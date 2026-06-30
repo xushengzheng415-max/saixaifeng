@@ -1,0 +1,1 @@
+{"name": "wechatWebLogin", "version": "1.0.0", "description": "微信开放平台网站扫码登录", "main": "index.js", "dependencies": {"wx-server-sdk": "~2.6.3"}}

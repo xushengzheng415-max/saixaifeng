@@ -1,0 +1,94 @@
+<!-- pages/my-cards/detail.wxml -->
+<!-- 球员卡详情页 -->
+<view class="container">
+  <!-- 卡片区域 -->
+  <view class="card-container" wx:if="{{playerInfo}}">
+    <view class="player-card {{playerInfo.cardBg || 'gold'}}">
+      <view class="card-bg"></view>
+      
+      <view class="team-logo">
+        <image wx:if="{{playerInfo.teamLogo}}" src="{{playerInfo.teamLogo}}" mode="aspectFit"></image>
+        <view wx:else class="team-logo-placeholder">T</view>
+      </view>
+      
+      <text class="jersey-number">{{playerInfo.number || '?'}}</text>
+      
+      <view class="player-avatar">
+        <image wx:if="{{playerInfo.avatar}}" src="{{playerInfo.avatar}}" mode="aspectFill"></image>
+        <view wx:else class="avatar-placeholder">
+          <text>{{playerInfo.nameFirstChar || '?'}}</text>
+        </view>
+      </view>
+      
+      <text class="player-name">{{playerInfo.name || '未知'}}</text>
+      
+      <text class="player-position">{{playerInfo.position || '前锋'}}</text>
+      
+      <text class="jersey-name">{{playerInfo.jerseyName || playerInfo.nameUpper || ''}}</text>
+      
+      <view class="player-stats">
+        <text class="stat-item">{{playerInfo.height || '180'}}cm</text>
+        <text class="stat-item">{{playerInfo.weight || '75'}}kg</text>
+        <text class="stat-item">{{playerInfo.nationality || '中国'}}</text>
+      </view>
+    </view>
+    
+    <!-- 详细信息 -->
+    <view class="detail-section">
+      <text class="section-title">基本信息</text>
+      
+      <view class="info-row">
+        <text class="info-label">姓名：</text>
+        <text class="info-value">{{playerInfo.name}}</text>
+      </view>
+      
+      <view class="info-row">
+        <text class="info-label">球衣号：</text>
+        <text class="info-value">{{playerInfo.number}}</text>
+      </view>
+      
+      <view class="info-row">
+        <text class="info-label">位置：</text>
+        <text class="info-value">{{playerInfo.position}}</text>
+      </view>
+      
+      <view class="info-row">
+        <text class="info-label">球衣名：</text>
+        <text class="info-value">{{playerInfo.jerseyName}}</text>
+      </view>
+      
+      <view class="info-row">
+        <text class="info-label">身高：</text>
+        <text class="info-value">{{playerInfo.height}}cm</text>
+      </view>
+      
+      <view class="info-row">
+        <text class="info-label">体重：</text>
+        <text class="info-value">{{playerInfo.weight}}kg</text>
+      </view>
+      
+      <view class="info-row">
+        <text class="info-label">国籍：</text>
+        <text class="info-value">{{playerInfo.nationality}}</text>
+      </view>
+    </view>
+    
+    <!-- 操作按钮 -->
+    <view class="action-section">
+      <button class="action-btn primary" bindtap="shareCard">
+        <text class="btn-icon">📤</text>
+        <text class="btn-text">分享球员卡</text>
+      </button>
+      
+      <button class="action-btn" bindtap="editCard">
+        <text class="btn-icon">✏️</text>
+        <text class="btn-text">编辑信息</text>
+      </button>
+    </view>
+  </view>
+  
+  <!-- 加载状态 -->
+  <view class="loading-state" wx:else>
+    <text class="loading-text">加载中...</text>
+  </view>
+</view>

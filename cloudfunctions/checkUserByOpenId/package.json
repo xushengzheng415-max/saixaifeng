@@ -1,0 +1,9 @@
+{
+  "name": "checkUserByOpenId",
+  "version": "1.0.0",
+  "description": "根据 openId 查询用户是否已注册",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.7.0"
+  }
+}

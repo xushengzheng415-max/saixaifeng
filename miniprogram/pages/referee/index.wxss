@@ -1,0 +1,185 @@
+/* pages/referee/index.wxss */
+page {
+  background: linear-gradient(180deg, #1B5E20 0%, #2E7D32 50%, #43A047 100%);
+  min-height: 100vh;
+}
+
+.container {
+  padding: 30rpx 24rpx;
+  padding-bottom: 60rpx;
+}
+
+.page-header {
+  margin-bottom: 30rpx;
+}
+
+.page-title {
+  display: block;
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 8rpx;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
+}
+
+.page-desc {
+  display: block;
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.function-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 30rpx;
+}
+
+.function-item {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20rpx;
+  padding: 30rpx;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+}
+
+.function-item:active {
+  transform: translateY(2rpx);
+}
+
+.function-icon {
+  font-size: 44rpx;
+  margin-right: 20rpx;
+}
+
+.function-info {
+  flex: 1;
+}
+
+.function-name {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 6rpx;
+}
+
+.function-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.function-arrow {
+  font-size: 36rpx;
+  color: #ccc;
+  font-weight: bold;
+}
+
+/* 裁判列表 */
+.referee-section {
+  margin-bottom: 24rpx;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  padding: 0 8rpx;
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
+}
+
+.referee-count {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.referee-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.referee-item {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+}
+
+.referee-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+}
+
+.avatar-text {
+  font-size: 32rpx;
+}
+
+.referee-info {
+  flex: 1;
+}
+
+.referee-name {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 4rpx;
+}
+
+.referee-level {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+}
+
+.referee-phone {
+  font-size: 26rpx;
+  color: #666;
+}
+
+/* 空状态 */
+.empty-tip {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 24rpx;
+  padding: 80rpx 40rpx;
+  text-align: center;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+}
+
+.empty-icon {
+  display: block;
+  font-size: 80rpx;
+  margin-bottom: 20rpx;
+}
+
+.empty-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 12rpx;
+}
+
+.empty-desc {
+  display: block;
+  font-size: 24rpx;
+  color: #999;
+}

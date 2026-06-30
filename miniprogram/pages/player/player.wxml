@@ -1,0 +1,49 @@
+<!-- pages/player/player.wxml - 球员管理 -->
+<view class="container">
+  <!-- 球队信息栏 -->
+  <view class="team-bar">
+    <text class="team-name">{{teamName}}</text>
+    <text class="player-count">共 {{PlayersLen}} 名球员</text>
+  </view>
+
+  <!-- 球员列表 -->
+  <view class="player-list" wx:if="{{PlayersLen > 0}}">
+    <view class="player-card" wx:for="{{players}}" wx:key="_id">
+      <image class="player-photo" src="{{item.photoUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+      <view class="jersey-num">{{item.jerseyNumber || '--'}}</view>
+      <view class="player-info">
+        <view class="name-row">
+          <text class="player-name">{{item.name}}</text>
+          <text class="position-tag" wx:if="{{item.position}}">{{item.position}}</text>
+          <text class="captain-tag" wx:if="{{item.isCaptain}}">队长</text>
+          <text class="bind-tag" wx:if="{{item.showBindStatus}}">待绑定</text>
+        </view>
+        <view class="jersey-name-row">
+          <text class="jersey-name" wx:if="{{item.jerseyName}}">{{item.jerseyName}}</text>
+        </view>
+        <view class="meta-row">
+          <text wx:if="{{item.age}}" class="meta-item">{{item.age}}岁</text>
+          <text wx:if="{{item.birthDate}}" class="meta-item">{{item.birthDate}}</text>
+          <text wx:if="{{item.phone}}" class="meta-item phone" data-phone="{{item.phone}}" bindtap="callPlayer">{{item.phone}}</text>
+        </view>
+      </view>
+      <view class="player-actions">
+        <view class="action-btn edit" catchtap="editPlayer" data-id="{{item._id}}">编辑</view>
+        <view class="action-btn delete" catchtap="deletePlayer" data-id="{{item._id}}" data-name="{{item.name}}">删除</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:else>
+    <text class="empty-icon">⚽</text>
+    <text class="empty-text">暂无球员</text>
+    <text class="empty-hint">点击下方按钮添加球员</text>
+  </view>
+
+  <!-- 添加按钮（仅领队可见） -->
+  <view class="add-btn" bindtap="addPlayer">
+    <text class="add-icon">+</text>
+    <text class="add-text">添加球员</text>
+  </view>
+</view>

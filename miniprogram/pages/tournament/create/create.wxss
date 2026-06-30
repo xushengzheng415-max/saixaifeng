@@ -1,0 +1,124 @@
+/* pages/tournament/create/create.wxss ★ 重设计版 */
+page { background: #f5f7fa; }
+
+/* ===== 步骤条 ===== */
+.steps {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 30rpx 20rpx 20rpx; margin: 0 20rpx;
+  position: relative;
+}
+.steps::after {
+  content: ''; position: absolute; top: 52rpx; left: 60rpx; right: 60rpx;
+  height: 4rpx; background: #e8ecf0; z-index: 0;
+}
+.step-item {
+  display: flex; flex-direction: column; align-items: center; gap: 10rpx;
+  position: relative; z-index: 1; flex: 1;
+}
+.step-number {
+  width: 48rpx; height: 48rpx; border-radius: 50%;
+  background: #e8ecf0; color: #999;
+  font-size: 24rpx; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.3s ease;
+}
+.step-title {
+  font-size: 22rpx; color: #999; font-weight: 400;
+  transition: all 0.3s ease;
+}
+.step-item.active .step-number {
+  background: linear-gradient(135deg, #1B5E20, #43A047);
+  color: #fff; box-shadow: 0 4rpx 12rpx rgba(27,94,32,0.3);
+}
+.step-item.active .step-title { color: #1B5E20; font-weight: 600; }
+
+/* ===== 卡片 ===== */
+.card {
+  background: #fff; border-radius: 16rpx; margin: 20rpx;
+  padding: 30rpx; box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.06);
+}
+.card-title {
+  font-size: 30rpx; font-weight: 700; color: #1a1a2e;
+  margin-bottom: 28rpx; padding-bottom: 20rpx;
+  border-bottom: 2rpx solid #f0f2f5;
+  position: relative; padding-left: 20rpx;
+}
+.card-title::before {
+  content: ''; position: absolute; left: 0; top: 4rpx; bottom: 20rpx;
+  width: 6rpx; background: linear-gradient(180deg, #1B5E20, #43A047);
+  border-radius: 3rpx;
+}
+
+/* ===== 表单 ===== */
+.form-group {
+  margin-bottom: 24rpx;
+}
+.form-label {
+  display: block; font-size: 26rpx; font-weight: 500; color: #333;
+  margin-bottom: 10rpx;
+}
+.form-input {
+  width: 100%; height: 80rpx; line-height: 80rpx;
+  padding: 0 24rpx; box-sizing: border-box;
+  border: 2rpx solid #e8ecf0; border-radius: 12rpx;
+  font-size: 28rpx; color: #333; background: #fafbfc;
+  transition: all 0.2s ease;
+}
+.form-input:focus,
+.input-focus {
+  border-color: #43A047; background: #fff;
+  box-shadow: 0 0 0 4rpx rgba(67,160,71,0.1);
+}
+.picker-input {
+  display: flex; align-items: center; color: #666;
+}
+.picker-input:active { background: #f0f2f5; }
+.form-textarea {
+  width: 100%; min-height: 160rpx; padding: 20rpx 24rpx;
+  box-sizing: border-box; border: 2rpx solid #e8ecf0; border-radius: 12rpx;
+  font-size: 28rpx; color: #333; background: #fafbfc;
+  line-height: 1.6; transition: all 0.2s ease;
+}
+.form-textarea:focus { border-color: #43A047; background: #fff; }
+.form-textarea.large { min-height: 240rpx; }
+.form-switch {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16rpx 0;
+}
+.form-switch .form-label { margin-bottom: 0; }
+
+/* ===== 按钮 ===== */
+.step-buttons {
+  display: flex; gap: 20rpx; padding: 20rpx; margin-top: 10rpx;
+}
+.step-buttons button { flex: 1; margin: 0; height: 88rpx; line-height: 88rpx;
+  border-radius: 16rpx; font-size: 28rpx; font-weight: 600;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #1B5E20, #43A047) !important;
+  color: #fff !important; border: none !important;
+  box-shadow: 0 4rpx 16rpx rgba(27,94,32,0.3) !important;
+}
+.btn-primary:active { opacity: 0.9; transform: scale(0.98); }
+.btn-secondary {
+  background: #fff !important; color: #666 !important;
+  border: 2rpx solid #ddd !important;
+}
+.btn-secondary:active { background: #f5f5f5 !important; }
+
+/* ===== 选中卡片 ===== */
+.type-desc {
+  font-size: 24rpx; color: #999; margin-top: 8rpx; padding-left: 4rpx;
+  line-height: 1.4;
+}
+.theme-preview {
+  transition: all 0.3s ease;
+  border: 2rpx solid rgba(255,255,255,0.3);
+}
+
+/* ===== 布局 ===== */
+.container { padding-bottom: 40rpx; }
+
+/* ===== 小程序原生覆写 ===== */
+switch { transform: scale(0.8); margin-left: -16rpx; }
+picker { display: block; }

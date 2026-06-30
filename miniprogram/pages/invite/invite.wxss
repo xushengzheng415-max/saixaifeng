@@ -1,0 +1,200 @@
+/* pages/invite/invite.wxss */
+.invite-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #E8F5E9 0%, #FFFFFF 40%);
+  padding: 32rpx;
+  box-sizing: border-box;
+}
+
+.invite-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40rpx 0 32rpx;
+}
+
+.invite-logo {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.invite-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1B5E20;
+}
+
+.invite-subtitle {
+  font-size: 28rpx;
+  color: #43A047;
+  margin-top: 8rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.06);
+}
+
+/* 邀请信息 */
+.invite-info .info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #F5F5F5;
+}
+
+.invite-info .info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.info-value {
+  font-size: 28rpx;
+  color: #1B5E20;
+  font-weight: 600;
+}
+
+/* 登录区域 */
+.login-section {
+  text-align: center;
+  padding: 48rpx 32rpx;
+}
+
+.login-tip {
+  font-size: 30rpx;
+  color: #666;
+  margin-bottom: 32rpx;
+}
+
+.btn-login {
+  background: #07C160;
+  color: #fff;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  padding: 0 64rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+}
+
+/* 表单 */
+.form-section .form-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1B5E20;
+  margin-bottom: 32rpx;
+}
+
+.form-item {
+  margin-bottom: 28rpx;
+}
+
+.form-label {
+  font-size: 26rpx;
+  color: #999;
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+.form-input {
+  border: 2rpx solid #E0E0E0;
+  border-radius: 12rpx;
+  padding: 20rpx 24rpx;
+  font-size: 30rpx;
+  color: #333;
+  background: #FAFAFA;
+}
+
+.form-picker {
+  border: 2rpx solid #E0E0E0;
+  border-radius: 12rpx;
+  padding: 20rpx 24rpx;
+  font-size: 30rpx;
+  color: #333;
+  background: #FAFAFA;
+}
+
+/* 头像 */
+.avatar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.avatar-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.avatar-img {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  border: 4rpx solid #43A047;
+}
+
+.avatar-edit {
+  font-size: 24rpx;
+  color: #43A047;
+  margin-top: 8rpx;
+}
+
+/* 提交按钮 */
+.btn-submit {
+  background: linear-gradient(135deg, #1B5E20, #43A047);
+  color: #fff;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  height: 92rpx;
+  line-height: 92rpx;
+  margin-top: 24rpx;
+}
+
+/* 成功页面 */
+.success-section {
+  text-align: center;
+  padding: 64rpx 32rpx;
+}
+
+.success-icon {
+  font-size: 96rpx;
+  margin-bottom: 24rpx;
+}
+
+.success-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1B5E20;
+  margin-bottom: 16rpx;
+}
+
+.success-desc {
+  font-size: 28rpx;
+  color: #666;
+  margin-bottom: 8rpx;
+}
+
+.success-role {
+  font-size: 30rpx;
+  color: #43A047;
+  font-weight: 600;
+  margin-bottom: 48rpx;
+}
+
+.btn-back {
+  background: #F5F5F5;
+  color: #333;
+  border-radius: 48rpx;
+  font-size: 30rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+}

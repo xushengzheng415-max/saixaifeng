@@ -1,0 +1,43 @@
+<!-- pages/index/index.wxml - 首页（简化版） -->
+<view class="container">
+  <!-- 用户信息 -->
+  <view class="user-bar" wx:if="{{isLoggedIn}}">
+    <image class="avatar" src="{{userInfo.avatarUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+    <view class="user-info">
+      <text class="nickname">{{userInfo.nickName || '用户'}}</text>
+      <text class="role-tag"></text>
+    </view>
+    <view class="logout" bindtap="logout">退出</view>
+  </view>
+
+  <!-- 我的球队 -->
+  <view class="section">
+    <view class="section-header">
+      <text class="title">我的球队</text>
+      <text class="more" bindtap="goToTeam" wx:if="{{MyTeamsLen > 0}}">更多 ></text>
+    </view>
+    <view class="team-scroll" wx:if="{{MyTeamsLen > 0}}">
+      <view class="team-card" wx:for="{{myTeams}}" wx:key="_id">
+        <text class="team-name">{{item.name}}</text>
+        <text class="team-count">{{item.playerCount || 0}}人</text>
+      </view>
+    </view>
+    <view class="empty" wx:else>
+      <text>暂无球队，去球队页面创建一支吧</text>
+    </view>
+  </view>
+
+  <!-- 即将开始的比赛 -->
+  <view class="section">
+    <view class="section-header">
+      <text class="title">即将开始</text>
+    </view>
+    <view class="match-item" wx:for="{{upcomingMatches}}" wx:key="_id">
+      <text class="match-teams">{{item.homeTeam}} VS {{item.awayTeam}}</text>
+      <text class="match-time">{{item.matchTime}}</text>
+    </view>
+    <view class="empty">
+      <text>暂无比赛安排</text>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,104 @@
+<view class="page-container">
+  <view class="header-container flex-row">
+    <image class="header-avatar" src="{{currentCard.avatarUrl || '/images/app-logo.png'}}"></image>
+    <view class="header-info flex-col">
+      <text class="header-name bold">{{currentCard.nickname || '郑旭升'}}</text>
+      <view class="tag-group flex-row">
+        <text class="tag tag-player">球员</text>
+        <text class="tag tag-tier {{currentCard.tier || 'bronze'}}">{{currentCard.tierName || '青铜'}}</text>
+        <text class="tag tag-number">#{{currentCard.jerseyNumber || '21'}}</text>
+      </view>
+    </view>
+    <text class="tag-active tag-capsule">当前使用</text>
+  </view>
+
+  <view class="card-display-area flex-center">
+    <view class="player-card {{currentCard.tier || 'bronze'}}">
+      <view class="card-top-left">
+        <text class="card-num">{{currentCard.jerseyNumber || '21'}}</text>
+        <text class="card-pos">{{currentCard.position || '前锋'}}</text>
+      </view>
+
+      <!-- 头像区域 - 点击触发上传 -->
+      <view class="card-avatar-container" bindtap="onUploadAvatar">
+        <image 
+          class="card-avatar" 
+          src="{{avatarUrl}}" 
+          mode="aspectFill"
+        ></image>
+        <!-- 上传提示遮罩 -->
+        <view class="upload-hint">
+          <text class="upload-icon">📷</text>
+          <text class="upload-text">点击上传照片</text>
+        </view>
+      </view>
+
+      <view class="card-text-group">
+        <text class="card-name">{{currentCard.nickname || '郑旭升'}}</text>
+        <text class="card-jersey-name">{{currentCard.jerseyName || 'ZHENG X.S.'}}</text>
+      </view>
+
+      <view class="card-stats">
+        <text class="stat-height">{{currentCard.height || '178'}}CM</text>
+        <text class="stat-weight">{{currentCard.weight || '90'}}KG</text>
+      </view>
+
+      <view class="card-bottom-icons">
+        <image class="card-flag" src="{{nationalityFlagUrl || ''}}" mode="aspectFit"></image>
+        <image class="card-logo" src="{{currentCard.teamLogo || '/images/app-logo.png'}}" mode="aspectFit"></image>
+      </view>
+    </view>
+  </view>
+
+  <view class="info-list-container">
+    <view class="info-item">
+      <text class="info-label">位置</text>
+      <text class="info-value">{{currentCard.position || '前锋'}}</text>
+    </view>
+    <view class="info-item">
+      <text class="info-label">球衣名</text>
+      <text class="info-value yellow">{{currentCard.jerseyName || 'ZHENG X.S.'}}</text>
+    </view>
+    <view class="info-item">
+      <text class="info-label">国籍</text>
+      <text class="info-value">{{currentCard.nationality || '中国'}}</text>
+    </view>
+    <view class="info-item">
+      <text class="info-label">身高/体重</text>
+      <text class="info-value">{{currentCard.height || '178'}} / {{currentCard.weight || '90'}} kg</text>
+    </view>
+    <view class="info-item">
+      <text class="info-label">籍贯</text>
+      <text class="info-value">{{nativePlace || '河南省郑州中原'}}</text>
+    </view>
+    <view class="info-item">
+      <text class="info-label">参赛场次</text>
+      <text class="info-value">{{currentCard.totalMatches || '0'}} 场</text>
+    </view>
+    <view class="info-item">
+      <text class="info-label">参与积分</text>
+      <text class="info-value green">{{currentCard.participationPoints || '0'}} 分</text>
+    </view>
+  </view>
+
+  <view class="action-buttons-container">
+    <view class="action-btn btn-edit flex-center" bindtap="editCard">
+      <text class="btn-icon">✏️</text>
+      <text>编辑</text>
+    </view>
+    <view class="action-btn btn-preview flex-center" bindtap="previewCard">
+      <text class="btn-icon">👁️</text>
+      <text>预览</text>
+    </view>
+  </view>
+
+  <view class="fixed-bottom-btn btn-green full-width bold" bindtap="createCard">
+    <text>+ 创建身份卡</text>
+  </view>
+  
+  <!-- 隐藏的 Canvas，用于背景抠图处理 -->
+  <canvas 
+    canvas-id="bgRemoveCanvas" 
+    class="hidden-canvas"
+  ></canvas>
+</view>

@@ -1,0 +1,215 @@
+<!--pages/match/detail/detail.wxml - 增强版-->
+<view class="container">
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <!-- 错误提示 -->
+  <view wx:elif="{{errorMsg}}" class="error-state">
+    <text class="error-icon">⚠️</text>
+    <text class="error-title">{{errorMsg}}</text>
+    <button class="retry-btn" bindtap="loadMatchDetail">重新加载</button>
+  </view>
+
+  <!-- 比赛信息（使用 displayMatch 统一字段） -->
+  <block wx:elif="{{displayMatch}}">
+    <view class="match-card">
+      <!-- 赛事名称 -->
+      <view class="tournament-name" wx:if="{{displayMatch.tournamentName}}">{{displayMatch.tournamentName}}</view>
+
+      <!-- 状态标签 -->
+      <view class="status-banner {{displayMatch.status}}">
+        <text class="status-text">{{displayMatch.statusText}}</text>
+      </view>
+
+      <!-- 两队信息 VS -->
+      <view class="teams-row">
+        <view class="team home-team">
+          <image
+            class="team-logo"
+            src="{{displayMatch.homeLogo || '/images/app-logo.png'}}"
+            mode="aspectFit"
+          ></image>
+          <text class="team-name">{{displayMatch.homeTeamName}}</text>
+          <view class="team-score">
+            <text class="score-num">{{displayMatch.homeScore}}</text>
+          </view>
+        </view>
+
+        <view class="vs-col">
+          <text class="vs-text">VS</text>
+          <text class="vs-text vs-dash">—</text>
+        </view>
+
+        <view class="team away-team">
+          <image
+            class="team-logo"
+            src="{{displayMatch.awayLogo || '/images/app-logo.png'}}"
+            mode="aspectFit"
+          ></image>
+          <text class="team-name">{{displayMatch.awayTeamName}}</text>
+          <view class="team-score">
+            <text class="score-num">{{displayMatch.awayScore}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 比赛信息 -->
+      <view class="match-info">
+        <view class="info-item">
+          <text class="info-label">⏰ 时间</text>
+          <text class="info-value">{{displayMatch.matchTime}}</text>
+        </view>
+        <view class="info-item">
+          <text class="info-label">📍 场地</text>
+          <text class="info-value">{{displayMatch.venue}}</text>
+        </view>
+        <view class="info-item" wx:if="{{displayMatch.round}}">
+          <text class="info-label">📋 轮次</text>
+          <text class="info-value">{{displayMatch.round}}</text>
+        </view>
+      </view>
+
+      <!-- 首发阵容提交状态 -->
+      <view class="lineup-status-bar">
+        <view class="lineup-tag ">
+          <text></text>
+        </view>
+        <view class="lineup-tag ">
+          <text></text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 裁判信息 -->
+    <view class="referee-card" wx:if="{{displayMatch.refereeName || displayMatch.assistantReferee1 || displayMatch.fourthOfficial}}">
+      <view class="section-title">🧑‍⚖️ 裁判组</view>
+      <view class="info-item" wx:if="{{displayMatch.refereeName}}">
+        <text class="info-label">主裁判</text>
+        <text class="info-value">{{displayMatch.refereeName}}</text>
+      </view>
+      <view class="info-item" wx:if="{{displayMatch.assistantReferee1}}">
+        <text class="info-label">助理裁判1</text>
+        <text class="info-value">{{displayMatch.assistantReferee1}}</text>
+      </view>
+      <view class="info-item" wx:if="{{displayMatch.assistantReferee2}}">
+        <text class="info-label">助理裁判2</text>
+        <text class="info-value">{{displayMatch.assistantReferee2}}</text>
+      </view>
+      <view class="info-item" wx:if="{{displayMatch.fourthOfficial}}">
+        <text class="info-label">第四官员</text>
+        <text class="info-value">{{displayMatch.fourthOfficial}}</text>
+      </view>
+    </view>
+
+    <!-- 教练操作区 -->
+    <view wx:if="{{isHomeCoach || isAwayCoach}}" class="coach-actions">
+      <view class="section-title">🎯 教练操作</view>
+
+      <!-- 主队教练 -->
+      <view wx:if="{{isHomeCoach}}" class="action-item">
+        <view class="action-info">
+          <text class="action-label">{{displayMatch.homeTeamName}} 首发阵容</text>
+          <text class="action-status ">
+            
+          </text>
+        </view>
+        <button
+          class="btn-primary "
+          data-home="true"
+          bindtap="onSubmitLineup"
+          disabled="{{homeLineupSubmitted}}"
+        >
+          
+        </button>
+      </view>
+
+      <!-- 客队教练 -->
+      <view wx:if="{{isAwayCoach}}" class="action-item">
+        <view class="action-info">
+          <text class="action-label">{{displayMatch.awayTeamName}} 首发阵容</text>
+          <text class="action-status ">
+            
+          </text>
+        </view>
+        <button
+          class="btn-primary "
+          data-home="false"
+          bindtap="onSubmitLineup"
+          disabled="{{awayLineupSubmitted}}"
+        >
+          
+        </button>
+      </view>
+    </view>
+
+    <!-- 非教练提示 -->
+    <view wx:if="{{showLineupTip}}" class="tip">
+      <text class="tip-icon">ℹ️</text>
+      <text class="tip-text">您不是本场比赛的教练，无法提交首发阵容</text>
+    </view>
+
+    <!-- 球服颜色 -->
+    <view class="kit-section" wx:if="{{hasKitColors}}">
+      <view class="section-title">球服颜色</view>
+      <view class="kit-row">
+        <view class="kit-team">
+          <text class="kit-name">{{displayMatch.homeTeamName}}</text>
+          <view class="kit-colors">
+            <view class="kc-item" wx:if="{{homeKitJersey}}">
+              <view class="kc-dot" style="background:{{homeKitJersey}}"></view>
+              <text>上衣:{{homeKitJersey}}</text>
+            </view>
+            <view class="kc-item" wx:if="{{homeKitShorts}}">
+              <view class="kc-dot" style="background:{{homeKitShorts}}"></view>
+              <text>短裤:{{homeKitShorts}}</text>
+            </view>
+            <view class="kc-item" wx:if="{{homeKitSocks}}">
+              <view class="kc-dot" style="background:{{homeKitSocks}}"></view>
+              <text>球袜:{{homeKitSocks}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="kit-divider"></view>
+        <view class="kit-team">
+          <text class="kit-name">{{displayMatch.awayTeamName}}</text>
+          <view class="kit-colors">
+            <view class="kc-item" wx:if="{{awayKitJersey}}">
+              <view class="kc-dot" style="background:{{awayKitJersey}}"></view>
+              <text>上衣:{{awayKitJersey}}</text>
+            </view>
+            <view class="kc-item" wx:if="{{awayKitShorts}}">
+              <view class="kc-dot" style="background:{{awayKitShorts}}"></view>
+              <text>短裤:{{awayKitShorts}}</text>
+            </view>
+            <view class="kc-item" wx:if="{{awayKitSocks}}">
+              <view class="kc-dot" style="background:{{awayKitSocks}}"></view>
+              <text>球袜:{{awayKitSocks}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 比赛事件 -->
+    <view class="events-section">
+      <view class="section-title">比赛事件</view>
+      <view class="events-empty" wx:if="{{!hasEvents}}">
+        <text>暂无比赛事件记录</text>
+      </view>
+      <view class="events-list" wx:else>
+        <view class="event-item" wx:for="{{events}}" wx:key="">
+          <text class="ev-minute">{{item.minute}}'</text>
+          <text class="ev-icon">{{item.typeIcon}}</text>
+          <view class="ev-info">
+            <text class="ev-type">{{item.typeText}}</text>
+            <text class="ev-player">{{item.playerName}}</text>
+            <text class="ev-assist" wx:if="{{item.assistName}}">(assist: {{item.assistName}})</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

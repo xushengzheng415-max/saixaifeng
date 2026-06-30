@@ -1,0 +1,9 @@
+{
+  "name": "uploadToCOS",
+  "version": "1.0.0",
+  "description": "云存储上传云函数 - 使用微信云开发存储能力",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

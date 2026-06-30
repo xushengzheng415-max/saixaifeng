@@ -1,0 +1,118 @@
+<view class="guide-container">
+<!-- 头部区域 -->
+  <view class="header-section">
+    <text class="guide-title">球队资料填写</text>
+    <text class="guide-subtitle">请填写您的球队信息，以便我们为您提供更好的服务</text>
+  </view>
+
+  <!-- 表单区域 -->
+  <view class="form-section">
+    <view class="input-group">
+      <text class="input-label">球队名称</text>
+      <view class="input-wrapper">
+        <input 
+          class="input-field" 
+          placeholder="请输入球队名称" 
+          bindinput="onTeamNameInput"
+          value="{{teamName}}"
+        />
+        <text class="input-icon">🏟️</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.teamName}}">{{errors.teamName}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">球队成立时间</text>
+      <view class="input-wrapper">
+        <picker mode="date" value="{{establishmentDate}}" bindchange="onEstablishmentDateChange">
+          <view class="picker-field">
+            {{establishmentDate || '请选择球队成立时间'}}
+          </view>
+        </picker>
+        <text class="input-icon">📅</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.establishmentDate}}">{{errors.establishmentDate}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">球队简介</text>
+      <view class="input-wrapper">
+        <textarea 
+          class="input-field" 
+          placeholder="请输入球队简介" 
+          maxlength="200"
+          bindinput="onDescriptionInput"
+          value="{{description}}"
+        ></textarea>
+        <text class="input-icon">📝</text>
+      </view>
+      <text class="char-count">{{DescriptionLen}}/200</text>
+      <text class="error-message" wx:if="{{errors.description}}">{{errors.description}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">所属地区</text>
+      <view class="input-wrapper">
+        <input 
+          class="input-field" 
+          placeholder="请输入球队所属地区" 
+          bindinput="onRegionInput"
+          value="{{region}}"
+        />
+        <text class="input-icon">📍</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.region}}">{{errors.region}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">联系电话</text>
+      <view class="input-wrapper">
+        <input 
+          class="input-field" 
+          placeholder="请输入联系电话" 
+          type="number"
+          bindinput="onPhoneInput"
+          value="{{phone}}"
+        />
+        <text class="input-icon">📱</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.phone}}">{{errors.phone}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">球队队徽</text>
+      <view class="image-uploader">
+        <view class="upload-btn" bindtap="chooseLogo">
+          <text class="upload-icon">📷</text>
+          <text class="upload-text"></text>
+        </view>
+        <image 
+          class="logo-preview" 
+          src="{{logoUrl}}" 
+          mode="aspectFit" 
+          wx:if="{{logoUrl}}"
+        ></image>
+      </view>
+      <text class="error-message" wx:if="{{errors.logo}}">{{errors.logo}}</text>
+    </view>
+  </view>
+
+  <!-- 按钮区域 -->
+  <view class="button-section">
+    <button 
+      class="submit-btn "
+      bindtap="handleSubmit"
+      disabled="{{isSubmitting}}"
+    >
+      
+    </button>
+
+    <button 
+      class="skip-btn "
+      bindtap="skipGuide"
+      disabled="{{isSubmitting}}"
+    >
+      跳过引导，稍后填写
+    </button>
+  </view>
+</view>

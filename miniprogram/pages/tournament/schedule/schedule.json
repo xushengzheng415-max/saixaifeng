@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "赛程安排",
+  "navigationBarBackgroundColor": "#1B5E20",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#f5f5f5",
+  "enablePullDownRefresh": true
+}

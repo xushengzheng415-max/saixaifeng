@@ -1,0 +1,485 @@
+/* 赛事报名页 */
+.container {
+  min-height: 100vh;
+  background: #F5F5F5;
+  padding-bottom: 120rpx;
+}
+
+/* 加载中 */
+.loading-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #999;
+}
+
+/* 信息卡片 */
+.info-card {
+  background: #fff;
+  margin: 24rpx;
+  padding: 32rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+  padding-bottom: 24rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #212121;
+  flex: 1;
+}
+
+.type-tag {
+  padding: 6rpx 16rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+}
+
+.type-tag.campus {
+  background: rgba(63, 81, 181, 0.1);
+  color: #3F51B5;
+}
+
+.type-tag.amateur {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
+}
+
+.card-body {
+  /* 内容区 */
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-label {
+  font-size: 26rpx;
+  color: #999;
+}
+
+.info-value {
+  font-size: 26rpx;
+  color: #212121;
+}
+
+/* 区块卡片 */
+.section-card {
+  background: #fff;
+  margin: 0 24rpx 24rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.section-bar {
+  width: 6rpx;
+  height: 28rpx;
+  background: #2E7D32;
+  border-radius: 3rpx;
+  margin-right: 12rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #212121;
+}
+
+/* 球队信息 */
+.team-info {
+  display: flex;
+  align-items: center;
+  padding: 16rpx;
+  background: #FAFAFA;
+  border-radius: 12rpx;
+}
+
+.team-logo {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 16rpx;
+  background: #E8F5E9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.team-logo image {
+  width: 100%;
+  height: 100%;
+}
+
+.default-logo text {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #2E7D32;
+}
+
+.team-detail {
+  flex: 1;
+}
+
+.team-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #212121;
+  display: block;
+  margin-bottom: 4rpx;
+}
+
+.team-meta {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 报名须知 */
+.notice-box {
+  background: #FAFAFA;
+  padding: 20rpx;
+  border-radius: 12rpx;
+}
+
+.notice-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12rpx;
+}
+
+.notice-item:last-child {
+  margin-bottom: 0;
+}
+
+.notice-icon {
+  font-size: 24rpx;
+  color: #4CAF50;
+  margin-right: 12rpx;
+  margin-top: 2rpx;
+}
+
+.notice-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* 竞赛规程 */
+.required-tag {
+  margin-left: 12rpx;
+  padding: 2rpx 10rpx;
+  background: #FF5722;
+  color: #fff;
+  font-size: 20rpx;
+  border-radius: 8rpx;
+}
+
+.rules-box {
+  background: #FAFAFA;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.rules-preview {
+  padding: 20rpx;
+  max-height: 300rpx;
+  overflow-y: auto;
+}
+
+.rules-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+  display: block;
+}
+
+.rules-file {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.file-icon-box {
+  width: 64rpx;
+  height: 64rpx;
+  background: #E8F5E9;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 16rpx;
+}
+
+.file-icon {
+  font-size: 32rpx;
+}
+
+.file-info {
+  flex: 1;
+}
+
+.file-name {
+  font-size: 28rpx;
+  color: #212121;
+  display: block;
+  margin-bottom: 4rpx;
+}
+
+.file-tip {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.file-arrow {
+  font-size: 32rpx;
+  color: #999;
+}
+
+/* 免责声明 */
+.disclaimer-box {
+  background: #FAFAFA;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.disclaimer-preview {
+  padding: 20rpx;
+  max-height: 300rpx;
+  overflow-y: auto;
+}
+
+.disclaimer-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+  display: block;
+  white-space: pre-wrap;
+}
+
+.view-full-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16rpx 0;
+  background: #fff;
+  border-top: 1rpx solid #F0F0F0;
+  border-bottom: 1rpx solid #F0F0F0;
+}
+
+.view-full-btn text:first-child {
+  font-size: 26rpx;
+  color: #2E7D32;
+}
+
+.view-full-arrow {
+  font-size: 24rpx;
+  color: #2E7D32;
+  margin-left: 8rpx;
+}
+
+/* 同意勾选行 */
+.agree-row {
+  display: flex;
+  align-items: center;
+  padding: 20rpx;
+  background: #fff;
+  border-top: 1rpx solid #F0F0F0;
+}
+
+.checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  border: 2rpx solid #ccc;
+  border-radius: 8rpx;
+  margin-right: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.checkbox.checked {
+  background: #4CAF50;
+  border-color: #4CAF50;
+}
+
+.checkbox text {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: bold;
+}
+
+.agree-text {
+  font-size: 26rpx;
+  color: #999;
+  flex: 1;
+}
+
+.agree-text.active {
+  color: #212121;
+}
+
+/* 赛事说明 */
+.description-box {
+  background: #FAFAFA;
+  padding: 20rpx;
+  border-radius: 12rpx;
+}
+
+.description-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* 底部按钮栏 */
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  padding: 16rpx 24rpx;
+  background: #fff;
+  box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.cancel-btn {
+  flex: 1;
+  height: 80rpx;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  background: #F5F5F5;
+  color: #666;
+  margin-right: 16rpx;
+}
+
+.submit-btn {
+  flex: 2;
+  height: 80rpx;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  background: linear-gradient(135deg, #43A047 0%, #2E7D32 100%);
+  color: #fff;
+}
+
+.submit-btn.disabled {
+  background: #ccc;
+  color: #fff;
+}
+
+/* 免责声明全屏模态框 */
+.disclaimer-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.disclaimer-modal-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.disclaimer-modal-body {
+  position: relative;
+  width: 100%;
+  max-height: 85vh;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+}
+
+.disclaimer-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+  flex-shrink: 0;
+}
+
+.disclaimer-modal-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #212121;
+}
+
+.disclaimer-modal-close {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #F5F5F5;
+}
+
+.disclaimer-modal-close text {
+  font-size: 28rpx;
+  color: #666;
+}
+
+.disclaimer-modal-content {
+  flex: 1;
+  padding: 24rpx 32rpx;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.disclaimer-modal-text {
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  display: block;
+}
+
+.disclaimer-modal-footer {
+  padding: 20rpx 32rpx;
+  border-top: 1rpx solid #F0F0F0;
+  flex-shrink: 0;
+}

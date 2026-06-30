@@ -1,0 +1,9 @@
+{
+  "name": "migrateCoachData",
+  "version": "1.0.0",
+  "description": "教练数据迁移：从 coaches 集合迁移到 coach_library + coach_assignments",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,287 @@
+<!-- pages/team/team.wxml -->
+<!-- 专业足球风格球队页面 -->
+
+<view class="team-page">
+  <!-- 空状态 - 没有球队 -->
+  <view class="empty-state" wx:if="{{!teamInfo.teamName}}">
+    <view class="empty-icon">🏟️</view>
+    <text class="empty-title">还没有球队</text>
+    <text class="empty-subtitle">创建您的第一支球队</text>
+    <button class="create-btn" bindtap="onCreateTeam">
+      <text>创建球队</text>
+    </button>
+  </view>
+
+  <!-- 球队内容 -->
+  <block wx:else>
+    <!-- 顶部球队信息区 -->
+    <view class="team-header">
+      <view class="header-bg"></view>
+      <view class="header-content">
+        <!-- 球队Logo -->
+        <view class="team-logo-wrapper">
+          <image class="team-logo" src="{{teamInfo.teamLogo || '/images/default-team.png'}}" mode="aspectFit"></image>
+        </view>
+        
+        <!-- 球队名称 -->
+        <view class="team-name-section">
+          <text class="team-name-cn">{{teamInfo.teamName}}</text>
+          <text class="team-short-name" wx:if="{{teamInfo.shortName}}">({{teamInfo.shortName}})</text>
+          <text class="team-name-en" wx:if="{{teamInfo.teamNameEn}}">{{teamInfo.teamNameEn}}</text>
+        </view>
+        
+        <!-- 球队标签 -->
+        <view class="team-tags">
+          <view class="tag-item" wx:if="{{teamInfo.homeCourt}}">
+            <text class="tag-icon">🏟</text>
+            <text class="tag-text">{{teamInfo.homeCourt}}</text>
+          </view>
+        </view>
+        
+        <!-- 快捷操作 -->
+        <view class="header-actions">
+          <button class="action-btn-small" bindtap="onEditTeam">
+            <text>编辑</text>
+          </button>
+          <button class="action-btn-small" bindtap="onViewPhotos">
+            <text>相册</text>
+          </button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 数据统计区 -->
+    <view class="stats-section">
+      <view class="stats-title">球队数据</view>
+      <view class="stats-scroll">
+        <view class="stat-card">
+          <text class="stat-num">{{playerCount}}</text>
+          <text class="stat-label">球员</text>
+        </view>
+        <view class="stat-card">
+          <text class="stat-num">{{managementCount}}</text>
+          <text class="stat-label">教练组</text>
+        </view>
+        <view class="stat-card">
+          <text class="stat-num">{{teamMatches || 0}}</text>
+          <text class="stat-label">比赛</text>
+        </view>
+        <view class="stat-card">
+          <text class="stat-num">{{teamWins || 0}}</text>
+          <text class="stat-label">胜</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- Tab 导航 -->
+    <view class="tab-nav">
+      <view class="tab-item " bindtap="switchTab" data-tab="squad">
+        <text>阵容</text>
+      </view>
+      <view class="tab-item " bindtap="switchTab" data-tab="stats">
+        <text>数据</text>
+      </view>
+      <view class="tab-item " bindtap="switchTab" data-tab="matches">
+        <text>赛程</text>
+      </view>
+    </view>
+
+    <!-- 阵容Tab内容 -->
+    <view class="tab-content">
+      <!-- 教练组 -->
+      <view class="squad-section">
+        <view class="section-header">
+          <text class="section-title">教练组</text>
+          <text class="section-count">{{managementCount}}人</text>
+        </view>
+        
+        <view class="staff-list" wx:if="{{ManagementListLen > 0}}">
+          <view
+            class="staff-item"
+            wx:for="{{managementList}}" wx:key="_id"
+            wx:key="_id"
+            bindtap="onViewManagement"
+            data-id="{{item._id}}"
+          >
+            <view class="staff-avatar">
+              <image src="{{item.photoUrl || item.avatarUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+            </view>
+            <view class="staff-info">
+              <text class="staff-name">{{item.name}}</text>
+              <text class="staff-role">{{item.typeLabel || item.type || item.positionLabel || item.position || '其他'}}</text>
+            </view>
+            <view class="staff-actions">
+              <view class="icon-btn" catchtap="onEditManagement" data-id="{{item._id}}">✏️</view>
+              <view class="icon-btn delete" catchtap="onDeleteManagement" data-id="{{item._id}}" data-source="{{item._source}}">🗑</view>
+            </view>
+          </view>
+        </view>
+        
+        <view class="empty-tip" wx:else>
+          <text>暂无教练组成员</text>
+        </view>
+        
+        <view class="add-btn-row">
+          <button class="add-btn-outline" bindtap="onAddManagement">
+            <text>+ 添加教练</text>
+          </button>
+        </view>
+      </view>
+
+      <!-- 球员阵容 - 按位置分组 -->
+      <view class="squad-section">
+        <view class="section-header">
+          <text class="section-title">球员阵容</text>
+          <text class="section-count">{{playerCount}}人</text>
+        </view>
+
+        <!-- 守门员 -->
+        <view class="position-group" wx:if="{{GoalkeepersLen > 0}}">
+          <view class="position-label">守门员</view>
+          <view class="player-list">
+            <view 
+              class="player-row" 
+              wx:for="{{goalkeepers}}" wx:key="_id"
+              wx:key="_id"
+              bindtap="onViewPlayer"
+              data-id="{{item._id}}"
+            >
+              <view class="player-number">{{item.jerseyNumber || '-'}}</view>
+              <view class="player-avatar-small">
+                <image src="{{item.photoUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+              </view>
+              <view class="player-info">
+                <text class="player-name">{{item.name}}</text>
+                <text class="player-meta">{{item.nationality || '中国'}} · {{item.age || '-'}}岁</text>
+              </view>
+              <view class="player-stats-mini">
+                <text class="mini-stat">{{item.matches || 0}}场</text>
+                <text class="mini-stat">{{item.goals || 0}}球</text>
+              </view>
+              <view class="player-actions-mini">
+                <view class="icon-btn-small" catchtap="onEditPlayer" data-id="{{item._id}}">✏️</view>
+                <view class="icon-btn-small delete" catchtap="onDeletePlayer" data-id="{{item._id}}">🗑</view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 后卫 -->
+        <view class="position-group" wx:if="{{DefendersLen > 0}}">
+          <view class="position-label">后卫</view>
+          <view class="player-list">
+            <view 
+              class="player-row" 
+              wx:for="{{defenders}}" wx:key="_id"
+              wx:key="_id"
+              bindtap="onViewPlayer"
+              data-id="{{item._id}}"
+            >
+              <view class="player-number">{{item.jerseyNumber || '-'}}</view>
+              <view class="player-avatar-small">
+                <image src="{{item.photoUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+              </view>
+              <view class="player-info">
+                <text class="player-name">{{item.name}}</text>
+                <text class="player-meta">{{item.nationality || '中国'}} · {{item.age || '-'}}岁</text>
+              </view>
+              <view class="player-stats-mini">
+                <text class="mini-stat">{{item.matches || 0}}场</text>
+                <text class="mini-stat">{{item.goals || 0}}球</text>
+              </view>
+              <view class="player-actions-mini">
+                <view class="icon-btn-small" catchtap="onEditPlayer" data-id="{{item._id}}">✏️</view>
+                <view class="icon-btn-small delete" catchtap="onDeletePlayer" data-id="{{item._id}}">🗑</view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 中场 -->
+        <view class="position-group" wx:if="{{MidfieldersLen > 0}}">
+          <view class="position-label">中场</view>
+          <view class="player-list">
+            <view 
+              class="player-row" 
+              wx:for="{{midfielders}}" wx:key="_id"
+              wx:key="_id"
+              bindtap="onViewPlayer"
+              data-id="{{item._id}}"
+            >
+              <view class="player-number">{{item.jerseyNumber || '-'}}</view>
+              <view class="player-avatar-small">
+                <image src="{{item.photoUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+              </view>
+              <view class="player-info">
+                <text class="player-name">{{item.name}}</text>
+                <text class="player-meta">{{item.nationality || '中国'}} · {{item.age || '-'}}岁</text>
+              </view>
+              <view class="player-stats-mini">
+                <text class="mini-stat">{{item.matches || 0}}场</text>
+                <text class="mini-stat">{{item.goals || 0}}球</text>
+              </view>
+              <view class="player-actions-mini">
+                <view class="icon-btn-small" catchtap="onEditPlayer" data-id="{{item._id}}">✏️</view>
+                <view class="icon-btn-small delete" catchtap="onDeletePlayer" data-id="{{item._id}}">🗑</view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 前锋 -->
+        <view class="position-group" wx:if="{{ForwardsLen > 0}}">
+          <view class="position-label">前锋</view>
+          <view class="player-list">
+            <view 
+              class="player-row" 
+              wx:for="{{forwards}}" wx:key="_id"
+              wx:key="_id"
+              bindtap="onViewPlayer"
+              data-id="{{item._id}}"
+            >
+              <view class="player-number">{{item.jerseyNumber || '-'}}</view>
+              <view class="player-avatar-small">
+                <image src="{{item.photoUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+              </view>
+              <view class="player-info">
+                <text class="player-name">{{item.name}}</text>
+                <text class="player-meta">{{item.nationality || '中国'}} · {{item.age || '-'}}岁</text>
+              </view>
+              <view class="player-stats-mini">
+                <text class="mini-stat">{{item.matches || 0}}场</text>
+                <text class="mini-stat">{{item.goals || 0}}球</text>
+              </view>
+              <view class="player-actions-mini">
+                <view class="icon-btn-small" catchtap="onEditPlayer" data-id="{{item._id}}">✏️</view>
+                <view class="icon-btn-small delete" catchtap="onDeletePlayer" data-id="{{item._id}}">🗑</view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 添加球员按钮 -->
+        <view class="add-btn-row">
+          <button class="add-btn-primary" bindtap="onAddPlayer">
+            <text>+ 添加球员</text>
+          </button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 数据Tab内容 -->
+    <view class="tab-content">
+      <view class="coming-soon">
+        <text class="coming-icon">📊</text>
+        <text class="coming-text">数据统计功能开发中...</text>
+      </view>
+    </view>
+
+    <!-- 赛程Tab内容 -->
+    <view class="tab-content">
+      <view class="coming-soon">
+        <text class="coming-icon">📅</text>
+        <text class="coming-text">赛程功能开发中...</text>
+      </view>
+    </view>
+  </block>
+</view>

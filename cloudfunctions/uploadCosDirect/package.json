@@ -1,0 +1,9 @@
+{
+  "name": "uploadCosDirect",
+  "version": "1.0.0",
+  "description": "浏览器端 FormData 直传到 COS",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,132 @@
+<view class="guide-container">
+<!-- 头部区域 -->
+  <view class="header-section">
+    <text class="guide-title">裁判资料填写</text>
+    <text class="guide-subtitle">请填写您的裁判信息，以便我们为您提供更好的服务</text>
+  </view>
+
+  <!-- 表单区域 -->
+  <view class="form-section">
+    <view class="input-group">
+      <text class="input-label">姓名</text>
+      <view class="input-wrapper">
+        <input 
+          class="input-field" 
+          placeholder="请输入您的姓名" 
+          bindinput="onNameInput"
+          value="{{name}}"
+        />
+        <text class="input-icon">👤</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.name}}">{{errors.name}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">裁判等级</text>
+      <view class="input-wrapper">
+        <picker range="{{refereeLevels}}" value="{{refereeLevelIndex}}" bindchange="onRefereeLevelChange">
+          <view class="picker-field">
+            
+          </view>
+        </picker>
+        <text class="input-icon">⭐</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.refereeLevel}}">{{errors.refereeLevel}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">裁判编号</text>
+      <view class="input-wrapper">
+        <input 
+          class="input-field" 
+          placeholder="请输入裁判编号" 
+          bindinput="onRefereeIdInput"
+          value="{{refereeId}}"
+        />
+        <text class="input-icon">🏆</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.refereeId}}">{{errors.refereeId}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">联系电话</text>
+      <view class="input-wrapper">
+        <input 
+          class="input-field" 
+          placeholder="请输入联系电话" 
+          type="number"
+          bindinput="onPhoneInput"
+          value="{{phone}}"
+        />
+        <text class="input-icon">📱</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.phone}}">{{errors.phone}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">执裁经验</text>
+      <view class="input-wrapper">
+        <textarea 
+          class="input-field" 
+          placeholder="请输入执裁经验" 
+          maxlength="200"
+          bindinput="onExperienceInput"
+          value="{{experience}}"
+        ></textarea>
+        <text class="input-icon">📝</text>
+      </view>
+      <text class="char-count">{{ExperienceLen}}/200</text>
+      <text class="error-message" wx:if="{{errors.experience}}">{{errors.experience}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">所在地区</text>
+      <view class="input-wrapper">
+        <input 
+          class="input-field" 
+          placeholder="请输入所在地区" 
+          bindinput="onRegionInput"
+          value="{{region}}"
+        />
+        <text class="input-icon">📍</text>
+      </view>
+      <text class="error-message" wx:if="{{errors.region}}">{{errors.region}}</text>
+    </view>
+
+    <view class="input-group">
+      <text class="input-label">个人头像</text>
+      <view class="image-uploader">
+        <view class="upload-btn" bindtap="chooseAvatar">
+          <text class="upload-icon">📷</text>
+          <text class="upload-text"></text>
+        </view>
+        <image 
+          class="avatar-preview" 
+          src="{{avatarUrl}}" 
+          mode="aspectFit" 
+          wx:if="{{avatarUrl}}"
+        ></image>
+      </view>
+      <text class="error-message" wx:if="{{errors.avatar}}">{{errors.avatar}}</text>
+    </view>
+  </view>
+
+  <!-- 按钮区域 -->
+  <view class="button-section">
+    <button 
+      class="submit-btn "
+      bindtap="handleSubmit"
+      disabled="{{isSubmitting}}"
+    >
+      
+    </button>
+
+    <button 
+      class="skip-btn "
+      bindtap="skipGuide"
+      disabled="{{isSubmitting}}"
+    >
+      跳过引导，稍后填写
+    </button>
+  </view>
+</view>

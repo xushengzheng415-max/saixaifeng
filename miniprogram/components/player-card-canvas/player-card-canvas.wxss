@@ -1,0 +1,19 @@
+/* components/player-card-canvas/player-card-canvas.wxss */
+.card-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.card-canvas {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.card-preview {
+  width: 100%;
+  border-radius: 16rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.3);
+}

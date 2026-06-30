@@ -1,0 +1,54 @@
+{
+  "name": "麦步足球赛事系统",
+  "version": "1.0.0",
+  "description": "基于微信云开发的足球赛事管理小程序",
+  "cloud": true,
+  "miniprogramRoot": "miniprogram/",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "appid": "wx57164cca8676f411",
+  "projectConfig": {
+    "appid": "wx57164cca8676f411",
+    "projectname": "maibu-football",
+    "compileType": "miniprogram",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "enhance": true
+    },
+    "libVersion": "3.15.1",
+    "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"
+  },
+  "setting": {
+    "es6": false,
+    "postcss": false,
+    "compileWorklet": false,
+    "minified": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "enhance": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": false,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "compileType": "miniprogram",
+  "libVersion": "development",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {},
+  "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"
+}

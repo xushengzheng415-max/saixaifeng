@@ -1,0 +1,177 @@
+<!--packageA/pages/lineup/lineup.wxml-->
+<view class="page-container">
+  <!-- 顶部信息栏 -->
+  <view class="header-bar">
+    <view class="match-info">
+      <text class="team-name">{{teamName}}</text>
+      <text class="vs">VS</text>
+      <text class="team-name">{{opponentName}}</text>
+    </view>
+    <view class="formation-selector" bindtap="showFormationPicker">
+      <text>阵型：{{currentFormation.name}}</text>
+      <text class="arrow">▼</text>
+    </view>
+  </view>
+
+  <!-- 主体区域：左侧阵型图 + 右侧球员列表 -->
+  <view class="main-area">
+    <!-- 左侧：足球场 + 阵型 -->
+    <view class="field-area">
+      <view class="field-container">
+        <!-- 足球场背景 -->
+        <image class="field-bg" src="/images/field-horizontal.png" mode="aspectFit" />
+        
+        <!-- 阵型球员位置 -->
+        <view class="positions-layer">
+          <block wx:for="{{positions}}" wx:key="id">
+            <view 
+              class="position-slot "
+              style="left:{{item.x}}%;top:{{item.y}}%"
+              data-index="{{index}}"
+              bindtap="onPositionTap"
+            >
+              <view class="jersey" wx:if="{{item.playerId}}">
+                <text class="jersey-number">{{item.jerseyNumber}}</text>
+              </view>
+              <view class="empty-slot" wx:else>
+                <text class="plus">+</text>
+              </view>
+              <text class="position-label">{{item.label}}</text>
+            </view>
+          </block>
+        </view>
+      </view>
+
+      <!-- 已选首发计数 -->
+      <view class="selection-count">
+        <text>首发：{{selectedCount}}/11</text>
+      </view>
+    </view>
+
+    <!-- 右侧：球员选择面板 -->
+    <view class="player-panel" wx:if="{{showPlayerPanel}}">
+      <view class="panel-header">
+        <text class="panel-title">选择球员 - {{currentPositionLabel}}</text>
+        <text class="panel-close" bindtap="closePlayerPanel">✕</text>
+      </view>
+      
+      <!-- 搜索框 -->
+      <view class="search-box">
+        <input 
+          class="search-input"
+          placeholder="搜索球员姓名"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+        />
+      </view>
+
+      <!-- 球员列表 -->
+      <scroll-view class="player-list" scroll-y>
+        <view 
+          class="player-item "
+          wx:for="{{filteredPlayers}}" wx:key="_id"
+          wx:key="id"
+          data-player="{{item}}"
+          bindtap="onPlayerSelect"
+        >
+          <view class="player-jersey">{{item.jerseyNumber}}</view>
+          <view class="player-info">
+            <text class="player-name">{{item.name}}</text>
+            <text class="player-position">{{item.position}}</text>
+          </view>
+          <view class="player-status">
+            <text class="status-badge" wx:if="{{item.isStarting}}">首发</text>
+            <text class="status-badge substitute" wx:elif="{{item.isSubstitute}}">替补</text>
+          </view>
+        </view>
+
+        <!-- 空状态 -->
+        <view class="empty-state">
+          <text>暂无可用球员</text>
+        </view>
+      </scroll-view>
+
+      <!-- 移除按钮 -->
+      <view class="panel-footer" wx:if="{{selectedPlayerId}}">
+        <button class="btn-remove" bindtap="onRemovePlayer">移除该位置</button>
+      </view>
+    </view>
+
+    <!-- 右侧：替补列表（未打开球员面板时显示） -->
+    <view class="substitute-panel" wx:else>
+      <view class="panel-header">
+        <text class="panel-title">替补席（{{SubstitutesLen}}/12）</text>
+        <text class="panel-subtitle">点击 + 添加替补</text>
+      </view>
+
+      <scroll-view class="sub-list" scroll-y>
+        <view 
+          class="sub-item"
+          wx:for="{{substitutes}}" wx:key="_id"
+          wx:key="id"
+        >
+          <view class="sub-jersey">{{item.jerseyNumber}}</view>
+          <view class="sub-info">
+            <text class="sub-name">{{item.name}}</text>
+            <text class="sub-position">{{item.position}}</text>
+          </view>
+          <text class="sub-remove" data-index="{{index}}" bindtap="onRemoveSubstitute">✕</text>
+        </view>
+
+        <!-- 添加替补的空框 -->
+        <view 
+          class="sub-item add-slot"
+          wx:if="{{SubstitutesLen < 12}}"
+          bindtap="onAddSubstitute"
+        >
+          <view class="add-icon">+</view>
+          <text class="add-text">添加替补</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 底部操作栏 -->
+  <view class="bottom-bar">
+    <button class="btn-cancel" bindtap="onCancel">取消</button>
+    <button 
+      class="btn-submit "
+      disabled="{{selectedCount < 11}}"
+      bindtap="onSubmit"
+    >
+      提交首发（{{selectedCount}}/11）
+    </button>
+  </view>
+
+  <!-- 阵型选择弹窗 -->
+  <view class="picker-mask" wx:if="{{showFormationModal}}" bindtap="hideFormationPicker">
+    <view class="picker-modal" catchtap="">
+      <view class="modal-header">
+        <text class="modal-title">选择阵型</text>
+        <text class="modal-close" bindtap="hideFormationPicker">✕</text>
+      </view>
+      <view class="formation-grid">
+        <view 
+          class="formation-item "
+          wx:for="{{formations}}" wx:key="_id"
+          wx:key="id"
+          data-formation="{{item}}"
+          bindtap="onFormationSelect"
+        >
+          <text class="formation-name">{{item.name}}</text>
+          <text class="formation-desc">{{item.playerCount}}人</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 提交成功弹窗 -->
+  <view class="success-mask" wx:if="{{showSuccessModal}}">
+    <view class="success-modal">
+      <view class="success-icon">✓</view>
+      <text class="success-title">首发阵容已提交</text>
+      <text class="success-desc">如需修改，请联系第四官员</text>
+      <button class="btn-confirm" bindtap="onSuccessConfirm">确定</button>
+    </view>
+  </view>
+</view>

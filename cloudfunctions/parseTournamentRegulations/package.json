@@ -1,0 +1,11 @@
+{
+  "name": "parseTournamentRegulations",
+  "version": "1.0.0",
+  "description": "解析竞赛规程PDF/Word/图片，AI识别赛制信息",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^3.16.0",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.5.2"
+  }
+}

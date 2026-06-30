@@ -1,0 +1,35 @@
+<!-- pages/identity/claim.wxml - 认领临时球员 -->
+<view class="container">
+  <view class="tip-box">
+    <text class="tip-icon">💡</text>
+    <text class="tip-text">以下是教练为你创建的球员档案，认领后可查看完整比赛数据</text>
+  </view>
+
+  <view class="player-list" wx:if="{{PendingPlayersLen > 0}}">
+    <view class="player-card" wx:for="{{pendingPlayers}}" wx:key="_id">
+      <view class="player-info">
+        <view class="name-row">
+          <text class="jersey-num">{{item.jerseyNumber || '--'}}</text>
+          <text class="player-name">{{item.name}}</text>
+          <text class="jersey-name" wx:if="{{item.jerseyName}}">{{item.jerseyName}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-item" wx:if="{{item.position}}">{{item.position}}</text>
+          <text class="meta-item" wx:if="{{item.teamName}}">{{item.teamName}}</text>
+          <text class="meta-item" wx:if="{{item.phone}}">{{item.phone}}</text>
+        </view>
+        <text class="coach-tip">由教练创建 · 数据仅教练可见</text>
+      </view>
+      <view class="action-col">
+        <view class="claim-btn" bindtap="claimPlayer" data-id="{{item._id}}" data-name="{{item.name}}">认领</view>
+        <view class="ignore-btn" bindtap="ignorePlayer" data-id="{{item._id}}">忽略</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-state" wx:else>
+    <text class="empty-icon">✅</text>
+    <text class="empty-text">暂无待认领的球员档案</text>
+    <text class="empty-hint">当教练为你创建球员档案后，会在这里显示</text>
+  </view>
+</view>

@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "官员详情",
+  "navigationBarBackgroundColor": "#1565C0",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#1976D2",
+  "backgroundTextStyle": "light",
+  "enablePullDownRefresh": false
+}

@@ -1,0 +1,237 @@
+<!-- pages/match/squad/squad.wxml -->
+<!-- 首发阵容设置界面 - 支持5/7/8/11人制 -->
+
+<view class="container">
+  <!-- 比赛信息 -->
+  <view class="match-info" wx:if="{{match}}">
+    <view class="match-header">
+      <text class="match-title">{{match.name}}</text>
+      <text class="match-format">{{formatText}}</text>
+    </view>
+    <view class="match-detail">
+      <text class="detail-item">📅 {{match.matchDate}}</text>
+      <text class="detail-item">📍 {{match.venue || '待定'}}</text>
+    </view>
+  </view>
+
+  <!-- 首发阵容预览区域 -->
+  <view class="formation-section" wx:if="{{StartingPlayersLen > 0}}">
+    <view class="section-header">
+      <text class="section-title">首发阵容 ({{StartingPlayersLen}}/{{minPlayers}})</text>
+      <text class="section-hint">点击球员卡片可查看详情</text>
+    </view>
+    
+    <!-- 阵型视图 -->
+    <view class="formation-pitch">
+      <!-- 前锋 -->
+      <view class="formation-row formation-fw">
+        <view 
+          class="formation-player" 
+          wx:for="{{startingByPosition.FW}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onShowPlayerCard"
+          data-player="{{item}}"
+        >
+          <view class="player-simple">
+            <text class="player-jersey">{{item.jerseyNumber}}</text>
+            <text class="player-name-short">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 中场 -->
+      <view class="formation-row formation-mf">
+        <view 
+          class="formation-player" 
+          wx:for="{{startingByPosition.MF}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onShowPlayerCard"
+          data-player="{{item}}"
+        >
+          <view class="player-simple">
+            <text class="player-jersey">{{item.jerseyNumber}}</text>
+            <text class="player-name-short">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 后卫 -->
+      <view class="formation-row formation-df">
+        <view 
+          class="formation-player" 
+          wx:for="{{startingByPosition.DF}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onShowPlayerCard"
+          data-player="{{item}}"
+        >
+          <view class="player-simple">
+            <text class="player-jersey">{{item.jerseyNumber}}</text>
+            <text class="player-name-short">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 门将 -->
+      <view class="formation-row formation-gk">
+        <view 
+          class="formation-player" 
+          wx:for="{{startingByPosition.GK}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onShowPlayerCard"
+          data-player="{{item}}"
+        >
+          <view class="player-simple player-gk">
+            <text class="player-jersey">{{item.jerseyNumber}}</text>
+            <text class="player-name-short">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 选择统计 -->
+  <view class="selection-bar">
+    <text class="selection-count">已选首发: {{StartingPlayersLen}}/{{minPlayers}}</text>
+    <view class="selection-actions">
+      <text class="action-text" bindtap="onClearStarting">清空首发</text>
+    </view>
+  </view>
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-state">
+    <text>加载中...</text>
+  </view>
+
+  <!-- 球员列表 -->
+  <block wx:else>
+    <!-- 门将 -->
+    <view class="position-section" wx:if="{{PlayersLen > 0}}">
+      <view class="position-header">
+        <text class="position-title">门将 (GK)</text>
+        <text class="position-count">{{positionCount.GK || 0}}人</text>
+      </view>
+      <view class="player-grid">
+        <view 
+          class="player-card " 
+          wx:for="{{players}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onToggleStarting"
+          data-id="{{item._id}}"
+        >
+          <image wx:if="{{item.photoUrl}}" class="player-photo" src="{{item.photoUrl}}" mode="aspectFill"></image>
+          <view wx:else class="photo-placeholder">GK</view>
+          <text class="player-number">#{{item.jerseyNumber}}</text>
+          <text class="player-name">{{item.name}}</text>
+          <view class="starting-badge" wx:if="{{item.isStarting}}">首发</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 后卫 -->
+    <view class="position-section" wx:if="{{PlayersLen > 0}}">
+      <view class="position-header">
+        <text class="position-title">后卫 (DF)</text>
+        <text class="position-count">{{positionCount.DF || 0}}人</text>
+      </view>
+      <view class="player-grid">
+        <view 
+          class="player-card " 
+          wx:for="{{players}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onToggleStarting"
+          data-id="{{item._id}}"
+        >
+          <image wx:if="{{item.photoUrl}}" class="player-photo" src="{{item.photoUrl}}" mode="aspectFill"></image>
+          <view wx:else class="photo-placeholder">DF</view>
+          <text class="player-number">#{{item.jerseyNumber}}</text>
+          <text class="player-name">{{item.name}}</text>
+          <view class="starting-badge" wx:if="{{item.isStarting}}">首发</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 中场 -->
+    <view class="position-section" wx:if="{{PlayersLen > 0}}">
+      <view class="position-header">
+        <text class="position-title">中场 (MF)</text>
+        <text class="position-count">{{positionCount.MF || 0}}人</text>
+      </view>
+      <view class="player-grid">
+        <view 
+          class="player-card " 
+          wx:for="{{players}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onToggleStarting"
+          data-id="{{item._id}}"
+        >
+          <image wx:if="{{item.photoUrl}}" class="player-photo" src="{{item.photoUrl}}" mode="aspectFill"></image>
+          <view wx:else class="photo-placeholder">MF</view>
+          <text class="player-number">#{{item.jerseyNumber}}</text>
+          <text class="player-name">{{item.name}}</text>
+          <view class="starting-badge" wx:if="{{item.isStarting}}">首发</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 前锋 -->
+    <view class="position-section" wx:if="{{PlayersLen > 0}}">
+      <view class="position-header">
+        <text class="position-title">前锋 (FW)</text>
+        <text class="position-count">{{positionCount.FW || 0}}人</text>
+      </view>
+      <view class="player-grid">
+        <view 
+          class="player-card " 
+          wx:for="{{players}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onToggleStarting"
+          data-id="{{item._id}}"
+        >
+          <image wx:if="{{item.photoUrl}}" class="player-photo" src="{{item.photoUrl}}" mode="aspectFill"></image>
+          <view wx:else class="photo-placeholder">FW</view>
+          <text class="player-number">#{{item.jerseyNumber}}</text>
+          <text class="player-name">{{item.name}}</text>
+          <view class="starting-badge" wx:if="{{item.isStarting}}">首发</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view class="empty-state">
+      <text class="empty-icon">⚽</text>
+      <text class="empty-text">暂无球员，请先添加球员</text>
+      <button class="btn-add" bindtap="navigateToAddPlayer">添加球员</button>
+    </view>
+  </block>
+
+  <!-- 底部提交按钮 -->
+  <view class="submit-section" wx:if="{{PlayersLen > 0}}">
+    <button 
+      class="btn-submit" 
+      bindtap="onSubmitSquad" 
+      disabled="{{saving || StartingPlayersLen < minPlayers}}"
+    >
+      
+    </button>
+    <text class="hint-text" wx:if="{{StartingPlayersLen < minPlayers}}">需要选择 {{minPlayers}} 名首发球员</text>
+  </view>
+</view>
+
+<!-- 球员卡预览弹窗 -->
+<view class="player-card-modal" wx:if="{{showPlayerCard}}" bindtap="onClosePlayerCard">
+  <view class="modal-content" catchtap="preventBubble">
+    <player-card-canvas 
+      playerData="{{currentPlayer}}"
+      tier="{{currentPlayer.tier || 'bronze'}}"
+      avatarUrl="{{currentPlayer.photoUrl}}"
+      teamLogoUrl="{{teamLogoUrl}}"
+    />
+    <view class="player-details">
+      <text class="detail-name">{{currentPlayer.name}}</text>
+      <text class="detail-position">{{currentPlayer.position}}</text>
+      <text class="detail-info">身高: {{currentPlayer.height || '--'}}cm</text>
+      <text class="detail-info">体重: {{currentPlayer.weight || '--'}}kg</text>
+    </view>
+    <button class="btn-close" bindtap="onClosePlayerCard">关闭</button>
+  </view>
+</view>

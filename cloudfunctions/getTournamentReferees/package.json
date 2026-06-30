@@ -1,0 +1,9 @@
+{
+  "name": "getTournamentReferees",
+  "version": "1.0.0",
+  "description": "获取赛事关联的裁判列表",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

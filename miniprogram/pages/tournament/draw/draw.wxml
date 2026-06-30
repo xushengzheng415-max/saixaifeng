@@ -1,0 +1,65 @@
+<view class="page">
+  <view class="loading-box" wx:if="{{errorMsg}}">
+    <text>{{errorMsg}}</text>
+    <text bindtap="loadData" style="color:#1B5E20;margin-top:16rpx;">点击重试</text>
+  </view>
+
+  <block wx:else>
+    <view class="header">
+      <text class="h-title">{{tournamentName}}</text>
+      <view class="h-row">
+        <text class="h-tag">{{typeText}}</text>
+        <text class="h-count">{{teamsLen}} 队</text>
+      </view>
+    </view>
+
+    <view class="empty" wx:if="{{noData}}">
+      <text class="empty-icon">📋</text>
+      <text class="empty-text">暂无抽签分组数据</text>
+      <text class="empty-desc">请在网页端管理后台进行抽签分组</text>
+    </view>
+
+    <block wx:else>
+      <!-- 赛会制 / 复合制 - 小组分组 -->
+      <view class="draw-section" wx:if="{{hasGroups}}">
+        <view class="section-title">分组情况</view>
+        <view class="group-box" wx:for="{{groupList}}" wx:key="groupName">
+          <view class="gb-header">
+            <text class="gb-name">{{item.groupName}}</text>
+            <text class="gb-count">{{item.teamsLen}}队</text>
+          </view>
+          <view class="gb-teams">
+            <text class="gb-team" wx:for="{{item.teams}}" wx:key="teamName" wx:for-item="t">{{t.teamName}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 杯赛制 - 上半区/下半区 -->
+      <view class="draw-section" wx:if="{{isCup}}">
+        <view class="section-title">对阵分区</view>
+        <view class="cup-rows">
+          <view class="cup-half">
+            <text class="cup-label">上半区 ({{upperHalfLen}}队)</text>
+            <text class="cup-team" wx:for="{{cupUpperHalf}}" wx:key="teamName">{{item.teamName}}</text>
+          </view>
+          <view class="cup-divider">
+            <view class="cup-line"></view><text>VS</text><view class="cup-line"></view>
+          </view>
+          <view class="cup-half">
+            <text class="cup-label">下半区 ({{lowerHalfLen}}队)</text>
+            <text class="cup-team" wx:for="{{cupLowerHalf}}" wx:key="teamName">{{item.teamName}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 联赛制 -->
+      <view class="draw-section" wx:if="{{isLeague}}">
+        <view class="section-title">联赛信息</view>
+        <view class="info-row">
+          <text class="info-label">赛制</text>
+          <text class="info-value">{{leagueText}}</text>
+        </view>
+      </view>
+    </block>
+  </block>
+</view>

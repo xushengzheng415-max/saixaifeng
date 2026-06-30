@@ -1,0 +1,76 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/home/home",
+    "pages/guide/team-info/team-info",
+    "pages/guide/referee-info/referee-info",
+    "pages/team/team",
+    "pages/team/detail/detail",
+    "pages/team/player-add/player-add",
+    "pages/team/player-detail/player-detail",
+    "pages/team/management-add/management-add",
+    "pages/team/management-detail/management-detail",
+    "pages/player/detail/detail",
+    "pages/match/detail/detail",
+    "pages/match/squad/squad",
+    "pages/tournament/list/list",
+    "pages/tournament/teams/teams",
+    "pages/tournament/draw/draw",
+    "pages/tournament/signup/signup",
+    "pages/tournament/schedule/schedule",
+    "pages/tournament-center/tournament-center",
+    "pages/tournament/create/create",
+    "pages/tournament/detail/detail",
+    "pages/tournament/rules/rules",
+    "pages/roster-change/roster-change",
+    "pages/referee/index",
+    "pages/profile/profile",
+    "pages/profile/info/info",
+    "pages/manage/manage",
+    "pages/invite/invite"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#2E7D32",
+    "navigationBarTitleText": "赛小蜂足球赛事",
+    "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#757575",
+    "selectedColor": "#2E7D32",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/tournament-center/tournament-center",
+        "text": "赛事"
+      },
+      {
+        "pagePath": "pages/referee/index",
+        "text": "裁判"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
+    ]
+  },
+  "subpackages": [
+    {
+      "root": "packageA",
+      "pages": [
+        "pages/signature/signature",
+        "pages/lineup/lineup"
+      ]
+    }
+  ],
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}
+

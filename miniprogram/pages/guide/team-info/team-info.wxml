@@ -1,0 +1,135 @@
+<view class="guide-container">
+<!-- 头部区域 -->
+  <view class="header-section">
+    <view class="progress-bar">
+      <view class="progress-fill" style="width: 33%;"></view>
+    </view>
+    <view class="header-content">
+      <view class="icon-wrapper">
+        <text class="step-icon">📝</text>
+      </view>
+      <text class="title">完善球队信息</text>
+      <text class="subtitle">成为球队管理者</text>
+    </view>
+  </view>
+
+  <!-- 表单区域 -->
+  <view class="form-section">
+    <view class="form-card">
+      <view class="input-group">
+        <text class="input-label">球队全称</text>
+        <view class="input-wrapper">
+          <input 
+            class="input-field" 
+            placeholder="请输入球队全称（2-20字）"
+            bindinput="onFullNameInput"
+            value="{{fullName}}"
+            maxlength="20"
+          />
+          <text class="input-icon">⚽</text>
+        </view>
+        <text class="error-message" wx:if="{{errors.fullName}}">{{errors.fullName}}</text>
+      </view>
+
+      <view class="input-group">
+        <text class="input-label">球队简称</text>
+        <view class="input-wrapper">
+          <input 
+            class="input-field" 
+            placeholder="请输入球队简称（1-10字）"
+            bindinput="onShortNameInput"
+            value="{{shortName}}"
+            maxlength="10"
+          />
+          <text class="input-icon">✏️</text>
+        </view>
+        <text class="error-message" wx:if="{{errors.shortName}}">{{errors.shortName}}</text>
+      </view>
+
+      <view class="input-group">
+        <text class="input-label">球队所在城市</text>
+        <view class="input-wrapper">
+          <picker mode="region" bindchange="onCityChange" value="{{city}}">
+            <view class="picker-text">{{city || '请选择所在城市'}}</view>
+            <text class="picker-icon">📍</text>
+          </picker>
+        </view>
+        <text class="error-message" wx:if="{{errors.city}}">{{errors.city}}</text>
+      </view>
+
+      <view class="input-group">
+        <text class="input-label">球队类型</text>
+        <view class="select-wrapper">
+          <picker bindchange="onTeamTypeChange" value="{{teamTypeIndex}}" range="{{teamTypeOptions}}" range-key="label">
+            <view class="picker-text">{{selectedTeamTypeText}}</view>
+            <text class="picker-icon">▼</text>
+          </picker>
+        </view>
+        <text class="error-message" wx:if="{{errors.teamType}}">{{errors.teamType}}</text>
+      </view>
+
+      <view class="input-group">
+        <text class="input-label">球队成立时间</text>
+        <view class="input-wrapper">
+          <picker mode="date" bindchange="onFoundedDateChange" value="{{foundedDate}}">
+            <view class="picker-text">{{foundedDate || '请选择成立时间'}}</view>
+            <text class="picker-icon">📅</text>
+          </picker>
+        </view>
+        <text class="error-message" wx:if="{{errors.foundedDate}}">{{errors.foundedDate}}</text>
+      </view>
+
+      <view class="input-group">
+        <text class="input-label">球队简介</text>
+        <view class="textarea-wrapper">
+          <textarea 
+            class="textarea-field" 
+            placeholder="请输入球队简介（最多200字）"
+            maxlength="200"
+            bindinput="onDescriptionInput"
+            value="{{description}}"
+          />
+          <view class="char-count">{{DescriptionLen}}/200</view>
+        </view>
+        <text class="error-message" wx:if="{{errors.description}}">{{errors.description}}</text>
+      </view>
+
+      <view class="input-group">
+        <text class="input-label">球队Logo</text>
+        <view class="upload-wrapper">
+          <view 
+            class="upload-area" 
+            bindtap="chooseImage"
+            style=""
+          >
+            <view class="upload-content" wx:if="{{!teamLogo}}">
+              <text class="upload-icon">📷</text>
+              <text class="upload-text">点击上传Logo</text>
+              <text class="upload-hint">支持JPG、PNG格式</text>
+            </view>
+          </view>
+          <text class="error-message" wx:if="{{errors.logo}}">{{errors.logo}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="action-section">
+    <button 
+      class="submit-btn "
+      bindtap="handleSubmit"
+      disabled="{{isSubmitting}}"
+    >
+      保存
+    </button>
+    <text class="skip-text" bindtap="skip">跳过，稍后完善</text>
+  </view>
+
+  <!-- 底部提示 -->
+  <view class="footer-section">
+    <text class="tips">
+      完成球队信息填写后，您将成为球队管理者，有权限管理球队和邀请球员。
+    </text>
+  </view>
+</view>

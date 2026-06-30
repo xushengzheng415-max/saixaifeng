@@ -1,0 +1,100 @@
+<!-- pages/team/detail/detail.wxml -->
+<!-- 青训版本 - 球队详情页 -->
+
+<view class="container">
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-state">
+    <text>加载中...</text>
+  </view>
+
+  <!-- 球队信息 -->
+  <block wx:else>
+    <!-- 顶部卡片 -->
+    <view class="team-header">
+      <view class="team-logo">
+        <image wx:if="{{team.logoUrl}}" src="{{team.logoUrl}}" mode="aspectFill"></image>
+        <text wx:else class="logo-placeholder">⚽</text>
+      </view>
+      <view class="team-info">
+        <text class="team-name">{{team.name}}</text>
+        <text wx:if="{{shortName}}" style="color:#999;font-size:28rpx;">{{shortName}}</text>
+        <view class="team-meta">
+          <text class="meta-item">📅 创建于 {{team.createTime}}</text>
+        </view>
+        <view class="team-code-box" bindtap="onCopyCode">
+          <text class="code-label">球队代码</text>
+          <text class="code-value">{{team.teamCode}}</text>
+          <text class="copy-hint">点击复制</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 统计 -->
+    <view class="stats-section">
+      <view class="stat-item">
+        <text class="stat-number">{{stats.totalPlayers}}</text>
+        <text class="stat-label">球员</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-number">{{stats.gk}}</text>
+        <text class="stat-label">门将</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-number">{{stats.df}}</text>
+        <text class="stat-label">后卫</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-number">{{stats.mf}}</text>
+        <text class="stat-label">中场</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-number">{{stats.fw}}</text>
+        <text class="stat-label">前锋</text>
+      </view>
+    </view>
+
+    <!-- 快捷操作 -->
+    <view class="action-section">
+      <button class="action-btn primary" bindtap="onAddPlayer">
+        <text class="btn-icon">➕</text> 添加球员
+      </button>
+      <button class="action-btn" bindtap="onSubmitSquad">
+        <text class="btn-icon">🏆</text> 提交名单
+      </button>
+      <button class="action-btn" bindtap="onEditTeam">
+        <text class="btn-icon">✏️</text> 编辑球队
+      </button>
+    </view>
+
+    <!-- 球员列表 -->
+    <view class="players-section">
+      <view class="section-header">
+        <text class="section-title">球员名单 ({{PlayersLen}}人)</text>
+      </view>
+      
+      <view class="player-list" wx:if="{{PlayersLen > 0}}">
+        <view 
+          class="player-item" 
+          wx:for="{{players}}" wx:key="_id"
+          wx:key="_id"
+          bindtap="onViewPlayer"
+          data-id="{{item._id}}"
+        >
+          <image wx:if="{{item.photoUrl}}" class="player-avatar" src="{{item.photoUrl}}" mode="aspectFill"></image>
+          <view wx:else class="avatar-placeholder">{{item.nameFirstLetter}}</view>
+          <view class="player-info">
+            <text class="player-name">{{item.name}}</text>
+            <text class="player-meta">#{{item.jerseyNumber}} · </text>
+          </view>
+          <text class="arrow">></text>
+        </view>
+      </view>
+
+      <view class="empty-state" wx:else>
+        <text class="empty-icon">⚽</text>
+        <text class="empty-text">暂无球员，快去添加吧</text>
+        <button class="btn-add" bindtap="onAddPlayer">添加球员</button>
+      </view>
+    </view>
+  </block>
+</view>

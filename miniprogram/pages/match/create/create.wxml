@@ -1,0 +1,256 @@
+<!-- 创建赛事页面 -->
+<view class="container">
+  <!-- 顶部标题 -->
+  <view class="header-section">
+    <view class="header-bg"></view>
+    <view class="header-content">
+      <text class="header-title">创建赛事</text>
+      <text class="header-desc">填写赛事信息，开启精彩比赛</text>
+    </view>
+  </view>
+
+  <!-- 表单区域 -->
+  <view class="form-section">
+    <!-- 赛事基本信息 -->
+    <view class="form-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        <text class="title-text">赛事信息</text>
+      </view>
+
+      <!-- 赛事名称 -->
+      <view class="form-item">
+        <text class="label">赛事名称 <text class="required">*</text></text>
+        <input 
+          class="input-field" 
+          placeholder="请输入赛事名称"
+          value="{{formData.name}}"
+          bindinput="onInputChange"
+          data-field="name"
+          maxlength="50"
+        />
+      </view>
+
+      <!-- 赛制选择 -->
+      <view class="form-item">
+        <text class="label">赛事赛制 <text class="required">*</text></text>
+        <view class="schedule-types">
+          <view class="type-card "
+                wx:for="{{typeOptions}}" wx:key="value" data-type="{{item.value}}" data-index="{{index}}" bindtap="onTypeSelect">
+            <view class="type-icon">{{item.icon}}</view>
+            <view class="type-info">
+              <text class="type-name">{{item.label}}</text>
+              <text class="type-desc">{{item.desc}}</text>
+            </view>
+            <view class="type-check">✓</view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 比赛地点 -->
+      <view class="form-item">
+        <text class="label">比赛地点 <text class="required">*</text></text>
+        <input 
+          class="input-field" 
+          placeholder="请输入比赛地点"
+          value="{{formData.location}}"
+          bindinput="onInputChange"
+          data-field="location"
+          maxlength="100"
+        />
+      </view>
+
+      <!-- 赛事LOGO -->
+      <view class="form-item">
+        <text class="label">赛事LOGO</text>
+        <view class="logo-upload-box">
+          <view class="logo-preview" wx:if="{{formData.logo}}">
+            <image src="{{formData.logo}}" mode="aspectFill" />
+            <view class="delete-btn" bindtap="onDeleteLogo">✕</view>
+          </view>
+          <view class="upload-btn" wx:else bindtap="onChooseLogo">
+            <text class="upload-icon">+</text>
+            <text class="upload-text">上传LOGO</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 赞助商信息 -->
+    <view class="form-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        <text class="title-text">赞助商信息</text>
+      </view>
+
+      <!-- 冠名商 -->
+      <view class="form-item">
+        <text class="label">冠名商</text>
+        <input 
+          class="input-field" 
+          placeholder="请输入冠名商名称（选填）"
+          value="{{formData.titleSponsor}}"
+          bindinput="onInputChange"
+          data-field="titleSponsor"
+          maxlength="50"
+        />
+      </view>
+
+      <!-- 赞助商列表 -->
+      <view class="form-item">
+        <text class="label">赞助商</text>
+        <view class="sponsors-section">
+          <!-- 已添加的赞助商 -->
+          <view class="sponsor-item" wx:for="{{formData.sponsors}}" wx:key="index">
+            <view class="sponsor-preview">
+              <image src="{{item.value}}" mode="aspectFit" />
+            </view>
+            <text class="sponsor-text">{{item.value}}</text>
+            <view class="delete-sponsor-btn" bindtap="onDeleteSponsor" data-index="{{index}}">✕</view>
+          </view>
+          
+          <!-- 添加赞助商按钮 -->
+          <view class="add-sponsor-box">
+            <button class="add-sponsor-btn" bindtap="onAddTextSponsor">
+              <text class="btn-icon">+</text>
+              <text>文字赞助商</text>
+            </button>
+            <button class="add-sponsor-btn" bindtap="onAddImageSponsor">
+              <text class="btn-icon">+</text>
+              <text>图片赞助商</text>
+            </button>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 时间设置 -->
+    <view class="form-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        <text class="title-text">时间设置</text>
+      </view>
+
+      <!-- 开始日期 -->
+      <view class="form-item">
+        <text class="label">开始日期 <text class="required">*</text></text>
+        <picker 
+          mode="date" 
+          bindchange="onStartDateChange"
+          value="{{formData.startDate}}"
+          start="{{minDate}}"
+        >
+          <view class="picker-field">
+            <text>
+              {{formData.startDate || '请选择开始日期'}}
+            </text>
+            <text class="picker-arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+
+      <!-- 结束日期 -->
+      <view class="form-item">
+        <text class="label">结束日期 <text class="required">*</text></text>
+        <picker 
+          mode="date" 
+          bindchange="onEndDateChange"
+          value="{{formData.endDate}}"
+          start="{{formData.startDate || minDate}}"
+        >
+          <view class="picker-field">
+            <text>
+              {{formData.endDate || '请选择结束日期'}}
+            </text>
+            <text class="picker-arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+
+      <!-- 报名截止日期 -->
+      <view class="form-item">
+        <text class="label">报名截止日期 <text class="required">*</text></text>
+        <picker 
+          mode="date" 
+          bindchange="onDeadlineChange"
+          value="{{formData.deadline}}"
+          end="{{formData.startDate}}"
+        >
+          <view class="picker-field">
+            <text>
+              {{formData.deadline || '请选择报名截止日期'}}
+            </text>
+            <text class="picker-arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+    </view>
+
+    <!-- 规模设置 -->
+    <view class="form-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        <text class="title-text">规模设置</text>
+      </view>
+
+      <!-- 最大球队数 -->
+      <view class="form-item">
+        <text class="label">最大球队数 <text class="required">*</text></text>
+        <view class="stepper-wrapper">
+          <view class="stepper-box">
+            <button class="stepper-btn minus" bindtap="onStepperChange" data-field="maxTeams" data-action="minus">−</button>
+            <view class="stepper-value">{{formData.maxTeams}}</view>
+            <button class="stepper-btn plus" bindtap="onStepperChange" data-field="maxTeams" data-action="plus">+</button>
+          </view>
+          <text class="stepper-hint">范围：2-64 队</text>
+        </view>
+      </view>
+
+      <!-- 参赛名单人数 -->
+      <view class="form-item">
+        <view class="label-row">
+          <text class="label">参赛名单人数 <text class="required">*</text></text>
+          <text class="label-tip">（每队可报名参赛的球员数）</text>
+        </view>
+        <view class="stepper-wrapper">
+          <view class="stepper-box">
+            <button class="stepper-btn minus" bindtap="onStepperChange" data-field="maxPlayers" data-action="minus">−</button>
+            <view class="stepper-value">{{formData.maxPlayers}}</view>
+            <button class="stepper-btn plus" bindtap="onStepperChange" data-field="maxPlayers" data-action="plus">+</button>
+          </view>
+          <text class="stepper-hint">范围：5-50 人</text>
+        </view>
+        <view class="field-notice">
+          <text class="notice-icon">💡</text>
+          <text class="notice-text">教练报名时需从球队球员库中选择参赛球员</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 赛事说明 -->
+    <view class="form-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        <text class="title-text">赛事说明</text>
+      </view>
+
+      <view class="form-item">
+        <textarea 
+          class="textarea-field" 
+          placeholder="请输入赛事说明、规则、注意事项等"
+          value="{{formData.description}}"
+          bindinput="onInputChange"
+          data-field="description"
+          maxlength="500"
+          auto-height
+        />
+        <text class="char-count">{{formData.DescriptionLen || 0}}/500</text>
+      </view>
+    </view>
+
+    <!-- 提交按钮 -->
+    <button class="submit-btn" bindtap="onSubmit" loading="{{submitting}}">
+      <text class="btn-text">创建赛事</text>
+    </button>
+  </view>
+</view>

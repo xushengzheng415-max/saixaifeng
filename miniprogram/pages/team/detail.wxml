@@ -1,0 +1,105 @@
+<!-- pages/team/detail.wxml - 球队详情 -->
+<!-- 编辑模式（创建/编辑球队） -->
+<view wx:if="{{!isEdit}}" class="container">
+  <view class="form-section">
+    <view class="form-item">
+      <text class="label">球队名称 *</text>
+      <input class="input" placeholder="请输入球队名称" value="{{name}}" bindinput="onNameInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="label">球队Logo</text>
+      <view class="logo-upload" bindtap="chooseLogo">
+        <image wx:if="{{logo}}" class="logo-preview" src="{{logo}}" mode="aspectFill"></image>
+        <view wx:else class="logo-placeholder">
+          <text class="plus">+</text>
+          <text class="hint">点击上传</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="form-item">
+      <text class="label">教练姓名</text>
+      <input class="input" placeholder="请输入教练姓名" value="{{coachName}}" bindinput="onCoachInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="label">联系电话</text>
+      <input class="input" placeholder="请输入联系电话" value="{{phone}}" bindinput="onPhoneInput" type="number" />
+    </view>
+
+    <view class="form-item">
+      <text class="label">备注</text>
+      <textarea class="textarea" placeholder="请输入备注信息" value="{{remark}}" bindinput="onRemarkInput" maxlength="200"></textarea>
+    </view>
+  </view>
+
+  <button class="save-btn" bindtap="saveTeam">创建球队</button>
+</view>
+
+<!-- 查看模式（球队详情） -->
+<view wx:else class="container">
+  <!-- 球队信息卡 -->
+  <view class="team-header">
+    <view class="team-logo-box">
+      <image wx:if="{{logo}}" class="team-logo" src="{{logo}}" mode="aspectFill"></image>
+      <text wx:else class="team-logo-text">⚽</text>
+    </view>
+    <text class="team-name">{{name}}</text>
+    <text class="team-meta">教练: {{coachName || '未设置'}}</text>
+    <text class="team-meta">电话: {{phone || '未设置'}}</text>
+  </view>
+
+  <!-- 球队代码（领队可见） -->
+  <view class="code-section">
+    <text class="code-label">球队代码（发给球员即可加入）</text>
+    <view class="code-box" bindtap="copyCode">
+      <text class="code-text">{{teamCode}}</text>
+      <text class="copy-hint">点击复制</text>
+    </view>
+  </view>
+
+  <!-- 快捷操作 -->
+  <view class="action-section">
+    <view class="section-title-bar">
+      <text class="section-title">球队管理</text>
+    </view>
+    <view class="action-grid">
+      <view class="action-card" bindtap="goToPlayers">
+        <text class="action-icon">👥</text>
+        <text class="action-name">管理球员</text>
+        <text class="action-desc">{{playerCount}}名球员</text>
+      </view>
+      <view class="action-card" bindtap="addPlayer">
+        <text class="action-icon">➕</text>
+        <text class="action-name">添加球员</text>
+        <text class="action-desc">手动添加</text>
+      </view>
+      <view class="action-card" bindtap="saveTeam">
+        <text class="action-icon">✏️</text>
+        <text class="action-name">编辑信息</text>
+        <text class="action-desc">修改球队资料</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 球员列表预览 -->
+  <view class="player-section">
+    <view class="section-title-bar">
+      <text class="section-title">球员名单</text>
+      <text class="more" bindtap="goToPlayers" wx:if="{{PlayersLen > 0}}">全部 ></text>
+    </view>
+    <view class="player-preview" wx:if="{{PlayersLen > 0}}">
+      <view class="player-row" wx:for="{{players}}" wx:key="_id">
+        <text class="jersey-num">{{item.jerseyNumber || '--'}}</text>
+        <text class="player-name">{{item.name}}</text>
+        <text class="player-pos" wx:if="{{item.position}}">{{item.position}}</text>
+        <text class="bind-status" wx:if="{{item.showBindStatus}}">待绑定</text>
+        <text class="bind-status bound" wx:elif="{{item.isBound}}">已绑定</text>
+      </view>
+    </view>
+    <view class="empty-small" wx:else>
+      <text>暂无球员</text>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,139 @@
+<!-- pages/player/detail/detail.wxml -->
+<view class="detail-container">
+  <!-- 头部区域 -->
+  <view class="header-section">
+    <view class="header-background">
+      <image class="team-logo" src="{{player.teamLogo}}" mode="aspectFit"></image>
+    </view>
+    <view class="player-info">
+      <view class="player-photo-wrapper">
+        <image 
+          class="player-photo" 
+          src="{{player.photoUrl || '/images/default-avatar.png'}}" 
+          mode="aspectFill"
+        ></image>
+      </view>
+      <view class="player-details">
+        <text class="player-name">{{player.name}}</text>
+        <text class="player-jersey">#{{player.jerseyNumber || '00'}} · {{player.position}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 基础信息卡片 -->
+  <view class="info-card">
+    <view class="card-header">
+      <text class="card-title">球员信息</text>
+    </view>
+    <view class="card-content">
+      <view class="info-item">
+        <text class="info-label">球衣号码</text>
+        <text class="info-value">{{player.jerseyNumber || '-'}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">场上位置</text>
+        <text class="info-value">{{player.position || '-'}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">身高</text>
+        <text class="info-value">{{player.height || '-'}}cm</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">体重</text>
+        <text class="info-value">{{player.weight || '-'}}kg</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">出生日期</text>
+        <text class="info-value">{{player.birthDate || '-'}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">籍贯</text>
+        <text class="info-value">{{player.nationality || '-'}}</text>
+      </view>
+      <view class="info-item">
+        <text class="info-label">球衣名</text>
+        <text class="info-value">{{player.jerseyName || '-'}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 球队信息卡片 -->
+  <view class="info-card" wx:if="{{player.teamId}}">
+    <view class="card-header">
+      <text class="card-title">所属球队</text>
+    </view>
+    <view class="card-content">
+      <view class="team-info">
+        <view class="team-logo-wrapper">
+          <image class="team-logo-small" src="{{player.teamLogo || '/images/default-team.png'}}" mode="aspectFit"></image>
+        </view>
+        <view class="team-details">
+          <text class="team-name">{{player.teamName || '-'}}</text>
+          <text class="team-level">{{player.teamLevel || '-'}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 技术特点卡片 -->
+  <view class="info-card" wx:if="{{player.technicalFeatures}}">
+    <view class="card-header">
+      <text class="card-title">技术特点</text>
+    </view>
+    <view class="card-content">
+      <view class="features-list">
+        <view 
+          class="feature-item" 
+          wx:for="{{player.technicalFeatures}}" wx:key="_id"
+          wx:key="index"
+        >
+          <text class="feature-text">{{item}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 比赛记录卡片 -->
+  <view class="info-card" wx:if="{{player.matchRecords}}">
+    <view class="card-header">
+      <text class="card-title">比赛记录</text>
+    </view>
+    <view class="card-content">
+      <view class="match-list">
+        <view 
+          class="match-item" 
+          wx:for="{{player.matchRecords}}" wx:key="_id"
+          wx:key="id"
+        >
+          <view class="match-info">
+            <text class="match-date">{{item.date}}</text>
+            <text class="match-team">{{item.opponent}}</text>
+          </view>
+          <view class="match-stats">
+            <text class="match-stat">{{item.goals}}球</text>
+            <text class="match-stat">{{item.assists}}助</text>
+            <text class="match-stat">{{item.minutes}}分</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="action-section">
+    <button 
+      class="action-btn primary"
+      bindtap="onEditPlayer"
+    >
+      <text class="btn-icon">✏️</text>
+      <text class="btn-text">编辑球员信息</text>
+    </button>
+    <button 
+      class="action-btn secondary"
+      bindtap="onSharePlayer"
+    >
+      <text class="btn-icon">📤</text>
+      <text class="btn-text">分享球员卡片</text>
+    </button>
+  </view>
+</view>

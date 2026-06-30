@@ -1,0 +1,293 @@
+/* pages/tournament/detail/detail.wxss */
+.page { padding: 20rpx; background: #f5f5f5; min-height: 100vh; }
+
+.section-title { display: flex; align-items: center; justify-content: space-between; font-size: 32rpx; font-weight: bold; color: #333; margin: 30rpx 0 16rpx; }
+.st-cnt { font-size: 26rpx; color: #999; font-weight: normal; }
+
+/* 赛事头部 */
+.t-header { background: linear-gradient(135deg, #1B5E20, #43A047); border-radius: 24rpx; padding: 36rpx; color: #fff; margin-bottom: 24rpx; }
+.th-name { font-size: 40rpx; font-weight: bold; margin-bottom: 12rpx; }
+.th-meta { font-size: 24rpx; opacity: 0.85; }
+.th-qr { display: flex; align-items: center; margin-top: 24rpx; background: rgba(255,255,255,0.15); border-radius: 16rpx; padding: 16rpx 24rpx; }
+.qr-num { font-size: 48rpx; font-weight: bold; margin-right: 8rpx; }
+.qr-lbl { font-size: 22rpx; opacity: 0.8; }
+
+/* Tab 切换 */
+.tabs { display: flex; background: #fff; border-radius: 16rpx; overflow: hidden; margin-bottom: 24rpx; }
+.tab-item { flex: 1; text-align: center; padding: 24rpx 0; font-size: 28rpx; color: #666; position: relative; }
+.tab-item.active { color: #2E7D32; font-weight: bold; }
+.tab-item.active::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 60rpx; height: 4rpx; background: #2E7D32; border-radius: 2rpx; }
+
+/* 参赛名单 */
+.roster-section { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 24rpx; }
+.rs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20rpx; }
+.rs-title { font-size: 30rpx; font-weight: bold; color: #333; }
+.rs-count { font-size: 24rpx; color: #999; }
+.rs-add { font-size: 26rpx; color: #2E7D32; }
+.player-list { max-height: 500rpx; overflow-y: auto; }
+.player-item { display: flex; align-items: center; padding: 16rpx 0; border-bottom: 1rpx solid #f0f0f0; }
+.player-item:last-child { border-bottom: none; }
+.p-avatar { width: 64rpx; height: 64rpx; border-radius: 50%; background: #e8e8e8; margin-right: 20rpx; display: flex; align-items: center; justify-content: center; font-size: 28rpx; color: #999; }
+.p-info { flex: 1; }
+.p-name { font-size: 28rpx; color: #333; font-weight: 500; }
+.p-num { font-size: 24rpx; color: #999; margin-top: 4rpx; }
+.p-del { font-size: 24rpx; color: #ff4444; padding: 8rpx 16rpx; }
+
+.submit-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20rpx; padding-top: 20rpx; border-top: 1rpx solid #eee; font-size: 28rpx; color: #666; }
+.sb-btn { background: #2E7D32; color: #fff; padding: 16rpx 40rpx; border-radius: 40rpx; font-size: 28rpx; }
+.sb-btn.disabled { background: #ccc; }
+
+/* 状态卡片 */
+.status-card { background: #fff; border-radius: 16rpx; padding: 30rpx; text-align: center; margin-bottom: 24rpx; }
+.sc-icon { font-size: 80rpx; margin-bottom: 16rpx; }
+.sc-text { font-size: 30rpx; color: #666; margin-bottom: 8rpx; }
+.sc-desc { font-size: 26rpx; color: #999; }
+.sc-btn { display: inline-block; margin-top: 20rpx; background: #2E7D32; color: #fff; padding: 18rpx 48rpx; border-radius: 40rpx; font-size: 28rpx; }
+
+/* 排行榜 */
+.lb-section { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 24rpx; }
+.lb-list .lb-item { display: flex; align-items: center; padding: 16rpx 0; border-bottom: 1rpx solid #f5f5f5; }
+.lb-rank { width: 48rpx; font-size: 28rpx; font-weight: bold; color: #999; text-align: center; }
+.lb-rank.top3 { color: #FF9800; }
+.lb-name { flex: 1; font-size: 28rpx; color: #333; }
+.lb-val { font-size: 30rpx; font-weight: bold; color: #2E7D32; }
+
+/* 积分榜 */
+.st-section { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 24rpx; }
+.st-table { width: 100%; font-size: 24rpx; }
+.st-th { display: flex; padding: 12rpx 0; border-bottom: 2rpx solid #eee; font-size: 22rpx; color: #999; font-weight: bold; }
+.st-row { display: flex; align-items: center; padding: 16rpx 0; border-bottom: 1rpx solid #f5f5f5; }
+.st-row:last-child { border-bottom: none; }
+.st-rk { width: 56rpx; text-align: center; font-weight: bold; color: #666; }
+.st-team { flex: 1; font-size: 26rpx; color: #333; }
+.st-stat { width: 56rpx; text-align: center; color: #666; font-size: 24rpx; }
+.st-pts { width: 60rpx; text-align: center; font-weight: bold; color: #2E7D32; font-size: 28rpx; }
+
+/* 赛程按钮 */
+.schedule-bar { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 24rpx; }
+.sb-label { font-size: 30rpx; color: #333; font-weight: bold; }
+.sb-action { background: #2E7D32; color: #fff; padding: 14rpx 32rpx; border-radius: 32rpx; font-size: 26rpx; }
+
+/* 比赛列表 */
+.match-list { background: #fff; border-radius: 16rpx; overflow: hidden; margin-bottom: 24rpx; }
+.match-item { display: flex; align-items: center; padding: 24rpx; border-bottom: 1rpx solid #f5f5f5; }
+.match-item:last-child { border-bottom: none; }
+.mi-time { font-size: 22rpx; color: #999; width: 140rpx; }
+.mi-body { flex: 1; display: flex; align-items: center; justify-content: center; }
+.mi-team { font-size: 28rpx; color: #333; width: 160rpx; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-vs { font-size: 26rpx; color: #999; padding: 0 16rpx; }
+.mi-score { font-size: 32rpx; font-weight: bold; color: #2E7D32; width: 80rpx; text-align: center; }
+
+/* 球队列表 */
+.team-list { background: #fff; border-radius: 16rpx; overflow: hidden; margin-bottom: 24rpx; }
+.team-item { display: flex; align-items: center; padding: 20rpx 24rpx; border-bottom: 1rpx solid #f5f5f5; }
+.team-item:last-child { border-bottom: none; }
+.ti-badge { width: 44rpx; height: 44rpx; border-radius: 50%; background: #e8f5e9; display: flex; align-items: center; justify-content: center; font-size: 24rpx; color: #2E7D32; margin-right: 16rpx; }
+.ti-name { flex: 1; font-size: 28rpx; color: #333; }
+.ti-status { font-size: 24rpx; padding: 6rpx 16rpx; border-radius: 20rpx; }
+.ti-status.approved { background: #e8f5e9; color: #2E7D32; }
+.ti-status.pending { background: #fff3e0; color: #F57C00; }
+
+/* 分组显示 */
+.group-box { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 16rpx; }
+.gp-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16rpx; }
+.gp-n { font-size: 28rpx; font-weight: bold; color: #333; }
+.gp-c { font-size: 24rpx; color: #999; }
+.gp-t text { display: inline-block; background: #f5f5f5; padding: 10rpx 20rpx; border-radius: 8rpx; font-size: 26rpx; color: #666; margin: 8rpx 8rpx 0 0; }
+
+/* 杯赛制 */
+.tag-group { display: flex; align-items: center; margin-bottom: 16rpx; }
+.tg-b { font-size: 24rpx; padding: 6rpx 16rpx; border-radius: 8rpx; margin-right: 12rpx; color: #fff; }
+.tg-b.cup { background: #E65100; }
+.tg-s { font-size: 26rpx; color: #666; }
+.cup { display: flex; align-items: stretch; }
+.cup-half { flex: 1; padding: 20rpx; background: #fafafa; border-radius: 12rpx; }
+.cup-hf { display: flex; justify-content: space-between; font-size: 26rpx; font-weight: bold; color: #333; margin-bottom: 12rpx; }
+.cup-hf.up { color: #2E7D32; }
+.cup-hf.dn { color: #E65100; }
+.cup-tl text { display: block; font-size: 26rpx; color: #666; padding: 8rpx 0; }
+.cup-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 16rpx; font-size: 28rpx; color: #999; font-weight: bold; }
+.cup-line { width: 2rpx; flex: 1; background: #ddd; margin: 8rpx 0; }
+
+.empty-box { text-align: center; padding: 60rpx 0; background: #fff; border-radius: 16rpx; }
+.eb-emoji { font-size: 72rpx; margin-bottom: 16rpx; }
+.eb-text { font-size: 28rpx; color: #999; }
+
+.loading-box { text-align: center; padding: 100rpx 0; }
+.lb-spin { font-size: 48rpx; animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+/* ===== 竞赛规则折叠 ===== */
+.rules-section {
+  background: #fff; border-radius: 12rpx; margin: 16rpx 20rpx; 
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.06); overflow: hidden;
+}
+.rules-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 24rpx; background: #f8f9fa;
+}
+.rules-title { font-size: 28rpx; font-weight: 600; color: #333; }
+.rules-arrow { font-size: 24rpx; color: #999; }
+.rules-body { padding: 20rpx 24rpx; border-top: 2rpx solid #f0f0f0; }
+.rule-block { margin-bottom: 20rpx; }
+.rule-block:last-child { margin-bottom: 0; }
+.rule-block-title { font-size: 26rpx; font-weight: 600; color: #1B5E20; display: block; margin-bottom: 8rpx; }
+.rule-text { font-size: 24rpx; color: #666; display: block; line-height: 1.8; }
+
+/* ===== 报名状态 ===== */
+.signup-section { margin: 16rpx 20rpx; }
+.signup-card {
+  display: flex; align-items: center; padding: 20rpx 24rpx; border-radius: 12rpx;
+}
+.signup-approved { background: #e8f5e9; }
+.signup-pending { background: #fff8e1; }
+.signup-rejected { background: #fce4ec; }
+.signup-icon { font-size: 40rpx; margin-right: 16rpx; }
+.signup-title { font-size: 28rpx; font-weight: 600; color: #333; display: block; }
+.signup-desc { font-size: 24rpx; color: #666; display: block; margin-top: 4rpx; }
+
+/* ===== T02 新增：名单上限提示 / 淘汰赛入口 / 换人申请入口 ===== */
+.roster-limit-tip {
+  background: #e3f2fd;
+  color: #1565c0;
+  font-size: 24rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 12rpx;
+  margin-bottom: 20rpx;
+  border-left: 6rpx solid #1565c0;
+}
+
+.knockout-entry {
+  background: #fff3e0;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  border: 1rpx solid #ffe0b2;
+}
+.knockout-entry .ke-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #E65100;
+  margin-bottom: 8rpx;
+}
+.knockout-entry .ke-desc {
+  font-size: 24rpx;
+  color: #999;
+  margin-bottom: 16rpx;
+}
+.knockout-entry .ke-btn {
+  background: #E65100;
+  color: #fff;
+  text-align: center;
+  padding: 16rpx 0;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+}
+
+.change-entry-btn {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.05);
+}
+.change-entry-btn .ceb-icon {
+  font-size: 36rpx;
+  margin-right: 16rpx;
+}
+.change-entry-btn .ceb-text {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+}
+.change-entry-btn .ceb-arrow {
+  font-size: 32rpx;
+  color: #ccc;
+}
+
+/* ★ 信息同步新增样式 */
+.t-hero { display:flex; justify-content:center; padding:20rpx 0; }
+.hero-logo { width:160rpx; height:160rpx; border-radius:20rpx; background:#f5f5f5; }
+
+.t-tags { display:flex; gap:12rpx; padding:0 24rpx 12rpx; }
+.t-tag { font-size:22rpx; padding:4rpx 16rpx; border-radius:20rpx; }
+.type-tag { background:#E3F2FD; color:#1565C0; }
+.status-tag { background:#E8F5E9; color:#2E7D32; }
+
+.t-desc { padding:0 24rpx 16rpx; font-size:26rpx; color:#666; line-height:1.6; }
+
+.t-stats { display:flex; justify-content:space-around; padding:20rpx 24rpx; background:#fff; margin:0 24rpx 20rpx; border-radius:16rpx; box-shadow:0 2rpx 8rpx rgba(0,0,0,0.06); }
+.ts-item { display:flex; flex-direction:column; align-items:center; }
+.ts-val { font-size:40rpx; font-weight:700; color:#1B5E20; }
+.ts-lbl { font-size:22rpx; color:#999; margin-top:4rpx; }
+
+.t-info-section { padding:0 24rpx; margin-bottom:20rpx; background:#fff; border-radius:16rpx; }
+.ti-row { display:flex; justify-content:space-between; padding:20rpx 24rpx; border-bottom:1rpx solid #f0f0f0; }
+.ti-row:last-child { border-bottom:none; }
+.ti-label { font-size:26rpx; color:#999; }
+.ti-value { font-size:26rpx; color:#333; font-weight:500; }
+
+.t-regulations { padding:0 24rpx; margin-bottom:20rpx; }
+.tr-card { display:flex; align-items:center; gap:16rpx; padding:20rpx 24rpx; background:#fff; border-radius:16rpx; border:1rpx solid #e0e0e0; }
+.tr-icon { font-size:40rpx; }
+.tr-info { flex:1; display:flex; flex-direction:column; }
+.tr-name { font-size:28rpx; font-weight:500; color:#333; }
+.tr-meta { font-size:22rpx; color:#999; margin-top:4rpx; }
+.tr-btn { padding:8rpx 24rpx; background:#1B5E20; color:#fff; font-size:24rpx; border-radius:8rpx; }
+
+.t-rules-html { padding:0 24rpx 20rpx; font-size:26rpx; color:#555; line-height:1.8; white-space:pre-wrap; }
+
+.t-website { padding:0 24rpx; margin-bottom:20rpx; }
+.tw-row { display:flex; align-items:center; gap:12rpx; padding:20rpx 24rpx; background:#fff; border-radius:16rpx; }
+.tw-label { font-size:26rpx; color:#999; flex-shrink:0; }
+.tw-url { flex:1; font-size:24rpx; color:#1565C0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tw-btn { padding:8rpx 20rpx; background:#E3F2FD; color:#1565C0; font-size:24rpx; border-radius:8rpx; flex-shrink:0; }
+
+/* ★ 卡片快捷操作 */
+.quick-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  padding: 0 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.qc-card {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.06);
+}
+
+.qc-card:active {
+  background: #f5f7fa;
+  transform: scale(0.97);
+}
+
+.qc-icon {
+  font-size: 44rpx;
+  flex-shrink: 0;
+}
+
+.qc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.qc-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.qc-desc {
+  font-size: 24rpx;
+  color: #909399;
+}

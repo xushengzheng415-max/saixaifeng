@@ -1,0 +1,306 @@
+/* pages/login/login.wxss */
+/* 赛小蜂 - 品牌登录页 v3（毛玻璃弹窗版） */
+
+page { width: 100%; height: 100%; }
+
+.login-page {
+  width: 100%; min-height: 100vh;
+  position: relative; overflow: hidden;
+}
+
+/* ===== 全屏背景图 + 缓慢放大动画 ===== */
+.bg-image {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100vh; z-index: 0;
+  animation: bgZoom 20s ease-in-out infinite alternate;
+}
+@keyframes bgZoom {
+  0%   { transform: scale(1); }
+  100% { transform: scale(1.10); }
+}
+
+/* ===== 内容层：底部对齐 ===== */
+.content-overlay {
+  position: relative; z-index: 2;
+  width: 100%; min-height: 100vh;
+  display: flex; flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ===== 登录按钮区 ===== */
+.login-section {
+  padding: 36rpx 56rpx 44rpx 56rpx;
+}
+
+/* 微信一键登录（主推大按钮） */
+.wechat-btn {
+  width: 100%; height: 96rpx; line-height: 96rpx;
+  background: linear-gradient(90deg, #43A047 0%, #2E7D32 100%);
+  color: white; font-size: 32rpx; font-weight: bold;
+  border-radius: 48rpx;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 24rpx;
+  box-shadow: 0 8rpx 28rpx rgba(67,160,71,0.4);
+  border: none;
+}
+.wechat-btn::after { border: none; }
+.btn-icon { margin-right: 14rpx; font-size: 28rpx; }
+.btn-text { font-size: 32rpx; }
+
+/* ===== 其他登录方式入口（干净的一行） ===== */
+.alt-login-trigger {
+  display: flex; align-items: center; justify-content: center;
+  padding: 16rpx 0 28rpx 0;
+}
+.alt-text {
+  font-size: 26rpx; color: rgba(255,255,255,0.55);
+  transition: color 0.2s;
+}
+.alt-login-trigger:active .alt-text { color: rgba(255,255,255,0.85); }
+.alt-arrow {
+  font-size: 26rpx; color: rgba(255,255,255,0.35);
+  margin-left: 8rpx;
+  transform: translateY(-1rpx);
+}
+
+/* 协议勾选 */
+.agreement-row {
+  display: flex; align-items: center;
+  justify-content: center; flex-wrap: wrap;
+  margin-bottom: 12rpx;
+}
+.checkbox {
+  width: 26rpx; height: 26rpx;
+  border-radius: 50%;
+  border: 2rpx solid rgba(255,255,255,0.6);
+  margin-right: 10rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18rpx; color: white;
+}
+.checkbox.checked { background: #43A047; border-color: #43A047; }
+.agreement-text { font-size: 21rpx; color: rgba(255,255,255,0.65); }
+.agreement-link { font-size: 21rpx; color: #A5D6A7; margin: 0 4rpx; }
+
+.dev-mode { display: flex; justify-content: center; padding: 14rpx 0; }
+.dev-mode-text { font-size: 18rpx; color: rgba(255,255,255,0.18); }
+
+/* ===== 身份选择卡片 ===== */
+.role-section {
+  width: 100%; background: rgba(255,255,255,0.97);
+  border-radius: 28rpx 28rpx 0 0;
+  padding: 44rpx 36rpx calc(56rpx + env(safe-area-inset-bottom)) 36rpx;
+  margin: 0 -56rpx;
+  width: calc(100% + 112rpx);
+  box-sizing: border-box;
+  box-shadow: 0 -8rpx 32rpx rgba(0,0,0,0.15);
+}
+.role-title { font-size: 36rpx; font-weight: bold; color: #1B5E20; text-align: center; margin-bottom: 8rpx; }
+.role-subtitle { font-size: 24rpx; color: #999; text-align: center; margin-bottom: 32rpx; }
+.role-list { display: flex; flex-wrap: wrap; justify-content: space-between; margin-bottom: 40rpx; }
+.role-item {
+  width: 47%; display: flex; flex-direction: column; align-items: center;
+  padding: 28rpx 0; margin-bottom: 16rpx;
+  background: #F5F7F5; border-radius: 16rpx; border: 3rpx solid transparent;
+}
+.role-item.active { background: #E8F5E9; border-color: #1B5E20; }
+.role-name { font-size: 30rpx; font-weight: bold; color: #333; margin-bottom: 8rpx; }
+.role-item.active .role-name { color: #1B5E20; }
+.role-desc { font-size: 22rpx; color: #999; }
+.enter-btn {
+  width: 100%; height: 88rpx; line-height: 88rpx;
+  background: linear-gradient(90deg, #43A047 0%, #2E7D32 100%);
+  color: white; font-size: 32rpx; font-weight: bold;
+  border-radius: 44rpx; border: none; margin-bottom: 20rpx;
+  box-shadow: 0 6rpx 20rpx rgba(67,160,71,0.35);
+}
+.enter-btn::after { border: none; }
+.enter-btn[disabled] { background: #CCC; box-shadow: none; }
+.back-link { display: block; text-align: center; font-size: 26rpx; color: #999; text-decoration: underline; }
+
+
+/* ================================================================
+   ★★★ 毛玻璃弹窗：其他登录方式 ★★★
+   ================================================================ */
+
+/* 遮罩层 */
+.glass-modal-mask {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 998;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.glass-modal-mask.visible {
+  opacity: 1;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* 毛玻璃面板主体 */
+.glass-modal {
+  position: fixed;
+  z-index: 999;
+  left: 32rpx;
+  right: 32rpx;
+  bottom: calc(60rpx + env(safe-area-inset-bottom));
+  background: rgba(20, 50, 30, 0.35);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 28rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 16rpx 56rpx rgba(0, 0, 0, 0.25),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  /* 默认隐藏（在屏幕下方） */
+  transform: translateY(120%);
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.3s ease;
+}
+.glass-modal.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* 关闭按钮 */
+.glass-close {
+  position: absolute; top: 20rpx; right: 24rpx;
+  width: 52rpx; height: 52rpx;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+}
+.glass-close text {
+  font-size: 28rpx; color: rgba(255, 255, 255, 0.65);
+  line-height: 1;
+}
+
+/* ===== Tab 切换栏 ===== */
+.glass-tabs {
+  display: flex; align-items: center;
+  justify-content: space-around;
+  padding: 32rpx 16rpx 0 16rpx;
+  margin-bottom: 8rpx;
+}
+.glass-tab {
+  font-size: 27rpx; color: rgba(255, 255, 255, 0.45);
+  padding: 10rpx 8rpx 14rpx 8rpx;
+  position: relative;
+  transition: color 0.25s ease;
+  white-space: nowrap;
+}
+.glass-tab.active {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+/* tab 底部指示线 */
+.glass-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 32rpx; height: 4rpx;
+  background: linear-gradient(90deg, #66BB6A, #43A047);
+  border-radius: 2rpx;
+}
+.glass-tab-divider {
+  width: 1rpx; height: 28rpx;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
+/* ===== 表单区域 ===== */
+.glass-form {
+  padding: 24rpx 32rpx 36rpx 32rpx;
+}
+
+/* 输入行（毛玻璃内：半透明深色） */
+.input-row {
+  display: flex; align-items: center;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 16rpx;
+  padding: 0 24rpx; margin-bottom: 18rpx;
+  height: 88rpx; box-sizing: border-box;
+  border: 1rpx solid rgba(255, 255, 255, 0.18);
+}
+.input-prefix { font-size: 30rpx; margin-right: 14rpx; flex-shrink: 0; }
+.form-input {
+  flex: 1; height: 100%;
+  font-size: 29rpx; color: #fff;
+}
+.password-toggle {
+  flex-shrink: 0;
+  width: 46rpx;
+  text-align: right;
+  font-size: 34rpx;
+  color: rgba(255,255,255,0.72);
+  margin-left: 14rpx;
+}
+.password-toggle:active {
+  opacity: 0.8;
+}
+.form-input::placeholder { color: rgba(255,255,255,0.45); }
+.form-code-input { flex: 1.2; }
+
+/* 获取验证码按钮（毛玻璃风格） */
+.code-btn,
+.glass-code-btn {
+  flex-shrink: 0;
+  height: 64rpx; line-height: 64rpx;
+  padding: 0 22rpx;
+  font-size: 23rpx; color: #A5D6A7;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 12rpx; border: 1rpx solid rgba(255, 255, 255, 0.2);
+  margin-left: 12rpx;
+  text-align: center; white-space: nowrap;
+  display: inline-block;
+}
+.code-btn::after,
+.glass-code-btn::after { border: none; }
+.code-btn.disabled,
+.glass-code-btn.disabled {
+  color: rgba(255,255,255,0.3);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 登录按钮（毛玻璃风格：品牌绿色半透明） */
+.glass-submit-btn {
+  width: 100%; height: 84rpx; line-height: 84rpx;
+  background: linear-gradient(90deg, #43A047 0%, #2E7D32 100%);
+  color: white; font-size: 30rpx; font-weight: bold;
+  border-radius: 42rpx; text-align: center;
+  margin-top: 12rpx;
+  border: none;
+  box-shadow: 0 6rpx 24rpx rgba(67,160,71,0.35);
+}
+.glass-submit-btn::after { border: none; }
+.glass-submit-btn[disabled] {
+  background: rgba(255,255,255,0.15);
+  box-shadow: none;
+  color: rgba(255,255,255,0.35);
+}
+
+/* ===== 弹窗内协议勾选（毛玻璃风格） ===== */
+.glass-agreement {
+  display: flex; align-items: center;
+  flex-wrap: wrap;
+  padding: 8rpx 0 4rpx 0;
+}
+.glass-checkbox {
+  width: 26rpx; height: 26rpx;
+  border-radius: 50%;
+  border: 2rpx solid rgba(255,255,255,0.5);
+  margin-right: 10rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18rpx; color: white;
+  flex-shrink: 0;
+}
+.glass-checkbox.checked { background: #43A047; border-color: #43A047; }
+.glass-agree-text { font-size: 20rpx; color: rgba(255,255,255,0.55); }
+.glass-agree-link { font-size: 20rpx; color: #A5D6A7; margin: 0 4rpx; }
+
+

@@ -1,0 +1,10 @@
+{
+  "name": "removeLogoBg",
+  "version": "1.0.0",
+  "description": "队徽/Logo 抠图",
+  "main": "index.js",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "wx-server-sdk": "latest"
+  }
+}

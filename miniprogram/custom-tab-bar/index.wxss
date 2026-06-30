@@ -1,0 +1,42 @@
+/* custom-tab-bar/index.wxss */
+/* 赛小蜂 - 自定义底部导航样式 */
+
+.tab-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  height: 110rpx;           /* 和原生 tabBar 高度一致 */
+  background: #ffffff;
+  border-top: 1rpx solid #e8e8e8;
+  padding-bottom: env(safe-area-inset-bottom); /* iPhone X 底部安全区 */
+}
+
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+  padding: 8rpx 0 6rpx 0;
+  position: relative;
+}
+
+.tab-icon-text {
+  font-size: 40rpx;
+  line-height: 1.2;
+  margin-bottom: 2rpx;
+}
+
+.tab-text {
+  font-size: 20rpx;
+  color: #757575;
+  line-height: 1.2;
+}
+
+/* 选中状态 */
+.tab-item.active .tab-text {
+  color: #2E7D32;
+  font-weight: 500;
+}

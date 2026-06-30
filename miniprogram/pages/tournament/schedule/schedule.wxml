@@ -1,0 +1,86 @@
+<!--pages/tournament/schedule/schedule.wxml-->
+<!-- 赛程安排 - 全新简约Tab布局 - 单行卡片 -->
+
+<view class="page">
+  <!-- 加载状态 -->
+  <view class="loading-box" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+  <view class="loading-box" wx:if="{{showError}}">
+    <text>{{errorMsg}}</text>
+    <text bindtap="loadData" style="color:#1B5E20;margin-top:16rpx;">点击重试</text>
+  </view>
+
+  <block wx:if="{{showContent}}">
+    <!-- 头部 -->
+    <view class="header">
+      <text class="h-title">{{tournamentName}}</text>
+      <view class="h-row">
+        <text class="h-tag">{{typeText}}</text>
+        <text class="h-tag2">{{formatText}}</text>
+        <text class="h-count">{{teamsLen}} 队</text>
+      </view>
+    </view>
+
+    <!-- Tab 切换栏 -->
+    <view class="tab-bar">
+      <view class="tab-item {{scheduleTabClass}}" data-tab="schedule" bindtap="switchTab">赛程表</view>
+      <view class="tab-item {{standingsTabClass}}" data-tab="standings" bindtap="switchTab">积分榜</view>
+      <view class="tab-item {{statsTabClass}}" data-tab="stats" bindtap="switchTab">数据统计</view>
+    </view>
+
+    <!-- 赛程表 -->
+    <view wx:if="{{isScheduleTab}}" class="schedule-content">
+      <view class="empty-inner" wx:if="{{hasNoMatches}}">
+        <text class="ei-icon">📅</text>
+        <text class="ei-text">暂无赛程安排</text>
+        <text class="ei-desc">请在网页端管理后台生成赛程</text>
+      </view>
+
+      <view wx:else>
+        <!-- 按轮次分组 -->
+        <view class="round-group" wx:for="{{groupedMatches}}" wx:key="round">
+          <view class="round-header" wx:if="{{item.round}}">
+            <text class="round-title">{{item.round}}</text>
+          </view>
+          <view class="match-card" wx:for="{{item.matches}}" wx:for-item="m" wx:key="_id"
+                data-id="{{m._id}}" bindtap="onMatchTap">
+
+            <!-- 单行布局：时间 | 主队 | 比分 | 客队 -->
+            <text class="mc-time">{{m.matchTime || '-'}}</text>
+            <view class="mc-team mc-home">
+              <image class="mc-logo" wx:if="{{m.homeTeamLogo}}" src="{{m.homeTeamLogo}}" mode="aspectFill"></image>
+              <view class="mc-logo-chip" wx:else><text>{{m.homeFirstChar}}</text></view>
+              <text class="mc-name {{m.homeWinnerClass}}">{{m.homeTeamName}}</text>
+            </view>
+
+            <view class="mc-score-wrap {{m.scoreWrapClass}}">
+              <text class="mc-score">{{m.homeDisplayScore}}</text>
+              <text class="mc-colon">:</text>
+              <text class="mc-score">{{m.awayDisplayScore}}</text>
+            </view>
+
+            <view class="mc-team mc-away">
+              <text class="mc-name {{m.awayWinnerClass}}">{{m.awayTeamName}}</text>
+              <image class="mc-logo" wx:if="{{m.awayTeamLogo}}" src="{{m.awayTeamLogo}}" mode="aspectFill"></image>
+              <view class="mc-logo-chip" wx:else><text>{{m.awayFirstChar}}</text></view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 积分榜（占位） -->
+    <view wx:if="{{isStandingsTab}}" class="tab-placeholder">
+      <text class="ei-icon">🏆</text>
+      <text class="ei-text">积分榜功能开发中</text>
+    </view>
+
+    <!-- 数据统计（占位） -->
+    <view wx:if="{{isStatsTab}}" class="tab-placeholder">
+      <text class="ei-icon">📊</text>
+      <text class="ei-text">数据统计功能开发中</text>
+    </view>
+  </block>
+</view>
+

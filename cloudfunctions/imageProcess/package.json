@@ -1,0 +1,9 @@
+{
+  "name": "imageProcess",
+  "version": "1.0.0",
+  "description": "AI图像处理云函数 - 使用腾讯混元AI进行抠图",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

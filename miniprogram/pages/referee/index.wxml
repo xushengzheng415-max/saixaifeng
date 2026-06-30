@@ -1,0 +1,63 @@
+<!--pages/referee/index.wxml-->
+<!-- 裁判管理页面 -->
+<view class="container">
+  <view class="page-header">
+    <text class="page-title">裁判管理</text>
+    <text class="page-desc">管理赛事裁判资源</text>
+  </view>
+
+  <view class="function-list">
+    <view class="function-item" bindtap="goToRefereeLibrary">
+      <text class="function-icon">📋</text>
+      <view class="function-info">
+        <text class="function-name">裁判库</text>
+        <text class="function-desc">查看与管理裁判信息</text>
+      </view>
+      <text class="function-arrow">›</text>
+    </view>
+
+    <view class="function-item" bindtap="goToRefereeAssign">
+      <text class="function-icon">⚖️</text>
+      <view class="function-info">
+        <text class="function-name">裁判指派</text>
+        <text class="function-desc">为赛事分配裁判员</text>
+      </view>
+      <text class="function-arrow">›</text>
+    </view>
+
+    <view class="function-item" bindtap="goToRefereeRecords">
+      <text class="function-icon">📊</text>
+      <view class="function-info">
+        <text class="function-name">执法记录</text>
+        <text class="function-desc">查看裁判执法统计</text>
+      </view>
+      <text class="function-arrow">›</text>
+    </view>
+  </view>
+
+  <!-- 裁判列表 -->
+  <view class="referee-section" wx:if="{{RefereesLen > 0}}">
+    <view class="section-header">
+      <text class="section-title">裁判列表</text>
+      <text class="referee-count">共 {{RefereesLen}} 人</text>
+    </view>
+    <view class="referee-list">
+      <view class="referee-item" wx:for="{{referees}}" wx:key="_id">
+        <view class="referee-avatar">
+          <text class="avatar-text">⚽</text>
+        </view>
+        <view class="referee-info">
+          <text class="referee-name">{{item.name || '未命名'}}</text>
+          <text class="referee-level">{{item.level || '国家级裁判'}}</text>
+        </view>
+        <text class="referee-phone">{{item.phone || ''}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty-tip" wx:else>
+    <text class="empty-icon">📋</text>
+    <text class="empty-title">暂无裁判数据</text>
+    <text class="empty-desc">请在PC端添加裁判或在小程序端完善裁判信息</text>
+  </view>
+</view>

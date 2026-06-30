@@ -1,0 +1,190 @@
+<!-- pages/team/management-add/management-add.wxml -->
+<view class="management-add-container">
+  <!-- 头部区域 -->
+  <view class="header-section">
+    <view class="header-content">
+      <text class="page-title"></text>
+      <text class="team-info" wx:if="{{teamName}}">球队：{{teamName}}</text>
+    </view>
+  </view>
+
+  <!-- 表单区域 -->
+  <view class="form-container">
+    <!-- 基本信息 -->
+    <view class="form-section">
+      <view class="section-title">基本信息</view>
+      
+      <!-- 姓名 -->
+      <view class="form-item">
+        <view class="label">姓名</view>
+        <input 
+          class="input" 
+          type="text" 
+          placeholder="请输入姓名" 
+          value="{{form.name}}" 
+          bindinput="onNameInput"
+        />
+      </view>
+
+      <!-- 联系方式 -->
+      <view class="form-item">
+        <view class="label">联系电话</view>
+        <input 
+          class="input" 
+          type="tel" 
+          placeholder="请输入手机号" 
+          value="{{form.phone}}" 
+          bindinput="onPhoneInput"
+        />
+      </view>
+
+      <!-- 邮箱 -->
+      <view class="form-item">
+        <view class="label">邮箱</view>
+        <input 
+          class="input" 
+          type="text" 
+          placeholder="请输入邮箱地址" 
+          value="{{form.email}}" 
+          bindinput="onEmailInput"
+        />
+      </view>
+
+      <!-- 职位 -->
+      <view class="form-item">
+        <view class="label">职位</view>
+        <picker 
+          class="picker" 
+          range="{{positionOptions}}" 
+          range-key="label"
+          value="{{positionIndex}}" 
+          bindchange="onPositionChange"
+        >
+          <view class="picker-display">
+            {{positionLabel || '请选择职位'}}
+          </view>
+        </picker>
+      </view>
+    </view>
+
+    <!-- 个人信息 -->
+    <view class="form-section">
+      <view class="section-title">个人信息</view>
+      
+      <!-- 性别 -->
+      <view class="form-item">
+        <view class="label">性别</view>
+        <picker 
+          class="picker" 
+          range="{{genderOptions}}" 
+          range-key="label"
+          value="{{genderIndex}}" 
+          bindchange="onGenderChange"
+        >
+          <view class="picker-display">
+            {{genderLabel || '请选择性别'}}
+          </view>
+        </picker>
+      </view>
+
+      <!-- 出生日期 -->
+      <view class="form-item">
+        <view class="label">出生日期</view>
+        <picker 
+          class="picker" 
+          mode="date" 
+          value="{{form.birthDate}}" 
+          bindchange="onBirthDateChange"
+        >
+          <view class="picker-display">
+            {{form.birthDate || '请选择出生日期'}}
+          </view>
+        </picker>
+      </view>
+
+      <!-- 身份证号 -->
+      <view class="form-item">
+        <view class="label">身份证号</view>
+        <input 
+          class="input" 
+          type="text" 
+          placeholder="请输入身份证号" 
+          value="{{form.idCard}}" 
+          bindinput="onIdCardInput"
+        />
+      </view>
+
+      <!-- 联系地址 -->
+      <view class="form-item">
+        <view class="label">联系地址</view>
+        <input 
+          class="input" 
+          type="text" 
+          placeholder="请输入联系地址" 
+          value="{{form.address}}" 
+          bindinput="onAddressInput"
+        />
+      </view>
+    </view>
+
+    <!-- 联系方式 -->
+    <view class="form-section">
+      <view class="section-title">联系方式</view>
+      
+      <!-- 联系人姓名 -->
+      <view class="form-item">
+        <view class="label">联系人</view>
+        <input 
+          class="input" 
+          type="text" 
+          placeholder="请输入联系人姓名" 
+          value="{{form.contactName}}" 
+          bindinput="onContactNameInput"
+        />
+      </view>
+
+      <!-- 联系电话 -->
+      <view class="form-item">
+        <view class="label">联系电话</view>
+        <input 
+          class="input" 
+          type="tel" 
+          placeholder="请输入联系电话" 
+          value="{{form.contactPhone}}" 
+          bindinput="onContactPhoneInput"
+        />
+      </view>
+    </view>
+
+    <!-- 头像上传 -->
+    <view class="form-section">
+      <view class="section-title">头像上传</view>
+      
+      <view class="avatar-upload-section">
+        <view class="avatar-preview" bindtap="onUploadAvatar">
+          <image 
+            class="avatar-img" 
+            src="{{avatarUrl || '/images/default-avatar.png'}}" 
+            mode="aspectFill"
+          ></image>
+          <view class="upload-overlay">
+            <text class="upload-text"></text>
+          </view>
+        </view>
+        <view class="upload-hint">支持JPG、PNG格式，建议尺寸300×300像素</view>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="action-section">
+      <button class="cancel-btn" bindtap="onCancel">取消</button>
+      <button 
+        class="submit-btn " 
+        bindtap="onSubmit"
+        disabled="{{isSubmitting}}"
+      >
+        
+      </button>
+    </view>
+  </view>
+</view>

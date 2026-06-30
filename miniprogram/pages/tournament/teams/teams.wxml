@@ -1,0 +1,31 @@
+<view class="page">
+  <view class="loading-box" wx:if="{{errorMsg}}">
+    <text>{{errorMsg}}</text>
+    <text bindtap="loadData" style="color:#1B5E20;margin-top:16rpx;">点击重试</text>
+  </view>
+
+  <block wx:else>
+    <view class="header">
+      <text class="h-title">{{tournamentName}}</text>
+      <text class="h-count">共 {{teamsLen}} 支球队</text>
+    </view>
+
+    <view class="team-list" wx:if="{{hasTeamsLen}}">
+      <view class="team-card" wx:for="{{teams}}" wx:key="_id">
+        <view class="tc-logo">
+          <image wx:if="{{item.teamLogo}}" src="{{item.teamLogo}}" mode="aspectFill"></image>
+          <text wx:else class="tc-letter">{{item.firstChar}}</text>
+        </view>
+        <view class="tc-info">
+          <text class="tc-name">{{item.teamName}}</text>
+          <text class="tc-city" wx:if="{{item.teamCity}}">{{item.teamCity}}</text>
+        </view>
+        <text class="tc-count" wx:if="{{item.playerCount}}">{{item.playerCount}}人</text>
+      </view>
+    </view>
+
+    <view class="empty" wx:else>
+      <text>暂无参赛球队</text>
+    </view>
+  </block>
+</view>

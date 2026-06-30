@@ -1,0 +1,60 @@
+<!-- pages/my-cards/my-cards.wxml -->
+<!-- 球员卡展示页 -->
+<view class="container">
+  <!-- 顶部标题 -->
+  <view class="header">
+    <text class="title">我的球员卡</text>
+    <text class="subtitle">身份象征 · 荣耀展示</text>
+  </view>
+
+  <!-- 身份卡列表 -->
+  <view class="cards-container" wx:if="{{PlayersLen > 0}}">
+    <view class="card-wrapper" wx:for="{{players}}" wx:key="_id">
+      <!-- 球员卡卡片 -->
+      <view class="player-card {{item.cardBg || 'gold'}}">
+        <!-- 卡片背景 -->
+        <view class="card-bg"></view>
+        
+        <!-- 队徽 -->
+        <view class="team-logo">
+          <image wx:if="{{item.teamLogo}}" src="{{item.teamLogo}}" mode="aspectFit"></image>
+          <view wx:else class="team-logo-placeholder">T</view>
+        </view>
+        
+        <!-- 球衣号 -->
+        <text class="jersey-number">{{item.number || '?'}}</text>
+        
+        <!-- 球员头像 -->
+        <view class="player-avatar">
+          <image wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+          <view wx:else class="avatar-placeholder">
+            <text>{{item.nameFirstChar || '?'}}</text>
+          </view>
+        </view>
+        
+        <!-- 球员姓名 -->
+        <text class="player-name">{{item.name || '未知'}}</text>
+        
+        <!-- 球员位置 -->
+        <text class="player-position">{{item.position || '前锋'}}</text>
+        
+        <!-- 球衣名 -->
+        <text class="jersey-name">{{item.jerseyName || item.nameUpper || ''}}</text>
+        
+        <!-- 球员数据 -->
+        <view class="player-stats">
+          <text class="stat-item">{{item.height || '180'}}cm</text>
+          <text class="stat-item">{{item.weight || '75'}}kg</text>
+          <text class="stat-item">{{item.nationality || '中国'}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:else>
+    <text class="empty-icon">⚽</text>
+    <text class="empty-text">你还没有球员卡</text>
+    <text class="empty-desc">参加比赛或注册成为球员即可获得</text>
+  </view>
+</view>
