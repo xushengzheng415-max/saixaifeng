@@ -791,8 +791,8 @@ async function loadTeams() {
         const result = await queryList('teams', { orderBy: { createTime: 'desc' } })
       teams.value = result
     } else if (currentRole.value === ROLES.COACH) {
-      // 教练查看自己创建的球队
-        // 匹配优先级：creatorId > contactPhone > coachPhone > 老数据无 creatorId 全显示
+      // 球队/教练查看自己创建或绑定手机号匹配的球队
+      // 匹配优先级：creatorId/coachId > ownerPhone/creatorPhone/contactPhone/coachPhone > 老数据无归属字段全显示
       const result = await queryList('teams', { orderBy: { createTime: 'desc' } })
       teams.value = result.filter(team => {
         // ★ 赛事中心创建的公共球队
@@ -804,16 +804,27 @@ async function loadTeams() {
           // 未认领 → 隐藏
           return false
         }
-        // 1. 精确匹配 creatorId
+        // 1. 精确匹配 creatorId / coachId
         if (team.creatorId && userId.value) {
           if (team.creatorId === userId.value) return true
         }
-        // 2. 按手机号匹配（contactPhone ?coachPhone)
-          if (userPhone.value) {
-          if (team.contactPhone === userPhone.value || team.coachPhone === userPhone.value) return true
+        if (team.coachId && userId.value) {
+          if (team.coachId === userId.value) return true
         }
-        // 3. 老数据没有 creatorId 也没有电话，默认显示（兼容）
-        if (!team.creatorId && !team.contactPhone && !team.coachPhone) {
+        // 2. 按手机号匹配，兼容 PC 端创建字段和历史字段
+        if (userPhone.value) {
+          const teamPhones = [
+            team.ownerPhone,
+            team.creatorPhone,
+            team.contactPhone,
+            team.coachPhone,
+            team.phone,
+            team.phoneNumber
+          ].filter(Boolean)
+          if (teamPhones.includes(userPhone.value)) return true
+        }
+        // 3. 老数据没有归属字段，默认显示（兼容）
+        if (!team.creatorId && !team.coachId && !team.ownerPhone && !team.creatorPhone && !team.contactPhone && !team.coachPhone && !team.phone && !team.phoneNumber) {
           return true
         }
         return false

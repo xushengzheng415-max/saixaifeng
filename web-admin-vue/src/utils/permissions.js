@@ -48,6 +48,32 @@ export function hasRole(roles) {
   return currentRole === roles
 }
 
+function getCurrentUserPhone() {
+  try {
+    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    return userInfo.phone || localStorage.getItem('phone') || ''
+  } catch {
+    return localStorage.getItem('phone') || ''
+  }
+}
+
+function ownsTeam(team) {
+  if (!team) return false
+  const userId = localStorage.getItem('userId')
+  if (userId && (team.creatorId === userId || team.coachId === userId)) return true
+
+  const phone = getCurrentUserPhone()
+  if (!phone) return false
+  return [
+    team.ownerPhone,
+    team.creatorPhone,
+    team.contactPhone,
+    team.coachPhone,
+    team.phone,
+    team.phoneNumber
+  ].filter(Boolean).includes(phone)
+}
+
 /**
  * 权限检查对象
  */
@@ -63,8 +89,7 @@ export const permissions = {
       if (hasRole([ROLES.ADMIN, ROLES.ORGANIZER])) return true
       // 教练只能编辑自己创建的球队
       if (role === ROLES.COACH) {
-        const userId = localStorage.getItem('userId')
-        return team && (team.creatorId === userId || team.coachId === userId)
+        return ownsTeam(team)
       }
       return false
     },
@@ -73,8 +98,7 @@ export const permissions = {
       const role = getCurrentRole()
       if (hasRole([ROLES.ADMIN, ROLES.ORGANIZER])) return true
       if (role === ROLES.COACH) {
-        const userId = localStorage.getItem('userId')
-        return team && (team.creatorId === userId || team.coachId === userId)
+        return ownsTeam(team)
       }
       return false
     },
@@ -90,8 +114,7 @@ export const permissions = {
     create: (team) => {
       if (hasRole([ROLES.ADMIN, ROLES.ORGANIZER])) return true
       if (hasRole(ROLES.COACH)) {
-        const userId = localStorage.getItem('userId')
-        return team && (team.creatorId === userId || team.coachId === userId)
+        return ownsTeam(team)
       }
       return false
     },
@@ -101,7 +124,7 @@ export const permissions = {
       if (hasRole(ROLES.COACH)) {
         const userId = localStorage.getItem('userId')
         // 检查是否是该球员所属球队的教练
-        if (team && (team.creatorId === userId || team.coachId === userId)) return true
+        if (ownsTeam(team)) return true
         // 或者球员直接关联了教练ID
         return player && (player.creatorId === userId || player.coachId === userId)
       }
@@ -112,7 +135,7 @@ export const permissions = {
       if (hasRole([ROLES.ADMIN, ROLES.ORGANIZER])) return true
       if (hasRole(ROLES.COACH)) {
         const userId = localStorage.getItem('userId')
-        if (team && (team.creatorId === userId || team.coachId === userId)) return true
+        if (ownsTeam(team)) return true
         return player && (player.creatorId === userId || player.coachId === userId)
       }
       return false
