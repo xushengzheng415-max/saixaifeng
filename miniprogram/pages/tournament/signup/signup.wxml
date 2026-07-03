@@ -75,11 +75,11 @@
         </view>
         <view class="notice-item">
           <text class="notice-icon">✓</text>
-          <text class="notice-text">校园足球模式：由领队/教练提交参赛名单</text>
+          <text class="notice-text">青少年赛事：由领队/教练提交参赛名单</text>
         </view>
         <view class="notice-item">
           <text class="notice-icon">✓</text>
-          <text class="notice-text">业余足球模式：球员可自主报名参赛</text>
+          <text class="notice-text">请确认参赛球员年龄组符合赛事要求</text>
         </view>
       </view>
     </view>

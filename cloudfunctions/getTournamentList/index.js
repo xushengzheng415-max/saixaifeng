@@ -8,28 +8,25 @@ const db = cloud.database()
 const _ = db.command
 
 exports.main = async (event, context) => {
-  const { featured = false, status, page = 1, pageSize = 20 } = event
+  const { featured = false, status, page = 1, pageSize = 20, includeLegacyCategory = false } = event
 
   try {
     let query = db.collection('tournaments')
 
-    // 构建查询条件
-    let where = {}
+    const conditions = []
 
     // 只查询已发布的赛事（非草稿状态）
-    where.status = _.neq('draft')
-
-    // 如果指定了状态
-    if (status) {
-      where.status = status
+    conditions.push({ status: status || _.neq('draft') })
+    if (!includeLegacyCategory) {
+      conditions.push(_.or([{ category: 'youth' }, { type: 'youth' }]))
     }
 
     // 推荐赛事 - 查询 featured 为 true 的
     if (featured) {
-      where.featured = true
+      conditions.push({ featured: true })
     }
 
-    query = query.where(where)
+    query = query.where(conditions.length === 1 ? conditions[0] : _.and(conditions))
 
     // 排序：推荐的排前面，然后按创建时间倒序
     const result = await query
@@ -44,7 +41,9 @@ exports.main = async (event, context) => {
       data: result.data.map(item => ({
         _id: item._id,
         name: item.name,
-        type: item.type,               // 赛事分类：youth/amateur/local
+        type: item.type || item.category,
+        category: item.category || item.type || 'youth',
+        categoryLabel: '青少年赛事',
         matchFormat: item.matchFormat || 'tournament', // 赛制：tournament/cup/league/combined
         status: item.status,
         startDate: item.startDate,

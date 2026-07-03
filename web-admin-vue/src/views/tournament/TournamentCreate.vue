@@ -912,11 +912,7 @@ const matchFormatOptions = MATCH_FORMAT_OPTIONS
 
 // 赛事类型选项
 const categoryOptions = [
-  { value: 'youth', label: '青少年赛事', icon: '⚽', desc: 'U8~U18青少年足球赛事', bgColor: '#F3E5F5', color: '#AB47BC' },
-  { value: 'amateur', label: '业余赛事', icon: '🏀', desc: '社会业余球队参赛赛事', bgColor: '#E8F5E9', color: '#66BB6A' },
-  { value: 'local', label: '地协赛', icon: '🏟', desc: '各地足协主办精品赛事', bgColor: '#E3F2FD', color: '#42A5F5' },
-  { value: 'city', label: '城市联赛', icon: '🏙', desc: '各城市代表队巅峰对决', bgColor: '#FFF3E0', color: '#FF9800' },
-  { value: 'professional', label: '职业联赛', icon: '🏆', desc: '职业级足球联赛赛事', bgColor: '#FFEBEE', color: '#E53935' }
+  { value: 'youth', label: '青少年赛事', icon: '⚽', desc: 'U8~U18青少年足球赛事', bgColor: '#F3E5F5', color: '#AB47BC' }
 ]
 
 // 淘汰赛配置折叠区默认展开状态
@@ -938,7 +934,7 @@ const form = ref({
   titleSponsor: '', deadline: '', startDate: '', endDate: '',
   maxTeams: 8, maxPlayers: 20, description: '',
   status: 'registering', registeredTeams: 0,
-  category: '', // 赛事类型：youth/amateur/local/city/professional
+  category: 'youth', // 赛小蜂足球只创建青少年赛事
   themeId: 'green',
   logo: '',
 

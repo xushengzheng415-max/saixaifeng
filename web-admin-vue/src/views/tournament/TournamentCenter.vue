@@ -3,7 +3,7 @@
     <!-- 顶部导航栏 -->
     <header class="center-header">
       <div class="header-left">
-        <img src="/LOGO2.png" alt="赛小蜂" class="logo" @click="goToHome" style="cursor: pointer;" />
+        <img src="/LOGO2.png" alt="赛小蜂足球" class="logo" @click="goToHome" style="cursor: pointer;" />
       </div>
       <div class="header-right">
         <template v-if="isLoggedIn()">

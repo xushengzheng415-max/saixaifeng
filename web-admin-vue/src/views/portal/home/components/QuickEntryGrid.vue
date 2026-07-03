@@ -21,7 +21,7 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import {
-  Trophy, Medal, Flag, Sunny, Basketball, Collection, MoreFilled, Star
+  Trophy, Medal, Flag, Sunny, Collection, MoreFilled, Star
 } from '@element-plus/icons-vue'
 
 /**
@@ -39,19 +39,20 @@ const router = useRouter()
 
 const entries = [
   { key: 'youth', label: '青少年赛事', icon: Sunny, bgColor: '#F3E5F5', color: '#AB47BC' },
-  { key: 'amateur', label: '业余赛事', icon: Basketball, bgColor: '#E8F5E9', color: '#66BB6A' },
-  { key: 'local', label: '地协赛', icon: Flag, bgColor: '#E3F2FD', color: '#42A5F5' },
-  { key: 'city', label: '城市联赛', icon: Medal, bgColor: '#FFF3E0', color: '#FF9800' },
-  { key: 'professional', label: '职业联赛', icon: Trophy, bgColor: '#FFEBEE', color: '#E53935' },
-  { key: 'guess', label: '竞猜', icon: Star, bgColor: '#FFF8E1', color: '#FFA000' }
+  { key: 'u12', label: 'U12赛事', icon: Medal, bgColor: '#E3F2FD', color: '#42A5F5' },
+  { key: 'u15', label: 'U15赛事', icon: Flag, bgColor: '#E8F5E9', color: '#66BB6A' },
+  { key: 'u18', label: 'U18赛事', icon: Trophy, bgColor: '#FFF3E0', color: '#FF9800' },
+  { key: 'guess', label: '赛程成绩', icon: Star, bgColor: '#FFF8E1', color: '#FFA000' }
 ]
 
 function handleClick(item) {
   emit('select', item)
   if (item.key === 'guess') {
-    router.push('/portal/tournament/all/guess')
+    router.push('/portal/tournaments')
+  } else if (item.key === 'youth') {
+    router.push({ path: '/portal/tournaments', query: { category: 'youth' } })
   } else {
-    router.push({ path: '/portal/tournaments', query: { category: item.key } })
+    router.push({ path: '/portal/tournaments', query: { category: 'youth', ageGroup: item.key.toUpperCase() } })
   }
 }
 </script>

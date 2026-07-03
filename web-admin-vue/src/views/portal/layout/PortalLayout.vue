@@ -6,7 +6,7 @@
     </header>
     <header v-else class="portal-header-mobile">
       <div class="mobile-header-inner">
-        <img src="/LOGO2.png" alt="赛小蜂" class="mobile-logo" @click="goHome" />
+        <img src="/LOGO2.png" alt="赛小蜂足球" class="mobile-logo" @click="goHome" />
         <div class="mobile-search" @click="goSearch">
           <el-icon><Search /></el-icon>
           <span class="search-placeholder">搜索赛事/球队</span>

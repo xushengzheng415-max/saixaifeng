@@ -5,7 +5,7 @@
       <div class="header-content">
         <div class="logo-area">
           <span class="logo-icon">⚽</span>
-          <span class="logo-text">赛小蜂</span>
+          <span class="logo-text">赛小蜂足球</span>
         </div>
         <nav class="nav-tabs">
           <a :class="{ active: activeTab === 'info' }" @click="activeTab = 'info'">赛事首页</a>
@@ -188,8 +188,8 @@
 
     <!-- 页脚 -->
     <footer class="website-footer">
-      <p>© 2026 赛小蜂 · 赛事即官网 SaaS 平台</p>
-      <p class="footer-desc">提供专业足球赛事管理系统，让赛事组织更简单</p>
+      <p>© 2026 赛小蜂足球 · 青少年足球赛事平台</p>
+      <p class="footer-desc">提供专业青少年足球赛事管理系统，让赛事组织更简单</p>
     </footer>
   </div>
 </template>

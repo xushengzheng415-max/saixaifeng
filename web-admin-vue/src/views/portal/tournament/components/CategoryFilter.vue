@@ -57,11 +57,7 @@ const sortBy = ref('latest')
 
 const categories = [
   { key: 'all', label: '全部' },
-  { key: 'youth', label: '青少年赛事' },
-  { key: 'amateur', label: '业余赛事' },
-  { key: 'local', label: '地协赛' },
-  { key: 'city', label: '城市联赛' },
-  { key: 'professional', label: '职业联赛' }
+  { key: 'youth', label: '青少年赛事' }
 ]
 
 const statusOptions = [

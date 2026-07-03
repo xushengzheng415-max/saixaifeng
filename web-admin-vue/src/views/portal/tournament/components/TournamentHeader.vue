@@ -28,7 +28,7 @@
           </div>
           <div class="meta-item">
             <el-icon><OfficeBuilding /></el-icon>
-            <span>{{ organizer || '赛小蜂' }}</span>
+            <span>{{ organizer || '赛小蜂足球' }}</span>
           </div>
           <div class="meta-item">
             <el-icon><User /></el-icon>

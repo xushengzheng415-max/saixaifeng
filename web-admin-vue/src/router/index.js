@@ -281,7 +281,7 @@ const routes = [
     path: '/tournament-center-admin',
     name: 'TournamentCenterAdmin',
     component: () => import('../views/tournament-center/TournamentCenterAdmin.vue'),
-    meta: { requiresAuth: false, title: '赛小蜂赛事中心-管理后台', tcAuth: true }
+    meta: { requiresAuth: false, title: '赛小蜂足球赛事中心-管理后台', tcAuth: true }
   },
   // 管理后台 - 赛事列表（查看所有赛事）
   {

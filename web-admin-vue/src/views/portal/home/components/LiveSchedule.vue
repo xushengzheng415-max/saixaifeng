@@ -76,16 +76,16 @@ const schedule = ref([
   },
   {
     time: '16:30',
-    homeTeam: '海港联',
-    awayTeam: '城市竞技',
-    tournament: '业余联赛',
+    homeTeam: '郑东U15',
+    awayTeam: '高新U15',
+    tournament: '校园青少年联赛',
     isLive: true
   },
   {
     time: '19:30',
-    homeTeam: '洛阳龙门',
-    awayTeam: '开封蹴鞠',
-    tournament: '地协赛',
+    homeTeam: '洛阳少年队',
+    awayTeam: '开封少年队',
+    tournament: '青训邀请赛',
     isLive: false
   }
 ])

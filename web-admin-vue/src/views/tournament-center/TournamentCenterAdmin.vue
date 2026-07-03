@@ -3,7 +3,7 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <div class="page-header-left">
-        <img src="/logo-saixiaofeng.png" alt="赛小蜂" class="header-logo" />
+        <img src="/logo-saixiaofeng.png" alt="赛小蜂足球" class="header-logo" />
         <div class="header-text">
           <h2>赛事中心后台</h2>
           <p class="subtitle">赛事数据库 · 球队管理 · 数据运营</p>
@@ -381,10 +381,6 @@
             <div class="header-actions">
               <el-select v-model="tournamentCategoryFilter" placeholder="按类型筛选" clearable style="width: 160px; margin-right: 12px;">
                 <el-option label="青少年赛事" value="youth" />
-                <el-option label="业余赛事" value="amateur" />
-                <el-option label="地协赛" value="local" />
-                <el-option label="城市联赛" value="city" />
-                <el-option label="职业联赛" value="professional" />
               </el-select>
               <el-input
                 v-model="tournamentSearchKeyword"
@@ -739,11 +735,7 @@ async function fetchTournaments() {
 
 // 格式化赛事类型
 const categoryLabelMap = {
-  youth: '青少年赛事',
-  amateur: '业余赛事',
-  local: '地协赛',
-  city: '城市联赛',
-  professional: '职业联赛'
+  youth: '青少年赛事'
 }
 function formatCategory(category) {
   return categoryLabelMap[category] || category || '未知'
@@ -855,7 +847,7 @@ async function fetchFeaturedTournaments() {
         id: 1,
         name: '2026春季青少年足球联赛',
         coverImage: '/images/tournament1.jpg',
-        organizerName: '赛小蜂',
+        organizerName: '赛小蜂足球',
         type: 'league',
         ageGroup: 'U12',
         sort: 1
@@ -874,7 +866,7 @@ async function fetchOrganizers() {
     organizers.value = [
       {
         id: 1,
-        name: '赛小蜂',
+        name: '赛小蜂足球',
         logo: '/logo.png',
         contact: '张三',
         phone: '13800138000',
@@ -1182,11 +1174,7 @@ function previewImage(url) {
 
 // 赛事分类数据
 const categories = ref([
-  { id: 1, key: 'youth', label: '青少年赛事', color: '#AB47BC', bgColor: '#F3E5F5', sort: 1, isActive: true },
-  { id: 2, key: 'amateur', label: '业余赛事', color: '#66BB6A', bgColor: '#E8F5E9', sort: 2, isActive: true },
-  { id: 3, key: 'local', label: '地协赛', color: '#42A5F5', bgColor: '#E3F2FD', sort: 3, isActive: true },
-  { id: 4, key: 'city', label: '城市联赛', color: '#FF9800', bgColor: '#FFF3E0', sort: 4, isActive: true },
-  { id: 5, key: 'professional', label: '职业联赛', color: '#E53935', bgColor: '#FFEBEE', sort: 5, isActive: true }
+  { id: 1, key: 'youth', label: '青少年赛事', color: '#AB47BC', bgColor: '#F3E5F5', sort: 1, isActive: true }
 ])
 
 // 认领审核数据
@@ -1312,7 +1300,7 @@ function deleteLive(live) {
 // 补充 loading 和 saving 字段
 
 onMounted(() => {
-  document.title = '赛小蜂赛事中心-管理后台'
+  document.title = '赛小蜂足球赛事中心-管理后台'
   fetchStats()
   fetchBanners()
   fetchFeaturedTournaments()

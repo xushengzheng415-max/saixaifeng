@@ -2,11 +2,14 @@
 const cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 const db = cloud.database()
+const _ = db.command
 
 exports.main = async (event) => {
   try {
-    const { pageIndex = 0, pageSize = 100 } = event
+    const { pageIndex = 0, pageSize = 100, includeLegacyCategory = false } = event
+    const where = includeLegacyCategory ? {} : _.or([{ category: 'youth' }, { type: 'youth' }])
     const result = await db.collection('tournaments')
+      .where(where)
       .orderBy('createdAt', 'desc')
       .skip(pageIndex * pageSize)
       .limit(pageSize)

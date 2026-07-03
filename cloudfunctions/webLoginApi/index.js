@@ -26,7 +26,7 @@ const EMAIL_CONFIG = {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || ''
   },
-  fromName: '赛小蜂'
+  fromName: '赛小蜂足球'
 }
 
 // 发送邮件（返回 { success, sent }）
@@ -293,13 +293,13 @@ async function handleEmailSendCode(event) {
   .code { font-size: 32px; font-weight: bold; color: #1B5E20; letter-spacing: 6px; }
 </style></head><body>
   <p>尊敬的 <strong>${email}</strong>，您好！</p>
-  <p>您的赛小蜂验证码是：</p>
+  <p>您的赛小蜂足球验证码是：</p>
   <div class="code">${code}</div>
   <p>验证码 10 分钟内有效，请及时使用。</p>
   <p style="color:#999;font-size:12px;">如非本人操作，请忽略此邮件。</p>
 </body></html>`
 
-    const sendResult = await sendEmail(email, '赛小蜂 - 邮箱验证码', emailHtml)
+    const sendResult = await sendEmail(email, '赛小蜂足球 - 邮箱验证码', emailHtml)
 
     return {
       success: true,

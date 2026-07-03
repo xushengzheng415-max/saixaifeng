@@ -3,7 +3,7 @@
     <div class="bind-phone-container">
       <!-- Logo 区域 -->
       <div class="logo-area">
-        <img src="/logo-saixiaofeng.png" alt="赛小蜂" class="logo-img" />
+        <img src="/logo-saixiaofeng.png" alt="赛小蜂足球" class="logo-img" />
       </div>
 
       <!-- 绑定手机号区域 -->

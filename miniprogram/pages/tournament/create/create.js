@@ -28,9 +28,9 @@ const QUARTER_VALUES = [5,10,15,20,25,30];
 const Q_COUNT_OPTIONS = ['2节','4节'];
 const EXTRA_SUB_OPTIONS = ['0人','1人','2人','3人','不限'];
 
-const CATEGORY_LABELS = ['青少年赛事', '业余赛事', '地协赛', '城市联赛', '职业联赛'];
-const CATEGORY_VALUES = ['youth','amateur','local','city','professional'];
-const CATEGORY_DESCS = ['U8~U18青少年足球赛事','社会业余球队参赛赛事','各地足协主办精品赛事','各城市代表队巅峰对决','职业级足球联赛赛事'];
+const CATEGORY_LABELS = ['青少年赛事'];
+const CATEGORY_VALUES = ['youth'];
+const CATEGORY_DESCS = ['U8~U18青少年足球赛事'];
 
 Page({
   data: {
@@ -65,6 +65,7 @@ Page({
     selectedQCount: Q_COUNT_OPTIONS[1],
     categoryIdx: 0,
     selectedCategoryLabel: CATEGORY_LABELS[0],
+    selectedCategoryDesc: CATEGORY_DESCS[0],
     categoryLabels: CATEGORY_LABELS,
     extraSubOptions: EXTRA_SUB_OPTIONS,
     selectedExtraSub: EXTRA_SUB_OPTIONS[4],
@@ -128,7 +129,12 @@ Page({
 
   onCategorySelect(e) {
     const i = e.detail.value;
-    this.setData({ categoryIdx: i, 'form.category': CATEGORY_VALUES[i], selectedCategoryLabel: CATEGORY_LABELS[i] });
+    this.setData({
+      categoryIdx: i,
+      'form.category': CATEGORY_VALUES[i] || 'youth',
+      selectedCategoryLabel: CATEGORY_LABELS[i] || '青少年赛事',
+      selectedCategoryDesc: CATEGORY_DESCS[i] || 'U8~U18青少年足球赛事'
+    });
   },
 
   onPicker(e) {

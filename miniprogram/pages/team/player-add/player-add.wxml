@@ -14,7 +14,7 @@
       <text class="label">性别</text>
       <picker class="picker" range="{{genderOptions}}" range-key="label" bindchange="onGenderChange" value="{{genderIndex}}">
         <view class="picker-display">
-          <text class="picker-text {{genderLabel ? '' : 'placeholder'}}">{{genderLabel || '请选择性别'}}</text>
+          <text class="picker-text {{genderPickerClass}}">{{genderPickerText}}</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -24,7 +24,7 @@
       <text class="label">出生日期</text>
       <picker class="picker" mode="date" bindchange="onBirthDateChange" value="{{form.birthDate}}">
         <view class="picker-display">
-          <text class="picker-text {{form.birthDate ? '' : 'placeholder'}}">{{form.birthDate || '请选择出生日期'}}</text>
+          <text class="picker-text {{birthDatePickerClass}}">{{birthDatePickerText}}</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -49,7 +49,7 @@
       <text class="label">场上位置</text>
       <picker class="picker" range="{{positionOptions}}" range-key="label" bindchange="onPositionChange" value="{{positionIndex}}">
         <view class="picker-display">
-          <text class="picker-text {{positionLabel ? '' : 'placeholder'}}">{{positionLabel || '请选择位置'}}</text>
+          <text class="picker-text {{positionPickerClass}}">{{positionPickerText}}</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -57,14 +57,14 @@
 
     <view class="form-item">
       <text class="label">球衣姓名</text>
-      <view class="readonly-value">{{form.jerseyName || '自动生成'}}</view>
+      <view class="readonly-value">{{jerseyNameText}}</view>
     </view>
 
     <view class="form-item">
       <text class="label">衣服尺码</text>
       <picker class="picker" range="{{clothingSizeOptions}}" range-key="label" bindchange="onClothingSizeChange" value="{{clothingSizeIndex}}">
         <view class="picker-display">
-          <text class="picker-text {{clothingSizeLabel ? '' : 'placeholder'}}">{{clothingSizeLabel || '请选择衣服尺码'}}</text>
+          <text class="picker-text {{clothingSizePickerClass}}">{{clothingSizePickerText}}</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -110,7 +110,7 @@
 
   <view class="action-bar">
     <button class="btn btn-secondary" bindtap="onCancel">取消</button>
-    <button class="btn btn-primary" bindtap="onSubmit" disabled="{{isSubmitting}}">{{isSubmitting ? '保存中...' : '保存球员'}}</button>
+    <button class="btn btn-primary" bindtap="onSubmit" disabled="{{isSubmitting}}">{{submitButtonText}}</button>
   </view>
 
   <view wx:if="{{cropper.visible}}" class="cropper-mask" catchtouchmove="noop">

@@ -35,7 +35,7 @@ exports.main = async (event, context) => {
     const transporter = nodemailer.createTransport(SMTP_CONFIG)
 
     const mailOptions = {
-      from: `"赛小蜂" <${SMTP_CONFIG.auth.user}>`,
+      from: `"赛小蜂足球" <${SMTP_CONFIG.auth.user}>`,
       to: to,
       subject: subject,
       text: body,

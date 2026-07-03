@@ -39,7 +39,7 @@
       <picker bindchange="onCategorySelect" value="{{categoryIdx}}" range="{{categoryLabels}}">
         <view class="form-input picker-input">{{selectedCategoryLabel}}</view>
       </picker>
-      <view class="type-desc">{{categoryLabels[categoryIdx]}}赛事</view>
+      <view class="type-desc">{{selectedCategoryDesc}}</view>
     </view>
 
     <view class="form-group">

@@ -12,7 +12,7 @@
       <!-- 品牌区域 -->
       <div class="brand-section">
         <div class="brand-icon">
-          <img src="/logo-saixiaofeng.png" alt="赛小蜂" class="brand-logo-img" />
+          <img src="/logo-saixiaofeng.png" alt="赛小蜂足球" class="brand-logo-img" />
         </div>
         <h1 class="brand-title">赛事中心管理后台</h1>
         <p class="brand-subtitle">Tournament Center Admin</p>

@@ -3,14 +3,14 @@
     <div class="select-role-container">
       <!-- Logo 区域 -->
       <div class="logo-area">
-        <img src="/logo-saixiaofeng.png" alt="赛小蜂" class="logo-img" />
-        <h1 class="app-title">赛小蜂</h1>
-        <p class="app-subtitle">足球赛事管理系统</p>
+        <img src="/logo-saixiaofeng.png" alt="赛小蜂足球" class="logo-img" />
+        <h1 class="app-title">赛小蜂足球</h1>
+        <p class="app-subtitle">青少年足球赛事管理系统</p>
       </div>
 
       <!-- 选择身份区域 -->
       <h2 class="page-title">选择您的身份</h2>
-      <p class="page-desc">欢迎使用赛小蜂！请选择您的身份，这将决定您在平台上的功能权限</p>
+      <p class="page-desc">欢迎使用赛小蜂足球！请选择您的身份，这将决定您在平台上的功能权限</p>
 
       <div class="role-options">
         <div

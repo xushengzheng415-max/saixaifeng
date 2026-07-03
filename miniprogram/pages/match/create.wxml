@@ -2,21 +2,15 @@
 <view class="container">
   <view class="form-section">
 
-    <!-- 赛事类型选择 -->
+    <!-- 赛事类型 -->
     <view class="form-item">
       <text class="label">赛事类型 *</text>
       <view class="type-list">
-        <view class="type-card " data-type="campus" bindtap="selectType">
-          <text class="type-icon">🏫</text>
-          <text class="type-name">校园足球</text>
-          <text class="type-desc">领队/教练全权管理</text>
-          <text class="type-desc">提交参赛名单即可</text>
-        </view>
-        <view class="type-card " data-type="amateur" bindtap="selectType">
+        <view class="type-card active" data-type="youth" bindtap="selectType">
           <text class="type-icon">⚽</text>
-          <text class="type-name">业余足球</text>
-          <text class="type-desc">球员自主报名</text>
-          <text class="type-desc">支持官员角色注册</text>
+          <text class="type-name">青少年足球</text>
+          <text class="type-desc">U8~U18青少年赛事</text>
+          <text class="type-desc">教练/领队提交参赛名单</text>
         </view>
       </view>
     </view>
@@ -68,10 +62,10 @@
       <textarea class="textarea" placeholder="请输入赛事说明（赛制、规则等）" value="{{description}}" bindinput="onDescInput" maxlength="500"></textarea>
     </view>
 
-    <!-- 业余足球：官员角色配置 -->
+    <!-- 青少年赛事：工作人员配置 -->
     <view class="form-item">
-      <text class="label">官员角色（可选）</text>
-      <text class="sub-label">选择需要开放的官员职位，球员注册时可兼任</text>
+      <text class="label">赛事工作人员（可选）</text>
+      <text class="sub-label">选择本赛事需要登记的队伍工作人员职位</text>
       <view class="official-list">
         <view class="official-tag "
               wx:for="{{officialRoles}}" wx:key="*this"
@@ -82,21 +76,11 @@
       </view>
     </view>
 
-    <!-- 校园足球提示 -->
     <view class="tip-box">
-      <text class="tip-title">校园足球模式</text>
+      <text class="tip-title">青少年足球赛事</text>
       <text class="tip-text">• 领队/教练提交参赛名单</text>
       <text class="tip-text">• 领队全权管理球员信息</text>
-      <text class="tip-text">• 球员无需自主注册</text>
-    </view>
-
-    <!-- 业余足球提示 -->
-    <view class="tip-box">
-      <text class="tip-title">业余足球模式</text>
-      <text class="tip-text">• 教练创建球队后球员自主加入</text>
-      <text class="tip-text">• 球员可自己创建角色并报名</text>
-      <text class="tip-text">• 支持官员角色（助理教练/队医等）</text>
-      <text class="tip-text">• 兼项人员在名单中统一展示</text>
+      <text class="tip-text">• 后续可按年龄组进行报名审核</text>
     </view>
   </view>
 
