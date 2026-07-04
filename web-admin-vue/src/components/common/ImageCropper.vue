@@ -60,14 +60,23 @@ const imageRef = ref(null)
 const cropping = ref(false)
 let cropper = null
 
-watch(() => props.imageSrc, async (src) => {
-  if (!src || !visible.value) return
-  await nextTick()
-  await nextTick()
+function destroyCropper() {
   if (cropper) {
     cropper.destroy()
     cropper = null
   }
+  cropping.value = false
+}
+
+watch(() => visible.value, (isVisible) => {
+  if (!isVisible) destroyCropper()
+})
+
+watch(() => props.imageSrc, async (src) => {
+  if (!src || !visible.value) return
+  await nextTick()
+  await nextTick()
+  destroyCropper()
   if (imageRef.value) {
     cropper = new Cropper(imageRef.value, {
       aspectRatio: 1,
@@ -84,8 +93,9 @@ watch(() => props.imageSrc, async (src) => {
       minContainerWidth: 500,
       minContainerHeight: 350,
       ready() {
-        const canvasData = this.getCanvasData()
-        const containerData = this.getContainerData()
+        if (!cropper) return
+        const canvasData = cropper.getCanvasData()
+        const containerData = cropper.getContainerData()
         if (canvasData.naturalWidth > 0 && canvasData.naturalHeight > 0) {
           // 缩放到让图片 fit 进画布，留 5% 边距
           const scale = Math.min(
@@ -93,7 +103,7 @@ watch(() => props.imageSrc, async (src) => {
             containerData.height / canvasData.naturalHeight
           )
           if (scale < 1) {
-            this.zoomTo(scale * 0.95)
+            cropper.zoomTo(scale * 0.95)
           }
         }
       }
@@ -115,31 +125,33 @@ function reset() {
 
 function cancel() {
   visible.value = false
-  if (cropper) {
-    cropper.destroy()
-    cropper = null
-  }
+  destroyCropper()
 }
 
 function confirm() {
   if (!cropper) return
   cropping.value = true
-  const canvas = cropper.getCroppedCanvas({
-    width: 400,
-    height: 400,
-    fillColor: '#fff',
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high'
-  })
-  canvas.toBlob((blob) => {
+  try {
+    const canvas = cropper.getCroppedCanvas({
+      width: 400,
+      height: 400,
+      fillColor: '#fff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high'
+    })
+    if (!canvas) throw new Error('裁剪画布生成失败')
+    canvas.toBlob((blob) => {
+      cropping.value = false
+      if (blob) {
+        emit('crop', blob)
+        visible.value = false
+        destroyCropper()
+      }
+    }, 'image/png')
+  } catch (err) {
+    console.error('[ImageCropper] 裁剪失败:', err)
     cropping.value = false
-    if (blob) {
-      emit('crop', blob)
-    }
-    visible.value = false
-    cropper.destroy()
-    cropper = null
-  }, 'image/png')
+  }
 }
 </script>
 

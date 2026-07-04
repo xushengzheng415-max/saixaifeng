@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="team-list">
     <div class="page-card">
       <div class="page-header">
@@ -529,22 +529,47 @@ function handleAISuccess(url) {
   teamForm.value.logo = url // 同时更新logo字段
 }
 
+function resetLogoCropperState() {
+  showLogoCropper.value = false
+  cropperImageSrc.value = ''
+  cropperPendingFile.value = null
+}
+
 function handleLogoUpload(options) {
-  const { file } = options
+  resetLogoCropperState()
+  const file = options?.file?.raw || options?.file
+  if (!(file instanceof Blob)) {
+    ElMessage.error('Logo文件读取失败，请重新选择图片')
+    options?.onError?.(new Error('Invalid upload file'))
+    return
+  }
+
   const reader = new FileReader()
   reader.onload = (e) => {
     cropperImageSrc.value = e.target.result
     cropperPendingFile.value = file
     showLogoCropper.value = true
+    options?.onSuccess?.({ success: true })
+  }
+  reader.onerror = () => {
+    resetLogoCropperState()
+    ElMessage.error('Logo文件读取失败，请重新上传')
+    options?.onError?.(reader.error || new Error('File read failed'))
   }
   reader.readAsDataURL(file)
 }
 
 // 压缩图片 blob（缩小尺寸 + JPEG压缩）
 function compressImage(blob, maxSize = 400) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    if (!(blob instanceof Blob)) {
+      reject(new Error('无效的图片数据'))
+      return
+    }
     const img = new Image()
+    const url = URL.createObjectURL(blob)
     img.onload = () => {
+      URL.revokeObjectURL(url)
       let w = img.width, h = img.height
       if (w > maxSize || h > maxSize) {
         const ratio = Math.min(maxSize / w, maxSize / h)
@@ -556,9 +581,16 @@ function compressImage(blob, maxSize = 400) {
       canvas.height = h
       const ctx = canvas.getContext('2d')
       ctx.drawImage(img, 0, 0, w, h)
-      canvas.toBlob((compressed) => resolve(compressed), 'image/png')
+      canvas.toBlob((compressed) => {
+        if (compressed) resolve(compressed)
+        else reject(new Error('图片压缩失败'))
+      }, 'image/png')
     }
-    img.src = URL.createObjectURL(blob)
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('图片加载失败'))
+    }
+    img.src = url
   })
 }
 
@@ -603,6 +635,7 @@ async function handleLogoCropConfirm(croppedBlob) {
     ElMessage.error('上传失败: ' + (err.message || '未知错误'))
   } finally {
     uploadingLogo.value = false
+    cropperPendingFile.value = null
   }
 }
 
