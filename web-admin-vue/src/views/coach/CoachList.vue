@@ -52,10 +52,13 @@
             </el-table-column>
             <el-table-column label="角色" width="100">
               <template #default="{ row }">
-                <el-tag :type="getRoleTagType(row.type)" size="small">
-                  {{ getRoleName(row.type) }}
+                <el-tag :type="getRoleTagType(row.type || row.role)" size="small">
+                  {{ getRoleName(row.type || row.role) }}
                 </el-tag>
               </template>
+            </el-table-column>
+            <el-table-column label="编号" width="150">
+              <template #default="{ row }">{{ row.playerId || row.memberId || '-' }}</template>
             </el-table-column>
             <el-table-column prop="name" label="姓名" min-width="120" />
             <el-table-column prop="phone" label="联系电话" width="140" />
@@ -317,23 +320,44 @@ const memberForm = ref({
 // 成员角色类型定义
 const memberTypes = [
   { value: 'head_coach', label: '主教练', tagType: 'primary', description: '负责战术安排、阵容提交' },
-  { value: 'assistant', label: '助理教练', tagType: 'success', description: '主教练不在时代替行使职权' },
+  { value: 'assistant_coach', label: '助理教练', tagType: 'success', description: '主教练不在时代替行使职权' },
+  { value: 'goalkeeper_coach', label: '守门员教练', tagType: 'success', description: '负责守门员专项训练' },
+  { value: 'team_leader', label: '领队', tagType: 'info', description: '负责球队信息化管理' },
   { value: 'doctor', label: '队医', tagType: 'warning', description: '负责球员伤病情况记录' },
-  { value: 'leader', label: '领队', tagType: 'info', description: '负责球队信息化管理' }
+  { value: 'translator', label: '翻译', tagType: 'info', description: '负责沟通翻译' },
+  { value: 'press_officer', label: '新闻官', tagType: 'info', description: '负责媒体与新闻事务' },
+  { value: 'other', label: '其他', tagType: 'info', description: '其他工作人员' }
 ]
+const roleTypeAliases = {
+  assistant: 'assistant_coach',
+  leader: 'team_leader',
+  '助理教练': 'assistant_coach',
+  '主教练': 'head_coach',
+  '领队': 'team_leader',
+  '队医': 'doctor',
+  '翻译': 'translator',
+  '新闻官': 'press_officer',
+  '守门员教练': 'goalkeeper_coach'
+}
+
+function normalizeRoleType(type) {
+  const value = String(type || '').trim()
+  return roleTypeAliases[value] || value || 'other'
+}
 
 // 获取角色显示名称
 function getRoleName(type) {
-  const role = memberTypes.find(r => r.value === type)
-  return role ? role.label : type
+  const normalizedType = normalizeRoleType(type)
+  const role = memberTypes.find(r => r.value === normalizedType)
+  return role ? role.label : (type || '-')
 }
 
 // 获取角色标签颜色
 function getRoleTagType(type) {
-  const role = memberTypes.find(r => r.value === type)
+  const normalizedType = normalizeRoleType(type)
+  const role = memberTypes.find(r => r.value === normalizedType)
   return role ? role.tagType : 'info'
 }
-
 // 获取成员数量描述
 function getMemberCount(members) {
   return members ? members.length : 0
@@ -430,7 +454,7 @@ function editMember(teamId, teamName, members, member) {
   isEditingMember.value = true
   editingMemberIndex.value = members.indexOf(member)
   memberForm.value = {
-    type: member.type || 'head_coach',
+    type: normalizeRoleType(member.type || member.role || 'head_coach'),
     name: member.name || '',
     phone: member.phone || '',
     description: member.description || '',
@@ -475,8 +499,11 @@ async function submitMember() {
     const currentUser = getCurrentUser()
     const uid = currentUser ? currentUser.uid : ''
 
+    const normalizedType = normalizeRoleType(memberForm.value.type)
     const memberData = {
       ...memberForm.value,
+      type: normalizedType,
+      role: getRoleName(normalizedType),
       teamId: currentTeamId.value,
       teamName: currentTeamName.value,
       creator: uid,

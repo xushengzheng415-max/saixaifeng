@@ -1885,7 +1885,16 @@ const STAFF_ROLE_TYPE_MAP = {
   '新闻官': 'press_officer',
   '其他': 'other'
 }
-const STAFF_ROLE_LABEL_MAP = Object.fromEntries(Object.entries(STAFF_ROLE_TYPE_MAP).map(([label, type]) => [type, label]))
+const STAFF_ROLE_LABEL_MAP = {
+  head_coach: '主教练',
+  assistant_coach: '助理教练',
+  goalkeeper_coach: '守门员教练',
+  team_leader: '领队',
+  doctor: '队医',
+  translator: '翻译',
+  press_officer: '新闻官',
+  other: '其他'
+}
 const COACH_STAFF_TYPES = ['head_coach', 'assistant_coach', 'goalkeeper_coach']
 const isStaffRole = (role) => !!STAFF_ROLE_TYPE_MAP[String(role || '').trim()]
 const getImportRoleSuffix = (staffType) => COACH_STAFF_TYPES.includes(staffType) ? 'A' : 'B'
