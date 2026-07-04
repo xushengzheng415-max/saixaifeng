@@ -691,7 +691,9 @@
     <el-dialog
       v-model="showBatchImport"
       title="批量导入球员"
-      width="800px"
+      width="1180px"
+      class="batch-import-dialog"
+      top="5vh"
       :close-on-click-modal="false"
       destroy-on-close
     >
@@ -752,7 +754,7 @@
             </div>
           </template>
         </el-alert>
-        <el-table :data="importParsedData" max-height="380" size="small" border style="width: 100%">
+        <el-table :data="importParsedData" max-height="56vh" size="small" border style="width: 100%">
           <el-table-column type="index" label="#" width="40" />
           <el-table-column prop="name" label="姓名" width="80" />
           <el-table-column prop="_importKindLabel" label="人员类型" width="80" align="center" />
@@ -2675,5 +2677,17 @@ function compressBase64(dataUrl, maxSize = 300) {
 
 .library-empty-tip {
   margin-top: 16px;
+}
+
+.batch-import-dialog {
+  max-width: calc(100vw - 48px);
+}
+
+.batch-import-dialog :deep(.el-dialog__body) {
+  padding-top: 8px;
+}
+
+.import-preview {
+  min-width: 0;
 }
 </style>
