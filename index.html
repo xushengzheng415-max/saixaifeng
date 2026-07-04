@@ -393,6 +393,9 @@
                 <!-- 左侧：微信扫码 -->
                 <div class="login-modal-left">
                     <h3 class="text-lg font-medium text-white/90 mb-6">扫描二维码登录</h3>
+                    <button type="button" onclick="openWechatDesktopLogin()" class="mb-4 inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-bee-main text-white font-bold hover:bg-bee-bright hover:-translate-y-0.5 transition-all text-sm shadow-lg shadow-bee-main/20">
+                        电脑微信一键授权登录
+                    </button>
                     <!-- 微信 WxLogin 内嵌二维码容器 -->
                     <div id="wx_login_container" class="w-[340px] h-[360px] bg-white rounded-xl flex items-center justify-center mb-4 overflow-hidden">
                         <div id="wechat-qrcode-loading" class="flex flex-col items-center gap-2">
@@ -400,7 +403,7 @@
                             <span class="text-sm text-gray-500">正在加载二维码...</span>
                         </div>
                     </div>
-                    <p class="text-white/50 text-sm text-center">请使用 <span class="text-bee-main">微信客户端</span> 扫码登录</p>
+                    <p class="text-white/50 text-sm text-center">未登录电脑微信时，请使用 <span class="text-bee-main">微信客户端</span> 扫码登录</p>
                 </div>
 
                 <!-- 右侧：表单区域 -->
@@ -1224,6 +1227,23 @@
             }
         })();
 
+        function buildWechatLoginUrl(state) {
+            const redirectUri = decodeURIComponent(WECHAT_REDIRECT_URI);
+            return 'https://open.weixin.qq.com/connect/qrconnect?appid=' + encodeURIComponent(WECHAT_WEB_APPID)
+                + '&redirect_uri=' + encodeURIComponent(redirectUri)
+                + '&response_type=code&scope=snsapi_login&state=' + encodeURIComponent(state)
+                + '#wechat_redirect';
+        }
+
+        function openWechatDesktopLogin() {
+            if (!WECHAT_WEB_APPID) {
+                showToast('微信 AppID 未配置', 'error');
+                return;
+            }
+            var state = 'wx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            sessionStorage.setItem('wechat_login_state', state);
+            window.location.href = buildWechatLoginUrl(state);
+        }
         // 加载微信 WxLogin.js 并渲染内嵌二维码
         function loadWechatEmbeddedQR() {
             if (!WECHAT_WEB_APPID) {
