@@ -202,7 +202,7 @@
             border: 1px solid rgba(16, 185, 129, 0.3);
             border-radius: 24px;
             width: 90%;
-            max-width: 800px;
+            max-width: 860px;
             padding: 0;
             position: relative;
             transform: scale(0.9) translateY(20px);
@@ -240,7 +240,7 @@
             min-height: 520px;
         }
         .login-modal-left {
-            flex: 0 0 340px;
+            flex: 0 0 400px;
             padding: 48px 32px;
             display: flex;
             flex-direction: column;
@@ -393,17 +393,14 @@
                 <!-- 左侧：微信扫码 -->
                 <div class="login-modal-left">
                     <h3 class="text-lg font-medium text-white/90 mb-6">扫描二维码登录</h3>
-                    <button type="button" onclick="openWechatDesktopLogin()" class="mb-4 inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-bee-main text-white font-bold hover:bg-bee-bright hover:-translate-y-0.5 transition-all text-sm shadow-lg shadow-bee-main/20">
-                        电脑微信一键授权登录
-                    </button>
                     <!-- 微信 WxLogin 内嵌二维码容器 -->
-                    <div id="wx_login_container" class="w-[340px] h-[360px] bg-white rounded-xl flex items-center justify-center mb-4 overflow-hidden">
+                    <div id="wx_login_container" class="w-[360px] h-[420px] bg-white rounded-xl flex items-center justify-center mb-3 overflow-visible">
                         <div id="wechat-qrcode-loading" class="flex flex-col items-center gap-2">
                             <svg class="w-12 h-12 text-green-500 animate-pulse" viewBox="0 0 1024 1024"><path d="M690.1 377.4c5.9 0 11.8.2 17.6.5-24.4-128.7-158.3-227.1-319.9-227.1C209 150.8 57.9 276.3 57.9 431.3c0 82.9 43.2 157.9 113.3 210.5l-28.4 85.2 99.3-49.7c35.6 7 71.5 14.1 107.7 14.1 5.5 0 11-.2 16.4-.5-3.4-15.8-5.3-32.2-5.3-49.1.1-172.2 139.8-264.4 309.2-264.4z"/><path d="M966.2 647.5c0-126.8-126.8-230-267.5-230-150.2 0-267.6 103.2-267.6 230 0 127 117.4 230 267.6 230 31.3 0 62.5-8 93.7-18.8l79.4 44.5-21.8-72.1c56.8-48.9 116.2-114.2 116.2-183.6z"/></svg>
                             <span class="text-sm text-gray-500">正在加载二维码...</span>
                         </div>
                     </div>
-                    <p class="text-white/50 text-sm text-center">未登录电脑微信时，请使用 <span class="text-bee-main">微信客户端</span> 扫码登录</p>
+                    <p class="text-white/50 text-sm text-center">请使用 <span class="text-bee-main">微信客户端</span> 扫码登录</p>
                 </div>
 
                 <!-- 右侧：表单区域 -->
@@ -1227,23 +1224,6 @@
             }
         })();
 
-        function buildWechatLoginUrl(state) {
-            const redirectUri = decodeURIComponent(WECHAT_REDIRECT_URI);
-            return 'https://open.weixin.qq.com/connect/qrconnect?appid=' + encodeURIComponent(WECHAT_WEB_APPID)
-                + '&redirect_uri=' + encodeURIComponent(redirectUri)
-                + '&response_type=code&scope=snsapi_login&state=' + encodeURIComponent(state)
-                + '#wechat_redirect';
-        }
-
-        function openWechatDesktopLogin() {
-            if (!WECHAT_WEB_APPID) {
-                showToast('微信 AppID 未配置', 'error');
-                return;
-            }
-            var state = 'wx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            sessionStorage.setItem('wechat_login_state', state);
-            window.location.href = buildWechatLoginUrl(state);
-        }
         // 加载微信 WxLogin.js 并渲染内嵌二维码
         function loadWechatEmbeddedQR() {
             if (!WECHAT_WEB_APPID) {
