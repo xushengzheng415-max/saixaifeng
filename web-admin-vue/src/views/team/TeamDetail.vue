@@ -1857,6 +1857,12 @@ function editTeam() {
 
 // ========== 批量导入球员（Excel）==========
 
+const IMPORT_DATA_START_ROW = 2
+const IMPORT_DATA_END_ROW = 36
+const IMPORT_INSTRUCTION_START_ROW = 38
+const IMPORT_POSITION_OPTIONS = ['守门员', '后卫', '前卫', '前锋']
+const IMPORT_RELATED_POSITION_OPTIONS = ['队员', '球员', '主教练', '助理教练', '领队', '队医', '翻译', '新闻官', '其他']
+
 // 位置映射：中文 → 代码
 const POSITION_MAP_CN = {
   '守门员': 'GK', '门将': 'GK',
@@ -1865,39 +1871,185 @@ const POSITION_MAP_CN = {
   '前锋': 'FW', '前峰': 'FW'
 }
 
+function toUtf8Bytes(text) {
+  return new TextEncoder().encode(text)
+}
+
+function readUInt16LE(bytes, offset) {
+  return bytes[offset] | (bytes[offset + 1] << 8)
+}
+
+function readUInt32LE(bytes, offset) {
+  return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0
+}
+
+function writeUInt16LE(bytes, offset, value) {
+  bytes[offset] = value & 0xff
+  bytes[offset + 1] = (value >>> 8) & 0xff
+}
+
+function writeUInt32LE(bytes, offset, value) {
+  bytes[offset] = value & 0xff
+  bytes[offset + 1] = (value >>> 8) & 0xff
+  bytes[offset + 2] = (value >>> 16) & 0xff
+  bytes[offset + 3] = (value >>> 24) & 0xff
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i]
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function concatBytes(parts) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0)
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.length
+  }
+  return out
+}
+
+function patchXlsxTemplateValidations(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer)
+  let eocd = -1
+  for (let i = bytes.length - 22; i >= 0; i--) {
+    if (readUInt32LE(bytes, i) === 0x06054b50) {
+      eocd = i
+      break
+    }
+  }
+  if (eocd < 0) return bytes
+
+  const fileCount = readUInt16LE(bytes, eocd + 10)
+  const centralOffset = readUInt32LE(bytes, eocd + 16)
+  const decoder = new TextDecoder()
+  const entries = []
+  let ptr = centralOffset
+
+  for (let i = 0; i < fileCount; i++) {
+    if (readUInt32LE(bytes, ptr) !== 0x02014b50) return bytes
+    const method = readUInt16LE(bytes, ptr + 10)
+    const compressedSize = readUInt32LE(bytes, ptr + 20)
+    const nameLen = readUInt16LE(bytes, ptr + 28)
+    const extraLen = readUInt16LE(bytes, ptr + 30)
+    const commentLen = readUInt16LE(bytes, ptr + 32)
+    const localOffset = readUInt32LE(bytes, ptr + 42)
+    const name = decoder.decode(bytes.slice(ptr + 46, ptr + 46 + nameLen))
+
+    const localNameLen = readUInt16LE(bytes, localOffset + 26)
+    const localExtraLen = readUInt16LE(bytes, localOffset + 28)
+    const dataStart = localOffset + 30 + localNameLen + localExtraLen
+    let data = bytes.slice(dataStart, dataStart + compressedSize)
+
+    if (name === 'xl/worksheets/sheet1.xml' && method === 0) {
+      let xml = decoder.decode(data)
+      const validationsXml = `<dataValidations count="2"><dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="E${IMPORT_DATA_START_ROW}:E${IMPORT_DATA_END_ROW}"><formula1>"${IMPORT_POSITION_OPTIONS.join(',')}"</formula1></dataValidation><dataValidation type="list" allowBlank="1" showErrorMessage="1" sqref="J${IMPORT_DATA_START_ROW}:J${IMPORT_DATA_END_ROW}"><formula1>"${IMPORT_RELATED_POSITION_OPTIONS.join(',')}"</formula1></dataValidation></dataValidations>`
+      xml = xml.replace(/<dataValidations[\s\S]*?<\/dataValidations>/, '')
+      if (xml.includes('<pageMargins')) {
+        xml = xml.replace('<pageMargins', validationsXml + '<pageMargins')
+      } else {
+        xml = xml.replace('</worksheet>', validationsXml + '</worksheet>')
+      }
+      data = toUtf8Bytes(xml)
+    }
+
+    entries.push({ name, data })
+    ptr += 46 + nameLen + extraLen + commentLen
+  }
+
+  const localParts = []
+  const centralParts = []
+  let offset = 0
+
+  for (const entry of entries) {
+    const nameBytes = toUtf8Bytes(entry.name)
+    const data = entry.data
+    const crc = crc32(data)
+    const local = new Uint8Array(30 + nameBytes.length)
+    writeUInt32LE(local, 0, 0x04034b50)
+    writeUInt16LE(local, 4, 20)
+    writeUInt16LE(local, 6, 0x0800)
+    writeUInt16LE(local, 8, 0)
+    writeUInt32LE(local, 14, crc)
+    writeUInt32LE(local, 18, data.length)
+    writeUInt32LE(local, 22, data.length)
+    writeUInt16LE(local, 26, nameBytes.length)
+    local.set(nameBytes, 30)
+    localParts.push(local, data)
+
+    const central = new Uint8Array(46 + nameBytes.length)
+    writeUInt32LE(central, 0, 0x02014b50)
+    writeUInt16LE(central, 4, 20)
+    writeUInt16LE(central, 6, 20)
+    writeUInt16LE(central, 8, 0x0800)
+    writeUInt16LE(central, 10, 0)
+    writeUInt32LE(central, 16, crc)
+    writeUInt32LE(central, 20, data.length)
+    writeUInt32LE(central, 24, data.length)
+    writeUInt16LE(central, 28, nameBytes.length)
+    writeUInt32LE(central, 42, offset)
+    central.set(nameBytes, 46)
+    centralParts.push(central)
+
+    offset += local.length + data.length
+  }
+
+  const centralDir = concatBytes(centralParts)
+  const eocdOut = new Uint8Array(22)
+  writeUInt32LE(eocdOut, 0, 0x06054b50)
+  writeUInt16LE(eocdOut, 8, entries.length)
+  writeUInt16LE(eocdOut, 10, entries.length)
+  writeUInt32LE(eocdOut, 12, centralDir.length)
+  writeUInt32LE(eocdOut, 16, offset)
+  return concatBytes([...localParts, centralDir, eocdOut])
+}
+
 // 下载导入模板
 async function downloadImportTemplate() {
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   
-  // 模板说明（合并的抬头行）
-  const headerRow = ['姓名', '身份证号', '球号', '球场位置', '身高(cm)', '体重(kg)', '联系人', '联系电话', '关联职位']
-  const sampleRow = ['示例球员', '410204200001010011', '10', '前卫', '178', '70', '13800138000', '队员']
-  
-  const data = [headerRow, sampleRow]
+  const headerRow = ['序号', '姓名', '身份证号', '球号', '球场位置', '身高(cm)', '体重(kg)', '联系人', '联系电话', '关联职位']
+  const data = [headerRow]
+  data.push([1, '张三', '410204200001010011', '10', '前卫', '178', '70', '张三', '13800138000', '队员'])
+  for (let i = 2; i <= 35; i++) {
+    data.push([i, '', '', '', '', '', '', '', '', ''])
+  }
+  data.push([])
+  data.push(['填写说明：'])
+  data.push(['1. 第2行为示例，请替换为真实人员信息；如未替换，系统导入时会自动跳过。'])
+  data.push(['2. 序号仅用于表格填写和核对顺序，导入时不会写入系统。'])
+  data.push(['3. 球场位置可选：守门员/后卫/前卫/前锋。'])
+  data.push(['4. 关联职位可选：队员/球员/主教练/助理教练/领队/队医/翻译/新闻官/其他。'])
+  data.push(['5. 第38行及以下填写说明会在导入时自动忽略，无需删除。'])
+
   const ws = XLSX.utils.aoa_to_sheet(data)
-  
-  // 设置列宽
   ws['!cols'] = [
-    { wch: 12 }, // 姓名
-    { wch: 22 }, // 身份证号
-    { wch: 8 },  // 球号
-    { wch: 12 }, // 球场位置
-    { wch: 12 }, // 身高
-    { wch: 12 }, // 体重
-    { wch: 12 }, // 联系人
-    { wch: 15 }, // 联系电话
-    { wch: 14 }, // 关联职位
+    { wch: 8 },
+    { wch: 12 },
+    { wch: 22 },
+    { wch: 8 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 15 },
+    { wch: 14 },
   ]
-  
-  // 添加说明行
-  XLSX.utils.sheet_add_aoa(ws, [['填写说明：'], ['1. 姓名为必填，身份证号为必填'], ['2. 球场位置可选：守门员/后卫/前卫/前锋'], ['3. 关联职位可选：队员/主教练/助理教练/领队/队医/翻译/新闻官'], ['4. 球衣名会根据姓名自动生成，无需填写'], ['5. 示例行请在导入前删除']], { origin: 3 })
-  
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 }
   XLSX.utils.book_append_sheet(wb, ws, '球员导入')
   
-  // 生成并下载
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([wbout], { type: 'application/octet-stream' })
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: false })
+  const patched = patchXlsxTemplateValidations(wbout)
+  const blob = new Blob([patched], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -1939,9 +2091,11 @@ async function handleImportFileChange(file) {
       }
       
       const headers = jsonData[headerRowIndex].map(h => String(h || '').trim())
-      const dataRows = jsonData.slice(headerRowIndex + 1).filter(row => row && row.some(c => String(c || '').trim()))
+      const candidateRows = jsonData.slice(headerRowIndex + 1)
+        .map((row, index) => ({ row, excelRowNumber: headerRowIndex + index + 2 }))
+        .filter(({ row }) => row && row.some(c => String(c || '').trim()))
       
-      if (dataRows.length === 0) {
+      if (candidateRows.length === 0) {
         ElMessage.warning('Excel 中没有有效的数据行')
         return
       }
@@ -1961,6 +2115,7 @@ async function handleImportFileChange(file) {
       }
       
       const colMap = {
+        serial: findCol(['序号', '编号', '顺序'], []),
         name: findCol(['姓名'], ['球衣', '号码', '球衣名', '缩写', '拼音']),
         idCard: findCol(['身份证号', '身份证', '证件号', '证件']),
         jerseyNumber: findCol(['球号', '号码'], ['身份证']),
@@ -1982,6 +2137,7 @@ async function handleImportFileChange(file) {
         位置列: colMap.position >= 0 ? `第${colMap.position + 1}列「${headers[colMap.position]}」` : '未找到',
         联系人列: colMap.contactName >= 0 ? `第${colMap.contactName + 1}列「${headers[colMap.contactName]}」` : '未找到',
         联系电话列: colMap.contactPhone >= 0 ? `第${colMap.contactPhone + 1}列「${headers[colMap.contactPhone]}」` : '未找到',
+        序号列: colMap.serial >= 0 ? `第${colMap.serial + 1}列「${headers[colMap.serial]}」` : '未找到（不影响导入）',
         关联职位列: colMap.relatedPosition >= 0 ? `第${colMap.relatedPosition + 1}列「${headers[colMap.relatedPosition]}」` : '未找到',
       }
       colDetectInfo.value = info
@@ -1994,8 +2150,18 @@ async function handleImportFileChange(file) {
       
       const parsed = []
       const errors = []
+      const instructionKeywords = ['填写说明', '姓名为必填', '球场位置可选', '关联职位可选', '球衣名会', '示例行请', '导入前删除']
+      const isInstructionRow = (row, excelRowNumber) => {
+        const rowText = (row || []).map(c => String(c || '').trim()).filter(Boolean).join(' ')
+        if (!rowText) return true
+        if (excelRowNumber >= IMPORT_INSTRUCTION_START_ROW) return true
+        return instructionKeywords.some(keyword => rowText.includes(keyword))
+      }
       
-      dataRows.forEach((row, idx) => {
+      candidateRows.forEach(({ row, excelRowNumber }) => {
+        if (isInstructionRow(row, excelRowNumber)) return
+
+        const serial = String(colMap.serial >= 0 ? (row[colMap.serial] || '') : '').trim()
         const name = String(colMap.name >= 0 ? (row[colMap.name] || '') : '').trim()
         const idCard = String(colMap.idCard >= 0 ? (row[colMap.idCard] || '') : '').trim()
         const jerseyNumberStr = String(colMap.jerseyNumber >= 0 ? (row[colMap.jerseyNumber] || '') : '').trim()
@@ -2006,9 +2172,14 @@ async function handleImportFileChange(file) {
         const contactPhone = String(colMap.contactPhone >= 0 ? (row[colMap.contactPhone] || '') : '').trim()
         const relatedPosition = String(colMap.relatedPosition >= 0 ? (row[colMap.relatedPosition] || '') : '').trim()
         const jerseyNameFromExcel = String(colMap.jerseyName >= 0 ? (row[colMap.jerseyName] || '') : '').trim()
+
+        const unchangedExample = serial === '1' && name === '张三' && idCard === '410204200001010011' &&
+          jerseyNumberStr === '10' && positionCn === '前卫' && heightStr === '178' && weightStr === '70' &&
+          contactName === '张三' && contactPhone === '13800138000' && ['队员', '球员'].includes(relatedPosition)
+        if (unchangedExample) return
         
         if (!name) {
-          errors.push(`第 ${idx + 2} 行：姓名为空，已跳过`)
+          errors.push(`第 ${excelRowNumber} 行：姓名为空，已跳过`)
           return
         }
         
@@ -2034,7 +2205,7 @@ async function handleImportFileChange(file) {
         // 验证
         if (!idCard) {
           player._error = true
-          errors.push(`第 ${idx + 2} 行「${name}」：身份证号为空`)
+          errors.push(`第 ${excelRowNumber} 行「${name}」：身份证号为空`)
         }
         
         parsed.push(player)
