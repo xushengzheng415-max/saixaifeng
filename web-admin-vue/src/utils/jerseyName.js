@@ -17,7 +17,7 @@ const COMPOUND_SURNAMES = [
  */
 function toPinyin(char) {
   const result = pinyin.convertToPinyin(char, '', true)
-  return result || char
+  return result ? result.toUpperCase() : char
 }
 
 /**
@@ -71,5 +71,6 @@ export function generateJerseyName(name) {
   }
 
   const suffix = initials.join('')
-  return suffix ? `${surnamePinyin} ${suffix}` : surnamePinyin
+  const jerseyName = suffix ? `${surnamePinyin} ${suffix}` : surnamePinyin
+  return jerseyName.toUpperCase()
 }

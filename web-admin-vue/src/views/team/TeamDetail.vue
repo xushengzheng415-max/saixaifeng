@@ -1887,6 +1887,12 @@ const STAFF_ROLE_LABEL_MAP = Object.fromEntries(Object.entries(STAFF_ROLE_TYPE_M
 const COACH_STAFF_TYPES = ['head_coach', 'assistant_coach', 'goalkeeper_coach']
 const isStaffRole = (role) => !!STAFF_ROLE_TYPE_MAP[String(role || '').trim()]
 const getImportRoleSuffix = (staffType) => COACH_STAFF_TYPES.includes(staffType) ? 'A' : 'B'
+const normalizeJerseyNumber = (value) => {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  return /^\d+$/.test(text) ? String(parseInt(text, 10)) : text
+}
+const normalizeJerseyName = (value) => String(value || '').trim().toUpperCase()
 
 // 下载导入模板
 function downloadImportTemplate() {
@@ -2012,6 +2018,8 @@ async function handleImportFileChange(file) {
         const contactPhone = String(colMap.contactPhone >= 0 ? (row[colMap.contactPhone] || '') : '').trim()
         const relatedPosition = String(colMap.relatedPosition >= 0 ? (row[colMap.relatedPosition] || '') : '').trim()
         const jerseyNameFromExcel = String(colMap.jerseyName >= 0 ? (row[colMap.jerseyName] || '') : '').trim()
+        const normalizedJerseyNumber = normalizeJerseyNumber(jerseyNumberStr)
+        const normalizedJerseyName = normalizeJerseyName(jerseyNameFromExcel)
 
         const unchangedExample = serial === '1' && name === '张三' && idCard === '410204200001010011' &&
           jerseyNumberStr === '10' && positionCn === '前卫' && heightStr === '178' && weightStr === '70' &&
@@ -2028,14 +2036,14 @@ async function handleImportFileChange(file) {
         const player = {
           name,
           idCard,
-          jerseyNumber: importKind === 'staff' ? '' : (jerseyNumberStr || ''),
+          jerseyNumber: importKind === 'staff' ? '' : normalizedJerseyNumber,
           position: importKind === 'staff' ? '' : (POSITION_MAP_CN[positionCn] || ''),
           height: heightStr || '',
           weight: weightStr || '',
           contactName: contactName || '',
           contactPhone: contactPhone || '',
           relatedPosition: normalizedRole,
-          jerseyName: importKind === 'staff' ? '' : (jerseyNameFromExcel || ''),
+          jerseyName: importKind === 'staff' ? '' : normalizedJerseyName,
           _importKind: importKind,
           _staffType: STAFF_ROLE_TYPE_MAP[normalizedRole] || '',
           _roleSuffix: importKind === 'staff' ? getImportRoleSuffix(STAFF_ROLE_TYPE_MAP[normalizedRole] || 'other') : 'C',
