@@ -142,11 +142,13 @@ function confirm() {
     if (!canvas) throw new Error('裁剪画布生成失败')
     canvas.toBlob((blob) => {
       cropping.value = false
-      if (blob) {
-        emit('crop', blob)
-        visible.value = false
-        destroyCropper()
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        console.error('[ImageCropper] invalid cropped image data')
+        return
       }
+      emit('crop', blob)
+      visible.value = false
+      destroyCropper()
     }, 'image/png')
   } catch (err) {
     console.error('[ImageCropper] 裁剪失败:', err)

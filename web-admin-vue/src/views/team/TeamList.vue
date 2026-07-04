@@ -560,10 +560,23 @@ function handleLogoUpload(options) {
 }
 
 // 压缩图片 blob（缩小尺寸 + JPEG压缩）
+function isValidImageBlob(value) {
+  return value instanceof Blob && value.size > 0 && (!value.type || value.type.startsWith('image/'))
+}
+
+async function normalizeImageBlob(value) {
+  if (isValidImageBlob(value)) return value
+  if (typeof value === 'string' && value.startsWith('data:image/')) {
+    const response = await fetch(value)
+    const blob = await response.blob()
+    if (isValidImageBlob(blob)) return blob
+  }
+  throw new Error('Invalid image data')
+}
 function compressImage(blob, maxSize = 400) {
   return new Promise((resolve, reject) => {
-    if (!(blob instanceof Blob)) {
-      reject(new Error('无效的图片数据'))
+    if (!isValidImageBlob(blob)) {
+      reject(new Error('Invalid image data'))
       return
     }
     const img = new Image()
@@ -597,48 +610,43 @@ function compressImage(blob, maxSize = 400) {
 async function handleLogoCropConfirm(croppedBlob) {
   uploadingLogo.value = true
   try {
-    // ★ 转换为 File 对象
-    const file = new File([croppedBlob], 'logo-cropped.png', { type: 'image/png' })
+    const cropBlob = await normalizeImageBlob(croppedBlob)
+    const file = new File([cropBlob], 'logo-cropped.png', { type: cropBlob.type || 'image/png' })
 
-    // ★ AI 智能去背景（rembg）
-    let finalBlob = croppedBlob
+    let finalBlob = cropBlob
     try {
-      ElMessage.info('正在智能去背景...')
+      ElMessage.info('Processing image background...')
       const rembgResult = await removeBackground(file, { format: 'png' })
       if (rembgResult.success) {
-        // removeBackground 返回的 blob 就是透明 PNG
-        finalBlob = rembgResult.blob
-        ElMessage.success('去背景完成')
+        finalBlob = await normalizeImageBlob(rembgResult.blob || rembgResult.data)
+        ElMessage.success('Background processed')
       } else {
-        console.warn('[队徽] 去背景失败，使用原图:', rembgResult.message)
+        console.warn('[Team logo] remove background failed, using original image:', rembgResult.message)
       }
     } catch (rembgErr) {
-      console.warn('[队徽] 去背景异常，使用原图:', rembgErr.message)
+      console.warn('[Team logo] remove background error, using original image:', rembgErr.message)
+      finalBlob = cropBlob
     }
 
-    // ★ 压缩到 400px 以内
     const compressed = await compressImage(finalBlob, 400)
     const cloudPath = `team-logos/${Date.now()}-logo.png`
-    
-    // ★ 使用分片上传（避免 413 错误）
     const result = await uploadLargeFileViaCloud(cloudPath, compressed, { chunkSize: 100 * 1024 })
 
     if (result.success) {
       teamForm.value.logoUrl = result.tempUrl
       teamForm.value.logo = result.tempUrl
-      ElMessage.success('Logo上传成功')
+      ElMessage.success('Logo upload succeeded')
     } else {
-      throw new Error(result.message || '上传失败')
+      throw new Error(result.message || 'Upload failed')
     }
   } catch (err) {
-    console.error('[队徽上传] 失败:', err)
-    ElMessage.error('上传失败: ' + (err.message || '未知错误'))
+    console.error('[Team logo upload] failed:', err)
+    ElMessage.error('Upload failed: ' + (err.message || 'Unknown error'))
   } finally {
     uploadingLogo.value = false
     cropperPendingFile.value = null
   }
 }
-
 function formatTime(time) {
   if (!time) return '-'
   const d = new Date(time)

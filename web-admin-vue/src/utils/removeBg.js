@@ -88,6 +88,7 @@ export async function removeBackground(file, options = {}) {
     return {
       success: true,
       data: base64,
+      blob,
       type: blob.type
     }
 
