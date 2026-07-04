@@ -571,12 +571,12 @@ async function normalizeImageBlob(value) {
     const blob = await response.blob()
     if (isValidImageBlob(blob)) return blob
   }
-  throw new Error('Invalid image data')
+  throw new Error('图片数据无效，请重新选择图片')
 }
 function compressImage(blob, maxSize = 320, mimeType = 'image/webp', quality = 0.82) {
   return new Promise((resolve, reject) => {
     if (!isValidImageBlob(blob)) {
-      reject(new Error('Invalid image data'))
+      reject(new Error('图片数据无效，请重新选择图片'))
       return
     }
     const img = new Image()
@@ -594,19 +594,19 @@ function compressImage(blob, maxSize = 320, mimeType = 'image/webp', quality = 0
       canvas.height = h
       const ctx = canvas.getContext('2d')
       if (!ctx) {
-        reject(new Error('Image compression failed'))
+        reject(new Error('图片压缩失败，请重新上传'))
         return
       }
       ctx.drawImage(img, 0, 0, w, h)
       const outputType = canvas.toDataURL('image/webp').startsWith('data:image/webp') ? mimeType : 'image/png'
       canvas.toBlob((compressed) => {
         if (compressed) resolve(compressed)
-        else reject(new Error('Image compression failed'))
+        else reject(new Error('图片压缩失败，请重新上传'))
       }, outputType, quality)
     }
     img.onerror = () => {
       URL.revokeObjectURL(url)
-      reject(new Error('Image load failed'))
+      reject(new Error('图片加载失败，请重新上传'))
     }
     img.src = url
   })
@@ -616,7 +616,7 @@ async function uploadTeamLogo(cloudPath, file) {
   try {
     return await uploadImageViaWebApi('team-logos', file)
   } catch (err) {
-    console.warn('[Team logo upload] uploadImage failed, retry chunk upload:', err.message)
+    console.warn('[队徽上传] 图片直传失败，改用分片上传:', err.message)
     return await uploadLargeFileViaCloud(cloudPath, file, { chunkSize: 48 * 1024 })
   }
 }
@@ -629,16 +629,16 @@ async function handleLogoCropConfirm(croppedBlob) {
 
     let finalBlob = cropBlob
     try {
-      ElMessage.info('Processing image background...')
+      ElMessage.info('正在处理图片背景...')
       const rembgResult = await removeBackground(file, { format: 'png' })
       if (rembgResult.success) {
         finalBlob = await normalizeImageBlob(rembgResult.blob || rembgResult.data)
-        ElMessage.success('Background processed')
+        ElMessage.success('背景处理完成')
       } else {
-        console.warn('[Team logo] remove background failed, using original image:', rembgResult.message)
+        console.warn('[队徽] 背景处理失败，使用原图:', rembgResult.message)
       }
     } catch (rembgErr) {
-      console.warn('[Team logo] remove background error, using original image:', rembgErr.message)
+      console.warn('[队徽] 背景处理异常，使用原图:', rembgErr.message)
       finalBlob = cropBlob
     }
 
@@ -649,13 +649,13 @@ async function handleLogoCropConfirm(croppedBlob) {
     if (result.success) {
       teamForm.value.logoUrl = result.tempUrl
       teamForm.value.logo = result.tempUrl
-      ElMessage.success('Logo upload succeeded')
+      ElMessage.success('Logo上传成功')
     } else {
-      throw new Error(result.message || 'Upload failed')
+      throw new Error(result.message || '上传失败')
     }
   } catch (err) {
-    console.error('[Team logo upload] failed:', err)
-    ElMessage.error('Upload failed: ' + (err.message || 'Unknown error'))
+    console.error('[队徽上传] 失败:', err)
+    ElMessage.error('上传失败：' + (err.message || '未知错误'))
   } finally {
     uploadingLogo.value = false
     cropperPendingFile.value = null

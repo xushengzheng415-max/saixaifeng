@@ -395,7 +395,7 @@ export async function uploadImageViaWebApi(folder, file) {
       tempUrl: result.tempUrl || ''
     }
   }
-  throw new Error(result?.message || result?.error || 'Image upload failed')
+  throw new Error(result?.message || result?.error || '图片上传失败')
 }
 export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
   const CHUNK_SIZE = options.chunkSize || (100 * 1024) // ★ 默认 100KB/片（Base64后~133KB，远低于网关限制）
