@@ -81,6 +81,7 @@
         </el-table-column>
         <!-- 姓名 -->
         <el-table-column prop="name" label="姓名" width="80" />
+          <el-table-column prop="_importKindLabel" label="人员类型" width="80" align="center" />
         <!-- 位置 -->
         <el-table-column label="位置" width="70" align="center">
           <template #default="{ row }">
@@ -727,7 +728,7 @@
       <!-- 预览区域 -->
       <div v-else class="import-preview">
         <div class="import-preview-header">
-          <span class="import-preview-count">共解析到 <strong>{{ importParsedData.length }}</strong> 条球员记录</span>
+          <span class="import-preview-count">共解析到 <strong>{{ importParsedData.length }}</strong> 条人员记录</span>
           <div class="import-preview-actions">
             <el-button size="small" @click="clearImportData">重新选择</el-button>
             <el-button type="primary" size="small" :loading="batchImporting" @click="confirmBatchImport">
@@ -754,11 +755,15 @@
         <el-table :data="importParsedData" max-height="380" size="small" border style="width: 100%">
           <el-table-column type="index" label="#" width="40" />
           <el-table-column prop="name" label="姓名" width="80" />
-          <el-table-column prop="jerseyNumber" label="球号" width="60" align="center" />
+          <el-table-column prop="_importKindLabel" label="人员类型" width="80" align="center" />
+          <el-table-column prop="jerseyNumber" label="球号" width="60" align="center">
+            <template #default="{ row }">{{ row._importKind === 'staff' ? '-' : row.jerseyNumber }}</template>
+          </el-table-column>
           <el-table-column prop="idCard" label="身份证号" width="160" />
           <el-table-column prop="position" label="位置" width="70" align="center">
             <template #default="{ row }">
-              <el-tag :type="getPositionType(row.position)" size="small">{{ getPositionLabel(row.position) }}</el-tag>
+              <span v-if="row._importKind === 'staff'">-</span>
+              <el-tag v-else :type="getPositionType(row.position)" size="small">{{ getPositionLabel(row.position) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="jerseyName" label="球衣名" width="110" />
@@ -1866,6 +1871,22 @@ const POSITION_MAP_CN = {
   '前卫': 'MF', '中场': 'MF',
   '前锋': 'FW', '前峰': 'FW'
 }
+const PLAYER_ROLE_NAMES = ['队员', '球员', '运动员', '']
+const STAFF_ROLE_TYPE_MAP = {
+  '主教练': 'head_coach',
+  '教练': 'head_coach',
+  '助理教练': 'assistant_coach',
+  '守门员教练': 'goalkeeper_coach',
+  '领队': 'team_leader',
+  '队医': 'doctor',
+  '翻译': 'translator',
+  '新闻官': 'press_officer',
+  '其他': 'other'
+}
+const STAFF_ROLE_LABEL_MAP = Object.fromEntries(Object.entries(STAFF_ROLE_TYPE_MAP).map(([label, type]) => [type, label]))
+const COACH_STAFF_TYPES = ['head_coach', 'assistant_coach', 'goalkeeper_coach']
+const isStaffRole = (role) => !!STAFF_ROLE_TYPE_MAP[String(role || '').trim()]
+const getImportRoleSuffix = (staffType) => COACH_STAFF_TYPES.includes(staffType) ? 'A' : 'B'
 
 // 下载导入模板
 function downloadImportTemplate() {
@@ -2002,29 +2023,41 @@ async function handleImportFileChange(file) {
           return
         }
         
+        const normalizedRole = relatedPosition || '队员'
+        const importKind = isStaffRole(normalizedRole) ? 'staff' : 'player'
         const player = {
           name,
           idCard,
-          jerseyNumber: jerseyNumberStr || '',
-          position: POSITION_MAP_CN[positionCn] || '',
+          jerseyNumber: importKind === 'staff' ? '' : (jerseyNumberStr || ''),
+          position: importKind === 'staff' ? '' : (POSITION_MAP_CN[positionCn] || ''),
           height: heightStr || '',
           weight: weightStr || '',
           contactName: contactName || '',
           contactPhone: contactPhone || '',
-          relatedPosition: relatedPosition || '',
-          jerseyName: jerseyNameFromExcel || '',
+          relatedPosition: normalizedRole,
+          jerseyName: importKind === 'staff' ? '' : (jerseyNameFromExcel || ''),
+          _importKind: importKind,
+          _staffType: STAFF_ROLE_TYPE_MAP[normalizedRole] || '',
+          _roleSuffix: importKind === 'staff' ? getImportRoleSuffix(STAFF_ROLE_TYPE_MAP[normalizedRole] || 'other') : 'C',
+          _importKindLabel: importKind === 'staff'
+            ? (getImportRoleSuffix(STAFF_ROLE_TYPE_MAP[normalizedRole] || 'other') === 'A' ? '教练' : '工作人员')
+            : '球员',
           _error: false
         }
         
-        // 自动生成球衣名（仅当 Excel 中没有提供时）
-        if (!player.jerseyName && typeof generateJerseyName === 'function') {
+        // 自动生成球衣名（仅球员且 Excel 中没有提供时）
+        if (player._importKind === 'player' && !player.jerseyName && typeof generateJerseyName === 'function') {
           player.jerseyName = generateJerseyName(name)
         }
         
-        // 验证
+        // 验证：工作人员允许不填球号和球场位置，但姓名、身份证号仍保留为基础身份信息
         if (!idCard) {
           player._error = true
           errors.push(`第 ${excelRowNumber} 行「${name}」：身份证号为空`)
+        }
+        if (player._importKind === 'player' && relatedPosition && !PLAYER_ROLE_NAMES.includes(relatedPosition) && !isStaffRole(relatedPosition)) {
+          player._error = true
+          errors.push(`第 ${excelRowNumber} 行「${name}」：关联职位「${relatedPosition}」无法识别`)
         }
         
         parsed.push(player)
@@ -2034,9 +2067,9 @@ async function handleImportFileChange(file) {
       importErrors.value = errors
       
       if (parsed.length > 0) {
-        ElMessage.success(`成功解析 ${parsed.length} 条球员记录${errors.length > 0 ? `，${errors.length} 条有警告` : ''}`)
+        ElMessage.success(`成功解析 ${parsed.length} 条人员记录${errors.length > 0 ? `，${errors.length} 条有警告` : ''}`)
       } else {
-        ElMessage.warning('未解析到有效球员数据')
+        ElMessage.warning('未解析到有效人员数据')
       }
     } catch (err) {
       console.error('导入解析失败:', err)
@@ -2057,13 +2090,15 @@ function clearImportData() {
 async function confirmBatchImport() {
   const validData = importParsedData.value.filter(p => !p._error)
   if (validData.length === 0) {
-    ElMessage.warning('没有可导入的有效球员数据')
+    ElMessage.warning('没有可导入的有效人员数据')
     return
   }
   
+  const playerCount = validData.filter(item => item._importKind !== 'staff').length
+  const staffCount = validData.filter(item => item._importKind === 'staff').length
   try {
     await ElMessageBox.confirm(
-      `确定导入 ${validData.length} 名球员到「${team.value.name || '当前球队'}」？`,
+      `确定导入 ${playerCount} 名球员、${staffCount} 名工作人员到「${team.value.name || '当前球队'}」？`,
       '批量导入确认',
       { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'info' }
     )
@@ -2072,27 +2107,71 @@ async function confirmBatchImport() {
   }
   
   batchImporting.value = true
-  let success = 0
+  let successPlayers = 0
+  let successStaff = 0
   let failed = 0
-  // 计算起始序号：在现有球员最大序号基础上递增，避免ID冲突
+  // A/B/C 共用同一个球队成员序号空间，删除后不复用
   const teamCodeForId = team.value.teamCode || teamId
+  let existingCoaches = []
+  try {
+    const [coachByTeamId, coachByTeamCode] = await Promise.all([
+      queryList('coaches', { where: { teamId: teamId } }),
+      queryList('coaches', { where: { teamCode: teamCodeForId } })
+    ])
+    const coachMap = new Map()
+    ;[...(coachByTeamId || []), ...(coachByTeamCode || [])].forEach(item => {
+      const key = item._id || item.playerId || item.idNumber || `${item.name}-${item.phone}`
+      coachMap.set(key, item)
+    })
+    existingCoaches = Array.from(coachMap.values())
+  } catch (err) {
+    console.warn('读取现有工作人员编号失败，将仅按球员编号递增:', err)
+  }
   let maxExistingSeq = 0
-  for (let i = 0; i < players.value.length; i++) {
-    const pid = players.value[i].playerId || ''
+  ;[...players.value, ...existingCoaches].forEach(item => {
+    const pid = item.playerId || item.memberId || ''
     if (pid.startsWith(teamCodeForId)) {
       const seqStr = pid.substring(teamCodeForId.length, teamCodeForId.length + 3)
       const seq = parseInt(seqStr, 10)
       if (!isNaN(seq) && seq > maxExistingSeq) maxExistingSeq = seq
     }
-  }
-  let importSeq = maxExistingSeq + 1 // 批量导入序号计数器，确保每个球员ID唯一
+  })
+  let importSeq = maxExistingSeq + 1 // 批量导入序号计数器，确保每个人员ID唯一
   
   for (const player of validData) {
     try {
       // 解析身份证号（出生日期、籍贯、性别）
       const idCardInfo = parseIdCard(player.idCard) || {}
+      const now = new Date().toISOString()
+
+      if (player._importKind === 'staff') {
+        const staffPlayerId = generatePlayerId(teamCodeForId, player._roleSuffix || 'B', importSeq)
+        await addRecord('coaches', {
+          teamId: teamId,
+          teamCode: team.value.teamCode || teamId,
+          teamName: team.value.name || '',
+          playerId: staffPlayerId,
+          memberId: staffPlayerId,
+          name: player.name,
+          phone: player.contactPhone || '',
+          idNumber: player.idCard || '',
+          idCard: player.idCard || '',
+          type: player._staffType || 'other',
+          role: STAFF_ROLE_LABEL_MAP[player._staffType] || player.relatedPosition || '其他',
+          contactName: player.contactName || '',
+          gender: idCardInfo.gender || '',
+          birthDate: idCardInfo.birthDate || '',
+          nativePlace: idCardInfo.nativePlace || '',
+          description: '',
+          createTime: now,
+          updateTime: now
+        })
+        successStaff++
+        importSeq++
+        continue
+      }
+
       const jerseyNum = parseInt(player.jerseyNumber)
-      
       await addRecord('players', {
         name: player.name,
         idCard: player.idCard,
@@ -2111,14 +2190,14 @@ async function confirmBatchImport() {
         nationality: '中国',
         birthDate: idCardInfo.birthDate || '',
         nativePlace: idCardInfo.nativePlace || '',
-        playerId: generatePlayerId(team.value.teamCode || teamId, 'C', importSeq),
-        registerTime: new Date().toISOString(),
-        createTime: new Date().toISOString()
+        playerId: generatePlayerId(teamCodeForId, 'C', importSeq),
+        registerTime: now,
+        createTime: now
       })
-      success++
+      successPlayers++
       importSeq++ // 序号递增，确保每个球员ID唯一
     } catch (err) {
-      console.error(`导入球员「${player.name}」失败:`, err)
+      console.error(`导入人员「${player.name}」失败:`, err)
       failed++
     }
   }
@@ -2131,7 +2210,7 @@ async function confirmBatchImport() {
   loadPlayers()
   showBatchImport.value = false
   
-  ElMessage.success(`导入完成：成功 ${success} 人${failed > 0 ? `，失败 ${failed} 人` : ''}`)
+  ElMessage.success(`导入完成：成功球员 ${successPlayers} 人、工作人员 ${successStaff} 人${failed > 0 ? `，失败 ${failed} 人` : ''}`)
 }
 
 // 上传球队Logo（先裁剪预览，再抠图上传）
