@@ -380,6 +380,23 @@ function fileToBase64(file) {
  * @param {Function} options.onProgress - 进度回调 (received, total)
  * @returns {Promise<{success:boolean, fileId:string, tempUrl:string}>}
  */
+
+/**
+ * Upload small compressed images directly to cloud storage through webLoginApi.
+ * Database records should store only the returned URL/fileId, not image base64.
+ */
+export async function uploadImageViaWebApi(folder, file) {
+  const base64Data = await fileToBase64(file)
+  const result = await callFunctionHTTP('uploadImage', { base64Data, folder })
+  if (result && result.success) {
+    return {
+      success: true,
+      fileId: result.fileID || result.fileId,
+      tempUrl: result.tempUrl || ''
+    }
+  }
+  throw new Error(result?.message || result?.error || 'Image upload failed')
+}
 export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
   const CHUNK_SIZE = options.chunkSize || (100 * 1024) // ★ 默认 100KB/片（Base64后~133KB，远低于网关限制）
   const folder = cloudPath.split('/')[0] || 'regulations'

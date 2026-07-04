@@ -279,7 +279,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Back, Grid, List, Message, Trophy, Clock, WarningFilled } from '@element-plus/icons-vue'
-import { queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
+import { queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction } from '../../utils/cloud'
 import { removeBackground } from '../../utils/removeBg'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import { permissions, getCurrentRole, ROLES } from '../../utils/permissions'
@@ -573,7 +573,7 @@ async function normalizeImageBlob(value) {
   }
   throw new Error('Invalid image data')
 }
-function compressImage(blob, maxSize = 400) {
+function compressImage(blob, maxSize = 320, mimeType = 'image/webp', quality = 0.82) {
   return new Promise((resolve, reject) => {
     if (!isValidImageBlob(blob)) {
       reject(new Error('Invalid image data'))
@@ -593,18 +593,32 @@ function compressImage(blob, maxSize = 400) {
       canvas.width = w
       canvas.height = h
       const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Image compression failed'))
+        return
+      }
       ctx.drawImage(img, 0, 0, w, h)
+      const outputType = canvas.toDataURL('image/webp').startsWith('data:image/webp') ? mimeType : 'image/png'
       canvas.toBlob((compressed) => {
         if (compressed) resolve(compressed)
-        else reject(new Error('图片压缩失败'))
-      }, 'image/png')
+        else reject(new Error('Image compression failed'))
+      }, outputType, quality)
     }
     img.onerror = () => {
       URL.revokeObjectURL(url)
-      reject(new Error('图片加载失败'))
+      reject(new Error('Image load failed'))
     }
     img.src = url
   })
+}
+
+async function uploadTeamLogo(cloudPath, file) {
+  try {
+    return await uploadImageViaWebApi('team-logos', file)
+  } catch (err) {
+    console.warn('[Team logo upload] uploadImage failed, retry chunk upload:', err.message)
+    return await uploadLargeFileViaCloud(cloudPath, file, { chunkSize: 48 * 1024 })
+  }
 }
 
 async function handleLogoCropConfirm(croppedBlob) {
@@ -628,9 +642,9 @@ async function handleLogoCropConfirm(croppedBlob) {
       finalBlob = cropBlob
     }
 
-    const compressed = await compressImage(finalBlob, 400)
-    const cloudPath = `team-logos/${Date.now()}-logo.png`
-    const result = await uploadLargeFileViaCloud(cloudPath, compressed, { chunkSize: 100 * 1024 })
+    const compressed = await compressImage(finalBlob, 320, 'image/webp', 0.82)
+    const cloudPath = `team-logos/${Date.now()}-logo.webp`
+    const result = await uploadTeamLogo(cloudPath, compressed)
 
     if (result.success) {
       teamForm.value.logoUrl = result.tempUrl
