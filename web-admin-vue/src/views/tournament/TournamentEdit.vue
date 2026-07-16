@@ -58,6 +58,38 @@
             </div>
           </el-form-item>
 
+          <el-form-item label="多组别赛事">
+            <div class="division-mode-panel">
+              <div class="division-mode-head">
+                <div>
+                  <div class="division-mode-title">一个赛事统一管理多个年龄组</div>
+                  <div class="form-tip">各组别独立管理球队、抽签、赛程和排名。</div>
+                </div>
+                <el-switch v-model="form.multiDivision" active-text="启用" inactive-text="单组别" @change="onMultiDivisionChange" />
+              </div>
+              <template v-if="form.multiDivision">
+                <div class="division-quick-add">
+                  <span>快速添加：</span>
+                  <el-button v-for="name in divisionPresets" :key="name" size="small" @click="addDivision(name)">{{ name }}</el-button>
+                  <el-button size="small" type="primary" plain @click="addDivision('')">自定义组别</el-button>
+                </div>
+                <div v-for="(division, index) in form.divisions" :key="division.id" class="division-row">
+                  <el-input v-model="division.name" placeholder="组别名称，如 U8" />
+                  <el-select v-model="division.tournamentType" placeholder="赛制">
+                    <el-option v-for="option in typeOptions" :key="option.value" :label="option.label" :value="option.value" />
+                  </el-select>
+                  <el-select v-model="division.matchFormat" placeholder="比赛制式" @change="onDivisionFormatChange(index)">
+                    <el-option v-for="option in matchFormatOptions" :key="option.value" :label="option.label" :value="option.value" />
+                  </el-select>
+                  <el-input-number v-model="division.maxTeams" :min="2" :max="64" controls-position="right" />
+                  <el-input-number v-model="division.maxPlayersPerTeam" :min="5" :max="getMaxByFormat(division.matchFormat)" controls-position="right" />
+                  <el-button type="danger" link :disabled="form.divisions.length <= 2" @click="removeDivision(index)">删除</el-button>
+                </div>
+                <div class="division-column-hint">依次为：组别名称 / 赛制 / 比赛制式 / 球队上限 / 名单上限</div>
+              </template>
+            </div>
+          </el-form-item>
+
           <el-divider />
 
           <el-row :gutter="16">
@@ -83,7 +115,7 @@
 
           <el-row :gutter="16">
             <el-col :span="12">
-              <el-form-item label="赛事Logo">
+              <el-form-item label="赛事Logo" prop="logo" required>
                 <div class="logo-upload-wrapper">
                   <div class="logo-input-row">
                     <el-input v-model="form.logo" placeholder="上传后将自动填充URL" style="flex: 1;" />
@@ -680,7 +712,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, MagicStick, Check, InfoFilled, Document, Delete, QuestionFilled } from '@element-plus/icons-vue'
-import { queryList, queryById, updateRecord, uploadFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
+import { queryList, queryById, updateRecord, uploadFileViaCloud, uploadLargeFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
 import { MATCH_FORMAT_OPTIONS, MATCH_FORMAT_DEFAULTS, resolveMaxPlayers, inferMatchFormat, getMaxByFormat } from '../../utils/rosterHelper'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 
@@ -729,9 +761,14 @@ const form = ref({
   status: 'registering', registeredTeams: 0,
   themeId: 'green',
   logo: '',
+  logoFileId: '',
   regulationsFileId: '',
   regulationsUrl: '',
   regulationsFileName: '',
+  multiDivision: false,
+  divisionMode: 'single',
+  defaultDivisionId: '',
+  divisions: [],
   // ★ 比赛制式与每队大名单上限
   matchFormat: '11side',
   maxPlayersPerTeam: 35,
@@ -774,7 +811,8 @@ const form = ref({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入赛事名称', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入赛事名称', trigger: 'blur' }],
+  logo: [{ required: true, message: '请上传赛事Logo', trigger: 'change' }]
 }
 
 // 主题选择
@@ -857,28 +895,112 @@ function handleAISuccess(url) {
 // 赛事 Logo 上传
 async function beforeLogoUpload(file) {
   const isImage = file.type.startsWith('image/')
-  const isLt2M = file.size / 1024 / 1024 < 2
+  const isLt20M = file.size / 1024 / 1024 < 20
 
   if (!isImage) {
     ElMessage.error('只能上传图片文件！')
     return false
   }
-  if (!isLt2M) {
-    ElMessage.error('图片大小不能超过 2MB！')
+  if (!isLt20M) {
+    ElMessage.error('原始图片不能超过 20MB！')
     return false
   }
   return true
+}
+
+const divisionPresets = ['U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18']
+
+function createDivision(name = '') {
+  return {
+    id: `division-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    tournamentType: form.value.type || 'tournament',
+    matchFormat: form.value.matchFormat || '7side',
+    maxTeams: Number(form.value.maxTeams) || 8,
+    maxPlayersPerTeam: Number(form.value.maxPlayersPerTeam) || 20
+  }
+}
+
+function onMultiDivisionChange(enabled) {
+  if (enabled && form.value.divisions.length === 0) {
+    form.value.divisions = [createDivision('U8'), createDivision('U9')]
+  }
+}
+
+function addDivision(name) {
+  if (name && form.value.divisions.some(item => item.name === name)) return
+  form.value.divisions.push(createDivision(name))
+}
+
+function removeDivision(index) {
+  if (form.value.divisions.length <= 2) {
+    ElMessage.warning('多组别赛事至少保留两个组别')
+    return
+  }
+  form.value.divisions.splice(index, 1)
+}
+
+function onDivisionFormatChange(index) {
+  const division = form.value.divisions[index]
+  if (division) division.maxPlayersPerTeam = MATCH_FORMAT_DEFAULTS[division.matchFormat] || 20
+}
+
+async function compressLogoImage(file) {
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('图片读取失败'))
+      img.src = objectUrl
+    })
+
+    const maxDimension = 640
+    const scale = Math.min(maxDimension / image.width, maxDimension / image.height, 1)
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    context.clearRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+
+    const targetSize = 180 * 1024
+    let quality = 0.82
+    let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality))
+    while (blob && blob.size > targetSize && quality > 0.4) {
+      quality -= 0.08
+      blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality))
+    }
+    if (!blob) throw new Error('图片压缩失败')
+
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'tournament-logo'
+    return new File([blob], `${baseName}.webp`, {
+      type: 'image/webp',
+      lastModified: Date.now()
+    })
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }
 
 async function handleLogoUpload(options) {
   uploadingLogo.value = true
   try {
     const { file } = options
-    const cloudPath = `tournament-logos/${Date.now()}-${file.name}`
-    // 使用云函数上传解决CORS问题
-    const result = await uploadFileViaCloud(cloudPath, file)
-    form.value.logo = result.tempUrl
-    ElMessage.success('Logo上传成功！')
+    ElMessage.info('正在压缩赛事Logo...')
+    const compressedFile = await compressLogoImage(file)
+    const cloudPath = `tournament-logos/${Date.now()}-${compressedFile.name}`
+    const result = await uploadLargeFileViaCloud(cloudPath, compressedFile, {
+      chunkSize: 32 * 1024
+    })
+    const previewUrl = result.tempUrl || await getFileUrl(result.fileId)
+    if (!previewUrl) throw new Error('未获取到Logo预览地址')
+    form.value.logoFileId = result.fileId || ''
+    form.value.logo = previewUrl
+    formRef.value?.clearValidate('logo')
+    ElMessage.success(`Logo压缩并上传成功（${Math.ceil(compressedFile.size / 1024)}KB）`)
   } catch (err) {
     console.error('上传失败:', err)
     ElMessage.error('上传失败: ' + (err.message || '未知错误'))
@@ -1050,9 +1172,21 @@ async function loadTournament() {
       registeredTeams: data.registeredTeams || 0,
       themeId: data.themeId || 'green',
       logo: data.logo || data.logoUrl || '',
+      logoFileId: data.logoFileId || '',
       regulationsFileId: data.regulationsFileId || '',
       regulationsUrl: data.regulationsUrl || '',
       regulationsFileName: data.regulationsFileName || '',
+      multiDivision: data.multiDivision === true || data.divisionMode === 'multiple' || (data.divisions || []).length > 1,
+      divisionMode: data.divisionMode || ((data.divisions || []).length > 1 ? 'multiple' : 'single'),
+      defaultDivisionId: data.defaultDivisionId || data.divisions?.[0]?.id || 'default',
+      divisions: (data.divisions || []).map(item => ({
+        id: item.id || `division-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: item.name || '',
+        tournamentType: item.tournamentType || data.type || 'tournament',
+        matchFormat: item.matchFormat || resolvedFormat,
+        maxTeams: Number(item.maxTeams || data.maxTeams || 8),
+        maxPlayersPerTeam: Number(item.maxPlayersPerTeam || resolvedMax)
+      })),
       // ★ 比赛制式与大名单上限（带回退）
       matchFormat: resolvedFormat,
       maxPlayersPerTeam: resolvedMax,
@@ -1107,12 +1241,35 @@ async function handleSubmit() {
     ElMessage.warning('请输入赛事名称')
     return
   }
+  if (!form.value.logo && !form.value.logoFileId) {
+    ElMessage.warning('请上传赛事Logo')
+    activeStep.value = 0
+    return
+  }
+  if (form.value.multiDivision) {
+    const names = form.value.divisions.map(item => item.name.trim()).filter(Boolean)
+    if (form.value.divisions.length < 2 || names.length !== form.value.divisions.length) {
+      ElMessage.warning('多组别赛事至少需要两个已命名组别')
+      activeStep.value = 0
+      return
+    }
+    if (new Set(names).size !== names.length) {
+      ElMessage.warning('组别名称不能重复')
+      activeStep.value = 0
+      return
+    }
+  }
 
   submitting.value = true
   try {
     // 整理提交数据
     const submitData = {
       ...form.value,
+      divisionMode: form.value.multiDivision ? 'multiple' : 'single',
+      divisions: form.value.multiDivision
+        ? form.value.divisions.map(item => ({ ...item, name: item.name.trim() }))
+        : [],
+      defaultDivisionId: form.value.multiDivision ? (form.value.divisions[0]?.id || 'default') : 'default',
       // ★ 向后兼容：同时写入 maxPlayers（= maxPlayersPerTeam）
       maxPlayers: form.value.maxPlayersPerTeam,
       // 确保 rules 对象完整
@@ -1440,4 +1597,11 @@ onMounted(() => {
 .ai-result-value {
   width: 100%;
 }
+
+.division-mode-panel { width: 100%; padding: 16px; background: #f5f9f5; border: 1px solid #d9ead9; border-radius: 10px; box-sizing: border-box; }
+.division-mode-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.division-mode-title { color: #1b5e20; font-weight: 600; }
+.division-quick-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 12px; }
+.division-row { display: grid; grid-template-columns: 1.1fr 1fr 1fr 125px 125px 52px; gap: 8px; align-items: center; padding: 10px; margin-top: 8px; background: #fff; border-radius: 8px; }
+.division-column-hint { margin-top: 8px; color: #909399; font-size: 12px; }
 </style>

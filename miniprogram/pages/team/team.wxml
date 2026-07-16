@@ -10,6 +10,9 @@
     <button class="create-btn" bindtap="onCreateTeam">
       <text>创建球队</text>
     </button>
+    <button class="share-create-btn" open-type="share" data-share-type="createTeam">
+      <text>分享给好友创建球队</text>
+    </button>
   </view>
 
   <!-- 球队内容 -->
@@ -46,6 +49,9 @@
           <button class="action-btn-small" bindtap="onViewPhotos">
             <text>相册</text>
           </button>
+          <button class="action-btn-small" open-type="share" data-share-type="player">
+            <text>邀球员</text>
+          </button>
         </view>
       </view>
     </view>
@@ -71,6 +77,13 @@
           <text class="stat-label">胜</text>
         </view>
       </view>
+    </view>
+
+    <view class="team-share-panel">
+      <button class="team-share-primary" open-type="share" data-share-type="player">
+        <text>邀请球员填写资料</text>
+      </button>
+      <text class="team-share-tip">分享给微信群或好友，球员可自行提交资料</text>
     </view>
 
     <!-- Tab 导航 -->
@@ -260,9 +273,12 @@
         </view>
 
         <!-- 添加球员按钮 -->
-        <view class="add-btn-row">
+<view class="add-actions-row">
           <button class="add-btn-primary" bindtap="onAddPlayer">
             <text>+ 添加球员</text>
+          </button>
+          <button class="invite-player-btn" open-type="share" data-share-type="player">
+            <text>分享给球员填写资料</text>
           </button>
         </view>
       </view>

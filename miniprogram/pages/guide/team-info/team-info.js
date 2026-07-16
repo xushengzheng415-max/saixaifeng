@@ -1,4 +1,5 @@
 // pages/guide/team-info.js
+const { provinceNameCodeMap, cityNameLetterMap, normalizeCityName } = require('../../../utils/teamCodeRegions')
 Page({
   _updateLens: function() {
     var data = this.data;
@@ -45,66 +46,15 @@ Page({
     }
   },
 
-  // 省份名称->代码映射
-  provinceNameCodeMap: {
-    '上海市': '101', '天津': '102', '天津市': '102', '重庆': '103', '重庆市': '103',
-    '北京': '104', '北京市': '104',
-    '安徽省': '201', '福建省': '202', '甘肃省': '203', '广东省': '204', '广西': '205',
-    '广西壮族自治区': '205', '贵州省': '206', '海南省': '207', '河北省': '208',
-    '黑龙江省': '209', '湖北省': '210', '湖南省': '211', '吉林省': '212',
-    '江苏省': '213', '辽宁省': '214', '江西省': '215', '内蒙古': '216',
-    '内蒙古自治区': '216', '宁夏': '217', '宁夏回族自治区': '217',
-    '青海省': '218', '山东省': '219', '山西省': '220', '陕西省': '221',
-    '四川省': '222', '新疆': '223', '新疆维吾尔自治区': '223',
-    '云南省': '224', '浙江省': '225', '河南省': '226'
-  },
-
-  // 城市名称->字母映射（从现有的cityLetterMap提取）
-  cityNameLetterMap: {
-    '上海': 'A', '上海浦东': 'B', '上海郊区': 'C', '上海崇明': 'D',
-    '天津': 'A', '天津滨海': 'B', '天津郊区': 'C',
-    '重庆': 'A', '重庆涪陵': 'B', '重庆万州': 'C',
-    '北京': 'A', '北京城区': 'B', '北京郊区': 'C', '北京延庆': 'Y',
-    '广州': 'A', '广州市': 'A', '深圳': 'B', '深圳市': 'B', '珠海': 'C', '珠海市': 'C',
-    '汕头': 'D', '汕头市': 'D', '佛山': 'E', '佛山市': 'E', '韶关': 'F', '韶关市': 'F',
-    '湛江': 'G', '湛江市': 'G', '肇庆': 'H', '肇庆市': 'H', '江门': 'J', '江门市': 'J',
-    '茂名': 'K', '茂名市': 'K', '惠州': 'L', '惠州市': 'L', '梅州': 'M', '梅州市': 'M',
-    '汕尾': 'N', '汕尾市': 'N', '河源': 'P', '河源市': 'P', '阳江': 'Q', '阳江市': 'Q',
-    '清远': 'R', '清远市': 'R', '东莞': 'S', '东莞市': 'S', '中山': 'T', '中山市': 'T',
-    '潮州': 'U', '潮州市': 'U', '揭阳': 'V', '揭阳市': 'V', '云浮': 'W', '云浮市': 'W',
-    '石家庄': 'A', '石家庄市': 'A', '唐山': 'B', '唐山市': 'B', '秦皇岛': 'C', '秦皇岛市': 'C',
-    '邯郸': 'D', '邯郸市': 'D', '邢台': 'E', '邢台市': 'E', '保定': 'F', '保定市': 'F',
-    '张家口': 'G', '张家口市': 'G', '承德': 'H', '承德市': 'H', '沧州': 'J', '沧州市': 'J',
-    '廊坊': 'K', '廊坊市': 'K', '衡水': 'L', '衡水市': 'L',
-    '武汉': 'A', '武汉市': 'A', '黄石': 'B', '黄石市': 'B', '十堰': 'C', '十堰市': 'C',
-    '荆州': 'D', '荆州市': 'D', '宜昌': 'E', '宜昌市': 'E', '襄阳': 'F', '襄阳市': 'F',
-    '鄂州': 'G', '鄂州市': 'G', '荆门': 'H', '荆门市': 'H', '黄冈': 'J', '黄冈市': 'J',
-    '孝感': 'K', '孝感市': 'K', '咸宁': 'L', '咸宁市': 'L', '仙桃': 'M', '仙桃市': 'M',
-    '潜江': 'N', '潜江市': 'N', '神农架': 'P', '恩施': 'Q',
-    '长沙': 'A', '长沙市': 'A', '株洲': 'B', '株洲市': 'B', '湘潭': 'C', '湘潭市': 'C',
-    '衡阳': 'D', '衡阳市': 'D', '邵阳': 'E', '邵阳市': 'E', '岳阳': 'F', '岳阳市': 'F',
-    '常德': 'G', '常德市': 'G', '益阳': 'H', '益阳市': 'H', '娄底': 'J', '娄底市': 'J',
-    '郴州': 'K', '郴州市': 'K', '永州': 'L', '永州市': 'L', '怀化': 'M', '怀化市': 'M',
-    '湘西': 'N',
-    '南京': 'A', '南京市': 'A', '无锡': 'B', '无锡市': 'B', '徐州': 'C', '徐州市': 'C',
-    '常州': 'D', '常州市': 'D', '苏州': 'E', '苏州市': 'E', '南通': 'F', '南通市': 'F',
-    '连云港': 'G', '连云港市': 'G', '淮安': 'H', '淮安市': 'H', '盐城': 'J', '盐城市': 'J',
-    '扬州': 'K', '扬州市': 'K', '镇江': 'L', '镇江市': 'L', '泰州': 'M', '泰州市': 'M',
-    '宿迁': 'N', '宿迁市': 'N',
-    '济南': 'A', '济南市': 'A', '青岛': 'B', '青岛市': 'B', '淄博': 'C', '淄博市': 'C',
-    '枣庄': 'D', '枣庄市': 'D', '东营': 'E', '东营市': 'E', '烟台': 'F', '烟台市': 'F',
-    '潍坊': 'G', '潍坊市': 'G', '济宁': 'H', '济宁市': 'H', '泰安': 'J', '泰安市': 'J',
-    '威海': 'K', '威海市': 'K', '日照': 'L', '日照市': 'L',
-    '郑州': 'A', '郑州市': 'A', '开封': 'B', '开封市': 'B', '洛阳': 'C', '洛阳市': 'C',
-    '平顶山': 'D', '平顶山市': 'D', '安阳': 'E', '安阳市': 'E', '鹤壁': 'F', '鹤壁市': 'F',
-    '新乡': 'G', '新乡市': 'G', '焦作': 'H', '焦作市': 'H', '濮阳': 'J', '濮阳市': 'J',
-    '许昌': 'K', '许昌市': 'K', '漯河': 'L', '漯河市': 'L', '三门峡': 'M', '三门峡市': 'M',
-    '商丘': 'N', '商丘市': 'N', '周口': 'P', '周口市': 'P', '驻马店': 'Q', '驻马店市': 'Q',
-    '南阳': 'R', '南阳市': 'R', '信阳': 'S', '信阳市': 'S', '济源': 'U', '济源市': 'U'
-  },
 
   // 页面加载时获取已有的球队信息
-  onLoad() {
+  onLoad(options) {
+    const fromSharedCreate = options && (options.inviteCreateTeam === '1' || options.fromShare === '1')
+    if (fromSharedCreate) {
+      this.setData({ shareMode: 'createTeam' })
+      return
+    }
+
     const teamInfo = wx.getStorageSync('teamInfo')
     if (teamInfo) {
       // 尝试从已有teamTypeCode找到对应的index
@@ -170,14 +120,14 @@ Page({
     var districtName = region[2] || ''
 
     // 查找省份代码
-    var provinceCode = this.data.provinceNameCodeMap[provinceName] || ''
+    var provinceCode = provinceNameCodeMap[provinceName] || ''
 
     // 查找城市字母：先精确匹配城市名，再去除"市"后缀匹配
-    var cityLetter = this.data.cityNameLetterMap[cityName] || ''
+    var cityLetter = cityNameLetterMap[cityName] || ''
     if (!cityLetter) {
       // 尝试去掉"市"再匹配
       var shortCity = cityName.replace(/市$/, '')
-      cityLetter = this.data.cityNameLetterMap[shortCity] || ''
+      cityLetter = cityNameLetterMap[shortCity] || ''
     }
 
     this.setData({ 
@@ -211,21 +161,58 @@ Page({
 
   // 选择图片
   chooseImage() {
+    const that = this
     wx.chooseImage({
       count: 1,
       sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
       success: (res) => {
-        this.setData({ 
-          teamLogo: res.tempFilePaths[0],
-          'errors.logo': ''
-        })
+        const filePath = res.tempFilePaths && res.tempFilePaths[0]
+        if (filePath) that.compressAndUploadTeamLogo(filePath)
       },
       fail: () => {
         wx.showToast({
           title: '选择图片失败',
           icon: 'none'
         })
+      }
+    })
+  },
+
+  // 上传前压缩，数据库只保存可长期使用的云文件 ID
+  compressAndUploadTeamLogo(filePath) {
+    const that = this
+    wx.showLoading({ title: '压缩上传中...' })
+    wx.compressImage({
+      src: filePath,
+      quality: 70,
+      compressedWidth: 640,
+      compressedHeight: 640,
+      success(compressed) {
+        const cloudPath = 'team-logos/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.jpg'
+        wx.cloud.uploadFile({
+          cloudPath,
+          filePath: compressed.tempFilePath,
+          success(uploaded) {
+            that.setData({
+              teamLogo: uploaded.fileID,
+              'errors.logo': ''
+            })
+            wx.showToast({ title: 'Logo上传成功', icon: 'success' })
+          },
+          fail(err) {
+            console.error('球队Logo上传失败:', err)
+            wx.showToast({ title: 'Logo上传失败', icon: 'none' })
+          },
+          complete() {
+            wx.hideLoading()
+          }
+        })
+      },
+      fail(err) {
+        wx.hideLoading()
+        console.error('球队Logo压缩失败:', err)
+        wx.showToast({ title: '图片压缩失败', icon: 'none' })
       }
     })
   },
@@ -297,9 +284,10 @@ Page({
       const currentUser = wx.getStorageSync('userInfo') || {}
       const ownerPhone = currentUser.phoneNumber || currentUser.phone || wx.getStorageSync('phoneNumber') || ''
       const creatorId = currentUser._id || wx.getStorageSync('userId') || ''
+      const openId = currentUser.openId || currentUser.openid || wx.getStorageSync('openid') || ''
       
       // 检查是否已有球队
-      const currentTeamId = wx.getStorageSync('currentTeamId')
+      const currentTeamId = this.data.shareMode === 'createTeam' ? '' : wx.getStorageSync('currentTeamId')
       let teamId = currentTeamId
       
       // 使用新格式生成球队编号
@@ -316,7 +304,14 @@ Page({
         cityName: city,
         teamType: teamTypeCode,
         teamCode: genCode,
-        ownerPhone: ownerPhone,              // ★ 唯一归属手机号
+        ownerPhone: ownerPhone,
+        creatorPhone: ownerPhone,
+        contactPhone: ownerPhone,
+        phoneNumber: ownerPhone,
+        phone: ownerPhone,
+        mobile: ownerPhone,
+        openId: openId,
+        wechatOpenId: openId,              // ★ 唯一归属手机号
         source: 'miniprogram',               // ★ 创建来源
         createTime: db.serverDate(),
         updateTime: db.serverDate(),
@@ -359,6 +354,7 @@ Page({
         contactPhone: ownerPhone,
         phoneNumber: ownerPhone,
         phone: ownerPhone,
+        mobile: ownerPhone,
         creatorId: creatorId,
         openId: openId,
         wechatOpenId: openId,
@@ -388,5 +384,21 @@ Page({
   // 跳过
   skip() {
     wx.switchTab({ url: '/pages/home/home' })
+  },
+
+  onShareAppMessage() {
+    return {
+      title: '邀请你创建球队资料',
+      path: '/pages/guide/team-info/team-info?inviteCreateTeam=1&fromShare=1',
+      imageUrl: '/images/logo.png'
+    }
+  },
+
+  onShareTimeline() {
+    return {
+      title: '创建球队资料',
+      query: 'inviteCreateTeam=1&fromShare=1',
+      imageUrl: '/images/logo.png'
+    }
   }
 })

@@ -1,87 +1,74 @@
 // decodePhoneNumber/index.js
-// 解密微信手机号 - 支持 code（新）和 cloudID（旧）两种方案
-
+// 解密微信授权手机号。支持新版 code，也保留旧版 cloudID 兜底。
 const cloud = require('wx-server-sdk')
 
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV
 })
 
-exports.main = async (event, context) => {
-  const { code, cloudID } = event
+exports.main = async (event) => {
+  const code = event && event.code
+  const cloudID = event && event.cloudID
 
-  console.log('[decodePhoneNumber] 收到请求, code:', code ? '有值' : '无', 'cloudID:', cloudID ? '有值' : '无')
+  console.log('[decodePhoneNumber] request:', {
+    hasCode: !!code,
+    hasCloudID: !!cloudID
+  })
 
   if (!code && !cloudID) {
     return {
       success: false,
-      message: '缺少 code 或 cloudID 参数'
+      message: '缺少手机号授权凭证'
     }
   }
 
-  // 方案A：使用 code（新版本微信，2023+）
   if (code) {
     try {
-      console.log('[decodePhoneNumber] 使用 code 方案')
-      
-      // 调用微信 API 解密手机号
-      const result = await cloud.openapi.phonenumber.getPhoneNumber({
-        code: code
-      })
+      const result = await cloud.openapi.phonenumber.getPhoneNumber({ code })
+      console.log('[decodePhoneNumber] phonenumber.getPhoneNumber result:', JSON.stringify(result))
 
-      console.log('[decodePhoneNumber] code 方案返回:', JSON.stringify(result))
-
-      if (result && result.phoneInfo) {
+      const phoneInfo = result && result.phoneInfo
+      if (phoneInfo && phoneInfo.phoneNumber) {
         return {
           success: true,
-          phoneNumber: result.phoneInfo.phoneNumber,
-          purePhoneNumber: result.phoneInfo.purePhoneNumber || '',
-          countryCode: result.phoneInfo.countryCode || '86'
-        }
-      } else {
-        return {
-          success: false,
-          message: 'code 方案解密失败',
-          rawResult: result
+          phoneNumber: phoneInfo.phoneNumber,
+          purePhoneNumber: phoneInfo.purePhoneNumber || '',
+          countryCode: phoneInfo.countryCode || '86'
         }
       }
+
+      return {
+        success: false,
+        message: '手机号解密失败',
+        rawResult: result
+      }
     } catch (err) {
-      console.error('[decodePhoneNumber] code 方案异常:', err)
-      // 如果 code 方案失败，尝试 cloudID 方案（如果有的话）
+      console.error('[decodePhoneNumber] phonenumber.getPhoneNumber error:', err)
       if (cloudID) {
-        console.log('[decodePhoneNumber] code 方案失败，尝试 cloudID 方案')
-        return await decodeByCloudID(cloudID)
+        return decodeByCloudID(cloudID)
       }
       return {
         success: false,
-        message: 'code 方案失败: ' + (err.message || '未知错误'),
+        message: '手机号解密失败：' + (err.errMsg || err.message || '未知错误'),
+        errCode: err.errCode || err.code || '',
         error: err.toString()
       }
     }
   }
 
-  // 方案B：使用 cloudID（旧版本微信）
-  if (cloudID) {
-    return await decodeByCloudID(cloudID)
-  }
+  return decodeByCloudID(cloudID)
 }
 
-// 使用 cloudID 解密手机号
 async function decodeByCloudID(cloudID) {
   try {
-    console.log('[decodeByCloudID] 开始调用 getOpenData')
-    const result = await cloud.getOpenData({
-      list: [cloudID]
-    })
-
-    console.log('[decodeByCloudID] getOpenData 返回:', JSON.stringify(result))
+    const result = await cloud.getOpenData({ list: [cloudID] })
+    console.log('[decodePhoneNumber] getOpenData result:', JSON.stringify(result))
 
     const phoneData = result && result.list && result.list[0]
-
     if (!phoneData) {
       return {
         success: false,
-        message: 'cloudID 方案: 解密返回数据为空',
+        message: '手机号解密返回为空',
         rawResult: result
       }
     }
@@ -89,27 +76,24 @@ async function decodeByCloudID(cloudID) {
     if (phoneData.errCode !== 0) {
       return {
         success: false,
-        message: 'cloudID 方案: 解密失败: ' + (phoneData.errMsg || '未知错误'),
+        message: '手机号解密失败：' + (phoneData.errMsg || '未知错误'),
         errCode: phoneData.errCode
       }
     }
 
-    // data 可能是字符串或对象
     let phoneInfo = phoneData.data
     if (typeof phoneInfo === 'string') {
       try {
         phoneInfo = JSON.parse(phoneInfo)
-      } catch (e) {
-        console.error('[decodeByCloudID] JSON.parse 失败:', e)
+      } catch (err) {
+        console.error('[decodePhoneNumber] parse cloudID data failed:', err)
       }
     }
-
-    console.log('[decodeByCloudID] 手机号信息:', JSON.stringify(phoneInfo))
 
     if (!phoneInfo || !phoneInfo.phoneNumber) {
       return {
         success: false,
-        message: 'cloudID 方案: 未获取到手机号'
+        message: '未获取到手机号'
       }
     }
 
@@ -119,12 +103,12 @@ async function decodeByCloudID(cloudID) {
       purePhoneNumber: phoneInfo.purePhoneNumber || '',
       countryCode: phoneInfo.countryCode || '86'
     }
-
   } catch (err) {
-    console.error('[decodeByCloudID] 异常:', err)
+    console.error('[decodePhoneNumber] getOpenData error:', err)
     return {
       success: false,
-      message: 'cloudID 方案异常: ' + (err.message || '未知错误'),
+      message: '手机号解密异常：' + (err.errMsg || err.message || '未知错误'),
+      errCode: err.errCode || err.code || '',
       error: err.toString()
     }
   }

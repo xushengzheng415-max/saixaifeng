@@ -3,7 +3,27 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
 
+async function findUniqueUser(where, label) {
+  const result = await db.collection('users').where(where).limit(2).get()
+  const users = result.data || []
+  if (users.length > 1) {
+    console.error('[bindPhone] 检测到重复账号:', label, users.map(item => item._id))
+    throw new Error(label + '存在重复绑定，请联系管理员处理')
+  }
+  return users[0] || null
+}
+
+async function findUsersByPhone(phone) {
+  const result = await db.collection('users').where(_.or([
+    { phone: phone },
+    { phoneNumber: phone }
+  ])).limit(3).get()
+  return result.data || []
+}
+
 exports.main = async (event, context) => {
+  return { success: false, error: '当前为纯微信登录，不再绑定手机号' }
+  /* istanbul ignore next */
   const { email, phone, code, unionId, openId } = event
   // unionId/openId 用于微信用户绑手机号时识别身份
   const wechatUnionId = unionId || ''
@@ -58,9 +78,8 @@ exports.main = async (event, context) => {
   try {
     // === 第1优先级：通过微信 unionId 查找（最可靠）===
     if (wechatUnionId) {
-      const res = await db.collection('users').where({ unionId: wechatUnionId }).get()
-      if (res.data && res.data.length > 0) {
-        targetUser = res.data[0]
+      targetUser = await findUniqueUser({ unionId: wechatUnionId }, '微信 UnionID')
+      if (targetUser) {
         targetUserId = targetUser._id
         foundBy = 'unionId'
         console.log('[bindPhone] ✅ 通过 unionId 找到用户:', targetUserId)
@@ -70,17 +89,15 @@ exports.main = async (event, context) => {
     // === 第2优先级：通过微信 openId 查找（同时查 wechatOpenId 和 openId 字段）===
     if (!targetUser && wechatOpenId) {
       // 先查网页端标准字段
-      let res = await db.collection('users').where({ wechatOpenId: wechatOpenId }).get()
-      if (res.data && res.data.length > 0) {
-        targetUser = res.data[0]
+      targetUser = await findUniqueUser({ wechatOpenId: wechatOpenId }, '网页微信 OpenID')
+      if (targetUser) {
         targetUserId = targetUser._id
         foundBy = 'wechatOpenId'
         console.log('[bindPhone] ✅ 通过 wechatOpenId 找到用户:', targetUserId)
       } else {
         // 再查小程序端字段名
-        res = await db.collection('users').where({ openId: wechatOpenId }).get()
-        if (res.data && res.data.length > 0) {
-          targetUser = res.data[0]
+        targetUser = await findUniqueUser({ openId: wechatOpenId }, '小程序微信 OpenID')
+        if (targetUser) {
           targetUserId = targetUser._id
           foundBy = 'openId(小程序)'
           console.log('[bindPhone] ✅ 通过 openId(小程序字段) 找到用户:', targetUserId)
@@ -90,9 +107,8 @@ exports.main = async (event, context) => {
 
     // === 第3优先级：通过邮箱查找 ===
     if (!targetUser && email) {
-      const res = await db.collection('users').where({ email }).get()
-      if (res.data && res.data.length > 0) {
-        targetUser = res.data[0]
+      targetUser = await findUniqueUser({ email }, '邮箱 ' + email)
+      if (targetUser) {
         targetUserId = targetUser._id
         foundBy = 'email'
         console.log('[bindPhone] ✅ 通过 email 找到用户:', targetUserId)
@@ -101,16 +117,14 @@ exports.main = async (event, context) => {
 
     // === 第4优先级：通过当前登录的 openId 查找（同时查两种字段名）===
     if (!targetUser && loginOpenId) {
-      let res = await db.collection('users').where({ wechatOpenId: loginOpenId }).get()
-      if (res.data && res.data.length > 0) {
-        targetUser = res.data[0]
+      targetUser = await findUniqueUser({ wechatOpenId: loginOpenId }, '当前网页微信 OpenID')
+      if (targetUser) {
         targetUserId = targetUser._id
         foundBy = 'loginOpenId(wechatOpenId)'
         console.log('[bindPhone] ✅ 通过 loginOpenId 找到用户:', targetUserId)
       } else {
-        res = await db.collection('users').where({ openId: loginOpenId }).get()
-        if (res.data && res.data.length > 0) {
-          targetUser = res.data[0]
+        targetUser = await findUniqueUser({ openId: loginOpenId }, '当前小程序微信 OpenID')
+        if (targetUser) {
           targetUserId = targetUser._id
           foundBy = 'loginOpenId(openId)'
           console.log('[bindPhone] ✅ 通过 loginOpenId(openId) 找到用户:', targetUserId)
@@ -123,14 +137,15 @@ exports.main = async (event, context) => {
     // 此时 wechatWebLogin 已创建了临时用户（带 unionId），但同手机号可能已有小程序创建的账号
     if (!targetUser) {
       // 同时查 phone 和 phoneNumber 字段
-      const phoneRes = await db.collection('users').where(_.or([
-        { phone: phone },
-        { phoneNumber: phone }
-      ])).get()
+      const phoneUsers = await findUsersByPhone(phone)
 
-      if (phoneRes.data && phoneRes.data.length > 0) {
+      if (phoneUsers.length > 1) {
+        throw new Error('手机号 ' + phone + ' 存在重复账号，请联系管理员处理')
+      }
+
+      if (phoneUsers.length === 1) {
         // 找到了已有手机号账号！合并微信信息到这个账号
-        const existUser = phoneRes.data[0]
+        const existUser = phoneUsers[0]
         console.log('[bindPhone] ⚠️ 未找到微信身份用户，但找到同手机号已有账号:', existUser._id, '方式=', foundBy)
 
         // 把微信信息补充到这个已有账号
@@ -141,6 +156,8 @@ exports.main = async (event, context) => {
           headimgurl: existUser.headimgurl || existUser.avatarUrl || '',
           // 标准化手机号字段
           phone: existUser.phone || existUser.phoneNumber || phone,
+          phoneNumber: existUser.phoneNumber || existUser.phone || phone,
+          role: 'organizer',
           updateTime: new Date()
         }
         await db.collection('users').doc(existUser._id).update({ data: mergeData })
@@ -157,25 +174,44 @@ exports.main = async (event, context) => {
           phone: phone,
           merged: true,
           user: targetUser,
-          needSelectRole: !targetUser.role || targetUser.role === ''
+          needSelectRole: false
         }
       }
     }
 
     if (!targetUser) {
-      console.error('[bindPhone] ❌ 无法识别用户身份', { wechatUnionId, wechatOpenId, loginOpenId, phone, email })
-      return { success: false, error: '无法识别用户身份，请重新登录' }
+      const now = new Date()
+      const createData = {
+        phone,
+        phoneNumber: phone,
+        phoneVerified: true,
+        unionId: wechatUnionId,
+        wechatOpenId,
+        email: email || '',
+        role: 'organizer',
+        passwordSet: false,
+        createTime: now,
+        updateTime: now
+      }
+      const created = await db.collection('users').add({ data: createData })
+      targetUserId = created._id
+      targetUser = { _id: created._id, ...createData }
+      foundBy = 'createdOrganizer'
     }
 
     console.log('[bindPhone] 目标用户确定:', targetUserId, 'foundBy=', foundBy)
 
-    // 检查手机号是否已被其他账号占用（★ 同时查 phone 和 phoneNumber）
-    const existPhoneRes = await db.collection('users').where(_.or([
-      { phone: phone },
-      { phoneNumber: phone }
-    ])).get()
+    const targetPhone = targetUser.phone || targetUser.phoneNumber || ''
+    if (targetPhone && targetPhone !== phone) {
+      return { success: false, error: '当前微信已绑定其他手机号，请联系管理员核验后更换' }
+    }
 
-    const existPhoneUsers = (existPhoneRes.data || []).filter(u => u._id !== targetUserId)
+    // 检查手机号是否已被其他账号占用（★ 同时查 phone 和 phoneNumber）
+    const phoneUsers = await findUsersByPhone(phone)
+    const existPhoneUsers = phoneUsers.filter(u => u._id !== targetUserId)
+    if (existPhoneUsers.length > 1) {
+      throw new Error('手机号 ' + phone + ' 存在重复账号，请联系管理员处理')
+    }
     if (existPhoneUsers.length > 0) {
       const existUser = existPhoneUsers[0]
       // 手机号已被其他账号占用 → 合并：把目标用户（临时）的信息合并到已有账号
@@ -190,10 +226,13 @@ exports.main = async (event, context) => {
         // 标准化手机号字段
         phone: existUser.phone || existUser.phoneNumber || phone,
         phoneNumber: existUser.phoneNumber || existUser.phone || phone,
-        role: existUser.role || targetUser.role || '',
+        role: 'organizer',
         passwordSet: existUser.passwordSet || targetUser.passwordSet || false,
+        email: existUser.email || targetUser.email || email || '',
         updateTime: new Date()
       }
+      if (!existUser.passwordHash && targetUser.passwordHash) mergeData.passwordHash = targetUser.passwordHash
+      if (!existUser.passwordSalt && targetUser.passwordSalt) mergeData.passwordSalt = targetUser.passwordSalt
       await db.collection('users').doc(existUser._id).update({ data: mergeData })
 
       // 删除临时用户（已合并到已有账号）
@@ -218,16 +257,12 @@ exports.main = async (event, context) => {
         phone: phone,
         merged: true,
         user: finalUser,
-        needSelectRole: !finalUser.role || finalUser.role === ''
+        needSelectRole: false
       }
     }
 
     // 更新目标用户的手机号（★ 同时写两种字段名确保兼容）
-    const phoneUpdateData = { phone: phone, updateTime: new Date() }
-    // 如果原来有 phoneNumber 但没有 phone，也更新 phoneNumber 保持一致
-    if (targetUser.phoneNumber && !targetUser.phone) {
-      phoneUpdateData.phoneNumber = phone
-    }
+    const phoneUpdateData = { phone: phone, phoneNumber: phone, phoneVerified: true, role: 'organizer', updateTime: new Date() }
     await db.collection('users').doc(targetUserId).update({
       data: phoneUpdateData
     })
@@ -257,7 +292,7 @@ exports.main = async (event, context) => {
       userId: targetUserId,
       phone: phone,
       user: finalUser,
-      needSelectRole: !finalUser.role || finalUser.role === ''
+      needSelectRole: false
     }
 
   } catch (err) {

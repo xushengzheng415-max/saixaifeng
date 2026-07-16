@@ -24,24 +24,14 @@
               <el-dropdown-item disabled>
                 <div class="user-info-dropdown">
                   <div class="user-name">{{ userInfo.userName || '未登录' }}</div>
-                  <div class="user-contact">
-                    <div v-if="userInfo.phone"><el-icon><Phone /></el-icon> {{ userInfo.phone }}</div>
-                    <div v-if="userInfo.email"><el-icon><Message /></el-icon> {{ userInfo.email }}</div>
-                  </div>
                   <div class="user-role">
                     <el-tag v-if="loginType === 'anonymous'" type="info" size="small">开发模式</el-tag>
-                    <el-tag v-else-if="loginType === 'weixin'" type="success" size="small">微信登录</el-tag>
+                    <el-tag v-else-if="loginType === 'wechat'" type="success" size="small">微信扫码</el-tag>
                     <el-tag type="warning" size="small">{{ roleLabel }}</el-tag>
                   </div>
                 </div>
               </el-dropdown-item>
-              <el-dropdown-item v-if="!userInfo.phone" divided command="bindPhone">
-                <el-icon><Phone /></el-icon>绑定手机号
-              </el-dropdown-item>
-              <el-dropdown-item v-else divided disabled>
-                <el-icon><Phone /></el-icon>已绑定：{{ userInfo.phone }}
-              </el-dropdown-item>
-              <el-dropdown-item command="refresh">
+              <el-dropdown-item divided command="refresh">
                 <el-icon><Refresh /></el-icon>刷新数据
               </el-dropdown-item>
               <el-dropdown-item command="logout">
@@ -54,7 +44,7 @@
     </header>
 
     <!-- 绑定手机号弹窗（强制绑定，不可关闭） -->
-    <el-dialog
+    <el-dialog v-if="false"
       v-model="bindPhoneVisible"
       title="绑定手机号"
       width="400px"
@@ -97,7 +87,7 @@
     </el-dialog>
 
     <!-- 强制设置密码弹窗（不可关闭） -->
-    <el-dialog
+    <el-dialog v-if="false"
       v-model="setPasswordVisible"
       title="设置登录密码"
       width="420px"
@@ -134,7 +124,7 @@
     </el-dialog>
 
     <!-- 强制绑定邮箱弹窗（不可关闭） -->
-    <el-dialog
+    <el-dialog v-if="false"
       v-model="bindEmailVisible"
       title="绑定邮箱"
       width="420px"
@@ -630,9 +620,6 @@ const currentNavItems = computed(() => {
 // 用户下拉菜单命令
 function handleUserCommand(command) {
   switch (command) {
-    case 'bindPhone':
-      bindPhoneVisible.value = true
-      break
     case 'refresh':
       router.go(0)
       break
@@ -670,10 +657,15 @@ onMounted(() => {
       const parsed = JSON.parse(savedInfo)
       userInfo.value = {
         userName: parsed.userName || '开发者',
-        avatarUrl: parsed.avatarUrl || '',
-        phone: parsed.phone || '',
-        email: parsed.email || ''
+        avatarUrl: parsed.avatarUrl || ''
       }
+      localStorage.setItem('userInfo', JSON.stringify({
+        uid: parsed.uid || '',
+        userName: parsed.userName || '微信用户',
+        avatarUrl: parsed.avatarUrl || '',
+        openid: parsed.openid || '',
+        unionid: parsed.unionid || ''
+      }))
     } catch (e) {
       // ignore
     }
@@ -681,23 +673,8 @@ onMounted(() => {
   loginType.value = localStorage.getItem('loginType') || 'anonymous'
   currentRole.value = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
 
-  // ★ 按照用户流程图的正确弹窗顺序：选身份(路由守卫)→绑手机号→设置密码→绑定邮箱
-  // 1. 强制绑定手机号（微信扫码/邮箱登录需要，手机登录不需要）
-  if (localStorage.getItem('needBindPhone') === 'true' && loginType.value !== 'phone' && loginType.value !== 'anonymous') {
-    bindPhoneVisible.value = true
-  }
-  // 邮箱登录用户强制绑定手机号（兼容旧逻辑）
-  else if (loginType.value === 'email' && !userInfo.value.phone) {
-    bindPhoneVisible.value = true
-  }
-  // 2. 强制设置密码
-  else if (localStorage.getItem('needSetPassword') === 'true') {
-    setPasswordVisible.value = true
-  }
-  // 3. 强制绑定邮箱（用于找回密码，手机登录用户跳过）
-  else if (localStorage.getItem('needBindEmail') === 'true' && loginType.value !== 'phone') {
-    bindEmailVisible.value = true
-  }
+  ['needBindPhone', 'needSetPassword', 'needBindEmail', 'phone', 'phoneNumber']
+    .forEach(key => localStorage.removeItem(key))
 
   // 检测是否为裁判长（查询 tournament_referees 集合，支持按赛事设置）
   const userId = localStorage.getItem('userId')

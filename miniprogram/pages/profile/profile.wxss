@@ -78,6 +78,7 @@
 .role-badge.organizer { background: rgba(255,224,130,0.25); color: #FFE082; border: 1rpx solid rgba(255,224,130,0.35); }
 .role-badge.coach { background: rgba(129,212,250,0.25); color: #81D4FA; border: 1rpx solid rgba(129,212,250,0.35); }
 .role-badge.referee { background: rgba(186,104,200,0.25); color: #CE93D8; border: 1rpx solid rgba(186,104,200,0.35); }
+.role-badge.player { background: rgba(129,212,250,0.25); color: #81D4FA; border: 1rpx solid rgba(129,212,250,0.35); }
 
 .team-name {
   display: block;

@@ -93,7 +93,7 @@ Page({
       isCoachMode: roleLower === 'coach',
       isRefereeMode: roleLower === 'referee',
       isOrganizerMode: roleLower === 'organizer',
-      isSpectatorMode: roleLower === 'spectator',
+      isSpectatorMode: roleLower === 'spectator' || roleLower === 'player',
       isLoggedIn: !!userInfo && !!userInfo._id
     });
 
@@ -109,7 +109,7 @@ Page({
       this.loadOrganizerData();
       return;
     }
-    if (roleLower === 'spectator') {
+    if (roleLower === 'spectator' || roleLower === 'player') {
       this.loadSpectatorData();
       return;
     }
@@ -446,34 +446,81 @@ Page({
       }
     });
 
-    db.collection('tournaments').where(_.or([
-      { creatorId: userId },
-      { creatorPhone: phone },
-      { phoneNumber: phone },
-      { openId: openId },
-      { wechatOpenId: openId }
-    ])).orderBy('createTime', 'desc').limit(10).get({
-      success: function (res) {
-        var items = [];
-        (res.data || []).forEach(function (t) {
-          items.push({
-            _id: t._id,
-            name: t.name || '未命名赛事',
-            status: t.status || 'draft',
-            statusLabel: t.statusLabel || (t.status === 'ongoing' ? '进行中' : (t.status === 'finished' ? '已结束' : '草稿')),
-            dateRange: that.formatDate(t.startDate || t.createTime) + ' - ' + that.formatDate(t.endDate || t.startDate || t.createTime),
-            registeredTeams: t.registeredTeams || 0,
-            maxTeams: t.maxTeams || 0
-          });
-        });
-        that.setData({ myTournaments: items, loading: false });
-        that.syncLengths();
-      },
-      fail: function () {
-        that.setData({ myTournaments: [], loading: false });
-        that.syncLengths();
-      }
-    });
+    function normalizeTournament(t) {
+      return {
+        _id: t._id,
+        name: t.name || '未命名赛事',
+        status: t.status || 'draft',
+        statusLabel: t.statusLabel || (t.status === 'ongoing' ? '进行中' : (t.status === 'finished' || t.status === 'completed' ? '已结束' : '草稿')),
+        dateRange: that.formatDate(t.startDate || t.createTime) + ' - ' + that.formatDate(t.endDate || t.startDate || t.createTime),
+        registeredTeams: t.registeredTeams || t.approvedTeams || 0,
+        maxTeams: t.maxTeams || 0
+      };
+    }
+
+    function applyTournamentList(list) {
+      var items = [];
+      (list || []).forEach(function (t) {
+        items.push(normalizeTournament(t));
+      });
+      that.setData({ myTournaments: items, loading: false });
+      that.syncLengths();
+    }
+
+    function loadRecentTournaments() {
+      db.collection('tournaments').orderBy('createTime', 'desc').limit(10).get({
+        success: function (res) {
+          applyTournamentList(res.data || []);
+        },
+        fail: function () {
+          that.setData({ myTournaments: [], loading: false });
+          that.syncLengths();
+        }
+      });
+    }
+
+    var ownerConditions = [];
+    function addCondition(field, value) {
+      if (!value) return;
+      var item = {};
+      item[field] = value;
+      ownerConditions.push(item);
+    }
+
+    addCondition('creatorId', userId);
+    addCondition('organizerId', userId);
+    addCondition('createdBy', userId);
+    addCondition('ownerId', userId);
+    addCondition('userId', userId);
+    addCondition('creatorPhone', phone);
+    addCondition('organizerPhone', phone);
+    addCondition('ownerPhone', phone);
+    addCondition('contactPhone', phone);
+    addCondition('phoneNumber', phone);
+    addCondition('phone', phone);
+    addCondition('mobile', phone);
+    addCondition('openId', openId);
+    addCondition('wechatOpenId', openId);
+    addCondition('_openid', openId);
+
+    if (ownerConditions.length === 0) {
+      loadRecentTournaments();
+    } else {
+      var ownerWhere = ownerConditions.length === 1 ? ownerConditions[0] : _.or(ownerConditions);
+      db.collection('tournaments').where(ownerWhere).orderBy('createTime', 'desc').limit(10).get({
+        success: function (res) {
+          var list = res.data || [];
+          if (list.length > 0) {
+            applyTournamentList(list);
+          } else {
+            loadRecentTournaments();
+          }
+        },
+        fail: function () {
+          loadRecentTournaments();
+        }
+      });
+    }
 
     that.setData({ pendingItems: [] });
     that.syncLengths();
@@ -567,7 +614,7 @@ Page({
   },
 
   goToTournamentManage: function () {
-    wx.navigateTo({ url: '/pages/manage/manage' });
+    wx.switchTab({ url: '/pages/tournament-center/tournament-center' });
   },
 
   goToRefereeManage: function () {

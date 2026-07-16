@@ -5,7 +5,7 @@ const db = cloud.database()
 
 exports.main = async (event) => {
   try {
-    const { name, shortName, teamCode, province, city, cityName, teamType, establishedDate, logo, description, ownerPhone } = event
+    const { name, shortName, teamCode, province, city, cityName, teamType, establishedDate, logo, description, ownerPhone, creatorId, openId, wechatOpenId } = event
     if (!name || !shortName) {
       return { success: false, error: '球队名称必填' }
     }
@@ -23,6 +23,13 @@ exports.main = async (event) => {
       teamType: teamType || '',
       teamCode: teamCode || '',
       ownerPhone: ownerPhone || '',
+      creatorPhone: ownerPhone || '',
+      contactPhone: ownerPhone || '',
+      phoneNumber: ownerPhone || '',
+      phone: ownerPhone || '',
+      mobile: ownerPhone || '',
+      openId: openId || wechatOpenId || '',
+      wechatOpenId: wechatOpenId || openId || '',
       source: 'tournament_center',
       createTime: db.serverDate(),
       updateTime: db.serverDate(),
@@ -32,7 +39,7 @@ exports.main = async (event) => {
       description: description || '',
       home: '',
       // 管理
-      creatorId: '',
+      creatorId: creatorId || '',
       claimStatus: claimStatus
     }
     const addResult = await db.collection('teams').add({ data })

@@ -18,26 +18,29 @@
 
     <!-- 赛事头部 -->
     <view class="t-header">
-      <text class="th-name">{{name}}</text>
-      <view class="th-meta">
-        <text wx:if="{{showStartDate}}">{{startDate}}</text>
-        <text wx:if="{{showDateSeparator}}"> ~ </text>
-        <text wx:if="{{showEndDate}}">{{endDate}}</text>
-        <text wx:if="{{location}}" style="margin-left:16rpx;">📍 {{location}}</text>
+      <view class="th-main">
+        <view class="th-copy">
+          <text class="th-name">{{name}}</text>
+          <view class="th-meta">
+            <text wx:if="{{showStartDate}}">{{startDate}}</text>
+            <text wx:if="{{showDateSeparator}}"> ~ </text>
+            <text wx:if="{{showEndDate}}">{{endDate}}</text>
+            <text wx:if="{{location}}" style="margin-left:16rpx;">📍 {{location}}</text>
+          </view>
+        </view>
+        <image class="th-logo" wx:if="{{logoUrl}}" src="{{logoUrl}}" mode="aspectFill"></image>
       </view>
-      <!-- 申请参赛按钮（非主办方可见） -->
-      <!-- 报名参赛（非主办方可见） -->
       <button class="signup-btn" wx:if="{{!isOrganizer}}" data-id="{{tournamentId}}" bindtap="goSignup">报名参赛</button>
-      <view class="th-qr" wx:if="{{isOrganizer}}">
-        <text class="qr-num">{{approvedTeamsLen || 0}}</text>
-        <text class="qr-lbl">球队</text>
+      <view class="th-footer" wx:if="{{isOrganizer}}">
+        <view class="th-qr">
+          <text class="qr-num">{{approvedTeamsLen || 0}}</text>
+          <text class="qr-lbl">球队</text>
+        </view>
+        <button class="t-invite-btn" open-type="share" data-share-type="tournamentSignup">邀请球队</button>
       </view>
     </view>
 
-    <!-- ★ 赛事头部增强：logo + 状态标签 + 描述（信息同步） -->
-    <view class="t-hero" wx:if="{{logoUrl}}">
-      <image class="hero-logo" src="{{logoUrl}}" mode="aspectFill"></image>
-    </view>
+    <!-- ★ 赛事头部增强：状态标签 + 描述（信息同步） -->
 
     <view class="t-tags">
       <text class="t-tag type-tag" wx:if="{{typeText}}">{{typeText}}</text>
@@ -82,15 +85,18 @@
       </view>
     </view>
 
-    <!-- ★ 竞赛规程文件（信息同步） -->
-    <view class="t-regulations" wx:if="{{hasRegulationsFile}}">
+    <!-- 竞赛规程文件 -->
+    <view class="t-regulations" wx:if="{{showRegulationsCard}}">
       <view class="tr-card">
-        <text class="tr-icon">📄</text>
+        <view class="tr-icon">DOC</view>
         <view class="tr-info">
           <text class="tr-name">{{regulationsFileName}}</text>
-          <text class="tr-meta">已上传的竞赛规程文档</text>
+          <text class="tr-meta">{{regulationsStatusText}}</text>
         </view>
-        <view class="tr-btn" bindtap="onDownloadRegulations">下载</view>
+        <view class="tr-actions">
+          <view class="tr-btn tr-download" wx:if="{{hasRegulationsFile}}" bindtap="onDownloadRegulations">下载</view>
+          <view class="tr-btn tr-upload" wx:if="{{isOrganizer}}" bindtap="onUploadRegulations">{{regulationsActionText}}</view>
+        </view>
       </view>
     </view>
 

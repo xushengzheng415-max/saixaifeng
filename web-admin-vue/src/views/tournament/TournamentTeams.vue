@@ -8,6 +8,14 @@
     </el-page-header>
 
     <div class="page-content">
+      <div v-if="divisionOptions.length > 1" class="division-switch-bar">
+        <span class="division-switch-label">赛事组别</span>
+        <el-radio-group v-model="activeDivisionId" @change="onDivisionChange">
+          <el-radio-button v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ division.name }}</el-radio-button>
+        </el-radio-group>
+        <span class="division-switch-hint">当前：{{ activeDivision.name }}</span>
+      </div>
+
       <!-- 统计卡片 -->
       <div class="stats-bar">
         <div class="stat-card">
@@ -37,6 +45,9 @@
         <el-button type="primary" @click="openInviteDialog">
           <el-icon><Plus /></el-icon>邀请球队
         </el-button>
+        <el-button type="success" @click="openCreateTeamDialog">
+          <el-icon><Plus /></el-icon>添加球队
+        </el-button>
         <el-button @click="openQrDialog">
           <el-icon><Picture /></el-icon>生成报名二维码
         </el-button>
@@ -54,7 +65,7 @@
         <el-tab-pane name="all">
           <template #label>
             <span>全部</span>
-            <el-badge :value="tournamentTeams.length" class="tab-badge" />
+            <el-badge :value="divisionTournamentTeams.length" class="tab-badge" />
           </template>
         </el-tab-pane>
         <el-tab-pane name="approved">
@@ -126,6 +137,7 @@
               <el-button type="danger" size="small" @click="rejectTeam(team)">拒绝</el-button>
             </template>
             <template v-else-if="team.status === 'approved'">
+              <el-button type="primary" size="small" plain @click="openTeamPlayers(team)">添加球员</el-button>
               <el-button type="danger" size="small" plain @click="removeTeam(team)">移除</el-button>
             </template>
             <template v-else-if="team.status === 'cancel_requested'">
@@ -149,6 +161,7 @@
       @closed="onInviteDialogClose"
     >
       <div class="invite-dialog">
+        <el-alert v-if="divisionOptions.length > 1" :title="`当前邀请至 ${activeDivision.name} 组`" type="success" :closable="false" style="margin-bottom: 14px" />
         <!-- 顶部信息栏 -->
         <div class="invite-header">
           <div class="invite-info">
@@ -254,6 +267,103 @@
       </template>
     </el-dialog>
 
+    <!-- 添加球队弹窗：字段与球队身份创建球队保持一致 -->
+    <el-dialog
+      v-model="showCreateTeamDialog"
+      title="添加球队"
+      width="620px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-form :model="createTeamForm" label-position="top">
+        <el-alert v-if="divisionOptions.length > 1" :title="`新球队将直接加入 ${activeDivision.name} 组`" type="success" :closable="false" style="margin-bottom: 14px" />
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="球队全称" required>
+              <el-input v-model="createTeamForm.name" placeholder="请输入球队全称" maxlength="50" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="球队简称" required>
+              <el-input v-model="createTeamForm.shortName" placeholder="请输入球队简称" maxlength="20" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="所属省份" required>
+              <el-select v-model="createTeamForm.province" placeholder="选择省份" style="width: 100%" @change="onCreateProvinceChange">
+                <el-option v-for="province in provinceCodeMap" :key="province.code" :label="province.code + ' - ' + province.name" :value="province.code" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="城市" required>
+              <el-select v-model="createTeamForm.city" placeholder="先选择省份" style="width: 100%" :disabled="createCityOptions.length === 0" @change="onCreateCityChange">
+                <el-option v-for="city in createCityOptions" :key="city.l" :label="city.n + ' (' + city.l + ')'" :value="city.l" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="队伍类型" required>
+              <el-select v-model="createTeamForm.teamType" placeholder="选择队伍类型" style="width: 100%" @change="autoGenerateCreateTeamCode">
+                <el-option v-for="option in teamTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="球队编号">
+              <el-input v-model="createTeamForm.teamCode" placeholder="选择地区和类型后自动生成" maxlength="9" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="成立时间" required>
+              <el-date-picker v-model="createTeamForm.establishedDate" type="date" placeholder="选择成立时间" value-format="YYYY-MM-DD" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="绑定手机号">
+              <el-input v-model="createTeamForm.ownerPhone" disabled placeholder="自动使用当前登录手机号" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="球队Logo">
+          <div class="create-logo-row">
+            <el-upload
+              :show-file-list="false"
+              :before-upload="beforeCreateLogoUpload"
+              :http-request="handleCreateLogoUpload"
+              accept="image/*"
+            >
+              <el-button type="primary" plain :loading="uploadingCreateLogo">
+                <el-icon v-if="!uploadingCreateLogo"><Upload /></el-icon>
+                {{ uploadingCreateLogo ? '压缩上传中...' : '上传Logo' }}
+              </el-button>
+            </el-upload>
+            <img v-if="createTeamForm.logoUrl" :src="createTeamForm.logoUrl" class="create-logo-preview" alt="球队Logo预览" />
+            <span class="create-logo-tip">上传前会自动压缩</span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="球队简介">
+          <el-input v-model="createTeamForm.description" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="请输入球队简介" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showCreateTeamDialog = false">取消</el-button>
+        <el-button type="primary" :loading="creatingTeam" @click="submitCreateTeam">创建并加入赛事</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 报名二维码弹窗 -->
     <el-dialog
       v-model="showQrDialog"
@@ -296,12 +406,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, User, InfoFilled, Picture, CircleCloseFilled } from '@element-plus/icons-vue'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction } from '../../utils/cloud'
+import { Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, Upload } from '@element-plus/icons-vue'
+import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, getFileUrl } from '../../utils/cloud'
+import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 
 const route = useRoute()
+const router = useRouter()
 const tournamentId = route.params.id
 
 const loading = ref(false)
@@ -314,6 +426,41 @@ const showInviteDialog = ref(false)
 const inviteSearchKeyword = ref('')
 const selectedTeams = ref([])
 const sendingInvites = ref(false)
+const activeDivisionId = ref('default')
+
+// 主办方直接添加球队
+const showCreateTeamDialog = ref(false)
+const creatingTeam = ref(false)
+const uploadingCreateLogo = ref(false)
+const createCityOptions = ref([])
+const createTeamForm = ref({
+  name: '',
+  shortName: '',
+  province: '',
+  city: '',
+  cityName: '',
+  teamType: '',
+  teamCode: '',
+  establishedDate: '',
+  logoUrl: '',
+  description: '',
+  ownerPhone: ''
+})
+const teamTypeOptions = [
+  { label: '一线队', value: '01' },
+  { label: '二线队', value: '02' },
+  { label: 'U8', value: '08' },
+  { label: 'U9', value: '09' },
+  { label: 'U10', value: '10' },
+  { label: 'U11', value: '11' },
+  { label: 'U12', value: '12' },
+  { label: 'U13', value: '13' },
+  { label: 'U14', value: '14' },
+  { label: 'U15', value: '15' },
+  { label: 'U16', value: '16' },
+  { label: 'U17', value: '17' },
+  { label: 'U18', value: '18' }
+]
 
 // 报名二维码弹窗
 const showQrDialog = ref(false)
@@ -341,15 +488,29 @@ const statusTypes = {
   cancel_requested: 'warning'
 }
 
-// 计算属性
-const approvedTeams = computed(() => tournamentTeams.value.filter(t => t.status === 'approved'))
-const pendingTeams = computed(() => tournamentTeams.value.filter(t => t.status === 'pending'))
-const invitedTeams = computed(() => tournamentTeams.value.filter(t => t.status === 'invited'))
-const cancelRequestedTeams = computed(() => tournamentTeams.value.filter(t => t.status === 'cancel_requested'))
+// 组别与统计（旧赛事自动归入默认组）
+const divisionOptions = computed(() => {
+  const divisions = Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []
+  if (divisions.length > 0) return divisions
+  return [{
+    id: 'default',
+    name: '默认组',
+    tournamentType: tournament.value.type || tournament.value.tournamentType || 'tournament',
+    matchFormat: tournament.value.matchFormat || '11side',
+    maxTeams: Number(tournament.value.maxTeams || 0),
+    maxPlayersPerTeam: Number(tournament.value.maxPlayersPerTeam || tournament.value.maxPlayers || 35)
+  }]
+})
+const activeDivision = computed(() => divisionOptions.value.find(item => item.id === activeDivisionId.value) || divisionOptions.value[0])
+const divisionTournamentTeams = computed(() => tournamentTeams.value.filter(item => (item.divisionId || 'default') === activeDivisionId.value))
+const approvedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'approved'))
+const pendingTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'pending'))
+const invitedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'invited'))
+const cancelRequestedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'cancel_requested'))
 
 const availableSlots = computed(() => {
   // 如果没有设置maxTeams，默认允许邀请（不限制）
-  const max = tournament.value.maxTeams
+  const max = activeDivision.value?.maxTeams || tournament.value.maxTeams
   if (!max || max <= 0) {
     return 999 // 返回一个大数字表示无限制
   }
@@ -359,7 +520,7 @@ const availableSlots = computed(() => {
 })
 
 const filteredTeams = computed(() => {
-  let list = tournamentTeams.value
+  let list = divisionTournamentTeams.value
   
   // 按标签筛选
   if (activeTab.value !== 'all') {
@@ -390,7 +551,7 @@ const getSelectedTeamNames = computed(() => {
 // 可邀请的球队列表
 const availableTeamsToInvite = computed(() => {
   // 已关联赛事的球队ID（包括已邀请、待确认、已参赛、已拒绝）
-  const invitedTeamIds = tournamentTeams.value.map(t => t.teamId).filter(Boolean)
+  const invitedTeamIds = divisionTournamentTeams.value.map(t => t.teamId).filter(Boolean)
 
 
   const available = allTeams.value
@@ -428,10 +589,243 @@ function toggleSelectTeam(teamId) {
   }
 }
 
+function getStoredUserInfo() {
+  try {
+    return JSON.parse(localStorage.getItem('userInfo') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function resetCreateTeamForm() {
+  const user = getStoredUserInfo()
+  createTeamForm.value = {
+    name: '',
+    shortName: '',
+    province: '',
+    city: '',
+    cityName: '',
+    teamType: '',
+    teamCode: '',
+    establishedDate: '',
+    logoUrl: '',
+    description: '',
+    ownerPhone: user.phone || user.phoneNumber || user.mobile || localStorage.getItem('phone') || ''
+  }
+  createCityOptions.value = []
+}
+
+function openCreateTeamDialog() {
+  if (availableSlots.value <= 0) {
+    ElMessage.warning('参赛名额已满，无法继续添加球队')
+    return
+  }
+  resetCreateTeamForm()
+  showCreateTeamDialog.value = true
+}
+
+function onCreateProvinceChange(value) {
+  createTeamForm.value.city = ''
+  createTeamForm.value.cityName = ''
+  createTeamForm.value.teamCode = ''
+  createCityOptions.value = cityLetterMap[value] || []
+}
+
+function onCreateCityChange(value) {
+  const city = createCityOptions.value.find(item => item.l === value)
+  createTeamForm.value.cityName = city ? city.n : ''
+  autoGenerateCreateTeamCode()
+}
+
+function autoGenerateCreateTeamCode() {
+  const form = createTeamForm.value
+  if (!form.province || !form.city || !form.teamType) return
+  const prefix = form.province + form.city
+  let maxSequence = 0
+  allTeams.value.forEach(team => {
+    const code = team.teamCode || ''
+    if (code.startsWith(prefix)) {
+      const sequence = Number.parseInt(code.substring(4, 7), 10)
+      if (Number.isFinite(sequence)) maxSequence = Math.max(maxSequence, sequence)
+    }
+  })
+  form.teamCode = prefix + String(maxSequence + 1).padStart(3, '0') + form.teamType
+}
+
+function beforeCreateLogoUpload(file) {
+  if (!file.type || !file.type.startsWith('image/')) {
+    ElMessage.error('只能上传图片文件')
+    return false
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    ElMessage.error('原图大小不能超过20MB')
+    return false
+  }
+  return true
+}
+
+function compressCreateLogo(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      const ratio = Math.min(1, 640 / Math.max(image.width, image.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(image.width * ratio))
+      canvas.height = Math.max(1, Math.round(image.height * ratio))
+      const context = canvas.getContext('2d')
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+      const targetSize = 180 * 1024
+      const encode = quality => {
+        canvas.toBlob(blob => {
+          if (!blob) {
+            reject(new Error('图片压缩失败'))
+            return
+          }
+          if (blob.size > targetSize && quality > 0.42) {
+            encode(quality - 0.08)
+            return
+          }
+          resolve(new File([blob], `team-logo-${Date.now()}.webp`, { type: 'image/webp' }))
+        }, 'image/webp', quality)
+      }
+      encode(0.82)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('无法读取图片'))
+    }
+    image.src = objectUrl
+  })
+}
+
+async function handleCreateLogoUpload({ file }) {
+  uploadingCreateLogo.value = true
+  try {
+    const compressedFile = await compressCreateLogo(file)
+    const cloudPath = `team-logos/${Date.now()}-${compressedFile.name}`
+    const result = await uploadLargeFileViaCloud(cloudPath, compressedFile, { chunkSize: 32 * 1024 })
+    if (!result.success) throw new Error(result.message || '上传失败')
+    createTeamForm.value.logoUrl = result.tempUrl || await getFileUrl(result.fileId)
+    ElMessage.success(`Logo已压缩并上传（${Math.ceil(compressedFile.size / 1024)}KB）`)
+  } catch (err) {
+    console.error('球队Logo上传失败:', err)
+    ElMessage.error('Logo上传失败: ' + (err.message || '未知错误'))
+  } finally {
+    uploadingCreateLogo.value = false
+  }
+}
+
+function openTeamPlayers(team) {
+  const teamId = team.teamId || team._id
+  if (!teamId) {
+    ElMessage.warning('未找到球队信息')
+    return
+  }
+  router.push({ path: `/teams/${teamId}`, query: { fromTournament: tournamentId } })
+}
+
+async function submitCreateTeam() {
+  const form = createTeamForm.value
+  if (!form.name.trim() || !form.shortName.trim()) {
+    ElMessage.warning('请填写球队全称和简称')
+    return
+  }
+  if (!form.province || !form.city || !form.teamType) {
+    ElMessage.warning('请选择所属省份、城市和队伍类型')
+    return
+  }
+  if (!form.establishedDate) {
+    ElMessage.warning('请选择球队成立时间')
+    return
+  }
+  if (availableSlots.value <= 0) {
+    ElMessage.warning('参赛名额已满')
+    return
+  }
+
+  creatingTeam.value = true
+  let createdTeamId = ''
+  let linkedToTournament = false
+  try {
+    const user = getStoredUserInfo()
+    const userId = user._id || localStorage.getItem('userId') || ''
+    const ownerPhone = form.ownerPhone || user.phone || user.phoneNumber || ''
+    const now = new Date()
+    const teamData = {
+      name: form.name.trim(),
+      shortName: form.shortName.trim(),
+      provinceCode: form.province,
+      cityCode: form.city,
+      cityName: form.cityName,
+      teamType: form.teamType,
+      teamCode: form.teamCode,
+      establishedDate: form.establishedDate,
+      logo: form.logoUrl || '',
+      logoUrl: form.logoUrl || '',
+      description: form.description || '',
+      ownerPhone,
+      creatorPhone: ownerPhone,
+      contactPhone: ownerPhone,
+      phoneNumber: ownerPhone,
+      phone: ownerPhone,
+      mobile: ownerPhone,
+      creatorId: userId,
+      source: 'saixiaofeng',
+      claimStatus: 'claimed',
+      playerCount: 0,
+      createTime: now,
+      updateTime: now
+    }
+    const created = await addRecord('teams', teamData)
+    createdTeamId = created._id
+    if (!createdTeamId) throw new Error('球队创建成功但未返回球队ID')
+
+    await addRecord('tournament_teams', {
+      tournamentId,
+      teamId: createdTeamId,
+      teamName: teamData.name,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
+      status: 'approved',
+      approveTime: now,
+      createTime: now,
+      updateTime: now
+    })
+    linkedToTournament = true
+
+    showCreateTeamDialog.value = false
+    await Promise.all([loadTournamentTeams(), loadAllTeams()])
+
+    try {
+      await ElMessageBox.confirm('球队已创建并加入赛事，是否现在添加球员？', '创建成功', {
+        confirmButtonText: '添加球员',
+        cancelButtonText: '稍后添加',
+        type: 'success'
+      })
+      router.push({ path: `/teams/${createdTeamId}`, query: { fromTournament: tournamentId } })
+    } catch (choice) {
+      if (choice !== 'cancel' && choice !== 'close') throw choice
+    }
+  } catch (err) {
+    console.error('添加球队失败:', err)
+    if (createdTeamId && !linkedToTournament) {
+      try { await deleteRecord('teams', createdTeamId) } catch (rollbackError) { console.warn('回滚球队失败:', rollbackError) }
+    }
+    ElMessage.error('添加球队失败: ' + (err.message || '未知错误'))
+  } finally {
+    creatingTeam.value = false
+  }
+}
+
 // 加载赛事信息
 async function loadTournament() {
   try {
     tournament.value = await queryById('tournaments', tournamentId)
+    const preferred = tournament.value.defaultDivisionId || tournament.value.divisions?.[0]?.id || 'default'
+    activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
   } catch (err) {
     console.error('加载赛事失败:', err)
   }
@@ -470,6 +864,8 @@ async function loadTournamentTeams() {
           recordUpdateTime: item.updateTime,
           teamId: item.teamId,
           tournamentId: item.tournamentId,
+          divisionId: item.divisionId || 'default',
+          divisionName: item.divisionName || '',
           teamName: item.teamName || teamData.name,
           status: item.status,
           createTime: item.createTime,
@@ -522,6 +918,8 @@ async function sendInvites() {
         tournamentId,
         teamId,
         teamName: team.name,
+        divisionId: activeDivisionId.value,
+        divisionName: activeDivision.value.name,
         status: 'invited', // 邀请状态
         inviteTime: new Date(),
         createTime: new Date()
@@ -539,6 +937,12 @@ async function sendInvites() {
   } finally {
     sendingInvites.value = false
   }
+}
+
+function onDivisionChange() {
+  activeTab.value = 'all'
+  selectedTeams.value = []
+  inviteSearchKeyword.value = ''
 }
 
 // 打开邀请弹窗
@@ -758,6 +1162,10 @@ onMounted(() => {
 .page-content {
   margin-top: 20px;
 }
+
+.division-switch-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 16px; background: #f0f8f1; border: 1px solid #d8ead9; border-radius: 10px; }
+.division-switch-label { color: #1b5e20; font-weight: 600; }
+.division-switch-hint { color: #6b7280; font-size: 13px; }
 
 /* 统计栏 */
 .stats-bar {
@@ -1019,6 +1427,27 @@ onMounted(() => {
 
 .player-count {
   color: #409eff;
+}
+
+.create-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+}
+
+.create-logo-preview {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.create-logo-tip {
+  color: #909399;
+  font-size: 12px;
 }
 
 /* 弹窗底部 */

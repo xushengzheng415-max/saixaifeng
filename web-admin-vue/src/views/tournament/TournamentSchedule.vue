@@ -7,6 +7,14 @@
       </template>
     </el-page-header>
 
+    <div v-if="divisionOptions.length > 1" class="division-selector">
+      <span>赛事组别</span>
+      <el-radio-group v-model="activeDivisionId" @change="handleDivisionChange">
+        <el-radio-button v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ division.name }}</el-radio-button>
+      </el-radio-group>
+      <el-tag type="success">当前：{{ activeDivision.name }}</el-tag>
+    </div>
+
     <div class="page-card" style="margin-top: 20px;">
       <!-- Tab 导航 -->
       <el-tabs v-model="activeTab" class="schedule-tabs">
@@ -15,7 +23,7 @@
           <template #label>
             <span class="tab-label"><el-icon><Grid /></el-icon>抽签分组</span>
           </template>
-          <TournamentDraw :embedded="true" :tournament-id="tournamentId" :readonly="true" />
+          <TournamentDraw :key="activeDivisionId" :embedded="true" :tournament-id="tournamentId" :division-id="activeDivisionId" :readonly="true" />
         </el-tab-pane>
 
         <!-- 赛程列表 Tab -->
@@ -314,6 +322,7 @@ const tournamentId = route.params.id
 
 const activeTab = ref('schedule')
 const tournament = ref({})
+const activeDivisionId = ref('default')
 const tournamentType = ref('')
 const formatLabel = ref('')
 const matches = ref([])
@@ -361,6 +370,24 @@ const editForm = ref({
 })
 
 const phaseLabels = { group: '小组赛', league: '联赛', cup: '淘汰赛', knockout: '淘汰赛', final: '决赛' }
+
+const divisionOptions = computed(() => {
+  const divisions = Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []
+  if (divisions.length > 0) return divisions
+  return [{ id: 'default', name: '默认组', tournamentType: tournament.value.tournamentType || tournament.value.type || tournament.value.format || 'tournament' }]
+})
+const activeDivision = computed(() => divisionOptions.value.find(item => item.id === activeDivisionId.value) || divisionOptions.value[0])
+function belongsToActiveDivision(record) {
+  return (record.divisionId || 'default') === activeDivisionId.value
+}
+
+async function handleDivisionChange() {
+  tournamentType.value = activeDivision.value.tournamentType || tournament.value.tournamentType || tournament.value.type || tournament.value.format || 'tournament'
+  formatLabel.value = { tournament: '赛会制', cup: '杯赛制', league: '联赛制' }[tournamentType.value] || ''
+  await loadMatches()
+  await loadTeamLogos()
+  await loadAllTeams()
+}
 
 // 场地选项（编辑弹窗用）
 const venueOptions = computed(() => {
@@ -587,6 +614,8 @@ async function saveManualMatch() {
 
     await addRecord('matches', {
       tournamentId,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
       scheduleType: tournamentType.value,
       phase: 'group',
       roundName: f.roundName || '手动添加',
@@ -650,6 +679,8 @@ async function handleGenerate() {
   try {
     const result = await callFunction('generateSchedule', {
       tournamentId,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
       scheduleType: tournamentType.value,
       scheduleConfig: {
         startDate: scheduleConfig.value.startDate,
@@ -677,7 +708,9 @@ async function loadTournament() {
   try {
     const t = await queryById('tournaments', tournamentId)
     tournament.value = t
-    tournamentType.value = t.tournamentType || t.format || 'tournament'
+    const preferred = t.defaultDivisionId || t.divisions?.[0]?.id || 'default'
+    activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
+    tournamentType.value = activeDivision.value.tournamentType || t.tournamentType || t.type || t.format || 'tournament'
     formatLabel.value = { tournament: '赛会制', cup: '杯赛制', league: '联赛制' }[tournamentType.value] || ''
     // 回填配置
     if (t.scheduleConfig) {
@@ -692,10 +725,11 @@ async function loadTournament() {
 async function loadMatches() {
   loading.value = true
   try {
-    matches.value = await queryList('matches', {
+    const list = await queryList('matches', {
       where: { tournamentId },
       orderBy: { matchDate: 'asc', matchTime: 'asc' }
     })
+    matches.value = list.filter(belongsToActiveDivision)
   } catch (err) {
     console.error('加载赛程失败:', err)
   } finally {
@@ -705,7 +739,7 @@ async function loadMatches() {
 
 async function loadAllTeams() {
   try {
-    const groups = await queryList('tournament_groups', { where: { tournamentId } })
+    const groups = (await queryList('tournament_groups', { where: { tournamentId } })).filter(belongsToActiveDivision)
     const teams = []
     groups.forEach(g => {
       ;(g.groups || []).forEach(gp => {
@@ -718,7 +752,7 @@ async function loadAllTeams() {
       })
     })
     // 也加载 approved teams
-    const approved = await queryList('tournament_teams', { where: { tournamentId, status: 'approved' } })
+    const approved = (await queryList('tournament_teams', { where: { tournamentId, status: 'approved' } })).filter(belongsToActiveDivision)
     approved.forEach(t => teams.push({ teamId: t.teamId || t._id, teamName: t.teamName || t.name || '' }))
     allTeams.value = [...new Map(teams.map(t => [t.teamId, t])).values()]
   } catch (err) {
@@ -757,6 +791,8 @@ onMounted(async () => {
 
 <style scoped>
 .tournament-schedule { padding: 20px; max-width: 1600px; margin: 0 auto; }
+.division-selector { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 18px; margin-top: 20px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; }
+.division-selector > span:first-child { font-weight: 600; color: #374151; }
 .schedule-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
 .tab-label { display: flex; align-items: center; gap: 6px; }
 

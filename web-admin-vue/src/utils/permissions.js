@@ -3,7 +3,7 @@
  * 定义不同角色的操作权限
  */
 
-// 角色定义
+// 登录身份只有 ORGANIZER；其余值仅作为主办方管理业务对象时的兼容标签。
 export const ROLES = {
   ORGANIZER: 'organizer',  // 主办方
   COACH: 'coach',          // 教练
@@ -266,9 +266,7 @@ export function getNavItemsByRole() {
  */
 export function getAvailableRoles() {
   return [
-    { value: ROLES.ORGANIZER, label: '主办方', icon: 'OfficeBuilding' },
-    { value: ROLES.COACH, label: '球队', icon: 'Football' },
-    { value: ROLES.REFEREE, label: '裁判', icon: 'VideoPlay' }
+    { value: ROLES.ORGANIZER, label: '主办方', icon: 'OfficeBuilding' }
   ]
 }
 

@@ -431,3 +431,19 @@
     box-sizing: border-box;
   }
 }
+
+.share-team-btn {
+  width: 100%;
+  padding: 22rpx;
+  border-radius: 12rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a5d27;
+  background: rgba(255, 255, 255, 0.94);
+  border: 2rpx solid rgba(255, 255, 255, 0.75);
+  margin-bottom: 20rpx;
+}
+
+.share-team-btn::after {
+  border: none;
+}

@@ -24,6 +24,20 @@
   <view class="card" wx:if="{{isStep1}}">
     <view class="card-title">基础信息</view>
 
+    <view class="regulation-section">
+      <view class="regulation-title">竞赛规程</view>
+      <view class="regulation-hint">上传后可直接查看，不会自动识别或填充表单</view>
+      <button class="regulation-upload-btn" bindtap="chooseRegulationFile" loading="{{uploadingRegulation}}">
+        {{regulationUploadText}}
+      </button>
+      <view class="regulation-file" wx:if="{{hasRegulationFile}}">
+        <text class="regulation-file-name">{{regulationFileName}}</text>
+        <text class="regulation-action" bindtap="viewRegulationFile">查看</text>
+        <text class="regulation-delete" bindtap="clearRegulationFile">删除</text>
+      </view>
+      <view class="regulation-formats">支持 PDF、WORD、JPG、PNG、BMP，最大 10MB</view>
+    </view>
+
     <!-- 选择赛制 -->
     <view class="form-group">
       <text class="form-label">选择赛制 *</text>
@@ -33,6 +47,23 @@
       <view class="type-desc">{{selectedTypeDesc}}</view>
     </view>
 
+    <view class="form-group">
+      <text class="form-label">比赛制式 *</text>
+      <view class="match-format-grid">
+        <view
+          wx:for="{{matchFormatOptions}}"
+          wx:key="value"
+          class="match-format-card {{item.selectedClass}}"
+          data-value="{{item.value}}"
+          bindtap="onMatchFormatSelect"
+        >
+          <text class="match-format-icon">⚽</text>
+          <text class="match-format-name">{{item.label}}</text>
+          <text class="match-format-desc">默认 {{item.defaultPlayers}} 人，上限 {{item.maxPlayers}} 人</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 赛事类型 -->
     <view class="form-group">
       <text class="form-label">赛事类型 *</text>
@@ -40,6 +71,35 @@
         <view class="form-input picker-input">{{selectedCategoryLabel}}</view>
       </picker>
       <view class="type-desc">{{selectedCategoryDesc}}</view>
+    </view>
+
+    <view class="form-group division-mode-block">
+      <view class="division-mode-row">
+        <view>
+          <text class="form-label">多年龄组别</text>
+          <view class="type-desc">一次创建赛事，U8/U9/U10等组别分别管理球队、抽签和赛程</view>
+        </view>
+        <switch color="#2e7d32" checked="{{multiDivision}}" bindchange="onMultiDivisionChange" />
+      </view>
+      <block wx:if="{{multiDivision}}">
+        <view class="division-presets">
+          <view wx:for="{{divisionPresets}}" wx:key="*this" class="division-preset" data-name="{{item}}" bindtap="addDivision">+ {{item}}</view>
+        </view>
+        <view wx:for="{{divisions}}" wx:key="id" class="division-card">
+          <view class="division-card-title">
+            <text>组别 {{index + 1}}</text>
+            <text class="division-remove" data-index="{{index}}" bindtap="removeDivision">删除</text>
+          </view>
+          <input class="form-input" placeholder="例如 U10" value="{{item.name}}" data-index="{{index}}" data-field="name" bindinput="onDivisionInput" />
+          <picker value="{{item.matchFormatIndex}}" range="{{matchFormatOptions}}" range-key="label" data-index="{{index}}" bindchange="onDivisionFormat">
+            <view class="form-input picker-input">{{item.matchFormatLabel}}</view>
+          </picker>
+          <view class="division-numbers">
+            <input class="form-input" type="number" placeholder="球队上限" value="{{item.maxTeams}}" data-index="{{index}}" data-field="maxTeams" bindinput="onDivisionInput" />
+            <input class="form-input" type="number" placeholder="名单上限" value="{{item.maxPlayersPerTeam}}" data-index="{{index}}" data-field="maxPlayersPerTeam" bindinput="onDivisionInput" />
+          </view>
+        </view>
+      </block>
     </view>
 
     <view class="form-group">
@@ -126,13 +186,13 @@
       </picker>
     </view>
 
-    <view class="form-group">
-      <text class="form-label">最大球队数</text>
+    <view class="form-group" wx:if="{{!multiDivision}}">
+      <text class="form-label">最大球队数 *</text>
       <input class="form-input" type="number" placeholder="如：32" value="{{form.maxTeams}}" bindinput="onInput" data-field="maxTeams" />
     </view>
 
-    <view class="form-group">
-      <text class="form-label">每队参赛人数</text>
+    <view class="form-group" wx:if="{{!multiDivision}}">
+      <text class="form-label">每队大名单上限 *</text>
       <input class="form-input" type="number" placeholder="如：15" value="{{form.maxPlayers}}" bindinput="onInput" data-field="maxPlayers" />
     </view>
 

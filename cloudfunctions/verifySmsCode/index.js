@@ -11,7 +11,7 @@ function hashPassword(password, salt = '') {
 // ★ 手机号→角色映射表（已知的管理员账号自动识别）
 var PHONE_ROLE_MAP = {
   '15038292130': 'organizer',   // 主办方管理账号
-  '17319716663': 'coach'        // 教练账号
+  '17319716663': 'player'        // player account
 }
 
 exports.main = async (event) => {

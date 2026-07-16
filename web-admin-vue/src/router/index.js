@@ -7,20 +7,6 @@ const routes = [
     component: () => import('../views/login/LoginView.vue'),
     meta: { requiresAuth: false }
   },
-  // 选择身份页面（首次登录必须先选身份，独立页面）
-  {
-    path: '/select-role',
-    name: 'SelectRole',
-    component: () => import('../views/login/SelectRoleView.vue'),
-    meta: { requiresAuth: true, skipRoleCheck: true }
-  },
-  // 绑定手机号页面（微信扫码新用户，独立页面）
-  {
-    path: '/bind-phone',
-    name: 'BindPhone',
-    component: () => import('../views/login/BindPhoneView.vue'),
-    meta: { requiresAuth: false, skipAuthCheck: true }
-  },
   // 微信扫码回调页面（从 index.html 跳转过来，用 Vue 的 cloud.js 处理登录）
   {
     path: '/wechat-callback',
@@ -518,15 +504,23 @@ const router = createRouter({
   routes
 })
 
-// 根据角色获取默认首页路径
+// 当前后台只有主办方登录身份，默认进入赛事管理。
 function getDefaultPathByRole() {
-  const currentRole = (localStorage.getItem('currentRole') || '').toUpperCase()
-  const rolePathMap = {
-    'ORGANIZER': '/tournaments',  // 主办方 → 赛事管理
-    'COACH': '/teams',            // 教练 → 球队管理
-    'REFEREE': '/referees'        // 裁判 → 裁判资料库
-  }
-  return rolePathMap[currentRole] || '/tournaments'
+  return '/tournaments'
+}
+
+function hasOrganizerSession() {
+  const role = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
+  const version = localStorage.getItem('authSessionVersion') || ''
+  const loginType = localStorage.getItem('loginType') || ''
+  return role.toLowerCase() === 'organizer' && version === 'wechat-only-v1' && loginType === 'wechat'
+}
+
+function clearInvalidSession() {
+  ['isLoggedIn', 'loginType', 'role', 'currentRole', 'userId', 'userInfo',
+    'needSelectRole', 'needBindPhone', 'needSetPassword', 'needBindEmail',
+    'wechatTemp', 'phone', 'phoneNumber', 'openid', 'unionid', 'authSessionVersion']
+    .forEach(key => localStorage.removeItem(key))
 }
 
 // 路由守卫
@@ -553,6 +547,12 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth === false) {
     const isLoggedIn = localStorage.getItem('isLoggedIn')
     if (isLoggedIn === 'true') {
+      if (!hasOrganizerSession()) {
+        clearInvalidSession()
+        if (to.path === '/login') next()
+        else next('/login')
+        return
+      }
       // 已登录状态访问登录页，根据角色跳转对应首页
       if (to.path === '/login') {
         next(getDefaultPathByRole())
@@ -561,11 +561,8 @@ router.beforeEach(async (to, from, next) => {
       // 已登录用户访问赛事中心 → 根据角色跳转首页
       // （赛事中心是面向未登录访客的公共页面，已登录用户应直接进入管理后台）
       if (to.path === '/tournament-center') {
-        const currentRole = (localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toUpperCase()
-        if (currentRole === 'COACH' || currentRole === 'ORGANIZER' || currentRole === 'REFEREE') {
-          next(getDefaultPathByRole())
-          return
-        }
+        next(getDefaultPathByRole())
+        return
       }
     }
     next()
@@ -576,14 +573,12 @@ router.beforeEach(async (to, from, next) => {
   const isLoggedIn = localStorage.getItem('isLoggedIn')
   const loginType = localStorage.getItem('loginType') || ''
   if (isLoggedIn === 'true') {
-    // 非微信登录用户（SMS/密码/邮箱），通过 HTTP API 登录，不走 CloudBase SDK auth
-    // ★ 不再调用 checkAuth()，因为零 SDK 模式下 auth 始终为 null
-    // 信任 localStorage 的 isLoggedIn 标记即可（由登录 API 保证合法性）
-    // 首次登录必须先选身份
-    if (localStorage.getItem('needSelectRole') === 'true' && !to.meta.skipRoleCheck) {
-      next('/select-role')
+    if (!hasOrganizerSession()) {
+      clearInvalidSession()
+      next('/login')
       return
     }
+    // 纯微信会话已通过版本与主办方角色校验。
     // 访问根路径时，根据角色跳转对应首页
     if (to.path === '/' || to.path === '/dashboard') {
       next(getDefaultPathByRole())
@@ -597,9 +592,9 @@ router.beforeEach(async (to, from, next) => {
     const isAuth = await checkAuth()
     if (isAuth) {
       localStorage.setItem('isLoggedIn', 'true')
-      // 首次登录必须先选身份
-      if (localStorage.getItem('needSelectRole') === 'true' && !to.meta.skipRoleCheck) {
-        next('/select-role')
+      if (!hasOrganizerSession()) {
+        clearInvalidSession()
+        next('/login')
         return
       }
       // 访问根路径时，根据角色跳转对应首页

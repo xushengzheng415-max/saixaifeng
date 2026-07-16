@@ -47,7 +47,7 @@ exports.main = async (event, context) => {
     const teamIds = [...new Set([
       ...matches.map(m => m.homeTeamId),
       ...matches.map(m => m.awayTeamId)
-    ].filter(Boolean))}
+    ].filter(Boolean))]
 
     let teamMap = {}
     if (teamIds.length > 0) {
@@ -70,10 +70,10 @@ exports.main = async (event, context) => {
       homeScore: m.homeScore ?? null,
       awayScore: m.awayScore ?? null,
       status: m.status || 'pending',    // pending/ongoing/completed
-      groupName: m.groupName || '',    // 小组赛组别
-      round: m.round || '',          // 轮次（联赛第几轮）
+      groupName: m.groupName || '',
+      round: m.round || '',
       field: m.field || '',
-      events: m.events || []            // 进球/黄牌/红牌/换人等事件
+      events: m.events || []
     }))
 
     return {

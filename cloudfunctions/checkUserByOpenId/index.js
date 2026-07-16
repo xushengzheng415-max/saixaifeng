@@ -1,95 +1,76 @@
-// checkUserByOpenId/index.js
-// 根据 openId 查询用户是否已注册（ES5 语法，兼容真机）
-
+// 根据小程序 OpenID 查询或创建纯微信主办方账号。
 var cloud = require('wx-server-sdk')
 
-cloud.init({
-  env: cloud.DYNAMIC_CURRENT_ENV
-})
+cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
-// 安全查询：集合不存在时返回空数组，不抛异常
-async function safeQuery(db, collectionName, whereCondition) {
-  try {
-    var res = await db.collection(collectionName).where(whereCondition).get()
-    return res.data || []
-  } catch (err) {
-    // 集合不存在或其他错误，返回空数组
-    console.log('[safeQuery] ' + collectionName + ' 查询失败（可能集合不存在）:', err.message || err)
-    return []
-  }
-}
-
-// 注意：必须用 async，否则返回 Promise 框架不等待
-exports.main = async function(event, context) {
-  var openId = event.openId
-
-  console.log('[checkUserByOpenId] 收到请求, openId:', openId ? '有值' : '空')
+exports.main = async function(event) {
+  event = event || {}
+  var wxContext = cloud.getWXContext()
+  var openId = wxContext.OPENID || event.openId || ''
+  var createIfMissing = event.createIfMissing === true
 
   if (!openId) {
-    return {
-      success: false,
-      message: '缺少 openId 参数'
-    }
+    return { success: false, isRegistered: false, message: '缺少微信 OpenID' }
   }
 
   try {
     var db = cloud.database()
+    var result = await db.collection('users').where({ openId: openId }).limit(2).get()
+    var users = result.data || []
 
-    // 分别查询，独立容错（某个集合不存在不影响其他）
-    var usersData = await safeQuery(db, 'users', { openId: openId })
-    var coachData = await safeQuery(db, 'coach_library', { openId: openId })
-    var refereeData = await safeQuery(db, 'referee_library', { openId: openId })
-
-    console.log('[checkUserByOpenId] users:', usersData.length,
-                'coach_library:', coachData.length,
-                'referee_library:', refereeData.length)
-
-    var user = null
-    var sourceCollection = ''
-
-    if (usersData.length > 0) {
-      user = usersData[0]
-      sourceCollection = 'users'
-    } else if (coachData.length > 0) {
-      user = coachData[0]
-      sourceCollection = 'coach_library'
-    } else if (refereeData.length > 0) {
-      user = refereeData[0]
-      sourceCollection = 'referee_library'
+    if (users.length > 1) {
+      return {
+        success: false,
+        isRegistered: false,
+        message: '当前微信存在重复账号，请联系管理员处理'
+      }
     }
 
-    if (user) {
-      // 统一字段名（不同集合字段可能不同）
-      var phone = user.phoneNumber || user.phone || user.mobile || ''
-      var role = user.role || ''
-      if (!role && sourceCollection === 'coach_library') role = 'coach'
-      if (!role && sourceCollection === 'referee_library') role = 'referee'
+    var user = users[0] || null
+    if (!user && !createIfMissing) {
+      return { success: true, isRegistered: false }
+    }
 
-      return {
-        success: true,
-        isRegistered: true,
-        user: {
-          _id: user._id,
-          openId: user.openId,
-          phoneNumber: phone,
-          nickName: user.nickName || user.name || '微信用户',
-          avatarUrl: user.avatarUrl || user.avatar || '',
-          role: role,
-          roleName: user.roleName || '',
-          source: sourceCollection
-        }
+    if (!user) {
+      var now = db.serverDate()
+      var userData = {
+        openId: openId,
+        nickName: event.nickName || '微信用户',
+        avatarUrl: event.avatarUrl || '',
+        role: 'organizer',
+        loginType: 'wechat',
+        createTime: now,
+        updateTime: now,
+        lastLoginTime: now
       }
+      var created = await db.collection('users').add({ data: userData })
+      user = Object.assign({ _id: created._id }, userData)
     } else {
-      return {
-        success: true,
-        isRegistered: false
+      var patch = {
+        role: 'organizer',
+        loginType: 'wechat',
+        updateTime: db.serverDate(),
+        lastLoginTime: db.serverDate()
+      }
+      await db.collection('users').doc(user._id).update({ data: patch })
+      user = Object.assign({}, user, patch)
+    }
+
+    return {
+      success: true,
+      isRegistered: true,
+      isNewUser: !users[0],
+      user: {
+        _id: user._id,
+        openId: openId,
+        nickName: user.nickName || '微信用户',
+        avatarUrl: user.avatarUrl || '',
+        role: 'organizer',
+        source: 'users'
       }
     }
   } catch (err) {
     console.error('[checkUserByOpenId] 异常:', err)
-    return {
-      success: false,
-      message: '查询失败: ' + (err.message || '未知错误')
-    }
+    return { success: false, isRegistered: false, message: '微信登录失败：' + (err.message || '未知错误') }
   }
 }

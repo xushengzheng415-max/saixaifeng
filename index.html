@@ -202,7 +202,7 @@
             border: 1px solid rgba(16, 185, 129, 0.3);
             border-radius: 24px;
             width: 90%;
-            max-width: 860px;
+            max-width: 440px;
             padding: 0;
             position: relative;
             transform: scale(0.9) translateY(20px);
@@ -240,19 +240,16 @@
             min-height: 520px;
         }
         .login-modal-left {
-            flex: 0 0 400px;
+            flex: 1;
             padding: 48px 32px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            border-right: 1px solid rgba(255,255,255,0.06);
+            border-right: none;
         }
         .login-modal-right {
-            flex: 1;
-            padding: 48px 40px;
-            display: flex;
-            flex-direction: column;
+            display: none;
         }
 
         /* Tab 样式 */
@@ -1092,6 +1089,25 @@
 
         // 账号密码登录 - 切换手机号/邮箱模式
         let pwdMode = 'phone'; // 'phone' | 'email'
+        const ORGANIZER_ROLE = 'organizer';
+        const AUTH_STORAGE_KEYS = [
+            'isLoggedIn', 'loginType', 'role', 'currentRole', 'userId', 'userInfo',
+            'userPhone', 'phone', 'phoneNumber', 'openid', 'unionid', 'wechatTemp',
+            'needSetPassword', 'needBindPhone', 'needBindEmail', 'needSelectRole'
+        ];
+
+        function beginOrganizerSession(data) {
+            const role = String(data?.role || data?.user?.role || '').toLowerCase();
+            if (role !== ORGANIZER_ROLE) {
+                throw new Error('主办方账号初始化失败，请重新登录');
+            }
+            AUTH_STORAGE_KEYS.forEach(function(key) { localStorage.removeItem(key); });
+            localStorage.setItem('role', ORGANIZER_ROLE);
+            localStorage.setItem('currentRole', ORGANIZER_ROLE);
+            localStorage.setItem('authSessionVersion', 'wechat-only-v1');
+            return ORGANIZER_ROLE;
+        }
+
         function switchPwdMode(mode) {
             pwdMode = mode;
             document.getElementById('pwd-mode-phone').classList.toggle('bg-bee-main', mode === 'phone');
@@ -1125,10 +1141,9 @@
                 // HTTP API 直接返回结果对象，不需要 .result 包装
                 const data = result;
                 if (data && data.success === true) {
+                    beginOrganizerSession(data);
                     localStorage.setItem('isLoggedIn', 'true');
                     localStorage.setItem('loginType', pwdMode);
-                    localStorage.setItem('role', data.role || '');
-                    localStorage.setItem('currentRole', data.role || '');
                     localStorage.setItem('userId', data.user?._id || '');
                     localStorage.setItem('userInfo', JSON.stringify({
                         uid: data.user?._id || '',
@@ -1153,10 +1168,6 @@
                     }
                     // 邮箱登录不需要残留的 needSetPassword
                     localStorage.removeItem('needSetPassword');
-                    // 选择身份（首次登录）
-                    if (data.needSelectRole) {
-                        localStorage.setItem('needSelectRole', 'true');
-                    }
                     // 跳转到 Vue 管理后台
                     console.log('[passwordLogin] 登录成功，正在跳转到后台...');
                     window.location.href = '/admin/';
@@ -1340,6 +1351,7 @@
                 var result = res || {};
 
                 if (result.success) {
+                    beginOrganizerSession(result);
                     // 3. 登录成功 → 写入 localStorage
                     var user = result.user || {};
                     localStorage.setItem('loginType', 'wechat');
@@ -1347,33 +1359,11 @@
                         uid: user._id,
                         userName: user.nickname || '微信用户',
                         avatarUrl: user.headimgurl || '',
-                        phone: user.phone || user.phoneNumber || '',
-                        email: user.email || '',
                         openid: user.openid || user.wechatOpenId || '',
                         unionid: user.unionid || ''
                     }));
                     localStorage.setItem('userId', user._id || '');
-                    localStorage.setItem('role', result.role || '');
-                    localStorage.setItem('currentRole', result.role || '');
                     localStorage.setItem('isLoggedIn', 'true');
-
-                    // 设置标志位
-                    if (result.needSetPassword) localStorage.setItem('needSetPassword', 'true');
-                    if (result.needPhoneBinding || result.needBindPhone) localStorage.setItem('needBindPhone', 'true');
-                    if (result.needSelectRole) localStorage.setItem('needSelectRole', 'true');
-                    if (result.wechatTemp) {
-                        localStorage.setItem('wechatTemp', JSON.stringify(result.wechatTemp));
-                    }
-
-                    // 4. 分流：需绑手机号 → 跳 Vue 绑定页；否则 → 直接进后台
-                    if (result.needPhoneBinding) {
-                        hideLoading();
-                        showToast('登录成功！请绑定手机号', 'success');
-                        setTimeout(function() {
-                            window.location.href = '/admin/#/bind-phone';
-                        }, 800);
-                        return;
-                    }
 
                     showToast(result.message || '登录成功！正在进入后台...', 'success');
                     setTimeout(function() {
@@ -1567,11 +1557,10 @@
                 console.log('[emailLogin] success值：', data?.success);
 
                 if (data && data.success === true) {
+                    beginOrganizerSession(data);
                     console.log('[emailLogin] 登录成功，准备跳转...');
                     localStorage.setItem('isLoggedIn', 'true');
                     localStorage.setItem('loginType', 'email');
-                    localStorage.setItem('role', data.role || '');
-                    localStorage.setItem('currentRole', data.role || '');
                     localStorage.setItem('userId', data.user?._id || '');
                     localStorage.setItem('userInfo', JSON.stringify({
                         uid: data.user?._id || '',
@@ -1589,10 +1578,6 @@
                     }
                     if (data.needBindEmail) {
                         localStorage.setItem('needBindEmail', 'true');
-                    }
-                    // 选择身份（首次登录）
-                    if (data.needSelectRole) {
-                        localStorage.setItem('needSelectRole', 'true');
                     }
                     console.log('[emailLogin] localStorage已设置，正在跳转...');
                     // 跳转到 Vue 管理后台
@@ -1662,10 +1647,9 @@
                 if (result && result.success) {
                     const data = result;
                     var user = data.user || {};
+                    beginOrganizerSession(data);
                     localStorage.setItem('isLoggedIn', 'true');
                     localStorage.setItem('loginType', 'phone');
-                    localStorage.setItem('role', user.role || '');
-                    localStorage.setItem('currentRole', user.role || '');
                     localStorage.setItem('userPhone', phone);
                     localStorage.setItem('userId', user._id || '');
                     localStorage.setItem('userInfo', JSON.stringify({
@@ -1688,10 +1672,6 @@
                     }
                     // 手机号登录不需要绑定手机号，清除残留标志
                     localStorage.removeItem('needBindPhone');
-                    // 选择身份（首次登录）
-                    if (data.needSelectRole) {
-                        localStorage.setItem('needSelectRole', 'true');
-                    }
                     // 跳转到 Vue 管理后台
                     console.log('[phoneLogin] 登录成功，正在跳转到后台...');
                     window.location.href = '/admin/';

@@ -457,9 +457,13 @@ function generateCombinedSchedule(tournamentId, params, scheduleConfig) {
 // ========== 数据加载辅助函数 ==========
 
 // 从 tournament_groups 加载赛会制分组数据（兼容多种存储格式）
-async function loadTournamentGroups(tournamentId) {
+function belongsToDivision(item, divisionId) {
+  return (item.divisionId || 'default') === divisionId
+}
+
+async function loadTournamentGroups(tournamentId, divisionId) {
   var res = await db.collection('tournament_groups').where({ tournamentId: tournamentId }).get()
-  var list = res.data || []
+  var list = (res.data || []).filter(function(item) { return belongsToDivision(item, divisionId) })
 
   if (list.length === 0) return { groups: [], tournamentConfig: null }
 
@@ -498,9 +502,9 @@ async function loadTournamentGroups(tournamentId) {
 }
 
 // 从 tournament_bracket 加载杯赛制对阵数据
-async function loadCupBracket(tournamentId) {
+async function loadCupBracket(tournamentId, divisionId) {
   var res = await db.collection('tournament_bracket').where({ tournamentId: tournamentId }).orderBy('round', 'asc').get()
-  var list = res.data || []
+  var list = (res.data || []).filter(function(item) { return belongsToDivision(item, divisionId) })
   if (list.length === 0) return { allTeams: [], cupConfig: { bracketSize: 16, hasThirdPlace: true, cupMode: 'single' } }
 
   // 收集所有已分配的球队
@@ -537,9 +541,9 @@ async function loadCupBracket(tournamentId) {
 }
 
 // 从 tournament_league_tables 加载联赛制数据
-async function loadLeagueData(tournamentId) {
+async function loadLeagueData(tournamentId, divisionId) {
   var res = await db.collection('tournament_league_tables').where({ tournamentId: tournamentId }).get()
-  var list = res.data || []
+  var list = (res.data || []).filter(function(item) { return belongsToDivision(item, divisionId) })
   if (list.length === 0) return { ranking: [], leagueConfig: { loopType: 'single' } }
 
   var ranking = []
@@ -564,6 +568,8 @@ async function loadLeagueData(tournamentId) {
 
 exports.main = async (event, context) => {
   var tournamentId = event.tournamentId
+  var divisionId = event.divisionId || 'default'
+  var divisionName = event.divisionName || '默认组'
   var scheduleType = event.scheduleType || ''
   var scheduleConfig = event.scheduleConfig || {}
 
@@ -592,16 +598,17 @@ exports.main = async (event, context) => {
   }
 
   try {
-    console.log('开始生成赛程:', scheduleType)
+    console.log('开始生成赛程:', scheduleType, divisionId, divisionName)
 
     // 删除旧赛程
     var oldMatches = await db.collection('matches').where({ tournamentId: tournamentId }).get()
-    if (oldMatches.data.length > 0) {
-      var deletePromises = oldMatches.data.map(function(m) {
+    var scopedOldMatches = (oldMatches.data || []).filter(function(m) { return belongsToDivision(m, divisionId) })
+    if (scopedOldMatches.length > 0) {
+      var deletePromises = scopedOldMatches.map(function(m) {
         return db.collection('matches').doc(m._id).remove()
       })
       await Promise.all(deletePromises)
-      console.log('删除旧赛程:', oldMatches.data.length, '场')
+      console.log('删除当前组别旧赛程:', scopedOldMatches.length, '场')
     }
 
     // 按赛制生成
@@ -611,7 +618,7 @@ exports.main = async (event, context) => {
       // 赛会制
       var tg = event.groups && event.groups.length > 0
         ? { groups: event.groups, tournamentConfig: event.tournamentConfig }
-        : await loadTournamentGroups(tournamentId)
+        : await loadTournamentGroups(tournamentId, divisionId)
       var groups = tg.groups || []
       var tournamentConfig = tg.tournamentConfig || event.tournamentConfig || { advanceCount: 2, hasThirdPlace: true }
       if (groups.length === 0) {
@@ -631,7 +638,7 @@ exports.main = async (event, context) => {
             allTeams: (event.upperHalf || []).concat(event.lowerHalf || []),
             cupConfig: event.cupConfig || { bracketSize: 16, hasThirdPlace: true, cupMode: 'single' }
           }
-        : await loadCupBracket(tournamentId)
+        : await loadCupBracket(tournamentId, divisionId)
       var allTeams = cupData.allTeams || []
       var cupConfig = cupData.cupConfig || event.cupConfig || { bracketSize: 16, hasThirdPlace: true, cupMode: 'single' }
       if (allTeams.length === 0) {
@@ -643,7 +650,7 @@ exports.main = async (event, context) => {
       // 联赛制
       var lg = (event.ranking && event.ranking.length > 0)
         ? { ranking: event.ranking, leagueConfig: event.leagueConfig }
-        : await loadLeagueData(tournamentId)
+        : await loadLeagueData(tournamentId, divisionId)
       var ranking = lg.ranking || []
       var leagueConfig = lg.leagueConfig || event.leagueConfig || { loopType: 'single' }
       if (ranking.length === 0) {
@@ -653,8 +660,8 @@ exports.main = async (event, context) => {
 
     } else if (scheduleType === 'combined') {
       // 复合制：先尝试拿 league + cup 的数据
-      var leagueData = await loadLeagueData(tournamentId)
-      var cupData2 = await loadCupBracket(tournamentId)
+      var leagueData = await loadLeagueData(tournamentId, divisionId)
+      var cupData2 = await loadCupBracket(tournamentId, divisionId)
       var combinedConfig = event.combinedConfig || { useGroups: false, leagueLoopType: 'single', cupAdvanceCount: 4 }
       var params = {
         groups: event.groups || (leagueData.ranking.length > 0 ? [] : []),
@@ -670,6 +677,8 @@ exports.main = async (event, context) => {
     }
 
     var insertPromises = matches.map(function(match) {
+      match.divisionId = divisionId
+      match.divisionName = divisionName
       return db.collection('matches').add({ data: match })
     })
     await Promise.all(insertPromises)
@@ -677,6 +686,8 @@ exports.main = async (event, context) => {
     // 保存汇总记录到 tournament_groups（供下次快速读取）
     var summaryData = {
       tournamentId: tournamentId,
+      divisionId: divisionId,
+      divisionName: divisionName,
       scheduleType: scheduleType,
       createTime: db.serverDate(),
       updateTime: db.serverDate()
@@ -698,8 +709,9 @@ exports.main = async (event, context) => {
 
     // 删除旧的汇总记录（有 scheduleType 字段的即为汇总记录），插入新的
     var oldSummary = await db.collection('tournament_groups').where({ tournamentId: tournamentId, scheduleType: scheduleType }).get()
-    if (oldSummary.data.length > 0) {
-      await Promise.all(oldSummary.data.map(function(g) {
+    var scopedOldSummary = (oldSummary.data || []).filter(function(g) { return belongsToDivision(g, divisionId) })
+    if (scopedOldSummary.length > 0) {
+      await Promise.all(scopedOldSummary.map(function(g) {
         return db.collection('tournament_groups').doc(g._id).remove()
       }))
     }

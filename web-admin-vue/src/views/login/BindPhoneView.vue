@@ -148,10 +148,15 @@ async function handleBind() {
 
     // 更新本地存储（用 bindPhone 返回的最终用户信息）
     const finalUser = bindRes.user
+    const finalRole = String(finalUser?.role || '').toLowerCase()
+    if (finalRole !== 'organizer') {
+      ElMessage.error('主办方账号初始化失败，请重新登录')
+      return
+    }
     if (finalUser) {
       localStorage.setItem('userId', finalUser._id || '')
-      localStorage.setItem('role', finalUser.role || '')
-      localStorage.setItem('currentRole', finalUser.role || '')
+      localStorage.setItem('role', 'organizer')
+      localStorage.setItem('currentRole', 'organizer')
       localStorage.setItem('isLoggedIn', 'true')
       localStorage.setItem('userInfo', JSON.stringify({
         uid: finalUser._id,
@@ -165,18 +170,11 @@ async function handleBind() {
     // 清理临时数据
     localStorage.removeItem('wechatTemp')
     localStorage.removeItem('needBindPhone')
+    localStorage.removeItem('needSelectRole')
 
     ElMessage.success('绑定成功！正在进入系统...')
 
-    // 检查是否需要选角色
-    if (!finalUser?.role || finalUser.role === '' || bindRes.needSelectRole) {
-      localStorage.setItem('needSelectRole', 'true')
-      setTimeout(() => router.push('/select-role'), 800)
-    } else {
-      const rolePathMap = { ORGANIZER: '/tournaments', COACH: '/teams', REFEREE: '/matches' }
-      const targetPath = rolePathMap[finalUser.role] || '/tournaments'
-      setTimeout(() => router.push(targetPath), 800)
-    }
+    setTimeout(() => router.push('/tournaments'), 800)
   } catch (err) {
     console.error('[BindPhone] 绑定异常:', err)
     ElMessage.error('绑定失败：' + (err.message || '网络错误'))

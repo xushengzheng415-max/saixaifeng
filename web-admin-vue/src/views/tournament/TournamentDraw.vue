@@ -10,6 +10,14 @@
       </el-page-header>
     </div>
 
+    <div v-if="divisionOptions.length > 1 && !props.embedded" class="division-selector">
+      <span>赛事组别</span>
+      <el-radio-group v-model="activeDivisionId" @change="handleDivisionChange">
+        <el-radio-button v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ division.name }}</el-radio-button>
+      </el-radio-group>
+      <el-tag type="success">{{ activeDivision.name }}</el-tag>
+    </div>
+
     <!-- 初始状态：显示新建抽签规则按钮 -->
     <div v-if="!drawGenerated && !hasSavedGroups" class="empty-state">
       <el-empty :description="props.readonly ? '暂无抽签分组数据' : '暂无抽签规则'">
@@ -470,7 +478,8 @@ import { queryById, queryList, addRecord, updateRecord, deleteRecord } from '../
 const props = defineProps({
   embedded: { type: Boolean, default: false },
   tournamentId: { type: String, default: null },
-  readonly: { type: Boolean, default: false }
+  readonly: { type: Boolean, default: false },
+  divisionId: { type: String, default: '' }
 })
 
 const route = useRoute()
@@ -480,6 +489,7 @@ const loading = ref(false)
 const saving = ref(false)
 const drawing = ref(false)
 const tournament = ref({})
+const activeDivisionId = ref(props.divisionId || 'default')
 const approvedTeams = ref([])
 const groups = ref([])
 const groupCount = ref(4)
@@ -506,6 +516,27 @@ const configForm = ref({
   knockoutSize: 16,
   leagueGrouped: false
 })
+
+const divisionOptions = computed(() => {
+  const divisions = Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []
+  if (divisions.length > 0) return divisions
+  return [{ id: 'default', name: '默认组', tournamentType: tournament.value.type || tournament.value.tournamentType || 'tournament' }]
+})
+const activeDivision = computed(() => divisionOptions.value.find(item => item.id === activeDivisionId.value) || divisionOptions.value[0])
+function belongsToActiveDivision(record) {
+  return (record.divisionId || 'default') === activeDivisionId.value
+}
+
+async function handleDivisionChange() {
+  configForm.value.tournamentType = activeDivision.value.tournamentType || tournament.value.type || tournament.value.tournamentType || 'tournament'
+  drawGenerated.value = false
+  hasSavedGroups.value = false
+  groups.value = []
+  bracket.value = []
+  bracketConfirmed.value = false
+  await loadApprovedTeams()
+  await loadGroups()
+}
 
 // 赛制相关
 const tournamentType = computed(() => configForm.value.tournamentType)
@@ -786,6 +817,9 @@ watch(groupCount, (newVal) => {
 async function loadTournament() {
   try {
     tournament.value = await queryById('tournaments', tournamentId)
+    const preferred = props.divisionId || tournament.value.defaultDivisionId || tournament.value.divisions?.[0]?.id || 'default'
+    activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
+    configForm.value.tournamentType = activeDivision.value.tournamentType || tournament.value.type || tournament.value.tournamentType || 'tournament'
   } catch (err) {
     console.error('加载赛事失败:', err)
   }
@@ -800,7 +834,8 @@ async function loadApprovedTeams() {
       orderBy: { createTime: 'desc' }
     })
 
-    const teamIds = list.map(t => t.teamId).filter(Boolean)
+    const scopedList = list.filter(belongsToActiveDivision)
+    const teamIds = scopedList.map(t => t.teamId).filter(Boolean)
     if (teamIds.length > 0) {
       const teamsData = await queryList('teams', {
         where: { _id: { $in: teamIds } }
@@ -808,14 +843,14 @@ async function loadApprovedTeams() {
       const teamMap = {}
       teamsData.forEach(t => { teamMap[t._id] = t })
 
-      approvedTeams.value = list.map(item => ({
+      approvedTeams.value = scopedList.map(item => ({
         ...item,
         ...teamMap[item.teamId],
         _id: item._id,
         teamId: item.teamId
       }))
     } else {
-      approvedTeams.value = list
+      approvedTeams.value = scopedList
     }
   } catch (err) {
     console.error('加载球队失败:', err)
@@ -842,10 +877,11 @@ async function loadGroups() {
 }
 
 async function loadGroupsData() {
-  const list = await queryList('tournament_groups', {
+  const allRecords = await queryList('tournament_groups', {
     where: { tournamentId },
     orderBy: { groupCode: 'asc' }
   })
+  const list = allRecords.filter(belongsToActiveDivision)
 
   if (list.length > 0) {
     drawGenerated.value = true
@@ -897,10 +933,11 @@ async function loadGroupsData() {
 }
 
 async function loadBracket() {
-  const list = await queryList('tournament_bracket', {
+  const allRecords = await queryList('tournament_bracket', {
     where: { tournamentId },
     orderBy: { round: 'asc' }
   })
+  const list = allRecords.filter(belongsToActiveDivision)
 
   if (list.length > 0) {
     drawGenerated.value = true
@@ -925,10 +962,11 @@ async function loadBracket() {
 }
 
 async function loadLeagueTables() {
-  const list = await queryList('tournament_league_tables', {
+  const allRecords = await queryList('tournament_league_tables', {
     where: { tournamentId },
     orderBy: { tableName: 'asc' }
   })
+  const list = allRecords.filter(belongsToActiveDivision)
 
   if (list.length > 0) {
     drawGenerated.value = true
@@ -1482,7 +1520,7 @@ async function saveGroups() {
 
 async function saveGroupsData() {
   const oldGroups = await queryList('tournament_groups', { where: { tournamentId } })
-  for (const g of oldGroups) {
+  for (const g of oldGroups.filter(belongsToActiveDivision)) {
     await deleteRecord('tournament_groups', g._id)
   }
 
@@ -1498,6 +1536,8 @@ async function saveGroupsData() {
 
     await addRecord('tournament_groups', {
       tournamentId,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
       groupName: group.name,
       groupCode: group.code || group.name[0],
       teams: teamList,
@@ -1512,7 +1552,7 @@ async function saveGroupsData() {
 
 async function saveBracket() {
   const oldBracket = await queryList('tournament_bracket', { where: { tournamentId } })
-  for (const b of oldBracket) {
+  for (const b of oldBracket.filter(belongsToActiveDivision)) {
     await deleteRecord('tournament_bracket', b._id)
   }
 
@@ -1520,6 +1560,8 @@ async function saveBracket() {
     const roundData = bracket.value[index]
     await addRecord('tournament_bracket', {
       tournamentId,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
       round: roundData.round,
       name: roundData.name,
       matches: roundData.matches.map(m => ({
@@ -1538,7 +1580,7 @@ async function saveBracket() {
 
 async function saveLeagueTables() {
   const oldTables = await queryList('tournament_league_tables', { where: { tournamentId } })
-  for (const t of oldTables) {
+  for (const t of oldTables.filter(belongsToActiveDivision)) {
     await deleteRecord('tournament_league_tables', t._id)
   }
 
@@ -1558,6 +1600,8 @@ async function saveLeagueTables() {
 
     await addRecord('tournament_league_tables', {
       tournamentId,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
       tableName: group.name,
       tableCode: group.code || 'ALL',
       teams: teamList,
@@ -1712,6 +1756,12 @@ document.addEventListener('fullscreenchange', () => {
   isFullscreen.value = !!document.fullscreenElement
 })
 
+watch(() => props.divisionId, async value => {
+  if (!value || value === activeDivisionId.value) return
+  activeDivisionId.value = value
+  await handleDivisionChange()
+})
+
 // 组件挂载
 onMounted(async () => {
   await loadTournament()
@@ -1739,6 +1789,23 @@ onMounted(async () => {
   padding: 0;
   min-height: auto;
   background: transparent;
+}
+
+.division-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin: 16px 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.division-selector > span:first-child {
+  font-weight: 600;
+  color: #374151;
 }
 
 /* 空状态 */

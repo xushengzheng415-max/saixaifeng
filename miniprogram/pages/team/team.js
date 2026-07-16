@@ -153,6 +153,7 @@ Page({
 
     // 鍔犺浇鐞冨憳鏁版嵁锛堝吋瀹?teamCode 鍜?teamId锛?
     const _ = db.command
+    const teamName = this.data.teamInfo.teamName || this.data.teamInfo.fullName || this.data.teamInfo.shortName || ''
     var playerWhere = {}
     if (teamCode && teamId) {
       playerWhere = _.or([
@@ -168,21 +169,62 @@ Page({
       playerWhere = { teamCode: teamCode }
     }
 
+    const fetchPlayersPage = skip => db.collection('players')
+      .where(playerWhere)
+      .skip(skip)
+      .limit(20)
+      .get()
+
     db.collection('players')
       .where(playerWhere)
-      .get()
-      .then(res => {
-        const allPlayers = (res.data || []).map(item => ({
-          ...item,
-          photoUrl: item.photoUrl || item.photo || '',
-          photo: item.photo || item.photoUrl || '',
-          birthday: item.birthday || item.birthDate || '',
-          birthDate: item.birthDate || item.birthday || '',
-          teamId: item.teamId || item.teamCode || '',
-          teamCode: item.teamCode || item.teamId || '',
-          teamName: item.teamName || teamName || '',
-          age: this.calculateAge(item.birthday || item.birthDate)
-        }))
+      .count()
+      .then(countRes => {
+        const total = countRes.total || 0
+        if (!total) return []
+
+        const tasks = []
+        for (let skip = 0; skip < total; skip += 20) {
+          tasks.push(fetchPlayersPage(skip))
+        }
+
+        return Promise.all(tasks).then(pages => {
+          return pages.reduce((list, page) => list.concat(page.data || []), [])
+        })
+      })
+      .then(players => {
+        const normalizePosition = value => {
+          const raw = String(value || '').trim()
+          const upper = raw.toUpperCase()
+          const map = {
+            GK: 'GK', GOALKEEPER: 'GK', '\u5b88\u95e8\u5458': 'GK', '\u95e8\u5c06': 'GK',
+            DF: 'DF', DEFENDER: 'DF', '\u540e\u536b': 'DF',
+            MF: 'MF', MIDFIELDER: 'MF', '\u4e2d\u573a': 'MF',
+            FW: 'FW', FORWARD: 'FW', STRIKER: 'FW', '\u524d\u950b': 'FW'
+          }
+          return map[upper] || map[raw] || upper
+        }
+        const positionLabelMap = {
+          GK: '\u5b88\u95e8\u5458',
+          DF: '\u540e\u536b',
+          MF: '\u4e2d\u573a',
+          FW: '\u524d\u950b'
+        }
+        const allPlayers = (players || []).map(item => {
+          const normalizedPosition = normalizePosition(item.position || item.positionLabel)
+          return ({
+            ...item,
+            photoUrl: item.photoUrl || item.photo || '',
+            photo: item.photo || item.photoUrl || '',
+            birthday: item.birthday || item.birthDate || '',
+            birthDate: item.birthDate || item.birthday || '',
+            teamId: item.teamId || item.teamCode || '',
+            teamCode: item.teamCode || item.teamId || '',
+            teamName: item.teamName || teamName || '',
+            position: normalizedPosition,
+            positionLabel: item.positionLabel || positionLabelMap[normalizedPosition] || item.position || '\u5176\u4ed6',
+            age: this.calculateAge(item.birthday || item.birthDate)
+          })
+        })
 
         // 鎸変綅缃垎缁?
         const goalkeepers = []
@@ -214,6 +256,7 @@ Page({
           forwards,
           playerCount: allPlayers.length
         })
+        this._updateLens()
       })
       .catch(err => {
         console.error('鍔犺浇鐞冨憳鏁版嵁澶辫触:', err)
@@ -360,7 +403,64 @@ Page({
         }
       }
     })
+  },
+
+  getTeamSharePayload() {
+    const teamInfo = this.data.teamInfo || {}
+    const realTeamId = teamInfo._id || teamInfo.teamId || wx.getStorageSync('currentTeamId') || ''
+    const realTeamCode = teamInfo.teamCode || realTeamId || ''
+    const realTeamName = teamInfo.teamName || teamInfo.fullName || '球队'
+    return {
+      teamId: realTeamId,
+      teamCode: realTeamCode,
+      teamName: realTeamName,
+      teamLogo: teamInfo.teamLogo || teamInfo.logo || ''
+    }
+  },
+
+  buildPlayerInvitePath() {
+    const payload = this.getTeamSharePayload()
+    const params = [
+      'inviteType=player',
+      'fromShare=1',
+      'teamId=' + encodeURIComponent(payload.teamId || payload.teamCode || ''),
+      'teamCode=' + encodeURIComponent(payload.teamCode || payload.teamId || ''),
+      'teamName=' + encodeURIComponent(payload.teamName || '')
+    ]
+    return '/pages/team/player-add/player-add?' + params.join('&')
+  },
+
+  onShareCreateTeam() {
+    wx.showShareMenu({ withShareTicket: true })
+  },
+
+  onShareAppMessage(e) {
+    const shareType = e && e.target && e.target.dataset ? e.target.dataset.shareType : ''
+    if (shareType === 'createTeam' || !this.data.teamInfo || !this.data.teamInfo.teamName) {
+      return {
+        title: '邀请你创建球队资料',
+        path: '/pages/guide/team-info/team-info?inviteCreateTeam=1&fromShare=1',
+        imageUrl: '/images/logo.png'
+      }
+    }
+
+    const payload = this.getTeamSharePayload()
+    return {
+      title: '邀请你加入' + (payload.teamName ? '「' + payload.teamName + '」' : '球队') + '并创建球员资料',
+      path: this.buildPlayerInvitePath(),
+      imageUrl: payload.teamLogo || '/images/logo.png'
+    }
+  },
+
+  onShareTimeline() {
+    const payload = this.getTeamSharePayload()
+    return {
+      title: payload.teamName ? payload.teamName + '邀请球员完善资料' : '邀请球员完善资料',
+      query: this.buildPlayerInvitePath().split('?')[1] || '',
+      imageUrl: '/images/logo.png'
+    }
   }
+
 })
 
 

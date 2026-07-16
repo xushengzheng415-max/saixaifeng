@@ -20,16 +20,6 @@ Page({
     positionLabel: '',
     genderLabel: '男',
     clothingSizeLabel: '',
-    genderPickerClass: '',
-    genderPickerText: '',
-    birthDatePickerClass: 'placeholder',
-    birthDatePickerText: '请选择出生日期',
-    positionPickerClass: 'placeholder',
-    positionPickerText: '请选择位置',
-    clothingSizePickerClass: 'placeholder',
-    clothingSizePickerText: '请选择衣服尺码',
-    jerseyNameText: '自动生成',
-    submitButtonText: '保存球员',
     genderIndex: 0,
     positionIndex: -1,
     clothingSizeIndex: -1,
@@ -57,6 +47,7 @@ Page({
     isSubmitting: false,
     id: '',
     mode: 'add',
+    inviteMode: false,
     cropper: {
       visible: false,
       imagePath: '',
@@ -78,11 +69,13 @@ Page({
   },
 
   onLoad(options) {
+    options = options || {}
     const teamId = options.teamId || ''
     const teamCode = options.teamCode || options.teamId || ''
-    const teamName = options.teamName || ''
+    const teamName = decodeURIComponent(options.teamName || '')
     const id = options.id || ''
     const mode = options.mode || 'add'
+    const inviteMode = options.inviteType === 'player' || options.fromShare === '1'
 
     this.setData({
       teamId,
@@ -90,34 +83,14 @@ Page({
       teamName,
       id,
       mode,
+      inviteMode,
       genderIndex: 0,
       genderLabel: this.data.genderOptions[0].label
     })
-    this._syncDisplayState()
 
     if (mode === 'edit' && id) {
       this.loadPlayerData(id)
     }
-  },
-
-  _syncDisplayState() {
-    const form = this.data.form || {}
-    const genderLabel = this.data.genderLabel || ''
-    const positionLabel = this.data.positionLabel || ''
-    const clothingSizeLabel = this.data.clothingSizeLabel || ''
-
-    this.setData({
-      genderPickerClass: genderLabel ? '' : 'placeholder',
-      genderPickerText: genderLabel || '请选择性别',
-      birthDatePickerClass: form.birthDate ? '' : 'placeholder',
-      birthDatePickerText: form.birthDate || '请选择出生日期',
-      positionPickerClass: positionLabel ? '' : 'placeholder',
-      positionPickerText: positionLabel || '请选择位置',
-      clothingSizePickerClass: clothingSizeLabel ? '' : 'placeholder',
-      clothingSizePickerText: clothingSizeLabel || '请选择衣服尺码',
-      jerseyNameText: form.jerseyName || '自动生成',
-      submitButtonText: this.data.isSubmitting ? '保存中...' : '保存球员'
-    })
   },
 
   async loadPlayerData(id) {
@@ -154,7 +127,6 @@ Page({
         clothingSizeIndex,
         clothingSizeLabel: clothingSizeIndex >= 0 ? this.data.clothingSizeOptions[clothingSizeIndex].label : ''
       })
-      this._syncDisplayState()
       wx.hideLoading()
     } catch (err) {
       wx.hideLoading()
@@ -169,7 +141,6 @@ Page({
       'form.name': name,
       'form.jerseyName': this.generateJerseyName(name)
     })
-    this._syncDisplayState()
   },
 
   onGenderChange(e) {
@@ -180,12 +151,10 @@ Page({
       genderIndex: index,
       genderLabel: option.label
     })
-    this._syncDisplayState()
   },
 
   onBirthDateChange(e) {
     this.setData({ 'form.birthDate': e.detail.value })
-    this._syncDisplayState()
   },
 
   onIdCardInput(e) {
@@ -217,7 +186,6 @@ Page({
       positionIndex: index,
       positionLabel: option.label
     })
-    this._syncDisplayState()
   },
 
   onClothingSizeChange(e) {
@@ -229,7 +197,6 @@ Page({
       clothingSizeIndex: index,
       clothingSizeLabel: option.label
     })
-    this._syncDisplayState()
   },
 
   onContactNameInput(e) {
@@ -245,7 +212,6 @@ Page({
     if (birthDateStr.length === 8) {
       const birthDate = birthDateStr.substring(0, 4) + '-' + birthDateStr.substring(4, 6) + '-' + birthDateStr.substring(6, 8)
       this.setData({ 'form.birthDate': birthDate })
-      this._syncDisplayState()
     }
 
     const genderCode = parseInt(idCard.substring(16, 17), 10)
@@ -256,7 +222,6 @@ Page({
       genderIndex: genderIndex >= 0 ? genderIndex : 0,
       genderLabel: genderIndex >= 0 ? this.data.genderOptions[genderIndex].label : this.data.genderOptions[0].label
     })
-    this._syncDisplayState()
   },
 
   async onUploadPhoto() {
@@ -564,7 +529,6 @@ Page({
     if (!photoUrl) return wx.showToast({ title: '请上传证件照片', icon: 'none' })
 
     this.setData({ isSubmitting: true })
-    this._syncDisplayState()
     wx.showLoading({ title: '保存中...', mask: true })
 
     const db = wx.cloud.database()
@@ -596,7 +560,7 @@ Page({
       updateTime: db.serverDate(),
       creatorPhone: currentPhone,
       creatorId: currentUser._id || wx.getStorageSync('userId') || '',
-      source: 'mini_program',
+      source: this.data.inviteMode ? 'mini_program_share_invite' : 'mini_program',
       isBound: true,
       status: 'active'
     }
@@ -620,6 +584,15 @@ Page({
         duration: 1200
       })
       setTimeout(() => {
+        if (this.data.inviteMode && mode !== 'edit') {
+          wx.showModal({
+            title: '提交成功',
+            content: '球员资料已提交给' + (teamName ? '「' + teamName + '」' : '球队') + '。',
+            showCancel: false,
+            success: () => wx.switchTab({ url: '/pages/home/home' })
+          })
+          return
+        }
         wx.navigateBack()
       }, 1200)
     } catch (err) {
@@ -627,12 +600,10 @@ Page({
       console.error('保存球员失败:', err)
       wx.showToast({ title: '保存失败，请重试', icon: 'none' })
       this.setData({ isSubmitting: false })
-      this._syncDisplayState()
       return
     }
 
     this.setData({ isSubmitting: false })
-    this._syncDisplayState()
   },
 
   onCancel() {
@@ -641,5 +612,29 @@ Page({
       return
     }
     wx.navigateBack()
+  },
+
+  buildSharePath() {
+    const teamId = this.data.teamId || this.data.teamCode || ''
+    const teamCode = this.data.teamCode || this.data.teamId || ''
+    const teamName = this.data.teamName || ''
+    return '/pages/team/player-add/player-add?inviteType=player&fromShare=1&teamId=' + encodeURIComponent(teamId) + '&teamCode=' + encodeURIComponent(teamCode) + '&teamName=' + encodeURIComponent(teamName)
+  },
+
+  onShareAppMessage() {
+    const teamName = this.data.teamName || '球队'
+    return {
+      title: '邀请你加入「' + teamName + '」并创建球员资料',
+      path: this.buildSharePath(),
+      imageUrl: '/images/logo.png'
+    }
+  },
+
+  onShareTimeline() {
+    return {
+      title: (this.data.teamName || '球队') + '邀请球员完善资料',
+      query: this.buildSharePath().split('?')[1] || '',
+      imageUrl: '/images/logo.png'
+    }
   }
 })

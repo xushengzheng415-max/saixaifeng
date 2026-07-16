@@ -9,6 +9,13 @@ var logger = {
   flush: function() {}
 }
 
+var AUTH_SESSION_VERSION = 'wechat-only-v1'
+var LEGACY_AUTH_KEYS = [
+  'userInfo', 'userId', 'currentRole', 'phoneNumber', 'phone', 'email',
+  'hasPassword', 'currentCardId', 'currentTeam', 'currentTeamId',
+  'currentTeamIndex', 'teamInfo', 'coachInfo', 'myTeams', 'userLoggedOut'
+]
+
 // 赛事色调模板配置
 var THEME_TEMPLATES = [
   {
@@ -63,6 +70,13 @@ var THEME_TEMPLATES = [
 
 App({
   onLaunch: function() {
+    if (wx.getStorageSync('authSessionVersion') !== AUTH_SESSION_VERSION) {
+      LEGACY_AUTH_KEYS.forEach(function(key) { wx.removeStorageSync(key) })
+      wx.removeStorageSync('openId')
+      wx.removeStorageSync('openid')
+      wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
+    }
+
     // 初始化云开发（容错：即使云环境不可用也不阻塞启动）
     if (wx.cloud) {
       try {
@@ -110,7 +124,7 @@ App({
 
   checkLoginStatus: function() {
     var userInfo = wx.getStorageSync('userInfo')
-    if (userInfo) {
+    if (userInfo && wx.getStorageSync('authSessionVersion') === AUTH_SESSION_VERSION) {
       this.globalData.userInfo = userInfo
       logger.info('用户已登录', { openid: userInfo.openid })
     }
@@ -139,8 +153,16 @@ App({
   },
 
   updateUserInfo: function(userInfo) {
+    userInfo = {
+      _id: userInfo._id || '',
+      openId: userInfo.openId || userInfo.openid || '',
+      nickName: userInfo.nickName || '微信用户',
+      avatarUrl: userInfo.avatarUrl || '',
+      role: 'organizer'
+    }
     this.globalData.userInfo = userInfo
     wx.setStorageSync('userInfo', userInfo)
+    wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
     logger.info('更新用户信息', { openid: userInfo.openid })
   },
 
@@ -150,6 +172,7 @@ App({
     this.globalData.currentCard = null
     this.globalData.cards = []
     wx.clearStorageSync()
+    wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
     wx.setStorageSync('userLoggedOut', 'true')
   }
 })

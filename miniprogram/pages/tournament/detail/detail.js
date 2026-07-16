@@ -163,9 +163,14 @@ Page({
     maxTeams: 0,
     dayCount: 0,
     regulationsUrl: '',
+    regulationsFileId: '',
     regulationsFileName: '',
     hasRegulationsFile: false,
+    showRegulationsCard: false,
+    regulationsStatusText: '未上传',
+    regulationsActionText: '上传',
     websiteUrl: '',
+    inviteSharePath: '',
     // 赛制规则完整字段（预计算，避免 WXML 深度属性链）
     rulePointsEnableGoalBonus: false,
     rulePointsGoalBonus: 0,
@@ -182,6 +187,34 @@ Page({
     rulesStringContent: ''
   },
 
+  normalizeRegulationsFileName: function (value, fallback) {
+    var text = value === undefined || value === null ? '' : String(value)
+    text = text || fallback || '竞赛规程'
+    text = text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+
+    text = text.replace(/&#(x?[0-9a-fA-F]+);/g, function (match, code) {
+      var point = code.charAt(0).toLowerCase() === 'x'
+        ? parseInt(code.slice(1), 16)
+        : parseInt(code, 10)
+      if (!point || point < 0) return ''
+      try {
+        return String.fromCodePoint ? String.fromCodePoint(point) : String.fromCharCode(point)
+      } catch (e) {
+        return ''
+      }
+    })
+
+    text = text.replace(/\uD83D[\uDCC3\uDCC4]/g, '')
+    text = text.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+    return text || fallback || '竞赛规程'
+  },
+
   // 规则折叠
   toggleRules: function () {
     var newShowRules = !this.data.showRules
@@ -189,11 +222,36 @@ Page({
   },
 
   onDownloadRegulations: function () {
+    var fileId = this.data.regulationsFileId
     var url = this.data.regulationsUrl
+
+    if (fileId) {
+      wx.showLoading({ title: '下载中...' })
+      wx.cloud.downloadFile({
+        fileID: fileId,
+        success: function (res) {
+          wx.hideLoading()
+          wx.openDocument({
+            filePath: res.tempFilePath,
+            showMenu: true,
+            fail: function () {
+              wx.showToast({ title: '无法打开文件', icon: 'none' })
+            }
+          })
+        },
+        fail: function () {
+          wx.hideLoading()
+          wx.showToast({ title: '下载失败', icon: 'none' })
+        }
+      })
+      return
+    }
+
     if (!url) {
       wx.showToast({ title: '暂无规程文件', icon: 'none' })
       return
     }
+
     wx.showLoading({ title: '下载中...' })
     wx.downloadFile({
       url: url,
@@ -202,6 +260,7 @@ Page({
         if (res.statusCode === 200) {
           wx.openDocument({
             filePath: res.tempFilePath,
+            showMenu: true,
             fail: function () {
               wx.showToast({ title: '无法打开文件', icon: 'none' })
             }
@@ -211,6 +270,91 @@ Page({
       fail: function () {
         wx.hideLoading()
         wx.showToast({ title: '下载失败', icon: 'none' })
+      }
+    })
+  },
+
+  onUploadRegulations: function () {
+    var that = this
+    if (!that.data.isOrganizer) {
+      wx.showToast({ title: '仅主办方可上传', icon: 'none' })
+      return
+    }
+
+    wx.chooseMessageFile({
+      count: 1,
+      type: 'file',
+      extension: ['pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp'],
+      success: function (res) {
+        var file = res.tempFiles && res.tempFiles[0]
+        if (!file || !file.path) return
+        that.uploadRegulationsFile(file)
+      }
+    })
+  },
+
+  uploadRegulationsFile: function (file) {
+    var that = this
+    var fileName = that.normalizeRegulationsFileName(file.name, '竞赛规程-' + Date.now())
+    var size = file.size || 0
+    if (size > 10 * 1024 * 1024) {
+      wx.showToast({ title: '文件不能超过10MB', icon: 'none' })
+      return
+    }
+
+    var safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    var cloudPath = 'tournament-regulations/' + that.data.tournamentId + '/' + Date.now() + '-' + safeName
+    wx.showLoading({ title: '上传中...' })
+
+    wx.cloud.uploadFile({
+      cloudPath: cloudPath,
+      filePath: file.path,
+      success: function (uploadRes) {
+        var fileID = uploadRes.fileID
+        var saveUpload = function (tempUrl) {
+          db.collection('tournaments').doc(that.data.tournamentId).update({
+            data: {
+              regulationsFileId: fileID,
+              regulationsUrl: tempUrl || '',
+              regulationsFileName: fileName,
+              updateTime: db.serverDate()
+            },
+            success: function () {
+              wx.hideLoading()
+              that.setData({
+                regulationsFileId: fileID,
+                regulationsUrl: tempUrl || '',
+                regulationsFileName: fileName,
+                hasRegulationsFile: true,
+                showRegulationsCard: true,
+                regulationsStatusText: '已上传的竞赛规程文档',
+                regulationsActionText: '更换'
+              })
+              wx.showToast({ title: '上传成功', icon: 'success' })
+            },
+            fail: function (err) {
+              wx.hideLoading()
+              console.error('[detail] 保存竞赛规程失败:', err)
+              wx.showToast({ title: '保存失败', icon: 'none' })
+            }
+          })
+        }
+
+        wx.cloud.getTempFileURL({
+          fileList: [fileID],
+          success: function (urlRes) {
+            var item = urlRes.fileList && urlRes.fileList[0]
+            saveUpload((item && item.tempFileURL) || '')
+          },
+          fail: function () {
+            saveUpload('')
+          }
+        })
+      },
+      fail: function (err) {
+        wx.hideLoading()
+        console.error('[detail] 上传竞赛规程失败:', err)
+        wx.showToast({ title: '上传失败', icon: 'none' })
       }
     })
   },
@@ -245,6 +389,15 @@ Page({
         wx.showToast({ title: '链接已复制', icon: 'success' })
       }
     })
+  },
+
+  onShareAppMessage: function (e) {
+    var tournamentName = this.data.name || '赛小蜂足球赛事'
+    var path = this.data.inviteSharePath || ('/pages/tournament/signup/signup?id=' + this.data.tournamentId + '&from=share')
+    return {
+      title: '邀请球队报名参赛：' + tournamentName,
+      path: path
+    }
   },
 
   onLoad(options) {
@@ -511,8 +664,9 @@ Page({
         var typeNames = { tournament: '赛会制', cup: '杯赛制', league: '联赛制', combined: '复合制' }
         var resolvedTypeText = typeNames[t.type] || t.type || ''
         var regUrl = t.regulationsUrl || ''
-        var regFileName = t.regulationsFileName || '竞赛规程'
-        var hasRegFile = !!(regUrl || t.regulationsFileId)
+        var regFileId = typeof t.regulationsFileId === 'string' ? t.regulationsFileId : ''
+        var regFileName = that.normalizeRegulationsFileName(t.regulationsFileName, '竞赛规程')
+        var hasRegFile = !!(regUrl || regFileId)
         var createTimeText = ''
         if (t.createTime) {
           var ct2 = new Date(t.createTime)
@@ -541,9 +695,14 @@ Page({
           maxTeams: t.maxTeams || 0,
           dayCount: dayCount,
           regulationsUrl: regUrl,
+          regulationsFileId: regFileId,
           regulationsFileName: regFileName,
           hasRegulationsFile: hasRegFile,
+          showRegulationsCard: hasRegFile,
+          regulationsStatusText: hasRegFile ? '已上传的竞赛规程文档' : '未上传',
+          regulationsActionText: hasRegFile ? '更换' : '上传',
           websiteUrl: websiteUrl,
+          inviteSharePath: '/pages/tournament/signup/signup?id=' + that.data.tournamentId + '&from=share',
           hasRulesObject: hasRulesObj,
           hasRulesString: hasRulesStr,
           rulesStringContent: rulesStrContent
@@ -612,7 +771,8 @@ Page({
       isOrganizer: isOrganizer,
       isCoach: isCoach,
       myTeamId: myTeamId,
-      myTeamName: myTeamName
+      myTeamName: myTeamName,
+      showRegulationsCard: isOrganizer || that.data.hasRegulationsFile
     })
 
     // 根据角色设置默认 Tab 和加载数据

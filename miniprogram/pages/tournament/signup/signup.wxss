@@ -18,6 +18,13 @@
   color: #999;
 }
 
+.division-section { padding: 20rpx 24rpx 0; border-top: 1rpx solid #f0f0f0; }
+.division-label { display:block; margin-bottom:14rpx; color:#606266; font-size:25rpx; font-weight:600; }
+.division-tabs { width:100%; white-space:nowrap; }
+.division-tabs-inner { display:inline-flex; gap:12rpx; padding-bottom:8rpx; }
+.division-tab { padding:12rpx 28rpx; color:#606266; background:#f2f4f6; border-radius:30rpx; font-size:25rpx; }
+.division-tab.active { color:#fff; background:#1B5E20; font-weight:600; }
+
 /* 信息卡片 */
 .info-card {
   background: #fff;
@@ -52,6 +59,11 @@
 .type-tag.campus {
   background: rgba(63, 81, 181, 0.1);
   color: #3F51B5;
+}
+
+.type-tag.amateur {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4CAF50;
 }
 
 .card-body {
@@ -188,6 +200,15 @@
 }
 
 /* 竞赛规程 */
+.optional-tag {
+  margin-left: 12rpx;
+  padding: 2rpx 10rpx;
+  background: #EEF2F6;
+  color: #8A96A3;
+  font-size: 20rpx;
+  border-radius: 8rpx;
+}
+
 .required-tag {
   margin-left: 12rpx;
   padding: 2rpx 10rpx;
@@ -201,6 +222,13 @@
   background: #FAFAFA;
   border-radius: 12rpx;
   overflow: hidden;
+}
+
+.rules-missing {
+  padding: 28rpx 20rpx;
+  color: #999;
+  font-size: 26rpx;
+  background: #fff;
 }
 
 .rules-preview {

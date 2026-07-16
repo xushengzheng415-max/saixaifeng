@@ -17,15 +17,7 @@
       <view class="info-text" bindtap="goToInfo">
         <view class="nickname-row">
           <text class="nickname">{{userInfo.nickName || '微信用户'}}</text>
-          <text class="role-badge {{currentRole}}" wx:if="{{isOrganizer}}">主办方</text>
-          <text class="role-badge {{currentRole}}" wx:if="{{isCoach}}">教练</text>
-          <text class="role-badge {{currentRole}}" wx:if="{{isReferee}}">裁判</text>
-        </view>
-        <view class="account-info">
-          <text class="account-phone" wx:if="{{currentPhone}}">手机 {{currentPhone}}</text>
-        </view>
-        <view class="account-info" wx:if="{{userInfo.email}}">
-          <text class="account-email">邮箱 {{userInfo.email}}</text>
+          <text class="role-badge organizer">主办方</text>
         </view>
         <view class="team-info-line">
           <text class="team-name" wx:if="{{teamInfo}}">
@@ -192,16 +184,6 @@
           <text class="menu-text">编辑资料</text>
         </view>
         <text class="menu-arrow">></text>
-      </view>
-      <view class="menu-item" bindtap="showSetPasswordModal">
-        <view class="menu-left">
-          <text class="menu-icon icon-password"></text>
-          <text class="menu-text">登录密码</text>
-        </view>
-        <view class="menu-right">
-          <text class="menu-tag" wx:if="{{!hasPassword}}">未设置</text>
-          <text class="menu-arrow">></text>
-        </view>
       </view>
       <view class="menu-item" bindtap="goToPage" data-url="/pages/profile/settings/settings">
         <view class="menu-left">

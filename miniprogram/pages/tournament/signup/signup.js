@@ -4,6 +4,10 @@ Page({
 
   data: {
     tournamentId: '',
+    divisionOptions: [],
+    activeDivisionId: 'default',
+    activeDivisionName: '默认组',
+    fromShare: false,
     tournament: null,
     team: null,
     loading: true,
@@ -27,7 +31,7 @@ Page({
       }
     }
     if (tournamentId) {
-      this.setData({ tournamentId })
+      this.setData({ tournamentId, activeDivisionId: (options && options.divisionId) || 'default', fromShare: options && options.from === 'share' })
       this.loadData()
     }
   },
@@ -53,38 +57,26 @@ Page({
         return
       }
 
-      const tournament = this.formatTournament(tournamentRes.data)
+      const rawTournament = tournamentRes.data
+      const divisions = Array.isArray(rawTournament.divisions) && rawTournament.divisions.length
+        ? rawTournament.divisions
+        : [{ id: 'default', name: '默认组', maxTeams: rawTournament.maxTeams, maxPlayersPerTeam: rawTournament.maxPlayersPerTeam || rawTournament.maxPlayers }]
+      const preferred = this.data.activeDivisionId !== 'default' ? this.data.activeDivisionId : (rawTournament.defaultDivisionId || divisions[0].id)
+      const activeDivision = divisions.find(item => item.id === preferred) || divisions[0]
+      const allSignupsRes = await db.collection('tournament_teams').where({ tournamentId: this.data.tournamentId }).get()
+      const registeredTeams = (allSignupsRes.data || []).filter(item => (item.divisionId || 'default') === activeDivision.id && item.status !== 'cancelled' && item.status !== 'withdrawn').length
+      const tournament = this.formatTournament({
+        ...rawTournament,
+        maxTeams: Number(activeDivision.maxTeams || rawTournament.maxTeams || 0),
+        maxPlayers: Number(activeDivision.maxPlayersPerTeam || rawTournament.maxPlayersPerTeam || rawTournament.maxPlayers || 0),
+        registeredTeams
+      })
+      this.setData({ divisionOptions: divisions, activeDivisionId: activeDivision.id, activeDivisionName: activeDivision.name })
 
-      // 获取当前球队信息
-      const teamId = wx.getStorageSync('currentTeamId')
-      const teamInfo = wx.getStorageSync('teamInfo')
-      
-      if (!teamId && !teamInfo) {
-        wx.showModal({
-          title: '提示',
-          content: '请先创建或加入球队',
-          showCancel: false,
-          success: () => {
-            wx.switchTab({ url: '/pages/team/team' })
-          }
-        })
-        return
-      }
-
-      let team = null
-      if (teamId) {
-        // 从数据库获取球队信息
-        const teamRes = await db.collection('teams').doc(teamId).get()
-        team = teamRes.data
-      } else if (teamInfo) {
-        // 使用本地存储的球队信息
-        team = {
-          _id: teamInfo.teamId,
-          name: teamInfo.teamName,
-          logo: teamInfo.teamLogo,
-          city: teamInfo.city
-        }
-      }
+      // 分享进入时先按当前登录账号自动识别球队，避免本地缓存为空时误判
+      const team = await this.resolveSignupTeam(db)
+      if (!team) return
+      const teamId = team._id || team.teamId || ''
 
       // 预计算用于 WXML 显示的字段
       const teamName = team.name || team.teamName || '未知球队'
@@ -100,9 +92,10 @@ Page({
             tournamentId: this.data.tournamentId,
             teamId: teamId
           })
-          .count()
+          .get()
 
-        if (signupRes.total > 0) {
+        const alreadySigned = (signupRes.data || []).some(item => (item.divisionId || 'default') === this.data.activeDivisionId)
+        if (alreadySigned) {
           wx.showToast({
             title: '您的球队已报名',
             icon: 'none'
@@ -134,6 +127,188 @@ Page({
     }
   },
 
+  onDivisionTap(e) {
+    const id = e.currentTarget.dataset.id
+    if (!id || id === this.data.activeDivisionId) return
+    this.setData({ activeDivisionId: id, regulationsRead: false, disclaimerAgreed: false, loading: true })
+    this.loadData()
+  },
+
+  getLoginIdentifiers() {
+    const userInfo = wx.getStorageSync('userInfo') || {}
+    return {
+      phone: wx.getStorageSync('phoneNumber') || userInfo.phoneNumber || userInfo.phone || '',
+      openId: wx.getStorageSync('openId') || wx.getStorageSync('openid') || userInfo.openId || userInfo.wechatOpenId || '',
+      userId: wx.getStorageSync('userId') || userInfo._id || userInfo.userId || '',
+      role: wx.getStorageSync('currentRole') || userInfo.role || ''
+    }
+  },
+
+  normalizeTeam(team) {
+    if (!team) return null
+    return {
+      _id: team._id || team.teamId || '',
+      teamId: team.teamId || team._id || '',
+      name: team.name || team.teamName || '\u672a\u547d\u540d\u7403\u961f',
+      teamName: team.teamName || team.name || '\u672a\u547d\u540d\u7403\u961f',
+      logo: team.logo || team.logoUrl || team.teamLogo || '',
+      teamLogo: team.teamLogo || team.logo || team.logoUrl || '',
+      city: team.city || team.cityName || '',
+      teamCode: team.teamCode || team._id || team.teamId || '',
+      playerCount: team.playerCount || 0,
+      ownerPhone: team.ownerPhone || team.creatorPhone || team.phoneNumber || team.phone || team.contactPhone || team.mobile || '',
+      creatorPhone: team.creatorPhone || '',
+      phoneNumber: team.phoneNumber || team.phone || '',
+      phone: team.phone || team.phoneNumber || '',
+      contactPhone: team.contactPhone || '',
+      mobile: team.mobile || '',
+      creatorId: team.creatorId || '',
+      ownerId: team.ownerId || '',
+      userId: team.userId || '',
+      openId: team.openId || '',
+      wechatOpenId: team.wechatOpenId || '',
+      _openid: team._openid || ''
+    }
+  },
+
+  teamMatchesCurrentLogin(team, ids) {
+    if (!team || !ids) return false
+    const phone = ids.phone || ''
+    const userId = ids.userId || ''
+    const openId = ids.openId || ''
+    const phones = [
+      team.ownerPhone, team.creatorPhone, team.phoneNumber,
+      team.phone, team.contactPhone, team.mobile
+    ].filter(Boolean)
+    const userIds = [team.creatorId, team.ownerId, team.userId].filter(Boolean)
+    const openIds = [team.openId, team.wechatOpenId, team._openid].filter(Boolean)
+
+    if (phone && phones.indexOf(phone) >= 0) return true
+    if (userId && userIds.indexOf(userId) >= 0) return true
+    if (!phone && !userId && openId && openIds.indexOf(openId) >= 0) return true
+    return false
+  },
+
+  cacheCurrentTeam(team) {
+    const normalized = this.normalizeTeam(team)
+    if (!normalized) return null
+    wx.setStorageSync('teamInfo', normalized)
+    wx.setStorageSync('currentTeamId', normalized._id || normalized.teamId)
+    wx.setStorageSync('currentTeam', normalized)
+    const teams = wx.getStorageSync('myTeams') || []
+    if (!teams || teams.length === 0) {
+      wx.setStorageSync('myTeams', [normalized])
+      wx.setStorageSync('currentTeamIndex', 0)
+    }
+    return normalized
+  },
+
+  goLoginForSignup() {
+    const signupPath = '/pages/tournament/signup/signup?id=' + this.data.tournamentId + '&divisionId=' + encodeURIComponent(this.data.activeDivisionId) + '&from=share'
+    const redirect = encodeURIComponent(signupPath)
+    wx.setStorageSync('loginRedirectUrl', signupPath)
+    wx.redirectTo({ url: '/pages/login/login?redirect=' + redirect })
+  },
+
+  async resolveSignupTeam(db) {
+    const ids = this.getLoginIdentifiers()
+    if (!ids.phone && !ids.openId && !ids.userId) {
+      this.goLoginForSignup()
+      return null
+    }
+
+    const cachedTeamId = wx.getStorageSync('currentTeamId') || ''
+    const cachedTeamInfo = wx.getStorageSync('teamInfo') || null
+
+    if (cachedTeamId) {
+      try {
+        const teamRes = await db.collection('teams').doc(cachedTeamId).get()
+        if (teamRes.data && this.teamMatchesCurrentLogin(teamRes.data, ids)) {
+          return this.cacheCurrentTeam(teamRes.data)
+        }
+      } catch (e) {
+        if (cachedTeamInfo && this.teamMatchesCurrentLogin(cachedTeamInfo, ids)) {
+          return this.cacheCurrentTeam(cachedTeamInfo)
+        }
+      }
+    }
+
+    if (cachedTeamInfo && this.teamMatchesCurrentLogin(cachedTeamInfo, ids) && (cachedTeamInfo._id || cachedTeamInfo.teamId || cachedTeamInfo.teamName || cachedTeamInfo.name)) {
+      return this.cacheCurrentTeam(cachedTeamInfo)
+    }
+
+    try {
+      const teamRes = await wx.cloud.callFunction({
+        name: 'getMyTeams',
+        timeout: 15000,
+        data: {
+          phone: ids.phone,
+          userId: ids.userId,
+          openId: ids.openId,
+          role: ids.role || 'coach'
+        }
+      })
+      const result = teamRes.result || {}
+      if (result.success && Array.isArray(result.teams) && result.teams.length > 0) {
+        const teams = result.teams.map(t => this.normalizeTeam(t))
+        wx.setStorageSync('myTeams', teams)
+        wx.setStorageSync('currentTeamIndex', 0)
+        return this.cacheCurrentTeam(teams[0])
+      }
+    } catch (err) {
+      console.error('[signup] resolve team failed:', err)
+    }
+
+    try {
+      const phoneConditions = []
+      const idConditions = []
+      function make(field, value) {
+        if (!value) return null
+        const item = {}
+        item[field] = value
+        return item
+      }
+      ;['ownerPhone', 'creatorPhone', 'phoneNumber', 'phone', 'contactPhone', 'mobile'].forEach(field => {
+        const item = make(field, ids.phone)
+        if (item) phoneConditions.push(item)
+      })
+      ;['creatorId', 'ownerId', 'userId'].forEach(field => {
+        const item = make(field, ids.userId)
+        if (item) idConditions.push(item)
+      })
+      if (!ids.phone && !ids.userId) {
+        ;['openId', 'wechatOpenId', '_openid'].forEach(field => {
+          const item = make(field, ids.openId)
+          if (item) idConditions.push(item)
+        })
+      }
+
+      const groups = [phoneConditions, idConditions].filter(group => group.length > 0)
+      for (let i = 0; i < groups.length; i++) {
+        const conditions = groups[i]
+        const where = conditions.length === 1 ? conditions[0] : db.command.or(conditions)
+        const directRes = await db.collection('teams').where(where).limit(10).get()
+        if (directRes.data && directRes.data.length > 0) {
+          const teams = directRes.data.map(t => this.normalizeTeam(t))
+          wx.setStorageSync('myTeams', teams)
+          wx.setStorageSync('currentTeamIndex', 0)
+          return this.cacheCurrentTeam(teams[0])
+        }
+      }
+    } catch (err2) {
+      console.error('[signup] fallback team query failed:', err2)
+    }
+
+    wx.showModal({
+      title: '\u63d0\u793a',
+      content: '\u5f53\u524d\u8d26\u53f7\u672a\u5173\u8054\u7403\u961f\uff0c\u8bf7\u5148\u521b\u5efa\u6216\u52a0\u5165\u7403\u961f',
+      showCancel: false,
+      success: () => {
+        wx.switchTab({ url: '/pages/team/team' })
+      }
+    })
+    return null
+  },
   // 格式化赛事数据
   formatTournament(tournament) {
     let dateRange = ''
@@ -141,19 +316,41 @@ Page({
       const start = this.formatDate(tournament.startDate)
       if (tournament.endDate) {
         const end = this.formatDate(tournament.endDate)
-        dateRange = `${start} - ${end}`
+        dateRange = start + ' - ' + end
       } else {
         dateRange = start
       }
     }
 
+    const rawRules = tournament.rules
+    let rulesText = ''
+    if (typeof rawRules === 'string') {
+      const trimmed = rawRules.trim()
+      if (trimmed && trimmed !== '[object Object]') rulesText = trimmed
+    } else if (rawRules && typeof rawRules === 'object') {
+      const maybeText = rawRules.text || rawRules.content || rawRules.html || rawRules.description || ''
+      if (typeof maybeText === 'string' && maybeText.trim()) rulesText = maybeText.trim()
+    }
+
+    const rawFileId = tournament.regulationsFileId || tournament.regulationsFile || ''
+    const regulationsFileId = typeof rawFileId === 'string' ? rawFileId : ''
+    const hasRulesText = !!rulesText
+    const hasRegulationsFile = !!regulationsFileId
+    const hasRegulations = hasRulesText || hasRegulationsFile
+
     return {
       ...tournament,
-      dateRange
+      dateRange,
+      rulesText,
+      hasRulesText,
+      regulationsFileId,
+      hasRegulationsFile,
+      hasRegulations,
+      regulationsRequired: hasRegulations,
+      regulationsStatusText: hasRegulations ? '' : '\u672a\u4e0a\u4f20'
     }
   },
 
-  // 格式化日期
   formatDate(dateStr) {
     if (!dateStr) return ''
     const date = new Date(dateStr)
@@ -165,7 +362,7 @@ Page({
   // 更新提交按钮状态
   updateSubmitStatus() {
     const tournament = this.data.tournament
-    const needRegulations = tournament && (tournament.regulationsFileId || tournament.rules)
+    const needRegulations = tournament && tournament.hasRegulations
     const regulationsOk = needRegulations ? this.data.regulationsRead : true
     const disclaimerOk = this.data.disclaimerAgreed
     const canSubmit = regulationsOk && disclaimerOk
@@ -177,7 +374,7 @@ Page({
   toggleRegulationsRead() {
     const tournament = this.data.tournament
     // 如果没有规程文件也没有rules内容，不需要勾选
-    if (!tournament.regulationsFileId && !tournament.rules) {
+    if (!tournament.hasRegulations) {
       return
     }
     this.setData({
@@ -247,7 +444,7 @@ Page({
     const tournament = this.data.tournament
 
     // 检查竞赛规程阅读（如果有的话）
-    if ((tournament.regulationsFileId || tournament.rules) && !this.data.regulationsRead) {
+    if (tournament.hasRegulations && !this.data.regulationsRead) {
       wx.showToast({
         title: '请先阅读竞赛规程',
         icon: 'none'
@@ -264,11 +461,10 @@ Page({
       return
     }
 
-    // 检查权限（只有教练可以报名）
-    const role = wx.getStorageSync('currentRole')
-    if (role !== 'coach') {
+    // 邀请报名以球队绑定为准：当前账号能识别到球队即可提交报名
+    if (!this.data.team || !(this.data.team._id || this.data.team.teamId)) {
       wx.showToast({
-        title: '只有教练可以报名',
+        title: '未识别到球队',
         icon: 'none'
       })
       return
@@ -287,13 +483,15 @@ Page({
 
     try {
       const db = wx.cloud.database()
-      const teamId = wx.getStorageSync('currentTeamId')
       const team = this.data.team
+      const teamId = team._id || team.teamId || wx.getStorageSync('currentTeamId')
 
       // 创建报名记录
       await db.collection('tournament_teams').add({
         data: {
           tournamentId: this.data.tournamentId,
+          divisionId: this.data.activeDivisionId,
+          divisionName: this.data.activeDivisionName,
           teamId: teamId,
           teamName: team.name || team.teamName,
           teamLogo: team.logo || team.teamLogo || '',

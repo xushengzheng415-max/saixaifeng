@@ -14,7 +14,22 @@
           {{tournament.typeName}}
         </view>
       </view>
+      <view wx:if="{{divisionOptions.length > 1}}" class="division-section">
+        <text class="division-label">选择报名组别</text>
+        <scroll-view class="division-tabs" scroll-x enhanced show-scrollbar="false">
+          <view class="division-tabs-inner">
+            <view wx:for="{{divisionOptions}}" wx:key="id">
+              <view wx:if="{{activeDivisionId == item.id}}" class="division-tab active" data-id="{{item.id}}" bindtap="onDivisionTap">{{item.name}}</view>
+              <view wx:else class="division-tab" data-id="{{item.id}}" bindtap="onDivisionTap">{{item.name}}</view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
       <view class="card-body">
+        <view class="info-row">
+          <text class="info-label">报名组别</text>
+          <text class="info-value">{{activeDivisionName}}</text>
+        </view>
         <view class="info-row">
           <text class="info-label">比赛时间</text>
           <text class="info-value">{{tournament.dateRange || '待定'}}</text>
@@ -75,27 +90,31 @@
         </view>
         <view class="notice-item">
           <text class="notice-icon">✓</text>
-          <text class="notice-text">青少年赛事：由领队/教练提交参赛名单</text>
+          <text class="notice-text">校园足球模式：由领队/教练提交参赛名单</text>
         </view>
         <view class="notice-item">
           <text class="notice-icon">✓</text>
-          <text class="notice-text">请确认参赛球员年龄组符合赛事要求</text>
+          <text class="notice-text">业余足球模式：球员可自主报名参赛</text>
         </view>
       </view>
     </view>
 
     <!-- 竞赛规程 -->
-    <view class="section-card" wx:if="{{tournament.regulationsFileId || tournament.rules}}">
+    <view class="section-card">
       <view class="section-header">
         <view class="section-bar"></view>
         <text class="section-title">竞赛规程</text>
-        <text class="required-tag">必读</text>
+        <text class="required-tag" wx:if="{{tournament.hasRegulations}}">必读</text>
+        <text class="optional-tag" wx:else>{{tournament.regulationsStatusText || '未上传'}}</text>
       </view>
       <view class="rules-box">
-        <view class="rules-preview" wx:if="{{tournament.rules}}">
-          <text class="rules-text">{{tournament.rules}}</text>
+        <view class="rules-missing" wx:if="{{!tournament.hasRegulations}}">
+          <text>未上传</text>
         </view>
-        <view class="rules-file" wx:if="{{tournament.regulationsFileId}}" bindtap="viewRegulations">
+        <view class="rules-preview" wx:if="{{tournament.hasRulesText}}">
+          <text class="rules-text">{{tournament.rulesText}}</text>
+        </view>
+        <view class="rules-file" wx:if="{{tournament.hasRegulationsFile}}" bindtap="viewRegulations">
           <view class="file-icon-box">
             <text class="file-icon">&#128196;</text>
           </view>
@@ -105,7 +124,7 @@
           </view>
           <text class="file-arrow">&#62;</text>
         </view>
-        <view class="agree-row" bindtap="toggleRegulationsRead">
+        <view class="agree-row" wx:if="{{tournament.hasRegulations}}" bindtap="toggleRegulationsRead">
           <view class="checkbox ">
             <text wx:if="{{regulationsRead}}">&#10003;</text>
           </view>

@@ -123,6 +123,9 @@
     >
       保存
     </button>
+    <button class="share-team-btn" open-type="share">
+      分享给好友创建球队
+    </button>
     <text class="skip-text" bindtap="skip">跳过，稍后完善</text>
   </view>
 

@@ -1,4 +1,9 @@
 <view class="page">
+  <view class="invite-card" wx:if="{{inviteMode && teamName}}">
+    <text class="invite-title">{{teamName}}邀请你填写球员资料</text>
+    <text class="invite-desc">提交后资料会自动归入该球队，方便球队负责人统一管理报名与阵容。</text>
+  </view>
+
   <view class="form-card">
     <view class="form-item">
       <text class="label">球员姓名</text>
@@ -14,7 +19,8 @@
       <text class="label">性别</text>
       <picker class="picker" range="{{genderOptions}}" range-key="label" bindchange="onGenderChange" value="{{genderIndex}}">
         <view class="picker-display">
-          <text class="picker-text {{genderPickerClass}}">{{genderPickerText}}</text>
+          <text wx:if="{{genderLabel}}" class="picker-text">{{genderLabel}}</text>
+          <text wx:else class="picker-text placeholder">请选择性别</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -24,7 +30,8 @@
       <text class="label">出生日期</text>
       <picker class="picker" mode="date" bindchange="onBirthDateChange" value="{{form.birthDate}}">
         <view class="picker-display">
-          <text class="picker-text {{birthDatePickerClass}}">{{birthDatePickerText}}</text>
+          <text wx:if="{{form.birthDate}}" class="picker-text">{{form.birthDate}}</text>
+          <text wx:else class="picker-text placeholder">请选择出生日期</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -49,7 +56,8 @@
       <text class="label">场上位置</text>
       <picker class="picker" range="{{positionOptions}}" range-key="label" bindchange="onPositionChange" value="{{positionIndex}}">
         <view class="picker-display">
-          <text class="picker-text {{positionPickerClass}}">{{positionPickerText}}</text>
+          <text wx:if="{{positionLabel}}" class="picker-text">{{positionLabel}}</text>
+          <text wx:else class="picker-text placeholder">请选择位置</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -57,14 +65,15 @@
 
     <view class="form-item">
       <text class="label">球衣姓名</text>
-      <view class="readonly-value">{{jerseyNameText}}</view>
+      <view class="readonly-value">{{form.jerseyName || '自动生成'}}</view>
     </view>
 
     <view class="form-item">
       <text class="label">衣服尺码</text>
       <picker class="picker" range="{{clothingSizeOptions}}" range-key="label" bindchange="onClothingSizeChange" value="{{clothingSizeIndex}}">
         <view class="picker-display">
-          <text class="picker-text {{clothingSizePickerClass}}">{{clothingSizePickerText}}</text>
+          <text wx:if="{{clothingSizeLabel}}" class="picker-text">{{clothingSizeLabel}}</text>
+          <text wx:else class="picker-text placeholder">请选择衣服尺码</text>
           <text class="picker-arrow">></text>
         </view>
       </picker>
@@ -108,9 +117,16 @@
     <text class="photo-hint">支持 JPG、PNG，建议上传正面半身照，背景越干净越好</text>
   </view>
 
+  <view class="share-card" wx:if="{{teamId || teamCode}}">
+    <button class="share-player-btn" open-type="share">分享给其他球员填写资料</button>
+  </view>
+
   <view class="action-bar">
     <button class="btn btn-secondary" bindtap="onCancel">取消</button>
-    <button class="btn btn-primary" bindtap="onSubmit" disabled="{{isSubmitting}}">{{submitButtonText}}</button>
+    <button class="btn btn-primary" bindtap="onSubmit" disabled="{{isSubmitting}}">
+      <text wx:if="{{isSubmitting}}">保存中...</text>
+      <text wx:else>保存球员</text>
+    </button>
   </view>
 
   <view wx:if="{{cropper.visible}}" class="cropper-mask" catchtouchmove="noop">

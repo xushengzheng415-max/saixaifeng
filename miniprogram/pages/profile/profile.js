@@ -12,18 +12,12 @@ Page({
       pending: 0,      // 涓诲姙鏂瑰彂缁欐垜鐨勫緟澶勭悊浠诲姟
       reviewing: 0,    // 鎴戞彁浜ょ殑绛夊緟瀹℃牳
       done: 0,         // 宸插畬鎴?      total: 0
-    },
-    // 璁剧疆瀵嗙爜寮圭獥
-    setPasswordVisible: false,
-    newPassword: '',
-    confirmPassword: '',
-    hasPassword: false
+    }
   },
   onLoad: function() {
     this.loadUserInfo()
     this.loadTeamInfo()
     this.loadTeamsCount()
-    this.checkPasswordStatus()
     this.loadTodoStats()
   },
 
@@ -35,7 +29,6 @@ Page({
     this.loadUserInfo()
     this.loadTeamInfo()
     this.loadTeamsCount()
-    this.checkPasswordStatus()
     this.loadTodoStats()
   },
 
@@ -45,17 +38,18 @@ Page({
     if (userInfo) {
       this.setData({ userInfo: userInfo })
     }
-    // 鏄剧ず褰撳墠鐧诲綍鐨勬墜鏈哄彿鍜岃鑹诧紙璋冭瘯鐢級
-    var phone = wx.getStorageSync('phoneNumber') || '鏈櫥褰?'
-    var role = wx.getStorageSync('currentRole') || '鏈煡'
-    console.log('[profile] 褰撳墠璐﹀彿:', phone, '瑙掕壊:', role, '瀹屾暣userInfo:', userInfo)
+    var role = 'organizer'
+    wx.setStorageSync('currentRole', role)
+    wx.removeStorageSync('phoneNumber')
+    wx.removeStorageSync('phone')
+    wx.removeStorageSync('email')
     this.setData({
-      'currentPhone': phone,
       'currentRole': role,
       // 鈽?WXML 琛ㄨ揪寮忛搧寰嬶細涓嶈兘鍐?currentRole === 'xxx'锛屾敼涓洪璁＄畻甯冨皵鍊?
-      isOrganizer: role === 'organizer',
-      isCoach: role === 'coach',
-      isReferee: role === 'referee'
+      isOrganizer: true,
+      isCoach: false,
+      isReferee: false,
+      isPlayer: false
     })
   },
 
@@ -345,12 +339,6 @@ Page({
     // TODO: 姝ｅ紡鐗堣烦杞?    // wx.navigateTo({ url: '/pages/todo/todo-list?type=' + type })
   },
 
-  // ===== 妫€鏌ユ槸鍚﹀凡璁剧疆瀵嗙爜 =====
-  checkPasswordStatus: function() {
-    var hasPassword = wx.getStorageSync('hasPassword') === 'true'
-    this.setData({ hasPassword: hasPassword })
-  },
-
   // ===== 椤甸潰璺宠浆 =====
   goToPage: function(e) {
     var url = e.currentTarget.dataset.url
@@ -371,130 +359,14 @@ Page({
     wx.navigateTo({ url: '/pages/identity/identity' })
   },
 
-  // 切换身份：弹出身份选择器，切换后重加载到首页
+  // 当前仅保留主办方身份，不提供身份切换。
   onSwitchRole: function() {
-    var that = this
-    var currentRole = wx.getStorageSync('currentRole') || 'coach'
-    var roleNames = {
-      organizer: '赛事主办方',
-      coach: '球队教练',
-      referee: '裁判'
-    }
-    var itemList = []
-    var roleKeys = []
-
-    // 过滤掉当前身份，显示其他可选身份
-    var allRoles = [
-      { key: 'organizer', name: '赛事主办方' },
-      { key: 'coach', name: '球队教练' },
-      { key: 'referee', name: '裁判' }
-    ]
-
-    allRoles.forEach(function(r) {
-      if (r.key !== currentRole) {
-        itemList.push(r.name)
-        roleKeys.push(r.key)
-      }
-    })
-
-    if (itemList.length === 0) {
-      wx.showToast({ title: '暂无其他身份可切换', icon: 'none' })
-      return
-    }
-
-    wx.showActionSheet({
-      itemList: itemList,
-      success: function(res) {
-        var newRole = roleKeys[res.tapIndex]
-        if (newRole) {
-          // 更新身份并清除相关缓存
-          wx.setStorageSync('currentRole', newRole)
-          // 清除球队相关缓存，让新身份重新加载
-          wx.removeStorageSync('teamInfo')
-          wx.removeStorageSync('myTeams')
-          // 重新启动到首页
-          wx.reLaunch({ url: '/pages/home/home' })
-        }
-      }
-    })
+    wx.showToast({ title: '当前仅保留主办方身份', icon: 'none' })
   },
 
   // ===== 鍒囨崲/鍔犲叆鐞冮槦 =====
   onSwitchTeam: function() {
     wx.navigateTo({ url: '/pages/team/list/list' })
-  },
-
-  // ===== 璁剧疆瀵嗙爜寮圭獥 =====
-  showSetPasswordModal: function() {
-    this.setData({
-      setPasswordVisible: true,
-      newPassword: '',
-      confirmPassword: ''
-    })
-  },
-
-  hideSetPasswordModal: function() {
-    this.setData({ setPasswordVisible: false })
-  },
-
-  preventBubble: function() {},
-
-  onPasswordInput: function(e) {
-    var field = e.currentTarget.dataset.field
-    var value = e.detail.value
-    var obj = {}
-    obj[field] = value
-    this.setData(obj)
-  },
-
-  confirmSetPassword: function() {
-    var newPassword = this.data.newPassword
-    var confirmPassword = this.data.confirmPassword
-
-    if (!newPassword || newPassword.length < 8) {
-      wx.showToast({ title: '密码至少8位', icon: 'none' })
-      return
-    }
-
-    var hasUpper = /[A-Z]/.test(newPassword)
-    var hasLower = /[a-z]/.test(newPassword)
-    var hasDigit = /\d/.test(newPassword)
-
-    if (!hasUpper || !hasLower || !hasDigit) {
-      wx.showToast({ title: '需包含大写+小写+数字', icon: 'none' })
-      return
-    }
-
-    if (newPassword !== confirmPassword) {
-      wx.showToast({ title: '两次密码不一致', icon: 'none' })
-      return
-    }
-
-    wx.showLoading({ title: '设置中...' })
-    var that = this
-
-    wx.cloud.callFunction({
-      name: 'emailLogin',
-      data: {
-        action: 'setPassword',
-        password: newPassword
-      },
-      success: function(res) {
-        wx.hideLoading()
-        if (res.result && res.result.success) {
-          wx.showToast({ title: '密码设置成功', icon: 'success' })
-          wx.setStorageSync('hasPassword', 'true')
-          that.setData({ setPasswordVisible: false, hasPassword: true })
-        } else {
-          wx.showToast({ title: (res.result && res.result.error) || '设置失败', icon: 'none' })
-        }
-      },
-      fail: function(err) {
-        wx.hideLoading()
-        console.error('璁剧疆瀵嗙爜澶辫触:', err)
-        wx.showToast({ title: '设置失败', icon: 'none' })
-      }
-    })
   },
 
   // ===== 閫€鍑虹櫥褰?=====
@@ -507,6 +379,7 @@ Page({
       success: function(res) {
         if (res.confirm) {
           wx.clearStorageSync()
+          wx.setStorageSync('authSessionVersion', 'wechat-only-v1')
           // 鈽?璁剧疆"涓诲姩閫€鍑?鏍囧織锛岄槻姝?login.js 鑷姩鐧诲綍
           wx.setStorageSync('userLoggedOut', 'true')
           wx.reLaunch({ url: '/pages/login/login' })
@@ -515,9 +388,6 @@ Page({
     })
   }
 })
-
-
-
 
 
 

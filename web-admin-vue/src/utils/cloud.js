@@ -93,6 +93,12 @@ export async function logout() {
   localStorage.removeItem('needSetPassword')
   localStorage.removeItem('needBindEmail')
   localStorage.removeItem('needSelectRole')
+  localStorage.removeItem('wechatTemp')
+  localStorage.removeItem('phone')
+  localStorage.removeItem('phoneNumber')
+  localStorage.removeItem('openid')
+  localStorage.removeItem('unionid')
+  localStorage.removeItem('authSessionVersion')
 }
 
 export async function checkAuth() {

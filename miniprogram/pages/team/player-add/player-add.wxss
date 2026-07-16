@@ -330,3 +330,44 @@
   opacity: 0;
   pointer-events: none;
 }
+
+.invite-card,
+.share-card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  box-shadow: 0 6rpx 24rpx rgba(46, 125, 50, 0.08);
+  margin-bottom: 20rpx;
+  padding: 28rpx;
+}
+
+.invite-title {
+  display: block;
+  color: #1B5E20;
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.invite-desc {
+  display: block;
+  margin-top: 12rpx;
+  color: #6e7d70;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.share-player-btn {
+  width: 100%;
+  height: 84rpx;
+  line-height: 84rpx;
+  border-radius: 42rpx;
+  color: #1B5E20;
+  background: #F7FBF6;
+  border: 2rpx solid #B7D7B9;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.share-player-btn::after {
+  border: none;
+}

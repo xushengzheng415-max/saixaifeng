@@ -1,10 +1,10 @@
-﻿# Repository Policy
+# Repository Policy
 
 ## 唯一正式代码库
 
 本项目唯一正式本地代码库是：
 
-`C:\Users\Frank\Documents\赛小蜂`
+`E:\Documents\sxf-football`
 
 所有代码修改、备份、提交、推送、构建和部署都必须以该目录为准。
 
@@ -18,7 +18,7 @@
 
 源码目录：
 
-`C:\Users\Frank\Documents\赛小蜂\web-admin-vue`
+`E:\Documents\sxf-football\web-admin-vue`
 
 构建并部署：
 

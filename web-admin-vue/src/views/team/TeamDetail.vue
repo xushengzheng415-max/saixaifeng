@@ -44,7 +44,10 @@
         <h2>球员阵容</h2>
         <div style="display: flex; gap: 8px;">
           <el-button type="success" size="small" @click="showBatchImport = true">
-            <el-icon><Download /></el-icon>批量导入
+            <el-icon><Download /></el-icon>批量导入名单
+          </el-button>
+          <el-button type="warning" size="small" @click="showBatchAvatarImport = true">
+            <el-icon><Upload /></el-icon>批量导入头像
           </el-button>
           <el-button type="primary" size="small" @click="showAddPlayer = true">
             <el-icon><Plus /></el-icon>添加球员
@@ -791,6 +794,126 @@
       </template>
     </el-dialog>
 
+    <!-- 批量导入头像对话框 -->
+    <el-dialog
+      v-model="showBatchAvatarImport"
+      title="批量导入头像"
+      width="980px"
+      class="batch-avatar-dialog"
+      top="5vh"
+      :close-on-click-modal="false"
+      :before-close="closeBatchAvatarImport"
+    >
+      <div class="avatar-import-guide">
+        <strong>使用方法：</strong>
+        将照片按球员姓名命名后打包为 ZIP，例如“张三.jpg、李四.png”。系统只按完整姓名匹配；遇到同名球员或同名照片会提示人工选择。
+      </div>
+
+      <div v-if="avatarImportRows.length === 0" class="import-upload-area">
+        <el-upload
+          accept=".zip,application/zip"
+          :auto-upload="false"
+          :show-file-list="false"
+          :on-change="handleAvatarZipChange"
+          drag
+        >
+          <el-icon class="el-icon--upload" :size="48"><UploadFilled /></el-icon>
+          <div class="el-upload__text">将头像 ZIP 压缩包拖到此处，或 <em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持 JPG、PNG、WEBP；单张照片不超过 10MB</div>
+          </template>
+        </el-upload>
+      </div>
+
+      <div v-else class="avatar-import-preview">
+        <div class="avatar-import-summary">
+          <div>
+            <strong>{{ avatarZipName }}</strong>
+            <el-tag type="success" size="small">自动匹配 {{ avatarAutoMatchedCount }}</el-tag>
+            <el-tag v-if="avatarConflictCount" type="warning" size="small">需人工处理 {{ avatarConflictCount }}</el-tag>
+            <el-tag v-if="avatarImportedCount" type="success" size="small">已完成 {{ avatarImportedCount }}</el-tag>
+          </div>
+          <div>
+            <el-button size="small" :disabled="avatarBatchProcessing" @click="clearAvatarImport">重新选择</el-button>
+            <el-button type="primary" size="small" :loading="avatarBatchProcessing" @click="confirmBatchAvatarImport">
+              开始处理 ({{ avatarReadyCount }})
+            </el-button>
+          </div>
+        </div>
+
+        <el-alert
+          v-if="avatarConflictCount"
+          type="warning"
+          :closable="false"
+          title="发现同名球员、同名照片或未匹配照片，请在“匹配球员”列人工选择；不需要的照片可忽略。"
+          style="margin-bottom: 10px;"
+        />
+
+        <el-table :data="avatarImportRows" max-height="58vh" size="small" border>
+          <el-table-column type="index" label="#" width="45" />
+          <el-table-column label="照片" width="76" align="center">
+            <template #default="{ row }">
+              <img :src="row.previewUrl" class="import-photo-preview" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="fileName" label="文件名" min-width="155" show-overflow-tooltip />
+          <el-table-column prop="photoName" label="识别姓名" width="100" />
+          <el-table-column label="匹配球员" min-width="235">
+            <template #default="{ row }">
+              <el-select
+                v-if="row.needsManual"
+                v-model="row.selectedPlayerId"
+                filterable
+                clearable
+                placeholder="请选择球员"
+                size="small"
+                style="width: 100%;"
+                :disabled="avatarBatchProcessing || row.ignored || row.status === 'success'"
+              >
+                <el-option
+                  v-for="player in players"
+                  :key="player._id"
+                  :label="`${player.name}（${player.playerId || player.jerseyNumber || '无编号'}）`"
+                  :value="player._id"
+                />
+              </el-select>
+              <span v-else>{{ getAvatarTargetLabel(row) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="120" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.ignored" type="info" size="small">已忽略</el-tag>
+              <el-tag v-else-if="row.status === 'success'" type="success" size="small">上传成功</el-tag>
+              <el-tag v-else-if="row.status === 'auditing'" type="warning" size="small">检查人像</el-tag>
+              <el-tag v-else-if="row.status === 'processing'" type="warning" size="small">抠图压缩</el-tag>
+              <el-tag v-else-if="row.status === 'uploading'" type="warning" size="small">上传 {{ row.progress || 0 }}%</el-tag>
+              <el-tooltip v-else-if="row.status === 'failed'" :content="row.error" placement="top">
+                <el-tag type="danger" size="small">处理失败</el-tag>
+              </el-tooltip>
+              <el-tag v-else-if="row.needsManual && !row.selectedPlayerId" type="warning" size="small">待人工匹配</el-tag>
+              <el-tag v-else type="success" size="small">待处理</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="75" align="center">
+            <template #default="{ row }">
+              <el-button
+                link
+                :type="row.ignored ? 'primary' : 'danger'"
+                :disabled="avatarBatchProcessing || row.status === 'success'"
+                @click="row.ignored = !row.ignored"
+              >
+                {{ row.ignored ? '恢复' : '忽略' }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <template #footer>
+        <el-button :disabled="avatarBatchProcessing" @click="closeBatchAvatarImport">关闭</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 编辑球队对话框 -->
     <el-dialog
       v-model="showEditTeam"
@@ -891,6 +1014,7 @@ import ImageCropper from '../../components/common/ImageCropper.vue'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
 import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
+import JSZip from 'jszip'
 
 const route = useRoute()
 const router = useRouter()
@@ -923,6 +1047,7 @@ const team = ref({})
 const players = ref([])
 const showAddPlayer = ref(false)
 const showBatchImport = ref(false)
+const showBatchAvatarImport = ref(false)
 const isEditingPlayer = ref(false)
 const editingPlayerId = ref('')
 
@@ -945,6 +1070,15 @@ const importErrors = ref([])
 const batchImporting = ref(false)
 const colDetectInfo = ref({})
 const importUploadRef = ref(null)
+
+// 批量头像导入相关
+const avatarImportRows = ref([])
+const avatarZipName = ref('')
+const avatarBatchProcessing = ref(false)
+const avatarAutoMatchedCount = computed(() => avatarImportRows.value.filter(row => !row.needsManual && row.selectedPlayerId).length)
+const avatarConflictCount = computed(() => avatarImportRows.value.filter(row => !row.ignored && row.needsManual && !row.selectedPlayerId).length)
+const avatarImportedCount = computed(() => avatarImportRows.value.filter(row => row.status === 'success').length)
+const avatarReadyCount = computed(() => avatarImportRows.value.filter(row => !row.ignored && row.status !== 'success' && row.selectedPlayerId).length)
 
 // 编辑球队相关
 const showEditTeam = ref(false)
@@ -1207,9 +1341,9 @@ async function handleAvatarCropSuccess(base64Image) {
     const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'image/png' })
     const file = new File([blob], `avatar-${Date.now()}.png`, { type: 'image/png' })
 
-    // ★ 分片上传（100KB/片，兼顾速度与稳定性）
+    // ★ 网页登录接口请求体限制较小，统一使用 32KB 小分片避免 HTTP 413
     const cloudPath = `player-photos/${teamId}/${Date.now()}-avatar.png`
-    const result = await uploadLargeFileViaCloud(cloudPath, file, { chunkSize: 100 * 1024 })
+    const result = await uploadLargeFileViaCloud(cloudPath, file, { chunkSize: 32 * 1024 })
 
     if (result.success) {
       playerForm.value.photoUrl = result.tempUrl || ''
@@ -2105,6 +2239,333 @@ function clearImportData() {
   colDetectInfo.value = {}
 }
 
+// ========== 批量导入头像（ZIP，按完整姓名匹配）==========
+
+const AVATAR_IMAGE_EXT_RE = /\.(jpe?g|png|webp)$/i
+const AVATAR_ZIP_MAX_SIZE = 200 * 1024 * 1024
+const AVATAR_SINGLE_MAX_SIZE = 10 * 1024 * 1024
+
+function getAvatarPhotoName(path) {
+  const fileName = String(path || '').split('/').pop() || ''
+  return fileName.replace(AVATAR_IMAGE_EXT_RE, '').trim()
+}
+
+function getAvatarMimeType(fileName) {
+  const lower = String(fileName || '').toLowerCase()
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  return 'image/jpeg'
+}
+
+function getAvatarTargetLabel(row) {
+  const player = players.value.find(item => item._id === row.selectedPlayerId)
+  if (!player) return '-'
+  return `${player.name}（${player.playerId || player.jerseyNumber || '无编号'}）`
+}
+
+function revokeAvatarPreviewUrls() {
+  avatarImportRows.value.forEach(row => {
+    if (row.previewUrl) URL.revokeObjectURL(row.previewUrl)
+  })
+}
+
+function clearAvatarImport() {
+  revokeAvatarPreviewUrls()
+  avatarImportRows.value = []
+  avatarZipName.value = ''
+}
+
+function closeBatchAvatarImport(done) {
+  if (avatarBatchProcessing.value) {
+    ElMessage.warning('头像正在处理中，请稍候')
+    return
+  }
+  clearAvatarImport()
+  if (typeof done === 'function') done()
+  else showBatchAvatarImport.value = false
+}
+
+async function handleAvatarZipChange(uploadFile) {
+  const file = uploadFile?.raw || uploadFile
+  if (!file) return
+
+  if (!String(file.name || '').toLowerCase().endsWith('.zip')) {
+    ElMessage.error('请选择 ZIP 压缩包')
+    return
+  }
+  if (file.size > AVATAR_ZIP_MAX_SIZE) {
+    ElMessage.error('ZIP 压缩包不能超过 200MB')
+    return
+  }
+  if (!players.value.length) {
+    ElMessage.warning('当前球队还没有球员，请先批量导入名单')
+    return
+  }
+
+  let loadingMessage = null
+  try {
+    loadingMessage = ElMessage({ message: '正在解压并匹配头像...', type: 'info', duration: 0 })
+    const zip = await JSZip.loadAsync(file)
+    const imageEntries = Object.values(zip.files).filter(entry => {
+      if (entry.dir || !AVATAR_IMAGE_EXT_RE.test(entry.name)) return false
+      const normalizedPath = entry.name.replace(/\\/g, '/')
+      return !normalizedPath.includes('__MACOSX/') && !normalizedPath.split('/').pop().startsWith('.')
+    })
+
+    if (!imageEntries.length) {
+      loadingMessage.close()
+      ElMessage.error('ZIP 中没有找到 JPG、PNG 或 WEBP 照片')
+      return
+    }
+
+    const photoNameCounts = new Map()
+    imageEntries.forEach(entry => {
+      const name = getAvatarPhotoName(entry.name)
+      photoNameCounts.set(name, (photoNameCounts.get(name) || 0) + 1)
+    })
+
+    const rows = []
+    for (const entry of imageEntries) {
+      const fileName = entry.name.split('/').pop()
+      const photoName = getAvatarPhotoName(entry.name)
+      const blob = await entry.async('blob')
+      const candidates = players.value.filter(player => String(player.name || '').trim() === photoName)
+      const duplicatePhotos = (photoNameCounts.get(photoName) || 0) > 1
+      const autoMatched = candidates.length === 1 && !duplicatePhotos
+      let issue = ''
+      if (duplicatePhotos) issue = `ZIP 中存在 ${photoNameCounts.get(photoName)} 张“${photoName}”照片`
+      else if (candidates.length > 1) issue = `球队中存在 ${candidates.length} 名“${photoName}”球员`
+      else if (candidates.length === 0) issue = `没有找到姓名为“${photoName}”的球员`
+
+      rows.push({
+        fileName,
+        photoName,
+        blob,
+        previewUrl: URL.createObjectURL(blob),
+        selectedPlayerId: autoMatched ? candidates[0]._id : '',
+        needsManual: !autoMatched,
+        issue,
+        ignored: false,
+        status: 'pending',
+        progress: 0,
+        error: ''
+      })
+    }
+
+    clearAvatarImport()
+    avatarZipName.value = file.name
+    avatarImportRows.value = rows
+    loadingMessage.close()
+
+    const abnormalRows = rows.filter(row => row.needsManual)
+    if (abnormalRows.length) {
+      await ElMessageBox.alert(
+        `共读取 ${rows.length} 张照片，其中 ${abnormalRows.length} 张存在重名、重复或未匹配情况。请在列表中人工选择对应球员，或忽略不需要的照片。`,
+        '发现头像匹配异常',
+        { confirmButtonText: '去处理', type: 'warning' }
+      )
+    } else {
+      ElMessage.success(`已读取并匹配 ${rows.length} 张头像`)
+    }
+  } catch (err) {
+    loadingMessage?.close()
+    console.error('头像 ZIP 解析失败:', err)
+    ElMessage.error('ZIP 解析失败：' + (err.message || '文件格式错误'))
+  }
+}
+
+function validateAvatarImage(row) {
+  return new Promise((resolve, reject) => {
+    if (!row.blob || row.blob.size === 0) {
+      reject(new Error('照片文件为空'))
+      return
+    }
+    if (row.blob.size > AVATAR_SINGLE_MAX_SIZE) {
+      reject(new Error('单张照片不能超过 10MB'))
+      return
+    }
+
+    const image = new Image()
+    const url = URL.createObjectURL(row.blob)
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      if (image.width < 160 || image.height < 160) {
+        reject(new Error('照片分辨率过低，宽高至少 160px'))
+        return
+      }
+      resolve(true)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('照片已损坏或格式不支持'))
+    }
+    image.src = url
+  })
+}
+
+function dataUrlToFile(dataUrl, fileName) {
+  const parts = String(dataUrl || '').split(',')
+  if (parts.length !== 2) throw new Error('处理后的头像数据无效')
+  const mimeMatch = parts[0].match(/:(.*?);/)
+  const mime = mimeMatch ? mimeMatch[1] : 'image/png'
+  const binary = atob(parts[1])
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new File([bytes], fileName, { type: mime })
+}
+
+function compressAvatarForAudit(file, maxWidth = 250, quality = 0.5) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    const url = URL.createObjectURL(file)
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      const ratio = Math.min(1, maxWidth / image.width)
+      const width = Math.max(1, Math.round(image.width * ratio))
+      const height = Math.max(1, Math.round(image.height * ratio))
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(image, 0, 0, width, height)
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('照片预压缩失败')),
+        'image/jpeg',
+        quality
+      )
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('照片加载失败'))
+    }
+    image.src = url
+  })
+}
+
+function blobToRawBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '')
+    reader.onerror = () => reject(new Error('照片读取失败'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function auditAndRemoveAvatarBackground(sourceFile) {
+  const auditFile = sourceFile.size > 50 * 1024
+    ? await compressAvatarForAudit(sourceFile)
+    : sourceFile
+  const imageBase64 = await blobToRawBase64(auditFile)
+  const result = await callFunction('baiduRemoveBg', {
+    action: 'removeBackground',
+    imageBase64
+  })
+  if (!result.success || !result.data) {
+    throw new Error(result.message || '未检测到有效人像')
+  }
+  if (Number(result.personNum || 0) !== 1) {
+    throw new Error(`照片检测到 ${result.personNum || 0} 个人像，请使用单人照片`)
+  }
+  return `data:image/png;base64,${result.data}`
+}
+
+async function processAvatarImportRow(row) {
+  const targetPlayer = players.value.find(player => player._id === row.selectedPlayerId)
+  if (!targetPlayer) throw new Error('未选择对应球员')
+
+  row.status = 'auditing'
+  row.error = ''
+  row.progress = 0
+  await validateAvatarImage(row)
+
+  const sourceFile = new File([row.blob], row.fileName, { type: getAvatarMimeType(row.fileName) })
+  const processedAvatar = await auditAndRemoveAvatarBackground(sourceFile)
+
+  row.status = 'processing'
+  const compressedDataUrl = await compressBase64(processedAvatar, 300)
+  const processedFile = dataUrlToFile(compressedDataUrl, `${row.photoName || 'avatar'}-${Date.now()}.png`)
+
+  row.status = 'uploading'
+  const safeName = String(targetPlayer.playerId || targetPlayer._id || row.photoName).replace(/[^a-zA-Z0-9_-]/g, '') || 'avatar'
+  const cloudPath = `player-photos/${teamId}/batch-${Date.now()}-${safeName}.png`
+  const uploadResult = await uploadLargeFileViaCloud(cloudPath, processedFile, {
+    chunkSize: 32 * 1024,
+    onProgress: (received, total) => {
+      row.progress = Math.round((received / total) * 100)
+    }
+  })
+  if (!uploadResult.success || !uploadResult.fileId) {
+    throw new Error(uploadResult.message || '头像上传失败')
+  }
+
+  await updateRecord('players', targetPlayer._id, {
+    photoUrl: uploadResult.fileId,
+    photoFileID: uploadResult.fileId,
+    updateTime: new Date().toISOString()
+  })
+  row.status = 'success'
+  row.progress = 100
+}
+
+async function confirmBatchAvatarImport() {
+  const unresolved = avatarImportRows.value.filter(row => !row.ignored && row.status !== 'success' && !row.selectedPlayerId)
+  if (unresolved.length) {
+    ElMessage.warning(`还有 ${unresolved.length} 张照片需要人工选择对应球员或设为忽略`)
+    return
+  }
+
+  const activeRows = avatarImportRows.value.filter(row => !row.ignored && row.status !== 'success' && row.selectedPlayerId)
+  if (!activeRows.length) {
+    ElMessage.warning('没有待处理的头像')
+    return
+  }
+
+  const targetCounts = new Map()
+  activeRows.forEach(row => targetCounts.set(row.selectedPlayerId, (targetCounts.get(row.selectedPlayerId) || 0) + 1))
+  const duplicatedTargets = Array.from(targetCounts.entries()).filter(([, count]) => count > 1)
+  if (duplicatedTargets.length) {
+    const names = duplicatedTargets.map(([id]) => players.value.find(player => player._id === id)?.name || '未知球员')
+    ElMessageBox.alert(
+      `以下球员被分配了多张头像：${names.join('、')}。请每人只保留一张，其余照片设为忽略或重新选择。`,
+      '头像分配重复',
+      { confirmButtonText: '去处理', type: 'warning' }
+    )
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定处理并上传 ${activeRows.length} 张球员头像吗？系统将更新对应球员的现有头像。`,
+      '批量头像确认',
+      { confirmButtonText: '开始处理', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch {
+    return
+  }
+
+  avatarBatchProcessing.value = true
+  let successCount = 0
+  let failedCount = 0
+  for (const row of activeRows) {
+    try {
+      await processAvatarImportRow(row)
+      successCount++
+    } catch (err) {
+      console.error(`头像“${row.fileName}”处理失败:`, err)
+      row.status = 'failed'
+      row.error = err.message || '处理失败'
+      failedCount++
+    }
+  }
+  avatarBatchProcessing.value = false
+  await loadPlayers()
+
+  if (failedCount) {
+    ElMessage.warning(`头像处理完成：成功 ${successCount} 张，失败 ${failedCount} 张；失败项可直接重试`)
+  } else {
+    ElMessage.success(`头像批量导入完成，共成功 ${successCount} 张`)
+  }
+}
+
 // 确认批量导入
 async function confirmBatchImport() {
   const validData = importParsedData.value.filter(p => !p._error)
@@ -2698,5 +3159,51 @@ function compressBase64(dataUrl, maxSize = 300) {
 
 .import-preview {
   min-width: 0;
+}
+
+.avatar-import-guide {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  color: #606266;
+  line-height: 1.7;
+  background: #f0f9eb;
+  border: 1px solid #c2e7b0;
+  border-radius: 6px;
+}
+
+.avatar-import-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.avatar-import-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.avatar-import-summary strong {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-photo-preview {
+  width: 42px;
+  height: 54px;
+  display: block;
+  margin: 0 auto;
+  object-fit: contain;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+}
+
+.batch-avatar-dialog :deep(.el-dialog__body) {
+  padding-top: 8px;
 }
 </style>

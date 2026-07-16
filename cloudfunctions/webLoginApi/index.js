@@ -86,6 +86,17 @@ function verifyPassword(password, salt, hash) {
   return hashPassword(password, salt) === hash
 }
 
+const ORGANIZER_ROLE = 'organizer'
+
+async function normalizeOrganizerUser(db, user) {
+  if (String((user && user.role) || '').toLowerCase() !== ORGANIZER_ROLE) {
+    await db.collection('users').doc(user._id).update({
+      data: { role: ORGANIZER_ROLE, updateTime: db.serverDate() }
+    })
+  }
+  return { ...user, role: ORGANIZER_ROLE }
+}
+
 function httpsPost(hostname, port, path, headers, payload) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(payload)
@@ -218,30 +229,33 @@ async function handleVerifySmsCode(event) {
     return { success: false, error: '验证码错误或已过期' }
   }
 
-  await db.collection('sms_codes').doc(smsResult.data[0]._id).update({ data: { used: true, usedAt: db.serverDate() } })
-
-  // 查找或创建用户
-  let user = null
-  let isNewUser = false
-  const existUser = await db.collection('users').where({ phone: phoneNumber }).get()
-
-  if (!existUser.data || existUser.data.length === 0) {
-    const newUser = await db.collection('users').add({
-      data: { phone: phoneNumber, phoneVerified: true, role: '', email: '', passwordSet: false, createTime: db.serverDate(), updateTime: db.serverDate(), lastLoginTime: db.serverDate(), lastLoginType: 'phone' }
+  const existUser = await db.collection('users').where(_.or([
+    { phone: phoneNumber },
+    { phoneNumber }
+  ])).limit(2).get()
+  const users = existUser.data || []
+  if (users.length > 1) return { success: false, error: '手机号存在重复账号，请联系管理员处理' }
+  let user
+  if (users.length === 0) {
+    const created = await db.collection('users').add({
+      data: {
+        phone: phoneNumber, phoneNumber, phoneVerified: true, role: ORGANIZER_ROLE,
+        email: '', passwordSet: false, createTime: db.serverDate(), updateTime: db.serverDate()
+      }
     })
-    user = { _id: newUser._id, phone: phoneNumber, role: '', email: '', passwordSet: false }
-    isNewUser = true
+    user = { _id: created._id, phone: phoneNumber, phoneNumber, role: ORGANIZER_ROLE, email: '', passwordSet: false }
   } else {
-    user = existUser.data[0]
-    await db.collection('users').doc(user._id).update({
-      data: { lastLoginTime: db.serverDate(), lastLoginType: 'phone', updateTime: db.serverDate() }
-    })
+    user = await normalizeOrganizerUser(db, users[0])
   }
+  await db.collection('sms_codes').doc(smsResult.data[0]._id).update({ data: { used: true, usedAt: db.serverDate() } })
+  await db.collection('users').doc(user._id).update({
+    data: { lastLoginTime: db.serverDate(), lastLoginType: 'phone', updateTime: db.serverDate() }
+  })
 
-  const normalizedRole = (user.role || '').toLowerCase()
+  const normalizedRole = ORGANIZER_ROLE
   return {
-    success: true, message: isNewUser ? '注册并登录成功' : '登录成功',
-    needSetPassword: !(user.passwordSet || user.passwordHash), needBindEmail: !user.email, needSelectRole: !user.role,
+    success: true, message: '登录成功',
+    needSetPassword: !(user.passwordSet || user.passwordHash), needBindEmail: !user.email, needSelectRole: false,
     role: normalizedRole,
     user: { _id: user._id, phone: user.phone, email: user.email || '', role: normalizedRole, openId: user.openId || '' }
   }
@@ -253,18 +267,24 @@ async function handlePasswordLogin(event) {
   if (!phoneNumber || !password) return { success: false, error: '缺少手机号或密码' }
 
   const db = cloud.database()
-  const users = await db.collection('users').where({ phone: phoneNumber }).get()
+  const _ = db.command
+  const users = await db.collection('users').where(_.or([
+    { phone: phoneNumber },
+    { phoneNumber }
+  ])).limit(2).get()
 
   if (!users.data || users.data.length === 0) return { success: false, error: '该手机号未注册' }
+  if (users.data.length > 1) return { success: false, error: '手机号存在重复账号，请联系管理员处理' }
 
-  const user = users.data[0]
+  let user = users.data[0]
   if (!user.passwordHash || !user.passwordSalt) return { success: false, error: '该用户未设置密码' }
   if (!verifyPassword(password, user.passwordSalt, user.passwordHash)) return { success: false, error: '密码错误' }
+  user = await normalizeOrganizerUser(db, user)
 
-  const normalizedRole = (user.role || '').toLowerCase()
+  const normalizedRole = ORGANIZER_ROLE
   return {
     success: true, message: '登录成功',
-    needSetPassword: false, needBindEmail: !user.email, needSelectRole: !user.role,
+    needSetPassword: false, needBindEmail: !user.email, needSelectRole: false,
     role: normalizedRole,
     user: { _id: user._id, phone: user.phone, email: user.email || '', role: normalizedRole }
   }
@@ -328,33 +348,130 @@ async function handleEmailVerifyCode(event) {
     return { success: false, error: '验证码错误或已过期' }
   }
 
-  await db.collection('email_verification').doc(codeResult.data[0]._id).update({ data: { used: true, usedAt: db.serverDate() } })
-
-  let user = null
-  let isNewUser = false
-  const existUser = await db.collection('users').where({ email }).get()
-
-  if (!existUser.data || existUser.data.length === 0) {
-    const newUser = await db.collection('users').add({
-      data: { email, phone: '', role: '', passwordSet: false, createTime: db.serverDate(), updateTime: db.serverDate(), lastLoginTime: db.serverDate(), lastLoginType: 'email' }
+  const existUser = await db.collection('users').where({ email }).limit(2).get()
+  const users = existUser.data || []
+  if (users.length > 1) return { success: false, error: '邮箱存在重复账号，请联系管理员处理' }
+  let user
+  if (users.length === 0) {
+    const created = await db.collection('users').add({
+      data: {
+        email, phone: '', phoneNumber: '', role: ORGANIZER_ROLE, passwordSet: false,
+        createTime: db.serverDate(), updateTime: db.serverDate()
+      }
     })
-    user = { _id: newUser._id, email, phone: '', role: '' }
-    isNewUser = true
+    user = { _id: created._id, email, phone: '', phoneNumber: '', role: ORGANIZER_ROLE, passwordSet: false }
   } else {
-    user = existUser.data[0]
-    await db.collection('users').doc(user._id).update({ data: { lastLoginTime: db.serverDate(), lastLoginType: 'email', updateTime: db.serverDate() } })
+    user = await normalizeOrganizerUser(db, users[0])
   }
+  await db.collection('email_verification').doc(codeResult.data[0]._id).update({ data: { used: true, usedAt: db.serverDate() } })
+  await db.collection('users').doc(user._id).update({ data: { lastLoginTime: db.serverDate(), lastLoginType: 'email', updateTime: db.serverDate() } })
 
-  const normalizedRole = (user.role || '').toLowerCase()
+  const normalizedRole = ORGANIZER_ROLE
   return {
-    success: true, message: isNewUser ? '注册并登录成功' : '登录成功',
-    needSetPassword: !(user.passwordSet || user.passwordHash), needBindPhone: !user.phone, needSelectRole: !user.role,
+    success: true, message: '登录成功',
+    needSetPassword: !(user.passwordSet || user.passwordHash), needBindPhone: !(user.phone || user.phoneNumber), needSelectRole: false,
     role: normalizedRole,
     user: { _id: user._id, email, phone: user.phone || '', role: normalizedRole, userName: user.nickname || user.userName || email, avatarUrl: user.headimgurl || user.avatarUrl || '' }
   }
 }
 
-// 6. 微信扫码登录
+// 6. 纯微信扫码登录：不绑定手机号、邮箱或密码。
+async function handleWechatOnlyLogin(event) {
+  const { code } = event
+  if (!code) return { success: false, error: '缺少授权码' }
+  if (!WECHAT_CONFIG.APP_ID || !WECHAT_CONFIG.APP_SECRET) {
+    return { success: false, error: '微信配置缺失' }
+  }
+
+  const db = cloud.database()
+  const _ = db.command
+  const findUniqueUser = async (where, label) => {
+    const result = await db.collection('users').where(where).limit(2).get()
+    const users = result.data || []
+    if (users.length > 1) throw new Error(label + '存在重复账号，请联系管理员处理')
+    return users[0] || null
+  }
+
+  try {
+    const tokenUrl = 'https://api.weixin.qq.com/sns/oauth2/access_token?appid=' + WECHAT_CONFIG.APP_ID +
+      '&secret=' + WECHAT_CONFIG.APP_SECRET + '&code=' + code + '&grant_type=authorization_code'
+    const tokenData = await httpsGet(tokenUrl)
+    if (tokenData.errcode) throw new Error('微信错误:' + (tokenData.errmsg || ''))
+
+    const userInfoUrl = 'https://api.weixin.qq.com/sns/userinfo?access_token=' + tokenData.access_token + '&openid=' + tokenData.openid
+    const wxUserInfo = await httpsGet(userInfoUrl)
+    if (wxUserInfo.errcode) throw new Error('获取用户信息失败')
+
+    const unionId = wxUserInfo.unionid || ''
+    const openId = tokenData.openid
+    const now = new Date()
+    let user = null
+    if (unionId) user = await findUniqueUser({ unionId }, '微信 UnionID')
+    if (!user) user = await findUniqueUser({ wechatOpenId: openId }, '网页微信 OpenID')
+
+    let isNewUser = false
+    if (!user) {
+      const data = {
+        wechatOpenId: openId,
+        unionId,
+        nickname: wxUserInfo.nickname || '微信用户',
+        headimgurl: wxUserInfo.headimgurl || '',
+        role: ORGANIZER_ROLE,
+        loginType: 'wechat',
+        createTime: now,
+        updateTime: now,
+        lastLoginTime: now
+      }
+      const created = await db.collection('users').add({ data })
+      user = { _id: created._id, ...data }
+      isNewUser = true
+    } else {
+      const updateData = {
+        wechatOpenId: openId,
+        nickname: wxUserInfo.nickname || user.nickname || '微信用户',
+        headimgurl: wxUserInfo.headimgurl || user.headimgurl || '',
+        role: ORGANIZER_ROLE,
+        loginType: 'wechat',
+        updateTime: now,
+        lastLoginTime: now,
+        phone: _.remove(),
+        phoneNumber: _.remove(),
+        phoneVerified: _.remove(),
+        email: _.remove(),
+        passwordHash: _.remove(),
+        passwordSalt: _.remove(),
+        passwordSet: _.remove()
+      }
+      if (unionId) updateData.unionId = unionId
+      await db.collection('users').doc(user._id).update({ data: updateData })
+      user = { ...user, ...updateData }
+    }
+
+    return {
+      success: true,
+      message: isNewUser ? '扫码成功，已创建主办方账号' : '欢迎回来！',
+      needSetPassword: false,
+      needBindPhone: false,
+      needBindEmail: false,
+      needSelectRole: false,
+      role: ORGANIZER_ROLE,
+      user: {
+        _id: user._id,
+        openid: openId,
+        unionid: unionId,
+        nickname: user.nickname || '微信用户',
+        headimgurl: user.headimgurl || '',
+        role: ORGANIZER_ROLE
+      },
+      isNewUser
+    }
+  } catch (err) {
+    console.error('[webApi] wechatOnlyLogin error:', err.message)
+    return { success: false, error: err.message || '微信登录失败' }
+  }
+}
+
+// 历史多方式登录实现保留在源码中但不再路由调用。
 async function handleWechatWebLogin(event) {
   const { code, phone: eventPhone, smsCode } = event
   if (!code) return { success: false, error: '缺少授权码' }
@@ -363,6 +480,17 @@ async function handleWechatWebLogin(event) {
   }
 
   const db = cloud.database()
+  const _ = db.command
+
+  const findUniqueUser = async (where, label) => {
+    const result = await db.collection('users').where(where).limit(2).get()
+    const users = result.data || []
+    if (users.length > 1) {
+      console.error('[webApi] 微信登录检测到重复账号:', label, users.map(item => item._id))
+      throw new Error(label + '存在重复绑定，请联系管理员处理')
+    }
+    return users[0] || null
+  }
 
   try {
     // 用 code 换 token
@@ -392,49 +520,119 @@ async function handleWechatWebLogin(event) {
     const openId = tokenData.openid
     const now = new Date()
     let user = null
-    let isNewUser = false
+    let foundBy = ''
 
     // 按 unionId 查找
     if (unionId) {
-      const res = await db.collection('users').where({ unionId }).get()
-      if (res.data && res.data.length > 0) user = res.data[0]
+      user = await findUniqueUser({ unionId }, '微信 UnionID')
+      if (user) foundBy = 'unionId'
     }
     // 按 wechatOpenId/openId 查找
     if (!user) {
-      const r1 = await db.collection('users').where({ wechatOpenId: openId }).get()
-      if (r1.data && r1.data.length > 0) user = r1.data[0]
+      user = await findUniqueUser({ wechatOpenId: openId }, '网页微信 OpenID')
+      if (user) foundBy = 'wechatOpenId'
     }
     if (!user) {
-      const r2 = await db.collection('users').where({ openId }).get()
-      if (r2.data && r2.data.length > 0) user = r2.data[0]
+      user = await findUniqueUser({ openId }, '兼容微信 OpenID')
+      if (user) foundBy = 'legacyOpenId'
     }
     // 按手机号查找（合并账号）
     if (!user && verifiedPhone) {
-      const rp = await db.collection('users').where({ phone: verifiedPhone }).get()
-      if (rp.data && rp.data.length > 0) user = rp.data[0]
+      user = await findUniqueUser(_.or([
+        { phone: verifiedPhone },
+        { phoneNumber: verifiedPhone }
+      ]), '手机号 ' + verifiedPhone)
+      if (user) foundBy = 'verifiedPhone'
     }
-    // 创建新用户
+    let isNewUser = false
+    // 微信扫码即注册为主办方，不再要求预先开通身份。
     if (!user) {
-      const nu = await db.collection('users').add({
-        data: { wechatOpenId: openId, unionId, nickname: wxUserInfo.nickname || '微信用户', headimgurl: wxUserInfo.headimgurl || '', phone: verifiedPhone, email: '', role: '', passwordSet: false, createTime: now, updateTime: now }
+      const created = await db.collection('users').add({
+        data: {
+          wechatOpenId: openId,
+          unionId,
+          nickname: wxUserInfo.nickname || '微信用户',
+          headimgurl: wxUserInfo.headimgurl || '',
+          phone: verifiedPhone,
+          phoneNumber: verifiedPhone,
+          phoneVerified: !!verifiedPhone,
+          email: '',
+          role: ORGANIZER_ROLE,
+          passwordSet: false,
+          createTime: now,
+          updateTime: now,
+          lastLoginTime: now,
+          loginType: 'wechat'
+        }
       })
-      user = { _id: nu._id, wechatOpenId: openId, unionId, nickname: wxUserInfo.nickname, headimgurl: wxUserInfo.headimgurl, phone: verifiedPhone, role: '', isNew: true }
+      user = {
+        _id: created._id,
+        wechatOpenId: openId,
+        unionId,
+        nickname: wxUserInfo.nickname || '微信用户',
+        headimgurl: wxUserInfo.headimgurl || '',
+        phone: verifiedPhone,
+        phoneNumber: verifiedPhone,
+        email: '',
+        role: ORGANIZER_ROLE,
+        passwordSet: false
+      }
       isNewUser = true
+      foundBy = 'createdOrganizer'
     } else {
+      user = await normalizeOrganizerUser(db, user)
+      const currentPhone = user.phone || user.phoneNumber || ''
+      if (verifiedPhone && currentPhone && currentPhone !== verifiedPhone) {
+        throw new Error('当前微信已绑定其他手机号，请先完成账号核验')
+      }
+
+      const updateData = {
+        wechatOpenId: openId,
+        headimgurl: wxUserInfo.headimgurl || user.headimgurl || '',
+        nickname: wxUserInfo.nickname || user.nickname || user.nickName || '',
+        lastLoginTime: now,
+        loginType: 'wechat',
+        role: ORGANIZER_ROLE,
+        updateTime: now
+      }
+      if (unionId) updateData.unionId = unionId
+      if (verifiedPhone && !currentPhone) {
+        updateData.phone = verifiedPhone
+        updateData.phoneNumber = verifiedPhone
+        updateData.phoneVerified = true
+      }
       await db.collection('users').doc(user._id).update({
-        data: { headimgurl: wxUserInfo.headimgurl || user.headimgurl, nickname: wxUserInfo.nickname || user.nickname, lastLoginTime: now, updateTime: now }
+        data: updateData
       })
+      user = { ...user, ...updateData }
     }
 
-    const finalRole = user.role || ''
+    const finalPhone = user.phone || user.phoneNumber || verifiedPhone || ''
+    if (finalPhone) {
+      const phoneResult = await db.collection('users').where(_.or([
+        { phone: finalPhone },
+        { phoneNumber: finalPhone }
+      ])).limit(3).get()
+      const uniqueIds = [...new Set((phoneResult.data || []).map(item => item._id))]
+      if (uniqueIds.length > 1) {
+        console.error('[webApi] 手机号重复绑定:', finalPhone, uniqueIds)
+        throw new Error('手机号 ' + finalPhone + ' 存在重复账号，请联系管理员处理')
+      }
+    }
+
+    const finalRole = ORGANIZER_ROLE
+    console.log('[webApi] 微信登录匹配完成:', foundBy, user._id, finalPhone || '(未绑定)')
     return {
-      success: true, message: isNewUser ? '注册并登录成功' : '欢迎回来！',
-      needSetPassword: !(user.passwordSet || user.passwordHash), needBindEmail: !(user.email || ''), needSelectRole: isNewUser || !user.role,
+      success: true, message: isNewUser ? '注册成功，已进入主办方后台' : '欢迎回来！',
+      needSetPassword: !(user.passwordSet || user.passwordHash),
+      needBindPhone: !finalPhone,
+      needBindEmail: !(user.email || ''),
+      needSelectRole: false,
       role: finalRole,
       user: {
-        _id: user._id, openid: user.wechatOpenId || openId, unionid: unionId,
+        _id: user._id, openid: user.wechatOpenId || openId, unionid: user.unionId || unionId,
         nickname: user.nickname || wxUserInfo.nickname, headimgurl: user.headimgurl || '',
-        phone: user.phone || verifiedPhone || '', email: user.email || '', role: finalRole
+        phone: finalPhone, phoneNumber: finalPhone, email: user.email || '', role: finalRole
       },
       isNewUser
     }
@@ -446,28 +644,7 @@ async function handleWechatWebLogin(event) {
 
 // 8. 设置用户身份（网页端选择角色后调用）
 async function handleEmailSetRole(event) {
-  const { role, userId } = event
-  if (!userId) return { success: false, error: '缺少用户ID' }
-
-  const VALID_ROLES = ['organizer', 'coach', 'referee', 'admin']
-  if (!role || !VALID_ROLES.includes(role.toLowerCase())) {
-    return { success: false, error: '无效的角色类型' }
-  }
-
-  const db = cloud.database()
-  try {
-    await db.collection('users').doc(userId).update({
-      data: {
-        role: role.toLowerCase(),
-        updateTime: db.serverDate()
-      }
-    })
-    console.log('[webApi] emailSetRole 成功:', userId, '→', role.toLowerCase())
-    return { success: true, message: '身份设置成功', role: role.toLowerCase() }
-  } catch (err) {
-    console.error('[webApi] emailSetRole 失败:', err.message)
-    return { success: false, error: err.message || '设置角色失败' }
-  }
+  return { success: false, error: '当前仅保留主办方身份，不支持选择或切换身份' }
 }
 
 // 9. 设置密码（邮箱/手机注册用户首次设置密码）
@@ -556,7 +733,7 @@ async function handleCheckLogin(event) {
     const result = await db.collection('users').doc(userId).get()
     if (result.data && result.data.length > 0) {
       const u = result.data[0]
-      return { success: true, loggedIn: true, user: { _id: u._id, phone: u.phone || '', email: u.email || '', role: (u.role || '').toLowerCase(), nickname: u.nickname || '' } }
+      return { success: true, loggedIn: true, user: { _id: u._id, role: ORGANIZER_ROLE, nickname: u.nickname || '' } }
     }
     return { success: true, loggedIn: false }
   } catch (e) {
@@ -919,23 +1096,16 @@ exports.main = async (event, context) => {
     let result
     switch (action) {
       case 'sendSms':
-        result = await handleSendSms(params); break
       case 'verifySmsCode':
-        result = await handleVerifySmsCode(params); break
       case 'passwordLogin':
-        result = await handlePasswordLogin(params); break
       case 'emailSendCode':
-        result = await handleEmailSendCode(params); break
       case 'emailVerifyCode':
-        result = await handleEmailVerifyCode(params); break
       case 'emailSetRole':
-        result = await handleEmailSetRole(params); break
       case 'emailSetPassword':
-        result = await handleEmailSetPassword(params); break
       case 'emailBindEmail':
-        result = await handleEmailBindEmail(params); break
+        result = { success: false, error: '当前仅支持微信扫码登录' }; break
       case 'wechatWebLogin':
-        result = await handleWechatWebLogin(params); break
+        result = await handleWechatOnlyLogin(params); break
       case 'checkLogin':
         result = await handleCheckLogin(params); break
       case 'dbQuery':
