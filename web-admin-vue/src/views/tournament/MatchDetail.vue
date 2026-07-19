@@ -1288,6 +1288,7 @@ const router = useRouter()
 
 const tournamentId = route.params.id
 const matchId = route.params.matchId
+const sourceDivisionId = typeof route.query.divisionId === 'string' ? route.query.divisionId : ''
 
 const match = ref({})
 const homeName = ref('')
@@ -1544,7 +1545,10 @@ function formatDateTimeCN(date) {
 }
 
 function goBack() {
-  router.push(`/tournaments/${tournamentId}/schedule`)
+  router.push({
+    path: `/tournaments/${tournamentId}/schedule`,
+    query: sourceDivisionId ? { divisionId: sourceDivisionId } : {}
+  })
 }
 
 // 加载赛事名称

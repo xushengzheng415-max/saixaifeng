@@ -1,0 +1,9 @@
+{
+  "name": "platformOwner",
+  "version": "1.0.0",
+  "description": "Hidden WeChat customer-service assistance grants and owner console",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

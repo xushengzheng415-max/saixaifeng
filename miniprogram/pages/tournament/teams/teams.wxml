@@ -25,7 +25,13 @@
     </view>
 
     <view class="team-list" wx:if="{{hasTeamsLen}}">
-      <view class="team-card" wx:for="{{teams}}" wx:key="_id">
+      <view
+        class="team-card"
+        wx:for="{{teams}}"
+        wx:key="_id"
+        bindtap="onViewTeam"
+        data-id="{{item.teamId}}"
+      >
         <view class="tc-logo">
           <image wx:if="{{item.teamLogo}}" src="{{item.teamLogo}}" mode="aspectFill"></image>
           <text wx:else class="tc-letter">{{item.firstChar}}</text>

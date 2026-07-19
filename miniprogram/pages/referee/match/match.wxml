@@ -1,0 +1,152 @@
+<view class="page">
+  <view class="match-hero">
+    <view class="hero-topline">
+      <text>{{tournamentName}}</text>
+      <text class="status-pill">{{matchStatusText}}</text>
+    </view>
+    <text class="teams-text">{{teamsText}}</text>
+    <text class="match-meta">{{matchTimeText}} · {{venue}}</text>
+  </view>
+
+  <view class="loading-card" wx:if="{{loading}}">正在加载比赛...</view>
+
+  <view class="phone-card" wx:if="{{needsPhone}}">
+    <text class="phone-icon">🧑‍⚖️</text>
+    <text class="phone-title">验证裁判身份</text>
+    <text class="phone-desc">系统将根据主办方已录入的裁判手机号核验本场权限。</text>
+    <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" loading="{{bindingPhone}}">微信手机号一键验证</button>
+  </view>
+
+  <view class="error-card" wx:if="{{errorMsg}}">
+    <text>{{errorMsg}}</text>
+    <button class="plain-btn" bindtap="retryLoad">重新加载</button>
+  </view>
+
+  <block wx:if="{{showMatchContent}}">
+    <view class="step-card" wx:if="{{canStart}}">
+      <text class="step-number">第 1 步</text>
+      <text class="step-title">确认开始执裁</text>
+      <text class="step-desc">到达比赛现场并确认双方可以开赛后，点击下方按钮。</text>
+      <button class="primary-btn action-btn" bindtap="startMatch" loading="{{savingAction}}">开始执裁</button>
+    </view>
+
+    <view class="step-card live-card" wx:if="{{canFinish}}">
+      <view class="live-indicator"><view class="live-dot"></view><text>比赛执裁中</text></view>
+      <text class="step-title">比赛结束后录入比分</text>
+      <text class="step-desc">确认终场后，填写双方最终比分并结束本场执裁。</text>
+      <button class="finish-btn action-btn" bindtap="openFinishModal">结束执裁并录入比分</button>
+    </view>
+
+    <view class="result-card" wx:if="{{canRecordEvents}}">
+      <text class="step-number">第 2 步</text>
+      <text class="result-title">终场比分</text>
+      <view class="score-board">
+        <view class="score-team">
+          <text class="score-name">{{homeTeamName}}</text>
+          <text class="score-number">{{homeScore}}</text>
+        </view>
+        <text class="score-separator">:</text>
+        <view class="score-team">
+          <text class="score-name">{{awayTeamName}}</text>
+          <text class="score-number">{{awayScore}}</text>
+        </view>
+      </view>
+      <text class="step-desc">比分已保存，现在可补录本场进球、红黄牌等比赛事件。</text>
+      <button class="primary-btn action-btn" bindtap="openEventModal">录入比赛事件</button>
+    </view>
+
+    <view class="event-section" wx:if="{{canRecordEvents}}">
+      <view class="section-heading">
+        <view>
+          <text class="section-title">比赛事件</text>
+          <text class="section-subtitle">按时间顺序显示</text>
+        </view>
+        <button class="small-add-btn" bindtap="openEventModal">+ 添加</button>
+      </view>
+
+      <view class="event-empty" wx:if="{{!hasEvents}}">暂无事件，点击“录入比赛事件”开始添加。</view>
+      <view class="event-list" wx:else>
+        <view class="event-item" wx:for="{{events}}" wx:key="eventId">
+          <view class="event-minute">{{item.minute}}'</view>
+          <view class="event-icon">{{item.typeIcon}}</view>
+          <view class="event-content">
+            <view class="event-topline">
+              <text class="event-type">{{item.typeText}}</text>
+              <text class="event-team">{{item.teamName}}</text>
+            </view>
+            <text class="event-player">{{item.playerName}}</text>
+            <text class="event-assist" wx:if="{{item.assistText}}">{{item.assistText}}</text>
+          </view>
+          <button class="delete-btn" data-event-id="{{item.eventId}}" bindtap="deleteEvent">删除</button>
+        </view>
+      </view>
+    </view>
+
+    <view class="unavailable-card" wx:if="{{showUnavailable}}">
+      当前比赛状态为“{{matchStatusText}}”，暂时不能开始执裁。
+    </view>
+  </block>
+
+  <view class="modal-mask" wx:if="{{showFinishModal}}" catchtap="closeFinishModal">
+    <view class="sheet-modal" catchtap="preventBubble">
+      <view class="modal-header">
+        <view>
+          <text class="modal-title">结束执裁</text>
+          <text class="modal-subtitle">请核对终场比分</text>
+        </view>
+        <text class="modal-close" bindtap="closeFinishModal">×</text>
+      </view>
+      <view class="score-input-row">
+        <view class="score-input-team">
+          <text>{{homeTeamName}}</text>
+          <input class="score-input" type="number" maxlength="2" value="{{finishHomeScore}}" bindinput="onFinishHomeScoreInput" />
+        </view>
+        <text class="input-separator">:</text>
+        <view class="score-input-team">
+          <text>{{awayTeamName}}</text>
+          <input class="score-input" type="number" maxlength="2" value="{{finishAwayScore}}" bindinput="onFinishAwayScoreInput" />
+        </view>
+      </view>
+      <text class="finish-tip">确认后比赛状态将变为已结束，并进入事件录入。</text>
+      <button class="finish-btn modal-submit" bindtap="finishMatch" loading="{{savingAction}}">确认比分并结束</button>
+    </view>
+  </view>
+
+  <view class="modal-mask" wx:if="{{showEventModal}}" catchtap="closeEventModal">
+    <view class="sheet-modal event-modal" catchtap="preventBubble">
+      <view class="modal-header">
+        <view>
+          <text class="modal-title">录入比赛事件</text>
+          <text class="modal-subtitle">无首发名单，球员姓名直接填写</text>
+        </view>
+        <text class="modal-close" bindtap="closeEventModal">×</text>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">事件类型</text>
+        <picker range="{{eventTypeOptions}}" range-key="label" value="{{eventTypeIndex}}" bindchange="onEventTypeChange">
+          <view class="picker-field">{{eventTypeLabel}} <text>⌄</text></view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">所属球队</text>
+        <picker range="{{eventTeamOptions}}" range-key="label" value="{{eventTeamIndex}}" bindchange="onEventTeamChange">
+          <view class="picker-field">{{eventTeamLabel}} <text>⌄</text></view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">比赛分钟</text>
+        <input class="text-input" type="number" maxlength="3" placeholder="例如：35" value="{{eventMinute}}" bindinput="onEventMinuteInput" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">{{eventPlayerLabel}}</text>
+        <input class="text-input" maxlength="30" placeholder="请输入球员姓名" value="{{eventPlayerName}}" bindinput="onEventPlayerInput" />
+      </view>
+      <view class="form-item" wx:if="{{showAssistField}}">
+        <text class="form-label">{{eventAssistLabel}}</text>
+        <input class="text-input" maxlength="30" placeholder="选填" value="{{eventAssistName}}" bindinput="onEventAssistInput" />
+      </view>
+      <button class="primary-btn modal-submit" bindtap="saveEvent" loading="{{savingAction}}">保存比赛事件</button>
+    </view>
+  </view>
+</view>

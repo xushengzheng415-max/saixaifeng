@@ -1,6 +1,6 @@
 <template>
   <div class="team-detail">
-    <el-page-header @back="$router.push('/teams')" title="返回球队列表" />
+    <el-page-header @back="goBack" :title="backTitle" />
 
     <!-- 球队基本信息 -->
     <div class="page-card" style="margin-top: 20px;">
@@ -43,6 +43,16 @@
       <div class="page-header">
         <h2>球员阵容</h2>
         <div style="display: flex; gap: 8px;">
+          <el-button
+            type="danger"
+            plain
+            size="small"
+            :loading="clearingPlayers"
+            :disabled="players.length === 0"
+            @click="clearPlayerRoster"
+          >
+            <el-icon><Delete /></el-icon>清空球员名单
+          </el-button>
           <el-button type="success" size="small" @click="showBatchImport = true">
             <el-icon><Download /></el-icon>批量导入名单
           </el-button>
@@ -700,10 +710,15 @@
       :close-on-click-modal="false"
       destroy-on-close
     >
-      <!-- 下载模板 -->
+      <!-- 导入模式切换 + 下载模板 -->
       <div class="import-header">
-        <p class="import-tip">下载模板并填写球员信息后，上传 Excel 文件即可批量导入</p>
-        <el-button type="success" size="small" @click="downloadImportTemplate">
+        <el-radio-group v-model="importMode" size="small" @change="clearImportData">
+          <el-radio-button value="excel">Excel 模板导入</el-radio-button>
+          <el-radio-button value="word">快捷模式（Word 报名表）</el-radio-button>
+        </el-radio-group>
+        <p class="import-tip" v-if="importMode === 'excel'">下载模板并填写球员信息后，上传 Excel 文件即可批量导入</p>
+        <p class="import-tip" v-else>直接上传球队 Word 报名表（.docx），按「姓名 + 号码 + 出生年月/日期」快速录入，无需身份证号</p>
+        <el-button v-if="importMode === 'excel'" type="success" size="small" @click="downloadImportTemplate">
           <el-icon><Download /></el-icon> 下载模板
         </el-button>
       </div>
@@ -712,18 +727,24 @@
       <div class="import-upload-area" v-if="importParsedData.length === 0">
         <el-upload
           ref="importUploadRef"
-          accept=".xlsx,.xls"
+          :accept="importMode === 'word' ? '.docx' : '.xlsx,.xls'"
           :auto-upload="false"
           :show-file-list="false"
-          :on-change="handleImportFileChange"
+          :on-change="importMode === 'word' ? handleWordImportFileChange : handleImportFileChange"
           drag
         >
           <el-icon class="el-icon--upload" :size="48"><UploadFilled /></el-icon>
-          <div class="el-upload__text">
+          <div class="el-upload__text" v-if="importMode === 'word'">
+            将 Word 报名表拖拽到此处，或 <em>点击选择</em>
+          </div>
+          <div class="el-upload__text" v-else>
             将 Excel 文件拖拽到此处，或 <em>点击选择</em>
           </div>
           <template #tip>
-            <div class="el-upload__tip">
+            <div class="el-upload__tip" v-if="importMode === 'word'">
+              支持 .docx 格式报名表（表格中含「姓名：XXX 号码：XX」与出生年月/日期；未写具体日期时按当月 1 日导入）
+            </div>
+            <div class="el-upload__tip" v-else>
               支持 .xlsx 格式，请使用模板文件填写球员信息
             </div>
           </template>
@@ -741,6 +762,33 @@
             </el-button>
           </div>
         </div>
+        <!-- Word 报名表信息提示 -->
+        <el-alert
+          v-if="wordFormInfo.队名"
+          type="success"
+          :closable="false"
+          style="margin-bottom: 8px;"
+          title="报名表信息（请核对与当前球队一致）："
+        >
+          <template #default>
+            <div style="font-size: 12px; line-height: 1.8;">
+              <span v-for="(val, key) in wordFormInfo" :key="key" style="margin-right: 12px;">
+                <strong>{{ key }}</strong>: {{ val }}
+              </span>
+            </div>
+          </template>
+        </el-alert>
+        <el-alert
+          v-if="importMode === 'word' && wordTeamLogoPreview"
+          :type="teamHasLogo ? 'info' : 'success'"
+          :closable="false"
+          style="margin-bottom: 8px;"
+          :title="teamHasLogo ? '检测到报名表队徽；当前球队已有队徽，将保留现有队徽' : '检测到报名表队徽；确认导入时将同步补充到当前球队'"
+        >
+          <template #default>
+            <img :src="wordTeamLogoPreview" alt="报名表队徽预览" style="display: block; width: 72px; height: 72px; object-fit: contain; margin-top: 6px;" />
+          </template>
+        </el-alert>
         <!-- 列检测提示 -->
         <el-alert 
           v-if="colDetectInfo.姓名列"
@@ -759,6 +807,12 @@
         </el-alert>
         <el-table :data="importParsedData" max-height="56vh" size="small" border style="width: 100%">
           <el-table-column type="index" label="#" width="40" />
+          <el-table-column label="照片" width="60" align="center">
+            <template #default="{ row }">
+              <img v-if="row._photoPreview" :src="row._photoPreview" alt="球员照片" style="width: 36px; height: 44px; object-fit: cover; border-radius: 4px;" />
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="name" label="姓名" width="80" />
           <el-table-column prop="_importKindLabel" label="人员类型" width="80" align="center" />
           <el-table-column prop="jerseyNumber" label="球号" width="60" align="center">
@@ -772,6 +826,10 @@
             </template>
           </el-table-column>
           <el-table-column prop="jerseyName" label="球衣名" width="110" />
+          <el-table-column prop="birthDate" label="出生日期" width="100" />
+          <el-table-column label="年龄" width="55" align="center">
+            <template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '-' }}</template>
+          </el-table-column>
           <el-table-column prop="height" label="身高" width="60" align="center" />
           <el-table-column prop="weight" label="体重" width="60" align="center" />
           <el-table-column prop="contactPhone" label="联系电话" width="130" />
@@ -1005,8 +1063,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled } from '@element-plus/icons-vue'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, getFileUrl, callFunction, getCurrentOwner } from '../../utils/cloud'
+import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete } from '@element-plus/icons-vue'
+import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
 import { removeLogoBackground } from '../../utils/logoRemoveBg'
@@ -1019,6 +1077,21 @@ import JSZip from 'jszip'
 const route = useRoute()
 const router = useRouter()
 const teamId = route.params.id
+const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : '')
+const sourceDivisionId = computed(() => typeof route.query.divisionId === 'string' ? route.query.divisionId : '')
+const backTitle = computed(() => sourceTournamentId.value ? '返回参赛球队' : '返回球队列表')
+
+function goBack() {
+  if (!sourceTournamentId.value) {
+    router.push('/teams')
+    return
+  }
+
+  router.push({
+    path: `/tournaments/${encodeURIComponent(sourceTournamentId.value)}/teams`,
+    query: sourceDivisionId.value ? { divisionId: sourceDivisionId.value } : {}
+  })
+}
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -1045,6 +1118,7 @@ function onCityChange() {
 }
 const team = ref({})
 const players = ref([])
+const clearingPlayers = ref(false)
 const showAddPlayer = ref(false)
 const showBatchImport = ref(false)
 const showBatchAvatarImport = ref(false)
@@ -1070,6 +1144,12 @@ const importErrors = ref([])
 const batchImporting = ref(false)
 const colDetectInfo = ref({})
 const importUploadRef = ref(null)
+const importMode = ref('excel') // excel=模板导入，word=快捷模式（Word 报名表，免身份证）
+const wordFormInfo = ref({})
+const wordTeamLogoPreview = ref('')
+const wordTeamLogoFile = ref(null)
+const getTeamLogoUrl = (teamRecord) => String(teamRecord?.logoUrl || '').trim() || String(teamRecord?.logo || '').trim()
+const teamHasLogo = computed(() => Boolean(getTeamLogoUrl(team.value)))
 
 // 批量头像导入相关
 const avatarImportRows = ref([])
@@ -1436,26 +1516,69 @@ async function removePlayer(row) {
       console.error('删除失败：row._id 为空', JSON.stringify(row))
       return
     }
-    // 改用 webBatchUpdate 云函数删除（权限与 update 一致）
-    const res = await callFunction('webBatchUpdate', {
-      action: 'delete',
-      collection: 'players',
-      id: row._id
-    })
-    if (res && res.success) {
-      ElMessage.success('删除成功')
-      loadPlayers()
-    } else {
-      const msg = res?.message || '删除失败'
-      console.error('删除失败:', res)
-      ElMessage.error('删除失败: ' + msg)
-    }
+    await deleteRecord('players', row._id)
+    ElMessage.success('删除成功')
+    await loadPlayers()
   } catch (err) {
     if (err !== 'cancel') {
       const msg = err?.message || String(err)
       console.error('删除球员失败:', err)
       ElMessage.error('删除失败: ' + msg)
     }
+  }
+}
+
+async function clearPlayerRoster() {
+  if (players.value.length === 0 || clearingPlayers.value) return
+
+  const teamName = team.value.name || '当前球队'
+  const playerCount = players.value.length
+  try {
+    await ElMessageBox.prompt(
+      `将永久删除「${teamName}」的全部 ${playerCount} 条人员记录，且无法恢复。请输入“清空”确认。`,
+      '清空球员名单',
+      {
+        type: 'error',
+        confirmButtonText: '确认清空',
+        cancelButtonText: '取消',
+        inputPlaceholder: '请输入：清空',
+        inputPattern: /^清空$/,
+        inputErrorMessage: '请输入“清空”后再继续',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+  } catch {
+    return
+  }
+
+  clearingPlayers.value = true
+  let deletedCount = 0
+  const failedPlayers = []
+  try {
+    for (const player of [...players.value]) {
+      if (!player._id) {
+        failedPlayers.push(player.name || '未知人员')
+        continue
+      }
+      try {
+        await deleteRecord('players', player._id)
+        deletedCount += 1
+      } catch (err) {
+        console.error(`清空名单时删除球员 ${player.name || player._id} 失败:`, err)
+        failedPlayers.push(player.name || player._id)
+      }
+    }
+
+    await loadPlayers()
+    if (players.value.length === 0) {
+      ElMessage.success(`已清空球员名单，共删除 ${deletedCount} 条记录`)
+    } else if (deletedCount > 0) {
+      ElMessage.warning(`已删除 ${deletedCount} 条，仍有 ${players.value.length} 条记录未删除，请重试`)
+    } else {
+      ElMessage.error(`清空失败，${failedPlayers.length || players.value.length} 条记录未删除`)
+    }
+  } finally {
+    clearingPlayers.value = false
   }
 }
 
@@ -2233,10 +2356,196 @@ async function handleImportFileChange(file) {
 }
 
 // 清空导入数据
+// ========== 快捷模式：Word 报名表导入（姓名 + 号码 + 出生日期，免身份证）==========
+const WORD_NAME_CELL_RE = /姓名\s*[：:]\s*(.*?)\s*号码\s*[：:]\s*([0-9０-９]*)/
+const WORD_BIRTH_CELL_RE = /出生\s*(\d{4})\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*日)?/
+const WORD_TEAM_LOGO_MAX_SIZE = 10 * 1024 * 1024
+const WORD_PLAYER_PHOTO_MAX_SIZE = 10 * 1024 * 1024
+
+function normalizeFullWidthDigits(text) {
+  return String(text || '').replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+}
+
+function createWordImageFile(dataUrl, baseName) {
+  const match = String(dataUrl || '').match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i)
+  if (!match) throw new Error('报名表图片格式不受支持')
+  const mimeType = match[1].toLowerCase()
+  const binary = atob(match[2])
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1]
+  return new File([bytes], `${baseName}.${extension}`, { type: mimeType })
+}
+
+// 解析报名表头部信息（队名/人数/组别/队服颜色），仅用于预览核对，不写入数据库
+function parseWordFormHeader(fullText) {
+  const info = {}
+  const pick = (re) => {
+    const m = fullText.match(re)
+    return m ? m[1].trim() : ''
+  }
+  const teamName = pick(/队\s*名\s*[：:]\s*(.*?)\s*队员人数/)
+  const playerCount = pick(/队员人数\s*[：:]\s*(\d+)/)
+  const coachCount = pick(/教练人数\s*[：:]\s*(\d+)/)
+  const group = pick(/参赛组别\s*[：:]\s*(\S+)/)
+  const color1 = pick(/比赛服装颜色\s*1\s*[：:]\s*(\S+)/)
+  const color2 = pick(/比赛服装颜色\s*2\s*[：:]\s*(\S+)/)
+  if (teamName) info.队名 = teamName
+  if (playerCount) info.队员人数 = playerCount
+  if (coachCount) info.教练人数 = coachCount
+  if (group) info.参赛组别 = group
+  if (color1) info.队服颜色1 = color1
+  if (color2) info.队服颜色2 = color2
+  return info
+}
+
+async function handleWordImportFileChange(file) {
+  const fileName = (file.name || '').toLowerCase()
+  if (!fileName.endsWith('.docx')) {
+    ElMessage.error('快捷模式仅支持 .docx 格式的 Word 报名表')
+    return
+  }
+  try {
+    const rawFile = file.raw || file
+    const arrayBuffer = await rawFile.arrayBuffer()
+    const mammoth = (await import('mammoth')).default
+    const result = await mammoth.convertToHtml({ arrayBuffer })
+    const doc = new DOMParser().parseFromString(result.value || '', 'text/html')
+    const parsed = []
+    const warnings = []
+
+    // 报名表队徽可能位于表头表格内：先识别所有“姓名/号码”上方的球员照片，再取首张非球员图片作为队徽
+    wordTeamLogoPreview.value = ''
+    wordTeamLogoFile.value = null
+    const wordPlayerPhotoImages = new Set()
+    Array.from(doc.querySelectorAll('table')).forEach(table => {
+      const rows = Array.from(table.querySelectorAll('tr'))
+      rows.forEach((tr, rowIdx) => {
+        if (rowIdx === 0) return
+        const cells = Array.from(tr.querySelectorAll('td, th'))
+        const previousCells = Array.from(rows[rowIdx - 1].querySelectorAll('td, th'))
+        cells.forEach((cell, cellIdx) => {
+          if (!(cell.textContent || '').match(WORD_NAME_CELL_RE)) return
+          const photoImage = previousCells[cellIdx]?.querySelector('img')
+          if (photoImage) wordPlayerPhotoImages.add(photoImage)
+        })
+      })
+    })
+    const headerLogoImage = Array.from(doc.querySelectorAll('img')).find(img => !wordPlayerPhotoImages.has(img))
+    const headerLogoSource = headerLogoImage?.getAttribute('src') || ''
+    if (headerLogoSource) {
+      try {
+        const logoFile = createWordImageFile(headerLogoSource, 'word-team-logo')
+        if (logoFile.size > WORD_TEAM_LOGO_MAX_SIZE) {
+          warnings.push('报名表页首队徽超过 10MB，已跳过队徽补充')
+        } else {
+          wordTeamLogoPreview.value = headerLogoSource
+          wordTeamLogoFile.value = logoFile
+        }
+      } catch (logoError) {
+        console.warn('解析报名表页首队徽失败:', logoError)
+        warnings.push('报名表页首队徽无法解析，不影响球员名单导入')
+      }
+    } else if (!teamHasLogo.value) {
+      warnings.push('当前球队没有队徽，且报名表页首未识别到可用队徽')
+    }
+
+    // 头部信息（队名/人数/组别/队服颜色）
+    const fullText = (doc.body.textContent || '').replace(/\s+/g, ' ').trim()
+    wordFormInfo.value = parseWordFormHeader(fullText)
+
+    // 表格解析：「姓名：X 号码：N」单元格所在行，下一行同列单元格是其「出生」日期
+    const tables = Array.from(doc.querySelectorAll('table'))
+    tables.forEach(table => {
+      const rows = Array.from(table.querySelectorAll('tr'))
+      rows.forEach((tr, rowIdx) => {
+        const cells = Array.from(tr.querySelectorAll('td, th'))
+        const previousCells = rowIdx > 0
+          ? Array.from(rows[rowIdx - 1].querySelectorAll('td, th'))
+          : []
+        const nextCells = rowIdx + 1 < rows.length
+          ? Array.from(rows[rowIdx + 1].querySelectorAll('td, th'))
+          : []
+        cells.forEach((cell, cellIdx) => {
+          const m = (cell.textContent || '').match(WORD_NAME_CELL_RE)
+          if (!m) return
+          const name = (m[1] || '').trim()
+          if (!name) return
+          const jerseyNumber = normalizeJerseyNumber(normalizeFullWidthDigits((m[2] || '').trim()))
+          let photoFile = null
+          let photoPreview = ''
+          const photoImage = previousCells[cellIdx]?.querySelector('img')
+          const photoSource = photoImage?.getAttribute('src') || ''
+          if (photoSource) {
+            try {
+              const candidatePhoto = createWordImageFile(photoSource, `word-player-${name}`)
+              if (candidatePhoto.size > WORD_PLAYER_PHOTO_MAX_SIZE) {
+                warnings.push(`「${name}」：报名表照片超过 10MB，已跳过照片导入`)
+              } else {
+                photoFile = candidatePhoto
+                photoPreview = photoSource
+              }
+            } catch (photoError) {
+              console.warn(`解析「${name}」报名表照片失败:`, photoError)
+              warnings.push(`「${name}」：报名表照片无法解析`)
+            }
+          }
+          let birthDate = ''
+          const birthText = nextCells[cellIdx] ? (nextCells[cellIdx].textContent || '') : ''
+          const bm = birthText.match(WORD_BIRTH_CELL_RE)
+          if (bm) {
+            const birthDay = bm[3] || '1'
+            birthDate = `${bm[1]}-${String(bm[2]).padStart(2, '0')}-${String(birthDay).padStart(2, '0')}`
+          } else {
+            warnings.push(`「${name}」：未解析到出生日期，导入后可手动补充`)
+          }
+          parsed.push({
+            name,
+            idCard: '',
+            jerseyNumber,
+            position: '',
+            height: '',
+            weight: '',
+            contactName: '',
+            contactPhone: '',
+            relatedPosition: '队员',
+            jerseyName: typeof generateJerseyName === 'function' ? generateJerseyName(name) : '',
+            birthDate,
+            _importKind: 'player',
+            _staffType: '',
+            _roleSuffix: 'C',
+            _importKindLabel: '球员',
+            _photoFile: photoFile,
+            _photoPreview: photoPreview,
+            _error: false
+          })
+        })
+      })
+    })
+
+    if (parsed.length === 0) {
+      ElMessage.error('未从 Word 中解析到球员信息，请确认报名表表格中包含「姓名/号码/出生日期」')
+      return
+    }
+
+    importParsedData.value = parsed
+    importErrors.value = warnings
+    colDetectInfo.value = {}
+    const photoCount = parsed.filter(player => player._photoFile).length
+    ElMessage.success(`已从 Word 报名表解析到 ${parsed.length} 名球员、${photoCount} 张球员照片`)
+  } catch (err) {
+    console.error('解析 Word 报名表失败:', err)
+    ElMessage.error('Word 报名表解析失败，请确认文件格式正确（.docx）')
+  }
+}
+
 function clearImportData() {
   importParsedData.value = []
   importErrors.value = []
   colDetectInfo.value = {}
+  wordFormInfo.value = {}
+  wordTeamLogoPreview.value = ''
+  wordTeamLogoFile.value = null
 }
 
 // ========== 批量导入头像（ZIP，按完整姓名匹配）==========
@@ -2414,6 +2723,18 @@ function dataUrlToFile(dataUrl, fileName) {
   return new File([bytes], fileName, { type: mime })
 }
 
+async function createWordImageForDirectUpload(dataUrl, fileName) {
+  // webLoginApi 的 JSON 请求体限制较小；18KB PNG 转成 Base64 后仍处于安全范围
+  const maxUploadBytes = 18 * 1024
+  const candidateSizes = [220, 180, 150, 128, 112, 96, 80, 64]
+  for (const maxSize of candidateSizes) {
+    const compressedDataUrl = await compressBase64(dataUrl, maxSize)
+    const candidateFile = dataUrlToFile(compressedDataUrl, fileName)
+    if (candidateFile.size <= maxUploadBytes) return candidateFile
+  }
+  throw new Error('报名表图片压缩后仍超过上传限制，请更换图片后重试')
+}
+
 function compressAvatarForAudit(file, maxWidth = 250, quality = 0.5) {
   return new Promise((resolve, reject) => {
     const image = new Image()
@@ -2566,6 +2887,71 @@ async function confirmBatchAvatarImport() {
   }
 }
 
+async function uploadWordTeamLogoIfMissing() {
+  if (!wordTeamLogoFile.value) return { imported: false, preservedExisting: false }
+
+  // 上传前重新读取球队，避免覆盖刚由其他入口补充的队徽
+  const latestResult = await queryById('teams', teamId)
+  const latestTeam = Array.isArray(latestResult) ? latestResult[0] : latestResult
+  const latestLogo = getTeamLogoUrl(latestTeam)
+  if (latestLogo) {
+    team.value = { ...team.value, ...latestTeam }
+    return { imported: false, preservedExisting: true }
+  }
+
+  // 报名表队徽属于小图片，压缩后直接上传，避免分片会话在连续导入时失效
+  const logoFile = await createWordImageForDirectUpload(
+    wordTeamLogoPreview.value,
+    `word-logo-${Date.now()}.png`
+  )
+  const uploadResult = await uploadImageViaWebApi(`team-logos/${teamId}`, logoFile)
+  if (!uploadResult.success || !uploadResult.fileId) {
+    throw new Error(uploadResult.message || '报名表队徽上传失败')
+  }
+
+  const logoUrl = uploadResult.tempUrl || await getFileUrl(uploadResult.fileId)
+  if (!logoUrl) throw new Error('报名表队徽已上传，但未获取到可访问地址')
+  await updateRecord('teams', teamId, { logo: logoUrl, logoUrl, logoFileID: uploadResult.fileId })
+
+  team.value = { ...team.value, logo: logoUrl, logoUrl }
+  return { imported: true, preservedExisting: false }
+}
+
+function findExistingWordPlayers(player) {
+  if (!player.birthDate) return []
+  const targetName = String(player.name || '').trim()
+  const targetJersey = normalizeJerseyNumber(player.jerseyNumber)
+  return players.value.filter(existing =>
+    String(existing.name || '').trim() === targetName &&
+    normalizeJerseyNumber(existing.jerseyNumber) === targetJersey &&
+    String(existing.birthDate || '').trim() === String(player.birthDate || '').trim()
+  )
+}
+
+async function uploadWordPlayerPhoto(player, playerId) {
+  const sourceFile = player._photoFile
+  if (!sourceFile) return null
+  if (!sourceFile.size || sourceFile.size > WORD_PLAYER_PHOTO_MAX_SIZE) {
+    throw new Error('报名表球员照片为空或超过 10MB')
+  }
+
+  const safePlayerId = String(playerId || player.name || 'player').replace(/[^a-zA-Z0-9_-]/g, '') || 'player'
+  const processedAvatar = await auditAndRemoveAvatarBackground(sourceFile)
+  const processedFile = await createWordImageForDirectUpload(
+    processedAvatar,
+    `word-${safePlayerId}-${Date.now()}.png`
+  )
+  // 抠图后的头像只有几十 KB，直接上传比创建分片会话更可靠
+  const uploadResult = await uploadImageViaWebApi(`player-photos/${teamId}`, processedFile)
+  if (!uploadResult.success || !uploadResult.fileId) {
+    throw new Error(uploadResult.message || '报名表球员照片上传失败')
+  }
+  return {
+    photoUrl: uploadResult.fileId,
+    photoFileID: uploadResult.fileId
+  }
+}
+
 // 确认批量导入
 async function confirmBatchImport() {
   const validData = importParsedData.value.filter(p => !p._error)
@@ -2576,9 +2962,14 @@ async function confirmBatchImport() {
   
   const playerCount = validData.filter(item => item._importKind !== 'staff').length
   const staffCount = validData.filter(item => item._importKind === 'staff').length
+  const wordPhotoCount = importMode.value === 'word' ? validData.filter(item => item._photoFile).length : 0
+  const wordExistingUpdateCount = importMode.value === 'word'
+    ? validData.filter(item => item._importKind !== 'staff' && findExistingWordPlayers(item).length === 1).length
+    : 0
+  const shouldImportWordLogo = importMode.value === 'word' && !teamHasLogo.value && Boolean(wordTeamLogoFile.value)
   try {
     await ElMessageBox.confirm(
-      `确定导入 ${playerCount} 名球员、${staffCount} 名工作人员到「${team.value.name || '当前球队'}」？`,
+      `确定处理 ${playerCount} 名球员、${staffCount} 名工作人员到「${team.value.name || '当前球队'}」${wordExistingUpdateCount ? `；其中 ${wordExistingUpdateCount} 名将匹配并更新现有球员` : ''}${wordPhotoCount ? `，自动抠图并导入 ${wordPhotoCount} 张球员照片` : ''}${shouldImportWordLogo ? '，并补充报名表队徽' : ''}？`,
       '批量导入确认',
       { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'info' }
     )
@@ -2588,8 +2979,11 @@ async function confirmBatchImport() {
   
   batchImporting.value = true
   let successPlayers = 0
+  let updatedPlayers = 0
   let successStaff = 0
   let failed = 0
+  let successPhotos = 0
+  let failedPhotos = 0
   // A/B/C 共用同一个球队成员序号空间，删除后不复用
   const teamCodeForId = team.value.teamCode || teamId
   let existingCoaches = []
@@ -2640,7 +3034,7 @@ async function confirmBatchImport() {
           role: STAFF_ROLE_LABEL_MAP[player._staffType] || player.relatedPosition || '其他',
           contactName: player.contactName || '',
           gender: idCardInfo.gender || '',
-          birthDate: idCardInfo.birthDate || '',
+          birthDate: idCardInfo.birthDate || player.birthDate || '',
           nativePlace: idCardInfo.nativePlace || '',
           description: '',
           createTime: now,
@@ -2652,6 +3046,46 @@ async function confirmBatchImport() {
       }
 
       const jerseyNum = parseInt(player.jerseyNumber)
+      const existingWordMatches = importMode.value === 'word' ? findExistingWordPlayers(player) : []
+      if (existingWordMatches.length > 1) {
+        console.warn(`Word 导入匹配到多个现有球员，已跳过「${player.name}」`, existingWordMatches.map(item => item._id))
+        failed++
+        continue
+      }
+
+      if (existingWordMatches.length === 1) {
+        const existingPlayer = existingWordMatches[0]
+        let photoFields = {}
+        if (player._photoFile) {
+          try {
+            photoFields = await uploadWordPlayerPhoto(player, existingPlayer.playerId || existingPlayer._id) || {}
+            successPhotos++
+          } catch (photoError) {
+            failedPhotos++
+            console.error(`上传「${player.name}」报名表照片失败:`, photoError)
+          }
+        }
+        await updateRecord('players', existingPlayer._id, {
+          birthDate: idCardInfo.birthDate || player.birthDate || existingPlayer.birthDate || '',
+          jerseyName: player.jerseyName || existingPlayer.jerseyName || '',
+          ...photoFields,
+          updateTime: now
+        })
+        updatedPlayers++
+        continue
+      }
+
+      const generatedPlayerId = generatePlayerId(teamCodeForId, 'C', importSeq)
+      let photoFields = {}
+      if (player._photoFile) {
+        try {
+          photoFields = await uploadWordPlayerPhoto(player, generatedPlayerId) || {}
+          successPhotos++
+        } catch (photoError) {
+          failedPhotos++
+          console.error(`上传「${player.name}」报名表照片失败:`, photoError)
+        }
+      }
       await addRecord('players', {
         name: player.name,
         idCard: player.idCard,
@@ -2668,9 +3102,10 @@ async function confirmBatchImport() {
         teamName: team.value.name || '',
         gender: idCardInfo.gender || 'male',
         nationality: '中国',
-        birthDate: idCardInfo.birthDate || '',
+        birthDate: idCardInfo.birthDate || player.birthDate || '',
         nativePlace: idCardInfo.nativePlace || '',
-        playerId: generatePlayerId(teamCodeForId, 'C', importSeq),
+        playerId: generatedPlayerId,
+        ...photoFields,
         registerTime: now,
         createTime: now
       })
@@ -2681,16 +3116,40 @@ async function confirmBatchImport() {
       failed++
     }
   }
+
+  let logoImportResult = { imported: false, preservedExisting: false }
+  let logoImportFailed = false
+  if (shouldImportWordLogo) {
+    try {
+      logoImportResult = await uploadWordTeamLogoIfMissing()
+    } catch (logoError) {
+      logoImportFailed = true
+      console.error('报名表队徽补充失败:', logoError)
+    }
+  }
   
   batchImporting.value = false
-  importParsedData.value = []
-  importErrors.value = []
-  colDetectInfo.value = {}
+  clearImportData()
   
-  loadPlayers()
+  await loadPlayers()
   showBatchImport.value = false
   
-  ElMessage.success(`导入完成：成功球员 ${successPlayers} 人、工作人员 ${successStaff} 人${failed > 0 ? `，失败 ${failed} 人` : ''}`)
+  const logoResultText = logoImportResult.imported
+    ? '，已同步补充队徽'
+    : logoImportResult.preservedExisting
+      ? '，球队已有队徽，未覆盖'
+      : logoImportFailed
+        ? '，队徽补充失败，可稍后手动上传'
+        : ''
+  const photoResultText = wordPhotoCount
+    ? `，球员照片抠图上传成功 ${successPhotos} 张${failedPhotos ? `、失败 ${failedPhotos} 张` : ''}`
+    : ''
+  const resultMessage = `导入完成：新增球员 ${successPlayers} 人、更新现有球员 ${updatedPlayers} 人、工作人员 ${successStaff} 人${failed > 0 ? `，人员失败 ${failed} 人` : ''}${photoResultText}${logoResultText}`
+  if (logoImportFailed || failedPhotos > 0 || failed > 0) {
+    ElMessage.warning(resultMessage)
+  } else {
+    ElMessage.success(resultMessage)
+  }
 }
 
 // 上传球队Logo（先裁剪预览，再抠图上传）

@@ -1,0 +1,50 @@
+<view class="page">
+  <view class="header">
+    <text class="header-step">第一步</text>
+    <text class="header-title">认领球队名单</text>
+    <text class="header-desc">认领仅用于本届赛事，不会修改球队档案。</text>
+  </view>
+
+  <view class="code-card" wx:if="{{!hasPreview}}">
+    <text class="card-title">输入裁判提供的认领码</text>
+    <input class="code-input" value="{{codeInput}}" maxlength="16" placeholder="请输入认领码" bindinput="onCodeInput" />
+    <button class="primary-btn" bindtap="confirmCode">查看球队</button>
+  </view>
+
+  <view class="loading-card" wx:if="{{loading}}">正在核对球队信息...</view>
+
+  <view class="error-card" wx:if="{{errorMsg}}">
+    <text>{{errorMsg}}</text>
+  </view>
+
+  <view class="team-card" wx:if="{{hasPreview}}">
+    <text class="tournament-name">{{tournamentName}}</text>
+    <text class="team-name">{{teamName}}</text>
+    <text class="vs-text">本场对阵 {{opponentName}}</text>
+    <view class="match-meta">
+      <text>{{matchTimeText}}</text>
+      <text>{{venue}}</text>
+    </view>
+    <view class="safe-tip">
+      <text class="safe-icon">✓</text>
+      <text>只能从主办方已确认名单中选择首发</text>
+    </view>
+
+    <button
+      class="primary-btn"
+      wx:if="{{needsPhone}}"
+      open-type="getPhoneNumber"
+      bindgetphonenumber="onGetPhoneNumber"
+      loading="{{bindingPhone}}"
+    >微信手机号一键认领</button>
+    <button class="primary-btn" wx:else bindtap="claimTeam">{{claimButtonText}}</button>
+  </view>
+
+  <view class="success-card" wx:if="{{claimed}}">
+    <text class="success-icon">✓</text>
+    <text class="success-title">认领成功</text>
+    <text class="success-desc">现在可以直接选择本场首发球员。</text>
+    <button class="primary-btn" bindtap="goLineup">去提交首发</button>
+    <button class="text-btn" bindtap="goWorkbench">返回赛事工作台</button>
+  </view>
+</view>

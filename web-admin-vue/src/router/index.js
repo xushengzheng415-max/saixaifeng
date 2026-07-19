@@ -513,13 +513,18 @@ function hasOrganizerSession() {
   const role = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
   const version = localStorage.getItem('authSessionVersion') || ''
   const loginType = localStorage.getItem('loginType') || ''
-  return role.toLowerCase() === 'organizer' && version === 'wechat-only-v1' && loginType === 'wechat'
+  const authToken = localStorage.getItem('authToken') || ''
+  return role.toLowerCase() === 'organizer' &&
+    version === 'wechat-assistance-v1' &&
+    loginType === 'wechat' &&
+    Boolean(authToken)
 }
 
 function clearInvalidSession() {
   ['isLoggedIn', 'loginType', 'role', 'currentRole', 'userId', 'userInfo',
     'needSelectRole', 'needBindPhone', 'needSetPassword', 'needBindEmail',
-    'wechatTemp', 'phone', 'phoneNumber', 'openid', 'unionid', 'authSessionVersion']
+    'wechatTemp', 'phone', 'phoneNumber', 'openid', 'unionid', 'authSessionVersion',
+    'authToken', 'assistanceContext']
     .forEach(key => localStorage.removeItem(key))
 }
 

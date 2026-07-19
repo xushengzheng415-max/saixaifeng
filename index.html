@@ -1093,17 +1093,23 @@
         const AUTH_STORAGE_KEYS = [
             'isLoggedIn', 'loginType', 'role', 'currentRole', 'userId', 'userInfo',
             'userPhone', 'phone', 'phoneNumber', 'openid', 'unionid', 'wechatTemp',
-            'needSetPassword', 'needBindPhone', 'needBindEmail', 'needSelectRole'
+            'needSetPassword', 'needBindPhone', 'needBindEmail', 'needSelectRole',
+            'authToken'
         ];
 
         function beginOrganizerSession(data) {
             const role = String(data?.role || data?.user?.role || '').toLowerCase();
+            const authToken = String(data?.authToken || '').trim();
+            AUTH_STORAGE_KEYS.forEach(function(key) { localStorage.removeItem(key); });
             if (role !== ORGANIZER_ROLE) {
                 throw new Error('主办方账号初始化失败，请重新登录');
             }
-            AUTH_STORAGE_KEYS.forEach(function(key) { localStorage.removeItem(key); });
+            if (!authToken) {
+                throw new Error('安全登录会话创建失败，请重新扫码');
+            }
             localStorage.setItem('role', ORGANIZER_ROLE);
             localStorage.setItem('currentRole', ORGANIZER_ROLE);
+            localStorage.setItem('authToken', authToken);
             localStorage.setItem('authSessionVersion', 'wechat-only-v1');
             return ORGANIZER_ROLE;
         }

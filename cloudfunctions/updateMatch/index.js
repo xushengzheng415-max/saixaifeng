@@ -1,33 +1,91 @@
 // 云函数：更新比赛信息
 const cloud = require('wx-server-sdk')
+const crypto = require('crypto')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
+
+function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex')
+}
+
+function recordBelongsToActor(record, actor) {
+  if (!record || !actor) return false
+  if (record.orgId && String(record.orgId) === String(actor.orgId)) return true
+  const ids = [actor.user._id, actor.user.uid, actor.user.userId].filter(Boolean)
+  if (['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy']
+    .some(field => record[field] && ids.includes(record[field]))) return true
+  const phones = [actor.user.phone, actor.user.phoneNumber].filter(Boolean)
+  return phones.length > 0 && ['creatorPhone', 'organizerPhone', 'ownerPhone', 'contactPhone', 'phoneNumber', 'phone']
+    .some(field => record[field] && phones.includes(record[field]))
+}
+
+async function authenticateActor(event) {
+  const token = String((event && event.__authToken) || '').trim()
+  if (!token) throw new Error('登录会话已失效，请重新登录')
+  const _ = db.command
+  const sessionResult = await db.collection('auth_sessions').where({
+    tokenHash: hashSessionToken(token),
+    active: true,
+    expiresAt: _.gt(new Date())
+  }).limit(2).get()
+  const sessions = sessionResult.data || []
+  if (sessions.length !== 1) throw new Error('登录会话已失效，请重新登录')
+  const userResult = await db.collection('users').doc(sessions[0].userId).get()
+  const user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
+  if (!user) throw new Error('登录账号不存在')
+  const orgId = String(user.orgId || user._id)
+  if (event.__actorUserId && event.__actorUserId !== user._id) throw new Error('登录身份校验失败')
+  if (event.__actorOrgId && String(event.__actorOrgId) !== orgId) throw new Error('机构归属校验失败')
+  if (!user.orgId) {
+    await db.collection('users').doc(user._id).update({ data: { orgId, updateTime: db.serverDate() } })
+  }
+  return { user: { ...user, orgId }, orgId }
+}
 
 exports.main = async (event, context) => {
   const { matchId, data } = event
 
-  if (!matchId) {
-    return { success: false, message: '缺少 matchId' }
+  if (!matchId || !data || typeof data !== 'object') {
+    return { success: false, message: '缺少 matchId 或更新内容' }
   }
 
   try {
+    const actor = await authenticateActor(event)
+    const matchResult = await db.collection('matches').doc(matchId).get()
+    const match = Array.isArray(matchResult.data) ? matchResult.data[0] : matchResult.data
+    if (!match) return { success: false, message: '比赛不存在' }
+
+    let tournament = null
+    if (match.tournamentId) {
+      const tournamentResult = await db.collection('tournaments').doc(match.tournamentId).get()
+      tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+    }
+    if (!recordBelongsToActor(match, actor) && !recordBelongsToActor(tournament, actor)) {
+      return { success: false, message: '无权修改其他账号的比赛' }
+    }
+
+    const safeData = { ...data }
+    ;['orgId', 'creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy'].forEach(field => { delete safeData[field] })
+    delete safeData.tournamentId
+
     // 更新 matches 集合
     await db.collection('matches').doc(matchId).update({
       data: {
-        ...data,
+        ...safeData,
+        orgId: actor.orgId,
         updateTime: db.serverDate()
       }
     })
 
     // 如果更新了裁判组，同步到 match_referees 集合
-    if (data.refereeCrew) {
-      await syncMatchReferees(matchId, data.refereeCrew, data.tournamentId)
+    if (safeData.refereeCrew) {
+      await syncMatchReferees(matchId, safeData.refereeCrew, match.tournamentId, actor.orgId)
     }
 
     // 如果更新了比分且状态为 finished，同时更新联赛/小组积分榜
-    if (data.status === 'finished' && data.homeScore != null && data.awayScore != null) {
+    if (safeData.status === 'finished' && safeData.homeScore != null && safeData.awayScore != null) {
       try {
-        await updateStandings(matchId, data)
+        await updateStandings(matchId, safeData, actor.orgId)
       } catch (e) {
         console.warn('更新积分榜失败（非关键）', e)
       }
@@ -41,7 +99,7 @@ exports.main = async (event, context) => {
 }
 
 // 同步 match_referees 集合
-async function syncMatchReferees(matchId, refereeCrew, tournamentId) {
+async function syncMatchReferees(matchId, refereeCrew, tournamentId, orgId) {
   try {
     // 1. 删除旧的裁判记录
     const oldRecords = await db.collection('match_referees').where({ matchId }).get()
@@ -86,6 +144,7 @@ async function syncMatchReferees(matchId, refereeCrew, tournamentId) {
           data: {
             matchId,
             tournamentId: tournamentId || '',
+            orgId,
             refereeId: refId,
             role,
             roleLabel: roleLabels[role] || role,
@@ -103,10 +162,10 @@ async function syncMatchReferees(matchId, refereeCrew, tournamentId) {
 }
 
 // 更新积分榜（联赛制/小组赛）
-async function updateStandings(matchId, data) {
+async function updateStandings(matchId, data, orgId) {
   // 查找这场比赛属于哪个赛事
   const matchRes = await db.collection('matches').doc(matchId).get()
-  const match = matchRes.data[0]
+  const match = Array.isArray(matchRes.data) ? matchRes.data[0] : matchRes.data
   if (!match) return
 
   const tournamentId = match.tournamentId
@@ -137,6 +196,7 @@ async function updateStandings(matchId, data) {
     standingId = standingRes.data[0]._id
     standingsData = standingRes.data[0]
   }
+  standingsData.orgId = orgId
 
   // 更新对应球队的积分
   function updateTeamInStandings(teamId, points, gf, ga) {
@@ -192,6 +252,7 @@ async function updateStandings(matchId, data) {
     await db.collection('standings').add({
       data: {
         tournamentId,
+        orgId,
         ...standingsData,
         createTime: db.serverDate(),
         updateTime: db.serverDate()

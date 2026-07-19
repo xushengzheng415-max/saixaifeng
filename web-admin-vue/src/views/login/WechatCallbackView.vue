@@ -72,7 +72,9 @@ const AUTH_STORAGE_KEYS = [
   'needBindEmail',
   'needSelectRole',
   'wechatTemp',
-  'authSessionVersion'
+  'authSessionVersion',
+  'authToken',
+  'assistanceContext'
 ]
 
 function clearStoredAuthSession() {
@@ -118,20 +120,27 @@ onMounted(async () => {
         clearStoredAuthSession()
         throw new Error('主办方账号初始化失败，请重新登录')
       }
+      if (!result.authToken) {
+        clearStoredAuthSession()
+        throw new Error('安全登录会话创建失败，请重新扫码')
+      }
       clearStoredAuthSession()
       localStorage.setItem('loginType', 'wechat')
       localStorage.setItem('userInfo', JSON.stringify({
+        _id: user._id || '',
         uid: user._id || '',
         userName: user.nickname || '微信用户',
         avatarUrl: user.headimgurl || '',
         openid: user.openid || user.wechatOpenId || '',
-        unionid: user.unionid || ''
+        unionid: user.unionid || '',
+        isPlatformOwner: user.isPlatformOwner === true
       }))
       localStorage.setItem('userId', user._id || '')
       localStorage.setItem('role', normalizedRole)
       localStorage.setItem('currentRole', normalizedRole)
       localStorage.setItem('isLoggedIn', 'true')
-      localStorage.setItem('authSessionVersion', 'wechat-only-v1')
+      localStorage.setItem('authToken', result.authToken)
+      localStorage.setItem('authSessionVersion', 'wechat-assistance-v1')
 
       status.value = 'success'
 

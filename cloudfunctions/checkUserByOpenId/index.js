@@ -44,9 +44,14 @@ exports.main = async function(event) {
         lastLoginTime: now
       }
       var created = await db.collection('users').add({ data: userData })
-      user = Object.assign({ _id: created._id }, userData)
+      var createdOrgId = created._id
+      await db.collection('users').doc(created._id).update({
+        data: { orgId: createdOrgId, updateTime: db.serverDate() }
+      })
+      user = Object.assign({ _id: created._id, orgId: createdOrgId }, userData)
     } else {
       var patch = {
+        orgId: user.orgId || user._id,
         role: 'organizer',
         loginType: 'wechat',
         updateTime: db.serverDate(),
@@ -62,6 +67,7 @@ exports.main = async function(event) {
       isNewUser: !users[0],
       user: {
         _id: user._id,
+        orgId: user.orgId || user._id,
         openId: openId,
         nickName: user.nickName || '微信用户',
         avatarUrl: user.avatarUrl || '',

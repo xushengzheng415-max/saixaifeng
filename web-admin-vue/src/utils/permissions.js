@@ -48,6 +48,34 @@ export function hasRole(roles) {
   return currentRole === roles
 }
 
+/**
+ * 当前账号是否为平台所有者
+ * @returns {boolean}
+ */
+export function isPlatformOwner() {
+  try {
+    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    return userInfo.isPlatformOwner === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 当前网页是否处于用户主动授权的临时协助上下文。
+ * 此值仅用于控制界面；最终权限仍由 webLoginApi 服务端校验。
+ */
+export function hasActiveAssistance() {
+  try {
+    const context = JSON.parse(localStorage.getItem('assistanceContext') || '{}')
+    return Boolean(
+      context.requestId && context.expiresAt && new Date(context.expiresAt).getTime() > Date.now()
+    )
+  } catch {
+    return false
+  }
+}
+
 function getCurrentUserPhone() {
   try {
     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
@@ -95,6 +123,7 @@ export const permissions = {
     },
     // 删除球队
     delete: (team) => {
+      if (hasActiveAssistance()) return false
       const role = getCurrentRole()
       if (hasRole([ROLES.ADMIN, ROLES.ORGANIZER])) return true
       if (role === ROLES.COACH) {
@@ -132,6 +161,7 @@ export const permissions = {
     },
     // 删除球员
     delete: (player, team) => {
+      if (hasActiveAssistance()) return false
       if (hasRole([ROLES.ADMIN, ROLES.ORGANIZER])) return true
       if (hasRole(ROLES.COACH)) {
         const userId = localStorage.getItem('userId')
@@ -152,6 +182,7 @@ export const permissions = {
     create: () => hasRole([ROLES.ORGANIZER, ROLES.ADMIN]),
     // 编辑赛事
     edit: (tournament) => {
+      if (isPlatformOwner() || hasActiveAssistance()) return true
       if (hasRole([ROLES.ADMIN])) return true
       if (hasRole(ROLES.ORGANIZER)) {
         const userId = localStorage.getItem('userId')
@@ -161,6 +192,7 @@ export const permissions = {
     },
     // 删除赛事
     delete: (tournament) => {
+      if (isPlatformOwner()) return true
       if (hasRole([ROLES.ADMIN])) return true
       if (hasRole(ROLES.ORGANIZER)) {
         const userId = localStorage.getItem('userId')
@@ -170,6 +202,7 @@ export const permissions = {
     },
     // 管理赛事（抽签、赛程等）
     manage: (tournament) => {
+      if (isPlatformOwner() || hasActiveAssistance()) return true
       if (hasRole([ROLES.ADMIN])) return true
       if (hasRole(ROLES.ORGANIZER)) {
         const userId = localStorage.getItem('userId')
@@ -276,6 +309,8 @@ export default {
   ROLE_ICONS,
   getCurrentRole,
   hasRole,
+  isPlatformOwner,
+  hasActiveAssistance,
   permissions,
   getNavItemsByRole,
   getAvailableRoles

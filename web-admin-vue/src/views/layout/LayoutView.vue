@@ -254,7 +254,8 @@ const userInfo = ref({
   userName: '',
   avatarUrl: '',
   phone: '',
-  email: ''
+  email: '',
+  isPlatformOwner: false
 })
 const loginType = ref('')
 const currentRole = ref('')
@@ -355,7 +356,8 @@ async function confirmBindPhone() {
             avatarUrl: infoRes.user.headimgurl || infoRes.user.avatarUrl || '',
             phone: infoRes.user.phone || infoRes.user.phoneNumber || bindForm.value.phone,
             email: infoRes.user.email || '',
-            uid: infoRes.user._id
+            uid: infoRes.user._id,
+            isPlatformOwner: infoRes.user.isPlatformOwner === true || userInfo.value.isPlatformOwner === true
           }
           localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
           localStorage.setItem('userId', infoRes.user._id)
@@ -604,17 +606,20 @@ const isAdminPage = computed(() => {
 
 // 根据角色返回对应导航菜单
 const currentNavItems = computed(() => {
+  const ownerOnly = (items) => userInfo.value.isPlatformOwner
+    ? items
+    : items.filter(item => item.path !== '/system')
   // 赛事中心管理页面使用超级管理后台导航
   if (isAdminPage.value) {
-    return adminNavItems
+    return ownerOnly(adminNavItems)
   }
   if (currentRole.value === ROLES.COACH) {
     return coachNavItems
   }
   if (currentRole.value === ROLES.REFEREE) {
-    return refereeNavItems.value
+    return ownerOnly(refereeNavItems.value)
   }
-  return organizerNavItems
+  return ownerOnly(organizerNavItems)
 })
 
 // 用户下拉菜单命令
@@ -657,14 +662,22 @@ onMounted(() => {
       const parsed = JSON.parse(savedInfo)
       userInfo.value = {
         userName: parsed.userName || '开发者',
-        avatarUrl: parsed.avatarUrl || ''
+        avatarUrl: parsed.avatarUrl || '',
+        phone: parsed.phone || '',
+        email: parsed.email || '',
+        uid: parsed.uid || parsed._id || '',
+        isPlatformOwner: parsed.isPlatformOwner === true
       }
       localStorage.setItem('userInfo', JSON.stringify({
-        uid: parsed.uid || '',
+        _id: parsed._id || parsed.uid || '',
+        uid: parsed.uid || parsed._id || '',
         userName: parsed.userName || '微信用户',
         avatarUrl: parsed.avatarUrl || '',
         openid: parsed.openid || '',
-        unionid: parsed.unionid || ''
+        unionid: parsed.unionid || '',
+        phone: parsed.phone || '',
+        email: parsed.email || '',
+        isPlatformOwner: parsed.isPlatformOwner === true
       }))
     } catch (e) {
       // ignore

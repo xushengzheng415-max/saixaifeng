@@ -78,6 +78,13 @@
         <div v-if="configForm.tournamentType === 'league'" class="config-section">
           <h4>联赛设置</h4>
           <div class="config-row">
+            <label>循环方式</label>
+            <el-radio-group v-model="configForm.loopType">
+              <el-radio-button value="single">单循环</el-radio-button>
+              <el-radio-button value="double">双循环</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="config-row">
             <label>分组设置</label>
             <el-radio-group v-model="configForm.leagueGrouped">
               <el-radio-button :value="false">不分组（单联赛表）</el-radio-button>
@@ -514,7 +521,8 @@ const configForm = ref({
   groupCount: 4,
   teamsPerGroup: 4,
   knockoutSize: 16,
-  leagueGrouped: false
+  leagueGrouped: false,
+  loopType: 'single'
 })
 
 const divisionOptions = computed(() => {
@@ -651,7 +659,8 @@ function resetConfig() {
     groupCount: 4,
     teamsPerGroup: 4,
     knockoutSize: 16,
-    leagueGrouped: false
+    leagueGrouped: false,
+    loopType: 'single'
   }
 }
 
@@ -861,8 +870,45 @@ async function loadApprovedTeams() {
 }
 
 // 加载已有数据
+function getRecordTimestamp(record) {
+  const raw = record?.updateTime || record?.createTime
+  if (!raw) return 0
+  if (raw instanceof Date) return raw.getTime()
+  if (typeof raw === 'number') return raw
+  const parsed = new Date(raw?.$date || raw).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+async function detectLatestSavedTournamentType() {
+  const [savedGroups, savedBracket, savedLeagueTables] = await Promise.all([
+    queryList('tournament_groups', { where: { tournamentId }, limit: 100 }),
+    queryList('tournament_bracket', { where: { tournamentId }, limit: 100 }),
+    queryList('tournament_league_tables', { where: { tournamentId }, limit: 100 })
+  ])
+
+  const candidates = [
+    ...savedGroups
+      .filter(record => belongsToActiveDivision(record) && (record.groupName || record.groupCode) && Array.isArray(record.teams))
+      .map(record => ({ type: 'tournament', timestamp: getRecordTimestamp(record) })),
+    ...savedBracket
+      .filter(record => belongsToActiveDivision(record) && Array.isArray(record.matches))
+      .map(record => ({ type: 'cup', timestamp: getRecordTimestamp(record) })),
+    ...savedLeagueTables
+      .filter(record => belongsToActiveDivision(record) && Array.isArray(record.teams))
+      .map(record => ({ type: 'league', timestamp: getRecordTimestamp(record) }))
+  ]
+
+  candidates.sort((a, b) => b.timestamp - a.timestamp)
+  return candidates[0]?.type || ''
+}
+
 async function loadGroups() {
   try {
+    const savedTournamentType = await detectLatestSavedTournamentType()
+    if (savedTournamentType) {
+      configForm.value.tournamentType = savedTournamentType
+    }
+
     if (tournamentType.value === 'cup') {
       await loadBracket()
     } else if (tournamentType.value === 'league') {
@@ -881,7 +927,11 @@ async function loadGroupsData() {
     where: { tournamentId },
     orderBy: { groupCode: 'asc' }
   })
-  const list = allRecords.filter(belongsToActiveDivision)
+  const list = allRecords.filter(record => (
+    belongsToActiveDivision(record) &&
+    (record.groupName || record.groupCode) &&
+    Array.isArray(record.teams)
+  ))
 
   if (list.length > 0) {
     drawGenerated.value = true
@@ -982,6 +1032,7 @@ async function loadLeagueTables() {
     orderBy: { tableName: 'asc' }
   })
   const list = allRecords.filter(belongsToActiveDivision)
+  configForm.value.loopType = list[0]?.loopType === 'double' ? 'double' : 'single'
 
   if (list.length > 0) {
     drawGenerated.value = true
@@ -1509,7 +1560,7 @@ function clearGroups() {
 
 // 保存分组/对阵/积分表
 async function saveGroups() {
-  await ElMessageBox.confirm('保存后抽签结果将生效，确定保存吗？', '保存确认', {
+  await ElMessageBox.confirm('保存后抽签结果将生效，本组别以前生成的赛程会被清空，需要重新生成赛程。确定保存吗？', '保存确认', {
     type: 'warning'
   })
 
@@ -1523,8 +1574,16 @@ async function saveGroups() {
       await saveGroupsData()
     }
 
+    await clearOtherSavedDrawTypes()
+    const scheduleResult = await clearCurrentDivisionSchedule()
+    await syncSavedTournamentState(scheduleResult.hasOtherDivisionMatches)
+
     hasSavedGroups.value = true
-    ElMessage.success('保存成功！')
+    if (scheduleResult.deletedCount > 0) {
+      ElMessage.success(`保存成功，已清空本组别 ${scheduleResult.deletedCount} 场旧赛程，请重新生成赛程`)
+    } else {
+      ElMessage.success('保存成功！')
+    }
   } catch (err) {
     console.error('保存失败:', err)
     ElMessage.error('保存失败: ' + err.message)
@@ -1533,13 +1592,90 @@ async function saveGroups() {
   }
 }
 
+async function deleteActiveDivisionRecords(collection) {
+  const records = await queryList(collection, { where: { tournamentId }, limit: 1000 })
+  const scopedRecords = records.filter(belongsToActiveDivision)
+  for (const record of scopedRecords) {
+    await deleteRecord(collection, record._id)
+  }
+  return scopedRecords.length
+}
+
+async function clearOtherSavedDrawTypes() {
+  const activeCollection = {
+    tournament: 'tournament_groups',
+    cup: 'tournament_bracket',
+    league: 'tournament_league_tables'
+  }[tournamentType.value]
+  const drawCollections = ['tournament_groups', 'tournament_bracket', 'tournament_league_tables']
+
+  for (const collection of drawCollections) {
+    if (collection !== activeCollection) {
+      await deleteActiveDivisionRecords(collection)
+    }
+  }
+}
+
+async function clearCurrentDivisionSchedule() {
+  const allMatches = await queryList('matches', { where: { tournamentId }, limit: 1000 })
+  const currentDivisionMatches = allMatches.filter(belongsToActiveDivision)
+
+  for (const match of currentDivisionMatches) {
+    await deleteRecord('matches', match._id)
+  }
+
+  return {
+    deletedCount: currentDivisionMatches.length,
+    hasOtherDivisionMatches: allMatches.some(match => !belongsToActiveDivision(match))
+  }
+}
+
+async function syncSavedTournamentState(hasOtherDivisionMatches) {
+  const updateData = {
+    scheduleGenerated: hasOtherDivisionMatches,
+    updateTime: new Date()
+  }
+  const divisions = Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []
+
+  if (divisions.length > 0) {
+    const nextDivisions = divisions.map(division => (
+      String(division.id) === String(activeDivisionId.value)
+        ? { ...division, tournamentType: tournamentType.value }
+        : division
+    ))
+    updateData.divisions = nextDivisions
+    tournament.value = { ...tournament.value, divisions: nextDivisions, scheduleGenerated: hasOtherDivisionMatches }
+  } else {
+    updateData.type = tournamentType.value
+    updateData.tournamentType = tournamentType.value
+    tournament.value = {
+      ...tournament.value,
+      type: tournamentType.value,
+      tournamentType: tournamentType.value,
+      scheduleGenerated: hasOtherDivisionMatches
+    }
+  }
+
+  await updateRecord('tournaments', tournamentId, updateData)
+}
+
 async function saveGroupsData() {
+  const validGroups = groups.value.filter(group => (
+    group &&
+    Array.isArray(group.slots) &&
+    (group.name || group.code)
+  ))
+  if (validGroups.length === 0) {
+    throw new Error('没有可保存的有效分组，请重新配置分组')
+  }
+
   const oldGroups = await queryList('tournament_groups', { where: { tournamentId } })
   for (const g of oldGroups.filter(belongsToActiveDivision)) {
     await deleteRecord('tournament_groups', g._id)
   }
 
-  for (const group of groups.value) {
+  for (let groupIndex = 0; groupIndex < validGroups.length; groupIndex++) {
+    const group = validGroups[groupIndex]
     const teamList = group.slots.map((slot, index) => {
       if (!slot) return null
       return {
@@ -1553,8 +1689,8 @@ async function saveGroupsData() {
       tournamentId,
       divisionId: activeDivisionId.value,
       divisionName: activeDivision.value.name,
-      groupName: group.name,
-      groupCode: group.code || group.name[0],
+      groupName: group.name || `${group.code}组`,
+      groupCode: group.code || group.name?.[0] || `G${groupIndex + 1}`,
       teams: teamList,
       teamCount: teamList.length,
       maxTeams: teamsPerGroup.value,
@@ -1623,6 +1759,7 @@ async function saveLeagueTables() {
       teams: teamList,
       teamCount: teamList.length,
       type: 'league',
+      loopType: configForm.value.loopType === 'double' ? 'double' : 'single',
       createTime: new Date(),
       updateTime: new Date()
     })

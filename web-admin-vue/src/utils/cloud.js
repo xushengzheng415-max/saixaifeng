@@ -9,6 +9,8 @@ const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shangha
 
 // ★ 云函数直接 HTTP 调用的基础 URL（不经过 webLoginApi 中转）
 const CLOUD_FUNCTION_BASE_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com'
+const AUTH_TOKEN_KEY = 'authToken'
+const ASSISTANCE_CONTEXT_KEY = 'assistanceContext'
 
 // 登录相关云函数名 → webLoginApi action 映射
 const LOGIN_FUNCTION_MAP = {
@@ -56,7 +58,15 @@ const CLOUD_FUNCTION_MAP = {
  * @param {object} data - 请求数据
  */
 async function callFunctionHTTP(action, data = {}) {
-  const payload = { ...data, action }
+  const assistance = getAssistanceContext()
+  const bypassAssistance = action === 'callFunction' &&
+    ['platformOwner', 'generateMiniProgramCode'].includes(data.functionName)
+  const payload = {
+    ...data,
+    action,
+    authToken: localStorage.getItem(AUTH_TOKEN_KEY) || '',
+    assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : ''
+  }
   console.log(`[callFunctionHTTP] → ${action}`)
 
   try {
@@ -71,6 +81,17 @@ async function callFunctionHTTP(action, data = {}) {
     }
 
     const result = await response.json()
+    if (result && result.authToken) {
+      localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
+    }
+    if (result && result.code === 'ASSISTANCE_EXPIRED') {
+      clearAssistanceContext()
+    }
+    if (result && result.code === 'AUTH_REQUIRED') {
+      await logout()
+      window.location.href = 'https://saixiaofeng.com/'
+      throw new Error(result.error || '登录会话已失效，请重新微信扫码登录')
+    }
     return result
   } catch (err) {
     console.error('[callFunctionHTTP] ❌', err.message)
@@ -99,11 +120,12 @@ export async function logout() {
   localStorage.removeItem('openid')
   localStorage.removeItem('unionid')
   localStorage.removeItem('authSessionVersion')
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
 }
 
 export async function checkAuth() {
-  // 零 SDK 模式：信任 localStorage
-  return localStorage.getItem('isLoggedIn') === 'true'
+  return localStorage.getItem('isLoggedIn') === 'true' && Boolean(localStorage.getItem(AUTH_TOKEN_KEY))
 }
 
 export function getCurrentUser() {
@@ -119,13 +141,46 @@ export function getCurrentUser() {
 }
 
 export function getCurrentOwner() {
-  // 零 SDK 模式：返回手机号或用户 ID 作为 owner 标识
+  const assistance = getAssistanceContext()
+  if (assistance && assistance.targetOwnerKey) return assistance.targetOwnerKey
   return localStorage.getItem('phone') || localStorage.getItem('userId') || null
 }
 
+export function getAssistanceContext() {
+  try {
+    const raw = localStorage.getItem(ASSISTANCE_CONTEXT_KEY)
+    if (!raw) return null
+    const context = JSON.parse(raw)
+    if (!context.requestId || !context.expiresAt || new Date(context.expiresAt).getTime() <= Date.now()) {
+      localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+      return null
+    }
+    return context
+  } catch {
+    localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+    return null
+  }
+}
+
+export function setAssistanceContext(context) {
+  if (!context || !context.requestId || !context.expiresAt) {
+    throw new Error('协助上下文不完整')
+  }
+  localStorage.setItem(ASSISTANCE_CONTEXT_KEY, JSON.stringify({
+    requestId: context.requestId,
+    targetUserId: context.targetUserId || '',
+    targetName: context.targetName || '被协助用户',
+    targetOwnerKey: context.targetOwnerKey || context.targetUserId || '',
+    expiresAt: context.expiresAt
+  }))
+}
+
+export function clearAssistanceContext() {
+  localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+}
+
 export async function ensureLogin() {
-  // 零 SDK 模式：不需要登录，直接通过
-  return true
+  return checkAuth()
 }
 
 export async function anonymousLogin() {
@@ -152,10 +207,7 @@ export function getAuth() { return null }
  * 通过 HTTP API 执行数据库查询
  */
 async function dbQuery(collection, operation, params = {}) {
-  // ★ 附加当前用户 ID 用于后端鉴权
-  const user = getCurrentUser()
-  const userId = user ? user._id : null
-  return callFunctionHTTP('dbQuery', { collection, operation, userId, ...params })
+  return callFunctionHTTP('dbQuery', { collection, operation, ...params })
 }
 
 /**

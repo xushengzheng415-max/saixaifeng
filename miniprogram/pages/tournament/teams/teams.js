@@ -364,6 +364,17 @@ Page({
     })
   },
 
+  onViewTeam(e) {
+    var teamId = e.currentTarget.dataset.id || ''
+    if (!teamId) {
+      wx.showToast({ title: '未找到球队信息', icon: 'none' })
+      return
+    }
+    wx.navigateTo({
+      url: '/pages/team/detail/detail?id=' + encodeURIComponent(teamId)
+    })
+  },
+
   onShareAppMessage() {
     return {
       title: '邀请球队报名参赛：' + (this.data.tournamentName || '赛小蜂足球赛事'),

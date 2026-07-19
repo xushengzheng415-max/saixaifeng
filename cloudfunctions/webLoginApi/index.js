@@ -72,6 +72,400 @@ const WECHAT_CONFIG = {
   APP_SECRET: process.env.WECHAT_WEB_APPSECRET || '',
 }
 
+const WEB_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const ASSISTANCE_COLLECTIONS = new Set([
+  'teams', 'players', 'player_library', 'coaches',
+  'tournaments', 'matches', 'tournament_teams', 'rosters', 'roster_change_requests'
+])
+
+// 普通主办方工作台只允许访问明确列出的机构私有业务集合。
+// orgId 是租户边界；creatorId 只记录具体创建人，不能代替租户边界。
+const ORGANIZER_PRIVATE_COLLECTIONS = new Set([
+  'tournaments', 'teams', 'players', 'coaches', 'management',
+  'player_library', 'coach_library', 'referees', 'referee_invitations',
+  'matches', 'match_events', 'match_referees', 'tournament_referees',
+  'tournament_teams', 'tournament_groups', 'tournament_bracket',
+  'tournament_league_tables', 'rosters', 'roster_change_requests',
+  'squads', 'standings', 'schedule_info', 'team_tasks'
+])
+
+const ORGANIZER_SCOPED_RELAY_FUNCTIONS = new Set([
+  'generateSchedule', 'updateMatch'
+])
+
+const ORGANIZER_IMMUTABLE_OWNERSHIP_FIELDS = new Set([
+  'orgId', 'creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy',
+  'owner', 'creator'
+])
+
+function dateValue(value) {
+  if (!value) return 0
+  const raw = value && typeof value === 'object' && value.$date ? value.$date : value
+  const time = new Date(raw).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex')
+}
+
+async function createWebSession(userId) {
+  const db = cloud.database()
+  const userResult = await db.collection('users').doc(userId).get()
+  const rawUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
+  if (!rawUser) throw new Error('登录账号不存在')
+  await ensureUserOrgId(db, rawUser)
+  const token = crypto.randomBytes(32).toString('hex')
+  await db.collection('auth_sessions').add({
+    data: {
+      tokenHash: hashSessionToken(token),
+      userId,
+      active: true,
+      channel: 'wechat_web',
+      expiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS),
+      createTime: db.serverDate(),
+      lastUsedAt: db.serverDate()
+    }
+  })
+  return token
+}
+
+async function authenticateWebSession(event) {
+  const token = String((event && event.authToken) || '').trim()
+  if (!token) return { success: false, error: '登录会话已失效，请重新微信扫码登录', code: 'AUTH_REQUIRED' }
+  const db = cloud.database()
+  const _ = db.command
+  const sessionResult = await db.collection('auth_sessions').where({
+    tokenHash: hashSessionToken(token),
+    active: true,
+    expiresAt: _.gt(new Date())
+  }).limit(2).get()
+  const sessions = sessionResult.data || []
+  if (sessions.length !== 1) return { success: false, error: '登录会话已失效，请重新微信扫码登录', code: 'AUTH_REQUIRED' }
+  const session = sessions[0]
+  const userResult = await db.collection('users').doc(session.userId).get()
+  const rawUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
+  if (!rawUser) return { success: false, error: '登录账号不存在，请重新登录', code: 'AUTH_REQUIRED' }
+  const user = await ensureUserOrgId(db, rawUser)
+  db.collection('auth_sessions').doc(session._id).update({ data: { lastUsedAt: db.serverDate() } }).catch(() => {})
+  return { success: true, session, user, userId: user._id, orgId: user.orgId }
+}
+
+async function ensureUserOrgId(db, user) {
+  if (!user || !user._id) throw new Error('账号归属信息不完整')
+  const orgId = String(user.orgId || user._id)
+  if (user.orgId !== orgId) {
+    await db.collection('users').doc(user._id).update({
+      data: { orgId, updateTime: db.serverDate() }
+    })
+  }
+  return { ...user, orgId }
+}
+
+function recordBelongsToUser(record, user, idFields, phoneFields) {
+  const ids = [user._id, user.uid, user.userId].filter(Boolean)
+  if (idFields.some(field => record[field] && ids.includes(record[field]))) return true
+  const phones = [user.phone, user.phoneNumber].filter(Boolean)
+  if (phones.length > 0 && phoneFields.some(field => record[field] && phones.includes(record[field]))) return true
+  const openIds = [user.openId, user.openid, user.wechatOpenId, user._openid].filter(Boolean)
+  return openIds.length > 0 && ['openId', 'openid', 'wechatOpenId', '_openid']
+    .some(field => record[field] && openIds.includes(record[field]))
+}
+
+function recordHasOrg(record, orgId) {
+  return Boolean(record && orgId && String(record.orgId || '') === String(orgId))
+}
+
+function recordTeamKeys(record) {
+  return [record && record.teamId, record && record.teamCode]
+    .concat(record && Array.isArray(record.teamIds) ? record.teamIds : [])
+    .concat(record && Array.isArray(record.teamCodes) ? record.teamCodes : [])
+    .filter(Boolean)
+}
+
+async function buildOrganizerScope(db, rawUser) {
+  const user = await ensureUserOrgId(db, rawUser)
+  const [teamResult, tournamentResult] = await Promise.all([
+    db.collection('teams').limit(1000).get(),
+    db.collection('tournaments').limit(1000).get()
+  ])
+
+  const teams = (teamResult.data || []).filter(team => recordHasOrg(team, user.orgId) || recordBelongsToUser(
+    team,
+    user,
+    ['creatorId', 'ownerId', 'userId', 'createdBy', 'creator'],
+    ['ownerPhone', 'creatorPhone', 'contactPhone', 'phoneNumber', 'phone', 'mobile']
+  ))
+  const tournaments = (tournamentResult.data || []).filter(tournament => recordHasOrg(tournament, user.orgId) || recordBelongsToUser(
+    tournament,
+    user,
+    ['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy', 'creator'],
+    ['creatorPhone', 'organizerPhone', 'ownerPhone', 'contactPhone', 'phoneNumber', 'phone']
+  ))
+
+  const scope = {
+    user,
+    orgId: user.orgId,
+    teamIds: new Set(teams.map(item => item._id).filter(Boolean)),
+    teamCodes: new Set(teams.flatMap(item => [item.teamCode, item.code]).filter(Boolean)),
+    tournamentIds: new Set(tournaments.map(item => item._id).filter(Boolean)),
+    matchIds: new Set()
+  }
+
+  const matchResult = await db.collection('matches').limit(1000).get()
+  ;(matchResult.data || []).forEach(match => {
+    if (recordHasOrg(match, scope.orgId) || scope.tournamentIds.has(match.tournamentId) ||
+        scope.teamIds.has(match.homeTeamId) || scope.teamIds.has(match.awayTeamId)) {
+      if (match._id) scope.matchIds.add(match._id)
+    }
+  })
+  return scope
+}
+
+function organizerRecordAllowed(collection, record, scope) {
+  if (!record || !scope) return false
+  if (recordHasOrg(record, scope.orgId)) return true
+
+  if (collection === 'teams') {
+    return scope.teamIds.has(record._id) || recordBelongsToUser(
+      record, scope.user,
+      ['creatorId', 'ownerId', 'userId', 'createdBy', 'creator'],
+      ['ownerPhone', 'creatorPhone', 'contactPhone', 'phoneNumber', 'phone', 'mobile']
+    )
+  }
+  if (collection === 'tournaments') {
+    return scope.tournamentIds.has(record._id) || recordBelongsToUser(
+      record, scope.user,
+      ['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy', 'creator'],
+      ['creatorPhone', 'organizerPhone', 'ownerPhone', 'contactPhone', 'phoneNumber', 'phone']
+    )
+  }
+  if (collection === 'players' || collection === 'coaches' || collection === 'management') {
+    return recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value)) ||
+      recordBelongsToUser(
+        record, scope.user,
+        ['creatorId', 'ownerId', 'userId', 'createdBy', 'creator'],
+        ['creatorPhone', 'ownerPhone', 'contactPhone']
+      )
+  }
+  if (collection === 'player_library' || collection === 'coach_library') {
+    const userKeys = [scope.user._id, scope.user.phone, scope.user.phoneNumber].filter(Boolean)
+    return [record.owner, record.creator, record.creatorId, record.userId, record.createdBy]
+      .some(value => value && userKeys.includes(value))
+  }
+  if (collection === 'referees' || collection === 'referee_invitations') {
+    return scope.tournamentIds.has(record.tournamentId) || recordBelongsToUser(
+      record, scope.user,
+      ['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy', 'creator'],
+      ['creatorPhone', 'organizerPhone', 'ownerPhone', 'phone']
+    )
+  }
+  if (collection === 'matches') {
+    return scope.matchIds.has(record._id) || scope.tournamentIds.has(record.tournamentId)
+  }
+  if (collection === 'match_events') {
+    return scope.matchIds.has(record.matchId) || scope.tournamentIds.has(record.tournamentId)
+  }
+  if (collection === 'match_referees') {
+    return scope.matchIds.has(record.matchId) || scope.tournamentIds.has(record.tournamentId)
+  }
+  if (collection === 'tournament_referees' || collection === 'tournament_teams' ||
+      collection === 'tournament_groups' || collection === 'tournament_bracket' ||
+      collection === 'tournament_league_tables' || collection === 'rosters' ||
+      collection === 'roster_change_requests' || collection === 'standings' ||
+      collection === 'schedule_info') {
+    return scope.tournamentIds.has(record.tournamentId)
+  }
+  if (collection === 'squads') {
+    return scope.matchIds.has(record.matchId) || scope.tournamentIds.has(record.tournamentId) ||
+      recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value))
+  }
+  if (collection === 'team_tasks') {
+    return scope.tournamentIds.has(record.tournamentId) ||
+      recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value))
+  }
+  return false
+}
+
+function organizerRelationAllowed(collection, record, scope) {
+  if (!record || !scope) return false
+  if (collection === 'teams' || collection === 'tournaments' || collection === 'referees' ||
+      collection === 'referee_invitations' || collection === 'player_library' ||
+      collection === 'coach_library') return true
+  if (collection === 'players' || collection === 'coaches' || collection === 'management') {
+    return recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value))
+  }
+  if (collection === 'matches' || collection === 'tournament_referees' ||
+      collection === 'tournament_teams' || collection === 'tournament_groups' ||
+      collection === 'tournament_bracket' || collection === 'tournament_league_tables' ||
+      collection === 'rosters' || collection === 'roster_change_requests' ||
+      collection === 'standings' || collection === 'schedule_info') {
+    return Boolean(record.tournamentId && scope.tournamentIds.has(record.tournamentId))
+  }
+  if (collection === 'match_events' || collection === 'match_referees') {
+    return Boolean((record.matchId && scope.matchIds.has(record.matchId)) ||
+      (record.tournamentId && scope.tournamentIds.has(record.tournamentId)))
+  }
+  if (collection === 'squads') {
+    return Boolean((record.matchId && scope.matchIds.has(record.matchId)) ||
+      (record.tournamentId && scope.tournamentIds.has(record.tournamentId)) ||
+      recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value)))
+  }
+  if (collection === 'team_tasks') {
+    return Boolean((record.tournamentId && scope.tournamentIds.has(record.tournamentId)) ||
+      recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value)))
+  }
+  return false
+}
+
+function prepareOrganizerAdd(collection, data, scope) {
+  const next = { ...(data || {}) }
+  next.orgId = scope.orgId
+  next.creatorId = scope.user._id
+  if (collection === 'tournaments') next.organizerId = scope.user._id
+  if (collection === 'teams') next.ownerId = scope.user._id
+  if (collection === 'player_library') next.owner = scope.user._id
+  if (collection === 'coach_library') next.creator = scope.user._id
+  return next
+}
+
+function sanitizeOrganizerUpdate(data) {
+  const next = { ...(data || {}) }
+  ORGANIZER_IMMUTABLE_OWNERSHIP_FIELDS.forEach(field => { delete next[field] })
+  return next
+}
+
+async function validateAssistanceGrant(db, requestId, helperUserId) {
+  if (!requestId) return null
+  let result
+  try {
+    result = await db.collection('assistance_requests').doc(String(requestId)).get()
+  } catch (err) {
+    throw new Error('协助授权不存在，请退出协助模式')
+  }
+  const grant = Array.isArray(result.data) ? result.data[0] : result.data
+  if (!grant || grant.helperUserId !== helperUserId) throw new Error('无权使用该协助授权')
+  if (grant.status !== 'active' || dateValue(grant.grantExpiresAt) <= Date.now()) {
+    if (grant.status === 'active') {
+      await db.collection('assistance_requests').doc(grant._id).update({
+        data: { status: 'expired', updateTime: db.serverDate() }
+      })
+    }
+    throw new Error('协助授权已失效，请退出协助模式')
+  }
+  return grant
+}
+
+async function buildAssistanceScope(db, grant) {
+  const targetResult = await db.collection('users').doc(grant.targetUserId).get()
+  const target = Array.isArray(targetResult.data) ? targetResult.data[0] : targetResult.data
+  if (!target) throw new Error('被协助账号不存在')
+  const [teamResult, tournamentResult] = await Promise.all([
+    db.collection('teams').limit(1000).get(),
+    db.collection('tournaments').limit(1000).get()
+  ])
+  const teams = (teamResult.data || []).filter(team => recordBelongsToUser(
+    team,
+    target,
+    ['creatorId', 'ownerId', 'userId', 'createdBy'],
+    ['ownerPhone', 'creatorPhone', 'contactPhone', 'phoneNumber', 'phone', 'mobile']
+  ))
+  const tournaments = (tournamentResult.data || []).filter(tournament => recordBelongsToUser(
+    tournament,
+    target,
+    ['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy'],
+    ['creatorPhone', 'organizerPhone', 'ownerPhone', 'contactPhone', 'phoneNumber', 'phone']
+  ))
+  return {
+    grant,
+    target,
+    teamIds: new Set(teams.map(item => item._id).filter(Boolean)),
+    teamCodes: new Set(teams.flatMap(item => [item.teamCode, item.code]).filter(Boolean)),
+    tournamentIds: new Set(tournaments.map(item => item._id).filter(Boolean))
+  }
+}
+
+function assistanceRecordAllowed(collection, record, scope) {
+  if (!record) return false
+  if (collection === 'teams') return scope.teamIds.has(record._id) || recordBelongsToUser(
+    record, scope.target,
+    ['creatorId', 'ownerId', 'userId', 'createdBy'],
+    ['ownerPhone', 'creatorPhone', 'contactPhone', 'phoneNumber', 'phone', 'mobile']
+  )
+  if (collection === 'tournaments') return scope.tournamentIds.has(record._id) || recordBelongsToUser(
+    record, scope.target,
+    ['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy'],
+    ['creatorPhone', 'organizerPhone', 'ownerPhone', 'contactPhone', 'phoneNumber', 'phone']
+  )
+  if (collection === 'players' || collection === 'coaches') {
+    const teamIds = [record.teamId, record.teamCode]
+      .concat(Array.isArray(record.teamIds) ? record.teamIds : [])
+      .concat(Array.isArray(record.teamCodes) ? record.teamCodes : [])
+      .filter(Boolean)
+    return teamIds.some(value => scope.teamIds.has(value) || scope.teamCodes.has(value)) || recordBelongsToUser(
+      record, scope.target,
+      ['creatorId', 'ownerId', 'userId', 'createdBy'],
+      ['creatorPhone', 'contactPhone', 'phoneNumber', 'phone']
+    )
+  }
+  if (collection === 'player_library') {
+    const targetKeys = [scope.target._id, scope.target.phone, scope.target.phoneNumber].filter(Boolean)
+    return [record.owner, record.creatorId, record.userId, record.createdBy].some(value => value && targetKeys.includes(value))
+  }
+  if (collection === 'matches') {
+    return scope.tournamentIds.has(record.tournamentId) ||
+      scope.teamIds.has(record.homeTeamId) || scope.teamIds.has(record.awayTeamId)
+  }
+  if (collection === 'tournament_teams' || collection === 'rosters' || collection === 'roster_change_requests') {
+    return scope.tournamentIds.has(record.tournamentId) || scope.teamIds.has(record.teamId)
+  }
+  return false
+}
+
+function prepareAssistanceAdd(collection, data, scope) {
+  const next = { ...(data || {}) }
+  if (collection === 'teams') {
+    next.creatorId = scope.target._id
+    next.ownerId = scope.target._id
+    if (scope.target.phone || scope.target.phoneNumber) next.ownerPhone = scope.target.phone || scope.target.phoneNumber
+  } else if (collection === 'tournaments') {
+    next.creatorId = scope.target._id
+    next.organizerId = scope.target._id
+  } else if (collection === 'player_library') {
+    next.owner = scope.target._id
+    next.creatorId = scope.target._id
+  }
+  return next
+}
+
+function auditSnapshot(record) {
+  if (!record || typeof record !== 'object') return record || null
+  const snapshot = {}
+  Object.keys(record).forEach(key => {
+    const value = record[key]
+    if (typeof value === 'string' && value.length > 2000) snapshot[key] = `[内容已省略:${value.length}]`
+    else snapshot[key] = value
+  })
+  return snapshot
+}
+
+async function writeAssistanceAudit(db, scope, actorUserId, operation, collection, recordId, before, after) {
+  await db.collection('assistance_audit_logs').add({
+    data: {
+      requestId: scope.grant._id,
+      helperUserId: actorUserId,
+      targetUserId: scope.grant.targetUserId,
+      operation,
+      collection,
+      recordId: recordId || '',
+      before: auditSnapshot(before),
+      after: auditSnapshot(after),
+      channel: 'wechat_customer_service',
+      createTime: db.serverDate()
+    }
+  })
+}
+
 // ========== 工具函数 ==========
 
 function generateCode() {
@@ -461,7 +855,8 @@ async function handleWechatOnlyLogin(event) {
         unionid: unionId,
         nickname: user.nickname || '微信用户',
         headimgurl: user.headimgurl || '',
-        role: ORGANIZER_ROLE
+        role: ORGANIZER_ROLE,
+        isPlatformOwner: user.isPlatformOwner === true
       },
       isNewUser
     }
@@ -629,11 +1024,12 @@ async function handleWechatWebLogin(event) {
       needBindEmail: !(user.email || ''),
       needSelectRole: false,
       role: finalRole,
-      user: {
-        _id: user._id, openid: user.wechatOpenId || openId, unionid: user.unionId || unionId,
-        nickname: user.nickname || wxUserInfo.nickname, headimgurl: user.headimgurl || '',
-        phone: finalPhone, phoneNumber: finalPhone, email: user.email || '', role: finalRole
-      },
+    user: {
+      _id: user._id, openid: user.wechatOpenId || openId, unionid: user.unionId || unionId,
+      nickname: user.nickname || wxUserInfo.nickname, headimgurl: user.headimgurl || '',
+      phone: finalPhone, phoneNumber: finalPhone, email: user.email || '', role: finalRole,
+      isPlatformOwner: user.isPlatformOwner === true
+    },
       isNewUser
     }
   } catch (err) {
@@ -772,10 +1168,12 @@ const ALLOWED_FUNCTIONS = [
   'createPlayer', 'updatePlayer', 'deletePlayer',
   'getBanners', 'saveBanner',
   'getTournaments',
+  'generateMiniProgramCode',
+  'platformOwner',
 ]
 
 async function handleCallFunction(event) {
-  const { functionName, functionParams } = event
+  const { functionName, functionParams, assistanceGrantId } = event
   if (!functionName) {
     return { success: false, error: '缺少 functionName 参数' }
   }
@@ -785,10 +1183,38 @@ async function handleCallFunction(event) {
   }
 
   try {
+    let authenticated = null
+    let assistanceGrant = null
+    const requiresSession = functionName === 'platformOwner' || functionName === 'generateMiniProgramCode' ||
+      ORGANIZER_SCOPED_RELAY_FUNCTIONS.has(functionName) || Boolean(assistanceGrantId)
+    if (requiresSession) {
+      authenticated = await authenticateWebSession(event)
+      if (!authenticated.success) return authenticated
+    }
+    if (assistanceGrantId) {
+      assistanceGrant = await validateAssistanceGrant(cloud.database(), assistanceGrantId, authenticated.userId)
+      const assistedRelayAllowlist = new Set([
+        'uploadFile', 'removeImageBg', 'baiduRemoveBg', 'generatePlayerCard',
+        'generateQRCode', 'generateMiniProgramCode', 'getSignatureStatus',
+        'getTeams', 'getPlayers', 'getTournaments'
+      ])
+      if (!assistedRelayAllowlist.has(functionName)) {
+        return { success: false, error: '当前协助授权暂不允许执行该高风险操作' }
+      }
+    }
+    const trustedParams = {
+      ...(functionParams || {}),
+      ...(authenticated ? { __authToken: event.authToken } : {}),
+      ...(authenticated && !assistanceGrant ? {
+        __actorUserId: authenticated.userId,
+        __actorOrgId: authenticated.orgId
+      } : {}),
+      ...(assistanceGrant ? { assistanceGrantId: assistanceGrant._id } : {})
+    }
     console.log('[webApi] 调用云函数:', functionName, '参数 keys:', Object.keys(functionParams || {}))
     const result = await cloud.callFunction({
       name: functionName,
-      data: functionParams || {}
+      data: trustedParams
     })
     console.log('[webApi] 云函数调用成功:', functionName, 'result:', result.result ? '有返回' : '无返回')
     return result.result || { success: false, error: '云函数无返回结果' }
@@ -982,9 +1408,12 @@ async function handleUploadToCosDirect(event, params) {
 // 8. 通用数据库查询（替代浏览器端 SDK 数据库操作）
 // 支持: list / get / count / add / update / delete
 // ★ 添加集合白名单，禁止直接操作系统集合
-const SYSTEM_COLLECTIONS = ['users', 'sms_codes', 'email_verification', 'email_codes', 'invite_codes']
+const SYSTEM_COLLECTIONS = [
+  'users', 'sms_codes', 'email_verification', 'email_codes', 'invite_codes',
+  'auth_sessions', 'assistance_requests', 'assistance_attempts', 'assistance_audit_logs', 'platform_settings'
+]
 async function handleDbQuery(event) {
-  const { userId, collection, operation, where, orderBy, limit: limitVal, skip: skipVal, id, data } = event
+  const { collection, operation, where, orderBy, limit: limitVal, skip: skipVal, id, data, assistanceGrantId } = event
   if (!collection) return { success: false, error: '缺少 collection 参数' }
   if (!operation) return { success: false, error: '缺少 operation 参数' }
 
@@ -993,22 +1422,32 @@ async function handleDbQuery(event) {
     console.warn('[webApi] 非法操作系统集合:', collection)
     return { success: false, error: '无权操作此集合' }
   }
-
-  // ★ userId 鉴权：验证用户身份
-  if (!userId) {
-    return { success: false, error: '未登录，无法操作数据库' }
-  }
-  try {
-    const userCheck = await cloud.database().collection('users').doc(userId).get()
-    if (!userCheck.data) {
-      return { success: false, error: '用户不存在或已注销' }
-    }
-  } catch (e) {
-    return { success: false, error: '身份验证失败' }
+  if (!ORGANIZER_PRIVATE_COLLECTIONS.has(collection)) {
+    console.warn('[webApi] 普通工作台尝试访问非私有业务集合:', collection)
+    return { success: false, error: '普通工作台无权访问此集合' }
   }
 
   const db = cloud.database()
-  const _ = db.command
+  const authenticated = await authenticateWebSession(event)
+  if (!authenticated.success) return authenticated
+
+  let assistanceScope = null
+  if (assistanceGrantId) {
+    if (!ASSISTANCE_COLLECTIONS.has(collection)) {
+      return { success: false, error: '当前协助授权不能访问该类资料' }
+    }
+    try {
+      const grant = await validateAssistanceGrant(db, assistanceGrantId, authenticated.userId)
+      assistanceScope = await buildAssistanceScope(db, grant)
+    } catch (err) {
+      return { success: false, error: err.message || '协助授权校验失败', code: 'ASSISTANCE_EXPIRED' }
+    }
+  }
+
+  let organizerScope = null
+  if (!assistanceScope) {
+    organizerScope = await buildOrganizerScope(db, authenticated.user)
+  }
 
   try {
     switch (operation) {
@@ -1026,36 +1465,125 @@ async function handleDbQuery(event) {
             }
           }
         }
-        if (skipVal) query = query.skip(skipVal)
-        query = query.limit(limitVal || 100)
+        if (!organizerScope && skipVal) query = query.skip(skipVal)
+        query = query.limit(organizerScope ? 1000 : (limitVal || 100))
         const res = await query.get()
-        return { success: true, data: res.data || [], total: res.data?.length || 0 }
+        let records = assistanceScope
+          ? (res.data || []).filter(record => assistanceRecordAllowed(collection, record, assistanceScope))
+          : (res.data || [])
+        if (organizerScope) {
+          const start = Math.max(Number(skipVal) || 0, 0)
+          const size = Math.min(Math.max(Number(limitVal) || 100, 1), 1000)
+          records = records
+            .filter(record => organizerRecordAllowed(collection, record, organizerScope))
+            .slice(start, start + size)
+        }
+        return { success: true, data: records, total: records.length }
       }
       case 'get': {
         if (!id) return { success: false, error: '缺少记录 ID' }
         const res = await db.collection(collection).doc(id).get()
         const record = res.data
-        return { success: true, data: Array.isArray(record) ? (record[0] || null) : record }
+        const normalized = Array.isArray(record) ? (record[0] || null) : record
+        if (assistanceScope && !assistanceRecordAllowed(collection, normalized, assistanceScope)) {
+          return { success: false, error: '该资料不在用户授权范围内' }
+        }
+        if (organizerScope && !organizerRecordAllowed(collection, normalized, organizerScope)) {
+          return { success: false, error: '无权查看其他账号的资料' }
+        }
+        return { success: true, data: normalized }
       }
       case 'count': {
         let q = db.collection(collection)
         if (where && Object.keys(where).length > 0) q = q.where(where)
+        if (assistanceScope) {
+          const records = (await q.limit(1000).get()).data || []
+          return {
+            success: true,
+            total: records.filter(record => assistanceRecordAllowed(collection, record, assistanceScope)).length
+          }
+        }
+        if (organizerScope) {
+          const records = (await q.limit(1000).get()).data || []
+          return {
+            success: true,
+            total: records.filter(record => organizerRecordAllowed(collection, record, organizerScope)).length
+          }
+        }
         const c = await q.count()
         return { success: true, total: c.total }
       }
       case 'add': {
         if (!data) return { success: false, error: '缺少 data 参数' }
-        const addRes = await db.collection(collection).add({ data })
+        const nextData = assistanceScope
+          ? prepareAssistanceAdd(collection, data, assistanceScope)
+          : prepareOrganizerAdd(collection, data, organizerScope)
+        if (assistanceScope) {
+          if (!assistanceScope.grant.permissions || assistanceScope.grant.permissions.edit !== true) {
+            return { success: false, error: '用户未授权添加或修改资料' }
+          }
+          if (!assistanceRecordAllowed(collection, nextData, assistanceScope)) {
+            return { success: false, error: '新增资料不在用户授权范围内' }
+          }
+        }
+        if (organizerScope && !organizerRelationAllowed(collection, nextData, organizerScope)) {
+          return { success: false, error: '新增资料关联了其他账号的数据' }
+        }
+        const addRes = await db.collection(collection).add({ data: nextData })
+        if (assistanceScope) {
+          await writeAssistanceAudit(
+            db, assistanceScope, authenticated.userId, 'add', collection, addRes._id, null, { ...nextData, _id: addRes._id }
+          )
+        }
         return { success: true, _id: addRes._id, message: '新增成功' }
       }
       case 'update': {
         if (!id) return { success: false, error: '缺少记录 ID' }
         if (!data) return { success: false, error: '缺少 data 参数' }
-        await db.collection(collection).doc(id).update({ data })
+        let before = null
+        let nextUpdateData = data
+        if (assistanceScope) {
+          if (!assistanceScope.grant.permissions || assistanceScope.grant.permissions.edit !== true) {
+            return { success: false, error: '用户未授权添加或修改资料' }
+          }
+          const beforeResult = await db.collection(collection).doc(id).get()
+          before = Array.isArray(beforeResult.data) ? beforeResult.data[0] : beforeResult.data
+          const after = { ...(before || {}), ...data }
+          if (!assistanceRecordAllowed(collection, before, assistanceScope) ||
+              !assistanceRecordAllowed(collection, after, assistanceScope)) {
+            return { success: false, error: '该资料不在用户授权范围内' }
+          }
+        }
+        if (organizerScope) {
+          const beforeResult = await db.collection(collection).doc(id).get()
+          before = Array.isArray(beforeResult.data) ? beforeResult.data[0] : beforeResult.data
+          if (!organizerRecordAllowed(collection, before, organizerScope)) {
+            return { success: false, error: '无权修改其他账号的资料' }
+          }
+          nextUpdateData = sanitizeOrganizerUpdate(data)
+          const after = { ...(before || {}), ...nextUpdateData }
+          if (!organizerRelationAllowed(collection, after, organizerScope)) {
+            return { success: false, error: '不能把资料关联到其他账号的数据' }
+          }
+        }
+        await db.collection(collection).doc(id).update({ data: nextUpdateData })
+        if (assistanceScope) {
+          await writeAssistanceAudit(
+            db, assistanceScope, authenticated.userId, 'update', collection, id, before, { ...(before || {}), ...data }
+          )
+        }
         return { success: true, message: '更新成功' }
       }
       case 'delete': {
         if (!id) return { success: false, error: '缺少记录 ID' }
+        if (assistanceScope) return { success: false, error: '本次协助未开放删除权限' }
+        if (organizerScope) {
+          const beforeResult = await db.collection(collection).doc(id).get()
+          const before = Array.isArray(beforeResult.data) ? beforeResult.data[0] : beforeResult.data
+          if (!organizerRecordAllowed(collection, before, organizerScope)) {
+            return { success: false, error: '无权删除其他账号的资料' }
+          }
+        }
         await db.collection(collection).doc(id).remove()
         return { success: true, deleted: 1, message: '删除成功' }
       }
@@ -1105,9 +1633,19 @@ exports.main = async (event, context) => {
       case 'emailBindEmail':
         result = { success: false, error: '当前仅支持微信扫码登录' }; break
       case 'wechatWebLogin':
-        result = await handleWechatOnlyLogin(params); break
-      case 'checkLogin':
-        result = await handleCheckLogin(params); break
+        result = await handleWechatOnlyLogin(params)
+        if (result && result.success && result.user && result.user._id) {
+          result.authToken = await createWebSession(result.user._id)
+          result.authExpiresAt = new Date(Date.now() + WEB_SESSION_TTL_MS)
+        }
+        break
+      case 'checkLogin': {
+        const auth = await authenticateWebSession(params)
+        result = auth.success
+          ? { success: true, loggedIn: true, user: { _id: auth.user._id, role: auth.user.role || ORGANIZER_ROLE } }
+          : { success: false, loggedIn: false, error: auth.error, code: auth.code }
+        break
+      }
       case 'dbQuery':
         result = await handleDbQuery(params); break
       case 'callFunction':

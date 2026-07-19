@@ -24,7 +24,12 @@
     "pages/tournament/rules/rules",
     "pages/roster-change/roster-change",
     "pages/referee/index",
+    "pages/referee/match/match",
+    "pages/service/workbench/workbench",
+    "pages/service/claim/claim",
+    "pages/service/lineup/lineup",
     "pages/profile/profile",
+    "pages/admin/index",
     "pages/profile/info/info",
     "pages/manage/manage",
     "pages/invite/invite"
