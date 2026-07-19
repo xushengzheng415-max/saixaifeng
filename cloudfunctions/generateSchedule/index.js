@@ -107,8 +107,26 @@ function buildRoundRobinRounds(sourceTeams) {
 
 function roundScheduleKey(match) {
   var phase = match.phase || match.scheduleType || 'other'
-  var round = match.round != null ? String(match.round) : (match.roundName || 'other')
+  var round = match.scheduleRound != null
+    ? String(match.scheduleRound)
+    : (match.round != null ? String(match.round) : (match.roundName || 'other'))
   return phase + ':' + round
+}
+
+function isKnockoutMatch(match) {
+  var phase = match && (match.phase || match.scheduleType || '')
+  return phase === 'knockout' || phase === 'cup'
+}
+
+function compareScheduleOrderWithinRound(a, b) {
+  if (!!a.isThirdPlace !== !!b.isThirdPlace) return a.isThirdPlace ? -1 : 1
+  return Number(a.matchIndex || 0) - Number(b.matchIndex || 0)
+}
+
+function shouldStartRoundOnNewDay(previousMatches, currentMatches) {
+  if (!previousMatches || !currentMatches || currentMatches.length === 0) return false
+  if (!currentMatches.some(isKnockoutMatch)) return false
+  return roundScheduleKey(previousMatches[0]) !== roundScheduleKey(currentMatches[0])
 }
 
 function normalizeVenueList(venues) {
@@ -185,6 +203,11 @@ function assignDateTimeByRound(matches, startDate, venues, timeSlots, scheduleCo
   var slotCursor = 0
   for (var roundIndex = 0; roundIndex < roundGroups.length; roundIndex++) {
     var roundMatches = roundGroups[roundIndex]
+    var previousRoundMatches = roundIndex > 0 ? roundGroups[roundIndex - 1] : null
+    if (shouldStartRoundOnNewDay(previousRoundMatches, roundMatches) && slotCursor % slotsPerDay !== 0) {
+      slotCursor = (Math.floor(slotCursor / slotsPerDay) + 1) * slotsPerDay
+    }
+    roundMatches.sort(compareScheduleOrderWithinRound)
     for (var matchIndex = 0; matchIndex < roundMatches.length; matchIndex++) {
       var currentMatch = roundMatches[matchIndex]
       var assigned = false
@@ -379,7 +402,9 @@ function generateTournamentSchedule(tournamentId, groups, tournamentConfig, sche
         tournamentId: tournamentId,
         scheduleType: 'tournament',
         phase: 'knockout',
+        scheduleRound: knockoutRounds,
         roundName: '三四名决赛',
+        isThirdPlace: true,
         homeTeamId: null,
         homeTeamName: '待定',
         awayTeamId: null,
@@ -488,7 +513,9 @@ function generateCupSchedule(tournamentId, allTeams, cupConfig, scheduleConfig, 
       tournamentId: tournamentId,
       scheduleType: 'cup',
       phase: 'knockout',
+      scheduleRound: rounds,
       roundName: '三四名决赛',
+      isThirdPlace: true,
       matchIndex: matchIdx,
       homeTeamId: null,
       homeTeamName: '待定',

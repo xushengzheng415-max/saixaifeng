@@ -693,6 +693,10 @@ const teamOptions = computed(() => {
 })
 
 function matchRoundNumber(match) {
+  if (match?.scheduleRound != null) {
+    const value = Number(match.scheduleRound)
+    if (Number.isFinite(value)) return value
+  }
   if (match?.round != null) {
     const value = Number(match.round)
     if (Number.isFinite(value)) return value

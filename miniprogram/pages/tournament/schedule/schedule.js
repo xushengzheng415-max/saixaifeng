@@ -82,7 +82,12 @@ Page({
       .orderBy('matchTime', 'asc')
       .get({
         success(res) {
-          var allMatches = (res.data || []).map(function(m) {
+          var sourceMatches = (res.data || []).slice().sort(function(a, b) {
+            var aKey = String(a.matchDate || '') + ' ' + String(a.matchTime || '')
+            var bKey = String(b.matchDate || '') + ' ' + String(b.matchTime || '')
+            return aKey.localeCompare(bKey)
+          })
+          var allMatches = sourceMatches.map(function(m) {
             var hasScores = (m.homeScore !== undefined && m.homeScore !== null && m.awayScore !== undefined && m.awayScore !== null)
             var hasRealScore = hasScores && ((m.homeScore > 0) || (m.awayScore > 0))
             var isFinished = !!(m.status === 'finished' || m.status === 'completed' || hasRealScore)
@@ -91,6 +96,8 @@ Page({
               var d = timeStr.substring(5, 10).replace('-', '/')
               var t = timeStr.substring(11, 16)
               timeStr = d + ' ' + t
+            } else if (m.matchDate && timeStr) {
+              timeStr = String(m.matchDate).substring(5, 10).replace('-', '/') + ' ' + timeStr
             }
             var homeDisplayScore = isFinished ? String(m.homeScore) : '-'
             var awayDisplayScore = isFinished ? String(m.awayScore) : '-'
@@ -108,7 +115,7 @@ Page({
               awayScore: m.awayScore,
               homeDisplayScore: homeDisplayScore,
               awayDisplayScore: awayDisplayScore,
-              round: m.round || m.matchDay || '',
+              round: m.roundName || (m.round ? '第' + m.round + '轮' : (m.matchDay || '其他比赛')),
               venue: m.venue || m.location || '',
               isFinished: isFinished,
               homeWinnerClass: isFinished && m.homeScore > m.awayScore ? 'mc-winner' : '',
