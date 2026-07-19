@@ -187,8 +187,22 @@ function generateTournamentSchedule(tournamentId, groups, tournamentConfig, sche
 
 // ========== 杯赛制: 单场淘汰 ==========
 
+function resolveBracketSize(teamCount, configuredSize) {
+  var normalizedTeamCount = Math.max(0, Number(teamCount) || 0)
+  var normalizedConfiguredSize = Number(configuredSize)
+  var hasValidConfiguredSize = normalizedConfiguredSize >= 4 &&
+    Number.isInteger(Math.log2(normalizedConfiguredSize)) &&
+    normalizedConfiguredSize >= normalizedTeamCount
+
+  if (hasValidConfiguredSize) return normalizedConfiguredSize
+
+  var inferredSize = 4
+  while (inferredSize < normalizedTeamCount) inferredSize *= 2
+  return inferredSize
+}
+
 function generateCupSchedule(tournamentId, allTeams, cupConfig, scheduleConfig) {
-  var bracketSize = cupConfig.bracketSize || 16
+  var bracketSize = resolveBracketSize(allTeams.length, cupConfig.bracketSize)
   var rounds = Math.log2(bracketSize)
   var byeCount = bracketSize - allTeams.length
 
@@ -522,14 +536,8 @@ async function loadCupBracket(tournamentId, divisionId) {
 
   var allTeams = Object.values(teamMap)
 
-  // 从第一条记录找 bracketSize（如果没有，根据球队数推算最近的2的幂）
-  var bracketSize = list[0].bracketSize || 16
-  if (!bracketSize) {
-    var teamCount = allTeams.length
-    bracketSize = 1
-    while (bracketSize < teamCount) bracketSize *= 2
-    if (bracketSize < 4) bracketSize = 4
-  }
+  // 新数据使用已保存的淘汰赛规模；旧数据缺少该字段时按实际球队数推算最近的 2 的幂。
+  var bracketSize = resolveBracketSize(allTeams.length, list[0].bracketSize)
 
   var cupConfig = {
     bracketSize: bracketSize,

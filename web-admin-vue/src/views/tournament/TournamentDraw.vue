@@ -940,6 +940,21 @@ async function loadBracket() {
   const list = allRecords.filter(belongsToActiveDivision)
 
   if (list.length > 0) {
+    const savedBracketSize = Number(list[0]?.bracketSize)
+    if (savedBracketSize >= 4 && Number.isInteger(Math.log2(savedBracketSize))) {
+      configForm.value.knockoutSize = savedBracketSize
+    } else {
+      const assignedTeamIds = new Set()
+      list.forEach(round => {
+        ;(round.matches || []).forEach(match => {
+          if (match.slot1?.teamId) assignedTeamIds.add(match.slot1.teamId)
+          if (match.slot2?.teamId) assignedTeamIds.add(match.slot2.teamId)
+        })
+      })
+      let inferredBracketSize = 4
+      while (inferredBracketSize < assignedTeamIds.size) inferredBracketSize *= 2
+      configForm.value.knockoutSize = inferredBracketSize
+    }
     drawGenerated.value = true
     hasSavedGroups.value = true
     bracket.value = list.map((r, ri) => ({
@@ -1562,6 +1577,7 @@ async function saveBracket() {
       tournamentId,
       divisionId: activeDivisionId.value,
       divisionName: activeDivision.value.name,
+      bracketSize: configForm.value.knockoutSize,
       round: roundData.round,
       name: roundData.name,
       matches: roundData.matches.map(m => ({
