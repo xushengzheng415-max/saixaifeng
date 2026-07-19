@@ -782,19 +782,17 @@ const groupedByRound = computed(() => {
 // 日历视图
 const calendarDays = computed(() => {
   const base = new Date(calendarBaseDate.value)
-  const day = base.getDay()
-  const monday = new Date(base)
-  monday.setDate(base.getDate() - (day === 0 ? 6 : day - 1))
+  const start = new Date(base.getFullYear(), base.getMonth(), base.getDate())
   const days = []
   const todayStr = formatDateStr(new Date())
   for (let i = 0; i < 7; i++) {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
+    const d = new Date(start)
+    d.setDate(start.getDate() + i)
     const ds = formatDateStr(d)
     days.push({
       date: ds,
       dateLabel: `${d.getMonth() + 1}/${d.getDate()}`,
-      dayName: ['一','二','三','四','五','六','日'][i],
+      dayName: ['日','一','二','三','四','五','六'][d.getDay()],
       isToday: ds === todayStr,
       matches: matches.value.filter(m => m.matchDate === ds).sort(compareMatchesByRoundAndTime)
     })
@@ -964,7 +962,9 @@ function syncVenueSelection() {
 }
 
 function shiftCalendar(days) {
-  calendarBaseDate.value = new Date(calendarBaseDate.value.getTime() + days * 86400000)
+  const next = new Date(calendarBaseDate.value)
+  next.setDate(next.getDate() + days)
+  calendarBaseDate.value = next
 }
 
 function shiftVenueDate(days) {
