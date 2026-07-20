@@ -545,8 +545,8 @@ const filteredReferees = computed(() => {
 
 // 检查是否可以编辑裁判
 function canEditReferee(referee) {
-  if (canApproveReferee.value) return true
-  return referee.userId === userId.value
+  if (canAddReferee.value || canApproveReferee.value) return true
+  return referee.creatorId === userId.value || referee.userId === userId.value
 }
 
 // 加载赛事裁判组（从各场比赛聚合）
