@@ -1,10 +1,15 @@
 // pages/tournament/detail/detail.js
 const app = getApp()
 const db = wx.cloud.database()
+const workspace = require('../../../utils/workspace')
 
 Page({
   data: {
     loading: true,
+    visualQa: false,
+    visualSummary: {},
+    visualPreTasks: [],
+    visualPostTasks: [],
     tournamentId: '',
     // 赛事基本信息
     name: '',
@@ -373,9 +378,9 @@ Page({
     wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + id })
   },
   onQuickCard4: function () {
-    // 报名审核 → 跳转签到页面
+    // 赛前工作台统一承接名单审核、赛程确认和裁判安排的主办方移动协作。
     var id = this.data.tournamentId
-    wx.navigateTo({ url: '/pages/tournament/signup/signup?id=' + id })
+    wx.navigateTo({ url: '/pages/tournament/pre-match/pre-match?id=' + id })
   },
   onQuickScrollRules: function () {
     // 滚动到竞赛规程区
@@ -401,6 +406,10 @@ Page({
   },
 
   onLoad(options) {
+    if (workspace.isVisualQaEnabled(options)) {
+      this.loadVisualFixture()
+      return
+    }
     if (options && options.id) {
       this.setData({ tournamentId: options.id })
       this.loadTournament()
@@ -410,15 +419,40 @@ Page({
   },
 
   onShow() {
-    if (this.data.tournamentId) {
+    if (this.data.tournamentId && !this.data.visualQa) {
       this.loadTournament()
     }
   },
 
   onPullDownRefresh() {
+    if (this.data.visualQa) { wx.stopPullDownRefresh(); return }
     this.loadTournament().then(() => {
       wx.stopPullDownRefresh()
     })
+  },
+
+  loadVisualFixture: function () {
+    this.setData({
+      visualQa: true, loading: false, tournamentId: 'visual-pro',
+      visualSummary: { name: '2026 河南青少年足球冠军联赛', tag: '我主办的', mode: 'PRO · U12', status: '进行中', dateVenue: '7月20日—8月18日 · 河南省体育中心', teamCount: '16', matchCount: '32', pendingCount: '10' },
+      visualPreTasks: [
+        { icon: '/images/runtime/icons/brand-v2-13.png', title: '报名审核', count: '待处理 6', route: 'teams' },
+        { icon: '/images/runtime/icons/brand-v2-03.png', title: '正式名单审核', count: '待处理 3', route: 'teams' },
+        { icon: '/images/runtime/icons/brand-v2-14.png', title: '裁判安排', count: '待处理 1', route: 'pre' }
+      ],
+      visualPostTasks: [
+        { icon: '/images/runtime/icons/brand-v2-09.png', title: '待复核', count: '待处理 2', route: 'schedule' },
+        { icon: '/images/runtime/icons/brand-v2-13.png', title: '异常', count: '待处理 1', route: 'pre' }
+      ]
+    })
+  },
+
+  onVisualRoute: function (event) {
+    var route = event.currentTarget.dataset.route
+    var id = this.data.tournamentId
+    if (route === 'teams') { wx.navigateTo({ url: '/pages/tournament/teams/teams?id=' + id }); return }
+    if (route === 'schedule') { wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + id }); return }
+    wx.navigateTo({ url: '/pages/tournament/pre-match/pre-match?id=' + id })
   },
 
   // 读取大名单上限回退链（P0 功能：maxPlayersPerTeam ?? maxPlayers ?? 默认值 ?? 20）
@@ -607,9 +641,9 @@ Page({
     flags['quickCard3Icon'] = '📅'
     flags['quickCard3Title'] = '赛程安排'
     flags['quickCard3Desc'] = (d.matchesLen || 0) + ' 场'
-    flags['quickCard4Icon'] = '🔔'
-    flags['quickCard4Title'] = '报名审核'
-    flags['quickCard4Desc'] = (d.pendingTeamsLen || 0) + ' 待审'
+    flags['quickCard4Icon'] = '赛'
+    flags['quickCard4Title'] = '赛前工作台'
+    flags['quickCard4Desc'] = (d.pendingTeamsLen || 0) + ' 待处理'
 
     this.setData(flags)
   },
@@ -680,7 +714,7 @@ Page({
           dayCount = Math.ceil((eDate - sDate) / (1000*60*60*24)) + 1
         }
         // 官网链接
-        var websiteUrl = 'https://saixiaofeng.com/t/' + that.data.tournamentId
+    var websiteUrl = 'https://www.sxffootball.cn/t/' + that.data.tournamentId
         // rules 字符串内容
         var hasRulesStr = !!(t.rules && typeof t.rules === 'string')
         var rulesStrContent = hasRulesStr ? t.rules : ''
@@ -743,13 +777,17 @@ Page({
 
   checkPermissionAndLoadData: function (tournament) {
     var that = this
-    var userInfo = app.globalData.userInfo || {}
-
-    // 判断是否为主办方
-    var currentRole = (wx.getStorageSync('currentRole') || '').toLowerCase()
-    var isOrganizer = currentRole === 'organizer' || userInfo.role === 'ORGANIZER'
-
-    // 判断是否为参赛教练
+    var context = workspace.readContext() || {}
+    var currentTournaments = context.tournaments || []
+    var currentTournament = currentTournaments.find(function(item) {
+      return item.id === that.data.tournamentId || item._id === that.data.tournamentId
+    })
+    var isOrganizer = !!(
+      workspace.hasPermission('event.manage', context) &&
+      currentTournament &&
+      currentTournament.relation === 'hosted'
+    )
+    var accessibleTeamIds = workspace.getAccessibleTeamIds(context)
     var isCoach = false
     var myTeamId = ''
     var myTeamName = ''
@@ -757,14 +795,21 @@ Page({
     if (tournament.teams && tournament.teams.length > 0) {
       for (var i = 0; i < tournament.teams.length; i++) {
         var tt = tournament.teams[i]
-        if (tt.coachOpenId === userInfo.openId ||
-            tt.coachPhone === userInfo.phoneNumber) {
+        var teamId = tt.teamId || tt._id || ''
+        if (accessibleTeamIds.indexOf(teamId) >= 0) {
           isCoach = true
-          myTeamId = tt.teamId || tt._id || ''
+          myTeamId = teamId
           myTeamName = tt.teamName || ''
           break
         }
       }
+    }
+    if (!isCoach && currentTournament && currentTournament.relation === 'participating' && accessibleTeamIds.length) {
+      isCoach = true
+      myTeamId = accessibleTeamIds[0]
+      var currentTeams = context.teams || []
+      var myTeam = currentTeams.find(function(item) { return item.id === myTeamId })
+      myTeamName = myTeam ? myTeam.name : ''
     }
 
     that.setData({
@@ -775,7 +820,7 @@ Page({
       showRegulationsCard: isOrganizer || that.data.hasRegulationsFile
     })
 
-    // 根据角色设置默认 Tab 和加载数据
+    // 根据当前机构授权设置默认 Tab 和加载数据
     if (isOrganizer) {
       that.setData({ currentTab: 'teams' })
       that.loadAllData()
@@ -1112,13 +1157,18 @@ Page({
 
   onAddPlayer: function () {
     wx.navigateTo({
-      url: '/pages/player-add/player-add?tournamentId=' + this.data.tournamentId +
-           '&teamId=' + this.data.myTeamId
+      url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(this.data.myTeamId)
     })
   },
 
   onAddCoach: function () {
-    wx.showToast({ title: '添加教练功能开发中', icon: 'none' })
+    if (!this.data.myTeamId) {
+      wx.showToast({ title: '请先选择当前球队', icon: 'none' })
+      return
+    }
+    wx.navigateTo({
+      url: '/pages/team/members/members?teamId=' + encodeURIComponent(this.data.myTeamId) + '&role=coach'
+    })
   },
 
   onDeletePlayer: function (e) {
@@ -1363,13 +1413,13 @@ Page({
   onViewMatch: function (e) {
     var matchId = e.currentTarget.dataset.id
     wx.navigateTo({
-      url: '/pages/match/match?matchId=' + matchId
+      url: '/pages/match/detail/detail?matchId=' + matchId
     })
   },
 
   onManageTeam: function () {
     wx.navigateTo({
-      url: '/pages/team-detail/team-detail?id=' + this.data.myTeamId
+      url: '/pages/team/detail/detail?teamId=' + encodeURIComponent(this.data.myTeamId)
     })
   },
 

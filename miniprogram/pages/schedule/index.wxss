@@ -1,0 +1,26 @@
+.page { min-height: 100vh; background: #f4f7f5; padding: 24rpx 24rpx 150rpx; box-sizing: border-box; }
+.workspace-bar { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #0b3d2e, #16734f); color: #fff; padding: 28rpx; border-radius: 24rpx; }
+.workspace-label { display: block; font-size: 22rpx; opacity: .72; }
+.workspace-name { display: block; margin-top: 8rpx; font-size: 34rpx; font-weight: 700; }
+.switch-text { border: 1rpx solid rgba(255,255,255,.45); border-radius: 24rpx; padding: 10rpx 20rpx; font-size: 24rpx; }
+.filter-row { display: flex; gap: 16rpx; padding: 28rpx 0 20rpx; }
+.filter-item { padding: 12rpx 28rpx; border-radius: 30rpx; background: #fff; color: #66736d; font-size: 26rpx; }
+.filter-item.active { background: #1d7a55; color: #fff; }
+.loading, .error { text-align: center; padding: 80rpx 0; color: #78837e; }
+.error { color: #b5443c; }
+.timeline { margin-top: 8rpx; }
+.schedule-card { display: flex; margin-bottom: 20rpx; }
+.time-column { width: 150rpx; position: relative; padding-top: 24rpx; }
+.time-text { font-size: 23rpx; color: #64706a; }
+.timeline-dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: #2e8b62; position: absolute; right: 12rpx; top: 31rpx; }
+.schedule-content { flex: 1; background: #fff; border-radius: 22rpx; padding: 24rpx; box-shadow: 0 8rpx 24rpx rgba(20,69,48,.06); }
+.card-head { display: flex; justify-content: space-between; align-items: center; }
+.source-tag { color: #16734f; background: #e6f4ed; border-radius: 18rpx; padding: 6rpx 14rpx; font-size: 21rpx; }
+.status-text { font-size: 22rpx; color: #89928e; }
+.schedule-title { display: block; margin-top: 18rpx; font-size: 30rpx; font-weight: 700; color: #1b2923; }
+.schedule-subtitle { display: block; margin-top: 10rpx; font-size: 26rpx; color: #3d4d45; }
+.schedule-location { display: block; margin-top: 14rpx; font-size: 23rpx; color: #89928e; }
+.empty { margin-top: 100rpx; text-align: center; color: #7d8883; }
+.empty-icon { display: block; width: 90rpx; height: 90rpx; line-height: 90rpx; margin: 0 auto; border-radius: 28rpx; background: #e7f2ec; color: #237a57; font-size: 38rpx; }
+.empty-title { display: block; margin-top: 24rpx; font-size: 30rpx; color: #26352e; font-weight: 600; }
+.empty-desc { display: block; margin: 16rpx auto 0; max-width: 540rpx; font-size: 24rpx; line-height: 1.7; }

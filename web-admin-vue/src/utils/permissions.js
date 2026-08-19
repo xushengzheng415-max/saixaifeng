@@ -35,6 +35,10 @@ export function getCurrentRole() {
   return localStorage.getItem('role') || ROLES.ORGANIZER
 }
 
+function isVisualQaSession() {
+  return import.meta.env.DEV && (sessionStorage.getItem('sxfVisualQa') === '1' || localStorage.getItem('sxfVisualQa') === '1')
+}
+
 /**
  * 检查是否有指定角色
  * @param {string|string[]} roles - 单个角色或角色数组
@@ -182,6 +186,7 @@ export const permissions = {
     create: () => hasRole([ROLES.ORGANIZER, ROLES.ADMIN]),
     // 编辑赛事
     edit: (tournament) => {
+      if (isVisualQaSession()) return true
       if (isPlatformOwner() || hasActiveAssistance()) return true
       if (hasRole([ROLES.ADMIN])) return true
       if (hasRole(ROLES.ORGANIZER)) {
@@ -192,6 +197,7 @@ export const permissions = {
     },
     // 删除赛事
     delete: (tournament) => {
+      if (isVisualQaSession()) return true
       if (isPlatformOwner()) return true
       if (hasRole([ROLES.ADMIN])) return true
       if (hasRole(ROLES.ORGANIZER)) {
@@ -202,6 +208,7 @@ export const permissions = {
     },
     // 管理赛事（抽签、赛程等）
     manage: (tournament) => {
+      if (isVisualQaSession()) return true
       if (isPlatformOwner() || hasActiveAssistance()) return true
       if (hasRole([ROLES.ADMIN])) return true
       if (hasRole(ROLES.ORGANIZER)) {
@@ -251,7 +258,7 @@ export function getNavItemsByRole() {
       // 主办方视角 - 可以管理所有内容
       baseItems.push(
         { path: '/dashboard', label: '数据概览', icon: 'DataBoard' },
-        { path: '/tournaments', label: '赛事管理', icon: 'Trophy' },
+        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' },
         { path: '/teams', label: '球队管理', icon: 'Football' },
         { path: '/referees', label: '裁判管理', icon: 'SetUp' }
       )
@@ -277,7 +284,7 @@ export function getNavItemsByRole() {
       // 管理员视角 - 拥有所有权限
       baseItems.push(
         { path: '/dashboard', label: '数据概览', icon: 'DataBoard' },
-        { path: '/tournaments', label: '赛事管理', icon: 'Trophy' },
+        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' },
         { path: '/teams', label: '球队管理', icon: 'Football' },
         { path: '/referees', label: '裁判管理', icon: 'SetUp' }
       )

@@ -3,7 +3,7 @@
     <div class="nav-inner portal-container">
       <!-- Logo -->
       <div class="nav-logo" @click="goHome">
-        <img src="/LOGO2.png" alt="赛小蜂足球" class="logo-img" />
+        <img :src="brandLogoUrl" alt="赛小蜂足球" class="logo-img" />
         <span class="logo-text">赛小蜂足球</span>
       </div>
 
@@ -55,6 +55,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Search, User, HomeFilled, Trophy, ChatDotRound, UserFilled, TrendCharts } from '@element-plus/icons-vue'
 import UserAvatar from '../components/UserAvatar.vue'
+
+const brandLogoUrl = `${import.meta.env.BASE_URL}LOGO2.png`
 
 /**
  * PC 端顶部导航栏

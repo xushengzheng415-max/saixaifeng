@@ -7,7 +7,10 @@ Page({
     refereeTasks: [],
     hasRefereeTasks: false,
     hasNoTasks: false,
-    bindingPhone: false
+    bindingPhone: false,
+    bindPhone: '',
+    bindCode: '',
+    sendingCode: false
   },
 
   onLoad: function() {
@@ -64,30 +67,41 @@ Page({
     })
   },
 
-  onGetPhoneNumber: function(e) {
-    var code = e.detail && e.detail.code
-    if (!code) {
-      wx.showToast({ title: '需要手机号授权才能识别裁判身份', icon: 'none' })
-      return
-    }
+  onBindPhoneInput: function(e) { this.setData({ bindPhone: e.detail.value }) },
+  onBindCodeInput: function(e) { this.setData({ bindCode: e.detail.value }) },
+
+  sendBindCode: function() {
+    var phone = String(this.data.bindPhone || '').trim()
+    if (!/^1[3-9]\d{9}$/.test(phone)) return wx.showToast({ title: '请输入正确手机号', icon: 'none' })
+    if (this.data.sendingCode) return
+    var that = this
+    that.setData({ sendingCode: true })
+    that.callWorkflow({ action: 'sendBindSms', phone: phone }, function(res) {
+      that.setData({ sendingCode: false })
+      var result = res.result || {}
+      wx.showToast({ title: result.success ? '验证码已发送' : (result.message || '发送失败'), icon: 'none' })
+    }, function(err) {
+      that.setData({ sendingCode: false })
+      console.error('[referee-workbench] send code failed:', err)
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' })
+    })
+  },
+
+  verifyBindCode: function() {
+    var phone = String(this.data.bindPhone || '').trim()
+    var code = String(this.data.bindCode || '').trim()
+    if (!/^1[3-9]\d{9}$/.test(phone) || !/^\d{6}$/.test(code)) return wx.showToast({ title: '请填写手机号和6位验证码', icon: 'none' })
     if (this.data.bindingPhone) return
     var that = this
     that.setData({ bindingPhone: true })
-    wx.showLoading({ title: '正在识别裁判...' })
-    that.callWorkflow({ action: 'bindPhone', phoneCode: code }, function(res) {
-      wx.hideLoading()
+    that.callWorkflow({ action: 'verifyBindSms', phone: phone, code: code }, function(res) {
       that.setData({ bindingPhone: false })
       var result = res.result || {}
-      if (!result.success) {
-        wx.showModal({ title: '识别失败', content: result.message || '请稍后重试', showCancel: false })
-        return
-      }
-      wx.showToast({ title: '裁判身份已识别', icon: 'success' })
+      if (!result.success) return wx.showModal({ title: '绑定失败', content: result.message || '请重试', showCancel: false })
+      wx.showToast({ title: '身份绑定成功', icon: 'success' })
       that.loadWorkbench()
-    }, function(err) {
-      wx.hideLoading()
+    }, function() {
       that.setData({ bindingPhone: false })
-      console.error('[referee-workbench] bind phone failed:', err)
       wx.showToast({ title: '网络异常，请重试', icon: 'none' })
     })
   },

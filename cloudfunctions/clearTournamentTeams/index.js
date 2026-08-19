@@ -1,6 +1,16 @@
 const cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
+function competitionPlanLocked(tournament) {
+  if (!tournament) return false
+  if (tournament.competitionPlanLocked === true || tournament.finalPlanLocked === true ||
+    ['locked', 'match_management', 'in_progress', 'completed'].includes(String(tournament.competitionPlanStatus || '').toLowerCase())) return true
+  return (Array.isArray(tournament.divisions) ? tournament.divisions : []).some(function(division) {
+    return division && (division.competitionPlanLocked === true || division.finalPlanLocked === true ||
+      ['locked', 'match_management', 'in_progress', 'completed'].includes(String(division.competitionPlanStatus || '').toLowerCase()))
+  })
+}
+
 exports.main = async (event, context) => {
   const { tournamentId } = event
   if (!tournamentId) {
@@ -10,6 +20,11 @@ exports.main = async (event, context) => {
   try {
     const db = cloud.database()
     const _ = db.command
+    const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
+    const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+    if (competitionPlanLocked(tournament)) {
+      return { code: 'COMPETITION_PLAN_LOCKED', message: '竞赛方案已确认，不能清空参赛关系' }
+    }
     const countRes = await db.collection('tournament_teams')
       .where({ tournamentId: tournamentId })
       .count()

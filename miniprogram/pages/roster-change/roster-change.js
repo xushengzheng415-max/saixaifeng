@@ -41,13 +41,20 @@ Page({
     outPlayerSelected: false,
     inPlayerSelected: false,
     canSubmitChange: false,
-    submitBtnClass: 'disabled'
+    submitBtnClass: 'disabled',
+    legacyFlowUnavailable: true
   },
 
   onLoad(options) {
     var tournamentId = options.tournamentId || ''
     var teamId = options.teamId || ''
-    this.setData({ tournamentId: tournamentId, teamId: teamId })
+    this.setData({
+      tournamentId: tournamentId,
+      teamId: teamId,
+      loading: false,
+      legacyFlowUnavailable: true
+    })
+    return
 
     if (!tournamentId || !teamId) {
       wx.showToast({ title: '参数缺失', icon: 'none' })
@@ -326,88 +333,9 @@ Page({
     })
   },
 
-  // 提交换人申请
+  // 报名截止后的名单变化必须进入主办方异常处理，不从旧小程序页直接提交。
   onSubmitChange: function () {
-    var that = this
-    var d = this.data
-
-    if (!d.canSubmitChange) {
-      wx.showToast({ title: '请完成换出、换入选择和原因', icon: 'none' })
-      return
-    }
-
-    // 找到换出/换入球员完整信息
-    var outPlayer = null
-    for (var i = 0; i < d.rosterPlayers.length; i++) {
-      var pid = d.rosterPlayers[i]._id || d.rosterPlayers[i].id || d.rosterPlayers[i].name
-      if (pid === d.outPlayerId) { outPlayer = d.rosterPlayers[i]; break }
-    }
-    var inPlayer = null
-    for (var j = 0; j < d.availablePlayers.length; j++) {
-      var pid2 = d.availablePlayers[j]._id || d.availablePlayers[j].id || d.availablePlayers[j].name
-      if (pid2 === d.inPlayerId) { inPlayer = d.availablePlayers[j]; break }
-    }
-
-    if (!outPlayer || !inPlayer) {
-      wx.showToast({ title: '球员信息异常，请重新选择', icon: 'none' })
-      return
-    }
-
-    wx.showModal({
-      title: '确认提交',
-      content: '换出：' + outPlayer.name + '\n换入：' + inPlayer.name + '\n确认提交换人申请？',
-      success: function (res) {
-        if (res.confirm) {
-          that._callSubmitCloudFunction(outPlayer, inPlayer)
-        }
-      }
-    })
-  },
-
-  // 调用云函数提交
-  _callSubmitCloudFunction: function (outPlayer, inPlayer) {
-    var that = this
-    var d = this.data
-
-    wx.showLoading({ title: '提交中...' })
-
-    wx.cloud.callFunction({
-      name: 'submitRosterChange',
-      data: {
-        tournamentId: d.tournamentId,
-        teamId: d.teamId,
-        outPlayerId: outPlayer._id || outPlayer.id || outPlayer.name,
-        outPlayerName: outPlayer.name,
-        outPlayerNumber: outPlayer.number || '',
-        inPlayerId: inPlayer._id || inPlayer.id || inPlayer.name,
-        inPlayerName: inPlayer.name,
-        inPlayerNumber: inPlayer.number || '',
-        inPlayerInfo: {
-          idCard: inPlayer.idCard || '',
-          phone: inPlayer.phone || inPlayer.phoneNumber || ''
-        },
-        reason: d.reason,
-        reasonText: d.reason === 'other' ? d.reasonText : ''
-      },
-      success: function (cfRes) {
-        wx.hideLoading()
-        var result = cfRes.result || {}
-        if (result.success) {
-          wx.showToast({ title: '换人申请已提交', icon: 'success' })
-          // 刷新剩余次数
-          that.loadRemainingChanges()
-          // 重置选择
-          that._resetSelection()
-        } else {
-          wx.showToast({ title: result.message || '提交失败', icon: 'none', duration: 2500 })
-        }
-      },
-      fail: function (err) {
-        wx.hideLoading()
-        console.error('[roster-change] 云函数调用失败:', err)
-        wx.showToast({ title: '提交失败，请重试', icon: 'none' })
-      }
-    })
+    wx.showToast({ title: '请联系主办方走异常处理', icon: 'none', duration: 3000 })
   },
 
   // 重置选择状态

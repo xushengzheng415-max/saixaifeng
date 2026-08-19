@@ -1,4 +1,6 @@
 // 赛事列表页
+const workspace = require('../../../utils/workspace')
+
 Page({
 
 
@@ -149,10 +151,9 @@ Page({
   // 创建赛事
   onCreateTournament() {
     // 检查权限（只有赛事主办方可以创建）
-    const role = wx.getStorageSync('currentRole')
-    if (role !== 'organizer') {
+    if (!workspace.hasPermission('event.manage')) {
       wx.showToast({
-        title: '只有赛事主办方可以创建赛事',
+        title: '当前机构未授予赛事管理权限',
         icon: 'none',
         duration: 2000
       })
@@ -160,7 +161,7 @@ Page({
     }
 
     wx.navigateTo({
-      url: '/pages/match/create/create'
+      url: '/pages/tournament/create/create'
     })
   }
 })

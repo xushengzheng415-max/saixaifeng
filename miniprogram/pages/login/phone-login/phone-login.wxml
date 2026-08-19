@@ -1,0 +1,9 @@
+<view class="phone-login-page">
+  <view class="phone-login-card">
+    <view class="phone-login-icon">手机</view>
+    <view class="phone-login-title">手机号授权说明</view>
+    <view class="phone-login-copy">{{notice}}</view>
+    <button class="phone-login-main" bindtap="useWechatLogin">返回微信登录</button>
+    <view class="phone-login-link" bindtap="viewPrivacy">查看隐私政策</view>
+  </view>
+</view>

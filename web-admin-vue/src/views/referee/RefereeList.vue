@@ -9,11 +9,6 @@
               <el-icon><Plus /></el-icon>添加裁判
             </el-button>
           </template>
-          <template v-else-if="currentRole === ROLES.REFEREE && !isRegistered">
-            <el-button type="primary" @click="showApplyDialog = true">
-              <el-icon><Edit /></el-icon>申请成为裁判
-            </el-button>
-          </template>
         </div>
       </div>
 
@@ -23,26 +18,6 @@
           v-if="canViewAllReferees"
           label="裁判库"
           name="all"
-        />
-        <el-tab-pane
-          v-if="canViewAllReferees"
-          label="裁判组"
-          name="groups"
-        />
-        <el-tab-pane
-          v-if="canViewAllReferees"
-          label="裁判委员会"
-          name="committee"
-        />
-        <el-tab-pane
-          v-if="currentRole === ROLES.REFEREE"
-          label="我的执法"
-          name="myAssignments"
-        />
-        <el-tab-pane
-          v-if="canApproveReferee"
-          label="待审核"
-          name="pending"
         />
       </el-tabs>
 
@@ -60,9 +35,6 @@
             <div class="card-info">
               <h3 class="referee-name">{{ referee.name }}</h3>
               <div class="referee-level">
-                <el-tag :type="getLevelType(referee.level)" size="small">
-                  {{ referee.level || '初级裁判' }}
-                </el-tag>
                 <el-tag v-if="referee.status" :type="getStatusType(referee.status)" size="small" style="margin-left: 8px;">
                   {{ getStatusLabel(referee.status) }}
                 </el-tag>
@@ -79,22 +51,9 @@
               <span class="label">执法场次：</span>
               <span class="value">{{ referee.matchCount || 0 }} 场</span>
             </div>
-            <div class="info-item">
-              <span class="label">所在地区：</span>
-              <span class="value">{{ referee.region || '-' }}</span>
-            </div>
-            <div v-if="referee.certNumber" class="info-item">
-              <span class="label">证书编号：</span>
-              <span class="value">{{ referee.certNumber }}</span>
-            </div>
           </div>
 
           <div class="card-footer" @click.stop>
-            <template v-if="canInviteReferee && referee.status === 'approved'">
-              <el-button type="primary" link size="small" @click="inviteReferee(referee)">
-                邀请执法
-              </el-button>
-            </template>
             <template v-if="canApproveReferee && referee.status === 'pending'">
               <el-button type="success" link size="small" @click="approveReferee(referee)">
                 通过
@@ -121,9 +80,6 @@
         >
           <el-button v-if="canAddReferee" type="primary" @click="showAddDialog = true">
             添加第一个裁判
-          </el-button>
-          <el-button v-else-if="currentRole === ROLES.REFEREE && !isRegistered" type="primary" @click="showApplyDialog = true">
-            申请成为裁判
           </el-button>
         </el-empty>
       </div>
@@ -252,29 +208,7 @@
         <el-form-item label="联系电话" required>
           <el-input v-model="refereeForm.phone" placeholder="请输入联系电话" />
         </el-form-item>
-        <el-form-item label="裁判等级">
-          <el-select v-model="refereeForm.level" placeholder="选择裁判等级" style="width: 100%">
-            <el-option label="国家级" value="国家级" />
-            <el-option label="一级" value="一级" />
-            <el-option label="二级" value="二级" />
-            <el-option label="三级" value="三级" />
-            <el-option label="初级" value="初级" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="所在地区">
-          <el-input v-model="refereeForm.region" placeholder="请输入所在地区" />
-        </el-form-item>
-        <el-form-item label="证书编号">
-          <el-input v-model="refereeForm.certNumber" placeholder="请输入证书编号（如有）" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input 
-            v-model="refereeForm.remark" 
-            type="textarea" 
-            :rows="2" 
-            placeholder="备注信息"
-          />
-        </el-form-item>
+        <el-alert title="第一阶段只需登记姓名和手机号，所属主办方由当前账号自动记录" type="info" :closable="false" />
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">取消</el-button>
@@ -386,40 +320,6 @@
       </template>
     </el-dialog>
 
-    <!-- 邀请裁判对话框 -->
-
-    <el-dialog
-      v-model="showInviteDialog"
-      title="邀请裁判执法"
-      width="500px"
-    >
-      <el-form :model="inviteForm" label-width="90px">
-        <el-form-item label="选择赛事" required>
-          <el-select v-model="inviteForm.tournamentId" placeholder="请选择赛事" style="width: 100%">
-            <el-option 
-              v-for="t in myTournaments" 
-              :key="t._id" 
-              :label="t.name" 
-              :value="t._id" 
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="邀请信息">
-          <el-input 
-            v-model="inviteForm.message" 
-            type="textarea" 
-            :rows="3" 
-            placeholder="请输入邀请信息（可选）"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showInviteDialog = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitInvite">
-          发送邀请
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -434,7 +334,6 @@ const loading = ref(false)
 const submitting = ref(false)
 const activeTab = ref('all')
 const referees = ref([])
-const myTournaments = ref([])
 
 // 裁判组数据
 const tournamentGroups = ref([])
@@ -448,7 +347,6 @@ const userId = ref(localStorage.getItem('userId') || 'dev-user-id')
 const canAddReferee = computed(() => permissions.referee.add())
 const canViewAllReferees = computed(() => permissions.referee.view())
 const canApproveReferee = computed(() => permissions.referee.approve())
-const canInviteReferee = computed(() => permissions.referee.invite())
 
 // 页面标题
 const pageTitle = computed(() => {
@@ -470,19 +368,13 @@ const isRegistered = computed(() => {
 // 对话框显示状态
 const showAddDialog = ref(false)
 const showApplyDialog = ref(false)
-const showInviteDialog = ref(false)
 const isEditing = ref(false)
 const editingId = ref('')
-const currentReferee = ref(null)
 
 // 表单数据
 const refereeForm = ref({
   name: '',
-  phone: '',
-  level: '初级',
-  region: '',
-  certNumber: '',
-  remark: ''
+  phone: ''
 })
 
 const applyForm = ref({
@@ -492,11 +384,6 @@ const applyForm = ref({
   region: '',
   certNumber: '',
   bio: ''
-})
-
-const inviteForm = ref({
-  tournamentId: '',
-  message: ''
 })
 
 // 等级标签类型
@@ -680,18 +567,6 @@ async function loadReferees() {
   }
 }
 
-// 加载我的赛事（用于邀请裁判）
-async function loadMyTournaments() {
-  try {
-    myTournaments.value = await queryList('tournaments', {
-      where: { creatorId: userId.value },
-      orderBy: { createTime: 'desc' }
-    })
-  } catch (err) {
-    console.error('加载赛事列表失败:', err)
-  }
-}
-
 // 提交裁判信息（添加/编辑）
 async function submitReferee() {
   if (!refereeForm.value.name.trim()) {
@@ -702,11 +577,24 @@ async function submitReferee() {
     ElMessage.warning('请输入联系电话')
     return
   }
+  if (!/^1[3-9]\d{9}$/.test(refereeForm.value.phone.trim())) {
+    ElMessage.warning('请输入正确的11位手机号')
+    return
+  }
 
   submitting.value = true
   try {
+    const phone = refereeForm.value.phone.trim()
+    const [samePhone, samePhoneNumber] = await Promise.all([
+      queryList('referees', { where: { phone } }),
+      queryList('referees', { where: { phoneNumber: phone } })
+    ])
+    if ([...(samePhone || []), ...(samePhoneNumber || [])].some(item => item._id !== editingId.value)) {
+      throw new Error('该手机号已建立裁判资料')
+    }
     const data = {
-      ...refereeForm.value,
+      name: refereeForm.value.name.trim(),
+      phone,
       status: 'approved', // 主办方添加的直接通过
       creatorId: userId.value,
       creatorRole: currentRole.value
@@ -796,46 +684,6 @@ async function rejectReferee(referee) {
   }
 }
 
-// 邀请裁判
-function inviteReferee(referee) {
-  currentReferee.value = referee
-  inviteForm.value = { tournamentId: '', message: '' }
-  showInviteDialog.value = true
-  loadMyTournaments()
-}
-
-// 提交邀请
-async function submitInvite() {
-  if (!inviteForm.value.tournamentId) {
-    ElMessage.warning('请选择赛事')
-    return
-  }
-
-  submitting.value = true
-  try {
-    const tournament = myTournaments.value.find(t => t._id === inviteForm.value.tournamentId)
-    
-    // 创建邀请记录
-    await addRecord('referee_invitations', {
-      refereeId: currentReferee.value._id,
-      refereeName: currentReferee.value.name,
-      tournamentId: inviteForm.value.tournamentId,
-      tournamentName: tournament?.name || '',
-      message: inviteForm.value.message,
-      status: 'pending',
-      createTime: new Date().toISOString(),
-      inviterId: userId.value
-    })
-
-    ElMessage.success('邀请已发送')
-    showInviteDialog.value = false
-  } catch (err) {
-    ElMessage.error('邀请失败: ' + err.message)
-  } finally {
-    submitting.value = false
-  }
-}
-
 // 编辑裁判
 function editReferee(referee) {
   isEditing.value = true
@@ -871,11 +719,7 @@ async function deleteReferee(referee) {
 function resetForm() {
   refereeForm.value = {
     name: '',
-    phone: '',
-    level: '初级',
-    region: '',
-    certNumber: '',
-    remark: ''
+    phone: ''
   }
   isEditing.value = false
   editingId.value = ''

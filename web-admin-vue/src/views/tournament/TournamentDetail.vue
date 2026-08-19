@@ -427,6 +427,19 @@
           :value="team._id"
         />
       </el-select>
+      <el-select
+        v-if="signupDivisions.length"
+        v-model="selectedDivisionId"
+        placeholder="选择竞赛组别"
+        style="width: 100%; margin-top: 16px"
+      >
+        <el-option
+          v-for="division in signupDivisions"
+          :key="division.id"
+          :label="division.name"
+          :value="division.id"
+        />
+      </el-select>
       <el-input
         v-model="signupMessage"
         type="textarea"
@@ -540,6 +553,8 @@ const mySignupRecord = ref(null)
 const signupVisible = ref(false)
 const loginPromptVisible = ref(false)
 const selectedTeamId = ref('')
+const selectedDivisionId = ref('')
+const signupDivisions = ref([])
 const myTeams = ref([])
 const loadingTeams = ref(false)
 const signupLoading = ref(false)
@@ -636,6 +651,29 @@ function isLoggedIn() {
   return localStorage.getItem('isLoggedIn') === 'true'
 }
 
+function normalizeSignupDivisions(source) {
+  return (Array.isArray(source) ? source : []).map(item => ({
+    id: String(item && (item.id || item._id || item.divisionId || item.division || item.divisionKey) || '').trim(),
+    name: String(item && (item.name || item.divisionName || item.label || item.ageGroup) || '当前竞赛组别').trim()
+  })).filter(item => item.id)
+}
+
+async function loadSignupDivisions() {
+  const embedded = normalizeSignupDivisions(tournament.value && tournament.value.divisions)
+  if (embedded.length) {
+    signupDivisions.value = embedded
+    selectedDivisionId.value = embedded.length === 1 ? embedded[0].id : ''
+    return
+  }
+  try {
+    const rows = await queryList('divisions', { limit: 100, where: { tournamentId: id } })
+    signupDivisions.value = normalizeSignupDivisions(rows)
+  } catch (error) {
+    signupDivisions.value = []
+  }
+  selectedDivisionId.value = signupDivisions.value.length === 1 ? signupDivisions.value[0].id : ''
+}
+
 // 加载当前球队的报名状态
 async function loadMySignupStatus() {
   try {
@@ -705,9 +743,11 @@ async function handleSignup() {
     return
   }
   selectedTeamId.value = ''
+  selectedDivisionId.value = ''
+  signupDivisions.value = []
   signupMessage.value = ''
   signupVisible.value = true
-  await loadMyTeams()
+  await Promise.all([loadMyTeams(), loadSignupDivisions()])
 }
 
 // 加载我的球队
@@ -732,12 +772,17 @@ async function submitSignup() {
     ElMessage.warning('请选择球队')
     return
   }
+  if (signupDivisions.value.length > 1 && !selectedDivisionId.value) {
+    ElMessage.warning('请选择报名竞赛组别')
+    return
+  }
 
   signupLoading.value = true
   try {
     const res = await callFunction('applyTournament', {
       tournamentId: id,
       teamId: selectedTeamId.value,
+      ...(selectedDivisionId.value ? { divisionId: selectedDivisionId.value } : {}),
       message: signupMessage.value
     })
 

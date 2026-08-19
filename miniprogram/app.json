@@ -1,27 +1,22 @@
 {
   "pages": [
     "pages/login/login",
+    "pages/login/phone-login/phone-login",
     "pages/home/home",
+    "pages/login/agreement/agreement",
+    "pages/event/index",
+    "pages/teams/index",
+    "pages/training/index",
+    "pages/messages/index",
+    "pages/schedule/index",
+    "pages/todo/index",
+    "pages/data/index",
+    "pages/onboarding/onboarding",
     "pages/guide/team-info/team-info",
     "pages/guide/referee-info/referee-info",
-    "pages/team/team",
-    "pages/team/detail/detail",
-    "pages/team/player-add/player-add",
-    "pages/team/player-detail/player-detail",
-    "pages/team/management-add/management-add",
-    "pages/team/management-detail/management-detail",
     "pages/player/detail/detail",
-    "pages/match/detail/detail",
-    "pages/match/squad/squad",
-    "pages/tournament/list/list",
-    "pages/tournament/teams/teams",
-    "pages/tournament/draw/draw",
-    "pages/tournament/signup/signup",
-    "pages/tournament/schedule/schedule",
+    "pages/card-preview/card-preview",
     "pages/tournament-center/tournament-center",
-    "pages/tournament/create/create",
-    "pages/tournament/detail/detail",
-    "pages/tournament/rules/rules",
     "pages/roster-change/roster-change",
     "pages/referee/index",
     "pages/referee/match/match",
@@ -32,7 +27,11 @@
     "pages/admin/index",
     "pages/profile/info/info",
     "pages/manage/manage",
-    "pages/invite/invite"
+    "pages/invite/invite",
+    "pages/workspace/select/select",
+    "pages/workspace/switch/switch",
+    "pages/workspace/temp-team/temp-team"
+    ,"pages/workspace/restricted/restricted"
   ],
   "window": {
     "backgroundTextStyle": "light",
@@ -52,12 +51,16 @@
         "text": "首页"
       },
       {
-        "pagePath": "pages/tournament-center/tournament-center",
+        "pagePath": "pages/event/index",
         "text": "赛事"
       },
       {
-        "pagePath": "pages/referee/index",
-        "text": "裁判"
+        "pagePath": "pages/teams/index",
+        "text": "球队"
+      },
+      {
+        "pagePath": "pages/training/index",
+        "text": "青训"
       },
       {
         "pagePath": "pages/profile/profile",
@@ -72,10 +75,62 @@
         "pages/signature/signature",
         "pages/lineup/lineup"
       ]
+    },
+    {
+      "root": "pages/team",
+      "pages": [
+        "team",
+        "player-library/player-library",
+        "parent-collaboration/parent-collaboration",
+        "profile-progress/profile-progress",
+        "profile-exception/profile-exception",
+        "official-roster/official-roster",
+        "data-package/data-package",
+        "data-package-events/data-package-events",
+        "prebuilt-invite/prebuilt-invite",
+        "claim-conflict/claim-conflict",
+        "create-team-invite/create-team-invite",
+        "profile/profile",
+        "members/members",
+        "participation/participation",
+        "history/history",
+        "detail/detail",
+        "player-add/player-add",
+        "player-detail/player-detail",
+        "management-add/management-add",
+        "management-detail/management-detail"
+      ]
+    },
+    {
+      "root": "pages/match",
+      "pages": [
+        "detail/detail",
+        "share/share",
+        "squad/squad",
+        "lineup-result/lineup-result",
+        "lineup-returned/lineup-returned"
+      ]
+    },
+    {
+      "root": "pages/tournament",
+      "pages": [
+        "flow-handoff/flow-handoff",
+        "list/list",
+        "teams/teams",
+        "draw/draw",
+        "signup/signup",
+        "schedule/schedule",
+        "create/create",
+        "detail/detail",
+        "pre-match/pre-match",
+        "monitor/monitor",
+        "review/review",
+        "exception/exception",
+        "rules/rules"
+      ]
     }
   ],
   "sitemapLocation": "sitemap.json",
   "style": "v2",
   "lazyCodeLoading": "requiredComponents"
 }
-

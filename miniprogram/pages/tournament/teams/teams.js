@@ -1,11 +1,13 @@
 const db = wx.cloud.database()
 const { provinceNameCodeMap, cityNameLetterMap } = require('../../../utils/teamCodeRegions')
+const workspace = require('../../../utils/workspace')
 
 Page({
   data: {
     tournamentId: '',
     tournamentName: '',
     divisionOptions: [],
+    showDivisionTabs: false,
     activeDivisionId: 'default',
     activeDivisionName: '默认组',
     teams: [],
@@ -50,9 +52,14 @@ Page({
   },
 
   onLoad(options) {
-    var userInfo = wx.getStorageSync('userInfo') || {}
-    var role = (wx.getStorageSync('userRole') || (getApp().globalData && getApp().globalData.userRole) || userInfo.role || '').toString().toLowerCase()
-    this.setData({ isOrganizer: role === 'organizer' })
+    var context = workspace.readContext() || {}
+    var tournamentId = options && options.id ? options.id : ''
+    var tournament = (context.tournaments || []).find(function(item) {
+      return item.id === tournamentId || item._id === tournamentId
+    })
+    var canManage = workspace.hasPermission('event.manage', context) &&
+      tournament && tournament.relation === 'hosted'
+    this.setData({ isOrganizer: !!canManage })
     if (options && options.id) {
       this.setData({ tournamentId: options.id, activeDivisionId: options.divisionId || 'default' })
       this.loadData()
@@ -70,9 +77,13 @@ Page({
         : [{ id: 'default', name: '默认组', maxTeams: Number(tournament.maxTeams || 0), maxPlayersPerTeam: Number(tournament.maxPlayersPerTeam || tournament.maxPlayers || 0) }]
       var preferred = this.data.activeDivisionId !== 'default' ? this.data.activeDivisionId : (tournament.defaultDivisionId || divisions[0].id)
       var active = divisions.find(function(item) { return item.id === preferred }) || divisions[0]
+      var displayDivisions = divisions.map(function(item) {
+        return Object.assign({}, item, { tabClass: item.id === active.id ? 'active' : '' })
+      })
       this.setData({
         tournamentName: tournament.name || '',
-        divisionOptions: divisions,
+        divisionOptions: displayDivisions,
+        showDivisionTabs: displayDivisions.length > 1,
         activeDivisionId: active.id,
         activeDivisionName: active.name,
         maxTeams: Number(active.maxTeams || tournament.maxTeams || 0)
@@ -124,7 +135,16 @@ Page({
     var id = e.currentTarget.dataset.id
     if (!id || id === this.data.activeDivisionId) return
     var active = this.data.divisionOptions.find(function(item) { return item.id === id })
-    this.setData({ activeDivisionId: id, activeDivisionName: active ? active.name : '', maxTeams: Number((active && active.maxTeams) || 0) })
+    var divisions = this.data.divisionOptions.map(function(item) {
+      item.tabClass = item.id === id ? 'active' : ''
+      return item
+    })
+    this.setData({
+      divisionOptions: divisions,
+      activeDivisionId: id,
+      activeDivisionName: active ? active.name : '',
+      maxTeams: Number((active && active.maxTeams) || 0)
+    })
     this.loadTeamsForDivision().catch(err => {
       console.error('切换组别失败:', err)
       this.setData({ loading: false, errorMsg: '加载失败' })

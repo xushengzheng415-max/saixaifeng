@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b3d2e">
+  <title>赛事工作台｜赛小蜂足球</title>
+  <link rel="stylesheet" href="./styles.css?v=20260720-2">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-mark">蜂</div>
+    <div><strong>赛事工作台</strong><span>赛小蜂足球 · 裁判端</span></div>
+  </header>
+  <main id="app" class="page" aria-live="polite"></main>
+
+  <dialog id="eventDialog" class="sheet">
+    <form id="eventForm" method="dialog">
+      <div class="sheet-head"><div><span class="sheet-kicker">比赛记录</span><h2 id="eventDialogTitle">记录比赛事件</h2></div><button id="closeEventDialog" class="icon-btn" type="button" aria-label="关闭">×</button></div>
+      <label>事件类型<select name="type" id="eventType">
+        <option value="goal">进球</option><option value="yellow_card">黄牌</option>
+        <option value="red_card">红牌</option><option value="substitution">换人</option>
+        <option value="stoppage_time">补时</option><option value="other">其他事件</option>
+      </select></label>
+      <div class="two-col"><label>球队<select name="teamSide" id="eventTeamSide"><option value="home">主队</option><option value="away">客队</option></select></label><label>分钟<input name="minute" type="number" min="0" max="130" required inputmode="numeric"></label></div>
+      <label id="playerField">球员姓名<input name="playerName" maxlength="30" list="eventPlayerOptions" autocomplete="off"><datalist id="eventPlayerOptions"></datalist></label>
+      <label id="assistField">助攻／换下球员<input name="assistName" maxlength="30" list="eventAssistOptions" autocomplete="off"><datalist id="eventAssistOptions"></datalist></label>
+      <label>备注<input name="description" maxlength="100"></label>
+      <button type="submit" class="primary wide sheet-submit">保存事件</button>
+    </form>
+  </dialog>
+
+  <dialog id="rosterDialog" class="sheet roster-sheet">
+    <form id="rosterForm" method="dialog">
+      <div class="sheet-head"><div><span class="sheet-kicker">拍照录入名单</span><h2 id="rosterDialogTitle">核对球队名单</h2></div><button id="closeRosterDialog" class="icon-btn" type="button" aria-label="关闭">×</button></div>
+      <p class="muted roster-tip">OCR 可能存在误识别。请核对号码、姓名和首发／替补身份后再保存。</p>
+      <div id="rosterWarnings"></div>
+      <div class="roster-table-head"><span>号码</span><span>姓名</span><span>身份</span><span></span></div>
+      <div id="rosterRows" class="roster-rows"></div>
+      <button id="addRosterPlayer" class="secondary wide roster-add" type="button">＋ 手动添加球员</button>
+      <details id="ocrRawDetails" class="ocr-raw"><summary>查看 OCR 原始文字</summary><pre id="ocrRawLines"></pre></details>
+      <button type="submit" class="primary wide sheet-submit">确认并保存本场名单</button>
+    </form>
+  </dialog>
+
+  <input id="rosterPhotoInput" class="visually-hidden" type="file" accept="image/jpeg,image/png" capture="environment">
+  <dialog id="finishDialog" class="sheet">
+    <form id="finishForm" method="dialog">
+      <div class="sheet-head"><div><span class="sheet-kicker">结束比赛</span><h2>确认本场比分</h2></div><button id="closeFinishDialog" class="icon-btn" type="button" aria-label="关闭">×</button></div>
+      <p class="muted">确认后比赛进入报告待提交状态，仍可核对事件。</p>
+      <div class="score-inputs"><label id="finishHomeLabel">主队<input name="homeScore" type="number" min="0" max="99" required inputmode="numeric"></label><b>:</b><label id="finishAwayLabel">客队<input name="awayScore" type="number" min="0" max="99" required inputmode="numeric"></label></div>
+      <button type="submit" class="primary wide">结束比赛并保存比分</button>
+    </form>
+  </dialog>
+  <script src="./app.js?v=20260720-2"></script>
+</body>
+</html>

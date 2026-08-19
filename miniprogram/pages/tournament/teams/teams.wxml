@@ -10,12 +10,15 @@
       <text class="h-count">{{activeDivisionName}} · 共 {{teamsLen}} 支球队</text>
     </view>
 
-    <scroll-view wx:if="{{divisionOptions.length > 1}}" class="division-tabs" scroll-x enhanced show-scrollbar="false">
+    <scroll-view wx:if="{{showDivisionTabs}}" class="division-tabs" scroll-x enhanced show-scrollbar="false">
       <view class="division-tabs-inner">
-        <view wx:for="{{divisionOptions}}" wx:key="id">
-          <view wx:if="{{activeDivisionId == item.id}}" class="division-tab active" data-id="{{item.id}}" bindtap="onDivisionTap">{{item.name}}</view>
-          <view wx:else class="division-tab" data-id="{{item.id}}" bindtap="onDivisionTap">{{item.name}}</view>
-        </view>
+        <view
+          wx:for="{{divisionOptions}}"
+          wx:key="id"
+          class="division-tab {{item.tabClass}}"
+          data-id="{{item.id}}"
+          bindtap="onDivisionTap"
+        >{{item.name}}</view>
       </view>
     </scroll-view>
 

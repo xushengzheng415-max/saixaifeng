@@ -17,7 +17,8 @@ exports.main = async (event, context) => {
   const {
     matchId,        // 比赛ID
     path,           // 页面路径
-    width = 430     // 二维码宽度
+    width = 430,    // 二维码宽度
+    envVersion      // 开发环境：develop/trial/release
   } = event
 
   console.log('生成分享小程序码参数:', event)
@@ -54,7 +55,9 @@ exports.main = async (event, context) => {
       autoColor: false,
       lineColor: { r: 0, g: 0, b: 0 },
       isHyaline: false,
-      envVersion: 'trial' // 'release'|'trial'|'develop'
+      envVersion: ['develop', 'trial', 'release'].includes(String(envVersion || '').trim().toLowerCase())
+        ? String(envVersion).trim().toLowerCase()
+        : 'release'
     })
 
     console.log('小程序码生成成功，buffer长度:', result.buffer ? result.buffer.length : 0)

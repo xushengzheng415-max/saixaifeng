@@ -14,6 +14,10 @@ page { background: #F4F7F4; min-height: 100%; }
 .card-title { margin-top: 18rpx; color: #18331D; font-size: 34rpx; font-weight: 750; }
 .card-desc { margin: 14rpx auto 30rpx; max-width: 560rpx; color: #758078; font-size: 26rpx; line-height: 1.65; }
 .primary-btn { height: 92rpx; line-height: 92rpx; border-radius: 46rpx; color: #fff; font-size: 31rpx; font-weight: 700; background: linear-gradient(135deg, #1B5E20, #43A047); }
+.bind-input { height: 84rpx; margin-bottom: 18rpx; padding: 0 24rpx; text-align: left; border: 2rpx solid #DDE8DF; border-radius: 16rpx; background: #FAFCFA; box-sizing: border-box; }
+.code-row { display: flex; gap: 16rpx; margin-bottom: 20rpx; }
+.code-input { flex: 1; margin-bottom: 0; }
+.code-btn { width: 220rpx; height: 84rpx; line-height: 84rpx; padding: 0; color: #1B5E20; font-size: 25rpx; border-radius: 16rpx; background: #E8F3EA; }
 .plain-btn { height: 82rpx; line-height: 82rpx; border-radius: 42rpx; color: #1B5E20; font-size: 29rpx; border: 2rpx solid #A8C9AD; background: #F7FBF7; }
 .error-card { margin-bottom: 22rpx; }
 .error-text { display: block; margin-bottom: 24rpx; color: #C62828; font-size: 27rpx; }

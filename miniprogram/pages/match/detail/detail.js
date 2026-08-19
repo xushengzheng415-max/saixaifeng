@@ -1,5 +1,6 @@
 // pages/match/detail/detail.js
 // 比赛详情页 - 增强版（修复空白 + 完善字段映射）
+var workspace = require('../../../utils/workspace')
 
 // 辅助函数：事件类型文本映射
 function getEventTypeText(type) {
@@ -66,16 +67,10 @@ Page({
         var raw = res.data
         console.log('[matchDetail] 原始数据:', JSON.stringify(raw).substring(0, 500))
 
-        // 获取当前球队信息（用于判断是否教练）
-        var teamInfo = wx.getStorageSync('teamInfo') || {}
-        var currentTeamId = teamInfo._id || teamInfo.teamId || ''
-        var currentRole = wx.getStorageSync('currentRole') || ''
-
-        // 兼容多种字段名格式
-        var isHomeCoach = currentRole === 'coach' && currentTeamId &&
-          (raw.homeTeamId === currentTeamId || raw.homeTeam === currentTeamId)
-        var isAwayCoach = currentRole === 'coach' && currentTeamId &&
-          (raw.awayTeamId === currentTeamId || raw.awayTeam === currentTeamId)
+        // 球队操作权来自当前工作空间，不再依赖永久角色。
+        var accessibleTeamIds = workspace.getAccessibleTeamIds()
+        var isHomeCoach = accessibleTeamIds.indexOf(raw.homeTeamId || raw.homeTeam) >= 0
+        var isAwayCoach = accessibleTeamIds.indexOf(raw.awayTeamId || raw.awayTeam) >= 0
 
         // 格式化日期（兼容 Date 对象、时间戳、ISO 字符串）
         var matchTimeStr = that.formatMatchTime(raw.matchTime || raw.date || raw.startTime || raw.matchDate)

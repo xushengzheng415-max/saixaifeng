@@ -21,8 +21,7 @@ Page({
   onLoad(options) {
     if (options.teamId) {
       this.setData({ 
-        teamId: options.teamId,
-        role: getApp().globalData.userRole || 'coach'
+        teamId: options.teamId
       })
       this.loadTeamName(options.teamId)
     }
@@ -105,7 +104,7 @@ Page({
   // 添加球员
   addPlayer() {
     wx.navigateTo({
-      url: `/pages/player/detail?teamId=${this.data.teamId}`
+      url: `/pages/team/player-add/player-add?teamId=${encodeURIComponent(this.data.teamId || '')}`
     })
   },
 
@@ -113,7 +112,7 @@ Page({
   editPlayer(e) {
     const id = e.currentTarget.dataset.id
     wx.navigateTo({
-      url: `/pages/player/detail?teamId=${this.data.teamId}&playerId=${id}`
+      url: `/pages/player/detail/detail?teamId=${encodeURIComponent(this.data.teamId || '')}&playerId=${encodeURIComponent(id || '')}`
     })
   },
 

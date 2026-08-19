@@ -35,6 +35,9 @@ Thumbs.db
 $null
 *.tmp
 *.temp
+.tmp-*
+**/__pycache__/
+*.pyc
 
 # Backups and generated snapshots
 backup-*/

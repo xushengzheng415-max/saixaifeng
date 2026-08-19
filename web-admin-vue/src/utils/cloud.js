@@ -11,6 +11,12 @@ const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shangha
 const CLOUD_FUNCTION_BASE_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com'
 const AUTH_TOKEN_KEY = 'authToken'
 const ASSISTANCE_CONTEXT_KEY = 'assistanceContext'
+let visualQaModulePromise = null
+
+function loadVisualQaModule() {
+  if (!visualQaModulePromise) visualQaModulePromise = window.__sxfVisualQaModulePromise || import('./visualQaFixtures')
+  return visualQaModulePromise
+}
 
 // 登录相关云函数名 → webLoginApi action 映射
 const LOGIN_FUNCTION_MAP = {
@@ -26,19 +32,18 @@ const LOGIN_FUNCTION_MAP = {
 const CLOUD_FUNCTION_MAP = {
   // ★ uploadFile 改用 relay 模式：direct 端点有严格的 body 限制，改走 webLoginApi 中转
   uploadFile: 'relay',
-  parseTournamentRegulations: 'direct', // 竞赛规程解析云函数
-  bindPhone: 'direct', // 直接调用 bindPhone 云函数
-  phoneLogin: 'direct', // 直接调用 phoneLogin 云函数
+  parseTournamentRegulations: 'relay', // 竞赛规程解析统一经 webLoginApi
+  bindPhone: 'relay', // 绑定手机号统一经 webLoginApi
+  phoneLogin: 'relay', // 旧手机号登录入口统一经 webLoginApi 白名单校验
   // 抠图相关云函数 — 通过 webLoginApi 的 callFunction action 中转（服务端 cloud.callFunction 转发）
   // 注意：不能 'direct'，因为大多数云函数没有独立的 HTTP 触发端点
   baiduRemoveBg: 'relay', // 百度智能云人像分割
   removeImageBg: 'relay', // 通用抠图（rembg）
   removeLogoBg: 'relay', // 队徽/Logo 抠图
-  // 赛事中心独立登录系统
-  tournamentCenterLogin: 'relay', // 赛事中心手机号+密码登录
-  setTournamentCenterPassword: 'relay', // 赛事中心首次设置密码
-  manageTournamentCenterAccounts: 'relay', // 赛事中心账号管理（list/add/remove/toggle）
-  // 赛事中心后台数据操作（共享赛小蜂数据库）
+  generateAIImage: 'relay', // AI 生图必须经 webLoginApi 会话中转
+  // 赛事中心后台内容管理（复用主办方登录，仅平台负责人可用）
+  manageTournamentCenterContent: 'relay',
+  // 赛事中心公开数据与主办方业务操作
   getTeams: 'relay',
   getPlayers: 'relay',
   createTeam: 'relay',
@@ -48,8 +53,14 @@ const CLOUD_FUNCTION_MAP = {
   updatePlayer: 'relay',
   deletePlayer: 'relay',
   getBanners: 'relay',
-  saveBanner: 'relay',
   getTournaments: 'relay',
+  getTournamentDetail: 'relay', // 公开赛事详情只读查询
+  getTournamentMatches: 'relay', // 公开赛事赛况只读查询
+  setHeadReferee: 'relay', // 设置赛事裁判长必须经过机构会话中转
+  getRegulations: 'relay', // PC 规程文件读取需登录后中转
+  reviewRosterChange: 'relay', // 名单变更审核必须经过当前机构门禁
+  onboardingWorkspace: 'relay',
+  organizerClaimInvite: 'relay',
 }
 
 /**
@@ -58,9 +69,15 @@ const CLOUD_FUNCTION_MAP = {
  * @param {object} data - 请求数据
  */
 async function callFunctionHTTP(action, data = {}) {
+  // 视觉验收样例仅在 Vite 开发模式按需加载；生产构建不会打包样例数据。
+  if (import.meta.env.DEV) {
+    const { handleVisualQaHttp } = await loadVisualQaModule()
+    const qa = handleVisualQaHttp(action, data)
+    if (qa.handled) return qa.result
+  }
   const assistance = getAssistanceContext()
   const bypassAssistance = action === 'callFunction' &&
-    ['platformOwner', 'generateMiniProgramCode'].includes(data.functionName)
+    ['platformOwner', 'manageTournamentCenterContent', 'generateMiniProgramCode'].includes(data.functionName)
   const payload = {
     ...data,
     action,
@@ -89,7 +106,10 @@ async function callFunctionHTTP(action, data = {}) {
     }
     if (result && result.code === 'AUTH_REQUIRED') {
       await logout()
-      window.location.href = 'https://saixiaofeng.com/'
+      const localPreview = import.meta.env.DEV || ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+      window.location.href = localPreview
+        ? `${window.location.origin}${import.meta.env.BASE_URL}#/login`
+        : 'https://www.sxffootball.cn/'
       throw new Error(result.error || '登录会话已失效，请重新微信扫码登录')
     }
     return result
@@ -97,6 +117,15 @@ async function callFunctionHTTP(action, data = {}) {
     console.error('[callFunctionHTTP] ❌', err.message)
     throw err
   }
+}
+
+export async function reviewRefereeRecord(data = {}) {
+  return callFunctionHTTP('reviewRefereeRecord', data)
+}
+
+// 赛事正式名单异常看板：由 webLoginApi 在服务端收敛赛事、球队和名单快照范围。
+export async function rosterExceptionBoard(data = {}) {
+  return callFunctionHTTP('rosterExceptionBoard', data)
 }
 
 // ========== 登录认证 ==========
@@ -122,6 +151,10 @@ export async function logout() {
   localStorage.removeItem('authSessionVersion')
   localStorage.removeItem(AUTH_TOKEN_KEY)
   localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+  // 机构缓存属于账号会话，退出后必须清理，避免下一个账号误显示或误用旧机构。
+  localStorage.removeItem('organizationInfo')
+  localStorage.removeItem('currentOrganization')
+  localStorage.removeItem('currentOrg')
 }
 
 export async function checkAuth() {
@@ -273,6 +306,33 @@ export async function updateRecord(collection, id, data) {
 /**
  * 删除记录
  */
+export async function confirmDivisionRules(id, data = {}) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'confirmDivisionRules',
+    id,
+    data
+  })
+}
+
+export async function upgradeDivisionToProfessional(id, data = {}) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'upgradeDivisionToProfessional',
+    id,
+    data
+  })
+}
+
+export async function confirmCompetitionPlan(tournamentId, data = {}) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'tournaments',
+    operation: 'confirmCompetitionPlan',
+    id: tournamentId,
+    data
+  })
+}
+
 export async function deleteRecord(collection, id, options = {}) {
   const result = await dbQuery(collection, 'delete', { id })
   if (!result.success) throw new Error(result.error || '删除失败')

@@ -188,6 +188,13 @@ Page({
 
   // 提交签名
   async submitSignature() {
+    wx.showModal({
+      title: '签字入口已调整',
+      content: '请从裁判服务号/H5进入比赛后完成电子记录签字。',
+      showCancel: false
+    })
+    return
+
     if (!this.data.hasSigned) {
       wx.showToast({ title: '请先签字', icon: 'none' })
       return

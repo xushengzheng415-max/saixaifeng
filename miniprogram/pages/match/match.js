@@ -1,3 +1,5 @@
+var workspace = require('../../utils/workspace')
+
 Page({
   data: {
     labels: {
@@ -24,17 +26,21 @@ Page({
   },
 
   onLoad: function() {
-    var currentRole = wx.getStorageSync('currentRole') || 'spectator'
+    var canManage = workspace.hasPermission('event.manage')
     this.setData({
       loading: true,
       noData: true,
       hasData: false,
       showEmpty: false,
       showList: false,
-      isOrganizer: currentRole === 'organizer',
-      isReferee: currentRole === 'referee'
+      isOrganizer: canManage,
+      isReferee: false
     })
-    this.loadReferees()
+    if (canManage) {
+      this.loadReferees()
+    } else {
+      this.setData({ loading: false, showEmpty: true })
+    }
   },
 
   normalizeLevel: function(level) {

@@ -10,7 +10,6 @@
     "deploy": "npm run build && tcb hosting deploy dist/ admin -e cloud1-7g8ckb3c7815a011"
   },
   "dependencies": {
-    "@cloudbase/js-sdk": "^2.28.1",
     "@element-plus/icons-vue": "^2.3.0",
     "cropperjs": "^1.6.2",
     "element-china-area-data": "^6.1.0",

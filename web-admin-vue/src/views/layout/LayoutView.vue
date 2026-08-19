@@ -1,48 +1,5 @@
 <template>
   <div class="layout">
-    <!-- 顶部导航栏 -->
-    <header class="top-header">
-      <div class="header-left">
-        <div class="logo-area">
-          <img src="/LOGO2.png" alt="赛小蜂足球赛事管理系统" class="logo-img" />
-        </div>
-      </div>
-      <div class="header-center">
-        <span class="page-title">{{ currentPageTitle }}</span>
-      </div>
-      <div class="header-right">
-        <el-dropdown trigger="click" @command="handleUserCommand">
-          <div class="user-avatar-wrapper">
-            <el-avatar v-if="userInfo.avatarUrl" :size="36" :src="userInfo.avatarUrl" />
-            <el-avatar v-else :size="36" style="background: #43A047; font-size: 14px;">
-              {{ userInfo.userName ? userInfo.userName.charAt(0) : '?' }}
-            </el-avatar>
-            <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
-          </div>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item disabled>
-                <div class="user-info-dropdown">
-                  <div class="user-name">{{ userInfo.userName || '未登录' }}</div>
-                  <div class="user-role">
-                    <el-tag v-if="loginType === 'anonymous'" type="info" size="small">开发模式</el-tag>
-                    <el-tag v-else-if="loginType === 'wechat'" type="success" size="small">微信扫码</el-tag>
-                    <el-tag type="warning" size="small">{{ roleLabel }}</el-tag>
-                  </div>
-                </div>
-              </el-dropdown-item>
-              <el-dropdown-item divided command="refresh">
-                <el-icon><Refresh /></el-icon>刷新数据
-              </el-dropdown-item>
-              <el-dropdown-item command="logout">
-                <el-icon><SwitchButton /></el-icon>退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-    </header>
-
     <!-- 绑定手机号弹窗（强制绑定，不可关闭） -->
     <el-dialog v-if="false"
       v-model="bindPhoneVisible"
@@ -168,17 +125,33 @@
 
     <div class="main-container">
       <!-- 侧边栏 -->
-      <aside class="sidebar">
+      <aside v-if="!usesWorkspaceShell" class="sidebar">
+        <button
+          class="sidebar-brand"
+          type="button"
+          :aria-label="`${organizationBrand.name}，返回赛事管理`"
+          @click="router.push('/tournament-space')"
+        >
+          <span class="organization-logo">
+            <img
+              :src="organizationBrand.logo"
+              :alt="`${organizationBrand.name} Logo`"
+              @error="handleOrganizationLogoError"
+            />
+          </span>
+          <span class="organization-name">{{ organizationBrand.name }}</span>
+        </button>
+
         <nav class="sidebar-nav">
           <template v-for="item in currentNavItems" :key="item.path">
             <!-- 有子菜单 -->
             <template v-if="item.children">
               <div
                 class="nav-item"
-                :class="{ active: isActive(item.path) || isChildActive(item.path) }"
+                :class="{ active: isItemActive(item) || isChildActive(item.path) }"
                 @click="toggleSubMenu(item)"
               >
-                <el-icon :size="20"><component :is="item.icon" /></el-icon>
+                <el-icon :size="22"><component :is="item.icon" /></el-icon>
                 <span class="nav-label">{{ item.label }}</span>
                 <el-icon class="submenu-arrow" :class="{ rotated: expandedMenus.includes(item.path) }">
                   <ArrowDown />
@@ -202,29 +175,92 @@
             <template v-else>
               <div
                 class="nav-item"
-                :class="{ active: isActive(item.path) }"
+                :class="{ active: isItemActive(item) }"
                 @click="handleNavClick(item)"
               >
-                <el-icon :size="20"><component :is="item.icon" /></el-icon>
+                <el-icon :size="22"><component :is="item.icon" /></el-icon>
                 <span class="nav-label">{{ item.label }}</span>
               </div>
             </template>
           </template>
         </nav>
 
-        <!-- 当前身份（只读，在赛事中心管理页面隐藏）-->
-        <div v-if="!isAdminPage" class="sidebar-footer">
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:#f5f7fa;">
-            <span style="font-size:12px;color:#909399;">当前身份：</span>
-            <el-tag type="primary" size="small">{{ roleLabel }}</el-tag>
-          </div>
-        </div>
+        <div v-if="route.path.includes('/draw')" class="sidebar-pro-badge">♛　PRO 专业版 · 已开通</div>
+        <div class="sidebar-support">由赛小蜂足球提供技术支持</div>
       </aside>
 
-      <!-- 主内容区 -->
-      <main class="content-area">
-        <router-view />
-      </main>
+      <section class="workspace">
+        <!-- 顶部工具栏 -->
+        <header v-if="usesWorkspaceShell" class="workspace-shell-header">
+          <button class="product-brand" type="button" aria-label="返回赛事空间" @click="router.push('/tournament-space')">
+            <img :src="productLogo" alt="赛小蜂足球" />
+          </button>
+          <div class="workspace-shell-actions">
+            <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
+            <button class="notification-action" type="button" aria-label="查看通知" @click="showNotifications"><el-icon><Bell /></el-icon><i v-if="unreadNotificationCount">{{ unreadNotificationCount }}</i></button>
+            <el-dropdown trigger="click" @command="handleUserCommand">
+              <div class="workspace-user">
+                <el-avatar v-if="userInfo.avatarUrl" :size="38" :src="userInfo.avatarUrl" />
+                <el-avatar v-else :size="38" class="workspace-user-avatar">{{ userInfo.userName ? userInfo.userName.charAt(0) : '蜂' }}</el-avatar>
+                <span>{{ userInfo.userName || '主办方管理员' }}</span>
+                <el-icon><ArrowDown /></el-icon>
+              </div>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="refresh"><el-icon><Refresh /></el-icon>刷新数据</el-dropdown-item>
+                  <el-dropdown-item divided command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </header>
+        <header v-else-if="!usesEmbeddedPageHeader" class="top-header">
+          <div class="header-left">
+            <span class="page-title">{{ currentPageTitle }}</span>
+          </div>
+          <div class="header-right">
+            <div class="header-role">主办方管理</div>
+            <span class="header-divider" aria-hidden="true"></span>
+            <el-dropdown trigger="click" @command="handleUserCommand">
+              <div class="user-avatar-wrapper">
+                <el-avatar v-if="userInfo.avatarUrl" :size="36" :src="userInfo.avatarUrl" />
+                <el-avatar v-else :size="36" class="user-avatar-fallback">
+                  {{ userInfo.userName ? userInfo.userName.charAt(0) : '?' }}
+                </el-avatar>
+                <span class="header-user-name">{{ userInfo.userName || '主办方管理员' }}</span>
+                <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
+              </div>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item disabled>
+                    <div class="user-info-dropdown">
+                      <div class="user-name">{{ userInfo.userName || '未登录' }}</div>
+                      <div class="user-role">
+                        <el-tag v-if="loginType === 'anonymous'" type="info" size="small">开发模式</el-tag>
+                        <el-tag v-else-if="loginType === 'wechat'" type="success" size="small">微信扫码</el-tag>
+                        <el-tag type="warning" size="small">{{ roleLabel }}</el-tag>
+                      </div>
+                    </div>
+                  </el-dropdown-item>
+                  <el-dropdown-item divided command="refresh">
+                    <el-icon><Refresh /></el-icon>刷新数据
+                  </el-dropdown-item>
+                  <el-dropdown-item command="logout">
+                    <el-icon><SwitchButton /></el-icon>退出登录
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="content-area" :class="{ 'workspace-shell-content': usesWorkspaceShell, 'embedded-header-content': usesEmbeddedPageHeader }">
+          <div class="admin-content-frame">
+            <router-view />
+          </div>
+        </main>
+      </section>
     </div>
   </div>
 </template>
@@ -236,9 +272,10 @@ import { ElMessage } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
-  Postcard, Place
+  Postcard, Place, QuestionFilled, Bell
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList } from '../../utils/cloud'
+import productLogo from '../../assets/logo-saixiaofeng.png'
 import {
   ROLE_NAMES,
   ROLES
@@ -248,18 +285,49 @@ const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shangha
 
 const router = useRouter()
 const route = useRoute()
+const usesWorkspaceShell = computed(() => route.meta.workspaceShell === true)
+const usesEmbeddedPageHeader = computed(() => route.meta.embeddedPageHeader === true)
+const unreadNotificationCount = ref(0)
+
+function openHelpCenter() {
+  window.open('https://www.sxffootball.cn/#features', '_blank', 'noopener,noreferrer')
+}
+
+function showNotifications() {
+  ElMessage.info(unreadNotificationCount.value ? `你有 ${unreadNotificationCount.value} 条未读通知` : '暂无新通知')
+}
 
 // 用户信息
+function readStoredObject(key) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null') || {} } catch { return {} }
+}
+const initialStoredUser = readStoredObject('userInfo')
+const initialStoredOrganization = readStoredObject('currentOrganization')
 const userInfo = ref({
-  userName: '',
-  avatarUrl: '',
-  phone: '',
-  email: '',
-  isPlatformOwner: false
+  userName: initialStoredUser.userName || '',
+  avatarUrl: initialStoredUser.avatarUrl || '',
+  phone: initialStoredUser.phone || '',
+  email: initialStoredUser.email || '',
+  organizationName: initialStoredOrganization.name || initialStoredOrganization.organizationName || initialStoredUser.organizationName || '',
+  organizationLogo: initialStoredOrganization.logo || initialStoredOrganization.logoUrl || initialStoredUser.organizationLogo || '',
+  isPlatformOwner: initialStoredUser.isPlatformOwner === true
 })
 const loginType = ref('')
 const currentRole = ref('')
 const isHeadReferee = ref(false)
+const DEFAULT_ORGANIZATION_LOGO = `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
+
+const organizationBrand = computed(() => ({
+  name: userInfo.value.organizationName || '未建立机构',
+  logo: userInfo.value.organizationLogo || DEFAULT_ORGANIZATION_LOGO
+}))
+
+function handleOrganizationLogoError(event) {
+  const image = event.currentTarget
+  if (image && !image.src.endsWith(DEFAULT_ORGANIZATION_LOGO)) {
+    image.src = DEFAULT_ORGANIZATION_LOGO
+  }
+}
 
 // 绑定手机号弹窗
 const bindPhoneVisible = ref(false)
@@ -557,21 +625,75 @@ const coachNavItems = [
   { path: '/shop', label: '赛事商城', icon: 'ShoppingBag' }
 ]
 
-// 主办方端导航菜单
-const organizerNavItems = [
-  { 
-    path: '/tournaments', 
-    label: '赛事管理', 
-    icon: 'Trophy',
-    children: [
-      { path: '/tournaments', label: '赛事列表' }
-    ]
+const currentTournamentId = computed(() => String(route.params.id || ''))
+
+function tournamentWorkspacePath(suffix = '') {
+  return currentTournamentId.value
+    ? `/tournaments/${currentTournamentId.value}${suffix}`
+    : '/tournaments'
+}
+
+// 主办方 PC 端统一为一套赛事空间分类；赛事内入口会复用当前路由中的赛事上下文。
+const organizerNavItems = computed(() => [
+  {
+    path: '/dashboard',
+    label: '赛事主控制台',
+    icon: 'HomeFilled',
+    exact: true
   },
-  { path: '/referees', label: '裁判管理', icon: 'SetUp' },
-  { path: '/poster/editor', label: '海报编辑器', icon: 'Postcard' },
-  { path: '/tournament-center', label: '赛事中心', icon: 'Picture' },
-  { path: '/system', label: '系统管理', icon: 'Setting' }
-]
+  {
+    path: '/tournaments',
+    label: '竞赛管理',
+    icon: 'Trophy',
+    activeWhen: () => route.path === '/tournaments' || route.path === '/tournaments/create'
+  },
+  {
+    path: '/teams',
+    label: '球队管理',
+    icon: 'UserFilled',
+    activeWhen: () => route.path.startsWith('/teams') || /\/tournaments\/[^/]+\/teams/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/draw'),
+    label: '抽签与分组',
+    icon: 'Grid',
+    requiresTournament: true,
+    activeWhen: () => route.path.includes('/draw')
+  },
+  {
+    path: tournamentWorkspacePath('/schedule'),
+    label: '赛程管理',
+    icon: 'Calendar',
+    requiresTournament: true,
+    activeWhen: () => route.path.includes('/schedule')
+  },
+  {
+    path: tournamentWorkspacePath(),
+    label: '比赛管理',
+    icon: 'Football',
+    requiresTournament: true,
+    activeWhen: () => Boolean(currentTournamentId.value) &&
+      /\/tournaments\/[^/]+(?:\/match\/[^/]+)?$/.test(route.path)
+  },
+  {
+    path: '/referees',
+    label: '裁判管理',
+    icon: 'SetUp',
+    activeWhen: () => route.path.startsWith('/referees') || route.path.startsWith('/referee/')
+  },
+  {
+    path: '/data',
+    label: '数据中心',
+    icon: 'DataAnalysis'
+  },
+  {
+    path: tournamentWorkspacePath('/edit'),
+    label: '赛事设置',
+    icon: 'Setting',
+    requiresTournament: true,
+    activeWhen: () => route.path.includes('/edit')
+  }
+])
 
 // 裁判端导航菜单（裁判长额外显示"裁判长管理"）
 const refereeNavItems = computed(() => {
@@ -592,7 +714,7 @@ const adminNavItems = [
   { path: '/admin/tournaments', label: '赛事列表', icon: 'Trophy' },
   { path: '/admin/teams', label: '球队列表', icon: 'UserFilled' },
   { path: '/referees', label: '裁判库', icon: 'SetUp' },
-  { path: '/formation-designer.html', label: '阵型设计器', icon: 'Place', external: true },
+  { path: `${import.meta.env.BASE_URL}formation-designer.html`, label: '阵型设计器', icon: 'Place', external: true },
   { path: '/shop-admin', label: '商城管理', icon: 'ShoppingBag' },
   { path: '/insurance-admin', label: '保险业务', icon: 'FirstAidKit' },
   { path: '/system', label: '系统管理', icon: 'Setting' }
@@ -619,7 +741,7 @@ const currentNavItems = computed(() => {
   if (currentRole.value === ROLES.REFEREE) {
     return ownerOnly(refereeNavItems.value)
   }
-  return ownerOnly(organizerNavItems)
+  return ownerOnly(organizerNavItems.value)
 })
 
 // 用户下拉菜单命令
@@ -632,7 +754,7 @@ function handleUserCommand(command) {
       // 先清理登录态
       logout()
       // 再直接跳到首页（不要经过路由守卫，它会在 isLoggedIn 清空后自动跳到 /login）
-      window.location.replace('https://saixiaofeng.com/')
+  window.location.replace('https://www.sxffootball.cn/')
       break
   }
 }
@@ -640,6 +762,9 @@ function handleUserCommand(command) {
 function handleNavClick(item) {
   if (item.external) {
     window.open(item.path, '_blank')
+  } else if (item.requiresTournament && !currentTournamentId.value) {
+    ElMessage.info('请先选择赛事，进入赛事空间后再使用此功能')
+    router.push('/tournaments')
   } else {
     router.push(item.path)
   }
@@ -647,6 +772,12 @@ function handleNavClick(item) {
 
 function isActive(path) {
   return route.path === path || route.path.startsWith(path + '/')
+}
+
+function isItemActive(item) {
+  if (typeof item.activeWhen === 'function') return item.activeWhen()
+  if (item.exact) return route.path === item.path
+  return isActive(item.path)
 }
 
 function isChildActive(parentPath) {
@@ -660,15 +791,42 @@ onMounted(() => {
   if (savedInfo) {
     try {
       const parsed = JSON.parse(savedInfo)
+      const storedOrganization = ['organizationInfo', 'currentOrganization', 'currentOrg']
+        .map(key => {
+          try {
+            return JSON.parse(localStorage.getItem(key) || 'null')
+          } catch (e) {
+            return null
+          }
+        })
+        .find(Boolean) || {}
+      const organizationName = storedOrganization.name ||
+        storedOrganization.organizationName ||
+        parsed.organizationName ||
+        parsed.orgName ||
+        parsed.organizerName ||
+        parsed.institutionName ||
+        ''
+      const organizationLogo = storedOrganization.logo ||
+        storedOrganization.logoUrl ||
+        storedOrganization.organizationLogo ||
+        parsed.organizationLogo ||
+        parsed.orgLogo ||
+        parsed.organizerLogo ||
+        parsed.institutionLogo ||
+        ''
       userInfo.value = {
         userName: parsed.userName || '开发者',
         avatarUrl: parsed.avatarUrl || '',
         phone: parsed.phone || '',
         email: parsed.email || '',
         uid: parsed.uid || parsed._id || '',
+        organizationName,
+        organizationLogo,
         isPlatformOwner: parsed.isPlatformOwner === true
       }
       localStorage.setItem('userInfo', JSON.stringify({
+        ...parsed,
         _id: parsed._id || parsed.uid || '',
         uid: parsed.uid || parsed._id || '',
         userName: parsed.userName || '微信用户',
@@ -677,6 +835,8 @@ onMounted(() => {
         unionid: parsed.unionid || '',
         phone: parsed.phone || '',
         email: parsed.email || '',
+        organizationName,
+        organizationLogo,
         isPlatformOwner: parsed.isPlatformOwner === true
       }))
     } catch (e) {
@@ -723,195 +883,144 @@ onUnmounted(() => {
 <style scoped>
 .layout {
   display: flex;
-  flex-direction: column;
   height: 100vh;
-  background: #f5f7fa;
-}
-
-/* 顶部导航栏 */
-.top-header {
-  height: 64px;
-  background: linear-gradient(135deg, #1B5E20, #2E7D32);
-  padding: 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  flex-shrink: 0;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.logo-area {
-  display: flex;
-  align-items: center;
-}
-
-.logo-img {
-  width: 160px;
-  height: auto;
-  max-height: 48px;
-  object-fit: contain;
-}
-
-.header-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-}
-
-.page-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-.user-avatar-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 20px;
-  transition: background 0.2s;
-}
-
-.user-avatar-wrapper:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.dropdown-arrow {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-}
-
-.user-info-dropdown {
-  padding: 8px 0;
-  min-width: 140px;
-}
-
-.user-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
-  margin-bottom: 6px;
-}
-
-.user-contact {
-  font-size: 12px;
-  color: #606266;
-  line-height: 1.8;
-  margin-bottom: 4px;
-}
-.user-contact .el-icon {
-  margin-right: 4px;
-  color: #909399;
-}
-
-.user-role {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  min-width: 1024px;
+  color: #1f2937;
+  background: #f6f8f7;
+  overflow: hidden;
 }
 
 /* 主容器 */
 .main-container {
   flex: 1;
   display: flex;
+  min-width: 0;
   overflow: hidden;
 }
 
 /* 侧边栏 */
 .sidebar {
-  width: 200px;
-  background: #fff;
-  box-shadow: 1px 0 4px rgba(0, 0, 0, 0.06);
+  position: relative;
+  z-index: 2;
+  width: var(--admin-sidebar-width);
+  color: #fff;
+  font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  background:
+    linear-gradient(180deg, rgba(0, 44, 31, 0.1), rgba(0, 64, 38, 0.18)),
+    url('../../assets/images/organizer-sidebar.png') center / cover no-repeat,
+    #003d2b;
+  box-shadow: 4px 0 20px rgba(1, 39, 28, 0.12);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
 }
 
+.sidebar-brand {
+  width: 100%;
+  height: var(--admin-topbar-height);
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.organization-logo {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.organization-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 7px rgba(0, 25, 17, 0.24));
+}
+
+.organization-name {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .sidebar-nav {
   flex: 1;
-  padding: 16px 0;
+  padding: 24px 14px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sidebar-pro-badge {
+  flex-shrink: 0;
+  margin: 0 14px 18px;
+  padding: 13px 10px;
+  border: 1px solid #f4c63d;
+  border-radius: 7px;
+  color: #ffd95e;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 0 16px rgba(244, 198, 61, 0.08) inset;
+}
+
+.sidebar-support {
+  flex-shrink: 0;
+  margin: 0 18px;
+  padding: 16px 0 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  letter-spacing: 0.02em;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 14px 20px;
-  margin: 4px 12px;
+  min-height: 54px;
+  padding: 0 18px;
+  margin: 0 0 8px;
   border-radius: 8px;
-  color: #606266;
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
-  transition: all 0.2s;
-  gap: 12px;
+  transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+  gap: 14px;
 }
 
 .nav-item:hover {
-  background: #f0f9eb;
-  color: #2E7D32;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
 .nav-item.active {
-  background: #e8f5e9;
-  color: #2E7D32;
-  font-weight: 500;
+  color: #fff;
+  font-weight: 600;
+  background: linear-gradient(135deg, #008b4e, #06a75e);
+  box-shadow: 0 8px 20px rgba(0, 144, 80, 0.24);
 }
 
 .nav-label {
-  font-size: 14px;
-}
-
-/* 侧边栏底部 - 身份切换 */
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid #ebeef5;
-}
-
-.role-label {
-  font-size: 11px;
-  color: #909399;
-  margin-bottom: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.role-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.role-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #606266;
-  background: #f5f7fa;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.role-option:hover {
-  background: #e8f5e9;
-  color: #2E7D32;
-}
-
-.role-option.active {
-  background: #2E7D32;
-  color: #fff;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 /* 子菜单箭头 */
@@ -919,7 +1028,7 @@ onUnmounted(() => {
   margin-left: auto;
   transition: transform 0.2s;
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.64);
 }
 
 .submenu-arrow.rotated {
@@ -928,34 +1037,201 @@ onUnmounted(() => {
 
 /* 子菜单容器 */
 .submenu {
-  padding: 4px 0;
+  margin: -2px 0 8px;
+  padding: 2px 0 2px 14px;
 }
 
 /* 子菜单项 */
 .nav-sub-item {
-  padding: 10px 20px 10px 48px;
-  font-size: 13px;
-  color: #606266;
+  min-height: 38px;
+  padding: 10px 16px 10px 42px;
+  border-radius: 7px;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.68);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .nav-sub-item:hover {
-  background: #f0f9eb;
-  color: #2E7D32;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .nav-sub-item.active {
-  background: #e8f5e9;
-  color: #2E7D32;
+  background: rgba(0, 171, 95, 0.18);
+  color: #65e8a8;
+  font-weight: 600;
+}
+
+.workspace {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-shell-header {
+  height: 90px;
+  padding: 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e5e9e7;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 2px 12px rgba(20, 48, 34, 0.05);
+}
+
+.product-brand {
+  width: 188px;
+  height: 66px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.product-brand img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: left center; }
+.workspace-shell-actions,.workspace-user,.header-action,.notification-action { display: flex; align-items: center; }
+.workspace-shell-actions { gap: 22px; }
+.header-action,.notification-action { border: 0; color: #59645e; background: transparent; cursor: pointer; }
+.header-action { gap: 7px; font-size: 14px; }
+.header-action .el-icon,.notification-action { font-size: 21px; }
+.notification-action { position: relative; justify-content: center; width: 34px; height: 34px; }
+.notification-action i { position: absolute; right: -2px; top: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 10px; color: #fff; font-size: 11px; font-style: normal; line-height: 18px; background: #f04438; }
+.workspace-user { gap: 9px; min-height: 46px; color: #4d5952; font-size: 14px; cursor: pointer; }
+.workspace-user-avatar { color: #fff; background: #087b45; }
+
+/* 顶部工具栏 */
+.top-header {
+  height: var(--admin-topbar-height);
+  padding: 0 30px;
+  background: rgba(255, 255, 255, 0.98);
+  border-bottom: 1px solid #e5e9e7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.header-left,
+.header-right,
+.user-avatar-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.header-left {
+  min-width: 0;
+  gap: 12px;
+}
+
+.page-title {
+  overflow: hidden;
+  color: #28332d;
+  font-size: 16px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-right {
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.header-role {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.header-divider {
+  width: 1px;
+  height: 24px;
+  background: #e3e8e5;
+}
+
+.user-avatar-wrapper {
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.user-avatar-wrapper:hover {
+  background: #f3f7f5;
+}
+
+.user-avatar-fallback {
+  color: #fff;
+  background: #087a45;
+  font-size: 14px;
+}
+
+.header-user-name {
+  max-width: 140px;
+  overflow: hidden;
+  color: #28332d;
+  font-size: 14px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-arrow {
+  color: #7a847f;
+  font-size: 12px;
+}
+
+.user-info-dropdown {
+  min-width: 160px;
+  padding: 8px 0;
+}
+
+.user-name {
+  margin-bottom: 6px;
+  color: #303133;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.user-role {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 /* 主内容区 */
 .content-area {
+  min-width: 0;
   flex: 1;
-  padding: 24px;
+  padding: var(--admin-content-gutter-y) var(--admin-content-gutter-x) 32px;
+  background: #f6f8f7;
   overflow-y: auto;
+}
+
+.content-area.workspace-shell-content { padding: 0 0 32px; }
+.workspace-shell-content .admin-content-frame { width: 100%; max-width: none; }
+.content-area.embedded-header-content { padding-top: 0; }
+
+.admin-content-frame {
+  width: min(100%, var(--admin-content-max-width));
+  min-width: 0;
+  min-height: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 1280px) {
+  .top-header {
+    padding-inline: 24px;
+  }
+
+  .content-area {
+    padding-inline: 22px;
+  }
 }
 
 </style>

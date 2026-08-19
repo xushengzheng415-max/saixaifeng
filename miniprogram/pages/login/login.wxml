@@ -1,32 +1,35 @@
 <!-- pages/login/login.wxml -->
-<!-- 赛小蜂足球 - 仅微信授权登录 -->
+<!-- 赛小蜂足球 - 高保真原型 V2.0 登录页（仅微信授权登录） -->
 <view class="login-page">
-  <image class="bg-image" src="/images/login-bg.jpg" mode="aspectFill"></image>
+  <image class="login-bg" src="/images/runtime/mobile-login-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="login-mask"></view>
 
-  <view class="content-overlay">
-    <view class="login-section">
-      <button class="wechat-btn" bindtap="loginWithWechat" disabled="{{isSubmitting}}">
-        <text class="btn-text">{{loginButtonText}}</text>
-      </button>
+  <view class="login-logo" style="padding-top:220rpx">
+    <image class="login-logo-img" src="/images/login-brand-foreground-reference.png" mode="widthFix" style="width:420rpx"></image>
+    <view class="login-slogan">让每一场比赛都有记录</view>
+  </view>
 
-      <view class="agreement-row">
-        <view class="agreement-check" bindtap="toggleAgreement">
-          <view class="checkbox {{checkboxClass}}">
-            <text wx:if="{{agreementChecked}}">✓</text>
-          </view>
-          <text class="agreement-text">我已阅读并同意</text>
-        </view>
-        <view class="agreement-links">
-          <text class="agreement-link" catchtap="showUserAgreement">《用户协议》</text>
-          <text class="agreement-text">和</text>
-          <text class="agreement-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
-        </view>
+  <view class="login-panel">
+    <view class="login-panel-title">欢迎使用赛小蜂足球</view>
+    <view class="login-panel-sub">赛事协作、球队资产与青训经营，一个机构工作空间统一管理</view>
+
+    <button class="btn block login-btn-main" bindtap="loginWithWechat" disabled="{{isSubmitting}}">{{loginButtonText}}</button>
+    <button class="btn block outline mt8" bindtap="loginWithPhone">手机号登录</button>
+
+    <view class="agree-row">
+      <view class="agree-check {{checkboxClass}}" bindtap="toggleAgreement">
+        <text wx:if="{{agreementChecked}}">✓</text>
       </view>
-
-      <view class="dev-mode" bindlongpress="devLogin">
-        <text class="dev-mode-text">赛小蜂 v1.0.0</text>
+      <view class="agree-text">
+        <text bindtap="toggleAgreement">我已阅读并同意</text>
+        <text class="agree-link" catchtap="showUserAgreement">《用户协议》</text>
+        <text>和</text>
+        <text class="agree-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
       </view>
     </view>
+  </view>
 
+  <view class="dev-mode" bindlongpress="devLogin">
+    <text class="dev-mode-text">赛小蜂 v1.0.0</text>
   </view>
 </view>

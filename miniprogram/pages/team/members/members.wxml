@@ -1,0 +1,71 @@
+<view class="member-page">
+  <image class="member-page-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="member-content">
+    <view class="member-nav">
+      <text class="member-back" bindtap="back">‹</text>
+      <text class="member-nav-title">球队成员</text>
+    </view>
+    <view wx:if="{{inviteMode}}" class="member-invite-view">
+      <view wx:if="{{inviteAvailable}}" class="member-invite-card">
+        <view class="member-invite-kicker">球队成员邀请</view>
+        <view class="member-invite-crest-wrap">
+          <image wx:if="{{team.logo}}" class="member-invite-crest" src="{{team.logo}}" mode="aspectFit" />
+          <text wx:else class="member-invite-crest member-crest-fallback">球队</text>
+        </view>
+        <text class="member-invite-team">邀请你加入 {{team.name}}</text>
+        <text class="member-invite-role">身份：{{invite.roleText}}</text>
+        <text class="member-invite-expiry">有效期至：{{invite.expiresAtText}}</text>
+        <view class="member-invite-boundary"><text class="member-note-icon">ⓘ</text>加入后获得球队协作权限，不等于赛事正式名单中的球员。</view>
+        <button wx:if="{{!inviteAccepted}}" class="member-invite-confirm" bindtap="acceptInvite">确认加入球队</button>
+        <button wx:if="{{inviteAccepted}}" class="member-invite-confirm" bindtap="acceptInvite">进入球队</button>
+      </view>
+      <view wx:else class="member-invite-card member-invite-error">{{inviteStatusText}}</view>
+    </view>
+    <view wx:if="{{showMemberLoading}}" class="member-loading">正在读取成员关系…</view>
+    <block wx:if="{{showMemberContent}}">
+      <view class="member-hero member-hero-compact">
+        <view class="member-crest-wrap">
+          <image wx:if="{{team.logo}}" class="member-crest" src="{{team.logo}}" mode="aspectFit" />
+          <text wx:else class="member-crest-fallback">球队</text>
+        </view>
+        <view class="member-hero-info">
+          <text class="member-team-name">{{team.name}}</text>
+          <text class="member-count">{{memberCount}} 名成员</text>
+        </view>
+        <button wx:if="{{canManage}}" class="member-invite" bindtap="invite"><image class="member-invite-icon" src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit" />邀请成员</button>
+      </view>
+      <view class="member-card">
+        <view class="member-search">
+          <text class="member-search-icon">⌕</text>
+          <input bindinput="search" placeholder="搜索成员姓名或手机号" placeholder-class="member-search-placeholder" />
+        </view>
+        <view class="member-filters">
+          <text wx:for="{{filterTabs}}" wx:key="id" class="{{item.className}}" data-id="{{item.id}}" bindtap="chooseFilter">{{item.label}}</text>
+        </view>
+        <view class="member-list">
+          <view wx:for="{{visible}}" wx:key="id" class="member-row">
+            <view class="member-avatar-wrap">
+              <image wx:if="{{item.avatar}}" class="member-avatar" src="{{item.avatar}}" mode="aspectFill" />
+              <text wx:else class="member-avatar member-avatar-fallback">{{item.avatarText}}</text>
+            </view>
+            <view class="member-row-info">
+              <text class="member-name">{{item.name}}</text>
+              <text class="member-role">{{item.roleText}}</text>
+              <text class="member-phone">{{item.phoneMasked}}</text>
+            </view>
+            <view class="member-row-action">
+              <text class="{{item.statusClass}}">{{item.statusText}}</text>
+              <button wx:if="{{item.pending}}" class="member-resend" bindtap="resend">再次邀请</button>
+            </view>
+            <text class="member-arrow">›</text>
+          </view>
+        </view>
+      </view>
+      <view class="member-note"><text class="member-note-icon">ⓘ</text>球队成员负责管理球队，不等于赛事正式名单中的球员。</view>
+      <view wx:if="{{canManage}}" class="member-invite-panel">
+        <button class="member-channel" bindtap="invite"><image class="member-channel-icon" src="/images/runtime/icons/brand-v2-06.png" mode="aspectFit" /><view><text>微信邀请</text><text>通过微信好友或群聊发送邀请</text></view></button>
+        <button class="member-channel member-channel-border" bindtap="invite"><image class="member-channel-icon" src="/images/runtime/icons/brand-v2-07.png" mode="aspectFit" /><view><text>生成邀请二维码</text><text>分享二维码邀请成员加入</text></view></button>
+      </view>
+    </block>
+  </view>
+</view>

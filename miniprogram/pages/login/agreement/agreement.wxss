@@ -1,0 +1,55 @@
+page {
+  min-height: 100%;
+  background: #f4f7f4;
+  color: #263328;
+}
+
+.agreement-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 24rpx 48rpx;
+}
+
+.agreement-card {
+  box-sizing: border-box;
+  padding: 40rpx 32rpx 20rpx;
+  border: 1rpx solid #e1ebe2;
+  border-radius: 20rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 30rpx rgba(27, 94, 32, 0.06);
+}
+
+.agreement-title {
+  color: #1b5e20;
+  font-size: 42rpx;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.agreement-date {
+  margin: 12rpx 0 34rpx;
+  color: #7a877c;
+  font-size: 24rpx;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.section {
+  margin-bottom: 30rpx;
+}
+
+.section-title {
+  margin-bottom: 12rpx;
+  color: #243728;
+  font-size: 30rpx;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.section-text {
+  color: #4f5f52;
+  font-size: 27rpx;
+  line-height: 1.9;
+  text-align: justify;
+}

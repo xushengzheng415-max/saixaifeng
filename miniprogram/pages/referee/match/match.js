@@ -19,6 +19,10 @@ Page({
     canStart: false,
     canFinish: false,
     canRecordEvents: false,
+    canSubmitReport: false,
+    showFinalScore: false,
+    refereeRecordLocked: false,
+    refereeRoleLabel: '',
     showUnavailable: false,
     showMatchContent: false,
     savingAction: false,
@@ -31,8 +35,8 @@ Page({
       { value: 'yellow_card', label: '黄牌' },
       { value: 'red_card', label: '红牌' },
       { value: 'substitution', label: '换人' },
-      { value: 'penalty', label: '点球' },
-      { value: 'own_goal', label: '乌龙球' }
+      { value: 'stoppage_time', label: '补时' },
+      { value: 'other', label: '其他事件' }
     ],
     eventTypeIndex: 0,
     eventType: 'goal',
@@ -44,9 +48,12 @@ Page({
     eventMinute: '',
     eventPlayerName: '',
     eventAssistName: '',
+    eventDescription: '',
     eventPlayerLabel: '进球球员',
     eventAssistLabel: '助攻球员（选填）',
-    showAssistField: true
+    showAssistField: true,
+    showPlayerField: true,
+    showDescriptionField: false
   },
 
   onLoad: function(options) {
@@ -122,7 +129,11 @@ Page({
       canStart: canStart,
       canFinish: canFinish,
       canRecordEvents: canRecordEvents,
-      showUnavailable: !canStart && !canFinish && !canRecordEvents,
+      canSubmitReport: !!match.canSubmitReport,
+      showFinalScore: !!match.showFinalScore,
+      refereeRecordLocked: !!match.refereeRecordLocked,
+      refereeRoleLabel: match.refereeRoleLabel || '',
+      showUnavailable: !canStart && !canFinish && !canRecordEvents && !match.refereeRecordLocked,
       eventTeamOptions: [
         { value: 'home', label: '主队 · ' + homeTeamName },
         { value: 'away', label: '客队 · ' + awayTeamName }
@@ -131,32 +142,7 @@ Page({
     })
   },
 
-  onGetPhoneNumber: function(e) {
-    var code = e.detail && e.detail.code
-    if (!code) {
-      wx.showToast({ title: '需要手机号授权才能核验裁判身份', icon: 'none' })
-      return
-    }
-    if (this.data.bindingPhone) return
-    var that = this
-    that.setData({ bindingPhone: true })
-    wx.showLoading({ title: '正在识别裁判...' })
-    that.callWorkflow({ action: 'bindPhone', phoneCode: code }, function(res) {
-      wx.hideLoading()
-      that.setData({ bindingPhone: false })
-      var result = res.result || {}
-      if (!result.success) {
-        wx.showModal({ title: '身份识别失败', content: result.message || '请重试', showCancel: false })
-        return
-      }
-      that.loadMatch()
-    }, function(err) {
-      wx.hideLoading()
-      that.setData({ bindingPhone: false })
-      console.error('[referee-match] bind failed:', err)
-      wx.showToast({ title: '网络异常，请重试', icon: 'none' })
-    })
-  },
+  goBindIdentity: function() { wx.redirectTo({ url: '/pages/service/workbench/workbench' }) },
 
   startMatch: function() {
     if (this.data.savingAction) return
@@ -257,9 +243,12 @@ Page({
       eventMinute: '',
       eventPlayerName: '',
       eventAssistName: '',
+      eventDescription: '',
       eventPlayerLabel: '进球球员',
       eventAssistLabel: '助攻球员（选填）',
-      showAssistField: true
+      showAssistField: true,
+      showPlayerField: true,
+      showDescriptionField: false
     })
   },
 
@@ -275,6 +264,7 @@ Page({
     var option = this.data.eventTypeOptions[index] || this.data.eventTypeOptions[0]
     var isSubstitution = option.value === 'substitution'
     var isGoal = option.value === 'goal'
+    var needsPlayer = ['stoppage_time', 'other'].indexOf(option.value) < 0
     this.setData({
       eventTypeIndex: index,
       eventType: option.value,
@@ -282,6 +272,8 @@ Page({
       eventPlayerLabel: isSubstitution ? '换上球员' : (isGoal ? '进球球员' : '球员姓名'),
       eventAssistLabel: isSubstitution ? '换下球员（选填）' : '助攻球员（选填）',
       showAssistField: isSubstitution || isGoal,
+      showPlayerField: needsPlayer,
+      showDescriptionField: option.value === 'other',
       eventAssistName: ''
     })
   },
@@ -307,6 +299,7 @@ Page({
   onEventAssistInput: function(e) {
     this.setData({ eventAssistName: e.detail.value })
   },
+  onEventDescriptionInput: function(e) { this.setData({ eventDescription: e.detail.value }) },
 
   saveEvent: function() {
     if (this.data.savingAction) return
@@ -316,7 +309,7 @@ Page({
       wx.showToast({ title: '请输入0至130的比赛分钟', icon: 'none' })
       return
     }
-    if (!playerName) {
+    if (['stoppage_time', 'other'].indexOf(this.data.eventType) < 0 && !playerName) {
       wx.showToast({ title: '请输入球员姓名', icon: 'none' })
       return
     }
@@ -330,7 +323,8 @@ Page({
       teamSide: that.data.eventTeamSide,
       minute: minute,
       playerName: playerName,
-      assistName: String(that.data.eventAssistName || '').trim()
+      assistName: String(that.data.eventAssistName || '').trim(),
+      description: String(that.data.eventDescription || '').trim()
     }, function(res) {
       wx.hideLoading()
       that.setData({ savingAction: false })
@@ -347,6 +341,29 @@ Page({
       that.setData({ savingAction: false })
       console.error('[referee-match] event save failed:', err)
       wx.showToast({ title: '网络异常，请重试', icon: 'none' })
+    })
+  },
+
+  submitReport: function() {
+    if (this.data.savingAction) return
+    var that = this
+    wx.showModal({
+      title: '提交裁判报告',
+      content: '提交后比分和比赛事件将锁定，不能再修改。确认提交吗？',
+      success: function(modal) {
+        if (!modal.confirm) return
+        that.setData({ savingAction: true })
+        that.callWorkflow({ action: 'submitRefereeReport', matchId: that.data.matchId }, function(res) {
+          that.setData({ savingAction: false })
+          var result = res.result || {}
+          if (!result.success) return wx.showModal({ title: '提交失败', content: result.message || '请重试', showCancel: false })
+          wx.showToast({ title: '报告已提交', icon: 'success' })
+          that.loadMatch()
+        }, function() {
+          that.setData({ savingAction: false })
+          wx.showToast({ title: '网络异常，请重试', icon: 'none' })
+        })
+      }
     })
   },
 

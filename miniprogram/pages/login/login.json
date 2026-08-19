@@ -1,6 +1,5 @@
 {
+  "navigationStyle": "custom",
   "navigationBarTitleText": "赛小蜂足球",
-  "navigationBarBackgroundColor": "#1B5E20",
-  "navigationBarTextStyle": "white",
   "usingComponents": {}
 }

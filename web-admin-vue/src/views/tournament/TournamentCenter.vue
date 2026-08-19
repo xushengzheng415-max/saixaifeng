@@ -3,7 +3,7 @@
     <!-- 顶部导航栏 -->
     <header class="center-header">
       <div class="header-left">
-        <img src="/LOGO2.png" alt="赛小蜂足球" class="logo" @click="goToHome" style="cursor: pointer;" />
+        <img :src="brandLogoUrl" alt="赛小蜂足球" class="logo" @click="goToHome" style="cursor: pointer;" />
       </div>
       <div class="header-right">
         <template v-if="isLoggedIn()">
@@ -97,7 +97,7 @@
           @click="goToTournament(tournament._id)"
         >
           <div class="card-image">
-            <img :src="tournament.logo || '/images/default-tournament.png'" :alt="tournament.name" />
+            <img :src="tournament.logo || defaultTournamentLogo" :alt="tournament.name" />
             <div class="card-badge" :class="getStatusClass(tournament.status)">
               {{ getStatusText(tournament.status) }}
             </div>
@@ -179,6 +179,19 @@
           :value="team._id"
         />
       </el-select>
+      <el-select
+        v-if="signupDivisions.length"
+        v-model="selectedDivisionId"
+        placeholder="选择竞赛组别"
+        style="width: 100%; margin-top: 16px"
+      >
+        <el-option
+          v-for="division in signupDivisions"
+          :key="division.id"
+          :label="division.name"
+          :value="division.id"
+        />
+      </el-select>
       <el-input
         v-model="signupMessage"
         type="textarea"
@@ -217,6 +230,8 @@ import { queryList, callFunction } from '../../utils/cloud'
 import { getTempFileURL } from '../../utils/upload'
 
 const router = useRouter()
+const brandLogoUrl = `${import.meta.env.BASE_URL}LOGO2.png`
+const defaultTournamentLogo = `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
 const loading = ref(false)
 const tournaments = ref([])
 const currentPage = ref(1)
@@ -245,6 +260,8 @@ const signupVisible = ref(false)
 const loginPromptVisible = ref(false)
 const selectedTournament = ref(null)
 const selectedTeamId = ref('')
+const selectedDivisionId = ref('')
+const signupDivisions = ref([])
 const myTeams = ref([])
 const loadingTeams = ref(false)
 const signupLoading = ref(false)
@@ -303,13 +320,22 @@ const filteredTournaments = computed(() => {
   // 排序
   switch (selectedSort.value) {
     case 'newest':
-      result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      result.sort((a, b) => {
+        const featuredPriority = Number(Boolean(b.isFeatured || b.featured)) - Number(Boolean(a.isFeatured || a.featured))
+        return featuredPriority || new Date(b.createdAt || b.createTime) - new Date(a.createdAt || a.createTime)
+      })
       break
     case 'hot':
-      result.sort((a, b) => (b.registeredTeams || 0) - (a.registeredTeams || 0))
+      result.sort((a, b) => {
+        const featuredPriority = Number(Boolean(b.isFeatured || b.featured)) - Number(Boolean(a.isFeatured || a.featured))
+        return featuredPriority || (b.registeredTeams || 0) - (a.registeredTeams || 0)
+      })
       break
     case 'soon':
-      result.sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+      result.sort((a, b) => {
+        const featuredPriority = Number(Boolean(b.isFeatured || b.featured)) - Number(Boolean(a.isFeatured || a.featured))
+        return featuredPriority || new Date(a.startDate) - new Date(b.startDate)
+      })
       break
   }
 
@@ -350,14 +376,14 @@ async function loadBanners() {
 async function loadTournaments() {
   loading.value = true
   try {
-    // 查询所有赛事（排除已结束的），报名中/进行中/即将开始的赛事都显示
-    const data = await queryList('tournaments', {
-      limit: pageSize.value,
-      skip: (currentPage.value - 1) * pageSize.value,
-      where: {}
+    const result = await callFunction('getTournaments', {
+      pageIndex: currentPage.value - 1,
+      pageSize: pageSize.value,
+      includeLegacyCategory: true
     })
-    tournaments.value = data || []
-    total.value = data.length || 0
+    if (!result.success) throw new Error(result.error || result.message || '加载赛事失败')
+    tournaments.value = result.data || []
+    total.value = Number(result.total || tournaments.value.length)
   } catch (err) {
     console.error('加载赛事失败:', err)
     ElMessage.error('加载赛事失败')
@@ -424,6 +450,29 @@ function isLoggedIn() {
   return localStorage.getItem('isLoggedIn') === 'true'
 }
 
+function normalizeSignupDivisions(source) {
+  return (Array.isArray(source) ? source : []).map(item => ({
+    id: String(item && (item.id || item._id || item.divisionId || item.division || item.divisionKey) || '').trim(),
+    name: String(item && (item.name || item.divisionName || item.label || item.ageGroup) || '当前竞赛组别').trim()
+  })).filter(item => item.id)
+}
+
+async function loadSignupDivisions(tournament) {
+  const embedded = normalizeSignupDivisions(tournament && tournament.divisions)
+  if (embedded.length) {
+    signupDivisions.value = embedded
+    selectedDivisionId.value = embedded.length === 1 ? embedded[0].id : ''
+    return
+  }
+  try {
+    const rows = await queryList('divisions', { limit: 100, where: { tournamentId: tournament && tournament._id } })
+    signupDivisions.value = normalizeSignupDivisions(rows)
+  } catch (error) {
+    signupDivisions.value = []
+  }
+  selectedDivisionId.value = signupDivisions.value.length === 1 ? signupDivisions.value[0].id : ''
+}
+
 // 处理报名按钮点击
 async function handleSignup(tournament) {
   if (!isLoggedIn()) {
@@ -432,9 +481,11 @@ async function handleSignup(tournament) {
   }
   selectedTournament.value = tournament
   selectedTeamId.value = ''
+  selectedDivisionId.value = ''
+  signupDivisions.value = []
   signupMessage.value = ''
   signupVisible.value = true
-  await loadMyTeams()
+  await Promise.all([loadMyTeams(), loadSignupDivisions(tournament)])
 }
 
 // 加载我的球队
@@ -459,6 +510,10 @@ async function submitSignup() {
     ElMessage.warning('请选择球队')
     return
   }
+  if (signupDivisions.value.length > 1 && !selectedDivisionId.value) {
+    ElMessage.warning('请选择报名竞赛组别')
+    return
+  }
   if (!selectedTournament.value) {
     ElMessage.warning('请选择赛事')
     return
@@ -469,6 +524,7 @@ async function submitSignup() {
     const res = await callFunction('applyTournament', {
       tournamentId: selectedTournament.value._id,
       teamId: selectedTeamId.value,
+      ...(selectedDivisionId.value ? { divisionId: selectedDivisionId.value } : {}),
       message: signupMessage.value
     })
 

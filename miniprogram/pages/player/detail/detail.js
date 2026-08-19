@@ -98,8 +98,9 @@ Page({
   // 编辑球员（仅教练/创建者可编辑）
   onEditPlayer() {
     const playerId = this.data.playerId
+    const teamId = this.data.player && (this.data.player.teamId || this.data.player.teamCode || '')
     wx.navigateTo({
-      url: `/pages/team/player-edit/player-edit?id=${playerId}`
+      url: `/pages/team/player-add/player-add?id=${playerId}&teamId=${encodeURIComponent(teamId || '')}&mode=edit`
     })
   },
 

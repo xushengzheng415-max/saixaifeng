@@ -297,46 +297,8 @@ Page({
   },
 
   // 涓嬭浇PDF鏂囨。
-  async onDownloadPDF() {
-    wx.showLoading({ title: '鐢熸垚PDF涓?..' })
-    
-    try {
-      // 璋冪敤浜戝嚱鏁扮敓鎴怭DF
-      const res = await wx.cloud.callFunction({
-        name: 'generatePDF',
-        data: {
-          matchId: this.data.matchId,
-          type: 'starting lineup'
-        }
-      })
-      
-      if (res.result && res.result.fileID) {
-        // 涓嬭浇鏂囦欢
-        const fileRes = await wx.cloud.downloadFile({
-          fileID: res.result.fileID
-        })
-        
-        // 鎵撳紑鏂囦欢
-        wx.openDocument({
-          filePath: fileRes.tempFilePath,
-          showMenu: true,  // 鏄剧ず鍒嗕韩鑿滃崟锛屽彲浠ヨ浆鍙戙€佷繚瀛樼瓑
-          success: () => {
-            wx.hideLoading()
-          },
-          fail: () => {
-            wx.hideLoading()
-            wx.showToast({ title: '鎵撳紑澶辫触', icon: 'none' })
-          }
-        })
-      } else {
-        throw new Error('鐢熸垚澶辫触')
-      }
-      
-    } catch (err) {
-      console.error('鐢熸垚PDF澶辫触:', err)
-      wx.hideLoading()
-      wx.showToast({ title: '鐢熸垚澶辫触', icon: 'none' })
-    }
+  onDownloadPDF() {
+    wx.showToast({ title: 'PDF导出待配置', icon: 'none' })
   },
 
   // 鍒嗕韩缁欏ソ鍙?

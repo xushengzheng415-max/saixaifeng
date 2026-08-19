@@ -263,14 +263,6 @@ async function findOrCreateUser(db, userInfo, phone) {
 /**
  * �����ֻ���ӳ���ɫ
  */
-function mapRoleByPhone(phone) {
-  const PHONE_ROLE_MAP = {
-    '15038292130': 'ORGANIZER',
-    '17319716663': 'COACH'
-  }
-  return PHONE_ROLE_MAP[phone] || null
-}
-
 // ========== ����� ==========
 exports.main = async (event) => {
   const { code, phone: eventPhone, smsCode } = event
@@ -331,7 +323,7 @@ exports.main = async (event) => {
     const needSetPassword = !user.passwordSet
     const needBindPhone = !finalPhone && !verifiedPhone
     const needBindEmail = !(user.email || '')
-    const needSelectRole = isNewUser || (!user.role || user.role === '')
+    const needSelectRole = false
 
     // 7. �����û���ֻ��ţ����� needPhoneBinding ��ǰ�˵���ҳ
     if (needBindPhone) {
@@ -349,13 +341,7 @@ exports.main = async (event) => {
     }
 
     // 8. ȷ�����ս�ɫ���� ʹ�ù�һ������ֻ��ţ�
-    let finalRole = user.role || ''
-    if (finalPhone || verifiedPhone) {
-      const phoneForRole = finalPhone || verifiedPhone
-      const mappedRole = mapRoleByPhone(phoneForRole)
-      if (mappedRole) finalRole = mappedRole
-    }
-
+    const finalRole = 'ORGANIZER'
     // 9. �����Զ����¼Ʊ��
     const ticket = null
 

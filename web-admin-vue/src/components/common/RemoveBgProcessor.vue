@@ -71,7 +71,7 @@
         <!-- 头像参考框叠加层（仅球员头像显示） -->
         <img
           v-if="cropConfig.showAvatarFrame"
-          src="/images/avatar-frame.png"
+          :src="avatarFrameUrl"
           class="avatar-frame-overlay"
           alt="头像参考框"
         />
@@ -139,6 +139,8 @@ import { removeBackground } from '../../utils/removeBg'
 import { removeBackgroundBaidu } from '../../utils/baiduRemoveBg'
 import { removeWhiteBackground } from '../../utils/whiteBgRemover'
 import { getTempFileURL } from '../../utils/upload'
+
+const avatarFrameUrl = `${import.meta.env.BASE_URL}images/avatar-frame.png`
 import { uploadLargeFileViaCloud } from '../../utils/cloud'
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
@@ -160,6 +162,7 @@ const processing = ref(false)
 const cropping = ref(false)
 const uploading = ref(false) // 上传到云存储中
 const originalUrl = ref('')
+const sourceFile = ref(null)
 const processedUrl = ref('')
 const processedFileUrl = ref('') // 上传到云存储后的临时URL
 const processedFileID = ref('') // 上传到云存储后的fileID
@@ -302,6 +305,9 @@ const cropConfig = computed(() => {
 // 处理文件选择
 async function handleFileChange(file) {
   if (!file || !file.raw) return
+
+  // 保留用户上传的原始文件给调用方持久化；裁剪/透明抠图只生成派生图，不能覆盖原图。
+  sourceFile.value = file.raw
 
   // 验证文件类型
   const validTypes = ['image/jpeg', 'image/png', 'image/jpg']
@@ -562,6 +568,7 @@ function getFolderByType() {
 // 重置
 function handleReset() {
   originalUrl.value = ''
+  sourceFile.value = null
   processedUrl.value = ''
   processedFileUrl.value = ''
   processedFileID.value = ''
@@ -579,7 +586,8 @@ function handleConfirm() {
     emit('success', {
       url: processedFileUrl.value,
       previewUrl: processedUrl.value,
-      fileID: processedFileID.value
+      fileID: processedFileID.value,
+      sourceFile: sourceFile.value
     })
     ElMessage.success('图片已选择，请点击保存按钮保存更改')
     // 不重置，保持预览状态

@@ -1,9 +1,0 @@
-{
-  "name": "tournamentCenterLogin",
-  "version": "1.0.0",
-  "description": "赛事中心独立登录云函数（手机号+密码）",
-  "main": "index.js",
-  "dependencies": {
-    "wx-server-sdk": "~2.6.3"
-  }
-}

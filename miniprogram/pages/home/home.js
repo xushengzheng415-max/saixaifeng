@@ -1,642 +1,257 @@
-// pages/home/home.js
+var workspace = require('../../utils/workspace')
+
+function countPending(items) {
+  return (items || []).filter(function (item) { return item.status === 'pending' || item.status === 'reviewing' }).length
+}
+
+function taskCards(items) {
+  var tones = ['', 'orange', 'blue']
+  var icons = [
+    '/images/icons/shield.svg',
+    '/images/icons/event.svg',
+    '/images/icons/warning.svg'
+  ]
+  return (items || []).slice(0, 3).map(function (item, index) {
+    return {
+      id: item.id || item._id || String(index),
+      title: item.title || '待处理事项',
+      subtitle: item.subtitle || '待处理 1',
+      count: String(item.count || 1),
+      toneClass: tones[index],
+      icon: icons[index],
+      assetClass: 'svg-icon',
+      isPrototypeReference: false,
+      taskWrapStyle: '',
+      taskImageStyle: ''
+    }
+  })
+}
+
+function formatTeam(item, index) {
+  var rawCompletion = item.completionPercent != null ? item.completionPercent : item.profileCompletion
+  var completion = Number(rawCompletion)
+  var completionText = Number.isFinite(completion) ? '资料完整度 ' + completion + '%' : '资料完整度待完善'
+  return {
+    id: item.id || item._id || item.teamId || String(index),
+    name: item.name || item.teamName || '未命名球队',
+    logo: item.logo || item.teamLogo || '/images/logo.png',
+    ownerText: item.ownerText || item.responsibleText || (item.coachName ? '负责人 ' + item.coachName : '负责人待完善'),
+    playerText: String(item.playerCount || 0) + ' 名球员',
+    coachText: String(item.coachCount || 0) + ' 名教练',
+    eventText: String(item.tournamentCount || item.eventCount || 0) + ' 项赛事',
+    completionText: completionText
+  }
+}
+
+function formatMatch(item, index) {
+  var dateValue = item.dateText || item.matchDateText || item.date || '日期待定'
+  return {
+    id: item.id || item._id || String(index),
+    tournamentId: item.tournamentId || item.eventId || item.id || '',
+    dateText: dateValue,
+    timeText: item.timeText || item.startTime || '时间待定',
+    divisionText: item.divisionText || item.divisionName || item.division || '组别待定',
+    statusText: item.statusText || '状态待定',
+    roundText: item.roundText || item.roundName || '轮次待定',
+    venueText: item.venueText || item.location || item.venue || '场地待定',
+    homeName: item.homeName || item.homeTeamName || '主队待定',
+    awayName: item.awayName || item.awayTeamName || '客队待定',
+    homeLogo: item.homeLogo || item.homeTeamLogo || '/images/logo.png',
+    awayLogo: item.awayLogo || item.awayTeamLogo || '/images/logo.png'
+  }
+}
+
+function formatTrainingCourse(item, index) {
+  return {
+    id: item.id || item._id || String(index),
+    timeText: item.timeText || item.startTime || '时间待定',
+    classText: item.classText || item.className || item.name || '班级待完善',
+    venueText: item.venueText || item.location || '场地待定',
+    coachText: item.coachText || item.coachName || '教练待完善',
+    studentText: String(item.studentCount || item.playerCount || 0) + ' 人'
+  }
+}
+
+function isDevtools() {
+  try { return wx.getSystemInfoSync().platform === 'devtools' } catch (error) { return false }
+}
+
+function previewContext() {
+  return {
+    currentWorkspace: { id: 'preview-workspace', name: '赛小蜂足球', permissions: [] },
+    currentIdentity: { id: 'team_coach', label: '球队教练' },
+    unreadMessageCount: 3,
+    teams: [
+      { id: 'preview-u12', name: '赛小蜂 U12 竞技队', logo: '/images/logo.png', playerCount: 23, coachCount: 3, tournamentCount: 2, completionPercent: 92, coachName: '许老师' },
+      { id: 'preview-u10', name: '赛小蜂 U10 梯队', logo: '/images/logo.png', playerCount: 18, coachCount: 2, tournamentCount: 1, completionPercent: 86, coachName: '许老师' }
+    ],
+    eventSchedule: [{ id: 'preview-match', tournamentId: 'preview-event', dateText: '8月2日', timeText: '10:30', divisionText: 'U12组', statusText: '进行中', roundText: '小组赛 第3轮', venueText: '1号场', homeName: '郑州劲风U12', awayName: '洛阳龙门U12', homeLogo: '/images/logo.png', awayLogo: '/images/logo.png' }],
+    eventTasks: [
+      { id: 'preview-roster', title: '正式名单待确认', subtitle: '待处理 1', count: 1, audience: 'team', status: 'pending' },
+      { id: 'preview-lineup', title: '比赛阵容待提交', subtitle: '待处理 1', count: 1, audience: 'team', status: 'pending' },
+      { id: 'preview-profile', title: '资料异常', subtitle: '待处理 1', count: 1, audience: 'team', status: 'reviewing' }
+    ],
+    statistics: { teamCount: 2, playerCount: 41 },
+    trainingSchedule: [], trainingTasks: [], tournaments: []
+  }
+}
+
+function previewOrganizerContext() {
+  return {
+    currentWorkspace: { id: 'preview-organizer-workspace', name: '2026 河南青少年足球冠军联赛', permissions: [] },
+    currentIdentity: { id: 'organizer', label: '赛事负责人' },
+    unreadMessageCount: 3,
+    teams: [],
+    tournaments: [{ id: 'preview-tournament', name: '2026河南青少年足球冠军联赛', statusText: '进行中' }],
+    eventSchedule: [
+      { id: 'preview-match-u12', tournamentId: 'preview-tournament', timeText: '10:30', divisionText: 'U12组', statusText: '进行中', roundText: '小组赛 第3轮', venueText: '1号场', homeName: '郑州劲风U12', awayName: '洛阳龙门U12', homeLogo: '/images/logo.png', awayLogo: '/images/logo.png' },
+      { id: 'preview-match-u10', tournamentId: 'preview-tournament', timeText: '15:00', divisionText: 'U10组', statusText: '进行中', roundText: '小组赛 第2轮', venueText: '2号场', homeName: '赛小蜂U10', awayName: '雏鹰U10', homeLogo: '/images/logo.png', awayLogo: '/images/logo.png' }
+    ],
+    eventTasks: [
+      { id: 'preview-roster', title: '正式名单审核', subtitle: '待处理 3', count: 3, status: 'pending' },
+      { id: 'preview-referee', title: '裁判缺员', subtitle: '待处理 1', count: 1, status: 'pending' },
+      { id: 'preview-result', title: '赛果复核', subtitle: '待处理 2', count: 2, status: 'reviewing' }
+    ],
+    trainingSchedule: [], trainingTasks: [], statistics: { todayMatchCount: 8, pendingReviewCount: 2, exceptionCount: 1 }
+  }
+}
+
+function previewTrainingContext() {
+  return {
+    currentWorkspace: { id: 'preview-training-workspace', name: '赛小蜂青训中心', permissions: [] },
+    currentIdentity: { id: 'training_coach', label: '青训教练' },
+    unreadMessageCount: 3,
+    eventTasks: [], teams: [], tournaments: [], eventSchedule: [],
+    trainingSchedule: [
+      { id: 'training-1', timeText: '16:30', classText: 'U8 启蒙班', venueText: '东区 1 号场', coachText: '王教练', studentCount: 18 },
+      { id: 'training-2', timeText: '18:00', classText: 'U10 提高班', venueText: '西区 2 号场', coachText: '刘教练', studentCount: 20 },
+      { id: 'training-3', timeText: '19:30', classText: 'U12 竞技班', venueText: '东区 1 号场', coachText: '张教练', studentCount: 16 }
+    ],
+    trainingTasks: [
+      { id: 'leave', title: '请假待审批', subtitle: '待处理 2', count: 2, status: 'pending' },
+      { id: 'attendance', title: '签到异常', subtitle: '待处理 1', count: 1, status: 'pending' },
+      { id: 'record', title: '课后记录待补', subtitle: '待处理 1', count: 1, status: 'reviewing' }
+    ],
+    statistics: { classCount: 4, studentCount: 76, pendingTrainingTaskCount: 3, trainingSubscribed: true, trainingAuthorized: true }
+  }
+}
+
 Page({
   data: {
-    loading: true,
-    currentRole: '',
-    isCoachMode: false,
-    isRefereeMode: false,
-    isOrganizerMode: false,
-    isSpectatorMode: false,
-    isLoggedIn: false,
-    userInfo: null,
-    teams: [],
-    currentTeamIndex: 0,
-    teamInfo: {},
-    playerCount: 0,
-    matchCount: 0,
-    winCount: 0,
-    matches: [],
-    albums: [],
-    refereeStats: {
-      totalMatches: 0,
-      thisMonth: 0,
-      rating: 0
-    },
-    upcomingMatches: [],
-    organizerStats: {
-      totalTournaments: 0,
-      ongoing: 0,
-      totalTeams: 0
-    },
-    myTournaments: [],
-    pendingItems: [],
-    hotTournaments: [],
-    highlights: [],
-    AlbumsLen: 0,
-    MyTournamentsLen: 0,
-    UpcomingMatchesLen: 0,
-    TeamsLen: 0,
-    MatchesLen: 0,
-    HighlightsLen: 0,
-    PendingItemsLen: 0,
-    HotTournamentsLen: 0
-  },
-
-  syncLengths: function () {
-    var data = this.data;
-    this.setData({
-      AlbumsLen: (data.albums || []).length,
-      MyTournamentsLen: (data.myTournaments || []).length,
-      UpcomingMatchesLen: (data.upcomingMatches || []).length,
-      TeamsLen: (data.teams || []).length,
-      MatchesLen: (data.matches || []).length,
-      HighlightsLen: (data.highlights || []).length,
-      PendingItemsLen: (data.pendingItems || []).length,
-      HotTournamentsLen: (data.hotTournaments || []).length
-    });
+    loading: true, isLoggedIn: false, errorText: '', roleTitle: '球队教练',
+    isOrganizer: false, isTeamCoach: true, isTrainingCoach: false,
+    unreadMessageCount: 0, hasUnreadMessages: false,
+    overviewTitle: '球队协作概览', overviewName: '暂无可管理球队', hasOverviewName: true,
+    overviewStatus: '', hasOverviewStatus: false, overviewLogo: '', hasOverviewLogo: false,
+    metrics: [], homeTaskCards: [], hasTaskCards: false, trainingCourses: [], hasTrainingCourses: false,
+    matches: [], hasMatches: false, teams: [], hasTeams: false,
+    showOtherRoleContent: false, otherSectionTitle: '', otherSectionEmptyText: '', matchSectionTitle: '最近比赛', overviewClass: '', topbarClass: '',
+    localVisualQa: false
   },
 
   onLoad: function (options) {
-    try {
-      if (wx.cloud) {
-        wx.cloud.init({ env: 'cloud1-7g8ckb3c7815a011', traceUser: false });
-      }
-    } catch (e) {}
-
-    if (options && options.scene) {
-      var scene = decodeURIComponent(options.scene);
-      if (scene) {
-        wx.navigateTo({ url: '/packageA/pages/signature/signature?matchId=' + scene });
-        return;
-      }
+    if (isDevtools() && options && options.visualQa === '1' && options.scenario === 'team-coach') {
+      this.setData({ localVisualQa: true })
+      this.applyContext(previewContext())
+      return
     }
-
-    this.loadData();
+    if (isDevtools() && options && options.visualQa === '1' && options.scenario === 'organizer') {
+      this.setData({ localVisualQa: true })
+      this.applyContext(previewOrganizerContext())
+      return
+    }
+    if (isDevtools() && options && options.visualQa === '1' && options.scenario === 'training-coach') {
+      this.setData({ localVisualQa: true })
+      this.applyContext(previewTrainingContext())
+      return
+    }
+    this.loadData()
   },
-
   onShow: function () {
-    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
-      this.getTabBar().syncSelected();
-    }
-    this.loadData();
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) this.getTabBar().syncFromPage(0)
+    if (this.data.localVisualQa) return
+    var cached = workspace.readContext()
+    if (cached) this.applyContext(cached)
+    this.loadData(true)
   },
+  onPullDownRefresh: function () { this.loadData(true).finally(function () { wx.stopPullDownRefresh() }) },
 
-  loadData: function () {
-    var currentRole = wx.getStorageSync('currentRole') || 'spectator';
-    var userInfo = wx.getStorageSync('userInfo') || {};
-    var roleLower = (currentRole || '').toLowerCase();
-
-    this.setData({
-      loading: true,
-      currentRole: currentRole,
-      userInfo: userInfo,
-      isCoachMode: roleLower === 'coach',
-      isRefereeMode: roleLower === 'referee',
-      isOrganizerMode: roleLower === 'organizer',
-      isSpectatorMode: roleLower === 'spectator' || roleLower === 'player',
-      isLoggedIn: !!userInfo && !!userInfo._id
-    });
-
-    if (roleLower === 'coach') {
-      this.loadCoachData();
-      return;
-    }
-    if (roleLower === 'referee') {
-      this.loadRefereeData();
-      return;
-    }
-    if (roleLower === 'organizer') {
-      this.loadOrganizerData();
-      return;
-    }
-    if (roleLower === 'spectator' || roleLower === 'player') {
-      this.loadSpectatorData();
-      return;
-    }
-
-    this.setData({ loading: false });
-    this.syncLengths();
-  },
-
-  loadCoachData: function () {
-    var teams = wx.getStorageSync('myTeams') || [];
-    var currentIndex = wx.getStorageSync('currentTeamIndex') || 0;
-
-    if (teams.length > 0) {
-      var currentTeam = teams[currentIndex] || teams[0];
-      this.setData({
-        teams: teams,
-        currentTeamIndex: currentIndex,
-        teamInfo: currentTeam,
-        loading: false
-      });
-      this.syncLengths();
-      this.loadTeamStats(currentTeam);
-      this.loadCoachMatches(currentTeam);
-      this.loadTeamFromDatabase();
-      return;
-    }
-
-    this.loadTeamFromDatabase();
-  },
-
-  switchTeam: function (e) {
-    var index = Number(e.currentTarget.dataset.index || 0);
-    var teams = this.data.teams || [];
-    if (index < 0 || index >= teams.length) return;
-
-    var currentTeam = teams[index];
-    wx.setStorageSync('currentTeamIndex', index);
-    wx.setStorageSync('teamInfo', currentTeam);
-
-    this.setData({
-      currentTeamIndex: index,
-      teamInfo: currentTeam,
-      loading: true
-    });
-
-    this.loadTeamStats(currentTeam);
-    this.loadCoachMatches(currentTeam);
-  },
-
-  loadTeamStats: function (teamInfo) {
-    var that = this;
-    var teamCode = teamInfo && (teamInfo.teamCode || '');
-    var teamId = teamInfo && (teamInfo._id || teamInfo.teamId || '');
-
-    if (!teamCode && !teamId) {
-      that.setData({ playerCount: 0 });
-      return;
-    }
-
-    var db = wx.cloud.database();
-    var _ = db.command;
-    var playerWhere = teamCode && teamId
-      ? _.or([{ teamCode: teamCode }, { teamId: teamId }])
-      : (teamId
-          ? _.or([{ teamId: teamId }, { teamCode: teamCode || teamId }])
-          : { teamCode: teamCode });
-
-    db.collection('players').where(playerWhere).count({
-      success: function (res) {
-        that.setData({ playerCount: res.total || 0 });
-      },
-      fail: function () {
-        that.setData({ playerCount: 0 });
+  loadData: function (silent) {
+    var userInfo = wx.getStorageSync('userInfo') || null
+    if (!userInfo || !userInfo._id) { this.setData({ loading: false, isLoggedIn: false }); return Promise.resolve() }
+    var that = this
+    if (!silent) this.setData({ loading: true, errorText: '', isLoggedIn: true })
+    var cached = workspace.readContext()
+    if (cached) this.applyContext(cached)
+    return workspace.loadContext().then(function (context) { that.applyContext(context) }).catch(function (error) {
+      if (error && error.code === 'ORG_CONFLICT') {
+        workspace.clearContext()
+        that.setData({ loading: false, errorText: error.message || '当前账号关联多个机构，请联系管理员核验' })
+        return
       }
-    });
+      if (cached) { that.applyContext(cached); return }
+      that.setData({ loading: false, errorText: error.message || '首页加载失败，请重试' })
+    })
   },
 
-  loadTeamFromDatabase: function () {
-    var that = this;
-    var userInfo = wx.getStorageSync('userInfo') || {};
-    var phoneNumber = wx.getStorageSync('phoneNumber') || userInfo.phoneNumber || userInfo.phone || '';
-    var openId = wx.getStorageSync('openId') || wx.getStorageSync('openid') || userInfo.openId || '';
-    var userId = wx.getStorageSync('userId') || userInfo._id || '';
-
-    if (!phoneNumber && !openId && !userId) {
-      that.setData({ loading: false });
-      that.syncLengths();
-      return;
+  applyContext: function (context) {
+    if (!context || !context.currentWorkspace) return
+    var identity = context.currentIdentity || {}
+    var role = identity.id || 'team_coach'
+    var isOrganizer = role === 'organizer'
+    var isTrainingCoach = role === 'training_coach'
+    var isTeamCoach = !isOrganizer && !isTrainingCoach
+    var rawTeams = (context.teams || []).slice(0, 2)
+    var teams = rawTeams.map(formatTeam)
+    var matches = (context.eventSchedule || context.schedule || []).slice(0, isOrganizer ? 2 : 1).map(formatMatch)
+    var eventTasks = context.eventTasks || []
+    var trainingTasks = context.trainingTasks || []
+    var trainingCourses = (context.trainingSchedule || []).slice(0, 3).map(formatTrainingCourse)
+    var stats = context.statistics || {}
+    var cards = taskCards(isTrainingCoach ? trainingTasks : eventTasks.filter(function (item) { return isOrganizer || item.audience === 'team' || !item.audience }))
+    var firstTeam = teams[0] || {}
+    var data = {
+      loading: false, isLoggedIn: true, errorText: '', roleTitle: identity.label || (isOrganizer ? '赛事负责人' : (isTrainingCoach ? '青训教练' : '球队教练')),
+      isOrganizer: isOrganizer, isTeamCoach: isTeamCoach, isTrainingCoach: isTrainingCoach,
+      unreadMessageCount: Number(context.unreadMessageCount || 0), hasUnreadMessages: Number(context.unreadMessageCount || 0) > 0,
+      teams: teams, hasTeams: teams.length > 0, matches: matches, hasMatches: matches.length > 0, trainingCourses: trainingCourses, hasTrainingCourses: trainingCourses.length > 0,
+      homeTaskCards: cards, hasTaskCards: cards.length > 0,
+      showOtherRoleContent: false,
+      otherSectionTitle: isOrganizer ? '今日比赛' : '今日课程',
+      otherSectionEmptyText: isOrganizer ? '当前没有可见赛事赛程' : '当前没有课程安排',
+      matchSectionTitle: isOrganizer ? '今日比赛' : '最近比赛',
+      overviewClass: isOrganizer ? 'organizer-overview' : '',
+      topbarClass: isOrganizer ? 'organizer-topbar' : ''
     }
-
-    wx.cloud.callFunction({
-      name: 'getMyTeams',
-      timeout: 15000,
-      data: {
-        phone: phoneNumber,
-        userId: userId,
-        openId: openId,
-        role: 'coach'
-      },
-      success: function (res) {
-        var result = res.result || {};
-        if (result.success && Array.isArray(result.teams) && result.teams.length > 0) {
-          var rawTeams = result.teams;
-          var teams = [];
-          for (var i = 0; i < rawTeams.length; i++) {
-            var t = rawTeams[i];
-            teams.push({
-              _id: t._id,
-              teamId: t.teamId || t._id,
-              teamName: t.teamName || t.name || '未命名球队',
-              teamLogo: t.logoUrl || t.logo || '',
-              teamCode: t.teamCode || t._id,
-              contactName: t.contactName || t.coachName || '',
-              contactPhone: t.contactPhone || t.ownerPhone || t.creatorPhone || t.phoneNumber || t.phone || ''
-            });
-          }
-
-          var storedIndex = wx.getStorageSync('currentTeamIndex') || 0;
-          var currentIndex = (storedIndex >= 0 && storedIndex < teams.length) ? storedIndex : 0;
-          var currentTeam = teams[currentIndex];
-
-          wx.setStorageSync('myTeams', teams);
-          wx.setStorageSync('currentTeamIndex', currentIndex);
-          wx.setStorageSync('teamInfo', currentTeam);
-
-          that.setData({
-            teams: teams,
-            currentTeamIndex: currentIndex,
-            teamInfo: currentTeam
-          });
-          that.syncLengths();
-          that.loadTeamStats(currentTeam);
-          that.loadCoachMatches(currentTeam);
-        } else {
-          that.setData({
-            teams: [],
-            currentTeamIndex: 0,
-            teamInfo: {},
-            playerCount: 0,
-            matchCount: 0,
-            winCount: 0,
-            loading: false
-          });
-          that.syncLengths();
-        }
-      },
-      fail: function (err) {
-        console.error('[home] getMyTeams 调用失败（保留现有数据）:', err);
-        that.setData({ loading: false });
-        that.syncLengths();
-      }
-    });
-  },
-
-  loadCoachMatches: function (teamInfo) {
-    var that = this;
-    var db = wx.cloud.database();
-    var teamId = teamInfo && (teamInfo._id || teamInfo.teamId || '');
-
-    if (!teamId) {
-      that.setData({ matchCount: 0, winCount: 0, matches: [], loading: false });
-      that.syncLengths();
-      return;
-    }
-
-    db.collection('matches')
-      .where(db.command.or([
-        { homeTeamId: teamId },
-        { awayTeamId: teamId }
-      ]))
-      .orderBy('matchTime', 'desc')
-      .limit(20)
-      .get({
-        success: function (res) {
-          var matches = res.data || [];
-          var teamIdSet = {};
-          for (var i = 0; i < matches.length; i++) {
-            if (matches[i].homeTeamId) teamIdSet[matches[i].homeTeamId] = true;
-            if (matches[i].awayTeamId) teamIdSet[matches[i].awayTeamId] = true;
-          }
-          var teamIds = Object.keys(teamIdSet);
-
-          var formatMatches = function (teamMap) {
-            var formattedMatches = [];
-            var winCount = 0;
-            for (var i = 0; i < matches.length; i++) {
-              var m = matches[i];
-              var statusText = '未开始';
-              var statusClass = 'upcoming';
-              if (m.status === 'ongoing') {
-                statusText = '进行中';
-                statusClass = 'live';
-              } else if (m.status === 'completed') {
-                statusText = '已结束';
-                statusClass = 'finished';
-                if (teamId && m.homeScore !== undefined && m.awayScore !== undefined) {
-                  if ((m.homeTeamId === teamId && Number(m.homeScore) > Number(m.awayScore)) ||
-                      (m.awayTeamId === teamId && Number(m.awayScore) > Number(m.homeScore))) {
-                    winCount += 1;
-                  }
-                }
-              }
-
-              var homeTeam = teamMap[m.homeTeamId] || {};
-              var awayTeam = teamMap[m.awayTeamId] || {};
-              formattedMatches.push({
-                id: m._id,
-                matchName: (m.tournamentName || '比赛') + ' ' + (m.round || ''),
-                homeTeam: m.homeTeamName || homeTeam.teamName || homeTeam.name || '主队',
-                awayTeam: m.awayTeamName || awayTeam.teamName || awayTeam.name || '客队',
-                homeLogo: homeTeam.logoUrl || homeTeam.logo || m.homeTeamLogo || '',
-                awayLogo: awayTeam.logoUrl || awayTeam.logo || m.awayTeamLogo || '',
-                score: (m.homeScore !== undefined && m.awayScore !== undefined) ? (m.homeScore + ' : ' + m.awayScore) : '',
-                statusText: statusText,
-                statusClass: statusClass,
-                location: m.venue || '待定',
-                date: that.formatDate(m.matchTime || m.date || m.startTime || m.matchDate)
-              });
-            }
-
-            that.setData({
-              matchCount: formattedMatches.length,
-              winCount: winCount,
-              matches: formattedMatches,
-              loading: false
-            });
-            that.syncLengths();
-          };
-
-          if (teamIds.length > 0) {
-            db.collection('teams').where({ _id: db.command.in(teamIds) }).get({
-              success: function (teamRes) {
-                var teamMap = {};
-                (teamRes.data || []).forEach(function (item) {
-                  teamMap[item._id] = item;
-                });
-                formatMatches(teamMap);
-              },
-              fail: function () {
-                formatMatches({});
-              }
-            });
-          } else {
-            formatMatches({});
-          }
-        },
-        fail: function () {
-          that.setData({ matchCount: 0, winCount: 0, matches: [], loading: false });
-          that.syncLengths();
-        }
-      });
-  },
-
-  loadRefereeData: function () {
-    var that = this;
-    var userInfo = wx.getStorageSync('userInfo') || {};
-    var phone = wx.getStorageSync('phoneNumber') || userInfo.phoneNumber || userInfo.phone || '';
-    var openId = wx.getStorageSync('openId') || userInfo.openId || '';
-    var db = wx.cloud.database();
-    var _ = db.command;
-
-    db.collection('matches').where(_.or([
-      { refereePhone: phone },
-      { assignedRefereePhone: phone },
-      { refereeOpenId: openId },
-      { assignedRefereeOpenId: openId }
-    ])).get({
-      success: function (res) {
-        var matches = res.data || [];
-        var upcoming = [];
-        for (var i = 0; i < matches.length && upcoming.length < 5; i++) {
-          var m = matches[i];
-          upcoming.push({
-            id: m._id,
-            matchName: (m.tournamentName || '比赛') + ' ' + (m.round || ''),
-            homeTeam: m.homeTeamName || '主队',
-            awayTeam: m.awayTeamName || '客队',
-            location: m.venue || '待定',
-            time: that.formatDate(m.matchTime || m.date || m.startTime || m.matchDate)
-          });
-        }
-
-        that.setData({
-          refereeStats: {
-            totalMatches: matches.length,
-            thisMonth: matches.length,
-            rating: matches.length > 0 ? 100 : 0
-          },
-          upcomingMatches: upcoming,
-          loading: false
-        });
-        that.syncLengths();
-      },
-      fail: function () {
-        that.setData({
-          refereeStats: { totalMatches: 0, thisMonth: 0, rating: 0 },
-          upcomingMatches: [],
-          loading: false
-        });
-        that.syncLengths();
-      }
-    });
-  },
-
-  loadOrganizerData: function () {
-    var that = this;
-    var db = wx.cloud.database();
-    var userInfo = wx.getStorageSync('userInfo') || {};
-    var phone = wx.getStorageSync('phoneNumber') || userInfo.phoneNumber || userInfo.phone || '';
-    var openId = wx.getStorageSync('openId') || userInfo.openId || '';
-    var userId = wx.getStorageSync('userId') || userInfo._id || '';
-    var _ = db.command;
-
-    var stats = { totalTournaments: 0, ongoing: 0, totalTeams: 0 };
-
-    db.collection('tournaments').count({
-      success: function (res) {
-        stats.totalTournaments = res.total || 0;
-        that.setData({ organizerStats: stats });
-      }
-    });
-
-    db.collection('tournaments').where({ status: 'ongoing' }).count({
-      success: function (res) {
-        stats.ongoing = res.total || 0;
-        that.setData({ organizerStats: stats });
-      }
-    });
-
-    db.collection('teams').count({
-      success: function (res) {
-        stats.totalTeams = res.total || 0;
-        that.setData({ organizerStats: stats });
-      }
-    });
-
-    function normalizeTournament(t) {
-      return {
-        _id: t._id,
-        name: t.name || '未命名赛事',
-        status: t.status || 'draft',
-        statusLabel: t.statusLabel || (t.status === 'ongoing' ? '进行中' : (t.status === 'finished' || t.status === 'completed' ? '已结束' : '草稿')),
-        dateRange: that.formatDate(t.startDate || t.createTime) + ' - ' + that.formatDate(t.endDate || t.startDate || t.createTime),
-        registeredTeams: t.registeredTeams || t.approvedTeams || 0,
-        maxTeams: t.maxTeams || 0
-      };
-    }
-
-    function applyTournamentList(list) {
-      var items = [];
-      (list || []).forEach(function (t) {
-        items.push(normalizeTournament(t));
-      });
-      that.setData({ myTournaments: items, loading: false });
-      that.syncLengths();
-    }
-
-    function loadRecentTournaments() {
-      db.collection('tournaments').orderBy('createTime', 'desc').limit(10).get({
-        success: function (res) {
-          applyTournamentList(res.data || []);
-        },
-        fail: function () {
-          that.setData({ myTournaments: [], loading: false });
-          that.syncLengths();
-        }
-      });
-    }
-
-    var ownerConditions = [];
-    function addCondition(field, value) {
-      if (!value) return;
-      var item = {};
-      item[field] = value;
-      ownerConditions.push(item);
-    }
-
-    addCondition('creatorId', userId);
-    addCondition('organizerId', userId);
-    addCondition('createdBy', userId);
-    addCondition('ownerId', userId);
-    addCondition('userId', userId);
-    addCondition('creatorPhone', phone);
-    addCondition('organizerPhone', phone);
-    addCondition('ownerPhone', phone);
-    addCondition('contactPhone', phone);
-    addCondition('phoneNumber', phone);
-    addCondition('phone', phone);
-    addCondition('mobile', phone);
-    addCondition('openId', openId);
-    addCondition('wechatOpenId', openId);
-    addCondition('_openid', openId);
-
-    if (ownerConditions.length === 0) {
-      loadRecentTournaments();
+    if (isOrganizer) {
+      var tournament = (context.tournaments || [])[0] || {}
+      data.overviewTitle = '今日赛事概况'; data.overviewName = tournament.name || '暂无进行中的赛事'; data.hasOverviewName = true
+      data.overviewStatus = tournament.statusText || '待创建'; data.hasOverviewStatus = true; data.overviewLogo = ''; data.hasOverviewLogo = false
+      data.metrics = [{ label: '今日比赛', value: String(stats.todayMatchCount || matches.length), icon: '/images/icons/event.svg' }, { label: '待复核', value: String(stats.pendingReviewCount || countPending(eventTasks)), icon: '/images/icons/shield.svg' }, { label: '异常', value: String(stats.exceptionCount || eventTasks.filter(function (item) { return item.status === 'reviewing' }).length), icon: '/images/icons/warning.svg' }]
+    } else if (isTrainingCoach) {
+      data.overviewTitle = '今日青训概览'; data.overviewName = ''; data.hasOverviewName = false; data.overviewStatus = ''; data.hasOverviewStatus = false; data.overviewLogo = ''; data.hasOverviewLogo = false
+      data.metrics = [{ label: '班级', value: String(stats.classCount || trainingCourses.length), icon: '/images/icons/training.svg' }, { label: '学员', value: String(stats.studentCount || 0), icon: '/images/icons/players.svg' }, { label: '待办事项', value: String(stats.pendingTrainingTaskCount || countPending(trainingTasks)), icon: '/images/icons/list.svg' }]
     } else {
-      var ownerWhere = ownerConditions.length === 1 ? ownerConditions[0] : _.or(ownerConditions);
-      db.collection('tournaments').where(ownerWhere).orderBy('createTime', 'desc').limit(10).get({
-        success: function (res) {
-          var list = res.data || [];
-          if (list.length > 0) {
-            applyTournamentList(list);
-          } else {
-            loadRecentTournaments();
-          }
-        },
-        fail: function () {
-          loadRecentTournaments();
-        }
-      });
+      data.overviewTitle = '球队协作概览'; data.overviewName = firstTeam.name || '暂无可管理球队'; data.hasOverviewName = true; data.overviewStatus = ''; data.hasOverviewStatus = false
+      data.overviewLogo = firstTeam.logo || ''; data.hasOverviewLogo = Boolean(firstTeam.logo)
+      data.metrics = [{ label: '我的球队', value: String(stats.teamCount || teams.length), icon: '/images/icons/players.svg' }, { label: '球员总数', value: String(stats.playerCount || 0), icon: '/images/icons/players.svg' }, { label: '赛事待办', value: String(countPending(eventTasks)), icon: '/images/icons/list.svg' }]
     }
-
-    that.setData({ pendingItems: [] });
-    that.syncLengths();
+    this.setData(data)
   },
 
-  loadSpectatorData: function () {
-    var that = this;
-    var db = wx.cloud.database();
-
-    db.collection('tournaments').orderBy('createTime', 'desc').limit(5).get({
-      success: function (res) {
-        var hot = [];
-        (res.data || []).forEach(function (t) {
-          hot.push({
-            _id: t._id,
-            name: t.name || '未命名赛事',
-            status: t.status || 'draft',
-            statusLabel: t.statusLabel || (t.status === 'ongoing' ? '进行中' : '热门'),
-            dateRange: that.formatDate(t.startDate || t.createTime) + ' - ' + that.formatDate(t.endDate || t.startDate || t.createTime),
-            registeredTeams: t.registeredTeams || 0,
-            maxTeams: t.maxTeams || 0
-          });
-        });
-
-        db.collection('matches').orderBy('matchTime', 'desc').limit(4).get({
-          success: function (matchRes) {
-            var highlights = [];
-            (matchRes.data || []).forEach(function (m) {
-              highlights.push({
-                _id: m._id,
-                title: m.tournamentName || '精彩比赛',
-                desc: (m.homeTeamName || '主队') + ' vs ' + (m.awayTeamName || '客队'),
-                cover: m.cover || m.poster || m.homeTeamLogo || '/images/app-logo.png'
-              });
-            });
-            that.setData({ hotTournaments: hot, highlights: highlights, loading: false });
-            that.syncLengths();
-          },
-          fail: function () {
-            that.setData({ hotTournaments: hot, highlights: [], loading: false });
-            that.syncLengths();
-          }
-        });
-      },
-      fail: function () {
-        that.setData({ hotTournaments: [], highlights: [], loading: false });
-        that.syncLengths();
-      }
-    });
-  },
-
-  formatDate: function (value) {
-    if (!value) return '待定';
-    var date = new Date(value);
-    if (isNaN(date.getTime())) return String(value).slice(0, 10) || '待定';
-    var y = date.getFullYear();
-    var m = String(date.getMonth() + 1).padStart(2, '0');
-    var d = String(date.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + d;
-  },
-
-  manageTeam: function () {
-    wx.navigateTo({ url: '/pages/team/team' });
-  },
-
-  goToMatches: function () {
-    wx.navigateTo({ url: '/pages/tournament/list/list' });
-  },
-
-  viewMatchData: function (e) {
-    var id = e.currentTarget.dataset.id;
-    if (id) {
-      wx.navigateTo({ url: '/pages/match/detail/detail?id=' + id });
-    }
-  },
-
-  goToAlbum: function () {
-    wx.showToast({ title: '相册功能开发中', icon: 'none' });
-  },
-
-  viewPhoto: function () {
-    wx.showToast({ title: '相册功能开发中', icon: 'none' });
-  },
-
-  addPhoto: function () {
-    wx.showToast({ title: '相册功能开发中', icon: 'none' });
-  },
-
-  createTournament: function () {
-    wx.navigateTo({ url: '/pages/tournament/create/create' });
-  },
-
-  goToTournamentManage: function () {
-    wx.switchTab({ url: '/pages/tournament-center/tournament-center' });
-  },
-
-  goToRefereeManage: function () {
-    wx.navigateTo({ url: '/pages/referee/index' });
-  },
-
-  onPendingItemTap: function () {
-    wx.showToast({ title: '功能开发中', icon: 'none' });
-  },
-
-  goToTournaments: function () {
-    wx.navigateTo({ url: '/pages/tournament/list/list' });
-  },
-
-  viewTournament: function (e) {
-    var id = e.currentTarget.dataset.id;
-    if (id) {
-      wx.navigateTo({ url: '/pages/tournament/detail/detail?id=' + id });
-    }
-  },
-
-  goToLogin: function () {
-    wx.reLaunch({ url: '/pages/login/login' });
+  goToMessages: function () { wx.navigateTo({ url: '/pages/messages/index' }) },
+  goToTodo: function () { wx.navigateTo({ url: '/pages/todo/index' }) },
+  goToSchedule: function () { wx.navigateTo({ url: '/pages/schedule/index' }) },
+  goToTeams: function () { wx.switchTab({ url: '/pages/teams/index' }) },
+  goToOtherSection: function () { if (this.data.isOrganizer) wx.switchTab({ url: '/pages/event/index' }); else wx.switchTab({ url: '/pages/training/index' }) },
+  goToLogin: function () { wx.navigateTo({ url: '/pages/login/login' }) },
+  goToPublicTournaments: function () { wx.navigateTo({ url: '/pages/tournament/list/list' }) },
+  onTournamentTap: function (event) { var id = event.currentTarget.dataset.id; if (id) wx.navigateTo({ url: '/pages/tournament/detail/detail?id=' + id }) },
+  onTeamTap: function (event) {
+    var id = event.currentTarget.dataset.id
+    var team = (this.data.teams || []).filter(function (item) { return item.id === id })[0]
+    if (!team) return
+    wx.setStorageSync('teamInfo', { _id: team.id, teamId: team.id, teamName: team.name, teamLogo: team.logo })
+    wx.navigateTo({ url: '/pages/team/team' })
   }
-});
+})

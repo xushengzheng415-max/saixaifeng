@@ -66,7 +66,9 @@ function resolveRootOwner(record, indexes, rules) {
   if (candidates.size > 1) return { status: 'ambiguous', candidates: Array.from(candidates) }
   const userId = Array.from(candidates)[0]
   const user = indexes.byId.get(userId)
-  return { status: 'resolvable', orgId: String(user.orgId || user._id), userId }
+  const orgId = String(user.orgId || user.organizationId || '').trim()
+  if (!orgId) return { status: 'unresolved', userId, reason: 'user_missing_org' }
+  return { status: 'resolvable', orgId, userId }
 }
 
 function resolveChildOwner(record, parentMaps) {

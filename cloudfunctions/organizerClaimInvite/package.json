@@ -1,0 +1,9 @@
+{
+  "name": "organizerClaimInvite",
+  "version": "1.0.0",
+  "description": "为赛事主办方创建受控球队认领邀请",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

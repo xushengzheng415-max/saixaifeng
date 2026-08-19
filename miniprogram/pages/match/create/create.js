@@ -1,4 +1,6 @@
 // pages/match/create/create.js
+const workspace = require('../../../utils/workspace')
+
 Page({
   data: {
     submitting: false,
@@ -286,10 +288,9 @@ Page({
     }
 
     // 检查权限
-    const role = wx.getStorageSync('currentRole')
-    if (role !== 'organizer') {
+    if (!workspace.hasPermission('event.manage')) {
       wx.showToast({
-        title: '只有赛事主办方可以创建赛事',
+        title: '当前机构未授予赛事管理权限',
         icon: 'none'
       })
       return

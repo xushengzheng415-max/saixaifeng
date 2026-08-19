@@ -1,0 +1,151 @@
+<view class="onboarding-page">
+  <image class="stadium-bg" src="/images/runtime/mobile-login-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="stadium-mask"></view>
+  <canvas canvas-id="crestCropCanvas" class="hidden-canvas" width="600" height="600"></canvas>
+
+  <view class="content">
+    <view class="page-title">{{pageTitle}}</view>
+    <view class="steps" wx:if="{{showSteps}}" style="margin-top:20rpx">
+      <view class="step {{stepOneClass}}"><view class="step-badge">1</view><text>选择场景</text></view>
+      <view class="step-line"></view>
+      <view class="step {{stepTwoClass}}"><view class="step-badge">2</view><text>完善资料</text></view>
+      <view class="step-line"></view>
+      <view class="step {{stepThreeClass}}"><view class="step-badge">3</view><text>创建完成</text></view>
+    </view>
+
+    <view class="white-panel" wx:if="{{isSceneStep}}">
+      <view class="panel-title">你准备先做什么？</view>
+      <view class="panel-subtitle">选择一个开始，后续可随时增加其他业务。</view>
+      <view class="scene-card {{sceneEventClass}}" data-scene="event" bindtap="selectScene">
+        <image class="scene-icon" src="/images/icons/event.svg" mode="aspectFit"></image>
+        <view><text class="scene-title">举办赛事</text><text class="scene-desc">创建主办机构，开始管理赛事</text></view>
+      </view>
+      <view class="scene-card {{sceneTeamClass}}" data-scene="team" bindtap="selectScene">
+        <image class="scene-icon" src="/images/icons/team.svg" mode="aspectFit"></image>
+        <view><text class="scene-title">管理球队</text><text class="scene-desc">创建或认领球队，参与赛事</text></view>
+      </view>
+      <view class="scene-card {{sceneTrainingClass}}" data-scene="training" bindtap="selectScene">
+        <image class="scene-icon" src="/images/icons/training.svg" mode="aspectFit"></image>
+        <view><text class="scene-title">青训教务</text><text class="scene-desc">创建青训机构，管理校区与课程</text></view>
+      </view>
+    </view>
+
+    <view class="white-panel training-service-panel" wx:if="{{isTrainingServiceStep}}">
+      <view class="service-badge">付费服务</view>
+      <view class="service-title">青训机构经营工作台</view>
+      <view class="service-subtitle">为青训机构提供长期教务与经营协作能力</view>
+      <view class="service-capabilities">
+        <view><image src="/images/icons/team.svg" mode="aspectFit"></image><text>校区与班级</text></view>
+        <view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>课程排课</text></view>
+        <view><image src="/images/icons/check.svg" mode="aspectFit"></image><text>签到与消课</text></view>
+        <view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>教练学员协作</text></view>
+      </view>
+      <view class="service-note">具体服务方案由客服根据机构规模协助确认，不在页面展示价格</view>
+      <view class="service-divider"></view>
+      <view class="service-status-title">开户状态</view>
+      <view class="service-status {{trainingStatusClass}}"><image src="/images/icons/check.svg" mode="aspectFit" wx:if="{{trainingCanCreate}}"></image><image src="/images/icons/warning.svg" mode="aspectFit" wx:if="{{!trainingCanCreate}}"></image><text>{{trainingStatusText}}</text></view>
+      <view class="service-status-hint" wx:if="{{trainingCanCreate}}">已具备创建青训空间的权限</view>
+      <view class="service-status-hint" wx:if="{{!trainingCanCreate}}">仅后台已完成开户的机构可创建青训空间</view>
+      <button class="primary-button service-primary" wx:if="{{trainingCanCreate}}" bindtap="showTrainingProfile">继续创建青训空间</button>
+      <button class="primary-button service-primary" wx:if="{{!trainingCanCreate}}" bindtap="requestTrainingConsultation" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{consultationText}}</button>
+      <button class="secondary-button" wx:if="{{trainingCanCreate}}" bindtap="requestTrainingConsultation" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{consultationText}}</button>
+      <button class="secondary-button" wx:if="{{!trainingCanCreate}}" bindtap="showTrainingDemo">进入功能演示</button>
+      <view class="refresh-link" wx:if="{{!trainingCanCreate}}" bindtap="refreshTrainingStatus">我已开户，刷新状态</view>
+    </view>
+
+    <view class="white-panel profile-panel" wx:if="{{isTrainingProfileStep}}">
+      <view class="panel-title">完善机构资料</view>
+      <view class="panel-subtitle">只需两项，其他资料以后再补充。</view>
+      <view class="crest-row" bindtap="chooseCrest">
+        <view class="crest-placeholder" wx:if="{{!crestPreview}}"><view style="position:relative;width:86rpx;height:86rpx"><image src="/images/icons/shield.svg" mode="aspectFit" style="position:absolute;left:0;top:0;width:86rpx;height:86rpx;opacity:.18"></image><view style="position:absolute;left:15rpx;top:41rpx;width:56rpx;height:4rpx;border-radius:4rpx;background:#168642"></view><view style="position:absolute;left:41rpx;top:15rpx;width:4rpx;height:56rpx;border-radius:4rpx;background:#168642"></view></view></view>
+        <image class="crest-preview" wx:if="{{crestPreview}}" src="{{crestPreview}}" mode="aspectFit"></image>
+        <view><text class="crest-title">上传机构标识</text><text class="crest-hint">{{crestStateText}}</text></view>
+      </view>
+      <view class="form-divider"></view>
+      <text class="field-label">机构名称</text>
+      <input class="team-input" placeholder="例如：绿城足球青训中心" maxlength="50" value="{{trainingOrgName}}" bindinput="onTrainingOrgNameInput"></input>
+      <view class="cooperate-note"><image src="/images/icons/players.svg" mode="aspectFit"></image><text>创建后可继续设置校区、课程和教练</text></view>
+    </view>
+
+    <view class="white-panel success-panel" wx:if="{{isTrainingSuccessStep}}">
+      <view class="success-mark"><image src="/images/icons/shield.svg" mode="aspectFit"></image></view>
+      <view class="success-title">青训机构创建成功</view>
+      <view class="team-summary">
+        <image class="success-logo" wx:if="{{hasCreatedTrainingLogo}}" src="{{createdTrainingLogo}}" mode="aspectFit"></image>
+        <view class="success-logo fallback-logo" wx:if="{{!hasCreatedTrainingLogo}}"><image src="/images/icons/shield.svg" mode="aspectFit"></image></view>
+        <view><text class="created-team-name">{{createdTrainingName}}</text><text class="team-tag">青训教务</text></view>
+      </view>
+      <text class="success-subtitle">{{successSubtitle}}</text>
+      <view class="success-actions"><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>完善机构资料</text></view><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>添加校区教练</text></view><view><image src="/images/icons/training.svg" mode="aspectFit"></image><text>创建课程班级</text></view></view>
+    </view>
+
+    <view class="training-demo" wx:if="{{isTrainingDemoStep}}">
+      <view class="demo-notice"><image src="/images/icons/warning.svg" mode="aspectFit"></image><text>演示模式 · 数据不会保存</text></view>
+      <view class="demo-subtitle">以下为示例机构数据，用于了解青训教务能力</view>
+      <view class="demo-metrics"><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text class="metric-value">186</text><text>在训学员</text></view><view><image src="/images/icons/training.svg" mode="aspectFit"></image><text class="metric-value">12</text><text>班级</text></view><view><image src="/images/icons/check.svg" mode="aspectFit"></image><text class="metric-value">92%</text><text>今日出勤</text></view><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text class="metric-value">18</text><text>本月新增</text></view></view>
+      <view class="demo-card"><view class="demo-card-title">今日安排</view><view class="demo-schedule"><view><text class="schedule-time">16:30</text><text class="schedule-tag">U8 启蒙班</text><text class="schedule-place">东区 1 号场</text></view><text class="schedule-coach">王教练 · 18人</text></view><view class="demo-schedule"><view><text class="schedule-time">18:00</text><text class="schedule-tag">U10 提高班</text><text class="schedule-place">西区 2 号场</text></view><text class="schedule-coach">刘教练 · 20人</text></view></view>
+      <view class="demo-card"><view class="demo-card-title">需要关注</view><view class="demo-attention"><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>学员资料待完善</text><text>2 名学员信息待补充</text></view><view><image src="/images/icons/training.svg" mode="aspectFit"></image><text>班级出勤待确认</text><text>1 个班级出勤待确认</text></view></view></view>
+      <view class="demo-card"><view class="demo-card-title">核心能力</view><view class="demo-core"><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>学员与班级</text><text>学员管理 · 班级管理</text></view><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>课程排课</text><text>课程安排 · 场地管理</text></view><view><image src="/images/icons/check.svg" mode="aspectFit"></image><text>签到与消课</text><text>出勤签到 · 课时消耗</text></view><view><image src="/images/icons/chart.svg" mode="aspectFit"></image><text>经营报表</text><text>运营数据 · 趋势分析</text></view></view></view>
+      <button class="demo-return" bindtap="returnTrainingService">返回服务说明</button>
+      <view class="demo-footnote">演示数据不会创建机构、保存记录或产生费用</view>
+    </view>
+
+    <view class="white-panel profile-panel" wx:if="{{isTeamProfileStep}}">
+      <view class="panel-title">完善球队资料</view>
+      <view class="panel-subtitle">只需两项，其他资料以后再补充。</view>
+      <view class="crest-row" bindtap="chooseCrest">
+        <view class="crest-placeholder" wx:if="{{!crestPreview}}"><view class="crest-upload-icon"><image class="crest-upload-shield" src="/images/icons/shield.svg" mode="aspectFit"></image><view class="crest-upload-shield-mask"></view><view class="crest-upload-plus crest-upload-plus-horizontal"></view><view class="crest-upload-plus crest-upload-plus-vertical"></view></view></view>
+        <image class="crest-preview" wx:if="{{crestPreview}}" src="{{crestPreview}}" mode="aspectFit"></image>
+        <view><text class="crest-title">上传队徽</text><text class="crest-hint">{{crestStateText}}</text></view>
+      </view>
+      <view class="form-divider"></view>
+      <text class="field-label">球队名称</text>
+      <input class="team-input" placeholder="例如：绿城少年队" maxlength="30" value="{{teamName}}" bindinput="onTeamNameInput"></input>
+      <view class="draft-confirmation" wx:if="{{isTeamDraftConfirmation}}"><view><text>球队简称</text><text>{{teamShortName}}</text></view><view><text>年龄组</text><text>{{teamDivision}}</text></view><view><text>所在城市</text><text>{{teamCity}}</text></view></view>
+      <view class="cooperate-note"><image src="/images/icons/players.svg" mode="aspectFit"></image><text>创建后可邀请其他成员共同管理</text></view>
+    </view>
+
+    <view class="white-panel profile-panel" wx:if="{{isEventProfileStep}}">
+      <view class="panel-title">完善赛事资料</view><view class="panel-subtitle">只需三项，其他设置进入赛事空间后补充。</view>
+      <view class="crest-row" bindtap="chooseCrest"><view class="crest-placeholder" wx:if="{{!crestPreview}}"><image src="/images/icons/event.svg" mode="aspectFit" style="width:80rpx;height:80rpx"></image></view><image class="crest-preview" wx:if="{{crestPreview}}" src="{{crestPreview}}" mode="aspectFit"></image><view><text class="crest-title">上传赛事标识</text><text class="crest-hint">{{crestStateText}}</text></view></view>
+      <view class="form-divider"></view><text class="field-label">赛事名称</text><input class="team-input" placeholder="例如：2026 青少年足球邀请赛" maxlength="50" value="{{eventName}}" bindinput="onEventNameInput"></input><text class="field-label second-label">举办城市</text><input class="team-input" placeholder="例如：河南 · 郑州" maxlength="40" value="{{eventCity}}" bindinput="onEventCityInput"></input><view class="cooperate-note"><image src="/images/icons/players.svg" mode="aspectFit"></image><text>创建后可继续设置组别、规则和报名</text></view>
+    </view>
+
+    <view class="white-panel success-panel" wx:if="{{isTeamSuccessStep}}">
+      <view class="success-mark"><image src="/images/icons/shield.svg" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view>
+      <view class="success-title">球队创建成功</view>
+      <view class="team-summary">
+        <image class="success-logo" wx:if="{{hasCreatedTeamLogo}}" src="{{createdTeamLogo}}" mode="aspectFit"></image>
+        <view class="success-logo fallback-logo" wx:if="{{!hasCreatedTeamLogo}}"><image src="/images/icons/team.svg" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view>
+        <view><text class="created-team-name">{{createdTeamName}}</text><text class="team-tag">球队管理</text></view>
+      </view>
+      <text class="success-subtitle">{{successSubtitle}}</text>
+      <view class="success-actions"><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>维护球队资料</text></view><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>邀请管理成员</text></view><view><image src="/images/icons/event.svg" mode="aspectFit"></image><text>加入赛事</text></view></view>
+    </view>
+
+    <view class="white-panel success-panel" wx:if="{{isEventSuccessStep}}"><view class="success-mark"><image src="/images/icons/shield.svg" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view><view class="success-title">赛事空间创建成功</view><view class="team-summary"><image class="success-logo" wx:if="{{hasCreatedEventLogo}}" src="{{createdEventLogo}}" mode="aspectFit"></image><view class="success-logo fallback-logo" wx:if="{{!hasCreatedEventLogo}}"><image src="/images/icons/shield.svg" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view><view><text class="created-team-name">{{createdEventName}}</text><text class="team-tag">赛事主办</text></view></view><text class="success-subtitle">{{successSubtitle}}</text><view class="success-actions"><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>完善赛事设置</text></view><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>邀请参赛球队</text></view><view><image src="/images/icons/event.svg" mode="aspectFit"></image><text>配置竞赛组别</text></view></view></view>
+
+    <view class="error-card" wx:if="{{errorVisible}}">{{errorText}}</view>
+    <button class="primary-button" wx:if="{{isSceneStep}}" bindtap="saveSceneAndContinue" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button" wx:if="{{isTeamProfileStep}}" bindtap="createTeam" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button" wx:if="{{isEventProfileStep}}" bindtap="createEventSpace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button" wx:if="{{isTrainingProfileStep}}" bindtap="createTrainingWorkspace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button" wx:if="{{isTeamSuccessStep}}" bindtap="enterTeamHome" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button" wx:if="{{isEventSuccessStep}}" bindtap="enterEventSpace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button" wx:if="{{isTrainingSuccessStep}}" bindtap="enterTrainingHome" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <view class="bottom-tip" wx:if="{{isSceneStep}}">已有业务关系的账号将自动进入对应工作空间</view>
+    <view class="bottom-tip" wx:if="{{isTeamProfileStep}}">后续可在球队资料中随时修改</view>
+    <view class="bottom-tip" wx:if="{{isTeamSuccessStep}}">以后可在“我的”中切换或新增其他工作空间</view>
+    <view class="bottom-tip" wx:if="{{isEventProfileStep}}">复杂赛制、批量球队与完整规则建议在电脑端完成</view><view class="bottom-tip" wx:if="{{isEventSuccessStep}}">以后可在“我的”中切换或新增其他工作空间</view>
+    <view class="bottom-tip" wx:if="{{isTrainingProfileStep}}">后续可在机构资料中随时修改</view><view class="bottom-tip" wx:if="{{isTrainingSuccessStep}}">以后可在“我的”中切换或新增其他工作空间</view>
+  </view>
+
+  <view class="crop-mask" wx:if="{{cropVisible}}">
+    <view class="crop-dialog">
+      <text class="crop-title">裁剪队徽</text>
+      <view class="crop-window" bindtouchstart="onCropTouchStart" bindtouchmove="onCropTouchMove"><image class="crop-image" src="{{tempCrestPath}}" mode="aspectFit" style="transform: {{crestTransform}}"></image></view>
+      <text class="crop-label">缩放</text><slider min="100" max="220" value="100" bindchange="onCropScaleChange" activeColor="#19974c"></slider>
+      <view class="crop-actions"><button class="crop-cancel" bindtap="closeCrop">取消</button><button class="crop-confirm" bindtap="confirmCrop">确认裁剪</button></view>
+    </view>
+  </view>
+</view>

@@ -3,7 +3,7 @@
     <!-- 未登录态 -->
     <div v-if="!isLoggedIn" class="login-guide">
       <div class="guide-card">
-        <img src="/LOGO2.png" alt="赛小蜂足球" class="guide-logo" />
+        <img :src="brandLogoUrl" alt="赛小蜂足球" class="guide-logo" />
         <h2 class="guide-title">登录赛小蜂足球</h2>
         <p class="guide-desc">登录后体验竞猜、关注、蜂蜜币等完整功能</p>
 
@@ -127,6 +127,8 @@ import {
 } from '@element-plus/icons-vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import LoginDialog from '../components/LoginDialog.vue'
+
+const brandLogoUrl = `${import.meta.env.BASE_URL}LOGO2.png`
 
 /**
  * 个人中心基础页

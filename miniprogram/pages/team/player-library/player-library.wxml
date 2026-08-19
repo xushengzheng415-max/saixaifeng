@@ -1,0 +1,15 @@
+<view class="page">
+  <image class="bg" src="/images/runtime/stadium-tech-bg.jpg" mode="aspectFill" />
+  <view class="nav"><text class="back" bindtap="onBack">‹</text><text class="title">球队球员库</text></view>
+  <view wx:if="{{loading}}" class="state"><text>正在加载长期球员资产…</text></view>
+  <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="loadPlayers">重新加载</button></view>
+  <block wx:else>
+    <view class="team-card team-card-compact"><image wx:if="{{teamLogo}}" class="crest" src="{{teamLogo}}" mode="aspectFit"/><view wx:else class="crest crest-text">队徽</view><view class="team-main"><text class="team-name">{{teamName}}</text><text class="team-desc">长期球员资产 · 共 {{totalCount}} 人</text></view><view class="buttons"><button wx:if="{{canManage}}" class="primary" bindtap="addPlayer">添加球员</button><button wx:if="{{canManage}}" class="secondary" bindtap="inviteParent">邀请家长补资料</button></view><view class="stats"><view><text class="green">{{completeCount}}</text><text>资料完整</text></view><view><text class="orange">{{pendingCount}}</text><text>资料不完整</text></view><view><text class="red">{{exceptionCount}}</text><text>异常</text></view></view></view>
+    <view class="notice">家长可通过服务号/H5 补充实名、形象照等资料，无需进入球队小程序。</view>
+    <input class="search" placeholder="搜索球员姓名" value="{{query}}" bindinput="onSearch" />
+    <view class="filters"><text class="pill" data-filter="all" bindtap="setFilter">全部 {{totalCount}}</text><text class="pill" data-filter="pending" bindtap="setFilter">资料不完整 {{pendingCount}}</text><text class="pill" data-filter="exception" bindtap="setFilter">异常 {{exceptionCount}}</text></view>
+    <view wx:if="{{hasPlayers}}" class="list"><view class="row" wx:for="{{players}}" wx:key="id" bindtap="openPlayer" data-id="{{item.id}}"><image wx:if="{{item.photoUrl}}" class="avatar" src="{{item.photoUrl}}" mode="aspectFill"/><view wx:else class="avatar initial">{{item.name}}</view><view class="info"><text class="name">{{item.name}}</text><text class="date">{{item.birthDate}}</text></view><text wx:if="{{item.isComplete}}" class="tag complete">{{item.statusText}}</text><text wx:if="{{item.isPending}}" class="tag pending">{{item.statusText}}</text><text wx:if="{{item.isException}}" class="tag exception">{{item.statusText}}</text><text class="arrow">›</text></view></view>
+    <view wx:else class="empty"><image src="/images/icons/players.svg" mode="aspectFit"/><text>暂无符合条件的球员</text></view>
+    <view class="bottom-note">球队球员库是长期资产；加入赛事需另行选择形成正式参赛名单，不会自动报名。</view>
+  </block>
+</view>

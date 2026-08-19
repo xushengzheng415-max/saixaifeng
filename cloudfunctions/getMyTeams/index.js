@@ -65,12 +65,32 @@ function makeConditions(fields, value) {
   })
 }
 
+function teamBelongsToOrg(team, orgId) {
+  if (!team) return false
+  const teamOrgId = String(team.orgId || team.organizationId || team.organization_id || '').trim()
+  return Boolean(teamOrgId) && teamOrgId === String(orgId || '').trim()
+}
+
 exports.main = async function(event) {
   event = event || {}
-  var phone = event.phone || event.phoneNumber || ''
-  var role = event.role || ''
-  var openId = event.openId || event.wechatOpenId || ''
-  var userId = event.userId || ''
+  var actorUserId = String(event.__actorUserId || '').trim()
+  var actorOrgId = String(event.__actorOrgId || '').trim()
+  if (!actorUserId || !actorOrgId) return { success: false, message: '登录会话或机构信息已失效，请重新登录', code: 'AUTH_REQUIRED', teams: [] }
+  var userResult = await db.collection('users').doc(actorUserId).get()
+  var user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
+  if (!user) return { success: false, message: '登录账号不存在', code: 'AUTH_REQUIRED', teams: [] }
+  var userOrgId = String(user.orgId || user.organizationId || '').trim()
+  if (!userOrgId || userOrgId !== actorOrgId || userOrgId === String(user._id || '').trim()) {
+    return { success: false, message: '当前账号尚未关联有效机构', code: 'ORG_REQUIRED', teams: [] }
+  }
+  var organizationResult = await db.collection('organizations').doc(actorOrgId).get()
+  if (!(Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data)) {
+    return { success: false, message: '当前机构不存在或已失效', code: 'ORG_REQUIRED', teams: [] }
+  }
+  var phone = user.phone || user.phoneNumber || user.mobile || ''
+  var role = ''
+  var openId = user.openId || user.wechatOpenId || user._openid || ''
+  var userId = actorUserId
 
   console.log('[getMyTeams] phone:', phone ? 'yes' : 'no', 'userId:', userId ? 'yes' : 'no', 'openId:', openId ? 'yes' : 'no')
 
@@ -86,7 +106,7 @@ exports.main = async function(event) {
         var phoneFields = ['ownerPhone', 'creatorPhone', 'phoneNumber', 'phone', 'contactPhone', 'mobile']
         var phoneTeams = await queryTeamsByOr(makeConditions(phoneFields, phone))
         console.log('[getMyTeams] phone teams:', phoneTeams.length)
-        for (var p = 0; p < phoneTeams.length; p++) addTeamUnique(result.teams, phoneTeams[p], 'owner')
+        for (var p = 0; p < phoneTeams.length; p++) if (teamBelongsToOrg(phoneTeams[p], actorOrgId)) addTeamUnique(result.teams, phoneTeams[p], 'owner')
       } catch (e) {
         console.warn('[getMyTeams] phone query failed:', e.message || e)
       }
@@ -101,7 +121,7 @@ exports.main = async function(event) {
         }
         var idTeams = await queryTeamsByOr(idConditions)
         console.log('[getMyTeams] id teams:', idTeams.length)
-        for (var i = 0; i < idTeams.length; i++) addTeamUnique(result.teams, idTeams[i], 'creator')
+        for (var i = 0; i < idTeams.length; i++) if (teamBelongsToOrg(idTeams[i], actorOrgId)) addTeamUnique(result.teams, idTeams[i], 'creator')
       } catch (e2) {
         console.warn('[getMyTeams] id query failed:', e2.message || e2)
       }
@@ -131,7 +151,7 @@ exports.main = async function(event) {
             if (teamIds.length > 0) {
               var teamsRes = await db.collection('teams').where({ _id: db.command.in(teamIds) }).get()
               console.log('[getMyTeams] coach teams:', teamsRes.data.length)
-              for (var j = 0; j < teamsRes.data.length; j++) addTeamUnique(result.teams, teamsRes.data[j], 'coach')
+              for (var j = 0; j < teamsRes.data.length; j++) if (teamBelongsToOrg(teamsRes.data[j], actorOrgId)) addTeamUnique(result.teams, teamsRes.data[j], 'coach')
             }
           }
         }

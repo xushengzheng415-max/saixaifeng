@@ -7,6 +7,11 @@ cloud.init({
 
 const db = cloud.database()
 
+function normalizeEnvVersion(value) {
+  const requested = String(value || '').trim().toLowerCase()
+  return ['develop', 'trial', 'release'].includes(requested) ? requested : 'release'
+}
+
 /**
  * 生成邀请小程序码
  * 参数：
@@ -20,7 +25,8 @@ exports.main = async (event, context) => {
     type = 'coach',
     teamId = '',
     teamName = '',
-    role = '教练'
+    role = '教练',
+    envVersion
   } = event
 
   console.log('生成邀请码参数:', event)
@@ -56,7 +62,7 @@ exports.main = async (event, context) => {
       autoColor: false,
       lineColor: { r: 27, g: 94, b: 32 },  // 麦部绿色 #1B5E20
       isHyaline: false,
-      envVersion: 'trial'  // 'release' | 'trial' | 'develop'
+      envVersion: normalizeEnvVersion(envVersion)
     })
 
     console.log('小程序码生成成功')

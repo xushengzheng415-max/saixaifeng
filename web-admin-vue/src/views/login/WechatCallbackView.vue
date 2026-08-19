@@ -40,7 +40,7 @@
  * 流程：
  *   微信 OAuth 回调 → /admin/#/wechat-callback?code=xxx&state=xxx
  *     → 此页面直接用 fetch 调 webLoginApi (wechatWebLogin)
- *       → 成功 → 写入纯微信会话 → 跳 /admin/#/tournaments
+ *       → 成功 → 写入纯微信会话 → 跳 /admin/#/organization-onboarding
  */
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -74,7 +74,11 @@ const AUTH_STORAGE_KEYS = [
   'wechatTemp',
   'authSessionVersion',
   'authToken',
-  'assistanceContext'
+  'assistanceContext',
+  // 机构信息必须随账号会话一起替换，避免新账号沿用上一个账号的机构标签。
+  'organizationInfo',
+  'currentOrganization',
+  'currentOrg'
 ]
 
 function clearStoredAuthSession() {
@@ -145,7 +149,7 @@ onMounted(async () => {
       status.value = 'success'
 
       setTimeout(() => {
-        window.location.href = '/admin/#/tournaments'
+        window.location.href = '/admin/#/organization-onboarding'
       }, 800)
 
     } else {

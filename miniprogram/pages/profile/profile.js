@@ -1,396 +1,184 @@
-// pages/profile/profile.js
-// 璧涘皬铚?- 涓汉涓績锛堟暀缁冪 v2 鈥?寰呭姙浣撶郴锛?
+var workspace = require('../../utils/workspace')
+
+var identityMeta = {
+  team_coach: { title: '球队教练', icon: '/images/icons/team.svg' },
+  organizer: { title: '赛事负责人', icon: '/images/icons/event.svg' },
+  training_coach: { title: '青训教练', icon: '/images/icons/training.svg' }
+}
+
+function isDevtools() {
+  try { return wx.getSystemInfoSync().platform === 'devtools' } catch (error) { return false }
+}
+
+function previewContext() {
+  return {
+    currentWorkspace: { id: 'preview-workspace', name: '赛小蜂足球俱乐部', logo: '' },
+    currentIdentity: { id: 'team_coach', available: ['team_coach', 'organizer', 'training_coach'] },
+    unreadMessageCount: 3,
+    user: { nickName: '许老师', avatarUrl: '' }
+  }
+}
+
 Page({
   data: {
-    userInfo: null,
-    teamInfo: null,
-    role: '',
-    stats: null,
-    teamsCount: 0,
-    // 寰呭姙缁熻
-    todoStats: {
-      pending: 0,      // 涓诲姙鏂瑰彂缁欐垜鐨勫緟澶勭悊浠诲姟
-      reviewing: 0,    // 鎴戞彁浜ょ殑绛夊緟瀹℃牳
-      done: 0,         // 宸插畬鎴?      total: 0
-    }
-  },
-  onLoad: function() {
-    this.loadUserInfo()
-    this.loadTeamInfo()
-    this.loadTeamsCount()
-    this.loadTodoStats()
+    loading: true,
+    submitting: false,
+    errorText: '',
+    userName: '微信用户',
+    userAvatar: '',
+    hasUserAvatar: false,
+    workspaceName: '当前机构',
+    workspaceLogo: '',
+    hasWorkspaceLogo: false,
+    currentIdentityName: '球队教练',
+    currentIdentityIcon: '/images/icons/team.svg',
+    hasUnread: false,
+    unreadText: '',
+    primaryMenus: [
+      { icon: '/images/icons/bell.svg', title: '消息中心', action: 'messages', badgeText: '' },
+      { icon: '/images/icons/event.svg', title: '我的赛事', action: 'events', badgeText: '' },
+      { icon: '/images/icons/team.svg', title: '我的球队', action: 'teams', badgeText: '' },
+      { icon: '/images/icons/shield.svg', title: '账号与安全', action: 'security', badgeText: '' }
+    ],
+    supportMenus: [
+      { icon: '/images/icons/list.svg', title: '服务与帮助', action: 'support' },
+      { icon: '/images/icons/list.svg', title: '意见反馈', action: 'feedback' },
+      { icon: '/images/icons/check.svg', title: '关于赛小蜂', action: 'about' }
+    ],
+    identityOptions: [],
+    isIdentitySheet: false,
+    hasIdentityOptions: false,
+    confirmDisabled: true,
+    confirmText: '确认切换',
+    localVisualQa: false
   },
 
+  onLoad: function(options) {
+    if (isDevtools() && options && options.visualQa === '1') {
+      this.setData({ localVisualQa: true })
+      this.applyContext(previewContext())
+      if (options.state === 'identity-sheet') this.setData({ isIdentitySheet: true })
+      return
+    }
+    this.loadData()
+  },
   onShow: function() {
-    // 鍚屾鑷畾涔?tabBar 閫変腑鐘舵€?
-    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
-      this.getTabBar().syncSelected()
-    }
-    this.loadUserInfo()
-    this.loadTeamInfo()
-    this.loadTeamsCount()
-    this.loadTodoStats()
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) this.getTabBar().syncFromPage(4)
+    if (this.data.localVisualQa) return
+    this.loadData(true)
   },
 
-  // ===== 鍔犺浇鐢ㄦ埛淇℃伅 =====
-  loadUserInfo: function() {
-    var userInfo = wx.getStorageSync('userInfo')
-    if (userInfo) {
-      this.setData({ userInfo: userInfo })
-    }
-    var role = 'organizer'
-    wx.setStorageSync('currentRole', role)
-    wx.removeStorageSync('phoneNumber')
-    wx.removeStorageSync('phone')
-    wx.removeStorageSync('email')
+  loadData: function(silent) {
+    var that = this
+    if (!silent) this.setData({ loading: true, errorText: '' })
+    var cached = workspace.readContext()
+    if (cached) this.applyContext(cached)
+    return workspace.loadContext().then(function(context) { that.applyContext(context) }).catch(function(error) {
+      that.setData({ loading: false, errorText: error.message || '我的页面加载失败，请重试' })
+    })
+  },
+
+  applyContext: function(context) {
+    if (!context || !context.currentWorkspace) return
+    var current = context.currentWorkspace
+    var identity = context.currentIdentity || {}
+    var currentId = identity.id || 'team_coach'
+    var available = identity.available || [currentId]
+    var options = available.map(function(id) {
+      var meta = identityMeta[id] || identityMeta.team_coach
+      return { id: id, title: meta.title, icon: meta.icon, selectedClass: id === currentId ? 'is-current' : '', selectedText: id === currentId ? '当前使用' : '', selectable: id !== currentId }
+    })
+    var currentMeta = identityMeta[currentId] || identityMeta.team_coach
+    var unread = Number(context.unreadMessageCount || 0)
+    var primaryMenus = this.data.primaryMenus.map(function(item) {
+      return Object.assign({}, item, { badgeText: item.action === 'messages' && unread > 0 ? String(unread) : '' })
+    })
     this.setData({
-      'currentRole': role,
-      // 鈽?WXML 琛ㄨ揪寮忛搧寰嬶細涓嶈兘鍐?currentRole === 'xxx'锛屾敼涓洪璁＄畻甯冨皵鍊?
-      isOrganizer: true,
-      isCoach: false,
-      isReferee: false,
-      isPlayer: false
+      loading: false,
+      userName: (context.user && context.user.nickName) || '微信用户',
+      userAvatar: (context.user && context.user.avatarUrl) || '',
+      hasUserAvatar: Boolean(context.user && context.user.avatarUrl),
+      workspaceName: current.name || '当前机构',
+      workspaceLogo: current.logo || '',
+      hasWorkspaceLogo: Boolean(current.logo),
+      currentIdentityName: currentMeta.title,
+      currentIdentityIcon: currentMeta.icon,
+      identityOptions: options,
+      primaryMenus: primaryMenus,
+      hasUnread: unread > 0,
+      unreadText: unread > 99 ? '99+' : (unread > 0 ? String(unread) : ''),
+      hasIdentityOptions: options.length > 1,
+      confirmDisabled: true,
+      confirmText: '确认切换',
+      errorText: ''
     })
   },
 
-  // ===== 鍔犺浇鐞冮槦淇℃伅 + 缁熻鏁版嵁 =====
-  loadTeamInfo: function() {
-    var that = this
+  goToInfo: function() { wx.navigateTo({ url: '/pages/profile/info/info' }) },
+  goToMessages: function() { wx.navigateTo({ url: '/pages/messages/index' }) },
 
-    // 鈽?鍏堣鍙栫湡瀹炶鑹诧紙涓嶅啀纭紪鐮?coach锛?
-    var realRole = (wx.getStorageSync('currentRole') || '').toLowerCase()
+  onMenuTap: function(event) {
+    var action = event.currentTarget.dataset.action || ''
+    if (action === 'messages') return this.goToMessages()
+    if (action === 'events') return wx.switchTab({ url: '/pages/event/index' })
+    if (action === 'teams') return wx.switchTab({ url: '/pages/teams/index' })
+    if (action === 'security') return this.goToInfo()
+    if (action === 'support') return wx.showModal({ title: '服务与帮助', content: '请在当前机构的赛事或球队页面查看对应待办；需要协助时可通过机构管理员发起咨询。', showCancel: false })
+    if (action === 'feedback') return wx.showModal({ title: '意见反馈', content: '请将问题场景、页面和复现步骤提交给机构管理员，以便跟进处理。', showCancel: false })
+    if (action === 'about') return wx.showModal({ title: '关于赛小蜂足球', content: '赛小蜂足球为赛事组织、球队协作和赛场执行提供统一服务。', showCancel: false })
+  },
 
-    // 涓诲姙鏂规病鏈夌悆闃熶俊鎭紝鐩存帴鐢ㄨ鑹叉樉绀?
-    if (realRole === 'organizer') {
-      that.setData({
-        teamInfo: null,
-        role: 'organizer'
-      })
-      that.loadOrganizerStats()
+  openIdentitySheet: function() {
+    if (!this.data.hasIdentityOptions) {
+      wx.showToast({ title: '当前机构暂无其他已授权身份', icon: 'none' })
       return
     }
-
-    // 鈽?浼樺厛鐢?home 椤甸潰缂撳瓨鐨?teamInfo锛堝鐞冮槦鍦烘櫙锛?
-    var cachedTeamInfo = wx.getStorageSync('teamInfo')
-    if (cachedTeamInfo && cachedTeamInfo._id) {
-      that.setData({
-        teamInfo: cachedTeamInfo,
-        role: realRole || 'coach'
-      })
-      that.loadStats(cachedTeamInfo._id)
-      return
-    }
-
-    // 鍏煎鏃ч€昏緫锛氭寜 currentTeamId 鏌?
-    var teamId = wx.getStorageSync('currentTeamId')
-    if (!teamId) return
-
-    var db = wx.cloud.database()
-
-    db.collection('teams').doc(teamId).get({
-      success: function(res) {
-        if (res.data) {
-          that.setData({
-            teamInfo: res.data,
-            role: res.data.role || 'player'
-          })
-          that.loadStats(teamId)
-        }
-      },
-      fail: function(err) {
-        console.error('鍔犺浇鐞冮槦澶辫触:', err)
-      }
-    })
+    this.setData({ isIdentitySheet: true, errorText: '' })
   },
 
-  // ===== 涓诲姙鏂圭粺璁★紙璧涗簨鏁般€佺悆闃熸暟绛夛級=====
-  loadOrganizerStats: function() {
+  closeIdentitySheet: function() { this.setData({ isIdentitySheet: false, confirmDisabled: true, confirmText: '确认切换', errorText: '' }) },
+
+  selectIdentity: function(event) {
+    var id = event.currentTarget.dataset.id || ''
+    var selected = this.data.identityOptions.some(function(item) { return item.id === id && item.selectable })
+    if (!selected) return
+    var options = this.data.identityOptions.map(function(item) {
+      var isSelected = item.id === id
+      return Object.assign({}, item, { selectedClass: isSelected ? 'is-selected' : (item.selectedText ? 'is-current' : ''), selectedText: isSelected ? '待切换' : (item.selectable ? '' : '当前使用') })
+    })
+    this.setData({ identityOptions: options, selectedIdentity: id, confirmDisabled: false })
+  },
+
+  confirmIdentitySwitch: function() {
     var that = this
-    var db = wx.cloud.database()
-
-    var stats = {
-      playerCount: 0,
-      tournamentCount: 0,
-      matchCount: 0,
-      pendingCount: 0
-    }
-
-    // 鏌ヤ富鍔炴柟鍒涘缓鐨勮禌浜嬫暟
-    db.collection('tournaments').count({
-      success: function(res) {
-        stats.tournamentCount = res.total || 0
-        that.setData({ stats: stats })
+    var selected = this.data.selectedIdentity || ''
+    if (!selected || this.data.confirmDisabled || this.data.submitting) return
+    var context = workspace.readContext() || {}
+    this.setData({ submitting: true, confirmText: '正在验证…', errorText: '' })
+    wx.cloud.callFunction({
+      name: 'getMiniWorkspace',
+      data: { action: 'setHomeIdentity', workspaceId: (context.currentWorkspace || {}).id || '', identity: selected },
+      success: function(response) {
+        var result = response.result || {}
+        if (!result.success) { that.setData({ errorText: result.message || '身份切换失败，请刷新后重试' }); return }
+        workspace.loadContext({ workspaceId: result.workspaceId || '' }).then(function() {
+          wx.switchTab({ url: '/pages/home/home' })
+        }).catch(function() { that.setData({ errorText: '身份已保存，但首页加载失败，请重试' }) })
       },
-      fail: function() {
-        that.setData({ stats: stats })
-      }
-    })
-
-    // 鏌ユ瘮璧涙€绘暟
-    db.collection('matches').count({
-      success: function(res) {
-        stats.matchCount = res.total || 0
-        that.setData({ stats: stats })
-      },
-      fail: function() {}
+      fail: function() { that.setData({ errorText: '网络异常，身份未切换' }) },
+      complete: function() { that.setData({ submitting: false, confirmText: '确认切换' }) }
     })
   },
 
-  // ===== 鍔犺浇鐞冮槦鏁伴噺锛堜粠缂撳瓨锛?=====
-  loadTeamsCount: function() {
-    var myTeams = wx.getStorageSync('myTeams') || []
-    this.setData({ teamsCount: myTeams.length })
-  },
-
-  // 鍔犺浇缁熻锛堢悆鍛樻暟銆佽禌浜嬫暟銆佹瘮璧涙暟锛?
-  loadStats: function(teamId) {
-    var that = this
-    var db = wx.cloud.database()
-    var _ = db.command
-
-    var stats = { playerCount: 0, tournamentCount: 0, matchCount: 0 }
-
-    if (this.data.teamInfo && this.data.teamInfo.members) {
-      stats.playerCount = this.data.teamInfo.members.length || 0
-    }
-
-    // 鏌ヨ鍙傝禌璧涗簨鏁帮紙鐢?tournament_teams 涓棿琛級
-    db.collection('tournament_teams').where({
-      teamId: teamId
-    }).count({
-      success: function(res) {
-        stats.tournamentCount = res.total || 0
-        that.setData({ stats: stats })
-      },
-      fail: function() {
-        that.setData({ stats: stats })
-      }
-    })
-
-    // 鏌ヨ姣旇禌鏁?
-    db.collection('matches').where(
-      _.or([
-        { homeTeamId: teamId },
-        { awayTeamId: teamId }
-      ])
-    ).count({
-      success: function(res) {
-        stats.matchCount = res.total || 0
-        that.setData({ stats: stats })
-      },
-      fail: function() {
-        that.setData({ stats: stats })
-      }
-    })
-
-    if (stats.playerCount > 0) {
-      that.setData({ stats: stats })
-    }
-  },
-
-  // ===== 鍔犺浇寰呭姙浜嬮」缁熻 =====
-  loadTodoStats: function() {
-    var that = this
-    // 鈽?浼樺厛浠庣紦瀛樼殑 teamInfo 鍙?teamId
-    var cachedTeamInfo = wx.getStorageSync('teamInfo') || {}
-    var teamId = cachedTeamInfo._id || wx.getStorageSync('currentTeamId') || ''
-    var phoneNumber = wx.getStorageSync('phoneNumber') || ''
-
-    if (!teamId && !phoneNumber) {
-      return
-    }
-
-    var db = wx.cloud.database()
-
-    // 鍒濆鍖栫粺璁℃暟鎹紙榛樿鍏?锛屼笉浼氬奖鍝峌I鏄剧ず锛?
-    var todoStats = { pending: 0, reviewing: 0, done: 0, total: 0 }
-
-    // 鈽?鐩存帴鐢ㄩ檷绾ф柟妗堬細浠?tournament_teams 浼扮畻寰呭姙
-    // 锛坱eam_tasks 闆嗗悎鍙兘灏氭湭鍒涘缓锛岄伩鍏嶆姤閿欏共鎵扮敤鎴凤級
-    that.loadTodoFromTournamentTeams(teamId)
-  },
-
-  // 浠?team_tasks 鍒嗙姸鎬佺粺璁¤鎯?
-  loadTodoDetails: function(teamId, phoneNumber, openId) {
-    var that = this
-    var db = wx.cloud.database()
-    var todoStats = { pending: 0, reviewing: 0, done: 0, total: 0 }
-
-    // 骞惰鏌ヨ3绉嶇姸鎬?
-    db.collection('team_tasks').where(
-      db.command.and([
-        db.command.or([
-          { teamId: teamId },
-          { targetPhone: phoneNumber },
-          { targetOpenId: openId }
-        ]),
-        { status: 'pending' }
-      ])
-    ).count({
-      success: function(r) {
-        todoStats.pending = r.total || 0
-        that.updateTodoStats(todoStats)
-      }
-    })
-
-    db.collection('team_tasks').where(
-      db.command.and([
-        db.command.or([
-          { teamId: teamId },
-          { targetPhone: phoneNumber },
-          { targetOpenId: openId }
-        ]),
-        { status: db.command.in(['reviewing', 'submitted', 'pending_approval']) }
-      ])
-    ).count({
-      success: function(r) {
-        todoStats.reviewing = r.total || 0
-        that.updateTodoStats(todoStats)
-      }
-    })
-
-    db.collection('team_tasks').where(
-      db.command.and([
-        db.command.or([
-          { teamId: teamId },
-          { targetPhone: phoneNumber },
-          { targetOpenId: openId }
-        ]),
-        { status: db.command.in(['approved', 'completed', 'rejected', 'done']) }
-      ])
-    ).count({
-      success: function(r) {
-        todoStats.done = r.total || 0
-        that.updateTodoStats(todoStats)
-      }
-    })
-  },
-
-  // 闄嶇骇鏂规锛氫粠 tournament_teams 浼扮畻寰呭姙鐘舵€?
-  loadTodoFromTournamentTeams: function(teamId) {
-    var that = this
-    var db = wx.cloud.database()
-    var todoStats = { pending: 0, reviewing: 0, done: 0, total: 0 }
-
-    // 鐢?tournament_teams 鐨?status 瀛楁浼扮畻
-    // pending 鈫?寰呭鏍革紙鎶ュ悕寰呮壒锛?    // approved 鈫?宸查€氳繃锛堝彲瑙嗕负宸插畬鎴愶級
-    db.collection('tournament_teams').where({
-      teamId: teamId,
-      status: 'pending'
-    }).count({
-      success: function(r) {
-        todoStats.reviewing = r.total || 0
-        that.updateTodoStats(todoStats)
-      },
-      fail: function() {}
-    })
-
-    db.collection('tournament_teams').where({
-      teamId: teamId,
-      status: db.command.in(['approved', 'confirmed', 'active'])
-    }).count({
-      success: function(r) {
-        todoStats.done = r.total || 0
-        that.updateTodoStats(todoStats)
-      },
-      fail: function() {}
-    })
-
-    // 寤惰繜璁剧疆鍒濆鍊?
-    setTimeout(function() {
-      that.updateTodoStats(todoStats)
-    }, 500)
-  },
-
-  // 鏇存柊寰呭姙缁熻鍒扮晫闈?
-  updateTodoStats: function(todoStats) {
-    todoStats.total = (todoStats.pending || 0) + (todoStats.reviewing || 0)
-    this.setData({
-      todoStats: todoStats,
-      'stats.pendingCount': todoStats.total
-    })
-  },
-
-  // ===== 鐐瑰嚮寰呭姙鍗＄墖 =====
-  onTodoTap: function(e) {
-    var type = e.currentTarget.dataset.type
-    var title = ''
-
-    switch (type) {
-      case 'pending':
-        title = '待处理'
-        break
-      case 'reviewing':
-        title = '待审核'
-        break
-      case 'done':
-        title = '已完成'
-        break
-      default:
-        title = '全部'
-    }
-
-    // 璺宠浆鍒板緟鍔炲垪琛ㄩ〉锛堝鏋滃瓨鍦級锛屽惁鍒欐彁绀哄紑鍙戜腑
-    wx.showToast({
-      title: title + '功能开发中',
-      icon: 'none'
-    })
-
-    // TODO: 姝ｅ紡鐗堣烦杞?    // wx.navigateTo({ url: '/pages/todo/todo-list?type=' + type })
-  },
-
-  // ===== 椤甸潰璺宠浆 =====
-  goToPage: function(e) {
-    var url = e.currentTarget.dataset.url
-    if (url) {
-      wx.navigateTo({ url: url })
-    }
-  },
-
-  goToInfo: function() {
-    wx.navigateTo({ url: '/pages/profile/info/info' })
-  },
-
-  goToTournamentCenter: function() {
-    wx.switchTab({ url: '/pages/tournament-center/tournament-center' })
-  },
-
-  onViewIdentity: function() {
-    wx.navigateTo({ url: '/pages/identity/identity' })
-  },
-
-  // 当前仅保留主办方身份，不提供身份切换。
-  onSwitchRole: function() {
-    wx.showToast({ title: '当前仅保留主办方身份', icon: 'none' })
-  },
-
-  // ===== 鍒囨崲/鍔犲叆鐞冮槦 =====
-  onSwitchTeam: function() {
-    wx.navigateTo({ url: '/pages/team/list/list' })
-  },
-
-  // ===== 閫€鍑虹櫥褰?=====
   onLogout: function() {
-    var that = this
-    wx.showModal({
-      title: '确认退出',
-      content: '确定要退出登录吗？',
-      confirmColor: '#E53935',
-      success: function(res) {
-        if (res.confirm) {
-          wx.clearStorageSync()
-          wx.setStorageSync('authSessionVersion', 'wechat-only-v1')
-          // 鈽?璁剧疆"涓诲姩閫€鍑?鏍囧織锛岄槻姝?login.js 鑷姩鐧诲綍
-          wx.setStorageSync('userLoggedOut', 'true')
-          wx.reLaunch({ url: '/pages/login/login' })
-        }
-      }
-    })
-  }
+    wx.showModal({ title: '退出登录', content: '退出后将清理当前设备上的登录和工作空间缓存，确定继续吗？', confirmColor: '#C43D34', success: function(result) {
+      if (!result.confirm) return
+      var app = getApp()
+      if (app && app.logout) app.logout()
+      workspace.clearContext()
+      wx.reLaunch({ url: '/pages/login/login' })
+    } })
+  },
+
+  noop: function() {}
 })
-
-
-
-
-
-

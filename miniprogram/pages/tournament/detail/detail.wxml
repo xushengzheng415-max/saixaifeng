@@ -1,5 +1,15 @@
 <!-- pages/tournament/detail/detail.wxml - 赛事详情页（无WXS、无===/!==/&&/三元） -->
 <view class="page">
+  <block wx:if="{{visualQa}}">
+    <image class="visual-detail-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+    <view class="visual-detail-nav"><text>‹</text><text>赛事详情</text></view>
+    <view class="visual-detail-hero"><view class="visual-detail-tags"><text>{{visualSummary.tag}}</text><text>{{visualSummary.mode}}</text></view><text class="visual-detail-name">{{visualSummary.name}}</text><text class="visual-detail-meta">{{visualSummary.dateVenue}}</text><text class="visual-detail-status">● {{visualSummary.status}}</text><view class="visual-detail-stats"><view><text>{{visualSummary.teamCount}}</text><text>参赛球队</text></view><view><text>{{visualSummary.matchCount}}</text><text>比赛场次</text></view><view><text>{{visualSummary.pendingCount}}</text><text>待处理</text></view></view></view>
+    <view class="visual-detail-panel"><view class="visual-detail-head"><text>赛前管理</text><text>共 10 项待处理 ›</text></view><view class="visual-detail-grid"><view wx:for="{{visualPreTasks}}" wx:key="title" class="visual-detail-task" data-route="{{item.route}}" bindtap="onVisualRoute"><image src="{{item.icon}}" mode="aspectFit"/><text>{{item.title}}</text><text>{{item.count}}</text></view></view></view>
+    <view class="visual-detail-panel visual-match-panel" data-route="schedule" bindtap="onVisualRoute"><view class="visual-detail-head"><text>比赛管理</text><text>今日比赛 ›</text></view><view class="visual-match-row"><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"/><view><text>8 场</text><text>今日比赛场次</text></view><button>查看今日比赛</button></view></view>
+    <view class="visual-detail-panel"><view class="visual-detail-head"><text>赛后处理</text><text>共 3 项待处理 ›</text></view><view class="visual-detail-grid visual-detail-grid-short"><view wx:for="{{visualPostTasks}}" wx:key="title" class="visual-detail-task" data-route="{{item.route}}" bindtap="onVisualRoute"><image src="{{item.icon}}" mode="aspectFit"/><text>{{item.title}}</text><text>{{item.count}}</text></view></view></view>
+    <view class="visual-detail-note">复杂赛制、抽签和赛程配置请在 PC 后台完成。</view>
+  </block>
+  <block wx:else>
 
   <!-- 加载中 -->
   <!-- 错误提示 -->
@@ -188,5 +198,6 @@
     </view>
   </view>
 
+  </block>
   </block>
 </view>

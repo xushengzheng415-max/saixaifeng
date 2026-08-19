@@ -7,22 +7,22 @@
   </view>
 
   <view class="function-list">
-    <view class="function-item" bindtap="goToRefereeLibrary">
+    <view class="function-item readonly-item">
       <text class="function-icon">📋</text>
       <view class="function-info">
         <text class="function-name">裁判库</text>
         <text class="function-desc">查看与管理裁判信息</text>
       </view>
-      <text class="function-arrow">›</text>
+      <text class="readonly-note">PC 管理</text>
     </view>
 
-    <view class="function-item" bindtap="goToRefereeAssign">
+    <view class="function-item readonly-item">
       <text class="function-icon">⚖️</text>
       <view class="function-info">
         <text class="function-name">裁判指派</text>
         <text class="function-desc">为赛事分配裁判员</text>
       </view>
-      <text class="function-arrow">›</text>
+      <text class="readonly-note">PC 管理</text>
     </view>
 
     <view class="function-item" bindtap="goToRefereeRecords">

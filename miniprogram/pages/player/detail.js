@@ -37,8 +37,7 @@ Page({
 
   onLoad(options) {
     this.setData({ 
-      teamId: options.teamId,
-      role: getApp().globalData.userRole || 'coach'
+      teamId: options.teamId
     })
     if (options.playerId) {
       this.setData({ playerId: options.playerId, isEdit: true })

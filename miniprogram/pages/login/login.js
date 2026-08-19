@@ -1,10 +1,16 @@
 // pages/login/login.js - 仅微信授权登录
+var workspace = require('../../utils/workspace')
 var AUTH_SESSION_VERSION = 'wechat-only-v1'
 var AUTH_STORAGE_KEYS = [
-  'userInfo', 'userId', 'currentRole', 'phoneNumber', 'phone', 'email',
+  'userInfo', 'userId', 'phoneNumber', 'phone', 'email',
   'hasPassword', 'currentCardId', 'currentTeam', 'currentTeamId',
-  'currentTeamIndex', 'teamInfo', 'coachInfo', 'myTeams'
+  'currentTeamIndex', 'teamInfo', 'coachInfo', 'myTeams',
+  'workspaceContext', 'currentWorkspaceId'
 ]
+
+function isDevtools() {
+  try { return wx.getSystemInfoSync().platform === 'devtools' } catch (error) { return false }
+}
 
 Page({
   data: {
@@ -13,10 +19,19 @@ Page({
     openId: '',
     redirectUrl: '',
     checkboxClass: '',
-    loginButtonText: '微信授权登录'
+    loginButtonText: '微信授权登录',
+    localVisualQa: false
   },
 
   onLoad: function(options) {
+    if (isDevtools() && options && options.visualQa === '1') {
+      this.setData({
+        localVisualQa: true,
+        agreementChecked: true,
+        checkboxClass: 'checked'
+      })
+      return
+    }
     var redirectUrl = options && (options.redirect || options.redirectUrl)
       ? decodeURIComponent(options.redirect || options.redirectUrl)
       : (wx.getStorageSync('loginRedirectUrl') || '')
@@ -136,6 +151,10 @@ Page({
     })
   },
 
+  loginWithPhone: function() {
+    wx.navigateTo({ url: '/pages/login/phone-login/phone-login' })
+  },
+
   resetSubmitState: function() {
     this.setData({ isSubmitting: false, loginButtonText: '微信授权登录' })
   },
@@ -144,7 +163,7 @@ Page({
     var userInfo = {
       _id: user._id || '',
       openId: user.openId || this.data.openId || '',
-      role: 'organizer',
+      orgId: user.orgId || user.organizationId || '',
       nickName: user.nickName || '微信用户',
       avatarUrl: user.avatarUrl || '',
       loginTime: new Date().toISOString()
@@ -155,11 +174,35 @@ Page({
     wx.setStorageSync('userInfo', userInfo)
     wx.setStorageSync('openId', userInfo.openId)
     wx.setStorageSync('userId', userInfo._id)
-    wx.setStorageSync('currentRole', 'organizer')
     var app = getApp()
     if (app && app.globalData) app.globalData.userInfo = userInfo
     if (showSuccess) wx.showToast({ title: '登录成功', icon: 'success' })
-    this.goToHome()
+    this.goToPostLogin()
+  },
+
+  goToPostLogin: function() {
+    var that = this
+    this.callCloud('onboardingWorkspace', { action: 'state' }, function(res) {
+      var result = res.result || {}
+      if (result.success && result.organizationConflict) {
+        workspace.clearContext()
+        that.clearAuthSession()
+        wx.showModal({
+          title: '机构关系待核验',
+          content: '当前账号关联了多个机构，系统不会自动选择。请联系管理员完成机构归属核验。',
+          showCancel: false
+        })
+        return
+      }
+      if (result.success && result.requiresOnboarding) {
+        wx.redirectTo({ url: '/pages/onboarding/onboarding' })
+        return
+      }
+      that.goToHome()
+    }, function() {
+      // 无法确认关系时不阻断已有账号；服务端恢复后下次登录会重新判断。
+      that.goToHome()
+    }, 15000)
   },
 
   goToHome: function() {

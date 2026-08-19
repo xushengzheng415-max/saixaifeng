@@ -29,7 +29,7 @@
         <view class="avatar-frame">
           <image 
             class="player-avatar" 
-            src="{{player.photoUrl || '/images/app-logo.png'}}" 
+            src="{{player.photoUrl || '/images/logo.png'}}"
             mode="aspectFill"
             bindtap="previewImage"
           ></image>

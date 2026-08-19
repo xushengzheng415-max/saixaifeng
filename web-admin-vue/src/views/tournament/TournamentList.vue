@@ -2,7 +2,7 @@
   <div class="tournament-list">
     <div class="page-card">
       <div class="page-header">
-        <h2>{{ currentRole === ROLES.COACH ? '赛事报名' : '赛事管理' }}</h2>
+        <h2>{{ currentRole === ROLES.COACH ? '赛事报名' : '竞赛管理' }}</h2>
         <el-button v-if="canCreateTournament" type="primary" @click="$router.push('/tournaments/create')">
           <el-icon><Plus /></el-icon>创建赛事
         </el-button>

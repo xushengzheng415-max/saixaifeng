@@ -1,9 +1,14 @@
 # 赛小蜂足球赛事系统 - 创建页面修复团队
 
+> [!WARNING]
+> **历史归档资料，不是当前需求或开发规则。**
+> 本文中的旧目录、旧域名、旧任务和备份方式不得作为修改或部署依据。
+> 当前规则请阅读 `AGENTS.md`、`docs/PRODUCT_RULES.md` 和 `docs/CURRENT_STATUS.md`。
+
 ## 团队信息
 - **团队名称**: software-saixiaofeng-fix2
 - **项目**: 赛小蜂足球赛事管理系统
-- **域名**: 54football.top
+- **域名**: saixiaofeng.com
 - **项目路径**: C:\Users\Frank\OneDrive\Desktop\足球赛事系统\referee-system
 
 ## 技术栈

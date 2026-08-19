@@ -1,0 +1,46 @@
+{
+  "name": "Saixiaofeng Football Shared Icon Library",
+  "version": "1.0.0",
+  "status": "active",
+  "design_system": {
+    "style": "rounded professional line icons",
+    "default_stroke": "#087A48",
+    "default_stroke_width": "1.8",
+    "view_box": "24x24",
+    "usage": "Use one semantic source per icon. Recolor only through documented variants; never copy an icon into a page folder."
+  },
+  "icons": [
+    { "semantic": "tab-home", "file": "tab-home.svg", "active_file": "tab-home-active.svg", "source_type": "existing-football-project-vector", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-event", "file": "tab-event.svg", "active_file": "tab-event-active.svg", "source_type": "existing-football-project-vector", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-team", "file": "tab-team.svg", "active_file": "tab-team-active.svg", "source_type": "existing-football-project-vector", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-training", "file": "tab-training.svg", "active_file": "tab-training-active.svg", "source_type": "existing-football-project-vector", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-profile", "file": "tab-me.svg", "active_file": "tab-me-active.svg", "source_type": "existing-football-project-vector", "targets": ["mini-tab-bar"] },
+    { "semantic": "team-members", "file": "players.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "team", "file": "team.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "schedule", "file": "event.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "task-list", "file": "list.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "success", "file": "check.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "identity-protection", "file": "shield.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "risk", "file": "warning.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "notifications", "file": "bell.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "performance-data", "file": "chart.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "football", "file": "ball.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "tournament-calendar-spot", "file": "brand-spot/football-brand-v2/01.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "official-roster-spot", "file": "brand-spot/football-brand-v2/03.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "lineup-task-spot", "file": "brand-spot/football-brand-v2/04.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "notification-spot", "file": "brand-spot/football-brand-v2/05.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "wechat-invite-spot", "file": "brand-spot/football-brand-v2/06.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "invite-qr-spot", "file": "brand-spot/football-brand-v2/07.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "member-invite-spot", "file": "brand-spot/football-brand-v2/08.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "approved-status-spot", "file": "brand-spot/football-brand-v2/09.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "pending-status-spot", "file": "brand-spot/football-brand-v2/10.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] }
+  ],
+  "gaps": [
+    "credential-verification",
+    "referee-whistle",
+    "document-review",
+    "trophy",
+    "crest-upload"
+  ],
+  "acquisition_policy": "Search this manifest first, then the approved basketball common library. When neither provides a visually suitable semantic match, archive a licensed Iconfont SVG with its source metadata before use."
+}

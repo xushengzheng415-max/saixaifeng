@@ -319,6 +319,7 @@
             position: absolute;
             inset: 0;
             overflow: hidden;
+            background: #003524 url('./assets/backgrounds/pc-landing-emerald-stadium-v1.png') center / cover no-repeat;
         }
         .hero-video-bg video {
             position: absolute;
@@ -330,6 +331,7 @@
             height: auto;
             transform: translate(-50%, -50%);
             object-fit: cover;
+            display: none !important;
         }
         .hero-video-overlay {
             position: absolute;
@@ -1016,7 +1018,7 @@
                         </li>
                         <li class="flex items-center">
                             <svg class="w-4 h-4 mr-2 text-bee-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
-                            www.saixiaofeng.com
+                            www.sxffootball.cn
                         </li>
                     </ul>
                 </div>
@@ -1024,10 +1026,11 @@
 
             <div class="border-t border-white/5 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
                 <p class="text-white/30 text-sm"> 2026 赛小蜂足球 FOOTBALL. All rights reserved.</p>
-                <div class="flex space-x-6 mt-4 md:mt-0 text-white/30 text-sm">
+                <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-4 md:mt-0 text-white/30 text-sm">
                     <a href="#" class="hover:text-white transition-colors">隐私政策</a>
                     <a href="#" class="hover:text-white transition-colors">用户协议</a>
-                    <a href="#" class="hover:text-white transition-colors">ICP备案</a>
+                    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">豫ICP备2026019672号-6</a>
+                    <a href="https://beian.mps.gov.cn/#/query/webSearch?code=41010202003914" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">豫公网安备41010202003914号</a>
                 </div>
             </div>
         </div>
@@ -1046,12 +1049,11 @@
             }
         });
 
-        // ===== 登录弹窗 =====
+        // ===== 官网到后台登录的单一入口 =====
         function openLoginModal() {
-            document.getElementById('login-modal').classList.add('active');
-            document.body.style.overflow = 'hidden';
-            // 自动加载微信二维码
-            loadWechatEmbeddedQR();
+            // 正式认证、回调和会话校验均在 /admin/ 的零 SDK HTTP 链路完成。
+            // 官网保持公开页，不维护第二套登录状态。
+            window.location.assign('/admin/#/login');
         }
         function closeLoginModal(event) {
             if (!event || event.target === document.getElementById('login-modal')) {
@@ -1207,8 +1209,8 @@
 
         // ===== 微信扫码登录（WxLogin.js 内嵌二维码） =====
         const WECHAT_WEB_APPID = 'wx5a42aae0e5d0669c';
-        // 微信回调地址必须是微信开放平台配置的域名（saixiaofeng.com）
-        const WECHAT_REDIRECT_URI = encodeURIComponent('https://saixiaofeng.com/');
+        // 微信回调地址必须是微信开放平台配置的域名（www.sxffootball.cn）
+        const WECHAT_REDIRECT_URI = encodeURIComponent('https://www.sxffootball.cn/');
         let wxLoginInstance = null;
         let cloudbaseApp = null;  // ⚠️ 必须在 checkWechatCallback IIFE 之前声明！否则微信回调时处于 TDZ
 
@@ -1776,7 +1778,7 @@
 
                 // 4. 注入 CSS
                 console.log('[loadAdminSPA] 步骤4: 加载 CSS...');
-                var cssFiles = ['/admin/assets/index-LjxO-qni.css'];
+                var cssFiles = ['/admin/assets/index-DpOb8WhM.css'];
                 cssFiles.forEach(function(href) {
                     var link = document.createElement('link');
                     link.rel = 'stylesheet';
@@ -1797,14 +1799,14 @@
 
                 // 6. 用动态 import() 加载 Vue SPA（比手动注入 <script type="module"> 更可靠）
                 console.log('[loadAdminSPA] 步骤6: 动态导入 Vue SPA...');
-                var jsUrl = '/admin/assets/index-I2plJ-Rl.js' + cb;
+                var jsUrl = '/admin/assets/index-B9Is9pUN.js' + cb;
                 
                 // 先用 fetch 预检查 JS 文件是否可访问
                 fetch(jsUrl, { method: 'HEAD', cache: 'no-store' })
                     .then(function(res) {
                         if (!res.ok) throw new Error('HTTP ' + res.status);
                         console.log('[loadAdminSPA] JS 文件可访问，开始 import()...');
-                        return import('/admin/assets/index-I2plJ-Rl.js' + cb);
+                        return import('/admin/assets/index-B9Is9pUN.js' + cb);
                     })
                     .then(function(module) {
                         console.log('[loadAdminSPA] ✅ Vue SPA 模块加载成功！', Object.keys(module));

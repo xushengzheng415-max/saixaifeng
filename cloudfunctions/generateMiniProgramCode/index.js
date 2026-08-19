@@ -15,6 +15,11 @@ console.log('cloud.init 完成')
 
 const db = cloud.database()
 
+function normalizeEnvVersion(value) {
+  const requested = String(value || '').trim().toLowerCase()
+  return ['develop', 'trial', 'release'].includes(requested) ? requested : 'release'
+}
+
 /**
  * 生成小程序码
  * 支持模式：
@@ -75,7 +80,7 @@ exports.main = async (event, context) => {
       autoColor: autoColor,
       lineColor: lineColor,
       isHyaline: isHyaline,
-      envVersion: envVersion || 'trial'
+      envVersion: normalizeEnvVersion(envVersion)
     }
 
     // 调用微信云开发生成小程序码（unlimited 模式）

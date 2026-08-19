@@ -1,0 +1,20 @@
+<view class="event-page">
+  <image class="event-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="event-content">
+    <view class="event-nav"><text class="event-title">赛事</text><text class="event-workspace" bindtap="onSwitchWorkspace">{{workspaceName}}⌄</text></view>
+    <view wx:if="{{loading}}" class="event-loading">正在加载赛事中心…</view>
+    <view wx:if="{{errorText}}" class="event-error">{{errorText}}</view>
+    <block wx:else>
+      <view class="event-relation-tabs"><text wx:for="{{relationTabs}}" wx:key="id" class="event-relation {{item.itemClass}}" data-id="{{item.id}}" bindtap="onRelationTap">{{item.text}}</text></view>
+      <view class="event-filter-row"><text wx:for="{{statusFilters}}" wx:key="id" class="event-filter {{item.itemClass}}" data-id="{{item.id}}" bindtap="onStatusTap">{{item.text}}</text><text class="event-filter-action">筛选 ☷</text></view>
+      <view wx:if="{{!hasTournaments}}" class="event-empty">当前分类暂无赛事</view>
+      <view wx:for="{{visibleTournaments}}" wx:key="id" class="event-card {{item.cardClass}}" data-id="{{item.id}}" bindtap="onTournamentTap">
+        <view class="event-card-top"><text class="event-relation-badge">{{item.relationText}}</text><text class="event-mode">{{item.modeText}}</text></view>
+        <text class="event-name">{{item.name}}</text><text class="event-date">▣ {{item.dateText}}</text>
+        <view class="event-divider"></view>
+        <view class="event-metrics"><text>◈ {{item.teamCountText}}</text><text>⚽ {{item.matchCountText}}</text><text class="event-status">● {{item.statusText}}</text></view>
+      </view>
+      <view wx:if="{{hasFeaturedTask}}" class="event-task" bindtap="onTaskTap" data-tournament="{{featuredTask.tournamentId}}" data-audience="{{featuredTask.audience}}"><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit"/><view><text>{{featuredTask.title}}</text><text>{{featuredTask.subtitle}}</text></view><text class="event-bubble">{{pendingCount}}</text><text class="event-arrow">›</text></view>
+    </block>
+  </view>
+</view>

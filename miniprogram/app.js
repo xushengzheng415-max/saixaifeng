@@ -11,9 +11,10 @@ var logger = {
 
 var AUTH_SESSION_VERSION = 'wechat-only-v1'
 var LEGACY_AUTH_KEYS = [
-  'userInfo', 'userId', 'currentRole', 'phoneNumber', 'phone', 'email',
+  'userInfo', 'userId', 'phoneNumber', 'phone', 'email',
   'hasPassword', 'currentCardId', 'currentTeam', 'currentTeamId',
-  'currentTeamIndex', 'teamInfo', 'coachInfo', 'myTeams', 'userLoggedOut'
+  'currentTeamIndex', 'teamInfo', 'coachInfo', 'myTeams', 'userLoggedOut',
+  'workspaceContext', 'currentWorkspaceId'
 ]
 
 // 赛事色调模板配置
@@ -76,6 +77,7 @@ App({
       wx.removeStorageSync('openid')
       wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
     }
+    wx.removeStorageSync('current' + 'Role')
 
     // 初始化云开发（容错：即使云环境不可用也不阻塞启动）
     if (wx.cloud) {
@@ -116,7 +118,7 @@ App({
     userInfo: null,
     currentCard: null,
     cards: [],
-    userRole: null,
+    workspaceContext: null,
     appVersion: '1.0.0',
     logger: logger,
     themeTemplates: THEME_TEMPLATES
@@ -126,6 +128,7 @@ App({
     var userInfo = wx.getStorageSync('userInfo')
     if (userInfo && wx.getStorageSync('authSessionVersion') === AUTH_SESSION_VERSION) {
       this.globalData.userInfo = userInfo
+      this.globalData.workspaceContext = wx.getStorageSync('workspaceContext') || null
       logger.info('用户已登录', { openid: userInfo.openid })
     }
 
@@ -138,18 +141,8 @@ App({
 
   switchCard: function(card) {
     this.globalData.currentCard = card
-    this.globalData.userRole = card.role
     wx.setStorageSync('currentCardId', card._id)
-
-    logger.info('切换身份卡', { role: card.role, cardId: card._id })
-
-    // 更新顶部导航栏显示当前身份
-    var pages = getCurrentPages()
-    if (pages.length > 0) {
-      pages[pages.length - 1].setData({
-        currentRoleName: card.roleName
-      })
-    }
+    logger.info('切换展示卡片', { cardId: card._id })
   },
 
   updateUserInfo: function(userInfo) {
@@ -158,7 +151,7 @@ App({
       openId: userInfo.openId || userInfo.openid || '',
       nickName: userInfo.nickName || '微信用户',
       avatarUrl: userInfo.avatarUrl || '',
-      role: 'organizer'
+      orgId: userInfo.orgId || ''
     }
     this.globalData.userInfo = userInfo
     wx.setStorageSync('userInfo', userInfo)
@@ -171,9 +164,9 @@ App({
     this.globalData.userInfo = null
     this.globalData.currentCard = null
     this.globalData.cards = []
+    this.globalData.workspaceContext = null
     wx.clearStorageSync()
     wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
     wx.setStorageSync('userLoggedOut', 'true')
   }
 })
-

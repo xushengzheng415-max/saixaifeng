@@ -6,6 +6,7 @@
     </view>
     <text class="teams-text">{{teamsText}}</text>
     <text class="match-meta">{{matchTimeText}} · {{venue}}</text>
+    <text class="match-meta">本场岗位：{{refereeRoleLabel}}（唯一操作负责人）</text>
   </view>
 
   <view class="loading-card" wx:if="{{loading}}">正在加载比赛...</view>
@@ -13,8 +14,8 @@
   <view class="phone-card" wx:if="{{needsPhone}}">
     <text class="phone-icon">🧑‍⚖️</text>
     <text class="phone-title">验证裁判身份</text>
-    <text class="phone-desc">系统将根据主办方已录入的裁判手机号核验本场权限。</text>
-    <button class="primary-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" loading="{{bindingPhone}}">微信手机号一键验证</button>
+    <text class="phone-desc">请先返回赛事工作台，通过手机号和短信验证码绑定裁判身份。</text>
+    <button class="primary-btn" bindtap="goBindIdentity">前往绑定身份</button>
   </view>
 
   <view class="error-card" wx:if="{{errorMsg}}">
@@ -37,7 +38,7 @@
       <button class="finish-btn action-btn" bindtap="openFinishModal">结束执裁并录入比分</button>
     </view>
 
-    <view class="result-card" wx:if="{{canRecordEvents}}">
+    <view class="result-card" wx:if="{{showFinalScore}}">
       <text class="step-number">第 2 步</text>
       <text class="result-title">终场比分</text>
       <view class="score-board">
@@ -51,9 +52,18 @@
           <text class="score-number">{{awayScore}}</text>
         </view>
       </view>
-      <text class="step-desc">比分已保存，现在可补录本场进球、红黄牌等比赛事件。</text>
+      <text class="step-desc">比分已保存，请核对进球、红黄牌、换人、补时和其他事件后提交报告。</text>
       <button class="primary-btn action-btn" bindtap="openEventModal">录入比赛事件</button>
     </view>
+
+    <view class="step-card" wx:if="{{canSubmitReport}}">
+      <text class="step-number">最后一步</text>
+      <text class="step-title">提交裁判报告</text>
+      <text class="step-desc">提交后比赛结束，比分和事件将永久锁定。</text>
+      <button class="finish-btn action-btn" bindtap="submitReport" loading="{{savingAction}}">提交报告并锁定</button>
+    </view>
+
+    <view class="unavailable-card" wx:if="{{refereeRecordLocked}}">裁判报告已提交，本场记录已锁定。</view>
 
     <view class="event-section" wx:if="{{canRecordEvents}}">
       <view class="section-heading">
@@ -122,7 +132,7 @@
         <text class="modal-close" bindtap="closeEventModal">×</text>
       </view>
 
-      <view class="form-item">
+      <view class="form-item" wx:if="{{showPlayerField}}">
         <text class="form-label">事件类型</text>
         <picker range="{{eventTypeOptions}}" range-key="label" value="{{eventTypeIndex}}" bindchange="onEventTypeChange">
           <view class="picker-field">{{eventTypeLabel}} <text>⌄</text></view>
@@ -145,6 +155,10 @@
       <view class="form-item" wx:if="{{showAssistField}}">
         <text class="form-label">{{eventAssistLabel}}</text>
         <input class="text-input" maxlength="30" placeholder="选填" value="{{eventAssistName}}" bindinput="onEventAssistInput" />
+      </view>
+      <view class="form-item" wx:if="{{showDescriptionField}}">
+        <text class="form-label">事件说明</text>
+        <input class="text-input" maxlength="100" placeholder="请输入事件说明" value="{{eventDescription}}" bindinput="onEventDescriptionInput" />
       </view>
       <button class="primary-btn modal-submit" bindtap="saveEvent" loading="{{savingAction}}">保存比赛事件</button>
     </view>

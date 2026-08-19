@@ -1060,7 +1060,6 @@ const typeOptions = [
 // ★ 创建赛事页比赛制式选项（与小程序保持一致）
 const matchFormatOptions = [
   MATCH_FORMAT_OPTIONS.find(item => item.value === '11side'),
-  { value: '9side', label: '9人制', icon: '⚽', defaultPlayers: 28, maxPlayers: 45 },
   MATCH_FORMAT_OPTIONS.find(item => item.value === '8side'),
   MATCH_FORMAT_OPTIONS.find(item => item.value === '7side'),
   { value: '6side', label: '6人制', icon: '⚽', defaultPlayers: 16, maxPlayers: 30 },
@@ -1069,7 +1068,6 @@ const matchFormatOptions = [
 
 const matchFormatDefaults = {
   ...MATCH_FORMAT_DEFAULTS,
-  '9side': 28,
   '6side': 16
 }
 

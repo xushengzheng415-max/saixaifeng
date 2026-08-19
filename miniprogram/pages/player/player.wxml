@@ -9,7 +9,7 @@
   <!-- 球员列表 -->
   <view class="player-list" wx:if="{{PlayersLen > 0}}">
     <view class="player-card" wx:for="{{players}}" wx:key="_id">
-      <image class="player-photo" src="{{item.photoUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+      <image class="player-photo" src="{{item.photoUrl || '/images/logo.png'}}" mode="aspectFill"></image>
       <view class="jersey-num">{{item.jerseyNumber || '--'}}</view>
       <view class="player-info">
         <view class="name-row">

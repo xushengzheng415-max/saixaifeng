@@ -101,7 +101,7 @@ Page({
   editCard() {
     if (this.data.playerInfo) {
       wx.navigateTo({
-        url: `/pages/player/detail?playerId=${this.data.playerInfo._id}`
+        url: `/pages/player/detail/detail?playerId=${this.data.playerInfo._id}`
       })
     }
   },
@@ -111,7 +111,7 @@ Page({
     const player = this.data.playerInfo
     return {
       title: player ? `查看${player.name}的球员卡` : '我的球员卡',
-      path: `/pages/my-cards/detail?playerId=${this.data.playerInfo ? this.data.playerInfo._id : ''}`
+      path: `/pages/player/detail/detail?playerId=${this.data.playerInfo ? this.data.playerInfo._id : ''}`
     }
   },
 

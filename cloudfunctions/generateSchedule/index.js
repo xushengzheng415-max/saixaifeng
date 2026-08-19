@@ -11,13 +11,46 @@ function hashSessionToken(token) {
 
 function recordBelongsToActor(record, actor) {
   if (!record || !actor) return false
-  if (record.orgId && String(record.orgId) === String(actor.orgId)) return true
-  var ids = [actor.user._id, actor.user.uid, actor.user.userId].filter(Boolean)
-  if (['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy']
-    .some(function(field) { return record[field] && ids.indexOf(record[field]) >= 0 })) return true
-  var phones = [actor.user.phone, actor.user.phoneNumber].filter(Boolean)
-  return phones.length > 0 && ['creatorPhone', 'organizerPhone', 'ownerPhone', 'contactPhone', 'phoneNumber', 'phone']
-    .some(function(field) { return record[field] && phones.indexOf(record[field]) >= 0 })
+  var orgIds = ['orgId', 'organizationId', 'organization_id']
+    .map(function(field) { return record[field] == null ? '' : String(record[field]).trim() })
+    .filter(Boolean)
+  var uniqueOrgIds = Array.from(new Set(orgIds))
+  return uniqueOrgIds.length === 1 && uniqueOrgIds[0] === String(actor.orgId)
+}
+
+function competitionPlanLocked(record) {
+  if (!record) return false
+  return record.competitionPlanLocked === true ||
+    record.finalPlanLocked === true ||
+    ['locked', 'match_management', 'in_progress', 'completed'].indexOf(String(record.competitionPlanStatus || '').toLowerCase()) >= 0
+}
+
+function divisionMatches(record, divisionId) {
+  if (!record) return false
+  var recordDivisionId = record.divisionId || record.division || record.divisionKey || ''
+  if (!recordDivisionId) return String(divisionId || 'default') === 'default'
+  return String(recordDivisionId) === String(divisionId || 'default')
+}
+
+function nestedDivisionLocked(tournament, divisionId) {
+  var divisions = tournament && Array.isArray(tournament.divisions) ? tournament.divisions : []
+  return divisions.some(function(item) {
+    return divisionMatches(item, divisionId) && competitionPlanLocked(item)
+  })
+}
+
+async function competitionPlanState(tournament, divisionId) {
+  var selectedDivisionId = String(divisionId || 'default')
+  if (nestedDivisionLocked(tournament, selectedDivisionId)) return { locked: true }
+  if (competitionPlanLocked(tournament) && (!selectedDivisionId || selectedDivisionId === 'default')) return { locked: true }
+  if (!selectedDivisionId || selectedDivisionId === 'default') return { locked: false }
+  try {
+    var result = await db.collection('divisions').doc(selectedDivisionId).get()
+    var division = Array.isArray(result.data) ? result.data[0] : result.data
+    return { locked: competitionPlanLocked(division) }
+  } catch (error) {
+    return { locked: false, readError: error }
+  }
 }
 
 async function authenticateActor(event) {
@@ -34,12 +67,13 @@ async function authenticateActor(event) {
   var userResult = await db.collection('users').doc(sessions[0].userId).get()
   var user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!user) throw new Error('登录账号不存在')
-  var orgId = String(user.orgId || user._id)
+  var orgId = String(user.orgId || user.organizationId || '').trim()
+  if (!orgId) throw new Error('当前账号尚未关联机构，请先完成机构引导')
   if (event.__actorUserId && event.__actorUserId !== user._id) throw new Error('登录身份校验失败')
   if (event.__actorOrgId && String(event.__actorOrgId) !== orgId) throw new Error('机构归属校验失败')
-  if (!user.orgId) {
-    await db.collection('users').doc(user._id).update({ data: { orgId: orgId, updateTime: db.serverDate() } })
-  }
+  var organizationResult = await db.collection('organizations').doc(orgId).get()
+  var organization = Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data
+  if (!organization) throw new Error('当前机构不存在或已失效，请重新完成机构引导')
   return { user: Object.assign({}, user, { orgId: orgId }), orgId: orgId }
 }
 
@@ -871,6 +905,13 @@ exports.main = async (event, context) => {
     if (!tournament) return { success: false, message: '赛事不存在' }
     if (!recordBelongsToActor(tournament, actor)) {
       return { success: false, message: '无权为其他账号的赛事生成赛程' }
+    }
+    var planState = await competitionPlanState(tournament, divisionId)
+    if (planState.readError) {
+      return { success: false, message: '无法确认当前竞赛方案状态，请稍后重试', code: 'COMPETITION_PLAN_STATE_UNAVAILABLE' }
+    }
+    if (planState.locked) {
+      return { success: false, message: '竞赛方案已经锁定，不能重新生成赛程', code: 'COMPETITION_PLAN_LOCKED' }
     }
     if (!scheduleType) {
       scheduleType = tournament.tournamentType || tournament.format || 'tournament'

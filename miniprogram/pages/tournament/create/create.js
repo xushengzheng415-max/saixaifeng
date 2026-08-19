@@ -29,7 +29,6 @@ const Q_COUNT_OPTIONS = ['2节','4节'];
 const EXTRA_SUB_OPTIONS = ['0人','1人','2人','3人','不限'];
 const MATCH_FORMAT_OPTIONS = [
   { value: '11side', label: '11人制', defaultPlayers: 35, maxPlayers: 50, selectedClass: 'selected' },
-  { value: '9side', label: '9人制', defaultPlayers: 28, maxPlayers: 45, selectedClass: '' },
   { value: '8side', label: '8人制', defaultPlayers: 25, maxPlayers: 40, selectedClass: '' },
   { value: '7side', label: '7人制', defaultPlayers: 20, maxPlayers: 35, selectedClass: '' },
   { value: '6side', label: '6人制', defaultPlayers: 16, maxPlayers: 30, selectedClass: '' },

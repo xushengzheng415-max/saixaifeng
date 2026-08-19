@@ -1,0 +1,18 @@
+<view class="page">
+  <image class="bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="content">
+    <view class="nav"><text bindtap="back" class="back">‹</text><text>家长协作</text></view>
+    <view wx:if="{{loading}}" class="loading">正在生成资料补充邀请…</view>
+    <block wx:else>
+      <view class="hero"><text>{{invite.playerName}} · {{invite.teamName}}</text><text>资料补充邀请已生成</text><text>家长通过服务号/H5 补充资料，不需要进入球队管理小程序。</text></view>
+      <view class="panel">
+        <view class="qr"><image src="/images/runtime/icons/brand-v2-07.png" mode="aspectFit"/><text>受控服务号入口</text></view>
+        <view class="actions"><text>{{invite.expiresAtText}}</text><button bindtap="copy" class="primary">复制服务号链接</button><button wx:if="{{canManage}}" bindtap="regenerate" class="link">重新生成</button></view>
+        <view class="section-title">本次邀请内容</view>
+        <view wx:for="{{requirements}}" wx:key="*this" class="requirement"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit"/><text>{{item}}</text></view>
+        <view class="privacy"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit"/><text>资料仅用于赛事报名与身份核验，链接令牌不是管理权限。</text></view>
+        <view class="record"><text>监护人 {{invite.guardianPhoneMasked}}</text><button wx:if="{{canManage}}" bindtap="remind">提醒一次</button></view>
+      </view>
+    </block>
+  </view>
+</view>

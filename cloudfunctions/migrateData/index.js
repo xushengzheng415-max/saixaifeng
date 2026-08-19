@@ -6,18 +6,29 @@ const cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 
 exports.main = async (event) => {
-  const { action = 'migrate', dryRun = true } = event
+  const {
+    action = 'migrate',
+    dryRun = true,
+    teamOwnerPhone,
+    tournamentCreatorPhone
+  } = event
 
   if (action !== 'migrate') {
     return { success: false, error: '未知操作，只支持 migrate' }
   }
 
+  if (!teamOwnerPhone || !tournamentCreatorPhone) {
+    return {
+      success: false,
+      error: '必须显式提供 teamOwnerPhone 和 tournamentCreatorPhone，迁移脚本不再内置测试手机号'
+    }
+  }
+
   const db = cloud.database()
   const _ = db.command
 
-  // 目标手机号
-  const TEAM_PHONE = '17319716663'      // 球队/球员 归属手机号（小程序端）
-  const TOURNAMENT_PHONE = '15038292130' // 赛事 归属手机号（网页端主办方）
+  const TEAM_PHONE = String(teamOwnerPhone)
+  const TOURNAMENT_PHONE = String(tournamentCreatorPhone)
 
   const result = {
     success: true,
@@ -29,7 +40,7 @@ exports.main = async (event) => {
 
   try {
     // ========== 1. 迁移 teams（球队）==========
-    // 目标：确保每支球队有 ownerPhone = 17319716663
+    // 目标：确保每支球队有明确的 ownerPhone。
     // 策略：如果 contactPhone 已有值，保留；否则设为 TEAM_PHONE
     //       同时把 creatorId = 'dev-user-id' 标记为已迁移
     const teamsRes = await db.collection('teams').get()
@@ -77,7 +88,7 @@ exports.main = async (event) => {
     }
 
     // ========== 2. 迁移 tournaments（赛事）==========
-    // 目标：给所有赛事添加 creatorPhone = 15038292130
+    // 目标：给所有赛事补充明确的 creatorPhone。
     const tourRes = await db.collection('tournaments').get()
     for (const tour of tourRes.data) {
       const updateData = {}

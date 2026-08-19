@@ -48,6 +48,18 @@ page {
   transform: translateY(2rpx);
 }
 
+.readonly-item:active {
+  transform: none;
+}
+
+.readonly-note {
+  padding: 8rpx 14rpx;
+  border-radius: 16rpx;
+  background: #eef4ef;
+  color: #617165;
+  font-size: 20rpx;
+}
+
 .function-icon {
   font-size: 44rpx;
   margin-right: 20rpx;

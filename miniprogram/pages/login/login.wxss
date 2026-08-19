@@ -1,138 +1,138 @@
-/* pages/login/login.wxss */
-/* 赛小蜂 - 仅微信授权登录 */
-
-page { width: 100%; height: 100%; }
+/* pages/login/login.wxss — 高保真原型 V2.0 登录页
+ * 来源：原型生成源 styles.css 的 .login / .login-logo / .login-panel
+ * 换算：原型 390px ↔ 750rpx，1px ≈ 1.92rpx
+ */
+@import "../../styles/proto.wxss";
 
 .login-page {
-  width: 100%; min-height: 100vh;
-  position: relative; overflow: hidden;
+  position: relative;
+  min-height: 100vh;
+  background: #031f16;
+  overflow: hidden;
 }
 
-/* ===== 全屏背景图 + 缓慢放大动画 ===== */
-.bg-image {
-  position: absolute; top: 0; left: 0;
-  width: 100%; height: 100vh; z-index: 0;
-  animation: bgZoom 20s ease-in-out infinite alternate;
-}
-@keyframes bgZoom {
-  0%   { transform: scale(1); }
-  100% { transform: scale(1.10); }
+.login-bg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
 }
 
-/* ===== 内容层：底部对齐 ===== */
-.content-overlay {
-  position: relative; z-index: 2;
-  width: 100%; min-height: 100vh;
-  display: flex; flex-direction: column;
-  justify-content: flex-end;
-  padding-bottom: env(safe-area-inset-bottom);
+/* 底部向 #eff6f2 过渡的渐变遮罩（对应 styles.css .login:after） */
+.login-mask {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(1, 22, 15, 0.15), rgba(1, 40, 26, 0.30) 45%, #eff6f2 69%);
 }
 
-/* ===== 登录按钮区 ===== */
-.login-section {
-  padding: 34rpx 72rpx 44rpx;
+/* ===== 白色 Logo + slogan ===== */
+.login-logo {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding-top: 200rpx; /* 58px + 自定义导航下状态栏余量 */
 }
 
-/* 微信一键登录（主推大按钮） */
-.wechat-btn {
-  width: 430rpx;
-  max-width: 100%;
-  height: 88rpx;
-  line-height: 1;
-  background: linear-gradient(90deg, #43A047 0%, #2E7D32 100%);
-  color: white;
-  font-size: 30rpx;
-  font-weight: 700;
-  border-radius: 44rpx;
+.login-logo-img {
+  width: 600rpx;
+}
+
+.login-slogan {
+  display: none;
+  font-size: 19rpx; /* 10px */
+  letter-spacing: 6rpx; /* 3px */
+  color: rgba(255, 255, 255, 0.68);
+  margin-top: 23rpx; /* 12px */
+}
+
+/* ===== 底部白色圆角登录面板 ===== */
+.login-panel {
+  position: absolute;
+  z-index: 3;
+  left: 35rpx; /* 18px */
+  right: 35rpx;
+  bottom: calc(108rpx + env(safe-area-inset-bottom)); /* 28px + 底部版本号区域 */
+  border-radius: 42rpx; /* 22px */
+  background: rgba(255, 255, 255, 0.98);
+  padding: 38rpx; /* 20px */
+  box-shadow: 0 24rpx 60rpx rgba(3, 40, 26, 0.18);
+  border: 2rpx solid rgba(255, 255, 255, 0.8);
+  box-sizing: border-box;
+}
+
+.login-panel-title {
+  font-size: 38rpx; /* 20px */
+  font-weight: 900;
+  color: #111b17;
+}
+
+.login-panel-sub {
+  font-size: 19rpx; /* 10px */
+  color: #7d8883;
+  line-height: 1.6;
+  margin: 12rpx 0 31rpx; /* 6px 0 16px */
+}
+
+.login-btn-main[disabled] {
+  opacity: 0.75;
+}
+
+/* ===== 协议勾选行 ===== */
+.agree-row {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 23rpx; /* 12px */
+  font-size: 16rpx; /* 8.5px */
+  color: #748079;
+  line-height: 1.5;
+}
+
+.agree-check {
+  width: 35rpx; /* 18px */
+  height: 35rpx;
+  border-radius: 12rpx; /* 6px */
+  flex: none;
+  box-sizing: border-box;
+  border: 2rpx solid #b9c8c0;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 22rpx;
-  padding: 0 40rpx;
-  box-sizing: border-box;
-  box-shadow: 0 8rpx 24rpx rgba(67,160,71,0.34);
-  border: none;
-}
-.wechat-btn::after { border: none; }
-.wechat-btn .btn-icon { display: none; }
-.btn-text {
-  font-size: 30rpx;
-  line-height: 1;
-  letter-spacing: 0;
-  white-space: nowrap;
+  color: #fff;
+  font-size: 21rpx;
+  font-weight: 900;
+  margin-right: 13rpx; /* 7px */
 }
 
-/* agreement */
-.agreement-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  max-width: 580rpx;
-  margin: 4rpx auto 14rpx;
-  row-gap: 8rpx;
-  column-gap: 8rpx;
-}
-.agreement-check,
-.agreement-links {
-  display: flex;
-  align-items: center;
-  min-height: 44rpx;
-}
-.agreement-check { padding: 6rpx 0; }
-.checkbox {
-  width: 28rpx; height: 28rpx;
-  border-radius: 50%;
-  border: 2rpx solid rgba(255,255,255,0.7);
-  margin-right: 10rpx;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18rpx; color: white;
-  flex-shrink: 0;
-}
-.checkbox.checked { background: #43A047; border-color: #43A047; }
-.agreement-text { font-size: 22rpx; color: rgba(255,255,255,0.72); line-height: 36rpx; }
-.agreement-link {
-  font-size: 22rpx;
-  color: #C8E6C9;
-  line-height: 44rpx;
-  padding: 0 8rpx;
-  font-weight: 600;
+.agree-check.checked {
+  background: #087a48;
+  border-color: #087a48;
 }
 
-.dev-mode { display: flex; justify-content: center; padding: 14rpx 0; }
-.dev-mode-text { font-size: 18rpx; color: rgba(255,255,255,0.18); }
-
-/* ===== 身份选择卡片 ===== */
-.role-section {
-  width: 100%; background: rgba(255,255,255,0.97);
-  border-radius: 28rpx 28rpx 0 0;
-  padding: 44rpx 36rpx calc(56rpx + env(safe-area-inset-bottom)) 36rpx;
-  margin: 0 -56rpx;
-  width: calc(100% + 112rpx);
-  box-sizing: border-box;
-  box-shadow: 0 -8rpx 32rpx rgba(0,0,0,0.15);
+.agree-text {
+  flex: 1;
+  min-width: 0;
 }
-.role-title { font-size: 36rpx; font-weight: bold; color: #1B5E20; text-align: center; margin-bottom: 8rpx; }
-.role-subtitle { font-size: 24rpx; color: #999; text-align: center; margin-bottom: 32rpx; }
-.role-list { display: flex; flex-wrap: wrap; justify-content: space-between; margin-bottom: 40rpx; }
-.role-item {
-  width: 47%; display: flex; flex-direction: column; align-items: center;
-  padding: 28rpx 0; margin-bottom: 16rpx;
-  background: #F5F7F5; border-radius: 16rpx; border: 3rpx solid transparent;
-}
-.role-item.active { background: #E8F5E9; border-color: #1B5E20; }
-.role-name { font-size: 30rpx; font-weight: bold; color: #333; margin-bottom: 8rpx; }
-.role-item.active .role-name { color: #1B5E20; }
-.role-desc { font-size: 22rpx; color: #999; }
-.enter-btn {
-  width: 100%; height: 88rpx; line-height: 88rpx;
-  background: linear-gradient(90deg, #43A047 0%, #2E7D32 100%);
-  color: white; font-size: 32rpx; font-weight: bold;
-  border-radius: 44rpx; border: none; margin-bottom: 20rpx;
-  box-shadow: 0 6rpx 20rpx rgba(67,160,71,0.35);
-}
-.enter-btn::after { border: none; }
-.enter-btn[disabled] { background: #CCC; box-shadow: none; }
-.back-link { display: block; text-align: center; font-size: 26rpx; color: #999; text-decoration: underline; }
 
+.agree-link {
+  color: #087a48;
+}
 
+/* ===== 底部低调版本号（长按 devLogin） ===== */
+.dev-mode {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: calc(30rpx + env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.dev-mode-text {
+  font-size: 17rpx;
+  color: rgba(17, 27, 23, 0.35);
+}

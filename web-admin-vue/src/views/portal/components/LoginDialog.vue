@@ -10,7 +10,7 @@
     @close="handleClose"
   >
     <div class="login-header">
-      <img src="/LOGO2.png" alt="赛小蜂足球" class="login-logo" />
+      <img :src="brandLogoUrl" alt="赛小蜂足球" class="login-logo" />
       <h3 class="login-title">登录赛小蜂足球</h3>
       <p class="login-subtitle">登录后体验竞猜、关注、蜂蜜币等完整功能</p>
     </div>
@@ -65,6 +65,8 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Phone, Key } from '@element-plus/icons-vue'
+
+const brandLogoUrl = `${import.meta.env.BASE_URL}LOGO2.png`
 
 /**
  * 登录弹窗组件

@@ -5,6 +5,7 @@ Page({
   data: {
     tournamentId: '',
     divisionOptions: [],
+    showDivisionTabs: false,
     activeDivisionId: 'default',
     activeDivisionName: '默认组',
     fromShare: false,
@@ -71,7 +72,16 @@ Page({
         maxPlayers: Number(activeDivision.maxPlayersPerTeam || rawTournament.maxPlayersPerTeam || rawTournament.maxPlayers || 0),
         registeredTeams
       })
-      this.setData({ divisionOptions: divisions, activeDivisionId: activeDivision.id, activeDivisionName: activeDivision.name })
+      const displayDivisions = divisions.map(item => ({
+        ...item,
+        tabClass: item.id === activeDivision.id ? 'active' : ''
+      }))
+      this.setData({
+        divisionOptions: displayDivisions,
+        showDivisionTabs: displayDivisions.length > 1,
+        activeDivisionId: activeDivision.id,
+        activeDivisionName: activeDivision.name
+      })
 
       // 分享进入时先按当前登录账号自动识别球队，避免本地缓存为空时误判
       const team = await this.resolveSignupTeam(db)
@@ -139,8 +149,7 @@ Page({
     return {
       phone: wx.getStorageSync('phoneNumber') || userInfo.phoneNumber || userInfo.phone || '',
       openId: wx.getStorageSync('openId') || wx.getStorageSync('openid') || userInfo.openId || userInfo.wechatOpenId || '',
-      userId: wx.getStorageSync('userId') || userInfo._id || userInfo.userId || '',
-      role: wx.getStorageSync('currentRole') || userInfo.role || ''
+      userId: wx.getStorageSync('userId') || userInfo._id || userInfo.userId || ''
     }
   },
 
@@ -244,8 +253,7 @@ Page({
         data: {
           phone: ids.phone,
           userId: ids.userId,
-          openId: ids.openId,
-          role: ids.role || 'coach'
+          openId: ids.openId
         }
       })
       const result = teamRes.result || {}
@@ -482,27 +490,23 @@ Page({
     this.setData({ submitting: true })
 
     try {
-      const db = wx.cloud.database()
       const team = this.data.team
       const teamId = team._id || team.teamId || wx.getStorageSync('currentTeamId')
 
       // 创建报名记录
-      await db.collection('tournament_teams').add({
+      const response = await wx.cloud.callFunction({
+        name: 'applyTournament',
+        timeout: 20000,
         data: {
           tournamentId: this.data.tournamentId,
-          divisionId: this.data.activeDivisionId,
-          divisionName: this.data.activeDivisionName,
           teamId: teamId,
-          teamName: team.name || team.teamName,
-          teamLogo: team.logo || team.teamLogo || '',
-          playerCount: team.playerCount || 0,
-          status: 'pending',
+          divisionId: this.data.activeDivisionId,
           disclaimerAgreed: true,
-          disclaimerTime: db.serverDate(),
-          createTime: db.serverDate(),
-          updateTime: db.serverDate()
+          message: ''
         }
       })
+      const result = response.result || {}
+      if (!result.success) throw new Error(result.message || '报名提交失败')
 
       wx.showToast({
         title: '报名申请已提交',
