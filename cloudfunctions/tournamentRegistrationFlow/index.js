@@ -931,7 +931,21 @@ async function sendMiniReviewNotification(registration, tournament, decision, re
     if (code) return { status:'failed', code:`WECHAT_${code}`, message:text(result.errMsg || result.errmsg || '小程序订阅消息发送失败') }
     return { status:'delivered', code:'', message:'小程序订阅消息已发送' }
   } catch (error) {
-    return { status:'failed', code:text(error.errCode || error.errCode || error.code || 'MINI_SEND_FAILED'), message:text(error.message || error.errMsg || '小程序订阅消息发送失败') }
+    const firstCode = text(error.errCode || error.code || 'MINI_SEND_FAILED')
+    const firstMessage = text(error.message || error.errMsg || '小程序订阅消息发送失败')
+    const tokenInvalid = firstCode === '-501001' || /invalid wx openapi access_token|INVALID_WX_ACCESS_TOKEN/i.test(firstMessage)
+    if (!tokenInvalid) return { status:'failed', code:firstCode, message:firstMessage }
+    try {
+      const accessToken = await miniAccessToken()
+      await wechatJson(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${encodeURIComponent(accessToken)}`, {
+        method:'POST',
+        headers:{ 'content-type':'application/json; charset=utf-8' },
+        body:JSON.stringify({ touser, template_id:templateId, page:'pages/todo/index', miniprogram_state:text(process.env.SXF_FOOTBALL_MINI_MESSAGE_STATE || 'trial'), lang:'zh_CN', data })
+      })
+      return { status:'delivered', code:'', message:'小程序订阅消息已通过官方通道发送' }
+    } catch (fallbackError) {
+      return { status:'failed', code:text(fallbackError.code || fallbackError.wechatCode || 'MINI_DIRECT_SEND_FAILED'), message:text(fallbackError.message || '小程序订阅消息发送失败') }
+    }
   }
 }
 
