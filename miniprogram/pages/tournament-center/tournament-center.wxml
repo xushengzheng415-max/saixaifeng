@@ -1,224 +1,88 @@
-<!--pages/tournament-center/tournament-center.wxml-->
-<!--赛小蜂 - 赛事中心（按角色区分：主办方卡片式 / 教练列表式）-->
-
-<view class="container">
-  <!-- 加载中 -->
-  <view wx:if="{{loading}}" class="loading-wrap">
-    <view class="loading-spinner"></view>
-    <text class="loading-text">加载中...</text>
+<view class="page">
+  <view class="hero">
+    <view class="topbar">
+      <text class="page-title">赛事</text>
+      <view class="workspace-switch" bindtap="onSwitchWorkspace">
+        <text class="workspace-name">{{workspaceName}}</text>
+        <text class="workspace-arrow">⌄</text>
+      </view>
+    </view>
+    <view class="segment-row">
+      <view
+        wx:for="{{relationFilters}}"
+        wx:key="id"
+        class="segment-item {{item.itemClass}}"
+        data-id="{{item.id}}"
+        bindtap="onRelationFilterTap"
+      >{{item.text}}</view>
+    </view>
   </view>
 
-  <!-- 主内容 -->
-  <block wx:else>
-
-    <!-- ========== 主办方模式：Web端风格卡片 ========== -->
-    <block wx:if="{{isOrganizer}}">
-
-      <!-- 状态筛选标签 -->
-      <view class="filter-tabs">
-        <view
-          class="filter-tab "
-          bindtap="onFilterTap"
-          data-filter="all"
-        >全部</view>
-        <view
-          class="filter-tab "
-          bindtap="onFilterTap"
-          data-filter="registering"
-        >报名中</view>
-        <view
-          class="filter-tab "
-          bindtap="onFilterTap"
-          data-filter="ongoing"
-        >进行中</view>
-        <view
-          class="filter-tab "
-          bindtap="onFilterTap"
-          data-filter="completed"
-        >已结束</view>
+  <view class="content">
+    <view class="filter-row">
+      <view
+        wx:for="{{statusFilters}}"
+        wx:key="id"
+        class="status-filter {{item.itemClass}}"
+        data-id="{{item.id}}"
+        bindtap="onStatusFilterTap"
+      >{{item.text}}</view>
+      <view class="todo-entry" bindtap="onTodoTap">
+        <text>赛事待办</text>
+        <text class="todo-arrow">›</text>
       </view>
+    </view>
 
-      <!-- 页面标题 -->
-      <view class="page-header">
-        <text class="page-title">赛事管理</text>
-        <text class="page-subtitle">共 {{TournamentsLen}} 场赛事</text>
-      </view>
+    <view class="loading" wx:if="{{loading}}">正在加载赛事…</view>
+    <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
 
-      <!-- 赛事卡片列表 -->
-      <view class="card-list" wx:if="{{TournamentsLen > 0}}">
-        <view
-          class="tour-card"
-          wx:for="{{filteredTournaments}}" wx:key="_id"
-          wx:key="_id"
-          bindtap="onViewTournament"
-          data-id="{{item._id}}"
-        >
-          <!-- 卡片顶部：渐变背景 + Logo -->
-          <view class="card-banner {{item.bannerClass || 'banner-default'}}">
-            <!-- 左上：热门标签 -->
-            <view class="badge badge-hot" wx:if="{{item.isHot}}">🔥 热门</view>
-            <!-- 右上：状态 -->
-            <view class="badge badge-status badge-{{item.statusCls}}">{{item.statusLabel}}</view>
-            <!-- 中间Logo -->
-            <image
-              class="card-logo"
-              src="{{item.coverImage || '/images/app-logo.png'}}"
-              mode="aspectFit"
-            ></image>
+    <view wx:if="{{hasTournaments}}">
+      <view
+        wx:for="{{visibleTournaments}}"
+        wx:key="id"
+        class="tournament-card {{item.cardClass}}"
+        data-id="{{item.id}}"
+        bindtap="onTournamentTap"
+      >
+        <view class="card-top">
+          <view class="tag-group">
+            <text class="relation-tag {{item.relationClass}}">{{item.relationText}}</text>
+            <text class="mode-tag">{{item.modeText}}</text>
           </view>
-
-          <!-- 卡片内容区 -->
-          <view class="card-content">
-            <!-- 赛事名称 -->
-            <text class="card-name">{{item.name}}</text>
-
-            <!-- 信息行：赛制 + 日期 -->
-            <view class="card-info-row">
-              <text class="info-item" wx:if="{{item.typeLabel}}">👤 {{item.typeLabel}}</text>
-              <text class="info-item" wx:if="{{item.dateRange}}">📅 {{item.dateRange}}</text>
-            </view>
-
-            <!-- 参赛队伍进度条 -->
-            <view class="team-progress">
-              <view class="progress-bar">
-                <view
-                  class="progress-fill"
-                  style="width: {{item.teamProgressPercent}}%"
-                ></view>
-              </view>
-              <text class="progress-text">{{item.registeredTeams}} / {{item.maxTeams || '?'}} 队</text>
-            </view>
+          <text class="status-tag {{item.statusClass}}">{{item.statusText}}</text>
+        </view>
+        <text class="tournament-name">{{item.name}}</text>
+        <text class="tournament-date">{{item.dateVenueText}}</text>
+        <view class="metrics-row">
+          <view class="metric" wx:if="{{item.showTeamCount}}">
+            <text class="metric-number">{{item.teamCountText}}</text>
+            <text class="metric-label">支球队</text>
+          </view>
+          <view class="metric" wx:if="{{item.showMatchCount}}">
+            <text class="metric-number">{{item.matchCountText}}</text>
+            <text class="metric-label">场比赛</text>
+          </view>
+          <view class="card-enter">
+            <text>进入赛事</text>
+            <text class="enter-arrow">›</text>
           </view>
         </view>
       </view>
+    </view>
 
-      <!-- 空状态 -->
-      <view class="empty-state" wx:if="{{!TournamentsLen}}">
-        <text class="empty-icon-sm">🏆</text>
-        <text class="empty-text">暂无赛事</text>
-        <text class="empty-sub">点击右下角创建你的第一场赛事吧</text>
-        <button class="create-btn" bindtap="goCreateTournament">+ 创建赛事</button>
+    <view class="pc-guide" wx:if="{{canManageEvents}}" bindtap="showPcHint">
+      <view class="guide-icon">⌘</view>
+      <view class="guide-copy">
+        <text class="guide-title">需要创建或配置赛事？</text>
+        <text class="guide-desc">复杂建赛、组别、赛程请在 PC 管理后台完成</text>
       </view>
-    </block>
+      <text class="guide-arrow">›</text>
+    </view>
 
-    <!-- ========== 教练/裁判模式：球队参赛列表（原有逻辑） ========== -->
-    <block wx:else>
-      <!-- 球队信息头 -->
-      <view class="team-header" wx:if="{{teamInfo}}">
-        <image
-          class="team-logo"
-          src="{{teamInfo.teamLogo || '/images/app-logo.png'}}"
-          mode="aspectFit"
-        ></image>
-        <view class="team-name-row">
-          <text class="team-name">{{teamInfo.teamName || '我的球队'}}</text>
-          <text class="sub-title">参赛赛事</text>
-        </view>
-        <view class="match-count-badge">
-          <text class="count-num">{{matchStats.total}}</text>
-          <text class="count-label">场比赛</text>
-        </view>
-      </view>
-
-      <!-- 未选择球队 -->
-      <view wx:if="{{showEmptyTeam}}" class="empty-team">
-        <text class="empty-icon">⚽</text>
-        <text class="empty-title">请先选择一支球队</text>
-        <text class="empty-desc">在「首页」切换到你要查看的球队</text>
-        <button class="go-home-btn" bindtap="viewAllMatches">去首页</button>
-      </view>
-
-      <!-- 我的参赛 -->
-      <view class="section section-primary" wx:if="{{teamInfo}}">
-        <view class="section-header">
-          <view class="title-accent green"></view>
-          <text class="section-title">我的参赛</text>
-          <text class="count-tag" wx:if="{{TeamTournamentsLen > 0}}">{{TeamTournamentsLen}}项</text>
-        </view>
-
-        <view class="tournament-list" wx:if="{{TeamTournamentsLen > 0}}">
-          <view
-            class="tournament-card"
-            wx:for="{{teamTournaments}}" wx:key="_id"
-            wx:key="_id"
-            bindtap="onViewTournament"
-            data-id="{{item._id}}"
-          >
-            <view class="card-top">
-              <image class="cover-img" src="{{item.coverImage || '/images/app-logo.png'}}" mode="aspectFill"></image>
-              <view class="status-badge {{item.statusCls}}">{{item.statusLabel}}</view>
-              <view class="roster-badge roster-{{item.rosterStatus}}" wx:if="{{item.rosterStatus}}">{{item.rosterStatusLabel}}</view>
-            </view>
-            <view class="card-body">
-              <text class="tn-name">{{item.name}}</text>
-              <view class="tn-info">
-                <text class="tn-info-item">📅 {{item.dateRange}}</text>
-                <text class="tn-info-item" wx:if="{{item.location}}">📍 {{item.location}}</text>
-              </view>
-              <view class="tn-teams-row">
-                <view class="tn-teams-info"><text>👥 {{item.registeredTeams}} / {{item.maxTeams || '?'}} 队参赛</text></view>
-                <view class="tn-matches-info" wx:if="{{item.matchCount > 0}}"><text>⚽ {{item.matchCount}} 场比赛</text></view>
-              </view>
-              <view class="roster-hint" wx:if="{{!item.rosterSubmitted}}">
-                <text class="roster-hint-icon">📝</text>
-                <text class="roster-hint-text">需要提交参赛名单</text>
-                <text class="roster-hint-action">去提交 ›</text>
-              </view>
-              <view class="roster-hint roster-ok" wx:if="{{item.rosterSubmitted}}">
-                <text class="roster-hint-icon">✅</text>
-                <text class="roster-hint-text">参赛名单已{{item.rosterStatusLabel}}</text>
-              </view>
-              <view class="roster-hint roster-waiting" wx:else>
-                <text class="roster-hint-icon">⏳</text>
-                <text class="roster-hint-text">参赛名单{{item.rosterStatusLabel}}</text>
-              </view>
-            </view>
-          </view>
-        </view>
-
-        <view class="empty-state" wx:else>
-          <text class="empty-icon-sm">🏆</text>
-          <text class="empty-text">暂无参赛记录</text>
-          <text class="empty-sub">去发现更多赛事报名参赛吧</text>
-        </view>
-      </view>
-
-      <!-- 即将开赛 -->
-      <view class="section" wx:if="{{UpcomingMatchesLen > 0}}">
-        <view class="section-header">
-          <view class="title-accent orange"></view>
-          <text class="section-title">即将开赛</text>
-          <text class="more-link" bindtap="viewAllMatches">更多 ›</text>
-        </view>
-        <view class="match-list">
-          <view
-            class="match-item"
-            wx:for="{{upcomingMatches}}" wx:key="_id"
-            wx:key="_id"
-            bindtap="onViewMatch"
-            data-id="{{item._id}}"
-          >
-            <view class="match-vs">
-              <view class="side">
-                <image class="mini-logo" src="{{item.homeLogo || '/images/app-logo.png'}}" mode="aspectFit"></image>
-                <text class="side-name">{{item.homeTeam}}</text>
-              </view>
-              <view class="score-box">
-                <text class="score-txt" wx:if="{{item.score}}">{{item.score}}</text>
-                <text class="vs-txt" wx:else>VS</text>
-              </view>
-              <view class="side">
-                <image class="mini-logo" src="{{item.awayLogo || '/images/app-logo.png'}}" mode="aspectFit"></image>
-                <text class="side-name">{{item.awayTeam}}</text>
-              </view>
-            </view>
-            <view class="match-meta">
-              <text>{{item.matchTime}}</text>
-              <text>📍 {{item.venue}}</text>
-            </view>
-          </view>
-        </view>
-      </view>
-    </block>
-  </block>
+    <view class="empty" wx:if="{{!loading}}" hidden="{{hasTournaments}}">
+      <text class="empty-icon">赛</text>
+      <text class="empty-title">当前暂无关联赛事</text>
+      <text class="empty-desc">主办赛事和球队参赛项目都会汇总到这里。</text>
+    </view>
+  </view>
 </view>

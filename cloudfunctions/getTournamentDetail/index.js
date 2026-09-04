@@ -8,7 +8,7 @@ const db = cloud.database()
 const _ = db.command
 
 exports.main = async (event, context) => {
-  const { id } = event
+  const { id, includeLegacyCategory = false } = event
 
   if (!id) {
     return { success: false, message: '缺少赛事ID' }
@@ -22,13 +22,19 @@ exports.main = async (event, context) => {
     }
 
     const t = res.data[0] || res.data
+    const category = t.category || t.type || 'youth'
+    if (!includeLegacyCategory && category !== 'youth') {
+      return { success: false, message: '该赛事不属于青少年赛事' }
+    }
 
     return {
       success: true,
       data: {
         _id: t._id,
         name: t.name,
-        type: t.type,                 // 赛事分类：youth/amateur/local
+        type: t.type || category,
+        category,
+        categoryLabel: '青少年赛事',
         matchFormat: t.matchFormat || 'tournament', // 赛制：tournament/cup/league/combined
         status: t.status,
         startDate: t.startDate,

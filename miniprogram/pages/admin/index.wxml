@@ -1,2 +1,63 @@
-<!--pages/admin/index.wxml-->
-<text>pages/admin/index.wxml</text>
+<view class="page">
+  <view class="hero">
+    <text class="service-badge">微信客服专属</text>
+    <text class="hero-title">赛小蜂远程协助</text>
+    <text class="hero-subtitle">只有您本人确认后，工作人员才能获得临时资料权限</text>
+  </view>
+
+  <view class="code-card">
+    <text class="section-title">输入客服发送的8位协助码</text>
+    <view class="code-row">
+      <input
+        class="code-input"
+        type="number"
+        maxlength="8"
+        value="{{code}}"
+        placeholder="请输入8位数字"
+        bindinput="onCodeInput"
+      />
+      <button class="check-button" loading="{{previewLoading}}" bindtap="previewCode">核对申请</button>
+    </view>
+    <text class="safe-tip">协助码10分钟内有效，且只能使用一次。请勿转发给其他人。</text>
+  </view>
+
+  <view class="preview-card" wx:if="{{previewVisible}}">
+    <view class="preview-head">
+      <view class="shield">✓</view>
+      <view>
+        <text class="preview-title">请确认协助申请</text>
+        <text class="preview-subtitle">申请来自赛小蜂微信客服</text>
+      </view>
+    </view>
+    <view class="detail-row"><text>协助人员</text><text>{{helperName}}</text></view>
+    <view class="detail-row"><text>协助原因</text><text>{{reason}}</text></view>
+    <view class="detail-row"><text>授权时长</text><text>{{durationLabel}}</text></view>
+    <view class="detail-row"><text>权限范围</text><text>{{permissionLabel}}</text></view>
+    <view class="detail-row"><text>协助码截止</text><text>{{codeExpiresLabel}}</text></view>
+    <view class="warning-box">工作人员不能删除您的资料；您可在本页随时撤销权限。</view>
+    <view class="action-row">
+      <button class="reject-button" loading="{{rejecting}}" bindtap="rejectCode">拒绝</button>
+      <button class="accept-button" loading="{{accepting}}" bindtap="acceptCode">同意协助</button>
+    </view>
+  </view>
+
+  <view class="records-card">
+    <text class="section-title">我的协助记录</text>
+    <view class="loading-line" wx:if="{{loading}}">正在同步协助状态...</view>
+    <view class="empty-line" wx:elif="{{showEmpty}}">暂无协助记录</view>
+    <view class="grant-item" wx:for="{{activeGrants}}" wx:key="_id" wx:for-item="grant">
+      <view class="grant-head">
+        <text class="grant-name">{{grant.helperName}}</text>
+        <text class="status-tag {{grant.statusClass}}">{{grant.statusLabel}}</text>
+      </view>
+      <text class="grant-reason">{{grant.reason}}</text>
+      <text class="grant-expiry">权限截止：{{grant.expiresLabel}}</text>
+      <button class="revoke-button" wx:if="{{grant.canRevoke}}" data-id="{{grant._id}}" bindtap="revokeGrant">立即撤销权限</button>
+    </view>
+  </view>
+
+  <view class="footer-tip">
+    <text>本页面不在小程序公开菜单展示</text>
+    <text>如有疑问，请返回赛小蜂微信客服咨询</text>
+  </view>
+</view>

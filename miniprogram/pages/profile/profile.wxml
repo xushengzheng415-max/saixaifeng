@@ -1,223 +1,54 @@
-<!--pages/profile/profile.wxml-->
-
-<view class="container">
-  <view class="header-bg">
-    <view class="user-info-row">
-      <image
-        wx:if="{{userInfo.avatarUrl}}"
-        class="avatar"
-        src="{{userInfo.avatarUrl}}"
-        mode="aspectFill"
-        bindtap="goToInfo"
-      />
-      <view wx:else class="avatar avatar-placeholder" bindtap="goToInfo">
-        <text>编辑</text>
-      </view>
-
-      <view class="info-text" bindtap="goToInfo">
-        <view class="nickname-row">
-          <text class="nickname">{{userInfo.nickName || '微信用户'}}</text>
-          <text class="role-badge {{currentRole}}" wx:if="{{isOrganizer}}">主办方</text>
-          <text class="role-badge {{currentRole}}" wx:if="{{isCoach}}">教练</text>
-          <text class="role-badge {{currentRole}}" wx:if="{{isReferee}}">裁判</text>
-        </view>
-        <view class="account-info">
-          <text class="account-phone" wx:if="{{currentPhone}}">手机 {{currentPhone}}</text>
-        </view>
-        <view class="account-info" wx:if="{{userInfo.email}}">
-          <text class="account-email">邮箱 {{userInfo.email}}</text>
-        </view>
-        <view class="team-info-line">
-          <text class="team-name" wx:if="{{teamInfo}}">
-            <text class="team-icon">球队</text> {{teamInfo.teamName || teamInfo.name}}
-          </text>
-          <text class="team-name" wx:if="{{isOrganizer}}">
-            <text class="team-icon">身份</text> 赛事主办方
-          </text>
-          <text class="team-name" wx:else>未加入球队</text>
-          <text class="teams-count" wx:if="{{teamsCount > 1}}">（共{{teamsCount}}支）</text>
-        </view>
-      </view>
-
-      <view class="edit-entry" bindtap="goToInfo">
-        <text class="edit-icon">></text>
+<view class="page">
+  <image class="stadium-bg" src="/images/runtime/home-roles-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="shade"></view>
+  <view class="content">
+    <view class="topbar">
+      <text>我的</text>
+      <view class="message-trigger" bindtap="goToMessages">
+        <image src="/images/icons/bell-white.svg" mode="aspectFit"></image>
+        <text class="unread-badge" wx:if="{{hasUnread}}">{{unreadText}}</text>
       </view>
     </view>
-
-    <view class="stats-card" wx:if="{{stats}}">
-      <view class="stat-item" bindtap="goToTournamentCenter" wx:if="{{isOrganizer}}">
-        <text class="stat-num">{{stats.tournamentCount || 0}}</text>
-        <text class="stat-label">赛事</text>
-      </view>
-      <view class="stat-item" bindtap="goToPage" data-url="/pages/match/match" wx:else>
-        <text class="stat-num">{{stats.matchCount || 0}}</text>
-        <text class="stat-label">参赛场次</text>
-      </view>
-
-      <view class="stat-divider"></view>
-
-      <view class="stat-item" bindtap="goToPage" data-url="/pages/match/match" wx:if="{{isOrganizer}}">
-        <text class="stat-num">{{stats.matchCount || 0}}</text>
-        <text class="stat-label">比赛</text>
-      </view>
-      <view class="stat-item" bindtap="goToPage" data-url="/pages/team/player-list/player-list" wx:else>
-        <text class="stat-num">{{stats.playerCount || 0}}</text>
-        <text class="stat-label">球员</text>
-      </view>
-
-      <view class="stat-divider"></view>
-      <view class="stat-item">
-        <text class="stat-num">{{stats.pendingCount || 0}}</text>
-        <text class="stat-label">待办</text>
+    <view class="user-card" bindtap="goToInfo">
+      <image class="avatar" wx:if="{{hasUserAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image>
+      <view class="avatar avatar-fallback" wx:if="{{!hasUserAvatar}}"><image src="/images/runtime/icons/brand-v1-tab-profile.png" mode="aspectFit"></image></view>
+      <view class="user-main"><text>{{userName}}</text><text>{{phoneMasked}}</text><text class="login-tag {{phoneStateClass}}">{{phoneVerifiedText}}</text></view>
+      <text class="chevron">›</text>
+    </view>
+    <view class="authorization-card">
+      <view class="authorization-head"><text>账号授权</text><text>按手机号隔离</text></view>
+      <view class="authorization-row"><text>授权岗位</text><text>{{positionsText}}</text></view>
+      <view class="authorization-row"><text>权限范围</text><text>{{permissionsText}}</text></view>
+    </view>
+    <view class="identity-card">
+      <view class="identity-head"><text>当前身份</text><text bindtap="openIdentitySheet">切换身份 ›</text></view>
+      <view class="identity-body">
+        <image wx:if="{{hasWorkspaceLogo}}" src="{{workspaceLogo}}" mode="aspectFit"></image>
+        <view class="identity-logo" wx:if="{{!hasWorkspaceLogo}}"><image src="{{currentIdentityIcon}}" mode="aspectFit"></image></view>
+        <view><text>{{workspaceName}}</text><text>当前使用身份</text><text class="identity-tag">{{currentIdentityName}}</text></view>
       </view>
     </view>
+    <view class="profile-menu">
+      <view class="menu-row" wx:for="{{primaryMenus}}" wx:key="action" data-action="{{item.action}}" bindtap="onMenuTap">
+        <image src="{{item.icon}}" mode="aspectFit"></image><text>{{item.title}}</text><text class="menu-badge" wx:if="{{item.badgeText}}">{{item.badgeText}}</text><text class="menu-arrow">›</text>
+      </view>
+    </view>
+    <view class="profile-menu support-menu">
+      <view class="menu-row" wx:for="{{supportMenus}}" wx:key="action" data-action="{{item.action}}" bindtap="onMenuTap">
+        <image src="{{item.icon}}" mode="aspectFit"></image><text>{{item.title}}</text><text class="menu-arrow">›</text>
+      </view>
+    </view>
+    <button class="logout" bindtap="onLogout">退出登录</button>
+    <text class="version-entry" bindtap="onMenuTap" data-action="versionLog">版本 {{appVersion}} · 查看更新日志</text>
+    <text class="support-note">由赛小蜂足球提供技术支持</text>
+    <view class="loading" wx:if="{{loading}}">正在同步我的信息…</view>
+    <view class="error-card" wx:if="{{errorText}}">{{errorText}}</view>
   </view>
-
-  <view class="menu-group pending-group">
-    <view class="menu-group-title">
-      <text>待办事项</text>
-      <view class="pending-badge" wx:if="{{todoStats.total > 0}}">
-        <text class="badge-num">{{todoStats.total}}</text>
-        <text class="badge-label">项待处理</text>
-      </view>
+  <view class="sheet-mask" wx:if="{{isIdentitySheet}}" bindtap="closeIdentitySheet">
+    <view class="identity-sheet" catchtap="noop">
+      <view class="sheet-handle"></view><text class="sheet-title">切换身份</text><text class="sheet-subtitle">进入后只展示该身份对应的工作内容</text>
+      <view class="identity-options"><view class="identity-option {{item.selectedClass}}" wx:for="{{identityOptions}}" wx:key="id" data-id="{{item.id}}" bindtap="selectIdentity"><image src="{{item.icon}}" mode="aspectFit"></image><text>{{item.title}}</text><text>{{workspaceName}}</text><text class="identity-state">{{item.selectedText}}</text></view></view>
+      <button class="confirm" bindtap="confirmIdentitySwitch" loading="{{submitting}}" disabled="{{confirmDisabled}}">{{confirmText}}</button><text class="cancel" bindtap="closeIdentitySheet">取消</text><view class="sheet-error" wx:if="{{errorText}}">{{errorText}}</view>
     </view>
-    <view class="todo-grid">
-      <view class="todo-card todo-pending" bindtap="onTodoTap" data-type="pending">
-        <view class="todo-icon-wrap">
-          <text class="todo-icon">待</text>
-        </view>
-        <text class="todo-count">{{todoStats.pending || 0}}</text>
-        <text class="todo-label">待处理</text>
-        <text class="todo-desc" wx:if="{{todoStats.pending > 0}}">有新任务需要处理</text>
-        <text class="todo-desc todo-empty-desc" wx:else>暂无待办</text>
-      </view>
-
-      <view class="todo-card todo-reviewing" bindtap="onTodoTap" data-type="reviewing">
-        <view class="todo-icon-wrap">
-          <text class="todo-icon">审</text>
-        </view>
-        <text class="todo-count">{{todoStats.reviewing || 0}}</text>
-        <text class="todo-label">待审核</text>
-        <text class="todo-desc" wx:if="{{todoStats.reviewing > 0}}">等待主办方审核中</text>
-        <text class="todo-desc todo-empty-desc" wx:else>暂无审核</text>
-      </view>
-
-      <view class="todo-card todo-done" bindtap="onTodoTap" data-type="done">
-        <view class="todo-icon-wrap">
-          <text class="todo-icon">完</text>
-        </view>
-        <text class="todo-count">{{todoStats.done || 0}}</text>
-        <text class="todo-label">已完成</text>
-        <text class="todo-desc">历史完成记录</text>
-      </view>
-    </view>
-  </view>
-
-  <view class="menu-group" wx:if="{{isOrganizer}}">
-    <view class="menu-group-title">赛事管理</view>
-    <view class="menu-list">
-      <view class="menu-item" bindtap="goToTournamentCenter">
-        <view class="menu-left">
-          <text class="menu-icon icon-tournament"></text>
-          <text class="menu-text">赛事中心</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-    </view>
-  </view>
-
-  <view class="menu-group" wx:else>
-    <view class="menu-group-title">球队管理</view>
-    <view class="menu-list">
-      <view class="menu-item" bindtap="onSwitchTeam">
-        <view class="menu-left">
-          <text class="menu-icon icon-team"></text>
-          <text class="menu-text">我的球队</text>
-        </view>
-        <view class="menu-right">
-          <text class="menu-tag menu-tag-green" wx:if="{{teamsCount > 0}}">{{teamsCount}}支</text>
-          <text class="menu-arrow">></text>
-        </view>
-      </view>
-      <view class="menu-item" bindtap="goToPage" data-url="/pages/team/player-list/player-list" wx:if="{{teamInfo}}">
-        <view class="menu-left">
-          <text class="menu-icon icon-player"></text>
-          <text class="menu-text">球员名单</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-      <view class="menu-item" bindtap="goToPage" data-url="/pages/team/player-add/player-add" wx:if="{{teamInfo}}">
-        <view class="menu-left">
-          <text class="menu-icon icon-add"></text>
-          <text class="menu-text">添加球员</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-      <view class="menu-item" bindtap="goToPage" data-url="/pages/match/squad/squad" wx:if="{{teamInfo}}">
-        <view class="menu-left">
-          <text class="menu-icon icon-squad"></text>
-          <text class="menu-text">提交首发名单</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-    </view>
-  </view>
-
-  <view class="menu-group">
-    <view class="menu-group-title">比赛相关</view>
-    <view class="menu-list">
-      <view class="menu-item" bindtap="goToPage" data-url="/pages/match/match">
-        <view class="menu-left">
-          <text class="menu-icon icon-match"></text>
-          <text class="menu-text">比赛记录</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-      <view class="menu-item" bindtap="onViewIdentity" wx:if="{{teamInfo}}">
-        <view class="menu-left">
-          <text class="menu-icon icon-idcard"></text>
-          <text class="menu-text">查看身份卡</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-    </view>
-  </view>
-
-  <view class="menu-group">
-    <view class="menu-group-title">账号与设置</view>
-    <view class="menu-list">
-      <view class="menu-item" bindtap="goToInfo">
-        <view class="menu-left">
-          <text class="menu-icon icon-edit"></text>
-          <text class="menu-text">编辑资料</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-      <view class="menu-item" bindtap="showSetPasswordModal">
-        <view class="menu-left">
-          <text class="menu-icon icon-password"></text>
-          <text class="menu-text">登录密码</text>
-        </view>
-        <view class="menu-right">
-          <text class="menu-tag" wx:if="{{!hasPassword}}">未设置</text>
-          <text class="menu-arrow">></text>
-        </view>
-      </view>
-      <view class="menu-item" bindtap="goToPage" data-url="/pages/profile/settings/settings">
-        <view class="menu-left">
-          <text class="menu-icon icon-settings"></text>
-          <text class="menu-text">设置</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-    </view>
-  </view>
-
-  <view class="logout-wrap">
-    <view class="logout-btn" bindtap="onLogout">退出登录</view>
-  </view>
-
-  <view class="footer">
-    <text class="footer-text">赛小蜂足球赛事 v1.0.0</text>
   </view>
 </view>

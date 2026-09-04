@@ -97,17 +97,17 @@ const ranking = ref([
   },
   {
     id: 2,
-    name: '海港联',
+    name: '郑东U15',
     avatar: '/team-placeholder.png',
-    extra: '业余赛事',
+    extra: '青少年赛事',
     heat: 10234,
     type: 'team'
   },
   {
     id: 3,
-    name: '洛阳龙门',
+    name: '洛阳少年队',
     avatar: '/team-placeholder.png',
-    extra: '地协赛',
+    extra: '青少年赛事',
     heat: 8934,
     type: 'team'
   },
@@ -121,9 +121,9 @@ const ranking = ref([
   },
   {
     id: 5,
-    name: '开封蹴鞠',
+    name: '开封少年队',
     avatar: '/team-placeholder.png',
-    extra: '地协赛',
+    extra: '青少年赛事',
     heat: 6234,
     type: 'team'
   }

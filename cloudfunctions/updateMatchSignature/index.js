@@ -1,25 +1,10 @@
-const cloud = require('wx-server-sdk')
-cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
-const db = cloud.database()
-
-exports.main = async (event, context) => {
-  const { matchId, signatureUrl, signed, signedBy } = event
-  if (!matchId) {
-    return { code: -1, message: '缺少 matchId' }
-  }
-
-  try {
-    await db.collection('matches').doc(matchId).update({
-      data: {
-        refereeSigned: !!signed,
-        refereeSignatureUrl: signatureUrl || '',
-        refereeSignedAt: db.serverDate(),
-        refereeSignedBy: signedBy || ''
-      }
-    })
-    return { code: 0, message: '更新成功' }
-  } catch (err) {
-    console.error('updateMatchSignature error:', err)
-    return { code: -1, message: err.message || '更新失败' }
+// 旧版直接更新 matches 的签字入口已停用。
+// 正式签字必须通过 serviceMatchWorkflow.submitSignedRefereeRecord。
+exports.main = async function() {
+  return {
+    code: -2,
+    success: false,
+    message: '该签字入口已停用，请从裁判服务号/H5进入比赛后完成电子记录签字',
+    error: 'LEGACY_SIGNATURE_ENTRY_RETIRED'
   }
 }

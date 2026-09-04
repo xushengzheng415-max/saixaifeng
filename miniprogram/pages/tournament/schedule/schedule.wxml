@@ -1,86 +1,16 @@
-<!--pages/tournament/schedule/schedule.wxml-->
-<!-- 赛程安排 - 全新简约Tab布局 - 单行卡片 -->
-
 <view class="page">
-  <!-- 加载状态 -->
-  <view class="loading-box" wx:if="{{loading}}">
-    <text>加载中...</text>
-  </view>
-  <view class="loading-box" wx:if="{{showError}}">
-    <text>{{errorMsg}}</text>
-    <text bindtap="loadData" style="color:#1B5E20;margin-top:16rpx;">点击重试</text>
-  </view>
-
+  <image class="schedule-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="schedule-nav"><text class="schedule-back">‹</text><text>赛程赛果</text></view>
+  <view class="loading-box" wx:if="{{loading}}"><text>正在加载赛事赛程…</text></view>
+  <view class="loading-box" wx:if="{{showError}}"><text>{{errorMsg}}</text><text bindtap="loadData">点击重试</text></view>
   <block wx:if="{{showContent}}">
-    <!-- 头部 -->
-    <view class="header">
-      <text class="h-title">{{tournamentName}}</text>
-      <view class="h-row">
-        <text class="h-tag">{{typeText}}</text>
-        <text class="h-tag2">{{formatText}}</text>
-        <text class="h-count">{{teamsLen}} 队</text>
-      </view>
-    </view>
-
-    <!-- Tab 切换栏 -->
-    <view class="tab-bar">
-      <view class="tab-item {{scheduleTabClass}}" data-tab="schedule" bindtap="switchTab">赛程表</view>
-      <view class="tab-item {{standingsTabClass}}" data-tab="standings" bindtap="switchTab">积分榜</view>
-      <view class="tab-item {{statsTabClass}}" data-tab="stats" bindtap="switchTab">数据统计</view>
-    </view>
-
-    <!-- 赛程表 -->
+    <view class="header"><text class="h-title">{{tournamentName}}</text><view class="h-row"><text class="h-tag">{{typeText}}</text><text class="h-tag2">{{formatText}}</text><text class="h-count">{{teamsLen}} 队</text></view></view>
+    <view class="tab-bar"><view class="tab-item {{scheduleTabClass}}" data-tab="schedule" bindtap="switchTab">赛程</view><view class="tab-item {{resultsTabClass}}" data-tab="results" bindtap="switchTab">赛果</view><view class="tab-item {{standingsTabClass}}" data-tab="standings" bindtap="switchTab">排名</view></view>
     <view wx:if="{{isScheduleTab}}" class="schedule-content">
-      <view class="empty-inner" wx:if="{{hasNoMatches}}">
-        <text class="ei-icon">📅</text>
-        <text class="ei-text">暂无赛程安排</text>
-        <text class="ei-desc">请在网页端管理后台生成赛程</text>
-      </view>
-
-      <view wx:else>
-        <!-- 按轮次分组 -->
-        <view class="round-group" wx:for="{{groupedMatches}}" wx:key="round">
-          <view class="round-header" wx:if="{{item.round}}">
-            <text class="round-title">{{item.round}}</text>
-          </view>
-          <view class="match-card" wx:for="{{item.matches}}" wx:for-item="m" wx:key="_id"
-                data-id="{{m._id}}" bindtap="onMatchTap">
-
-            <!-- 单行布局：时间 | 主队 | 比分 | 客队 -->
-            <text class="mc-time">{{m.matchTime || '-'}}</text>
-            <view class="mc-team mc-home">
-              <image class="mc-logo" wx:if="{{m.homeTeamLogo}}" src="{{m.homeTeamLogo}}" mode="aspectFill"></image>
-              <view class="mc-logo-chip" wx:else><text>{{m.homeFirstChar}}</text></view>
-              <text class="mc-name {{m.homeWinnerClass}}">{{m.homeTeamName}}</text>
-            </view>
-
-            <view class="mc-score-wrap {{m.scoreWrapClass}}">
-              <text class="mc-score">{{m.homeDisplayScore}}</text>
-              <text class="mc-colon">:</text>
-              <text class="mc-score">{{m.awayDisplayScore}}</text>
-            </view>
-
-            <view class="mc-team mc-away">
-              <text class="mc-name {{m.awayWinnerClass}}">{{m.awayTeamName}}</text>
-              <image class="mc-logo" wx:if="{{m.awayTeamLogo}}" src="{{m.awayTeamLogo}}" mode="aspectFill"></image>
-              <view class="mc-logo-chip" wx:else><text>{{m.awayFirstChar}}</text></view>
-            </view>
-          </view>
-        </view>
-      </view>
+      <view class="empty-inner" wx:if="{{hasNoMatches}}"><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"/><text class="ei-text">暂无赛程安排</text><text class="ei-desc">请在 PC 管理后台生成赛程</text></view>
+      <view wx:for="{{groupedMatches}}" wx:key="round" class="round-group"><text class="round-title">{{item.round}}</text><view wx:for="{{item.matches}}" wx:for-item="m" wx:key="_id" class="match-card" data-id="{{m._id}}" data-finished="{{m.isFinished}}" bindtap="onMatchTap"><view class="match-top"><text>{{m.matchTimeText}}</text><text>{{m.statusText}}</text></view><view class="match-sides"><view class="match-team"><view class="mc-logo-chip"><text>{{m.homeFirstChar}}</text></view><text>{{m.homeTeamName}}</text></view><view class="match-score"><text>{{m.homeDisplayScore}} : {{m.awayDisplayScore}}</text><text>{{m.round}}</text></view><view class="match-team"><view class="mc-logo-chip"><text>{{m.awayFirstChar}}</text></view><text>{{m.awayTeamName}}</text></view></view><view class="match-action"><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"/><text>{{m.actionText}}</text><text>›</text></view></view></view>
     </view>
-
-    <!-- 积分榜（占位） -->
-    <view wx:if="{{isStandingsTab}}" class="tab-placeholder">
-      <text class="ei-icon">🏆</text>
-      <text class="ei-text">积分榜功能开发中</text>
-    </view>
-
-    <!-- 数据统计（占位） -->
-    <view wx:if="{{isStatsTab}}" class="tab-placeholder">
-      <text class="ei-icon">📊</text>
-      <text class="ei-text">数据统计功能开发中</text>
-    </view>
+    <view wx:if="{{isResultsTab}}" class="schedule-content"><view wx:if="{{!hasResults}}" class="empty-inner"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit"/><text class="ei-text">暂无已归档赛果</text></view><view wx:for="{{resultMatches}}" wx:key="_id" class="match-card" data-id="{{item._id}}" data-finished="{{item.isFinished}}" bindtap="onMatchTap"><view class="match-top"><text>{{item.matchTimeText}}</text><text>已结束</text></view><view class="match-sides"><view class="match-team"><view class="mc-logo-chip"><text>{{item.homeFirstChar}}</text></view><text>{{item.homeTeamName}}</text></view><view class="match-score"><text>{{item.homeDisplayScore}} : {{item.awayDisplayScore}}</text></view><view class="match-team"><view class="mc-logo-chip"><text>{{item.awayFirstChar}}</text></view><text>{{item.awayTeamName}}</text></view></view><view class="match-action"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit"/><text>查看归档</text><text>›</text></view></view></view>
+    <view wx:if="{{isStandingsTab}}" class="tab-placeholder"><image src="/images/runtime/icons/brand-v2-02.png" mode="aspectFit"/><text>排名以已归档赛果为准</text></view>
   </block>
 </view>
-

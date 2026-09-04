@@ -9,6 +9,56 @@ cloud.init({
 const db = cloud.database()
 const _ = db.command
 
+function actorContext(event) {
+  const userId = String(event && event.__actorUserId || '').trim()
+  const orgId = String(event && event.__actorOrgId || '').trim()
+  if (!userId || !orgId) {
+    return { ok: false, result: { success: false, message: '网页会话或机构信息已失效，请重新登录', code: 'AUTH_REQUIRED' } }
+  }
+  return { ok: true, actor: { userId, orgId, userName: String(event.__actorUserName || '主办方').trim().slice(0, 50) || '主办方' } }
+}
+
+function recordOrganizationIds(record) {
+  const values = [record && record.orgId, record && record.organizationId, record && record.organization_id]
+    .filter(value => value !== undefined && value !== null && String(value).trim())
+    .map(value => String(value).trim())
+  return Array.from(new Set(values))
+}
+
+function recordBelongsToOrganization(record, orgId) {
+  const ids = recordOrganizationIds(record)
+  return ids.length === 1 && ids[0] === String(orgId || '').trim()
+}
+
+async function authorizeTournament(event, tournamentId) {
+  const actor = actorContext(event)
+  if (!actor.ok) return actor
+  const id = String(tournamentId || '').trim()
+  if (!id) return { ok: false, result: { success: false, message: '缺少 tournamentId 参数' } }
+  const result = await db.collection('tournaments').doc(id).get()
+  const tournament = Array.isArray(result.data) ? result.data[0] : result.data
+  if (!tournament) return { ok: false, result: { success: false, message: '赛事不存在' } }
+  if (!recordBelongsToOrganization(tournament, actor.actor.orgId)) {
+    return { ok: false, result: { success: false, message: '无权访问当前机构之外的赛事名单变更', code: 'ORG_ACCESS_DENIED' } }
+  }
+  return { ok: true, actor: actor.actor, tournament }
+}
+
+async function authorizeRequest(event, request) {
+  const scope = await authorizeTournament(event, request && request.tournamentId)
+  if (!scope.ok) return scope
+  const teamId = String(request && request.teamId || '').trim()
+  if (!teamId) return { ok: false, result: { success: false, message: '换人申请缺少球队关系，无法审核' } }
+  const relationResult = await db.collection('tournament_teams')
+    .where({ tournamentId: String(request.tournamentId), teamId })
+    .limit(1)
+    .get()
+  if (!(relationResult.data || []).length) {
+    return { ok: false, result: { success: false, message: '换人申请不属于当前赛事参赛关系', code: 'ROSTER_RELATION_DENIED' } }
+  }
+  return scope
+}
+
 exports.main = async (event, context) => {
   const { action } = event
 
@@ -27,6 +77,9 @@ exports.main = async (event, context) => {
 async function handleGetList(event) {
   const { tournamentId, status, teamId, limit = 100 } = event
   if (!tournamentId) return { success: false, message: '缺少 tournamentId 参数' }
+
+  const scope = await authorizeTournament(event, tournamentId)
+  if (!scope.ok) return scope.result
 
   try {
     let where = { tournamentId: tournamentId }
@@ -57,7 +110,7 @@ async function handleGetList(event) {
 // 审核通过：事务内更新 rosters（移除换出+添加换入）+ 更新申请状态
 // 注意：CloudBase 事务仅支持 doc() 操作，不支持 where()，需先在事务外查出 rosterId
 async function handleApprove(event) {
-  const { requestId, reviewerId, reviewerName, reviewNote } = event
+  const { requestId, reviewNote } = event
   if (!requestId) return { success: false, message: '缺少 requestId 参数' }
 
   try {
@@ -67,6 +120,11 @@ async function handleApprove(event) {
       return { success: false, message: '换人申请记录不存在' }
     }
     const req = reqRes.data
+
+    const scope = await authorizeRequest(event, req)
+    if (!scope.ok) return scope.result
+    const reviewerId = scope.actor.userId
+    const reviewerName = scope.actor.userName
 
     if (req.status !== 'pending') {
       return { success: false, message: '该申请已处理（当前状态：' + req.status + '）' }
@@ -181,7 +239,7 @@ async function handleApprove(event) {
 
 // 审核拒绝：仅更新申请状态和备注
 async function handleReject(event) {
-  const { requestId, reviewerId, reviewerName, reviewNote } = event
+  const { requestId, reviewNote } = event
   if (!requestId) return { success: false, message: '缺少 requestId 参数' }
 
   try {
@@ -191,6 +249,11 @@ async function handleReject(event) {
       return { success: false, message: '换人申请记录不存在' }
     }
     const req = reqRes.data
+
+    const scope = await authorizeRequest(event, req)
+    if (!scope.ok) return scope.result
+    const reviewerId = scope.actor.userId
+    const reviewerName = scope.actor.userName
 
     if (req.status !== 'pending') {
       return { success: false, message: '该申请已处理（当前状态：' + req.status + '）' }

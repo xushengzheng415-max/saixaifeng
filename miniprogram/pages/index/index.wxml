@@ -2,7 +2,7 @@
 <view class="container">
   <!-- 用户信息 -->
   <view class="user-bar" wx:if="{{isLoggedIn}}">
-    <image class="avatar" src="{{userInfo.avatarUrl || '/images/app-logo.png'}}" mode="aspectFill"></image>
+    <image class="avatar" src="{{userInfo.avatarUrl || '/images/logo.png'}}" mode="aspectFill"></image>
     <view class="user-info">
       <text class="nickname">{{userInfo.nickName || '用户'}}</text>
       <text class="role-tag"></text>

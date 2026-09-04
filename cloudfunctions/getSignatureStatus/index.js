@@ -1,74 +1,83 @@
-// 云函数：查询签字状态（供PC端轮询）
-// 被 PC 端 previewDialog 里的 startSignaturePolling() 调用
+// 只读查询比赛签字状态，供 PC 轮询使用。
+// 轮询不得在读取接口中反向更新 matches，正式写入只由裁判工作流完成。
 const cloud = require('wx-server-sdk')
+
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
-exports.main = async (event, context) => {
-  const { matchId } = event
-  
-  if (!matchId) {
-    return { code: 1, message: '缺少 matchId' }
+function firstNonEmpty() {
+  for (let i = 0; i < arguments.length; i += 1) {
+    const value = arguments[i]
+    if (value !== undefined && value !== null && value !== '') return value
   }
-  
+  return ''
+}
+
+exports.main = async function(event) {
+  const matchId = String((event || {}).matchId || '')
+  if (!matchId) return { code: 1, success: false, message: '缺少 matchId' }
+
   try {
     const db = cloud.database()
-    const _ = db.command
-    
-    // 查询比赛记录
-    const matchRes = await db.collection('matches').doc(matchId).get()
-    
-    if (!matchRes.data) {
-      return { code: 1, message: '比赛不存在' }
-    }
-    
-    const match = matchRes.data
-    
-    // 检查是否已签字（优先使用 refereeSignatureUrl，兼容 signatureUrl）
-    const sigUrl = match.refereeSignatureUrl || match.signatureUrl || ''
-    if (match.refereeSigned === true && sigUrl) {
+    const matchResult = await db.collection('matches').doc(matchId).get()
+    const match = matchResult && matchResult.data
+    if (!match) return { code: 1, success: false, message: '比赛不存在' }
+
+    const signature = match.refereeSignature && typeof match.refereeSignature === 'object'
+      ? match.refereeSignature
+      : {}
+    const record = match.refereeRecord && typeof match.refereeRecord === 'object'
+      ? match.refereeRecord
+      : {}
+    const signatureUrl = firstNonEmpty(
+      match.refereeSignatureUrl,
+      match.signatureUrl,
+      signature.url,
+      signature.signatureUrl,
+      record.signatureUrl,
+      ''
+    )
+    const signed = match.refereeSigned === true ||
+      signature.status === 'signed' ||
+      Number(signature.pointCount || 0) >= 8 ||
+      record.signatureStatus === 'signed'
+
+    if (signed) {
       return {
         code: 0,
+        success: true,
         signed: true,
-        signatureUrl: sigUrl,
-        signedAt: match.refereeSignatureTime || match.signedAt || null
+        signatureUrl,
+        signedAt: firstNonEmpty(
+          match.refereeSignatureTime,
+          match.refereeSignedAt,
+          signature.signedAt,
+          record.submittedAt,
+          null
+        )
       }
     }
-    
-    // 也检查签名集合（备用）
-    const sigRes = await db.collection('signatures').where({
-      matchId: matchId
-    }).limit(1).get()
-    
-    if (sigRes.data && sigRes.data.length > 0) {
-      const sig = sigRes.data[0]
-      if (sig.signed === true && sig.signatureUrl) {
-        // 同步到 matches 表
-        await db.collection('matches').doc(matchId).update({
-          refereeSigned: true,
-          refereeSignatureUrl: sig.signatureUrl,
-          refereeSignatureTime: sig.signedAt || new Date()
-        })
-        
-        return {
-          code: 0,
-          signed: true,
-          signatureUrl: sig.signatureUrl,
-          signedAt: sig.signedAt || null
-        }
+
+    // 兼容历史 signatures 记录，但保持整个函数只读，不再同步 matches。
+    const sigResult = await db.collection('signatures').where({ matchId }).limit(1).get()
+    const legacy = sigResult && Array.isArray(sigResult.data) ? sigResult.data[0] : null
+    if (legacy && legacy.signed === true && firstNonEmpty(legacy.signatureUrl, legacy.url, '')) {
+      return {
+        code: 0,
+        success: true,
+        signed: true,
+        signatureUrl: firstNonEmpty(legacy.signatureUrl, legacy.url, ''),
+        signedAt: firstNonEmpty(legacy.signedAt, legacy.signTime, null),
+        source: 'legacy_read_only'
       }
     }
-    
-    // 未签字
-    return {
-      code: 0,
-      signed: false
-    }
-    
-  } catch (e) {
-    console.error('查询签字状态失败:', e)
+
+    return { code: 0, success: true, signed: false }
+  } catch (error) {
+    console.error('[getSignatureStatus] read failed:', error)
     return {
       code: 1,
-      message: '查询失败: ' + (e.message || e),
+      success: false,
+      message: '查询失败: ' + (error.message || error),
       signed: false
     }
   }

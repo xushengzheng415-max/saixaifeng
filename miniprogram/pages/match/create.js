@@ -2,8 +2,8 @@
 Page({
 
   data: {
-    // 赛事类型
-    type: 'campus', // campus=校园足球, amateur=业余足球
+    // 赛小蜂足球只创建青少年赛事
+    type: 'youth',
     // 基本信息
     name: '',
     startDate: '',
@@ -13,7 +13,7 @@ Page({
     // 报名设置
     maxTeams: 16,
     maxPlayers: 25,
-    // 业余足球官员角色选项 (pre-computed for WXML compatibility)
+    // 青少年赛事工作人员角色选项 (pre-computed for WXML compatibility)
     officialRoles: [
       { name: '助理教练', _selected: false },
       { name: '队医', _selected: false },
@@ -30,9 +30,9 @@ Page({
     }
   },
 
-  // 选择赛事类型
-  selectType(e) {
-    this.setData({ type: e.currentTarget.dataset.type })
+  // 兼容旧模板事件，当前只保留青少年足球模式
+  selectType() {
+    this.setData({ type: 'youth' })
   },
 
   // 日期选择
@@ -65,7 +65,8 @@ Page({
     var selected = this.data.selectedOfficials || []
     var roles = this.data.officialRoles || []
     var updated = roles.map(function(r) {
-      return { name: r, _selected: selected.indexOf(r) > -1 }
+      var name = typeof r === 'string' ? r : r.name
+      return { name: name, _selected: selected.indexOf(name) > -1 }
     })
     this.setData({ officialRoles: updated })
   },
@@ -90,15 +91,16 @@ Page({
       const tournamentData = {
         name: this.data.name.trim(),
         type: this.data.type,
-        typeName: this.data.type === 'campus' ? '校园足球' : '业余足球',
+        typeName: '青少年足球',
+        category: 'youth',
         startDate: this.data.startDate,
         endDate: this.data.endDate,
         location: this.data.location,
         description: this.data.description,
         maxTeams: this.data.maxTeams,
         maxPlayers: this.data.maxPlayers,
-        // 业余足球官员角色配置
-        officialRoles: this.data.type === 'amateur' ? this.data.selectedOfficials : [],
+        // 青少年赛事工作人员角色配置
+        officialRoles: this.data.selectedOfficials,
         // 报名状态
         status: 'registering',
         registeredTeams: 0,

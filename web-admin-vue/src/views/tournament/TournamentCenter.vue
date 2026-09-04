@@ -3,7 +3,7 @@
     <!-- 顶部导航栏 -->
     <header class="center-header">
       <div class="header-left">
-        <img src="/LOGO2.png" alt="赛小蜂" class="logo" @click="goToHome" style="cursor: pointer;" />
+        <img :src="brandLogoUrl" alt="赛小蜂足球" class="logo" @click="goToHome" style="cursor: pointer;" />
       </div>
       <div class="header-right">
         <template v-if="isLoggedIn()">
@@ -97,7 +97,7 @@
           @click="goToTournament(tournament._id)"
         >
           <div class="card-image">
-            <img :src="tournament.logo || '/images/default-tournament.png'" :alt="tournament.name" />
+            <img :src="tournament.logo || defaultTournamentLogo" :alt="tournament.name" />
             <div class="card-badge" :class="getStatusClass(tournament.status)">
               {{ getStatusText(tournament.status) }}
             </div>
@@ -179,6 +179,19 @@
           :value="team._id"
         />
       </el-select>
+      <div v-if="signupDivisions.length" class="signup-division-picker">
+        <div class="signup-division-heading"><strong>选择报名组别</strong><span>已满或未开放的组别不可选择</span></div>
+        <div class="signup-division-tags">
+          <button
+            v-for="division in signupDivisions"
+            :key="division.id"
+            type="button"
+            :class="{ active: division.id === selectedDivisionId, disabled: division.disabled }"
+            :disabled="division.disabled"
+            @click="selectSignupDivision(division)"
+          ><strong>{{ division.name }}</strong><small v-if="division.statusText">{{ division.statusText }}</small></button>
+        </div>
+      </div>
       <el-input
         v-model="signupMessage"
         type="textarea"
@@ -217,6 +230,8 @@ import { queryList, callFunction } from '../../utils/cloud'
 import { getTempFileURL } from '../../utils/upload'
 
 const router = useRouter()
+const brandLogoUrl = `${import.meta.env.BASE_URL}LOGO2.png`
+const defaultTournamentLogo = `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
 const loading = ref(false)
 const tournaments = ref([])
 const currentPage = ref(1)
@@ -245,6 +260,8 @@ const signupVisible = ref(false)
 const loginPromptVisible = ref(false)
 const selectedTournament = ref(null)
 const selectedTeamId = ref('')
+const selectedDivisionId = ref('')
+const signupDivisions = ref([])
 const myTeams = ref([])
 const loadingTeams = ref(false)
 const signupLoading = ref(false)
@@ -303,13 +320,22 @@ const filteredTournaments = computed(() => {
   // 排序
   switch (selectedSort.value) {
     case 'newest':
-      result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      result.sort((a, b) => {
+        const featuredPriority = Number(Boolean(b.isFeatured || b.featured)) - Number(Boolean(a.isFeatured || a.featured))
+        return featuredPriority || new Date(b.createdAt || b.createTime) - new Date(a.createdAt || a.createTime)
+      })
       break
     case 'hot':
-      result.sort((a, b) => (b.registeredTeams || 0) - (a.registeredTeams || 0))
+      result.sort((a, b) => {
+        const featuredPriority = Number(Boolean(b.isFeatured || b.featured)) - Number(Boolean(a.isFeatured || a.featured))
+        return featuredPriority || (b.registeredTeams || 0) - (a.registeredTeams || 0)
+      })
       break
     case 'soon':
-      result.sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+      result.sort((a, b) => {
+        const featuredPriority = Number(Boolean(b.isFeatured || b.featured)) - Number(Boolean(a.isFeatured || a.featured))
+        return featuredPriority || new Date(a.startDate) - new Date(b.startDate)
+      })
       break
   }
 
@@ -350,14 +376,14 @@ async function loadBanners() {
 async function loadTournaments() {
   loading.value = true
   try {
-    // 查询所有赛事（排除已结束的），报名中/进行中/即将开始的赛事都显示
-    const data = await queryList('tournaments', {
-      limit: pageSize.value,
-      skip: (currentPage.value - 1) * pageSize.value,
-      where: {}
+    const result = await callFunction('getTournaments', {
+      pageIndex: currentPage.value - 1,
+      pageSize: pageSize.value,
+      includeLegacyCategory: true
     })
-    tournaments.value = data || []
-    total.value = data.length || 0
+    if (!result.success) throw new Error(result.error || result.message || '加载赛事失败')
+    tournaments.value = result.data || []
+    total.value = Number(result.total || tournaments.value.length)
   } catch (err) {
     console.error('加载赛事失败:', err)
     ElMessage.error('加载赛事失败')
@@ -407,21 +433,68 @@ function goToHome() {
 
 // 跳转到系统首页（让路由守卫根据角色自动转发）
 function goToDashboard() {
-  const role = (localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toUpperCase()
-  if (role === 'ORGANIZER') {
-    router.push('/tournaments')
-  } else if (role === 'COACH') {
-    router.push('/teams')
-  } else if (role === 'REFEREE') {
-    router.push('/referees')
-  } else {
-    router.push('/dashboard')
-  }
+  router.push('/tournament-space')
 }
 
 // 检查是否已登录
 function isLoggedIn() {
   return localStorage.getItem('isLoggedIn') === 'true'
+}
+
+function normalizeSignupDivisions(source) {
+  return (Array.isArray(source) ? source : []).map(item => ({
+    id: String(item && (item.id || item._id || item.divisionId || item.division || item.divisionKey) || '').trim(),
+    name: String(item && (item.name || item.divisionName || item.label || item.ageGroup) || '当前竞赛组别').trim(),
+    maxTeams: Number(item && (item.maxTeams || item.teamLimit) || 0),
+    registrationEnabled: item && item.registrationEnabled === true
+  })).filter(item => item.id)
+}
+
+async function loadSignupDivisions(tournament) {
+  const embedded = normalizeSignupDivisions(tournament && tournament.divisions)
+  let rows = []
+  let registrations = []
+  try {
+    const loaded = await Promise.all([
+      queryList('divisions', { limit: 100, where: { tournamentId: tournament && tournament._id } }),
+      queryList('tournament_teams', { limit: 1000, where: { tournamentId: tournament && tournament._id } })
+    ])
+    rows = loaded[0] || []
+    registrations = loaded[1] || []
+  } catch (error) {
+    rows = []
+    registrations = []
+  }
+  const capacityCounts = registrations.reduce((counts, item) => {
+    if (!['approved', 'invited'].includes(String(item.status || '').toLowerCase())) return counts
+    const divisionId = String(item.divisionId || item.division || 'default')
+    counts[divisionId] = Number(counts[divisionId] || 0) + 1
+    return counts
+  }, {})
+  const tournamentStatus = String(tournament && tournament.status || '').toLowerCase()
+  const source = rows.length ? normalizeSignupDivisions(rows) : embedded
+  signupDivisions.value = source.map((division, order) => {
+    const maxTeams = Number(division.maxTeams || tournament?.maxTeams || 0)
+    const registeredTeams = Number(capacityCounts[division.id] || 0)
+    const registrationOpen = tournament?.registrationEnabled !== false && division.registrationEnabled === true && ['registering', 'upcoming'].includes(tournamentStatus)
+    const isFull = maxTeams > 0 && registeredTeams >= maxTeams
+    return {
+      ...division,
+      maxTeams,
+      registeredTeams,
+      isFull,
+      disabled: !registrationOpen || isFull,
+      statusText: isFull ? '已满' : (!registrationOpen ? '已关闭' : ''),
+      order
+    }
+  }).sort((a, b) => Number(a.disabled) - Number(b.disabled) || a.order - b.order)
+  const firstSelectable = signupDivisions.value.find(item => !item.disabled)
+  selectedDivisionId.value = firstSelectable ? firstSelectable.id : ''
+}
+
+function selectSignupDivision(division) {
+  if (!division || division.disabled) return
+  selectedDivisionId.value = division.id
 }
 
 // 处理报名按钮点击
@@ -432,9 +505,11 @@ async function handleSignup(tournament) {
   }
   selectedTournament.value = tournament
   selectedTeamId.value = ''
+  selectedDivisionId.value = ''
+  signupDivisions.value = []
   signupMessage.value = ''
   signupVisible.value = true
-  await loadMyTeams()
+  await Promise.all([loadMyTeams(), loadSignupDivisions(tournament)])
 }
 
 // 加载我的球队
@@ -459,6 +534,15 @@ async function submitSignup() {
     ElMessage.warning('请选择球队')
     return
   }
+  if (signupDivisions.value.length && !selectedDivisionId.value) {
+    ElMessage.warning('请选择报名竞赛组别')
+    return
+  }
+  const selectedDivision = signupDivisions.value.find(item => item.id === selectedDivisionId.value)
+  if (selectedDivision && selectedDivision.disabled) {
+    ElMessage.warning(selectedDivision.statusText || '当前组别暂不可报名')
+    return
+  }
   if (!selectedTournament.value) {
     ElMessage.warning('请选择赛事')
     return
@@ -469,6 +553,7 @@ async function submitSignup() {
     const res = await callFunction('applyTournament', {
       tournamentId: selectedTournament.value._id,
       teamId: selectedTeamId.value,
+      ...(selectedDivisionId.value ? { divisionId: selectedDivisionId.value } : {}),
       message: signupMessage.value
     })
 
@@ -795,6 +880,17 @@ onMounted(() => {
   color: #606266;
   font-size: 14px;
 }
+
+.signup-division-picker { margin-top:16px;padding:14px;border:1px solid #e0e8e3;border-radius:10px;background:#f8fbf9; }
+.signup-division-heading { display:flex;justify-content:space-between;gap:16px;margin-bottom:12px; }
+.signup-division-heading strong { color:#34453a;font-size:14px; }
+.signup-division-heading span { color:#8b958f;font-size:12px; }
+.signup-division-tags { display:flex;flex-wrap:wrap;gap:10px; }
+.signup-division-tags button { display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border:1px solid #b9dcc6;border-radius:18px;background:#f1faf4;color:#24643d;cursor:pointer; }
+.signup-division-tags button strong { font-size:14px; }
+.signup-division-tags button small { font-size:11px; }
+.signup-division-tags button.active { border-color:#168447;background:#168447;color:#fff; }
+.signup-division-tags button.disabled { border-color:#e0e4e1;background:#ecefed;color:#a1a8a3;cursor:not-allowed; }
 
 .pagination-wrapper {
   display: flex;

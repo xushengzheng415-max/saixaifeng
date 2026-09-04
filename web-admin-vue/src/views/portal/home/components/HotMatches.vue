@@ -141,24 +141,24 @@ const matches = ref([
   {
     id: 2,
     status: 'upcoming',
-    homeTeam: { name: '海港联', logo: '/team-placeholder.png' },
-    awayTeam: { name: '城市竞技', logo: '/team-placeholder.png' },
+    homeTeam: { name: '郑东U15', logo: '/team-placeholder.png' },
+    awayTeam: { name: '高新U15', logo: '/team-placeholder.png' },
     homeScore: null,
     awayScore: null,
     startTime: '19:30',
-    tournamentName: '2026业余足球联赛',
-    round: '1/8决赛'
+    tournamentName: '2026校园青少年联赛',
+    round: 'U15组半决赛'
   },
   {
     id: 3,
     status: 'ongoing',
-    homeTeam: { name: '洛阳龙门', logo: '/team-placeholder.png' },
-    awayTeam: { name: '开封蹴鞠', logo: '/team-placeholder.png' },
+    homeTeam: { name: '洛阳少年队', logo: '/team-placeholder.png' },
+    awayTeam: { name: '开封少年队', logo: '/team-placeholder.png' },
     homeScore: 0,
     awayScore: 0,
     currentTime: '第23\'',
-    tournamentName: '2026地协挑战赛',
-    round: '第5轮'
+    tournamentName: '2026青训俱乐部邀请赛',
+    round: 'U13组第5轮'
   }
 ])
 

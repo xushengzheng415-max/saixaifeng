@@ -16,7 +16,7 @@
     <div class="card-body">
       <div class="card-title">{{ name }}</div>
       <div class="card-season">{{ season }}</div>
-      <div class="card-organizer">{{ organizer || '赛小蜂' }}</div>
+      <div class="card-organizer">{{ organizer || '赛小蜂足球' }}</div>
       <div class="card-footer">
         <div class="footer-left">
           <span class="footer-icon">👥</span>
@@ -72,9 +72,7 @@ const statusText = computed(() => (STATUS_MAP[props.status] || STATUS_MAP.regist
 const fallbackStyle = computed(() => {
   // 根据分类生成渐变色
   const categoryColors = {
-    youth: { bg: 'linear-gradient(135deg, #6A1B9A, #AB47BC)' },
-    amateur: { bg: 'linear-gradient(135deg, #2E7D32, #66BB6A)' },
-    local: { bg: 'linear-gradient(135deg, #1565C0, #42A5F5)' }
+    youth: { bg: 'linear-gradient(135deg, #6A1B9A, #AB47BC)' }
   }
   const colors = categoryColors[props.category] || { bg: 'linear-gradient(135deg, #1B5E20, #43A047)' }
   return { background: colors.bg }

@@ -15,6 +15,7 @@
     "minifyWXML": true,
     "compileWorklet": false,
     "uploadWithSourceMap": true,
+    "ignoreUploadUnusedFiles": true,
     "packNpmManually": false,
     "minifyWXSS": true,
     "localPlugins": false,

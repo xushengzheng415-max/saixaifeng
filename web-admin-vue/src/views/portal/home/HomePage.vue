@@ -60,7 +60,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Trophy, Medal, Flag, Sunny, Basketball, Collection, MoreFilled, Star
+  Trophy, Medal, Flag, Sunny, Collection, MoreFilled, Star
 } from '@element-plus/icons-vue'
 import ResponsiveContainer from '../components/ResponsiveContainer.vue'
 import BannerCarousel from './components/BannerCarousel.vue'
@@ -78,21 +78,15 @@ const router = useRouter()
 
 // Mock 轮播图
 const banners = ref([
-  { id: 1, title: '2026 青少年足球锦标赛', subtitle: '30 支球队逐梦绿茵', image: '', link: '/portal/tournaments?category=youth' },
-  { id: 2, title: '业余足球联赛报名开启', subtitle: '各类业余球队均可参赛', image: '', link: '/portal/tournaments?category=amateur' },
-  { id: 3, title: '地协赛火热进行中', subtitle: '各地足协主办精品赛事', image: '', link: '/portal/tournaments?category=local' },
-  { id: 4, title: '城市联赛火热开战', subtitle: '各城市代表队巅峰对决', image: '', link: '/portal/tournaments?category=city' },
-  { id: 5, title: '职业联赛精彩回顾', subtitle: '顶级赛事数据一网打尽', image: '', link: '/portal/tournaments?category=professional' }
+  { id: 1, title: '2026 青少年足球锦标赛', subtitle: 'U8-U18 球队逐梦绿茵', image: '', link: '/portal/tournaments?category=youth' },
+  { id: 2, title: '校园足球联赛报名开启', subtitle: '面向学校与青训机构开放报名', image: '', link: '/portal/tournaments?category=youth' },
+  { id: 3, title: '青训俱乐部邀请赛', subtitle: '记录每一名青少年球员的成长', image: '', link: '/portal/tournaments?category=youth' }
 ])
 
 // 赛事分类（左栏）
 const categories = ref([
-  { key: 'all', label: '全部赛事', icon: Trophy, count: 100 },
-  { key: 'youth', label: '青少年赛事', icon: Sunny, count: 30 },
-  { key: 'amateur', label: '业余赛事', icon: Basketball, count: 20 },
-  { key: 'local', label: '地协赛', icon: Flag, count: 16 },
-  { key: 'city', label: '城市联赛', icon: Medal, count: 18 },
-  { key: 'professional', label: '职业联赛', icon: Trophy, count: 16 }
+  { key: 'all', label: '全部青少年赛事', icon: Trophy, count: 30 },
+  { key: 'youth', label: '青少年赛事', icon: Sunny, count: 30 }
 ])
 
 const activeCategory = ref('all')

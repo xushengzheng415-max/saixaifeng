@@ -55,11 +55,10 @@ const loading = ref(false)
 // Mock 赛事数据
 const tournaments = ref([
   { id: 't1', name: '2026 青少年足球锦标赛', cover: '', season: '2026 赛季', organizer: '青训中心', teamCount: 30, status: 'ongoing', category: 'youth', categoryLabel: '青少年赛事', hot: 5420 },
-  { id: 't2', name: '业余足球联赛', cover: '', season: '2026 赛季', organizer: '业余足协', teamCount: 20, status: 'registering', category: 'amateur', categoryLabel: '业余赛事', hot: 3210 },
-  { id: 't3', name: '地协挑战赛', cover: '', season: '2026 春', organizer: '市足协', teamCount: 16, status: 'ongoing', category: 'local', categoryLabel: '地协赛', hot: 1876 },
-  { id: 't4', name: '校园青少年联赛', cover: '', season: '2026 春', organizer: '教育局', teamCount: 28, status: 'ongoing', category: 'youth', categoryLabel: '青少年赛事', hot: 4109 },
-  { id: 't5', name: '社区业余足球赛', cover: '', season: '2026 全年', organizer: '社区联盟', teamCount: 12, status: 'registering', category: 'amateur', categoryLabel: '业余赛事', hot: 1567 },
-  { id: 't6', name: '地市足协杯', cover: '', season: '2026 赛季', organizer: '地协', teamCount: 18, status: 'completed', category: 'local', categoryLabel: '地协赛', hot: 2345 }
+  { id: 't2', name: '校园青少年联赛', cover: '', season: '2026 春', organizer: '教育局', teamCount: 28, status: 'ongoing', category: 'youth', categoryLabel: '青少年赛事', hot: 4109 },
+  { id: 't3', name: 'U12 青训邀请赛', cover: '', season: '2026 春', organizer: '青训联盟', teamCount: 24, status: 'registering', category: 'youth', categoryLabel: '青少年赛事', hot: 3210 },
+  { id: 't4', name: 'U15 校园冠军杯', cover: '', season: '2026 夏', organizer: '校园足球中心', teamCount: 32, status: 'registering', category: 'youth', categoryLabel: '青少年赛事', hot: 2876 },
+  { id: 't5', name: 'U18 青少年精英赛', cover: '', season: '2026 赛季', organizer: '赛小蜂足球', teamCount: 16, status: 'completed', category: 'youth', categoryLabel: '青少年赛事', hot: 2345 }
 ])
 
 const filteredTournaments = computed(() => {

@@ -1,193 +1,30 @@
-﻿<!--pages/login/login.wxml-->
-<!-- 赛小蜂足球赛事 - 品牌登录页 v3（干净版） -->
 <view class="login-page">
-  <!-- 全屏背景图（自带Logo+文字+Slogan，带缓慢放大动效） -->
   <image class="bg-image" src="/images/login-bg.jpg" mode="aspectFill"></image>
+  <view class="login-shade"></view>
 
-  <!-- 内容层 -->
+  <view class="guest-home" style="{{guestHomeStyle}}" role="button" aria-label="免登录浏览首页" bindtap="goToGuestHome">
+    <image src="/images/runtime/icons/brand-v1-tab-home.png" mode="aspectFit"></image>
+  </view>
+
   <view class="content-overlay">
-
-    <!-- ===== 状态1：登录界面 ===== -->
-    <view class="login-section" wx:if="{{isLoginState}}">
-
-      <!-- 微信一键登录（主推，唯一的大按钮） -->
-      <button class="wechat-btn"
-        open-type="getPhoneNumber"
-        bindgetphonenumber="getPhoneNumber">
-        <text class="btn-icon">微信</text>
-        <text class="btn-text">微信一键登录</text>
-      </button>
-
-      <!-- 其他登录方式入口 -->
-      <view class="alt-login-trigger" bindtap="openAltLogin">
-        <text class="alt-text">其他登录方式</text>
-        <text class="alt-arrow">›</text>
+    <view class="login-card">
+      <text class="login-title">欢迎使用赛小蜂足球</text>
+      <text class="login-subtitle">赛事协作、球队资产与青训经营，一个机构工作空间统一管理</text>
+      <view class="login-action">
+        <button class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="loginWithPhone" disabled="{{loginDisabled}}">{{loginButtonText}}</button>
       </view>
+      <text class="phone-auth-note">手机号用于识别唯一账号并加载已有权限</text>
 
-      <!-- 协议勾选 -->
-      <view class="agreement-row" bindtap="toggleAgreement">
-        <view class="checkbox {{checkboxClass}}">
+      <view class="agreement-row">
+        <view class="checkbox {{checkboxClass}}" bindtap="toggleAgreement">
           <text wx:if="{{agreementChecked}}">✓</text>
         </view>
-        <text class="agreement-text">我已阅读并同意</text>
+        <text class="agreement-text" bindtap="toggleAgreement">我已阅读并同意</text>
         <text class="agreement-link" catchtap="showUserAgreement">《用户协议》</text>
         <text class="agreement-text">和</text>
         <text class="agreement-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
       </view>
 
-      <!-- 版本信息 -->
-      <view class="dev-mode" bindlongpress="devLogin">
-        <text class="dev-mode-text">赛小蜂 v1.0.0</text>
-      </view>
     </view>
-
-    <!-- ===== 状态2：身份选择（底部弹出卡片） ===== -->
-    <view class="role-section" wx:if="{{isRoleState}}">
-      <view class="role-title">选择您的身份</view>
-      <view class="role-subtitle">请选择您在赛事中的角色</view>
-
-      <view class="role-list">
-        <view class="role-item {{roleOrgActive}}" bindtap="selectRole" data-role="organizer">
-          <text class="role-name">赛事方</text>
-          <text class="role-desc">管理赛事</text>
-        </view>
-        <view class="role-item {{roleCoachActive}}" bindtap="selectRole" data-role="coach">
-          <text class="role-name">球队教练</text>
-          <text class="role-desc">管理球队</text>
-        </view>
-        <view class="role-item {{roleRefActive}}" bindtap="selectRole" data-role="referee">
-          <text class="role-name">裁判</text>
-          <text class="role-desc">执裁比赛</text>
-        </view>
-        <view class="role-item {{rolePlayerActive}}" bindtap="selectRole" data-role="player">
-          <text class="role-name">球员</text>
-          <text class="role-desc">查看比赛</text>
-        </view>
-      </view>
-
-      <button class="enter-btn" bindtap="submitLogin" disabled="{{!selectedRole || isSubmitting}}">
-        {{submitBtnText}}
-      </button>
-
-      <text class="back-link" bindtap="backToLogin">返回重新登录</text>
-    </view>
-
-  </view>
-
-  <!-- ===== 毛玻璃弹窗：其他登录方式 ===== -->
-  <view class="glass-modal-mask {{maskVisible}}" bindtap="closeAltLogin" catchtouchmove="preventMove"></view>
-  <view class="glass-modal {{modalShow}}" catchtap="preventBubble">
-
-    <!-- 关闭按钮 -->
-    <view class="glass-close" bindtap="closeAltLogin">
-      <text>✕</text>
-    </view>
-
-    <!-- Tab 切换栏 -->
-    <view class="glass-tabs">
-      <view class="glass-tab {{tabSmsActive}}" bindtap="switchLoginTab" data-tab="sms"
-        hover-class="none">手机号登录</view>
-      <view class="glass-tab-divider"></view>
-      <view class="glass-tab {{tabEmailActive}}" bindtap="switchLoginTab" data-tab="email"
-        hover-class="none">邮箱登录</view>
-      <view class="glass-tab-divider"></view>
-      <view class="glass-tab {{tabPwdActive}}" bindtap="switchLoginTab" data-tab="password"
-        hover-class="none">账号密码</view>
-    </view>
-
-    <!-- ===== Tab1：手机号+验证码 ===== -->
-    <view class="glass-form" wx:if="{{isTabSms}}">
-      <view class="input-row">
-        <text class="input-prefix">📞</text>
-        <input class="form-input" type="number" maxlength="11" placeholder="请输入手机号"
-          value="{{manualPhone}}" bindinput="onManualPhoneInput"/>
-      </view>
-      <view class="input-row">
-        <text class="input-prefix">🔢</text>
-        <input class="form-input form-code-input" type="number" maxlength="6" placeholder="请输入验证码"
-          value="{{smsCode}}" bindinput="onSmsCodeInput"/>
-        <button class="code-btn glass-code-btn {{codeBtnClass}}"
-          bindtap="sendSmsCode" disabled="{{countingDown || !manualPhone11}}">
-          {{codeBtnText}}
-        </button>
-      </view>
-      <!-- 弹窗内协议勾选 -->
-      <view class="glass-agreement" bindtap="toggleAgreement">
-        <view class="glass-checkbox {{glassCheckboxClass}}">
-          <text wx:if="{{agreementChecked}}">✓</text>
-        </view>
-        <text class="glass-agree-text">已阅读并同意</text>
-        <text class="glass-agree-link" catchtap="showUserAgreement">《用户协议》</text>
-        <text class="glass-agree-text">和</text>
-        <text class="glass-agree-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
-      </view>
-      <button class="glass-submit-btn" bindtap="submitSmsLogin"
-        disabled="{{!manualPhone11 || smsCodeShort || !agreementChecked}}">
-        登 录
-      </button>
-    </view>
-
-    <!-- ===== Tab2：邮箱+密码 ===== -->
-    <view class="glass-form" wx:if="{{isTabEmail}}">
-      <view class="input-row">
-        <text class="input-prefix">📧</text>
-        <input class="form-input" type="text" placeholder="请输入邮箱地址"
-          value="{{email}}" bindinput="onEmailInput"/>
-      </view>
-      <view class="input-row">
-        <text class="input-prefix">🔒</text>
-        <input class="form-input" password="{{!passwordVisible}}" placeholder="请输入密码"
-          value="{{password}}" bindinput="onPasswordInput"/>
-        <text class="password-toggle" bindtap="togglePasswordVisibility">{{passwordVisible ? '🙈' : '👁'}}</text>
-      </view>
-      <!-- 弹窗内协议勾选 -->
-      <view class="glass-agreement" bindtap="toggleAgreement">
-        <view class="glass-checkbox {{glassCheckboxClass}}">
-          <text wx:if="{{agreementChecked}}">✓</text>
-        </view>
-        <text class="glass-agree-text">已阅读并同意</text>
-        <text class="glass-agree-link" catchtap="showUserAgreement">《用户协议》</text>
-        <text class="glass-agree-text">和</text>
-        <text class="glass-agree-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
-      </view>
-      <button class="glass-submit-btn" bindtap="submitEmailLogin"
-        disabled="{{!email || !password || !agreementChecked}}">
-        登 录
-      </button>
-    </view>
-
-    <!-- ===== Tab3：手机号+密码 ===== -->
-    <view class="glass-form" wx:if="{{isTabPwd}}">
-      <view class="input-row">
-        <text class="input-prefix">📞</text>
-        <input class="form-input" type="number" maxlength="11" placeholder="请输入手机号"
-          value="{{phoneForPassword}}" bindinput="onPhoneForPasswordInput"/>
-      </view>
-      <view class="input-row">
-        <text class="input-prefix">🔒</text>
-        <input class="form-input" password="{{!passwordVisible}}" placeholder="请输入密码"
-          value="{{passwordForPhone}}" bindinput="onPasswordForPhoneInput"/>
-        <text class="password-toggle" bindtap="togglePasswordVisibility">{{passwordVisible ? '🙈' : '👁'}}</text>
-      </view>
-      <!-- 弹窗内协议勾选 -->
-      <view class="glass-agreement" bindtap="toggleAgreement">
-        <view class="glass-checkbox {{glassCheckboxClass}}">
-          <text wx:if="{{agreementChecked}}">✓</text>
-        </view>
-        <text class="glass-agree-text">已阅读并同意</text>
-        <text class="glass-agree-link" catchtap="showUserAgreement">《用户协议》</text>
-        <text class="glass-agree-text">和</text>
-        <text class="glass-agree-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
-      </view>
-      <button class="glass-submit-btn" bindtap="submitPhonePasswordLogin"
-        disabled="{{!phonePwd11 || !passwordForPhone || !agreementChecked}}">
-        登 录
-      </button>
-    </view>
-
   </view>
 </view>
-
-
-
-

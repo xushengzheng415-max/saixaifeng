@@ -9,6 +9,16 @@ var logger = {
   flush: function() {}
 }
 
+var release = require('./config/release')
+
+var AUTH_SESSION_VERSION = 'phone-canonical-v1'
+var LEGACY_AUTH_KEYS = [
+  'userInfo', 'userId', 'phoneNumber', 'phone', 'email',
+  'hasPassword', 'currentCardId', 'currentTeam', 'currentTeamId',
+  'currentTeamIndex', 'teamInfo', 'coachInfo', 'myTeams', 'userLoggedOut',
+  'workspaceContext', 'currentWorkspaceId'
+]
+
 // 赛事色调模板配置
 var THEME_TEMPLATES = [
   {
@@ -63,6 +73,14 @@ var THEME_TEMPLATES = [
 
 App({
   onLaunch: function() {
+    if (wx.getStorageSync('authSessionVersion') !== AUTH_SESSION_VERSION) {
+      LEGACY_AUTH_KEYS.forEach(function(key) { wx.removeStorageSync(key) })
+      wx.removeStorageSync('openId')
+      wx.removeStorageSync('openid')
+      wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
+    }
+    wx.removeStorageSync('current' + 'Role')
+
     // 初始化云开发（容错：即使云环境不可用也不阻塞启动）
     if (wx.cloud) {
       try {
@@ -85,7 +103,7 @@ App({
     this.checkLoginStatus()
   },
 
-  onShow: function() {
+  onShow: function(options) {
     logger.info('小程序显示')
   },
 
@@ -102,16 +120,18 @@ App({
     userInfo: null,
     currentCard: null,
     cards: [],
-    userRole: null,
-    appVersion: '1.0.0',
+    workspaceContext: null,
+    appVersion: release.version,
+    release: release,
     logger: logger,
     themeTemplates: THEME_TEMPLATES
   },
 
   checkLoginStatus: function() {
     var userInfo = wx.getStorageSync('userInfo')
-    if (userInfo) {
+    if (userInfo && wx.getStorageSync('authSessionVersion') === AUTH_SESSION_VERSION) {
       this.globalData.userInfo = userInfo
+      this.globalData.workspaceContext = wx.getStorageSync('workspaceContext') || null
       logger.info('用户已登录', { openid: userInfo.openid })
     }
 
@@ -124,23 +144,23 @@ App({
 
   switchCard: function(card) {
     this.globalData.currentCard = card
-    this.globalData.userRole = card.role
     wx.setStorageSync('currentCardId', card._id)
-
-    logger.info('切换身份卡', { role: card.role, cardId: card._id })
-
-    // 更新顶部导航栏显示当前身份
-    var pages = getCurrentPages()
-    if (pages.length > 0) {
-      pages[pages.length - 1].setData({
-        currentRoleName: card.roleName
-      })
-    }
+    logger.info('切换展示卡片', { cardId: card._id })
   },
 
   updateUserInfo: function(userInfo) {
+    userInfo = {
+      _id: userInfo._id || '',
+      openId: userInfo.openId || userInfo.openid || '',
+      phone: userInfo.phone || userInfo.phoneNumber || '',
+      phoneNumber: userInfo.phoneNumber || userInfo.phone || '',
+      nickName: userInfo.nickName || '微信用户',
+      avatarUrl: userInfo.avatarUrl || '',
+      orgId: userInfo.orgId || ''
+    }
     this.globalData.userInfo = userInfo
     wx.setStorageSync('userInfo', userInfo)
+    wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
     logger.info('更新用户信息', { openid: userInfo.openid })
   },
 
@@ -149,8 +169,9 @@ App({
     this.globalData.userInfo = null
     this.globalData.currentCard = null
     this.globalData.cards = []
+    this.globalData.workspaceContext = null
     wx.clearStorageSync()
+    wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
     wx.setStorageSync('userLoggedOut', 'true')
   }
 })
-

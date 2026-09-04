@@ -14,7 +14,31 @@
           {{tournament.typeName}}
         </view>
       </view>
+      <view wx:if="{{showDivisionTabs}}" class="division-section">
+        <text class="division-label">选择报名组别</text>
+        <view class="division-tabs">
+          <view class="division-tabs-inner">
+            <view
+              wx:for="{{divisionOptions}}"
+              wx:key="id"
+              class="division-tab {{item.tabClass}}"
+              data-id="{{item.id}}"
+              data-disabled="{{item.disabled}}"
+              bindtap="onDivisionTap"
+            ><text>{{item.name}}</text><text wx:if="{{item.statusText}}" class="division-status">{{item.statusText}}</text></view>
+          </view>
+        </view>
+        <text wx:if="{{noSelectableDivision}}" class="division-empty-tip">当前所有组别均已满或未开放报名</text>
+      </view>
       <view class="card-body">
+        <view class="info-row">
+          <text class="info-label">报名组别</text>
+          <text class="info-value">{{activeDivisionName}}</text>
+        </view>
+        <view class="info-row" wx:if="{{intendedTeamName}}">
+          <text class="info-label">定向邀约</text>
+          <text class="info-value">{{intendedTeamName}}</text>
+        </view>
         <view class="info-row">
           <text class="info-label">比赛时间</text>
           <text class="info-value">{{tournament.dateRange || '待定'}}</text>
@@ -54,6 +78,13 @@
       </view>
     </view>
 
+    <view class="section-card" wx:if="{{tournament}}">
+      <view class="section-header"><view class="section-bar"></view><text class="section-title">关注服务号（报名前必需）</text></view>
+      <view class="notice-box"><view class="notice-item"><text class="notice-icon">✓</text><text class="notice-text">请先关注“赛小蜂足球助手”</text></view><view class="notice-item"><text class="notice-icon">✓</text><text class="notice-text">用于接收审核、赛程和名单截止提醒</text></view></view>
+      <image class="service-follow-qr" wx:if="{{showServiceFollowQr}}" src="{{serviceFollowUrl}}" mode="aspectFit" show-menu-by-longpress bindtap="previewServiceQr"></image>
+      <view class="service-binding-row"><view><text class="service-binding-title">服务号状态</text><text class="service-binding-status">{{serviceBindingStatusText}}</text></view><button class="service-binding-button" bindtap="refreshServiceBinding">{{serviceBindingButtonText}}</button></view>
+    </view>
+
     <!-- 报名须知 -->
     <view class="section-card">
       <view class="section-header">
@@ -85,31 +116,35 @@
     </view>
 
     <!-- 竞赛规程 -->
-    <view class="section-card" wx:if="{{tournament.regulationsFileId || tournament.rules}}">
+    <view class="section-card">
       <view class="section-header">
         <view class="section-bar"></view>
         <text class="section-title">竞赛规程</text>
-        <text class="required-tag">必读</text>
+        <text class="required-tag" wx:if="{{tournament.hasRegulations}}">必读</text>
+        <text class="optional-tag" wx:else>{{tournament.regulationsStatusText || '未上传'}}</text>
       </view>
       <view class="rules-box">
-        <view class="rules-preview" wx:if="{{tournament.rules}}">
-          <text class="rules-text">{{tournament.rules}}</text>
+        <view class="rules-missing" wx:if="{{!tournament.hasRegulations}}">
+          <text>未上传</text>
         </view>
-        <view class="rules-file" wx:if="{{tournament.regulationsFileId}}" bindtap="viewRegulations">
+        <view class="rules-preview" wx:if="{{tournament.hasRulesText}}">
+          <text class="rules-text">{{tournament.rulesText}}</text>
+        </view>
+        <view class="rules-file" wx:if="{{tournament.hasRegulationsFile}}" bindtap="viewRegulations">
           <view class="file-icon-box">
-            <text class="file-icon">&#128196;</text>
+            <text class="file-icon">📄</text>
           </view>
           <view class="file-info">
             <text class="file-name">{{tournament.regulationsFileName || '竞赛规程文档'}}</text>
             <text class="file-tip">点击阅读完整竞赛规程</text>
           </view>
-          <text class="file-arrow">&#62;</text>
+          <text class="file-arrow">›</text>
         </view>
-        <view class="agree-row" bindtap="toggleRegulationsRead">
-          <view class="checkbox ">
-            <text wx:if="{{regulationsRead}}">&#10003;</text>
+        <view class="agree-row" wx:if="{{tournament.hasRegulations}}" bindtap="toggleRegulationsRead">
+          <view class="checkbox {{regulationsCheckboxClass}}">
+            <text wx:if="{{regulationsRead}}">✓</text>
           </view>
-          <text class="agree-text ">我已阅读并理解竞赛规程内容</text>
+          <text class="agree-text {{regulationsTextClass}}">我已阅读并理解竞赛规程内容</text>
         </view>
       </view>
     </view>
@@ -127,13 +162,13 @@
         </view>
         <view class="view-full-btn" bindtap="viewFullDisclaimer">
           <text>查看完整免责声明</text>
-          <text class="view-full-arrow">&#x276F;</text>
+          <text class="view-full-arrow">›</text>
         </view>
         <view class="agree-row" bindtap="toggleDisclaimerAgree">
-          <view class="checkbox ">
-            <text wx:if="{{disclaimerAgreed}}">&#10003;</text>
+          <view class="checkbox {{disclaimerCheckboxClass}}">
+            <text wx:if="{{disclaimerAgreed}}">✓</text>
           </view>
-          <text class="agree-text ">我已阅读并同意参赛免责声明</text>
+          <text class="agree-text {{disclaimerTextClass}}">我已阅读并同意参赛免责声明</text>
         </view>
       </view>
     </view>
@@ -155,7 +190,7 @@
     <!-- 底部按钮 -->
     <view class="bottom-bar">
       <button class="cancel-btn" bindtap="onCancel">取消</button>
-      <button class="submit-btn " bindtap="onSubmit" loading="{{submitting}}" disabled="{{!canSubmit}}">
+      <button class="submit-btn {{submitButtonClass}}" bindtap="onSubmit" loading="{{submitting}}" disabled="{{submitDisabled}}">
         {{submitBtnText}}
       </button>
     </view>
@@ -168,7 +203,7 @@
       <view class="disclaimer-modal-header">
         <text class="disclaimer-modal-title">参赛免责声明</text>
         <view class="disclaimer-modal-close" bindtap="closeFullDisclaimer">
-          <text>&#x2715;</text>
+          <text>×</text>
         </view>
       </view>
       <scroll-view class="disclaimer-modal-content" scroll-y="true">
@@ -176,12 +211,24 @@
       </scroll-view>
       <view class="disclaimer-modal-footer">
         <view class="agree-row" bindtap="toggleDisclaimerAgree">
-          <view class="checkbox ">
-            <text wx:if="{{disclaimerAgreed}}">&#10003;</text>
+          <view class="checkbox {{disclaimerCheckboxClass}}">
+            <text wx:if="{{disclaimerAgreed}}">✓</text>
           </view>
-          <text class="agree-text ">我已阅读并同意参赛免责声明</text>
+          <text class="agree-text {{disclaimerTextClass}}">我已阅读并同意参赛免责声明</text>
         </view>
       </view>
+    </view>
+  </view>
+
+  <view class="service-follow-modal" wx:if="{{showServiceFollowModal}}">
+    <view class="service-follow-modal-mask"></view>
+    <view class="service-follow-modal-body">
+      <view class="service-follow-modal-title">关注后继续报名</view>
+      <view class="service-follow-modal-subtitle">长按识别二维码，关注“赛小蜂足球助手”</view>
+      <image class="service-follow-modal-qr" src="{{serviceFollowUrl}}" mode="aspectFit" show-menu-by-longpress bindtap="previewServiceQr"></image>
+      <view class="service-follow-modal-tip">关注完成后返回小程序，点击下方按钮刷新状态</view>
+      <button class="service-follow-modal-confirm" loading="{{serviceBindingRefreshing}}" disabled="{{serviceBindingRefreshing}}" bindtap="refreshServiceBindingFromModal">我已关注，刷新状态</button>
+      <button class="service-follow-modal-later" bindtap="closeServiceFollowModal">稍后处理</button>
     </view>
   </view>
 </view>

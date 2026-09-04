@@ -138,7 +138,7 @@
     
     <view class="download-options">
       <button class="btn-download" bindtap="onDownloadImage">下载阵容图片</button>
-      <button class="btn-download btn-download-pdf" bindtap="onDownloadPDF">下载PDF文档</button>
+      <button class="btn-download btn-download-pdf" bindtap="onDownloadPDF">PDF导出待配置</button>
     </view>
 
     <!-- canvas用于生成图片 -->

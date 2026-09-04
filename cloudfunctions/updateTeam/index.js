@@ -19,7 +19,14 @@ exports.main = async (event) => {
     if (cityName !== undefined) updateData.cityName = cityName
     if (teamCode !== undefined) updateData.teamCode = teamCode
     if (teamType !== undefined) updateData.teamType = teamType
-    if (ownerPhone !== undefined) updateData.ownerPhone = ownerPhone
+    if (ownerPhone !== undefined) {
+      updateData.ownerPhone = ownerPhone
+      updateData.creatorPhone = ownerPhone
+      updateData.contactPhone = ownerPhone
+      updateData.phoneNumber = ownerPhone
+      updateData.phone = ownerPhone
+      updateData.mobile = ownerPhone
+    }
     // 可选字段
     if (establishedDate !== undefined) updateData.establishedDate = establishedDate
     if (logo !== undefined) updateData.logo = logo

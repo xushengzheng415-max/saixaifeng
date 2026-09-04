@@ -99,8 +99,12 @@ Page({
   // 查看球员详情
   onViewPlayer(e) {
     const playerId = e.currentTarget.dataset.id
+    if (!playerId) {
+      wx.showToast({ title: '未找到球员信息', icon: 'none' })
+      return
+    }
     wx.navigateTo({
-      url: `/pages/player/detail/detail?id=${playerId}`
+      url: `/pages/team/player-detail/player-detail?id=${encodeURIComponent(playerId)}`
     })
   },
 

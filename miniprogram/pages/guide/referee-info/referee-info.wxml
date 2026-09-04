@@ -1,136 +1,36 @@
-<view class="guide-container">
-<!-- 头部区域 -->
-  <view class="header-section">
-    <view class="progress-bar">
-      <view class="progress-fill" style="width: 33%;"></view>
-    </view>
-    <view class="header-content">
-      <view class="icon-wrapper">
-        <text class="step-icon">👮</text>
-      </view>
-      <text class="title">完善裁判信息</text>
-      <text class="subtitle">成为赛事裁判</text>
-    </view>
+<view class="referee-handoff">
+  <view class="hero">
+    <view class="hero-icon">裁</view>
+    <text class="hero-title">裁判服务入口</text>
+    <text class="hero-subtitle">资料与比赛任务统一在服务号办理</text>
   </view>
 
-  <!-- 表单区域 -->
-  <view class="form-section">
-    <view class="form-card">
-      <view class="input-group">
-        <text class="input-label">裁判姓名</text>
-        <view class="input-wrapper">
-          <input 
-            class="input-field" 
-            placeholder="请输入真实姓名"
-            bindinput="onNameInput"
-            value="{{name}}"
-          />
-          <text class="input-icon">👤</text>
-        </view>
-        <text class="error-message" wx:if="{{errors.name}}">{{errors.name}}</text>
-      </view>
+  <view class="handoff-card">
+    <text class="card-title">请前往赛小蜂足球服务号</text>
+    <text class="card-body">小程序不保存裁判注册资料，也不会在本地生成裁判身份。请通过服务号完成微信授权、手机号绑定、裁判资料提交、比赛任务接收和电子记录签字。</text>
 
-      <view class="input-group">
-        <text class="input-label">裁判级别</text>
-        <view class="select-wrapper">
-          <picker bindchange="onLevelChange" value="{{level}}" range="{{levels}}">
-            <view class="picker-text">{{selectedLevelText}}</view>
-            <text class="picker-icon">▼</text>
-          </picker>
-        </view>
-        <text class="error-message" wx:if="{{errors.level}}">{{errors.level}}</text>
+    <view class="steps">
+      <view class="step">
+        <text class="step-number">1</text>
+        <text class="step-text">微信授权</text>
       </view>
-
-      <view class="input-group">
-        <text class="input-label">裁判证号</text>
-        <view class="input-wrapper">
-          <input 
-            class="input-field" 
-            placeholder="请输入裁判证号"
-            bindinput="onCertNoInput"
-            value="{{certNo}}"
-          />
-          <text class="input-icon">📄</text>
-        </view>
-        <text class="error-message" wx:if="{{errors.certNo}}">{{errors.certNo}}</text>
+      <view class="step">
+        <text class="step-number">2</text>
+        <text class="step-text">手机号绑定</text>
       </view>
-
-      <view class="input-group">
-        <text class="input-label">执裁经验</text>
-        <view class="select-wrapper">
-          <picker bindchange="onExperienceChange" value="{{experience}}" range="{{experiences}}">
-            <view class="picker-text">{{selectedExperienceText}}</view>
-            <text class="picker-icon">▼</text>
-          </picker>
-        </view>
-        <text class="error-message" wx:if="{{errors.experience}}">{{errors.experience}}</text>
-      </view>
-
-      <view class="input-group">
-        <text class="input-label">擅长项目</text>
-        <view class="input-wrapper">
-          <input 
-            class="input-field" 
-            placeholder="请输入擅长的足球项目"
-            bindinput="onSpecialtyInput"
-            value="{{specialty}}"
-          />
-          <text class="input-icon">⚽</text>
-        </view>
-        <text class="error-message" wx:if="{{errors.specialty}}">{{errors.specialty}}</text>
-      </view>
-
-      <view class="input-group">
-        <text class="input-label">执裁经历</text>
-        <view class="textarea-wrapper">
-          <textarea 
-            class="textarea-field" 
-            placeholder="请输入执裁经历（最多200字）"
-            maxlength="200"
-            bindinput="onExperienceInput"
-            value="{{experienceText}}"
-          />
-          <view class="char-count">{{ExperienceTextLen}}/200</view>
-        </view>
-        <text class="error-message" wx:if="{{errors.experienceText}}">{{errors.experienceText}}</text>
-      </view>
-
-      <view class="input-group">
-        <text class="input-label">裁判照片</text>
-        <view class="upload-wrapper">
-          <view 
-            class="upload-area" 
-            bindtap="chooseImage"
-            style=""
-          >
-            <view class="upload-content" wx:if="{{!photoUrl}}">
-              <text class="upload-icon">📷</text>
-              <text class="upload-text">点击上传照片</text>
-              <text class="upload-hint">支持JPG、PNG格式</text>
-            </view>
-          </view>
-          <text class="error-message" wx:if="{{errors.photo}}">{{errors.photo}}</text>
-        </view>
+      <view class="step">
+        <text class="step-number">3</text>
+        <text class="step-text">接收指派并执裁</text>
       </view>
     </view>
+
+    <button class="primary-btn" bindtap="openRefereeService">复制服务号入口</button>
+    <button class="secondary-btn" bindtap="backHome">返回首页</button>
   </view>
 
-  <!-- 操作按钮 -->
-  <view class="action-section">
-    <button 
-      class="submit-btn "
-      bindtap="handleSubmit"
-      disabled="{{isSubmitting}}"
-    >
-      
-    </button>
-    <text class="skip-text" bindtap="skip">跳过，稍后完善</text>
-  </view>
-
-  <!-- 底部提示 -->
-  <view class="footer-section">
-    <text class="tips">
-      完成裁判信息填写后，您将成为注册裁判，有权限执裁各类足球赛事。
-    </text>
+  <view class="url-card">
+    <text class="url-label">入口地址</text>
+    <text class="url-value">{{handoffUrl}}</text>
+    <text class="url-status" wx:if="{{copied}}">已复制，可在微信中打开</text>
   </view>
 </view>

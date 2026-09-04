@@ -1,0 +1,24 @@
+<view class="player-library-page">
+  <image class="player-library-bg" src="/images/runtime/stadium-tech-bg.jpg" mode="aspectFill" />
+  <view class="player-library-content">
+    <view class="player-library-nav" style="height:174rpx;"><text class="player-library-back" bindtap="onBack">‹</text><text class="player-library-title">球队球员库</text></view>
+    <view wx:if="{{loading}}" class="player-library-state"><text>正在加载长期球员资产…</text></view>
+    <view wx:elif="{{errorText}}" class="player-library-state"><text>{{errorText}}</text><button bindtap="loadPlayers">重新加载</button></view>
+    <block wx:else>
+      <view class="player-team-card" style="min-height:266rpx;">
+        <view class="player-team-top">
+          <view class="player-crest-wrap"><image wx:if="{{teamLogo}}" class="player-crest" src="{{teamLogo}}" mode="aspectFit" /><view wx:else class="player-crest player-crest-empty">队徽</view></view>
+          <view class="player-team-copy" style="position:absolute;left:150rpx;right:208rpx;padding:0 10rpx;box-sizing:border-box;"><text class="player-team-name">{{teamName}}</text><text class="player-team-desc">长期球员资产 · 共 {{totalCount}} 人</text></view>
+          <view wx:if="{{canManage}}" class="player-team-actions"><button class="player-action-primary" bindtap="addPlayer"><image src="/images/icons/players.svg" mode="aspectFit" />添加球员</button><button class="player-action-secondary" bindtap="inviteParent"><image src="/images/icons/team.svg" mode="aspectFit" />邀请家长补资料</button></view>
+        </view>
+        <view class="player-stats"><view><text class="player-stat-value player-stat-complete">{{completeCount}}</text><text>资料完整</text></view><view><text class="player-stat-value player-stat-pending">{{pendingCount}}</text><text>待补充</text></view><view><text class="player-stat-value player-stat-exception">{{exceptionCount}}</text><text>异常</text></view></view>
+      </view>
+      <view class="player-parent-notice" style="min-height:56rpx;padding:8rpx 16rpx;font-size:19rpx;white-space:nowrap;"><image src="/images/icons/players.svg" mode="aspectFit" /><text>家长通过服务号/H5补充实名、形象照等资料，不需要进入球队小程序。</text></view>
+      <view class="player-search" style="margin-top:12rpx;"><input placeholder="搜索球员姓名" value="{{query}}" bindinput="onSearch" /></view>
+      <view class="player-filters"><text class="player-filter {{filterAllClass}}" data-filter="all" bindtap="setFilter">全部 {{totalCount}}</text><text class="player-filter {{filterPendingClass}}" data-filter="pending" bindtap="setFilter">待补充 {{pendingCount}}</text><text class="player-filter {{filterExceptionClass}}" data-filter="exception" bindtap="setFilter">异常 {{exceptionCount}}</text></view>
+      <view wx:if="{{hasPlayers}}" class="player-list"><view class="player-row" wx:for="{{players}}" wx:key="id" bindtap="openPlayer" data-id="{{item.id}}"><image wx:if="{{item.photoUrl}}" class="player-avatar" src="{{item.photoUrl}}" mode="aspectFill" /><view wx:else class="player-avatar player-avatar-empty">{{item.avatarText}}</view><view class="player-info"><text class="player-name">{{item.name}}</text><text class="player-date">{{item.birthDate}}</text></view><text wx:if="{{item.isComplete}}" class="player-tag player-tag-complete">{{item.statusText}}</text><text wx:if="{{item.isPending}}" class="player-tag player-tag-pending">{{item.statusText}}</text><text wx:if="{{item.isException}}" class="player-tag player-tag-exception">{{item.statusText}}</text><text class="player-arrow">›</text></view></view>
+      <view wx:else class="player-empty"><image src="/images/runtime/icons/brand-v2-11.png" mode="aspectFit" /><text>暂无符合条件的球员</text></view>
+      <view class="player-bottom-note"><text class="player-bottom-note-icon">i</text><text>球队球员库是长期资产，加入赛事需另行选择形成正式参赛名单。不把所有球员自动报名。</text></view>
+    </block>
+  </view>
+</view>

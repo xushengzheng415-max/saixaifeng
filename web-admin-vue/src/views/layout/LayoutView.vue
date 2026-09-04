@@ -1,60 +1,7 @@
 <template>
   <div class="layout">
-    <!-- 顶部导航栏 -->
-    <header class="top-header">
-      <div class="header-left">
-        <div class="logo-area">
-          <img src="/LOGO2.png" alt="赛小蜂足球赛事管理系统" class="logo-img" />
-        </div>
-      </div>
-      <div class="header-center">
-        <span class="page-title">{{ currentPageTitle }}</span>
-      </div>
-      <div class="header-right">
-        <el-dropdown trigger="click" @command="handleUserCommand">
-          <div class="user-avatar-wrapper">
-            <el-avatar v-if="userInfo.avatarUrl" :size="36" :src="userInfo.avatarUrl" />
-            <el-avatar v-else :size="36" style="background: #43A047; font-size: 14px;">
-              {{ userInfo.userName ? userInfo.userName.charAt(0) : '?' }}
-            </el-avatar>
-            <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
-          </div>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item disabled>
-                <div class="user-info-dropdown">
-                  <div class="user-name">{{ userInfo.userName || '未登录' }}</div>
-                  <div class="user-contact">
-                    <div v-if="userInfo.phone"><el-icon><Phone /></el-icon> {{ userInfo.phone }}</div>
-                    <div v-if="userInfo.email"><el-icon><Message /></el-icon> {{ userInfo.email }}</div>
-                  </div>
-                  <div class="user-role">
-                    <el-tag v-if="loginType === 'anonymous'" type="info" size="small">开发模式</el-tag>
-                    <el-tag v-else-if="loginType === 'weixin'" type="success" size="small">微信登录</el-tag>
-                    <el-tag type="warning" size="small">{{ roleLabel }}</el-tag>
-                  </div>
-                </div>
-              </el-dropdown-item>
-              <el-dropdown-item v-if="!userInfo.phone" divided command="bindPhone">
-                <el-icon><Phone /></el-icon>绑定手机号
-              </el-dropdown-item>
-              <el-dropdown-item v-else divided disabled>
-                <el-icon><Phone /></el-icon>已绑定：{{ userInfo.phone }}
-              </el-dropdown-item>
-              <el-dropdown-item command="refresh">
-                <el-icon><Refresh /></el-icon>刷新数据
-              </el-dropdown-item>
-              <el-dropdown-item command="logout">
-                <el-icon><SwitchButton /></el-icon>退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-    </header>
-
     <!-- 绑定手机号弹窗（强制绑定，不可关闭） -->
-    <el-dialog
+    <el-dialog v-if="false"
       v-model="bindPhoneVisible"
       title="绑定手机号"
       width="400px"
@@ -96,8 +43,18 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="profileDialogVisible" title="修改个人资料" width="440px">
+      <el-form label-position="top"><el-form-item label="账号显示名称"><el-input v-model.trim="profileForm.nickname" maxlength="30" placeholder="请输入姓名或显示名称" /></el-form-item></el-form>
+      <template #footer><el-button @click="profileDialogVisible=false">取消</el-button><el-button type="primary" :loading="profileSubmitting" @click="saveProfile">保存个人资料</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="organizationDialogVisible" title="修改机构资料" width="560px">
+      <el-form label-position="top"><el-form-item label="机构名称"><el-input v-model.trim="organizationForm.name" maxlength="80" /></el-form-item><el-form-item label="机构类型"><el-select v-model="organizationForm.organizationType"><el-option v-for="item in organizationTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item><div class="account-location-grid"><el-form-item label="所在省份"><el-select v-model="organizationForm.provinceCode" filterable @change="organizationForm.city=''"><el-option v-for="item in provinceOptions" :key="item.code" :label="item.name" :value="item.code" /></el-select></el-form-item><el-form-item label="所在城市"><el-select v-model="organizationForm.city" filterable :disabled="!organizationForm.provinceCode"><el-option v-for="item in organizationCityOptions" :key="item.code" :label="item.name" :value="item.name" /></el-select></el-form-item></div></el-form>
+      <template #footer><el-button @click="organizationDialogVisible=false">取消</el-button><el-button type="primary" :loading="organizationSubmitting" @click="saveOrganization">保存机构资料</el-button></template>
+    </el-dialog>
+
     <!-- 强制设置密码弹窗（不可关闭） -->
-    <el-dialog
+    <el-dialog v-if="false"
       v-model="setPasswordVisible"
       title="设置登录密码"
       width="420px"
@@ -134,7 +91,7 @@
     </el-dialog>
 
     <!-- 强制绑定邮箱弹窗（不可关闭） -->
-    <el-dialog
+    <el-dialog v-if="false"
       v-model="bindEmailVisible"
       title="绑定邮箱"
       width="420px"
@@ -178,17 +135,33 @@
 
     <div class="main-container">
       <!-- 侧边栏 -->
-      <aside class="sidebar">
+      <aside v-if="!usesWorkspaceShell" class="sidebar">
+        <button
+          class="sidebar-brand"
+          type="button"
+          :aria-label="`${organizationBrand.name}，返回赛事管理`"
+          @click="router.push('/tournament-space')"
+        >
+          <span class="organization-logo">
+            <img
+              :src="organizationBrand.logo"
+              :alt="`${organizationBrand.name} Logo`"
+              @error="handleOrganizationLogoError"
+            />
+          </span>
+          <span class="organization-name">{{ organizationBrand.name }}</span>
+        </button>
+
         <nav class="sidebar-nav">
           <template v-for="item in currentNavItems" :key="item.path">
             <!-- 有子菜单 -->
             <template v-if="item.children">
               <div
                 class="nav-item"
-                :class="{ active: isActive(item.path) || isChildActive(item.path) }"
+                :class="{ active: isItemActive(item) || isChildActive(item.path) }"
                 @click="toggleSubMenu(item)"
               >
-                <el-icon :size="20"><component :is="item.icon" /></el-icon>
+                <el-icon :size="22"><component :is="item.icon" /></el-icon>
                 <span class="nav-label">{{ item.label }}</span>
                 <el-icon class="submenu-arrow" :class="{ rotated: expandedMenus.includes(item.path) }">
                   <ArrowDown />
@@ -212,43 +185,113 @@
             <template v-else>
               <div
                 class="nav-item"
-                :class="{ active: isActive(item.path) }"
+                :class="{ active: isItemActive(item) }"
                 @click="handleNavClick(item)"
               >
-                <el-icon :size="20"><component :is="item.icon" /></el-icon>
+                <el-icon :size="22"><component :is="item.icon" /></el-icon>
                 <span class="nav-label">{{ item.label }}</span>
               </div>
             </template>
           </template>
         </nav>
 
-        <!-- 当前身份（只读，在赛事中心管理页面隐藏）-->
-        <div v-if="!isAdminPage" class="sidebar-footer">
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:#f5f7fa;">
-            <span style="font-size:12px;color:#909399;">当前身份：</span>
-            <el-tag type="primary" size="small">{{ roleLabel }}</el-tag>
-          </div>
-        </div>
+        <div v-if="route.path.includes('/draw')" class="sidebar-pro-badge">♛　PRO 专业版 · 已开通</div>
+        <div class="sidebar-support">由赛小蜂足球提供技术支持</div>
       </aside>
 
-      <!-- 主内容区 -->
-      <main class="content-area">
-        <router-view />
-      </main>
+      <section class="workspace">
+        <!-- 顶部工具栏 -->
+        <header v-if="usesWorkspaceShell" class="workspace-shell-header">
+          <button class="product-brand" type="button" aria-label="返回赛事空间" @click="router.push('/tournament-space')">
+            <img :src="productLogo" alt="赛小蜂足球" />
+          </button>
+          <div class="workspace-shell-actions">
+            <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
+            <button class="notification-action" type="button" aria-label="查看通知" @click="showNotifications"><el-icon><Bell /></el-icon><i v-if="unreadNotificationCount">{{ unreadNotificationCount }}</i></button>
+            <el-dropdown trigger="click" @command="handleUserCommand">
+              <div class="workspace-user">
+                <el-avatar v-if="userInfo.avatarUrl" :size="38" :src="userInfo.avatarUrl" />
+                <el-avatar v-else :size="38" class="workspace-user-avatar">{{ userInfo.userName ? userInfo.userName.charAt(0) : '蜂' }}</el-avatar>
+                <span class="workspace-account-copy"><strong>{{ accountDisplayName }}</strong><small>{{ organizationDisplayName }}</small></span>
+                <el-icon><ArrowDown /></el-icon>
+              </div>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span></div></el-dropdown-item>
+                  <el-dropdown-item divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
+                  <el-dropdown-item command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
+                  <el-dropdown-item command="refresh"><el-icon><Refresh /></el-icon>刷新数据</el-dropdown-item>
+                  <el-dropdown-item divided command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </header>
+        <header v-else-if="!usesEmbeddedPageHeader" class="top-header">
+          <div class="header-left">
+            <span class="page-title">{{ currentPageTitle }}</span>
+          </div>
+          <div class="header-right">
+            <div class="header-role">主办方管理</div>
+            <span class="header-divider" aria-hidden="true"></span>
+            <el-dropdown trigger="click" @command="handleUserCommand">
+              <div class="user-avatar-wrapper">
+                <el-avatar v-if="userInfo.avatarUrl" :size="36" :src="userInfo.avatarUrl" />
+                <el-avatar v-else :size="36" class="user-avatar-fallback">
+                  {{ userInfo.userName ? userInfo.userName.charAt(0) : '?' }}
+                </el-avatar>
+                <span class="header-account-copy"><strong>{{ accountDisplayName }}</strong><small>{{ organizationDisplayName }}</small></span>
+                <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
+              </div>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item disabled>
+                    <div class="user-info-dropdown">
+                      <div class="user-name">{{ userInfo.userName || '未登录' }}</div>
+                      <div class="user-role">
+                        <el-tag v-if="loginType === 'anonymous'" type="info" size="small">开发模式</el-tag>
+                        <el-tag v-else-if="loginType === 'wechat'" type="success" size="small">微信扫码</el-tag>
+                        <el-tag type="warning" size="small">{{ roleLabel }}</el-tag>
+                      </div>
+                    </div>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
+                  <el-dropdown-item command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
+                  <el-dropdown-item divided command="refresh">
+                    <el-icon><Refresh /></el-icon>刷新数据
+                  </el-dropdown-item>
+                  <el-dropdown-item command="logout">
+                    <el-icon><SwitchButton /></el-icon>退出登录
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="content-area" :class="{ 'workspace-shell-content': usesWorkspaceShell, 'embedded-header-content': usesEmbeddedPageHeader }">
+          <div class="admin-content-frame">
+            <router-view />
+          </div>
+        </main>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
-  Postcard, Place
+  Postcard, Place, QuestionFilled, Bell
 } from '@element-plus/icons-vue'
-import { logout, queryById, queryList } from '../../utils/cloud'
+import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
+import productLogo from '../../assets/logo-saixiaofeng.png'
+import { provincesData, cityMapData } from '../team/areaData.js'
 import {
   ROLE_NAMES,
   ROLES
@@ -258,17 +301,118 @@ const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shangha
 
 const router = useRouter()
 const route = useRoute()
+const usesWorkspaceShell = computed(() => route.meta.workspaceShell === true)
+const usesEmbeddedPageHeader = computed(() => route.meta.embeddedPageHeader === true)
+const unreadNotificationCount = ref(0)
+
+function openHelpCenter() {
+  window.open('https://www.sxffootball.cn/#features', '_blank', 'noopener,noreferrer')
+}
+
+function showNotifications() {
+  ElMessage.info(unreadNotificationCount.value ? `你有 ${unreadNotificationCount.value} 条未读通知` : '暂无新通知')
+}
 
 // 用户信息
+function readStoredObject(key) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null') || {} } catch { return {} }
+}
+const initialStoredUser = readStoredObject('userInfo')
+const initialStoredOrganization = readStoredObject('currentOrganization')
 const userInfo = ref({
-  userName: '',
-  avatarUrl: '',
-  phone: '',
-  email: ''
+  userName: initialStoredUser.userName || initialStoredUser.nickname || '',
+  avatarUrl: initialStoredUser.avatarUrl || '',
+  phone: initialStoredUser.phone || '',
+  email: initialStoredUser.email || '',
+  organizationName: initialStoredOrganization.name || initialStoredOrganization.organizationName || initialStoredUser.organizationName || '',
+  organizationLogo: initialStoredOrganization.logo || initialStoredOrganization.logoUrl || initialStoredUser.organizationLogo || '',
+  isPlatformOwner: initialStoredUser.isPlatformOwner === true
 })
 const loginType = ref('')
 const currentRole = ref('')
 const isHeadReferee = ref(false)
+const DEFAULT_ORGANIZATION_LOGO = `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
+
+const organizationBrand = computed(() => ({
+  name: userInfo.value.organizationName || '未建立机构',
+  logo: userInfo.value.organizationLogo || DEFAULT_ORGANIZATION_LOGO
+}))
+const accountDisplayName = computed(() => userInfo.value.userName || '主办方管理员')
+const organizationDisplayName = computed(() => userInfo.value.organizationName || '尚未建立机构')
+const profileDialogVisible = ref(false)
+const organizationDialogVisible = ref(false)
+const profileSubmitting = ref(false)
+const organizationSubmitting = ref(false)
+const profileForm = reactive({ nickname: '' })
+const organizationForm = reactive({ name: '', organizationType: '', provinceCode: '', city: '' })
+const organizationRecord = ref(initialStoredOrganization || {})
+const organizationTypeOptions = [{ value:'event_company', label:'赛事公司' }, { value:'club', label:'足球俱乐部' }, { value:'school', label:'学校' }, { value:'association', label:'足协/体育组织' }, { value:'other', label:'其他机构' }]
+const provinceOptions = provincesData
+const organizationCityOptions = computed(() => cityMapData[organizationForm.provinceCode] || [])
+
+function persistWorkspaceOrganization(organization) {
+  if (!organization) return
+  const id = organization.id || organization._id || ''
+  const name = organization.name || organization.organizationName || ''
+  organizationRecord.value = { ...organization, id, name }
+  userInfo.value.organizationName = name
+  userInfo.value.organizationLogo = organization.logo || organization.logoUrl || organization.organizationLogo || userInfo.value.organizationLogo
+  localStorage.setItem('currentOrganization', JSON.stringify(organizationRecord.value))
+  const storedUser = readStoredObject('userInfo')
+  localStorage.setItem('userInfo', JSON.stringify({ ...storedUser, orgId:id || storedUser.orgId, organizationId:id || storedUser.organizationId, organizationName:name, organizationLogo:userInfo.value.organizationLogo }))
+}
+
+async function loadWorkspaceAccount() {
+  try {
+    const result = await callFunction('onboardingWorkspace', { action:'state' })
+    if (result?.success && result.organization) persistWorkspaceOrganization(result.organization)
+  } catch (error) {
+    console.warn('读取机构资料失败:', error.message || error)
+  }
+}
+
+function openProfileDialog() { profileForm.nickname = accountDisplayName.value; profileDialogVisible.value = true }
+function openOrganizationDialog() {
+  const organization = organizationRecord.value || {}
+  organizationForm.name = organization.name || organization.organizationName || organizationDisplayName.value
+  organizationForm.organizationType = organization.organizationType || ''
+  organizationForm.provinceCode = organization.provinceCode || ''
+  organizationForm.city = organization.city || ''
+  organizationDialogVisible.value = true
+}
+async function saveProfile() {
+  if (!profileForm.nickname || profileSubmitting.value) return ElMessage.warning('请输入账号显示名称')
+  profileSubmitting.value = true
+  try {
+    const result = await callFunction('onboardingWorkspace', { action:'updateProfile', nickname:profileForm.nickname })
+    if (!result?.success) throw new Error(result?.message || '保存失败')
+    userInfo.value.userName = result.user?.nickname || profileForm.nickname
+    const storedUser = readStoredObject('userInfo')
+    localStorage.setItem('userInfo', JSON.stringify({ ...storedUser, userName:userInfo.value.userName, nickname:userInfo.value.userName }))
+    profileDialogVisible.value = false
+    ElMessage.success('个人资料已更新')
+  } catch (error) { ElMessage.error(error.message || '保存失败') } finally { profileSubmitting.value = false }
+}
+async function saveOrganization() {
+  if (organizationSubmitting.value) return
+  if (organizationForm.name.length < 2 || !organizationForm.organizationType || !organizationForm.provinceCode || !organizationForm.city) return ElMessage.warning('请完整填写机构资料')
+  organizationSubmitting.value = true
+  try {
+    const province = provinceOptions.find(item => item.code === organizationForm.provinceCode)?.name || ''
+    const result = await callFunction('onboardingWorkspace', { action:'updateOrganization', ...organizationForm, province })
+    if (!result?.success) throw new Error(result?.message || '保存失败')
+    persistWorkspaceOrganization(result.organization)
+    organizationDialogVisible.value = false
+    ElMessage.success('机构资料已更新')
+  } catch (error) { ElMessage.error(error.message || '保存失败') } finally { organizationSubmitting.value = false }
+}
+
+function handleOrganizationLogoError(event) {
+  const image = event.currentTarget
+  if (image && !image.src.endsWith(DEFAULT_ORGANIZATION_LOGO)) {
+    image.src = DEFAULT_ORGANIZATION_LOGO
+  }
+}
 
 // 绑定手机号弹窗
 const bindPhoneVisible = ref(false)
@@ -365,7 +509,8 @@ async function confirmBindPhone() {
             avatarUrl: infoRes.user.headimgurl || infoRes.user.avatarUrl || '',
             phone: infoRes.user.phone || infoRes.user.phoneNumber || bindForm.value.phone,
             email: infoRes.user.email || '',
-            uid: infoRes.user._id
+            uid: infoRes.user._id,
+            isPlatformOwner: infoRes.user.isPlatformOwner === true || userInfo.value.isPlatformOwner === true
           }
           localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
           localStorage.setItem('userId', infoRes.user._id)
@@ -553,54 +698,101 @@ function toggleSubMenu(item) {
   }
 }
 
-// 教练端导航菜单
-const coachNavItems = [
-  { path: '/coaches', label: '教练组管理', icon: 'UserFilled' },
-  { path: '/teams', label: '球队管理', icon: 'UserFilled' },
-  { path: '/players', label: '球员数据', icon: 'User' },
-  { path: '/my-tournaments', label: '我的赛事', icon: 'Trophy' },
-  { path: '/tournament-center', label: '赛事中心', icon: 'Trophy' },
-  { path: '/team-album', label: '球队相册', icon: 'Picture' },
-  { path: '/insurance', label: '赛事保险', icon: 'FirstAidKit' },
-  { path: '/shop', label: '赛事商城', icon: 'ShoppingBag' }
-]
+// PC 当前只保留主办方正式赛事空间；教练业务由小程序承接。
+const coachNavItems = [{ path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }]
 
-// 主办方端导航菜单
-const organizerNavItems = [
-  { 
-    path: '/tournaments', 
-    label: '赛事管理', 
-    icon: 'Trophy',
-    children: [
-      { path: '/tournaments', label: '赛事列表' }
-    ]
+const currentTournamentId = computed(() => String(route.params.id || ''))
+
+function tournamentWorkspacePath(suffix = '') {
+  return currentTournamentId.value
+    ? `/tournaments/${currentTournamentId.value}${suffix}`
+    : '/tournaments'
+}
+
+// 主办方 PC 端统一为一套赛事空间分类；赛事内入口会复用当前路由中的赛事上下文。
+const organizerNavItems = computed(() => [
+  {
+    path: tournamentWorkspacePath(),
+    label: '赛事主控制台',
+    icon: 'HomeFilled',
+    requiresTournament: true,
+    activeWhen: () => Boolean(currentTournamentId.value) && /^\/tournaments\/[^/]+$/.test(route.path)
   },
-  { path: '/referees', label: '裁判管理', icon: 'SetUp' },
-  { path: '/poster/editor', label: '海报编辑器', icon: 'Postcard' },
-  { path: '/tournament-center', label: '赛事中心', icon: 'Picture' },
-  { path: '/system', label: '系统管理', icon: 'Setting' }
-]
+  {
+    path: tournamentWorkspacePath('/competition'),
+    label: '竞赛管理',
+    icon: 'Trophy',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/competition(?:\/create)?$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/registration'),
+    label: '报名管理',
+    icon: 'Postcard',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/registration$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/teams'),
+    label: '球队管理',
+    icon: 'UserFilled',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/teams/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/draw'),
+    label: '抽签与分组',
+    icon: 'Grid',
+    requiresTournament: true,
+    activeWhen: () => route.path.includes('/draw')
+  },
+  {
+    path: tournamentWorkspacePath('/schedule'),
+    label: '赛程管理',
+    icon: 'Calendar',
+    requiresTournament: true,
+    activeWhen: () => route.path.includes('/schedule')
+  },
+  {
+    path: tournamentWorkspacePath('/matches'),
+    label: '比赛管理',
+    icon: 'Football',
+    requiresTournament: true,
+    activeWhen: () => Boolean(currentTournamentId.value) &&
+      /\/tournaments\/[^/]+\/(?:matches|match\/[^/]+(?:\/monitor|\/post-match|\/review|\/archive)?)$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/results'),
+    label: '赛果管理',
+    icon: 'DataAnalysis',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/results$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/referees'),
+    label: '裁判管理',
+    icon: 'SetUp',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/referees$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/edit'),
+    label: '赛事设置',
+    icon: 'Setting',
+    requiresTournament: true,
+    activeWhen: () => route.path.includes('/edit')
+  }
+])
 
 // 裁判端导航菜单（裁判长额外显示"裁判长管理"）
-const refereeNavItems = computed(() => {
-  const items = [
-    { path: '/referee/my-matches', label: '我的执法', icon: 'SetUp' },
-    { path: '/tournament-center', label: '赛事中心', icon: 'Trophy' },
-    { path: '/system', label: '系统管理', icon: 'Setting' }
-  ]
-  if (isHeadReferee.value) {
-    items.splice(1, 0, { path: '/referee/head-referee', label: '裁判长管理', icon: 'UserFilled' })
-  }
-  return items
-})
+const refereeNavItems = computed(() => [{ path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }])
 
 // 赛事中心超级管理后台导航
 const adminNavItems = [
   { path: '/tournament-center-admin', label: '赛事中心管理', icon: 'Picture' },
   { path: '/admin/tournaments', label: '赛事列表', icon: 'Trophy' },
   { path: '/admin/teams', label: '球队列表', icon: 'UserFilled' },
-  { path: '/referees', label: '裁判库', icon: 'SetUp' },
-  { path: '/formation-designer.html', label: '阵型设计器', icon: 'Place', external: true },
+  { path: `${import.meta.env.BASE_URL}formation-designer.html`, label: '阵型设计器', icon: 'Place', external: true },
   { path: '/shop-admin', label: '商城管理', icon: 'ShoppingBag' },
   { path: '/insurance-admin', label: '保险业务', icon: 'FirstAidKit' },
   { path: '/system', label: '系统管理', icon: 'Setting' }
@@ -614,24 +806,30 @@ const isAdminPage = computed(() => {
 
 // 根据角色返回对应导航菜单
 const currentNavItems = computed(() => {
+  const ownerOnly = (items) => userInfo.value.isPlatformOwner
+    ? items
+    : items.filter(item => item.path !== '/system')
   // 赛事中心管理页面使用超级管理后台导航
   if (isAdminPage.value) {
-    return adminNavItems
+    return ownerOnly(adminNavItems)
   }
   if (currentRole.value === ROLES.COACH) {
     return coachNavItems
   }
   if (currentRole.value === ROLES.REFEREE) {
-    return refereeNavItems.value
+    return ownerOnly(refereeNavItems.value)
   }
-  return organizerNavItems
+  return ownerOnly(organizerNavItems.value)
 })
 
 // 用户下拉菜单命令
 function handleUserCommand(command) {
   switch (command) {
-    case 'bindPhone':
-      bindPhoneVisible.value = true
+    case 'profile':
+      openProfileDialog()
+      break
+    case 'organization':
+      openOrganizationDialog()
       break
     case 'refresh':
       router.go(0)
@@ -640,7 +838,7 @@ function handleUserCommand(command) {
       // 先清理登录态
       logout()
       // 再直接跳到首页（不要经过路由守卫，它会在 isLoggedIn 清空后自动跳到 /login）
-      window.location.replace('https://saixiaofeng.com/')
+  window.location.replace('https://www.sxffootball.cn/')
       break
   }
 }
@@ -648,6 +846,9 @@ function handleUserCommand(command) {
 function handleNavClick(item) {
   if (item.external) {
     window.open(item.path, '_blank')
+  } else if (item.requiresTournament && !currentTournamentId.value) {
+    ElMessage.info('请先选择赛事，进入赛事空间后再使用此功能')
+    router.push('/tournament-space')
   } else {
     router.push(item.path)
   }
@@ -655,6 +856,12 @@ function handleNavClick(item) {
 
 function isActive(path) {
   return route.path === path || route.path.startsWith(path + '/')
+}
+
+function isItemActive(item) {
+  if (typeof item.activeWhen === 'function') return item.activeWhen()
+  if (item.exact) return route.path === item.path
+  return isActive(item.path)
 }
 
 function isChildActive(parentPath) {
@@ -668,36 +875,64 @@ onMounted(() => {
   if (savedInfo) {
     try {
       const parsed = JSON.parse(savedInfo)
+      const storedOrganization = ['organizationInfo', 'currentOrganization', 'currentOrg']
+        .map(key => {
+          try {
+            return JSON.parse(localStorage.getItem(key) || 'null')
+          } catch (e) {
+            return null
+          }
+        })
+        .find(Boolean) || {}
+      const organizationName = storedOrganization.name ||
+        storedOrganization.organizationName ||
+        parsed.organizationName ||
+        parsed.orgName ||
+        parsed.organizerName ||
+        parsed.institutionName ||
+        ''
+      const organizationLogo = storedOrganization.logo ||
+        storedOrganization.logoUrl ||
+        storedOrganization.organizationLogo ||
+        parsed.organizationLogo ||
+        parsed.orgLogo ||
+        parsed.organizerLogo ||
+        parsed.institutionLogo ||
+        ''
       userInfo.value = {
-        userName: parsed.userName || '开发者',
+        userName: parsed.userName || parsed.nickname || '微信用户',
         avatarUrl: parsed.avatarUrl || '',
         phone: parsed.phone || '',
-        email: parsed.email || ''
+        email: parsed.email || '',
+        uid: parsed.uid || parsed._id || '',
+        organizationName,
+        organizationLogo,
+        isPlatformOwner: parsed.isPlatformOwner === true
       }
+      localStorage.setItem('userInfo', JSON.stringify({
+        ...parsed,
+        _id: parsed._id || parsed.uid || '',
+        uid: parsed.uid || parsed._id || '',
+        userName: parsed.userName || parsed.nickname || '微信用户',
+        avatarUrl: parsed.avatarUrl || '',
+        openid: parsed.openid || '',
+        unionid: parsed.unionid || '',
+        phone: parsed.phone || '',
+        email: parsed.email || '',
+        organizationName,
+        organizationLogo,
+        isPlatformOwner: parsed.isPlatformOwner === true
+      }))
     } catch (e) {
       // ignore
     }
   }
   loginType.value = localStorage.getItem('loginType') || 'anonymous'
   currentRole.value = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
+  loadWorkspaceAccount()
 
-  // ★ 按照用户流程图的正确弹窗顺序：选身份(路由守卫)→绑手机号→设置密码→绑定邮箱
-  // 1. 强制绑定手机号（微信扫码/邮箱登录需要，手机登录不需要）
-  if (localStorage.getItem('needBindPhone') === 'true' && loginType.value !== 'phone' && loginType.value !== 'anonymous') {
-    bindPhoneVisible.value = true
-  }
-  // 邮箱登录用户强制绑定手机号（兼容旧逻辑）
-  else if (loginType.value === 'email' && !userInfo.value.phone) {
-    bindPhoneVisible.value = true
-  }
-  // 2. 强制设置密码
-  else if (localStorage.getItem('needSetPassword') === 'true') {
-    setPasswordVisible.value = true
-  }
-  // 3. 强制绑定邮箱（用于找回密码，手机登录用户跳过）
-  else if (localStorage.getItem('needBindEmail') === 'true' && loginType.value !== 'phone') {
-    bindEmailVisible.value = true
-  }
+  ['needBindPhone', 'needSetPassword', 'needBindEmail', 'phone', 'phoneNumber']
+    .forEach(key => localStorage.removeItem(key))
 
   // 检测是否为裁判长（查询 tournament_referees 集合，支持按赛事设置）
   const userId = localStorage.getItem('userId')
@@ -733,195 +968,144 @@ onUnmounted(() => {
 <style scoped>
 .layout {
   display: flex;
-  flex-direction: column;
   height: 100vh;
-  background: #f5f7fa;
-}
-
-/* 顶部导航栏 */
-.top-header {
-  height: 64px;
-  background: linear-gradient(135deg, #1B5E20, #2E7D32);
-  padding: 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  flex-shrink: 0;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.logo-area {
-  display: flex;
-  align-items: center;
-}
-
-.logo-img {
-  width: 160px;
-  height: auto;
-  max-height: 48px;
-  object-fit: contain;
-}
-
-.header-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-}
-
-.page-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-.user-avatar-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 20px;
-  transition: background 0.2s;
-}
-
-.user-avatar-wrapper:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.dropdown-arrow {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-}
-
-.user-info-dropdown {
-  padding: 8px 0;
-  min-width: 140px;
-}
-
-.user-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
-  margin-bottom: 6px;
-}
-
-.user-contact {
-  font-size: 12px;
-  color: #606266;
-  line-height: 1.8;
-  margin-bottom: 4px;
-}
-.user-contact .el-icon {
-  margin-right: 4px;
-  color: #909399;
-}
-
-.user-role {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  min-width: 1024px;
+  color: #1f2937;
+  background: #f6f8f7;
+  overflow: hidden;
 }
 
 /* 主容器 */
 .main-container {
   flex: 1;
   display: flex;
+  min-width: 0;
   overflow: hidden;
 }
 
 /* 侧边栏 */
 .sidebar {
-  width: 200px;
-  background: #fff;
-  box-shadow: 1px 0 4px rgba(0, 0, 0, 0.06);
+  position: relative;
+  z-index: 2;
+  width: var(--admin-sidebar-width);
+  color: #fff;
+  font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  background:
+    linear-gradient(180deg, rgba(0, 44, 31, 0.1), rgba(0, 64, 38, 0.18)),
+    url('../../assets/images/organizer-sidebar.png') center / cover no-repeat,
+    #003d2b;
+  box-shadow: 4px 0 20px rgba(1, 39, 28, 0.12);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
 }
 
+.sidebar-brand {
+  width: 100%;
+  height: var(--admin-topbar-height);
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.organization-logo {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.organization-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 7px rgba(0, 25, 17, 0.24));
+}
+
+.organization-name {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .sidebar-nav {
   flex: 1;
-  padding: 16px 0;
+  padding: 24px 14px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sidebar-pro-badge {
+  flex-shrink: 0;
+  margin: 0 14px 18px;
+  padding: 13px 10px;
+  border: 1px solid #f4c63d;
+  border-radius: 7px;
+  color: #ffd95e;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 0 16px rgba(244, 198, 61, 0.08) inset;
+}
+
+.sidebar-support {
+  flex-shrink: 0;
+  margin: 0 18px;
+  padding: 16px 0 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  letter-spacing: 0.02em;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 14px 20px;
-  margin: 4px 12px;
+  min-height: 54px;
+  padding: 0 18px;
+  margin: 0 0 8px;
   border-radius: 8px;
-  color: #606266;
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
-  transition: all 0.2s;
-  gap: 12px;
+  transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+  gap: 14px;
 }
 
 .nav-item:hover {
-  background: #f0f9eb;
-  color: #2E7D32;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
 .nav-item.active {
-  background: #e8f5e9;
-  color: #2E7D32;
-  font-weight: 500;
+  color: #fff;
+  font-weight: 600;
+  background: linear-gradient(135deg, #008b4e, #06a75e);
+  box-shadow: 0 8px 20px rgba(0, 144, 80, 0.24);
 }
 
 .nav-label {
-  font-size: 14px;
-}
-
-/* 侧边栏底部 - 身份切换 */
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid #ebeef5;
-}
-
-.role-label {
-  font-size: 11px;
-  color: #909399;
-  margin-bottom: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.role-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.role-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #606266;
-  background: #f5f7fa;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.role-option:hover {
-  background: #e8f5e9;
-  color: #2E7D32;
-}
-
-.role-option.active {
-  background: #2E7D32;
-  color: #fff;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 /* 子菜单箭头 */
@@ -929,7 +1113,7 @@ onUnmounted(() => {
   margin-left: auto;
   transition: transform 0.2s;
   font-size: 12px;
-  color: #909399;
+  color: rgba(255, 255, 255, 0.64);
 }
 
 .submenu-arrow.rotated {
@@ -938,34 +1122,208 @@ onUnmounted(() => {
 
 /* 子菜单容器 */
 .submenu {
-  padding: 4px 0;
+  margin: -2px 0 8px;
+  padding: 2px 0 2px 14px;
 }
 
 /* 子菜单项 */
 .nav-sub-item {
-  padding: 10px 20px 10px 48px;
-  font-size: 13px;
-  color: #606266;
+  min-height: 38px;
+  padding: 10px 16px 10px 42px;
+  border-radius: 7px;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.68);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .nav-sub-item:hover {
-  background: #f0f9eb;
-  color: #2E7D32;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .nav-sub-item.active {
-  background: #e8f5e9;
-  color: #2E7D32;
+  background: rgba(0, 171, 95, 0.18);
+  color: #65e8a8;
+  font-weight: 600;
+}
+
+.workspace {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-shell-header {
+  height: 90px;
+  padding: 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e5e9e7;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 2px 12px rgba(20, 48, 34, 0.05);
+}
+
+.product-brand {
+  width: 188px;
+  height: 66px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.product-brand img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: left center; }
+.workspace-shell-actions,.workspace-user,.header-action,.notification-action { display: flex; align-items: center; }
+.workspace-shell-actions { gap: 22px; }
+.header-action,.notification-action { border: 0; color: #59645e; background: transparent; cursor: pointer; }
+.header-action { gap: 7px; font-size: 14px; }
+.header-action .el-icon,.notification-action { font-size: 21px; }
+.notification-action { position: relative; justify-content: center; width: 34px; height: 34px; }
+.notification-action i { position: absolute; right: -2px; top: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 10px; color: #fff; font-size: 11px; font-style: normal; line-height: 18px; background: #f04438; }
+.workspace-user { gap: 9px; min-height: 46px; color: #4d5952; font-size: 14px; cursor: pointer; }
+.workspace-user-avatar { color: #fff; background: #087b45; }
+.workspace-account-copy,.header-account-copy { display:flex; min-width:0; flex-direction:column; align-items:flex-start; gap:3px; line-height:1.15; }
+.workspace-account-copy strong,.header-account-copy strong { max-width:150px; overflow:hidden; color:#26342c; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
+.workspace-account-copy small,.header-account-copy small { max-width:180px; overflow:hidden; color:#738078; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.account-dropdown-summary { display:flex; min-width:220px; flex-direction:column; gap:5px; padding:5px 0; }
+.account-dropdown-summary strong { color:#1f3026; font-size:14px; }.account-dropdown-summary span { color:#758079; font-size:12px; }
+.account-location-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }.account-location-grid :deep(.el-select),.layout :deep(.el-dialog .el-select) { width:100%; }
+
+/* 顶部工具栏 */
+.top-header {
+  height: var(--admin-topbar-height);
+  padding: 0 30px;
+  background: rgba(255, 255, 255, 0.98);
+  border-bottom: 1px solid #e5e9e7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.header-left,
+.header-right,
+.user-avatar-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.header-left {
+  min-width: 0;
+  gap: 12px;
+}
+
+.page-title {
+  overflow: hidden;
+  color: #28332d;
+  font-size: 16px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-right {
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.header-role {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.header-divider {
+  width: 1px;
+  height: 24px;
+  background: #e3e8e5;
+}
+
+.user-avatar-wrapper {
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.user-avatar-wrapper:hover {
+  background: #f3f7f5;
+}
+
+.user-avatar-fallback {
+  color: #fff;
+  background: #087a45;
+  font-size: 14px;
+}
+
+.header-user-name {
+  max-width: 140px;
+  overflow: hidden;
+  color: #28332d;
+  font-size: 14px;
   font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-arrow {
+  color: #7a847f;
+  font-size: 12px;
+}
+
+.user-info-dropdown {
+  min-width: 160px;
+  padding: 8px 0;
+}
+
+.user-name {
+  margin-bottom: 6px;
+  color: #303133;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.user-role {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 /* 主内容区 */
 .content-area {
+  min-width: 0;
   flex: 1;
-  padding: 24px;
+  padding: var(--admin-content-gutter-y) var(--admin-content-gutter-x) 32px;
+  background: #f6f8f7;
   overflow-y: auto;
 }
+
+.content-area.workspace-shell-content { padding: 0 0 32px; }
+.workspace-shell-content .admin-content-frame { width: 100%; max-width: none; }
+.content-area.embedded-header-content { padding-top: 0; }
+
+.admin-content-frame {
+  width: min(100%, var(--admin-content-max-width));
+  min-width: 0;
+  min-height: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 1280px) {
+  .top-header {
+    padding-inline: 24px;
+  }
+
+  .content-area {
+    padding-inline: 22px;
+  }
+}
+@media (max-width:720px) { .account-location-grid { grid-template-columns:1fr; }.workspace-account-copy small { display:none; } }
 
 </style>

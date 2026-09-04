@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "提交比赛名单",
+  "navigationStyle": "custom",
   "usingComponents": {
     "player-card-canvas": "/components/player-card-canvas/player-card-canvas"
   }

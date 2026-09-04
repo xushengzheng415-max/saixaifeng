@@ -137,6 +137,41 @@
   background: #ccc;
 }
 
+/* 旧换人入口仅保留异常处理指引，避免提交到已下线云函数 */
+.legacy-notice {
+  margin: 32rpx;
+  padding: 40rpx 32rpx;
+  background: #fff;
+  border: 1px solid #d7eee2;
+  border-radius: 20rpx;
+  text-align: center;
+}
+.legacy-notice-icon {
+  display: block;
+  margin: 0 auto 20rpx;
+  width: 64rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  border-radius: 50%;
+  background: #e9f7ef;
+  color: #16845a;
+  font-size: 36rpx;
+  font-weight: 700;
+}
+.legacy-notice-title {
+  display: block;
+  color: #183b2d;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+.legacy-notice-body {
+  display: block;
+  margin-top: 16rpx;
+  color: #6b7b74;
+  font-size: 26rpx;
+  line-height: 1.7;
+}
+
 /* 空状态 */
 .empty-box {
   text-align: center;

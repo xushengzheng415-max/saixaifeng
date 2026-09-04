@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="team-list">
     <div class="page-card">
       <div class="page-header">
@@ -183,8 +183,8 @@
         </el-form-item>
         <el-form-item label="队伍类型" required>
           <el-select v-model="teamForm.teamType" placeholder="选择队伍类型" style="width: 100%" @change="onTeamTypeChange">
-            <el-option label="一线队" value="01" />
-            <el-option label="二线队" value="02" />
+            <el-option label="校园队" value="01" />
+            <el-option label="青训队" value="02" />
             <el-option label="U8" value="08" />
             <el-option label="U9" value="09" />
             <el-option label="U10" value="10" />
@@ -284,6 +284,7 @@ import { removeBackground } from '../../utils/removeBg'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import { permissions, getCurrentRole, ROLES } from '../../utils/permissions'
 import ImageCropper from '../../components/common/ImageCropper.vue'
+import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 
 // 注册组件
 defineOptions({
@@ -312,7 +313,8 @@ const viewMode = ref('card') // 默认卡片视图
 const currentRole = ref(getCurrentRole())
 const userId = ref(localStorage.getItem('userId') || 'dev-user-id')
 // 当前用户手机号（用于备用匹配球队）
-const userPhone = ref(localStorage.getItem('userInfo') ? (JSON.parse(localStorage.getItem('userInfo') || '{}').phone || '') : '')
+const storedUserInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+const userPhone = ref(storedUserInfo.phone || storedUserInfo.phoneNumber || storedUserInfo.mobile || '')
 
 // 权限检查
 const canCreateTeam = computed(() => permissions.team.create())
@@ -342,11 +344,6 @@ function onTeamTypeChange() {
   autoGenerateTeamCode();
 }
 
-const provinceCodeMap = [{"code":"101","name":"上海"},{"code":"102","name":"天津"},{"code":"103","name":"重庆"},{"code":"104","name":"北京"},{"code":"201","name":"安徽"},{"code":"202","name":"福建"},{"code":"203","name":"甘肃"},{"code":"204","name":"广东"},{"code":"205","name":"广西"},{"code":"206","name":"贵州"},{"code":"207","name":"海南"},{"code":"208","name":"河北"},{"code":"209","name":"黑龙江"},{"code":"210","name":"湖北"},{"code":"211","name":"湖南"},{"code":"212","name":"吉林"},{"code":"213","name":"江苏"},{"code":"214","name":"辽宁"},{"code":"215","name":"江西"},{"code":"216","name":"内蒙古"},{"code":"217","name":"宁夏"},{"code":"218","name":"青海"},{"code":"219","name":"山东"},{"code":"220","name":"山西"},{"code":"221","name":"陕西"},{"code":"222","name":"四川"},{"code":"223","name":"新疆"},{"code":"224","name":"云南"},{"code":"225","name":"浙江"},{"code":"226","name":"河南"}];
-
-// 省份城市车牌字母映射
-var cityLetterMap = {"101":[{"l":"A","n":"上海"},{"l":"B","n":"上海浦东"},{"l":"C","n":"上海郊区"},{"l":"D","n":"上海崇明"}],"102":[{"l":"A","n":"天津"},{"l":"B","n":"天津滨海"},{"l":"C","n":"天津郊区"}],"103":[{"l":"A","n":"重庆"},{"l":"B","n":"重庆涪陵"},{"l":"C","n":"重庆万州"}],"104":[{"l":"A","n":"北京"},{"l":"B","n":"北京城区"},{"l":"C","n":"北京郊区"},{"l":"Y","n":"北京延庆"}],"204":[{"l":"A","n":"广州"},{"l":"B","n":"深圳"},{"l":"C","n":"珠海"},{"l":"D","n":"汕头"},{"l":"E","n":"佛山"},{"l":"F","n":"韶关"},{"l":"G","n":"湛江"},{"l":"H","n":"肇庆"},{"l":"J","n":"江门"},{"l":"K","n":"茂名"},{"l":"L","n":"惠州"},{"l":"M","n":"梅州"},{"l":"N","n":"汕尾"},{"l":"P","n":"河源"},{"l":"Q","n":"阳江"},{"l":"R","n":"清远"},{"l":"S","n":"东莞"},{"l":"T","n":"中山"},{"l":"U","n":"潮州"},{"l":"V","n":"揭阳"},{"l":"W","n":"云浮"}],"208":[{"l":"A","n":"石家庄"},{"l":"B","n":"唐山"},{"l":"C","n":"秦皇岛"},{"l":"D","n":"邯郸"},{"l":"E","n":"邢台"},{"l":"F","n":"保定"},{"l":"G","n":"张家口"},{"l":"H","n":"承德"},{"l":"J","n":"沧州"},{"l":"K","n":"廊坊"},{"l":"L","n":"衡水"}],"210":[{"l":"A","n":"武汉"},{"l":"B","n":"黄石"},{"l":"C","n":"十堰"},{"l":"D","n":"荆州"},{"l":"E","n":"宜昌"},{"l":"F","n":"襄阳"},{"l":"G","n":"鄂州"},{"l":"H","n":"荆门"},{"l":"J","n":"黄冈"},{"l":"K","n":"孝感"},{"l":"L","n":"咸宁"},{"l":"M","n":"仙桃"},{"l":"N","n":"潜江"},{"l":"P","n":"神农架"},{"l":"Q","n":"恩施"}],"211":[{"l":"A","n":"长沙"},{"l":"B","n":"株洲"},{"l":"C","n":"湘潭"},{"l":"D","n":"衡阳"},{"l":"E","n":"邵阳"},{"l":"F","n":"岳阳"},{"l":"G","n":"常德"},{"l":"H","n":"益阳"},{"l":"J","n":"娄底"},{"l":"K","n":"郴州"},{"l":"L","n":"永州"},{"l":"M","n":"怀化"},{"l":"N","n":"湘西"}],"213":[{"l":"A","n":"南京"},{"l":"B","n":"无锡"},{"l":"C","n":"徐州"},{"l":"D","n":"常州"},{"l":"E","n":"苏州"},{"l":"F","n":"南通"},{"l":"G","n":"连云港"},{"l":"H","n":"淮安"},{"l":"J","n":"盐城"},{"l":"K","n":"扬州"},{"l":"L","n":"镇江"},{"l":"M","n":"泰州"},{"l":"N","n":"宿迁"}],"219":[{"l":"A","n":"济南"},{"l":"B","n":"青岛"},{"l":"C","n":"淄博"},{"l":"D","n":"枣庄"},{"l":"E","n":"东营"},{"l":"F","n":"烟台"},{"l":"G","n":"潍坊"},{"l":"H","n":"济宁"},{"l":"J","n":"泰安"},{"l":"K","n":"威海"},{"l":"L","n":"日照"},{"l":"M","n":"滨州"},{"l":"N","n":"德州"},{"l":"P","n":"聊城"},{"l":"Q","n":"临沂"},{"l":"R","n":"菏泽"},{"l":"S","n":"莱芜"}],"221":[{"l":"A","n":"西安"},{"l":"B","n":"铜川"},{"l":"C","n":"宝鸡"},{"l":"D","n":"咸阳"},{"l":"E","n":"渭南"},{"l":"F","n":"汉中"},{"l":"G","n":"安康"},{"l":"H","n":"商洛"},{"l":"J","n":"延安"},{"l":"K","n":"榆林"}],"222":[],"225":[{"l":"A","n":"杭州"},{"l":"B","n":"宁波"},{"l":"C","n":"温州"},{"l":"D","n":"绍兴"},{"l":"E","n":"湖州"},{"l":"F","n":"嘉兴"},{"l":"G","n":"金华"},{"l":"H","n":"衢州"},{"l":"J","n":"台州"},{"l":"K","n":"丽水"},{"l":"L","n":"舟山"}],"226":[{"l":"A","n":"郑州"},{"l":"B","n":"开封"},{"l":"C","n":"洛阳"},{"l":"D","n":"平顶山"},{"l":"E","n":"安阳"},{"l":"F","n":"鹤壁"},{"l":"G","n":"新乡"},{"l":"H","n":"焦作"},{"l":"J","n":"濮阳"},{"l":"K","n":"许昌"},{"l":"L","n":"漯河"},{"l":"M","n":"三门峡"},{"l":"N","n":"商丘"},{"l":"P","n":"周口"},{"l":"Q","n":"驻马店"},{"l":"R","n":"南阳"},{"l":"S","n":"信阳"},{"l":"U","n":"济源"}]};
-const cityLetterList = ["A","B","C","D","E","F","G","H","J","K","L","M","N","P","Q","R","S","T","U","V","W","X","Y","Z"];
 
 const teamForm = ref({
   name: '',
@@ -510,14 +507,14 @@ import { Upload } from '@element-plus/icons-vue'
 // 球队 Logo 上传
 async function beforeLogoUpload(file) {
   const isImage = file.type.startsWith('image/')
-  const isLt2M = file.size / 1024 / 1024 < 2
+  const isLt20M = file.size / 1024 / 1024 < 20
 
   if (!isImage) {
     ElMessage.error('只能上传图片文件')
     return false
   }
-  if (!isLt2M) {
-    ElMessage.error('图片大小不能超过 2MB')
+  if (!isLt20M) {
+    ElMessage.error('原图大小不能超过 20MB')
     return false
   }
   return true
@@ -542,9 +539,11 @@ function handleLogoUpload(options) {
 
 // 压缩图片 blob（缩小尺寸 + JPEG压缩）
 function compressImage(blob, maxSize = 400) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image()
+    const objectUrl = URL.createObjectURL(blob)
     img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
       let w = img.width, h = img.height
       if (w > maxSize || h > maxSize) {
         const ratio = Math.min(maxSize / w, maxSize / h)
@@ -556,9 +555,16 @@ function compressImage(blob, maxSize = 400) {
       canvas.height = h
       const ctx = canvas.getContext('2d')
       ctx.drawImage(img, 0, 0, w, h)
-      canvas.toBlob((compressed) => resolve(compressed), 'image/png')
+      canvas.toBlob((compressed) => {
+        if (compressed) resolve(compressed)
+        else reject(new Error('图片压缩失败'))
+      }, 'image/png')
     }
-    img.src = URL.createObjectURL(blob)
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('图片读取失败'))
+    }
+    img.src = objectUrl
   })
 }
 
@@ -585,16 +591,23 @@ async function handleLogoCropConfirm(croppedBlob) {
     }
 
     // ★ 压缩到 400px 以内
-    const compressed = await compressImage(finalBlob, 400)
+    const compressedBlob = await compressImage(finalBlob, 400)
+    // 分片上传依赖 file.name；Blob 没有文件名，必须转成 File
+    const compressedFile = new File(
+      [compressedBlob],
+      `team-logo-${Date.now()}.png`,
+      { type: compressedBlob.type || 'image/png' }
+    )
     const cloudPath = `team-logos/${Date.now()}-logo.png`
-    
+
     // ★ 使用分片上传（避免 413 错误）
-    const result = await uploadLargeFileViaCloud(cloudPath, compressed, { chunkSize: 100 * 1024 })
+    const result = await uploadLargeFileViaCloud(cloudPath, compressedFile, { chunkSize: 32 * 1024 })
 
     if (result.success) {
-      teamForm.value.logoUrl = result.tempUrl
-      teamForm.value.logo = result.tempUrl
-      ElMessage.success('Logo上传成功')
+      const logoUrl = result.tempUrl || await getFileUrl(result.fileId)
+      teamForm.value.logoUrl = logoUrl
+      teamForm.value.logo = logoUrl
+      ElMessage.success(`Logo已压缩并上传（${Math.ceil(compressedFile.size / 1024)}KB）`)
     } else {
       throw new Error(result.message || '上传失败')
     }
@@ -727,6 +740,11 @@ async function submitTeam() {
         teamType: teamForm.value.teamType,
         teamCode: teamForm.value.teamCode,
         ownerPhone: userPhone.value,
+        creatorPhone: userPhone.value,
+        contactPhone: userPhone.value,
+        phoneNumber: userPhone.value,
+        phone: userPhone.value,
+        mobile: userPhone.value,
         source: 'saixiaofeng',
         // 可选字段
         establishedDate: teamForm.value.establishedDate || '',
@@ -798,8 +816,8 @@ async function loadTeams() {
         // ★ 赛事中心创建的公共球队
         if (team.source === 'tournament_center') {
           // 已认领 + 手机号匹配当前用户 → 显示
-          if (team.claimStatus === 'claimed' && team.ownerPhone && userPhone.value) {
-            return team.ownerPhone === userPhone.value
+          if (team.claimStatus === 'claimed' && userPhone.value) {
+            return [team.ownerPhone, team.creatorPhone, team.contactPhone, team.phoneNumber, team.phone, team.mobile].includes(userPhone.value)
           }
           // 未认领 → 隐藏
           return false
@@ -810,7 +828,7 @@ async function loadTeams() {
         }
         // 2. 按手机号匹配（contactPhone ?coachPhone)
           if (userPhone.value) {
-          if (team.contactPhone === userPhone.value || team.coachPhone === userPhone.value) return true
+          if ([team.ownerPhone, team.creatorPhone, team.contactPhone, team.coachPhone, team.phoneNumber, team.phone, team.mobile].includes(userPhone.value)) return true
         }
         // 3. 老数据没有 creatorId 也没有电话，默认显示（兼容）
         if (!team.creatorId && !team.contactPhone && !team.coachPhone) {

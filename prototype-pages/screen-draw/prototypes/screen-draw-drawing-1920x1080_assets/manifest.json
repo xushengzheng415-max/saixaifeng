@@ -1,0 +1,125 @@
+{
+  "prototype": "E:\\Documents\\sxf-football\\prototype-pages\\screen-draw\\prototypes\\screen-draw-drawing-1920x1080.png",
+  "asset_dir": "E:\\Documents\\sxf-football\\prototype-pages\\screen-draw\\prototypes\\screen-draw-drawing-1920x1080_assets",
+  "generated_at": "2026-08-19",
+  "tool": "yuanxing prototype decomposition",
+  "status": "awaiting-user-confirmation",
+  "screen": {
+    "width": 1920,
+    "height": 1080
+  },
+  "summary": "专业版抽签公众大屏进行状态，展示当前球队、目标小组和8组实时只读进度。",
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "00-source/screen-draw-drawing-1920x1080.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 1080
+      },
+      "sha256": "ae0945513be6cfee8936b0aff12199a86f788a73efba341000d9f597b76fe596",
+      "notes": "Canonical approved prototype copied for traceability."
+    },
+    {
+      "id": "screen-header",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 108
+      },
+      "notes": "固定品牌、赛事、组别、阶段和连接状态头部。"
+    },
+    {
+      "id": "state-content",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 60,
+        "y": 135,
+        "width": 1800,
+        "height": 838
+      },
+      "notes": "抽签进行中的主体内容区域，由代码渲染。"
+    },
+    {
+      "id": "screen-footer",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 1016,
+        "width": 1920,
+        "height": 64
+      },
+      "notes": "固定只读大屏标识、发布版本和正式域名。"
+    },
+    {
+      "id": "header-reference",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/header.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 108
+      },
+      "notes": "头部比例、层级和连接状态参考。"
+    },
+    {
+      "id": "content-reference",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/content.png",
+      "source_bbox": {
+        "x": 60,
+        "y": 135,
+        "width": 1800,
+        "height": 838
+      },
+      "notes": "抽签进行中主体结构参考，不作为生产图片。"
+    },
+    {
+      "id": "visible-text",
+      "category": "text",
+      "implementation": "text-code",
+      "text": "第19/32签；当前轮次04；当前球队即将进入E组。",
+      "notes": "所有可见文字由正式代码和只读快照渲染。"
+    },
+    {
+      "id": "state-transition",
+      "category": "interaction",
+      "implementation": "code",
+      "action": "sync-published-draw-snapshot",
+      "target": "same public screen route",
+      "states": [
+        "loading",
+        "drawing",
+        "revoked",
+        "invalid",
+        "offline"
+      ],
+      "notes": "读取已发布快照的drawing阶段；大屏只读更新，不接受公众写入。"
+    },
+    {
+      "id": "canonical-logo",
+      "category": "production-asset",
+      "implementation": "code",
+      "notes": "复用 web-admin-vue/public/logo-saixiaofeng.png，不复制页面局部资产。"
+    },
+    {
+      "id": "annotated-layout-overlay",
+      "category": "overlay",
+      "implementation": "overlay",
+      "output": "06-overlays/annotated-layout.png",
+      "notes": "Generated bounding-box overlay for comparison only."
+    }
+  ]
+}

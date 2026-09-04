@@ -58,6 +58,41 @@
             </div>
           </el-form-item>
 
+          <el-form-item label="多组别赛事">
+            <div class="division-mode-panel">
+              <div class="division-mode-head">
+                <div>
+                  <div class="division-mode-title">一个赛事统一管理多个年龄组</div>
+                  <div class="form-tip">各组别独立管理球队、抽签、赛程和排名。</div>
+                </div>
+                <el-switch v-model="form.multiDivision" active-text="启用" inactive-text="单组别" @change="onMultiDivisionChange" />
+              </div>
+              <template v-if="form.multiDivision">
+                <div class="division-quick-add">
+                  <span>快速添加：</span>
+                  <el-button v-for="name in divisionPresets" :key="name" size="small" @click="addDivision(name)">{{ name }}</el-button>
+                  <el-button size="small" type="primary" plain @click="addDivision('')">自定义组别</el-button>
+                </div>
+                <div v-for="(division, index) in form.divisions" :key="division.id" class="division-row">
+                  <el-input v-model="division.name" placeholder="组别名称，如 U8" />
+                  <el-select v-model="division.tournamentType" placeholder="赛制" @change="onDivisionTypeChange(index)">
+                    <el-option v-for="option in typeOptions" :key="option.value" :label="option.label" :value="option.value" />
+                  </el-select>
+                  <el-select v-model="division.matchFormat" placeholder="比赛制式" @change="onDivisionFormatChange(index)">
+                    <el-option v-for="option in matchFormatOptions" :key="option.value" :label="option.label" :value="option.value" />
+                  </el-select>
+                  <el-input-number v-model="division.maxTeams" :min="2" :max="64" controls-position="right" />
+                  <el-input-number v-model="division.maxPlayersPerTeam" :min="5" :max="getMaxByFormat(division.matchFormat)" controls-position="right" />
+                  <el-button type="primary" plain @click="openDivisionRules(index)">
+                    {{ getDivisionRulesStatus(division) }}
+                  </el-button>
+                  <el-button type="danger" link :disabled="form.divisions.length <= 2" @click="removeDivision(index)">删除</el-button>
+                </div>
+                <div class="division-column-hint">依次为：组别名称 / 赛制 / 比赛制式 / 球队上限 / 名单上限 / 详细规则</div>
+              </template>
+            </div>
+          </el-form-item>
+
           <el-divider />
 
           <el-row :gutter="16">
@@ -83,7 +118,7 @@
 
           <el-row :gutter="16">
             <el-col :span="12">
-              <el-form-item label="赛事Logo">
+              <el-form-item label="赛事Logo" prop="logo" required>
                 <div class="logo-upload-wrapper">
                   <div class="logo-input-row">
                     <el-input v-model="form.logo" placeholder="上传后将自动填充URL" style="flex: 1;" />
@@ -601,6 +636,189 @@
       </el-form>
     </div>
 
+    <el-drawer
+      v-model="divisionRulesVisible"
+      :title="divisionRulesTitle"
+      size="720px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <div v-if="divisionRulesDraft" class="division-rules-editor">
+        <el-alert
+          title="赛制与晋级规则始终按当前组别独立保存；积分、换人和红黄牌可沿用赛事统一规则，也可为本组单独设置。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+
+        <el-tabs v-model="divisionRulesTab" class="division-rules-tabs">
+          <el-tab-pane label="赛制与晋级" name="competition">
+            <el-form label-position="top">
+              <template v-if="['tournament', 'combined'].includes(currentDivisionType)">
+                <div class="division-rule-section-title">小组赛与出线</div>
+                <div class="division-rule-grid">
+                  <el-form-item label="小组赛循环方式">
+                    <el-select v-model="divisionRulesDraft.competitionRule.groupRoundMode">
+                      <el-option label="单循环" value="single" />
+                      <el-option label="双循环" value="double" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="每组直接出线名次">
+                    <el-select v-model="divisionRulesDraft.competitionRule.qualifyPerGroup">
+                      <el-option v-for="rank in 8" :key="rank" :label="`前 ${rank} 名`" :value="rank" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="成绩最好的额外出线名额">
+                    <el-input-number v-model="divisionRulesDraft.competitionRule.bestThirdQualifiers" :min="0" :max="8" controls-position="right" />
+                    <div class="form-tip">用于成绩最好的第三名或其他非直接晋级球队，0 表示不设置。</div>
+                  </el-form-item>
+                  <el-form-item label="淘汰赛规模">
+                    <el-select v-model="divisionRulesDraft.competitionRule.knockoutTeamCount">
+                      <el-option v-for="count in [2, 4, 8, 16, 32]" :key="count" :label="`${count} 强`" :value="count" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="首轮淘汰赛对阵">
+                    <el-select v-model="divisionRulesDraft.competitionRule.knockoutPairing">
+                      <el-option label="小组交叉对阵" value="cross" />
+                      <el-option label="按排名设种子" value="seeded" />
+                      <el-option label="晋级球队重新抽签" value="draw" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="首轮同组回避">
+                    <el-switch v-model="divisionRulesDraft.competitionRule.avoidSameGroup" active-text="回避" inactive-text="不回避" />
+                  </el-form-item>
+                </div>
+              </template>
+
+              <template v-if="['league', 'combined'].includes(currentDivisionType)">
+                <div class="division-rule-section-title">联赛阶段</div>
+                <div class="division-rule-grid">
+                  <el-form-item label="联赛循环方式">
+                    <el-select v-model="divisionRulesDraft.competitionRule.leagueRoundMode">
+                      <el-option label="单循环" value="single" />
+                      <el-option label="双循环（主客场）" value="double" />
+                    </el-select>
+                  </el-form-item>
+                </div>
+              </template>
+
+              <template v-if="currentDivisionType === 'cup'">
+                <div class="division-rule-section-title">杯赛阶段</div>
+                <div class="division-rule-grid">
+                  <el-form-item label="淘汰赛对阵方式">
+                    <el-select v-model="divisionRulesDraft.competitionRule.cupTieMode">
+                      <el-option label="单场淘汰" value="single" />
+                      <el-option label="主客场两回合" value="twoLegs" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="每轮重新抽签">
+                    <el-switch v-model="divisionRulesDraft.competitionRule.reseedEachRound" active-text="重新抽签" inactive-text="固定签位" />
+                  </el-form-item>
+                </div>
+              </template>
+
+              <template v-if="currentDivisionType !== 'league'">
+                <div class="division-rule-section-title">淘汰赛决胜</div>
+                <div class="division-rule-grid">
+                  <el-form-item label="平局处理">
+                    <el-select v-model="divisionRulesDraft.competitionRule.knockoutTieBreaker">
+                      <el-option label="加时赛后点球" value="extraTimePenalties" />
+                      <el-option label="直接点球" value="directPenalties" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item v-if="divisionRulesDraft.competitionRule.knockoutTieBreaker === 'extraTimePenalties'" label="加时赛总时长">
+                    <el-input-number v-model="divisionRulesDraft.competitionRule.extraTimeMinutes" :min="2" :max="30" controls-position="right" />
+                    <span class="division-rule-unit">分钟</span>
+                  </el-form-item>
+                  <el-form-item label="三四名决赛">
+                    <el-switch v-model="divisionRulesDraft.competitionRule.thirdPlaceMatch" active-text="设置" inactive-text="不设置" />
+                  </el-form-item>
+                </div>
+              </template>
+            </el-form>
+          </el-tab-pane>
+
+          <el-tab-pane label="积分与排名" name="points">
+            <el-switch
+              v-model="divisionRulesDraft.inheritTournamentRules"
+              active-text="沿用赛事统一规则"
+              inactive-text="本组独立设置"
+              class="division-rules-inherit-switch"
+            />
+            <el-alert v-if="divisionRulesDraft.inheritTournamentRules" title="当前组别沿用赛事编辑页中的积分与排名规则。" type="success" :closable="false" />
+            <el-form v-else label-position="top">
+              <div class="division-rule-grid division-rule-grid-four">
+                <el-form-item label="胜场积分"><el-input-number v-model="divisionRulesDraft.pointsRule.winPoints" :min="0" :max="10" /></el-form-item>
+                <el-form-item label="平局积分"><el-input-number v-model="divisionRulesDraft.pointsRule.drawPoints" :min="0" :max="10" /></el-form-item>
+                <el-form-item label="负场积分"><el-input-number v-model="divisionRulesDraft.pointsRule.lossPoints" :min="0" :max="10" /></el-form-item>
+                <el-form-item label="弃权积分"><el-input-number v-model="divisionRulesDraft.pointsRule.forfeitPoints" :min="-10" :max="10" /></el-form-item>
+              </div>
+              <el-form-item label="同分排名顺序">
+                <el-select v-model="divisionRulesDraft.pointsRule.tiebreakerOrder" multiple style="width: 100%" placeholder="按选择顺序执行">
+                  <el-option v-for="option in tiebreakerOptions" :key="option.key" :label="option.label" :value="option.key" />
+                </el-select>
+                <div class="form-tip">系统按已选项目显示的先后顺序依次比较。</div>
+              </el-form-item>
+            </el-form>
+          </el-tab-pane>
+
+          <el-tab-pane label="换人规则" name="substitution">
+            <el-alert v-if="divisionRulesDraft.inheritTournamentRules" title="当前组别沿用赛事编辑页中的换人规则；可在“积分与排名”中切换为本组独立设置。" type="success" :closable="false" />
+            <el-form v-else label-position="top">
+              <div class="division-rule-grid">
+                <el-form-item label="每队最多换人名额">
+                  <el-input-number v-model="divisionRulesDraft.substitutionRule.maxSubstitutions" :min="0" :max="20" controls-position="right" />
+                  <div class="form-tip">0 表示不限制换人人数。</div>
+                </el-form-item>
+                <el-form-item label="换人窗口次数">
+                  <el-input-number v-model="divisionRulesDraft.substitutionRule.substitutionWindows" :min="0" :max="10" controls-position="right" />
+                  <div class="form-tip">0 表示不限制换人窗口。</div>
+                </el-form-item>
+                <el-form-item label="换下后能否再次上场">
+                  <el-switch v-model="divisionRulesDraft.substitutionRule.allowReturnSubstitution" active-text="允许" inactive-text="不允许" />
+                </el-form-item>
+                <el-form-item label="中场换人计入窗口">
+                  <el-switch v-model="divisionRulesDraft.substitutionRule.halftimeCountsAsWindow" active-text="计入" inactive-text="不计入" />
+                </el-form-item>
+                <el-form-item label="进入加时赛增加换人名额">
+                  <el-input-number v-model="divisionRulesDraft.substitutionRule.extraTimeSubstitution" :min="0" :max="5" controls-position="right" />
+                </el-form-item>
+              </div>
+            </el-form>
+          </el-tab-pane>
+
+          <el-tab-pane label="红黄牌" name="discipline">
+            <el-alert v-if="divisionRulesDraft.inheritTournamentRules" title="当前组别沿用赛事编辑页中的红黄牌和停赛规则；可在“积分与排名”中切换为本组独立设置。" type="success" :closable="false" />
+            <el-form v-else label-position="top">
+              <div class="division-rule-grid">
+                <el-form-item label="累计黄牌停赛门槛">
+                  <el-input-number v-model="divisionRulesDraft.suspensionRule.yellowCardsForSuspension" :min="1" :max="10" controls-position="right" />
+                  <span class="division-rule-unit">张</span>
+                </el-form-item>
+                <el-form-item label="累计黄牌停赛场次"><el-input-number v-model="divisionRulesDraft.suspensionRule.yellowCardSuspensionMatches" :min="0" :max="10" controls-position="right" /></el-form-item>
+                <el-form-item label="直接红牌停赛场次"><el-input-number v-model="divisionRulesDraft.suspensionRule.redCardSuspensionMatches" :min="0" :max="20" controls-position="right" /></el-form-item>
+                <el-form-item label="两黄变红停赛场次"><el-input-number v-model="divisionRulesDraft.suspensionRule.secondYellowSuspensionMatches" :min="0" :max="10" controls-position="right" /></el-form-item>
+                <el-form-item v-if="['tournament', 'combined'].includes(currentDivisionType)" label="小组赛牌数带入淘汰赛">
+                  <el-switch v-model="divisionRulesDraft.suspensionRule.carryCardsToKnockout" active-text="带入" inactive-text="清零" />
+                </el-form-item>
+                <el-form-item v-if="['tournament', 'combined'].includes(currentDivisionType)" label="小组赛结束清除黄牌">
+                  <el-switch v-model="divisionRulesDraft.suspensionRule.clearYellowCardsAfterGroup" active-text="清除" inactive-text="保留" />
+                </el-form-item>
+                <el-form-item label="直接红牌需纪律审核">
+                  <el-switch v-model="divisionRulesDraft.suspensionRule.directRedNeedsReview" active-text="需要" inactive-text="按默认场次执行" />
+                </el-form-item>
+              </div>
+            </el-form>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+
+      <template #footer>
+        <el-button @click="divisionRulesVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveDivisionRules">保存该组规则</el-button>
+      </template>
+    </el-drawer>
+
     <!-- AI 识别结果预览弹窗 -->
     <el-dialog
       v-model="showAiPreview"
@@ -680,7 +898,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, MagicStick, Check, InfoFilled, Document, Delete, QuestionFilled } from '@element-plus/icons-vue'
-import { queryList, queryById, updateRecord, uploadFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
+import { queryList, queryById, updateRecord, uploadFileViaCloud, uploadLargeFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
 import { MATCH_FORMAT_OPTIONS, MATCH_FORMAT_DEFAULTS, resolveMaxPlayers, inferMatchFormat, getMaxByFormat } from '../../utils/rosterHelper'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 
@@ -729,9 +947,14 @@ const form = ref({
   status: 'registering', registeredTeams: 0,
   themeId: 'green',
   logo: '',
+  logoFileId: '',
   regulationsFileId: '',
   regulationsUrl: '',
   regulationsFileName: '',
+  multiDivision: false,
+  divisionMode: 'single',
+  defaultDivisionId: '',
+  divisions: [],
   // ★ 比赛制式与每队大名单上限
   matchFormat: '11side',
   maxPlayersPerTeam: 35,
@@ -774,7 +997,8 @@ const form = ref({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入赛事名称', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入赛事名称', trigger: 'blur' }],
+  logo: [{ required: true, message: '请上传赛事Logo', trigger: 'change' }]
 }
 
 // 主题选择
@@ -857,28 +1081,257 @@ function handleAISuccess(url) {
 // 赛事 Logo 上传
 async function beforeLogoUpload(file) {
   const isImage = file.type.startsWith('image/')
-  const isLt2M = file.size / 1024 / 1024 < 2
+  const isLt20M = file.size / 1024 / 1024 < 20
 
   if (!isImage) {
     ElMessage.error('只能上传图片文件！')
     return false
   }
-  if (!isLt2M) {
-    ElMessage.error('图片大小不能超过 2MB！')
+  if (!isLt20M) {
+    ElMessage.error('原始图片不能超过 20MB！')
     return false
   }
   return true
+}
+
+const divisionPresets = ['U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18']
+
+const tiebreakerOptions = [
+  { key: 'headToHead', label: '相互胜负关系' },
+  { key: 'headToHeadGoalDiff', label: '相互净胜球' },
+  { key: 'headToHeadGoals', label: '相互进球' },
+  { key: 'goalDiff', label: '总净胜球' },
+  { key: 'totalGoals', label: '总进球' },
+  { key: 'fewestCards', label: '红黄牌数少优先' },
+  { key: 'goalsConceded', label: '总失球' }
+]
+
+const divisionRulesVisible = ref(false)
+const divisionRulesTab = ref('competition')
+const editingDivisionIndex = ref(-1)
+const divisionRulesDraft = ref(null)
+
+const currentDivisionType = computed(() => (
+  form.value.divisions[editingDivisionIndex.value]?.tournamentType || 'tournament'
+))
+
+const divisionRulesTitle = computed(() => {
+  const division = form.value.divisions[editingDivisionIndex.value]
+  return `${division?.name || '当前组别'} · 详细规则设置`
+})
+
+function cloneRuleData(value) {
+  return JSON.parse(JSON.stringify(value || {}))
+}
+
+function createCompetitionRule(type = 'tournament') {
+  return {
+    groupRoundMode: 'single',
+    qualifyPerGroup: 2,
+    bestThirdQualifiers: 0,
+    knockoutTeamCount: 8,
+    knockoutPairing: 'cross',
+    avoidSameGroup: true,
+    leagueRoundMode: 'single',
+    cupTieMode: 'single',
+    reseedEachRound: false,
+    knockoutTieBreaker: 'extraTimePenalties',
+    extraTimeMinutes: 10,
+    thirdPlaceMatch: false,
+    type
+  }
+}
+
+function normalizeDivisionRules(savedRules, type = 'tournament', tournamentRules = null) {
+  const source = savedRules || {}
+  const inherited = tournamentRules || form.value?.rules || {}
+  const defaultPoints = {
+    winPoints: 3,
+    drawPoints: 1,
+    lossPoints: 0,
+    forfeitPoints: 0,
+    tiebreakerOrder: tiebreakerOptions.map(item => item.key)
+  }
+  const defaultSubstitution = {
+    maxSubstitutions: 5,
+    substitutionWindows: 3,
+    allowReturnSubstitution: false,
+    halftimeCountsAsWindow: false,
+    extraTimeSubstitution: 1
+  }
+  const defaultSuspension = {
+    yellowCardsForSuspension: 4,
+    yellowCardSuspensionMatches: 1,
+    redCardSuspensionMatches: 1,
+    secondYellowSuspensionMatches: 0,
+    carryCardsToKnockout: false,
+    clearYellowCardsAfterGroup: false,
+    directRedNeedsReview: true
+  }
+
+  return {
+    version: 1,
+    configured: source.configured === true,
+    inheritTournamentRules: source.inheritTournamentRules !== false,
+    competitionRule: {
+      ...createCompetitionRule(type),
+      ...(source.competitionRule || {}),
+      type
+    },
+    pointsRule: {
+      ...defaultPoints,
+      ...(inherited.pointsRule || {}),
+      ...(source.pointsRule || {}),
+      tiebreakerOrder: cloneRuleData(
+        source.pointsRule?.tiebreakerOrder || inherited.pointsRule?.tiebreakerOrder || defaultPoints.tiebreakerOrder
+      )
+    },
+    substitutionRule: {
+      ...defaultSubstitution,
+      ...(inherited.substitutionRule || {}),
+      ...(source.substitutionRule || {})
+    },
+    suspensionRule: {
+      ...defaultSuspension,
+      ...(inherited.suspensionRule || {}),
+      ...(source.suspensionRule || {})
+    }
+  }
+}
+
+function openDivisionRules(index) {
+  const division = form.value.divisions[index]
+  if (!division) return
+  editingDivisionIndex.value = index
+  divisionRulesDraft.value = cloneRuleData(
+    normalizeDivisionRules(division.rules, division.tournamentType)
+  )
+  divisionRulesTab.value = 'competition'
+  divisionRulesVisible.value = true
+}
+
+function saveDivisionRules() {
+  const division = form.value.divisions[editingDivisionIndex.value]
+  if (!division || !divisionRulesDraft.value) return
+  if (!divisionRulesDraft.value.inheritTournamentRules && !divisionRulesDraft.value.pointsRule.tiebreakerOrder.length) {
+    ElMessage.warning('请至少选择一种同分排名方式')
+    divisionRulesTab.value = 'points'
+    return
+  }
+  if (divisionRulesDraft.value.suspensionRule.clearYellowCardsAfterGroup) {
+    divisionRulesDraft.value.suspensionRule.carryCardsToKnockout = false
+  }
+  division.rules = cloneRuleData({ ...divisionRulesDraft.value, configured: true })
+  divisionRulesVisible.value = false
+  ElMessage.success(`${division.name || '当前组别'}规则已保存`)
+}
+
+function getDivisionRulesStatus(division) {
+  if (!division.rules?.configured) return '详细规则'
+  return division.rules.inheritTournamentRules === false ? '独立规则' : '规则已设置'
+}
+
+function onDivisionTypeChange(index) {
+  const division = form.value.divisions[index]
+  if (!division) return
+  const rulesData = normalizeDivisionRules(division.rules, division.tournamentType)
+  rulesData.competitionRule = createCompetitionRule(division.tournamentType)
+  rulesData.configured = false
+  division.rules = rulesData
+}
+
+function createDivision(name = '') {
+  return {
+    id: `division-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    tournamentType: form.value.type || 'tournament',
+    matchFormat: form.value.matchFormat || '7side',
+    maxTeams: Number(form.value.maxTeams) || 8,
+    maxPlayersPerTeam: Number(form.value.maxPlayersPerTeam) || 20,
+    rules: normalizeDivisionRules(null, form.value.type || 'tournament')
+  }
+}
+
+function onMultiDivisionChange(enabled) {
+  if (enabled && form.value.divisions.length === 0) {
+    form.value.divisions = [createDivision('U8'), createDivision('U9')]
+  }
+}
+
+function addDivision(name) {
+  if (name && form.value.divisions.some(item => item.name === name)) return
+  form.value.divisions.push(createDivision(name))
+}
+
+function removeDivision(index) {
+  if (form.value.divisions.length <= 2) {
+    ElMessage.warning('多组别赛事至少保留两个组别')
+    return
+  }
+  form.value.divisions.splice(index, 1)
+}
+
+function onDivisionFormatChange(index) {
+  const division = form.value.divisions[index]
+  if (division) division.maxPlayersPerTeam = MATCH_FORMAT_DEFAULTS[division.matchFormat] || 20
+}
+
+async function compressLogoImage(file) {
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('图片读取失败'))
+      img.src = objectUrl
+    })
+
+    const maxDimension = 640
+    const scale = Math.min(maxDimension / image.width, maxDimension / image.height, 1)
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    context.clearRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+
+    const targetSize = 180 * 1024
+    let quality = 0.82
+    let blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality))
+    while (blob && blob.size > targetSize && quality > 0.4) {
+      quality -= 0.08
+      blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality))
+    }
+    if (!blob) throw new Error('图片压缩失败')
+
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'tournament-logo'
+    return new File([blob], `${baseName}.webp`, {
+      type: 'image/webp',
+      lastModified: Date.now()
+    })
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }
 
 async function handleLogoUpload(options) {
   uploadingLogo.value = true
   try {
     const { file } = options
-    const cloudPath = `tournament-logos/${Date.now()}-${file.name}`
-    // 使用云函数上传解决CORS问题
-    const result = await uploadFileViaCloud(cloudPath, file)
-    form.value.logo = result.tempUrl
-    ElMessage.success('Logo上传成功！')
+    ElMessage.info('正在压缩赛事Logo...')
+    const compressedFile = await compressLogoImage(file)
+    const cloudPath = `tournament-logos/${Date.now()}-${compressedFile.name}`
+    const result = await uploadLargeFileViaCloud(cloudPath, compressedFile, {
+      chunkSize: 32 * 1024
+    })
+    const previewUrl = result.tempUrl || await getFileUrl(result.fileId)
+    if (!previewUrl) throw new Error('未获取到Logo预览地址')
+    form.value.logoFileId = result.fileId || ''
+    form.value.logo = previewUrl
+    formRef.value?.clearValidate('logo')
+    ElMessage.success(`Logo压缩并上传成功（${Math.ceil(compressedFile.size / 1024)}KB）`)
   } catch (err) {
     console.error('上传失败:', err)
     ElMessage.error('上传失败: ' + (err.message || '未知错误'))
@@ -1021,7 +1474,7 @@ async function loadTournament() {
     })
     if (result.length === 0) {
       ElMessage.error('赛事不存在')
-      router.push('/tournaments')
+  router.push('/tournament-space')
       return
     }
     const data = result[0]
@@ -1050,9 +1503,26 @@ async function loadTournament() {
       registeredTeams: data.registeredTeams || 0,
       themeId: data.themeId || 'green',
       logo: data.logo || data.logoUrl || '',
+      logoFileId: data.logoFileId || '',
       regulationsFileId: data.regulationsFileId || '',
       regulationsUrl: data.regulationsUrl || '',
       regulationsFileName: data.regulationsFileName || '',
+      multiDivision: data.multiDivision === true || data.divisionMode === 'multiple' || (data.divisions || []).length > 1,
+      divisionMode: data.divisionMode || ((data.divisions || []).length > 1 ? 'multiple' : 'single'),
+      defaultDivisionId: data.defaultDivisionId || data.divisions?.[0]?.id || 'default',
+      divisions: (data.divisions || []).map(item => ({
+        id: item.id || `division-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: item.name || '',
+        tournamentType: item.tournamentType || data.type || 'tournament',
+        matchFormat: item.matchFormat || resolvedFormat,
+        maxTeams: Number(item.maxTeams || data.maxTeams || 8),
+        maxPlayersPerTeam: Number(item.maxPlayersPerTeam || resolvedMax),
+        rules: normalizeDivisionRules(
+          item.rules,
+          item.tournamentType || data.type || 'tournament',
+          data.rules
+        )
+      })),
       // ★ 比赛制式与大名单上限（带回退）
       matchFormat: resolvedFormat,
       maxPlayersPerTeam: resolvedMax,
@@ -1107,12 +1577,39 @@ async function handleSubmit() {
     ElMessage.warning('请输入赛事名称')
     return
   }
+  if (!form.value.logo && !form.value.logoFileId) {
+    ElMessage.warning('请上传赛事Logo')
+    activeStep.value = 0
+    return
+  }
+  if (form.value.multiDivision) {
+    const names = form.value.divisions.map(item => item.name.trim()).filter(Boolean)
+    if (form.value.divisions.length < 2 || names.length !== form.value.divisions.length) {
+      ElMessage.warning('多组别赛事至少需要两个已命名组别')
+      activeStep.value = 0
+      return
+    }
+    if (new Set(names).size !== names.length) {
+      ElMessage.warning('组别名称不能重复')
+      activeStep.value = 0
+      return
+    }
+  }
 
   submitting.value = true
   try {
     // 整理提交数据
     const submitData = {
       ...form.value,
+      divisionMode: form.value.multiDivision ? 'multiple' : 'single',
+      divisions: form.value.multiDivision
+        ? form.value.divisions.map(item => ({
+            ...item,
+            name: item.name.trim(),
+            rules: normalizeDivisionRules(item.rules, item.tournamentType, form.value.rules)
+          }))
+        : [],
+      defaultDivisionId: form.value.multiDivision ? (form.value.divisions[0]?.id || 'default') : 'default',
       // ★ 向后兼容：同时写入 maxPlayers（= maxPlayersPerTeam）
       maxPlayers: form.value.maxPlayersPerTeam,
       // 确保 rules 对象完整
@@ -1439,5 +1936,27 @@ onMounted(() => {
 
 .ai-result-value {
   width: 100%;
+}
+
+.division-mode-panel { width: 100%; padding: 16px; background: #f5f9f5; border: 1px solid #d9ead9; border-radius: 10px; box-sizing: border-box; }
+.division-mode-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.division-mode-title { color: #1b5e20; font-weight: 600; }
+.division-quick-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 12px; }
+.division-row { display: grid; grid-template-columns: 1.1fr 1fr 1fr 110px 110px 92px 52px; gap: 8px; align-items: center; padding: 10px; margin-top: 8px; background: #fff; border-radius: 8px; }
+.division-column-hint { margin-top: 8px; color: #909399; font-size: 12px; }
+
+.division-rules-editor { padding: 0 4px 20px; }
+.division-rules-tabs { margin-top: 18px; }
+.division-rules-inherit-switch { margin-bottom: 16px; }
+.division-rule-section-title { margin: 8px 0 14px; padding-left: 10px; border-left: 3px solid #2e7d32; color: #1b5e20; font-size: 15px; font-weight: 600; }
+.division-rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.division-rule-grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.division-rule-grid :deep(.el-select),
+.division-rule-grid :deep(.el-input-number) { width: 100%; }
+.division-rule-unit { margin-left: 8px; color: #606266; }
+
+@media (max-width: 1100px) {
+  .division-row { grid-template-columns: 1fr 1fr; }
+  .division-rule-grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

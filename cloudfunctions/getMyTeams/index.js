@@ -1,108 +1,169 @@
-// 云函数：根据手机号/userId 查询当前用户关联的球队
-// v2.0 精简：只查 ownerPhone + creatorId，不再查冗余字段
+// getMyTeams/index.js
+// Query teams for the current mini-program account. Phone binding is the primary identity.
 const cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 
+function firstNonEmpty() {
+  for (var i = 0; i < arguments.length; i++) {
+    if (arguments[i] !== undefined && arguments[i] !== null && arguments[i] !== '') return arguments[i]
+  }
+  return ''
+}
+
 function addTeamUnique(resultList, team, roleLabel) {
+  if (!team) return false
   for (var i = 0; i < resultList.length; i++) {
     if (resultList[i]._id === team._id) return false
   }
   resultList.push({
     _id: team._id,
     teamId: team.teamId || team._id,
-    name: team.name || '',
-    teamName: team.name || '',
+    name: firstNonEmpty(team.name, team.teamName),
+    teamName: firstNonEmpty(team.teamName, team.name),
     shortName: team.shortName || '',
-    logo: team.logo || '',
-    ownerPhone: team.ownerPhone || '',
+    logo: firstNonEmpty(team.logo, team.logoUrl, team.teamLogo),
+    teamLogo: firstNonEmpty(team.teamLogo, team.logo, team.logoUrl),
+    ownerPhone: firstNonEmpty(team.ownerPhone, team.creatorPhone, team.phoneNumber, team.phone, team.contactPhone, team.mobile),
+    creatorPhone: team.creatorPhone || '',
+    phoneNumber: firstNonEmpty(team.phoneNumber, team.phone),
+    phone: firstNonEmpty(team.phone, team.phoneNumber),
+    contactPhone: team.contactPhone || '',
+    mobile: team.mobile || '',
     creatorId: team.creatorId || '',
+    ownerId: team.ownerId || '',
+    userId: team.userId || '',
+    openId: team.openId || '',
+    wechatOpenId: team.wechatOpenId || '',
+    _openid: team._openid || '',
     claimStatus: team.claimStatus || '',
     teamCode: team.teamCode || '',
     teamType: team.teamType || '',
     provinceCode: team.provinceCode || '',
     cityCode: team.cityCode || '',
     cityName: team.cityName || '',
+    playerCount: team.playerCount || 0,
     source: team.source || '',
-    role: roleLabel || '教练'
+    role: roleLabel || 'owner'
   })
   return true
 }
 
-exports.main = async (event) => {
-  const { phone, role, openId, userId } = event
-  console.log('[getMyTeams] phone:', phone ? '有' : '无', 'userId:', userId ? '有' : '无', 'openId:', openId ? '有' : '无')
+async function queryTeamsByOr(conditions) {
+  if (!conditions || conditions.length === 0) return []
+  var where = conditions.length === 1 ? conditions[0] : db.command.or(conditions)
+  var res = await db.collection('teams').where(where).limit(20).get()
+  return res.data || []
+}
+
+function makeConditions(fields, value) {
+  if (!value) return []
+  return fields.map(function(field) {
+    var item = {}
+    item[field] = value
+    return item
+  })
+}
+
+function teamBelongsToOrg(team, orgId) {
+  if (!team) return false
+  const teamOrgId = String(team.orgId || team.organizationId || team.organization_id || '').trim()
+  return Boolean(teamOrgId) && teamOrgId === String(orgId || '').trim()
+}
+
+exports.main = async function(event) {
+  event = event || {}
+  var actorUserId = String(event.__actorUserId || '').trim()
+  var actorOrgId = String(event.__actorOrgId || '').trim()
+  if (!actorUserId || !actorOrgId) return { success: false, message: '登录会话或机构信息已失效，请重新登录', code: 'AUTH_REQUIRED', teams: [] }
+  var userResult = await db.collection('users').doc(actorUserId).get()
+  var user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
+  if (!user) return { success: false, message: '登录账号不存在', code: 'AUTH_REQUIRED', teams: [] }
+  var userOrgId = String(user.orgId || user.organizationId || '').trim()
+  if (!userOrgId || userOrgId !== actorOrgId || userOrgId === String(user._id || '').trim()) {
+    return { success: false, message: '当前账号尚未关联有效机构', code: 'ORG_REQUIRED', teams: [] }
+  }
+  var organizationResult = await db.collection('organizations').doc(actorOrgId).get()
+  if (!(Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data)) {
+    return { success: false, message: '当前机构不存在或已失效', code: 'ORG_REQUIRED', teams: [] }
+  }
+  var phone = user.phone || user.phoneNumber || user.mobile || ''
+  var role = ''
+  var openId = user.openId || user.wechatOpenId || user._openid || ''
+  var userId = actorUserId
+
+  console.log('[getMyTeams] phone:', phone ? 'yes' : 'no', 'userId:', userId ? 'yes' : 'no', 'openId:', openId ? 'yes' : 'no')
 
   if (!phone && !openId && !userId) {
-    return { success: false, message: '缺少查询参数' }
+    return { success: false, message: 'missing query params', teams: [] }
   }
 
   try {
     var result = { success: true, teams: [], coachInfo: null }
 
-    // ===== 方案A：ownerPhone 直查（1次查询，最快）=====
     if (phone) {
       try {
-        var phoneQuery = await db.collection('teams').where({ ownerPhone: phone }).get()
-        console.log('[getMyTeams] ownerPhone 查到:', phoneQuery.data.length, '支')
-        if (phoneQuery.data?.length > 0) {
-          for (var k = 0; k < phoneQuery.data.length; k++) {
-            addTeamUnique(result.teams, phoneQuery.data[k], '所有者')
-          }
-        }
-      } catch (e) { console.warn('[getMyTeams] ownerPhone查询失败:', e.message) }
+        var phoneFields = ['ownerPhone', 'creatorPhone', 'phoneNumber', 'phone', 'contactPhone', 'mobile']
+        var phoneTeams = await queryTeamsByOr(makeConditions(phoneFields, phone))
+        console.log('[getMyTeams] phone teams:', phoneTeams.length)
+        for (var p = 0; p < phoneTeams.length; p++) if (teamBelongsToOrg(phoneTeams[p], actorOrgId)) addTeamUnique(result.teams, phoneTeams[p], 'owner')
+      } catch (e) {
+        console.warn('[getMyTeams] phone query failed:', e.message || e)
+      }
     }
 
-    // ===== 方案B：creatorId 直查 =====
-    const lookupId = userId || openId
-    if (lookupId) {
+    if (result.teams.length === 0) {
       try {
-        var creatorQuery = await db.collection('teams').where({ creatorId: lookupId }).get()
-        console.log('[getMyTeams] creatorId 查到:', creatorQuery.data.length, '支')
-        if (creatorQuery.data?.length > 0) {
-          for (var c = 0; c < creatorQuery.data.length; c++) {
-            addTeamUnique(result.teams, creatorQuery.data[c], '创建者')
-          }
+        var idConditions = []
+        idConditions = idConditions.concat(makeConditions(['creatorId', 'ownerId', 'userId'], userId))
+        if (!phone && !userId) {
+          idConditions = idConditions.concat(makeConditions(['openId', 'wechatOpenId', '_openid'], openId))
         }
-      } catch (e) { console.warn('[getMyTeams] creatorId查询失败:', e.message) }
+        var idTeams = await queryTeamsByOr(idConditions)
+        console.log('[getMyTeams] id teams:', idTeams.length)
+        for (var i = 0; i < idTeams.length; i++) if (teamBelongsToOrg(idTeams[i], actorOrgId)) addTeamUnique(result.teams, idTeams[i], 'creator')
+      } catch (e2) {
+        console.warn('[getMyTeams] id query failed:', e2.message || e2)
+      }
     }
 
-    // ===== 方案C：coach_library 兜底（历史数据）=====
-    if ((role === 'coach' || !role) && phone && result.teams.length < 2) {
+    if ((role === 'coach' || !role) && phone && result.teams.length === 0) {
       try {
         var coachRes = await db.collection('coach_library')
-          .where(db.command.or([{ phone }, { phoneNumber: phone }]))
+          .where(db.command.or([{ phone: phone }, { phoneNumber: phone }, { mobile: phone }]))
           .limit(1).get()
 
-        if (coachRes.data?.length > 0) {
+        if (coachRes.data && coachRes.data.length > 0) {
           var coach = coachRes.data[0]
           result.coachInfo = {
-            _id: coach._id, name: coach.name || '',
-            phone: coach.phone || coach.phoneNumber || '',
-            avatarUrl: coach.avatarUrl || '', idNumber: coach.idNumber || ''
+            _id: coach._id,
+            name: coach.name || '',
+            phone: firstNonEmpty(coach.phone, coach.phoneNumber, coach.mobile),
+            avatarUrl: firstNonEmpty(coach.avatarUrl, coach.avatar),
+            idNumber: coach.idNumber || ''
           }
 
           var assignRes = await db.collection('coach_assignments')
             .where({ coachId: coach._id, status: 'active' }).get()
 
-          if (assignRes.data?.length > 0) {
-            var teamIds = assignRes.data.map(a => a.teamId)
-            var teamsRes = await db.collection('teams').where({ _id: db.command.in(teamIds) }).get()
-            console.log('[getMyTeams] coach_library 补充:', teamsRes.data.length, '支')
-            if (teamsRes.data?.length > 0) {
-              for (var j = 0; j < teamsRes.data.length; j++) {
-                addTeamUnique(result.teams, teamsRes.data[j], '教练')
-              }
+          if (assignRes.data && assignRes.data.length > 0) {
+            var teamIds = assignRes.data.map(function(a) { return a.teamId }).filter(Boolean)
+            if (teamIds.length > 0) {
+              var teamsRes = await db.collection('teams').where({ _id: db.command.in(teamIds) }).get()
+              console.log('[getMyTeams] coach teams:', teamsRes.data.length)
+              for (var j = 0; j < teamsRes.data.length; j++) if (teamBelongsToOrg(teamsRes.data[j], actorOrgId)) addTeamUnique(result.teams, teamsRes.data[j], 'coach')
             }
           }
         }
-      } catch (e) { console.warn('[getMyTeams] coach_library查询失败:', e.message) }
+      } catch (e3) {
+        console.warn('[getMyTeams] coach query failed:', e3.message || e3)
+      }
     }
 
-    console.log('[getMyTeams] 总计:', result.teams.length, '支')
+    console.log('[getMyTeams] total:', result.teams.length)
     return result
   } catch (err) {
-    console.error('[getMyTeams] 失败:', err)
-    return { success: false, message: err.message || '查询失败' }
+    console.error('[getMyTeams] failed:', err)
+    return { success: false, message: err.message || 'query failed', teams: [] }
   }
 }

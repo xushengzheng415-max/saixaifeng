@@ -9,6 +9,14 @@
 
   <block wx:else>
 
+    <view class="legacy-notice" wx:if="{{legacyFlowUnavailable}}">
+      <text class="legacy-notice-icon">!</text>
+      <text class="legacy-notice-title">普通换人申请已关闭</text>
+      <text class="legacy-notice-body">报名截止后的名单变化须由主办方在异常处理流程中核验，当前入口不直接提交。</text>
+    </view>
+
+    <block wx:else>
+
     <!-- 上限与剩余次数提示 -->
     <view class="tip-card">
       <view class="tip-row">{{rosterLimitText}}</view>
@@ -117,6 +125,8 @@
           提交换人申请
         </view>
       </view>
+
+    </block>
 
     </block>
 

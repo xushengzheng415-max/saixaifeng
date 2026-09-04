@@ -1,21 +1,9 @@
 // verifySmsCode - 赛小蜂短信验证码校验云函数
 const cloud = require('wx-server-sdk')
-const crypto = require('crypto')
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 
-// 密码哈希函数
-function hashPassword(password, salt = '') {
-  return crypto.createHash('sha256').update(password + salt).digest('hex')
-}
-
-// ★ 手机号→角色映射表（已知的管理员账号自动识别）
-var PHONE_ROLE_MAP = {
-  '15038292130': 'organizer',   // 主办方管理账号
-  '17319716663': 'coach'        // 教练账号
-}
-
 exports.main = async (event) => {
-  const { phoneNumber, code, bindToUser = false, password } = event
+  const { phoneNumber, code, bindToUser = false } = event
 
   // 参数校验
   if (!phoneNumber || !/^1[3-9]\d{9}$/.test(phoneNumber)) {
@@ -24,7 +12,6 @@ exports.main = async (event) => {
   if (!code || !/^\d{6}$/.test(code)) {
     return { success: false, error: '验证码格式不正确' }
   }
-
   const db = cloud.database()
   const _ = db.command
   const now = new Date()
@@ -65,44 +52,33 @@ exports.main = async (event) => {
         { phone: phoneNumber },
         { phoneNumber: phoneNumber }
       ]))
+      .limit(2)
       .get()
 
-    if (userRes.data && userRes.data.length > 0) {
-      // 已有用户，更新登录时间
-      user = userRes.data[0]
+    const matchedUsers = userRes.data || []
+    if (matchedUsers.length > 1) {
+      return { success: false, error: '手机号存在重复账号，请联系管理员处理' }
+    }
 
-      // ★ 如果角色为空但手机号在映射表中 → 自动补角色
-      var mappedRole = PHONE_ROLE_MAP[phoneNumber]
-      if ((!user.role || user.role === '') && mappedRole) {
-        console.log('[verifySmsCode] 补充角色:', phoneNumber, '→', mappedRole)
-        user.role = mappedRole
-        await db.collection('users').doc(user._id).update({
-          data: {
-            role: mappedRole,
-            lastLoginTime: db.serverDate(),
-            lastLoginType: 'phone',
-            updateTime: db.serverDate()
-          }
-        })
-      } else {
-        await db.collection('users').doc(user._id).update({
-          data: {
-            lastLoginTime: db.serverDate(),
-            lastLoginType: 'phone',
-            updateTime: db.serverDate()
-          }
-        })
-      }
+    if (matchedUsers.length === 1) {
+      // 已有用户，更新登录时间
+      user = { ...matchedUsers[0], role: 'organizer' }
+      await db.collection('users').doc(user._id).update({
+        data: {
+          role: 'organizer',
+          lastLoginTime: db.serverDate(),
+          lastLoginType: 'phone',
+          updateTime: db.serverDate()
+        }
+      })
     } else {
-      // 新用户 → 检查是否为已知管理账号（自动分配角色）
-      var autoRole = PHONE_ROLE_MAP[phoneNumber] || ''
-      console.log('[verifySmsCode] 新用户, 手机号:', phoneNumber, ', 自动角色:', autoRole || '(无)')
+      // 新用户直接创建为主办方账号
       const newUserRes = await db.collection('users').add({
         data: {
           phone: phoneNumber,
           phoneNumber: phoneNumber,   // ★ 同时写两个字段确保兼容
           phoneVerified: true,
-          role: autoRole,
+          role: 'organizer',
           email: '',
           passwordSet: false,
           createTime: db.serverDate(),
@@ -114,7 +90,7 @@ exports.main = async (event) => {
       user = {
         _id: newUserRes._id,
         phone: phoneNumber,
-        role: autoRole,
+        role: 'organizer',
         email: '',
         passwordSet: false
       }
@@ -141,13 +117,13 @@ exports.main = async (event) => {
       message: isNewUser ? '注册并登录成功' : '登录成功',
       needSetPassword: !user.passwordSet,
       needBindEmail: !user.email,
-      needSelectRole: !user.role,  // 角色为空时需要选择身份
-      role: (user.role || '').toLowerCase(),  // 统一小写，不 fallback
+      needSelectRole: false,
+      role: 'organizer',
       user: {
         _id: user._id,
         phone: user.phone,
         email: user.email || '',
-        role: (user.role || '').toLowerCase(),
+        role: 'organizer',
         passwordSet: !!user.passwordSet,
         openId: user.openId || ''
       }

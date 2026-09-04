@@ -220,11 +220,7 @@ const stats = reactive({
 // 分类选项
 const categories = [
   { label: '全部', value: 'all' },
-  { label: '青少年赛', value: 'youth' },
-  { label: '业余赛', value: 'amateur' },
-  { label: '地协赛', value: 'local' },
-  { label: '城市联赛', value: 'city' },
-  { label: '职业联赛', value: 'professional' }
+  { label: '青少年球队', value: 'youth' }
 ]
 
 // Mock 数据（当云函数不可用时的降级方案）
@@ -235,12 +231,12 @@ const MOCK_TEAMS = [
     shortName: '天河FC',
     logo: '',
     city: '广州',
-    category: 'amateur',
+    category: 'youth',
     foundedYear: 2018,
     playerCount: 25,
     tournamentCount: 12,
     coachName: '李明',
-    description: '广州天河区知名业余足球队，注重技术配合，多次获得区级赛事冠军。',
+    description: '广州天河区青少年足球队，注重基本功训练和团队配合。',
     contactPhone: '13800138001'
   },
   {
@@ -263,12 +259,12 @@ const MOCK_TEAMS = [
     shortName: '南海雄鹰',
     logo: '',
     city: '佛山',
-    category: 'local',
+    category: 'youth',
     foundedYear: 2015,
     playerCount: 28,
     tournamentCount: 15,
     coachName: '陈国华',
-    description: '佛山南海区传统强队，作风硬朗，防守稳固，地协赛常客。',
+    description: '佛山南海区青训梯队，重视防守意识和比赛阅读能力。',
     contactPhone: '13800138003'
   },
   {
@@ -291,12 +287,12 @@ const MOCK_TEAMS = [
     shortName: '石岐老友',
     logo: '',
     city: '中山',
-    category: 'amateur',
+    category: 'youth',
     foundedYear: 2012,
     playerCount: 22,
     tournamentCount: 20,
     coachName: '刘东海',
-    description: '中山石岐区业余足球队，队员多为老友记，以球会友，享受足球乐趣。',
+    description: '中山石岐区青少年足球队，帮助孩子在比赛中建立自信。',
     contactPhone: '13800138005'
   },
   {
@@ -305,12 +301,12 @@ const MOCK_TEAMS = [
     shortName: '香洲勇士',
     logo: '',
     city: '珠海',
-    category: 'local',
+    category: 'youth',
     foundedYear: 2019,
     playerCount: 26,
     tournamentCount: 10,
     coachName: '赵勇',
-    description: '珠海香洲区地协赛参赛队伍，拼搏精神强，团队协作出色。',
+    description: '珠海香洲区青少年代表队，拼搏精神强，团队协作出色。',
     contactPhone: '13800138006'
   },
   {
@@ -319,12 +315,12 @@ const MOCK_TEAMS = [
     shortName: '惠城联队',
     logo: '',
     city: '惠州',
-    category: 'amateur',
+    category: 'youth',
     foundedYear: 2017,
     playerCount: 24,
     tournamentCount: 14,
     coachName: '孙立',
-    description: '惠州惠城区业余足球联队，整合了区内多支球队的优秀球员。',
+    description: '惠州惠城区青训联队，汇聚区内优秀青少年球员。',
     contactPhone: '13800138007'
   },
   {
@@ -347,12 +343,12 @@ const MOCK_TEAMS = [
     shortName: '端州竞技',
     logo: '',
     city: '肇庆',
-    category: 'local',
+    category: 'youth',
     foundedYear: 2016,
     playerCount: 30,
     tournamentCount: 18,
     coachName: '吴竞技',
-    description: '肇庆端州区地协赛劲旅，攻防平衡，战术素养高。',
+    description: '肇庆端州区青少年梯队，攻防平衡，战术素养持续提升。',
     contactPhone: '13800138009'
   },
   {
@@ -361,12 +357,12 @@ const MOCK_TEAMS = [
     shortName: '清城FC',
     logo: '',
     city: '清远',
-    category: 'amateur',
+    category: 'youth',
     foundedYear: 2014,
     playerCount: 23,
     tournamentCount: 16,
     coachName: '黄清远',
-    description: '清远清城区业余足球队，历史悠久，培养了多名优秀本土球员。',
+    description: '清远清城区青少年足球队，长期培养本地校园足球苗子。',
     contactPhone: '13800138010'
   }
 ]
@@ -376,11 +372,7 @@ const MOCK_TEAMS = [
  */
 function getCategoryLabel(category) {
   const map = {
-    youth: '青少年',
-    amateur: '业余',
-    local: '地协',
-    city: '城市联赛',
-    professional: '职业联赛'
+    youth: '青少年'
   }
   return map[category] || category
 }
@@ -780,14 +772,6 @@ onMounted(() => {
 
 .team-badge.youth {
   background: linear-gradient(135deg, #1976D2, #42A5F5);
-}
-
-.team-badge.amateur {
-  background: linear-gradient(135deg, #F57C00, #FFA726);
-}
-
-.team-badge.local {
-  background: linear-gradient(135deg, #7B1FA2, #AB47BC);
 }
 
 .team-card-body {

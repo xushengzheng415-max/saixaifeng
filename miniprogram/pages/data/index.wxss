@@ -1,0 +1,24 @@
+.page { min-height: 100vh; background: #f4f7f5; padding: 24rpx 24rpx 150rpx; box-sizing: border-box; }
+.head { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 4rpx; }
+.head-label { display: block; color: #7e8c85; font-size: 22rpx; }
+.head-title { display: block; margin-top: 8rpx; color: #173328; font-size: 36rpx; font-weight: 700; }
+.switch-text { color: #1b7d56; font-size: 25rpx; }
+.loading, .error { text-align: center; padding: 70rpx 0; color: #7c8983; }
+.error { color: #b5443c; }
+.metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18rpx; margin-top: 10rpx; }
+.metric-card { min-height: 154rpx; border-radius: 24rpx; padding: 26rpx; box-sizing: border-box; color: #fff; }
+.metric-card.green { background: linear-gradient(135deg, #145b42, #2c9269); }
+.metric-card.blue { background: linear-gradient(135deg, #285b8d, #4984bb); }
+.metric-card.orange { background: linear-gradient(135deg, #a85e21, #df914d); }
+.metric-card.purple { background: linear-gradient(135deg, #66508d, #927bb9); }
+.metric-value { display: block; font-size: 48rpx; font-weight: 700; }
+.metric-label { display: block; margin-top: 10rpx; font-size: 23rpx; opacity: .82; }
+.section { margin-top: 36rpx; }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4rpx 16rpx; }
+.section-title { font-size: 30rpx; color: #21362d; font-weight: 700; }
+.section-note { font-size: 21rpx; color: #939e99; }
+.list-card { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 20rpx; padding: 24rpx; margin-bottom: 14rpx; }
+.item-title { display: block; color: #21322b; font-size: 28rpx; font-weight: 600; }
+.item-subtitle { display: block; margin-top: 8rpx; color: #87928d; font-size: 22rpx; }
+.item-status { color: #177451; background: #e8f4ee; border-radius: 18rpx; padding: 7rpx 14rpx; font-size: 21rpx; }
+.item-link { color: #247b59; font-size: 24rpx; }

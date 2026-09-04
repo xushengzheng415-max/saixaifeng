@@ -1,6 +1,6 @@
 <template>
   <div class="tournament-signups">
-    <el-page-header @back="$router.push('/tournaments')" title="返回赛事列表">
+    <el-page-header @back="$router.push('/tournament-space')" title="返回赛事空间">
       <template #content>
         <span style="font-size: 18px;">报名审核 - {{ tournament.name || '赛事' }}</span>
       </template>

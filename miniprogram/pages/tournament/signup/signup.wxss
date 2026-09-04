@@ -18,6 +18,19 @@
   color: #999;
 }
 
+.division-section { padding: 20rpx 24rpx 0; border-top: 1rpx solid #f0f0f0; }
+.division-label { display:block; margin-bottom:14rpx; color:#606266; font-size:25rpx; font-weight:600; }
+.division-tabs { width:100%; }
+.division-tabs-inner { display:flex; flex-wrap:wrap; gap:12rpx; padding-bottom:8rpx; }
+.division-tab { display:flex; align-items:center; gap:8rpx; min-height:54rpx; padding:10rpx 22rpx; box-sizing:border-box; color:#46504a; background:#f2f7f4; border:1rpx solid #dce8e0; border-radius:28rpx; font-size:24rpx; }
+.division-tab.available { color:#276640; background:#f2faf5; border-color:#b9ddc6; }
+.division-tab.active { color:#fff; background:#1B5E20; font-weight:600; }
+.division-tab.disabled { color:#a2a8a4; background:#eef0ef; border-color:#e3e6e4; }
+.division-status { font-size:19rpx; line-height:1; }
+.division-tab.active .division-status { color:rgba(255,255,255,.86); }
+.division-tab.disabled .division-status { color:#a2a8a4; }
+.division-empty-tip { display:block; margin-top:6rpx; color:#9b6262; font-size:21rpx; line-height:1.5; }
+
 /* 信息卡片 */
 .info-card {
   background: #fff;
@@ -193,6 +206,15 @@
 }
 
 /* 竞赛规程 */
+.optional-tag {
+  margin-left: 12rpx;
+  padding: 2rpx 10rpx;
+  background: #EEF2F6;
+  color: #8A96A3;
+  font-size: 20rpx;
+  border-radius: 8rpx;
+}
+
 .required-tag {
   margin-left: 12rpx;
   padding: 2rpx 10rpx;
@@ -206,6 +228,13 @@
   background: #FAFAFA;
   border-radius: 12rpx;
   overflow: hidden;
+}
+
+.rules-missing {
+  padding: 28rpx 20rpx;
+  color: #999;
+  font-size: 26rpx;
+  background: #fff;
 }
 
 .rules-preview {
@@ -483,3 +512,6 @@
   border-top: 1rpx solid #F0F0F0;
   flex-shrink: 0;
 }
+.service-binding-row{display:flex;align-items:center;justify-content:space-between;gap:20rpx;margin-top:20rpx;padding:22rpx;border:1rpx solid #cde3d4;border-radius:12rpx;background:#f7fcf8}.service-binding-row>view{display:flex;flex-direction:column;gap:8rpx}.service-binding-title{color:#24352b;font-weight:600}.service-binding-status{color:#6b796f;font-size:24rpx}.service-binding-button{height:64rpx;margin:0;padding:0 22rpx;border:1rpx solid #16854a;border-radius:10rpx;color:#087c43;background:#fff;font-size:24rpx;line-height:62rpx}.service-binding-button::after{border:0}
+.service-follow-qr{display:block;width:300rpx;height:300rpx;margin:22rpx auto 4rpx;border:1rpx solid #d8e8dc;border-radius:16rpx;background:#fff}
+.service-follow-modal{position:fixed;z-index:1200;inset:0;display:flex;align-items:center;justify-content:center;padding:40rpx;box-sizing:border-box}.service-follow-modal-mask{position:absolute;inset:0;background:rgba(0,20,12,.72)}.service-follow-modal-body{position:relative;z-index:1;width:100%;padding:42rpx 36rpx 30rpx;border-radius:28rpx;background:#fff;box-sizing:border-box;text-align:center}.service-follow-modal-title{color:#14241b;font-size:38rpx;font-weight:800}.service-follow-modal-subtitle{margin-top:14rpx;color:#657269;font-size:25rpx}.service-follow-modal-qr{display:block;width:360rpx;height:360rpx;margin:30rpx auto 18rpx;border:1rpx solid #d7e8dc;border-radius:18rpx;background:#fff}.service-follow-modal-tip{color:#768078;font-size:23rpx;line-height:1.6}.service-follow-modal-confirm,.service-follow-modal-later{width:100%;height:82rpx;margin-top:24rpx;border-radius:41rpx;font-size:28rpx}.service-follow-modal-confirm{color:#fff;background:#168a49}.service-follow-modal-later{margin-top:14rpx;color:#5e6b63;background:#f1f5f2}.service-follow-modal-confirm::after,.service-follow-modal-later::after{border:0}

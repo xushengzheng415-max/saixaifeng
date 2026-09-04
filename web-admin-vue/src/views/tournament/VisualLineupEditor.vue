@@ -54,7 +54,7 @@
       <div class="editor-content" ref="editorContentRef">
         <div class="football-field-wrapper">
           <div class="football-field" ref="fieldRef">
-            <div class="field-background"></div>
+            <div class="field-background" :style="{ backgroundImage: `url(${fieldBgImage})` }"></div>
             <div
               v-for="pos in currentPositions"
               :key="pos.role"
@@ -1418,7 +1418,6 @@ function handlePlayerSearch() {}
   .field-background {
     position: absolute;
     inset: 0;
-    background-image: url('~@/assets/images/football-field-dual.jpg');
     background-size: contain;
     background-position: center;
     background-repeat: no-repeat;

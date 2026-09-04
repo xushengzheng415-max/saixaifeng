@@ -3,8 +3,8 @@
     <!-- 未登录态 -->
     <div v-if="!isLoggedIn" class="login-guide">
       <div class="guide-card">
-        <img src="/LOGO2.png" alt="赛小蜂" class="guide-logo" />
-        <h2 class="guide-title">登录赛小蜂</h2>
+        <img :src="brandLogoUrl" alt="赛小蜂足球" class="guide-logo" />
+        <h2 class="guide-title">登录赛小蜂足球</h2>
         <p class="guide-desc">登录后体验竞猜、关注、蜂蜜币等完整功能</p>
 
         <el-form :model="loginForm" class="login-form" @submit.prevent="handleLogin">
@@ -58,7 +58,7 @@
         <div class="user-main">
           <UserAvatar :src="userInfo.avatarUrl" :name="userInfo.userName" :size="64" />
           <div class="user-info">
-            <div class="user-name">{{ userInfo.userName || '赛小蜂用户' }}</div>
+            <div class="user-name">{{ userInfo.userName || '赛小蜂足球用户' }}</div>
             <div class="user-phone">{{ maskedPhone }}</div>
           </div>
           <el-button text @click="goSettings">
@@ -128,6 +128,8 @@ import {
 import UserAvatar from '../components/UserAvatar.vue'
 import LoginDialog from '../components/LoginDialog.vue'
 
+const brandLogoUrl = `${import.meta.env.BASE_URL}LOGO2.png`
+
 /**
  * 个人中心基础页
  * - 未登录态：手机号 + 验证码登录引导
@@ -164,7 +166,7 @@ const features = [
 const menuItems = [
   { key: 'notify', label: '消息通知', icon: Bell },
   { key: 'help', label: '帮助中心', icon: QuestionFilled },
-  { key: 'about', label: '关于赛小蜂', icon: InfoFilled }
+  { key: 'about', label: '关于赛小蜂足球', icon: InfoFilled }
 ]
 
 async function sendCode() {
@@ -200,7 +202,7 @@ async function handleLogin() {
     await new Promise((resolve) => setTimeout(resolve, 800))
     ElMessage.success('登录成功（Mock）')
     isLoggedIn.value = true
-    userInfo.value = { userName: '赛小蜂用户', avatarUrl: '', phone: loginForm.value.phone }
+    userInfo.value = { userName: '赛小蜂足球用户', avatarUrl: '', phone: loginForm.value.phone }
     localStorage.setItem('isLoggedIn', 'true')
     localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
     loginForm.value = { phone: '', code: '' }
@@ -213,7 +215,7 @@ async function handleLogin() {
 
 function handleLoginSuccess(data) {
   isLoggedIn.value = true
-  userInfo.value = { userName: '赛小蜂用户', avatarUrl: '', phone: data.phone || '' }
+  userInfo.value = { userName: '赛小蜂足球用户', avatarUrl: '', phone: data.phone || '' }
 }
 
 function handleFeature(f) {

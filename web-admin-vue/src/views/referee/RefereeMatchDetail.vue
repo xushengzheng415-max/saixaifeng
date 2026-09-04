@@ -40,29 +40,10 @@
       </div>
     </div>
 
-    <!-- 裁判操作栏 -->
-    <div class="referee-actions">
-      <el-button
-        v-if="match.status === 'scheduled'"
-        type="success"
-        size="small"
-        @click="handleCheckIn"
-        :loading="saving"
-      >GPS 签到</el-button>
-      <el-button
-        v-if="match.status === 'checked_in' || match.status === 'scheduled'"
-        type="primary"
-        size="small"
-        @click="handleStartMatch"
-        :loading="saving"
-      >开始比赛</el-button>
-      <el-button
-        v-if="match.status === 'ongoing'"
-        type="warning"
-        size="small"
-        @click="handleFinishMatch"
-        :loading="saving"
-      >结束比赛</el-button>
+    <!-- 现场执行边界：PC 仅查看，签到、开赛、比分和事件统一在裁判服务号/H5完成 -->
+    <div class="referee-workflow-boundary">
+      <strong>现场执行已迁移到裁判服务号/H5</strong>
+      <span>本页面只读展示比赛和事件流水，不能修改现场数据。</span>
     </div>
 
     <!-- 首发阵容 -->
@@ -103,14 +84,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { queryById, callFunction, queryList } from '../../utils/cloud'
+import { queryById, queryList } from '../../utils/cloud'
 
 const router = useRouter()
 const route = useRoute()
 const matchId = route.params.id
 const match = ref({})
 const matchEvents = ref([])
-const saving = ref(false)
 
 // 球队名
 const homeName = computed(() => match.value.homeTeamName || '主队')
@@ -150,91 +130,6 @@ async function loadMatch() {
     }
   } catch (err) {
     ElMessage.error('加载失败: ' + err.message)
-  }
-}
-
-// GPS 签到
-async function handleCheckIn() {
-  saving.value = true
-  try {
-    // 获取 GPS 位置
-    const getLocation = () => {
-      return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error('浏览器不支持地理位置'))
-          return
-        }
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            resolve({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy,
-              timestamp: position.timestamp
-            })
-          },
-          (err) => {
-            reject(err)
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        )
-      })
-    }
-
-    const location = await getLocation()
-
-    // 保存位置和状态
-    await callFunction('updateMatch', {
-      matchId,
-      data: {
-        status: 'checked_in',
-        checkInLocation: location,
-        updateTime: new Date()
-      }
-    })
-
-    match.value.status = 'checked_in'
-    match.value.checkInLocation = location
-    ElMessage.success('签到成功！位置已记录')
-  } catch (err) {
-    console.error('[handleCheckIn] 签到失败:', err)
-    ElMessage.error('签到失败: ' + err.message)
-  } finally {
-    saving.value = false
-  }
-}
-
-// 开始比赛
-async function handleStartMatch() {
-  saving.value = true
-  try {
-    await callFunction('updateMatch', {
-      matchId,
-      data: { status: 'ongoing', startTime: new Date(), updateTime: new Date() }
-    })
-    match.value.status = 'ongoing'
-    ElMessage.success('比赛已开始')
-  } catch (err) {
-    ElMessage.error('操作失败: ' + err.message)
-  } finally {
-    saving.value = false
-  }
-}
-
-// 结束比赛
-async function handleFinishMatch() {
-  saving.value = true
-  try {
-    await callFunction('updateMatch', {
-      matchId,
-      data: { status: 'finished', endTime: new Date(), updateTime: new Date() }
-    })
-    match.value.status = 'finished'
-    ElMessage.success('比赛已结束')
-  } catch (err) {
-    ElMessage.error('操作失败: ' + err.message)
-  } finally {
-    saving.value = false
   }
 }
 
@@ -331,11 +226,24 @@ onMounted(() => {
   color: #909399;
 }
 
-.referee-actions {
+.referee-workflow-boundary {
   display: flex;
-  justify-content: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   margin: 20px 0;
+  padding: 12px 16px;
+  border: 1px solid #cfe8d5;
+  border-radius: 8px;
+  background: #f4fbf6;
+  color: #31633d;
+}
+
+.referee-workflow-boundary strong {
+  color: #176b35;
+}
+
+.referee-workflow-boundary span {
+  font-size: 13px;
 }
 
 .match-lineup {

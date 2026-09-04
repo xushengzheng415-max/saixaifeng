@@ -1,13 +1,109 @@
 <template>
-  <div class="tournament-draw" :class="{ fullscreen: isFullscreen, embedded: props.embedded }">
+  <section v-if="!modeOverview && !drawPrerequisitesReady" class="draw-requirement-state"><el-icon class="is-loading"><Loading /></el-icon><h2>正在核对球队审核数量</h2></section>
+  <section v-else-if="drawBlocked" class="draw-requirement-state"><el-icon><Lock /></el-icon><h2>暂不能抽签与分组</h2><p>当前组别赛制要求 {{ activeRequiredTeamCount }} 支球队，球队管理已审核通过 {{ activeApprovedTeamCount }} 支。</p><el-progress :percentage="drawRequirementProgress" /><el-button type="success" @click="router.push({ path:`/tournaments/${tournamentId}/registration`, query:{ divisionId:activeDivisionId, tab:'all' } })">前往球队审查</el-button></section>
+  <QuickHybridConsole v-else-if="quickHybridFlow" :tournament-id="tournamentId" />
+  <QuickTournamentConsole v-else-if="quickTournamentFlow" :tournament-id="tournamentId" />
+  <QuickDrawResult v-else-if="quickResultFlow" :tournament-id="tournamentId" />
+  <ProfessionalDrawFlow v-else-if="professionalFlow" :tournament-id="tournamentId" />
+  <section v-else-if="quickConfigFlow" class="quick-draw-setup">
+    <header class="quick-setup-context">
+      <div class="quick-event-context">
+        <span class="quick-event-crest"><el-icon><Trophy /></el-icon></span>
+        <strong>{{ tournament.name || '当前赛事' }}</strong>
+        <el-tag type="primary" effect="light">{{ activeDivision.name }}</el-tag>
+        <el-tag type="success" effect="light">进行中</el-tag>
+        <span class="quick-event-meta"><el-icon><Calendar /></el-icon>{{ overviewDateRange }}</span>
+        <span class="quick-event-meta"><el-icon><Location /></el-icon>{{ overviewLocation }}</span>
+      </div>
+      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+    </header>
+    <main>
+      <div class="quick-setup-heading">
+        <div><h1>抽签与分组 <small>设置快速分组的基础参数</small></h1></div>
+        <label>当前组别<span class="quick-current-division">{{ activeDivision.name }}<el-icon><Lock /></el-icon></span></label>
+      </div>
+      <nav class="quick-flow-tabs">
+        <button class="active" type="button">分组设置</button>
+        <button type="button" @click="enterQuickConsole">分组操作台</button>
+        <button type="button" @click="router.push({ path: route.path, query: { divisionId: activeDivisionId, mode: 'quick', view: 'result' } })">分组结果</button>
+      </nav>
+      <div class="quick-config-layout">
+        <section class="quick-config-card">
+          <h2>基础分组设置</h2>
+          <el-alert title="本页仅设置分组结构，赛制及晋级规则请前往“竞赛管理”设置。" type="primary" :closable="false" show-icon />
+          <div class="quick-setting-row"><strong>参赛球队</strong><span class="quick-readonly-value">{{ divisionTeamCount(activeDivision) }}支</span><small>已从球队管理同步</small></div>
+          <div class="quick-setting-row"><strong>小组数量</strong><select v-model.number="configForm.groupCount"><option v-for="count in quickGroupCountOptions" :key="count" :value="count">{{ count }}组</option></select></div>
+          <div class="quick-setting-row"><strong>每组球队</strong><select v-model.number="configForm.teamsPerGroup"><option v-for="count in quickTeamCountOptions" :key="count" :value="count">{{ count }}支</option></select></div>
+          <div class="quick-setting-row"><strong>组别命名</strong><span>{{ quickGroupNameRange }}</span><el-button plain>编辑组名</el-button></div>
+          <div class="quick-setting-row"><strong>组内编号</strong><span>{{ quickNumberingPreview }}</span><el-button plain>编号设置</el-button></div>
+          <div class="quick-setting-row"><strong>同地区球队规避</strong><el-switch v-model="configForm.avoidSameRegion" /><small>可关闭</small></div>
+          <div class="quick-setting-row"><strong>分配均衡</strong><el-switch v-model="configForm.balancedDistribution" /><small>各组球队数量尽量一致</small></div>
+          <div class="quick-validation"><strong>{{ quickCapacityLabel }}</strong><span><el-icon><CircleCheck /></el-icon>{{ quickCapacityValid ? '校验通过' : '容量需调整' }}</span></div>
+        </section>
+        <section class="quick-preview-card">
+          <h2>分组结构预览</h2>
+          <div class="quick-group-preview">
+            <article v-for="group in quickGroupPreview" :key="group.name"><h3>{{ group.name }} <small>（{{ configForm.teamsPerGroup }} 个签位）</small></h3><div><span v-for="slot in group.slots" :key="slot">{{ slot }}</span></div></article>
+          </div>
+          <footer><span><el-icon><User /></el-icon>总签位 {{ quickCapacity }}</span><span><el-icon><Grid /></el-icon>已配置 {{ configForm.groupCount }} 组</span><span><el-icon><UserFilled /></el-icon>每组 {{ configForm.teamsPerGroup }} 支</span></footer>
+        </section>
+      </div>
+      <footer class="quick-setup-footer"><p><el-icon><InfoFilled /></el-icon>保存后进入分组操作台，将左侧球队拖入右侧各组签位。</p><div><el-button @click="resetQuickConfig">恢复默认设置</el-button><el-button type="success" :disabled="!quickCapacityValid" @click="enterQuickConsole">保存并进入分组操作台</el-button></div></footer>
+    </main>
+  </section>
+  <section v-else-if="modeOverview" v-loading="loading" class="draw-overview">
+    <header class="overview-context">
+      <div class="overview-event">
+        <span class="overview-event-crest"><el-icon><Trophy /></el-icon></span>
+        <strong>{{ tournament.name || '当前赛事' }}</strong>
+        <el-tag type="primary" effect="light">{{ divisionOptions.length }}个组别</el-tag>
+        <el-tag type="success" effect="light">进行中</el-tag>
+        <span class="overview-meta"><el-icon><Calendar /></el-icon>{{ overviewDateRange }}</span>
+        <span class="overview-meta"><el-icon><Location /></el-icon>{{ overviewLocation }}</span>
+      </div>
+      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+    </header>
+    <main>
+      <h1>抽签与分组</h1><p class="overview-lead">先选择竞赛组别，再进入该组别已锁定的抽签流程。</p>
+      <el-alert title="组别运行版本已在竞赛方案中锁定，本页不再选择或切换模式。" type="success" :closable="false" show-icon />
+      <div class="overview-filters">
+        <el-button :type="activeOverviewFilter === 'all' ? 'success' : ''" @click="activeOverviewFilter = 'all'">全部　{{ divisionOptions.length }}</el-button>
+        <el-button :type="activeOverviewFilter === 'pending' ? 'success' : ''" @click="activeOverviewFilter = 'pending'">待开始　{{ divisionStateCounts.pending }}</el-button>
+        <el-button :type="activeOverviewFilter === 'active' ? 'success' : ''" @click="activeOverviewFilter = 'active'">进行中　{{ divisionStateCounts.active }}</el-button>
+        <el-button :type="activeOverviewFilter === 'done' ? 'success' : ''" @click="activeOverviewFilter = 'done'">已完成　{{ divisionStateCounts.done }}</el-button>
+      </div>
+      <div class="division-draw-list">
+        <article v-for="(division,index) in filteredDivisionOptions" :key="division.id || division._id">
+          <span class="division-crest" :class="[`crest-${index % 5}`, { pro: divisionIsProfessional(division) }]">
+            <el-icon><Trophy /></el-icon><small>{{ divisionIsProfessional(division) ? 'PRO' : division.name?.replace('组', '') }}</small>
+          </span>
+          <strong>{{ divisionDisplayName(division) }}</strong>
+          <dl class="format"><dt><el-icon><Trophy /></el-icon>{{ divisionFormatLabel(division) }}</dt><dd>{{ divisionTeamCount(division) }} 支</dd></dl>
+          <span class="mode-badge" :class="{ pro: divisionIsProfessional(division) }"><el-icon><Medal v-if="divisionIsProfessional(division)" /><Lock v-else /></el-icon>{{ divisionIsProfessional(division) ? 'PRO 专业版 · 已开通' : '简易模式 · 已锁定' }}</span>
+          <dl class="state" :class="divisionDrawState(division).state"><dt><el-icon><component :is="divisionDrawState(division).icon" /></el-icon>{{ divisionDrawState(division).label }}</dt><dd>{{ divisionDrawState(division).hint }}</dd></dl>
+          <div class="overview-row-actions"><template v-if="divisionDrawState(division).state === 'done'"><el-button plain @click="viewDivisionResult(division)">查看结果</el-button><el-button type="danger" plain @click="modifyDivisionDraw(division)">修改分组</el-button></template><el-button v-else :type="divisionIsProfessional(division) ? 'success' : ''" plain :disabled="!divisionDrawReady(division)" @click="enterDivisionDraw(division)">{{ divisionDrawState(division).action }}</el-button></div>
+        </article>
+      </div>
+      <el-alert class="overview-footer" title="简易模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
+    </main>
+  </section>
+  <div v-else class="tournament-draw" :class="{ fullscreen: isFullscreen, embedded: props.embedded }">
     <!-- 顶部导航栏 -->
     <div class="draw-header" v-show="!isFullscreen && !props.embedded">
-      <el-page-header @back="$router.push('/tournaments')" title="返回赛事列表">
+    <el-page-header @back="$router.push('/tournament-space')" title="返回赛事空间">
         <template #content>
           <span style="font-size: 18px;">抽签分组 - {{ tournament.name || '赛事' }}</span>
           <el-tag v-if="tournamentType" style="margin-left: 8px;">{{ formatLabel }}</el-tag>
         </template>
       </el-page-header>
+    </div>
+
+    <div v-if="divisionOptions.length > 1 && !props.embedded" class="division-selector">
+      <span>赛事组别</span>
+      <el-radio-group v-model="activeDivisionId" @change="handleDivisionChange">
+        <el-radio-button v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ divisionDisplayName(division) }}</el-radio-button>
+      </el-radio-group>
+      <el-tag type="success">{{ activeDivision.name }}</el-tag>
     </div>
 
     <!-- 初始状态：显示新建抽签规则按钮 -->
@@ -69,6 +165,13 @@
         <!-- 联赛制配置 -->
         <div v-if="configForm.tournamentType === 'league'" class="config-section">
           <h4>联赛设置</h4>
+          <div class="config-row">
+            <label>循环方式</label>
+            <el-radio-group v-model="configForm.loopType">
+              <el-radio-button value="single">单循环</el-radio-button>
+              <el-radio-button value="double">双循环</el-radio-button>
+            </el-radio-group>
+          </div>
           <div class="config-row">
             <label>分组设置</label>
             <el-radio-group v-model="configForm.leagueGrouped">
@@ -461,26 +564,60 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, reactive } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Delete } from '@element-plus/icons-vue'
+import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Delete, Trophy, Lock, Medal, Warning, CircleCheck, CircleClose, Calendar, Location, SwitchButton, User, Grid, UserFilled, InfoFilled, Loading } from '@element-plus/icons-vue'
 import html2canvas from 'html2canvas'
 import { queryById, queryList, addRecord, updateRecord, deleteRecord } from '../../utils/cloud'
+import ProfessionalDrawFlow from './ProfessionalDrawFlow.vue'
+import QuickHybridConsole from './QuickHybridConsole.vue'
+import QuickTournamentConsole from './QuickTournamentConsole.vue'
+import QuickDrawResult from './QuickDrawResult.vue'
+import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
 
 const props = defineProps({
   embedded: { type: Boolean, default: false },
   tournamentId: { type: String, default: null },
-  readonly: { type: Boolean, default: false }
+  readonly: { type: Boolean, default: false },
+  divisionId: { type: String, default: '' }
 })
 
 const route = useRoute()
+const router = useRouter()
 const tournamentId = props.tournamentId || route.params.id
+const qaSnapshot = typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
+  ? (window.__sxfVisualQaSnapshot || getVisualQaSnapshot())
+  : null
+const visualQa = typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
+const modeOverview = computed(() => !props.embedded && !route.query.mode && !route.query.view)
+const professionalFlow = computed(() => route.query.mode === 'professional' && ['setup', 'pool', 'screen', 'console', 'result'].includes(String(route.query.step || 'setup')))
+const quickConfigFlow = computed(() => route.query.mode === 'quick' && route.query.view === 'config')
+const requestedQuickFormat = computed(() => ['tournament', 'cup', 'league'].includes(String(route.query.format || '')) ? String(route.query.format) : '')
+const quickHybridFlow = computed(() => route.query.mode === 'quick' && route.query.view === 'console' && ['league', 'cup', 'hybrid'].includes(String(route.query.format || 'hybrid')))
+const quickTournamentFlow = computed(() => route.query.mode === 'quick' && route.query.view === 'console' && route.query.format === 'tournament')
+const quickResultFlow = computed(() => route.query.mode === 'quick' && route.query.view === 'result')
 
 const loading = ref(false)
+const drawPrerequisitesReady = ref(false)
 const saving = ref(false)
 const drawing = ref(false)
-const tournament = ref({})
+const activeOverviewFilter = ref('all')
+const tournament = ref(qaSnapshot ? {
+  ...qaSnapshot.tournament,
+  divisions: [
+    { id: 'qa-division-u8', name: 'U8组', tournamentType: 'league', mode: 'simple', teamCount: 16, drawStatus: 'pending' },
+    { id: 'qa-division-u10', name: 'U10组', tournamentType: 'tournament', mode: 'simple', teamCount: 24, drawStatus: 'active' },
+    { id: 'qa-division-u12', name: 'U12组', tournamentType: 'tournament', mode: 'professional', teamCount: 32, drawStatus: 'pending' },
+    { id: 'qa-division-u14', name: 'U14组', tournamentType: 'league', mode: 'simple', teamCount: 12, drawStatus: 'pending' },
+    { id: 'qa-division-u16', name: 'U16组', tournamentType: 'tournament', mode: 'professional', teamCount: 16, drawStatus: 'done' }
+  ],
+  drawStatusByDivision: { 'qa-division-u8': 'schedule-pending', 'qa-division-u10': 'configured' },
+  professionalDrawConfigs: { 'qa-division-u12': { poolValidated: true }, 'qa-division-u16': { drawStatus: 'confirmed' } }
+} : {})
+const activeDivisionId = ref(props.divisionId || (typeof route.query.divisionId === 'string' ? route.query.divisionId : 'default'))
 const approvedTeams = ref([])
+const allApprovedRelations = ref([])
+const drawOverviewByDivision = ref({})
 const groups = ref([])
 const groupCount = ref(4)
 const teamsPerGroup = ref(4)
@@ -503,9 +640,169 @@ const configForm = ref({
   tournamentType: 'tournament',
   groupCount: 4,
   teamsPerGroup: 4,
+  avoidSameRegion: true,
+  balancedDistribution: true,
   knockoutSize: 16,
-  leagueGrouped: false
+  leagueGrouped: false,
+  loopType: 'single'
 })
+
+const divisionOptions = computed(() => {
+  const divisions = Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []
+  if (divisions.length > 0) return divisions
+  return [{ id: 'default', name: '默认组', tournamentType: tournament.value.type || tournament.value.tournamentType || 'tournament' }]
+})
+const activeDivision = computed(() => divisionOptions.value.find(item => item.id === activeDivisionId.value) || divisionOptions.value[0])
+function divisionPlayerFormatLabel(division) { const value=String(division?.matchFormat || '').match(/(5|7|8|9|11)/);const players=Number(value?.[1] || division?.playersOnField || 0);return players ? `${players}人制` : '' }
+function divisionDisplayName(division) { const format=divisionPlayerFormatLabel(division);return format ? `${division?.name || '未命名组别'} · ${format}` : division?.name || '未命名组别' }
+const activeRequiredTeamCount = computed(() => divisionRequiredTeams(activeDivision.value))
+const activeApprovedTeamCount = computed(() => divisionTeamCount(activeDivision.value))
+const drawBlocked = computed(() => drawPrerequisitesReady.value && activeRequiredTeamCount.value > 0 && activeApprovedTeamCount.value < activeRequiredTeamCount.value)
+const drawRequirementProgress = computed(() => activeRequiredTeamCount.value > 0 ? Math.min(100, Math.round(activeApprovedTeamCount.value / activeRequiredTeamCount.value * 100)) : 0)
+const divisionStateCounts = computed(() => divisionOptions.value.reduce((counts, division) => {
+  const state = divisionDrawState(division).state
+  counts[state] += 1
+  return counts
+}, { pending: 0, active: 0, done: 0 }))
+const filteredDivisionOptions = computed(() => activeOverviewFilter.value === 'all'
+  ? divisionOptions.value
+  : divisionOptions.value.filter(division => divisionDrawState(division).state === activeOverviewFilter.value))
+const overviewDateRange = computed(() => {
+  const start = String(tournament.value.startDate || '').replaceAll('-', '.')
+  const end = String(tournament.value.endDate || '').replaceAll('-', '.')
+  return start && end ? `${start}—${end}` : '时间待定'
+})
+const overviewLocation = computed(() => tournament.value.province || tournament.value.city || tournament.value.location || '地点待定')
+const quickGroupCountOptions = computed(() => Array.from({ length: 7 }, (_, index) => index + 2))
+const quickTeamCountOptions = computed(() => Array.from({ length: 7 }, (_, index) => index + 2))
+const quickCapacity = computed(() => configForm.value.groupCount * configForm.value.teamsPerGroup)
+const quickCapacityValid = computed(() => quickCapacity.value >= divisionTeamCount(activeDivision.value))
+const quickCapacityLabel = computed(() => `${divisionTeamCount(activeDivision.value)}支球队 ÷ ${configForm.value.groupCount}个小组 = 每组${configForm.value.teamsPerGroup}支`)
+const quickGroupNameRange = computed(() => `A组—${String.fromCharCode(64 + configForm.value.groupCount)}组`)
+const quickNumberingPreview = computed(() => Array.from({ length: configForm.value.teamsPerGroup }, (_, index) => `A${index + 1}`).join('、'))
+const quickGroupPreview = computed(() => Array.from({ length: configForm.value.groupCount }, (_, groupIndex) => {
+  const code = String.fromCharCode(65 + groupIndex)
+  return { name: `${code}组`, slots: Array.from({ length: configForm.value.teamsPerGroup }, (_, slotIndex) => `${code}${slotIndex + 1}`) }
+}))
+
+function divisionIsProfessional(division) {
+  const mode = division.mode || division.ruleMode || division.rulesMode
+  return mode === 'professional' || division.isProfessional === true
+}
+function divisionFormatLabel(division) {
+  const value = division.formatType || division.tournamentType || division.matchFormat
+  return ({ league: '联赛制', cup: '杯赛制', tournament: '赛会制', knockout: '淘汰赛', hybrid: '混合制' })[value] || '赛会制'
+}
+function drawWorkflowFormat(division) {
+  const value = String(division?.formatType || division?.tournamentType || division?.matchFormat || '').toLowerCase()
+  if (value === 'tournament') return 'cup'
+  if (value === 'cup') return 'tournament'
+  if (value === 'league') return 'league'
+  if (value === 'hybrid') return 'hybrid'
+  return 'tournament'
+}
+function divisionTeamCount(division) {
+  const id = String(division.id || division._id || 'default')
+  return allApprovedRelations.value.filter(item => String(item.divisionId || 'default') === id).length || Number(division.teamCount || 0)
+}
+function divisionRequiredTeams(division) {
+  const candidates = [division?.expectedTeams, division?.requiredTeams, division?.teamRequirement, division?.participantTeams, division?.maxTeams]
+  const value = candidates.map(Number).find(item => Number.isFinite(item) && item > 0)
+  return value || 0
+}
+function divisionDrawReady(division) {
+  const required = divisionRequiredTeams(division)
+  return required <= 0 || divisionTeamCount(division) >= required
+}
+function divisionDrawState(division) {
+  const id = String(division.id || division._id || 'default')
+  const persistedState = drawOverviewByDivision.value[id]
+  const professionalConfig = tournament.value.professionalDrawConfigs?.[id]
+  const simpleState = tournament.value.drawStatusByDivision?.[id]
+  if (!divisionDrawReady(division)) return { state: 'pending', label: '球队审核未完成', hint: `已通过 ${divisionTeamCount(division)} / ${divisionRequiredTeams(division)} 支`, action: '等待球队审核', icon: Lock }
+  if (persistedState?.state === 'done') return { state: 'done', label: '抽签已完成', hint: persistedState.confirmedAt ? `确认于 ${formatOverviewTime(persistedState.confirmedAt)}` : '分组结果已正式确认', action: '修改分组', icon: CircleCheck }
+  if (persistedState?.state === 'active') return { state: 'active', label: '抽签结果待确认', hint: '已完成分组，等待最终确认', action: '继续确认', icon: Warning }
+  if (professionalConfig?.drawStatus === 'confirmed' || simpleState === 'confirmed') return { state: 'done', label: '抽签已完成', hint: '可查看抽签结果', action: '查看结果', icon: CircleCheck }
+  if (professionalConfig?.poolValidated) return { state: 'active', label: '球队池已完成 / 待抽签', hint: '等待开始公开抽签', action: '进入专业抽签', icon: Warning }
+  if (simpleState === 'configured') return { state: 'active', label: '分组设置已完成', hint: '等待确认分组结果', action: '继续分组', icon: CircleCheck }
+  if (simpleState === 'schedule-pending') return { state: 'active', label: '赛程顺序待确认', hint: '赛程顺序待确认', action: '进入分组', icon: Warning }
+  return { state: 'pending', label: '尚未开始', hint: '等待开始分组', action: '开始分组', icon: CircleClose }
+}
+function formatOverviewTime(value) {
+  const date = new Date(value?.$date || value)
+  if (Number.isNaN(date.getTime())) return '已确认'
+  return date.toLocaleString('zh-CN', { hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit' })
+}
+function enterDivisionDraw(division) {
+  if (!divisionDrawReady(division)) return ElMessage.warning(`当前组别需审核通过 ${divisionRequiredTeams(division)} 支球队后才能抽签与分组`)
+  const id = String(division.id || division._id || 'default')
+  const state = divisionDrawState(division)
+  if (divisionIsProfessional(division)) {
+    router.push({ path: route.path, query: { divisionId: id, mode: 'professional', step: state.state === 'done' ? 'result' : 'setup' } })
+  } else {
+    const format = drawWorkflowFormat(division)
+    router.push({ path: route.path, query: { divisionId: id, mode: 'quick', view: state.state === 'done' ? 'result' : (format === 'tournament' ? 'config' : 'console'), format, knockoutSize:String(division.knockoutSize || ''), knockoutType:String(division.knockoutType || '') } })
+  }
+}
+function viewDivisionResult(division) {
+  const id = String(division.id || division._id || 'default')
+  if (divisionIsProfessional(division)) router.push({ path:route.path,query:{ divisionId:id,mode:'professional',step:'result' } })
+  else router.push({ path:route.path,query:{ divisionId:id,mode:'quick',view:'result',format:drawOverviewByDivision.value[id]?.format || 'tournament' } })
+}
+async function modifyDivisionDraw(division) {
+  const id = String(division.id || division._id || 'default')
+  try {
+    const matches = await queryList('matches',{ where:{ tournamentId },limit:1000,silent:true })
+    const scopedMatches = (matches || []).filter(match => String(match.divisionId || 'default') === id && !['cancelled','void'].includes(String(match.status || '')))
+    if (scopedMatches.length) {
+      await ElMessageBox.alert(`“${division.name}”已经生成 ${scopedMatches.length} 场赛程或比赛，不能直接修改分组。请先在赛程管理完成影响范围核对和赛程撤回，再返回此处调整。`, '分组已影响赛程', { type:'error',confirmButtonText:'我知道了' })
+      return
+    }
+    await ElMessageBox.prompt(`分组结果决定后续赛程。请输入完整组别名称“${division.name}”以确认进入修改。`, '谨慎修改分组', { type:'warning',confirmButtonText:'下一步',cancelButtonText:'取消',inputPlaceholder:division.name,inputValidator:value => String(value || '').trim() === String(division.name || '').trim() || '请输入完整且一致的组别名称' })
+    const reason = await ElMessageBox.prompt('请填写本次修改原因，原因将随新的分组草稿保留。', '填写修改原因', { type:'warning',confirmButtonText:'确认进入修改',cancelButtonText:'取消',inputType:'textarea',inputPlaceholder:'例如：球队退出，需要重新平衡分组',inputValidator:value => String(value || '').trim().length >= 4 || '请至少填写4个字的修改原因' })
+    sessionStorage.setItem(`sxf-draw-edit:${tournamentId}:${id}`, String(reason.value || '').trim())
+    if (divisionIsProfessional(division)) router.push({ path:route.path,query:{ divisionId:id,mode:'professional',step:'result' } })
+    else router.push({ path:route.path,query:{ divisionId:id,mode:'quick',view:'console',format:drawOverviewByDivision.value[id]?.format || 'tournament' } })
+  } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '无法进入修改') }
+}
+function returnToDrawOverview() { router.push({ path: route.path, query: {} }) }
+function resetQuickConfig() {
+  const approvedCount = divisionTeamCount(activeDivision.value)
+  configForm.value.groupCount = approvedCount >= 28 ? 8 : 4
+  configForm.value.teamsPerGroup = 4
+  configForm.value.avoidSameRegion = true
+  configForm.value.balancedDistribution = true
+}
+function enterQuickConsole() {
+  if (drawBlocked.value) return ElMessage.warning(`需审核通过 ${activeRequiredTeamCount.value} 支球队后才能进入分组操作台`)
+  router.push({
+    path: route.path,
+    query: {
+      divisionId: activeDivisionId.value,
+      mode: 'quick',
+      view: 'console',
+      format: configForm.value.tournamentType,
+      groupCount: String(configForm.value.groupCount),
+      teamsPerGroup: String(configForm.value.teamsPerGroup),
+      avoidSameRegion: configForm.value.avoidSameRegion ? '1' : '0',
+      balancedDistribution: configForm.value.balancedDistribution ? '1' : '0'
+    }
+  })
+}
+function belongsToActiveDivision(record) {
+  return (record.divisionId || 'default') === activeDivisionId.value
+}
+
+async function handleDivisionChange() {
+  configForm.value.tournamentType = activeDivision.value.tournamentType || tournament.value.type || tournament.value.tournamentType || 'tournament'
+  drawGenerated.value = false
+  hasSavedGroups.value = false
+  groups.value = []
+  bracket.value = []
+  bracketConfirmed.value = false
+  await loadApprovedTeams()
+  await loadGroups()
+}
 
 // 赛制相关
 const tournamentType = computed(() => configForm.value.tournamentType)
@@ -620,7 +917,8 @@ function resetConfig() {
     groupCount: 4,
     teamsPerGroup: 4,
     knockoutSize: 16,
-    leagueGrouped: false
+    leagueGrouped: false,
+    loopType: 'single'
   }
 }
 
@@ -784,23 +1082,73 @@ watch(groupCount, (newVal) => {
 
 // 加载赛事信息
 async function loadTournament() {
+  if (qaSnapshot || visualQa) {
+    activeDivisionId.value = props.divisionId || (typeof route.query.divisionId === 'string' ? route.query.divisionId : 'qa-division-u8')
+    configForm.value.tournamentType = activeDivision.value.tournamentType || 'tournament'
+    return
+  }
   try {
-    tournament.value = await queryById('tournaments', tournamentId)
+    const [tournamentRecord, divisionRecords] = await Promise.all([
+      queryById('tournaments', tournamentId),
+      queryList('divisions', { where:{ tournamentId }, orderBy:{ createTime:'asc' }, silent:true })
+    ])
+    tournament.value = { ...(tournamentRecord || {}), divisions:Array.isArray(divisionRecords) ? divisionRecords.map(item => ({ ...item, id:item._id || item.id })) : [] }
+    const preferred = props.divisionId || tournament.value.defaultDivisionId || tournament.value.divisions?.[0]?.id || 'default'
+    activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
+    configForm.value.tournamentType = activeDivision.value.tournamentType || tournament.value.type || tournament.value.tournamentType || 'tournament'
+    if (route.query.mode === 'quick' && route.query.view === 'config') {
+      const format = drawWorkflowFormat(activeDivision.value)
+      if (format !== 'tournament') await router.replace({ path:route.path,query:{ ...route.query,view:'console',format,knockoutSize:String(activeDivision.value.knockoutSize || ''),knockoutType:String(activeDivision.value.knockoutType || '') } })
+    }
   } catch (err) {
     console.error('加载赛事失败:', err)
   }
+}
+
+async function loadOverviewDrawStates() {
+  if (qaSnapshot || visualQa) return
+  try {
+    const [savedGroups,savedBrackets,savedLeagues] = await Promise.all([
+      queryList('tournament_groups',{ where:{ tournamentId },limit:1000,silent:true }),
+      queryList('tournament_bracket',{ where:{ tournamentId },limit:1000,silent:true }),
+      queryList('tournament_league_tables',{ where:{ tournamentId },limit:1000,silent:true })
+    ])
+    const buckets = {}
+    const append = (record,format) => {
+      if (record.status === 'archived') return
+      const id = String(record.divisionId || 'default')
+      if (!buckets[id]) buckets[id] = []
+      buckets[id].push({ ...record,format })
+    }
+    ;(savedGroups || []).forEach(record => append(record,'tournament'))
+    ;(savedBrackets || []).forEach(record => append(record,'cup'))
+    ;(savedLeagues || []).forEach(record => append(record,record.type || 'league'))
+    drawOverviewByDivision.value = Object.fromEntries(Object.entries(buckets).map(([id,records]) => {
+      const explicitlyConfirmed = records.length > 0 && records.every(record => record.status === 'published' || (record.status === 'confirmed' && Boolean(record.confirmedAt)))
+      const latestConfirmed = records.map(record => record.confirmedAt).filter(Boolean).sort((a,b) => new Date(b?.$date || b) - new Date(a?.$date || a))[0]
+      return [id,{ state:explicitlyConfirmed ? 'done' : 'active',confirmedAt:latestConfirmed || '',format:records[0]?.format || 'tournament' }]
+    }))
+  } catch (error) { console.warn('加载各组别抽签状态失败:', error) }
 }
 
 // 加载已参赛球队
 async function loadApprovedTeams() {
   loading.value = true
   try {
+    if (qaSnapshot || visualQa) {
+      const names = ['郑州绿城U12', '洛阳龙门U12', '开封未来U12', '南阳小将U12', '许昌奋进U12', '信阳追风U12', '漯河蓝鹰U12', '新乡天宇U12']
+      approvedTeams.value = names.map((name, index) => ({ _id: `qa-cup-${index + 1}`, teamId: `qa-cup-${index + 1}`, name, teamName: name, divisionId: activeDivisionId.value, status: 'approved' }))
+      allApprovedRelations.value = approvedTeams.value
+      return
+    }
     const list = await queryList('tournament_teams', {
       where: { tournamentId, status: 'approved' },
       orderBy: { createTime: 'desc' }
     })
+    allApprovedRelations.value = list
 
-    const teamIds = list.map(t => t.teamId).filter(Boolean)
+    const scopedList = list.filter(belongsToActiveDivision)
+    const teamIds = scopedList.map(t => t.teamId).filter(Boolean)
     if (teamIds.length > 0) {
       const teamsData = await queryList('teams', {
         where: { _id: { $in: teamIds } }
@@ -808,14 +1156,14 @@ async function loadApprovedTeams() {
       const teamMap = {}
       teamsData.forEach(t => { teamMap[t._id] = t })
 
-      approvedTeams.value = list.map(item => ({
+      approvedTeams.value = scopedList.map(item => ({
         ...item,
         ...teamMap[item.teamId],
         _id: item._id,
         teamId: item.teamId
       }))
     } else {
-      approvedTeams.value = list
+      approvedTeams.value = scopedList
     }
   } catch (err) {
     console.error('加载球队失败:', err)
@@ -826,8 +1174,56 @@ async function loadApprovedTeams() {
 }
 
 // 加载已有数据
+function getRecordTimestamp(record) {
+  const raw = record?.updateTime || record?.createTime
+  if (!raw) return 0
+  if (raw instanceof Date) return raw.getTime()
+  if (typeof raw === 'number') return raw
+  const parsed = new Date(raw?.$date || raw).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+async function detectLatestSavedTournamentType() {
+  const [savedGroups, savedBracket, savedLeagueTables] = await Promise.all([
+    queryList('tournament_groups', { where: { tournamentId }, limit: 100 }),
+    queryList('tournament_bracket', { where: { tournamentId }, limit: 100 }),
+    queryList('tournament_league_tables', { where: { tournamentId }, limit: 100 })
+  ])
+
+  const candidates = [
+    ...savedGroups
+      .filter(record => belongsToActiveDivision(record) && (record.groupName || record.groupCode) && Array.isArray(record.teams))
+      .map(record => ({ type: 'tournament', timestamp: getRecordTimestamp(record) })),
+    ...savedBracket
+      .filter(record => belongsToActiveDivision(record) && Array.isArray(record.matches))
+      .map(record => ({ type: 'cup', timestamp: getRecordTimestamp(record) })),
+    ...savedLeagueTables
+      .filter(record => belongsToActiveDivision(record) && Array.isArray(record.teams))
+      .map(record => ({ type: 'league', timestamp: getRecordTimestamp(record) }))
+  ]
+
+  candidates.sort((a, b) => b.timestamp - a.timestamp)
+  return candidates[0]?.type || ''
+}
+
 async function loadGroups() {
   try {
+    if ((qaSnapshot || visualQa) && route.query.mode === 'quick' && route.query.view === 'console' && route.query.format === 'tournament') {
+      const names = ['A组', 'B组', 'C组', 'D组', 'E组', 'F组', 'G组', 'H组']
+      groups.value = names.map((name, index) => ({ name, code: String.fromCharCode(65 + index), slots: [approvedTeams.value[index] || null, null, null, null], dragOver: false, slotDragOver: -1 }))
+      groupCount.value = 8
+      teamsPerGroup.value = 4
+      configForm.value.groupCount = 8
+      configForm.value.teamsPerGroup = 4
+      drawGenerated.value = true
+      hasSavedGroups.value = false
+      return
+    }
+    const savedTournamentType = requestedQuickFormat.value || await detectLatestSavedTournamentType()
+    if (savedTournamentType) {
+      configForm.value.tournamentType = savedTournamentType
+    }
+
     if (tournamentType.value === 'cup') {
       await loadBracket()
     } else if (tournamentType.value === 'league') {
@@ -842,10 +1238,15 @@ async function loadGroups() {
 }
 
 async function loadGroupsData() {
-  const list = await queryList('tournament_groups', {
+  const allRecords = await queryList('tournament_groups', {
     where: { tournamentId },
     orderBy: { groupCode: 'asc' }
   })
+  const list = allRecords.filter(record => (
+    belongsToActiveDivision(record) &&
+    (record.groupName || record.groupCode) &&
+    Array.isArray(record.teams)
+  ))
 
   if (list.length > 0) {
     drawGenerated.value = true
@@ -897,12 +1298,41 @@ async function loadGroupsData() {
 }
 
 async function loadBracket() {
-  const list = await queryList('tournament_bracket', {
+  if (qaSnapshot) {
+    const rows = approvedTeams.value
+    configForm.value.knockoutSize = 8
+    drawGenerated.value = true
+    hasSavedGroups.value = true
+    bracket.value = [
+      { round: 1, name: '1/4决赛', matches: [0, 1, 2, 3].map((index) => ({ id: `qa-cup-r1-${index}`, slot1: rows[index * 2], slot2: rows[index * 2 + 1], winner: null, dragOverSlot1: false, dragOverSlot2: false, _roundIndex: 0, _matchIndex: index })) },
+      { round: 2, name: '半决赛', matches: [0, 1].map((index) => ({ id: `qa-cup-r2-${index}`, slot1: null, slot2: null, winner: null, dragOverSlot1: false, dragOverSlot2: false, _roundIndex: 1, _matchIndex: index })) },
+      { round: 3, name: '决赛', matches: [{ id: 'qa-cup-final', slot1: null, slot2: null, winner: null, dragOverSlot1: false, dragOverSlot2: false, _roundIndex: 2, _matchIndex: 0 }] }
+    ]
+    bracketConfirmed.value = false
+    return
+  }
+  const allRecords = await queryList('tournament_bracket', {
     where: { tournamentId },
     orderBy: { round: 'asc' }
   })
+  const list = allRecords.filter(belongsToActiveDivision)
 
   if (list.length > 0) {
+    const savedBracketSize = Number(list[0]?.bracketSize)
+    if (savedBracketSize >= 4 && Number.isInteger(Math.log2(savedBracketSize))) {
+      configForm.value.knockoutSize = savedBracketSize
+    } else {
+      const assignedTeamIds = new Set()
+      list.forEach(round => {
+        ;(round.matches || []).forEach(match => {
+          if (match.slot1?.teamId) assignedTeamIds.add(match.slot1.teamId)
+          if (match.slot2?.teamId) assignedTeamIds.add(match.slot2.teamId)
+        })
+      })
+      let inferredBracketSize = 4
+      while (inferredBracketSize < assignedTeamIds.size) inferredBracketSize *= 2
+      configForm.value.knockoutSize = inferredBracketSize
+    }
     drawGenerated.value = true
     hasSavedGroups.value = true
     bracket.value = list.map((r, ri) => ({
@@ -925,10 +1355,12 @@ async function loadBracket() {
 }
 
 async function loadLeagueTables() {
-  const list = await queryList('tournament_league_tables', {
+  const allRecords = await queryList('tournament_league_tables', {
     where: { tournamentId },
     orderBy: { tableName: 'asc' }
   })
+  const list = allRecords.filter(belongsToActiveDivision)
+  configForm.value.loopType = list[0]?.loopType === 'double' ? 'double' : 'single'
 
   if (list.length > 0) {
     drawGenerated.value = true
@@ -1456,7 +1888,7 @@ function clearGroups() {
 
 // 保存分组/对阵/积分表
 async function saveGroups() {
-  await ElMessageBox.confirm('保存后抽签结果将生效，确定保存吗？', '保存确认', {
+  await ElMessageBox.confirm('保存后抽签结果将生效，本组别以前生成的赛程会被清空，需要重新生成赛程。确定保存吗？', '保存确认', {
     type: 'warning'
   })
 
@@ -1470,8 +1902,16 @@ async function saveGroups() {
       await saveGroupsData()
     }
 
+    await clearOtherSavedDrawTypes()
+    const scheduleResult = await clearCurrentDivisionSchedule()
+    await syncSavedTournamentState(scheduleResult.hasOtherDivisionMatches)
+
     hasSavedGroups.value = true
-    ElMessage.success('保存成功！')
+    if (scheduleResult.deletedCount > 0) {
+      ElMessage.success(`保存成功，已清空本组别 ${scheduleResult.deletedCount} 场旧赛程，请重新生成赛程`)
+    } else {
+      ElMessage.success('保存成功！')
+    }
   } catch (err) {
     console.error('保存失败:', err)
     ElMessage.error('保存失败: ' + err.message)
@@ -1480,13 +1920,90 @@ async function saveGroups() {
   }
 }
 
+async function deleteActiveDivisionRecords(collection) {
+  const records = await queryList(collection, { where: { tournamentId }, limit: 1000 })
+  const scopedRecords = records.filter(belongsToActiveDivision)
+  for (const record of scopedRecords) {
+    await deleteRecord(collection, record._id)
+  }
+  return scopedRecords.length
+}
+
+async function clearOtherSavedDrawTypes() {
+  const activeCollection = {
+    tournament: 'tournament_groups',
+    cup: 'tournament_bracket',
+    league: 'tournament_league_tables'
+  }[tournamentType.value]
+  const drawCollections = ['tournament_groups', 'tournament_bracket', 'tournament_league_tables']
+
+  for (const collection of drawCollections) {
+    if (collection !== activeCollection) {
+      await deleteActiveDivisionRecords(collection)
+    }
+  }
+}
+
+async function clearCurrentDivisionSchedule() {
+  const allMatches = await queryList('matches', { where: { tournamentId }, limit: 1000 })
+  const currentDivisionMatches = allMatches.filter(belongsToActiveDivision)
+
+  for (const match of currentDivisionMatches) {
+    await deleteRecord('matches', match._id)
+  }
+
+  return {
+    deletedCount: currentDivisionMatches.length,
+    hasOtherDivisionMatches: allMatches.some(match => !belongsToActiveDivision(match))
+  }
+}
+
+async function syncSavedTournamentState(hasOtherDivisionMatches) {
+  const updateData = {
+    scheduleGenerated: hasOtherDivisionMatches,
+    updateTime: new Date()
+  }
+  const divisions = Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []
+
+  if (divisions.length > 0) {
+    const nextDivisions = divisions.map(division => (
+      String(division.id) === String(activeDivisionId.value)
+        ? { ...division, tournamentType: tournamentType.value }
+        : division
+    ))
+    updateData.divisions = nextDivisions
+    tournament.value = { ...tournament.value, divisions: nextDivisions, scheduleGenerated: hasOtherDivisionMatches }
+  } else {
+    updateData.type = tournamentType.value
+    updateData.tournamentType = tournamentType.value
+    tournament.value = {
+      ...tournament.value,
+      type: tournamentType.value,
+      tournamentType: tournamentType.value,
+      scheduleGenerated: hasOtherDivisionMatches
+    }
+  }
+
+  await updateRecord('tournaments', tournamentId, updateData)
+}
+
 async function saveGroupsData() {
+  const validGroups = groups.value.filter(group => (
+    group &&
+    Array.isArray(group.slots) &&
+    (group.name || group.code)
+  ))
+  if (validGroups.length === 0) {
+    throw new Error('没有可保存的有效分组，请重新配置分组')
+  }
+
   const oldGroups = await queryList('tournament_groups', { where: { tournamentId } })
-  for (const g of oldGroups) {
+  for (const g of oldGroups.filter(belongsToActiveDivision)) {
     await deleteRecord('tournament_groups', g._id)
   }
 
-  for (const group of groups.value) {
+  for (let groupIndex = 0; groupIndex < validGroups.length; groupIndex++) {
+    const group = validGroups[groupIndex]
     const teamList = group.slots.map((slot, index) => {
       if (!slot) return null
       return {
@@ -1498,8 +2015,10 @@ async function saveGroupsData() {
 
     await addRecord('tournament_groups', {
       tournamentId,
-      groupName: group.name,
-      groupCode: group.code || group.name[0],
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
+      groupName: group.name || `${group.code}组`,
+      groupCode: group.code || group.name?.[0] || `G${groupIndex + 1}`,
       teams: teamList,
       teamCount: teamList.length,
       maxTeams: teamsPerGroup.value,
@@ -1512,7 +2031,7 @@ async function saveGroupsData() {
 
 async function saveBracket() {
   const oldBracket = await queryList('tournament_bracket', { where: { tournamentId } })
-  for (const b of oldBracket) {
+  for (const b of oldBracket.filter(belongsToActiveDivision)) {
     await deleteRecord('tournament_bracket', b._id)
   }
 
@@ -1520,6 +2039,9 @@ async function saveBracket() {
     const roundData = bracket.value[index]
     await addRecord('tournament_bracket', {
       tournamentId,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
+      bracketSize: configForm.value.knockoutSize,
       round: roundData.round,
       name: roundData.name,
       matches: roundData.matches.map(m => ({
@@ -1538,7 +2060,7 @@ async function saveBracket() {
 
 async function saveLeagueTables() {
   const oldTables = await queryList('tournament_league_tables', { where: { tournamentId } })
-  for (const t of oldTables) {
+  for (const t of oldTables.filter(belongsToActiveDivision)) {
     await deleteRecord('tournament_league_tables', t._id)
   }
 
@@ -1558,11 +2080,14 @@ async function saveLeagueTables() {
 
     await addRecord('tournament_league_tables', {
       tournamentId,
+      divisionId: activeDivisionId.value,
+      divisionName: activeDivision.value.name,
       tableName: group.name,
       tableCode: group.code || 'ALL',
       teams: teamList,
       teamCount: teamList.length,
       type: 'league',
+      loopType: configForm.value.loopType === 'double' ? 'double' : 'single',
       createTime: new Date(),
       updateTime: new Date()
     })
@@ -1712,15 +2237,34 @@ document.addEventListener('fullscreenchange', () => {
   isFullscreen.value = !!document.fullscreenElement
 })
 
+watch(() => props.divisionId, async value => {
+  if (!value || value === activeDivisionId.value) return
+  activeDivisionId.value = value
+  await handleDivisionChange()
+})
+
 // 组件挂载
 onMounted(async () => {
   await loadTournament()
   await loadApprovedTeams()
+  await loadOverviewDrawStates()
   await loadGroups()
+  drawPrerequisitesReady.value = true
+  if (visualQa && route.query.mode === 'quick' && route.query.view === 'console' && route.query.format === 'tournament') {
+    setTimeout(() => {
+      const names = ['A组', 'B组', 'C组', 'D组', 'E组', 'F组', 'G组', 'H组']
+      groups.value = names.map((name, index) => ({ name, code: String.fromCharCode(65 + index), slots: [approvedTeams.value[index] || null, null, null, null], dragOver: false, slotDragOver: -1 }))
+      groupCount.value = 8
+      teamsPerGroup.value = 4
+      drawGenerated.value = true
+      hasSavedGroups.value = false
+    }, 0)
+  }
 })
 </script>
 
 <style scoped>
+.draw-requirement-state{display:flex;min-height:520px;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px;text-align:center;background:#f7faf8}.draw-requirement-state>.el-icon{font-size:48px;color:#0b8a4b}.draw-requirement-state h2{margin:0;color:#173a29;font-size:28px}.draw-requirement-state p{max-width:620px;margin:0;color:#65746a;font-size:16px}.draw-requirement-state .el-progress{width:min(520px,80vw)}
 .tournament-draw {
   padding: 20px;
   max-width: 1600px;
@@ -1739,6 +2283,23 @@ onMounted(async () => {
   padding: 0;
   min-height: auto;
   background: transparent;
+}
+
+.division-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin: 16px 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.division-selector > span:first-child {
+  font-weight: 600;
+  color: #374151;
 }
 
 /* 空状态 */
@@ -2750,7 +3311,52 @@ onMounted(async () => {
   background: rgba(64, 158, 255, 0.05);
 }
 
+.draw-overview { min-height: 100%; background: #fafcfb; color: #151d18; }
+.overview-context { display: flex; align-items: center; justify-content: space-between; min-height: 76px; padding: 0 30px; border-bottom: 1px solid #e2e7e3; background: #fff; }
+.overview-event { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.overview-event-crest { display: grid; width: 45px; height: 51px; place-items: center; border: 2px solid #17422e; border-radius: 14px 14px 20px 20px; color: #17422e; background: linear-gradient(135deg,#eff8f1,#fff); font-size: 24px; }
+.overview-context strong { max-width: 365px; overflow: hidden; font-size: 21px; text-overflow: ellipsis; white-space: nowrap; }
+.overview-meta { display: inline-flex; align-items: center; gap: 8px; padding-left: 18px; border-left: 1px solid #e3e7e4; color: #424b45; font-size: 14px; white-space: nowrap; }
+.overview-meta .el-icon { font-size: 19px; }
+.draw-overview main { width: min(1320px, calc(100% - 64px)); margin: 0 auto; padding: 28px 0 34px; }
+.draw-overview h1 { margin: 0; font-size: 30px; line-height: 1.25; }
+.overview-lead { margin: 7px 0 21px; color: #5e6962; font-size: 15px; }
+.overview-filters { display: flex; gap: 14px; margin: 24px 0 20px; }
+.overview-filters .el-button { min-width: 104px; }
+.division-draw-list { display: flex; flex-direction: column; gap: 10px; }
+.division-draw-list article { display: grid; grid-template-columns: 70px 170px 1fr 1.45fr 1.4fr 230px; align-items: center; min-height: 94px; padding: 0 26px 0 18px; border: 1px solid #dde4df; border-radius: 10px; background: #fff; }
+.division-crest { position: relative; display: grid; width: 54px; height: 62px; place-items: center; overflow: hidden; border: 2px solid rgba(255,255,255,.72); border-radius: 17px 17px 24px 24px; color: #fff; background: linear-gradient(145deg,#0a8c4c,#034c2c); box-shadow: 0 0 0 2px #0a633b, inset 0 0 0 2px rgba(255,255,255,.25); }
+.division-crest::after { position: absolute; inset: 4px; border: 1px solid rgba(255,255,255,.45); border-radius: 12px 12px 19px 19px; content: ''; }
+.division-crest .el-icon { position: relative; z-index: 1; margin-top: -11px; font-size: 23px; }
+.division-crest small { position: absolute; z-index: 1; bottom: 7px; font-size: 10px; font-weight: 800; letter-spacing: .5px; }
+.crest-1{background:linear-gradient(145deg,#217bd6,#06488f);box-shadow:0 0 0 2px #154e8e,inset 0 0 0 2px rgba(255,255,255,.25)}
+.crest-2{background:linear-gradient(145deg,#b08b1b,#4c3b06);box-shadow:0 0 0 2px #715b0d,inset 0 0 0 2px rgba(255,255,255,.25)}
+.crest-3{background:linear-gradient(145deg,#e16b27,#8c2b08);box-shadow:0 0 0 2px #96340d,inset 0 0 0 2px rgba(255,255,255,.25)}
+.crest-4{background:linear-gradient(145deg,#7441b6,#35146b);box-shadow:0 0 0 2px #48237b,inset 0 0 0 2px rgba(255,255,255,.25)}
+.division-crest.pro { color: #ffdc53; }
+.division-draw-list article > strong { font-size: 21px; }
+.division-draw-list dl { margin: 0; padding-left: 28px; border-left: 1px solid #dfe4e0; }
+.division-draw-list dt { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; font-size: 15px; }
+.division-draw-list dt .el-icon { font-size: 18px; }
+.division-draw-list .format dt .el-icon { color: #078640; }
+.division-draw-list dd { margin: 0; color: #5f6962; font-size: 14px; }
+.mode-badge { display: inline-flex; align-items: center; gap: 9px; justify-self: start; min-width: 194px; padding: 9px 16px; border: 1px solid #cde5d4; border-radius: 6px; color: #087b3b; background: #f0f8f2; font-weight: 650; }
+.mode-badge .el-icon { font-size: 18px; }
+.mode-badge.pro { border-color: #0a5130; color: #ffd447; background: linear-gradient(135deg,#06331f,#075d35); }
+.division-draw-list .state dt { font-weight: 650; }
+.division-draw-list .state.active dt .el-icon { color: #ed7b17; }
+.division-draw-list .state.done dt .el-icon { color: #138841; }
+.division-draw-list .state.pending dt .el-icon { color: #777f79; }
+.division-draw-list article > .el-button { justify-self: end; min-width: 136px; }
+.overview-row-actions{display:flex;justify-self:end;gap:8px}.overview-row-actions .el-button{min-width:100px;margin:0}
+.overview-footer { margin-top: 14px; }
+
 /* 响应式 */
+@media (max-width: 1100px) {
+  .division-draw-list article { grid-template-columns: 56px 130px 1fr 1fr 190px; }
+  .mode-badge { display: none; }
+  .division-draw-list .state { border-left: 0; }
+}
 @media (max-width: 768px) {
   .draw-body {
     flex-direction: column;
@@ -2776,4 +3382,47 @@ onMounted(async () => {
     justify-content: center;
   }
 }
+.quick-draw-setup { min-height: 100%; background: #f6f8f6; color: #1b281d; }
+.quick-setup-context { display: flex; align-items: center; justify-content: space-between; min-height: 76px; padding: 0 30px; border-bottom: 1px solid #e1e8e2; background: #fff; }
+.quick-event-context { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.quick-event-context strong { max-width: 360px; overflow: hidden; font-size: 21px; text-overflow: ellipsis; white-space: nowrap; }
+.quick-event-crest { display: grid; width: 43px; height: 50px; place-items: center; border: 2px solid #193f2e; border-radius: 13px 13px 18px 18px; color: #193f2e; background: #f3f8f4; font-size: 22px; }
+.quick-event-meta { display: inline-flex; align-items: center; gap: 8px; padding-left: 18px; border-left: 1px solid #e2e7e3; color: #465148; white-space: nowrap; }
+.quick-draw-setup main { width: min(1328px, calc(100% - 56px)); margin: 0 auto; padding: 25px 0 18px; }
+.quick-setup-heading { display: flex; align-items: center; justify-content: space-between; min-height: 58px; }
+.quick-setup-heading h1 { display: flex; align-items: baseline; gap: 22px; margin: 0; font-size: 29px; }
+.quick-setup-heading h1 small { color: #3d4840; font-size: 15px; font-weight: 500; }
+.quick-setup-heading label { display: flex; align-items: center; gap: 13px; font-weight: 650; }
+.quick-current-division { display: flex; width: 160px; min-height: 38px; align-items: center; justify-content: space-between; padding: 0 14px; border: 1px solid #dfe5e1; border-radius: 6px; background: #fff; font-weight: 500; }
+.quick-flow-tabs { display: flex; height: 58px; align-items: flex-end; gap: 34px; border-bottom: 1px solid #dce3de; }
+.quick-flow-tabs button { height: 58px; padding: 0 22px; border: 0; border-bottom: 3px solid transparent; color: #252e28; background: transparent; font-size: 17px; cursor: pointer; }
+.quick-flow-tabs button.active { border-bottom-color: #08773b; color: #08773b; font-weight: 700; }
+.quick-config-layout { display: grid; grid-template-columns: 43% 57%; gap: 28px; margin-top: 18px; }
+.quick-config-card,.quick-preview-card { min-height: 572px; padding: 20px 23px; border: 1px solid #dde4df; border-radius: 10px; background: #fff; }
+.quick-config-card h2,.quick-preview-card h2 { margin: 0 0 17px; font-size: 20px; }
+.quick-config-card .el-alert { margin-bottom: 13px; }
+.quick-setting-row { display: grid; grid-template-columns: 142px 200px 1fr; min-height: 54px; align-items: center; gap: 12px; }
+.quick-setting-row strong { font-size: 15px; }
+.quick-setting-row small { color: #737e76; font-size: 13px; }
+.quick-setting-row select { width: 200px; min-height: 40px; padding: 0 13px; border: 1px solid #dce3de; border-radius: 6px; color: #303a33; background: #fff; font: inherit; }
+.quick-setting-row :deep(.el-switch.is-checked .el-switch__core) { border-color: #087b3b; background-color: #087b3b; }
+.quick-setting-row .el-button { justify-self: end; }
+.quick-readonly-value { padding: 9px 13px; border: 1px solid #e0e5e1; border-radius: 6px; color: #6c766f; background: #f7f8f7; }
+.quick-validation { display: flex; align-items: center; justify-content: space-between; margin-top: 11px; padding: 14px 16px; border: 1px solid #d9e8dd; border-radius: 7px; color: #116e37; background: #f4f9f5; }
+.quick-validation span { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.quick-group-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; }
+.quick-group-preview article { padding: 10px 12px 11px; border: 1px solid #e0e5e1; border-radius: 7px; }
+.quick-group-preview h3 { margin: 0 0 9px; color: #08783a; font-size: 16px; }
+.quick-group-preview h3 small { color: #737d76; font-size: 13px; font-weight: 400; }
+.quick-group-preview article div { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+.quick-group-preview article span { display: grid; height: 42px; place-items: center; border: 1px solid #e2e7e3; border-radius: 6px; background: #fbfcfb; }
+.quick-preview-card > footer { display: grid; grid-template-columns: repeat(3,1fr); margin-top: 13px; border: 1px solid #dde4df; border-radius: 7px; }
+.quick-preview-card > footer span { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 50px; border-right: 1px solid #dde4df; font-weight: 650; }
+.quick-preview-card > footer span:last-child { border-right: 0; }
+.quick-preview-card > footer .el-icon { color: #087b3b; font-size: 22px; }
+.quick-setup-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding: 10px 18px; border: 1px solid #e0e7e1; border-radius: 8px; background: #f2f7f3; }
+.quick-setup-footer p { display: flex; align-items: center; gap: 11px; margin: 0; color: #135f35; }
+.quick-setup-footer p .el-icon { font-size: 23px; }
+.quick-setup-footer > div { display: flex; gap: 16px; }
+.quick-setup-footer .el-button { min-height: 44px; }
 </style>

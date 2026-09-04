@@ -1,17 +1,6 @@
-<!--custom-tab-bar/index.wxml-->
-<!--赛小蜂 - 自定义底部导航-->
-<view class="tab-bar">
-  <view
-    wx:for="{{tabs}}" wx:key="_id"
-    wx:key="id"
-    class="tab-item {{item.activeClass}}"
-    data-index="{{index}}"
-    data-path="{{item.path}}"
-    bindtap="switchTab"
-  >
-    <!-- 图标（文字图标，不需要图片文件） -->
-    <text class="tab-icon-text">{{item.iconText}}</text>
-    <!-- 文字 -->
+<view class="tab-bar" wx:if="{{ready}}">
+  <view wx:for="{{tabs}}" wx:key="id" class="tab-item {{item.activeClass}}" data-index="{{index}}" bindtap="switchTab">
+    <image class="tab-icon" src="{{item.icon}}" mode="aspectFit"></image>
     <text class="tab-text">{{item.text}}</text>
   </view>
 </view>

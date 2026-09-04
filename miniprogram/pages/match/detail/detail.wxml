@@ -29,7 +29,7 @@
         <view class="team home-team">
           <image
             class="team-logo"
-            src="{{displayMatch.homeLogo || '/images/app-logo.png'}}"
+            src="{{displayMatch.homeLogo || '/images/logo.png'}}"
             mode="aspectFit"
           ></image>
           <text class="team-name">{{displayMatch.homeTeamName}}</text>
@@ -46,7 +46,7 @@
         <view class="team away-team">
           <image
             class="team-logo"
-            src="{{displayMatch.awayLogo || '/images/app-logo.png'}}"
+            src="{{displayMatch.awayLogo || '/images/logo.png'}}"
             mode="aspectFit"
           ></image>
           <text class="team-name">{{displayMatch.awayTeamName}}</text>

@@ -42,7 +42,7 @@
       >
         <div class="card-image">
           <!-- 球队LOGO -->
-          <img :src="item.teamLogo || item.logo || '/images/default-team.png'" :alt="item.teamName || item.name" />
+          <img :src="item.teamLogo || item.logo || defaultTeamLogo" :alt="item.teamName || item.name" />
           <!-- 赛事状态 -->
           <div class="card-badge" :class="getStatusClass(item.status)">
             {{ getStatusText(item.status) }}
@@ -139,6 +139,7 @@ import { Plus, Calendar, Location, Search, Trophy, Message, Delete } from '@elem
 import { queryList, deleteRecord as deleteTournamentApi, updateRecord, callFunction } from '../../utils/cloud'
 
 const router = useRouter()
+const defaultTeamLogo = `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
 const loading = ref(false)
 const myTournaments = ref([])
 const currentPage = ref(1)

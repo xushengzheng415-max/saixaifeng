@@ -23,7 +23,6 @@ Page({
   },
 
   onLoad(options) {
-    this.setData({ role: getApp().globalData.userRole || 'coach' })
     if (options.id) {
       this.setData({ teamId: options.id, isEdit: true })
       this.loadTeam(options.id)
@@ -150,14 +149,14 @@ Page({
   // 跳转球员管理
   goToPlayers() {
     wx.navigateTo({
-      url: `/pages/player/player?teamId=${this.data.teamId}`
+      url: `/pages/team/player-library/player-library?teamId=${encodeURIComponent(this.data.teamId)}`
     })
   },
 
   // 添加球员（快捷入口）
   addPlayer() {
     wx.navigateTo({
-      url: `/pages/player/detail?teamId=${this.data.teamId}`
+      url: `/pages/team/player-add/player-add?teamId=${encodeURIComponent(this.data.teamId)}`
     })
   },
 

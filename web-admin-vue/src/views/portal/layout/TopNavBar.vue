@@ -3,8 +3,8 @@
     <div class="nav-inner portal-container">
       <!-- Logo -->
       <div class="nav-logo" @click="goHome">
-        <img src="/LOGO2.png" alt="赛小蜂" class="logo-img" />
-        <span class="logo-text">赛小蜂</span>
+        <img :src="brandLogoUrl" alt="赛小蜂足球" class="logo-img" />
+        <span class="logo-text">赛小蜂足球</span>
       </div>
 
       <!-- 主导航菜单 -->
@@ -56,11 +56,13 @@ import { useRouter, useRoute } from 'vue-router'
 import { Search, User, HomeFilled, Trophy, ChatDotRound, UserFilled, TrendCharts } from '@element-plus/icons-vue'
 import UserAvatar from '../components/UserAvatar.vue'
 
+const brandLogoUrl = `${import.meta.env.BASE_URL}LOGO2.png`
+
 /**
  * PC 端顶部导航栏
  * 设计要求：
  * - 高度 64px，绿色渐变背景 + 底部2px金色装饰线
- * - Logo白色 + 品牌名"赛小蜂"
+ * - Logo白色 + 品牌名"赛小蜂足球"
  * - 导航菜单白色，hover/active效果
  * - 搜索框胶囊形，半透明
  * - 登录按钮白底绿字

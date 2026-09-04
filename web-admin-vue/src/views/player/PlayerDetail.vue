@@ -358,8 +358,10 @@ function goBack() {
 }
 
 function goToTeam() {
-  if (playerData.value.teamCode) {
-    router.push('/teams/' + playerData.value.teamCode)
+  const tournamentId = String(route.params.id || route.query.fromTournament || '')
+  const teamId = String(route.query.teamId || playerData.value.teamId || playerData.value.teamCode || '')
+  if (tournamentId && teamId) {
+    router.push({ path: `/tournaments/${tournamentId}/teams/${teamId}`, query: { divisionId: route.query.divisionId || '' } })
   }
 }
 
@@ -441,7 +443,7 @@ function createIdentityCard() {
 }
 
 async function loadPlayerData() {
-  const playerId = route.params.id
+  const playerId = route.params.playerId || route.params.id
   if (!playerId) {
     ElMessage.error('球员ID不存在')
     return

@@ -19,13 +19,14 @@
       </div>
 
       <div class="hero-score-area">
-        <template v-if="match.status === 'finished'">
+        <template v-if="match.status === 'finished' || match.status === 'completed'">
           <div class="hero-score">
-            <span class="score-num">{{ match.homeScore }}</span>
+            <span class="score-num">{{ match.homeScore ?? 0 }}</span>
             <span class="score-sep">:</span>
-            <span class="score-num">{{ match.awayScore }}</span>
+            <span class="score-num">{{ match.awayScore ?? 0 }}</span>
           </div>
           <div class="hero-match-time">{{ match.matchDate }} {{ match.matchTime }}</div>
+          <div class="hero-venue">{{ match.venue || '场地待定' }}</div>
         </template>
         <template v-else>
           <div class="hero-vs">VS</div>
@@ -42,7 +43,7 @@
     </div>
 
     <!-- 操作栏 -->
-    <div class="detail-actions">
+    <div v-if="!isRefereeEvidenceLocked" class="detail-actions">
       <el-button @click="openEditDialog" size="small">
         <el-icon><Edit /></el-icon> 编辑比赛
       </el-button>
@@ -76,6 +77,17 @@
       >延期</el-button>
     </div>
 
+    <section v-if="canReviewRefereeRecord" class="referee-review-bar">
+      <div>
+        <strong>裁判电子记录待复核</strong>
+        <span>比分、阵容、事件、报告及签字均为只读证据；退回不会直接改写现场数据。</span>
+      </div>
+      <div class="referee-review-actions">
+        <el-button type="warning" plain @click="openReturnRecordDialog">退回裁判修正</el-button>
+        <el-button type="success" @click="archiveRefereeRecord" :loading="reviewSaving">确认无误并归档</el-button>
+      </div>
+    </section>
+
     <div class="detail-body">
       <!-- 左侧：事件时间线 -->
       <div class="detail-main">
@@ -86,10 +98,10 @@
             <div class="lineup-header">
               <div class="lineup-title">{{ homeName }} vs {{ awayName }}</div>
               <div class="lineup-actions">
-                <el-button size="small" @click="openDualVisualEditor">
+                <el-button v-if="!isRefereeEvidenceLocked" size="small" @click="openDualVisualEditor">
                   <el-icon><Picture /></el-icon> 可视化布置
                 </el-button>
-                <el-button type="primary" size="small" @click="openLineupDialog">
+                <el-button v-if="!isRefereeEvidenceLocked" type="primary" size="small" @click="openLineupDialog">
                   <el-icon><Edit /></el-icon> 编辑阵容
                 </el-button>
                 <el-button v-if="hasLineups" type="success" size="small" @click="openPreviewDialog">
@@ -192,15 +204,24 @@
                 <div class="lineup-coach" v-if="lineups.away?.coach">主教练：{{ lineups.away.coach }}</div>
               </div>
             </div>
-            <el-empty v-else description="暂无阵容信息，点击上方按钮录入" />
+            <el-empty v-else :description="lineupEmptyDescription" />
           </el-tab-pane>
 
           <!-- 比赛事件 -->
           <el-tab-pane name="events">
             <template #label><el-icon><Soccer /></el-icon> 比赛事件</template>
+            <div v-if="sortedEvents.length" class="event-summary-grid">
+              <div v-for="item in eventSummary" :key="item.key" class="event-summary-item">
+                <span class="event-summary-icon">{{ item.icon }}</span>
+                <div>
+                  <strong>{{ item.value }}</strong>
+                  <span>{{ item.label }}</span>
+                </div>
+              </div>
+            </div>
             <div class="events-timeline">
               <div v-if="sortedEvents.length === 0" class="events-empty">
-                暂无比赛事件，<el-button link type="primary" @click="openAddEventDialog">+ 添加事件</el-button>
+                暂无比赛事件<el-button v-if="!isRefereeEvidenceLocked" link type="primary" @click="openAddEventDialog">，+ 添加事件</el-button>
               </div>
               <div v-for="(evt, i) in sortedEvents" :key="i" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ evt.minute }}'</div>
@@ -211,40 +232,38 @@
                   <span v-if="evt.assistName" class="event-assist">助攻: {{ evt.assistName }}</span>
                   <span v-if="evt.teamSide" class="event-side">{{ evt.teamSide === 'home' ? homeName : awayName }}</span>
                 </div>
-                <el-button size="small" text type="danger" @click="removeEvent(i)">
+                <el-button v-if="!isRefereeEvidenceLocked" size="small" text type="danger" @click="removeEvent(i)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
               </div>
             </div>
-            <el-button type="primary" plain size="small" @click="openAddEventDialog" style="margin-top: 12px;">
+            <el-button v-if="!isRefereeEvidenceLocked" type="primary" plain size="small" @click="openAddEventDialog" style="margin-top: 12px;">
               <el-icon><Plus /></el-icon> 添加事件
             </el-button>
           </el-tab-pane>
 
-          <!-- 数据统计（后期扩展） -->
+          <!-- 数据统计 -->
           <el-tab-pane name="stats">
             <template #label><el-icon><DataLine /></el-icon> 数据统计</template>
-            <div class="stats-placeholder">
-              <el-empty description="数据统计功能开发中" />
+            <div class="match-stats-panel">
+              <div class="stats-score-row">
+                <span>{{ homeName || '主队' }}</span>
+                <strong>{{ match.homeScore ?? 0 }} : {{ match.awayScore ?? 0 }}</strong>
+                <span>{{ awayName || '客队' }}</span>
+              </div>
+              <div class="event-summary-grid stats-summary-grid">
+                <div v-for="item in eventSummary" :key="item.key" class="event-summary-item">
+                  <span class="event-summary-icon">{{ item.icon }}</span>
+                  <div>
+                    <strong>{{ item.value }}</strong>
+                    <span>{{ item.label }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="sortedEvents.length === 0" class="stats-empty">暂无比赛事件数据</div>
             </div>
           </el-tab-pane>
         </el-tabs>
-      <!-- 签字二维码弹窗 -->
-      <el-dialog v-model="signatureQrDialogVisible" title="比赛监督扫码签字" width="420px" :close-on-click-modal="false" @close="stopSignaturePolling">
-        <div style="text-align:center; padding: 20px 0;">
-          <div v-if="signatureQrUrl" style="margin-bottom: 16px;">
-            <img :src="signatureQrUrl" style="width: 240px; height: 240px; border: 1px solid #eee; border-radius: 8px;" />
-          </div>
-          <div v-else style="padding: 40px 0; color: #999;">正在生成二维码...</div>
-          <div style="font-size: 13px; color: #999; margin-top: 12px;">
-            请使用微信扫描上方二维码<br/>在手机上完成手写签字
-          </div>
-          <div v-if="signatureSigned" style="margin-top: 16px; color: #67C23A; font-size: 14px; font-weight: 600;">
-            ✓ 签字已提交！
-          </div>
-        </div>
-      </el-dialog>
-
       </div>
 
       <!-- 右侧：比赛信息 -->
@@ -263,50 +282,30 @@
         <div class="info-card">
           <div class="info-card-title">
             裁判组
-            <el-button link type="primary" size="small" @click="openRefereeDialog" style="margin-left: auto;">
+            <el-button v-if="!isRefereeEvidenceLocked" link type="primary" size="small" @click="openRefereeDialog" style="margin-left: auto;">
               <el-icon><Edit /></el-icon>
             </el-button>
           </div>
           <div v-if="hasRefereeCrew">
-            <div class="info-row" v-if="refereeCrew.mainReferee?.name">
-              <span class="info-label">主裁判</span><span>{{ refereeCrew.mainReferee.name }}</span>
+            <div class="info-row" v-for="role in refereeRoleOptions" :key="role.key" v-show="refereeCrew[role.key]?.name">
+              <span class="info-label">{{ role.label }}</span><span>{{ refereeCrew[role.key]?.name }}</span>
             </div>
-            <div class="info-row" v-if="refereeCrew.assistant1?.name">
-              <span class="info-label">助理裁判1</span><span>{{ refereeCrew.assistant1.name }}</span>
+            <div class="info-row" v-if="operationRefereeName">
+              <span class="info-label">操作负责人</span><span>{{ operationRefereeName }}</span>
             </div>
-            <div class="info-row" v-if="refereeCrew.assistant2?.name">
-              <span class="info-label">助理裁判2</span><span>{{ refereeCrew.assistant2.name }}</span>
-            </div>
-            <div class="info-row" v-if="refereeCrew.fourthOfficial?.name">
-              <span class="info-label">第四官员</span><span>{{ refereeCrew.fourthOfficial.name }}</span>
-            </div>
-            <div class="info-row" v-if="refereeCrew.varReferee?.name">
-              <span class="info-label">视频裁判</span><span>{{ refereeCrew.varReferee.name }}</span>
-            </div>
-            <div class="info-row" v-if="refereeCrew.matchObserver?.name">
-              <span class="info-label">比赛监督</span><span>{{ refereeCrew.matchObserver.name }}</span>
-            </div>
-            <div class="info-row" v-if="refereeCrew.refereeObserver?.name">
-              <span class="info-label">裁判监督</span><span>{{ refereeCrew.refereeObserver.name }}</span>
+            <div class="info-row">
+              <span class="info-label">裁判报告</span>
+              <span>{{ match.refereeReportStatus === 'submitted' ? '已提交并锁定' : '未提交' }}</span>
             </div>
           </div>
           <div v-else class="info-empty">暂无裁判信息</div>
-        </div>
-
-        <!-- 签字状态 -->
-        <div class="info-row" style="margin-top: 8px;">
-          <span class="info-label">监督签字</span>
-          <span v-if="match.refereeSigned" style="color: #67C23A; font-weight: 600;">已签字 ✓</span>
-          <el-button v-else type="primary" size="small" @click="openSignatureQrDialog" style="margin-left: 4px;">
-            <el-icon><EditPen /></el-icon> 扫码签字
-          </el-button>
         </div>
 
         <!-- 球服颜色 -->
         <div class="info-card">
           <div class="info-card-title">
             球服颜色
-            <el-button link type="primary" size="small" @click="openKitDialog" style="margin-left: auto;">
+            <el-button v-if="!isRefereeEvidenceLocked" link type="primary" size="small" @click="openKitDialog" style="margin-left: auto;">
               <el-icon><Edit /></el-icon>
             </el-button>
           </div>
@@ -416,51 +415,41 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="returnRecordDialogVisible" title="退回裁判限定修正" width="560px">
+      <el-alert type="warning" :closable="false" title="主办方不能直接修改裁判现场记录。请选择需要更正的进球事件，并填写退回原因。" style="margin-bottom: 16px;" />
+      <el-form label-position="top">
+        <el-form-item label="退回原因" required>
+          <el-input v-model="returnRecordForm.reason" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="例如：第 58 分钟进球球员与事件记录不一致" />
+        </el-form-item>
+        <el-form-item label="允许修正的事件球员字段" required>
+          <el-checkbox-group v-model="returnRecordForm.fields">
+            <el-checkbox v-for="eventItem in returnableEvents" :key="eventItem.eventId" :label="`event_player:${eventItem.eventId}`">
+              {{ eventItem.minute }}′ · {{ eventItem.playerName || '未填写球员' }} · {{ eventItem.teamSide === 'away' ? awayName : homeName }}
+            </el-checkbox>
+          </el-checkbox-group>
+          <el-empty v-if="!returnableEvents.length" description="没有可退回的结构化进球事件" :image-size="70" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="returnRecordDialogVisible = false">取消</el-button>
+        <el-button type="warning" @click="returnRefereeRecord" :loading="reviewSaving">确认退回</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 裁判组编辑弹窗 -->
-    <el-dialog v-model="refereeDialogVisible" title="编辑裁判组" width="480px">
-      <el-form :model="refereeForm" label-width="90px" size="default">
-        <el-form-item label="主裁判">
-          <el-select v-model="refereeForm.mainReferee" placeholder="请选择主裁判" style="width:100%;" filterable clearable>
-            <el-option label="未指派" value="" />
-            <el-option v-for="r in referees" :key="r._id" :label="r.name" :value="r._id" />
+    <el-dialog v-model="refereeDialogVisible" title="编辑裁判组" width="520px">
+      <el-form :model="refereeForm" label-width="110px" size="default">
+        <el-alert :title="`${currentMatchFormatLabel}固定安排4人；只有操作负责人可以进入手机端执法`" type="info" :closable="false" style="margin-bottom:16px;" />
+        <el-form-item v-for="role in refereeRoleOptions" :key="role.key" :label="role.label" required>
+          <el-select v-model="refereeForm[role.key]" :placeholder="`请选择${role.label}`" style="width:100%;" filterable>
+            <el-option v-for="r in referees" :key="r._id" :label="`${r.name}（${r.phone || '-'}）`" :value="r._id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="助理裁判1">
-          <el-select v-model="refereeForm.assistant1" placeholder="请选择助理裁判1" style="width:100%;" filterable clearable>
-            <el-option label="未指派" value="" />
-            <el-option v-for="r in referees" :key="r._id" :label="r.name" :value="r._id" />
+        <el-form-item label="操作负责人" required>
+          <el-select v-model="refereeForm.operationRefereeId" style="width:100%;">
+            <el-option v-for="r in selectedCrewOptions" :key="r._id" :label="r.name" :value="r._id" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="助理裁判2">
-          <el-select v-model="refereeForm.assistant2" placeholder="请选择助理裁判2" style="width:100%;" filterable clearable>
-            <el-option label="未指派" value="" />
-            <el-option v-for="r in referees" :key="r._id" :label="r.name" :value="r._id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="第四官员">
-          <el-select v-model="refereeForm.fourthOfficial" placeholder="请选择第四官员" style="width:100%;" filterable clearable>
-            <el-option label="未指派" value="" />
-            <el-option v-for="r in referees" :key="r._id" :label="r.name" :value="r._id" />
-          </el-select>
-        </el-form-item>
-        <el-divider>以下为选填项</el-divider>
-        <el-form-item label="视频裁判">
-          <el-select v-model="refereeForm.varReferee" placeholder="请选择视频助理裁判" style="width:100%;" filterable clearable>
-            <el-option label="未指派" value="" />
-            <el-option v-for="r in referees" :key="r._id" :label="r.name" :value="r._id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="比赛监督">
-          <el-select v-model="refereeForm.matchObserver" placeholder="请选择比赛监督" style="width:100%;" filterable clearable>
-            <el-option label="未指派" value="" />
-            <el-option v-for="r in referees" :key="r._id" :label="r.name" :value="r._id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="裁判监督">
-          <el-select v-model="refereeForm.refereeObserver" placeholder="请选择裁判监督" style="width:100%;" filterable clearable>
-            <el-option label="未指派" value="" />
-            <el-option v-for="r in referees" :key="r._id" :label="r.name" :value="r._id" />
-          </el-select>
+          <div style="color:#909399;font-size:12px;">每场只设1名操作人员，负责开始比赛、记录事件、结束比赛和提交裁判报告</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -818,22 +807,9 @@
         <!-- 裁判组 -->
         <div class="csl-referee-block">
           <div class="csl-ref-row">
-            <span class="csl-ref-label">主裁判：</span><span class="csl-ref-val">{{ match.refereeName || '-' }}</span>
-            <span class="csl-ref-label">第一助理：</span><span class="csl-ref-val">{{ refereeCrew.assistant1?.name || '-' }}</span>
-            <span class="csl-ref-label">第二助理：</span><span class="csl-ref-val">{{ refereeCrew.assistant2?.name || '-' }}</span>
-            <span class="csl-ref-label">第四官员：</span><span class="csl-ref-val">{{ refereeCrew.fourthOfficial?.name || '-' }}</span>
-          </div>
-          <div class="csl-ref-row">
-            <span class="csl-ref-label">视频助理裁判：</span><span class="csl-ref-val">{{ refereeCrew.varReferee?.name || '-' }}</span>
-            <span class="csl-ref-label">助理视频助理裁判：</span><span class="csl-ref-val">-</span>
-            <span class="csl-ref-label">比赛监督：</span><span class="csl-ref-val">{{ refereeCrew.matchObserver?.name || '-' }}</span>
-            <span class="csl-ref-label">裁判监督：</span><span class="csl-ref-val">{{ refereeCrew.refereeObserver?.name || '-' }}</span>
-          </div>
-          <div class="csl-ref-row">
-            <span class="csl-ref-label">赛区协调员：</span><span class="csl-ref-val">-</span>
-            <span class="csl-ref-label">新闻官：</span><span class="csl-ref-val">-</span>
-            <span class="csl-ref-label">安保官：</span><span class="csl-ref-val">-</span>
-            <span class="csl-ref-label">商务监督：</span><span class="csl-ref-val">-</span>
+            <template v-for="role in refereeRoleOptions" :key="role.key">
+              <span class="csl-ref-label">{{ role.label }}：</span><span class="csl-ref-val">{{ refereeCrew[role.key]?.name || '-' }}</span>
+            </template>
           </div>
         </div>
 
@@ -984,7 +960,7 @@
 
         <!-- 签字区 -->
         <div class="csl-sign-row">
-          <div class="csl-sign">比赛监督签字：________________</div>
+          <div class="csl-sign">操作负责人：{{ operationRefereeName || '-' }}</div>
           <div class="csl-sign">{{ formatDateTimeCN(new Date()) }}</div>
         </div>
       </div>
@@ -1030,16 +1006,9 @@
             <!-- 裁判组 -->
             <div class="csl-referee-block">
               <div class="csl-ref-row">
-                <span class="csl-ref-label">主裁判：</span><span class="csl-ref-val">{{ match.refereeName || '-' }}</span>
-                <span class="csl-ref-label">第一助理：</span><span class="csl-ref-val">{{ refereeCrew.assistant1?.name || '-' }}</span>
-                <span class="csl-ref-label">第二助理：</span><span class="csl-ref-val">{{ refereeCrew.assistant2?.name || '-' }}</span>
-                <span class="csl-ref-label">第四官员：</span><span class="csl-ref-val">{{ refereeCrew.fourthOfficial?.name || '-' }}</span>
-              </div>
-              <div class="csl-ref-row">
-                <span class="csl-ref-label">视频助理裁判：</span><span class="csl-ref-val">{{ refereeCrew.varReferee?.name || '-' }}</span>
-                <span class="csl-ref-label">助理视频助理裁判：</span><span class="csl-ref-val">-</span>
-                <span class="csl-ref-label">比赛监督：</span><span class="csl-ref-val">{{ refereeCrew.matchObserver?.name || '-' }}</span>
-                <span class="csl-ref-label">裁判监督：</span><span class="csl-ref-val">{{ refereeCrew.refereeObserver?.name || '-' }}</span>
+                <template v-for="role in refereeRoleOptions" :key="role.key">
+                  <span class="csl-ref-label">{{ role.label }}：</span><span class="csl-ref-val">{{ refereeCrew[role.key]?.name || '-' }}</span>
+                </template>
               </div>
             </div>
 
@@ -1189,11 +1158,7 @@
             <!-- 签字区 -->
             <div class="csl-sign-row">
               <div class="csl-sign">
-                比赛监督签字：
-                <img v-if="match.refereeSigned && match.signatureUrl" 
-                     :src="match.signatureUrl" 
-                     style="height: 40px; vertical-align: middle;" />
-                <span v-else style="display: inline-block; width: 160px; border-bottom: 1px solid #333; margin-left: 8px;">&nbsp;</span>
+                操作负责人：{{ operationRefereeName || '-' }}
               </div>
               <div class="csl-sign">{{ formatDateTimeCN(new Date()) }}</div>
             </div>
@@ -1212,17 +1177,6 @@
           <el-button type="warning" @click="printLineup">
             <el-icon><Printer /></el-icon> 打印
           </el-button>
-          <el-button type="danger" @click="openSignatureQrDialog" v-if="!match.refereeSigned">
-            <el-icon><EditPen /></el-icon> 比赛监督签字
-          </el-button>
-          <el-button type="success" v-else disabled>
-            <el-icon><Check /></el-icon> 已签字
-          </el-button>
-          <!-- 签字图片显示 -->
-          <div v-if="signatureImageUrl" style="display:inline-flex;align-items:center;gap:8px;margin-left:12px;">
-            <img :src="signatureImageUrl" style="height:48px;border:1px solid #DCDFE6;border-radius:4px;background:#fff;" />
-            <el-button type="danger" size="small" @click="removeSignature">移除</el-button>
-          </div>
         </div>
       </template>
     </el-dialog>
@@ -1280,7 +1234,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, Plus, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
-import { queryById, callFunction, updateRecord, queryList } from '../../utils/cloud'
+import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord } from '../../utils/cloud'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 
 const route = useRoute()
@@ -1288,6 +1242,7 @@ const router = useRouter()
 
 const tournamentId = route.params.id
 const matchId = route.params.matchId
+const sourceDivisionId = typeof route.query.divisionId === 'string' ? route.query.divisionId : ''
 
 const match = ref({})
 const homeName = ref('')
@@ -1296,7 +1251,11 @@ const homeLogo = ref('')
 const awayLogo = ref('')
 const refName = ref('')
 const tournamentNameStr = ref('')
+const tournamentMatchFormat = ref('')
 const saving = ref(false)
+const reviewSaving = ref(false)
+const returnRecordDialogVisible = ref(false)
+const returnRecordForm = ref({ reason: '', fields: [] })
 const activeTab = ref('lineup')
 const homePlayers = ref([])
 const awayPlayers = ref([])
@@ -1320,12 +1279,9 @@ const eventForm = ref({ type: 'goal', minute: 0, teamSide: 'home', playerName: '
 const refereeDialogVisible = ref(false)
 const refereeForm = ref({
   mainReferee: '',
-  assistant1: '',
-  assistant2: '',
-  fourthOfficial: '',
-  varReferee: '',
-  matchObserver: '',
-  refereeObserver: ''
+  assistant1: '', assistant2: '', fourthOfficial: '',
+  secondReferee: '', thirdReferee: '', timekeeper: '',
+  operationRefereeId: ''
 })
 
 // 球服颜色编辑弹窗
@@ -1420,24 +1376,77 @@ const roundLabel = computed(() => {
 
 const statusLabel = computed(() => {
   const s = match.value.status || 'scheduled'
-  return { scheduled: '未开始', ongoing: '进行中', finished: '已结束', postponed: '延期', cancelled: '已取消' }[s] || s
+  return { scheduled: '未开始', ongoing: '进行中', finished: '待提交报告', completed: '已结束', postponed: '延期', cancelled: '已取消' }[s] || s
 })
 
 const statusTagType = computed(() => {
   const s = match.value.status || 'scheduled'
-  return { scheduled: 'info', ongoing: 'warning', finished: 'success', postponed: 'warning', cancelled: 'danger' }[s] || 'info'
+  return { scheduled: 'info', ongoing: 'warning', finished: 'warning', completed: 'success', postponed: 'warning', cancelled: 'danger' }[s] || 'info'
 })
+
+const canReviewRefereeRecord = computed(() => Boolean(match.value.refereeRecord && match.value.refereeReviewStatus === 'under_review'))
+const isRefereeEvidenceLocked = computed(() => Boolean(
+  match.value.refereeRecordLocked ||
+  match.value.refereeReviewStatus === 'under_review' ||
+  match.value.refereeReviewStatus === 'returned' ||
+  match.value.refereeReviewStatus === 'archived'
+))
+const lineupEmptyDescription = computed(() => isRefereeEvidenceLocked.value
+  ? '裁判电子记录已锁定，阵容证据仅可查看'
+  : '暂无阵容信息，点击上方按钮录入')
+const returnableEvents = computed(() => (match.value.events || []).filter(item => item && item.type === 'goal' && item.eventId))
 
 const sortedEvents = computed(() => {
   const events = match.value.events || []
   return [...events].sort((a, b) => (a.minute || 0) - (b.minute || 0))
 })
 
+const eventSummary = computed(() => {
+  const events = match.value.events || []
+  const count = (...types) => events.filter(event => types.includes(event.type)).length
+  return [
+    { key: 'total', icon: '📋', label: '全部事件', value: events.length },
+    { key: 'goals', icon: '⚽', label: '进球', value: count('goal', 'penalty', 'own_goal') },
+    { key: 'yellow', icon: '🟨', label: '黄牌', value: count('yellow_card') },
+    { key: 'red', icon: '🟥', label: '红牌', value: count('red_card') },
+    { key: 'subs', icon: '🔄', label: '换人', value: count('substitution') }
+  ]
+})
+
 // 裁判组
 const refereeCrew = computed(() => match.value.refereeCrew || {})
+const currentMatchFormat = computed(() => match.value.matchFormat || tournamentMatchFormat.value || '11side')
+const currentMatchFormatLabel = computed(() => {
+  const number = String(currentMatchFormat.value).match(/\d+/)?.[0] || '11'
+  return `${number}人制`
+})
+const refereeRoleOptions = computed(() => /^(5|6)/.test(String(currentMatchFormat.value))
+  ? [
+      { key: 'mainReferee', label: '主裁判' },
+      { key: 'secondReferee', label: '第二裁判' },
+      { key: 'thirdReferee', label: '第三裁判' },
+      { key: 'timekeeper', label: '计时员' }
+    ]
+  : [
+      { key: 'mainReferee', label: '主裁判' },
+      { key: 'assistant1', label: '第一助理裁判' },
+      { key: 'assistant2', label: '第二助理裁判' },
+      { key: 'fourthOfficial', label: '第四官员' }
+    ])
+const selectedCrewOptions = computed(() => {
+  const ids = refereeRoleOptions.value.map(role => refereeForm.value[role.key]).filter(Boolean)
+  return referees.value.filter(referee => ids.includes(referee._id))
+})
+const operationRefereeName = computed(() => {
+  const id = match.value.operationRefereeId
+  for (const role of refereeRoleOptions.value) {
+    const referee = refereeCrew.value[role.key]
+    if (referee?._id === id) return referee.name
+  }
+  return ''
+})
 const hasRefereeCrew = computed(() => {
-  const c = refereeCrew.value
-  return !!(c.mainReferee?.name || c.assistant1?.name || c.assistant2?.name || c.fourthOfficial?.name)
+  return refereeRoleOptions.value.some(role => refereeCrew.value[role.key]?.name)
 })
 
 // 球服颜色（自动将旧 hex 值转换为颜色名）
@@ -1520,11 +1529,11 @@ function isLightColor(hex) {
 }
 
 function eventIcon(type) {
-  return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🔴', substitution: '🔄', penalty: '⚽', own_goal: '⚽' }[type] || '•'
+  return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🟥', substitution: '🔄', stoppage_time: '⏱', other: '•••', penalty: '⚽', own_goal: '⚽' }[type] || '•'
 }
 
 function eventLabel(type) {
-  return { goal: '进球', assist: '助攻', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', penalty: '点球', own_goal: '乌龙球' }[type] || type
+  return { goal: '进球', assist: '助攻', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', stoppage_time: '补时', other: '其他', penalty: '点球', own_goal: '乌龙球' }[type] || type
 }
 
 function formatPosition(pos) {
@@ -1544,7 +1553,48 @@ function formatDateTimeCN(date) {
 }
 
 function goBack() {
-  router.push(`/tournaments/${tournamentId}/schedule`)
+  router.push({
+    path: `/tournaments/${tournamentId}/schedule`,
+    query: sourceDivisionId ? { divisionId: sourceDivisionId } : {}
+  })
+}
+
+function ensureEvidenceEditable() {
+  if (!isRefereeEvidenceLocked.value) return true
+  ElMessage.warning('裁判电子记录已提交，PC 端只能复核或归档，不能改写现场快照')
+  return false
+}
+
+function openReturnRecordDialog() {
+  returnRecordForm.value = { reason: '', fields: [] }
+  returnRecordDialogVisible.value = true
+}
+
+async function archiveRefereeRecord() {
+  try {
+    await ElMessageBox.confirm('确认归档后，电子比赛记录及全部裁判现场快照将保持只读。', '确认无误并归档', { type: 'warning' })
+    reviewSaving.value = true
+    const result = await reviewRefereeRecord({ matchId, reviewOperation: 'archive' })
+    if (!result.success) throw new Error(result.error || result.message || '归档失败')
+    match.value.refereeReviewStatus = 'archived'
+    match.value.refereeRecord = { ...(match.value.refereeRecord || {}), reviewStatus: 'archived' }
+    ElMessage.success(result.message || '赛果已确认归档')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '归档失败')
+  } finally { reviewSaving.value = false }
+}
+
+async function returnRefereeRecord() {
+  if (!returnRecordForm.value.reason.trim() || !returnRecordForm.value.fields.length) return ElMessage.warning('请填写退回原因并选择允许修正的事件球员字段')
+  try {
+    reviewSaving.value = true
+    const result = await reviewRefereeRecord({ matchId, reviewOperation: 'return', reason: returnRecordForm.value.reason, fields: returnRecordForm.value.fields })
+    if (!result.success) throw new Error(result.error || result.message || '退回失败')
+    match.value.refereeReviewStatus = 'returned'
+    match.value.refereeRecord = { ...(match.value.refereeRecord || {}), reviewStatus: 'returned' }
+    returnRecordDialogVisible.value = false
+    ElMessage.success(result.message || '电子记录已退回裁判限定修正')
+  } catch (error) { ElMessage.error(error.message || '退回失败') } finally { reviewSaving.value = false }
 }
 
 // 加载赛事名称
@@ -1553,6 +1603,10 @@ async function loadTournamentName(tid) {
     const tournament = await queryById('tournaments', tid)
     if (tournament && tournament.name) {
       tournamentNameStr.value = tournament.name
+    }
+    if (tournament) {
+      const division = (tournament.divisions || []).find(item => item && sourceDivisionId && (item.id === sourceDivisionId || item._id === sourceDivisionId))
+      tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
     }
   } catch (e) {
     console.warn('加载赛事名称失败:', e)
@@ -1564,6 +1618,9 @@ async function loadMatch() {
   try {
     const m = await queryById('matches', matchId)
     match.value = m
+    if (['finished', 'completed'].includes(m.status) || (m.events || []).length > 0) {
+      activeTab.value = 'events'
+    }
     homeName.value = m.homeTeamName || ''
     awayName.value = m.awayTeamName || ''
     refName.value = m.refereeName || ''
@@ -1646,6 +1703,7 @@ async function loadTeamLogos(homeId, awayId) {
 
 // 更新比赛状态
 async function updateStatus(status) {
+  if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
     await callFunction('updateMatch', {
@@ -1663,6 +1721,7 @@ async function updateStatus(status) {
 
 // 结束比赛
 function openFinishDialog() {
+  if (!ensureEvidenceEditable()) return
   finishForm.value = {
     homeScore: match.value.homeScore || 0,
     awayScore: match.value.awayScore || 0
@@ -1671,6 +1730,7 @@ function openFinishDialog() {
 }
 
 async function finishMatch() {
+  if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
     await callFunction('updateMatch', {
@@ -1696,6 +1756,7 @@ async function finishMatch() {
 
 // 编辑比赛
 async function openEditDialog() {
+  if (!ensureEvidenceEditable()) return
   editForm.value = {
     _id: match.value._id,
     matchDate: match.value.matchDate || '',
@@ -1746,16 +1807,18 @@ async function loadAllTeams() {
 
 async function loadReferees() {
   try {
-    const res = await callFunction('getTournamentReferees', { tournamentId })
-    referees.value = res.data || []
+    referees.value = await queryList('referees', {
+      where: { status: 'approved' },
+      orderBy: { createTime: 'desc' }
+    })
   } catch (e) {
-    try {
-      referees.value = await queryList('referees', { orderBy: { createTime: 'desc' } })
-    } catch (e2) { referees.value = [] }
+    console.warn('加载已通过裁判失败', e)
+    referees.value = []
   }
 }
 
 async function saveMatchEdit() {
+  if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
     const f = editForm.value
@@ -1799,11 +1862,13 @@ async function saveMatchEdit() {
 
 // 比赛事件
 function openAddEventDialog() {
+  if (!ensureEvidenceEditable()) return
   eventForm.value = { type: 'goal', minute: 0, teamSide: 'home', playerName: '', assistName: '' }
   eventDialogVisible.value = true
 }
 
 async function saveEvent() {
+  if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
     const events = [...(match.value.events || []), { ...eventForm.value }]
@@ -1822,6 +1887,7 @@ async function saveEvent() {
 }
 
 async function removeEvent(index) {
+  if (!ensureEvidenceEditable()) return
   try {
     const events = [...(match.value.events || [])]
     events.splice(index, 1)
@@ -1838,6 +1904,7 @@ async function removeEvent(index) {
 
 // 裁判组编辑
 async function openRefereeDialog() {
+  if (!ensureEvidenceEditable()) return
   await loadReferees()
   const c = match.value.refereeCrew || {}
   
@@ -1848,31 +1915,34 @@ async function openRefereeDialog() {
     return ref?._id || ''
   }
   
-  refereeForm.value = {
-    mainReferee: findIdByName(c.mainReferee?.name),
-    assistant1: findIdByName(c.assistant1?.name),
-    assistant2: findIdByName(c.assistant2?.name),
-    fourthOfficial: findIdByName(c.fourthOfficial?.name),
-    varReferee: findIdByName(c.varReferee?.name),
-    matchObserver: findIdByName(c.matchObserver?.name),
-    refereeObserver: findIdByName(c.refereeObserver?.name)
-  }
+  const form = { operationRefereeId: match.value.operationRefereeId || match.value.refereeRecordKeeperId || '' }
+  refereeRoleOptions.value.forEach(role => { form[role.key] = c[role.key]?._id || findIdByName(c[role.key]?.name) })
+  const defaultOperatorRole = /^(5|6)/.test(String(currentMatchFormat.value)) ? 'timekeeper' : 'fourthOfficial'
+  form.operationRefereeId = form.operationRefereeId || form[defaultOperatorRole]
+  refereeForm.value = form
   refereeDialogVisible.value = true
 }
 
 async function saveRefereeCrew() {
+  if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
-    const data = { ...refereeForm.value }
-    // 过滤空值
-    Object.keys(data).forEach(k => {
-      if (!data[k]) data[k] = null
-    })
+    const roleIds = refereeRoleOptions.value.map(role => refereeForm.value[role.key])
+    if (roleIds.some(id => !id)) throw new Error('请完整安排4名裁判')
+    if (new Set(roleIds).size !== 4) throw new Error('同一名裁判不能重复担任多个岗位')
+    if (!roleIds.includes(refereeForm.value.operationRefereeId)) throw new Error('操作负责人必须从本场裁判中选择')
+    const data = {}
+    refereeRoleOptions.value.forEach(role => { data[role.key] = refereeForm.value[role.key] })
     await callFunction('updateMatch', {
       matchId,
-      data: { refereeCrew: data, updateTime: new Date() }
+      data: {
+        refereeCrew: data,
+        refereeRecordKeeperId: refereeForm.value.operationRefereeId,
+        operationRefereeId: refereeForm.value.operationRefereeId,
+        updateTime: new Date()
+      }
     })
-    match.value.refereeCrew = refereeForm.value
+    await loadMatch()
     refereeDialogVisible.value = false
     ElMessage.success('裁判信息已保存')
   } catch (err) {
@@ -1884,6 +1954,7 @@ async function saveRefereeCrew() {
 
 // 球服颜色编辑
 function openKitDialog() {
+  if (!ensureEvidenceEditable()) return
   const k = match.value.kitColors || {}
   kitForm.value = {
     home: {
@@ -1901,6 +1972,7 @@ function openKitDialog() {
 }
 
 async function saveKitColors() {
+  if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
     await callFunction('updateMatch', {
@@ -1957,6 +2029,7 @@ async function loadTeamPlayers(teamId) {
 
 // 阵容编辑
 async function openLineupDialog() {
+  if (!ensureEvidenceEditable()) return
   const l = match.value.lineups || {}
   lineupForm.value = {
     home: {
@@ -1984,6 +2057,7 @@ async function openLineupDialog() {
 
 // 可视化阵容编辑（双队模式）
 async function openDualVisualEditor() {
+  if (!ensureEvidenceEditable()) return
   // 确保球员数据已加载
   if (homePlayers.value.length === 0) {
     homePlayers.value = await loadTeamPlayers(match.value.homeTeamId)
@@ -1995,6 +2069,7 @@ async function openDualVisualEditor() {
 }
 
 async function handleVisualLineupSave(data) {
+  if (!ensureEvidenceEditable()) return
   try {
     let updateData
     if (data && data.home && data.away) {
@@ -2060,7 +2135,7 @@ async function openSignatureQrDialog() {
     const QRCode = await import('qrcode')
     // 本地开发用局域网IP，生产用官网域名
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    const baseUrl = isLocal ? 'http://192.168.1.4:5174' : 'https://saixiaofeng.com'
+  const baseUrl = isLocal ? 'http://192.168.1.4:5174' : 'https://www.sxffootball.cn'
     const signUrl = baseUrl + '/#/sign?matchId=' + mid
     const dataUrl = await QRCode.toDataURL(signUrl, {
       width: 280,
@@ -2528,16 +2603,19 @@ const surnamePinyinMap = {
 }
 
 function addPlayer(side, type) {
+  if (!ensureEvidenceEditable()) return
   const arr = type === 'starting' ? lineupForm.value[side].players : lineupForm.value[side].substitutes
   arr.push({ number: null, position: 'DF', name: '', jerseyName: '', isCaptain: false, isForeign: false, isYoung: false, isOverage: false })
 }
 
 function removePlayer(side, type, index) {
+  if (!ensureEvidenceEditable()) return
   const arr = type === 'starting' ? lineupForm.value[side].players : lineupForm.value[side].substitutes
   arr.splice(index, 1)
 }
 
 async function saveLineup() {
+  if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
     await callFunction('updateMatch', {
@@ -2576,8 +2654,14 @@ onMounted(() => {
 .status-bg-scheduled { background: linear-gradient(135deg, #1B5E20 0%, #43A047 100%); }
 .status-bg-ongoing { background: linear-gradient(135deg, #e65100 0%, #f57c00 100%); }
 .status-bg-finished { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); }
+.status-bg-completed { background: linear-gradient(135deg, #064e3b 0%, #0f766e 100%); }
 .status-bg-postponed { background: linear-gradient(135deg, #616161 0%, #9e9e9e 100%); }
 .status-bg-cancelled { background: linear-gradient(135deg, #b71c1c 0%, #c62828 100%); opacity: 0.7; }
+.referee-review-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 16px 0; padding: 14px 16px; border: 1px solid #f1d28e; border-radius: 10px; background: #fffaf0; }
+.referee-review-bar strong, .referee-review-bar span { display: block; }
+.referee-review-bar strong { color: #72520d; }
+.referee-review-bar span { margin-top: 5px; color: #7d7160; font-size: 13px; }
+.referee-review-actions { display: flex; flex: 0 0 auto; gap: 10px; }
 
 .hero-team { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 160px; }
 .hero-logo { width: 64px; height: 64px; object-fit: contain; }
@@ -2618,7 +2702,27 @@ onMounted(() => {
 .info-label { color: #909399; }
 .ref-note { font-size: 13px; color: #606266; line-height: 1.6; }
 
-/* 事件时间线 */
+/* 事件统计与时间线 */
+.event-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.event-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  background: #fff;
+}
+.event-summary-icon { font-size: 22px; line-height: 1; }
+.event-summary-item div { display: flex; flex-direction: column; min-width: 0; }
+.event-summary-item strong { color: #1f2937; font-size: 20px; line-height: 1.1; }
+.event-summary-item span:last-child { margin-top: 4px; color: #909399; font-size: 12px; }
 .events-timeline { display: flex; flex-direction: column; gap: 8px; }
 .events-empty { text-align: center; padding: 20px 0; color: #909399; font-size: 13px; }
 .event-row {
@@ -2647,7 +2751,31 @@ onMounted(() => {
 
 /* Tab 样式 */
 .detail-tabs :deep(.el-tabs__header) { margin-bottom: 16px; }
-.lineup-placeholder, .stats-placeholder { padding: 40px 0; }
+.lineup-placeholder { padding: 40px 0; }
+.match-stats-panel {
+  padding: 20px;
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.stats-score-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+  color: #606266;
+  text-align: center;
+}
+.stats-score-row span:first-child { text-align: right; }
+.stats-score-row span:last-child { text-align: left; }
+.stats-score-row strong { color: #064e3b; font-size: 32px; }
+.stats-summary-grid { margin-bottom: 0; }
+.stats-empty { padding: 28px 0 8px; color: #909399; font-size: 13px; text-align: center; }
+
+@media (max-width: 980px) {
+  .event-summary-grid { grid-template-columns: repeat(3, minmax(100px, 1fr)); }
+}
 
 /* 裁判组信息卡片 */
 .info-card-title {

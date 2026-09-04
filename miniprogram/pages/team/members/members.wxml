@@ -1,0 +1,136 @@
+<view class="member-page">
+  <image class="member-page-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="member-content">
+    <view class="member-nav">
+      <text class="member-back" bindtap="back">‹</text>
+      <text class="member-nav-title">球队成员</text>
+    </view>
+    <view wx:if="{{inviteMode}}" class="member-invite-view">
+      <view wx:if="{{inviteAvailable}}" class="member-invite-card">
+        <view class="member-invite-kicker">球队管理成员邀请</view>
+        <view class="member-invite-crest-wrap">
+          <image wx:if="{{team.logo}}" class="member-invite-crest" src="{{team.logo}}" mode="aspectFit" />
+          <text wx:else class="member-invite-crest member-crest-fallback">球队</text>
+        </view>
+        <text class="member-invite-team">邀请你加入 {{team.name}}</text>
+        <text class="member-invite-role">身份：{{invite.roleText}}</text>
+        <text class="member-invite-expiry">有效期至：{{invite.expiresAtText}}</text>
+        <view class="member-invite-boundary"><text class="member-note-icon">ⓘ</text>加入后获得球队协作权限，不等于赛事正式名单中的球员。</view>
+        <button wx:if="{{!inviteAccepted}}" class="member-invite-confirm" bindtap="acceptInvite">确认加入球队</button>
+        <button wx:if="{{inviteAccepted}}" class="member-invite-confirm" bindtap="returnHome">已加入管理团队，返回首页</button>
+      </view>
+      <view wx:else class="member-invite-card member-invite-error">{{inviteStatusText}}</view>
+    </view>
+    <view wx:if="{{showMemberLoading}}" class="member-loading">正在读取成员关系…</view>
+    <block wx:if="{{showMemberContent}}">
+      <view class="member-hero member-hero-compact">
+        <view class="member-crest-wrap">
+          <image wx:if="{{team.logo}}" class="member-crest" src="{{team.logo}}" mode="aspectFit" />
+          <text wx:else class="member-crest-fallback">球队</text>
+        </view>
+        <view class="member-hero-info">
+          <text class="member-team-name">{{team.name}}</text>
+          <text class="member-count">{{memberCount}} 名成员</text>
+        </view>
+        <button wx:if="{{canManage}}" class="member-invite" bindtap="invite"><image class="member-invite-icon" src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit" />邀请管理成员</button>
+      </view>
+      <view class="member-card">
+        <view class="member-search">
+          <text class="member-search-icon">⌕</text>
+          <input bindinput="search" placeholder="搜索成员姓名或手机号" placeholder-class="member-search-placeholder" />
+        </view>
+        <view class="member-filters">
+          <text wx:for="{{filterTabs}}" wx:key="id" class="{{item.className}}" data-id="{{item.id}}" bindtap="chooseFilter">{{item.label}}</text>
+        </view>
+        <view class="member-list">
+          <view wx:for="{{visible}}" wx:key="id" class="member-row">
+            <view class="member-avatar-wrap">
+              <image wx:if="{{item.avatar}}" class="member-avatar" src="{{item.avatar}}" mode="aspectFill" />
+              <text wx:else class="member-avatar member-avatar-fallback">{{item.avatarText}}</text>
+            </view>
+            <view class="member-row-info">
+              <text class="member-name">{{item.name}}</text>
+              <text class="member-role">{{item.roleText}}</text>
+              <text class="member-phone">{{item.phoneMasked}}</text>
+            </view>
+            <view class="member-row-action">
+              <text class="{{item.statusClass}}">{{item.statusText}}</text>
+              <button wx:if="{{item.pending}}" class="member-resend" bindtap="resend">再次邀请</button>
+            </view>
+            <text class="member-arrow">›</text>
+          </view>
+        </view>
+      </view>
+      <view class="member-note"><text class="member-note-icon">ⓘ</text>球队成员负责管理球队，不等于赛事正式名单中的球员。</view>
+      <view wx:if="{{canManage}}" class="member-invite-panel">
+        <button class="member-channel" bindtap="invite"><image class="member-channel-icon" src="/images/runtime/icons/brand-v2-06.png" mode="aspectFit" /><view><text>邀请教练/管理员</text><text>通过微信发送球队管理协作邀请</text></view></button>
+        <button class="member-channel member-channel-border" bindtap="invite"><image class="member-channel-icon" src="/images/runtime/icons/brand-v2-07.png" mode="aspectFit" /><view><text>管理成员二维码</text><text>仅用于教练、领队或管理员</text></view></button>
+      </view>
+    </block>
+  </view>
+  <view wx:if="{{inviteSheetVisible}}" class="invite-sheet-mask" bindtap="closeInvitePanel">
+    <view class="invite-sheet" catchtap="noop">
+      <view class="invite-sheet-handle"></view>
+      <view class="invite-sheet-header">
+        <view>
+          <text class="invite-sheet-title">邀请加入球队管理</text>
+          <text class="invite-sheet-subtitle">仅用于教练、领队或管理员；邀请球员请到球员库</text>
+        </view>
+        <text class="invite-sheet-close" bindtap="closeInvitePanel">×</text>
+      </view>
+      <scroll-view class="invite-sheet-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+        <view wx:if="{{inviteBusy}}" class="invite-sheet-loading">
+          <view class="invite-loading-ring"></view>
+          <text>正在生成专属邀请…</text>
+        </view>
+        <view wx:if="{{inviteReady}}" class="invite-sheet-body">
+          <view class="invite-team-summary">
+            <image wx:if="{{team.logo}}" class="invite-team-logo" src="{{team.logo}}" mode="aspectFit" />
+            <view wx:else class="invite-team-logo invite-team-logo-fallback">队</view>
+            <view class="invite-team-copy">
+              <text class="invite-team-name">{{team.name}}</text>
+              <text class="invite-team-note">成员加入后可参与球队协作管理</text>
+              <text class="invite-team-expiry">邀请有效期至 {{inviteExpiresAtText}}</text>
+            </view>
+          </view>
+
+          <view wx:if="{{inviteQrReady}}" class="invite-qr-card">
+            <image class="invite-qr-image" src="{{inviteQrUrl || inviteQrFileId}}" mode="aspectFit" bindtap="previewInviteQr" />
+            <text class="invite-qr-title">{{inviteEnvironmentText}}</text>
+            <text class="invite-qr-tip">{{inviteEnvironmentTip}}</text>
+          </view>
+          <view wx:else class="invite-qr-placeholder">
+            <text>二维码暂未生成</text>
+            <text>仍可先通过微信好友或群聊分享</text>
+          </view>
+
+          <view class="invite-link-card">
+            <view class="invite-link-copy">
+              <text class="invite-link-label">可点击邀请链接</text>
+              <text class="invite-link-value">{{inviteLinkDisplayText}}</text>
+            </view>
+            <button class="invite-copy-button" bindtap="copyInviteLink" disabled="{{inviteCopyDisabled}}">{{inviteCopyLabel}}</button>
+          </view>
+
+          <button class="invite-share-primary" open-type="share" disabled="{{inviteBusy}}">发送给微信好友或群聊</button>
+
+          <view class="invite-action-grid">
+            <button class="invite-action" bindtap="copyInviteLink" disabled="{{inviteCopyDisabled}}"><text class="invite-action-icon">链</text><text>获取链接</text></button>
+            <button class="invite-action" bindtap="previewInviteQr"><text class="invite-action-icon">码</text><text>查看二维码</text></button>
+            <button class="invite-action" bindtap="saveInviteQr"><text class="invite-action-icon">存</text><text>保存二维码</text></button>
+            <button class="invite-action" bindtap="generateInvitePoster"><text class="invite-action-icon">报</text><text>生成入队海报</text></button>
+          </view>
+
+          <view wx:if="{{invitePosterReady}}" class="invite-poster-ready">
+            <image class="invite-poster-thumb" src="{{invitePosterPath}}" mode="aspectFill" bindtap="previewInvitePoster" />
+            <view class="invite-poster-copy"><text>邀请海报已生成</text><text>可预览后保存到手机相册</text></view>
+            <button class="invite-poster-save" bindtap="saveInvitePoster">保存海报</button>
+          </view>
+        </view>
+        <view wx:if="{{inviteAssetError}}" class="invite-asset-error">{{inviteAssetError}}</view>
+        <view class="invite-boundary-note">球队成员关系用于协作管理，不会自动进入赛事正式名单。</view>
+      </scroll-view>
+    </view>
+  </view>
+  <canvas canvas-id="invitePosterCanvas" id="invitePosterCanvas" class="invite-poster-canvas"></canvas>
+</view>

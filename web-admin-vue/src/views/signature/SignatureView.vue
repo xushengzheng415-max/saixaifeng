@@ -265,6 +265,10 @@ function clearCanvas() {
 }
 
 async function submitSignature() {
+  message.value = '该旧版签字入口已停用，请从裁判服务号/H5进入比赛后完成电子记录签字'
+  messageType.value = 'error'
+  return
+
   if (!hasDrawn.value || !matchId) {
     message.value = '请先手写签字，且比赛ID不能为空'
     messageType.value = 'error'

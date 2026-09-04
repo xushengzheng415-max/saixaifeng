@@ -40,8 +40,7 @@
  * 流程：
  *   微信 OAuth 回调 → /admin/#/wechat-callback?code=xxx&state=xxx
  *     → 此页面直接用 fetch 调 webLoginApi (wechatWebLogin)
- *       → 成功 → 写 localStorage → 跳 /admin/#/tournaments
- *         → 需绑手机号 → 跳 /admin/#/bind-phone
+ *       → 成功 → 签发短时登录挑战 → 验证手机号 → 建立会话
  */
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -57,9 +56,54 @@ const status = ref('processing')
 const errorMessage = ref('')
 const hint = ref('正在验证微信授权...')
 
+const AUTH_STORAGE_KEYS = [
+  'isLoggedIn',
+  'userInfo',
+  'role',
+  'currentRole',
+  'userId',
+  'loginType',
+  'phone',
+  'phoneNumber',
+  'openid',
+  'unionid',
+  'needBindPhone',
+  'needSetPassword',
+  'needBindEmail',
+  'needSelectRole',
+  'wechatTemp',
+  'authSessionVersion',
+  'authToken',
+  'assistanceContext',
+  // 机构信息必须随账号会话一起替换，避免新账号沿用上一个账号的机构标签。
+  'organizationInfo',
+  'currentOrganization',
+  'currentOrg'
+]
+
+function clearStoredAuthSession() {
+  AUTH_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
+}
+
+function storeDirectLogin(result) {
+  const user=result.user||{}
+  clearStoredAuthSession()
+  localStorage.setItem('userId',user._id||'')
+  localStorage.setItem('role','organizer')
+  localStorage.setItem('currentRole','organizer')
+  localStorage.setItem('isLoggedIn','true')
+  localStorage.setItem('loginType','wechat')
+  localStorage.setItem('phone',user.phone||user.phoneNumber||'')
+  localStorage.setItem('phoneNumber',user.phoneNumber||user.phone||'')
+  localStorage.setItem('authToken',result.authToken||'')
+  localStorage.setItem('authSessionVersion','phone-canonical-web-v1')
+  localStorage.setItem('userInfo',JSON.stringify({_id:user._id,uid:user._id,userName:user.nickname||'微信用户',avatarUrl:user.headimgurl||'',phone:user.phone||user.phoneNumber||'',email:user.email||''}))
+}
+
 onMounted(async () => {
-  const code = route.query.code
-  const state = route.query.state || ''
+  const search = new URLSearchParams(window.location.search)
+  const code = route.query.code || search.get('code') || ''
+  const state = route.query.state || search.get('state') || ''
 
   if (!code) {
     status.value = 'error'
@@ -84,61 +128,25 @@ onMounted(async () => {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'wechatWebLogin', code })
+      body: JSON.stringify({ action: 'wechatPhoneChallenge', code })
     })
-    const result = await res.json()
+    let result = await res.json()
+    if (result && typeof result.body === 'string') {
+      try { result = JSON.parse(result.body) } catch { /* 保留原响应，交给统一错误提示 */ }
+    }
 
-    if (result.success) {
-      // 登录成功 → 写 localStorage
-      const user = result.user || {}
-      localStorage.setItem('loginType', 'wechat')
-      localStorage.setItem('userInfo', JSON.stringify({
-        uid: user._id || '',
-        userName: user.nickname || '微信用户',
-        avatarUrl: user.headimgurl || '',
-        phone: user.phone || user.phoneNumber || '',
-        email: user.email || '',
-        openid: user.openid || user.wechatOpenId || '',
-        unionid: user.unionid || ''
-      }))
-      localStorage.setItem('userId', user._id || '')
-      localStorage.setItem('role', result.role || '')
-      localStorage.setItem('currentRole', result.role || '')
-      localStorage.setItem('isLoggedIn', 'true')
-
-      if (result.needSetPassword) localStorage.setItem('needSetPassword', 'true')
-      if (result.needPhoneBinding || result.needBindPhone) localStorage.setItem('needBindPhone', 'true')
-      // ★ 关键修复：之前漏写了这两个标志，导致新用户不弹选身份页和邮箱绑定
-      if (result.needSelectRole) localStorage.setItem('needSelectRole', 'true')
-      if (result.needBindEmail) localStorage.setItem('needBindEmail', 'true')
-      if (result.wechatTemp) {
-        localStorage.setItem('wechatTemp', JSON.stringify(result.wechatTemp))
-      }
-
-      status.value = 'success'
-
-      // ★ 按流程图正确跳转顺序：选身份 → 绑手机号 → 进首页
-      setTimeout(() => {
-        // 优先跳选身份页（新用户必须先选身份）
-        if (result.needSelectRole) {
-          window.location.href = '/admin/#/select-role'
-        } else if (result.needPhoneBinding || result.needBindPhone) {
-          window.location.href = '/admin/#/bind-phone'
-        } else {
-          // 根据角色跳转到对应首页
-          const rolePathMap = {
-            'organizer': '/admin/#/tournaments',
-            'coach': '/admin/#/teams',
-            'referee': '/admin/#/referees'
-          }
-          const role = (result.role || '').toLowerCase()
-          window.location.href = rolePathMap[role] || '/admin/#/select-role'
-        }
-      }, 800)
-
+    if (result.success && result.directLogin && result.authToken && result.user) {
+      storeDirectLogin(result)
+      status.value='success'
+      setTimeout(()=>router.replace('/tournament-space'),500)
+    } else if (result.success && result.requiresPhoneAuthorization && result.loginChallenge) {
+      clearStoredAuthSession()
+      sessionStorage.setItem('wechat_login_challenge', result.loginChallenge)
+      sessionStorage.setItem('wechat_login_profile', JSON.stringify(result.user || {}))
+      router.replace('/bind-phone')
     } else {
       status.value = 'error'
-      errorMessage.value = result.error || '微信登录失败，请重试'
+      errorMessage.value = result?.error || result?.message || '微信授权未完成，请重新扫码'
     }
 
   } catch (err) {

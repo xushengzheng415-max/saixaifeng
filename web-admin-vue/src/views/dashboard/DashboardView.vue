@@ -86,7 +86,7 @@
     <div class="page-card">
       <div class="page-header">
         <h2>最近赛事</h2>
-        <el-button type="primary" size="small" @click="$router.push('/tournaments')">查看全部</el-button>
+            <el-button type="primary" size="small" @click="$router.push('/tournament-space')">查看全部</el-button>
       </div>
       <el-table :data="recentTournaments" style="width: 100%" empty-text="暂无赛事数据">
         <el-table-column prop="name" label="赛事名称" min-width="200" />

@@ -3,7 +3,8 @@
 
 Page({
   data: {
-    referees: []
+    referees: [],
+    RefereesLen: 0
   },
 
   onLoad: function(options) {
@@ -25,28 +26,19 @@ Page({
       .get({
         success: function(res) {
           that.setData({
-            referees: res.data || []
+            referees: res.data || [],
+            RefereesLen: (res.data || []).length
           })
         },
         fail: function(err) {
           console.error('加载裁判列表失败:', err)
-          that.setData({ referees: [] })
+          that.setData({ referees: [], RefereesLen: 0 })
         }
       })
   },
 
-  // 裁判库
-  goToRefereeLibrary: function() {
-    wx.showToast({ title: '裁判库功能开发中', icon: 'none' })
-  },
-
-  // 裁判指派
-  goToRefereeAssign: function() {
-    wx.showToast({ title: '裁判指派功能开发中', icon: 'none' })
-  },
-
   // 执法记录
   goToRefereeRecords: function() {
-    wx.navigateTo({ url: '/pages/referee/record' })
+    wx.navigateTo({ url: '/pages/service/workbench/workbench' })
   }
 })

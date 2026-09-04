@@ -156,10 +156,11 @@ const cardLevelClass = computed(() => `card-${cardLevel.value}`)
 
 // 卡片背景图路径
 const cardBgImage = computed(() => {
+  const publicBaseUrl = import.meta.env.BASE_URL
   const images = {
-    bronze: '/images/铜卡.png',
-    silver: '/images/银卡.png',
-    gold: '/images/金卡.png'
+    bronze: `${publicBaseUrl}images/铜卡.png`,
+    silver: `${publicBaseUrl}images/银卡.png`,
+    gold: `${publicBaseUrl}images/金卡.png`
   }
   return images[cardLevel.value]
 })

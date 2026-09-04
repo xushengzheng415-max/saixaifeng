@@ -9,6 +9,14 @@ const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shangha
 
 // ★ 云函数直接 HTTP 调用的基础 URL（不经过 webLoginApi 中转）
 const CLOUD_FUNCTION_BASE_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com'
+const AUTH_TOKEN_KEY = 'authToken'
+const ASSISTANCE_CONTEXT_KEY = 'assistanceContext'
+let visualQaModulePromise = null
+
+function loadVisualQaModule() {
+  if (!visualQaModulePromise) visualQaModulePromise = window.__sxfVisualQaModulePromise || import('./visualQaFixtures')
+  return visualQaModulePromise
+}
 
 // 登录相关云函数名 → webLoginApi action 映射
 const LOGIN_FUNCTION_MAP = {
@@ -17,6 +25,8 @@ const LOGIN_FUNCTION_MAP = {
   emailLogin: null,
   verifyPassword: 'passwordLogin',
   wechatWebLogin: 'wechatWebLogin',
+  sendWechatLoginSms: 'sendWechatLoginSms',
+  completeWechatPhoneLogin: 'completeWechatPhoneLogin',
   checkLogin: 'checkLogin',
 }
 
@@ -24,19 +34,18 @@ const LOGIN_FUNCTION_MAP = {
 const CLOUD_FUNCTION_MAP = {
   // ★ uploadFile 改用 relay 模式：direct 端点有严格的 body 限制，改走 webLoginApi 中转
   uploadFile: 'relay',
-  parseTournamentRegulations: 'direct', // 竞赛规程解析云函数
-  bindPhone: 'direct', // 直接调用 bindPhone 云函数
-  phoneLogin: 'direct', // 直接调用 phoneLogin 云函数
+  parseTournamentRegulations: 'relay', // 竞赛规程解析统一经 webLoginApi
+  bindPhone: 'relay', // 绑定手机号统一经 webLoginApi
+  phoneLogin: 'relay', // 旧手机号登录入口统一经 webLoginApi 白名单校验
   // 抠图相关云函数 — 通过 webLoginApi 的 callFunction action 中转（服务端 cloud.callFunction 转发）
   // 注意：不能 'direct'，因为大多数云函数没有独立的 HTTP 触发端点
   baiduRemoveBg: 'relay', // 百度智能云人像分割
   removeImageBg: 'relay', // 通用抠图（rembg）
   removeLogoBg: 'relay', // 队徽/Logo 抠图
-  // 赛事中心独立登录系统
-  tournamentCenterLogin: 'relay', // 赛事中心手机号+密码登录
-  setTournamentCenterPassword: 'relay', // 赛事中心首次设置密码
-  manageTournamentCenterAccounts: 'relay', // 赛事中心账号管理（list/add/remove/toggle）
-  // 赛事中心后台数据操作（共享赛小蜂数据库）
+  generateAIImage: 'relay', // AI 生图必须经 webLoginApi 会话中转
+  // 赛事中心后台内容管理（复用主办方登录，仅平台负责人可用）
+  manageTournamentCenterContent: 'relay',
+  // 赛事中心公开数据与主办方业务操作
   getTeams: 'relay',
   getPlayers: 'relay',
   createTeam: 'relay',
@@ -46,8 +55,15 @@ const CLOUD_FUNCTION_MAP = {
   updatePlayer: 'relay',
   deletePlayer: 'relay',
   getBanners: 'relay',
-  saveBanner: 'relay',
   getTournaments: 'relay',
+  getTournamentDetail: 'relay', // 公开赛事详情只读查询
+  getTournamentMatches: 'relay', // 公开赛事赛况只读查询
+  setHeadReferee: 'relay', // 设置赛事裁判长必须经过机构会话中转
+  getRegulations: 'relay', // PC 规程文件读取需登录后中转
+  reviewRosterChange: 'relay', // 名单变更审核必须经过当前机构门禁
+  onboardingWorkspace: 'relay',
+  organizerClaimInvite: 'relay',
+  resultCenter: 'relay',
 }
 
 /**
@@ -56,7 +72,21 @@ const CLOUD_FUNCTION_MAP = {
  * @param {object} data - 请求数据
  */
 async function callFunctionHTTP(action, data = {}) {
-  const payload = { ...data, action }
+  // 视觉验收样例仅在 Vite 开发模式按需加载；生产构建不会打包样例数据。
+  if (import.meta.env.DEV) {
+    const { handleVisualQaHttp } = await loadVisualQaModule()
+    const qa = handleVisualQaHttp(action, data)
+    if (qa.handled) return qa.result
+  }
+  const assistance = getAssistanceContext()
+  const bypassAssistance = action === 'callFunction' &&
+    ['platformOwner', 'manageTournamentCenterContent', 'generateMiniProgramCode'].includes(data.functionName)
+  const payload = {
+    ...data,
+    action,
+    authToken: localStorage.getItem(AUTH_TOKEN_KEY) || '',
+    assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : ''
+  }
   console.log(`[callFunctionHTTP] → ${action}`)
 
   try {
@@ -70,12 +100,38 @@ async function callFunctionHTTP(action, data = {}) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    const result = await response.json()
+    let result = await response.json()
+    if (result && typeof result.body === 'string') {
+      try { result = JSON.parse(result.body) } catch { /* 保留原响应，由调用方显示错误 */ }
+    }
+    if (result && result.authToken) {
+      localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
+    }
+    if (result && result.code === 'ASSISTANCE_EXPIRED') {
+      clearAssistanceContext()
+    }
+    if (result && result.code === 'AUTH_REQUIRED') {
+      await logout()
+      const localPreview = import.meta.env.DEV || ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+      window.location.href = localPreview
+        ? `${window.location.origin}${import.meta.env.BASE_URL}#/login`
+        : 'https://www.sxffootball.cn/'
+      throw new Error(result.error || '登录会话已失效，请重新微信扫码登录')
+    }
     return result
   } catch (err) {
     console.error('[callFunctionHTTP] ❌', err.message)
     throw err
   }
+}
+
+export async function reviewRefereeRecord(data = {}) {
+  return callFunctionHTTP('reviewRefereeRecord', data)
+}
+
+// 赛事正式名单异常看板：由 webLoginApi 在服务端收敛赛事、球队和名单快照范围。
+export async function rosterExceptionBoard(data = {}) {
+  return callFunctionHTTP('rosterExceptionBoard', data)
 }
 
 // ========== 登录认证 ==========
@@ -93,11 +149,22 @@ export async function logout() {
   localStorage.removeItem('needSetPassword')
   localStorage.removeItem('needBindEmail')
   localStorage.removeItem('needSelectRole')
+  localStorage.removeItem('wechatTemp')
+  localStorage.removeItem('phone')
+  localStorage.removeItem('phoneNumber')
+  localStorage.removeItem('openid')
+  localStorage.removeItem('unionid')
+  localStorage.removeItem('authSessionVersion')
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+  // 机构缓存属于账号会话，退出后必须清理，避免下一个账号误显示或误用旧机构。
+  localStorage.removeItem('organizationInfo')
+  localStorage.removeItem('currentOrganization')
+  localStorage.removeItem('currentOrg')
 }
 
 export async function checkAuth() {
-  // 零 SDK 模式：信任 localStorage
-  return localStorage.getItem('isLoggedIn') === 'true'
+  return localStorage.getItem('isLoggedIn') === 'true' && Boolean(localStorage.getItem(AUTH_TOKEN_KEY))
 }
 
 export function getCurrentUser() {
@@ -113,13 +180,46 @@ export function getCurrentUser() {
 }
 
 export function getCurrentOwner() {
-  // 零 SDK 模式：返回手机号或用户 ID 作为 owner 标识
+  const assistance = getAssistanceContext()
+  if (assistance && assistance.targetOwnerKey) return assistance.targetOwnerKey
   return localStorage.getItem('phone') || localStorage.getItem('userId') || null
 }
 
+export function getAssistanceContext() {
+  try {
+    const raw = localStorage.getItem(ASSISTANCE_CONTEXT_KEY)
+    if (!raw) return null
+    const context = JSON.parse(raw)
+    if (!context.requestId || !context.expiresAt || new Date(context.expiresAt).getTime() <= Date.now()) {
+      localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+      return null
+    }
+    return context
+  } catch {
+    localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+    return null
+  }
+}
+
+export function setAssistanceContext(context) {
+  if (!context || !context.requestId || !context.expiresAt) {
+    throw new Error('协助上下文不完整')
+  }
+  localStorage.setItem(ASSISTANCE_CONTEXT_KEY, JSON.stringify({
+    requestId: context.requestId,
+    targetUserId: context.targetUserId || '',
+    targetName: context.targetName || '被协助用户',
+    targetOwnerKey: context.targetOwnerKey || context.targetUserId || '',
+    expiresAt: context.expiresAt
+  }))
+}
+
+export function clearAssistanceContext() {
+  localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+}
+
 export async function ensureLogin() {
-  // 零 SDK 模式：不需要登录，直接通过
-  return true
+  return checkAuth()
 }
 
 export async function anonymousLogin() {
@@ -146,10 +246,7 @@ export function getAuth() { return null }
  * 通过 HTTP API 执行数据库查询
  */
 async function dbQuery(collection, operation, params = {}) {
-  // ★ 附加当前用户 ID 用于后端鉴权
-  const user = getCurrentUser()
-  const userId = user ? user._id : null
-  return callFunctionHTTP('dbQuery', { collection, operation, userId, ...params })
+  return callFunctionHTTP('dbQuery', { collection, operation, ...params })
 }
 
 /**
@@ -215,6 +312,58 @@ export async function updateRecord(collection, id, data) {
 /**
  * 删除记录
  */
+export async function confirmDivisionRules(id, data = {}) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'confirmDivisionRules',
+    id,
+    data
+  })
+}
+
+export async function reviseDivisionRules(id) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'reviseDivisionRules',
+    id
+  })
+}
+
+export async function deleteDivision(id) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'deleteDivision',
+    id
+  })
+}
+
+export async function assignTournamentTeamDivision(id, divisionId) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'tournament_teams',
+    operation: 'assignTournamentTeamDivision',
+    id,
+    data: { divisionId }
+  })
+}
+
+export async function upgradeDivisionToProfessional(id, data = {}) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'upgradeDivisionToProfessional',
+    id,
+    data
+  })
+}
+
+export async function confirmCompetitionPlan(tournamentId, data = {}) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'tournaments',
+    operation: 'confirmCompetitionPlan',
+    id: tournamentId,
+    data
+  })
+}
+
 export async function deleteRecord(collection, id, options = {}) {
   const result = await dbQuery(collection, 'delete', { id })
   if (!result.success) throw new Error(result.error || '删除失败')
@@ -380,6 +529,23 @@ function fileToBase64(file) {
  * @param {Function} options.onProgress - 进度回调 (received, total)
  * @returns {Promise<{success:boolean, fileId:string, tempUrl:string}>}
  */
+
+/**
+ * Upload small compressed images directly to cloud storage through webLoginApi.
+ * Database records should store only the returned URL/fileId, not image base64.
+ */
+export async function uploadImageViaWebApi(folder, file) {
+  const base64Data = await fileToBase64(file)
+  const result = await callFunctionHTTP('uploadImage', { base64Data, folder })
+  if (result && result.success) {
+    return {
+      success: true,
+      fileId: result.fileID || result.fileId,
+      tempUrl: result.tempUrl || ''
+    }
+  }
+  throw new Error(result?.message || result?.error || '图片上传失败')
+}
 export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
   const CHUNK_SIZE = options.chunkSize || (100 * 1024) // ★ 默认 100KB/片（Base64后~133KB，远低于网关限制）
   const folder = cloudPath.split('/')[0] || 'regulations'

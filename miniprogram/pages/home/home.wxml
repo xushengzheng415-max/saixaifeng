@@ -1,445 +1,108 @@
-<!-- pages/home/home.wxml -->
-<!-- 麦部足球赛事系统 - 首页（多身份模式） -->
-<view class="home-container">
-  <!-- 加载中 -->
-  <view wx:if="{{loading}}" class="loading-state">
-    <view class="loading-spinner"></view>
-    <text class="loading-text">加载中...</text>
+<view class="page">
+  <image class="stadium-bg" src="/images/runtime/home-roles-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="page-shade"></view>
+
+  <view class="content">
+    <view class="topbar {{topbarClass}}" wx:if="{{isLoggedIn}}">
+      <view class="topbar-left">
+        <view class="message-button" bindtap="goToMessages">
+          <image src="/images/icons/bell-white.svg" mode="aspectFit"></image>
+          <text class="message-badge" wx:if="{{hasUnreadMessages}}">{{unreadMessageCount}}</text>
+        </view>
+        <text class="role-title">{{roleTitle}}</text>
+      </view>
+    </view>
+
+    <view class="login-hero" wx:if="{{!isLoggedIn}}">
+      <view class="guest-home-badge">
+        <image src="/images/runtime/icons/brand-v1-tab-home.png" mode="aspectFit"></image>
+        <text>游客首页</text>
+      </view>
+      <text class="guest-title">赛小蜂足球</text>
+      <text class="guest-subtitle">无需登录或授权，即可先浏览公开赛事与平台服务</text>
+      <button bindtap="goToPublicTournaments">免登录浏览公开赛事</button>
+      <button class="login-outline" bindtap="goToLogin">体验后，自主选择登录</button>
+      <view class="guest-feature-grid">
+        <view><text>赛事</text><text>浏览公开赛程与赛事信息</text></view>
+        <view><text>球队</text><text>了解球队资料与协作服务</text></view>
+        <view><text>任务</text><text>登录后处理报名与比赛任务</text></view>
+      </view>
+    </view>
+
+    <view class="loading" wx:if="{{loading}}">正在准备首页…</view>
+    <view class="error-card" wx:if="{{errorText}}"><text>{{errorText}}</text><text bindtap="loadData">重新加载</text></view>
+
+    <block wx:if="{{isLoggedIn}}">
+      <view class="overview-card {{overviewClass}}">
+        <text class="overview-eyebrow">{{overviewTitle}}</text>
+        <text class="overview-name" wx:if="{{hasOverviewName}}">{{overviewName}}</text>
+        <text class="overview-status" wx:if="{{hasOverviewStatus}}">{{overviewStatus}}</text>
+        <image class="overview-logo" wx:if="{{hasOverviewLogo}}" src="{{overviewLogo}}" mode="aspectFit"></image>
+        <image class="overview-ball" wx:if="{{!hasOverviewLogo}}" src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
+        <view class="metrics">
+          <view class="metric" wx:for="{{metrics}}" wx:key="label">
+            <image class="metric-icon" src="{{item.icon}}" mode="aspectFit"></image>
+            <text class="metric-value">{{item.value}}</text>
+            <text class="metric-label">{{item.label}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="task-card">
+        <view class="card-heading"><text>需要我处理</text><text bindtap="goToTodo">全部任务 ›</text></view>
+        <view class="task-grid" wx:if="{{hasTaskCards}}">
+          <view class="task-item" wx:for="{{homeTaskCards}}" wx:key="id" bindtap="goToTodo">
+            <view class="task-icon-wrap {{item.toneClass}} {{item.assetClass}}" style="{{item.taskWrapStyle}}">
+              <image src="{{item.icon}}" mode="aspectFit" style="{{item.taskImageStyle}}"></image>
+              <text class="task-badge" wx:if="{{!item.isPrototypeReference}}">{{item.count}}</text>
+            </view>
+            <text class="task-title">{{item.title}}</text>
+            <text class="task-subtitle">{{item.subtitle}}</text>
+          </view>
+        </view>
+        <view class="empty-card" wx:if="{{!hasTaskCards}}">当前没有需要处理的事项</view>
+      </view>
+
+      <view class="section" wx:if="{{isTeamCoach}}">
+        <view class="section-heading"><text>我的球队</text><text bindtap="goToTeams">全部球队 ›</text></view>
+        <view class="team-card" wx:for="{{teams}}" wx:key="id" data-id="{{item.id}}" bindtap="onTeamTap">
+          <image class="team-logo" src="{{item.logo}}" mode="aspectFit"></image>
+          <view class="team-main">
+            <view class="team-title-row"><text class="team-name">{{item.name}}</text><text class="team-owner">{{item.ownerText}}</text></view>
+            <view class="team-meta"><text>{{item.playerText}}</text><text>{{item.coachText}}</text><text>{{item.eventText}}</text></view>
+            <text class="completion">{{item.completionText}}</text>
+          </view>
+          <text class="row-arrow">›</text>
+        </view>
+        <view class="empty-card light-empty" wx:if="{{!hasTeams}}">当前没有可管理球队</view>
+      </view>
+
+      <view class="section match-section" wx:if="{{isTeamCoach || isOrganizer}}">
+        <view class="section-heading"><text>{{matchSectionTitle}}</text><text bindtap="goToSchedule">全部赛程 ›</text></view>
+        <view class="match-card" wx:for="{{matches}}" wx:key="id" data-id="{{item.tournamentId}}" bindtap="onTournamentTap">
+          <view class="match-date"><text>{{item.dateText}}</text><text>{{item.timeText}}</text><text>{{item.divisionText}}</text><text class="live-dot">{{item.statusText}}</text></view>
+          <view class="match-main">
+            <view class="match-meta"><text>{{item.roundText}}</text><text>{{item.venueText}}</text></view>
+            <view class="versus-row"><view class="match-team"><image src="{{item.homeLogo}}" mode="aspectFit"></image><text>{{item.homeName}}</text></view><text class="versus">VS</text><view class="match-team"><image src="{{item.awayLogo}}" mode="aspectFit"></image><text>{{item.awayName}}</text></view></view>
+          </view>
+        </view>
+        <view class="empty-card light-empty" wx:if="{{!hasMatches}}">当前没有可见比赛</view>
+      </view>
+
+      <view class="section other-role" wx:if="{{showOtherRoleContent}}">
+        <view class="section-heading"><text>{{otherSectionTitle}}</text><text bindtap="goToOtherSection">查看全部 ›</text></view>
+        <view class="empty-card light-empty">{{otherSectionEmptyText}}</view>
+      </view>
+
+      <view class="section training-home-section" wx:if="{{isTrainingCoach}}">
+        <view class="section-heading"><text>今日课程</text><text bindtap="goToOtherSection">全部课程 ›</text></view>
+        <view class="training-course-card" wx:for="{{trainingCourses}}" wx:key="id" bindtap="goToOtherSection">
+          <view class="training-course-time"><text>{{item.timeText}}</text><text>{{item.venueText}}</text></view>
+          <view class="training-course-main"><text class="training-course-name">{{item.classText}}</text><text class="training-course-coach">{{item.coachText}} · {{item.studentText}}</text></view>
+        </view>
+        <view class="empty-card light-empty" wx:if="{{!hasTrainingCourses}}">当前没有课程安排</view>
+        <view class="training-permission-note"><image src="/images/icons/check.svg" mode="aspectFit"></image><text>青训经营数据仅对有权限的机构成员开放</text></view>
+      </view>
+    </block>
   </view>
-
-  <!-- 主要内容 -->
-  <block wx:else>
-    
-    <!-- ========== 教练模式 ========== -->
-    <block wx:if="{{isCoachMode}}">
-
-      <!-- 0. 多球队切换栏（横向滚动） -->
-      <view class="team-switcher-section" wx:if="{{TeamsLen > 1}}">
-        <scroll-view class="team-switcher-scroll" scroll-x="true" show-scrollbar="false">
-          <view class="team-switcher-list">
-            <view
-              class="team-switcher-item "
-              wx:for="{{teams}}" wx:key="_id"
-              wx:key="_id"
-              bindtap="switchTeam"
-              data-index="{{index}}"
-            >
-              <image
-                class="switcher-logo"
-                src="{{item.teamLogo || '/images/app-logo.png'}}"
-                mode="aspectFill"
-              ></image>
-              <text class="switcher-name">{{item.teamName}}</text>
-            </view>
-          </view>
-        </scroll-view>
-      </view>
-
-      <!-- 1. 球队信息卡片 -->
-      <view class="team-card">
-        <!-- 球队头部 -->
-        <view class="team-header-row">
-          <view class="team-badge-large">
-            <image
-              class="team-logo-img"
-              src="{{teamInfo.teamLogo || '/images/app-logo.png'}}"
-              mode="aspectFit"
-            ></image>
-          </view>
-          <view class="team-meta-info">
-            <text class="team-title-text">{{teamInfo.teamName || '未创建球队'}}</text>
-          </view>
-        </view>
-
-        <!-- 统计数据 -->
-        <view class="stats-row">
-          <view class="stat-box">
-            <text class="stat-num">{{playerCount}}</text>
-            <text class="stat-desc">球员</text>
-          </view>
-          <view class="stat-divider"></view>
-          <view class="stat-box">
-            <text class="stat-num">{{matchCount}}</text>
-            <text class="stat-desc">比赛</text>
-          </view>
-          <view class="stat-divider"></view>
-          <view class="stat-box">
-            <text class="stat-num">{{winCount}}</text>
-            <text class="stat-desc">胜场</text>
-          </view>
-        </view>
-
-        <!-- 管理按钮 -->
-        <button class="manage-team-btn" bindtap="manageTeam">
-          <text class="btn-icon-text">⚙️</text>
-          <text class="btn-text-main">管理球队</text>
-        </button>
-      </view>
-
-      <!-- 2. 参加过的比赛卡片 -->
-      <view class="matches-section">
-        <view class="section-title-bar">
-          <view class="title-accent-bar"></view>
-          <text class="section-title-main">参加的比赛</text>
-          <text class="view-all-link" bindtap="goToMatches">查看全部 ›</text>
-        </view>
-
-        <view class="matches-list" wx:if="{{MatchesLen > 0}}">
-          <view 
-            class="match-card-item" 
-            wx:for="{{matches}}" wx:key="_id"
-            wx:key="id"
-            bindtap="viewMatchData"
-            data-id="{{item.id}}"
-          >
-            <view class="match-header-row">
-              <text class="match-name-text">{{item.matchName}}</text>
-              <view class="match-status-tag {{item.statusClass}}">
-                <text class="status-text">{{item.statusText}}</text>
-              </view>
-            </view>
-
-            <view class="vs-section">
-              <view class="team-side">
-                <image class="team-logo-small" src="{{item.homeLogo || '/images/app-logo.png'}}" mode="aspectFit"></image>
-                <text class="team-name-small">{{item.homeTeam}}</text>
-              </view>
-              
-              <view class="score-area">
-                <text class="score-text" wx:if="{{item.score}}">{{item.score}}</text>
-                <text class="vs-text" wx:else>VS</text>
-              </view>
-              
-              <view class="team-side">
-                <image class="team-logo-small" src="{{item.awayLogo || '/images/app-logo.png'}}" mode="aspectFit"></image>
-                <text class="team-name-small">{{item.awayTeam}}</text>
-              </view>
-            </view>
-
-            <view class="match-info-row">
-              <text class="info-item-text">📍 {{item.location}}</text>
-              <text class="info-item-text">📅 {{item.date}}</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="empty-card">
-          <text class="empty-icon-large">🏆</text>
-          <text class="empty-title-text">暂无比赛记录</text>
-          <text class="empty-desc-text">参加比赛后这里会显示比赛信息</text>
-          <button class="join-match-btn" bindtap="goToMatches">
-            <text class="btn-text-main">参加比赛</text>
-          </button>
-        </view>
-      </view>
-
-      <!-- 3. 球队相册 -->
-      <view class="album-section">
-        <view class="section-title-bar">
-          <view class="title-accent-bar green"></view>
-          <text class="section-title-main">球队相册</text>
-          <text class="view-all-link" bindtap="goToAlbum">查看全部 ›</text>
-        </view>
-
-        <view class="album-grid-view" wx:if="{{AlbumsLen > 0}}">
-          <view 
-            class="photo-item" 
-            wx:for="{{albums}}" wx:key="_id"
-            wx:key="id"
-            bindtap="viewPhoto"
-            data-index="{{index}}"
-          >
-            <image class="photo-img" src="{{item.url}}" mode="aspectFill"></image>
-            <view class="photo-count-badge" wx:if="{{item.count > 1}}">
-              <text class="count-text">{{item.count}}</text>
-            </view>
-          </view>
-          
-          <view class="add-photo-item" bindtap="addPhoto">
-            <view class="add-icon-circle">
-              <text class="plus-sign">+</text>
-            </view>
-            <text class="add-photo-text">添加照片</text>
-          </view>
-        </view>
-
-        <view class="empty-card">
-          <text class="empty-icon-large">📸</text>
-          <text class="empty-title-text">暂无照片</text>
-          <button class="upload-photo-btn" bindtap="addPhoto">
-            <text class="btn-text-main">上传照片</text>
-          </button>
-        </view>
-      </view>
-    </block>
-
-    <!-- ========== 裁判模式 ========== -->
-    <block wx:elif="{{isRefereeMode}}">
-      <!-- 裁判信息卡 -->
-      <view class="referee-card">
-        <view class="referee-header">
-          <view class="referee-avatar">
-            <text class="avatar-icon">⚽</text>
-          </view>
-          <view class="referee-info">
-            <text class="referee-name">{{userInfo.nickName || '裁判员'}}</text>
-            <text class="referee-level">国家级裁判</text>
-          </view>
-        </view>
-
-        <view class="referee-stats">
-          <view class="referee-stat-item">
-            <text class="stat-num">{{refereeStats.totalMatches}}</text>
-            <text class="stat-label">执法场次</text>
-          </view>
-          <view class="referee-stat-item">
-            <text class="stat-num">{{refereeStats.thisMonth}}</text>
-            <text class="stat-label">本月执法</text>
-          </view>
-          <view class="referee-stat-item">
-            <text class="stat-num">{{refereeStats.rating}}</text>
-            <text class="stat-label">评分</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 即将执法的比赛 -->
-      <view class="upcoming-matches-section">
-        <view class="section-title-bar">
-          <view class="title-accent-bar orange"></view>
-          <text class="section-title-main">即将执法的比赛</text>
-        </view>
-
-        <view class="match-card-item" wx:for="{{upcomingMatches}}" wx:key="id">
-          <view class="match-header-row">
-            <text class="match-name-text">{{item.matchName}}</text>
-            <view class="match-status-tag upcoming">
-              <text class="status-text">{{item.date}}</text>
-            </view>
-          </view>
-
-          <view class="vs-section">
-            <view class="team-side">
-              <text class="team-name-small">{{item.homeTeam}}</text>
-            </view>
-            <text class="vs-text">VS</text>
-            <view class="team-side">
-              <text class="team-name-small">{{item.awayTeam}}</text>
-            </view>
-          </view>
-
-          <view class="match-info-row">
-            <text class="info-item-text">📍 {{item.location}}</text>
-            <text class="info-item-text">🕐 {{item.time}}</text>
-          </view>
-        </view>
-
-        <view class="empty-card">
-          <text class="empty-icon-large">📋</text>
-          <text class="empty-title-text">暂无执法安排</text>
-        </view>
-      </view>
-    </block>
-
-    <!-- ========== 赛事主办方模式 ========== -->
-    <block wx:elif="{{isOrganizerMode}}">
-      <!-- 赛事主办方信息卡 -->
-      <view class="organizer-card">
-        <view class="organizer-header">
-          <view class="organizer-avatar">
-            <text class="avatar-icon">🏆</text>
-          </view>
-          <view class="organizer-info">
-            <text class="organizer-name">{{userInfo.nickName || '赛事主办方'}}</text>
-            <text class="organizer-desc">赛事组织与管理</text>
-          </view>
-        </view>
-
-        <view class="organizer-stats">
-          <view class="organizer-stat-item">
-            <text class="stat-num">{{organizerStats.totalTournaments}}</text>
-            <text class="stat-label">创建赛事</text>
-          </view>
-          <view class="organizer-stat-item">
-            <text class="stat-num">{{organizerStats.ongoing}}</text>
-            <text class="stat-label">进行中</text>
-          </view>
-          <view class="organizer-stat-item">
-            <text class="stat-num">{{organizerStats.totalTeams}}</text>
-            <text class="stat-label">参赛球队</text>
-          </view>
-        </view>
-
-        <button class="create-tournament-btn" bindtap="createTournament">
-          <text class="btn-icon-text">➕</text>
-          <text class="btn-text-main">创建新赛事</text>
-        </button>
-      </view>
-
-      <!-- 管理快捷入口 -->
-      <view class="manage-entry-section">
-        <view class="section-title-bar">
-          <view class="title-accent-bar green"></view>
-          <text class="section-title-main">管理中心</text>
-        </view>
-        <view class="manage-entry-list">
-          <view class="manage-entry-item" bindtap="goToTournamentManage">
-            <view class="entry-icon-box">
-              <text class="entry-icon">🏆</text>
-            </view>
-            <text class="entry-name">赛事管理</text>
-            <text class="entry-desc">管理赛事报名与赛程</text>
-          </view>
-          <view class="manage-entry-item" bindtap="goToRefereeManage">
-            <view class="entry-icon-box orange">
-              <text class="entry-icon">⚖️</text>
-            </view>
-            <text class="entry-name">裁判管理</text>
-            <text class="entry-desc">裁判指派与执法记录</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 待办事项 -->
-      <view class="pending-section" wx:if="{{PendingItemsLen > 0}}">
-        <view class="section-title-bar">
-          <view class="title-accent-bar orange"></view>
-          <text class="section-title-main">待办事项</text>
-          <text class="pending-count">{{PendingItemsLen}}</text>
-        </view>
-
-        <view class="pending-list">
-          <view class="pending-item" wx:for="{{pendingItems}}" wx:key="type" bindtap="onPendingItemTap" data-item="{{item}}">
-            <view class="pending-icon">{{item.icon}}</view>
-            <view class="pending-info">
-              <text class="pending-title">{{item.title}}</text>
-              <text class="pending-desc">{{item.desc}}</text>
-            </view>
-            <text class="pending-arrow">›</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 我创建的赛事 -->
-      <view class="my-tournaments-section">
-        <view class="section-title-bar">
-          <view class="title-accent-bar"></view>
-          <text class="section-title-main">我创建的赛事</text>
-          <text class="view-all-link" bindtap="goToTournaments">查看全部 ›</text>
-        </view>
-
-        <view class="tournament-list" wx:if="{{MyTournamentsLen > 0}}">
-          <view 
-            class="tournament-item" 
-            wx:for="{{myTournaments}}" wx:key="_id"
-
-            bindtap="viewTournament"
-            data-id="{{item._id}}"
-          >
-            <view class="tournament-item-header">
-              <text class="tournament-item-name">{{item.name}}</text>
-              <view class="status-tag {{item.status}}">{{item.statusLabel}}</view>
-            </view>
-            <view class="tournament-item-info">
-              <text class="info-text">📅 {{item.dateRange}}</text>
-              <text class="info-text">👥 {{item.registeredTeams || 0}}/{{item.maxTeams}} 队</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="empty-card" wx:if="{{!MyTournamentsLen}}">
-          <text class="empty-icon-large">🏆</text>
-          <text class="empty-title-text">暂无赛事</text>
-          <text class="empty-desc-text">点击上方按钮创建第一个赛事</text>
-        </view>
-      </view>
-
-    </block>
-
-    <!-- ========== 观众模式 ========== -->
-    <block wx:elif="{{isSpectatorMode}}">
-      <!-- 欢迎卡片 -->
-      <view class="spectator-welcome-card">
-        <view class="welcome-header">
-          <text class="welcome-icon">👀</text>
-          <view class="welcome-text">
-            <text class="welcome-title">欢迎来到麦部足球</text>
-            <text class="welcome-desc">观看精彩赛事，关注心仪球队</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 热门赛事 -->
-      <view class="hot-tournaments-section">
-        <view class="section-title-bar">
-          <view class="title-accent-bar orange"></view>
-          <text class="section-title-main">热门赛事</text>
-          <text class="view-all-link" bindtap="goToTournaments">查看全部 ›</text>
-        </view>
-
-        <view class="tournament-list" wx:if="{{HotTournamentsLen > 0}}">
-          <view 
-            class="tournament-item" 
-            wx:for="{{hotTournaments}}" wx:key="_id"
-            wx:key="_id"
-            bindtap="viewTournament"
-            data-id="{{item._id}}"
-          >
-            <view class="tournament-item-header">
-              <text class="tournament-item-name">{{item.name}}</text>
-              <view class="status-tag {{item.status}}">{{item.statusLabel}}</view>
-            </view>
-            <view class="tournament-item-info">
-              <text class="info-text">📅 {{item.dateRange}}</text>
-              <text class="info-text">👥 {{item.registeredTeams || 0}}/{{item.maxTeams}} 队</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="empty-card">
-          <text class="empty-icon-large">🏆</text>
-          <text class="empty-title-text">暂无赛事</text>
-          <text class="empty-desc-text">敬请期待精彩赛事</text>
-        </view>
-      </view>
-
-      <!-- 精彩瞬间 -->
-      <view class="highlights-section">
-        <view class="section-title-bar">
-          <view class="title-accent-bar green"></view>
-          <text class="section-title-main">精彩瞬间</text>
-        </view>
-
-        <view class="highlights-grid" wx:if="{{HighlightsLen > 0}}">
-          <view 
-            class="highlight-item" 
-            wx:for="{{highlights}}" wx:key="_id"
-            wx:key="id"
-          >
-            <image class="highlight-img" src="{{item.cover}}" mode="aspectFill"></image>
-            <view class="highlight-info">
-              <text class="highlight-title">{{item.title}}</text>
-              <text class="highlight-desc">{{item.desc}}</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="empty-card">
-          <text class="empty-icon-large">📸</text>
-          <text class="empty-title-text">暂无精彩瞬间</text>
-        </view>
-      </view>
-    </block>
-
-    <!-- ========== 未登录/其他身份 ========== -->
-    <block wx:else>
-      <view class="visitor-welcome">
-        <text class="welcome-icon">⚽</text>
-        <text class="welcome-title">欢迎使用麦部足球赛事系统</text>
-        <text class="welcome-desc">请登录后使用完整功能</text>
-        <button class="login-btn" bindtap="goToLogin">立即登录</button>
-      </view>
-    </block>
-
-  </block>
 </view>

@@ -1,6 +1,6 @@
 <view class="page-container">
   <view class="header-container flex-row">
-    <image class="header-avatar" src="{{currentCard.avatarUrl || '/images/app-logo.png'}}"></image>
+    <image class="header-avatar" src="{{currentCard.avatarUrl || '/images/logo.png'}}"></image>
     <view class="header-info flex-col">
       <text class="header-name bold">{{currentCard.nickname || '郑旭升'}}</text>
       <view class="tag-group flex-row">
@@ -45,7 +45,7 @@
 
       <view class="card-bottom-icons">
         <image class="card-flag" src="{{nationalityFlagUrl || ''}}" mode="aspectFit"></image>
-        <image class="card-logo" src="{{currentCard.teamLogo || '/images/app-logo.png'}}" mode="aspectFit"></image>
+        <image class="card-logo" src="{{currentCard.teamLogo || '/images/logo.png'}}" mode="aspectFit"></image>
       </view>
     </view>
   </view>

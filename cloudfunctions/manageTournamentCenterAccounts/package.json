@@ -1,9 +1,0 @@
-{
-  "name": "manageTournamentCenterAccounts",
-  "version": "1.0.0",
-  "description": "赛事中心白名单账号管理云函数（list/add/remove/toggle）",
-  "main": "index.js",
-  "dependencies": {
-    "wx-server-sdk": "~2.6.3"
-  }
-}

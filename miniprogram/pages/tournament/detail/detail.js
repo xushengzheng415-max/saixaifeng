@@ -1,11 +1,46 @@
 // pages/tournament/detail/detail.js
 const app = getApp()
 const db = wx.cloud.database()
+const workspace = require('../../../utils/workspace')
 
 Page({
   data: {
     loading: true,
+    visualQa: false,
+    visualSummary: {},
+    visualPreTasks: [],
+    visualPostTasks: [],
     tournamentId: '',
+    requestedTeamId: '',
+    requestedDivisionId: '',
+    showTeamTournamentDetail: false,
+    teamPageClass: '',
+    teamEventTag: '我参与的',
+    teamEventMode: '',
+    teamEventName: '',
+    teamEventDateVenue: '',
+    teamEventTeamId: '',
+    teamEventTeamName: '',
+    teamEventTeamLogo: '',
+    teamEventStatusText: '',
+    teamEventRank: '—',
+    teamEventRankTotal: '—',
+    teamEventPlayed: 0,
+    teamEventPoints: 0,
+    teamEventRosterText: '尚未提交正式名单',
+    teamEventLineupText: '暂无待进行比赛',
+    showNextMatch: false,
+    showNextMatchEmpty: true,
+    nextMatchId: '',
+    nextMatchDateTime: '',
+    nextMatchVenue: '',
+    nextHomeName: '',
+    nextHomeLogo: '',
+    nextAwayName: '',
+    nextAwayLogo: '',
+    canSubmitNextLineup: false,
+    nextLineupButtonText: '提交本场阵容',
+    nextLineupButtonClass: '',
     // 赛事基本信息
     name: '',
     status: '',
@@ -163,9 +198,14 @@ Page({
     maxTeams: 0,
     dayCount: 0,
     regulationsUrl: '',
+    regulationsFileId: '',
     regulationsFileName: '',
     hasRegulationsFile: false,
+    showRegulationsCard: false,
+    regulationsStatusText: '未上传',
+    regulationsActionText: '上传',
     websiteUrl: '',
+    inviteSharePath: '',
     // 赛制规则完整字段（预计算，避免 WXML 深度属性链）
     rulePointsEnableGoalBonus: false,
     rulePointsGoalBonus: 0,
@@ -182,6 +222,34 @@ Page({
     rulesStringContent: ''
   },
 
+  normalizeRegulationsFileName: function (value, fallback) {
+    var text = value === undefined || value === null ? '' : String(value)
+    text = text || fallback || '竞赛规程'
+    text = text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+
+    text = text.replace(/&#(x?[0-9a-fA-F]+);/g, function (match, code) {
+      var point = code.charAt(0).toLowerCase() === 'x'
+        ? parseInt(code.slice(1), 16)
+        : parseInt(code, 10)
+      if (!point || point < 0) return ''
+      try {
+        return String.fromCodePoint ? String.fromCodePoint(point) : String.fromCharCode(point)
+      } catch (e) {
+        return ''
+      }
+    })
+
+    text = text.replace(/\uD83D[\uDCC3\uDCC4]/g, '')
+    text = text.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+    return text || fallback || '竞赛规程'
+  },
+
   // 规则折叠
   toggleRules: function () {
     var newShowRules = !this.data.showRules
@@ -189,11 +257,36 @@ Page({
   },
 
   onDownloadRegulations: function () {
+    var fileId = this.data.regulationsFileId
     var url = this.data.regulationsUrl
+
+    if (fileId) {
+      wx.showLoading({ title: '下载中...' })
+      wx.cloud.downloadFile({
+        fileID: fileId,
+        success: function (res) {
+          wx.hideLoading()
+          wx.openDocument({
+            filePath: res.tempFilePath,
+            showMenu: true,
+            fail: function () {
+              wx.showToast({ title: '无法打开文件', icon: 'none' })
+            }
+          })
+        },
+        fail: function () {
+          wx.hideLoading()
+          wx.showToast({ title: '下载失败', icon: 'none' })
+        }
+      })
+      return
+    }
+
     if (!url) {
       wx.showToast({ title: '暂无规程文件', icon: 'none' })
       return
     }
+
     wx.showLoading({ title: '下载中...' })
     wx.downloadFile({
       url: url,
@@ -202,6 +295,7 @@ Page({
         if (res.statusCode === 200) {
           wx.openDocument({
             filePath: res.tempFilePath,
+            showMenu: true,
             fail: function () {
               wx.showToast({ title: '无法打开文件', icon: 'none' })
             }
@@ -211,6 +305,91 @@ Page({
       fail: function () {
         wx.hideLoading()
         wx.showToast({ title: '下载失败', icon: 'none' })
+      }
+    })
+  },
+
+  onUploadRegulations: function () {
+    var that = this
+    if (!that.data.isOrganizer) {
+      wx.showToast({ title: '仅主办方可上传', icon: 'none' })
+      return
+    }
+
+    wx.chooseMessageFile({
+      count: 1,
+      type: 'file',
+      extension: ['pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp'],
+      success: function (res) {
+        var file = res.tempFiles && res.tempFiles[0]
+        if (!file || !file.path) return
+        that.uploadRegulationsFile(file)
+      }
+    })
+  },
+
+  uploadRegulationsFile: function (file) {
+    var that = this
+    var fileName = that.normalizeRegulationsFileName(file.name, '竞赛规程-' + Date.now())
+    var size = file.size || 0
+    if (size > 10 * 1024 * 1024) {
+      wx.showToast({ title: '文件不能超过10MB', icon: 'none' })
+      return
+    }
+
+    var safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+    var cloudPath = 'tournament-regulations/' + that.data.tournamentId + '/' + Date.now() + '-' + safeName
+    wx.showLoading({ title: '上传中...' })
+
+    wx.cloud.uploadFile({
+      cloudPath: cloudPath,
+      filePath: file.path,
+      success: function (uploadRes) {
+        var fileID = uploadRes.fileID
+        var saveUpload = function (tempUrl) {
+          db.collection('tournaments').doc(that.data.tournamentId).update({
+            data: {
+              regulationsFileId: fileID,
+              regulationsUrl: tempUrl || '',
+              regulationsFileName: fileName,
+              updateTime: db.serverDate()
+            },
+            success: function () {
+              wx.hideLoading()
+              that.setData({
+                regulationsFileId: fileID,
+                regulationsUrl: tempUrl || '',
+                regulationsFileName: fileName,
+                hasRegulationsFile: true,
+                showRegulationsCard: true,
+                regulationsStatusText: '已上传的竞赛规程文档',
+                regulationsActionText: '更换'
+              })
+              wx.showToast({ title: '上传成功', icon: 'success' })
+            },
+            fail: function (err) {
+              wx.hideLoading()
+              console.error('[detail] 保存竞赛规程失败:', err)
+              wx.showToast({ title: '保存失败', icon: 'none' })
+            }
+          })
+        }
+
+        wx.cloud.getTempFileURL({
+          fileList: [fileID],
+          success: function (urlRes) {
+            var item = urlRes.fileList && urlRes.fileList[0]
+            saveUpload((item && item.tempFileURL) || '')
+          },
+          fail: function () {
+            saveUpload('')
+          }
+        })
+      },
+      fail: function (err) {
+        wx.hideLoading()
+        console.error('[detail] 上传竞赛规程失败:', err)
+        wx.showToast({ title: '上传失败', icon: 'none' })
       }
     })
   },
@@ -229,9 +408,9 @@ Page({
     wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + id })
   },
   onQuickCard4: function () {
-    // 报名审核 → 跳转签到页面
+    // 赛前工作台统一承接名单审核、赛程确认和裁判安排的主办方移动协作。
     var id = this.data.tournamentId
-    wx.navigateTo({ url: '/pages/tournament/signup/signup?id=' + id })
+    wx.navigateTo({ url: '/pages/tournament/pre-match/pre-match?id=' + id })
   },
   onQuickScrollRules: function () {
     // 滚动到竞赛规程区
@@ -247,9 +426,22 @@ Page({
     })
   },
 
+  onShareAppMessage: function (e) {
+    var tournamentName = this.data.name || '赛小蜂足球赛事'
+    var path = this.data.inviteSharePath || ('/pages/tournament/signup/signup?id=' + this.data.tournamentId + '&from=share')
+    return {
+      title: '邀请球队报名参赛：' + tournamentName,
+      path: path
+    }
+  },
+
   onLoad(options) {
+    if (workspace.isVisualQaEnabled(options)) {
+      this.loadVisualFixture()
+      return
+    }
     if (options && options.id) {
-      this.setData({ tournamentId: options.id })
+      this.setData({ tournamentId: options.id, requestedTeamId: options.teamId || '', requestedDivisionId: options.divisionId || '' })
       this.loadTournament()
     } else {
       this.setData({ loading: false })
@@ -257,15 +449,114 @@ Page({
   },
 
   onShow() {
-    if (this.data.tournamentId) {
+    if (this.data.tournamentId && !this.data.visualQa) {
       this.loadTournament()
     }
   },
 
   onPullDownRefresh() {
+    if (this.data.visualQa) { wx.stopPullDownRefresh(); return }
     this.loadTournament().then(() => {
       wx.stopPullDownRefresh()
     })
+  },
+
+  loadVisualFixture: function () {
+    this.setData({
+      visualQa: true, loading: false, tournamentId: 'visual-team-event', showTeamTournamentDetail: true, teamPageClass: 'team-event-mode',
+      teamEventMode: 'PRO · U12', teamEventName: '2026 河南青少年足球冠军联赛', teamEventDateVenue: '7月20日 — 8月18日 · 河南省体育中心',
+      teamEventTeamId: 'visual-team', teamEventTeamName: '赛小蜂U12竞技队', teamEventTeamLogo: '/images/logo.png', teamEventStatusText: '已确认',
+      teamEventRank: '3', teamEventRankTotal: '8', teamEventPlayed: 4, teamEventPoints: 6, teamEventRosterText: '18/20 已通过审核', teamEventLineupText: '下一场待提交',
+      showNextMatch: true, showNextMatchEmpty: false, nextMatchId: 'visual-match', nextMatchDateTime: '8月2日 周六 10:30', nextMatchVenue: '1号场',
+      nextHomeName: '赛小蜂U12竞技队', nextHomeLogo: '/images/logo.png', nextAwayName: '洛阳龙门U12', nextAwayLogo: '/images/runtime/icons/brand-v1-tab-team.png',
+      canSubmitNextLineup: true, nextLineupButtonText: '提交本场阵容', nextLineupButtonClass: ''
+    })
+  },
+
+  formatTeamEventDate: function (value) {
+    if (!value) return ''
+    var date = new Date(value && value.$date ? value.$date : value)
+    if (Number.isNaN(date.getTime())) return String(value)
+    return (date.getMonth() + 1) + '月' + date.getDate() + '日'
+  },
+
+  formatNextMatchDateTime: function (value, fallbackDate, fallbackTime) {
+    if (!value) return [fallbackDate, fallbackTime].filter(Boolean).join(' ')
+    var date = new Date(value && value.$date ? value.$date : value)
+    if (Number.isNaN(date.getTime())) return [fallbackDate, fallbackTime].filter(Boolean).join(' ')
+    var weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    var hour = String(date.getHours()).padStart(2, '0')
+    var minute = String(date.getMinutes()).padStart(2, '0')
+    return (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + weekdays[date.getDay()] + ' ' + hour + ':' + minute
+  },
+
+  loadTeamTournamentDetail: function () {
+    var that = this
+    var context = workspace.readContext() || {}
+    var teamId = that.data.requestedTeamId || wx.getStorageSync('currentTeamId') || ''
+    var workspaceId = teamId ? 'team:' + teamId : ((context.currentWorkspace || {}).id || '')
+    return wx.cloud.callFunction({
+      name: 'getMiniWorkspace',
+      data: { action: 'teamTournamentDetail', workspaceId: workspaceId, tournamentId: that.data.tournamentId, teamId: teamId, divisionId: that.data.requestedDivisionId }
+    }).then(function (response) {
+      var result = response.result || {}
+      if (!result.success || !result.participating) return false
+      var tournament = result.tournament || {}
+      var division = result.division || {}
+      var registration = result.registration || {}
+      var team = result.team || {}
+      var summary = result.summary || {}
+      var roster = result.roster || {}
+      var next = result.nextMatch || null
+      var startText = that.formatTeamEventDate(tournament.startDate)
+      var endText = that.formatTeamEventDate(tournament.endDate)
+      var dateText = startText
+      if (startText && endText && startText !== endText) dateText += ' — ' + endText
+      var dateVenue = [dateText, tournament.location].filter(Boolean).join(' · ')
+      var nextDateTime = next ? that.formatNextMatchDateTime(next.startTime, next.dateText, next.timeText) : ''
+      var rosterText = roster.exists ? (roster.playerCount + '/' + roster.maxPlayers + (roster.approved ? ' 已通过审核' : ' 正式名单待处理')) : '尚未提交正式名单'
+      var lineupText = next ? (result.canSubmitLineup ? '下一场待提交' : (roster.approved ? '阵容暂不可提交' : '请先完成正式名单')) : '暂无待进行比赛'
+      that.setData({
+        showTeamTournamentDetail: true, teamPageClass: 'team-event-mode', isCoach: true, myTeamId: team.id || '', myTeamName: team.name || '', requestedDivisionId: division.id || that.data.requestedDivisionId || '',
+        teamEventMode: division.modeText || division.name || '', teamEventName: tournament.name || '', teamEventDateVenue: dateVenue,
+        teamEventTeamId: team.id || '', teamEventTeamName: team.name || '', teamEventTeamLogo: team.logo || '/images/runtime/icons/brand-v1-tab-team.png', teamEventStatusText: registration.statusText || '已确认',
+        teamEventRank: summary.rank ? String(summary.rank) : '—', teamEventRankTotal: summary.rankTotal ? String(summary.rankTotal) : '—', teamEventPlayed: Number(summary.played || 0), teamEventPoints: Number(summary.points || 0),
+        teamEventRosterText: rosterText, teamEventLineupText: lineupText, showNextMatch: Boolean(next), showNextMatchEmpty: !next,
+        nextMatchId: next ? next.id || '' : '', nextMatchDateTime: nextDateTime, nextMatchVenue: next ? next.venue || '' : '',
+        nextHomeName: next && next.home ? next.home.name || '' : '', nextHomeLogo: next && next.home ? next.home.logo || '/images/runtime/icons/brand-v1-tab-team.png' : '',
+        nextAwayName: next && next.away ? next.away.name || '' : '', nextAwayLogo: next && next.away ? next.away.logo || '/images/runtime/icons/brand-v1-tab-team.png' : '',
+        canSubmitNextLineup: result.canSubmitLineup === true, nextLineupButtonText: result.canSubmitLineup ? '提交本场阵容' : (next ? '请先完成正式名单' : '赛程尚未公布'), nextLineupButtonClass: result.canSubmitLineup ? '' : 'disabled'
+      })
+      return true
+    }).catch(function (error) {
+      console.warn('[detail] 球队赛事视角加载失败，回退公共视角:', error)
+      return false
+    })
+  },
+
+  onTeamEventBack: function () { wx.navigateBack({ fail: function () { wx.switchTab({ url: '/pages/event/index' }) } }) },
+  onTeamEventNotice: function () { wx.navigateTo({ url: '/pages/messages/index' }) },
+  onTeamEventRoster: function () {
+    wx.navigateTo({ url: '/pages/team/official-roster/official-roster?teamId=' + encodeURIComponent(this.data.teamEventTeamId) + '&tournamentId=' + encodeURIComponent(this.data.tournamentId) + '&divisionId=' + encodeURIComponent(this.data.requestedDivisionId || '') })
+  },
+  onTeamEventLineup: function () {
+    if (!this.data.nextMatchId) return wx.showToast({ title: '暂无待进行比赛', icon: 'none' })
+    if (!this.data.canSubmitNextLineup) return wx.showToast({ title: '请先完成并通过正式名单', icon: 'none' })
+    wx.navigateTo({ url: '/pages/match/squad/squad?matchId=' + encodeURIComponent(this.data.nextMatchId) + '&teamId=' + encodeURIComponent(this.data.teamEventTeamId) })
+  },
+  onTeamEventSchedule: function () { wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + encodeURIComponent(this.data.tournamentId) }) },
+  onTeamEventTabHome: function () { wx.switchTab({ url: '/pages/home/home' }) },
+  onTeamEventTabEvent: function () { wx.switchTab({ url: '/pages/event/index' }) },
+  onTeamEventTabTeam: function () { wx.switchTab({ url: '/pages/teams/index' }) },
+  onTeamEventTabTraining: function () { wx.switchTab({ url: '/pages/training/index' }) },
+  onTeamEventTabProfile: function () { wx.switchTab({ url: '/pages/profile/profile' }) },
+
+  onVisualRoute: function (event) {
+    var route = event.currentTarget.dataset.route
+    var id = this.data.tournamentId
+    if (route === 'teams') { wx.navigateTo({ url: '/pages/tournament/teams/teams?id=' + id }); return }
+    if (route === 'schedule') { wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + id }); return }
+    wx.navigateTo({ url: '/pages/tournament/pre-match/pre-match?id=' + id })
   },
 
   // 读取大名单上限回退链（P0 功能：maxPlayersPerTeam ?? maxPlayers ?? 默认值 ?? 20）
@@ -454,9 +745,9 @@ Page({
     flags['quickCard3Icon'] = '📅'
     flags['quickCard3Title'] = '赛程安排'
     flags['quickCard3Desc'] = (d.matchesLen || 0) + ' 场'
-    flags['quickCard4Icon'] = '🔔'
-    flags['quickCard4Title'] = '报名审核'
-    flags['quickCard4Desc'] = (d.pendingTeamsLen || 0) + ' 待审'
+    flags['quickCard4Icon'] = '赛'
+    flags['quickCard4Title'] = '赛前工作台'
+    flags['quickCard4Desc'] = (d.pendingTeamsLen || 0) + ' 待处理'
 
     this.setData(flags)
   },
@@ -511,8 +802,9 @@ Page({
         var typeNames = { tournament: '赛会制', cup: '杯赛制', league: '联赛制', combined: '复合制' }
         var resolvedTypeText = typeNames[t.type] || t.type || ''
         var regUrl = t.regulationsUrl || ''
-        var regFileName = t.regulationsFileName || '竞赛规程'
-        var hasRegFile = !!(regUrl || t.regulationsFileId)
+        var regFileId = typeof t.regulationsFileId === 'string' ? t.regulationsFileId : ''
+        var regFileName = that.normalizeRegulationsFileName(t.regulationsFileName, '竞赛规程')
+        var hasRegFile = !!(regUrl || regFileId)
         var createTimeText = ''
         if (t.createTime) {
           var ct2 = new Date(t.createTime)
@@ -526,7 +818,7 @@ Page({
           dayCount = Math.ceil((eDate - sDate) / (1000*60*60*24)) + 1
         }
         // 官网链接
-        var websiteUrl = 'https://saixiaofeng.com/t/' + that.data.tournamentId
+    var websiteUrl = 'https://www.sxffootball.cn/t/' + that.data.tournamentId
         // rules 字符串内容
         var hasRulesStr = !!(t.rules && typeof t.rules === 'string')
         var rulesStrContent = hasRulesStr ? t.rules : ''
@@ -541,9 +833,14 @@ Page({
           maxTeams: t.maxTeams || 0,
           dayCount: dayCount,
           regulationsUrl: regUrl,
+          regulationsFileId: regFileId,
           regulationsFileName: regFileName,
           hasRegulationsFile: hasRegFile,
+          showRegulationsCard: hasRegFile,
+          regulationsStatusText: hasRegFile ? '已上传的竞赛规程文档' : '未上传',
+          regulationsActionText: hasRegFile ? '更换' : '上传',
           websiteUrl: websiteUrl,
+          inviteSharePath: '/pages/tournament/signup/signup?id=' + that.data.tournamentId + '&from=share',
           hasRulesObject: hasRulesObj,
           hasRulesString: hasRulesStr,
           rulesStringContent: rulesStrContent
@@ -568,11 +865,11 @@ Page({
 
         // 关闭加载状态
         that.setData({ loading: false, errorMsg: '' })
-        // 加载球队列表
-        that.loadTeams()
-
-        // 判断权限并加载数据
-        try { that.checkPermissionAndLoadData(t) } catch(e) { console.error('[detail] 权限判断异常:', e) }
+        that.loadTeamTournamentDetail().then(function (shown) {
+          if (shown) return
+          that.loadTeams()
+          try { that.checkPermissionAndLoadData(t) } catch(e) { console.error('[detail] 权限判断异常:', e) }
+        })
       },
       fail: function (err) {
         clearTimeout(_timeout)
@@ -584,13 +881,17 @@ Page({
 
   checkPermissionAndLoadData: function (tournament) {
     var that = this
-    var userInfo = app.globalData.userInfo || {}
-
-    // 判断是否为主办方
-    var currentRole = (wx.getStorageSync('currentRole') || '').toLowerCase()
-    var isOrganizer = currentRole === 'organizer' || userInfo.role === 'ORGANIZER'
-
-    // 判断是否为参赛教练
+    var context = workspace.readContext() || {}
+    var currentTournaments = context.tournaments || []
+    var currentTournament = currentTournaments.find(function(item) {
+      return item.id === that.data.tournamentId || item._id === that.data.tournamentId
+    })
+    var isOrganizer = !!(
+      workspace.hasPermission('event.manage', context) &&
+      currentTournament &&
+      currentTournament.relation === 'hosted'
+    )
+    var accessibleTeamIds = workspace.getAccessibleTeamIds(context)
     var isCoach = false
     var myTeamId = ''
     var myTeamName = ''
@@ -598,24 +899,32 @@ Page({
     if (tournament.teams && tournament.teams.length > 0) {
       for (var i = 0; i < tournament.teams.length; i++) {
         var tt = tournament.teams[i]
-        if (tt.coachOpenId === userInfo.openId ||
-            tt.coachPhone === userInfo.phoneNumber) {
+        var teamId = tt.teamId || tt._id || ''
+        if (accessibleTeamIds.indexOf(teamId) >= 0) {
           isCoach = true
-          myTeamId = tt.teamId || tt._id || ''
+          myTeamId = teamId
           myTeamName = tt.teamName || ''
           break
         }
       }
+    }
+    if (!isCoach && currentTournament && currentTournament.relation === 'participating' && accessibleTeamIds.length) {
+      isCoach = true
+      myTeamId = accessibleTeamIds[0]
+      var currentTeams = context.teams || []
+      var myTeam = currentTeams.find(function(item) { return item.id === myTeamId })
+      myTeamName = myTeam ? myTeam.name : ''
     }
 
     that.setData({
       isOrganizer: isOrganizer,
       isCoach: isCoach,
       myTeamId: myTeamId,
-      myTeamName: myTeamName
+      myTeamName: myTeamName,
+      showRegulationsCard: isOrganizer || that.data.hasRegulationsFile
     })
 
-    // 根据角色设置默认 Tab 和加载数据
+    // 根据当前机构授权设置默认 Tab 和加载数据
     if (isOrganizer) {
       that.setData({ currentTab: 'teams' })
       that.loadAllData()
@@ -952,13 +1261,18 @@ Page({
 
   onAddPlayer: function () {
     wx.navigateTo({
-      url: '/pages/player-add/player-add?tournamentId=' + this.data.tournamentId +
-           '&teamId=' + this.data.myTeamId
+      url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(this.data.myTeamId)
     })
   },
 
   onAddCoach: function () {
-    wx.showToast({ title: '添加教练功能开发中', icon: 'none' })
+    if (!this.data.myTeamId) {
+      wx.showToast({ title: '请先选择当前球队', icon: 'none' })
+      return
+    }
+    wx.navigateTo({
+      url: '/pages/team/members/members?teamId=' + encodeURIComponent(this.data.myTeamId) + '&role=coach'
+    })
   },
 
   onDeletePlayer: function (e) {
@@ -1203,13 +1517,13 @@ Page({
   onViewMatch: function (e) {
     var matchId = e.currentTarget.dataset.id
     wx.navigateTo({
-      url: '/pages/match/match?matchId=' + matchId
+      url: '/pages/match/detail/detail?matchId=' + matchId
     })
   },
 
   onManageTeam: function () {
     wx.navigateTo({
-      url: '/pages/team-detail/team-detail?id=' + this.data.myTeamId
+      url: '/pages/team/detail/detail?teamId=' + encodeURIComponent(this.data.myTeamId)
     })
   },
 

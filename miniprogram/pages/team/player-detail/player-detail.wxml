@@ -1,224 +1,35 @@
-<!-- pages/team/player-detail/player-detail.wxml -->
-<!-- 球员详情页 - FIFA卡片风格 -->
-
 <view class="player-detail-container">
-  <!-- 加载中 -->
-  <view wx:if="{{loading}}" class="loading-state">
-    <view class="loading-spinner"></view>
-    <text class="loading-text">加载中...</text>
-  </view>
-
-  <!-- 球员信息 -->
+  <view wx:if="{{loading}}" class="loading-state"><view class="loading-spinner"></view><text class="loading-text">加载中...</text></view>
+  <view wx:elif="{{errorText}}" class="loading-state"><text class="loading-text">{{errorText}}</text><button bindtap="loadPlayerData">重新加载</button></view>
   <block wx:else>
-    <!-- 顶部背景装饰 -->
-    <view class="hero-bg">
-      <view class="bg-circle circle-1"></view>
-      <view class="bg-circle circle-2"></view>
-      <view class="bg-pattern"></view>
-    </view>
-
-    <!-- 球员主卡片 - FIFA风格 -->
+    <view class="hero-bg"><view class="bg-circle circle-1"></view><view class="bg-circle circle-2"></view><view class="bg-pattern"></view></view>
     <view class="player-card-fifa">
-      <!-- 球衣号码角标 -->
-      <view class="jersey-badge" wx:if="{{player.jerseyNumber}}">
-        <text class="jersey-num">{{player.jerseyNumber}}</text>
-      </view>
-      
-      <!-- 头像区域 -->
-      <view class="avatar-section">
-        <view class="avatar-frame">
-          <image 
-            class="player-avatar" 
-            src="{{player.photoUrl || '/images/app-logo.png'}}" 
-            mode="aspectFill"
-            bindtap="previewImage"
-          ></image>
-        </view>
-        <view class="avatar-glow"></view>
-      </view>
-      
-      <!-- 基本信息 -->
-      <view class="info-section">
-        <text class="player-name">{{player.name}}</text>
-        <view class="jersey-name" wx:if="{{player.jerseyName}}">{{player.jerseyName}}</view>
-        <view class="position-tag" wx:if="{{player.positionLabel}}">
-          <text class="tag-text">{{player.positionLabel}}</text>
-        </view>
-      </view>
+      <view wx:if="{{player.hasJerseyNumber}}" class="jersey-badge"><text class="jersey-num">{{player.jerseyNumber}}</text></view>
+      <view class="avatar-section"><view class="avatar-frame"><image class="player-avatar" src="{{player.displayPhoto}}" mode="aspectFill" bindtap="previewImage"></image></view><view class="avatar-glow"></view></view>
+      <view class="info-section"><text class="player-name">{{player.name}}</text><view wx:if="{{player.hasJerseyName}}" class="jersey-name">{{player.jerseyName}}</view><view wx:if="{{player.hasPosition}}" class="position-tag"><text class="tag-text">{{player.positionLabel}}</text></view><view class="profile-state-tag">{{player.profileStatusText}}</view></view>
     </view>
 
-    <!-- 核心数据卡片 -->
     <view class="core-stats-card">
-      <view class="stats-grid-four">
-        <!-- 身高 -->
-        <view class="stat-box" wx:if="{{player.height}}">
-          <text class="stat-number">{{player.height}}</text>
-          <text class="stat-unit">cm</text>
-          <text class="stat-name">身高</text>
-        </view>
-        
-        <!-- 体重 -->
-        <view class="stat-box" wx:if="{{player.weight}}">
-          <text class="stat-number">{{player.weight}}</text>
-          <text class="stat-unit">kg</text>
-          <text class="stat-name">体重</text>
-        </view>
-        
-        <!-- 年龄 -->
-        <view class="stat-box" wx:if="{{player.age}}">
-          <text class="stat-number">{{player.age}}</text>
-          <text class="stat-unit">岁</text>
-          <text class="stat-name">年龄</text>
-        </view>
-        
-        <!-- 参赛场次 -->
-        <view class="stat-box">
-          <text class="stat-number">{{player.matchCount || 0}}</text>
-          <text class="stat-unit">场</text>
-          <text class="stat-name">参赛</text>
-        </view>
-      </view>
+      <view class="stats-grid-four"><view class="stat-box"><text class="stat-number">{{player.heightText}}</text><text class="stat-unit">{{player.heightUnit}}</text><text class="stat-name">身高</text></view><view class="stat-box"><text class="stat-number">{{player.weightText}}</text><text class="stat-unit">{{player.weightUnit}}</text><text class="stat-name">体重</text></view><view class="stat-box"><text class="stat-number">{{player.ageText}}</text><text class="stat-unit">岁</text><text class="stat-name">年龄</text></view><view class="stat-box"><text class="stat-number">{{stats.appearances}}</text><text class="stat-unit">场</text><text class="stat-name">参赛</text></view></view>
     </view>
 
-    <!-- 参赛数据统计卡片 -->
     <view class="stats-record-card">
-      <view class="card-title-bar">
-        <view class="title-accent"></view>
-        <text class="card-title">参赛数据</text>
-      </view>
-      
-      <view class="stats-record-grid">
-        <!-- 出场 -->
-        <view class="stats-record-item">
-          <view class="stats-icon-wrapper matches">
-            <text class="stats-icon">⚽</text>
-          </view>
-          <view class="stats-content">
-            <text class="stats-record-value">{{player.matches || 0}}</text>
-            <text class="stats-record-label">出场</text>
-          </view>
-        </view>
-        
-        <!-- 进球 -->
-        <view class="stats-record-item">
-          <view class="stats-icon-wrapper goals">
-            <text class="stats-icon">🎯</text>
-          </view>
-          <view class="stats-content">
-            <text class="stats-record-value">{{player.goals || 0}}</text>
-            <text class="stats-record-label">进球</text>
-          </view>
-        </view>
-        
-        <!-- 黄牌 -->
-        <view class="stats-record-item">
-          <view class="stats-icon-wrapper yellow">
-            <text class="stats-icon">🟨</text>
-          </view>
-          <view class="stats-content">
-            <text class="stats-record-value">{{player.yellowCards || 0}}</text>
-            <text class="stats-record-label">黄牌</text>
-          </view>
-        </view>
-        
-        <!-- 红牌 -->
-        <view class="stats-record-item">
-          <view class="stats-icon-wrapper red">
-            <text class="stats-icon">🟥</text>
-          </view>
-          <view class="stats-content">
-            <text class="stats-record-value">{{player.redCards || 0}}</text>
-            <text class="stats-record-label">红牌</text>
-          </view>
-        </view>
-      </view>
+      <view class="card-title-bar"><view class="title-accent"></view><text class="card-title">参赛数据</text></view>
+      <view class="stats-record-grid"><view class="stats-record-item"><view class="stats-icon-wrapper matches"><text class="stats-icon">出</text></view><view class="stats-content"><text class="stats-record-value">{{stats.appearances}}</text><text class="stats-record-label">出场</text></view></view><view class="stats-record-item"><view class="stats-icon-wrapper goals"><text class="stats-icon">球</text></view><view class="stats-content"><text class="stats-record-value">{{stats.goals}}</text><text class="stats-record-label">进球</text></view></view><view class="stats-record-item"><view class="stats-icon-wrapper yellow"><text class="stats-icon">黄</text></view><view class="stats-content"><text class="stats-record-value">{{stats.yellowCards}}</text><text class="stats-record-label">黄牌</text></view></view><view class="stats-record-item"><view class="stats-icon-wrapper red"><text class="stats-icon">红</text></view><view class="stats-content"><text class="stats-record-value">{{stats.redCards}}</text><text class="stats-record-label">红牌</text></view></view></view>
     </view>
 
-    <!-- 详细信息卡片 -->
     <view class="detail-card">
-      <view class="card-title-bar">
-        <view class="title-accent"></view>
-        <text class="card-title">详细信息</text>
-      </view>
-      
-      <view class="detail-grid">
-        <!-- 性别 -->
-        <view class="detail-item" wx:if="{{player.genderLabel}}">
-          <text class="detail-label">性别</text>
-          <text class="detail-value">{{player.genderLabel}}</text>
-        </view>
-        
-        <!-- 国籍 -->
-        <view class="detail-item" wx:if="{{player.nationality}}">
-          <text class="detail-label">国籍</text>
-          <text class="detail-value">{{player.nationality}}</text>
-        </view>
-        
-        <!-- 籍贯 -->
-        <view class="detail-item" wx:if="{{player.hometown}}">
-          <text class="detail-label">籍贯</text>
-          <text class="detail-value">{{player.hometown}}</text>
-        </view>
-        
-        <!-- 出生日期 -->
-        <view class="detail-item" wx:if="{{player.birthday}}">
-          <text class="detail-label">出生日期</text>
-          <text class="detail-value">{{player.birthday}}</text>
-        </view>
-        
-        <!-- 惯用脚 -->
-        <view class="detail-item" wx:if="{{player.strongFootLabel}}">
-          <text class="detail-label">惯用脚</text>
-          <text class="detail-value">{{player.strongFootLabel}}</text>
-        </view>
-        
-        <!-- 联系电话 -->
-        <view class="detail-item" wx:if="{{player.phone}}">
-          <text class="detail-label">联系电话</text>
-          <text class="detail-value phone-link" bindtap="callPhone">{{player.phone}}</text>
-        </view>
-      </view>
+      <view class="card-title-bar"><view class="title-accent"></view><text class="card-title">详细信息</text></view>
+      <view class="detail-grid"><view class="detail-item" wx:for="{{detailItems}}" wx:key="id"><text class="detail-label">{{item.label}}</text><text class="detail-value">{{item.value}}</text></view></view>
     </view>
 
-    <!-- 所属球队 -->
-    <view class="team-card" wx:if="{{teamInfo.teamName}}">
-      <view class="card-title-bar">
-        <view class="title-accent green"></view>
-        <text class="card-title">所属球队</text>
-      </view>
-      
-      <view class="team-info-row">
-        <image 
-          class="team-logo-small" 
-          src="{{teamInfo.teamLogo || '/images/default-team.png'}}" 
-          mode="aspectFit"
-        ></image>
-        <view class="team-meta">
-          <text class="team-name-text">{{teamInfo.teamName}}</text>
-          <text class="team-code-text">球队代码: {{teamInfo.teamCode}}</text>
-        </view>
-      </view>
+    <view class="team-card">
+      <view class="card-title-bar"><view class="title-accent green"></view><text class="card-title">所属球队</text></view>
+      <view class="team-info-row"><image class="team-logo-small" src="{{teamInfo.logo || '/images/logo.png'}}" mode="aspectFit"></image><view class="team-meta"><text class="team-name-text">{{teamInfo.name}}</text><text class="team-code-text">球队代码：{{teamInfo.code || '待生成'}}</text></view></view>
     </view>
 
-    <!-- 备注 -->
-    <view class="remark-card" wx:if="{{player.remark}}">
-      <view class="card-title-bar">
-        <view class="title-accent orange"></view>
-        <text class="card-title">备注</text>
-      </view>
-      <text class="remark-content">{{player.remark}}</text>
-    </view>
+    <view wx:if="{{player.remark}}" class="remark-card"><view class="card-title-bar"><view class="title-accent orange"></view><text class="card-title">备注</text></view><text class="remark-content">{{player.remark}}</text></view>
 
-    <!-- 底部操作按钮 -->
-    <view class="action-bar">
-      <button class="action-btn edit-btn" bindtap="onEdit">
-        <text class="btn-icon">✏️</text>
-        <text class="btn-text">编辑信息</text>
-      </button>
-      <button class="action-btn delete-btn" bindtap="onDelete">
-        <text class="btn-icon">🗑️</text>
-        <text class="btn-text">删除球员</text>
-      </button>
-    </view>
+    <view wx:if="{{canManage}}" class="action-bar"><button class="action-btn edit-btn" bindtap="onEdit"><text class="btn-text">编辑信息</text></button><button class="action-btn delete-btn" bindtap="onDelete"><text class="btn-text">移出球队</text></button></view>
   </block>
 </view>

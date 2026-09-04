@@ -1,0 +1,35 @@
+<view class="page">
+  <view class="hero">
+    <view class="nav-row">
+      <view class="back-button" bindtap="onBackTap">‹</view>
+      <text class="page-title">赛事待办</text>
+      <view class="workspace-dot" bindtap="onSwitchWorkspace">{{workspaceName}}</view>
+    </view>
+    <view class="tournament-panel">
+      <view class="panel-top"><text class="hosted-tag">当前赛事</text><text class="pending-tag">待处理 {{pendingCount}}</text></view>
+      <text class="tournament-name">{{tournamentName}}</text>
+      <text class="tournament-meta">{{tournamentMeta}}</text>
+      <view class="panel-rule"></view>
+      <text class="panel-summary">仅聚合当前赛事审批、赛前准备和赛后复核</text>
+    </view>
+    <view class="stage-row">
+      <view wx:for="{{stageTabs}}" wx:key="id" class="stage-item {{item.itemClass}}" data-id="{{item.id}}" bindtap="onStageTap">{{item.text}}</view>
+    </view>
+  </view>
+  <view class="content">
+    <view class="loading" wx:if="{{loading}}">正在整理赛事待办…</view>
+    <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
+    <view class="task-list" wx:if="{{hasTasks}}">
+      <view class="task-card" wx:for="{{visibleTasks}}" wx:key="id" data-tournament="{{item.tournamentId}}" data-team="{{item.teamId}}" data-audience="{{item.audience}}" data-type="{{item.type}}" data-division="{{item.divisionId}}" data-invite="{{item.inviteKey}}" bindtap="onTaskTap">
+        <view class="task-glyph {{item.statusClass}}"><image src="{{item.typeIcon}}" mode="aspectFit"/></view>
+        <view class="task-content">
+          <view class="task-title-row"><text class="task-title">{{item.title}}</text><text class="task-status {{item.statusClass}}">{{item.statusText}}</text></view>
+          <text class="task-subtitle">{{item.subtitle}}</text>
+          <view class="task-detail-row"><text class="task-detail">{{item.deadlineText}}</text><text class="task-detail-separator">|</text><text class="task-detail">{{item.detailText}}</text></view>
+        </view>
+        <view class="task-action">{{item.actionText}}</view><text class="task-arrow">›</text>
+      </view>
+    </view>
+    <view class="empty" wx:if="{{!loading}}" hidden="{{hasTasks}}"><text class="empty-icon">✓</text><text class="empty-title">当前没有需要处理的赛事待办</text><text class="empty-desc">切换分段可查看其他赛事阶段的授权任务。</text></view>
+  </view>
+</view>
