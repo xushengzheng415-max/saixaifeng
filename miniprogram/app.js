@@ -73,7 +73,6 @@ var THEME_TEMPLATES = [
 
 App({
   onLaunch: function() {
-    wx.removeStorageSync('guestBrowsing')
     if (wx.getStorageSync('authSessionVersion') !== AUTH_SESSION_VERSION) {
       LEGACY_AUTH_KEYS.forEach(function(key) { wx.removeStorageSync(key) })
       wx.removeStorageSync('openId')
@@ -106,23 +105,10 @@ App({
 
   onShow: function(options) {
     logger.info('小程序显示')
-    this.routeGuestHomeLaunchToLogin(options)
-  },
-
-  routeGuestHomeLaunchToLogin: function(options) {
-    var path = String(options && options.path || '')
-    if (path !== 'pages/home/home') return
-    if (this.globalData.guestBrowsingSession === true) return
-    var userInfo = wx.getStorageSync('userInfo') || null
-    var hasValidSession = Boolean(userInfo && wx.getStorageSync('authSessionVersion') === AUTH_SESSION_VERSION)
-    if (hasValidSession) return
-    wx.reLaunch({ url: '/pages/login/login' })
   },
 
   onHide: function() {
     logger.info('小程序隐藏')
-    this.globalData.guestBrowsingSession = false
-    wx.removeStorageSync('guestBrowsing')
     logger.flush() // 关闭前上传日志
   },
 
@@ -137,7 +123,6 @@ App({
     workspaceContext: null,
     appVersion: release.version,
     release: release,
-    guestBrowsingSession: false,
     logger: logger,
     themeTemplates: THEME_TEMPLATES
   },

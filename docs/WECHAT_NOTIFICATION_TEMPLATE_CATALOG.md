@@ -57,7 +57,7 @@
 
 ### 1. 报名审核结果通知（已配置）
 
-- 模板 ID：`oyXRAzKHZE3Rsex7SVtl2zR-cMNznM_P3azxG8olz1g`
+- 模板 ID：`ovXRAzKHZE3Rsex7SVtl2zR-cMNznM_P3azxG8olz1g`
 - 用途：报名驳回及通用审核结果
 - 字段：
   - 比赛名称：`thing6`

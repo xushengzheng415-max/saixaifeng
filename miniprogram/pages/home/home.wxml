@@ -21,7 +21,7 @@
       <text class="guest-title">赛小蜂足球</text>
       <text class="guest-subtitle">无需登录或授权，即可先浏览公开赛事与平台服务</text>
       <button bindtap="goToPublicTournaments">免登录浏览公开赛事</button>
-      <button class="login-outline" bindtap="goToLogin">需要管理球队时再登录</button>
+      <button class="login-outline" bindtap="goToLogin">体验后，自主选择登录</button>
       <view class="guest-feature-grid">
         <view><text>赛事</text><text>浏览公开赛程与赛事信息</text></view>
         <view><text>球队</text><text>了解球队资料与协作服务</text></view>

@@ -17,7 +17,7 @@ let miniAccessTokenCache = null
 function text(value) { return String(value == null ? '' : value).trim() }
 function randomKey(bytes) { return crypto.randomBytes(bytes).toString('base64url') }
 function miniReviewTemplateId() { return text(process.env.SXF_FOOTBALL_MINI_TEMPLATE_TOURNAMENT_REVIEW || 'CxBgS7fgjeNoKTSwl0q0o_lErclh_ffpIj2IeL6mpRw') }
-function serviceReviewTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_REVIEW || 'oyXRAzKHZE3Rsex7SVtl2zR-cMNznM_P3azxG8olz1g') }
+function serviceReviewTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_REVIEW || 'ovXRAzKHZE3Rsex7SVtl2zR-cMNznM_P3azxG8olz1g') }
 function serviceRegistrationSuccessTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_SUCCESS || 'aX_3wN6SbFR0s3giwyoK5P6eBbl9lwx2rqU_jCld-Uk') }
 function divisionCapacity(division, tournament) {
   const candidates = [division && division.expectedTeams, division && division.requiredTeams, division && division.teamRequirement, division && division.participantTeams, division && division.maxTeams, division && division.teamLimit, tournament && tournament.maxTeams]

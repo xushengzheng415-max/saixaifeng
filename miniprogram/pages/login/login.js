@@ -132,9 +132,6 @@ Page({
   },
 
   goToGuestHome: function() {
-    var app = getApp()
-    if (app && app.globalData) app.globalData.guestBrowsingSession = true
-    wx.setStorageSync('guestBrowsing', 'true')
     wx.switchTab({ url: '/pages/home/home' })
   },
 
@@ -156,7 +153,6 @@ Page({
     }
 
     wx.removeStorageSync('userLoggedOut')
-    wx.removeStorageSync('guestBrowsing')
     this.setData({ isSubmitting: true, loginDisabled: true, loginButtonText: '验证手机号中...' })
     wx.showLoading({ title: '正在验证账号...' })
 
