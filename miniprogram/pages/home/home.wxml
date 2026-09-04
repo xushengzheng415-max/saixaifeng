@@ -4,18 +4,29 @@
 
   <view class="content">
     <view class="topbar {{topbarClass}}" wx:if="{{isLoggedIn}}">
-      <text class="role-title">{{roleTitle}}</text>
-      <view class="message-button" bindtap="goToMessages">
-        <image src="/images/icons/bell-white.svg" mode="aspectFit"></image>
-        <text class="message-badge" wx:if="{{hasUnreadMessages}}">{{unreadMessageCount}}</text>
+      <view class="topbar-left">
+        <view class="message-button" bindtap="goToMessages">
+          <image src="/images/icons/bell-white.svg" mode="aspectFit"></image>
+          <text class="message-badge" wx:if="{{hasUnreadMessages}}">{{unreadMessageCount}}</text>
+        </view>
+        <text class="role-title">{{roleTitle}}</text>
       </view>
     </view>
 
     <view class="login-hero" wx:if="{{!isLoggedIn}}">
-      <text>赛小蜂足球</text>
-      <text>登录后进入你的机构工作空间</text>
-      <button bindtap="goToLogin">微信登录</button>
-      <button class="login-outline" bindtap="goToPublicTournaments">查看公开赛事</button>
+      <view class="guest-home-badge">
+        <image src="/images/runtime/icons/brand-v1-tab-home.png" mode="aspectFit"></image>
+        <text>游客首页</text>
+      </view>
+      <text class="guest-title">赛小蜂足球</text>
+      <text class="guest-subtitle">无需登录或授权，即可先浏览公开赛事与平台服务</text>
+      <button bindtap="goToPublicTournaments">免登录浏览公开赛事</button>
+      <button class="login-outline" bindtap="goToLogin">需要管理球队时再登录</button>
+      <view class="guest-feature-grid">
+        <view><text>赛事</text><text>浏览公开赛程与赛事信息</text></view>
+        <view><text>球队</text><text>了解球队资料与协作服务</text></view>
+        <view><text>任务</text><text>登录后处理报名与比赛任务</text></view>
+      </view>
     </view>
 
     <view class="loading" wx:if="{{loading}}">正在准备首页…</view>
@@ -27,7 +38,7 @@
         <text class="overview-name" wx:if="{{hasOverviewName}}">{{overviewName}}</text>
         <text class="overview-status" wx:if="{{hasOverviewStatus}}">{{overviewStatus}}</text>
         <image class="overview-logo" wx:if="{{hasOverviewLogo}}" src="{{overviewLogo}}" mode="aspectFit"></image>
-        <image class="overview-ball" wx:if="{{!hasOverviewLogo}}" src="/images/icons/ball.svg" mode="aspectFit"></image>
+        <image class="overview-ball" wx:if="{{!hasOverviewLogo}}" src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
         <view class="metrics">
           <view class="metric" wx:for="{{metrics}}" wx:key="label">
             <image class="metric-icon" src="{{item.icon}}" mode="aspectFit"></image>

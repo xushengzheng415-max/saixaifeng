@@ -1,4 +1,5 @@
 var workspace = require('../../utils/workspace')
+var release = require('../../config/release')
 
 var identityMeta = {
   team_coach: { title: '球队教练', icon: '/images/icons/team.svg' },
@@ -15,8 +16,22 @@ function previewContext() {
     currentWorkspace: { id: 'preview-workspace', name: '赛小蜂足球俱乐部', logo: '' },
     currentIdentity: { id: 'team_coach', available: ['team_coach', 'organizer', 'training_coach'] },
     unreadMessageCount: 3,
-    user: { nickName: '许老师', avatarUrl: '' }
+    user: { nickName: '许老师', avatarUrl: '', phoneMasked: '138****1663', phoneVerified: true }
   }
+}
+
+function permissionText(permissions) {
+  var labels = {
+    'workspace.manage': '工作空间管理',
+    'event.view': '赛事查看',
+    'event.manage': '赛事管理',
+    'team.view': '球队查看',
+    'team.manage': '球队管理',
+    'education.view': '青训查看',
+    'education.manage': '青训管理',
+    'education.execute': '青训执行'
+  }
+  return (permissions || []).map(function(item) { return labels[item] || item }).join('、')
 }
 
 Page({
@@ -27,6 +42,11 @@ Page({
     userName: '微信用户',
     userAvatar: '',
     hasUserAvatar: false,
+    phoneMasked: '',
+    phoneVerifiedText: '未验证',
+    phoneStateClass: 'is-unverified',
+    positionsText: '暂无授权岗位',
+    permissionsText: '暂无业务权限',
     workspaceName: '当前机构',
     workspaceLogo: '',
     hasWorkspaceLogo: false,
@@ -43,8 +63,10 @@ Page({
     supportMenus: [
       { icon: '/images/icons/list.svg', title: '服务与帮助', action: 'support' },
       { icon: '/images/icons/list.svg', title: '意见反馈', action: 'feedback' },
+      { icon: '/images/icons/list.svg', title: '版本日志', action: 'versionLog' },
       { icon: '/images/icons/check.svg', title: '关于赛小蜂', action: 'about' }
     ],
+    appVersion: release.version,
     identityOptions: [],
     isIdentitySheet: false,
     hasIdentityOptions: false,
@@ -89,15 +111,23 @@ Page({
       return { id: id, title: meta.title, icon: meta.icon, selectedClass: id === currentId ? 'is-current' : '', selectedText: id === currentId ? '当前使用' : '', selectable: id !== currentId }
     })
     var currentMeta = identityMeta[currentId] || identityMeta.team_coach
+    var user = context.user || {}
+    var positions = current.positions || []
+    var permissions = current.permissions || []
     var unread = Number(context.unreadMessageCount || 0)
     var primaryMenus = this.data.primaryMenus.map(function(item) {
       return Object.assign({}, item, { badgeText: item.action === 'messages' && unread > 0 ? String(unread) : '' })
     })
     this.setData({
       loading: false,
-      userName: (context.user && context.user.nickName) || '微信用户',
-      userAvatar: (context.user && context.user.avatarUrl) || '',
-      hasUserAvatar: Boolean(context.user && context.user.avatarUrl),
+      userName: user.nickName || '微信用户',
+      userAvatar: user.avatarUrl || '',
+      hasUserAvatar: Boolean(user.avatarUrl),
+      phoneMasked: user.phoneMasked || '',
+      phoneVerifiedText: user.phoneVerified ? '手机号已验证' : '手机号未验证',
+      phoneStateClass: user.phoneVerified ? 'is-verified' : 'is-unverified',
+      positionsText: positions.length ? positions.join('、') : '暂无授权岗位',
+      permissionsText: permissions.length ? permissionText(permissions) : '暂无业务权限',
       workspaceName: current.name || '当前机构',
       workspaceLogo: current.logo || '',
       hasWorkspaceLogo: Boolean(current.logo),
@@ -125,7 +155,8 @@ Page({
     if (action === 'security') return this.goToInfo()
     if (action === 'support') return wx.showModal({ title: '服务与帮助', content: '请在当前机构的赛事或球队页面查看对应待办；需要协助时可通过机构管理员发起咨询。', showCancel: false })
     if (action === 'feedback') return wx.showModal({ title: '意见反馈', content: '请将问题场景、页面和复现步骤提交给机构管理员，以便跟进处理。', showCancel: false })
-    if (action === 'about') return wx.showModal({ title: '关于赛小蜂足球', content: '赛小蜂足球为赛事组织、球队协作和赛场执行提供统一服务。', showCancel: false })
+    if (action === 'versionLog') return wx.navigateTo({ url: '/pages/profile/version-log/version-log' })
+    if (action === 'about') return wx.showModal({ title: '关于赛小蜂足球', content: '赛小蜂足球为赛事组织、球队协作和赛场执行提供统一服务。\n\n当前版本：' + release.version, showCancel: false })
   },
 
   openIdentitySheet: function() {

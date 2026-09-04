@@ -2,15 +2,59 @@ var STORAGE_KEY = 'workspaceContext'
 var WORKSPACE_ID_KEY = 'currentWorkspaceId'
 var loadingPromise = null
 var loadingWorkspaceId = ''
+var loadingAccountKey = ''
+var contextGeneration = 0
+
+function activeAccount() {
+  var user = wx.getStorageSync('userInfo') || {}
+  return {
+    id: String(user._id || user.id || ''),
+    phone: String(user.phone || user.phoneNumber || wx.getStorageSync('phoneNumber') || wx.getStorageSync('phone') || '')
+  }
+}
+
+function accountKey(account) {
+  account = account || activeAccount()
+  return String(account.id || '') + '|' + String(account.phone || '')
+}
+
+function contextBelongsToActiveAccount(context) {
+  if (!context) return false
+  var active = activeAccount()
+  var owner = context.accountOwner || context.user || {}
+  var ownerId = String(owner.id || owner._id || '')
+  var ownerPhone = String(owner.phone || owner.phoneNumber || '')
+  if (!active.id || !ownerId || active.id !== ownerId) return false
+  if (active.phone && ownerPhone && active.phone !== ownerPhone) return false
+  return true
+}
 
 function readContext() {
-  return wx.getStorageSync(STORAGE_KEY) || null
+  var context = wx.getStorageSync(STORAGE_KEY) || null
+  if (!context) return null
+  if (!contextBelongsToActiveAccount(context)) {
+    clearContext()
+    return null
+  }
+  return context
 }
 
 function saveContext(result) {
   if (!result || !result.currentWorkspace) return
+  var active = activeAccount()
+  var resultUser = result.user || {}
+  var resultUserId = String(resultUser.id || resultUser._id || '')
+  var resultPhone = String(resultUser.phone || resultUser.phoneNumber || '')
+  if (!active.id || !resultUserId || active.id !== resultUserId || (active.phone && resultPhone && active.phone !== resultPhone)) {
+    clearContext()
+    var mismatch = new Error('账号会话已变更，请重新登录')
+    mismatch.code = 'SESSION_ACCOUNT_MISMATCH'
+    throw mismatch
+  }
   var context = {
     user: result.user || {},
+    accountOwner: { id: resultUserId, phone: resultPhone },
+    accountKey: accountKey(active),
     workspaces: result.workspaces || [],
     currentWorkspace: result.currentWorkspace,
     currentIdentity: result.currentIdentity || {},
@@ -37,6 +81,7 @@ function saveContext(result) {
 }
 
 function clearContext() {
+  contextGeneration += 1
   wx.removeStorageSync(STORAGE_KEY)
   wx.removeStorageSync(WORKSPACE_ID_KEY)
   var app = getApp()
@@ -76,6 +121,20 @@ function isWorkspaceAccessError(error) {
   return message.indexOf('无权访问') >= 0 || message.indexOf('没有可用工作空间') >= 0 || message.indexOf('没有权限') >= 0
 }
 
+function isAccountAuthError(error) {
+  var code = String(error && error.code || '')
+  return ['PHONE_AUTH_REQUIRED', 'PHONE_ACCOUNT_CONFLICT', 'WECHAT_ACCOUNT_CONFLICT', 'ACCOUNT_IDENTITY_CONFLICT', 'SESSION_ACCOUNT_MISMATCH'].indexOf(code) >= 0
+}
+
+function resetInvalidAccountSession() {
+  clearContext()
+  var app = getApp()
+  if (app && typeof app.logout === 'function') app.logout()
+  var pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+  var current = pages && pages.length ? pages[pages.length - 1] : null
+  if (!current || current.route !== 'pages/login/login') wx.reLaunch({ url: '/pages/login/login' })
+}
+
 function redirectToRestricted(workspaceId) {
   var orgId = getRestrictedOrgId(workspaceId)
   if (!orgId) return
@@ -87,36 +146,76 @@ function redirectToRestricted(workspaceId) {
 
 function loadContext(options) {
   options = options || {}
+  readContext()
+  var expectedAccount = activeAccount()
+  var expectedAccountKey = accountKey(expectedAccount)
   var workspaceId = options.workspaceId || wx.getStorageSync(WORKSPACE_ID_KEY) || ''
   var skipRestrictedRedirect = options.skipRestrictedRedirect === true
-  if (loadingPromise && loadingWorkspaceId === workspaceId) return loadingPromise
+  if (loadingPromise && loadingWorkspaceId === workspaceId && loadingAccountKey === expectedAccountKey) return loadingPromise
+  var requestGeneration = contextGeneration
   loadingWorkspaceId = workspaceId
-  loadingPromise = new Promise(function(resolve, reject) {
+  loadingAccountKey = expectedAccountKey
+  var requestPromise = new Promise(function(resolve, reject) {
+    var settled = false
+    var watchdog = setTimeout(function() {
+      if (settled) return
+      settled = true
+      var timeoutError = new Error('工作空间加载超时，请下拉刷新重试')
+      timeoutError.code = 'WORKSPACE_LOAD_TIMEOUT'
+      reject(timeoutError)
+    }, 18000)
+    function finish(callback, value) {
+      if (settled) return
+      settled = true
+      clearTimeout(watchdog)
+      callback(value)
+    }
     wx.cloud.callFunction({
       name: 'getMiniWorkspace',
       data: { workspaceId: workspaceId },
-      timeout: 20000,
+      timeout: 15000,
       success: function(response) {
+        if (requestGeneration !== contextGeneration || accountKey(activeAccount()) !== expectedAccountKey) {
+          var changedError = new Error('账号已切换，已丢弃上一账号的工作空间数据')
+          changedError.code = 'SESSION_ACCOUNT_MISMATCH'
+          finish(reject, changedError)
+          return
+        }
         var result = response.result || {}
         if (!result.success) {
           var resultError = new Error(result.message || '工作空间加载失败')
           resultError.code = result.code || 'WORKSPACE_LOAD_FAILED'
+          if (isAccountAuthError(resultError)) resetInvalidAccountSession()
           if (!skipRestrictedRedirect && isWorkspaceAccessError(resultError)) redirectToRestricted(workspaceId)
-          reject(resultError)
+          finish(reject, resultError)
           return
         }
-        resolve(saveContext(result))
+        try {
+          finish(resolve, saveContext(result))
+        } catch (saveError) {
+          if (isAccountAuthError(saveError)) resetInvalidAccountSession()
+          finish(reject, saveError)
+        }
       },
       fail: function(error) {
+        if (isAccountAuthError(error)) resetInvalidAccountSession()
         if (!skipRestrictedRedirect && isWorkspaceAccessError(error)) redirectToRestricted(workspaceId)
-        reject(error)
+        finish(reject, error)
       }
     })
   })
-  return loadingPromise.finally(function() {
+  loadingPromise = requestPromise
+  return requestPromise.finally(function() {
+    if (loadingPromise !== requestPromise) return
     loadingPromise = null
     loadingWorkspaceId = ''
+    loadingAccountKey = ''
   })
+}
+
+function selectWorkspace(workspaceId) {
+  clearContext()
+  wx.setStorageSync(WORKSPACE_ID_KEY, workspaceId)
 }
 
 function switchWorkspace(workspaceId) {
@@ -161,6 +260,7 @@ module.exports = {
   hasPermission: hasPermission,
   isVisualQaEnabled: isVisualQaEnabled,
   getAccessibleTeamIds: getAccessibleTeamIds,
+  selectWorkspace: selectWorkspace,
   loadContext: loadContext,
   switchWorkspace: switchWorkspace,
   chooseWorkspace: chooseWorkspace

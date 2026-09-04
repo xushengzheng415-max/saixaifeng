@@ -5,14 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b3d2e">
   <title>赛事工作台｜赛小蜂足球</title>
-  <link rel="stylesheet" href="./styles.css?v=20260720-2">
+  <link rel="stylesheet" href="./styles.css?v=20260831-2">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand-mark">蜂</div>
-    <div><strong>赛事工作台</strong><span>赛小蜂足球 · 裁判端</span></div>
+    <img class="brand-logo" src="./assets/logo-saixiaofeng-football.png" alt="赛小蜂足球">
+    <div class="brand-copy"><strong>赛事工作台</strong><span>裁判服务中心</span></div>
   </header>
   <main id="app" class="page" aria-live="polite"></main>
+
+  <dialog id="refereeAvatarCropDialog" class="referee-crop-dialog">
+    <section>
+      <header><div><span>裁判二寸照</span><h2>裁剪并去除背景</h2></div><button id="refereeCropClose" type="button" aria-label="关闭">×</button></header>
+      <p>拖动和缩放照片，让头发、下巴、颈部与双肩贴合灰色人物模板；确认后将通过百度人像分割去除背景。</p>
+      <div class="referee-crop-stage">
+        <canvas id="refereeCropCanvas" width="500" height="700"></canvas>
+        <img class="referee-portrait-guide" src="./assets/referee-portrait-guide-v1.png" alt="" aria-hidden="true">
+      </div>
+      <div class="referee-crop-zoom"><b>缩小</b><input id="refereeCropZoom" type="range" min="100" max="260" value="100"><b>放大</b></div>
+      <footer><button id="refereeCropCancel" class="secondary" type="button">取消</button><button id="refereeCropConfirm" class="primary" type="button">确认裁剪并抠图</button></footer>
+    </section>
+  </dialog>
 
   <dialog id="eventDialog" class="sheet">
     <form id="eventForm" method="dialog">
@@ -52,6 +65,6 @@
       <button type="submit" class="primary wide">结束比赛并保存比分</button>
     </form>
   </dialog>
-  <script src="./app.js?v=20260720-2"></script>
+  <script src="./app.js?v=20260831-2"></script>
 </body>
 </html>

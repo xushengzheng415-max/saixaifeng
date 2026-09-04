@@ -1,11 +1,11 @@
 // custom-tab-bar/index.js
 // 赛小蜂 - 机构工作空间五中心导航
 var WORKSPACE_TABS = [
-  { id: 'home', text: '首页', icon: '/images/icons/tab-home.svg', activeIcon: '/images/icons/tab-home-active.svg', path: '/pages/home/home' },
-  { id: 'event', text: '赛事', icon: '/images/icons/tab-event.svg', activeIcon: '/images/icons/tab-event-active.svg', path: '/pages/event/index' },
-  { id: 'team', text: '球队', icon: '/images/icons/tab-team.svg', activeIcon: '/images/icons/tab-team-active.svg', path: '/pages/teams/index' },
-  { id: 'training', text: '青训', icon: '/images/icons/tab-training.svg', activeIcon: '/images/icons/tab-training-active.svg', path: '/pages/training/index' },
-  { id: 'profile', text: '我的', icon: '/images/icons/tab-me.svg', activeIcon: '/images/icons/tab-me-active.svg', path: '/pages/profile/profile' }
+  { id: 'home', text: '首页', icon: '/images/runtime/icons/brand-v1-tab-home.png', activeIcon: '/images/runtime/icons/brand-v1-tab-home.png', path: '/pages/home/home' },
+  { id: 'event', text: '赛事', icon: '/images/runtime/icons/brand-v1-tab-event.png', activeIcon: '/images/runtime/icons/brand-v1-tab-event.png', path: '/pages/event/index' },
+  { id: 'team', text: '球队', icon: '/images/runtime/icons/brand-v1-tab-team.png', activeIcon: '/images/runtime/icons/brand-v1-tab-team.png', path: '/pages/teams/index' },
+  { id: 'training', text: '青训', icon: '/images/runtime/icons/brand-v1-tab-training.png', activeIcon: '/images/runtime/icons/brand-v1-tab-training.png', path: '/pages/training/index' },
+  { id: 'profile', text: '我的', icon: '/images/runtime/icons/brand-v1-tab-profile.png', activeIcon: '/images/runtime/icons/brand-v1-tab-profile.png', path: '/pages/profile/profile' }
 ]
 function buildTabs(selectedIndex) {
   var tabs = WORKSPACE_TABS

@@ -6,9 +6,9 @@
         <img src="/logo-saixiaofeng.png" alt="赛小蜂足球" class="logo-img" />
       </div>
 
-      <!-- 绑定手机号区域 -->
-      <h2 class="page-title">绑定手机号</h2>
-      <p class="page-desc">微信登录成功！请绑定手机号以激活您的账号</p>
+      <!-- 首次手机号验证区域 -->
+      <h2 class="page-title">首次验证手机号</h2>
+      <p class="page-desc">仅首次绑定微信或账号异常时验证；以后微信扫码可直接登录</p>
 
       <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="handleBind">
         <el-form-item prop="phone">
@@ -50,12 +50,12 @@
           :disabled="loading || !form.phone || !form.code"
           @click="handleBind"
         >
-          {{ loading ? '绑定中...' : '确认绑定' }}
+          {{ loading ? '验证中...' : '确认验证' }}
         </button>
       </el-form>
 
       <!-- 底部提示 -->
-      <p class="footer-hint">绑定后，您可以使用手机号+验证码方式登录</p>
+      <p class="footer-hint">微信标识只作为登录渠道，不会单独创建另一个业务身份</p>
     </div>
   </div>
 </template>
@@ -95,7 +95,13 @@ async function sendCode() {
   if (!form.phone || form.phone.length !== 11) return
 
   try {
-    const res = await callFunction('sendSms', { phoneNumber: form.phone })
+    const loginChallenge = sessionStorage.getItem('wechat_login_challenge') || ''
+    if (!loginChallenge) {
+      ElMessage.error('微信授权已失效，请重新扫码')
+      router.replace('/login')
+      return
+    }
+    const res = await callFunction('sendWechatLoginSms', { phoneNumber: form.phone, loginChallenge })
 
     if (res.success) {
       ElMessage.success('验证码已发送')
@@ -123,21 +129,18 @@ async function handleBind() {
   loading.value = true
 
   try {
-    // 取出微信临时信息（扫码时 wechatWebLogin 保存在 localStorage 的）
-    const wechatTempStr = localStorage.getItem('wechatTemp') || '{}'
+    const loginChallenge = sessionStorage.getItem('wechat_login_challenge') || ''
+    const wechatTempStr = sessionStorage.getItem('wechat_login_profile') || '{}'
     const wechatTemp = JSON.parse(wechatTempStr)
-
-
-    // ★ 直接调用 bindPhone 云函数，它内部会：
-    //   1. 校验短信验证码（verifySmsCode 的逻辑）
-    //   2. 通过 unionId/openId 找到微信临时用户
-    //   3. 检查手机号是否已被占用 → 自动合并或直接绑定
-    //   4. 返回合并后的完整用户对象
-    const bindRes = await callFunction('bindPhone', {
-      phone: form.phone,
-      code: form.code,
-      unionId: wechatTemp.unionId || '',
-      openId: wechatTemp.openId || ''
+    if (!loginChallenge) {
+      ElMessage.error('微信授权已失效，请重新扫码')
+      router.replace('/login')
+      return
+    }
+    const bindRes = await callFunction('completeWechatPhoneLogin', {
+      phoneNumber: form.phone,
+      smsCode: form.code,
+      loginChallenge
     })
 
     if (!bindRes.success) {
@@ -148,6 +151,10 @@ async function handleBind() {
 
     // 更新本地存储（用 bindPhone 返回的最终用户信息）
     const finalUser = bindRes.user
+    if (!bindRes.authToken) {
+      ElMessage.error('安全登录会话创建失败，请重新扫码')
+      return
+    }
     const finalRole = String(finalUser?.role || '').toLowerCase()
     if (finalRole !== 'organizer') {
       ElMessage.error('主办方账号初始化失败，请重新登录')
@@ -158,7 +165,13 @@ async function handleBind() {
       localStorage.setItem('role', 'organizer')
       localStorage.setItem('currentRole', 'organizer')
       localStorage.setItem('isLoggedIn', 'true')
+      localStorage.setItem('loginType', 'wechat')
+      localStorage.setItem('phone', finalUser.phone || form.phone)
+      localStorage.setItem('phoneNumber', finalUser.phoneNumber || form.phone)
+      localStorage.setItem('authToken', bindRes.authToken || '')
+      localStorage.setItem('authSessionVersion', 'phone-canonical-web-v1')
       localStorage.setItem('userInfo', JSON.stringify({
+        _id: finalUser._id,
         uid: finalUser._id,
         userName: finalUser.nickname || wechatTemp.nickname || '微信用户',
         avatarUrl: finalUser.headimgurl || wechatTemp.headimgurl || '',
@@ -168,13 +181,14 @@ async function handleBind() {
     }
 
     // 清理临时数据
-    localStorage.removeItem('wechatTemp')
+    sessionStorage.removeItem('wechat_login_challenge')
+    sessionStorage.removeItem('wechat_login_profile')
     localStorage.removeItem('needBindPhone')
     localStorage.removeItem('needSelectRole')
 
-    ElMessage.success('绑定成功！正在进入系统...')
+    ElMessage.success('手机号验证成功，正在进入系统...')
 
-    setTimeout(() => router.push('/tournaments'), 800)
+    setTimeout(() => router.push('/organization-onboarding'), 800)
   } catch (err) {
     console.error('[BindPhone] 绑定异常:', err)
     ElMessage.error('绑定失败：' + (err.message || '网络错误'))

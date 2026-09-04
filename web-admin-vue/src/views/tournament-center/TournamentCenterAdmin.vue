@@ -651,7 +651,7 @@ function viewTournament(tournament) {
 }
 
 function goBack() {
-  router.push('/tournaments')
+  router.push('/admin/tournaments')
 }
 
 onMounted(async () => {

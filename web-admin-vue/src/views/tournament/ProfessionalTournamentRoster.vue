@@ -54,7 +54,7 @@ function goExceptions() { router.push({ path: `/tournaments/${tournamentId}/rost
 function goChanges() { router.push({ path: `/tournaments/${tournamentId}/roster-changes`, query: { ...(divisionId.value ? { divisionId: divisionId.value } : {}), mode: 'professional' } }) }
 function viewPlayer(row) {
   router.push({
-    path: `/players/${row.id}`,
+    path: `/tournaments/${tournamentId}/players/${row.id}`,
     query: {
       fromTournament: tournamentId,
       divisionId: divisionId.value,

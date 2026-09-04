@@ -40,7 +40,7 @@
  * 流程：
  *   微信 OAuth 回调 → /admin/#/wechat-callback?code=xxx&state=xxx
  *     → 此页面直接用 fetch 调 webLoginApi (wechatWebLogin)
- *       → 成功 → 写入纯微信会话 → 跳 /admin/#/organization-onboarding
+ *       → 成功 → 签发短时登录挑战 → 验证手机号 → 建立会话
  */
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -85,9 +85,25 @@ function clearStoredAuthSession() {
   AUTH_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
 }
 
+function storeDirectLogin(result) {
+  const user=result.user||{}
+  clearStoredAuthSession()
+  localStorage.setItem('userId',user._id||'')
+  localStorage.setItem('role','organizer')
+  localStorage.setItem('currentRole','organizer')
+  localStorage.setItem('isLoggedIn','true')
+  localStorage.setItem('loginType','wechat')
+  localStorage.setItem('phone',user.phone||user.phoneNumber||'')
+  localStorage.setItem('phoneNumber',user.phoneNumber||user.phone||'')
+  localStorage.setItem('authToken',result.authToken||'')
+  localStorage.setItem('authSessionVersion','phone-canonical-web-v1')
+  localStorage.setItem('userInfo',JSON.stringify({_id:user._id,uid:user._id,userName:user.nickname||'微信用户',avatarUrl:user.headimgurl||'',phone:user.phone||user.phoneNumber||'',email:user.email||''}))
+}
+
 onMounted(async () => {
-  const code = route.query.code
-  const state = route.query.state || ''
+  const search = new URLSearchParams(window.location.search)
+  const code = route.query.code || search.get('code') || ''
+  const state = route.query.state || search.get('state') || ''
 
   if (!code) {
     status.value = 'error'
@@ -112,49 +128,25 @@ onMounted(async () => {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'wechatWebLogin', code })
+      body: JSON.stringify({ action: 'wechatPhoneChallenge', code })
     })
-    const result = await res.json()
+    let result = await res.json()
+    if (result && typeof result.body === 'string') {
+      try { result = JSON.parse(result.body) } catch { /* 保留原响应，交给统一错误提示 */ }
+    }
 
-    if (result.success) {
-      // 每次扫码登录都原子替换认证会话，避免上一个账号的手机号和流程标志残留。
-      const user = result.user || {}
-      const normalizedRole = String(result.role || user.role || '').toLowerCase()
-      if (normalizedRole !== 'organizer') {
-        clearStoredAuthSession()
-        throw new Error('主办方账号初始化失败，请重新登录')
-      }
-      if (!result.authToken) {
-        clearStoredAuthSession()
-        throw new Error('安全登录会话创建失败，请重新扫码')
-      }
+    if (result.success && result.directLogin && result.authToken && result.user) {
+      storeDirectLogin(result)
+      status.value='success'
+      setTimeout(()=>router.replace('/tournament-space'),500)
+    } else if (result.success && result.requiresPhoneAuthorization && result.loginChallenge) {
       clearStoredAuthSession()
-      localStorage.setItem('loginType', 'wechat')
-      localStorage.setItem('userInfo', JSON.stringify({
-        _id: user._id || '',
-        uid: user._id || '',
-        userName: user.nickname || '微信用户',
-        avatarUrl: user.headimgurl || '',
-        openid: user.openid || user.wechatOpenId || '',
-        unionid: user.unionid || '',
-        isPlatformOwner: user.isPlatformOwner === true
-      }))
-      localStorage.setItem('userId', user._id || '')
-      localStorage.setItem('role', normalizedRole)
-      localStorage.setItem('currentRole', normalizedRole)
-      localStorage.setItem('isLoggedIn', 'true')
-      localStorage.setItem('authToken', result.authToken)
-      localStorage.setItem('authSessionVersion', 'wechat-assistance-v1')
-
-      status.value = 'success'
-
-      setTimeout(() => {
-        window.location.href = '/admin/#/organization-onboarding'
-      }, 800)
-
+      sessionStorage.setItem('wechat_login_challenge', result.loginChallenge)
+      sessionStorage.setItem('wechat_login_profile', JSON.stringify(result.user || {}))
+      router.replace('/bind-phone')
     } else {
       status.value = 'error'
-      errorMessage.value = result.error || '微信登录失败，请重试'
+      errorMessage.value = result?.error || result?.message || '微信授权未完成，请重新扫码'
     }
 
   } catch (err) {

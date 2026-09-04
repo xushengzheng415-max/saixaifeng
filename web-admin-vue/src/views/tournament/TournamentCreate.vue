@@ -1,6 +1,6 @@
 <template>
   <div class="tournament-create">
-    <el-page-header @back="$router.push('/tournaments')" title="返回赛事列表">
+    <el-page-header @back="$router.push('/tournament-space')" title="返回赛事空间">
       <template #content>
         <span style="font-size: 18px;">创建赛事</span>
       </template>
@@ -2303,7 +2303,7 @@ async function handleSubmit() {
 
     await addRecord('tournaments', formData)
     ElMessage.success('赛事创建成功！')
-    router.push('/tournaments')
+    router.push('/tournament-space')
   } catch (err) {
     ElMessage.error('创建失败: ' + err.message)
   } finally {

@@ -1,6 +1,55 @@
 <!-- pages/tournament/detail/detail.wxml - 赛事详情页（无WXS、无===/!==/&&/三元） -->
-<view class="page">
-  <block wx:if="{{visualQa}}">
+<view class="page {{teamPageClass}}">
+  <block wx:if="{{showTeamTournamentDetail}}">
+    <image class="team-event-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+    <view class="team-event-shade"></view>
+    <view class="team-event-nav">
+      <view class="team-event-back" bindtap="onTeamEventBack"><view class="team-event-back-icon"></view></view>
+      <text>赛事详情</text>
+    </view>
+    <view class="team-event-content">
+      <view class="team-event-hero">
+        <view class="team-event-tags"><text>{{teamEventTag}}</text><text>{{teamEventMode}}</text></view>
+        <text class="team-event-name">{{teamEventName}}</text>
+        <view class="team-event-meta"><image src="/images/icons/event.svg" mode="aspectFit"></image><text>{{teamEventDateVenue}}</text></view>
+        <view class="team-event-team-row">
+          <view class="team-event-current-team"><image src="{{teamEventTeamLogo}}" mode="aspectFit"></image><view><text>当前球队</text><text>{{teamEventTeamName}}</text></view></view>
+          <view class="team-event-registration"><text>参赛状态</text><view><image src="/images/icons/check.svg" mode="aspectFit"></image><text>{{teamEventStatusText}}</text></view></view>
+        </view>
+      </view>
+
+      <view class="team-event-summary">
+        <view><text class="team-event-summary-label">小组排名</text><text class="team-event-summary-value">{{teamEventRank}}</text><text class="team-event-summary-unit">/ {{teamEventRankTotal}}</text></view>
+        <view><text class="team-event-summary-label">比赛场次</text><text class="team-event-summary-value">{{teamEventPlayed}}</text><text class="team-event-summary-unit">场</text></view>
+        <view><text class="team-event-summary-label">积分</text><text class="team-event-summary-value">{{teamEventPoints}}</text><text class="team-event-summary-unit">分</text></view>
+      </view>
+
+      <view class="team-event-actions">
+        <view class="team-event-action" bindtap="onTeamEventNotice"><view><image src="/images/icons/bell.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛事通知</text><text class="team-event-action-desc">查看赛事公告与重要通知</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventRoster"><view><image src="/images/icons/players.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">正式名单</text><text class="team-event-action-desc">{{teamEventRosterText}}</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventLineup"><view><image src="/images/icons/team.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">比赛阵容</text><text class="team-event-action-desc lineup-state">{{teamEventLineupText}}</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventSchedule"><view><image src="/images/icons/event.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛程赛果</text><text class="team-event-action-desc">查看赛程安排与比赛结果</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+      </view>
+
+      <view class="team-event-section-title"><view></view><text>下一场比赛</text></view>
+      <view class="team-event-next" wx:if="{{showNextMatch}}">
+        <view class="team-event-next-meta"><text>{{nextMatchDateTime}}</text><text>{{nextMatchVenue}}</text></view>
+        <view class="team-event-versus"><view><image src="{{nextHomeLogo}}" mode="aspectFit"></image><text>{{nextHomeName}}</text></view><text class="team-event-vs">VS</text><view><image src="{{nextAwayLogo}}" mode="aspectFit"></image><text>{{nextAwayName}}</text></view></view>
+        <button class="team-event-lineup-button {{nextLineupButtonClass}}" disabled="{{!canSubmitNextLineup}}" bindtap="onTeamEventLineup">{{nextLineupButtonText}}</button>
+        <view class="team-event-lineup-note"><image src="/images/icons/shield.svg" mode="aspectFit"></image><text>阵容只能从审核通过的正式参赛名单中选择，开赛后锁定为比赛快照。</text></view>
+      </view>
+      <view class="team-event-next team-event-next-empty" wx:if="{{showNextMatchEmpty}}" bindtap="onTeamEventSchedule"><image src="/images/icons/event.svg" mode="aspectFit"></image><text>赛程尚未公布</text><text class="team-event-empty-desc">点击查看赛事赛程与最新安排</text></view>
+    </view>
+
+    <view class="team-event-tabbar">
+      <view bindtap="onTeamEventTabHome"><image src="/images/runtime/icons/brand-v1-tab-home.png" mode="aspectFit"></image><text>首页</text></view>
+      <view class="active" bindtap="onTeamEventTabEvent"><image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit"></image><text>赛事</text></view>
+      <view bindtap="onTeamEventTabTeam"><image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image><text>球队</text></view>
+      <view bindtap="onTeamEventTabTraining"><image src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image><text>青训</text></view>
+      <view bindtap="onTeamEventTabProfile"><image src="/images/runtime/icons/brand-v1-tab-profile.png" mode="aspectFit"></image><text>我的</text></view>
+    </view>
+  </block>
+  <block wx:elif="{{visualQa}}">
     <image class="visual-detail-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
     <view class="visual-detail-nav"><text>‹</text><text>赛事详情</text></view>
     <view class="visual-detail-hero"><view class="visual-detail-tags"><text>{{visualSummary.tag}}</text><text>{{visualSummary.mode}}</text></view><text class="visual-detail-name">{{visualSummary.name}}</text><text class="visual-detail-meta">{{visualSummary.dateVenue}}</text><text class="visual-detail-status">● {{visualSummary.status}}</text><view class="visual-detail-stats"><view><text>{{visualSummary.teamCount}}</text><text>参赛球队</text></view><view><text>{{visualSummary.matchCount}}</text><text>比赛场次</text></view><view><text>{{visualSummary.pendingCount}}</text><text>待处理</text></view></view></view>

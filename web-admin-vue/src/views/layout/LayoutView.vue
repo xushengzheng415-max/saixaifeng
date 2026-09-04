@@ -43,6 +43,16 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="profileDialogVisible" title="修改个人资料" width="440px">
+      <el-form label-position="top"><el-form-item label="账号显示名称"><el-input v-model.trim="profileForm.nickname" maxlength="30" placeholder="请输入姓名或显示名称" /></el-form-item></el-form>
+      <template #footer><el-button @click="profileDialogVisible=false">取消</el-button><el-button type="primary" :loading="profileSubmitting" @click="saveProfile">保存个人资料</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="organizationDialogVisible" title="修改机构资料" width="560px">
+      <el-form label-position="top"><el-form-item label="机构名称"><el-input v-model.trim="organizationForm.name" maxlength="80" /></el-form-item><el-form-item label="机构类型"><el-select v-model="organizationForm.organizationType"><el-option v-for="item in organizationTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item><div class="account-location-grid"><el-form-item label="所在省份"><el-select v-model="organizationForm.provinceCode" filterable @change="organizationForm.city=''"><el-option v-for="item in provinceOptions" :key="item.code" :label="item.name" :value="item.code" /></el-select></el-form-item><el-form-item label="所在城市"><el-select v-model="organizationForm.city" filterable :disabled="!organizationForm.provinceCode"><el-option v-for="item in organizationCityOptions" :key="item.code" :label="item.name" :value="item.name" /></el-select></el-form-item></div></el-form>
+      <template #footer><el-button @click="organizationDialogVisible=false">取消</el-button><el-button type="primary" :loading="organizationSubmitting" @click="saveOrganization">保存机构资料</el-button></template>
+    </el-dialog>
+
     <!-- 强制设置密码弹窗（不可关闭） -->
     <el-dialog v-if="false"
       v-model="setPasswordVisible"
@@ -202,11 +212,14 @@
               <div class="workspace-user">
                 <el-avatar v-if="userInfo.avatarUrl" :size="38" :src="userInfo.avatarUrl" />
                 <el-avatar v-else :size="38" class="workspace-user-avatar">{{ userInfo.userName ? userInfo.userName.charAt(0) : '蜂' }}</el-avatar>
-                <span>{{ userInfo.userName || '主办方管理员' }}</span>
+                <span class="workspace-account-copy"><strong>{{ accountDisplayName }}</strong><small>{{ organizationDisplayName }}</small></span>
                 <el-icon><ArrowDown /></el-icon>
               </div>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span></div></el-dropdown-item>
+                  <el-dropdown-item divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
+                  <el-dropdown-item command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
                   <el-dropdown-item command="refresh"><el-icon><Refresh /></el-icon>刷新数据</el-dropdown-item>
                   <el-dropdown-item divided command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
                 </el-dropdown-menu>
@@ -227,7 +240,7 @@
                 <el-avatar v-else :size="36" class="user-avatar-fallback">
                   {{ userInfo.userName ? userInfo.userName.charAt(0) : '?' }}
                 </el-avatar>
-                <span class="header-user-name">{{ userInfo.userName || '主办方管理员' }}</span>
+                <span class="header-account-copy"><strong>{{ accountDisplayName }}</strong><small>{{ organizationDisplayName }}</small></span>
                 <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
               </div>
               <template #dropdown>
@@ -242,6 +255,8 @@
                       </div>
                     </div>
                   </el-dropdown-item>
+                  <el-dropdown-item command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
+                  <el-dropdown-item command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
                   <el-dropdown-item divided command="refresh">
                     <el-icon><Refresh /></el-icon>刷新数据
                   </el-dropdown-item>
@@ -266,7 +281,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -274,8 +289,9 @@ import {
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
   Postcard, Place, QuestionFilled, Bell
 } from '@element-plus/icons-vue'
-import { logout, queryById, queryList } from '../../utils/cloud'
+import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import productLogo from '../../assets/logo-saixiaofeng.png'
+import { provincesData, cityMapData } from '../team/areaData.js'
 import {
   ROLE_NAMES,
   ROLES
@@ -304,7 +320,7 @@ function readStoredObject(key) {
 const initialStoredUser = readStoredObject('userInfo')
 const initialStoredOrganization = readStoredObject('currentOrganization')
 const userInfo = ref({
-  userName: initialStoredUser.userName || '',
+  userName: initialStoredUser.userName || initialStoredUser.nickname || '',
   avatarUrl: initialStoredUser.avatarUrl || '',
   phone: initialStoredUser.phone || '',
   email: initialStoredUser.email || '',
@@ -321,6 +337,75 @@ const organizationBrand = computed(() => ({
   name: userInfo.value.organizationName || '未建立机构',
   logo: userInfo.value.organizationLogo || DEFAULT_ORGANIZATION_LOGO
 }))
+const accountDisplayName = computed(() => userInfo.value.userName || '主办方管理员')
+const organizationDisplayName = computed(() => userInfo.value.organizationName || '尚未建立机构')
+const profileDialogVisible = ref(false)
+const organizationDialogVisible = ref(false)
+const profileSubmitting = ref(false)
+const organizationSubmitting = ref(false)
+const profileForm = reactive({ nickname: '' })
+const organizationForm = reactive({ name: '', organizationType: '', provinceCode: '', city: '' })
+const organizationRecord = ref(initialStoredOrganization || {})
+const organizationTypeOptions = [{ value:'event_company', label:'赛事公司' }, { value:'club', label:'足球俱乐部' }, { value:'school', label:'学校' }, { value:'association', label:'足协/体育组织' }, { value:'other', label:'其他机构' }]
+const provinceOptions = provincesData
+const organizationCityOptions = computed(() => cityMapData[organizationForm.provinceCode] || [])
+
+function persistWorkspaceOrganization(organization) {
+  if (!organization) return
+  const id = organization.id || organization._id || ''
+  const name = organization.name || organization.organizationName || ''
+  organizationRecord.value = { ...organization, id, name }
+  userInfo.value.organizationName = name
+  userInfo.value.organizationLogo = organization.logo || organization.logoUrl || organization.organizationLogo || userInfo.value.organizationLogo
+  localStorage.setItem('currentOrganization', JSON.stringify(organizationRecord.value))
+  const storedUser = readStoredObject('userInfo')
+  localStorage.setItem('userInfo', JSON.stringify({ ...storedUser, orgId:id || storedUser.orgId, organizationId:id || storedUser.organizationId, organizationName:name, organizationLogo:userInfo.value.organizationLogo }))
+}
+
+async function loadWorkspaceAccount() {
+  try {
+    const result = await callFunction('onboardingWorkspace', { action:'state' })
+    if (result?.success && result.organization) persistWorkspaceOrganization(result.organization)
+  } catch (error) {
+    console.warn('读取机构资料失败:', error.message || error)
+  }
+}
+
+function openProfileDialog() { profileForm.nickname = accountDisplayName.value; profileDialogVisible.value = true }
+function openOrganizationDialog() {
+  const organization = organizationRecord.value || {}
+  organizationForm.name = organization.name || organization.organizationName || organizationDisplayName.value
+  organizationForm.organizationType = organization.organizationType || ''
+  organizationForm.provinceCode = organization.provinceCode || ''
+  organizationForm.city = organization.city || ''
+  organizationDialogVisible.value = true
+}
+async function saveProfile() {
+  if (!profileForm.nickname || profileSubmitting.value) return ElMessage.warning('请输入账号显示名称')
+  profileSubmitting.value = true
+  try {
+    const result = await callFunction('onboardingWorkspace', { action:'updateProfile', nickname:profileForm.nickname })
+    if (!result?.success) throw new Error(result?.message || '保存失败')
+    userInfo.value.userName = result.user?.nickname || profileForm.nickname
+    const storedUser = readStoredObject('userInfo')
+    localStorage.setItem('userInfo', JSON.stringify({ ...storedUser, userName:userInfo.value.userName, nickname:userInfo.value.userName }))
+    profileDialogVisible.value = false
+    ElMessage.success('个人资料已更新')
+  } catch (error) { ElMessage.error(error.message || '保存失败') } finally { profileSubmitting.value = false }
+}
+async function saveOrganization() {
+  if (organizationSubmitting.value) return
+  if (organizationForm.name.length < 2 || !organizationForm.organizationType || !organizationForm.provinceCode || !organizationForm.city) return ElMessage.warning('请完整填写机构资料')
+  organizationSubmitting.value = true
+  try {
+    const province = provinceOptions.find(item => item.code === organizationForm.provinceCode)?.name || ''
+    const result = await callFunction('onboardingWorkspace', { action:'updateOrganization', ...organizationForm, province })
+    if (!result?.success) throw new Error(result?.message || '保存失败')
+    persistWorkspaceOrganization(result.organization)
+    organizationDialogVisible.value = false
+    ElMessage.success('机构资料已更新')
+  } catch (error) { ElMessage.error(error.message || '保存失败') } finally { organizationSubmitting.value = false }
+}
 
 function handleOrganizationLogoError(event) {
   const image = event.currentTarget
@@ -613,17 +698,8 @@ function toggleSubMenu(item) {
   }
 }
 
-// 教练端导航菜单
-const coachNavItems = [
-  { path: '/coaches', label: '教练组管理', icon: 'UserFilled' },
-  { path: '/teams', label: '球队管理', icon: 'UserFilled' },
-  { path: '/players', label: '球员数据', icon: 'User' },
-  { path: '/my-tournaments', label: '我的赛事', icon: 'Trophy' },
-  { path: '/tournament-center', label: '赛事中心', icon: 'Trophy' },
-  { path: '/team-album', label: '球队相册', icon: 'Picture' },
-  { path: '/insurance', label: '赛事保险', icon: 'FirstAidKit' },
-  { path: '/shop', label: '赛事商城', icon: 'ShoppingBag' }
-]
+// PC 当前只保留主办方正式赛事空间；教练业务由小程序承接。
+const coachNavItems = [{ path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }]
 
 const currentTournamentId = computed(() => String(route.params.id || ''))
 
@@ -636,22 +712,32 @@ function tournamentWorkspacePath(suffix = '') {
 // 主办方 PC 端统一为一套赛事空间分类；赛事内入口会复用当前路由中的赛事上下文。
 const organizerNavItems = computed(() => [
   {
-    path: '/dashboard',
+    path: tournamentWorkspacePath(),
     label: '赛事主控制台',
     icon: 'HomeFilled',
-    exact: true
+    requiresTournament: true,
+    activeWhen: () => Boolean(currentTournamentId.value) && /^\/tournaments\/[^/]+$/.test(route.path)
   },
   {
-    path: '/tournaments',
+    path: tournamentWorkspacePath('/competition'),
     label: '竞赛管理',
     icon: 'Trophy',
-    activeWhen: () => route.path === '/tournaments' || route.path === '/tournaments/create'
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/competition(?:\/create)?$/.test(route.path)
   },
   {
-    path: '/teams',
+    path: tournamentWorkspacePath('/registration'),
+    label: '报名管理',
+    icon: 'Postcard',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/registration$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/teams'),
     label: '球队管理',
     icon: 'UserFilled',
-    activeWhen: () => route.path.startsWith('/teams') || /\/tournaments\/[^/]+\/teams/.test(route.path)
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/teams/.test(route.path)
   },
   {
     path: tournamentWorkspacePath('/draw'),
@@ -668,23 +754,26 @@ const organizerNavItems = computed(() => [
     activeWhen: () => route.path.includes('/schedule')
   },
   {
-    path: tournamentWorkspacePath(),
+    path: tournamentWorkspacePath('/matches'),
     label: '比赛管理',
     icon: 'Football',
     requiresTournament: true,
     activeWhen: () => Boolean(currentTournamentId.value) &&
-      /\/tournaments\/[^/]+(?:\/match\/[^/]+)?$/.test(route.path)
+      /\/tournaments\/[^/]+\/(?:matches|match\/[^/]+(?:\/monitor|\/post-match|\/review|\/archive)?)$/.test(route.path)
   },
   {
-    path: '/referees',
+    path: tournamentWorkspacePath('/results'),
+    label: '赛果管理',
+    icon: 'DataAnalysis',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/results$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/referees'),
     label: '裁判管理',
     icon: 'SetUp',
-    activeWhen: () => route.path.startsWith('/referees') || route.path.startsWith('/referee/')
-  },
-  {
-    path: '/data',
-    label: '数据中心',
-    icon: 'DataAnalysis'
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/referees$/.test(route.path)
   },
   {
     path: tournamentWorkspacePath('/edit'),
@@ -696,24 +785,13 @@ const organizerNavItems = computed(() => [
 ])
 
 // 裁判端导航菜单（裁判长额外显示"裁判长管理"）
-const refereeNavItems = computed(() => {
-  const items = [
-    { path: '/referee/my-matches', label: '我的执法', icon: 'SetUp' },
-    { path: '/tournament-center', label: '赛事中心', icon: 'Trophy' },
-    { path: '/system', label: '系统管理', icon: 'Setting' }
-  ]
-  if (isHeadReferee.value) {
-    items.splice(1, 0, { path: '/referee/head-referee', label: '裁判长管理', icon: 'UserFilled' })
-  }
-  return items
-})
+const refereeNavItems = computed(() => [{ path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }])
 
 // 赛事中心超级管理后台导航
 const adminNavItems = [
   { path: '/tournament-center-admin', label: '赛事中心管理', icon: 'Picture' },
   { path: '/admin/tournaments', label: '赛事列表', icon: 'Trophy' },
   { path: '/admin/teams', label: '球队列表', icon: 'UserFilled' },
-  { path: '/referees', label: '裁判库', icon: 'SetUp' },
   { path: `${import.meta.env.BASE_URL}formation-designer.html`, label: '阵型设计器', icon: 'Place', external: true },
   { path: '/shop-admin', label: '商城管理', icon: 'ShoppingBag' },
   { path: '/insurance-admin', label: '保险业务', icon: 'FirstAidKit' },
@@ -747,6 +825,12 @@ const currentNavItems = computed(() => {
 // 用户下拉菜单命令
 function handleUserCommand(command) {
   switch (command) {
+    case 'profile':
+      openProfileDialog()
+      break
+    case 'organization':
+      openOrganizationDialog()
+      break
     case 'refresh':
       router.go(0)
       break
@@ -764,7 +848,7 @@ function handleNavClick(item) {
     window.open(item.path, '_blank')
   } else if (item.requiresTournament && !currentTournamentId.value) {
     ElMessage.info('请先选择赛事，进入赛事空间后再使用此功能')
-    router.push('/tournaments')
+    router.push('/tournament-space')
   } else {
     router.push(item.path)
   }
@@ -816,7 +900,7 @@ onMounted(() => {
         parsed.institutionLogo ||
         ''
       userInfo.value = {
-        userName: parsed.userName || '开发者',
+        userName: parsed.userName || parsed.nickname || '微信用户',
         avatarUrl: parsed.avatarUrl || '',
         phone: parsed.phone || '',
         email: parsed.email || '',
@@ -829,7 +913,7 @@ onMounted(() => {
         ...parsed,
         _id: parsed._id || parsed.uid || '',
         uid: parsed.uid || parsed._id || '',
-        userName: parsed.userName || '微信用户',
+        userName: parsed.userName || parsed.nickname || '微信用户',
         avatarUrl: parsed.avatarUrl || '',
         openid: parsed.openid || '',
         unionid: parsed.unionid || '',
@@ -845,6 +929,7 @@ onMounted(() => {
   }
   loginType.value = localStorage.getItem('loginType') || 'anonymous'
   currentRole.value = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
+  loadWorkspaceAccount()
 
   ['needBindPhone', 'needSetPassword', 'needBindEmail', 'phone', 'phoneNumber']
     .forEach(key => localStorage.removeItem(key))
@@ -1102,6 +1187,12 @@ onUnmounted(() => {
 .notification-action i { position: absolute; right: -2px; top: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 10px; color: #fff; font-size: 11px; font-style: normal; line-height: 18px; background: #f04438; }
 .workspace-user { gap: 9px; min-height: 46px; color: #4d5952; font-size: 14px; cursor: pointer; }
 .workspace-user-avatar { color: #fff; background: #087b45; }
+.workspace-account-copy,.header-account-copy { display:flex; min-width:0; flex-direction:column; align-items:flex-start; gap:3px; line-height:1.15; }
+.workspace-account-copy strong,.header-account-copy strong { max-width:150px; overflow:hidden; color:#26342c; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
+.workspace-account-copy small,.header-account-copy small { max-width:180px; overflow:hidden; color:#738078; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.account-dropdown-summary { display:flex; min-width:220px; flex-direction:column; gap:5px; padding:5px 0; }
+.account-dropdown-summary strong { color:#1f3026; font-size:14px; }.account-dropdown-summary span { color:#758079; font-size:12px; }
+.account-location-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }.account-location-grid :deep(.el-select),.layout :deep(.el-dialog .el-select) { width:100%; }
 
 /* 顶部工具栏 */
 .top-header {
@@ -1233,5 +1324,6 @@ onUnmounted(() => {
     padding-inline: 22px;
   }
 }
+@media (max-width:720px) { .account-location-grid { grid-template-columns:1fr; }.workspace-account-copy small { display:none; } }
 
 </style>

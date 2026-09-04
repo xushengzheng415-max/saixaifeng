@@ -12,7 +12,7 @@
         <span class="context-label">当前赛事</span>
         <strong>{{ tournament.name || '赛事' }}</strong>
         <span class="context-divider"></span>
-        <span>{{ activeDivision.name }}</span>
+        <span>{{ activeDivisionDisplayName }}</span>
         <el-tag :type="isProfessional ? 'warning' : 'success'" effect="plain" round>
           {{ isProfessional ? '专业版' : '简易版 · 免费' }}
         </el-tag>
@@ -23,26 +23,15 @@
     <main class="teams-page-content">
       <div class="teams-page-heading">
         <div>
-          <div class="heading-eyebrow">赛事运营 / 球队管理</div>
-          <h1>球队管理</h1>
-          <p>管理参赛球队、入驻申请与赛事名单，所有变更均保留赛事快照。</p>
+          <div class="heading-eyebrow">赛事运营 / {{ isRegistrationWorkspace ? '报名管理' : '球队管理' }}</div>
+          <h1>{{ isRegistrationWorkspace ? '报名管理' : '球队管理' }}</h1>
+          <p>{{ isRegistrationWorkspace ? '管理报名入口、宣传物料、定向邀请与球队资格审核。' : '管理已审核通过的参赛球队、球员与赛事正式名单。' }}</p>
         </div>
-        <div v-if="!simpleOverview" class="heading-actions">
-          <el-button @click="openQrDialog"><el-icon><Picture /></el-icon>报名入口</el-button>
-          <el-button v-if="isProfessional" @click="openRosterExceptions">名单异常</el-button>
-          <el-button v-if="!simpleOverview" plain @click="openClaimReviewBoard">认领冲突审核</el-button>
-          <el-button type="primary" @click="openInviteDialog"><el-icon><Plus /></el-icon>生成球队邀请</el-button>
-          <el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button>
-        </div>
+        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button type="success" plain @click="openSyntheticTeamDialog"><el-icon><Plus /></el-icon>添加虚拟球队</el-button><el-button @click="openQrDialog"><el-icon><Picture /></el-icon>生成报名海报</el-button><el-button type="primary" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>邀约球队</el-button><el-button plain type="success" @click="openBulkTeamDialog"><el-icon><Grid /></el-icon>批量添加资料</el-button><el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button></div>
       </div>
 
       <section class="division-toolbar">
-        <div class="division-picker">
-          <span>竞赛组别</span>
-          <el-select v-model="activeDivisionId" @change="onDivisionChange" style="width: 190px">
-            <el-option v-for="division in divisionOptions" :key="division.id" :label="division.name" :value="division.id" />
-          </el-select>
-        </div>
+        <div class="division-tab-section"><span class="division-tab-title">竞赛组别</span><div class="division-tabs" role="tablist" aria-label="竞赛组别"><button v-for="division in divisionOptions" :key="division.id" type="button" role="tab" class="division-tab-button" :class="{ active: division.id === activeDivisionId }" :aria-selected="division.id === activeDivisionId" @click="selectDivision(division.id)"><strong>{{ divisionDisplayName(division) }}</strong><small>{{ divisionTeamCount(division.id) }} 支球队</small><em v-if="division.id !== 'default'" :class="division.mode === 'professional' || division.isProfessional ? 'professional' : 'simple'">{{ division.mode === 'professional' || division.isProfessional ? '专业' : '简易' }}</em></button></div></div>
         <div class="division-rule-summary">
           <span>{{ formatLabel }}</span>
           <i></i>
@@ -53,14 +42,24 @@
       </section>
 
       <el-tabs v-model="activeTab" class="team-work-tabs" @tab-change="handleWorkspaceTab">
-        <el-tab-pane label="参赛球队" name="all" />
-        <el-tab-pane :label="`加入申请 ${pendingTeams.length || ''}`" name="pending" />
-        <el-tab-pane v-if="isProfessional" label="参赛名单" name="roster" />
-        <el-tab-pane v-if="isProfessional" label="名单异常" name="abnormal" />
-        <el-tab-pane :label="isProfessional ? '名单变更' : '球队变更'" name="cancel_requested" />
+        <template v-if="isRegistrationWorkspace"><el-tab-pane :label="`球队审核 ${pendingTeams.length || ''}`" name="all" /><el-tab-pane label="宣传物料" name="materials" /></template>
+        <template v-else><el-tab-pane label="已审核球队" name="all" /><el-tab-pane v-if="isProfessional" label="参赛名单" name="roster" /><el-tab-pane v-if="isProfessional" label="名单异常" name="abnormal" /><el-tab-pane :label="isProfessional ? '名单变更' : '球队变更'" name="cancel_requested" /></template>
       </el-tabs>
 
-      <section v-if="isSimpleChangeView" class="team-summary-grid change-summary-grid">
+      <section v-if="activeTab === 'materials'" class="registration-materials"><header><div><h2>赛事宣传物料</h2><p>选择版式后，系统自动填入当前赛事与组别资料，生成正式报名海报。</p></div><el-button type="primary" @click="openQrDialog"><el-icon><Picture /></el-icon>生成当前版式海报</el-button></header><div class="poster-template-grid"><button v-for="template in posterTemplates" :key="template.id" type="button" :class="{ active:posterTemplate===template.id }" @click="posterTemplate=template.id"><span :class="`poster-template-preview ${template.id}`"></span><strong>{{ template.name }}</strong><small>{{ template.description }}</small></button></div><el-alert type="info" :closable="false" title="竞赛规程全文保留在小程序报名页，海报只显示“规程已发布”和扫码入口，避免信息过载。" /></section>
+      <section v-else-if="isRegistrationWorkspace && activeTab === 'all'" class="team-summary-grid">
+        <article><span>报名球队</span><strong>{{ divisionTournamentTeams.length }}</strong><small>支</small></article>
+        <article><span>待资格审核</span><strong :class="{ danger: pendingTeams.length > 0 }">{{ pendingTeams.length }}</strong><small>支</small></article>
+        <article><span>已审核通过</span><strong>{{ approvedTeams.length }}</strong><small>支</small></article>
+        <article><span>待领取邀请</span><strong>{{ invitedTeams.length }}</strong><small>支</small></article>
+      </section>
+      <section v-else-if="!isRegistrationWorkspace && activeTab === 'all'" class="team-summary-grid">
+        <article><span>已审核球队</span><strong>{{ approvedTeams.length }}</strong><small>支</small></article>
+        <article><span>已认领</span><strong>{{ approvedClaimedTeams.length }}</strong><small>支</small></article>
+        <article><span>已确认参赛</span><strong>{{ approvedConfirmedTeams.length }}</strong><small>支</small></article>
+        <article><span>{{ isProfessional ? '名单已提交' : '当前组别' }}</span><strong :class="{ 'division-summary-value': !isProfessional }">{{ isProfessional ? submittedRosterCount : activeDivisionDisplayName }}</strong><small v-if="isProfessional">支</small></article>
+      </section>
+      <section v-else-if="isSimpleChangeView" class="team-summary-grid change-summary-grid">
         <article><span class="change-summary-icon change-gray"><el-icon><Lock /></el-icon></span><span>变更入口</span><strong class="change-text">已关闭</strong></article>
         <article><span class="change-summary-icon change-green"><el-icon><CircleCheckFilled /></el-icon></span><span>历史已通过</span><strong>{{ simpleChangeApprovedCount }}</strong><small>项</small></article>
         <article><span class="change-summary-icon change-red"><el-icon><CircleCloseFilled /></el-icon></span><span>历史已拒绝</span><strong>{{ simpleChangeRejectedCount }}</strong><small>项</small></article>
@@ -100,6 +99,7 @@
       </section>
 
       <el-alert
+        v-if="activeTab !== 'materials'"
         class="teams-mode-notice"
         :title="isSimpleChangeView ? `本组报名已于 ${simpleChangeDeadline} 截止；参赛队名与队徽已锁定，普通流程不再允许修改。` : (isApplicationReviewView ? '球队可通过主办方邀请进入，或在赛小蜂小程序搜索赛事后申请；无论哪种入口，球队都必须在小程序完成认领与参赛确认。' : (isProfessional ? '专业版按赛事正式名单管理球员资格；审核后的名单与比赛阵容均保留独立快照。' : '简易版以球队为单位快速参赛；需要球员资格审核与正式名单时，可将组别升级为专业版。'))"
         :type="isSimpleChangeView ? 'info' : (isProfessional ? 'warning' : 'success')"
@@ -107,12 +107,34 @@
         show-icon
       />
 
+      <section v-if="isRegistrationWorkspace && activeTab === 'all'" class="registration-review-actions">
+        <div>
+          <strong>待审核球队 {{ pendingTeams.length }} 支</strong>
+          <span>请勾选需要通过的球队；异常或非待审核球队不能选择。</span>
+        </div>
+        <div class="registration-review-selection">
+          <el-checkbox
+            :model-value="allVisibleApprovalsSelected"
+            :indeterminate="someVisibleApprovalsSelected"
+            :disabled="selectableApprovalRows.length === 0"
+            @change="toggleAllVisibleApprovals"
+          >全选当前待审</el-checkbox>
+          <span>已选 {{ selectedApprovalIds.length }} 支</span>
+          <el-button
+            type="success"
+            :loading="batchApproving"
+            :disabled="selectedApprovalIds.length === 0"
+            @click="approveAllVisibleApplications"
+          >
+            <el-icon><CircleCheckFilled /></el-icon>批量通过已选
+          </el-button>
+        </div>
+      </section>
+
       <section v-if="simpleOverview" class="simple-team-filters">
         <el-input v-model="searchKeyword" placeholder="搜索球队名称" clearable :prefix-icon="Search" />
         <el-select v-model="professionalSourceFilter" placeholder="加入来源（主办方邀请/搜索申请）" clearable><el-option label="主办方邀请" value="invite" /><el-option label="搜索赛事申请" value="apply" /></el-select>
         <el-select v-model="professionalClaimFilter" placeholder="认领状态" clearable><el-option label="已认领" value="claimed" /><el-option label="待认领" value="pending" /></el-select>
-        <el-button type="primary" plain @click="openInviteDialog"><el-icon><Plus /></el-icon>生成球队邀请</el-button>
-        <el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button>
       </section>
 
       <section v-if="isApplicationReviewView" class="simple-application-filters" :class="{ 'professional-application-filters': isProfessionalApplicationView }">
@@ -131,13 +153,11 @@
         <el-button plain type="success" @click="resetApplicationFilters">重置</el-button>
       </section>
 
-      <section v-if="isProfessional && activeTab === 'all'" class="professional-team-filters">
+      <section v-if="!isRegistrationWorkspace && isProfessional && activeTab === 'all'" class="professional-team-filters">
         <el-input v-model="searchKeyword" placeholder="搜索球队名称" clearable :prefix-icon="Search" />
         <el-select v-model="professionalSourceFilter" placeholder="加入来源" clearable><el-option label="主办方邀请" value="invite" /><el-option label="搜索赛事申请" value="apply" /></el-select>
         <el-select v-model="professionalClaimFilter" placeholder="认领状态" clearable><el-option label="已认领" value="claimed" /><el-option label="待认领" value="pending" /></el-select>
         <el-select v-model="professionalRosterFilter" placeholder="赛事名单状态" clearable><el-option label="已提交" value="submitted" /><el-option label="草稿" value="draft" /><el-option label="未提交" value="empty" /></el-select>
-        <el-button type="primary" plain @click="openInviteDialog"><el-icon><Picture /></el-icon>生成球队邀请</el-button>
-        <el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button>
       </section>
 
       <section v-if="isSimpleChangeView && !showPendingChangeReview" class="simple-change-history">
@@ -147,7 +167,7 @@
         <div class="change-principles"><div><el-icon><InfoFilled /></el-icon><span>报名截止前可修改参赛队名、队徽；截止后原则上不予变更。确需纠错时，仅由主办方异常处理并完善留痕。</span></div><div><strong>处理原则</strong><span>报名截止后普通流程不予修改</span><span>所有更改保留审计记录</span></div></div>
       </section>
 
-      <section v-if="!isSimpleChangeView || showPendingChangeReview" class="teams-table-panel" :class="{ 'simple-application-panel': isApplicationReviewView, 'professional-team-panel': isProfessional && activeTab === 'all', 'professional-application-panel': isProfessionalApplicationView }">
+      <section v-if="activeTab !== 'materials' && (!isSimpleChangeView || showPendingChangeReview)" class="teams-table-panel" :class="{ 'simple-application-panel': isApplicationReviewView, 'professional-team-panel': isProfessional && activeTab === 'all', 'professional-application-panel': isProfessionalApplicationView }">
         <div class="table-toolbar">
           <div>
             <strong>{{ activeTabTitle }}</strong>
@@ -166,7 +186,14 @@
             <span>参赛确认</span><span v-if="isProfessional">赛事参赛名单</span><span>球员数</span><span>操作</span>
           </div>
           <div v-for="row in filteredTeams" :key="row.recordId" class="teams-table-row" :class="{ 'simple-application-row': isApplicationReviewView, 'professional-table-row': isProfessional }" role="row">
-            <div class="team-identity">
+            <div class="team-identity" :class="{ 'approval-selectable': isRegistrationWorkspace && activeTab === 'all' }">
+              <el-checkbox
+                v-if="isRegistrationWorkspace && activeTab === 'all'"
+                v-model="selectedApprovalIds"
+                :value="getRecordId(row)"
+                :disabled="!isApprovalSelectable(row)"
+                :aria-label="`选择${row.name || row.teamName || '球队'}`"
+              />
               <img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" />
               <span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span>
               <div><strong>{{ row.name || row.teamName || '未命名球队' }}</strong><small>{{ row.shortName || row.coachName || row.contactName || '—' }}</small></div>
@@ -175,24 +202,27 @@
               <span>{{ activeDivision.name }}</span><span>{{ teamSource(row) }}</span><span>{{ applicationOwner(row) }}</span>
               <span><el-tag type="success" effect="light" size="small">{{ longTermTeamLabel(row) }}</el-tag></span><span>{{ applicationTime(row) }}</span>
               <span><el-tag :type="applicationRiskType(row)" effect="plain" size="small">{{ applicationRiskLabel(row) }}</el-tag></span>
-              <div class="team-row-actions"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button><el-button link type="primary" @click="openTeamPlayers(row)">查看</el-button></div>
+              <div class="team-row-actions"><template v-if="row.status === 'pending'"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template><el-button link type="primary" @click="openTeamPlayers(row)">查看</el-button></div>
             </template>
             <template v-else>
             <span>{{ teamRegistrationNo(row) }}</span><span><el-tag :type="teamSource(row) === '主办方邀请' ? 'primary' : 'warning'" effect="light" size="small">{{ teamSource(row) }}</el-tag></span>
             <span><el-tag :type="claimType(row)" effect="plain" size="small">{{ claimLabel(row) }}</el-tag></span>
             <span><el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag></span>
             <span v-if="isProfessional"><el-tag :type="rosterTagType(row)" effect="light" size="small">{{ rosterLabel(row) }}<template v-if="rosterPlayerCount(row)">（{{ rosterPlayerCount(row) }}人）</template></el-tag></span>
-            <span v-if="isProfessional">{{ rosterPlayerCount(row) || '—' }} 人</span><span v-else>{{ row.matchCount || 0 }} 场</span>
+            <span>{{ teamPlayerCount(row) }} 人</span>
             <div class="team-row-actions">
+              <el-button v-if="activeDivisionId === 'default'" link type="success" @click="openDivisionAssignment(row)">分配组别</el-button>
               <template v-if="row.status === 'pending'"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template>
               <template v-else-if="row.status === 'cancel_requested'"><el-button link type="danger" @click="approveCancel(row)">同意变更</el-button><el-button link @click="rejectCancel(row)">驳回</el-button></template>
-              <template v-else><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><el-button v-if="isProfessional && row.status === 'approved'" link type="primary" @click="openTeamRoster(row)">查看名单</el-button><el-button v-if="isProfessional && claimLabel(row) !== '已认领'" link type="success" @click="openClaimReminder(row)">发送认领提醒</el-button><el-button v-if="row.status === 'invited'" link type="danger" @click="cancelInvite(row)">取消邀请</el-button><el-button v-if="row.status === 'approved'" link type="danger" @click="removeTeam(row)">移除</el-button></template>
+              <template v-else><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><el-button v-if="isProfessional && row.status === 'approved'" link type="primary" @click="openTeamRoster(row)">查看名单</el-button><el-button v-if="isProfessional && claimLabel(row) !== '已认领'" link type="success" @click="openClaimReminder(row)">发送认领提醒</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(row.status)" link type="warning" :loading="retryingNotificationId===getRecordId(row)" @click="retryRegistrationNotification(row)">重发通知</el-button><el-button v-if="row.status === 'invited'" link type="danger" @click="cancelInvite(row)">取消邀请</el-button><el-button v-if="row.status === 'approved'" link type="danger" @click="removeTeam(row)">移除</el-button></template>
             </div>
             </template>
           </div>
           <div v-if="filteredTeams.length === 0" class="teams-empty">暂无符合条件的球队</div>
         </div>
       </section>
+      <el-dialog v-model="divisionAssignmentVisible" title="分配竞赛组别" width="480px"><div class="division-assignment-summary"><strong>{{ divisionAssignmentTeam.name || divisionAssignmentTeam.teamName || '当前球队' }}</strong><span>当前状态：待分配</span></div><el-form label-position="top"><el-form-item label="目标竞赛组别"><el-select v-model="divisionAssignmentTarget" placeholder="请选择组别"><el-option v-for="division in assignableDivisions" :key="division.id" :label="`${division.name}（${divisionTeamCount(division.id)} 支球队）`" :value="division.id" /></el-select></el-form-item></el-form><el-alert type="info" :closable="false" title="分配后，该球队的参赛关系、审核和名单均进入目标组别；不会复制或合并球队资料。" /><template #footer><el-button @click="divisionAssignmentVisible=false">取消</el-button><el-button type="primary" :loading="divisionAssignmentSubmitting" :disabled="!divisionAssignmentTarget" @click="confirmDivisionAssignment">确认分配</el-button></template></el-dialog>
+      <el-dialog v-model="syntheticTeamDialogVisible" title="添加虚拟球队" width="760px"><div class="synthetic-team-dialog-heading"><div><strong>{{ activeDivision.name }}</strong><span>可多选；添加后进入待审查，不会自动通过。</span></div><el-button link type="primary" :disabled="!availableSyntheticTeams.length" @click="selectAllSyntheticTeams">选择全部可用球队</el-button></div><div v-loading="syntheticTeamLoading" class="synthetic-team-grid"><label v-for="team in syntheticTeamCandidates" :key="team._id" class="synthetic-team-option" :class="{ disabled:team.alreadyAdded }"><el-checkbox v-model="selectedSyntheticTeamIds" :value="team._id" :disabled="team.alreadyAdded" /><img :src="team.logo || team.logoUrl" alt="" /><span><strong>{{ team.name || team.teamName }}</strong><small>{{ team.alreadyAdded ? '已加入当前组别' : `${team.playerCount || 15}名球员 · 可添加` }}</small></span></label><el-empty v-if="!syntheticTeamLoading && !syntheticTeamCandidates.length" description="当前年龄组暂无虚拟球队" /></div><template #footer><el-button @click="syntheticTeamDialogVisible=false">取消</el-button><el-button type="primary" :loading="addingSyntheticTeams" :disabled="!selectedSyntheticTeamIds.length" @click="submitSyntheticTeams">添加已选 {{ selectedSyntheticTeamIds.length }} 支球队</el-button></template></el-dialog>
       <section v-if="isApplicationReviewView && pendingClaimRows.length" class="teams-table-panel pending-claim-panel">
         <div class="table-toolbar"><div><strong>主办方邀请待认领 {{ pendingClaimRows.length }} 支</strong></div></div>
         <div class="teams-data-table" role="table"><div class="teams-table-row pending-claim-row teams-table-head" role="row"><span>球队（队徽 + 名称）</span><span>所属组别</span><span>专属小程序认领链接</span><span>发送时间</span><span>操作</span></div><div v-for="row in pendingClaimRows" :key="row.recordId" class="teams-table-row pending-claim-row" role="row"><div class="team-identity"><img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" /><span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span><div><strong>{{ row.name || row.teamName }}</strong></div></div><span>{{ activeDivision.name }}</span><span><el-tag type="warning" effect="plain" size="small">未认领</el-tag></span><span>{{ applicationTime(row) }}</span><div class="team-row-actions"><el-button link type="primary" @click="openClaimReminder(row)">复制认领链接</el-button><el-button link type="success" @click="openClaimReminder(row)">发送提醒</el-button><el-button link type="danger" @click="cancelInvite(row)">撤回邀请</el-button></div></div></div>
@@ -228,14 +258,16 @@
             <button type="button" :class="{ selected: claimShareMethod === 'link' }" @click="claimShareMethod = 'link'"><span class="claim-option-icon"><el-icon><Link /></el-icon></span><span><strong>复制认领链接</strong><small>复制后通过微信发送给球队负责人</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
             <button type="button" :class="{ selected: claimShareMethod === 'scan' }" @click="claimShareMethod = 'scan'"><span class="claim-option-icon claim-option-qr"><el-icon><Grid /></el-icon></span><span><strong>手机扫码分享</strong><small>主办方用手机扫码进入小程序，再转发认领卡片</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
           </div>
-          <label class="claim-link-field"><strong>认领链接</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input :value="claimInvitePath || (claimInviteLoading ? '正在生成认领链接…' : '认领链接待生成')" readonly /><button type="button" :disabled="claimInviteLoading" @click="copyClaimInviteLink"><el-icon><CopyDocument /></el-icon>复制链接</button></div></label>
+          <label class="claim-link-field"><strong>体验版球队认领</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input value="可将下方体验版小程序码发送给已加入体验成员的球队负责人" readonly /></div></label>
           <div class="claim-code-row"><img v-if="claimInviteCodeUrl" :src="claimInviteCodeUrl" class="claim-qr-image" alt="球队认领小程序码" /><div v-else-if="claimInvitePath" class="claim-qr-vector" role="img" aria-label="球队认领二维码" v-html="claimQrSvg"></div><div v-else class="claim-qr-placeholder" role="status">{{ claimInviteLoading ? '生成中' : '待生成' }}</div><div><strong>球队认领小程序码</strong><p>{{ claimInviteCodeUrl ? '扫码后可转发小程序卡片' : (claimInviteLoading ? '正在生成小程序码…' : '认领链接生成后显示可扫码二维码') }}</p></div></div>
           <div class="claim-after-note"><el-icon><InfoFilled /></el-icon><span>认领完成后，如球队资料或参赛名单未完善，再由系统发送资料完善提醒。</span></div>
         </div>
         <footer class="claim-dialog-footer"><button type="button" class="claim-cancel" @click="closeClaimInvite">取消</button><button type="button" class="claim-download" @click="downloadClaimCode"><el-icon><Download /></el-icon>下载小程序码</button><button type="button" class="claim-copy" @click="copyClaimInviteLink"><el-icon><CopyDocument /></el-icon>复制认领链接</button></footer>
       </section>
     </div>
-    <!-- 邀请球队弹窗 -->
+    <el-dialog v-model="targetedRegistrationLinkVisible" title="邀约球队" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="creatingTargetedRegistrationLink"><el-alert type="warning" :closable="false" title="当前生成体验版球队邀约，仅限已加入小程序体验成员的微信扫码测试；暂不用于对外传播。"/><section v-if="targetedRegistrationResult" class="targeted-link-result"><img v-if="targetedRegistrationResult.qrCodeUrl" :src="targetedRegistrationResult.qrCodeUrl" alt="邀约球队体验版小程序码"/><div><strong>球队邀约体验版二维码已生成</strong><el-tag type="warning" size="small">体验版</el-tag><span>报名时由球队选择组别</span><p>可下载二维码，发送给已加入体验成员的球队负责人测试报名流程。</p></div></section><el-empty v-else description="正在生成体验版球队邀约…"/></div><template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationResult" disabled>体验版不提供链接</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.qrCodeUrl" @click="downloadTargetedRegistrationCode">下载二维码</el-button><el-button v-if="targetedRegistrationResult" type="primary" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重新生成</el-button></template></el-dialog>
+
+    <!-- 邀请球队弹窗（旧球队池入口保留给内部兼容流程，不再由“定向邀请球队”按钮触发） -->
     <el-dialog
       v-model="showInviteDialog"
       title="邀请球队参赛"
@@ -245,7 +277,19 @@
       @closed="onInviteDialogClose"
     >
       <div class="invite-dialog">
-        <el-alert v-if="divisionOptions.length > 1" :title="`当前邀请至 ${activeDivision.name} 组`" type="success" :closable="false" style="margin-bottom: 14px" />
+        <section class="invite-division-picker" aria-label="选择邀请竞赛组别">
+          <div class="invite-division-heading"><strong>选择邀请组别</strong><span>已满组别不可选择</span></div>
+          <div class="invite-division-tags">
+            <button
+              v-for="division in inviteDivisionOptions"
+              :key="division.id"
+              type="button"
+              :class="{ active: division.id === activeDivisionId, disabled: divisionIsFull(division) }"
+              :disabled="divisionIsFull(division)"
+              @click="selectInviteDivision(division)"
+            ><strong>{{ division.name }}</strong><small>{{ divisionInviteStatusText(division) }}</small></button>
+          </div>
+        </section>
         <!-- 顶部信息栏 -->
         <div class="invite-header">
           <div class="invite-info">
@@ -350,6 +394,8 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="targetedInviteResultVisible" title="球队体验版注册邀请已生成" width="820px" destroy-on-close><el-alert type="warning" :closable="false" title="当前为体验版球队注册邀请，仅供已加入体验成员的微信测试；扫码后仍需登录、确认球队并提交报名审核。"/><div class="targeted-invite-results"><article v-for="item in targetedInviteResults" :key="item.teamId"><img v-if="item.qrCodeUrl" :src="item.qrCodeUrl" alt="球队注册体验版小程序码"/><div v-else class="targeted-code-placeholder">待生成</div><div><strong>{{ item.teamName }}</strong><span>{{ activeDivision.name }}</span><el-tag v-if="item.success" type="warning" size="small">体验版邀请</el-tag><el-tag v-else type="danger" size="small">生成失败</el-tag><input :value="item.path || item.error" readonly/></div><footer><el-button link disabled>体验版不提供链接</el-button><el-button link type="success" :disabled="!item.qrCodeUrl" @click="downloadTargetedInviteCode(item)">下载体验版小程序码</el-button></footer></article></div><template #footer><el-button type="primary" @click="targetedInviteResultVisible=false">完成</el-button></template></el-dialog>
 
     <!-- 添加球队弹窗：字段与球队身份创建球队保持一致 -->
     <el-dialog
@@ -486,40 +532,125 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="showBulkTeamDialog"
+      title="批量添加球队资料"
+      width="min(1180px, calc(100vw - 48px))"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <div class="bulk-team-dialog">
+        <el-alert
+          :title="`以下资料将加入 ${activeDivision.name}，保存后生成待认领参赛资料，不会按球队名称自动合并。`"
+          type="success"
+          :closable="false"
+          show-icon
+        />
+
+        <section class="bulk-field-picker">
+          <div class="bulk-field-heading">
+            <div><strong>选择要填写的资料项</strong><span>球队名称固定必填；勾选后会立即增加对应表格列。</span></div>
+            <div class="bulk-row-actions">
+              <el-button @click="addBulkRows(1)"><el-icon><Plus /></el-icon>加一行</el-button>
+              <el-button @click="addBulkRows(5)">加五行</el-button>
+              <el-button @click="removeEmptyBulkRows">清理空行</el-button>
+            </div>
+          </div>
+          <el-checkbox-group v-model="bulkSelectedFields" class="bulk-field-options">
+            <el-checkbox-button
+              v-for="field in bulkOptionalFields"
+              :key="field.key"
+              :value="field.key"
+              :disabled="isProfessional && ['contactName', 'contactPhone'].includes(field.key)"
+            >{{ field.label }}<small v-if="isProfessional && ['contactName', 'contactPhone'].includes(field.key)">必填</small></el-checkbox-button>
+          </el-checkbox-group>
+        </section>
+
+        <div class="bulk-table-wrap">
+          <table class="bulk-team-table">
+            <thead><tr>
+              <th class="bulk-index-col">序号</th>
+              <th class="bulk-name-col"><b>*</b> 球队名称</th>
+              <th v-if="bulkFieldEnabled('shortName')">球队简称</th>
+              <th v-if="bulkFieldEnabled('sourceType')">资料来源</th>
+              <th v-if="bulkFieldEnabled('province')">省份</th>
+              <th v-if="bulkFieldEnabled('city')">城市</th>
+              <th v-if="bulkFieldEnabled('address')" class="bulk-address-col">详细地址</th>
+              <th v-if="bulkFieldEnabled('contactName')"><b v-if="isProfessional">*</b> 负责人</th>
+              <th v-if="bulkFieldEnabled('contactPhone')"><b v-if="isProfessional">*</b> 手机号</th>
+              <th v-if="bulkFieldEnabled('logoUrl')">队徽</th>
+              <th class="bulk-operation-col">操作</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="(row, index) in bulkTeamRows" :key="row.rowId" :class="{ 'has-error': row.error }">
+                <td class="bulk-row-number">{{ index + 1 }}</td>
+                <td><el-input v-model="row.name" maxlength="50" placeholder="请输入球队名称" /></td>
+                <td v-if="bulkFieldEnabled('shortName')"><el-input v-model="row.shortName" maxlength="20" placeholder="简称" /></td>
+                <td v-if="bulkFieldEnabled('sourceType')"><el-select v-model="row.sourceType" placeholder="选择来源"><el-option v-for="item in bulkSourceOptions" :key="item" :label="item" :value="item" /></el-select></td>
+                <td v-if="bulkFieldEnabled('province')"><el-select v-model="row.province" placeholder="省份" filterable @change="onBulkProvinceChange(row)"><el-option v-for="province in provinceCodeMap" :key="province.code" :label="province.name" :value="province.code" /></el-select></td>
+                <td v-if="bulkFieldEnabled('city')"><el-select v-model="row.city" placeholder="城市" filterable :disabled="!row.province" @change="onBulkCityChange(row)"><el-option v-for="city in bulkCityOptions(row)" :key="city.l" :label="city.n" :value="city.l" /></el-select></td>
+                <td v-if="bulkFieldEnabled('address')"><el-input v-model="row.address" maxlength="80" placeholder="街道、场馆或机构地址" /></td>
+                <td v-if="bulkFieldEnabled('contactName')"><el-input v-model="row.contactName" maxlength="30" placeholder="负责人姓名" /></td>
+                <td v-if="bulkFieldEnabled('contactPhone')"><el-input v-model="row.contactPhone" maxlength="20" placeholder="手机号" /></td>
+                <td v-if="bulkFieldEnabled('logoUrl')" class="bulk-logo-cell">
+                  <el-upload :show-file-list="false" :before-upload="beforeCreateLogoUpload" :http-request="request => handleBulkLogoUpload(request, row)" accept="image/*">
+                    <button class="bulk-logo-button" type="button" :disabled="row.uploadingLogo">
+                      <img v-if="row.logoUrl" :src="row.logoUrl" alt="" />
+                      <span v-else>{{ row.uploadingLogo ? '上传中' : '上传队徽' }}</span>
+                    </button>
+                  </el-upload>
+                </td>
+                <td class="bulk-row-operation"><el-button link type="danger" :disabled="bulkTeamRows.length === 1" @click="removeBulkRow(index)">删除</el-button><small v-if="row.error">{{ row.error }}</small></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bulk-table-footnote"><span>共 {{ bulkValidRowCount }} 支待保存球队</span><span>发现同名球队时会标记为“待人工核验”，不会自动合并长期球队资料。</span></div>
+      </div>
+
+      <template #footer>
+        <el-button @click="showBulkTeamDialog = false">取消</el-button>
+        <el-button type="success" :loading="savingBulkTeams" @click="submitBulkTeams">保存 {{ bulkValidRowCount }} 支球队资料</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 报名二维码弹窗 -->
     <el-dialog
       v-model="showQrDialog"
       :title="qrDialogTitle"
-      width="400px"
+      width="min(880px, calc(100vw - 48px))"
       destroy-on-close
     >
       <div class="qr-dialog">
-        <div v-loading="qrLoading" class="qr-image-wrapper">
+        <section class="registration-poster-panel" v-loading="posterGenerating"><img v-if="registrationPosterUrl" :src="registrationPosterUrl" class="registration-poster-preview" alt="足球赛事报名海报" /><el-empty v-else description="生成报名海报中…" /></section>
+        <section class="registration-qr-panel"><div v-loading="qrLoading" class="qr-image-wrapper">
           <img v-if="qrCodeImage" :src="qrCodeImage" class="qr-image" alt="报名二维码" />
           <el-empty v-else-if="!qrLoading && !qrError" description="生成中..." />
           <div v-else-if="qrError" class="qr-error">
             <el-icon :size="40" color="#f56c6c"><CircleCloseFilled /></el-icon>
             <p class="error-text">二维码生成失败</p>
             <p class="error-detail">{{ qrError }}</p>
-            <p class="error-hint">请手动复制下方小程序路径给教练</p>
+            <el-button v-if="qrErrorCode === 'DIVISION_REGISTRATION_CLOSED'" type="success" @click="goToDivisionRegistrationSettings">前往竞赛管理开启报名</el-button>
+            <p class="error-hint">{{ qrErrorCode === 'DIVISION_REGISTRATION_CLOSED' ? '只有明确开启报名的竞赛组别才能生成该组海报' : '体验版二维码生成失败，请确认扫码微信已加入小程序体验成员后重试' }}</p>
           </div>
         </div>
-        <div class="qr-tips" v-if="!qrError">
-          <p>📱 使用微信扫码即可进入报名页</p>
-          <p>✅ 教练提交报名后，您将在此页收到审核通知</p>
-        </div>
-        <div class="qr-actions">
-          <el-button :disabled="!qrCodeImage" @click="downloadQRCode">
+      <el-alert v-if="qrEnvVersion === 'trial'" type="warning" :closable="false" show-icon title="当前为体验版二维码，仅限小程序体验成员扫码测试，暂不用于对外报名传播。" />
+      <div class="qr-tips" v-if="!qrError"><p v-for="(step,index) in registrationGuideSteps" :key="step"><b>{{ index + 1 }}</b>{{ step }}</p><small>报名审核完成后，任务中心、小程序订阅消息和服务号将分别记录通知状态。</small></div>
+      <div class="qr-actions">
+        <el-button :loading="serviceProbeLoading" @click="probeServiceAccountChannel">检测服务号通道</el-button>
+        <el-button type="primary" :disabled="!registrationPosterUrl" @click="downloadRegistrationPoster">下载报名海报</el-button>
+        <el-button :disabled="!qrCodeImage" @click="downloadQRCode">
             下载二维码
           </el-button>
-          <el-button type="primary" @click="copySignupLink">
-            复制小程序路径
+          <el-button disabled>体验版不提供链接</el-button>
+          <el-button @click="copySignupLink">
+            复制报名文案
           </el-button>
         </div>
         <div class="qr-path">
-          <span class="label">小程序路径：</span>
-          <code class="path-code">pages/tournament/signup/signup?id={{ tournamentId }}</code>
+          <span class="label">分享建议：</span><span>将报名海报发送到微信群、朋友圈或线下打印；定向球队使用“定向邀请球队”。</span>
         </div>
+        </section>
       </div>
     </el-dialog>
 
@@ -532,12 +663,13 @@ import QRCode from 'qrcode'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, Upload, UserFilled, DocumentChecked, WarningFilled, Timer, CircleCheckFilled, Lock, Download, Link, Grid, CopyDocument } from '@element-plus/icons-vue'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, getFileUrl } from '../../utils/cloud'
+import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, getFileUrl, assignTournamentTeamDivision } from '../../utils/cloud'
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 
 const route = useRoute()
 const router = useRouter()
+const isRegistrationWorkspace = computed(() => /\/registration$/.test(route.path))
 const publicBase = import.meta.env.BASE_URL
 const tournamentId = route.params.id
 const qaSnapshot = typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
@@ -594,6 +726,16 @@ const tournament = ref(qaSnapshot ? { ...qaSnapshot.tournament, divisions: qaSna
   pendingClaimCount: item._id === 'qa-division-u8' ? 3 : undefined,
   confirmedTeamCount: item._id === 'qa-division-u8' ? 13 : undefined
 })) } : {})
+const divisionRecords = ref(qaSnapshot?.divisions || [])
+const divisionAssignmentVisible = ref(false)
+const divisionAssignmentTeam = ref({})
+const divisionAssignmentTarget = ref('')
+const divisionAssignmentSubmitting = ref(false)
+const syntheticTeamDialogVisible = ref(false)
+const syntheticTeamLoading = ref(false)
+const syntheticTeamCandidates = ref([])
+const selectedSyntheticTeamIds = ref([])
+const addingSyntheticTeams = ref(false)
 const tournamentTeams = ref(qaTournamentTeams)
 const qaInviteCandidates = qaSnapshot && qaRequestedDivisionId === 'qa-division-u16' ? [
   { _id: 'qa-invite-candidate-1', name: '济南青训U16', teamName: '济南青训U16', contactName: '赵教练', phone: '13800001111', status: 'active' },
@@ -609,6 +751,8 @@ const professionalRosterFilter = ref('')
 const applicationSource = ref('')
 const applicationStatus = ref('')
 const applicationDate = ref('')
+const batchApproving = ref(false)
+const selectedApprovalIds = ref([])
 const changeTypeFilter = ref('')
 const changeStatusFilter = ref('')
 const changeDateRange = ref([])
@@ -617,11 +761,27 @@ const showInviteDialog = ref(Boolean(qaSnapshot && route.query.action === 'invit
 const inviteSearchKeyword = ref('')
 const selectedTeams = ref([])
 const sendingInvites = ref(false)
+const targetedInviteResultVisible = ref(false)
+const targetedInviteResults = ref([])
+const targetedRegistrationLinkVisible = ref(false)
+const creatingTargetedRegistrationLink = ref(false)
+const targetedRegistrationResult = ref(null)
 const activeDivisionId = ref(qaSnapshot && typeof route.query.divisionId === 'string' ? route.query.divisionId : 'default')
-const teamTabs = new Set(['all', 'pending', 'invited', 'roster', 'abnormal', 'cancel_requested'])
+const teamTabs = new Set(['all', 'pending', 'invited', 'materials', 'roster', 'abnormal', 'cancel_requested'])
 
 watch(() => route.query.tab, (tab) => {
-  activeTab.value = typeof tab === 'string' && teamTabs.has(tab) ? tab : 'all'
+  const normalizedTab = isRegistrationWorkspace.value && tab === 'pending' ? 'all' : tab
+  activeTab.value = typeof normalizedTab === 'string' && teamTabs.has(normalizedTab) ? normalizedTab : 'all'
+})
+watch(() => route.query.divisionId, divisionId => {
+  if (typeof divisionId === 'string' && divisionOptions.value.some(item => item.id === divisionId)) activeDivisionId.value = divisionId
+})
+watch(isRegistrationWorkspace, registration => {
+  const allowed = registration ? new Set(['all', 'materials']) : new Set(['all', 'roster', 'abnormal', 'cancel_requested'])
+  if (!allowed.has(activeTab.value)) {
+    activeTab.value = 'all'
+    router.replace({ query:{ ...route.query, tab:'all', divisionId:activeDivisionId.value } })
+  }
 })
 
 watch(
@@ -633,6 +793,7 @@ watch(
     if (action === 'claim-invite') {
       claimInviteId.value = ''
       claimInvitePathValue.value = ''
+      claimInviteUrlLink.value = ''
       claimInviteCodeUrl.value = ''
       claimInviteExpiry.value = ''
       claimLastSharedAtValue.value = ''
@@ -642,6 +803,7 @@ watch(
       claimInviteRetryPending.value = false
       claimInviteId.value = ''
       claimInvitePathValue.value = ''
+      claimInviteUrlLink.value = ''
       claimInviteCodeUrl.value = ''
       claimInviteExpiry.value = ''
       claimLastSharedAtValue.value = ''
@@ -673,21 +835,48 @@ const createTeamForm = ref({
   contactPhone: qaSnapshot && route.query.action === 'quick-add' ? '18612343345' : '',
   ownerPhone: ''
 })
+let bulkRowSequence = 0
+const bulkOptionalFields = [
+  { key: 'shortName', label: '球队简称' },
+  { key: 'sourceType', label: '资料来源' },
+  { key: 'province', label: '省份' },
+  { key: 'city', label: '城市' },
+  { key: 'address', label: '详细地址' },
+  { key: 'contactName', label: '负责人' },
+  { key: 'contactPhone', label: '手机号' },
+  { key: 'logoUrl', label: '队徽' }
+]
+const bulkSourceOptions = ['主办方录入', '线下报名', '合作机构', '历史参赛球队', '其他']
+const showBulkTeamDialog = ref(false)
+const savingBulkTeams = ref(false)
+const bulkSelectedFields = ref(['shortName', 'sourceType', 'contactName', 'contactPhone', 'logoUrl'])
+const bulkTeamRows = ref([])
+function createBulkTeamRow() {
+  bulkRowSequence += 1
+  return {
+    rowId: `bulk-team-${Date.now()}-${bulkRowSequence}`,
+    name: '', shortName: '', sourceType: '主办方录入', province: '', city: '', cityName: '', address: '',
+    contactName: '', contactPhone: '', logoUrl: '', uploadingLogo: false, error: ''
+  }
+}
+const bulkValidRowCount = computed(() => bulkTeamRows.value.filter(row => String(row.name || '').trim()).length)
 const qaVisualClosed = ref(false)
 const qaVisualAction = computed(() => qaSnapshot && !qaVisualClosed.value ? String(route.query.action || '') : '')
 const claimInviteOpen = ref(String(route.query.action || '') === 'claim-invite')
 const claimShareMethod = ref('link')
 const overlayAction = computed(() => qaVisualAction.value || (claimInviteOpen.value ? 'claim-invite' : ''))
 const inviteQrCode = ref('')
-const claimInviteId = ref('')
-const claimInvitePathValue = ref('')
+const qaClaimInviteActive = Boolean(qaSnapshot && String(route.query.action || '') === 'claim-invite')
+const claimInviteId = ref(qaClaimInviteActive ? 'qa-claim-invite' : '')
+const claimInvitePathValue = ref(qaClaimInviteActive ? '/pages/team/prebuilt-invite/prebuilt-invite?inviteId=qa-claim-invite' : '')
+const claimInviteUrlLink = ref('')
 const claimInviteCodeUrl = ref('')
 // 认领邀请的有效期以服务端实际生成/复用的邀请为准，不能只用赛事截止时间推算。
-const claimInviteExpiry = ref('')
+const claimInviteExpiry = ref(qaClaimInviteActive ? '2026-08-18T23:59:00+08:00' : '')
 const claimInviteLoading = ref(false)
 const claimInviteRequestKey = ref('')
 const claimInviteRetryPending = ref(false)
-const claimLastSharedAtValue = ref('')
+const claimLastSharedAtValue = ref(qaClaimInviteActive ? '2026-07-28T15:20:00+08:00' : '')
 const claimReminderTeam = computed(() => {
   const requestedTeamId = String(route.query.tournamentTeamId || route.query.teamId || '')
   if (requestedTeamId) {
@@ -717,6 +906,7 @@ const inviteExpiryText = computed(() => {
   return `${String(date).replaceAll('-', '.')} 18:00`
 })
 const claimInvitePath = computed(() => {
+  if (claimInviteUrlLink.value) return claimInviteUrlLink.value
   if (claimInvitePathValue.value) return claimInvitePathValue.value
   if (!claimInviteId.value) return ''
   return `/pages/team/prebuilt-invite/prebuilt-invite?inviteId=${encodeURIComponent(claimInviteId.value)}`
@@ -768,8 +958,17 @@ const teamTypeOptions = [
 // 报名二维码弹窗
 const showQrDialog = ref(false)
 const qrCodeImage = ref('')
+const registrationUrlLink = ref('')
+const qrErrorCode = ref('')
+const qrEnvVersion = ref('')
 const qrLoading = ref(false)
 const qrError = ref('')
+const registrationPosterUrl = ref('')
+const posterGenerating = ref(false)
+const posterTemplate = ref('emerald')
+const posterTemplates = [{ id:'emerald', name:'绿茵经典', description:'深绿球场风格，适合常规赛事报名' }, { id:'redgold', name:'红金赛事', description:'热烈醒目，适合杯赛与总决赛招募' }, { id:'blue', name:'蓝焰竞技', description:'现代竞技风格，适合青少年联赛' }]
+const registrationGuideSteps = ref(['进入赛小蜂足球小程序', '按提示关注服务号并完成绑定', '选择球队并确认参赛'])
+const serviceProbeLoading = ref(false)
 
 // 二维码弹窗标题
 const qrDialogTitle = computed(() => `赛事报名二维码 - ${tournament.value.name || '赛事'}`)
@@ -791,23 +990,81 @@ const statusTypes = {
   cancel_requested: 'warning'
 }
 
-// 组别与统计（旧赛事自动归入默认组）
+// 正式竞赛组别来自 divisions 集合；旧的无组别关系只进入“待分配”，不混入正式组别。
 const divisionOptions = computed(() => {
-  const divisions = Array.isArray(tournament.value.divisions) ? tournament.value.divisions : []
-  if (divisions.length > 0) return divisions
-  return [{
-    id: 'default',
-    name: '默认组',
-    tournamentType: tournament.value.type || tournament.value.tournamentType || 'tournament',
-    matchFormat: tournament.value.matchFormat || '11side',
-    maxTeams: Number(tournament.value.maxTeams || 0),
-    maxPlayersPerTeam: Number(tournament.value.maxPlayersPerTeam || tournament.value.maxPlayers || 35)
-  }]
+  const source = divisionRecords.value.length ? divisionRecords.value : (Array.isArray(tournament.value.divisions) ? tournament.value.divisions : [])
+  const divisions = source.map(item => ({ ...item, id:String(item.id || item._id || '') })).filter(item => item.id)
+  const hasUnassigned = tournamentTeams.value.some(item => !item.divisionId || item.divisionId === 'default')
+  if (hasUnassigned) divisions.push({ id:'default', name:'待分配', tournamentType:tournament.value.type || tournament.value.tournamentType || 'tournament', matchFormat:tournament.value.matchFormat || '11side', maxTeams:0, maxPlayersPerTeam:Number(tournament.value.maxPlayersPerTeam || tournament.value.maxPlayers || 35) })
+  return divisions.length ? divisions : [{ id:'default', name:'待创建组别', tournamentType:tournament.value.type || tournament.value.tournamentType || 'tournament', maxTeams:0, maxPlayersPerTeam:35 }]
 })
 const activeDivision = computed(() => divisionOptions.value.find(item => item.id === activeDivisionId.value) || divisionOptions.value[0])
+function divisionPlayerFormatLabel(division) { const value=String(division?.matchFormat || '').match(/(5|7|8|9|11)/);const players=Number(value?.[1] || division?.playersOnField || 0);return players ? `${players}人制` : '' }
+function divisionDisplayName(division) { const format=divisionPlayerFormatLabel(division);return format ? `${division?.name || '未命名组别'} · ${format}` : division?.name || '未命名组别' }
+const activeDivisionDisplayName = computed(() => divisionDisplayName(activeDivision.value))
+function divisionCapacity(division) {
+  const candidates = [division?.expectedTeams, division?.requiredTeams, division?.teamRequirement, division?.participantTeams, division?.maxTeams]
+  return candidates.map(Number).find(value => Number.isFinite(value) && value > 0) || 0
+}
+const activeDivisionCapacity = computed(() => divisionCapacity(activeDivision.value))
+const assignableDivisions = computed(() => divisionOptions.value.filter(item => item.id !== 'default'))
 const divisionTournamentTeams = computed(() => tournamentTeams.value.filter(item => (item.divisionId || 'default') === activeDivisionId.value))
+const availableSyntheticTeams = computed(() => syntheticTeamCandidates.value.filter(team => !team.alreadyAdded))
+function divisionTeamCount(divisionId) { return tournamentTeams.value.filter(item => (item.divisionId || 'default') === divisionId).length }
+function divisionCapacityUsed(divisionId) { return tournamentTeams.value.filter(item => (item.divisionId || 'default') === divisionId && ['approved', 'invited'].includes(String(item.status || '').toLowerCase())).length }
+function divisionIsFull(division) { const max=divisionCapacity(division);return max > 0 && divisionCapacityUsed(division.id) >= max }
+function divisionInviteStatusText(division) { const max=divisionCapacity(division);const used=divisionCapacityUsed(division.id);return divisionIsFull(division) ? '已满' : (max > 0 ? `${used}/${max}` : '可邀请') }
+const inviteDivisionOptions = computed(() => divisionOptions.value
+  .filter(item => item.id !== 'default')
+  .map((item, order) => ({ ...item, order }))
+  .sort((a, b) => Number(divisionIsFull(a)) - Number(divisionIsFull(b)) || a.order - b.order))
+function selectInviteDivision(division) { if(!division || divisionIsFull(division)) return;selectDivision(division.id) }
+function openDivisionAssignment(team) { divisionAssignmentTeam.value = team || {}; divisionAssignmentTarget.value = ''; divisionAssignmentVisible.value = true }
+async function confirmDivisionAssignment() {
+  const relationId = getRecordId(divisionAssignmentTeam.value)
+  if (!relationId || !divisionAssignmentTarget.value || divisionAssignmentSubmitting.value) return
+  divisionAssignmentSubmitting.value = true
+  try {
+    const result = await assignTournamentTeamDivision(relationId, divisionAssignmentTarget.value)
+    if (!result?.success) throw new Error(result?.error || result?.message || '分配失败')
+    const target = divisionAssignmentTarget.value
+    divisionAssignmentVisible.value = false
+    await loadTournamentTeams()
+    activeDivisionId.value = target
+    await router.replace({ query:{ ...route.query, divisionId:target, tab:'all' } })
+    ElMessage.success(result.message || '组别分配成功')
+  } catch (error) { ElMessage.error(error.message || '分配失败') } finally { divisionAssignmentSubmitting.value = false }
+}
+async function openSyntheticTeamDialog() {
+  syntheticTeamDialogVisible.value = true
+  syntheticTeamLoading.value = true
+  selectedSyntheticTeamIds.value = []
+  try {
+    const teams = await queryList('teams', { where:{ synthetic:true }, orderBy:{ name:'asc' }, limit:100, silent:true })
+    const ageGroup = String(activeDivision.value.ageGroup || '').toUpperCase()
+    const existingIds = new Set(divisionTournamentTeams.value.map(item => String(item.teamId || '')))
+    syntheticTeamCandidates.value = (teams || []).filter(team => String(team.ageGroup || '').toUpperCase() === ageGroup).map(team => ({ ...team, alreadyAdded:existingIds.has(String(team._id)) }))
+  } catch (error) {
+    syntheticTeamCandidates.value = []
+    ElMessage.error(error.message || '虚拟球队加载失败')
+  } finally { syntheticTeamLoading.value = false }
+}
+function selectAllSyntheticTeams() { selectedSyntheticTeamIds.value = availableSyntheticTeams.value.map(team => team._id) }
+async function submitSyntheticTeams() {
+  if (!selectedSyntheticTeamIds.value.length) return
+  addingSyntheticTeams.value = true
+  try {
+    const result = await callFunction('tournamentRegistrationFlow', { action:'addSyntheticTeams', tournamentId, divisionId:activeDivisionId.value, teamIds:selectedSyntheticTeamIds.value })
+    if (!result?.success) throw new Error(result?.message || '虚拟球队添加失败')
+    ElMessage.success(result.message || '虚拟球队已添加')
+    syntheticTeamDialogVisible.value = false
+    await loadTournamentTeams()
+  } catch (error) { ElMessage.error(error.message || '虚拟球队添加失败') } finally { addingSyntheticTeams.value = false }
+}
 const approvedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'approved'))
 const claimedTeams = computed(() => divisionTournamentTeams.value.filter(team => claimLabel(team) === '已认领'))
+const approvedClaimedTeams = computed(() => approvedTeams.value.filter(team => claimLabel(team) === '已认领'))
+const approvedConfirmedTeams = computed(() => approvedTeams.value.filter(team => ['approved', 'confirmed', 'active', 'locked'].includes(String(team.participationStatus || team.confirmStatus || team.status))))
 const pendingTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'pending'))
 const invitedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'invited'))
 const cancelRequestedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'cancel_requested'))
@@ -816,9 +1073,9 @@ const isProfessional = computed(() => {
   const mode = activeDivision.value?.mode || activeDivision.value?.ruleMode || activeDivision.value?.rulesMode
   return mode === 'professional' || activeDivision.value?.isProfessional === true
 })
-const simpleOverview = computed(() => !isProfessional.value && activeTab.value === 'all')
+const simpleOverview = computed(() => !isRegistrationWorkspace.value && !isProfessional.value && activeTab.value === 'all')
 const simpleTeamCapacity = computed(() => {
-  const max = Number(activeDivision.value?.maxTeams || tournament.value.maxTeams || 0)
+  const max = activeDivisionCapacity.value || Number(tournament.value.maxTeams || 0)
   return max > 0 ? max : divisionTournamentTeams.value.length
 })
 const simpleClaimedCount = computed(() => {
@@ -873,7 +1130,7 @@ const formatLabel = computed(() => {
   return labels[value] || '赛制待定'
 })
 const quotaText = computed(() => {
-  const max = Number(activeDivision.value?.maxTeams || tournament.value.maxTeams || 0)
+  const max = activeDivisionCapacity.value || Number(tournament.value.maxTeams || 0)
   return max > 0 ? `${approvedTeams.value.length} / ${max} 支球队` : `${approvedTeams.value.length} 支球队`
 })
 const displayAvailableSlots = computed(() => availableSlots.value === 999 ? '不限' : availableSlots.value)
@@ -885,7 +1142,7 @@ const exceptionCount = computed(() => divisionTournamentTeams.value.reduce((tota
   return total + Number(team.exceptionCount || team.rosterExceptionCount || team.abnormalCount || 0)
 }, 0))
 const activeTabTitle = computed(() => ({
-  all: '参赛球队',
+  all: isRegistrationWorkspace.value ? '球队审核' : '参赛球队',
   pending: '加入申请',
   invited: '已发出邀请',
   roster: '参赛名单',
@@ -894,12 +1151,12 @@ const activeTabTitle = computed(() => ({
 }[activeTab.value] || '参赛球队'))
 
 const availableSlots = computed(() => {
-  // 如果没有设置maxTeams，默认允许邀请（不限制）
-  const max = activeDivision.value?.maxTeams || tournament.value.maxTeams
+  // 优先使用当前组别已定版规则的预计参赛球队数，旧 maxTeams 仅作兼容兜底。
+  const max = activeDivisionCapacity.value || Number(tournament.value.maxTeams || 0)
   if (!max || max <= 0) {
     return 999 // 返回一个大数字表示无限制
   }
-  const current = approvedTeams.value.length
+  const current = divisionCapacityUsed(activeDivisionId.value)
   const slots = Math.max(0, max - current)
   return slots
 })
@@ -909,7 +1166,9 @@ const filteredTeams = computed(() => {
   
   // 按标签筛选
   if (activeTab.value === 'all') {
-    list = list.filter(t => !['cancel_requested', 'invited'].includes(t.status))
+    list = isRegistrationWorkspace.value
+      ? list.filter(t => !['cancel_requested', 'withdrawn', 'cancelled'].includes(t.status))
+      : list.filter(t => t.status === 'approved')
   } else if (activeTab.value === 'roster') {
     list = list.filter(t => t.status === 'approved')
   } else if (activeTab.value === 'abnormal') {
@@ -950,6 +1209,34 @@ const filteredTeams = computed(() => {
   return list
 })
 
+function isApprovalSelectable(team) {
+  return team?.status === 'pending' && applicationRiskLabel(team) === '无重复'
+}
+
+const selectableApprovalRows = computed(() => filteredTeams.value.filter(isApprovalSelectable))
+const allVisibleApprovalsSelected = computed(() => {
+  if (!selectableApprovalRows.value.length) return false
+  const selected = new Set(selectedApprovalIds.value)
+  return selectableApprovalRows.value.every(team => selected.has(getRecordId(team)))
+})
+const someVisibleApprovalsSelected = computed(() => {
+  if (allVisibleApprovalsSelected.value) return false
+  const selected = new Set(selectedApprovalIds.value)
+  return selectableApprovalRows.value.some(team => selected.has(getRecordId(team)))
+})
+
+function toggleAllVisibleApprovals(checked) {
+  const visibleIds = selectableApprovalRows.value.map(getRecordId)
+  const selected = new Set(selectedApprovalIds.value)
+  visibleIds.forEach(id => checked ? selected.add(id) : selected.delete(id))
+  selectedApprovalIds.value = [...selected]
+}
+
+watch([divisionTournamentTeams, activeDivisionId], () => {
+  const validIds = new Set(divisionTournamentTeams.value.filter(isApprovalSelectable).map(getRecordId))
+  selectedApprovalIds.value = selectedApprovalIds.value.filter(id => validIds.has(id))
+})
+
 // 已选球队名称预览
 const getSelectedTeamNames = computed(() => {
   const names = selectedTeams.value.map(id => {
@@ -967,6 +1254,7 @@ const availableTeamsToInvite = computed(() => {
 
   const available = allTeams.value
     .filter(team => team && team._id) // 确保球队数据有效
+    .filter(team => team.synthetic !== true && !team.syntheticDatasetId) // 虚拟球队只允许从“添加虚拟球队”进入
     .filter(team => !invitedTeamIds.includes(team._id))
     .filter(team => {
       if (!inviteSearchKeyword.value) return true
@@ -1049,6 +1337,10 @@ function rosterPlayerCount(team) {
   return Number(team.rosterPlayerCount || team.approvedPlayerCount || team.playerCount || 0)
 }
 
+function teamPlayerCount(team) {
+  return Number(team.playerCount || team.rosterPlayerCount || team.approvedPlayerCount || 0)
+}
+
 function rosterLabel(team) {
   const status = team.rosterStatus || team.lineupStatus || team.registrationStatus
   return ({ draft: '待提交', submitted: '审核中', approved: '已生效', locked: '已锁定', returned: '已退回' })[status] || (rosterPlayerCount(team) > 0 ? '已提交' : '待提交')
@@ -1112,10 +1404,37 @@ function viewSimpleChangeRecord(row) {
   ElMessageBox.alert(`${row.time} · ${row.teamName}\n${row.typeLabel}：${row.before} → ${row.after}\n申请人：${row.applicant}\n影响范围：${row.scope}\n处理结果：${row.status === 'approved' ? '已通过' : '已拒绝'}`, '变更记录')
 }
 
+function notificationChannelSummary(channels = {}) {
+  const labels = {
+    delivered: '已同步', queued: '待发送', permission_required: '未授权',
+    waiting_follow_bind: '待服务号绑定', configuration_required: '模板未配置', recipient_missing: '接收人缺失', failed: '发送失败'
+  }
+  return `任务中心：${labels[channels.taskCenter] || '待同步'}；小程序：${labels[channels.miniSubscription] || '待记录'}；服务号：${labels[channels.serviceAccount] || '待记录'}`
+}
+
+const retryingNotificationId = ref('')
+async function retryRegistrationNotification(team) {
+  const registrationId = getRecordId(team)
+  retryingNotificationId.value = registrationId
+  try {
+    const result = await callFunction('tournamentRegistrationFlow', { action:'retryRegistrationNotifications', registrationId })
+    if (!result?.success) throw new Error(result?.message || '通知重试失败')
+    const channels = result.data?.channels || {}
+    ElMessage.success(`通知重试已执行。${notificationChannelSummary(channels)}`)
+    if (channels.miniSubscription === 'permission_required') ElMessage.warning('报名时未获得小程序订阅授权，本条小程序通知无法补发')
+    if (channels.serviceAccount === 'configuration_required') ElMessage.warning('服务号报名审核模板尚未配置，暂时无法发送模板消息')
+  } catch (error) {
+    ElMessage.error(error.message || '通知重试失败')
+  } finally {
+    retryingNotificationId.value = ''
+  }
+}
+
 async function approveAllVisibleApplications() {
-  const safeRows = filteredTeams.value.filter(team => applicationRiskLabel(team) === '无重复')
+  const selectedIds = new Set(selectedApprovalIds.value)
+  const safeRows = divisionTournamentTeams.value.filter(team => selectedIds.has(getRecordId(team)) && isApprovalSelectable(team))
   if (!safeRows.length) {
-    ElMessage.warning('当前没有可批量通过的无异常申请')
+    ElMessage.warning('请先勾选需要通过的待审核球队')
     return
   }
   try {
@@ -1132,7 +1451,7 @@ async function approveAllVisibleApplications() {
         cloudWrite: false
       }
     }
-    await ElMessageBox.confirm(`确认批量通过 ${safeRows.length} 支无异常球队的参赛申请吗？异常关系仍保留人工处理。`, '批量通过')
+    await ElMessageBox.confirm(`确认通过当前组别已勾选的 ${safeRows.length} 支球队吗？未勾选球队保持原状态。`, '批量通过已选球队', { type: 'warning' })
     if (qaSnapshot) {
       const safeIds = new Set(safeRows.map(getRecordId))
       tournamentTeams.value = tournamentTeams.value.map(team => safeIds.has(getRecordId(team)) ? { ...team, status: 'approved', approveTime: new Date().toISOString() } : team)
@@ -1148,14 +1467,33 @@ async function approveAllVisibleApplications() {
         mergedByName: false,
         cloudWrite: false
       }
+      selectedApprovalIds.value = []
       ElMessage.success(`已通过 ${safeRows.length} 支球队`)
       return
     }
-    await Promise.all(safeRows.map(team => updateRecord('tournament_teams', getRecordId(team), { status: 'approved', approveTime: new Date() })))
-    ElMessage.success(`已通过 ${safeRows.length} 支球队`)
+    batchApproving.value = true
+    const succeeded = []
+    const failed = []
+    for (const team of safeRows) {
+      try {
+        const result = await callFunction('tournamentRegistrationFlow', { action: 'reviewRegistration', registrationId: getRecordId(team), decision: 'approved' })
+        if (!result?.success) throw new Error(result?.message || '审核失败')
+        succeeded.push(team)
+      } catch (error) {
+        failed.push({ team, message: error?.message || '审核失败' })
+      }
+    }
     await loadTournamentTeams()
+    selectedApprovalIds.value = failed.map(item => getRecordId(item.team))
+    if (failed.length) {
+      ElMessage.warning(`批量审核完成：通过 ${succeeded.length} 支，失败 ${failed.length} 支；失败记录仍保留待审核。`)
+    } else {
+      ElMessage.success(`已通过 ${succeeded.length} 支球队`)
+    }
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('批量通过失败，申请记录已保留')
+  } finally {
+    batchApproving.value = false
   }
 }
 
@@ -1213,6 +1551,144 @@ function openCreateTeamDialog() {
   }
   resetCreateTeamForm()
   showCreateTeamDialog.value = true
+}
+
+function bulkFieldEnabled(field) {
+  return bulkSelectedFields.value.includes(field)
+}
+
+function addBulkRows(count = 1) {
+  const safeCount = Math.max(1, Math.min(Number(count) || 1, 20))
+  for (let index = 0; index < safeCount; index += 1) bulkTeamRows.value.push(createBulkTeamRow())
+}
+
+function openBulkTeamDialog() {
+  if (availableSlots.value <= 0) {
+    ElMessage.warning('参赛名额已满，无法继续添加球队')
+    return
+  }
+  if (isProfessional.value) {
+    bulkSelectedFields.value = Array.from(new Set([...bulkSelectedFields.value, 'contactName', 'contactPhone']))
+  }
+  bulkTeamRows.value = [createBulkTeamRow(), createBulkTeamRow(), createBulkTeamRow()]
+  showBulkTeamDialog.value = true
+}
+
+function removeBulkRow(index) {
+  if (bulkTeamRows.value.length <= 1) return
+  bulkTeamRows.value.splice(index, 1)
+}
+
+function removeEmptyBulkRows() {
+  const rows = bulkTeamRows.value.filter(row => String(row.name || '').trim())
+  bulkTeamRows.value = rows.length ? rows : [createBulkTeamRow()]
+}
+
+function bulkCityOptions(row) {
+  return cityLetterMap[row.province] || []
+}
+
+function onBulkProvinceChange(row) {
+  row.city = ''
+  row.cityName = ''
+  row.error = ''
+}
+
+function onBulkCityChange(row) {
+  const city = bulkCityOptions(row).find(item => item.l === row.city)
+  row.cityName = city ? city.n : ''
+  row.error = ''
+}
+
+function normalizedTeamName(value) {
+  return String(value || '').trim().replace(/\s+/g, '').toLowerCase()
+}
+
+function validateBulkTeamRows(rows) {
+  const names = new Map()
+  let valid = true
+  rows.forEach(row => {
+    row.error = ''
+    const name = String(row.name || '').trim()
+    const normalized = normalizedTeamName(name)
+    if (!name) row.error = '请填写球队名称'
+    else if (names.has(normalized)) row.error = `与第 ${names.get(normalized)} 行重名`
+    else names.set(normalized, rows.indexOf(row) + 1)
+    if (!row.error && isProfessional.value && !String(row.contactName || '').trim()) row.error = '请填写负责人'
+    if (!row.error && isProfessional.value && !/^1\d{10}$/.test(String(row.contactPhone || '').trim())) row.error = '请填写正确的11位手机号'
+    if (!row.error && bulkFieldEnabled('city') && row.city && !row.province) row.error = '请先选择省份'
+    if (row.error) valid = false
+  })
+  return valid
+}
+
+async function submitBulkTeams() {
+  const rows = bulkTeamRows.value.filter(row => String(row.name || '').trim())
+  if (!rows.length) return ElMessage.warning('请至少填写一支球队')
+  if (rows.length > availableSlots.value) return ElMessage.warning(`当前组别仅剩 ${availableSlots.value} 个名额`)
+  if (!validateBulkTeamRows(rows)) return ElMessage.warning('请先修正表格中标红的内容')
+
+  savingBulkTeams.value = true
+  const existingNames = new Set(divisionTournamentTeams.value.map(team => normalizedTeamName(team.name || team.teamName)))
+  const failedRows = []
+  let savedCount = 0
+  try {
+    for (const row of rows) {
+      const name = String(row.name || '').trim()
+      const sameName = existingNames.has(normalizedTeamName(name))
+      const prebuiltTeamProfile = { name }
+      if (bulkFieldEnabled('shortName')) prebuiltTeamProfile.shortName = String(row.shortName || '').trim()
+      if (bulkFieldEnabled('sourceType')) prebuiltTeamProfile.sourceType = row.sourceType || ''
+      if (bulkFieldEnabled('province')) prebuiltTeamProfile.provinceCode = row.province || ''
+      if (bulkFieldEnabled('city')) {
+        prebuiltTeamProfile.cityCode = row.city || ''
+        prebuiltTeamProfile.cityName = row.cityName || ''
+      }
+      if (bulkFieldEnabled('address')) prebuiltTeamProfile.address = String(row.address || '').trim()
+      if (bulkFieldEnabled('contactName')) prebuiltTeamProfile.contactName = String(row.contactName || '').trim()
+      if (bulkFieldEnabled('contactPhone')) prebuiltTeamProfile.contactPhone = String(row.contactPhone || '').trim()
+      if (bulkFieldEnabled('logoUrl')) prebuiltTeamProfile.logoUrl = row.logoUrl || ''
+
+      const now = new Date()
+      try {
+        await addRecord('tournament_teams', {
+          tournamentId,
+          divisionId: activeDivisionId.value,
+          divisionName: activeDivision.value.name,
+          teamName: name,
+          joinSource: 'organizer',
+          source: 'organizer',
+          sourceType: prebuiltTeamProfile.sourceType || '主办方录入',
+          contactName: prebuiltTeamProfile.contactName || '',
+          contactPhone: prebuiltTeamProfile.contactPhone || '',
+          logoUrl: prebuiltTeamProfile.logoUrl || '',
+          prebuiltTeamProfile,
+          isTemporary: true,
+          claimStatus: 'pending_claim',
+          status: 'invited',
+          riskStatus: sameName ? '疑似同名球队' : '',
+          manualReviewRequired: sameName,
+          createTime: now,
+          updateTime: now
+        })
+        existingNames.add(normalizedTeamName(name))
+        savedCount += 1
+      } catch (error) {
+        row.error = error.message || '保存失败'
+        failedRows.push(row)
+      }
+    }
+    await loadTournamentTeams()
+    if (failedRows.length) {
+      bulkTeamRows.value = failedRows
+      ElMessage.warning(`已保存 ${savedCount} 支，另有 ${failedRows.length} 支失败，请修正后重试`)
+    } else {
+      showBulkTeamDialog.value = false
+      ElMessage.success(`已批量添加 ${savedCount} 支球队资料，等待负责人认领确认`)
+    }
+  } finally {
+    savingBulkTeams.value = false
+  }
 }
 
 function onCreateProvinceChange(value) {
@@ -1391,6 +1867,22 @@ async function handleCreateLogoUpload({ file }) {
   }
 }
 
+async function handleBulkLogoUpload({ file }, row) {
+  row.uploadingLogo = true
+  row.error = ''
+  try {
+    const result = await uploadCreateLogoFile(file)
+    row.logoUrl = result.url
+    ElMessage.success(`队徽已压缩并上传（${Math.ceil(result.size / 1024)}KB）`)
+  } catch (err) {
+    console.error('批量球队队徽上传失败:', err)
+    row.error = '队徽上传失败'
+    ElMessage.error('队徽上传失败: ' + (err.message || '未知错误'))
+  } finally {
+    row.uploadingLogo = false
+  }
+}
+
 function openTeamPlayers(team) {
   const teamId = team.teamId || team._id
   if (!teamId) {
@@ -1398,8 +1890,8 @@ function openTeamPlayers(team) {
     return
   }
   router.push({
-    path: `/teams/${teamId}`,
-    query: { fromTournament: tournamentId, divisionId: activeDivisionId.value }
+    path: `/tournaments/${tournamentId}/teams/${teamId}`,
+    query: { divisionId: activeDivisionId.value }
   })
 }
 
@@ -1489,7 +1981,7 @@ async function submitCreateTeam() {
       mobile: ownerPhone,
       creatorId: userId,
       source: 'saixiaofeng',
-      claimStatus: isProfessional.value ? 'pending_claim' : 'claimed',
+      claimStatus: 'pending_claim',
       playerCount: 0,
       createTime: now,
       updateTime: now
@@ -1510,7 +2002,7 @@ async function submitCreateTeam() {
     createdTeamId = created._id
     if (!createdTeamId) throw new Error('球队创建成功但未返回球队ID')
 
-    await addRecord('tournament_teams', {
+    const createdRelation = await addRecord('tournament_teams', {
       tournamentId,
       teamId: createdTeamId,
       teamName: teamData.name,
@@ -1520,9 +2012,8 @@ async function submitCreateTeam() {
       joinSource: 'organizer',
       contactName: isProfessional.value ? form.contactName.trim() : '',
       contactPhone: ownerPhone,
-      claimStatus: isProfessional.value ? 'pending_claim' : 'claimed',
-      status: isProfessional.value ? 'invited' : 'approved',
-      approveTime: now,
+      claimStatus: 'pending_confirmation',
+      status: 'invited',
       createTime: now,
       updateTime: now
     })
@@ -1534,17 +2025,16 @@ async function submitCreateTeam() {
     if (qaSnapshot) return true
 
     try {
-      await ElMessageBox.confirm('球队已创建并加入赛事，是否现在添加球员？', '创建成功', {
-        confirmButtonText: '添加球员',
-        cancelButtonText: '稍后添加',
-        type: 'success'
-      })
-      router.push({
-        path: `/teams/${createdTeamId}`,
-        query: { fromTournament: tournamentId, divisionId: activeDivisionId.value }
-      })
-    } catch (choice) {
-      if (choice !== 'cancel' && choice !== 'close') throw choice
+      const prepared = await callFunction('tournamentRegistrationFlow', { action:'createTargetedTeamInvitations', tournamentId, divisionId:activeDivisionId.value, teamIds:[createdTeamId] })
+      if (!prepared?.success || !prepared.data?.invitations?.length) throw new Error(prepared?.message || '专属邀请创建失败')
+      const invitation = prepared.data.invitations[0]
+      const code = await callFunction('tournamentRegistrationFlow', { action:'generateTeamInviteCode', inviteId:invitation.inviteId, width:300, envVersion:'trial' })
+      if (!code?.success) throw new Error(code?.message || '小程序码生成失败')
+      targetedInviteResults.value = [{ teamId:createdTeamId, teamName:teamData.name, tournamentTeamId:createdRelation._id, inviteId:invitation.inviteId, path:code.data?.path || invitation.path || '', urlLink:'', qrCodeUrl:code.data?.qrCodeUrl || '', envVersion:code.data?.envVersion || 'trial', testOnly:true, success:true }]
+      targetedInviteResultVisible.value = true
+      ElMessage.success('球队已预建，请将专属注册邀请发送给负责人')
+    } catch (inviteError) {
+      ElMessage.warning(`球队已预建，但邀请生成失败：${inviteError.message || '请稍后重试'}`)
     }
     return true
   } catch (err) {
@@ -1616,12 +2106,15 @@ async function loadTournament() {
   try {
     if (qaSnapshot) {
       tournament.value = { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions.map(item => ({ ...item, id: item._id, maxTeams: item._id === 'qa-division-u16' ? 36 : 16, maxPlayersPerTeam: 35 })) }
+      divisionRecords.value = qaSnapshot.divisions
       activeDivisionId.value = typeof route.query.divisionId === 'string' ? route.query.divisionId : 'qa-division-u8'
       return
     }
-    tournament.value = await queryById('tournaments', tournamentId)
+    const [currentTournament, divisions] = await Promise.all([queryById('tournaments', tournamentId), queryList('divisions', { where:{ tournamentId }, orderBy:{ createTime:'asc' }, silent:true })])
+    tournament.value = currentTournament
+    divisionRecords.value = divisions || []
     const routeDivisionId = typeof route.query.divisionId === 'string' ? route.query.divisionId : ''
-    const preferred = routeDivisionId || tournament.value.defaultDivisionId || tournament.value.divisions?.[0]?.id || 'default'
+    const preferred = routeDivisionId || tournament.value.defaultDivisionId || divisionOptions.value.find(item => item.id !== 'default')?.id || divisionOptions.value[0].id
     activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
   } catch (err) {
     console.error('加载赛事失败:', err)
@@ -1644,17 +2137,32 @@ async function loadTournamentTeams() {
     // 获取球队详情
     const teamIds = list.map(t => t.teamId).filter(Boolean)
     if (teamIds.length > 0) {
-      const teamsData = await queryList('teams', {
-        where: { _id: { $in: teamIds } }
-      })
+      const teamsData = await queryList('teams', { where: { _id: { $in: teamIds } } })
       
       const teamMap = {}
       teamsData.forEach(t => {
         teamMap[t._id] = t
       })
+      const syntheticTeamIds = teamsData
+        .filter(team => team.synthetic === true || team.syntheticDatasetId)
+        .map(team => String(team._id))
+      const [playersByTeamId, playersByTeamCode] = syntheticTeamIds.length
+        ? await Promise.all([
+            queryList('players', { where: { teamId: { $in: syntheticTeamIds } }, limit: 1000 }),
+            queryList('players', { where: { teamCode: { $in: syntheticTeamIds } }, limit: 1000 })
+          ])
+        : [[], []]
+      const playerIdsByTeam = new Map()
+      ;[...(playersByTeamId || []), ...(playersByTeamCode || [])].forEach(player => {
+        const linkedTeamId = String(player.teamId || player.teamCode || '')
+        if (!linkedTeamId) return
+        if (!playerIdsByTeam.has(linkedTeamId)) playerIdsByTeam.set(linkedTeamId, new Set())
+        playerIdsByTeam.get(linkedTeamId).add(String(player._id || `${player.name || ''}:${player.birthDate || ''}`))
+      })
       
-      tournamentTeams.value = list.map(item => {
+      const mergedRows = list.map(item => {
         const teamData = teamMap[item.teamId] || {}
+        const logoFileId = teamData.logo || teamData.logoUrl || teamData.logoTransparent || item.teamLogo || item.logo || item.logoUrl || ''
         return {
           // 先放球队数据
           ...teamData,
@@ -1670,12 +2178,23 @@ async function loadTournamentTeams() {
           divisionId: item.divisionId || 'default',
           divisionName: item.divisionName || '',
           teamName: item.teamName || teamData.name,
+          logoFileId,
+          logo: /^https?:\/\//i.test(logoFileId) ? logoFileId : '',
+          logoUrl: /^https?:\/\//i.test(logoFileId) ? logoFileId : '',
+          playerCount: playerIdsByTeam.get(String(item.teamId))?.size || Number(teamData.playerCount || item.playerCount || 0),
           status: item.status,
           createTime: item.createTime,
           inviteTime: item.inviteTime,
           approveTime: item.approveTime,
           cancelRequestTime: item.cancelRequestTime
         }
+      })
+      const cloudLogoIds = [...new Set(mergedRows.map(item => item.logoFileId).filter(value => String(value || '').startsWith('cloud://')))]
+      const logoPairs = await Promise.all(cloudLogoIds.map(async fileId => [fileId, await getFileUrl(fileId)]))
+      const logoUrlMap = new Map(logoPairs.filter(pair => /^https?:\/\//i.test(String(pair[1] || ''))))
+      tournamentTeams.value = mergedRows.map(item => {
+        const resolvedLogo = logoUrlMap.get(item.logoFileId) || item.logo || item.logoUrl || ''
+        return { ...item, logo: resolvedLogo, logoUrl: resolvedLogo }
       })
     } else {
       tournamentTeams.value = list
@@ -1716,21 +2235,22 @@ async function sendInvites() {
 
   sendingInvites.value = true
   try {
-    for (const teamId of selectedTeams.value) {
-      const team = allTeams.value.find(t => t._id === teamId)
-      await addRecord('tournament_teams', {
-        tournamentId,
-        teamId,
-        teamName: team.name,
-        divisionId: activeDivisionId.value,
-        divisionName: activeDivision.value.name,
-        status: 'invited', // 邀请状态
-        inviteTime: new Date(),
-        createTime: new Date()
-      })
+    const prepared = await callFunction('tournamentRegistrationFlow', { action:'createTargetedTeamInvitations', tournamentId, divisionId:activeDivisionId.value, teamIds:selectedTeams.value })
+    if (!prepared?.success) throw new Error(prepared?.message || '邀请准备失败')
+    const rows = prepared.data?.invitations || []
+    const results = []
+    for (const row of rows) {
+      try {
+        const code = await callFunction('tournamentRegistrationFlow', { action:'generateTeamInviteCode', inviteId:row.inviteId, width:300, envVersion:'trial' })
+        if (!code?.success) throw new Error(code?.message || '小程序码生成失败')
+        results.push({ teamId:row.teamId, teamName:row.teamName, tournamentTeamId:row.tournamentTeamId, inviteId:row.inviteId, path:code.data?.path || row.path || '', urlLink:'', qrCodeUrl:code.data?.qrCodeUrl || '', envVersion:code.data?.envVersion || 'trial', testOnly:true, success:true })
+      } catch (error) {
+        results.push({ teamId:row.teamId, teamName:row.teamName, tournamentTeamId:row.tournamentTeamId, error:error.message || '邀请生成失败', success:false })
+      }
     }
-
-    ElMessage.success(`已成功邀请 ${selectedTeams.value.length} 支球队`)
+    targetedInviteResults.value = results
+    targetedInviteResultVisible.value = true
+    ElMessage.success(`已生成 ${results.filter(item => item.success).length} 支球队的专属注册邀请`)
     showInviteDialog.value = false
     selectedTeams.value = []
     inviteSearchKeyword.value = ''
@@ -1741,6 +2261,22 @@ async function sendInvites() {
   } finally {
     sendingInvites.value = false
   }
+}
+
+async function copyTargetedInvite(item) {
+  const linkValue = item.urlLink || (qaSnapshot ? item.path : '')
+  if (!linkValue) return ElMessage.warning('正式邀请链接尚未生成')
+  const text = `【${tournament.value.name || '足球赛事'}】邀请 ${item.teamName} 参加 ${activeDivision.value.name}。请打开：${linkValue}`
+  try { await navigator.clipboard.writeText(text); ElMessage.success('球队专属邀请已复制') } catch { ElMessage.info(text) }
+}
+async function copyAllTargetedInvites() {
+  const text = targetedInviteResults.value.map(item => ({ ...item, shareLink:item.urlLink || (qaSnapshot ? item.path : '') })).filter(item => item.shareLink).map(item => `【${item.teamName}】${item.shareLink}`).join('\n')
+  if (!text) return ElMessage.warning('当前没有可复制的邀请')
+  try { await navigator.clipboard.writeText(text); ElMessage.success('全部邀请说明已复制') } catch { ElMessage.info(text) }
+}
+function downloadTargetedInviteCode(item) {
+  if (!item.qrCodeUrl) return
+  const link = document.createElement('a'); link.href = item.qrCodeUrl; link.download = `${item.teamName || '球队'}-${activeDivision.value.name || '组别'}-注册邀请.png`; link.click()
 }
 
 async function ensureInviteQrCode() {
@@ -1782,6 +2318,11 @@ function onDivisionChange() {
   inviteSearchKeyword.value = ''
   router.replace({ query: { ...route.query, divisionId: activeDivisionId.value } })
 }
+function selectDivision(divisionId) {
+  if (!divisionId || divisionId === activeDivisionId.value) return
+  activeDivisionId.value = divisionId
+  onDivisionChange()
+}
 
 function closeQaVisualAction() {
   qaVisualClosed.value = true
@@ -1818,9 +2359,10 @@ async function ensureClaimInvite() {
   }
   if (qaSnapshot) {
     claimInviteId.value = 'qa-claim-invite'
-    claimInvitePathValue.value = ''
+    claimInvitePathValue.value = '/pages/team/prebuilt-invite/prebuilt-invite?inviteId=qa-claim-invite'
     claimInviteCodeUrl.value = ''
-    claimInviteExpiry.value = ''
+    claimInviteExpiry.value = '2026-08-18T23:59:00+08:00'
+    claimLastSharedAtValue.value = '2026-07-28T15:20:00+08:00'
     return
   }
   const requestKey = `${tournamentId}:${activeDivisionId.value}:${relationId}`
@@ -1831,12 +2373,14 @@ async function ensureClaimInvite() {
     const result = await callFunction('organizerClaimInvite', {
       tournamentId,
       divisionId: activeDivisionId.value,
-      tournamentTeamId: relationId
+      tournamentTeamId: relationId,
+      envVersion:'trial'
     })
     if (claimInviteRequestKey.value !== requestKey) return
     if (!result || !result.success || !result.inviteId) throw new Error(result?.message || '认领邀请生成失败')
     claimInviteId.value = String(result.inviteId)
     claimInvitePathValue.value = String(result.path || '')
+    claimInviteUrlLink.value = String(result.urlLink || '')
     claimInviteCodeUrl.value = String(result.qrCodeUrl || '')
     claimInviteExpiry.value = result.inviteExpireAt || ''
     claimLastSharedAtValue.value = String(result.lastSharedAt || new Date().toISOString())
@@ -1844,6 +2388,7 @@ async function ensureClaimInvite() {
     if (claimInviteRequestKey.value !== requestKey) return
     claimInviteId.value = ''
     claimInvitePathValue.value = ''
+    claimInviteUrlLink.value = ''
     claimInviteCodeUrl.value = ''
     claimInviteExpiry.value = ''
     claimLastSharedAtValue.value = ''
@@ -1903,6 +2448,7 @@ function closeClaimInvite() {
   claimInviteOpen.value = false
   claimInviteId.value = ''
   claimInvitePathValue.value = ''
+  claimInviteUrlLink.value = ''
   claimInviteCodeUrl.value = ''
   claimInviteExpiry.value = ''
   claimLastSharedAtValue.value = ''
@@ -1916,10 +2462,21 @@ async function openInviteDialog() {
     loadAllTeams()
   ])
 
+  if (divisionIsFull(activeDivision.value)) {
+    const firstAvailableDivision = inviteDivisionOptions.value.find(division => !divisionIsFull(division))
+    if (firstAvailableDivision) selectDivision(firstAvailableDivision.id)
+  }
+
+  if (!inviteDivisionOptions.value.some(division => !divisionIsFull(division))) {
+    ElMessage.warning('全部竞赛组别均已满，无法继续邀请球队')
+    return
+  }
+
   // 检查是否有可邀请的球队
   if (availableTeamsToInvite.value.length === 0) {
-    if (allTeams.value.length === 0) {
-      ElMessage.warning('系统中暂无球队，请先创建球队')
+    const realTeams = allTeams.value.filter(team => team && team._id && team.synthetic !== true && !team.syntheticDatasetId)
+    if (realTeams.length === 0) {
+      ElMessage.warning('当前机构暂无可邀请的真实球队；虚拟球队请使用“添加虚拟球队”')
     } else {
       ElMessage.info('所有球队已加入该赛事或已被邀请')
     }
@@ -1927,6 +2484,32 @@ async function openInviteDialog() {
   }
 
   showInviteDialog.value = true
+}
+
+function openTargetedRegistrationLinkDialog() {
+  targetedRegistrationResult.value = null
+  targetedRegistrationLinkVisible.value = true
+  void createTargetedRegistrationLink()
+}
+async function createTargetedRegistrationLink() {
+  creatingTargetedRegistrationLink.value = true
+  try {
+    const result = await callFunction('tournamentRegistrationFlow', { action:'createTargetedRegistrationLink', tournamentId, width:300, envVersion:'trial' })
+    if (!result?.success) throw new Error(result?.message || '球队邀约生成失败')
+    targetedRegistrationResult.value = result.data || null
+    ElMessage.success(result.message || '球队邀约二维码和链接已生成')
+  } catch (error) { ElMessage.error(error.message || '球队邀约生成失败') } finally { creatingTargetedRegistrationLink.value = false }
+}
+async function copyTargetedRegistrationLink() {
+  const item = targetedRegistrationResult.value
+  if (!item?.urlLink) return ElMessage.warning('体验版仅提供二维码，请使用已加入体验成员的微信扫码')
+  const text = `【${tournament.value.name || '足球赛事'}】邀请贵队报名参赛，请打开链接后选择竞赛组别：${item.urlLink}`
+  try { await navigator.clipboard.writeText(text); ElMessage.success('小程序邀约已复制') } catch { ElMessage.info(text) }
+}
+function downloadTargetedRegistrationCode() {
+  const item = targetedRegistrationResult.value
+  if (!item?.qrCodeUrl) return
+  const link = document.createElement('a'); link.href = item.qrCodeUrl; link.download = `${tournament.value.name || '赛事'}-球队邀约二维码.png`; link.click()
 }
 
 // 弹窗关闭回调
@@ -1938,6 +2521,7 @@ function onInviteDialogClose() {
 // 打开报名二维码弹窗
 async function openQrDialog() {
   showQrDialog.value = true
+  registrationPosterUrl.value = ''
   await generateSignupQRCode()
 }
 
@@ -1946,16 +2530,20 @@ async function generateSignupQRCode() {
   qrLoading.value = true
   qrCodeImage.value = ''
   qrError.value = ''
+  qrErrorCode.value = ''
+  qrEnvVersion.value = ''
+  registrationUrlLink.value = ''
   try {
-    const res = await callFunction('generateMiniProgramCode', {
-      action: 'signup',
-      tournamentId: tournamentId,
-      width: 300
-    })
+    const res = await callFunction('tournamentRegistrationFlow', { action:'ensureInvite', tournamentId, divisionId:activeDivisionId.value, width:300, envVersion:'trial' })
     if (res.success) {
       qrCodeImage.value = res.data?.qrCodeUrl || res.data?.imageUrl || ''
+      qrEnvVersion.value = res.data?.envVersion || 'trial'
+      registrationUrlLink.value = res.data?.urlLink || ''
+      registrationGuideSteps.value = Array.isArray(res.data?.guideSteps) && res.data.guideSteps.length ? res.data.guideSteps : registrationGuideSteps.value
       if (!qrCodeImage.value) qrError.value = '云端已生成二维码，但未返回可显示的图片数据'
+      else await generateRegistrationPoster()
     } else {
+      qrErrorCode.value = res.code || ''
       qrError.value = res.message || '生成二维码失败'
       console.error('[QR] 云函数返回失败:', res)
     }
@@ -1964,6 +2552,80 @@ async function generateSignupQRCode() {
     qrError.value = err.message || String(err)
   } finally {
     qrLoading.value = false
+  }
+}
+
+function goToDivisionRegistrationSettings() {
+  showQrDialog.value = false
+  router.push({ path:`/tournaments/${tournamentId}/competition`, query:{ highlightDivisionId:activeDivisionId.value } })
+}
+
+function posterDate(value) {
+  if (!value) return '时间待定'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? String(value) : `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
+}
+function canvasImage(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('二维码图片加载失败'))
+    image.src = source
+  })
+}
+function roundedRect(context, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2)
+  context.beginPath(); context.moveTo(x + r, y); context.arcTo(x + width, y, x + width, y + height, r); context.arcTo(x + width, y + height, x, y + height, r); context.arcTo(x, y + height, x, y, r); context.arcTo(x, y, x + width, y, r); context.closePath()
+}
+function drawCenteredFitText(context, value, y, maximumWidth, initialSize, minimumSize = 28) {
+  let size = initialSize
+  do { context.font = `800 ${size}px "Microsoft YaHei", sans-serif`; if (context.measureText(value).width <= maximumWidth) break; size -= 2 } while (size > minimumSize)
+  context.fillText(value, 450, y)
+}
+async function generateRegistrationPoster() {
+  if (!qrCodeImage.value) return
+  posterGenerating.value = true
+  try {
+    const canvas = document.createElement('canvas'); canvas.width = 900; canvas.height = 1200
+    const context = canvas.getContext('2d')
+    const scheme = ({ emerald:['#013d29','#087b45','#03291d','#f2c85b'], redgold:['#5c0710','#c13a19','#6b0711','#ffd06a'], blue:['#082b54','#087d92','#071d42','#5ce1e6'] })[posterTemplate.value] || ['#013d29','#087b45','#03291d','#f2c85b']
+    const gradient = context.createLinearGradient(0, 0, 900, 1200); gradient.addColorStop(0, scheme[0]); gradient.addColorStop(.55, scheme[1]); gradient.addColorStop(1, scheme[2]); context.fillStyle = gradient; context.fillRect(0, 0, 900, 1200)
+    context.save(); context.globalAlpha = .12; context.strokeStyle = '#c9f5dc'; context.lineWidth = 5; context.strokeRect(70, 250, 760, 520); context.beginPath(); context.moveTo(450, 250); context.lineTo(450, 770); context.stroke(); context.beginPath(); context.arc(450, 510, 105, 0, Math.PI * 2); context.stroke(); context.strokeRect(70, 365, 145, 290); context.strokeRect(685, 365, 145, 290); context.restore()
+    context.textAlign = 'center'; context.fillStyle = '#a8edc6'; context.font = '600 25px "Microsoft YaHei"'; context.fillText('赛小蜂足球 · 官方赛事报名', 450, 76)
+    context.fillStyle = '#fff'; drawCenteredFitText(context, String(tournament.value.name || '足球赛事'), 166, 760, 62)
+    context.fillStyle = '#d9f8e6'; context.font = '600 28px "Microsoft YaHei"'; context.fillText('加入球队 · 一起登场', 450, 218)
+    roundedRect(context, 260, 278, 380, 60, 30); context.fillStyle = scheme[3]; context.fill(); context.fillStyle = '#183d2b'; context.font = '800 29px "Microsoft YaHei"'; context.fillText(activeDivision.value.name || '竞赛组别', 450, 318)
+    roundedRect(context, 100, 385, 700, 290, 24); context.fillStyle = 'rgba(0,24,16,.55)'; context.fill(); context.textAlign = 'left'; context.fillStyle = '#fff'; context.font = '600 29px "Microsoft YaHei"'
+    const start = posterDate(tournament.value.startDate), end = posterDate(tournament.value.endDate)
+    const rows = [`比赛时间　${start}${end !== '时间待定' && end !== start ? ` — ${end}` : ''}`, `比赛地点　${tournament.value.location || tournament.value.city || tournament.value.region || '待公布'}`, `报名截止　${posterDate(tournament.value.registrationDeadline || tournament.value.signupDeadline)}`]
+    rows.forEach((row, index) => context.fillText(row, 150, 455 + index * 70))
+    const qr = await canvasImage(qrCodeImage.value)
+    roundedRect(context, 120, 735, 660, 370, 30); context.fillStyle = '#fff'; context.fill(); context.drawImage(qr, 315, 765, 270, 270)
+    context.textAlign = 'center'; context.fillStyle = '#123c29'; context.font = '800 31px "Microsoft YaHei"'; context.fillText('微信扫码进入小程序报名', 450, 1070)
+    context.fillStyle = '#c8eed8'; context.font = '500 20px "Microsoft YaHei"'; context.fillText(tournament.value.organizerName || '赛事组委会', 450, 1155)
+    registrationPosterUrl.value = canvas.toDataURL('image/png', 1)
+  } catch (error) {
+    console.error('生成报名海报失败:', error)
+    ElMessage.warning('二维码已生成，海报暂时生成失败，可先下载二维码')
+  } finally { posterGenerating.value = false }
+}
+
+function downloadRegistrationPoster() {
+  if (!registrationPosterUrl.value) return
+  const link = document.createElement('a'); link.href = registrationPosterUrl.value; link.download = `${tournament.value.name || '足球赛事'}-${activeDivision.value.name || '报名'}-报名海报.png`; link.click()
+}
+
+async function probeServiceAccountChannel() {
+  serviceProbeLoading.value = true
+  try {
+    const result = await callFunction('tournamentRegistrationFlow', { action: 'probeServiceAccount' })
+    if (!result?.success) throw new Error(result?.message || '服务号通道检测失败')
+    ElMessage.success('服务号接口凭据验证通过，可以生成带参数关注二维码')
+  } catch (error) {
+    ElMessageBox.alert(error.message || '服务号通道检测失败', '服务号通道检测结果', { type: 'warning' })
+  } finally {
+    serviceProbeLoading.value = false
   }
 }
 
@@ -1976,14 +2638,26 @@ function downloadQRCode() {
   link.click()
 }
 
-// 复制小程序报名路径
-async function copySignupLink() {
-  const path = `pages/tournament/signup/signup?id=${tournamentId}`
+async function copyRegistrationUrlLink() {
+  if (!registrationUrlLink.value) return ElMessage.warning('正式报名链接尚未生成')
+  const copy = `【${tournament.value.name || '足球赛事'}】${activeDivision.value.name || ''}报名链接：${registrationUrlLink.value}`
   try {
-    await navigator.clipboard.writeText(path)
-    ElMessage.success('小程序路径已复制')
+    await navigator.clipboard.writeText(copy)
+    ElMessage.success('正式报名链接已复制')
   } catch {
-    ElMessage.info('复制失败，路径: ' + path)
+    ElMessage.info(copy)
+  }
+}
+
+// 复制赛事报名文案
+async function copySignupLink() {
+  const start = posterDate(tournament.value.startDate), end = posterDate(tournament.value.endDate)
+  const copy = `【${tournament.value.name || '足球赛事'}】${activeDivision.value.name || ''}报名开启\n比赛时间：${start}${end !== '时间待定' && end !== start ? `—${end}` : ''}\n比赛地点：${tournament.value.location || tournament.value.city || tournament.value.region || '待公布'}\n请识别报名海报中的小程序码，选择球队并确认参赛。`
+  try {
+    await navigator.clipboard.writeText(copy)
+    ElMessage.success('报名文案已复制')
+  } catch {
+    ElMessage.info('报名文案复制失败，请手动填写')
   }
 }
 
@@ -2017,15 +2691,14 @@ async function approveTeam(team) {
       ElMessage.success('已通过')
       return
     }
-    await updateRecord('tournament_teams', getRecordId(team), {
-      status: 'approved',
-      approveTime: new Date()
-    })
-    ElMessage.success('已通过')
+    const result = await callFunction('tournamentRegistrationFlow', { action: 'reviewRegistration', registrationId: getRecordId(team), decision: 'approved' })
+    if (!result?.success) throw new Error(result?.message || '审核失败')
+    ElMessage.success(`报名已通过。${notificationChannelSummary(result.data?.channels)}`)
+    if (result.data?.notificationWarning) ElMessage.warning(result.data.warningText || '审核已生效，部分通知状态待系统重试')
     await loadTournamentTeams()
   } catch (err) {
     console.error('操作失败:', err)
-    ElMessage.error('操作失败')
+    ElMessage.error(err?.message || '操作失败')
   }
 }
 
@@ -2035,7 +2708,7 @@ async function rejectTeam(team) {
     if (qaSnapshot) {
       window.__sxfQaApplicationDecision = { phase: 'confirmation-opened', action: 'reject', recordId: getRecordId(team), tournamentId, divisionId: activeDivisionId.value, preservedTeamProfile: true, deletedUser: false, cloudWrite: false }
     }
-    await ElMessageBox.confirm(`确定拒绝「${team.name || team.teamName}」的参赛申请吗？`, '确认拒绝')
+    const prompt = await ElMessageBox.prompt(`请填写「${team.name || team.teamName}」需要补充的资料或驳回原因。`, '驳回参赛申请', { confirmButtonText: '确认驳回', cancelButtonText: '取消', inputType: 'textarea', inputValidator: value => String(value || '').trim() ? true : '驳回原因不能为空' })
     if (qaSnapshot) {
       const recordId = getRecordId(team)
       window.__sxfQaApplicationDecision = { phase: 'confirmed', action: 'reject', recordId, tournamentId, divisionId: activeDivisionId.value, preservedTeamProfile: true, deletedUser: false, cloudWrite: false }
@@ -2043,16 +2716,15 @@ async function rejectTeam(team) {
       ElMessage.success('已拒绝')
       return
     }
-    await updateRecord('tournament_teams', getRecordId(team), {
-      status: 'rejected',
-      rejectTime: new Date()
-    })
-    ElMessage.success('已拒绝')
+    const result = await callFunction('tournamentRegistrationFlow', { action: 'reviewRegistration', registrationId: getRecordId(team), decision: 'rejected', reason: String(prompt.value || '').trim() })
+    if (!result?.success) throw new Error(result?.message || '驳回失败')
+    ElMessage.success(`报名已驳回。${notificationChannelSummary(result.data?.channels)}`)
+    if (result.data?.notificationWarning) ElMessage.warning(result.data.warningText || '驳回已生效，部分通知状态待系统重试')
     await loadTournamentTeams()
   } catch (err) {
     if (err !== 'cancel') {
       console.error('操作失败:', err)
-      ElMessage.error('操作失败')
+      ElMessage.error(err?.message || '操作失败')
     }
   }
 }
@@ -2149,9 +2821,13 @@ async function rejectCancel(team) {
 onMounted(async () => {
   await loadTournament()
   await Promise.all([loadTournamentTeams(), loadAllTeams()])
+  if (route.query.divisionId !== activeDivisionId.value) await router.replace({ query:{ ...route.query, divisionId:activeDivisionId.value } })
 
-  const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : 'all'
-  activeTab.value = teamTabs.has(requestedTab) ? requestedTab : 'all'
+  const rawRequestedTab = typeof route.query.tab === 'string' ? route.query.tab : 'all'
+  const requestedTab = isRegistrationWorkspace.value && rawRequestedTab === 'pending' ? 'all' : rawRequestedTab
+  const workspaceTabs = isRegistrationWorkspace.value ? new Set(['all', 'materials']) : new Set(['all', 'roster', 'abnormal', 'cancel_requested'])
+  activeTab.value = teamTabs.has(requestedTab) && workspaceTabs.has(requestedTab) ? requestedTab : 'all'
+  if (rawRequestedTab !== requestedTab) await router.replace({ query:{ ...route.query, tab:requestedTab, divisionId:activeDivisionId.value } })
 
   const requestedAction = typeof route.query.action === 'string' ? route.query.action : ''
   if (requestedAction === 'invite') {
@@ -2335,6 +3011,17 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
+.invite-division-picker { margin-bottom:16px;padding:14px;border:1px solid #e1e9e4;border-radius:10px;background:#f8fbf9; }
+.invite-division-heading { display:flex;align-items:center;justify-content:space-between;margin-bottom:12px; }
+.invite-division-heading strong { color:#26372d;font-size:15px; }
+.invite-division-heading span { color:#8b958f;font-size:12px; }
+.invite-division-tags { display:flex;flex-wrap:wrap;gap:10px; }
+.invite-division-tags button { display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:0 14px;border:1px solid #b8d9c4;border-radius:18px;background:#f1faf4;color:#22633c;cursor:pointer; }
+.invite-division-tags button strong { font-size:14px; }
+.invite-division-tags button small { font-size:11px; }
+.invite-division-tags button.active { border-color:#0b8746;background:#0b8746;color:#fff; }
+.invite-division-tags button.disabled { border-color:#e0e4e1;background:#ecefed;color:#a1a8a3;cursor:not-allowed; }
+
 /* 弹窗顶部信息栏 */
 .invite-header {
   display: flex;
@@ -2463,6 +3150,44 @@ onMounted(async () => {
   border: 1px solid #d9ecff;
   border-radius: 8px;
   background: #f4f9ff;
+}
+
+.bulk-team-dialog { display: grid; gap: 16px; }
+.bulk-field-picker { padding: 16px; border: 1px solid #dce8df; border-radius: 10px; background: #f8fbf8; }
+.bulk-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
+.bulk-field-heading > div:first-child { display: grid; gap: 4px; }
+.bulk-field-heading strong { color: #183c26; font-size: 15px; }
+.bulk-field-heading span { color: #66756b; font-size: 12px; }
+.bulk-row-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.bulk-field-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.bulk-field-options :deep(.el-checkbox-button__inner) { border: 1px solid #d7e4da !important; border-radius: 7px !important; box-shadow: none !important; }
+.bulk-field-options :deep(.el-checkbox-button.is-checked .el-checkbox-button__inner) { border-color: #2f9b54 !important; background: #e8f6ec; color: #187239; }
+.bulk-field-options small { margin-left: 4px; color: #df7d21; }
+.bulk-table-wrap { max-height: 430px; overflow: auto; border: 1px solid #dce5de; border-radius: 10px; }
+.bulk-team-table { width: 100%; min-width: 920px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.bulk-team-table th { position: sticky; top: 0; z-index: 2; height: 44px; padding: 0 8px; border-bottom: 1px solid #dce5de; background: #f2f6f3; color: #405148; font-size: 12px; text-align: left; white-space: nowrap; }
+.bulk-team-table th b { color: #e04b4b; }
+.bulk-team-table td { min-width: 132px; padding: 8px; border-bottom: 1px solid #edf1ee; background: #fff; vertical-align: top; }
+.bulk-team-table tr:last-child td { border-bottom: 0; }
+.bulk-team-table tr.has-error td { background: #fff8f7; }
+.bulk-team-table :deep(.el-input), .bulk-team-table :deep(.el-select) { width: 100%; }
+.bulk-index-col { width: 52px; text-align: center !important; }
+.bulk-name-col { width: 190px; }
+.bulk-address-col { width: 210px; }
+.bulk-operation-col { width: 96px; }
+.bulk-row-number { width: 52px; min-width: 52px !important; color: #789082; text-align: center; line-height: 32px; }
+.bulk-row-operation { width: 96px; min-width: 96px !important; }
+.bulk-row-operation small { display: block; margin-top: 2px; color: #d84c4c; font-size: 11px; line-height: 1.35; }
+.bulk-logo-cell { width: 100px; min-width: 100px !important; }
+.bulk-logo-button { width: 76px; height: 34px; overflow: hidden; border: 1px dashed #9fc3a9; border-radius: 6px; background: #f5fbf7; color: #228146; cursor: pointer; }
+.bulk-logo-button:disabled { cursor: wait; opacity: .65; }
+.bulk-logo-button img { width: 100%; height: 100%; object-fit: contain; }
+.bulk-table-footnote { display: flex; justify-content: space-between; gap: 16px; color: #6e7d73; font-size: 12px; }
+.bulk-table-footnote span:first-child { color: #1d7c3e; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .bulk-field-heading, .bulk-table-footnote { align-items: flex-start; flex-direction: column; }
+  .bulk-row-actions { flex-wrap: wrap; }
 }
 
 .create-mode-title {
@@ -2595,12 +3320,13 @@ onMounted(async () => {
 
 /* 报名二维码弹窗 */
 .qr-dialog {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
   padding: 8px 0;
 }
+.registration-poster-panel { display:grid; min-height:480px; place-items:center; border:1px solid #dce6df; border-radius:10px; overflow:hidden; background:#eef4f0; }.registration-poster-preview { display:block; width:360px; max-width:100%; height:auto; aspect-ratio:3/4; object-fit:cover; }.registration-qr-panel { display:flex; min-width:0; flex-direction:column; align-items:center; gap:12px; }
 
 .qr-image-wrapper {
   width: 100%;
@@ -2626,9 +3352,12 @@ onMounted(async () => {
 
 .qr-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
 }
+.qr-path { width:100%; padding:10px 12px; border-radius:7px; color:#637067; background:#f6f8f7; font-size:12px; line-height:1.6; }
+@media(max-width:760px){.qr-dialog{grid-template-columns:1fr}.registration-poster-panel{min-height:0}.registration-poster-preview{width:min(360px,100%)}}
 
 .qr-error {
   display: flex;
@@ -2749,8 +3478,8 @@ onMounted(async () => {
   border-radius: 10px;
   background: #fff;
 }
-.division-picker { gap: 12px; color: #5c685f; font-size: 13px; }
-.division-picker > span { font-weight: 650; color: #253329; }
+.division-tab-section { display:flex; min-width:0; flex:1; align-items:center; gap:16px; }.division-tab-title { flex:0 0 auto; color:#253329; font-size:13px; font-weight:700; }.division-tabs { display:flex; min-width:0; flex-wrap:wrap; gap:8px; }.division-tab-button { position:relative; display:flex; min-height:48px; align-items:center; gap:8px; padding:7px 13px; border:1px solid #d8e3db; border-radius:8px; color:#526158; background:#f9fbfa; cursor:pointer; }.division-tab-button:hover { border-color:#79bd91; background:#f5fbf7; }.division-tab-button.active { border-color:#11894d; color:#087c43; background:#edf8f1; box-shadow:0 0 0 1px #11894d inset; }.division-tab-button strong { font-size:14px; }.division-tab-button small { color:#7a867f; font-size:11px; }.division-tab-button em { padding:2px 5px; border-radius:4px; font-size:10px; font-style:normal; }.division-tab-button em.simple { color:#168248; background:#e9f7ed; }.division-tab-button em.professional { color:#a66e00; background:#fff2cf; }
+.division-assignment-summary { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; padding:14px 16px; border:1px solid #dce8df; border-radius:8px; background:#f7fbf8; }.division-assignment-summary strong { color:#203128; font-size:16px; }.division-assignment-summary span { color:#9a6a13; font-size:13px; }.division-assignment-summary + .el-form :deep(.el-select) { width:100%; }
 .division-rule-summary { gap: 14px; color: #68756b; font-size: 13px; }
 .division-rule-summary i { width: 3px; height: 3px; border-radius: 50%; background: #a9b2ab; }
 
@@ -2760,12 +3489,14 @@ onMounted(async () => {
 .team-work-tabs :deep(.el-tabs__item) { height: 52px; padding: 0 24px; color: #667168; font-weight: 550; }
 .team-work-tabs :deep(.el-tabs__item.is-active) { color: #12713b; }
 .team-work-tabs :deep(.el-tabs__active-bar) { height: 3px; border-radius: 3px 3px 0 0; background: #158142; }
+.registration-materials { margin-top:20px; padding:24px; border:1px solid #dfe7e1; border-radius:10px; background:#fff; }.registration-materials>header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }.registration-materials h2 { margin:0; color:#203128; font-size:21px; }.registration-materials header p { margin:7px 0 0; color:#6d7971; }.poster-template-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:22px 0; }.poster-template-grid button { display:grid; grid-template-columns:78px 1fr; grid-template-rows:auto auto; gap:5px 14px; align-items:center; min-height:112px; padding:13px; border:1px solid #dce5df; border-radius:9px; color:#27372d; text-align:left; background:#fff; cursor:pointer; }.poster-template-grid button.active { border-color:#11894d; background:#f3faf5; box-shadow:0 0 0 1px #11894d inset; }.poster-template-preview { grid-row:1/3; width:72px; height:88px; border-radius:6px; background:linear-gradient(155deg,#013d29,#16a05a 60%,#03291d); box-shadow:inset 0 0 0 3px rgba(255,255,255,.18); }.poster-template-preview.redgold { background:linear-gradient(155deg,#5c0710,#d54b1f 60%,#6b0711); }.poster-template-preview.blue { background:linear-gradient(155deg,#082b54,#0795a4 60%,#071d42); }.poster-template-grid strong { align-self:end; font-size:15px; }.poster-template-grid small { align-self:start; color:#78857c; font-size:12px; line-height:1.5; }
 
 .team-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 22px 0 16px; }
 .team-summary-grid article { position: relative; min-height: 94px; padding: 19px 22px; overflow: hidden; border: 1px solid #e0e7e1; border-radius: 10px; background: #fff; }
 .team-summary-grid article::after { position: absolute; right: -12px; bottom: -30px; width: 84px; height: 84px; border-radius: 50%; background: #eff7f1; content: ''; }
 .team-summary-grid span { display: block; margin-bottom: 11px; color: #77817a; font-size: 13px; }
 .team-summary-grid strong { color: #17251b; font-size: 28px; line-height: 1; }
+.team-summary-grid strong.division-summary-value { position: relative; z-index: 1; font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
 .team-summary-grid strong.danger { color: #c33b32; }
 .team-summary-grid small { margin-left: 6px; color: #7e8981; font-size: 12px; }
 .professional-summary-icon{position:relative;z-index:1;display:grid!important;place-items:center;width:58px;height:58px;margin:0 0 12px!important;border-radius:50%;font-size:30px}.professional-summary-icon.icon-emerald{background:#e5f7e9;color:#07813d}.professional-summary-icon.icon-blue{background:#e9f3ff;color:#2478ea}.professional-summary-icon.icon-orange{background:#fff0dc;color:#f08a0a}.professional-summary-icon.icon-teal{background:#e2f7f5;color:#129c96}.team-summary-grid:has(.professional-summary-icon) article{display:grid;grid-template-columns:72px 1fr;grid-template-rows:auto auto;align-items:center;min-height:110px;padding:16px 20px}.team-summary-grid:has(.professional-summary-icon) .professional-summary-icon{grid-row:1 / span 2}.team-summary-grid:has(.professional-summary-icon) article>span:not(.professional-summary-icon){grid-column:2;margin:0 0 7px;color:#435047;font-size:14px}.team-summary-grid:has(.professional-summary-icon) article strong{grid-column:2;font-size:31px}.team-summary-grid:has(.professional-summary-icon) article small{grid-column:2;margin:-25px 0 0 47px}
@@ -2782,7 +3513,25 @@ onMounted(async () => {
 .summary-symbol-alert { background: #fff0ed; }.summary-symbol-alert::before { top: 11px; left: 16px; width: 0; height: 0; border-right: 9px solid transparent; border-bottom: 26px solid #ef554b; border-left: 9px solid transparent; }.summary-symbol-alert::after { top: 20px; left: 23px; width: 2px; height: 8px; border-radius: 1px; background: #fff; box-shadow: 0 11px 0 -0.3px #fff; }
 
 .teams-mode-notice { margin-bottom: 16px; border-radius: 8px; }
-.professional-team-filters{display:grid;grid-template-columns:1.12fr 1.38fr .72fr .8fr auto auto;gap:12px;align-items:center;margin:22px 0 18px}.professional-team-filters .el-input,.professional-team-filters .el-select{width:100%}.professional-team-filters .el-button{height:40px;margin:0}
+.registration-review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border: 1px solid #dce9df;
+  border-radius: 9px;
+  background: #fff;
+}
+.registration-review-actions > div:first-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.registration-review-actions strong { color: #183b29; font-size: 14px; }
+.registration-review-actions span { color: #758178; font-size: 12px; }
+.registration-review-actions .el-button { flex: 0 0 auto; margin: 0; }
+.registration-review-selection { display: flex; flex: 0 0 auto; align-items: center; gap: 16px; }
+.registration-review-selection > span { white-space: nowrap; }
+.team-identity.approval-selectable > .el-checkbox { flex: 0 0 auto; margin-right: 0; }
+.professional-team-filters{display:grid;grid-template-columns:1.12fr 1.2fr .68fr .78fr;gap:10px;align-items:center;margin:22px 0 18px}.professional-team-filters .el-input,.professional-team-filters .el-select{width:100%}.professional-team-filters .el-button{height:40px;margin:0}
 .simple-application-filters { display: grid; grid-template-columns: 1.45fr .9fr .9fr 1.05fr auto; gap: 16px; align-items: center; margin: 20px 0 14px; }
 .simple-application-filters .el-input,.simple-application-filters .el-select,.simple-application-filters .el-date-editor { width: 100%; }
 .professional-application-summary { grid-template-columns: repeat(4, 1fr); }
@@ -2804,15 +3553,13 @@ onMounted(async () => {
 .teams-table-row.professional-table-row{grid-template-columns:minmax(220px,1.62fr) minmax(130px,.9fr) minmax(112px,.78fr) minmax(116px,.86fr) 88px minmax(134px,.92fr) 65px minmax(168px,1.16fr);min-height:71px;column-gap:10px}.professional-team-panel .table-toolbar{padding:0;border-bottom:0}.professional-team-panel .table-toolbar>div{display:none}.professional-team-panel .table-toolbar .el-input{display:none}.professional-team-panel .teams-table-head{min-height:48px;background:#fafbfa}.professional-team-panel .team-crest{width:40px;height:40px}.professional-team-panel .team-row-actions{gap:8px}.professional-team-panel .team-row-actions .el-button{margin:0;padding:0;font-size:12px}
 .teams-table-head { min-height: 48px; border-top: 0; background: #f7f9f7; color: #647067; font-size: 12px; font-weight: 650; }
 .professional-team-overview .teams-page-content{position:relative;padding-top:28px}
-.professional-team-overview .teams-page-heading{align-items:center;min-height:54px;margin-bottom:0;padding-right:520px}
+.professional-team-overview .teams-page-heading{align-items:center;min-height:54px;margin-bottom:12px;padding-right:0}
 .professional-team-overview .teams-page-heading .heading-eyebrow,
 .professional-team-overview .teams-page-heading p,
 .professional-team-overview .teams-page-heading .heading-actions{display:none}
 .professional-team-overview .teams-page-heading h1{font-size:30px}
-.professional-team-overview .division-toolbar{position:absolute;top:24px;right:36px;width:500px;padding:0;border:0;background:transparent}
-.professional-team-overview .division-rule-summary{display:none}
-.professional-team-overview .division-picker{margin-left:auto}
-.professional-team-overview .team-work-tabs{margin-top:4px}
+.professional-team-overview .division-toolbar{position:static;width:100%;padding:12px 16px;border:1px solid #dfe7e1;background:#fff}
+.professional-team-overview .team-work-tabs{margin-top:10px}
 .professional-team-overview .team-summary-grid{margin:20px 0 16px}
 .professional-team-overview .professional-team-filters{margin:16px 0 14px}
 .professional-team-overview .professional-team-panel .teams-table-row{min-height:40px}
@@ -2906,6 +3653,7 @@ onMounted(async () => {
   font-size: 14px;
 }
 .simple-team-overview .team-summary-grid article strong { grid-column: 2; font-size: 29px; }
+.simple-team-overview .team-summary-grid article strong.division-summary-value { font-size: 18px; line-height: 1.3; }
 .simple-team-overview .team-summary-grid article small { grid-column: 2; margin: -24px 0 0 47px; }
 .simple-summary-icon {
   position: relative;
@@ -2926,13 +3674,16 @@ onMounted(async () => {
 .simple-team-overview .teams-mode-notice { margin-bottom: 12px; }
 .simple-team-filters {
   display: grid;
-  grid-template-columns: minmax(210px, 1.25fr) minmax(220px, 1fr) 150px auto auto;
+  grid-template-columns: minmax(190px, 1.2fr) minmax(200px, 1fr) 140px;
   gap: 11px;
   align-items: center;
   margin: 0 0 13px;
 }
 .simple-team-filters .el-input,.simple-team-filters .el-select { width: 100%; }
 .simple-team-filters .el-button { height: 36px; margin: 0; }
+.synthetic-team-dialog-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.synthetic-team-dialog-heading>div{display:flex;flex-direction:column;gap:5px}.synthetic-team-dialog-heading strong{color:#173b29;font-size:18px}.synthetic-team-dialog-heading span{color:#718078;font-size:13px}.synthetic-team-grid{display:grid;max-height:480px;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow:auto}.synthetic-team-option{display:grid;grid-template-columns:auto 48px 1fr;align-items:center;gap:12px;padding:12px;border:1px solid #dfe8e2;border-radius:10px;background:#fff;cursor:pointer}.synthetic-team-option:hover{border-color:#45a66d;background:#f7fcf8}.synthetic-team-option.disabled{opacity:.58;cursor:not-allowed;background:#f5f7f5}.synthetic-team-option img{width:48px;height:48px;object-fit:contain}.synthetic-team-option>span{display:flex;min-width:0;flex-direction:column;gap:4px}.synthetic-team-option strong{overflow:hidden;color:#23362b;text-overflow:ellipsis;white-space:nowrap}.synthetic-team-option small{color:#7b8880}
+.targeted-invite-results{display:grid;max-height:520px;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;overflow:auto}.targeted-invite-results article{display:grid;grid-template-columns:94px 1fr;gap:14px;padding:14px;border:1px solid #dfe8e2;border-radius:12px;background:#fafcfb}.targeted-invite-results article>img,.targeted-code-placeholder{width:94px;height:94px;border-radius:8px;object-fit:contain;background:#fff}.targeted-code-placeholder{display:grid;place-items:center;color:#9aa49d;font-size:12px}.targeted-invite-results article>div:nth-child(2){display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:5px}.targeted-invite-results article strong{color:#193a29}.targeted-invite-results article span{color:#758078;font-size:12px}.targeted-invite-results article input{width:100%;box-sizing:border-box;padding:7px;border:1px solid #d8e1db;border-radius:6px;color:#66746b;background:#fff}.targeted-invite-results article footer{grid-column:1 / -1;display:flex;justify-content:flex-end;border-top:1px solid #edf1ee;padding-top:8px}
+.targeted-link-dialog{display:flex;flex-direction:column;gap:18px}.targeted-contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.targeted-link-result{display:grid;grid-template-columns:180px 1fr;gap:20px;padding:18px;border:1px solid #cfe4d5;border-radius:12px;background:#f7fcf8}.targeted-link-result>img{width:180px;height:180px;border-radius:10px;object-fit:contain;background:#fff}.targeted-link-result>div{display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:9px}.targeted-link-result strong{color:#133c27;font-size:19px}.targeted-link-result span{color:#6d7a72}.targeted-link-result input{width:100%;box-sizing:border-box;padding:9px;border:1px solid #d3dfd7;border-radius:7px;background:#fff;color:#526159}.targeted-link-result p{margin:0;color:#748178;font-size:13px;line-height:1.6}
 .simple-team-overview .teams-table-panel .table-toolbar { display: none; }
 .simple-team-overview .teams-table-row { min-height: 58px; }
 .simple-team-overview .teams-table-head { min-height: 43px; }
@@ -2949,8 +3700,12 @@ onMounted(async () => {
   .teams-context-header { padding: 0 18px; }
   .teams-page-content { width: calc(100% - 28px); padding-top: 24px; }
   .division-toolbar { align-items: flex-start; flex-direction: column; }
+  .division-tab-section { width:100%; align-items:flex-start; flex-direction:column; gap:9px; }
   .division-rule-summary { flex-wrap: wrap; }
   .team-summary-grid { grid-template-columns: 1fr 1fr; }
+  .registration-materials>header { flex-direction:column; }.poster-template-grid { grid-template-columns:1fr; }
+  .registration-review-actions { align-items: stretch; flex-direction: column; }
+  .registration-review-selection { flex-wrap: wrap; }
   .table-toolbar { align-items: stretch; flex-direction: column; }
 }
 .qa-dialog-mask{position:fixed;z-index:5000;inset:0;display:grid;place-items:center;padding:44px;background:rgba(12,20,15,.54)}.qa-dialog{box-sizing:border-box;width:min(720px,calc(100vw - 88px));max-height:calc(100vh - 88px);overflow:auto;padding:25px 30px 21px;border-radius:14px;background:#fff;color:#1d2c21;box-shadow:0 22px 60px rgba(0,0,0,.28)}.qa-dialog-header{display:flex;justify-content:space-between;gap:20px;padding-bottom:16px;border-bottom:1px solid #e5ebe6}.qa-dialog-header h2{margin:5px 0;font-size:24px}.qa-dialog-header p{margin:0;color:#758278;font-size:13px}.qa-dialog-eyebrow{color:#159447;font-size:12px;font-weight:700}.qa-close{width:32px;height:32px;border:0;border-radius:50%;background:#f0f5f0;font-size:22px;color:#657268;cursor:pointer}.qa-dialog input{box-sizing:border-box;min-height:36px;border:1px solid #d8e1d9;border-radius:6px;padding:7px 10px;outline:none}.qa-dialog-meta{display:flex;align-items:center;gap:18px;margin:18px 0 12px;color:#637166;font-size:14px}.qa-dialog-meta strong{color:#189a4a;font-size:18px}.qa-dialog-meta input{margin-left:auto;width:205px}.qa-dialog-notice{margin:12px 0;padding:9px 12px;border-left:3px solid #35a961;background:#f1fbf4;color:#4c6855;font-size:13px;line-height:1.55}.qa-candidate-list{display:grid;gap:9px}.qa-candidate{display:grid;grid-template-columns:22px 38px 1fr auto;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid #e0e8e1;border-radius:9px;background:#fff;text-align:left;cursor:pointer}.qa-candidate.selected{border-color:#1da551;background:#f1fbf4}.qa-check{display:grid;place-items:center;width:17px;height:17px;border:1px solid #c8d4c9;border-radius:4px;color:#fff;font-size:12px}.qa-candidate.selected .qa-check{border-color:#179b4b;background:#179b4b}.qa-crest{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#e2f3e7;color:#168d46;font-weight:800}.qa-crest-large{width:50px;height:50px;font-size:18px}.qa-candidate strong{display:block;font-size:14px}.qa-candidate small{display:block;margin-top:3px;color:#7c897f;font-size:12px}.qa-candidate em{color:#189a4a;font-size:12px;font-style:normal}.qa-dialog-footer{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px;padding-top:16px;border-top:1px solid #e7ede8;color:#7b897f;font-size:12px}.qa-button{min-height:34px;border:1px solid #d2ded4;border-radius:6px;padding:0 14px;background:#fff;color:#405044;cursor:pointer}.qa-button+.qa-button{margin-left:8px}.qa-button-primary{border-color:#19a04d;background:#19a04d;color:#fff}.qa-button:disabled{opacity:.5;cursor:not-allowed}.qa-create-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:15px 16px;margin:20px 0}.qa-create-grid label{color:#445248;font-size:13px;font-weight:600}.qa-create-grid input{width:100%;margin-top:7px}.qa-form-band,.qa-claim-team{display:flex;align-items:center;gap:13px;border:1px solid #e0e8e1;border-radius:9px;padding:13px;background:#fbfefb}.qa-form-band div,.qa-claim-team div{flex:1}.qa-form-band p,.qa-claim-team p{margin:4px 0 0;color:#7a887d;font-size:12px}.qa-claim-team{margin:19px 0}.qa-status{padding:4px 8px;border-radius:99px;background:#fff4dd;color:#b57206;font-size:12px}.qa-link-label{display:block;color:#48564d;font-size:13px;font-weight:700}.qa-link-label>span{margin-left:8px;color:#839087;font-size:12px;font-weight:400}.qa-link-label>div{display:flex;gap:8px;margin-top:8px}.qa-link-label input{flex:1;color:#647268;font-size:12px}.qa-share-options{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:17px 0}.qa-share-options article{display:flex;gap:9px;padding:12px;border:1px solid #e2e9e3;border-radius:8px}.qa-share-options strong{font-size:13px}.qa-share-options p{margin:4px 0 0;color:#7a887d;font-size:12px}.qa-share-options article>span{color:#1da14e;font-weight:800}

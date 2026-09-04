@@ -100,6 +100,42 @@ function recordDivisionId(record) {
   return String(record && (record.divisionId || record.division || record.categoryId || record.groupId) || '').trim()
 }
 
+async function upsertByKey(collection, uniqueKey, data) {
+  const result = await db.collection(collection).where({ uniqueKey }).limit(2).get()
+  const row = (result.data || [])[0]
+  if (row) {
+    await db.collection(collection).doc(row._id).update({ data: { ...data, updateTime: db.serverDate() } })
+    return row._id
+  }
+  const created = await db.collection(collection).add({ data: { ...data, uniqueKey, createTime: db.serverDate(), updateTime: db.serverDate() } })
+  return created._id
+}
+
+async function verifyServiceFollow(actor, tournamentId, gateId) {
+  if (!actor || actor.channel !== 'mini' || !actor.openId) {
+    return { ok: true, gateId: '', officialOpenId: '' }
+  }
+  const bindings = await db.collection('service_account_bindings').where({
+    sport: 'football', miniOpenId: actor.openId, subscribed: true
+  }).limit(2).get()
+  const binding = (bindings.data || []).find(item => String(item.officialOpenId || '').trim())
+  if (binding) return { ok: true, gateId: String(gateId || ''), officialOpenId: String(binding.officialOpenId) }
+
+  const normalizedGateId = String(gateId || '').trim()
+  if (normalizedGateId) {
+    const gateResult = await db.collection('service_follow_gates').doc(normalizedGateId).get()
+    const gate = Array.isArray(gateResult.data) ? gateResult.data[0] : gateResult.data
+    const owned = gate && String(gate.miniOpenId || '') === actor.openId && String(gate.tournamentId || '') === String(tournamentId)
+    if (owned && gate.subscribed === true && String(gate.officialOpenId || '').trim()) {
+      return { ok: true, gateId: normalizedGateId, officialOpenId: String(gate.officialOpenId) }
+    }
+  }
+  return {
+    ok: false,
+    result: { success: false, code: 'SERVICE_FOLLOW_REQUIRED', message: '请先关注并绑定“赛小蜂足球助手”，再确认报名' }
+  }
+}
+
 function configuredDivisionIds(tournament, divisionRows) {
   const inline = Array.isArray(tournament && tournament.divisions) ? tournament.divisions : []
   const inlineIds = inline.map(function (item) {
@@ -144,7 +180,7 @@ async function resolveSignupDivision(tournament, requestedDivisionId, existingRo
 }
 
 exports.main = async (event, context) => {
-  const { tournamentId, teamId, divisionId = '', message = '' } = event
+  const { tournamentId, teamId, divisionId = '', inviteKey = '', message = '' } = event
 
   if (!tournamentId) {
     return { success: false, message: '缺少 tournamentId 参数' }
@@ -163,6 +199,15 @@ exports.main = async (event, context) => {
     }
     const tournament = tournamentRes.data
 
+    let registrationInvite = null
+    if (inviteKey) {
+      const inviteResult = await db.collection('tournament_invites').where({ sport: 'football', inviteKey: String(inviteKey), status: 'active' }).limit(2).get()
+      registrationInvite = (inviteResult.data || [])[0] || null
+      if (!registrationInvite || String(registrationInvite.tournamentId) !== String(tournamentId)) {
+        return { success: false, code: 'INVITE_INVALID', message: '报名邀请无效、已重置或不属于当前赛事' }
+      }
+    }
+
     const teamRes = await db.collection('teams').doc(teamId).get()
     const team = Array.isArray(teamRes.data) ? teamRes.data[0] : teamRes.data
     if (!team) {
@@ -172,10 +217,11 @@ exports.main = async (event, context) => {
     if (actorResult.actor.channel === 'mini') {
       const canManage = await canManageMiniTeam(team, actorResult.actor)
       if (!canManage) return { success: false, code: 'TEAM_ACCESS_DENIED', message: '当前账号没有该球队的报名权限' }
-      // 公开赛事允许跨机构报名；后续兼容校验仍要求球队自身存在明确机构边界。
-      actorResult.actor.orgId = teamOrgId
+      // 小程序球队以已验证的负责人/管理员关系作为报名授权；历史球队可能尚未补齐 orgId。
+      // 有明确机构时继续沿用机构边界，没有机构字段时不能否定已经通过的球队管理权校验。
+      if (teamOrgId) actorResult.actor.orgId = teamOrgId
     }
-    if (!teamOrgId || teamOrgId !== actorResult.actor.orgId) {
+    if (actorResult.actor.channel !== 'mini' && (!teamOrgId || teamOrgId !== actorResult.actor.orgId)) {
       return { success: false, message: '无权提交当前机构之外的球队', code: 'ORG_ACCESS_DENIED' }
     }
 
@@ -188,6 +234,12 @@ exports.main = async (event, context) => {
     if (actorResult.actor.channel === 'mini' && event.disclaimerAgreed !== true) {
       return { success: false, code: 'DISCLAIMER_REQUIRED', message: '请先阅读并同意参赛免责声明' }
     }
+    const enforceServiceFollow = String(process.env.SXF_FOOTBALL_ENFORCE_SERVICE_FOLLOW || '').toLowerCase() === 'true'
+    const shouldVerifyServiceFollow = actorResult.actor.channel === 'mini' && (enforceServiceFollow || Boolean(String(event.serviceFollowGateId || '').trim()))
+    const serviceFollow = shouldVerifyServiceFollow
+      ? await verifyServiceFollow(actorResult.actor, tournamentId, event.serviceFollowGateId)
+      : { ok: true, gateId: '', officialOpenId: '' }
+    if (!serviceFollow.ok) return serviceFollow.result
     const existRes = await db.collection('tournament_teams').where({
       tournamentId: tournamentId,
       teamId: teamId
@@ -196,6 +248,12 @@ exports.main = async (event, context) => {
     const divisionResult = await resolveSignupDivision(tournament, divisionId, existRes.data || [])
     if (!divisionResult.ok) return divisionResult.result
     const selectedDivisionId = divisionResult.divisionId
+    if (!divisionResult.selectedDivision || divisionResult.selectedDivision.registrationEnabled !== true) {
+      return { success: false, code: 'DIVISION_REGISTRATION_CLOSED', message: '当前竞赛组别尚未开启报名或已停止报名' }
+    }
+    if (registrationInvite && registrationInvite.divisionId && String(registrationInvite.divisionId) !== String(selectedDivisionId)) {
+      return { success: false, code: 'INVITE_DIVISION_MISMATCH', message: '报名邀请仅适用于指定竞赛组别' }
+    }
     const selectedDivisionName = String((divisionResult.selectedDivision && (divisionResult.selectedDivision.name || divisionResult.selectedDivision.divisionName || divisionResult.selectedDivision.title)) || tournament.divisionName || '')
     if (competitionPlanLocked(tournament, selectedDivisionId)) {
       return { success: false, code: 'COMPETITION_PLAN_LOCKED', message: '竞赛方案已确认，不能新增或重建参赛关系' }
@@ -233,7 +291,7 @@ exports.main = async (event, context) => {
     const selectedMaxTeams = Number((divisionResult.selectedDivision && (divisionResult.selectedDivision.maxTeams || divisionResult.selectedDivision.teamLimit)) || tournament.maxTeams || 0)
 
     if (selectedMaxTeams && approvedCount.total >= selectedMaxTeams) {
-      return { success: false, message: '该赛事名额已满' }
+      return { success: false, code: 'DIVISION_FULL', message: '该组别名额已满，请选择其他可报名组别' }
     }
 
     // 6. 创建报名记录
@@ -251,6 +309,15 @@ exports.main = async (event, context) => {
       status: 'pending',
       type: 'signup',  // signup = 外部报名, invite = 内部邀请
       message: message,
+      inviteId: registrationInvite ? registrationInvite._id : '',
+      inviteKeyUsed: registrationInvite ? true : false,
+      applicantUserId: actorResult.actor.userId,
+      applicantMiniOpenId: actorResult.actor.channel === 'mini' ? actorResult.actor.openId : '',
+      teamOrgId,
+      miniSubscriptionAccepted: event.miniSubscriptionAccepted === true,
+      serviceFollowGateId: serviceFollow.gateId,
+      serviceAccountBound: Boolean(serviceFollow.officialOpenId),
+      serviceAccountOpenId: serviceFollow.officialOpenId,
       disclaimerAgreed: actorResult.actor.channel === 'mini' ? true : Boolean(event.disclaimerAgreed),
       ...(actorResult.actor.channel === 'mini' ? { disclaimerTime: db.serverDate() } : {}),
       message: message,
@@ -261,6 +328,32 @@ exports.main = async (event, context) => {
     const result = await db.collection('tournament_teams').add({
       data: signupData
     })
+
+    // 业务状态先落库，任务、通知与审计作为可重试的协作记录，不以微信是否送达决定报名是否成功。
+    try {
+      await upsertByKey('tournament_tasks', `${tournamentId}:registration_review:${result._id}`, {
+        sport: 'football', tournamentId, divisionId: selectedDivisionId, teamId, registrationId: result._id,
+        type: 'registration_review', audience: 'organizer', recipientOrgId: String(tournament.orgId || tournament.organizationId || ''),
+        status: 'pending', title: '审核参赛球队', detail: team.name
+      })
+      await upsertByKey('tournament_tasks', `${tournamentId}:registration_status:${teamId}`, {
+        sport: 'football', tournamentId, divisionId: selectedDivisionId, teamId, registrationId: result._id,
+        type: 'registration_status', audience: 'team', recipientUserId: actorResult.actor.userId,
+        status: 'pending', title: '赛事报名审核中', detail: tournament.name
+      })
+      await upsertByKey('notification_outbox', `registration_submitted:${result._id}:task_center`, {
+        sport: 'football', businessEventId: `registration_submitted:${result._id}`, tournamentId, registrationId: result._id,
+        recipientOrgId: String(tournament.orgId || tournament.organizationId || ''), channel: 'task_center', status: 'delivered', targetPage: 'pages/todo/index'
+      })
+      await db.collection('registration_audit_logs').add({ data: {
+        sport: 'football', action: 'registration_submitted', tournamentId, divisionId: selectedDivisionId,
+        inviteId: registrationInvite ? registrationInvite._id : '', registrationId: result._id,
+        actorUserId: actorResult.actor.userId, actorOrgId: teamOrgId, result: 'success',
+        detail: { channel: actorResult.actor.channel || 'web', inviteUsed: Boolean(registrationInvite) }, createTime: db.serverDate()
+      } })
+    } catch (collaborationError) {
+      console.warn('[applyTournament] 协作任务或通知记录写入失败，报名记录已保留:', collaborationError.message)
+    }
 
     // 7. 同步创建 invitations 记录（用于消息通知）
     try {

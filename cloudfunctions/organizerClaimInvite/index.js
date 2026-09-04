@@ -5,6 +5,7 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
 const db = cloud.database()
 const _ = db.command
+let miniAccessTokenCache = null
 
 function hashSessionToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex')
@@ -16,6 +17,43 @@ function asObject(value) {
 
 function text(value, maxLength) {
   return String(value || '').trim().slice(0, maxLength || 120)
+}
+
+function qrEnvVersion(value) {
+  const normalized = text(value, 20).toLowerCase()
+  return ['develop', 'trial', 'release'].includes(normalized) ? normalized : 'release'
+}
+
+async function wechatJson(url, options) {
+  const response = await fetch(url, options)
+  const data = await response.json()
+  if (!response.ok || data.errcode) {
+    const error = new Error(`微信接口返回 ${data.errcode || response.status}：${data.errmsg || '请求失败'}`)
+    error.code = `WECHAT_${data.errcode || response.status}`
+    throw error
+  }
+  return data
+}
+
+async function miniAccessToken() {
+  if (miniAccessTokenCache && miniAccessTokenCache.expiresAt > Date.now() + 120000) return miniAccessTokenCache.value
+  const appId = text(process.env.SXF_FOOTBALL_MINIPROGRAM_APPID || 'wx57164cca8676f411')
+  const appSecret = text(process.env.SXF_FOOTBALL_MINIPROGRAM_APPSECRET, 256)
+  if (!appSecret) throw new Error('足球小程序AppSecret尚未配置，无法生成正式链接')
+  const data = await wechatJson(`https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}`)
+  miniAccessTokenCache = { value:data.access_token, expiresAt:Date.now() + Math.max(300, Number(data.expires_in || 7200) - 300) * 1000 }
+  return data.access_token
+}
+
+async function makeMiniProgramUrlLink(inviteId) {
+  const accessToken = await miniAccessToken()
+  const data = await wechatJson(`https://api.weixin.qq.com/wxa/generate_urllink?access_token=${encodeURIComponent(accessToken)}`, {
+    method:'POST',
+    headers:{ 'content-type':'application/json' },
+    body:JSON.stringify({ path:'pages/team/prebuilt-invite/prebuilt-invite', query:`inviteId=${encodeURIComponent(inviteId)}`, is_expire:false })
+  })
+  if (!data.url_link) throw new Error('微信未返回可用的小程序URL Link')
+  return data.url_link
 }
 
 function toTime(value) {
@@ -112,24 +150,17 @@ function inviteExpiry(tournament) {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 }
 
-async function makeMiniProgramCode(inviteId, envVersion) {
-  const requestedEnv = String(envVersion || '').trim().toLowerCase()
-  const codeEnvVersion = ['develop', 'trial', 'release'].includes(requestedEnv)
-    ? requestedEnv
-    : 'release'
-  try {
-    const result = await cloud.openapi.wxacode.getUnlimited({
-      scene: String(inviteId).slice(0, 32),
-      page: 'pages/team/prebuilt-invite/prebuilt-invite',
-      width: 300,
-      envVersion: codeEnvVersion
-    })
-    const base64 = result.buffer.toString('base64')
-    return `data:image/png;base64,${base64}`
-  } catch (error) {
-    console.warn('[organizerClaimInvite] mini-program code unavailable:', error.message)
-    return ''
-  }
+async function makeMiniProgramCode(inviteId, version) {
+  const actualVersion = qrEnvVersion(version)
+  const result = await cloud.openapi.wxacode.getUnlimited({
+    scene: String(inviteId).slice(0, 32),
+    page: 'pages/team/prebuilt-invite/prebuilt-invite',
+    width: 300,
+    envVersion: actualVersion,
+    checkPath: actualVersion === 'release'
+  })
+  const base64 = result.buffer.toString('base64')
+  return `data:image/png;base64,${base64}`
 }
 
 async function createOrReuseInvite(event, identity) {
@@ -151,7 +182,6 @@ async function createOrReuseInvite(event, identity) {
     error.code = 'TEAM_CLAIM_INVITE_EXPIRED'
     throw error
   }
-  if (competitionPlanLocked(tournament, divisionId)) throw new Error('竞赛方案已确认，不能再生成认领邀请')
   if (!userOwnsTournament(tournament, identity, actorOrgId)) throw new Error('当前账号无权为该赛事生成认领邀请')
   if (!relation || String(relation.tournamentId || '') !== tournamentId) throw new Error('参赛球队关系不存在或不属于当前赛事')
   if (relation.divisionId && String(relation.divisionId) !== divisionId) throw new Error('参赛球队不属于当前竞赛组别')
@@ -169,11 +199,6 @@ async function createOrReuseInvite(event, identity) {
   if (actorOrgId && teamOrgId && teamOrgId !== actorOrgId) {
     throw new Error('球队不属于当前机构')
   }
-  const claimStatus = String(team.claimStatus || relation.claimStatus || '').toLowerCase()
-  if (['claimed', 'owned', 'accepted'].includes(claimStatus) && !['pending_claim', 'unclaimed'].includes(String(relation.claimStatus || '').toLowerCase())) {
-    throw new Error('该球队已完成认领，无需重复生成邀请')
-  }
-
   const inviteQuery = {
     type: 'prebuilt_tournament_team',
     tournamentId,
@@ -219,9 +244,12 @@ async function createOrReuseInvite(event, identity) {
 
   const inviteId = String(invite._id)
   const path = `/pages/team/prebuilt-invite/prebuilt-invite?inviteId=${encodeURIComponent(inviteId)}`
-  const qrCodeUrl = await makeMiniProgramCode(inviteId, event.envVersion)
+  const actualVersion = qrEnvVersion(event.envVersion)
+  const testOnly = actualVersion !== 'release'
+  const qrCodeUrl = event.skipCode === true ? '' : await makeMiniProgramCode(inviteId, actualVersion)
+  const urlLink = event.skipCode === true || testOnly ? '' : await makeMiniProgramUrlLink(inviteId)
   await db.collection('team_invitations').doc(inviteId).update({
-    data: { lastSharedAt: now, updateTime: now }
+    data: { qrCodeUrl, urlLink, qrEnvVersion:actualVersion, lastSharedAt: now, updateTime: now }
   })
   await db.collection('tournament_teams').doc(tournamentTeamId).update({
     data: { claimInviteId: inviteId, lastInviteTime: now, updateTime: now }
@@ -230,7 +258,10 @@ async function createOrReuseInvite(event, identity) {
     success: true,
     inviteId,
     path,
+    urlLink,
     qrCodeUrl,
+    envVersion:actualVersion,
+    testOnly,
     inviteExpireAt: invite.inviteExpireAt || tournamentInviteExpiry,
     tournamentId,
     divisionId,

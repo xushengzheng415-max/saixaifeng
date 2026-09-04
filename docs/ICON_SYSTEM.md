@@ -2,6 +2,8 @@
 
 Status: confirmed by the product owner on 2026-08-11.
 
+The complete local asset catalog, semantic map, source-sheet paths, runtime filenames, and replacement ledger are maintained in [`ICON_ASSET_CATALOG.md`](ICON_ASSET_CATALOG.md).
+
 ## Brand direction
 
 - Professional youth-football competition product; energetic and trustworthy, never cartoonish.

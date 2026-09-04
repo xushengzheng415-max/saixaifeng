@@ -105,6 +105,27 @@ async function authenticateActor(event) {
   return { user: { ...user, orgId }, orgId }
 }
 
+async function undoLastScheduleAdjustment(event) {
+  const actor=await authenticateActor(event)
+  const tournamentId=String(event.tournamentId || '')
+  if(!tournamentId) return { success:false,message:'缺少赛事信息' }
+  const tournamentResult=await db.collection('tournaments').doc(tournamentId).get()
+  const tournament=Array.isArray(tournamentResult.data)?tournamentResult.data[0]:tournamentResult.data
+  if(!recordBelongsToActor(tournament,actor)) return { success:false,message:'无权恢复其他机构的赛程' }
+  const where={ tournamentId,status:'applied',undone:false }
+  if(event.divisionId && event.divisionId!=='all') where.divisionId=String(event.divisionId)
+  const latestResult=await db.collection('schedule_adjustment_logs').where(where).orderBy('createTime','desc').limit(1).get()
+  const latest=(latestResult.data || [])[0]
+  if(!latest) return { success:false,code:'NO_ADJUSTMENT_HISTORY',message:'当前没有可撤销的赛程调整记录' }
+  const groupResult=await db.collection('schedule_adjustment_logs').where({ tournamentId,operationGroupId:latest.operationGroupId,status:'applied',undone:false }).limit(20).get()
+  const logs=groupResult.data || []
+  if(!logs.length) return { success:false,code:'NO_ADJUSTMENT_HISTORY',message:'未找到完整的调整记录' }
+  for(const log of logs){const matchResult=await db.collection('matches').doc(log.matchId).get();const match=Array.isArray(matchResult.data)?matchResult.data[0]:matchResult.data;if(!match) return { success:false,message:'原比赛已不存在，不能直接撤销' };if(match.executionSnapshot || ['ongoing','finished'].includes(match.status)) return { success:false,message:'相关比赛已开始或固化，不能撤销调整' }}
+  await Promise.all(logs.map(log=>db.collection('matches').doc(log.matchId).update({ data:{ matchDate:String(log.before && log.before.matchDate || ''),matchTime:String(log.before && log.before.matchTime || ''),venue:String(log.before && log.before.venue || ''),updateTime:db.serverDate() } })))
+  await Promise.all(logs.map(log=>db.collection('schedule_adjustment_logs').doc(log._id).update({ data:{ undone:true,undoneAt:db.serverDate(),undoneBy:actor.user._id,updateTime:db.serverDate() } })))
+  return { success:true,message:'已撤销上次赛程调整',operationGroupId:latest.operationGroupId,restoredMatches:logs.length }
+}
+
 function refereeTemplate(format) {
   return /^(5|6)/.test(String(format || ''))
     ? [
@@ -121,7 +142,7 @@ function refereeTemplate(format) {
       ]
 }
 
-async function normalizeRefereeCrew(refereeCrew, format, actor, operationRefereeId, recordKeeperId) {
+async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, operationRefereeId, recordKeeperId) {
   const template = refereeTemplate(format)
   const crew = {}
   const ids = []
@@ -132,11 +153,13 @@ async function normalizeRefereeCrew(refereeCrew, format, actor, operationReferee
     if (ids.includes(refereeId)) throw new Error('同一名裁判不能重复担任多个岗位')
     const result = await db.collection('referees').doc(refereeId).get()
     const referee = Array.isArray(result.data) ? result.data[0] : result.data
-    if (!referee || referee.status !== 'approved' || !recordBelongsToActor(referee, actor)) {
-      throw new Error(role.label + '必须从本机构已通过的裁判中选择')
+    const approvedRealReferee = referee && referee.status === 'approved' && recordBelongsToActor(referee, actor)
+    const scopedSyntheticReferee = referee && referee.synthetic === true && String(referee.tournamentId || '') === String(tournamentId || '')
+    if (!approvedRealReferee && !scopedSyntheticReferee) {
+      throw new Error(role.label + '必须从本机构已审核裁判或当前赛事虚拟裁判中选择')
     }
     ids.push(refereeId)
-    crew[role.key] = { _id: refereeId, name: referee.name || '', phone: referee.phone || referee.phoneNumber || '' }
+    crew[role.key] = { _id: refereeId, name: referee.name || '', phone: referee.phone || referee.phoneNumber || '', synthetic: referee.synthetic === true }
   }
   const defaultKeeper = crew.timekeeper?._id || crew.fourthOfficial?._id || ''
   const keeperId = recordKeeperId || defaultKeeper
@@ -148,6 +171,10 @@ async function normalizeRefereeCrew(refereeCrew, format, actor, operationReferee
 
 exports.main = async (event, context) => {
   const { matchId, data } = event
+
+  if(event.action==='undoLastScheduleAdjustment') {
+    try{return await undoLastScheduleAdjustment(event)}catch(err){console.error('撤销赛程调整失败:',err);return { success:false,message:'撤销失败: '+err.message }}
+  }
 
   if (!matchId || !data || typeof data !== 'object') {
     return { success: false, message: '缺少 matchId 或更新内容' }
@@ -200,6 +227,7 @@ exports.main = async (event, context) => {
         safeData.refereeCrew,
         safeData.matchFormat || match.matchFormat || (tournament && tournament.matchFormat) || '11side',
         actor,
+        match.tournamentId,
         safeData.operationRefereeId,
         safeData.refereeRecordKeeperId
       )
@@ -214,6 +242,10 @@ exports.main = async (event, context) => {
       safeData.executionSnapshotAt = db.serverDate()
     }
 
+    const scheduleChanged=['matchDate','matchTime','venue'].some(field=>safeData[field]!==undefined && String(safeData[field] || '')!==String(match[field] || ''))
+    let adjustmentLogId=''
+    if(scheduleChanged){const operationGroupId=String(event.adjustmentGroupId || ('adjust-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')));const logResult=await db.collection('schedule_adjustment_logs').add({ data:{ tournamentId:String(match.tournamentId || ''),divisionId:String(match.divisionId || 'default'),matchId:String(matchId),operationGroupId,adjustmentType:String(event.adjustmentType || 'manual'),before:{ matchDate:String(match.matchDate || ''),matchTime:String(match.matchTime || ''),venue:String(match.venue || '') },after:{ matchDate:String(safeData.matchDate!==undefined?safeData.matchDate:match.matchDate || ''),matchTime:String(safeData.matchTime!==undefined?safeData.matchTime:match.matchTime || ''),venue:String(safeData.venue!==undefined?safeData.venue:match.venue || '') },actorUserId:String(actor.user._id || ''),actorOrgId:actor.orgId,status:'pending',undone:false,createTime:db.serverDate(),updateTime:db.serverDate() } });adjustmentLogId=String(logResult._id || '')}
+
     // 更新 matches 集合
     await db.collection('matches').doc(matchId).update({
       data: {
@@ -222,6 +254,7 @@ exports.main = async (event, context) => {
         updateTime: db.serverDate()
       }
     })
+    if(adjustmentLogId) await db.collection('schedule_adjustment_logs').doc(adjustmentLogId).update({ data:{ status:'applied',appliedAt:db.serverDate(),updateTime:db.serverDate() } })
 
     let notificationRelay = null
 

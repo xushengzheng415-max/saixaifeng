@@ -1,4 +1,5 @@
 var workspace = require('../../utils/workspace')
+var signupDraft = require('../../utils/signup-draft')
 
 Page({
   data: {
@@ -60,7 +61,12 @@ Page({
     if (!context || !context.currentWorkspace) return
     var stats = context.statistics || {}
     var tournaments = context.tournaments || []
-    var eventTasks = context.eventTasks || []
+    var eventTasks = (context.eventTasks || []).slice()
+    var localDraft = signupDraft.resolveAgainstRegistrations(signupDraft.read(), context.registrations || [])
+    var localDraftTask = signupDraft.toTask(localDraft)
+    if (localDraftTask && !eventTasks.some(function(item) {
+      return item.type === 'registration_draft' && item.tournamentId === localDraftTask.tournamentId && item.teamId === localDraftTask.teamId
+    })) eventTasks.unshift(localDraftTask)
     var tasks = eventTasks.map(function(item) {
       item.statusClass = item.status === 'reviewing' ? 'reviewing' : 'pending'
       item.statusText = item.status === 'reviewing' ? '审核中' : '待处理'
@@ -68,6 +74,7 @@ Page({
       item.typeIcon = item.type === 'registration_review' ? '/images/runtime/icons/brand-v2-13.png' : (item.type === 'registration' ? '/images/runtime/icons/brand-v2-08.png' : (item.type === 'result_review' ? '/images/runtime/icons/brand-v2-09.png' : '/images/runtime/icons/brand-v2-14.png'))
       item.deadlineText = item.deadlineText || item.timeText || '请尽快处理'
       item.detailText = item.sourceText || '赛事协作'
+      item.actionText = item.type === 'registration_draft' ? '继续报名' : '查看'
       return item
     })
     var firstTournament = tournaments[0] || {}
@@ -124,6 +131,9 @@ Page({
     var tournamentId = event.currentTarget.dataset.tournament
     var teamId = event.currentTarget.dataset.team
     var audience = event.currentTarget.dataset.audience
+    var taskType = event.currentTarget.dataset.type
+    var divisionId = event.currentTarget.dataset.division
+    var inviteKey = event.currentTarget.dataset.invite
     if (!tournamentId) return
     if (audience === 'organizer') {
       wx.navigateTo({ url: '/pages/tournament/teams/teams?id=' + tournamentId })
@@ -131,6 +141,9 @@ Page({
     }
     var url = '/pages/tournament/signup/signup?id=' + tournamentId
     if (teamId) url += '&teamId=' + teamId
+    if (divisionId) url += '&divisionId=' + encodeURIComponent(divisionId)
+    if (inviteKey) url += '&inviteKey=' + encodeURIComponent(inviteKey)
+    if (taskType === 'registration_draft') url += '&from=task'
     wx.navigateTo({ url: url })
   },
 

@@ -56,6 +56,12 @@ const routes = [
     component: () => import('../views/login/WechatCallbackView.vue'),
     meta: { requiresAuth: false, skipAuthCheck: true }
   },
+  {
+    path: '/bind-phone',
+    name: 'BindPhone',
+    component: () => import('../views/login/BindPhoneView.vue'),
+    meta: { requiresAuth: false, skipAuthCheck: true, title: '验证手机号' }
+  },
   // 公开赛事中心页面（无需登录）
   {
     path: '/tournament-center',
@@ -155,166 +161,6 @@ const routes = [
   // 根路径由 beforeEach 守卫根据登录状态和角色动态跳转
   // （已登录→角色首页，未登录→赛事中心/登录页）
   {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '数据概览' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/dashboard/DashboardView.vue')
-      }
-    ]
-  },
-  {
-    path: '/teams',
-    name: 'Teams',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '球队管理' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/team/TeamList.vue')
-      }
-    ]
-  },
-  {
-    path: '/teams/:id',
-    name: 'TeamDetail',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '球队详情', embeddedPageHeader: true },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/team/TeamDetail.vue')
-      }
-    ]
-  },
-  {
-    path: '/players',
-    name: 'Players',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '球员管理' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/player/PlayerList.vue')
-      }
-    ]
-  },
-  {
-    path: '/players/:id',
-    name: 'PlayerDetail',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '球员详情' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/player/PlayerDetail.vue')
-      }
-    ]
-  },
-  {
-    path: '/data',
-    name: 'DataCenter',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '数据中心' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/data/DataManager.vue')
-      }
-    ]
-  },
-  {
-    path: '/referees',
-    name: 'Referees',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '裁判管理' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/referee/RefereeList.vue')
-      }
-    ]
-  },
-  // 裁判后台 - 我的比赛
-  {
-    path: '/referee/my-matches',
-    name: 'RefereeMyMatches',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '我的比赛' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/referee/RefereeMyMatches.vue')
-      }
-    ]
-  },
-  // 裁判后台 - 比赛详情（裁判视角）
-  {
-    path: '/referee/match/:id',
-    name: 'RefereeMatchDetail',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '比赛详情' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/referee/RefereeMatchDetail.vue')
-      }
-    ]
-  },
-  // 裁判长管理 - 分配裁判
-  {
-    path: '/referee/head-referee',
-    name: 'HeadRefereeManagement',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '裁判管理', embeddedPageHeader: true },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/referee/HeadRefereeManagement.vue')
-      }
-    ]
-  },
-  {
-    path: '/coaches',
-    name: 'Coaches',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '教练组管理' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/coach/CoachList.vue')
-      }
-    ]
-  },
-  {
-    path: '/tournaments',
-    name: 'Tournaments',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '竞赛管理', parent: 'tournaments' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/tournament/TournamentList.vue')
-      }
-    ]
-  },
-  // 我的赛事页面
-  {
-    path: '/my-tournaments',
-    name: 'MyTournaments',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '我的赛事' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/tournament/MyTournaments.vue')
-      }
-    ]
-  },
-  {
     path: '/tournament-space',
     name: 'TournamentSpace',
     component: () => import('../views/layout/LayoutView.vue'),
@@ -384,6 +230,27 @@ const routes = [
         component: () => import('../views/tournament/TournamentTeams.vue')
       }
     ]
+  },
+  {
+    path: '/tournaments/:id/registration',
+    name: 'TournamentRegistrationManagement',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '赛事报名管理', parent: 'tournaments', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentTeams.vue') }]
+  },
+  {
+    path: '/tournaments/:id/teams/:teamId',
+    name: 'TournamentTeamDetail',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '赛事球队详情', parent: 'tournaments', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/team/TeamDetail.vue') }]
+  },
+  {
+    path: '/tournaments/:id/players/:playerId',
+    name: 'TournamentPlayerDetail',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '赛事球员详情', parent: 'tournaments', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/player/PlayerDetail.vue') }]
   },
   {
     path: '/tournaments/:id/claim-reviews',
@@ -472,6 +339,20 @@ const routes = [
     component: () => import('../views/layout/LayoutView.vue'),
     meta: { requiresAuth: true, title: '比赛管理', embeddedPageHeader: true },
     children: [{ path: '', component: () => import('../views/tournament/TournamentMatchManagement.vue') }]
+  },
+  {
+    path: '/tournaments/:id/results',
+    name: 'TournamentResultCenter',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '赛果与排名', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentResultCenter.vue') }]
+  },
+  {
+    path: '/tournaments/:id/referees',
+    name: 'TournamentReferees',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '赛事裁判管理', parent: 'tournaments', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/referee/HeadRefereeManagement.vue') }]
   },
   {
     path: '/tournaments/:id/match/:matchId/monitor', name: 'MatchLiveMonitor', component: () => import('../views/layout/LayoutView.vue'), meta: { requiresAuth: true, title: '赛中只读监控', embeddedPageHeader: true }, children: [{ path: '', component: () => import('../views/tournament/MatchLiveMonitor.vue') }]
@@ -565,55 +446,6 @@ const routes = [
     component: () => import('../views/signature/SignatureView.vue'),
     meta: { requiresAuth: false, title: '比赛监督签字' }
   },
-  {
-    path: '/test',
-    name: 'TestData',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '测试数据' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/test/TestDataView.vue')
-      }
-    ]
-  },
-  {
-    path: '/test/removebg',
-    name: 'RemoveBgDemo',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '抠图功能测试' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/test/RemoveBgDemo.vue')
-      }
-    ]
-  },
-  // 海报编辑器
-  {
-    path: '/poster/editor',
-    name: 'PosterEditor',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '海报编辑器' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/poster/PosterEditor.vue')
-      }
-    ]
-  },
-  {
-    path: '/poster/editor/:tournamentId',
-    name: 'PosterEditorTournament',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '赛事海报编辑' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/poster/PosterEditor.vue')
-      }
-    ]
-  },
   // 系统管理
   {
     path: '/system',
@@ -626,7 +458,8 @@ const routes = [
         component: () => import('../views/system/SystemAdmin.vue')
       }
     ]
-  }
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/tournament-space' }
 ]
 
 const router = createRouter({
@@ -645,7 +478,7 @@ function hasOrganizerSession() {
   const loginType = localStorage.getItem('loginType') || ''
   const authToken = localStorage.getItem('authToken') || ''
   return role.toLowerCase() === 'organizer' &&
-    version === 'wechat-assistance-v1' &&
+    version === 'phone-canonical-web-v1' &&
     loginType === 'wechat' &&
     Boolean(authToken)
 }
@@ -746,7 +579,7 @@ router.beforeEach(async (to, from, next) => {
     }
     // 纯微信会话已通过版本与主办方角色校验。
     // 访问根路径时，根据角色跳转对应首页
-    if (to.path === '/' || to.path === '/dashboard') {
+    if (to.path === '/') {
       next(getDefaultPathByRole())
       return
     }
@@ -768,7 +601,7 @@ router.beforeEach(async (to, from, next) => {
         return
       }
       // 访问根路径时，根据角色跳转对应首页
-      if (to.path === '/' || to.path === '/dashboard') {
+      if (to.path === '/') {
         next(getDefaultPathByRole())
         return
       }

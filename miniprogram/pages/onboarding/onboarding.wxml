@@ -4,28 +4,32 @@
   <canvas canvas-id="crestCropCanvas" class="hidden-canvas" width="600" height="600"></canvas>
 
   <view class="content">
+    <view class="training-back" wx:if="{{isTrainingServiceStep}}" bindtap="backToSceneSelection">
+      <text class="training-back-arrow">‹</text>
+      <text>返回</text>
+    </view>
     <view class="page-title">{{pageTitle}}</view>
     <view class="steps" wx:if="{{showSteps}}" style="margin-top:20rpx">
-      <view class="step {{stepOneClass}}"><view class="step-badge">1</view><text>选择场景</text></view>
+      <view class="step {{stepOneClass}}"><view class="step-badge">1</view><text wx:if="{{isTournamentSignupFlow}}">球队身份</text><text wx:if="{{!isTournamentSignupFlow}}">选择场景</text></view>
       <view class="step-line"></view>
-      <view class="step {{stepTwoClass}}"><view class="step-badge">2</view><text>完善资料</text></view>
+      <view class="step {{stepTwoClass}}"><view class="step-badge">2</view><text wx:if="{{isTournamentSignupFlow}}">球队资料</text><text wx:if="{{!isTournamentSignupFlow}}">完善资料</text></view>
       <view class="step-line"></view>
-      <view class="step {{stepThreeClass}}"><view class="step-badge">3</view><text>创建完成</text></view>
+      <view class="step {{stepThreeClass}}"><view class="step-badge">3</view><text wx:if="{{isTournamentSignupFlow}}">确认报名</text><text wx:if="{{!isTournamentSignupFlow}}">创建完成</text></view>
     </view>
 
     <view class="white-panel" wx:if="{{isSceneStep}}">
       <view class="panel-title">你准备先做什么？</view>
       <view class="panel-subtitle">选择一个开始，后续可随时增加其他业务。</view>
       <view class="scene-card {{sceneEventClass}}" data-scene="event" bindtap="selectScene">
-        <image class="scene-icon" src="/images/icons/event.svg" mode="aspectFit"></image>
+        <image class="scene-icon" src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit"></image>
         <view><text class="scene-title">举办赛事</text><text class="scene-desc">创建主办机构，开始管理赛事</text></view>
       </view>
       <view class="scene-card {{sceneTeamClass}}" data-scene="team" bindtap="selectScene">
-        <image class="scene-icon" src="/images/icons/team.svg" mode="aspectFit"></image>
+        <image class="scene-icon" src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image>
         <view><text class="scene-title">管理球队</text><text class="scene-desc">创建或认领球队，参与赛事</text></view>
       </view>
       <view class="scene-card {{sceneTrainingClass}}" data-scene="training" bindtap="selectScene">
-        <image class="scene-icon" src="/images/icons/training.svg" mode="aspectFit"></image>
+        <image class="scene-icon" src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image>
         <view><text class="scene-title">青训教务</text><text class="scene-desc">创建青训机构，管理校区与课程</text></view>
       </view>
     </view>
@@ -68,15 +72,15 @@
     </view>
 
     <view class="white-panel success-panel" wx:if="{{isTrainingSuccessStep}}">
-      <view class="success-mark"><image src="/images/icons/shield.svg" mode="aspectFit"></image></view>
+      <view class="success-mark"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit"></image></view>
       <view class="success-title">青训机构创建成功</view>
       <view class="team-summary">
         <image class="success-logo" wx:if="{{hasCreatedTrainingLogo}}" src="{{createdTrainingLogo}}" mode="aspectFit"></image>
-        <view class="success-logo fallback-logo" wx:if="{{!hasCreatedTrainingLogo}}"><image src="/images/icons/shield.svg" mode="aspectFit"></image></view>
+        <view class="success-logo fallback-logo" wx:if="{{!hasCreatedTrainingLogo}}"><image src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image></view>
         <view><text class="created-team-name">{{createdTrainingName}}</text><text class="team-tag">青训教务</text></view>
       </view>
       <text class="success-subtitle">{{successSubtitle}}</text>
-      <view class="success-actions"><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>完善机构资料</text></view><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>添加校区教练</text></view><view><image src="/images/icons/training.svg" mode="aspectFit"></image><text>创建课程班级</text></view></view>
+      <view class="success-actions"><view><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit"></image><text>完善机构资料</text></view><view><image src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit"></image><text>添加校区教练</text></view><view><image src="/images/runtime/icons/brand-v2-15.png" mode="aspectFit"></image><text>创建课程班级</text></view></view>
     </view>
 
     <view class="training-demo" wx:if="{{isTrainingDemoStep}}">
@@ -92,7 +96,7 @@
 
     <view class="white-panel profile-panel" wx:if="{{isTeamProfileStep}}">
       <view class="panel-title">完善球队资料</view>
-      <view class="panel-subtitle">只需两项，其他资料以后再补充。</view>
+      <view class="panel-subtitle">{{teamProfileSubtitle}}</view>
       <view class="crest-row" bindtap="chooseCrest">
         <view class="crest-placeholder" wx:if="{{!crestPreview}}"><view class="crest-upload-icon"><image class="crest-upload-shield" src="/images/icons/shield.svg" mode="aspectFit"></image><view class="crest-upload-shield-mask"></view><view class="crest-upload-plus crest-upload-plus-horizontal"></view><view class="crest-upload-plus crest-upload-plus-vertical"></view></view></view>
         <image class="crest-preview" wx:if="{{crestPreview}}" src="{{crestPreview}}" mode="aspectFit"></image>
@@ -107,27 +111,27 @@
 
     <view class="white-panel profile-panel" wx:if="{{isEventProfileStep}}">
       <view class="panel-title">完善赛事资料</view><view class="panel-subtitle">只需三项，其他设置进入赛事空间后补充。</view>
-      <view class="crest-row" bindtap="chooseCrest"><view class="crest-placeholder" wx:if="{{!crestPreview}}"><image src="/images/icons/event.svg" mode="aspectFit" style="width:80rpx;height:80rpx"></image></view><image class="crest-preview" wx:if="{{crestPreview}}" src="{{crestPreview}}" mode="aspectFit"></image><view><text class="crest-title">上传赛事标识</text><text class="crest-hint">{{crestStateText}}</text></view></view>
+      <view class="crest-row" bindtap="chooseCrest"><view class="crest-placeholder" wx:if="{{!crestPreview}}"><image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit" style="width:80rpx;height:80rpx"></image></view><image class="crest-preview" wx:if="{{crestPreview}}" src="{{crestPreview}}" mode="aspectFit"></image><view><text class="crest-title">上传赛事标识</text><text class="crest-hint">{{crestStateText}}</text></view></view>
       <view class="form-divider"></view><text class="field-label">赛事名称</text><input class="team-input" placeholder="例如：2026 青少年足球邀请赛" maxlength="50" value="{{eventName}}" bindinput="onEventNameInput"></input><text class="field-label second-label">举办城市</text><input class="team-input" placeholder="例如：河南 · 郑州" maxlength="40" value="{{eventCity}}" bindinput="onEventCityInput"></input><view class="cooperate-note"><image src="/images/icons/players.svg" mode="aspectFit"></image><text>创建后可继续设置组别、规则和报名</text></view>
     </view>
 
     <view class="white-panel success-panel" wx:if="{{isTeamSuccessStep}}">
-      <view class="success-mark"><image src="/images/icons/shield.svg" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view>
-      <view class="success-title">球队创建成功</view>
+      <view class="success-mark"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view>
+      <view class="success-title">{{teamSuccessTitle}}</view>
       <view class="team-summary">
         <image class="success-logo" wx:if="{{hasCreatedTeamLogo}}" src="{{createdTeamLogo}}" mode="aspectFit"></image>
-        <view class="success-logo fallback-logo" wx:if="{{!hasCreatedTeamLogo}}"><image src="/images/icons/team.svg" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view>
+        <view class="success-logo fallback-logo" wx:if="{{!hasCreatedTeamLogo}}"><image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view>
         <view><text class="created-team-name">{{createdTeamName}}</text><text class="team-tag">球队管理</text></view>
       </view>
       <text class="success-subtitle">{{successSubtitle}}</text>
-      <view class="success-actions"><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>维护球队资料</text></view><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>邀请管理成员</text></view><view><image src="/images/icons/event.svg" mode="aspectFit"></image><text>加入赛事</text></view></view>
+      <view class="success-actions"><view><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit"></image><text>维护球队资料</text></view><view><image src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit"></image><text>邀请管理成员</text></view><view><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"></image><text>加入赛事</text></view></view>
     </view>
 
-    <view class="white-panel success-panel" wx:if="{{isEventSuccessStep}}"><view class="success-mark"><image src="/images/icons/shield.svg" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view><view class="success-title">赛事空间创建成功</view><view class="team-summary"><image class="success-logo" wx:if="{{hasCreatedEventLogo}}" src="{{createdEventLogo}}" mode="aspectFit"></image><view class="success-logo fallback-logo" wx:if="{{!hasCreatedEventLogo}}"><image src="/images/icons/shield.svg" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view><view><text class="created-team-name">{{createdEventName}}</text><text class="team-tag">赛事主办</text></view></view><text class="success-subtitle">{{successSubtitle}}</text><view class="success-actions"><view><image src="/images/icons/list.svg" mode="aspectFit"></image><text>完善赛事设置</text></view><view><image src="/images/icons/players.svg" mode="aspectFit"></image><text>邀请参赛球队</text></view><view><image src="/images/icons/event.svg" mode="aspectFit"></image><text>配置竞赛组别</text></view></view></view>
+    <view class="white-panel success-panel" wx:if="{{isEventSuccessStep}}"><view class="success-mark"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit" style="width:86rpx;height:86rpx"></image></view><view class="success-title">赛事空间创建成功</view><view class="team-summary"><image class="success-logo" wx:if="{{hasCreatedEventLogo}}" src="{{createdEventLogo}}" mode="aspectFit"></image><view class="success-logo fallback-logo" wx:if="{{!hasCreatedEventLogo}}"><image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit" style="width:74rpx;height:74rpx"></image></view><view><text class="created-team-name">{{createdEventName}}</text><text class="team-tag">赛事主办</text></view></view><text class="success-subtitle">{{successSubtitle}}</text><view class="success-actions"><view><image src="/images/runtime/icons/brand-v2-15.png" mode="aspectFit"></image><text>完善赛事设置</text></view><view><image src="/images/runtime/icons/brand-v2-08.png" mode="aspectFit"></image><text>邀请参赛球队</text></view><view><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"></image><text>配置竞赛组别</text></view></view></view>
 
     <view class="error-card" wx:if="{{errorVisible}}">{{errorText}}</view>
     <button class="primary-button" wx:if="{{isSceneStep}}" bindtap="saveSceneAndContinue" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
-    <button class="primary-button" wx:if="{{isTeamProfileStep}}" bindtap="createTeam" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
+    <button class="primary-button team-save-button" wx:if="{{isTeamProfileStep}}" bindtap="createTeam" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button" wx:if="{{isEventProfileStep}}" bindtap="createEventSpace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button" wx:if="{{isTrainingProfileStep}}" bindtap="createTrainingWorkspace" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>
     <button class="primary-button" wx:if="{{isTeamSuccessStep}}" bindtap="enterTeamHome" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{primaryText}}</button>

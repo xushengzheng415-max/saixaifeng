@@ -14,7 +14,6 @@ const REFEREE_EVENT_TYPES = ['goal', 'yellow_card', 'red_card', 'substitution', 
 
 const OCR_HOST = 'ocr.tencentcloudapi.com'
 const OCR_SERVICE = 'ocr'
-const OCR_ACTION = 'GeneralHandwritingOCR'
 const OCR_VERSION = '2018-11-19'
 
 function hmacSha256(key, value) {
@@ -36,19 +35,21 @@ function tc3Authorization(secretId, secretKey, timestamp, payload) {
   return 'TC3-HMAC-SHA256 Credential=' + secretId + '/' + credentialScope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature
 }
 
-function callHandwritingOcr(imageBase64) {
+function callTencentOcr(action, requestData) {
   return new Promise(function(resolve, reject) {
-    const secretId = process.env.TENCENTCLOUD_SECRETID || process.env.TENCENT_SECRET_ID || ''
-    const secretKey = process.env.TENCENTCLOUD_SECRETKEY || process.env.TENCENT_SECRET_KEY || ''
-    const sessionToken = process.env.TENCENTCLOUD_SESSIONTOKEN || ''
+    const explicitSecretId=process.env.OCR_SECRET_ID||''
+    const explicitSecretKey=process.env.OCR_SECRET_KEY||''
+    const secretId = explicitSecretId || process.env.TENCENTCLOUD_SECRETID || process.env.TENCENT_SECRET_ID || ''
+    const secretKey = explicitSecretKey || process.env.TENCENTCLOUD_SECRETKEY || process.env.TENCENT_SECRET_KEY || ''
+    const sessionToken = explicitSecretId&&explicitSecretKey?'':(process.env.TENCENTCLOUD_SESSIONTOKEN || '')
     if (!secretId || !secretKey) return reject(Object.assign(new Error('OCR云函数临时凭据不可用'), { code: 'OCR_CREDENTIAL_MISSING' }))
-    const payload = JSON.stringify({ ImageBase64: imageBase64, EnableWordPolygon: false, EnableDetectText: true })
+    const payload = JSON.stringify(requestData || {})
     const timestamp = Math.floor(Date.now() / 1000)
     const headers = {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(payload),
       Host: OCR_HOST,
-      'X-TC-Action': OCR_ACTION,
+      'X-TC-Action': action,
       'X-TC-Version': OCR_VERSION,
       'X-TC-Timestamp': String(timestamp),
       'X-TC-Region': process.env.TENCENTCLOUD_REGION || 'ap-shanghai',
@@ -78,6 +79,22 @@ function callHandwritingOcr(imageBase64) {
     request.write(payload)
     request.end()
   })
+}
+
+function callAccurateOcr(imageBase64) {
+  return callTencentOcr('GeneralAccurateOCR',{ImageBase64:imageBase64})
+}
+
+function callHandwritingOcr(imageBase64) {
+  return callTencentOcr('GeneralHandwritingOCR',{ImageBase64:imageBase64,EnableWordPolygon:false,EnableDetectText:true})
+}
+
+function callCardRiskDetection(imageBase64) {
+  return callTencentOcr('RecognizeGeneralCardWarn',{ImageBase64:imageBase64,CardType:'General'})
+}
+
+function callSealOcr(imageBase64) {
+  return callTencentOcr('SealOCR',{ImageBase64:imageBase64,EnablePdf:false})
 }
 
 function fullWidthToHalf(text) {
@@ -169,6 +186,15 @@ function ok(data, message) {
 
 function fail(message, code) {
   return { success: false, message: message || '操作失败', code: code || 'WORKFLOW_ERROR' }
+}
+
+function publicWorkflowError(error) {
+  const code=String(error&&error.code||'')
+  const message=String(error&&error.message||'')
+  if(/UnauthorizedOperation|AuthFailure/i.test(code)||/not authorized|no permission|CAM policies/i.test(message))return fail('裁判证已上传，但自动识别服务尚未获得腾讯云 OCR 权限。请先手动核对填写姓名、等级和证书编号。','OCR_PERMISSION_REQUIRED')
+  if(/LimitExceeded|RequestLimitExceeded|FailedOperation\.ServiceIsolate/i.test(code))return fail('自动识别服务暂时繁忙，裁判证已保留，请稍后重试或手动填写。','OCR_SERVICE_BUSY')
+  if(/database request fail|document\.(?:add|update):fail|DATABASE_REQUEST_FAILED|-5020\d+/i.test(message))return fail('裁判资料保存失败，请保留当前页面并稍后重试。','REFEREE_PROFILE_SAVE_FAILED')
+  return fail(message||'服务异常，请稍后重试',code||'UNEXPECTED_ERROR')
 }
 
 function firstNonEmpty() {
@@ -677,6 +703,145 @@ async function queryByPhone(collection, phone) {
     console.warn('[serviceMatchWorkflow] phone query failed:', collection, error.message)
     return []
   }
+}
+
+function refereeOfficialOpenId(workflowOpenId){return String(workflowOpenId||'').replace(/^service:/,'')}
+
+function refereeFollowAllowed(invitation,workflowOpenId){
+  if(!invitation||invitation.followRequired!==true)return true
+  return invitation.followStatus==='subscribed'&&refereeOfficialOpenId(workflowOpenId)&&invitation.officialOpenId===refereeOfficialOpenId(workflowOpenId)
+}
+
+async function getRefereeInvitation(openId,event) {
+  const token=String(event.inviteToken || '')
+  const result=await db.collection('referee_invitations').where({ token,status:'active' }).limit(1).get()
+  const invitation=listData(result)[0]
+  if(!invitation)return fail('裁判邀请不存在或已失效','REFEREE_INVITE_INVALID')
+  if(!refereeFollowAllowed(invitation,openId))return fail('请先使用当前微信扫码关注赛小蜂足球助手，再从服务号消息进入裁判登记。','REFEREE_FOLLOW_REQUIRED')
+  const tournamentResult=await db.collection('tournaments').doc(invitation.tournamentId).get()
+  const tournament=Array.isArray(tournamentResult.data)?tournamentResult.data[0]:tournamentResult.data
+  return ok({ tournamentName:tournament && tournament.name || '足球赛事',targetRefereeName:invitation.targetRefereeName || '' })
+}
+
+function refereeCertificateFields(rows) {
+  const lines=(rows||[]).map(function(row){return fullWidthToHalf(row.text).replace(/\s+/g,' ').trim()}).filter(Boolean)
+  const text=lines.join('\n')
+  const levelOptions=['五人制足球国际级裁判员','沙滩足球国际级裁判员','国际级视频比赛官员','国际级助理裁判员','国际级裁判员','国家级','一级','二级','三级']
+  let name='',certificateNumber='',level=''
+  const nameMatch=text.match(/(?:姓名|姓\s*名|现授予|兹授予|授予)\s*[:：]?\s*([\u3400-\u9fff·]{2,12})/)
+  if(nameMatch)name=nameMatch[1]
+  const numberPatterns=[/(?:证书编号|证件编号|编号|证号)\s*[:：]?\s*([A-Za-z0-9-]{5,32})/i,/(?:No\.?|NO\.?)\s*[:：]?\s*([A-Za-z0-9-]{5,32})/i,/(?:第\s*)?([A-Za-z]{0,5}\d[A-Za-z0-9-]{4,28})\s*号/i]
+  for(let i=0;i<numberPatterns.length&&!certificateNumber;i+=1){const matched=text.match(numberPatterns[i]);if(matched)certificateNumber=matched[1]}
+  level=levelOptions.find(function(item){return text.indexOf(item)>=0})||''
+  if(!level&&/一[级圾].{0,6}足球裁判员|一级.{0,8}裁判/.test(text))level='一级'
+  if(!level&&/二[级圾].{0,6}足球裁判员|二级.{0,8}裁判/.test(text))level='二级'
+  if(!level&&/三[级圾].{0,6}足球裁判员|三级.{0,8}裁判/.test(text))level='三级'
+  if(!level&&/国家.{0,3}级.{0,8}裁判/.test(text))level='国家级'
+  if(!name){
+    const labelIndex=lines.findIndex(function(line){return /^姓名[:：]?$/.test(line)})
+    if(labelIndex>=0&&lines[labelIndex+1]&&/^[\u3400-\u9fff·]{2,12}$/.test(lines[labelIndex+1]))name=lines[labelIndex+1]
+  }
+  let issueDate=''
+  const labelledDate=text.match(/(?:发\s*证\s*日\s*期|颁\s*发\s*日\s*期|签\s*发\s*日\s*期)\s*[:：]?\s*(20\d{2})\s*[.年\-/]?\s*(\d{1,2})(?:\s*[.月\-/]?\s*(\d{1,2})\s*日?)?/)
+  const generalDate=text.match(/(?:^|\s)(20\d{2})\s*[.年\-/]\s*(\d{1,2})(?:\s*[.月\-/]\s*(\d{1,2})\s*日?)?(?:\s|$)/)
+  const dateMatch=labelledDate||generalDate
+  if(dateMatch)issueDate=[dateMatch[1],String(Number(dateMatch[2])).padStart(2,'0'),dateMatch[3]?String(Number(dateMatch[3])).padStart(2,'0'):''].filter(Boolean).join('.')
+  return {name,certificateNumber,level,issueDate,rawLines:lines.slice(0,40)}
+}
+
+function normalizeIssuingAuthority(value,fullText) {
+  const source=String(value||'').replace(/\s+/g,'').trim()
+  const combined=source+' '+String(fullText||'')
+  if(/江苏省.{0,6}足球.{0,4}协会|JIANGSU.{0,8}FOOTBALL.{0,8}ASSOCIATION|JSFA/i.test(combined))return '江苏省足球协会'
+  return source.replace('足球运动协会','足球协会')
+}
+
+async function processRefereeAvatar(openId,event) {
+  if(!openId)return fail('请先完成微信授权','OPENID_REQUIRED')
+  const inviteToken=String(event.inviteToken||'')
+  const inviteResult=await db.collection('referee_invitations').where({token:inviteToken,status:'active'}).limit(1).get()
+  const invitation=listData(inviteResult)[0]
+  if(!invitation)return fail('裁判邀请不存在或已失效','REFEREE_INVITE_INVALID')
+  if(!refereeFollowAllowed(invitation,openId))return fail('请先关注服务号并从服务号消息进入裁判登记。','REFEREE_FOLLOW_REQUIRED')
+  const imageBase64=String(event.imageBase64||'').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/,'').replace(/\s/g,'')
+  if(!imageBase64||imageBase64.length<200)return fail('请选择清晰的本人头像','AVATAR_IMAGE_REQUIRED')
+  if(imageBase64.length>4*1024*1024)return fail('头像照片过大，请重新裁剪','AVATAR_IMAGE_TOO_LARGE')
+  if(!/^[A-Za-z0-9+/=]+$/.test(imageBase64))return fail('头像照片格式不正确','AVATAR_IMAGE_INVALID')
+  const called=await cloud.callFunction({name:'baiduRemoveBg',data:{action:'removeBackground',imageBase64}})
+  const result=called&&called.result||{}
+  if(!result.success||!result.data||result.type){const error=new Error(result.message||'人像分割未返回透明前景，请重新选择清晰的单人照片');error.code='AVATAR_SEGMENT_FAILED';throw error}
+  const transparentBase64=String(result.data).replace(/^data:image\/png;base64,/i,'')
+  const avatarPath='referee-avatars/'+invitation.tournamentId+'/staged-'+Date.now()+'-'+crypto.randomBytes(5).toString('hex')+'.png'
+  const avatarUpload=await cloud.uploadFile({cloudPath:avatarPath,fileContent:Buffer.from(transparentBase64,'base64')})
+  await db.collection('referee_invitations').doc(invitation._id).update({data:{stagedAvatarFileId:avatarUpload.fileID,stagedAvatarAt:db.serverDate(),updateTime:db.serverDate()}})
+  return ok({transparentImageDataUrl:'data:image/png;base64,'+transparentBase64,avatarFileId:avatarUpload.fileID,personNum:Number(result.personNum||1),method:'baidu_body_seg'},'头像裁剪和人像分割完成')
+}
+
+async function recognizeRefereeCertificate(openId,event) {
+  if(!openId)return fail('请先完成微信授权','OPENID_REQUIRED')
+  const inviteToken=String(event.inviteToken||'')
+  const inviteResult=await db.collection('referee_invitations').where({token:inviteToken,status:'active'}).limit(1).get()
+  const invitation=listData(inviteResult)[0]
+  if(!invitation)return fail('裁判邀请不存在或已失效','REFEREE_INVITE_INVALID')
+  if(!refereeFollowAllowed(invitation,openId))return fail('请先关注服务号并从服务号消息进入裁判登记。','REFEREE_FOLLOW_REQUIRED')
+  const imageBase64=String(event.imageBase64||'').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/,'').replace(/\s/g,'')
+  if(!imageBase64||imageBase64.length<200)return fail('请上传清晰的裁判证照片','OCR_IMAGE_REQUIRED')
+  if(imageBase64.length>8*1024*1024)return fail('裁判证照片过大，请压缩后重新上传','OCR_IMAGE_TOO_LARGE')
+  if(!/^[A-Za-z0-9+/=]+$/.test(imageBase64))return fail('裁判证照片格式不正确','OCR_IMAGE_INVALID')
+  const certificatePath='referee-certificates/'+invitation.tournamentId+'/staged-'+Date.now()+'-'+crypto.randomBytes(5).toString('hex')+'.jpg'
+  const certificateUpload=await cloud.uploadFile({cloudPath:certificatePath,fileContent:Buffer.from(imageBase64,'base64')})
+  await db.collection('referee_invitations').doc(invitation._id).update({data:{stagedCertificateFileId:certificateUpload.fileID,stagedCertificateAt:db.serverDate(),updateTime:db.serverDate()}})
+  const results=await Promise.all([callAccurateOcr(imageBase64),callCardRiskDetection(imageBase64).catch(function(error){console.warn('[serviceMatchWorkflow] card risk detection skipped:',error.code||error.message);return null}),callSealOcr(imageBase64).catch(function(error){console.warn('[serviceMatchWorkflow] seal recognition skipped:',error.code||error.message);return null})])
+  const result=results[0]
+  const fields=refereeCertificateFields(ocrRows(result.TextDetections))
+  const riskResult=results[1]
+  const sealResult=results[2]
+  const riskLabels={Blur:'图片模糊',BorderIncomplete:'边框不完整',Copy:'疑似复印件',Ps:'疑似修改',Reflection:'存在反光',Reprint:'疑似翻拍',Screenshot:'疑似截图',Cover:'存在遮挡',Overlap:'图像重叠',Watermark:'存在水印'}
+  const risks=Object.keys(riskLabels).filter(function(key){return riskResult&&riskResult[key]&&riskResult[key].IsWarn===true}).map(function(key){return {type:key,label:riskLabels[key],confidence:Number(riskResult[key].RiskConfidence||0)}})
+  fields.risks=risks
+  fields.riskChecked=!!riskResult
+  fields.issuingAuthorityRaw=String(sealResult&&sealResult.SealBody||sealResult&&sealResult.SealInfos&&sealResult.SealInfos[0]&&sealResult.SealInfos[0].SealBody||'').trim()
+  fields.issuingAuthority=normalizeIssuingAuthority(fields.issuingAuthorityRaw,fields.rawLines.join(' '))
+  fields.sealRecognized=!!fields.issuingAuthority
+  fields.ocrEngine='GeneralAccurateOCR'
+  fields.certificateFileId=certificateUpload.fileID
+  return ok(fields,fields.name||fields.certificateNumber||fields.level?'证书识别完成，请核对信息':'已读取证书，请手动补充未识别信息')
+}
+
+function refereeImagePayload(value,label,maxBytes) {
+  const matched=String(value||'').match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=\s]+)$/i)
+  if(!matched){const error=new Error('请上传'+label);error.code='REFEREE_IMAGE_REQUIRED';throw error}
+  const buffer=Buffer.from(matched[2].replace(/\s/g,''),'base64')
+  if(!buffer.length||buffer.length>maxBytes){const error=new Error(label+'文件过大，请重新选择');error.code='REFEREE_IMAGE_TOO_LARGE';throw error}
+  return {buffer,extension:matched[1].toLowerCase()==='jpeg'?'jpg':'png',dataUrl:'data:image/'+matched[1].toLowerCase()+';base64,'+matched[2].replace(/\s/g,'')}
+}
+
+async function acceptRefereeInvitation(openId,event) {
+  const token=String(event.inviteToken || ''),name=String(event.name || '').trim(),phone=normalizePhone(event.phone),level=String(event.level || '').trim(),qualification=String(event.qualification || '').trim(),issuingAuthority=String(event.issuingAuthority||'').trim().slice(0,100),certificateIssueDate=String(event.certificateIssueDate||'').trim().slice(0,30)
+  if(!openId)return fail('请先完成微信授权','OPENID_REQUIRED')
+  if(!name || !/^1[3-9]\d{9}$/.test(phone)||!level||!qualification||!issuingAuthority)return fail('请核对姓名、手机号、裁判等级、证书编号和发证单位','PROFILE_REQUIRED')
+  const avatarPreviewImage=refereeImagePayload(event.avatarPreviewDataUrl||event.avatarImageDataUrl,'头像预览',512*1024)
+  const result=await db.collection('referee_invitations').where({ token,status:'active' }).limit(1).get();const invitation=listData(result)[0]
+  if(!invitation)return fail('裁判邀请不存在或已失效','REFEREE_INVITE_INVALID')
+  if(!refereeFollowAllowed(invitation,openId))return fail('请从服务号发送的裁判登记入口重新进入。','REFEREE_FOLLOW_REQUIRED')
+  if(!invitation.stagedCertificateFileId||!invitation.stagedAvatarFileId)return fail('请重新上传裁判证并完成头像裁剪抠图','REFEREE_ASSET_NOT_READY')
+  const duplicate=listData(await db.collection('referees').where({ tournamentId:invitation.tournamentId,phone }).limit(2).get()).filter(function(item) { return item._id !== invitation.targetRefereeId })
+  if(duplicate.length)return fail('该手机号已提交裁判资料，请勿重复提交','REFEREE_DUPLICATED')
+  const tournamentResult=await db.collection('tournaments').doc(invitation.tournamentId).get();const tournament=Array.isArray(tournamentResult.data)?tournamentResult.data[0]:tournamentResult.data
+  let target=null
+  if(invitation.targetRefereeId){const targetResult=await db.collection('referees').doc(invitation.targetRefereeId).get();target=Array.isArray(targetResult.data)?targetResult.data[0]:targetResult.data;if(!target||target.tournamentId!==invitation.tournamentId||target.synthetic!==true)return fail('待认领的模拟裁判资料不存在或已绑定','REFEREE_TARGET_INVALID')}
+  const certificateRisks=(Array.isArray(event.certificateRisks)?event.certificateRisks:[]).slice(0,10).map(function(item){return {type:String(item&&item.type||'').slice(0,40),label:String(item&&item.label||'').slice(0,40),confidence:Math.max(0,Math.min(1,Number(item&&item.confidence||0)))}}).filter(function(item){return item.type&&item.label})
+  const profileAssets={certificateNumber:qualification,certificateIssueDate,issuingAuthority,certificateFileId:invitation.stagedCertificateFileId,avatarFileId:invitation.stagedAvatarFileId,avatarUrl:avatarPreviewImage.dataUrl,avatarBackgroundRemoved:true,avatarProcessingMethod:'baidu_body_seg',certificateRecognized:true,certificateOcrEngine:'GeneralAccurateOCR+SealOCR',certificateRisks,certificateRiskReviewRequired:certificateRisks.length>0}
+  let refereeId=''
+  if(invitation.targetRefereeId) {
+    await db.collection('referees').doc(invitation.targetRefereeId).update({ data:Object.assign({ name,realName:name,phone,level,qualification,status:'pending',auditStatus:'pending',availabilityStatus:'pending',wechatWorkflowOpenId:openId,wechatBound:true,synthetic:false,wasSyntheticCandidate:true,canLogin:true,canOperate:false,notificationDisabled:false,source:'synthetic_profile_claim',inviteId:invitation._id,updateTime:db.serverDate() },profileAssets) })
+    refereeId=invitation.targetRefereeId
+  } else {
+    const added=await db.collection('referees').add({ data:Object.assign({ tournamentId:invitation.tournamentId,orgId:invitation.orgId || tournament && (tournament.orgId || tournament.organizationId) || '',name,realName:name,phone,level,qualification,status:'pending',auditStatus:'pending',availabilityStatus:'pending',wechatWorkflowOpenId:openId,wechatBound:true,source:'referee_invite_qr',inviteId:invitation._id,canLogin:true,canOperate:false,createTime:db.serverDate(),updateTime:db.serverDate() },profileAssets) })
+    refereeId=added._id
+  }
+  await db.collection('referee_invitations').doc(invitation._id).update({ data:{ status:'accepted',refereeId,acceptedAt:db.serverDate(),updateTime:db.serverDate() } })
+  return ok({ refereeId },'裁判资料已提交，等待主办方审核')
 }
 
 async function getRefereeRecords(identity) {
@@ -1998,6 +2163,10 @@ exports.main = async function(event) {
 
   try {
     if (action === 'sendBindSms') return await sendBindSms(openId, event.phone)
+    if (action === 'getRefereeInvitation') return await getRefereeInvitation(openId,event)
+    if (action === 'acceptRefereeInvitation') return await acceptRefereeInvitation(openId,event)
+    if (action === 'recognizeRefereeCertificate') return await recognizeRefereeCertificate(openId,event)
+    if (action === 'processRefereeAvatar') return await processRefereeAvatar(openId,event)
     if (action === 'verifyBindSms') return await verifyBindSms(openId, event.phone, event.code)
     if (action === 'getWorkbench') return await getWorkbench(openId)
     if (action === 'getRefereeMatch') return await getRefereeMatch(openId, event.matchId)
@@ -2021,6 +2190,6 @@ exports.main = async function(event) {
     return fail('不支持的操作', 'ACTION_NOT_SUPPORTED')
   } catch (error) {
     console.error('[serviceMatchWorkflow] action failed:', action, error)
-    return fail(error.message || '服务异常，请稍后重试', error.code || 'UNEXPECTED_ERROR')
+    return publicWorkflowError(error)
   }
 }

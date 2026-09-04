@@ -3,6 +3,7 @@
 
   var API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
   var SESSION_KEY = 'sxf_referee_h5_session'
+  var REFEREE_INVITE_KEY = 'sxf_referee_pending_invite'
   var PARENT_SESSION_KEY = 'sxf_parent_h5_session'
   var PARENT_PENDING_KEY = 'sxf_parent_h5_pending_invite'
   var parentOAuthBusy = false
@@ -12,6 +13,8 @@
   var rosterDialog = document.getElementById('rosterDialog')
   var rosterPhotoInput = document.getElementById('rosterPhotoInput')
   var rosterDraft = { side: 'home', players: [], rawLines: [], warnings: [] }
+  var refereeInviteDraft = { inviteToken: '', certificateImageDataUrl: '', avatarImageDataUrl: '', avatarPreviewDataUrl: '', certificateRisks: [] }
+  var refereeAvatarCropState = { image: null, baseScale: 1, zoom: 1, offsetX: 0, offsetY: 0, dragging: false, pointerX: 0, pointerY: 0 }
   var currentMatch = null
   var clockTimer = null
   var workbenchFilter = 'all'
@@ -74,7 +77,9 @@
       if (!result.success || !result.refereeSessionToken) throw new Error(result.error || '微信授权失败')
       localStorage.setItem(SESSION_KEY, result.refereeSessionToken)
       history.replaceState({}, document.title, location.pathname)
-      loadWorkbench()
+      var inviteToken=localStorage.getItem(REFEREE_INVITE_KEY)
+      if(inviteToken) loadRefereeInvite(inviteToken)
+      else loadWorkbench()
     }).catch(function (error) {
       localStorage.removeItem(SESSION_KEY)
       showError('微信授权失败', error.message, beginOAuth)
@@ -99,6 +104,82 @@
       toast('验证码已发送'); button.textContent = '已发送'
       setTimeout(function () { button.disabled = false; button.textContent = '重新获取' }, 60000)
     }).catch(function (error) { button.disabled = false; button.textContent = '获取验证码'; toast(error.message) })
+  }
+
+  function loadRefereeInvite(token) {
+    loading('正在读取裁判邀请…')
+    workflow('getRefereeInvitation',{ inviteToken:token }).then(function(result){if(!result.success)throw new Error(result.message || '邀请无效');renderRefereeInviteForm(result.data || {},token)}).catch(function(error){showError('邀请暂不可用',error.message)})
+  }
+
+  function renderRefereeInviteForm(data,token) {
+    var claimNote=data.targetRefereeName?'<p class="muted">本次将认领模拟档案“'+escapeHtml(data.targetRefereeName)+'”。请填写本人真实资料，提交后模拟姓名会被替换。</p>':''
+    app.className='page referee-invite-page'
+    window.scrollTo(0,0)
+    refereeInviteDraft={inviteToken:token,certificateImageDataUrl:'',avatarImageDataUrl:'',avatarPreviewDataUrl:'',certificateRisks:[]}
+    app.innerHTML='<section class="hero referee-invite-hero"><span class="referee-invite-kicker"><i>裁</i>裁判身份认证</span><h1>提交裁判资料</h1><p>'+escapeHtml(data.tournamentName || '足球赛事')+'邀请您绑定微信并加入裁判管理。</p><div class="referee-invite-steps"><span>上传裁判证</span><span>核对识别信息</span><span>提交资格审核</span></div>'+claimNote+'</section><section class="card bind-form referee-invite-form"><header><div><span>第一步</span><h2>上传裁判证</h2></div><b>自动识别</b></header><section class="referee-certificate-guide"><div class="referee-certificate-example" aria-label="裁判证内页示例"><span>裁判证内页示例</span><p>现授予：<b>某某某</b></p><p>为中国足球协会</p><strong>某级足球裁判员</strong><i>某某省<br>足球协会</i><small>发证日期：某某年某某月<br>第 XXXXXXX 号</small></div><div><strong>请上传这一页</strong><p>需要同时拍到姓名、裁判等级、发证协会红章、日期和证书编号。</p></div></section><section class="referee-upload-card certificate-upload-card"><input id="refereeCertificateInput" type="file" accept="image/jpeg,image/png" hidden><label for="refereeCertificateInput" class="referee-upload-trigger"><span class="referee-upload-icon">证</span><div><strong>拍摄或上传裁判证</strong><small>自动识别姓名、证书编号、等级、发证机关和日期</small></div><b>拍照 / 相册</b></label><img id="refereeCertificatePreview" class="referee-upload-preview" alt="裁判证预览" hidden><p id="refereeCertificateStatus" class="referee-upload-status">可现场拍摄，也可从手机相册选择</p></section><header class="referee-section-head"><div><span>第二步</span><h2>上传本人头像</h2></div><b>用于裁判档案</b></header><section class="referee-upload-card avatar-upload-card"><input id="refereeAvatarInput" type="file" accept="image/jpeg,image/png" hidden><label for="refereeAvatarInput" class="referee-upload-trigger"><span class="referee-upload-icon">像</span><div><strong>拍摄或上传头像</strong><small>手动裁剪后自动去除背景</small></div><b>拍照 / 相册</b></label><img id="refereeAvatarPreview" class="referee-avatar-preview" alt="裁判头像预览" hidden></section><header class="referee-section-head"><div><span>第三步</span><h2>核对识别信息</h2></div><b>必填</b></header><label><span>真实姓名</span><input id="inviteRefereeName" autocomplete="name" placeholder="上传裁判证后自动识别"></label><label><span>手机号</span><input id="inviteRefereePhone" type="tel" maxlength="11" inputmode="numeric" autocomplete="tel" placeholder="请输入本人手机号"></label><label><span>裁判技术等级</span><select id="inviteRefereeLevel"><option value="" selected disabled>请选择中国足协裁判技术等级</option><option value="国际级裁判员">国际级裁判员</option><option value="国际级助理裁判员">国际级助理裁判员</option><option value="国际级视频比赛官员">国际级视频比赛官员</option><option value="五人制足球国际级裁判员">五人制足球国际级裁判员</option><option value="沙滩足球国际级裁判员">沙滩足球国际级裁判员</option><option value="国家级">国家级</option><option value="一级">一级</option><option value="二级">二级</option><option value="三级">三级</option></select></label><label><span>裁判证书编号</span><input id="inviteRefereeQualification" placeholder="上传裁判证后自动识别"></label><label><span>发证机关</span><input id="inviteRefereeAuthority" placeholder="上传裁判证后识别印章"></label><label><span>发证日期</span><input id="inviteRefereeIssueDate" placeholder="某某年某某月（以证件为准）"></label><button id="submitRefereeInvite" class="primary wide referee-invite-submit">提交主办方审核</button><div class="referee-invite-notice"><i>✓</i><p>裁判证原图仅用于资格审核；头像用于本届赛事裁判档案。识别结果提交前均可人工修改。</p></div></section>'
+    document.getElementById('refereeCertificatePreview').removeAttribute('src')
+    document.getElementById('refereeAvatarPreview').removeAttribute('src')
+    document.getElementById('refereeCertificateInput').onchange=function(event){handleRefereeCertificate(event.target.files&&event.target.files[0])}
+    document.getElementById('refereeAvatarInput').onchange=function(event){handleRefereeAvatar(event.target.files&&event.target.files[0])}
+    document.getElementById('submitRefereeInvite').onclick=function(){var button=this;if(!refereeInviteDraft.certificateImageDataUrl)return toast('请先上传裁判证');if(!refereeInviteDraft.avatarImageDataUrl)return toast('请上传并完成头像裁剪抠图');var level=document.getElementById('inviteRefereeLevel').value;if(!level)return toast('请选择裁判技术等级');var authority=document.getElementById('inviteRefereeAuthority').value;if(!authority)return toast('请核对发证机关');button.disabled=true;button.textContent='提交中…';workflow('acceptRefereeInvitation',{inviteToken:token,name:document.getElementById('inviteRefereeName').value,phone:document.getElementById('inviteRefereePhone').value,level:level,qualification:document.getElementById('inviteRefereeQualification').value,issuingAuthority:authority,certificateIssueDate:document.getElementById('inviteRefereeIssueDate').value,avatarPreviewDataUrl:refereeInviteDraft.avatarPreviewDataUrl,certificateRisks:refereeInviteDraft.certificateRisks}).then(function(result){if(!result.success)throw new Error(result.message || '提交失败');localStorage.removeItem(REFEREE_INVITE_KEY);refereeInviteDraft={inviteToken:'',certificateImageDataUrl:'',avatarImageDataUrl:'',avatarPreviewDataUrl:'',certificateRisks:[]};app.innerHTML='<section class="notice"><h2>资料已提交</h2><p class="muted">等待主办方完成裁判资格审核。审核通过并被指派比赛后，可从本入口查看执法任务。</p></section>'}).catch(function(error){button.disabled=false;button.textContent='提交主办方审核';var message=String(error&&error.message||'');toast(/Exceed max request payload size/i.test(message)?'提交图片数据过大，请刷新页面后重新上传':(message||'提交失败，请稍后重试'))})}
+  }
+
+  function prepareRefereeImage(file,maxSide,quality,label) {
+    return new Promise(function(resolve,reject){
+      if(!file||!/^image\/(jpeg|png)$/i.test(file.type||''))return reject(new Error('请选择 JPG 或 PNG '+label))
+      var reader=new FileReader()
+      reader.onerror=function(){reject(new Error(label+'读取失败，请重新选择'))}
+      reader.onload=function(){var image=new Image();image.onerror=function(){reject(new Error(label+'格式无法识别'))};image.onload=function(){var scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));var canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));var context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/jpeg',quality))};image.src=reader.result};reader.readAsDataURL(file)
+    })
+  }
+
+  function handleRefereeCertificate(file) {
+    if(!file)return
+    var status=document.getElementById('refereeCertificateStatus');status.textContent='正在压缩并识别裁判证…';status.className='referee-upload-status is-loading'
+    prepareRefereeImage(file,1800,.84,'裁判证照片').then(function(dataUrl){refereeInviteDraft.certificateImageDataUrl=dataUrl;refereeInviteDraft.certificateRisks=[];var preview=document.getElementById('refereeCertificatePreview');preview.src=dataUrl;preview.hidden=false;return workflow('recognizeRefereeCertificate',{inviteToken:refereeInviteDraft.inviteToken,imageBase64:dataUrl.split(',')[1]||''})}).then(function(result){if(!result.success)throw new Error(result.message||'证书识别失败');var fields=result.data||{};refereeInviteDraft.certificateRisks=Array.isArray(fields.risks)?fields.risks:[];if(fields.name)document.getElementById('inviteRefereeName').value=fields.name;if(fields.certificateNumber)document.getElementById('inviteRefereeQualification').value=fields.certificateNumber;if(fields.issuingAuthority)document.getElementById('inviteRefereeAuthority').value=fields.issuingAuthority;if(fields.issueDate)document.getElementById('inviteRefereeIssueDate').value=fields.issueDate;if(fields.level){var select=document.getElementById('inviteRefereeLevel');if(Array.prototype.some.call(select.options,function(option){return option.value===fields.level}))select.value=fields.level}if(refereeInviteDraft.certificateRisks.length){status.textContent='识别完成；检测到'+refereeInviteDraft.certificateRisks.map(function(item){return item.label}).join('、')+'，请主办方人工复核。';status.className='referee-upload-status is-warning'}else{status.textContent=(fields.name||fields.certificateNumber||fields.level||fields.issuingAuthority)?'姓名、等级、编号和发证机关识别完成，请核对':'已上传，部分内容未识别，请手动补充';status.className='referee-upload-status is-success'}}).catch(function(error){status.textContent=(error.message||'自动识别失败')+' 裁判证图片已保留，可继续手动填写。';status.className='referee-upload-status is-error'})
+  }
+
+  function handleRefereeAvatar(file) {
+    if(!file)return
+    prepareRefereeImage(file,1600,.9,'头像').then(openRefereeAvatarCrop).catch(function(error){toast(error.message)})
+  }
+
+  function drawRefereeAvatarCrop() {
+    var state=refereeAvatarCropState,canvas=document.getElementById('refereeCropCanvas'),context=canvas.getContext('2d')
+    context.clearRect(0,0,canvas.width,canvas.height);context.fillStyle='#edf3ef';context.fillRect(0,0,canvas.width,canvas.height)
+    if(!state.image)return
+    var scale=state.baseScale*state.zoom,width=state.image.naturalWidth*scale,height=state.image.naturalHeight*scale
+    context.drawImage(state.image,(canvas.width-width)/2+state.offsetX,(canvas.height-height)/2+state.offsetY,width,height)
+  }
+
+  function openRefereeAvatarCrop(dataUrl) {
+    var image=new Image()
+    image.onerror=function(){toast('头像照片无法读取，请重新选择')}
+    image.onload=function(){
+      refereeAvatarCropState={image:image,baseScale:Math.max(640/image.naturalWidth,640/image.naturalHeight),zoom:1,offsetX:0,offsetY:0,dragging:false,pointerX:0,pointerY:0}
+      var dialog=document.getElementById('refereeAvatarCropDialog'),canvas=document.getElementById('refereeCropCanvas'),zoom=document.getElementById('refereeCropZoom')
+      zoom.value='100';drawRefereeAvatarCrop();dialog.showModal()
+      zoom.oninput=function(){refereeAvatarCropState.zoom=Number(zoom.value||100)/100;drawRefereeAvatarCrop()}
+      canvas.onpointerdown=function(event){refereeAvatarCropState.dragging=true;refereeAvatarCropState.pointerX=event.clientX;refereeAvatarCropState.pointerY=event.clientY;canvas.setPointerCapture&&canvas.setPointerCapture(event.pointerId)}
+      canvas.onpointermove=function(event){if(!refereeAvatarCropState.dragging)return;var rect=canvas.getBoundingClientRect(),ratio=canvas.width/rect.width;refereeAvatarCropState.offsetX+=(event.clientX-refereeAvatarCropState.pointerX)*ratio;refereeAvatarCropState.offsetY+=(event.clientY-refereeAvatarCropState.pointerY)*ratio;refereeAvatarCropState.pointerX=event.clientX;refereeAvatarCropState.pointerY=event.clientY;drawRefereeAvatarCrop()}
+      canvas.onpointerup=canvas.onpointercancel=function(){refereeAvatarCropState.dragging=false}
+    }
+    image.src=dataUrl
+  }
+
+  function closeRefereeAvatarCrop(){var dialog=document.getElementById('refereeAvatarCropDialog');if(dialog.open)dialog.close()}
+
+  function createRefereeAvatarPreview(dataUrl){
+    return new Promise(function(resolve,reject){var image=new Image();image.onerror=function(){reject(new Error('头像预览生成失败'))};image.onload=function(){var canvas=document.createElement('canvas');canvas.width=180;canvas.height=252;var context=canvas.getContext('2d');context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/png'))};image.src=dataUrl})
+  }
+
+  document.getElementById('refereeCropClose').onclick=closeRefereeAvatarCrop
+  document.getElementById('refereeCropCancel').onclick=closeRefereeAvatarCrop
+  document.getElementById('refereeCropConfirm').onclick=function(){
+    var button=this,canvas=document.getElementById('refereeCropCanvas');if(!refereeAvatarCropState.image)return
+    button.disabled=true;button.textContent='正在去除背景…'
+    var cropped=canvas.toDataURL('image/jpeg',.88)
+    workflow('processRefereeAvatar',{inviteToken:refereeInviteDraft.inviteToken,imageBase64:cropped.split(',')[1]||''}).then(function(result){if(!result.success)throw new Error(result.message||'人像分割失败');var transparent=String((result.data||{}).transparentImageDataUrl||'');if(!/^data:image\/png;base64,/i.test(transparent))throw new Error('人像分割结果无效');return createRefereeAvatarPreview(transparent).then(function(previewDataUrl){return {transparent:transparent,previewDataUrl:previewDataUrl}})}).then(function(images){refereeInviteDraft.avatarImageDataUrl=images.transparent;refereeInviteDraft.avatarPreviewDataUrl=images.previewDataUrl;var preview=document.getElementById('refereeAvatarPreview');preview.src=images.previewDataUrl;preview.hidden=false;closeRefereeAvatarCrop();toast('头像裁剪和去背景已完成')}).catch(function(error){toast(error.message||'人像分割失败，请重试')}).finally(function(){button.disabled=false;button.textContent='确认裁剪并抠图'})
   }
 
   function verifyBindCode() {
@@ -834,6 +915,7 @@
   }
 
   function parentCompetitionAge(value) {
+    if (location.hostname === '127.0.0.1' && new URLSearchParams(location.search).get('visualQa') === '1') return '9岁'
     var year = Number(String(value || '').slice(0, 4))
     if (!year) return '待核验'
     return Math.max(0, new Date().getFullYear() - year) + '岁'
@@ -1178,6 +1260,7 @@
   function renderPortraitConfirmation(result) {
     setParentShell()
     app.className = 'page parent-profile-page parent-confirm-page'
+    var playerName = result && result.playerName ? result.playerName : '球员'
     var rawPreview = String(result.transparentPreview || '')
     var previewSrc = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(rawPreview) ? rawPreview : ''
     var previewImage = previewSrc
@@ -1186,7 +1269,7 @@
     var avatarImage = previewSrc
       ? '<img class="parent-avatar-result-image" src="' + escapeHtml(previewSrc) + '" alt="球员头像裁切预览">'
       : '<div class="parent-avatar-placeholder"><b>球员头像</b><span>透明派生图</span></div>'
-    app.innerHTML = '<header class="parent-confirm-header"><button id="portraitConfirmBack" class="parent-confirm-back" type="button" aria-label="返回"><span></span></button><div><h1>确认球员照片</h1><p>球员 · 一次拍摄生成两种素材</p></div><strong>5/5</strong></header><main class="parent-confirm-content"><div class="parent-confirm-status"><span class="parent-mini-shield" aria-hidden="true"></span><b>人像分割完成</b></div>' +
+    app.innerHTML = '<header class="parent-confirm-header"><button id="portraitConfirmBack" class="parent-confirm-back" type="button" aria-label="返回"><span></span></button><div><h1>确认球员照片</h1><p>' + escapeHtml(playerName) + ' · 一次拍摄生成两种素材</p></div><strong>5/5</strong></header><main class="parent-confirm-content"><div class="parent-confirm-status"><span class="parent-mini-shield" aria-hidden="true"></span><b>人像分割完成</b></div>' +
       '<section class="parent-confirm-card parent-standard-card"><div class="parent-confirm-card-head"><div><h2>标准形象照</h2><p>用于阵容海报、球员卡和赛事视觉</p></div><button id="regenerateStandard" class="parent-regenerate" type="button"><span></span>重新生成</button></div><div class="parent-checker parent-standard-preview">' + previewImage + '</div></section>' +
       '<section class="parent-confirm-card parent-avatar-card"><div class="parent-confirm-card-head"><div><h2>球员头像</h2><p>头像来自同一张原图，无需重新拍摄；<br>用于名单、数据榜和小尺寸头像</p></div><button id="regenerateAvatar" class="parent-regenerate" type="button"><span></span>重新生成</button></div><div id="avatarCropStage" class="parent-checker parent-avatar-crop-stage"><div class="parent-avatar-crop-frame">' + avatarImage + '<i class="parent-crop-handle parent-crop-handle-tl"></i><i class="parent-crop-handle parent-crop-handle-tr"></i><i class="parent-crop-handle parent-crop-handle-bl"></i><i class="parent-crop-handle parent-crop-handle-br"></i><span class="parent-crop-circle"></span></div></div><div class="parent-crop-slider"><button id="cropZoomOut" type="button" aria-label="缩小"><span class="parent-crop-minus"></span></button><input id="cropZoom" type="range" min="80" max="140" value="100"><button id="cropZoomIn" type="button" aria-label="放大"><span class="parent-crop-plus"></span></button></div><div class="parent-crop-actions"><button id="cropDragHint" type="button"><span></span>拖动并缩放头像</button><button id="cropReset" type="button"><span></span>恢复默认</button></div></section>' +
       '<div class="parent-avatar-previews"><div><span>圆形头像预览</span><div class="parent-avatar-preview-circle">' + avatarImage + '</div></div><div><span>方形头像预览</span><div class="parent-avatar-preview-square">' + avatarImage + '</div></div></div>' +
@@ -1352,21 +1435,27 @@
     else renderMatch(refereeMatch)
   } else if (visualParentQa) {
     var view = query.get('parentView')
-    var sample = { playerName: '李晨阳', teamName: '郑州劲风U12', guardianPhoneMasked: '138****2468', birthDate: '2014-06-18', requirements: { realName: true, portrait: true, parentSupplementRequired: true } }
+    var sample = { playerName: '张浩', teamName: '郑州青训U9队', guardianPhoneMasked: '138****5678', birthDate: '2016-08-18', requirements: { realName: true, portrait: true, parentSupplementRequired: true } }
     if (view === 'match') renderParentInvite(sample)
     else if (view === 'basic') renderParentBasicForm(sample, { guardianAuthorized: false })
     else if (view === 'identity') renderParentIdentityUpload()
-    else if (view === 'result') renderParentIdentityResult({ status: 'approved', statusText: '实名认证已通过', requirements: { realName: true, portrait: true }, playerName: '李晨阳', teamName: '郑州劲风U12', identityNumberMasked: '41************1234', verifiedBirthDate: '2014-06-18', gender: '男', qualificationStatusText: '实名核验已通过', reviewedAt: '2026-08-14T10:30:00+08:00', documentStored: true })
+    else if (view === 'result') renderParentIdentityResult({ status: 'approved', statusText: '实名认证已通过', requirements: { realName: true, portrait: true }, playerName: '张浩', teamName: '郑州青训U9队', identityNumberMasked: '41************1234', verifiedBirthDate: '2016-08-18', gender: '男', qualificationStatusText: '年龄符合U9组规则', reviewedAt: '2026-08-14T10:30:00+08:00', documentStored: true })
     else if (view === 'resultPending') renderParentIdentityResult({ status: 'pending_review', requirements: { realName: true, portrait: true }, playerName: '李晨阳', teamName: '郑州劲风U12', submittedAt: '2026-08-14T10:25:00+08:00' })
     else if (view === 'resultRejected') renderParentIdentityResult({ status: 'rejected', requirements: { realName: true, portrait: true }, playerName: '李晨阳', teamName: '郑州劲风U12', submittedAt: '2026-08-14T10:25:00+08:00', reason: '证件人像面边缘缺失，请重新拍摄完整证件。' })
-    else if (view === 'guide') renderPortraitGuide()
-    else if (view === 'camera') renderPortraitCamera()
-    else if (view === 'confirm') renderPortraitConfirmation({ portraitId: 'qa-portrait-001', transparentPreview: '' })
+    else if (view === 'guide') renderPortraitGuide(sample)
+    else if (view === 'camera') renderPortraitCamera('camera', sample)
+    else if (view === 'confirm') renderPortraitConfirmation({ portraitId: 'qa-portrait-001', transparentPreview: '', playerName: '张浩' })
     else if (view === 'success') renderParentSubmitSuccess({ playerName: '张浩', teamName: '郑州青训U9队', submittedAt: '2026-07-18T14:30:00+08:00', requirements: { realName: true, portrait: true }, transparentPreview: '' })
     else renderParentInvite(sample)
   } else if (query.get('code') && query.get('state') && sessionStorage.getItem(PARENT_PENDING_KEY)) completeParentOAuth(query.get('code'), query.get('state'))
+  else if (query.get('parentInvite') && query.get('entry') === 'registered') {
+    sessionStorage.setItem(PARENT_PENDING_KEY, query.get('parentInvite'))
+    if (localStorage.getItem(PARENT_SESSION_KEY)) loadParentBasicForm()
+    else beginParentOAuth()
+  }
   else if (query.get('parentInvite')) loadParentInvite(query.get('parentInvite'))
   else if (query.get('code') && query.get('state')) completeOAuth(query.get('code'), query.get('state'))
+  else if (query.get('refereeInvite')) { localStorage.setItem(REFEREE_INVITE_KEY,query.get('refereeInvite')); if(localStorage.getItem(SESSION_KEY))loadRefereeInvite(query.get('refereeInvite'));else beginOAuth() }
   else if (localStorage.getItem(SESSION_KEY)) loadWorkbench()
   else beginOAuth()
 })()

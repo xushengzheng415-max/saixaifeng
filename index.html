@@ -7,12 +7,69 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>赛小蜂足球-青少年足球赛事管理平台</title>
+    <title>赛小蜂足球｜青少年足球赛事管理平台</title>
+    <meta name="description" content="赛小蜂足球是青少年足球赛事管理平台，提供比赛报名、球队管理、裁判无纸化、赛程编排与数据报表等全流程数字化服务。">
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+    <meta name="author" content="河南麦步体育文化发展有限公司">
+    <link rel="canonical" href="https://www.sxffootball.cn/">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:site_name" content="赛小蜂足球">
+    <meta property="og:title" content="赛小蜂足球｜青少年足球赛事管理平台">
+    <meta property="og:description" content="青少年足球赛事管理平台：比赛报名、球队管理、裁判无纸化、赛程编排与数据报表，让每一场比赛高效、专业、无纸化。">
+    <meta property="og:url" content="https://www.sxffootball.cn/">
+    <meta property="og:image" content="https://www.sxffootball.cn/logo-saixiaofeng.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="赛小蜂足球｜青少年足球赛事管理平台">
+    <meta name="twitter:description" content="青少年足球赛事管理平台：比赛报名、球队管理、裁判无纸化、赛程编排与数据报表。">
+    <meta name="twitter:image" content="https://www.sxffootball.cn/logo-saixiaofeng.png">
     <link rel="icon" type="image/png" href="./logo-saixiaofeng.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- CloudBase SDK（已弃用：保留但不使用，改用 webLoginApi HTTP 代理） -->
     <!-- <script src="./cloudbase-sdk.js?v=20260619e"></script> -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://www.sxffootball.cn/#organization",
+          "name": "赛小蜂足球",
+          "url": "https://www.sxffootball.cn",
+          "description": "青少年足球赛事管理平台",
+          "areaServed": "CN",
+          "sameAs": ["https://www.saixiaofeng.com", "https://www.sxfbasketball.cn", "https://sports.saixiaofeng.com"]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://www.sxffootball.cn/#website",
+          "url": "https://www.sxffootball.cn",
+          "name": "赛小蜂足球",
+          "inLanguage": "zh-CN",
+          "publisher": { "@id": "https://www.sxffootball.cn/#organization" }
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://www.sxffootball.cn/#webpage",
+          "url": "https://www.sxffootball.cn/",
+          "name": "赛小蜂足球｜青少年足球赛事管理平台",
+          "description": "青少年足球赛事管理平台：比赛报名、球队管理、裁判无纸化、赛程编排与数据报表。",
+          "inLanguage": "zh-CN",
+          "isPartOf": { "@id": "https://www.sxffootball.cn/#website" },
+          "about": { "@id": "https://www.sxffootball.cn/#organization" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "赛小蜂足球",
+          "alternateName": "赛小蜂足球赛事管理平台",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web, WeChat Mini Program",
+          "description": "青少年足球赛事管理平台，覆盖比赛报名、球队管理、裁判执裁、赛程编排与数据报表。",
+          "publisher": { "@id": "https://www.sxffootball.cn/#organization" }
+        }
+      ]
+    }
+    </script>
     <script>
         tailwind.config = {
             theme: {
@@ -530,7 +587,7 @@
 
                 <!-- 主标题 -->
                 <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black text-white mb-4 leading-tight animate-slide-up">
-                    赛小蜂足球
+                    赛小蜂足球，青少年足球赛事管理平台
                 </h1>
 
                 <!-- 标语 -->
@@ -1337,7 +1394,10 @@
 
         // ★ 微信扫码回调处理（index.html 完成全部登录流程）
         // 2026-06-18 最终修复：persistence 必须在 init() 中指定，不能传给 auth()
+        var wechatCallbackHandled = false;
         async function handleWechatCallback(code, state) {
+            if (wechatCallbackHandled) return;
+            wechatCallbackHandled = true;
             // 校验 state 防 CSRF
             var savedState = sessionStorage.getItem('wechat_login_state');
             if (savedState && savedState !== state) {
@@ -1353,12 +1413,20 @@
                 console.log('[微信登录] 调用 wechatWebLogin (HTTP)...');
 
                 // 2. 用 HTTP 调用云函数
-                var res = await callFunctionHTTP('wechatWebLogin', { code: code });
+                var res = await callFunctionHTTP('wechatPhoneChallenge', { code: code });
                 console.log('[微信登录] 云函数返回:', JSON.stringify(res));
 
                 var result = res || {};
 
-                if (result.success) {
+                if (result.success && result.requiresPhoneAuthorization && result.loginChallenge) {
+                    ['isLoggedIn','userInfo','role','currentRole','userId','loginType','phone','phoneNumber','openid','unionid','authToken','organizationInfo','currentOrganization','currentOrg'].forEach(function(key){ localStorage.removeItem(key); });
+                    sessionStorage.setItem('wechat_login_challenge', result.loginChallenge);
+                    sessionStorage.setItem('wechat_login_profile', JSON.stringify(result.user || {}));
+                    window.location.href = '/admin/#/bind-phone';
+                    return;
+                }
+
+                if (result.success && result.authToken && result.user) {
                     beginOrganizerSession(result);
                     // 3. 登录成功 → 写入 localStorage
                     var user = result.user || {};
@@ -1498,6 +1566,9 @@
                 }
 
                 var result = await res.json();
+                if (result && typeof result.body === 'string') {
+                    try { result = JSON.parse(result.body); } catch (e) { /* 由调用方显示统一错误 */ }
+                }
                 console.log('[callFunction] ✅ 成功:', result.success);
                 return result;
             } catch (err) {

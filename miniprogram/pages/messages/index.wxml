@@ -4,6 +4,6 @@
     <view class="tabs"><view class="tab {{tabAllClass}}" data-tab="all" bindtap="selectTab">全部</view><view class="tab {{tabEventClass}}" data-tab="event" bindtap="selectTab">赛事</view><view class="tab {{tabTeamClass}}" data-tab="team" bindtap="selectTab">球队</view><view class="tab {{tabSystemClass}}" data-tab="system" bindtap="selectTab">系统</view></view>
     <view class="loading" wx:if="{{loading}}">正在同步消息…</view><view class="error-card" wx:if="{{errorText}}"><text>{{errorText}}</text><text bindtap="loadData">重新加载</text></view>
     <view class="message-panel" wx:if="{{hasVisibleMessages}}"><view class="message-row {{item.unreadClass}}" wx:for="{{visibleMessages}}" wx:key="id" data-id="{{item.id}}" data-path="{{item.path}}" bindtap="onMessageTap"><image src="{{item.icon}}" mode="aspectFit"></image><view class="message-main"><text class="message-title">{{item.title}}</text><text class="message-desc">{{item.subtitle}}</text></view><view class="message-meta"><view wx:if="{{item.isUnread}}"></view><text>{{item.timeText}}</text><text>›</text></view></view></view>
-    <view class="empty-card" wx:if="{{showEmpty}}"><image src="/images/icons/bell.svg" mode="aspectFit"></image><text>{{emptyTitle}}</text><text>赛事、球队和系统通知会在这里按来源展示</text></view>
+  <view class="empty-card" wx:if="{{showEmpty}}"><image src="/images/runtime/icons/brand-v2-05.png" mode="aspectFit"></image><text>{{emptyTitle}}</text><text>赛事、球队和系统通知会在这里按来源展示</text></view>
   </view>
 </view>

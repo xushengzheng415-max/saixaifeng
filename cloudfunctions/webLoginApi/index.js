@@ -76,10 +76,13 @@ const WECHAT_CONFIG = {
 const SERVICE_ACCOUNT_CONFIG = {
   APP_ID: process.env.SERVICE_ACCOUNT_APP_ID || '',
   APP_SECRET: process.env.SERVICE_ACCOUNT_APP_SECRET || '',
-  H5_URL: process.env.SERVICE_ACCOUNT_H5_URL || ''
+  // 足球裁判服务固定回到足球正式域名。不能复用篮球/旧官网的环境变量，
+  // 否则微信授权完成后会落入 saixiaofeng.com 的 404 页面。
+  H5_URL: 'https://www.sxffootball.cn/service-account-h5/'
 }
 
 const WEB_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const WEB_LOGIN_CHALLENGE_TTL_MS = 10 * 60 * 1000
 const REFEREE_H5_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const REFEREE_OAUTH_STATE_TTL_MS = 10 * 60 * 1000
 const ASSISTANCE_COLLECTIONS = new Set([
@@ -101,7 +104,7 @@ const ORGANIZER_PRIVATE_COLLECTIONS = new Set([
 const ORGANIZER_SCOPED_RELAY_FUNCTIONS = new Set([
   'generateSchedule', 'updateMatch', 'onboardingWorkspace', 'organizerClaimInvite',
   'reviewRosterChange', 'clearTeamPlayers', 'tournamentReview', 'applyTournament', 'getMyTeams',
-  'setHeadReferee'
+  'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter'
 ])
 
 // 这些中转入口会消耗第三方 AI/微信能力，或读取受保护的球员/比赛数据。
@@ -120,7 +123,7 @@ const SESSION_REQUIRED_RELAY_FUNCTIONS = new Set([
 // 只能先完成机构引导，不能再用个人账号作为隐含租户继续写入。
 const ORGANIZER_REQUIRED_RELAY_FUNCTIONS = new Set([
   'generateSchedule', 'updateMatch', 'organizerClaimInvite', 'reviewRosterChange', 'clearTeamPlayers', 'tournamentReview', 'applyTournament', 'getMyTeams',
-  'setHeadReferee'
+  'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter'
 ])
 
 // 赛事中心遗留的球队/球员/赛事入口统一收敛到本函数的租户校验，
@@ -151,6 +154,34 @@ function dateValue(value) {
 
 function hashSessionToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex')
+}
+
+function createWebLoginChallenge(payload) {
+  const body = Buffer.from(JSON.stringify({
+    wechatOpenId: String(payload.wechatOpenId || ''),
+    unionId: String(payload.unionId || ''),
+    nickname: String(payload.nickname || '微信用户').slice(0, 80),
+    headimgurl: String(payload.headimgurl || '').slice(0, 500),
+    nonce: crypto.randomBytes(16).toString('hex'),
+    expiresAt: Date.now() + WEB_LOGIN_CHALLENGE_TTL_MS
+  })).toString('base64url')
+  const signature = crypto.createHmac('sha256', WECHAT_CONFIG.APP_SECRET).update(body).digest('base64url')
+  return body + '.' + signature
+}
+
+function verifyWebLoginChallenge(token) {
+  try {
+    const parts = String(token || '').split('.')
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return null
+    const expected = crypto.createHmac('sha256', WECHAT_CONFIG.APP_SECRET).update(parts[0]).digest()
+    const actual = Buffer.from(parts[1], 'base64url')
+    if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null
+    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'))
+    if (!payload.wechatOpenId || Number(payload.expiresAt || 0) <= Date.now()) return null
+    return payload
+  } catch (error) {
+    return null
+  }
 }
 
 async function createWebSession(userId) {
@@ -282,7 +313,7 @@ async function handleRefereeOAuth(event) {
 }
 
 const REFEREE_WORKFLOW_ACTIONS = new Set([
-  'getWorkbench', 'sendBindSms', 'verifyBindSms', 'getRefereeMatch',
+  'getWorkbench', 'sendBindSms', 'verifyBindSms', 'getRefereeInvitation', 'recognizeRefereeCertificate', 'processRefereeAvatar', 'acceptRefereeInvitation', 'getRefereeMatch',
   'updatePreMatchState',
   'reviewLineup',
   'saveRefereeReportDraft',
@@ -1120,7 +1151,8 @@ function compactCompetitionSnapshot(division, relations, drawRecords, matches) {
     'knockoutTieBreak', 'birthDateCutoff', 'rosterLimit', 'minimumRoster',
     'identityVerificationRequired', 'eligibilityReviewRequired', 'portraitRequired',
     'registrationDeadline', 'lockRosterAfterDeadline', 'periodMode', 'matchMinutes',
-    'breakMinutes', 'playersOnField', 'substitutionMode', 'substitutionLimit',
+    'singlePeriodCount', 'breakMinutes', 'playersOnField', 'substitutionMode', 'substitutionLimit',
+    'substitutionWindows', 'substitutionReentryAllowed',
     'disciplineEnabled', 'yellowCardSuspension', 'redCardSuspension', 'secondYellowRed',
     'knockoutYellowReset', 'winPoints', 'drawPoints', 'lossPoints', 'rankingRule',
     'awayGoalsEnabled', 'liveRankingEnabled', 'manualRankingReview', 'advancementRule',
@@ -1159,6 +1191,14 @@ async function competitionPlanMutationAllowed(db, collection, record) {
   if (!COMPETITION_PLAN_MUTABLE_COLLECTIONS.has(collection) || !record) return true
   const divisionId = String(record.divisionId || record.division || record.divisionKey || '').trim()
   try {
+    // 参赛球队尚未进入赛程时必须允许继续增补。规则定版不等于竞赛方案锁定；
+    // 只有该组别已经形成比赛后，才按正式竞赛方案锁定关系拦截新增球队。
+    if (collection === 'tournament_teams') {
+      const tournamentId = String(record.tournamentId || '').trim()
+      if (!tournamentId) return false
+      const matches = await queryTournamentDivisionRecords(db, 'matches', tournamentId, divisionId || 'default')
+      if (!matches.length) return true
+    }
     if (divisionId) {
       const result = await db.collection('divisions').doc(divisionId).get()
       const division = Array.isArray(result.data) ? result.data[0] : result.data
@@ -1178,6 +1218,104 @@ async function competitionPlanMutationAllowed(db, collection, record) {
     console.error('[webApi] competition plan mutation check failed:', error.message || error)
     return false
   }
+}
+
+async function deleteDivision(db, id, organizerScope) {
+  if (!organizerScope || !organizerScope.orgId) {
+    return { success: false, error: '当前账号尚未关联机构，请先完成机构引导', code: 'ORG_REQUIRED' }
+  }
+  const divisionId = String(id || '').trim()
+  if (!divisionId) return { success: false, error: '缺少竞赛组别 ID', code: 'DIVISION_ID_REQUIRED' }
+  const divisionResult = await db.collection('divisions').doc(divisionId).get()
+  const division = Array.isArray(divisionResult.data) ? divisionResult.data[0] : divisionResult.data
+  if (!division || !organizerRecordAllowed('divisions', division, organizerScope)) {
+    return { success: false, error: '组别不存在或无权删除', code: 'DIVISION_SCOPE_DENIED' }
+  }
+  if (divisionRulesLocked(division) || competitionPlanLocked(division)) {
+    return { success: false, error: '组别规则已经定版或竞赛方案已经锁定，不能删除', code: 'DIVISION_LOCKED' }
+  }
+  if (divisionEntitlementIsActive(division)) {
+    return { success: false, error: '该组别已开通专业版权益，不能直接删除', code: 'DIVISION_ENTITLEMENT_ACTIVE' }
+  }
+
+  const tournamentId = String(division.tournamentId || '').trim()
+  if (!tournamentId) return { success: false, error: '组别缺少赛事归属，不能删除', code: 'DIVISION_TOURNAMENT_REQUIRED' }
+  const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
+  const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+  if (!tournament || !organizerRecordAllowed('tournaments', tournament, organizerScope)) {
+    return { success: false, error: '赛事不存在或无权删除该组别', code: 'TOURNAMENT_SCOPE_DENIED' }
+  }
+  if (competitionPlanLocked(tournament)) {
+    return { success: false, error: '赛事竞赛方案已经锁定，不能删除组别', code: 'COMPETITION_PLAN_LOCKED' }
+  }
+
+  const linkedCollections = [
+    ['tournament_teams', '参赛球队'],
+    ['tournament_groups', '抽签分组'],
+    ['tournament_bracket', '淘汰对阵'],
+    ['tournament_league_tables', '联赛签位'],
+    ['matches', '赛程比赛']
+  ]
+  const linked = []
+  for (const item of linkedCollections) {
+    const rows = await queryTournamentDivisionRecords(db, item[0], tournamentId, divisionId)
+    if (rows.length > 0) linked.push(`${item[1]}${rows.length}条`)
+  }
+  if (linked.length > 0) {
+    return {
+      success: false,
+      error: `该组别仍有关联数据（${linked.join('、')}），请先清理后再删除`,
+      code: 'DIVISION_HAS_LINKED_DATA',
+      linked
+    }
+  }
+
+  await db.collection('divisions').doc(divisionId).remove()
+  if (Array.isArray(tournament.divisions)) {
+    const nestedDivisions = tournament.divisions.filter(item => {
+      const nestedId = String(item && (item._id || item.id || item.divisionId || '') || '').trim()
+      return nestedId !== divisionId
+    })
+    if (nestedDivisions.length !== tournament.divisions.length) {
+      await db.collection('tournaments').doc(tournamentId).update({
+        data: { divisions: nestedDivisions, updateTime: db.serverDate() }
+      })
+    }
+  }
+  return { success: true, deleted: 1, message: '组别已删除' }
+}
+
+async function assignTournamentTeamDivision(db, id, data, organizerScope) {
+  if (!organizerScope || !organizerScope.orgId) return { success: false, error: '当前账号尚未关联机构', code: 'ORG_REQUIRED' }
+  const relationId = String(id || '').trim()
+  const divisionId = String(data && data.divisionId || '').trim()
+  if (!relationId || !divisionId || divisionId === 'default') return { success: false, error: '请选择正式竞赛组别', code: 'DIVISION_REQUIRED' }
+  const relationResult = await db.collection('tournament_teams').doc(relationId).get()
+  const relation = Array.isArray(relationResult.data) ? relationResult.data[0] : relationResult.data
+  if (!relation || !organizerRecordAllowed('tournament_teams', relation, organizerScope)) return { success: false, error: '参赛关系不存在或无权操作', code: 'REGISTRATION_SCOPE_DENIED' }
+  if (String(relation.divisionId || 'default') !== 'default') return { success: false, error: '该球队已经属于正式竞赛组别', code: 'REGISTRATION_ALREADY_ASSIGNED' }
+  const tournamentId = String(relation.tournamentId || '').trim()
+  const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
+  const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+  if (!tournament || !organizerRecordAllowed('tournaments', tournament, organizerScope)) return { success: false, error: '赛事不存在或无权操作', code: 'TOURNAMENT_SCOPE_DENIED' }
+  if (competitionPlanLocked(tournament)) return { success: false, error: '赛事竞赛方案已经锁定，不能重新分配球队', code: 'COMPETITION_PLAN_LOCKED' }
+  const divisionResult = await db.collection('divisions').doc(divisionId).get()
+  const division = Array.isArray(divisionResult.data) ? divisionResult.data[0] : divisionResult.data
+  if (!division || String(division.tournamentId || '') !== tournamentId || !organizerRecordAllowed('divisions', division, organizerScope)) return { success: false, error: '目标组别不存在或不属于当前赛事', code: 'DIVISION_SCOPE_DENIED' }
+  if (competitionPlanLocked(division)) return { success: false, error: '目标组别竞赛方案已经锁定', code: 'COMPETITION_PLAN_LOCKED' }
+  const matches = await queryTournamentDivisionRecords(db, 'matches', tournamentId, divisionId)
+  if (matches.length > 0) return { success: false, error: '目标组别已经生成赛程，不能再分配历史球队', code: 'DIVISION_SCHEDULE_EXISTS' }
+  const teamId = String(relation.teamId || '').trim()
+  const relations = (await db.collection('tournament_teams').where({ tournamentId, teamId }).limit(100).get()).data || []
+  if (relations.some(item => String(item._id) !== relationId && String(item.divisionId || 'default') === divisionId && !['rejected', 'withdrawn', 'cancelled'].includes(String(item.status || '').toLowerCase()))) return { success: false, error: '该球队已在目标组别中', code: 'REGISTRATION_DUPLICATE' }
+  const activeRelations = (await db.collection('tournament_teams').where({ tournamentId, divisionId }).limit(1000).get()).data || []
+  const activeCount = activeRelations.filter(item => !['rejected', 'withdrawn', 'cancelled'].includes(String(item.status || '').toLowerCase())).length
+  const capacity = Number(division.maxTeams || division.expectedTeams || 0)
+  if (capacity > 0 && activeCount >= capacity) return { success: false, error: `目标组别名额已满（${activeCount}/${capacity}）`, code: 'DIVISION_CAPACITY_FULL' }
+  const divisionName = String(division.name || division.divisionName || '').trim()
+  await db.collection('tournament_teams').doc(relationId).update({ data: { divisionId, divisionName, assignedDivisionAt: db.serverDate(), assignedDivisionBy: organizerScope.user._id, updateTime: db.serverDate() } })
+  try { await db.collection('registration_audit_logs').add({ data: { sport:'football', action:'registration_division_assigned', tournamentId, divisionId, registrationId:relationId, actorUserId:organizerScope.user._id, actorOrgId:organizerScope.orgId, result:'success', detail:{ sourceDivisionId:'default', teamId }, createTime:db.serverDate() } }) } catch (error) { console.warn('[webApi] 分配组别审计写入失败:', error.message) }
+  return { success: true, message: `已分配至${divisionName}`, data: { relationId, divisionId, divisionName } }
 }
 
 function sanitizeDivisionUpdate(data, before) {
@@ -1208,9 +1346,24 @@ function sanitizeDivisionUpdate(data, before) {
   }
   next.mode = requestedMode
   next.isProfessional = requestedMode === 'professional'
+  normalizeFinalRankingSettings(next)
   next.ruleStatus = 'draft'
   next.ruleProgress = Math.max(0, Math.min(Number(next.ruleProgress) || 0, 99))
   return next
+}
+
+function normalizeFinalRankingSettings(record) {
+  if (!record) return record
+  var formatType = String(record.formatType || record.tournamentType || '').toLowerCase()
+  var mode = String(record.finalRankingMode || record.rankingScope || '').toLowerCase()
+  if (formatType === 'league') mode = 'full'
+  if (!['champion', 'top4', 'full'].includes(mode)) {
+    mode = record.fullRankingEnabled === true ? 'full' : (record.thirdPlaceEnabled === false ? 'champion' : 'top4')
+  }
+  record.finalRankingMode = mode
+  record.fullRankingEnabled = mode === 'full'
+  record.thirdPlaceEnabled = mode !== 'champion'
+  return record
 }
 
 function sanitizeTournamentUpdate(data, before) {
@@ -1243,13 +1396,59 @@ function divisionRuleSnapshot(before, data) {
     'rulesLocked', 'ruleFinalized', 'ruleStatus', 'ruleProgress', 'rulesVersion',
     'rulesSnapshot', 'finalizedAt', 'finalizedBy', 'finalizedByName',
     'confirmedByUserId', 'confirmedByOrgId', 'confirmedAt', 'updateTime',
+    'rulesHistory', 'activeRulesVersion', 'activeRulesSnapshot', 'rulesRevisionPending',
+    'rulesRevisionOf', 'rulesVersionDraft',
     'professionalEntitlementStatus', 'entitlementStatus', 'professionalEntitlement',
     'professionalEntitlementExpiresAt', 'entitlementExpiresAt'
   ].forEach(field => { delete snapshot[field] })
   const mode = normalizeDivisionMode(snapshot)
   snapshot.mode = mode
   snapshot.isProfessional = mode === 'professional'
+  normalizeFinalRankingSettings(snapshot)
   return snapshot
+}
+
+async function reviseDivisionRules(db, id, organizerScope) {
+  if (!organizerScope || !organizerScope.orgId) {
+    return { success: false, error: '当前账号尚未关联机构，请先完成机构引导', code: 'ORG_REQUIRED' }
+  }
+  const divisionId = String(id || '')
+  if (!divisionId) return { success: false, error: '缺少竞赛组别 ID', code: 'DIVISION_ID_REQUIRED' }
+  const result = await db.collection('divisions').doc(divisionId).get()
+  const before = Array.isArray(result.data) ? result.data[0] : result.data
+  if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
+    return { success: false, error: '无权调整其他机构的竞赛组别', code: 'DIVISION_SCOPE_DENIED' }
+  }
+  if (!divisionRulesLocked(before)) {
+    return { success: false, error: '当前规则草稿尚未定版，请继续编辑草稿', code: 'DIVISION_DRAFT_EXISTS' }
+  }
+  const currentVersion = String(before.rulesVersion || 'V1.0')
+  const history = Array.isArray(before.rulesHistory) ? before.rulesHistory.slice(-19) : []
+  const activeSnapshot = before.rulesSnapshot || divisionRuleSnapshot(before, {})
+  history.push({
+    version: currentVersion,
+    snapshot: activeSnapshot,
+    finalizedAt: before.finalizedAt || before.confirmedAt || null,
+    finalizedBy: before.finalizedBy || before.confirmedByUserId || '',
+    finalizedByName: before.finalizedByName || ''
+  })
+  const draftVersion = `${currentVersion}-R${history.length}`
+  const now = new Date()
+  const updateData = {
+    rulesLocked: false,
+    ruleFinalized: false,
+    ruleStatus: 'draft',
+    ruleProgress: 0,
+    rulesRevisionPending: true,
+    rulesRevisionOf: currentVersion,
+    rulesVersionDraft: draftVersion,
+    activeRulesVersion: currentVersion,
+    activeRulesSnapshot: activeSnapshot,
+    rulesHistory: history,
+    updateTime: now
+  }
+  await db.collection('divisions').doc(divisionId).update({ data: updateData })
+  return { success: true, data: { ...before, ...updateData }, message: `已基于 ${currentVersion} 创建规则草稿 ${draftVersion}` }
 }
 
 async function confirmDivisionRules(db, id, data, organizerScope) {
@@ -1273,7 +1472,7 @@ async function confirmDivisionRules(db, id, data, organizerScope) {
   const teamsPerGroup = Number(snapshot.teamsPerGroup)
   const matchMinutes = Number(snapshot.matchMinutes)
   const playersOnField = Number(snapshot.playersOnField)
-  if (!snapshot.formatType || expectedTeams < 2 || groupCount < 1 || teamsPerGroup < 2 ||
+  if (!snapshot.formatType || !['champion', 'top4', 'full'].includes(String(snapshot.finalRankingMode || '')) || expectedTeams < 2 || groupCount < 1 || teamsPerGroup < 2 ||
       matchMinutes < 10 || playersOnField < 1) {
     return { success: false, error: '竞赛规则尚未填写完整，请完成赛制、球队数量和比赛执行设置', code: 'DIVISION_RULES_INCOMPLETE' }
   }
@@ -1288,7 +1487,7 @@ async function confirmDivisionRules(db, id, data, organizerScope) {
   }
 
   const now = new Date()
-  const version = `V${now.toISOString().slice(0, 10)}`
+  const version = String(before.rulesVersionDraft || `V${now.toISOString().slice(0, 10)}`)
   const updateData = {
     ...snapshot,
     rulesLocked: true,
@@ -1297,6 +1496,8 @@ async function confirmDivisionRules(db, id, data, organizerScope) {
     ruleProgress: 100,
     rulesVersion: version,
     rulesSnapshot: snapshot,
+    rulesRevisionPending: false,
+    rulesVersionDraft: '',
     finalizedAt: now,
     finalizedBy: organizerScope.user._id,
     finalizedByName: String(
@@ -1806,7 +2007,7 @@ async function callTencentSMS(phoneNumber, code) {
 
 // 1. 发送短信验证码
 async function handleSendSms(event) {
-  const { phoneNumber } = event
+  const { phoneNumber, loginChallengeId } = event
   if (!phoneNumber || !/^1[3-9]\d{9}$/.test(phoneNumber)) {
     return { success: false, error: '手机号格式不正确' }
   }
@@ -1819,10 +2020,10 @@ async function handleSendSms(event) {
 
   try {
     await callTencentSMS(phoneNumber, code)
-    console.log('[webApi] SMS sent to', phoneNumber, 'code:', code)
+    console.log('[webApi] SMS sent to verified login flow:', phoneNumber.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2'))
 
     await db.collection('sms_codes').add({
-      data: { phoneNumber, code, expireAt: new Date(Date.now() + 5 * 60 * 1000), used: false, createdAt: db.serverDate() }
+      data: { phoneNumber, code, loginChallengeId: loginChallengeId || '', expireAt: new Date(Date.now() + 5 * 60 * 1000), used: false, createdAt: db.serverDate() }
     })
     return { success: true, message: '验证码发送成功' }
   } catch (err) {
@@ -1995,7 +2196,7 @@ async function handleEmailVerifyCode(event) {
   }
 }
 
-// 6. 纯微信扫码登录：不绑定手机号、邮箱或密码。
+// 6. PC 微信扫码第一步：只验证微信并签发短时手机号验证挑战，不创建账号或会话。
 async function handleWechatOnlyLogin(event) {
   const { code } = event
   if (!code) return { success: false, error: '缺少授权码' }
@@ -2004,14 +2205,6 @@ async function handleWechatOnlyLogin(event) {
   }
 
   const db = cloud.database()
-  const _ = db.command
-  const findUniqueUser = async (where, label) => {
-    const result = await db.collection('users').where(where).limit(2).get()
-    const users = result.data || []
-    if (users.length > 1) throw new Error(label + '存在重复账号，请联系管理员处理')
-    return users[0] || null
-  }
-
   try {
     const tokenUrl = 'https://api.weixin.qq.com/sns/oauth2/access_token?appid=' + WECHAT_CONFIG.APP_ID +
       '&secret=' + WECHAT_CONFIG.APP_SECRET + '&code=' + code + '&grant_type=authorization_code'
@@ -2022,73 +2215,173 @@ async function handleWechatOnlyLogin(event) {
     const wxUserInfo = await httpsGet(userInfoUrl)
     if (wxUserInfo.errcode) throw new Error('获取用户信息失败')
 
-    const unionId = wxUserInfo.unionid || ''
-    const openId = tokenData.openid
-    const now = new Date()
-    let user = null
-    if (unionId) user = await findUniqueUser({ unionId }, '微信 UnionID')
-    if (!user) user = await findUniqueUser({ wechatOpenId: openId }, '网页微信 OpenID')
-
-    let isNewUser = false
-    if (!user) {
-      const data = {
-        wechatOpenId: openId,
-        unionId,
-        nickname: wxUserInfo.nickname || '微信用户',
-        headimgurl: wxUserInfo.headimgurl || '',
-        role: ORGANIZER_ROLE,
-        loginType: 'wechat',
-        createTime: now,
-        updateTime: now,
-        lastLoginTime: now
+    const unionId=String(wxUserInfo.unionid||tokenData.unionid||'')
+    const uniqueUser=async(where,label)=>{
+      const found=await db.collection('users').where(where).limit(3).get()
+      const rows=(found.data||[]).filter((item,index,list)=>list.findIndex(other=>String(other._id)===String(item._id))===index)
+      if(rows.length>1)throw new Error(label+'存在重复账号，请联系管理员处理')
+      return rows[0]||null
+    }
+    const unionUser=unionId?await uniqueUser({unionId},'微信 UnionID'):null
+    const webUser=await uniqueUser({wechatOpenId:tokenData.openid},'网页微信 OpenID')
+    const legacyUser=webUser?null:await uniqueUser({openId:tokenData.openid},'兼容微信 OpenID')
+    const channelUsers=[unionUser,webUser,legacyUser].filter(Boolean)
+    const channelIds=[...new Set(channelUsers.map(item=>String(item._id)))]
+    if(channelIds.length>1)throw new Error('微信标识指向不同账号，已阻止自动登录，请联系管理员核验')
+    let boundUser=channelUsers[0]||null
+    if(boundUser){
+      const phone=String(boundUser.phone||boundUser.phoneNumber||'')
+      const phoneReady=/^1[3-9]\d{9}$/.test(phone)&&boundUser.phoneVerified===true
+      if(phoneReady){
+        const phoneUser=await uniqueUser(db.command.or([{phone},{phoneNumber:phone}]),'手机号')
+        if(!phoneUser||String(phoneUser._id)!==String(boundUser._id))throw new Error('手机号与微信标识指向不同账号，已阻止自动登录')
+        if(boundUser.wechatOpenId&&String(boundUser.wechatOpenId)!==String(tokenData.openid))throw new Error('当前账号已绑定其他 PC 微信，请联系管理员核验')
+        if(unionId&&boundUser.unionId&&String(boundUser.unionId)!==unionId)throw new Error('当前账号微信 UnionID 不一致，请联系管理员核验')
+        const now=db.serverDate()
+        const patch={lastLoginTime:now,lastLoginType:'wechat',updateTime:now}
+        if(!boundUser.wechatOpenId)patch.wechatOpenId=tokenData.openid
+        if(unionId&&!boundUser.unionId)patch.unionId=unionId
+        await db.collection('users').doc(boundUser._id).update({data:patch})
+        boundUser={...boundUser,...patch}
+        return {success:true,directLogin:true,requiresPhoneAuthorization:false,message:'欢迎回来！',role:ORGANIZER_ROLE,user:{_id:boundUser._id,nickname:boundUser.nickname||wxUserInfo.nickname||'微信用户',headimgurl:boundUser.headimgurl||wxUserInfo.headimgurl||'',phone,phoneNumber:phone,wechatOpenId:boundUser.wechatOpenId||tokenData.openid,unionid:boundUser.unionId||unionId,role:ORGANIZER_ROLE,isPlatformOwner:boundUser.isPlatformOwner===true}}
       }
-      const created = await db.collection('users').add({ data })
-      user = { _id: created._id, ...data }
-      isNewUser = true
-    } else {
-      const updateData = {
-        wechatOpenId: openId,
-        nickname: wxUserInfo.nickname || user.nickname || '微信用户',
-        headimgurl: wxUserInfo.headimgurl || user.headimgurl || '',
-        role: ORGANIZER_ROLE,
-        loginType: 'wechat',
-        updateTime: now,
-        lastLoginTime: now,
-        phone: _.remove(),
-        phoneNumber: _.remove(),
-        phoneVerified: _.remove(),
-        email: _.remove(),
-        passwordHash: _.remove(),
-        passwordSalt: _.remove(),
-        passwordSet: _.remove()
-      }
-      if (unionId) updateData.unionId = unionId
-      await db.collection('users').doc(user._id).update({ data: updateData })
-      user = { ...user, ...updateData }
     }
 
+    const challengeToken = createWebLoginChallenge({
+      wechatOpenId: tokenData.openid,
+      unionId,
+      nickname: wxUserInfo.nickname || '微信用户',
+      headimgurl: wxUserInfo.headimgurl || ''
+    })
     return {
       success: true,
-      message: isNewUser ? '扫码成功，已创建主办方账号' : '欢迎回来！',
-      needSetPassword: false,
-      needBindPhone: false,
-      needBindEmail: false,
-      needSelectRole: false,
+      requiresPhoneAuthorization: true,
+      needBindPhone: true,
+      loginChallenge: challengeToken,
+      challengeExpiresAt: new Date(Date.now() + WEB_LOGIN_CHALLENGE_TTL_MS),
+      user: {
+        nickname: wxUserInfo.nickname || '微信用户',
+        headimgurl: wxUserInfo.headimgurl || ''
+      }
+    }
+  } catch (err) {
+    console.error('[webApi] wechatOnlyLogin error:', err.message)
+    return { success: false, error: err.message || '微信登录失败' }
+  }
+}
+
+async function loadWebLoginChallenge(token) {
+  const challengeToken = String(token || '').trim()
+  if (!challengeToken) return { success: false, error: '微信授权已失效，请重新扫码' }
+  const challenge = verifyWebLoginChallenge(challengeToken)
+  if (!challenge) return { success: false, error: '微信授权已失效，请重新扫码' }
+  const db = cloud.database()
+  return { success: true, db, challenge, challengeId: hashSessionToken(challengeToken) }
+}
+
+async function handleSendWechatLoginSms(event) {
+  const loaded = await loadWebLoginChallenge(event.loginChallenge)
+  if (!loaded.success) return loaded
+  const phoneNumber = String(event.phoneNumber || '').trim()
+  if (!/^1[3-9]\d{9}$/.test(phoneNumber)) return { success: false, error: '手机号格式不正确' }
+  const [challengeCodes, phoneCodes] = await Promise.all([
+    loaded.db.collection('sms_codes').where({ loginChallengeId: loaded.challengeId }).limit(10).get(),
+    loaded.db.collection('sms_codes').where({ phoneNumber }).limit(20).get()
+  ])
+  const recentWindow = Date.now() - 60 * 1000
+  const recentPhoneCount = (phoneCodes.data || []).filter(item => dateValue(item.createdAt) > recentWindow).length
+  if (recentPhoneCount > 0) return { success: false, error: '验证码发送过于频繁，请60秒后重试' }
+  if ((challengeCodes.data || []).length >= 5) return { success: false, error: '本次扫码发送次数过多，请重新扫码' }
+  return handleSendSms({ phoneNumber, loginChallengeId: loaded.challengeId })
+}
+
+async function handleCompleteWechatPhoneLogin(event) {
+  const phone = String(event.phoneNumber || '').trim()
+  const smsCode = String(event.smsCode || '').trim()
+  if (!/^1[3-9]\d{9}$/.test(phone) || !/^\d{6}$/.test(smsCode)) {
+    return { success: false, error: '请输入正确的手机号和验证码' }
+  }
+  const loaded = await loadWebLoginChallenge(event.loginChallenge)
+  if (!loaded.success) return loaded
+  const db = loaded.db
+  const _ = db.command
+  const challenge = loaded.challenge
+  const smsResult = await db.collection('sms_codes').where({
+    phoneNumber: phone,
+    code: smsCode,
+    loginChallengeId: loaded.challengeId,
+    used: false,
+    expireAt: _.gt(new Date())
+  }).orderBy('createdAt', 'desc').limit(1).get()
+  if (!smsResult.data || smsResult.data.length !== 1) return { success: false, error: '验证码错误或已过期' }
+
+  const queryUnique = async (where, label) => {
+    const result = await db.collection('users').where(where).limit(3).get()
+    const rows = result.data || []
+    const unique = rows.filter((item, index, list) => list.findIndex(other => String(other._id) === String(item._id)) === index)
+    if (unique.length > 1) throw new Error(label + '存在重复账号，请联系管理员处理')
+    return unique[0] || null
+  }
+  try {
+    const phoneUser = await queryUnique(_.or([{ phone }, { phoneNumber: phone }]), '手机号')
+    const unionUser = challenge.unionId ? await queryUnique({ unionId: challenge.unionId }, '微信 UnionID') : null
+    let wechatUser = await queryUnique({ wechatOpenId: challenge.wechatOpenId }, '网页微信 OpenID')
+    if (!wechatUser) wechatUser = await queryUnique({ openId: challenge.wechatOpenId }, '兼容微信 OpenID')
+    const candidates = [phoneUser, unionUser, wechatUser].filter(Boolean)
+    const candidateIds = [...new Set(candidates.map(item => String(item._id)))]
+    if (candidateIds.length > 1) {
+      return { success: false, error: '手机号与微信标识指向不同账号，已阻止自动合并，请联系管理员核验' }
+    }
+    let user = candidates[0] || null
+    if (user) {
+      const boundPhone = String(user.phone || user.phoneNumber || '')
+      if (boundPhone && boundPhone !== phone) return { success: false, error: '当前微信已绑定其他手机号，请联系管理员核验' }
+      if (user.wechatOpenId && String(user.wechatOpenId) !== String(challenge.wechatOpenId)) return { success: false, error: '该手机号已绑定其他 PC 微信，请联系管理员核验' }
+      if (challenge.unionId && user.unionId && String(user.unionId) !== String(challenge.unionId)) return { success: false, error: '手机号与微信 UnionID 不一致，请联系管理员核验' }
+    }
+    const now = db.serverDate()
+    const patch = {
+      phone,
+      phoneNumber: phone,
+      phoneVerified: true,
+      wechatOpenId: challenge.wechatOpenId,
+      nickname: (user && (user.nickname || user.nickName)) || challenge.nickname || '微信用户',
+      headimgurl: (user && (user.headimgurl || user.avatarUrl)) || challenge.headimgurl || '',
+      loginType: 'wechat_phone',
+      lastLoginTime: now,
+      updateTime: now
+    }
+    if (challenge.unionId) patch.unionId = challenge.unionId
+    const isNewUser = !user
+    if (isNewUser) {
+      patch.role = ORGANIZER_ROLE
+      patch.createTime = now
+      const created = await db.collection('users').add({ data: patch })
+      user = { _id: created._id, ...patch }
+    } else {
+      await db.collection('users').doc(user._id).update({ data: patch })
+      user = { ...user, ...patch }
+    }
+    await db.collection('sms_codes').doc(smsResult.data[0]._id).update({ data: { used: true, usedAt: now } })
+    return {
+      success: true,
       role: ORGANIZER_ROLE,
       user: {
         _id: user._id,
-        openid: openId,
-        unionid: unionId,
         nickname: user.nickname || '微信用户',
         headimgurl: user.headimgurl || '',
+        phone,
+        phoneNumber: phone,
+        wechatOpenId: user.wechatOpenId || '',
+        unionid: user.unionId || '',
         role: ORGANIZER_ROLE,
         isPlatformOwner: user.isPlatformOwner === true
       },
       isNewUser
     }
-  } catch (err) {
-    console.error('[webApi] wechatOnlyLogin error:', err.message)
-    return { success: false, error: err.message || '微信登录失败' }
+  } catch (error) {
+    console.error('[webApi] completeWechatPhoneLogin error:', error.message)
+    return { success: false, error: error.message || '手机号账号登录失败' }
   }
 }
 
@@ -2399,6 +2692,8 @@ const ALLOWED_FUNCTIONS = [
   'reviewRosterChange',
   'onboardingWorkspace',
   'organizerClaimInvite',
+  'tournamentRegistrationFlow',
+  'resultCenter',
   'manageTournamentCenterContent',
   'generateMiniProgramCode',
   'platformOwner',
@@ -2918,7 +3213,7 @@ async function handleDbQuery(event) {
     if (organizerScope.organizationConflict) {
       return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
     }
-    if (!organizerScope.orgId && ['add', 'update', 'delete', 'confirmDivisionRules', 'upgradeDivisionToProfessional', 'confirmCompetitionPlan'].includes(operation)) {
+    if (!organizerScope.orgId && ['add', 'update', 'delete', 'deleteDivision', 'assignTournamentTeamDivision', 'confirmDivisionRules', 'reviseDivisionRules', 'upgradeDivisionToProfessional', 'confirmCompetitionPlan'].includes(operation)) {
       return { success: false, error: '当前账号尚未关联机构，请先完成机构引导', code: 'ORG_REQUIRED' }
     }
   }
@@ -2937,6 +3232,29 @@ async function handleDbQuery(event) {
           return { success: false, error: '协助模式不能确认竞赛规则', code: 'ASSISTANCE_OPERATION_DENIED' }
         }
         return confirmDivisionRules(db, id, data, organizerScope)
+      }
+      case 'reviseDivisionRules': {
+        if (collection !== 'divisions') {
+          return { success: false, error: '只允许对竞赛组别调整规则', code: 'DIVISION_OPERATION_INVALID' }
+        }
+        if (assistanceScope) {
+          return { success: false, error: '协助模式不能调整竞赛规则', code: 'ASSISTANCE_OPERATION_DENIED' }
+        }
+        return reviseDivisionRules(db, id, organizerScope)
+      }
+      case 'deleteDivision': {
+        if (collection !== 'divisions') {
+          return { success: false, error: '只允许删除竞赛组别', code: 'DIVISION_OPERATION_INVALID' }
+        }
+        if (assistanceScope) {
+          return { success: false, error: '协助模式不能删除竞赛组别', code: 'ASSISTANCE_OPERATION_DENIED' }
+        }
+        return deleteDivision(db, id, organizerScope)
+      }
+      case 'assignTournamentTeamDivision': {
+        if (collection !== 'tournament_teams') return { success: false, error: '只允许分配赛事参赛球队', code: 'DIVISION_OPERATION_INVALID' }
+        if (assistanceScope) return { success: false, error: '协助模式不能分配竞赛组别', code: 'ASSISTANCE_OPERATION_DENIED' }
+        return assignTournamentTeamDivision(db, id, data, organizerScope)
       }
       case 'upgradeDivisionToProfessional': {
         if (collection !== 'divisions') {
@@ -3023,6 +3341,23 @@ async function handleDbQuery(event) {
         const nextData = assistanceScope
           ? prepareAssistanceAdd(collection, data, assistanceScope)
           : prepareOrganizerAdd(collection, data, organizerScope)
+        if (collection === 'divisions' && organizerScope) {
+          const ageGroup = String(nextData.ageGroup || '').trim()
+          const gender = String(nextData.gender || '').trim()
+          const tournamentId = String(nextData.tournamentId || '').trim()
+          if (!ageGroup || !['男子组', '女子组', '混合组'].includes(gender)) {
+            return { success: false, error: '请选择有效的年龄组和参赛性别', code: 'DIVISION_NAME_SOURCE_REQUIRED' }
+          }
+          if (!tournamentId) return { success: false, error: '缺少赛事归属', code: 'DIVISION_TOURNAMENT_REQUIRED' }
+          const duplicateResult = await db.collection('divisions').where({ tournamentId, ageGroup, gender }).limit(2).get()
+          const duplicate = (duplicateResult.data || []).some(record => organizerRecordAllowed('divisions', record, organizerScope))
+          if (duplicate) return { success: false, error: `${ageGroup}${gender} 已存在`, code: 'DIVISION_DUPLICATE' }
+          const existingResult = await db.collection('divisions').where({ tournamentId }).limit(1000).get()
+          const existingCount = (existingResult.data || []).filter(record => organizerRecordAllowed('divisions', record, organizerScope)).length
+          nextData.name = `${ageGroup}${gender}`
+          delete nextData.shortName
+          nextData.displayOrder = existingCount + 1
+        }
         if (assistanceScope) {
           if (!assistanceScope.grant.permissions || assistanceScope.grant.permissions.edit !== true) {
             return { success: false, error: '用户未授权添加或修改资料' }
@@ -3100,6 +3435,9 @@ async function handleDbQuery(event) {
       case 'delete': {
         if (!id) return { success: false, error: '缺少记录 ID' }
         if (assistanceScope) return { success: false, error: '本次协助未开放删除权限' }
+        if (collection === 'divisions') {
+          return { success: false, error: '竞赛组别必须通过受控删除操作处理', code: 'DIVISION_DELETE_CONTROLLED_REQUIRED' }
+        }
         let before = null
         if (COMPETITION_PLAN_MUTABLE_COLLECTIONS.has(collection) || organizerScope) {
           const beforeResult = await db.collection(collection).doc(id).get()
@@ -3528,6 +3866,19 @@ exports.main = async (event, context) => {
         result = { success: false, error: '当前仅支持微信扫码登录' }; break
       case 'wechatWebLogin':
         result = await handleWechatOnlyLogin(params)
+        break
+      case 'wechatPhoneChallenge':
+        result = await handleWechatOnlyLogin(params)
+        if (result && result.success && result.directLogin && result.user && result.user._id) {
+          result.authToken = await createWebSession(result.user._id)
+          result.authExpiresAt = new Date(Date.now() + WEB_SESSION_TTL_MS)
+        }
+        break
+      case 'sendWechatLoginSms':
+        result = await handleSendWechatLoginSms(params)
+        break
+      case 'completeWechatPhoneLogin':
+        result = await handleCompleteWechatPhoneLogin(params)
         if (result && result.success && result.user && result.user._id) {
           result.authToken = await createWebSession(result.user._id)
           result.authExpiresAt = new Date(Date.now() + WEB_SESSION_TTL_MS)

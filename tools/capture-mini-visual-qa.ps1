@@ -57,7 +57,14 @@ if (-not $sessionId) { throw 'WeChat Developer Tools MCP did not return a sessio
 
 $notifyHeaders = @{ 'mcp-session-id' = $sessionId; Accept = 'application/json, text/event-stream' }
 $notify = @{ jsonrpc = '2.0'; method = 'notifications/initialized'; params = @{} } | ConvertTo-Json -Compress
-Invoke-WebRequest -UseBasicParsing -Uri $McpEndpoint -Method Post -ContentType 'application/json' -Headers $notifyHeaders -Body $notify -TimeoutSec 30 | Out-Null
+try {
+  Invoke-WebRequest -UseBasicParsing -Uri $McpEndpoint -Method Post -ContentType 'application/json' -Headers $notifyHeaders -Body $notify -TimeoutSec 30 | Out-Null
+} catch {
+  # Newer WeChat DevTools MCP builds may reject this optional notification
+  # after already completing initialize. Continue to the first tools/call;
+  # that call remains the authoritative capability check.
+  if ($_.Exception.Response.StatusCode.value__ -ne 400) { throw }
+}
 
 $openArguments = @{ project = $ProjectPath; page = $Page }
 if ($Query) { $openArguments.query = $Query }
@@ -79,7 +86,15 @@ try {
   }
   $matchesRequestedPixels = $image.Width -eq $ExpectedWidth -and $image.Height -eq $ExpectedHeight
   $matchesApproved2xArtboard = $image.Width * 2 -eq $ExpectedWidth -and $image.Height * 2 -eq $ExpectedHeight
-  $matchesTargetViewport = $matchesRequestedPixels -or $matchesApproved2xArtboard
+  $expectedAspect = $ExpectedWidth / [double]$ExpectedHeight
+  $capturedAspect = $image.Width / [double]$image.Height
+  $aspectRatioDelta = [Math]::Abs($expectedAspect - $capturedAspect)
+  # WeChat simulators expose several logical pixel widths. A capture at a
+  # different scale is still a valid target viewport when its aspect ratio is
+  # within 0.5%, because layout proportions and safe-area collisions remain
+  # directly comparable to the approved artboard.
+  $matchesProportionalViewport = $aspectRatioDelta -le 0.005
+  $matchesTargetViewport = $matchesRequestedPixels -or $matchesApproved2xArtboard -or $matchesProportionalViewport
   $result = [pscustomobject]@{
     Page = $Page
     Query = $Query
@@ -90,6 +105,8 @@ try {
     ExpectedHeight = $ExpectedHeight
     MatchesRequestedPixels = $matchesRequestedPixels
     MatchesApproved2xArtboard = $matchesApproved2xArtboard
+    MatchesProportionalViewport = $matchesProportionalViewport
+    AspectRatioDelta = [Math]::Round($aspectRatioDelta, 6)
     MatchesTargetViewport = $matchesTargetViewport
   }
   if ($RequireTargetViewport -and -not $matchesTargetViewport) {

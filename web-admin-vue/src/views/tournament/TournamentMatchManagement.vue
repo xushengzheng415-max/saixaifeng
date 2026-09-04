@@ -61,14 +61,39 @@
       </section>
       <footer class="match-footer"><el-alert title="PC端默认只监控裁判现场数据；比赛结束后由主办方复核、补录或归档。" type="info" :closable="false" show-icon /><el-pagination background layout="prev, pager, next, sizes" :total="divisionMatches.length" :page-size="10" :pager-count="5" /></footer>
     </section>
+
+    <el-dialog v-model="assignmentVisible" title="快捷指派裁判" width="600px" :close-on-click-modal="false">
+      <section class="assignment-match-summary">
+        <div><small>比赛场次</small><strong>{{ assignmentMatch.matchSequence || assignmentMatch.sequence || '—' }}</strong></div>
+        <div class="assignment-versus"><b>{{ assignmentMatch.homeTeamName || '主队待定' }}</b><span>VS</span><b>{{ assignmentMatch.awayTeamName || '客队待定' }}</b></div>
+        <div><small>时间 / 场地</small><strong>{{ displayDate(assignmentMatch.matchDate) }} {{ assignmentMatch.matchTime || '待定' }} · {{ assignmentMatch.venue || '场地待定' }}</strong></div>
+      </section>
+      <el-alert class="assignment-alert" :title="`${assignmentFormatLabel}需完整指派4人；只有操作负责人可进入服务号现场执法。`" type="info" :closable="false" show-icon />
+      <el-form v-loading="refereeLoading" label-position="top" class="assignment-form">
+        <el-form-item v-for="role in assignmentRoles" :key="role.key" :label="role.label" required>
+          <el-select v-model="assignmentForm[role.key]" filterable :placeholder="`选择${role.label}`">
+            <el-option v-for="referee in assignableReferees" :key="referee._id" :label="refereeOptionLabel(referee)" :value="referee._id" :disabled="refereeUsedByOtherRole(referee._id, role.key)" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="操作负责人" required class="operator-field">
+          <el-select v-model="assignmentForm.operationRefereeId" placeholder="从本场裁判组中选择">
+            <el-option v-for="referee in selectedCrewReferees" :key="referee._id" :label="referee.name || referee.realName" :value="referee._id" />
+          </el-select>
+          <small>负责开始比赛、记录事件、结束比赛并提交裁判报告。</small>
+        </el-form-item>
+      </el-form>
+      <el-empty v-if="!refereeLoading && !assignableReferees.length" description="当前赛事暂无可指派裁判"><el-button type="success" plain @click="goToRefereeManagement">前往裁判管理</el-button></el-empty>
+      <template #footer><el-button @click="assignmentVisible=false">取消</el-button><el-button type="success" :loading="assignmentSaving" :disabled="!assignableReferees.length" @click="saveQuickAssignment">确认指派</el-button></template>
+    </el-dialog>
   </main>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight, Bell, Calendar, CircleCheckFilled, Clock, DocumentChecked, Download, EditPen, FolderChecked, InfoFilled, LocationInformation, Monitor, Search, Trophy, UserFilled, WarningFilled } from '@element-plus/icons-vue'
-import { queryById, queryList } from '../../utils/cloud'
+import { callFunction, queryById, queryList } from '../../utils/cloud'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,6 +108,12 @@ const venueFilter = ref('')
 const divisions = ref(visualQaSnapshot?.divisions || [])
 const matches = ref(visualQaSnapshot?.matches || [])
 const tournament = ref(visualQaSnapshot?.tournament || {})
+const assignmentVisible = ref(false)
+const assignmentSaving = ref(false)
+const refereeLoading = ref(false)
+const assignmentMatch = ref({})
+const refereeRows = ref([])
+const assignmentForm = ref({ operationRefereeId:'' })
 const selectedDivisionId = computed(() => String(route.query.divisionId || hashQuery.get('divisionId') || ''))
 
 const qaMetrics = {
@@ -108,8 +139,10 @@ const rows = computed(() => divisions.value.map((division, index) => {
   const progress = total ? Math.min(100, Math.round((completed + active) / total * 100)) : 0
   const statusText = qa?.statusText || (active ? '进行中' : pending ? '待录入赛果' : completed === total && total ? '已完成' : '尚未开始')
   const todos = qa?.todos || (pending ? [{ type:'warning', label:`待处理 ${pending}场`, icon:WarningFilled }] : active ? [{ type:'warning', label:`进行中 ${active}场`, icon:WarningFilled }] : [])
-  const formatMap = { tournament:'联赛制', cup:'杯赛制', league:'联赛制', hybrid:'杯赛制' }
-  return { id, name:division.name || division.divisionName || `组别 ${index + 1}`, format:formatMap[division.tournamentType] || division.formatType || division.tournamentType || '赛制待设置', total, completed, pending, active, professional, progress, statusText, todos, progressText: active ? `进行中 ${active}场 · 待复核 ${pending}场` : completed ? `已完成${completed}场` : pending ? '赛程已生成' : '尚未开始' }
+  const formatValue = String(division.formatType || division.tournamentType || division.competitionFormat || '').trim()
+  const formatMap = { tournament:'赛会制', cup:'杯赛制', league:'联赛制', hybrid:'混合制', round_robin:'循环赛制', knockout:'淘汰赛制' }
+  const format = formatMap[formatValue.toLowerCase()] || (/^[\u4e00-\u9fff]/.test(formatValue) ? formatValue : '赛制待设置')
+  return { id, name:division.name || division.divisionName || `组别 ${index + 1}`, format, total, completed, pending, active, professional, progress, statusText, todos, progressText: active ? `进行中 ${active}场 · 待复核 ${pending}场` : completed ? `已完成${completed}场` : pending ? '赛程已生成' : '尚未开始' }
 }))
 
 const selectedDivision = computed(() => rows.value.find(row => row.id === selectedDivisionId.value))
@@ -167,16 +200,23 @@ const statCards = computed(() => {
     { label:proQa ? '待复核' : '待处理', value:qa ? 2 : proQa ? 1 : divisionPendingCount.value, icon:FolderChecked, tone:'orange' }
   ]
 })
+const assignmentFormat = computed(() => assignmentMatch.value.matchFormat || divisions.value.find(item => String(item._id || item.id) === String(assignmentMatch.value.divisionId || selectedDivisionId.value))?.matchFormat || '11side')
+const assignmentFormatLabel = computed(() => `${String(assignmentFormat.value).match(/\d+/)?.[0] || '11'}人制`)
+const assignmentRoles = computed(() => /^(5|6)/.test(String(assignmentFormat.value)) ? [{key:'mainReferee',label:'主裁判'},{key:'secondReferee',label:'第二裁判'},{key:'thirdReferee',label:'第三裁判'},{key:'timekeeper',label:'计时员'}] : [{key:'mainReferee',label:'主裁判'},{key:'assistant1',label:'第一助理裁判'},{key:'assistant2',label:'第二助理裁判'},{key:'fourthOfficial',label:'第四官员'}])
+const assignableReferees = computed(() => refereeRows.value.filter(item => item.synthetic === true ? String(item.tournamentId || '') === String(tournamentId) : item.status === 'approved' && item.canOperate !== false))
+const selectedCrewReferees = computed(() => { const ids=assignmentRoles.value.map(role=>assignmentForm.value[role.key]).filter(Boolean);return assignableReferees.value.filter(item=>ids.includes(item._id)) })
 
 function matchStatus(row) { const value = String(row.status || '').toLowerCase(); if (['live', 'in_progress', 'playing'].includes(value)) return { key:'active', label:'进行中', type:'success' }; if (['completed', 'archived', 'finished'].includes(value)) return { key:'done', label:'已结束', type:'info' }; if (['pending_result', 'pending_review', 'awaiting_result'].includes(value)) return { key:'pending', label:'待处理', type:'warning' }; return { key:'pending', label:'待开始', type:'info' } }
 function reviewStatus(row) { if (['archived', 'completed'].includes(String(row.status || '').toLowerCase())) return { label:'已归档', type:'success' }; if (row.reviewStatus === 'pending' || row.status === 'pending_review') return { label:'待复核', type:'warning' }; return { label:'未结束', type:'info' } }
 function actionLabel(row) { const status = matchStatus(row).key; return status === 'active' ? '实时监控' : status === 'done' ? '赛果复核' : '查看详情' }
 function displayDate(value) { return String(value || '待定').replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2月$3日') }
 function scoreText(row) { return row.homeScore == null && row.awayScore == null ? 'vs' : `${row.homeScore ?? '—'} : ${row.awayScore ?? '—'}` }
+function assignedRefereeName(row) { const crew=row.refereeCrew||{};const operatorId=row.operationRefereeId||row.refereeRecordKeeperId;const selected=Object.values(crew).find(item=>(typeof item==='string'?item:item?._id)===operatorId);const main=crew.mainReferee;return (typeof selected==='object'&&selected?.name)||(typeof main==='object'&&main?.name)||row.refereeName||row.refereName||'' }
 function executionInfo(row) {
-  if (row.executionState === 'recording' || matchStatus(row).key === 'active') return { label:'王海峰 · 手机记录中', icon:Monitor, tone:'recording' }
-  if (row.executionState === 'assigned') return { label:'李明 · 已接收任务', icon:UserFilled, tone:'assigned' }
+  const refereeName=assignedRefereeName(row)
+  if (row.executionState === 'recording' || matchStatus(row).key === 'active') return { label:`${refereeName || '裁判'} · 手机记录中`, icon:Monitor, tone:'recording' }
   if (row.executionState === 'submitted' || row.refereeSubmittedAt) return { label:'记录已提交', icon:CircleCheckFilled, tone:'submitted' }
+  if (row.executionState === 'assigned' || Object.keys(row.refereeCrew || {}).length) return { label:`${refereeName || '裁判组'} · 已指派`, icon:UserFilled, tone:'assigned' }
   return { label:'未使用手机记录', icon:WarningFilled, tone:'missing' }
 }
 function rosterInfo(row) {
@@ -196,7 +236,8 @@ function postInfo(row) {
   if (row.postState === 'await_match') return { label:'待比赛', icon:Clock, tone:'pending' }
   return { label:'未结束', icon:InfoFilled, tone:'pending' }
 }
-function rowActions(row) {
+function canQuickAssign(row) { return matchStatus(row).key === 'pending' && !row.refereeRecordLocked && row.refereeReviewStatus !== 'archived' }
+function baseRowActions(row) {
   if (row.rosterState === '名单待提交') return [{ label:'查看赛前安排', action:'detail', type:'primary', className:'outline-action' }]
   if (row.recordState === '电子记录待复核') return [{ label:'赛果复核', action:'review', type:'warning', className:'solid-action review-action' }]
   if (row.recordState === '电子记录已归档') return [{ label:'查看归档', action:'archive', type:'success', className:'outline-action' }]
@@ -207,6 +248,7 @@ function rowActions(row) {
   if (postInfo(row).tone === 'archived') return [{ label:'查看比赛档案', action:'archive', type:'success', className:'outline-action' }]
   return [{ label:'查看详情', action:'detail', type:'success', className:'outline-action' }]
 }
+function rowActions(row) { const actions=baseRowActions(row);if(canQuickAssign(row))actions.unshift({label:Object.keys(row.refereeCrew||{}).length?'调整裁判':'指派裁判',action:'assign',type:'success',className:'solid-assignment-action'});return actions }
 function matchRoute(row, suffix = '') {
   return {
     path: `/tournaments/${tournamentId}/match/${row._id}${suffix}`,
@@ -214,6 +256,7 @@ function matchRoute(row, suffix = '') {
   }
 }
 function performMatchAction(row, action) {
+  if (action === 'assign') { openQuickAssignment(row); return }
   if (action === 'remind') { window.alert('已向当前裁判发送比赛提醒。'); return }
   if (action === 'monitor') { router.push(matchRoute(row, '/monitor')); return }
   if (action === 'review') { router.push(matchRoute(row, '/review')); return }
@@ -221,6 +264,12 @@ function performMatchAction(row, action) {
   if (action === 'archive') { router.push(matchRoute(row, '/archive')); return }
   openMatch(row)
 }
+function refereeOptionLabel(referee) { const phone=String(referee.phone||referee.phoneNumber||'');const masked=phone.length===11?`${phone.slice(0,3)}****${phone.slice(-4)}`:phone||'无手机号';return `${referee.name||referee.realName||'未命名裁判'}（${referee.synthetic===true?'虚拟测试':referee.level||referee.refereeLevel||'已审核'} · ${masked}）` }
+function refereeUsedByOtherRole(id,currentRole) { return assignmentRoles.value.some(role=>role.key!==currentRole&&assignmentForm.value[role.key]===id) }
+async function loadAssignableReferees() { refereeLoading.value=true;try{refereeRows.value=await queryList('referees',{orderBy:{createTime:'desc'},limit:500,silent:true})||[]}catch(error){refereeRows.value=[];ElMessage.error(error.message||'裁判名单加载失败')}finally{refereeLoading.value=false} }
+async function openQuickAssignment(row) { assignmentMatch.value=row;await loadAssignableReferees();const crew=row.refereeCrew||{};const form={operationRefereeId:row.operationRefereeId||row.refereeRecordKeeperId||''};assignmentRoles.value.forEach(role=>{const value=crew[role.key];form[role.key]=typeof value==='string'?value:value?._id||''});const defaultRole=/^(5|6)/.test(String(assignmentFormat.value))?'timekeeper':'fourthOfficial';form.operationRefereeId=form.operationRefereeId||form[defaultRole]||'';assignmentForm.value=form;assignmentVisible.value=true }
+async function saveQuickAssignment() { const ids=assignmentRoles.value.map(role=>assignmentForm.value[role.key]);if(ids.some(id=>!id))return ElMessage.warning('请完整指派4名裁判');if(new Set(ids).size!==ids.length)return ElMessage.warning('同一名裁判不能重复担任多个岗位');if(!ids.includes(assignmentForm.value.operationRefereeId))return ElMessage.warning('操作负责人必须从本场裁判组中选择');assignmentSaving.value=true;try{const crew={};assignmentRoles.value.forEach(role=>{const referee=assignableReferees.value.find(item=>item._id===assignmentForm.value[role.key]);crew[role.key]={_id:referee._id,name:referee.name||referee.realName||'',phone:referee.phone||referee.phoneNumber||'',synthetic:referee.synthetic===true}});const result=await callFunction('updateMatch',{matchId:assignmentMatch.value._id,data:{refereeCrew:crew,refereeRecordKeeperId:assignmentForm.value.operationRefereeId,operationRefereeId:assignmentForm.value.operationRefereeId}});if(!result?.success)throw new Error(result?.message||result?.error||'裁判指派失败');Object.assign(assignmentMatch.value,{refereeCrew:crew,refereeRecordKeeperId:assignmentForm.value.operationRefereeId,operationRefereeId:assignmentForm.value.operationRefereeId,refereeAssignmentStatus:'assigned',executionState:'assigned'});assignmentVisible.value=false;ElMessage.success('裁判组已指派，操作负责人将通过服务号接收任务')}catch(error){ElMessage.error(error.message||'裁判指派失败')}finally{assignmentSaving.value=false} }
+function goToRefereeManagement(){assignmentVisible.value=false;router.push(`/tournaments/${tournamentId}/referees`)}
 function openMatch(row) { const status = matchStatus(row).key; const archived = row.refereeReviewStatus === 'archived' || String(row.status || '').toLowerCase() === 'archived'; const underReview = row.refereeReviewStatus === 'under_review' || row.status === 'pending_review'; const needsPostMatch = !archived && !underReview && status === 'done'; router.push(matchRoute(row, status === 'active' ? '/monitor' : archived ? '/archive' : underReview ? '/review' : needsPostMatch ? '/post-match' : '')) }
 function enterDivision(row) { router.push({ path:`/tournaments/${tournamentId}/matches`, query:{ divisionId:row.id } }) }
 function backToDivisions() { router.push(`/tournaments/${tournamentId}/matches`) }
@@ -243,4 +292,5 @@ onMounted(async () => {
 /* Match list prototype layer: native grid keeps the 1618px table stable in Vite and production. */
 .workspace-alert{min-height:58px}
 .division-workspace{padding-top:20px}.workspace-header{display:flex;align-items:flex-start;justify-content:space-between}.workspace-header h2{margin:8px 0 8px;font-size:35px;line-height:1.12}.workspace-header p{margin:0;color:#506057;font-size:17px}.workspace-header .back-button{margin-top:15px;min-width:170px;height:42px;color:#34443b;border-color:#88938c}.workspace-alert{margin:22px 0 26px;border:1px solid #c5ddd0;background:#f8fcf9}.match-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:30px;margin:0 0 26px}.match-stats article{display:flex;align-items:center;gap:24px;min-height:105px;padding:0 28px;border:1px solid #e4e8e6;border-radius:10px;background:#fff}.match-stats article>.el-icon{font-size:51px}.match-stats .green{color:#076b31}.match-stats .orange{color:#ff850b}.match-stats span,.match-stats strong{display:block}.match-stats span{color:#303d35;font-size:17px}.match-stats strong{margin-top:9px;font-size:31px;line-height:1}.match-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.division-filters.compact{gap:16px;margin:0}.division-filters.compact button{min-width:auto;height:42px;padding:0 15px;font-size:15px}.match-toolbox{display:flex;align-items:center;gap:10px}.match-toolbox .el-button{height:40px}.venue-select{width:118px}.match-search{width:194px}.export-button{min-width:168px}.match-table{overflow:hidden;border:1px solid #e3e8e5;border-radius:9px;background:#fff}.match-table>.el-alert{margin:14px}.match-grid{display:grid;grid-template-columns:116px 1.28fr 2.28fr 1.15fr 1.38fr 1.08fr 1.65fr;align-items:center;gap:16px;padding:0 16px}.match-grid-head{height:52px;border-bottom:1px solid #e9edeb;color:#334239;background:#fafcfb;font-size:15px}.match-grid-row{min-height:63px;border-bottom:1px solid #e9edeb;color:#18241d;font-size:15px}.match-grid-row:last-of-type{border-bottom:0}.time-cell,.referee-cell,.post-cell{display:flex;align-items:center;gap:7px}.time-cell{flex-wrap:wrap}.time-cell small{display:block;flex-basis:100%;margin-top:1px;color:#5c6b62;font-size:14px}.versus-cell{display:flex;align-items:center;justify-content:center;gap:14px;white-space:nowrap}.versus-cell>b{font-weight:500}.versus-cell>strong{font-size:18px}.status-cell{display:flex;align-items:center;gap:8px}.status-cell i{width:9px;height:9px;border-radius:50%;background:#aeb5b1}.status-cell.active i{background:#087834}.referee-cell .el-icon,.post-cell .el-icon{font-size:18px}.referee-cell.recording{color:#0c612e}.referee-cell.assigned{color:#5b645f}.referee-cell.submitted,.post-cell.archived{color:#087634}.referee-cell.missing{color:#69736e}.post-cell.review,.post-cell.supplement{color:#ff7d09}.post-cell.pending{color:#65716a}.action-cell{display:flex;justify-content:flex-end;gap:9px;white-space:nowrap}.action-cell .el-button{height:37px;margin:0;padding:0 14px;font-weight:600}.action-cell .outline-action{color:#147140;border-color:#8ac8a3;background:#fff}.action-cell .solid-action{border:0;color:#4b2e00}.action-cell .review-action{background:linear-gradient(180deg,#ffd65d,#ffb727)}.action-cell .supplement-action{background:linear-gradient(180deg,#ffca46,#ff962f)}.match-footer{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px}.match-footer>.el-alert{flex:1;border:1px solid #d4e3da;background:#f8fbf9}.match-footer :deep(.el-pagination){flex:none}@media(max-width:1180px){.match-controls{align-items:flex-start;flex-direction:column}.match-grid{grid-template-columns:90px 1fr 1.7fr 1fr 1.1fr 1.1fr}.match-grid>:last-child{display:none}.match-toolbox{width:100%;flex-wrap:wrap}}@media(max-width:760px){.match-stats{grid-template-columns:1fr 1fr;gap:10px}.workspace-header{align-items:flex-start;flex-direction:column}.workspace-header .back-button{display:none}.match-grid{grid-template-columns:80px 1fr 1.5fr}.match-grid>:nth-child(n+5){display:none}.match-footer{align-items:flex-start;flex-direction:column}}
+.match-grid{grid-template-columns:116px 1.28fr 2.28fr 1.15fr 1.38fr 1.08fr 2fr}.action-cell .solid-assignment-action{border:1px solid #087c40;color:#fff;background:#087c40}.assignment-match-summary{display:grid;grid-template-columns:90px 1fr 170px;align-items:center;gap:15px;padding:15px;border:1px solid #dfe8e2;border-radius:8px;background:#f8fbf9}.assignment-match-summary>div{display:grid;gap:5px}.assignment-match-summary small{color:#758178;font-size:11px}.assignment-versus{grid-template-columns:1fr auto 1fr!important;align-items:center;text-align:center}.assignment-versus span{color:#89938d;font-size:12px}.assignment-alert{margin:16px 0}.assignment-form{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.assignment-form :deep(.el-select){width:100%}.assignment-form .operator-field{grid-column:1/-1}.operator-field small{display:block;margin-top:6px;color:#7d8981;font-size:11px}@media(max-width:1180px){.match-grid{grid-template-columns:90px 1fr 1.7fr 1fr 1.1fr 1.1fr}}@media(max-width:760px){.assignment-match-summary,.assignment-form{grid-template-columns:1fr}.assignment-form .operator-field{grid-column:auto}}
 </style>

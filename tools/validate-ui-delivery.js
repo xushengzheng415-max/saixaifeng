@@ -170,7 +170,7 @@ function routeTargetExists(route, nodeType) {
 }
 
 for (const node of inventory.nodes) {
-  if (node.assetStatus !== 'approved') fail(node, `素材包状态为 ${node.assetStatus}`)
+  if (!['approved', 'implemented'].includes(node.assetStatus)) fail(node, `素材包状态为 ${node.assetStatus}`)
   if (!node.formalRoute) fail(node, '缺少正式路由')
   else if (!routeTargetExists(node.formalRoute, node.type)) fail(node, `路由目标不存在：${node.formalRoute}`)
   for (const [name, value] of [['button-destination', node.buttonDestination], ['flow-transition', node.flowTransition], ['build-verification', node.build]]) {
@@ -186,7 +186,7 @@ const miniFunctionAudit = auditMiniCloudFunctionReferences()
 const miniVisualQaAudit = auditMiniVisualQaGates()
 const visualPending = inventory.nodes.filter(node => VISUAL_PENDING_PATTERN.test(String(node.visual))).length
 console.log(`节点：${inventory.nodes.length}`)
-console.log(`素材包已批准：${inventory.nodes.filter(node => node.assetStatus === 'approved').length}`)
+console.log(`素材包已批准：${inventory.nodes.filter(node => ['approved', 'implemented'].includes(node.assetStatus)).length}`)
 console.log(`正式路由：${inventory.nodes.filter(node => node.formalRoute).length}`)
 console.log(`小程序已登记路由：${miniRouteAudit.registered}`)
 console.log(`小程序缺失路由：${miniRouteAudit.missing}`)

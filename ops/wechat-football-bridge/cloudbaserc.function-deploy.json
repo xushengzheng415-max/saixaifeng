@@ -1,0 +1,49 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "cloud1-7g8ckb3c7815a011",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "tournamentRegistrationFlow",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "installDependency": true
+    },
+    {
+      "name": "sendRefereeTemplateMessages",
+      "handler": "index.main",
+      "runtime": "Nodejs16.13",
+      "installDependency": true
+    },
+    {
+      "name": "organizerClaimInvite",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "installDependency": true
+    },
+    {
+      "name": "onboardingWorkspace",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "installDependency": true
+    },
+    {
+      "name": "getMiniWorkspace",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "installDependency": true
+    },
+    {
+      "name": "serviceAccountCallback",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "installDependency": true
+    },
+    {
+      "name": "applyTournament",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "installDependency": true
+    }
+  ]
+}

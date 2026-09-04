@@ -1,0 +1,8 @@
+{
+  "name": "service-account-callback",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

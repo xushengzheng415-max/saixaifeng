@@ -4,6 +4,13 @@ const crypto = require('crypto')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
+const ORGANIZATION_TYPES = {
+  event_company: '赛事公司',
+  club: '足球俱乐部',
+  school: '学校',
+  association: '足协/体育组织',
+  other: '其他机构'
+}
 
 function cleanText(value, maxLength) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maxLength)
@@ -88,9 +95,76 @@ async function organizationAccess(identity, organization) {
   })
   return {
     isMember: Boolean(membership || isOwner),
+    canManageWorkspace: Boolean(isOwner || (membership && hasPermission(membership, 'workspace.manage'))),
     canEvent: Boolean(isOwner || (membership && hasPermission(membership, 'event.manage'))),
     canTraining: Boolean(isOwner || (membership && (hasPermission(membership, 'education.manage') || hasPermission(membership, 'workspace.manage'))))
   }
+}
+
+async function updateProfile(identity, event) {
+  const nickname = cleanText(event.nickname, 30)
+  if (!nickname) throw new Error('请输入账号显示名称')
+  await db.collection('users').doc(String(identity.user._id)).update({
+    data: { nickname, userName: nickname, updateTime: db.serverDate() }
+  })
+  return { success: true, user: { id: identity.user._id, nickname } }
+}
+
+async function updateOrganization(identity, event) {
+  const name = cleanText(event.name, 80)
+  const organizationType = cleanText(event.organizationType, 30)
+  const province = cleanText(event.province, 40)
+  const provinceCode = cleanText(event.provinceCode, 12)
+  const city = cleanText(event.city, 40)
+  if (name.length < 2) throw new Error('机构名称需为 2–80 个字')
+  if (!ORGANIZATION_TYPES[organizationType]) throw new Error('请选择机构类型')
+  if (!province || !provinceCode || !city) throw new Error('请选择机构所在省份和城市')
+  const state = await loadOnboardingState(identity)
+  if (!state.organization) throw new Error('当前账号尚未建立机构')
+  const access = await organizationAccess(identity, state.organization)
+  if (!access.canManageWorkspace) throw new Error('只有机构负责人可以修改机构资料')
+  const orgId = String(state.organization._id || state.organization.id)
+  await db.collection('organizations').doc(orgId).update({
+    data: {
+      name,
+      organizationName: name,
+      organizationType,
+      organizationTypeName: ORGANIZATION_TYPES[organizationType],
+      province,
+      provinceCode,
+      city,
+      updateTime: db.serverDate()
+    }
+  })
+  return {
+    success: true,
+    organization: {
+      id: orgId,
+      name,
+      organizationType,
+      organizationTypeName: ORGANIZATION_TYPES[organizationType],
+      province,
+      provinceCode,
+      city,
+      capabilities: Array.isArray(state.organization.capabilities) ? state.organization.capabilities : []
+    }
+  }
+}
+
+async function grantMembershipPermissions(identity, organizationId, permissionsToAdd, capabilitiesToAdd) {
+  const userId = String(identity.user._id)
+  const rows = await safeRows('organization_memberships', _.or([
+    { orgId: organizationId, userId },
+    { organizationId, userId },
+    { organization_id: organizationId, userId }
+  ]), 20)
+  const membership = rows.find(isActiveMembership)
+  if (!membership) return
+  const permissions = Array.from(new Set((Array.isArray(membership.permissions) ? membership.permissions : []).concat(permissionsToAdd || [])))
+  const capabilities = Array.from(new Set((Array.isArray(membership.capabilities) ? membership.capabilities : []).concat(capabilitiesToAdd || [])))
+  await db.collection('organization_memberships').doc(String(membership._id)).update({
+    data: { permissions, capabilities, updateTime: db.serverDate() }
+  })
 }
 
 function hashSessionToken(token) {
@@ -138,8 +212,10 @@ async function currentUser(event) {
 async function findTrainingProvision(identity) {
   const user = identity.user
   const userId = user._id
-  const openId = identity.openId
-  const condition = _.or([{ userId }, { memberUserId: userId }, { openId }, { _openid: openId }])
+  const phone = String(user.phone || user.phoneNumber || '')
+  const conditions = [{ userId }, { memberUserId: userId }]
+  if (phone) conditions.push({ phone }, { phoneNumber: phone })
+  const condition = _.or(conditions)
   const [subscriptions, provisions] = await Promise.all([
     safeRows('training_subscriptions', condition, 5),
     safeRows('training_account_provisionings', condition, 5)
@@ -167,22 +243,58 @@ async function findTrainingProvision(identity) {
 async function loadOnboardingState(identity) {
   const user = identity.user
   const userId = user._id
-  const openId = identity.openId
-  const [organizationMembershipResult, directTeams, teamMembershipResult, directTournaments] = await Promise.all([
-    db.collection('organization_memberships').where(_.or([{ userId }, { memberUserId: userId }, { openId }])).limit(20).get(),
-    db.collection('teams').where(_.or([{ creatorId: userId }, { ownerId: userId }, { userId }, { openId }, { _openid: openId }])).limit(20).get(),
-    db.collection('team_memberships').where(_.or([{ userId }, { memberUserId: userId }, { openId }])).limit(20).get(),
-    db.collection('tournaments').where(_.or([{ creatorId: userId }, { organizerId: userId }, { ownerId: userId }, { userId }, { openId }, { _openid: openId }])).limit(20).get()
+  const phone = String(user.phone || user.phoneNumber || '')
+  const membershipConditions = [{ userId }, { memberUserId: userId }]
+  if (phone) membershipConditions.push({ phone }, { phoneNumber: phone })
+  const [organizationMembershipResult, directTeams, rawTeamMembershipRows, directTournaments] = await Promise.all([
+    db.collection('organization_memberships').where(_.or(membershipConditions)).limit(20).get(),
+    db.collection('teams').where(_.or([{ creatorId: userId }, { ownerId: userId }, { userId }])).limit(50).get(),
+    safeRows('team_memberships', _.or(membershipConditions), 100),
+    db.collection('tournaments').where(_.or([{ creatorId: userId }, { organizerId: userId }, { ownerId: userId }, { userId }])).limit(20).get()
   ])
   const organizationMemberships = (organizationMembershipResult.data || []).filter(isActiveMembership)
-  const teamMemberships = (teamMembershipResult.data || []).filter(isActiveMembership)
+  const teamMemberships = (rawTeamMembershipRows || []).filter(isActiveMembership)
   const directTeamRows = directTeams.data || []
   const teamMembershipRows = teamMemberships
   const teamIds = teamMembershipRows.map(function(row) {
     return row && (row.teamId || row.team_id)
   }).filter(Boolean)
   const memberTeams = await rowsByIds('teams', teamIds, 20)
-  const allTeamRows = directTeamRows.concat(memberTeams)
+  const allTeamMap = {}
+  directTeamRows.concat(memberTeams).forEach(function(team) {
+    if (team && team._id) allTeamMap[String(team._id)] = team
+  })
+  const allTeamRows = Object.keys(allTeamMap).map(function(id) { return allTeamMap[id] })
+  const manageableTeams = allTeamRows.filter(function(team) {
+    const teamId = String(team._id || '')
+    const directOwner = [team.ownerId, team.creatorId, team.userId].some(function(value) {
+      return identityMatches(value, userId)
+    })
+    const membership = teamMembershipRows.find(function(row) {
+      return String(row.teamId || row.team_id || '') === teamId
+    })
+    const roles = Array.isArray(membership && membership.roles) ? membership.roles : []
+    const role = String(membership && membership.role || '')
+    return directOwner || Boolean(membership && (
+      hasPermission(membership, 'team.manage') ||
+      roles.indexOf('owner') >= 0 || roles.indexOf('team_manager') >= 0 ||
+      role === 'owner' || role === 'team_manager'
+    ))
+  }).map(function(team) {
+    const teamId = String(team._id)
+    const membership = teamMembershipRows.find(function(row) {
+      return String(row.teamId || row.team_id || '') === teamId
+    })
+    const teamOrgId = String(team.orgId || team.organizationId || '')
+    return {
+      id: teamId,
+      name: String(team.name || team.teamName || '未命名球队'),
+      logo: String(team.logo || team.logoUrl || ''),
+      orgId: teamOrgId,
+      attachable: !teamOrgId,
+      membershipId: membership && membership._id ? String(membership._id) : ''
+    }
+  })
   const organizationIds = new Set()
   collectOrganizationIds([{ orgId: user.orgId, organizationId: user.organizationId }], organizationIds)
   collectOrganizationIds(organizationMemberships, organizationIds)
@@ -205,17 +317,153 @@ async function loadOnboardingState(identity) {
     validOrganizationRows.length ||
     allTeamRows.length
   )
+  const hasTeamRelation = allTeamRows.length > 0
   const trainingProvision = await findTrainingProvision(identity)
   const organizationConflict = validOrganizationRows.length > 1
+  const organization = organizationConflict ? null : (validOrganizationRows[0] || null)
+  const attachableTeams = manageableTeams.filter(function(team) { return team.attachable })
+  const hasTournamentWithoutOrganization = !organization && (directTournaments.data || []).length > 0
+  const canCreateOrganizationFromTeams = Boolean(
+    !organizationConflict && !organization && attachableTeams.length && !hasTournamentWithoutOrganization
+  )
+  const capabilities = Array.isArray(organization && organization.capabilities) ? organization.capabilities : []
+  const hasWorkspaceCapability = capabilities.indexOf('event') >= 0 || capabilities.indexOf('education') >= 0
   return {
     success: true,
     hasBusinessRelation,
-    requiresOnboarding: !hasBusinessRelation,
+    hasTeamRelation,
+    manageableTeams,
+    canCreateOrganizationFromTeams,
+    hasTournamentWithoutOrganization,
+    requiresOnboarding: !hasTeamRelation && (!organization || !hasWorkspaceCapability),
     onboarding: user.onboarding || {},
     training: trainingProvision,
-    organization: organizationConflict ? null : (validOrganizationRows[0] || null),
+    organization,
     organizationConflict,
     organizationIds: validOrganizationRows.map(function(row) { return row._id })
+  }
+}
+
+async function createOrganization(identity, event) {
+  const name = cleanText(event.name, 80)
+  const organizationType = cleanText(event.organizationType, 30)
+  const province = cleanText(event.province, 40)
+  const provinceCode = cleanText(event.provinceCode, 12)
+  const city = cleanText(event.city, 40)
+  if (name.length < 2) throw new Error('机构名称需为 2–80 个字')
+  if (!ORGANIZATION_TYPES[organizationType]) throw new Error('请选择机构类型')
+  if (!province || !provinceCode || !city) throw new Error('请选择机构所在省份和城市')
+  const state = await loadOnboardingState(identity)
+  if (state.organization) {
+    const access = await organizationAccess(identity, state.organization)
+    if (!access.isMember) throw new Error('当前账号没有此机构的访问权限')
+    return {
+      success: true,
+      duplicate: true,
+      organization: {
+        id: state.organization._id || state.organization.id,
+        name: state.organization.name || state.organization.organizationName || '',
+        organizationType: state.organization.organizationType || '',
+        province: state.organization.province || '',
+        provinceCode: state.organization.provinceCode || '',
+        city: state.organization.city || ''
+      }
+    }
+  }
+  const requestedTeamIds = Array.from(new Set((Array.isArray(event.attachTeamIds) ? event.attachTeamIds : [])
+    .map(function(value) { return String(value || '').trim() }).filter(Boolean)))
+  const attachableTeamMap = {}
+  ;(state.manageableTeams || []).filter(function(team) { return team.attachable }).forEach(function(team) {
+    attachableTeamMap[String(team.id)] = team
+  })
+  if (state.hasBusinessRelation && !state.canCreateOrganizationFromTeams) {
+    throw new Error('当前业务关系不满足自助创建机构条件，请先完成人工归属核验')
+  }
+  if (state.canCreateOrganizationFromTeams && !requestedTeamIds.length) {
+    throw new Error('请至少选择一支要接入新机构的已有球队')
+  }
+  if (requestedTeamIds.some(function(teamId) { return !attachableTeamMap[teamId] })) {
+    throw new Error('选中球队不属于当前账号，或已归属其他机构')
+  }
+  const now = db.serverDate()
+  const result = await db.runTransaction(async function(transaction) {
+    for (const teamId of requestedTeamIds) {
+      const teamResult = await transaction.collection('teams').doc(teamId).get()
+      const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
+      if (!team) throw new Error('选中球队不存在')
+      if (String(team.orgId || team.organizationId || '')) throw new Error('选中球队已归属其他机构')
+    }
+    const organizationCapabilities = requestedTeamIds.length ? ['team'] : []
+    const organizationResult = await transaction.collection('organizations').add({
+      data: {
+        name,
+        organizationName: name,
+        organizationType,
+        organizationTypeName: ORGANIZATION_TYPES[organizationType],
+        province,
+        provinceCode,
+        city,
+        capabilities: organizationCapabilities,
+        creatorId: identity.user._id,
+        ownerId: identity.user._id,
+        source: 'pc_wechat_onboarding',
+        createTime: now,
+        updateTime: now
+      }
+    })
+    const orgId = organizationResult._id
+    await transaction.collection('organization_memberships').add({
+      data: {
+        orgId,
+        userId: identity.user._id,
+        status: 'active',
+        positions: ['机构负责人'],
+        permissions: requestedTeamIds.length
+          ? ['workspace.manage', 'team.view', 'team.manage']
+          : ['workspace.manage'],
+        capabilities: organizationCapabilities,
+        source: 'pc_wechat_onboarding',
+        createTime: now,
+        updateTime: now
+      }
+    })
+    for (const teamId of requestedTeamIds) {
+      await transaction.collection('teams').doc(teamId).update({
+        data: { orgId, organizationId: orgId, updateTime: now }
+      })
+      const membershipId = attachableTeamMap[teamId] && attachableTeamMap[teamId].membershipId
+      if (membershipId) {
+        await transaction.collection('team_memberships').doc(membershipId).update({
+          data: { orgId, organizationId: orgId, updateTime: now }
+        })
+      }
+    }
+    const onboarding = Object.assign({}, identity.user.onboarding || {}, {
+      scene: 'organization',
+      step: 'organization_created',
+      orgId,
+      updatedAt: now
+    })
+    await transaction.collection('users').doc(identity.user._id).update({
+      data: { orgId, organizationId: orgId, onboarding, updateTime: now }
+    })
+    return { orgId, attachedTeamIds: requestedTeamIds }
+  })
+  return {
+    success: true,
+    organization: {
+      id: result.orgId,
+      name,
+      organizationType,
+      organizationTypeName: ORGANIZATION_TYPES[organizationType],
+      province,
+      provinceCode,
+      city,
+      capabilities: result.attachedTeamIds.length ? ['team'] : []
+    },
+    attachedTeams: (state.manageableTeams || []).filter(function(team) {
+      return result.attachedTeamIds.indexOf(String(team.id)) >= 0
+    }).map(function(team) { return { id: team.id, name: team.name } })
   }
 }
 
@@ -268,10 +516,54 @@ async function createTeam(identity, event) {
   }
   const tournamentInvite = await loadTournamentCreateTeamInvite(identity, event.tournamentCreateTeamInviteId || event.tournamentInviteId || event.inviteId)
   const state = await loadOnboardingState(identity)
-  if (state.hasBusinessRelation && !tournamentInvite) throw new Error('当前账号已有业务关系，请在已有工作空间内管理球队')
+  const userId = String(identity.user._id)
+  const ownedTeams = await safeRows('teams', _.or([
+    { creatorId: userId },
+    { ownerId: userId },
+    { openId: identity.openId }
+  ]), 50)
+  const existingMemberships = await safeRows('team_memberships', _.or([
+    { userId },
+    { memberUserId: userId },
+    { openId: identity.openId }
+  ]), 100)
+  const completedTeamIds = new Set(existingMemberships.filter(isActiveMembership).map(function(membership) {
+    return String(membership.teamId || membership.team_id || '')
+  }).filter(Boolean))
+  const incompleteOnboardingTeams = ownedTeams.filter(function(team) {
+    return String(team.source || '') === 'mini_onboarding' &&
+      !completedTeamIds.has(String(team._id || '')) &&
+      [team.creatorId, team.ownerId, team.openId].some(function(value) {
+        return String(value || '') === userId || String(value || '') === String(identity.openId || '')
+      })
+  })
+  const retryTeam = incompleteOnboardingTeams.find(function(team) {
+    return cleanText(team.name || team.teamName, 30) === name
+  }) || (!state.organization && completedTeamIds.size === 0 && incompleteOnboardingTeams.length === 1
+    ? incompleteOnboardingTeams[0]
+    : null)
+  const completedSameNameTeam = ownedTeams.find(function(team) {
+    return completedTeamIds.has(String(team._id || '')) && cleanText(team.name || team.teamName, 30) === name
+  })
+  if (completedSameNameTeam && !retryTeam) throw new Error('你已管理同名球队，请直接选择已有球队继续报名')
   const now = db.serverDate()
-  const teamResult = await db.collection('teams').add({
-    data: {
+  let teamId = retryTeam ? String(retryTeam._id) : ''
+  if (retryTeam) {
+    await db.collection('teams').doc(teamId).update({
+      data: {
+        name,
+        teamName: name,
+        shortName,
+        division,
+        city,
+        logo: transparentLogo || originalLogo || retryTeam.logo || '',
+        logoTransparent: transparentLogo || retryTeam.logoTransparent || '',
+        logoOriginal: originalLogo || retryTeam.logoOriginal || '',
+        updateTime: now
+      }
+    })
+  } else {
+    const teamResult = await db.collection('teams').add({ data: {
       name,
       teamName: name,
       shortName,
@@ -287,22 +579,36 @@ async function createTeam(identity, event) {
       logoOriginal: originalLogo,
       createTime: now,
       updateTime: now
-    }
-  })
-  const teamId = teamResult._id
-  await db.collection('team_memberships').add({
-    data: {
+    } })
+    teamId = teamResult._id
+  }
+  const memberships = await safeRows('team_memberships', _.or([
+    { teamId, userId },
+    { teamId, memberUserId: userId },
+    { teamId, openId: identity.openId }
+  ]), 5)
+  if (!memberships.some(isActiveMembership)) {
+    try {
+      await db.collection('team_memberships').add({ data: {
       teamId,
-      userId: identity.user._id,
+      userId,
+      memberUserId: userId,
       openId: identity.openId,
-      status: 'active',
-      roles: ['team_manager'],
+      role: 'owner',
+      status: 'accepted',
+      roles: ['owner', 'team_manager'],
       permissions: ['event.view', 'team.view', 'team.manage'],
       source: 'mini_onboarding',
       createTime: now,
       updateTime: now
+      } })
+    } catch (error) {
+      if (/collection.+not exist|DATABASE_COLLECTION_NOT_EXIST|ResourceNotFound/i.test(String(error && (error.message || error.errMsg) || error))) {
+        throw new Error('球队负责人关系尚未初始化，请联系平台管理员后重试；已填写的球队资料不会重复创建')
+      }
+      throw error
     }
-  })
+  }
   let registration = null
   if (tournamentInvite) {
     const existing = await safeRows('tournament_teams', { tournamentId: String(tournamentInvite.invite.tournamentId), teamId }, 1)
@@ -346,9 +652,11 @@ async function createTeam(identity, event) {
 
 async function createEventSpace(identity, event) {
   const name = cleanText(event.name, 50)
+  const province = cleanText(event.province, 40)
+  const provinceCode = cleanText(event.provinceCode, 12)
   const city = cleanText(event.city, 40)
   if (name.length < 2) throw new Error('赛事名称至少需要 2 个字符')
-  if (!city) throw new Error('请填写举办城市')
+  if (!province || !provinceCode || !city) throw new Error('请选择举办省份和城市')
   const originalLogo = String(event.originalLogo || '')
   const transparentLogo = String(event.transparentLogo || '')
   if ((originalLogo && originalLogo.indexOf('cloud://') !== 0) || (transparentLogo && transparentLogo.indexOf('cloud://') !== 0)) {
@@ -364,10 +672,14 @@ async function createEventSpace(identity, event) {
     await db.collection('organizations').doc(orgId).update({
       data: { capabilities, updateTime: now }
     })
+    await grantMembershipPermissions(identity, orgId, ['event.view', 'event.manage'], ['event'])
     const tournamentResult = await db.collection('tournaments').add({
       data: {
         name,
+        province,
+        provinceCode,
         city,
+        venueProvince: province,
         venueCity: city,
         orgId,
         creatorId: identity.user._id,
@@ -398,84 +710,21 @@ async function createEventSpace(identity, event) {
       organizationId: orgId,
       reusedOrganization: true,
       organization: { id: orgId, name: state.organization.name || state.organization.organizationName || '', logo: state.organization.logo || '' },
-      tournament: { id: tournamentId, name, city, logo: transparentLogo || originalLogo }
+      tournament: { id: tournamentId, name, province, city, logo: transparentLogo || originalLogo }
     }
   }
-  if (state.hasBusinessRelation) {
-    throw new Error('当前账号已有业务关系，请在已有机构工作空间内管理赛事')
-  }
-  const now = db.serverDate()
-  const organizationResult = await db.collection('organizations').add({
-    data: {
-      name: name + '主办方',
-      organizationName: name + '主办方',
-      capabilities: ['event'],
-      logo: transparentLogo || originalLogo,
-      creatorId: identity.user._id,
-      createTime: now,
-      updateTime: now
-    }
-  })
-  const orgId = organizationResult._id
-  await db.collection('organization_memberships').add({
-    data: {
-      orgId,
-      userId: identity.user._id,
-      openId: identity.openId,
-      status: 'active',
-      positions: ['机构负责人'],
-      permissions: ['event.view', 'event.manage'],
-      capabilities: ['event'],
-      createTime: now,
-      updateTime: now
-    }
-  })
-  const tournamentResult = await db.collection('tournaments').add({
-    data: {
-      name,
-      city,
-      venueCity: city,
-      orgId,
-      creatorId: identity.user._id,
-      organizerId: identity.user._id,
-      ownerId: identity.user._id,
-      logo: transparentLogo || originalLogo,
-      logoTransparent: transparentLogo,
-      logoOriginal: originalLogo,
-      status: 'draft',
-      source: 'pc_onboarding',
-      createTime: now,
-      updateTime: now
-    }
-  })
-  const tournamentId = tournamentResult._id
-  const onboarding = Object.assign({}, identity.user.onboarding || {}, {
-    scene: 'event',
-    step: 'event_created',
-    orgId,
-    tournamentId,
-    completedAt: now
-  })
-  await db.collection('users').doc(identity.user._id).update({
-    data: { orgId, onboarding, updateTime: now }
-  })
-  return {
-    success: true,
-    organizationId: orgId,
-    organization: { id: orgId, name: name + '主办方', logo: transparentLogo || originalLogo },
-    tournament: { id: tournamentId, name, city, logo: transparentLogo || originalLogo }
-  }
+  throw new Error('请先创建机构信息，再创建赛事空间')
 }
 
 async function createTrainingWorkspace(identity, event) {
-  const name = cleanText(event.name, 50)
-  if (name.length < 2) throw new Error('机构名称需为 2–50 个字')
   const originalLogo = String(event.originalLogo || '')
   const transparentLogo = String(event.transparentLogo || '')
   if ((originalLogo && originalLogo.indexOf('cloud://') !== 0) || (transparentLogo && transparentLogo.indexOf('cloud://') !== 0)) {
     throw new Error('机构标识文件无效，请重新上传')
   }
   const state = await loadOnboardingState(identity)
+  if (!state.organization) throw new Error('请先创建机构信息，再开通青训能力')
+  const name = cleanText(event.name || state.organization.name || state.organization.organizationName, 80)
   const training = state.training || {}
   if (!training.hasBackendProvision || !canUseTraining(training.status)) {
     throw new Error('当前机构尚未完成有效青训开户，无法创建青训空间')
@@ -497,6 +746,7 @@ async function createTrainingWorkspace(identity, event) {
         updateTime: now
       }
     })
+    await grantMembershipPermissions(identity, orgId, ['education.view', 'education.manage', 'education.execute'], ['education'])
     const onboarding = Object.assign({}, identity.user.onboarding || {}, {
       scene: 'training', step: 'training_created', orgId, completedAt: now
     })
@@ -511,53 +761,7 @@ async function createTrainingWorkspace(identity, event) {
       trainingStatus: training.status
     }
   }
-  if (state.hasBusinessRelation) {
-    throw new Error('当前账号已有业务关系，请在已有机构内开通青训能力')
-  }
-  const now = db.serverDate()
-  const organizationResult = await db.collection('organizations').add({
-    data: {
-      name,
-      organizationName: name,
-      capabilities: ['education'],
-      entitlements: { training: { status: training.status, source: training.source } },
-      trainingSubscriptionStatus: training.status,
-      logo: transparentLogo || originalLogo,
-      logoTransparent: transparentLogo,
-      logoOriginal: originalLogo,
-      creatorId: identity.user._id,
-      source: 'mini_onboarding_training',
-      createTime: now,
-      updateTime: now
-    }
-  })
-  const orgId = organizationResult._id
-  await db.collection('organization_memberships').add({
-    data: {
-      orgId,
-      userId: identity.user._id,
-      openId: identity.openId,
-      status: 'active',
-      positions: ['机构负责人'],
-      permissions: ['workspace.manage', 'education.view', 'education.manage', 'education.execute'],
-      capabilities: ['education'],
-      source: 'mini_onboarding_training',
-      createTime: now,
-      updateTime: now
-    }
-  })
-  const onboarding = Object.assign({}, identity.user.onboarding || {}, {
-    scene: 'training', step: 'training_created', orgId, completedAt: now
-  })
-  await db.collection('users').doc(identity.user._id).update({
-    data: { orgId, onboarding, updateTime: now }
-  })
-  return {
-    success: true,
-    organization: { id: orgId, name, logo: transparentLogo || originalLogo },
-    workspaceId: 'org:' + orgId,
-    trainingStatus: training.status
-  }
+  throw new Error('请先创建机构信息，再开通青训能力')
 }
 
 async function createTrainingConsultation(identity) {
@@ -586,6 +790,9 @@ exports.main = async function(event) {
   try {
     const identity = await currentUser(event)
     if (event.action === 'state') return await loadOnboardingState(identity)
+    if (event.action === 'updateProfile') return await updateProfile(identity, event)
+    if (event.action === 'updateOrganization') return await updateOrganization(identity, event)
+    if (event.action === 'createOrganization') return await createOrganization(identity, event)
     if (event.action === 'saveScene') return await saveScene(identity, event)
     if (event.action === 'createTeam') return await createTeam(identity, event)
     if (event.action === 'previewTournamentCreateTeamInvite') return await previewTournamentCreateTeamInvite(identity, event)

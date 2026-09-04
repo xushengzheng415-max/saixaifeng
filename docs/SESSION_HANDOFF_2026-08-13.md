@@ -1,5 +1,62 @@
 # 赛小蜂足球原型落地交接文档
 
+### 2026-08-19 20:10:30 公众抽签大屏原型包待确认
+
+- 用户确认方案 A，第一阶段只做专业版抽签；产品规则和 ADR 已更新。
+- 新增 `prototype-pages/screen-draw/` 七状态原型和独立确认板：抽签介绍、球队展示、抽签进行、分组结果、发布撤回、链接无效/过期、断网恢复。
+- 1920×1080 与 1366×768 均已渲染，全部无横向溢出；确认板审计为 1 区段、7 页面、0 缺页、0 缺逻辑、PASS。
+- 七个 `_assets` 包均通过验证，每包 3 个布局、3 个裁片、0 个新增生产素材，状态统一为 `awaiting-user-confirmation`。素材包确认前未开始正式大屏应用或公开快照接口。
+
+### 2026-08-19 19:37:47 公众赛事大屏待确认方案
+
+- 新增 `docs/SCREEN_PRODUCT_DECISION_PROPOSAL.md`；提供独立公众大屏应用、PC 公开路由、暂缓三种方案，推荐独立应用第一阶段只做专业版抽签。
+- 方案定义公开快照白名单、敏感字段禁入、发布/撤回/过期、不可预测令牌、统一 HTTP 入口和审计要求。
+- 状态仍为待用户确认，未写入已确认产品规则，未开始大屏页面或接口实现，未部署或发布。
+
+### 2026-08-19 19:32:59 赛事大屏真实阻塞修正
+
+- 当前仓库只有 `ProfessionalDrawFlow.vue` 的后台大屏设置/预览和 `screen.sxffootball.cn/draw/:tournamentId` 链接生成器，没有独立公开大屏应用、公开路由或匿名只读数据接口。
+- 已验收的 162 节点包含后台“大屏设置”，不能据此声称公众赛事大屏已完成；`screen` 不只是 DNS/证书问题。
+- 实施前需确认大屏范围与公开数据授权方案；未确认前不从后台会话或数据库接口拼装一个公开页面。本轮未部署、未提交审核、未发布。
+
+### 2026-08-19 19:27:41 生产就绪只读检查自动化
+
+- 新增 `tools/check-production-readiness.ps1`，统一检查三个域名、裁判长无会话门禁和裁判通知配置状态；不发送通知、不读取通知队列、不写业务数据、不打印凭据。
+- 当前读回：`coreWeb=true`；`refereeNotification=false`、`apexCompatibility=false`、`screen=false`、`full=false`。
+- 缺失项仍为服务号四项生产变量、根域名兼容网站入口和 `screen.sxffootball.cn` DNS/证书/路由。本轮未部署、未提交审核、未发布。
+
+### 2026-08-19 19:20:57 生产外部配置检查表
+
+- 新增 `docs/PRODUCTION_EXTERNAL_CONFIGURATION.md`，覆盖微信回调域、裁判通知变量/模板字段/中转门禁、根域名与赛事大屏 DNS/证书完成条件，以及未发布候选范围。
+- 文档不保存任何 AppSecret、令牌、API Key 或模板真实值；未知配置没有写入代码。
+- 后续由微信开放平台、服务号和 DNS/网关管理员按清单执行；本轮未部署、未提交审核、未发布。
+
+### 2026-08-19 19:17:24 未发布候选包清单
+
+- 官网根 `index.html` 与线上 SHA-256 一致，无需重复上传；小程序、云函数和根入口没有本轮源码差异。
+- PC 候选包为 `web-admin-vue/dist` 193 个文件、32,884,809 bytes；Vite 哈希资源图已变化，后续必须完整上传 `/admin/`，不能只替换单个 chunk。
+- 家长 H5 `index.html` 与线上一致，只有 `app.js` 和 `styles.css` 需要在获准发布后更新。
+- 当前用户禁止提交审核和发布，本轮仅生成清单，没有上传任何候选文件。
+
+### 2026-08-19 19:10:24 外部配置只读复核
+
+- 正式线上登录分包包含 `www.sxffootball.cn` 与 `/admin/#/wechat-callback`，回调分包使用 `webLoginApi` HTTP 入口，均不含浏览器 CloudBase SDK；微信开放平台后台仍需管理员确认授权回调域。
+- 裁判通知配置诊断返回 `configured:false`、`results:[]`，四项缺失变量为 `SERVICE_ACCOUNT_APP_ID`、`SERVICE_ACCOUNT_APP_SECRET`、`SERVICE_ACCOUNT_REFEREE_TEMPLATE_ID`、`SERVICE_ACCOUNT_H5_URL`；未读取通知队列或发送消息。
+- `www.sxffootball.cn` CNAME 正常且 HTTPS 200；根域名无网站 HTTPS；`screen.sxffootball.cn` 无 CNAME/A/HTTPS。本轮只读，未部署、未提交审核、未发布。
+
+### 2026-08-19 19:03:17 全量视觉截图验收完成
+
+- PC 专业版认领邀请弹层与家长 H5 01-08 共 9 个节点完成目标/回退视口截图，全部从 `visual-review-pending` 转为 `visual-accepted`。
+- 严格门禁为 162/162、视觉待执行 0、visual-1:1 通过；PC 1672×941 与 1440×900 均无横向溢出，H5 目标长页与批准原图高度差 0%–3.7%，390px 回退长页全部无横向溢出。
+- 儿童、身份证和透明人像继续按隐私素材边界使用代码示意或受限占位；本地 QA 不调用云函数、不创建认领邀请、不写真实资料。
+- PC 构建、Node 语法、11 区段/162 页画板审计和差异检查通过。按用户要求暂不提交审核和发布，本轮未上传生产静态包。
+
+### 2026-08-19 18:26:20 进入全量视觉截图验收
+
+- 用户明确允许正式页面预览和目标/回退视口截图，仍禁止小程序提交审核和发布。
+- 静态台账 162/162；严格视觉待验收为 9 个节点：PC 专业版球队认领邀请弹层 1 个、家长服务号 H5 01-08 共 8 个。
+- `www.sxffootball.cn` 四个正式入口已上线；2026-08-18 的 `webLoginApi.setHeadReferee` 安全中转已读回 `Deployment completed / modifyTime 2026-08-18 12:22:38`，无会话探针返回 `AUTH_REQUIRED`，不再等待部署。
+
 ### 2026-08-15 11:43:01 线上状态复核
 
 - 正式域名根目录、/admin/、/referee/、/service-account-h5/ 均 HTTP 200；主要已登记云函数为 Deployment completed。

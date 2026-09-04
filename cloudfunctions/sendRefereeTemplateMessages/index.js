@@ -10,17 +10,24 @@ const CONFIG = {
   appId: process.env.SERVICE_ACCOUNT_APP_ID || '',
   appSecret: process.env.SERVICE_ACCOUNT_APP_SECRET || '',
   templateId: process.env.SERVICE_ACCOUNT_REFEREE_TEMPLATE_ID || '',
-  h5Url: process.env.SERVICE_ACCOUNT_H5_URL || '',
+  h5Url: process.env.SERVICE_ACCOUNT_H5_URL || 'https://www.sxffootball.cn/service-account-h5/',
   tournamentKey: process.env.SERVICE_TEMPLATE_TOURNAMENT_KEY || 'thing1',
   matchKey: process.env.SERVICE_TEMPLATE_MATCH_KEY || 'thing2',
   timeKey: process.env.SERVICE_TEMPLATE_TIME_KEY || 'time3',
-  roleKey: process.env.SERVICE_TEMPLATE_ROLE_KEY || 'thing4'
+  roleKey: process.env.SERVICE_TEMPLATE_ROLE_KEY || 'thing4',
+  bridgeUrl: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_URL || '',
+  bridgeSecret: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_SECRET || ''
 }
 
 function getConfigurationStatus() {
   const missing = []
-  if (!CONFIG.appId) missing.push('SERVICE_ACCOUNT_APP_ID')
-  if (!CONFIG.appSecret) missing.push('SERVICE_ACCOUNT_APP_SECRET')
+  const bridgeConfigured = Boolean(CONFIG.bridgeUrl && CONFIG.bridgeSecret)
+  if (!bridgeConfigured && !CONFIG.appId) missing.push('SERVICE_ACCOUNT_APP_ID')
+  if (!bridgeConfigured && !CONFIG.appSecret) missing.push('SERVICE_ACCOUNT_APP_SECRET')
+  if (!bridgeConfigured) {
+    if (!CONFIG.bridgeUrl) missing.push('SXF_FOOTBALL_WECHAT_BRIDGE_URL')
+    if (!CONFIG.bridgeSecret) missing.push('SXF_FOOTBALL_WECHAT_BRIDGE_SECRET')
+  }
   if (!CONFIG.templateId) missing.push('SERVICE_ACCOUNT_REFEREE_TEMPLATE_ID')
   if (!/^https:\/\//i.test(CONFIG.h5Url)) missing.push('SERVICE_ACCOUNT_H5_URL')
   return { configured: missing.length === 0, missing }
@@ -58,7 +65,7 @@ function httpsGet(url) {
   })
 }
 
-function httpsPost(url, payload) {
+function httpsPost(url, payload, extraHeaders) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload)
     const target = new URL(url)
@@ -67,7 +74,7 @@ function httpsPost(url, payload) {
       port: 443,
       path: target.pathname + target.search,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) }
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), ...(extraHeaders || {}) }
     }, response => {
       let result = ''
       response.on('data', chunk => { result += chunk })
@@ -77,6 +84,35 @@ function httpsPost(url, payload) {
     })
     req.on('error', reject)
     req.setTimeout(10000, () => req.destroy(new Error('微信接口超时')))
+    req.write(body); req.end()
+  })
+}
+
+async function bridgePost(action, payload) {
+  const baseUrl = String(CONFIG.bridgeUrl || '').replace(/\/+$/, '')
+  if (!baseUrl || !CONFIG.bridgeSecret) throw new Error('服务号固定出口中转尚未配置')
+  const body = JSON.stringify(payload || {})
+  const timestamp = Date.now()
+  const nonce = crypto.randomBytes(16).toString('hex')
+  const signature = crypto.createHmac('sha256', CONFIG.bridgeSecret).update(`${timestamp}\n${nonce}\n${body}`).digest('hex')
+  const target = new URL(baseUrl + '/' + action)
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: target.hostname, port: 443, path: target.pathname + target.search, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'X-Sxf-Timestamp': String(timestamp), 'X-Sxf-Nonce': nonce, 'X-Sxf-Signature': signature }
+    }, response => {
+      let result = ''
+      response.on('data', chunk => { result += chunk })
+      response.on('end', () => {
+        try {
+          const parsed = JSON.parse(result)
+          if (response.statusCode < 200 || response.statusCode >= 300 || parsed.success !== true) return reject(new Error(parsed.message || '服务号固定出口中转请求失败'))
+          resolve(parsed)
+        } catch (error) { reject(error) }
+      })
+    })
+    req.on('error', reject)
+    req.setTimeout(10000, () => req.destroy(new Error('服务号固定出口中转超时')))
     req.write(body); req.end()
   })
 }
@@ -138,25 +174,35 @@ async function sendOne(notification) {
     phone: notification.phone,
     phoneVerified: true
   }).limit(5).get()
-  const identity = (identityResult.data || []).find(item => item.serviceAccountOpenId)
+  let identity = (identityResult.data || []).find(item => item.serviceAccountOpenId)
+  if (!identity) {
+    const refereeResult = await db.collection('referees').where({ phone: notification.phone, wechatBound: true }).limit(10).get()
+    const referee = (refereeResult.data || []).find(item => item.wechatWorkflowOpenId)
+    if (referee) identity = { serviceAccountOpenId: String(referee.wechatWorkflowOpenId).replace(/^service:/, '') }
+  }
   if (!identity) {
     await db.collection('referee_notifications').doc(notification._id).update({
       data: { status: 'awaiting_binding', updateTime: db.serverDate() }
     })
     return { bound: false }
   }
-  const token = await getAccessToken()
   const data = {}
   data[CONFIG.tournamentKey] = value(notification.tournamentName, 20)
   data[CONFIG.matchKey] = value(notification.teamsText, 20)
   data[CONFIG.timeKey] = value(notification.matchTimeText, 20)
   data[CONFIG.roleKey] = value(notification.roleLabel, 20)
-  const result = await httpsPost('https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=' + encodeURIComponent(token), {
+  const message = {
     touser: identity.serviceAccountOpenId,
     template_id: CONFIG.templateId,
     url: CONFIG.h5Url,
     data
-  })
+  }
+  let result
+  if (CONFIG.bridgeUrl && CONFIG.bridgeSecret) result = await bridgePost('template/send', { message })
+  else {
+    const token = await getAccessToken()
+    result = await httpsPost('https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=' + encodeURIComponent(token), message)
+  }
   if (result.errcode) throw new Error('模板消息发送失败：' + (result.errmsg || result.errcode))
   await db.collection('referee_notifications').doc(notification._id).update({
     data: { status: 'sent', msgId: result.msgid || '', sentAt: db.serverDate(), updateTime: db.serverDate() }

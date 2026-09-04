@@ -98,14 +98,23 @@ async function findCurrentUser() {
   const openId = context.OPENID || ''
   if (!openId) throw new Error('无法识别当前微信账号')
   const result = await db.collection('users')
-    .where(_.or([{ openId }, { _openid: openId }]))
-    .limit(2)
+    .where(_.or([{ openId }, { openid: openId }, { _openid: openId }]))
+    .limit(3)
     .get()
-  const users = result.data || []
+  const users = (result.data || []).filter((item, index, rows) => rows.findIndex(other => String(other._id) === String(item._id)) === index)
   if (users.length !== 1) {
-    throw new Error(users.length > 1 ? '当前微信存在重复账号，请联系管理员处理' : '登录状态已失效，请重新登录')
+    throw workspaceError(users.length > 1 ? 'WECHAT_ACCOUNT_CONFLICT' : 'PHONE_AUTH_REQUIRED', users.length > 1 ? '当前微信存在重复账号，请联系管理员处理' : '登录状态已失效，请重新授权手机号')
   }
-  return { user: users[0], openId }
+  const user = users[0]
+  const phone = String(firstValue(user.phone, user.phoneNumber))
+  if (!/^1[3-9]\d{9}$/.test(phone)) throw workspaceError('PHONE_AUTH_REQUIRED', '当前账号未完成手机号验证，请重新登录')
+  const phoneResult = await db.collection('users').where(_.or([{ phone }, { phoneNumber: phone }])).limit(3).get()
+  const phoneUsers = (phoneResult.data || []).filter((item, index, rows) => rows.findIndex(other => String(other._id) === String(item._id)) === index)
+  if (phoneUsers.length > 1) throw workspaceError('PHONE_ACCOUNT_CONFLICT', '当前手机号存在重复账号，请联系管理员核验')
+  if (phoneUsers.length !== 1 || String(phoneUsers[0]._id) !== String(user._id)) {
+    throw workspaceError('ACCOUNT_IDENTITY_CONFLICT', '微信与手机号指向不同账号，已阻止访问')
+  }
+  return { user, openId, phone }
 }
 
 function normalizeCapabilityValues() {
@@ -258,7 +267,7 @@ function normalizePermissions(membership, fallbackOwner) {
 async function loadWorkspaceCatalog(user, openId) {
   const membershipRows = await safeGet(
     'organization_memberships',
-    _.or([{ userId: user._id }, { memberUserId: user._id }, { openId }]),
+    _.or([{ userId: user._id }, { memberUserId: user._id }, { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }]),
     100
   )
   const memberships = membershipRows.filter(item => {
@@ -349,7 +358,7 @@ async function loadWorkspaceCatalog(user, openId) {
   })
   const teamMemberships = await safeGet(
     'team_memberships',
-    _.or([{ userId: user._id }, { memberUserId: user._id }, { openId }]),
+    _.or([{ userId: user._id }, { memberUserId: user._id }, { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }]),
     100
   )
   const acceptedTeamMemberships = teamMemberships.filter(item => {
@@ -605,6 +614,26 @@ function buildTasks(registrations) {
     }
   })
   return items
+}
+
+function buildRegistrationDraftTasks(rows) {
+  return (rows || []).filter(item => {
+    return String(item.type || '') === 'registration_draft' && ['pending', 'drafting'].indexOf(String(item.status || 'pending')) >= 0
+  }).map(item => ({
+    id: 'registration-draft:' + item._id,
+    type: 'registration_draft',
+    audience: 'team',
+    source: 'event',
+    sourceText: '报名未完成',
+    status: 'pending',
+    title: item.title || '继续完成赛事报名',
+    subtitle: item.tournamentName || item.teamName || '赛事报名',
+    tournamentId: item.tournamentId || '',
+    teamId: item.teamId || '',
+    divisionId: item.divisionId || 'default',
+    inviteKey: item.inviteKey || '',
+    deadlineText: item.detail || '请继续完成关注与报名确认'
+  }))
 }
 
 function buildOrganizerTasks(registrations) {
@@ -1056,7 +1085,7 @@ async function loadTeamPlayersForWorkspace(event, identity) {
   const teams = await loadTeams(workspace, identity.user, identity.openId)
   const team = teams.find(item => String(item._id) === requestedTeamId) || (workspace.type === 'team' ? teams[0] : null)
   if (!team) throw new Error('球队不存在或不属于当前工作空间')
-  const rows = await safeGet('players', { teamId: String(team._id) }, 500)
+  const rows = (await safeGet('players', { teamId: String(team._id) }, 500)).filter(item => ['archived', 'deleted'].indexOf(String(item.status || '').toLowerCase()) < 0)
   const players = rows.map(formatTeamPlayer)
   const counts = { complete: 0, pending: 0, exception: 0 }
   players.forEach(item => { counts[item.profileStatus] += 1 })
@@ -1067,6 +1096,97 @@ async function loadTeamPlayersForWorkspace(event, identity) {
     counts,
     canManage: permissions.has('team.manage')
   }
+}
+
+function matchPlayerIds(match) {
+  const ids = []
+  const add = function(value) {
+    const id = String(value && (value.playerId || value.id || value._id) || value || '')
+    if (id) ids.push(id)
+  }
+  ;['starters', 'substitutes', 'homeStarters', 'awayStarters', 'homeLineup', 'awayLineup', 'lineupHome', 'lineupAway'].forEach(function(key) {
+    const rows = match && match[key]
+    if (Array.isArray(rows)) rows.forEach(add)
+  })
+  const lineups = match && match.lineups
+  if (lineups && typeof lineups === 'object') Object.keys(lineups).forEach(function(key) { if (Array.isArray(lineups[key])) lineups[key].forEach(add) })
+  return unique(ids)
+}
+
+async function loadTeamPlayerDetailForWorkspace(event, identity) {
+  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const workspace = result.workspace
+  const permissions = new Set(workspace.permissions || [])
+  if (!permissions.has('team.view') && !permissions.has('team.manage')) throw new Error('当前身份没有查看球员详情的权限')
+  const teamId = String(event.teamId || '')
+  const playerId = String(event.playerId || '')
+  if (!teamId || !playerId) throw new Error('球队和球员识别信息不完整')
+  const teams = await loadTeams(workspace, identity.user, identity.openId)
+  const team = teams.find(item => String(item._id) === teamId)
+  if (!team) throw new Error('球队不存在或不属于当前工作空间')
+  const rows = await safeGet('players', { _id: playerId, teamId }, 1)
+  const player = rows[0]
+  if (!player || ['archived', 'deleted'].indexOf(String(player.status || '').toLowerCase()) >= 0) throw new Error('球员不存在或已移出球队')
+  const matchResult = await db.collection('matches').where(_.or([{ homeTeamId: teamId }, { awayTeamId: teamId }])).limit(500).get()
+  const matches = matchResult.data || []
+  const stats = { appearances: 0, goals: 0, yellowCards: 0, redCards: 0 }
+  matches.forEach(function(match) {
+    const appeared = new Set(matchPlayerIds(match))
+    ;(Array.isArray(match.events) ? match.events : []).forEach(function(eventItem) {
+      const eventPlayerId = String(eventItem.playerId || eventItem.player || '')
+      if (eventPlayerId !== playerId) return
+      appeared.add(playerId)
+      const type = String(eventItem.type || eventItem.eventType || '').toLowerCase()
+      if (['goal', 'score'].indexOf(type) >= 0) stats.goals += 1
+      if (['yellow', 'yellow_card', 'yellowcard'].indexOf(type) >= 0) stats.yellowCards += 1
+      if (['red', 'red_card', 'redcard'].indexOf(type) >= 0) stats.redCards += 1
+    })
+    if (appeared.has(playerId)) stats.appearances += 1
+  })
+  const formatted = formatTeamPlayer(player)
+  return {
+    success: true,
+    canManage: permissions.has('team.manage'),
+    team: { id: teamId, name: String(firstValue(team.name, team.teamName, '未命名球队')), logo: String(firstValue(team.logo, team.logoUrl, team.teamLogo) || ''), code: String(firstValue(team.teamCode, team.code) || '') },
+    player: {
+      id: playerId,
+      name: String(player.name || '未命名球员'),
+      jerseyName: String(player.jerseyName || ''),
+      jerseyNumber: String(player.jerseyNumber || player.number || ''),
+      photoUrl: String(firstValue(player.photoUrl, player.photo) || ''),
+      birthDate: String(firstValue(player.birthDate, player.birthday) || ''),
+      gender: String(player.gender || ''),
+      nationality: String(player.nationality || ''),
+      hometown: String(firstValue(player.hometown, player.nativePlace) || ''),
+      position: String(player.position || ''),
+      strongFoot: String(player.strongFoot || ''),
+      height: Number(player.height || 0),
+      weight: Number(player.weight || 0),
+      guardianName: String(firstValue(player.guardianName, player.parentName) || ''),
+      guardianRelation: String(player.guardianRelation || ''),
+      guardianPhoneMasked: maskPhone(String(firstValue(player.guardianPhone, player.contactPhone) || '')),
+      profileStatus: String(formatted.profileStatus || 'pending'),
+      profileStatusText: String(formatted.statusText || '待完善'),
+      identityStatus: String(firstValue(player.identityStatus, player.verifyStatus, player.realNameStatus) || ''),
+      portraitStatus: String(firstValue(player.portraitStatus, player.avatarProcessingStatus) || ''),
+      remark: String(firstValue(player.remark, player.notes) || '')
+    },
+    stats
+  }
+}
+
+async function archiveTeamPlayerForWorkspace(event, identity) {
+  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const workspace = result.workspace
+  if ((workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有移出球员的权限')
+  const teamId = String(event.teamId || '')
+  const playerId = String(event.playerId || '')
+  const teams = await loadTeams(workspace, identity.user, identity.openId)
+  if (!teams.some(item => String(item._id) === teamId)) throw new Error('球队不存在或不属于当前工作空间')
+  const rows = await safeGet('players', { _id: playerId, teamId }, 1)
+  if (!rows.length) throw new Error('球员不存在或不属于该球队')
+  await db.collection('players').doc(playerId).update({ data: { status: 'archived', archivedAt: db.serverDate(), archivedBy: identity.user._id, updateTime: db.serverDate() } })
+  return { success: true, archived: true }
 }
 
 async function loadTeamPlayerForEditForWorkspace(event, identity) {
@@ -1191,6 +1311,17 @@ async function createParentProfileInvite(team, player, orgId, creatorId) {
   const data = { token, teamId: String(team._id), playerId: String(player._id), orgId, guardianPhone: String(player.guardianPhone || player.contactPhone || ''), status: 'active', creatorId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now }
   const added = await db.collection('parent_profile_invites').add({ data })
   return Object.assign({ _id: added._id }, data)
+}
+
+async function ensureParentProfileInviteForPlayer(team, player, orgId, creatorId) {
+  const rows = await safeGet('parent_profile_invites', { teamId: String(team._id), playerId: String(player._id), status: 'active' }, 20)
+  const active = rows.find(item => !item.expiresAt || toTime(item.expiresAt) > Date.now())
+  if (active) return active
+  return await createParentProfileInvite(team, player, orgId, creatorId)
+}
+
+function parentProfileInviteUrl(token) {
+  return 'https://www.sxffootball.cn/service-account-h5/?parentInvite=' + encodeURIComponent(String(token || '')) + '&entry=registered'
 }
 
 async function regenerateParentProfileInviteForWorkspace(event, identity) {
@@ -1481,17 +1612,42 @@ async function prebuiltTeamInviteForWorkspace(event, identity) {
   assertPrebuiltInviteActive(invite, tournament)
   const workspaces = await loadWorkspaceCatalog(identity.user, identity.openId)
   const candidateTeams = []
+  let managesPrebuiltTeam = false
   for (const item of workspaces) {
     if ((item.permissions || []).indexOf('team.manage') < 0) continue
     const rows = await loadTeams(item, identity.user, identity.openId)
-    rows.forEach(row => { if (String(row._id) !== teamId && !candidateTeams.some(candidate => String(candidate.id) === String(row._id))) candidateTeams.push({ id: String(row._id), name: String(row.name || row.teamName || ''), playerCount: Number(row.playerCount || 0), workspaceId: item.id }) })
+    rows.forEach(row => {
+      const rowId = String(row._id)
+      if (rowId === teamId) managesPrebuiltTeam = true
+      if (!candidateTeams.some(candidate => String(candidate.id) === rowId)) candidateTeams.push({ id: rowId, name: String(row.name || row.teamName || ''), playerCount: Number(row.playerCount || 0), workspaceId: item.id, isInvitedTeam: rowId === teamId })
+    })
   }
   const claimStatus = String(team.claimStatus || 'unclaimed').toLowerCase()
   const hasOwnership = Boolean(team.ownerId || team.ownerUserId || team.claimedByUserId || (team.orgId && String(team.orgId) !== String(invite.organizerOrgId || '')))
-  return { success: true, invite: { id: inviteId, status: inviteStatus, reviewRequestId: String(invite.reviewRequestId || ''), organizerName: String(invite.organizerName || ''), managerName: String(invite.managerName || ''), managerPhoneMasked: maskPhone(String(invite.managerPhone || '')), teamId, tournamentId, divisionName: String(invite.divisionName || '') }, tournament: { name: String(tournament.name || '') }, prebuiltTeam: { id: teamId, name: String(team.name || team.teamName || ''), claimStatus, requiresReview: claimStatus !== 'unclaimed' || hasOwnership }, candidateTeams }
+  return { success: true, invite: { id: inviteId, status: inviteStatus, reviewRequestId: String(invite.reviewRequestId || ''), organizerName: String(invite.organizerName || ''), managerName: String(invite.managerName || ''), managerPhoneMasked: maskPhone(String(invite.managerPhone || '')), teamId, tournamentId, divisionName: String(invite.divisionName || '') }, tournament: { name: String(tournament.name || '') }, prebuiltTeam: { id: teamId, name: String(team.name || team.teamName || ''), claimStatus, managesPrebuiltTeam, requiresReview: !managesPrebuiltTeam && (claimStatus !== 'unclaimed' || hasOwnership) }, candidateTeams }
+}
+
+async function upsertRegistrationArtifact(collection, uniqueKey, data) {
+  const existing = await safeGet(collection, { uniqueKey }, 2)
+  if (existing.length) {
+    await db.collection(collection).doc(existing[0]._id).update({ data: Object.assign({}, data, { updateTime: db.serverDate() }) })
+    return existing[0]._id
+  }
+  const created = await db.collection(collection).add({ data: Object.assign({}, data, { uniqueKey, createTime: db.serverDate(), updateTime: db.serverDate() }) })
+  return created._id
+}
+
+async function createRegistrationReviewArtifacts(invite, relationId, teamId, identity) {
+  const tournamentId = String(invite.tournamentId || '')
+  const divisionId = String(invite.divisionId || 'default')
+  await upsertRegistrationArtifact('tournament_tasks', `${tournamentId}:registration_review:${relationId}`, { sport:'football', tournamentId, divisionId, teamId, registrationId:relationId, type:'registration_review', audience:'organizer', recipientOrgId:String(invite.organizerOrgId || ''), status:'pending', title:'审核受邀参赛球队', detail:String(invite.divisionName || '') })
+  await upsertRegistrationArtifact('tournament_tasks', `${tournamentId}:registration_status:${teamId}`, { sport:'football', tournamentId, divisionId, teamId, registrationId:relationId, type:'registration_status', audience:'team', recipientUserId:String(identity.user._id || ''), status:'pending', title:'赛事报名审核中', detail:String(invite.divisionName || '') })
+  await upsertRegistrationArtifact('notification_outbox', `targeted_registration_confirmed:${relationId}:task_center`, { sport:'football', businessEventId:`targeted_registration_confirmed:${relationId}`, tournamentId, registrationId:relationId, recipientOrgId:String(invite.organizerOrgId || ''), channel:'task_center', status:'delivered', targetPage:'pages/todo/index' })
+  await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'targeted_registration_confirmed', tournamentId, divisionId, inviteId:String(invite._id || ''), registrationId:relationId, actorUserId:String(identity.user._id || ''), actorOrgId:'', result:'success', detail:{ teamId }, createTime:db.serverDate() } })
 }
 
 async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
+  if (event.disclaimerAgreed !== true) throw new Error('请先阅读并同意参赛免责声明')
   const preview = await prebuiltTeamInviteForWorkspace(Object.assign({}, event, { allowReviewRequired: true }), identity)
   const invite = (await safeGet('team_invitations', { _id: preview.invite.id }, 1))[0]
   if (!invite || String(invite.type || '') !== 'prebuilt_tournament_team') throw new Error('邀请不存在或已失效')
@@ -1510,10 +1666,19 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
     const teamId = String(event.existingTeamId || '')
     const candidate = preview.candidateTeams.filter(item => item.id === teamId)[0]
     if (!candidate) throw new Error('只能选择当前账号可管理的既有球队')
-    const existing = await safeGet('tournament_teams', { tournamentId: preview.invite.tournamentId, teamId }, 1)
-    if (!existing.length) await db.collection('tournament_teams').add({ data: { tournamentId: preview.invite.tournamentId, teamId, divisionId: invite.divisionId || 'default', status: 'pending', source: 'prebuilt_invite_existing_team', createTime: now, updateTime: now } })
+    const existing = (await safeGet('tournament_teams', { tournamentId: preview.invite.tournamentId, teamId }, 20)).filter(item => String(item.divisionId || 'default') === String(invite.divisionId || 'default'))
+    let relationId = ''
+    if (!existing.length) {
+      const created = await db.collection('tournament_teams').add({ data: { tournamentId: preview.invite.tournamentId, teamId, divisionId: invite.divisionId || 'default', divisionName:invite.divisionName || '', status: 'pending', claimStatus:'claimed', source: 'targeted_invite_existing_team', applicantUserId:identity.user._id, applicantMiniOpenId:identity.openId || '', inviteId:preview.invite.id, createTime: now, updateTime: now } })
+      relationId = String(created._id)
+    } else {
+      relationId = String(existing[0]._id)
+      await db.collection('tournament_teams').doc(relationId).update({ data:{ status:'pending', claimStatus:'claimed', source:'targeted_invite_existing_team', applicantUserId:identity.user._id, applicantMiniOpenId:identity.openId || '', inviteId:preview.invite.id, updateTime:now } })
+    }
+    if (String(invite.teamId || '') !== teamId && invite.tournamentTeamId) await db.collection('tournament_teams').doc(String(invite.tournamentTeamId)).update({ data:{ status:'replaced', replacedByTeamId:teamId, updateTime:now } })
     await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'accepted', acceptedChoice: 'existing', acceptedTeamId: teamId, acceptedUserId: identity.user._id, acceptedOpenId: identity.openId || '', updateTime: now } })
-    return { success: true, teamId, destination: 'team-center' }
+    await createRegistrationReviewArtifacts(invite, relationId, teamId, identity)
+    return { success: true, teamId, registrationId:relationId, destination: 'team-center' }
   }
   if (preview.prebuiltTeam.requiresReview && !reviewApproved) {
     await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'review_required', reviewReason: '预建队存在归属或认领冲突，禁止自动合并', reviewRequestedBy: identity.user._id, updateTime: now } })
@@ -1524,12 +1689,19 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
   await db.collection('teams').doc(preview.prebuiltTeam.id).update({ data: { claimStatus: 'claimed', ownerId: identity.user._id, claimedByUserId: identity.user._id, updateTime: now } })
   await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'accepted', acceptedChoice: 'prebuilt', acceptedTeamId: preview.prebuiltTeam.id, acceptedUserId: identity.user._id, acceptedOpenId: identity.openId || '', reviewStatus: reviewApproved ? 'confirmed' : '', updateTime: now } })
   const relations = await safeGet('tournament_teams', { tournamentId: preview.invite.tournamentId, teamId: preview.prebuiltTeam.id }, 20)
+  let relationId = ''
   for (const relation of relations) {
     const relationStatus = String(relation.status || '').toLowerCase()
     if (['approved', 'confirmed', 'claimed', 'accepted'].includes(relationStatus)) continue
-    await db.collection('tournament_teams').doc(relation._id).update({ data: { claimStatus: 'claimed', claimReviewStatus: 'confirmed', claimReviewRequestId: preview.invite.reviewRequestId || '', acceptedUserId: identity.user._id, updateTime: now } })
+    relationId = String(relation._id)
+    await db.collection('tournament_teams').doc(relation._id).update({ data: { status:'pending', claimStatus: 'claimed', claimReviewStatus: 'confirmed', claimReviewRequestId: preview.invite.reviewRequestId || '', applicantUserId:identity.user._id, applicantMiniOpenId:identity.openId || '', acceptedUserId: identity.user._id, inviteId:preview.invite.id, updateTime: now } })
   }
-  return { success: true, teamId: preview.prebuiltTeam.id, destination: 'team-center' }
+  if (!relationId) {
+    const created = await db.collection('tournament_teams').add({ data:{ tournamentId:preview.invite.tournamentId, divisionId:invite.divisionId || 'default', divisionName:invite.divisionName || '', teamId:preview.prebuiltTeam.id, status:'pending', claimStatus:'claimed', source:'targeted_invite_prebuilt_team', applicantUserId:identity.user._id, applicantMiniOpenId:identity.openId || '', inviteId:preview.invite.id, createTime:now, updateTime:now } })
+    relationId = String(created._id)
+  }
+  await createRegistrationReviewArtifacts(invite, relationId, preview.prebuiltTeam.id, identity)
+  return { success: true, teamId: preview.prebuiltTeam.id, registrationId:relationId, destination: 'team-center' }
 }
 
 async function requestPrebuiltTeamClaimReview(event, identity) {
@@ -1635,7 +1807,9 @@ async function teamMembersForWorkspace(event, identity) {
   const userMap = {}; users.forEach(item => { userMap[String(item._id)] = item })
   const members = memberships.map(item => { const user = userMap[String(item.userId || item.memberUserId)] || {}; const roles = item.roles || (item.role ? [item.role] : []); const roleText = roles.indexOf('owner') >= 0 || roles.indexOf('team_manager') >= 0 ? '负责人 / 管理员' : (roles.indexOf('coach') >= 0 ? '教练' : '成员'); return { id: String(item._id), name: String(user.name || user.nickName || item.name || '未命名成员'), avatar: String(user.avatarUrl || item.avatarUrl || ''), phoneMasked: maskPhone(String(user.phone || user.phoneNumber || item.phone || '')), roleText, statusText: String(item.status || '').toLowerCase() === 'accepted' || String(item.status || '').toLowerCase() === 'active' ? '已加入' : '待确认', pending: String(item.status || '').toLowerCase() !== 'accepted' && String(item.status || '').toLowerCase() !== 'active' } })
   const invitations = await safeGet('team_invitations', { teamId }, 100)
-  invitations.filter(item => String(item.type || '') === 'team_member' && String(item.status || '') === 'pending').forEach(item => members.push({ id: 'invite:' + item._id, inviteId: String(item._id), name: String(item.inviteeName || '待确认成员'), avatar: '', phoneMasked: maskPhone(String(item.inviteePhone || '')), roleText: String(item.roleText || '成员'), statusText: '待确认', pending: true }))
+  invitations.filter(item => String(item.type || '') === 'team_member' && String(item.status || '') === 'pending' &&
+    Boolean(item.inviteeName || item.inviteePhone) && (!item.expiresAt || toTime(item.expiresAt) > Date.now())
+  ).forEach(item => members.push({ id: 'invite:' + item._id, inviteId: String(item._id), name: String(item.inviteeName || '待确认成员'), avatar: '', phoneMasked: maskPhone(String(item.inviteePhone || '')), roleText: String(item.roleText || '成员'), statusText: '待确认', pending: true }))
   return { success: true, team: { id: teamId, name: String(team.name || team.teamName || ''), logo: String(team.logo || team.logoTransparent || '') }, members, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
 }
 
@@ -1643,26 +1817,49 @@ async function createTeamMemberInviteForWorkspace(event, identity) {
   const scope = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
   if ((scope.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有邀请球队成员的权限')
   const loaded = await teamMembersForWorkspace(event, identity)
+  const reusableInvites = await safeGet('team_invitations', {
+    teamId: loaded.team.id,
+    type: 'team_member',
+    inviterUserId: identity.user._id
+  }, 50)
+  const reusable = reusableInvites.find(function(item) {
+    return ['active', 'pending'].indexOf(String(item.status || '')) >= 0 && String(item.token || '').indexOf('tm_') === 0 && toTime(item.expiresAt) > Date.now()
+  })
+  if (reusable) {
+    return {
+      success: true,
+      reused: true,
+      inviteId: String(reusable._id),
+      token: String(reusable.token),
+      expiresAtText: dateText(reusable.expiresAt),
+      path: '/pages/team/members/members?teamId=' + encodeURIComponent(loaded.team.id) + '&memberInviteId=' + encodeURIComponent(String(reusable.token))
+    }
+  }
   const token = 'tm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
   const now = db.serverDate()
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   const created = await db.collection('team_invitations').add({ data: {
     token,
     teamId: loaded.team.id,
     orgId: String(scope.workspace.orgId || ''),
     type: 'team_member',
-    status: 'pending',
+    status: 'active',
+    usageMode: 'multi',
     inviterUserId: identity.user._id,
+    acceptedCount: 0,
     memberRole: 'member',
-    roleText: String(event.roleText || '成员').slice(0, 20),
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    roleText: String(event.roleText || '管理成员').slice(0, 20),
+    expiresAt,
     createTime: now,
     updateTime: now
   } })
   return {
     success: true,
+    reused: false,
     inviteId: String(created._id),
     token,
-    path: '/pages/team/members/members?teamId=' + encodeURIComponent(loaded.team.id) + '&memberInviteId=' + encodeURIComponent(String(created._id))
+    expiresAtText: dateText(expiresAt),
+    path: '/pages/team/members/members?teamId=' + encodeURIComponent(loaded.team.id) + '&memberInviteId=' + encodeURIComponent(token)
   }
 }
 
@@ -1672,7 +1869,7 @@ async function teamMemberInviteForWorkspace(event, identity) {
   const lookup = key.indexOf('tm_') === 0 ? { token: key } : { _id: key }
   const invite = (await safeGet('team_invitations', lookup, 1))[0]
   if (!invite || String(invite.type || '') !== 'team_member') throw new Error('邀请不存在或已失效')
-  if (String(invite.status || 'pending') !== 'pending') throw new Error('邀请不存在或已处理')
+  if (['active', 'pending'].indexOf(String(invite.status || 'pending')) < 0) throw new Error('邀请不存在或已停用')
   if (invite.expiresAt && toTime(invite.expiresAt) > 0 && toTime(invite.expiresAt) <= Date.now()) throw new Error('邀请已过期，请让球队管理员重新邀请')
   const teamId = String(invite.teamId || '')
   const team = (await safeGet('teams', { _id: teamId }, 1))[0]
@@ -1702,7 +1899,7 @@ async function acceptTeamMemberInviteForWorkspace(event, identity) {
   if (preview.alreadyMember) return { success: true, alreadyMember: true, teamId: preview.team.id, destination: '/pages/team/detail/detail?teamId=' + encodeURIComponent(preview.team.id) }
   const invite = (await safeGet('team_invitations', { _id: preview.invitation.id }, 1))[0]
   if (invite && invite.expiresAt && toTime(invite.expiresAt) > 0 && toTime(invite.expiresAt) <= Date.now()) throw workspaceError('TEAM_MEMBER_INVITE_EXPIRED', '成员邀请已过期，请让球队管理员重新邀请')
-  if (!invite || String(invite.status || 'pending') !== 'pending') throw new Error('邀请不存在或已处理')
+  if (!invite || ['active', 'pending'].indexOf(String(invite.status || 'pending')) < 0) throw new Error('邀请不存在或已停用')
   const memberships = await safeGet('team_memberships', { teamId: preview.team.id }, 200)
   const existing = memberships.find(item => String(item.userId || item.memberUserId || '') === String(identity.user._id))
   const now = db.serverDate()
@@ -1724,13 +1921,174 @@ async function acceptTeamMemberInviteForWorkspace(event, identity) {
     } })
   }
   await db.collection('team_invitations').doc(preview.invitation.id).update({ data: {
-    status: 'accepted',
-    acceptedUserId: identity.user._id,
-    acceptedOpenId: identity.openId || '',
-    acceptedAt: now,
+    status: 'active',
+    acceptedCount: _.inc(1),
+    lastAcceptedUserId: identity.user._id,
+    lastAcceptedOpenId: identity.openId || '',
+    lastAcceptedAt: now,
     updateTime: now
   } })
   return { success: true, teamId: preview.team.id, destination: '/pages/team/detail/detail?teamId=' + encodeURIComponent(preview.team.id) }
+}
+
+async function createTeamPlayerInviteForWorkspace(event, identity) {
+  const scope = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  if ((scope.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有邀请球员的权限')
+  const teamId = String(event.teamId || '')
+  const teams = await loadTeams(scope.workspace, identity.user, identity.openId)
+  const team = teams.find(item => String(item._id) === teamId)
+  if (!team) throw new Error('球队不存在或不属于当前工作空间')
+  const rows = await safeGet('team_invitations', { teamId, type: 'team_player', inviterUserId: identity.user._id }, 50)
+  const reusable = rows.find(item => ['active', 'pending'].indexOf(String(item.status || '')) >= 0 && String(item.token || '').indexOf('tp_') === 0 && toTime(item.expiresAt) > Date.now())
+  if (reusable) {
+    return {
+      success: true,
+      reused: true,
+      inviteId: String(reusable._id),
+      token: String(reusable.token),
+      expiresAtText: dateText(reusable.expiresAt),
+      path: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId) + '&playerInviteId=' + encodeURIComponent(String(reusable.token))
+    }
+  }
+  const token = 'tp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+  const now = db.serverDate()
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  const created = await db.collection('team_invitations').add({ data: {
+    token,
+    teamId,
+    orgId: String(scope.workspace.orgId || ''),
+    type: 'team_player',
+    purpose: 'player_profile_onboarding',
+    status: 'active',
+    usageMode: 'multi',
+    inviterUserId: identity.user._id,
+    acceptedCount: 0,
+    expiresAt,
+    createTime: now,
+    updateTime: now
+  } })
+  return {
+    success: true,
+    reused: false,
+    inviteId: String(created._id),
+    token,
+    expiresAtText: dateText(expiresAt),
+    path: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId) + '&playerInviteId=' + encodeURIComponent(token)
+  }
+}
+
+async function teamPlayerInviteForWorkspace(event, identity) {
+  const key = String(event.inviteId || event.token || '').trim()
+  if (!key) throw new Error('缺少球员入队邀请')
+  const lookup = key.indexOf('tp_') === 0 ? { token: key } : { _id: key }
+  const invite = (await safeGet('team_invitations', lookup, 1))[0]
+  if (!invite || String(invite.type || '') !== 'team_player') throw new Error('球员邀请不存在或已失效')
+  if (['active', 'pending'].indexOf(String(invite.status || 'active')) < 0) throw new Error('球员邀请已停用')
+  if (invite.expiresAt && toTime(invite.expiresAt) > 0 && toTime(invite.expiresAt) <= Date.now()) throw new Error('球员邀请已过期，请让球队管理员重新生成')
+  const teamId = String(invite.teamId || '')
+  const team = (await safeGet('teams', { _id: teamId }, 1))[0]
+  if (!team) throw new Error('球队不存在或已停用')
+  if (invite.orgId && team.orgId && String(invite.orgId) !== String(team.orgId)) throw new Error('邀请所属机构校验失败')
+  const players = await safeGet('players', { teamId }, 500)
+  const userId = String(identity.user._id || '')
+  const openId = String(identity.openId || '')
+  const existing = players.find(item => {
+    const linkedIds = [item.linkedUserId, item.playerUserId].filter(Boolean).map(String)
+    const linkedOpenIds = [item.linkedOpenId, item.playerOpenId].filter(Boolean).map(String)
+    return (userId && linkedIds.indexOf(userId) >= 0) || (openId && linkedOpenIds.indexOf(openId) >= 0)
+  })
+  return {
+    success: true,
+    invitation: { id: String(invite._id), token: String(invite.token || ''), expiresAtText: dateText(invite.expiresAt) },
+    team: { id: teamId, name: String(team.name || team.teamName || ''), logo: String(team.logoTransparent || team.logo || team.logoUrl || '') },
+    existingPlayer: existing ? { id: String(existing._id), name: String(existing.name || '球员'), birthDate: String(firstValue(existing.birthDate, existing.birthday) || ''), profileStatus: String(existing.profileStatus || 'pending') } : null
+  }
+}
+
+async function acceptTeamPlayerInviteForWorkspace(event, identity) {
+  const preview = await teamPlayerInviteForWorkspace(event, identity)
+  const invite = (await safeGet('team_invitations', { _id: preview.invitation.id }, 1))[0]
+  if (!invite || ['active', 'pending'].indexOf(String(invite.status || 'active')) < 0) throw new Error('球员邀请不存在或已停用')
+  const teamRecord = (await safeGet('teams', { _id: preview.team.id }, 1))[0] || { _id: preview.team.id, name: preview.team.name }
+  if (preview.existingPlayer) {
+    const existingRows = await safeGet('players', { _id: preview.existingPlayer.id, teamId: preview.team.id }, 1)
+    const existingPlayer = existingRows[0]
+    if (!existingPlayer) throw new Error('已关联的球员档案不存在，请联系球队管理员')
+    const parentInvite = await ensureParentProfileInviteForPlayer(teamRecord, existingPlayer, String(invite.orgId || ''), identity.user._id)
+    return { success: true, idempotent: true, player: preview.existingPlayer, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token) }
+  }
+  const participantRole = String(event.participantRole || '') === 'player' ? 'player' : 'guardian'
+  const name = String(event.name || '').trim().slice(0, 30)
+  const birthDate = String(event.birthDate || '').trim()
+  const guardianPhone = String(event.guardianPhone || '').replace(/\s/g, '')
+  const allowedRelations = ['father', 'mother', 'other']
+  const guardianRelation = allowedRelations.indexOf(String(event.guardianRelation || '')) >= 0 ? String(event.guardianRelation) : 'other'
+  const jerseyNumber = String(event.jerseyNumber || '').trim().slice(0, 3)
+  const allowedPositions = ['GK', 'DF', 'MF', 'FW']
+  const position = allowedPositions.indexOf(String(event.position || '')) >= 0 ? String(event.position) : ''
+  const birthTime = new Date(birthDate + 'T00:00:00').getTime()
+  if (event.authorizationAgreed !== true) throw new Error('请确认已获得球员及监护人授权')
+  if (name.length < 2) throw new Error('请填写真实球员姓名')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(birthTime) || birthTime > Date.now()) throw new Error('请选择正确的出生日期')
+  if (!/^1\d{10}$/.test(guardianPhone)) throw new Error('请填写正确的监护人手机号')
+  if (jerseyNumber && !/^\d{1,3}$/.test(jerseyNumber)) throw new Error('球衣号码只可填写数字')
+  const teamPlayers = await safeGet('players', { teamId: preview.team.id }, 500)
+  const duplicates = teamPlayers.filter(item => String(item.name || '') === name && String(firstValue(item.birthDate, item.birthday) || '') === birthDate)
+  if (duplicates.length) {
+    const currentUserId = String(identity.user._id || '')
+    const currentOpenId = String(identity.openId || '')
+    const owned = duplicates.find(item => {
+      const userIds = participantRole === 'player' ? [item.linkedUserId, item.playerUserId] : [item.guardianUserId]
+      const openIds = participantRole === 'player' ? [item.linkedOpenId, item.playerOpenId] : [item.guardianOpenId]
+      return (currentUserId && userIds.filter(Boolean).map(String).indexOf(currentUserId) >= 0) || (currentOpenId && openIds.filter(Boolean).map(String).indexOf(currentOpenId) >= 0)
+    })
+    if (owned) {
+      const parentInvite = await ensureParentProfileInviteForPlayer(teamRecord, owned, String(invite.orgId || ''), identity.user._id)
+      return { success: true, idempotent: true, player: { id: String(owned._id), name: String(owned.name || name), profileStatus: String(owned.profileStatus || 'pending') }, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token) }
+    }
+    throw workspaceError('PLAYER_PROFILE_CONFLICT', '球队中已有同名且出生日期相同的球员，请联系球队管理员人工核验，系统不会自动合并')
+  }
+  const now = db.serverDate()
+  const playerData = {
+    teamId: preview.team.id,
+    orgId: String(invite.orgId || ''),
+    name,
+    birthDate,
+    birthday: birthDate,
+    guardianPhone,
+    guardianRelation,
+    contactPhone: guardianPhone,
+    jerseyNumber,
+    position,
+    profileStatus: 'pending',
+    needsParentCompletion: true,
+    source: 'team_player_invite',
+    playerInviteId: preview.invitation.id,
+    applicantRole: participantRole,
+    authorizationAgreed: true,
+    authorizationConfirmedAt: now,
+    createTime: now,
+    updateTime: now
+  }
+  if (participantRole === 'player') {
+    playerData.linkedUserId = identity.user._id
+    playerData.linkedOpenId = identity.openId || ''
+  } else {
+    playerData.guardianUserId = identity.user._id
+    playerData.guardianOpenId = identity.openId || ''
+  }
+  const created = await db.collection('players').add({ data: playerData })
+  const createdPlayer = Object.assign({ _id: created._id }, playerData)
+  const parentInvite = await ensureParentProfileInviteForPlayer(teamRecord, createdPlayer, String(invite.orgId || ''), identity.user._id)
+  await db.collection('team_invitations').doc(preview.invitation.id).update({ data: {
+    status: 'active',
+    acceptedCount: _.inc(1),
+    lastAcceptedUserId: identity.user._id,
+    lastAcceptedOpenId: identity.openId || '',
+    lastAcceptedAt: now,
+    updateTime: now
+  } })
+  return { success: true, player: { id: String(created._id), name, profileStatus: 'pending' }, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token) }
 }
 
 async function teamParticipationForWorkspace(event, identity) {
@@ -1764,6 +2122,108 @@ async function teamParticipationForWorkspace(event, identity) {
     return { id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '赛事'), divisionName: String(item.divisionName || tournament.divisionName || '默认组别'), status, statusText: status === 'confirmed' || status === 'active' ? '已确认' : '待确认', rosterText: roster ? (String(roster.status || '') === 'approved' ? '正式名单已审核' : '正式名单待处理') : '尚未提交正式名单', nextMatchId: next ? String(next._id) : '', nextMatchText: next ? dateText(firstValue(next.matchTime, next.matchDate, next.startTime)) : '暂无待进行比赛' }
   }))
   return { success: true, team: { id: teamId, name: String(team.name || '') }, items, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
+}
+
+async function teamTournamentDetailForWorkspace(event, identity) {
+  const scoped = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const permissions = scoped.workspace.permissions || []
+  if (permissions.indexOf('team.view') < 0 && permissions.indexOf('team.manage') < 0) throw new Error('当前身份没有查看球队赛事详情的权限')
+  const tournamentId = String(event.tournamentId || '')
+  if (!tournamentId) throw new Error('缺少赛事信息')
+  const teams = await loadTeams(scoped.workspace, identity.user, identity.openId)
+  const accessibleTeamIds = unique(teams.map(item => item._id))
+  const requestedTeamId = String(event.teamId || '')
+  const requestedDivisionId = String(event.divisionId || '')
+  if (requestedTeamId && accessibleTeamIds.indexOf(requestedTeamId) < 0) throw new Error('球队不属于当前工作空间')
+  const registrations = await safeGet('tournament_teams', { tournamentId }, 200)
+  const registration = registrations.find(item => {
+    const teamMatches = requestedTeamId ? String(item.teamId || '') === requestedTeamId : accessibleTeamIds.indexOf(String(item.teamId || '')) >= 0
+    const divisionMatches = requestedDivisionId ? registrationDivisionId(item) === requestedDivisionId : true
+    return teamMatches && divisionMatches && ['cancelled', 'withdrawn', 'rejected'].indexOf(String(item.status || '').toLowerCase()) < 0
+  })
+  if (!registration) return { success: true, participating: false }
+  const teamId = String(registration.teamId || '')
+  const team = teams.find(item => String(item._id) === teamId)
+  if (!team) throw new Error('当前球队资料不可用')
+  const tournament = (await safeGet('tournaments', { _id: tournamentId }, 1))[0]
+  if (!tournament) throw new Error('赛事不存在')
+  const divisionId = registrationDivisionId(registration)
+  let division = divisionId && divisionId !== 'default' ? (await safeGet('divisions', { _id: divisionId }, 1))[0] : null
+  if (!division && Array.isArray(tournament.divisions)) division = tournament.divisions.find(item => String(item && (item._id || item.id) || '') === divisionId) || null
+  division = division || {}
+
+  const allMatches = await safeGet('matches', { tournamentId }, 300)
+  const teamMatches = allMatches.filter(item => {
+    const involved = [String(item.homeTeamId || ''), String(item.awayTeamId || '')].indexOf(teamId) >= 0 || [String(item.homeTeamName || ''), String(item.awayTeamName || '')].indexOf(String(team.name || '')) >= 0
+    if (!involved) return false
+    const matchDivisionId = String(item.divisionId || item.division || '')
+    return !matchDivisionId || matchDivisionId === divisionId
+  })
+  const completedStatuses = ['completed', 'finished', 'archived']
+  const completedMatches = teamMatches.filter(item => completedStatuses.indexOf(String(item.status || '').toLowerCase()) >= 0)
+  const nextMatch = teamMatches.filter(item => completedStatuses.indexOf(String(item.status || '').toLowerCase()) < 0).sort((a, b) => {
+    const left = toTime(firstValue(a.matchTime, a.matchDate, a.startTime)) || Number.MAX_SAFE_INTEGER
+    const right = toTime(firstValue(b.matchTime, b.matchDate, b.startTime)) || Number.MAX_SAFE_INTEGER
+    return left - right
+  })[0] || null
+
+  const opponentIds = unique(teamMatches.reduce((ids, item) => ids.concat([item.homeTeamId, item.awayTeamId]), []).filter(id => String(id || '') !== teamId))
+  const opponentRows = opponentIds.length ? await safeGet('teams', { _id: _.in(opponentIds) }, 100) : []
+  const teamMap = {}; teams.concat(opponentRows).forEach(item => { teamMap[String(item._id)] = item })
+  const standings = await safeGet('standings', { tournamentId }, 200)
+  const divisionStandings = standings.filter(item => {
+    const itemDivisionId = String(item.divisionId || item.division || '')
+    return !itemDivisionId || itemDivisionId === divisionId
+  }).sort((a, b) => Number(b.points || 0) - Number(a.points || 0) || Number(b.goalDiff || 0) - Number(a.goalDiff || 0))
+  const standingIndex = divisionStandings.findIndex(item => String(item.teamId || '') === teamId || String(item.teamName || '') === String(team.name || ''))
+  const standing = standingIndex >= 0 ? divisionStandings[standingIndex] : null
+  let computedPoints = 0
+  completedMatches.forEach(item => {
+    const isHome = String(item.homeTeamId || '') === teamId || String(item.homeTeamName || '') === String(team.name || '')
+    const own = Number(isHome ? firstValue(item.homeScore, item.scoreHome, 0) : firstValue(item.awayScore, item.scoreAway, 0))
+    const opponent = Number(isHome ? firstValue(item.awayScore, item.scoreAway, 0) : firstValue(item.homeScore, item.scoreHome, 0))
+    computedPoints += own > opponent ? 3 : (own === opponent ? 1 : 0)
+  })
+  const snapshots = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20)).filter(item => snapshotMatchesDivision(item, divisionId, true))
+  const legacyRosters = await safeGet('rosters', { tournamentId, teamId }, 20)
+  const roster = snapshots.concat(legacyRosters).sort((a, b) => toTime(firstValue(b.updateTime, b.updatedAt, b.submitTime)) - toTime(firstValue(a.updateTime, a.updatedAt, a.submitTime)))[0] || null
+  const rosterPlayers = roster ? (roster.players || roster.playerIds || roster.rosterPlayers || []) : []
+  const rosterStatus = String(roster && roster.status || '')
+  const rosterApproved = ['approved', 'confirmed', 'locked'].indexOf(rosterStatus) >= 0
+  const registrationStatus = String(registration.status || '').toLowerCase()
+  const statusText = ['approved', 'confirmed', 'active', 'locked'].indexOf(registrationStatus) >= 0 ? '已确认' : (registrationStatus === 'pending' ? '审核中' : '待确认')
+  const isProfessional = division.mode === 'professional' || division.isProfessional === true || String(division.ruleMode || '').toLowerCase() === 'professional'
+
+  function teamBrief(id, fallbackName, fallbackLogo) {
+    const row = teamMap[String(id || '')] || {}
+    return { id: String(id || ''), name: String(row.name || row.teamName || fallbackName || '球队待定'), logo: String(row.logo || row.logoTransparent || row.logoOriginal || fallbackLogo || '') }
+  }
+  let next = null
+  if (nextMatch) {
+    const start = firstValue(nextMatch.matchTime, nextMatch.matchDate, nextMatch.startTime)
+    next = {
+      id: String(nextMatch._id || ''),
+      startTime: start,
+      dateText: dateText(start),
+      timeText: start ? new Date(toTime(start)).toISOString().slice(11, 16) : '时间待定',
+      venue: String(firstValue(nextMatch.venue, nextMatch.location, nextMatch.fieldName, '场地待定')),
+      home: teamBrief(nextMatch.homeTeamId, nextMatch.homeTeamName, nextMatch.homeTeamLogo),
+      away: teamBrief(nextMatch.awayTeamId, nextMatch.awayTeamName, nextMatch.awayTeamLogo)
+    }
+  }
+  return {
+    success: true,
+    participating: true,
+    canManage: permissions.indexOf('team.manage') >= 0,
+    tournament: { id: tournamentId, name: String(tournament.name || '赛事'), startDate: firstValue(tournament.startDate, tournament.startTime), endDate: firstValue(tournament.endDate, tournament.endTime), location: String(firstValue(tournament.location, tournament.venue, tournament.region, '地点待定')) },
+    division: { id: divisionId, name: String(registration.divisionName || division.name || division.divisionName || '默认组别'), modeText: (isProfessional ? 'PRO · ' : '简易 · ') + String(registration.divisionName || division.name || division.divisionName || '默认组别') },
+    registration: { id: String(registration._id), status: registrationStatus, statusText },
+    team: { id: teamId, name: String(team.name || team.teamName || registration.teamName || '当前球队'), logo: String(team.logo || team.logoTransparent || team.logoOriginal || registration.teamLogo || '') },
+    summary: { rank: standingIndex >= 0 ? standingIndex + 1 : 0, rankTotal: divisionStandings.length, played: Number(firstValue(standing && standing.played, standing && standing.matches, completedMatches.length, 0)), points: Number(firstValue(standing && standing.points, computedPoints, 0)) },
+    roster: { exists: Boolean(roster), approved: rosterApproved, status: rosterStatus, playerCount: Array.isArray(rosterPlayers) ? rosterPlayers.length : Number(roster && roster.playerCount || 0), maxPlayers: Number(firstValue(division.maxPlayersPerTeam, division.maxPlayers, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)) },
+    nextMatch: next,
+    canSubmitLineup: Boolean(next && rosterApproved && ['approved', 'confirmed', 'active', 'locked'].indexOf(registrationStatus) >= 0)
+  }
 }
 
 async function teamHistoryForWorkspace(event, identity) {
@@ -1928,8 +2388,10 @@ exports.main = async function(event) {
     if (event.action === 'markMessageRead') return await markMessagesRead(event, identity)
     if (event.action === 'setHomeIdentity') return await saveHomeIdentity(event, identity)
     if (event.action === 'teamPlayers') return await loadTeamPlayersForWorkspace(event, identity)
+    if (event.action === 'teamPlayerDetail') return await loadTeamPlayerDetailForWorkspace(event, identity)
     if (event.action === 'teamPlayerEdit') return await loadTeamPlayerForEditForWorkspace(event, identity)
     if (event.action === 'saveTeamPlayer') return await saveTeamPlayerForWorkspace(event, identity)
+    if (event.action === 'archiveTeamPlayer') return await archiveTeamPlayerForWorkspace(event, identity)
     if (event.action === 'remindParentProfile') return await remindParentProfileForWorkspace(event, identity)
     if (event.action === 'parentProfileInvite') return await parentProfileInviteForWorkspace(event, identity)
     if (event.action === 'regenerateParentProfileInvite') return await regenerateParentProfileInviteForWorkspace(event, identity)
@@ -1952,7 +2414,11 @@ exports.main = async function(event) {
     if (event.action === 'createTeamMemberInvite') return await createTeamMemberInviteForWorkspace(event, identity)
     if (event.action === 'teamMemberInvite') return await teamMemberInviteForWorkspace(event, identity)
     if (event.action === 'acceptTeamMemberInvite') return await acceptTeamMemberInviteForWorkspace(event, identity)
+    if (event.action === 'createTeamPlayerInvite') return await createTeamPlayerInviteForWorkspace(event, identity)
+    if (event.action === 'teamPlayerInvite') return await teamPlayerInviteForWorkspace(event, identity)
+    if (event.action === 'acceptTeamPlayerInvite') return await acceptTeamPlayerInviteForWorkspace(event, identity)
     if (event.action === 'teamParticipation') return await teamParticipationForWorkspace(event, identity)
+    if (event.action === 'teamTournamentDetail') return await teamTournamentDetailForWorkspace(event, identity)
     if (event.action === 'teamHistory') return await teamHistoryForWorkspace(event, identity)
     if (event.action === 'reviewRefereeRecord') return await reviewRefereeRecordForWorkspace(event, identity)
     if (event.action === 'reportMatchException') return await reportMatchExceptionForWorkspace(event, identity)
@@ -2007,7 +2473,20 @@ exports.main = async function(event) {
       .sort((a, b) => a.time - b.time)
     const education = await loadEducationData(current, identity.user)
     const schedule = eventSchedule.concat(education.schedule).sort((a, b) => a.time - b.time)
-    const eventTasks = buildTasks(registrations).concat(buildOrganizerTasks(hostedRegistrations))
+    const accessibleTeamIds = unique(teams.map(item => item._id).concat(current.teamId || []))
+    const draftConditions = [
+      { recipientUserId: String(identity.user._id) },
+      { recipientMiniOpenId: String(identity.openId) }
+    ]
+    if (accessibleTeamIds.length) draftConditions.push({ teamId: _.in(accessibleTeamIds) })
+    const registrationDraftRows = await safeGet('tournament_tasks', _.or(draftConditions), 100)
+    const activeRegistrationKeys = new Set(registrations.filter(item => ['pending', 'approved', 'confirmed', 'active', 'locked'].indexOf(String(item.status || '').toLowerCase()) >= 0).map(item => String(item.tournamentId || '') + ':' + String(item.teamId || '') + ':' + registrationDivisionId(item)))
+    const staleDraftRows = registrationDraftRows.filter(item => activeRegistrationKeys.has(String(item.tournamentId || '') + ':' + String(item.teamId || '') + ':' + String(item.divisionId || 'default')))
+    if (staleDraftRows.length) {
+      await Promise.all(staleDraftRows.map(item => db.collection('tournament_tasks').doc(item._id).update({ data: { status: 'completed', completedAt: db.serverDate(), updateTime: db.serverDate() } }).catch(() => null)))
+    }
+    const activeDraftRows = registrationDraftRows.filter(item => staleDraftRows.indexOf(item) < 0)
+    const eventTasks = buildRegistrationDraftTasks(activeDraftRows).concat(buildTasks(registrations), buildOrganizerTasks(hostedRegistrations))
     const tasks = eventTasks.concat(education.tasks)
     const teamIds = unique(teams.map(item => item._id))
     const players = canViewTeams && teamIds.length
@@ -2035,8 +2514,12 @@ exports.main = async function(event) {
       success: true,
       user: {
         id: identity.user._id,
-        nickName: identity.user.nickName || '微信用户',
-        avatarUrl: identity.user.avatarUrl || ''
+        nickName: firstValue(identity.user.nickName, identity.user.nickname, identity.user.name, '微信用户'),
+        avatarUrl: firstValue(identity.user.avatarUrl, identity.user.avatar, identity.user.headimgurl),
+        phone: identity.phone,
+        phoneNumber: identity.phone,
+        phoneMasked: maskPhone(identity.phone),
+        phoneVerified: identity.user.phoneVerified === true
       },
       workspaces,
       currentWorkspace: current,
@@ -2044,6 +2527,7 @@ exports.main = async function(event) {
       modules: buildModules(current),
       teams: teams.map(team => formatTeam(team, teamSummaryMap[String(team._id)])),
       tournaments: tournaments.map(formatTournament),
+      registrations: registrations.map(item => ({ tournamentId: String(item.tournamentId || ''), teamId: String(item.teamId || ''), divisionId: registrationDivisionId(item), status: String(item.status || '') })),
       schedule,
       eventSchedule,
       trainingSchedule: education.schedule,

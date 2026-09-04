@@ -3,10 +3,11 @@ page{background:#001d12}
 .stadium-bg{display:block;position:fixed;left:0;top:0;z-index:0;width:100%;height:100%;object-fit:cover}
 .page-shade{position:fixed;left:0;top:0;z-index:1;width:100%;height:100%;background:linear-gradient(180deg,rgba(0,15,10,.04),rgba(0,27,16,.12) 35%,rgba(0,20,11,.58) 100%)}
 .content{position:relative;z-index:2;padding:104rpx 37rpx 150rpx}
-.topbar{display:flex;align-items:flex-start;justify-content:space-between;height:210rpx}
+.topbar{display:flex;align-items:flex-start;justify-content:flex-start;height:210rpx}
 .topbar.organizer-topbar{height:238rpx}
+.topbar-left{display:flex;align-items:center;min-height:64rpx}
 .role-title{font-size:38rpx;line-height:64rpx;font-weight:800;letter-spacing:1rpx}
-.message-button{position:relative;width:64rpx;height:64rpx;margin-right:4rpx}
+.message-button{position:relative;flex:none;width:64rpx;height:64rpx;margin-right:18rpx}
 .message-button image{display:block;width:58rpx;height:58rpx}
 .message-badge{position:absolute;right:-4rpx;top:-12rpx;min-width:34rpx;height:34rpx;padding:0 5rpx;border-radius:20rpx;background:#f04436;color:#fff;font-size:20rpx;line-height:34rpx;text-align:center}
 .overview-card{position:relative;height:308rpx;padding:28rpx 30rpx;overflow:hidden;border:2rpx solid rgba(43,187,104,.62);border-radius:29rpx;background:linear-gradient(115deg,rgba(0,74,42,.96),rgba(0,57,34,.9));box-shadow:0 18rpx 42rpx rgba(0,0,0,.24);box-sizing:border-box}
@@ -84,8 +85,15 @@ page{background:#001d12}
 .training-permission-note image{display:block;width:28rpx;height:28rpx;margin-right:12rpx;filter:brightness(0) invert(1)}
 .loading{padding:80rpx 0;color:#e5eee9;text-align:center}
 .error-card{display:flex;justify-content:space-between;margin-bottom:18rpx;padding:20rpx 23rpx;border-radius:16rpx;background:#fff0ef;color:#a53e37;font-size:22rpx}
-.login-hero{display:flex;flex-direction:column;align-items:center;margin-top:180rpx}
-.login-hero text:first-child{font-size:48rpx;font-weight:900}
-.login-hero text:nth-child(2){margin:20rpx 0 45rpx;color:rgba(255,255,255,.76);font-size:25rpx}
+.login-hero{display:flex;flex-direction:column;align-items:center;margin-top:70rpx}
+.guest-home-badge{display:flex;align-items:center;align-self:flex-start;margin-bottom:80rpx;padding:10rpx 18rpx 10rpx 10rpx;border:1rpx solid rgba(255,255,255,.3);border-radius:34rpx;background:rgba(0,49,28,.58)}
+.guest-home-badge image{display:block;width:44rpx;height:44rpx;margin-right:8rpx}
+.guest-home-badge text{font-size:23rpx!important;font-weight:700!important}
+.guest-title{font-size:48rpx;font-weight:900}
+.guest-subtitle{margin:20rpx 0 45rpx;color:rgba(255,255,255,.76);font-size:25rpx;text-align:center}
 .login-hero button{width:100%;height:88rpx;border-radius:20rpx;background:#159346;color:#fff;font-size:30rpx;font-weight:800}
 .login-outline{margin-top:22rpx!important;border:2rpx solid #fff!important;background:rgba(255,255,255,.12)!important}
+.guest-feature-grid{display:flex;width:100%;margin-top:34rpx;gap:12rpx}
+.guest-feature-grid view{flex:1;min-width:0;padding:20rpx 12rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:18rpx;background:rgba(0,39,23,.5);text-align:center}
+.guest-feature-grid text{display:block!important;margin:0!important;font-size:22rpx!important;color:#fff!important}
+.guest-feature-grid text:last-child{margin-top:8rpx!important;font-size:18rpx!important;line-height:1.45;color:rgba(255,255,255,.65)!important}

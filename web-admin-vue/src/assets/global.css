@@ -34,10 +34,13 @@ html, body, #app {
 .el-button--primary {
   --el-button-bg-color: #2E7D32;
   --el-button-border-color: #2E7D32;
+  --el-button-text-color: #fff;
   --el-button-hover-bg-color: #43A047;
   --el-button-hover-border-color: #43A047;
+  --el-button-hover-text-color: #fff;
   --el-button-active-bg-color: #1B5E20;
   --el-button-active-border-color: #1B5E20;
+  --el-button-active-text-color: #fff;
 }
 
 /* 滚动条美化 */

@@ -78,7 +78,7 @@ const groups = [
     { name: '专业版参赛球队', note: '球队列表', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional` },
     { name: '生成球队邀请', note: '邀请弹窗', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional&action=invite` },
     { name: '快速添加球队', note: '预建参赛占位', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional&action=quick-add` },
-    { name: '球队详情', note: '赛事球队视角', path: `/teams/${team}?fromTournament=${tournament}&divisionId=${proDivision}&mode=professional` },
+  { name: '球队详情', note: '赛事球队视角', path: `/tournaments/${tournament}/teams/${team}?divisionId=${proDivision}&mode=professional` },
     { name: '加入申请', note: '待处理队列', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional&tab=pending` },
     { name: '参赛名单', note: '名单总览', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional&tab=roster` },
     { name: '查看正式名单', note: '球队名单快照', path: `/tournaments/${tournament}/teams/${team}/roster?divisionId=${proDivision}` },

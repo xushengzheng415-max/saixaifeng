@@ -20,14 +20,14 @@
     <view class="loading" wx:if="{{loading}}">正在整理赛事待办…</view>
     <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
     <view class="task-list" wx:if="{{hasTasks}}">
-      <view class="task-card" wx:for="{{visibleTasks}}" wx:key="id" data-tournament="{{item.tournamentId}}" data-team="{{item.teamId}}" data-audience="{{item.audience}}" bindtap="onTaskTap">
+      <view class="task-card" wx:for="{{visibleTasks}}" wx:key="id" data-tournament="{{item.tournamentId}}" data-team="{{item.teamId}}" data-audience="{{item.audience}}" data-type="{{item.type}}" data-division="{{item.divisionId}}" data-invite="{{item.inviteKey}}" bindtap="onTaskTap">
         <view class="task-glyph {{item.statusClass}}"><image src="{{item.typeIcon}}" mode="aspectFit"/></view>
         <view class="task-content">
           <view class="task-title-row"><text class="task-title">{{item.title}}</text><text class="task-status {{item.statusClass}}">{{item.statusText}}</text></view>
           <text class="task-subtitle">{{item.subtitle}}</text>
           <view class="task-detail-row"><text class="task-detail">{{item.deadlineText}}</text><text class="task-detail-separator">|</text><text class="task-detail">{{item.detailText}}</text></view>
         </view>
-        <view class="task-action">查看</view><text class="task-arrow">›</text>
+        <view class="task-action">{{item.actionText}}</view><text class="task-arrow">›</text>
       </view>
     </view>
     <view class="empty" wx:if="{{!loading}}" hidden="{{hasTasks}}"><text class="empty-icon">✓</text><text class="empty-title">当前没有需要处理的赛事待办</text><text class="empty-desc">切换分段可查看其他赛事阶段的授权任务。</text></view>

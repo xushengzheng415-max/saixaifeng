@@ -257,43 +257,35 @@ export function getNavItemsByRole() {
     case ROLES.ORGANIZER:
       // 主办方视角 - 可以管理所有内容
       baseItems.push(
-        { path: '/dashboard', label: '数据概览', icon: 'DataBoard' },
-        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' },
-        { path: '/teams', label: '球队管理', icon: 'Football' },
-        { path: '/referees', label: '裁判管理', icon: 'SetUp' }
+        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }
       )
       break
 
     case ROLES.COACH:
       // 教练视角 - 只能管理自己的球队和球员，可以报名赛事
       baseItems.push(
-        { path: '/teams', label: '我的球队', icon: 'Football' },
-        { path: '/tournaments', label: '赛事报名', icon: 'Trophy' }
+        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }
       )
       break
 
     case ROLES.REFEREE:
       // 裁判视角 - 查看执法记录和可报名的赛事
       baseItems.push(
-        { path: '/referees', label: '我的执法', icon: 'SetUp' },
-        { path: '/tournaments', label: '赛事列表', icon: 'Trophy' }
+        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }
       )
       break
 
     case ROLES.ADMIN:
       // 管理员视角 - 拥有所有权限
       baseItems.push(
-        { path: '/dashboard', label: '数据概览', icon: 'DataBoard' },
-        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' },
-        { path: '/teams', label: '球队管理', icon: 'Football' },
-        { path: '/referees', label: '裁判管理', icon: 'SetUp' }
+        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }
       )
       break
 
     default:
       // 默认显示赛事列表
       baseItems.push(
-        { path: '/tournaments', label: '赛事列表', icon: 'Trophy' }
+        { path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }
       )
   }
 

@@ -25,6 +25,7 @@
         <el-select class="division-selector" :model-value="divisionId" disabled aria-label="当前组别">
           <el-option :label="`当前组别：${division.name || '竞赛组别'}`" :value="divisionId" />
         </el-select>
+        <el-button v-if="effective && canManage" type="primary" :loading="saving" @click="startRuleRevision">调整规则</el-button>
         <el-button v-if="effective" plain @click="backToDivisions">返回组别管理</el-button>
         <span v-else class="draft-version">草稿 {{ draftVersion }}</span>
       </div>
@@ -52,35 +53,55 @@
 
     <main v-if="!effective" class="wizard-content">
       <template v-if="activeKey === 'format'">
-        <section class="format-picker panel-card" :class="{ professional: isProfessional }">
-          <h3>选择赛制类型</h3>
-          <div class="format-grid">
-            <button v-for="item in formats" :key="item.value" type="button" :class="{ selected: form.formatType === item.value }" @click="form.formatType = item.value">
-              <el-icon><component :is="item.icon" /></el-icon>
-              <span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span>
-              <el-icon v-if="form.formatType === item.value" class="selected-check"><CircleCheckFilled /></el-icon>
-            </button>
-          </div>
-          <p class="format-description"><strong>{{ formatLabel }}说明</strong>{{ selectedFormatDescription }}</p>
-        </section>
+        <div class="format-stage" :class="{ professional: isProfessional }">
+          <section class="format-picker panel-card" :class="{ professional: isProfessional }">
+            <h3>选择赛制类型</h3>
+            <div class="format-grid">
+              <button v-for="item in formats" :key="item.value" type="button" :class="{ selected: form.formatType === item.value }" @click="form.formatType = item.value">
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span>
+                <el-icon v-if="form.formatType === item.value" class="selected-check"><CircleCheckFilled /></el-icon>
+              </button>
+            </div>
+            <p class="format-description"><strong>{{ formatLabel }}说明</strong>{{ selectedFormatDescription }}</p>
+          </section>
 
-        <section v-if="!isProfessional" class="panel-card basic-format-settings">
-          <h3>基础赛制设置</h3>
-          <el-form label-position="left" label-width="120px">
-            <el-form-item label="参赛球队"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" controls-position="right" /></el-form-item>
-            <el-form-item label="小组数量"><el-input-number v-model="form.groupCount" :min="1" :max="32" controls-position="right" /></el-form-item>
-            <el-form-item label="每组球队"><el-input-number v-model="form.teamsPerGroup" :min="2" :max="32" controls-position="right" /></el-form-item>
-            <el-form-item label="小组循环"><el-select v-model="form.groupCycle"><el-option label="单循环" value="single" /><el-option label="双循环" value="double" /></el-select></el-form-item>
-            <el-form-item label="每组晋级"><el-input-number v-model="form.advancePerGroup" :min="1" :max="16" controls-position="right" /></el-form-item>
-          </el-form>
-          <div class="auto-result"><el-icon><MagicStick /></el-icon>系统将自动生成：{{ form.groupCount }} 个小组，前 {{ form.groupCount * form.advancePerGroup }} 名进入淘汰赛阶段。</div>
-        </section>
+          <section v-if="!isProfessional" class="panel-card basic-format-settings">
+            <div class="basic-settings-heading"><div><h3>{{ basicSettingsTitle }}</h3><p>{{ basicSettingsSubtitle }}</p></div><span>{{ form.expectedTeams }} 支球队</span></div>
+            <div class="basic-setting-grid" :class="`format-${form.formatType}`">
+              <label class="basic-setting-item"><span>参赛球队</span><el-input-number v-model="form.expectedTeams" aria-label="参赛球队" :min="2" :max="128" controls-position="right" /></label>
+              <template v-if="form.formatType === 'cup'">
+              <label class="basic-setting-item"><span>小组数量</span><el-input-number v-model="form.groupCount" aria-label="小组数量" :min="1" :max="32" controls-position="right" /></label>
+              <label class="basic-setting-item"><span>每组球队</span><el-input-number v-model="form.teamsPerGroup" aria-label="每组球队" :min="2" :max="32" controls-position="right" /></label>
+              <label class="basic-setting-item"><span>每组晋级</span><el-input-number v-model="form.advancePerGroup" aria-label="每组晋级" :min="1" :max="16" controls-position="right" /></label>
+              </template>
+              <template v-else-if="form.formatType === 'tournament'">
+                <label class="basic-setting-item"><span>淘汰赛规模</span><el-select v-model="form.knockoutSize" aria-label="淘汰赛规模"><el-option v-for="size in knockoutSizeOptions" :key="size" :label="`${size} 强`" :value="size" /></el-select></label>
+                <label class="basic-setting-item"><span>淘汰形式</span><el-select v-model="form.knockoutType" aria-label="淘汰形式"><el-option label="单淘汰" value="single" /><el-option label="双败淘汰" value="double" /></el-select></label>
+                <label class="basic-setting-item"><span>比赛回合</span><el-select v-model="form.knockoutLegs" aria-label="比赛回合"><el-option label="单场决胜" value="single" /><el-option label="主客场两回合" value="home-away" /></el-select></label>
+              </template>
+              <template v-else-if="form.formatType === 'league'">
+                <label class="basic-setting-item"><span>联赛循环</span><el-select v-model="form.groupCycle" aria-label="联赛循环"><el-option label="单循环" value="single" /><el-option label="双循环" value="double" /></el-select></label>
+                <label class="basic-setting-item"><span>比赛场地</span><el-select v-model="form.venueMode" aria-label="比赛场地"><el-option label="集中场地" value="centralized" /><el-option label="主客场" value="home-away" /></el-select></label>
+              </template>
+              <template v-else-if="form.formatType === 'hybrid'">
+                <label class="basic-setting-item"><span>联赛循环</span><el-select v-model="form.groupCycle" aria-label="联赛阶段循环"><el-option label="单循环" value="single" /><el-option label="双循环" value="double" /></el-select></label>
+                <label class="basic-setting-item"><span>晋级淘汰赛</span><el-select v-model="form.knockoutSize" aria-label="晋级淘汰赛规模"><el-option v-for="size in knockoutSizeOptions" :key="size" :label="`前 ${size} 名`" :value="size" /></el-select></label>
+                <label class="basic-setting-item"><span>淘汰形式</span><el-select v-model="form.knockoutType" aria-label="混合制淘汰形式"><el-option label="单淘汰" value="single" /><el-option label="双败淘汰" value="double" /></el-select></label>
+              </template>
+            </div>
+            <label v-if="form.formatType === 'cup'" class="basic-cycle-row"><span>小组循环</span><el-select v-model="form.groupCycle" aria-label="小组循环"><el-option label="单循环" value="single" /><el-option label="双循环" value="double" /></el-select></label>
+            <div class="ranking-scope-row"><span>最终名次</span><el-radio-group v-model="form.finalRankingMode" :disabled="form.formatType === 'league'" aria-label="最终名次范围"><el-radio-button label="champion">仅冠亚军</el-radio-button><el-radio-button label="top4">前四名</el-radio-button><el-radio-button label="full">全排名</el-radio-button></el-radio-group><small>{{ finalRankingHint }}</small></div>
+            <div class="auto-result"><el-icon><MagicStick /></el-icon><span>{{ formatAutoSummary }}</span></div>
+          </section>
+        </div>
 
-        <template v-else>
+        <template v-if="isProfessional">
           <section class="professional-settings">
-            <article class="panel-card"><h3>小组赛阶段</h3><el-form label-position="left" label-width="118px"><el-form-item label="参赛球队"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" /></el-form-item><el-form-item label="小组数量"><el-input-number v-model="form.groupCount" :min="1" :max="32" /></el-form-item><el-form-item label="每组球队"><el-input-number v-model="form.teamsPerGroup" :min="2" :max="32" /></el-form-item><el-form-item label="循环方式"><el-select :key="`group-cycle-${formRenderKey}`" v-model="form.groupCycle"><el-option label="单循环" value="single" /><el-option label="双循环" value="double" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ groupCycleLabel }}</span></el-form-item><el-form-item label="每组晋级"><el-input-number v-model="form.advancePerGroup" :min="1" :max="16" /></el-form-item></el-form></article>
-            <article class="panel-card"><h3>淘汰赛阶段</h3><el-form label-position="left" label-width="118px"><el-form-item label="淘汰赛规模"><el-select :key="`knockout-size-${formRenderKey}`" v-model="form.knockoutSize"><el-option label="4 强" :value="4" /><el-option label="8 强" :value="8" /><el-option label="16 强" :value="16" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.knockoutSize }} 强</span></el-form-item><el-form-item label="淘汰形式"><el-select :key="`knockout-type-${formRenderKey}`" v-model="form.knockoutType"><el-option label="单淘汰" value="single" /><el-option label="双败淘汰" value="double" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.knockoutType === 'double' ? '双败淘汰' : '单淘汰' }}</span></el-form-item><el-form-item label="比赛回合"><el-select :key="`knockout-legs-${formRenderKey}`" v-model="form.knockoutLegs"><el-option label="单场决胜" value="single" /><el-option label="主客场两回合" value="home-away" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.knockoutLegs === 'home-away' ? '主客场两回合' : '单场决胜' }}</span></el-form-item><el-form-item label="对阵生成"><el-select :key="`bracket-source-${formRenderKey}`" v-model="form.bracketSource"><el-option label="小组结束后二次抽签" value="redraw" /><el-option label="按预设签位生成" value="preset" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.bracketSource === 'preset' ? '按预设签位生成' : '小组结束后二次抽签' }}</span></el-form-item></el-form></article>
-            <article class="panel-card"><h3>比赛组织</h3><el-form label-position="left" label-width="118px"><el-form-item label="比赛场地"><el-select :key="`venue-mode-${formRenderKey}`" v-model="form.venueMode"><el-option label="集中场地" value="centralized" /><el-option label="主客场" value="home-away" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.venueMode === 'home-away' ? '主客场' : '集中场地' }}</span></el-form-item><el-form-item label="主客场设置"><el-switch v-model="form.homeAwayEnabled" /></el-form-item><el-form-item label="三四名决赛"><el-switch v-model="form.thirdPlaceEnabled" /></el-form-item><el-form-item label="淘汰赛平局"><el-select :key="`tie-break-${formRenderKey}`" v-model="form.knockoutTieBreak"><el-option label="加时赛 + 点球决胜" value="extra-penalties" /><el-option label="直接点球决胜" value="penalties" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.knockoutTieBreak === 'penalties' ? '直接点球决胜' : '加时赛 + 点球决胜' }}</span></el-form-item></el-form></article>
+            <article v-if="form.formatType === 'cup'" class="panel-card"><h3>小组赛阶段</h3><el-form label-position="left" label-width="118px"><el-form-item label="参赛球队"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" /></el-form-item><el-form-item label="小组数量"><el-input-number v-model="form.groupCount" :min="1" :max="32" /></el-form-item><el-form-item label="每组球队"><el-input-number v-model="form.teamsPerGroup" :min="2" :max="32" /></el-form-item><el-form-item label="循环方式"><el-select :key="`group-cycle-${formRenderKey}`" v-model="form.groupCycle"><el-option label="单循环" value="single" /><el-option label="双循环" value="double" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ groupCycleLabel }}</span></el-form-item><el-form-item label="每组晋级"><el-input-number v-model="form.advancePerGroup" :min="1" :max="16" /></el-form-item></el-form></article>
+            <article v-if="['league', 'hybrid'].includes(form.formatType)" class="panel-card"><h3>{{ form.formatType === 'league' ? '联赛阶段' : '前置联赛阶段' }}</h3><el-form label-position="left" label-width="118px"><el-form-item label="参赛球队"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" /></el-form-item><el-form-item label="联赛循环"><el-select v-model="form.groupCycle"><el-option label="单循环" value="single" /><el-option label="双循环" value="double" /></el-select></el-form-item><el-form-item label="比赛场地"><el-select v-model="form.venueMode"><el-option label="集中场地" value="centralized" /><el-option label="主客场" value="home-away" /></el-select></el-form-item></el-form></article>
+            <article v-if="['cup', 'tournament', 'hybrid'].includes(form.formatType)" class="panel-card"><h3>{{ form.formatType === 'tournament' ? '集中淘汰赛' : '淘汰赛阶段' }}</h3><el-form label-position="left" label-width="118px"><el-form-item v-if="form.formatType === 'tournament'" label="参赛球队"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" /></el-form-item><el-form-item :label="form.formatType === 'hybrid' ? '晋级规模' : '淘汰赛规模'"><el-select :key="`knockout-size-${formRenderKey}`" v-model="form.knockoutSize"><el-option v-for="size in knockoutSizeOptions" :key="size" :label="`${size} 强`" :value="size" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.knockoutSize }} 强</span></el-form-item><el-form-item label="淘汰形式"><el-select :key="`knockout-type-${formRenderKey}`" v-model="form.knockoutType"><el-option label="单淘汰" value="single" /><el-option label="双败淘汰" value="double" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ knockoutTypeLabel }}</span></el-form-item><el-form-item label="比赛回合"><el-select :key="`knockout-legs-${formRenderKey}`" v-model="form.knockoutLegs"><el-option label="单场决胜" value="single" /><el-option label="主客场两回合" value="home-away" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ knockoutLegsLabel }}</span></el-form-item></el-form></article>
+            <article class="panel-card"><h3>比赛组织</h3><el-form label-position="left" label-width="118px"><el-form-item label="最终名次"><el-select v-model="form.finalRankingMode" :disabled="form.formatType === 'league'"><el-option label="仅冠亚军" value="champion" /><el-option label="前四名（含三四名赛）" value="top4" /><el-option label="全排名" value="full" /></el-select></el-form-item><el-form-item label="比赛场地"><el-select :key="`venue-mode-${formRenderKey}`" v-model="form.venueMode"><el-option label="集中场地" value="centralized" /><el-option label="主客场" value="home-away" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.venueMode === 'home-away' ? '主客场' : '集中场地' }}</span></el-form-item><el-form-item v-if="form.formatType !== 'league'" label="淘汰赛平局"><el-select :key="`tie-break-${formRenderKey}`" v-model="form.knockoutTieBreak"><el-option label="加时赛 + 点球决胜" value="extra-penalties" /><el-option label="直接点球决胜" value="penalties" /></el-select><span class="select-value-overlay" aria-hidden="true">{{ form.knockoutTieBreak === 'penalties' ? '直接点球决胜' : '加时赛 + 点球决胜' }}</span></el-form-item></el-form></article>
           </section>
         </template>
       </template>
@@ -101,10 +122,10 @@
 
       <template v-else-if="activeKey === 'rules'">
         <section class="simple-rules-grid">
-          <article class="panel-card"><h3><span>1</span>球队参赛 <em>可配置</em></h3><el-form label-position="left" label-width="130px"><el-form-item label="参赛球队上限"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" /></el-form-item><el-form-item label="报名截止时间"><el-input v-model="form.registrationDeadline" /></el-form-item><el-form-item label="截止后锁定队名与队徽"><el-switch v-model="form.lockRosterAfterDeadline" /></el-form-item></el-form><p>截止后如需变更，进入名单变更流程。</p></article>
-          <article class="panel-card"><h3><span>2</span>比赛时间 <em>可配置</em></h3><el-form label-position="left" label-width="105px"><el-form-item label="比赛形式"><el-radio-group v-model="form.periodMode"><el-radio-button label="halves">上下半场制</el-radio-button><el-radio-button label="single">单节制</el-radio-button></el-radio-group></el-form-item><el-form-item label="单半场时长"><el-input-number v-model="form.matchMinutes" :min="10" :max="120" /><span class="unit">分钟</span></el-form-item><el-form-item label="中场休息"><el-input-number v-model="form.breakMinutes" :min="0" :max="30" /><span class="unit">分钟</span></el-form-item></el-form></article>
-          <article class="panel-card"><h3><span>3</span>比赛执行 <em>可配置</em></h3><el-form label-position="left" label-width="96px"><el-form-item label="换人规则"><el-radio-group v-model="form.substitutionMode"><el-radio-button label="free">自由换人</el-radio-button><el-radio-button label="limited">限定换人</el-radio-button></el-radio-group></el-form-item><el-form-item label="比分录入"><el-switch v-model="form.scoreRequired" active-text="必须录入" /></el-form-item><el-form-item label="球员事件"><el-switch v-model="form.playerEventsEnabled" active-text="可选记录" /></el-form-item></el-form><p>简易版可人工填写号码/姓名，也可省略。</p></article>
-          <article class="panel-card discipline-card"><h3><span>4</span>红黄牌纪律 <em>可配置</em></h3><el-form label-position="left" label-width="112px"><el-form-item label="黄牌累计"><el-input-number v-model="form.yellowCardSuspension" :min="1" :max="10" /><span class="unit">张停赛 1 场</span></el-form-item><el-form-item label="直接红牌"><el-input-number v-model="form.redCardSuspension" :min="1" :max="10" /><span class="unit">场</span></el-form-item><el-form-item label="两黄变一红"><el-switch v-model="form.secondYellowRed" /></el-form-item><el-form-item label="淘汰赛前清零"><el-switch v-model="form.knockoutYellowReset" /></el-form-item></el-form><p>简易版可人工填写号码或姓名，纪律处罚按本赛事累计。</p></article>
+          <article class="panel-card"><h3><span>1</span>球队参赛 <em>可配置</em></h3><el-form class="participation-form" label-position="left" label-width="142px"><el-form-item label="参赛球队上限"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" /></el-form-item><el-form-item label="报名截止时间"><el-date-picker v-model="form.registrationDeadline" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" placeholder="选择截止日期和时间" :clearable="false" :disabled-date="disablePastRegistrationDate" :disabled-hours="disabledPastRegistrationHours" :disabled-minutes="disabledPastRegistrationMinutes" /></el-form-item><el-form-item label="截止后锁定队名与队徽"><el-switch v-model="form.lockRosterAfterDeadline" /></el-form-item></el-form><p>截止时间最早可设为当前时刻；截止后如需变更，进入名单变更流程。</p></article>
+          <article class="panel-card"><h3><span>2</span>比赛时间 <em>可配置</em></h3><el-form label-position="left" label-width="105px"><el-form-item label="比赛制式"><el-select v-model="form.matchFormat" aria-label="比赛制式" @change="applyMatchFormat"><el-option v-for="option in playerFormatOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></el-form-item><el-form-item label="比赛形式"><el-radio-group v-model="form.periodMode"><el-radio-button label="halves">上下半场制</el-radio-button><el-radio-button label="single">单节制</el-radio-button></el-radio-group></el-form-item><el-form-item :label="form.periodMode === 'single' ? '单节时长' : '单半场时长'"><el-input-number v-model="form.matchMinutes" :min="10" :max="120" /><span class="unit">分钟</span></el-form-item><el-form-item v-if="form.periodMode === 'single'" label="比赛节数"><el-input-number v-model="form.singlePeriodCount" :min="1" :max="8" /><span class="unit">节</span></el-form-item><el-form-item v-if="form.periodMode === 'halves'" label="中场休息"><el-input-number v-model="form.breakMinutes" :min="0" :max="30" /><span class="unit">分钟</span></el-form-item><div v-else class="rule-mode-note">共 {{ form.singlePeriodCount }} 节，每节 {{ form.matchMinutes }} 分钟；节间休息由裁判按赛事规程执行。</div></el-form></article>
+          <article class="panel-card"><h3><span>3</span>比赛执行 <em>可配置</em></h3><el-form label-position="left" label-width="104px"><el-form-item label="换人规则"><el-radio-group v-model="form.substitutionMode"><el-radio-button label="free">自由换人</el-radio-button><el-radio-button label="limited">限定换人</el-radio-button></el-radio-group></el-form-item><template v-if="form.substitutionMode === 'limited'"><el-form-item label="换人人数上限"><el-input-number v-model="form.substitutionLimit" :min="1" :max="20" /><span class="unit">人</span></el-form-item><el-form-item label="换人窗口次数"><el-input-number v-model="form.substitutionWindows" :min="1" :max="10" /><span class="unit">次</span></el-form-item><div class="rule-mode-note limited">限定换人按人数和窗口次数执行，换下球员不得再次上场。</div></template><div v-else class="rule-mode-note free">自由换人不限人数和次数，换下球员允许再次上场。</div><el-form-item label="比分录入"><el-switch v-model="form.scoreRequired" active-text="必须录入" /></el-form-item><el-form-item label="球员事件"><el-switch v-model="form.playerEventsEnabled" active-text="可选记录" /></el-form-item></el-form><p>简易版可人工填写号码/姓名，也可省略。</p></article>
+          <article class="panel-card discipline-card"><h3><span>4</span>红黄牌纪律 <em>可配置</em></h3><el-form class="discipline-inline-form" label-position="top"><el-form-item label="黄牌累计"><div class="discipline-value"><el-input-number v-model="form.yellowCardSuspension" :min="1" :max="10" /><span class="unit">张停赛1场</span></div></el-form-item><el-form-item label="直接红牌"><div class="discipline-value"><el-input-number v-model="form.redCardSuspension" :min="1" :max="10" /><span class="unit">场</span></div></el-form-item><el-form-item label="两黄变一红"><el-switch v-model="form.secondYellowRed" /></el-form-item><el-form-item label="淘汰赛前清零"><el-switch v-model="form.knockoutYellowReset" /></el-form-item></el-form><p>简易版可人工填写号码或姓名，纪律处罚按本赛事累计。</p></article>
           <article class="panel-card default-rules"><h3>系统默认规则 <em>无需修改</em></h3><div><strong>小组赛积分</strong><span>胜 {{ form.winPoints }} / 平 {{ form.drawPoints }} / 负 {{ form.lossPoints }}</span></div><div><strong>同分排名</strong><span>{{ rankingLabel }}</span></div><div><strong>淘汰赛平局</strong><span>{{ knockoutTieBreakLabel }}</span></div></article>
         </section>
       </template>
@@ -121,11 +142,11 @@
         <section v-if="isProfessional" class="finalize-layout professional-finalize">
           <article class="finalize-main panel-card">
             <h3>规则方案</h3>
-            <section class="final-rule-row"><span class="final-rule-number">1</span><div><h4>赛制结构</h4><p>{{ formatLabel }} · {{ form.groupCount }}组 × {{ form.teamsPerGroup }}支 · {{ groupCycleLabel }} · 每组前{{ form.advancePerGroup }}名晋级</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click="jumpToStep('format')">查看详情</button></section>
-            <section class="final-rule-row"><span class="final-rule-number">2</span><div><h4>参赛资格</h4><p>U16年龄资格 · 每队{{ form.minimumRoster }}—{{ form.rosterLimit }}人 · 报名截止后锁定名单</p><p>实名与标准形象照按主办方开关核验，异常资料进入人工复核</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click="jumpToStep('eligibility')">查看详情</button></section>
-            <section class="final-rule-row"><span class="final-rule-number">3</span><div><h4>比赛执行</h4><p>上场{{ form.playersOnField }}人 · {{ periodModeLabel }}每段{{ form.matchMinutes }}分钟 · 中场休息{{ form.breakMinutes }}分钟 · {{ substitutionModeLabel }}</p><p>红黄牌结构化记录 · 裁判报告关联正式名单 · 停赛自动执行</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click="jumpToStep('execution')">查看详情</button></section>
-            <section class="final-rule-row"><span class="final-rule-number">4</span><div><h4>积分排名</h4><p>胜{{ form.winPoints }} / 平{{ form.drawPoints }} / 负{{ form.lossPoints }} · {{ rankingLabel }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click="jumpToStep('ranking')">查看详情</button></section>
-            <section class="final-rule-row"><span class="final-rule-number">5</span><div><h4>晋级规则</h4><p>各组前{{ form.advancePerGroup }}名晋级 · 种子队 / 非种子队分池 · 同组回避 · 抽签前允许递补</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click="jumpToStep('advancement')">查看详情</button></section>
+          <section class="final-rule-row is-clickable" role="button" tabindex="0" @click="jumpToStep('format')" @keydown.enter="jumpToStep('format')"><span class="final-rule-number">1</span><div><h4>赛制结构</h4><p>{{ formatLabel }} · {{ formatStructureSummary }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click.stop="jumpToStep('format')">查看详情</button></section>
+            <section class="final-rule-row is-clickable" role="button" tabindex="0" @click="jumpToStep('eligibility')" @keydown.enter="jumpToStep('eligibility')"><span class="final-rule-number">2</span><div><h4>参赛资格</h4><p>U16年龄资格 · 每队{{ form.minimumRoster }}—{{ form.rosterLimit }}人 · 报名截止后锁定名单</p><p>实名与标准形象照按主办方开关核验，异常资料进入人工复核</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click.stop="jumpToStep('eligibility')">查看详情</button></section>
+            <section class="final-rule-row is-clickable" role="button" tabindex="0" @click="jumpToStep('execution')" @keydown.enter="jumpToStep('execution')"><span class="final-rule-number">3</span><div><h4>比赛执行</h4><p>上场{{ form.playersOnField }}人 · {{ periodModeLabel }}每段{{ form.matchMinutes }}分钟 · 中场休息{{ form.breakMinutes }}分钟 · {{ substitutionModeLabel }}</p><p>红黄牌结构化记录 · 裁判报告关联正式名单 · 停赛自动执行</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click.stop="jumpToStep('execution')">查看详情</button></section>
+            <section class="final-rule-row is-clickable" role="button" tabindex="0" @click="jumpToStep('ranking')" @keydown.enter="jumpToStep('ranking')"><span class="final-rule-number">4</span><div><h4>积分排名</h4><p>胜{{ form.winPoints }} / 平{{ form.drawPoints }} / 负{{ form.lossPoints }} · {{ rankingLabel }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click.stop="jumpToStep('ranking')">查看详情</button></section>
+            <section class="final-rule-row is-clickable" role="button" tabindex="0" @click="jumpToStep('advancement')" @keydown.enter="jumpToStep('advancement')"><span class="final-rule-number">5</span><div><h4>晋级规则</h4><p>{{ advancementSummary }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click.stop="jumpToStep('advancement')">查看详情</button></section>
             <div class="final-check"><el-icon><CircleCheckFilled /></el-icon>规则检查通过，竞赛规程预览稿已生成。</div>
           </article>
           <aside class="finalize-side-stack">
@@ -137,11 +158,11 @@
         <section v-else class="finalize-layout">
           <article class="finalize-main panel-card">
             <h3>{{ division.name || '当前组别' }}竞赛规则定版</h3>
-            <section class="summary-section"><div class="summary-heading"><span>1</span><h4>赛制设置</h4><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click="jumpToStep('format')">修改</button></div><div class="summary-items"><span><el-icon><Trophy /></el-icon>{{ formatLabel }}</span><span>{{ form.expectedTeams }} 支球队 / {{ form.groupCount }} 组</span><span>{{ groupCycleLabel }}</span><span>前 {{ form.advancePerGroup }} 名晋级</span></div></section>
-            <section class="summary-section"><div class="summary-heading"><span>2</span><h4>基础规则</h4><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click="jumpToStep('rules')">修改</button></div><div class="summary-items"><span>上场 {{ form.playersOnField }} 人</span><span>{{ periodModeLabel }} · {{ form.matchMinutes }} 分钟</span><span>中场 {{ form.breakMinutes }} 分钟</span><span>{{ substitutionModeLabel }}</span><span>胜 {{ form.winPoints }} / 平 {{ form.drawPoints }} / 负 {{ form.lossPoints }}</span></div></section>
+        <section class="summary-section is-clickable" role="button" tabindex="0" @click="jumpToStep('format')" @keydown.enter="jumpToStep('format')"><div class="summary-heading"><span>1</span><h4>赛制设置</h4><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click.stop="jumpToStep('format')">修改</button></div><div class="summary-items"><span v-for="(item, index) in formatSummaryItems" :key="item"><el-icon v-if="index === 0"><Trophy /></el-icon>{{ item }}</span></div></section>
+            <section class="summary-section is-clickable" role="button" tabindex="0" @click="jumpToStep('rules')" @keydown.enter="jumpToStep('rules')"><div class="summary-heading"><span>2</span><h4>基础规则</h4><em><el-icon><CircleCheckFilled /></el-icon>已完成</em><button type="button" @click.stop="jumpToStep('rules')">修改</button></div><div class="summary-items"><span>上场 {{ form.playersOnField }} 人</span><span>{{ periodModeLabel }} · {{ form.matchMinutes }} 分钟</span><span>中场 {{ form.breakMinutes }} 分钟</span><span>{{ substitutionModeLabel }}</span><span>胜 {{ form.winPoints }} / 平 {{ form.drawPoints }} / 负 {{ form.lossPoints }}</span></div></section>
             <section class="system-summary"><h4>系统默认规则</h4><span>小组赛积分按已配置值计算</span><span>同分排名：{{ rankingLabel }}</span><span>淘汰赛平局：{{ knockoutTieBreakLabel }}</span></section>
           </article>
-          <aside class="finalize-aside panel-card"><h3>定版信息</h3><dl><div><dt>组别</dt><dd>{{ division.name || '竞赛组别' }}</dd></div><div><dt>参赛球队</dt><dd>{{ form.expectedTeams }} 支</dd></div><div><dt>当前草稿</dt><dd>{{ draftVersion }}</dd></div><div><dt>状态</dt><dd class="warning">待定版</dd></div><div><dt>最后保存</dt><dd>{{ lastSavedText }}</dd></div></dl><hr /><h4>启用后影响</h4><div class="impact-tags"><span>抽签分组</span><span>赛程编排</span><span>积分排名</span></div><el-alert type="warning" :closable="false" title="本次仅确认当前组别规则；已生成的赛程与历史比赛快照不会被改写。" /></aside>
+          <aside class="finalize-aside panel-card"><h3>定版信息</h3><dl><div><dt>组别</dt><dd>{{ division.name || '竞赛组别' }}</dd></div><div><dt>参赛球队</dt><dd>{{ form.expectedTeams }} 支</dd></div><div><dt>当前草稿</dt><dd>{{ draftVersion }}</dd></div><div><dt>状态</dt><dd class="warning">待定版</dd></div><div><dt>最后保存</dt><dd>{{ lastSavedText }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">普通版同样生成精简正式规程，定版后可在竞赛文件发布中心正式发布。</p><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" title="本次仅确认当前组别规则；已生成的赛程与历史比赛快照不会被改写。" /></aside>
         </section>
       </template>
     </main>
@@ -150,33 +171,33 @@
       <template v-if="isProfessional">
         <article class="effective-main panel-card">
           <h3>{{ division.name || '当前组别' }}专业竞赛规则 <strong>{{ division.rulesVersion || draftVersion }} · 已生效</strong></h3>
-          <section class="effective-rule-row"><span class="final-rule-number">1</span><div><h4>赛制结构</h4><p>{{ formatLabel }} · {{ form.groupCount }}组 × {{ form.teamsPerGroup }}支 · {{ groupCycleLabel }} · {{ form.groupCount * form.advancePerGroup }}强单淘汰 · 每组前{{ form.advancePerGroup }}名晋级</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
+          <section class="effective-rule-row"><span class="final-rule-number">1</span><div><h4>赛制结构</h4><p>{{ formatLabel }} · {{ formatStructureSummary }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
           <section class="effective-rule-row"><span class="final-rule-number">2</span><div><h4>参赛资格</h4><p>U16年龄组 · 最多{{ form.expectedTeams }}支球队 · 每队最多{{ form.rosterLimit }}人 · 报名截止后名单锁定</p><p>正式参赛名单从球队长期球员库中选定，需完成球队确认</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
           <section class="effective-rule-row"><span class="final-rule-number">3</span><div><h4>比赛执行</h4><p>{{ form.playersOnField }}人制 · {{ periodModeLabel }} · 单段{{ form.matchMinutes }}分钟 · 中场{{ form.breakMinutes }}分钟 · {{ substitutionModeLabel }} · 弃权0:3</p><p>比赛事件、裁判报告和纪律处罚关联正式赛事名单</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
           <section class="effective-rule-row"><span class="final-rule-number">4</span><div><h4>报名与锁定</h4><p>报名截止时间：{{ form.registrationDeadline || '按赛事公告执行' }}</p><p>报名截止后，球员、球队名称及队徽锁定；正常变更进入受控申请</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
-          <section class="effective-rule-row"><span class="final-rule-number">5</span><div><h4>积分排名与晋级</h4><p>胜{{ form.winPoints }} / 平{{ form.drawPoints }} / 负{{ form.lossPoints }} · {{ rankingLabel }}</p><p>每组前{{ form.advancePerGroup }}名晋级 · 种子 / 非种子分池 · 同组回避 · 抽签前允许递补</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
+          <section class="effective-rule-row"><span class="final-rule-number">5</span><div><h4>积分排名与晋级</h4><p>胜{{ form.winPoints }} / 平{{ form.drawPoints }} / 负{{ form.lossPoints }} · {{ rankingLabel }}</p><p>{{ advancementSummary }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
         </article>
         <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>状态</dt><dd class="effective-state">已生效</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>基于版本</dt><dd>V1.0</dd></div></dl><hr /><h4>启用后影响</h4><div class="impact-tags effective-impact"><span>抽签分组</span><span>赛程编排</span><span>积分排名</span><span>比赛执行</span></div><div class="effective-warning"><el-icon><WarningFilled /></el-icon><span>已进入正式比赛管理，版本不可降级；规则调整将生成新版本并保留审计，不能解除报名截止后的身份锁定。</span></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出{{ division.name || '当前组别' }}规则</el-button></div></aside>
       </template>
       <template v-else>
         <article class="effective-main panel-card">
           <h3>{{ division.name || '当前组别' }}竞赛规则 <strong>{{ division.rulesVersion || draftVersion }} · 已生效</strong></h3>
-          <section class="summary-section effective-section"><div class="summary-heading"><span>1</span><h4>赛制设置</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span>{{ formatLabel }}</span><span>{{ form.expectedTeams }} 支球队 / {{ form.groupCount }} 组</span><span>{{ groupCycleLabel }}</span><span>前 {{ form.advancePerGroup }} 名晋级</span></div></section>
+          <section class="summary-section effective-section"><div class="summary-heading"><span>1</span><h4>赛制设置</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span v-for="item in formatSummaryItems" :key="item">{{ item }}</span></div></section>
           <section class="summary-section effective-section"><div class="summary-heading"><span>2</span><h4>基础规则</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span>{{ periodModeLabel }}</span><span>单段 {{ form.matchMinutes }} 分钟</span><span>中场 {{ form.breakMinutes }} 分钟</span><span>{{ substitutionModeLabel }}</span><span>{{ rankingLabel }}</span></div></section>
         </article>
-        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>影响范围</h4><div class="impact-tags"><span>抽签分组</span><span>赛程编排</span><span>积分排名</span></div><el-alert type="warning" :closable="false" title="已进入正式竞赛管理，规则调整将生成新版本并保留审计记录。" /></aside>
+        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">本组精简正式规程已根据定版规则生成，可预览、导出并进入发布中心正式发布。</p><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" title="已进入正式竞赛管理，规则调整将生成新版本并保留审计记录。" /></aside>
       </template>
     </main>
 
     <footer class="wizard-footer">
       <div class="footer-summary"><el-icon><CircleCheck /></el-icon><span>{{ footerSummary }}</span></div>
       <div class="footer-actions">
-        <template v-if="effective"><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">进入赛程管理</el-button></template>
+        <template v-if="effective"><el-button type="primary" :loading="saving" :disabled="!canManage" @click="startRuleRevision">调整规则</el-button><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">进入赛程管理</el-button></template>
         <template v-else>
           <el-button v-if="activeIndex > 0 && (activeKey !== 'finalize' || !isProfessional)" :disabled="saving" @click="previous">上一步</el-button>
           <el-button v-if="activeKey !== 'finalize'" type="primary" :loading="saving" :disabled="!canManage" @click="next">{{ nextButtonText }} <el-icon><ArrowRight /></el-icon></el-button>
           <el-button v-else plain :icon="Printer" @click="printRules">打印预览</el-button>
-          <el-button v-if="activeKey === 'finalize' && isProfessional" plain :icon="View" @click="printRules">预览竞赛规程</el-button>
+          <el-button v-if="activeKey === 'finalize'" plain :icon="View" @click="printRules">预览竞赛规程</el-button>
           <el-button v-if="activeKey === 'finalize'" type="primary" :loading="saving" :disabled="!canManage" @click="finalize">确认规则并进入球队管理</el-button>
         </template>
       </div>
@@ -190,7 +211,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, Check, CircleCheck, CircleCheckFilled, Document, Grid, Location, MagicStick, Printer, Tickets, Trophy, View, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { confirmDivisionRules, queryById, updateRecord } from '../../utils/cloud'
+import { confirmDivisionRules, queryById, reviseDivisionRules, updateRecord } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 
@@ -228,15 +249,41 @@ const formats = [
   { value: 'league', label: '联赛制', description: '单循环 / 双循环', icon: Grid },
   { value: 'hybrid', label: '混合制', description: '联赛阶段 + 淘汰赛', icon: Tickets }
 ]
+const knockoutSizeOptions = [4, 8, 16, 32, 64]
+
+function formatLocalMinute(date = new Date()) {
+  const pad = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function defaultRegistrationDeadline() {
+  const date = new Date()
+  date.setHours(23, 59, 0, 0)
+  return formatLocalMinute(date)
+}
+
+function parseLocalMinute(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/)
+  const date = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]))
+    : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 const form = reactive({
-  formatType: 'cup', expectedTeams: 16, groupCount: 4, teamsPerGroup: 4, groupCycle: 'single', advancePerGroup: 2,
-  knockoutSize: 8, knockoutType: 'single', knockoutLegs: 'single', bracketSource: 'redraw', venueMode: 'centralized', homeAwayEnabled: false, thirdPlaceEnabled: true, knockoutTieBreak: 'extra-penalties',
+  formatType: 'cup', expectedTeams: 16, groupCount: 4, teamsPerGroup: 4, groupCycle: 'single', advancePerGroup: 2, finalRankingMode: 'top4',
+  knockoutSize: 8, knockoutType: 'single', knockoutLegs: 'single', venueMode: 'centralized', homeAwayEnabled: false, thirdPlaceEnabled: true, knockoutTieBreak: 'extra-penalties',
   birthDateCutoff: '', rosterLimit: 30, minimumRoster: 11, identityVerificationRequired: true, eligibilityReviewRequired: true, portraitRequired: true, overageAllowed: false, exceptionPolicy: 'return',
-  registrationDeadline: '2026-07-15 18:00', lockRosterAfterDeadline: true, periodMode: 'halves', matchMinutes: 35, breakMinutes: 10, playersOnField: 11, substitutionMode: 'free', substitutionLimit: 5, scoreRequired: true, playerEventsEnabled: true, refereeReportRequired: true,
+  registrationDeadline: defaultRegistrationDeadline(), lockRosterAfterDeadline: true, matchFormat: '11side', periodMode: 'halves', matchMinutes: 35, singlePeriodCount: 4, breakMinutes: 10, playersOnField: 11, substitutionMode: 'free', substitutionLimit: 5, substitutionWindows: 3, substitutionReentryAllowed: true, scoreRequired: true, playerEventsEnabled: true, refereeReportRequired: true,
   disciplineEnabled: true, yellowCardSuspension: 2, redCardSuspension: 1, secondYellowRed: true, knockoutYellowReset: false,
   winPoints: 3, drawPoints: 1, lossPoints: 0, rankingRule: 'points-headtohead-goaldiff', awayGoalsEnabled: false, liveRankingEnabled: true, manualRankingReview: false,
   advancementRule: 'group-top', sameGroupAvoidance: true
 })
+const playerFormatOptions = [5,7,8,9,11].map(players => ({ value:`${players}side`,label:`${players}人制`,players }))
+function applyMatchFormat(value) {
+  const option=playerFormatOptions.find(item => item.value===value)
+  if (option) form.playersOnField=option.players
+}
 
 const isProfessional = computed(() => division.value.mode === 'professional' || division.value.isProfessional === true || division.value.plan === 'professional')
 const steps = computed(() => isProfessional.value ? professionalSteps : simpleSteps)
@@ -251,8 +298,79 @@ const formatLabel = computed(() => formats.find(item => item.value === form.form
 const selectedFormatDescription = computed(() => ({ cup: '先进行小组赛确定晋级名额，再进入淘汰赛决出最终名次。', tournament: '在集中赛期内以淘汰赛为主完成全部场次。', league: '所有球队按单循环或双循环积分排名。', hybrid: '先完成联赛阶段，再根据排名进入淘汰赛。' })[form.formatType])
 const rankingLabel = computed(() => form.rankingRule === 'points-goaldiff-goals' ? '积分 → 净胜球 → 进球数' : '积分 → 相互战绩 → 净胜球')
 const groupCycleLabel = computed(() => form.groupCycle === 'double' ? '小组双循环' : '小组单循环')
+const leagueCycleLabel = computed(() => form.groupCycle === 'double' ? '双循环联赛' : '单循环联赛')
+const knockoutTypeLabel = computed(() => form.knockoutType === 'double' ? '双败淘汰' : '单淘汰')
+const knockoutLegsLabel = computed(() => form.knockoutLegs === 'home-away' ? '主客场两回合' : '单场决胜')
+const finalRankingLabel = computed(() => ({ champion: '仅决出冠亚军', top4: '决出前四名', full: '生成全部名次' })[form.finalRankingMode] || '决出前四名')
+const finalRankingHint = computed(() => form.formatType === 'league' ? '联赛按积分自动生成全排名' : ({ champion: '不安排三四名赛', top4: '包含三四名决赛', full: '所有球队都有唯一最终名次' })[form.finalRankingMode])
+const basicSettingsTitle = computed(() => ({ cup: '杯赛基础配置', tournament: '赛会制基础配置', league: '联赛基础配置', hybrid: '混合制基础配置' })[form.formatType] || '基础赛制')
+const basicSettingsSubtitle = computed(() => ({ cup: '设置小组赛与晋级结构', tournament: '设置集中淘汰赛结构', league: '设置循环与积分排名结构', hybrid: '设置联赛阶段与淘汰赛结构' })[form.formatType] || '设置比赛结构')
+const formatStructureSummary = computed(() => {
+  if (form.formatType === 'tournament') return `${form.expectedTeams} 支球队 · ${form.knockoutSize} 强${knockoutTypeLabel.value} · ${knockoutLegsLabel.value} · ${finalRankingLabel.value}`
+  if (form.formatType === 'league') return `${form.expectedTeams} 支球队 · ${leagueCycleLabel.value} · ${form.venueMode === 'home-away' ? '主客场' : '集中场地'} · 积分生成全排名`
+  if (form.formatType === 'hybrid') return `${form.expectedTeams} 支球队 · ${leagueCycleLabel.value} · 前 ${form.knockoutSize} 名进入${knockoutTypeLabel.value} · ${finalRankingLabel.value}`
+  return `${form.expectedTeams} 支球队 · ${form.groupCount} 个小组 · 每组 ${form.teamsPerGroup} 支 · ${groupCycleLabel.value} · 每组前 ${form.advancePerGroup} 名晋级 · ${finalRankingLabel.value}`
+})
+const formatAutoSummary = computed(() => {
+  if (form.formatType === 'tournament') return `按 ${form.knockoutSize} 强${knockoutTypeLabel.value}生成淘汰对阵，${knockoutLegsLabel.value}；${finalRankingLabel.value}。`
+  if (form.formatType === 'league') return `自动生成${leagueCycleLabel.value}赛程，按积分与同分规则生成全部名次。`
+  if (form.formatType === 'hybrid') return `先生成${leagueCycleLabel.value}赛程，前 ${form.knockoutSize} 名进入${knockoutTypeLabel.value}；${finalRankingLabel.value}。`
+  return `自动生成 ${form.groupCount} 个小组，${form.groupCount * form.advancePerGroup} 支球队晋级淘汰赛；${finalRankingLabel.value}。`
+})
+const formatSummaryItems = computed(() => {
+  if (form.formatType === 'tournament') return [formatLabel.value, `${form.expectedTeams} 支球队`, `${form.knockoutSize} 强${knockoutTypeLabel.value}`, knockoutLegsLabel.value, finalRankingLabel.value]
+  if (form.formatType === 'league') return [formatLabel.value, `${form.expectedTeams} 支球队`, leagueCycleLabel.value, form.venueMode === 'home-away' ? '主客场' : '集中场地', '积分全排名']
+  if (form.formatType === 'hybrid') return [formatLabel.value, `${form.expectedTeams} 支球队`, leagueCycleLabel.value, `前 ${form.knockoutSize} 名晋级`, knockoutTypeLabel.value]
+  return [formatLabel.value, `${form.expectedTeams} 支球队 / ${form.groupCount} 组`, groupCycleLabel.value, `每组前 ${form.advancePerGroup} 名晋级`, finalRankingLabel.value]
+})
+const advancementSummary = computed(() => {
+  if (form.formatType === 'league') return '无淘汰晋级阶段，按联赛积分生成最终排名。'
+  if (form.formatType === 'tournament') return `${form.knockoutSize} 强${knockoutTypeLabel.value}，对阵签位在后续抽签分组中生成。`
+  if (form.formatType === 'hybrid') return `联赛阶段前 ${form.knockoutSize} 名晋级${knockoutTypeLabel.value}。`
+  return `各组前 ${form.advancePerGroup} 名晋级，种子队与非种子队分池，执行同组回避及赛前递补核验。`
+})
+watch(() => form.formatType, type => {
+  if (type === 'league') form.finalRankingMode = 'full'
+  if (['tournament', 'hybrid'].includes(type) && !knockoutSizeOptions.includes(Number(form.knockoutSize))) form.knockoutSize = 8
+})
+function disablePastRegistrationDate(date) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const candidate = new Date(date)
+  candidate.setHours(0, 0, 0, 0)
+  return candidate.getTime() < today.getTime()
+}
+function registrationSelectionIsToday() {
+  const selected = parseLocalMinute(form.registrationDeadline)
+  if (!selected) return false
+  const now = new Date()
+  return selected.getFullYear() === now.getFullYear() && selected.getMonth() === now.getMonth() && selected.getDate() === now.getDate()
+}
+function disabledPastRegistrationHours() {
+  if (!registrationSelectionIsToday()) return []
+  const currentHour = new Date().getHours()
+  return Array.from({ length: currentHour }, (_, index) => index)
+}
+function disabledPastRegistrationMinutes(hour) {
+  const now = new Date()
+  if (!registrationSelectionIsToday() || Number(hour) !== now.getHours()) return []
+  return Array.from({ length: now.getMinutes() }, (_, index) => index)
+}
+function validateRegistrationDeadline() {
+  const deadline = parseLocalMinute(form.registrationDeadline)
+  if (!deadline) {
+    ElMessage.warning('请选择有效的报名截止时间')
+    return false
+  }
+  if (deadline.getTime() + 60000 <= Date.now()) {
+    ElMessage.warning('报名截止时间不能早于当前时间')
+    return false
+  }
+  return true
+}
 const periodModeLabel = computed(() => form.periodMode === 'single' ? '单节制' : '上下半场制')
-const substitutionModeLabel = computed(() => form.substitutionMode === 'limited' ? `限定换人 ${form.substitutionLimit} 次` : '自由换人')
+const substitutionModeLabel = computed(() => form.substitutionMode === 'limited' ? `限定换人 ${form.substitutionLimit} 人 / ${form.substitutionWindows} 次` : '自由换人（不限次数）')
+watch(() => form.substitutionMode, mode => { form.substitutionReentryAllowed = mode === 'free' })
 const knockoutTieBreakLabel = computed(() => form.knockoutTieBreak === 'penalties' ? '直接点球决胜' : '加时赛 + 点球决胜')
 const modeStateText = computed(() => effective.value ? `${isProfessional.value ? '专业模式' : '简易模式'} · 已锁定` : `${isProfessional.value ? '专业模式' : '简易模式'} · ${activeKey.value === 'finalize' ? '待定版' : '当前配置'}`)
 const pageSubtitle = computed(() => {
@@ -267,7 +385,7 @@ const finalizedTimeText = computed(() => formatDateTime(division.value.finalized
 const nextButtonText = computed(() => `保存并进入${steps.value[activeIndex.value + 1]?.title || '下一步'}`)
 const footerSummary = computed(() => {
   if (effective.value) return `${division.value.name || '当前组别'}规则已完成定版，可用于本组抽签、赛程和积分计算。`
-  if (activeKey.value === 'format') return `${form.expectedTeams} 支球队 · ${form.groupCount} 个小组 · ${groupCycleLabel.value} · 前 ${form.advancePerGroup} 名晋级`
+  if (activeKey.value === 'format') return formatStructureSummary.value
   if (activeKey.value === 'finalize') return '规则可定版，确认后进入球队管理。'
   return `当前步骤：${steps.value[activeIndex.value]?.title || '规则配置'}，保存后进入下一步。`
 })
@@ -313,18 +431,77 @@ function hydrateForm(source) {
   const keys = Object.keys(form)
   keys.forEach(key => { if (source[key] !== undefined && source[key] !== null) form[key] = source[key] })
   form.formatType = source.formatType || source.tournamentType || form.formatType
+  const formatConfig = source.formatConfig && typeof source.formatConfig === 'object' ? source.formatConfig : {}
+  if (form.formatType === 'league') form.groupCycle = formatConfig.loopType || source.loopType || form.groupCycle
+  if (form.formatType === 'hybrid') {
+    form.groupCycle = formatConfig.leagueLoopType || source.leagueLoopType || form.groupCycle
+    form.knockoutSize = Number(formatConfig.cupAdvanceCount || source.cupAdvanceCount || form.knockoutSize)
+  }
+  if (form.formatType === 'tournament') {
+    form.knockoutSize = Number(formatConfig.bracketSize || source.bracketSize || form.knockoutSize)
+    const cupMode = formatConfig.cupMode || source.cupMode
+    if (cupMode) form.knockoutLegs = cupMode === 'two-leg' ? 'home-away' : 'single'
+  }
   form.expectedTeams = Number(source.expectedTeams || source.teamCount || form.expectedTeams)
   form.matchMinutes = Number(source.matchMinutes || form.matchMinutes)
   form.playersOnField = Number(source.playersOnField || form.playersOnField)
+  form.matchFormat = source.matchFormat || `${form.playersOnField}side`
+  applyMatchFormat(form.matchFormat)
+  if (!source.finalRankingMode) {
+    form.finalRankingMode = source.fullRankingEnabled === true ? 'full' : (source.thirdPlaceEnabled === false ? 'champion' : 'top4')
+  }
+  if (form.formatType === 'league') form.finalRankingMode = 'full'
+  const registrationDeadline = parseLocalMinute(form.registrationDeadline)
+  if (registrationDeadline) form.registrationDeadline = formatLocalMinute(registrationDeadline)
+  if (!effective.value && (!registrationDeadline || registrationDeadline.getTime() + 60000 <= Date.now())) {
+    form.registrationDeadline = defaultRegistrationDeadline()
+  }
   formRenderKey.value += 1
 }
 
+function formatAwareRuleFields() {
+  const common = { expectedTeams: Number(form.expectedTeams), finalRankingMode: form.finalRankingMode }
+  if (form.formatType === 'tournament') {
+    const formatConfig = {
+      ...common,
+      bracketSize: Number(form.knockoutSize),
+      knockoutType: form.knockoutType,
+      knockoutLegs: form.knockoutLegs,
+      cupMode: form.knockoutLegs === 'home-away' ? 'two-leg' : 'single'
+    }
+    return { formatConfig, bracketSize: formatConfig.bracketSize, cupMode: formatConfig.cupMode, hasThirdPlace: form.finalRankingMode === 'top4' }
+  }
+  if (form.formatType === 'league') {
+    const formatConfig = { ...common, loopType: form.groupCycle, venueMode: form.venueMode, finalRankingMode: 'full' }
+    return { formatConfig, loopType: formatConfig.loopType, finalRankingMode: 'full', fullRankingEnabled: true, hasThirdPlace: false }
+  }
+  if (form.formatType === 'hybrid') {
+    const formatConfig = {
+      ...common,
+      leagueLoopType: form.groupCycle,
+      cupAdvanceCount: Number(form.knockoutSize),
+      knockoutType: form.knockoutType,
+      knockoutLegs: form.knockoutLegs
+    }
+    return { formatConfig, leagueLoopType: formatConfig.leagueLoopType, cupAdvanceCount: formatConfig.cupAdvanceCount, hasThirdPlace: form.finalRankingMode === 'top4' }
+  }
+  const formatConfig = {
+    ...common,
+    groupCount: Number(form.groupCount),
+    teamsPerGroup: Number(form.teamsPerGroup),
+    groupCycle: form.groupCycle,
+    advancePerGroup: Number(form.advancePerGroup)
+  }
+  return { formatConfig, advanceCount: formatConfig.advancePerGroup, hasThirdPlace: form.finalRankingMode === 'top4' }
+}
+
 function rulePayload(progress) {
-  return { ...form, mode: isProfessional.value ? 'professional' : 'simple', isProfessional: isProfessional.value, ruleStatus: 'draft', ruleProgress: progress, updateTime: new Date() }
+  return { ...form, ...formatAwareRuleFields(), fullRankingEnabled: form.finalRankingMode === 'full', thirdPlaceEnabled: form.finalRankingMode !== 'champion', mode: isProfessional.value ? 'professional' : 'simple', isProfessional: isProfessional.value, ruleStatus: 'draft', ruleProgress: progress, updateTime: new Date() }
 }
 
 async function save(progress) {
   if (!canManage.value) return false
+  if (!validateRegistrationDeadline()) return false
   saving.value = true
   try {
     const payload = rulePayload(progress)
@@ -335,6 +512,28 @@ async function save(progress) {
   } catch (error) {
     ElMessage.error(error.message || '保存规则失败')
     return false
+  } finally {
+    saving.value = false
+  }
+}
+
+async function startRuleRevision() {
+  if (!canManage.value || saving.value) return
+  if (localVisualQa) {
+    Object.assign(division.value, { rulesLocked: false, ruleFinalized: false, ruleStatus: 'draft', ruleProgress: 0, rulesVersionDraft: `${division.value.rulesVersion || 'V1.0'}-R1` })
+    replaceStep('finalize')
+    return
+  }
+  saving.value = true
+  try {
+    const result = await reviseDivisionRules(divisionId)
+    if (!result?.success) throw new Error(result?.error || '创建规则草稿失败')
+    Object.assign(division.value, result.data || {})
+    hydrateForm(division.value)
+    replaceStep('finalize')
+    ElMessage.success(result.message || '已创建新的规则草稿')
+  } catch (error) {
+    ElMessage.error(error.message || '创建规则草稿失败')
   } finally {
     saving.value = false
   }
@@ -354,10 +553,12 @@ function replaceStep(step) { router.replace({ query: { ...route.query, divisionI
 
 async function finalize() {
   if (!canManage.value) return
+  if (!validateRegistrationDeadline()) return
   saving.value = true
   try {
     const result = await confirmDivisionRules(divisionId, {
       ...form,
+      ...formatAwareRuleFields(),
       mode: isProfessional.value ? 'professional' : 'simple',
       isProfessional: isProfessional.value
     })
@@ -389,11 +590,11 @@ function escapeDocumentText(value) {
 function exportRules() {
   const title = escapeDocumentText(`${division.value.name || '竞赛组别'}竞赛规程`)
   const sections = [
-    ['一、赛制结构', `${formatLabel.value}；${form.expectedTeams}支球队分为${form.groupCount}组，每组${form.teamsPerGroup}支，${groupCycleLabel.value}，每组前${form.advancePerGroup}名晋级。`],
+    ['一、赛制结构', `${formatLabel.value}；${formatStructureSummary.value}。`],
     ['二、参赛资格', `每队赛事名单${form.minimumRoster}—${form.rosterLimit}人，报名截止后按赛事名单快照执行。`],
     ['三、比赛办法', `上场${form.playersOnField}人，${periodModeLabel.value}每段${form.matchMinutes}分钟，中场休息${form.breakMinutes}分钟，${substitutionModeLabel.value}。`],
     ['四、积分排名', `胜${form.winPoints}分、平${form.drawPoints}分、负${form.lossPoints}分；同分排名按${rankingLabel.value}。`],
-    ['五、晋级规则', `各组前${form.advancePerGroup}名晋级，种子队与非种子队分池，执行同组回避及赛前递补核验。`],
+    ['五、晋级规则', advancementSummary.value],
     ['六、纪律处罚', `红黄牌与停赛按结构化比赛事件执行；淘汰赛平局采用${knockoutTieBreakLabel.value}。`]
   ]
   const body = sections.map(([heading, content]) => `<h2>${escapeDocumentText(heading)}</h2><p>${escapeDocumentText(content)}</p>`).join('')
@@ -423,8 +624,9 @@ onUnmounted(() => window.removeEventListener('sxf-visual-qa-ready', load))
 .tournament-identity { display:flex; min-width:0; align-items:center; gap:13px; }.tournament-identity>img,.logo-placeholder { width:46px; height:46px; flex:0 0 46px; object-fit:contain; }.logo-placeholder { display:grid; place-items:center; color:#087c43; font-size:24px; }.tournament-identity h1 { overflow:hidden; margin:0 7px 0 0; font-size:23px; text-overflow:ellipsis; white-space:nowrap; }.header-chip,.status-chip,.mode-state,.draft-version { padding:5px 10px; border:1px solid #c5e1ff; border-radius:5px; color:#1680df; font-size:13px; white-space:nowrap; }.status-chip,.mode-state { border-color:#bde3c9; color:#147b43; background:#f2faf4; }.header-meta { display:flex; align-items:center; gap:6px; margin-left:8px; color:#526159; font-size:13px; white-space:nowrap; }
 .page-heading { display:flex; align-items:flex-start; justify-content:space-between; margin:27px 0 18px; }.title-line,.heading-actions { display:flex; align-items:center; gap:15px; }.page-heading h2 { margin:0; font-size:29px; }.page-heading p { margin:8px 0 0; color:#65736b; font-size:14px; }.mode-state.professional { border-color:#e7c36c; color:#8f6500; background:#fffaf0; }.heading-actions { gap:18px; }.division-selector { width:235px; }.draft-version { border:0; color:#555f59; background:#f1f3f2; }
 .rule-steps { position:relative; display:flex; align-items:flex-start; max-width:980px; margin:0 auto 24px; }.rule-steps.professional { max-width:none; padding-top:28px; }.step-counter { position:absolute; top:4px; left:0; color:#087c43; font-size:14px; font-weight:600; }.step-item { display:flex; width:110px; flex:0 0 110px; flex-direction:column; align-items:center; gap:6px; padding:0; border:0; color:#18231d; background:transparent; }.step-item:not(:disabled) { cursor:pointer; }.step-circle { display:grid; width:40px; height:40px; place-items:center; border:1px solid #d6dcda; border-radius:50%; color:#303632; font-size:19px; background:#f5f6f6; }.step-item.active .step-circle,.step-item.done .step-circle { border-color:#087c43; color:#fff; background:#087c43; }.step-item.done:not(.active) .step-circle { color:#087c43; background:#fff; }.step-item strong { font-size:15px; }.step-item small { color:#6d7972; font-size:12px; white-space:nowrap; }.step-item.active strong,.step-item.active small,.step-item.done strong { color:#087c43; }.step-item.locked .step-circle { color:#858b87; }.step-line { height:2px; flex:1; margin-top:19px; background:#d4d9d6; }.step-line.done { background:#087c43; }
-.scope-alert { min-height:58px; margin-bottom:20px; border:1px solid #c2dfcb; background:#f8fcf9; }.wizard-content { min-height:440px; }.panel-card { border:1px solid #dfe6e2; border-radius:9px; background:#fff; box-shadow:0 2px 10px rgba(23,55,35,.035); }.panel-card h3 { margin:0 0 20px; font-size:18px; }.format-picker { float:left; width:52%; min-height:380px; padding:22px; }.format-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }.format-grid button { position:relative; display:flex; min-height:184px; flex-direction:column; align-items:center; justify-content:center; gap:15px; padding:18px 10px; border:1px solid #dce3df; border-radius:8px; color:#171d19; background:#fff; cursor:pointer; }.format-grid button.selected { border-color:#0a8649; color:#087c43; box-shadow:0 0 0 1px #0a8649 inset; }.format-grid button>.el-icon:first-child { font-size:40px; }.format-grid button span { text-align:center; }.format-grid button strong,.format-grid button small { display:block; }.format-grid button strong { font-size:17px; }.format-grid button small { margin-top:9px; color:#4f5c54; font-size:12px; }.selected-check { position:absolute; top:10px; right:10px; color:#087c43; }.format-description { margin:28px 0 0; color:#76837b; line-height:1.7; }.format-description strong { display:block; margin-bottom:7px; color:#28342d; }
-.basic-format-settings { float:right; width:50%; width:calc(48% - 20px); min-height:380px; padding:22px 26px; }.basic-format-settings :deep(.el-form-item) { margin-bottom:9px; }.basic-format-settings :deep(.el-input-number),.basic-format-settings :deep(.el-select) { width:100%; }.auto-result { display:flex; align-items:center; gap:9px; margin-top:8px; padding:15px; border:1px solid #c9dfd0; border-radius:7px; color:#24372c; background:#f9fcfa; }.auto-result .el-icon { color:#078344; font-size:22px; }.format-picker.professional{float:none;width:auto;min-height:0;padding:0;border:0;background:transparent;box-shadow:none}.format-picker.professional>h3,.format-picker.professional .format-description{display:none}.format-picker.professional .format-grid{gap:18px}.format-picker.professional .format-grid button{min-height:88px;flex-direction:row;justify-content:flex-start;gap:16px;padding:16px 24px;text-align:left}.format-picker.professional .format-grid button>.el-icon:first-child{font-size:34px}.format-picker.professional .format-grid button span{text-align:left}.format-picker.professional .format-grid button strong{font-size:18px}.format-picker.professional .format-grid button small{margin-top:5px}.professional-settings { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; clear:both; margin-top:18px; }.professional-settings .panel-card { padding:20px 22px; }.professional-settings :deep(.el-form-item) { margin-bottom:9px; }.professional-settings :deep(.el-input-number),.professional-settings :deep(.el-select) { width:100%; }
+.scope-alert { min-height:58px; margin-bottom:20px; border:1px solid #c2dfcb; background:#f8fcf9; }.wizard-content { min-width:0; min-height:440px; }.panel-card { border:1px solid #dfe6e2; border-radius:9px; background:#fff; box-shadow:0 2px 10px rgba(23,55,35,.035); }.panel-card h3 { margin:0 0 20px; font-size:18px; }.format-stage { display:grid; width:100%; min-width:0; grid-template-columns:minmax(0,1fr) minmax(300px,340px); align-items:start; gap:20px; }.format-stage.professional { display:block; }.format-picker { width:auto; min-width:0; min-height:342px; padding:22px; }.format-grid { display:grid; min-width:0; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }.format-grid button { position:relative; display:flex; min-width:0; min-height:164px; flex-direction:column; align-items:center; justify-content:center; gap:13px; padding:16px 10px; border:1px solid #dce3df; border-radius:8px; color:#171d19; background:#fff; cursor:pointer; }.format-grid button.selected { border-color:#0a8649; color:#087c43; box-shadow:0 0 0 1px #0a8649 inset; }.format-grid button>.el-icon:first-child { font-size:38px; }.format-grid button span { text-align:center; }.format-grid button strong,.format-grid button small { display:block; }.format-grid button strong { font-size:17px; }.format-grid button small { margin-top:8px; color:#4f5c54; font-size:12px; }.selected-check { position:absolute; top:10px; right:10px; color:#087c43; }.format-description { margin:22px 0 0; color:#76837b; line-height:1.65; }.format-description strong { display:block; margin-bottom:5px; color:#28342d; }
+.basic-format-settings { width:auto; min-width:0; max-width:340px; min-height:342px; padding:20px; }.basic-settings-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:16px; }.basic-settings-heading h3 { margin:0; font-size:18px; }.basic-settings-heading p { margin:5px 0 0; color:#748078; font-size:12px; }.basic-settings-heading>span { padding:5px 9px; border-radius:99px; color:#087c43; background:#edf8f0; font-size:12px; white-space:nowrap; }.basic-setting-grid { display:grid; min-width:0; grid-template-columns:1fr 1fr; gap:10px; }.basic-setting-item { display:grid; min-width:0; gap:7px; padding:10px 11px; border:1px solid #e1e8e3; border-radius:7px; background:#fafcfb; }.basic-setting-item>span,.basic-cycle-row>span { color:#55645b; font-size:12px; font-weight:600; }.basic-setting-item :deep(.el-input-number),.basic-setting-item :deep(.el-select) { width:100%; min-width:0; }.basic-cycle-row { display:grid; min-width:0; grid-template-columns:84px minmax(0,1fr); align-items:center; gap:12px; margin-top:11px; padding:10px 11px; border:1px solid #e1e8e3; border-radius:7px; }.basic-cycle-row :deep(.el-select) { width:100%; min-width:0; }.auto-result { display:flex; min-width:0; align-items:center; gap:9px; margin-top:11px; padding:11px 12px; border:1px solid #c9dfd0; border-radius:7px; color:#24372c; background:#f7fcf8; font-size:12px; line-height:1.5; }.auto-result .el-icon { flex:0 0 auto; color:#078344; font-size:20px; }.format-picker.professional{width:auto;min-height:0;padding:0;border:0;background:transparent;box-shadow:none}.format-picker.professional>h3,.format-picker.professional .format-description{display:none}.format-picker.professional .format-grid{gap:18px}.format-picker.professional .format-grid button{min-height:88px;flex-direction:row;justify-content:flex-start;gap:16px;padding:16px 24px;text-align:left}.format-picker.professional .format-grid button>.el-icon:first-child{font-size:34px}.format-picker.professional .format-grid button span{text-align:left}.format-picker.professional .format-grid button strong{font-size:18px}.format-picker.professional .format-grid button small{margin-top:5px}.professional-settings { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:18px; }.professional-settings .panel-card { padding:20px 22px; }.professional-settings :deep(.el-form-item) { margin-bottom:9px; }.professional-settings :deep(.el-input-number),.professional-settings :deep(.el-select) { width:100%; }
+.ranking-scope-row { display:grid; grid-template-columns:74px 1fr; align-items:center; gap:6px 10px; margin-top:8px; padding:8px 10px; border:1px solid #cfe2d5; border-radius:7px; background:#fbfefc; }.ranking-scope-row>span { color:#33443a; font-size:12px; font-weight:700; }.ranking-scope-row :deep(.el-radio-group) { display:flex; }.ranking-scope-row :deep(.el-radio-button) { flex:1; }.ranking-scope-row :deep(.el-radio-button__inner) { width:100%; padding:7px 6px; }.ranking-scope-row small { grid-column:2; color:#6c7971; font-size:11px; }
 .simple-rules-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.simple-rules-grid .panel-card{min-height:232px;padding:22px 25px}.simple-rules-grid h3{display:flex;align-items:center;gap:10px}.simple-rules-grid h3>span{display:grid;width:39px;height:39px;place-items:center;border-radius:50%;color:#fff;background:#087c43}.simple-rules-grid h3 em{margin-left:auto;padding:3px 7px;border-radius:4px;color:#138044;background:#edf8f0;font-size:12px;font-style:normal}.simple-rules-grid :deep(.el-form-item){margin-bottom:11px}.simple-rules-grid :deep(.el-input-number){width:100%}.simple-rules-grid p{margin:9px 0 0;color:#6e7b73;font-size:12px;line-height:1.6}.simple-rules-grid .unit{margin-left:8px;color:#526158;font-size:13px;white-space:nowrap}.discipline-card{grid-column:span 2}.default-rules{display:grid;grid-template-columns:1fr;align-content:start;gap:14px}.default-rules h3{grid-column:1/-1}.default-rules div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #edf1ee;color:#56645c}.default-rules div:last-child{border-bottom:0}.default-rules strong{color:#27362d}
 .rule-card-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }.rule-card-grid .panel-card { min-height:260px; padding:22px 25px; }.rule-card-grid .panel-card h3 { display:flex; align-items:center; gap:10px; }.rule-card-grid h3>span,.summary-heading>span { display:grid; width:31px; height:31px; place-items:center; border-radius:50%; color:#fff; font-size:14px; background:#087c43; }.rule-card-grid :deep(.el-date-editor),.rule-card-grid :deep(.el-input-number),.rule-card-grid :deep(.el-select) { width:100%; }.eligibility-grid,.execution-grid,.ranking-grid,.advancement-grid { grid-template-columns:repeat(4,1fr); }.points-inputs { display:grid; gap:13px; }.points-inputs label { display:flex; align-items:center; justify-content:space-between; gap:10px; }.ranking-order { display:grid; gap:9px; margin:20px 0 0; padding-left:25px; color:#56645c; }.ranking-grid .panel-card>.el-switch { display:flex; margin:20px 0; }.advancement-grid .panel-card>p { color:#69776f; }
 .finalize-layout,.effective-layout { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:28px; }.finalize-main,.effective-main { padding:28px 34px; }.finalize-main>h3,.effective-main>h3 { font-size:22px; }.effective-main>h3 strong { margin-left:10px; color:#078442; font-size:17px; }.summary-section { padding:17px 0 23px; border-bottom:1px solid #e8edea; }.summary-heading { display:flex; align-items:center; gap:12px; }.summary-heading h4 { flex:1; margin:0; font-size:17px; }.summary-heading em { display:flex; align-items:center; gap:5px; color:#078442; font-style:normal; }.summary-heading button { padding:7px 18px; border:1px solid #aeb8b2; border-radius:5px; background:#fff; cursor:pointer; }.summary-items { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:16px; }.summary-items span { display:flex; min-height:62px; align-items:center; justify-content:center; gap:7px; padding:10px; border:1px solid #e1e6e3; border-radius:6px; text-align:center; }.system-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:14px; padding:14px; border:1px solid #dce7df; border-radius:7px; background:#fbfdfb; }.system-summary h4 { grid-column:1/-1; margin:0; color:#087c43; }.system-summary span { padding:10px; border:1px solid #e1e8e3; border-radius:6px; background:#fff; }.finalize-aside,.effective-aside { padding:28px 26px; }.finalize-aside dl,.effective-aside dl { display:grid; gap:18px; margin:0; }.finalize-aside dl>div,.effective-aside dl>div { display:flex; justify-content:space-between; }.finalize-aside dt,.effective-aside dt { color:#67746c; }.finalize-aside dd,.effective-aside dd { margin:0; }.finalize-aside dd.warning { color:#f07813; }.finalize-aside hr,.effective-aside hr { margin:26px 0; border:0; border-top:1px solid #e5eae7; }.impact-tags { display:flex; gap:10px; margin:16px 0 28px; }.impact-tags span { padding:5px 9px; border:1px solid #b9ddc5; border-radius:5px; color:#087c43; }.aside-title { display:flex; align-items:center; justify-content:space-between; }.aside-title strong { color:#078442; }.effective-section:last-child { border-bottom:0; }.effective-layout { min-height:500px; }
@@ -488,9 +690,9 @@ onUnmounted(() => window.removeEventListener('sxf-visual-qa-ready', load))
 .effective-export-actions { display:grid; grid-template-columns:1fr 1.25fr; gap:14px; margin-top:18px; }
 .effective-export-actions :deep(.el-button) { width:100%; min-height:44px; margin:0; }
 .wizard-footer { position:fixed; right:0; bottom:0; left:var(--admin-sidebar-width); z-index:12; display:flex; min-height:82px; align-items:center; justify-content:space-between; gap:24px; padding:12px 30px; border-top:1px solid #dfe6e1; background:rgba(255,255,255,.98); box-shadow:0 -3px 14px rgba(20,46,31,.05); }.footer-summary { display:flex; min-width:0; align-items:center; gap:10px; color:#087c43; font-size:14px; }.footer-summary .el-icon { font-size:25px; }.footer-actions { display:flex; flex:0 0 auto; gap:16px; }.footer-actions :deep(.el-button) { min-width:184px; min-height:48px; font-size:15px; }.footer-actions :deep(.el-button--primary) { min-width:265px; }.permission-alert { margin-top:16px; }
-@media (max-width:1400px) { .header-meta { display:none; }.format-picker { width:55%; }.basic-format-settings { width:calc(45% - 18px); }.format-grid { gap:10px; }.rule-card-grid { grid-template-columns:repeat(2,1fr); }.professional-settings { grid-template-columns:1fr 1fr; }.professional-settings article:last-child { grid-column:1/-1; } }
-@media (max-width:1050px) { .format-picker,.basic-format-settings { float:none; width:100%; }.basic-format-settings { margin-top:18px; }.professional-settings,.finalize-layout,.effective-layout { grid-template-columns:1fr; }.rule-steps { overflow-x:auto; }.step-item { min-width:100px; }.wizard-footer { left:0; }.summary-items { grid-template-columns:repeat(2,1fr); } }
-@media (max-width:720px) { .page-heading,.tournament-header { align-items:flex-start; }.page-heading,.heading-actions { flex-direction:column; }.header-chip,.status-chip { display:none; }.format-grid,.rule-card-grid,.professional-settings,.summary-items,.system-summary { grid-template-columns:1fr; }.system-summary h4 { grid-column:auto; }.wizard-footer { position:sticky; flex-direction:column; align-items:stretch; }.footer-actions { width:100%; }.footer-actions :deep(.el-button) { flex:1; min-width:0; } }
+@media (max-width:1400px) { .header-meta { display:none; }.format-stage { grid-template-columns:720px 410px; }.format-picker { width:720px; }.basic-format-settings { width:410px; }.format-grid { gap:10px; }.rule-card-grid { grid-template-columns:repeat(2,1fr); }.professional-settings { grid-template-columns:1fr 1fr; }.professional-settings article:last-child { grid-column:1/-1; } }
+@media (max-width:1200px) { .format-stage { grid-template-columns:minmax(0,800px); }.format-picker { width:100%; }.basic-format-settings { width:430px; max-width:100%; }.professional-settings,.finalize-layout,.effective-layout { grid-template-columns:1fr; }.rule-steps { overflow-x:auto; }.step-item { min-width:100px; }.wizard-footer { left:0; }.summary-items { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:720px) { .page-heading,.tournament-header { align-items:flex-start; }.page-heading,.heading-actions { flex-direction:column; }.header-chip,.status-chip { display:none; }.format-grid,.rule-card-grid,.professional-settings,.summary-items,.system-summary,.basic-setting-grid { grid-template-columns:1fr; }.basic-format-settings { width:100%; }.system-summary h4 { grid-column:auto; }.wizard-footer { position:sticky; flex-direction:column; align-items:stretch; }.footer-actions { width:100%; }.footer-actions :deep(.el-button) { flex:1; min-width:0; } }
 @media print { .sidebar,.tournament-header,.wizard-footer,.page-heading .heading-actions { display:none!important; }.rules-page { padding:0; }.finalize-layout,.effective-layout { grid-template-columns:1fr; } }
 .professional-settings :deep(.el-form-item__content) { position:relative; }
 .select-value-overlay { position:absolute; z-index:2; top:50%; left:12px; max-width:calc(100% - 44px); overflow:hidden; color:#17231c; font-size:14px; line-height:1.2; pointer-events:none; text-overflow:ellipsis; transform:translateY(-50%); white-space:nowrap; }
@@ -534,4 +736,6 @@ onUnmounted(() => window.removeEventListener('sxf-visual-qa-ready', load))
 .is-advancement-step .footer-summary { display:none; }
 .is-advancement-step .footer-actions { z-index:14; margin-left:auto; }
 @media (max-width:1180px) { .advancement-layout { grid-template-columns:1fr; }.bracket { min-height:220px; } }
+.simple-rules-grid :deep(.el-date-editor){width:100%}.rule-mode-note{margin:4px 0 11px;padding:9px 11px;border-radius:7px;color:#53675b;background:#f2f6f3;font-size:12px;line-height:1.5}.rule-mode-note.free{color:#087c43;background:#edf8f0}.rule-mode-note.limited{color:#9a6510;background:#fff7e7}.discipline-inline-form{display:grid;grid-template-columns:1.35fr 1.15fr .8fr 1fr;gap:14px;align-items:start}.discipline-inline-form :deep(.el-form-item){min-width:0;margin-bottom:0}.discipline-value{display:flex;align-items:center;gap:4px}.discipline-value :deep(.el-input-number){min-width:100px}.discipline-inline-form :deep(.el-switch){margin-top:7px}@media(max-width:1180px){.discipline-inline-form{grid-template-columns:1fr 1fr}}@media(max-width:760px){.discipline-inline-form{grid-template-columns:1fr}}
+.simple-rules-grid .panel-card{min-height:270px}.simple-rules-grid :deep(.el-input-number){width:170px}.simple-rules-grid .participation-form :deep(.el-form-item){margin-bottom:14px}.simple-rules-grid .participation-form :deep(.el-form-item:last-child){margin-bottom:18px}.simple-rules-grid .participation-form + p{margin-top:18px}.summary-section.is-clickable,.final-rule-row.is-clickable{cursor:pointer;transition:border-color .18s,background .18s,box-shadow .18s}.summary-section.is-clickable{margin:0 -14px;padding-right:14px;padding-left:14px;border-radius:8px}.summary-section.is-clickable:hover,.summary-section.is-clickable:focus-visible,.final-rule-row.is-clickable:hover,.final-rule-row.is-clickable:focus-visible{outline:0;border-color:#88c9a1;background:#f5fbf7;box-shadow:0 0 0 2px rgba(8,124,67,.08)}@media(max-width:760px){.simple-rules-grid :deep(.el-input-number){width:100%}}
 </style>

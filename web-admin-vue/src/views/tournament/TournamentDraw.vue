@@ -1,5 +1,7 @@
 <template>
-  <QuickHybridConsole v-if="quickHybridFlow" :tournament-id="tournamentId" />
+  <section v-if="!modeOverview && !drawPrerequisitesReady" class="draw-requirement-state"><el-icon class="is-loading"><Loading /></el-icon><h2>正在核对球队审核数量</h2></section>
+  <section v-else-if="drawBlocked" class="draw-requirement-state"><el-icon><Lock /></el-icon><h2>暂不能抽签与分组</h2><p>当前组别赛制要求 {{ activeRequiredTeamCount }} 支球队，球队管理已审核通过 {{ activeApprovedTeamCount }} 支。</p><el-progress :percentage="drawRequirementProgress" /><el-button type="success" @click="router.push({ path:`/tournaments/${tournamentId}/registration`, query:{ divisionId:activeDivisionId, tab:'all' } })">前往球队审查</el-button></section>
+  <QuickHybridConsole v-else-if="quickHybridFlow" :tournament-id="tournamentId" />
   <QuickTournamentConsole v-else-if="quickTournamentFlow" :tournament-id="tournamentId" />
   <QuickDrawResult v-else-if="quickResultFlow" :tournament-id="tournamentId" />
   <ProfessionalDrawFlow v-else-if="professionalFlow" :tournament-id="tournamentId" />
@@ -18,7 +20,7 @@
     <main>
       <div class="quick-setup-heading">
         <div><h1>抽签与分组 <small>设置快速分组的基础参数</small></h1></div>
-        <label>当前组别<span class="quick-current-division">{{ activeDivision.name }}<el-icon><ArrowDown /></el-icon></span></label>
+        <label>当前组别<span class="quick-current-division">{{ activeDivision.name }}<el-icon><Lock /></el-icon></span></label>
       </div>
       <nav class="quick-flow-tabs">
         <button class="active" type="button">分组设置</button>
@@ -75,11 +77,11 @@
           <span class="division-crest" :class="[`crest-${index % 5}`, { pro: divisionIsProfessional(division) }]">
             <el-icon><Trophy /></el-icon><small>{{ divisionIsProfessional(division) ? 'PRO' : division.name?.replace('组', '') }}</small>
           </span>
-          <strong>{{ division.name }}</strong>
+          <strong>{{ divisionDisplayName(division) }}</strong>
           <dl class="format"><dt><el-icon><Trophy /></el-icon>{{ divisionFormatLabel(division) }}</dt><dd>{{ divisionTeamCount(division) }} 支</dd></dl>
           <span class="mode-badge" :class="{ pro: divisionIsProfessional(division) }"><el-icon><Medal v-if="divisionIsProfessional(division)" /><Lock v-else /></el-icon>{{ divisionIsProfessional(division) ? 'PRO 专业版 · 已开通' : '简易模式 · 已锁定' }}</span>
           <dl class="state" :class="divisionDrawState(division).state"><dt><el-icon><component :is="divisionDrawState(division).icon" /></el-icon>{{ divisionDrawState(division).label }}</dt><dd>{{ divisionDrawState(division).hint }}</dd></dl>
-          <el-button :type="divisionIsProfessional(division) ? 'success' : ''" plain @click="enterDivisionDraw(division)">{{ divisionDrawState(division).action }}</el-button>
+          <div class="overview-row-actions"><template v-if="divisionDrawState(division).state === 'done'"><el-button plain @click="viewDivisionResult(division)">查看结果</el-button><el-button type="danger" plain @click="modifyDivisionDraw(division)">修改分组</el-button></template><el-button v-else :type="divisionIsProfessional(division) ? 'success' : ''" plain :disabled="!divisionDrawReady(division)" @click="enterDivisionDraw(division)">{{ divisionDrawState(division).action }}</el-button></div>
         </article>
       </div>
       <el-alert class="overview-footer" title="简易模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
@@ -88,7 +90,7 @@
   <div v-else class="tournament-draw" :class="{ fullscreen: isFullscreen, embedded: props.embedded }">
     <!-- 顶部导航栏 -->
     <div class="draw-header" v-show="!isFullscreen && !props.embedded">
-      <el-page-header @back="$router.push('/tournaments')" title="返回赛事列表">
+    <el-page-header @back="$router.push('/tournament-space')" title="返回赛事空间">
         <template #content>
           <span style="font-size: 18px;">抽签分组 - {{ tournament.name || '赛事' }}</span>
           <el-tag v-if="tournamentType" style="margin-left: 8px;">{{ formatLabel }}</el-tag>
@@ -99,7 +101,7 @@
     <div v-if="divisionOptions.length > 1 && !props.embedded" class="division-selector">
       <span>赛事组别</span>
       <el-radio-group v-model="activeDivisionId" @change="handleDivisionChange">
-        <el-radio-button v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ division.name }}</el-radio-button>
+        <el-radio-button v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ divisionDisplayName(division) }}</el-radio-button>
       </el-radio-group>
       <el-tag type="success">{{ activeDivision.name }}</el-tag>
     </div>
@@ -564,7 +566,7 @@
 import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Delete, Trophy, Lock, Medal, Warning, CircleCheck, CircleClose, Calendar, Location, SwitchButton, User, Grid, UserFilled, InfoFilled, ArrowDown } from '@element-plus/icons-vue'
+import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Delete, Trophy, Lock, Medal, Warning, CircleCheck, CircleClose, Calendar, Location, SwitchButton, User, Grid, UserFilled, InfoFilled, Loading } from '@element-plus/icons-vue'
 import html2canvas from 'html2canvas'
 import { queryById, queryList, addRecord, updateRecord, deleteRecord } from '../../utils/cloud'
 import ProfessionalDrawFlow from './ProfessionalDrawFlow.vue'
@@ -596,6 +598,7 @@ const quickTournamentFlow = computed(() => route.query.mode === 'quick' && route
 const quickResultFlow = computed(() => route.query.mode === 'quick' && route.query.view === 'result')
 
 const loading = ref(false)
+const drawPrerequisitesReady = ref(false)
 const saving = ref(false)
 const drawing = ref(false)
 const activeOverviewFilter = ref('all')
@@ -614,6 +617,7 @@ const tournament = ref(qaSnapshot ? {
 const activeDivisionId = ref(props.divisionId || (typeof route.query.divisionId === 'string' ? route.query.divisionId : 'default'))
 const approvedTeams = ref([])
 const allApprovedRelations = ref([])
+const drawOverviewByDivision = ref({})
 const groups = ref([])
 const groupCount = ref(4)
 const teamsPerGroup = ref(4)
@@ -649,6 +653,12 @@ const divisionOptions = computed(() => {
   return [{ id: 'default', name: '默认组', tournamentType: tournament.value.type || tournament.value.tournamentType || 'tournament' }]
 })
 const activeDivision = computed(() => divisionOptions.value.find(item => item.id === activeDivisionId.value) || divisionOptions.value[0])
+function divisionPlayerFormatLabel(division) { const value=String(division?.matchFormat || '').match(/(5|7|8|9|11)/);const players=Number(value?.[1] || division?.playersOnField || 0);return players ? `${players}人制` : '' }
+function divisionDisplayName(division) { const format=divisionPlayerFormatLabel(division);return format ? `${division?.name || '未命名组别'} · ${format}` : division?.name || '未命名组别' }
+const activeRequiredTeamCount = computed(() => divisionRequiredTeams(activeDivision.value))
+const activeApprovedTeamCount = computed(() => divisionTeamCount(activeDivision.value))
+const drawBlocked = computed(() => drawPrerequisitesReady.value && activeRequiredTeamCount.value > 0 && activeApprovedTeamCount.value < activeRequiredTeamCount.value)
+const drawRequirementProgress = computed(() => activeRequiredTeamCount.value > 0 ? Math.min(100, Math.round(activeApprovedTeamCount.value / activeRequiredTeamCount.value * 100)) : 0)
 const divisionStateCounts = computed(() => divisionOptions.value.reduce((counts, division) => {
   const state = divisionDrawState(division).state
   counts[state] += 1
@@ -683,28 +693,77 @@ function divisionFormatLabel(division) {
   const value = division.formatType || division.tournamentType || division.matchFormat
   return ({ league: '联赛制', cup: '杯赛制', tournament: '赛会制', knockout: '淘汰赛', hybrid: '混合制' })[value] || '赛会制'
 }
+function drawWorkflowFormat(division) {
+  const value = String(division?.formatType || division?.tournamentType || division?.matchFormat || '').toLowerCase()
+  if (value === 'tournament') return 'cup'
+  if (value === 'cup') return 'tournament'
+  if (value === 'league') return 'league'
+  if (value === 'hybrid') return 'hybrid'
+  return 'tournament'
+}
 function divisionTeamCount(division) {
   const id = String(division.id || division._id || 'default')
   return allApprovedRelations.value.filter(item => String(item.divisionId || 'default') === id).length || Number(division.teamCount || 0)
 }
+function divisionRequiredTeams(division) {
+  const candidates = [division?.expectedTeams, division?.requiredTeams, division?.teamRequirement, division?.participantTeams, division?.maxTeams]
+  const value = candidates.map(Number).find(item => Number.isFinite(item) && item > 0)
+  return value || 0
+}
+function divisionDrawReady(division) {
+  const required = divisionRequiredTeams(division)
+  return required <= 0 || divisionTeamCount(division) >= required
+}
 function divisionDrawState(division) {
   const id = String(division.id || division._id || 'default')
+  const persistedState = drawOverviewByDivision.value[id]
   const professionalConfig = tournament.value.professionalDrawConfigs?.[id]
   const simpleState = tournament.value.drawStatusByDivision?.[id]
+  if (!divisionDrawReady(division)) return { state: 'pending', label: '球队审核未完成', hint: `已通过 ${divisionTeamCount(division)} / ${divisionRequiredTeams(division)} 支`, action: '等待球队审核', icon: Lock }
+  if (persistedState?.state === 'done') return { state: 'done', label: '抽签已完成', hint: persistedState.confirmedAt ? `确认于 ${formatOverviewTime(persistedState.confirmedAt)}` : '分组结果已正式确认', action: '修改分组', icon: CircleCheck }
+  if (persistedState?.state === 'active') return { state: 'active', label: '抽签结果待确认', hint: '已完成分组，等待最终确认', action: '继续确认', icon: Warning }
   if (professionalConfig?.drawStatus === 'confirmed' || simpleState === 'confirmed') return { state: 'done', label: '抽签已完成', hint: '可查看抽签结果', action: '查看结果', icon: CircleCheck }
   if (professionalConfig?.poolValidated) return { state: 'active', label: '球队池已完成 / 待抽签', hint: '等待开始公开抽签', action: '进入专业抽签', icon: Warning }
   if (simpleState === 'configured') return { state: 'active', label: '分组设置已完成', hint: '等待确认分组结果', action: '继续分组', icon: CircleCheck }
   if (simpleState === 'schedule-pending') return { state: 'active', label: '赛程顺序待确认', hint: '赛程顺序待确认', action: '进入分组', icon: Warning }
   return { state: 'pending', label: '尚未开始', hint: '等待开始分组', action: '开始分组', icon: CircleClose }
 }
+function formatOverviewTime(value) {
+  const date = new Date(value?.$date || value)
+  if (Number.isNaN(date.getTime())) return '已确认'
+  return date.toLocaleString('zh-CN', { hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit' })
+}
 function enterDivisionDraw(division) {
+  if (!divisionDrawReady(division)) return ElMessage.warning(`当前组别需审核通过 ${divisionRequiredTeams(division)} 支球队后才能抽签与分组`)
   const id = String(division.id || division._id || 'default')
   const state = divisionDrawState(division)
   if (divisionIsProfessional(division)) {
     router.push({ path: route.path, query: { divisionId: id, mode: 'professional', step: state.state === 'done' ? 'result' : 'setup' } })
   } else {
-    router.push({ path: route.path, query: { divisionId: id, mode: 'quick', view: state.state === 'done' ? 'result' : 'config' } })
+    const format = drawWorkflowFormat(division)
+    router.push({ path: route.path, query: { divisionId: id, mode: 'quick', view: state.state === 'done' ? 'result' : (format === 'tournament' ? 'config' : 'console'), format, knockoutSize:String(division.knockoutSize || ''), knockoutType:String(division.knockoutType || '') } })
   }
+}
+function viewDivisionResult(division) {
+  const id = String(division.id || division._id || 'default')
+  if (divisionIsProfessional(division)) router.push({ path:route.path,query:{ divisionId:id,mode:'professional',step:'result' } })
+  else router.push({ path:route.path,query:{ divisionId:id,mode:'quick',view:'result',format:drawOverviewByDivision.value[id]?.format || 'tournament' } })
+}
+async function modifyDivisionDraw(division) {
+  const id = String(division.id || division._id || 'default')
+  try {
+    const matches = await queryList('matches',{ where:{ tournamentId },limit:1000,silent:true })
+    const scopedMatches = (matches || []).filter(match => String(match.divisionId || 'default') === id && !['cancelled','void'].includes(String(match.status || '')))
+    if (scopedMatches.length) {
+      await ElMessageBox.alert(`“${division.name}”已经生成 ${scopedMatches.length} 场赛程或比赛，不能直接修改分组。请先在赛程管理完成影响范围核对和赛程撤回，再返回此处调整。`, '分组已影响赛程', { type:'error',confirmButtonText:'我知道了' })
+      return
+    }
+    await ElMessageBox.prompt(`分组结果决定后续赛程。请输入完整组别名称“${division.name}”以确认进入修改。`, '谨慎修改分组', { type:'warning',confirmButtonText:'下一步',cancelButtonText:'取消',inputPlaceholder:division.name,inputValidator:value => String(value || '').trim() === String(division.name || '').trim() || '请输入完整且一致的组别名称' })
+    const reason = await ElMessageBox.prompt('请填写本次修改原因，原因将随新的分组草稿保留。', '填写修改原因', { type:'warning',confirmButtonText:'确认进入修改',cancelButtonText:'取消',inputType:'textarea',inputPlaceholder:'例如：球队退出，需要重新平衡分组',inputValidator:value => String(value || '').trim().length >= 4 || '请至少填写4个字的修改原因' })
+    sessionStorage.setItem(`sxf-draw-edit:${tournamentId}:${id}`, String(reason.value || '').trim())
+    if (divisionIsProfessional(division)) router.push({ path:route.path,query:{ divisionId:id,mode:'professional',step:'result' } })
+    else router.push({ path:route.path,query:{ divisionId:id,mode:'quick',view:'console',format:drawOverviewByDivision.value[id]?.format || 'tournament' } })
+  } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '无法进入修改') }
 }
 function returnToDrawOverview() { router.push({ path: route.path, query: {} }) }
 function resetQuickConfig() {
@@ -715,6 +774,7 @@ function resetQuickConfig() {
   configForm.value.balancedDistribution = true
 }
 function enterQuickConsole() {
+  if (drawBlocked.value) return ElMessage.warning(`需审核通过 ${activeRequiredTeamCount.value} 支球队后才能进入分组操作台`)
   router.push({
     path: route.path,
     query: {
@@ -1028,13 +1088,47 @@ async function loadTournament() {
     return
   }
   try {
-    tournament.value = await queryById('tournaments', tournamentId)
+    const [tournamentRecord, divisionRecords] = await Promise.all([
+      queryById('tournaments', tournamentId),
+      queryList('divisions', { where:{ tournamentId }, orderBy:{ createTime:'asc' }, silent:true })
+    ])
+    tournament.value = { ...(tournamentRecord || {}), divisions:Array.isArray(divisionRecords) ? divisionRecords.map(item => ({ ...item, id:item._id || item.id })) : [] }
     const preferred = props.divisionId || tournament.value.defaultDivisionId || tournament.value.divisions?.[0]?.id || 'default'
     activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
     configForm.value.tournamentType = activeDivision.value.tournamentType || tournament.value.type || tournament.value.tournamentType || 'tournament'
+    if (route.query.mode === 'quick' && route.query.view === 'config') {
+      const format = drawWorkflowFormat(activeDivision.value)
+      if (format !== 'tournament') await router.replace({ path:route.path,query:{ ...route.query,view:'console',format,knockoutSize:String(activeDivision.value.knockoutSize || ''),knockoutType:String(activeDivision.value.knockoutType || '') } })
+    }
   } catch (err) {
     console.error('加载赛事失败:', err)
   }
+}
+
+async function loadOverviewDrawStates() {
+  if (qaSnapshot || visualQa) return
+  try {
+    const [savedGroups,savedBrackets,savedLeagues] = await Promise.all([
+      queryList('tournament_groups',{ where:{ tournamentId },limit:1000,silent:true }),
+      queryList('tournament_bracket',{ where:{ tournamentId },limit:1000,silent:true }),
+      queryList('tournament_league_tables',{ where:{ tournamentId },limit:1000,silent:true })
+    ])
+    const buckets = {}
+    const append = (record,format) => {
+      if (record.status === 'archived') return
+      const id = String(record.divisionId || 'default')
+      if (!buckets[id]) buckets[id] = []
+      buckets[id].push({ ...record,format })
+    }
+    ;(savedGroups || []).forEach(record => append(record,'tournament'))
+    ;(savedBrackets || []).forEach(record => append(record,'cup'))
+    ;(savedLeagues || []).forEach(record => append(record,record.type || 'league'))
+    drawOverviewByDivision.value = Object.fromEntries(Object.entries(buckets).map(([id,records]) => {
+      const explicitlyConfirmed = records.length > 0 && records.every(record => record.status === 'published' || (record.status === 'confirmed' && Boolean(record.confirmedAt)))
+      const latestConfirmed = records.map(record => record.confirmedAt).filter(Boolean).sort((a,b) => new Date(b?.$date || b) - new Date(a?.$date || a))[0]
+      return [id,{ state:explicitlyConfirmed ? 'done' : 'active',confirmedAt:latestConfirmed || '',format:records[0]?.format || 'tournament' }]
+    }))
+  } catch (error) { console.warn('加载各组别抽签状态失败:', error) }
 }
 
 // 加载已参赛球队
@@ -2153,7 +2247,9 @@ watch(() => props.divisionId, async value => {
 onMounted(async () => {
   await loadTournament()
   await loadApprovedTeams()
+  await loadOverviewDrawStates()
   await loadGroups()
+  drawPrerequisitesReady.value = true
   if (visualQa && route.query.mode === 'quick' && route.query.view === 'console' && route.query.format === 'tournament') {
     setTimeout(() => {
       const names = ['A组', 'B组', 'C组', 'D组', 'E组', 'F组', 'G组', 'H组']
@@ -2168,6 +2264,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.draw-requirement-state{display:flex;min-height:520px;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px;text-align:center;background:#f7faf8}.draw-requirement-state>.el-icon{font-size:48px;color:#0b8a4b}.draw-requirement-state h2{margin:0;color:#173a29;font-size:28px}.draw-requirement-state p{max-width:620px;margin:0;color:#65746a;font-size:16px}.draw-requirement-state .el-progress{width:min(520px,80vw)}
 .tournament-draw {
   padding: 20px;
   max-width: 1600px;
@@ -3227,7 +3324,7 @@ onMounted(async () => {
 .overview-filters { display: flex; gap: 14px; margin: 24px 0 20px; }
 .overview-filters .el-button { min-width: 104px; }
 .division-draw-list { display: flex; flex-direction: column; gap: 10px; }
-.division-draw-list article { display: grid; grid-template-columns: 70px 170px 1fr 1.45fr 1.4fr 158px; align-items: center; min-height: 94px; padding: 0 26px 0 18px; border: 1px solid #dde4df; border-radius: 10px; background: #fff; }
+.division-draw-list article { display: grid; grid-template-columns: 70px 170px 1fr 1.45fr 1.4fr 230px; align-items: center; min-height: 94px; padding: 0 26px 0 18px; border: 1px solid #dde4df; border-radius: 10px; background: #fff; }
 .division-crest { position: relative; display: grid; width: 54px; height: 62px; place-items: center; overflow: hidden; border: 2px solid rgba(255,255,255,.72); border-radius: 17px 17px 24px 24px; color: #fff; background: linear-gradient(145deg,#0a8c4c,#034c2c); box-shadow: 0 0 0 2px #0a633b, inset 0 0 0 2px rgba(255,255,255,.25); }
 .division-crest::after { position: absolute; inset: 4px; border: 1px solid rgba(255,255,255,.45); border-radius: 12px 12px 19px 19px; content: ''; }
 .division-crest .el-icon { position: relative; z-index: 1; margin-top: -11px; font-size: 23px; }
@@ -3251,11 +3348,12 @@ onMounted(async () => {
 .division-draw-list .state.done dt .el-icon { color: #138841; }
 .division-draw-list .state.pending dt .el-icon { color: #777f79; }
 .division-draw-list article > .el-button { justify-self: end; min-width: 136px; }
+.overview-row-actions{display:flex;justify-self:end;gap:8px}.overview-row-actions .el-button{min-width:100px;margin:0}
 .overview-footer { margin-top: 14px; }
 
 /* 响应式 */
 @media (max-width: 1100px) {
-  .division-draw-list article { grid-template-columns: 56px 130px 1fr 1fr 130px; }
+  .division-draw-list article { grid-template-columns: 56px 130px 1fr 1fr 190px; }
   .mode-badge { display: none; }
   .division-draw-list .state { border-left: 0; }
 }

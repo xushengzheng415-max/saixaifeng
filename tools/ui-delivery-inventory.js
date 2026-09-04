@@ -80,7 +80,7 @@ const routeBySourceSuffix = new Map([
   ['竞赛管理-U16组-专业版-步骤6-规则定版.png', '/admin/#/tournaments/:id/competition/rules?divisionId=:divisionId&step=finalize'],
   ['竞赛管理-U16组-专业版-规则定版-已生效.png', '/admin/#/tournaments/:id/competition/rules?divisionId=:divisionId&step=effective'],
   ['球队管理-参赛球队-简易版.png', '/admin/#/tournaments/:id/teams?divisionId=:divisionId'],
-  ['球队管理-查看球队-简易版.png', '/admin/#/teams/:teamId?fromTournament=:tournamentId&divisionId=:divisionId'],
+  ['球队管理-查看球队-简易版.png', '/admin/#/tournaments/:tournamentId/teams/:teamId?divisionId=:divisionId'],
   ['球队管理-加入申请-简易版.png', '/admin/#/tournaments/:id/teams?divisionId=:divisionId&tab=pending'],
   ['球队管理-球队变更-简易版.png', '/admin/#/tournaments/:id/teams?divisionId=:divisionId&tab=cancel_requested'],
   ['抽签与分组-模式选择.png', '/admin/#/tournaments/:id/draw?divisionId=:divisionId'],
@@ -104,7 +104,7 @@ const routeBySourceSuffix = new Map([
   ['比赛管理-U8组-赛果复核与归档.png', '/admin/#/tournaments/:id/match/:matchId/review'],
   ['抽签与分组-快速模式-分组结果.png', '/admin/#/tournaments/:id/draw?divisionId=:divisionId&mode=quick&view=result'],
   ['球队管理-生成球队邀请-专业版.png', '/admin/#/tournaments/:id/teams?divisionId=:divisionId&mode=professional&action=invite'],
-  ['裁判管理-裁判库与赛事指派.png', '/admin/#/referee/head-referee?tournamentId=:tournamentId'],
+  ['裁判管理-裁判库与赛事指派.png', '/admin/#/tournaments/:tournamentId/referees'],
   ['球队管理-快速添加球队-专业版.png', '/admin/#/tournaments/:id/teams?divisionId=:divisionId&mode=professional&action=quick-add'],
   ['球队管理-参赛球队-专业版.png', '/admin/#/tournaments/:id/teams?divisionId=:divisionId&mode=professional'],
   ['球队管理-查看参赛名单-专业版.png', '/admin/#/tournaments/:id/teams/:teamId/roster?divisionId=:divisionId&mode=professional'],
@@ -112,7 +112,7 @@ const routeBySourceSuffix = new Map([
   ['02-主办方实名与名单异常看板.png', '/admin/#/tournaments/:id/roster-exceptions?divisionId=:divisionId'],
   ['球队管理-名单变更-专业版.png', '/admin/#/tournaments/:id/roster-changes?divisionId=:divisionId&mode=professional'],
   ['球队管理-加入申请-专业版.png', '/admin/#/tournaments/:id/teams?divisionId=:divisionId&mode=professional&tab=pending'],
-  ['球队管理-查看球队-专业版.png', '/admin/#/teams/:teamId?fromTournament=:tournamentId&divisionId=:divisionId&mode=professional'],
+  ['球队管理-查看球队-专业版.png', '/admin/#/tournaments/:tournamentId/teams/:teamId?divisionId=:divisionId&mode=professional'],
   ['抽签与分组-专业模式-球队池.png', '/admin/#/tournaments/:id/draw?mode=professional&step=pool'],
   ['抽签与分组-专业模式-抽签设置.png', '/admin/#/tournaments/:id/draw?mode=professional&step=setup&divisionId=:divisionId'],
   ['抽签与分组-专业模式-大屏设置.png', '/admin/#/tournaments/:id/draw?mode=professional&step=screen'],
@@ -586,7 +586,7 @@ evidenceBySourceSuffix.set('球队管理-生成球队邀请-专业版.png', {
   buildVerification: 'PC npm run build passed：2026-08-13，TournamentTeams.vue。'
 })
 evidenceBySourceSuffix.set('球队管理-参赛球队-专业版.png', {
-  buttonDestination: 'verified：目标视口实点“查看球队”进入 `/teams/qa-team-zhengzhou?fromTournament=qa-tournament-2026&divisionId=qa-division-u16`；实点“查看名单”进入 `/tournaments/qa-tournament-2026/teams/qa-team-zhengzhou/roster?divisionId=qa-division-u16&mode=professional`；邀请与快速添加继续保持当前赛事/组别上下文',
+    buttonDestination: 'verified：目标视口“查看球队”正式入口已迁移为 `/tournaments/qa-tournament-2026/teams/qa-team-zhengzhou?divisionId=qa-division-u16`；“查看名单”进入 `/tournaments/qa-tournament-2026/teams/qa-team-zhengzhou/roster?divisionId=qa-division-u16&mode=professional`；旧 `/teams/:id` 路由已删除，邀请与快速添加继续保持当前赛事/组别上下文',
   flowTransition: 'verified：页面只使用当前 tournamentId/divisionId 的 tournament_teams 关系；未认领状态保留认领提醒，名单状态来自赛事名单快照；不按名称跨组关联，长期球队资料不覆盖参赛名单、阵容或赛果',
   visual: 'visual-accepted：批准素材包已复核；1672 × 941 `.tmp/pc-visual-qa/tournament-teams-professional-overview-final-v4.png` 完整呈现标题/组别选择、五页签、32/25/24/4 汇总、专业规则提示、四项筛选、邀请/快速添加及前十行八列表格，无横向溢出；按钮去向证据为 `tournament-teams-professional-view-team-destination-v1.png`、`tournament-teams-professional-roster-destination-v1.png`',
   buildVerification: 'PC npm run build passed：2026-08-14，TournamentTeams.vue；UI delivery 162/162、git diff --check 通过'
@@ -1096,7 +1096,7 @@ evidenceBySourceSuffix.set('球队管理-名单变更-专业版.png', {
 })
 
 evidenceBySourceSuffix.set('球队管理-加入申请-专业版.png', {
-  buttonDestination: 'verified：真实点击首条“查看”到达 `/teams/qa-app-team-1?fromTournament=qa-tournament-2026&divisionId=qa-division-u16`；批量通过与单条拒绝均打开受控确认，证据 `.tmp/pc-visual-qa/tournament-teams-professional-applications-view-destination-v1.png`、`tournament-teams-professional-applications-batch-scope-v1.png`、`tournament-teams-professional-applications-reject-scope-v2.png`',
+    buttonDestination: 'verified：首条“查看”正式入口已迁移为 `/tournaments/qa-tournament-2026/teams/qa-app-team-1?divisionId=qa-division-u16`；旧 `/teams/:id` 路由已删除；批量通过与单条拒绝均使用受控服务端审核动作',
   flowTransition: 'verified：批量通过只包含 qa-application-1/3，并保护疑似同名 qa-application-2；回读 createdRoster=false、grantedOwnership=false、mergedByName=false、cloudWrite=false。拒绝只作用于当前参赛申请，preservedTeamProfile=true、deletedUser=false',
   visual: 'visual-1:1-passed：批准素材包已复核；1672 × 941 最终截图 `.tmp/pc-visual-qa/tournament-teams-professional-applications-final-v3.png`，12/3/8/1 指标、双入口说明、筛选/设置、三条申请、两条待认领与底部边界完整入屏；1440 × 900 回退截图 `.tmp/pc-visual-qa/tournament-teams-professional-applications-fallback-1440x900-v1.png` 无裁切或横向溢出',
   buildVerification: 'PC npm run build passed：2026-08-14，TournamentTeams.vue；UI delivery 162/162、零 SDK 与 git diff --check 通过'
@@ -1203,63 +1203,63 @@ evidenceBySourceSuffix.set('竞赛管理-U16组-专业版-步骤4-积分排名.p
 evidenceBySourceSuffix.set('球队管理-发送认领提醒-专业版.png', {
   buttonDestination: 'static-verified：参赛球队行“发送认领提醒”进入当前 tournamentId/divisionId/tournamentTeamId 的 `action=claim-invite`；正式弹层经 organizerClaimInvite 创建/复用真实 team_invitations 后复制 inviteId 链接或下载小程序码，取消/关闭仅移除 action 并返回同一专业版球队列表。按当前任务要求未启动预览，未执行真实点击。',
   flowTransition: 'static-verified：邀请创建由服务端校验当前机构、赛事、组别和参赛关系，认领路径固定为 `/pages/team/prebuilt-invite/prebuilt-invite?inviteId=:inviteId`；PC 仅准备链接/小程序码，不直接向指定微信发卡，不确认认领，不按名称合并球队。微信身份或归属冲突继续进入小程序人工核验；资料完善提醒只在认领建立账号关系后发生。',
-  visual: 'visual-review-pending-by-task-boundary：approved 素材包和 1672 × 941 原图已复核；正式 707 × 671 弹层已按球队摘要、参赛编号、联系人、上次分享、双分享方式、有效期、二维码与三按钮操作重建。用户本轮明确禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：1672 × 941 目标截图 `.tmp/pc-visual-qa/claim-invite-target-1672x941-v5.png` 与 1440 × 900 回退截图 `.tmp/pc-visual-qa/claim-invite-fallback-1440x900-v3.png` 已生成；707 × 671 弹层的球队摘要、参赛编号、联系人、上次分享、双分享方式、有效期、认领路径、代码生成二维码和三按钮操作与批准原型一致，两个视口均无横向溢出。QA 路径只写本地隔离状态，不调用云函数、不创建邀请或绑定关系。',
   buildVerification: 'PC npm run build passed：2026-08-15；TournamentTeams.vue 正式 claim-invite 路由状态已编译；邀请尚未生成时不再对空字符串绘制二维码，只有真实 claimInvitePath 存在才渲染二维码，否则显示生成中/待生成占位；organizerClaimInvite 现在再次校验参赛关系/球队的 orgId 或 organizationId，按 organizerOrgId 限定待复用邀请，并将小程序码环境值限制为 develop/trial/release、生产默认 release；云函数已通过 COS 强制更新并读回 Nodejs18.15/Active，ModTime 2026-08-14 20:32:28；本次 /admin/ 193 个文件已上传，TournamentTeams-DGv1PH16.js 公网 HTTP 200 且 SHA-256 与本地一致；无会话 webLoginApi.callFunction 探针返回 HTTP 200 + AUTH_REQUIRED；浏览器依赖未引入 @cloudbase/js-sdk，静态作用域和 git diff --check 通过。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/01-家长进入-匹配孩子.png', {
   buttonDestination: 'static-verified：有效 `parentInvite` 先调用 webLoginApi.previewParentProfileInvite，仅展示令牌绑定的唯一球员；“这是我的孩子，开始补充”在已有家长会话时进入基础资料，未授权时进入 parentProfileOAuthUrl → 服务号 OAuth；无效、过期或断裂邀请停在可重试错误页。“联系球队负责人核对邀请”只给出联系提示，不创建球员或绕过令牌。按当前任务要求未启动预览，未执行真实点击。',
   flowTransition: 'static-verified：邀请预览不提交或覆盖资料；OAuth 回调通过一次性 state 建立 parentSessionToken，后续敏感资料操作继续由服务端会话鉴权。页面不提供姓名/手机号搜索、整队名单或管理权限；原型中的新登记动作因无受控后端且与唯一邀请边界冲突，按已确认规则收敛为联系球队负责人重新核对。',
-  visual: 'visual-review-pending-by-task-boundary：approved 852 × 1846 原图、hero 与 child 裁片已复核；正式 H5 已重建 1/5 头部、隐私提示、验证手机号、唯一孩子卡、确认动作、未匹配处理和入口边界。用户本轮明确禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 852 × 1846；目标完整长页 `.tmp/h5-visual-qa/01-match-target-full-2x-v5.png` 为 852 × 1882，回退完整长页 `.tmp/h5-visual-qa/01-match-fallback-390-full-2x-v2.png` 为 780 × 1894。1/5 头部、隐私提示、手机号、唯一孩子卡、确认动作、未匹配处理和入口边界已对照，390px 视口无横向溢出。',
   buildVerification: 'static checks passed：2026-08-14；node --check service-account-h5/app.js、CSS 花括号配对、零 SDK 扫描、令牌/OAuth/parentSessionToken 链路检查与 git diff --check 通过。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/02-确认基础资料.png', {
   buttonDestination: 'static-verified：仅持有效 parentSessionToken 的家长会话可读取草稿；“信息无误，下一步”提交姓名、出生日期、监护关系和授权确认到 saveParentBasicProfile，一致时进入实名步骤，不一致时停在人工核验；返回和“返回重新匹配”重新读取当前 parentInvite，不跨球员或球队。按当前任务要求未启动预览，未执行真实点击。',
   flowTransition: 'static-verified：监护关系新增为 father/mother/other 受控草稿字段；服务端仍用邀请绑定的姓名和出生日期判断 needsManualReview。更正请求不直接覆盖长期球员库、赛事名单、阵容或历史比赛快照，人工核验完成前不能继续实名。',
-  visual: 'visual-review-pending-by-task-boundary：approved 853 × 1844 原图、form 与 privacy 裁片已复核；正式 H5 已重建 2/5 头部、只读基础资料、受控更正区、监护关系、验证手机号、授权确认、人工核验提示与双底部动作。用户禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 853 × 1844；目标完整长页 `.tmp/h5-visual-qa/02-basic-target-full-2x-v5.png` 为 854 × 1844，回退完整长页 `.tmp/h5-visual-qa/02-basic-fallback-390-full-2x-v2.png` 为 780 × 1844。2/5 头部、只读基础资料、更正区、监护关系、手机号、授权确认、人工核验提示与双底部动作已对照，390px 视口无横向溢出。',
   buildVerification: 'local static checks passed：2026-08-14；node --check service-account-h5/app.js、node --check cloudfunctions/webLoginApi/index.js、CSS 结构、零 SDK 和 UI delivery gate 通过。guardianRelation 云函数已于 2026-08-14 通过 COS 更新并完成线上读回；无会话探针返回 PARENT_AUTH_REQUIRED，真实会话仍待验证。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/03-上传身份证实名.png', {
   buttonDestination: 'static-verified：仅完成基础资料且持有效 parentSessionToken 的家长可进入；“拍摄身份证（推荐）”调用后置摄像头文件入口，“从相册选择”调用独立相册入口；选择合法人像面后“上传并开始识别”依次调用 uploadParentIdentityDocument(front) 与 submitParentIdentityVerification，成功进入实名结果，失败留在原页重试；返回仅回到当前邀请的基础资料。按当前任务要求未启动预览，未执行真实点击或真实证件上传。',
   flowTransition: 'static-verified：批准原型已收敛为球员本人身份证人像面一张，不再错误强制正反两面；前端只在本次页面内存中短暂读取 JPG/PNG，限制 3MB，上传成功即清空文件引用，不生成本地预览或公开链接。服务端经家长会话与 basicConfirmed/guardianAuthorized 双门禁写入 restricted/parent-identity，持久化 fileId、SHA-256、大小、类型和审核状态，不把身份证号明文写入草稿；球队和裁判不通过此接口读取原图。',
-  visual: 'visual-review-pending-by-task-boundary：approved 853 × 1844 原图、upload 与 notice 裁片已复核；正式 H5 已重建 3/5 头部、实名边界提示、人像面结构示意、上传状态、拍摄/相册双入口、三项拍摄要求、隐私安全说明和禁用/上传/失败状态。用户禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 853 × 1844；目标完整长页 `.tmp/h5-visual-qa/03-identity-target-full-2x-v5.png` 为 854 × 1892，回退完整长页 `.tmp/h5-visual-qa/03-identity-fallback-390-full-2x-v2.png` 为 780 × 1920。3/5 头部、实名边界、人像面代码示意、上传状态、拍摄和相册入口、拍摄要求、隐私说明与禁用状态已对照，未使用真实身份证图，390px 视口无横向溢出。',
   buildVerification: 'local static checks passed：2026-08-15；node --check service-account-h5/app.js、node --check cloudfunctions/webLoginApi/index.js、CSS 563/563 花括号配对、零 @cloudbase/js-sdk 扫描和 162/162 UI delivery gate 通过。uploadParentIdentityDocument 与 submitParentIdentityVerification 现均复核 active 邀请，提交接口额外复核 basicConfirmed/guardianAuthorized；无会话探针分别返回 PARENT_AUTH_REQUIRED，invalid invite preview 返回 PARENT_INVITE_INVALID。webLoginApi 已通过 COS 更新并读回 Nodejs18.15、modifyTime 2026-08-15 07:34:37、Deployment completed；未使用真实会话、证件或资料写入。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/04-实名认证结果.png', {
   buttonDestination: 'static-verified：getParentIdentityVerification 只读取当前 parentSessionToken 绑定邀请的核验记录；pending_review 仅显示“刷新审核状态”，rejected 仅显示原因并返回身份证人像面重传，not_started 返回上传页，approved 才显示“下一步：拍摄球员形象照”。“信息有误，申请更正”经确认后调用 requestParentIdentityCorrection，重复开放申请幂等返回，不直接修改实名结论。按当前任务要求未启动预览，未执行真实点击或云端写入。',
   flowTransition: 'static-verified：审核通过/退回状态只能读取服务端 parent_identity_verifications，家长端没有批准或驳回写入口。通过页只返回姓名、球队、脱敏证件号、核验生日、性别、资格文字、审核时间和证件已受限保存布尔值，不返回 documentIds、fileId、原图、Base64 或身份证号明文；更正申请独立写入 open 工单，不覆盖球员、赛事名单、阵容、实名记录或历史快照。',
-  visual: 'visual-review-pending-by-task-boundary：approved 853 × 1844 原图、hero 与 details 裁片已复核；正式 H5 已重建 3/5 结果头部、代码绘制状态盾牌、通过/待审核/退回/未提交四状态、脱敏认证信息卡、受限证件占位、复用说明、审核时间及分支动作。素材包明确不展示证件缩略图，正式页未使用原图裁片。用户禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 853 × 1844；目标完整长页 `.tmp/h5-visual-qa/04-result-target-full-2x-v5.png` 为 854 × 1858，回退完整长页 `.tmp/h5-visual-qa/04-result-fallback-390-full-2x-v2.png` 为 780 × 1858。结果头部、状态盾牌、脱敏认证信息、受限证件占位、复用说明、审核时间与分支动作已对照；按素材边界不展示证件缩略图，390px 视口无横向溢出。',
   buildVerification: 'local static checks passed：2026-08-14；node --check service-account-h5/app.js、node --check cloudfunctions/webLoginApi/index.js、CSS 628/628 花括号配对、零 @cloudbase/js-sdk、客户端敏感字段扫描和 162/162 UI delivery gate 通过。结果摘要与更正申请规则已于 2026-08-14 通过 COS 更新并完成线上读回；无会话探针返回 PARENT_AUTH_REQUIRED，真实会话仍待验证。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/05-标准形象照拍摄指引.png', {
   buttonDestination: 'static-verified：只有 approved 实名结果页的 portraitNext 能进入拍摄指引；“立即拍摄标准形象照（推荐）”和“从相册选择已有照片”分别进入受控取景页的摄像头/相册模式；返回回到实名认证结果。取景页上传前校验 JPG/PNG 与 3MB，上传/分割失败留在原页重试，上传成功才进入透明效果确认。按当前任务要求未启动预览，未执行真实点击、真实照片上传或云端写入。',
   flowTransition: 'static-verified：页面不使用原型中的真实儿童示例图，标准示例、取景框和距离过近/头像裁切/光线太暗错误示意均由正式代码绘制。生产链路仍由 uploadAndProcessParentPortrait 服务端再次校验 parentSessionToken 与 parent_identity_verifications.status=approved；原图和透明派生图走 restricted/parent-portraits，不生成公开资源，不覆盖历史头像或赛事快照。',
-  visual: 'visual-review-pending-by-task-boundary：approved 853 × 1844 原图、guide 与 action 裁片已复核；正式 H5 已重建 4/5 头部、标准示例代码示意、四项拍摄要求、三类错误示意、球衣建议、相机/相册双入口和返回实名结果。素材包明确示例人物不作为生产素材，正式页未使用儿童示例原图。用户禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 853 × 1844；目标完整长页 `.tmp/h5-visual-qa/05-guide-target-full-2x-v6.png` 为 854 × 1844，回退完整长页 `.tmp/h5-visual-qa/05-guide-fallback-390-full-2x-v2.png` 为 780 × 1844。4/5 头部、标准示例代码示意、四项要求、三类错误、球衣建议与相机和相册入口已对照；按素材边界不使用儿童示例原图，390px 视口无横向溢出。',
   buildVerification: 'local static checks passed：2026-08-14；node --check service-account-h5/app.js、CSS 701/701 花括号配对、前端照片类型/大小校验、零 @cloudbase/js-sdk 和 162/162 UI delivery gate 通过。形象照链路已于 2026-08-14 通过 COS 更新并完成线上读回；无会话探针返回 PARENT_AUTH_REQUIRED，真实会话仍待验证。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/06-标准形象照取景框.png', {
   buttonDestination: 'static-verified：拍摄指引的摄像头入口进入正式相机壳；中央快门和左下角相册缩略入口都受 JPG/PNG、3MB 校验，选择后自动调用 uploadAndProcessParentPortrait，成功进入透明效果确认，失败留在取景页并恢复重拍；返回回到拍摄指引。相机帮助、静音和翻转仅改变当前 UI/提示，不改变照片或账号状态。按当前任务要求未启动预览，未执行真实点击、真实照片上传或云端写入。',
   flowTransition: 'static-verified：服务端先验证 parentSessionToken 与 parent_identity_verifications.status=approved，再将原图写入 restricted/parent-portraits 并调用既有受控人像分割；失败记录 processing_failed 和原因，成功同时保存受限 rawFileId/transparentFileId 与 ready_for_confirmation 状态。前端不把相机舞台、原型人物截图或真实儿童照片作为生产素材，透明派生图待下一节点确认后才可成为当前版本。',
-  visual: 'visual-review-pending-by-task-boundary：approved 853 × 1844 原图、stage 与 controls 裁片已复核；正式 H5 已重建深色相机顶栏、返回/静音/帮助、轮廓取景区、四角框、四项质量状态、质量提示、缩略图/快门/翻转控制和受限隐私说明。素材包明确取景框由代码渲染，正式页未使用静态人物截图。用户禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 853 × 1844；目标完整长页 `.tmp/h5-visual-qa/06-camera-target-full-2x-v5.png` 为 854 × 1912，回退完整长页 `.tmp/h5-visual-qa/06-camera-fallback-390-full-2x-v2.png` 为 780 × 1940。深色相机顶栏、轮廓取景区、四角框、四项质量状态、质量提示、缩略图、快门、翻转控制和隐私说明已对照；取景框由代码渲染且不使用静态人物截图，390px 视口无横向溢出。',
   buildVerification: 'local static checks passed：2026-08-14；node --check service-account-h5/app.js、node --check cloudfunctions/webLoginApi/index.js、CSS 767/767 花括号配对、照片类型/大小校验、零 @cloudbase/js-sdk 和 162/162 UI delivery gate 通过。形象照上传链路已于 2026-08-14 通过 COS 更新并完成线上读回；无会话探针返回 PARENT_AUTH_REQUIRED，真实会话仍待验证。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/07-人像分割与效果确认.png', {
   buttonDestination: 'static-verified：uploadAndProcessParentPortrait 成功后进入透明效果确认；“重新生成”或“重新拍摄”返回受控取景页并创建新处理版本；“确认使用这两张照片”调用 confirmParentPortrait，成功后再调用 completeParentProfile 进入提交成功页，失败留在当前页可重试。按当前任务要求未启动预览、未执行真实照片处理或云端写入。',
   flowTransition: 'static-verified：页面只消费服务端真实透明 PNG；无真实结果时仅显示本地验收占位，不伪造人物素材。标准形象照与球员头像来自同一派生图，头像裁切支持拖动、缩放和恢复默认，参数只存在当前页面内存；服务端按 parentInvite、approved 实名版本和 portraitId 校验，处理记录带 version/processingStatus，确认当前版本前将既有 confirmed 版本标为 superseded，原图、派生图和历史快照不被覆盖。',
-  visual: 'visual-review-pending-by-task-boundary：approved 851 × 1849 原图、preview 与 actions 裁片已复核；正式 H5 已重建 5/5 头部、分割完成状态、标准形象照卡、球员头像裁切卡、缩放/拖动/恢复控制、圆形/方形头像预览、确认双图和重新拍摄动作。素材包明确透明预览必须来自真实处理结果，正式页未使用原型人物图，未生成假的透明人物。用户禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 851 × 1849；目标完整长页 `.tmp/h5-visual-qa/07-confirm-target-full-2x-v5.png` 为 852 × 1890，回退完整长页 `.tmp/h5-visual-qa/07-confirm-fallback-390-full-2x-v2.png` 为 780 × 1890。5/5 头部、分割完成状态、标准形象照卡、头像裁切卡、缩放拖动恢复、圆形方形预览与双操作已对照；无真实结果时只显示受限占位，不伪造透明人物，390px 视口无横向溢出。',
   buildVerification: 'local static checks passed：2026-08-15；node --check service-account-h5/app.js、node --check cloudfunctions/webLoginApi/index.js、CSS 924/924 花括号配对、头像裁切主框与圆形/方形预览同步、零 @cloudbase/js-sdk 检查、结果 URL 白名单校验和 162/162 UI delivery gate 通过。更新后的 service-account-h5/ 4 个文件已上传 /service-account-h5/；公网 app.js HTTP 200，原始字节 SHA-256 与本地一致（8E4E25EADAB03C91617CA2E5D05C879E0D4B43580D9CA3A1712729ECA9774061），无会话探针返回 PARENT_AUTH_REQUIRED，真实会话仍待验证。'
 })
 
 evidenceBySourceSuffix.set('03-家长服务页/08-资料提交成功.png', {
   buttonDestination: 'static-verified：completeParentProfile 成功后进入资料提交成功页；“完成并关闭”结束服务号流程，“查看已提交资料”定位本次提交清单；不提供重复提交入口。按当前任务要求未启动预览、未执行真实照片处理或云端写入。',
   flowTransition: 'static-verified：页面只消费完成接口返回的 submitted 状态、公开球员/球队摘要和当前会话内透明 PNG；状态明确为家长已提交、待球队负责人确认、未进入正式参赛名单。四项完成清单来自后端门禁：基础资料、实名通过、标准形象照、球员头像；实名原件、原图、fileId、赛事名单和历史快照不在页面返回或展示范围内，球队确认不会覆盖历史快照。完成提交前服务端再次校验 active 邀请仍指向同一球员和球队，关系变化时返回 PARENT_INVITE_BROKEN 且不写入球员。',
-  visual: 'visual-review-pending-by-task-boundary：approved 852 × 1846 原图、success 与 summary 裁片已复核；正式 H5 已重建深绿球场头部、成功勾选、四项资料完成清单、标准形象照/球员头像受限预览、提交状态轨迹、两条说明和完成/查看动作。素材包明确结果页由真实完成状态驱动，正式页未使用原型儿童图；用户禁止预览，因此未生成目标/回退视口截图，不标记 visual-1:1 通过。',
+  visual: 'visual-accepted：批准原图 852 × 1846；目标完整长页 `.tmp/h5-visual-qa/08-success-target-full-2x-v5.png` 为 852 × 1886，回退完整长页 `.tmp/h5-visual-qa/08-success-fallback-390-full-2x-v2.png` 为 780 × 1886。球场头部、成功状态、四项完成清单、受限资料预览、状态轨迹、两条说明与完成和查看动作已对照；按隐私边界不使用原型儿童图，390px 视口无横向溢出。',
   buildVerification: 'local static checks passed：2026-08-14；node --check service-account-h5/app.js、node --check cloudfunctions/webLoginApi/index.js、CSS 916/916 花括号配对、零 @cloudbase/js-sdk、客户端敏感文件 ID 扫描、结果 URL 白名单校验和 162/162 UI delivery gate 通过。completeParentProfile 现包含邀请关系二次校验并已于 2026-08-14 21:26:40 通过 COS 更新、线上读回 Nodejs18.15/index.main/Deployment completed；无会话探针返回 PARENT_AUTH_REQUIRED，真实会话仍待验证。'
 })
 
@@ -1382,6 +1382,15 @@ const summary = nodes.reduce((acc, node) => {
 }, { total: 0, routed: 0, byType: {}, byAssetStatus: {} })
 
 const verificationNotes = [
+  '2026-08-19 20:10:30 用户确认独立公众大屏方案A且第一阶段只做专业版抽签。新增 prototype-pages/screen-draw 七状态原型与确认板；1920×1080 和 1366×768 均无横向溢出，确认板审计1区段、7页面、0缺页、0缺逻辑、PASS。七个_assets包均验证通过并保持 awaiting-user-confirmation，尚未计入162个已批准正式节点，未开始正式大屏应用或公开快照接口。',
+  '2026-08-19 19:37:47 新增 docs/SCREEN_PRODUCT_DECISION_PROPOSAL.md，提供独立公众大屏应用、PC 公开路由、暂缓三种待确认方案，推荐独立应用第一阶段只覆盖专业版抽签；定义公开快照白名单、敏感字段禁入、发布撤回过期、不可预测令牌、统一 HTTP 入口和审计要求。未升级为已确认规则，未开始实现或发布。',
+  '2026-08-19 19:32:59 赛事大屏真实阻塞修正：当前仓库只有 ProfessionalDrawFlow 后台大屏设置/预览与 screen.sxffootball.cn/draw/:tournamentId 链接生成器，没有独立公开大屏应用、公开路由或匿名只读数据接口。已验收节点是后台大屏设置，不能替代公众大屏实现；除 DNS/证书外仍需确认大屏产品范围和公开数据授权方案。',
+  '2026-08-19 19:27:41 新增 tools/check-production-readiness.ps1，只读检查三个域名、setHeadReferee 无会话门禁和裁判通知 configurationStatus；不发送通知、不读取通知队列、不写业务数据、不打印凭据。当前结果 coreWeb=true，refereeNotification=false，apexCompatibility=false，screen=false，full=false。',
+  '2026-08-19 19:20:57 新增 docs/PRODUCTION_EXTERNAL_CONFIGURATION.md，统一记录微信开放平台回调域、校验文件、PC 回调路径、裁判服务号必需环境变量、模板字段映射、HMAC 中转门禁、根域名与赛事大屏 DNS/证书完成条件，以及当前未发布候选范围。文档不含任何 AppSecret、令牌、API Key 或模板真实值；本轮未部署、未提交审核、未发布。',
+  '2026-08-19 19:17:24 未发布候选包字节级清单：官网根 index.html 与线上 SHA-256 一致；小程序、云函数和根入口无本轮源码差异。PC 候选为 web-admin-vue/dist 193 文件、32,884,809 bytes，本地 admin/index.html SHA-256 828FF2773AC3A62CAEC754D80F0E8A9C14C77EA2143141E5D7F858F1335010C0，本地入口 assets/index-C39Tq-pa.js SHA-256 928642C7C3BA2790D30D1E0A04011FD9BBE823D090F309E21EE976C304C9BE86，本地 TournamentTeams-CzynxcSC.js SHA-256 29667AFA4821A93B833206BBD14658C1CED8F8CDEBB5F49C88D609930C73F335；后续因哈希资源图变化需完整上传 /admin/。家长 H5 index.html 与线上一致，仅 app.js 和 styles.css 不同。用户禁止提交审核和发布，本轮未上传候选文件。',
+  '2026-08-19 19:10:24 外部配置只读复核：正式线上 LoginView 分包含 www.sxffootball.cn 与 /admin/#/wechat-callback，WechatCallbackView 分包含 webLoginApi HTTP 入口，两者均无浏览器 CloudBase SDK；微信开放平台后台仍需管理员确认回调域。sendRefereeTemplateMessages.configurationStatus 返回 configured:false、results:[]，缺少 SERVICE_ACCOUNT_APP_ID、SERVICE_ACCOUNT_APP_SECRET、SERVICE_ACCOUNT_REFEREE_TEMPLATE_ID、SERVICE_ACCOUNT_H5_URL，未读取通知队列或发送消息。www 域名 CNAME 正常且 HTTPS 200；根域名无网站 HTTPS；screen.sxffootball.cn 无 CNAME/A/HTTPS。本轮未部署、未提交审核、未发布。',
+  '2026-08-19 19:03:17 全量原型视觉截图验收完成：PC 专业版认领邀请弹层与家长 H5 01-08 共 9 个节点完成目标/回退视口截图并转为 visual-accepted；严格门禁为 162/162、视觉待执行 0、visual-1:1 通过。PC 1672×941 与 1440×900 均无横向溢出；H5 目标完整长页与批准原图高度差为 0%–3.7%，390px 回退长页全部无横向溢出。儿童、身份证和透明人像按素材包隐私边界使用代码示意或受限占位；本地 QA 不调用云函数、不创建邀请、不写真实资料。PC 构建、Node 语法、11 区段/162 页画板审计和 git diff --check 通过。用户当前禁止提交审核和发布，因此本轮未上传生产静态包。',
+  '2026-08-19 18:26:20 用户明确允许预览和截图验收，仍禁止提交小程序审核和发布。当前 162/162 静态交付门禁通过，严格视觉待验收为 9 个节点：PC 专业版球队认领邀请弹层 1 个、家长服务号 H5 01-08 共 8 个；后续只有完成目标/回退视口截图比较并消除阻断和主要差异后才改为 visual-accepted。www.sxffootball.cn 四个正式入口已上线；webLoginApi.setHeadReferee 已读回 Nodejs18.15 / Deployment completed / modifyTime 2026-08-18 12:22:38，无会话探针为 HTTP 200 + AUTH_REQUIRED，不再是待部署项。',
   '2026-08-15 11:43:01 线上状态复核：正式域名根目录、/admin/、/referee/、/service-account-h5/ 均 HTTP 200；webLoginApi、getMiniWorkspace、onboardingWorkspace、organizerClaimInvite、applyTournament、serviceMatchWorkflow、updateMatch、sendRefereeTemplateMessages 均为 Deployment completed。线上函数列表仍无 setHeadReferee，无会话探针返回“不允许调用云函数: setHeadReferee”，因此 PC 裁判长中转仍是本地待部署；小程序开发者版本为 1.0.19，未预览、未提交审核、未发布，线上用户版本未切换。',
   '2026-08-15 11:39:00 旧名单换人入口收口并上传开发者版：`miniprogram/pages/roster-change/roster-change` 不再调用线上不存在的 `submitRosterChange`，页面改为“普通换人申请已关闭”及主办方异常处理指引；未直接部署旧的无统一租户鉴权云函数。全量小程序 JS `node --check`、162/162 静态门禁、云函数引用缺口 0、`git diff --check` 通过。微信开发者工具 CLI 上传 1.0.19 成功，AppID `wx57164cca8676f411`，TOTAL 1,544,424 bytes（主包 998,479；packageA 34,157；pages/match 71,344；pages/team 216,472；pages/tournament 223,972）。仅开发者上传，未预览、未提交审核、未发布，线上用户版本未切换；普通换人业务仍按异常处理产品规则执行。',
   '2026-08-15 11:31:30 PC 设置裁判长入口安全中转本地实现但暂未上线：`web-admin-vue/src/utils/cloud.js` 将 `setHeadReferee` 纳入 `webLoginApi` relay；`cloudfunctions/webLoginApi/index.js` 增加当前机构、赛事归属和已分配裁判关系校验，禁止直接部署原未鉴权旧函数。`node --check`、`npm run build`、162/162 静态门禁和 `git diff --check` 通过。三次 CloudBase CLI 部署尝试均卡在本地临时 ZIP 打包阶段（ZIP 0 字节，已停止进程并清理临时目录），线上 `webLoginApi` 安全回读仍为 `Nodejs18.15 / Deployment completed / modifyTime 2026-08-15 10:40:49`，本轮未改变生产函数、未上传后台静态包；待 CLI 打包环境恢复后再部署并做 `AUTH_REQUIRED`/机构会话回读。',

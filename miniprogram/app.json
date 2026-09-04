@@ -1,7 +1,6 @@
 {
   "pages": [
     "pages/login/login",
-    "pages/login/phone-login/phone-login",
     "pages/home/home",
     "pages/login/agreement/agreement",
     "pages/event/index",
@@ -24,6 +23,7 @@
     "pages/service/claim/claim",
     "pages/service/lineup/lineup",
     "pages/profile/profile",
+    "pages/profile/version-log/version-log",
     "pages/admin/index",
     "pages/profile/info/info",
     "pages/manage/manage",
@@ -82,6 +82,7 @@
         "team",
         "player-library/player-library",
         "parent-collaboration/parent-collaboration",
+        "parent-service/parent-service",
         "profile-progress/profile-progress",
         "profile-exception/profile-exception",
         "official-roster/official-roster",
@@ -96,6 +97,7 @@
         "history/history",
         "detail/detail",
         "player-add/player-add",
+        "player-invite/player-invite",
         "player-detail/player-detail",
         "management-add/management-add",
         "management-detail/management-detail"

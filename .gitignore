@@ -9,11 +9,14 @@ coverage/
 
 # Local CloudBase / deploy state
 .cloudbase/
+.tcb/
+.codex-temp/
 deploy_temp/
 cloudresources/
 
 # Local workspace helpers
 .workbuddy/
+work/
 
 # Secrets and machine-local config
 .env

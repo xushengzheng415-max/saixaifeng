@@ -1474,7 +1474,7 @@ async function loadTournament() {
     })
     if (result.length === 0) {
       ElMessage.error('赛事不存在')
-      router.push('/tournaments')
+  router.push('/tournament-space')
       return
     }
     const data = result[0]

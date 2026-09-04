@@ -25,6 +25,8 @@ const LOGIN_FUNCTION_MAP = {
   emailLogin: null,
   verifyPassword: 'passwordLogin',
   wechatWebLogin: 'wechatWebLogin',
+  sendWechatLoginSms: 'sendWechatLoginSms',
+  completeWechatPhoneLogin: 'completeWechatPhoneLogin',
   checkLogin: 'checkLogin',
 }
 
@@ -61,6 +63,7 @@ const CLOUD_FUNCTION_MAP = {
   reviewRosterChange: 'relay', // 名单变更审核必须经过当前机构门禁
   onboardingWorkspace: 'relay',
   organizerClaimInvite: 'relay',
+  resultCenter: 'relay',
 }
 
 /**
@@ -97,7 +100,10 @@ async function callFunctionHTTP(action, data = {}) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    const result = await response.json()
+    let result = await response.json()
+    if (result && typeof result.body === 'string') {
+      try { result = JSON.parse(result.body) } catch { /* 保留原响应，由调用方显示错误 */ }
+    }
     if (result && result.authToken) {
       localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
     }
@@ -312,6 +318,31 @@ export async function confirmDivisionRules(id, data = {}) {
     operation: 'confirmDivisionRules',
     id,
     data
+  })
+}
+
+export async function reviseDivisionRules(id) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'reviseDivisionRules',
+    id
+  })
+}
+
+export async function deleteDivision(id) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'deleteDivision',
+    id
+  })
+}
+
+export async function assignTournamentTeamDivision(id, divisionId) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'tournament_teams',
+    operation: 'assignTournamentTeamDivision',
+    id,
+    data: { divisionId }
   })
 }
 

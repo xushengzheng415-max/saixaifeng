@@ -51,6 +51,10 @@ Page({
     teamCity: '',
     isTeamDraftConfirmation: false,
     teamSuccessForTournament: false,
+    isTournamentSignupFlow: false,
+    teamOnboardingReturnUrl: '',
+    teamProfileSubtitle: '只需两项，其他资料以后再补充。',
+    teamSuccessTitle: '球队创建成功',
     successSubtitle: '',
     eventName: '', eventCity: '', createdEvent: {}, createdEventName: '', createdEventLogo: '', hasCreatedEventLogo: false,
     trainingStatus: 'inactive',
@@ -83,6 +87,23 @@ Page({
     var requestedStep = options && options.step
     var requestedScene = options && options.scene
     var tournamentInviteId = options && (options.tournamentInviteId || options.inviteId)
+    var tournamentSignupFlow = options && options.fromTournamentSignup === '1'
+    var teamOnboardingReturnUrl = options && options.returnUrl
+      ? decodeURIComponent(options.returnUrl)
+      : (wx.getStorageSync('teamOnboardingReturnUrl') || '')
+    if (tournamentSignupFlow && teamOnboardingReturnUrl) {
+      wx.setStorageSync('teamOnboardingReturnUrl', teamOnboardingReturnUrl)
+      this.setData({
+        isTournamentSignupFlow: true,
+        teamOnboardingReturnUrl: teamOnboardingReturnUrl,
+        selectedScene: 'team',
+        sceneEventClass: '',
+        sceneTeamClass: 'is-selected',
+        sceneTrainingClass: '',
+        teamProfileSubtitle: '填写球队名称和队徽后，继续选择报名组别并确认参赛。',
+        teamSuccessTitle: '球队资料已保存'
+      })
+    }
     if (tournamentInviteId) this.setData({ tournamentInviteId: String(tournamentInviteId) })
     if (['event', 'team', 'training'].indexOf(requestedScene) >= 0) {
       this.selectScene({ currentTarget: { dataset: { scene: requestedScene } } })
@@ -101,6 +122,18 @@ Page({
         this.showTrainingProfile()
       })
     }
+    if (!requestedStep && !requestedScene && !tournamentInviteId && !(options && options.fromTeamDraft === '1')) {
+      this.redirectExistingWorkspace()
+    }
+  },
+
+  redirectExistingWorkspace: function() {
+    workspace.loadContext({ skipRestrictedRedirect: true }).then(function(context) {
+      if (!context || !context.currentWorkspace) return
+      wx.switchTab({ url: '/pages/home/home' })
+    }).catch(function() {
+      // 没有可用工作空间时保留首次创建页，不向新用户展示技术错误。
+    })
   },
 
   selectScene: function(event) {
@@ -118,7 +151,7 @@ Page({
 
   saveSceneAndContinue: function() {
     var that = this
-    if (this.data.isSubmitting) return
+    if (this.data.isSubmitting || this.data.crestBusy) return
     this.setData({ isSubmitting: true, primaryText: '正在保存…', errorVisible: false })
     wx.cloud.callFunction({
       name: 'onboardingWorkspace',
@@ -148,7 +181,7 @@ Page({
 
   showTeamProfile: function() {
     this.setData({
-      pageTitle: '创建球队',
+      pageTitle: this.data.isTournamentSignupFlow ? '填写球队资料' : '创建球队',
       isSceneStep: false,
       isTeamProfileStep: true,
       isTeamSuccessStep: false,
@@ -162,7 +195,7 @@ Page({
       stepOneClass: 'is-complete',
       stepTwoClass: 'is-current',
       stepThreeClass: '',
-      primaryText: this.data.isTeamDraftConfirmation ? '确认创建球队' : '创建并继续',
+      primaryText: this.data.isTournamentSignupFlow ? '保存球队并继续报名' : (this.data.isTeamDraftConfirmation ? '确认创建球队' : '创建并继续'),
       isSubmitting: false,
       errorVisible: false,
       errorText: ''
@@ -214,6 +247,29 @@ Page({
       trainingStatusClass: canCreate ? 'service-status-active' : 'service-status-inactive',
       trainingCanCreate: canCreate,
       consultationText: '联系客户咨询',
+      errorVisible: false,
+      errorText: ''
+    })
+  },
+
+  backToSceneSelection: function() {
+    this.setData({
+      pageTitle: '开始使用赛小蜂',
+      isSceneStep: true,
+      isTeamProfileStep: false,
+      isTeamSuccessStep: false,
+      isEventProfileStep: false,
+      isEventSuccessStep: false,
+      isTrainingServiceStep: false,
+      isTrainingProfileStep: false,
+      isTrainingSuccessStep: false,
+      isTrainingDemoStep: false,
+      showSteps: true,
+      stepOneClass: 'is-current',
+      stepTwoClass: '',
+      stepThreeClass: '',
+      primaryText: '下一步',
+      isSubmitting: false,
       errorVisible: false,
       errorText: ''
     })
@@ -280,7 +336,7 @@ Page({
       this.showError('请输入 2–50 个字的机构名称')
       return
     }
-    if (this.data.isSubmitting || this.data.crestBusy) return
+    if (this.data.isSubmitting) return
     this.setData({ isSubmitting: true, primaryText: '正在创建…', errorVisible: false })
     wx.cloud.callFunction({
       name: 'onboardingWorkspace',
@@ -492,12 +548,16 @@ Page({
 
   createTeam: function() {
     var that = this
-    var name = this.data.teamName
+    var name = String(this.data.teamName || '').trim()
     if (name.length < 2) {
       this.showError('请输入 2—30 个字的球队名称')
       return
     }
-    if (this.data.isSubmitting || this.data.crestBusy) return
+    if (this.data.isSubmitting) return
+    if (this.data.crestBusy) {
+      wx.showToast({ title: '队徽正在处理，请稍候', icon: 'none' })
+      return
+    }
     this.setData({ isSubmitting: true, primaryText: '正在创建…', errorVisible: false })
     wx.cloud.callFunction({
       name: 'onboardingWorkspace',
@@ -508,11 +568,23 @@ Page({
           that.showError(result.message || '球队创建失败，请重试')
           return
         }
+        that.cacheCreatedTeam(result.team)
+        if (that.data.isTournamentSignupFlow && that.data.teamOnboardingReturnUrl) {
+          wx.removeStorageSync('teamOnboardingReturnUrl')
+          wx.redirectTo({
+            url: that.data.teamOnboardingReturnUrl,
+            fail: function() {
+              that.showTeamSuccess(result.team, result.registration)
+              that.showError('球队已创建，请点击下方按钮继续报名')
+            }
+          })
+          return
+        }
         that.showTeamSuccess(result.team, result.registration)
       },
       fail: function() { that.showError('网络异常，球队暂未创建') },
       complete: function() {
-        if (that.data.isTeamProfileStep) that.setData({ isSubmitting: false, primaryText: that.data.isTeamDraftConfirmation ? '确认创建球队' : '创建并继续' })
+        if (that.data.isTeamProfileStep) that.setData({ isSubmitting: false, primaryText: that.data.isTournamentSignupFlow ? '保存球队并继续报名' : (that.data.isTeamDraftConfirmation ? '确认创建球队' : '创建并继续') })
       }
     })
   },
@@ -531,9 +603,34 @@ Page({
       createdTeamLogo: team.logo || '',
       hasCreatedTeamLogo: Boolean(team.logo),
       teamSuccessForTournament: Boolean(registration),
-      successSubtitle: registration ? '球队已创建，并已建立本届赛事参赛关系' : '你的球队工作空间已准备好',
-      primaryText: '进入球队首页'
+      successSubtitle: this.data.isTournamentSignupFlow ? '球队资料已保存，请继续选择组别并确认报名' : (registration ? '球队已创建，并已建立本届赛事参赛关系' : '你的球队工作空间已准备好'),
+      primaryText: this.data.isTournamentSignupFlow ? '继续完成报名' : '进入球队首页'
     })
+  },
+
+  cacheCreatedTeam: function(team) {
+    team = team || {}
+    if (!team.id) return
+    var userId = wx.getStorageSync('userId') || ''
+    var openId = wx.getStorageSync('openId') || ''
+    var cachedTeam = {
+      _id: team.id,
+      teamId: team.id,
+      name: team.name || '',
+      teamName: team.name || '',
+      logo: team.logo || '',
+      teamLogo: team.logo || '',
+      creatorId: userId,
+      ownerId: userId,
+      userId: userId,
+      openId: openId
+    }
+    workspace.selectWorkspace('team:' + team.id)
+    wx.setStorageSync('currentTeamId', team.id)
+    wx.setStorageSync('teamInfo', cachedTeam)
+    wx.setStorageSync('currentTeam', cachedTeam)
+    wx.setStorageSync('myTeams', [cachedTeam])
+    wx.setStorageSync('currentTeamIndex', 0)
   },
 
   createEventSpace: function() {
@@ -552,14 +649,27 @@ Page({
   enterTeamHome: function() {
     var team = this.data.createdTeam || {}
     if (!team.id) return this.showError('球队信息缺失，请返回后重试')
+    if (this.data.isSubmitting) return
+    if (this.data.isTournamentSignupFlow && this.data.teamOnboardingReturnUrl) {
+      this.setData({ isSubmitting: true, primaryText: '正在进入报名…' })
+      wx.redirectTo({
+        url: this.data.teamOnboardingReturnUrl,
+        fail: () => this.showError('报名页面暂时无法打开，请重试')
+      })
+      return
+    }
     var that = this
     this.setData({ isSubmitting: true, primaryText: '正在进入…' })
-    workspace.switchWorkspace('team:' + team.id).then(function() {
-      wx.switchTab({ url: '/pages/teams/index' })
-    }).catch(function() {
-      that.showError('球队已创建，但工作空间加载失败，请在“我的”中重试')
-    }).finally(function() {
-      that.setData({ isSubmitting: false, primaryText: '进入球队首页' })
+    this.cacheCreatedTeam(team)
+    wx.reLaunch({
+      url: '/pages/teams/index',
+      fail: function() {
+        that.showError('球队首页暂时无法打开，请重试')
+      },
+      complete: function(result) {
+        if (result && result.errMsg && result.errMsg.indexOf(':ok') >= 0) return
+        that.setData({ isSubmitting: false, primaryText: '进入球队首页' })
+      }
     })
   },
 

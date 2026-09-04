@@ -2,7 +2,7 @@
   <div class="tournament-detail" v-loading="loading">
     <!-- 返回按钮 -->
     <div class="back-bar">
-      <el-button @click="$router.push('/tournaments')" :icon="Back">返回赛事列表</el-button>
+      <el-button @click="$router.push('/tournament-space')" :icon="Back">返回赛事空间</el-button>
     </div>
 
     <!-- 赛事主信息卡片 -->
@@ -813,7 +813,7 @@ async function loadTournament() {
     tournament.value = Array.isArray(result) ? result[0] : result
     if (!tournament.value) {
       ElMessage.error('赛事不存在')
-      router.push('/tournaments')
+  router.push('/tournament-space')
       return
     }
 
@@ -886,7 +886,7 @@ async function deleteTournament() {
     )
     await deleteRecord('tournaments', id, { cascade: true })
     ElMessage.success('删除成功')
-    router.push('/tournaments')
+    router.push('/tournament-space')
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('删除失败')
   }

@@ -1,4 +1,5 @@
 var workspace = require('../../utils/workspace')
+var signupDraft = require('../../utils/signup-draft')
 
 function countPending(items) {
   return (items || []).filter(function (item) { return item.status === 'pending' || item.status === 'reviewing' }).length
@@ -204,7 +205,12 @@ Page({
     var rawTeams = (context.teams || []).slice(0, 2)
     var teams = rawTeams.map(formatTeam)
     var matches = (context.eventSchedule || context.schedule || []).slice(0, isOrganizer ? 2 : 1).map(formatMatch)
-    var eventTasks = context.eventTasks || []
+    var eventTasks = (context.eventTasks || []).slice()
+    var localDraft = signupDraft.resolveAgainstRegistrations(signupDraft.read(), context.registrations || [])
+    var localDraftTask = signupDraft.toTask(localDraft)
+    if (localDraftTask && !eventTasks.some(function(item) {
+      return item.type === 'registration_draft' && item.tournamentId === localDraftTask.tournamentId && item.teamId === localDraftTask.teamId
+    })) eventTasks.unshift(localDraftTask)
     var trainingTasks = context.trainingTasks || []
     var trainingCourses = (context.trainingSchedule || []).slice(0, 3).map(formatTrainingCourse)
     var stats = context.statistics || {}

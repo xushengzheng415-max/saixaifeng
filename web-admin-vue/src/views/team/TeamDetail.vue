@@ -63,6 +63,42 @@
             </template>
           </section>
         </div>
+        <section class="team-kit-panel">
+          <header><div><h2>比赛服颜色</h2><p>设置球队常用主、备用比赛服；单场比赛可根据撞色情况另行调整，历史比赛快照不会被覆盖。</p></div><el-button type="success" :loading="kitSaving" @click="saveTeamKitColors">保存颜色设置</el-button></header>
+          <div class="kit-set-grid">
+            <article v-for="kit in kitSets" :key="kit.key" class="kit-set-card">
+              <div class="kit-set-title"><span>{{ kit.badge }}</span><div><strong>{{ kit.label }}</strong><small>{{ kit.description }}</small></div></div>
+              <div class="kit-equipment-grid">
+                <label v-for="equipment in kitEquipment" :key="equipment.key" class="kit-equipment-item">
+                  <span class="kit-image-stage"><i class="kit-silhouette" :class="equipment.key" :style="kitShapeStyle(equipment.key, kitForm[kit.key][equipment.key])"></i></span>
+                  <strong>{{ equipment.label }}</strong>
+                  <el-select v-model="kitForm[kit.key][equipment.key]" :aria-label="`${kit.label}${equipment.label}颜色`">
+                    <el-option v-for="color in kitColorOptions" :key="color.value" :label="color.label" :value="color.value"><span class="kit-color-option"><i :style="{backgroundColor:color.value}"></i>{{ color.label }}</span></el-option>
+                  </el-select>
+                </label>
+              </div>
+            </article>
+          </div>
+          <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
+        </section>
+        <section v-if="isSyntheticTeam" class="synthetic-player-panel">
+          <div class="synthetic-player-heading">
+            <div><h2>虚拟球员资料</h2><p>本队共 {{ players.length }} 名测试球员；资料仅用于赛事流程验收。</p></div>
+            <el-tag type="warning" effect="plain">合成测试数据</el-tag>
+          </div>
+          <el-table :data="players" v-loading="loading" empty-text="暂无虚拟球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
+            <el-table-column label="头像" width="72" align="center">
+              <template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="球员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
+            </el-table-column>
+            <el-table-column prop="name" label="姓名" min-width="110" />
+            <el-table-column prop="playerId" label="球员编号" min-width="150" />
+            <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
+            <el-table-column label="位置" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
+            <el-table-column label="出生日期" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
+            <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag type="success" size="small">{{ row.profileStatus === 'complete' ? '已完整' : '测试资料' }}</el-tag></template></el-table-column>
+          </el-table>
+        </section>
         <section v-if="isProfessionalTournamentTeam" class="collaboration-timeline"><h2>协作流程进度</h2><ol><li v-for="step in professionalTimeline" :key="step.title"><span><el-icon><CircleCheckFilled /></el-icon></span><div><strong>{{ step.title }}</strong><time>{{ step.time }}</time><small>{{ step.description }}</small></div></li></ol></section>
         <el-button v-else class="view-results" type="success" plain @click="openTournamentMatches"><el-icon><SwitchButton /></el-icon>查看赛程赛果</el-button>
         <el-alert :title="isProfessionalTournamentTeam ? '专业版仅展示当前赛事参赛关系、名单快照与协作状态，不展示俱乐部日常训练或财务资料。' : '简易版仅展示球队级赛事资料、赛程、比分与排名，不生成赛事官方球员个人数据。'" type="success" :closable="false" show-icon />
@@ -1144,8 +1180,8 @@ import JSZip from 'jszip'
 
 const route = useRoute()
 const router = useRouter()
-const teamId = route.params.id
-const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : '')
+const teamId = String(route.params.teamId || route.params.id || '')
+const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : (route.params.teamId ? String(route.params.id || '') : ''))
 const sourceDivisionId = computed(() => typeof route.query.divisionId === 'string' ? route.query.divisionId : '')
 const isProfessionalTournamentTeam = computed(() => route.query.mode === 'professional' || sourceDivisionId.value === 'qa-division-u16')
 const tournamentDateRange = computed(() => tournamentContext.value.startDate && tournamentContext.value.endDate
@@ -1171,7 +1207,7 @@ const qaTeam = qaSnapshot && sourceTournamentId.value ? (() => {
 
 function goBack() {
   if (!sourceTournamentId.value) {
-    router.push('/teams')
+    router.push('/tournament-space')
     return
   }
 
@@ -1218,8 +1254,14 @@ function onCityChange() {
 }
 const team = ref(qaTeam || {})
 const players = ref([])
+const kitSaving = ref(false)
+const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
+const kitEquipment = [{key:'jersey',label:'球衣'},{key:'shorts',label:'球裤'},{key:'socks',label:'球袜'}]
+const kitColorOptions = [{label:'纯白',value:'#FFFFFF'},{label:'炭黑',value:'#161A18'},{label:'深灰',value:'#59615D'},{label:'银灰',value:'#A8B0AC'},{label:'正红',value:'#D72631'},{label:'酒红',value:'#7E1731'},{label:'亮橙',value:'#F47A1F'},{label:'比赛黄',value:'#F5C518'},{label:'荧光黄',value:'#D7F300'},{label:'草地绿',value:'#138A4B'},{label:'深绿',value:'#075B35'},{label:'天蓝',value:'#47A9E8'},{label:'皇家蓝',value:'#1455B5'},{label:'海军蓝',value:'#14264A'},{label:'竞技紫',value:'#6B3FA0'},{label:'亮粉',value:'#E64A8A'}]
+const kitForm = ref({primary:{jersey:'#138A4B',shorts:'#FFFFFF',socks:'#138A4B'},secondary:{jersey:'#FFFFFF',shorts:'#138A4B',socks:'#FFFFFF'}})
 const tournamentContext = ref(qaSnapshot && sourceTournamentId.value ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions } : {})
 const tournamentRelation = ref(qaSnapshot && sourceTournamentId.value ? { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' } : {})
+const isSyntheticTeam = computed(() => team.value.synthetic === true || Boolean(team.value.syntheticDatasetId))
 const tournamentMatches = ref([])
 const teamMatchStats = computed(() => tournamentMatches.value.reduce((stats, match) => {
   const isHome = String(match.homeTeamId || match.teamAId || '') === String(teamId)
@@ -1608,7 +1650,8 @@ async function handleIdCardUpload(options, side) {
 }
 
 function viewPlayerCard(row) {
-  router.push('/players/' + row._id)
+  if (!sourceTournamentId.value) return router.push('/tournament-space')
+  router.push({ path: `/tournaments/${sourceTournamentId.value}/players/${row._id}`, query: { teamId, divisionId: sourceDivisionId.value } })
 }
 
 function editPlayer(row) {
@@ -3368,6 +3411,7 @@ async function submitTeamEdit() {
 async function loadTeam() {
   if (qaTeam) {
     team.value = qaTeam
+    syncKitColorsFromTeam()
     return
   }
   try {
@@ -3381,10 +3425,53 @@ async function loadTeam() {
     } else {
       team.value = {}
     }
+    syncKitColorsFromTeam()
     
   } catch (err) {
     console.error('加载球队信息失败:', err)
     team.value = {}
+  }
+}
+
+function normalizeKitSet(source, fallback) {
+  const allowed = new Set(kitColorOptions.map(item => item.value))
+  return Object.fromEntries(kitEquipment.map(item => {
+    const value = String(source?.[item.key] || '').toUpperCase()
+    return [item.key, allowed.has(value) ? value : fallback[item.key]]
+  }))
+}
+
+function syncKitColorsFromTeam() {
+  const source = tournamentRelation.value.kitColors || team.value.kitColors || team.value.uniformColors || {}
+  kitForm.value = {
+    primary: normalizeKitSet(source.primary || source.home || {}, { jersey:'#138A4B', shorts:'#FFFFFF', socks:'#138A4B' }),
+    secondary: normalizeKitSet(source.secondary || source.away || {}, { jersey:'#FFFFFF', shorts:'#138A4B', socks:'#FFFFFF' })
+  }
+}
+
+function kitShapeStyle(type, color) {
+  const asset = `${import.meta.env.BASE_URL}assets/kit/${type}.svg`
+  return { backgroundColor:color, WebkitMaskImage:`url(${asset})`, maskImage:`url(${asset})` }
+}
+
+async function saveTeamKitColors() {
+  kitSaving.value = true
+  try {
+    const data = { primary:{ ...kitForm.value.primary }, secondary:{ ...kitForm.value.secondary } }
+    if (sourceTournamentId.value) {
+      if (!tournamentRelation.value._id) throw new Error('当前球队参赛关系不存在，无法保存本届赛事配色')
+      await updateRecord('tournament_teams', tournamentRelation.value._id, { kitColors:data, kitColorsUpdatedAt:new Date().toISOString() })
+      tournamentRelation.value = { ...tournamentRelation.value, kitColors:data }
+      ElMessage.success('本届赛事主、备用比赛服颜色已保存')
+    } else {
+      await updateRecord('teams', teamId, { kitColors:data, kitColorsUpdatedAt:new Date().toISOString() })
+      team.value = { ...team.value, kitColors:data }
+      ElMessage.success('球队默认主、备用比赛服颜色已保存')
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '颜色设置保存失败')
+  } finally {
+    kitSaving.value = false
   }
 }
 
@@ -3448,12 +3535,14 @@ async function loadPlayers() {
     
     players.value = processedPlayers
 
-    // 同步更新球队的 playerCount
-    try {
-      await updateRecord('teams', teamId, { playerCount: processedPlayers.length })
-      if (team.value) team.value.playerCount = processedPlayers.length
-    } catch (e) {
-      console.error('同步 playerCount 失败:', e)
+    // 普通球队资料页沿用历史同步行为；赛事内查看只读，不因打开页面改写球队资产。
+    if (!sourceTournamentId.value) {
+      try {
+        await updateRecord('teams', teamId, { playerCount: processedPlayers.length })
+        if (team.value) team.value.playerCount = processedPlayers.length
+      } catch (e) {
+        console.error('同步 playerCount 失败:', e)
+      }
     }
   } catch (err) {
     console.error('加载球员列表失败:', err)
@@ -3475,6 +3564,7 @@ async function loadTournamentTeamContext() {
     tournamentContext.value = { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions }
     tournamentRelation.value = { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' }
     tournamentMatches.value = []
+    syncKitColorsFromTeam()
     return
   }
   try {
@@ -3485,6 +3575,7 @@ async function loadTournamentTeamContext() {
     ])
     tournamentContext.value = event || {}
     tournamentRelation.value = (relations || []).find(item => !sourceDivisionId.value || (item.divisionId || 'default') === sourceDivisionId.value) || relations?.[0] || {}
+    syncKitColorsFromTeam()
     tournamentMatches.value = (matches || []).filter(match => {
       const homeId = String(match.homeTeamId || match.teamAId || '')
       const awayId = String(match.awayTeamId || match.teamBId || '')
@@ -3502,7 +3593,7 @@ function openTournamentMatches() {
 
 onMounted(async () => {
   await loadTeam()
-  if (sourceTournamentId.value) await loadTournamentTeamContext()
+  if (sourceTournamentId.value) await Promise.all([loadTournamentTeamContext(), isSyntheticTeam.value ? loadPlayers() : Promise.resolve()])
   else await loadPlayers()
 })
 
@@ -3871,7 +3962,9 @@ function compressBase64(dataUrl, maxSize = 300) {
 .collaboration-status dt { margin-bottom: 14px; }
 .match-summary { padding-bottom: 12px; }
 .professional-roster-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}.professional-roster-stats article{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:end;min-height:88px;padding:14px;border:1px solid #e6ebe7;border-radius:7px;background:#fbfdfb}.professional-roster-stats span{grid-column:1/-1;color:#667269;font-size:12px}.professional-roster-stats strong{color:#167f42;font-size:26px}.professional-roster-stats small{margin-bottom:4px;color:#536158}.professional-roster-stats article.pending strong{color:#d98b15}.professional-team-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}.professional-team-actions .el-button{height:41px;margin:0}
+.team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
+.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.synthetic-player-table .player-avatar-img{width:38px;height:38px;border-radius:50%;object-fit:cover;background:#edf3ee}
 .match-stats { display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: 23px; border-bottom: 1px solid #e8ece9; }
 .match-stats.lower { grid-template-columns: repeat(2, 1fr); padding: 24px 0 0; border: 0; }
 .match-stats dl { display: block; padding: 0 10px; text-align: center; }
@@ -3884,5 +3977,6 @@ function compressBase64(dataUrl, maxSize = 300) {
   .team-event-summary dl { border-left: 0; }
   .summary-identity { grid-column: 1 / -1; }
   .team-detail-grid { grid-template-columns: 1fr; }
+  .kit-set-grid { grid-template-columns: 1fr; }
 }
 </style>

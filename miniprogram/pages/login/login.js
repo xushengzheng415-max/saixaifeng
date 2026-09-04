@@ -1,6 +1,6 @@
-// pages/login/login.js - 仅微信授权登录
+// pages/login/login.js - 手机号主账号登录
 var workspace = require('../../utils/workspace')
-var AUTH_SESSION_VERSION = 'wechat-only-v1'
+var AUTH_SESSION_VERSION = 'phone-canonical-v1'
 var AUTH_STORAGE_KEYS = [
   'userInfo', 'userId', 'phoneNumber', 'phone', 'email',
   'hasPassword', 'currentCardId', 'currentTeam', 'currentTeamId',
@@ -19,16 +19,20 @@ Page({
     openId: '',
     redirectUrl: '',
     checkboxClass: '',
-    loginButtonText: '微信授权登录',
-    localVisualQa: false
+    loginButtonText: '手机号快捷登录',
+    loginDisabled: true,
+    localVisualQa: false,
+    guestHomeStyle: ''
   },
 
   onLoad: function(options) {
+    this.updateGuestHomePosition()
     if (isDevtools() && options && options.visualQa === '1') {
       this.setData({
         localVisualQa: true,
         agreementChecked: true,
-        checkboxClass: 'checked'
+        checkboxClass: 'checked',
+        loginDisabled: false
       })
       return
     }
@@ -38,7 +42,21 @@ Page({
     this.setData({ redirectUrl: redirectUrl })
     if (redirectUrl) wx.setStorageSync('loginRedirectUrl', redirectUrl)
     this.clearLegacyBindingState()
-    if (wx.getStorageSync('userLoggedOut') !== 'true') this.validateExistingWechatSession()
+    if (!wx.getStorageSync('userLoggedOut')) this.validateExistingSession()
+  },
+
+  updateGuestHomePosition: function() {
+    var top = 54
+    try {
+      var menuRect = wx.getMenuButtonBoundingClientRect()
+      var systemInfo = wx.getSystemInfoSync()
+      var statusBarHeight = Number(systemInfo.statusBarHeight || 0)
+      var menuTop = Number(menuRect && menuRect.top || 0)
+      top = Math.max(menuTop + 6, statusBarHeight + 18, 46)
+    } catch (error) {
+      console.warn('[login] 游客入口安全区读取失败，使用兼容位置:', error)
+    }
+    this.setData({ guestHomeStyle: 'top:' + top + 'px;' })
   },
 
   callCloud: function(name, data, success, fail, timeout) {
@@ -86,7 +104,7 @@ Page({
     }, function() { callback('') }, 15000)
   },
 
-  validateExistingWechatSession: function() {
+  validateExistingSession: function() {
     var that = this
     this.ensureOpenId(function(openId) {
       if (!openId) return
@@ -96,6 +114,9 @@ Page({
           that.finishLogin(result.user, false)
         } else {
           that.clearAuthSession()
+          if (result.requiresPhoneAuthorization) {
+            that.setData({ loginButtonText: '手机号快捷登录' })
+          }
         }
       }, function() {}, 15000)
     })
@@ -105,34 +126,52 @@ Page({
     var checked = !this.data.agreementChecked
     this.setData({
       agreementChecked: checked,
-      checkboxClass: checked ? 'checked' : ''
+      checkboxClass: checked ? 'checked' : '',
+      loginDisabled: !checked || this.data.isSubmitting
     })
   },
 
-  loginWithWechat: function() {
+  goToGuestHome: function() {
+    var app = getApp()
+    if (app && app.globalData) app.globalData.guestBrowsingSession = true
+    wx.setStorageSync('guestBrowsing', 'true')
+    wx.switchTab({ url: '/pages/home/home' })
+  },
+
+  loginWithPhone: function(event) {
     var that = this
     if (!this.data.agreementChecked) {
       wx.showToast({ title: '请先同意用户协议和隐私政策', icon: 'none' })
       return
     }
     if (this.data.isSubmitting) return
+    var phoneCode = event && event.detail && event.detail.code
+    if (!phoneCode) {
+      var message = event && event.detail && event.detail.errMsg
+      wx.showToast({
+        title: message && message.indexOf('deny') >= 0 ? '需授权手机号后才能登录' : '未获取到手机号，请重试',
+        icon: 'none'
+      })
+      return
+    }
 
     wx.removeStorageSync('userLoggedOut')
-    this.setData({ isSubmitting: true, loginButtonText: '登录中...' })
-    wx.showLoading({ title: '微信登录中...' })
+    wx.removeStorageSync('guestBrowsing')
+    this.setData({ isSubmitting: true, loginDisabled: true, loginButtonText: '验证手机号中...' })
+    wx.showLoading({ title: '正在验证账号...' })
 
     this.ensureOpenId(function(openId) {
       if (!openId) {
         wx.hideLoading()
         that.resetSubmitState()
-        wx.showToast({ title: '获取微信身份失败，请重试', icon: 'none' })
+        wx.showToast({ title: '获取账号身份失败，请重试', icon: 'none' })
         return
       }
 
       that.callCloud('checkUserByOpenId', {
         openId: openId,
-        createIfMissing: true,
-        nickName: '微信用户',
+        phoneCode: phoneCode,
+        nickName: '用户',
         avatarUrl: ''
       }, function(res) {
         wx.hideLoading()
@@ -142,7 +181,7 @@ Page({
           that.finishLogin(result.user, true)
           return
         }
-        wx.showToast({ title: result.message || '微信登录失败，请重试', icon: 'none' })
+        wx.showToast({ title: result.message || '手机号登录失败，请重试', icon: 'none' })
       }, function() {
         wx.hideLoading()
         that.resetSubmitState()
@@ -151,20 +190,22 @@ Page({
     })
   },
 
-  loginWithPhone: function() {
-    wx.navigateTo({ url: '/pages/login/phone-login/phone-login' })
-  },
-
   resetSubmitState: function() {
-    this.setData({ isSubmitting: false, loginButtonText: '微信授权登录' })
+    this.setData({
+      isSubmitting: false,
+      loginDisabled: !this.data.agreementChecked,
+      loginButtonText: '手机号快捷登录'
+    })
   },
 
   finishLogin: function(user, showSuccess) {
     var userInfo = {
       _id: user._id || '',
       openId: user.openId || this.data.openId || '',
+      phone: user.phone || user.phoneNumber || '',
+      phoneNumber: user.phoneNumber || user.phone || '',
       orgId: user.orgId || user.organizationId || '',
-      nickName: user.nickName || '微信用户',
+      nickName: user.nickName || '用户',
       avatarUrl: user.avatarUrl || '',
       loginTime: new Date().toISOString()
     }
@@ -174,6 +215,8 @@ Page({
     wx.setStorageSync('userInfo', userInfo)
     wx.setStorageSync('openId', userInfo.openId)
     wx.setStorageSync('userId', userInfo._id)
+    wx.setStorageSync('phone', userInfo.phone)
+    wx.setStorageSync('phoneNumber', userInfo.phoneNumber)
     var app = getApp()
     if (app && app.globalData) app.globalData.userInfo = userInfo
     if (showSuccess) wx.showToast({ title: '登录成功', icon: 'success' })
@@ -184,6 +227,9 @@ Page({
     var that = this
     this.callCloud('onboardingWorkspace', { action: 'state' }, function(res) {
       var result = res.result || {}
+      var signupRedirect = that.getTournamentSignupRedirect()
+      var teamMemberRedirect = that.getTeamMemberInviteRedirect()
+      var teamPlayerRedirect = that.getTeamPlayerInviteRedirect()
       if (result.success && result.organizationConflict) {
         workspace.clearContext()
         that.clearAuthSession()
@@ -195,6 +241,21 @@ Page({
         return
       }
       if (result.success && result.requiresOnboarding) {
+        if (teamPlayerRedirect) {
+          wx.redirectTo({ url: teamPlayerRedirect })
+          return
+        }
+        if (teamMemberRedirect) {
+          wx.redirectTo({ url: teamMemberRedirect })
+          return
+        }
+        if (signupRedirect) {
+          wx.setStorageSync('teamOnboardingReturnUrl', signupRedirect)
+          wx.redirectTo({
+            url: '/pages/onboarding/onboarding?scene=team&step=team&fromTournamentSignup=1&returnUrl=' + encodeURIComponent(signupRedirect)
+          })
+          return
+        }
         wx.redirectTo({ url: '/pages/onboarding/onboarding' })
         return
       }
@@ -203,6 +264,29 @@ Page({
       // 无法确认关系时不阻断已有账号；服务端恢复后下次登录会重新判断。
       that.goToHome()
     }, 15000)
+  },
+
+  getTournamentSignupRedirect: function() {
+    var redirectUrl = this.data.redirectUrl || wx.getStorageSync('loginRedirectUrl') || ''
+    if (redirectUrl.indexOf('/pages/tournament/signup/signup') !== 0) return ''
+    if (redirectUrl.indexOf('inviteKey=') < 0) return ''
+    return redirectUrl
+  },
+
+  getTeamMemberInviteRedirect: function() {
+    var redirectUrl = this.data.redirectUrl || wx.getStorageSync('loginRedirectUrl') || ''
+    if (redirectUrl.indexOf('/pages/team/members/members') !== 0) return ''
+    if (redirectUrl.indexOf('memberInviteId=') < 0) return ''
+    wx.removeStorageSync('loginRedirectUrl')
+    return redirectUrl
+  },
+
+  getTeamPlayerInviteRedirect: function() {
+    var redirectUrl = this.data.redirectUrl || wx.getStorageSync('loginRedirectUrl') || ''
+    if (redirectUrl.indexOf('/pages/team/player-invite/player-invite') !== 0) return ''
+    if (redirectUrl.indexOf('playerInviteId=') < 0) return ''
+    wx.removeStorageSync('loginRedirectUrl')
+    return redirectUrl
   },
 
   goToHome: function() {
@@ -218,7 +302,7 @@ Page({
   },
 
   devLogin: function() {
-    console.log('[login] 微信单路径登录页')
+    console.log('[login] 手机号单路径登录页')
   },
 
   showUserAgreement: function() {

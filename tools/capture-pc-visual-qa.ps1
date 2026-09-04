@@ -5,6 +5,8 @@ param(
   [int]$Height = 1000,
   [int]$DelayMs = 8000,
   [int]$Port = 9333,
+  [double]$DeviceScaleFactor = 1,
+  [switch]$FullPage,
   [string]$ClickText = '',
   [string]$EvaluateExpression = ''
 )
@@ -82,7 +84,7 @@ try {
   Send-CdpCommand -Method 'Page.enable' | Out-Null
   Send-CdpCommand -Method 'Runtime.enable' | Out-Null
   Send-CdpCommand -Method 'Page.bringToFront' | Out-Null
-  Send-CdpCommand -Method 'Emulation.setDeviceMetricsOverride' -Params @{ width = $Width; height = $Height; deviceScaleFactor = 1; mobile = $false } | Out-Null
+  Send-CdpCommand -Method 'Emulation.setDeviceMetricsOverride' -Params @{ width = $Width; height = $Height; deviceScaleFactor = $DeviceScaleFactor; mobile = $false } | Out-Null
   Send-CdpCommand -Method 'Page.navigate' -Params @{ url = $Url } | Out-Null
   # Hash-only Vue routes otherwise retain the previously mounted page instance in the shared CDP tab.
   # Reload after navigation so every visual-QA capture evaluates its current route and fixtures anew.
@@ -145,8 +147,21 @@ try {
   Write-Output "QA_DOM=$($domDiagnostic.result.value)"
   $layoutDiagnostic = Send-CdpCommand -Method 'Runtime.evaluate' -Params @{ expression = "(()=>{const section=document.querySelector('.overview-table')||document.querySelector('.table-card')||document.querySelector('.teams-table-panel');const q=s=>section?.querySelector(s);const table=q('.el-table');const body=q('.el-table__body-wrapper');const inner=q('.el-table__inner-wrapper');const header=q('.el-table__header-wrapper');const tbody=q('tbody');const row=q('tbody tr');const heading=document.querySelector('.teams-page-heading');const toolbar=document.querySelector('.division-toolbar');const tabs=document.querySelector('.team-work-tabs');const summary=document.querySelector('.team-summary-grid');const box=e=>e?{rect:e.getBoundingClientRect().toJSON(),height:getComputedStyle(e).height,display:getComputedStyle(e).display,visibility:getComputedStyle(e).visibility,opacity:getComputedStyle(e).opacity,overflow:getComputedStyle(e).overflow,position:getComputedStyle(e).position,zIndex:getComputedStyle(e).zIndex,scrollHeight:e.scrollHeight}:null;return JSON.stringify({section:box(section),table:box(table),inner:box(inner),header:box(header),body:box(body),tbody:box(tbody),row:box(row),heading:box(heading),toolbar:box(toolbar),tabs:box(tabs),summary:box(summary)})})()"; returnByValue = $true }
   Write-Output "QA_LAYOUT=$($layoutDiagnostic.result.value)"
+  $viewportDiagnostic = Send-CdpCommand -Method 'Runtime.evaluate' -Params @{ expression = "JSON.stringify({innerWidth:window.innerWidth,innerHeight:window.innerHeight,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight,horizontalOverflow:document.documentElement.scrollWidth>window.innerWidth})"; returnByValue = $true }
+  Write-Output "QA_VIEWPORT=$($viewportDiagnostic.result.value)"
   Start-Sleep -Milliseconds 2000
-  $capture = Send-CdpCommand -Method 'Page.captureScreenshot' -Params @{ format = 'png'; captureBeyondViewport = $false; fromSurface = $true }
+  if ($FullPage) {
+    $metrics = Send-CdpCommand -Method 'Page.getLayoutMetrics'
+    $contentSize = $metrics.cssContentSize
+    $capture = Send-CdpCommand -Method 'Page.captureScreenshot' -Params @{
+      format = 'png'
+      captureBeyondViewport = $true
+      fromSurface = $true
+      clip = @{ x = 0; y = 0; width = [double]$contentSize.width; height = [double]$contentSize.height; scale = 1 }
+    }
+  } else {
+    $capture = Send-CdpCommand -Method 'Page.captureScreenshot' -Params @{ format = 'png'; captureBeyondViewport = $false; fromSurface = $true }
+  }
   [IO.File]::WriteAllBytes([IO.Path]::GetFullPath($OutputPath), [Convert]::FromBase64String($capture.data))
   Get-Item -LiteralPath $OutputPath | Select-Object FullName, Length, LastWriteTime
 } finally {

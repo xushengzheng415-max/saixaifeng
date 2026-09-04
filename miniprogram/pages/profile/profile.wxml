@@ -12,8 +12,13 @@
     <view class="user-card" bindtap="goToInfo">
       <image class="avatar" wx:if="{{hasUserAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image>
       <view class="avatar avatar-fallback" wx:if="{{!hasUserAvatar}}"><image src="/images/runtime/icons/brand-v1-tab-profile.png" mode="aspectFit"></image></view>
-      <view class="user-main"><text>{{userName}}</text><text>当前账号已登录</text><text class="login-tag">已登录</text></view>
+      <view class="user-main"><text>{{userName}}</text><text>{{phoneMasked}}</text><text class="login-tag {{phoneStateClass}}">{{phoneVerifiedText}}</text></view>
       <text class="chevron">›</text>
+    </view>
+    <view class="authorization-card">
+      <view class="authorization-head"><text>账号授权</text><text>按手机号隔离</text></view>
+      <view class="authorization-row"><text>授权岗位</text><text>{{positionsText}}</text></view>
+      <view class="authorization-row"><text>权限范围</text><text>{{permissionsText}}</text></view>
     </view>
     <view class="identity-card">
       <view class="identity-head"><text>当前身份</text><text bindtap="openIdentitySheet">切换身份 ›</text></view>
@@ -34,6 +39,7 @@
       </view>
     </view>
     <button class="logout" bindtap="onLogout">退出登录</button>
+    <text class="version-entry" bindtap="onMenuTap" data-action="versionLog">版本 {{appVersion}} · 查看更新日志</text>
     <text class="support-note">由赛小蜂足球提供技术支持</text>
     <view class="loading" wx:if="{{loading}}">正在同步我的信息…</view>
     <view class="error-card" wx:if="{{errorText}}">{{errorText}}</view>
