@@ -22,6 +22,7 @@
 .task-card+.task-card{margin-top:0;border-radius:0 0 24rpx 24rpx;border-top:1rpx solid #e6ebe7}
 .task-card:first-of-type{border-radius:24rpx 24rpx 0 0}
 .task-card:only-of-type{border-radius:24rpx}
+.guest-mode-banner{display:flex;align-items:center;justify-content:space-between;margin-bottom:28rpx;padding:22rpx 24rpx;border:2rpx solid rgba(74,211,125,.55);border-radius:20rpx;background:rgba(0,38,23,.92);color:#fff}.guest-mode-banner view text{display:block}.guest-mode-banner view text:first-child{font-size:27rpx;font-weight:800}.guest-mode-banner view text:last-child{margin-top:7rpx;color:rgba(255,255,255,.68);font-size:20rpx}.guest-mode-banner>text{color:#55d682;font-size:23rpx;font-weight:800}.guest-mode-banner+.teams-hero{margin-top:0}
 
 /* Empty-state panel follows the approved y=320 @2 composition and uses the formal brand mark. */
 .empty-team-panel{margin-top:180rpx}

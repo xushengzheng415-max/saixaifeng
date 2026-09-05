@@ -4,11 +4,12 @@
   <view class="content">
     <view class="topbar">
       <text>我的</text>
-      <view class="message-trigger" bindtap="goToMessages">
+      <view class="message-trigger" wx:if="{{!guestMode}}" bindtap="goToMessages">
         <image src="/images/icons/bell-white.svg" mode="aspectFit"></image>
         <text class="unread-badge" wx:if="{{hasUnread}}">{{unreadText}}</text>
       </view>
     </view>
+    <view class="guest-mode-banner" wx:if="{{guestMode}}" bindtap="goToInfo"><view><text>当前未登录</text><text>“我的”功能演示 · 示例数据不保存</text></view><text>去登录 ›</text></view>
     <view class="user-card" bindtap="goToInfo">
       <image class="avatar" wx:if="{{hasUserAvatar}}" src="{{userAvatar}}" mode="aspectFill"></image>
       <view class="avatar avatar-fallback" wx:if="{{!hasUserAvatar}}"><image src="/images/runtime/icons/brand-v1-tab-profile.png" mode="aspectFit"></image></view>
@@ -38,7 +39,8 @@
         <image src="{{item.icon}}" mode="aspectFit"></image><text>{{item.title}}</text><text class="menu-arrow">›</text>
       </view>
     </view>
-    <button class="logout" bindtap="onLogout">退出登录</button>
+    <button class="logout" wx:if="{{!guestMode}}" bindtap="onLogout">退出登录</button>
+    <button class="guest-login-button" wx:if="{{guestMode}}" bindtap="goToInfo">登录后使用完整功能</button>
     <text class="version-entry" bindtap="onMenuTap" data-action="versionLog">版本 {{appVersion}} · 查看更新日志</text>
     <text class="support-note">由赛小蜂足球提供技术支持</text>
     <view class="loading" wx:if="{{loading}}">正在同步我的信息…</view>

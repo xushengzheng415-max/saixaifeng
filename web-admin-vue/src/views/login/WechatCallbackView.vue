@@ -97,7 +97,32 @@ function storeDirectLogin(result) {
   localStorage.setItem('phoneNumber',user.phoneNumber||user.phone||'')
   localStorage.setItem('authToken',result.authToken||'')
   localStorage.setItem('authSessionVersion','phone-canonical-web-v1')
-  localStorage.setItem('userInfo',JSON.stringify({_id:user._id,uid:user._id,userName:user.nickname||'微信用户',avatarUrl:user.headimgurl||'',phone:user.phone||user.phoneNumber||'',email:user.email||''}))
+  localStorage.setItem('userInfo',JSON.stringify({_id:user._id,uid:user._id,userName:user.nickname||'微信用户',avatarUrl:user.headimgurl||'',phone:user.phone||user.phoneNumber||'',email:user.email||'',isPlatformOwner:user.isPlatformOwner===true}))
+}
+
+function consumePostLoginPath() {
+  const key = 'sxfPostLoginRedirect'
+  const target = sessionStorage.getItem(key) || '/tournament-space'
+  sessionStorage.removeItem(key)
+  return target.startsWith('/') ? target : '/tournament-space'
+}
+
+async function verifyPlatformOwner(authToken) {
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'callFunction',
+      functionName: 'platformOwner',
+      functionParams: { action: 'status' },
+      authToken
+    })
+  })
+  let result = await response.json()
+  if (result && typeof result.body === 'string') {
+    try { result = JSON.parse(result.body) } catch { /* 交给下方权限判断 */ }
+  }
+  return result
 }
 
 onMounted(async () => {
@@ -137,8 +162,19 @@ onMounted(async () => {
 
     if (result.success && result.directLogin && result.authToken && result.user) {
       storeDirectLogin(result)
+      const target = consumePostLoginPath()
+      if (target === '/tournament-center-admin') {
+        hint.value = '正在校验平台管理员权限...'
+        const ownerResult = await verifyPlatformOwner(result.authToken)
+        if (!ownerResult?.success || !ownerResult.isPlatformOwner) {
+          clearStoredAuthSession()
+          status.value = 'error'
+          errorMessage.value = '当前微信账号不是平台负责人，无法登录平台运营管理后台'
+          return
+        }
+      }
       status.value='success'
-      setTimeout(()=>router.replace('/tournament-space'),500)
+      setTimeout(()=>router.replace(target),500)
     } else if (result.success && result.requiresPhoneAuthorization && result.loginChallenge) {
       clearStoredAuthSession()
       sessionStorage.setItem('wechat_login_challenge', result.loginChallenge)

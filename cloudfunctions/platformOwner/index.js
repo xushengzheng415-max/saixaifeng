@@ -84,6 +84,9 @@ async function resolveCurrentUser(db, event) {
     }).limit(2).get()
     const sessions = sessionResult.data || []
     if (sessions.length !== 1) throw new Error('网页登录会话已失效，请重新微信扫码登录')
+    if (sessions[0].principalType === 'platform_owner' && sessions[0].channel === 'platform_password') {
+      return { _id: 'platform-owner', nickname: '平台负责人', role: 'platform_owner', isPlatformOwner: true }
+    }
     const result = await db.collection('users').doc(sessions[0].userId).get()
     const user = firstRecord(result.data)
     if (user) return user

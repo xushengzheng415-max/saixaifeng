@@ -146,11 +146,25 @@ Page({
     overviewStatus: '', hasOverviewStatus: false, overviewLogo: '', hasOverviewLogo: false,
     metrics: [], homeTaskCards: [], hasTaskCards: false, trainingCourses: [], hasTrainingCourses: false,
     matches: [], hasMatches: false, teams: [], hasTeams: false,
+    guestDemoMetrics: [
+      { label: '今日比赛', value: '3', icon: '/images/icons/event.svg' },
+      { label: '待处理', value: '2', icon: '/images/icons/list.svg' },
+      { label: '我的球队', value: '2', icon: '/images/icons/players.svg' }
+    ],
+    guestDemoTasks: [
+      { id: 'demo-roster', title: '参赛名单确认', subtitle: '查看球队报名与名单进度', icon: '/images/icons/shield.svg' },
+      { id: 'demo-schedule', title: '今日赛程', subtitle: '查看比赛时间、场地与对阵', icon: '/images/icons/event.svg' },
+      { id: 'demo-team', title: '球队协作', subtitle: '维护球队与球员基础资料', icon: '/images/icons/players.svg' }
+    ],
     showOtherRoleContent: false, otherSectionTitle: '', otherSectionEmptyText: '', matchSectionTitle: '最近比赛', overviewClass: '', topbarClass: '',
     localVisualQa: false
   },
 
   onLoad: function (options) {
+    if (isDevtools() && options && options.reviewGuest === '1') {
+      this.setData({ localVisualQa: true, loading: false, isLoggedIn: false, errorText: '' })
+      return
+    }
     if (isDevtools() && options && options.visualQa === '1' && options.scenario === 'team-coach') {
       this.setData({ localVisualQa: true })
       this.applyContext(previewContext())
@@ -251,6 +265,17 @@ Page({
   goToTeams: function () { wx.switchTab({ url: '/pages/teams/index' }) },
   goToOtherSection: function () { if (this.data.isOrganizer) wx.switchTab({ url: '/pages/event/index' }); else wx.switchTab({ url: '/pages/training/index' }) },
   goToLogin: function () { wx.navigateTo({ url: '/pages/login/login' }) },
+  openGuestDemoAction: function () {
+    var that = this
+    wx.showModal({
+      title: '功能演示',
+      content: '当前展示的是示例数据，不会保存或产生业务记录。登录后可使用对应管理功能。',
+      confirmText: '去登录',
+      cancelText: '继续浏览',
+      confirmColor: '#159346',
+      success: function (res) { if (res.confirm) that.goToLogin() }
+    })
+  },
   goToPublicTournaments: function () { wx.navigateTo({ url: '/pages/tournament/list/list' }) },
   onTournamentTap: function (event) { var id = event.currentTarget.dataset.id; if (id) wx.navigateTo({ url: '/pages/tournament/detail/detail?id=' + id }) },
   onTeamTap: function (event) {

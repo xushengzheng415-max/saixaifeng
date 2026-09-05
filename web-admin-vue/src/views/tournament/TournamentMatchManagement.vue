@@ -68,11 +68,11 @@
         <div class="assignment-versus"><b>{{ assignmentMatch.homeTeamName || '主队待定' }}</b><span>VS</span><b>{{ assignmentMatch.awayTeamName || '客队待定' }}</b></div>
         <div><small>时间 / 场地</small><strong>{{ displayDate(assignmentMatch.matchDate) }} {{ assignmentMatch.matchTime || '待定' }} · {{ assignmentMatch.venue || '场地待定' }}</strong></div>
       </section>
-      <el-alert class="assignment-alert" :title="`${assignmentFormatLabel}需完整指派4人；只有操作负责人可进入服务号现场执法。`" type="info" :closable="false" show-icon />
+      <el-alert class="assignment-alert" :title="`${assignmentFormatLabel}需完整指派4人；同一裁判可执法多场比赛，仅同日期同时间的场次不可重复指派。`" type="info" :closable="false" show-icon />
       <el-form v-loading="refereeLoading" label-position="top" class="assignment-form">
         <el-form-item v-for="role in assignmentRoles" :key="role.key" :label="role.label" required>
           <el-select v-model="assignmentForm[role.key]" filterable :placeholder="`选择${role.label}`">
-            <el-option v-for="referee in assignableReferees" :key="referee._id" :label="refereeOptionLabel(referee)" :value="referee._id" :disabled="refereeUsedByOtherRole(referee._id, role.key)" />
+            <el-option v-for="referee in assignableReferees" :key="referee._id" :label="refereeOptionLabel(referee)" :value="referee._id" :disabled="refereeUsedByOtherRole(referee._id, role.key) || refereeHasTimeConflict(referee._id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="操作负责人" required class="operator-field">
@@ -203,8 +203,25 @@ const statCards = computed(() => {
 const assignmentFormat = computed(() => assignmentMatch.value.matchFormat || divisions.value.find(item => String(item._id || item.id) === String(assignmentMatch.value.divisionId || selectedDivisionId.value))?.matchFormat || '11side')
 const assignmentFormatLabel = computed(() => `${String(assignmentFormat.value).match(/\d+/)?.[0] || '11'}人制`)
 const assignmentRoles = computed(() => /^(5|6)/.test(String(assignmentFormat.value)) ? [{key:'mainReferee',label:'主裁判'},{key:'secondReferee',label:'第二裁判'},{key:'thirdReferee',label:'第三裁判'},{key:'timekeeper',label:'计时员'}] : [{key:'mainReferee',label:'主裁判'},{key:'assistant1',label:'第一助理裁判'},{key:'assistant2',label:'第二助理裁判'},{key:'fourthOfficial',label:'第四官员'}])
-const assignableReferees = computed(() => refereeRows.value.filter(item => item.synthetic === true ? String(item.tournamentId || '') === String(tournamentId) : item.status === 'approved' && item.canOperate !== false))
+const assignableReferees = computed(() => refereeRows.value.filter(item => String(item.tournamentId || '') === String(tournamentId) && (item.synthetic === true || item.status === 'approved' && item.canOperate !== false)))
 const selectedCrewReferees = computed(() => { const ids=assignmentRoles.value.map(role=>assignmentForm.value[role.key]).filter(Boolean);return assignableReferees.value.filter(item=>ids.includes(item._id)) })
+const conflictingRefereeIds = computed(() => {
+  const current = assignmentMatch.value || {}
+  const date = String(current.matchDate || '').slice(0, 10)
+  const time = String(current.matchTime || '')
+  if (!date || !time) return new Set()
+  const ids = new Set()
+  matches.value.forEach(match => {
+    if (String(match._id || '') === String(current._id || '')) return
+    if (['cancelled', 'canceled', 'postponed'].includes(String(match.status || '').toLowerCase())) return
+    if (String(match.matchDate || '').slice(0, 10) !== date || String(match.matchTime || '') !== time) return
+    Object.values(match.refereeCrew || {}).forEach(person => {
+      const refereeId = typeof person === 'string' ? person : person?._id || person?.refereeId
+      if (refereeId) ids.add(String(refereeId))
+    })
+  })
+  return ids
+})
 
 function matchStatus(row) { const value = String(row.status || '').toLowerCase(); if (['live', 'in_progress', 'playing'].includes(value)) return { key:'active', label:'进行中', type:'success' }; if (['completed', 'archived', 'finished'].includes(value)) return { key:'done', label:'已结束', type:'info' }; if (['pending_result', 'pending_review', 'awaiting_result'].includes(value)) return { key:'pending', label:'待处理', type:'warning' }; return { key:'pending', label:'待开始', type:'info' } }
 function reviewStatus(row) { if (['archived', 'completed'].includes(String(row.status || '').toLowerCase())) return { label:'已归档', type:'success' }; if (row.reviewStatus === 'pending' || row.status === 'pending_review') return { label:'待复核', type:'warning' }; return { label:'未结束', type:'info' } }
@@ -266,7 +283,8 @@ function performMatchAction(row, action) {
 }
 function refereeOptionLabel(referee) { const phone=String(referee.phone||referee.phoneNumber||'');const masked=phone.length===11?`${phone.slice(0,3)}****${phone.slice(-4)}`:phone||'无手机号';return `${referee.name||referee.realName||'未命名裁判'}（${referee.synthetic===true?'虚拟测试':referee.level||referee.refereeLevel||'已审核'} · ${masked}）` }
 function refereeUsedByOtherRole(id,currentRole) { return assignmentRoles.value.some(role=>role.key!==currentRole&&assignmentForm.value[role.key]===id) }
-async function loadAssignableReferees() { refereeLoading.value=true;try{refereeRows.value=await queryList('referees',{orderBy:{createTime:'desc'},limit:500,silent:true})||[]}catch(error){refereeRows.value=[];ElMessage.error(error.message||'裁判名单加载失败')}finally{refereeLoading.value=false} }
+function refereeHasTimeConflict(id) { return conflictingRefereeIds.value.has(String(id || '')) }
+async function loadAssignableReferees() { refereeLoading.value=true;try{refereeRows.value=await queryList('referees',{where:{tournamentId},limit:500})||[]}catch(error){refereeRows.value=[];ElMessage.error(error.message||'裁判名单加载失败')}finally{refereeLoading.value=false} }
 async function openQuickAssignment(row) { assignmentMatch.value=row;await loadAssignableReferees();const crew=row.refereeCrew||{};const form={operationRefereeId:row.operationRefereeId||row.refereeRecordKeeperId||''};assignmentRoles.value.forEach(role=>{const value=crew[role.key];form[role.key]=typeof value==='string'?value:value?._id||''});const defaultRole=/^(5|6)/.test(String(assignmentFormat.value))?'timekeeper':'fourthOfficial';form.operationRefereeId=form.operationRefereeId||form[defaultRole]||'';assignmentForm.value=form;assignmentVisible.value=true }
 async function saveQuickAssignment() { const ids=assignmentRoles.value.map(role=>assignmentForm.value[role.key]);if(ids.some(id=>!id))return ElMessage.warning('请完整指派4名裁判');if(new Set(ids).size!==ids.length)return ElMessage.warning('同一名裁判不能重复担任多个岗位');if(!ids.includes(assignmentForm.value.operationRefereeId))return ElMessage.warning('操作负责人必须从本场裁判组中选择');assignmentSaving.value=true;try{const crew={};assignmentRoles.value.forEach(role=>{const referee=assignableReferees.value.find(item=>item._id===assignmentForm.value[role.key]);crew[role.key]={_id:referee._id,name:referee.name||referee.realName||'',phone:referee.phone||referee.phoneNumber||'',synthetic:referee.synthetic===true}});const result=await callFunction('updateMatch',{matchId:assignmentMatch.value._id,data:{refereeCrew:crew,refereeRecordKeeperId:assignmentForm.value.operationRefereeId,operationRefereeId:assignmentForm.value.operationRefereeId}});if(!result?.success)throw new Error(result?.message||result?.error||'裁判指派失败');Object.assign(assignmentMatch.value,{refereeCrew:crew,refereeRecordKeeperId:assignmentForm.value.operationRefereeId,operationRefereeId:assignmentForm.value.operationRefereeId,refereeAssignmentStatus:'assigned',executionState:'assigned'});assignmentVisible.value=false;ElMessage.success('裁判组已指派，操作负责人将通过服务号接收任务')}catch(error){ElMessage.error(error.message||'裁判指派失败')}finally{assignmentSaving.value=false} }
 function goToRefereeManagement(){assignmentVisible.value=false;router.push(`/tournaments/${tournamentId}/referees`)}

@@ -81,6 +81,81 @@ const SERVICE_ACCOUNT_CONFIG = {
   H5_URL: 'https://www.sxffootball.cn/service-account-h5/'
 }
 
+const PARENT_OCR_HOST = 'ocr.tencentcloudapi.com'
+const PARENT_OCR_SERVICE = 'ocr'
+const PARENT_OCR_VERSION = '2018-11-19'
+
+function parentOcrHmac(key, value) {
+  return crypto.createHmac('sha256', key).update(value).digest()
+}
+
+function parentOcrAuthorization(secretId, secretKey, timestamp, payload) {
+  const date = new Date(timestamp * 1000).toISOString().slice(0, 10)
+  const canonicalHeaders = 'content-type:application/json; charset=utf-8\nhost:' + PARENT_OCR_HOST + '\n'
+  const signedHeaders = 'content-type;host'
+  const hashedPayload = crypto.createHash('sha256').update(payload).digest('hex')
+  const canonicalRequest = ['POST', '/', '', canonicalHeaders, signedHeaders, hashedPayload].join('\n')
+  const credentialScope = date + '/' + PARENT_OCR_SERVICE + '/tc3_request'
+  const stringToSign = ['TC3-HMAC-SHA256', String(timestamp), credentialScope, crypto.createHash('sha256').update(canonicalRequest).digest('hex')].join('\n')
+  const dateKey = parentOcrHmac('TC3' + secretKey, date)
+  const serviceKey = parentOcrHmac(dateKey, PARENT_OCR_SERVICE)
+  const signingKey = parentOcrHmac(serviceKey, 'tc3_request')
+  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex')
+  return 'TC3-HMAC-SHA256 Credential=' + secretId + '/' + credentialScope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature
+}
+
+function callParentIdCardOcr(imageBase64) {
+  return new Promise(function(resolve, reject) {
+    const explicitSecretId = process.env.OCR_SECRET_ID || ''
+    const explicitSecretKey = process.env.OCR_SECRET_KEY || ''
+    const secretId = explicitSecretId || process.env.TENCENTCLOUD_SECRETID || process.env.TENCENT_SECRET_ID || ''
+    const secretKey = explicitSecretKey || process.env.TENCENTCLOUD_SECRETKEY || process.env.TENCENT_SECRET_KEY || ''
+    const sessionToken = explicitSecretId && explicitSecretKey ? '' : (process.env.TENCENTCLOUD_SESSIONTOKEN || '')
+    if (!secretId || !secretKey) return reject(Object.assign(new Error('身份证识别服务临时凭据不可用'), { code: 'OCR_CREDENTIAL_MISSING' }))
+    const payload = JSON.stringify({ ImageBase64: imageBase64, CardSide: 'FRONT', Config: JSON.stringify({ CropIdCard: true, CopyWarn: true, ReshootWarn: true, BorderCheckWarn: true, DetectPsWarn: true, TempIdWarn: true, InvalidDateWarn: true }) })
+    const timestamp = Math.floor(Date.now() / 1000)
+    const headers = {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Length': Buffer.byteLength(payload),
+      Host: PARENT_OCR_HOST,
+      'X-TC-Action': 'IDCardOCR',
+      'X-TC-Version': PARENT_OCR_VERSION,
+      'X-TC-Timestamp': String(timestamp),
+      'X-TC-Region': process.env.TENCENTCLOUD_REGION || 'ap-shanghai',
+      Authorization: parentOcrAuthorization(secretId, secretKey, timestamp, payload)
+    }
+    if (sessionToken) headers['X-TC-Token'] = sessionToken
+    const request = https.request({ hostname: PARENT_OCR_HOST, port: 443, path: '/', method: 'POST', headers }, function(response) {
+      let body = ''
+      response.on('data', function(chunk) { body += chunk })
+      response.on('end', function() {
+        try {
+          const parsed = JSON.parse(body)
+          const result = parsed.Response || {}
+          if (result.Error) return reject(Object.assign(new Error(result.Error.Message || '身份证识别失败'), { code: result.Error.Code || 'OCR_API_ERROR' }))
+          resolve(result)
+        } catch (error) { reject(Object.assign(new Error('身份证识别结果解析失败'), { code: 'OCR_RESPONSE_INVALID' })) }
+      })
+    })
+    request.setTimeout(18000, function() { request.destroy(Object.assign(new Error('身份证识别超时，请重试'), { code: 'OCR_TIMEOUT' })) })
+    request.on('error', reject)
+    request.write(payload)
+    request.end()
+  })
+}
+
+function normalizeOcrBirthDate(value) {
+  const digits = String(value || '').replace(/\D/g, '')
+  if (digits.length !== 8) return ''
+  return digits.slice(0, 4) + '-' + digits.slice(4, 6) + '-' + digits.slice(6, 8)
+}
+
+function maskIdentityNumber(value) {
+  const normalized = String(value || '').replace(/[^0-9Xx]/g, '').toUpperCase()
+  if (normalized.length < 6) return ''
+  return normalized.slice(0, 2) + '*'.repeat(Math.max(2, normalized.length - 6)) + normalized.slice(-4)
+}
+
 const WEB_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const WEB_LOGIN_CHALLENGE_TTL_MS = 10 * 60 * 1000
 const REFEREE_H5_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -184,7 +259,7 @@ function verifyWebLoginChallenge(token) {
   }
 }
 
-async function createWebSession(userId) {
+async function createWebSession(userId, channel = 'wechat_web') {
   const db = cloud.database()
   const userResult = await db.collection('users').doc(userId).get()
   const rawUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
@@ -196,7 +271,25 @@ async function createWebSession(userId) {
       tokenHash: hashSessionToken(token),
       userId,
       active: true,
-      channel: 'wechat_web',
+      channel,
+      expiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS),
+      createTime: db.serverDate(),
+      lastUsedAt: db.serverDate()
+    }
+  })
+  return token
+}
+
+async function createPlatformWebSession() {
+  const db = cloud.database()
+  const token = crypto.randomBytes(32).toString('hex')
+  await db.collection('auth_sessions').add({
+    data: {
+      tokenHash: hashSessionToken(token),
+      userId: '',
+      principalType: 'platform_owner',
+      active: true,
+      channel: 'platform_password',
       expiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS),
       createTime: db.serverDate(),
       lastUsedAt: db.serverDate()
@@ -377,15 +470,16 @@ function resolveParentInviteRequirements(invite, player) {
   const identity = readRosterBoolean(sources, ['identityVerificationRequired', 'requiresRealName', 'requireRealName'])
   const portrait = readRosterBoolean(sources, ['portraitRequired', 'requiresPortrait', 'requirePortrait'])
   const parent = readRosterBoolean([invite], ['parentSupplementRequired', 'parentProfileRequired', 'parentCompletionRequired'])
+  const standardFlow = invite.standardProfileFlow === true || player.standardProfileFlow === true || String(player.source || '') === 'team_player_invite'
   return {
     guardianAuthorization: true,
     parentSupplementRequired: parent.defined ? parent.value : true,
     parentSupplementConfigured: true,
-    identityVerificationRequired: identity.defined ? identity.value : false,
-    portraitRequired: portrait.defined ? portrait.value : false,
-    realName: identity.defined ? identity.value : false,
-    portrait: portrait.defined ? portrait.value : false,
-    source: identity.defined || portrait.defined || parent.defined ? 'invite-or-player' : 'invite'
+    identityVerificationRequired: identity.defined ? identity.value : standardFlow,
+    portraitRequired: portrait.defined ? portrait.value : standardFlow,
+    realName: identity.defined ? identity.value : standardFlow,
+    portrait: portrait.defined ? portrait.value : standardFlow,
+    source: standardFlow ? 'standard-player-onboarding' : (identity.defined || portrait.defined || parent.defined ? 'invite-or-player' : 'invite')
   }
 }
 
@@ -501,10 +595,27 @@ async function uploadParentIdentityDocument(event) {
   const digest = crypto.createHash('sha256').update(buffer).digest('hex')
   const cloudPath = 'restricted/parent-identity/' + crypto.createHash('sha256').update(authenticated.session.parentInvite).digest('hex').slice(0, 20) + '/' + side + '-' + Date.now() + '.' + (matched[1] === 'jpeg' ? 'jpg' : 'png')
   const uploaded = await cloud.uploadFile({ cloudPath, fileContent: buffer })
+  let recognition = null
+  let recognitionStatus = 'recognized'
+  let recognitionErrorCode = ''
+  try {
+    const ocr = await callParentIdCardOcr(matched[2])
+    recognition = {
+      name: String(ocr.Name || '').trim(),
+      birthDate: normalizeOcrBirthDate(ocr.Birth),
+      gender: ['男', '女'].indexOf(String(ocr.Sex || '').trim()) >= 0 ? String(ocr.Sex).trim() : '',
+      identityNumberMasked: maskIdentityNumber(ocr.IdNum),
+      warnings: Array.isArray(ocr.WarnInfos) ? ocr.WarnInfos.map(item => String(item)).slice(0, 12) : []
+    }
+    if (!recognition.name || !recognition.birthDate || !recognition.identityNumberMasked) recognitionStatus = 'needs_manual_review'
+  } catch (error) {
+    recognitionStatus = 'needs_manual_review'
+    recognitionErrorCode = String(error.code || 'OCR_FAILED').slice(0, 80)
+  }
   const existing = (await db.collection('parent_identity_documents').where({ parentInvite: authenticated.session.parentInvite, side, status: 'uploaded' }).limit(20).get()).data || []
   await Promise.all(existing.map(item => db.collection('parent_identity_documents').doc(item._id).update({ data: { status: 'replaced', replacedAt: db.serverDate() } })))
-  await db.collection('parent_identity_documents').add({ data: { parentInvite: authenticated.session.parentInvite, side, fileId: uploaded.fileID, sha256: digest, size: buffer.length, mimeType: 'image/' + matched[1], status: 'uploaded', serviceAccountOpenId: authenticated.session.serviceAccountOpenId, createTime: db.serverDate(), updateTime: db.serverDate() } })
-  return { success: true, side, status: 'uploaded' }
+  await db.collection('parent_identity_documents').add({ data: { parentInvite: authenticated.session.parentInvite, side, fileId: uploaded.fileID, sha256: digest, size: buffer.length, mimeType: 'image/' + matched[1], status: 'uploaded', recognitionStatus, recognizedName: recognition ? recognition.name : '', recognizedBirthDate: recognition ? recognition.birthDate : '', recognizedGender: recognition ? recognition.gender : '', identityNumberMasked: recognition ? recognition.identityNumberMasked : '', recognitionWarnings: recognition ? recognition.warnings : [], recognitionErrorCode, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, createTime: db.serverDate(), updateTime: db.serverDate() } })
+  return { success: true, side, status: 'uploaded', recognitionStatus }
 }
 
 async function submitParentIdentityVerification(event) {
@@ -528,27 +639,41 @@ async function submitParentIdentityVerification(event) {
     }
   }
   const records = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
+  const recognized = String(frontDocument.recognitionStatus || '') === 'recognized'
+  const warnings = Array.isArray(frontDocument.recognitionWarnings) ? frontDocument.recognitionWarnings : []
+  const recognizedName = String(frontDocument.recognizedName || '').trim()
+  const recognizedBirthDate = String(frontDocument.recognizedBirthDate || '')
+  const nameMatches = recognizedName && recognizedName === String(preview.data.playerName || '').trim()
+  const birthMatches = recognizedBirthDate && recognizedBirthDate === String(preview.data.birthDate || '')
+  const autoReviewAllowed = recognized && warnings.length === 0
+  const reviewStatus = autoReviewAllowed ? (nameMatches && birthMatches ? 'approved' : 'rejected') : 'pending_review'
+  const reviewReason = reviewStatus === 'rejected'
+    ? (!nameMatches && !birthMatches ? '证件姓名和出生日期与球员档案不一致，请核对后重新上传。' : (!nameMatches ? '证件姓名与球员档案不一致，请核对后重新上传。' : '证件出生日期与球员档案不一致，请核对后重新上传。'))
+    : ''
+  const reviewedAt = reviewStatus === 'pending_review' ? null : db.serverDate()
   const data = {
     parentInvite: authenticated.session.parentInvite,
     documentIds: [frontDocument._id],
     requiredSides: ['front'],
-    status: 'pending_review',
-    reason: '',
-    rejectReason: '',
-    reviewedAt: null,
-    approvedAt: null,
-    rejectedAt: null,
-    identityNumberMasked: '',
-    verifiedBirthDate: '',
-    gender: '',
-    qualificationStatusText: '',
+    status: reviewStatus,
+    reason: reviewReason,
+    rejectReason: reviewReason,
+    reviewedAt,
+    approvedAt: reviewStatus === 'approved' ? reviewedAt : null,
+    rejectedAt: reviewStatus === 'rejected' ? reviewedAt : null,
+    identityNumberMasked: String(frontDocument.identityNumberMasked || ''),
+    verifiedBirthDate: recognizedBirthDate,
+    gender: String(frontDocument.recognizedGender || ''),
+    qualificationStatusText: reviewStatus === 'approved' ? '实名信息与球员档案一致' : '',
+    reviewMode: reviewStatus === 'pending_review' ? 'manual' : 'automatic_ocr',
+    recognitionErrorCode: String(frontDocument.recognitionErrorCode || ''),
     submittedAt: db.serverDate(),
     serviceAccountOpenId: authenticated.session.serviceAccountOpenId,
     updateTime: db.serverDate()
   }
   if (records[0]) await db.collection('parent_identity_verifications').doc(records[0]._id).update({ data })
   else await db.collection('parent_identity_verifications').add({ data: Object.assign({}, data, { createTime: db.serverDate() }) })
-  return { success: true, status: 'pending_review' }
+  return { success: true, status: reviewStatus }
 }
 
 async function getParentIdentityVerification(event) {
@@ -739,6 +864,11 @@ async function authenticateWebSession(event) {
   const sessions = sessionResult.data || []
   if (sessions.length !== 1) return { success: false, error: '登录会话已失效，请重新微信扫码登录', code: 'AUTH_REQUIRED' }
   const session = sessions[0]
+  if (session.principalType === 'platform_owner' && session.channel === 'platform_password') {
+    const platformUser = { _id: 'platform-owner', nickname: '平台负责人', role: 'platform_owner', isPlatformOwner: true, orgId: '' }
+    db.collection('auth_sessions').doc(session._id).update({ data: { lastUsedAt: db.serverDate() } }).catch(() => {})
+    return { success: true, session, user: platformUser, userId: platformUser._id, orgId: '', principalType: 'platform_owner' }
+  }
   const userResult = await db.collection('users').doc(session.userId).get()
   const rawUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!rawUser) return { success: false, error: '登录账号不存在，请重新登录', code: 'AUTH_REQUIRED' }
@@ -1908,6 +2038,56 @@ function verifyPassword(password, salt, hash) {
 }
 
 const ORGANIZER_ROLE = 'organizer'
+const PLATFORM_OWNER_SETTING_ID = 'platform-owner'
+
+async function getPlatformOwnerSetting(db) {
+  let setting = null
+  try {
+    const settingResult = await db.collection('platform_settings').doc(PLATFORM_OWNER_SETTING_ID).get()
+    setting = Array.isArray(settingResult.data) ? settingResult.data[0] : settingResult.data
+  } catch (error) {
+    setting = null
+  }
+  return setting
+}
+
+function verifyPlatformPassword(password, setting) {
+  const salt = String(setting && setting.adminPasswordSalt || 'platform-login-dummy-salt')
+  const actual = crypto.scryptSync(String(password || ''), salt, 64)
+  const expectedHex = String(setting && setting.adminPasswordHash || '')
+  if (!/^[a-f0-9]{128}$/i.test(expectedHex)) return false
+  const expected = Buffer.from(expectedHex, 'hex')
+  return expected.length === actual.length && crypto.timingSafeEqual(actual, expected)
+}
+
+async function recordPlatformLoginFailure(db, setting) {
+  const now = Date.now()
+  const windowMs = 15 * 60 * 1000
+  const windowStartedAt = dateValue(setting && setting.adminLoginWindowStartedAt)
+  const previousCount = windowStartedAt && now - windowStartedAt < windowMs
+    ? Number(setting.adminLoginFailedCount || 0)
+    : 0
+  const failedCount = previousCount + 1
+  const data = {
+    adminLoginFailedCount: failedCount,
+    adminLoginWindowStartedAt: previousCount ? setting.adminLoginWindowStartedAt : new Date(now),
+    adminLoginLastFailedAt: new Date(now)
+  }
+  if (failedCount >= 5) data.adminLoginLockedUntil = new Date(now + windowMs)
+  await db.collection('platform_settings').doc(PLATFORM_OWNER_SETTING_ID).update({ data })
+}
+
+async function clearPlatformLoginFailures(db) {
+  await db.collection('platform_settings').doc(PLATFORM_OWNER_SETTING_ID).update({
+    data: {
+      adminLoginFailedCount: 0,
+      adminLoginWindowStartedAt: null,
+      adminLoginLastFailedAt: null,
+      adminLoginLockedUntil: null,
+      adminLoginLastSuccessAt: db.serverDate()
+    }
+  })
+}
 
 async function normalizeOrganizerUser(db, user) {
   if (String((user && user.role) || '').toLowerCase() !== ORGANIZER_ROLE) {
@@ -2011,21 +2191,18 @@ async function handleSendSms(event) {
   if (!phoneNumber || !/^1[3-9]\d{9}$/.test(phoneNumber)) {
     return { success: false, error: '手机号格式不正确' }
   }
-  if (!SMS_CONFIG.SecretId || !SMS_CONFIG.SecretKey || !SMS_CONFIG.SmsSdkAppId) {
-    return { success: false, error: 'SMS 配置不完整' }
-  }
-
-  const code = generateCode()
-  const db = cloud.database()
 
   try {
-    await callTencentSMS(phoneNumber, code)
-    console.log('[webApi] SMS sent to verified login flow:', phoneNumber.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2'))
-
-    await db.collection('sms_codes').add({
-      data: { phoneNumber, code, loginChallengeId: loginChallengeId || '', expireAt: new Date(Date.now() + 5 * 60 * 1000), used: false, createdAt: db.serverDate() }
+    // 短信凭据只保留在独立 sendSms 函数；网页登录挑战验证通过后再由统一入口转发。
+    const invoked = await cloud.callFunction({
+      name: 'sendSms',
+      data: { phoneNumber, loginChallengeId: loginChallengeId || '' }
     })
-    return { success: true, message: '验证码发送成功' }
+    const result = invoked && invoked.result ? invoked.result : invoked
+    if (!result || result.success !== true) {
+      return { success: false, error: (result && result.error) || '发送失败，请稍后重试' }
+    }
+    return { success: true, message: result.message || '验证码发送成功' }
   } catch (err) {
     console.error('[webApi] sendSms error:', err.message)
     return { success: false, error: err.message || '发送失败，请稍后重试' }
@@ -2108,6 +2285,43 @@ async function handlePasswordLogin(event) {
     needSetPassword: false, needBindEmail: !user.email, needSelectRole: false,
     role: normalizedRole,
     user: { _id: user._id, phone: user.phone, email: user.email || '', role: normalizedRole }
+  }
+}
+
+async function handlePlatformPasswordLogin(event) {
+  const account = String(event.account || '').trim().slice(0, 64)
+  const password = String(event.password || '')
+  if (!account || !password) return { success: false, error: '请输入管理员账号和密码' }
+  if (password.length > 128) return { success: false, error: '账号、密码或平台权限不正确' }
+
+  const db = cloud.database()
+  const setting = await getPlatformOwnerSetting(db) || {}
+  if (dateValue(setting.adminLoginLockedUntil) > Date.now()) {
+    return { success: false, error: '登录尝试次数过多，请15分钟后再试' }
+  }
+  const accountMatches = account === String(setting.adminUsername || '')
+  const passwordMatches = verifyPlatformPassword(password, setting)
+  if (!accountMatches || !passwordMatches) {
+    await recordPlatformLoginFailure(db, setting)
+    return { success: false, error: '账号、密码或平台权限不正确' }
+  }
+  await clearPlatformLoginFailures(db)
+  const authToken = await createPlatformWebSession()
+  return {
+    success: true,
+    message: '平台管理员登录成功',
+    authToken,
+    authExpiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS),
+    role: ORGANIZER_ROLE,
+    user: {
+      _id: 'platform-owner',
+      nickname: '平台负责人',
+      phone: '',
+      phoneNumber: '',
+      email: '',
+      role: 'platform_owner',
+      isPlatformOwner: true
+    }
   }
 }
 
@@ -3864,6 +4078,9 @@ exports.main = async (event, context) => {
       case 'emailSetPassword':
       case 'emailBindEmail':
         result = { success: false, error: '当前仅支持微信扫码登录' }; break
+      case 'platformPasswordLogin':
+        result = await handlePlatformPasswordLogin(params)
+        break
       case 'wechatWebLogin':
         result = await handleWechatOnlyLogin(params)
         break

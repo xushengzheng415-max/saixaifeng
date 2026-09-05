@@ -72,7 +72,8 @@ Page({
     hasIdentityOptions: false,
     confirmDisabled: true,
     confirmText: '确认切换',
-    localVisualQa: false
+    localVisualQa: false,
+    guestMode: false
   },
 
   onLoad: function(options) {
@@ -82,11 +83,20 @@ Page({
       if (options.state === 'identity-sheet') this.setData({ isIdentitySheet: true })
       return
     }
+    if (workspace.isGuestReviewEnabled(options) || !workspace.hasAuthenticatedUser()) {
+      this.loadGuestDemo()
+      return
+    }
     this.loadData()
   },
   onShow: function() {
     if (typeof this.getTabBar === 'function' && this.getTabBar()) this.getTabBar().syncFromPage(4)
     if (this.data.localVisualQa) return
+    if (this.data.guestMode) return
+    if (!workspace.hasAuthenticatedUser()) {
+      this.loadGuestDemo()
+      return
+    }
     this.loadData(true)
   },
 
@@ -144,11 +154,12 @@ Page({
     })
   },
 
-  goToInfo: function() { wx.navigateTo({ url: '/pages/profile/info/info' }) },
-  goToMessages: function() { wx.navigateTo({ url: '/pages/messages/index' }) },
+  goToInfo: function() { if (this.data.guestMode) return workspace.promptLogin('登录后可维护头像、昵称和账号安全信息。'); wx.navigateTo({ url: '/pages/profile/info/info' }) },
+  goToMessages: function() { if (this.data.guestMode) return workspace.promptLogin('登录后可接收并查看与你相关的赛事和球队消息。'); wx.navigateTo({ url: '/pages/messages/index' }) },
 
   onMenuTap: function(event) {
     var action = event.currentTarget.dataset.action || ''
+    if (this.data.guestMode && (action === 'messages' || action === 'security')) return workspace.promptLogin('当前是“我的”功能演示，登录后可使用账号和消息功能。')
     if (action === 'messages') return this.goToMessages()
     if (action === 'events') return wx.switchTab({ url: '/pages/event/index' })
     if (action === 'teams') return wx.switchTab({ url: '/pages/teams/index' })
@@ -160,6 +171,7 @@ Page({
   },
 
   openIdentitySheet: function() {
+    if (this.data.guestMode) return workspace.promptLogin('登录后可查看并切换当前机构内已授权的身份。')
     if (!this.data.hasIdentityOptions) {
       wx.showToast({ title: '当前机构暂无其他已授权身份', icon: 'none' })
       return
@@ -209,6 +221,18 @@ Page({
       workspace.clearContext()
       wx.reLaunch({ url: '/pages/login/login' })
     } })
+  },
+
+  loadGuestDemo: function() {
+    this.setData({
+      localVisualQa: false, guestMode: true, loading: false, submitting: false, errorText: '',
+      userName: '当前未登录', userAvatar: '', hasUserAvatar: false, phoneMasked: '登录后显示账号信息',
+      phoneVerifiedText: '功能演示', phoneStateClass: 'is-unverified',
+      positionsText: '示例 · 球队教练、赛事负责人', permissionsText: '登录后按机构授权显示',
+      workspaceName: '我的功能演示', workspaceLogo: '', hasWorkspaceLogo: false,
+      currentIdentityName: '示例身份', currentIdentityIcon: '/images/icons/team.svg',
+      hasUnread: false, unreadText: '', identityOptions: [], hasIdentityOptions: false, isIdentitySheet: false
+    })
   },
 
   noop: function() {}

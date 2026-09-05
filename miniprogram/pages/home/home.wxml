@@ -13,21 +13,70 @@
       </view>
     </view>
 
-    <view class="login-hero" wx:if="{{!isLoggedIn}}">
-      <view class="guest-home-badge">
-        <image src="/images/runtime/icons/brand-v1-tab-home.png" mode="aspectFit"></image>
-        <text>游客首页</text>
+    <block wx:if="{{!isLoggedIn}}">
+      <view class="guest-login-guide" bindtap="goToLogin">
+        <view class="guest-login-copy">
+          <text class="guest-login-title">当前未登录</text>
+          <text class="guest-login-desc">可先浏览首页服务，使用管理功能时再登录</text>
+        </view>
+        <text class="guest-login-action">去登录 ›</text>
       </view>
-      <text class="guest-title">赛小蜂足球</text>
-      <text class="guest-subtitle">无需登录或授权，即可先浏览公开赛事与平台服务</text>
-      <button bindtap="goToPublicTournaments">免登录浏览公开赛事</button>
-      <button class="login-outline" bindtap="goToLogin">体验后，自主选择登录</button>
-      <view class="guest-feature-grid">
-        <view><text>赛事</text><text>浏览公开赛程与赛事信息</text></view>
-        <view><text>球队</text><text>了解球队资料与协作服务</text></view>
-        <view><text>任务</text><text>登录后处理报名与比赛任务</text></view>
+
+      <view class="guest-section-heading"><text>首页功能演示</text><text>示例数据 · 不保存</text></view>
+      <view class="guest-demo-overview">
+        <view class="guest-demo-top">
+          <view><text class="guest-demo-label">功能演示</text><text class="guest-demo-title">今日工作概览</text></view>
+          <image src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
+        </view>
+        <view class="guest-demo-metrics">
+          <view class="guest-demo-metric" wx:for="{{guestDemoMetrics}}" wx:key="label">
+            <image src="{{item.icon}}" mode="aspectFit"></image>
+            <text class="guest-demo-value">{{item.value}}</text>
+            <text class="guest-demo-name">{{item.label}}</text>
+          </view>
+        </view>
+        <text class="guest-demo-note">以下内容用于了解首页能力，不代表真实赛事或球队数据</text>
       </view>
-    </view>
+
+      <view class="guest-section-heading guest-task-heading"><text>需要我处理</text><text>演示任务</text></view>
+      <view class="guest-demo-tasks">
+        <view class="guest-demo-task" wx:for="{{guestDemoTasks}}" wx:key="id" bindtap="openGuestDemoAction">
+          <image src="{{item.icon}}" mode="aspectFit"></image>
+          <view><text class="guest-demo-task-title">{{item.title}}</text><text class="guest-demo-task-desc">{{item.subtitle}}</text></view>
+          <text class="guest-demo-arrow">›</text>
+        </view>
+      </view>
+
+      <view class="guest-section-heading"><text>赛事服务</text><text bindtap="goToPublicTournaments">全部赛事 ›</text></view>
+      <view class="guest-public-card" bindtap="goToPublicTournaments">
+        <view class="guest-public-copy">
+          <text class="guest-public-label">公开赛事</text>
+          <text class="guest-public-title">查看赛程、比分与排名</text>
+          <text class="guest-public-desc">无需登录或授权，直接浏览已公开的赛事信息</text>
+        </view>
+        <image src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
+        <view class="guest-public-action">免登录浏览公开赛事　›</view>
+      </view>
+
+      <view class="guest-section-heading guest-service-heading"><text>平台功能</text><text>浏览后，可自行选择登录</text></view>
+      <view class="guest-service-grid">
+        <view class="guest-service-card" bindtap="goToPublicTournaments">
+          <image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit"></image>
+          <text class="guest-service-title">赛事</text>
+          <text class="guest-service-desc">公开赛事与赛程</text>
+        </view>
+        <view class="guest-service-card" bindtap="goToLogin">
+          <image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image>
+          <text class="guest-service-title">球队</text>
+          <text class="guest-service-desc">球队与球员协作</text>
+        </view>
+        <view class="guest-service-card" bindtap="goToLogin">
+          <image src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image>
+          <text class="guest-service-title">青训</text>
+          <text class="guest-service-desc">课程与训练服务</text>
+        </view>
+      </view>
+    </block>
 
     <view class="loading" wx:if="{{loading}}">正在准备首页…</view>
     <view class="error-card" wx:if="{{errorText}}"><text>{{errorText}}</text><text bindtap="loadData">重新加载</text></view>

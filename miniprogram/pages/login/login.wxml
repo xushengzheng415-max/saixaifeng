@@ -3,7 +3,7 @@
   <view class="login-shade"></view>
 
   <view class="guest-home" style="{{guestHomeStyle}}" role="button" aria-label="免登录浏览首页" bindtap="goToGuestHome">
-    <image src="/images/runtime/icons/brand-v1-tab-home.png" mode="aspectFit"></image>
+    <image src="/images/icons/home-entry-white.svg" mode="aspectFit"></image>
   </view>
 
   <view class="content-overlay">

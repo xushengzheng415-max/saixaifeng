@@ -70,6 +70,24 @@ async function accessToken() {
   return tokenCache.value
 }
 
+function validatedMenu(value) {
+  const menu = value && typeof value === 'object' ? value : {}
+  if (!Array.isArray(menu.button) || menu.button.length < 1 || menu.button.length > 3) throw new Error('菜单必须包含1至3个一级入口')
+  const buttons = menu.button.map(item => {
+    const type = String(item && item.type || '').trim()
+    const name = String(item && item.name || '').trim()
+    const url = String(item && item.url || '').trim()
+    if (type !== 'view' || !name || !url) throw new Error('当前只允许名称和链接完整的网页菜单')
+    if ([...name].length > 4) throw new Error('一级菜单名称不能超过4个汉字')
+    let parsed
+    try { parsed = new URL(url) } catch { throw new Error('菜单链接格式无效') }
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'www.sxffootball.cn') throw new Error('菜单只能指向足球正式域名')
+    return { type, name, url: parsed.toString() }
+  })
+  if (new Set(buttons.map(item => item.name)).size !== buttons.length) throw new Error('菜单名称不能重复')
+  return { button: buttons }
+}
+
 async function handle(action, payload) {
   if (action === 'probe') {
     await accessToken()
@@ -93,6 +111,19 @@ async function handle(action, payload) {
       method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify(message)
     })
     return { success: true, msgid: data.msgid || '' }
+  }
+  if (action === 'menu/create') {
+    const menu = validatedMenu(payload && payload.menu)
+    const token = await accessToken()
+    await wechatJson(`https://api.weixin.qq.com/cgi-bin/menu/create?access_token=${encodeURIComponent(token)}`, {
+      method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify(menu)
+    })
+    return { success: true, menu }
+  }
+  if (action === 'menu/get') {
+    const token = await accessToken()
+    const data = await wechatJson(`https://api.weixin.qq.com/cgi-bin/menu/get?access_token=${encodeURIComponent(token)}`)
+    return { success: true, menu: data.menu || null }
   }
   const error = new Error('不支持的中转动作')
   error.statusCode = 404

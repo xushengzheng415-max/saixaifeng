@@ -306,7 +306,7 @@ const usesEmbeddedPageHeader = computed(() => route.meta.embeddedPageHeader === 
 const unreadNotificationCount = ref(0)
 
 function openHelpCenter() {
-  window.open('https://www.sxffootball.cn/#features', '_blank', 'noopener,noreferrer')
+  router.push(userInfo.value.isPlatformOwner === true ? '/system' : '/assistance')
 }
 
 function showNotifications() {
@@ -789,7 +789,7 @@ const refereeNavItems = computed(() => [{ path: '/tournament-space', label: '赛
 
 // 赛事中心超级管理后台导航
 const adminNavItems = [
-  { path: '/tournament-center-admin', label: '赛事中心管理', icon: 'Picture' },
+  { path: '/tournament-center-admin', label: '平台运营中心', icon: 'Picture' },
   { path: '/admin/tournaments', label: '赛事列表', icon: 'Trophy' },
   { path: '/admin/teams', label: '球队列表', icon: 'UserFilled' },
   { path: `${import.meta.env.BASE_URL}formation-designer.html`, label: '阵型设计器', icon: 'Place', external: true },

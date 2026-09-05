@@ -1,302 +1,154 @@
 <template>
-  <div class="content-admin">
+  <div class="platform-console">
     <div v-if="checkingPermission" class="permission-loading">
-      <el-icon class="is-loading" :size="28"><Loading /></el-icon>
-      <span>正在校验平台负责人权限…</span>
+      <el-icon class="is-loading" :size="30"><Loading /></el-icon>
+      <span>正在进入平台运营中心…</span>
     </div>
 
     <template v-else>
-      <header class="page-header">
+      <aside class="sidebar">
         <div class="brand">
-          <img :src="logoUrl" alt="赛小蜂足球" class="brand-logo" />
-          <div>
-            <h1>赛事中心内容后台</h1>
-            <p>统一管理公开赛事中心的轮播与推荐内容</p>
-          </div>
+          <img :src="logoUrl" alt="赛小蜂足球" />
+          <div><strong>赛小蜂足球</strong><span>平台运营中心</span></div>
         </div>
-        <div class="header-actions">
-          <span class="current-user">{{ currentUserName }}</span>
-          <el-button @click="loadOverview">
-            <el-icon><Refresh /></el-icon>
-            刷新
-          </el-button>
-          <el-button type="primary" plain @click="goBack">
-            返回管理后台
-          </el-button>
+        <nav>
+          <button v-for="item in navigation" :key="item.key" :class="{ active: activeTab === item.key }" @click="activeTab = item.key">
+            <el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span><em v-if="item.badge">{{ item.badge }}</em>
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="owner"><small>当前平台负责人</small><strong>{{ currentUserName }}</strong></div>
+          <el-button text @click="router.push('/tournament-space')"><el-icon><Back /></el-icon>返回赛事空间</el-button>
         </div>
-      </header>
+      </aside>
 
-      <main class="page-main">
-        <el-alert
-          title="主办方账号由用户首次登录自动创建；本页仅提供账号概览，不在这里新增、停用或切换登录身份。"
-          type="info"
-          :closable="false"
-          show-icon
-          class="scope-alert"
-        />
+      <main>
+        <header class="topbar">
+          <div><small>PLATFORM OPERATIONS</small><h1>{{ section.title }}</h1><p>{{ section.description }}</p></div>
+          <div class="top-actions"><span v-if="lastLoadedAt">更新于 {{ formatTime(lastLoadedAt, true) }}</span><el-button :loading="loading" @click="loadOverview"><el-icon><Refresh /></el-icon>刷新数据</el-button></div>
+        </header>
 
-        <el-row :gutter="16" class="stats-row">
-          <el-col v-for="item in statCards" :key="item.key" :xs="12" :sm="12" :lg="6">
-            <div class="stat-card">
-              <div class="stat-icon" :class="item.color">
-                <el-icon><component :is="item.icon" /></el-icon>
-              </div>
-              <div>
-                <div class="stat-value">{{ item.value }}</div>
-                <div class="stat-label">{{ item.label }}</div>
-              </div>
+        <div v-loading="loading" class="workspace">
+          <template v-if="activeTab === 'overview'">
+            <section class="stats">
+              <button v-for="item in statCards" :key="item.key" @click="activeTab = item.target">
+                <span class="stat-icon" :class="item.color"><el-icon><component :is="item.icon" /></el-icon></span>
+                <span class="stat-copy"><strong>{{ item.value }}</strong><b>{{ item.label }}</b><small>{{ item.hint }}</small></span>
+                <el-icon><ArrowRight /></el-icon>
+              </button>
+            </section>
+
+            <div class="overview-grid">
+              <section class="panel">
+                <div class="panel-head"><div><h2>最近创建的赛事</h2><p>第一时间知道谁在平台发起了新比赛</p></div><el-button link type="primary" @click="activeTab = 'tournaments'">查看全部</el-button></div>
+                <div v-if="recentTournaments.length" class="activity-list">
+                  <button v-for="item in recentTournaments" :key="item._id" @click="openTournament(item)">
+                    <span class="entity-icon"><el-icon><Trophy /></el-icon></span>
+                    <span><strong>{{ item.name }}</strong><small>{{ item.organizerName || '主办方待补充' }} · {{ formatDate(item.createTime) }}</small></span>
+                    <el-tag :type="statusType(item.status)">{{ statusText(item.status) }}</el-tag><small>{{ item.teamCount }} 支球队</small>
+                  </button>
+                </div>
+                <el-empty v-else description="暂无赛事数据" />
+              </section>
+              <section class="panel attention">
+                <div class="panel-head"><div><h2>需要跟进</h2><p>联系人和协助事项集中处理</p></div></div>
+                <button v-if="stats.activeSupportCount" class="notice warning" @click="activeTab = 'support'"><el-icon><Service /></el-icon><span><strong>{{ stats.activeSupportCount }} 个协助事项处理中</strong><small>查看用户授权状态和有效期</small></span><el-icon><ArrowRight /></el-icon></button>
+                <button v-if="stats.missingContactCount" class="notice danger" @click="showMissingContacts"><el-icon><Warning /></el-icon><span><strong>{{ stats.missingContactCount }} 个主办方缺少联系方式</strong><small>需要补齐手机号或邮箱</small></span><el-icon><ArrowRight /></el-icon></button>
+                <div v-if="!stats.activeSupportCount && !stats.missingContactCount" class="all-clear"><el-icon><CircleCheckFilled /></el-icon><strong>当前没有待跟进异常</strong><small>联系人与协助状态都正常</small></div>
+              </section>
             </div>
-          </el-col>
-        </el-row>
 
-        <el-card shadow="never" class="content-card">
-          <el-tabs v-model="activeTab">
-            <el-tab-pane label="轮播图" name="banners">
-              <div class="section-header">
-                <div>
-                  <h2>首页轮播图</h2>
-                  <p>停用后将不再作为公开内容展示。</p>
-                </div>
-                <el-button type="primary" @click="openBannerDialog()">
-                  <el-icon><Plus /></el-icon>
-                  添加轮播图
-                </el-button>
-              </div>
+            <section class="panel recent-organizers">
+              <div class="panel-head"><div><h2>最近活跃的主办方</h2><p>按最近创建赛事时间排序</p></div><el-button link type="primary" @click="activeTab = 'organizers'">主办方名录</el-button></div>
+              <div class="organizer-cards"><button v-for="item in organizers.slice(0, 4)" :key="item._id" @click="openOrganizer(item)"><span class="avatar">{{ avatarText(item.name) }}</span><span><strong>{{ item.name }}</strong><small>{{ item.contact }} · {{ item.phone || item.email || '联系方式待补充' }}</small><small>{{ item.tournamentCount }} 场赛事 · {{ item.teamCount }} 支自建球队</small></span><el-icon><ArrowRight /></el-icon></button></div>
+            </section>
+          </template>
 
-              <el-table :data="banners" v-loading="loading" border>
-                <el-table-column label="图片" width="190">
-                  <template #default="{ row }">
-                    <button class="image-button" type="button" @click="previewImage(row.displayImageUrl)">
-                      <img :src="row.displayImageUrl" :alt="row.title || '轮播图'" class="banner-image" />
-                    </button>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="title" label="标题" min-width="160" />
-                <el-table-column prop="link" label="跳转链接" min-width="210" show-overflow-tooltip />
-                <el-table-column label="排序" width="120">
-                  <template #default="{ row }">
-                    <el-input-number
-                      v-model="row.sort"
-                      :min="0"
-                      :max="999"
-                      size="small"
-                      controls-position="right"
-                      @change="saveBannerQuick(row)"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column label="状态" width="100">
-                  <template #default="{ row }">
-                    <el-switch v-model="row.isActive" @change="saveBannerQuick(row)" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="150" fixed="right">
-                  <template #default="{ row }">
-                    <el-button type="primary" link @click="openBannerDialog(row)">编辑</el-button>
-                    <el-button type="danger" link @click="removeBanner(row)">删除</el-button>
-                  </template>
-                </el-table-column>
-                <template #empty>
-                  <el-empty description="暂无轮播图" />
-                </template>
-              </el-table>
-            </el-tab-pane>
+          <section v-else-if="activeTab === 'organizers'" class="panel table-panel">
+            <div class="toolbar">
+              <el-input v-model="organizerKeyword" clearable placeholder="搜索主办方、联系人、手机号、邮箱"><template #prefix><el-icon><Search /></el-icon></template></el-input>
+              <el-select v-model="organizerContactFilter"><el-option label="全部联系状态" value="all" /><el-option label="可直接联系" value="ready" /><el-option label="联系方式缺失" value="missing" /><el-option label="协助处理中" value="support" /></el-select>
+              <span>共 {{ filteredOrganizers.length }} 个主办方</span>
+            </div>
+            <el-table :data="filteredOrganizers" row-key="_id" @row-click="openOrganizer">
+              <el-table-column label="主办方" min-width="230"><template #default="{ row }"><div class="name-cell"><span class="avatar small">{{ avatarText(row.name) }}</span><div><strong>{{ row.name }}</strong><small>{{ row.orgId ? '已关联机构' : '个人主办方账号' }}</small></div></div></template></el-table-column>
+              <el-table-column label="联系人" min-width="150"><template #default="{ row }"><strong>{{ row.contact }}</strong><small class="block">{{ row.email || '未填写邮箱' }}</small></template></el-table-column>
+              <el-table-column label="手机号" width="175"><template #default="{ row }"><button v-if="row.phone" class="phone" @click.stop="copyText(row.phone)">{{ row.phone }} <el-icon><CopyDocument /></el-icon></button><el-tag v-else type="danger" effect="plain">待补充</el-tag></template></el-table-column>
+              <el-table-column prop="tournamentCount" label="创建赛事" width="105" align="center" /><el-table-column prop="teamCount" label="创建球队" width="105" align="center" />
+              <el-table-column label="协助状态" width="120"><template #default="{ row }"><el-tag v-if="row.activeSupportCount" type="warning">处理中 {{ row.activeSupportCount }}</el-tag><small v-else>暂无</small></template></el-table-column>
+              <el-table-column label="最近赛事" min-width="210"><template #default="{ row }">{{ row.latestTournament?.name || '尚未创建赛事' }}<small class="block">{{ formatDate(row.latestTournament?.createTime || row.createTime) }}</small></template></el-table-column>
+              <el-table-column label="操作" width="170" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openOrganizer(row)">查看档案</el-button><el-button link @click.stop="startSupport">协助处理</el-button></template></el-table-column>
+              <template #empty><el-empty description="没有符合条件的主办方" /></template>
+            </el-table>
+          </section>
 
-            <el-tab-pane label="推荐赛事" name="featured">
-              <div class="section-header">
-                <div>
-                  <h2>推荐赛事</h2>
-                  <p>推荐内容按排序数字从小到大展示。</p>
-                </div>
-                <el-button type="primary" @click="openFeaturedDialog">
-                  <el-icon><Plus /></el-icon>
-                  添加推荐
-                </el-button>
-              </div>
+          <section v-else-if="activeTab === 'accounts'" class="panel table-panel">
+            <div class="account-tip"><strong>账号删除保护</strong><span>只允许删除没有机构、赛事、球队、球员或成员关系的空主办方账号。业务数据不会随账号删除。</span></div>
+            <div class="toolbar">
+              <el-input v-model="accountKeyword" clearable placeholder="搜索账号姓名、手机号、邮箱"><template #prefix><el-icon><Search /></el-icon></template></el-input>
+              <span>共 {{ filteredAccounts.length }} 个主办方账号</span>
+            </div>
+            <el-table :data="filteredAccounts" row-key="_id">
+              <el-table-column label="登录账号" min-width="210"><template #default="{ row }"><div class="name-cell"><span class="avatar small">{{ avatarText(row.name) }}</span><div><strong>{{ row.name }}</strong><small>{{ row._id }}</small></div></div></template></el-table-column>
+              <el-table-column label="手机号" width="150"><template #default="{ row }">{{ row.phone || '未填写' }}</template></el-table-column>
+              <el-table-column label="邮箱" min-width="190"><template #default="{ row }">{{ row.email || '未填写' }}</template></el-table-column>
+              <el-table-column label="机构状态" width="120"><template #default="{ row }"><el-tag :type="row.orgId ? 'warning' : 'info'" effect="plain">{{ row.orgId ? '已关联机构' : '无机构' }}</el-tag></template></el-table-column>
+              <el-table-column prop="tournamentCount" label="创建赛事" width="95" align="center" />
+              <el-table-column prop="teamCount" label="创建球队" width="95" align="center" />
+              <el-table-column label="账号状态" width="100"><template #default="{ row }"><el-tag :type="row.isActive ? 'success' : 'info'">{{ row.isActive ? '正常' : '已停用' }}</el-tag></template></el-table-column>
+              <el-table-column label="最近登录" width="165"><template #default="{ row }">{{ formatTime(row.lastLoginTime) }}</template></el-table-column>
+              <el-table-column label="操作" width="110" fixed="right"><template #default="{ row }"><el-button link type="danger" :loading="accountDeletingId === row._id" @click="inspectAndDeleteAccount(row)">删除账号</el-button></template></el-table-column>
+              <template #empty><el-empty description="没有符合条件的主办方账号" /></template>
+            </el-table>
+          </section>
 
-              <el-table :data="featuredTournaments" v-loading="loading" border>
-                <el-table-column prop="name" label="赛事名称" min-width="220" />
-                <el-table-column prop="organizerName" label="主办方" min-width="150" />
-                <el-table-column label="类型" width="120">
-                  <template #default="{ row }">
-                    <el-tag>{{ categoryText(row.category) }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="状态" width="110">
-                  <template #default="{ row }">
-                    <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="排序" width="120">
-                  <template #default="{ row }">
-                    <el-input-number
-                      v-model="row.featuredSort"
-                      :min="0"
-                      :max="999"
-                      size="small"
-                      controls-position="right"
-                      @change="updateFeatured(row, true)"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="160" fixed="right">
-                  <template #default="{ row }">
-                    <el-button type="primary" link @click="viewTournament(row)">查看</el-button>
-                    <el-button type="danger" link @click="confirmRemoveFeatured(row)">取消推荐</el-button>
-                  </template>
-                </el-table-column>
-                <template #empty>
-                  <el-empty description="暂无推荐赛事" />
-                </template>
-              </el-table>
-            </el-tab-pane>
+          <section v-else-if="activeTab === 'tournaments'" class="panel table-panel">
+            <div class="toolbar"><el-input v-model="tournamentKeyword" clearable placeholder="搜索赛事、主办方、城市"><template #prefix><el-icon><Search /></el-icon></template></el-input><el-select v-model="tournamentStatusFilter"><el-option label="全部状态" value="all" /><el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" /></el-select><span>共 {{ filteredTournaments.length }} 场赛事</span></div>
+            <el-table :data="filteredTournaments" row-key="_id" @row-click="openTournament">
+              <el-table-column label="赛事名称" min-width="260"><template #default="{ row }"><div class="name-cell"><span class="entity-icon"><el-icon><Trophy /></el-icon></span><div><strong>{{ row.name }}</strong><small>{{ categoryText(row.category) }} · {{ formatText(row.formatType) }}</small></div></div></template></el-table-column>
+              <el-table-column label="主办方/创建人" min-width="210"><template #default="{ row }"><strong>{{ row.organizerName || '主办方待补充' }}</strong><small class="block">{{ row.creatorName || '创建人待核验' }}{{ row.creatorPhone ? ` · ${row.creatorPhone}` : '' }}</small></template></el-table-column><el-table-column label="举办地" min-width="130"><template #default="{ row }">{{ row.city || '待补充' }}</template></el-table-column>
+              <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column><el-table-column prop="teamCount" label="参赛球队" width="105" align="center" /><el-table-column label="创建时间" width="150"><template #default="{ row }">{{ formatDate(row.createTime) }}</template></el-table-column>
+              <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openTournament(row)">查看</el-button></template></el-table-column>
+              <template #empty><el-empty description="没有符合条件的赛事" /></template>
+            </el-table>
+          </section>
 
-            <el-tab-pane label="全部赛事" name="tournaments">
-              <div class="section-header">
-                <div>
-                  <h2>赛事数据</h2>
-                  <p>此处展示平台赛事概览，赛事业务编辑仍在主办方管理后台完成。</p>
-                </div>
-                <div class="filters">
-                  <el-select v-model="categoryFilter" placeholder="全部类型" clearable>
-                    <el-option
-                      v-for="item in categories"
-                      :key="item.value"
-                      :label="item.label"
-                      :value="item.value"
-                    />
-                  </el-select>
-                  <el-input v-model="keyword" placeholder="搜索赛事名称" clearable>
-                    <template #prefix><el-icon><Search /></el-icon></template>
-                  </el-input>
-                </div>
-              </div>
+          <section v-else-if="activeTab === 'teams'" class="panel table-panel">
+            <div class="toolbar"><el-input v-model="teamKeyword" clearable placeholder="搜索球队、联系人、手机号、创建方"><template #prefix><el-icon><Search /></el-icon></template></el-input><span>共 {{ filteredTeams.length }} 支长期球队</span></div>
+            <el-table :data="filteredTeams" row-key="_id" @row-click="openTeam">
+              <el-table-column label="球队" min-width="230"><template #default="{ row }"><div class="name-cell"><span class="team-logo"><img v-if="row.logo" :src="row.logo" alt="" /><el-icon v-else><Flag /></el-icon></span><div><strong>{{ row.name }}</strong><small>{{ row.city || '地区待补充' }}</small></div></div></template></el-table-column>
+              <el-table-column label="创建方/所属机构" min-width="200"><template #default="{ row }">{{ row.organizerName || '归属待核验' }}</template></el-table-column><el-table-column label="球队联系人" min-width="180"><template #default="{ row }"><strong>{{ row.contact || '待补充' }}</strong><small class="block">{{ row.phone || '未填写手机号' }}</small></template></el-table-column>
+              <el-table-column prop="playerCount" label="球员数" width="90" align="center" /><el-table-column prop="tournamentCount" label="参赛次数" width="100" align="center" /><el-table-column label="创建时间" width="150"><template #default="{ row }">{{ formatDate(row.createTime) }}</template></el-table-column><el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openTeam(row)">查看</el-button></template></el-table-column>
+              <template #empty><el-empty description="没有符合条件的球队" /></template>
+            </el-table>
+          </section>
 
-              <el-table :data="filteredTournaments" v-loading="loading" border>
-                <el-table-column prop="name" label="赛事名称" min-width="220" />
-                <el-table-column prop="organizerName" label="主办方" min-width="150" />
-                <el-table-column label="赛事类型" width="120">
-                  <template #default="{ row }">{{ categoryText(row.category) }}</template>
-                </el-table-column>
-                <el-table-column label="赛制" width="110">
-                  <template #default="{ row }">{{ formatText(row.formatType) }}</template>
-                </el-table-column>
-                <el-table-column label="状态" width="110">
-                  <template #default="{ row }">
-                    <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="推荐" width="90">
-                  <template #default="{ row }">
-                    <el-tag :type="row.isFeatured ? 'success' : 'info'">
-                      {{ row.isFeatured ? '已推荐' : '未推荐' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="100" fixed="right">
-                  <template #default="{ row }">
-                    <el-button type="primary" link @click="viewTournament(row)">查看</el-button>
-                  </template>
-                </el-table-column>
-                <template #empty>
-                  <el-empty description="暂无赛事数据" />
-                </template>
-              </el-table>
-            </el-tab-pane>
+          <template v-else-if="activeTab === 'support'">
+            <section class="support-hero"><div><span><el-icon><Headset /></el-icon></span><div><h2>安全协助中心</h2><p>联系主办方后，由对方本人确认协助码，再临时进入其赛事与球队处理问题。</p></div></div><el-button size="large" @click="router.push('/system')"><el-icon><Connection /></el-icon>发起一次协助</el-button></section>
+            <section class="panel table-panel"><div class="panel-head"><div><h2>最近协助记录</h2><p>仅展示必要状态，不暴露微信身份标识</p></div></div><el-table :data="supportRequests"><el-table-column label="协助对象" min-width="180"><template #default="{ row }"><strong>{{ row.targetName || '等待用户确认' }}</strong><small class="block">{{ row.targetPhoneMasked || '手机号确认后显示' }}</small></template></el-table-column><el-table-column prop="reason" label="问题说明" min-width="300" /><el-table-column label="状态" width="130"><template #default="{ row }"><el-tag :type="supportStatusType(row.status)">{{ supportStatusText(row.status) }}</el-tag></template></el-table-column><el-table-column label="发起时间" width="165"><template #default="{ row }">{{ formatTime(row.createTime) }}</template></el-table-column><el-table-column label="授权截止" width="165"><template #default="{ row }">{{ formatTime(row.grantExpiresAt) }}</template></el-table-column><template #empty><el-empty description="暂无协助记录" /></template></el-table></section>
+          </template>
 
-            <el-tab-pane label="主办方概览" name="organizers">
-              <div class="section-header">
-                <div>
-                  <h2>主办方账号概览</h2>
-                  <p>手机号已脱敏；账号创建和身份归一由统一登录流程负责。</p>
-                </div>
-              </div>
-
-              <el-table :data="organizers" v-loading="loading" border>
-                <el-table-column prop="name" label="主办方名称" min-width="190" />
-                <el-table-column prop="contact" label="联系人" min-width="130" />
-                <el-table-column prop="phone" label="手机号" width="140" />
-                <el-table-column prop="email" label="邮箱" min-width="190" show-overflow-tooltip />
-                <el-table-column prop="orgId" label="机构标识" min-width="190" show-overflow-tooltip />
-                <el-table-column label="账号状态" width="110">
-                  <template #default="{ row }">
-                    <el-tag :type="row.isActive ? 'success' : 'info'">
-                      {{ row.isActive ? '正常' : '已停用' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <template #empty>
-                  <el-empty description="暂无主办方账号" />
-                </template>
-              </el-table>
-            </el-tab-pane>
-          </el-tabs>
-        </el-card>
+          <section v-else class="panel content-panel">
+            <el-tabs v-model="contentTab">
+              <el-tab-pane label="首页轮播" name="banners"><div class="panel-head"><div><h2>赛事中心首页轮播</h2><p>管理公开赛事中心展示内容</p></div><el-button type="primary" @click="openBannerDialog()"><el-icon><Plus /></el-icon>添加轮播</el-button></div><el-table :data="banners" border><el-table-column label="图片" width="190"><template #default="{ row }"><button class="banner-image" @click="previewImage(row.displayImageUrl)"><img :src="row.displayImageUrl" alt="" /></button></template></el-table-column><el-table-column prop="title" label="标题" min-width="180" /><el-table-column prop="link" label="跳转链接" min-width="220" show-overflow-tooltip /><el-table-column label="排序" width="120"><template #default="{ row }"><el-input-number v-model="row.sort" :min="0" :max="999" size="small" controls-position="right" @change="saveBannerQuick(row)" /></template></el-table-column><el-table-column label="状态" width="100"><template #default="{ row }"><el-switch v-model="row.isActive" @change="saveBannerQuick(row)" /></template></el-table-column><el-table-column label="操作" width="140"><template #default="{ row }"><el-button link type="primary" @click="openBannerDialog(row)">编辑</el-button><el-button link type="danger" @click="removeBanner(row)">删除</el-button></template></el-table-column></el-table></el-tab-pane>
+              <el-tab-pane label="推荐赛事" name="featured"><div class="panel-head"><div><h2>公开推荐赛事</h2><p>按排序数字从小到大展示</p></div><el-button type="primary" @click="featuredDialogVisible = true"><el-icon><Plus /></el-icon>添加推荐</el-button></div><el-table :data="featuredTournaments" border><el-table-column prop="name" label="赛事名称" min-width="230" /><el-table-column prop="organizerName" label="主办方" min-width="180" /><el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column><el-table-column label="排序" width="120"><template #default="{ row }"><el-input-number v-model="row.featuredSort" :min="0" :max="999" size="small" controls-position="right" @change="updateFeatured(row, true)" /></template></el-table-column><el-table-column label="操作" width="120"><template #default="{ row }"><el-button link type="danger" @click="removeFeatured(row)">取消推荐</el-button></template></el-table-column></el-table></el-tab-pane>
+            </el-tabs>
+          </section>
+        </div>
       </main>
 
-      <el-dialog
-        v-model="bannerDialogVisible"
-        :title="bannerForm.bannerId ? '编辑轮播图' : '添加轮播图'"
-        width="min(620px, 92vw)"
-        destroy-on-close
-      >
-        <el-form label-width="88px">
-          <el-form-item label="标题">
-            <el-input v-model="bannerForm.title" maxlength="80" show-word-limit />
-          </el-form-item>
-          <el-form-item label="图片" required>
-            <div class="upload-area">
-              <button type="button" class="upload-button" @click="openBannerCropper">
-                <img v-if="bannerForm.displayImageUrl" :src="bannerForm.displayImageUrl" alt="轮播图预览" />
-                <span v-else><el-icon><Plus /></el-icon> 选择并裁剪图片</span>
-              </button>
-              <span class="form-tip">建议比例 16:5，支持 JPG、PNG。</span>
-            </div>
-          </el-form-item>
-          <el-form-item label="跳转链接">
-            <el-input v-model="bannerForm.link" placeholder="/portal/tournaments 或 https://…" />
-          </el-form-item>
-          <el-form-item label="排序">
-            <el-input-number v-model="bannerForm.sort" :min="0" :max="999" />
-            <span class="form-tip inline-tip">数字越小越靠前</span>
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-switch v-model="bannerForm.isActive" active-text="启用" inactive-text="停用" />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="bannerDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="savingBanner" @click="submitBanner">保存</el-button>
-        </template>
-      </el-dialog>
+      <el-drawer v-model="organizerDrawerVisible" title="主办方运营档案" size="min(680px, 92vw)">
+        <template v-if="selectedOrganizer"><div class="profile-head"><span class="avatar large">{{ avatarText(selectedOrganizer.name) }}</span><div><h2>{{ selectedOrganizer.name }}</h2><p>{{ selectedOrganizer.contact }} · {{ selectedOrganizer.orgId ? '机构主办方' : '个人主办方账号' }}</p></div></div><div class="contact-card"><div><small>手机号</small><strong>{{ selectedOrganizer.phone || '尚未填写' }}</strong></div><div><small>邮箱</small><strong>{{ selectedOrganizer.email || '尚未填写' }}</strong></div><div class="contact-actions"><el-button :disabled="!selectedOrganizer.phone" @click="copyText(selectedOrganizer.phone)"><el-icon><CopyDocument /></el-icon>复制手机号</el-button><el-button type="primary" @click="startSupport"><el-icon><Headset /></el-icon>协助处理问题</el-button></div></div><el-descriptions :column="2" border class="description"><el-descriptions-item label="创建赛事">{{ selectedOrganizer.tournamentCount }}</el-descriptions-item><el-descriptions-item label="创建球队">{{ selectedOrganizer.teamCount }}</el-descriptions-item><el-descriptions-item label="账号状态">{{ selectedOrganizer.isActive ? '正常' : '已停用' }}</el-descriptions-item><el-descriptions-item label="最近登录">{{ formatTime(selectedOrganizer.lastLoginTime) }}</el-descriptions-item></el-descriptions><h3>他创建的赛事</h3><div v-if="selectedOrganizerTournaments.length" class="drawer-list"><button v-for="item in selectedOrganizerTournaments" :key="item._id" @click="openTournament(item)"><span><strong>{{ item.name }}</strong><small>{{ statusText(item.status) }} · {{ item.teamCount }} 支球队</small></span><el-icon><ArrowRight /></el-icon></button></div><el-empty v-else description="尚未创建赛事" :image-size="70" /><h3>他创建的球队</h3><div v-if="selectedOrganizerTeams.length" class="drawer-list"><button v-for="item in selectedOrganizerTeams" :key="item._id" @click="openTeam(item)"><span><strong>{{ item.name }}</strong><small>{{ item.city || '地区待补充' }} · 参加 {{ item.tournamentCount }} 场赛事</small></span><el-icon><ArrowRight /></el-icon></button></div><el-empty v-else description="尚未创建球队" :image-size="70" /></template>
+      </el-drawer>
 
-      <el-dialog v-model="featuredDialogVisible" title="添加推荐赛事" width="min(760px, 92vw)">
-        <el-input v-model="featuredKeyword" placeholder="搜索未推荐赛事" clearable class="dialog-search">
-          <template #prefix><el-icon><Search /></el-icon></template>
-        </el-input>
-        <el-table :data="featuredCandidates" border max-height="420">
-          <el-table-column prop="name" label="赛事名称" min-width="220" />
-          <el-table-column prop="organizerName" label="主办方" min-width="150" />
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">{{ statusText(row.status) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="90" fixed="right">
-            <template #default="{ row }">
-              <el-button type="primary" link @click="addFeatured(row)">添加</el-button>
-            </template>
-          </el-table-column>
-          <template #empty>
-            <el-empty description="没有可添加的赛事" />
-          </template>
-        </el-table>
-      </el-dialog>
+      <el-drawer v-model="detailDrawerVisible" :title="selectedTournament ? '赛事平台档案' : '球队平台档案'" size="min(620px, 92vw)">
+        <template v-if="selectedTournament"><div class="profile-head"><span class="entity-icon large"><el-icon><Trophy /></el-icon></span><div><h2>{{ selectedTournament.name }}</h2><p>{{ selectedTournament.organizerName || '主办方待补充' }}</p></div></div><el-descriptions :column="1" border><el-descriptions-item label="赛事状态"><el-tag :type="statusType(selectedTournament.status)">{{ statusText(selectedTournament.status) }}</el-tag></el-descriptions-item><el-descriptions-item label="实际创建人">{{ selectedTournament.creatorName || '待核验' }}</el-descriptions-item><el-descriptions-item label="创建人手机"><button v-if="selectedTournament.creatorPhone" class="phone" @click="copyText(selectedTournament.creatorPhone)">{{ selectedTournament.creatorPhone }} <el-icon><CopyDocument /></el-icon></button><span v-else>待补充</span></el-descriptions-item><el-descriptions-item label="创建人邮箱">{{ selectedTournament.creatorEmail || '待补充' }}</el-descriptions-item><el-descriptions-item label="赛事类别">{{ categoryText(selectedTournament.category) }}</el-descriptions-item><el-descriptions-item label="赛制">{{ formatText(selectedTournament.formatType) }}</el-descriptions-item><el-descriptions-item label="举办地">{{ selectedTournament.city || '待补充' }}</el-descriptions-item><el-descriptions-item label="参赛球队">{{ selectedTournament.teamCount }} 支</el-descriptions-item><el-descriptions-item label="创建时间">{{ formatTime(selectedTournament.createTime) }}</el-descriptions-item><el-descriptions-item label="平台标识">{{ selectedTournament._id }}</el-descriptions-item></el-descriptions></template>
+        <template v-else-if="selectedTeam"><div class="profile-head"><span class="team-logo large"><img v-if="selectedTeam.logo" :src="selectedTeam.logo" alt="" /><el-icon v-else><Flag /></el-icon></span><div><h2>{{ selectedTeam.name }}</h2><p>{{ selectedTeam.organizerName || '归属待核验' }}</p></div></div><el-descriptions :column="1" border><el-descriptions-item label="所在地区">{{ selectedTeam.city || '待补充' }}</el-descriptions-item><el-descriptions-item label="球队联系人">{{ selectedTeam.contact || '待补充' }}</el-descriptions-item><el-descriptions-item label="联系电话">{{ selectedTeam.phone || '待补充' }}</el-descriptions-item><el-descriptions-item label="球员数量">{{ selectedTeam.playerCount }}</el-descriptions-item><el-descriptions-item label="参赛次数">{{ selectedTeam.tournamentCount }}</el-descriptions-item><el-descriptions-item label="创建时间">{{ formatTime(selectedTeam.createTime) }}</el-descriptions-item><el-descriptions-item label="平台标识">{{ selectedTeam._id }}</el-descriptions-item></el-descriptions></template>
+      </el-drawer>
 
-      <ImageCropper
-        ref="bannerCropperRef"
-        title="裁剪轮播图"
-        :aspect-ratio="1920 / 600"
-        @confirm="handleBannerCrop"
-      />
+      <el-dialog v-model="bannerDialogVisible" :title="bannerForm.bannerId ? '编辑轮播图' : '添加轮播图'" width="min(620px, 92vw)"><el-form label-width="88px"><el-form-item label="标题"><el-input v-model="bannerForm.title" maxlength="80" /></el-form-item><el-form-item label="图片" required><div class="upload"><button @click.prevent="openBannerCropper"><img v-if="bannerForm.displayImageUrl" :src="bannerForm.displayImageUrl" alt="" /><span v-else>选择并裁剪图片</span></button><small>建议比例 16:5，支持 JPG、PNG</small></div></el-form-item><el-form-item label="跳转链接"><el-input v-model="bannerForm.link" /></el-form-item><el-form-item label="排序"><el-input-number v-model="bannerForm.sort" :min="0" :max="999" /></el-form-item><el-form-item label="状态"><el-switch v-model="bannerForm.isActive" active-text="启用" inactive-text="停用" /></el-form-item></el-form><template #footer><el-button @click="bannerDialogVisible = false">取消</el-button><el-button type="primary" :loading="savingBanner" @click="submitBanner">保存</el-button></template></el-dialog>
+      <el-dialog v-model="featuredDialogVisible" title="添加推荐赛事" width="min(760px, 92vw)"><el-input v-model="featuredKeyword" clearable placeholder="搜索未推荐赛事" class="dialog-search" /><el-table :data="featuredCandidates" max-height="420"><el-table-column prop="name" label="赛事名称" min-width="240" /><el-table-column prop="organizerName" label="主办方" min-width="180" /><el-table-column label="操作" width="90"><template #default="{ row }"><el-button link type="primary" @click="addFeatured(row)">添加</el-button></template></el-table-column></el-table></el-dialog>
+      <ImageCropper ref="bannerCropperRef" title="裁剪轮播图" :aspect-ratio="1920 / 600" @confirm="handleBannerCrop" />
     </template>
   </div>
 </template>
@@ -305,629 +157,61 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Loading,
-  Picture,
-  Plus,
-  Refresh,
-  Search,
-  Star,
-  Trophy,
-  User
-} from '@element-plus/icons-vue'
+import { ArrowRight, Back, CircleCheckFilled, Connection, CopyDocument, Flag, Headset, Loading, Picture, Plus, Refresh, Search, Service, Tickets, Trophy, UserFilled, Warning } from '@element-plus/icons-vue'
 import { callFunction } from '@/utils/cloud'
 import { getTempFileURL, uploadBase64Image } from '@/utils/upload'
 import ImageCropper from '@/components/common/ImageCropper.vue'
 
-const router = useRouter()
-const logoUrl = `${import.meta.env.BASE_URL}logo.png`
-
-const activeTab = ref('banners')
-const checkingPermission = ref(true)
-const loading = ref(false)
-const savingBanner = ref(false)
-const bannerDialogVisible = ref(false)
-const featuredDialogVisible = ref(false)
-const bannerCropperRef = ref(null)
-const keyword = ref('')
-const categoryFilter = ref('')
-const featuredKeyword = ref('')
-const banners = ref([])
-const tournaments = ref([])
-const organizers = ref([])
-
-const stats = reactive({
-  totalTournaments: 0,
-  featuredTournaments: 0,
-  totalOrganizers: 0,
-  bannerCount: 0
-})
-
-const bannerForm = reactive({
-  bannerId: '',
-  title: '',
-  imageUrl: '',
-  displayImageUrl: '',
-  link: '',
-  sort: 0,
-  isActive: true,
-  storageType: 'cloud'
-})
-
-const categories = [
-  { value: 'youth', label: '青少年赛事' },
-  { value: 'amateur', label: '业余赛事' },
-  { value: 'local', label: '地协赛' },
-  { value: 'city', label: '城市联赛' },
-  { value: 'professional', label: '职业联赛' }
-]
-
-const categoryMap = Object.fromEntries(categories.map(item => [item.value, item.label]))
-const formatMap = {
-  tournament: '赛会制',
-  cup: '杯赛制',
-  league: '联赛制',
-  combined: '复合制',
-  hybrid: '复合制'
-}
-const statusMap = {
-  draft: '草稿',
-  registering: '报名中',
-  published: '已发布',
-  ongoing: '进行中',
-  ended: '已结束',
-  completed: '已结束',
-  cancelled: '已取消'
-}
-
-const currentUserName = computed(() => {
-  try {
-    const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    return user.organizationName || user.nickname || user.name || user.phone || '平台负责人'
-  } catch (error) {
-    return '平台负责人'
-  }
-})
-
-const statCards = computed(() => [
-  { key: 'tournaments', label: '赛事总数', value: stats.totalTournaments, icon: Trophy, color: 'blue' },
-  { key: 'featured', label: '推荐赛事', value: stats.featuredTournaments, icon: Star, color: 'green' },
-  { key: 'organizers', label: '主办方账号', value: stats.totalOrganizers, icon: User, color: 'orange' },
-  { key: 'banners', label: '轮播图', value: stats.bannerCount, icon: Picture, color: 'purple' }
-])
-
-const featuredTournaments = computed(() => tournaments.value
-  .filter(item => item.isFeatured)
-  .sort((a, b) => a.featuredSort - b.featuredSort))
-
-const filteredTournaments = computed(() => {
-  const normalizedKeyword = keyword.value.trim().toLowerCase()
-  return tournaments.value.filter(item => {
-    const matchesCategory = !categoryFilter.value || item.category === categoryFilter.value
-    const matchesKeyword = !normalizedKeyword || item.name.toLowerCase().includes(normalizedKeyword)
-    return matchesCategory && matchesKeyword
-  })
-})
-
-const featuredCandidates = computed(() => {
-  const normalizedKeyword = featuredKeyword.value.trim().toLowerCase()
-  return tournaments.value.filter(item =>
-    !item.isFeatured &&
-    (!normalizedKeyword || item.name.toLowerCase().includes(normalizedKeyword))
-  )
-})
-
-function resultError(result, fallback) {
-  return (result && (result.error || result.message)) || fallback
-}
-
-function categoryText(value) {
-  return categoryMap[value] || value || '未分类'
-}
-
-function formatText(value) {
-  return formatMap[value] || value || '未设置'
-}
-
-function statusText(value) {
-  return statusMap[value] || value || '未知'
-}
-
-function statusType(value) {
-  return {
-    draft: 'info',
-    registering: 'primary',
-    published: 'success',
-    ongoing: 'warning',
-    ended: 'info',
-    completed: 'info',
-    cancelled: 'danger'
-  }[value] || 'info'
-}
-
-async function resolveImageUrl(imageUrl) {
-  if (!imageUrl || !imageUrl.startsWith('cloud://')) return imageUrl
-  try {
-    const result = await getTempFileURL(imageUrl)
-    return result.success ? result.url : imageUrl
-  } catch (error) {
-    return imageUrl
-  }
-}
-
-async function checkPermission() {
-  const result = await callFunction('platformOwner', { action: 'status' })
-  if (!result.success || !result.isPlatformOwner) {
-    ElMessage.error(resultError(result, '仅平台负责人可以进入赛事中心内容后台'))
-    await router.replace('/tournaments')
-    return false
-  }
-  return true
-}
-
-async function loadOverview() {
-  loading.value = true
-  try {
-    const result = await callFunction('manageTournamentCenterContent', { action: 'overview' })
-    if (!result.success) throw new Error(resultError(result, '加载赛事中心数据失败'))
-
-    const data = result.data || {}
-    const rawBanners = data.banners || []
-    banners.value = await Promise.all(rawBanners.map(async banner => ({
-      ...banner,
-      displayImageUrl: await resolveImageUrl(banner.imageUrl)
-    })))
-    tournaments.value = data.tournaments || []
-    organizers.value = data.organizers || []
-    Object.assign(stats, data.stats || {})
-  } catch (error) {
-    ElMessage.error(error.message || '加载赛事中心数据失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-function resetBannerForm() {
-  Object.assign(bannerForm, {
-    bannerId: '',
-    title: '',
-    imageUrl: '',
-    displayImageUrl: '',
-    link: '',
-    sort: 0,
-    isActive: true,
-    storageType: 'cloud'
-  })
-}
-
-function openBannerDialog(banner = null) {
-  resetBannerForm()
-  if (banner) {
-    Object.assign(bannerForm, {
-      bannerId: banner._id,
-      title: banner.title,
-      imageUrl: banner.imageUrl,
-      displayImageUrl: banner.displayImageUrl,
-      link: banner.link,
-      sort: banner.sort,
-      isActive: banner.isActive,
-      storageType: banner.storageType || 'cloud'
-    })
-  }
-  bannerDialogVisible.value = true
-}
-
-function openBannerCropper() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/jpeg,image/png,image/webp'
-  input.onchange = event => {
-    const file = event.target.files && event.target.files[0]
-    if (file) bannerCropperRef.value?.open(file)
-  }
-  input.click()
-}
-
-async function handleBannerCrop(blob, dataUrl) {
-  bannerForm.displayImageUrl = dataUrl
-  try {
-    const result = await uploadBase64Image(dataUrl, 'banners')
-    if (!result.success || !result.fileID) throw new Error(result.message || '图片上传失败')
-    bannerForm.imageUrl = result.fileID
-    bannerForm.displayImageUrl = await resolveImageUrl(result.fileID)
-    bannerForm.storageType = 'cloud'
-    ElMessage.success('图片上传成功')
-  } catch (error) {
-    bannerForm.imageUrl = ''
-    ElMessage.error(error.message || '图片上传失败')
-  }
-}
-
-async function persistBanner(payload, successMessage = '') {
-  const result = await callFunction('manageTournamentCenterContent', {
-    action: 'saveBanner',
-    ...payload
-  })
-  if (!result.success) throw new Error(resultError(result, '保存轮播图失败'))
-  if (successMessage) ElMessage.success(successMessage)
-}
-
-async function submitBanner() {
-  if (!bannerForm.imageUrl) {
-    ElMessage.warning('请先上传轮播图片')
-    return
-  }
-  savingBanner.value = true
-  try {
-    await persistBanner({ ...bannerForm }, bannerForm.bannerId ? '轮播图已更新' : '轮播图已添加')
-    bannerDialogVisible.value = false
-    await loadOverview()
-  } catch (error) {
-    ElMessage.error(error.message || '保存轮播图失败')
-  } finally {
-    savingBanner.value = false
-  }
-}
-
-async function saveBannerQuick(banner) {
-  try {
-    await persistBanner({
-      bannerId: banner._id,
-      title: banner.title,
-      imageUrl: banner.imageUrl,
-      link: banner.link,
-      sort: banner.sort,
-      isActive: banner.isActive,
-      storageType: banner.storageType
-    }, '设置已保存')
-    await loadOverview()
-  } catch (error) {
-    ElMessage.error(error.message || '保存设置失败')
-    await loadOverview()
-  }
-}
-
-async function removeBanner(banner) {
-  try {
-    await ElMessageBox.confirm(`确定删除轮播图“${banner.title || '未命名'}”吗？`, '删除轮播图', {
-      type: 'warning'
-    })
-    const result = await callFunction('manageTournamentCenterContent', {
-      action: 'deleteBanner',
-      bannerId: banner._id
-    })
-    if (!result.success) throw new Error(resultError(result, '删除轮播图失败'))
-    ElMessage.success('轮播图已删除')
-    await loadOverview()
-  } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '删除轮播图失败')
-  }
-}
-
-function openFeaturedDialog() {
-  featuredKeyword.value = ''
-  featuredDialogVisible.value = true
-}
-
-async function updateFeatured(tournament, enabled, showMessage = true) {
-  try {
-    const result = await callFunction('manageTournamentCenterContent', {
-      action: 'setFeatured',
-      tournamentId: tournament._id,
-      enabled,
-      sort: tournament.featuredSort || 0
-    })
-    if (!result.success) throw new Error(resultError(result, '更新推荐赛事失败'))
-    if (showMessage) ElMessage.success(enabled ? '推荐设置已保存' : '已取消推荐')
-    await loadOverview()
-  } catch (error) {
-    ElMessage.error(error.message || '更新推荐赛事失败')
-  }
-}
-
-async function addFeatured(tournament) {
-  await updateFeatured(tournament, true)
-  featuredDialogVisible.value = false
-}
-
-async function confirmRemoveFeatured(tournament) {
-  try {
-    await ElMessageBox.confirm(`确定取消推荐“${tournament.name}”吗？`, '取消推荐', {
-      type: 'warning'
-    })
-    await updateFeatured(tournament, false)
-  } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '取消推荐失败')
-  }
-}
-
-function previewImage(url) {
-  if (url) window.open(url, '_blank', 'noopener,noreferrer')
-}
-
-function viewTournament(tournament) {
-  const href = `${import.meta.env.BASE_URL}#/tournaments/${tournament._id}`
-  window.open(href, '_blank', 'noopener,noreferrer')
-}
-
-function goBack() {
-  router.push('/admin/tournaments')
-}
-
-onMounted(async () => {
-  document.title = '赛小蜂足球赛事中心 - 内容后台'
-  try {
-    const allowed = await checkPermission()
-    if (allowed) await loadOverview()
-  } catch (error) {
-    ElMessage.error(error.message || '权限校验失败')
-    await router.replace('/tournaments')
-  } finally {
-    checkingPermission.value = false
-  }
-})
+const router = useRouter(), logoUrl = `${import.meta.env.BASE_URL}logo.png`
+const activeTab = ref('overview'), contentTab = ref('banners'), checkingPermission = ref(true), loading = ref(false), savingBanner = ref(false), lastLoadedAt = ref(null)
+const banners = ref([]), tournaments = ref([]), organizers = ref([]), accounts = ref([]), teams = ref([]), supportRequests = ref([])
+const organizerKeyword = ref(''), organizerContactFilter = ref('all'), accountKeyword = ref(''), tournamentKeyword = ref(''), tournamentStatusFilter = ref('all'), teamKeyword = ref(''), featuredKeyword = ref('')
+const accountDeletingId = ref('')
+const organizerDrawerVisible = ref(false), detailDrawerVisible = ref(false), bannerDialogVisible = ref(false), featuredDialogVisible = ref(false), bannerCropperRef = ref(null)
+const selectedOrganizer = ref(null), selectedTournament = ref(null), selectedTeam = ref(null)
+const stats = reactive({ totalTournaments: 0, totalOrganizers: 0, totalTeams: 0, activeSupportCount: 0, missingContactCount: 0 })
+const bannerForm = reactive({ bannerId: '', title: '', imageUrl: '', displayImageUrl: '', link: '', sort: 0, isActive: true, storageType: 'cloud' })
+const sections = { overview: ['运营总览','掌握平台赛事、主办方和问题协助的最新情况'], organizers: ['主办方联系人','找到赛事创建者，查看联系方式及其赛事和球队'], accounts: ['账号管理','管理主办方登录账号，并安全处理无业务关联的空账号'], tournaments: ['全平台赛事','查看平台内全部赛事的创建方、状态和参赛规模'], teams: ['全平台球队','查看长期球队资产、创建方和历史参赛情况'], support: ['问题与协助','通过用户确认授权的方式安全处理实际使用问题'], content: ['内容运营','管理公开赛事中心的轮播和推荐赛事'] }
+const section = computed(() => ({ title: sections[activeTab.value][0], description: sections[activeTab.value][1] }))
+const navigation = computed(() => [{key:'overview',label:'运营总览',icon:Picture},{key:'organizers',label:'主办方联系人',icon:UserFilled,badge:stats.missingContactCount||''},{key:'accounts',label:'账号管理',icon:UserFilled},{key:'tournaments',label:'全平台赛事',icon:Trophy},{key:'teams',label:'全平台球队',icon:Flag},{key:'support',label:'问题与协助',icon:Headset,badge:stats.activeSupportCount||''},{key:'content',label:'内容运营',icon:Tickets}])
+const statCards = computed(() => [{key:'o',label:'主办方',value:stats.totalOrganizers,hint:'平台联系人档案',icon:UserFilled,color:'blue',target:'organizers'},{key:'t',label:'全部赛事',value:stats.totalTournaments,hint:'含草稿与历史赛事',icon:Trophy,color:'green',target:'tournaments'},{key:'m',label:'长期球队',value:stats.totalTeams,hint:'不等同于参赛快照',icon:Flag,color:'orange',target:'teams'},{key:'s',label:'协助处理中',value:stats.activeSupportCount,hint:'等待确认或授权中',icon:Service,color:'purple',target:'support'}])
+const currentUserName = computed(() => { try { const user = JSON.parse(localStorage.getItem('userInfo') || '{}'); return user.organizationName || user.nickname || user.name || user.phone || '平台负责人' } catch { return '平台负责人' } })
+const recentTournaments = computed(() => tournaments.value.slice(0, 6)), featuredTournaments = computed(() => tournaments.value.filter(x => x.isFeatured).sort((a,b) => a.featuredSort-b.featuredSort))
+const norm = value => String(value || '').trim().toLowerCase()
+const featuredCandidates = computed(() => tournaments.value.filter(x => !x.isFeatured && (!norm(featuredKeyword.value) || norm(x.name).includes(norm(featuredKeyword.value)))))
+const filteredOrganizers = computed(() => organizers.value.filter(x => { const match = !norm(organizerKeyword.value) || norm([x.name,x.contact,x.phone,x.email].join(' ')).includes(norm(organizerKeyword.value)); const f=organizerContactFilter.value; return match && (f==='all'||(f==='ready'&&x.hasContact)||(f==='missing'&&!x.hasContact)||(f==='support'&&x.activeSupportCount>0)) }))
+const filteredAccounts = computed(() => accounts.value.filter(x => !norm(accountKeyword.value) || norm([x.name,x.phone,x.email,x._id].join(' ')).includes(norm(accountKeyword.value))))
+const filteredTournaments = computed(() => tournaments.value.filter(x => (!norm(tournamentKeyword.value)||norm([x.name,x.organizerName,x.city].join(' ')).includes(norm(tournamentKeyword.value)))&&(tournamentStatusFilter.value==='all'||x.status===tournamentStatusFilter.value)))
+const filteredTeams = computed(() => teams.value.filter(x => !norm(teamKeyword.value)||norm([x.name,x.organizerName,x.contact,x.phone,x.city].join(' ')).includes(norm(teamKeyword.value))))
+const selectedOrganizerTournaments = computed(() => selectedOrganizer.value ? tournaments.value.filter(x => selectedOrganizer.value.tournamentIds.includes(String(x._id))) : [])
+const selectedOrganizerTeams = computed(() => selectedOrganizer.value ? teams.value.filter(x => selectedOrganizer.value.teamIds.includes(String(x._id))) : [])
+const categoryMap={youth:'青少年赛事',amateur:'业余赛事',local:'地协赛',city:'城市联赛',professional:'职业联赛'},formatMap={tournament:'赛会制',cup:'杯赛制',league:'联赛制',combined:'混合制',hybrid:'混合制'},statusMap={draft:'草稿',registering:'报名中',published:'已发布',ongoing:'进行中',ended:'已结束',completed:'已结束',cancelled:'已取消'}
+const categoryText=v=>categoryMap[v]||v||'未分类',formatText=v=>formatMap[v]||v||'未设置',statusText=v=>statusMap[v]||v||'未知',statusType=v=>({draft:'info',registering:'primary',published:'success',ongoing:'warning',cancelled:'danger'}[v]||'info')
+const supportStatusText=v=>({pending:'等待确认',active:'协助中',rejected:'已拒绝',revoked:'已撤销',expired:'已过期'}[v]||'未知'),supportStatusType=v=>({pending:'warning',active:'success',rejected:'danger'}[v]||'info')
+const avatarText=v=>String(v||'主').slice(0,1)
+function dateOf(value){if(!value)return null;const d=new Date(value?.$date||value);return Number.isNaN(d.getTime())?null:d}
+const formatDate=v=>dateOf(v)?.toLocaleDateString('zh-CN')||'时间待补充',formatTime=(v,only=false)=>{const d=dateOf(v);return d?(only?d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):d.toLocaleString('zh-CN',{hour12:false})):'—'}
+async function copyText(v){if(!v)return;try{await navigator.clipboard.writeText(String(v));ElMessage.success('手机号已复制')}catch{ElMessage.warning('复制失败，请手动复制')}}
+function openOrganizer(v){selectedOrganizer.value=v;organizerDrawerVisible.value=true}function openTournament(v){selectedTournament.value=v;selectedTeam.value=null;detailDrawerVisible.value=true}function openTeam(v){selectedTeam.value=v;selectedTournament.value=null;detailDrawerVisible.value=true}function startSupport(){organizerDrawerVisible.value=false;router.push('/system')}function showMissingContacts(){organizerContactFilter.value='missing';activeTab.value='organizers'}function previewImage(v){if(v)window.open(v,'_blank','noopener,noreferrer')}
+const resultError=(r,f)=>r?.error||r?.message||f
+async function resolveImageUrl(v){if(!v||!v.startsWith('cloud://'))return v;try{const r=await getTempFileURL(v);return r.success?r.url:v}catch{return v}}
+async function checkPermission(){const r=await callFunction('platformOwner',{action:'status'});if(!r.success||!r.isPlatformOwner){ElMessage.error(resultError(r,'仅平台负责人可以进入平台运营中心'));await router.replace('/tournament-space');return false}return true}
+async function loadOverview(){loading.value=true;try{const r=await callFunction('manageTournamentCenterContent',{action:'overview'});if(!r.success)throw new Error(resultError(r,'加载平台运营数据失败'));const d=r.data||{};banners.value=await Promise.all((d.banners||[]).map(async x=>({...x,displayImageUrl:await resolveImageUrl(x.imageUrl)})));tournaments.value=d.tournaments||[];organizers.value=d.organizers||[];accounts.value=d.accounts||[];teams.value=d.teams||[];supportRequests.value=d.supportRequests||[];Object.assign(stats,d.stats||{});lastLoadedAt.value=new Date()}catch(e){ElMessage.error(e.message||'加载平台运营数据失败')}finally{loading.value=false}}
+async function inspectAndDeleteAccount(row){if(accountDeletingId.value)return;accountDeletingId.value=row._id;try{const inspection=await callFunction('manageTournamentCenterContent',{action:'inspectOrganizerAccountDeletion',userId:row._id});if(!inspection.success)throw new Error(resultError(inspection,'账号删除预检查失败'));if(!inspection.canDelete){const details=(inspection.dependencies||[]).map(item=>item.label+'：'+item.count+' 项').join('；');await ElMessageBox.alert('该账号仍有关联数据，不能删除。请先处理：'+details,'账号暂不可删除',{type:'warning',confirmButtonText:'知道了'});return}const prompt=await ElMessageBox.prompt('删除后，该账号将无法登录，现有登录会话会立即失效。业务数据不会被删除。请输入“删除”确认。','删除主办方账号',{confirmButtonText:'确认删除',cancelButtonText:'取消',type:'error',inputPattern:/^删除$/,inputErrorMessage:'请输入“删除”'});const result=await callFunction('manageTournamentCenterContent',{action:'deleteOrganizerAccount',userId:row._id,confirmText:prompt.value});if(!result.success)throw new Error(resultError(result,'账号删除失败'));ElMessage.success('主办方账号已删除');await loadOverview()}catch(e){if(!['cancel','close'].includes(e))ElMessage.error(e.message||'账号删除失败')}finally{accountDeletingId.value=''}}
+function openBannerDialog(x=null){Object.assign(bannerForm,{bannerId:'',title:'',imageUrl:'',displayImageUrl:'',link:'',sort:0,isActive:true,storageType:'cloud'});if(x)Object.assign(bannerForm,{bannerId:x._id,title:x.title,imageUrl:x.imageUrl,displayImageUrl:x.displayImageUrl,link:x.link,sort:x.sort,isActive:x.isActive,storageType:x.storageType||'cloud'});bannerDialogVisible.value=true}
+function openBannerCropper(){const i=document.createElement('input');i.type='file';i.accept='image/jpeg,image/png,image/webp';i.onchange=e=>{const f=e.target.files?.[0];if(f)bannerCropperRef.value?.open(f)};i.click()}
+async function handleBannerCrop(blob,dataUrl){bannerForm.displayImageUrl=dataUrl;try{const r=await uploadBase64Image(dataUrl,'banners');if(!r.success||!r.fileID)throw new Error(r.message||'图片上传失败');bannerForm.imageUrl=r.fileID;bannerForm.displayImageUrl=await resolveImageUrl(r.fileID);ElMessage.success('图片上传成功')}catch(e){bannerForm.imageUrl='';ElMessage.error(e.message||'图片上传失败')}}
+async function saveBanner(payload,msg=''){const r=await callFunction('manageTournamentCenterContent',{action:'saveBanner',...payload});if(!r.success)throw new Error(resultError(r,'保存失败'));if(msg)ElMessage.success(msg)}
+async function submitBanner(){if(!bannerForm.imageUrl)return ElMessage.warning('请先上传轮播图片');savingBanner.value=true;try{await saveBanner({...bannerForm},'轮播图已保存');bannerDialogVisible.value=false;await loadOverview()}catch(e){ElMessage.error(e.message)}finally{savingBanner.value=false}}
+async function saveBannerQuick(x){try{await saveBanner({bannerId:x._id,title:x.title,imageUrl:x.imageUrl,link:x.link,sort:x.sort,isActive:x.isActive,storageType:x.storageType},'设置已保存');await loadOverview()}catch(e){ElMessage.error(e.message);await loadOverview()}}
+async function removeBanner(x){try{await ElMessageBox.confirm(`确定删除轮播图“${x.title||'未命名'}”吗？`,'删除轮播图',{type:'warning'});const r=await callFunction('manageTournamentCenterContent',{action:'deleteBanner',bannerId:x._id});if(!r.success)throw new Error(resultError(r,'删除失败'));ElMessage.success('轮播图已删除');await loadOverview()}catch(e){if(!['cancel','close'].includes(e))ElMessage.error(e.message)}}
+async function updateFeatured(x,enabled,msg=true){try{const r=await callFunction('manageTournamentCenterContent',{action:'setFeatured',tournamentId:x._id,enabled,sort:x.featuredSort||0});if(!r.success)throw new Error(resultError(r,'更新失败'));if(msg)ElMessage.success(enabled?'推荐设置已保存':'已取消推荐');await loadOverview()}catch(e){ElMessage.error(e.message)}}
+async function addFeatured(x){await updateFeatured(x,true);featuredDialogVisible.value=false}async function removeFeatured(x){try{await ElMessageBox.confirm(`确定取消推荐“${x.name}”吗？`,'取消推荐',{type:'warning'});await updateFeatured(x,false)}catch(e){if(!['cancel','close'].includes(e))ElMessage.error(e.message)}}
+onMounted(async()=>{document.title='赛小蜂足球 - 平台运营中心';try{if(await checkPermission())await loadOverview()}catch(e){ElMessage.error(e.message||'权限校验失败');await router.replace('/tournament-space')}finally{checkingPermission.value=false}})
 </script>
 
 <style scoped>
-.content-admin {
-  min-height: 100vh;
-  color: #1f2937;
-  background: #f3f6f4;
-}
-
-.permission-loading {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #4b5563;
-}
-
-.page-header {
-  min-height: 84px;
-  padding: 14px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  color: #fff;
-  background: linear-gradient(120deg, #14532d, #16a34a);
-  box-shadow: 0 6px 24px rgb(5 46 22 / 18%);
-}
-
-.brand,
-.header-actions,
-.stat-card,
-.section-header,
-.filters {
-  display: flex;
-  align-items: center;
-}
-
-.brand {
-  gap: 14px;
-}
-
-.brand-logo {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-  border-radius: 12px;
-  background: rgb(255 255 255 / 92%);
-  padding: 5px;
-}
-
-.brand h1,
-.section-header h2 {
-  margin: 0;
-}
-
-.brand h1 {
-  font-size: 22px;
-  line-height: 1.25;
-}
-
-.brand p,
-.section-header p {
-  margin: 5px 0 0;
-}
-
-.brand p {
-  color: rgb(255 255 255 / 74%);
-  font-size: 13px;
-}
-
-.header-actions {
-  gap: 10px;
-}
-
-.current-user {
-  margin-right: 4px;
-  font-size: 14px;
-}
-
-.page-main {
-  max-width: 1500px;
-  margin: 0 auto;
-  padding: 22px 28px 36px;
-}
-
-.scope-alert {
-  margin-bottom: 18px;
-}
-
-.stats-row {
-  row-gap: 16px;
-  margin-bottom: 18px;
-}
-
-.stat-card {
-  min-height: 96px;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid #e6ebe8;
-  border-radius: 14px;
-  background: #fff;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 13px;
-  font-size: 23px;
-}
-
-.stat-icon.blue {
-  color: #2563eb;
-  background: #eff6ff;
-}
-
-.stat-icon.green {
-  color: #15803d;
-  background: #f0fdf4;
-}
-
-.stat-icon.orange {
-  color: #c2410c;
-  background: #fff7ed;
-}
-
-.stat-icon.purple {
-  color: #7e22ce;
-  background: #faf5ff;
-}
-
-.stat-value {
-  color: #111827;
-  font-size: 27px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.stat-label {
-  margin-top: 7px;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.content-card {
-  border-radius: 14px;
-}
-
-.section-header {
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 18px;
-}
-
-.section-header h2 {
-  font-size: 18px;
-}
-
-.section-header p,
-.form-tip {
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.filters {
-  gap: 10px;
-}
-
-.filters .el-select {
-  width: 160px;
-}
-
-.filters .el-input {
-  width: 240px;
-}
-
-.image-button,
-.upload-button {
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  background: transparent;
-}
-
-.banner-image {
-  width: 160px;
-  height: 52px;
-  display: block;
-  object-fit: cover;
-  border-radius: 7px;
-  background: #eef2f0;
-}
-
-.upload-area {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.upload-button {
-  width: min(430px, 100%);
-  aspect-ratio: 16 / 5;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  color: #15803d;
-  border: 1px dashed #86b69a;
-  border-radius: 10px;
-  background: #f4fbf6;
-}
-
-.upload-button img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.inline-tip {
-  margin-left: 10px;
-}
-
-.dialog-search {
-  margin-bottom: 14px;
-}
-
-@media (max-width: 760px) {
-  .page-header,
-  .section-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .page-header,
-  .page-main {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .header-actions {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .current-user {
-    width: 100%;
-  }
-
-  .filters {
-    width: 100%;
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .filters .el-select,
-  .filters .el-input {
-    width: 100%;
-  }
-}
+:global(body){margin:0;background:#f3f6f4}.platform-console{min-height:100vh;color:#17211b;background:#f3f6f4}.permission-loading{min-height:100vh;display:grid;place-content:center;justify-items:center;gap:14px;color:#237a49}.sidebar{position:fixed;inset:0 auto 0 0;z-index:10;width:238px;display:flex;flex-direction:column;padding:22px 16px 18px;color:#fff;background:linear-gradient(180deg,#0c3b27,#082c1d);box-sizing:border-box}.brand{display:flex;align-items:center;gap:12px;padding:0 8px 24px;border-bottom:1px solid #ffffff1a}.brand img{width:44px;height:44px;padding:4px;object-fit:contain;border-radius:13px;background:#fff;box-sizing:border-box}.brand div,.owner{display:flex;flex-direction:column;gap:4px}.brand span,.owner small{color:#ffffff9e;font-size:12px}.sidebar nav{display:flex;flex-direction:column;gap:6px;padding-top:22px}.sidebar nav button{min-height:46px;display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:10px;padding:0 13px;color:#ffffffb3;border:0;border-radius:10px;background:transparent;text-align:left;cursor:pointer}.sidebar nav button:hover{color:#fff;background:#ffffff12}.sidebar nav button.active{color:#fff;background:#198754;box-shadow:0 8px 20px #00000024}.sidebar nav em{min-width:20px;padding:2px 6px;border-radius:10px;background:#e6594f;font-size:11px;font-style:normal;text-align:center}.sidebar-bottom{margin-top:auto}.owner{margin-bottom:8px;padding:13px;border:1px solid #ffffff17;border-radius:10px;background:#ffffff0d}.owner strong{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.sidebar-bottom :deep(.el-button){color:#ffffffa6}.platform-console>main{min-height:100vh;margin-left:238px}.topbar{min-height:112px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:22px 34px;border-bottom:1px solid #dfe7e2;background:#ffffffeb;box-sizing:border-box}.topbar h1{margin:3px 0 0;font-size:25px}.topbar p{margin:5px 0 0;color:#738078;font-size:13px}.topbar>div>small{color:#248553;font-size:10px;font-weight:700;letter-spacing:.12em}.top-actions{display:flex;align-items:center;gap:12px}.top-actions span{color:#8a948e;font-size:12px}.workspace{max-width:1560px;margin:auto;padding:24px 30px 40px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}.stats>button{min-height:112px;display:grid;grid-template-columns:50px 1fr 18px;align-items:center;gap:13px;padding:18px;border:1px solid #e0e7e3;border-radius:14px;background:#fff;text-align:left;cursor:pointer;box-shadow:0 5px 18px #1e462d0a}.stats>button:hover{border-color:#9bc3ac}.stat-icon{width:50px;height:50px;display:grid;place-items:center;border-radius:14px;font-size:24px}.stat-icon.blue{color:#2771d6;background:#ebf3ff}.stat-icon.green{color:#17814c;background:#eaf8f0}.stat-icon.orange{color:#d16a21;background:#fff2e8}.stat-icon.purple{color:#8154cb;background:#f3edff}.stat-copy{display:flex;flex-direction:column}.stat-copy>strong{font-size:27px}.stat-copy b{font-size:13px}.stat-copy small{margin-top:4px;color:#929b95;font-size:11px}.overview-grid{display:grid;grid-template-columns:1.65fr .8fr;gap:16px;margin-top:17px}.panel{overflow:hidden;border:1px solid #e0e7e3;border-radius:14px;background:#fff;box-shadow:0 5px 18px #1e462d08}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 22px;border-bottom:1px solid #edf1ee}.panel-head h2{margin:0;font-size:16px}.panel-head p{margin:5px 0 0;color:#839087;font-size:12px}.activity-list>button{width:100%;display:grid;grid-template-columns:38px 1fr auto 80px;align-items:center;gap:12px;padding:14px 20px;border:0;border-bottom:1px solid #f0f3f1;background:#fff;text-align:left;cursor:pointer}.activity-list>button:hover,.organizer-cards>button:hover,.drawer-list button:hover{background:#f8fbf9}.activity-list>button>span:nth-child(2),.organizer-cards>button>span:nth-child(2),.drawer-list button span{min-width:0;display:flex;flex-direction:column;gap:5px}.activity-list small,.organizer-cards small,.drawer-list small,.name-cell small,.block,.table-panel td small{color:#879189;font-size:11px}.entity-icon,.team-logo{width:36px;height:36px;display:grid;place-items:center;overflow:hidden;flex:0 0 auto;color:#237a49;border-radius:10px;background:#e9f6ef}.team-logo img{width:100%;height:100%;object-fit:cover}.attention{padding-bottom:16px}.notice{width:calc(100% - 32px);min-height:76px;display:grid;grid-template-columns:38px 1fr 18px;align-items:center;gap:12px;margin:14px 16px 0;padding:12px;border:1px solid #eadfca;border-radius:11px;background:#fffaf1;text-align:left;cursor:pointer}.notice.danger{border-color:#edd8d5;background:#fff7f6}.notice span{display:flex;flex-direction:column;gap:5px}.all-clear{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#7b887f}.all-clear .el-icon{color:#2a9a5d;font-size:35px}.recent-organizers{margin-top:17px}.organizer-cards{display:grid;grid-template-columns:repeat(4,1fr)}.organizer-cards>button{display:grid;grid-template-columns:42px 1fr 18px;align-items:center;gap:11px;padding:18px;border:0;border-right:1px solid #edf1ee;background:#fff;text-align:left;cursor:pointer}.avatar{width:42px;height:42px;display:grid;place-items:center;flex:0 0 auto;color:#fff;border-radius:12px;background:linear-gradient(135deg,#238b56,#125f39);font-weight:700}.avatar.small{width:35px;height:35px}.avatar.large{width:58px;height:58px;font-size:21px}.table-panel .toolbar{display:flex;align-items:center;gap:12px;padding:17px 20px;border-bottom:1px solid #e9eeeb}.toolbar .el-input{width:min(390px,42vw)}.toolbar .el-select{width:170px}.toolbar>span{margin-left:auto;color:#7e8982;font-size:12px}.name-cell{display:flex;align-items:center;gap:11px}.name-cell>div{min-width:0;display:flex;flex-direction:column;gap:4px}.block{display:block;margin-top:4px}.phone{padding:0;color:#176d43;border:0;background:transparent;font-weight:600;cursor:pointer}.support-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:17px;padding:25px 28px;color:#fff;border-radius:15px;background:linear-gradient(120deg,#0f5132,#188455);box-shadow:0 12px 28px #115b362e}.support-hero>div{display:flex;align-items:center;gap:16px}.support-hero>div>span{width:54px;height:54px;display:grid;place-items:center;border-radius:15px;background:#ffffff24;font-size:27px}.support-hero h2{margin:0}.support-hero p{margin:6px 0 0;color:#ffffffb8;font-size:12px}.support-hero :deep(.el-button){color:#155e3a;border-color:#fff;background:#fff}.content-panel{padding:0 20px 20px}.content-panel .panel-head{padding-inline:2px}.banner-image{padding:0;border:0;background:transparent;cursor:pointer}.banner-image img{width:160px;height:52px;display:block;object-fit:cover;border-radius:7px}.profile-head{display:flex;align-items:center;gap:15px;margin-bottom:20px}.profile-head h2{margin:0;font-size:20px}.profile-head p{margin:6px 0 0;color:#7d8981;font-size:12px}.profile-head .large{width:58px;height:58px}.contact-card{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:18px;border:1px solid #dce8e1;border-radius:12px;background:#f6fbf8}.contact-card>div:not(.contact-actions){display:flex;flex-direction:column;gap:6px}.contact-actions{grid-column:1/-1;display:flex;gap:10px}.description{margin-top:18px}.drawer-list{overflow:hidden;border:1px solid #e1e8e4;border-radius:11px}.drawer-list button{width:100%;display:flex;align-items:center;justify-content:space-between;padding:13px 15px;border:0;border-bottom:1px solid #edf1ee;background:#fff;text-align:left;cursor:pointer}.drawer-list button:last-child{border-bottom:0}.upload{width:100%;display:flex;flex-direction:column;gap:8px}.upload button{width:min(430px,100%);aspect-ratio:16/5;overflow:hidden;display:grid;place-items:center;color:#177545;border:1px dashed #7eaf91;border-radius:10px;background:#f4fbf6;cursor:pointer}.upload img{width:100%;height:100%;object-fit:cover}.dialog-search{margin-bottom:14px}
+@media(max-width:1180px){.stats{grid-template-columns:repeat(2,1fr)}.overview-grid{grid-template-columns:1fr}.organizer-cards{grid-template-columns:repeat(2,1fr)}}@media(max-width:760px){.sidebar{width:74px;padding-inline:10px}.brand{justify-content:center;padding-inline:0}.brand div,.sidebar nav span,.sidebar nav em,.owner,.sidebar-bottom .el-button span{display:none}.sidebar nav button{grid-template-columns:1fr;justify-items:center;padding:0}.platform-console>main{margin-left:74px}.topbar{align-items:flex-start;flex-direction:column;padding:20px}.workspace{padding:18px 14px 30px}.stats,.organizer-cards{grid-template-columns:1fr}.activity-list>button{grid-template-columns:34px 1fr auto}.activity-list>button>small:last-child{display:none}.toolbar{align-items:stretch!important;flex-direction:column}.toolbar .el-input,.toolbar .el-select{width:100%}.toolbar>span{margin-left:0}.support-hero{align-items:flex-start;flex-direction:column}.contact-card{grid-template-columns:1fr}}
+.account-tip{display:flex;gap:12px;padding:14px 20px;color:#8b6327;border-bottom:1px solid #eadfcf;background:#fffaf2;font-size:12px}.account-tip strong{flex:0 0 auto}.account-tip span{color:#857765}
 </style>

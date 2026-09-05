@@ -69,6 +69,13 @@ const routes = [
     component: () => import('../views/tournament/TournamentCenter.vue'),
     meta: { requiresAuth: false, title: '赛事中心' }
   },
+  // 平台运营独立登录入口。认证仍复用统一微信登录，但固定记录登录后的目标页面。
+  {
+    path: '/platform-login',
+    name: 'PlatformLogin',
+    component: () => import('../views/login/PlatformLoginView.vue'),
+    meta: { requiresAuth: false, title: '赛小蜂足球平台运营登录' }
+  },
   // 历史赛事中心登录入口统一并入主办方登录
   {
     path: '/tournament-center-login',
@@ -172,12 +179,12 @@ const routes = [
       }
     ]
   },
-  // 赛事中心内容运营后台（复用主办方会话，页面内继续校验平台负责人身份）
+  // 平台运营中心（复用主办方会话，页面内继续校验平台负责人身份）
   {
     path: '/tournament-center-admin',
     name: 'TournamentCenterAdmin',
     component: () => import('../views/tournament-center/TournamentCenterAdmin.vue'),
-    meta: { requiresAuth: true, title: '赛小蜂足球赛事中心-管理后台' }
+    meta: { requiresAuth: true, title: '赛小蜂足球平台运营中心' }
   },
   // 管理后台 - 赛事列表（查看所有赛事）
   {
@@ -448,6 +455,19 @@ const routes = [
   },
   // 系统管理
   {
+    path: '/assistance',
+    name: 'AssistanceAuthorization',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '远程协助授权', workspaceShell: true },
+    children: [
+      {
+        path: '',
+        component: () => import('../views/system/AssistanceAuthorization.vue')
+      }
+    ]
+  },
+  // 系统管理
+  {
     path: '/system',
     name: 'SystemAdmin',
     component: () => import('../views/layout/LayoutView.vue'),
@@ -467,6 +487,8 @@ const router = createRouter({
   routes
 })
 
+const POST_LOGIN_REDIRECT_KEY = 'sxfPostLoginRedirect'
+
 // 当前后台只有主办方登录身份，默认进入赛事管理。
 function getDefaultPathByRole() {
   return '/tournament-space'
@@ -477,9 +499,15 @@ function hasOrganizerSession() {
   const version = localStorage.getItem('authSessionVersion') || ''
   const loginType = localStorage.getItem('loginType') || ''
   const authToken = localStorage.getItem('authToken') || ''
+  let isPlatformOwner = false
+  try {
+    isPlatformOwner = JSON.parse(localStorage.getItem('userInfo') || '{}').isPlatformOwner === true
+  } catch { /* 无有效用户信息时保持 false */ }
+  const validLoginType = loginType === 'wechat' ||
+    (loginType === 'platform-password' && isPlatformOwner)
   return role.toLowerCase() === 'organizer' &&
     version === 'phone-canonical-web-v1' &&
-    loginType === 'wechat' &&
+    validLoginType &&
     Boolean(authToken)
 }
 
@@ -496,8 +524,12 @@ function hasLocalOrganization() {
 
 function needsOrganizerOnboarding(to) {
   const role = String(localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toLowerCase()
-  if (role !== 'organizer' || to.path === '/organization-onboarding') return false
+  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/assistance') return false
   if (to.meta.requiresAuth !== true) return false
+  try {
+    const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    if (to.path === '/tournament-center-admin' && user.isPlatformOwner === true) return false
+  } catch { /* 交给后续机构引导处理 */ }
   return !hasLocalOrganization()
 }
 
@@ -511,6 +543,9 @@ function clearInvalidSession() {
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
+  if (to.path === '/platform-login') {
+    sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, '/tournament-center-admin')
+  }
   // 仅本地开发环境开放视觉验收会话。它不写入正式认证信息，也不会在生产构建中绕过登录。
   if (import.meta.env.DEV) {
     const requestedVisualQa = to.query.visualQa === '1' || window.location.href.includes('visualQa=1')
@@ -611,6 +646,9 @@ router.beforeEach(async (to, from, next) => {
       }
       next()
     } else {
+      if (to.path !== '/login' && to.fullPath.startsWith('/')) {
+        sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, to.fullPath)
+      }
       next('/login')
     }
   }

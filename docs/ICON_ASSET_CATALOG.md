@@ -91,3 +91,12 @@
 - 页面不得从原型 PNG 裁切图标，不得在页面目录复制同一图标；
 - 新一批图标必须沿用本文件的色板与构造体系，并完成切图及对比底 QA；
 - 小程序运行资产改变后必须执行 WXML 扫描、JavaScript 语法检查和开发者工具预览编译。
+
+## 七、服务号 H5 功能控件
+
+| 语义 | 正式资产 | 来源 | 使用位置 |
+|---|---|---|---|
+| 切换前后摄像头 | `service-account-h5/assets/icon-camera-switch.svg` | iconfont 图标 ID `27317580`，作者“不吃香菜S”，资源库 ID `363850`，详情页 `https://www.iconfont.cn/icon-detail?icon_id=27317580` | 家长标准形象照正式相机 |
+
+- 原始 SVG 保存在 `docs/prototype-assets/icon-source/iconfont/camera-switch-27317580-source.svg`；正式 SVG 仅将颜色规范化为白色，未修改图形轮廓。
+- 来源与许可说明：该图标为 iconfont 公共可下载资源，平台支持单个 SVG 下载与前端项目使用；版权归上传作者及原始来源所有，项目保留作者、图标 ID、资源库 ID 和详情地址，不主张图标著作权。

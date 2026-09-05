@@ -18,7 +18,7 @@ function text(value) { return String(value == null ? '' : value).trim() }
 function randomKey(bytes) { return crypto.randomBytes(bytes).toString('base64url') }
 function miniReviewTemplateId() { return text(process.env.SXF_FOOTBALL_MINI_TEMPLATE_TOURNAMENT_REVIEW || 'CxBgS7fgjeNoKTSwl0q0o_lErclh_ffpIj2IeL6mpRw') }
 function serviceReviewTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_REVIEW || 'ovXRAzKHZE3Rsex7SVtl2zR-cMNznM_P3azxG8olz1g') }
-function serviceRegistrationSuccessTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_SUCCESS || 'aX_3wN6SbFR0s3giwyoK5P6eBbl9lwx2rqU_jCld-Uk') }
+function serviceRegistrationSuccessTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_SUCCESS || 'aX_3wN6SbFR0s3giwyoK5P6eBbl9Iwx2rqU_jCId-Uk') }
 function divisionCapacity(division, tournament) {
   const candidates = [division && division.expectedTeams, division && division.requiredTeams, division && division.teamRequirement, division && division.participantTeams, division && division.maxTeams, division && division.teamLimit, tournament && tournament.maxTeams]
   return candidates.map(Number).find(value => Number.isFinite(value) && value > 0) || 0
@@ -907,7 +907,7 @@ function notificationCopy(registration, tournament, decision, reason) {
     tournamentName: templateText(tournament && tournament.name || '足球赛事', 20),
     teamName: templateText(registration.teamName || '报名球队', 20),
     divisionName: templateText(registration.divisionName || '竞赛组别', 20),
-    teamCode: templateText(registration.registrationNo || registration.tournamentTeamCode || registration.teamCode || registration.participationCode || '待生成', 32),
+    teamCode: templateText(registration.registrationNo || registration.tournamentTeamCode || registration.teamCode || registration.participationCode || `T-${text(registration._id).slice(-6).toUpperCase()}`, 32),
     statusText: approved ? '审核通过' : '审核驳回',
     detail: templateText(reason || (approved ? '报名已通过，请进入小程序查看赛事安排' : '请进入小程序查看并补充报名资料'), 20)
   }
@@ -968,21 +968,28 @@ async function sendServiceReviewNotification(registration, tournament, decision,
     data[text(process.env.SXF_FOOTBALL_SERVICE_REVIEW_STATUS_KEY || 'thing2')] = { value:copy.statusText }
   }
   try {
-    const result = await serviceBridgeJson('template/send', { message:{ touser:text(binding.officialOpenId), template_id:templateId, url:'https://www.sxffootball.cn/service-account-h5/', data } })
+    const result = await serviceBridgeJson('template/send', { message:{
+      touser:text(binding.officialOpenId),
+      template_id:templateId,
+      url:'https://www.sxffootball.cn/',
+      miniprogram:{ appid:text(process.env.SXF_FOOTBALL_MINIPROGRAM_APPID || 'wx57164cca8676f411'), pagepath:'pages/todo/index' },
+      data
+    } })
     return result && result.success ? { status:'delivered', code:'', message:'服务号模板消息已发送' } : { status:'failed', code:'SERVICE_SEND_FAILED', message:'服务号模板消息发送失败' }
   } catch (error) {
     return { status:'failed', code:text(error.code || error.wechatCode || 'SERVICE_SEND_FAILED'), message:text(error.message || '服务号模板消息发送失败') }
   }
 }
 
-async function deliverRegistrationNotifications(registration, tournament, decision, reason) {
+async function deliverRegistrationNotifications(registration, tournament, decision, reason, options) {
+  const deliveryOptions = options || {}
   const bindingResult = registration.applicantMiniOpenId
     ? await db.collection('service_account_bindings').where({ sport:SPORT, miniOpenId:registration.applicantMiniOpenId, subscribed:true }).limit(2).get()
     : { data:[] }
   const binding = (bindingResult.data || [])[0] || null
   const [mini, service] = await Promise.all([
-    sendMiniReviewNotification(registration, tournament, decision, reason),
-    sendServiceReviewNotification(registration, tournament, decision, reason, binding)
+    deliveryOptions.skipMini ? Promise.resolve({ status:'delivered', code:'ALREADY_DELIVERED', message:'小程序订阅消息此前已送达，本次未重复发送' }) : sendMiniReviewNotification(registration, tournament, decision, reason),
+    deliveryOptions.skipService ? Promise.resolve({ status:'delivered', code:'ALREADY_DELIVERED', message:'服务号消息此前已送达，本次未重复发送' }) : sendServiceReviewNotification(registration, tournament, decision, reason, binding)
   ])
   return { mini, service, binding }
 }
@@ -1071,7 +1078,9 @@ async function retryRegistrationNotifications(event) {
   const reason = text(registration.reviewReason)
   const businessEventId = `registration_review:${registration._id}:${decision}`
   if (registration.applicantUserId) await upsertByKey('messages', `registration:${registration._id}:${decision}`, { orgId:registration.teamOrgId || '', userId:registration.applicantUserId, type:'registration_status', category:'tournament', title:decision === 'approved' ? '赛事报名已通过' : '赛事报名已驳回', content:reason || `${registration.teamName || '球队'}报名审核已通过`, tournamentId:registration.tournamentId, teamId:registration.teamId, read:false })
-  const deliveries = await deliverRegistrationNotifications(registration, tournament, decision, reason)
+  const existingOutbox = (await db.collection('notification_outbox').where({ sport:SPORT, registrationId:registration._id }).limit(100).get()).data || []
+  const miniDelivered = existingOutbox.some(item => item.channel === 'mini_subscription' && item.status === 'delivered')
+  const deliveries = await deliverRegistrationNotifications(registration, tournament, decision, reason, { skipMini:miniDelivered, skipService:false })
   await Promise.all([
     upsertByKey('notification_outbox', `${businessEventId}:mini_subscription`, { sport:SPORT, businessEventId, tournamentId:registration.tournamentId, registrationId:registration._id, recipientUserId:registration.applicantUserId || '', recipientMiniOpenId:registration.applicantMiniOpenId || '', channel:'mini_subscription', status:deliveries.mini.status, errorCode:deliveries.mini.code || '', errorMessage:deliveries.mini.message || '', attemptedAt:db.serverDate(), targetPage:'pages/todo/index' }),
     upsertByKey('notification_outbox', `${businessEventId}:service_account`, { sport:SPORT, businessEventId, tournamentId:registration.tournamentId, registrationId:registration._id, recipientUserId:registration.applicantUserId || '', recipientMiniOpenId:registration.applicantMiniOpenId || '', recipientOfficialOpenId:deliveries.binding && deliveries.binding.officialOpenId || '', channel:'service_account', status:deliveries.service.status, errorCode:deliveries.service.code || '', errorMessage:deliveries.service.message || '', attemptedAt:db.serverDate(), targetPage:'pages/todo/index' })

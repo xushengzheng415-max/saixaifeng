@@ -46,13 +46,18 @@ Page({
     trainingTasks: [],
     hasSchedule: false,
     hasTasks: false,
-    visualQa: false
+    visualQa: false,
+    guestMode: false
   },
 
   onLoad: function(options) {
     var query = options || {}
     if (workspace.isVisualQaEnabled(query)) {
       this.setData(visualFixture(String(query.state || 'locked')))
+      return
+    }
+    if (workspace.isGuestReviewEnabled(query) || !workspace.hasAuthenticatedUser()) {
+      this.loadGuestDemo()
       return
     }
     this.loadData()
@@ -62,7 +67,12 @@ Page({
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().syncFromPage(3)
     }
+    if (this.data.guestMode) return
     if (!this.data.visualQa) {
+      if (!workspace.hasAuthenticatedUser()) {
+        this.loadGuestDemo()
+        return
+      }
       this.applyContext(workspace.readContext())
       this.loadData(true)
     }
@@ -119,6 +129,7 @@ Page({
   },
 
   onSwitchWorkspace: function() {
+    if (this.data.guestMode) return workspace.promptLogin('登录后可查看机构青训空间和已开通的服务。')
     if (this.data.visualQa) return
     var that = this
     workspace.chooseWorkspace(workspace.readContext()).then(function(context) {
@@ -129,6 +140,7 @@ Page({
   },
 
   onOpenRequest: function() {
+    if (this.data.guestMode) return workspace.promptLogin('当前是青训功能演示，登录后可查看机构的开户和权限状态。')
     if (this.data.visualQa) return
     wx.showModal({
       title: '开通青训经营能力',
@@ -136,6 +148,24 @@ Page({
       showCancel: false,
       confirmText: '我知道了'
     })
+  },
+
+  loadGuestDemo: function() {
+    var demo = visualFixture('active')
+    demo.visualQa = false
+    demo.guestMode = true
+    demo.workspaceName = '青训功能演示'
+    demo.canSwitchWorkspace = false
+    demo.entitlementText = '示例数据 · 不保存'
+    demo.trainingSchedule = [
+      { id: 'guest-course-1', title: '示例 · U12 技术训练', timeText: '今天 18:30–20:00', location: '示例 1 号场', statusText: '待签到' },
+      { id: 'guest-course-2', title: '示例 · U10 基础训练', timeText: '明天 09:00–10:30', location: '示例训练馆', statusText: '已排课' }
+    ]
+    demo.trainingTasks = [
+      { id: 'guest-training-task-1', title: '示例 · 请假待确认', subtitle: '登录后可处理课程执行任务' },
+      { id: 'guest-training-task-2', title: '示例 · 课后记录待补充', subtitle: '登录后可保存训练记录' }
+    ]
+    this.setData(demo)
   },
 
   // 课程和待办仅在工作空间返回可进入的目标后才可点击；

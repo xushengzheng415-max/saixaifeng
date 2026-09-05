@@ -252,7 +252,7 @@ Page({
   loadVisualFixture: function (state) {
     var team = { id: 'visual-team', name: '郑州青训U9队', logo: '/images/runtime/icons/brand-v2-11.png' }
     var base = { visualQa: true, loading: false, teamId: team.id, team: team, inviteId: 'visual-invite', expiresAtText: '09-06 16:30' }
-    if (state === 'manager') return this.setData(Object.assign(base, { modeManager: true, pageTitle: '邀请球员入队', qrReady: false, linkDisabled: true, linkDisplayText: '可点击邀请链接将在真实环境生成', environmentText: '体验版球员邀请二维码', environmentTip: '扫码后匹配或登记孩子资料' }))
+    if (state === 'manager') return this.setData(Object.assign(base, { modeManager: true, pageTitle: '邀请球员入队', qrReady: false, linkDisabled: true, linkDisplayText: '可点击邀请链接将在真实环境生成', environmentText: '正式版球员邀请二维码', environmentTip: '扫码后匹配或登记孩子资料' }))
     if (state === 'match') return this.setData(Object.assign(base, { modeRecipient: true, pageTitle: '确认孩子', showMatchStep: true, hasMatchedPlayer: true, submittedPlayer: { name: '张浩', birthDate: '2016年08月', profileStatus: '待家长补充' }, matchPhoneText: '138 **** 5678' }))
     if (state === 'nomatch') return this.setData(Object.assign(base, { modeRecipient: true, pageTitle: '确认孩子', showMatchStep: true, hasMatchedPlayer: false, matchPhoneText: '账号已验证' }))
     if (state === 'success') return this.setData(Object.assign(base, { modeRecipient: true, pageTitle: '资料提交成功', submitted: true, submittedPlayer: { name: '张浩' }, canContinueProfile: true, parentProfileUrl: 'https://www.sxffootball.cn/service-account-h5/?parentInvite=visual' }))

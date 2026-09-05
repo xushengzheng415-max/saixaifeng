@@ -69,7 +69,7 @@
 
 ### 2. 比赛报名成功通知（已配置）
 
-- 模板 ID：`aX_3wN6SbFR0s3giwyoK5P6eBbl9lwx2rqU_jCld-Uk`
+- 模板 ID：`aX_3wN6SbFR0s3giwyoK5P6eBbl9Iwx2rqU_jCId-Uk`
 - 用途：报名审核通过
 - 字段：
   - 比赛名称：`thing3`

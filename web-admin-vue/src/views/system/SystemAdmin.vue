@@ -34,11 +34,11 @@
           <div class="service-flow">
             <div class="flow-step"><strong>1</strong><span>用户关注服务号并通过微信客服申请协助</span></div>
             <div class="flow-step"><strong>2</strong><span>总控生成一次性协助码和小程序码</span></div>
-            <div class="flow-step"><strong>3</strong><span>客服私发给用户，由用户在小程序确认</span></div>
+            <div class="flow-step"><strong>3</strong><span>客服发送PC确认链接，由用户在帮助中心确认</span></div>
             <div class="flow-step"><strong>4</strong><span>授权生效后进入资料，全部修改保留操作记录</span></div>
           </div>
           <el-alert
-            title="关注服务号只是服务入口，资料权限必须由用户本人在小程序中再次确认。"
+            title="PC后台是协助确认主入口；小程序码只作为手机端备用入口。资料权限必须由用户本人再次确认。"
             type="info"
             :closable="false"
             show-icon
@@ -108,7 +108,7 @@
               <div v-if="qrLoading" class="qr-placeholder">正在生成小程序码…</div>
               <img v-else-if="createdRequest.qrCodeUrl" :src="createdRequest.qrCodeUrl" alt="协助确认小程序码" />
               <div v-else class="qr-placeholder">小程序码生成失败，可发送数字码</div>
-              <small>客服可发送此图，用户扫码后直接进入隐藏确认页</small>
+              <small>手机端备用：用户扫码后进入小程序协助确认页</small>
             </div>
           </div>
         </el-card>
@@ -289,7 +289,8 @@ let pollTimer = null
 
 const customerServiceMessage = computed(() => {
   if (!createdRequest.value) return ''
-  return `您好，赛小蜂已为您创建临时协助申请。请打开客服发送的赛小蜂足球小程序确认页，输入8位协助码：${createdRequest.value.code}。协助码10分钟内有效；授权前可查看协助原因、权限和有效期，删除功能默认关闭。`
+  const pcLink = window.location.origin + import.meta.env.BASE_URL + '#/assistance?code=' + createdRequest.value.code
+  return '您好，赛小蜂已为您创建临时协助申请。请在电脑打开：' + pcLink + '，登录后核对并确认。协助码：' + createdRequest.value.code + '，10分钟内有效；授权前可查看协助原因、权限和有效期，删除功能始终关闭。'
 })
 
 const activeExpiresLabel = computed(() => formatTime(activeExpiresAt.value))
@@ -354,7 +355,7 @@ async function createAssistanceRequest() {
     } finally {
       qrLoading.value = false
     }
-    ElMessage.success('协助码已生成，请通过微信客服私发给用户')
+    ElMessage.success('协助码已生成，请把PC确认链接通过微信客服发给用户')
     await refreshRequests()
   } catch (err) {
     ElMessage.error(err.message)

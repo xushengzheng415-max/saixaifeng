@@ -48,7 +48,6 @@
           class="bind-btn"
           :class="{ active: form.phone && form.code }"
           :disabled="loading || !form.phone || !form.code"
-          @click="handleBind"
         >
           {{ loading ? '验证中...' : '确认验证' }}
         </button>

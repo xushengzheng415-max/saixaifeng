@@ -3,7 +3,7 @@
 固定入口：`https://api.saixiaofeng.com/wechat/football/v1`
 固定公网出口：`124.221.239.63`
 
-该服务只允许三个受控动作：接口探测、生成服务号带参关注二维码、发送服务号模板消息。请求必须携带时间戳、随机数和 HMAC-SHA256 签名；用于获取普通 `access_token` 的服务号 AppSecret 保存在服务器环境变量中，不写入仓库。现有服务号网页 OAuth 链路仍按原配置运行，不在本中转的三个动作范围内。
+该服务只允许五类受控动作：接口探测、生成服务号带参关注二维码、发送服务号模板消息、创建自定义菜单和读取当前自定义菜单。请求必须携带时间戳、随机数和 HMAC-SHA256 签名；用于获取普通 `access_token` 的服务号 AppSecret 保存在服务器环境变量中，不写入仓库。菜单创建仅接受指向 `https://www.sxffootball.cn` 的网页入口。现有服务号网页 OAuth 链路仍按原配置运行。
 
 运行前提：Ubuntu、Node.js 18 或更高版本、Nginx，以及 `api.saixiaofeng.com` 的现有有效 HTTPS 证书。
 
@@ -33,5 +33,14 @@ SXF_FOOTBALL_WECHAT_BRIDGE_SECRET=<与服务器 SXF_BRIDGE_SHARED_SECRET 相同>
 部署顺序必须是：服务器进程与 Nginx 就绪 → `/health` 返回成功 → 服务号白名单加入 `124.221.239.63` → 签名 `probe` 成功 → 配置并部署 CloudBase 调用方 → 单条验收。报名服务端硬门禁必须最后上线，避免中转未就绪时阻断正式用户。
 
 服务器侧签名探针：`sudo node /opt/sxf-wechat-football-bridge/probe.js`。脚本只输出 HTTP 状态与微信错误/成功结果，不输出 AppSecret 或中转共享密钥。
+
+服务器侧菜单发布与读回：
+
+```bash
+sudo node /opt/sxf-wechat-football-bridge/menu-admin.js create /opt/sxf-wechat-football-bridge/wechat-menu.json
+sudo node /opt/sxf-wechat-football-bridge/menu-admin.js get
+```
+
+`menu-admin.js` 只从受限环境文件读取共享密钥用于 HMAC，不输出共享密钥、AppSecret 或 access token。
 
 Windows 正式仓库部署两个调用方时，使用 `cloudbaserc.function-deploy.json` 明确限定 `cloudfunctions/`，避免 CloudBase CLI 在仓库根目录误打包 PC 依赖与其他工程文件。

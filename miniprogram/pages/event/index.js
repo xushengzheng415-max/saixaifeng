@@ -29,12 +29,17 @@ Page({
     activeStatus: 'all',
     pendingCount: 0,
     featuredTask: null,
-    hasFeaturedTask: false
+    hasFeaturedTask: false,
+    guestMode: false
   },
 
   onLoad: function(options) {
     if (workspace.isVisualQaEnabled(options)) {
       this.loadVisualFixture()
+      return
+    }
+    if (workspace.isGuestReviewEnabled(options) || !workspace.hasAuthenticatedUser()) {
+      this.loadGuestDemo()
       return
     }
     this.loadData()
@@ -44,7 +49,12 @@ Page({
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().syncFromPage(1)
     }
+    if (this.data.guestMode) return
     if (!this.data.visualQa) {
+      if (!workspace.hasAuthenticatedUser()) {
+        this.loadGuestDemo()
+        return
+      }
       this.applyContext(workspace.readContext())
       this.loadData(true)
     }
@@ -141,6 +151,7 @@ Page({
   },
 
   onSwitchWorkspace: function() {
+    if (this.data.guestMode) return workspace.promptLogin('登录后可查看和切换已授权的机构赛事空间。')
     var that = this
     workspace.chooseWorkspace(workspace.readContext()).then(function(context) {
       that.applyContext(context)
@@ -150,6 +161,7 @@ Page({
   },
 
   onCreateTournament: function() {
+    if (this.data.guestMode) return workspace.promptLogin('登录后可创建赛事并保存赛事配置。')
     if (!this.data.canManage) {
       wx.showToast({ title: '当前机构未授予赛事管理权限', icon: 'none' })
       return
@@ -158,16 +170,19 @@ Page({
   },
 
   onTournamentTap: function(event) {
+    if (this.data.guestMode) return workspace.promptLogin('当前是赛事功能演示。登录后可进入赛事管理；公开赛事可从首页免登录浏览。')
     var id = event.currentTarget.dataset.id
     if (id) wx.navigateTo({ url: '/pages/tournament/detail/detail?id=' + id })
   },
 
   onMatchTap: function(event) {
+    if (this.data.guestMode) return workspace.promptLogin('当前是赛程功能演示，登录后可查看本机构比赛任务。')
     var id = event.currentTarget.dataset.id
     if (id) wx.navigateTo({ url: '/pages/match/detail/detail?matchId=' + id })
   },
 
   onTaskTap: function(event) {
+    if (this.data.guestMode) return workspace.promptLogin('当前是任务功能演示，登录后可处理报名、名单和赛果任务。')
     var tournamentId = event.currentTarget.dataset.tournament
     var teamId = event.currentTarget.dataset.team
     var audience = event.currentTarget.dataset.audience
@@ -191,6 +206,22 @@ Page({
       relationTabs: [{ id: 'hosted', text: '我主办的', count: 2, itemClass: 'event-relation-active' }, { id: 'participating', text: '我参与的', count: 0, itemClass: '' }], showRelationTabs: true, activeRelation: 'hosted',
       hostedTournaments: hosted, participatingTournaments: [], visibleTournaments: hosted, hasTournaments: true,
       eventTasks: [{ id: 'task-1', title: '赛事审批待处理', subtitle: '报名 6 · 名单 3 · 赛果 1', tournamentId: 'visual-pro', audience: 'organizer' }], featuredTask: { id: 'task-1', title: '赛事审批待处理', subtitle: '报名 6 · 名单 3 · 赛果 1', tournamentId: 'visual-pro', audience: 'organizer' }, hasFeaturedTask: true, hasTasks: true, pendingCount: 10,
+      eventSchedule: [], hasSchedule: false
+    })
+  },
+
+  loadGuestDemo: function() {
+    var tournaments = [
+      { id: 'guest-demo-event-1', name: '示例 · 青少年足球邀请赛', dateText: '周六至周日 · 示例体育中心', statusText: '进行中', relationText: '功能演示', modeText: 'U12', teamCountText: '8 支球队', matchCountText: '16 场比赛', cardClass: 'event-card-pro' },
+      { id: 'guest-demo-event-2', name: '示例 · 校园足球联赛', dateText: '日期待发布 · 示例场地', statusText: '待开始', relationText: '功能演示', modeText: '简易版', teamCountText: '6 支球队', matchCountText: '9 场比赛', cardClass: 'event-card-simple' }
+    ]
+    this.setData({
+      loading: false, errorText: '', visualQa: false, guestMode: true,
+      workspaceName: '赛事功能演示', workspaceTypeText: '示例数据 · 不保存', canSwitchWorkspace: false, canManage: false,
+      relationTabs: [{ id: 'hosted', text: '赛事示例', count: 2, itemClass: 'event-relation-active' }], showRelationTabs: false, activeRelation: 'hosted',
+      hostedTournaments: tournaments, participatingTournaments: [], visibleTournaments: tournaments, hasTournaments: true,
+      eventTasks: [{ id: 'guest-task', title: '报名与名单待处理', subtitle: '演示任务 · 登录后可处理', tournamentId: 'guest-demo-event-1', audience: 'organizer' }],
+      featuredTask: { id: 'guest-task', title: '报名与名单待处理', subtitle: '演示任务 · 登录后可处理', tournamentId: 'guest-demo-event-1', audience: 'organizer' }, hasFeaturedTask: true, hasTasks: true, pendingCount: 2,
       eventSchedule: [], hasSchedule: false
     })
   }

@@ -85,15 +85,46 @@ page{background:#001d12}
 .training-permission-note image{display:block;width:28rpx;height:28rpx;margin-right:12rpx;filter:brightness(0) invert(1)}
 .loading{padding:80rpx 0;color:#e5eee9;text-align:center}
 .error-card{display:flex;justify-content:space-between;margin-bottom:18rpx;padding:20rpx 23rpx;border-radius:16rpx;background:#fff0ef;color:#a53e37;font-size:22rpx}
-.login-hero{display:flex;flex-direction:column;align-items:center;margin-top:70rpx}
-.guest-home-badge{display:flex;align-items:center;align-self:flex-start;margin-bottom:80rpx;padding:10rpx 18rpx 10rpx 10rpx;border:1rpx solid rgba(255,255,255,.3);border-radius:34rpx;background:rgba(0,49,28,.58)}
-.guest-home-badge image{display:block;width:44rpx;height:44rpx;margin-right:8rpx}
-.guest-home-badge text{font-size:23rpx!important;font-weight:700!important}
-.guest-title{font-size:48rpx;font-weight:900}
-.guest-subtitle{margin:20rpx 0 45rpx;color:rgba(255,255,255,.76);font-size:25rpx;text-align:center}
-.login-hero button{width:100%;height:88rpx;border-radius:20rpx;background:#159346;color:#fff;font-size:30rpx;font-weight:800}
-.login-outline{margin-top:22rpx!important;border:2rpx solid #fff!important;background:rgba(255,255,255,.12)!important}
-.guest-feature-grid{display:flex;width:100%;margin-top:34rpx;gap:12rpx}
-.guest-feature-grid view{flex:1;min-width:0;padding:20rpx 12rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:18rpx;background:rgba(0,39,23,.5);text-align:center}
-.guest-feature-grid text{display:block!important;margin:0!important;font-size:22rpx!important;color:#fff!important}
-.guest-feature-grid text:last-child{margin-top:8rpx!important;font-size:18rpx!important;line-height:1.45;color:rgba(255,255,255,.65)!important}
+.guest-login-guide{display:flex;align-items:center;justify-content:space-between;margin-top:132rpx;margin-bottom:30rpx;padding:22rpx 24rpx;border:2rpx solid rgba(43,187,104,.58);border-radius:20rpx;background:rgba(0,35,22,.9);box-shadow:0 14rpx 36rpx rgba(0,0,0,.2)}
+.guest-login-copy{display:flex;min-width:0;flex-direction:column}
+.guest-login-title{font-size:28rpx;font-weight:900}
+.guest-login-desc{margin-top:8rpx;color:rgba(255,255,255,.7);font-size:20rpx;line-height:1.45}
+.guest-login-action{flex:none;margin-left:18rpx;color:#50d27c;font-size:24rpx;font-weight:800}
+.guest-section-heading{display:flex;align-items:center;justify-content:space-between;margin:0 12rpx 16rpx}
+.guest-section-heading text:first-child{font-size:34rpx;font-weight:900}
+.guest-section-heading text:last-child{color:rgba(255,255,255,.76);font-size:21rpx}
+.guest-demo-overview{padding:28rpx 26rpx 22rpx;border:2rpx solid rgba(43,187,104,.62);border-radius:28rpx;background:linear-gradient(115deg,rgba(0,74,42,.96),rgba(0,48,30,.94));box-shadow:0 18rpx 42rpx rgba(0,0,0,.24)}
+.guest-demo-top{display:flex;align-items:flex-start;justify-content:space-between}
+.guest-demo-top>view{display:flex;flex-direction:column}
+.guest-demo-label{align-self:flex-start;padding:6rpx 14rpx;border-radius:15rpx;background:rgba(92,211,130,.18);color:#91e7ad;font-size:20rpx}
+.guest-demo-title{margin-top:18rpx;font-size:34rpx;font-weight:900}
+.guest-demo-top image{display:block;width:102rpx;height:102rpx;opacity:.56}
+.guest-demo-metrics{display:flex;margin-top:26rpx;padding:20rpx 8rpx;border-radius:18rpx;background:rgba(0,30,19,.58)}
+.guest-demo-metric{display:flex;flex:1;flex-direction:column;align-items:center;border-right:1rpx solid rgba(255,255,255,.18)}
+.guest-demo-metric:last-child{border-right:0}
+.guest-demo-metric image{display:block;width:36rpx;height:36rpx;filter:brightness(0) invert(1);opacity:.8}
+.guest-demo-value{margin-top:8rpx;font-size:36rpx;font-weight:900}
+.guest-demo-name{margin-top:5rpx;color:rgba(255,255,255,.72);font-size:19rpx}
+.guest-demo-note{display:block;margin-top:18rpx;color:rgba(255,255,255,.56);font-size:18rpx;line-height:1.5;text-align:center}
+.guest-task-heading{margin-top:32rpx}
+.guest-demo-tasks{margin-bottom:32rpx;padding:4rpx 22rpx;border-radius:24rpx;background:rgba(255,255,255,.97);color:#121612}
+.guest-demo-task{display:flex;align-items:center;min-height:104rpx;border-bottom:1rpx solid #e7ebe8}
+.guest-demo-task:last-child{border-bottom:0}
+.guest-demo-task>image{display:block;flex:none;width:52rpx;height:52rpx;margin-right:18rpx}
+.guest-demo-task>view{display:flex;min-width:0;flex:1;flex-direction:column}
+.guest-demo-task-title{font-size:25rpx;font-weight:800}
+.guest-demo-task-desc{margin-top:7rpx;color:#747c77;font-size:19rpx}
+.guest-demo-arrow{margin-left:12rpx;color:#159346;font-size:42rpx}
+.guest-public-card{position:relative;min-height:300rpx;padding:30rpx 28rpx 84rpx;overflow:hidden;border:2rpx solid rgba(43,187,104,.65);border-radius:28rpx;background:linear-gradient(125deg,rgba(0,72,42,.97),rgba(0,42,27,.94));box-shadow:0 18rpx 42rpx rgba(0,0,0,.24);box-sizing:border-box}
+.guest-public-copy{position:relative;z-index:2;display:flex;max-width:430rpx;flex-direction:column}
+.guest-public-label{align-self:flex-start;padding:6rpx 14rpx;border-radius:15rpx;background:rgba(92,211,130,.18);color:#91e7ad;font-size:20rpx}
+.guest-public-title{margin-top:24rpx;font-size:36rpx;font-weight:900}
+.guest-public-desc{margin-top:15rpx;color:rgba(255,255,255,.68);font-size:22rpx;line-height:1.6}
+.guest-public-card image{position:absolute;right:22rpx;top:38rpx;width:150rpx;height:150rpx;opacity:.42}
+.guest-public-action{position:absolute;left:22rpx;right:22rpx;bottom:20rpx;z-index:2;height:58rpx;border-radius:14rpx;background:#159346;font-size:23rpx;font-weight:800;line-height:58rpx;text-align:center}
+.guest-service-heading{margin-top:34rpx}
+.guest-service-grid{display:flex;gap:12rpx}
+.guest-service-card{display:flex;min-width:0;flex:1;flex-direction:column;align-items:center;padding:24rpx 10rpx 22rpx;border:1rpx solid rgba(255,255,255,.2);border-radius:20rpx;background:rgba(0,39,24,.76);box-sizing:border-box;text-align:center}
+.guest-service-card image{display:block;width:72rpx;height:72rpx}
+.guest-service-title{margin-top:12rpx;font-size:25rpx;font-weight:800}
+.guest-service-desc{margin-top:8rpx;color:rgba(255,255,255,.62);font-size:18rpx;line-height:1.4}

@@ -258,14 +258,14 @@
             <button type="button" :class="{ selected: claimShareMethod === 'link' }" @click="claimShareMethod = 'link'"><span class="claim-option-icon"><el-icon><Link /></el-icon></span><span><strong>复制认领链接</strong><small>复制后通过微信发送给球队负责人</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
             <button type="button" :class="{ selected: claimShareMethod === 'scan' }" @click="claimShareMethod = 'scan'"><span class="claim-option-icon claim-option-qr"><el-icon><Grid /></el-icon></span><span><strong>手机扫码分享</strong><small>主办方用手机扫码进入小程序，再转发认领卡片</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
           </div>
-          <label class="claim-link-field"><strong>体验版球队认领</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input value="可将下方体验版小程序码发送给已加入体验成员的球队负责人" readonly /></div></label>
+          <label class="claim-link-field"><strong>正式版球队认领</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input :value="claimInviteUrlLink || '正在生成正式版认领链接…'" readonly /></div></label>
           <div class="claim-code-row"><img v-if="claimInviteCodeUrl" :src="claimInviteCodeUrl" class="claim-qr-image" alt="球队认领小程序码" /><div v-else-if="claimInvitePath" class="claim-qr-vector" role="img" aria-label="球队认领二维码" v-html="claimQrSvg"></div><div v-else class="claim-qr-placeholder" role="status">{{ claimInviteLoading ? '生成中' : '待生成' }}</div><div><strong>球队认领小程序码</strong><p>{{ claimInviteCodeUrl ? '扫码后可转发小程序卡片' : (claimInviteLoading ? '正在生成小程序码…' : '认领链接生成后显示可扫码二维码') }}</p></div></div>
           <div class="claim-after-note"><el-icon><InfoFilled /></el-icon><span>认领完成后，如球队资料或参赛名单未完善，再由系统发送资料完善提醒。</span></div>
         </div>
         <footer class="claim-dialog-footer"><button type="button" class="claim-cancel" @click="closeClaimInvite">取消</button><button type="button" class="claim-download" @click="downloadClaimCode"><el-icon><Download /></el-icon>下载小程序码</button><button type="button" class="claim-copy" @click="copyClaimInviteLink"><el-icon><CopyDocument /></el-icon>复制认领链接</button></footer>
       </section>
     </div>
-    <el-dialog v-model="targetedRegistrationLinkVisible" title="邀约球队" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="creatingTargetedRegistrationLink"><el-alert type="warning" :closable="false" title="当前生成体验版球队邀约，仅限已加入小程序体验成员的微信扫码测试；暂不用于对外传播。"/><section v-if="targetedRegistrationResult" class="targeted-link-result"><img v-if="targetedRegistrationResult.qrCodeUrl" :src="targetedRegistrationResult.qrCodeUrl" alt="邀约球队体验版小程序码"/><div><strong>球队邀约体验版二维码已生成</strong><el-tag type="warning" size="small">体验版</el-tag><span>报名时由球队选择组别</span><p>可下载二维码，发送给已加入体验成员的球队负责人测试报名流程。</p></div></section><el-empty v-else description="正在生成体验版球队邀约…"/></div><template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationResult" disabled>体验版不提供链接</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.qrCodeUrl" @click="downloadTargetedRegistrationCode">下载二维码</el-button><el-button v-if="targetedRegistrationResult" type="primary" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重新生成</el-button></template></el-dialog>
+    <el-dialog v-model="targetedRegistrationLinkVisible" title="邀约球队" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="creatingTargetedRegistrationLink"><el-alert type="success" :closable="false" title="当前生成正式版球队邀约，可将二维码或完整小程序链接对外发送。"/><section v-if="targetedRegistrationResult" class="targeted-link-result"><img v-if="targetedRegistrationResult.qrCodeUrl" :src="targetedRegistrationResult.qrCodeUrl" alt="邀约球队正式版小程序码"/><div><strong>球队邀约正式版二维码已生成</strong><el-tag type="success" size="small">正式版</el-tag><span>报名时由球队选择组别</span><p>可下载二维码或复制完整链接，发送给球队负责人办理报名。</p></div></section><el-empty v-else description="正在生成正式版球队邀约…"/></div><template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.urlLink" @click="copyTargetedRegistrationLink">复制链接</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.qrCodeUrl" @click="downloadTargetedRegistrationCode">下载二维码</el-button><el-button v-if="targetedRegistrationResult" type="primary" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重新生成</el-button></template></el-dialog>
 
     <!-- 邀请球队弹窗（旧球队池入口保留给内部兼容流程，不再由“定向邀请球队”按钮触发） -->
     <el-dialog
@@ -395,7 +395,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="targetedInviteResultVisible" title="球队体验版注册邀请已生成" width="820px" destroy-on-close><el-alert type="warning" :closable="false" title="当前为体验版球队注册邀请，仅供已加入体验成员的微信测试；扫码后仍需登录、确认球队并提交报名审核。"/><div class="targeted-invite-results"><article v-for="item in targetedInviteResults" :key="item.teamId"><img v-if="item.qrCodeUrl" :src="item.qrCodeUrl" alt="球队注册体验版小程序码"/><div v-else class="targeted-code-placeholder">待生成</div><div><strong>{{ item.teamName }}</strong><span>{{ activeDivision.name }}</span><el-tag v-if="item.success" type="warning" size="small">体验版邀请</el-tag><el-tag v-else type="danger" size="small">生成失败</el-tag><input :value="item.path || item.error" readonly/></div><footer><el-button link disabled>体验版不提供链接</el-button><el-button link type="success" :disabled="!item.qrCodeUrl" @click="downloadTargetedInviteCode(item)">下载体验版小程序码</el-button></footer></article></div><template #footer><el-button type="primary" @click="targetedInviteResultVisible=false">完成</el-button></template></el-dialog>
+    <el-dialog v-model="targetedInviteResultVisible" title="球队正式版注册邀请已生成" width="820px" destroy-on-close><el-alert type="success" :closable="false" title="当前为正式版球队注册邀请，可将链接或二维码发送给球队负责人；对方仍需登录、确认球队并提交报名审核。"/><div class="targeted-invite-results"><article v-for="item in targetedInviteResults" :key="item.teamId"><img v-if="item.qrCodeUrl" :src="item.qrCodeUrl" alt="球队注册正式版小程序码"/><div v-else class="targeted-code-placeholder">待生成</div><div><strong>{{ item.teamName }}</strong><span>{{ activeDivision.name }}</span><el-tag v-if="item.success" type="success" size="small">正式版邀请</el-tag><el-tag v-else type="danger" size="small">生成失败</el-tag><input :value="item.urlLink || item.error" readonly/></div><footer><el-button link :disabled="!item.urlLink" @click="copyTargetedInvite(item)">复制邀请链接</el-button><el-button link type="success" :disabled="!item.qrCodeUrl" @click="downloadTargetedInviteCode(item)">下载正式版小程序码</el-button></footer></article></div><template #footer><el-button type="primary" @click="targetedInviteResultVisible=false">完成</el-button></template></el-dialog>
 
     <!-- 添加球队弹窗：字段与球队身份创建球队保持一致 -->
     <el-dialog
@@ -631,10 +631,11 @@
             <p class="error-text">二维码生成失败</p>
             <p class="error-detail">{{ qrError }}</p>
             <el-button v-if="qrErrorCode === 'DIVISION_REGISTRATION_CLOSED'" type="success" @click="goToDivisionRegistrationSettings">前往竞赛管理开启报名</el-button>
-            <p class="error-hint">{{ qrErrorCode === 'DIVISION_REGISTRATION_CLOSED' ? '只有明确开启报名的竞赛组别才能生成该组海报' : '体验版二维码生成失败，请确认扫码微信已加入小程序体验成员后重试' }}</p>
+            <p class="error-hint">{{ qrErrorCode === 'DIVISION_REGISTRATION_CLOSED' ? '只有明确开启报名的竞赛组别才能生成该组海报' : '正式版二维码生成失败，请稍后重试或检查小程序发布状态' }}</p>
           </div>
         </div>
-      <el-alert v-if="qrEnvVersion === 'trial'" type="warning" :closable="false" show-icon title="当前为体验版二维码，仅限小程序体验成员扫码测试，暂不用于对外报名传播。" />
+      <el-alert v-if="qrEnvVersion === 'release'" type="success" :closable="false" show-icon title="当前为正式版报名二维码，可用于微信群、朋友圈或线下报名传播。" />
+      <el-alert v-else-if="qrEnvVersion" type="warning" :closable="false" show-icon title="当前未生成正式版二维码，请重新生成后再对外传播。" />
       <div class="qr-tips" v-if="!qrError"><p v-for="(step,index) in registrationGuideSteps" :key="step"><b>{{ index + 1 }}</b>{{ step }}</p><small>报名审核完成后，任务中心、小程序订阅消息和服务号将分别记录通知状态。</small></div>
       <div class="qr-actions">
         <el-button :loading="serviceProbeLoading" @click="probeServiceAccountChannel">检测服务号通道</el-button>
@@ -642,7 +643,7 @@
         <el-button :disabled="!qrCodeImage" @click="downloadQRCode">
             下载二维码
           </el-button>
-          <el-button disabled>体验版不提供链接</el-button>
+          <el-button :disabled="!registrationUrlLink" @click="copyRegistrationUrlLink">复制报名链接</el-button>
           <el-button @click="copySignupLink">
             复制报名文案
           </el-button>
@@ -1417,14 +1418,15 @@ async function retryRegistrationNotification(team) {
   const registrationId = getRecordId(team)
   retryingNotificationId.value = registrationId
   try {
-    const result = await callFunction('tournamentRegistrationFlow', { action:'retryRegistrationNotifications', registrationId })
+    await ElMessageBox.confirm('本次只补发服务号报名结果通知；已成功的小程序一次性订阅不会重复发送。', '补发服务号通知', { confirmButtonText:'确认补发', cancelButtonText:'取消', type:'warning' })
+    const result = await callFunction('tournamentRegistrationFlow', { action:'retryRegistrationNotifications', registrationId, forceService:true })
     if (!result?.success) throw new Error(result?.message || '通知重试失败')
     const channels = result.data?.channels || {}
     ElMessage.success(`通知重试已执行。${notificationChannelSummary(channels)}`)
     if (channels.miniSubscription === 'permission_required') ElMessage.warning('报名时未获得小程序订阅授权，本条小程序通知无法补发')
     if (channels.serviceAccount === 'configuration_required') ElMessage.warning('服务号报名审核模板尚未配置，暂时无法发送模板消息')
   } catch (error) {
-    ElMessage.error(error.message || '通知重试失败')
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '通知重试失败')
   } finally {
     retryingNotificationId.value = ''
   }
@@ -2028,9 +2030,10 @@ async function submitCreateTeam() {
       const prepared = await callFunction('tournamentRegistrationFlow', { action:'createTargetedTeamInvitations', tournamentId, divisionId:activeDivisionId.value, teamIds:[createdTeamId] })
       if (!prepared?.success || !prepared.data?.invitations?.length) throw new Error(prepared?.message || '专属邀请创建失败')
       const invitation = prepared.data.invitations[0]
-      const code = await callFunction('tournamentRegistrationFlow', { action:'generateTeamInviteCode', inviteId:invitation.inviteId, width:300, envVersion:'trial' })
+      const code = await callFunction('tournamentRegistrationFlow', { action:'generateTeamInviteCode', inviteId:invitation.inviteId, width:300, envVersion:'release' })
       if (!code?.success) throw new Error(code?.message || '小程序码生成失败')
-      targetedInviteResults.value = [{ teamId:createdTeamId, teamName:teamData.name, tournamentTeamId:createdRelation._id, inviteId:invitation.inviteId, path:code.data?.path || invitation.path || '', urlLink:'', qrCodeUrl:code.data?.qrCodeUrl || '', envVersion:code.data?.envVersion || 'trial', testOnly:true, success:true }]
+      if (code.data?.envVersion !== 'release' || code.data?.testOnly) throw new Error('未生成正式版邀请，请稍后重试')
+      targetedInviteResults.value = [{ teamId:createdTeamId, teamName:teamData.name, tournamentTeamId:createdRelation._id, inviteId:invitation.inviteId, path:code.data?.path || invitation.path || '', urlLink:code.data?.urlLink || '', qrCodeUrl:code.data?.qrCodeUrl || '', envVersion:code.data?.envVersion || 'release', testOnly:false, success:true }]
       targetedInviteResultVisible.value = true
       ElMessage.success('球队已预建，请将专属注册邀请发送给负责人')
     } catch (inviteError) {
@@ -2241,9 +2244,10 @@ async function sendInvites() {
     const results = []
     for (const row of rows) {
       try {
-        const code = await callFunction('tournamentRegistrationFlow', { action:'generateTeamInviteCode', inviteId:row.inviteId, width:300, envVersion:'trial' })
+        const code = await callFunction('tournamentRegistrationFlow', { action:'generateTeamInviteCode', inviteId:row.inviteId, width:300, envVersion:'release' })
         if (!code?.success) throw new Error(code?.message || '小程序码生成失败')
-        results.push({ teamId:row.teamId, teamName:row.teamName, tournamentTeamId:row.tournamentTeamId, inviteId:row.inviteId, path:code.data?.path || row.path || '', urlLink:'', qrCodeUrl:code.data?.qrCodeUrl || '', envVersion:code.data?.envVersion || 'trial', testOnly:true, success:true })
+        if (code.data?.envVersion !== 'release' || code.data?.testOnly) throw new Error('未生成正式版邀请，请稍后重试')
+        results.push({ teamId:row.teamId, teamName:row.teamName, tournamentTeamId:row.tournamentTeamId, inviteId:row.inviteId, path:code.data?.path || row.path || '', urlLink:code.data?.urlLink || '', qrCodeUrl:code.data?.qrCodeUrl || '', envVersion:code.data?.envVersion || 'release', testOnly:false, success:true })
       } catch (error) {
         results.push({ teamId:row.teamId, teamName:row.teamName, tournamentTeamId:row.tournamentTeamId, error:error.message || '邀请生成失败', success:false })
       }
@@ -2374,10 +2378,11 @@ async function ensureClaimInvite() {
       tournamentId,
       divisionId: activeDivisionId.value,
       tournamentTeamId: relationId,
-      envVersion:'trial'
+      envVersion:'release'
     })
     if (claimInviteRequestKey.value !== requestKey) return
     if (!result || !result.success || !result.inviteId) throw new Error(result?.message || '认领邀请生成失败')
+    if (result.envVersion !== 'release' || result.testOnly) throw new Error('未生成正式版认领邀请，请稍后重试')
     claimInviteId.value = String(result.inviteId)
     claimInvitePathValue.value = String(result.path || '')
     claimInviteUrlLink.value = String(result.urlLink || '')
@@ -2494,15 +2499,16 @@ function openTargetedRegistrationLinkDialog() {
 async function createTargetedRegistrationLink() {
   creatingTargetedRegistrationLink.value = true
   try {
-    const result = await callFunction('tournamentRegistrationFlow', { action:'createTargetedRegistrationLink', tournamentId, width:300, envVersion:'trial' })
+    const result = await callFunction('tournamentRegistrationFlow', { action:'createTargetedRegistrationLink', tournamentId, width:300, envVersion:'release' })
     if (!result?.success) throw new Error(result?.message || '球队邀约生成失败')
+    if (result.data?.envVersion !== 'release' || result.data?.testOnly) throw new Error('未生成正式版球队邀约，请稍后重试')
     targetedRegistrationResult.value = result.data || null
     ElMessage.success(result.message || '球队邀约二维码和链接已生成')
   } catch (error) { ElMessage.error(error.message || '球队邀约生成失败') } finally { creatingTargetedRegistrationLink.value = false }
 }
 async function copyTargetedRegistrationLink() {
   const item = targetedRegistrationResult.value
-  if (!item?.urlLink) return ElMessage.warning('体验版仅提供二维码，请使用已加入体验成员的微信扫码')
+  if (!item?.urlLink) return ElMessage.warning('正式版小程序链接尚未生成，请稍后重新生成')
   const text = `【${tournament.value.name || '足球赛事'}】邀请贵队报名参赛，请打开链接后选择竞赛组别：${item.urlLink}`
   try { await navigator.clipboard.writeText(text); ElMessage.success('小程序邀约已复制') } catch { ElMessage.info(text) }
 }
@@ -2534,10 +2540,11 @@ async function generateSignupQRCode() {
   qrEnvVersion.value = ''
   registrationUrlLink.value = ''
   try {
-    const res = await callFunction('tournamentRegistrationFlow', { action:'ensureInvite', tournamentId, divisionId:activeDivisionId.value, width:300, envVersion:'trial' })
+    const res = await callFunction('tournamentRegistrationFlow', { action:'ensureInvite', tournamentId, divisionId:activeDivisionId.value, width:300, envVersion:'release' })
     if (res.success) {
+      if (res.data?.envVersion !== 'release' || res.data?.testOnly) throw new Error('未生成正式版报名二维码，请稍后重试')
       qrCodeImage.value = res.data?.qrCodeUrl || res.data?.imageUrl || ''
-      qrEnvVersion.value = res.data?.envVersion || 'trial'
+      qrEnvVersion.value = res.data?.envVersion || 'release'
       registrationUrlLink.value = res.data?.urlLink || ''
       registrationGuideSteps.value = Array.isArray(res.data?.guideSteps) && res.data.guideSteps.length ? res.data.guideSteps : registrationGuideSteps.value
       if (!qrCodeImage.value) qrError.value = '云端已生成二维码，但未返回可显示的图片数据'

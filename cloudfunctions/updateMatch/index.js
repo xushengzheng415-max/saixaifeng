@@ -169,6 +169,32 @@ async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, op
   return { crew, template, keeperId, operatorId }
 }
 
+async function ensureNoRefereeScheduleConflicts(matchId, match, refereeCrew) {
+  const tournamentId = String(match.tournamentId || '')
+  const matchDate = String(match.matchDate || '').slice(0, 10)
+  const matchTime = String(match.matchTime || '')
+  if (!tournamentId || !matchDate || !matchTime) return
+  const refereeIds = new Set(Object.values(refereeCrew || {}).map(person => String(person && (person._id || person.refereeId) || '')).filter(Boolean))
+  if (!refereeIds.size) return
+  const result = await db.collection('matches').where({ tournamentId }).limit(1000).get()
+  const conflicts = (result.data || []).filter(item => {
+    if (String(item._id || '') === String(matchId || '')) return false
+    if (['cancelled', 'canceled', 'postponed'].includes(String(item.status || '').toLowerCase())) return false
+    if (String(item.matchDate || '').slice(0, 10) !== matchDate || String(item.matchTime || '') !== matchTime) return false
+    return Object.values(item.refereeCrew || {}).some(person => {
+      const refereeId = typeof person === 'string' ? person : person && (person._id || person.refereeId)
+      return refereeId && refereeIds.has(String(refereeId))
+    })
+  })
+  if (!conflicts.length) return
+  const names = new Set()
+  conflicts.forEach(item => Object.values(item.refereeCrew || {}).forEach(person => {
+    const refereeId = typeof person === 'string' ? person : person && (person._id || person.refereeId)
+    if (refereeId && refereeIds.has(String(refereeId))) names.add(typeof person === 'object' && person.name ? person.name : '所选裁判')
+  }))
+  throw new Error(`${Array.from(names).join('、')}在${matchDate} ${matchTime}已有执法场次，请调整后再指派`)
+}
+
 exports.main = async (event, context) => {
   const { matchId, data } = event
 
@@ -235,6 +261,7 @@ exports.main = async (event, context) => {
       safeData.refereeRecordKeeperId = assignment.keeperId
       safeData.operationRefereeId = assignment.operatorId
       safeData.refereeAssignmentStatus = 'assigned'
+      await ensureNoRefereeScheduleConflicts(matchId, match, assignment.crew)
     }
 
     if (!match.executionSnapshot && planState.locked) {

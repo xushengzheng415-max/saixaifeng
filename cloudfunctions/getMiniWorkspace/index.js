@@ -1308,7 +1308,10 @@ function formatParentProfileInvite(invite, team, player) {
 
 async function createParentProfileInvite(team, player, orgId, creatorId) {
   const now = db.serverDate(), token = 'pp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)
-  const data = { token, teamId: String(team._id), playerId: String(player._id), orgId, guardianPhone: String(player.guardianPhone || player.contactPhone || ''), status: 'active', creatorId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now }
+  const standardFlow = String(player.source || '') === 'team_player_invite' || player.standardProfileFlow === true
+  const identity = readBooleanSetting([player], ['identityVerificationRequired', 'requiresRealName', 'requireRealName'])
+  const portrait = readBooleanSetting([player], ['portraitRequired', 'requiresPortrait', 'requirePortrait'])
+  const data = { token, teamId: String(team._id), playerId: String(player._id), orgId, guardianPhone: String(player.guardianPhone || player.contactPhone || ''), status: 'active', creatorId, parentSupplementRequired: true, identityVerificationRequired: identity.defined ? identity.value : standardFlow, portraitRequired: portrait.defined ? portrait.value : standardFlow, standardProfileFlow: standardFlow, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now }
   const added = await db.collection('parent_profile_invites').add({ data })
   return Object.assign({ _id: added._id }, data)
 }
@@ -1316,7 +1319,15 @@ async function createParentProfileInvite(team, player, orgId, creatorId) {
 async function ensureParentProfileInviteForPlayer(team, player, orgId, creatorId) {
   const rows = await safeGet('parent_profile_invites', { teamId: String(team._id), playerId: String(player._id), status: 'active' }, 20)
   const active = rows.find(item => !item.expiresAt || toTime(item.expiresAt) > Date.now())
-  if (active) return active
+  if (active) {
+    const standardFlow = String(player.source || '') === 'team_player_invite' || player.standardProfileFlow === true
+    const needsUpgrade = standardFlow && (active.identityVerificationRequired !== true || active.portraitRequired !== true || active.parentSupplementRequired !== true)
+    if (needsUpgrade) {
+      await db.collection('parent_profile_invites').doc(String(active._id)).update({ data: { parentSupplementRequired: true, identityVerificationRequired: true, portraitRequired: true, standardProfileFlow: true, updateTime: db.serverDate() } })
+      return Object.assign({}, active, { parentSupplementRequired: true, identityVerificationRequired: true, portraitRequired: true, standardProfileFlow: true })
+    }
+    return active
+  }
   return await createParentProfileInvite(team, player, orgId, creatorId)
 }
 
@@ -2062,6 +2073,9 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     position,
     profileStatus: 'pending',
     needsParentCompletion: true,
+    standardProfileFlow: true,
+    identityVerificationRequired: true,
+    portraitRequired: true,
     source: 'team_player_invite',
     playerInviteId: preview.invitation.id,
     applicantRole: participantRole,

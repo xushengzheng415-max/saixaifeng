@@ -10,6 +10,7 @@
     "usage": "Use one semantic source per icon. Recolor only through documented variants; never copy an icon into a page folder."
   },
   "icons": [
+    { "semantic": "guest-home-entry", "file": "home-entry-white.svg", "source_type": "project-authored-vector", "targets": ["mini-login"] },
     { "semantic": "tab-home", "file": "../runtime/icons/brand-v1-tab-home.png", "active_file": "../runtime/icons/brand-v1-tab-home.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },
     { "semantic": "tab-event", "file": "../runtime/icons/brand-v1-tab-event.png", "active_file": "../runtime/icons/brand-v1-tab-event.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },
     { "semantic": "tab-team", "file": "../runtime/icons/brand-v1-tab-team.png", "active_file": "../runtime/icons/brand-v1-tab-team.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },

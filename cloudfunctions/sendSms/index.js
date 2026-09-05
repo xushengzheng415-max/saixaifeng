@@ -97,14 +97,6 @@ function callSendSms(phoneNumber, code) {
       host, service, action, version, timestamp, payload
     )
 
-    // 调试日志（隐藏敏感信息）
-    console.log('[sendSms] 请求参数:')
-    console.log('  SecretId:', CONFIG.SecretId ? CONFIG.SecretId.substring(0, 8) + '...' : '(空!)')
-    console.log('  SecretKey:', CONFIG.SecretKey ? '(已配置, 长度=' + CONFIG.SecretKey.length + ')' : '(空!)')
-    console.log('  SmsSdkAppId:', CONFIG.SmsSdkAppId || '(空!)')
-    console.log('  timestamp:', timestamp)
-    console.log('  Authorization前缀:', authorization.substring(0, 50) + '...')
-
     const options = {
       hostname: host,
       port: 443,
@@ -149,14 +141,11 @@ function callSendSms(phoneNumber, code) {
 
 // ========== 云函数入口 ==========
 exports.main = async (event) => {
-  // ⚠️ 版本标记 - 如果日志里看不到这行，说明云端跑的是旧版代码！
-  console.log('[sendSms] ========== v5-fix-region 新版代码运行中 ==========')
-  console.log('[sendSms] TemplateId:', CONFIG.TemplateId, '类型:', typeof CONFIG.TemplateId)
-  console.log('[sendSms] SmsSdkAppId:', CONFIG.SmsSdkAppId, '类型:', typeof CONFIG.SmsSdkAppId)
-  console.log('[sendSms] SignName:', CONFIG.SignName)
-  console.log('[sendSms] Region:', CONFIG.Region)
 
   const { phoneNumber } = event
+  const loginChallengeId = /^[a-f0-9]{64}$/i.test(String(event.loginChallengeId || ''))
+    ? String(event.loginChallengeId)
+    : ''
 
   // 参数校验
   if (!phoneNumber || !/^1[3-9]\d{9}$/.test(phoneNumber)) {
@@ -175,7 +164,7 @@ exports.main = async (event) => {
   try {
     // 调用腾讯云 SMS API 发送短信
     await callSendSms(phoneNumber, code)
-    console.log('[sendSms] 短信发送成功，验证码：', code)
+    console.log('[sendSms] 验证码短信发送成功')
 
     // 存储验证码到云数据库（用于后续 verifySmsCode 校验）
     const db = cloud.database()
@@ -183,6 +172,7 @@ exports.main = async (event) => {
       data: {  // 必须用 data 包裹！
         phoneNumber,
         code,
+        loginChallengeId,
         expireAt: new Date(expireAt),
         used: false,
         createdAt: db.serverDate(),

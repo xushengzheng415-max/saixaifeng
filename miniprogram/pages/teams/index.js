@@ -16,7 +16,8 @@ Page({
     teamTasks: [],
     hasTasks: false,
     statistics: {},
-    localVisualQa: false
+    localVisualQa: false,
+    guestMode: false
   },
 
   onLoad: function(options) {
@@ -45,6 +46,10 @@ Page({
       })
       return
     }
+    if (workspace.isGuestReviewEnabled(options) || !workspace.hasAuthenticatedUser()) {
+      this.loadGuestDemo()
+      return
+    }
     this.loadData()
   },
 
@@ -53,6 +58,11 @@ Page({
       this.getTabBar().syncFromPage(2)
     }
     if (this.data.localVisualQa) return
+    if (this.data.guestMode) return
+    if (!workspace.hasAuthenticatedUser()) {
+      this.loadGuestDemo()
+      return
+    }
     this.applyContext(workspace.readContext())
     this.loadData(true)
   },
@@ -95,6 +105,7 @@ Page({
   },
 
   onSwitchWorkspace: function() {
+    if (this.data.guestMode) return workspace.promptLogin('登录后可查看和切换已授权的机构球队空间。')
     var that = this
     workspace.chooseWorkspace(workspace.readContext()).then(function(context) {
       that.applyContext(context)
@@ -104,6 +115,7 @@ Page({
   },
 
   onCreateTeam: function() {
+    if (this.data.guestMode) return workspace.promptLogin('当前是球队功能演示，登录后可创建球队并保存资料。')
     if (!this.data.canManage) {
       wx.showToast({ title: '当前机构未授予球队管理权限', icon: 'none' })
       return
@@ -112,6 +124,7 @@ Page({
   },
 
   onTeamTap: function(event) {
+    if (this.data.guestMode) return workspace.promptLogin('当前展示示例球队。登录后可进入真实球队并管理球员资料。')
     var id = event.currentTarget.dataset.id
     var team = (this.data.teams || []).find(function(item) { return item.id === id })
     if (!team) return
@@ -126,6 +139,7 @@ Page({
   },
 
   onTaskTap: function(event) {
+    if (this.data.guestMode) return workspace.promptLogin('当前展示示例任务。登录后可处理正式名单和比赛阵容。')
     var tournamentId = event.currentTarget.dataset.tournament
     var teamId = event.currentTarget.dataset.team
     if (!tournamentId) return
@@ -142,6 +156,24 @@ Page({
     }
     wx.navigateTo({
       url: '/pages/tournament/signup/signup?id=' + encodeURIComponent(tournamentId) + '&teamId=' + encodeURIComponent(teamId || '')
+    })
+  },
+
+  loadGuestDemo: function() {
+    this.setData({
+      localVisualQa: false, guestMode: true, loading: false, errorText: '',
+      workspaceName: '球队功能演示', workspaceTypeText: '示例数据 · 不保存', canSwitchWorkspace: false, canManage: false,
+      teams: [
+        { id: 'guest-team-u12', name: '示例 · U12 竞技队', logo: '/images/runtime/icons/brand-v1-tab-team.png', playerCount: 18, coachCount: 2, tournamentCount: 2, claimText: '资料完整度 90%' },
+        { id: 'guest-team-u10', name: '示例 · U10 成长队', logo: '/images/runtime/icons/brand-v1-tab-team.png', playerCount: 16, coachCount: 2, tournamentCount: 1, claimText: '资料完整度 82%' }
+      ],
+      hasTeams: true, showTeamEmpty: false,
+      teamTasks: [
+        { id: 'guest-roster-task', title: '正式参赛名单待确认', subtitle: '示例赛事 · 登录后可处理', tournamentId: 'guest-event', teamId: 'guest-team-u12' },
+        { id: 'guest-lineup-task', title: '本场比赛阵容待提交', subtitle: '示例对阵 · 登录后可处理', tournamentId: 'guest-event', teamId: 'guest-team-u12' }
+      ],
+      hasTasks: true,
+      statistics: { teamCount: 2, playerCount: 34 }
     })
   }
 })

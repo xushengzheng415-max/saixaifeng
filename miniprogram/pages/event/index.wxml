@@ -2,6 +2,7 @@
   <image class="event-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
   <view class="event-content">
     <view class="event-nav"><text class="event-title">赛事</text><text class="event-workspace" bindtap="onSwitchWorkspace">{{workspaceName}}⌄</text></view>
+    <view class="guest-mode-banner" wx:if="{{guestMode}}" bindtap="onSwitchWorkspace"><view><text>当前未登录</text><text>赛事功能演示 · 示例数据不保存</text></view><text>去登录 ›</text></view>
     <view wx:if="{{loading}}" class="event-loading">正在加载赛事中心…</view>
     <view wx:if="{{errorText}}" class="event-error">{{errorText}}</view>
     <block wx:else>

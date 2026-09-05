@@ -4,6 +4,27 @@ var loadingPromise = null
 var loadingWorkspaceId = ''
 var loadingAccountKey = ''
 var contextGeneration = 0
+var AUTH_SESSION_VERSION = 'phone-canonical-v1'
+
+function hasAuthenticatedUser() {
+  var user = wx.getStorageSync('userInfo') || {}
+  var userId = String(user._id || user.id || '')
+  var phone = String(user.phone || user.phoneNumber || '')
+  return Boolean(userId && phone && wx.getStorageSync('authSessionVersion') === AUTH_SESSION_VERSION)
+}
+
+function promptLogin(content) {
+  wx.showModal({
+    title: '当前未登录',
+    content: content || '当前为功能演示，登录后可使用需要保存数据的管理功能。',
+    confirmText: '去登录',
+    cancelText: '继续浏览',
+    confirmColor: '#159346',
+    success: function(result) {
+      if (result.confirm) wx.navigateTo({ url: '/pages/login/login' })
+    }
+  })
+}
 
 function activeAccount() {
   var user = wx.getStorageSync('userInfo') || {}
@@ -97,6 +118,16 @@ function hasPermission(permission, context) {
 function isVisualQaEnabled(options) {
   options = options || {}
   if (String(options.visualQa || '') !== '1') return false
+  try {
+    return wx.getSystemInfoSync().platform === 'devtools'
+  } catch (error) {
+    return false
+  }
+}
+
+function isGuestReviewEnabled(options) {
+  options = options || {}
+  if (String(options.reviewGuest || '') !== '1') return false
   try {
     return wx.getSystemInfoSync().platform === 'devtools'
   } catch (error) {
@@ -254,11 +285,14 @@ function chooseWorkspace(context) {
 }
 
 module.exports = {
+  hasAuthenticatedUser: hasAuthenticatedUser,
+  promptLogin: promptLogin,
   readContext: readContext,
   saveContext: saveContext,
   clearContext: clearContext,
   hasPermission: hasPermission,
   isVisualQaEnabled: isVisualQaEnabled,
+  isGuestReviewEnabled: isGuestReviewEnabled,
   getAccessibleTeamIds: getAccessibleTeamIds,
   selectWorkspace: selectWorkspace,
   loadContext: loadContext,

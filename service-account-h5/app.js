@@ -1211,27 +1211,40 @@
     }
   }
 
+  function speakPortraitGuide() {
+    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+      toast('请按页面示例完成站位和动作')
+      return
+    }
+    window.speechSynthesis.cancel()
+    var prompt = new SpeechSynthesisUtterance('请让球员站在白色或浅色墙面前，尽量穿俱乐部或校队队服，正面看向镜头，双臂自然交叉，保持头部、手臂和腰部完整入镜。')
+    prompt.lang = 'zh-CN'
+    prompt.rate = 0.9
+    window.speechSynthesis.speak(prompt)
+  }
+
   function renderPortraitGuide(data) {
     setParentShell()
     var playerName = data && data.playerName ? data.playerName : '球员'
     app.className = 'page parent-profile-page parent-guide-page'
     app.innerHTML = '<header class="parent-match-hero parent-basic-hero parent-guide-header"><button id="portraitGuideBack" class="parent-match-back" type="button" aria-label="返回"><span></span></button><div><h1>拍摄球员形象照</h1><p>' + escapeHtml(playerName) + ' · 让球队形象更统一</p></div><strong>4/5</strong></header>' +
-      '<main class="parent-guide-content"><section class="parent-guide-hero"><div class="parent-guide-visual" aria-hidden="true"><div class="parent-guide-person"><i></i><b></b></div><span class="parent-frame-corner parent-frame-corner-tl"></span><span class="parent-frame-corner parent-frame-corner-tr"></span><span class="parent-frame-corner parent-frame-corner-bl"></span><span class="parent-frame-corner parent-frame-corner-br"></span></div><div class="parent-guide-checks"><strong>标准示例</strong><ul><li><span aria-hidden="true"></span>穿本队球衣效果更好</li><li><span aria-hidden="true"></span>正面看镜头</li><li><span aria-hidden="true"></span>双臂交叉</li><li><span aria-hidden="true"></span>头部、手臂和腰部完整入镜</li></ul></div></section>' +
-      '<section class="parent-guide-errors"><h2>常见错误示例</h2><div class="parent-guide-error-grid"><article class="guide-error guide-error-close"><div aria-hidden="true"><i></i></div><span class="guide-error-mark" aria-hidden="true"></span><p>距离过近</p></article><article class="guide-error guide-error-crop"><div aria-hidden="true"><i></i></div><span class="guide-error-mark" aria-hidden="true"></span><p>头像裁切</p></article><article class="guide-error guide-error-dark"><div aria-hidden="true"><i></i></div><span class="guide-error-mark" aria-hidden="true"></span><p>光线太暗</p></article></div></section>' +
-      '<section class="parent-guide-notice"><span class="parent-bulb-icon" aria-hidden="true"></span><p>球衣是建议，不作为提交限制；系统会自动去除背景并生成透明人像图。</p></section>' +
-      '<div class="parent-guide-actions"><button id="openPortraitCamera" class="parent-guide-camera" type="button"><span class="parent-camera-icon"></span>立即拍摄标准形象照（推荐）</button><button id="openPortraitAlbum" class="parent-guide-album" type="button"><span class="parent-album-icon"></span>从相册选择已有照片</button></div></main>'
+      '<main class="parent-guide-content"><section class="parent-guide-intro"><div><span>拍摄前示例</span><h2>照着这个动作拍</h2></div><button id="playPortraitGuide" class="parent-guide-voice" type="button"><i aria-hidden="true"></i>播放动作提示</button></section>' +
+      '<section class="parent-guide-hero"><div class="parent-guide-visual"><img src="./assets/parent-portrait-guide-v2.png" alt="标准形象照动作示例"><span class="parent-frame-corner parent-frame-corner-tl"></span><span class="parent-frame-corner parent-frame-corner-tr"></span><span class="parent-frame-corner parent-frame-corner-bl"></span><span class="parent-frame-corner parent-frame-corner-br"></span></div><div class="parent-guide-checks"><strong>拍摄要点</strong><ul><li><span aria-hidden="true"></span>尽量选择白色或浅色墙面</li><li><span aria-hidden="true"></span>建议穿俱乐部或校队队服</li><li><span aria-hidden="true"></span>正面看镜头，双臂自然交叉</li><li><span aria-hidden="true"></span>头部、手臂和腰部完整入镜</li></ul></div></section>' +
+      '<section class="parent-guide-notice"><span class="parent-bulb-icon" aria-hidden="true"></span><p>请先看示例并听完动作提示。点击“我已准备好”后，才会打开相机开始正式拍照。</p></section>' +
+      '<div class="parent-guide-actions"><button id="openPortraitCamera" class="parent-guide-camera" type="button"><span class="parent-camera-icon"></span>我已准备好，开始拍照</button></div></main>'
     document.getElementById('portraitGuideBack').onclick = loadParentIdentityResult
-    document.getElementById('openPortraitCamera').onclick = function () { renderPortraitCamera('camera', data) }
-    document.getElementById('openPortraitAlbum').onclick = function () { renderPortraitCamera('album', data) }
+    document.getElementById('playPortraitGuide').onclick = speakPortraitGuide
+    document.getElementById('openPortraitCamera').onclick = function () { window.speechSynthesis && window.speechSynthesis.cancel(); renderPortraitCamera('camera', data, true) }
+    setTimeout(speakPortraitGuide, 350)
   }
 
-  function renderPortraitCamera(source, data) {
+  function renderPortraitCamera(source, data, autoStart) {
     setParentShell()
     var useCamera = source !== 'album'
     var playerName = data && data.playerName ? data.playerName : '球员'
     app.className = 'page parent-profile-page parent-camera-page'
     app.innerHTML = '<header class="parent-camera-topbar"><button id="portraitCameraBack" class="parent-camera-back" type="button" aria-label="返回"><span></span></button><h1>拍摄标准形象照</h1><div class="parent-camera-top-actions"><button id="portraitMute" type="button" aria-label="静音"><span></span></button><button id="portraitHelp" type="button" aria-label="拍摄帮助">?</button></div></header>' +
-      '<main class="parent-camera-stage-page"><section id="portraitStage" class="parent-camera-stage"><div class="parent-camera-tip">请让球员站入轮廓内</div><div class="parent-camera-silhouette" aria-hidden="true"><i></i><b></b></div><span class="parent-camera-corner parent-camera-corner-tl"></span><span class="parent-camera-corner parent-camera-corner-tr"></span><span class="parent-camera-corner parent-camera-corner-bl"></span><span class="parent-camera-corner parent-camera-corner-br"></span><div class="parent-camera-quality"><span><i></i>距离合适</span><span><i></i>光线良好</span><span><i></i>人物清晰</span><span><i></i>姿势完整</span></div><div class="parent-camera-hint">保持不动，系统将自动检查照片质量</div><input id="portraitFile" class="visually-hidden" type="file" accept="image/jpeg,image/png"' + (useCamera ? ' capture="user"' : '') + '><div class="parent-camera-controls"><button id="portraitThumbnail" class="parent-camera-thumbnail" type="button" aria-label="从相册选择"><span></span></button><button id="capturePortraitButton" class="parent-camera-shutter" type="button" aria-label="' + (useCamera ? '拍摄照片' : '从相册选择照片') + '"><span></span></button><button id="portraitFlip" class="parent-camera-flip" type="button" aria-label="切换摄像头"><span></span></button></div></section><section class="parent-camera-privacy"><span class="parent-mini-shield" aria-hidden="true"></span><p>照片只用于生成标准透明人像，原图与派生图均受限保存，不会公开展示。</p></section><p id="portraitCameraStatus" class="parent-camera-status">' + (useCamera ? '点击中央按钮拍摄，或从左下角选择已有照片' : '请选择一张清晰的单人正面照片') + '</p></main>'
+      '<main class="parent-camera-stage-page"><section id="portraitStage" class="parent-camera-stage"><div class="parent-camera-tip">请将球员完整置于取景框内</div><div class="parent-camera-frame" aria-hidden="true"></div><div class="parent-camera-quality"><span><i></i>距离合适</span><span><i></i>光线良好</span><span><i></i>人物清晰</span><span><i></i>姿势完整</span></div><div class="parent-camera-hint">保持不动，系统将自动检查照片质量</div><input id="portraitFile" class="visually-hidden" type="file" accept="image/jpeg,image/png"' + (useCamera ? ' capture="user"' : '') + '><div class="parent-camera-controls"><button id="portraitThumbnail" class="parent-camera-thumbnail" type="button" aria-label="从相册选择"><span></span></button><button id="capturePortraitButton" class="parent-camera-shutter" type="button" aria-label="' + (useCamera ? '拍摄照片' : '从相册选择照片') + '"><span></span></button><button id="portraitFlip" class="parent-camera-flip" type="button" aria-label="切换摄像头"><img src="./assets/icon-camera-switch.svg" alt=""></button></div></section><section class="parent-camera-privacy"><span class="parent-mini-shield" aria-hidden="true"></span><p>照片只用于生成标准透明人像，原图与派生图均受限保存，不会公开展示。</p></section><p id="portraitCameraStatus" class="parent-camera-status">' + (useCamera ? '点击中央按钮拍摄，或从左下角选择已有照片' : '请选择一张清晰的单人正面照片') + '</p></main>'
     var input = document.getElementById('portraitFile')
     var capture = document.getElementById('capturePortraitButton')
     var status = document.getElementById('portraitCameraStatus')
@@ -1254,7 +1267,8 @@
     document.getElementById('portraitThumbnail').onclick = function () { input.removeAttribute('capture'); input.click() }
     capture.onclick = function () { input.click() }
     input.onchange = function () { processPortraitFile(input.files[0]) }
-    if (!useCamera) setTimeout(function () { input.removeAttribute('capture'); input.click() }, 0)
+    if (!useCamera) { input.removeAttribute('capture'); input.click() }
+    else if (autoStart) input.click()
   }
 
   function renderPortraitConfirmation(result) {
@@ -1262,17 +1276,17 @@
     app.className = 'page parent-profile-page parent-confirm-page'
     var playerName = result && result.playerName ? result.playerName : '球员'
     var rawPreview = String(result.transparentPreview || '')
-    var previewSrc = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(rawPreview) ? rawPreview : ''
+    var previewSrc = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(rawPreview) ? rawPreview : (visualParentQa ? './assets/parent-portrait-guide-v2.png' : '')
     var previewImage = previewSrc
       ? '<img class="parent-portrait-result-image" src="' + escapeHtml(previewSrc) + '" alt="透明标准形象照">'
       : '<div class="parent-portrait-placeholder"><b>透明人像预览</b><span>本地验收不使用真实儿童照片</span></div>'
     var avatarImage = previewSrc
       ? '<img class="parent-avatar-result-image" src="' + escapeHtml(previewSrc) + '" alt="球员头像裁切预览">'
-      : '<div class="parent-avatar-placeholder"><b>球员头像</b><span>透明派生图</span></div>'
+      : '<div class="parent-avatar-placeholder"><b>球员头像</b><span>白底无边框预览</span></div>'
     app.innerHTML = '<header class="parent-confirm-header"><button id="portraitConfirmBack" class="parent-confirm-back" type="button" aria-label="返回"><span></span></button><div><h1>确认球员照片</h1><p>' + escapeHtml(playerName) + ' · 一次拍摄生成两种素材</p></div><strong>5/5</strong></header><main class="parent-confirm-content"><div class="parent-confirm-status"><span class="parent-mini-shield" aria-hidden="true"></span><b>人像分割完成</b></div>' +
       '<section class="parent-confirm-card parent-standard-card"><div class="parent-confirm-card-head"><div><h2>标准形象照</h2><p>用于阵容海报、球员卡和赛事视觉</p></div><button id="regenerateStandard" class="parent-regenerate" type="button"><span></span>重新生成</button></div><div class="parent-checker parent-standard-preview">' + previewImage + '</div></section>' +
-      '<section class="parent-confirm-card parent-avatar-card"><div class="parent-confirm-card-head"><div><h2>球员头像</h2><p>头像来自同一张原图，无需重新拍摄；<br>用于名单、数据榜和小尺寸头像</p></div><button id="regenerateAvatar" class="parent-regenerate" type="button"><span></span>重新生成</button></div><div id="avatarCropStage" class="parent-checker parent-avatar-crop-stage"><div class="parent-avatar-crop-frame">' + avatarImage + '<i class="parent-crop-handle parent-crop-handle-tl"></i><i class="parent-crop-handle parent-crop-handle-tr"></i><i class="parent-crop-handle parent-crop-handle-bl"></i><i class="parent-crop-handle parent-crop-handle-br"></i><span class="parent-crop-circle"></span></div></div><div class="parent-crop-slider"><button id="cropZoomOut" type="button" aria-label="缩小"><span class="parent-crop-minus"></span></button><input id="cropZoom" type="range" min="80" max="140" value="100"><button id="cropZoomIn" type="button" aria-label="放大"><span class="parent-crop-plus"></span></button></div><div class="parent-crop-actions"><button id="cropDragHint" type="button"><span></span>拖动并缩放头像</button><button id="cropReset" type="button"><span></span>恢复默认</button></div></section>' +
-      '<div class="parent-avatar-previews"><div><span>圆形头像预览</span><div class="parent-avatar-preview-circle">' + avatarImage + '</div></div><div><span>方形头像预览</span><div class="parent-avatar-preview-square">' + avatarImage + '</div></div></div>' +
+      '<section class="parent-confirm-card parent-avatar-card"><div class="parent-confirm-card-head"><div><h2>球员头像</h2><p>从同一张原图生成白底无边框头像；<br>保存到球队长期球员资料库</p></div><button id="regenerateAvatar" class="parent-regenerate" type="button"><span></span>重新生成</button></div><div id="avatarCropStage" class="parent-avatar-crop-stage"><div class="parent-avatar-crop-frame">' + avatarImage + '<i class="parent-crop-handle parent-crop-handle-tl"></i><i class="parent-crop-handle parent-crop-handle-tr"></i><i class="parent-crop-handle parent-crop-handle-bl"></i><i class="parent-crop-handle parent-crop-handle-br"></i></div></div><div class="parent-crop-slider"><button id="cropZoomOut" type="button" aria-label="缩小"><span class="parent-crop-minus"></span></button><input id="cropZoom" type="range" min="80" max="140" value="100"><button id="cropZoomIn" type="button" aria-label="放大"><span class="parent-crop-plus"></span></button></div><div class="parent-crop-actions"><button id="cropDragHint" type="button"><span></span>拖动并缩放头像</button><button id="cropReset" type="button"><span></span>恢复默认</button></div></section>' +
+      '<div class="parent-avatar-previews"><div><span>白底无边框头像预览</span><div class="parent-avatar-preview-plain">' + avatarImage + '</div></div></div>' +
       '<section class="parent-confirm-actions"><button id="confirmPortrait" class="parent-confirm-primary" type="button">确认使用这两张照片</button><button id="retryPortrait" class="parent-confirm-secondary" type="button">重新拍摄</button></section></main>'
     var cropStage = document.getElementById('avatarCropStage')
     var cropFrame = cropStage.querySelector('.parent-avatar-crop-frame')
@@ -1283,7 +1297,7 @@
     var cropY = 0
     var dragState = null
     var confirmedAvatarPreview = ''
-    var previewImages = Array.prototype.slice.call(document.querySelectorAll('.parent-avatar-preview-circle .parent-avatar-result-image, .parent-avatar-preview-square .parent-avatar-result-image'))
+    var previewImages = Array.prototype.slice.call(document.querySelectorAll('.parent-avatar-preview-plain .parent-avatar-result-image'))
     function updateCrop() {
       cropScale = Math.min(1.4, Math.max(.8, Number(cropScale) || 1))
       cropX = Math.min(512, Math.max(-512, Number(cropX) || 0))
@@ -1359,15 +1373,15 @@
     result = result || {}
     var requirements = result.requirements || { realName: false, portrait: false }
     var rawPreview = String(result.transparentPreview || '')
-    var previewSrc = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(rawPreview) ? rawPreview : ''
+    var previewSrc = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(rawPreview) ? rawPreview : (visualParentQa ? './assets/parent-portrait-guide-v2.png' : '')
     var rawAvatarPreview = String(result.avatarPreview || '')
-    var avatarPreviewSrc = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(rawAvatarPreview) ? rawAvatarPreview : ''
+    var avatarPreviewSrc = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(rawAvatarPreview) ? rawAvatarPreview : (visualParentQa ? './assets/parent-portrait-guide-v2.png' : '')
     var previewImage = previewSrc
       ? '<img class="parent-success-portrait-image" src="' + escapeHtml(previewSrc) + '" alt="已提交的标准形象照">'
       : '<div class="parent-success-placeholder"><b>受限预览</b><span>本地验收不使用真实儿童照片</span></div>'
     var avatarImage = avatarPreviewSrc
-      ? '<img class="parent-success-avatar-image" src="' + escapeHtml(avatarPreviewSrc) + '" alt="已提交的球员头像">'
-      : '<div class="parent-success-placeholder"><b>球员头像</b><span>等待受限预览</span></div>'
+      ? '<img class="parent-success-avatar-image" src="' + escapeHtml(avatarPreviewSrc) + '" alt="已提交的白底无边框球员头像">'
+      : '<div class="parent-success-placeholder"><b>球员头像</b><span>白底无边框预览</span></div>'
     var progressItems = ['基础资料已核对']
     if (requirements.realName === true) progressItems.push('实名认证已通过')
     if (requirements.portrait === true) {
@@ -1379,18 +1393,17 @@
       return '<li><span class="parent-progress-icon ' + icon + '" aria-hidden="true"></span><b>' + escapeHtml(label) + '</b><strong>已完成<i></i></strong></li>'
     }).join('')
     var previewMarkup = requirements.portrait === true
-      ? '<section class="parent-success-card parent-submitted-preview"><div class="parent-success-card-title"><h2>资料预览</h2><span>仅展示本次赛事已开启的要求</span></div><div class="parent-success-preview-grid"><figure><figcaption>标准形象照</figcaption><div class="parent-success-standard parent-checker">' + previewImage + '</div></figure><figure><figcaption>球员头像</figcaption><div class="parent-success-avatar parent-checker">' + avatarImage + '</div></figure></div></section>'
-      : '<section class="parent-success-card parent-submitted-preview"><div class="parent-success-card-title"><h2>资料预览</h2><span>本次邀请未开启标准形象照要求</span></div><p class="parent-success-no-preview">基础资料已提交，后续如需实名或照片由主办方重新开启对应要求。</p></section>'
+      ? '<section class="parent-success-card parent-submitted-preview"><div class="parent-success-card-title"><h2>资料预览</h2><span>保存至球队长期球员资料库</span></div><div class="parent-success-preview-grid"><figure><figcaption>竖版标准形象照</figcaption><div class="parent-success-standard">' + previewImage + '</div></figure><figure><figcaption>白底无边框头像</figcaption><div class="parent-success-avatar">' + avatarImage + '</div></figure></div></section>'
+      : '<section class="parent-success-card parent-submitted-preview"><div class="parent-success-card-title"><h2>资料预览</h2><span>保存至球队长期球员资料库</span></div><p class="parent-success-no-preview">基础资料已提交给球队负责人确认，不会自动进入任何赛事参赛名单。</p></section>'
     var playerName = escapeHtml(result.playerName || '球员')
     var teamName = escapeHtml(result.teamName || '当前球队')
     var submittedAt = escapeHtml(displayTime(result.submittedAt || result.updateTime))
     app.className = 'page parent-profile-page parent-success-page'
     app.innerHTML = '<header class="parent-success-header"><div><span>赛小蜂足球 · 家长服务</span><h1>资料提交成功</h1><p>' + playerName + ' · ' + teamName + '</p></div><button id="closeParentService" class="parent-success-close" type="button">完成</button></header>' +
-      '<main class="parent-success-content"><section class="parent-success-hero"><div class="parent-success-check" aria-hidden="true"><span></span></div><h2>已完成本次赛事要求</h2><p>资料已提交给球队负责人确认</p></section>' +
+      '<main class="parent-success-content"><section class="parent-success-hero"><div class="parent-success-check" aria-hidden="true"><span></span></div><h2>球员资料已提交</h2><p>确认后保存到球队长期球员资料库</p></section>' +
       '<section id="parentSubmittedSummary" class="parent-success-card parent-progress-card"><h2>资料提交进度</h2><ul class="parent-progress-list">' + progressMarkup + '</ul></section>' +
       previewMarkup +
-      '<section class="parent-success-card parent-status-card"><h2>状态跟踪</h2><div class="parent-status-track"><div class="parent-status-line"><span class="parent-status-node is-done"><i></i></span><span class="parent-status-node is-current"><i></i></span><span class="parent-status-node"><i></i></span></div><div class="parent-status-labels"><div><b>家长已提交</b><small>' + submittedAt + '</small></div><div><b>球队负责人确认</b><small>待处理</small></div><div><b>进入正式参赛名单</b><small>未开始</small></div></div></div></section>' +
-      '<section class="parent-success-notice"><span class="parent-info-icon" aria-hidden="true">i</span><p>是否需要实名认证和照片由主办方设置；本页只显示本次赛事已开启的要求。</p></section><section class="parent-success-notice"><span class="parent-notice-shield" aria-hidden="true"></span><p>实名结果绑定球员平台档案，后续赛事仅在监护人授权后复用。</p></section>' +
+      '<section class="parent-success-card parent-status-card"><h2>状态跟踪</h2><div class="parent-status-track"><div class="parent-status-line"><span class="parent-status-node is-done"><i></i></span><span class="parent-status-node is-current"><i></i></span><span class="parent-status-node"><i></i></span></div><div class="parent-status-labels"><div><b>家长已提交</b><small>' + submittedAt + '</small></div><div><b>球队负责人确认</b><small>待处理</small></div><div><b>保存至球队球员库</b><small>确认后完成</small></div></div></div><p class="parent-status-note">本次只补充球队长期球员资料，不会自动加入任何赛事参赛名单。</p></section>' +
       '<div class="parent-success-actions"><button id="closeParentServicePrimary" class="parent-success-primary" type="button">完成并关闭</button><button id="viewSubmittedData" class="parent-success-secondary" type="button">查看已提交资料</button></div></main>'
     function closeParentService() { window.close(); toast('资料已提交，可返回微信继续使用') }
     document.getElementById('closeParentService').onclick = closeParentService

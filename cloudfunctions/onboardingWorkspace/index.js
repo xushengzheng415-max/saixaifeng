@@ -379,9 +379,6 @@ async function createOrganization(identity, event) {
   if (state.hasBusinessRelation && !state.canCreateOrganizationFromTeams) {
     throw new Error('当前业务关系不满足自助创建机构条件，请先完成人工归属核验')
   }
-  if (state.canCreateOrganizationFromTeams && !requestedTeamIds.length) {
-    throw new Error('请至少选择一支要接入新机构的已有球队')
-  }
   if (requestedTeamIds.some(function(teamId) { return !attachableTeamMap[teamId] })) {
     throw new Error('选中球队不属于当前账号，或已归属其他机构')
   }
