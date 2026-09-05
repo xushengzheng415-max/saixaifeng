@@ -26,6 +26,18 @@ cloudbaserc.json
 project.private.config.json
 web-admin-vue/.env.production
 web-admin-vue/cloudbaserc.json
+cloudbase.deploy-safe.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+credentials/
+secrets/
+.idea/
+.vscode/
+*.code-workspace
 
 # Logs and temporary files
 *.log

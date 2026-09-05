@@ -3,7 +3,9 @@
  * 用于图片抠图去背景
  */
 
-const REMOVE_BG_API_KEY = 'mX1VixQHtrnpc1J7B2rPS3LM'
+// 安全边界：浏览器构建产物中的任何 Key 都会被用户读取。
+// 旧的 remove.bg 浏览器直连能力已停用；需要密钥的抠图必须走受鉴权的云函数。
+const REMOVE_BG_API_KEY = ''
 const REMOVE_BG_API_URL = 'https://api.remove.bg/v1.0/removebg'
 
 /**
@@ -32,6 +34,12 @@ function fileToBase64(file) {
  */
 export async function removeBackground(file, options = {}) {
   try {
+    if (!REMOVE_BG_API_KEY) {
+      return {
+        success: false,
+        message: 'remove.bg 浏览器直连已停用，请使用服务端抠图能力'
+      }
+    }
 
     // 构建 FormData
     const formData = new FormData()
@@ -84,14 +92,12 @@ export async function removeBackground(file, options = {}) {
       reader.readAsDataURL(blob)
     })
 
-
     return {
       success: true,
       data: base64,
       blob,
       type: blob.type
     }
-
   } catch (err) {
     console.error('[RemoveBg] 错误:', err)
     return {
@@ -109,14 +115,12 @@ export async function removeBackground(file, options = {}) {
  */
 export async function removeBackgroundBase64(base64Image, options = {}) {
   try {
-
     // 将 base64 转换为 Blob
     const response = await fetch(base64Image)
     const blob = await response.blob()
     const file = new File([blob], 'image.png', { type: blob.type })
 
     return await removeBackground(file, options)
-
   } catch (err) {
     console.error('[RemoveBg] Base64 处理错误:', err)
     return {
@@ -132,6 +136,13 @@ export async function removeBackgroundBase64(base64Image, options = {}) {
  */
 export async function checkApiCredits() {
   try {
+    if (!REMOVE_BG_API_KEY) {
+      return {
+        success: false,
+        message: 'remove.bg 浏览器直连已停用，无法在前端查询额度'
+      }
+    }
+
     const response = await fetch('https://api.remove.bg/v1.0/account', {
       method: 'GET',
       headers: {
@@ -154,7 +165,6 @@ export async function checkApiCredits() {
         subscription: data.data.attributes.subscription
       }
     }
-
   } catch (err) {
     console.error('[RemoveBg] 检查额度错误:', err)
     return {
