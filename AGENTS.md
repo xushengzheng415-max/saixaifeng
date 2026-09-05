@@ -31,7 +31,7 @@
 |---|---|
 | 项目名称 | 赛小蜂足球 |
 | 正式本地仓库 | `E:\Documents\sxf-football` |
-| Gitee | `https://gitee.com/saixiaofeng/saixiaofeng.git` |
+| Gitee | `https://gitee.com/saixiaofeng/football.git` |
 | GitHub | `https://github.com/xushengzheng415-max/saixaifeng.git` |
 | 正式域名 | `www.sxffootball.cn` |
 | CloudBase 环境 | `cloud1-7g8ckb3c7815a011` |

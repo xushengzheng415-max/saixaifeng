@@ -31,6 +31,6 @@ tcb hosting deploy dist/ admin -e cloud1-7g8ckb3c7815a011
 
 ## 远端仓库
 
-默认主远端：`origin` = `https://gitee.com/saixiaofeng/saixiaofeng.git`
+默认主远端：`origin` = `https://gitee.com/saixiaofeng/football.git`
 
 GitHub 远端：`github` = `https://github.com/xushengzheng415-max/saixaifeng.git`
