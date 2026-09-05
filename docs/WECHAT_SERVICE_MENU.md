@@ -8,8 +8,8 @@
 
 | 一级菜单 | 类型 | 正式落点 | 边界 |
 |---|---|---|---|
-| 赛事 | 网页 | `https://www.sxffootball.cn/admin/#/portal/home` | 公开赛事、赛程、比分和排名，无需登录 |
-| 工作台 | 网页 | `https://www.sxffootball.cn/service-account-h5/?entry=workbench` | 当前只承接已获授权裁判的个人比赛任务 |
+| 赛事中心 | 网页 | `https://www.sxffootball.cn/admin/#/portal/home` | 公开赛事、赛程、比分和排名，无需登录 |
+| 裁判任务 | 网页 | `https://www.sxffootball.cn/service-account-h5/?entry=workbench` | 只承接已获授权裁判的个人比赛任务 |
 | 我的 | 网页 | `https://www.sxffootball.cn/service-account-h5/me.html` | 汇总个人服务入口，不提供机构管理能力 |
 
 接口发布载荷保存在 `service-account-h5/wechat-menu.json`。
@@ -33,4 +33,4 @@
 4. “我的”不展示机构私有数据，监护人入口仍要求专属邀请；
 5. 从公众号接口读回菜单，并与 `wechat-menu.json` 逐项比对。
 
-2026-09-05 已将 `me.html` 与 `service-menu.css` 作为独立文件安全部署并从正式域名逐字节读回；未上传同目录中尚未发布的其他 H5 改动。固定出口已增加受 HMAC 保护的菜单创建和读取动作，服务重启后本机及公网健康检查均为 HTTP 200。公众号菜单创建返回成功，微信菜单接口读回的“赛事 / 工作台 / 我的”三项名称、类型、顺序和 URL 与 `wechat-menu.json` 完全一致。
+2026-09-05 已将 `me.html` 与 `service-menu.css` 作为独立文件安全部署并从正式域名逐字节读回；未上传同目录中尚未发布的其他 H5 改动。固定出口已增加受 HMAC 保护的菜单创建和读取动作，服务重启后本机及公网健康检查均为 HTTP 200。公众号菜单首次创建为“赛事 / 工作台 / 我的”；实际体验确认“工作台”会直接进入裁判绑定后，菜单名称收口为“赛事中心 / 裁判任务 / 我的”，不再使用宽泛名称误导普通关注者。
