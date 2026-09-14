@@ -475,7 +475,33 @@ async function saveScene(identity, event) {
   await db.collection('users').doc(identity.user._id).update({
     data: { onboarding, updateTime: db.serverDate() }
   })
-  return { success: true, onboarding }
+  const organization = await provisionEventWorkspace(identity, scene)
+  return { success: true, onboarding, organization }
+}
+
+// 选择“赛事”业务即开通赛事空间能力，首个赛事由赛事空间内的创建入口建立
+async function provisionEventWorkspace(identity, scene) {
+  if (scene !== 'event') return null
+  const state = await loadOnboardingState(identity)
+  const organization = state.organization
+  if (!organization) return null
+  const access = await organizationAccess(identity, organization)
+  if (!access.canEvent) return null
+  const orgId = String(organization._id || organization.id)
+  const capabilities = Array.from(new Set((Array.isArray(organization.capabilities) ? organization.capabilities : []).concat('event')))
+  await db.collection('organizations').doc(orgId).update({
+    data: { capabilities, updateTime: db.serverDate() }
+  })
+  await grantMembershipPermissions(identity, orgId, ['event.view', 'event.manage'], ['event'])
+  return {
+    id: orgId,
+    name: organization.name || organization.organizationName || '',
+    organizationType: organization.organizationType || '',
+    province: organization.province || '',
+    provinceCode: organization.provinceCode || '',
+    city: organization.city || '',
+    capabilities
+  }
 }
 
 async function loadTournamentCreateTeamInvite(identity, inviteId) {
