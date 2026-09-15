@@ -82,7 +82,7 @@
     <view class="empty" wx:if="{{!loading}}" hidden="{{hasTournaments}}">
       <text class="empty-icon">赛</text>
       <text class="empty-title">当前暂无关联赛事</text>
-      <text class="empty-desc">主办赛事和球队参赛项目都会汇总到这里。</text>
+
     </view>
   </view>
 </view>

@@ -156,6 +156,31 @@ function maskIdentityNumber(value) {
   return normalized.slice(0, 2) + '*'.repeat(Math.max(2, normalized.length - 6)) + normalized.slice(-4)
 }
 
+function identityFeatureKey() {
+  const raw = String(process.env.SXF_IDENTITY_FEATURE_KEY || '').trim()
+  if (!raw) return null
+  return crypto.createHash('sha256').update(raw).digest()
+}
+
+function encryptIdentityFeature(descriptor) {
+  const key = identityFeatureKey()
+  if (!key || !Array.isArray(descriptor) || descriptor.length !== 128) return null
+  const safe = descriptor.map(value => Number(Number(value || 0).toFixed(7)))
+  if (safe.some(value => !Number.isFinite(value) || Math.abs(value) > 4)) return null
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(safe), 'utf8'), cipher.final()])
+  return { version:1, algorithm:'aes-256-gcm', iv:iv.toString('base64'), tag:cipher.getAuthTag().toString('base64'), data:encrypted.toString('base64') }
+}
+
+async function ensureIdentityCollections(db) {
+  for (const name of ['player_identity_profiles', 'identity_verification_attempts', 'identity_manual_reviews', 'sensitive_file_deletion_tasks', 'player_electronic_passes']) {
+    try { await db.createCollection(name) } catch (error) {
+      if (!/exist|already|duplicate/i.test(String(error && error.message || ''))) console.warn('[identity] collection prepare skipped:', name, error.message || error)
+    }
+  }
+}
+
 const WEB_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const WEB_LOGIN_CHALLENGE_TTL_MS = 10 * 60 * 1000
 const REFEREE_H5_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -456,6 +481,28 @@ function maskServicePhone(value) {
   return phone.length === 11 ? phone.slice(0, 3) + ' **** ' + phone.slice(-4) : ''
 }
 
+function parentAgeOnReferenceDate(birthDate, referenceDate) {
+  const match = String(birthDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const reference = referenceDate ? new Date(referenceDate) : new Date()
+  if (!match || Number.isNaN(reference.getTime())) return null
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3])
+  let age = reference.getFullYear() - year
+  if (reference.getMonth() + 1 < month || (reference.getMonth() + 1 === month && reference.getDate() < day)) age -= 1
+  return age >= 0 ? age : null
+}
+
+function resolveParentRegistrantType(invite, player) {
+  const explicit = String((invite && invite.registrantType) || (player && (player.registrantType || player.applicantRole)) || '')
+  if (explicit === 'self' || explicit === 'player') return 'self'
+  if (explicit === 'guardian') return 'guardian'
+  const age = parentAgeOnReferenceDate(player && (player.birthDate || player.birthday), invite && invite.referenceDate)
+  return age !== null && age >= 18 ? 'self' : 'guardian'
+}
+
+function parentDraftIsAuthorized(draft) {
+  return Boolean(draft && draft.basicConfirmed === true && (draft.registrantAuthorized === true || draft.guardianAuthorized === true || draft.selfAuthorized === true))
+}
+
 function createRefereeNotificationRelayProof(phone, timestamp) {
   const normalizedPhone = String(phone || '').replace(/\D/g, '').slice(-11)
   const normalizedTimestamp = String(timestamp || '')
@@ -471,8 +518,10 @@ function resolveParentInviteRequirements(invite, player) {
   const portrait = readRosterBoolean(sources, ['portraitRequired', 'requiresPortrait', 'requirePortrait'])
   const parent = readRosterBoolean([invite], ['parentSupplementRequired', 'parentProfileRequired', 'parentCompletionRequired'])
   const standardFlow = invite.standardProfileFlow === true || player.standardProfileFlow === true || String(player.source || '') === 'team_player_invite'
+  const registrantType = resolveParentRegistrantType(invite, player)
   return {
-    guardianAuthorization: true,
+    registrantAuthorization: true,
+    guardianAuthorization: registrantType === 'guardian',
     parentSupplementRequired: parent.defined ? parent.value : true,
     parentSupplementConfigured: true,
     identityVerificationRequired: identity.defined ? identity.value : standardFlow,
@@ -485,19 +534,21 @@ function resolveParentInviteRequirements(invite, player) {
 
 async function previewParentProfileInvite(event) {
   const token = String(event.parentInvite || '').trim()
-  if (!/^pp_[a-z0-9]+$/i.test(token)) return { success: false, error: '家长协作链接无效或已失效', code: 'PARENT_INVITE_INVALID' }
+  if (!/^pp_[a-z0-9]+$/i.test(token)) return { success: false, error: '球员资料邀请无效或已失效', code: 'PARENT_INVITE_INVALID' }
   const db = cloud.database()
   const inviteResult = await db.collection('parent_profile_invites').where({ token, status: 'active' }).limit(2).get()
   const invites = inviteResult.data || []
-  if (invites.length !== 1) return { success: false, error: '家长协作链接无效或已失效', code: 'PARENT_INVITE_INVALID' }
+  if (invites.length !== 1) return { success: false, error: '球员资料邀请无效或已失效', code: 'PARENT_INVITE_INVALID' }
   const invite = invites[0]
-  if (invite.expiresAt && dateValue(invite.expiresAt) <= Date.now()) return { success: false, error: '家长协作链接已过期，请联系球队重新生成', code: 'PARENT_INVITE_EXPIRED' }
+  if (invite.expiresAt && dateValue(invite.expiresAt) <= Date.now()) return { success: false, error: '球员资料邀请已过期，请联系球队重新生成', code: 'PARENT_INVITE_EXPIRED' }
   const playerResult = await db.collection('players').doc(invite.playerId).get()
   const teamResult = await db.collection('teams').doc(invite.teamId).get()
   const player = Array.isArray(playerResult.data) ? playerResult.data[0] : playerResult.data
   const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
   if (!player || !team || String(player.teamId || '') !== String(invite.teamId || '')) return { success: false, error: '邀请关联资料不存在，请联系球队管理员', code: 'PARENT_INVITE_BROKEN' }
-  return { success: true, data: { playerName: String(player.name || '球员'), birthDate: String(player.birthDate || player.birthday || ''), teamName: String(team.name || team.teamName || ''), guardianPhoneMasked: maskServicePhone(player.guardianPhone || player.contactPhone || invite.guardianPhone), requirements: resolveParentInviteRequirements(invite, player), status: String(player.profileStatus || 'pending') } }
+  const registrantType = resolveParentRegistrantType(invite, player)
+  const phone = registrantType === 'self' ? (player.playerPhone || player.contactPhone || invite.registrantPhone) : (player.guardianPhone || player.contactPhone || invite.guardianPhone || invite.registrantPhone)
+  return { success: true, data: { playerName: String(player.name || '球员'), birthDate: String(player.birthDate || player.birthday || ''), teamName: String(team.name || team.teamName || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', isSelfRegistration: registrantType === 'self', accountPhoneMasked: maskServicePhone(phone), guardianPhoneMasked: registrantType === 'guardian' ? maskServicePhone(phone) : '', requirements: resolveParentInviteRequirements(invite, player), status: String(player.profileStatus || 'pending') } }
 }
 
 async function createParentProfileOAuthUrl(event) {
@@ -531,17 +582,17 @@ async function handleParentProfileOAuth(event) {
 async function authenticateParentH5Session(event) {
   const token = String(event.parentSessionToken || '').trim()
   const expectedInvite = String(event.parentInvite || '').trim()
-  if (!token) return { success: false, error: '家长服务会话已失效，请重新打开邀请', code: 'PARENT_AUTH_REQUIRED' }
+  if (!token) return { success: false, error: '资料登记会话已失效，请重新打开邀请', code: 'PARENT_AUTH_REQUIRED' }
   try {
     const db = cloud.database(), result = await db.collection('parent_h5_sessions').where({ tokenHash: hashSessionToken(token), active: true }).limit(2).get(), rows = result.data || []
     const session = rows[0]
-    if (rows.length !== 1 || !session || dateValue(session.expiresAt) <= Date.now()) return { success: false, error: '家长服务会话已失效，请重新打开邀请', code: 'PARENT_AUTH_REQUIRED' }
+    if (rows.length !== 1 || !session || dateValue(session.expiresAt) <= Date.now()) return { success: false, error: '资料登记会话已失效，请重新打开邀请', code: 'PARENT_AUTH_REQUIRED' }
     if (expectedInvite && String(session.parentInvite || '') !== expectedInvite) return { success: false, error: '当前家长会话与此邀请不匹配，请重新打开邀请', code: 'PARENT_INVITE_MISMATCH' }
     await db.collection('parent_h5_sessions').doc(session._id).update({ data: { lastUsedAt: db.serverDate() } })
     return { success: true, session }
   } catch (error) {
     console.warn('[webApi] parent session lookup failed:', error.message || error)
-    return { success: false, error: '家长服务会话已失效，请重新打开邀请', code: 'PARENT_AUTH_REQUIRED' }
+    return { success: false, error: '资料登记会话已失效，请重新打开邀请', code: 'PARENT_AUTH_REQUIRED' }
   }
 }
 
@@ -551,7 +602,7 @@ async function loadParentProfileDraft(event) {
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
   const db = cloud.database(), rows = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
-  return { success: true, data: preview.data, draft: rows[0] || { basicConfirmed: false, guardianAuthorized: false } }
+  return { success: true, data: preview.data, draft: rows[0] || { basicConfirmed: false, registrantAuthorized: false, guardianAuthorized: false, selfAuthorized: false } }
 }
 
 async function saveParentBasicProfile(event) {
@@ -559,13 +610,14 @@ async function saveParentBasicProfile(event) {
   if (!authenticated.success) return authenticated
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
-  const name = String(event.name || '').trim(), birthDate = String(event.birthDate || '').trim(), guardianAuthorized = Boolean(event.guardianAuthorized)
+  const name = String(event.name || '').trim(), birthDate = String(event.birthDate || '').trim(), registrantAuthorized = Boolean(event.registrantAuthorized || event.guardianAuthorized || event.selfAuthorized)
+  const registrantType = String(preview.data.registrantType || 'guardian') === 'self' ? 'self' : 'guardian'
   const requestedRelation = String(event.guardianRelation || '').trim().toLowerCase()
   const guardianRelation = ['father', 'mother', 'other'].includes(requestedRelation) ? requestedRelation : 'other'
-  if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !guardianAuthorized) return { success: false, error: '请确认孩子姓名、出生年月并完成监护人授权' }
+  if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !registrantAuthorized) return { success: false, error: registrantType === 'self' ? '请确认本人姓名、出生日期和资料授权' : '请确认孩子姓名、出生日期和监护人授权' }
   const needsReview = name !== String(preview.data.playerName || '') || birthDate !== String(preview.data.birthDate || '')
   const db = cloud.database(), oldRows = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
-  const data = { parentInvite: authenticated.session.parentInvite, basicConfirmed: !needsReview, guardianAuthorized: true, guardianRelation, requestedName: name, requestedBirthDate: birthDate, needsManualReview: needsReview, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, updateTime: db.serverDate() }
+  const data = { parentInvite: authenticated.session.parentInvite, registrantType, basicConfirmed: !needsReview, registrantAuthorized: true, guardianAuthorized: registrantType === 'guardian', selfAuthorized: registrantType === 'self', guardianRelation: registrantType === 'guardian' ? guardianRelation : 'self', requestedName: name, requestedBirthDate: birthDate, needsManualReview: needsReview, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, updateTime: db.serverDate() }
   if (oldRows[0]) await db.collection('parent_profile_drafts').doc(oldRows[0]._id).update({ data })
   else await db.collection('parent_profile_drafts').add({ data: Object.assign({}, data, { createTime: db.serverDate() }) })
   const requirements = preview.data.requirements || {}
@@ -578,14 +630,17 @@ async function uploadParentIdentityDocument(event) {
   if (!authenticated.success) return authenticated
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
-  if (!preview.data.requirements.realName) return { success: false, error: '本次邀请未开启实名认证要求', code: 'PARENT_IDENTITY_NOT_REQUIRED' }
+  if (!preview.data.requirements.realName) return { success: false, error: '本次邀请未开启人证核验要求', code: 'PARENT_IDENTITY_NOT_REQUIRED' }
   const side = String(event.side || '').toLowerCase()
   if (side !== 'front') return { success: false, error: '当前实名流程只需上传身份证人像面', code: 'PARENT_IDENTITY_FRONT_ONLY' }
-  const db = cloud.database(), verificationRows = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || [], currentVerification = verificationRows[0]
+  const documentType = ['resident_id','household_register','passport','mainland_travel_permit','taiwan_travel_permit'].includes(String(event.documentType || '')) ? String(event.documentType) : 'resident_id'
+  const db = cloud.database()
+  await ensureIdentityCollections(db)
+  const verificationRows = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || [], currentVerification = verificationRows[0]
   if (currentVerification && String(currentVerification.status || '') === 'pending_review') return { success: false, error: '实名材料正在审核，请先刷新审核结果', code: 'PARENT_IDENTITY_UNDER_REVIEW' }
-  if (currentVerification && String(currentVerification.status || '') === 'approved') return { success: false, error: '实名认证已通过，无需重复上传', code: 'PARENT_IDENTITY_ALREADY_APPROVED' }
-  const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true, guardianAuthorized: true }).limit(1).get()).data || []
-  if (!drafts[0]) return { success: false, error: '请先完成基础资料确认', code: 'PARENT_BASIC_REQUIRED' }
+  if (currentVerification && String(currentVerification.status || '') === 'approved') return { success: false, error: '人证核验已通过，无需重复上传', code: 'PARENT_IDENTITY_ALREADY_APPROVED' }
+  const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true }).limit(10).get()).data || []
+  if (!drafts.some(parentDraftIsAuthorized)) return { success: false, error: '请先完成基础资料确认', code: 'PARENT_BASIC_REQUIRED' }
   const base64Data = String(event.base64Data || '')
   if (base64Data.length > 4.2 * 1024 * 1024) return { success: false, error: '材料必须小于 3MB' }
   const matched = base64Data.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/)
@@ -599,6 +654,7 @@ async function uploadParentIdentityDocument(event) {
   let recognitionStatus = 'recognized'
   let recognitionErrorCode = ''
   try {
+    if (documentType !== 'resident_id') throw Object.assign(new Error('当前证件类型转人工核验'), { code:'DOCUMENT_MANUAL_REVIEW' })
     const ocr = await callParentIdCardOcr(matched[2])
     recognition = {
       name: String(ocr.Name || '').trim(),
@@ -614,8 +670,10 @@ async function uploadParentIdentityDocument(event) {
   }
   const existing = (await db.collection('parent_identity_documents').where({ parentInvite: authenticated.session.parentInvite, side, status: 'uploaded' }).limit(20).get()).data || []
   await Promise.all(existing.map(item => db.collection('parent_identity_documents').doc(item._id).update({ data: { status: 'replaced', replacedAt: db.serverDate() } })))
-  await db.collection('parent_identity_documents').add({ data: { parentInvite: authenticated.session.parentInvite, side, fileId: uploaded.fileID, sha256: digest, size: buffer.length, mimeType: 'image/' + matched[1], status: 'uploaded', recognitionStatus, recognizedName: recognition ? recognition.name : '', recognizedBirthDate: recognition ? recognition.birthDate : '', recognizedGender: recognition ? recognition.gender : '', identityNumberMasked: recognition ? recognition.identityNumberMasked : '', recognitionWarnings: recognition ? recognition.warnings : [], recognitionErrorCode, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, createTime: db.serverDate(), updateTime: db.serverDate() } })
-  return { success: true, side, status: 'uploaded', recognitionStatus }
+  const deleteAfter = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  const documentAdded = await db.collection('parent_identity_documents').add({ data: { parentInvite: authenticated.session.parentInvite, side, documentType, fileId: uploaded.fileID, sha256: digest, size: buffer.length, mimeType: 'image/' + matched[1], status: 'uploaded', recognitionStatus, recognizedName: recognition ? recognition.name : '', recognizedBirthDate: recognition ? recognition.birthDate : '', recognizedGender: recognition ? recognition.gender : '', identityNumberMasked: recognition ? recognition.identityNumberMasked : '', recognitionWarnings: recognition ? recognition.warnings : [], recognitionErrorCode, restrictedAccess:true, deleteAfter, retentionDays:30, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, createTime: db.serverDate(), updateTime: db.serverDate() } })
+  await db.collection('sensitive_file_deletion_tasks').add({ data:{ businessType:'player_identity_document', businessId:String(documentAdded._id), fileId:uploaded.fileID, status:'scheduled', executeAfter:deleteAfter, retentionDays:30, createTime:db.serverDate(), updateTime:db.serverDate() } })
+  return { success: true, side, documentType, status: 'uploaded', recognitionStatus }
 }
 
 async function submitParentIdentityVerification(event) {
@@ -623,12 +681,12 @@ async function submitParentIdentityVerification(event) {
   if (!authenticated.success) return authenticated
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
-  if (!preview.data.requirements.realName) return { success: false, error: '本次邀请未开启实名认证要求', code: 'PARENT_IDENTITY_NOT_REQUIRED' }
+  if (!preview.data.requirements.realName) return { success: false, error: '本次邀请未开启人证核验要求', code: 'PARENT_IDENTITY_NOT_REQUIRED' }
   const db = cloud.database(), currentRows = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || [], currentVerification = currentRows[0]
-  if (currentVerification && String(currentVerification.status || '') === 'approved') return { success: false, error: '实名认证已通过，无需重复提交', code: 'PARENT_IDENTITY_ALREADY_APPROVED' }
+  if (currentVerification && String(currentVerification.status || '') === 'approved') return { success: false, error: '人证核验已通过，无需重复提交', code: 'PARENT_IDENTITY_ALREADY_APPROVED' }
   if (currentVerification && String(currentVerification.status || '') === 'pending_review') return { success: true, status: 'pending_review', duplicate: true }
-  const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true, guardianAuthorized: true }).limit(1).get()).data || []
-  if (!drafts[0]) return { success: false, error: '请先完成基础资料确认', code: 'PARENT_BASIC_REQUIRED' }
+  const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true }).limit(10).get()).data || []
+  if (!drafts.some(parentDraftIsAuthorized)) return { success: false, error: '请先完成基础资料确认', code: 'PARENT_BASIC_REQUIRED' }
   const docs = (await db.collection('parent_identity_documents').where({ parentInvite: authenticated.session.parentInvite, status: 'uploaded' }).limit(10).get()).data || []
   const frontDocument = docs.find(item => item.side === 'front')
   if (!frontDocument) return { success: false, error: '请先上传身份证人像面' }
@@ -640,12 +698,23 @@ async function submitParentIdentityVerification(event) {
   }
   const records = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
   const recognized = String(frontDocument.recognitionStatus || '') === 'recognized'
+  const faceAssessment = event.faceAssessment && typeof event.faceAssessment === 'object' ? event.faceAssessment : {}
+  const faceMethod = String(faceAssessment.method || '')
+  const faceStatus = String(faceAssessment.status || '')
+  const biometricConsent = faceAssessment.biometricConsent === true
+  const faceDistance = Number(faceAssessment.distance)
+  const livenessMotion = Number(faceAssessment.livenessMotion)
+  const algorithmPassed = faceMethod === 'local_face_1to1' && faceStatus === 'passed' && biometricConsent && Number.isFinite(faceDistance) && faceDistance >= 0 && faceDistance <= .55 && Number.isFinite(livenessMotion) && livenessMotion >= .045
+  const manualPerEvent = faceMethod === 'manual_per_event' && biometricConsent === false
+  if (!algorithmPassed && !manualPerEvent && faceStatus !== 'needs_manual_review') return { success:false, error:'请先完成人证比对或选择人工核验', code:'IDENTITY_FACE_ASSESSMENT_REQUIRED' }
+  const featureEnvelope = algorithmPassed ? encryptIdentityFeature(faceAssessment.descriptor) : null
+  if (algorithmPassed && !featureEnvelope) return { success:false, error:'人脸特征加密尚未配置，请联系管理员后重试', code:'IDENTITY_FEATURE_ENCRYPTION_REQUIRED' }
   const warnings = Array.isArray(frontDocument.recognitionWarnings) ? frontDocument.recognitionWarnings : []
   const recognizedName = String(frontDocument.recognizedName || '').trim()
   const recognizedBirthDate = String(frontDocument.recognizedBirthDate || '')
   const nameMatches = recognizedName && recognizedName === String(preview.data.playerName || '').trim()
   const birthMatches = recognizedBirthDate && recognizedBirthDate === String(preview.data.birthDate || '')
-  const autoReviewAllowed = recognized && warnings.length === 0
+  const autoReviewAllowed = recognized && warnings.length === 0 && algorithmPassed
   const reviewStatus = autoReviewAllowed ? (nameMatches && birthMatches ? 'approved' : 'rejected') : 'pending_review'
   const reviewReason = reviewStatus === 'rejected'
     ? (!nameMatches && !birthMatches ? '证件姓名和出生日期与球员档案不一致，请核对后重新上传。' : (!nameMatches ? '证件姓名与球员档案不一致，请核对后重新上传。' : '证件出生日期与球员档案不一致，请核对后重新上传。'))
@@ -654,6 +723,7 @@ async function submitParentIdentityVerification(event) {
   const data = {
     parentInvite: authenticated.session.parentInvite,
     documentIds: [frontDocument._id],
+    documentType:String(frontDocument.documentType || 'resident_id'),
     requiredSides: ['front'],
     status: reviewStatus,
     reason: reviewReason,
@@ -664,15 +734,24 @@ async function submitParentIdentityVerification(event) {
     identityNumberMasked: String(frontDocument.identityNumberMasked || ''),
     verifiedBirthDate: recognizedBirthDate,
     gender: String(frontDocument.recognizedGender || ''),
-    qualificationStatusText: reviewStatus === 'approved' ? '实名信息与球员档案一致' : '',
-    reviewMode: reviewStatus === 'pending_review' ? 'manual' : 'automatic_ocr',
+    qualificationStatusText: reviewStatus === 'approved' ? '人证核验通过' : '',
+    verificationLabel:reviewStatus === 'approved' ? '人证核验通过' : '待人工核验',
+    verificationDisclosure:'平台人证核验，非权威库认证',
+    reviewMode: reviewStatus === 'pending_review' ? 'organizer_double_review' : 'local_ocr_face_1to1',
+    identityMethod:manualPerEvent ? 'manual_per_event' : 'local_face_1to1',
+    biometricConsent,
+    faceAssessment:{ status:algorithmPassed ? 'passed' : 'needs_manual_review', algorithm:String(faceAssessment.algorithm || '').slice(0,40), distance:Number.isFinite(faceDistance) ? faceDistance : null, livenessMotion:Number.isFinite(livenessMotion) ? livenessMotion : null },
+    encryptedFaceFeature:featureEnvelope,
+    featureStorageStatus:featureEnvelope ? 'encrypted' : (algorithmPassed ? 'encryption_key_missing' : 'not_stored'),
     recognitionErrorCode: String(frontDocument.recognitionErrorCode || ''),
     submittedAt: db.serverDate(),
     serviceAccountOpenId: authenticated.session.serviceAccountOpenId,
     updateTime: db.serverDate()
   }
+  let verificationId = records[0] ? String(records[0]._id) : ''
   if (records[0]) await db.collection('parent_identity_verifications').doc(records[0]._id).update({ data })
-  else await db.collection('parent_identity_verifications').add({ data: Object.assign({}, data, { createTime: db.serverDate() }) })
+  else { const added = await db.collection('parent_identity_verifications').add({ data: Object.assign({}, data, { createTime: db.serverDate() }) }); verificationId = String(added._id) }
+  await db.collection('identity_verification_attempts').add({ data:{ parentInvite:authenticated.session.parentInvite, playerId:String(preview.data.playerId || ''), verificationId, method:data.identityMethod, status:reviewStatus, faceAssessment:data.faceAssessment, documentType:String(frontDocument.documentType || 'resident_id'), serviceAccountOpenId:authenticated.session.serviceAccountOpenId, createTime:db.serverDate() } })
   return { success: true, status: reviewStatus }
 }
 
@@ -686,12 +765,14 @@ async function getParentIdentityVerification(event) {
   const publicPlayer = {
     playerName: String(preview.data.playerName || '球员'),
     teamName: String(preview.data.teamName || ''),
-    birthDate: String(preview.data.birthDate || '')
+    birthDate: String(preview.data.birthDate || ''),
+    registrantType: String(preview.data.registrantType || 'guardian'),
+    isSelfRegistration: preview.data.isSelfRegistration === true
   }
-  if (!preview.data.requirements.realName) return { success: true, data: Object.assign({}, publicPlayer, { requirements: preview.data.requirements, status: 'not_required', statusText: '本次邀请未开启实名认证', reason: '' }) }
-  if (!record) return { success: true, data: Object.assign({}, publicPlayer, { requirements: preview.data.requirements, status: 'not_started', statusText: '尚未提交实名核验', reason: '' }) }
+  if (!preview.data.requirements.realName) return { success: true, data: Object.assign({}, publicPlayer, { requirements: preview.data.requirements, status: 'not_required', statusText: '本次邀请未开启人证核验', reason: '' }) }
+  if (!record) return { success: true, data: Object.assign({}, publicPlayer, { requirements: preview.data.requirements, status: 'not_started', statusText: '尚未提交人证核验', reason: '' }) }
   const status = String(record.status || 'pending_review')
-  const text = status === 'approved' ? '实名认证已通过' : (status === 'rejected' ? '实名认证需要补充材料' : '实名认证审核中')
+  const text = status === 'approved' ? '人证核验通过' : (status === 'rejected' ? '人证核验需要补充材料' : '人证核验审核中')
   const maskedIdentityNumber = String(record.identityNumberMasked || record.idCardNumberMasked || '').replace(/[^0-9Xx*]/g, '').slice(0, 18)
   const gender = ['男', '女'].indexOf(String(record.gender || '')) >= 0 ? String(record.gender) : ''
   const corrections = status === 'approved'
@@ -716,18 +797,113 @@ async function getParentIdentityVerification(event) {
   }
 }
 
+async function identityOrganizerOrgIds(db, invite) {
+  const relations = (await db.collection('tournament_teams').where({ teamId:String(invite.teamId || '') }).limit(100).get()).data || []
+  const active = relations.filter(item => ['cancelled','withdrawn','rejected','replaced','invite_cancelled'].indexOf(String(item.status || '').toLowerCase()) < 0)
+  const tournamentIds = Array.from(new Set(active.map(item => String(item.tournamentId || '')).filter(Boolean)))
+  const result = []
+  for (let offset=0; offset<tournamentIds.length; offset+=10) {
+    const tournaments = (await db.collection('tournaments').where({ _id:db.command.in(tournamentIds.slice(offset,offset+10)) }).limit(10).get()).data || []
+    tournaments.forEach(item => { const orgId=String(item.orgId || item.organizationId || ''); if (orgId && result.indexOf(orgId) < 0) result.push(orgId) })
+  }
+  return result
+}
+
+async function identityReviewerAuth(event, orgIds) {
+  const auth = await authenticateWebSession(event)
+  if (!auth.success) return auth
+  if (auth.principalType === 'platform_owner') return auth
+  const allowedOrgIds = Array.isArray(orgIds) ? orgIds.map(String) : [String(orgIds || '')]
+  const orgId = String(auth.orgId || '')
+  if (!orgId || allowedOrgIds.indexOf(orgId) < 0) return { success:false, error:'当前账号不属于该赛事主办方', code:'IDENTITY_REVIEW_SCOPE_DENIED' }
+  const db = cloud.database()
+  const rows = (await db.collection('organization_memberships').where({ orgId:String(orgId), userId:String(auth.userId), status:'accepted' }).limit(5).get()).data || []
+  const allowed = rows.some(function(item) {
+    const role = String(item.role || item.memberRole || '').toLowerCase()
+    const permissions = Array.isArray(item.permissions) ? item.permissions : Object.keys(item.permissions || {}).filter(key => item.permissions[key] === true)
+    return ['owner','admin','organizer','event_manager'].indexOf(role) >= 0 || permissions.indexOf('event.manage') >= 0 || permissions.indexOf('identity.review') >= 0
+  })
+  if (!allowed) return { success:false, error:'当前账号没有人证复核权限', code:'IDENTITY_REVIEW_PERMISSION_DENIED' }
+  return auth
+}
+
+async function listIdentityReviewQueue(event) {
+  const auth = await authenticateWebSession(event)
+  if (!auth.success) return auth
+  const db = cloud.database()
+  const pending = (await db.collection('parent_identity_verifications').where({ status:'pending_review' }).limit(100).get()).data || []
+  const rows = []
+  for (const verification of pending) {
+    const invites = (await db.collection('parent_profile_invites').where({ token:String(verification.parentInvite || '') }).limit(1).get()).data || []
+    const invite = invites[0]
+    if (!invite) continue
+    const organizerOrgIds = await identityOrganizerOrgIds(db, invite)
+    const reviewAuth = await identityReviewerAuth(event, organizerOrgIds)
+    if (!reviewAuth.success) continue
+    const players = (await db.collection('players').where({ _id:String(invite.playerId || '') }).limit(1).get()).data || []
+    const player = players[0] || {}
+    const documentId = Array.isArray(verification.documentIds) ? String(verification.documentIds[0] || '') : ''
+    const documents = documentId ? (await db.collection('parent_identity_documents').where({ _id:documentId, status:'uploaded' }).limit(1).get()).data || [] : []
+    let documentUrl = ''
+    if (documents[0] && documents[0].fileId) {
+      const urls = await cloud.getTempFileURL({ fileList:[String(documents[0].fileId)] })
+      documentUrl = String(urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || '')
+    }
+    rows.push({ id:String(verification._id), playerId:String(invite.playerId || ''), playerName:String(player.name || '球员'), teamId:String(invite.teamId || ''), photoUrl:String(player.photoUrl || ''), documentUrl, documentType:String(verification.documentType || 'resident_id'), identityNumberMasked:String(verification.identityNumberMasked || ''), submittedAt:verification.submittedAt || null, faceAssessment:verification.faceAssessment || {}, reviewMode:String(verification.reviewMode || 'organizer_double_review') })
+  }
+  return { success:true, rows }
+}
+
+async function reviewIdentityVerification(event) {
+  const verificationId = String(event.verificationId || '')
+  const decision = String(event.decision || '')
+  const reason = String(event.reason || '').trim().slice(0, 300)
+  if (!verificationId || ['approved','rejected'].indexOf(decision) < 0) return { success:false, error:'请提交明确的复核结论', code:'IDENTITY_REVIEW_INVALID' }
+  if (decision === 'rejected' && !reason) return { success:false, error:'退回时必须填写原因', code:'IDENTITY_REVIEW_REASON_REQUIRED' }
+  const db = cloud.database()
+  await ensureIdentityCollections(db)
+  const result = await db.collection('parent_identity_verifications').doc(verificationId).get()
+  const verification = Array.isArray(result.data) ? result.data[0] : result.data
+  if (!verification || String(verification.status || '') !== 'pending_review') return { success:false, error:'核验记录不存在或已处理', code:'IDENTITY_REVIEW_NOT_PENDING' }
+  const invites = (await db.collection('parent_profile_invites').where({ token:String(verification.parentInvite || '') }).limit(1).get()).data || []
+  const invite = invites[0]
+  if (!invite) return { success:false, error:'核验关联邀请已失效', code:'IDENTITY_REVIEW_INVITE_MISSING' }
+  const organizerOrgIds = await identityOrganizerOrgIds(db, invite)
+  const auth = await identityReviewerAuth(event, organizerOrgIds)
+  if (!auth.success) return auth
+  const prior = (await db.collection('identity_manual_reviews').where({ verificationId, reviewerUserId:String(auth.userId) }).limit(2).get()).data || []
+  if (prior.length) return { success:false, error:'同一审核员不能重复参与双人复核', code:'IDENTITY_REVIEW_DUPLICATE_REVIEWER' }
+  await db.collection('identity_manual_reviews').add({ data:{ verificationId, playerId:String(invite.playerId || ''), teamId:String(invite.teamId || ''), orgId:String(auth.orgId || ''), reviewerUserId:String(auth.userId), decision, reason, independent:true, createTime:db.serverDate() } })
+  const votes = (await db.collection('identity_manual_reviews').where({ verificationId }).limit(10).get()).data || []
+  const uniqueReviewers = new Set(votes.map(item => String(item.reviewerUserId || '')).filter(Boolean))
+  if (uniqueReviewers.size < 2) return { success:true, status:'pending_review', awaitingSecondReviewer:true, message:'第一份复核意见已保存，等待另一名审核员' }
+  const latestVotes = []
+  uniqueReviewers.forEach(function(userId) { const vote = votes.filter(item => String(item.reviewerUserId || '') === userId).sort((a,b) => dateValue(b.createTime) - dateValue(a.createTime))[0]; if (vote) latestVotes.push(vote) })
+  const allApproved = latestVotes.length >= 2 && latestVotes.every(item => item.decision === 'approved')
+  const allRejected = latestVotes.length >= 2 && latestVotes.every(item => item.decision === 'rejected')
+  if (!allApproved && !allRejected) {
+    const disputedReason = '两名审核员结论不一致，请重新提交清晰的证件和本人照片。'
+    await db.collection('parent_identity_verifications').doc(verificationId).update({ data:{ status:'rejected', reason:disputedReason, rejectReason:disputedReason, manualReviewStatus:'disputed', manualReviewCount:latestVotes.length, rejectedAt:db.serverDate(), reviewedAt:db.serverDate(), updateTime:db.serverDate() } })
+    return { success:true, status:'rejected', disputed:true, message:'复核结论不一致，已退回重新补充资料' }
+  }
+  const status = allApproved ? 'approved' : 'rejected'
+  const finalReason = allRejected ? latestVotes.map(item => item.reason).filter(Boolean).join('；').slice(0,300) : ''
+  await db.collection('parent_identity_verifications').doc(verificationId).update({ data:{ status, reason:finalReason, rejectReason:finalReason, reviewMode:'organizer_double_review', manualReviewStatus:'completed', manualReviewCount:latestVotes.length, manualApprovalScopeOrgId:allApproved ? String(auth.orgId || '') : '', reviewedAt:db.serverDate(), approvedAt:allApproved ? db.serverDate() : null, rejectedAt:allRejected ? db.serverDate() : null, qualificationStatusText:allApproved ? '人证核验通过' : '', verificationLabel:allApproved ? '人证核验通过' : '核验未通过', updateTime:db.serverDate() } })
+  return { success:true, status, message:allApproved ? '双人复核通过' : '双人复核已退回' }
+}
+
 async function requestParentIdentityCorrection(event) {
   const authenticated = await authenticateParentH5Session(event)
   if (!authenticated.success) return authenticated
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
-  if (!preview.data.requirements.realName) return { success: false, error: '本次邀请未开启实名认证要求', code: 'PARENT_IDENTITY_NOT_REQUIRED' }
+  if (!preview.data.requirements.realName) return { success: false, error: '本次邀请未开启人证核验要求', code: 'PARENT_IDENTITY_NOT_REQUIRED' }
   const db = cloud.database()
   const verifications = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite, status: 'approved' }).limit(1).get()).data || []
   if (!verifications[0]) return { success: false, error: '仅已通过的实名信息可以申请更正', code: 'PARENT_IDENTITY_NOT_APPROVED' }
   const existing = (await db.collection('parent_identity_correction_requests').where({ parentInvite: authenticated.session.parentInvite, status: 'open' }).limit(1).get()).data || []
   if (existing[0]) return { success: true, requestId: String(existing[0]._id), status: 'open', duplicate: true }
-  const reason = String(event.reason || '家长反馈实名信息有误').trim().slice(0, 300)
+  const reason = String(event.reason || '登记人反馈实名信息有误').trim().slice(0, 300)
   if (!reason) return { success: false, error: '请填写需要核对的信息' }
   const created = await db.collection('parent_identity_correction_requests').add({
     data: {
@@ -751,7 +927,7 @@ async function uploadAndProcessParentPortrait(event) {
   if (!preview.data.requirements.portrait) return { success: false, error: '本次邀请未开启标准形象照要求', code: 'PARENT_PORTRAIT_NOT_REQUIRED' }
   const needsIdentity = Boolean(preview.data.requirements.realName)
   const db = cloud.database(), checks = needsIdentity ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite, status: 'approved' }).limit(1).get()).data || [] : []
-  if (needsIdentity && !checks[0]) return { success: false, error: '实名认证通过后才能上传标准形象照', code: 'PARENT_IDENTITY_REQUIRED' }
+  if (needsIdentity && !checks[0]) return { success: false, error: '人证核验通过后才能上传标准形象照', code: 'PARENT_IDENTITY_REQUIRED' }
   const priorPortraits = (await db.collection('parent_portraits').where({ parentInvite: authenticated.session.parentInvite }).limit(1000).get()).data || []
   const nextVersion = priorPortraits.reduce((max, item) => Math.max(max, Number(item.version || 0)), 0) + 1
   const base64Data = String(event.base64Data || '')
@@ -802,7 +978,7 @@ async function confirmParentPortrait(event) {
   if (!avatarBuffer.length || avatarBuffer.length > 2 * 1024 * 1024) return { success: false, error: '头像裁切结果过大，请重新调整', code: 'PARENT_AVATAR_TOO_LARGE' }
   const needsIdentity = Boolean(preview.data.requirements.realName)
   const db = cloud.database(), identityChecks = needsIdentity ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite, status: 'approved' }).limit(1).get()).data || [] : []
-  if (needsIdentity && !identityChecks[0]) return { success: false, error: '实名认证状态已变化，请重新核验后再确认形象照', code: 'PARENT_IDENTITY_REQUIRED' }
+  if (needsIdentity && !identityChecks[0]) return { success: false, error: '人证核验状态已变化，请重新核验后再确认形象照', code: 'PARENT_IDENTITY_REQUIRED' }
   const result = await db.collection('parent_portraits').doc(portraitId).get(), portrait = Array.isArray(result.data) ? result.data[0] : result.data
   if (!portrait || String(portrait.parentInvite || '') !== String(authenticated.session.parentInvite || '') || String(portrait.status || '') !== 'ready_for_confirmation') return { success: false, error: '当前人像版本不可确认' }
   if (needsIdentity && String(portrait.identityVerificationId || '') && String(portrait.identityVerificationId) !== String(identityChecks[0]._id)) return { success: false, error: '形象照与当前实名版本不匹配，请重新生成' }
@@ -829,16 +1005,44 @@ async function completeParentProfile(event) {
     return { success: false, error: '邀请关联资料已发生变化，请联系球队管理员重新生成链接', code: 'PARENT_INVITE_BROKEN' }
   }
   const requirements = preview.data.requirements || {}
-  const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true, guardianAuthorized: true }).limit(1).get()).data || []
+  const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true }).limit(10).get()).data || []
   const verifications = requirements.realName ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite, status: 'approved' }).limit(1).get()).data || [] : []
   const portraits = requirements.portrait ? (await db.collection('parent_portraits').where({ parentInvite: authenticated.session.parentInvite, status: 'confirmed' }).limit(1).get()).data || [] : []
-  if (!drafts[0] || (requirements.realName && !verifications[0]) || (requirements.portrait && !portraits[0])) return { success: false, error: '请先完成本次邀请已开启的资料要求' }
+  const authorizedDraft = drafts.find(parentDraftIsAuthorized)
+  if (!authorizedDraft || (requirements.realName && !verifications[0]) || (requirements.portrait && !portraits[0])) return { success: false, error: '请先完成本次邀请已开启的资料要求' }
   const submissionRows = (await db.collection('parent_profile_submissions').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
   const previous = submissionRows[0] || {}
-  const data = { parentInvite: authenticated.session.parentInvite, playerId: String(invite.playerId), teamId: String(invite.teamId), portraitId: portraits[0] ? String(portraits[0]._id) : String(previous.portraitId || ''), avatarFileId: portraits[0] ? String(portraits[0].avatarFileId || '') : String(previous.avatarFileId || ''), verificationId: verifications[0] ? String(verifications[0]._id) : String(previous.verificationId || ''), requirementsSnapshot: requirements, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, status: 'submitted', updateTime: db.serverDate() }
+  const registrantType = String(preview.data.registrantType || 'guardian') === 'self' ? 'self' : 'guardian'
+  const data = { parentInvite: authenticated.session.parentInvite, playerId: String(invite.playerId), teamId: String(invite.teamId), registrantType, registrantUserId: String(invite.registrantUserId || ''), portraitId: portraits[0] ? String(portraits[0]._id) : String(previous.portraitId || ''), avatarFileId: portraits[0] ? String(portraits[0].avatarFileId || '') : String(previous.avatarFileId || ''), verificationId: verifications[0] ? String(verifications[0]._id) : String(previous.verificationId || ''), requirementsSnapshot: requirements, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, status: 'submitted', updateTime: db.serverDate() }
   if (submissionRows[0]) await db.collection('parent_profile_submissions').doc(submissionRows[0]._id).update({ data })
   else await db.collection('parent_profile_submissions').add({ data: Object.assign({}, data, { createTime: db.serverDate() }) })
-  await db.collection('players').doc(invite.playerId).update({ data: { needsParentCompletion: false, profileStatus: 'complete', parentProfileCompletedAt: db.serverDate(), parentProfileSubmissionStatus: 'submitted', updateTime: db.serverDate() } })
+  const verification = verifications[0] || null
+  const portrait = portraits[0] || null
+  const identityMethod = verification ? String(verification.identityMethod || 'local_face_1to1') : 'not_required'
+  const identityStatus = verification ? (identityMethod === 'manual_per_event' ? 'manual_required' : 'verified') : 'not_required'
+  const playerUpdate = { registrantType, needsParentCompletion: false, profileStatus: 'complete', parentProfileCompletedAt: db.serverDate(), parentProfileSubmissionStatus: 'submitted', identityStatus, identityVerificationLabel:verification ? '人证核验通过' : '本次无需核验', identityVerificationId:verification ? String(verification._id) : '', identityVerificationMethod:identityMethod, identityVerificationDisclosure:'平台人证核验，非权威库认证', updateTime: db.serverDate() }
+  if (portrait) {
+    playerUpdate.photoUrl = String(portrait.avatarFileId || portrait.transparentFileId || player.photoUrl || '')
+    playerUpdate.photoFileID = playerUpdate.photoUrl
+    playerUpdate.recentPortraitId = String(portrait._id || '')
+    playerUpdate.recentPortraitConfirmedAt = portrait.confirmedAt || db.serverDate()
+  }
+  await db.collection('players').doc(invite.playerId).update({ data: playerUpdate })
+  if (verification) {
+    const profileRows = (await db.collection('player_identity_profiles').where({ playerId:String(invite.playerId) }).limit(2).get()).data || []
+    const profileData = { playerId:String(invite.playerId), teamId:String(invite.teamId), orgId:String(invite.orgId || ''), verificationId:String(verification._id), status:identityStatus, verificationLabel:'人证核验通过', verificationDisclosure:'平台人证核验，非权威库认证', verificationMethod:identityMethod, verificationScope:identityMethod === 'local_face_1to1' ? 'platform' : 'organizer', identityNumberMasked:String(verification.identityNumberMasked || ''), documentType:String(verification.documentType || 'resident_id'), encryptedFaceFeature:verification.encryptedFaceFeature || null, featureStorageStatus:String(verification.featureStorageStatus || 'not_stored'), biometricConsent:verification.biometricConsent === true, portraitId:portrait ? String(portrait._id || '') : '', portraitFileId:portrait ? String(portrait.avatarFileId || portrait.transparentFileId || '') : '', seasonPhotoRefreshDue:true, updateTime:db.serverDate() }
+    if (profileRows[0]) await db.collection('player_identity_profiles').doc(profileRows[0]._id).update({ data:profileData })
+    else await db.collection('player_identity_profiles').add({ data:Object.assign({}, profileData, { createTime:db.serverDate() }) })
+  }
+  let certificateNumber = ''
+  if (registrantType === 'self' && verification) {
+    const certificates = (await db.collection('player_electronic_passes').where({ playerId:String(invite.playerId), status:'active' }).limit(2).get()).data || []
+    if (certificates[0]) certificateNumber = String(certificates[0].certificateNumber || '')
+    else {
+      certificateNumber = 'SXF-' + Date.now().toString(36).toUpperCase() + '-' + String(invite.playerId).slice(-5).toUpperCase()
+      await db.collection('player_electronic_passes').add({ data:{ sport:'football', playerId:String(invite.playerId), ownerUserId:String(invite.registrantUserId || ''), certificateNumber, status:'active', issuedAt:db.serverDate(), source:'adult_identity_verification', createTime:db.serverDate(), updateTime:db.serverDate() } })
+    }
+  }
   return {
     success: true,
     status: 'submitted',
@@ -846,6 +1050,8 @@ async function completeParentProfile(event) {
     playerId: String(invite.playerId),
     playerName: preview.data.playerName,
     teamName: preview.data.teamName,
+    registrantType,
+    certificateNumber,
     submittedAt: new Date().toISOString(),
     requirements: Object.assign({ basic: true }, requirements, { standardPortrait: Boolean(requirements.portrait), playerAvatar: Boolean(requirements.portrait) })
   }
@@ -1145,13 +1351,14 @@ function prepareOrganizerAdd(collection, data, scope) {
     const mode = normalizeDivisionMode(next)
     next.mode = mode
     next.isProfessional = mode === 'professional'
-    // 专业版是否已开通只能由服务端支付/权益流程写入，不能由浏览器提交。
+    // 当前推广阶段两种运行模式均免费；状态仍由服务端写入，不能由浏览器伪造。
     delete next.professionalEntitlementStatus
     delete next.entitlementStatus
     delete next.professionalEntitlement
     delete next.professionalEntitlementExpiresAt
     delete next.entitlementExpiresAt
-    next.professionalEntitlementStatus = mode === 'professional' ? 'pending' : 'not_required'
+    next.professionalEntitlementStatus = mode === 'professional' ? 'free_current_phase' : 'not_required'
+    next.professionalAccessPhase = mode === 'professional' ? 'early_free' : ''
     next.ruleStatus = 'draft'
     next.ruleProgress = Math.max(0, Math.min(Number(next.ruleProgress) || 0, 99))
     delete next.rulesLocked
@@ -1168,12 +1375,21 @@ function prepareOrganizerAdd(collection, data, scope) {
 const DIVISION_ENTITLEMENT_ACTIVE_STATUSES = new Set([
   'active', 'enabled', 'paid', 'purchased', 'effective', 'valid'
 ])
+const EVENT_PROFESSIONAL_FREE_PHASE = true
 
 function normalizeDivisionMode(record) {
   const source = record || {}
   const raw = String(source.mode || source.plan || '').toLowerCase()
   if (raw === 'professional' || raw === 'pro' || source.isProfessional === true) return 'professional'
   return 'simple'
+}
+
+function normalizeDivisionGender(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (['male', 'man', 'men', '男', '男子', '男子组'].includes(normalized)) return '男子组'
+  if (['female', 'woman', 'women', '女', '女子', '女子组'].includes(normalized)) return '女子组'
+  if (['mixed', 'mix', '不限', '混合', '混合组'].includes(normalized)) return '混合组'
+  return ''
 }
 
 function divisionEntitlementIsActive(record) {
@@ -1191,6 +1407,10 @@ function divisionEntitlementIsActive(record) {
     (entitlement && (entitlement.expiresAt || entitlement.expireAt))
   )
   return !expiresAt || expiresAt > Date.now()
+}
+
+function divisionProfessionalAccessAllowed(record) {
+  return Boolean(EVENT_PROFESSIONAL_FREE_PHASE && normalizeDivisionMode(record) === 'professional') || divisionEntitlementIsActive(record)
 }
 
 function divisionRulesLocked(record) {
@@ -1278,15 +1498,17 @@ function compactCompetitionSnapshot(division, relations, drawRecords, matches) {
     'formatType', 'tournamentType', 'mode', 'isProfessional', 'expectedTeams', 'groupCount',
     'teamsPerGroup', 'groupCycle', 'advancePerGroup', 'knockoutSize', 'knockoutType',
     'knockoutLegs', 'bracketSource', 'venueMode', 'homeAwayEnabled', 'thirdPlaceEnabled',
-    'knockoutTieBreak', 'birthDateCutoff', 'rosterLimit', 'minimumRoster',
+    'knockoutTieBreak', 'birthDateCutoff', 'birthDateStart', 'birthDateEnd', 'eligibilityNotes', 'rosterLimit', 'minimumRoster',
     'identityVerificationRequired', 'eligibilityReviewRequired', 'portraitRequired',
+    'identityDocumentRequired', 'insuranceRequired', 'waiverRequired', 'singleDivisionOnly',
     'registrationDeadline', 'lockRosterAfterDeadline', 'periodMode', 'matchMinutes',
     'singlePeriodCount', 'breakMinutes', 'playersOnField', 'substitutionMode', 'substitutionLimit',
     'substitutionWindows', 'substitutionReentryAllowed',
     'disciplineEnabled', 'yellowCardSuspension', 'redCardSuspension', 'secondYellowRed',
-    'knockoutYellowReset', 'winPoints', 'drawPoints', 'lossPoints', 'rankingRule',
+    'knockoutYellowReset', 'winPoints', 'drawPoints', 'lossPoints', 'drawResolution',
+    'penaltyWinPoints', 'penaltyLossPoints', 'rankingRule', 'rankingTieBreakers',
     'awayGoalsEnabled', 'liveRankingEnabled', 'manualRankingReview', 'advancementRule',
-    'sameGroupAvoidance'
+    'sameGroupAvoidance', 'regulationDetails'
   ]
   const rules = {}
   ruleFields.forEach(field => { if (rulesSource && rulesSource[field] !== undefined) rules[field] = rulesSource[field] })
@@ -1370,8 +1592,13 @@ async function deleteDivision(db, id, organizerScope) {
 
   const tournamentId = String(division.tournamentId || '').trim()
   if (!tournamentId) return { success: false, error: '组别缺少赛事归属，不能删除', code: 'DIVISION_TOURNAMENT_REQUIRED' }
-  const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
-  const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+  let tournament
+  try {
+    const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
+    tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+  } catch (error) {
+    return { success: false, error: '赛事读取失败，请刷新后重试', code: 'TOURNAMENT_READ_FAILED' }
+  }
   if (!tournament || !organizerRecordAllowed('tournaments', tournament, organizerScope)) {
     return { success: false, error: '赛事不存在或无权删除该组别', code: 'TOURNAMENT_SCOPE_DENIED' }
   }
@@ -1413,6 +1640,180 @@ async function deleteDivision(db, id, organizerScope) {
     }
   }
   return { success: true, deleted: 1, message: '组别已删除' }
+}
+
+function normalizeDivisionDisplayName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 30)
+}
+
+async function renameDivision(db, id, data, organizerScope) {
+  if (!organizerScope || !organizerScope.orgId) {
+    return { success: false, error: '当前账号尚未关联机构，请先完成机构引导', code: 'ORG_REQUIRED' }
+  }
+  const divisionId = String(id || '').trim()
+  const nextName = normalizeDivisionDisplayName(data && data.name)
+  if (!divisionId) return { success: false, error: '缺少竞赛组别 ID', code: 'DIVISION_ID_REQUIRED' }
+  if (nextName.length < 2) return { success: false, error: '组别名称至少填写 2 个字符', code: 'DIVISION_NAME_REQUIRED' }
+
+  const result = await db.collection('divisions').doc(divisionId).get()
+  const before = Array.isArray(result.data) ? result.data[0] : result.data
+  if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
+    return { success: false, error: '组别不存在或无权修改', code: 'DIVISION_SCOPE_DENIED' }
+  }
+  const tournamentId = String(before.tournamentId || '').trim()
+  if (!tournamentId) return { success: false, error: '组别缺少赛事归属', code: 'DIVISION_TOURNAMENT_REQUIRED' }
+  const siblings = (await db.collection('divisions').where({ tournamentId }).limit(1000).get()).data || []
+  const duplicate = siblings.some(item => String(item._id) !== divisionId && normalizeDivisionDisplayName(item.name || item.divisionName).toLowerCase() === nextName.toLowerCase())
+  if (duplicate) return { success: false, error: `组别名称“${nextName}”已存在`, code: 'DIVISION_NAME_DUPLICATE' }
+  if (normalizeDivisionDisplayName(before.name || before.divisionName) === nextName) {
+    return { success: true, data: before, message: '组别名称未变化' }
+  }
+
+  const linkedCollections = [
+    'tournament_teams', 'matches', 'tournament_groups', 'tournament_bracket',
+    'tournament_league_tables', 'roster_snapshots', 'referee_invitations'
+  ]
+  const linkedRows = {}
+  for (const collection of linkedCollections) {
+    try {
+      const rows = (await db.collection(collection).where({ tournamentId, divisionId }).limit(1000).get()).data || []
+      if (rows.length >= 1000) return { success: false, error: `组别关联的${collection}记录过多，请联系平台处理`, code: 'DIVISION_RENAME_LIMIT' }
+      linkedRows[collection] = rows
+    } catch (error) {
+      linkedRows[collection] = []
+    }
+  }
+
+  await db.collection('divisions').doc(divisionId).update({ data: {
+    name: nextName,
+    divisionName: nextName,
+    nameSource: 'custom',
+    renamedAt: db.serverDate(),
+    renamedByUserId: organizerScope.user._id,
+    updateTime: db.serverDate()
+  } })
+  try {
+    const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
+    const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+    if (tournament && Array.isArray(tournament.divisions)) {
+      const nestedDivisions = tournament.divisions.map(item => {
+        const nestedId = String(item && (item._id || item.id || item.divisionId || '') || '')
+        return nestedId === divisionId ? { ...item, name: nextName, divisionName: nextName, nameSource: 'custom' } : item
+      })
+      await db.collection('tournaments').doc(tournamentId).update({ data: { divisions: nestedDivisions, updateTime: db.serverDate() } })
+    }
+  } catch (error) {
+    console.warn('[webApi] nested division rename skipped:', error.message || error)
+  }
+  const updated = {}
+  for (const collection of linkedCollections) {
+    updated[collection] = 0
+    for (const row of linkedRows[collection]) {
+      if (!row || !row._id) continue
+      await db.collection(collection).doc(row._id).update({ data: { divisionName: nextName, updateTime: db.serverDate() } })
+      updated[collection] += 1
+    }
+  }
+  return {
+    success: true,
+    data: { ...before, name: nextName, divisionName: nextName, nameSource: 'custom' },
+    details: { updated },
+    message: `组别已重命名为“${nextName}”`
+  }
+}
+
+async function deleteTournamentWorkspace(db, id, organizerScope, confirmText) {
+  if (!organizerScope || !organizerScope.orgId) {
+    return { success: false, error: '当前账号尚未关联机构，请先完成机构引导', code: 'ORG_REQUIRED' }
+  }
+  const tournamentId = String(id || '').trim()
+  if (!tournamentId) return { success: false, error: '缺少赛事 ID', code: 'TOURNAMENT_ID_REQUIRED' }
+  if (String(confirmText || '').trim() !== '删除') {
+    return { success: false, error: '请输入“删除”确认文本', code: 'DELETE_CONFIRMATION_REQUIRED' }
+  }
+
+  const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
+  const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+  if (!tournament || !organizerRecordAllowed('tournaments', tournament, organizerScope)) {
+    return { success: false, error: '赛事不存在或无权删除', code: 'TOURNAMENT_SCOPE_DENIED' }
+  }
+
+  async function deleteByTournament(collection, where) {
+    let total = 0
+    const batchSize = 500
+    while (true) {
+      let rows
+      try {
+        rows = (await db.collection(collection).where(where).limit(batchSize).get()).data || []
+      } catch (error) {
+        const message = String(error && (error.message || error.errMsg) || '').toLowerCase()
+        const code = String(error && (error.code || error.errCode) || '').toLowerCase()
+        const missing = code.includes('collection_not_exist') || code.includes('resourcenotfound') ||
+          message.includes('collection not exist') || message.includes('collection does not exist') ||
+          message.includes('table not exist') || message.includes('not found collection')
+        if (missing) return { deleted: total, skipped: true }
+        throw error
+      }
+      if (!rows.length) break
+      for (const row of rows) {
+        if (!row || !row._id) continue
+        await db.collection(collection).doc(row._id).remove()
+        total += 1
+      }
+      if (rows.length < batchSize) break
+    }
+    return { deleted: total, skipped: false }
+  }
+
+  const workspaceFilters = [
+    ['tournament_teams', '报名球队'],
+    ['tournament_groups', '抽签分组'],
+    ['tournament_bracket', '淘汰对阵'],
+    ['tournament_league_tables', '联赛签位'],
+    ['roster_snapshots', '名单快照'],
+    ['tournament_referees', '裁判指派'],
+    ['referee_invitations', '裁判邀请'],
+    ['matches', '比赛'],
+    ['divisions', '组别']
+  ]
+
+  const deleted = {}
+  const skipped = []
+  for (const item of workspaceFilters) {
+    try {
+      const result = await deleteByTournament(item[0], { tournamentId })
+      deleted[item[0]] = result.deleted
+      if (result.skipped) skipped.push(item[0])
+    } catch (error) {
+      console.error('[webApi] tournament workspace delete failed:', item[0], error.message || error)
+      return {
+        success: false,
+        error: `清理${item[1]}失败，请重试；已清理部分可安全重复删除`,
+        code: 'TOURNAMENT_WORKSPACE_DELETE_FAILED',
+        details: { tournamentId, failedCollection: item[0], deleted, skipped }
+      }
+    }
+  }
+
+  try {
+    const removed = await db.collection('tournaments').doc(tournamentId).remove()
+    if (!removed.stats || removed.stats.removed !== 1) {
+      return { success: false, error: '赛事主体删除未完成，请刷新后重试', code: 'TOURNAMENT_DELETE_NOT_CONFIRMED', details: { tournamentId, deleted, skipped } }
+    }
+  } catch (error) {
+    console.error('[webApi] tournament document delete failed:', error.message || error)
+    return { success: false, error: '赛事主体删除失败，请重试', code: 'TOURNAMENT_DELETE_FAILED', details: { tournamentId, deleted, skipped } }
+  }
+  return {
+    success: true,
+    deleted: 1 + Object.values(deleted).reduce((sum, num) => sum + Number(num || 0), 0),
+    details: {
+      tournamentId,
+      deleted,
+      skipped
+    },
+    message: '赛事与关联工作区已删除，球队资料和球员资料未受影响'
+  }
 }
 
 async function assignTournamentTeamDivision(db, id, data, organizerScope) {
@@ -1462,7 +1863,7 @@ function sanitizeDivisionUpdate(data, before) {
   ;[
     'rulesLocked', 'ruleFinalized', 'rulesVersion', 'rulesSnapshot', 'finalizedAt',
     'finalizedBy', 'finalizedByName', 'confirmedByUserId', 'confirmedByOrgId',
-    'confirmedAt', 'professionalEntitlementStatus', 'entitlementStatus',
+    'confirmedAt', 'professionalEntitlementStatus', 'entitlementStatus', 'professionalAccessPhase',
     'professionalEntitlement', 'professionalEntitlementExpiresAt', 'entitlementExpiresAt',
     'competitionPlanLocked', 'competitionPlanStatus', 'competitionPlanVersion',
     'competitionPlanSnapshot', 'competitionPlanLockedAt', 'competitionPlanLockedBy',
@@ -1477,6 +1878,9 @@ function sanitizeDivisionUpdate(data, before) {
   next.mode = requestedMode
   next.isProfessional = requestedMode === 'professional'
   normalizeFinalRankingSettings(next)
+  if (Object.prototype.hasOwnProperty.call(next, 'regulationDetails')) {
+    next.regulationDetails = sanitizeRegulationDetails(next.regulationDetails)
+  }
   next.ruleStatus = 'draft'
   next.ruleProgress = Math.max(0, Math.min(Number(next.ruleProgress) || 0, 99))
   return next
@@ -1494,6 +1898,45 @@ function normalizeFinalRankingSettings(record) {
   record.fullRankingEnabled = mode === 'full'
   record.thirdPlaceEnabled = mode !== 'champion'
   return record
+}
+
+const REGULATION_DETAIL_NUMBER_FIELDS = new Set([
+  'teamLeaderLimit', 'coachLimit', 'doctorLimit', 'registrationFeePerPerson',
+  'disciplineDepositPerTeam', 'depositRefundWorkdays', 'eligibilityComplaintDeadlineRound',
+  'matchBallSize', 'lineupSubmissionMinutes', 'minimumPlayersToContinue',
+  'firstHalfSubstitutionWindows', 'secondHalfSubstitutionWindows', 'halftimeSubstitutionWindows',
+  'concussionSubstitutionLimit', 'benchTotalLimit', 'benchPlayerLimit', 'benchOfficialLimit',
+  'jerseyNumberMin', 'jerseyNumberMax', 'stoppagePauseMinutes', 'stoppagePausePeriods',
+  'stoppageDecisionHours', 'severeMisconductBanMonths'
+])
+const REGULATION_DETAIL_BOOLEAN_FIELDS = new Set([
+  'officialsCanPlay', 'forfeitDepositDeduction', 'foreignPlayersAllowed',
+  'professionalPlayersAllowed', 'femaleAdultAgeException', 'ageByYearOnly',
+  'blacklistCheckRequired', 'teamKitPhotoRequired', 'unlimitedPlayersPerWindow',
+  'substitutionReentryForbidden', 'keepHigherLiveScore', 'opponentConcussionSubstitution',
+  'twoKitsRequired', 'captainArmbandRequired', 'shinGuardsRequired', 'metalStudsForbidden',
+  'jerseyModificationForbidden', 'benchKitContrastRequired', 'resumeRemainingTimePreferred',
+  'resumeStatePreserved', 'withdrawalVoidsResults', 'fairPlayDisqualification',
+  'cardsCarryToNextStage', 'teamOfficialsDiscipline'
+])
+const REGULATION_DETAIL_SCORE_FIELDS = new Set(['eligibilityViolationScore', 'terminationForfeitScore'])
+
+function sanitizeRegulationDetails(source) {
+  const input = source && typeof source === 'object' && !Array.isArray(source) ? source : {}
+  const result = {}
+  REGULATION_DETAIL_NUMBER_FIELDS.forEach(field => {
+    if (input[field] === null || input[field] === '' || input[field] === undefined) result[field] = null
+    else {
+      const value = Number(input[field])
+      result[field] = Number.isFinite(value) ? Math.max(0, Math.min(value, 100000)) : null
+    }
+  })
+  REGULATION_DETAIL_BOOLEAN_FIELDS.forEach(field => { result[field] = input[field] === true })
+  REGULATION_DETAIL_SCORE_FIELDS.forEach(field => {
+    const value = String(input[field] || '').trim().slice(0, 7)
+    result[field] = /^\d{1,2}:\d{1,2}$/.test(value) ? value : ''
+  })
+  return result
 }
 
 function sanitizeTournamentUpdate(data, before) {
@@ -1528,13 +1971,14 @@ function divisionRuleSnapshot(before, data) {
     'confirmedByUserId', 'confirmedByOrgId', 'confirmedAt', 'updateTime',
     'rulesHistory', 'activeRulesVersion', 'activeRulesSnapshot', 'rulesRevisionPending',
     'rulesRevisionOf', 'rulesVersionDraft',
-    'professionalEntitlementStatus', 'entitlementStatus', 'professionalEntitlement',
+    'professionalEntitlementStatus', 'entitlementStatus', 'professionalEntitlement', 'professionalAccessPhase',
     'professionalEntitlementExpiresAt', 'entitlementExpiresAt'
   ].forEach(field => { delete snapshot[field] })
   const mode = normalizeDivisionMode(snapshot)
   snapshot.mode = mode
   snapshot.isProfessional = mode === 'professional'
   normalizeFinalRankingSettings(snapshot)
+  snapshot.regulationDetails = sanitizeRegulationDetails(snapshot.regulationDetails)
   return snapshot
 }
 
@@ -1602,13 +2046,46 @@ async function confirmDivisionRules(db, id, data, organizerScope) {
   const teamsPerGroup = Number(snapshot.teamsPerGroup)
   const matchMinutes = Number(snapshot.matchMinutes)
   const playersOnField = Number(snapshot.playersOnField)
-  if (!snapshot.formatType || !['champion', 'top4', 'full'].includes(String(snapshot.finalRankingMode || '')) || expectedTeams < 2 || groupCount < 1 || teamsPerGroup < 2 ||
-      matchMinutes < 10 || playersOnField < 1) {
+  const formatType = String(snapshot.formatType || '')
+  const knockoutSize = Number(snapshot.knockoutSize || snapshot.formatConfig?.bracketSize)
+  if (!['cup', 'tournament', 'league', 'hybrid'].includes(formatType) ||
+      !['champion', 'top4', 'full'].includes(String(snapshot.finalRankingMode || '')) ||
+      expectedTeams < 2 || matchMinutes < 10 || playersOnField < 1) {
     return { success: false, error: '竞赛规则尚未填写完整，请完成赛制、球队数量和比赛执行设置', code: 'DIVISION_RULES_INCOMPLETE' }
   }
+  if (formatType === 'cup' && (groupCount < 1 || teamsPerGroup < 2)) {
+    return { success: false, error: '请完善小组数量和每组球队数量', code: 'DIVISION_GROUP_RULES_INCOMPLETE' }
+  }
+  if (['tournament', 'hybrid'].includes(formatType) && knockoutSize < 2) {
+    return { success: false, error: '请完善淘汰赛规模', code: 'DIVISION_KNOCKOUT_RULES_INCOMPLETE' }
+  }
+  const birthDateStart = String(snapshot.birthDateStart || '').trim()
+  const birthDateEnd = String(snapshot.birthDateEnd || snapshot.birthDateCutoff || '').trim()
+  if (birthDateStart && birthDateEnd && new Date(birthDateStart).getTime() > new Date(birthDateEnd).getTime()) {
+    return { success: false, error: '最早出生日期不能晚于最晚出生日期', code: 'DIVISION_BIRTH_RANGE_INVALID' }
+  }
+  const drawResolution = String(snapshot.drawResolution || 'draw').toLowerCase()
+  if (!['draw', 'penalties'].includes(drawResolution)) {
+    return { success: false, error: '请选择有效的常规时间战平处理方式', code: 'DIVISION_DRAW_RESOLUTION_INVALID' }
+  }
+  if (drawResolution === 'penalties') {
+    const penaltyWinPoints = Number(snapshot.penaltyWinPoints)
+    const penaltyLossPoints = Number(snapshot.penaltyLossPoints)
+    if (!Number.isFinite(penaltyWinPoints) || !Number.isFinite(penaltyLossPoints) || penaltyWinPoints <= penaltyLossPoints || penaltyLossPoints < 0) {
+      return { success: false, error: '点球胜者积分必须高于点球负者积分', code: 'DIVISION_PENALTY_POINTS_INVALID' }
+    }
+  }
+  const regulationDetails = sanitizeRegulationDetails(snapshot.regulationDetails)
+  if (regulationDetails.benchTotalLimit != null && regulationDetails.benchPlayerLimit != null && regulationDetails.benchOfficialLimit != null && regulationDetails.benchPlayerLimit + regulationDetails.benchOfficialLimit > regulationDetails.benchTotalLimit) {
+    return { success: false, error: '替补球员与球队官员人数不能超过替补席总人数', code: 'DIVISION_BENCH_LIMIT_INVALID' }
+  }
+  if (regulationDetails.jerseyNumberMin != null && regulationDetails.jerseyNumberMax != null && regulationDetails.jerseyNumberMin > regulationDetails.jerseyNumberMax) {
+    return { success: false, error: '球衣号码范围设置不正确', code: 'DIVISION_JERSEY_RANGE_INVALID' }
+  }
+  snapshot.regulationDetails = regulationDetails
 
   const mode = normalizeDivisionMode(snapshot)
-  if (mode === 'professional' && !divisionEntitlementIsActive(before)) {
+  if (mode === 'professional' && !divisionProfessionalAccessAllowed(before)) {
     return {
       success: false,
       error: '专业版尚未开通，完成专业版权益后才能定版',
@@ -1664,7 +2141,7 @@ async function upgradeDivisionToProfessional(db, id, data, organizerScope) {
   if (!alreadyProfessional && competitionPlanLocked(before)) {
     return { success: false, error: '竞赛方案已经锁定，不能再升级专业版', code: 'DIVISION_UPGRADE_LOCKED' }
   }
-  if (!alreadyProfessional && !divisionEntitlementIsActive(before)) {
+  if (!alreadyProfessional && !EVENT_PROFESSIONAL_FREE_PHASE && !divisionEntitlementIsActive(before)) {
     return { success: false, error: '专业版尚未开通，完成专业版权益后才能升级', code: 'DIVISION_ENTITLEMENT_REQUIRED' }
   }
 
@@ -1739,6 +2216,8 @@ async function upgradeDivisionToProfessional(db, id, data, organizerScope) {
   const divisionUpdate = {
     mode: 'professional',
     isProfessional: true,
+    professionalEntitlementStatus: EVENT_PROFESSIONAL_FREE_PHASE ? 'free_current_phase' : before.professionalEntitlementStatus,
+    professionalAccessPhase: EVENT_PROFESSIONAL_FREE_PHASE ? 'early_free' : before.professionalAccessPhase,
     professionalUpgradedAt: before.professionalUpgradedAt || now,
     professionalUpgradedBy: before.professionalUpgradedBy || organizerScope.user._id,
     professionalUpgradeVersion: upgradeVersion,
@@ -1754,7 +2233,7 @@ async function upgradeDivisionToProfessional(db, id, data, organizerScope) {
     const nextDivisions = tournament.divisions.map(item => {
       const itemId = String(item && (item.id || item._id) || '')
       return itemId === divisionId
-        ? { ...item, mode: 'professional', isProfessional: true, professionalUpgradedAt: divisionUpdate.professionalUpgradedAt }
+        ? { ...item, mode: 'professional', isProfessional: true, professionalEntitlementStatus:divisionUpdate.professionalEntitlementStatus, professionalAccessPhase:divisionUpdate.professionalAccessPhase, professionalUpgradedAt: divisionUpdate.professionalUpgradedAt }
         : item
     })
     await db.collection('tournaments').doc(tournamentId).update({ data: { divisions: nextDivisions, updateTime: now } })
@@ -1768,7 +2247,7 @@ async function upgradeDivisionToProfessional(db, id, data, organizerScope) {
     initializedTeams,
     pendingRosterTeamIds: pendingRosterTeamIds.filter(Boolean),
     preserved: { rules: true, tournamentTeams: true, draw: true, schedule: true, referees: true },
-    message: alreadyProfessional ? '该组别已是专业模式，正式名单待办已保持同步' : '已在原竞赛组别上开通专业版，现有球队已进入正式名单待办'
+    message: alreadyProfessional ? '该组别已是专业模式，正式名单待办已保持同步' : '已免费启用专业模式，现有球队已进入正式名单待办'
   }
 }
 
@@ -1812,7 +2291,7 @@ async function confirmCompetitionPlan(db, tournamentId, data, organizerScope) {
     return { success: false, error: '请先完成该组别规则定版', code: 'DIVISION_RULES_REQUIRED' }
   }
   const mode = normalizeDivisionMode(division)
-  if (mode === 'professional' && !divisionEntitlementIsActive(division)) {
+  if (mode === 'professional' && !divisionProfessionalAccessAllowed(division)) {
     return { success: false, error: '专业版尚未开通，完成专业版权益后才能锁定竞赛方案', code: 'DIVISION_ENTITLEMENT_REQUIRED' }
   }
 
@@ -2445,7 +2924,7 @@ async function handleWechatOnlyLogin(event) {
     let boundUser=channelUsers[0]||null
     if(boundUser){
       const phone=String(boundUser.phone||boundUser.phoneNumber||'')
-      const phoneReady=/^1[3-9]\d{9}$/.test(phone)&&boundUser.phoneVerified===true
+      const phoneReady=/^1[3-9]\d{9}$/.test(phone)&&boundUser.phoneVerified===true&&boundUser.pcAccountStatus!=='cancelled'&&boundUser.pcLoginEnabled!==false
       if(phoneReady){
         const phoneUser=await uniqueUser(db.command.or([{phone},{phoneNumber:phone}]),'手机号')
         if(!phoneUser||String(phoneUser._id)!==String(boundUser._id))throw new Error('手机号与微信标识指向不同账号，已阻止自动登录')
@@ -2509,6 +2988,213 @@ async function handleSendWechatLoginSms(event) {
   return handleSendSms({ phoneNumber, loginChallengeId: loaded.challengeId })
 }
 
+// 已登录账号在“个人资料”内绑定/更换手机号。
+// 与首次扫码登录绑定分开：以当前会话摘要作为一次性场景标识，不复用登录挑战，
+// 校验同一个 sms_codes 记录，避免两条流程互相消费验证码。
+function maskBoundPhone(phone) {
+  const value = String(phone || '')
+  return /^\d{11}$/.test(value) ? value.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2') : value
+}
+
+async function handleGetCurrentAccountProfile(event) {
+  const auth = await authenticateWebSession(event)
+  if (!auth.success) return { success: false, error: auth.error, code: auth.code }
+  if (auth.principalType === 'platform_owner') {
+    return { success: true, user: { _id: auth.userId, phone: '', phoneMasked: '', phoneVerified: false } }
+  }
+  const phone = String(auth.user.phone || auth.user.phoneNumber || '').trim()
+  return {
+    success: true,
+    user: {
+      _id: auth.userId,
+      phone,
+      phoneNumber: phone,
+      phoneMasked: maskBoundPhone(phone),
+      phoneVerified: Boolean(phone && auth.user.phoneVerified !== false)
+    }
+  }
+}
+
+// 同一手机号只能命中一个自然人账号；命中其他账号时阻断，不静默换绑。
+async function findOtherUserByPhone(db, phone, currentUserId) {
+  const _ = db.command
+  const result = await db.collection('users').where(_.or([
+    { phone },
+    { phoneNumber: phone }
+  ])).limit(3).get()
+  return (result.data || []).filter(item => String(item._id) !== String(currentUserId))
+}
+
+async function handleSendCurrentUserPhoneBindSms(event) {
+  const auth = await authenticateWebSession(event)
+  if (!auth.success) return { success: false, error: auth.error, code: auth.code }
+
+  const phoneNumber = String(event.phoneNumber || '').trim()
+  if (!/^1[3-9]\d{9}$/.test(phoneNumber)) return { success: false, error: '手机号格式不正确' }
+
+  const db = cloud.database()
+  // 先做占用与重复校验，避免为一个必然失败的绑定白发短信。
+  const others = await findOtherUserByPhone(db, phoneNumber, auth.userId)
+  if (others.length > 0) return { success: false, error: '该手机号已绑定其他账号，请联系管理员核验' }
+  const currentPhone = String(auth.user.phone || auth.user.phoneNumber || '')
+  if (currentPhone && currentPhone === phoneNumber) {
+    return { success: false, error: '该手机号已是当前账号的绑定手机号' }
+  }
+
+  const recent = await db.collection('sms_codes').where({ phoneNumber }).limit(20).get()
+  const recentWindow = Date.now() - 60 * 1000
+  const recentCount = (recent.data || []).filter(item => dateValue(item.createdAt) > recentWindow).length
+  if (recentCount > 0) return { success: false, error: '验证码发送过于频繁，请60秒后重试' }
+
+  const bindChallengeId = hashSessionToken(String(event.authToken || '').trim())
+  return handleSendSms({ phoneNumber, loginChallengeId: bindChallengeId })
+}
+
+async function handleBindCurrentUserPhone(event) {
+  const auth = await authenticateWebSession(event)
+  if (!auth.success) return { success: false, error: auth.error, code: auth.code }
+
+  const phone = String(event.phoneNumber || '').trim()
+  const smsCode = String(event.smsCode || '').trim()
+  if (!/^1[3-9]\d{9}$/.test(phone) || !/^\d{6}$/.test(smsCode)) {
+    return { success: false, error: '请输入正确的手机号和验证码' }
+  }
+
+  const db = cloud.database()
+  const _ = db.command
+  const bindChallengeId = hashSessionToken(String(event.authToken || '').trim())
+  const smsResult = await db.collection('sms_codes').where({
+    phoneNumber: phone,
+    code: smsCode,
+    loginChallengeId: bindChallengeId,
+    used: false,
+    expireAt: _.gt(new Date())
+  }).orderBy('createdAt', 'desc').limit(1).get()
+  if (!smsResult.data || smsResult.data.length !== 1) return { success: false, error: '验证码错误或已过期' }
+
+  const others = await findOtherUserByPhone(db, phone, auth.userId)
+  if (others.length > 0) return { success: false, error: '该手机号已绑定其他账号，请联系管理员核验' }
+
+  await db.collection('sms_codes').doc(smsResult.data[0]._id).update({ data: { used: true, usedAt: db.serverDate() } })
+  await db.collection('users').doc(auth.userId).update({
+    data: {
+      phone,
+      phoneNumber: phone,
+      phoneVerified: true,
+      phoneVerifiedAt: db.serverDate(),
+      updatedAt: db.serverDate()
+    }
+  })
+
+  return {
+    success: true,
+    message: '手机号绑定成功',
+    user: { _id: auth.userId, phone, phoneNumber: phone, phoneMasked: maskBoundPhone(phone) }
+  }
+}
+
+function selfAccountMembershipConditions(user) {
+  const conditions = []
+  const userId = String(user && user._id || '').trim()
+  const phone = String(user && (user.phone || user.phoneNumber) || '').trim()
+  const openIds = Array.from(new Set([
+    user && user.openId,
+    user && user.openid,
+    user && user.wechatOpenId,
+    user && user.miniProgramOpenId,
+    user && user.unionId,
+    user && user._openid
+  ].filter(Boolean).map(value => String(value))))
+  if (userId) conditions.push({ userId }, { memberUserId: userId }, { ownerId: userId })
+  if (phone) conditions.push({ phone }, { phoneNumber: phone })
+  openIds.forEach(openId => conditions.push(
+    { openId }, { openid: openId }, { wechatOpenId: openId },
+    { miniProgramOpenId: openId }, { unionId: openId }, { _openid: openId }
+  ))
+  return conditions
+}
+
+function selfAccountMembershipMatches(record, user) {
+  const userId = String(user && user._id || '')
+  const recordUserIds = [record.userId, record.memberUserId, record.ownerId].filter(Boolean).map(value => String(value))
+  if (recordUserIds.length) return recordUserIds.includes(userId)
+  const openIds = Array.from(new Set([
+    user && user.openId,
+    user && user.openid,
+    user && user.wechatOpenId,
+    user && user.miniProgramOpenId,
+    user && user.unionId,
+    user && user._openid
+  ].filter(Boolean).map(value => String(value))))
+  const recordOpenIds = [
+    record.openId, record.openid, record.wechatOpenId,
+    record.miniProgramOpenId, record.unionId, record._openid
+  ].filter(Boolean).map(value => String(value))
+  if (recordOpenIds.length) return recordOpenIds.some(value => openIds.includes(value))
+  const phone = String(user && (user.phone || user.phoneNumber) || '')
+  return Boolean(phone && [record.phone, record.phoneNumber].filter(Boolean).map(value => String(value)).includes(phone))
+}
+
+async function loadSelfAccountMemberships(db, collection, user) {
+  const conditions = selfAccountMembershipConditions(user)
+  if (!conditions.length) return []
+  const where = conditions.length === 1 ? conditions[0] : db.command.or(conditions)
+  const result = await db.collection(collection).where(where).limit(1000).get()
+  const candidateRows = result.data || []
+  if (candidateRows.length >= 1000) {
+    throw Object.assign(new Error('账号关联关系过多，请联系平台管理员处理'), { code: 'ACCOUNT_RELATION_LIMIT' })
+  }
+  return candidateRows.filter(record => selfAccountMembershipMatches(record, user))
+}
+
+async function handleDeleteCurrentAccount(event) {
+  const auth = await authenticateWebSession(event)
+  if (!auth.success) return { success: false, error: auth.error, code: auth.code }
+  if (auth.principalType === 'platform_owner' || auth.user.isPlatformOwner === true) return { success: false, error: '平台负责人账号不能在此注销', code: 'PLATFORM_ACCOUNT_DELETE_DENIED' }
+  if (String(event.confirmText || '').trim() !== '注销PC') return { success: false, error: '请输入“注销PC”完成二次确认', code: 'ACCOUNT_DELETE_CONFIRMATION_REQUIRED' }
+
+  const db = cloud.database()
+  const _ = db.command
+  const phone = String(auth.user.phone || auth.user.phoneNumber || '').trim()
+  const tournamentConditions = [
+    { creatorId: auth.userId }, { organizerId: auth.userId }, { ownerId: auth.userId }, { userId: auth.userId }, { createdBy: auth.userId }
+  ]
+  if (phone) tournamentConditions.push({ creatorPhone: phone }, { organizerPhone: phone }, { ownerPhone: phone })
+  const tournaments = await db.collection('tournaments').where(_.or(tournamentConditions)).limit(1).get()
+  if ((tournaments.data || []).length) return { success: false, error: '该PC账号仍有创建的赛事，请先处理赛事后再注销', code: 'PC_ACCOUNT_HAS_TOURNAMENTS' }
+
+  const [sessionResult, bindingResult, gateResult] = await Promise.all([
+    db.collection('auth_sessions').where({ userId: auth.userId }).limit(1000).get(),
+    db.collection('service_account_bindings').where({ userId: auth.userId }).limit(100).get(),
+    db.collection('service_follow_gates').where({ purpose: 'organizer_pc_bind', userId: auth.userId }).limit(100).get()
+  ])
+  const sessions = sessionResult.data || []
+  const auditResult = await db.collection('account_identity_audit_logs').add({ data: {
+    action: 'self_pc_account_unlink', result: 'pending', actorType: 'self', actorId: auth.userId, targetUserId: auth.userId,
+    phoneHash: phone ? crypto.createHash('sha256').update(phone).digest('hex') : '',
+    preservedMiniProgramAccount: true, createTime: db.serverDate()
+  } })
+  try {
+    for (const session of sessions) await db.collection('auth_sessions').doc(session._id).remove()
+    for (const binding of bindingResult.data || []) {
+      await db.collection('service_account_bindings').doc(binding._id).update({ data: { organizerPcBound: false, pcUnboundAt: db.serverDate(), updateTime: db.serverDate() } })
+    }
+    for (const gate of gateResult.data || []) {
+      await db.collection('service_follow_gates').doc(gate._id).update({ data: { subscribed: false, status: 'pc_unbound', updateTime: db.serverDate() } })
+    }
+    await db.collection('users').doc(auth.userId).update({ data: {
+      wechatOpenId: '', pcAccountStatus: 'cancelled', pcLoginEnabled: false, pcServiceRebindRequired: true,
+      pcAccountCancelledAt: db.serverDate(), pcAccountCancelledBy: auth.userId, lastPcLogoutAt: db.serverDate(), updateTime: db.serverDate()
+    } })
+    await db.collection('account_identity_audit_logs').doc(auditResult._id).update({ data: {
+      result: 'success', removedSessionCount: sessions.length, completedAt: db.serverDate()
+    } })
+    return { success: true, message: 'PC账号已注销，小程序账号和球队不受影响', removedSessionCount: sessions.length, preservedMiniProgramAccount: true }
+  } catch (error) {
+    await db.collection('account_identity_audit_logs').doc(auditResult._id).update({ data: { result: 'failed', errorCode: error.code || 'SELF_PC_ACCOUNT_UNLINK_FAILED', completedAt: db.serverDate() } }).catch(() => {})
+    throw error
+  }
+}
 async function handleCompleteWechatPhoneLogin(event) {
   const phone = String(event.phoneNumber || '').trim()
   const smsCode = String(event.smsCode || '').trim()
@@ -2558,6 +3244,9 @@ async function handleCompleteWechatPhoneLogin(event) {
       phone,
       phoneNumber: phone,
       phoneVerified: true,
+      pcAccountStatus: 'active',
+      pcLoginEnabled: true,
+      pcAccountReactivatedAt: now,
       wechatOpenId: challenge.wechatOpenId,
       nickname: (user && (user.nickname || user.nickName)) || challenge.nickname || '微信用户',
       headimgurl: (user && (user.headimgurl || user.avatarUrl)) || challenge.headimgurl || '',
@@ -3137,7 +3826,11 @@ async function handleCallFunction(event) {
     console.log('[webApi] 调用云函数:', functionName, '参数 keys:', Object.keys(functionParams || {}))
     const result = await cloud.callFunction({
       name: functionName,
-      data: trustedParams
+      data: trustedParams,
+      // 规程识别包含文件解析和大模型抽取，不能使用 SDK 默认的短超时。
+      // 保持在 parseTournamentRegulations 的 240 秒执行上限之外留出返回余量，
+      // 让中转层能够拿到并返回明确错误，而不是提前报 ESOCKETTIMEDOUT。
+      ...(functionName === 'parseTournamentRegulations' ? { timeout: 270000 } : {})
     })
     console.log('[webApi] 云函数调用成功:', functionName, 'result:', result.result ? '有返回' : '无返回')
     const relayResult = result.result || { success: false, error: '云函数无返回结果' }
@@ -3427,7 +4120,7 @@ async function handleDbQuery(event) {
     if (organizerScope.organizationConflict) {
       return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
     }
-    if (!organizerScope.orgId && ['add', 'update', 'delete', 'deleteDivision', 'assignTournamentTeamDivision', 'confirmDivisionRules', 'reviseDivisionRules', 'upgradeDivisionToProfessional', 'confirmCompetitionPlan'].includes(operation)) {
+    if (!organizerScope.orgId && ['add', 'update', 'delete', 'deleteDivision', 'renameDivision', 'deleteTournamentWorkspace', 'assignTournamentTeamDivision', 'confirmDivisionRules', 'reviseDivisionRules', 'upgradeDivisionToProfessional', 'confirmCompetitionPlan'].includes(operation)) {
       return { success: false, error: '当前账号尚未关联机构，请先完成机构引导', code: 'ORG_REQUIRED' }
     }
   }
@@ -3464,6 +4157,24 @@ async function handleDbQuery(event) {
           return { success: false, error: '协助模式不能删除竞赛组别', code: 'ASSISTANCE_OPERATION_DENIED' }
         }
         return deleteDivision(db, id, organizerScope)
+      }
+      case 'renameDivision': {
+        if (collection !== 'divisions') {
+          return { success: false, error: '只允许重命名竞赛组别', code: 'DIVISION_OPERATION_INVALID' }
+        }
+        if (assistanceScope) {
+          return { success: false, error: '协助模式不能重命名竞赛组别', code: 'ASSISTANCE_OPERATION_DENIED' }
+        }
+        return renameDivision(db, id, data, organizerScope)
+      }
+      case 'deleteTournamentWorkspace': {
+        if (collection !== 'tournaments') {
+          return { success: false, error: '只允许对赛事执行工作区删除', code: 'TOURNAMENT_WORKSPACE_OPERATION_INVALID' }
+        }
+        if (assistanceScope) {
+          return { success: false, error: '协助模式不能删除赛事工作区', code: 'ASSISTANCE_OPERATION_DENIED' }
+        }
+        return deleteTournamentWorkspace(db, id, organizerScope, data && data.confirmText)
       }
       case 'assignTournamentTeamDivision': {
         if (collection !== 'tournament_teams') return { success: false, error: '只允许分配赛事参赛球队', code: 'DIVISION_OPERATION_INVALID' }
@@ -3557,18 +4268,27 @@ async function handleDbQuery(event) {
           : prepareOrganizerAdd(collection, data, organizerScope)
         if (collection === 'divisions' && organizerScope) {
           const ageGroup = String(nextData.ageGroup || '').trim()
-          const gender = String(nextData.gender || '').trim()
+          const gender = normalizeDivisionGender(nextData.gender)
           const tournamentId = String(nextData.tournamentId || '').trim()
           if (!ageGroup || !['男子组', '女子组', '混合组'].includes(gender)) {
             return { success: false, error: '请选择有效的年龄组和参赛性别', code: 'DIVISION_NAME_SOURCE_REQUIRED' }
           }
+          nextData.gender = gender
           if (!tournamentId) return { success: false, error: '缺少赛事归属', code: 'DIVISION_TOURNAMENT_REQUIRED' }
-          const duplicateResult = await db.collection('divisions').where({ tournamentId, ageGroup, gender }).limit(2).get()
-          const duplicate = (duplicateResult.data || []).some(record => organizerRecordAllowed('divisions', record, organizerScope))
-          if (duplicate) return { success: false, error: `${ageGroup}${gender} 已存在`, code: 'DIVISION_DUPLICATE' }
           const existingResult = await db.collection('divisions').where({ tournamentId }).limit(1000).get()
-          const existingCount = (existingResult.data || []).filter(record => organizerRecordAllowed('divisions', record, organizerScope)).length
-          nextData.name = `${ageGroup}${gender}`
+          const existingRows = (existingResult.data || []).filter(record => organizerRecordAllowed('divisions', record, organizerScope))
+          const requestedName = normalizeDivisionDisplayName(nextData.customName || (nextData.nameSource === 'custom' ? nextData.name : ''))
+          const finalName = requestedName || `${ageGroup}${gender}`
+          const duplicate = existingRows.some(record => normalizeDivisionDisplayName(record.name || record.divisionName).toLowerCase() === finalName.toLowerCase())
+          if (duplicate) return { success: false, error: `${finalName} 已存在`, code: 'DIVISION_DUPLICATE' }
+          const existingCount = existingRows.length
+          nextData.name = finalName
+          nextData.divisionName = finalName
+          nextData.nameSource = requestedName ? 'custom' : 'generated'
+          if (nextData.regulationDetails && typeof nextData.regulationDetails === 'object') {
+            nextData.regulationDetails = sanitizeRegulationDetails(nextData.regulationDetails)
+          }
+          delete nextData.customName
           delete nextData.shortName
           nextData.displayOrder = existingCount + 1
         }
@@ -3980,8 +4700,8 @@ async function handleRosterExceptionBoard(event) {
         snapshotId: String(snapshot._id), teamId: String(snapshot.teamId || ''), teamName: String(team.name || team.teamName || relation.teamName || '未命名球队'),
         teamLogo: String(team.logo || team.logoUrl || ''), divisionName: String(relation.divisionName || relation.division || snapshot.divisionName || '-'),
         playerId, playerName: String(player.name || '未命名球员'), jerseyNumber: String(player.jerseyNumber || ''), position: String(player.position || ''),
-        profileStatus, statusText: profileStatus === 'exception' ? '资料异常' : (profileState.needsIdentity ? '待实名核验' : (profileState.needsPortrait ? '待形象照' : (profileState.needsParent ? '待家长补充' : '待完善基础资料'))),
-        missingItems: [!player.name ? '姓名' : '', !profileState.hasBirth ? '出生日期' : '', profileState.needsIdentity ? '实名认证' : '', profileState.needsPortrait ? '标准形象照' : '', profileState.needsParent ? '家长资料' : ''].filter(Boolean),
+        profileStatus, statusText: profileStatus === 'exception' ? '资料异常' : (profileState.needsIdentity ? '待人证核验' : (profileState.needsPortrait ? '待形象照' : (profileState.needsParent ? '待家长补充' : '待完善基础资料'))),
+        missingItems: [!player.name ? '姓名' : '', !profileState.hasBirth ? '出生日期' : '', profileState.needsIdentity ? '人证核验' : '', profileState.needsPortrait ? '标准形象照' : '', profileState.needsParent ? '家长资料' : ''].filter(Boolean),
         rosterStatus: String(snapshot.status || 'draft'), rosterVersion: Number(snapshot.version || 1), submittedAt: snapshot.updateTime || snapshot.createTime || null,
         returnReason: String(snapshot.returnReason || '')
       })
@@ -4101,6 +4821,18 @@ exports.main = async (event, context) => {
           result.authExpiresAt = new Date(Date.now() + WEB_SESSION_TTL_MS)
         }
         break
+      case 'getCurrentAccountProfile':
+        result = await handleGetCurrentAccountProfile(params)
+        break
+      case 'sendCurrentUserPhoneBindSms':
+        result = await handleSendCurrentUserPhoneBindSms(params)
+        break
+      case 'bindCurrentUserPhone':
+        result = await handleBindCurrentUserPhone(params)
+        break
+      case 'deleteCurrentAccount':
+        result = await handleDeleteCurrentAccount(params)
+        break
       case 'checkLogin': {
         const auth = await authenticateWebSession(params)
         result = auth.success
@@ -4132,6 +4864,10 @@ exports.main = async (event, context) => {
         result = await submitParentIdentityVerification(params); break
       case 'getParentIdentityVerification':
         result = await getParentIdentityVerification(params); break
+      case 'listIdentityReviewQueue':
+        result = await listIdentityReviewQueue(params); break
+      case 'reviewIdentityVerification':
+        result = await reviewIdentityVerification(params); break
       case 'requestParentIdentityCorrection':
         result = await requestParentIdentityCorrection(params); break
       case 'uploadAndProcessParentPortrait':

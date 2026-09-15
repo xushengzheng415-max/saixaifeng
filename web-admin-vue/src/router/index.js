@@ -57,6 +57,12 @@ const routes = [
     meta: { requiresAuth: false, skipAuthCheck: true }
   },
   {
+    path: '/service-account-binding',
+    name: 'OrganizerServiceBinding',
+    component: () => import('../views/onboarding/OrganizerServiceBinding.vue'),
+    meta: { requiresAuth: true, title: '绑定赛小蜂足球助手' }
+  },
+  {
     path: '/bind-phone',
     name: 'BindPhone',
     component: () => import('../views/login/BindPhoneView.vue'),
@@ -93,7 +99,7 @@ const routes = [
       {
         path: 'home',
         name: 'PortalHome',
-        component: () => import('../views/portal/home/HomePage.vue'),
+        component: () => import('../views/portal/home/PublicTournamentHub.vue'),
         meta: { requiresAuth: false, title: '首页' }
       },
       // 赛事列表
@@ -401,7 +407,7 @@ const routes = [
     children: [
       {
         path: '',
-        component: () => import('../views/tournament/TournamentEdit.vue')
+        component: () => import('../views/tournament/TournamentEditBasic.vue')
       }
     ]
   },
@@ -439,6 +445,15 @@ const routes = [
       { path: '', component: () => import('../views/tournament/RosterExceptionBoard.vue') }
     ]
   },
+  {
+    path: '/identity-reviews',
+    name: 'IdentityReviewBoard',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '人证复核', parent: 'tournaments' },
+    children: [
+      { path: '', component: () => import('../views/tournament/IdentityReviewBoard.vue') }
+    ]
+  },
   // 赛事官网（对外展示，无需登录）
   {
     path: '/t/:id',
@@ -470,14 +485,7 @@ const routes = [
   {
     path: '/system',
     name: 'SystemAdmin',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '系统管理' },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/system/SystemAdmin.vue')
-      }
-    ]
+    redirect: { path: '/tournament-center-admin', query: { section: 'support' } }
   },
   { path: '/:pathMatch(.*)*', redirect: '/tournament-space' }
 ]
@@ -524,13 +532,39 @@ function hasLocalOrganization() {
 
 function needsOrganizerOnboarding(to) {
   const role = String(localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toLowerCase()
-  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/assistance') return false
+  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/service-account-binding' || to.path === '/assistance') return false
   if (to.meta.requiresAuth !== true) return false
   try {
     const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    if (to.path === '/tournament-center-admin' && user.isPlatformOwner === true) return false
+    if (user.isPlatformOwner === true && ['/tournament-center-admin', '/system'].includes(to.path)) return false
   } catch { /* 交给后续机构引导处理 */ }
   return !hasLocalOrganization()
+}
+
+async function needsOrganizerServiceBinding(to) {
+  if (to.path === '/service-account-binding') return false
+  if (!hasLocalOrganization()) return false
+  const loginType = localStorage.getItem('loginType') || ''
+  if (loginType !== 'wechat') return false
+  try {
+    const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
+    if (user.isPlatformOwner === true) return false
+    const cached = JSON.parse(sessionStorage.getItem('sxfServiceBoundCheck') || '{}')
+    if (cached.subscribed === true && Date.now() - Number(cached.checkedAt || 0) < 120000) return false
+  } catch { /* 未缓存时继续服务端校验 */ }
+  try {
+    const { callFunction } = await import('../utils/cloud')
+    const result = await callFunction('tournamentRegistrationFlow', { action: 'getOrganizerServiceBindingStatus' })
+    const subscribed = Boolean(result && result.success && result.data && result.data.subscribed)
+    if (subscribed) {
+      sessionStorage.setItem('sxfServiceBoundCheck', JSON.stringify({ subscribed: true, checkedAt: Date.now() }))
+      return false
+    }
+  } catch { /* 绑定状态不可确认时按未绑定处理 */ }
+  if (to.fullPath && to.fullPath !== '/service-account-binding') {
+    sessionStorage.setItem('sxfAfterServiceBinding', to.fullPath)
+  }
+  return true
 }
 
 function clearInvalidSession() {
@@ -622,6 +656,10 @@ router.beforeEach(async (to, from, next) => {
       next('/organization-onboarding')
       return
     }
+    if (await needsOrganizerServiceBinding(to)) {
+      next('/service-account-binding')
+      return
+    }
     next()
   } else {
     // 尝试恢复云开发登录态（刷新页面场景）
@@ -642,6 +680,10 @@ router.beforeEach(async (to, from, next) => {
       }
       if (needsOrganizerOnboarding(to)) {
         next('/organization-onboarding')
+        return
+      }
+      if (await needsOrganizerServiceBinding(to)) {
+        next('/service-account-binding')
         return
       }
       next()

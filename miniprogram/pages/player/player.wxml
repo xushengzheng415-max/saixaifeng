@@ -38,7 +38,7 @@
   <view class="empty-state" wx:else>
     <text class="empty-icon">⚽</text>
     <text class="empty-text">暂无球员</text>
-    <text class="empty-hint">点击下方按钮添加球员</text>
+
   </view>
 
   <!-- 添加按钮（仅领队可见） -->

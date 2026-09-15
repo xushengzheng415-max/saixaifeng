@@ -65,7 +65,7 @@ Page({
     var genderMap = { male: '男', female: '女', '男': '男', '女': '女' }
     var footMap = { left: '左脚', right: '右脚', both: '双脚' }
     var relationMap = { father: '父亲', mother: '母亲', guardian: '监护人', other: '其他监护人' }
-    var identityMap = { verified: '已实名', approved: '已实名', complete: '已实名', pending: '待实名', reviewing: '实名审核中', rejected: '实名异常', failed: '实名异常' }
+    var identityMap = { verified: '人证已核验', approved: '人证已核验', complete: '人证已核验', manual_required: '每场人工核验', pending: '待人证核验', reviewing: '人证审核中', rejected: '人证异常', failed: '人证异常' }
     var portraitMap = { complete: '形象照已完成', completed: '形象照已完成', approved: '形象照已完成', processing: '形象照处理中', pending: '待形象照', rejected: '形象照异常', failed: '形象照异常' }
     var birthDate = String(raw.birthDate || '')
     var age = this.calculateAge(birthDate)
@@ -85,7 +85,7 @@ Page({
       genderLabel: genderMap[raw.gender] || display(raw.gender),
       strongFootLabel: footMap[raw.strongFoot] || display(raw.strongFoot),
       profileStatusText: display(raw.profileStatusText, '待完善'),
-      identityStatusText: identityMap[String(raw.identityStatus || '').toLowerCase()] || '待实名',
+      identityStatusText: identityMap[String(raw.identityStatus || '').toLowerCase()] || '待人证核验',
       portraitStatusText: portraitMap[String(raw.portraitStatus || '').toLowerCase()] || (raw.photoUrl ? '形象照已上传' : '待形象照'),
       guardianRelationText: relationMap[raw.guardianRelation] || display(raw.guardianRelation),
       hasJerseyNumber: Boolean(raw.jerseyNumber),
@@ -105,7 +105,7 @@ Page({
       { id: 'relation', label: '监护关系', value: player.guardianRelationText },
       { id: 'phone', label: '监护手机', value: display(raw.guardianPhoneMasked) },
       { id: 'profile', label: '资料状态', value: player.profileStatusText },
-      { id: 'identity', label: '实名认证', value: player.identityStatusText },
+      { id: 'identity', label: '人证核验', value: player.identityStatusText },
       { id: 'portrait', label: '标准形象照', value: player.portraitStatusText }
     ]
     this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: Number(stats.appearances || 0), goals: Number(stats.goals || 0), yellowCards: Number(stats.yellowCards || 0), redCards: Number(stats.redCards || 0) }, detailItems: detailItems, canManage: canManage })

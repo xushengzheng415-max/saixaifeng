@@ -2,7 +2,7 @@
   <view class="hero">
     <text class="hero-kicker">赛小蜂足球</text>
     <text class="hero-title">裁判工作台</text>
-    <text class="hero-desc">验证手机号后，直接处理已指派比赛</text>
+
   </view>
 
   <view class="loading-card" wx:if="{{loading}}">
@@ -36,7 +36,7 @@
     <view class="section" wx:if="{{hasRefereeTasks}}">
       <view class="section-heading">
         <text class="section-title">我的比赛</text>
-        <text class="section-tip">点击比赛即可执裁</text>
+
       </view>
       <view
         class="task-card"

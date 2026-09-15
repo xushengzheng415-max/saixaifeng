@@ -57,7 +57,7 @@ Page({
       item.statusKey = statusKey
       item.statusClass = 'status-' + statusKey
       item.cardClass = index === 0 ? 'feature-card' : 'standard-card'
-      item.modeText = item.modeText || item.planText || (item.isProfessional ? 'PRO · 专业版' : '简易版')
+      item.modeText = item.modeText || item.planText || (item.isProfessional ? 'PRO · 专业版' : '基础版')
       item.teamCountText = String(item.teamCount || item.registeredTeamCount || item.teamTotal || 0)
       item.matchCountText = String(item.matchCount || item.matchesCount || item.matchTotal || 0)
       item.venueText = item.venueText || item.location || item.city || '赛事地点待定'

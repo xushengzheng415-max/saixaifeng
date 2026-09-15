@@ -199,7 +199,7 @@ Page({
   loadVisualFixture: function() {
     var hosted = [
       { id: 'visual-pro', name: '2026 河南青少年足球冠军联赛', dateText: '7月20日 — 8月18日 · 河南省体育中心', statusText: '进行中', relationText: '我主办的', modeText: 'PRO · U12', teamCountText: '16 支球队', matchCountText: '32 场比赛', cardClass: 'event-card-pro' },
-      { id: 'visual-simple', name: '2026 金水区校园足球联赛', dateText: '7月20日 — 8月18日 · 河南省体育中心', statusText: '进行中', relationText: '我主办的', modeText: '简易版', teamCountText: '12 支球队', matchCountText: '24 场比赛', cardClass: 'event-card-simple' }
+      { id: 'visual-simple', name: '2026 金水区校园足球联赛', dateText: '7月20日 — 8月18日 · 河南省体育中心', statusText: '进行中', relationText: '我主办的', modeText: '基础版', teamCountText: '12 支球队', matchCountText: '24 场比赛', cardClass: 'event-card-simple' }
     ]
     this.setData({
       loading: false, visualQa: true, workspaceName: '河南青少年赛事中心', workspaceTypeText: '赛事', canSwitchWorkspace: true, canManage: true,
@@ -213,7 +213,7 @@ Page({
   loadGuestDemo: function() {
     var tournaments = [
       { id: 'guest-demo-event-1', name: '示例 · 青少年足球邀请赛', dateText: '周六至周日 · 示例体育中心', statusText: '进行中', relationText: '功能演示', modeText: 'U12', teamCountText: '8 支球队', matchCountText: '16 场比赛', cardClass: 'event-card-pro' },
-      { id: 'guest-demo-event-2', name: '示例 · 校园足球联赛', dateText: '日期待发布 · 示例场地', statusText: '待开始', relationText: '功能演示', modeText: '简易版', teamCountText: '6 支球队', matchCountText: '9 场比赛', cardClass: 'event-card-simple' }
+      { id: 'guest-demo-event-2', name: '示例 · 校园足球联赛', dateText: '日期待发布 · 示例场地', statusText: '待开始', relationText: '功能演示', modeText: '基础版', teamCountText: '6 支球队', matchCountText: '9 场比赛', cardClass: 'event-card-simple' }
     ]
     this.setData({
       loading: false, errorText: '', visualQa: false, guestMode: true,

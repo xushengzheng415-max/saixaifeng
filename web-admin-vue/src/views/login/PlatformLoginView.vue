@@ -4,7 +4,7 @@
       <button class="home-link" type="button" @click="goHome"><span>←</span> 返回官方网站</button>
       <section class="intro-panel">
         <div class="brand"><img :src="logoUrl" alt="赛小蜂足球" /><div><strong>赛小蜂足球</strong><span>SAIXIAOFENG FOOTBALL</span></div></div>
-        <div class="intro-copy"><span class="platform-badge">平台管理专用</span><h1>平台运营管理后台</h1><p>面向赛小蜂平台负责人，统一管理赛事创建者、主办方服务、全平台赛事与球队。</p></div>
+        <div class="intro-copy"><span class="platform-badge">平台管理专用</span><h1>平台运营管理后台</h1></div>
         <div class="capabilities">
           <div><span>01</span><p><strong>全平台运营总览</strong><small>查看主办方、赛事、球队和待跟进事项</small></p></div>
           <div><span>02</span><p><strong>主办方联系与服务</strong><small>核对创建人联系方式并跟进实际问题</small></p></div>
@@ -14,7 +14,7 @@
       </section>
       <section class="form-panel">
         <div class="form-card">
-          <div class="form-heading"><span class="admin-mark">管</span><div><h2>平台管理员登录</h2><p>仅限已配置的平台负责人使用</p></div></div>
+          <div class="form-heading"><span class="admin-mark">管</span><div><h2>平台管理员登录</h2></div></div>
           <form @submit.prevent="submitLogin">
             <label for="platform-account">管理员账号</label>
             <div class="input-shell"><span class="input-icon">A</span><input id="platform-account" v-model.trim="form.account" name="username" type="text" autocomplete="username" maxlength="64" placeholder="请输入平台管理员账号" :disabled="submitting" /></div>

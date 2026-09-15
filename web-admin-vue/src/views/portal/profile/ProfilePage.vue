@@ -5,7 +5,7 @@
       <div class="guide-card">
         <img :src="brandLogoUrl" alt="赛小蜂足球" class="guide-logo" />
         <h2 class="guide-title">登录赛小蜂足球</h2>
-        <p class="guide-desc">登录后体验竞猜、关注、蜂蜜币等完整功能</p>
+
 
         <el-form :model="loginForm" class="login-form" @submit.prevent="handleLogin">
           <el-form-item>

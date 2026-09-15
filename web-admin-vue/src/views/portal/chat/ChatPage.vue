@@ -4,7 +4,7 @@
     <div class="team-hero">
       <div class="hero-content">
         <h1 class="hero-title">球队数据库</h1>
-        <p class="hero-subtitle">探索所有参赛球队，了解球队信息、球员阵容和赛事记录</p>
+
       </div>
     </div>
 
@@ -140,9 +140,7 @@
               </div>
             </div>
 
-            <p v-if="team.description" class="team-description">
-              {{ team.description }}
-            </p>
+
           </div>
 
           <div class="team-card-footer">

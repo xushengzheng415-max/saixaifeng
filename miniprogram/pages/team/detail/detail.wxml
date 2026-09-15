@@ -24,7 +24,7 @@
         <view class="team-code-box" bindtap="onCopyCode">
           <text class="code-label">球队代码</text>
           <text class="code-value">{{team.teamCode}}</text>
-          <text class="copy-hint">点击复制</text>
+
         </view>
       </view>
     </view>
@@ -71,10 +71,10 @@
       <view class="section-header">
         <text class="section-title">球员名单 ({{PlayersLen}}人)</text>
       </view>
-      
+
       <view class="player-list" wx:if="{{PlayersLen > 0}}">
-        <view 
-          class="player-item" 
+        <view
+          class="player-item"
           wx:for="{{players}}" wx:key="_id"
           wx:key="_id"
           bindtap="onViewPlayer"

@@ -17,7 +17,7 @@
     <view class="progress-card" wx:if="{{hasPlayers}}">
       <view>
         <text class="progress-title">{{requirementText}}</text>
-        <text class="progress-tip">点击球员即可选择或取消</text>
+
       </view>
       <text class="count-badge">{{countText}}</text>
     </view>

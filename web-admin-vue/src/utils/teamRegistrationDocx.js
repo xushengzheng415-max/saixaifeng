@@ -1,0 +1,307 @@
+import { provincesData, cityMapData } from '../views/team/areaData.js'
+import { generateJerseyName } from './jerseyName.js'
+import { parseRegistrationKitColors } from './registrationKitColors.js'
+
+const WORD_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+
+const ROLE_TYPE_MAP = {
+  '领队': 'team_leader',
+  '领队(联络员)': 'team_leader',
+  '领队（联络员）': 'team_leader',
+  '联络员': 'team_leader',
+  '主教练': 'head_coach',
+  '教练': 'head_coach',
+  '队医': 'doctor',
+  '运动员': 'player',
+  '球员': 'player',
+  '队员': 'player'
+}
+
+const ROLE_LABEL_MAP = {
+  team_leader: '领队',
+  head_coach: '主教练',
+  doctor: '队医',
+  player: '球员'
+}
+
+function localName(node) {
+  return String(node?.localName || node?.nodeName || '').split(':').pop()
+}
+
+function elementChildren(node, name) {
+  return Array.from(node?.childNodes || []).filter(child => child.nodeType === 1 && (!name || localName(child) === name))
+}
+
+function descendants(node, name) {
+  return Array.from(node?.getElementsByTagName?.('*') || []).filter(child => localName(child) === name)
+}
+
+function attributeByLocalName(node, name) {
+  const direct = node?.getAttributeNS?.(WORD_NS, name) || node?.getAttributeNS?.(REL_NS, name)
+  if (direct) return direct
+  return Array.from(node?.attributes || []).find(attribute => localName(attribute) === name)?.value || ''
+}
+
+function normalizeText(value) {
+  return String(value || '').replace(/\u00a0/g, ' ').replace(/[\t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim()
+}
+
+function cellText(cellNode) {
+  const paragraphs = descendants(cellNode, 'p')
+  const lines = paragraphs.map(paragraph => descendants(paragraph, 't').map(node => node.textContent || '').join('')).filter(Boolean)
+  return normalizeText(lines.join('\n'))
+}
+
+function parseRow(rowNode) {
+  let column = 0
+  return {
+    cells: elementChildren(rowNode, 'tc').map(cellNode => {
+      const properties = elementChildren(cellNode, 'tcPr')[0]
+      const spanNode = properties ? elementChildren(properties, 'gridSpan')[0] : null
+      const span = Math.max(1, Number(attributeByLocalName(spanNode, 'val') || 1))
+      const images = descendants(cellNode, 'blip').map(node => node.getAttributeNS?.(REL_NS, 'embed') || attributeByLocalName(node, 'embed')).filter(Boolean)
+      const cell = { column, span, text: cellText(cellNode), imageIds: images }
+      column += span
+      return cell
+    })
+  }
+}
+
+function parseTable(tableNode) {
+  return { rows: elementChildren(tableNode, 'tr').map(parseRow) }
+}
+
+function cellAt(row, column) {
+  return row?.cells?.find(cell => column >= cell.column && column < cell.column + cell.span) || null
+}
+
+function cleanValue(value, labels) {
+  let result = normalizeText(value).replace(/\n/g, ' ')
+  for (const label of labels) {
+    result = result.replace(new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[：:]?\\s*`), '')
+  }
+  return result.trim()
+}
+
+function firstPhone(value) {
+  return (String(value || '').replace(/[\s-]/g, '').match(/1[3-9]\d{9}/) || [])[0] || ''
+}
+
+function normalizeIdentity(value) {
+  return String(value || '').toUpperCase().replace(/[^0-9X]/g, '').slice(0, 18)
+}
+
+function parseIdentity(identityNumber) {
+  if (!/^\d{17}[0-9X]$/.test(identityNumber)) return { birthDate: '', gender: '', nativePlace: '' }
+  const year = identityNumber.slice(6, 10)
+  const month = identityNumber.slice(10, 12)
+  const day = identityNumber.slice(12, 14)
+  const date = new Date(`${year}-${month}-${day}T00:00:00`)
+  const validDate = !Number.isNaN(date.getTime()) && date.getFullYear() === Number(year) && date.getMonth() + 1 === Number(month) && date.getDate() === Number(day)
+  const nativePlaceCode = identityNumber.slice(0, 6)
+  const provinceCode = `${nativePlaceCode.slice(0, 2)}0000`
+  const cityCode = `${nativePlaceCode.slice(0, 4)}00`
+  const provinceName = provincesData.find(item => item.code === provinceCode)?.name || ''
+  const cityName = (cityMapData[provinceCode] || []).find(item => item.code === cityCode)?.name || ''
+  const locationNames = [provinceName, cityName].filter(Boolean)
+  const nativePlaceBase = locationNames.filter((name, index) => index === 0 || name !== locationNames[index - 1]).join('')
+  const nativePlace = nativePlaceBase || '待核验'
+  return {
+    birthDate: validDate ? `${year}-${month}-${day}` : '',
+    gender: Number(identityNumber.charAt(16)) % 2 === 1 ? 'male' : 'female',
+    nativePlace
+  }
+}
+
+function relationshipMap(xmlDocument) {
+  const map = new Map()
+  descendants(xmlDocument, 'Relationship').forEach(node => {
+    const id = node.getAttribute('Id') || attributeByLocalName(node, 'Id')
+    const target = node.getAttribute('Target') || attributeByLocalName(node, 'Target')
+    if (id && target && !/^https?:/i.test(target)) map.set(id, target)
+  })
+  return map
+}
+
+function normalizeWordTarget(target) {
+  const parts = `word/${String(target || '')}`.replace(/\\/g, '/').split('/')
+  const normalized = []
+  parts.forEach(part => {
+    if (!part || part === '.') return
+    if (part === '..') normalized.pop()
+    else normalized.push(part)
+  })
+  return normalized.join('/')
+}
+
+function imageMimeType(path) {
+  const extension = String(path || '').split('.').pop()?.toLowerCase()
+  return {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif'
+  }[extension] || 'image/png'
+}
+
+async function imageFileFromRelationship(zip, relationships, relationshipId, baseName) {
+  const target = relationships.get(relationshipId)
+  if (!target) return null
+  const path = normalizeWordTarget(target)
+  const entry = zip.file(path)
+  if (!entry) return null
+  const mimeType = imageMimeType(path)
+  const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1]
+  const blob = await entry.async('blob')
+  return new File([blob], `${baseName}.${extension}`, { type: mimeType, lastModified: Date.now() })
+}
+
+function roleType(value) {
+  const normalized = String(value || '').replace(/\s+/g, '').replace(/（/g, '(').replace(/）/g, ')')
+  return ROLE_TYPE_MAP[normalized] || (normalized.includes('领队') || normalized.includes('联络员') ? 'team_leader' : (normalized.includes('教练') ? 'head_coach' : (normalized.includes('队医') ? 'doctor' : (normalized.includes('运动员') || normalized.includes('球员') || normalized.includes('队员') ? 'player' : ''))))
+}
+
+function uniqueWarnings(items) {
+  return Array.from(new Set(items.filter(Boolean)))
+}
+
+export async function parseTeamRegistrationDocx(file) {
+  const rawFile = file?.raw || file
+  if (!rawFile || !String(rawFile.name || '').toLowerCase().endsWith('.docx')) throw new Error('请选择 .docx 格式的球队报名表')
+  if (rawFile.size > 20 * 1024 * 1024) throw new Error('单份报名表不能超过 20MB')
+
+  const JSZipModule = await import('jszip')
+  const JSZip = JSZipModule.default || JSZipModule
+  const zip = await JSZip.loadAsync(await rawFile.arrayBuffer())
+  const documentEntry = zip.file('word/document.xml')
+  const relationshipEntry = zip.file('word/_rels/document.xml.rels')
+  if (!documentEntry || !relationshipEntry) throw new Error('报名表不是有效的 Word 文档')
+
+  const parser = new DOMParser()
+  const documentXml = parser.parseFromString(await documentEntry.async('text'), 'application/xml')
+  const relationshipsXml = parser.parseFromString(await relationshipEntry.async('text'), 'application/xml')
+  if (descendants(documentXml, 'parsererror').length || descendants(relationshipsXml, 'parsererror').length) throw new Error('报名表内部结构无法读取')
+
+  const body = descendants(documentXml, 'body')[0]
+  const tables = elementChildren(body, 'tbl').map(parseTable)
+  if (!tables.length) throw new Error('未找到人员名单表格，请使用报名表模板')
+
+  const relationships = relationshipMap(relationshipsXml)
+  const documentText = normalizeText(descendants(body, 'p').map(paragraph => descendants(paragraph, 't').map(node => node.textContent || '').join('')).filter(Boolean).join('\n'))
+  const headerTable = tables.find(table => table.rows.some(row => row.cells.some(cell => /球队名称|队名/.test(cell.text)))) || null
+  const headerRow = headerTable ? (headerTable.rows.find(row => row.cells.some(cell => /球队名称|队名/.test(cell.text))) || headerTable.rows[0]) : { cells:[] }
+  const teamLabelIndex = headerRow.cells.findIndex(cell => /球队名称|队名/.test(cell.text))
+  const teamLabel = teamLabelIndex >= 0 ? headerRow.cells[teamLabelIndex] : null
+  const teamValueCell = teamLabelIndex >= 0 ? headerRow.cells.slice(teamLabelIndex + 1).find(cell => !/队徽/.test(cell.text)) : null
+  const paragraphTeamName = (documentText.match(/球队名称\s*[：:]\s*([^\n]+)/) || documentText.match(/队名\s*[：:]\s*([^\n]+)/) || [])[1] || ''
+  const teamName = cleanValue(teamValueCell?.text || teamLabel?.text || paragraphTeamName, ['球队名称', '队名']).slice(0, 50)
+  const logoCell = headerRow.cells.find((cell, index) => index > headerRow.cells.findIndex(item => /队徽/.test(item.text)) && cell.imageIds.length)
+    || headerRow.cells.find(cell => cell.imageIds.length)
+  const logoFile = logoCell?.imageIds?.[0]
+    ? await imageFileFromRelationship(zip, relationships, logoCell.imageIds[0], `team-logo-${Date.now()}`)
+    : null
+
+  const rosterTable = tables.find(table => table.rows.length >= 9 && table.rows.some(row => row.cells.some(cell => /身份证|球服号码/.test(cell.text)))) || tables[tables.length - 1]
+  const kitResult = parseRegistrationKitColors(rosterTable)
+  const contactRow = rosterTable.rows.find(row => row.cells.some(cell => /领队|联络员/.test(cell.text)) && firstPhone(row.cells.map(cell => cell.text).join(' ')))
+  const contactPhone = firstPhone(contactRow?.cells?.map(cell => cell.text).join(' ') || '')
+  const contactLabelCell = contactRow?.cells?.find(cell => /领队|联络员/.test(cell.text))
+  const contactNameCell = contactRow?.cells?.find(cell => cell.column > Number(contactLabelCell?.column || 0) && !firstPhone(cell.text) && cleanValue(cell.text, ['姓名']))
+  const contactName = cleanValue(contactNameCell?.text || '', ['姓名']).slice(0, 30)
+
+  const people = []
+  const warnings = [...kitResult.warnings]
+  const errors = []
+  for (let rowIndex = 0; rowIndex + 4 < rosterTable.rows.length; rowIndex += 1) {
+    const roleRow = rosterTable.rows[rowIndex]
+    const photoRow = rosterTable.rows[rowIndex + 1]
+    const nameRow = rosterTable.rows[rowIndex + 2]
+    const identityRow = rosterTable.rows[rowIndex + 3]
+    const numberRow = rosterTable.rows[rowIndex + 4]
+    if (!nameRow.cells.some(cell => /姓名/.test(cell.text))) continue
+    const roleCells = roleRow.cells.filter(cell => roleType(cell.text))
+    if (!roleCells.length) continue
+
+    for (const roleCell of roleCells) {
+      const type = roleType(roleCell.text)
+      const name = cleanValue(cellAt(nameRow, roleCell.column)?.text || '', ['姓名']).slice(0, 30)
+      if (!name) continue
+      const identityNumber = normalizeIdentity(cleanValue(cellAt(identityRow, roleCell.column)?.text || '', ['身份证号', '身份证']))
+      const jerseyText = cleanValue(cellAt(numberRow, roleCell.column)?.text || '', ['球服号码', '球衣号码', '号码'])
+      const jerseyNumber = type === 'player' && /^\d{1,3}$/.test(jerseyText) ? String(Number(jerseyText)) : ''
+      const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0] || ''
+      const photoFile = photoRelationshipId
+        ? await imageFileFromRelationship(zip, relationships, photoRelationshipId, `person-${people.length + 1}-${Date.now()}`)
+        : null
+      const identity = parseIdentity(identityNumber)
+      const person = {
+        roleType: type,
+        roleLabel: ROLE_LABEL_MAP[type],
+        name,
+        phone: type === 'team_leader' ? contactPhone : '',
+        identityNumber,
+        jerseyNumber,
+        jerseyName: type === 'player' ? generateJerseyName(name) : '',
+        birthDate: identity.birthDate,
+        gender: identity.gender,
+        nativePlace: identity.nativePlace,
+        photoFile,
+        photoFileId: '',
+        photoOriginalFileId: '',
+        photoProcessingStatus: photoFile ? 'pending' : 'missing',
+        error: ''
+      }
+      if (!identityNumber) warnings.push(`「${name}」未填写身份证号`)
+      else if (!/^\d{17}[0-9X]$/.test(identityNumber) || !identity.birthDate) person.error = '身份证号格式不正确'
+      if (type === 'player' && !jerseyNumber) warnings.push(`「${name}」未填写球服号码`)
+      if (!photoFile) warnings.push(`「${name}」未找到照片`)
+      if (person.error) errors.push(`「${name}」${person.error}`)
+      people.push(person)
+    }
+  }
+
+  const staff = people.filter(person => person.roleType !== 'player')
+  const players = people.filter(person => person.roleType === 'player')
+  const leader = staff.find(person => person.roleType === 'team_leader')
+  if (leader && contactPhone) leader.phone = contactPhone
+  if (!teamName) errors.push('未识别到球队名称')
+  if (!contactName) warnings.push('未识别到领队姓名')
+  if (!/^1[3-9]\d{9}$/.test(contactPhone)) errors.push('未识别到有效的领队手机号')
+  if (!players.length) errors.push('未识别到球员资料')
+  if (!logoFile) warnings.push('未找到队徽，可在导入前手动上传')
+
+  const jerseyCounts = new Map()
+  players.forEach(player => {
+    if (!player.jerseyNumber) return
+    jerseyCounts.set(player.jerseyNumber, (jerseyCounts.get(player.jerseyNumber) || 0) + 1)
+  })
+  const duplicateJerseys = Array.from(jerseyCounts.entries()).filter(([, count]) => count > 1).map(([number]) => number)
+  if (duplicateJerseys.length) warnings.push(`球服号码重复：${duplicateJerseys.join('、')}`)
+
+  return {
+    clientKey: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    sourceFile: rawFile,
+    sourceFileName: String(rawFile.name || '球队报名表.docx'),
+    sourceFileId: '',
+    teamName,
+    shortName: Array.from(teamName).slice(0, 20).join(''),
+    contactName: contactName || leader?.name || '',
+    contactPhone,
+    logoFile,
+    logoFileId: '',
+    logoProcessingStatus: logoFile ? 'pending' : 'missing',
+    kitColors: kitResult.kitColors,
+    kitColorLabels: kitResult.kitColorLabels,
+    staff,
+    players,
+    warnings: uniqueWarnings(warnings),
+    errors: uniqueWarnings(errors),
+    expanded: true,
+    processing: false,
+    progressText: '',
+    importError: ''
+  }
+}
+
+export function maskRegistrationIdentity(value) {
+  const text = String(value || '')
+  return text.length === 18 ? `${text.slice(0, 6)}********${text.slice(-4)}` : (text || '未填写')
+}

@@ -51,7 +51,7 @@ function makeOverview(rows, ids, libraryCount) {
 
 function requirementText(requirements) {
   var labels = []
-  if (requirements && requirements.identityVerificationRequired) labels.push('实名认证')
+  if (requirements && requirements.identityVerificationRequired) labels.push('人证核验')
   if (requirements && requirements.portraitRequired) labels.push('标准形象照')
   if (requirements && requirements.parentSupplementConfigured && requirements.parentSupplementRequired) labels.push('家长补充资料')
   if (!labels.length) labels.push('姓名与出生日期')

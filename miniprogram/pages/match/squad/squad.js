@@ -43,7 +43,7 @@ function decorateSlots(slots, selectedSlotId) {
 
 Page({
   data: {
-    matchId: '', teamId: '', loading: true, saving: false, canManage: false, match: {}, minPlayers: 0,
+    matchId: '', teamId: '', loading: true, saving: false, confirmingArrival:false, canManage: false, match: {}, minPlayers: 0, teamArrived:false, allArrived:false, arrivalStatusText:'待报到', arrivalButtonText:'确认本队到场', arrivalButtonDisabled:true, canConfirmArrival:false,
     formation: '', formationOptions: [], slots: [], selectedSlotId: '', players: [], substitutes: [],
     starterCount: 0, substituteCount: 0, selectedCount: 0, submitDisabled: true, locked: false, returned: false, returnReason: '', emptyPlayers: false,
     dragging: false, draggingPlayerId: '', draggingPlayerName: '',
@@ -97,7 +97,9 @@ Page({
           if (index >= 0 && player) slots[index] = self.toSlot(slots[index], player)
         })
         var subs = (lineup.substitutes || []).map(function (item) { return playerMap[item.playerId] }).filter(Boolean)
-        self.setData({ loading: false, canManage: result.canManage, match: result.match || {}, minPlayers: min, formationOptions: options, formation: formation, slots: decorateSlots(slots, ''), substitutes: subs, locked: lineup.status === 'submitted' || lineup.status === 'locked', returned: lineup.status === 'returned', returnReason: lineup.returnReason || '', emptyPlayers: !(result.players || []).length })
+        var match=result.match || {}
+        var canConfirmArrival=result.canManage && !match.teamArrived
+        self.setData({ loading: false, canManage: result.canManage, match: match, minPlayers: min, formationOptions: options, formation: formation, slots: decorateSlots(slots, ''), substitutes: subs, locked: lineup.status === 'submitted' || lineup.status === 'locked', returned: lineup.status === 'returned', returnReason: lineup.returnReason || '', emptyPlayers: !(result.players || []).length, teamArrived:Boolean(match.teamArrived), allArrived:Boolean(match.allArrived), arrivalStatusText:match.allArrived ? '三方已报到' : (match.teamArrived ? '本队已报到，等待其他方' : '等待本队负责人确认'), arrivalButtonText:match.teamArrived ? '本队已报到' : '确认本队到场', arrivalButtonDisabled:!canConfirmArrival, canConfirmArrival:canConfirmArrival })
         self.refreshSelection(result.players || [])
       })
       .catch(function (error) { self.setData({ loading: false }); wx.showToast({ title: error.message || '阵容加载失败', icon: 'none' }) })
@@ -109,7 +111,14 @@ Page({
     var ids = selectedIds(this.data.slots, this.data.substitutes)
     var players = (rawPlayers || this.data.players).map(function (player) { var used = ids.indexOf(player.id) >= 0; return Object.assign({}, player, { selected: used, disabled: used, rowClass: used ? 'used' : '' }) })
     var starters = this.data.slots.filter(function (slot) { return !slot.empty }).length
-    this.setData({ players: players, starterCount: starters, substituteCount: this.data.substitutes.length, selectedCount: ids.length, submitDisabled: starters !== this.data.minPlayers || this.data.locked || !this.data.canManage })
+    this.setData({ players: players, starterCount: starters, substituteCount: this.data.substitutes.length, selectedCount: ids.length, submitDisabled: starters !== this.data.minPlayers || this.data.locked || !this.data.canManage || !this.data.allArrived })
+  },
+  confirmArrival:function() {
+    var self=this
+    if (!this.data.canConfirmArrival || this.data.confirmingArrival) return
+    var context=workspace.readContext() || {}
+    this.setData({ confirmingArrival:true, arrivalButtonDisabled:true })
+    wx.cloud.callFunction({ name:'getMiniWorkspace', data:{ action:'confirmTeamArrival', workspaceId:(context.currentWorkspace || {}).id, matchId:this.data.matchId, teamId:this.data.teamId } }).then(function(res) { var result=res.result || {}; if (!result.success) throw new Error(result.message || '报到失败'); wx.showToast({ title:'本队已报到', icon:'success' }); return self.load() }).catch(function(error) { wx.showToast({ title:error.message || '报到失败', icon:'none' }) }).finally(function() { self.setData({ confirmingArrival:false, arrivalButtonDisabled:!self.data.canConfirmArrival }) })
   },
   selectFormation: function (event) {
     if (this.data.locked || !this.data.canManage) return

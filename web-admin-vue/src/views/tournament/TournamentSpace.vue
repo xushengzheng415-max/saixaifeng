@@ -3,7 +3,7 @@
     <div class="space-hero">
       <div class="hero-copy">
         <h1 id="tournament-space-title">赛事空间</h1>
-        <p>选择一个赛事项目进入工作空间，或创建新的赛事</p>
+
       </div>
       <div class="space-heading"><i></i><h2>我的赛事</h2></div>
     </div>
@@ -37,6 +37,7 @@
                 <el-dropdown-item command="open">进入赛事空间</el-dropdown-item>
                 <el-dropdown-item command="edit">编辑基础信息</el-dropdown-item>
               </el-dropdown-menu>
+                <el-dropdown-item command="delete" divided>删除赛事</el-dropdown-item>
             </template>
           </el-dropdown>
           <img v-if="logoOf(tournament)" class="tournament-logo" :src="logoOf(tournament)" :alt="`${tournament.name} Logo`" />
@@ -74,14 +75,15 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Calendar, Document, Football, MoreFilled, Plus, Trophy, UserFilled } from '@element-plus/icons-vue'
-import { queryList } from '../../utils/cloud'
+import { deleteTournamentWorkspace, getFileUrl, queryList } from '../../utils/cloud'
 import defaultCover from '../../assets/images/tournament-space-emerald-field-v1.png'
 
 const router = useRouter()
 const loading = ref(false)
 const tournaments = ref([])
+const deletingTournamentId = ref('')
 const isVisualQa = import.meta.env.DEV && (window.location.href.includes('visualQa=1') || localStorage.getItem('sxfVisualQa') === '1')
 const visibleTournaments = computed(() => {
   if (!isVisualQa || !tournaments.value.length) return tournaments.value
@@ -113,7 +115,8 @@ async function loadTournaments() {
   }
   loading.value = true
   try {
-    tournaments.value = await queryList('tournaments', { where: { orgId }, orderBy: { createTime: 'desc' } })
+    const rows = await queryList('tournaments', { where: { orgId }, orderBy: { createTime: 'desc' } })
+    tournaments.value = await Promise.all((rows || []).map(resolveTournamentLogo))
   } finally {
     loading.value = false
   }
@@ -121,8 +124,54 @@ async function loadTournaments() {
 
 function goToCreate() { router.push('/tournaments/create') }
 function openTournament(tournament) { if (tournament?._id) router.push(`/tournaments/${tournament._id}`) }
-function handleMenu(command, tournament) { if (command === 'edit') router.push(`/tournaments/${tournament._id}/edit`); else openTournament(tournament) }
-function logoOf(tournament) { return tournament.logoTransparentUrl || tournament.logoUrl || tournament.logo || '' }
+async function handleMenu(command, tournament) {
+  if (command === 'edit') {
+    router.push(`/tournaments/${tournament._id}/edit`)
+    return
+  }
+  if (command !== 'delete') {
+    openTournament(tournament)
+    return
+  }
+  if (!tournament?._id || deletingTournamentId.value) return
+  if (String(tournament._id).startsWith('qa-tournament-')) {
+    ElMessage.info('视觉验收样例不能删除')
+    return
+  }
+  try {
+    const confirmation = await ElMessageBox.prompt(
+      `将删除“${tournament.name || '未命名赛事'}”及其报名、组别、赛程、比赛、名单快照、裁判指派和邀请。球队资料、球员资料和登录账号不会删除。请输入“删除”确认。`,
+      '删除赛事',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        inputPattern: /^删除$/,
+        inputErrorMessage: '请输入“删除”'
+      }
+    )
+    deletingTournamentId.value = tournament._id
+    const result = await deleteTournamentWorkspace(tournament._id, confirmation.value)
+    if (!result?.success) throw new Error(result?.error || '赛事删除失败')
+    tournaments.value = tournaments.value.filter(item => String(item._id) !== String(tournament._id))
+    ElMessage.success('赛事已删除，球队和球员资料未受影响')
+  } catch (error) {
+    if (!['cancel', 'close'].includes(error)) ElMessage.error(error.message || '赛事删除失败')
+  } finally {
+    deletingTournamentId.value = ''
+  }
+}
+async function resolveTournamentLogo(tournament) {
+  const source = String(tournament?.logoTransparentUrl || tournament?.logoUrl || tournament?.logo || '')
+  if (!source.startsWith('cloud://')) return tournament
+  const resolved = await getFileUrl(source)
+  const url = /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+  return { ...tournament, _logoFileId:source, logoTransparentUrl:url, logoUrl:url, logo:url }
+}
+function logoOf(tournament) {
+  const value = String(tournament?.logoTransparentUrl || tournament?.logoUrl || tournament?.logo || '')
+  return /^(https?:\/\/|\/)/i.test(value) ? value : ''
+}
 function coverStyle(tournament) { return { backgroundImage: `linear-gradient(180deg,rgba(0,66,40,.1),rgba(0,47,30,.45)),url(${tournament.coverUrl || defaultCover})` } }
 function displayNumber(value) { return Number.isFinite(Number(value)) ? Number(value) : 0 }
 function divisionLabel(tournament) { const divisions = Array.isArray(tournament.divisions) ? tournament.divisions : []; return tournament.divisionName || divisions[0]?.name || tournament.category || '竞赛组别待配置' }

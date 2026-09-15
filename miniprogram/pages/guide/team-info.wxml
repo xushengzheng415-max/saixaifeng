@@ -2,7 +2,7 @@
 <!-- 头部区域 -->
   <view class="header-section">
     <text class="guide-title">球队资料填写</text>
-    <text class="guide-subtitle">请填写您的球队信息，以便我们为您提供更好的服务</text>
+
   </view>
 
   <!-- 表单区域 -->
@@ -10,9 +10,9 @@
     <view class="input-group">
       <text class="input-label">球队名称</text>
       <view class="input-wrapper">
-        <input 
-          class="input-field" 
-          placeholder="请输入球队名称" 
+        <input
+          class="input-field"
+          placeholder="请输入球队名称"
           bindinput="onTeamNameInput"
           value="{{teamName}}"
         />
@@ -37,9 +37,9 @@
     <view class="input-group">
       <text class="input-label">球队简介</text>
       <view class="input-wrapper">
-        <textarea 
-          class="input-field" 
-          placeholder="请输入球队简介" 
+        <textarea
+          class="input-field"
+          placeholder="请输入球队简介"
           maxlength="200"
           bindinput="onDescriptionInput"
           value="{{description}}"
@@ -53,9 +53,9 @@
     <view class="input-group">
       <text class="input-label">所属地区</text>
       <view class="input-wrapper">
-        <input 
-          class="input-field" 
-          placeholder="请输入球队所属地区" 
+        <input
+          class="input-field"
+          placeholder="请输入球队所属地区"
           bindinput="onRegionInput"
           value="{{region}}"
         />
@@ -67,9 +67,9 @@
     <view class="input-group">
       <text class="input-label">联系电话</text>
       <view class="input-wrapper">
-        <input 
-          class="input-field" 
-          placeholder="请输入联系电话" 
+        <input
+          class="input-field"
+          placeholder="请输入联系电话"
           type="number"
           bindinput="onPhoneInput"
           value="{{phone}}"
@@ -86,10 +86,10 @@
           <text class="upload-icon">📷</text>
           <text class="upload-text"></text>
         </view>
-        <image 
-          class="logo-preview" 
-          src="{{logoUrl}}" 
-          mode="aspectFit" 
+        <image
+          class="logo-preview"
+          src="{{logoUrl}}"
+          mode="aspectFit"
           wx:if="{{logoUrl}}"
         ></image>
       </view>
@@ -99,15 +99,15 @@
 
   <!-- 按钮区域 -->
   <view class="button-section">
-    <button 
+    <button
       class="submit-btn "
       bindtap="handleSubmit"
       disabled="{{isSubmitting}}"
     >
-      
+
     </button>
 
-    <button 
+    <button
       class="skip-btn "
       bindtap="skipGuide"
       disabled="{{isSubmitting}}"

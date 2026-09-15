@@ -64,7 +64,7 @@
       <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
     </header>
     <main>
-      <h1>抽签与分组</h1><p class="overview-lead">先选择竞赛组别，再进入该组别已锁定的抽签流程。</p>
+      <h1>抽签与分组</h1>
       <el-alert title="组别运行版本已在竞赛方案中锁定，本页不再选择或切换模式。" type="success" :closable="false" show-icon />
       <div class="overview-filters">
         <el-button :type="activeOverviewFilter === 'all' ? 'success' : ''" @click="activeOverviewFilter = 'all'">全部　{{ divisionOptions.length }}</el-button>
@@ -79,12 +79,12 @@
           </span>
           <strong>{{ divisionDisplayName(division) }}</strong>
           <dl class="format"><dt><el-icon><Trophy /></el-icon>{{ divisionFormatLabel(division) }}</dt><dd>{{ divisionTeamCount(division) }} 支</dd></dl>
-          <span class="mode-badge" :class="{ pro: divisionIsProfessional(division) }"><el-icon><Medal v-if="divisionIsProfessional(division)" /><Lock v-else /></el-icon>{{ divisionIsProfessional(division) ? 'PRO 专业版 · 已开通' : '简易模式 · 已锁定' }}</span>
+          <span class="mode-badge" :class="{ pro: divisionIsProfessional(division) }"><el-icon><Medal v-if="divisionIsProfessional(division)" /><Lock v-else /></el-icon>{{ divisionIsProfessional(division) ? 'PRO 专业版 · 已开通' : '基础模式 · 已锁定' }}</span>
           <dl class="state" :class="divisionDrawState(division).state"><dt><el-icon><component :is="divisionDrawState(division).icon" /></el-icon>{{ divisionDrawState(division).label }}</dt><dd>{{ divisionDrawState(division).hint }}</dd></dl>
           <div class="overview-row-actions"><template v-if="divisionDrawState(division).state === 'done'"><el-button plain @click="viewDivisionResult(division)">查看结果</el-button><el-button type="danger" plain @click="modifyDivisionDraw(division)">修改分组</el-button></template><el-button v-else :type="divisionIsProfessional(division) ? 'success' : ''" plain :disabled="!divisionDrawReady(division)" @click="enterDivisionDraw(division)">{{ divisionDrawState(division).action }}</el-button></div>
         </article>
       </div>
-      <el-alert class="overview-footer" title="简易模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
+      <el-alert class="overview-footer" title="基础模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
     </main>
   </section>
   <div v-else class="tournament-draw" :class="{ fullscreen: isFullscreen, embedded: props.embedded }">

@@ -48,7 +48,7 @@
               <img v-if="player.nationality" :src="getFlagUrl(player.nationality)" class="flag-icon" alt="国旗" />
             </div>
             <div class="badge-item team-badge">
-              <img v-if="teamLogo" :src="teamLogo" class="team-logo-small" alt="球队" />
+              <img v-if="resolvedTeamLogo" :src="resolvedTeamLogo" class="team-logo-small" alt="球队" @error="resolvedTeamLogo = ''" />
             </div>
           </div>
         </div>
@@ -95,6 +95,7 @@ const defaultAvatar = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ
 
 // 头像URL（处理云存储fileID）
 const avatarUrl = ref('')
+const resolvedTeamLogo = ref('')
 
 // 判断是否是云存储fileID
 function isCloudFileID(url) {
@@ -136,6 +137,27 @@ async function loadAvatarUrl() {
 
 // 监听player变化，重新加载头像
 watch(() => props.player?.photoUrl, loadAvatarUrl, { immediate: true })
+
+async function loadTeamLogoUrl() {
+  const logo = String(props.teamLogo || '').trim()
+  if (!logo) {
+    resolvedTeamLogo.value = ''
+    return
+  }
+  if (isCloudFileID(logo)) {
+    try {
+      const result = await getTempFileURL(logo)
+      resolvedTeamLogo.value = result.success && /^https?:\/\//i.test(String(result.url || '')) ? result.url : ''
+    } catch (error) {
+      console.error('[PlayerCard] 获取球队队徽临时URL失败:', error)
+      resolvedTeamLogo.value = ''
+    }
+    return
+  }
+  resolvedTeamLogo.value = logo
+}
+
+watch(() => props.teamLogo, loadTeamLogoUrl, { immediate: true })
 
 const positionMap = {
   GK: '守门员',
@@ -340,6 +362,8 @@ function handleImageError(e) {
   height: 100%;
   object-fit: contain;
   object-position: center bottom;
+  transform: scale(1.28);
+  transform-origin: center bottom;
   /* 锁定: 图片适配模式 contain, 底部对齐 */
 }
 

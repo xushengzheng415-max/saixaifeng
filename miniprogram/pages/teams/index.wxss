@@ -29,3 +29,11 @@
 .empty-mark{width:290rpx;height:174rpx}
 .empty-heading{margin-top:36rpx}
 .empty-create{height:96rpx;line-height:96rpx}
+
+/* 描述性文字收口后，提升核心任务文字的扫描性。 */
+.page-title{font-size:46rpx}
+.teams-hero-title{font-size:48rpx}
+.teams-create-button{font-size:33rpx}
+.team-name{font-size:38rpx}
+.todo-title{font-size:41rpx}
+.task-card text{font-size:31rpx}

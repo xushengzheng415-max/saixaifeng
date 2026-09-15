@@ -5,6 +5,7 @@ const crypto = require('crypto')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
+const _ = db.command
 const SPORT = 'football'
 
 function text(value) { return String(value == null ? '' : value).trim() }
@@ -25,6 +26,10 @@ function textReply(toUser, fromUser, content) {
   return `<xml><ToUserName><![CDATA[${cdata(toUser)}]]></ToUserName><FromUserName><![CDATA[${cdata(fromUser)}]]></FromUserName><CreateTime>${Math.floor(Date.now() / 1000)}</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[${cdata(content)}]]></Content></xml>`
 }
 function followReplyContent(result) {
+  if (result.purpose === 'organizer_pc_bind') {
+    if (result.bound) return `绑定成功\n机构：${result.organizationName}\n身份：${result.roleLabel}\n\n请返回电脑继续。`
+    return '本次主办方账号绑定未完成。\n\n请返回电脑后台刷新二维码后重试；如仍失败，请联系赛小蜂客服核验账号。'
+  }
   if (result.purpose === 'referee_invite' && result.registerUrl) {
     const heading = result.eventType === 'subscribe' ? '感谢您关注赛小蜂足球助手！' : '裁判登记入口已发送！'
     return `${heading}\n\n您已完成裁判服务号关注绑定。请点击以下链接提交裁判证、头像和执裁资料：\n${result.registerUrl}\n\n审核通过后，比赛指派、时间调整、临场变更和退回修正等事项将通过本服务号通知。`
@@ -45,6 +50,62 @@ async function upsertBinding(miniOpenId, officialOpenId, subscribed) {
   else await db.collection('service_account_bindings').add({ data: { ...data, createTime: db.serverDate() } })
 }
 
+async function organizerGateContext(gate, user) {
+  const userId = text(user && user._id)
+  const orgId = text(gate && gate.orgId)
+  if (!userId || !orgId) return null
+  const organizationResult = await db.collection('organizations').doc(orgId).get()
+  const organization = Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data
+  if (!organization) return null
+  const isOwner = [organization.ownerId, organization.creatorId, organization.createdBy].some(value => text(value) === userId)
+  const memberships = (await db.collection('organization_memberships').where(_.or([
+    { orgId, userId }, { orgId, memberUserId: userId },
+    { organizationId: orgId, userId }, { organizationId: orgId, memberUserId: userId }
+  ])).limit(20).get()).data || []
+  const membership = memberships.find(row => ['active', 'accepted', 'claimed'].includes(text(row && row.status || 'active').toLowerCase())) || null
+  if (!isOwner && !membership) return null
+  const positions = Array.isArray(membership && membership.positions) ? membership.positions : []
+  const roles = Array.isArray(membership && membership.roles) ? membership.roles : []
+  return {
+    orgId,
+    organizationName: text(organization.name || organization.organizationName).slice(0, 80),
+    roleLabel: text(isOwner ? '机构负责人' : positions[0] || roles[0] || membership && (membership.roleLabel || membership.position || membership.role) || '机构成员').slice(0, 30)
+  }
+}
+
+async function bindOrganizerPcAccount(gate, officialOpenId, eventType) {
+  const userId = text(gate.userId)
+  const userResult = await db.collection('users').doc(userId).get()
+  const user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
+  if (!user || !/^1\d{10}$/.test(text(user.phone || user.phoneNumber))) {
+    await db.collection('service_follow_gates').doc(gate._id).update({ data: { status: 'account_invalid', subscribed: false, updateTime: db.serverDate() } })
+    return { eventType, officialOpenId, bound: false, shouldReply: true, purpose: 'organizer_pc_bind' }
+  }
+  const context = await organizerGateContext(gate, user)
+  if (!context) {
+    await db.collection('service_follow_gates').doc(gate._id).update({ data: { status: 'organization_invalid', subscribed: false, updateTime: db.serverDate() } })
+    return { eventType, officialOpenId, bound: false, shouldReply: true, purpose: 'organizer_pc_bind' }
+  }
+  const officialBindings = (await db.collection('service_account_bindings').where({ sport: SPORT, officialOpenId, subscribed: true }).limit(10).get()).data || []
+  if (officialBindings.some(item => !text(item.userId) || text(item.userId) !== userId)) {
+    await db.collection('service_follow_gates').doc(gate._id).update({ data: { status: 'identity_conflict', subscribed: false, officialOpenId, updateTime: db.serverDate() } })
+    return { eventType, officialOpenId, bound: false, shouldReply: true, purpose: 'organizer_pc_bind' }
+  }
+  const userBindings = (await db.collection('service_account_bindings').where({ sport: SPORT, userId, subscribed: true }).limit(10).get()).data || []
+  if (userBindings.some(item => text(item.officialOpenId) !== officialOpenId)) {
+    await db.collection('service_follow_gates').doc(gate._id).update({ data: { status: 'identity_conflict', subscribed: false, officialOpenId, updateTime: db.serverDate() } })
+    return { eventType, officialOpenId, bound: false, shouldReply: true, purpose: 'organizer_pc_bind' }
+  }
+  const uniqueKey = SPORT + ':user:' + userId
+  const canonicalRows = (await db.collection('service_account_bindings').where({ uniqueKey }).limit(2).get()).data || []
+  const data = { sport: SPORT, uniqueKey, userId, orgId: context.orgId, organizationName: context.organizationName, roleLabel: context.roleLabel, officialOpenId, organizerPcBound: true, subscribed: true, status: 'subscribed', updateTime: db.serverDate() }
+  if (canonicalRows[0]) await db.collection('service_account_bindings').doc(canonicalRows[0]._id).update({ data })
+  else await db.collection('service_account_bindings').add({ data: { ...data, createTime: db.serverDate() } })
+  await db.collection('users').doc(userId).update({ data: { pcServiceRebindRequired: false, updateTime: db.serverDate() } })
+  await db.collection('service_follow_gates').doc(gate._id).update({ data: { subscribed: true, status: 'subscribed', officialOpenId, boundUserId: userId, orgId: context.orgId, organizationName: context.organizationName, roleLabel: context.roleLabel, updateTime: db.serverDate() } })
+  return { eventType, officialOpenId, bound: true, shouldReply: true, purpose: 'organizer_pc_bind', ...context }
+}
+
 async function handleFollowEvent(xml) {
   const eventType = xmlValue(xml, 'Event').toLowerCase()
   const officialOpenId = xmlValue(xml, 'FromUserName')
@@ -63,6 +124,9 @@ async function handleFollowEvent(xml) {
   const gates = (await db.collection('service_follow_gates').where({ sport: SPORT, scene }).limit(2).get()).data || []
   const gate = gates[0]
   if (!gate) return { eventType, officialOpenId, bound: false, shouldReply: true }
+  if (gate.purpose === 'organizer_pc_bind' && gate.userId) {
+    return bindOrganizerPcAccount(gate, officialOpenId, eventType)
+  }
   await db.collection('service_follow_gates').doc(gate._id).update({ data: { subscribed: true, status: 'subscribed', officialOpenId, updateTime: db.serverDate() } })
   if (gate.purpose === 'referee_invite' && gate.refereeInviteId) {
     const invite = await db.collection('referee_invitations').doc(gate.refereeInviteId).get()

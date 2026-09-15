@@ -35,6 +35,8 @@ exports.main = async (event, context) => {
         return await uploadSingleChunk({ uploadId, chunkIndex, data: chunkData })
       case 'finishChunk':
         return await finishChunkUpload({ uploadId })
+      case 'abortChunk':
+        return await abortChunkUpload({ uploadId })
       default:
         // 兼容旧版调用方式
         return await legacyUpload(cloudPath, fileContent)
@@ -255,6 +257,33 @@ async function uploadSingleChunk({ uploadId, chunkIndex, data }) {
   return { success: true, chunkIndex, received, total: totalChunks }
 }
 
+async function removeChunkUploadData(uploadId) {
+  let deletedChunks = 0
+  while (true) {
+    const batch = await db.collection(CHUNK_DOCS_COLLECTION)
+      .where({ uploadId })
+      .limit(100)
+      .get()
+    const rows = batch.data || []
+    if (!rows.length) break
+    await Promise.all(rows.map(item => db.collection(CHUNK_DOCS_COLLECTION).doc(item._id).remove().catch(() => null)))
+    deletedChunks += rows.length
+    if (rows.length < 100) break
+  }
+  await db.collection(CHUNK_SESSIONS_COLLECTION).doc(uploadId).remove().catch(() => null)
+  return deletedChunks
+}
+
+async function abortChunkUpload({ uploadId }) {
+  const safeUploadId = String(uploadId || '')
+  if (!/^chunk_\d+_[a-z0-9]+$/i.test(safeUploadId)) {
+    return { success: false, message: '无效的 uploadId' }
+  }
+  const deletedChunks = await removeChunkUploadData(safeUploadId)
+  console.log('[uploadFile] 已终止并清理分片会话:', safeUploadId, '分片:', deletedChunks)
+  return { success: true, uploadId: safeUploadId, deletedChunks }
+}
+
 /**
  * 完成分片上传：从数据库读取所有分片 → 合并 → 上传到云存储 → 清理
  */
@@ -331,15 +360,7 @@ async function finishChunkUpload({ uploadId }) {
   
   // ★ 清理数据库中的分片和会话
   try {
-    // 批量删除分片文档
-    const chunkIds = allChunks.map(c => c._id)
-    const deletePromises = chunkIds.map(id => 
-      db.collection(CHUNK_DOCS_COLLECTION).doc(id).remove().catch(() => {})
-    )
-    await Promise.all(deletePromises)
-    
-    // 删除会话
-    await db.collection(CHUNK_SESSIONS_COLLECTION).doc(uploadId).remove()
+    await removeChunkUploadData(uploadId)
     console.log('[uploadFile] DB清理完成:', uploadId)
   } catch (cleanupErr) {
     console.warn('[uploadFile] DB清理失败:', cleanupErr.message)

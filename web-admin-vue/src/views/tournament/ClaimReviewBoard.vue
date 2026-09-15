@@ -2,7 +2,7 @@
   <div class="claim-review-page" v-loading="loading">
     <header class="page-header">
       <div>
-        <p class="eyebrow">赛事运营 / 球队管理 / 认领冲突</p>
+
         <h1>认领冲突人工审核</h1>
         <p class="subtitle">只处理归属争议的审核结论，不自动合并球队，也不覆盖球队长期资料。</p>
       </div>

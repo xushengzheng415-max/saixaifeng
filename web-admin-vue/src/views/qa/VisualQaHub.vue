@@ -2,9 +2,9 @@
   <main class="qa-hub">
     <header class="qa-header">
       <div>
-        <span class="eyebrow">仅本地开发环境</span>
+
         <h1>赛小蜂足球 · PC 原型验收台</h1>
-        <p>按正式画板阶段打开页面。所有样例数据都在当前浏览器内隔离，不调用生产写接口。</p>
+
       </div>
       <div class="qa-summary">
         <strong>{{ pageCount }}</strong>
@@ -57,10 +57,10 @@ const groups = [
     { name: '创建赛事 · 基础信息', note: '正式创建表单', path: '/tournaments/create' },
     { name: '赛事主控制台', note: '赛事全局状态与功能入口', path: `/tournaments/${tournament}` }
   ] },
-  { code: 'P2', title: '竞赛管理 · 简易版与专业版规则', pages: [
+  { code: 'P2', title: '竞赛管理 · 基础版与专业版规则', pages: [
     { name: '5 个组别总览', note: '组别卡片和菜单', path: `/tournaments/${tournament}/competition` },
     { name: '添加组别', note: '基础创建', path: `/tournaments/${tournament}/competition/create` },
-    { name: '模式对比', note: '简易版与专业版', path: `/tournaments/${tournament}/competition/create?view=mode-compare` },
+    { name: '模式对比', note: '基础版与专业版', path: `/tournaments/${tournament}/competition/create?view=mode-compare` },
     { name: '简易 · 赛制设置', note: '步骤 1', path: `/tournaments/${tournament}/competition/rules?divisionId=${simpleDivision}&step=format` },
     { name: '简易 · 基础规则', note: '步骤 2', path: `/tournaments/${tournament}/competition/rules?divisionId=${simpleDivision}&step=rules` },
     { name: '简易 · 规则定版', note: '步骤 3', path: `/tournaments/${tournament}/competition/rules?divisionId=${simpleDivision}&step=finalize` },
@@ -74,7 +74,7 @@ const groups = [
     { name: '专业 · 规则生效', note: '完成状态', path: `/tournaments/${tournament}/competition/rules?divisionId=${proDivision}&step=effective` }
   ] },
   { code: 'P3', title: '球队管理与正式名单', pages: [
-    { name: '简易版参赛球队', note: '球队列表', path: `/tournaments/${tournament}/teams?divisionId=${simpleDivision}` },
+    { name: '基础版参赛球队', note: '球队列表', path: `/tournaments/${tournament}/teams?divisionId=${simpleDivision}` },
     { name: '专业版参赛球队', note: '球队列表', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional` },
     { name: '生成球队邀请', note: '邀请弹窗', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional&action=invite` },
     { name: '快速添加球队', note: '预建参赛占位', path: `/tournaments/${tournament}/teams?divisionId=${proDivision}&mode=professional&action=quick-add` },
@@ -87,7 +87,7 @@ const groups = [
   ] },
   { code: 'P4', title: '抽签、分组与赛程管理', pages: [
     { name: '抽签模式选择', note: '简易 / 专业入口', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}` },
-    { name: '快速分组设置', note: '简易模式', path: `/tournaments/${tournament}/draw?divisionId=${simpleDivision}&mode=quick&view=config` },
+    { name: '快速分组设置', note: '基础模式', path: `/tournaments/${tournament}/draw?divisionId=${simpleDivision}&mode=quick&view=config` },
     { name: '快速分组操作台', note: '混合制', path: `/tournaments/${tournament}/draw?divisionId=${simpleDivision}&mode=quick&format=hybrid&view=console` },
     { name: '专业 · 抽签设置', note: '步骤 1', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=setup` },
     { name: '专业 · 球队池', note: '步骤 2，含下一步', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=pool` },
@@ -102,7 +102,7 @@ const groups = [
   ] },
   { code: 'P5', title: '比赛管理、复核归档与裁判', pages: [
     { name: '比赛管理 · 选择组别', note: '组别入口', path: `/tournaments/${tournament}/matches` },
-    { name: 'U8 比赛列表', note: '简易版', path: `/tournaments/${tournament}/matches?divisionId=${simpleDivision}` },
+    { name: 'U8 比赛列表', note: '基础版', path: `/tournaments/${tournament}/matches?divisionId=${simpleDivision}` },
     { name: 'U16 比赛列表', note: '专业版', path: `/tournaments/${tournament}/matches?divisionId=${proDivision}` },
     { name: '赛中只读监控', note: '专业比赛现场状态', path: `/tournaments/${tournament}/match/qa-match-u16-013/monitor` },
     { name: '赛后资料接收', note: '主办方补充', path: `/tournaments/${tournament}/match/qa-match-u8-012/post-match` },

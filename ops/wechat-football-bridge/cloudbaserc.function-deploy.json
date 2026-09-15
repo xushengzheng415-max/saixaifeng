@@ -44,6 +44,19 @@
       "handler": "index.main",
       "runtime": "Nodejs18.15",
       "installDependency": true
+    },
+    {
+      "name": "manageTournamentCenterContent",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "installDependency": true
+    },
+    {
+      "name": "webLoginApi",
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "timeout": 300,
+      "installDependency": true
     }
   ]
 }

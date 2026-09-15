@@ -73,6 +73,14 @@
                     <span class="info-value">{{ playerData.nationality || '中国' }}</span>
                   </div>
                   <div class="info-item">
+                    <span class="info-label">出生年月日</span>
+                    <span class="info-value">{{ playerData.birthDate || playerData.birthday || '-' }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">年龄</span>
+                    <span class="info-value">{{ playerAge }}</span>
+                  </div>
+                  <div class="info-item">
                     <span class="info-label">身高/体重</span>
                     <span class="info-value">{{ playerData.height || '-' }} / {{ playerData.weight || '-' }} kg</span>
                   </div>
@@ -274,6 +282,19 @@ const positionMap = {
   FW: '前锋'
 }
 
+const playerAge = computed(() => {
+  const raw = playerData.value.birthDate || playerData.value.birthday
+  if (!raw) return '-'
+  const birth = new Date(raw)
+  if (Number.isNaN(birth.getTime())) return '-'
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const beforeBirthday = today.getMonth() < birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())
+  if (beforeBirthday) age -= 1
+  return age >= 0 ? String(age) : '-'
+})
+
 // 计算球衣名（根据规则：二字姓名取姓全拼+名首字母，三字姓名取姓全拼+名首字母+名首字母）
 const jerseyName = computed(() => {
   const name = playerData.value.name
@@ -472,9 +493,10 @@ async function loadPlayerData() {
       }
       
       // 加载球队数据
-      if (playerData.value.teamCode) {
+      const relatedTeamId = playerData.value.teamId || route.query.teamId || playerData.value.teamCode
+      if (relatedTeamId) {
         const teams = await queryList('teams', {
-          where: { _id: playerData.value.teamCode }
+          where: { _id: String(relatedTeamId) }
         })
         if (teams && teams.length > 0) {
           teamData.value = teams[0]

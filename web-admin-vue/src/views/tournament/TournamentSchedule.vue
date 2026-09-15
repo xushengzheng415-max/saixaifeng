@@ -6,7 +6,7 @@
     </header>
 
     <section v-if="showWorkbenchCanvas" class="schedule-workbench-overlay">
-      <header class="workbench-heading"><div><el-button text class="workbench-back" @click="returnScheduleOverview">←　{{ scheduleReturnLabel }}</el-button><span>赛事空间　/　赛程管理　/　赛程地图</span><h1>赛程地图</h1><p>所有场地、日期和比赛均来自当前赛事真实配置</p></div><div><select v-if="!isJointSchedule" v-model="divisionSelectorValue" class="schedule-native-select" @change="handleDivisionChange"><option v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ division.name }}</option></select><el-tag v-else type="success" effect="plain">全部{{ divisionOptions.length }}个组别 · {{ allTournamentMatches.length }}场</el-tag><el-tag type="primary" effect="plain">赛程草稿</el-tag></div></header>
+      <header class="workbench-heading"><div><el-button text class="workbench-back" @click="returnScheduleOverview">←　{{ scheduleReturnLabel }}</el-button><span>赛事空间　/　赛程管理　/　赛程地图</span><h1>赛程地图</h1></div><div><select v-if="!isJointSchedule" v-model="divisionSelectorValue" class="schedule-native-select" @change="handleDivisionChange"><option v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ division.name }}</option></select><el-tag v-else type="success" effect="plain">全部{{ divisionOptions.length }}个组别 · {{ allTournamentMatches.length }}场</el-tag><el-tag type="primary" effect="plain">赛程草稿</el-tag></div></header>
       <section v-if="matches.length === 0" class="workbench-empty"><el-icon><MapLocation /></el-icon><h2>{{ activeDivision.name }}尚未生成赛程</h2><p>当前没有已配置的比赛场地、日期或时段。请先进入设置，输入真实场地名称并添加实际开赛时段。</p><div><el-button @click="returnScheduleOverview">{{ scheduleReturnLabel }}</el-button><el-button type="primary" @click="openScheduleConfigDialog('basic')">设置场地与生成赛程</el-button></div></section>
       <template v-else>
         <div class="saved-schedule-config"><span><el-icon><CircleCheck /></el-icon><strong>已保存并复用赛程设置</strong><small>{{ savedScheduleConfigSummary }}</small></span><el-button plain type="success" @click="openScheduleConfigDialog('preview')">查看或修改已保存设置</el-button></div>
@@ -46,7 +46,7 @@
     </div>
 
     <section v-if="showOverview" class="schedule-overview">
-      <header class="overview-heading"><div><span class="crumb">赛事空间　/　赛程管理</span><h1>赛程管理</h1><p>统一管理各组别赛程生成、冲突校验与发布状态</p></div><div><el-button plain @click="openScheduleEditor(activeDivisionId)">导入赛程</el-button><el-button v-if="overviewStats.matches" type="primary" @click="openScheduleEditor(activeDivisionId)"><el-icon><MapLocation /></el-icon>进入赛程地图</el-button><el-button v-else type="primary" :loading="generating" :disabled="!activeSchedulePrerequisite.ready" @click="openOverviewGenerate">生成赛程</el-button></div></header>
+      <header class="overview-heading"><div><span class="crumb">赛事空间　/　赛程管理</span><h1>赛程管理</h1></div><div><el-button plain @click="openScheduleEditor(activeDivisionId)">导入赛程</el-button><el-button v-if="overviewStats.matches" type="primary" @click="openScheduleEditor(activeDivisionId)"><el-icon><MapLocation /></el-icon>进入赛程地图</el-button><el-button v-else type="primary" :loading="generating" :disabled="!activeSchedulePrerequisite.ready" @click="openOverviewGenerate">生成赛程</el-button></div></header>
       <div class="overview-stats">
         <article><span class="stat-icon"><el-icon><UserFilled /></el-icon></span><strong>{{ divisionOptions.length }}<small>个组别</small></strong></article>
         <article><span class="stat-icon"><el-icon><User /></el-icon></span><strong>{{ overviewStats.teams }}<small>支球队</small></strong></article>
@@ -161,7 +161,7 @@
                   @pointerdown="handleMatchPointerDown($event, m)"
                   @dragstart.prevent
                 >
-                  <div v-if="quickEditMode && isMatchQuickEditable(m)" class="quick-drag-hint">拖拽交换场次 · 点击快捷修改</div>
+
                   <!-- 顶部：场号 + 时间 -->
                   <div class="match-header">
                     <span class="match-seq" v-if="m.matchSequence != null">场 {{ m.matchSequence }}</span>
@@ -327,7 +327,7 @@
         <div class="venue-page-header">
           <div>
             <div class="venue-page-title">全部组别球队场地部署</div>
-            <div class="venue-page-subtitle">横向对照场地、纵向对照时间，汇总整个赛事且不受当前组别筛选影响</div>
+
           </div>
           <el-button type="primary" plain @click="venueDialogVisible = false">返回组别赛程</el-button>
         </div>

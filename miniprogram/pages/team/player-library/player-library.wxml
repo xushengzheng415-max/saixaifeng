@@ -5,10 +5,11 @@
     <view wx:if="{{loading}}" class="player-library-state"><text>正在加载长期球员资产…</text></view>
     <view wx:elif="{{errorText}}" class="player-library-state"><text>{{errorText}}</text><button bindtap="loadPlayers">重新加载</button></view>
     <block wx:else>
+      <view wx:if="{{hasPendingImport}}" class="player-import-task" bindtap="openImportedReview"><view><text>确认导入球员</text><text>{{pendingImportCount}} 条资料等待核对</text></view><text>去处理 ›</text></view>
       <view class="player-team-card" style="min-height:266rpx;">
         <view class="player-team-top">
           <view class="player-crest-wrap"><image wx:if="{{teamLogo}}" class="player-crest" src="{{teamLogo}}" mode="aspectFit" /><view wx:else class="player-crest player-crest-empty">队徽</view></view>
-          <view class="player-team-copy" style="position:absolute;left:150rpx;right:208rpx;padding:0 10rpx;box-sizing:border-box;"><text class="player-team-name">{{teamName}}</text><text class="player-team-desc">长期球员资产 · 共 {{totalCount}} 人</text></view>
+          <view class="player-team-copy" style="position:absolute;left:150rpx;right:208rpx;padding:0 10rpx;box-sizing:border-box;"><text class="player-team-name">{{teamName}}</text></view>
           <view wx:if="{{canManage}}" class="player-team-actions"><button class="player-action-primary" bindtap="addPlayer"><image src="/images/icons/players.svg" mode="aspectFit" />添加球员</button><button class="player-action-secondary" bindtap="inviteParent"><image src="/images/icons/team.svg" mode="aspectFit" />邀请家长补资料</button></view>
         </view>
         <view class="player-stats"><view><text class="player-stat-value player-stat-complete">{{completeCount}}</text><text>资料完整</text></view><view><text class="player-stat-value player-stat-pending">{{pendingCount}}</text><text>待补充</text></view><view><text class="player-stat-value player-stat-exception">{{exceptionCount}}</text><text>异常</text></view></view>

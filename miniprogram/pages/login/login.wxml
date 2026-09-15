@@ -8,8 +8,6 @@
 
   <view class="content-overlay">
     <view class="login-card">
-      <text class="login-title">欢迎使用赛小蜂足球</text>
-      <text class="login-subtitle">赛事协作、球队资产与青训经营，一个机构工作空间统一管理</text>
       <view class="login-action">
         <button class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="loginWithPhone" disabled="{{loginDisabled}}">{{loginButtonText}}</button>
       </view>

@@ -1,6 +1,7 @@
 // 小程序机构工作空间聚合入口。
 // 当前兼容 users.orgId；未来 organization_memberships / organizations 建立后可直接接管。
 const cloud = require('wx-server-sdk')
+const crypto = require('crypto')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
@@ -58,6 +59,33 @@ function dateText(value) {
 function maskPhone(value) {
   const phone = String(value || '')
   return /^1\d{10}$/.test(phone) ? phone.slice(0, 3) + '****' + phone.slice(-4) : ''
+}
+
+function ageOnReferenceDate(birthDate, referenceDate) {
+  const match = String(birthDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const reference = referenceDate ? new Date(referenceDate) : new Date()
+  if (!match || Number.isNaN(reference.getTime())) return null
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3])
+  let age = reference.getFullYear() - year
+  if (reference.getMonth() + 1 < month || (reference.getMonth() + 1 === month && reference.getDate() < day)) age -= 1
+  return age >= 0 ? age : null
+}
+
+function registrantTypeForBirthDate(birthDate, referenceDate) {
+  const age = ageOnReferenceDate(birthDate, referenceDate)
+  return age !== null && age >= 18 ? 'self' : 'guardian'
+}
+
+function registrantTypeForPlayer(player, invite) {
+  const explicit = String(firstValue(invite && invite.registrantType, player && player.registrantType, player && player.applicantRole) || '')
+  if (explicit === 'self' || explicit === 'player') return 'self'
+  if (explicit === 'guardian') return 'guardian'
+  return registrantTypeForBirthDate(firstValue(player && player.birthDate, player && player.birthday), invite && invite.referenceDate)
+}
+
+function verifiedUserPhone(user) {
+  const phone = String(firstValue(user && user.phone, user && user.phoneNumber) || '').replace(/\D/g, '')
+  return /^1\d{10}$/.test(phone) ? phone : ''
 }
 
 function normalizeClaimReviewProofMaterials(event, inviteId) {
@@ -433,21 +461,31 @@ async function loadWorkspaceCatalog(user, openId) {
 }
 
 async function loadTeams(workspace, user, openId) {
-  if (workspace.type === 'team') {
-    const rows = await safeGet('teams', { _id: workspace.teamId }, 1)
-    return rows
-  }
-  const conditions = [{ orgId: workspace.orgId }]
-  if (workspace.allowOwnerRelations === true) {
-    conditions.push(
-      { creatorId: user._id },
-      { ownerId: user._id },
-      { userId: user._id },
-      { openId },
-      { _openid: openId }
-    )
-  }
-  return safeGet('teams', _.or(conditions), 100)
+  if (workspace.type === 'team') return safeGet('teams', { _id: workspace.teamId }, 1)
+
+  const orgTeams = await safeGet('teams', { orgId: workspace.orgId }, 100)
+  const membershipRows = await safeGet('team_memberships', _.or([
+    { userId: user._id }, { memberUserId: user._id },
+    { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }
+  ]), 100)
+  const acceptedTeamIds = unique(membershipRows.filter(item => {
+    return ['active', 'accepted', 'claimed'].includes(String(item.status || 'active').toLowerCase())
+  }).map(item => item.teamId))
+  const memberTeams = acceptedTeamIds.length ? await safeGet('teams', { _id: _.in(acceptedTeamIds) }, 100) : []
+  const ownerValues = unique([user._id, user.phone, user.phoneNumber, openId])
+  const ownerConditions = []
+  ownerValues.forEach(value => ownerConditions.push(
+    { creatorId: value }, { ownerId: value }, { ownerUserId: value },
+    { userId: value }, { openId: value }, { _openid: value }
+  ))
+  const ownedTeams = ownerConditions.length ? await safeGet('teams', _.or(ownerConditions), 100) : []
+  const visible = {}
+  orgTeams.concat(memberTeams, ownedTeams).forEach(team => {
+    const teamOrgId = String(team.orgId || team.organizationId || '')
+    if (teamOrgId && teamOrgId !== String(workspace.orgId)) return
+    visible[String(team._id)] = team
+  })
+  return Object.keys(visible).map(id => visible[id])
 }
 
 async function loadTournaments(workspace, user, openId, teams) {
@@ -1047,17 +1085,19 @@ function formatTeamPlayer(item, requirements) {
   const parentRequired = requirements && requirements.parentSupplementConfigured
     ? Boolean(requirements.parentSupplementRequired)
     : false
-  const needsIdentity = identityRequired && ['verified', 'approved', 'complete'].indexOf(identityRaw) < 0
+  const identityReady = ['verified', 'approved', 'complete', 'manual_required'].indexOf(identityRaw) >= 0
+  const needsIdentity = identityRequired && !identityReady
   const needsPortrait = portraitRequired && !hasPhoto
   const needsParentCompletion = parentRequired && Boolean(item.needsParentCompletion)
+  const registrantType = registrantTypeForPlayer(item)
   const rejected = ['rejected', 'failed', 'exception', 'invalid'].indexOf(String(firstValue(item.profileStatus, item.verifyStatus, item.identityStatus, item.status)).toLowerCase()) >= 0
   const incomplete = needsPortrait || !hasBirth || !hasName || needsParentCompletion || needsIdentity
   const profileStatus = rejected ? 'exception' : (incomplete ? 'pending' : 'complete')
   let statusText = '资料完整'
   if (profileStatus === 'exception') statusText = '资料异常'
-  else if (needsIdentity) statusText = '待实名核验'
+  else if (needsIdentity) statusText = '待人证核验'
   else if (needsPortrait) statusText = '待形象照'
-  else if (needsParentCompletion) statusText = '待家长补充'
+  else if (needsParentCompletion) statusText = registrantType === 'self' ? '待本人补充' : '待家长补充'
   else if (!hasBirth || !hasName) statusText = '待完善基础资料'
   return {
     id: String(item._id),
@@ -1069,7 +1109,7 @@ function formatTeamPlayer(item, requirements) {
     position: item.position || '',
     profileStatus,
     statusText,
-    identityStatus: identityRequired ? (['verified', 'approved', 'complete'].indexOf(identityRaw) >= 0 ? 'verified' : 'not_verified') : 'not_required',
+    identityStatus: identityRequired ? (identityRaw === 'manual_required' ? 'manual_required' : (identityReady ? 'verified' : 'not_verified')) : 'not_required',
     needsPortrait,
     needsParentCompletion,
     requirementSource: requirements && requirements.source ? requirements.source : 'legacy-compatibility'
@@ -1086,6 +1126,8 @@ async function loadTeamPlayersForWorkspace(event, identity) {
   const team = teams.find(item => String(item._id) === requestedTeamId) || (workspace.type === 'team' ? teams[0] : null)
   if (!team) throw new Error('球队不存在或不属于当前工作空间')
   const rows = (await safeGet('players', { teamId: String(team._id) }, 500)).filter(item => ['archived', 'deleted'].indexOf(String(item.status || '').toLowerCase()) < 0)
+  const importedDrafts = permissions.has('team.manage') ? await safeGet('registration_player_drafts', { teamId: String(team._id) }, 500) : []
+  const pendingImportCount = importedDrafts.filter(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0).length
   const players = rows.map(formatTeamPlayer)
   const counts = { complete: 0, pending: 0, exception: 0 }
   players.forEach(item => { counts[item.profileStatus] += 1 })
@@ -1094,8 +1136,103 @@ async function loadTeamPlayersForWorkspace(event, identity) {
     team: { id: String(team._id), name: firstValue(team.name, team.teamName, '未命名球队'), logo: firstValue(team.logo, team.logoUrl, team.teamLogo) },
     players,
     counts,
-    canManage: permissions.has('team.manage')
+    canManage: permissions.has('team.manage'),
+    pendingImportCount,
+    hasPendingImport: pendingImportCount > 0
   }
+}
+
+function importedDraftPublicView(item) {
+  const status = String(item.reviewStatus || 'pending')
+  return {
+    id: String(item._id || ''),
+    name: String(item.name || '未命名球员'),
+    jerseyNumber: String(firstValue(item.jerseyNumber, '') || ''),
+    jerseyName: String(item.jerseyName || ''),
+    birthDate: String(item.birthDate || ''),
+    gender: String(item.gender || ''),
+    nativePlace: String(item.nativePlace || ''),
+    photoUrl: String(firstValue(item.photoUrl, item.photoFileID) || ''),
+    identityMasked: String(item.identityMasked || ''),
+    reviewStatus: status,
+    statusText: status === 'conflict' ? '资料冲突' : (status === 'confirmed' ? '已确认入库' : (status === 'excluded' ? '已排除' : '可确认')),
+    conflictReason: status === 'conflict' ? String(item.conflictReason || '资料存在冲突，需要人工处理') : '',
+    canConfirm: status === 'pending',
+    canExclude: ['pending', 'conflict'].indexOf(status) >= 0
+  }
+}
+
+async function importedDraftTeamContext(event, identity) {
+  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const workspace = result.workspace
+  if ((workspace.permissions || []).indexOf('team.manage') < 0) throw workspaceError('TEAM_MANAGE_REQUIRED', '当前身份没有确认导入球员的权限')
+  const teamId = String(event.teamId || '')
+  const teams = await loadTeams(workspace, identity.user, identity.openId)
+  const team = teams.find(item => String(item._id) === teamId)
+  if (!team) throw workspaceError('TEAM_SCOPE_DENIED', '球队不存在或不属于当前工作空间')
+  return { workspace, team, teamId }
+}
+
+async function importedPlayerDraftsForWorkspace(event, identity) {
+  const context = await importedDraftTeamContext(event, identity)
+  const rows = await safeGet('registration_player_drafts', { teamId: context.teamId }, 500)
+  const drafts = rows.sort(function(a, b) { return Number(a.order || 0) - Number(b.order || 0) }).map(importedDraftPublicView)
+  const counts = { pending:0, conflict:0, confirmed:0, excluded:0 }
+  drafts.forEach(function(item) { if (Object.prototype.hasOwnProperty.call(counts, item.reviewStatus)) counts[item.reviewStatus] += 1 })
+  return { success:true, team:{ id:context.teamId, name:String(firstValue(context.team.name, context.team.teamName, '球队')) }, drafts, counts, reviewComplete:counts.pending === 0 && counts.conflict === 0 }
+}
+
+async function refreshImportedPlayerDraftState(teamId) {
+  const rows = await safeGet('registration_player_drafts', { teamId }, 500)
+  const pending = rows.filter(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0).length
+  const confirmed = rows.filter(item => String(item.reviewStatus || '') === 'confirmed').length
+  const excluded = rows.filter(item => String(item.reviewStatus || '') === 'excluded').length
+  const reviewStatus = pending ? 'pending' : 'completed'
+  await db.collection('teams').doc(teamId).update({ data:{ pendingPlayerDraftCount:pending, playerCount:confirmed, playerReviewStatus:reviewStatus, playerReviewCompletedAt:pending ? null : db.serverDate(), updateTime:db.serverDate() } })
+  const batchIds = unique(rows.map(item => item.importBatchId))
+  for (const batchId of batchIds) {
+    const batchRows = rows.filter(item => String(item.importBatchId || '') === batchId)
+    const batchPending = batchRows.some(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0)
+    await db.collection('registration_import_batches').doc(batchId).update({ data:{ playerReviewStatus:batchPending ? 'pending' : 'completed', confirmedPlayerCount:batchRows.filter(item => String(item.reviewStatus || '') === 'confirmed').length, excludedPlayerCount:batchRows.filter(item => String(item.reviewStatus || '') === 'excluded').length, playerReviewCompletedAt:batchPending ? null : db.serverDate(), updateTime:db.serverDate() } })
+  }
+  return { pending, confirmed, excluded, reviewStatus }
+}
+
+async function reviewImportedPlayerDraftsForWorkspace(event, identity) {
+  const context = await importedDraftTeamContext(event, identity)
+  const decision = String(event.decision || '')
+  if (decision !== 'confirm' && decision !== 'exclude') throw workspaceError('IMPORT_REVIEW_DECISION_INVALID', '请选择确认入库或排除')
+  const ids = unique(Array.isArray(event.draftIds) ? event.draftIds : []).slice(0, 100)
+  if (!ids.length) throw workspaceError('IMPORT_DRAFT_REQUIRED', '请至少选择一名球员')
+  const rows = (await safeGet('registration_player_drafts', { teamId:context.teamId }, 500)).filter(item => ids.indexOf(String(item._id)) >= 0)
+  if (rows.length !== ids.length) throw workspaceError('IMPORT_DRAFT_SCOPE_DENIED', '选择的数据包含不存在或其他球队球员')
+  if (decision === 'confirm' && rows.some(item => String(item.reviewStatus || '') === 'conflict')) throw workspaceError('IMPORT_DRAFT_CONFLICT_LOCKED', '冲突球员不能批量确认，请先由主办方人工处理')
+  const now = db.serverDate()
+  for (const draft of rows) {
+    const currentStatus = String(draft.reviewStatus || 'pending')
+    if (['confirmed', 'excluded'].indexOf(currentStatus) >= 0) continue
+    if (decision === 'exclude') {
+      await db.collection('registration_player_drafts').doc(draft._id).update({ data:{ reviewStatus:'excluded', excludedReason:String(event.reason || '领队确认不属于本队').trim().slice(0, 120), reviewedByUserId:String(identity.user._id), reviewedAt:now, updateTime:now } })
+      continue
+    }
+    const existing = await safeGet('players', { importDraftId:String(draft._id), teamId:context.teamId }, 2)
+    let playerId = existing[0] ? String(existing[0]._id) : ''
+    if (!playerId) {
+      const created = await db.collection('players').add({ data:{
+        orgId:String(draft.orgId || context.workspace.orgId || ''), teamId:context.teamId, teamCode:context.teamId, teamName:String(firstValue(context.team.name, context.team.teamName, '球队')),
+        playerId:'import-' + String(draft._id), name:String(draft.name || '未命名球员'), jerseyNumber:Number(draft.jerseyNumber || 0), jerseyName:String(draft.jerseyName || ''),
+        gender:String(draft.gender || ''), nationality:'中国', birthDate:String(draft.birthDate || ''), nativePlace:String(draft.nativePlace || ''),
+        photoUrl:String(firstValue(draft.photoUrl, draft.photoFileID) || ''), photoFileID:String(firstValue(draft.photoFileID, draft.photoUrl) || ''), photoProcessingStatus:String(draft.photoProcessingStatus || ''),
+        identityDigest:String(draft.identityDigest || ''), identityNumberMasked:String(draft.identityMasked || ''), identityStatus:'not_verified', identityVerificationLabel:'待人证核验',
+        profileStatus:'pending', source:'registration_docx_import_confirmed', importDraftId:String(draft._id), registrationImportBatchId:String(draft.importBatchId || ''), registrationSourceFileId:String(draft.registrationSourceFileId || ''),
+        creatorId:String(identity.user._id), registerTime:now, createTime:now, updateTime:now
+      } })
+      playerId = String(created._id)
+    }
+    await db.collection('registration_player_drafts').doc(draft._id).update({ data:{ reviewStatus:'confirmed', confirmedPlayerId:playerId, reviewedByUserId:String(identity.user._id), reviewedAt:now, updateTime:now } })
+  }
+  const state = await refreshImportedPlayerDraftState(context.teamId)
+  return { success:true, decision, state, message:decision === 'confirm' ? '所选球员已进入长期球员库' : '所选资料已排除' }
 }
 
 function matchPlayerIds(match) {
@@ -1207,7 +1344,8 @@ async function loadTeamPlayerForEditForWorkspace(event, identity) {
       id: String(player._id),
       name: String(player.name || ''),
       birthDate: String(firstValue(player.birthDate, player.birthday) || ''),
-      guardianPhone: String(firstValue(player.guardianPhone, player.contactPhone) || '')
+      contactPhone: String(firstValue(player.playerPhone, player.guardianPhone, player.contactPhone) || ''),
+      registrantType: registrantTypeForPlayer(player)
     }
   }
 }
@@ -1222,8 +1360,11 @@ async function saveTeamPlayerForWorkspace(event, identity) {
   if (!team) throw new Error('球队不存在或不属于当前工作空间')
   const name = String(event.name || '').trim()
   const birthDate = String(event.birthDate || '')
-  const guardianPhone = String(event.guardianPhone || '').replace(/\s/g, '')
-  if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !/^1\d{10}$/.test(guardianPhone)) throw new Error('请完整填写球员姓名、出生年月和监护人手机号')
+  const contactPhone = String(firstValue(event.contactPhone, event.guardianPhone) || '').replace(/\s/g, '')
+  const registrantType = registrantTypeForBirthDate(birthDate)
+  if (!name) throw new Error('请填写球员姓名')
+  if (ageOnReferenceDate(birthDate) === null) throw new Error('请选择正确的出生日期')
+  if (!/^1\d{10}$/.test(contactPhone)) throw new Error(registrantType === 'self' ? '请填写正确的球员本人手机号' : '请填写正确的监护人手机号')
   const playerId = String(event.playerId || '').trim()
   const duplicate = (await safeGet('players', { teamId, name, birthDate }, 20)).filter(item => String(item._id) !== playerId)
   if (duplicate.length) throw new Error('同一球队已存在同名且出生年月相同的球员，请先核验，不会自动合并')
@@ -1231,29 +1372,24 @@ async function saveTeamPlayerForWorkspace(event, identity) {
   if (playerId) {
     const existing = await safeGet('players', { _id: playerId, teamId }, 1)
     if (!existing.length) throw new Error('球员不存在或不属于该球队')
-    await db.collection('players').doc(playerId).update({
-      data: {
-        name,
-        birthDate,
-        birthday: birthDate,
-        guardianPhone,
-        contactPhone: guardianPhone,
-        updateTime: now,
-        lastEditedBy: identity.user._id
-      }
-    })
+    const updateData = { name, birthDate, birthday: birthDate, contactPhone, registrantType, updateTime: now, lastEditedBy: identity.user._id }
+    if (registrantType === 'self') updateData.playerPhone = contactPhone
+    else updateData.guardianPhone = contactPhone
+    await db.collection('players').doc(playerId).update({ data: updateData })
     return { success: true, playerId, updated: true, parentInvite: null }
   }
   const player = {
     teamId, orgId: workspace.orgId || '', name, birthDate, birthday: birthDate,
-    guardianPhone, contactPhone: guardianPhone, profileStatus: 'pending', needsParentCompletion: Boolean(event.createParentLink),
+    contactPhone, registrantType, profileStatus: 'pending', needsParentCompletion: Boolean(event.createParentLink),
     creatorId: identity.user._id, creatorOpenId: identity.openId, createTime: now, updateTime: now, source: 'team_quick_create'
   }
+  if (registrantType === 'self') player.playerPhone = contactPhone
+  else player.guardianPhone = contactPhone
   const added = await db.collection('players').add({ data: player })
   let parentInvite = null
   if (event.createParentLink) {
     const token = 'pp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)
-    await db.collection('parent_profile_invites').add({ data: { token, teamId, playerId: added._id, orgId: workspace.orgId || '', guardianPhone, status: 'active', creatorId: identity.user._id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now } })
+    await db.collection('parent_profile_invites').add({ data: { token, teamId, playerId: added._id, orgId: workspace.orgId || '', registrantMode: 'age_based', registrantType, registrantPhone: contactPhone, guardianPhone: registrantType === 'guardian' ? contactPhone : '', status: 'active', creatorId: identity.user._id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now } })
     parentInvite = { token, playerId: String(added._id) }
   }
   return { success: true, playerId: String(added._id), parentInvite }
@@ -1268,7 +1404,7 @@ async function remindParentProfileForWorkspace(event, identity) {
   const playerRows = await safeGet('players', { _id: playerId, teamId }, 1)
   if (!playerRows.length || !playerRows[0].needsParentCompletion) throw new Error('该球员当前没有可提醒的资料项')
   const invites = (await safeGet('parent_profile_invites', { playerId, teamId, status: 'active' }, 20)).filter(item => !item.expiresAt || toTime(item.expiresAt) > Date.now())
-  if (!invites.length) throw new Error('尚未生成家长协作链接，无法发送提醒')
+  if (!invites.length) throw new Error('尚未生成资料协作链接，无法发送提醒')
   const now = db.serverDate()
   await db.collection('parent_profile_reminders').add({ data: { teamId, playerId, inviteId: invites[0]._id, orgId: result.workspace.orgId || '', creatorId: identity.user._id, status: 'queued', createTime: now, updateTime: now } })
   return { success: true, reminderStatus: 'queued' }
@@ -1276,7 +1412,7 @@ async function remindParentProfileForWorkspace(event, identity) {
 
 async function parentProfileInviteForWorkspace(event, identity) {
   const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
-  if ((result.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有管理家长协作邀请的权限')
+  if ((result.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有管理资料协作邀请的权限')
   const teamId = String(event.teamId || ''), playerId = String(event.playerId || '')
   const teams = await loadTeams(result.workspace, identity.user, identity.openId)
   const team = teams.find(item => String(item._id) === teamId)
@@ -1295,15 +1431,18 @@ function formatParentInviteChecklist(invite, player) {
   const sources = [invite, player]
   const identity = readBooleanSetting(sources, ['identityVerificationRequired', 'requiresRealName', 'requireRealName'])
   const portrait = readBooleanSetting(sources, ['portraitRequired', 'requiresPortrait', 'requirePortrait'])
-  const items = ['核对姓名和出生年月', '监护人授权']
-  if (identity.defined && identity.value) items.push('实名认证（按当前要求）')
+  const registrantType = registrantTypeForPlayer(player, invite)
+  const items = ['核对姓名和出生年月', registrantType === 'self' ? '本人授权' : '监护人授权']
+  if (identity.defined && identity.value) items.push('人证核验')
   if (portrait.defined && portrait.value) items.push('标准形象照')
   return items
 }
 
 function formatParentProfileInvite(invite, team, player) {
   const expiresAt = invite.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  return { id: String(invite._id || ''), token: String(invite.token || ''), playerId: String(player._id), playerName: String(player.name || '球员'), teamName: String(team.name || team.teamName || ''), guardianPhoneMasked: maskPhone(String(player.guardianPhone || player.contactPhone || invite.guardianPhone || '')), status: String(invite.status || 'active'), expiresAtText: dateText(expiresAt), h5Path: '/service-account-h5/?parentInvite=' + encodeURIComponent(String(invite.token || '')), requirements: formatParentInviteChecklist(invite, player) }
+  const registrantType = registrantTypeForPlayer(player, invite)
+  const phone = registrantType === 'self' ? firstValue(player.playerPhone, player.contactPhone, invite.registrantPhone) : firstValue(player.guardianPhone, player.contactPhone, invite.guardianPhone, invite.registrantPhone)
+  return { id: String(invite._id || ''), token: String(invite.token || ''), playerId: String(player._id), playerName: String(player.name || '球员'), teamName: String(team.name || team.teamName || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', accountPhoneMasked: maskPhone(String(phone || '')), guardianPhoneMasked: registrantType === 'guardian' ? maskPhone(String(phone || '')) : '', status: String(invite.status || 'active'), expiresAtText: dateText(expiresAt), h5Path: '/service-account-h5/?parentInvite=' + encodeURIComponent(String(invite.token || '')), requirements: formatParentInviteChecklist(invite, player) }
 }
 
 async function createParentProfileInvite(team, player, orgId, creatorId) {
@@ -1311,7 +1450,10 @@ async function createParentProfileInvite(team, player, orgId, creatorId) {
   const standardFlow = String(player.source || '') === 'team_player_invite' || player.standardProfileFlow === true
   const identity = readBooleanSetting([player], ['identityVerificationRequired', 'requiresRealName', 'requireRealName'])
   const portrait = readBooleanSetting([player], ['portraitRequired', 'requiresPortrait', 'requirePortrait'])
-  const data = { token, teamId: String(team._id), playerId: String(player._id), orgId, guardianPhone: String(player.guardianPhone || player.contactPhone || ''), status: 'active', creatorId, parentSupplementRequired: true, identityVerificationRequired: identity.defined ? identity.value : standardFlow, portraitRequired: portrait.defined ? portrait.value : standardFlow, standardProfileFlow: standardFlow, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now }
+  const registrantType = registrantTypeForPlayer(player)
+  const registrantPhone = registrantType === 'self' ? firstValue(player.playerPhone, player.contactPhone) : firstValue(player.guardianPhone, player.contactPhone)
+  const registrantUserId = registrantType === 'self' ? firstValue(player.playerUserId, player.linkedUserId) : player.guardianUserId
+  const data = { token, teamId: String(team._id), playerId: String(player._id), orgId, registrantMode: 'age_based', registrantType, registrantUserId: String(registrantUserId || ''), registrantPhone: String(registrantPhone || ''), guardianPhone: registrantType === 'guardian' ? String(registrantPhone || '') : '', status: 'active', creatorId, parentSupplementRequired: true, identityVerificationRequired: identity.defined ? identity.value : standardFlow, portraitRequired: portrait.defined ? portrait.value : standardFlow, standardProfileFlow: standardFlow, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now }
   const added = await db.collection('parent_profile_invites').add({ data })
   return Object.assign({ _id: added._id }, data)
 }
@@ -1385,7 +1527,7 @@ async function submitOfficialRosterForWorkspace(event, identity) {
   if (!playerIds.length || playerIds.length > max) throw new Error('请选择符合上限的参赛球员')
   const rows = await safeGet('players', { teamId, _id: _.in(playerIds) }, 500)
   if (rows.length !== playerIds.length) throw new Error('名单包含不属于当前球队的球员')
-  if (rows.some(item => formatTeamPlayer(item, rosterContext.requirements).profileStatus !== 'complete')) throw new Error('资料不完整或异常的球员不能进入正式名单')
+  if (rows.some(item => formatTeamPlayer(item, Object.assign({}, rosterContext.requirements, { identityVerificationRequired:true })).profileStatus !== 'complete')) throw new Error('资料不完整、异常或未完成人证核验的球员不能进入正式名单')
   const existing = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
     .filter(item => snapshotMatchesDivision(item, rosterContext.divisionId, rosterContext.allowLegacySnapshot))
   if (existing.some(item => ['submitted', 'approved', 'locked'].indexOf(String(item.status || '')) >= 0)) throw new Error('该赛事名单已提交或锁定，不能重复提交')
@@ -1458,10 +1600,16 @@ async function matchLineupForWorkspace(event, identity) {
   matchTeams.forEach(item => { teamMap[String(item._id)] = item })
   const home = teamMap[String(match.homeTeamId || '')] || {}
   const away = teamMap[String(match.awayTeamId || '')] || {}
+  const side = String(match.homeTeamId || '') === teamId ? 'home' : 'away'
+  const preMatchState = match.preMatchState && typeof match.preMatchState === 'object' ? match.preMatchState : {}
+  const teamArrivals = preMatchState.teamArrivals && typeof preMatchState.teamArrivals === 'object' ? preMatchState.teamArrivals : {}
+  const refereeArrived = Boolean(preMatchState.refereeArrival && preMatchState.refereeArrival.confirmedAt)
+  const homeArrived = Boolean(teamArrivals.home && teamArrivals.home.confirmedAt)
+  const awayArrived = Boolean(teamArrivals.away && teamArrivals.away.confirmedAt)
   return {
     success: true,
     workspaceOrgId: String(result.workspace.orgId || ''),
-     match: { id: matchId, tournamentId, divisionId: rosterDivisionId, minPlayers: Number(match.minPlayers || 11), name: String(match.name || ''), matchDate: String(match.matchDate || ''), venue: String(match.venue || ''), divisionName: String(match.divisionName || match.division || ''), homeTeamName: String(home.name || match.homeTeamName || '主队'), awayTeamName: String(away.name || match.awayTeamName || '客队'), homeLogo: String(home.logoUrl || home.logo || ''), awayLogo: String(away.logoUrl || away.logo || '') },
+     match: { id: matchId, tournamentId, divisionId: rosterDivisionId, side, minPlayers: Number(match.minPlayers || 11), name: String(match.name || ''), matchDate: String(match.matchDate || ''), venue: String(match.venue || ''), divisionName: String(match.divisionName || match.division || ''), homeTeamName: String(home.name || match.homeTeamName || '主队'), awayTeamName: String(away.name || match.awayTeamName || '客队'), homeLogo: String(home.logoUrl || home.logo || ''), awayLogo: String(away.logoUrl || away.logo || ''), refereeArrived, homeArrived, awayArrived, teamArrived:side === 'home' ? homeArrived : awayArrived, allArrived:refereeArrived && homeArrived && awayArrived },
     rosterId: String(roster._id),
     players: players.map(formatTeamPlayer),
     lineup: latest ? { id: String(latest._id), formation: String(latest.formation || ''), starters: latest.starters || [], substitutes: latest.substitutes || [], status: String(latest.status || ''), returnReason: String(latest.returnReason || ''), submittedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null,
@@ -1469,9 +1617,71 @@ async function matchLineupForWorkspace(event, identity) {
   }
 }
 
+async function confirmTeamArrivalForWorkspace(event, identity) {
+  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  if ((result.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有确认球队到场的权限')
+  const matchId = String(event.matchId || ''), teamId = String(event.teamId || '')
+  const teams = await loadTeams(result.workspace, identity.user, identity.openId)
+  if (!teams.some(item => String(item._id) === teamId)) throw new Error('球队不属于当前工作空间')
+  const match = (await safeGet('matches', { _id:matchId }, 1))[0]
+  if (!match) throw new Error('比赛不存在')
+  const side = String(match.homeTeamId || '') === teamId ? 'home' : (String(match.awayTeamId || '') === teamId ? 'away' : '')
+  if (!side) throw new Error('该球队不属于本场比赛')
+  if (['ongoing','live','finished','completed','cancelled'].indexOf(String(match.status || 'scheduled')) >= 0) throw new Error('当前比赛状态不能确认赛前到场')
+  const state = Object.assign({}, match.preMatchState || {})
+  state.teamArrivals = Object.assign({}, state.teamArrivals || {})
+  state.teamArrivals[side] = { confirmedAt:new Date(), confirmedByUserId:String(identity.user._id), confirmedByPhoneMasked:maskPhone(String(firstValue(identity.user.phone, identity.user.phoneNumber) || '')) }
+  state.teamsArrival = state.teamArrivals.home && state.teamArrivals.away ? { confirmedAt:new Date(), source:'two_team_confirmations' } : null
+  await db.collection('matches').doc(matchId).update({ data:{ preMatchState:state, updateTime:db.serverDate() } })
+  return { success:true, side, teamArrived:true, allTeamsArrived:Boolean(state.teamArrivals.home && state.teamArrivals.away) }
+}
+
+function matchPassSecret() { return String(process.env.SXF_MATCH_PASS_SECRET || '').trim() }
+function matchPassSignature(passId) { return crypto.createHmac('sha256', matchPassSecret()).update('football:adult-match-pass:' + String(passId)).digest('base64url').slice(0,32) }
+
+async function adultElectronicPassForWorkspace(event, identity) {
+  const matchId = String(event.matchId || ''), playerId = String(event.playerId || '')
+  if (!matchId || !playerId) throw workspaceError('ADULT_PASS_CONTEXT_REQUIRED', '缺少比赛或球员信息')
+  if (!matchPassSecret()) throw workspaceError('MATCH_PASS_SECRET_MISSING', '电子参赛证签名尚未配置，请联系管理员')
+  for (const name of ['player_electronic_passes','adult_match_passes']) { try { await db.createCollection(name) } catch (error) {} }
+  const match = (await safeGet('matches', { _id:matchId }, 1))[0]
+  const player = (await safeGet('players', { _id:playerId }, 1))[0]
+  if (!match || !player) throw workspaceError('ADULT_PASS_NOT_FOUND', '比赛或球员不存在')
+  const phone = String(identity.phone || '').replace(/\D/g,'')
+  const playerPhones = unique([player.playerPhone, player.contactPhone, player.phone, player.phoneNumber].map(value => String(value || '').replace(/\D/g,'')))
+  if (!phone || playerPhones.indexOf(phone) < 0 || String(player.registrantType || '') !== 'self') throw workspaceError('ADULT_PASS_OWNER_REQUIRED', '只能由已验证手机号的成人球员本人调取参赛证')
+  if (['verified','approved','complete','manual_required'].indexOf(String(player.identityStatus || '').toLowerCase()) < 0) throw workspaceError('PLAYER_IDENTITY_REQUIRED', '请先完成人证核验')
+  const division = match.divisionId ? (await safeGet('divisions', { _id:String(match.divisionId) }, 1))[0] : null
+  const participantType = String(firstValue(division && division.participantType, division && division.audienceType, match.participantType, '')).toLowerCase()
+  const label = String(firstValue(division && division.name, match.divisionName, ''))
+  if (participantType !== 'adult' && !/成人|公开组/i.test(label)) throw workspaceError('ADULT_PASS_NOT_APPLICABLE', '青少年赛事由助理裁判直接按名单核验，不使用二维码')
+  const side = String(match.homeTeamId || '') === String(player.teamId || '') ? 'home' : (String(match.awayTeamId || '') === String(player.teamId || '') ? 'away' : '')
+  if (!side) throw workspaceError('PLAYER_NOT_IN_MATCH_TEAM', '球员所属球队不参加本场比赛')
+  const lineup = match[side === 'home' ? 'homeLineup' : 'awayLineup'] || {}
+  const allPlayers = (Array.isArray(lineup.starters) ? lineup.starters : []).concat(Array.isArray(lineup.substitutes) ? lineup.substitutes : [])
+  if (!allPlayers.some(item => String(firstValue(item._id, item.id, item.playerId) || '') === playerId)) throw workspaceError('PLAYER_NOT_IN_MATCH_LINEUP', '球员不在本场已提交阵容中')
+  const confirmations = lineup.confirmations || {}
+  if (!(confirmations.mainReferee && confirmations.mainReferee.status === 'approved')) throw workspaceError('LINEUP_NOT_CONFIRMED', '请等待第四官员和主裁判确认阵容')
+  let certificate = (await safeGet('player_electronic_passes', { playerId, status:'active' }, 2))[0]
+  if (!certificate) {
+    const number = 'SXF-' + Date.now().toString(36).toUpperCase() + '-' + playerId.slice(-5).toUpperCase()
+    const added = await db.collection('player_electronic_passes').add({ data:{ sport:'football', playerId, ownerUserId:String(identity.user._id), certificateNumber:number, status:'active', issuedAt:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate() } })
+    certificate = { _id:added._id, certificateNumber:number, status:'active' }
+  }
+  let pass = (await safeGet('adult_match_passes', { matchId, playerId, status:'active' }, 5)).find(item => !item.expiresAt || toTime(item.expiresAt) > Date.now())
+  if (!pass) {
+    const passId = crypto.randomBytes(12).toString('base64url'), expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    await db.collection('adult_match_passes').doc(passId).set({ data:{ sport:'football', matchId, playerId, teamId:String(player.teamId || ''), side, certificateId:String(certificate._id || ''), status:'active', expiresAt, issuedByUserId:String(identity.user._id), createTime:db.serverDate(), updateTime:db.serverDate() } })
+    pass = { _id:passId, expiresAt }
+  }
+  const token = 'SXFMP1.' + String(pass._id) + '.' + matchPassSignature(pass._id)
+  return { success:true, certificate:{ id:String(certificate._id || ''), number:String(certificate.certificateNumber || '') }, matchPass:{ id:String(pass._id), token, expiresAt:pass.expiresAt || null }, player:{ id:playerId, name:String(player.name || '球员'), jerseyNumber:String(player.jerseyNumber || ''), photoUrl:String(player.photoUrl || ''), identityLabel:'人证核验通过' }, match:{ id:matchId, teamsText:String(firstValue(match.homeTeamName,'主队')) + ' vs ' + String(firstValue(match.awayTeamName,'客队')), timeText:dateText(firstValue(match.matchTime, match.matchDate, match.startTime)) } }
+}
+
 async function submitMatchLineupForWorkspace(event, identity) {
   const loaded = await matchLineupForWorkspace(event, identity)
   if (!loaded.canManage) throw new Error('当前身份没有提交比赛阵容的权限')
+  if (!loaded.match.refereeArrived || !loaded.match.homeArrived || !loaded.match.awayArrived) throw new Error('请等待主裁判和双方球队负责人完成赛前报到')
   const starters = Array.isArray(event.starters) ? event.starters : []
   const substitutes = Array.isArray(event.substitutes) ? event.substitutes : []
   const ids = unique(starters.map(item => item.playerId).concat(substitutes.map(item => item.playerId)))
@@ -1482,6 +1692,14 @@ async function submitMatchLineupForWorkspace(event, identity) {
   const version = existing.reduce((max, item) => Math.max(max, Number(item.version || 1)), 0) + 1
   const now = db.serverDate()
   const created = await db.collection('match_lineup_snapshots').add({ data: { matchId: loaded.match.id, tournamentId: loaded.match.tournamentId, teamId: String(event.teamId || ''), rosterId: loaded.rosterId, formation: String(event.formation || ''), starters, substitutes, version, status: 'submitted', submittedBy: identity.user._id, createTime: now, updateTime: now } })
+  const playerMap = {}
+  loaded.players.forEach(item => { playerMap[String(item.id)] = item })
+  const lineup = { teamId:String(event.teamId || ''), formation:String(event.formation || ''), starters:starters.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId), slotId:String(item.slotId || '') })), substitutes:substitutes.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId) })), status:'submitted', submitted:true, version, snapshotId:String(created._id), confirmations:{}, identityChecks:{}, submittedAt:now, submittedByUserId:String(identity.user._id) }
+  const side = loaded.match.side
+  const matchUpdate = { lineupsLocked:false, identityVerificationStatus:'pending_lineup_confirmation', updateTime:now }
+  matchUpdate[side === 'home' ? 'homeLineup' : 'awayLineup'] = lineup
+  matchUpdate[side === 'home' ? 'homeLineupStatus' : 'awayLineupStatus'] = 'submitted'
+  await db.collection('matches').doc(loaded.match.id).update({ data:matchUpdate })
   const organizerUserIds = await findOrganizationUserIds(loaded.workspaceOrgId, 'event.manage')
   await publishWorkspaceMessage({
     orgId: loaded.workspaceOrgId,
@@ -1611,6 +1829,8 @@ async function prebuiltTeamInviteForWorkspace(event, identity) {
   const invite = (await safeGet('team_invitations', { _id: inviteId }, 1))[0]
   assertPrebuiltInviteActive(invite)
   if (!invite || String(invite.type || '') !== 'prebuilt_tournament_team') throw new Error('邀请不存在或已失效')
+  const allowedClaimPhones = unique((Array.isArray(invite.allowedClaimPhones) ? invite.allowedClaimPhones : []).map(function(value) { return String(value || '').replace(/\D/g, '') }).filter(function(value) { return /^1[3-9]\d{9}$/.test(value) }))
+  if (allowedClaimPhones.length && allowedClaimPhones.indexOf(String(identity.phone || '')) < 0) throw workspaceError('TEAM_CLAIM_PHONE_MISMATCH', '该邀请仅限报名表中的领队或主教练认领，请使用登记手机号登录')
   if (invite.inviteeUserId && String(invite.inviteeUserId) !== String(identity.user._id)) throw new Error('该邀请不属于当前账号')
   if (invite.inviteeOpenId && String(invite.inviteeOpenId) !== String(identity.openId || '')) throw new Error('该邀请不属于当前微信账号')
   const inviteStatus = String(invite.status || 'pending')
@@ -1635,7 +1855,8 @@ async function prebuiltTeamInviteForWorkspace(event, identity) {
   }
   const claimStatus = String(team.claimStatus || 'unclaimed').toLowerCase()
   const hasOwnership = Boolean(team.ownerId || team.ownerUserId || team.claimedByUserId || (team.orgId && String(team.orgId) !== String(invite.organizerOrgId || '')))
-  return { success: true, invite: { id: inviteId, status: inviteStatus, reviewRequestId: String(invite.reviewRequestId || ''), organizerName: String(invite.organizerName || ''), managerName: String(invite.managerName || ''), managerPhoneMasked: maskPhone(String(invite.managerPhone || '')), teamId, tournamentId, divisionName: String(invite.divisionName || '') }, tournament: { name: String(tournament.name || '') }, prebuiltTeam: { id: teamId, name: String(team.name || team.teamName || ''), claimStatus, managesPrebuiltTeam, requiresReview: !managesPrebuiltTeam && (claimStatus !== 'unclaimed' || hasOwnership) }, candidateTeams }
+  const claimant = (Array.isArray(invite.claimantCandidates) ? invite.claimantCandidates : []).find(function(item) { return String(item && item.phone || '').replace(/\D/g, '') === String(identity.phone || '') })
+  return { success: true, invite: { id: inviteId, status: inviteStatus, reviewRequestId: String(invite.reviewRequestId || ''), organizerName: String(invite.organizerName || ''), managerName: String(invite.managerName || ''), managerPhoneMasked: maskPhone(String(invite.managerPhone || '')), claimantRoleLabel:String(claimant && claimant.roleLabel || ''), teamId, tournamentId, divisionName: String(invite.divisionName || '') }, tournament: { name: String(tournament.name || '') }, prebuiltTeam: { id: teamId, name: String(team.name || team.teamName || ''), claimStatus, managesPrebuiltTeam, requiresReview: !managesPrebuiltTeam && (claimStatus !== 'unclaimed' || hasOwnership) }, candidateTeams }
 }
 
 async function upsertRegistrationArtifact(collection, uniqueKey, data) {
@@ -1655,6 +1876,27 @@ async function createRegistrationReviewArtifacts(invite, relationId, teamId, ide
   await upsertRegistrationArtifact('tournament_tasks', `${tournamentId}:registration_status:${teamId}`, { sport:'football', tournamentId, divisionId, teamId, registrationId:relationId, type:'registration_status', audience:'team', recipientUserId:String(identity.user._id || ''), status:'pending', title:'赛事报名审核中', detail:String(invite.divisionName || '') })
   await upsertRegistrationArtifact('notification_outbox', `targeted_registration_confirmed:${relationId}:task_center`, { sport:'football', businessEventId:`targeted_registration_confirmed:${relationId}`, tournamentId, registrationId:relationId, recipientOrgId:String(invite.organizerOrgId || ''), channel:'task_center', status:'delivered', targetPage:'pages/todo/index' })
   await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'targeted_registration_confirmed', tournamentId, divisionId, inviteId:String(invite._id || ''), registrationId:relationId, actorUserId:String(identity.user._id || ''), actorOrgId:'', result:'success', detail:{ teamId }, createTime:db.serverDate() } })
+}
+
+async function transferImportedPlayerDrafts(invite, targetTeamId, identity) {
+  const sourceTeamId = String(invite.teamId || '')
+  const batchId = String(invite.registrationImportBatchId || '')
+  const where = batchId ? { importBatchId:batchId } : { sourceTeamId }
+  const rows = await safeGet('registration_player_drafts', where, 500)
+  const movable = rows.filter(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0)
+  for (const draft of movable) {
+    await db.collection('registration_player_drafts').doc(draft._id).update({ data:{
+      teamId:targetTeamId,
+      claimedTeamId:targetTeamId,
+      claimedByUserId:String(identity.user._id || ''),
+      claimTransferredAt:db.serverDate(),
+      updateTime:db.serverDate()
+    } })
+  }
+  if (batchId) await db.collection('registration_import_batches').doc(batchId).update({ data:{ claimStatus:'claimed', status:'player_review_pending', claimedTeamId:targetTeamId, claimedByUserId:String(identity.user._id || ''), claimedAt:db.serverDate(), updateTime:db.serverDate() } })
+  if (targetTeamId) await db.collection('teams').doc(targetTeamId).update({ data:{ pendingPlayerDraftCount:movable.length, playerReviewStatus:movable.length ? 'pending' : 'completed', updateTime:db.serverDate() } })
+  if (sourceTeamId && sourceTeamId !== targetTeamId) await db.collection('teams').doc(sourceTeamId).update({ data:{ pendingPlayerDraftCount:0, playerReviewStatus:'transferred', importedDraftsTransferredToTeamId:targetTeamId, updateTime:db.serverDate() } })
+  return movable.length
 }
 
 async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
@@ -1688,8 +1930,9 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
     }
     if (String(invite.teamId || '') !== teamId && invite.tournamentTeamId) await db.collection('tournament_teams').doc(String(invite.tournamentTeamId)).update({ data:{ status:'replaced', replacedByTeamId:teamId, updateTime:now } })
     await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'accepted', acceptedChoice: 'existing', acceptedTeamId: teamId, acceptedUserId: identity.user._id, acceptedOpenId: identity.openId || '', updateTime: now } })
+    const pendingPlayerDraftCount = await transferImportedPlayerDrafts(invite, teamId, identity)
     await createRegistrationReviewArtifacts(invite, relationId, teamId, identity)
-    return { success: true, teamId, registrationId:relationId, destination: 'team-center' }
+    return { success: true, teamId, registrationId:relationId, pendingPlayerDraftCount, destination: pendingPlayerDraftCount ? 'imported-player-review' : 'team-center' }
   }
   if (preview.prebuiltTeam.requiresReview && !reviewApproved) {
     await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'review_required', reviewReason: '预建队存在归属或认领冲突，禁止自动合并', reviewRequestedBy: identity.user._id, updateTime: now } })
@@ -1699,6 +1942,7 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
   if (!membership.length) await db.collection('team_memberships').add({ data: { teamId: preview.prebuiltTeam.id, userId: identity.user._id, openId: identity.openId || '', role: 'owner', status: 'accepted', source: 'prebuilt_invite_claim', createTime: now, updateTime: now } })
   await db.collection('teams').doc(preview.prebuiltTeam.id).update({ data: { claimStatus: 'claimed', ownerId: identity.user._id, claimedByUserId: identity.user._id, updateTime: now } })
   await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'accepted', acceptedChoice: 'prebuilt', acceptedTeamId: preview.prebuiltTeam.id, acceptedUserId: identity.user._id, acceptedOpenId: identity.openId || '', reviewStatus: reviewApproved ? 'confirmed' : '', updateTime: now } })
+  const pendingPlayerDraftCount = await transferImportedPlayerDrafts(invite, preview.prebuiltTeam.id, identity)
   const relations = await safeGet('tournament_teams', { tournamentId: preview.invite.tournamentId, teamId: preview.prebuiltTeam.id }, 20)
   let relationId = ''
   for (const relation of relations) {
@@ -1712,7 +1956,7 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
     relationId = String(created._id)
   }
   await createRegistrationReviewArtifacts(invite, relationId, preview.prebuiltTeam.id, identity)
-  return { success: true, teamId: preview.prebuiltTeam.id, registrationId:relationId, destination: 'team-center' }
+  return { success: true, teamId: preview.prebuiltTeam.id, registrationId:relationId, pendingPlayerDraftCount, destination: pendingPlayerDraftCount ? 'imported-player-review' : 'team-center' }
 }
 
 async function requestPrebuiltTeamClaimReview(event, identity) {
@@ -1952,12 +2196,14 @@ async function createTeamPlayerInviteForWorkspace(event, identity) {
   const rows = await safeGet('team_invitations', { teamId, type: 'team_player', inviterUserId: identity.user._id }, 50)
   const reusable = rows.find(item => ['active', 'pending'].indexOf(String(item.status || '')) >= 0 && String(item.token || '').indexOf('tp_') === 0 && toTime(item.expiresAt) > Date.now())
   if (reusable) {
+    if (String(reusable.registrantMode || '') !== 'age_based') await db.collection('team_invitations').doc(String(reusable._id)).update({ data: { registrantMode: 'age_based', updateTime: db.serverDate() } })
     return {
       success: true,
       reused: true,
       inviteId: String(reusable._id),
       token: String(reusable.token),
       expiresAtText: dateText(reusable.expiresAt),
+      registrantMode: 'age_based',
       path: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId) + '&playerInviteId=' + encodeURIComponent(String(reusable.token))
     }
   }
@@ -1970,6 +2216,7 @@ async function createTeamPlayerInviteForWorkspace(event, identity) {
     orgId: String(scope.workspace.orgId || ''),
     type: 'team_player',
     purpose: 'player_profile_onboarding',
+    registrantMode: 'age_based',
     status: 'active',
     usageMode: 'multi',
     inviterUserId: identity.user._id,
@@ -1984,6 +2231,7 @@ async function createTeamPlayerInviteForWorkspace(event, identity) {
     inviteId: String(created._id),
     token,
     expiresAtText: dateText(expiresAt),
+    registrantMode: 'age_based',
     path: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId) + '&playerInviteId=' + encodeURIComponent(token)
   }
 }
@@ -2006,13 +2254,17 @@ async function teamPlayerInviteForWorkspace(event, identity) {
   const existing = players.find(item => {
     const linkedIds = [item.linkedUserId, item.playerUserId].filter(Boolean).map(String)
     const linkedOpenIds = [item.linkedOpenId, item.playerOpenId].filter(Boolean).map(String)
-    return (userId && linkedIds.indexOf(userId) >= 0) || (openId && linkedOpenIds.indexOf(openId) >= 0)
+    const guardianIds = [item.guardianUserId].filter(Boolean).map(String)
+    const guardianOpenIds = [item.guardianOpenId].filter(Boolean).map(String)
+    return (userId && linkedIds.indexOf(userId) >= 0) || (openId && linkedOpenIds.indexOf(openId) >= 0) || (userId && guardianIds.indexOf(userId) >= 0) || (openId && guardianOpenIds.indexOf(openId) >= 0)
   })
+  const existingRegistrantType = existing && ((userId && [existing.linkedUserId, existing.playerUserId].filter(Boolean).map(String).indexOf(userId) >= 0) || (openId && [existing.linkedOpenId, existing.playerOpenId].filter(Boolean).map(String).indexOf(openId) >= 0)) ? 'self' : 'guardian'
   return {
     success: true,
-    invitation: { id: String(invite._id), token: String(invite.token || ''), expiresAtText: dateText(invite.expiresAt) },
+    invitation: { id: String(invite._id), token: String(invite.token || ''), expiresAtText: dateText(invite.expiresAt), registrantMode: 'age_based' },
     team: { id: teamId, name: String(team.name || team.teamName || ''), logo: String(team.logoTransparent || team.logo || team.logoUrl || '') },
-    existingPlayer: existing ? { id: String(existing._id), name: String(existing.name || '球员'), birthDate: String(firstValue(existing.birthDate, existing.birthday) || ''), profileStatus: String(existing.profileStatus || 'pending') } : null
+    accountPhoneMasked: maskPhone(verifiedUserPhone(identity.user)),
+    existingPlayer: existing ? { id: String(existing._id), name: String(existing.name || '球员'), birthDate: String(firstValue(existing.birthDate, existing.birthday) || ''), profileStatus: String(existing.profileStatus || 'pending'), registrantType: existingRegistrantType, registrantLabel: existingRegistrantType === 'self' ? '球员本人' : '家长或监护人' } : null
   }
 }
 
@@ -2028,20 +2280,20 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     const parentInvite = await ensureParentProfileInviteForPlayer(teamRecord, existingPlayer, String(invite.orgId || ''), identity.user._id)
     return { success: true, idempotent: true, player: preview.existingPlayer, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token) }
   }
-  const participantRole = String(event.participantRole || '') === 'player' ? 'player' : 'guardian'
   const name = String(event.name || '').trim().slice(0, 30)
   const birthDate = String(event.birthDate || '').trim()
-  const guardianPhone = String(event.guardianPhone || '').replace(/\s/g, '')
+  const accountPhone = verifiedUserPhone(identity.user)
   const allowedRelations = ['father', 'mother', 'other']
   const guardianRelation = allowedRelations.indexOf(String(event.guardianRelation || '')) >= 0 ? String(event.guardianRelation) : 'other'
   const jerseyNumber = String(event.jerseyNumber || '').trim().slice(0, 3)
   const allowedPositions = ['GK', 'DF', 'MF', 'FW']
   const position = allowedPositions.indexOf(String(event.position || '')) >= 0 ? String(event.position) : ''
   const birthTime = new Date(birthDate + 'T00:00:00').getTime()
-  if (event.authorizationAgreed !== true) throw new Error('请确认已获得球员及监护人授权')
   if (name.length < 2) throw new Error('请填写真实球员姓名')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !Number.isFinite(birthTime) || birthTime > Date.now()) throw new Error('请选择正确的出生日期')
-  if (!/^1\d{10}$/.test(guardianPhone)) throw new Error('请填写正确的监护人手机号')
+  const registrantType = registrantTypeForBirthDate(birthDate, invite.referenceDate)
+  if (event.authorizationAgreed !== true) throw new Error(registrantType === 'self' ? '请确认由球员本人登记并授权资料使用' : '请确认监护关系和资料使用授权')
+  if (!accountPhone) throw workspaceError('VERIFIED_PHONE_REQUIRED', '当前账号缺少已验证手机号，请重新登录后再登记')
   if (jerseyNumber && !/^\d{1,3}$/.test(jerseyNumber)) throw new Error('球衣号码只可填写数字')
   const teamPlayers = await safeGet('players', { teamId: preview.team.id }, 500)
   const duplicates = teamPlayers.filter(item => String(item.name || '') === name && String(firstValue(item.birthDate, item.birthday) || '') === birthDate)
@@ -2049,8 +2301,8 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     const currentUserId = String(identity.user._id || '')
     const currentOpenId = String(identity.openId || '')
     const owned = duplicates.find(item => {
-      const userIds = participantRole === 'player' ? [item.linkedUserId, item.playerUserId] : [item.guardianUserId]
-      const openIds = participantRole === 'player' ? [item.linkedOpenId, item.playerOpenId] : [item.guardianOpenId]
+      const userIds = registrantType === 'self' ? [item.linkedUserId, item.playerUserId] : [item.guardianUserId]
+      const openIds = registrantType === 'self' ? [item.linkedOpenId, item.playerOpenId] : [item.guardianOpenId]
       return (currentUserId && userIds.filter(Boolean).map(String).indexOf(currentUserId) >= 0) || (currentOpenId && openIds.filter(Boolean).map(String).indexOf(currentOpenId) >= 0)
     })
     if (owned) {
@@ -2066,9 +2318,9 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     name,
     birthDate,
     birthday: birthDate,
-    guardianPhone,
-    guardianRelation,
-    contactPhone: guardianPhone,
+    registrantMode: 'age_based',
+    registrantType,
+    contactPhone: accountPhone,
     jerseyNumber,
     position,
     profileStatus: 'pending',
@@ -2078,16 +2330,19 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     portraitRequired: true,
     source: 'team_player_invite',
     playerInviteId: preview.invitation.id,
-    applicantRole: participantRole,
+    applicantRole: registrantType,
     authorizationAgreed: true,
     authorizationConfirmedAt: now,
     createTime: now,
     updateTime: now
   }
-  if (participantRole === 'player') {
+  if (registrantType === 'self') {
+    playerData.playerPhone = accountPhone
     playerData.linkedUserId = identity.user._id
     playerData.linkedOpenId = identity.openId || ''
   } else {
+    playerData.guardianPhone = accountPhone
+    playerData.guardianRelation = guardianRelation
     playerData.guardianUserId = identity.user._id
     playerData.guardianOpenId = identity.openId || ''
   }
@@ -2402,6 +2657,8 @@ exports.main = async function(event) {
     if (event.action === 'markMessageRead') return await markMessagesRead(event, identity)
     if (event.action === 'setHomeIdentity') return await saveHomeIdentity(event, identity)
     if (event.action === 'teamPlayers') return await loadTeamPlayersForWorkspace(event, identity)
+    if (event.action === 'importedPlayerDrafts') return await importedPlayerDraftsForWorkspace(event, identity)
+    if (event.action === 'reviewImportedPlayerDrafts') return await reviewImportedPlayerDraftsForWorkspace(event, identity)
     if (event.action === 'teamPlayerDetail') return await loadTeamPlayerDetailForWorkspace(event, identity)
     if (event.action === 'teamPlayerEdit') return await loadTeamPlayerForEditForWorkspace(event, identity)
     if (event.action === 'saveTeamPlayer') return await saveTeamPlayerForWorkspace(event, identity)
@@ -2413,6 +2670,8 @@ exports.main = async function(event) {
     if (event.action === 'submitOfficialRoster') return await submitOfficialRosterForWorkspace(event, identity)
     if (event.action === 'returnOfficialRoster') return await returnOfficialRosterForOrganizer(event, identity)
     if (event.action === 'matchLineup') return await matchLineupForWorkspace(event, identity)
+    if (event.action === 'confirmTeamArrival') return await confirmTeamArrivalForWorkspace(event, identity)
+    if (event.action === 'adultElectronicPass') return await adultElectronicPassForWorkspace(event, identity)
     if (event.action === 'submitMatchLineup') return await submitMatchLineupForWorkspace(event, identity)
     if (event.action === 'returnMatchLineup') return await returnMatchLineupForOrganizer(event, identity)
     if (event.action === 'teamDataPackage') return await teamDataPackageForWorkspace(event, identity)

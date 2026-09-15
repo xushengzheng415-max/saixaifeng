@@ -206,7 +206,7 @@
 
   function taskCard(task) {
     var state = taskStateKey(task)
-    return '<button class="task" data-match-id="' + escapeHtml(task.matchId) + '"><div class="task-card-top"><span class="task-state task-state-' + state + '">' + escapeHtml(taskStateLabel(state)) + '</span><span class="task-role">' + escapeHtml(task.refereeRoleLabel || '操作负责人') + '</span></div>' +
+    return '<button class="task" data-match-id="' + escapeHtml(task.matchId) + '" data-task-kind="' + (task.isIdentityTask ? 'identity' : 'match') + '" data-task-side="' + escapeHtml(task.identityTaskSide || 'home') + '"><div class="task-card-top"><span class="task-state task-state-' + state + '">' + escapeHtml(taskStateLabel(state)) + '</span><span class="task-role">' + escapeHtml(task.refereeRoleLabel || '操作负责人') + '</span></div>' +
       '<span class="task-tournament">' + escapeHtml(task.tournamentName || '赛事比赛') + '</span><h2><span>' + escapeHtml(task.homeTeamName) + '</span><i>VS</i><span>' + escapeHtml(task.awayTeamName) + '</span></h2>' +
       '<div class="task-meta"><span>' + escapeHtml(task.matchTimeText || '开赛时间待定') + '</span><span>' + escapeHtml(task.venue || '场地待定') + '</span></div><div class="task-foot"><span>' + escapeHtml(task.matchStatusText || taskStateLabel(state)) + '</span><b>进入任务</b></div></button>'
   }
@@ -233,7 +233,7 @@
       node.onclick = function () { workbenchFilter = node.getAttribute('data-task-filter') || 'all'; renderWorkbench(data) }
     })
     Array.prototype.forEach.call(document.querySelectorAll('[data-match-id]'), function (node) {
-      node.onclick = function () { loadMatch(node.getAttribute('data-match-id')) }
+      node.onclick = function () { if (node.getAttribute('data-task-kind') === 'identity') loadIdentityTask(node.getAttribute('data-match-id'), node.getAttribute('data-task-side')); else loadMatch(node.getAttribute('data-match-id')) }
     })
   }
 
@@ -291,7 +291,7 @@
   }
 
   function clockControls(match) {
-    if (!match.canFinish) return ''
+    if (!match.canControlClock) return ''
     var html = '<div class="clock-controls">'
     if (match.clockPhase === 'halftime') {
       html += '<button class="clock-main clock-only" data-clock-command="second_half">▶ 开始下半场</button>'
@@ -449,7 +449,7 @@
       '<section class="pre-match-teams"><div class="pre-match-division">' + escapeHtml(match.divisionName || '比赛场次') + '</div><div class="pre-match-team-row"><strong>' + escapeHtml(match.homeTeamName) + '</strong><b>VS</b><strong>' + escapeHtml(match.awayTeamName) + '</strong></div><div class="pre-match-time"><span>' + escapeHtml(match.matchTimeText) + '</span><span>' + escapeHtml(match.venue) + '</span><span>' + escapeHtml(match.matchStatusText) + '</span></div></section>' +
       '<section class="pre-match-steps">' + steps.map(function (step, index) { return '<div class="pre-match-step' + preMatchStepClass(index === 0, step[1]) + '"><b>' + (index + 1) + '</b><span>' + step[0] + '</span></div>' }).join('') + '</section>' +
       '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>裁判组报到</h2><span>' + (preMatch.refereeArrived ? '已确认' : '待确认') + '</span></div><p>仅本场获授权裁判可在抵达现场后确认报到。</p><button class="pre-match-action' + (preMatch.refereeArrived ? ' is-done' : '') + '" type="button" data-pre-match-operation="confirm_referee_arrival">' + (preMatch.refereeArrived ? '裁判已报到' : '确认本人已到场') + '</button></section>' +
-      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>双方球队到场确认</h2><span>' + (preMatch.teamsArrived ? '已确认' : '待确认') + '</span></div><div class="pre-match-team-check"><span>' + escapeHtml(match.homeTeamName) + '（主队）</span><b>' + (preMatch.teamsArrived ? '已到场' : '待确认') + '</b></div><div class="pre-match-team-check"><span>' + escapeHtml(match.awayTeamName) + '（客队）</span><b>' + (preMatch.teamsArrived ? '已到场' : '待确认') + '</b></div><button class="pre-match-action' + (preMatch.teamsArrived ? ' is-done' : '') + '" type="button" data-pre-match-operation="confirm_teams_arrival">' + (preMatch.teamsArrived ? '双方已到场' : '确认双方已到场') + '</button></section>' +
+      '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>球队负责人报到</h2><span>' + (preMatch.teamsArrived ? '双方已确认' : '等待球队') + '</span></div><div class="pre-match-team-check"><span>' + escapeHtml(match.homeTeamName) + '（主队）</span><b>' + (preMatch.homeTeamArrived ? '负责人已确认' : '待负责人确认') + '</b></div><div class="pre-match-team-check"><span>' + escapeHtml(match.awayTeamName) + '（客队）</span><b>' + (preMatch.awayTeamArrived ? '负责人已确认' : '待负责人确认') + '</b></div></section>' +
       '<section class="pre-match-panel"><div class="pre-match-panel-title"><h2>赛前检查清单</h2><span>' + checkedCount + '/' + checklist.length + '</span></div>' + checklist.map(function (item) { return '<button type="button" class="pre-match-check' + (item.checked ? ' is-checked' : '') + '" data-pre-match-operation="toggle_checklist" data-pre-match-item="' + escapeHtml(item.key) + '"><i aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span><b>' + (item.checked ? '已检查' : '待检查') + '</b></button>' }).join('') + '</section>' +
       '<section class="pre-match-bottom"><button id="completePreMatch" class="pre-match-complete" type="button"' + (completeReady ? '' : ' disabled') + '>确认赛前检查，进入阵容核验</button><button id="preMatchIssue" class="pre-match-issue" type="button">报告无法开赛</button></section>'
     document.getElementById('backButton').onclick = loadWorkbench
@@ -474,7 +474,7 @@
   }
 
   function lineupStatusText(status) {
-    return { submitted: '待核验', verified: '核验通过', locked: '已锁定', returned: '已退回修改', unclaimed: '尚未提交' }[status] || '尚未提交'
+    return { submitted: '待第四官员初审', fourth_approved:'待主裁判确认', identity_check:'待助理裁判逐人核验', identity_verified:'身份核验完成', verified: '核验通过', locked: '已锁定', returned: '已退回修改', unclaimed: '尚未提交' }[status] || '尚未提交'
   }
 
   function renderLineupVerification(match) {
@@ -495,10 +495,11 @@
       var status = roster.status || 'unclaimed'
       var starters = (roster.players || []).filter(function (player) { return player.role !== 'substitute' })
       var substitutes = (roster.players || []).filter(function (player) { return player.role === 'substitute' })
-      var canReview = match.canReviewLineups && status === 'submitted'
+      var canMainConfirm = match.refereeRole === 'mainReferee' && roster.fourthConfirmed && !roster.mainConfirmed && status === 'fourth_approved'
+      var canReturn = match.refereeRole === 'mainReferee' && ['submitted','fourth_approved'].indexOf(status) >= 0
       return '<section class="lineup-team-card' + (expanded ? ' is-expanded' : '') + '"><div class="lineup-team-heading"><div><span class="lineup-team-side">' + (team.side === 'home' ? '主队' : '客队') + '</span><h2>' + escapeHtml(team.name) + '</h2><small>' + escapeHtml(lineupStatusText(status)) + '</small></div><button type="button" class="lineup-expand" data-lineup-expand="' + team.side + '">' + (expanded ? '收起' : '展开') + '</button></div><div class="lineup-metrics"><span>首发 <b>' + starters.length + '</b> 人</span><span>替补 <b>' + substitutes.length + '</b> 人</span><span>共 <b>' + (roster.players || []).length + '</b> 人</span></div>' +
         (expanded ? '<div class="lineup-list-title">首发球员（' + starters.length + '人）</div><div class="lineup-players">' + (starters.length ? starters.map(function (player) { return playerRow(player, status) }).join('') : '<p class="lineup-empty">球队尚未提交本场首发阵容。</p>') + '</div>' + (substitutes.length ? '<div class="lineup-list-title">替补球员（' + substitutes.length + '人）</div><div class="lineup-players">' + substitutes.map(function (player) { return playerRow(player, status) }).join('') + '</div>' : '') : '') +
-        '<div class="lineup-card-actions"><button type="button" class="lineup-pass" data-lineup-decision="verified" data-lineup-side="' + team.side + '"' + (canReview ? '' : ' disabled') + '>确认核验通过</button><button type="button" class="lineup-return" data-lineup-decision="returned" data-lineup-side="' + team.side + '"' + (canReview ? '' : ' disabled') + '>标记异常</button></div></section>'
+        '<div class="lineup-card-actions"><button type="button" class="lineup-pass" data-lineup-stage="main" data-lineup-decision="approved" data-lineup-side="' + team.side + '"' + (canMainConfirm ? '' : ' disabled') + '>主裁判确认阵容</button><button type="button" class="lineup-return" data-lineup-stage="main" data-lineup-decision="returned" data-lineup-side="' + team.side + '"' + (canReturn ? '' : ' disabled') + '>退回球队修改</button></div></section>'
     }
     var expandedSide = match.lineupExpandedSide === 'away' ? 'away' : 'home'
     app.innerHTML = '<section class="lineup-hero"><button id="backButton" class="pre-match-back" type="button">返回</button><span>专业版 · 现场执行</span><h1>双方阵容及球员身份核验</h1><p>' + escapeHtml(match.matchTimeText) + ' · ' + escapeHtml(match.venue) + '</p></section><section class="lineup-steps"><span>赛前准备</span><b>2</b><strong>阵容核验</strong><span>赛前会议</span><span>设备检查</span><span>比赛开始</span></section><section class="lineup-notice">阵容由球队提交，裁判仅现场核验，不在此编辑首发或替补。</section>' + teams.map(function (team) { return teamCard(team, team.side === expandedSide) }).join('') + '<section class="lineup-bottom"><button id="lineupDone" type="button"' + (match.lineupsLocked ? '' : ' disabled') + '>完成核验并开始比赛</button><p>已完成 ' + verifiedCount + '/2 支球队核验。发现身份不符或名单异常时，请标记异常并退回球队修改。</p></section>'
@@ -507,9 +508,16 @@
       node.onclick = function () { match.lineupExpandedSide = node.getAttribute('data-lineup-expand'); renderLineupVerification(match) }
     })
     Array.prototype.forEach.call(document.querySelectorAll('[data-lineup-decision]'), function (node) {
-      node.onclick = function () { reviewLineup(node.getAttribute('data-lineup-side'), node.getAttribute('data-lineup-decision')) }
+      node.onclick = function () { reviewLineupStageFromMatch(node.getAttribute('data-lineup-side'), node.getAttribute('data-lineup-stage'), node.getAttribute('data-lineup-decision')) }
     })
     document.getElementById('lineupDone').onclick = function () { renderMatch(match) }
+  }
+
+  function reviewLineupStageFromMatch(side, stage, decision) {
+    var reason = ''
+    if (decision === 'returned') { reason = window.prompt('请填写退回原因'); if (!reason) return }
+    loading('正在保存阵容确认…')
+    workflow('confirmLineupStage', { matchId:currentMatch.matchId, side:side, stage:stage, decision:decision, reason:reason }).then(function(result) { if (!result.success) throw new Error(result.message || '保存失败'); toast(result.message); loadMatch(currentMatch.matchId) }).catch(function(error) { showError('阵容确认失败', error.message, function() { loadMatch(currentMatch.matchId) }) })
   }
 
   function reviewLineup(side, decision) {
@@ -524,6 +532,64 @@
       if (!result.success) throw new Error(result.message || '阵容核验保存失败')
       toast(result.message || '阵容核验已更新'); loadMatch(currentMatch.matchId)
     }).catch(function (error) { showError('阵容核验保存失败', error.message, function () { loadMatch(currentMatch.matchId) }) })
+  }
+
+  function identityPlayerCard(player, task) {
+    var photo = player.photoUrl ? '<img src="' + escapeHtml(player.photoUrl) + '" alt="' + escapeHtml(player.name) + '">' : '<span class="identity-player-avatar">' + escapeHtml(String(player.name || '球').slice(0,1)) + '</span>'
+    var actions = ''
+    if (task.canVerifyStarters && task.mainConfirmed && player.role === 'starter' && player.checkStatus === 'pending') actions = task.participantType === 'adult' ? '<div class="identity-player-actions"><small>请在小程序扫码核验</small><button data-player-exception="' + escapeHtml(player.id) + '">异常</button></div>' : '<div class="identity-player-actions"><button data-player-pass="' + escapeHtml(player.id) + '">通过</button><button data-player-exception="' + escapeHtml(player.id) + '">异常</button></div>'
+    if (task.canVerifySubstitutes && player.role === 'substitute' && player.checkStatus === 'pending') actions = '<div class="identity-player-actions"><button data-sub-pass="' + escapeHtml(player.id) + '">通过</button><button data-sub-exception="' + escapeHtml(player.id) + '">异常</button></div>'
+    if (task.role === 'fourthOfficial' && player.role === 'starter' && player.checkStatus === 'exception') actions += '<button class="identity-replace" data-replace-starter="' + escapeHtml(player.id) + '">从替补中更换</button>'
+    return '<article class="identity-player identity-player-' + escapeHtml(player.checkStatus || 'pending') + '">' + photo + '<div><b>' + escapeHtml(player.jerseyNumber || '—') + '号　' + escapeHtml(player.name) + '</b><span>' + escapeHtml(player.identityVerificationLabel || '待人证核验') + '</span><small>' + escapeHtml(player.checkStatusText || '待核验') + (player.exceptionReason ? ' · ' + escapeHtml(player.exceptionReason) : '') + '</small></div>' + actions + '</article>'
+  }
+
+  function renderIdentityTask(task) {
+    currentMatch = { matchId:task.matchId }
+    var progress = task.progress || { passed:0, total:0, exception:0 }
+    var stageAction = task.canFourthConfirm ? '<button id="confirmFourthLineup" class="primary wide">确认本队阵容初审</button><button id="returnLineupStage" class="secondary wide">退回球队修改</button>' : (task.canMainConfirm ? '<button id="confirmMainLineup" class="primary wide">主裁判确认阵容</button><button id="returnLineupStage" class="secondary wide">退回球队修改</button>' : '')
+    app.className = 'page identity-task-page'
+    app.innerHTML = '<section class="identity-task-hero"><button id="identityTaskBack" type="button">返回</button><span>' + escapeHtml(task.roleLabel || '裁判') + '</span><h1>' + escapeHtml(task.teamName || '球队') + '</h1><p>' + escapeHtml(task.matchTimeText || '') + ' · ' + escapeHtml(task.venue || '') + '</p></section>' +
+      '<section class="identity-stage"><div><span>第四官员初审</span><b>' + (task.fourthConfirmed ? '已完成' : '待处理') + '</b></div><div><span>主裁判确认</span><b>' + (task.mainConfirmed ? '已完成' : '待处理') + '</b></div><div><span>逐人核验</span><b>' + progress.passed + '/' + progress.total + '</b></div></section>' +
+      (stageAction ? '<section class="identity-stage-actions">' + stageAction + '</section>' : '') +
+      '<section class="identity-list-head"><h2>首发球员</h2><span>异常 ' + progress.exception + ' 人</span></section><section class="identity-player-list">' + (task.starters || []).map(function(player) { return identityPlayerCard(player, task) }).join('') + '</section>' +
+      (task.role === 'fourthOfficial' ? '<section class="identity-list-head"><h2>替补球员</h2><span>上场前核验</span></section><section class="identity-player-list">' + (task.substitutes || []).map(function(player) { return identityPlayerCard(player, task) }).join('') + '</section><div class="identity-side-switch"><button data-identity-side="home">查看主队</button><button data-identity-side="away">查看客队</button></div>' + (task.canOpenMatch ? '<button id="openMatchRecord" class="primary wide">进入计时与比赛事件</button>' : '') : '')
+    document.getElementById('identityTaskBack').onclick = loadWorkbench
+    var fourth = document.getElementById('confirmFourthLineup'), main = document.getElementById('confirmMainLineup'), returned = document.getElementById('returnLineupStage')
+    if (fourth) fourth.onclick = function() { submitLineupStage(task, 'fourth', 'approved', '') }
+    if (main) main.onclick = function() { submitLineupStage(task, 'main', 'approved', '') }
+    if (returned) returned.onclick = function() { var reason=window.prompt('请填写退回原因'); if (reason) submitLineupStage(task, task.role === 'mainReferee' ? 'main' : 'fourth', 'returned', reason) }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-player-pass]'), function(node) { node.onclick=function() { submitPlayerCheck(task, node.getAttribute('data-player-pass'), 'passed', 'visual', '') } })
+    Array.prototype.forEach.call(document.querySelectorAll('[data-player-exception]'), function(node) { node.onclick=function() { var reason=window.prompt('请填写身份异常原因'); if (reason) submitPlayerCheck(task, node.getAttribute('data-player-exception'), 'exception', 'visual', reason) } })
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sub-pass]'), function(node) { node.onclick=function() { submitSubstituteCheck(task, node.getAttribute('data-sub-pass'), 'passed', '') } })
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sub-exception]'), function(node) { node.onclick=function() { var reason=window.prompt('请填写替补身份异常原因'); if (reason) submitSubstituteCheck(task, node.getAttribute('data-sub-exception'), 'exception', reason) } })
+    Array.prototype.forEach.call(document.querySelectorAll('[data-replace-starter]'), function(node) { node.onclick=function() { var value=window.prompt('请输入替补球衣号或姓名'); if (!value) return; var replacement=(task.substitutes || []).find(function(item) { return String(item.jerseyNumber) === value.trim() || item.name === value.trim() }); if (!replacement) return toast('未找到对应替补'); submitStarterReplacement(task, node.getAttribute('data-replace-starter'), replacement.id) } })
+    Array.prototype.forEach.call(document.querySelectorAll('[data-identity-side]'), function(node) { node.onclick=function() { loadIdentityTask(task.matchId, node.getAttribute('data-identity-side')) } })
+    var openMatchRecord=document.getElementById('openMatchRecord'); if(openMatchRecord) openMatchRecord.onclick=function(){loadMatch(task.matchId)}
+  }
+
+  function loadIdentityTask(matchId, side) {
+    loading('正在加载身份核验任务…')
+    workflow('getIdentityVerificationTask', { matchId:matchId, side:side || 'home' }).then(function(result) { if (!result.success) throw new Error(result.message || '任务加载失败'); renderIdentityTask(result.data || {}) }).catch(function(error) { showError('身份核验任务加载失败', error.message, loadWorkbench) })
+  }
+
+  function submitLineupStage(task, stage, decision, reason) {
+    loading('正在保存阵容确认…')
+    workflow('confirmLineupStage', { matchId:task.matchId, side:task.side, stage:stage, decision:decision, reason:reason }).then(function(result) { if (!result.success) throw new Error(result.message || '保存失败'); toast(result.message); loadIdentityTask(task.matchId, task.side) }).catch(function(error) { showError('阵容确认失败', error.message, function() { loadIdentityTask(task.matchId, task.side) }) })
+  }
+
+  function submitPlayerCheck(task, playerId, decision, method, reason) {
+    loading('正在保存球员核验…')
+    workflow('verifyLineupPlayer', { matchId:task.matchId, side:task.side, playerId:playerId, decision:decision, method:method, reason:reason }).then(function(result) { if (!result.success) throw new Error(result.message || '核验失败'); toast(result.message); loadIdentityTask(task.matchId, task.side) }).catch(function(error) { showError('球员核验失败', error.message, function() { loadIdentityTask(task.matchId, task.side) }) })
+  }
+
+  function submitStarterReplacement(task, failedPlayerId, substitutePlayerId) {
+    loading('正在替换异常首发…')
+    workflow('replaceFailedStarter', { matchId:task.matchId, side:task.side, failedPlayerId:failedPlayerId, substitutePlayerId:substitutePlayerId }).then(function(result) { if (!result.success) throw new Error(result.message || '替换失败'); toast(result.message); loadIdentityTask(task.matchId, task.side) }).catch(function(error) { showError('首发替换失败', error.message, function() { loadIdentityTask(task.matchId, task.side) }) })
+  }
+
+  function submitSubstituteCheck(task, playerId, decision, reason) {
+    loading('正在保存替补核验…')
+    workflow('verifySubstituteIdentity', { matchId:task.matchId, side:task.side, playerId:playerId, decision:decision, method:'visual', reason:reason }).then(function(result) { if (!result.success) throw new Error(result.message || '核验失败'); toast(result.message); loadIdentityTask(task.matchId, task.side) }).catch(function(error) { showError('替补核验失败', error.message, function() { loadIdentityTask(task.matchId, task.side) }) })
   }
 
   function renderReport(match) {
@@ -809,10 +875,28 @@
   }
 
   function openFinish() {
-    finishDialog.querySelector('[name=homeScore]').value = currentMatch.homeScore || 0
-    finishDialog.querySelector('[name=awayScore]').value = currentMatch.awayScore || 0
+    var homeInput = finishDialog.querySelector('[name=homeScore]')
+    var awayInput = finishDialog.querySelector('[name=awayScore]')
+    var penaltyPanel = document.getElementById('finishPenaltyFields')
+    var penaltyHomeInput = finishDialog.querySelector('[name=homePenaltyScore]')
+    var penaltyAwayInput = finishDialog.querySelector('[name=awayPenaltyScore]')
+    homeInput.value = currentMatch.homeScore || 0
+    awayInput.value = currentMatch.awayScore || 0
+    penaltyHomeInput.value = currentMatch.homePenaltyScore || 0
+    penaltyAwayInput.value = currentMatch.awayPenaltyScore || 0
     document.getElementById('finishHomeLabel').childNodes[0].nodeValue = currentMatch.homeTeamName
     document.getElementById('finishAwayLabel').childNodes[0].nodeValue = currentMatch.awayTeamName
+    document.getElementById('finishPenaltyHomeLabel').childNodes[0].nodeValue = currentMatch.homeTeamName + '点球'
+    document.getElementById('finishPenaltyAwayLabel').childNodes[0].nodeValue = currentMatch.awayTeamName + '点球'
+    var penaltyWinPoints = currentMatch.penaltyWinPoints == null ? 2 : Number(currentMatch.penaltyWinPoints)
+    var penaltyLossPoints = currentMatch.penaltyLossPoints == null ? 0 : Number(currentMatch.penaltyLossPoints)
+    document.getElementById('finishPenaltyPoints').textContent = '点球胜者 ' + penaltyWinPoints + ' 分，点球负者 ' + penaltyLossPoints + ' 分。'
+    function syncPenaltyFields() {
+      penaltyPanel.hidden = !(currentMatch.drawResolution === 'penalties' && Number(homeInput.value) === Number(awayInput.value))
+    }
+    homeInput.oninput = syncPenaltyFields
+    awayInput.oninput = syncPenaltyFields
+    syncPenaltyFields()
     finishDialog.showModal()
   }
 
@@ -898,13 +982,18 @@
     event.preventDefault(); var form = new FormData(event.target)
     var homeScore = Number(form.get('homeScore')); var awayScore = Number(form.get('awayScore'))
     if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0 || homeScore > 99 || awayScore > 99) return toast('请输入0至99之间的有效比分')
-    finishDialog.close(); runMatchAction('finishRefereeMatch', { homeScore: homeScore, awayScore: awayScore }, '比分已确认')
+    var payload = { homeScore: homeScore, awayScore: awayScore }
+    if (currentMatch.drawResolution === 'penalties' && homeScore === awayScore) {
+      payload.homePenaltyScore = Number(form.get('homePenaltyScore')); payload.awayPenaltyScore = Number(form.get('awayPenaltyScore'))
+      if (!Number.isInteger(payload.homePenaltyScore) || !Number.isInteger(payload.awayPenaltyScore) || payload.homePenaltyScore < 0 || payload.awayPenaltyScore < 0 || payload.homePenaltyScore > 99 || payload.awayPenaltyScore > 99 || payload.homePenaltyScore === payload.awayPenaltyScore) return toast('请填写能够分出胜负的点球比分')
+    }
+    finishDialog.close(); runMatchAction('finishRefereeMatch', payload, '比分已确认')
   }
 
   function setParentShell() {
     var topbar = document.querySelector('.topbar')
     document.body.classList.add('parent-service-shell')
-    document.title = '补充球员资料｜赛小蜂足球'
+    document.title = '球员资料登记｜赛小蜂足球'
     if (topbar) topbar.hidden = true
   }
 
@@ -915,10 +1004,12 @@
   }
 
   function parentCompetitionAge(value) {
-    if (location.hostname === '127.0.0.1' && new URLSearchParams(location.search).get('visualQa') === '1') return '9岁'
-    var year = Number(String(value || '').slice(0, 4))
-    if (!year) return '待核验'
-    return Math.max(0, new Date().getFullYear() - year) + '岁'
+    var match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) return '待核验'
+    var today = new Date()
+    var age = today.getFullYear() - Number(match[1])
+    if (today.getMonth() + 1 < Number(match[2]) || (today.getMonth() + 1 === Number(match[2]) && today.getDate() < Number(match[3]))) age -= 1
+    return Math.max(0, age) + '岁'
   }
 
   function parentFullBirthDate(value) {
@@ -928,14 +1019,21 @@
 
   function renderParentInvite(data) {
     setParentShell()
+    var selfRegistration = data.registrantType === 'self' || data.isSelfRegistration === true
+    var entryLabel = selfRegistration ? '球员本人登记' : '家长登记'
+    var confirmTitle = selfRegistration ? '确认本人资料' : '确认孩子资料'
+    var privacyCopy = selfRegistration ? '本入口只显示与当前账号关联的本人资料。' : '本入口只显示与当前账号关联的孩子资料。'
+    var matchCopy = selfRegistration ? '系统已匹配到您的球员档案' : '系统已匹配到孩子的球员档案'
+    var actionCopy = selfRegistration ? '确认是本人，继续登记' : '确认是我的孩子，继续登记'
+    var statusCopy = selfRegistration ? '待本人补充' : '待家长补充'
     app.className = 'page parent-profile-page'
-    app.innerHTML = '<section class="parent-match-hero"><button id="parentInviteBack" class="parent-match-back" type="button" aria-label="返回">‹</button><div><h1>补充球员资料</h1><p>' + escapeHtml(data.teamName || '球队') + ' · 家长专属入口</p></div><strong>1/5</strong></section>' +
-      '<main class="parent-match-content"><section class="parent-privacy-banner"><span class="parent-shield" aria-hidden="true">✓</span><p>为保护隐私，您只能匹配自己的孩子，无法查看整队名单。</p></section>' +
-      '<section class="parent-match-card"><h2>确认您的孩子</h2><p class="parent-match-subtitle">我们将根据您已验证的手机号进行匹配</p><div class="parent-phone-verified"><span>●</span><strong>已验证手机号</strong><b>' + escapeHtml(data.guardianPhoneMasked || '待核验') + '</b></div>' +
-      '<p class="parent-match-found"><span aria-hidden="true"></span>系统已为您匹配到以下孩子</p><article class="parent-child-card"><div class="parent-child-avatar"><b>' + escapeHtml(String(data.playerName || '球员').slice(0, 1)) + '</b><span>球员</span></div><div class="parent-child-main"><h3>' + escapeHtml(data.playerName || '球员') + '</h3><dl><div><dt>出生年月</dt><dd>' + escapeHtml(parentBirthMonth(data.birthDate)) + '</dd></div><div><dt>比赛日年龄</dt><dd>' + escapeHtml(parentCompetitionAge(data.birthDate)) + '</dd></div><div><dt>状态</dt><dd><span>待家长补充</span></dd></div></dl></div></article>' +
-      '<button id="parentContinue" class="parent-match-primary" type="button"><span>✓</span>这是我的孩子，开始补充</button></section>' +
-      '<div class="parent-no-match"><span></span><b>没有匹配到？</b><span></span></div><button id="parentInviteHelp" class="parent-match-secondary" type="button">联系球队负责人核对邀请</button><p class="parent-help-copy">邀请只对应一名已建档球员；资料不一致时，请由球队负责人重新核对并生成邀请。</p>' +
-      '<section class="parent-entry-boundary"><span class="parent-shield parent-shield-lock" aria-hidden="true">✓</span><p>本入口仅用于本次赛事资料补充，不公开监护人手机号。</p></section></main>'
+    app.innerHTML = '<section class="parent-match-hero"><button id="parentInviteBack" class="parent-match-back" type="button" aria-label="返回">‹</button><div><h1>登记球员资料</h1><p>' + escapeHtml(data.teamName || '球队') + ' · ' + entryLabel + '</p></div><strong>1/5</strong></section>' +
+      '<main class="parent-match-content"><section class="parent-privacy-banner"><span class="parent-shield" aria-hidden="true">✓</span><p>' + privacyCopy + '</p></section>' +
+      '<section class="parent-match-card"><h2>' + confirmTitle + '</h2><div class="parent-phone-verified"><span>●</span><strong>已验证手机号</strong><b>' + escapeHtml(data.accountPhoneMasked || data.guardianPhoneMasked || '待核验') + '</b></div>' +
+      '<p class="parent-match-found"><span aria-hidden="true"></span>' + matchCopy + '</p><article class="parent-child-card"><div class="parent-child-avatar"><b>' + escapeHtml(String(data.playerName || '球员').slice(0, 1)) + '</b><span>球员</span></div><div class="parent-child-main"><h3>' + escapeHtml(data.playerName || '球员') + '</h3><dl><div><dt>出生年月</dt><dd>' + escapeHtml(parentBirthMonth(data.birthDate)) + '</dd></div><div><dt>当前年龄</dt><dd>' + escapeHtml(parentCompetitionAge(data.birthDate)) + '</dd></div><div><dt>状态</dt><dd><span>' + statusCopy + '</span></dd></div></dl></div></article>' +
+      '<button id="parentContinue" class="parent-match-primary" type="button"><span>✓</span>' + actionCopy + '</button></section>' +
+      '<button id="parentInviteHelp" class="parent-match-secondary" type="button">资料不符，联系球队</button>' +
+      '<section class="parent-entry-boundary"><span class="parent-shield parent-shield-lock" aria-hidden="true">✓</span><p>资料保存到球队球员库，不会自动进入赛事名单。</p></section></main>'
     document.getElementById('parentContinue').onclick = function () {
       var continueButton = document.getElementById('parentContinue')
       if (continueButton.disabled) return
@@ -960,9 +1058,9 @@
   }
 
   function loadParentInvite(token) {
-    loading('正在核验家长协作邀请…')
+    loading('正在核验球员资料邀请…')
     api({ action: 'previewParentProfileInvite', parentInvite: token }).then(function (result) {
-      if (!result.success) throw new Error(result.error || '家长协作链接无效')
+      if (!result.success) throw new Error(result.error || '球员资料邀请无效')
       renderParentInvite(Object.assign({}, result.data || {}, { parentInvite: token }))
     }).catch(function (error) { showError('暂时无法打开邀请', error.message, function () { loadParentInvite(token) }) })
   }
@@ -984,7 +1082,7 @@
   }
 
   function completeParentOAuth(code, state) {
-    loading('正在确认家长服务会话…')
+    loading('正在确认资料登记会话…')
     api({ action: 'parentProfileOAuth', code: code, state: state }).then(function (result) {
       if (!result.success || !result.parentSessionToken) throw new Error(result.error || '服务号授权失败')
       localStorage.setItem(PARENT_SESSION_KEY, result.parentSessionToken)
@@ -1001,9 +1099,9 @@
   }
 
   function loadParentBasicForm() {
-    loading('正在读取家长确认资料…')
+    loading('正在读取球员资料…')
     parentApi('getParentProfileDraft').then(function (result) {
-      if (!result.success) throw new Error(result.error || '家长服务会话已失效')
+      if (!result.success) throw new Error(result.error || '资料登记会话已失效')
       var draft = result.draft || {}
       if (draft.needsManualReview && draft.manualReviewStatus !== 'resolved') return renderParentBasicManualReview(result.data || {}, draft)
       renderParentBasicForm(result.data || {}, draft)
@@ -1013,8 +1111,8 @@
   function renderParentBasicManualReview(data, draft) {
     setParentShell()
     app.className = 'page parent-profile-page parent-basic-review-page'
-    app.innerHTML = '<section class="parent-hero"><span>赛小蜂足球 · 家长服务</span><h1>资料正在人工核验</h1><p>' + escapeHtml(data.playerName || '球员') + ' · ' + escapeHtml(data.teamName || '球队') + '</p></section>' +
-      '<section class="parent-card parent-manual-review-card"><div class="parent-result-emblem parent-result-pending"><span></span></div><h2>请等待球队管理员核对</h2><p class="muted">您提交的姓名或出生日期与球队现有资料不一致。核验完成前不能继续实名认证或形象照步骤，也不会覆盖历史赛事资料。</p><dl class="parent-manual-review-meta"><div><dt>提交姓名</dt><dd>' + escapeHtml(draft.requestedName || '待核验') + '</dd></div><div><dt>提交出生日期</dt><dd>' + escapeHtml(draft.requestedBirthDate || '待核验') + '</dd></div></dl><button id="parentManualReviewRefresh" class="primary wide" type="button">刷新核验状态</button><button id="parentManualReviewBack" class="secondary wide" type="button">返回邀请页</button></section>'
+    app.innerHTML = '<section class="parent-hero"><span>赛小蜂足球 · 球员资料</span><h1>资料正在人工核验</h1><p>' + escapeHtml(data.playerName || '球员') + ' · ' + escapeHtml(data.teamName || '球队') + '</p></section>' +
+      '<section class="parent-card parent-manual-review-card"><div class="parent-result-emblem parent-result-pending"><span></span></div><h2>请等待球队管理员核对</h2><p class="muted">您提交的姓名或出生日期与球队现有资料不一致。核验完成前不能继续人证核验或形象照步骤，也不会覆盖历史赛事资料。</p><dl class="parent-manual-review-meta"><div><dt>提交姓名</dt><dd>' + escapeHtml(draft.requestedName || '待核验') + '</dd></div><div><dt>提交出生日期</dt><dd>' + escapeHtml(draft.requestedBirthDate || '待核验') + '</dd></div></dl><button id="parentManualReviewRefresh" class="primary wide" type="button">刷新核验状态</button><button id="parentManualReviewBack" class="secondary wide" type="button">返回邀请页</button></section>'
     document.getElementById('parentManualReviewRefresh').onclick = loadParentBasicForm
     document.getElementById('parentManualReviewBack').onclick = function () { loadParentInvite(sessionStorage.getItem(PARENT_PENDING_KEY) || '') }
   }
@@ -1022,32 +1120,37 @@
   function renderParentBasicForm(data, draft) {
     setParentShell()
     app.className = 'page parent-profile-page'
+    var selfRegistration = data.registrantType === 'self' || data.isSelfRegistration === true
     var selectedRelation = ['father', 'mother', 'other'].indexOf(draft.guardianRelation) >= 0 ? draft.guardianRelation : 'father'
     var requestedName = draft.requestedName || data.playerName || ''
     var requestedBirthDate = draft.requestedBirthDate || data.birthDate || ''
+    var authorized = selfRegistration ? Boolean(draft.registrantAuthorized || draft.selfAuthorized) : Boolean(draft.registrantAuthorized || draft.guardianAuthorized)
+    var relationMarkup = selfRegistration
+      ? '<section class="parent-basic-card parent-guardian-card"><h2>登记身份</h2><div class="parent-verified-phone"><span>✓</span>球员本人　<strong>' + escapeHtml(data.accountPhoneMasked || '待核验') + '</strong></div></section>'
+      : '<section class="parent-basic-card parent-guardian-card"><h2>监护关系</h2><div class="parent-relation-options"><label><input type="radio" name="guardianRelation" value="father"' + (selectedRelation === 'father' ? ' checked' : '') + '><span></span>父亲</label><label><input type="radio" name="guardianRelation" value="mother"' + (selectedRelation === 'mother' ? ' checked' : '') + '><span></span>母亲</label><label><input type="radio" name="guardianRelation" value="other"' + (selectedRelation === 'other' ? ' checked' : '') + '><span></span>其他监护人</label></div><div class="parent-verified-phone"><span>✓</span>已验证手机号　<strong>' + escapeHtml(data.accountPhoneMasked || data.guardianPhoneMasked || '待核验') + '</strong></div></section>'
+    var consentCopy = selfRegistration ? '我确认由本人登记，并同意提交必要资料' : '我确认是该球员监护人，并同意提交必要资料'
     app.innerHTML = '<section class="parent-match-hero parent-basic-hero"><button id="parentBack" class="parent-match-back" type="button" aria-label="返回">‹</button><div><h1>确认基础资料</h1><p>' + escapeHtml(data.playerName || '球员') + ' · ' + escapeHtml(data.teamName || '球队') + '</p></div><strong>2/5</strong></section>' +
-      '<main class="parent-basic-content"><p class="parent-basic-intro">请先核对教练登记的信息，证件信息将在下一步自动识别。</p><section class="parent-basic-card"><h2>球员基础信息</h2><dl class="parent-basic-list"><div><dt>球员姓名</dt><dd>' + escapeHtml(data.playerName || '待补充') + '<span>✓</span></dd></div><div><dt>出生年月</dt><dd>' + escapeHtml(parentBirthMonth(data.birthDate)) + '<span>✓</span></dd></div><div><dt>比赛日年龄</dt><dd>' + escapeHtml(parentCompetitionAge(data.birthDate)) + '<span>✓</span></dd></div><div><dt>所属球队</dt><dd>' + escapeHtml(data.teamName || '待核验') + '<span>✓</span></dd></div></dl><details class="parent-correction"><summary>姓名或出生年月有误？提交更正</summary><div><label>正确姓名<input id="parentName" maxlength="30" value="' + escapeHtml(requestedName) + '"></label><label>正确出生日期<input id="parentBirthDate" type="date" value="' + escapeHtml(requestedBirthDate) + '"></label><p>更正将进入人工核验，核验前不能继续实名步骤，也不会覆盖历史赛事资料。</p></div></details></section>' +
-      '<section class="parent-basic-card parent-guardian-card"><h2>监护关系</h2><div class="parent-relation-options"><label><input type="radio" name="guardianRelation" value="father"' + (selectedRelation === 'father' ? ' checked' : '') + '><span></span>父亲</label><label><input type="radio" name="guardianRelation" value="mother"' + (selectedRelation === 'mother' ? ' checked' : '') + '><span></span>母亲</label><label><input type="radio" name="guardianRelation" value="other"' + (selectedRelation === 'other' ? ' checked' : '') + '><span></span>其他监护人</label></div><div class="parent-verified-phone"><span>✓</span>已验证手机号　<strong>' + escapeHtml(data.guardianPhoneMasked || '待核验') + '</strong></div></section>' +
-      '<div class="parent-basic-warning"><span class="parent-shield" aria-hidden="true">✓</span><p>如姓名或出生年月有误，请提交更正并等待人工核验，避免实名认证失败。</p></div><label class="parent-basic-consent"><input id="parentConsent" type="checkbox"' + (draft.guardianAuthorized ? ' checked' : '') + '><span></span><b>我确认是该球员监护人，并同意为本次赛事提交必要资料</b></label><button id="saveParentBasic" class="parent-match-primary parent-basic-next" type="button">信息无误，下一步</button><button id="parentRematch" class="parent-match-secondary" type="button">返回重新匹配</button></main>'
+      '<main class="parent-basic-content"><section class="parent-basic-card"><h2>球员基础信息</h2><dl class="parent-basic-list"><div><dt>球员姓名</dt><dd>' + escapeHtml(data.playerName || '待补充') + '<span>✓</span></dd></div><div><dt>出生年月</dt><dd>' + escapeHtml(parentBirthMonth(data.birthDate)) + '<span>✓</span></dd></div><div><dt>当前年龄</dt><dd>' + escapeHtml(parentCompetitionAge(data.birthDate)) + '<span>✓</span></dd></div><div><dt>所属球队</dt><dd>' + escapeHtml(data.teamName || '待核验') + '<span>✓</span></dd></div></dl><details class="parent-correction"><summary>资料有误？提交更正</summary><div><label>正确姓名<input id="parentName" maxlength="30" value="' + escapeHtml(requestedName) + '"></label><label>正确出生日期<input id="parentBirthDate" type="date" value="' + escapeHtml(requestedBirthDate) + '"></label><p>更正后需由球队人工核验。</p></div></details></section>' +
+      relationMarkup + '<label class="parent-basic-consent"><input id="parentConsent" type="checkbox"' + (authorized ? ' checked' : '') + '><span></span><b>' + consentCopy + '</b></label><button id="saveParentBasic" class="parent-match-primary parent-basic-next" type="button">确认并继续</button><button id="parentRematch" class="parent-match-secondary" type="button">返回</button></main>'
     document.getElementById('parentBack').onclick = function () { loadParentInvite(sessionStorage.getItem(PARENT_PENDING_KEY) || '') }
     document.getElementById('parentRematch').onclick = function () { loadParentInvite(sessionStorage.getItem(PARENT_PENDING_KEY) || '') }
     document.getElementById('saveParentBasic').onclick = function () {
       var relation = document.querySelector('[name=guardianRelation]:checked')
-      if (!relation) return toast('请选择与球员的监护关系')
-      if (!document.getElementById('parentConsent').checked) return toast('请先确认监护人授权')
+      if (!selfRegistration && !relation) return toast('请选择监护关系')
+      if (!document.getElementById('parentConsent').checked) return toast(selfRegistration ? '请先确认本人授权' : '请先确认监护人授权')
       var button = document.getElementById('saveParentBasic'); button.disabled = true; button.textContent = '正在保存确认…'
-      parentApi('saveParentBasicProfile', { name: document.getElementById('parentName').value.trim(), birthDate: document.getElementById('parentBirthDate').value, guardianRelation: relation.value, guardianAuthorized: true }).then(function (result) {
+      parentApi('saveParentBasicProfile', { name: document.getElementById('parentName').value.trim(), birthDate: document.getElementById('parentBirthDate').value, guardianRelation: selfRegistration ? 'self' : relation.value, registrantAuthorized: true }).then(function (result) {
         if (!result.success) throw new Error(result.error || '保存失败')
         if (result.needsManualReview) return showError('资料已提交人工核验', '姓名或出生年月与球队现有资料不一致，核验完成前不能继续实名与形象照步骤。', function () { loadParentBasicForm() })
         toast(result.nextStep === 'submit' ? '基础资料已确认，正在提交资料' : '基础资料已确认，进入下一步')
         if (result.nextStep === 'submit') submitParentProfile(data)
         else renderParentNextStep(Object.assign({}, data, { requirements: result.requirements || data.requirements || {} }))
-      }).catch(function (error) { button.disabled = false; button.textContent = '信息无误，下一步'; toast(error.message) })
+      }).catch(function (error) { button.disabled = false; button.textContent = '确认并继续'; toast(error.message) })
     }
   }
 
   function submitParentProfile(data) {
-    loading('正在提交家长资料…')
+    loading('正在提交球员资料…')
     parentApi('completeParentProfile').then(function (result) {
       if (!result.success) throw new Error(result.error || '资料提交失败')
       renderParentSubmitSuccess(Object.assign({}, result, { requirements: result.requirements || (data && data.requirements) || {} }))
@@ -1060,12 +1163,12 @@
     var requirements = (data && data.requirements) || {}
     var needsIdentity = requirements.realName === true
     var needsPortrait = requirements.portrait === true
-    var nextTitle = needsIdentity ? '下一步：实名认证' : (needsPortrait ? '下一步：标准形象照' : '下一步：提交资料')
+    var nextTitle = needsIdentity ? '下一步：人证核验' : (needsPortrait ? '下一步：标准形象照' : '下一步：提交资料')
     var nextCopy = needsIdentity
       ? '身份材料只用于赛事报名与身份核验。上传、核验结果、拍摄和透明人像确认会保留独立流程记录。'
-      : (needsPortrait ? '本次邀请未开启实名认证，接下来补充标准形象照并提交资料。' : '本次邀请未开启实名认证或标准形象照要求，基础资料确认后即可提交。')
-    var buttonText = needsIdentity ? '开始实名认证' : (needsPortrait ? '开始拍摄标准形象照' : '提交资料')
-    app.innerHTML = '<section class="parent-hero"><span>赛小蜂足球 · 家长服务</span><h1>基础资料已确认</h1><p>仅展示本次邀请已开启的资料要求。</p></section><section class="parent-card"><h2>' + nextTitle + '</h2><p class="muted">' + nextCopy + '</p><button id="parentNextStep" class="primary wide">' + buttonText + '</button></section>'
+      : (needsPortrait ? '本次邀请未开启人证核验，接下来补充标准形象照并提交资料。' : '本次邀请未开启人证核验或标准形象照要求，基础资料确认后即可提交。')
+    var buttonText = needsIdentity ? '开始人证核验' : (needsPortrait ? '开始拍摄标准形象照' : '提交资料')
+    app.innerHTML = '<section class="parent-hero"><span>赛小蜂足球 · 球员资料</span><h1>基础资料已确认</h1></section><section class="parent-card"><h2>' + nextTitle + '</h2><p class="muted">' + nextCopy + '</p><button id="parentNextStep" class="primary wide">' + buttonText + '</button></section>'
     document.getElementById('parentNextStep').onclick = function () {
       if (needsIdentity) renderParentIdentityUpload()
       else if (needsPortrait) renderPortraitGuide(data)
@@ -1077,11 +1180,83 @@
     return new Promise(function (resolve, reject) { var reader = new FileReader(); reader.onload = function () { resolve(reader.result) }; reader.onerror = function () { reject(new Error('读取材料失败')) }; reader.readAsDataURL(file) })
   }
 
-  function validateParentIdentityFile(file) {
+  var PARENT_IDENTITY_SOURCE_LIMIT = 25 * 1024 * 1024
+  var PARENT_IDENTITY_UPLOAD_LIMIT = 3 * 1024 * 1024
+  var PARENT_IDENTITY_COMPRESS_TARGET = 2.4 * 1024 * 1024
+  var PARENT_IDENTITY_MAX_EDGE = 2200
+
+  function validateParentIdentitySource(file) {
     if (!file) return '请先拍摄或选择身份证人像面'
     if (['image/jpeg', 'image/png'].indexOf(file.type) < 0) return '仅支持 JPG 或 PNG 图片'
-    if (file.size > 3 * 1024 * 1024) return '图片不能超过 3MB'
+    if (file.size > PARENT_IDENTITY_SOURCE_LIMIT) return '原图超过25MB，请重新拍摄'
     return ''
+  }
+
+  function validateParentIdentityFile(file) {
+    var sourceError = validateParentIdentitySource(file)
+    if (sourceError) return sourceError
+    if (file.size > PARENT_IDENTITY_UPLOAD_LIMIT) return '照片压缩失败，请重新选择'
+    return ''
+  }
+
+  function parentFileSizeText(size) {
+    if (!Number.isFinite(Number(size))) return ''
+    if (size < 1024 * 1024) return Math.max(1, Math.round(size / 1024)) + 'KB'
+    return (size / 1024 / 1024).toFixed(1) + 'MB'
+  }
+
+  function loadParentIdentityBitmap(file) {
+    if (window.createImageBitmap) {
+      return Promise.resolve().then(function () { return window.createImageBitmap(file, { imageOrientation: 'from-image' }) }).catch(function () { return window.createImageBitmap(file) })
+    }
+    return new Promise(function (resolve, reject) {
+      var image = new Image()
+      var url = URL.createObjectURL(file)
+      image.onload = function () { URL.revokeObjectURL(url); resolve(image) }
+      image.onerror = function () { URL.revokeObjectURL(url); reject(new Error('照片无法读取，请重新拍摄')) }
+      image.src = url
+    })
+  }
+
+  function parentCanvasBlob(canvas, quality) {
+    return new Promise(function (resolve, reject) {
+      canvas.toBlob(function (blob) { if (blob) resolve(blob); else reject(new Error('照片压缩失败，请重新选择')) }, 'image/jpeg', quality)
+    })
+  }
+
+  function compressParentIdentityFile(file) {
+    if (file.size <= PARENT_IDENTITY_COMPRESS_TARGET) return Promise.resolve(file)
+    return loadParentIdentityBitmap(file).then(function (bitmap) {
+      var sourceWidth = Number(bitmap.width || bitmap.naturalWidth || 0)
+      var sourceHeight = Number(bitmap.height || bitmap.naturalHeight || 0)
+      if (!sourceWidth || !sourceHeight) throw new Error('照片尺寸异常，请重新拍摄')
+      var initialScale = Math.min(1, PARENT_IDENTITY_MAX_EDGE / Math.max(sourceWidth, sourceHeight))
+      var width = Math.max(1, Math.round(sourceWidth * initialScale))
+      var height = Math.max(1, Math.round(sourceHeight * initialScale))
+      var canvas = document.createElement('canvas')
+      var context = canvas.getContext('2d', { alpha: false })
+      if (!context) throw new Error('当前手机无法压缩照片，请从相册选择较小图片')
+      var qualities = [.9, .82, .74, .66, .58]
+      function render() {
+        canvas.width = width
+        canvas.height = height
+        context.fillStyle = '#fff'
+        context.fillRect(0, 0, width, height)
+        context.drawImage(bitmap, 0, 0, width, height)
+      }
+      function attempt(index) {
+        render()
+        return parentCanvasBlob(canvas, qualities[Math.min(index, qualities.length - 1)]).then(function (blob) {
+          if (blob.size <= PARENT_IDENTITY_COMPRESS_TARGET) return blob
+          if (index + 1 < qualities.length) return attempt(index + 1)
+          if (Math.max(width, height) <= 1200) throw new Error('照片压缩后仍过大，请重新拍摄')
+          width = Math.max(1, Math.round(width * .82))
+          height = Math.max(1, Math.round(height * .82))
+          return attempt(2)
+        })
+      }
+      return attempt(0).finally(function () { if (bitmap && typeof bitmap.close === 'function') bitmap.close() })
+    })
   }
 
   function validateParentPortraitFile(file) {
@@ -1091,56 +1266,176 @@
     return ''
   }
 
+  var parentFaceModelsPromise = null
+  var parentFaceLibraryPromise = null
+  function loadParentFaceLibrary() {
+    if (window.faceapi) return Promise.resolve(window.faceapi)
+    if (!parentFaceLibraryPromise) parentFaceLibraryPromise = new Promise(function(resolve, reject) {
+      var script = document.createElement('script')
+      script.src = './vendor/face-api/face-api.js?v=1.7.15'
+      script.async = true
+      script.onload = function() { if (window.faceapi) resolve(window.faceapi); else reject(new Error('本地人脸模型初始化失败')) }
+      script.onerror = function() { reject(new Error('本地人脸模型加载失败，请检查网络后重试')) }
+      document.head.appendChild(script)
+    })
+    return parentFaceLibraryPromise
+  }
+  function loadParentFaceModels() {
+    return loadParentFaceLibrary().then(function() {
+      if (!parentFaceModelsPromise) {
+        var modelPath = './vendor/face-api/model'
+        parentFaceModelsPromise = Promise.all([
+          window.faceapi.nets.ssdMobilenetv1.loadFromUri(modelPath),
+          window.faceapi.nets.faceLandmark68TinyNet.loadFromUri(modelPath),
+          window.faceapi.nets.faceRecognitionNet.loadFromUri(modelPath)
+        ])
+      }
+      return parentFaceModelsPromise
+    })
+  }
+
+  function parentFaceResult(input) {
+    return window.faceapi.detectAllFaces(input, new window.faceapi.SsdMobilenetv1Options({ minConfidence: .55 })).withFaceLandmarks(true).withFaceDescriptors().then(function(results) {
+      if (results.length !== 1) throw new Error(results.length ? '画面中只能有一名球员' : '未检测到清晰正面人脸')
+      return results[0]
+    })
+  }
+
+  function parentFaceYaw(result) {
+    var points = result.landmarks && result.landmarks.positions || []
+    if (points.length < 48) return 0
+    var leftEye = points.slice(36, 42), rightEye = points.slice(42, 48), nose = points[30]
+    function averageX(rows) { return rows.reduce(function(sum, point) { return sum + point.x }, 0) / rows.length }
+    var left = averageX(leftEye), right = averageX(rightEye), width = Math.max(1, right - left)
+    return (nose.x - (left + right) / 2) / width
+  }
+
+  function parentFaceDistance(first, second) {
+    return window.faceapi.euclideanDistance(Array.prototype.slice.call(first), Array.prototype.slice.call(second))
+  }
+
+  function parentVideoFrame(video) {
+    var canvas = document.createElement('canvas')
+    canvas.width = Math.max(320, Number(video.videoWidth || 640))
+    canvas.height = Math.max(320, Number(video.videoHeight || 480))
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+    return canvas
+  }
+
   function renderParentIdentityUpload() {
     setParentShell()
     app.className = 'page parent-profile-page parent-identity-page'
-    app.innerHTML = '<header class="parent-match-hero parent-basic-hero parent-identity-hero"><button id="identityBackButton" class="parent-match-back" type="button" aria-label="返回"><span></span></button><div><h1>实名认证</h1><p>球员实名 · 专业版参赛资格</p></div><strong>3/5</strong></header>' +
-      '<main class="parent-identity-content"><section class="parent-privacy-banner parent-identity-banner"><span class="parent-shield" aria-hidden="true"></span><p>只需上传球员本人身份证人像面，<br>不需要学籍证明，不需要人脸识别。</p></section>' +
-      '<section class="parent-identity-card"><h2>上传身份证实名</h2><p class="parent-identity-subtitle">请上传球员本人身份证人像面</p><div class="parent-id-dropzone" aria-hidden="true"><div class="parent-id-illustration"><span class="parent-id-lines"></span><span class="parent-id-scan"><i></i></span><span class="parent-id-person"></span><b>身份证人像面</b></div></div>' +
-      '<div id="identityUploadStatus" class="parent-upload-status"><span></span><b>未上传</b></div>' +
+    app.innerHTML = '<header class="parent-match-hero parent-basic-hero parent-identity-hero"><button id="identityBackButton" class="parent-match-back" type="button" aria-label="返回"><span></span></button><div><h1>人证核验</h1><p>首次核验 · 参赛前必须完成</p></div><strong>3/5</strong></header>' +
+      '<main class="parent-identity-content"><section class="parent-privacy-banner parent-identity-banner"><span class="parent-shield" aria-hidden="true"></span><p>证件资料与本人照片在当前设备完成比对，非权威库认证。</p></section>' +
+      '<section class="parent-identity-card"><h2>上传身份证明</h2><p class="parent-identity-subtitle">支持身份证、户口簿本人页、护照及港澳台法定证件</p><label class="parent-document-type">证件类型<select id="identityDocumentType"><option value="resident_id">居民身份证</option><option value="household_register">户口簿本人页</option><option value="passport">护照</option><option value="mainland_travel_permit">港澳居民来往内地通行证</option><option value="taiwan_travel_permit">台湾居民来往大陆通行证</option></select></label><div class="parent-id-dropzone" aria-hidden="true"><div class="parent-id-illustration"><span class="parent-id-lines"></span><span class="parent-id-scan"><i></i></span><span class="parent-id-person"></span><b>证件人像页</b></div></div>' +
+      '<div id="identityUploadStatus" class="parent-upload-status"><span></span><b>选择后自动压缩</b></div>' +
       '<input id="identityCamera" class="visually-hidden" type="file" accept="image/jpeg,image/png" capture="environment"><input id="identityAlbum" class="visually-hidden" type="file" accept="image/jpeg,image/png">' +
-      '<button id="identityCameraButton" class="parent-upload-action parent-upload-camera" type="button"><span class="parent-camera-icon"></span>拍摄身份证（推荐）</button><button id="identityAlbumButton" class="parent-upload-action parent-upload-album" type="button"><span class="parent-album-icon"></span>从相册选择</button></section>' +
+      '<button id="identityCameraButton" class="parent-upload-action parent-upload-camera" type="button"><span class="parent-camera-icon"></span>拍摄证件（推荐）</button><button id="identityAlbumButton" class="parent-upload-action parent-upload-album" type="button"><span class="parent-album-icon"></span>从相册选择</button></section>' +
+      '<section class="parent-identity-card parent-face-check"><h2>采集本人照片</h2><p class="parent-identity-subtitle">正视镜头后按提示轻微转头，过程照片不会上传</p><video id="identityFaceVideo" playsinline muted></video><canvas id="identityFaceCanvas" class="visually-hidden"></canvas><div id="identityFaceStatus" class="parent-upload-status"><span></span><b>请先选择证件照片</b></div><button id="startIdentityFace" class="parent-upload-action parent-upload-camera" type="button" disabled>开始本地核验</button><button id="manualIdentityReview" class="parent-upload-action parent-upload-album" type="button">不使用人脸，申请人工核验</button></section>' +
       '<section class="parent-identity-requirements"><h2>拍摄要求</h2><ul><li><span aria-hidden="true"></span><p><b>四角完整：</b>证件四角需在画面内，无遮挡或缺角</p></li><li><span aria-hidden="true"></span><p><b>文字清晰：</b>所有文字清晰可辨，避免模糊</p></li><li><span aria-hidden="true"></span><p><b>无反光遮挡：</b>避免强光、反光或手指遮挡关键信息</p></li></ul></section>' +
-      '<section class="parent-identity-safety"><h2><span class="parent-lock-icon"></span>隐私安全说明</h2><ul><li>用于 OCR 读取姓名、身份证号、出生日期、性别；</li><li>球队和裁判只能查看“已实名/未实名”状态，不能查看身份证原图；</li><li>证件数据加密存储，严格保护用户隐私安全。</li></ul></section>' +
-      '<button id="submitIdentity" class="parent-identity-submit" type="button" disabled>上传并开始识别</button></main>'
+      '<section class="parent-identity-safety"><h2><span class="parent-lock-icon"></span>隐私安全说明</h2><ul><li>本地算法只用于证件照与本人照片1:1比对；</li><li>球队和裁判只能查看“人证核验通过/待核验”；</li><li>证件原图加密保留30天，过程照片不上传。</li></ul></section>' +
+      '<button id="submitIdentity" class="parent-identity-submit" type="button" disabled>提交人证核验</button></main>'
     var selectedIdentityFile = null
     var cameraInput = document.getElementById('identityCamera')
     var albumInput = document.getElementById('identityAlbum')
     var status = document.getElementById('identityUploadStatus')
     var submit = document.getElementById('submitIdentity')
+    var faceButton = document.getElementById('startIdentityFace')
+    var manualButton = document.getElementById('manualIdentityReview')
+    var faceStatus = document.getElementById('identityFaceStatus')
+    var faceVideo = document.getElementById('identityFaceVideo')
+    var documentType = document.getElementById('identityDocumentType')
+    var faceAssessment = null
+    var faceStream = null
     var identityUploadCompleted = false
+    var identityCompressVersion = 0
     function setUploadStatus(kind, text) {
       status.className = 'parent-upload-status parent-upload-status-' + kind
       status.querySelector('b').textContent = text
     }
+    function setFaceStatus(kind, text) { faceStatus.className = 'parent-upload-status parent-upload-status-' + kind; faceStatus.querySelector('b').textContent = text }
+    function stopFaceStream() { if (faceStream) faceStream.getTracks().forEach(function(track) { track.stop() }); faceStream = null; faceVideo.srcObject = null }
     function chooseIdentity(file) {
       identityUploadCompleted = false
-      var error = validateParentIdentityFile(file)
+      var currentVersion = ++identityCompressVersion
+      var error = validateParentIdentitySource(file)
       if (error) { selectedIdentityFile = null; submit.disabled = true; setUploadStatus('error', error); return toast(error) }
-      selectedIdentityFile = file
-      submit.disabled = false
-      setUploadStatus('ready', '已选择，等待安全上传')
+      selectedIdentityFile = null
+      submit.disabled = true
+      setUploadStatus('uploading', file.size > PARENT_IDENTITY_COMPRESS_TARGET ? '正在本地压缩照片' : '正在检查照片')
+      compressParentIdentityFile(file).then(function (compressedFile) {
+        if (currentVersion !== identityCompressVersion) return
+        var compressedError = validateParentIdentityFile(compressedFile)
+        if (compressedError) throw new Error(compressedError)
+        selectedIdentityFile = compressedFile
+        faceAssessment = null
+        faceButton.disabled = false
+        submit.disabled = true
+        var sizeCopy = parentFileSizeText(compressedFile.size)
+        setUploadStatus('ready', compressedFile === file ? '照片已就绪 · ' + sizeCopy : '压缩完成 · ' + sizeCopy)
+      }).catch(function (compressError) {
+        if (currentVersion !== identityCompressVersion) return
+        selectedIdentityFile = null
+        submit.disabled = true
+        setUploadStatus('error', compressError.message || '照片压缩失败，请重新选择')
+        toast(compressError.message || '照片压缩失败，请重新选择')
+      })
     }
     cameraInput.onchange = function () { chooseIdentity(cameraInput.files[0]) }
     albumInput.onchange = function () { chooseIdentity(albumInput.files[0]) }
     document.getElementById('identityCameraButton').onclick = function () { cameraInput.click() }
     document.getElementById('identityAlbumButton').onclick = function () { albumInput.click() }
     document.getElementById('identityBackButton').onclick = loadParentBasicForm
+    manualButton.onclick = function() {
+      stopFaceStream()
+      faceAssessment = { method:'manual_per_event', status:'needs_manual_review', biometricConsent:false, algorithm:'none' }
+      setFaceStatus('ready', '已选择人工核验，不保存人脸特征')
+      submit.disabled = !selectedIdentityFile
+    }
+    faceButton.onclick = function() {
+      if (!selectedIdentityFile) return toast('请先选择证件照片')
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return toast('当前微信版本无法调用摄像头，请选择人工核验')
+      faceButton.disabled = true
+      setFaceStatus('uploading', '正在加载本地模型…')
+      var idImage = null, frontResult = null, frontYaw = 0
+      Promise.all([loadParentFaceModels(), window.faceapi.bufferToImage(selectedIdentityFile), navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:{ ideal:720 }, height:{ ideal:960 } }, audio:false })]).then(function(values) {
+        idImage = values[1]; faceStream = values[2]; faceVideo.srcObject = faceStream; faceVideo.classList.add('is-active'); return faceVideo.play()
+      }).then(function() {
+        setFaceStatus('ready', '请正视镜头，保持单人入镜')
+        return new Promise(function(resolve) { setTimeout(resolve, 1200) })
+      }).then(function() { return parentFaceResult(parentVideoFrame(faceVideo)) }).then(function(result) {
+        frontResult = result; frontYaw = parentFaceYaw(result); setFaceStatus('uploading', '请轻微向左转头'); return new Promise(function(resolve) { setTimeout(resolve, 1500) })
+      }).then(function() { return parentFaceResult(parentVideoFrame(faceVideo)) }).then(function(turnResult) {
+        var motion = Math.abs(parentFaceYaw(turnResult) - frontYaw)
+        var sameLivePerson = parentFaceDistance(frontResult.descriptor, turnResult.descriptor)
+        if (motion < .045) throw new Error('未检测到转头动作，请重新核验')
+        if (sameLivePerson > .5) throw new Error('两次画面人脸不一致，请保持同一人操作')
+        return parentFaceResult(idImage).then(function(idResult) {
+          var distance = parentFaceDistance(idResult.descriptor, frontResult.descriptor)
+          faceAssessment = { method:'local_face_1to1', status:distance <= .55 ? 'passed' : 'needs_manual_review', biometricConsent:true, algorithm:'face-api-1.7.15', distance:Number(distance.toFixed(6)), livenessMotion:Number(motion.toFixed(6)), descriptor:Array.prototype.slice.call(frontResult.descriptor).map(function(value) { return Number(value.toFixed(7)) }) }
+          setFaceStatus(distance <= .55 ? 'success' : 'ready', distance <= .55 ? '本地人证比对通过' : '相似度不足，将转人工复核')
+          submit.disabled = false
+        })
+      }).catch(function(error) {
+        faceAssessment = null; setFaceStatus('error', error.message || '本地核验失败'); toast(error.message || '本地核验失败'); faceButton.disabled = false
+      }).finally(function() { stopFaceStream(); faceVideo.classList.remove('is-active') })
+    }
     submit.onclick = function () {
       var error = validateParentIdentityFile(selectedIdentityFile)
       if (error) return toast(error)
+      if (!faceAssessment) return toast('请先完成人证比对或选择人工核验')
       submit.disabled = true; submit.textContent = '正在安全上传…'; setUploadStatus('uploading', '正在加密上传')
       readParentImage(selectedIdentityFile).then(function (base64Data) {
-        return parentApi('uploadParentIdentityDocument', { side: 'front', base64Data: base64Data })
+        return parentApi('uploadParentIdentityDocument', { side: 'front', documentType:documentType.value, base64Data: base64Data })
       }).then(function (uploadResult) {
         selectedIdentityFile = null; cameraInput.value = ''; albumInput.value = ''
         if (!uploadResult.success) throw new Error(uploadResult.error || '身份证人像面上传失败')
         identityUploadCompleted = true
         setUploadStatus('success', '上传完成，正在提交识别')
         submit.textContent = '正在提交识别…'
-        return parentApi('submitParentIdentityVerification')
+        return parentApi('submitParentIdentityVerification', { faceAssessment:faceAssessment })
       }).then(function (result) {
-        if (!result.success) throw new Error(result.error || '实名核验提交失败')
+        if (!result.success) throw new Error(result.error || '人证核验提交失败')
         loadParentIdentityResult()
       }).catch(function (uploadError) {
         submit.disabled = !selectedIdentityFile
@@ -1154,12 +1449,12 @@
   function renderParentIdentityPending() {
     setParentShell()
     app.className = 'page parent-profile-page'
-    app.innerHTML = '<section class="parent-hero"><span>赛小蜂足球 · 家长服务</span><h1>实名认证已提交</h1><p>材料已进入受限核验队列。核验结果会决定是否可继续标准形象照步骤。</p></section><section class="parent-card"><h2>等待核验结果</h2><p class="muted">请勿重复上传或将身份材料发送到群聊。若材料不清晰，将在本页显示补充原因。</p><button id="identityRefresh" class="primary wide">刷新核验状态</button></section>'
+    app.innerHTML = '<section class="parent-hero"><span>赛小蜂足球 · 球员资料</span><h1>人证核验已提交</h1></section><section class="parent-card"><h2>等待核验结果</h2><p class="muted">需要人工复核时，本页会显示处理结果。</p><button id="identityRefresh" class="primary wide">刷新状态</button></section>'
     document.getElementById('identityRefresh').onclick = loadParentIdentityResult
   }
 
   function loadParentIdentityResult() {
-    loading('正在读取实名认证结果…')
+    loading('正在读取人证核验结果…')
     parentApi('getParentIdentityVerification').then(function (result) {
       if (!result.success) throw new Error(result.error || '读取审核状态失败')
       renderParentIdentityResult(result.data || {})
@@ -1171,28 +1466,28 @@
     var status = data.status || 'pending_review'
     var requirements = data.requirements || { realName: false, portrait: false }
     var approved = status === 'approved', rejected = status === 'rejected', notStarted = status === 'not_started'
-    var title = approved ? '实名认证通过' : (rejected ? '实名认证需要补充' : (notStarted ? '尚未提交实名认证' : '实名认证审核中'))
+    var title = approved ? '人证核验通过' : (rejected ? '人证核验需要补充' : (notStarted ? '尚未提交人证核验' : '人证核验审核中'))
     var subtitle = approved ? '姓名与身份证号匹配，球员身份已建立' : (rejected ? '请根据审核原因重新上传清晰材料' : (notStarted ? '请先上传球员本人身份证人像面' : '材料已进入受限审核队列，请耐心等待'))
     var stateClass = approved ? 'approved' : (rejected ? 'rejected' : (notStarted ? 'not-started' : 'pending'))
     var details = ''
     var actions = ''
     if (approved) {
-      details = '<section class="parent-result-card parent-result-information"><h2>认证信息</h2><dl><div><dt>姓名</dt><dd>' + escapeHtml(data.playerName || '球员') + '</dd></div><div><dt>身份证号</dt><dd>' + escapeHtml(data.identityNumberMasked || '仅系统加密保存') + '</dd></div><div><dt>出生日期</dt><dd>' + escapeHtml(parentFullBirthDate(data.verifiedBirthDate || data.birthDate)) + '</dd></div><div><dt>性别</dt><dd>' + escapeHtml(data.gender || '待核验') + '</dd></div><div><dt>比赛日年龄</dt><dd>' + escapeHtml(parentCompetitionAge(data.verifiedBirthDate || data.birthDate)) + '</dd></div><div><dt>资格状态</dt><dd class="parent-result-qualified">' + escapeHtml(data.qualificationStatusText || '实名核验已通过') + '</dd></div></dl><p class="parent-result-audit">审核完成：' + escapeHtml(displayTime(data.reviewedAt)) + '</p></section>' +
+      details = '<section class="parent-result-card parent-result-information"><h2>核验信息</h2><dl><div><dt>姓名</dt><dd>' + escapeHtml(data.playerName || '球员') + '</dd></div><div><dt>证件号码</dt><dd>' + escapeHtml(data.identityNumberMasked || '仅系统加密保存') + '</dd></div><div><dt>出生日期</dt><dd>' + escapeHtml(parentFullBirthDate(data.verifiedBirthDate || data.birthDate)) + '</dd></div><div><dt>性别</dt><dd>' + escapeHtml(data.gender || '待核验') + '</dd></div><div><dt>比赛日年龄</dt><dd>' + escapeHtml(parentCompetitionAge(data.verifiedBirthDate || data.birthDate)) + '</dd></div><div><dt>核验状态</dt><dd class="parent-result-qualified">' + escapeHtml(data.qualificationStatusText || '人证核验通过') + '</dd></div></dl><p class="parent-result-audit">平台人证核验，非权威库认证 · ' + escapeHtml(displayTime(data.reviewedAt)) + '</p></section>' +
         '<section class="parent-result-card parent-document-safe"><h2>证件原图 <span>（仅系统加密保存）</span></h2><div class="parent-document-summary"><span class="parent-document-placeholder" aria-hidden="true"><i></i></span><p><b class="parent-mini-shield"></b>加密保存，仅授权系统核验</p></div></section>' +
-        '<section class="parent-result-notice"><span class="parent-mini-shield" aria-hidden="true"></span><p>本次实名结果将绑定球员平台档案，后续赛事经监护人授权可复用，无需重复上传。</p></section>'
+        '<section class="parent-result-notice"><span class="parent-mini-shield" aria-hidden="true"></span><p>实名结果绑定球员档案，后续经本人或监护人授权可复用。</p></section>'
       actions = (requirements.portrait === true ? '<button id="portraitNext" class="parent-result-primary" type="button">下一步：拍摄球员形象照</button>' : '<button id="submitParentProfile" class="parent-result-primary" type="button">提交资料</button>') + '<button id="requestIdentityCorrection" class="parent-result-secondary" type="button"' + (data.correctionRequested ? ' disabled' : '') + '>' + (data.correctionRequested ? '更正申请处理中' : '信息有误，申请更正') + '</button>'
     } else if (rejected) {
       details = '<section class="parent-result-card parent-result-review"><h2>审核结果</h2><dl><div><dt>提交时间</dt><dd>' + escapeHtml(displayTime(data.submittedAt)) + '</dd></div><div><dt>审核状态</dt><dd class="parent-result-rejected-text">需要补充材料</dd></div></dl><div class="parent-result-reason"><b>退回原因</b><p>' + escapeHtml(data.reason || '证件人像面不够清晰或信息不完整，请重新拍摄后提交。') + '</p></div></section><section class="parent-result-notice parent-result-notice-warning"><span aria-hidden="true"></span><p>重新上传只替换本次待核验材料，不会修改球队长期资料或历史赛事快照。</p></section>'
       actions = '<button id="retryIdentity" class="parent-result-primary" type="button">重新上传身份证人像面</button>'
     } else if (notStarted) {
-      details = '<section class="parent-result-card parent-result-review"><h2>尚未提交</h2><p>完成基础资料确认后，请上传球员本人身份证人像面进行实名核验。</p></section>'
+      details = '<section class="parent-result-card parent-result-review"><h2>尚未提交</h2><p>完成基础资料确认后，请上传球员本人身份证明并完成人证核验。</p></section>'
       actions = '<button id="startIdentity" class="parent-result-primary" type="button">上传身份证人像面</button>'
     } else {
-      details = '<section class="parent-result-card parent-result-review"><h2>审核详情</h2><dl><div><dt>提交时间</dt><dd>' + escapeHtml(displayTime(data.submittedAt)) + '</dd></div><div><dt>当前状态</dt><dd class="parent-result-pending-text">等待受限审核</dd></div></dl><p>审核完成后本页会显示通过结果或明确的补充原因。家长端不能修改审核结论。</p></section><section class="parent-result-notice"><span class="parent-mini-shield" aria-hidden="true"></span><p>证件原图不会在页面展示，也不会提供公开访问链接。</p></section>'
+      details = '<section class="parent-result-card parent-result-review"><h2>审核详情</h2><dl><div><dt>提交时间</dt><dd>' + escapeHtml(displayTime(data.submittedAt)) + '</dd></div><div><dt>当前状态</dt><dd class="parent-result-pending-text">等待受限审核</dd></div></dl><p>审核完成后显示结果或补充原因。</p></section><section class="parent-result-notice"><span class="parent-mini-shield" aria-hidden="true"></span><p>证件原图不会公开展示。</p></section>'
       actions = '<button id="refreshIdentity" class="parent-result-primary" type="button">刷新审核状态</button>'
     }
     app.className = 'page parent-profile-page parent-result-page'
-    app.innerHTML = '<header class="parent-match-hero parent-basic-hero parent-result-header"><button id="parentResultBack" class="parent-match-back" type="button" aria-label="返回"><span></span></button><div><h1>实名认证结果</h1><p>' + escapeHtml(data.playerName || '球员') + ' · ' + escapeHtml(data.teamName || '专业版参赛资格') + '</p></div><strong>3/5</strong></header><main class="parent-result-content"><section class="parent-result-hero parent-result-' + stateClass + '"><div class="parent-result-emblem" aria-hidden="true"><span></span></div><h2>' + escapeHtml(title) + '</h2><p>' + escapeHtml(subtitle) + '</p></section>' + details + '<div class="parent-result-actions">' + actions + '</div></main>'
+    app.innerHTML = '<header class="parent-match-hero parent-basic-hero parent-result-header"><button id="parentResultBack" class="parent-match-back" type="button" aria-label="返回"><span></span></button><div><h1>人证核验结果</h1><p>' + escapeHtml(data.playerName || '球员') + ' · ' + escapeHtml(data.teamName || '专业版参赛资格') + '</p></div><strong>3/5</strong></header><main class="parent-result-content"><section class="parent-result-hero parent-result-' + stateClass + '"><div class="parent-result-emblem" aria-hidden="true"><span></span></div><h2>' + escapeHtml(title) + '</h2><p>' + escapeHtml(subtitle) + '</p></section>' + details + '<div class="parent-result-actions">' + actions + '</div></main>'
     document.getElementById('parentResultBack').onclick = function () { if (history.length > 1) history.back(); else { window.close(); toast('请返回微信继续使用') } }
     var retry = document.getElementById('retryIdentity'), start = document.getElementById('startIdentity'), refresh = document.getElementById('refreshIdentity'), portrait = document.getElementById('portraitNext'), submit = document.getElementById('submitParentProfile')
     if (retry || start) (retry || start).onclick = renderParentIdentityUpload
@@ -1203,7 +1498,7 @@
     if (correction && !data.correctionRequested) correction.onclick = function () {
       if (!window.confirm('确认实名信息有误并提交人工核对申请？提交后不会自动修改当前实名结果。')) return
       correction.disabled = true; correction.textContent = '正在提交更正申请…'
-      parentApi('requestParentIdentityCorrection', { reason: '家长反馈实名信息有误，请人工核对' }).then(function (result) {
+      parentApi('requestParentIdentityCorrection', { reason: '登记人反馈实名信息有误，请人工核对' }).then(function (result) {
         if (!result.success) throw new Error(result.error || '更正申请提交失败')
         correction.textContent = '更正申请处理中'
         toast(result.duplicate ? '更正申请已在处理中' : '已提交人工核对申请')
@@ -1256,7 +1551,7 @@
       readParentImage(file).then(function (base64Data) { return parentApi('uploadAndProcessParentPortrait', { base64Data: base64Data }) }).then(function (result) {
         if (!result.success) throw new Error(result.error || '人像分割失败')
         input.value = ''
-         // 保留实名认证结果带来的球员/球队上下文，重拍或返回取景框时不能退回通用占位。
+         // 保留人证核验结果带来的球员/球队上下文，重拍或返回取景框时不能退回通用占位。
          renderPortraitConfirmation(Object.assign({}, data || {}, result))
       }).catch(function (error) { capture.disabled = false; stage.classList.remove('is-processing'); status.textContent = '处理失败，请重新拍摄或选择照片'; toast(error.message) })
     }
@@ -1383,13 +1678,13 @@
       ? '<img class="parent-success-avatar-image" src="' + escapeHtml(avatarPreviewSrc) + '" alt="已提交的白底无边框球员头像">'
       : '<div class="parent-success-placeholder"><b>球员头像</b><span>白底无边框预览</span></div>'
     var progressItems = ['基础资料已核对']
-    if (requirements.realName === true) progressItems.push('实名认证已通过')
+    if (requirements.realName === true) progressItems.push('人证核验通过')
     if (requirements.portrait === true) {
       progressItems.push('标准形象照已生成')
       progressItems.push('球员头像已裁切')
     }
     var progressMarkup = progressItems.map(function (label, index) {
-      var icon = index === 0 ? 'parent-progress-document' : (label.indexOf('实名') >= 0 ? 'parent-progress-shield' : (label.indexOf('头像') >= 0 ? 'parent-progress-head' : 'parent-progress-document'))
+      var icon = index === 0 ? 'parent-progress-document' : (label.indexOf('人证') >= 0 ? 'parent-progress-shield' : (label.indexOf('头像') >= 0 ? 'parent-progress-head' : 'parent-progress-document'))
       return '<li><span class="parent-progress-icon ' + icon + '" aria-hidden="true"></span><b>' + escapeHtml(label) + '</b><strong>已完成<i></i></strong></li>'
     }).join('')
     var previewMarkup = requirements.portrait === true
@@ -1398,12 +1693,14 @@
     var playerName = escapeHtml(result.playerName || '球员')
     var teamName = escapeHtml(result.teamName || '当前球队')
     var submittedAt = escapeHtml(displayTime(result.submittedAt || result.updateTime))
+    var submitterLabel = result.registrantType === 'self' ? '本人已提交' : '家长已提交'
+    var certificateMarkup = result.certificateNumber ? '<section class="parent-success-card parent-progress-card"><h2>电子参赛证</h2><div class="parent-success-row"><b>' + escapeHtml(result.certificateNumber) + '</b><strong>已签发</strong></div></section>' : ''
     app.className = 'page parent-profile-page parent-success-page'
-    app.innerHTML = '<header class="parent-success-header"><div><span>赛小蜂足球 · 家长服务</span><h1>资料提交成功</h1><p>' + playerName + ' · ' + teamName + '</p></div><button id="closeParentService" class="parent-success-close" type="button">完成</button></header>' +
+    app.innerHTML = '<header class="parent-success-header"><div><span>赛小蜂足球 · ' + (result.registrantType === 'self' ? '球员服务' : '家长服务') + '</span><h1>资料提交成功</h1><p>' + playerName + ' · ' + teamName + '</p></div><button id="closeParentService" class="parent-success-close" type="button">完成</button></header>' +
       '<main class="parent-success-content"><section class="parent-success-hero"><div class="parent-success-check" aria-hidden="true"><span></span></div><h2>球员资料已提交</h2><p>确认后保存到球队长期球员资料库</p></section>' +
-      '<section id="parentSubmittedSummary" class="parent-success-card parent-progress-card"><h2>资料提交进度</h2><ul class="parent-progress-list">' + progressMarkup + '</ul></section>' +
+      certificateMarkup + '<section id="parentSubmittedSummary" class="parent-success-card parent-progress-card"><h2>资料提交进度</h2><ul class="parent-progress-list">' + progressMarkup + '</ul></section>' +
       previewMarkup +
-      '<section class="parent-success-card parent-status-card"><h2>状态跟踪</h2><div class="parent-status-track"><div class="parent-status-line"><span class="parent-status-node is-done"><i></i></span><span class="parent-status-node is-current"><i></i></span><span class="parent-status-node"><i></i></span></div><div class="parent-status-labels"><div><b>家长已提交</b><small>' + submittedAt + '</small></div><div><b>球队负责人确认</b><small>待处理</small></div><div><b>保存至球队球员库</b><small>确认后完成</small></div></div></div><p class="parent-status-note">本次只补充球队长期球员资料，不会自动加入任何赛事参赛名单。</p></section>' +
+      '<section class="parent-success-card parent-status-card"><h2>状态跟踪</h2><div class="parent-status-track"><div class="parent-status-line"><span class="parent-status-node is-done"><i></i></span><span class="parent-status-node is-current"><i></i></span><span class="parent-status-node"><i></i></span></div><div class="parent-status-labels"><div><b>' + submitterLabel + '</b><small>' + submittedAt + '</small></div><div><b>球队负责人确认</b><small>待处理</small></div><div><b>保存至球队球员库</b><small>确认后完成</small></div></div></div><p class="parent-status-note">资料不会自动加入赛事参赛名单。</p></section>' +
       '<div class="parent-success-actions"><button id="closeParentServicePrimary" class="parent-success-primary" type="button">完成并关闭</button><button id="viewSubmittedData" class="parent-success-secondary" type="button">查看已提交资料</button></div></main>'
     function closeParentService() { window.close(); toast('资料已提交，可返回微信继续使用') }
     document.getElementById('closeParentService').onclick = closeParentService
@@ -1448,17 +1745,18 @@
     else renderMatch(refereeMatch)
   } else if (visualParentQa) {
     var view = query.get('parentView')
-    var sample = { playerName: '张浩', teamName: '郑州青训U9队', guardianPhoneMasked: '138****5678', birthDate: '2016-08-18', requirements: { realName: true, portrait: true, parentSupplementRequired: true } }
+    var sampleSelf = query.get('registrant') === 'self'
+    var sample = { playerName: sampleSelf ? '王强' : '张浩', teamName: sampleSelf ? '城市联队' : '郑州青训U9队', registrantType: sampleSelf ? 'self' : 'guardian', isSelfRegistration: sampleSelf, accountPhoneMasked: '138 **** 5678', guardianPhoneMasked: sampleSelf ? '' : '138 **** 5678', birthDate: sampleSelf ? '1996-05-18' : '2016-08-18', requirements: { realName: true, portrait: true, parentSupplementRequired: true } }
     if (view === 'match') renderParentInvite(sample)
     else if (view === 'basic') renderParentBasicForm(sample, { guardianAuthorized: false })
     else if (view === 'identity') renderParentIdentityUpload()
-    else if (view === 'result') renderParentIdentityResult({ status: 'approved', statusText: '实名认证已通过', requirements: { realName: true, portrait: true }, playerName: '张浩', teamName: '郑州青训U9队', identityNumberMasked: '41************1234', verifiedBirthDate: '2016-08-18', gender: '男', qualificationStatusText: '年龄符合U9组规则', reviewedAt: '2026-08-14T10:30:00+08:00', documentStored: true })
+    else if (view === 'result') renderParentIdentityResult({ status: 'approved', statusText: '人证核验通过', requirements: { realName: true, portrait: true }, playerName: '张浩', teamName: '郑州青训U9队', identityNumberMasked: '41************1234', verifiedBirthDate: '2016-08-18', gender: '男', qualificationStatusText: '年龄符合U9组规则', reviewedAt: '2026-08-14T10:30:00+08:00', documentStored: true })
     else if (view === 'resultPending') renderParentIdentityResult({ status: 'pending_review', requirements: { realName: true, portrait: true }, playerName: '李晨阳', teamName: '郑州劲风U12', submittedAt: '2026-08-14T10:25:00+08:00' })
     else if (view === 'resultRejected') renderParentIdentityResult({ status: 'rejected', requirements: { realName: true, portrait: true }, playerName: '李晨阳', teamName: '郑州劲风U12', submittedAt: '2026-08-14T10:25:00+08:00', reason: '证件人像面边缘缺失，请重新拍摄完整证件。' })
     else if (view === 'guide') renderPortraitGuide(sample)
     else if (view === 'camera') renderPortraitCamera('camera', sample)
     else if (view === 'confirm') renderPortraitConfirmation({ portraitId: 'qa-portrait-001', transparentPreview: '', playerName: '张浩' })
-    else if (view === 'success') renderParentSubmitSuccess({ playerName: '张浩', teamName: '郑州青训U9队', submittedAt: '2026-07-18T14:30:00+08:00', requirements: { realName: true, portrait: true }, transparentPreview: '' })
+    else if (view === 'success') renderParentSubmitSuccess({ playerName: sample.playerName, teamName: sample.teamName, registrantType: sample.registrantType, submittedAt: '2026-07-18T14:30:00+08:00', requirements: { realName: true, portrait: true }, transparentPreview: '' })
     else renderParentInvite(sample)
   } else if (query.get('code') && query.get('state') && sessionStorage.getItem(PARENT_PENDING_KEY)) completeParentOAuth(query.get('code'), query.get('state'))
   else if (query.get('parentInvite') && query.get('entry') === 'registered') {

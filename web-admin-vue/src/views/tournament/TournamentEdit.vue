@@ -898,7 +898,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, MagicStick, Check, InfoFilled, Document, Delete, QuestionFilled } from '@element-plus/icons-vue'
-import { queryList, queryById, updateRecord, uploadFileViaCloud, uploadLargeFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
+import { queryList, queryById, updateRecord, uploadLargeFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
 import { MATCH_FORMAT_OPTIONS, MATCH_FORMAT_DEFAULTS, resolveMaxPlayers, inferMatchFormat, getMaxByFormat } from '../../utils/rosterHelper'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 
@@ -1386,7 +1386,9 @@ async function handleRegulationsUpload(options) {
     const { file } = options
     const ext = file.name.split('.').pop()
     const cloudPath = `tournament-regulations/${Date.now()}-${file.name}`
-    const result = await uploadFileViaCloud(cloudPath, file)
+    const result = await uploadLargeFileViaCloud(cloudPath, file, {
+      chunkSize: 32 * 1024
+    })
     form.value.regulationsFileId = result.fileId
     form.value.regulationsUrl = result.tempUrl
     form.value.regulationsFileName = file.name

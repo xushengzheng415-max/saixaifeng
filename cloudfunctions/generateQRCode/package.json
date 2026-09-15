@@ -7,6 +7,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "wx-server-sdk": "~2.6.3"
+    "qrcode": "^1.5.4",
+    "wx-server-sdk": "4.0.2"
   }
 }

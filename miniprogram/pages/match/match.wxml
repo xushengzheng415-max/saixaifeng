@@ -2,7 +2,7 @@
   <view class="page-header">
     <view>
       <text class="page-title">{{labels.title}}</text>
-      <text class="page-subtitle">{{labels.subtitle}}</text>
+
     </view>
   </view>
 
