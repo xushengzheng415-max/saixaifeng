@@ -13,6 +13,7 @@ export const KIT_COLOR_OPTIONS = Object.freeze([
   { label:'天蓝', value:'#47A9E8' },
   { label:'皇家蓝', value:'#1455B5' },
   { label:'海军蓝', value:'#14264A' },
+  { label:'藏青', value:'#1F3A6E' },
   { label:'竞技紫', value:'#6B3FA0' },
   { label:'亮粉', value:'#E64A8A' }
 ])
@@ -21,12 +22,12 @@ const REGISTRATION_COLOR_MAP = Object.freeze({
   白:'#FFFFFF', 黑:'#161A18', 深灰:'#59615D', 灰:'#A8B0AC',
   红:'#D72631', 酒红:'#7E1731', 橙:'#F47A1F', 黄:'#F5C518', 荧光黄:'#D7F300',
   绿:'#138A4B', 深绿:'#075B35', 天蓝:'#47A9E8', 浅蓝:'#47A9E8',
-  蓝:'#1455B5', 深蓝:'#14264A', 海军蓝:'#14264A', 紫:'#6B3FA0', 粉:'#E64A8A',
+  蓝:'#1455B5', 深蓝:'#14264A', 海军蓝:'#14264A', 藏青:'#1F3A6E', 紫:'#6B3FA0', 粉:'#E64A8A',
   white:'#FFFFFF', black:'#161A18', gray:'#A8B0AC', grey:'#A8B0AC', red:'#D72631',
   orange:'#F47A1F', yellow:'#F5C518', green:'#138A4B', blue:'#1455B5', purple:'#6B3FA0', pink:'#E64A8A'
 })
 
-const COLOR_TOKEN_PATTERN = /荧光黄|海军蓝|深灰|酒红|深绿|天蓝|浅蓝|深蓝|白|黑|灰|红|橙|黄|绿|蓝|紫|粉|white|black|gray|grey|red|orange|yellow|green|blue|purple|pink/i
+const COLOR_TOKEN_PATTERN = /荧光黄|海军蓝|藏青|深灰|酒红|深绿|天蓝|浅蓝|深蓝|白|黑|灰|红|橙|黄|绿|蓝|紫|粉|white|black|gray|grey|red|orange|yellow|green|blue|purple|pink/i
 
 export function registrationColorToHex(value) {
   const normalized = String(value || '').trim().toLowerCase()
