@@ -130,7 +130,7 @@ const previewRegion=computed(()=>regionSelection().region||'办赛地点')
 
 function currentOrgId(){if(isVisualQa)return'qa-org';try{const user=JSON.parse(localStorage.getItem('userInfo')||'{}');return user.orgId||user.organizationId||''}catch{return''}}
 function handleLogoReady(asset){logoPreview.value=asset.previewUrl||asset.url;pendingSourceFile.value=asset.sourceFile||null;form.value.logoTransparentFileId=asset.fileID||'';form.value.logoTransparentUrl=asset.fileID||asset.url||'';logoDialogVisible.value=false}
-async function ensureSourceLogo(){if(!pendingSourceFile.value||form.value.logoSourceUrl)return;const extension=pendingSourceFile.value.name.split('.').pop()||'png';const result=await uploadLargeFileViaCloud('tournament-logo-source/'+Date.now()+'.'+extension,pendingSourceFile.value,{chunkSize:32*1024});form.value.logoSourceUrl=result.tempUrl||result.fileId||''}
+async function ensureSourceLogo(){if(!pendingSourceFile.value||form.value.logoSourceUrl)return;const extension=pendingSourceFile.value.name.split('.').pop()||'png';const result=await uploadLargeFileViaCloud('tournament-logo-source/'+Date.now()+'.'+extension,pendingSourceFile.value,{chunkSize:32*1024});form.value.logoSourceUrl=result.tempUrl||result.fileId||'';pendingSourceFile.value=null}
 function beforeRegulationsUpload(file){if(!/\.(pdf|docx)$/i.test(file.name)){ElMessage.error('自动识别仅支持 PDF、Word（.docx）');return false}if(file.size>10*1024*1024){ElMessage.error('竞赛规程不能超过 10MB');return false}return true}
 async function handleRegulationsUpload(options){
   uploadingRegulations.value=true
