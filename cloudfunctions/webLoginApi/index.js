@@ -3741,9 +3741,9 @@ async function handleLegacyOrganizerFunction(functionName, functionParams, event
     const scope = await buildOrganizerScope(db, authenticated.user)
     if (scope.organizationConflict) return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
     if (!scope.orgId) return { success: false, error: '当前账号尚未关联机构，请先完成机构引导', code: 'ORG_REQUIRED' }
-    const teamResult = await db.collection('teams').doc(teamId).get()
-    const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
-    if (!team || !organizerRecordAllowed('teams', team, scope)) return { success: false, error: '无权删除其他机构的球队' }
+    const team = await readDocumentOrNull(db, 'teams', teamId)
+    if (!team) return { success: false, error: '球队不存在或已被删除', code: 'TEAM_NOT_FOUND' }
+    if (!organizerRecordAllowed('teams', team, scope)) return { success: false, error: '无权删除其他机构的球队' }
     const playerCountResult = await db.collection('players').where({ teamId }).count()
     const playerCount = playerCountResult.total || 0
     if (playerCount > 0 && params.force !== true) return { success: false, error: `该球队下有 ${playerCount} 名球员，请先删除所有球员后再删除球队`, playerCount }
@@ -4082,6 +4082,30 @@ const SYSTEM_COLLECTIONS = [
   'users', 'sms_codes', 'email_verification', 'email_codes', 'invite_codes',
   'auth_sessions', 'assistance_requests', 'assistance_attempts', 'assistance_audit_logs', 'platform_settings'
 ]
+// CloudBase 的 doc().get() 在文档不存在时抛异常，而不是返回空结果。
+// 这里统一收敛为 null，让删除/修改/读取返回受控的“记录不存在”，
+// 避免把原始数据库错误（document.getfail document with_id does not exist）透出给页面。
+function documentMissingError(error) {
+  const message = String((error && (error.message || error.errMsg)) || '').toLowerCase()
+  const code = String((error && (error.code || error.errCode)) || '').toLowerCase()
+  if (code.includes('document_not_found') || code.includes('documentnotfound')) return true
+  if (message.includes('document.getfail')) return true
+  return message.includes('document') && (message.includes('does not exist') || message.includes('not exist'))
+}
+
+async function readDocumentOrNull(db, collection, id) {
+  const targetId = String(id == null ? '' : id).trim()
+  if (!targetId) return null
+  try {
+    const result = await db.collection(collection).doc(targetId).get()
+    const record = result.data
+    return Array.isArray(record) ? (record[0] || null) : (record || null)
+  } catch (error) {
+    if (documentMissingError(error)) return null
+    throw error
+  }
+}
+
 async function handleDbQuery(event) {
   const { collection, operation, where, orderBy, limit: limitVal, skip: skipVal, id, data, assistanceGrantId } = event
   if (!collection) return { success: false, error: '缺少 collection 参数' }
@@ -4230,9 +4254,8 @@ async function handleDbQuery(event) {
       }
       case 'get': {
         if (!id) return { success: false, error: '缺少记录 ID' }
-        const res = await db.collection(collection).doc(id).get()
-        const record = res.data
-        const normalized = Array.isArray(record) ? (record[0] || null) : record
+        const normalized = await readDocumentOrNull(db, collection, id)
+        if (!normalized) return { success: false, error: '记录不存在或已被删除', code: 'RECORD_NOT_FOUND' }
         if (assistanceScope && !assistanceRecordAllowed(collection, normalized, assistanceScope)) {
           return { success: false, error: '该资料不在用户授权范围内' }
         }
@@ -4323,17 +4346,17 @@ async function handleDbQuery(event) {
           if (!assistanceScope.grant.permissions || assistanceScope.grant.permissions.edit !== true) {
             return { success: false, error: '用户未授权添加或修改资料' }
           }
-          const beforeResult = await db.collection(collection).doc(id).get()
-          before = Array.isArray(beforeResult.data) ? beforeResult.data[0] : beforeResult.data
-          const after = { ...(before || {}), ...data }
+          before = await readDocumentOrNull(db, collection, id)
+          if (!before) return { success: false, error: '记录不存在或已被删除', code: 'RECORD_NOT_FOUND' }
+          const after = { ...before, ...data }
           if (!assistanceRecordAllowed(collection, before, assistanceScope) ||
               !assistanceRecordAllowed(collection, after, assistanceScope)) {
             return { success: false, error: '该资料不在用户授权范围内' }
           }
         }
         if (organizerScope) {
-          const beforeResult = await db.collection(collection).doc(id).get()
-          before = Array.isArray(beforeResult.data) ? beforeResult.data[0] : beforeResult.data
+          before = await readDocumentOrNull(db, collection, id)
+          if (!before) return { success: false, error: '记录不存在或已被删除', code: 'RECORD_NOT_FOUND' }
           if (!organizerRecordAllowed(collection, before, organizerScope)) {
             return { success: false, error: '无权修改其他账号的资料' }
           }
@@ -4374,8 +4397,8 @@ async function handleDbQuery(event) {
         }
         let before = null
         if (COMPETITION_PLAN_MUTABLE_COLLECTIONS.has(collection) || organizerScope) {
-          const beforeResult = await db.collection(collection).doc(id).get()
-          before = Array.isArray(beforeResult.data) ? beforeResult.data[0] : beforeResult.data
+          before = await readDocumentOrNull(db, collection, id)
+          if (!before) return { success: false, error: '记录不存在或已被删除', code: 'RECORD_NOT_FOUND' }
         }
         if (organizerScope) {
           if (!organizerRecordAllowed(collection, before, organizerScope)) {
