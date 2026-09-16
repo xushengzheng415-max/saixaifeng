@@ -69,13 +69,38 @@
             </div>
           </section>
 
-          <section class="staff-strip">
-            <strong>工作人员</strong>
-            <div>
-              <article v-for="(person, personIndex) in team.staff" :key="`${team.clientKey}-staff-${personIndex}`">
-                <PersonPhotoUpload :person="person" @change="file => replacePersonPhoto(file, person)" />
-                <span><b>{{ person.name }}</b><small>{{ person.roleLabel }}<template v-if="person.dualRoleType"> · 兼球员 #{{ person.jerseyNumber }}</template><template v-if="person.phone"> · {{ maskPhone(person.phone) }}</template></small></span>
-              </article>
+          <section class="staff-section">
+            <header><strong>工作人员资料</strong><span>身份证信息、年龄、籍贯和照片状态已自动识别。</span></header>
+            <div class="staff-table-wrap">
+              <table>
+                <thead><tr><th>照片</th><th>姓名</th><th>职务</th><th>出生日期</th><th>年龄</th><th>籍贯</th><th>球衣英文</th><th>身份证</th><th>号码</th><th>手机号</th><th>照片状态</th></tr></thead>
+                <tbody>
+                  <tr v-for="(person, personIndex) in team.staff" :key="`${team.clientKey}-staff-${personIndex}`" :class="{ invalid: person.error }">
+                    <td><PersonPhotoUpload :person="person" @change="file => replacePersonPhoto(file, person)" /></td>
+                    <td><el-input v-model="person.name" maxlength="30" /></td>
+                    <td>
+                      <span>{{ person.roleLabel || '工作人员' }}</span>
+                      <el-tag v-if="person.dualRoleType" type="warning" effect="plain" size="small" class="dual-role-tag">兼球员</el-tag>
+                    </td>
+                    <td>{{ person.birthDate || '待补充' }}</td>
+                    <td>{{ ageFromBirth(person.birthDate) }}</td>
+                    <td><span class="native-place" :title="person.nativePlace">{{ person.nativePlace || '地区码待核验' }}</span></td>
+                    <td><el-input v-if="person.jerseyNumber" v-model="person.jerseyName" maxlength="32" /><span v-else>—</span></td>
+                    <td><span class="identity-mask">{{ maskRegistrationIdentity(person.identityNumber) }}</span></td>
+                    <td><el-input v-if="person.jerseyNumber" v-model="person.jerseyNumber" maxlength="3" inputmode="numeric" /><span v-else>—</span></td>
+                    <td>{{ person.phone ? maskPhone(person.phone) : '—' }}</td>
+                    <td>
+                      <el-tag v-if="person.error" type="danger" size="small">{{ person.error }}</el-tag>
+                      <el-tag v-else-if="person.photoProcessingStatus === 'processing'" type="warning" size="small">{{ person.photoProgressText || '处理中' }}</el-tag>
+                      <el-tag v-else-if="person.photoProcessingStatus === 'processed'" type="success" effect="plain" size="small">已处理</el-tag>
+                      <el-tag v-else-if="person.photoProcessingStatus === 'fallback_original'" type="warning" effect="plain" size="small">已保留原图</el-tag>
+                      <el-tag v-else-if="person.photoProcessingStatus === 'failed'" type="danger" size="small">处理失败</el-tag>
+                      <el-tag v-else-if="person.photoFile" type="info" effect="plain" size="small">待处理</el-tag>
+                      <el-tag v-else type="warning" effect="plain" size="small">缺照片</el-tag>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </section>
 
@@ -630,10 +655,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.registration-importer{display:flex;flex-direction:column;gap:14px;min-height:440px}.import-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}.import-toolbar>div{display:flex;flex-direction:column;gap:4px}.import-toolbar strong{font-size:17px}.import-toolbar span,.import-footer>span{color:#6f7c73;font-size:12px}.import-empty{min-height:300px;display:grid;place-content:center;justify-items:center;gap:9px;color:#7d8981;border:1px dashed #cdd9d1;background:#fafcfa}.import-empty .el-icon{font-size:42px;color:#1c8a4d}.import-team-list{display:flex;flex-direction:column;gap:10px;max-height:58vh;overflow:auto;padding-right:4px}.import-team{border:1px solid #dfe7e1;background:#fff}.import-team.invalid{border-color:#e6b8b4}.import-team>header{display:grid;grid-template-columns:28px 54px minmax(0,1fr) auto auto;align-items:center;gap:10px;min-height:66px;padding:7px 12px}.expand-button{border:0;background:transparent;color:#536159;cursor:pointer}.team-logo-button,.person-photo-button{display:grid;place-items:center;overflow:hidden;border:1px dashed #b8c9bd;background:#f7faf8;color:#21814e;cursor:pointer}.team-logo-button{width:50px;height:50px}.team-logo-button img,.person-photo-button img{width:100%;height:100%;object-fit:contain}.team-logo-button span{font-size:10px}.team-heading{min-width:0;display:flex;flex-direction:column;gap:4px}.team-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.team-heading span{color:#7b8780;font-size:11px}.team-detail{padding:14px 16px 16px;border-top:1px solid #edf1ee;background:#fbfcfb}.team-fields{display:grid;grid-template-columns:1.2fr .8fr .8fr .9fr;gap:11px}.team-fields label{display:flex;min-width:0;flex-direction:column;gap:6px;color:#46554b;font-size:12px}.team-fields small{color:#849087;font-weight:400}.staff-strip{display:grid;grid-template-columns:76px 1fr;align-items:start;gap:10px;margin-top:14px;padding:10px 0;border-top:1px solid #e7ece8}.staff-strip>strong{font-size:13px}.staff-strip>div{display:flex;flex-wrap:wrap;gap:9px}.staff-strip article{display:grid;grid-template-columns:38px auto;align-items:center;gap:8px;min-width:150px}.person-photo-button{width:36px;height:44px}.person-photo-button span{font-size:10px}.staff-strip b,.staff-strip small{display:block}.staff-strip b{font-size:12px}.staff-strip small{margin-top:3px;color:#7a877f;font-size:10px}.player-section{margin-top:8px}.player-section>header{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px}.player-section>header strong{font-size:13px}.player-section>header span{color:#7a877f;font-size:11px}.player-table-wrap{overflow:auto;border:1px solid #e1e7e3}.player-table-wrap table{width:100%;min-width:690px;border-collapse:collapse}.player-table-wrap th,.player-table-wrap td{height:54px;padding:5px 10px;border-bottom:1px solid #edf1ee;text-align:left}.player-table-wrap th{height:34px;color:#617068;background:#f5f8f6;font-size:11px}.player-table-wrap tr:last-child td{border-bottom:0}.player-table-wrap tr.invalid{background:#fff7f6}.player-table-wrap th:first-child,.player-table-wrap td:first-child{width:52px}.player-table-wrap th:nth-child(3){width:170px}.player-table-wrap th:nth-child(4){width:75px}.player-table-wrap th:last-child{width:120px}.identity-mask{color:#526159;font-family:monospace;font-size:12px}.team-messages{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:10px;padding:9px 11px;background:#fff8e9}.team-messages p{margin:0;color:#98601d;font-size:11px}.team-messages p.error{color:#c4453c}.import-footer{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-top:13px;border-top:1px solid #e4eae6}.import-footer>div{display:flex;gap:10px}@media(max-width:900px){.team-fields{grid-template-columns:1fr 1fr}.import-toolbar,.import-footer{align-items:flex-start;flex-direction:column}.import-footer>div{align-self:stretch}.import-footer :deep(.el-button){flex:1}}
+.registration-importer{display:flex;flex-direction:column;gap:14px;min-height:440px}.import-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}.import-toolbar>div{display:flex;flex-direction:column;gap:4px}.import-toolbar strong{font-size:17px}.import-toolbar span,.import-footer>span{color:#6f7c73;font-size:12px}.import-empty{min-height:300px;display:grid;place-content:center;justify-items:center;gap:9px;color:#7d8981;border:1px dashed #cdd9d1;background:#fafcfa}.import-empty .el-icon{font-size:42px;color:#1c8a4d}.import-team-list{display:flex;flex-direction:column;gap:10px;max-height:58vh;overflow:auto;padding-right:4px}.import-team{border:1px solid #dfe7e1;background:#fff}.import-team.invalid{border-color:#e6b8b4}.import-team>header{display:grid;grid-template-columns:28px 54px minmax(0,1fr) auto auto;align-items:center;gap:10px;min-height:66px;padding:7px 12px}.expand-button{border:0;background:transparent;color:#536159;cursor:pointer}.team-logo-button,.person-photo-button{display:grid;place-items:center;overflow:hidden;border:1px dashed #b8c9bd;background:#f7faf8;color:#21814e;cursor:pointer}.team-logo-button{width:50px;height:50px}.team-logo-button img,.person-photo-button img{width:100%;height:100%;object-fit:contain}.team-logo-button span{font-size:10px}.team-heading{min-width:0;display:flex;flex-direction:column;gap:4px}.team-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.team-heading span{color:#7b8780;font-size:11px}.team-detail{padding:14px 16px 16px;border-top:1px solid #edf1ee;background:#fbfcfb}.team-fields{display:grid;grid-template-columns:1.2fr .8fr .8fr .9fr;gap:11px}.team-fields label{display:flex;min-width:0;flex-direction:column;gap:6px;color:#46554b;font-size:12px}.team-fields small{color:#849087;font-weight:400}.person-photo-button{width:36px;height:44px}.person-photo-button span{font-size:10px}.staff-section{margin-top:14px;padding-top:10px;border-top:1px solid #e7ece8}.staff-section>header,.player-section>header{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px}.staff-section>header strong,.player-section>header strong{font-size:13px}.staff-section>header span,.player-section>header span{color:#7a877f;font-size:11px}.player-section{margin-top:14px}.staff-table-wrap,.player-table-wrap{overflow:auto;border:1px solid #e1e7e3}.staff-table-wrap table,.player-table-wrap table{width:100%;border-collapse:collapse;table-layout:fixed}.staff-table-wrap th,.staff-table-wrap td,.player-table-wrap th,.player-table-wrap td{height:54px;padding:5px 10px;border-bottom:1px solid #edf1ee;text-align:left}.staff-table-wrap th,.player-table-wrap th{height:34px;color:#617068;background:#f5f8f6;font-size:11px}.staff-table-wrap tr:last-child td,.player-table-wrap tr:last-child td{border-bottom:0}.staff-table-wrap tr.invalid,.player-table-wrap tr.invalid{background:#fff7f6}.staff-table-wrap th:first-child,.staff-table-wrap td:first-child,.player-table-wrap th:first-child,.player-table-wrap td:first-child{width:52px}.staff-table-wrap th:last-child,.staff-table-wrap td:last-child,.player-table-wrap th:last-child,.player-table-wrap td:last-child{width:120px}.identity-mask{color:#526159;font-family:monospace;font-size:12px}.dual-role-tag{display:block;width:max-content;margin-top:4px}.team-messages{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:10px;padding:9px 11px;background:#fff8e9}.team-messages p{margin:0;color:#98601d;font-size:11px}.team-messages p.error{color:#c4453c}.import-footer{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-top:13px;border-top:1px solid #e4eae6}.import-footer>div{display:flex;gap:10px}@media(max-width:900px){.team-fields{grid-template-columns:1fr 1fr}.import-toolbar,.import-footer{align-items:flex-start;flex-direction:column}.import-footer>div{align-self:stretch}.import-footer :deep(.el-button){flex:1}}
 .registration-kit-preview{display:flex;align-items:center;gap:14px;margin-top:12px;padding:10px 12px;border-top:1px solid #e7ece8;border-bottom:1px solid #e7ece8}.registration-kit-preview>strong{flex:0 0 62px;font-size:13px}.registration-kit-preview>div{display:flex;align-items:center;gap:10px}.registration-kit-preview b{font-size:12px}.registration-kit-preview span{display:inline-flex;align-items:center;gap:5px;color:#66746b;font-size:11px}.registration-kit-preview i{width:13px;height:13px;border:1px solid #cbd5ce;border-radius:2px}
 .import-toolbar>.import-toolbar-actions{flex-direction:row;align-items:center;gap:10px}
-.staff-strip :deep(.el-upload),.player-table-wrap :deep(.el-upload){display:block;width:36px}
+.staff-table-wrap :deep(.el-upload),.player-table-wrap :deep(.el-upload){display:block;width:36px}
 .registration-importer :deep(.person-photo-button){display:grid;width:36px;height:44px;padding:0;place-items:center;overflow:hidden;border:1px dashed #b8c9bd;background:#f7faf8;color:#21814e;cursor:pointer}
 .registration-importer :deep(.person-photo-button img){display:block;width:100%;height:100%;object-fit:cover}
 .registration-importer :deep(.person-photo-button span){font-size:10px}
@@ -649,6 +674,16 @@ onBeforeUnmount(() => {
 .player-table-wrap th:nth-child(8),.player-table-wrap td:nth-child(8){width:88px}
 .player-table-wrap th:nth-child(9),.player-table-wrap td:nth-child(9){width:120px}
 .native-place{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#526159;font-size:12px}
+.staff-table-wrap table{min-width:1390px}
+.staff-table-wrap th:nth-child(2),.staff-table-wrap td:nth-child(2){width:140px}
+.staff-table-wrap th:nth-child(3),.staff-table-wrap td:nth-child(3){width:110px}
+.staff-table-wrap th:nth-child(4),.staff-table-wrap td:nth-child(4){width:105px}
+.staff-table-wrap th:nth-child(5),.staff-table-wrap td:nth-child(5){width:68px}
+.staff-table-wrap th:nth-child(6),.staff-table-wrap td:nth-child(6){width:165px}
+.staff-table-wrap th:nth-child(7),.staff-table-wrap td:nth-child(7){width:145px}
+.staff-table-wrap th:nth-child(8),.staff-table-wrap td:nth-child(8){width:170px}
+.staff-table-wrap th:nth-child(9),.staff-table-wrap td:nth-child(9){width:70px}
+.staff-table-wrap th:nth-child(10),.staff-table-wrap td:nth-child(10){width:118px}
 .player-table-wrap table{min-width:1220px}
 .player-table-wrap th:nth-child(4),.player-table-wrap td:nth-child(4){width:68px}
 .player-table-wrap th:nth-child(5),.player-table-wrap td:nth-child(5){width:165px}
