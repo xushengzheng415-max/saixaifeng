@@ -72,3 +72,4 @@ tcb-sdk-*.js
 rollup.sdk.config.*
 vite.sdk.config.*
 *.bak
+dist-preview/

@@ -191,6 +191,10 @@ function uniqueWarnings(items) {
   return Array.from(new Set(items.filter(Boolean)))
 }
 
+export function parseRegistrationJerseyNumber(value) {
+  return jerseyNumberFromText(value)
+}
+
 function personNameKey(value) {
   return normalizeText(value).replace(/\s+/g, '').toLowerCase()
 }

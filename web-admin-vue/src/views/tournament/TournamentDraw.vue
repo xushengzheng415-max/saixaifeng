@@ -1,6 +1,6 @@
 <template>
-  <section v-if="!modeOverview && !drawPrerequisitesReady" class="draw-requirement-state"><el-icon class="is-loading"><Loading /></el-icon><h2>正在核对球队审核数量</h2></section>
-  <section v-else-if="drawBlocked" class="draw-requirement-state"><el-icon><Lock /></el-icon><h2>暂不能抽签与分组</h2><p>当前组别赛制要求 {{ activeRequiredTeamCount }} 支球队，球队管理已审核通过 {{ activeApprovedTeamCount }} 支。</p><el-progress :percentage="drawRequirementProgress" /><el-button type="success" @click="router.push({ path:`/tournaments/${tournamentId}/registration`, query:{ divisionId:activeDivisionId, tab:'all' } })">前往球队审查</el-button></section>
+  <section v-if="!modeOverview && !drawPrerequisitesReady" class="draw-requirement-state"><el-icon class="is-loading"><Loading /></el-icon><h2>正在核对抽签条件</h2></section>
+  <section v-else-if="drawBlocked" class="draw-requirement-state"><el-icon><Lock /></el-icon><h2>暂不能抽签与分组</h2><p>当前组别参赛球队 {{ activeApprovedTeamCount }} 支，赛制要求 {{ activeRequiredTeamCount }} 支，尚未满足抽签与分组条件。</p><el-progress :percentage="drawRequirementProgress" /><small class="draw-requirement-note">本页只负责抽签与分组，参赛球队数量满足赛制要求后方可开始。</small></section>
   <QuickHybridConsole v-else-if="quickHybridFlow" :tournament-id="tournamentId" />
   <QuickTournamentConsole v-else-if="quickTournamentFlow" :tournament-id="tournamentId" />
   <QuickDrawResult v-else-if="quickResultFlow" :tournament-id="tournamentId" />
@@ -31,7 +31,7 @@
         <section class="quick-config-card">
           <h2>基础分组设置</h2>
           <el-alert title="本页仅设置分组结构，赛制及晋级规则请前往“竞赛管理”设置。" type="primary" :closable="false" show-icon />
-          <div class="quick-setting-row"><strong>参赛球队</strong><span class="quick-readonly-value">{{ divisionTeamCount(activeDivision) }}支</span><small>已从球队管理同步</small></div>
+          <div class="quick-setting-row"><strong>参赛球队</strong><span class="quick-readonly-value">{{ divisionTeamCount(activeDivision) }}支</span><small>按当前组别统计</small></div>
           <div class="quick-setting-row"><strong>小组数量</strong><select v-model.number="configForm.groupCount"><option v-for="count in quickGroupCountOptions" :key="count" :value="count">{{ count }}组</option></select></div>
           <div class="quick-setting-row"><strong>每组球队</strong><select v-model.number="configForm.teamsPerGroup"><option v-for="count in quickTeamCountOptions" :key="count" :value="count">{{ count }}支</option></select></div>
           <div class="quick-setting-row"><strong>组别命名</strong><span>{{ quickGroupNameRange }}</span><el-button plain>编辑组名</el-button></div>
@@ -719,7 +719,7 @@ function divisionDrawState(division) {
   const persistedState = drawOverviewByDivision.value[id]
   const professionalConfig = tournament.value.professionalDrawConfigs?.[id]
   const simpleState = tournament.value.drawStatusByDivision?.[id]
-  if (!divisionDrawReady(division)) return { state: 'pending', label: '球队审核未完成', hint: `已通过 ${divisionTeamCount(division)} / ${divisionRequiredTeams(division)} 支`, action: '等待球队审核', icon: Lock }
+  if (!divisionDrawReady(division)) return { state: 'pending', label: '抽签条件未满足', hint: `参赛球队 ${divisionTeamCount(division)} / ${divisionRequiredTeams(division)} 支`, action: '条件未满足', icon: Lock }
   if (persistedState?.state === 'done') return { state: 'done', label: '抽签已完成', hint: persistedState.confirmedAt ? `确认于 ${formatOverviewTime(persistedState.confirmedAt)}` : '分组结果已正式确认', action: '修改分组', icon: CircleCheck }
   if (persistedState?.state === 'active') return { state: 'active', label: '抽签结果待确认', hint: '已完成分组，等待最终确认', action: '继续确认', icon: Warning }
   if (professionalConfig?.drawStatus === 'confirmed' || simpleState === 'confirmed') return { state: 'done', label: '抽签已完成', hint: '可查看抽签结果', action: '查看结果', icon: CircleCheck }
@@ -734,7 +734,7 @@ function formatOverviewTime(value) {
   return date.toLocaleString('zh-CN', { hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit' })
 }
 function enterDivisionDraw(division) {
-  if (!divisionDrawReady(division)) return ElMessage.warning(`当前组别需审核通过 ${divisionRequiredTeams(division)} 支球队后才能抽签与分组`)
+  if (!divisionDrawReady(division)) return ElMessage.warning(`当前组别需满足 ${divisionRequiredTeams(division)} 支参赛球队后才能抽签与分组`)
   const id = String(division.id || division._id || 'default')
   const state = divisionDrawState(division)
   if (divisionIsProfessional(division)) {
@@ -774,7 +774,7 @@ function resetQuickConfig() {
   configForm.value.balancedDistribution = true
 }
 function enterQuickConsole() {
-  if (drawBlocked.value) return ElMessage.warning(`需审核通过 ${activeRequiredTeamCount.value} 支球队后才能进入分组操作台`)
+  if (drawBlocked.value) return ElMessage.warning(`需满足 ${activeRequiredTeamCount.value} 支参赛球队后才能进入分组操作台`)
   router.push({
     path: route.path,
     query: {
@@ -2264,7 +2264,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.draw-requirement-state{display:flex;min-height:520px;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px;text-align:center;background:#f7faf8}.draw-requirement-state>.el-icon{font-size:48px;color:#0b8a4b}.draw-requirement-state h2{margin:0;color:#173a29;font-size:28px}.draw-requirement-state p{max-width:620px;margin:0;color:#65746a;font-size:16px}.draw-requirement-state .el-progress{width:min(520px,80vw)}
+.draw-requirement-state{display:flex;min-height:520px;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px;text-align:center;background:#f7faf8}.draw-requirement-state>.el-icon{font-size:48px;color:#0b8a4b}.draw-requirement-state h2{margin:0;color:#173a29;font-size:28px}.draw-requirement-state p{max-width:620px;margin:0;color:#65746a;font-size:16px}.draw-requirement-state .el-progress{width:min(520px,80vw)}.draw-requirement-state .draw-requirement-note{max-width:620px;color:#8a988f;font-size:13px;line-height:1.6}
 .tournament-draw {
   padding: 20px;
   max-width: 1600px;
