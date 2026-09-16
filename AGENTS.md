@@ -31,10 +31,11 @@
 |---|---|
 | 项目名称 | 赛小蜂足球 |
 | 正式本地仓库 | `E:\Documents\sxf-football` |
-| Gitee | `https://gitee.com/saixiaofeng/football.git` |
-| GitHub | `https://github.com/xushengzheng415-max/saixaifeng.git` |
+| Gitee | `https://gitee.com/saixiaofeng/football.git`（权威源，只此一端可推送） |
+| GitHub | `https://github.com/xushengzheng415-max/saixaifeng.git`（只读镜像，禁止推送） |
 | 正式域名 | `www.sxffootball.cn` |
 | CloudBase 环境 | `cloud1-7g8ckb3c7815a011` |
+| 权威主分支 | `main`（唯一权威；`master` 为历史遗留，不再使用） |
 | Web HTTP 入口 | `https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi` |
 
 `E:\OneDrive\Desktop\足球赛事系统` 仅是旧资料，Codex 临时 worktree 也不是部署源。所有修改、构建、提交和部署必须以正式仓库为准。

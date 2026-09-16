@@ -1,4 +1,9 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import {
+  PLATFORM_CONSOLE_PATH,
+  isOrganizerWorkspacePath,
+  isPlatformSession
+} from '../utils/platformSession'
 
 // 深链截图会在首个路由组件加载前访问数据，开发模式需先于路由守卫同步激活隔离样例。
 if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href.includes('visualQa=1')) {
@@ -507,15 +512,11 @@ function hasOrganizerSession() {
   const version = localStorage.getItem('authSessionVersion') || ''
   const loginType = localStorage.getItem('loginType') || ''
   const authToken = localStorage.getItem('authToken') || ''
-  let isPlatformOwner = false
-  try {
-    isPlatformOwner = JSON.parse(localStorage.getItem('userInfo') || '{}').isPlatformOwner === true
-  } catch { /* 无有效用户信息时保持 false */ }
-  const validLoginType = loginType === 'wechat' ||
-    (loginType === 'platform-password' && isPlatformOwner)
-  return role.toLowerCase() === 'organizer' &&
+  // 只承认微信主办方会话。平台管理员会话由上面的 redirectPlatformSession 单独分流；
+  // 这里不再接受 platform-password（历史实现把它伪装成 organizer 才放行，正是串味来源）。
+  return loginType === 'wechat' &&
+    role.toLowerCase() === 'organizer' &&
     version === 'phone-canonical-web-v1' &&
-    validLoginType &&
     Boolean(authToken)
 }
 
@@ -532,6 +533,9 @@ function hasLocalOrganization() {
 
 function needsOrganizerOnboarding(to) {
   const role = String(localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toLowerCase()
+  // needsOrganizerOnboarding 只服务主办方。平台管理员没有 orgId 也不该有机构，
+  // 历史实现让它走到这里，于是平台负责人被当成“尚未开户的主办方”推进了机构引导。
+  if (isPlatformSession()) return false
   if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/service-account-binding' || to.path === '/assistance') return false
   if (to.meta.requiresAuth !== true) return false
   try {
@@ -575,10 +579,25 @@ function clearInvalidSession() {
     .forEach(key => localStorage.removeItem(key))
 }
 
+// 平台管理员会话与主办方会话是两套身份。平台会话只允许走平台路径，
+// 绝不进入机构引导、赛事空间或协助确认页（协助确认是主办方本人对自己账号的授权行为）。
+function redirectPlatformSession(to) {
+  if (!isPlatformSession()) return null
+  if (isOrganizerWorkspacePath(to.path)) return { path: PLATFORM_CONSOLE_PATH, replace: true }
+  if (to.path === '/login') return { path: PLATFORM_CONSOLE_PATH, replace: true }
+  return null
+}
+
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
   if (to.path === '/platform-login') {
     sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, '/tournament-center-admin')
+  }
+  // 平台会话先于主办方逻辑分流，避免平台身份被当成无机构主办方触发机构引导。
+  const platformRedirect = redirectPlatformSession(to)
+  if (platformRedirect) {
+    next(platformRedirect)
+    return
   }
   // 仅本地开发环境开放视觉验收会话。它不写入正式认证信息，也不会在生产构建中绕过登录。
   if (import.meta.env.DEV) {
