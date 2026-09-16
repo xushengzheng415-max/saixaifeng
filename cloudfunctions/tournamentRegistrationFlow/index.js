@@ -2,6 +2,7 @@
 
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const { registerImportedPlayerIdentity } = require('./importDualRole')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -564,24 +565,22 @@ async function importTeamRegistrationBatch(event) {
       }
     }).filter(person => person.name)
 
+    const dualRoleIdentities = new Set()
     const players = rawPlayers.map((person, index) => {
       const identity = importedIdentityProfile(person.identityNumber)
+      const personName = importText(person.name, 30)
       if (!identity.identityNumber || !identity.birthDate) {
-        const error = new Error(`${name} 的球员“${importText(person.name, 30) || `第${index + 1}人`}”身份证号无效`)
+        const error = new Error(`${name} 的球员“${personName || `第${index + 1}人`}”身份证号无效`)
         error.code = 'IMPORT_IDENTITY_INVALID'
         throw error
       }
-      if (batchIdentities.has(identity.identityNumber)) {
-        const error = new Error(`${name} 存在重复身份证号，请核对人员资料`)
-        error.code = 'IMPORT_IDENTITY_DUPLICATED'
-        throw error
-      }
-      batchIdentities.add(identity.identityNumber)
+      const identityUsage = registerImportedPlayerIdentity({ teamName:name, playerName:personName, identityNumber:identity.identityNumber, staff, batchIdentities, dualRoleIdentities })
       return {
-        name:importText(person.name, 30), jerseyNumber:importText(person.jerseyNumber, 3), jerseyName:importText(person.jerseyName, 32).toUpperCase(), ...identity,
+        name:personName, jerseyNumber:importText(person.jerseyNumber, 3), jerseyName:importText(person.jerseyName, 32).toUpperCase(), ...identity,
         nativePlace:importText(person.nativePlace, 60),
         photoFileId:importedFileId(person.photoFileId, `/player-photos/imports/${tournamentId}/`),
-        photoProcessingStatus:importText(person.photoProcessingStatus, 32), order:index
+        photoProcessingStatus:importText(person.photoProcessingStatus, 32), order:index,
+        dualRoleType:identityUsage.dualRoleType, dualRoleLabel:identityUsage.dualRoleLabel || '', eligibilityReviewRequired:Boolean(identityUsage.dualRoleType)
       }
     })
     if (players.some(player => !player.name)) return { success:false, code:'IMPORT_PLAYER_NAME_REQUIRED', message:`${name} 有球员缺少姓名` }
@@ -593,7 +592,7 @@ async function importTeamRegistrationBatch(event) {
       { role:'team_leader', roleLabel:'领队', name:contactName || (leader && leader.name) || '', phone:contactPhone },
       headCoach && headCoach.phone ? { role:'head_coach', roleLabel:'主教练', name:headCoach.name, phone:headCoach.phone } : null
     ].filter(Boolean)
-    prepared.push({ clientKey:importText(row.clientKey, 80), name, nameKey, shortName:importText(row.shortName, 20), contactName, contactPhone, sourceFileId, sourceFileName:importText(row.sourceFileName, 120), logoFileId, kitColors, kitColorLabels, staff, players, claimantCandidates })
+    prepared.push({ clientKey:importText(row.clientKey, 80), name, nameKey, shortName:importText(row.shortName, 20), contactName, contactPhone, sourceFileId, sourceFileName:importText(row.sourceFileName, 120), logoFileId, kitColors, kitColorLabels, staff, players, claimantCandidates, dualRoleCount:dualRoleIdentities.size })
   }
 
   const identityConflicts = new Set(await importedIdentityConflicts(Array.from(batchIdentities)))
@@ -626,10 +625,10 @@ async function importTeamRegistrationBatch(event) {
         importMode:'basic', immutable:true, status:'awaiting_claim', claimStatus:'unclaimed', playerReviewStatus:'pending',
         snapshot:{
           team:{ name:team.name, shortName:team.shortName, contactName:team.contactName, contactPhoneMasked:team.contactPhone ? team.contactPhone.slice(0,3) + '****' + team.contactPhone.slice(-4) : '', logoFileId:team.logoFileId, kitColors:team.kitColors || null, kitColorLabels:team.kitColorLabels || null },
-          staff:team.staff.map(person => ({ name:person.name, roleType:person.roleType, roleLabel:person.roleLabel, phoneMasked:person.phone ? person.phone.slice(0,3) + '****' + person.phone.slice(-4) : '', identityMasked:importedIdentityMask(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId })),
-          players:team.players.map(person => ({ name:person.name, jerseyNumber:person.jerseyNumber, jerseyName:person.jerseyName, identityMasked:importedIdentityMask(person.identityNumber), identityDigest:importedIdentityDigest(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId, order:person.order }))
+          staff:team.staff.map(person => ({ name:person.name, roleType:person.roleType, roleLabel:person.roleLabel, phoneMasked:person.phone ? person.phone.slice(0,3) + '****' + person.phone.slice(-4) : '', identityMasked:importedIdentityMask(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId, dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '' })),
+          players:team.players.map(person => ({ name:person.name, jerseyNumber:person.jerseyNumber, jerseyName:person.jerseyName, identityMasked:importedIdentityMask(person.identityNumber), identityDigest:importedIdentityDigest(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId, order:person.order, dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '', eligibilityReviewRequired:person.eligibilityReviewRequired === true }))
         },
-        teamName:team.name, playerCount:team.players.length, staffCount:team.staff.length,
+        teamName:team.name, playerCount:team.players.length, staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0),
         importedByUserId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
       } })
       const importBatchId = text(importBatchAdded._id)
@@ -640,25 +639,30 @@ async function importTeamRegistrationBatch(event) {
         ...(team.kitColors ? { kitColors:team.kitColors, kitColorLabels:team.kitColorLabels || {}, kitColorsSource:'registration_docx_import', kitColorsImportedAt:db.serverDate() } : {}),
         source:'registration_docx_import', sourceType:'线下报名表', registrationImportBatchId:importBatchId, registrationSourceFileId:team.sourceFileId, registrationSourceFileName:team.sourceFileName,
         claimantCandidates:team.claimantCandidates.map(candidate => ({ role:candidate.role, roleLabel:candidate.roleLabel, name:candidate.name })),
-        playerCount:0, pendingPlayerDraftCount:team.players.length, staffCount:team.staff.length, creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
+        playerCount:0, pendingPlayerDraftCount:team.players.length, staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
       } })
       const teamId = text(teamAdded._id)
       artifacts.push({ collection:'teams', id:teamId })
 
       let sequence = 1
+      const linkedCoachIds = new Map()
       for (const person of team.staff) {
         const suffix = person.roleType === 'head_coach' ? 'A' : 'B'
         const added = await db.collection('coaches').add({ data:{
           orgId:actor.orgId, teamId, teamCode:teamId, teamName:team.name, playerId:`${teamId}${String(sequence).padStart(3, '0')}${suffix}`, memberId:`${teamId}${String(sequence).padStart(3, '0')}${suffix}`,
           name:person.name, phone:person.phone, idNumber:person.identityNumber, idCard:person.identityNumber, type:person.roleType, role:person.roleLabel || person.roleType,
           gender:person.gender, birthDate:person.birthDate, nativePlace:person.nativePlace, photoUrl:person.photoFileId, photoFileID:person.photoFileId, photoProcessingStatus:person.photoProcessingStatus,
+          identityDigest:person.identityNumber ? importedIdentityDigest(person.identityNumber) : '', dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '', isAlsoPlayer:person.dualRoleType === 'head_coach_player',
           source:'registration_docx_import', registrationSourceFileId:team.sourceFileId, creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
         } })
-        artifacts.push({ collection:'coaches', id:text(added._id) })
+        const coachId = text(added._id)
+        artifacts.push({ collection:'coaches', id:coachId })
+        if (person.dualRoleType === 'head_coach_player' && person.identityNumber) linkedCoachIds.set(person.identityNumber, coachId)
         sequence += 1
       }
       for (const person of team.players) {
         const identityConflict = identityConflicts.has(person.identityNumber)
+        const linkedCoachId = person.dualRoleType === 'head_coach_player' ? text(linkedCoachIds.get(person.identityNumber)) : ''
         const added = await db.collection('registration_player_drafts').add({ data:{
           sport:SPORT, orgId:actor.orgId, tournamentId, divisionId, importBatchId, sourceTeamId:teamId, teamId,
           name:person.name, jerseyNumber:Number(person.jerseyNumber || 0), jerseyName:person.jerseyName,
@@ -667,10 +671,13 @@ async function importTeamRegistrationBatch(event) {
           photoUrl:person.photoFileId, photoFileID:person.photoFileId, photoProcessingStatus:person.photoProcessingStatus,
           reviewStatus:identityConflict ? 'conflict' : 'pending', conflictType:identityConflict ? 'identity_already_exists' : '',
           conflictReason:identityConflict ? '证件号码已存在，禁止自动合并' : '', source:'registration_docx_import',
+          dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '', isAlsoStaff:Boolean(person.dualRoleType), linkedCoachId, eligibilityReviewRequired:person.eligibilityReviewRequired === true,
           registrationSourceFileId:team.sourceFileId, immutableSource:true, order:person.order,
           creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
         } })
-        artifacts.push({ collection:'registration_player_drafts', id:text(added._id) })
+        const draftId = text(added._id)
+        artifacts.push({ collection:'registration_player_drafts', id:draftId })
+        if (linkedCoachId) await db.collection('coaches').doc(linkedCoachId).update({ data:{ linkedPlayerDraftId:draftId, updateTime:db.serverDate() } })
         sequence += 1
         playerCount += 1
       }
@@ -680,7 +687,7 @@ async function importTeamRegistrationBatch(event) {
       const relationAdded = await db.collection('tournament_teams').add({ data:{
         tournamentId, divisionId, divisionName:text(division.name), teamId, teamName:team.name, teamLogo:team.logoFileId, orgId:actor.orgId, teamOrgId:actor.orgId,
         creatorId:actor.userId, status:'invited', type:'invite', source:'registration_docx_import', joinSource:'organizer_import', claimStatus:'pending_confirmation',
-        contactName:team.contactName, contactPhone:team.contactPhone, rosterStatus:'draft', rosterPlayerCount:0, importedPlayerDraftCount:team.players.length, playerReviewStatus:'pending',
+        contactName:team.contactName, contactPhone:team.contactPhone, rosterStatus:'draft', rosterPlayerCount:0, importedPlayerDraftCount:team.players.length, playerReviewStatus:'pending', dualRoleCount:Number(team.dualRoleCount || 0),
         ...(team.kitColors ? { kitColors:team.kitColors, kitColorLabels:team.kitColorLabels || {}, kitColorsSource:'registration_docx_import', kitColorsImportedAt:db.serverDate() } : {}),
         registrationImportBatchId:importBatchId, registrationSourceFileId:team.sourceFileId, riskStatus:manualReviewRequired ? '疑似同名球队' : '', manualReviewRequired,
         inviteTime:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate()
@@ -699,9 +706,9 @@ async function importTeamRegistrationBatch(event) {
       const inviteId = text(inviteAdded._id)
       artifacts.push({ collection:'team_invitations', id:inviteId })
       await db.collection('tournament_teams').doc(tournamentTeamId).update({ data:{ claimInviteId:inviteId, lastInviteTime:db.serverDate(), updateTime:db.serverDate() } })
-      results.push({ clientKey:team.clientKey, teamId, teamName:team.name, tournamentTeamId, inviteId, importBatchId, path:`/pages/team/prebuilt-invite/prebuilt-invite?inviteId=${encodeURIComponent(inviteId)}`, playerCount:team.players.length, pendingPlayerDraftCount:team.players.length, staffCount:team.staff.length, manualReviewRequired })
+      results.push({ clientKey:team.clientKey, teamId, teamName:team.name, tournamentTeamId, inviteId, importBatchId, path:`/pages/team/prebuilt-invite/prebuilt-invite?inviteId=${encodeURIComponent(inviteId)}`, playerCount:team.players.length, pendingPlayerDraftCount:team.players.length, staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), manualReviewRequired })
     }
-    await addAudit('team_registration_docx_batch_imported', { tournamentId, divisionId, actorUserId:actor.userId, actorOrgId:actor.orgId, detail:{ teamCount:results.length, playerCount, source:'registration_docx_import' } })
+    await addAudit('team_registration_docx_batch_imported', { tournamentId, divisionId, actorUserId:actor.userId, actorOrgId:actor.orgId, detail:{ teamCount:results.length, playerCount, dualRoleCount:prepared.reduce((sum, team) => sum + Number(team.dualRoleCount || 0), 0), source:'registration_docx_import' } })
     return { success:true, message:`已创建 ${results.length} 支待认领球队和 ${playerCount} 条待确认球员资料`, data:{ teams:results, playerCount, playerMode:'draft' } }
   } catch (error) {
     await rollbackImportedArtifacts(artifacts)
