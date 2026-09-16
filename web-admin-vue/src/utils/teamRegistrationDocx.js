@@ -100,6 +100,18 @@ function cleanValue(value, labels) {
   return result.trim()
 }
 
+// 真实报名表的号码写法五花八门：「8」「8号」「第8号」「No.8」「#8」「8 号」，甚至全角「８」。
+// 原实现只接受纯数字，导致「8号」被误判为未填写球服号码。
+// 这里取第一段 1~3 位数字（连续 4 位以上视为年份等其它内容，不当作号码），并归一化前导零。
+function jerseyNumberFromText(value) {
+  const normalized = String(value || '')
+    // 全角数字 → 半角
+    .replace(/[\uFF10-\uFF19]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+  const runs = normalized.match(/\d+/g) || []
+  const candidate = runs.find(run => run.length <= 3)
+  return candidate ? String(Number(candidate)) : ''
+}
+
 function firstPhone(value) {
   return (String(value || '').replace(/[\s-]/g, '').match(/1[3-9]\d{9}/) || [])[0] || ''
 }
@@ -180,8 +192,7 @@ function uniqueWarnings(items) {
 }
 
 export function parseRegistrationJerseyNumber(value) {
-  const match = String(value || '').match(/\d{1,3}/)
-  return match ? String(Number(match[0])) : ''
+  return jerseyNumberFromText(value)
 }
 
 function personNameKey(value) {
@@ -262,7 +273,10 @@ export async function parseTeamRegistrationDocx(file) {
       if (!name) continue
       const identityNumber = normalizeIdentity(cleanValue(cellAt(identityRow, roleCell.column)?.text || '', ['身份证号', '身份证']))
       const jerseyText = cleanValue(cellAt(numberRow, roleCell.column)?.text || '', ['球服号码', '球衣号码', '号码'])
-      const jerseyNumber = parseRegistrationJerseyNumber(jerseyText)
+      // 球服号码这里同时应用两处改动：号码容错（jerseyNumberFromText，支持「8号」「第8号」
+      // 「全角８」等写法）与「工作人员栏有效号码同样计入」。后者是工作人员兼球员判定所依赖
+      // 的行为、线上已生效，因此不再恢复 type === 'player' 守卫。
+      const jerseyNumber = jerseyNumberFromText(jerseyText)
       // 先取模板约定位置（角色行 +1、同列），取不到再在该人所在的人物块内同列兜底查找
       const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0]
         || firstImageInColumn(rosterTable.rows.slice(rowIndex, rowIndex + 5), roleCell.column)
@@ -289,7 +303,12 @@ export async function parseTeamRegistrationDocx(file) {
       }
       if (!identityNumber) warnings.push(`「${name}」未填写身份证号`)
       else if (!/^\d{17}[0-9X]$/.test(identityNumber) || !identity.birthDate) person.error = '身份证号格式不正确'
-      if (type === 'player' && !jerseyNumber) warnings.push(`「${name}」未填写球服号码`)
+      // 填了但无法识别时给出具体内容，避免与「根本没填」混为一谈
+      if (type === 'player' && !jerseyNumber) {
+        warnings.push(jerseyText
+          ? `「${name}」球服号码「${jerseyText.slice(0, 12)}」无法识别`
+          : `「${name}」未填写球服号码`)
+      }
       if (!photoFile) warnings.push(`「${name}」未找到照片`)
       if (person.error) errors.push(`「${name}」${person.error}`)
       people.push(person)

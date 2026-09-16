@@ -201,9 +201,28 @@ async function ensureCollections() {
   collectionsReady = true
 }
 
+// CloudBase 的 doc().get() 在文档不存在时抛异常，而不是返回空结果。
+// 本文件所有调用点都按“文档不存在返回 null”写了 !x 守卫（如“球队参赛关系不存在”“赛事不存在”），
+// 因此这里必须把“文档不存在”收敛为 null，否则守卫不可达，
+// 原始错误（document.getfail document with_id does not exist）会直接显示在页面上。
+function documentMissing(error) {
+  const message = text(error && (error.message || error.errMsg)).toLowerCase()
+  const code = text(error && (error.code || error.errCode)).toLowerCase()
+  if (code.includes('document_not_found') || code.includes('documentnotfound')) return true
+  if (message.includes('document.getfail')) return true
+  return message.includes('document') && (message.includes('does not exist') || message.includes('not exist'))
+}
+
 async function getDocument(collection, id) {
-  const result = await db.collection(collection).doc(id).get()
-  return Array.isArray(result.data) ? result.data[0] : result.data
+  const targetId = text(id)
+  if (!targetId) return null
+  try {
+    const result = await db.collection(collection).doc(targetId).get()
+    return Array.isArray(result.data) ? result.data[0] : result.data
+  } catch (error) {
+    if (documentMissing(error)) return null
+    throw error
+  }
 }
 
 // 竞赛组别有两个来源：正式的 divisions 集合，以及创建赛事向导内嵌在 tournaments.divisions 里的组别。
@@ -1610,17 +1629,22 @@ async function deleteUnclaimedTournamentTeam(event) {
   if (!registration) return { success:false, code:'REGISTRATION_NOT_FOUND', message:'球队参赛关系不存在' }
   const tournament = await getDocument('tournaments', registration.tournamentId)
   if (!tournament || recordOrgId(tournament) !== actor.orgId) return { success:false, code:'REGISTRATION_SCOPE_DENIED', message:'无权删除其他机构赛事中的球队' }
-  const team = await getDocument('teams', text(registration.teamId))
-  if (!team || recordOrgId(team) !== actor.orgId) return { success:false, code:'TEAM_SCOPE_DENIED', message:'球队不存在或不属于当前机构' }
+  const teamId = text(registration.teamId)
+  if (!teamId) return { success:false, code:'TEAM_REFERENCE_INVALID', message:'该报名关系缺少球队标识，无法安全清理' }
+  const team = await getDocument('teams', teamId)
+  // 球队长期资料可能已被删除，只剩残留报名关系。此时仍允许清理残留记录，
+  // 但不能凭不存在的资料做机构校验，也不能越权删除其他机构仍然存在的球队。
+  const teamProfileMissing = !team
+  if (!teamProfileMissing && recordOrgId(team) !== actor.orgId) return { success:false, code:'TEAM_SCOPE_DENIED', message:'球队不存在或不属于当前机构' }
   const claim = await teamClaimState(team, registration)
   if (claim.claimed) return { success:false, code:'TEAM_ALREADY_CLAIMED', message:'该球队已经认领，只能移出赛事，不能删除球队资料' }
 
   const [relations, homeMatches, awayMatches, rosterSnapshots, lineupSnapshots] = await Promise.all([
-    listAll('tournament_teams', { teamId:team._id }, 1000),
-    listAll('matches', { homeTeamId:team._id }, 1000),
-    listAll('matches', { awayTeamId:team._id }, 1000),
-    optionalHistoryRows('roster_snapshots', { teamId:team._id }, 1000),
-    optionalHistoryRows('match_lineup_snapshots', { teamId:team._id }, 1000)
+    listAll('tournament_teams', { teamId }, 1000),
+    listAll('matches', { homeTeamId:teamId }, 1000),
+    listAll('matches', { awayTeamId:teamId }, 1000),
+    optionalHistoryRows('roster_snapshots', { teamId }, 1000),
+    optionalHistoryRows('match_lineup_snapshots', { teamId }, 1000)
   ])
   const otherActiveRelations = relations.filter(function(row) {
     return text(row._id) !== text(registration._id) &&
@@ -1632,11 +1656,12 @@ async function deleteUnclaimedTournamentTeam(event) {
   }
 
   const snapshot = {
-    teamId:text(team._id),
-    teamName:text(team.name || team.teamName),
-    source:text(team.source),
-    playerCount:Number(team.playerCount || 0),
-    activeMembershipCount:claim.activeMembershipCount
+    teamId,
+    teamName:text((team && (team.name || team.teamName)) || registration.teamName),
+    source:text(team && team.source),
+    playerCount:Number((team && team.playerCount) || 0),
+    activeMembershipCount:claim.activeMembershipCount,
+    teamProfileMissing
   }
   await addAudit('unclaimed_team_hard_delete_started', {
     tournamentId:registration.tournamentId,
@@ -1647,16 +1672,17 @@ async function deleteUnclaimedTournamentTeam(event) {
     detail:snapshot
   })
   const deleted = {}
-  deleted.teamInvitations = await removeRows('team_invitations', { teamId:team._id }, 1000)
-  deleted.registrationPlayerDrafts = await removeRows('registration_player_drafts', { teamId:team._id }, 2000)
-  deleted.registrationImportBatches = await removeRows('registration_import_batches', { teamId:team._id }, 100)
-  deleted.teamTasks = await removeOptionalRows('team_tasks', { teamId:team._id }, 1000)
-  deleted.players = await removeRows('players', { teamId:team._id }, 2000)
-  deleted.coaches = await removeRows('coaches', { teamId:team._id }, 500)
-  deleted.management = await removeOptionalRows('management', { teamId:team._id }, 500)
-  deleted.teamMemberships = await removeRows('team_memberships', { teamId:team._id }, 500)
-  deleted.tournamentTeams = await removeRows('tournament_teams', { teamId:team._id }, 1000)
-  await db.collection('teams').doc(team._id).remove()
+  deleted.teamInvitations = await removeRows('team_invitations', { teamId }, 1000)
+  deleted.registrationPlayerDrafts = await removeRows('registration_player_drafts', { teamId }, 2000)
+  deleted.registrationImportBatches = await removeRows('registration_import_batches', { teamId }, 100)
+  deleted.teamTasks = await removeOptionalRows('team_tasks', { teamId }, 1000)
+  deleted.players = await removeRows('players', { teamId }, 2000)
+  deleted.coaches = await removeRows('coaches', { teamId }, 500)
+  deleted.management = await removeOptionalRows('management', { teamId }, 500)
+  deleted.teamMemberships = await removeRows('team_memberships', { teamId }, 500)
+  deleted.tournamentTeams = await removeRows('tournament_teams', { teamId }, 1000)
+  if (!teamProfileMissing) await db.collection('teams').doc(teamId).remove()
+  deleted.deletedTeamProfile = !teamProfileMissing
   await addAudit('unclaimed_team_hard_deleted', {
     tournamentId:registration.tournamentId,
     divisionId:registration.divisionId,
@@ -1665,7 +1691,11 @@ async function deleteUnclaimedTournamentTeam(event) {
     actorOrgId:actor.orgId,
     detail:{ ...snapshot, deleted, deletedUsers:0 }
   })
-  return { success:true, message:'未认领球队及其球队资料已删除，登录账号未删除', data:{ deleted, deletedUsers:0 } }
+  return {
+    success:true,
+    message: teamProfileMissing ? '球队长期资料已不存在，残留报名关系及相关草稿已清理，登录账号未删除' : '未认领球队及其球队资料已删除，登录账号未删除',
+    data:{ deleted, deletedUsers:0, teamProfileMissing }
+  }
 }
 
 async function removeClaimedTournamentTeam(event) {
