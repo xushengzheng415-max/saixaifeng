@@ -179,6 +179,11 @@ function uniqueWarnings(items) {
   return Array.from(new Set(items.filter(Boolean)))
 }
 
+export function parseRegistrationJerseyNumber(value) {
+  const match = String(value || '').match(/\d{1,3}/)
+  return match ? String(Number(match[0])) : ''
+}
+
 function personNameKey(value) {
   return normalizeText(value).replace(/\s+/g, '').toLowerCase()
 }
@@ -257,7 +262,7 @@ export async function parseTeamRegistrationDocx(file) {
       if (!name) continue
       const identityNumber = normalizeIdentity(cleanValue(cellAt(identityRow, roleCell.column)?.text || '', ['身份证号', '身份证']))
       const jerseyText = cleanValue(cellAt(numberRow, roleCell.column)?.text || '', ['球服号码', '球衣号码', '号码'])
-      const jerseyNumber = /^\d{1,3}$/.test(jerseyText) ? String(Number(jerseyText)) : ''
+      const jerseyNumber = parseRegistrationJerseyNumber(jerseyText)
       // 先取模板约定位置（角色行 +1、同列），取不到再在该人所在的人物块内同列兜底查找
       const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0]
         || firstImageInColumn(rosterTable.rows.slice(rowIndex, rowIndex + 5), roleCell.column)
