@@ -74,7 +74,7 @@
             <div>
               <article v-for="(person, personIndex) in team.staff" :key="`${team.clientKey}-staff-${personIndex}`">
                 <PersonPhotoUpload :person="person" @change="file => replacePersonPhoto(file, person)" />
-                <span><b>{{ person.name }}</b><small>{{ person.roleLabel }}<template v-if="person.phone"> · {{ maskPhone(person.phone) }}</template></small></span>
+                <span><b>{{ person.name }}</b><small>{{ person.roleLabel }}<template v-if="person.dualRoleType"> · 兼球员 #{{ person.jerseyNumber }}</template><template v-if="person.phone"> · {{ maskPhone(person.phone) }}</template></small></span>
               </article>
             </div>
           </section>
@@ -87,7 +87,7 @@
                 <tbody>
                   <tr v-for="(player, playerIndex) in team.players" :key="`${team.clientKey}-player-${playerIndex}`" :class="{ invalid: player.error }">
                     <td><PersonPhotoUpload :person="player" @change="file => replacePersonPhoto(file, player)" /></td>
-                    <td><el-input v-model="player.name" maxlength="30" /></td>
+                    <td><el-input v-model="player.name" maxlength="30" /><el-tag v-if="player.dualRoleType" type="warning" effect="plain" size="small" class="dual-role-tag">{{ player.dualRolePlayerLabel || '兼工作人员' }}</el-tag></td>
                     <td>{{ player.birthDate || '待补充' }}</td>
                     <td>{{ ageFromBirth(player.birthDate) }}</td>
                     <td><span class="native-place" :title="player.nativePlace">{{ player.nativePlace || '地区码待核验' }}</span></td>
@@ -425,6 +425,13 @@ async function processTeamFiles(team, teamIndex) {
     let processedPeople = 0
     for (let index = 0; index < people.length; index += 1) {
       const person = people[index]
+      if (person.roleType === 'player' && person.dualRoleType && !person.photoFileId) {
+        const linkedStaff = team.staff.find(item => item.identityNumber && item.identityNumber === person.identityNumber)
+        if (linkedStaff?.photoFileId) {
+          person.photoFileId = linkedStaff.photoFileId
+          person.photoProcessingStatus = linkedStaff.photoProcessingStatus
+        }
+      }
       if (!person.photoFile || person.photoFileId) continue
       processedPeople += 1
       const personProgress = `${processedPeople}/${pendingPeople.length}`
@@ -495,6 +502,8 @@ function payloadForTeam(team) {
       name: String(person.name || '').trim(),
       phone: normalizePhone(person.phone),
       identityNumber: person.identityNumber,
+      jerseyNumber: String(person.jerseyNumber || '').replace(/\D/g, '').slice(0, 3),
+      jerseyName: String(person.jerseyName || '').trim().toUpperCase().slice(0, 32),
       birthDate: person.birthDate,
       gender: person.gender,
       nativePlace: person.nativePlace,
