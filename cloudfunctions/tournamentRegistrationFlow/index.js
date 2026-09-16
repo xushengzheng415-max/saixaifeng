@@ -1621,6 +1621,52 @@ async function removeOptionalRows(collection, where, max) {
   }
 }
 
+// 预建球队（批量添加资料等入口创建）只有报名关系，没有长期 teams 资料，因此关系上
+// 也没有 teamId。该状态不存在任何按 teamId 归属的球员、工作人员、草稿、参赛关系或
+// 比赛历史，只能按报名关系本身清理；这里一律不使用空 teamId 做集合查询，避免把其它
+// 同样缺少 teamId 的记录一并误删。
+async function deletePrebuiltRegistrationRelation(input) {
+  const actor = input.actor
+  const registration = input.registration
+  const claim = input.claim
+  const snapshot = {
+    teamId:'',
+    teamName:text(registration.teamName),
+    source:text(registration.source || registration.joinSource),
+    playerCount:Number(registration.rosterPlayerCount || registration.playerCount || 0),
+    activeMembershipCount:claim.activeMembershipCount,
+    teamProfileMissing:true,
+    relationOnly:true
+  }
+  await addAudit('unclaimed_team_hard_delete_started', {
+    tournamentId:registration.tournamentId,
+    divisionId:registration.divisionId,
+    registrationId:registration._id,
+    actorUserId:actor.userId,
+    actorOrgId:actor.orgId,
+    detail:snapshot
+  })
+  const deleted = {}
+  deleted.teamInvitations = await removeRows('team_invitations', { tournamentTeamId:registration._id }, 100)
+  deleted.tournamentTeams = await removeRows('tournament_teams', { _id:registration._id }, 1)
+  deleted.deletedTeamProfile = false
+  await addAudit('unclaimed_team_hard_deleted', {
+    tournamentId:registration.tournamentId,
+    divisionId:registration.divisionId,
+    registrationId:registration._id,
+    actorUserId:actor.userId,
+    actorOrgId:actor.orgId,
+    detail:{ ...snapshot, deleted, deletedUsers:0 }
+  })
+  return {
+    success:true,
+    message:'该球队只有报名关系、没有长期球队资料，已删除报名关系及其未完成邀请，登录账号未删除',
+    // 该关系从来没有长期球队资料，teamProfileMissing 与审计快照保持一致，避免调用方
+    // 误判为“删除了一份已存在的球队资料”。
+    data:{ deleted, deletedUsers:0, teamProfileMissing:true, relationOnly:true }
+  }
+}
+
 async function deleteUnclaimedTournamentTeam(event) {
   const actor = await webActor(event)
   if (!actor) return { success:false, code:'AUTH_REQUIRED', message:'登录会话或机构信息已失效，请重新登录' }
@@ -1630,14 +1676,16 @@ async function deleteUnclaimedTournamentTeam(event) {
   const tournament = await getDocument('tournaments', registration.tournamentId)
   if (!tournament || recordOrgId(tournament) !== actor.orgId) return { success:false, code:'REGISTRATION_SCOPE_DENIED', message:'无权删除其他机构赛事中的球队' }
   const teamId = text(registration.teamId)
-  if (!teamId) return { success:false, code:'TEAM_REFERENCE_INVALID', message:'该报名关系缺少球队标识，无法安全清理' }
-  const team = await getDocument('teams', teamId)
+  const team = teamId ? await getDocument('teams', teamId) : null
   // 球队长期资料可能已被删除，只剩残留报名关系。此时仍允许清理残留记录，
   // 但不能凭不存在的资料做机构校验，也不能越权删除其他机构仍然存在的球队。
   const teamProfileMissing = !team
   if (!teamProfileMissing && recordOrgId(team) !== actor.orgId) return { success:false, code:'TEAM_SCOPE_DENIED', message:'球队不存在或不属于当前机构' }
   const claim = await teamClaimState(team, registration)
   if (claim.claimed) return { success:false, code:'TEAM_ALREADY_CLAIMED', message:'该球队已经认领，只能移出赛事，不能删除球队资料' }
+  // 关系上没有 teamId 说明这是预建球队，不是错误状态。认领校验已在上方完成，
+  // 未认领才允许按报名关系本身清理。
+  if (!teamId) return await deletePrebuiltRegistrationRelation({ actor, registration, claim })
 
   const [relations, homeMatches, awayMatches, rosterSnapshots, lineupSnapshots] = await Promise.all([
     listAll('tournament_teams', { teamId }, 1000),
