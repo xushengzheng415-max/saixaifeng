@@ -60,7 +60,12 @@ function parseRow(rowNode) {
       const properties = elementChildren(cellNode, 'tcPr')[0]
       const spanNode = properties ? elementChildren(properties, 'gridSpan')[0] : null
       const span = Math.max(1, Number(attributeByLocalName(spanNode, 'val') || 1))
-      const images = descendants(cellNode, 'blip').map(node => node.getAttributeNS?.(REL_NS, 'embed') || attributeByLocalName(node, 'embed')).filter(Boolean)
+      // 现代图形：<a:blip r:embed="rIdN">
+      const blipImages = descendants(cellNode, 'blip').map(node => node.getAttributeNS?.(REL_NS, 'embed') || attributeByLocalName(node, 'embed')).filter(Boolean)
+      // 旧式 VML 图片：<v:imagedata r:id="rIdN">。WPS 与早期 Word 另存出的图片走这种形式，
+      // 属性名是 r:id 而不是 r:embed，此前完全识别不到，导致照片被判为缺失。
+      const vmlImages = descendants(cellNode, 'imagedata').map(node => node.getAttributeNS?.(REL_NS, 'id') || attributeByLocalName(node, 'id')).filter(Boolean)
+      const images = [...blipImages, ...vmlImages]
       const cell = { column, span, text: cellText(cellNode), imageIds: images }
       column += span
       return cell
@@ -74,6 +79,17 @@ function parseTable(tableNode) {
 
 function cellAt(row, column) {
   return row?.cells?.find(cell => column >= cell.column && column < cell.column + cell.span) || null
+}
+
+// 照片按模板约定应位于「角色行 +1」且与本人角色同列，但真实报名表常把照片插到该人物块的其他行，
+// 或整块行序与模板不一致（多插/少插一行就会整体错位）。此处按「本人所在的 5 行人物块、同一列」
+// 依次查找：位于约定位置的单元格优先级最高，因此既有能正常识别的文件结果完全不变。
+function firstImageInColumn(rows, column) {
+  for (const row of rows) {
+    const ids = cellAt(row, column)?.imageIds
+    if (ids && ids.length) return ids[0]
+  }
+  return ''
 }
 
 function cleanValue(value, labels) {
@@ -227,7 +243,9 @@ export async function parseTeamRegistrationDocx(file) {
       const identityNumber = normalizeIdentity(cleanValue(cellAt(identityRow, roleCell.column)?.text || '', ['身份证号', '身份证']))
       const jerseyText = cleanValue(cellAt(numberRow, roleCell.column)?.text || '', ['球服号码', '球衣号码', '号码'])
       const jerseyNumber = type === 'player' && /^\d{1,3}$/.test(jerseyText) ? String(Number(jerseyText)) : ''
-      const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0] || ''
+      // 先取模板约定位置（角色行 +1、同列），取不到再在该人所在的人物块内同列兜底查找
+      const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0]
+        || firstImageInColumn(rosterTable.rows.slice(rowIndex, rowIndex + 5), roleCell.column)
       const photoFile = photoRelationshipId
         ? await imageFileFromRelationship(zip, relationships, photoRelationshipId, `person-${people.length + 1}-${Date.now()}`)
         : null
