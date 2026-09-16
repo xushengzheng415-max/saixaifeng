@@ -172,6 +172,8 @@
 
 ## 六、构建与部署
 
+PC 后台的预览、验收、合并和正式发布必须遵循 [`docs/PREVIEW_RELEASE_WORKFLOW.md`](docs/PREVIEW_RELEASE_WORKFLOW.md)。个人功能分支禁止直接部署 `/admin/`；必须先合并并部署 `preview` 到 `/preview/admin/`，产品负责人验收后再合并 `main`，且只有获得当前任务明确授权后才能部署正式 `/admin/`。
+
 两个网页部署目标：
 
 - 根目录：`index.html` → `/`
