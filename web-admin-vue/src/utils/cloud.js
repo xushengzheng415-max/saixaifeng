@@ -3,6 +3,7 @@
 //   登录 → fetch() → webLoginApi HTTP API
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
+import { PLATFORM_SESSION_KEY } from './platformSession'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
 const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
@@ -157,6 +158,8 @@ export async function logout() {
   localStorage.removeItem('authSessionVersion')
   localStorage.removeItem(AUTH_TOKEN_KEY)
   localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+  // 平台管理员会话的独立键位，避免退出主办方后仍残留平台身份标记。
+  localStorage.removeItem(PLATFORM_SESSION_KEY)
   // 机构缓存属于账号会话，退出后必须清理，避免下一个账号误显示或误用旧机构。
   localStorage.removeItem('organizationInfo')
   localStorage.removeItem('currentOrganization')
