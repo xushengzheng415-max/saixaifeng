@@ -92,7 +92,7 @@ page {
 }
 
 .card-header {
-  font-size: 32rpx;
+  font-size: 36rpx;
   font-weight: bold;
   color: var(--text-primary);
   margin-bottom: 16rpx;
@@ -104,7 +104,7 @@ page {
 .btn {
   padding: 20rpx 40rpx;
   border-radius: 12rpx;
-  font-size: 28rpx;
+  font-size: 32rpx;
   font-weight: 500;
   border: none;
   transition: all 0.3s ease;
@@ -167,7 +167,7 @@ page {
 
 .input-label {
   display: block;
-  font-size: 28rpx;
+  font-size: 31rpx;
   color: var(--text-primary);
   margin-bottom: 8rpx;
   font-weight: 500;
@@ -178,7 +178,7 @@ page {
   padding: 20rpx;
   border: 1rpx solid var(--border);
   border-radius: 8rpx;
-  font-size: 28rpx;
+  font-size: 31rpx;
   color: var(--text-primary);
   background: var(--surface);
   transition: border-color 0.3s ease;
@@ -245,7 +245,7 @@ page {
 }
 
 .empty-text {
-  font-size: 28rpx;
+  font-size: 32rpx;
   margin-bottom: 16rpx;
 }
 
@@ -284,7 +284,7 @@ page {
 }
 
 .list-item-title {
-  font-size: 30rpx;
+  font-size: 34rpx;
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: 4rpx;

@@ -224,7 +224,7 @@
     <view class="service-follow-modal-mask"></view>
     <view class="service-follow-modal-body">
       <view class="service-follow-modal-title">关注后继续报名</view>
-      <view class="service-follow-modal-subtitle">长按识别二维码，关注“赛小蜂足球助手”</view>
+
       <image class="service-follow-modal-qr" src="{{serviceFollowUrl}}" mode="aspectFit" show-menu-by-longpress bindtap="previewServiceQr"></image>
       <view class="service-follow-modal-tip">关注完成后返回小程序，点击下方按钮刷新状态</view>
       <button class="service-follow-modal-confirm" loading="{{serviceBindingRefreshing}}" disabled="{{serviceBindingRefreshing}}" bindtap="refreshServiceBindingFromModal">我已关注，刷新状态</button>

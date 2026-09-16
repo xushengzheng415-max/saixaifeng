@@ -6,7 +6,7 @@ page{background:#001d12}
 .topbar{display:flex;align-items:flex-start;justify-content:flex-start;height:210rpx}
 .topbar.organizer-topbar{height:238rpx}
 .topbar-left{display:flex;align-items:center;min-height:64rpx}
-.role-title{font-size:38rpx;line-height:64rpx;font-weight:800;letter-spacing:1rpx}
+.role-title{font-size:42rpx;line-height:64rpx;font-weight:800;letter-spacing:1rpx}
 .message-button{position:relative;flex:none;width:64rpx;height:64rpx;margin-right:18rpx}
 .message-button image{display:block;width:58rpx;height:58rpx}
 .message-badge{position:absolute;right:-4rpx;top:-12rpx;min-width:34rpx;height:34rpx;padding:0 5rpx;border-radius:20rpx;background:#f04436;color:#fff;font-size:20rpx;line-height:34rpx;text-align:center}
@@ -14,7 +14,7 @@ page{background:#001d12}
 .overview-card.organizer-overview{height:358rpx}
 .overview-card:after{content:"";position:absolute;right:-34rpx;bottom:-54rpx;width:356rpx;height:210rpx;border:2rpx solid rgba(108,211,141,.13);border-radius:50%;transform:rotate(-13deg)}
 .overview-eyebrow{display:block;font-size:24rpx;color:rgba(255,255,255,.91)}
-.overview-name{display:block;max-width:505rpx;margin-top:23rpx;font-size:35rpx;line-height:1.2;font-weight:900;letter-spacing:1rpx}
+.overview-name{display:block;max-width:505rpx;margin-top:23rpx;font-size:39rpx;line-height:1.2;font-weight:900;letter-spacing:1rpx}
 .overview-status{display:inline-block;margin-top:14rpx;padding:7rpx 15rpx;border-radius:14rpx;background:rgba(104,187,128,.24);font-size:20rpx}
 .overview-logo,.overview-ball{display:block;position:absolute;z-index:2;right:28rpx;top:30rpx;width:175rpx;height:175rpx;object-fit:contain}
 .overview-logo{border:0;border-radius:0;background:transparent}
@@ -28,7 +28,7 @@ page{background:#001d12}
 .task-card{margin-top:20rpx;padding:26rpx 22rpx 23rpx;border-radius:28rpx;background:rgba(255,255,255,.98);box-shadow:0 15rpx 36rpx rgba(0,0,0,.12);color:#111}
 .card-heading,.section-heading,.team-title-row,.match-meta{display:flex;align-items:center;justify-content:space-between}
 .card-heading{padding:0 2rpx}
-.card-heading text:first-child{font-size:34rpx;font-weight:900}
+.card-heading text:first-child{font-size:38rpx;font-weight:900}
 .card-heading text:last-child{color:#6f7471;font-size:22rpx}
 .task-grid{display:flex;justify-content:space-between;margin-top:28rpx}
 .task-item{display:flex;flex-direction:column;align-items:center;width:32%;text-align:center}
@@ -37,18 +37,18 @@ page{background:#001d12}
 .task-icon-wrap.blue{border-color:#bddcff;background:#ddebff}
 .task-icon-wrap image{display:block;width:48rpx;height:48rpx;object-fit:contain}
 .task-badge{position:absolute;right:-13rpx;top:-17rpx;min-width:33rpx;height:33rpx;padding:0 5rpx;border-radius:18rpx;background:#ff9600;color:#fff;font-size:19rpx;line-height:33rpx;text-align:center}
-.task-title{margin-top:15rpx;color:#141814;font-size:24rpx;line-height:1.25;font-weight:800}
+.task-title{margin-top:15rpx;color:#141814;font-size:28rpx;line-height:1.25;font-weight:800}
 .task-subtitle{margin-top:8rpx;color:#777c78;font-size:20rpx}
 .empty-card{margin-top:22rpx;padding:32rpx 20rpx;border-radius:18rpx;background:#f5f7f5;color:#818783;font-size:23rpx;text-align:center}
 .section{margin-top:27rpx}
 .section-heading{margin:0 13rpx 15rpx}
-.section-heading text:first-child{font-size:34rpx;font-weight:900;letter-spacing:1rpx}
+.section-heading text:first-child{font-size:38rpx;font-weight:900;letter-spacing:1rpx}
 .section-heading text:last-child{font-size:22rpx}
 .team-card{display:flex;align-items:center;min-height:132rpx;margin-top:10rpx;padding:15rpx 20rpx;border-radius:17rpx;background:rgba(255,255,255,.98);box-sizing:border-box;color:#121612}
 .team-logo{display:block;flex:none;width:100rpx;height:100rpx;margin-right:19rpx;border:0;border-radius:0;background:transparent;object-fit:contain}
 .team-main{min-width:0;flex:1}
 .team-title-row{align-items:flex-start}
-.team-name{max-width:280rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:28rpx;font-weight:900}
+.team-name{max-width:280rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:32rpx;font-weight:900}
 .team-owner{color:#168a40;font-size:19rpx}
 .team-meta{display:flex;margin-top:12rpx;color:#656d68;font-size:19rpx}
 .team-meta text{margin-right:22rpx}
@@ -79,7 +79,7 @@ page{background:#001d12}
 .training-course-time text:first-child{font-size:38rpx;font-weight:900;line-height:1.1}
 .training-course-time text:last-child{margin-top:13rpx;color:#68716c;font-size:22rpx}
 .training-course-main{min-width:0;flex:1;padding-left:26rpx}
-.training-course-name{display:inline-block;padding:8rpx 18rpx;border-radius:22rpx;background:#e9f5eb;color:#177c3c;font-size:28rpx;font-weight:800}
+.training-course-name{display:inline-block;padding:8rpx 18rpx;border-radius:22rpx;background:#e9f5eb;color:#177c3c;font-size:32rpx;font-weight:800}
 .training-course-coach{display:block;margin-top:18rpx;color:#68716d;font-size:26rpx}
 .training-permission-note{display:flex;align-items:center;justify-content:center;margin:20rpx 0 10rpx;padding:17rpx 20rpx;border-radius:16rpx;background:rgba(24,105,56,.5);color:rgba(255,255,255,.9);font-size:22rpx}
 .training-permission-note image{display:block;width:28rpx;height:28rpx;margin-right:12rpx;filter:brightness(0) invert(1)}
@@ -118,7 +118,7 @@ page{background:#001d12}
 .guest-public-card{position:relative;min-height:300rpx;padding:30rpx 28rpx 84rpx;overflow:hidden;border:2rpx solid rgba(43,187,104,.65);border-radius:28rpx;background:linear-gradient(125deg,rgba(0,72,42,.97),rgba(0,42,27,.94));box-shadow:0 18rpx 42rpx rgba(0,0,0,.24);box-sizing:border-box}
 .guest-public-copy{position:relative;z-index:2;display:flex;max-width:430rpx;flex-direction:column}
 .guest-public-label{align-self:flex-start;padding:6rpx 14rpx;border-radius:15rpx;background:rgba(92,211,130,.18);color:#91e7ad;font-size:20rpx}
-.guest-public-title{margin-top:24rpx;font-size:36rpx;font-weight:900}
+.guest-public-title{margin-top:24rpx;font-size:40rpx;font-weight:900}
 .guest-public-desc{margin-top:15rpx;color:rgba(255,255,255,.68);font-size:22rpx;line-height:1.6}
 .guest-public-card image{position:absolute;right:22rpx;top:38rpx;width:150rpx;height:150rpx;opacity:.42}
 .guest-public-action{position:absolute;left:22rpx;right:22rpx;bottom:20rpx;z-index:2;height:58rpx;border-radius:14rpx;background:#159346;font-size:23rpx;font-weight:800;line-height:58rpx;text-align:center}
@@ -126,5 +126,5 @@ page{background:#001d12}
 .guest-service-grid{display:flex;gap:12rpx}
 .guest-service-card{display:flex;min-width:0;flex:1;flex-direction:column;align-items:center;padding:24rpx 10rpx 22rpx;border:1rpx solid rgba(255,255,255,.2);border-radius:20rpx;background:rgba(0,39,24,.76);box-sizing:border-box;text-align:center}
 .guest-service-card image{display:block;width:72rpx;height:72rpx}
-.guest-service-title{margin-top:12rpx;font-size:25rpx;font-weight:800}
+.guest-service-title{margin-top:12rpx;font-size:29rpx;font-weight:800}
 .guest-service-desc{margin-top:8rpx;color:rgba(255,255,255,.62);font-size:18rpx;line-height:1.4}

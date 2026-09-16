@@ -3,7 +3,7 @@
 <view class="container">
   <view class="page-header">
     <text class="page-title">裁判管理</text>
-    <text class="page-desc">管理赛事裁判资源</text>
+
   </view>
 
   <view class="function-list">
@@ -11,7 +11,7 @@
       <text class="function-icon">📋</text>
       <view class="function-info">
         <text class="function-name">裁判库</text>
-        <text class="function-desc">查看与管理裁判信息</text>
+
       </view>
       <text class="readonly-note">PC 管理</text>
     </view>
@@ -20,7 +20,7 @@
       <text class="function-icon">⚖️</text>
       <view class="function-info">
         <text class="function-name">裁判指派</text>
-        <text class="function-desc">为赛事分配裁判员</text>
+
       </view>
       <text class="readonly-note">PC 管理</text>
     </view>
@@ -29,7 +29,7 @@
       <text class="function-icon">📊</text>
       <view class="function-info">
         <text class="function-name">执法记录</text>
-        <text class="function-desc">查看裁判执法统计</text>
+
       </view>
       <text class="function-arrow">›</text>
     </view>

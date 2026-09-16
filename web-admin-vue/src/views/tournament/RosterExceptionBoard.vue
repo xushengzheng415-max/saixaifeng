@@ -3,11 +3,12 @@
     <section class="hero">
       <div>
         <el-button text class="back" @click="backTeams">← 返回参赛球队</el-button>
-        <p class="eyebrow">赛事正式名单 · 资料闭环</p>
+
         <h1>实名与名单异常看板</h1>
         <p>{{ tournament.name || '当前赛事' }} · 仅展示已参赛球队的正式名单快照</p>
       </div>
       <div class="hero-actions">
+        <el-button type="success" plain @click="router.push('/identity-reviews')">人证复核</el-button>
         <el-select v-model="activeDivisionId" clearable placeholder="全部组别" @change="loadBoard">
           <el-option v-for="item in divisions" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
@@ -36,7 +37,7 @@
 
     <el-drawer v-model="drawerVisible" size="470px" :with-header="false">
       <div v-if="selected" class="drawer">
-        <p class="eyebrow">名单快照 V{{ selected.rosterVersion }}</p><h2>{{ selected.playerName }}</h2><p class="muted">{{ selected.teamName }} · {{ selected.divisionName }}</p>
+        <h2>{{ selected.playerName }}</h2><p class="muted">{{ selected.teamName }} · {{ selected.divisionName }}</p>
         <div class="detail-status"><el-tag :type="selected.profileStatus === 'exception' ? 'danger' : 'warning'">{{ selected.statusText }}</el-tag><span>{{ rosterStatusText(selected.rosterStatus) }}</span></div>
         <h3>需要处理</h3><div class="issue-list"><span v-for="item in selected.missingItems" :key="item">{{ item }}</span></div>
         <el-alert v-if="selected.returnReason" type="info" :closable="false" :title="`上次退回：${selected.returnReason}`" />

@@ -1,6 +1,6 @@
 <view class="page">
   <view class="hero">
-    <text class="eyebrow">赛小蜂足球版本公告</text>
+
     <text class="version">V{{version}}</text>
     <text class="title">{{title}}</text>
     <text class="summary">{{summary}}</text>

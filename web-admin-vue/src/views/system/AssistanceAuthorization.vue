@@ -2,9 +2,9 @@
   <div class="assistance-page">
     <section class="hero-card">
       <div>
-        <span class="eyebrow">赛小蜂客服支持</span>
+
         <h1>远程协助授权</h1>
-        <p>只有您本人确认后，赛小蜂工作人员才能在限定时间内协助处理赛事和球队问题。</p>
+
       </div>
       <span class="shield">✓</span>
     </section>
@@ -27,7 +27,7 @@
         <p class="safe-tip">请只使用赛小蜂官方客服发送的协助码，不要把协助码转发给其他人。</p>
 
         <div v-if="preview" class="preview-card">
-          <div class="preview-title"><span>✓</span><div><h3>请确认本次协助申请</h3><p>确认前请核对全部内容</p></div></div>
+          <div class="preview-title"><span>✓</span><div><h3>请确认本次协助申请</h3></div></div>
           <dl>
             <div><dt>协助人员</dt><dd>{{ preview.helperName }}</dd></div>
             <div><dt>协助原因</dt><dd>{{ preview.reason }}</dd></div>
@@ -41,7 +41,7 @@
       </section>
 
       <section class="panel records-panel">
-        <div class="panel-head"><div><h2>我的协助记录</h2><p>查看有效授权并可立即撤销</p></div><button class="refresh" type="button" @click="loadGrants">刷新</button></div>
+        <div class="panel-head"><div><h2>我的协助记录</h2></div><button class="refresh" type="button" @click="loadGrants">刷新</button></div>
         <div v-if="loading" class="state-line">正在同步协助记录…</div>
         <div v-else-if="!grants.length" class="empty-state"><span>盾</span><strong>暂无协助记录</strong><p>您尚未同意任何远程协助</p></div>
         <div v-else class="grant-list">

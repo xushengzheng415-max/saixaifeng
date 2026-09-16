@@ -14,6 +14,7 @@
     "pages/guide/team-info/team-info",
     "pages/guide/referee-info/referee-info",
     "pages/player/detail/detail",
+    "pages/player/electronic-pass/electronic-pass",
     "pages/card-preview/card-preview",
     "pages/tournament-center/tournament-center",
     "pages/roster-change/roster-change",
@@ -81,6 +82,7 @@
       "pages": [
         "team",
         "player-library/player-library",
+        "imported-player-review/imported-player-review",
         "parent-collaboration/parent-collaboration",
         "parent-service/parent-service",
         "profile-progress/profile-progress",

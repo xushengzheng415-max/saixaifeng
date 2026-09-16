@@ -2,7 +2,7 @@
   <view class="hero">
     <view class="hero-icon">裁</view>
     <text class="hero-title">裁判服务入口</text>
-    <text class="hero-subtitle">资料与比赛任务统一在服务号办理</text>
+
   </view>
 
   <view class="handoff-card">

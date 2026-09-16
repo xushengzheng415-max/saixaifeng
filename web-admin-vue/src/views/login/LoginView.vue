@@ -9,7 +9,7 @@
           <div v-else class="qr-loading">正在生成安全登录二维码…</div>
         </div>
       </section>
-      <p class="scan-tip outer-tip">请使用微信客户端扫码登录</p>
+
       <button v-if="!isLocalPreview" class="retry" type="button" @click="refreshQr">刷新二维码</button>
     </section>
   </main>

@@ -24,7 +24,7 @@
         <view class="task-glyph {{item.statusClass}}"><image src="{{item.typeIcon}}" mode="aspectFit"/></view>
         <view class="task-content">
           <view class="task-title-row"><text class="task-title">{{item.title}}</text><text class="task-status {{item.statusClass}}">{{item.statusText}}</text></view>
-          <text class="task-subtitle">{{item.subtitle}}</text>
+
           <view class="task-detail-row"><text class="task-detail">{{item.deadlineText}}</text><text class="task-detail-separator">|</text><text class="task-detail">{{item.detailText}}</text></view>
         </view>
         <view class="task-action">{{item.actionText}}</view><text class="task-arrow">›</text>

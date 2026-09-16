@@ -30,6 +30,31 @@ function todayText() {
   return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0')
 }
 
+function registrantTypeForBirthDate(value) {
+  var match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return 'guardian'
+  var today = new Date()
+  var age = today.getFullYear() - Number(match[1])
+  if (today.getMonth() + 1 < Number(match[2]) || (today.getMonth() + 1 === Number(match[2]) && today.getDate() < Number(match[3]))) age -= 1
+  return age >= 18 ? 'self' : 'guardian'
+}
+
+function registrantUi(type) {
+  var self = type === 'self'
+  return {
+    registrantType: self ? 'self' : 'guardian',
+    showGuardianFields: !self,
+    recipientEntryLabel: self ? '球员本人登记' : '家长登记',
+    confirmTitle: self ? '确认本人资料' : '确认孩子资料',
+    matchIntro: self ? '仅显示与当前账号关联的本人资料' : '仅显示与当前账号关联的孩子资料',
+    confirmActionText: self ? '确认是本人' : '确认是我的孩子',
+    registerActionText: self ? '登记本人资料' : '登记孩子资料',
+    authorizationText: self ? '我确认由本人登记，并同意提交必要资料。' : '我确认是该球员监护人，并同意提交必要资料。',
+    successTitle: self ? '本人资料已登记' : '孩子资料已登记',
+    successAuthorizationText: self ? '本人授权已确认' : '监护人授权已确认'
+  }
+}
+
 function roundedRect(context, x, y, width, height, radius) {
   context.beginPath()
   context.moveTo(x + radius, y)
@@ -56,10 +81,10 @@ Page({
     showMatchStep: false, showRegisterStep: false, hasMatchedPlayer: false, matchPhoneText: '微信账号已验证',
     sharePath: '', urlLink: '', linkDisplayText: '正在生成可点击邀请链接…', linkDisabled: true,
     qrUrl: '', qrFileId: '', qrReady: false, environmentText: '', environmentTip: '', expiresAtText: '7天内有效',
-    participantRole: 'guardian', roleGuardianClass: 'role-option active', rolePlayerClass: 'role-option',
+    registrantType: 'guardian', showGuardianFields: true, recipientEntryLabel: '资料登记', confirmTitle: '确认球员资料', matchIntro: '仅显示与本次邀请相关的球员资料', confirmActionText: '确认并继续', registerActionText: '登记球员资料', authorizationText: '请确认登记身份并授权资料使用。', successTitle: '球员资料已登记', successAuthorizationText: '资料授权已确认', accountPhoneMasked: '',
     authorizationAgreed: false, authorizationClass: 'authorization-box',
     guardianRelation: 'father', relationFatherClass: 'relation-option active', relationMotherClass: 'relation-option', relationOtherClass: 'relation-option',
-    name: '', birthDate: '', birthDateText: '请选择出生日期', maxBirthDate: '', guardianPhone: '', jerseyNumber: '',
+    name: '', birthDate: '', birthDateText: '请选择出生日期', maxBirthDate: '', jerseyNumber: '',
     positionLabels: ['暂不选择', '守门员', '后卫', '中场', '前锋'], positionValues: ['', 'GK', 'DF', 'MF', 'FW'], positionIndex: 0, positionText: '暂不选择',
     submitting: false, submitted: false, submittedPlayer: {}, parentProfileUrl: '', canContinueProfile: false,
     posterBusy: false, posterReady: false, posterPath: ''
@@ -146,7 +171,8 @@ Page({
         var result = response.result || {}
         if (!result.success) throw new Error(result.message || '球员邀请加载失败')
         var existingPlayer = result.existingPlayer || null
-        self.setData({
+        var registrant = existingPlayer ? registrantUi(existingPlayer.registrantType) : registrantUi('guardian')
+        self.setData(Object.assign({
           loading: false,
           teamId: String((result.team || {}).id || self.data.teamId || ''),
           team: result.team || {},
@@ -155,15 +181,16 @@ Page({
           showMatchStep: true,
           showRegisterStep: false,
           hasMatchedPlayer: Boolean(existingPlayer),
-          pageTitle: '确认孩子',
+          pageTitle: existingPlayer && existingPlayer.registrantType === 'self' ? '确认本人' : '确认球员',
+          accountPhoneMasked: String(result.accountPhoneMasked || '已验证'),
           submitted: false,
           submittedPlayer: existingPlayer || {}
-        })
+        }, registrant))
       }).catch(function (error) { self.setData({ loading: false, errorText: error.message || '球员邀请加载失败' }) })
   },
 
   startRegistration: function () {
-    this.setData({ showMatchStep: false, showRegisterStep: true, pageTitle: '注册孩子信息' })
+    this.setData(Object.assign({ showMatchStep: false, showRegisterStep: true, pageTitle: '登记球员资料' }, registrantUi(this.data.registrantType)))
   },
 
   chooseRelation: function (event) {
@@ -189,14 +216,13 @@ Page({
       }).catch(function (error) { self.setData({ submitting: false }); wx.showModal({ title: '无法继续', content: error.message || '请联系球队管理员', showCancel: false }) })
   },
 
-  chooseRole: function (event) {
-    var role = event.currentTarget.dataset.role === 'player' ? 'player' : 'guardian'
-    this.setData({ participantRole: role, roleGuardianClass: role === 'guardian' ? 'role-option active' : 'role-option', rolePlayerClass: role === 'player' ? 'role-option active' : 'role-option' })
-  },
   inputName: function (event) { this.setData({ name: event.detail.value || '' }) },
-  inputPhone: function (event) { this.setData({ guardianPhone: event.detail.value || '' }) },
   inputNumber: function (event) { this.setData({ jerseyNumber: event.detail.value || '' }) },
-  changeBirth: function (event) { var value = event.detail.value || ''; this.setData({ birthDate: value, birthDateText: value || '请选择出生日期' }) },
+  changeBirth: function (event) {
+    var value = event.detail.value || ''
+    var ui = registrantUi(registrantTypeForBirthDate(value))
+    this.setData(Object.assign({ birthDate: value, birthDateText: value || '请选择出生日期', pageTitle: ui.registrantType === 'self' ? '本人登记' : '家长登记' }, ui))
+  },
   changePosition: function (event) {
     var index = Number(event.detail.value || 0)
     this.setData({ positionIndex: index, positionText: this.data.positionLabels[index] || '暂不选择' })
@@ -214,8 +240,7 @@ Page({
       name: 'getMiniWorkspace',
       data: {
         action: 'acceptTeamPlayerInvite', inviteId: this.data.inviteId,
-        participantRole: this.data.participantRole, name: this.data.name, birthDate: this.data.birthDate,
-        guardianPhone: this.data.guardianPhone, jerseyNumber: this.data.jerseyNumber,
+        name: this.data.name, birthDate: this.data.birthDate, jerseyNumber: this.data.jerseyNumber,
         position: this.data.positionValues[this.data.positionIndex] || '',
         guardianRelation: this.data.guardianRelation,
         authorizationAgreed: this.data.authorizationAgreed
@@ -244,7 +269,7 @@ Page({
       url: '/pages/team/parent-service/parent-service?url=' + encodeURIComponent(this.data.parentProfileUrl),
       fail: function () {
         self.setData({ submitted: true, showRegisterStep: false, pageTitle: '资料提交成功' })
-        wx.showModal({ title: '孩子信息已登记', content: '实名与形象照入口暂时无法打开，可稍后从球队发送的家长协作链接继续。', showCancel: false })
+        wx.showModal({ title: self.data.successTitle, content: '实名与形象照入口暂时无法打开，可稍后从球队发送的资料协作链接继续。', showCancel: false })
       }
     })
   },
@@ -253,10 +278,11 @@ Page({
     var team = { id: 'visual-team', name: '郑州青训U9队', logo: '/images/runtime/icons/brand-v2-11.png' }
     var base = { visualQa: true, loading: false, teamId: team.id, team: team, inviteId: 'visual-invite', expiresAtText: '09-06 16:30' }
     if (state === 'manager') return this.setData(Object.assign(base, { modeManager: true, pageTitle: '邀请球员入队', qrReady: false, linkDisabled: true, linkDisplayText: '可点击邀请链接将在真实环境生成', environmentText: '正式版球员邀请二维码', environmentTip: '扫码后匹配或登记孩子资料' }))
-    if (state === 'match') return this.setData(Object.assign(base, { modeRecipient: true, pageTitle: '确认孩子', showMatchStep: true, hasMatchedPlayer: true, submittedPlayer: { name: '张浩', birthDate: '2016年08月', profileStatus: '待家长补充' }, matchPhoneText: '138 **** 5678' }))
-    if (state === 'nomatch') return this.setData(Object.assign(base, { modeRecipient: true, pageTitle: '确认孩子', showMatchStep: true, hasMatchedPlayer: false, matchPhoneText: '账号已验证' }))
-    if (state === 'success') return this.setData(Object.assign(base, { modeRecipient: true, pageTitle: '资料提交成功', submitted: true, submittedPlayer: { name: '张浩' }, canContinueProfile: true, parentProfileUrl: 'https://www.sxffootball.cn/service-account-h5/?parentInvite=visual' }))
-    this.setData(Object.assign(base, { modeRecipient: true, pageTitle: '注册孩子信息', showRegisterStep: true, name: '', birthDate: '', guardianPhone: '' }))
+    if (state === 'match') return this.setData(Object.assign(base, registrantUi('guardian'), { modeRecipient: true, pageTitle: '确认孩子', showMatchStep: true, hasMatchedPlayer: true, submittedPlayer: { name: '张浩', birthDate: '2016年08月', profileStatus: '待家长补充' }, accountPhoneMasked: '138 **** 5678' }))
+    if (state === 'adult') return this.setData(Object.assign(base, registrantUi('self'), { modeRecipient: true, pageTitle: '本人登记', showRegisterStep: true, name: '王强', birthDate: '1996-05-18', birthDateText: '1996-05-18', accountPhoneMasked: '138 **** 5678' }))
+    if (state === 'nomatch') return this.setData(Object.assign(base, registrantUi('guardian'), { modeRecipient: true, pageTitle: '确认球员', showMatchStep: true, hasMatchedPlayer: false, accountPhoneMasked: '账号已验证' }))
+    if (state === 'success') return this.setData(Object.assign(base, registrantUi('guardian'), { modeRecipient: true, pageTitle: '资料提交成功', submitted: true, submittedPlayer: { name: '张浩' }, canContinueProfile: true, parentProfileUrl: 'https://www.sxffootball.cn/service-account-h5/?parentInvite=visual' }))
+    this.setData(Object.assign(base, registrantUi('guardian'), { modeRecipient: true, pageTitle: '登记球员资料', showRegisterStep: true, name: '', birthDate: '', accountPhoneMasked: '138 **** 5678' }))
   },
 
   copyLink: function () {

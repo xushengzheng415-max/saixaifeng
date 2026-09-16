@@ -4,7 +4,7 @@
 
 ## 正式代码源
 
-- Gitee：`https://gitee.com/saixiaofeng/saixiaofeng.git`
+- Gitee：`https://gitee.com/saixiaofeng/football.git`
 - 正式本地仓库：`E:\Documents\sxf-football`
 - `main`：可发布的稳定代码
 - `develop`：日常集成分支
@@ -39,8 +39,8 @@
 ### PC 管理后台
 
 ```powershell
-git clone https://gitee.com/saixiaofeng/saixiaofeng.git
-cd saixiaofeng
+git clone https://gitee.com/saixiaofeng/football.git
+cd football
 git switch develop
 cd web-admin-vue
 npm ci

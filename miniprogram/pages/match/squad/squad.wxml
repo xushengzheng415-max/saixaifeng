@@ -9,6 +9,7 @@
     </view>
     <view wx:if="{{returned}}" class="returned">退回修改：{{returnReason}}</view>
     <view wx:if="{{locked}}" class="locked">阵容已提交，等待主办方处理</view>
+    <view class="arrival-card"><view><text>赛前报到</text><text>{{arrivalStatusText}}</text></view><button bindtap="confirmArrival" disabled="{{arrivalButtonDisabled}}">{{arrivalButtonText}}</button></view>
     <view class="formation-tabs"><text class="tab-label">首发阵型</text><view class="tabs"><text wx:for="{{formationOptions}}" wx:key="id" data-id="{{item.id}}" bindtap="selectFormation" class="formation-tab {{item.tabClass}}">{{item.label}}</text></view></view>
     <view wx:if="{{dragging}}" class="drag-tip">正在拖动「{{draggingPlayerName}}」：轻点场上空位完成落位 <text bindtap="cancelPlayerDrag">取消</text></view>
     <view class="pitch-card">

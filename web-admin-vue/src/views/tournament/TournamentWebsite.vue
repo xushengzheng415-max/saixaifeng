@@ -180,7 +180,7 @@
           <h3>📰 赛事新闻</h3>
           <div class="empty-tip">
             <el-icon :size="48"><Document /></el-icon>
-            <p>新闻功能即将上线，敬请期待...</p>
+
           </div>
         </div>
       </div>
@@ -189,7 +189,7 @@
     <!-- 页脚 -->
     <footer class="website-footer">
       <p>© 2026 赛小蜂足球 · 青少年足球赛事平台</p>
-      <p class="footer-desc">提供专业青少年足球赛事管理系统，让赛事组织更简单</p>
+
     </footer>
   </div>
 </template>

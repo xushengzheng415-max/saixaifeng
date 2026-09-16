@@ -15,7 +15,7 @@
       <div class="page-header">
         <div class="header-left">
           <h2>教练组管理</h2>
-          <span class="header-tip">管理球队教练组成员（主教练、助理教练、队医、领队）</span>
+
         </div>
       </div>
 
@@ -143,7 +143,7 @@
                   <el-option v-for="role in memberTypes" :key="role.value" :label="role.label" :value="role.value">
                     <div class="role-option">
                       <el-tag :type="role.tagType" size="small">{{ role.label }}</el-tag>
-                      <span class="role-desc">{{ role.description }}</span>
+
                     </div>
                   </el-option>
                 </el-select>
@@ -246,7 +246,7 @@
               <el-option v-for="role in memberTypes" :key="role.value" :label="role.label" :value="role.value">
                 <div class="role-option">
                   <el-tag :type="role.tagType" size="small">{{ role.label }}</el-tag>
-                  <span class="role-desc">{{ role.description }}</span>
+
                 </div>
               </el-option>
             </el-select>

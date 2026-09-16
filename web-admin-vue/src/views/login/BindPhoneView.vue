@@ -8,7 +8,7 @@
 
       <!-- 首次手机号验证区域 -->
       <h2 class="page-title">首次验证手机号</h2>
-      <p class="page-desc">仅首次绑定微信或账号异常时验证；以后微信扫码可直接登录</p>
+
 
       <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="handleBind">
         <el-form-item prop="phone">

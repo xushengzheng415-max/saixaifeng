@@ -5,9 +5,7 @@
         <h2>测试数据生成</h2>
         <el-tag type="info" effect="plain" size="small">开发模式专用</el-tag>
       </div>
-      <p class="page-desc">
-        一键生成模拟球队、球员和赛事数据，用于开发和演示。数据通过云函数写入云数据库，与小程序端共享。
-      </p>
+
     </div>
 
     <!-- 配置区域 -->
@@ -319,14 +317,14 @@ async function handleCleanAll() {
     'teams',            // 球队
     'tournaments'       // 赛事（最后）
   ]
-  
+
   let totalDeleted = 0
 
   for (const col of collections) {
     try {
       // 使用批量删除云函数
       const result = await deleteAllRecords(col)
-      
+
       if (result.deleted > 0) {
         addLog(`${col}: 删除 ${result.deleted} 条`, 'success')
         totalDeleted += result.deleted

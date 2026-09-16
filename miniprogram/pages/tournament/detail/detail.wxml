@@ -25,10 +25,10 @@
       </view>
 
       <view class="team-event-actions">
-        <view class="team-event-action" bindtap="onTeamEventNotice"><view><image src="/images/icons/bell.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛事通知</text><text class="team-event-action-desc">查看赛事公告与重要通知</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
-        <view class="team-event-action" bindtap="onTeamEventRoster"><view><image src="/images/icons/players.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">正式名单</text><text class="team-event-action-desc">{{teamEventRosterText}}</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
-        <view class="team-event-action" bindtap="onTeamEventLineup"><view><image src="/images/icons/team.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">比赛阵容</text><text class="team-event-action-desc lineup-state">{{teamEventLineupText}}</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
-        <view class="team-event-action" bindtap="onTeamEventSchedule"><view><image src="/images/icons/event.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛程赛果</text><text class="team-event-action-desc">查看赛程安排与比赛结果</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventNotice"><view><image src="/images/icons/bell.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛事通知</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventRoster"><view><image src="/images/icons/players.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">正式名单</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventLineup"><view><image src="/images/icons/team.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">比赛阵容</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventSchedule"><view><image src="/images/icons/event.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛程赛果</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
       </view>
 
       <view class="team-event-section-title"><view></view><text>下一场比赛</text></view>
@@ -170,28 +170,28 @@
         <text class="qc-icon">{{quickCard1Icon}}</text>
         <view class="qc-body">
           <text class="qc-title">{{quickCard1Title}}</text>
-          <text class="qc-desc">{{quickCard1Desc}}</text>
+
         </view>
       </view>
       <view class="qc-card" bindtap="onQuickCard2">
         <text class="qc-icon">{{quickCard2Icon}}</text>
         <view class="qc-body">
           <text class="qc-title">{{quickCard2Title}}</text>
-          <text class="qc-desc">{{quickCard2Desc}}</text>
+
         </view>
       </view>
       <view class="qc-card" bindtap="onQuickCard3">
         <text class="qc-icon">{{quickCard3Icon}}</text>
         <view class="qc-body">
           <text class="qc-title">{{quickCard3Title}}</text>
-          <text class="qc-desc">{{quickCard3Desc}}</text>
+
         </view>
       </view>
       <view class="qc-card" bindtap="onQuickCard4">
         <text class="qc-icon">{{quickCard4Icon}}</text>
         <view class="qc-body">
           <text class="qc-title">{{quickCard4Title}}</text>
-          <text class="qc-desc">{{quickCard4Desc}}</text>
+
         </view>
       </view>
     </view>

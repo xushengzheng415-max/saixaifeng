@@ -19,7 +19,7 @@
       <article v-for="item in metrics" :key="item.label" class="metric-card" :class="item.tone"><span class="metric-icon"><el-icon><component :is="item.icon" /></el-icon></span><div><p>{{ item.label }}</p><strong>{{ item.value }}</strong><small>{{ item.note }}</small></div></article>
     </section>
 
-    <el-alert class="console-tip" type="success" :closable="false" show-icon title="简易版组别按球队、比分和赛果运行；专业版组别增加球员档案、参赛名单和个人数据。" />
+    <el-alert class="console-tip" type="success" :closable="false" show-icon title="基础版组别按球队、比分和赛果运行；专业版组别增加球员档案、参赛名单和个人数据。" />
     <section v-if="!qaSnapshot && divisions.length" class="plan-confirm-panel" aria-label="最终竞赛方案确认"><div><strong>确认竞赛方案并进入比赛管理</strong><p>球队、抽签和赛程全部完成后执行；确认后当前组别版本永久锁定。</p></div><el-tag v-if="lockedDivisionCount" type="success" effect="plain">已锁定 {{ lockedDivisionCount }} 个组别</el-tag></section>
 
     <div class="middle-grid">
@@ -40,7 +40,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, CircleCheck, DocumentChecked, Football, Grid, List, Location, Promotion, Refresh, Tickets, Timer, Trophy, UserFilled, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { confirmCompetitionPlan, queryById, queryList } from '../../utils/cloud'
+import { confirmCompetitionPlan, getFileUrl, queryById, queryList } from '../../utils/cloud'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 
 const route = useRoute()
@@ -53,6 +53,7 @@ const registrations = ref(qaSnapshot?.tournamentTeams || [])
 const matches = ref(qaSnapshot?.matches || [])
 const divisionRecords = ref(qaSnapshot?.tournament?.divisions || [])
 const confirmingDivisionId = ref('')
+const resolvedTournamentLogo = ref('')
 
 const divisions = computed(() => divisionRecords.value.length
   ? divisionRecords.value
@@ -63,7 +64,10 @@ const pendingTeams = computed(() => registrations.value.filter(item => ['pending
 const activeMatches = computed(() => matches.value.filter(item => ['ongoing', 'in_progress', 'live'].includes(item.status)))
 const reviewMatches = computed(() => matches.value.filter(item => ['submitted', 'pending_review', 'review_pending'].includes(item.status)))
 const recentMatches = computed(() => [...matches.value].sort((a, b) => new Date(a.matchDate || a.date || a.startTime || 0) - new Date(b.matchDate || b.date || b.startTime || 0)).slice(0, 4))
-const tournamentLogo = computed(() => tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
+const tournamentLogo = computed(() => {
+  const source = String(tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
+  return resolvedTournamentLogo.value || (/^(https?:\/\/|\/)/i.test(source) ? source : '')
+})
 const dateRange = computed(() => tournament.value.startDate && tournament.value.endDate ? `${formatDate(tournament.value.startDate)} — ${formatDate(tournament.value.endDate)}` : '日期待定')
 const tournamentStatus = computed(() => ({ draft: '筹备中', registering: '报名中', upcoming: '即将开始', ongoing: '进行中', completed: '已结束', finished: '已结束' })[tournament.value.status] || '筹备中')
 const metrics = computed(() => [
@@ -109,6 +113,13 @@ async function loadConsole() {
       queryList('divisions', { where: { tournamentId: id }, orderBy: { createTime: 'asc' }, silent: true })
     ])
     tournament.value = Array.isArray(currentTournament) ? currentTournament[0] || {} : currentTournament || {}
+    const logoSource = String(tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
+    if (logoSource.startsWith('cloud://')) {
+      const resolved = await getFileUrl(logoSource)
+      resolvedTournamentLogo.value = /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+    } else {
+      resolvedTournamentLogo.value = ''
+    }
     registrations.value = currentRegistrations || []
     matches.value = currentMatches || []
     divisionRecords.value = currentDivisions || []
@@ -139,7 +150,7 @@ async function confirmPlan(division) {
   }
 }
 function formatDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '日期待定' : `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}` }
-function divisionMode(division) { return division.mode === 'professional' || division.isProfessional ? '专业版' : '简易版' }
+function divisionMode(division) { return division.mode === 'professional' || division.isProfessional ? '专业版' : '基础版' }
 function divisionProgress(division) { if (division.status === 'completed' || division.rulesLocked) return 100; if (division.status === 'ongoing') return 68; if (division.status === 'configured') return 42; return 8 }
 function divisionProgressLabel(division) { if (division.status === 'completed') return '已完成'; if (division.status === 'ongoing') return '比赛进行中'; if (division.rulesLocked) return '规则已定版'; if (division.status === 'configured') return '配置中'; return '待配置' }
 function matchDate(match) { return formatDate(match.matchDate || match.date || match.startTime).slice(5).replace('.', '-') }

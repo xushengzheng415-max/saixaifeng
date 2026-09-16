@@ -44,7 +44,7 @@
     <div v-else-if="showCropper && cropperUrl" class="cropper-area">
       <div class="cropper-header">
         <p class="cropper-title">{{ cropConfig.title }}</p>
-        <p class="cropper-subtitle">{{ cropConfig.subtitle }}</p>
+
       </div>
       <div class="cropper-wrapper">
         <vue-cropper
@@ -280,12 +280,45 @@ function hasTransparency(file) {
   })
 }
 
+function addLogoSafeArea(source, paddingRatio = 0.08) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => {
+      const longestSide = Math.max(image.width, image.height)
+      const canvasSide = Math.max(1, Math.ceil(longestSide / (1 - paddingRatio * 2)))
+      const canvas = document.createElement('canvas')
+      canvas.width = canvasSide
+      canvas.height = canvasSide
+      const context = canvas.getContext('2d')
+      context.clearRect(0, 0, canvasSide, canvasSide)
+      context.drawImage(image, Math.round((canvasSide - image.width) / 2), Math.round((canvasSide - image.height) / 2))
+      resolve(canvas.toDataURL('image/png'))
+    }
+    image.onerror = () => reject(new Error('Logo 安全边距处理失败'))
+    image.src = source
+  })
+}
+
+async function addLogoSafeAreaToFile(file) {
+  const sourceUrl = URL.createObjectURL(file)
+  try {
+    const dataUrl = await addLogoSafeArea(sourceUrl)
+    const blob = dataUrlToBlob(dataUrl)
+    return new File([blob], file.name.replace(/\.[^.]+$/, '.png'), {
+      type: 'image/png',
+      lastModified: Date.now()
+    })
+  } finally {
+    URL.revokeObjectURL(sourceUrl)
+  }
+}
+
 // 根据类型动态裁剪配置
 const cropConfig = computed(() => {
   if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
     return {
       title: '调整 Logo 位置',
-      subtitle: '拖动图片调整位置，滚轮缩放，框选区域将用作球队/赛事 Logo（建议 500×500）',
+      subtitle: '已预留安全边距，可拖动或缩放调整位置（建议 500×500）',
       ratio: [1, 1],
       width: 500,
       height: 500,
@@ -345,7 +378,8 @@ async function handleFileChange(file) {
     const hasAlpha = await hasTransparency(processFile)
     if (hasAlpha) {
       revokeBlobUrl()
-      const rawUrl = URL.createObjectURL(processFile)
+      const paddedFile = await addLogoSafeAreaToFile(processFile)
+      const rawUrl = URL.createObjectURL(paddedFile)
       blobUrlCache = rawUrl
       cropperUrl.value = rawUrl
       showCropper.value = true
@@ -357,9 +391,9 @@ async function handleFileChange(file) {
   }
 
   try {
-      
+
       let result
-    
+
     // 根据类型选择抠图方式
     if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
       // 队徽/赛事Logo：优先使用本地"抠白"算法（去除白色背景）
@@ -373,7 +407,7 @@ async function handleFileChange(file) {
     } else {
       // 球员头像：优先使用百度人像分割（免费额度充足）
       result = await removeBackgroundBaidu(processFile)
-      
+
       // 如果百度失败，回退到 remove.bg
       if (!result.success) {
         console.warn('[RemoveBg] 百度抠图失败，回退到 remove.bg API')
@@ -391,11 +425,12 @@ async function handleFileChange(file) {
         //    避免裁剪后 getCropData 输出大图 → 413 上传失败
         const cropperMaxSize = props.type === 'playerAvatar' ? 200 : 200
         const cropperReady = await compressToSize(result.data, cropperMaxSize)
+        const cropperWithSafeArea = await addLogoSafeArea(cropperReady)
         console.log(`[RemoveBg] 裁剪前压缩: 最长边≤${cropperMaxSize}px, ${(cropperReady.length / 1024).toFixed(1)}KB`)
 
         // 将 base64 转为 Blob URL（vue-cropper 对大 base64 支持不好）
         revokeBlobUrl()
-        const blobUrl = dataUrlToBlobUrl(cropperReady)
+        const blobUrl = dataUrlToBlobUrl(cropperWithSafeArea)
         blobUrlCache = blobUrl
 
         // 进入裁剪模式：先设置数据，再显示裁剪区，最后刷新组件
@@ -460,7 +495,7 @@ async function uploadWithAutoRetry(base64Data) {
   // ★ 分片上传：每片 32KB，远低于 HTTP 网关限制
   const sizes = [200, 128, 64]
   let lastError = null
-  
+
   for (let i = 0; i < sizes.length; i++) {
     try {
       const compressed = await compressToSize(base64Data, sizes[i])
@@ -737,7 +772,7 @@ onUnmounted(() => {
 }
 
 .image-box .transparent-bg {
-  background-image: 
+  background-image:
     linear-gradient(45deg, #ccc 25%, transparent 25%),
     linear-gradient(-45deg, #ccc 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #ccc 75%),

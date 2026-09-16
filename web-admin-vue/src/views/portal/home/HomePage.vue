@@ -36,7 +36,7 @@
         <div class="promo-banner section">
           <div class="promo-content">
             <div class="promo-title">竞猜赢蜂蜜币</div>
-            <div class="promo-desc">参与赛事竞猜，赢取丰厚奖励</div>
+
           </div>
           <el-button type="warning" round @click="goGuess">立即参与</el-button>
         </div>

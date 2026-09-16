@@ -1,18 +1,12 @@
 <template>
   <div class="layout">
-    <!-- 绑定手机号弹窗（强制绑定，不可关闭） -->
-    <el-dialog v-if="false"
+    <el-dialog
       v-model="bindPhoneVisible"
       title="绑定手机号"
       width="400px"
       :close-on-click-modal="false"
-      :show-close="false"
-      :close-on-press-escape="false"
     >
-      <div style="margin-bottom: 16px; color: #f56c6c; font-size: 13px;">
-        <el-icon><Warning /></el-icon>
-        为了账号安全，请绑定手机号后才能继续使用
-      </div>
+      <div class="phone-bind-note">手机号验证后不可直接更换。</div>
       <el-form :model="bindForm" label-width="80px">
         <el-form-item label="手机号">
           <el-input
@@ -39,13 +33,28 @@
         </el-form-item>
       </el-form>
       <template #footer>
+        <el-button @click="bindPhoneVisible=false">取消</el-button>
         <el-button type="primary" @click="confirmBindPhone">确认绑定</el-button>
       </template>
     </el-dialog>
 
     <el-dialog v-model="profileDialogVisible" title="修改个人资料" width="440px">
-      <el-form label-position="top"><el-form-item label="账号显示名称"><el-input v-model.trim="profileForm.nickname" maxlength="30" placeholder="请输入姓名或显示名称" /></el-form-item></el-form>
-      <template #footer><el-button @click="profileDialogVisible=false">取消</el-button><el-button type="primary" :loading="profileSubmitting" @click="saveProfile">保存个人资料</el-button></template>
+      <el-form label-position="top">
+        <el-form-item label="账号显示名称"><el-input v-model.trim="profileForm.nickname" maxlength="30" placeholder="请输入姓名或显示名称" /></el-form-item>
+        <el-form-item label="手机号">
+          <div class="profile-phone-row" v-loading="accountProfileLoading">
+            <span>{{ accountPhoneMasked || '未绑定' }}</span>
+            <el-tag v-if="accountPhoneVerified" type="success" size="small">已验证</el-tag>
+            <el-button v-else link type="primary" @click="openPhoneBinding">绑定手机号</el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="profile-dialog-footer">
+          <el-button v-if="!userInfo.isPlatformOwner" link type="danger" :loading="accountDeleting" @click="deleteCurrentAccount">注销PC</el-button>
+          <div><el-button @click="profileDialogVisible=false">取消</el-button><el-button type="primary" :loading="profileSubmitting" @click="saveProfile">保存个人资料</el-button></div>
+        </div>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="organizationDialogVisible" title="修改机构资料" width="560px">
@@ -180,7 +189,7 @@
                 </div>
               </div>
             </template>
-            
+
             <!-- 无子菜单 -->
             <template v-else>
               <div
@@ -196,7 +205,7 @@
         </nav>
 
         <div v-if="route.path.includes('/draw')" class="sidebar-pro-badge">♛　PRO 专业版 · 已开通</div>
-        <div class="sidebar-support">由赛小蜂足球提供技术支持</div>
+
       </aside>
 
       <section class="workspace">
@@ -217,7 +226,7 @@
               </div>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span></div></el-dropdown-item>
+                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
                   <el-dropdown-item divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
                   <el-dropdown-item command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
                   <el-dropdown-item command="refresh"><el-icon><Refresh /></el-icon>刷新数据</el-dropdown-item>
@@ -253,6 +262,7 @@
                         <el-tag v-else-if="loginType === 'wechat'" type="success" size="small">微信扫码</el-tag>
                         <el-tag type="warning" size="small">{{ roleLabel }}</el-tag>
                       </div>
+                      <div class="user-phone-summary">{{ accountPhoneSummary }}</div>
                     </div>
                   </el-dropdown-item>
                   <el-dropdown-item command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
@@ -283,7 +293,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
@@ -339,9 +349,14 @@ const organizationBrand = computed(() => ({
 }))
 const accountDisplayName = computed(() => userInfo.value.userName || '主办方管理员')
 const organizationDisplayName = computed(() => userInfo.value.organizationName || '尚未建立机构')
+const accountPhoneMasked = ref('')
+const accountPhoneVerified = ref(false)
+const accountProfileLoading = ref(false)
+const accountPhoneSummary = computed(() => accountPhoneMasked.value || maskAccountPhone(userInfo.value.phone) || '手机号未绑定')
 const profileDialogVisible = ref(false)
 const organizationDialogVisible = ref(false)
 const profileSubmitting = ref(false)
+const accountDeleting = ref(false)
 const organizationSubmitting = ref(false)
 const profileForm = reactive({ nickname: '' })
 const organizationForm = reactive({ name: '', organizationType: '', provinceCode: '', city: '' })
@@ -371,7 +386,44 @@ async function loadWorkspaceAccount() {
   }
 }
 
-function openProfileDialog() { profileForm.nickname = accountDisplayName.value; profileDialogVisible.value = true }
+function maskAccountPhone(value) {
+  const phone = String(value || '').replace(/\D/g, '')
+  return phone.length === 11 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : ''
+}
+async function loadCurrentAccountProfile() {
+  accountProfileLoading.value = true
+  try {
+    const result = await callFunction('getCurrentAccountProfile')
+    if (!result?.success) throw new Error(result?.error || '手机号状态读取失败')
+    const account = result.user || {}
+    accountPhoneMasked.value = account.phoneMasked || maskAccountPhone(account.phone)
+    accountPhoneVerified.value = account.phoneVerified === true
+    if (account.phone) {
+      userInfo.value.phone = account.phone
+      const stored = readStoredObject('userInfo')
+      localStorage.setItem('userInfo', JSON.stringify({ ...stored, phone:account.phone, phoneNumber:account.phone }))
+    }
+  } catch (error) {
+    accountPhoneMasked.value = maskAccountPhone(userInfo.value.phone)
+    accountPhoneVerified.value = Boolean(accountPhoneMasked.value)
+    ElMessage.error(error.message || '手机号状态读取失败')
+  } finally {
+    accountProfileLoading.value = false
+  }
+}
+function openProfileDialog() {
+  profileForm.nickname = accountDisplayName.value
+  accountPhoneMasked.value = maskAccountPhone(userInfo.value.phone)
+  accountPhoneVerified.value = Boolean(accountPhoneMasked.value)
+  profileDialogVisible.value = true
+  loadCurrentAccountProfile()
+}
+function openPhoneBinding() {
+  if (accountPhoneVerified.value) return
+  bindForm.value = { phone: '', code: '' }
+  profileDialogVisible.value = false
+  bindPhoneVisible.value = true
+}
 function openOrganizationDialog() {
   const organization = organizationRecord.value || {}
   organizationForm.name = organization.name || organization.organizationName || organizationDisplayName.value
@@ -392,6 +444,32 @@ async function saveProfile() {
     profileDialogVisible.value = false
     ElMessage.success('个人资料已更新')
   } catch (error) { ElMessage.error(error.message || '保存失败') } finally { profileSubmitting.value = false }
+}
+async function deleteCurrentAccount() {
+  if (accountDeleting.value) return
+  try {
+    const confirmation = await ElMessageBox.prompt(
+      '仅解除PC微信、服务号绑定和网页会话；小程序、机构和球队不受影响。请输入“注销PC”确认。',
+      '注销账号',
+      {
+        confirmButtonText: '确认注销',
+        cancelButtonText: '取消',
+        type: 'error',
+        inputPattern: /^注销PC$/,
+        inputErrorMessage: '请输入“注销PC”'
+      }
+    )
+    accountDeleting.value = true
+    const result = await callFunction('deleteCurrentAccount', { confirmText: confirmation.value })
+    if (!result?.success) throw new Error(result?.error || '账号注销失败')
+    await logout()
+    ElMessage.success('PC账号已注销，小程序不受影响')
+    window.location.replace('https://www.sxffootball.cn/')
+  } catch (error) {
+    if (!['cancel', 'close'].includes(error)) ElMessage.error(error.message || '账号注销失败')
+  } finally {
+    accountDeleting.value = false
+  }
 }
 async function saveOrganization() {
   if (organizationSubmitting.value) return
@@ -449,111 +527,48 @@ const canSubmitPassword = computed(() => {
 
 // 发送绑定验证码
 async function sendBindCode() {
-  if (!isPhoneValid.value) {
-    ElMessage.warning('请输入正确的手机号')
-    return
-  }
+  if (!isPhoneValid.value) return ElMessage.warning('请输入正确的手机号')
   try {
-    const { callFunction } = await import('../../utils/cloud')
-    const res = await callFunction('sendSms', { phoneNumber: bindForm.value.phone })
-    if (res.success) {
-      ElMessage.success('验证码已发送')
-      countdown.value = 60
-      countdownTimer = setInterval(() => {
-        countdown.value--
-        if (countdown.value <= 0) clearInterval(countdownTimer)
-      }, 1000)
-    } else {
-      ElMessage.error(res.error || '发送失败')
-    }
-  } catch (err) {
-    ElMessage.error('发送失败：' + (err.message || '网络错误'))
+    const res = await callFunction('sendCurrentUserPhoneBindSms', { phoneNumber:bindForm.value.phone })
+    if (!res?.success) throw new Error(res?.error || '验证码发送失败')
+    ElMessage.success('验证码已发送')
+    countdown.value = 60
+    if (countdownTimer) clearInterval(countdownTimer)
+    countdownTimer = setInterval(() => {
+      countdown.value--
+      if (countdown.value <= 0) clearInterval(countdownTimer)
+    }, 1000)
+  } catch (error) {
+    ElMessage.error(error.message || '验证码发送失败')
   }
 }
 
 // 确认绑定手机号
 async function confirmBindPhone() {
-  if (!isPhoneValid.value) {
-    ElMessage.warning('请输入正确的手机号')
-    return
-  }
-  if (!bindForm.value.code || bindForm.value.code.length !== 6) {
-    ElMessage.warning('请输入6位验证码')
-    return
-  }
-  const email = userInfo.value.email || (localStorage.getItem('userInfo') && JSON.parse(localStorage.getItem('userInfo')).email) || ''
-  const userId = JSON.parse(localStorage.getItem('userInfo') || '{}').uid || userInfo.value.uid || localStorage.getItem('userId')
-  if (!userId) {
-    ElMessage.error('未获取到用户信息，请重新登录')
-    return
-  }
+  if (!isPhoneValid.value) return ElMessage.warning('请输入正确的手机号')
+  if (!/^\d{6}$/.test(String(bindForm.value.code || ''))) return ElMessage.warning('请输入6位验证码')
   try {
-    const { callFunction } = await import('../../utils/cloud')
-    const res = await callFunction('bindPhone', {
-      email,
-      phone: bindForm.value.phone,
-      code: bindForm.value.code
+    const res = await callFunction('bindCurrentUserPhone', {
+      phoneNumber:bindForm.value.phone,
+      smsCode:bindForm.value.code
     })
-    if (res.success) {
-      ElMessage.success('手机号绑定成功')
-      
-      // ★ 从后端重新加载完整用户信息
-      try {
-        const infoRes = await callFunction('emailLogin', {
-          action: 'getUserInfo',
-          userId: userId
-        })
-        if (infoRes.success && infoRes.user) {
-          userInfo.value = {
-            userName: infoRes.user.nickname || infoRes.user.email || infoRes.user.userName || '微信用户',
-            avatarUrl: infoRes.user.headimgurl || infoRes.user.avatarUrl || '',
-            phone: infoRes.user.phone || infoRes.user.phoneNumber || bindForm.value.phone,
-            email: infoRes.user.email || '',
-            uid: infoRes.user._id,
-            isPlatformOwner: infoRes.user.isPlatformOwner === true || userInfo.value.isPlatformOwner === true
-          }
-          localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
-          localStorage.setItem('userId', infoRes.user._id)
-          console.log('[Layout] 用户信息已从后端同步:', userInfo.value)
-        }
-      } catch (e) {
-        // 后端获取失败，手动合并
-        console.warn('[Layout] getUserInfo 失败，手动合并:', e.message)
-        userInfo.value.phone = bindForm.value.phone
-        userInfo.value.uid = userId
-        const saved = JSON.parse(localStorage.getItem('userInfo') || '{}')
-        saved.phone = bindForm.value.phone
-        saved.uid = userId
-        localStorage.setItem('userInfo', JSON.stringify(saved))
-      }
-
-      // 根据手机号自动设置角色（云函数返回的 role）
-      if (res.role) {
-        currentRole.value = res.role
-        localStorage.setItem('role', res.role)
-        localStorage.setItem('currentRole', res.role)
-        ElMessage.success(`身份已设置为：${ROLE_NAMES[res.role] || res.role}`)
-      }
-
-      // 清除强制绑定手机标志
-      localStorage.removeItem('needBindPhone')
-      bindPhoneVisible.value = false
-      bindForm.value = { phone: '', code: '' }
-
-      // ★ 按流程图顺序：绑手机号 → 设置密码 → 绑邮箱
-      if (localStorage.getItem('needSetPassword') === 'true') {
-        setPasswordVisible.value = true
-      } else if (localStorage.getItem('needBindEmail') === 'true') {
-        bindEmailVisible.value = true
-      }
-    } else {
-      ElMessage.error(res.error || '绑定失败')
-    }
-  } catch (err) {
-    ElMessage.error('绑定失败：' + (err.message || '网络错误'))
+    if (!res?.success) throw new Error(res?.error || '手机号绑定失败')
+    const phone = String(res.user?.phone || bindForm.value.phone)
+    userInfo.value.phone = phone
+    accountPhoneMasked.value = res.user?.phoneMasked || maskAccountPhone(phone)
+    accountPhoneVerified.value = true
+    const stored = readStoredObject('userInfo')
+    localStorage.setItem('userInfo', JSON.stringify({ ...stored, phone, phoneNumber:phone }))
+    localStorage.setItem('phone', phone)
+    localStorage.setItem('phoneNumber', phone)
+    bindPhoneVisible.value = false
+    bindForm.value = { phone:'', code:'' }
+    profileDialogVisible.value = true
+    ElMessage.success('手机号已绑定')
+  } catch (error) {
+    ElMessage.error(error.message || '手机号绑定失败')
   }
 }
-
 // 确认设置密码（强制）
 async function confirmSetPassword() {
   if (!canSubmitPassword.value) {
@@ -668,7 +683,7 @@ async function confirmBindEmail() {
       const saved = JSON.parse(localStorage.getItem('userInfo') || '{}')
       saved.email = boundEmail
       localStorage.setItem('userInfo', JSON.stringify(saved))
-      
+
       // 检查是否需要继续绑定手机号
       if (localStorage.getItem('needBindPhone') === 'true') {
         bindPhoneVisible.value = true
@@ -795,13 +810,14 @@ const adminNavItems = [
   { path: `${import.meta.env.BASE_URL}formation-designer.html`, label: '阵型设计器', icon: 'Place', external: true },
   { path: '/shop-admin', label: '商城管理', icon: 'ShoppingBag' },
   { path: '/insurance-admin', label: '保险业务', icon: 'FirstAidKit' },
-  { path: '/system', label: '系统管理', icon: 'Setting' }
+  { path: '/tournament-center-admin?section=support', label: '问题与协助', icon: 'Setting' }
 ]
 
 // 是否是赛事中心管理页面
 const isAdminPage = computed(() => {
-  return route.path.startsWith('/tournament-center-admin') || 
-         route.path.startsWith('/admin/')
+  return route.path.startsWith('/tournament-center-admin') ||
+         route.path.startsWith('/admin/') ||
+         (route.path === '/system' && userInfo.value.isPlatformOwner === true)
 })
 
 // 根据角色返回对应导航菜单
@@ -930,6 +946,7 @@ onMounted(() => {
   loginType.value = localStorage.getItem('loginType') || 'anonymous'
   currentRole.value = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
   loadWorkspaceAccount()
+  loadCurrentAccountProfile();
 
   ['needBindPhone', 'needSetPassword', 'needBindEmail', 'phone', 'phoneNumber']
     .forEach(key => localStorage.removeItem(key))
@@ -1192,6 +1209,10 @@ onUnmounted(() => {
 .workspace-account-copy small,.header-account-copy small { max-width:180px; overflow:hidden; color:#738078; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
 .account-dropdown-summary { display:flex; min-width:220px; flex-direction:column; gap:5px; padding:5px 0; }
 .account-dropdown-summary strong { color:#1f3026; font-size:14px; }.account-dropdown-summary span { color:#758079; font-size:12px; }
+.phone-bind-note { margin-bottom:14px; color:#66736b; font-size:13px; }
+.profile-phone-row { display:flex; min-height:32px; align-items:center; gap:10px; }
+.profile-phone-row>span { color:#26332c; font-size:15px; }
+.profile-dialog-footer { display:flex; width:100%; align-items:center; justify-content:space-between; gap:12px; }
 .account-location-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }.account-location-grid :deep(.el-select),.layout :deep(.el-dialog .el-select) { width:100%; }
 
 /* 顶部工具栏 */

@@ -20,11 +20,11 @@
       <view class="field-container">
         <!-- 足球场背景 -->
         <image class="field-bg" src="/images/field-horizontal.png" mode="aspectFit" />
-        
+
         <!-- 阵型球员位置 -->
         <view class="positions-layer">
           <block wx:for="{{positions}}" wx:key="id">
-            <view 
+            <view
               class="position-slot "
               style="left:{{item.x}}%;top:{{item.y}}%"
               data-index="{{index}}"
@@ -54,10 +54,10 @@
         <text class="panel-title">选择球员 - {{currentPositionLabel}}</text>
         <text class="panel-close" bindtap="closePlayerPanel">✕</text>
       </view>
-      
+
       <!-- 搜索框 -->
       <view class="search-box">
-        <input 
+        <input
           class="search-input"
           placeholder="搜索球员姓名"
           value="{{searchKeyword}}"
@@ -67,7 +67,7 @@
 
       <!-- 球员列表 -->
       <scroll-view class="player-list" scroll-y>
-        <view 
+        <view
           class="player-item "
           wx:for="{{filteredPlayers}}" wx:key="_id"
           wx:key="id"
@@ -101,11 +101,11 @@
     <view class="substitute-panel" wx:else>
       <view class="panel-header">
         <text class="panel-title">替补席（{{SubstitutesLen}}/12）</text>
-        <text class="panel-subtitle">点击 + 添加替补</text>
+
       </view>
 
       <scroll-view class="sub-list" scroll-y>
-        <view 
+        <view
           class="sub-item"
           wx:for="{{substitutes}}" wx:key="_id"
           wx:key="id"
@@ -119,7 +119,7 @@
         </view>
 
         <!-- 添加替补的空框 -->
-        <view 
+        <view
           class="sub-item add-slot"
           wx:if="{{SubstitutesLen < 12}}"
           bindtap="onAddSubstitute"
@@ -134,7 +134,7 @@
   <!-- 底部操作栏 -->
   <view class="bottom-bar">
     <button class="btn-cancel" bindtap="onCancel">取消</button>
-    <button 
+    <button
       class="btn-submit "
       disabled="{{selectedCount < 11}}"
       bindtap="onSubmit"
@@ -151,7 +151,7 @@
         <text class="modal-close" bindtap="hideFormationPicker">✕</text>
       </view>
       <view class="formation-grid">
-        <view 
+        <view
           class="formation-item "
           wx:for="{{formations}}" wx:key="_id"
           wx:key="id"

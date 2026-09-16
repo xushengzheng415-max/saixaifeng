@@ -646,7 +646,7 @@
         ><section class="stage-teams">
           <header>
             <div>
-              <span class="eyebrow">参抽队伍展示</span>
+
               <h3>
                 共 {{ teams.length }} 支球队参加本次小组赛抽签，其中
                 {{ seedIds.length }} 支种子队
@@ -717,7 +717,7 @@
         ><section class="stage-slots">
           <header>
             <div>
-              <span class="eyebrow">签位编排</span>
+
               <h3>{{ activeDivision.name }} {{ drawModeLabel }}签位</h3>
             </div>
             <el-tag type="success"
@@ -1038,7 +1038,7 @@
       <section class="result-panel">
         <header>
           <div>
-            <span class="eyebrow">第 5 步 · 分组结果</span>
+
             <h3>专业版抽签结果</h3>
             <p>
               结果已写入当前赛事抽签配置；进入赛程编排前仍可返回操作台复核。

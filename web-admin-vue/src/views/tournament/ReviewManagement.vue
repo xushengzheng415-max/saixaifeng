@@ -2,7 +2,7 @@
   <div class="review-management">
     <div class="page-header">
       <h2>参赛审核管理</h2>
-      <p class="page-description">管理球队参赛申请的审核请求</p>
+
     </div>
 
     <!-- 筛选栏 -->
@@ -173,20 +173,20 @@ async function loadReviewRequests() {
       page: currentPage.value - 1,
       limit: pageSize.value
     }
-    
+
     if (filterStatus.value) {
       params.status = filterStatus.value
     }
-    
+
     if (filterTournament.value) {
       params.tournamentId = filterTournament.value
     }
-    
+
     const result = await callFunction('tournamentReview', {
       action: 'getRequests',
       ...params
     })
-    
+
     if (result && result.success) {
       requests.value = result.data || []
       total.value = result.total || 0
@@ -215,18 +215,18 @@ async function handleApprove(req) {
         type: 'warning'
       }
     )
-    
+
     actionLoading.value = true
-    
+
     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    
+
     const result = await callFunction('tournamentReview', {
       action: 'approve',
       requestId: req._id,
       reviewerId: userInfo.uid || '',
       reviewerName: userInfo.userName || '管理员'
     })
-    
+
     if (result && result.success) {
       ElMessage.success('已批准该参赛申请')
       loadReviewRequests()
@@ -260,12 +260,12 @@ async function confirmReject() {
     ElMessage.warning('请输入拒绝原因')
     return
   }
-  
+
   actionLoading.value = true
-  
+
   try {
     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    
+
     const result = await callFunction('tournamentReview', {
       action: 'reject',
       requestId: currentRequest.value._id,
@@ -273,7 +273,7 @@ async function confirmReject() {
       reviewerName: userInfo.userName || '管理员',
       rejectReason: rejectReason.value
     })
-    
+
     if (result && result.success) {
       ElMessage.success('已拒绝该参赛申请')
       rejectDialogVisible.value = false

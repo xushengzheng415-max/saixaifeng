@@ -14,7 +14,7 @@
         <span class="context-divider"></span>
         <span>{{ activeDivisionDisplayName }}</span>
         <el-tag :type="isProfessional ? 'warning' : 'success'" effect="plain" round>
-          {{ isProfessional ? '专业版' : '简易版 · 免费' }}
+          {{ isProfessional ? '专业版' : '基础版 · 免费' }}
         </el-tag>
       </div>
       <el-button plain @click="router.push('/tournament-space')">退出赛事</el-button>
@@ -23,11 +23,12 @@
     <main class="teams-page-content">
       <div class="teams-page-heading">
         <div>
-          <div class="heading-eyebrow">赛事运营 / {{ isRegistrationWorkspace ? '报名管理' : '球队管理' }}</div>
+
           <h1>{{ isRegistrationWorkspace ? '报名管理' : '球队管理' }}</h1>
-          <p>{{ isRegistrationWorkspace ? '管理报名入口、宣传物料、定向邀请与球队资格审核。' : '管理已审核通过的参赛球队、球员与赛事正式名单。' }}</p>
+
         </div>
-        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button type="success" plain @click="openSyntheticTeamDialog"><el-icon><Plus /></el-icon>添加虚拟球队</el-button><el-button @click="openQrDialog"><el-icon><Picture /></el-icon>生成报名海报</el-button><el-button type="primary" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>邀约球队</el-button><el-button plain type="success" @click="openBulkTeamDialog"><el-icon><Grid /></el-icon>批量添加资料</el-button><el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button></div>
+        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button type="success" plain @click="openSyntheticTeamDialog"><el-icon><Plus /></el-icon>添加虚拟球队</el-button><el-button @click="openQrDialog"><el-icon><Picture /></el-icon>生成报名海报</el-button><el-button type="primary" plain @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button><el-button type="primary" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>生成公开邀约</el-button><el-button plain type="success" @click="openBulkTeamDialog"><el-icon><Grid /></el-icon>批量添加资料</el-button><el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button></div>
+        <div v-else class="heading-actions"><el-button type="primary" @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button></div>
       </div>
 
       <section class="division-toolbar">
@@ -46,7 +47,7 @@
         <template v-else><el-tab-pane label="已审核球队" name="all" /><el-tab-pane v-if="isProfessional" label="参赛名单" name="roster" /><el-tab-pane v-if="isProfessional" label="名单异常" name="abnormal" /><el-tab-pane :label="isProfessional ? '名单变更' : '球队变更'" name="cancel_requested" /></template>
       </el-tabs>
 
-      <section v-if="activeTab === 'materials'" class="registration-materials"><header><div><h2>赛事宣传物料</h2><p>选择版式后，系统自动填入当前赛事与组别资料，生成正式报名海报。</p></div><el-button type="primary" @click="openQrDialog"><el-icon><Picture /></el-icon>生成当前版式海报</el-button></header><div class="poster-template-grid"><button v-for="template in posterTemplates" :key="template.id" type="button" :class="{ active:posterTemplate===template.id }" @click="posterTemplate=template.id"><span :class="`poster-template-preview ${template.id}`"></span><strong>{{ template.name }}</strong><small>{{ template.description }}</small></button></div><el-alert type="info" :closable="false" title="竞赛规程全文保留在小程序报名页，海报只显示“规程已发布”和扫码入口，避免信息过载。" /></section>
+      <section v-if="activeTab === 'materials'" class="registration-materials"><header><div><h2>赛事宣传物料</h2></div><el-button type="primary" @click="openQrDialog"><el-icon><Picture /></el-icon>生成当前版式海报</el-button></header><div class="poster-template-grid"><button v-for="template in posterTemplates" :key="template.id" type="button" :class="{ active:posterTemplate===template.id }" @click="posterTemplate=template.id"><span :class="`poster-template-preview ${template.id}`"></span><strong>{{ template.name }}</strong><small>{{ template.description }}</small></button></div><el-alert type="info" :closable="false" title="竞赛规程全文保留在小程序报名页，海报只显示“规程已发布”和扫码入口，避免信息过载。" /></section>
       <section v-else-if="isRegistrationWorkspace && activeTab === 'all'" class="team-summary-grid">
         <article><span>报名球队</span><strong>{{ divisionTournamentTeams.length }}</strong><small>支</small></article>
         <article><span>待资格审核</span><strong :class="{ danger: pendingTeams.length > 0 }">{{ pendingTeams.length }}</strong><small>支</small></article>
@@ -101,7 +102,7 @@
       <el-alert
         v-if="activeTab !== 'materials'"
         class="teams-mode-notice"
-        :title="isSimpleChangeView ? `本组报名已于 ${simpleChangeDeadline} 截止；参赛队名与队徽已锁定，普通流程不再允许修改。` : (isApplicationReviewView ? '球队可通过主办方邀请进入，或在赛小蜂小程序搜索赛事后申请；无论哪种入口，球队都必须在小程序完成认领与参赛确认。' : (isProfessional ? '专业版按赛事正式名单管理球员资格；审核后的名单与比赛阵容均保留独立快照。' : '简易版以球队为单位快速参赛；需要球员资格审核与正式名单时，可将组别升级为专业版。'))"
+        :title="isSimpleChangeView ? `本组报名已于 ${simpleChangeDeadline} 截止；参赛队名与队徽已锁定，普通流程不再允许修改。` : (isApplicationReviewView ? '球队可通过主办方邀请进入，或在赛小蜂小程序搜索赛事后申请；无论哪种入口，球队都必须在小程序完成认领与参赛确认。' : (isProfessional ? '专业版按赛事正式名单管理球员资格；审核后的名单与比赛阵容均保留独立快照。' : '基础版以球队为单位快速参赛；需要球员资格审核与正式名单时，可将组别升级为专业版。'))"
         :type="isSimpleChangeView ? 'info' : (isProfessional ? 'warning' : 'success')"
         :closable="false"
         show-icon
@@ -214,7 +215,7 @@
               <el-button v-if="activeDivisionId === 'default'" link type="success" @click="openDivisionAssignment(row)">分配组别</el-button>
               <template v-if="row.status === 'pending'"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template>
               <template v-else-if="row.status === 'cancel_requested'"><el-button link type="danger" @click="approveCancel(row)">同意变更</el-button><el-button link @click="rejectCancel(row)">驳回</el-button></template>
-              <template v-else><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><el-button v-if="isProfessional && row.status === 'approved'" link type="primary" @click="openTeamRoster(row)">查看名单</el-button><el-button v-if="isProfessional && claimLabel(row) !== '已认领'" link type="success" @click="openClaimReminder(row)">发送认领提醒</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(row.status)" link type="warning" :loading="retryingNotificationId===getRecordId(row)" @click="retryRegistrationNotification(row)">重发通知</el-button><el-button v-if="row.status === 'invited'" link type="danger" @click="cancelInvite(row)">取消邀请</el-button><el-button v-if="row.status === 'approved'" link type="danger" @click="removeTeam(row)">移除</el-button></template>
+              <template v-else><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><el-button v-if="row.status === 'invited' && claimLabel(row) !== '已认领'" link type="success" @click="openClaimReminder(row)">认领链接</el-button><el-button v-if="isProfessional && row.status === 'approved'" link type="primary" @click="openTeamRoster(row)">查看名单</el-button><el-button v-if="isProfessional && row.status !== 'invited' && claimLabel(row) !== '已认领'" link type="success" @click="openClaimReminder(row)">发送认领提醒</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(row.status)" link type="warning" :loading="retryingNotificationId===getRecordId(row)" @click="retryRegistrationNotification(row)">重发通知</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></template>
             </div>
             </template>
           </div>
@@ -225,7 +226,7 @@
       <el-dialog v-model="syntheticTeamDialogVisible" title="添加虚拟球队" width="760px"><div class="synthetic-team-dialog-heading"><div><strong>{{ activeDivision.name }}</strong><span>可多选；添加后进入待审查，不会自动通过。</span></div><el-button link type="primary" :disabled="!availableSyntheticTeams.length" @click="selectAllSyntheticTeams">选择全部可用球队</el-button></div><div v-loading="syntheticTeamLoading" class="synthetic-team-grid"><label v-for="team in syntheticTeamCandidates" :key="team._id" class="synthetic-team-option" :class="{ disabled:team.alreadyAdded }"><el-checkbox v-model="selectedSyntheticTeamIds" :value="team._id" :disabled="team.alreadyAdded" /><img :src="team.logo || team.logoUrl" alt="" /><span><strong>{{ team.name || team.teamName }}</strong><small>{{ team.alreadyAdded ? '已加入当前组别' : `${team.playerCount || 15}名球员 · 可添加` }}</small></span></label><el-empty v-if="!syntheticTeamLoading && !syntheticTeamCandidates.length" description="当前年龄组暂无虚拟球队" /></div><template #footer><el-button @click="syntheticTeamDialogVisible=false">取消</el-button><el-button type="primary" :loading="addingSyntheticTeams" :disabled="!selectedSyntheticTeamIds.length" @click="submitSyntheticTeams">添加已选 {{ selectedSyntheticTeamIds.length }} 支球队</el-button></template></el-dialog>
       <section v-if="isApplicationReviewView && pendingClaimRows.length" class="teams-table-panel pending-claim-panel">
         <div class="table-toolbar"><div><strong>主办方邀请待认领 {{ pendingClaimRows.length }} 支</strong></div></div>
-        <div class="teams-data-table" role="table"><div class="teams-table-row pending-claim-row teams-table-head" role="row"><span>球队（队徽 + 名称）</span><span>所属组别</span><span>专属小程序认领链接</span><span>发送时间</span><span>操作</span></div><div v-for="row in pendingClaimRows" :key="row.recordId" class="teams-table-row pending-claim-row" role="row"><div class="team-identity"><img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" /><span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span><div><strong>{{ row.name || row.teamName }}</strong></div></div><span>{{ activeDivision.name }}</span><span><el-tag type="warning" effect="plain" size="small">未认领</el-tag></span><span>{{ applicationTime(row) }}</span><div class="team-row-actions"><el-button link type="primary" @click="openClaimReminder(row)">复制认领链接</el-button><el-button link type="success" @click="openClaimReminder(row)">发送提醒</el-button><el-button link type="danger" @click="cancelInvite(row)">撤回邀请</el-button></div></div></div>
+        <div class="teams-data-table" role="table"><div class="teams-table-row pending-claim-row teams-table-head" role="row"><span>球队（队徽 + 名称）</span><span>所属组别</span><span>专属小程序认领链接</span><span>发送时间</span><span>操作</span></div><div v-for="row in pendingClaimRows" :key="row.recordId" class="teams-table-row pending-claim-row" role="row"><div class="team-identity"><img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" /><span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span><div><strong>{{ row.name || row.teamName }}</strong></div></div><span>{{ activeDivision.name }}</span><span><el-tag type="warning" effect="plain" size="small">未认领</el-tag></span><span>{{ applicationTime(row) }}</span><div class="team-row-actions"><el-button link type="primary" @click="openClaimReminder(row)">复制认领链接</el-button><el-button link type="success" @click="openClaimReminder(row)">发送提醒</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></div></div></div>
       </section>
       <div v-if="isProfessionalApplicationView" class="professional-application-boundary"><el-icon><InfoFilled /></el-icon><span>申请通过后，球队先完成小程序认领与参赛确认，再进入赛事参赛名单提交；审核不会自动生成名单或授予球队所有权。</span></div>
     </main>
@@ -310,7 +311,7 @@
             style="width: 240px"
           />
         </div>
-        
+
         <el-alert
           v-if="availableSlots <= 0"
           title="参赛名额已满，无法邀请更多球队"
@@ -335,17 +336,17 @@
             v-for="team in availableTeamsToInvite"
             :key="team._id"
             class="available-team-item"
-            :class="{ 
+            :class="{
               selected: selectedTeams.includes(team._id),
               disabled: availableSlots <= 0 && !selectedTeams.includes(team._id)
             }"
             @click="toggleSelectTeam(team._id)"
           >
-            <el-checkbox 
-              :model-value="selectedTeams.includes(team._id)" 
+            <el-checkbox
+              :model-value="selectedTeams.includes(team._id)"
               :disabled="availableSlots <= 0 && !selectedTeams.includes(team._id)"
             />
-            <img v-if="team.logo || team.logoUrl" :src="team.logo || team.logoUrl" class="team-thumb" />
+            <img v-if="team.logo || team.logoUrl" :src="team.logo || team.logoUrl" class="team-thumb" @error="clearInviteTeamLogo(team)" />
             <div v-else class="team-thumb-placeholder">{{ (team.name || '?')[0] }}</div>
             <div class="team-info">
               <span class="team-name">{{ team.name }}</span>
@@ -400,47 +401,39 @@
     <!-- 添加球队弹窗：字段与球队身份创建球队保持一致 -->
     <el-dialog
       v-model="showCreateTeamDialog"
-      title="添加球队"
-      width="620px"
+      :title="createTeamEntryMode === 'upload' ? '上传球队资料' : '添加球队'"
+      :width="createTeamEntryMode === 'upload' ? 'min(1180px, calc(100vw - 48px))' : '620px'"
       :close-on-click-modal="false"
       destroy-on-close
       :teleported="!qaSnapshot"
     >
-      <el-form :model="createTeamForm" label-position="top">
+      <div class="create-entry-switch">
+        <button type="button" :class="{ active: createTeamEntryMode === 'manual' }" @click="createTeamEntryMode = 'manual'">手动添加</button>
+        <button type="button" :class="{ active: createTeamEntryMode === 'upload' }" @click="createTeamEntryMode = 'upload'"><el-icon><Upload /></el-icon>上传球队资料</button>
+      </div>
+
+      <TeamRegistrationWordImporter
+        v-if="createTeamEntryMode === 'upload'"
+        :tournament-id="tournamentId"
+        :division="activeDivision"
+        :available-slots="availableSlots"
+        :existing-team-names="divisionTournamentTeams.map(team => team.name || team.teamName || '')"
+        @cancel="showCreateTeamDialog = false"
+        @success="onRegistrationWordBatchImported"
+      />
+
+      <el-form v-else :model="createTeamForm" label-position="top">
         <div class="create-mode-switch">
           <div>
             <div class="create-mode-title">创建模式</div>
-            <div class="create-mode-tip">简易模式只填写球队名称和 Logo，完整模式可补充球队资料</div>
+            <div class="create-mode-tip">基础模式只填写球队名称和 Logo，完整模式可补充球队资料</div>
           </div>
           <el-radio-group v-model="createTeamMode">
-            <el-radio-button value="simple">简易模式</el-radio-button>
+            <el-radio-button value="simple">基础模式</el-radio-button>
             <el-radio-button value="full">完整模式</el-radio-button>
           </el-radio-group>
         </div>
 
-        <div v-if="createTeamMode === 'full'" class="create-word-import">
-          <div class="create-word-import-main">
-            <div>
-              <div class="create-word-import-title">Word 报名表快速填充</div>
-              <div class="create-word-import-tip">自动识别球队名称和报名表中的第一张图片（球队 Logo）</div>
-            </div>
-            <el-upload
-              accept=".docx"
-              :auto-upload="false"
-              :show-file-list="false"
-              :on-change="handleCreateWordFileChange"
-            >
-              <el-button type="success" plain :loading="parsingCreateWord">
-                <el-icon v-if="!parsingCreateWord"><Upload /></el-icon>
-                {{ parsingCreateWord ? '正在识别...' : '上传 Word 报名表' }}
-              </el-button>
-            </el-upload>
-          </div>
-          <div v-if="createWordImportFileName" class="create-word-import-result">
-            <span>已读取：{{ createWordImportFileName }}</span>
-            <span>{{ createWordImportHasLogo ? '已提取球队 Logo，请核对下方内容' : '未找到 Logo，可在下方手动上传' }}</span>
-          </div>
-        </div>
         <el-alert v-if="divisionOptions.length > 1" :title="`新球队将直接加入 ${activeDivision.name} 组`" type="success" :closable="false" style="margin-bottom: 14px" />
         <el-row v-if="isProfessional" :gutter="16"><el-col :span="12"><el-form-item label="球队负责人" required><el-input v-model="createTeamForm.contactName" placeholder="请输入负责人姓名" maxlength="30" /></el-form-item></el-col><el-col :span="12"><el-form-item label="负责人手机号" required><el-input v-model="createTeamForm.contactPhone" placeholder="请输入负责人手机号" maxlength="20" /></el-form-item></el-col></el-row>
         <el-row :gutter="16">
@@ -526,7 +519,7 @@
         </el-form-item>
       </el-form>
 
-      <template #footer>
+      <template v-if="createTeamEntryMode === 'manual'" #footer>
         <el-button @click="showCreateTeamDialog = false">取消</el-button>
         <el-button type="primary" :loading="creatingTeam" @click="submitCreateTeam">创建并加入赛事</el-button>
       </template>
@@ -667,6 +660,7 @@ import { Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, Upload, Use
 import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, getFileUrl, assignTournamentTeamDivision } from '../../utils/cloud'
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
+import TeamRegistrationWordImporter from '../../components/tournament/TeamRegistrationWordImporter.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -816,6 +810,7 @@ watch(
 const showCreateTeamDialog = ref(Boolean(qaSnapshot && route.query.action === 'quick-add' && qaRequestedDivisionId === 'qa-division-u16'))
 const creatingTeam = ref(false)
 const createTeamMode = ref('simple')
+const createTeamEntryMode = ref('manual')
 const uploadingCreateLogo = ref(false)
 const parsingCreateWord = ref(false)
 const createWordImportFileName = ref('')
@@ -914,8 +909,11 @@ const claimInvitePath = computed(() => {
 })
 const claimQrSvg = computed(() => createQrSvg(claimInvitePath.value, '#111b15'))
 const claimParticipationCode = computed(() => claimReminderTeam.value.participationCode || claimReminderTeam.value.teamCode || claimReminderTeam.value.registrationCode || `HNYC-${String(activeDivision.value.name || 'U16').replace('组', '')}-${String(claimReminderTeam.value.recordId || claimReminderTeam.value._id || '005').slice(-3).toUpperCase()}`)
+function teamContactPhone(team) {
+  return String(team?.contactPhone || team?.managerPhone || team?.ownerPhone || team?.creatorPhone || team?.phoneNumber || team?.phone || team?.mobile || '').trim()
+}
 const maskedClaimPhone = computed(() => {
-  const phone = String(claimReminderTeam.value.contactPhone || claimReminderTeam.value.phone || '')
+  const phone = teamContactPhone(claimReminderTeam.value)
   if (!phone) return '未留联系电话'
   if (phone.includes('*')) return phone
   return phone.length >= 7 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone
@@ -1164,11 +1162,11 @@ const availableSlots = computed(() => {
 
 const filteredTeams = computed(() => {
   let list = isProfessionalApplicationView.value && qaSnapshot ? applicationReviewRows.value : divisionTournamentTeams.value
-  
+
   // 按标签筛选
   if (activeTab.value === 'all') {
     list = isRegistrationWorkspace.value
-      ? list.filter(t => !['cancel_requested', 'withdrawn', 'cancelled'].includes(t.status))
+      ? list.filter(t => !['cancel_requested', 'invite_cancelled', 'withdrawn', 'removed', 'cancelled'].includes(t.status))
       : list.filter(t => t.status === 'approved')
   } else if (activeTab.value === 'roster') {
     list = list.filter(t => t.status === 'approved')
@@ -1177,11 +1175,11 @@ const filteredTeams = computed(() => {
   } else if (activeTab.value !== 'all') {
     list = list.filter(t => t.status === activeTab.value)
   }
-  
+
   // 搜索筛选
   if (searchKeyword.value) {
     const kw = searchKeyword.value.toLowerCase()
-    list = list.filter(t => 
+    list = list.filter(t =>
       (t.name || t.teamName || '').toLowerCase().includes(kw) ||
       (t.contactName || t.coachName || '').toLowerCase().includes(kw)
     )
@@ -1206,7 +1204,7 @@ const filteredTeams = computed(() => {
   if (isApplicationReviewView.value && applicationStatus.value) {
     list = list.filter(t => t.status === applicationStatus.value)
   }
-  
+
   return list
 })
 
@@ -1250,7 +1248,10 @@ const getSelectedTeamNames = computed(() => {
 // 可邀请的球队列表
 const availableTeamsToInvite = computed(() => {
   // 已关联赛事的球队ID（包括已邀请、待确认、已参赛、已拒绝）
-  const invitedTeamIds = divisionTournamentTeams.value.map(t => t.teamId).filter(Boolean)
+  const invitedTeamIds = divisionTournamentTeams.value
+    .filter(t => !['invite_cancelled', 'cancelled', 'withdrawn', 'rejected'].includes(String(t.status || '').toLowerCase()))
+    .map(t => t.teamId)
+    .filter(Boolean)
 
 
   const available = allTeams.value
@@ -1284,9 +1285,18 @@ function teamInitial(team) {
   return Array.from(team.name || team.teamName || '?')[0] || '?'
 }
 
+function clearInviteTeamLogo(team) {
+  if (!team) return
+  team.logo = ''
+  team.logoUrl = ''
+}
+
 function applicationOwner(team) {
-  const name = team.contactName || team.coachName || '待补充'
-  const phone = team.contactPhone || team.phone || '138****2468'
+  const name = team.contactName || team.managerName || team.coachName || '待补充'
+  const rawPhone = teamContactPhone(team)
+  const phone = rawPhone
+    ? (rawPhone.includes('*') ? rawPhone : (rawPhone.length >= 7 ? `${rawPhone.slice(0, 3)}****${rawPhone.slice(-4)}` : rawPhone))
+    : '未留联系电话'
   return `${name} ${phone}`
 }
 
@@ -1552,7 +1562,30 @@ function openCreateTeamDialog() {
     return
   }
   resetCreateTeamForm()
+  createTeamEntryMode.value = 'manual'
   showCreateTeamDialog.value = true
+}
+
+async function onRegistrationWordBatchImported(payload) {
+  showCreateTeamDialog.value = false
+  await Promise.all([loadTournamentTeams(), loadAllTeams()])
+  const invitations = Array.isArray(payload?.invitations) ? payload.invitations : []
+  if (invitations.length) {
+    targetedInviteResults.value = invitations.map(item => ({
+      teamId: item.teamId,
+      teamName: item.teamName,
+      tournamentTeamId: item.tournamentTeamId,
+      inviteId: item.inviteId,
+      path: item.path || '',
+      urlLink: item.urlLink || '',
+      qrCodeUrl: item.qrCodeUrl || '',
+      envVersion: item.envVersion || 'release',
+      testOnly: false,
+      success: item.success !== false,
+      error: item.error || ''
+    }))
+    targetedInviteResultVisible.value = true
+  }
 }
 
 function bulkFieldEnabled(field) {
@@ -2136,12 +2169,12 @@ async function loadTournamentTeams() {
       where: { tournamentId },
       orderBy: { createTime: 'desc' }
     })
-    
+
     // 获取球队详情
     const teamIds = list.map(t => t.teamId).filter(Boolean)
     if (teamIds.length > 0) {
       const teamsData = await queryList('teams', { where: { _id: { $in: teamIds } } })
-      
+
       const teamMap = {}
       teamsData.forEach(t => {
         teamMap[t._id] = t
@@ -2162,7 +2195,7 @@ async function loadTournamentTeams() {
         if (!playerIdsByTeam.has(linkedTeamId)) playerIdsByTeam.set(linkedTeamId, new Set())
         playerIdsByTeam.get(linkedTeamId).add(String(player._id || `${player.name || ''}:${player.birthDate || ''}`))
       })
-      
+
       const mergedRows = list.map(item => {
         const teamData = teamMap[item.teamId] || {}
         const logoFileId = teamData.logo || teamData.logoUrl || teamData.logoTransparent || item.teamLogo || item.logo || item.logoUrl || ''
@@ -2218,7 +2251,17 @@ async function loadAllTeams() {
     const list = await queryList('teams', {
       orderBy: { createTime: 'desc' }
     })
-    allTeams.value = list || []
+    const rows = Array.isArray(list) ? list : []
+    const cloudLogoIds = [...new Set(rows
+      .map(team => String(team.logo || team.logoUrl || team.logoTransparent || ''))
+      .filter(value => value.startsWith('cloud://')))]
+    const resolvedPairs = await Promise.all(cloudLogoIds.map(async fileId => [fileId, await getFileUrl(fileId)]))
+    const resolvedMap = new Map(resolvedPairs.filter(([, url]) => /^https?:\/\//i.test(String(url || ''))))
+    allTeams.value = rows.map(team => {
+      const source = String(team.logo || team.logoUrl || team.logoTransparent || '')
+      const url = source.startsWith('cloud://') ? (resolvedMap.get(source) || '') : source
+      return { ...team, logo: url, logoUrl: url }
+    })
   } catch (err) {
     console.error('加载球队列表失败:', err)
     ElMessage.error('加载球队列表失败')
@@ -2676,14 +2719,22 @@ function getRecordId(team) {
 // 取消邀请
 async function cancelInvite(team) {
   try {
-    await ElMessageBox.confirm(`确定取消对「${team.name || team.teamName}」的邀请吗？`, '确认取消')
-    await deleteRecord('tournament_teams', getRecordId(team))
-    ElMessage.success('已取消邀请')
+    await ElMessageBox.confirm(`确定撤回对「${team.name || team.teamName}」的赛事邀约吗？球队资料和球员库会继续保留。`, '撤回邀约', {
+      confirmButtonText: '撤回邀约',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    const result = await callFunction('tournamentRegistrationFlow', {
+      action: 'cancelTournamentInvitation',
+      registrationId: getRecordId(team)
+    })
+    if (!result?.success) throw new Error(result?.message || '撤回邀约失败')
+    ElMessage.success(result.message || '邀约已撤回，球队资料仍保留')
     await loadTournamentTeams()
   } catch (err) {
-    if (err !== 'cancel') {
+    if (!['cancel', 'close'].includes(err)) {
       console.error('取消邀请失败:', err)
-      ElMessage.error('操作失败')
+      ElMessage.error(err.message || '撤回邀约失败')
     }
   }
 }
@@ -2736,19 +2787,62 @@ async function rejectTeam(team) {
   }
 }
 
-// 移除已参赛球队
+// 删除尚未认领的预建球队及其业务资料
+async function deleteUnclaimedTeam(team) {
+  try {
+    const confirmation = await ElMessageBox.prompt(
+      `将永久删除“${team.name || team.teamName}”的球队资料、球员、工作人员、报名草稿和邀请。登录账号不会删除。请输入“删除队伍”确认。`,
+      '删除未认领球队',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'error',
+        inputPattern: /^删除队伍$/,
+        inputErrorMessage: '请输入“删除队伍”'
+      }
+    )
+    const result = await callFunction('tournamentRegistrationFlow', {
+      action: 'deleteUnclaimedTournamentTeam',
+      registrationId: getRecordId(team),
+      confirmText: confirmation.value
+    })
+    if (!result?.success) throw new Error(result?.message || '删除队伍失败')
+    ElMessage.success(result.message || '未认领球队已删除')
+    await Promise.all([loadTournamentTeams(), loadAllTeams()])
+  } catch (err) {
+    if (!['cancel', 'close'].includes(err)) {
+      console.error('删除未认领球队失败:', err)
+      ElMessage.error(err.message || '删除队伍失败')
+    }
+  }
+}
+
+// 已认领球队只移出当前赛事，保留长期资料
 async function removeTeam(team) {
   try {
-    await ElMessageBox.confirm(`确定将「${team.name || team.teamName}」从赛事中移除吗？`, '确认移除', {
-      type: 'warning'
+    const confirmation = await ElMessageBox.prompt(
+      `将“${team.name || team.teamName}”移出本届赛事，球队、球员和账号资料继续保留，以后可以重新邀请。请输入“移出赛事”确认。`,
+      '移出赛事',
+      {
+        confirmButtonText: '确认移出',
+        cancelButtonText: '取消',
+        type: 'warning',
+        inputPattern: /^移出赛事$/,
+        inputErrorMessage: '请输入“移出赛事”'
+      }
+    )
+    const result = await callFunction('tournamentRegistrationFlow', {
+      action: 'removeClaimedTournamentTeam',
+      registrationId: getRecordId(team),
+      confirmText: confirmation.value
     })
-    await deleteRecord('tournament_teams', getRecordId(team))
-    ElMessage.success('已移除')
-    await loadTournamentTeams()
+    if (!result?.success) throw new Error(result?.message || '移出赛事失败')
+    ElMessage.success(result.message || '球队已移出赛事')
+    await Promise.all([loadTournamentTeams(), loadAllTeams()])
   } catch (err) {
-    if (err !== 'cancel') {
+    if (!['cancel', 'close'].includes(err)) {
       console.error('移除失败:', err)
-      ElMessage.error('操作失败')
+      ElMessage.error(err.message || '移出赛事失败')
     }
   }
 }
@@ -3307,11 +3401,11 @@ onMounted(async () => {
   .stats-bar {
     grid-template-columns: repeat(3, 1fr);
   }
-  
+
   .teams-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .action-bar {
     flex-direction: column;
     gap: 12px;
@@ -3555,8 +3649,9 @@ onMounted(async () => {
 .table-toolbar > div { display: flex; align-items: baseline; gap: 10px; }
 .table-toolbar strong { font-size: 15px; }
 .table-toolbar span { color: #89928b; font-size: 12px; }
-.teams-data-table { width: 100%; }
-.teams-table-row { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(120px, .9fr) minmax(108px, .75fr) minmax(100px, .72fr) minmax(112px, .82fr) 72px minmax(160px, .9fr); align-items: center; min-height: 68px; padding: 0 18px; border-top: 1px solid #edf0ed; color: #38423a; font-size: 13px; column-gap: 12px; }
+.teams-data-table { width: 100%; min-width: 1120px; }
+.teams-table-panel { overflow-x: auto; }
+.teams-table-row { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(120px, .9fr) minmax(108px, .75fr) minmax(100px, .72fr) minmax(112px, .82fr) 72px minmax(220px, 1.15fr); align-items: center; min-height: 68px; padding: 0 18px; border-top: 1px solid #edf0ed; color: #38423a; font-size: 13px; column-gap: 12px; }
 .teams-table-row.professional-table-row{grid-template-columns:minmax(220px,1.62fr) minmax(130px,.9fr) minmax(112px,.78fr) minmax(116px,.86fr) 88px minmax(134px,.92fr) 65px minmax(168px,1.16fr);min-height:71px;column-gap:10px}.professional-team-panel .table-toolbar{padding:0;border-bottom:0}.professional-team-panel .table-toolbar>div{display:none}.professional-team-panel .table-toolbar .el-input{display:none}.professional-team-panel .teams-table-head{min-height:48px;background:#fafbfa}.professional-team-panel .team-crest{width:40px;height:40px}.professional-team-panel .team-row-actions{gap:8px}.professional-team-panel .team-row-actions .el-button{margin:0;padding:0;font-size:12px}
 .teams-table-head { min-height: 48px; border-top: 0; background: #f7f9f7; color: #647067; font-size: 12px; font-weight: 650; }
 .professional-team-overview .teams-page-content{position:relative;padding-top:28px}
@@ -3629,7 +3724,8 @@ onMounted(async () => {
 .change-history-row { display: grid; grid-template-columns: 1.08fr .84fr 1.05fr .82fr 28px .9fr .7fr 1fr .66fr .68fr; align-items: center; min-height: 43px; padding: 0 16px; border-top: 1px solid #edf0ed; column-gap: 8px; font-size: 12px; }
 .change-history-head { min-height: 39px; border-top: 0; background: #f7f9f7; color: #5d6860; font-weight: 650; }.change-history-row strong { font-size: 12px; }.change-arrow { color: #15924c; font-size: 18px; }
 .change-principles { display: grid; grid-template-columns: 1.45fr .9fr; gap: 14px; margin-top: 10px; }.change-principles > div { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 16px; border: 1px solid #dce8f7; border-radius: 8px; background: #f5f9ff; color: #4f5f70; font-size: 12px; }.change-principles > div:last-child { align-items: flex-start; flex-direction: column; justify-content: center; gap: 3px; background: #fff; }.change-principles strong { color: #2474d8; }.change-principles .el-icon { color: #2474d8; font-size: 20px; }
-.team-row-actions { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+.team-row-actions { display: flex; min-width: 0; align-items: center; gap: 10px; white-space: nowrap; }
+.team-row-actions :deep(.el-button) { flex: 0 0 auto; margin: 0; padding-right: 0; padding-left: 0; }
 .teams-empty { padding: 46px 18px; color: #89928b; text-align: center; }
 .team-identity { gap: 12px; }
 .team-crest { width: 42px; height: 42px; flex: 0 0 auto; object-fit: contain; }
@@ -3736,4 +3832,5 @@ onMounted(async () => {
   background: #f5f8f5;
   font-size: 11px;
 }
+.create-entry-switch{display:inline-flex;gap:4px;margin-bottom:16px;padding:4px;border:1px solid #dfe7e1;background:#f5f8f6}.create-entry-switch button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 15px;border:0;background:transparent;color:#536159;cursor:pointer}.create-entry-switch button.active{background:#fff;color:#087d41;box-shadow:0 0 0 1px #b9d6c3 inset}.create-entry-switch .el-icon{font-size:15px}
 </style>

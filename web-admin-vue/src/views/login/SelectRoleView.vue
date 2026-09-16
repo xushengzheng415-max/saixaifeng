@@ -3,7 +3,7 @@
     <div class="organizer-card">
       <h1>赛小蜂足球</h1>
       <el-tag type="success" size="large">主办方后台</el-tag>
-      <p>当前系统仅保留主办方登录身份，无需选择身份。</p>
+
       <el-button type="primary" size="large" @click="enterOrganizer">进入赛事管理</el-button>
     </div>
   </div>

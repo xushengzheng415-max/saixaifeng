@@ -54,6 +54,7 @@ Page({
     showAssistField: true,
     showPlayerField: true,
     showDescriptionField: false
+    ,showIdentityTask:false, showAdultScan:false, identityTask:{}, identityPlayers:[], scannedPlayer:{}, scannedPassToken:'', showScannedPass:false
   },
 
   onLoad: function(options) {
@@ -88,6 +89,7 @@ Page({
     that.callWorkflow({ action: 'getRefereeMatch', matchId: that.data.matchId }, function(res) {
       var result = res.result || {}
       if (!result.success) {
+        if (result.code === 'REFEREE_FORBIDDEN' || result.code === 'REFEREE_ROLE_FORBIDDEN') { that.loadIdentityTask(); return }
         that.setData({
           loading: false,
           needsPhone: result.code === 'PHONE_REQUIRED',
@@ -103,6 +105,37 @@ Page({
     })
   },
 
+  loadIdentityTask:function() {
+    var that=this
+    that.callWorkflow({ action:'getIdentityVerificationTask', matchId:that.data.matchId }, function(res) {
+      var result=res.result || {}
+      if (!result.success) { that.setData({ loading:false, errorMsg:result.message || '身份核验任务加载失败' }); return }
+      var task=result.data || {}
+      that.setData({ loading:false, errorMsg:'', needsPhone:false, showMatchContent:false, showIdentityTask:true, showAdultScan:task.participantType === 'adult' && task.canVerifyStarters, identityTask:task, identityPlayers:task.starters || [], tournamentName:'身份核验任务', teamsText:(task.teamName || '') + ' vs ' + (task.opponentName || ''), matchTimeText:task.matchTimeText || '', venue:task.venue || '', matchStatusText:task.lineupStatus || '', refereeRoleLabel:task.roleLabel || '' })
+    }, function() { that.setData({ loading:false, errorMsg:'网络异常，请重试' }) })
+  },
+
+  scanAdultPass:function() {
+    var that=this
+    wx.scanCode({ onlyFromCamera:true, scanType:['qrCode'], success:function(scan) {
+      var token=String(scan.result || '')
+      that.callWorkflow({ action:'previewAdultMatchPass', matchId:that.data.matchId, passToken:token }, function(res) {
+        var result=res.result || {}
+        if (!result.success) { wx.showModal({ title:'参赛证无效', content:result.message || '请核对后重试', showCancel:false }); return }
+        that.setData({ scannedPlayer:result.data && result.data.player || {}, scannedPassToken:token, showScannedPass:true })
+      }, function() { wx.showToast({ title:'核验失败，请重试', icon:'none' }) })
+    }, fail:function(error) { if (String(error.errMsg || '').indexOf('cancel') < 0) wx.showToast({ title:'未识别到二维码', icon:'none' }) } })
+  },
+  closeScannedPass:function() { this.setData({ showScannedPass:false, scannedPlayer:{}, scannedPassToken:'' }) },
+  confirmScannedPass:function() {
+    var that=this, task=this.data.identityTask, player=this.data.scannedPlayer
+    this.callWorkflow({ action:'verifyLineupPlayer', matchId:this.data.matchId, side:task.side, playerId:player.id, decision:'passed', method:'adult_qr', passToken:this.data.scannedPassToken }, function(res) { var result=res.result || {}; if (!result.success) return wx.showModal({ title:'确认失败', content:result.message || '请重试', showCancel:false }); wx.showToast({ title:'核验通过', icon:'success' }); that.closeScannedPass(); that.loadIdentityTask() }, function() { wx.showToast({ title:'网络异常', icon:'none' }) })
+  },
+  manualVerifyPlayer:function(event) {
+    var that=this, task=this.data.identityTask, playerId=String(event.currentTarget.dataset.id || '')
+    wx.showModal({ title:'人工核验', content:'请当面核对球员近期照片与法定身份证明。确认通过？', confirmText:'确认通过', success:function(modal) { if (!modal.confirm) return; that.callWorkflow({ action:'verifyLineupPlayer', matchId:that.data.matchId, side:task.side, playerId:playerId, decision:'passed', method:'manual_document' }, function(res) { var result=res.result || {}; if (!result.success) return wx.showModal({ title:'核验失败', content:result.message || '请重试', showCancel:false }); wx.showToast({ title:'核验通过', icon:'success' }); that.loadIdentityTask() }, function() { wx.showToast({ title:'网络异常', icon:'none' }) }) } })
+  },
+
   applyMatch: function(data) {
     var match = data.match || {}
     var homeTeamName = match.homeTeamName || '主队'
@@ -115,6 +148,7 @@ Page({
       errorMsg: '',
       needsPhone: false,
       showMatchContent: true,
+      showIdentityTask:false,
       tournamentName: match.tournamentName || '赛事',
       teamsText: match.teamsText || '',
       matchTimeText: match.matchTimeText || '时间待定',

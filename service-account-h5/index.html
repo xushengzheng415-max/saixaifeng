@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b3d2e">
   <title>赛事工作台｜赛小蜂足球</title>
-  <link rel="stylesheet" href="./styles.css?v=20260905-1">
+  <link rel="stylesheet" href="./styles.css?v=20260913-2">
 </head>
 <body>
   <header class="topbar">
@@ -62,9 +62,10 @@
       <div class="sheet-head"><div><span class="sheet-kicker">结束比赛</span><h2>确认本场比分</h2></div><button id="closeFinishDialog" class="icon-btn" type="button" aria-label="关闭">×</button></div>
       <p class="muted">确认后比赛进入报告待提交状态，仍可核对事件。</p>
       <div class="score-inputs"><label id="finishHomeLabel">主队<input name="homeScore" type="number" min="0" max="99" required inputmode="numeric"></label><b>:</b><label id="finishAwayLabel">客队<input name="awayScore" type="number" min="0" max="99" required inputmode="numeric"></label></div>
+      <section id="finishPenaltyFields" class="penalty-score-panel" hidden><p>常规时间战平，本组必须通过点球分出胜负。</p><div class="score-inputs"><label id="finishPenaltyHomeLabel">主队点球<input name="homePenaltyScore" type="number" min="0" max="99" inputmode="numeric"></label><b>:</b><label id="finishPenaltyAwayLabel">客队点球<input name="awayPenaltyScore" type="number" min="0" max="99" inputmode="numeric"></label></div><small id="finishPenaltyPoints">点球积分以当前组别设置为准。</small></section>
       <button type="submit" class="primary wide">结束比赛并保存比分</button>
     </form>
   </dialog>
-  <script src="./app.js?v=20260905-1"></script>
+  <script src="./app.js?v=20260913-3"></script>
 </body>
 </html>

@@ -83,6 +83,8 @@ const AUTH_STORAGE_KEYS = [
 
 function clearStoredAuthSession() {
   AUTH_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
+  sessionStorage.removeItem('sxfServiceBoundCheck')
+  sessionStorage.removeItem('sxfAfterServiceBinding')
 }
 
 function storeDirectLogin(result) {

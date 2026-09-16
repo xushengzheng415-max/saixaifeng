@@ -16,7 +16,7 @@
     <div class="page-heading">
       <div>
         <h2 id="division-page-title">竞赛管理</h2>
-        <p>先选择组别，再配置该组别的赛制与竞赛规则。</p>
+
       </div>
       <el-button type="primary" :icon="Plus" :disabled="!canManage" @click="openDivisionEditor()">添加组别</el-button>
     </div>
@@ -45,7 +45,7 @@
               <div class="operation-cell">
                 <el-button size="small" :type="division.primaryActionType" :disabled="!canManage" @click="openDivisionEditor(division)">{{ division.primaryAction }}</el-button>
                 <el-button v-if="division.finalized" size="small" plain :disabled="!canManage" @click="startRuleRevision(division)">调整规则</el-button>
-                <div class="row-menu"><el-button text circle aria-label="组别更多操作" @click.stop="toggleRowMenu(division.id)"><el-icon><MoreFilled /></el-icon></el-button><div v-if="activeMenuId === division.id" class="row-menu-panel"><button type="button" :disabled="togglingRegistrationId === division.id" @click="toggleDivisionRegistration(division)">{{ togglingRegistrationId === division.id ? '正在处理…' : (division.registrationEnabled ? '关闭报名' : '开启报名') }}</button><button type="button" @click="openDivisionEditor(division)">编辑组别信息</button><button type="button" :disabled="division.finalized" @click="openModeGuide(division)">升级为专业模式</button><button type="button" @click="openModeGuide(division)">查看模式对比</button><button type="button" @click="handleRowCommand('teams', division)">查看参赛球队</button><button type="button" @click="handleRowCommand('draw', division)">进入抽签分组</button><button type="button" @click="handleRowCommand('schedule', division)">进入赛程管理</button><button class="danger-action" type="button" :disabled="deletingDivisionId === division.id" @click="handleDeleteDivision(division)">{{ deletingDivisionId === division.id ? '正在删除…' : '删除组别' }}</button></div></div>
+                <div class="row-menu"><el-button text circle aria-label="组别更多操作" @click.stop="toggleRowMenu(division.id)"><el-icon><MoreFilled /></el-icon></el-button><div v-if="activeMenuId === division.id" class="row-menu-panel"><button type="button" :disabled="togglingRegistrationId === division.id" @click="toggleDivisionRegistration(division)">{{ togglingRegistrationId === division.id ? '正在处理…' : (division.registrationEnabled ? '关闭报名' : '开启报名') }}</button><button type="button" :disabled="renamingDivisionId === division.id" @click="handleRenameDivision(division)">{{ renamingDivisionId === division.id ? '正在重命名…' : '重命名组别' }}</button><button type="button" @click="openDivisionEditor(division)">编辑竞赛设置</button><button type="button" :disabled="division.finalized" @click="openModeGuide(division)">升级为专业模式</button><button type="button" @click="openModeGuide(division)">查看模式对比</button><button type="button" @click="handleRowCommand('teams', division)">查看参赛球队</button><button type="button" @click="handleRowCommand('draw', division)">进入抽签分组</button><button type="button" @click="handleRowCommand('schedule', division)">进入赛程管理</button><button class="danger-action" type="button" :disabled="deletingDivisionId === division.id" @click="handleDeleteDivision(division)">{{ deletingDivisionId === division.id ? '正在删除…' : '删除组别' }}</button></div></div>
               </div>
             </td>
           </tr>
@@ -66,7 +66,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, CircleCheck, DocumentChecked, Grid, Location, MoreFilled, Plus, Tickets, Trophy, User, UserFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { callFunction, deleteDivision, queryById, queryList, reviseDivisionRules } from '../../utils/cloud'
+import { addRecord, callFunction, deleteDivision, queryById, queryList, renameDivision, reviseDivisionRules, updateRecord } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 
 const route = useRoute()
@@ -77,6 +77,7 @@ const tournament = ref({})
 const divisionRecords = ref([])
 const registrations = ref([])
 const deletingDivisionId = ref('')
+const renamingDivisionId = ref('')
 const togglingRegistrationId = ref('')
 const activeMenuId = ref(import.meta.env.DEV && route.query.view === 'card-menu' ? 'qa-division-u10' : '')
 
@@ -97,7 +98,7 @@ const summaryMetrics = computed(() => [
 ])
 const flowSteps = [
   { title: '选择组别', description: '创建或选择年龄组别', icon: UserFilled },
-  { title: '选择运行模式', description: '简易模式或专业模式', icon: Grid },
+  { title: '选择运行模式', description: '基础模式或专业模式', icon: Grid },
   { title: '赛制设置', description: '选择赛制与比赛形式', icon: Trophy },
   { title: '规则配置', description: '配置规则与赛事参数', icon: DocumentChecked },
   { title: '规则定版', description: '完成审核与规则发布', icon: CircleCheck }
@@ -131,7 +132,7 @@ function normalizeDivision(division, index) {
     teamCount: teamRows.length,
     playerFormatText: playerFormatLabel(division.matchFormat,division.playersOnField),
     formatText: division.formatName || division.tournamentTypeName || formatLabel(division.formatType || division.tournamentType),
-    modeText: modeProfessional ? '专业模式' : '简易模式 · 免费',
+    modeText: modeProfessional ? '专业模式' : '基础模式 · 免费',
     modeClass: modeProfessional ? 'professional' : 'simple',
     progress,
     versionText: division.rulesVersion || division.ruleVersion || (finalized ? '已定版' : '暂未定版'),
@@ -184,6 +185,28 @@ function handleRowCommand(command, division) {
 }
 function toggleRowMenu(divisionId) { activeMenuId.value = activeMenuId.value === divisionId ? '' : divisionId }
 function closeRowMenu() { activeMenuId.value = '' }
+async function handleRenameDivision(division) {
+  if (!canManage.value || !division?.id || renamingDivisionId.value) return
+  activeMenuId.value = ''
+  let confirmation
+  try {
+    confirmation = await ElMessageBox.prompt('只修改当前赛事中的组别显示名称，不改变年龄、性别或已定版竞赛规则。', '重命名组别', {
+      confirmButtonText: '保存名称', cancelButtonText: '取消', inputValue: division.name,
+      inputPattern: /^.{2,30}$/, inputErrorMessage: '请输入 2—30 个字符'
+    })
+  } catch { return }
+  renamingDivisionId.value = division.id
+  try {
+    const result = await renameDivision(division.id, confirmation.value)
+    if (!result?.success) throw new Error(result?.error || '组别重命名失败')
+    ElMessage.success(result.message || '组别名称已更新')
+    await loadDivisionManagement()
+  } catch (error) {
+    ElMessage.error(error.message || '组别重命名失败')
+  } finally {
+    renamingDivisionId.value = ''
+  }
+}
 async function toggleDivisionRegistration(division) {
   if (!canManage.value || !division?.id) return
   activeMenuId.value = ''
@@ -248,9 +271,91 @@ async function loadDivisionManagement() {
     tournament.value = Array.isArray(currentTournament) ? currentTournament[0] || {} : currentTournament || {}
     divisionRecords.value = divisions || []
     registrations.value = teamRegistrations || []
+    const created = await createSuggestedDivisionDrafts(tournament.value, divisionRecords.value)
+    if (created > 0) {
+      divisionRecords.value = await queryList('divisions', { where: { tournamentId: id }, orderBy: { createTime: 'asc' }, silent: true })
+      ElMessage.success('已根据竞赛规程生成 ' + created + ' 个组别草稿')
+    }
   } finally {
-    loading.value = false
+  loading.value = false
+}
+
+function suggestionGender(value) {
+  const text = String(value || '').toLowerCase()
+  if (text.includes('女') || text === 'female') return '女子组'
+  if (text.includes('男') || text === 'male') return '男子组'
+  return '混合组'
+}
+
+function suggestionFormat(value) {
+  const text = String(value || '').toLowerCase().replace(/人制$/, 'side')
+  return ['5side', '7side', '8side', '9side', '11side'].includes(text) ? text : '7side'
+}
+
+async function createSuggestedDivisionDrafts(currentTournament, existingDivisions) {
+  const suggestions = Array.isArray(currentTournament?.regulationDivisionSuggestions)
+    ? currentTournament.regulationDivisionSuggestions
+    : []
+  if (!suggestions.length || !permissions.tournament.manage(currentTournament)) return 0
+  const existingNames = new Set((existingDivisions || []).map(item => String(item.name || item.divisionName || '').trim().toLowerCase()))
+  const maxPlayers = { '5side': 12, '7side': 16, '8side': 18, '9side': 20, '11side': 23 }
+  let created = 0
+  for (const source of suggestions) {
+    const name = String(source?.name || '').trim()
+    if (!name || existingNames.has(name.toLowerCase())) continue
+    const matchFormat = suggestionFormat(source.matchFormat)
+    try {
+      await addRecord('divisions', {
+        tournamentId: id,
+        name,
+        customName: name,
+        nameSource: 'custom',
+        ageGroup: String(source.ageGroup || name),
+        gender: suggestionGender(source.gender),
+        matchFormat,
+        playersOnField: Number(matchFormat.replace('side', '')),
+        maxPlayersPerTeam: maxPlayers[matchFormat],
+        expectedTeams: Math.max(2, Number(source.expectedTeams || 8)),
+        mode: 'simple',
+        isProfessional: false,
+        ruleStatus: 'draft',
+        ruleProgress: 0,
+        rulesVersion: '暂未定版',
+        formatType: ['cup', 'tournament', 'league', 'hybrid'].includes(source.formatType) ? source.formatType : 'cup',
+        groupCount: Number(source.groupCount || 0),
+        teamsPerGroup: Number(source.teamsPerGroup || 0),
+        groupCycle: source.groupCycle === 'double' ? 'double' : 'single',
+        advancePerGroup: Number(source.advancePerGroup || 0),
+        knockoutSize: Number(source.knockoutSize || 0),
+        periodMode: source.periodMode === 'quarters' ? 'quarters' : 'halves',
+        matchMinutes: Number(source.matchMinutes || 0),
+        breakMinutes: Number(source.breakMinutes || 0),
+        substitutionLimit: Number(source.substitutionLimit || 0),
+        substitutionReentryAllowed: source.substitutionReentryAllowed === true,
+        yellowCardSuspension: Number(source.yellowCardSuspension || 0),
+        redCardSuspension: Number(source.redCardSuspension || 0),
+        winPoints: Number(source.winPoints ?? 3),
+        drawPoints: Number(source.drawPoints ?? 1),
+        lossPoints: Number(source.lossPoints ?? 0),
+        regulationSourceFileId: currentTournament.regulationsFileId || '',
+        regulationRecognition: true,
+        createTime: new Date(),
+        updateTime: new Date()
+      })
+      existingNames.add(name.toLowerCase())
+      created += 1
+    } catch (error) {
+      console.warn('[competition] 规程组别建议生成失败:', name, error.message)
+    }
   }
+  if (created > 0) {
+    await updateRecord('tournaments', id, {
+      regulationRecognitionStatus: 'suggestions_applied',
+      regulationSuggestionsAppliedAt: new Date()
+    })
+  }
+  return created
+}
 }
 
 function formatDate(value) { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? '日期待定' : `${parsed.getFullYear()}.${String(parsed.getMonth() + 1).padStart(2, '0')}.${String(parsed.getDate()).padStart(2, '0')}` }

@@ -55,7 +55,7 @@
     <text class="code-label">球队代码（发给球员即可加入）</text>
     <view class="code-box" bindtap="copyCode">
       <text class="code-text">{{teamCode}}</text>
-      <text class="copy-hint">点击复制</text>
+
     </view>
   </view>
 
@@ -68,17 +68,17 @@
       <view class="action-card" bindtap="goToPlayers">
         <text class="action-icon">👥</text>
         <text class="action-name">管理球员</text>
-        <text class="action-desc">{{playerCount}}名球员</text>
+
       </view>
       <view class="action-card" bindtap="addPlayer">
         <text class="action-icon">➕</text>
         <text class="action-name">添加球员</text>
-        <text class="action-desc">手动添加</text>
+
       </view>
       <view class="action-card" bindtap="saveTeam">
         <text class="action-icon">✏️</text>
         <text class="action-name">编辑信息</text>
-        <text class="action-desc">修改球队资料</text>
+
       </view>
     </view>
   </view>

@@ -2,7 +2,7 @@
 <!-- 头部区域 -->
   <view class="header-section">
     <text class="guide-title">裁判资料填写</text>
-    <text class="guide-subtitle">请填写您的裁判信息，以便我们为您提供更好的服务</text>
+
   </view>
 
   <!-- 表单区域 -->
@@ -10,9 +10,9 @@
     <view class="input-group">
       <text class="input-label">姓名</text>
       <view class="input-wrapper">
-        <input 
-          class="input-field" 
-          placeholder="请输入您的姓名" 
+        <input
+          class="input-field"
+          placeholder="请输入您的姓名"
           bindinput="onNameInput"
           value="{{name}}"
         />
@@ -26,7 +26,7 @@
       <view class="input-wrapper">
         <picker range="{{refereeLevels}}" value="{{refereeLevelIndex}}" bindchange="onRefereeLevelChange">
           <view class="picker-field">
-            
+
           </view>
         </picker>
         <text class="input-icon">⭐</text>
@@ -37,9 +37,9 @@
     <view class="input-group">
       <text class="input-label">裁判编号</text>
       <view class="input-wrapper">
-        <input 
-          class="input-field" 
-          placeholder="请输入裁判编号" 
+        <input
+          class="input-field"
+          placeholder="请输入裁判编号"
           bindinput="onRefereeIdInput"
           value="{{refereeId}}"
         />
@@ -51,9 +51,9 @@
     <view class="input-group">
       <text class="input-label">联系电话</text>
       <view class="input-wrapper">
-        <input 
-          class="input-field" 
-          placeholder="请输入联系电话" 
+        <input
+          class="input-field"
+          placeholder="请输入联系电话"
           type="number"
           bindinput="onPhoneInput"
           value="{{phone}}"
@@ -66,9 +66,9 @@
     <view class="input-group">
       <text class="input-label">执裁经验</text>
       <view class="input-wrapper">
-        <textarea 
-          class="input-field" 
-          placeholder="请输入执裁经验" 
+        <textarea
+          class="input-field"
+          placeholder="请输入执裁经验"
           maxlength="200"
           bindinput="onExperienceInput"
           value="{{experience}}"
@@ -82,9 +82,9 @@
     <view class="input-group">
       <text class="input-label">所在地区</text>
       <view class="input-wrapper">
-        <input 
-          class="input-field" 
-          placeholder="请输入所在地区" 
+        <input
+          class="input-field"
+          placeholder="请输入所在地区"
           bindinput="onRegionInput"
           value="{{region}}"
         />
@@ -100,10 +100,10 @@
           <text class="upload-icon">📷</text>
           <text class="upload-text"></text>
         </view>
-        <image 
-          class="avatar-preview" 
-          src="{{avatarUrl}}" 
-          mode="aspectFit" 
+        <image
+          class="avatar-preview"
+          src="{{avatarUrl}}"
+          mode="aspectFit"
           wx:if="{{avatarUrl}}"
         ></image>
       </view>
@@ -113,15 +113,15 @@
 
   <!-- 按钮区域 -->
   <view class="button-section">
-    <button 
+    <button
       class="submit-btn "
       bindtap="handleSubmit"
       disabled="{{isSubmitting}}"
     >
-      
+
     </button>
 
-    <button 
+    <button
       class="skip-btn "
       bindtap="skipGuide"
       disabled="{{isSubmitting}}"

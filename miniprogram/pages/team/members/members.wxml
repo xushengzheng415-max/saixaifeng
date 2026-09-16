@@ -74,7 +74,7 @@
       <view class="invite-sheet-header">
         <view>
           <text class="invite-sheet-title">邀请加入球队管理</text>
-          <text class="invite-sheet-subtitle">仅用于教练、领队或管理员；邀请球员请到球员库</text>
+
         </view>
         <text class="invite-sheet-close" bindtap="closeInvitePanel">×</text>
       </view>
@@ -123,7 +123,7 @@
 
           <view wx:if="{{invitePosterReady}}" class="invite-poster-ready">
             <image class="invite-poster-thumb" src="{{invitePosterPath}}" mode="aspectFill" bindtap="previewInvitePoster" />
-            <view class="invite-poster-copy"><text>邀请海报已生成</text><text>可预览后保存到手机相册</text></view>
+            <view class="invite-poster-copy"><text>邀请海报已生成</text></view>
             <button class="invite-poster-save" bindtap="saveInvitePoster">保存海报</button>
           </view>
         </view>

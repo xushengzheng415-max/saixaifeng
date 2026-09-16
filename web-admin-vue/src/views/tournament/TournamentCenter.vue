@@ -28,7 +28,7 @@
           <div class="banner-item" :style="{ backgroundImage: `url(${banner.image})` }">
             <div class="banner-content">
               <h2 class="banner-title">{{ banner.title }}</h2>
-              <p class="banner-desc">{{ banner.description }}</p>
+
               <el-button type="primary" size="large" @click="goToTournament(banner.tournamentId)">
                 立即查看
               </el-button>
@@ -122,10 +122,10 @@
               <span class="team-count">{{ tournament.registeredTeams || 0 }} 支球队报名</span>
               <div class="card-actions">
                 <el-button type="primary" size="small" @click.stop="goToTournament(tournament._id)">查看详情</el-button>
-                <el-button 
+                <el-button
                   v-if="userRole === 'COACH' && (tournament.status === 'registering' || tournament.status === 'upcoming')"
-                  type="success" 
-                  size="small" 
+                  type="success"
+                  size="small"
                   @click.stop="handleSignup(tournament)"
                 >
                   我要报名

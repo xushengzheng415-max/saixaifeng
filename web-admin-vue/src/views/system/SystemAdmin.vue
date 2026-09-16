@@ -4,7 +4,7 @@
       <div class="page-header">
         <div>
           <h2>微信客服协助中心</h2>
-          <p>通过微信客服私发协助码，用户本人确认后，临时进入其赛事、球队和球员资料。</p>
+
         </div>
         <el-button v-if="ownerStatus.isPlatformOwner" :loading="requestLoading" @click="refreshRequests">
           <el-icon><Refresh /></el-icon>
@@ -128,7 +128,7 @@
                 <small class="table-sub">{{ row.targetPhoneMasked || `尾号 ${row.codeLast4}` }}</small>
               </template>
             </el-table-column>
-            <el-table-column prop="reason" label="协助原因" min-width="240" show-overflow-tooltip />
+            <el-table-column prop="reason" label="协助原因" min-width="240" />
             <el-table-column label="状态" width="130">
               <template #default="{ row }">
                 <el-tag :type="statusType(row.status)">{{ row.statusLabel }}</el-tag>

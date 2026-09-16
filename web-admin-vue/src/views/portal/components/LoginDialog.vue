@@ -12,7 +12,7 @@
     <div class="login-header">
       <img :src="brandLogoUrl" alt="赛小蜂足球" class="login-logo" />
       <h3 class="login-title">登录赛小蜂足球</h3>
-      <p class="login-subtitle">登录后体验竞猜、关注、蜂蜜币等完整功能</p>
+
     </div>
 
     <el-form :model="form" class="login-form" @submit.prevent="handleLogin">

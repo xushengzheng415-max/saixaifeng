@@ -2,6 +2,7 @@
 // 首发阵容分享专用 - 生成小程序码
 
 const cloud = require('wx-server-sdk')
+const QRCode = require('qrcode')
 
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV
@@ -24,6 +25,16 @@ exports.main = async (event, context) => {
   console.log('生成分享小程序码参数:', event)
 
   try {
+    if (event.type === 'adult_match_pass') {
+      const passToken = String(event.passToken || '').trim()
+      const passId = String(event.passId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0,40)
+      if (!/^SXFMP1\.[A-Za-z0-9_-]{8,40}\.[A-Za-z0-9_-]{20,40}$/.test(passToken) || !passId) return { success:false, message:'本场电子参赛证参数无效' }
+      const buffer = await QRCode.toBuffer(passToken, { type:'png', width:Math.max(280, Math.min(720, Number(width || 430))), margin:2, errorCorrectionLevel:'M', color:{ dark:'#083d27', light:'#ffffff' } })
+      const cloudPath = 'restricted/adult-match-passes/' + passId + '.png'
+      const uploadResult = await cloud.uploadFile({ cloudPath, fileContent:buffer })
+      const fileList = await cloud.getTempFileURL({ fileList:[uploadResult.fileID] })
+      return { success:true, message:'本场电子参赛证已生成', data:{ fileID:uploadResult.fileID, tempUrl:fileList.fileList[0].tempFileURL, cloudPath, passId } }
+    }
     // 如果没有传入path，构建默认路径
     let targetPage = path || 'pages/match/share/share'
     let targetScene = ''

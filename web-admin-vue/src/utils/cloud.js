@@ -4,6 +4,7 @@
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
 import { PLATFORM_SESSION_KEY } from './platformSession'
+import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
 const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
@@ -28,6 +29,10 @@ const LOGIN_FUNCTION_MAP = {
   wechatWebLogin: 'wechatWebLogin',
   sendWechatLoginSms: 'sendWechatLoginSms',
   completeWechatPhoneLogin: 'completeWechatPhoneLogin',
+  getCurrentAccountProfile: 'getCurrentAccountProfile',
+  sendCurrentUserPhoneBindSms: 'sendCurrentUserPhoneBindSms',
+  bindCurrentUserPhone: 'bindCurrentUserPhone',
+  deleteCurrentAccount: 'deleteCurrentAccount',
   checkLogin: 'checkLogin',
 }
 
@@ -46,6 +51,7 @@ const CLOUD_FUNCTION_MAP = {
   generateAIImage: 'relay', // AI 生图必须经 webLoginApi 会话中转
   // 赛事中心后台内容管理（复用主办方登录，仅平台负责人可用）
   manageTournamentCenterContent: 'relay',
+  platformOwner: 'relay',
   // 赛事中心公开数据与主办方业务操作
   getTeams: 'relay',
   getPlayers: 'relay',
@@ -72,7 +78,7 @@ const CLOUD_FUNCTION_MAP = {
  * @param {string} action - webLoginApi 的 action 参数
  * @param {object} data - 请求数据
  */
-async function callFunctionHTTP(action, data = {}) {
+async function callFunctionHTTP(action, data = {}, timeout = 60000) {
   // 视觉验收样例仅在 Vite 开发模式按需加载；生产构建不会打包样例数据。
   if (import.meta.env.DEV) {
     const { handleVisualQaHttp } = await loadVisualQaModule()
@@ -90,20 +96,27 @@ async function callFunctionHTTP(action, data = {}) {
   }
   console.log(`[callFunctionHTTP] → ${action}`)
 
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+  const timeoutId = controller && timeout > 0
+    ? setTimeout(() => controller.abort(), timeout)
+    : null
+
   try {
     const response = await fetch(WEB_LOGIN_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      ...(controller ? { signal: controller.signal } : {})
     })
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    let result = await response.json()
+    const responseText = await response.text()
+    let result = null
+    try { result = responseText ? JSON.parse(responseText) : null } catch { result = null }
     if (result && typeof result.body === 'string') {
       try { result = JSON.parse(result.body) } catch { /* 保留原响应，由调用方显示错误 */ }
+    }
+    if (!response.ok) {
+      throw new Error(result?.error || result?.message || `HTTP ${response.status}: ${response.statusText}`)
     }
     if (result && result.authToken) {
       localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
@@ -121,13 +134,26 @@ async function callFunctionHTTP(action, data = {}) {
     }
     return result
   } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('请求处理时间较长，请稍后重试')
+    }
     console.error('[callFunctionHTTP] ❌', err.message)
     throw err
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
 }
 
 export async function reviewRefereeRecord(data = {}) {
   return callFunctionHTTP('reviewRefereeRecord', data)
+}
+
+export async function listIdentityReviewQueue(data = {}) {
+  return callFunctionHTTP('listIdentityReviewQueue', data)
+}
+
+export async function reviewIdentityVerification(data = {}) {
+  return callFunctionHTTP('reviewIdentityVerification', data)
 }
 
 // 赛事正式名单异常看板：由 webLoginApi 在服务端收敛赛事、球队和名单快照范围。
@@ -164,6 +190,8 @@ export async function logout() {
   localStorage.removeItem('organizationInfo')
   localStorage.removeItem('currentOrganization')
   localStorage.removeItem('currentOrg')
+  sessionStorage.removeItem('sxfServiceBoundCheck')
+  sessionStorage.removeItem('sxfAfterServiceBinding')
 }
 
 export async function checkAuth() {
@@ -340,6 +368,15 @@ export async function deleteDivision(id) {
   })
 }
 
+export async function renameDivision(id, name) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'divisions',
+    operation: 'renameDivision',
+    id,
+    data: { name }
+  })
+}
+
 export async function assignTournamentTeamDivision(id, divisionId) {
   return callFunctionHTTP('dbQuery', {
     collection: 'tournament_teams',
@@ -367,12 +404,20 @@ export async function confirmCompetitionPlan(tournamentId, data = {}) {
   })
 }
 
+export async function deleteTournamentWorkspace(tournamentId, confirmText) {
+  return callFunctionHTTP('dbQuery', {
+    collection: 'tournaments',
+    operation: 'deleteTournamentWorkspace',
+    id: tournamentId,
+    data: { confirmText }
+  })
+}
+
 export async function deleteRecord(collection, id, options = {}) {
   const result = await dbQuery(collection, 'delete', { id })
   if (!result.success) throw new Error(result.error || '删除失败')
   return result
 }
-
 /**
  * 批量删除记录
  */
@@ -550,76 +595,68 @@ export async function uploadImageViaWebApi(folder, file) {
   throw new Error(result?.message || result?.error || '图片上传失败')
 }
 export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
-  const CHUNK_SIZE = options.chunkSize || (100 * 1024) // ★ 默认 100KB/片（Base64后~133KB，远低于网关限制）
-  const folder = cloudPath.split('/')[0] || 'regulations'
-  
-  // 读取文件为 ArrayBuffer
+  const initialChunkSize = Number(options.chunkSize) > 0 ? Number(options.chunkSize) : (48 * 1024)
+  const fallbackChunkSize = Number(options.fallbackChunkSize) > 0 ? Number(options.fallbackChunkSize) : 0
+  const { folder, fileName } = resolveChunkUploadTarget(cloudPath, file?.name)
   const arrayBuffer = await file.arrayBuffer()
   const totalBytes = arrayBuffer.byteLength
-  const totalChunks = Math.ceil(totalBytes / CHUNK_SIZE)
-  
-  console.log(`[分片上传] 文件: ${file.name}, 大小: ${(totalBytes / 1024 / 1024).toFixed(2)}MB, 分成 ${totalChunks} 片`)
-  
-  // 步骤 1：初始化分片上传
-  const initResult = await callFunction('uploadFile', {
-    action: 'startChunk',
-    fileName: file.name,
-    totalChunks: totalChunks,
-    folder: folder
-  })
-  
-  if (!initResult.success) {
-    throw new Error(initResult.message || '初始化分片上传失败')
+
+  async function abortUpload(uploadId) {
+    if (!uploadId) return
+    try {
+      await callFunction('uploadFile', { action: 'abortChunk', uploadId }, 15000)
+    } catch (cleanupError) {
+      console.warn('[分片上传] 临时数据清理失败:', cleanupError.message)
+    }
   }
-  
-  const uploadId = initResult.uploadId
-  
-  try {
-    // 步骤 2：逐个上传分片
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE
-      const end = Math.min(start + CHUNK_SIZE, totalBytes)
-      const chunkBuffer = arrayBuffer.slice(start, end)
-      
-      // 将 chunk 转为 base64
-      const chunkBase64 = _arrayBufferToBase64(chunkBuffer)
-      
-      const chunkResult = await callFunction('uploadFile', {
-        action: 'uploadChunk',
-        uploadId: uploadId,
-        chunkIndex: i,
-        data: chunkBase64
-      })
-      
-      if (!chunkResult.success) {
-        throw new Error(`分片 ${i + 1} 上传失败: ${chunkResult.message}`)
-      }
-      
-      // 报告进度
-      if (options.onProgress) {
-        options.onProgress(i + 1, totalChunks)
-      }
-    }
-    
-    // 步骤 3：完成上传（合并 + 上传到云存储）
-    const finishResult = await callFunction('uploadFile', {
-      action: 'finishChunk',
-      uploadId: uploadId
+
+  async function uploadWithChunkSize(chunkSize) {
+    const totalChunks = Math.ceil(totalBytes / chunkSize)
+    console.log(`[分片上传] 文件: ${file.name}, 大小: ${(totalBytes / 1024 / 1024).toFixed(2)}MB, 分片: ${chunkSize / 1024}KB × ${totalChunks}`)
+    const initResult = await callFunction('uploadFile', {
+      action: 'startChunk',
+      fileName,
+      totalChunks,
+      folder
     })
-    
-    if (!finishResult.success) {
-      throw new Error(finishResult.message || '合并上传失败')
+    if (!initResult.success) throw new Error(initResult.message || '初始化分片上传失败')
+
+    const uploadId = initResult.uploadId
+    try {
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * chunkSize
+        const end = Math.min(start + chunkSize, totalBytes)
+        const chunkBase64 = _arrayBufferToBase64(arrayBuffer.slice(start, end))
+        const chunkResult = await callFunction('uploadFile', {
+          action: 'uploadChunk',
+          uploadId,
+          chunkIndex: i,
+          data: chunkBase64
+        })
+        if (!chunkResult.success) throw new Error(`分片 ${i + 1} 上传失败: ${chunkResult.message}`)
+        if (options.onProgress) options.onProgress(i + 1, totalChunks, { chunkSize })
+      }
+
+      const finishResult = await callFunction('uploadFile', { action: 'finishChunk', uploadId })
+      if (!finishResult.success) throw new Error(finishResult.message || '合并上传失败')
+      return { success: true, fileId: finishResult.fileID, tempUrl: finishResult.tempUrl || '' }
+    } catch (error) {
+      await abortUpload(uploadId)
+      throw error
     }
-    
-    return {
-      success: true,
-      fileId: finishResult.fileID,
-      tempUrl: finishResult.tempUrl || ''
+  }
+
+  try {
+    return await uploadWithChunkSize(initialChunkSize)
+  } catch (error) {
+    const canFallback = fallbackChunkSize > 0 && fallbackChunkSize < initialChunkSize && isPayloadTooLargeError(error)
+    if (!canFallback) {
+      console.error('[分片上传] 失败:', error.message)
+      throw error
     }
-    
-  } catch (err) {
-    console.error('[分片上传] 失败:', err.message)
-    throw err
+    console.warn(`[分片上传] 请求体超限，自动从 ${initialChunkSize / 1024}KB 降为 ${fallbackChunkSize / 1024}KB`)
+    if (options.onRetry) options.onRetry(fallbackChunkSize, error)
+    return uploadWithChunkSize(fallbackChunkSize)
   }
 }
 
@@ -684,7 +721,7 @@ if (name in CLOUD_FUNCTION_MAP) {
   return callFunctionHTTP('callFunction', {
     functionName: name,
     functionParams: data
-  })
+  }, timeout)
 }
 
   // 其他云函数调用（如 webBatchUpdate、deleteRecord 等）→ 也走 HTTP API
@@ -708,9 +745,13 @@ if (name in CLOUD_FUNCTION_MAP) {
     return await callFunctionHTTP('callFunction', {
       functionName: name,
       functionParams: data
-    })
+    }, timeout)
   } catch (err) {
     console.error(`[callFunction] ${name} 调用失败:`, err.message)
     throw new Error(`云函数调用失败: ${name} - ${err.message}`)
   }
+}
+
+export async function getPublicTournamentCenter() {
+  return callFunctionHTTP('publicTournamentCenter', {})
 }

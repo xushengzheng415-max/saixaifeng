@@ -160,6 +160,8 @@ function safeTournament(tournament, context = {}) {
     status: tournament.status || 'draft',
     isFeatured: tournament.isFeatured === true || tournament.featured === true,
     featuredSort: Number(tournament.featuredSort || tournament.sort || 0),
+    publicStatus: cleanText(tournament.publicStatus, 40),
+    publicVersion: Number(tournament.publicVersion || 0),
     teamCount: Number(relationCount || tournament.registeredTeams || tournament.approvedTeams || tournament.teamCount || 0),
     startDate: tournament.startDate || tournament.eventStartDate || null,
     endDate: tournament.endDate || tournament.eventEndDate || null,
@@ -192,7 +194,8 @@ function safeOrganizerAccount(user, tournamentRows, teamRows) {
     email: cleanText(user.email, 160),
     orgId: recordOrgId(user),
     role: cleanText(user.role, 40) || 'organizer',
-    isActive: user.status !== 'disabled' && user.isActive !== false,
+    pcAccountStatus: cleanText(user.pcAccountStatus, 30) || 'active',
+    isActive: user.status !== 'disabled' && user.isActive !== false && user.pcAccountStatus !== 'cancelled',
     tournamentCount: tournamentRows.filter(item => recordCreatorId(item) === userId).length,
     teamCount: teamRows.filter(item => recordCreatorId(item) === userId).length,
     createTime: user.createTime || user.createdAt || null,
@@ -296,17 +299,8 @@ async function getOverview(db) {
     return latestB - latestA
   })
 
-  const referencedOrganizerIds = new Set()
-  tournamentRows.forEach(item => {
-    const userId = recordCreatorId(item)
-    if (userId) referencedOrganizerIds.add(userId)
-  })
-  teamRows.forEach(item => {
-    const userId = recordCreatorId(item)
-    if (userId) referencedOrganizerIds.add(userId)
-  })
   const accounts = userRows
-    .filter(item => item.role === 'organizer' || referencedOrganizerIds.has(String(item._id)))
+    .filter(item => String(item.role || '').toLowerCase() === 'organizer' && String(item.pcAccountStatus || '').toLowerCase() !== 'cancelled')
     .map(item => safeOrganizerAccount(item, tournamentRows, teamRows))
     .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
@@ -337,7 +331,7 @@ async function getOverview(db) {
     }
   }).sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
-  const supportRequests = assistanceRows.map(request => ({
+  const supportRequests = assistanceRows.filter(request => request.helperUserId || request.targetUserId).map(request => ({
     _id: request._id,
     status: request.status || 'pending',
     targetUserId: request.targetUserId || '',
@@ -387,8 +381,14 @@ async function countUserReferences(db, collectionName, user, idFields, phoneFiel
   const conditions = userReferenceConditions(user, idFields, phoneFields)
   if (!conditions.length) return 0
   try {
-    const result = await db.collection(collectionName).where(db.command.or(conditions)).count()
-    return Number(result.total || 0)
+    if (collectionName === 'assistance_requests') {
+      const rows = await loadAll(db, collectionName, 1000)
+      const userId = cleanText(user && user._id, 128)
+      return rows.filter(item => cleanText(item.targetUserId, 128) === userId).length
+    }
+    const where = conditions.length === 1 ? conditions[0] : db.command.or(conditions)
+    const result = await db.collection(collectionName).where(where).limit(100).get()
+    return (result.data || []).length
   } catch (error) {
     throw new Error('无法核对账号关联数据：' + collectionName + '，已停止删除')
   }
@@ -396,27 +396,23 @@ async function countUserReferences(db, collectionName, user, idFields, phoneFiel
 
 async function accountDeletionInspection(db, user) {
   const specs = [
-    ['organizations', '机构负责人关系', ['ownerId', 'creatorId', 'createdBy'], ['contactPhone', 'phone', 'phoneNumber']],
+    ['organizations', '机构', ['ownerId', 'creatorId', 'createdBy'], ['contactPhone', 'phone', 'phoneNumber']],
     ['organization_memberships', '机构成员关系', ['userId', 'memberUserId', 'ownerId'], ['phone', 'phoneNumber']],
     ['tournaments', '创建的赛事', ['creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy'], ['creatorPhone', 'organizerPhone', 'ownerPhone']],
     ['teams', '创建或负责的球队', ['creatorId', 'ownerId', 'ownerUserId', 'userId', 'createdBy'], ['ownerPhone', 'creatorPhone', 'contactPhone', 'phoneNumber', 'phone']],
     ['team_memberships', '球队成员关系', ['userId', 'memberUserId', 'ownerId'], ['phone', 'phoneNumber']],
-    ['players', '创建的球员资料', ['creatorId', 'userId', 'createdBy'], ['creatorPhone']],
-    ['tournament_teams', '赛事报名与认领关系', ['creatorId', 'applicantUserId', 'claimedByUserId', 'userId', 'ownerId'], ['applicantPhone']],
-    ['assistance_requests', '协助申请记录', ['targetUserId'], []]
+    ['players', '球员资料', ['creatorId', 'userId', 'createdBy'], ['creatorPhone']],
+    ['tournament_teams', '赛事报名与认领关系', ['creatorId', 'applicantUserId', 'claimedByUserId', 'userId', 'ownerId'], ['applicantPhone']]
   ]
   const counts = await Promise.all(specs.map(item => countUserReferences(db, item[0], user, item[2], item[3])))
-  const dependencies = specs.map((item, index) => ({
-    key: item[0],
-    label: item[1],
-    count: counts[index]
-  })).filter(item => item.count > 0)
+  const references = specs.map((item, index) => ({ key: item[0], label: item[1], count: counts[index] })).filter(item => item.count > 0)
+  const dependencies = references.filter(item => item.key === 'tournaments')
   return {
     canDelete: dependencies.length === 0,
-    dependencies
+    dependencies,
+    preservedData: references.filter(item => item.key !== 'tournaments')
   }
 }
-
 async function loadOrganizerAccount(db, event) {
   const userId = cleanText(event.userId || event.id, 128)
   if (!userId || userId === 'platform-owner') throw new Error('缺少有效的主办方账号ID')
@@ -425,6 +421,7 @@ async function loadOrganizerAccount(db, event) {
   if (!user) throw new Error('主办方账号不存在或已删除')
   if (user.isPlatformOwner === true) throw new Error('平台负责人账号不能在此删除')
   if (String(user.role || '').toLowerCase() !== 'organizer') throw new Error('该账号不是主办方账号')
+  if (String(user.pcAccountStatus || '').toLowerCase() === 'cancelled') throw new Error('PC账号已注销')
   return user
 }
 
@@ -439,55 +436,46 @@ async function inspectOrganizerAccountDeletion(db, event) {
 }
 
 async function deleteOrganizerAccount(db, event, actor) {
-  if (cleanText(event.confirmText, 10) !== '删除') throw new Error('请输入“删除”完成二次确认')
+  if (cleanText(event.confirmText, 10) !== '注销PC') throw new Error('请输入“注销PC”完成二次确认')
   const user = await loadOrganizerAccount(db, event)
   const inspection = await accountDeletionInspection(db, user)
-  if (!inspection.canDelete) {
-    const summary = inspection.dependencies.map(item => item.label + ' ' + item.count + ' 项').join('、')
-    throw new Error('账号仍有关联数据，暂不能删除：' + summary)
-  }
+  if (!inspection.canDelete) throw new Error('该账号仍有创建的赛事，请先处理赛事后再注销PC账号')
 
-  const auditResult = await db.collection('account_identity_audit_logs').add({
-    data: {
-      action: 'organizer_account_delete',
-      result: 'pending',
-      actorType: 'platform_owner',
-      actorId: actor._id,
-      targetUserId: user._id,
-      phoneHash: normalizePhone(user.phone || user.phoneNumber)
-        ? crypto.createHash('sha256').update(normalizePhone(user.phone || user.phoneNumber)).digest('hex')
-        : '',
-      emailHash: user.email
-        ? crypto.createHash('sha256').update(String(user.email).trim().toLowerCase()).digest('hex')
-        : '',
-      dependencySnapshot: inspection.dependencies,
-      createTime: db.serverDate()
-    }
-  })
+  const auditResult = await db.collection('account_identity_audit_logs').add({ data: {
+    action: 'organizer_pc_account_unlink', result: 'pending', actorType: 'platform_owner', actorId: actor._id,
+    targetUserId: user._id,
+    phoneHash: normalizePhone(user.phone || user.phoneNumber) ? crypto.createHash('sha256').update(normalizePhone(user.phone || user.phoneNumber)).digest('hex') : '',
+    preservedData: inspection.preservedData,
+    createTime: db.serverDate()
+  } })
 
   try {
-    const sessions = (await db.collection('auth_sessions').where({ userId: user._id }).limit(100).get()).data || []
-    for (const session of sessions) {
-      await db.collection('auth_sessions').doc(session._id).remove()
+    const [sessionResult, bindingResult, gateResult] = await Promise.all([
+      db.collection('auth_sessions').where({ userId: user._id }).limit(100).get(),
+      db.collection('service_account_bindings').where({ userId: user._id }).limit(100).get(),
+      db.collection('service_follow_gates').where({ purpose: 'organizer_pc_bind', userId: user._id }).limit(100).get()
+    ])
+    const sessions = sessionResult.data || []
+    for (const session of sessions) await db.collection('auth_sessions').doc(session._id).remove()
+    for (const binding of bindingResult.data || []) {
+      await db.collection('service_account_bindings').doc(binding._id).update({ data: { organizerPcBound: false, pcUnboundAt: db.serverDate(), updateTime: db.serverDate() } })
     }
-    const removed = await db.collection('users').doc(user._id).remove()
-    if (!removed.stats || removed.stats.removed !== 1) throw new Error('账号删除未成功，请刷新后重试')
-    await db.collection('account_identity_audit_logs').doc(auditResult._id).update({
-      data: {
-        result: 'success',
-        removedSessionCount: sessions.length,
-        completedAt: db.serverDate()
-      }
-    })
-    return { success: true, userId: user._id, removedSessionCount: sessions.length }
+    for (const gate of gateResult.data || []) {
+      await db.collection('service_follow_gates').doc(gate._id).update({ data: { subscribed: false, status: 'pc_unbound', updateTime: db.serverDate() } })
+    }
+    await db.collection('users').doc(user._id).update({ data: {
+      wechatOpenId: '', pcAccountStatus: 'cancelled', pcLoginEnabled: false, pcServiceRebindRequired: true,
+      pcAccountCancelledAt: db.serverDate(), pcAccountCancelledBy: actor._id, lastPcLogoutAt: db.serverDate(), updateTime: db.serverDate()
+    } })
+    await db.collection('account_identity_audit_logs').doc(auditResult._id).update({ data: {
+      result: 'success', removedSessionCount: sessions.length, preservedMiniProgramAccount: true, completedAt: db.serverDate()
+    } })
+    return { success: true, userId: user._id, removedSessionCount: sessions.length, preservedMiniProgramAccount: true }
   } catch (error) {
-    await db.collection('account_identity_audit_logs').doc(auditResult._id).update({
-      data: { result: 'failed', errorCode: 'ACCOUNT_DELETE_FAILED', completedAt: db.serverDate() }
-    }).catch(() => {})
+    await db.collection('account_identity_audit_logs').doc(auditResult._id).update({ data: { result: 'failed', errorCode: 'PC_ACCOUNT_UNLINK_FAILED', completedAt: db.serverDate() } }).catch(() => {})
     throw error
   }
 }
-
 function validateBannerImage(imageUrl) {
   if (!imageUrl) throw new Error('请上传轮播图片')
   if (
@@ -567,6 +555,181 @@ async function setFeatured(db, event, user) {
   return { success: true }
 }
 
+function publicHttpsImage(value) {
+  const image = cleanText(value, 1000)
+  return image.startsWith('https://') ? image : ''
+}
+
+function publicMatchTimestamp(match) {
+  const direct = toTimestamp(match && match.matchTime)
+  if (direct) return direct
+  const parsed = Date.parse([
+    match && (match.matchDate || match.date),
+    match && (match.startTime || match.time)
+  ].filter(Boolean).join(' '))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+async function ensurePlatformContentAudit(db) {
+  try {
+    await db.collection('platform_content_audit_logs').limit(1).get()
+  } catch (error) {
+    try {
+      await db.createCollection('platform_content_audit_logs')
+    } catch (createError) {
+      if (!/exist/i.test(String(createError && createError.message || ''))) throw createError
+    }
+  }
+}
+
+async function ensurePublicationSnapshots(db) {
+  try {
+    await db.collection('publication_snapshots').limit(1).get()
+  } catch (error) {
+    try {
+      await db.createCollection('publication_snapshots')
+    } catch (createError) {
+      if (!/exist/i.test(String(createError && createError.message || ''))) throw createError
+    }
+  }
+}
+
+async function publishTournamentCenter(db, event, user) {
+  const tournamentId = cleanText(event.tournamentId || event.id || event._id, 128)
+  if (!tournamentId) throw new Error('缺少赛事 ID')
+  const tournament = firstRecord((await db.collection('tournaments').doc(tournamentId).get()).data)
+  if (!tournament) throw new Error('赛事不存在')
+  const tournamentStatus = cleanText(tournament.status, 40).toLowerCase()
+  if (['draft', 'cancelled'].includes(tournamentStatus)) throw new Error('草稿或已取消赛事不能发布到公共赛事中心')
+  await Promise.all([ensurePublicationSnapshots(db), ensurePlatformContentAudit(db)])
+
+  const [allRelations, allMatches, allDivisions, allTeams, oldSnapshots] = await Promise.all([
+    loadAllOptional(db, 'tournament_teams', 5000),
+    loadAllOptional(db, 'matches', 5000),
+    loadAllOptional(db, 'divisions', 1000),
+    loadAllOptional(db, 'teams', 5000),
+    loadAllOptional(db, 'publication_snapshots', 2000)
+  ])
+  const relations = allRelations.filter(item => cleanText(item.tournamentId, 128) === tournamentId)
+  const matches = allMatches.filter(item => {
+    if (cleanText(item.tournamentId, 128) !== tournamentId) return false
+    const status = cleanText(item.status, 40).toLowerCase()
+    return item.schedulePublished === true || item.published === true || ['ongoing', 'completed', 'finished', 'ended'].includes(status)
+  })
+  const divisionMap = new Map(allDivisions.filter(item => cleanText(item.tournamentId, 128) === tournamentId).map(item => [String(item._id), item]))
+  const teamMap = new Map()
+  relations.forEach(item => {
+    ;[item._id, item.teamId].filter(Boolean).forEach(id => teamMap.set(String(id), item))
+  })
+  allTeams.forEach(item => {
+    const id = String(item._id || '')
+    if (id && teamMap.has(id)) teamMap.set(id, { ...teamMap.get(id), ...item })
+  })
+  const approvedTeams = relations.filter(item => ['approved', 'confirmed', 'active'].includes(cleanText(item.status, 40).toLowerCase()))
+  const tournamentPayload = {
+    id: tournamentId,
+    name: firstText(tournament, ['name', 'tournamentName']) || '未命名赛事',
+    status: tournamentStatus || 'published',
+    startDate: firstText(tournament, ['startDate', 'beginDate']).slice(0, 30),
+    endDate: firstText(tournament, ['endDate', 'finishDate']).slice(0, 30),
+    city: firstText(tournament, ['city', 'cityName', 'location']).slice(0, 80),
+    venue: firstText(tournament, ['venue', 'field', 'address']).slice(0, 100),
+    category: firstText(tournament, ['category', 'type']).slice(0, 40),
+    formatType: firstText(tournament, ['formatType', 'tournamentType']).slice(0, 40),
+    logo: publicHttpsImage(firstText(tournament, ['logoTransparentUrl', 'logoUrl', 'logo'])),
+    cover: publicHttpsImage(firstText(tournament, ['coverImage', 'cover', 'bannerImage', 'poster'])),
+    featuredSort: Math.max(0, Math.min(999, Number(event.sort == null ? tournament.featuredSort : event.sort) || 0)),
+    teamCount: approvedTeams.length,
+    matchCount: matches.length,
+    completedMatchCount: matches.filter(item => ['completed', 'finished', 'ended'].includes(cleanText(item.status, 40).toLowerCase())).length
+  }
+  const matchPayload = matches.map(item => {
+    const home = teamMap.get(String(item.homeTeamId || '')) || {}
+    const away = teamMap.get(String(item.awayTeamId || '')) || {}
+    const division = divisionMap.get(String(item.divisionId || '')) || {}
+    const status = cleanText(item.status, 40).toLowerCase()
+    return {
+      id: String(item._id || ''),
+      tournamentId,
+      tournamentName: tournamentPayload.name,
+      divisionName: (firstText(item, ['divisionName']) || firstText(division, ['name', 'divisionName'])).slice(0, 60),
+      round: firstText(item, ['roundName', 'round', 'stageName', 'phase']).slice(0, 60),
+      status: status === 'ongoing' ? 'ongoing' : (['completed', 'finished', 'ended'].includes(status) ? 'finished' : 'upcoming'),
+      matchDate: firstText(item, ['matchDate', 'date']).slice(0, 30),
+      matchTime: firstText(item, ['startTime', 'time', 'matchTime']).slice(0, 40),
+      timestamp: publicMatchTimestamp(item),
+      venue: firstText(item, ['venue', 'field', 'location']).slice(0, 100),
+      homeName: (firstText(item, ['homeTeamName']) || firstText(home, ['teamName', 'name']) || '主队待定').slice(0, 80),
+      awayName: (firstText(item, ['awayTeamName']) || firstText(away, ['teamName', 'name']) || '客队待定').slice(0, 80),
+      homeLogo: publicHttpsImage(firstText(home, ['logoTransparentUrl', 'logoUrl', 'logo'])),
+      awayLogo: publicHttpsImage(firstText(away, ['logoTransparentUrl', 'logoUrl', 'logo'])),
+      homeScore: Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null,
+      awayScore: Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null
+    }
+  }).sort((left, right) => left.timestamp - right.timestamp)
+  const versions = oldSnapshots.filter(item => cleanText(item.tournamentId, 128) === tournamentId && item.type === 'tournament_center')
+  const version = versions.reduce((max, item) => Math.max(max, Number(item.version || 0)), 0) + 1
+  const snapshot = await db.collection('publication_snapshots').add({
+    data: {
+      sportCode: 'football',
+      type: 'tournament_center',
+      status: 'published',
+      tournamentId,
+      orgId: recordOrgId(tournament),
+      version,
+      payload: { tournament: tournamentPayload, matches: matchPayload },
+      publishedBy: user._id,
+      publishedByName: cleanText(user.nickname || user.userName || '平台负责人', 80),
+      publishedAt: db.serverDate(),
+      createTime: db.serverDate(),
+      updateTime: db.serverDate()
+    }
+  })
+  await db.collection('tournaments').doc(tournamentId).update({
+    data: {
+      isFeatured: true,
+      featured: true,
+      featuredSort: tournamentPayload.featuredSort,
+      publicStatus: 'published',
+      publicSnapshotId: snapshot._id,
+      publicVersion: version,
+      publicPublishedAt: db.serverDate(),
+      updateTime: db.serverDate()
+    }
+  })
+  await db.collection('platform_content_audit_logs').add({
+    data: {
+      action: 'publish_tournament_center',
+      actorId: user._id,
+      tournamentId,
+      snapshotId: snapshot._id,
+      version,
+      publicFieldSet: ['tournament', 'published_matches', 'public_team_names', 'public_team_logos', 'approved_scores'],
+      createTime: db.serverDate()
+    }
+  })
+  return { success: true, snapshotId: snapshot._id, version, tournament: tournamentPayload, matchCount: matchPayload.length }
+}
+
+async function revokeTournamentCenter(db, event, user) {
+  const tournamentId = cleanText(event.tournamentId || event.id || event._id, 128)
+  if (!tournamentId) throw new Error('缺少赛事 ID')
+  await Promise.all([ensurePublicationSnapshots(db), ensurePlatformContentAudit(db)])
+  const rows = (await db.collection('publication_snapshots').where({ sportCode: 'football', type: 'tournament_center', tournamentId, status: 'published' }).limit(100).get()).data || []
+  for (const item of rows) {
+    await db.collection('publication_snapshots').doc(item._id).update({
+      data: { status: 'revoked', revokedAt: db.serverDate(), revokedBy: user._id, updateTime: db.serverDate() }
+    })
+  }
+  await db.collection('tournaments').doc(tournamentId).update({
+    data: { publicStatus: 'revoked', publicSnapshotId: '', publicRevokedAt: db.serverDate(), updateTime: db.serverDate() }
+  })
+  await db.collection('platform_content_audit_logs').add({
+    data: { action: 'revoke_tournament_center', actorId: user._id, tournamentId, revokedSnapshots: rows.length, createTime: db.serverDate() }
+  })
+  return { success: true, revokedSnapshots: rows.length }
+}
+
 exports.main = async event => {
   const db = cloud.database()
   try {
@@ -579,6 +742,8 @@ exports.main = async event => {
     if (action === 'saveBanner') return await saveBanner(db, params, user)
     if (action === 'deleteBanner') return await deleteBanner(db, params)
     if (action === 'setFeatured') return await setFeatured(db, params, user)
+    if (action === 'publishTournamentCenter') return await publishTournamentCenter(db, params, user)
+    if (action === 'revokeTournamentCenter') return await revokeTournamentCenter(db, params, user)
     if (action === 'inspectOrganizerAccountDeletion') return await inspectOrganizerAccountDeletion(db, params)
     if (action === 'deleteOrganizerAccount') return await deleteOrganizerAccount(db, params, user)
     return { success: false, error: `不支持的操作: ${action}` }

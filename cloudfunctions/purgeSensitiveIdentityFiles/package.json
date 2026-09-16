@@ -1,0 +1,9 @@
+{
+  "name": "purgeSensitiveIdentityFiles",
+  "version": "1.0.0",
+  "description": "按保留期限删除球员人证核验原始证件文件",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

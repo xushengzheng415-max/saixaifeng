@@ -15,7 +15,7 @@
           <div class="slide-overlay">
             <div class="slide-content">
               <h3 class="slide-title">{{ banner.title }}</h3>
-              <p class="slide-subtitle">{{ banner.subtitle }}</p>
+
             </div>
           </div>
         </div>

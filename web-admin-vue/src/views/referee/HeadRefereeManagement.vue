@@ -14,7 +14,7 @@
 
     <section class="work-area">
       <div class="title-row">
-        <div><h1>裁判管理</h1><p>统一管理裁判资料、执裁资格、可用状态与赛事指派。</p></div>
+        <div><h1>裁判管理</h1></div>
         <div class="title-actions"><el-button plain type="warning" @click="openSyntheticPool">导入虚拟裁判资料</el-button><el-button plain type="success" @click="exportList"><el-icon><Download /></el-icon>导出裁判名单</el-button><el-button type="success" @click="openRefereeInvite()"><el-icon><Plus /></el-icon>邀请裁判扫码绑定</el-button></div>
       </div>
 

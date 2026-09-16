@@ -27,7 +27,7 @@
     <div v-else-if="imageUrl && !processedImage" class="crop-section">
       <div class="crop-header">
         <p class="crop-title">调整头像位置</p>
-        <p class="crop-subtitle">拖动图片调整位置，滚轮缩放，框选区域将用于球员卡显示</p>
+
       </div>
       <div class="cropper-wrapper">
         <vue-cropper
@@ -123,17 +123,17 @@ async function handleConfirm() {
   if (!cropperRef.value || !originalFile.value) return
 
   processing.value = true
-  
+
   try {
     // 获取裁剪后的图片数据
     cropperRef.value.getCropData(async (cropData) => {
       try {
         // 将 base64 转换为文件
         const cropFile = await base64ToFile(cropData, 'cropped.png')
-        
+
         // 调用抠图 API
         const result = await removeBackgroundBaidu(cropFile)
-        
+
         if (result.success && result.data) {
           // 保持透明背景，不添加白色背景
           processedImage.value = result.data
@@ -266,7 +266,7 @@ function handleUse() {
 }
 
 .transparent-bg {
-  background-image: 
+  background-image:
     linear-gradient(45deg, #ccc 25%, transparent 25%),
     linear-gradient(-45deg, #ccc 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #ccc 75%),

@@ -17,7 +17,7 @@
       <view class="guest-login-guide" bindtap="goToLogin">
         <view class="guest-login-copy">
           <text class="guest-login-title">当前未登录</text>
-          <text class="guest-login-desc">可先浏览首页服务，使用管理功能时再登录</text>
+
         </view>
         <text class="guest-login-action">去登录 ›</text>
       </view>
@@ -42,7 +42,7 @@
       <view class="guest-demo-tasks">
         <view class="guest-demo-task" wx:for="{{guestDemoTasks}}" wx:key="id" bindtap="openGuestDemoAction">
           <image src="{{item.icon}}" mode="aspectFit"></image>
-          <view><text class="guest-demo-task-title">{{item.title}}</text><text class="guest-demo-task-desc">{{item.subtitle}}</text></view>
+          <view><text class="guest-demo-task-title">{{item.title}}</text></view>
           <text class="guest-demo-arrow">›</text>
         </view>
       </view>
@@ -52,7 +52,7 @@
         <view class="guest-public-copy">
           <text class="guest-public-label">公开赛事</text>
           <text class="guest-public-title">查看赛程、比分与排名</text>
-          <text class="guest-public-desc">无需登录或授权，直接浏览已公开的赛事信息</text>
+
         </view>
         <image src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
         <view class="guest-public-action">免登录浏览公开赛事　›</view>
@@ -63,17 +63,17 @@
         <view class="guest-service-card" bindtap="goToPublicTournaments">
           <image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit"></image>
           <text class="guest-service-title">赛事</text>
-          <text class="guest-service-desc">公开赛事与赛程</text>
+
         </view>
         <view class="guest-service-card" bindtap="goToLogin">
           <image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image>
           <text class="guest-service-title">球队</text>
-          <text class="guest-service-desc">球队与球员协作</text>
+
         </view>
         <view class="guest-service-card" bindtap="goToLogin">
           <image src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image>
           <text class="guest-service-title">青训</text>
-          <text class="guest-service-desc">课程与训练服务</text>
+
         </view>
       </view>
     </block>
@@ -83,7 +83,7 @@
 
     <block wx:if="{{isLoggedIn}}">
       <view class="overview-card {{overviewClass}}">
-        <text class="overview-eyebrow">{{overviewTitle}}</text>
+
         <text class="overview-name" wx:if="{{hasOverviewName}}">{{overviewName}}</text>
         <text class="overview-status" wx:if="{{hasOverviewStatus}}">{{overviewStatus}}</text>
         <image class="overview-logo" wx:if="{{hasOverviewLogo}}" src="{{overviewLogo}}" mode="aspectFit"></image>
@@ -106,7 +106,7 @@
               <text class="task-badge" wx:if="{{!item.isPrototypeReference}}">{{item.count}}</text>
             </view>
             <text class="task-title">{{item.title}}</text>
-            <text class="task-subtitle">{{item.subtitle}}</text>
+
           </view>
         </view>
         <view class="empty-card" wx:if="{{!hasTaskCards}}">当前没有需要处理的事项</view>

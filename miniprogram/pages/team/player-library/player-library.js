@@ -4,7 +4,7 @@ Page({
   data: {
     loading: true, errorText: '', teamId: '', teamName: '', teamLogo: '', canManage: false,
     allPlayers: [], players: [], query: '', filter: 'all',
-    completeCount: 0, pendingCount: 0, exceptionCount: 0, totalCount: 0, hasPlayers: false, hasPending: false, visualQa: false,
+    completeCount: 0, pendingCount: 0, exceptionCount: 0, totalCount: 0, hasPlayers: false, hasPending: false, pendingImportCount: 0, hasPendingImport: false, visualQa: false,
     filterAllClass: 'active', filterPendingClass: '', filterExceptionClass: ''
   },
   onLoad: function(options) {
@@ -25,10 +25,11 @@ Page({
         var result = res.result || {}
         if (!result.success) throw new Error(result.message || '球员库加载失败')
         var completeCount = result.counts.complete || 0, pendingCount = result.counts.pending || 0, exceptionCount = result.counts.exception || 0
-        that.setData({ loading: false, teamId: result.team.id, teamName: result.team.name, teamLogo: result.team.logo || '', canManage: result.canManage, allPlayers: result.players || [], completeCount: completeCount, pendingCount: pendingCount, exceptionCount: exceptionCount, totalCount: completeCount + pendingCount + exceptionCount, hasPending: Boolean(pendingCount) })
+        that.setData({ loading: false, teamId: result.team.id, teamName: result.team.name, teamLogo: result.team.logo || '', canManage: result.canManage, allPlayers: result.players || [], completeCount: completeCount, pendingCount: pendingCount, exceptionCount: exceptionCount, totalCount: completeCount + pendingCount + exceptionCount, hasPending: Boolean(pendingCount), pendingImportCount:Number(result.pendingImportCount || 0), hasPendingImport:Boolean(result.hasPendingImport) })
         that.applyFilters()
       }).catch(function(error) { that.setData({ loading: false, errorText: error.message || '球员库加载失败' }) })
   },
+  openImportedReview: function() { wx.navigateTo({ url:'/pages/team/imported-player-review/imported-player-review?teamId=' + encodeURIComponent(this.data.teamId) }) },
   applyFilters: function() {
     var query = String(this.data.query || '').trim().toLowerCase(), filter = this.data.filter
     var rows = this.data.allPlayers.filter(function(item) {
@@ -50,7 +51,7 @@ Page({
       { id: 'p1', name: '张子墨', birthDate: '2014-03-18 出生', profileStatus: 'complete', statusText: '资料完整' },
       { id: 'p2', name: '李浩然', birthDate: '2014-09-02 出生', profileStatus: 'pending', statusText: '待家长补充', needsParentCompletion: true },
       { id: 'p3', name: '陈宇', birthDate: '2014-05-21 出生', profileStatus: 'complete', statusText: '资料完整' },
-      { id: 'p4', name: '王梓轩', birthDate: '2013-12-26 出生', profileStatus: 'exception', statusText: '实名异常' },
+      { id: 'p4', name: '王梓轩', birthDate: '2013-12-26 出生', profileStatus: 'exception', statusText: '人证异常' },
       { id: 'p5', name: '赵一诺', birthDate: '2014-06-11 出生', profileStatus: 'pending', statusText: '待形象照', needsParentCompletion: true }
     ]
     this.setData({ loading: false, teamId: 'visual-team', teamName: '赛小蜂 U12 竞技队', teamLogo: '/images/logo.png', canManage: true, allPlayers: rows, players: rows.map(function(item) { return Object.assign({}, item, { avatarText:item.name.slice(0,1),isComplete: item.profileStatus === 'complete', isPending: item.profileStatus === 'pending', isException: item.profileStatus === 'exception' }) }), completeCount: 18, pendingCount: 3, exceptionCount: 2, totalCount: 23, hasPlayers: true, hasPending: true, filterAllClass:'active',filterPendingClass:'',filterExceptionClass:'' })

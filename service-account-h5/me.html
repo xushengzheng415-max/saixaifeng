@@ -5,30 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b3d2e">
   <title>我的服务｜赛小蜂足球</title>
-  <link rel="stylesheet" href="./service-menu.css?v=20260905-1">
+  <link rel="stylesheet" href="./service-menu.css?v=20260905-2">
 </head>
 <body>
   <header class="topbar">
     <img src="./assets/logo-saixiaofeng-football.png" alt="赛小蜂足球">
     <div><strong>我的服务</strong><span>个人入口</span></div>
   </header>
-  <main class="page">
-    <section class="hero"><span>赛小蜂足球助手</span><h1>我的服务</h1><p>这里只汇总个人任务与邀请入口，不提供主办方或球队机构后台。</p></section>
-    <section class="service-list" aria-label="个人服务列表">
-      <article class="service-card">
-        <div><span class="kicker">比赛执行</span><h2>裁判任务</h2><p>查看已指派比赛，完成赛前确认、现场记录和赛后提交。</p></div>
-        <footer><small>进入后完成微信授权</small><a href="./?entry=workbench">进入任务</a></footer>
-      </article>
-      <article class="service-card muted-card">
-        <div><span class="kicker">邀请协作</span><h2>球员与监护人</h2><p>为保护未成年人资料，本入口只能从球队发送的专属邀请进入，不能搜索或查看整队名单。</p></div>
-        <footer><small>等待球队发送专属邀请</small><span>邀请限定</span></footer>
-      </article>
-      <article class="service-card">
-        <div><span class="kicker">公开信息</span><h2>赛事中心</h2><p>无需登录即可查看公开赛事、赛程、比分和排名。</p></div>
-        <footer><small>公开访问</small><a href="../admin/#/portal/home">查看赛事</a></footer>
-      </article>
-    </section>
-    <section class="boundary"><strong>机构业务去哪里？</strong><p>主办方、俱乐部和球队的移动管理在赛小蜂足球小程序中完成；复杂赛事配置使用 PC 管理后台。</p></section>
-  </main>
+  <main id="app" class="page"><section class="loading-card"><i></i><strong>正在读取我的数据…</strong><span>只读取当前微信已安全绑定的业务关系</span></section></main>
+  <script src="./service-private.js?v=20260905-2"></script>
 </body>
 </html>

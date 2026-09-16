@@ -23,6 +23,46 @@ function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
+// ========== 腾讯云 SMS 失败码 → 用户可读文案 ==========
+// 腾讯云原始响应含手机号（PhoneNumber）和 RequestId，属敏感信息：
+// 既不能返回给浏览器，也不能写入云函数日志。前端只接收可读文案，
+// 服务端只记录失败码用于排查。
+const SMS_ERROR_MESSAGES = {
+  'FailedOperation.InsufficientSMS package': '短信套餐包余量不足，请联系管理员充值后再试',
+  'FailedOperation.InsufficientSmsPackage': '短信套餐包余量不足，请联系管理员充值后再试',
+  'FailedOperation.InsufficientBalance': '短信账户余额不足，请联系管理员充值后再试',
+  'FailedOperation.PhoneNumberInBlacklist': '该手机号已被限制接收短信，请联系管理员处理',
+  'FailedOperation.PhoneNumberUnsupported': '该手机号暂不支持接收短信',
+  'FailedOperation.SignatureIncorrectOrUnapproved': '短信签名未通过审核，请联系管理员处理',
+  'FailedOperation.TemplateIncorrectOrUnapproved': '短信模板未通过审核，请联系管理员处理',
+  'FailedOperation.MissingPhoneNumber': '接收短信的手机号无效',
+  'FailedOperation.MissingTemplateParam': '短信模板参数缺失，请联系管理员处理',
+  'LimitExceeded.PhoneNumberDailyLimit': '该手机号今日短信发送次数已达上限，请明日再试',
+  'LimitExceeded.PhoneNumberOneHourLimit': '该手机号发送次数过多，请1小时后重试',
+  'LimitExceeded.PhoneNumberThirtySecondLimit': '发送过于频繁，请稍后重试',
+  'LimitExceeded.PhoneNumberFiveMinuteLimit': '发送过于频繁，请稍后重试',
+  'AuthFailure.SignatureFailure': '短信服务认证失败，请联系管理员处理',
+  'AuthFailure.SecretIdNotFound': '短信服务认证失败，请联系管理员处理',
+  'AuthFailure.UnauthorizedOperation': '短信服务未授权，请联系管理员处理',
+  'UnauthorizedOperation.RequestIpNotInWhitelist': '短信服务IP白名单未配置，请联系管理员处理',
+  'RequestLimitExceeded': '短信请求过于频繁，请稍后重试',
+  'InternalError': '短信服务内部错误，请稍后重试',
+}
+
+// 从腾讯云响应中只提取失败码，绝不回传原始响应体。
+function extractSmsFailureCode(resp) {
+  const set = resp && Array.isArray(resp.SendStatusSet) ? resp.SendStatusSet : []
+  const failed = set.find(item => item && item.Code && item.Code !== 'Ok')
+  if (failed) return String(failed.Code)
+  if (resp && resp.Error && resp.Error.Code) return String(resp.Error.Code)
+  return ''
+}
+
+function toUserFacingSmsError(code) {
+  if (code && SMS_ERROR_MESSAGES[code]) return SMS_ERROR_MESSAGES[code]
+  return '短信发送失败，请稍后重试'
+}
+
 // ========== TC3-HMAC-SHA256 签名（腾讯云官方示例）==========
 function getSignature(secretKey, date, service, stringToSign) {
   const kDate    = crypto.createHmac('sha256', 'TC3' + secretKey).update(date).digest()
@@ -124,11 +164,16 @@ function callSendSms(phoneNumber, code) {
           if (resp && resp.SendStatusSet && resp.SendStatusSet[0] && resp.SendStatusSet[0].Code === 'Ok') {
             resolve({ success: true, data: resp })
           } else {
-            const errMsg = resp ? JSON.stringify(resp) : data
-            reject(new Error('短信发送失败: ' + errMsg))
+            // 只带失败码和可读文案，原始响应（含手机号、RequestId）不出函数。
+            const smsCode = extractSmsFailureCode(resp)
+            const err = new Error(toUserFacingSmsError(smsCode))
+            err.smsCode = smsCode
+            reject(err)
           }
         } catch (e) {
-          reject(new Error('解析短信响应失败: ' + data))
+          const err = new Error('短信服务响应异常，请稍后重试')
+          err.smsCode = 'PARSE_ERROR'
+          reject(err)
         }
       })
     })
@@ -181,7 +226,8 @@ exports.main = async (event) => {
 
     return { success: true, message: '验证码发送成功' }
   } catch (err) {
-    console.error('[sendSms] 发送失败:', err.message || err)
+    // 只记录失败码或可读原因，不记录手机号、验证码或腾讯云原始响应。
+    console.error('[sendSms] 发送失败:', err.smsCode || err.message || 'UNKNOWN')
     return { success: false, error: err.message || '发送失败，请稍后重试' }
   }
 }

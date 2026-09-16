@@ -25,13 +25,13 @@
           <button type="button" @click="router.push({ path: `/tournaments/${sourceTournamentId}/teams`, query: { divisionId: sourceDivisionId, mode: 'professional', tab: 'cancel_requested' } })">名单变更 <strong>3</strong></button>
         </nav>
         <div class="detail-heading">
-          <div><h1>球队详情</h1><p>查看该球队在本届赛事中的参赛资料与球队级比赛数据</p></div>
+          <div><h1>球队详情</h1></div>
           <el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button>
         </div>
 
         <section class="team-event-summary">
           <div class="summary-identity">
-            <img :src="team.logoUrl || team.logo || '/admin/organization-logo-placeholder.svg'" alt="球队队徽" />
+            <img :src="teamLogoDisplayUrl" alt="球队队徽" />
             <strong>{{ team.name || '未命名球队' }}</strong>
           </div>
           <dl><dt>赛事参赛编号</dt><dd>{{ tournamentRelation.registrationNo || tournamentRelation.tournamentTeamCode || team.teamCode || '—' }}</dd></dl>
@@ -45,7 +45,7 @@
           <section class="detail-panel team-materials">
             <h2><el-icon><Tickets /></el-icon>球队赛事资料</h2>
             <dl><dt>赛事球队名称</dt><dd>{{ team.name || '—' }}</dd></dl>
-            <dl><dt>球队队徽</dt><dd><img :src="team.logoUrl || team.logo || '/admin/organization-logo-placeholder.svg'" alt="队徽" /></dd></dl>
+            <dl><dt>球队队徽</dt><dd><img :src="teamLogoDisplayUrl" alt="队徽" /></dd></dl>
             <dl><dt>球队负责人</dt><dd>{{ team.coachName || team.contactName || team.ownerName || '—' }}</dd></dl>
             <dl><dt>联系方式</dt><dd>{{ maskedPhone }}</dd></dl>
           </section>
@@ -55,7 +55,7 @@
             <dl><dt>最近活跃时间</dt><dd>{{ formatTournamentTime(team.lastActiveAt || team.updateTime) }}</dd></dl>
           </section>
           <section class="detail-panel match-summary">
-            <h2><el-icon><Histogram /></el-icon>{{ isProfessionalTournamentTeam ? '专业版赛事协作' : '简易版比赛数据' }}</h2>
+            <h2><el-icon><Histogram /></el-icon>{{ isProfessionalTournamentTeam ? '专业版赛事协作' : '基础版比赛数据' }}</h2>
             <template v-if="isProfessionalTournamentTeam"><div class="professional-roster-stats"><article><span>已提交</span><strong>23</strong><small>人</small></article><article><span>已审核</span><strong>23</strong><small>人</small></article><article class="pending"><span>资料待补充</span><strong>0</strong><small>人</small></article></div><div class="professional-team-actions"><el-button type="success" plain @click="openTournamentRoster"><el-icon><Tickets /></el-icon>查看参赛名单</el-button><el-button type="success" @click="sendTournamentNotification"><el-icon><Bell /></el-icon>发送赛事通知</el-button></div></template>
             <template v-else>
             <div class="match-stats"><dl><dt>比赛场次</dt><dd>{{ teamMatchStats.total }}</dd></dl><dl><dt>胜场</dt><dd>{{ teamMatchStats.wins }}</dd></dl><dl><dt>平场</dt><dd>{{ teamMatchStats.draws }}</dd></dl><dl><dt>负场</dt><dd>{{ teamMatchStats.losses }}</dd></dl></div>
@@ -72,36 +72,38 @@
                 <label v-for="equipment in kitEquipment" :key="equipment.key" class="kit-equipment-item">
                   <span class="kit-image-stage"><i class="kit-silhouette" :class="equipment.key" :style="kitShapeStyle(equipment.key, kitForm[kit.key][equipment.key])"></i></span>
                   <strong>{{ equipment.label }}</strong>
-                  <el-select v-model="kitForm[kit.key][equipment.key]" :aria-label="`${kit.label}${equipment.label}颜色`">
+                  <el-select v-model="kitForm[kit.key][equipment.key]" :aria-label="`${kit.label}${equipment.label}颜色`" @change="clearKitSourceLabel(kit.key, equipment.key)">
                     <el-option v-for="color in kitColorOptions" :key="color.value" :label="color.label" :value="color.value"><span class="kit-color-option"><i :style="{backgroundColor:color.value}"></i>{{ color.label }}</span></el-option>
                   </el-select>
+                  <small v-if="kitSourceLabel(kit.key, equipment.key)" class="kit-source-label">报名表：{{ kitSourceLabel(kit.key, equipment.key) }}</small>
                 </label>
               </div>
             </article>
           </div>
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
-        <section v-if="isSyntheticTeam" class="synthetic-player-panel">
+        <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
-            <div><h2>虚拟球员资料</h2><p>本队共 {{ players.length }} 名测试球员；资料仅用于赛事流程验收。</p></div>
-            <el-tag type="warning" effect="plain">合成测试数据</el-tag>
+            <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '球员资料' }}</h2><p>本队共 {{ players.length }} 名球员；基础资料不等于本届赛事正式名单。</p></div>
+            <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
-          <el-table :data="players" v-loading="loading" empty-text="暂无虚拟球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
+          <el-table :data="players" v-loading="loading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
             <el-table-column label="头像" width="72" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="球员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
             <el-table-column prop="name" label="姓名" min-width="110" />
-            <el-table-column prop="playerId" label="球员编号" min-width="150" />
+            <el-table-column v-if="isSyntheticTeam" prop="playerId" label="球员编号" min-width="150" />
             <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
             <el-table-column label="位置" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
-            <el-table-column label="出生日期" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
-            <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag type="success" size="small">{{ row.profileStatus === 'complete' ? '已完整' : '测试资料' }}</el-tag></template></el-table-column>
+            <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
           </el-table>
         </section>
         <section v-if="isProfessionalTournamentTeam" class="collaboration-timeline"><h2>协作流程进度</h2><ol><li v-for="step in professionalTimeline" :key="step.title"><span><el-icon><CircleCheckFilled /></el-icon></span><div><strong>{{ step.title }}</strong><time>{{ step.time }}</time><small>{{ step.description }}</small></div></li></ol></section>
         <el-button v-else class="view-results" type="success" plain @click="openTournamentMatches"><el-icon><SwitchButton /></el-icon>查看赛程赛果</el-button>
-        <el-alert :title="isProfessionalTournamentTeam ? '专业版仅展示当前赛事参赛关系、名单快照与协作状态，不展示俱乐部日常训练或财务资料。' : '简易版仅展示球队级赛事资料、赛程、比分与排名，不生成赛事官方球员个人数据。'" type="success" :closable="false" show-icon />
+        <el-alert :title="isProfessionalTournamentTeam ? '专业模式当前免费；这里只展示赛事所需的球队、球员和名单资料，不展示俱乐部训练或财务数据。' : '基础模式同样展示球队球员基础资料；只有球队明确提交后才形成本届正式名单和官方个人数据。'" type="success" :closable="false" show-icon />
       </main>
     </template>
 
@@ -113,7 +115,7 @@
       </div>
       <div class="team-info-header">
         <div class="team-logo-wrapper">
-          <el-avatar :size="100" :src="team.logoUrl || team.logo" shape="square" style="background-color: #fff; color: #909399; border: 1px solid #ebeef5;">
+          <el-avatar :size="100" :src="teamLogoDisplayUrl" shape="square" style="background-color: #fff; color: #909399; border: 1px solid #ebeef5;">
             {{ team.name ? team.name[0] : '?' }}
           </el-avatar>
           <!-- AI生成队徽按钮 -->
@@ -134,9 +136,7 @@
           <div class="team-meta-row">
             <span class="meta-item">简称: {{ team.shortName || '-' }}</span>
           </div>
-          <div class="team-description">
-            {{ team.description || '暂无球队介绍' }}
-          </div>
+
         </div>
       </div>
     </div>
@@ -168,10 +168,10 @@
         </div>
       </div>
 
-      <el-table 
-        :data="players" 
-        v-loading="loading" 
-        style="width: 100%" 
+      <el-table
+        :data="players"
+        v-loading="loading"
+        style="width: 100%"
         empty-text="暂无球员"
         @row-click="viewPlayerCard"
         class="player-table"
@@ -186,9 +186,9 @@
         <el-table-column prop="playerId" label="球员ID" width="140" />
         <el-table-column label="头像" width="60" align="center">
           <template #default="{ row }">
-            <img 
-              v-if="row.photoUrl" 
-              :src="row.photoUrl" 
+            <img
+              v-if="row.photoUrl"
+              :src="row.photoUrl"
               class="player-avatar-img"
               alt="头像"
             />
@@ -268,31 +268,31 @@
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="姓名" required>
-                  <el-input 
-                    v-model="playerForm.name" 
-                    placeholder="请输入姓名" 
+                  <el-input
+                    v-model="playerForm.name"
+                    placeholder="请输入姓名"
                     @input="onNameInput"
                   />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="身份证号" required>
-                  <el-input 
-                    v-model="playerForm.idCard" 
-                    placeholder="18位身份证号" 
+                  <el-input
+                    v-model="playerForm.idCard"
+                    placeholder="18位身份证号"
                     maxlength="18"
                     @input="onIdCardInput"
                   />
                 </el-form-item>
               </el-col>
             </el-row>
-            
+
             <!-- 第二行：自动生成的信息 -->
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="球衣姓名">
-                  <el-input 
-                    v-model="playerForm.jerseyName" 
+                  <el-input
+                    v-model="playerForm.jerseyName"
                     placeholder="自动根据姓名生成，可手动修改"
                   >
                     <template #suffix>
@@ -305,8 +305,8 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="平台年龄">
-                  <el-input 
-                    v-model="displayAge" 
+                  <el-input
+                    v-model="displayAge"
                     placeholder="根据身份证号计算"
                     readonly
                   >
@@ -319,13 +319,13 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            
+
             <!-- 第三行：身份证解析的信息 -->
             <el-row :gutter="16">
               <el-col :span="8">
                 <el-form-item label="出生日期">
-                  <el-input 
-                    v-model="playerForm.birthDate" 
+                  <el-input
+                    v-model="playerForm.birthDate"
                     placeholder="自动识别"
                     readonly
                   />
@@ -345,7 +345,7 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            
+
             <!-- 通讯地址 -->
             <el-row :gutter="16">
               <el-col :span="24">
@@ -367,7 +367,7 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            
+
             <!-- 第四行：球衣信息 -->
             <el-row :gutter="16">
               <el-col :span="12">
@@ -386,7 +386,7 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            
+
             <!-- 第五行：国籍 -->
             <el-row :gutter="16">
               <el-col :span="12">
@@ -402,7 +402,7 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            
+
             <!-- 第六行：身高体重 -->
             <el-row :gutter="16">
               <el-col :span="12">
@@ -416,7 +416,7 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            
+
             <el-divider content-position="left">联系方式</el-divider>
             <el-row :gutter="16">
               <el-col :span="12">
@@ -437,7 +437,7 @@
               <el-col :span="24">
                 <el-form-item label="球员照片" required>
                   <div class="player-photo-section">
-                    <AvatarCropper 
+                    <AvatarCropper
                       v-if="!playerForm.photoUrl"
                       @success="handleAvatarCropSuccess"
                     />
@@ -513,11 +513,11 @@
               <el-button size="small" :icon="Refresh" circle @click="loadPlayerLibrary(true)" title="刷新球员库" />
             </div>
             <!-- 球员库列表 -->
-            <el-table 
-              :data="playerLibraryList" 
-              v-loading="libraryLoading" 
-              style="width: 100%" 
-              max-height="400px" 
+            <el-table
+              :data="playerLibraryList"
+              v-loading="libraryLoading"
+              style="width: 100%"
+              max-height="400px"
               size="small"
               @selection-change="handleLibrarySelectionChange"
               ref="libraryTableRef"
@@ -560,31 +560,31 @@
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="姓名" required>
-                <el-input 
-                  v-model="playerForm.name" 
-                  placeholder="请输入姓名" 
+                <el-input
+                  v-model="playerForm.name"
+                  placeholder="请输入姓名"
                   @input="onNameInput"
                 />
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item label="身份证号" required>
-                <el-input 
-                  v-model="playerForm.idCard" 
-                  placeholder="18位身份证号" 
+                <el-input
+                  v-model="playerForm.idCard"
+                  placeholder="18位身份证号"
                   maxlength="18"
                   @input="onIdCardInput"
                 />
               </el-form-item>
             </el-col>
           </el-row>
-          
+
           <!-- 第二行：自动生成的信息 -->
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="球衣姓名">
-                <el-input 
-                  v-model="playerForm.jerseyName" 
+                <el-input
+                  v-model="playerForm.jerseyName"
                   placeholder="自动根据姓名生成，可手动修改"
                 >
                   <template #suffix>
@@ -597,8 +597,8 @@
             </el-col>
             <el-col :span="12">
               <el-form-item label="平台年龄">
-                <el-input 
-                  v-model="displayAge" 
+                <el-input
+                  v-model="displayAge"
                   placeholder="根据身份证号计算"
                   readonly
                 >
@@ -611,13 +611,13 @@
               </el-form-item>
             </el-col>
           </el-row>
-          
+
           <!-- 第三行：身份证解析的信息 -->
           <el-row :gutter="16">
             <el-col :span="8">
               <el-form-item label="出生日期">
-                <el-input 
-                  v-model="playerForm.birthDate" 
+                <el-input
+                  v-model="playerForm.birthDate"
                   placeholder="自动识别"
                   readonly
                 />
@@ -637,7 +637,7 @@
               </el-form-item>
             </el-col>
           </el-row>
-          
+
           <!-- 通讯地址 -->
           <el-row :gutter="16">
             <el-col :span="24">
@@ -659,7 +659,7 @@
               </el-form-item>
             </el-col>
           </el-row>
-          
+
           <!-- 第四行：球衣信息 -->
           <el-row :gutter="16">
             <el-col :span="12">
@@ -678,7 +678,7 @@
               </el-form-item>
             </el-col>
           </el-row>
-          
+
           <!-- 第五行：国籍 -->
           <el-row :gutter="16">
             <el-col :span="12">
@@ -694,7 +694,7 @@
               </el-form-item>
             </el-col>
           </el-row>
-          
+
           <!-- 第六行：身高体重 -->
           <el-row :gutter="16">
             <el-col :span="12">
@@ -708,7 +708,7 @@
               </el-form-item>
             </el-col>
           </el-row>
-          
+
           <el-divider content-position="left">联系方式</el-divider>
           <el-row :gutter="16">
             <el-col :span="12">
@@ -729,7 +729,7 @@
             <el-col :span="24">
               <el-form-item label="球员照片" required>
                 <div class="player-photo-section">
-                  <AvatarCropper 
+                  <AvatarCropper
                     v-if="!playerForm.photoUrl"
                     @success="handleAvatarCropSuccess"
                   />
@@ -893,10 +893,10 @@
           </template>
         </el-alert>
         <!-- 列检测提示 -->
-        <el-alert 
+        <el-alert
           v-if="colDetectInfo.姓名列"
-          type="info" 
-          :closable="false" 
+          type="info"
+          :closable="false"
           style="margin-bottom: 8px;"
           title="请确认以下列映射是否正确："
         >
@@ -1176,6 +1176,7 @@ import ImageCropper from '../../components/common/ImageCropper.vue'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
 import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
+import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
 import JSZip from 'jszip'
 
 const route = useRoute()
@@ -1257,8 +1258,9 @@ const players = ref([])
 const kitSaving = ref(false)
 const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
 const kitEquipment = [{key:'jersey',label:'球衣'},{key:'shorts',label:'球裤'},{key:'socks',label:'球袜'}]
-const kitColorOptions = [{label:'纯白',value:'#FFFFFF'},{label:'炭黑',value:'#161A18'},{label:'深灰',value:'#59615D'},{label:'银灰',value:'#A8B0AC'},{label:'正红',value:'#D72631'},{label:'酒红',value:'#7E1731'},{label:'亮橙',value:'#F47A1F'},{label:'比赛黄',value:'#F5C518'},{label:'荧光黄',value:'#D7F300'},{label:'草地绿',value:'#138A4B'},{label:'深绿',value:'#075B35'},{label:'天蓝',value:'#47A9E8'},{label:'皇家蓝',value:'#1455B5'},{label:'海军蓝',value:'#14264A'},{label:'竞技紫',value:'#6B3FA0'},{label:'亮粉',value:'#E64A8A'}]
+const kitColorOptions = KIT_COLOR_OPTIONS
 const kitForm = ref({primary:{jersey:'#138A4B',shorts:'#FFFFFF',socks:'#138A4B'},secondary:{jersey:'#FFFFFF',shorts:'#138A4B',socks:'#FFFFFF'}})
+const kitColorLabels = ref({ primary:{}, secondary:{} })
 const tournamentContext = ref(qaSnapshot && sourceTournamentId.value ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions } : {})
 const tournamentRelation = ref(qaSnapshot && sourceTournamentId.value ? { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' } : {})
 const isSyntheticTeam = computed(() => team.value.synthetic === true || Boolean(team.value.syntheticDatasetId))
@@ -1311,8 +1313,20 @@ const importMode = ref('excel') // excel=模板导入，word=快捷模式（Word
 const wordFormInfo = ref({})
 const wordTeamLogoPreview = ref('')
 const wordTeamLogoFile = ref(null)
-const getTeamLogoUrl = (teamRecord) => String(teamRecord?.logoUrl || '').trim() || String(teamRecord?.logo || '').trim()
+const getTeamLogoUrl = (teamRecord) => String(teamRecord?.logoUrl || '').trim() || String(teamRecord?.logo || '').trim() || String(teamRecord?._logoFileId || '').trim()
+const teamLogoDisplayUrl = computed(() => {
+  const value = String(team.value.logoUrl || team.value.logo || '')
+  return /^(https?:\/\/|\/)/i.test(value) ? value : '/admin/organization-logo-placeholder.svg'
+})
 const teamHasLogo = computed(() => Boolean(getTeamLogoUrl(team.value)))
+
+async function resolveTeamLogo(teamRecord) {
+  const source = getTeamLogoUrl(teamRecord)
+  if (!source.startsWith('cloud://')) return { ...teamRecord, _logoFileId: source }
+  const resolved = await getFileUrl(source)
+  const url = /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+  return { ...teamRecord, _logoFileId: source, logo: url, logoUrl: url }
+}
 
 // 批量头像导入相关
 const avatarImportRows = ref([])
@@ -1394,17 +1408,17 @@ const displayAge = computed(() => {
 // 解析身份证号
 function parseIdCard(idCard) {
   if (!idCard || idCard.length !== 18) return null
-  
+
   // 提取出生日期
   const year = idCard.substring(6, 10)
   const month = idCard.substring(10, 12)
   const day = idCard.substring(12, 14)
   const birthDate = `${year}-${month}-${day}`
-  
+
   // 提取性别（第17位，奇数男，偶数女）
   const genderCode = parseInt(idCard.charAt(16))
   const gender = genderCode % 2 === 1 ? 'male' : 'female'
-  
+
   // 提取籍贯（前6位地区码）- 显示城市
   const areaCode = idCard.substring(0, 6)
   const cityMap = {
@@ -1519,7 +1533,7 @@ function parseIdCard(idCard) {
   }
   const cityCode = areaCode.substring(0, 4)
   const nativePlace = cityMap[cityCode] || ''
-  
+
   return { birthDate, gender, nativePlace }
 }
 
@@ -1816,7 +1830,7 @@ async function submitPlayer() {
     // 如果有 photoFileID（云存储fileID），使用它作为永久保存的photoUrl
     // 这样避免临时URL过期导致图片无法显示
     const photoUrlToSave = playerForm.value.photoFileID || playerForm.value.photoUrl
-    
+
     const data = {
       ...playerForm.value,
       playerId: generatePlayerId(team.value.teamCode || teamId, 'C'),
@@ -2348,12 +2362,12 @@ async function handleImportFileChange(file) {
       const workbook = XLSX.read(data, { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 })
-      
+
       if (!jsonData || jsonData.length < 2) {
         ElMessage.error('Excel 文件为空或格式不正确')
         return
       }
-      
+
       // 查找表头行（找包含"姓名"的那一行）
       let headerRowIndex = -1
       for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
@@ -2367,31 +2381,31 @@ async function handleImportFileChange(file) {
         ElMessage.error('未找到列头行（需包含"姓名"列），请确认使用模板格式')
         return
       }
-      
+
       const headers = jsonData[headerRowIndex].map(h => String(h || '').trim())
       const candidateRows = jsonData.slice(headerRowIndex + 1)
         .map((row, index) => ({ row, excelRowNumber: headerRowIndex + index + 2 }))
         .filter(({ row }) => row && row.some(c => String(c || '').trim()))
-      
+
       if (candidateRows.length === 0) {
         ElMessage.warning('Excel 中没有有效的数据行')
         return
       }
-      
+
       // 列索引映射（优先精确匹配，再模糊匹配，避免"球衣名"误匹配"姓名"等）
       function findCol(keywords, excludes = []) {
         // 1. 精确匹配
         let idx = headers.findIndex(h => keywords.some(k => h === k))
         // 2. 模糊匹配（排除含特定关键词的列）
         if (idx === -1) {
-          idx = headers.findIndex(h => 
-            keywords.some(k => h.includes(k)) && 
+          idx = headers.findIndex(h =>
+            keywords.some(k => h.includes(k)) &&
             !excludes.some(e => h.includes(e))
           )
         }
         return idx
       }
-      
+
       const colMap = {
         serial: findCol(['序号', '编号', '顺序'], []),
         name: findCol(['姓名'], ['球衣', '号码', '球衣名', '缩写', '拼音']),
@@ -2405,7 +2419,7 @@ async function handleImportFileChange(file) {
         contactPhone: findCol(['联系电话', '手机号', '手机', '电话', '联系方式']),
         relatedPosition: findCol(['关联职位', '职务', '职位', '关联'], ['球场位置'])
       }
-      
+
       // 调试日志 & 用户可见提示
       const info = {
         姓名列: colMap.name >= 0 ? `第${colMap.name + 1}列「${headers[colMap.name]}」` : '未找到',
@@ -2420,12 +2434,12 @@ async function handleImportFileChange(file) {
       }
       colDetectInfo.value = info
       console.log('🔍 Excel 列检测结果:', info)
-      
+
       if (colMap.name === -1) {
         ElMessage.error('未找到"姓名"列，请使用模板格式')
         return
       }
-      
+
       const parsed = []
       const errors = []
       const instructionKeywords = ['填写说明', '姓名为必填', '球场位置可选', '关联职位可选', '球衣名会', '示例行请', '导入前删除']
@@ -2435,7 +2449,7 @@ async function handleImportFileChange(file) {
         if (excelRowNumber >= IMPORT_INSTRUCTION_START_ROW) return true
         return instructionKeywords.some(keyword => rowText.includes(keyword))
       }
-      
+
       candidateRows.forEach(({ row, excelRowNumber }) => {
         if (isInstructionRow(row, excelRowNumber)) return
 
@@ -2457,12 +2471,12 @@ async function handleImportFileChange(file) {
           jerseyNumberStr === '10' && positionCn === '前卫' && heightStr === '178' && weightStr === '70' &&
           contactName === '张三' && contactPhone === '13800138000' && ['队员', '球员'].includes(relatedPosition)
         if (unchangedExample) return
-        
+
         if (!name) {
           errors.push(`第 ${excelRowNumber} 行：姓名为空，已跳过`)
           return
         }
-        
+
         const normalizedRole = relatedPosition || '队员'
         const importKind = isStaffRole(normalizedRole) ? 'staff' : 'player'
         const player = {
@@ -2484,12 +2498,12 @@ async function handleImportFileChange(file) {
             : '球员',
           _error: false
         }
-        
+
         // 自动生成球衣名（仅球员且 Excel 中没有提供时）
         if (player._importKind === 'player' && !player.jerseyName && typeof generateJerseyName === 'function') {
           player.jerseyName = generateJerseyName(name)
         }
-        
+
         // 验证：工作人员允许不填球号和球场位置，但姓名、身份证号仍保留为基础身份信息
         if (!idCard) {
           player._error = true
@@ -2499,13 +2513,13 @@ async function handleImportFileChange(file) {
           player._error = true
           errors.push(`第 ${excelRowNumber} 行「${name}」：关联职位「${relatedPosition}」无法识别`)
         }
-        
+
         parsed.push(player)
       })
-      
+
       importParsedData.value = parsed
       importErrors.value = errors
-      
+
       if (parsed.length > 0) {
         ElMessage.success(`成功解析 ${parsed.length} 条人员记录${errors.length > 0 ? `，${errors.length} 条有警告` : ''}`)
       } else {
@@ -3123,7 +3137,7 @@ async function confirmBatchImport() {
     ElMessage.warning('没有可导入的有效人员数据')
     return
   }
-  
+
   const playerCount = validData.filter(item => item._importKind !== 'staff').length
   const staffCount = validData.filter(item => item._importKind === 'staff').length
   const wordPhotoCount = importMode.value === 'word' ? validData.filter(item => item._photoFile).length : 0
@@ -3140,7 +3154,7 @@ async function confirmBatchImport() {
   } catch {
     return
   }
-  
+
   batchImporting.value = true
   let successPlayers = 0
   let updatedPlayers = 0
@@ -3175,7 +3189,7 @@ async function confirmBatchImport() {
     }
   })
   let importSeq = maxExistingSeq + 1 // 批量导入序号计数器，确保每个人员ID唯一
-  
+
   for (const player of validData) {
     try {
       // 解析身份证号（出生日期、籍贯、性别）
@@ -3291,13 +3305,13 @@ async function confirmBatchImport() {
       console.error('报名表队徽补充失败:', logoError)
     }
   }
-  
+
   batchImporting.value = false
   clearImportData()
-  
+
   await loadPlayers()
   showBatchImport.value = false
-  
+
   const logoResultText = logoImportResult.imported
     ? '，已同步补充队徽'
     : logoImportResult.preservedExisting
@@ -3416,17 +3430,17 @@ async function loadTeam() {
   }
   try {
     const result = await queryById('teams', teamId)
-    
+
     // 处理不同的返回格式
     if (Array.isArray(result) && result.length > 0) {
-      team.value = result[0]
+      team.value = await resolveTeamLogo(result[0])
     } else if (result && typeof result === 'object') {
-      team.value = result
+      team.value = await resolveTeamLogo(result)
     } else {
       team.value = {}
     }
     syncKitColorsFromTeam()
-    
+
   } catch (err) {
     console.error('加载球队信息失败:', err)
     team.value = {}
@@ -3443,10 +3457,20 @@ function normalizeKitSet(source, fallback) {
 
 function syncKitColorsFromTeam() {
   const source = tournamentRelation.value.kitColors || team.value.kitColors || team.value.uniformColors || {}
+  const sourceLabels = tournamentRelation.value.kitColorLabels || team.value.kitColorLabels || {}
   kitForm.value = {
     primary: normalizeKitSet(source.primary || source.home || {}, { jersey:'#138A4B', shorts:'#FFFFFF', socks:'#138A4B' }),
     secondary: normalizeKitSet(source.secondary || source.away || {}, { jersey:'#FFFFFF', shorts:'#138A4B', socks:'#FFFFFF' })
   }
+  kitColorLabels.value = { primary:{ ...(sourceLabels.primary || {}) }, secondary:{ ...(sourceLabels.secondary || {}) } }
+}
+
+function kitSourceLabel(setKey, equipmentKey) {
+  return String(kitColorLabels.value?.[setKey]?.[equipmentKey] || '')
+}
+
+function clearKitSourceLabel(setKey, equipmentKey) {
+  if (kitColorLabels.value?.[setKey]) kitColorLabels.value[setKey][equipmentKey] = ''
 }
 
 function kitShapeStyle(type, color) {
@@ -3458,14 +3482,15 @@ async function saveTeamKitColors() {
   kitSaving.value = true
   try {
     const data = { primary:{ ...kitForm.value.primary }, secondary:{ ...kitForm.value.secondary } }
+    const labels = { primary:{ ...kitColorLabels.value.primary }, secondary:{ ...kitColorLabels.value.secondary } }
     if (sourceTournamentId.value) {
       if (!tournamentRelation.value._id) throw new Error('当前球队参赛关系不存在，无法保存本届赛事配色')
-      await updateRecord('tournament_teams', tournamentRelation.value._id, { kitColors:data, kitColorsUpdatedAt:new Date().toISOString() })
-      tournamentRelation.value = { ...tournamentRelation.value, kitColors:data }
+      await updateRecord('tournament_teams', tournamentRelation.value._id, { kitColors:data, kitColorLabels:labels, kitColorsUpdatedAt:new Date().toISOString() })
+      tournamentRelation.value = { ...tournamentRelation.value, kitColors:data, kitColorLabels:labels }
       ElMessage.success('本届赛事主、备用比赛服颜色已保存')
     } else {
-      await updateRecord('teams', teamId, { kitColors:data, kitColorsUpdatedAt:new Date().toISOString() })
-      team.value = { ...team.value, kitColors:data }
+      await updateRecord('teams', teamId, { kitColors:data, kitColorLabels:labels, kitColorsUpdatedAt:new Date().toISOString() })
+      team.value = { ...team.value, kitColors:data, kitColorLabels:labels }
       ElMessage.success('球队默认主、备用比赛服颜色已保存')
     }
   } catch (error) {
@@ -3518,7 +3543,7 @@ async function loadPlayers() {
       if (p._id) playerMap.set(p._id, p)
     }
     let result = Array.from(playerMap.values())
-    
+
     // 处理头像URL：如果是 cloudId，需要转换成临时URL
     const processedPlayers = await Promise.all(result.map(async (player) => {
       if (player.photoUrl && player.photoUrl.startsWith('cloud://')) {
@@ -3532,7 +3557,7 @@ async function loadPlayers() {
       }
       return player
     }))
-    
+
     players.value = processedPlayers
 
     // 普通球队资料页沿用历史同步行为；赛事内查看只读，不因打开页面改写球队资产。
@@ -3549,6 +3574,18 @@ async function loadPlayers() {
   } finally {
     loading.value = false
   }
+}
+
+function playerProfileLabel(player) {
+  const status = String(player?.profileStatus || '').toLowerCase()
+  if (status === 'complete') return '资料完整'
+  if (status === 'imported_pending_claim') return '待认领核对'
+  if (status === 'pending_review') return '待审核'
+  return isSyntheticTeam.value ? '测试资料' : '待完善'
+}
+
+function playerProfileTagType(player) {
+  return playerProfileLabel(player) === '资料完整' ? 'success' : 'warning'
 }
 
 function formatTournamentTime(value) {
@@ -3593,7 +3630,7 @@ function openTournamentMatches() {
 
 onMounted(async () => {
   await loadTeam()
-  if (sourceTournamentId.value) await Promise.all([loadTournamentTeamContext(), isSyntheticTeam.value ? loadPlayers() : Promise.resolve()])
+  if (sourceTournamentId.value) await Promise.all([loadTournamentTeamContext(), loadPlayers()])
   else await loadPlayers()
 })
 
@@ -3765,7 +3802,7 @@ function compressBase64(dataUrl, maxSize = 300) {
   object-fit: cover;
   border-radius: 8px;
   background-color: #f5f5f5;
-  background-image: 
+  background-image:
     linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
     linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
@@ -3963,6 +4000,7 @@ function compressBase64(dataUrl, maxSize = 300) {
 .match-summary { padding-bottom: 12px; }
 .professional-roster-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}.professional-roster-stats article{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:end;min-height:88px;padding:14px;border:1px solid #e6ebe7;border-radius:7px;background:#fbfdfb}.professional-roster-stats span{grid-column:1/-1;color:#667269;font-size:12px}.professional-roster-stats strong{color:#167f42;font-size:26px}.professional-roster-stats small{margin-bottom:4px;color:#536158}.professional-roster-stats article.pending strong{color:#d98b15}.professional-team-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}.professional-team-actions .el-button{height:41px;margin:0}
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
+.kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
 .synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.synthetic-player-table .player-avatar-img{width:38px;height:38px;border-radius:50%;object-fit:cover;background:#edf3ee}
 .match-stats { display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: 23px; border-bottom: 1px solid #e8ece9; }

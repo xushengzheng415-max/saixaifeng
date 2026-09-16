@@ -14,7 +14,7 @@
 
     <header v-if="!selectedDivision" class="match-heading">
       <h1>比赛管理<span v-if="selectedDivision"> / {{ selectedDivision.name }}</span></h1>
-      <p>{{ selectedDivision ? '查看当前组别比赛状态、裁判执行进度与赛后处理。' : '先选择竞赛组别，再管理该组别的比赛。' }}</p>
+
     </header>
 
     <section v-if="!selectedDivision" class="division-entry">
@@ -26,7 +26,7 @@
       <section class="division-list">
         <article v-for="row in filteredRows" :key="row.id" :class="{ professional: row.professional }">
           <div class="division-title"><el-icon><UserFilled /></el-icon><strong>{{ row.name }}</strong></div>
-          <div class="mode-cell"><el-tag :type="row.professional ? 'warning' : 'success'" effect="plain">{{ row.professional ? '专业版' : '简易版' }}</el-tag><span v-if="row.professional" class="pro-badge"><b>PRO</b> 专业版 · 已开通</span></div>
+          <div class="mode-cell"><el-tag :type="row.professional ? 'warning' : 'success'" effect="plain">{{ row.professional ? '专业版' : '基础版' }}</el-tag><span v-if="row.professional" class="pro-badge"><b>PRO</b> 专业版 · 已开通</span></div>
           <div class="format-cell"><el-icon><Trophy /></el-icon><span>{{ row.format }}</span></div>
           <div class="progress-cell"><strong>{{ row.total }}场</strong><p>{{ row.progressText }}</p><el-progress :percentage="row.progress" :show-text="false" :stroke-width="7" /></div>
           <div class="todo-cell"><template v-for="todo in row.todos" :key="todo.label"><span :class="todo.type"><el-icon><component :is="todo.icon" /></el-icon>{{ todo.label }}</span></template><span v-if="!row.todos.length" class="muted"><el-icon><CircleCheckFilled /></el-icon>{{ row.statusText }}</span></div>

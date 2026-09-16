@@ -1,7 +1,7 @@
 var workspace = require('../../../utils/workspace')
 
 function fixture() {
-  return { name: '王梓轩', birthDate: '2013-12-26 出生', teamName: '赛小蜂 U12 竞技队', statusText: '实名认证异常', avatarText: '王', maskedName: '王梓轩', verifiedName: '王梓轩', idMasked: '410***********281X', verificationHint: '疑似生僻字差异', canManage: true }
+  return { name: '王梓轩', birthDate: '2013-12-26 出生', teamName: '赛小蜂 U12 竞技队', statusText: '人证核验异常', avatarText: '王', maskedName: '王梓轩', verifiedName: '王梓轩', idMasked: '410***********281X', verificationHint: '疑似生僻字差异', canManage: true }
 }
 
 function normalize(player) {
@@ -28,11 +28,11 @@ Page({
     this.setData({ loading: false, player: player, canManage: canManage, checks: [
       { title: '基础资料', detail: '姓名、出生日期、监护人手机号', icon: '/images/runtime/icons/brand-v2-03.png', state: '已完成', className: 'check-ok' },
       { title: '监护人授权', detail: '监护人已确认资料使用授权', icon: '/images/runtime/icons/brand-v2-08.png', state: '已完成', className: 'check-ok' },
-      { title: '实名认证', detail: player.verificationHint, icon: '/images/runtime/icons/brand-v2-13.png', state: '姓名不一致', className: 'check-error' },
+      { title: '人证核验', detail: player.verificationHint, icon: '/images/runtime/icons/brand-v2-13.png', state: '姓名不一致', className: 'check-error' },
       { title: '标准形象照', detail: '当前赛事未要求', icon: '/images/runtime/icons/brand-v2-12.png', state: '已完成', className: 'check-ok' }
     ], audit: [
       { time: '2025-06-10 09:30', label: '家长提交资料', state: '提交成功', className: 'audit-ok' },
-      { time: '2025-06-10 09:31', label: '实名认证校验失败', state: '姓名不一致', className: 'audit-error' },
+      { time: '2025-06-10 09:31', label: '人证核验校验失败', state: '姓名不一致', className: 'audit-error' },
       { time: '2025-06-10 09:31', label: '已通知家长重新提交', state: '待家长处理', className: 'audit-wait' }
     ] })
   },

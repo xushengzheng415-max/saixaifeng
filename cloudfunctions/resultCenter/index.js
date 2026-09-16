@@ -138,13 +138,32 @@ function standingsEligible(match) {
   return match.standingsEligible === true || ['group', 'league', 'round_robin'].includes(phase)
 }
 
-function footballWarnings(match, status) {
+function winnerTeamIdOf(match) {
+  const explicit = text(match.winnerTeamId)
+  if (explicit) return explicit
+  const homePenalty = Number(match.homePenaltyScore ?? match.penaltyHomeScore ?? match.penaltiesHome)
+  const awayPenalty = Number(match.awayPenaltyScore ?? match.penaltyAwayScore ?? match.penaltiesAway)
+  if (Number.isFinite(homePenalty) && Number.isFinite(awayPenalty) && homePenalty !== awayPenalty) {
+    return homePenalty > awayPenalty ? teamIdOf(match, 'home') : teamIdOf(match, 'away')
+  }
+  const side = text(match.winnerSide).toLowerCase()
+  if (side === 'home') return teamIdOf(match, 'home')
+  if (side === 'away') return teamIdOf(match, 'away')
+  return ''
+}
+
+function footballWarnings(match, status, division) {
   const warnings = []
   const phase = phaseOf(match)
   const knockout = ['knockout', 'cup', 'placement', 'final', 'semifinal'].includes(phase)
   const tied = scoreReady(match) && number(match.homeScore) === number(match.awayScore)
-  if (knockout && tied && !text(match.winnerTeamId) && !text(match.resolution || match.decisionMethod)) {
+  const winnerTeamId = winnerTeamIdOf(match)
+  const winnerValid = winnerTeamId && [teamIdOf(match, 'home'), teamIdOf(match, 'away')].includes(winnerTeamId)
+  if (knockout && tied && !winnerTeamId && !text(match.resolution || match.decisionMethod)) {
     warnings.push('淘汰赛平局缺少加时/点球决胜与晋级球队')
+  }
+  if (!knockout && standingsEligible(match) && tied && pointsRule(division).drawResolution === 'penalties' && !winnerValid) {
+    warnings.push('常规时间战平，缺少点球决胜结果和胜者')
   }
   if (status === 'warning') warnings.push(text(match.resultWarning || match.exceptionReason) || '赛果存在异常，需人工核验')
   return warnings
@@ -153,9 +172,11 @@ function footballWarnings(match, status) {
 function normalizedMatch(match, divisionsById) {
   const status = resultStatus(match)
   const divisionId = divisionIdOf(match)
+  const division = divisionsById[divisionId] || {}
   const homeScore = scoreReady(match) ? number(match.homeScore) : null
   const awayScore = scoreReady(match) ? number(match.awayScore) : null
-  const warnings = footballWarnings(match, status)
+  const winnerTeamId = winnerTeamIdOf(match)
+  const warnings = footballWarnings(match, status, division)
   return {
     id: text(match._id || match.id),
     matchNo: text(match.matchNo || match.matchSequence || match.sequence || match.matchIndex),
@@ -182,8 +203,10 @@ function normalizedMatch(match, divisionsById) {
     source: match.refereeRecord || match.refereeSubmittedAt ? '裁判/计分台回传' : match.resultVersionId ? '赛果版本' : scoreReady(match) ? '后台记录' : '尚未录入',
     submittedAt: rawDate(match.refereeSubmittedAt || match.resultSubmittedAt || match.updateTime || ''),
     reviewedAt: rawDate(match.refereeRecordArchivedAt || match.resultReviewedAt || match.updateTime || ''),
-    winnerTeamId: text(match.winnerTeamId),
-    resolution: text(match.resolution || match.decisionMethod || (homeScore !== null && awayScore !== null && homeScore !== awayScore ? 'regular_time' : '')),
+    winnerTeamId,
+    homePenaltyScore: number(match.homePenaltyScore ?? match.penaltyHomeScore ?? match.penaltiesHome, 0),
+    awayPenaltyScore: number(match.awayPenaltyScore ?? match.penaltyAwayScore ?? match.penaltiesAway, 0),
+    resolution: text(match.resolution || match.decisionMethod || (homeScore !== null && awayScore !== null && homeScore !== awayScore ? 'regular_time' : winnerTeamId ? 'penalties' : '')),
     standingsEligible: standingsEligible(match),
     yellowHome: number(match.homeYellowCards || match.yellowCardsHome),
     yellowAway: number(match.awayYellowCards || match.yellowCardsAway),
@@ -195,17 +218,25 @@ function normalizedMatch(match, divisionsById) {
 function pointsRule(division) {
   const ranking = division && (division.rankingRules || division.rankingRule || division.rules && division.rules.ranking) || {}
   const points = ranking.points || {}
+  const drawResolution = text(points.drawResolution || (division && division.drawResolution) || 'draw').toLowerCase()
   return {
     win: number(points.win ?? (division && division.winPoints), 3),
     draw: number(points.draw ?? (division && division.drawPoints), 1),
     loss: number(points.loss ?? (division && division.lossPoints), 0),
+    drawResolution: ['penalties', 'penalty_shootout', 'shootout'].includes(drawResolution) ? 'penalties' : 'draw',
+    penaltyWin: number(points.penaltyWin ?? (division && division.penaltyWinPoints), 2),
+    penaltyLoss: number(points.penaltyLoss ?? (division && division.penaltyLossPoints), 0),
+    tieBreakers: Array.isArray(division && division.rankingTieBreakers) ? division.rankingTieBreakers : [
+      'headToHeadPoints', 'headToHeadGoalDifference', 'headToHeadGoalsFor',
+      'goalDifference', 'goalsFor', 'redCardsFewest', 'yellowCardsFewest', 'drawingLots'
+    ],
     source: points.win != null || division && division.winPoints != null ? '组别规则' : '足球标准规则'
   }
 }
 
 function addTeam(table, id, name, logo) {
   const key = id || `name:${name}`
-  if (!table[key]) table[key] = { teamId: id, teamName: name, logo, played: 0, win: 0, draw: 0, loss: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0, fairPlay: 0, provisionalMatches: 0 }
+  if (!table[key]) table[key] = { teamId: id, teamName: name, logo, played: 0, win: 0, draw: 0, loss: 0, penaltyWin: 0, penaltyLoss: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0, fairPlay: 0, yellowCards: 0, redCards: 0, provisionalMatches: 0 }
   return table[key]
 }
 
@@ -217,9 +248,16 @@ function applyResult(table, match, rule, provisional) {
   away.goalsFor += match.awayScore; away.goalsAgainst += match.homeScore
   if (match.homeScore > match.awayScore) { home.win += 1; away.loss += 1; home.points += rule.win; away.points += rule.loss }
   else if (match.homeScore < match.awayScore) { away.win += 1; home.loss += 1; away.points += rule.win; home.points += rule.loss }
-  else { home.draw += 1; away.draw += 1; home.points += rule.draw; away.points += rule.draw }
+  else if (rule.drawResolution === 'penalties') {
+    const homeWon = text(match.winnerTeamId) === text(match.homeTeamId)
+    const awayWon = text(match.winnerTeamId) === text(match.awayTeamId)
+    if (homeWon) { home.win += 1; home.penaltyWin += 1; away.loss += 1; away.penaltyLoss += 1; home.points += rule.penaltyWin; away.points += rule.penaltyLoss }
+    else if (awayWon) { away.win += 1; away.penaltyWin += 1; home.loss += 1; home.penaltyLoss += 1; away.points += rule.penaltyWin; home.points += rule.penaltyLoss }
+  } else { home.draw += 1; away.draw += 1; home.points += rule.draw; away.points += rule.draw }
   home.fairPlay -= match.yellowHome + match.redHome * 3
   away.fairPlay -= match.yellowAway + match.redAway * 3
+  home.yellowCards += match.yellowHome; away.yellowCards += match.yellowAway
+  home.redCards += match.redHome; away.redCards += match.redAway
   if (provisional) { home.provisionalMatches += 1; away.provisionalMatches += 1 }
   home.goalDifference = home.goalsFor - home.goalsAgainst
   away.goalDifference = away.goalsFor - away.goalsAgainst
@@ -238,7 +276,10 @@ function headToHeadScore(team, tied, matches, rule) {
     const scored = currentHome ? match.homeScore : match.awayScore
     const conceded = currentHome ? match.awayScore : match.homeScore
     mini.goalsFor += scored; mini.goalsAgainst += conceded
-    mini.points += scored > conceded ? rule.win : scored < conceded ? rule.loss : rule.draw
+    if (scored > conceded) mini.points += rule.win
+    else if (scored < conceded) mini.points += rule.loss
+    else if (rule.drawResolution === 'penalties') mini.points += text(match.winnerTeamId) === text(team.teamId) ? rule.penaltyWin : rule.penaltyLoss
+    else mini.points += rule.draw
   })
   return { ...mini, goalDifference: mini.goalsFor - mini.goalsAgainst }
 }
@@ -250,9 +291,11 @@ function rankTeams(teams, officialMatches, rule) {
   return teams.sort((a, b) => b.points - a.points ||
     b.headToHead.points - a.headToHead.points ||
     b.headToHead.goalDifference - a.headToHead.goalDifference ||
+    b.headToHead.goalsFor - a.headToHead.goalsFor ||
     b.goalDifference - a.goalDifference ||
     b.goalsFor - a.goalsFor ||
-    b.fairPlay - a.fairPlay ||
+    a.redCards - b.redCards ||
+    a.yellowCards - b.yellowCards ||
     a.teamName.localeCompare(b.teamName, 'zh-CN'))
     .map((team, index) => ({ ...team, rank: index + 1 }))
 }
@@ -274,7 +317,7 @@ function buildStandings(matches, divisionsById) {
       divisionName: bucket.divisionName,
       groupName: bucket.groupName,
       pointsRule: rule,
-      tieBreakers: ['积分', '相互比赛积分', '相互比赛净胜球', '总净胜球', '总进球', '公平竞赛积分', '球队名称'],
+      tieBreakers: ['积分', '相互比赛积分', '相互比赛净胜球', '相互比赛进球数', '总净胜球', '总进球', '红牌数少者', '黄牌数少者', '抽签决定'],
       officialTeams: rankTeams(Object.values(officialTable), bucket.official, rule),
       previewTeams: rankTeams(Object.values(previewTable), bucket.all, rule),
       officialMatchCount: bucket.official.length,
