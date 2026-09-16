@@ -206,6 +206,20 @@ async function getDocument(collection, id) {
   return Array.isArray(result.data) ? result.data[0] : result.data
 }
 
+// 竞赛组别有两个来源：正式的 divisions 集合，以及创建赛事向导内嵌在 tournaments.divisions 里的组别。
+// 内嵌组别没有独立的 _id 文档（id 形如 division-<时间戳>-<随机>），必须回退到内嵌数组读取，
+// 否则“添加虚拟球队”会对这类赛事误判为组别不存在。
+async function resolveTournamentDivision(tournament, tournamentId, divisionId) {
+  const targetId = text(divisionId)
+  if (!targetId) return null
+  let division = null
+  try { division = await getDocument('divisions', targetId) } catch (error) { division = null }
+  if (division && text(division.tournamentId) === tournamentId) return division
+  const embedded = Array.isArray(tournament && tournament.divisions) ? tournament.divisions : []
+  const matched = embedded.find(item => item && (text(item.id) === targetId || text(item._id) === targetId))
+  return matched ? Object.assign({}, matched, { tournamentId }) : null
+}
+
 async function webActor(event) {
   const userId = text(event.__actorUserId)
   const orgId = text(event.__actorOrgId)
@@ -377,14 +391,16 @@ async function addSyntheticTeams(event) {
   const divisionId = text(event.divisionId)
   const teamIds = Array.from(new Set((Array.isArray(event.teamIds) ? event.teamIds : []).map(text).filter(Boolean))).slice(0, 50)
   if (!teamIds.length) return { success:false, code:'TEAM_REQUIRED', message:'请至少选择一支虚拟球队' }
-  const [tournament, division] = await Promise.all([getDocument('tournaments', tournamentId), getDocument('divisions', divisionId)])
+  const tournament = await getDocument('tournaments', tournamentId)
   if (!tournament || recordOrgId(tournament) !== actor.orgId) return { success:false, code:'TOURNAMENT_SCOPE_DENIED', message:'赛事不存在或无权添加球队' }
-  if (!division || text(division.tournamentId) !== tournamentId) return { success:false, code:'DIVISION_REQUIRED', message:'竞赛组别不存在或不属于当前赛事' }
+  const division = await resolveTournamentDivision(tournament, tournamentId, divisionId)
+  if (!division) return { success:false, code:'DIVISION_REQUIRED', message:'竞赛组别不存在或不属于当前赛事' }
   const teamResult = await db.collection('teams').where({ _id:_.in(teamIds), orgId:actor.orgId, synthetic:true }).limit(50).get()
   const teams = teamResult.data || []
   if (teams.length !== teamIds.length) return { success:false, code:'SYNTHETIC_TEAM_SCOPE_DENIED', message:'所选球队包含不存在、非虚拟或其他机构球队' }
+  // 只有组别声明了年龄组才校验年龄一致性；向导创建的内嵌组别没有 ageGroup，视为不限年龄（虚拟球队为测试资料）。
   const ageGroup = text(division.ageGroup).toUpperCase()
-  if (teams.some(team => text(team.ageGroup).toUpperCase() !== ageGroup)) return { success:false, code:'AGE_GROUP_MISMATCH', message:'虚拟球队年龄组与当前竞赛组别不一致' }
+  if (ageGroup && teams.some(team => text(team.ageGroup).toUpperCase() !== ageGroup)) return { success:false, code:'AGE_GROUP_MISMATCH', message:'虚拟球队年龄组与当前竞赛组别不一致' }
   const existing = (await db.collection('tournament_teams').where({ tournamentId, divisionId }).limit(100).get()).data || []
   const existingIds = new Set(existing.filter(item => !['cancelled','withdrawn'].includes(text(item.status).toLowerCase())).map(item => text(item.teamId)))
   const additions = teams.filter(team => !existingIds.has(text(team._id)))
