@@ -121,7 +121,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, Calendar, Close, Document, InfoFilled, Location, Medal, SwitchButton, Tickets, Trophy, UploadFilled, User, WarningFilled } from '@element-plus/icons-vue'
-import { getFileUrl, queryById, queryList, updateRecord, uploadFileViaCloud } from '../../utils/cloud'
+import { getFileUrl, queryById, queryList, updateRecord, uploadLargeFileViaCloud } from '../../utils/cloud'
 
 const route = useRoute()
 const router = useRouter()
@@ -222,7 +222,9 @@ async function onFileSelected(uploadFile) {
   saving.value = true
   try {
     const suffix = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : ''
-    const result = await uploadFileViaCloud(`match-supplements/${matchId}/${Date.now()}${suffix}`, file)
+    // 单个文件上限 10MB，Base64 后约 13.7MB，整包发送必然触发 HTTP 413。
+    // 统一走 32KB 分片上传，避免大文件塞进单个请求体。
+    const result = await uploadLargeFileViaCloud(`match-supplements/${matchId}/${Date.now()}${suffix}`, file, { chunkSize: 32 * 1024 })
     const fileId = result.fileID || result.fileId || result.url || result.data?.fileID
     if (!fileId) throw new Error('文件上传结果缺少地址')
     supplements.value.push({ name: file.name, size: file.size, sizeText: formatSize(file.size), fileId, url: await getFileUrl(fileId).catch(() => '') })

@@ -1386,6 +1386,8 @@ async function handleRegulationsUpload(options) {
     const { file } = options
     const ext = file.name.split('.').pop()
     const cloudPath = `tournament-regulations/${Date.now()}-${file.name}`
+    // 规程文件（PDF/DOCX）可达数 MB，整包 Base64 发送会触发 HTTP 413。
+    // 统一走 32KB 分片上传。
     const result = await uploadLargeFileViaCloud(cloudPath, file, {
       chunkSize: 32 * 1024
     })

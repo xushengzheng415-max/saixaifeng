@@ -411,7 +411,7 @@ function importIdentity(value) {
 
 const IMPORT_KIT_COLOR_VALUES = new Set([
   '#FFFFFF','#161A18','#59615D','#A8B0AC','#D72631','#7E1731','#F47A1F','#F5C518',
-  '#D7F300','#138A4B','#075B35','#47A9E8','#1455B5','#14264A','#6B3FA0','#E64A8A'
+  '#D7F300','#138A4B','#075B35','#47A9E8','#1455B5','#14264A','#1F3A6E','#6B3FA0','#E64A8A'
 ])
 const IMPORT_KIT_KEYS = ['jersey','shorts','socks']
 
