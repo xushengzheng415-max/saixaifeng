@@ -134,6 +134,7 @@ import { ElButton, ElIcon, ElMessage, ElMessageBox, ElUpload } from 'element-plu
 import { ArrowDown, ArrowRight, Delete, DocumentAdd, Download, UploadFilled } from '@element-plus/icons-vue'
 import { callFunction, uploadLargeFileViaCloud } from '../../utils/cloud'
 import { removeWhiteBackground } from '../../utils/whiteBgRemover'
+import { findVisiblePixelBounds } from '../../utils/imageBounds'
 import { maskRegistrationIdentity, parseTeamRegistrationDocx } from '../../utils/teamRegistrationDocx'
 
 const props = defineProps({
@@ -254,9 +255,21 @@ function revokePreview(url) {
   objectUrls.delete(url)
 }
 
-function attachPreviews(team) {
+async function attachPreviews(team) {
   team.logoPreviewUrl = createPreview(team.logoFile)
   ;[...team.staff, ...team.players].forEach(person => { person.previewUrl = createPreview(person.photoFile) })
+  if (team.logoFile) {
+    try {
+      team.preparedLogoFile = await prepareLogo(team.logoFile)
+      revokePreview(team.logoPreviewUrl)
+      team.logoPreviewUrl = createPreview(team.preparedLogoFile)
+      team.logoProcessingStatus = 'prepared'
+    } catch (error) {
+      console.warn('队徽标准化预览失败，创建时重试:', error.message)
+      team.preparedLogoFile = null
+      team.logoProcessingStatus = 'pending'
+    }
+  }
   return team
 }
 
@@ -267,7 +280,7 @@ async function handleDocxChange(file) {
   if (teams.value.some(team => team.sourceFileName === rawFile.name && team.sourceFile?.size === rawFile.size)) return ElMessage.warning(`已选择 ${rawFile.name}`)
   parsingKeys.value = new Set([...parsingKeys.value, key])
   try {
-    const parsed = attachPreviews(await parseTeamRegistrationDocx(rawFile))
+    const parsed = await attachPreviews(await parseTeamRegistrationDocx(rawFile))
     teams.value.push(parsed)
     ElMessage.success(`已读取 ${parsed.teamName || rawFile.name}：${parsed.players.length} 名球员`)
   } catch (error) {
@@ -286,14 +299,24 @@ function removeTeam(index) {
   teams.value.splice(index, 1)
 }
 
-function replaceLogo(file, team) {
+async function replaceLogo(file, team) {
   const rawFile = file.raw || file
   if (!rawFile.type?.startsWith('image/') || rawFile.size > 10 * 1024 * 1024) return ElMessage.error('队徽须为 10MB 以内的图片')
   revokePreview(team.logoPreviewUrl)
   team.logoFile = rawFile
   team.logoPreviewUrl = createPreview(rawFile)
+  team.preparedLogoFile = null
   team.logoFileId = ''
-  team.logoProcessingStatus = 'pending'
+  team.logoProcessingStatus = 'processing'
+  try {
+    team.preparedLogoFile = await prepareLogo(rawFile)
+    revokePreview(team.logoPreviewUrl)
+    team.logoPreviewUrl = createPreview(team.preparedLogoFile)
+    team.logoProcessingStatus = 'prepared'
+  } catch (error) {
+    console.warn('队徽标准化预览失败，创建时重试:', error.message)
+    team.logoProcessingStatus = 'pending'
+  }
 }
 
 function replacePersonPhoto(file, person) {
@@ -319,6 +342,25 @@ function imageFromFile(file) {
 
 function canvasToFile(canvas, fileName, type = 'image/png', quality = 0.9) {
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(new File([blob], fileName, { type, lastModified: Date.now() })) : reject(new Error('图片处理失败')), type, quality))
+}
+
+async function trimTransparentContent(file, alphaThreshold = 12) {
+  const image = await imageFromFile(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, image.naturalWidth || image.width)
+  canvas.height = Math.max(1, image.naturalHeight || image.height)
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
+  const bounds = findVisiblePixelBounds(pixels.data, canvas.width, canvas.height, alphaThreshold)
+  if (!bounds || (bounds.x === 0 && bounds.y === 0 && bounds.width === canvas.width && bounds.height === canvas.height)) return file
+
+  const cropped = document.createElement('canvas')
+  cropped.width = bounds.width
+  cropped.height = bounds.height
+  cropped.getContext('2d').drawImage(canvas, bounds.x, bounds.y, bounds.width, bounds.height, 0, 0, bounds.width, bounds.height)
+  return canvasToFile(cropped, file.name.replace(/\.[^.]+$/, '-trimmed.png'), 'image/png', 1)
 }
 
 async function fitImage(file, width, height, paddingRatio = 0, background = null, outputType = 'image/png') {
@@ -363,7 +405,8 @@ async function prepareLogo(file) {
   } catch (error) {
     console.warn('队徽去白底失败，保留原图:', error.message)
   }
-  return fitImage(source, 500, 500, 0.08)
+  const trimmed = await trimTransparentContent(source)
+  return fitImage(trimmed, 500, 500, 0.08)
 }
 
 async function preparePortrait(file) {
@@ -372,7 +415,8 @@ async function preparePortrait(file) {
   if (!result?.success || !result.data) throw new Error(result?.message || '人像分割失败')
   if (result.personNum != null && Number(result.personNum) !== 1) throw new Error(`检测到 ${Number(result.personNum) || 0} 个人像`)
   const segmented = dataUrlToFile(`data:image/png;base64,${String(result.data).replace(/^data:image\/png;base64,/, '')}`, `portrait-${Date.now()}.png`)
-  return fitImage(segmented, 300, 388, 0.04)
+  const trimmed = await trimTransparentContent(segmented)
+  return fitImage(trimmed, 300, 388, 0.04)
 }
 
 async function uploadFile(cloudPath, file, onProgress, onRetry) {
@@ -411,7 +455,7 @@ async function processTeamFiles(team, teamIndex) {
 
     if (team.logoFile && !team.logoFileId) {
       updateProgress('处理队徽')
-      const logo = await prepareLogo(team.logoFile)
+      const logo = team.preparedLogoFile || await prepareLogo(team.logoFile)
       team.logoFileId = await uploadFile(
         `team-logos/imports/${props.tournamentId}/${teamKey}.png`,
         logo,
