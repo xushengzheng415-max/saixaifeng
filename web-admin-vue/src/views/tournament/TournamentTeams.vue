@@ -49,7 +49,7 @@
 
       <section v-if="activeTab === 'materials'" class="registration-materials"><header><div><h2>赛事宣传物料</h2></div><el-button type="primary" @click="openQrDialog"><el-icon><Picture /></el-icon>生成当前版式海报</el-button></header><div class="poster-template-grid"><button v-for="template in posterTemplates" :key="template.id" type="button" :class="{ active:posterTemplate===template.id }" @click="posterTemplate=template.id"><span :class="`poster-template-preview ${template.id}`"></span><strong>{{ template.name }}</strong><small>{{ template.description }}</small></button></div><el-alert type="info" :closable="false" title="竞赛规程全文保留在小程序报名页，海报只显示“规程已发布”和扫码入口，避免信息过载。" /></section>
       <section v-else-if="isRegistrationWorkspace && activeTab === 'all'" class="team-summary-grid">
-        <article><span>报名球队</span><strong>{{ divisionTournamentTeams.length }}</strong><small>支</small></article>
+        <article><span>报名球队</span><strong>{{ activeRegistrationTeamCount }}</strong><small>支</small></article>
         <article><span>待资格审核</span><strong :class="{ danger: pendingTeams.length > 0 }">{{ pendingTeams.length }}</strong><small>支</small></article>
         <article><span>已审核通过</span><strong>{{ approvedTeams.length }}</strong><small>支</small></article>
         <article><span>待领取邀请</span><strong>{{ invitedTeams.length }}</strong><small>支</small></article>
@@ -1008,8 +1008,9 @@ function divisionCapacity(division) {
 const activeDivisionCapacity = computed(() => divisionCapacity(activeDivision.value))
 const assignableDivisions = computed(() => divisionOptions.value.filter(item => item.id !== 'default'))
 const divisionTournamentTeams = computed(() => tournamentTeams.value.filter(item => (item.divisionId || 'default') === activeDivisionId.value))
+const inactiveRegistrationStatuses = new Set(['cancel_requested', 'invite_cancelled', 'withdrawn', 'removed', 'cancelled'])
 const availableSyntheticTeams = computed(() => syntheticTeamCandidates.value.filter(team => !team.alreadyAdded))
-function divisionTeamCount(divisionId) { return tournamentTeams.value.filter(item => (item.divisionId || 'default') === divisionId).length }
+function divisionTeamCount(divisionId) { return tournamentTeams.value.filter(item => (item.divisionId || 'default') === divisionId && !inactiveRegistrationStatuses.has(String(item.status || '').toLowerCase())).length }
 function divisionCapacityUsed(divisionId) { return tournamentTeams.value.filter(item => (item.divisionId || 'default') === divisionId && ['approved', 'invited'].includes(String(item.status || '').toLowerCase())).length }
 function divisionIsFull(division) { const max=divisionCapacity(division);return max > 0 && divisionCapacityUsed(division.id) >= max }
 function divisionInviteStatusText(division) { const max=divisionCapacity(division);const used=divisionCapacityUsed(division.id);return divisionIsFull(division) ? '已满' : (max > 0 ? `${used}/${max}` : '可邀请') }
@@ -1080,6 +1081,7 @@ const approvedConfirmedTeams = computed(() => approvedTeams.value.filter(team =>
 const pendingTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'pending'))
 const invitedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'invited'))
 const cancelRequestedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'cancel_requested'))
+const activeRegistrationTeamCount = computed(() => divisionTournamentTeams.value.filter(team => !inactiveRegistrationStatuses.has(String(team.status || '').toLowerCase())).length)
 const isProfessional = computed(() => {
   if (route.query.mode === 'professional') return true
   const mode = activeDivision.value?.mode || activeDivision.value?.ruleMode || activeDivision.value?.rulesMode
@@ -1179,7 +1181,7 @@ const filteredTeams = computed(() => {
   // 按标签筛选
   if (activeTab.value === 'all') {
     list = isRegistrationWorkspace.value
-      ? list.filter(t => !['cancel_requested', 'invite_cancelled', 'withdrawn', 'removed', 'cancelled'].includes(t.status))
+      ? list.filter(t => !inactiveRegistrationStatuses.has(String(t.status || '').toLowerCase()))
       : list.filter(t => t.status === 'approved')
   } else if (activeTab.value === 'roster') {
     list = list.filter(t => t.status === 'approved')

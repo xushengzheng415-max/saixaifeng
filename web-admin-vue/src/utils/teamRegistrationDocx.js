@@ -304,12 +304,31 @@ export async function parseTeamRegistrationDocx(file) {
     ? await imageFileFromRelationship(zip, relationships, logoCell.imageIds[0], `team-logo-${Date.now()}`)
     : null
 
-  const rosterTableIndex = tables.findIndex(table => table.rows.length >= 4 && table.rows.some(row => row.cells.some(cell => /身份证|球服号码/.test(cell.text))))
-  const resolvedRosterTableIndex = rosterTableIndex >= 0 ? rosterTableIndex : tables.length - 1
-  const rosterTable = tables[resolvedRosterTableIndex]
-  // Word/WPS 允许在分页处把一个视觉上的名单表拆成多个 XML 表。主表之后的行一起参与
-  // 人物块识别，仅带“姓名/身份证/号码”标签的行会被采用，不会把后续普通表格当成人员。
-  const rosterRows = tables.slice(resolvedRosterTableIndex).flatMap(table => table.rows)
+  // Word/WPS 可能在分页处把一张视觉名单拆成连续多个 <w:tbl>。续表有时只有号码行，
+  // 因而不能要求每个片段同时含“角色 + 姓名/身份证”；从首个完整名单表开始，把连续且
+  // 含角色或名单字段的片段合并，既保留 main 的续表识别，也覆盖号码行单独跨页的情况。
+  const rosterFieldPattern = /姓名|身份证|球服号码|球衣号码|球员号码/
+  const rosterStartIndex = tables.findIndex(table => (
+    table.rows.some(row => row.cells.some(cell => roleType(cell.text)))
+    && table.rows.some(row => row.cells.some(cell => rosterFieldPattern.test(cell.text)))
+  ))
+  const fallbackRosterIndex = tables.findIndex(table => table.rows.some(row => row.cells.some(cell => /身份证|球服号码/.test(cell.text))))
+  const resolvedRosterStartIndex = rosterStartIndex >= 0
+    ? rosterStartIndex
+    : (fallbackRosterIndex >= 0 ? fallbackRosterIndex : tables.length - 1)
+  const rosterTableFragments = []
+  for (let index = resolvedRosterStartIndex; index < tables.length; index += 1) {
+    const table = tables[index]
+    const isRosterFragment = table.rows.some(row => row.cells.some(cell => (
+      roleType(cell.text) || rosterFieldPattern.test(cell.text)
+    )))
+    if (!isRosterFragment && rosterTableFragments.length) break
+    if (isRosterFragment) rosterTableFragments.push(table)
+  }
+  const rosterTable = rosterTableFragments.length
+    ? { rows: rosterTableFragments.flatMap(table => table.rows) }
+    : tables[tables.length - 1]
+  const rosterRows = rosterTable.rows
   const kitResult = parseRegistrationKitColors(rosterTable)
   const contactRow = rosterTable.rows.find(row => row.cells.some(cell => /领队|联络员/.test(cell.text)) && firstPhone(row.cells.map(cell => cell.text).join(' ')))
   const contactPhone = firstPhone(contactRow?.cells?.map(cell => cell.text).join(' ') || '')
