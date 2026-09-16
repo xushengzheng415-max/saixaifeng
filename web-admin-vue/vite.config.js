@@ -7,8 +7,8 @@ import path from 'path'
 // import { vitePluginRemoveConsole } from 'vite-plugin-remove-console'  // 暂时注释，构建有问题
 
 export default defineConfig({
-  // Vue 应用部署到 /admin/ 子目录，避免与广告页冲突
-  base: '/admin/',
+  // 正式环境默认 /admin/；预览构建通过 VITE_APP_BASE 指向独立目录。
+  base: process.env.VITE_APP_BASE || '/admin/',
   plugins: [
     vue(),
     AutoImport({
