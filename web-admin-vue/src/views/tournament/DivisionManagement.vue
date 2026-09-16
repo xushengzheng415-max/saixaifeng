@@ -2,7 +2,7 @@
   <section v-loading="loading" class="division-management" aria-labelledby="division-page-title">
     <header class="tournament-context">
       <div class="context-left">
-        <img v-if="tournamentLogo" class="tournament-logo" :src="tournamentLogo" :alt="`${tournament.name} Logo`" />
+        <img v-if="tournamentLogo" class="tournament-logo" :src="tournamentLogo" :alt="`${tournament.name} Logo`" @error="handleTournamentLogoError" />
         <span v-else class="tournament-logo logo-placeholder"><el-icon><Trophy /></el-icon></span>
         <h1>{{ tournament.name || '赛事竞赛管理' }}</h1>
         <span class="header-chip">{{ divisionRows.length }} 个组别</span>
@@ -66,7 +66,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, CircleCheck, DocumentChecked, Grid, Location, MoreFilled, Plus, Tickets, Trophy, User, UserFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { addRecord, callFunction, deleteDivision, queryById, queryList, renameDivision, reviseDivisionRules, updateRecord } from '../../utils/cloud'
+import { addRecord, callFunction, deleteDivision, getFileUrl, queryById, queryList, renameDivision, reviseDivisionRules, updateRecord } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 
 const route = useRoute()
@@ -74,6 +74,8 @@ const router = useRouter()
 const id = String(route.params.id || '')
 const loading = ref(false)
 const tournament = ref({})
+const resolvedTournamentLogo = ref('')
+const tournamentLogoFailed = ref(false)
 const divisionRecords = ref([])
 const registrations = ref([])
 const deletingDivisionId = ref('')
@@ -81,7 +83,19 @@ const renamingDivisionId = ref('')
 const togglingRegistrationId = ref('')
 const activeMenuId = ref(import.meta.env.DEV && route.query.view === 'card-menu' ? 'qa-division-u10' : '')
 
-const tournamentLogo = computed(() => tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
+const tournamentLogoSource = computed(() => String(
+  tournament.value.logoTransparentFileId ||
+  tournament.value.logoFileId ||
+  tournament.value.logoCloudFileId ||
+  tournament.value.logoTransparentUrl ||
+  tournament.value.logoUrl ||
+  tournament.value.logo ||
+  ''
+).trim())
+const tournamentLogo = computed(() => {
+  if (tournamentLogoFailed.value) return ''
+  return resolvedTournamentLogo.value || (/^(https?:\/\/|\/)/i.test(tournamentLogoSource.value) ? tournamentLogoSource.value : '')
+})
 const tournamentStatus = computed(() => ({ draft: '筹备中', registering: '报名中', upcoming: '即将开始', ongoing: '进行中', completed: '已结束', finished: '已结束' })[tournament.value.status] || '筹备中')
 const dateRange = computed(() => tournament.value.startDate && tournament.value.endDate ? `${formatDate(tournament.value.startDate)} — ${formatDate(tournament.value.endDate)}` : '日期待定')
 const canManage = computed(() => permissions.tournament.manage(tournament.value))
@@ -269,6 +283,7 @@ async function loadDivisionManagement() {
       queryList('tournament_teams', { where: { tournamentId: id }, orderBy: { createTime: 'asc' } })
     ])
     tournament.value = Array.isArray(currentTournament) ? currentTournament[0] || {} : currentTournament || {}
+    await resolveTournamentLogo()
     divisionRecords.value = divisions || []
     registrations.value = teamRegistrations || []
     const created = await createSuggestedDivisionDrafts(tournament.value, divisionRecords.value)
@@ -278,6 +293,20 @@ async function loadDivisionManagement() {
     }
   } finally {
   loading.value = false
+}
+
+async function resolveTournamentLogo() {
+  tournamentLogoFailed.value = false
+  resolvedTournamentLogo.value = ''
+  const source = tournamentLogoSource.value
+  if (!source.startsWith('cloud://')) return
+  const resolved = await getFileUrl(source)
+  resolvedTournamentLogo.value = /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+}
+
+function handleTournamentLogoError() {
+  tournamentLogoFailed.value = true
+  resolvedTournamentLogo.value = ''
 }
 
 function suggestionGender(value) {
