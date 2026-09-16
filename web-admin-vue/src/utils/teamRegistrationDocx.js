@@ -81,6 +81,64 @@ function cellAt(row, column) {
   return row?.cells?.find(cell => column >= cell.column && column < cell.column + cell.span) || null
 }
 
+const NAME_CELL_PATTERN = /姓名/
+const IDENTITY_CELL_PATTERN = /身份证号|身份证/
+const JERSEY_CELL_PATTERN = /球服号码|球衣号码|球员号码|号码/
+
+function cellsMatching(row, pattern) {
+  return (row?.cells || []).filter(cell => pattern.test(cell.text || ''))
+}
+
+// 同一人物块跨页时，Word/WPS 可能把号码行拆到下一张表；部分文档还会在角色行保留
+// 额外的网格跨度，导致“同一 column”在号码行向后偏一格。人数一致时按从左到右的人员
+// 顺序配对最可靠；人数不一致时才回退到网格列，兼容旧模板的合并单元格。
+export function registrationCellsForPeople(row, roleCells, pattern) {
+  const candidates = cellsMatching(row, pattern)
+  return roleCells.map((roleCell, personIndex) => {
+    if (candidates.length === roleCells.length) return candidates[personIndex] || null
+    const direct = cellAt(row, roleCell.column)
+    if (direct && pattern.test(direct.text || '')) return direct
+    return candidates[personIndex] || direct || null
+  })
+}
+
+// 不再假定人物块固定为“角色、照片、姓名、身份证、号码”连续 5 行。以姓名行为锚点，
+// 在相邻人物块边界内寻找身份证与号码行；表格因分页被拆开、两表之间插入空行时仍可配对。
+export function findRegistrationPersonBlocks(rows) {
+  const sourceRows = Array.isArray(rows) ? rows : []
+  const nameIndexes = sourceRows
+    .map((row, index) => cellsMatching(row, NAME_CELL_PATTERN).length ? index : -1)
+    .filter(index => index >= 0)
+
+  return nameIndexes.map((nameIndex, blockIndex) => {
+    const previousNameIndex = blockIndex > 0 ? nameIndexes[blockIndex - 1] : -1
+    const nextNameIndex = blockIndex + 1 < nameIndexes.length ? nameIndexes[blockIndex + 1] : sourceRows.length
+    let roleIndex = -1
+    for (let index = nameIndex - 1; index > previousNameIndex; index -= 1) {
+      if ((sourceRows[index]?.cells || []).some(cell => roleType(cell.text))) {
+        roleIndex = index
+        break
+      }
+    }
+    if (roleIndex < 0) return null
+
+    let identityIndex = -1
+    let numberIndex = -1
+    for (let index = nameIndex + 1; index < nextNameIndex; index += 1) {
+      if (identityIndex < 0 && cellsMatching(sourceRows[index], IDENTITY_CELL_PATTERN).length) identityIndex = index
+      if (numberIndex < 0 && cellsMatching(sourceRows[index], JERSEY_CELL_PATTERN).length) numberIndex = index
+    }
+
+    return {
+      roleRow: sourceRows[roleIndex],
+      nameRow: sourceRows[nameIndex],
+      identityRow: identityIndex >= 0 ? sourceRows[identityIndex] : null,
+      numberRow: numberIndex >= 0 ? sourceRows[numberIndex] : null,
+      personRows: sourceRows.slice(roleIndex, nextNameIndex)
+    }
+  }).filter(Boolean)
+}
+
 // 照片按模板约定应位于「角色行 +1」且与本人角色同列，但真实报名表常把照片插到该人物块的其他行，
 // 或整块行序与模板不一致（多插/少插一行就会整体错位）。此处按「本人所在的 5 行人物块、同一列」
 // 依次查找：位于约定位置的单元格优先级最高，因此既有能正常识别的文件结果完全不变。
@@ -246,7 +304,12 @@ export async function parseTeamRegistrationDocx(file) {
     ? await imageFileFromRelationship(zip, relationships, logoCell.imageIds[0], `team-logo-${Date.now()}`)
     : null
 
-  const rosterTable = tables.find(table => table.rows.length >= 9 && table.rows.some(row => row.cells.some(cell => /身份证|球服号码/.test(cell.text)))) || tables[tables.length - 1]
+  const rosterTableIndex = tables.findIndex(table => table.rows.length >= 4 && table.rows.some(row => row.cells.some(cell => /身份证|球服号码/.test(cell.text))))
+  const resolvedRosterTableIndex = rosterTableIndex >= 0 ? rosterTableIndex : tables.length - 1
+  const rosterTable = tables[resolvedRosterTableIndex]
+  // Word/WPS 允许在分页处把一个视觉上的名单表拆成多个 XML 表。主表之后的行一起参与
+  // 人物块识别，仅带“姓名/身份证/号码”标签的行会被采用，不会把后续普通表格当成人员。
+  const rosterRows = tables.slice(resolvedRosterTableIndex).flatMap(table => table.rows)
   const kitResult = parseRegistrationKitColors(rosterTable)
   const contactRow = rosterTable.rows.find(row => row.cells.some(cell => /领队|联络员/.test(cell.text)) && firstPhone(row.cells.map(cell => cell.text).join(' ')))
   const contactPhone = firstPhone(contactRow?.cells?.map(cell => cell.text).join(' ') || '')
@@ -257,29 +320,30 @@ export async function parseTeamRegistrationDocx(file) {
   const people = []
   const warnings = [...kitResult.warnings]
   const errors = []
-  for (let rowIndex = 0; rowIndex + 4 < rosterTable.rows.length; rowIndex += 1) {
-    const roleRow = rosterTable.rows[rowIndex]
-    const photoRow = rosterTable.rows[rowIndex + 1]
-    const nameRow = rosterTable.rows[rowIndex + 2]
-    const identityRow = rosterTable.rows[rowIndex + 3]
-    const numberRow = rosterTable.rows[rowIndex + 4]
-    if (!nameRow.cells.some(cell => /姓名/.test(cell.text))) continue
+  for (const personBlock of findRegistrationPersonBlocks(rosterRows)) {
+    const { roleRow, nameRow, identityRow, numberRow, personRows } = personBlock
     const roleCells = roleRow.cells.filter(cell => roleType(cell.text))
     if (!roleCells.length) continue
+    const nameCells = registrationCellsForPeople(nameRow, roleCells, NAME_CELL_PATTERN)
+    const identityCells = registrationCellsForPeople(identityRow, roleCells, IDENTITY_CELL_PATTERN)
+    const numberCells = registrationCellsForPeople(numberRow, roleCells, JERSEY_CELL_PATTERN)
 
-    for (const roleCell of roleCells) {
+    for (let personIndex = 0; personIndex < roleCells.length; personIndex += 1) {
+      const roleCell = roleCells[personIndex]
       const type = roleType(roleCell.text)
-      const name = cleanValue(cellAt(nameRow, roleCell.column)?.text || '', ['姓名']).slice(0, 30)
+      const nameCell = nameCells[personIndex]
+      const personColumn = Number(nameCell?.column ?? roleCell.column)
+      const name = cleanValue(nameCell?.text || '', ['姓名']).slice(0, 30)
       if (!name) continue
-      const identityNumber = normalizeIdentity(cleanValue(cellAt(identityRow, roleCell.column)?.text || '', ['身份证号', '身份证']))
-      const jerseyText = cleanValue(cellAt(numberRow, roleCell.column)?.text || '', ['球服号码', '球衣号码', '号码'])
+      const identityNumber = normalizeIdentity(cleanValue(identityCells[personIndex]?.text || '', ['身份证号', '身份证']))
+      const jerseyText = cleanValue(numberCells[personIndex]?.text || '', ['球服号码', '球衣号码', '球员号码', '号码'])
       // 球服号码这里同时应用两处改动：号码容错（jerseyNumberFromText，支持「8号」「第8号」
       // 「全角８」等写法）与「工作人员栏有效号码同样计入」。后者是工作人员兼球员判定所依赖
       // 的行为、线上已生效，因此不再恢复 type === 'player' 守卫。
       const jerseyNumber = jerseyNumberFromText(jerseyText)
       // 先取模板约定位置（角色行 +1、同列），取不到再在该人所在的人物块内同列兜底查找
-      const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0]
-        || firstImageInColumn(rosterTable.rows.slice(rowIndex, rowIndex + 5), roleCell.column)
+      const photoRelationshipId = firstImageInColumn(personRows, personColumn)
+        || firstImageInColumn(personRows, roleCell.column)
       const photoFile = photoRelationshipId
         ? await imageFileFromRelationship(zip, relationships, photoRelationshipId, `person-${people.length + 1}-${Date.now()}`)
         : null
