@@ -122,3 +122,33 @@ E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run hosting deploy web-
 
 > 本项目 PC 改动必须遵循 `docs/PREVIEW_RELEASE_WORKFLOW.md`：功能分支只提交；先合并 `preview` 并部署 `/preview/admin/`；产品负责人验收后再合并 `main`；只有得到当前任务明确授权后才能部署正式 `/admin/`。发布前必须合并同期分支，发布后必须进行 HTTP 与 SHA-256 读回，禁止个人分支直接覆盖正式站。
 
+## 八 合并 main 后清理功能分支
+
+功能分支是短期分支。功能确认完整进入 `main` 后，应删除本地和 Gitee 远端分支，避免旧分支继续被误用或再次部署。
+
+删除前必须同时满足：
+
+1. `main` 已拉取到最新 Gitee 状态。
+2. 分支内容已完整进入 `main`；普通合并应通过 `git merge-base --is-ancestor`，若使用 cherry-pick、squash 或手工解冲突，必须另外核对功能代码和测试已在 `main`。
+3. `git rev-list --count origin/main..origin/分支名` 为 0，或独有提交已明确被 `main` 中的等价提交替代。
+4. `git worktree list` 中没有 worktree 正在使用该分支。
+5. 其他开发者或 Codex 会话没有继续在该分支工作。
+
+固定保留：
+
+- `main`：正式主分支。
+- `preview`：长期在线验收分支。
+- `master`：历史遗留分支，仅保留查阅，不再开发或部署。
+- 当前正在开发、尚未完整进入 `main` 的功能分支。
+
+确认后删除：
+
+```powershell
+git branch -d 功能分支
+git push origin --delete 功能分支
+git fetch origin --prune
+```
+
+如果 `git branch -d` 拒绝删除，不得直接改用 `-D`。先查明是上游跟踪分支差异、未合并提交还是仍有 worktree 占用；只有确认内容已由 `main` 完整保留后，才能使用 `-D` 删除本地旧引用。
+
+临时 worktree 清理顺序：先检查 `git -C 路径 status --short` 为空，再运行 `git worktree remove 路径`，最后执行 `git worktree prune`。不得删除有未提交修改的 worktree。
