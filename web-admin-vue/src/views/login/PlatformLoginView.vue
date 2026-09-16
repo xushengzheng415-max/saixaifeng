@@ -34,6 +34,7 @@
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { PLATFORM_CONSOLE_PATH, storePlatformSession } from '@/utils/platformSession'
 
 const API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
 const router = useRouter()
@@ -42,30 +43,6 @@ const form = reactive({ account: '', password: '' })
 const submitting = ref(false)
 const showPassword = ref(false)
 const errorMessage = ref('')
-const AUTH_KEYS = ['isLoggedIn','userInfo','role','currentRole','userId','loginType','phone','phoneNumber','openid','unionid','authSessionVersion','authToken','assistanceContext','organizationInfo','currentOrganization','currentOrg']
-
-function clearStoredSession() { AUTH_KEYS.forEach(key => localStorage.removeItem(key)) }
-function storePlatformSession(result) {
-  const user = result.user || {}
-  clearStoredSession()
-  localStorage.setItem('userId', user._id || '')
-  localStorage.setItem('role', 'organizer')
-  localStorage.setItem('currentRole', 'organizer')
-  localStorage.setItem('isLoggedIn', 'true')
-  localStorage.setItem('loginType', 'platform-password')
-  localStorage.setItem('phone', user.phone || user.phoneNumber || '')
-  localStorage.setItem('phoneNumber', user.phoneNumber || user.phone || '')
-  localStorage.setItem('authToken', result.authToken || '')
-  localStorage.setItem('authSessionVersion', 'phone-canonical-web-v1')
-  localStorage.setItem('userInfo', JSON.stringify({
-    _id: user._id,
-    uid: user._id,
-    userName: user.nickname || '平台负责人',
-    phone: user.phone || user.phoneNumber || '',
-    email: user.email || '',
-    isPlatformOwner: true
-  }))
-}
 async function submitLogin() {
   if (submitting.value) return
   errorMessage.value = ''
@@ -82,9 +59,9 @@ async function submitLogin() {
       try { result = JSON.parse(result.body) } catch { /* 使用统一错误提示 */ }
     }
     if (!result || !result.success || !result.authToken || !result.user) throw new Error(result && (result.error || result.message) || '登录失败')
-    storePlatformSession(result)
+    if (!storePlatformSession(result)) throw new Error('平台登录会话写入失败，请重试')
     form.password = ''
-    await router.replace('/tournament-center-admin')
+    await router.replace(PLATFORM_CONSOLE_PATH)
   } catch (error) {
     form.password = ''
     errorMessage.value = error.message || '账号、密码或平台权限不正确'

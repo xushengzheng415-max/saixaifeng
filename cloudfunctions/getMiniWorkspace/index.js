@@ -1144,6 +1144,8 @@ async function loadTeamPlayersForWorkspace(event, identity) {
 
 function importedDraftPublicView(item) {
   const status = String(item.reviewStatus || 'pending')
+  const dualRoleType = String(item.dualRoleType || '')
+  const dualRoleLabels = { head_coach_player:'兼主教练', team_leader_player:'兼领队', doctor_player:'兼队医' }
   return {
     id: String(item._id || ''),
     name: String(item.name || '未命名球员'),
@@ -1157,6 +1159,9 @@ function importedDraftPublicView(item) {
     reviewStatus: status,
     statusText: status === 'conflict' ? '资料冲突' : (status === 'confirmed' ? '已确认入库' : (status === 'excluded' ? '已排除' : '可确认')),
     conflictReason: status === 'conflict' ? String(item.conflictReason || '资料存在冲突，需要人工处理') : '',
+    dualRoleType,
+    dualRoleLabel: String(dualRoleLabels[dualRoleType] || ''),
+    isStaffPlayer: Boolean(dualRoleType),
     canConfirm: status === 'pending',
     canExclude: ['pending', 'conflict'].indexOf(status) >= 0
   }
@@ -1225,10 +1230,12 @@ async function reviewImportedPlayerDraftsForWorkspace(event, identity) {
         photoUrl:String(firstValue(draft.photoUrl, draft.photoFileID) || ''), photoFileID:String(firstValue(draft.photoFileID, draft.photoUrl) || ''), photoProcessingStatus:String(draft.photoProcessingStatus || ''),
         identityDigest:String(draft.identityDigest || ''), identityNumberMasked:String(draft.identityMasked || ''), identityStatus:'not_verified', identityVerificationLabel:'待人证核验',
         profileStatus:'pending', source:'registration_docx_import_confirmed', importDraftId:String(draft._id), registrationImportBatchId:String(draft.importBatchId || ''), registrationSourceFileId:String(draft.registrationSourceFileId || ''),
+        dualRoleType:String(draft.dualRoleType || ''), dualRoleLabel:String(draft.dualRoleLabel || ''), isAlsoStaff:Boolean(draft.dualRoleType), linkedCoachId:String(draft.linkedCoachId || ''), eligibilityReviewRequired:draft.eligibilityReviewRequired === true,
         creatorId:String(identity.user._id), registerTime:now, createTime:now, updateTime:now
       } })
       playerId = String(created._id)
     }
+    if (draft.linkedCoachId) await db.collection('coaches').doc(String(draft.linkedCoachId)).update({ data:{ linkedPlayerId:playerId, dualRoleType:String(draft.dualRoleType || 'staff_player'), isAlsoPlayer:true, updateTime:now } })
     await db.collection('registration_player_drafts').doc(draft._id).update({ data:{ reviewStatus:'confirmed', confirmedPlayerId:playerId, reviewedByUserId:String(identity.user._id), reviewedAt:now, updateTime:now } })
   }
   const state = await refreshImportedPlayerDraftState(context.teamId)

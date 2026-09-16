@@ -60,7 +60,12 @@ function parseRow(rowNode) {
       const properties = elementChildren(cellNode, 'tcPr')[0]
       const spanNode = properties ? elementChildren(properties, 'gridSpan')[0] : null
       const span = Math.max(1, Number(attributeByLocalName(spanNode, 'val') || 1))
-      const images = descendants(cellNode, 'blip').map(node => node.getAttributeNS?.(REL_NS, 'embed') || attributeByLocalName(node, 'embed')).filter(Boolean)
+      // 现代图形：<a:blip r:embed="rIdN">
+      const blipImages = descendants(cellNode, 'blip').map(node => node.getAttributeNS?.(REL_NS, 'embed') || attributeByLocalName(node, 'embed')).filter(Boolean)
+      // 旧式 VML 图片：<v:imagedata r:id="rIdN">。WPS 与早期 Word 另存出的图片走这种形式，
+      // 属性名是 r:id 而不是 r:embed，此前完全识别不到，导致照片被判为缺失。
+      const vmlImages = descendants(cellNode, 'imagedata').map(node => node.getAttributeNS?.(REL_NS, 'id') || attributeByLocalName(node, 'id')).filter(Boolean)
+      const images = [...blipImages, ...vmlImages]
       const cell = { column, span, text: cellText(cellNode), imageIds: images }
       column += span
       return cell
@@ -76,12 +81,35 @@ function cellAt(row, column) {
   return row?.cells?.find(cell => column >= cell.column && column < cell.column + cell.span) || null
 }
 
+// 照片按模板约定应位于「角色行 +1」且与本人角色同列，但真实报名表常把照片插到该人物块的其他行，
+// 或整块行序与模板不一致（多插/少插一行就会整体错位）。此处按「本人所在的 5 行人物块、同一列」
+// 依次查找：位于约定位置的单元格优先级最高，因此既有能正常识别的文件结果完全不变。
+function firstImageInColumn(rows, column) {
+  for (const row of rows) {
+    const ids = cellAt(row, column)?.imageIds
+    if (ids && ids.length) return ids[0]
+  }
+  return ''
+}
+
 function cleanValue(value, labels) {
   let result = normalizeText(value).replace(/\n/g, ' ')
   for (const label of labels) {
     result = result.replace(new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[：:]?\\s*`), '')
   }
   return result.trim()
+}
+
+// 真实报名表的号码写法五花八门：「8」「8号」「第8号」「No.8」「#8」「8 号」，甚至全角「８」。
+// 原实现只接受纯数字，导致「8号」被误判为未填写球服号码。
+// 这里取第一段 1~3 位数字（连续 4 位以上视为年份等其它内容，不当作号码），并归一化前导零。
+function jerseyNumberFromText(value) {
+  const normalized = String(value || '')
+    // 全角数字 → 半角
+    .replace(/[\uFF10-\uFF19]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+  const runs = normalized.match(/\d+/g) || []
+  const candidate = runs.find(run => run.length <= 3)
+  return candidate ? String(Number(candidate)) : ''
 }
 
 function firstPhone(value) {
@@ -163,6 +191,21 @@ function uniqueWarnings(items) {
   return Array.from(new Set(items.filter(Boolean)))
 }
 
+function personNameKey(value) {
+  return normalizeText(value).replace(/\s+/g, '').toLowerCase()
+}
+
+function dualRoleMeta(person) {
+  const label = ROLE_LABEL_MAP[person.roleType] || person.roleLabel || '工作人员'
+  return { type:`${person.roleType}_player`, staffLabel:`${label}兼球员`, playerLabel:`兼${label}` }
+}
+
+function mergeDuplicatePlayer(target, source) {
+  for (const field of ['jerseyNumber','jerseyName','birthDate','gender','nativePlace','photoFile','photoFileId','photoOriginalFileId','photoProcessingStatus']) {
+    if ((target[field] == null || target[field] === '') && source[field] != null && source[field] !== '') target[field] = source[field]
+  }
+}
+
 export async function parseTeamRegistrationDocx(file) {
   const rawFile = file?.raw || file
   if (!rawFile || !String(rawFile.name || '').toLowerCase().endsWith('.docx')) throw new Error('请选择 .docx 格式的球队报名表')
@@ -226,8 +269,13 @@ export async function parseTeamRegistrationDocx(file) {
       if (!name) continue
       const identityNumber = normalizeIdentity(cleanValue(cellAt(identityRow, roleCell.column)?.text || '', ['身份证号', '身份证']))
       const jerseyText = cleanValue(cellAt(numberRow, roleCell.column)?.text || '', ['球服号码', '球衣号码', '号码'])
-      const jerseyNumber = type === 'player' && /^\d{1,3}$/.test(jerseyText) ? String(Number(jerseyText)) : ''
-      const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0] || ''
+      // 球服号码这里同时应用两处改动：号码容错（jerseyNumberFromText，支持「8号」「第8号」
+      // 「全角８」等写法）与「工作人员栏有效号码同样计入」。后者是工作人员兼球员判定所依赖
+      // 的行为、线上已生效，因此不再恢复 type === 'player' 守卫。
+      const jerseyNumber = jerseyNumberFromText(jerseyText)
+      // 先取模板约定位置（角色行 +1、同列），取不到再在该人所在的人物块内同列兜底查找
+      const photoRelationshipId = cellAt(photoRow, roleCell.column)?.imageIds?.[0]
+        || firstImageInColumn(rosterTable.rows.slice(rowIndex, rowIndex + 5), roleCell.column)
       const photoFile = photoRelationshipId
         ? await imageFileFromRelationship(zip, relationships, photoRelationshipId, `person-${people.length + 1}-${Date.now()}`)
         : null
@@ -239,7 +287,7 @@ export async function parseTeamRegistrationDocx(file) {
         phone: type === 'team_leader' ? contactPhone : '',
         identityNumber,
         jerseyNumber,
-        jerseyName: type === 'player' ? generateJerseyName(name) : '',
+        jerseyName: jerseyNumber ? generateJerseyName(name) : '',
         birthDate: identity.birthDate,
         gender: identity.gender,
         nativePlace: identity.nativePlace,
@@ -251,7 +299,12 @@ export async function parseTeamRegistrationDocx(file) {
       }
       if (!identityNumber) warnings.push(`「${name}」未填写身份证号`)
       else if (!/^\d{17}[0-9X]$/.test(identityNumber) || !identity.birthDate) person.error = '身份证号格式不正确'
-      if (type === 'player' && !jerseyNumber) warnings.push(`「${name}」未填写球服号码`)
+      // 填了但无法识别时给出具体内容，避免与「根本没填」混为一谈
+      if (type === 'player' && !jerseyNumber) {
+        warnings.push(jerseyText
+          ? `「${name}」球服号码「${jerseyText.slice(0, 12)}」无法识别`
+          : `「${name}」未填写球服号码`)
+      }
       if (!photoFile) warnings.push(`「${name}」未找到照片`)
       if (person.error) errors.push(`「${name}」${person.error}`)
       people.push(person)
@@ -259,7 +312,69 @@ export async function parseTeamRegistrationDocx(file) {
   }
 
   const staff = people.filter(person => person.roleType !== 'player')
-  const players = people.filter(person => person.roleType === 'player')
+  const players = []
+  const playersByIdentity = new Map()
+  people.filter(person => person.roleType === 'player').forEach(person => {
+    const existing = person.identityNumber ? playersByIdentity.get(person.identityNumber) : null
+    if (!existing) {
+      players.push(person)
+      if (person.identityNumber) playersByIdentity.set(person.identityNumber, person)
+      return
+    }
+    if (personNameKey(existing.name) !== personNameKey(person.name)) {
+      person.error = '重复身份证号对应不同姓名'
+      errors.push(`重复身份证号对应“${existing.name}”和“${person.name}”，请核对`)
+      players.push(person)
+      return
+    }
+    mergeDuplicatePlayer(existing, person)
+    warnings.push(`「${person.name}」在球员栏重复出现，已保留 1 条球员资料`)
+  })
+
+  const staffByIdentity = new Map(staff.filter(person => person.identityNumber).map(person => [person.identityNumber, person]))
+  function markDualRole(staffPerson, player) {
+    if (personNameKey(staffPerson.name) !== personNameKey(player.name)) {
+      player.error = '与工作人员身份证相同但姓名不一致'
+      errors.push(`「${player.name}」与${staffPerson.roleLabel}身份证相同但姓名不一致`)
+      return
+    }
+    if (!player.jerseyNumber) {
+      player.error = '兼任球员需填写球服号码'
+      errors.push(`「${player.name}」兼任${staffPerson.roleLabel}，请填写球服号码`)
+      return
+    }
+    const meta = dualRoleMeta(staffPerson)
+    staffPerson.jerseyNumber = player.jerseyNumber
+    staffPerson.jerseyName = player.jerseyName || generateJerseyName(player.name)
+    staffPerson.dualRoleType = meta.type
+    staffPerson.dualRoleLabel = meta.staffLabel
+    player.dualRoleType = meta.type
+    player.dualRoleLabel = meta.staffLabel
+    player.dualRolePlayerLabel = meta.playerLabel
+    player.eligibilityReviewRequired = true
+    warnings.push(`「${player.name}」已按球衣号码识别为${meta.staffLabel}，球员序列保留 1 条`)
+  }
+
+  players.forEach(player => {
+    const staffPerson = player.identityNumber ? staffByIdentity.get(player.identityNumber) : null
+    if (staffPerson) markDualRole(staffPerson, player)
+  })
+  staff.filter(person => person.jerseyNumber).forEach(staffPerson => {
+    const existing = staffPerson.identityNumber ? playersByIdentity.get(staffPerson.identityNumber) : null
+    if (existing) return
+    const meta = dualRoleMeta(staffPerson)
+    const player = {
+      ...staffPerson,
+      roleType:'player', roleLabel:'球员', phone:'', jerseyName:staffPerson.jerseyName || generateJerseyName(staffPerson.name),
+      dualRoleType:meta.type, dualRoleLabel:meta.staffLabel, dualRolePlayerLabel:meta.playerLabel,
+      eligibilityReviewRequired:true, linkedStaffIdentityNumber:staffPerson.identityNumber
+    }
+    staffPerson.dualRoleType = meta.type
+    staffPerson.dualRoleLabel = meta.staffLabel
+    players.push(player)
+    if (player.identityNumber) playersByIdentity.set(player.identityNumber, player)
+    warnings.push(`「${player.name}」的工作人员栏填写了球衣号码，已加入球员序列并标记为${meta.staffLabel}`)
+  })
   const leader = staff.find(person => person.roleType === 'team_leader')
   if (leader && contactPhone) leader.phone = contactPhone
   if (!teamName) errors.push('未识别到球队名称')
