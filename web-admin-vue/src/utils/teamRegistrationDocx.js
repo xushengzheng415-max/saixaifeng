@@ -246,7 +246,18 @@ export async function parseTeamRegistrationDocx(file) {
     ? await imageFileFromRelationship(zip, relationships, logoCell.imageIds[0], `team-logo-${Date.now()}`)
     : null
 
-  const rosterTable = tables.find(table => table.rows.length >= 9 && table.rows.some(row => row.cells.some(cell => /身份证|球服号码/.test(cell.text)))) || tables[tables.length - 1]
+  // Word/WPS may split one long roster table into multiple consecutive <w:tbl>
+  // elements at a page break. The split can happen in the middle of a person's
+  // five-row block, so parsing only the first matching table silently drops the
+  // remaining people. Join all table fragments that contain both role and
+  // roster-field rows, preserving their document order.
+  const rosterTableFragments = tables.filter(table => (
+    table.rows.some(row => row.cells.some(cell => roleType(cell.text)))
+    && table.rows.some(row => row.cells.some(cell => /姓名|身份证|球服号码/.test(cell.text)))
+  ))
+  const rosterTable = rosterTableFragments.length
+    ? { rows: rosterTableFragments.flatMap(table => table.rows) }
+    : (tables.find(table => table.rows.length >= 9 && table.rows.some(row => row.cells.some(cell => /身份证|球服号码/.test(cell.text)))) || tables[tables.length - 1])
   const kitResult = parseRegistrationKitColors(rosterTable)
   const contactRow = rosterTable.rows.find(row => row.cells.some(cell => /领队|联络员/.test(cell.text)) && firstPhone(row.cells.map(cell => cell.text).join(' ')))
   const contactPhone = firstPhone(contactRow?.cells?.map(cell => cell.text).join(' ') || '')
