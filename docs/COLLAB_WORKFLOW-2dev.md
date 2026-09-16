@@ -11,7 +11,7 @@
 | # | 风险 | 证据 |
 |---|---|---|
 | R1 | **同一台机器只有一份工作副本**，两人同时改，谁都看不到对方的未提交改动 | 本机工作区即正式仓库，无 worktree/无独立分支隔离 |
-| R2 | **双远端**：Gitee `saixiaofeng/saixiaofeng` + GitHub `xushengzheng415-max/saixaifeng`，谁是权威源未定义 | `AGENTS.md` 第二节同时列出两个远端 |
+| R2 | **双远端**：Gitee `saixiaofeng/football` + GitHub `xushengzheng415-max/saixaifeng`，谁是权威源未定义 | `AGENTS.md` 第二节同时列出两个远端 |
 | R3 | **发布权没有归属**：PC 是"整包 209 个文件全量安全发布"，两个人同时发，后发的会覆盖先发的 | `AGENTS.md` 第六节 + `CURRENT_STATUS.md` 历次"安全发布 209/211 个文件" |
 | R4 | **文档是共享追加日志**：`CURRENT_STATUS.md` 已 970+ 行，两人同时插入表头条目必然冲突 | 本轮新增条目即插在文件首行 |
 | R5 | **云函数契约跨端**：`webLoginApi` 是所有网页端请求的唯一入口，改它的 action/返回结构会同时影响 PC / 小程序 / 服务号 | `AGENTS.md` 3.1 |
@@ -39,7 +39,7 @@ DSH 的 workspace-write 沙箱需要给工作区目录追加一条显式 DACL �
 
 | 项 | 结论 |
 |---|---|
-| 权威远端 | **Gitee `saixiaofeng/saixiaofeng` 为唯一权威源**；GitHub `xushengzheng415-max/saixaifeng` 只作只读镜像，**不从本地推 GitHub** |
+| 权威远端 | **Gitee `saixiaofeng/football` 为唯一权威源**；GitHub `xushengzheng415-max/saixaifeng` 只作只读镜像，**不从本地推 GitHub** |
 | 主干 | `main` 始终等于"线上已发布状态"，不直接在 main 上开发；两人各自把改动合进 main |
 | 开发分支 | `main` + **两条长期开发分支**（一人一条），互不推送对方的分支 |
 | 提交粒度 | 一个可独立验证的改动一次提交；提交信息带端别（PC / MP / FN / H5 / DOC） |
