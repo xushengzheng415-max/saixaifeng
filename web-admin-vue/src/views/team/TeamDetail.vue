@@ -34,7 +34,7 @@
             <img :src="teamLogoDisplayUrl" alt="球队队徽" />
             <strong>{{ team.name || '未命名球队' }}</strong>
           </div>
-          <dl><dt>赛事参赛编号</dt><dd>{{ tournamentRelation.registrationNo || tournamentRelation.tournamentTeamCode || team.teamCode || '—' }}</dd></dl>
+          <dl><dt>赛事参赛编号</dt><dd>{{ tournamentParticipationCode }}</dd></dl>
           <dl><dt>所属组别</dt><dd>{{ tournamentRelation.divisionName || sourceDivisionId || '当前组别' }}</dd></dl>
           <dl><dt>加入来源</dt><dd class="link">{{ tournamentJoinSource }}</dd></dl>
           <dl><dt>认领状态</dt><dd><el-tag type="success">{{ team.ownerId || team.coachId ? '已认领' : '已关联' }}</el-tag></dd></dl>
@@ -46,7 +46,7 @@
             <h2><el-icon><Tickets /></el-icon>球队赛事资料</h2>
             <dl><dt>赛事球队名称</dt><dd>{{ team.name || '—' }}</dd></dl>
             <dl><dt>球队队徽</dt><dd><img :src="teamLogoDisplayUrl" alt="队徽" /></dd></dl>
-            <dl><dt>球队负责人</dt><dd>{{ team.coachName || team.contactName || team.ownerName || '—' }}</dd></dl>
+            <dl><dt>球队负责人</dt><dd>{{ tournamentContactName }}</dd></dl>
             <dl><dt>联系方式</dt><dd>{{ maskedPhone }}</dd></dl>
           </section>
           <section class="detail-panel collaboration-status">
@@ -84,7 +84,7 @@
         </section>
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
-            <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '球员资料' }}</h2><p>本队共 {{ players.length }} 名球员；基础资料不等于本届赛事正式名单。</p></div>
+            <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '正式名单' }}</h2><p>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
           <el-table :data="players" v-loading="loading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
@@ -99,11 +99,12 @@
             <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="86" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button></template></el-table-column>
           </el-table>
         </section>
         <section v-if="isProfessionalTournamentTeam" class="collaboration-timeline"><h2>协作流程进度</h2><ol><li v-for="step in professionalTimeline" :key="step.title"><span><el-icon><CircleCheckFilled /></el-icon></span><div><strong>{{ step.title }}</strong><time>{{ step.time }}</time><small>{{ step.description }}</small></div></li></ol></section>
         <el-button v-else class="view-results" type="success" plain @click="openTournamentMatches"><el-icon><SwitchButton /></el-icon>查看赛程赛果</el-button>
-        <el-alert :title="isProfessionalTournamentTeam ? '专业模式当前免费；这里只展示赛事所需的球队、球员和名单资料，不展示俱乐部训练或财务数据。' : '基础模式同样展示球队球员基础资料；只有球队明确提交后才形成本届正式名单和官方个人数据。'" type="success" :closable="false" show-icon />
+        <el-alert title="报名表上传成功后直接形成本届正式名单；球员仍须完成人证核验后才能进入比赛阵容。" type="success" :closable="false" show-icon />
       </main>
     </template>
 
@@ -1189,7 +1190,13 @@ const tournamentDateRange = computed(() => tournamentContext.value.startDate && 
   ? `${String(tournamentContext.value.startDate).replaceAll('-', '.')}—${String(tournamentContext.value.endDate).replaceAll('-', '.')}`
   : '赛期待定')
 const backTitle = computed(() => sourceTournamentId.value ? '返回参赛球队' : '返回球队列表')
-const tournamentJoinSource = computed(() => ['invite', 'organizer', 'organizer_invite'].includes(tournamentRelation.value.joinSource) ? '主办方邀请' : (tournamentRelation.value.joinSource || '自主报名'))
+const tournamentJoinSource = computed(() => {
+  const source = String(tournamentRelation.value.joinSource || tournamentRelation.value.source || '').toLowerCase()
+  if (['organizer_import', 'registration_docx_import'].includes(source)) return '报名表导入'
+  if (['invite', 'organizer', 'organizer_invite', 'organizer_targeted_invite'].includes(source)) return '主办方邀请'
+  if (['apply', 'self_apply', 'public_registration'].includes(source)) return '球队报名'
+  return source ? '其他方式' : '自主报名'
+})
 const professionalTimeline = [
   { title: '主办方邀请', time: '2026.07.20 15:30', description: '主办方发起邀请' },
   { title: '球队认领', time: '2026.07.21 10:32', description: '球队负责人认领球队' },
@@ -1264,6 +1271,8 @@ const kitColorLabels = ref({ primary:{}, secondary:{} })
 const tournamentContext = ref(qaSnapshot && sourceTournamentId.value ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions } : {})
 const tournamentRelation = ref(qaSnapshot && sourceTournamentId.value ? { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' } : {})
 const isSyntheticTeam = computed(() => team.value.synthetic === true || Boolean(team.value.syntheticDatasetId))
+const tournamentParticipationCode = computed(() => tournamentRelation.value.registrationNo || tournamentRelation.value.tournamentTeamCode || tournamentRelation.value.participationCode || tournamentRelation.value.registrationCode || team.value.teamCode || (tournamentRelation.value._id ? `T-${String(tournamentRelation.value._id).slice(-6).toUpperCase()}` : '待分配'))
+const tournamentContactName = computed(() => tournamentRelation.value.contactName || tournamentRelation.value.managerName || team.value.coachName || team.value.contactName || team.value.managerName || team.value.ownerName || '—')
 const resolvedTournamentLogo = ref('')
 const tournamentLogoDirectUrl = computed(() => [tournamentContext.value.logoTransparentUrl, tournamentContext.value.logoUrl, tournamentContext.value.logo]
   .map(value => String(value || '').trim())
@@ -1294,7 +1303,10 @@ const teamMatchStats = computed(() => tournamentMatches.value.reduce((stats, mat
   return stats
 }, qaTeam ? { total: 12, wins: 8, draws: 2, losses: 2, goalsFor: 26, goalsAgainst: 10 } : { total: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 }))
 const maskedPhone = computed(() => {
-  const phone = String(team.value.contactPhone || team.value.phone || team.value.phoneNumber || '')
+  const phone = String(
+    tournamentRelation.value.contactPhone || tournamentRelation.value.managerPhone || tournamentRelation.value.ownerPhone ||
+    team.value.contactPhone || team.value.managerPhone || team.value.ownerPhone || team.value.creatorPhone || team.value.phoneNumber || team.value.phone || team.value.mobile || ''
+  )
   return /^\d{11}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : (phone || '—')
 })
 const clearingPlayers = ref(false)
@@ -1303,6 +1315,7 @@ const showBatchImport = ref(false)
 const showBatchAvatarImport = ref(false)
 const isEditingPlayer = ref(false)
 const editingPlayerId = ref('')
+const editingPlayerOriginal = ref(null)
 
 // 球员库相关
 const activeTab = ref('manual')
@@ -1685,6 +1698,7 @@ function viewPlayerCard(row) {
 function editPlayer(row) {
   isEditingPlayer.value = true
   editingPlayerId.value = row._id
+  editingPlayerOriginal.value = row
   playerForm.value = {
     name: row.name || '', gender: row.gender || 'male',
     birthDate: row.birthDate || '', idCard: row.idCard || '',
@@ -1779,7 +1793,8 @@ async function submitPlayer() {
     ElMessage.warning('请输入球员姓名')
     return
   }
-  if (!playerForm.value.idCard || playerForm.value.idCard.length !== 18) {
+  const keepImportedIdentity = isEditingPlayer.value && !playerForm.value.idCard && Boolean(editingPlayerOriginal.value?.identityDigest)
+  if (!keepImportedIdentity && (!playerForm.value.idCard || playerForm.value.idCard.length !== 18)) {
     ElMessage.warning('请输入18位身份证号')
     return
   }
@@ -1854,6 +1869,7 @@ async function submitPlayer() {
       // 新注册时设置注册时间
       registerTime: isEditingPlayer.value ? playerForm.value.registerTime : new Date().toISOString()
     }
+    if (keepImportedIdentity) delete data.idCard
     if (isEditingPlayer.value) {
       await updateRecord('players', editingPlayerId.value, data)
       ElMessage.success('保存成功')
@@ -3591,6 +3607,8 @@ async function loadPlayers() {
 }
 
 function playerProfileLabel(player) {
+  const identityStatus = String(player?.identityStatus || '').toLowerCase()
+  if (!['verified', 'approved', 'complete'].includes(identityStatus)) return '待人证核验'
   const status = String(player?.profileStatus || '').toLowerCase()
   if (status === 'complete') return '资料完整'
   if (status === 'imported_pending_claim') return '待认领核对'
