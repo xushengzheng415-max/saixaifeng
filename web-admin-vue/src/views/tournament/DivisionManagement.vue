@@ -37,7 +37,7 @@
         <tbody>
           <tr v-for="division in divisionRows" :key="division.id">
             <td><div class="division-name"><span class="division-avatar"><el-icon><UserFilled /></el-icon></span><strong>{{ division.name }}</strong></div></td>
-            <td><span class="team-count"><el-icon><User /></el-icon>{{ division.teamCount }} 支球队</span><span class="player-format-text">{{ division.playerFormatText }}</span><span class="format-text">{{ division.formatText }}</span></td>
+            <td><span class="team-count"><el-icon><User /></el-icon>已报名 {{ division.teamCount }} / {{ division.capacityText }} 支</span><span class="player-format-text">{{ division.playerFormatText }}</span><span class="format-text">{{ division.formatText }}</span></td>
             <td><span class="mode-tag" :class="division.modeClass">{{ division.modeText }}</span></td>
             <td><div class="rule-progress"><span>规则进度</span><el-progress :percentage="division.progress" :show-text="false" :stroke-width="7" /><b>{{ division.progress }}%</b></div><div class="rule-version">规则版本　{{ division.versionText }}</div></td>
             <td><span class="configuration-state" :class="division.stateClass">{{ division.stateText }}</span><span class="registration-state" :class="{ open: division.registrationEnabled }">{{ division.registrationEnabled ? '报名中' : '报名未开启' }}</span></td>
@@ -138,12 +138,14 @@ function normalizeDivision(division, index) {
   const modeProfessional = division.mode === 'professional' || division.isProfessional === true || division.plan === 'professional'
   const progress = Number.isFinite(explicitProgress) ? Math.min(100, Math.max(0, Math.round(explicitProgress))) : (finalized ? 100 : 0)
   const teamRows = registrations.value.filter(item => registrationMatchesDivision(item, division) && isConfirmedRegistration(item))
+  const allowedTeams = [division.expectedTeams, division.requiredTeams, division.teamRequirement, division.participantTeams, division.maxTeams].map(Number).find(value => Number.isFinite(value) && value > 0) || 0
   const stateText = finalized ? '已定版' : (progress > 0 ? '配置中' : '未配置')
   const primaryAction = finalized ? (modeProfessional ? '查看专业规则' : '查看规则') : (progress > 0 ? '继续配置' : '开始配置')
   return {
     id: String(division._id || division.id || `division-${index}`),
     name: division.name || division.divisionName || division.label || '未命名组别',
     teamCount: teamRows.length,
+    capacityText: allowedTeams > 0 ? String(allowedTeams) : '未设置',
     playerFormatText: playerFormatLabel(division.matchFormat,division.playersOnField),
     formatText: division.formatName || division.tournamentTypeName || formatLabel(division.formatType || division.tournamentType),
     modeText: modeProfessional ? '专业模式' : '基础模式 · 免费',
