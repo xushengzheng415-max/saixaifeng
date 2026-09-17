@@ -5,7 +5,7 @@
     <template v-if="sourceTournamentId">
       <header class="tournament-team-context">
         <div class="context-event">
-          <img :src="tournamentContext.logoUrl || tournamentContext.logo || '/admin/organization-logo-placeholder.svg'" alt="赛事标识" />
+          <img :src="tournamentLogoUrl" alt="赛事标识" />
           <strong>{{ tournamentContext.name || '当前赛事' }}</strong>
           <el-tag type="primary" effect="plain">{{ tournamentContext.divisions?.length || 1 }}个组别</el-tag>
           <el-tag type="success" effect="plain">{{ tournamentContext.status === 'completed' ? '已结束' : '进行中' }}</el-tag>
@@ -1264,6 +1264,20 @@ const kitColorLabels = ref({ primary:{}, secondary:{} })
 const tournamentContext = ref(qaSnapshot && sourceTournamentId.value ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions } : {})
 const tournamentRelation = ref(qaSnapshot && sourceTournamentId.value ? { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' } : {})
 const isSyntheticTeam = computed(() => team.value.synthetic === true || Boolean(team.value.syntheticDatasetId))
+const resolvedTournamentLogo = ref('')
+const tournamentLogoDirectUrl = computed(() => [tournamentContext.value.logoTransparentUrl, tournamentContext.value.logoUrl, tournamentContext.value.logo]
+  .map(value => String(value || '').trim())
+  .find(value => /^(https?:\/\/|\/)/i.test(value)) || '')
+async function resolveTournamentLogo() {
+  resolvedTournamentLogo.value = ''
+  const cloudSource = [tournamentContext.value.logoTransparentFileId, tournamentContext.value.logoFileId, tournamentContext.value.logoTransparentUrl, tournamentContext.value.logoUrl, tournamentContext.value.logo]
+    .map(value => String(value || '').trim())
+    .find(value => value.startsWith('cloud://'))
+  if (!cloudSource) return
+  const resolved = await getFileUrl(cloudSource)
+  resolvedTournamentLogo.value = /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+}
+const tournamentLogoUrl = computed(() => resolvedTournamentLogo.value || tournamentLogoDirectUrl.value || `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`)
 const tournamentMatches = ref([])
 const teamMatchStats = computed(() => tournamentMatches.value.reduce((stats, match) => {
   const isHome = String(match.homeTeamId || match.teamAId || '') === String(teamId)
@@ -1316,7 +1330,7 @@ const wordTeamLogoFile = ref(null)
 const getTeamLogoUrl = (teamRecord) => String(teamRecord?.logoUrl || '').trim() || String(teamRecord?.logo || '').trim() || String(teamRecord?._logoFileId || '').trim()
 const teamLogoDisplayUrl = computed(() => {
   const value = String(team.value.logoUrl || team.value.logo || '')
-  return /^(https?:\/\/|\/)/i.test(value) ? value : '/admin/organization-logo-placeholder.svg'
+  return /^(https?:\/\/|\/)/i.test(value) ? value : `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
 })
 const teamHasLogo = computed(() => Boolean(getTeamLogoUrl(team.value)))
 
@@ -3611,6 +3625,7 @@ async function loadTournamentTeamContext() {
       queryList('matches', { where: { tournamentId: sourceTournamentId.value }, limit: 500 })
     ])
     tournamentContext.value = event || {}
+    await resolveTournamentLogo()
     tournamentRelation.value = (relations || []).find(item => !sourceDivisionId.value || (item.divisionId || 'default') === sourceDivisionId.value) || relations?.[0] || {}
     syncKitColorsFromTeam()
     tournamentMatches.value = (matches || []).filter(match => {
