@@ -1891,7 +1891,7 @@ async function transferImportedPlayerDrafts(invite, targetTeamId, identity) {
   const where = batchId ? { importBatchId:batchId } : { sourceTeamId }
   const rows = await safeGet('registration_player_drafts', where, 500)
   const movable = rows.filter(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0)
-  for (const draft of movable) {
+  for (const draft of rows) {
     await db.collection('registration_player_drafts').doc(draft._id).update({ data:{
       teamId:targetTeamId,
       claimedTeamId:targetTeamId,
@@ -1900,8 +1900,19 @@ async function transferImportedPlayerDrafts(invite, targetTeamId, identity) {
       updateTime:db.serverDate()
     } })
   }
-  if (batchId) await db.collection('registration_import_batches').doc(batchId).update({ data:{ claimStatus:'claimed', status:'player_review_pending', claimedTeamId:targetTeamId, claimedByUserId:String(identity.user._id || ''), claimedAt:db.serverDate(), updateTime:db.serverDate() } })
-  if (targetTeamId) await db.collection('teams').doc(targetTeamId).update({ data:{ pendingPlayerDraftCount:movable.length, playerReviewStatus:movable.length ? 'pending' : 'completed', updateTime:db.serverDate() } })
+  const importedPlayers = batchId
+    ? await safeGet('players', { registrationImportBatchId:batchId }, 500)
+    : await safeGet('players', { teamId:sourceTeamId, source:'registration_docx_import_direct' }, 500)
+  if (sourceTeamId && sourceTeamId !== targetTeamId) {
+    const targetTeam = (await safeGet('teams', { _id:targetTeamId }, 1))[0] || {}
+    for (const player of importedPlayers) {
+      await db.collection('players').doc(player._id).update({ data:{ teamId:targetTeamId, teamCode:targetTeamId, teamName:String(targetTeam.name || targetTeam.teamName || player.teamName || ''), updateTime:db.serverDate() } })
+    }
+    const snapshots = await safeGet('roster_snapshots', { tournamentId:String(invite.tournamentId || ''), teamId:sourceTeamId, source:'registration_docx_import_direct' }, 20)
+    for (const snapshot of snapshots) await db.collection('roster_snapshots').doc(snapshot._id).update({ data:{ teamId:targetTeamId, updateTime:db.serverDate() } })
+  }
+  if (batchId) await db.collection('registration_import_batches').doc(batchId).update({ data:{ claimStatus:'claimed', status:'completed', playerReviewStatus:'completed', claimedTeamId:targetTeamId, claimedByUserId:String(identity.user._id || ''), claimedAt:db.serverDate(), updateTime:db.serverDate() } })
+  if (targetTeamId) await db.collection('teams').doc(targetTeamId).update({ data:{ playerCount:importedPlayers.length, pendingPlayerDraftCount:movable.length, playerReviewStatus:movable.length ? 'pending' : 'completed', updateTime:db.serverDate() } })
   if (sourceTeamId && sourceTeamId !== targetTeamId) await db.collection('teams').doc(sourceTeamId).update({ data:{ pendingPlayerDraftCount:0, playerReviewStatus:'transferred', importedDraftsTransferredToTeamId:targetTeamId, updateTime:db.serverDate() } })
   return movable.length
 }
