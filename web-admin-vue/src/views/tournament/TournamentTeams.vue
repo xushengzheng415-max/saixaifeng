@@ -27,7 +27,7 @@
           <h1>{{ isRegistrationWorkspace ? '报名管理' : '球队管理' }}</h1>
 
         </div>
-        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button type="success" plain @click="openSyntheticTeamDialog"><el-icon><Plus /></el-icon>添加虚拟球队</el-button><el-button @click="openQrDialog"><el-icon><Picture /></el-icon>生成报名海报</el-button><el-button type="primary" plain @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button><el-button type="primary" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>生成公开邀约</el-button><el-button plain type="success" @click="openBulkTeamDialog"><el-icon><Grid /></el-icon>批量添加资料</el-button><el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button></div>
+        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button type="success" plain @click="openSyntheticTeamDialog"><el-icon><Plus /></el-icon>添加虚拟球队</el-button><el-button @click="openQrDialog"><el-icon><Picture /></el-icon>生成报名海报</el-button><el-button type="primary" plain @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button><el-button type="primary" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>生成公开邀约</el-button><el-button type="warning" plain @click="openClaimCodeDialog"><el-icon><Key /></el-icon>赛事认领码</el-button><el-button plain type="success" @click="openBulkTeamDialog"><el-icon><Grid /></el-icon>批量添加资料</el-button><el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button></div>
         <div v-else class="heading-actions"><el-button type="primary" @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button></div>
       </div>
 
@@ -269,6 +269,7 @@
       </section>
     </div>
     <el-dialog v-model="targetedRegistrationLinkVisible" title="邀约球队" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="creatingTargetedRegistrationLink"><el-alert type="success" :closable="false" title="当前生成正式版球队邀约，可将二维码或完整小程序链接对外发送。"/><section v-if="targetedRegistrationResult" class="targeted-link-result"><img v-if="targetedRegistrationResult.qrCodeUrl" :src="targetedRegistrationResult.qrCodeUrl" alt="邀约球队正式版小程序码"/><div><strong>球队邀约正式版二维码已生成</strong><el-tag type="success" size="small">正式版</el-tag><span>报名时由球队选择组别</span><p>可下载二维码或复制完整链接，发送给球队负责人办理报名。</p></div></section><el-empty v-else description="正在生成正式版球队邀约…"/></div><template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.urlLink" @click="copyTargetedRegistrationLink">复制链接</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.qrCodeUrl" @click="downloadTargetedRegistrationCode">下载二维码</el-button><el-button v-if="targetedRegistrationResult" type="primary" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重新生成</el-button></template></el-dialog>
+    <el-dialog v-model="claimCodeVisible" title="赛事认领码" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="claimCodeLoading"><el-alert type="info" :closable="false" title="一个赛事一个认领码，可群发或张贴。球队负责人扫码后在小程序验证手机号，即可看到自己名下待认领的球队。"/><section v-if="claimCodeResult" class="targeted-link-result"><img v-if="claimCodeResult.qrCodeUrl" :src="claimCodeResult.qrCodeUrl" alt="赛事球队认领码"/><div><strong>球队认领码已生成</strong><el-tag type="success" size="small">正式版</el-tag><span>有效期至 {{ claimCodeExpiryText }}</span><p>把二维码或完整小程序链接发到领队群，球队负责人扫码后按报名表登记的领队或主教练手机号自助认领。</p></div></section><el-empty v-else description="正在生成球队认领码…"/></div><template #footer><el-button @click="claimCodeVisible=false">关闭</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.urlLink" @click="copyClaimCodeLink">复制链接</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.qrCodeUrl" @click="downloadTournamentClaimCode">下载二维码</el-button></template></el-dialog>
 
     <!-- 邀请球队弹窗（旧球队池入口保留给内部兼容流程，不再由“定向邀请球队”按钮触发） -->
     <el-dialog
@@ -658,7 +659,7 @@ import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import QRCode from 'qrcode'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, Upload, UserFilled, DocumentChecked, WarningFilled, Timer, CircleCheckFilled, Lock, Download, Link, Grid, CopyDocument } from '@element-plus/icons-vue'
+import { Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, Upload, UserFilled, DocumentChecked, WarningFilled, Timer, CircleCheckFilled, Lock, Download, Link, Grid, CopyDocument, Key } from '@element-plus/icons-vue'
 import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, getFileUrl, assignTournamentTeamDivision } from '../../utils/cloud'
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
@@ -761,6 +762,16 @@ const sendingInvites = ref(false)
 const targetedInviteResultVisible = ref(false)
 const targetedInviteResults = ref([])
 const targetedRegistrationLinkVisible = ref(false)
+const claimCodeVisible = ref(false)
+const claimCodeLoading = ref(false)
+const claimCodeResult = ref(null)
+const claimCodeExpiryText = computed(() => {
+  const raw = claimCodeResult.value?.expiresAt || ''
+  if (!raw) return '未设置'
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return '未设置'
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+})
 const creatingTargetedRegistrationLink = ref(false)
 const targetedRegistrationResult = ref(null)
 const activeDivisionId = ref(qaSnapshot && typeof route.query.divisionId === 'string' ? route.query.divisionId : 'default')
@@ -2599,6 +2610,35 @@ function downloadTargetedRegistrationCode() {
   const item = targetedRegistrationResult.value
   if (!item?.qrCodeUrl) return
   const link = document.createElement('a'); link.href = item.qrCodeUrl; link.download = `${tournament.value.name || '赛事'}-球队邀约二维码.png`; link.click()
+}
+
+// 赛事级球队认领码：一个赛事一个码，替代逐队分发认领链接。
+// 逐队「认领链接」按钮继续保留，用于报名表未留手机号或需要定向发送的场景。
+function openClaimCodeDialog() {
+  claimCodeResult.value = null
+  claimCodeVisible.value = true
+  void createTournamentClaimCode()
+}
+async function createTournamentClaimCode() {
+  claimCodeLoading.value = true
+  try {
+    const result = await callFunction('tournamentRegistrationFlow', { action:'createTournamentClaimCode', tournamentId, width:300, envVersion:'release' })
+    if (!result?.success) throw new Error(result?.message || '球队认领码生成失败')
+    if (result.data?.envVersion !== 'release' || result.data?.testOnly) throw new Error('未生成正式版球队认领码，请稍后重试')
+    claimCodeResult.value = result.data || null
+    ElMessage.success(result.message || '球队认领码已生成')
+  } catch (error) { ElMessage.error(error.message || '球队认领码生成失败') } finally { claimCodeLoading.value = false }
+}
+async function copyClaimCodeLink() {
+  const item = claimCodeResult.value
+  if (!item?.urlLink) return ElMessage.warning('正式版小程序链接尚未生成，请稍后重试')
+  const text = `【${tournament.value.name || '足球赛事'}】请球队负责人扫码或打开链接，验证报名表登记的手机号后认领本队：${item.urlLink}`
+  try { await navigator.clipboard.writeText(text); ElMessage.success('球队认领码链接已复制') } catch { ElMessage.info(text) }
+}
+function downloadTournamentClaimCode() {
+  const item = claimCodeResult.value
+  if (!item?.qrCodeUrl) return
+  const link = document.createElement('a'); link.href = item.qrCodeUrl; link.download = `${tournament.value.name || '赛事'}-球队认领码.png`; link.click()
 }
 
 // 弹窗关闭回调
