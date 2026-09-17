@@ -104,14 +104,14 @@
           </el-table>
         </section>
         <section v-if="importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
-          <div class="synthetic-player-heading"><div><h2>报名表球员信息</h2><p>共 {{ importedDraftPlayers.length }} 人；确认前仅作为报名资料展示。</p></div><el-tag type="warning" effect="plain">待确认资料</el-tag></div>
+          <div class="synthetic-player-heading"><div><h2>报名表导入资料</h2><p>共 {{ importedDraftPlayers.length }} 人；主办方导入即为本届正式名单，此处保留导入原始资料供核对。</p></div><el-tag type="info" effect="plain">导入记录</el-tag></div>
           <el-table :data="importedDraftPlayers" class="synthetic-player-table">
             <el-table-column label="姓名" prop="name" min-width="110" />
             <el-table-column label="身份" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
             <el-table-column label="出生日期" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="身份证" min-width="140"><template #default="{ row }">{{ row.identityMasked || '—' }}</template></el-table-column>
-            <el-table-column label="审核状态" width="110" align="center"><template #default="{ row }"><el-tag size="small" :type="row.reviewStatus === 'conflict' ? 'danger' : 'warning'">{{ row.reviewStatus === 'conflict' ? '资料冲突' : (row.reviewStatus === 'confirmed' ? '已确认' : '待确认') }}</el-tag></template></el-table-column>
+            <el-table-column label="并入状态" width="130" align="center"><template #default="{ row }"><el-tag size="small" :type="row.reviewStatus === 'conflict' ? 'danger' : (row.reviewStatus === 'confirmed' ? 'success' : 'info')">{{ row.reviewStatus === 'conflict' ? '资料冲突' : (row.reviewStatus === 'confirmed' ? '已入正式名单' : '历史导入') }}</el-tag></template></el-table-column>
           </el-table>
         </section>
         <section v-if="isProfessionalTournamentTeam" class="collaboration-timeline"><h2>协作流程进度</h2><ol><li v-for="step in professionalTimeline" :key="step.title"><span><el-icon><CircleCheckFilled /></el-icon></span><div><strong>{{ step.title }}</strong><time>{{ step.time }}</time><small>{{ step.description }}</small></div></li></ol></section>

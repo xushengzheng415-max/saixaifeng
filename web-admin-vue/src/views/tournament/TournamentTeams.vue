@@ -112,7 +112,7 @@
 
       <section v-if="isRegistrationWorkspace && activeTab === 'all'" class="registration-review-actions">
         <div>
-          <strong>待审核球队 {{ reviewableTeams.length }} 支</strong>
+          <strong>待审核球队 {{ pendingTeams.length }} 支</strong>
           <span>球员资料可在“球员信息”中查看；确认后进入参赛球队。</span>
         </div>
         <div class="registration-review-selection">
@@ -212,9 +212,8 @@
             <span><el-tag :type="claimType(row)" effect="plain" size="small">{{ claimLabel(row) }}</el-tag></span>
             <span><el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag></span>
             <span v-if="isProfessional"><el-tag :type="rosterTagType(row)" effect="light" size="small">{{ rosterLabel(row) }}<template v-if="rosterPlayerCount(row)">（{{ rosterPlayerCount(row) }}人）</template></el-tag></span>
-            <span class="player-count-cell"><strong>{{ teamPlayerCount(row) }} 人</strong><small v-if="importedPlayerTotal(row)">报名表 {{ importedPlayerTotal(row) }} 人 · 待确认 {{ importedPlayerPending(row) }}<template v-if="importedPlayerConflictCount(row)"> · 冲突 {{ importedPlayerConflictCount(row) }}</template></small></span>
+            <span class="player-count-cell"><strong>{{ teamPlayerCount(row) }} 人</strong></span>
             <div class="team-row-actions">
-              <el-button v-if="isImportedReviewTeam(row) && importedPlayerConflictCount(row) === 0" link type="success" @click="approveTeam(row)">确认参赛</el-button>
               <el-button v-if="activeDivisionId === 'default'" link type="success" @click="openDivisionAssignment(row)">分配组别</el-button>
               <template v-if="row.status === 'pending'"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template>
               <template v-else-if="row.status === 'cancel_requested'"><el-button link type="danger" @click="approveCancel(row)">同意变更</el-button><el-button link @click="rejectCancel(row)">驳回</el-button></template>
@@ -1082,8 +1081,6 @@ const claimedTeams = computed(() => divisionTournamentTeams.value.filter(team =>
 const approvedClaimedTeams = computed(() => approvedTeams.value.filter(team => claimLabel(team) === '已认领'))
 const approvedConfirmedTeams = computed(() => approvedTeams.value.filter(team => ['approved', 'confirmed', 'active', 'locked'].includes(String(team.participationStatus || team.confirmStatus || team.status))))
 const pendingTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'pending'))
-const importedReviewTeams = computed(() => divisionTournamentTeams.value.filter(team => isImportedReviewTeam(team) && importedPlayerConflictCount(team) === 0))
-const reviewableTeams = computed(() => [...pendingTeams.value, ...importedReviewTeams.value.filter(team => !pendingTeams.value.some(item => getRecordId(item) === getRecordId(team)))])
 const invitedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'invited'))
 const cancelRequestedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'cancel_requested'))
 const activeRegistrationTeamCount = computed(() => divisionTournamentTeams.value.filter(team => !inactiveRegistrationStatuses.has(String(team.status || '').toLowerCase())).length)
@@ -1225,7 +1222,7 @@ const filteredTeams = computed(() => {
 })
 
 function isApprovalSelectable(team) {
-  return (team?.status === 'pending' || isImportedReviewTeam(team)) && applicationRiskLabel(team) === '无重复' && importedPlayerConflictCount(team) === 0
+  return team?.status === 'pending' && applicationRiskLabel(team) === '无重复' && importedPlayerConflictCount(team) === 0
 }
 
 const selectableApprovalRows = computed(() => filteredTeams.value.filter(isApprovalSelectable))
@@ -1364,31 +1361,21 @@ function rosterPlayerCount(team) {
   return Number(team.rosterPlayerCount || team.approvedPlayerCount || team.playerCount || 0)
 }
 
+// 主办方导入的球员即为本届正式名单：优先取正式球员数，旧规则留下的导入草稿仅作兜底，冲突项不计入
 function teamPlayerCount(team) {
-  return Number(team.playerCount || team.rosterPlayerCount || team.approvedPlayerCount || 0)
+  const formal = Number(team.playerCount || team.rosterPlayerCount || team.approvedPlayerCount || 0)
+  if (formal) return formal
+  const stats = importedPlayerStats(team)
+  if (stats) return Number(stats.pending || 0) + Number(stats.confirmed || 0)
+  return Number(team.importedPlayerDraftCount || 0)
 }
 
 function importedPlayerStats(team) {
   return team?.importedPlayerStats || null
 }
 
-function importedPlayerTotal(team) {
-  return Number(importedPlayerStats(team)?.total || team?.importedPlayerDraftCount || 0)
-}
-
-function importedPlayerPending(team) {
-  const stats = importedPlayerStats(team)
-  return Number(stats ? stats.pending + stats.conflict : team?.pendingPlayerDraftCount || 0)
-}
-
 function importedPlayerConflictCount(team) {
   return Number(importedPlayerStats(team)?.conflict || 0)
-}
-
-function isImportedReviewTeam(team) {
-  return Boolean(team && ['invited', 'pending'].includes(String(team.status || '')) &&
-    (team.source === 'registration_docx_import' || team.registrationImportBatchId || importedPlayerTotal(team) > 0) &&
-    importedPlayerTotal(team) > 0)
 }
 
 function rosterLabel(team) {
