@@ -248,7 +248,42 @@ async function run() {
     ok('空白名单球队在认领码路径下不可发现、不可触达')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/10 通过`)
+  // 场景 11：手机号命中时认领成功，并真正写入球队归属与邀请状态
+  // 前十个场景证明「谁不能认领」，这一条证明「能认领的人确实认领成功」，
+  // 否则严格的白名单可能在正常路径上把所有人都挡掉。
+  {
+    const { result, store } = await callWorkspace(baseSeed(), {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      existingTeamId: '',
+      disclaimerAgreed: true
+    })
+    assert.strictEqual(result.success, true, `场景 11：应认领成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(result.teamId, 'team-1', '场景 11：应返回预建球队 ID')
+    const team = store.teams.find(row => row._id === 'team-1')
+    assert.strictEqual(team.claimStatus, 'claimed', '场景 11：球队应写入已认领')
+    assert.strictEqual(String(team.ownerId), 'user-1', '场景 11：球队归属应写入认领人')
+    const invite = store.team_invitations.find(row => row._id === 'inv-1')
+    assert.strictEqual(invite.status, 'accepted', '场景 11：邀请应流转为 accepted')
+    ok('手机号命中时认领成功并写入球队归属')
+  }
+
+  // 场景 12：未同意免责声明时不得认领
+  {
+    const { result, store } = await callWorkspace(baseSeed(), {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      existingTeamId: ''
+    })
+    assert.strictEqual(result.success, false, '场景 12：应失败')
+    const team = store.teams.find(row => row._id === 'team-1')
+    assert.strictEqual(team.claimStatus, 'unclaimed', '场景 12：未确认免责声明不得改动球队归属')
+    ok('未同意免责声明时认领被拒且不改动归属')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/12 通过`)
 }
 
 run().catch(error => {
