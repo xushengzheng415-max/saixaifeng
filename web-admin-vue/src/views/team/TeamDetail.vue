@@ -3676,7 +3676,7 @@ async function loadTournamentTeamContext() {
       queryList('tournament_teams', { where: { tournamentId: sourceTournamentId.value, teamId } }),
       queryList('matches', { where: { tournamentId: sourceTournamentId.value }, limit: 500 })
     ])
-    tournamentContext.value = event || {}
+    tournamentContext.value = Array.isArray(event) ? event[0] || {} : event || {}
     await resolveTournamentLogo()
     tournamentRelation.value = (relations || []).find(item => !sourceDivisionId.value || (item.divisionId || 'default') === sourceDivisionId.value) || relations?.[0] || {}
     syncKitColorsFromTeam()
