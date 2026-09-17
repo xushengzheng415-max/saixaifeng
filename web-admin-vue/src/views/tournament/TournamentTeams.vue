@@ -32,13 +32,15 @@
       </div>
 
       <section class="division-toolbar">
-        <div class="division-tab-section"><span class="division-tab-title">竞赛组别</span><div class="division-tabs" role="tablist" aria-label="竞赛组别"><button v-for="division in divisionOptions" :key="division.id" type="button" role="tab" class="division-tab-button" :class="{ active: division.id === activeDivisionId }" :aria-selected="division.id === activeDivisionId" @click="selectDivision(division.id)"><strong>{{ divisionDisplayName(division) }}</strong><small>{{ divisionTeamCount(division.id) }} 支球队</small><em v-if="division.id !== 'default'" :class="division.mode === 'professional' || division.isProfessional ? 'professional' : 'simple'">{{ division.mode === 'professional' || division.isProfessional ? '专业' : '简易' }}</em></button></div></div>
+        <div class="division-tab-section"><span class="division-tab-title">竞赛组别</span><div class="division-tabs" role="tablist" aria-label="竞赛组别"><button v-for="division in divisionOptions" :key="division.id" type="button" role="tab" class="division-tab-button" :class="{ active: division.id === activeDivisionId }" :aria-selected="division.id === activeDivisionId" @click="selectDivision(division.id)"><strong>{{ division?.name || '未命名组别' }}</strong><small>{{ divisionPlayerFormatLabel(division) || '赛制待定' }}</small><em v-if="division.id !== 'default'" :class="division.mode === 'professional' || division.isProfessional ? 'professional' : 'simple'">{{ division.mode === 'professional' || division.isProfessional ? '专业' : '简易' }}</em></button></div></div>
         <div class="division-rule-summary">
           <span>{{ formatLabel }}</span>
           <i></i>
-          <span>每队最多 {{ activeDivision.maxPlayersPerTeam || 35 }} 人</span>
+          <span>允许报名 {{ activeDivisionCapacity || '未设置' }} 支</span>
           <i></i>
-          <span>{{ quotaText }}</span>
+          <span>已报名 {{ activeRegistrationTeamCount }} 支</span>
+          <i></i>
+          <span>还可报名 {{ remainingTeamSlots }}</span>
         </div>
       </section>
 
@@ -110,8 +112,8 @@
 
       <section v-if="isRegistrationWorkspace && activeTab === 'all'" class="registration-review-actions">
         <div>
-          <strong>待审核球队 {{ pendingTeams.length }} 支</strong>
-          <span>请勾选需要通过的球队；异常或非待审核球队不能选择。</span>
+          <strong>待审核球队 {{ reviewableTeams.length }} 支</strong>
+          <span>球员资料可在“球员信息”中查看；确认后进入参赛球队。</span>
         </div>
         <div class="registration-review-selection">
           <el-checkbox
@@ -127,7 +129,7 @@
             :disabled="selectedApprovalIds.length === 0"
             @click="approveAllVisibleApplications"
           >
-            <el-icon><CircleCheckFilled /></el-icon>批量通过已选
+            <el-icon><CircleCheckFilled /></el-icon>批量确认参赛
           </el-button>
         </div>
       </section>
@@ -184,7 +186,7 @@
           </div>
           <div v-else class="teams-table-row teams-table-head" :class="{ 'professional-table-row': isProfessional }" role="row">
             <span>球队（队徽 + 名称）</span><span>赛事参赛编号</span><span>加入来源</span><span>小程序认领状态</span>
-            <span>参赛确认</span><span v-if="isProfessional">赛事参赛名单</span><span>球员数</span><span>操作</span>
+            <span>参赛确认</span><span v-if="isProfessional">赛事参赛名单</span><span>球员信息</span><span>操作</span>
           </div>
           <div v-for="row in filteredTeams" :key="row.recordId" class="teams-table-row" :class="{ 'simple-application-row': isApplicationReviewView, 'professional-table-row': isProfessional }" role="row">
             <div class="team-identity" :class="{ 'approval-selectable': isRegistrationWorkspace && activeTab === 'all' }">
@@ -210,8 +212,9 @@
             <span><el-tag :type="claimType(row)" effect="plain" size="small">{{ claimLabel(row) }}</el-tag></span>
             <span><el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag></span>
             <span v-if="isProfessional"><el-tag :type="rosterTagType(row)" effect="light" size="small">{{ rosterLabel(row) }}<template v-if="rosterPlayerCount(row)">（{{ rosterPlayerCount(row) }}人）</template></el-tag></span>
-            <span>{{ teamPlayerCount(row) }} 人</span>
+            <span class="player-count-cell"><strong>{{ teamPlayerCount(row) }} 人</strong><small v-if="importedPlayerTotal(row)">报名表 {{ importedPlayerTotal(row) }} 人 · 待确认 {{ importedPlayerPending(row) }}<template v-if="importedPlayerConflictCount(row)"> · 冲突 {{ importedPlayerConflictCount(row) }}</template></small></span>
             <div class="team-row-actions">
+              <el-button v-if="isImportedReviewTeam(row) && importedPlayerConflictCount(row) === 0" link type="success" @click="approveTeam(row)">确认参赛</el-button>
               <el-button v-if="activeDivisionId === 'default'" link type="success" @click="openDivisionAssignment(row)">分配组别</el-button>
               <template v-if="row.status === 'pending'"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template>
               <template v-else-if="row.status === 'cancel_requested'"><el-button link type="danger" @click="approveCancel(row)">同意变更</el-button><el-button link @click="rejectCancel(row)">驳回</el-button></template>
@@ -1079,6 +1082,8 @@ const claimedTeams = computed(() => divisionTournamentTeams.value.filter(team =>
 const approvedClaimedTeams = computed(() => approvedTeams.value.filter(team => claimLabel(team) === '已认领'))
 const approvedConfirmedTeams = computed(() => approvedTeams.value.filter(team => ['approved', 'confirmed', 'active', 'locked'].includes(String(team.participationStatus || team.confirmStatus || team.status))))
 const pendingTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'pending'))
+const importedReviewTeams = computed(() => divisionTournamentTeams.value.filter(team => isImportedReviewTeam(team) && importedPlayerConflictCount(team) === 0))
+const reviewableTeams = computed(() => [...pendingTeams.value, ...importedReviewTeams.value.filter(team => !pendingTeams.value.some(item => getRecordId(item) === getRecordId(team)))])
 const invitedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'invited'))
 const cancelRequestedTeams = computed(() => divisionTournamentTeams.value.filter(t => t.status === 'cancel_requested'))
 const activeRegistrationTeamCount = computed(() => divisionTournamentTeams.value.filter(team => !inactiveRegistrationStatuses.has(String(team.status || '').toLowerCase())).length)
@@ -1138,14 +1143,10 @@ const filteredSimpleChangeHistory = computed(() => simpleChangeHistory.value.fil
   if (changeKeyword.value && !row.teamName.toLowerCase().includes(changeKeyword.value.toLowerCase())) return false
   return true
 }))
-const formatLabel = computed(() => {
-  const value = activeDivision.value?.formatType || activeDivision.value?.tournamentType || activeDivision.value?.matchFormat
-  const labels = { league: '联赛制', knockout: '淘汰赛', mixed: '混合赛制', tournament: '杯赛制', '11side': '十一人制' }
-  return labels[value] || '赛制待定'
-})
-const quotaText = computed(() => {
-  const max = activeDivisionCapacity.value || Number(tournament.value.maxTeams || 0)
-  return max > 0 ? `${approvedTeams.value.length} / ${max} 支球队` : `${approvedTeams.value.length} 支球队`
+const formatLabel = computed(() => divisionPlayerFormatLabel(activeDivision.value) || '赛制待定')
+const remainingTeamSlots = computed(() => {
+  const max = activeDivisionCapacity.value
+  return max > 0 ? `${Math.max(0, max - activeRegistrationTeamCount.value)} 支` : '未设置'
 })
 const displayAvailableSlots = computed(() => availableSlots.value === 999 ? '不限' : availableSlots.value)
 const submittedRosterCount = computed(() => approvedTeams.value.filter(team => {
@@ -1224,7 +1225,7 @@ const filteredTeams = computed(() => {
 })
 
 function isApprovalSelectable(team) {
-  return team?.status === 'pending' && applicationRiskLabel(team) === '无重复'
+  return (team?.status === 'pending' || isImportedReviewTeam(team)) && applicationRiskLabel(team) === '无重复' && importedPlayerConflictCount(team) === 0
 }
 
 const selectableApprovalRows = computed(() => filteredTeams.value.filter(isApprovalSelectable))
@@ -1367,6 +1368,29 @@ function teamPlayerCount(team) {
   return Number(team.playerCount || team.rosterPlayerCount || team.approvedPlayerCount || 0)
 }
 
+function importedPlayerStats(team) {
+  return team?.importedPlayerStats || null
+}
+
+function importedPlayerTotal(team) {
+  return Number(importedPlayerStats(team)?.total || team?.importedPlayerDraftCount || 0)
+}
+
+function importedPlayerPending(team) {
+  const stats = importedPlayerStats(team)
+  return Number(stats ? stats.pending + stats.conflict : team?.pendingPlayerDraftCount || 0)
+}
+
+function importedPlayerConflictCount(team) {
+  return Number(importedPlayerStats(team)?.conflict || 0)
+}
+
+function isImportedReviewTeam(team) {
+  return Boolean(team && ['invited', 'pending'].includes(String(team.status || '')) &&
+    (team.source === 'registration_docx_import' || team.registrationImportBatchId || importedPlayerTotal(team) > 0) &&
+    importedPlayerTotal(team) > 0)
+}
+
 function rosterLabel(team) {
   const status = team.rosterStatus || team.lineupStatus || team.registrationStatus
   return ({ draft: '待提交', submitted: '审核中', approved: '已生效', locked: '已锁定', returned: '已退回' })[status] || (rosterPlayerCount(team) > 0 ? '已提交' : '待提交')
@@ -1478,7 +1502,7 @@ async function approveAllVisibleApplications() {
         cloudWrite: false
       }
     }
-    await ElMessageBox.confirm(`确认通过当前组别已勾选的 ${safeRows.length} 支球队吗？未勾选球队保持原状态。`, '批量通过已选球队', { type: 'warning' })
+    await ElMessageBox.confirm(`确认当前组别已勾选的 ${safeRows.length} 支球队参赛吗？未勾选球队保持原状态。`, '批量确认参赛', { type: 'warning' })
     if (qaSnapshot) {
       const safeIds = new Set(safeRows.map(getRecordId))
       tournamentTeams.value = tournamentTeams.value.map(team => safeIds.has(getRecordId(team)) ? { ...team, status: 'approved', approveTime: new Date().toISOString() } : team)
@@ -1515,7 +1539,7 @@ async function approveAllVisibleApplications() {
     if (failed.length) {
       ElMessage.warning(`批量审核完成：通过 ${succeeded.length} 支，失败 ${failed.length} 支；失败记录仍保留待审核。`)
     } else {
-      ElMessage.success(`已通过 ${succeeded.length} 支球队`)
+      ElMessage.success(`已确认 ${succeeded.length} 支球队参赛`)
     }
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('批量通过失败，申请记录已保留')
@@ -1941,7 +1965,7 @@ function openTeamPlayers(team) {
   }
   router.push({
     path: `/tournaments/${tournamentId}/teams/${teamId}`,
-    query: { divisionId: activeDivisionId.value }
+    query: { divisionId: activeDivisionId.value, from: 'registration' }
   })
 }
 
@@ -2187,6 +2211,19 @@ async function loadTournamentTeams() {
 
     // 获取球队详情
     const teamIds = list.map(t => t.teamId).filter(Boolean)
+    const importedDrafts = teamIds.length
+      ? await queryList('registration_player_drafts', { where: { teamId: { $in: teamIds } }, limit: 1000 })
+      : []
+    const importedStatsByTeam = new Map()
+    ;(importedDrafts || []).forEach(draft => {
+      const key = String(draft.teamId || '')
+      if (!key) return
+      const stats = importedStatsByTeam.get(key) || { total: 0, pending: 0, conflict: 0, confirmed: 0, excluded: 0 }
+      stats.total += 1
+      const status = String(draft.reviewStatus || 'pending')
+      if (Object.prototype.hasOwnProperty.call(stats, status)) stats[status] += 1
+      importedStatsByTeam.set(key, stats)
+    })
     if (teamIds.length > 0) {
       const teamsData = await queryList('teams', { where: { _id: { $in: teamIds } } })
 
@@ -2232,7 +2269,8 @@ async function loadTournamentTeams() {
           logoFileId,
           logo: /^https?:\/\//i.test(logoFileId) ? logoFileId : '',
           logoUrl: /^https?:\/\//i.test(logoFileId) ? logoFileId : '',
-          playerCount: playerIdsByTeam.get(String(item.teamId))?.size || Number(teamData.playerCount || item.playerCount || 0),
+          importedPlayerStats: importedStatsByTeam.get(String(item.teamId)) || null,
+          playerCount: importedStatsByTeam.get(String(item.teamId))?.confirmed || playerIdsByTeam.get(String(item.teamId))?.size || Number(teamData.playerCount || item.playerCount || 0),
           status: item.status,
           createTime: item.createTime,
           inviteTime: item.inviteTime,
@@ -3255,6 +3293,10 @@ onMounted(async () => {
 .player-count {
   color: #409eff;
 }
+
+.player-count-cell { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.player-count-cell strong { color:#26352b; font-weight:600; }
+.player-count-cell small { color:#7b877e; font-size:11px; line-height:1.35; white-space:normal; }
 
 .create-mode-switch {
   display: flex;

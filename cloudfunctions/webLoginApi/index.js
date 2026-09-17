@@ -195,6 +195,7 @@ const ASSISTANCE_COLLECTIONS = new Set([
 const ORGANIZER_PRIVATE_COLLECTIONS = new Set([
   'tournaments', 'teams', 'players', 'coaches', 'management',
   'player_library', 'coach_library', 'referees', 'referee_invitations',
+  'registration_player_drafts',
   'matches', 'match_events', 'match_referees', 'tournament_referees',
   'tournament_teams', 'tournament_groups', 'tournament_bracket',
   'tournament_league_tables', 'rosters', 'roster_change_requests',
@@ -1271,6 +1272,10 @@ function organizerRecordAllowed(collection, record, scope) {
   if (collection === 'players' || collection === 'coaches' || collection === 'management') {
     return recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value))
   }
+  if (collection === 'registration_player_drafts') {
+    return scope.tournamentIds.has(record.tournamentId) ||
+      recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value))
+  }
   if (collection === 'player_library' || collection === 'coach_library') {
     return recordHasOrg(record, scope.orgId)
   }
@@ -1313,6 +1318,9 @@ function organizerRelationAllowed(collection, record, scope) {
       collection === 'referee_invitations' || collection === 'player_library' ||
       collection === 'coach_library') return true
   if (collection === 'players' || collection === 'coaches' || collection === 'management') {
+    return recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value))
+  }
+  if (collection === 'registration_player_drafts') {
     return recordTeamKeys(record).some(value => scope.teamIds.has(value) || scope.teamCodes.has(value))
   }
   if (collection === 'matches' || collection === 'tournament_referees' ||

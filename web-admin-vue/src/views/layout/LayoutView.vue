@@ -745,14 +745,14 @@ const organizerNavItems = computed(() => [
     label: '报名管理',
     icon: 'Postcard',
     requiresTournament: true,
-    activeWhen: () => /\/tournaments\/[^/]+\/registration$/.test(route.path)
+    activeWhen: () => /\/tournaments\/[^/]+\/registration$/.test(route.path) || (route.query.from === 'registration' && /\/tournaments\/[^/]+\/teams\//.test(route.path))
   },
   {
     path: tournamentWorkspacePath('/teams'),
     label: '球队管理',
     icon: 'UserFilled',
     requiresTournament: true,
-    activeWhen: () => /\/tournaments\/[^/]+\/teams/.test(route.path)
+    activeWhen: () => /\/tournaments\/[^/]+\/teams/.test(route.path) && !(route.query.from === 'registration' && /\/tournaments\/[^/]+\/teams\//.test(route.path))
   },
   {
     path: tournamentWorkspacePath('/draw'),

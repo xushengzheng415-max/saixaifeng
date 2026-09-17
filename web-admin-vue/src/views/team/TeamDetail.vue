@@ -92,6 +92,7 @@
               <template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="球员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
             <el-table-column prop="name" label="姓名" min-width="110" />
+            <el-table-column label="身份" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="isSyntheticTeam" prop="playerId" label="球员编号" min-width="150" />
             <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
             <el-table-column label="位置" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
@@ -100,6 +101,17 @@
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="86" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button></template></el-table-column>
+          </el-table>
+        </section>
+        <section v-if="importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
+          <div class="synthetic-player-heading"><div><h2>报名表球员信息</h2><p>共 {{ importedDraftPlayers.length }} 人；确认前仅作为报名资料展示。</p></div><el-tag type="warning" effect="plain">待确认资料</el-tag></div>
+          <el-table :data="importedDraftPlayers" class="synthetic-player-table">
+            <el-table-column label="姓名" prop="name" min-width="110" />
+            <el-table-column label="身份" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
+            <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
+            <el-table-column label="出生日期" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column label="身份证" min-width="140"><template #default="{ row }">{{ row.identityMasked || '—' }}</template></el-table-column>
+            <el-table-column label="审核状态" width="110" align="center"><template #default="{ row }"><el-tag size="small" :type="row.reviewStatus === 'conflict' ? 'danger' : 'warning'">{{ row.reviewStatus === 'conflict' ? '资料冲突' : (row.reviewStatus === 'confirmed' ? '已确认' : '待确认') }}</el-tag></template></el-table-column>
           </el-table>
         </section>
         <section v-if="isProfessionalTournamentTeam" class="collaboration-timeline"><h2>协作流程进度</h2><ol><li v-for="step in professionalTimeline" :key="step.title"><span><el-icon><CircleCheckFilled /></el-icon></span><div><strong>{{ step.title }}</strong><time>{{ step.time }}</time><small>{{ step.description }}</small></div></li></ol></section>
@@ -1185,11 +1197,12 @@ const router = useRouter()
 const teamId = String(route.params.teamId || route.params.id || '')
 const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : (route.params.teamId ? String(route.params.id || '') : ''))
 const sourceDivisionId = computed(() => typeof route.query.divisionId === 'string' ? route.query.divisionId : '')
+const fromRegistration = computed(() => route.query.from === 'registration')
 const isProfessionalTournamentTeam = computed(() => route.query.mode === 'professional' || sourceDivisionId.value === 'qa-division-u16')
 const tournamentDateRange = computed(() => tournamentContext.value.startDate && tournamentContext.value.endDate
   ? `${String(tournamentContext.value.startDate).replaceAll('-', '.')}—${String(tournamentContext.value.endDate).replaceAll('-', '.')}`
   : '赛期待定')
-const backTitle = computed(() => sourceTournamentId.value ? '返回参赛球队' : '返回球队列表')
+const backTitle = computed(() => fromRegistration.value ? '返回报名管理' : (sourceTournamentId.value ? '返回参赛球队' : '返回球队列表'))
 const tournamentJoinSource = computed(() => {
   const source = String(tournamentRelation.value.joinSource || tournamentRelation.value.source || '').toLowerCase()
   if (['organizer_import', 'registration_docx_import'].includes(source)) return '报名表导入'
@@ -1220,7 +1233,9 @@ function goBack() {
   }
 
   router.push({
-    path: `/tournaments/${encodeURIComponent(sourceTournamentId.value)}/teams`,
+    path: fromRegistration.value
+      ? `/tournaments/${encodeURIComponent(sourceTournamentId.value)}/registration`
+      : `/tournaments/${encodeURIComponent(sourceTournamentId.value)}/teams`,
     query: {
       ...(sourceDivisionId.value ? { divisionId: sourceDivisionId.value } : {}),
       ...(route.query.mode === 'professional' ? { mode: 'professional' } : {})
@@ -1262,6 +1277,7 @@ function onCityChange() {
 }
 const team = ref(qaTeam || {})
 const players = ref([])
+const importedDraftPlayers = ref([])
 const kitSaving = ref(false)
 const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
 const kitEquipment = [{key:'jersey',label:'球衣'},{key:'shorts',label:'球裤'},{key:'socks',label:'球袜'}]
@@ -3589,6 +3605,16 @@ async function loadPlayers() {
     }))
 
     players.value = processedPlayers
+    if (sourceTournamentId.value && tournamentRelation.value?._id) {
+      try {
+        importedDraftPlayers.value = await queryList('registration_player_drafts', { where: { teamId }, limit: 500 })
+      } catch (error) {
+        importedDraftPlayers.value = []
+        console.warn('加载报名表球员资料失败:', error.message || error)
+      }
+    } else {
+      importedDraftPlayers.value = []
+    }
 
     // 普通球队资料页沿用历史同步行为；赛事内查看只读，不因打开页面改写球队资产。
     if (!sourceTournamentId.value) {
@@ -3614,6 +3640,14 @@ function playerProfileLabel(player) {
   if (status === 'imported_pending_claim') return '待认领核对'
   if (status === 'pending_review') return '待审核'
   return isSyntheticTeam.value ? '测试资料' : '待完善'
+}
+
+function playerIdentityLabel(player) {
+  const explicit = String(player?.dualRoleLabel || '').trim()
+  if (explicit) return explicit.startsWith('球员') ? explicit : `球员／${explicit.replace(/^兼/, '')}`
+  const role = String(player?.dualRoleType || '').trim()
+  const roleLabels = { head_coach_player: '教练', team_leader_player: '领队', doctor_player: '队医' }
+  return roleLabels[role] ? `球员／${roleLabels[role]}` : '球员'
 }
 
 function playerProfileTagType(player) {
@@ -3663,7 +3697,10 @@ function openTournamentMatches() {
 
 onMounted(async () => {
   await loadTeam()
-  if (sourceTournamentId.value) await Promise.all([loadTournamentTeamContext(), loadPlayers()])
+  if (sourceTournamentId.value) {
+    await loadTournamentTeamContext()
+    await loadPlayers()
+  }
   else await loadPlayers()
 })
 
@@ -4002,6 +4039,7 @@ function compressBase64(dataUrl, maxSize = 300) {
 }
 .context-event { display: flex; align-items: center; gap: 13px; }
 .context-event img { width: 42px; height: 42px; object-fit: contain; }
+.tournament-logo-placeholder { display:grid; width:42px; height:42px; place-items:center; flex:0 0 42px; color:#087542; background:#eaf6ed; font-size:10px; text-align:center; }
 .context-event strong { max-width: 390px; overflow: hidden; font-size: 20px; text-overflow: ellipsis; white-space: nowrap; }
 .event-context-divider { width: 1px !important; height: 26px !important; margin: 0 4px; border-radius: 0 !important; background: #e3e8e4 !important; }
 .event-context-meta { width: auto !important; height: auto !important; border-radius: 0 !important; background: transparent !important; color: #3e4a42 !important; font-size: 14px; font-weight: 500; }
