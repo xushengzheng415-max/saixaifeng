@@ -1041,6 +1041,14 @@ async function buildDivisionScheduleTopology(tournamentId, division, sharedConfi
     var leagueValidation=validateParticipantSet(ranking.map(function(item){return item.team}),approvedParticipantIds,expectedTeamCount)
     if (!leagueValidation.valid) return { success:false,code:leagueValidation.code,message:divisionName+'：'+leagueValidation.message }
     matches=generateLeagueSchedule(tournamentId,ranking,leagueData.leagueConfig || { loopType:'single' },{},new Set())
+  } else if (scheduleType === 'hybrid' || scheduleType === 'combined') {
+    var leagueData2 = await loadLeagueData(tournamentId, divisionId)
+    var cupData2 = await loadCupBracket(tournamentId, divisionId)
+    if (leagueData2.notConfirmed || cupData2.notConfirmed) return { success: false, code: 'DRAW_NOT_CONFIRMED', message: '当前组别混合制抽签结果尚未正式确认，不能生成对阵' }
+    matches = generateCombinedSchedule(tournamentId, { groups: [], ranking: leagueData2.ranking || [], combinedConfig: division && (division.combinedConfig || division.formatConfig) || { useGroups: false, leagueLoopType: 'single', cupAdvanceCount: 4 } }, {}, new Set())
+    if (!Array.isArray(matches) || !matches.length) {
+      matches = generateCupSchedule(tournamentId, cupData2.allTeams || [], Object.assign({}, cupData2.cupConfig || {}, { fullRankingEnabled: false }), {}, new Set())
+    }
   } else {
     return { success:false,code:'SCHEDULE_TYPE_UNSUPPORTED',message:divisionName+'当前赛制暂不支持联合编排' }
   }
