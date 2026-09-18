@@ -1,4 +1,5 @@
 <template>
+  <div v-if="!modeOverview && !professionalFlow && !drawBlocked" class="draw-projection-actions"><el-button type="success" plain @click="openGenericProjection"><el-icon><Monitor /></el-icon>打开抽签投屏</el-button><el-button type="success" @click="projectGenericStage"><el-icon><Picture /></el-icon>同步当前画面</el-button></div>
   <section v-if="!modeOverview && !drawPrerequisitesReady" class="draw-requirement-state"><el-icon class="is-loading"><Loading /></el-icon><h2>正在核对抽签条件</h2></section>
   <section v-else-if="drawBlocked" class="draw-requirement-state"><el-icon><Lock /></el-icon><h2>暂不能抽签与分组</h2><p>当前组别参赛球队 {{ activeApprovedTeamCount }} 支，赛制要求 {{ activeRequiredTeamCount }} 支，尚未满足抽签与分组条件。</p><el-progress :percentage="drawRequirementProgress" /><small class="draw-requirement-note">本页只负责抽签与分组，参赛球队数量满足赛制要求后方可开始。</small></section>
   <QuickHybridConsole v-else-if="quickHybridFlow" :tournament-id="tournamentId" />
@@ -563,10 +564,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Delete, Trophy, Lock, Medal, Warning, CircleCheck, CircleClose, Calendar, Location, SwitchButton, User, Grid, UserFilled, InfoFilled, Loading } from '@element-plus/icons-vue'
+import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Monitor, Delete, Trophy, Lock, Medal, Warning, CircleCheck, CircleClose, Calendar, Location, SwitchButton, User, Grid, UserFilled, InfoFilled, Loading } from '@element-plus/icons-vue'
 import html2canvas from 'html2canvas'
 import { queryById, queryList, addRecord, updateRecord, deleteRecord } from '../../utils/cloud'
 import ProfessionalDrawFlow from './ProfessionalDrawFlow.vue'
@@ -2242,6 +2243,39 @@ const showDrawAnimation = ref(false)
 const drawProgress = ref(0)
 const drawStatus = ref('')
 
+const genericProjectionChannelName = computed(() => `sxf-draw-screen-${tournamentId}-${String(activeDivisionId.value || 'default')}`)
+let genericProjectionChannel = null
+function genericProjectionStage() {
+  if (route.query.view === 'result' || bracketConfirmed.value || String(drawStatus.value).includes('完成')) return 'result'
+  if (drawing.value || showDrawAnimation.value) return 'drawing'
+  if (route.query.view === 'console' || drawGenerated.value) return 'teams'
+  return 'intro'
+}
+function genericProjectionAssignments() {
+  const rows = []
+  groups.value.forEach((group, groupIndex) => {
+    const slots = Array.isArray(group.slots) ? group.slots : (Array.isArray(group.teams) ? group.teams : [])
+    slots.forEach((team, position) => { if (team) rows.push({ teamId: team.teamId || team.id || team._id, teamName: team.name || team.teamName || '', groupIndex, position: position + 1 }) })
+  })
+  return rows
+}
+function genericProjectionPayload() {
+  const teams = approvedTeams.value.map(team => ({ id: String(team.teamId || team.id || team._id), name: team.name || team.teamName || '未命名球队', logo: team.logo || team.logoUrl || team.teamLogo || '' }))
+  return { stage: genericProjectionStage(), tournamentName: tournament.value.name || '足球赛事', divisionName: activeDivision.value?.name || '抽签分组', teams, assignments: genericProjectionAssignments(), screen: { theme: 'emerald', showTournament: true, showCrest: true, showProgress: true, fontSize: 'standard' }, assignedCount: genericProjectionAssignments().length, updatedAt: new Date().toISOString() }
+}
+function projectGenericStage() {
+  const payload = genericProjectionPayload()
+  try { localStorage.setItem(genericProjectionChannelName.value, JSON.stringify(payload)) } catch {}
+  if (typeof BroadcastChannel !== 'undefined') { if (!genericProjectionChannel || genericProjectionChannel.name !== genericProjectionChannelName.value) { genericProjectionChannel?.close(); genericProjectionChannel = new BroadcastChannel(genericProjectionChannelName.value) } genericProjectionChannel.postMessage(payload) }
+  ElMessage.success('当前抽签画面已同步到投屏')
+}
+function openGenericProjection() {
+  projectGenericStage()
+  const url = `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(String(activeDivisionId.value || 'default'))}`
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (!opened) ElMessage.warning('浏览器阻止了投屏窗口，请允许弹窗后重试')
+}
+
 // 全屏切换
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
@@ -2260,6 +2294,8 @@ function toggleFullscreen() {
 document.addEventListener('fullscreenchange', () => {
   isFullscreen.value = !!document.fullscreenElement
 })
+
+onUnmounted(() => genericProjectionChannel?.close())
 
 watch(() => props.divisionId, async value => {
   if (!value || value === activeDivisionId.value) return
@@ -2288,6 +2324,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.draw-projection-actions{position:fixed;right:24px;bottom:24px;z-index:30;display:flex;gap:8px;padding:8px;border:1px solid #cde5d5;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(23,67,43,.14)}
 .draw-requirement-state{display:flex;min-height:520px;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:48px;text-align:center;background:#f7faf8}.draw-requirement-state>.el-icon{font-size:48px;color:#0b8a4b}.draw-requirement-state h2{margin:0;color:#173a29;font-size:28px}.draw-requirement-state p{max-width:620px;margin:0;color:#65746a;font-size:16px}.draw-requirement-state .el-progress{width:min(520px,80vw)}.draw-requirement-state .draw-requirement-note{max-width:620px;color:#8a988f;font-size:13px;line-height:1.6}
 .tournament-draw {
   padding: 20px;

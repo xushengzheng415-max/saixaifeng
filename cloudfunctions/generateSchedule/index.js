@@ -3,6 +3,7 @@ const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const topology = require('./topology')
 const scheduleEngine = require('./scheduler')
+const pairingTemplates = require('./pairingTemplates')
 const SCHEDULE_ENGINE_VERSION = '2026-08-30-unified-final-stage-v3'
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -81,6 +82,200 @@ async function loadDivisionConfiguration(tournament, divisionId, actor) {
   } catch (error) {
     return nested ? { division: nested } : { readError: error }
   }
+}
+
+function configuredPairingTemplate(division, tournament) {
+  var configured = (division && (division.pairingTemplate ||
+    division.pairingTemplateSnapshot ||
+    division.rulesSnapshot && division.rulesSnapshot.pairingTemplate ||
+    division.competitionRule && division.competitionRule.pairingTemplate)) || null
+  if (configured) return configured
+  var key = division && (division.pairingTemplateKey || division.rulesSnapshot && division.rulesSnapshot.pairingTemplateKey || division.competitionRule && division.competitionRule.pairingTemplateKey)
+  if (key) return pairingTemplates.resolveTemplate(key)
+  var tournamentName = String(tournament && tournament.name || '')
+  var divisionName = String(division && (division.name || division.divisionName || '') || '')
+  if (tournamentName.indexOf('立洋杯') >= 0 || tournamentName.toLowerCase().indexOf('liyang') >= 0) {
+    if (divisionName.indexOf('青年') >= 0 || divisionName.toLowerCase().indexOf('youth') >= 0) return pairingTemplates.liyangYouthTemplate()
+    if (divisionName.indexOf('中年') >= 0 || divisionName.toLowerCase().indexOf('middle') >= 0) return pairingTemplates.liyangMiddleTemplate()
+    if (divisionName.indexOf('老年') >= 0 || divisionName.toLowerCase().indexOf('old') >= 0) return pairingTemplates.liyangOldTemplate()
+  }
+  return null
+}
+
+function clearScheduleAssignment(match) {
+  match.matchDate = ''
+  match.matchTime = ''
+  match.venue = ''
+  match.date = ''
+  match.startTime = ''
+  match.timeSlot = ''
+  match.scheduleStatus = 'unassigned'
+  match.schedulePublished = false
+  delete match.schedulePublicationId
+  delete match.schedulePublishedVersion
+  delete match.schedulePublishedAt
+  return match
+}
+
+function matchIsProtectedFromPairingReplace(match) {
+  if (!match || match.isBye) return false
+  return Boolean(match.matchDate || match.matchTime || match.venue ||
+    match.schedulePublished || match.executionSnapshot || match.resultStatus ||
+    match.winnerTeamId || match.homeScore !== undefined && Number(match.homeScore || 0) !== 0 ||
+    match.awayScore !== undefined && Number(match.awayScore || 0) !== 0 ||
+    ['ongoing', 'live', 'finished', 'completed', 'archived'].indexOf(String(match.status || '').toLowerCase()) >= 0)
+}
+
+async function buildPairingsForDivision(tournamentId, divisionId, divisionName, division, tournament) {
+  var groupsState = await loadTournamentGroups(tournamentId, divisionId)
+  var groups = groupsState.groups || []
+  if (groupsState.notConfirmed) return { success: false, code: 'DRAW_NOT_CONFIRMED', message: '当前组别抽签结果尚未正式确认，不能生成对阵' }
+  var template = configuredPairingTemplate(division, tournament)
+  var matches = []
+  var scheduleType = String(division && (division.formatType || division.tournamentType || tournament && tournament.tournamentType) || 'tournament').toLowerCase()
+  if (template) {
+    var templated = pairingTemplates.buildPairingsFromTemplate(tournamentId, divisionId, divisionName, groups, template)
+    if (templated.error) return { success: false, code: 'PAIRING_TEMPLATE_INVALID', message: templated.error }
+    matches = templated.matches
+  } else if (scheduleType === 'league') {
+    var leagueData = await loadLeagueData(tournamentId, divisionId)
+    if (leagueData.notConfirmed) return { success: false, code: 'DRAW_NOT_CONFIRMED', message: '当前组别联赛排序尚未正式确认，不能生成对阵' }
+    matches = generateLeagueSchedule(tournamentId, leagueData.ranking || [], leagueData.leagueConfig || { loopType: 'single' }, {}, new Set())
+  } else if (scheduleType === 'cup') {
+    var cupData = await loadCupBracket(tournamentId, divisionId)
+    if (cupData.notConfirmed) return { success: false, code: 'DRAW_NOT_CONFIRMED', message: '当前组别淘汰赛签位尚未正式确认，不能生成对阵' }
+    matches = generateCupSchedule(tournamentId, cupData.allTeams || [], Object.assign({}, cupData.cupConfig || {}, { fullRankingEnabled: finalRankingMode(division, 'cup') === 'full' }), {}, new Set())
+  } else {
+    var tournamentConfig = groupsState.tournamentConfig || { advanceCount: 2, hasThirdPlace: true }
+    var rankingMode = finalRankingMode(division, 'tournament')
+    matches = generateTournamentSchedule(tournamentId, groups, Object.assign({}, tournamentConfig, { fullRankingEnabled: rankingMode === 'full', hasThirdPlace: rankingMode === 'top4' }), {}, new Set())
+  }
+  if (!Array.isArray(matches) || matches.length === 0) return { success: false, code: 'PAIRING_EMPTY', message: '未生成任何对阵，请检查抽签结果和对阵模板' }
+  var matchFormat = String(division && (division.matchFormat || division.playersOnField && division.playersOnField + 'side') || '')
+  decorateGeneratedMatches(matches, tournamentId, divisionId, divisionName, { matchFormat: matchFormat })
+  matches.forEach(function(match) {
+    match.pairingStatus = 'confirmed'
+    match.pairingTemplateVersion = String(template && template.version || 'generated')
+    match.pairingTemplateSource = String(template && template.source || 'rules')
+    clearScheduleAssignment(match)
+  })
+  return { success: true, matches: matches, templateVersion: String(template && template.version || 'generated') }
+}
+
+async function groupsFromDrawAssignments(tournamentId, assignments) {
+  var rows = Array.isArray(assignments) ? assignments : []
+  if (!rows.length) return []
+  var registrations = (await db.collection('tournament_teams').where({ tournamentId: tournamentId, status: 'approved' }).limit(1000).get()).data || []
+  var ids = Array.from(new Set(rows.map(function(row) { return String(row.teamId || '') }).filter(Boolean)))
+  var teamRows = ids.length ? ((await db.collection('teams').where({ _id: db.command.in(ids) }).limit(1000).get()).data || []) : []
+  var teamMap = new Map(teamRows.map(function(team) { return [String(team._id), team] }))
+  var registrationMap = new Map(registrations.map(function(row) { return [String(row.teamId || row._id), row] }))
+  var grouped = new Map()
+  rows.forEach(function(row) {
+    var groupIndex = Number(row.groupIndex || 0)
+    var code = String.fromCharCode(65 + groupIndex)
+    var list = grouped.get(code) || []
+    var teamId = String(row.teamId || '')
+    var team = teamMap.get(teamId) || {}
+    var registration = registrationMap.get(teamId) || {}
+    list.push({ teamId: teamId, teamName: team.name || team.teamName || registration.teamName || '未命名球队', position: Number(row.position || list.length + 1) })
+    grouped.set(code, list)
+  })
+  return Array.from(grouped.entries()).sort(function(a, b) { return a[0].localeCompare(b[0]) }).map(function(entry) {
+    return { groupCode: entry[0], groupName: entry[0] + '组', teams: entry[1].sort(function(a, b) { return a.position - b.position }) }
+  })
+}
+
+async function generatePairingsOnly(event, tournament, actor) {
+  var tournamentId = String(event.tournamentId || tournament._id || '')
+  var divisionId = String(event.divisionId || 'default')
+  var divisionState = await loadDivisionConfiguration(tournament, divisionId, actor)
+  if (divisionState.scopeDenied) return { success: false, code: 'DIVISION_SCOPE_DENIED', message: '无权读取其他机构的竞赛组别' }
+  if (divisionState.readError || !divisionState.division) return { success: false, code: 'DIVISION_RULES_UNAVAILABLE', message: '无法读取当前竞赛组别规则' }
+  var planState = await competitionPlanState(tournament, divisionId)
+  if (planState.locked) return { success: false, code: 'COMPETITION_PLAN_LOCKED', message: '竞赛方案已经锁定，不能重新生成对阵' }
+  var division = divisionState.division
+  var divisionName = String(event.divisionName || division.name || division.divisionName || '默认组')
+  var existing = (await loadAllTournamentMatches(tournamentId)).filter(function(match) { return belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
+  var protectedMatch = existing.find(matchIsProtectedFromPairingReplace)
+  if (protectedMatch) return { success: false, code: 'PAIRING_REPLACE_BLOCKED', message: '当前组别已有已排赛、已发布或已产生赛果的比赛，不能重新生成对阵' }
+  var built = null
+  var drawAssignments = Array.isArray(event.drawAssignments) ? event.drawAssignments : []
+  if (drawAssignments.length) {
+    var assignedGroups = await groupsFromDrawAssignments(tournamentId, drawAssignments)
+    if (assignedGroups.length) {
+      var template = configuredPairingTemplate(division, tournament)
+      if (template) {
+        var templated = pairingTemplates.buildPairingsFromTemplate(tournamentId, divisionId, divisionName, assignedGroups, template)
+        if (templated.error) return { success: false, code: 'PAIRING_TEMPLATE_INVALID', message: templated.error }
+        var matchFormat = String(division && (division.matchFormat || division.playersOnField && division.playersOnField + 'side') || '')
+        decorateGeneratedMatches(templated.matches, tournamentId, divisionId, divisionName, { matchFormat: matchFormat })
+        templated.matches.forEach(function(match) { match.pairingStatus = 'confirmed'; match.pairingTemplateVersion = String(template.version || 'v1'); match.pairingTemplateSource = String(template.source || 'configured'); clearScheduleAssignment(match) })
+        built = { success: true, matches: templated.matches, templateVersion: String(template.version || 'v1') }
+      } else {
+        var fallback = generateTournamentSchedule(tournamentId, assignedGroups, { advanceCount: 2, hasThirdPlace: true, fullRankingEnabled: false }, {}, new Set())
+        decorateGeneratedMatches(fallback, tournamentId, divisionId, divisionName, { matchFormat: matchFormat })
+        fallback.forEach(function(match) { match.pairingStatus = 'confirmed'; match.pairingTemplateVersion = 'generated'; match.pairingTemplateSource = 'drawAssignments'; clearScheduleAssignment(match) })
+        built = { success: true, matches: fallback, templateVersion: 'generated' }
+      }
+    }
+  }
+  if (!built) built = await buildPairingsForDivision(tournamentId, divisionId, divisionName, division, tournament)
+  if (!built.success) return built
+  if (existing.length) await Promise.all(existing.map(function(match) { return db.collection('matches').doc(match._id).remove() }))
+  await Promise.all(built.matches.map(function(match) {
+    match.orgId = actor.orgId
+    return db.collection('matches').add({ data: match })
+  }))
+  var now = db.serverDate()
+  var divisionUpdate = { pairingGenerated: true, pairingGeneratedAt: now, pairingTemplateVersion: built.templateVersion, scheduleGenerated: false, schedulePublished: false, updateTime: now }
+  await db.collection('divisions').doc(divisionId).update({ data: divisionUpdate }).catch(function() {})
+  await db.collection('tournaments').doc(tournamentId).update({ data: { pairingGenerated: true, pairingGeneratedDivisionId: divisionId, scheduleGenerated: false, schedulePublished: false, updateTime: now, orgId: actor.orgId } })
+  return { success: true, message: '已生成' + built.matches.length + '场对阵，比赛时间待排', pairingOnly: true, pairingStatus: 'confirmed', scheduleStatus: 'unassigned', matchCount: built.matches.length, divisionId: divisionId, templateVersion: built.templateVersion, matches: built.matches }
+}
+
+async function scheduleExistingPairings(event, tournament, actor) {
+  var tournamentId = String(event.tournamentId || tournament._id || '')
+  var ids = Array.isArray(event.divisionIds) && event.divisionIds.length
+    ? event.divisionIds.map(String)
+    : [String(event.divisionId || 'default')]
+  var config = event.scheduleConfig || {}
+  var allMatches = await loadAllTournamentMatches(tournamentId)
+  var selected = []
+  var divisions = []
+  for (var i = 0; i < ids.length; i++) {
+    var divisionId = ids[i]
+    var state = await loadDivisionConfiguration(tournament, divisionId, actor)
+    if (state.scopeDenied) return { success: false, code: 'DIVISION_SCOPE_DENIED', message: '无权读取其他机构的竞赛组别' }
+    if (state.readError || !state.division) return { success: false, code: 'DIVISION_RULES_UNAVAILABLE', message: '无法读取当前竞赛组别规则' }
+    var normalized = normalizeScheduleTiming(config, state.division)
+    if (normalized.error) return { success: false, code: normalized.code, message: normalized.error }
+    var rows = allMatches.filter(function(match) { return belongsToDivision(match, divisionId) && !match.isBye && match.status !== 'cancelled' })
+    if (!rows.length) return { success: false, code: 'PAIRING_REQUIRED', message: '当前组别尚未生成对阵，请先确认抽签结果' }
+    if (rows.some(function(match) { return match.executionSnapshot || match.schedulePublished || ['ongoing','live','finished','completed'].indexOf(String(match.status || '').toLowerCase()) >= 0 })) {
+      return { success: false, code: 'SCHEDULE_REPLACE_BLOCKED', message: '当前组别已有已发布或已进入比赛执行的场次，不能重新编排' }
+    }
+    rows.forEach(clearScheduleAssignment)
+    selected = selected.concat(rows)
+    divisions.push({ id: divisionId, state: state, normalized: normalized })
+  }
+  var occupied = buildOccupiedSlotSet(allMatches.filter(function(match) { return ids.indexOf(String(match.divisionId || 'default')) < 0 }))
+  var occupiedBeforeAssignment = new Set(occupied)
+  var assigned = []
+  divisions.forEach(function(item) {
+    var rows = selected.filter(function(match) { return String(match.divisionId || 'default') === item.id })
+    assignDateTimeVenue(rows, item.normalized.config, config.cupMode || '', occupied)
+    rows.forEach(function(match) { match.scheduleStatus = match.matchDate && match.matchTime && match.venue ? 'scheduled' : 'unassigned' })
+    assigned = assigned.concat(rows)
+  })
+  var validation = validateGeneratedSchedule(assigned, occupiedBeforeAssignment, getDailyMatchLimit(config))
+  if (validation.missingAssignments.length || validation.conflicts.length || validation.dailyLimitExceeded.length) {
+    return { success: false, code: 'SCHEDULE_CAPACITY_INSUFFICIENT', message: '当前日期、场地或阶段容量不足，仍有' + validation.missingAssignments.length + '场比赛未完成安排', unassigned: validation.missingAssignments.length, conflicts: validation.conflicts }
+  }
+  await Promise.all(assigned.map(function(match) { return db.collection('matches').doc(match._id).update({ data: { matchDate: match.matchDate, matchTime: match.matchTime, venue: match.venue, date: match.date || match.matchDate, startTime: match.startTime || match.matchTime, timeSlot: match.timeSlot || match.matchTime, scheduleStatus: 'scheduled', scheduleGenerated: true, updateTime: db.serverDate() } }) }))
+  var now = db.serverDate()
+  await db.collection('tournaments').doc(tournamentId).update({ data: { scheduleGenerated: true, scheduleGenerationMode: ids.length > 1 ? 'joint' : 'separate', scheduleConfig: db.command.set(config), scheduleDraft: db.command.set(null), updateTime: now, orgId: actor.orgId } })
+  return { success: true, message: '已为' + assigned.length + '场对阵安排日期、时间和场地', matchCount: assigned.length, generationMode: ids.length > 1 ? 'joint' : 'separate', matches: assigned }
 }
 
 function finalRankingMode(record, scheduleType) {
@@ -774,7 +969,7 @@ function isOfficialDrawRecord(item) {
 }
 
 function configuredExpectedTeamCount(division) {
-  var candidates = division ? [division.expectedTeams, division.requiredTeams, division.teamRequirement, division.participantTeams, division.maxTeams] : []
+  var candidates = division ? [division.expectedTeams, division.requiredTeams, division.teamRequirement, division.participantTeams, division.maxTeams, division.teamLimit] : []
   for (var index = 0; index < candidates.length; index++) {
     var value = Number(candidates[index])
     if (Number.isFinite(value) && value > 0) return value
@@ -1183,6 +1378,8 @@ exports.main = async (event, context) => {
       await db.collection('tournaments').doc(tournamentId).update({ data:{ scheduleDraft:db.command.set(draftConfig),scheduleDraftUpdatedAt:db.serverDate(),orgId:actor.orgId,updateTime:db.serverDate() } })
       return { success:true,message:'赛程时间与场地配置草稿已保存',scheduleDraftUpdated:true }
     }
+    if (event.action === 'generatePairings') return await generatePairingsOnly(event, tournament, actor)
+    if (event.action === 'scheduleExistingPairings') return await scheduleExistingPairings(event, tournament, actor)
     if(event.action==='publishRegulations') return await publishCompetitionRegulations(event,tournament,actor)
     if(event.action==='publishSchedule') return await publishCompetitionSchedule(event,tournament,actor)
     if (event.scheduleAllDivisions===true) return await generateAllDivisionSchedules(event,tournament,actor)
@@ -1459,6 +1656,10 @@ exports.__test = {
   generateTournamentSchedule: generateTournamentSchedule,
   generateCupSchedule: generateCupSchedule,
   generateLeagueSchedule: generateLeagueSchedule,
+  buildPairingsFromTemplate: pairingTemplates.buildPairingsFromTemplate,
+  clearScheduleAssignment: clearScheduleAssignment,
+  matchIsProtectedFromPairingReplace: matchIsProtectedFromPairingReplace,
+  scheduleExistingPairings: scheduleExistingPairings,
   validateGeneratedSchedule: validateGeneratedSchedule,
   validateParticipantSet: validateParticipantSet,
   normalizeScheduleTiming: normalizeScheduleTiming,
