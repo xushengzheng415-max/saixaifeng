@@ -133,7 +133,7 @@ async function buildPairingsForDivision(tournamentId, divisionId, divisionName, 
   var template = configuredPairingTemplate(division, tournament)
   var matches = []
   var scheduleType = String(division && (division.formatType || division.tournamentType || tournament && tournament.tournamentType) || 'tournament').toLowerCase()
-  if (template) {
+  if (template && scheduleType !== 'league') {
     var templated = pairingTemplates.buildPairingsFromTemplate(tournamentId, divisionId, divisionName, groups, template)
     if (templated.error) return { success: false, code: 'PAIRING_TEMPLATE_INVALID', message: templated.error }
     matches = templated.matches
@@ -232,6 +232,24 @@ async function generatePairingsOnly(event, tournament, actor) {
   await db.collection('divisions').doc(divisionId).update({ data: divisionUpdate }).catch(function() {})
   await db.collection('tournaments').doc(tournamentId).update({ data: { pairingGenerated: true, pairingGeneratedDivisionId: divisionId, scheduleGenerated: false, schedulePublished: false, updateTime: now, orgId: actor.orgId } })
   return { success: true, message: '已生成' + built.matches.length + '场对阵，比赛时间待排', pairingOnly: true, pairingStatus: 'confirmed', scheduleStatus: 'unassigned', matchCount: built.matches.length, divisionId: divisionId, templateVersion: built.templateVersion, matches: built.matches }
+}
+
+async function resetPairings(event, tournament, actor) {
+  var tournamentId = String(event.tournamentId || tournament._id || '')
+  var divisionId = String(event.divisionId || 'default')
+  var state = await loadDivisionConfiguration(tournament, divisionId, actor)
+  if (state.scopeDenied) return { success:false, code:'DIVISION_SCOPE_DENIED', message:'无权操作其他机构的竞赛组别' }
+  if (state.readError || !state.division) return { success:false, code:'DIVISION_RULES_UNAVAILABLE', message:'无法读取当前竞赛组别规则' }
+  var planState = await competitionPlanState(tournament, divisionId)
+  if (planState.locked) return { success:false, code:'COMPETITION_PLAN_LOCKED', message:'竞赛方案已经锁定，不能清空并重新抽签' }
+  var matches = (await loadAllTournamentMatches(tournamentId)).filter(function(match) { return belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
+  var protectedMatch = matches.find(matchIsProtectedFromPairingReplace)
+  if (protectedMatch) return { success:false, code:'PAIRING_REPLACE_BLOCKED', message:'当前组别已有已排赛、已发布或已产生赛果的比赛，不能清空重抽' }
+  await Promise.all(matches.map(function(match) { return db.collection('matches').doc(match._id).remove() }))
+  var now = db.serverDate()
+  await db.collection('divisions').doc(divisionId).update({ data:{ pairingGenerated:false, pairingGeneratedAt:null, scheduleGenerated:false, schedulePublished:false, updateTime:now } })
+  await db.collection('tournaments').doc(tournamentId).update({ data:{ pairingGenerated:false, scheduleGenerated:false, schedulePublished:false, updateTime:now } })
+  return { success:true, message:'已清空当前组别对阵，可以重新抽签', divisionId, deletedMatchCount:matches.length }
 }
 
 async function scheduleExistingPairings(event, tournament, actor) {
@@ -1379,6 +1397,7 @@ exports.main = async (event, context) => {
       return { success:true,message:'赛程时间与场地配置草稿已保存',scheduleDraftUpdated:true }
     }
     if (event.action === 'generatePairings') return await generatePairingsOnly(event, tournament, actor)
+    if (event.action === 'resetPairings') return await resetPairings(event, tournament, actor)
     if (event.action === 'scheduleExistingPairings') return await scheduleExistingPairings(event, tournament, actor)
     if(event.action==='publishRegulations') return await publishCompetitionRegulations(event,tournament,actor)
     if(event.action==='publishSchedule') return await publishCompetitionSchedule(event,tournament,actor)
