@@ -123,7 +123,7 @@ function applyDivisionDraft(division) {
   form.nameSource = division.nameSource === 'custom' ? 'custom' : 'generated'
   form.customName = form.nameSource === 'custom' ? String(division.name || division.divisionName || '') : ''
   form.matchFormat = String(division.matchFormat || form.matchFormat)
-  form.expectedTeams = Number(division.expectedTeams || division.maxTeams || form.expectedTeams)
+  form.expectedTeams = Number(division.expectedTeams || division.requiredTeams || division.teamRequirement || division.participantTeams || division.maxTeams || division.teamLimit || form.expectedTeams)
   automaticDisplayOrder.value = Number(division.displayOrder || automaticDisplayOrder.value)
   form.mode = division.mode === 'professional' || division.isProfessional === true ? 'professional' : 'simple'
 }

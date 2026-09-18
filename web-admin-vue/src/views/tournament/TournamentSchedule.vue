@@ -754,7 +754,7 @@ const publicationPages = computed(() => { const pageSize=publicationOrientation.
 const publicationVenueSummary = computed(() => [...new Set(publicationMatches.value.map(match=>String(match.venue || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN',{numeric:true})).join('、') || '场地待定')
 const publicationPreparedDate = computed(() => new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}))
 function configuredTeamCount(division) {
-  const candidates = [division?.expectedTeams,division?.requiredTeams,division?.teamRequirement,division?.participantTeams,division?.maxTeams]
+  const candidates = [division?.expectedTeams,division?.requiredTeams,division?.teamRequirement,division?.participantTeams,division?.maxTeams,division?.teamLimit]
   const value = candidates.map(Number).find(item => Number.isFinite(item) && item > 0)
   return value || 0
 }

@@ -138,7 +138,7 @@ function normalizeDivision(division, index) {
   const modeProfessional = division.mode === 'professional' || division.isProfessional === true || division.plan === 'professional'
   const progress = Number.isFinite(explicitProgress) ? Math.min(100, Math.max(0, Math.round(explicitProgress))) : (finalized ? 100 : 0)
   const teamRows = registrations.value.filter(item => registrationMatchesDivision(item, division) && isConfirmedRegistration(item))
-  const allowedTeams = [division.expectedTeams, division.requiredTeams, division.teamRequirement, division.participantTeams, division.maxTeams].map(Number).find(value => Number.isFinite(value) && value > 0) || 0
+  const allowedTeams = [division.expectedTeams, division.requiredTeams, division.teamRequirement, division.participantTeams, division.maxTeams, division.teamLimit].map(Number).find(value => Number.isFinite(value) && value > 0) || 0
   const stateText = finalized ? '已定版' : (progress > 0 ? '配置中' : '未配置')
   const primaryAction = finalized ? (modeProfessional ? '查看专业规则' : '查看规则') : (progress > 0 ? '继续配置' : '开始配置')
   return {
