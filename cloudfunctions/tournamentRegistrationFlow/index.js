@@ -996,12 +996,25 @@ async function createTournamentClaimCode(event) {
     return { success:true, message:'已复用当前赛事有效的球队认领码', data:Object.assign(claimCodeResult(reusable, tournament, dateValue(reusable.expireAt) || expiresAt), { envVersion:actualVersion, testOnly }) }
   }
   const inviteKey = reusable ? text(reusable.inviteKey) : randomKey(16)
-  const codeBuffer = await miniProgramCode({ scene:`c=${inviteKey}`, page:CLAIM_CODE_PAGE, width:Number(event.width || 300), envVersion:actualVersion, checkPath:!testOnly })
+  // 小程序码与小程序短链都要求目标页面存在于对应版本的小程序里；页面不存在时微信返回
+  // 41030（invalid page），通常是新版小程序尚未上传/发布。这里翻译成可执行指引，
+  // 避免把微信原始错误码直接透给操作人。
+  let codeBuffer = null
+  let urlLink = ''
+  try {
+    codeBuffer = await miniProgramCode({ scene:`c=${inviteKey}`, page:CLAIM_CODE_PAGE, width:Number(event.width || 300), envVersion:actualVersion, checkPath:!testOnly })
+    urlLink = testOnly ? '' : await directMiniProgramUrlLink(CLAIM_CODE_PAGE, `c=${encodeURIComponent(inviteKey)}`, { envVersion:actualVersion, expiresAt })
+  } catch (error) {
+    const signature = `${text(error && error.code)} ${text(error && error.message)}`
+    if (/41030|invalid\s*page/i.test(signature)) {
+      return { success:false, code:'CLAIM_CODE_PAGE_MISSING', message:`小程序${testOnly ? '体验版' : '正式版'}尚未包含球队认领页（${CLAIM_CODE_PAGE}），无法生成赛事认领码。请先上传并发布包含该页面的新版小程序；在此期间请改用每支球队的「认领链接」。` }
+    }
+    throw error
+  }
   const cloudPath = `football/tournament-claim-codes/${tournamentId}/${inviteKey}-${actualVersion}.png`
   const uploaded = await cloud.uploadFile({ cloudPath, fileContent:codeBuffer })
   const urls = await cloud.getTempFileURL({ fileList:[uploaded.fileID] })
   const qrCodeUrl = urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || ''
-  const urlLink = testOnly ? '' : await directMiniProgramUrlLink(CLAIM_CODE_PAGE, `c=${encodeURIComponent(inviteKey)}`, { envVersion:actualVersion, expiresAt })
   const payload = {
     sport:SPORT, inviteType:'tournament_claim_code', tournamentId, tournamentName:text(tournament.name),
     organizerOrgId:actor.orgId, createBy:actor.userId, inviteKey, status:'active', page:CLAIM_CODE_PAGE, longTerm:true,
