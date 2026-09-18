@@ -31,6 +31,12 @@ if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href
 
 const routes = [
   {
+    path: '/draw-screen',
+    name: 'DrawScreenProjection',
+    component: () => import('../views/tournament/DrawScreenProjection.vue'),
+    meta: { requiresAuth: false, title: '抽签大屏' }
+  },
+  {
     path: '/',
     redirect: () => import.meta.env.DEV
       ? { path: '/visual-qa', query: { visualQa: '1' } }
