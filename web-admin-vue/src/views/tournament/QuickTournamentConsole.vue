@@ -42,6 +42,7 @@
         <aside class="team-pool">
           <h2>待分配球队 <em>{{ pool.length }}</em></h2>
           <p>拖拽球队至右侧空签位</p>
+          <el-button v-if="availableByeCount > 0" class="bye-button" size="small" type="warning" plain @click="addBye">添加轮空（{{ availableByeCount }}）</el-button>
           <el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索球队名称" />
           <small>{{ pool.length }}/{{ teams.length }} 待分配</small>
           <ol>
@@ -84,7 +85,7 @@
 
       <footer :key="`validation-${renderVersion}`" class="validation-footer">
         <div><span><el-icon><CircleCheckFilled /></el-icon>球队无重复</span><span><el-icon><CircleCheckFilled /></el-icon>签位编号正确</span><em v-if="pool.length"><el-icon><WarningFilled /></el-icon>尚有 {{ pool.length }} 支球队未分配</em><span v-else><el-icon><CircleCheckFilled /></el-icon>已完成全部分组</span></div>
-        <div><el-button :loading="saving" @click="saveDraft">保存草稿</el-button><el-button type="success" :disabled="Boolean(pool.length)" :loading="confirming" @click="proceedToResult"><el-icon><Check /></el-icon>完成抽签并查看结果</el-button><small>{{ pool.length ? '完成全部签位后方可进入结果确认' : '下一步在分组结果页正式确认' }}</small></div>
+        <div><el-button :loading="saving" @click="saveDraft">保存草稿</el-button><el-button type="success" :disabled="Boolean(pool.length || availableByeCount)" :loading="confirming" @click="proceedToResult"><el-icon><Check /></el-icon>完成抽签并查看结果</el-button><small>{{ pool.length ? '完成全部签位后方可进入结果确认' : (availableByeCount ? '请添加轮空签' : '下一步在分组结果页正式确认') }}</small></div>
       </footer>
     </div>
   </section>
@@ -209,9 +210,21 @@ const pool = computed(() => teams.value.filter(team => !groups.value.some(group 
 const filteredPool = computed(() => pool.value.filter(team => !keyword.value || team.name.includes(keyword.value)))
 const visiblePool = computed(() => poolExpanded.value ? filteredPool.value : filteredPool.value.slice(0,poolDisplayLimit))
 const visibleGroups = computed(() => visibleGroupFilter.value === 'all' ? groups.value : groups.value.filter(group => group.code === visibleGroupFilter.value))
+const totalSlots = computed(() => groups.value.reduce((sum, group) => sum + group.slots.length, 0))
+const byeCount = computed(() => groups.value.flatMap(group => group.slots).filter(team => team?.isBye).length)
+const availableByeCount = computed(() => Math.max(0, totalSlots.value - teams.value.length - byeCount.value))
 
 function place(team){
   for(const group of groups.value){ const index = group.slots.findIndex(slot => !slot); if(index >= 0){ remember(); group.slots[index] = team; commitGroups(); if(visualQa) window.__sxfQuickDrawInteraction = { action:'place-team',teamId:team.id,tournamentId:props.tournamentId,divisionId:divisionId.value,slot:`${group.code}${index + 1}`,published:false }; return } }
+}
+function addBye(){
+  const target = groups.value.find(group => group.slots.some(slot => !slot))
+  if (!target) return ElMessage.warning('没有可用签位')
+  remember()
+  const index = target.slots.findIndex(slot => !slot)
+  target.slots[index] = { id:`bye-${Date.now()}`, name:'轮空', teamName:'轮空', isBye:true }
+  commitGroups()
+  ElMessage.success(`${target.name}已添加轮空签`)
 }
 function remove(team){ remember(); groups.value.forEach(group => { const index = group.slots.findIndex(slot => slot?.id === team.id); if(index >= 0) group.slots[index] = null }); commitGroups() }
 function startDrag(team){ draggedTeam.value = team }
@@ -256,7 +269,7 @@ async function load(){
     const current = saved.filter(row => String(row.divisionId || 'default') === divisionId.value && row.type === 'tournament' && row.status !== 'archived')
     if(current.length){ savedGroupCount.value=current.length; configuredGroupSizes.value=current.map(row => Number(row.maxTeams || row.teams?.length || 0)).filter(Boolean); savedTeamsPerGroup.value=Math.max(...configuredGroupSizes.value,4) }
     const byId = new Map(teams.value.map(team => [team.id,team]))
-    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const capacity = Number(source?.maxTeams || group.slots.length || teamsPerGroup.value); const slots=Array.isArray(source?.teams) ? source.teams.map(item => byId.get(String(item.teamId)) || null).slice(0,capacity) : []; return { ...group,slots:[...slots,...Array(Math.max(0,capacity-slots.length)).fill(null)] } })
+    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const capacity = Number(source?.maxTeams || group.slots.length || teamsPerGroup.value); const slots=Array.isArray(source?.teams) ? source.teams.map(item => item.teamId?.startsWith('bye-') ? { id:item.teamId, name:'轮空', teamName:'轮空', isBye:true } : byId.get(String(item.teamId)) || null).slice(0,capacity) : []; return { ...group,slots:[...slots,...Array(Math.max(0,capacity-slots.length)).fill(null)] } })
     publishScreenState()
   }catch(error){ teams.value=[]; groups.value=makeGroups(); ElMessage.error(error.message || '加载赛会制分组数据失败') }
 }
@@ -276,6 +289,7 @@ async function saveDraft(){
 }
 async function proceedToResult(){
   if(pool.value.length) return
+  if (availableByeCount.value) return ElMessage.warning(`还需添加 ${availableByeCount.value} 个轮空签`)
   try{
     if(visualQa) window.__sxfQuickDrawAction = { phase:'result-review-opened',action:'save-draft-for-review',tournamentId:props.tournamentId,divisionId:divisionId.value,type:'tournament',groupCount:groupCount.value,teamsPerGroup:teamsPerGroup.value,assigned:assigned.value,published:false,deletedArchived:false,deletedOtherTypes:false }
     await ElMessageBox.confirm('完成本轮抽签并保存为待确认结果吗？进入结果页后仍需再次点击“确认分组结果”。','进入分组结果',{type:'warning',confirmButtonText:'保存并查看结果',cancelButtonText:'继续调整'})
