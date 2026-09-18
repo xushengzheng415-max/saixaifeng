@@ -2288,7 +2288,7 @@ async function goToScheduleAfterPairing() {
     const ok = await generatePairingsAfterDraw({ drawAssignments: drawAssignments.value, drawGeneratedAt: drawGeneratedAt.value, drawStatus: "confirmed" });
     if (!ok) return;
   }
-  router.push(`/tournaments/${tournamentId}/schedule?divisionId=${activeDivision.value.id || activeDivision.value._id}`);
+  router.push(`/tournaments/${tournamentId}/pairings?divisionId=${activeDivision.value.id || activeDivision.value._id}&divisionName=${encodeURIComponent(activeDivision.value.name || '')}`);
 }
 
 function exportPairingResult() {

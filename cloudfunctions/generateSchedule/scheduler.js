@@ -196,7 +196,7 @@ function assign(matches, config, occupiedInput) {
   const scopeStages=new Map()
   ordered.forEach(match=>{const scope=matchScope(match);if(!scopeStages.has(scope))scopeStages.set(scope,[]);const priority=schedulingPriority(match);if(!scopeStages.get(scope).includes(priority))scopeStages.get(scope).push(priority)})
   scopeStages.forEach(stages=>stages.sort((a,b)=>a-b))
-  ordered.forEach(match=>{const stages=scopeStages.get(matchScope(match)) || [schedulingPriority(match)];const index=stages.indexOf(schedulingPriority(match))+1;match.scheduleStageOrder=index;match.scheduleStageName=stageName(index)})
+  ordered.forEach(match=>{if(Number(match.scheduleStageOrder)>0 && match.scheduleStageName)return;const stages=scopeStages.get(matchScope(match)) || [schedulingPriority(match)];const index=stages.indexOf(schedulingPriority(match))+1;match.scheduleStageOrder=index;match.scheduleStageName=stageName(index)})
   const teamHistory = new Map()
   const sessionCounts = new Map()
   const dailyCounts = new Map()

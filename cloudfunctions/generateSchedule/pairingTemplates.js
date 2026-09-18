@@ -93,6 +93,8 @@ function buildPairingsFromTemplate(tournamentId, divisionId, divisionName, group
         round: Number(item.round || stage.round || stageIndex + 1),
         scheduleRound: Number(item.round || stage.round || stageIndex + 1),
         roundName: text(item.roundName || stage.name || ('第' + (stageIndex + 1) + '轮')),
+        scheduleStageOrder: Number(item.stageOrder || stage.stageOrder || stageIndex + 1),
+        scheduleStageName: text(item.stageName || stage.stageName || stage.name || ('第' + (stageIndex + 1) + '阶段')),
         rankRange: text(item.rankRange || stage.rankRange || ''),
         homeSource: home,
         awaySource: away,
@@ -132,7 +134,7 @@ function buildPairingsFromTemplate(tournamentId, divisionId, divisionName, group
 }
 
 function roundRobinStage(code, pairings, round) {
-  return { name: '小组赛 ' + code + '组 · 第' + round + '轮', phase: 'group', group: code + '组', round: round, matches: pairings.map(function(pair, index) { return { code: code + '-R' + round + '-' + (index + 1), home: code + pair[0], away: code + pair[1], roundName: '小组赛 ' + code + '组第' + round + '轮' } }) }
+  return { name: '小组赛 ' + code + '组 · 第' + round + '轮', stageName: '小组赛阶段', stageOrder: 1, phase: 'group', group: code + '组', round: round, matches: pairings.map(function(pair, index) { return { code: code + '-R' + round + '-' + (index + 1), home: code + pair[0], away: code + pair[1], roundName: '小组赛 ' + code + '组第' + round + '轮', stageName: '小组赛阶段', stageOrder: 1 } }) }
 }
 
 function liyangYouthTemplate() {
@@ -143,23 +145,23 @@ function liyangYouthTemplate() {
   ;[
     [[1, 4], [2, 3]], [[1, 3], [2, 4]], [[1, 2], [3, 4]]
   ].forEach(function(pairings, index) { stages.push(roundRobinStage('B', pairings, index + 1)) })
-  stages.push({ name: '淘汰赛第一轮', phase: 'knockout', round: 1, matches: [
-    { code: 'Q1', home: { type: 'group_rank', groupName: 'A组', rank: 1 }, away: { type: 'group_rank', groupName: 'B组', rank: 4 }, roundName: '淘汰赛第一轮' },
-    { code: 'Q2', home: { type: 'group_rank', groupName: 'A组', rank: 2 }, away: { type: 'group_rank', groupName: 'B组', rank: 3 }, roundName: '淘汰赛第一轮' },
-    { code: 'Q3', home: { type: 'group_rank', groupName: 'A组', rank: 3 }, away: { type: 'group_rank', groupName: 'B组', rank: 2 }, roundName: '淘汰赛第一轮' },
-    { code: 'Q4', home: { type: 'group_rank', groupName: 'A组', rank: 4 }, away: { type: 'group_rank', groupName: 'B组', rank: 1 }, roundName: '淘汰赛第一轮' }
+  stages.push({ name: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2, phase: 'knockout', round: 1, matches: [
+    { code: 'Q1', home: { type: 'group_rank', groupName: 'A组', rank: 1 }, away: { type: 'group_rank', groupName: 'B组', rank: 4 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
+    { code: 'Q2', home: { type: 'group_rank', groupName: 'A组', rank: 2 }, away: { type: 'group_rank', groupName: 'B组', rank: 3 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
+    { code: 'Q3', home: { type: 'group_rank', groupName: 'A组', rank: 3 }, away: { type: 'group_rank', groupName: 'B组', rank: 2 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
+    { code: 'Q4', home: { type: 'group_rank', groupName: 'A组', rank: 4 }, away: { type: 'group_rank', groupName: 'B组', rank: 1 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 }
   ] })
   stages.push({ name: '淘汰赛第二轮', phase: 'knockout', round: 2, matches: [
-    { code: 'S1', home: 'Q1胜', away: 'Q2胜', roundName: '争冠半决赛', rankRange: '1/2名' },
-    { code: 'S2', home: 'Q3胜', away: 'Q4胜', roundName: '争冠半决赛', rankRange: '1/2名' },
-    { code: 'P1', home: 'Q1负', away: 'Q2负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名' },
-    { code: 'P2', home: 'Q3负', away: 'Q4负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名' }
+    { code: 'S1', home: 'Q1胜', away: 'Q2胜', roundName: '争冠半决赛', rankRange: '1/2名', stageName: '决赛阶段', stageOrder: 3 },
+    { code: 'S2', home: 'Q3胜', away: 'Q4胜', roundName: '争冠半决赛', rankRange: '1/2名', stageName: '决赛阶段', stageOrder: 3 },
+    { code: 'P1', home: 'Q1负', away: 'Q2负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名', stageName: '排位赛阶段', stageOrder: 3 },
+    { code: 'P2', home: 'Q3负', away: 'Q4负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名', stageName: '排位赛阶段', stageOrder: 3 }
   ] })
   stages.push({ name: '淘汰赛第三轮', phase: 'knockout', round: 3, matches: [
-    { code: 'F1', home: 'S1胜', away: 'S2胜', roundName: '决赛', rankRange: '1-2名' },
-    { code: 'F2', home: 'S1负', away: 'S2负', phase: 'placement', roundName: '三四名决赛', rankRange: '3-4名' },
-    { code: 'F3', home: 'P1胜', away: 'P2胜', phase: 'placement', roundName: '5/6名决赛', rankRange: '5-6名' },
-    { code: 'F4', home: 'P1负', away: 'P2负', phase: 'placement', roundName: '7/8名决赛', rankRange: '7-8名' }
+    { code: 'F1', home: 'S1胜', away: 'S2胜', roundName: '决赛', rankRange: '1-2名', stageName: '决赛阶段', stageOrder: 4 },
+    { code: 'F2', home: 'S1负', away: 'S2负', phase: 'placement', roundName: '三四名决赛', rankRange: '3-4名', stageName: '决赛阶段', stageOrder: 4 },
+    { code: 'F3', home: 'P1胜', away: 'P2胜', phase: 'placement', roundName: '5/6名决赛', rankRange: '5-6名', stageName: '排位赛阶段', stageOrder: 4 },
+    { code: 'F4', home: 'P1负', away: 'P2负', phase: 'placement', roundName: '7/8名决赛', rankRange: '7-8名', stageName: '排位赛阶段', stageOrder: 4 }
   ] })
   return { version: 'liyang-youth-v1', source: '2026立洋杯青年组对阵模板', stages: stages }
 }
