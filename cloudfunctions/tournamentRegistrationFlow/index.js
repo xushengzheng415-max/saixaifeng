@@ -648,7 +648,7 @@ async function importTeamRegistrationBatch(event) {
   }
 
   const existingRelations = (await db.collection('tournament_teams').where({ tournamentId, divisionId }).limit(500).get()).data || []
-  const activeRelations = existingRelations.filter(item => !['cancelled','withdrawn','rejected','replaced'].includes(text(item.status).toLowerCase()))
+  const activeRelations = existingRelations.filter(item => !['cancelled','withdrawn','removed','invite_cancelled','rejected','replaced'].includes(text(item.status).toLowerCase()))
   const existingDivisionNames = new Set(activeRelations.map(item => importedTeamNameKey(item.teamName)).filter(Boolean))
   const duplicateNames = prepared.filter(team => existingDivisionNames.has(team.nameKey)).map(team => team.name)
   if (duplicateNames.length && event.confirmRisks !== true) return { success:false, code:'IMPORT_TEAM_NAME_CONFLICT', message:`当前组别已有同名球队：${Array.from(new Set(duplicateNames)).join('、')}。请确认后再创建独立球队` }
@@ -804,7 +804,7 @@ async function createTargetedTeamInvitations(event) {
   if (teams.length !== teamIds.length) return { success:false, code:'TEAM_SCOPE_DENIED', message:'所选球队包含不存在或其他机构球队' }
   if (teams.some(team => team.synthetic === true || text(team.syntheticDatasetId))) return { success:false, code:'SYNTHETIC_TEAM_NOT_ALLOWED', message:'定向邀请只适用于真实球队；虚拟球队请使用“添加虚拟球队”入口' }
   const existing = (await db.collection('tournament_teams').where({ tournamentId, divisionId }).limit(100).get()).data || []
-  const activeRows = existing.filter(item => !['invite_cancelled','cancelled','withdrawn','rejected'].includes(text(item.status).toLowerCase()))
+  const activeRows = existing.filter(item => !['invite_cancelled','cancelled','withdrawn','removed','rejected'].includes(text(item.status).toLowerCase()))
   const activeByTeam = new Map(activeRows.map(item => [text(item.teamId), item]))
   const additions = teams.filter(team => !activeByTeam.has(text(team._id)))
   const capacity = divisionCapacity(division, tournament)
