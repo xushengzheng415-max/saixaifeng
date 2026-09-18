@@ -60,6 +60,7 @@
               <el-select v-model="visibleGroupFilter"><el-option label="全部小组" value="all" /><el-option v-for="group in groups" :key="group.code" :label="group.name" :value="group.code" /></el-select>
               <el-button plain @click="screenConfigVisible = true"><el-icon><Setting /></el-icon>大屏配置</el-button>
               <el-button plain @click="projectScreen"><el-icon><Monitor /></el-icon>投大屏</el-button>
+              <el-button plain @click="copyScreenLink">复制大屏链接</el-button>
               <el-button plain><el-icon><Setting /></el-icon>签位编号设置</el-button>
               <el-button plain :disabled="!undoStack.length" @click="undo"><el-icon><Back /></el-icon>撤销一步</el-button>
               <el-button plain @click="clearGroups"><el-icon><Delete /></el-icon>清空分组</el-button>
@@ -157,11 +158,18 @@ const saving = ref(false)
 const confirming = ref(false)
 const renderVersion = ref(0)
 let drawChannel = null
+let projectionTimer = null
 
 function drawChannelKey() { return `sxf-draw-screen:${props.tournamentId}:${divisionId.value}` }
 function screenConfigKey() { return `${drawChannelKey()}:config` }
+const screenAddress = computed(() => {
+  const params = new URLSearchParams({ divisionId: divisionId.value, mode: 'quick', format: 'group', theme: screenConfig.value.theme, showProgress: screenConfig.value.showProgress ? '1' : '0', showSlotNumber: screenConfig.value.showSlotNumber ? '1' : '0' })
+  if (screenConfig.value.title) params.set('title', screenConfig.value.title)
+  return `https://screen.sxffootball.cn/draw/${encodeURIComponent(props.tournamentId)}?${params.toString()}`
+})
 function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved } } catch {} }
 function saveScreenConfig() { try { localStorage.setItem(screenConfigKey(), JSON.stringify(screenConfig.value)) } catch {}; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
+async function copyScreenLink() { try { await navigator.clipboard.writeText(screenAddress.value); ElMessage.success('大屏链接已复制') } catch { ElMessage.warning(`请手动复制：${screenAddress.value}`) } }
 function publishScreenState() {
   const state = { groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name } : null) })), updatedAt: Date.now() }
   screenGroups.value = state.groups
@@ -169,10 +177,15 @@ function publishScreenState() {
 }
 function projectScreen() {
   loadScreenConfig()
-  const url = router.resolve({ path: route.path, query: { ...route.query, display: 'screen' } }).href
-  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  const opened = window.open(screenAddress.value, '_blank', 'noopener,noreferrer')
   if (!opened) ElMessage.warning('浏览器阻止了大屏窗口，请允许弹窗后重试')
   publishScreenState()
+}
+
+function scheduleScreenPersist() {
+  if (isScreen.value) return
+  window.clearTimeout(projectionTimer)
+  projectionTimer = window.setTimeout(() => { persistGroups('draft').catch(() => {}) }, 450)
 }
 
 function makeGroups(){
@@ -196,6 +209,7 @@ function commitGroups(){
   componentInstance?.update?.()
   nextTick(() => componentInstance?.update?.())
   publishScreenState()
+  scheduleScreenPersist()
 }
 const assigned = computed(() => groups.value.flatMap(group => group.slots).filter(Boolean).length)
 const pool = computed(() => teams.value.filter(team => !groups.value.some(group => group.slots.some(slot => slot?.id === team.id))))
