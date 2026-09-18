@@ -47,7 +47,7 @@
           <small>{{ pool.length }}/{{ teams.length }} 待分配</small>
           <ol>
             <li v-for="team in visiblePool" :key="team.id" role="button" tabindex="0" draggable="true" @dragstart="startDrag(team)" @click="place(team)" @keydown.enter.prevent="place(team)" @keydown.space.prevent="place(team)">
-              <span class="team-crest"><img v-if="team.logo || team.logoUrl" :src="team.logo || team.logoUrl" alt="" @error="team.logo='';team.logoUrl=''" /><em v-else>{{ team.name.slice(0, 1) }}</em></span><b>{{ team.name }}</b><small>{{ team.region }}</small><el-icon><Grid /></el-icon>
+              <span class="team-crest"><img v-if="team.logo || team.logoUrl || team.logoTransparentUrl" :src="team.logo || team.logoUrl || team.logoTransparentUrl" alt="" @error="team.logo='';team.logoUrl='';team.logoTransparentUrl=''" /><em v-else>{{ team.name.slice(0, 1) }}</em></span><b>{{ team.name }}</b><small>{{ team.region }}</small><el-icon><Grid /></el-icon>
             </li>
           </ol>
           <button v-if="filteredPool.length > poolDisplayLimit" type="button" @click="poolExpanded = !poolExpanded">{{ poolExpanded ? '收起球队' : `还有 ${filteredPool.length - poolDisplayLimit} 支，向下滚动查看更多` }}<el-icon><ArrowDown /></el-icon></button>
@@ -74,7 +74,7 @@
               <ol>
                 <li v-for="(team,index) in group.slots" :key="index" :class="{ empty: !team }" @dragover.prevent @drop="dropInto(group,index)" @click="team && remove(team)">
                   <b>{{ group.code }}{{ index + 1 }}</b>
-                  <template v-if="team"><span class="team-crest"><img v-if="team.logo || team.logoUrl" :src="team.logo || team.logoUrl" alt="" @error="team.logo='';team.logoUrl=''" /><em v-else>{{ team.name.slice(0,1) }}</em></span><strong>{{ team.name }}</strong><el-icon><Grid /></el-icon></template>
+                  <template v-if="team"><span class="team-crest"><img v-if="team.logo || team.logoUrl || team.logoTransparentUrl" :src="team.logo || team.logoUrl || team.logoTransparentUrl" alt="" @error="team.logo='';team.logoUrl='';team.logoTransparentUrl=''" /><em v-else>{{ team.name.slice(0,1) }}</em></span><strong>{{ team.name }}</strong><el-icon><Grid /></el-icon></template>
                   <template v-else><el-icon><Trophy /></el-icon><em>拖入球队</em></template>
                 </li>
               </ol>
@@ -170,7 +170,7 @@ function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getIte
 function saveScreenConfig() { try { localStorage.setItem(screenConfigKey(), JSON.stringify(screenConfig.value)) } catch {}; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
 async function copyScreenLink() { try { await navigator.clipboard.writeText(screenAddress.value); ElMessage.success('大屏链接已复制') } catch { ElMessage.warning(`请手动复制：${screenAddress.value}`) } }
 async function publishScreenState() {
-  const state = { title: screenConfig.value.title || tournament.value.name || '赛事抽签', tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', divisionName: divisionName.value, status: groups.value.flatMap(group => group.slots).filter(Boolean).length ? '抽签进行中' : '等待抽签开始', groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name, logo: team.logo || team.logoUrl || '' } : null) })), updatedAt: Date.now() }
+  const state = { title: screenConfig.value.title || tournament.value.name || '赛事抽签', tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', divisionName: divisionName.value, status: groups.value.flatMap(group => group.slots).filter(Boolean).length ? '抽签进行中' : '等待抽签开始', groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name, logo: team.logo || team.logoUrl || team.logoTransparentUrl || '' } : null) })), updatedAt: Date.now() }
   screenGroups.value = state.groups
   try { localStorage.setItem(drawChannelKey(), JSON.stringify(state)); drawChannel?.postMessage(state) } catch {}
   try { const authToken = localStorage.getItem('authToken') || ''; if (authToken) await fetch('https://screen.sxffootball.cn/screen-api/state', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` }, body: JSON.stringify(state), keepalive: true }) } catch {}
@@ -264,7 +264,7 @@ async function load(){
     const ids = scoped.map(row => row.teamId).filter(Boolean)
     const details = ids.length ? await queryList('teams',{ where:{ _id:{ $in:ids } },limit:1000 }) : []
     const lookup = new Map(details.map(row => [String(row._id),row]))
-    teams.value = scoped.map(row => { const team=lookup.get(String(row.teamId)); return { id:String(row.teamId),name:String(team?.name || team?.teamName || row.teamName || '未命名球队'),region:String(team?.city || team?.region || ''),logo:String(team?.logo || team?.logoUrl || row.logo || row.logoUrl || ''),logoUrl:String(team?.logoUrl || team?.logo || row.logoUrl || row.logo || '') } })
+    teams.value = scoped.map(row => { const team=lookup.get(String(row.teamId)); const logo=String(team?.logoTransparentUrl || team?.logoUrl || team?.logo || team?.teamLogo || team?.avatarUrl || row.logoTransparentUrl || row.logoUrl || row.logo || row.teamLogo || ''); return { id:String(row.teamId),name:String(team?.name || team?.teamName || row.teamName || '未命名球队'),region:String(team?.city || team?.region || ''),logo,logoUrl:logo,logoTransparentUrl:logo } })
     const saved = await queryList('tournament_groups',{ where:{ tournamentId:props.tournamentId },limit:1000 })
     const current = saved.filter(row => String(row.divisionId || 'default') === divisionId.value && row.type === 'tournament' && row.status !== 'archived')
     if(current.length){ savedGroupCount.value=current.length; configuredGroupSizes.value=current.map(row => Number(row.maxTeams || row.teams?.length || 0)).filter(Boolean); savedTeamsPerGroup.value=Math.max(...configuredGroupSizes.value,4) }
