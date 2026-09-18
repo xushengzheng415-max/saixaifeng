@@ -261,7 +261,7 @@
             <button type="button" :class="{ selected: claimShareMethod === 'link' }" @click="claimShareMethod = 'link'"><span class="claim-option-icon"><el-icon><Link /></el-icon></span><span><strong>复制认领链接</strong><small>复制后通过微信发送给球队负责人</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
             <button type="button" :class="{ selected: claimShareMethod === 'scan' }" @click="claimShareMethod = 'scan'"><span class="claim-option-icon claim-option-qr"><el-icon><Grid /></el-icon></span><span><strong>手机扫码分享</strong><small>主办方用手机扫码进入小程序，再转发认领卡片</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
           </div>
-          <label class="claim-link-field"><strong>正式版球队认领</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input :value="claimInviteUrlLink || '正在生成正式版认领链接…'" readonly /></div></label>
+          <label class="claim-link-field"><strong>{{ claimInviteEnvLabel }}球队认领</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input :value="claimInviteUrlLink || claimInviteLinkPlaceholder" readonly /></div></label>
           <div class="claim-code-row"><img v-if="claimInviteCodeUrl" :src="claimInviteCodeUrl" class="claim-qr-image" alt="球队认领小程序码" /><div v-else-if="claimInvitePath" class="claim-qr-vector" role="img" aria-label="球队认领二维码" v-html="claimQrSvg"></div><div v-else class="claim-qr-placeholder" role="status">{{ claimInviteLoading ? '生成中' : '待生成' }}</div><div><strong>球队认领小程序码</strong><p>{{ claimInviteCodeUrl ? '扫码后可转发小程序卡片' : (claimInviteLoading ? '正在生成小程序码…' : '认领链接生成后显示可扫码二维码') }}</p></div></div>
           <div class="claim-after-note"><el-icon><InfoFilled /></el-icon><span>认领完成后，如球队资料或参赛名单未完善，再由系统发送资料完善提醒。</span></div>
         </div>
@@ -269,7 +269,7 @@
       </section>
     </div>
     <el-dialog v-model="targetedRegistrationLinkVisible" title="邀约球队" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="creatingTargetedRegistrationLink"><el-alert type="success" :closable="false" title="当前生成正式版球队邀约，可将二维码或完整小程序链接对外发送。"/><section v-if="targetedRegistrationResult" class="targeted-link-result"><img v-if="targetedRegistrationResult.qrCodeUrl" :src="targetedRegistrationResult.qrCodeUrl" alt="邀约球队正式版小程序码"/><div><strong>球队邀约正式版二维码已生成</strong><el-tag type="success" size="small">正式版</el-tag><span>报名时由球队选择组别</span><p>可下载二维码或复制完整链接，发送给球队负责人办理报名。</p></div></section><el-empty v-else description="正在生成正式版球队邀约…"/></div><template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.urlLink" @click="copyTargetedRegistrationLink">复制链接</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.qrCodeUrl" @click="downloadTargetedRegistrationCode">下载二维码</el-button><el-button v-if="targetedRegistrationResult" type="primary" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重新生成</el-button></template></el-dialog>
-    <el-dialog v-model="claimCodeVisible" title="赛事认领码" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="claimCodeLoading"><el-alert type="info" :closable="false" :title="miniProgramQrEnvVersion === 'trial' ? '预览环境使用体验版认领码；请用已加入体验成员的微信扫码测试。' : '一个赛事一个认领码，可群发或张贴。球队负责人扫码后在小程序验证手机号，即可看到自己名下待认领的球队。'"/><section v-if="claimCodeResult" class="targeted-link-result"><img v-if="claimCodeResult.qrCodeUrl" :src="claimCodeResult.qrCodeUrl" alt="赛事球队认领码"/><div><strong>球队认领码已生成</strong><el-tag type="success" size="small">{{ miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版' }}</el-tag><span>有效期至 {{ claimCodeExpiryText }}</span><p>把二维码发给领队，球队负责人扫码后按报名表登记的领队或主教练手机号自助认领。</p></div></section><el-empty v-else description="正在生成球队认领码…"/></div><template #footer><el-button @click="claimCodeVisible=false">关闭</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.urlLink" @click="copyClaimCodeLink">复制链接</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.qrCodeUrl" @click="downloadTournamentClaimCode">下载二维码</el-button></template></el-dialog>
+    <el-dialog v-model="claimCodeVisible" title="赛事认领码" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="claimCodeLoading"><el-alert type="info" :closable="false" :title="miniProgramQrEnvVersion === 'trial' ? '预览环境使用体验版认领码；请用已加入体验成员的微信扫码测试。' : '一个赛事一个认领码，可群发或张贴。球队负责人扫码后在小程序验证手机号，即可看到自己名下待认领的球队。'"/><section v-if="claimCodeResult" class="targeted-link-result"><img v-if="claimCodeResult.qrCodeUrl" :src="claimCodeResult.qrCodeUrl" alt="赛事球队认领码"/><div><strong>球队认领码已生成</strong><el-tag type="success" size="small">{{ miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版' }}</el-tag><span>有效期至 {{ claimCodeExpiryText }}</span><p>把二维码发给领队，球队负责人扫码后按报名表登记的领队或主教练手机号自助认领。</p></div></section><el-alert v-else-if="claimCodeError" type="error" :closable="false" show-icon title="赛事认领码生成失败" :description="claimCodeError"/><el-empty v-else description="正在生成球队认领码…"/></div><template #footer><el-button @click="claimCodeVisible=false">关闭</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.urlLink" @click="copyClaimCodeLink">复制链接</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.qrCodeUrl" @click="downloadTournamentClaimCode">下载二维码</el-button></template></el-dialog>
     <el-dialog v-model="teamActionDialogVisible" title="更多操作" width="360px" destroy-on-close><div v-if="teamActionTarget" class="team-action-dialog"><strong>{{ teamActionTarget.name || teamActionTarget.teamName || '当前球队' }}</strong><el-button @click="openTeamEditFromDialog">编辑球队</el-button><el-button v-if="isProfessional && teamActionTarget.status === 'approved'" @click="openTeamRosterFromDialog">查看名单</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(teamActionTarget.status)" @click="retryRegistrationNotificationFromDialog">重发通知</el-button><el-button v-if="claimLabel(teamActionTarget) !== '已认领'" type="danger" plain @click="deleteTeamFromDialog">删除队伍</el-button><el-button v-else type="warning" plain @click="removeTeamFromDialog">移出赛事</el-button></div></el-dialog>
 
     <!-- 邀请球队弹窗（旧球队池入口保留给内部兼容流程，不再由“定向邀请球队”按钮触发） -->
@@ -669,7 +669,18 @@ import TeamRegistrationWordImporter from '../../components/tournament/TeamRegist
 const route = useRoute()
 const router = useRouter()
 // 预览站点对应微信小程序体验版；正式站点才请求 release。
-const miniProgramQrEnvVersion = String(import.meta.env.VITE_MINIPROGRAM_ENV_VERSION || (String(import.meta.env.BASE_URL || '').includes('/preview/') ? 'trial' : 'release')).toLowerCase()
+// 注意：BASE_URL 判断必须放在最外层——构建 shell 里若残留 VITE_MINIPROGRAM_ENV_VERSION，
+// Vite 会把它注入 import.meta.env，`VITE_MINIPROGRAM_ENV_VERSION || (...)` 会被常量折叠成
+// 该变量值（2026-09-18 22:49 的 /preview/admin/ 构建因此被编译成常量 release，预览站无法生成体验版码）。
+const miniProgramQrEnvVersion = String(String(import.meta.env.BASE_URL || '').includes('/preview/')
+  ? 'trial'
+  : (import.meta.env.VITE_MINIPROGRAM_ENV_VERSION || 'release')).toLowerCase()
+// 逐队认领邀请沿用同一环境口径：预览站生成体验版小程序码（供内部扫码验证），正式站生成正式版。
+// 体验版没有 URL Link，只能扫码，所以链接占位文案单独给一句可执行的说明。
+const claimInviteEnvLabel = computed(() => (miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版'))
+const claimInviteLinkPlaceholder = computed(() => (miniProgramQrEnvVersion === 'trial'
+  ? '体验版不提供小程序链接，请用下方小程序码扫码测试'
+  : '正在生成正式版认领链接…'))
 const isRegistrationWorkspace = computed(() => /\/registration$/.test(route.path))
 const publicBase = import.meta.env.BASE_URL
 const tournamentId = route.params.id
@@ -768,6 +779,7 @@ const targetedRegistrationLinkVisible = ref(false)
 const claimCodeVisible = ref(false)
 const claimCodeLoading = ref(false)
 const claimCodeResult = ref(null)
+const claimCodeError = ref('')
 const teamActionDialogVisible = ref(false)
 const teamActionTarget = ref(null)
 const claimCodeExpiryText = computed(() => {
@@ -2496,11 +2508,11 @@ async function ensureClaimInvite() {
       tournamentId,
       divisionId: activeDivisionId.value,
       tournamentTeamId: relationId,
-      envVersion:'release'
+      envVersion: miniProgramQrEnvVersion
     })
     if (claimInviteRequestKey.value !== requestKey) return
     if (!result || !result.success || !result.inviteId) throw new Error(result?.message || '认领邀请生成失败')
-    if (result.envVersion !== 'release' || result.testOnly) throw new Error('未生成正式版认领邀请，请稍后重试')
+    if (result.envVersion !== miniProgramQrEnvVersion || (miniProgramQrEnvVersion === 'release' && result.testOnly)) throw new Error(`未生成${miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版'}认领邀请，请稍后重试`)
     claimInviteId.value = String(result.inviteId)
     claimInvitePathValue.value = String(result.path || '')
     claimInviteUrlLink.value = String(result.urlLink || '')
@@ -2638,20 +2650,37 @@ function downloadTargetedRegistrationCode() {
 
 // 赛事级球队认领码：一个赛事一个码，替代逐队分发认领链接。
 // 逐队「认领链接」按钮继续保留，用于报名表未留手机号或需要定向发送的场景。
+// 微信小程序码接口的原始错误码对操作人没有意义，这里把已知原因翻译成可执行指引。
+// 41030 = invalid page：目标页面在该版本小程序中不存在，通常是新版小程序尚未上传/发布。
+function claimCodeFailureReason(message) {
+  const raw = String(message || '')
+  if (raw.includes('41030') || /invalid\s*page/i.test(raw)) {
+    return '小程序正式版尚未包含球队认领页（pages/team/claim-code/claim-code），因此暂时无法生成赛事认领码。请先上传并发布包含该页面的新版小程序；在此期间请改用每支球队的「认领链接」。'
+  }
+  if (raw.includes('40001') || /invalid credential|access[_\s]?token/i.test(raw)) {
+    return '小程序接口凭据已失效，请稍后重试；若持续失败，请联系管理员核对小程序 AppSecret 配置。'
+  }
+  return raw || '球队认领码生成失败'
+}
 function openClaimCodeDialog() {
   claimCodeResult.value = null
+  claimCodeError.value = ''
   claimCodeVisible.value = true
   void createTournamentClaimCode()
 }
 async function createTournamentClaimCode() {
   claimCodeLoading.value = true
+  claimCodeError.value = ''
   try {
     const result = await callFunction('tournamentRegistrationFlow', { action:'createTournamentClaimCode', tournamentId, width:300, envVersion:miniProgramQrEnvVersion })
     if (!result?.success) throw new Error(result?.message || '球队认领码生成失败')
     if (result.data?.envVersion !== miniProgramQrEnvVersion || (miniProgramQrEnvVersion === 'release' && result.data?.testOnly)) throw new Error(`未生成${miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版'}球队认领码，请稍后重试`)
     claimCodeResult.value = result.data || null
     ElMessage.success(result.message || '球队认领码已生成')
-  } catch (error) { ElMessage.error(error.message || '球队认领码生成失败') } finally { claimCodeLoading.value = false }
+  } catch (error) {
+    claimCodeError.value = claimCodeFailureReason(error.message)
+    ElMessage.error(claimCodeError.value)
+  } finally { claimCodeLoading.value = false }
 }
 async function copyClaimCodeLink() {
   const item = claimCodeResult.value
