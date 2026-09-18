@@ -162,7 +162,7 @@ let projectionTimer = null
 function drawChannelKey() { return `sxf-draw-screen:${props.tournamentId}:${divisionId.value}` }
 function screenConfigKey() { return `${drawChannelKey()}:config` }
 const screenAddress = computed(() => {
-  const params = new URLSearchParams({ divisionId: divisionId.value, mode: 'quick', format: 'group', theme: screenConfig.value.theme, showProgress: screenConfig.value.showProgress ? '1' : '0', showSlotNumber: screenConfig.value.showSlotNumber ? '1' : '0' })
+  const params = new URLSearchParams({ divisionId: divisionId.value, divisionName: divisionName.value, mode: 'quick', format: 'group', theme: screenConfig.value.theme, showProgress: screenConfig.value.showProgress ? '1' : '0', showSlotNumber: screenConfig.value.showSlotNumber ? '1' : '0' })
   if (screenConfig.value.title) params.set('title', screenConfig.value.title)
   return `https://screen.sxffootball.cn/draw/${encodeURIComponent(props.tournamentId)}?${params.toString()}`
 })
