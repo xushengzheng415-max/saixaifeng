@@ -292,6 +292,33 @@ function normalizePermissions(membership, fallbackOwner) {
   return unique(permissions)
 }
 
+// 账号自己「认领/管理」的球队（所有权或已接受的成员关系）。
+// 刻意不采纳 creatorId：主办方用报名表预建但无人认领的占位球队也是 creatorId 命中，
+// 那些球队不应让账号在小程序里当成自己的长期球队。
+async function loadAccountOwnedOrManagedTeams(user, openId) {
+  const identityValues = unique([
+    user._id, user.uid, user.userId, user.phone, user.phoneNumber,
+    user.openId, user.openid, user.wechatOpenId, user._openid, openId
+  ])
+  const ownerConditions = []
+  identityValues.forEach(value => {
+    ownerConditions.push({ ownerId: value }, { ownerUserId: value }, { claimedByUserId: value })
+  })
+  const owned = ownerConditions.length ? await safeGet('teams', _.or(ownerConditions), 200) : []
+  const membershipRows = await safeGet(
+    'team_memberships',
+    _.or([{ userId: user._id }, { memberUserId: user._id }, { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }]),
+    200
+  )
+  const managedIds = unique(membershipRows.filter(item => {
+    return ['active', 'accepted', 'claimed'].indexOf(String(item.status || 'active').toLowerCase()) >= 0
+  }).map(item => String(item.teamId || '')).filter(Boolean))
+  const managed = managedIds.length ? await safeGet('teams', { _id: _.in(managedIds) }, 200) : []
+  const map = {}
+  owned.concat(managed).forEach(team => { map[String(team._id)] = team })
+  return Object.keys(map).map(id => map[id])
+}
+
 async function loadWorkspaceCatalog(user, openId) {
   const membershipRows = await safeGet(
     'organization_memberships',
@@ -336,6 +363,13 @@ async function loadWorkspaceCatalog(user, openId) {
   organizations.forEach(item => { organizationMap[String(item._id)] = item })
 
   const workspaces = []
+  // 账号自己认领/管理的球队落在哪个机构名下 —— 用于给该机构工作空间补球队能力位。
+  // 背景（2026-09-18 实测）：PC 引导页创建的赛事主办方机构只有 event 能力位，
+  // 成员关系里的权限数组非空，normalizePermissions 的「机构负责人」兜底因此不生效，
+  // 于是账号认领球队后小程序球队页仍返回空 teams、显示「当前还没有球队」。
+  // 这里只对「确实拥有或管理球队」的账号补 team.view/team.manage，不按机构整体放开。
+  const accountOwnedTeams = await loadAccountOwnedOrManagedTeams(user, openId)
+  const accountOwnedTeamOrgIds = unique(accountOwnedTeams.map(item => String(item.orgId || item.organizationId || '')))
   orgIds.forEach(orgId => {
     const membership = memberships.find(item => {
       return String(item.orgId || item.organizationId || '') === orgId
@@ -353,6 +387,10 @@ async function loadWorkspaceCatalog(user, openId) {
     if (fallbackOwner && capabilities.length === 0) capabilities = ['event', 'team']
     const positions = normalizePositions(membership, fallbackOwner)
     let permissions = normalizePermissions(membership, fallbackOwner)
+    // 该机构名下有账号自己认领/管理的球队时，必须给球队能力位，否则账号连自己的球队都看不到。
+    if (accountOwnedTeamOrgIds.indexOf(String(orgId)) >= 0) {
+      permissions = unique(permissions.concat(['team.view', 'team.manage']))
+    }
     const entitlements = buildEntitlements(organization, membership, capabilities)
     const isWorkspaceOwner = positions.some(position => {
       const value = String(position).toLowerCase()
