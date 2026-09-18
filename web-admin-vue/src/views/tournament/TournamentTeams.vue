@@ -205,7 +205,7 @@
               <span>{{ activeDivision.name }}</span><span>{{ teamSource(row) }}</span><span>{{ applicationOwner(row) }}</span>
               <span><el-tag type="success" effect="light" size="small">{{ longTermTeamLabel(row) }}</el-tag></span><span>{{ applicationTime(row) }}</span>
               <span><el-tag :type="applicationRiskType(row)" effect="plain" size="small">{{ applicationRiskLabel(row) }}</el-tag></span>
-              <div class="team-row-actions"><template v-if="row.status === 'pending'"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template><el-button link type="primary" @click="openTeamPlayers(row)">查看</el-button></div>
+              <div class="team-row-actions"><template v-if="['pending','invited'].includes(row.status)"><el-button link type="success" :disabled="Number(row.playerReviewPendingCount || 0) > 0" :title="Number(row.playerReviewPendingCount || 0) > 0 ? `还有 ${row.playerReviewPendingCount} 名球员未审核` : '通过'" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template><el-button link type="primary" @click="openTeamPlayers(row)">查看</el-button></div>
             </template>
             <template v-else>
             <span>{{ teamRegistrationNo(row) }}</span><span><el-tag :type="teamSource(row) === '主办方邀请' ? 'primary' : 'warning'" effect="light" size="small">{{ teamSource(row) }}</el-tag></span>
@@ -215,7 +215,7 @@
             <span class="player-count-cell"><strong>{{ teamPlayerCount(row) }} 人</strong></span>
             <div class="team-row-actions">
               <el-button v-if="activeDivisionId === 'default'" link type="success" @click="openDivisionAssignment(row)">分配组别</el-button>
-              <template v-if="row.status === 'pending'"><el-button link type="success" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template>
+              <template v-if="['pending','invited'].includes(row.status)"><el-button link type="success" :disabled="Number(row.playerReviewPendingCount || 0) > 0" :title="Number(row.playerReviewPendingCount || 0) > 0 ? `还有 ${row.playerReviewPendingCount} 名球员未审核` : '通过'" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template>
               <template v-else-if="row.status === 'cancel_requested'"><el-button link type="danger" @click="approveCancel(row)">同意变更</el-button><el-button link @click="rejectCancel(row)">驳回</el-button></template>
               <template v-else><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><el-button link type="primary" @click="openTeamEdit(row)">编辑球队</el-button><el-button v-if="isProfessional && row.status === 'approved'" link type="primary" @click="openTeamRoster(row)">查看名单</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(row.status)" link type="warning" :loading="retryingNotificationId===getRecordId(row)" @click="retryRegistrationNotification(row)">重发通知</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></template>
             </div>
@@ -1235,7 +1235,7 @@ const filteredTeams = computed(() => {
 })
 
 function isApprovalSelectable(team) {
-  return team?.status === 'pending' && applicationRiskLabel(team) === '无重复' && importedPlayerConflictCount(team) === 0
+  return ['pending', 'invited'].includes(String(team?.status || '').toLowerCase()) && applicationRiskLabel(team) === '无重复' && importedPlayerConflictCount(team) === 0 && Number(team.playerReviewPendingCount || 0) === 0
 }
 
 const selectableApprovalRows = computed(() => filteredTeams.value.filter(isApprovalSelectable))
@@ -2227,21 +2227,24 @@ async function loadTournamentTeams() {
       teamsData.forEach(t => {
         teamMap[t._id] = t
       })
-      const syntheticTeamIds = teamsData
-        .filter(team => team.synthetic === true || team.syntheticDatasetId)
-        .map(team => String(team._id))
-      const [playersByTeamId, playersByTeamCode] = syntheticTeamIds.length
-        ? await Promise.all([
-            queryList('players', { where: { teamId: { $in: syntheticTeamIds } }, limit: 1000 }),
-            queryList('players', { where: { teamCode: { $in: syntheticTeamIds } }, limit: 1000 })
-          ])
-        : [[], []]
+      const [playersByTeamId, playersByTeamCode] = await Promise.all([
+        queryList('players', { where: { teamId: { $in: teamIds } }, limit: 1000 }),
+        queryList('players', { where: { teamCode: { $in: teamIds } }, limit: 1000 })
+      ])
       const playerIdsByTeam = new Map()
+      const playerReviewPendingByTeam = new Map()
+      const playerReviewCountByTeam = new Map()
       ;[...(playersByTeamId || []), ...(playersByTeamCode || [])].forEach(player => {
         const linkedTeamId = String(player.teamId || player.teamCode || '')
         if (!linkedTeamId) return
         if (!playerIdsByTeam.has(linkedTeamId)) playerIdsByTeam.set(linkedTeamId, new Set())
-        playerIdsByTeam.get(linkedTeamId).add(String(player._id || `${player.name || ''}:${player.birthDate || ''}`))
+        const playerId = String(player._id || `${player.name || ''}:${player.birthDate || ''}`)
+        if (playerIdsByTeam.get(linkedTeamId).has(playerId)) return
+        playerIdsByTeam.get(linkedTeamId).add(playerId)
+        playerReviewCountByTeam.set(linkedTeamId, (playerReviewCountByTeam.get(linkedTeamId) || 0) + 1)
+        if (String(player.organizerReviewStatus || '').toLowerCase() !== 'approved') {
+          playerReviewPendingByTeam.set(linkedTeamId, (playerReviewPendingByTeam.get(linkedTeamId) || 0) + 1)
+        }
       })
 
       const mergedRows = list.map(item => {
@@ -2268,6 +2271,8 @@ async function loadTournamentTeams() {
           // 普通主办方工作台不能读取 registration_player_drafts；人数以正式球员/球队汇总字段为准。
           importedPlayerStats: teamData.importedPlayerStats || item.importedPlayerStats || null,
           playerCount: playerIdsByTeam.get(String(item.teamId))?.size || Number(teamData.playerCount || item.rosterPlayerCount || item.playerCount || 0),
+          playerReviewCount: playerReviewCountByTeam.get(String(item.teamId)) || 0,
+          playerReviewPendingCount: playerReviewPendingByTeam.get(String(item.teamId)) || 0,
           status: item.status,
           createTime: item.createTime,
           inviteTime: item.inviteTime,
@@ -2821,6 +2826,10 @@ async function cancelInvite(team) {
 // 通过报名/确认
 async function approveTeam(team) {
   try {
+    if (Number(team?.playerReviewPendingCount || 0) > 0) {
+      ElMessage.warning(`请先在球队详情审核完 ${team.playerReviewPendingCount} 名球员`)
+      return
+    }
     if (qaSnapshot) {
       const recordId = getRecordId(team)
       tournamentTeams.value = tournamentTeams.value.map(item => getRecordId(item) === recordId ? { ...item, status: 'approved', approveTime: new Date().toISOString() } : item)

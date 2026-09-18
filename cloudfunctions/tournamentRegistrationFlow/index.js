@@ -1610,6 +1610,11 @@ async function reviewRegistration(event) {
   if (!['approved', 'rejected'].includes(decision)) return { success: false, code: 'DECISION_INVALID', message: '请选择通过或驳回' }
   const reason = text(event.reason).slice(0, 300)
   if (decision === 'rejected' && !reason) return { success: false, code: 'REJECT_REASON_REQUIRED', message: '驳回必须填写原因' }
+  if (decision === 'approved') {
+    const playerRows = (await db.collection('players').where({ teamId: registration.teamId }).limit(1000).get()).data || []
+    const pendingPlayerCount = playerRows.filter(player => text(player.organizerReviewStatus).toLowerCase() !== 'approved').length
+    if (pendingPlayerCount > 0) return { success: false, code: 'PLAYER_REVIEW_REQUIRED', message: `请先审核完球队球员资料（还有 ${pendingPlayerCount} 人未审核）`, pendingPlayerCount }
+  }
   await db.collection('tournament_teams').doc(registration._id).update({ data: { status: decision, reviewReason: reason, reviewedBy: actor.userId, reviewedAt: db.serverDate(), approveTime: decision === 'approved' ? db.serverDate() : null, updateTime: db.serverDate() } })
   const businessEventId = `registration_review:${registration._id}:${decision}`
   const warnings = []

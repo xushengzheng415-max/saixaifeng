@@ -100,6 +100,7 @@
             <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
+            <el-table-column label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
             <el-table-column label="操作" width="86" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button></template></el-table-column>
           </el-table>
         </section>
@@ -1383,6 +1384,7 @@ const avatarReadyCount = computed(() => avatarImportRows.value.filter(row => !ro
 
 // 编辑球队相关
 const showEditTeam = ref(false)
+const playerReviewingId = ref('')
 const teamEditForm = ref({
   name: '',
   teamCode: '',
@@ -3634,6 +3636,24 @@ function playerProfileLabel(player) {
   if (status === 'imported_pending_claim') return '待认领核对'
   if (status === 'pending_review') return '待审核'
   return isSyntheticTeam.value ? '测试资料' : '待完善'
+}
+
+function playerOrganizerReviewStatus(player) {
+  return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
+}
+
+async function reviewPlayer(player) {
+  if (!player?._id || playerOrganizerReviewStatus(player) === 'approved') return
+  playerReviewingId.value = String(player._id)
+  try {
+    await updateRecord('players', player._id, { organizerReviewStatus: 'approved', organizerReviewedAt: new Date().toISOString(), organizerReviewedBy: '赛事主办方' })
+    player.organizerReviewStatus = 'approved'
+    ElMessage.success(`${player.name || '球员'}已审核`)
+  } catch (error) {
+    ElMessage.error(error.message || '球员审核失败')
+  } finally {
+    playerReviewingId.value = ''
+  }
 }
 
 function playerIdentityLabel(player) {
