@@ -7,7 +7,7 @@ const apiUrl = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tclou
 function checkSession(token) {
   return new Promise(resolve => {
     const body = JSON.stringify({ action: 'checkLogin', authToken: token })
-    const request = https.request(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 8000 }, response => { let data = ''; response.on('data', chunk => { data += chunk }); response.on('end', () => { try { const value = JSON.parse(data); resolve(Boolean(value.success && value.loggedIn)) } catch { resolve(false) } }) })
+    const request = https.request(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 8000 }, response => { let data = ''; response.on('data', chunk => { data += chunk }); response.on('end', () => { try { let value = JSON.parse(data); if (typeof value.body === 'string') value = JSON.parse(value.body); resolve(Boolean(value.success && value.loggedIn)) } catch { resolve(false) } }) })
     request.on('error', () => resolve(false)); request.on('timeout', () => { request.destroy(); resolve(false) }); request.write(body); request.end()
   })
 }
