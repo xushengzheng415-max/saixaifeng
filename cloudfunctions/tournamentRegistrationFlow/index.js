@@ -424,7 +424,7 @@ async function addSyntheticTeams(event) {
   const existing = (await db.collection('tournament_teams').where({ tournamentId, divisionId }).limit(100).get()).data || []
   const existingIds = new Set(existing.filter(item => !['cancelled','withdrawn'].includes(text(item.status).toLowerCase())).map(item => text(item.teamId)))
   const additions = teams.filter(team => !existingIds.has(text(team._id)))
-  const requiredTeams = Number(division.expectedTeams || division.requiredTeams || division.maxTeams || 0)
+  const requiredTeams = divisionCapacity(division, tournament)
   if (requiredTeams > 0 && existingIds.size + additions.length > requiredTeams) return { success:false, code:'DIVISION_CAPACITY_EXCEEDED', message:`当前组别目标${requiredTeams}支球队，所选数量超过剩余名额` }
   for (const team of additions) {
     await db.collection('tournament_teams').add({ data:{ tournamentId, divisionId, divisionName:text(division.name), teamId:team._id, teamName:text(team.name || team.teamName), orgId:actor.orgId, teamOrgId:actor.orgId, creatorId:actor.userId, status:'pending', claimStatus:'claimed', participationStatus:'pending_review', source:'synthetic_pool', joinSource:'synthetic_pool', rosterStatus:'draft', rosterPlayerCount:Number(team.playerCount || 15), synthetic:true, syntheticDatasetId:text(team.syntheticDatasetId), createTime:db.serverDate(), updateTime:db.serverDate() } })
@@ -807,7 +807,7 @@ async function createTargetedTeamInvitations(event) {
   const activeRows = existing.filter(item => !['invite_cancelled','cancelled','withdrawn','rejected'].includes(text(item.status).toLowerCase()))
   const activeByTeam = new Map(activeRows.map(item => [text(item.teamId), item]))
   const additions = teams.filter(team => !activeByTeam.has(text(team._id)))
-  const capacity = Number(division.expectedTeams || division.requiredTeams || division.maxTeams || 0)
+  const capacity = divisionCapacity(division, tournament)
   if (capacity > 0 && activeRows.length + additions.length > capacity) return { success:false, code:'DIVISION_CAPACITY_EXCEEDED', message:`当前组别目标${capacity}支球队，所选数量超过剩余名额` }
   const results = []
   for (const team of teams) {
@@ -1886,7 +1886,15 @@ async function removeClaimedTournamentTeam(event) {
   if (!tournament || recordOrgId(tournament) !== actor.orgId) return { success:false, code:'REGISTRATION_SCOPE_DENIED', message:'无权移除其他机构赛事中的球队' }
   const team = await getDocument('teams', text(registration.teamId))
   const claim = await teamClaimState(team, registration)
-  if (!claim.claimed) return { success:false, code:'TEAM_NOT_CLAIMED', message:'该球队尚未认领，请使用删除队伍' }
+  if (!claim.claimed) {
+    const [homeMatches, awayMatches, rosterSnapshots, lineupSnapshots] = await Promise.all([
+      listAll('matches', { homeTeamId:text(registration.teamId) }, 1000),
+      listAll('matches', { awayTeamId:text(registration.teamId) }, 1000),
+      optionalHistoryRows('roster_snapshots', { teamId:text(registration.teamId) }, 1000),
+      optionalHistoryRows('match_lineup_snapshots', { teamId:text(registration.teamId) }, 1000)
+    ])
+    if (!(homeMatches.length || awayMatches.length || rosterSnapshots.length || lineupSnapshots.length)) return { success:false, code:'TEAM_NOT_CLAIMED', message:'该球队尚未认领，请使用删除队伍' }
+  }
   if (text(registration.status).toLowerCase() === 'removed') return { success:true, message:'该球队已移出赛事，球队资料仍保留' }
   const now = db.serverDate()
   await db.collection('tournament_teams').doc(registration._id).update({ data:{

@@ -205,7 +205,7 @@
               <span>{{ activeDivision.name }}</span><span>{{ teamSource(row) }}</span><span>{{ applicationOwner(row) }}</span>
               <span><el-tag type="success" effect="light" size="small">{{ longTermTeamLabel(row) }}</el-tag></span><span>{{ applicationTime(row) }}</span>
               <span><el-tag :type="applicationRiskType(row)" effect="plain" size="small">{{ applicationRiskLabel(row) }}</el-tag></span>
-              <div class="team-row-actions"><template v-if="['pending','invited'].includes(row.status)"><el-button link type="success" :disabled="Number(row.playerReviewPendingCount || 0) > 0" :title="Number(row.playerReviewPendingCount || 0) > 0 ? `还有 ${row.playerReviewPendingCount} 名球员未审核` : '通过'" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template><el-button link type="primary" @click="openTeamPlayers(row)">查看</el-button></div>
+              <div class="team-row-actions"><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><template v-if="['pending','invited'].includes(row.status)"><el-button link type="success" :disabled="Number(row.playerReviewPendingCount || 0) > 0" :title="Number(row.playerReviewPendingCount || 0) > 0 ? `还有 ${row.playerReviewPendingCount} 名球员未审核` : '通过'" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template><el-button link @click="openTeamActions(row)">更多</el-button></div>
             </template>
             <template v-else>
             <span>{{ teamRegistrationNo(row) }}</span><span><el-tag :type="teamSource(row) === '主办方邀请' ? 'primary' : 'warning'" effect="light" size="small">{{ teamSource(row) }}</el-tag></span>
@@ -217,7 +217,7 @@
               <el-button v-if="activeDivisionId === 'default'" link type="success" @click="openDivisionAssignment(row)">分配组别</el-button>
               <template v-if="['pending','invited'].includes(row.status)"><el-button link type="success" :disabled="Number(row.playerReviewPendingCount || 0) > 0" :title="Number(row.playerReviewPendingCount || 0) > 0 ? `还有 ${row.playerReviewPendingCount} 名球员未审核` : '通过'" @click="approveTeam(row)">通过</el-button><el-button link type="danger" @click="rejectTeam(row)">拒绝</el-button></template>
               <template v-else-if="row.status === 'cancel_requested'"><el-button link type="danger" @click="approveCancel(row)">同意变更</el-button><el-button link @click="rejectCancel(row)">驳回</el-button></template>
-              <template v-else><el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><el-button link type="primary" @click="openTeamEdit(row)">编辑球队</el-button><el-button v-if="isProfessional && row.status === 'approved'" link type="primary" @click="openTeamRoster(row)">查看名单</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(row.status)" link type="warning" :loading="retryingNotificationId===getRecordId(row)" @click="retryRegistrationNotification(row)">重发通知</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></template>
+              <el-button link type="primary" @click="openTeamPlayers(row)">查看球队</el-button><el-button link @click="openTeamActions(row)">更多</el-button>
             </div>
             </template>
           </div>
@@ -270,6 +270,7 @@
     </div>
     <el-dialog v-model="targetedRegistrationLinkVisible" title="邀约球队" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="creatingTargetedRegistrationLink"><el-alert type="success" :closable="false" title="当前生成正式版球队邀约，可将二维码或完整小程序链接对外发送。"/><section v-if="targetedRegistrationResult" class="targeted-link-result"><img v-if="targetedRegistrationResult.qrCodeUrl" :src="targetedRegistrationResult.qrCodeUrl" alt="邀约球队正式版小程序码"/><div><strong>球队邀约正式版二维码已生成</strong><el-tag type="success" size="small">正式版</el-tag><span>报名时由球队选择组别</span><p>可下载二维码或复制完整链接，发送给球队负责人办理报名。</p></div></section><el-empty v-else description="正在生成正式版球队邀约…"/></div><template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.urlLink" @click="copyTargetedRegistrationLink">复制链接</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.qrCodeUrl" @click="downloadTargetedRegistrationCode">下载二维码</el-button><el-button v-if="targetedRegistrationResult" type="primary" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重新生成</el-button></template></el-dialog>
     <el-dialog v-model="claimCodeVisible" title="赛事认领码" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="claimCodeLoading"><el-alert type="info" :closable="false" :title="miniProgramQrEnvVersion === 'trial' ? '预览环境使用体验版认领码；请用已加入体验成员的微信扫码测试。' : '一个赛事一个认领码，可群发或张贴。球队负责人扫码后在小程序验证手机号，即可看到自己名下待认领的球队。'"/><section v-if="claimCodeResult" class="targeted-link-result"><img v-if="claimCodeResult.qrCodeUrl" :src="claimCodeResult.qrCodeUrl" alt="赛事球队认领码"/><div><strong>球队认领码已生成</strong><el-tag type="success" size="small">{{ miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版' }}</el-tag><span>有效期至 {{ claimCodeExpiryText }}</span><p>把二维码发给领队，球队负责人扫码后按报名表登记的领队或主教练手机号自助认领。</p></div></section><el-empty v-else description="正在生成球队认领码…"/></div><template #footer><el-button @click="claimCodeVisible=false">关闭</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.urlLink" @click="copyClaimCodeLink">复制链接</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.qrCodeUrl" @click="downloadTournamentClaimCode">下载二维码</el-button></template></el-dialog>
+    <el-dialog v-model="teamActionDialogVisible" title="更多操作" width="360px" destroy-on-close><div v-if="teamActionTarget" class="team-action-dialog"><strong>{{ teamActionTarget.name || teamActionTarget.teamName || '当前球队' }}</strong><el-button @click="openTeamEditFromDialog">编辑球队</el-button><el-button v-if="isProfessional && teamActionTarget.status === 'approved'" @click="openTeamRosterFromDialog">查看名单</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(teamActionTarget.status)" @click="retryRegistrationNotificationFromDialog">重发通知</el-button><el-button v-if="claimLabel(teamActionTarget) !== '已认领'" type="danger" plain @click="deleteTeamFromDialog">删除队伍</el-button><el-button v-else type="warning" plain @click="removeTeamFromDialog">移出赛事</el-button></div></el-dialog>
 
     <!-- 邀请球队弹窗（旧球队池入口保留给内部兼容流程，不再由“定向邀请球队”按钮触发） -->
     <el-dialog
@@ -767,6 +768,8 @@ const targetedRegistrationLinkVisible = ref(false)
 const claimCodeVisible = ref(false)
 const claimCodeLoading = ref(false)
 const claimCodeResult = ref(null)
+const teamActionDialogVisible = ref(false)
+const teamActionTarget = ref(null)
 const claimCodeExpiryText = computed(() => {
   const raw = claimCodeResult.value?.expiresAt || ''
   if (!raw) return '未设置'
@@ -1017,7 +1020,8 @@ function divisionPlayerFormatLabel(division) { const value=String(division?.matc
 function divisionDisplayName(division) { const format=divisionPlayerFormatLabel(division);return format ? `${division?.name || '未命名组别'} · ${format}` : division?.name || '未命名组别' }
 const activeDivisionDisplayName = computed(() => divisionDisplayName(activeDivision.value))
 function divisionCapacity(division) {
-  const candidates = [division?.expectedTeams, division?.requiredTeams, division?.teamRequirement, division?.participantTeams, division?.maxTeams]
+  // 组别容量字段需与报名服务端保持一致；历史组别可能把上限存于 teamLimit。
+  const candidates = [division?.expectedTeams, division?.requiredTeams, division?.teamRequirement, division?.participantTeams, division?.maxTeams, division?.teamLimit]
   return candidates.map(Number).find(value => Number.isFinite(value) && value > 0) || 0
 }
 const activeDivisionCapacity = computed(() => divisionCapacity(activeDivision.value))
@@ -1978,6 +1982,20 @@ function openTeamEdit(team) {
   })
 }
 
+function openTeamActions(team) {
+  teamActionTarget.value = team
+  teamActionDialogVisible.value = true
+}
+function closeTeamActions() {
+  teamActionDialogVisible.value = false
+  teamActionTarget.value = null
+}
+function openTeamEditFromDialog() { const team = teamActionTarget.value; closeTeamActions(); if (team) openTeamEdit(team) }
+function openTeamRosterFromDialog() { const team = teamActionTarget.value; closeTeamActions(); if (team) openTeamRoster(team) }
+function retryRegistrationNotificationFromDialog() { const team = teamActionTarget.value; closeTeamActions(); if (team) retryRegistrationNotification(team) }
+function deleteTeamFromDialog() { const team = teamActionTarget.value; closeTeamActions(); if (team) deleteUnclaimedTeam(team) }
+function removeTeamFromDialog() { const team = teamActionTarget.value; closeTeamActions(); if (team) removeTeam(team) }
+
 function openTeamRoster(team) {
   const teamId = team.teamId || team._id
   if (!teamId) return ElMessage.warning('未找到球队信息')
@@ -2894,7 +2912,13 @@ async function deleteUnclaimedTeam(team) {
       registrationId: getRecordId(team),
       confirmText: confirmation.value
     })
-    if (!result?.success) throw new Error(result?.message || '删除队伍失败')
+    if (!result?.success) {
+      if (result.code === 'TEAM_HISTORY_EXISTS' || String(result.message || '').includes('已有比赛或正式名单历史')) {
+        await removeTeam(team)
+        return
+      }
+      throw new Error(result?.message || '删除队伍失败')
+    }
     ElMessage.success(result.message || '未认领球队已删除')
     await Promise.all([loadTournamentTeams(), loadAllTeams()])
   } catch (err) {
