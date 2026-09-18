@@ -83,7 +83,7 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div></div>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table">
             <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="工作人员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="130" />
@@ -94,7 +94,8 @@
         </section>
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
-            <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '正式名单' }}</h2><p>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
+            <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '球员' }}</h2><p>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
+            <el-button type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
           <el-table :data="players" v-loading="loading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
@@ -1183,6 +1184,17 @@
         @success="handleLogoRemoveBgSuccess"
       />
     </el-dialog>
+
+    <el-dialog v-model="showAddStaff" title="添加工作人员" width="500px" :close-on-click-modal="false">
+      <el-form :model="staffForm" label-width="90px">
+        <el-form-item label="姓名" required><el-input v-model="staffForm.name" maxlength="30" /></el-form-item>
+        <el-form-item label="职务" required><el-select v-model="staffForm.type" style="width:100%"><el-option label="领队" value="team_leader" /><el-option label="主教练" value="head_coach" /><el-option label="队医" value="doctor" /><el-option label="工作人员" value="other" /></el-select></el-form-item>
+        <el-form-item label="手机号"><el-input v-model="staffForm.phone" maxlength="20" placeholder="可留空" /></el-form-item>
+        <el-form-item label="身份证"><el-input v-model="staffForm.idCard" maxlength="18" placeholder="可留空" /></el-form-item>
+        <el-form-item label="球衣号码"><el-input-number v-model="staffForm.jerseyNumber" :min="1" :max="99" placeholder="可留空" style="width:100%" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="showAddStaff=false">取消</el-button><el-button type="primary" :loading="staffSubmitting" @click="submitStaff">保存</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1340,6 +1352,9 @@ const maskedPhone = computed(() => {
 })
 const clearingPlayers = ref(false)
 const showAddPlayer = ref(false)
+const showAddStaff = ref(false)
+const staffSubmitting = ref(false)
+const staffForm = ref({ name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null })
 const showBatchImport = ref(false)
 const showBatchAvatarImport = ref(false)
 const isEditingPlayer = ref(false)
@@ -1955,6 +1970,46 @@ async function submitPlayer() {
     ElMessage.error('操作失败: ' + err.message)
   } finally {
     submitting.value = false
+  }
+}
+
+function openAddPlayer() {
+  resetPlayerForm()
+  showAddPlayer.value = true
+}
+
+function openAddStaff() {
+  staffForm.value = { name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null }
+  showAddStaff.value = true
+}
+
+async function submitStaff() {
+  const name = String(staffForm.value.name || '').trim()
+  if (!name) return ElMessage.warning('请输入工作人员姓名')
+  const roleLabels = { team_leader:'领队', head_coach:'主教练', doctor:'队医', other:'工作人员' }
+  staffSubmitting.value = true
+  try {
+    await addRecord('coaches', {
+      teamId,
+      teamCode: teamId,
+      teamName: team.value.name || '',
+      name,
+      type: staffForm.value.type,
+      role: roleLabels[staffForm.value.type] || '工作人员',
+      phone: String(staffForm.value.phone || '').trim(),
+      idCard: String(staffForm.value.idCard || '').trim(),
+      jerseyNumber: Number(staffForm.value.jerseyNumber || 0),
+      source: 'organizer_manual_add',
+      createTime: new Date().toISOString(),
+      updateTime: new Date().toISOString()
+    })
+    ElMessage.success('工作人员已添加')
+    showAddStaff.value = false
+    await loadPlayers()
+  } catch (error) {
+    ElMessage.error(error.message || '添加工作人员失败')
+  } finally {
+    staffSubmitting.value = false
   }
 }
 
