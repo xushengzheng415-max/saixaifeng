@@ -105,7 +105,7 @@ import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, Calendar, Check, CircleCheckFilled, Delete, Grid, Location, Lock, Monitor, Refresh, Search, Setting, SwitchButton, Trophy, WarningFilled } from '@element-plus/icons-vue'
-import { addRecord, deleteRecord, queryById, queryList } from '../../utils/cloud'
+import { addRecord, deleteRecord, getFileUrl, queryById, queryList } from '../../utils/cloud'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
 
 const props = defineProps({ tournamentId: { type: String, required: true } })
@@ -264,7 +264,7 @@ async function load(){
     const ids = scoped.map(row => row.teamId).filter(Boolean)
     const details = ids.length ? await queryList('teams',{ where:{ _id:{ $in:ids } },limit:1000 }) : []
     const lookup = new Map(details.map(row => [String(row._id),row]))
-    teams.value = scoped.map(row => { const team=lookup.get(String(row.teamId)); const logo=String(team?.logoTransparentUrl || team?.logoUrl || team?.logo || team?.teamLogo || team?.avatarUrl || row.logoTransparentUrl || row.logoUrl || row.logo || row.teamLogo || ''); return { id:String(row.teamId),name:String(team?.name || team?.teamName || row.teamName || '未命名球队'),region:String(team?.city || team?.region || ''),logo,logoUrl:logo,logoTransparentUrl:logo } })
+    teams.value = await Promise.all(scoped.map(async row => { const team=lookup.get(String(row.teamId)); const logoRef=String(team?.logoTransparentUrl || team?.logoUrl || team?.logo || team?.teamLogo || team?.logoFileId || team?.logoFileID || team?.avatarUrl || row.logoTransparentUrl || row.logoUrl || row.logo || row.teamLogo || row.logoFileId || ''); const logo=logoRef && !/^https?:\/\//i.test(logoRef) ? await getFileUrl(logoRef) : logoRef; return { id:String(row.teamId),name:String(team?.name || team?.teamName || row.teamName || '未命名球队'),region:String(team?.city || team?.region || ''),logo,logoUrl:logo,logoTransparentUrl:logo } }))
     const saved = await queryList('tournament_groups',{ where:{ tournamentId:props.tournamentId },limit:1000 })
     const current = saved.filter(row => String(row.divisionId || 'default') === divisionId.value && row.type === 'tournament' && row.status !== 'archived')
     if(current.length){ savedGroupCount.value=current.length; configuredGroupSizes.value=current.map(row => Number(row.maxTeams || row.teams?.length || 0)).filter(Boolean); savedTeamsPerGroup.value=Math.max(...configuredGroupSizes.value,4) }
