@@ -1830,6 +1830,112 @@ async function requestTeamDataExportForWorkspace(event, identity) {
   return { success: true, requestId: String(created._id), status: 'requested' }
 }
 
+// 赛事级球队认领码没有逐队 token，因此必须比逐队邀请更严格。
+// 逐队邀请由主办方定向发放，token 本身即是凭据，所以 prebuiltTeamInviteForWorkspace 允许
+// allowedClaimPhones 为空时凭 token 认领；赛事级认领码任何人都能扫到，
+// 因此这里只认「白名单非空且命中本人已验证手机号」，白名单为空一律不列出、也不可认领，
+// 否则报名表没登记负责人手机号的球队会变成“谁扫到谁认领”。
+function claimPhoneAllowed(invite, phone) {
+  const allowed = unique((Array.isArray(invite && invite.allowedClaimPhones) ? invite.allowedClaimPhones : [])
+    .map(value => String(value || '').replace(/\D/g, ''))
+    .filter(value => /^1[3-9]\d{9}$/.test(value)))
+  if (!allowed.length) return false
+  return allowed.indexOf(String(phone || '')) >= 0
+}
+
+async function resolveClaimCode(inviteKey) {
+  const key = String(inviteKey || '').trim()
+  if (!key) throw workspaceError('CLAIM_CODE_REQUIRED', '缺少球队认领码')
+  const rows = await safeGet('tournament_invites', { inviteType: 'tournament_claim_code', inviteKey: key }, 2)
+  const code = rows.filter(item => String(item.status || '') === 'active')[0]
+  if (!code) throw workspaceError('CLAIM_CODE_INVALID', '球队认领码无效或已停用')
+  const expiry = toTime(code.expireAt)
+  if (expiry > 0 && expiry <= Date.now()) throw workspaceError('CLAIM_CODE_EXPIRED', '球队认领码已过期，请联系赛事主办方重新生成')
+  return code
+}
+
+// 一个赛事可能导入上百支待认领球队，分页读取并设置上界，避免单次查询超时。
+async function listClaimableInvites(tournamentId) {
+  const rows = []
+  for (let offset = 0; offset < 500; offset += 100) {
+    let page = []
+    try {
+      const result = await db.collection('team_invitations')
+        .where({ tournamentId, type: 'prebuilt_tournament_team' })
+        .skip(offset)
+        .limit(100)
+        .get()
+      page = result.data || []
+    } catch (error) {
+      console.warn('[getMiniWorkspace] claim invite page skipped:', error.message)
+      break
+    }
+    rows.push.apply(rows, page)
+    if (page.length < 100) break
+  }
+  return rows
+}
+
+async function claimCodeContextForWorkspace(event, identity) {
+  const code = await resolveClaimCode(event.inviteKey || event.c)
+  const tournament = (await safeGet('tournaments', { _id: String(code.tournamentId || '') }, 1))[0]
+  if (!tournament) throw workspaceError('CLAIM_CODE_INVALID', '认领码对应的赛事不存在或已下线')
+  const phone = verifiedUserPhone(identity.user)
+  return {
+    success: true,
+    code: { inviteId: String(code._id || ''), expiresAtText: dateText(code.expireAt) },
+    tournament: {
+      id: String(tournament._id || ''),
+      name: String(tournament.name || ''),
+      organizerName: String(tournament.organizerName || tournament.organizer || ''),
+      registrationDeadlineText: dateText(tournament.registrationDeadline || tournament.signupDeadline),
+      status: String(tournament.status || '')
+    },
+    phoneMasked: maskPhone(phone),
+    needsPhone: !phone
+  }
+}
+
+// 只做发现：列出本次认领码赛事中、手机号命中本人且仍可认领的球队。
+// 列表里的每一项都已经过服务端手机号匹配，前端不得、也不需要再次过滤。
+async function claimableTeamsForWorkspace(event, identity) {
+  const code = await resolveClaimCode(event.inviteKey || event.c)
+  const tournamentId = String(code.tournamentId || '')
+  const tournament = (await safeGet('tournaments', { _id: tournamentId }, 1))[0]
+  if (!tournament) throw workspaceError('CLAIM_CODE_INVALID', '认领码对应的赛事不存在或已下线')
+  const phone = verifiedUserPhone(identity.user)
+  if (!phone) return { success: true, needsPhone: true, tournamentId, teams: [] }
+  const invites = await listClaimableInvites(tournamentId)
+  const teams = []
+  for (const invite of invites) {
+    if (!claimPhoneAllowed(invite, phone)) continue
+    // 只保留 acceptPrebuiltTeamInvite 真正接受的状态，避免列出点了会失败的行。
+    const status = String(invite.status || 'pending')
+    if (['pending', 'review_approved'].indexOf(status) < 0) continue
+    try { assertPrebuiltInviteActive(invite, tournament) } catch (error) { continue }
+    const team = (await safeGet('teams', { _id: String(invite.teamId || '') }, 1))[0]
+    if (!team) continue
+    const claimStatus = String(team.claimStatus || 'unclaimed').toLowerCase()
+    const ownerIds = [team.ownerId, team.ownerUserId, team.claimedByUserId].map(value => String(value || '')).filter(Boolean)
+    const hasOwnership = ownerIds.length > 0 || Boolean(team.orgId && String(team.orgId) !== String(invite.organizerOrgId || ''))
+    const claimedByMe = ownerIds.indexOf(String(identity.user._id || '')) >= 0
+    const claimant = (Array.isArray(invite.claimantCandidates) ? invite.claimantCandidates : [])
+      .find(item => String(item && item.phone || '').replace(/\D/g, '') === phone)
+    teams.push({
+      inviteId: String(invite._id || ''),
+      teamId: String(invite.teamId || ''),
+      teamName: String(team.name || team.teamName || '未命名球队'),
+      divisionName: String(invite.divisionName || ''),
+      claimantRoleLabel: String(claimant && claimant.roleLabel || ''),
+      managerPhoneMasked: maskPhone(String(invite.managerPhone || '')),
+      claimedByMe,
+      requiresReview: !claimedByMe && (claimStatus !== 'unclaimed' || hasOwnership),
+      statusText: claimedByMe ? '已认领' : ((claimStatus !== 'unclaimed' || hasOwnership) ? '需人工核验' : '待认领')
+    })
+  }
+  return { success: true, needsPhone: false, phoneMasked: maskPhone(phone), tournamentId, teams }
+}
+
 async function prebuiltTeamInviteForWorkspace(event, identity) {
   const inviteId = String(event.inviteId || event.token || '')
   if (!inviteId) throw new Error('缺少参赛邀请')
@@ -1891,7 +1997,7 @@ async function transferImportedPlayerDrafts(invite, targetTeamId, identity) {
   const where = batchId ? { importBatchId:batchId } : { sourceTeamId }
   const rows = await safeGet('registration_player_drafts', where, 500)
   const movable = rows.filter(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0)
-  for (const draft of movable) {
+  for (const draft of rows) {
     await db.collection('registration_player_drafts').doc(draft._id).update({ data:{
       teamId:targetTeamId,
       claimedTeamId:targetTeamId,
@@ -1900,8 +2006,19 @@ async function transferImportedPlayerDrafts(invite, targetTeamId, identity) {
       updateTime:db.serverDate()
     } })
   }
-  if (batchId) await db.collection('registration_import_batches').doc(batchId).update({ data:{ claimStatus:'claimed', status:'player_review_pending', claimedTeamId:targetTeamId, claimedByUserId:String(identity.user._id || ''), claimedAt:db.serverDate(), updateTime:db.serverDate() } })
-  if (targetTeamId) await db.collection('teams').doc(targetTeamId).update({ data:{ pendingPlayerDraftCount:movable.length, playerReviewStatus:movable.length ? 'pending' : 'completed', updateTime:db.serverDate() } })
+  const importedPlayers = batchId
+    ? await safeGet('players', { registrationImportBatchId:batchId }, 500)
+    : await safeGet('players', { teamId:sourceTeamId, source:'registration_docx_import_direct' }, 500)
+  if (sourceTeamId && sourceTeamId !== targetTeamId) {
+    const targetTeam = (await safeGet('teams', { _id:targetTeamId }, 1))[0] || {}
+    for (const player of importedPlayers) {
+      await db.collection('players').doc(player._id).update({ data:{ teamId:targetTeamId, teamCode:targetTeamId, teamName:String(targetTeam.name || targetTeam.teamName || player.teamName || ''), updateTime:db.serverDate() } })
+    }
+    const snapshots = await safeGet('roster_snapshots', { tournamentId:String(invite.tournamentId || ''), teamId:sourceTeamId, source:'registration_docx_import_direct' }, 20)
+    for (const snapshot of snapshots) await db.collection('roster_snapshots').doc(snapshot._id).update({ data:{ teamId:targetTeamId, updateTime:db.serverDate() } })
+  }
+  if (batchId) await db.collection('registration_import_batches').doc(batchId).update({ data:{ claimStatus:'claimed', status:'completed', playerReviewStatus:'completed', claimedTeamId:targetTeamId, claimedByUserId:String(identity.user._id || ''), claimedAt:db.serverDate(), updateTime:db.serverDate() } })
+  if (targetTeamId) await db.collection('teams').doc(targetTeamId).update({ data:{ playerCount:importedPlayers.length, pendingPlayerDraftCount:movable.length, playerReviewStatus:movable.length ? 'pending' : 'completed', updateTime:db.serverDate() } })
   if (sourceTeamId && sourceTeamId !== targetTeamId) await db.collection('teams').doc(sourceTeamId).update({ data:{ pendingPlayerDraftCount:0, playerReviewStatus:'transferred', importedDraftsTransferredToTeamId:targetTeamId, updateTime:db.serverDate() } })
   return movable.length
 }
@@ -2688,6 +2805,8 @@ exports.main = async function(event) {
     if (event.action === 'prebuiltTeamInvite') return await prebuiltTeamInviteForWorkspace(Object.assign({}, event, { allowReviewRequired: true }), identity)
     if (event.action === 'acceptPrebuiltTeamInvite') return await acceptPrebuiltTeamInviteForWorkspace(event, identity)
     if (event.action === 'requestPrebuiltTeamClaimReview') return await requestPrebuiltTeamClaimReview(event, identity)
+    if (event.action === 'claimCodeContext') return await claimCodeContextForWorkspace(event, identity)
+    if (event.action === 'claimableTeams') return await claimableTeamsForWorkspace(event, identity)
     if (event.action === 'teamProfile') return await teamProfileForWorkspace(event, identity)
     if (event.action === 'saveTeamProfile') return await saveTeamProfileForWorkspace(event, identity)
     if (event.action === 'teamMembers') return await teamMembersForWorkspace(event, identity)

@@ -10,7 +10,8 @@ const _ = db.command
 
 const SPORT = 'football'
 const REGISTER_PAGE = 'pages/tournament/signup/signup'
-const FLOW_COLLECTIONS = ['tournament_invites', 'team_invitations', 'tournament_tasks', 'service_follow_gates', 'service_account_bindings', 'notification_outbox', 'registration_audit_logs', 'messages', 'registration_import_batches', 'registration_player_drafts']
+const CLAIM_CODE_PAGE = 'pages/team/claim-code/claim-code'
+const FLOW_COLLECTIONS = ['tournament_invites', 'team_invitations', 'tournament_tasks', 'service_follow_gates', 'service_account_bindings', 'notification_outbox', 'registration_audit_logs', 'messages', 'registration_import_batches', 'registration_player_drafts', 'roster_snapshots']
 let collectionsReady = false
 let serviceAccessTokenCache = null
 let miniAccessTokenCache = null
@@ -530,11 +531,16 @@ async function importedIdentityConflicts(identityNumbers) {
   const conflicts = []
   for (let offset = 0; offset < identityNumbers.length; offset += 10) {
     const chunk = identityNumbers.slice(offset, offset + 10)
-    const [players, coaches] = await Promise.all([
+    const digestMap = new Map(chunk.map(identity => [importedIdentityDigest(identity), identity]))
+    const digests = Array.from(digestMap.keys()).filter(Boolean)
+    const [players, coaches, digestPlayers, digestCoaches] = await Promise.all([
       db.collection('players').where({ idCard:_.in(chunk) }).limit(100).get(),
-      db.collection('coaches').where({ idCard:_.in(chunk) }).limit(100).get()
+      db.collection('coaches').where({ idCard:_.in(chunk) }).limit(100).get(),
+      db.collection('players').where({ identityDigest:_.in(digests) }).limit(100).get(),
+      db.collection('coaches').where({ identityDigest:_.in(digests) }).limit(100).get()
     ])
     ;[...(players.data || []), ...(coaches.data || [])].forEach(item => conflicts.push(importIdentity(item.idCard || item.idNumber)))
+    ;[...(digestPlayers.data || []), ...(digestCoaches.data || [])].forEach(item => conflicts.push(digestMap.get(text(item.identityDigest)) || ''))
   }
   return Array.from(new Set(conflicts.filter(Boolean)))
 }
@@ -634,6 +640,12 @@ async function importTeamRegistrationBatch(event) {
   }
 
   const identityConflicts = new Set(await importedIdentityConflicts(Array.from(batchIdentities)))
+  const conflictingPlayers = prepared.flatMap(team => team.players
+    .filter(player => identityConflicts.has(player.identityNumber))
+    .map(player => `${team.name}：${player.name}`))
+  if (conflictingPlayers.length) {
+    return { success:false, code:'IMPORT_PLAYER_IDENTITY_CONFLICT', message:`以下球员证件已存在，不能直接生成正式名单：${conflictingPlayers.slice(0, 5).join('、')}` }
+  }
 
   const existingRelations = (await db.collection('tournament_teams').where({ tournamentId, divisionId }).limit(500).get()).data || []
   const activeRelations = existingRelations.filter(item => !['cancelled','withdrawn','rejected','replaced'].includes(text(item.status).toLowerCase()))
@@ -660,7 +672,7 @@ async function importTeamRegistrationBatch(event) {
       const importBatchAdded = await db.collection('registration_import_batches').add({ data:{
         sport:SPORT, orgId:actor.orgId, tournamentId, divisionId, divisionName:text(division.name),
         sourceFileId:team.sourceFileId, sourceFileName:team.sourceFileName,
-        importMode:'basic', immutable:true, status:'awaiting_claim', claimStatus:'unclaimed', playerReviewStatus:'pending',
+        importMode:'basic', immutable:true, status:'completed', claimStatus:'unclaimed', playerReviewStatus:'completed',
         snapshot:{
           team:{ name:team.name, shortName:team.shortName, contactName:team.contactName, contactPhoneMasked:team.contactPhone ? team.contactPhone.slice(0,3) + '****' + team.contactPhone.slice(-4) : '', logoFileId:team.logoFileId, kitColors:team.kitColors || null, kitColorLabels:team.kitColorLabels || null },
           staff:team.staff.map(person => ({ name:person.name, roleType:person.roleType, roleLabel:person.roleLabel, phoneMasked:person.phone ? person.phone.slice(0,3) + '****' + person.phone.slice(-4) : '', identityMasked:importedIdentityMask(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId, jerseyNumber:person.jerseyNumber || '', jerseyName:person.jerseyName || '', dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '' })),
@@ -673,17 +685,18 @@ async function importTeamRegistrationBatch(event) {
       artifacts.push({ collection:'registration_import_batches', id:importBatchId })
       const teamAdded = await db.collection('teams').add({ data:{
         orgId:actor.orgId, name:team.name, shortName:team.shortName, logo:team.logoFileId, logoUrl:team.logoFileId, logoFileID:team.logoFileId,
-        contactName:team.contactName, managerName:team.contactName, coachName:headCoach ? headCoach.name : '', claimStatus:'unclaimed',
+        contactName:team.contactName, contactPhone:team.contactPhone, managerName:team.contactName, managerPhone:team.contactPhone, coachName:headCoach ? headCoach.name : '', claimStatus:'unclaimed',
         ...(team.kitColors ? { kitColors:team.kitColors, kitColorLabels:team.kitColorLabels || {}, kitColorsSource:'registration_docx_import', kitColorsImportedAt:db.serverDate() } : {}),
         source:'registration_docx_import', sourceType:'线下报名表', registrationImportBatchId:importBatchId, registrationSourceFileId:team.sourceFileId, registrationSourceFileName:team.sourceFileName,
         claimantCandidates:team.claimantCandidates.map(candidate => ({ role:candidate.role, roleLabel:candidate.roleLabel, name:candidate.name })),
-        playerCount:0, pendingPlayerDraftCount:team.players.length, staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
+        playerCount:team.players.length, pendingPlayerDraftCount:0, playerReviewStatus:'completed', staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
       } })
       const teamId = text(teamAdded._id)
       artifacts.push({ collection:'teams', id:teamId })
 
       let sequence = 1
       const linkedCoachIds = new Map()
+      const formalPlayerIds = []
       for (const person of team.staff) {
         const suffix = person.roleType === 'head_coach' ? 'A' : 'B'
         const added = await db.collection('coaches').add({ data:{
@@ -699,7 +712,6 @@ async function importTeamRegistrationBatch(event) {
         sequence += 1
       }
       for (const person of team.players) {
-        const identityConflict = identityConflicts.has(person.identityNumber)
         const linkedCoachId = person.dualRoleType ? text(linkedCoachIds.get(person.identityNumber)) : ''
         const added = await db.collection('registration_player_drafts').add({ data:{
           sport:SPORT, orgId:actor.orgId, tournamentId, divisionId, importBatchId, sourceTeamId:teamId, teamId,
@@ -707,31 +719,53 @@ async function importTeamRegistrationBatch(event) {
           identityDigest:importedIdentityDigest(person.identityNumber), identityMasked:importedIdentityMask(person.identityNumber),
           gender:person.gender || 'male', birthDate:person.birthDate, nativePlace:person.nativePlace,
           photoUrl:person.photoFileId, photoFileID:person.photoFileId, photoProcessingStatus:person.photoProcessingStatus,
-          reviewStatus:identityConflict ? 'conflict' : 'pending', conflictType:identityConflict ? 'identity_already_exists' : '',
-          conflictReason:identityConflict ? '证件号码已存在，禁止自动合并' : '', source:'registration_docx_import',
+          reviewStatus:'confirmed', conflictType:'', conflictReason:'', source:'registration_docx_import',
           dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '', isAlsoStaff:Boolean(person.dualRoleType), linkedCoachId, eligibilityReviewRequired:person.eligibilityReviewRequired === true,
           registrationSourceFileId:team.sourceFileId, immutableSource:true, order:person.order,
-          creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
+          creatorId:actor.userId, reviewedByUserId:actor.userId, reviewedAt:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate()
         } })
         const draftId = text(added._id)
         artifacts.push({ collection:'registration_player_drafts', id:draftId })
-        if (linkedCoachId) await db.collection('coaches').doc(linkedCoachId).update({ data:{ linkedPlayerDraftId:draftId, updateTime:db.serverDate() } })
+        const playerAdded = await db.collection('players').add({ data:{
+          orgId:actor.orgId, teamId, teamCode:teamId, teamName:team.name,
+          playerId:`${teamId}${String(sequence).padStart(3, '0')}C`, name:person.name, jerseyNumber:Number(person.jerseyNumber || 0), jerseyName:person.jerseyName,
+          gender:person.gender || 'male', nationality:'中国', birthDate:person.birthDate, nativePlace:person.nativePlace,
+          photoUrl:person.photoFileId, photoFileID:person.photoFileId, photoProcessingStatus:person.photoProcessingStatus,
+          identityDigest:importedIdentityDigest(person.identityNumber), identityNumberMasked:importedIdentityMask(person.identityNumber), identityStatus:'not_verified', identityVerificationLabel:'待人证核验',
+          profileStatus:'pending', source:'registration_docx_import_direct', importDraftId:draftId, registrationImportBatchId:importBatchId, registrationSourceFileId:team.sourceFileId,
+          dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '', isAlsoStaff:Boolean(person.dualRoleType), linkedCoachId, eligibilityReviewRequired:person.eligibilityReviewRequired === true,
+          creatorId:actor.userId, registerTime:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate()
+        } })
+        const formalPlayerId = text(playerAdded._id)
+        artifacts.push({ collection:'players', id:formalPlayerId })
+        formalPlayerIds.push(formalPlayerId)
+        await db.collection('registration_player_drafts').doc(draftId).update({ data:{ confirmedPlayerId:formalPlayerId, updateTime:db.serverDate() } })
+        if (linkedCoachId) await db.collection('coaches').doc(linkedCoachId).update({ data:{ linkedPlayerDraftId:draftId, linkedPlayerId:formalPlayerId, isAlsoPlayer:true, updateTime:db.serverDate() } })
         sequence += 1
         playerCount += 1
       }
-      await db.collection('registration_import_batches').doc(importBatchId).update({ data:{ teamId, updateTime:db.serverDate() } })
+      await db.collection('registration_import_batches').doc(importBatchId).update({ data:{ teamId, confirmedPlayerCount:formalPlayerIds.length, updateTime:db.serverDate() } })
 
       const manualReviewRequired = existingDivisionNames.has(team.nameKey)
       const relationAdded = await db.collection('tournament_teams').add({ data:{
         tournamentId, divisionId, divisionName:text(division.name), teamId, teamName:team.name, teamLogo:team.logoFileId, orgId:actor.orgId, teamOrgId:actor.orgId,
         creatorId:actor.userId, status:'invited', type:'invite', source:'registration_docx_import', joinSource:'organizer_import', claimStatus:'pending_confirmation',
-        contactName:team.contactName, contactPhone:team.contactPhone, rosterStatus:'draft', rosterPlayerCount:0, importedPlayerDraftCount:team.players.length, playerReviewStatus:'pending', dualRoleCount:Number(team.dualRoleCount || 0),
+        contactName:team.contactName, contactPhone:team.contactPhone, rosterStatus:'approved', rosterPlayerCount:formalPlayerIds.length, importedPlayerDraftCount:0, playerReviewStatus:'completed', dualRoleCount:Number(team.dualRoleCount || 0),
         ...(team.kitColors ? { kitColors:team.kitColors, kitColorLabels:team.kitColorLabels || {}, kitColorsSource:'registration_docx_import', kitColorsImportedAt:db.serverDate() } : {}),
         registrationImportBatchId:importBatchId, registrationSourceFileId:team.sourceFileId, riskStatus:manualReviewRequired ? '疑似同名球队' : '', manualReviewRequired,
         inviteTime:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate()
       } })
       const tournamentTeamId = text(relationAdded._id)
       artifacts.push({ collection:'tournament_teams', id:tournamentTeamId })
+
+      const rosterAdded = await db.collection('roster_snapshots').add({ data:{
+        tournamentId, teamId, divisionId, divisionName:text(division.name), orgId:actor.orgId,
+        playerIds:formalPlayerIds, version:1, status:'approved', source:'registration_docx_import_direct', autoApproved:true,
+        approvedByUserId:actor.userId, approvedAt:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate()
+      } })
+      const rosterSnapshotId = text(rosterAdded._id)
+      artifacts.push({ collection:'roster_snapshots', id:rosterSnapshotId })
+      await db.collection('tournament_teams').doc(tournamentTeamId).update({ data:{ rosterSnapshotId, updateTime:db.serverDate() } })
 
       const inviteAdded = await db.collection('team_invitations').add({ data:{
         type:'prebuilt_tournament_team', purpose:'tournament_registration', status:'pending', tournamentId, divisionId, teamId, tournamentTeamId,
@@ -744,10 +778,10 @@ async function importTeamRegistrationBatch(event) {
       const inviteId = text(inviteAdded._id)
       artifacts.push({ collection:'team_invitations', id:inviteId })
       await db.collection('tournament_teams').doc(tournamentTeamId).update({ data:{ claimInviteId:inviteId, lastInviteTime:db.serverDate(), updateTime:db.serverDate() } })
-      results.push({ clientKey:team.clientKey, teamId, teamName:team.name, tournamentTeamId, inviteId, importBatchId, path:`/pages/team/prebuilt-invite/prebuilt-invite?inviteId=${encodeURIComponent(inviteId)}`, playerCount:team.players.length, pendingPlayerDraftCount:team.players.length, staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), duplicatePlayerCount:Number(team.duplicatePlayerCount || 0), warnings:Number(team.duplicatePlayerCount || 0) ? [`报名表有 ${Number(team.duplicatePlayerCount)} 条重复人员，已各保留 1 条球员资料`] : [], manualReviewRequired })
+      results.push({ clientKey:team.clientKey, teamId, teamName:team.name, tournamentTeamId, inviteId, importBatchId, rosterSnapshotId, path:`/pages/team/prebuilt-invite/prebuilt-invite?inviteId=${encodeURIComponent(inviteId)}`, playerCount:formalPlayerIds.length, pendingPlayerDraftCount:0, staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), duplicatePlayerCount:Number(team.duplicatePlayerCount || 0), warnings:Number(team.duplicatePlayerCount || 0) ? [`报名表有 ${Number(team.duplicatePlayerCount)} 条重复人员，已各保留 1 条球员资料`] : [], manualReviewRequired })
     }
     await addAudit('team_registration_docx_batch_imported', { tournamentId, divisionId, actorUserId:actor.userId, actorOrgId:actor.orgId, detail:{ teamCount:results.length, playerCount, dualRoleCount:prepared.reduce((sum, team) => sum + Number(team.dualRoleCount || 0), 0), duplicatePlayerCount:prepared.reduce((sum, team) => sum + Number(team.duplicatePlayerCount || 0), 0), source:'registration_docx_import' } })
-    return { success:true, message:`已创建 ${results.length} 支待认领球队和 ${playerCount} 条待确认球员资料`, data:{ teams:results, playerCount, playerMode:'draft' } }
+    return { success:true, message:`已创建 ${results.length} 支待认领球队、${playerCount} 名正式球员和本届正式名单`, data:{ teams:results, playerCount, playerMode:'formal', rosterMode:'approved' } }
   } catch (error) {
     await rollbackImportedArtifacts(artifacts)
     throw error
@@ -894,9 +928,100 @@ async function createTargetedRegistrationLink(event) {
   return { success:true, message:testOnly ? '球队邀约体验版二维码已生成' : '球队邀约正式二维码和完整链接已生成', data:{ inviteId, path:`/pages/tournament/signup/signup?inviteKey=${encodeURIComponent(inviteKey)}`, urlLink, qrCodeUrl, envVersion:actualVersion, testOnly, longTerm:true, intendedTeamName:'', divisionName:'报名时选择组别', availableDivisions:openDivisions.map(item => ({ id:item._id || item.id, name:text(item.name || item.divisionName) })), expiresAt:'' } }
 }
 
+// 与 organizerClaimInvite / applyTournament / clearTournamentTeams / webLoginApi 保持同一判定。
+// 云函数各自独立打包、无法共享模块，因此沿用本仓库既有的“每个函数内保留同一份锁定判定”约定；
+// 修改任一处的判定语义时必须同步其余函数，否则会出现“某入口已锁定、某入口仍可写”的裂缝。
+function competitionPlanLocked(tournament) {
+  if (!tournament) return false
+  if (tournament.competitionPlanLocked === true || tournament.finalPlanLocked === true ||
+    ['locked', 'match_management', 'in_progress', 'completed'].includes(text(tournament.competitionPlanStatus).toLowerCase())) return true
+  return (Array.isArray(tournament.divisions) ? tournament.divisions : []).some(function(division) {
+    return division && (division.competitionPlanLocked === true || division.finalPlanLocked === true ||
+      ['locked', 'match_management', 'in_progress', 'completed'].includes(text(division.competitionPlanStatus).toLowerCase()))
+  })
+}
+
+// 与 organizerClaimInvite.inviteExpiry 同一口径：报名截止 / 报名结束 / 赛事结束，缺失时回退 30 天。
+function claimCodeExpireAt(tournament) {
+  const explicit = dateValue(tournament && (tournament.registrationDeadline || tournament.signupDeadline || tournament.endDate))
+  if (explicit > 0) return explicit
+  return Date.now() + 30 * 24 * 60 * 60 * 1000
+}
+
+async function findReusableClaimCode(tournamentId, orgId) {
+  const result = await db.collection('tournament_invites')
+    .where({ sport: SPORT, inviteType: 'tournament_claim_code', tournamentId, status: 'active' })
+    .limit(5)
+    .get()
+  const now = Date.now()
+  return (result.data || []).find(function(row) {
+    if (text(row.organizerOrgId) !== text(orgId)) return false
+    const rowExpire = dateValue(row.expireAt)
+    return rowExpire <= 0 || rowExpire > now
+  }) || null
+}
+
+function claimCodeResult(record, tournament, expiresAt) {
+  const inviteKey = text(record && record.inviteKey)
+  return {
+    inviteId: text(record && record._id),
+    inviteKey,
+    path: `${CLAIM_CODE_PAGE}?c=${encodeURIComponent(inviteKey)}`,
+    urlLink: text(record && record.urlLink),
+    qrCodeUrl: text(record && record.qrCodeUrl),
+    tournamentId: text(tournament && tournament._id),
+    tournamentName: text(tournament && tournament.name),
+    expiresAt: new Date(expiresAt).toISOString()
+  }
+}
+
+// 赛事级球队认领码：一个赛事一个码，供主办方群发或张贴。
+// 码本身不承载授权——球队归属判定仍由 getMiniWorkspace 按 allowedClaimPhones 逐条校验，
+// 因此码即使被转发给无关人员，也不会泄露或转移任何球队。
+async function createTournamentClaimCode(event) {
+  const actor = await webActor(event)
+  if (!actor) return { success:false, code:'AUTH_REQUIRED', message:'登录会话或机构信息已失效，请重新登录' }
+  const tournamentId = text(event.tournamentId)
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament || recordOrgId(tournament) !== actor.orgId) return { success:false, code:'TOURNAMENT_SCOPE_DENIED', message:'赛事不存在或无权生成球队认领码' }
+  if (competitionPlanLocked(tournament)) return { success:false, code:'COMPETITION_PLAN_LOCKED', message:'竞赛方案已确认，不能生成球队认领码' }
+  const expiresAt = claimCodeExpireAt(tournament)
+  const actualVersion = envVersion(event.envVersion)
+  const testOnly = actualVersion !== 'release'
+  // 同一赛事只保留一个可用认领码：已存在未过期、同机构的直接复用，
+  // 避免反复点击让多条有效码并存，也保证已群发或已张贴的码继续可用。
+  const reusable = await findReusableClaimCode(tournamentId, actor.orgId)
+  const reusableUsable = reusable && text(reusable.qrCodeUrl) && (testOnly || text(reusable.urlLink))
+  if (reusableUsable) {
+    return { success:true, message:'已复用当前赛事有效的球队认领码', data:Object.assign(claimCodeResult(reusable, tournament, dateValue(reusable.expireAt) || expiresAt), { envVersion:actualVersion, testOnly }) }
+  }
+  const inviteKey = reusable ? text(reusable.inviteKey) : randomKey(16)
+  const codeBuffer = await miniProgramCode({ scene:`c=${inviteKey}`, page:CLAIM_CODE_PAGE, width:Number(event.width || 300), envVersion:actualVersion, checkPath:!testOnly })
+  const cloudPath = `football/tournament-claim-codes/${tournamentId}/${inviteKey}-${actualVersion}.png`
+  const uploaded = await cloud.uploadFile({ cloudPath, fileContent:codeBuffer })
+  const urls = await cloud.getTempFileURL({ fileList:[uploaded.fileID] })
+  const qrCodeUrl = urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || ''
+  const urlLink = testOnly ? '' : await directMiniProgramUrlLink(CLAIM_CODE_PAGE, `c=${encodeURIComponent(inviteKey)}`, { envVersion:actualVersion, expiresAt })
+  const payload = {
+    sport:SPORT, inviteType:'tournament_claim_code', tournamentId, tournamentName:text(tournament.name),
+    organizerOrgId:actor.orgId, createBy:actor.userId, inviteKey, status:'active', page:CLAIM_CODE_PAGE, longTerm:true,
+    qrCodeFileId:uploaded.fileID, qrCodeUrl, urlLink, envVersion:actualVersion, expireAt:new Date(expiresAt), updateTime:db.serverDate()
+  }
+  let inviteId = text(reusable && reusable._id)
+  if (inviteId) await db.collection('tournament_invites').doc(inviteId).update({ data:payload })
+  else {
+    const created = await db.collection('tournament_invites').add({ data:Object.assign({}, payload, { createTime:db.serverDate() }) })
+    inviteId = text(created._id)
+  }
+  await addAudit('tournament_claim_code_created', { tournamentId, inviteId, actorUserId:actor.userId, actorOrgId:actor.orgId, detail:{ envVersion:actualVersion, reused:Boolean(reusable), expiresAt:new Date(expiresAt).toISOString() } })
+  return { success:true, message:testOnly ? '球队认领码体验版已生成' : '球队认领码正式版已生成', data:Object.assign(claimCodeResult({ _id:inviteId, inviteKey, qrCodeUrl, urlLink }, tournament, expiresAt), { envVersion:actualVersion, testOnly }) }
+}
+
 async function getInvitation(event) {
   const invite = await invitationByKey(event.inviteKey)
-  if (!invite || invite.status !== 'active') return { success: false, code: 'INVITE_INVALID', message: '报名邀请无效或已重置' }
+  // 认领码与报名邀请共用 tournament_invites 集合，但语义不同：认领码只用于小程序认领页，
+  // 不能被当作报名邀请打开，否则会出现“用认领码进入报名流程”的越权路径。
+  if (!invite || invite.status !== 'active' || text(invite.inviteType) === 'tournament_claim_code') return { success: false, code: 'INVITE_INVALID', message: '报名邀请无效或已重置' }
   const tournament = await getDocument('tournaments', invite.tournamentId)
   if (!tournament) return { success: false, code: 'TOURNAMENT_NOT_FOUND', message: '赛事不存在' }
   const divisions = (await db.collection('divisions').where({ tournamentId: invite.tournamentId }).limit(100).get()).data || []
@@ -1875,6 +2000,7 @@ exports.main = async (event) => {
     if (action === 'generateTeamInviteCode') return await generateTeamInviteCode(event)
     if (action === 'ensureInvite') return await ensureInvite(event)
     if (action === 'createTargetedRegistrationLink') return await createTargetedRegistrationLink(event)
+    if (action === 'createTournamentClaimCode') return await createTournamentClaimCode(event)
     if (action === 'getInvitation') return await getInvitation(event)
     if (action === 'createFollowGate') return await createFollowGate(event)
     if (action === 'createOrganizerServiceGate') return await createOrganizerServiceGate(event)

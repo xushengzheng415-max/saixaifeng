@@ -91,6 +91,7 @@
         "data-package/data-package",
         "data-package-events/data-package-events",
         "prebuilt-invite/prebuilt-invite",
+        "claim-code/claim-code",
         "claim-conflict/claim-conflict",
         "create-team-invite/create-team-invite",
         "profile/profile",

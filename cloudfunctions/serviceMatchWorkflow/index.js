@@ -9,7 +9,7 @@ const _ = db.command
 
 const CLAIM_TTL_MS = 48 * 60 * 60 * 1000
 const ACTIVE_CLAIM_STATUS = 'claimed'
-const ROSTER_READY_STATUS = ['approved', 'confirmed']
+const ROSTER_READY_STATUS = ['approved', 'confirmed', 'locked']
 const REFEREE_EVENT_TYPES = ['goal', 'yellow_card', 'red_card', 'substitution', 'stoppage_time', 'other']
 
 const OCR_HOST = 'ocr.tencentcloudapi.com'
@@ -1325,8 +1325,25 @@ function sanitizePlayer(player) {
 }
 
 async function getApprovedRoster(tournamentId, teamId, match) {
+  const snapshotResult = await db.collection('roster_snapshots').where({ tournamentId, teamId }).limit(20).get()
+  const matchDivisionId = String(match && (match.divisionId || match.division) || '')
+  const snapshots = listData(snapshotResult).filter(function(item) {
+    if (ROSTER_READY_STATUS.indexOf(String(item.status || '')) < 0) return false
+    const snapshotDivisionId = String(item.divisionId || item.division || '')
+    return !matchDivisionId || !snapshotDivisionId || snapshotDivisionId === matchDivisionId
+  }).sort(function(a, b) {
+    return new Date(b.updateTime || b.createTime || 0).getTime() - new Date(a.updateTime || a.createTime || 0).getTime()
+  })
+  if (snapshots.length) {
+    const snapshot = snapshots[0]
+    const ids = Array.isArray(snapshot.playerIds) ? snapshot.playerIds.map(String).filter(Boolean) : []
+    const playerResult = ids.length ? await db.collection('players').where({ _id:_.in(ids) }).limit(500).get() : { data:[] }
+    const playerMap = new Map(listData(playerResult).map(function(player) { return [String(player._id), player] }))
+    return Object.assign({}, snapshot, { players:ids.map(function(id) { return playerMap.get(id) }).filter(Boolean) })
+  }
+
   const result = await db.collection('rosters').where({ tournamentId, teamId }).limit(20).get()
-  let rosters = listData(result).filter(function(item) {
+  const rosters = listData(result).filter(function(item) {
     return ROSTER_READY_STATUS.indexOf(item.status) >= 0
   })
   if (rosters.length === 0) return null
@@ -1464,6 +1481,8 @@ async function submitLineup(openId, event) {
   const substituteIds = requestedSubstituteIds.length ? Array.from(new Set(requestedSubstituteIds)) : Object.keys(rosterMap).filter(function(id) { return uniqueIds.indexOf(id) < 0 })
   if (substituteIds.some(function(id) { return !rosterMap[id] || uniqueIds.indexOf(id) >= 0 })) return fail('替补名单包含无效或重复球员', 'SUBSTITUTE_PLAYER_INVALID')
   const substitutes = substituteIds.map(function(id) { return rosterMap[id] })
+  const identityPending = starters.concat(substitutes).filter(function(player) { return !identityReady(player) })
+  if (identityPending.length) return fail('阵容中有球员尚未完成人证核验', 'PLAYER_IDENTITY_NOT_READY')
 
   const previousLineup = match[lineupField(side)] || {}
   const version = Number(previousLineup.version || 0) + 1
