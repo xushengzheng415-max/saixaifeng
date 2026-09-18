@@ -157,22 +157,22 @@ const saving = ref(false)
 const confirming = ref(false)
 const renderVersion = ref(0)
 let drawChannel = null
-let projectionTimer = null
 
 function drawChannelKey() { return `sxf-draw-screen:${props.tournamentId}:${divisionId.value}` }
 function screenConfigKey() { return `${drawChannelKey()}:config` }
 const screenAddress = computed(() => {
-  const params = new URLSearchParams({ divisionId: divisionId.value, divisionName: divisionName.value, mode: 'quick', format: 'group', theme: screenConfig.value.theme, showProgress: screenConfig.value.showProgress ? '1' : '0', showSlotNumber: screenConfig.value.showSlotNumber ? '1' : '0' })
+  const params = new URLSearchParams({ divisionId: divisionId.value, divisionName: divisionName.value, tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', mode: 'quick', format: 'group', theme: screenConfig.value.theme, showProgress: screenConfig.value.showProgress ? '1' : '0', showSlotNumber: screenConfig.value.showSlotNumber ? '1' : '0' })
   if (screenConfig.value.title) params.set('title', screenConfig.value.title)
   return `https://screen.sxffootball.cn/draw/${encodeURIComponent(props.tournamentId)}?${params.toString()}`
 })
 function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved } } catch {} }
 function saveScreenConfig() { try { localStorage.setItem(screenConfigKey(), JSON.stringify(screenConfig.value)) } catch {}; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
 async function copyScreenLink() { try { await navigator.clipboard.writeText(screenAddress.value); ElMessage.success('大屏链接已复制') } catch { ElMessage.warning(`请手动复制：${screenAddress.value}`) } }
-function publishScreenState() {
-  const state = { groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name } : null) })), updatedAt: Date.now() }
+async function publishScreenState() {
+  const state = { title: screenConfig.value.title || tournament.value.name || '赛事抽签', tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', divisionName: divisionName.value, status: groups.value.flatMap(group => group.slots).filter(Boolean).length ? '抽签进行中' : '等待抽签开始', groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name, logo: team.logo || team.logoUrl || '' } : null) })), updatedAt: Date.now() }
   screenGroups.value = state.groups
   try { localStorage.setItem(drawChannelKey(), JSON.stringify(state)); drawChannel?.postMessage(state) } catch {}
+  try { const authToken = localStorage.getItem('authToken') || ''; if (authToken) await fetch('https://screen.sxffootball.cn/screen-api/state', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` }, body: JSON.stringify(state), keepalive: true }) } catch {}
 }
 function projectScreen() {
   loadScreenConfig()
@@ -181,11 +181,6 @@ function projectScreen() {
   publishScreenState()
 }
 
-function scheduleScreenPersist() {
-  if (isScreen.value) return
-  window.clearTimeout(projectionTimer)
-  projectionTimer = window.setTimeout(() => { persistGroups('draft').catch(() => {}) }, 450)
-}
 
 function makeGroups(){
   return Array.from({ length: groupCount.value }, (_,index) => ({ name:`${String.fromCharCode(65 + index)}组`, code:String.fromCharCode(65 + index), slots:Array(groupSizes.value[index] || teamsPerGroup.value).fill(null) }))
@@ -208,7 +203,6 @@ function commitGroups(){
   componentInstance?.update?.()
   nextTick(() => componentInstance?.update?.())
   publishScreenState()
-  scheduleScreenPersist()
 }
 const assigned = computed(() => groups.value.flatMap(group => group.slots).filter(Boolean).length)
 const pool = computed(() => teams.value.filter(team => !groups.value.some(group => group.slots.some(slot => slot?.id === team.id))))
