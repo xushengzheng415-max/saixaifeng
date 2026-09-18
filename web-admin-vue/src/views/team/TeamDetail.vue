@@ -82,6 +82,16 @@
           </div>
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
+        <section class="synthetic-player-panel staff-roster-panel">
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div></div>
+          <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table">
+            <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="工作人员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
+            <el-table-column prop="name" label="姓名" min-width="130" />
+            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼球员</el-tag></template></el-table-column>
+            <el-table-column label="出生日期" width="130"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+          </el-table>
+        </section>
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
             <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '正式名单' }}</h2><p>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
@@ -101,7 +111,7 @@
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
-            <el-table-column label="操作" width="86" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button></template></el-table-column>
+            <el-table-column label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
         </section>
         <section v-if="importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
@@ -1278,6 +1288,7 @@ function onCityChange() {
 }
 const team = ref(qaTeam || {})
 const players = ref([])
+const staffMembers = ref([])
 const importedDraftPlayers = ref([])
 const kitSaving = ref(false)
 const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
@@ -3578,10 +3589,21 @@ async function loadPlayers() {
   try {
     // 同时查询 teamId 和 teamCode，合并去重
     // 因为历史数据有的用 teamId，有的用 teamCode
-    const [byTeamId, byTeamCode] = await Promise.all([
+    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode] = await Promise.all([
       queryList('players', { where: { teamId: teamId } }),
-      queryList('players', { where: { teamCode: teamId } })
+      queryList('players', { where: { teamCode: teamId } }),
+      queryList('coaches', { where: { teamId: teamId } }),
+      queryList('coaches', { where: { teamCode: teamId } })
     ])
+
+    const staffMap = new Map()
+    ;[...(staffByTeamId || []), ...(staffByTeamCode || [])].forEach(person => { if (person?._id) staffMap.set(String(person._id), person) })
+    staffMembers.value = await Promise.all(Array.from(staffMap.values()).map(async person => {
+      if (person.photoUrl && person.photoUrl.startsWith('cloud://')) {
+        try { return { ...person, photoUrl: await getFileUrl(person.photoUrl) } } catch { return person }
+      }
+      return person
+    }))
 
     // 合并并去重（按 _id）
     const playerMap = new Map()
@@ -3628,6 +3650,18 @@ async function loadPlayers() {
   }
 }
 
+async function deletePlayer(player) {
+  if (!player?._id) return
+  try {
+    await ElMessageBox.confirm(`确定删除球员“${player.name || '未命名'}”吗？删除后不可恢复。`, '删除球员', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
+    await deleteRecord('players', player._id)
+    players.value = players.value.filter(item => String(item._id) !== String(player._id))
+    ElMessage.success('球员已删除')
+  } catch (error) {
+    if (!['cancel', 'close'].includes(error)) ElMessage.error(error.message || '删除球员失败')
+  }
+}
+
 function playerProfileLabel(player) {
   const identityStatus = String(player?.identityStatus || '').toLowerCase()
   if (!['verified', 'approved', 'complete'].includes(identityStatus)) return '待人证核验'
@@ -3658,10 +3692,10 @@ async function reviewPlayer(player) {
 
 function playerIdentityLabel(player) {
   const explicit = String(player?.dualRoleLabel || '').trim()
-  if (explicit) return explicit.startsWith('球员') ? explicit : `球员／${explicit.replace(/^兼/, '')}`
+  if (explicit) return explicit
   const role = String(player?.dualRoleType || '').trim()
-  const roleLabels = { head_coach_player: '教练', team_leader_player: '领队', doctor_player: '队医' }
-  return roleLabels[role] ? `球员／${roleLabels[role]}` : '球员'
+  const roleLabels = { head_coach_player: '主教练兼球员', team_leader_player: '领队兼球员', doctor_player: '队医兼球员' }
+  return roleLabels[role] || '球员'
 }
 
 function playerProfileTagType(player) {
