@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!modeOverview && !professionalFlow && !drawBlocked" class="draw-projection-actions"><el-button type="success" plain @click="openGenericProjection"><el-icon><Monitor /></el-icon>打开抽签投屏</el-button><el-button type="success" @click="projectGenericStage"><el-icon><Picture /></el-icon>同步当前画面</el-button></div>
+  <div v-if="!modeOverview && !professionalFlow && !quickHybridFlow && !quickTournamentFlow && !quickResultFlow && !quickConfigFlow && !drawBlocked" class="draw-projection-actions"><el-button type="success" plain @click="openGenericProjection"><el-icon><Monitor /></el-icon>打开抽签投屏</el-button><el-button type="success" @click="projectGenericStage"><el-icon><Picture /></el-icon>同步当前画面</el-button></div>
   <section v-if="!modeOverview && !drawPrerequisitesReady" class="draw-requirement-state"><el-icon class="is-loading"><Loading /></el-icon><h2>正在核对抽签条件</h2></section>
   <section v-else-if="drawBlocked" class="draw-requirement-state"><el-icon><Lock /></el-icon><h2>暂不能抽签与分组</h2><p>当前组别参赛球队 {{ activeApprovedTeamCount }} 支，赛制要求 {{ activeRequiredTeamCount }} 支，尚未满足抽签与分组条件。</p><el-progress :percentage="drawRequirementProgress" /><small class="draw-requirement-note">本页只负责抽签与分组，参赛球队数量满足赛制要求后方可开始。</small></section>
   <QuickHybridConsole v-else-if="quickHybridFlow" :tournament-id="tournamentId" />
