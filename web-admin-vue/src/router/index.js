@@ -358,6 +358,13 @@ const routes = [
     ]
   },
   {
+    path: '/tournaments/:id/pairings',
+    name: 'PairingResult',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '对阵结果', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/PairingResult.vue') }]
+  },
+  {
     path: '/tournaments/:id/matches',
     name: 'TournamentMatchManagement',
     component: () => import('../views/layout/LayoutView.vue'),
