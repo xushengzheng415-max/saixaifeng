@@ -7,9 +7,9 @@
 
     <section v-if="showWorkbenchCanvas" class="schedule-workbench-overlay">
       <header class="workbench-heading"><div><el-button text class="workbench-back" @click="returnScheduleOverview">←　{{ scheduleReturnLabel }}</el-button><span>赛事空间　/　赛程管理　/　赛程地图</span><h1>赛程地图</h1></div><div><select v-if="!isJointSchedule" v-model="divisionSelectorValue" class="schedule-native-select" @change="handleDivisionChange"><option v-for="division in divisionOptions" :key="division.id" :value="division.id">{{ division.name }}</option></select><el-tag v-else type="success" effect="plain">全部{{ divisionOptions.length }}个组别 · {{ allTournamentMatches.length }}场</el-tag><el-tag type="primary" effect="plain">赛程草稿</el-tag></div></header>
-      <section v-if="matches.length === 0" class="workbench-empty"><el-icon><MapLocation /></el-icon><h2>{{ activeDivision.name }}尚未生成赛程</h2><p>当前没有已配置的比赛场地、日期或时段。请先进入设置，输入真实场地名称并添加实际开赛时段。</p><div><el-button @click="returnScheduleOverview">{{ scheduleReturnLabel }}</el-button><el-button type="primary" @click="openScheduleConfigDialog('basic')">设置场地与生成赛程</el-button></div></section>
+        <section v-if="matches.length === 0" class="workbench-empty"><el-icon><MapLocation /></el-icon><h2>{{ activeDivision.name }}尚未生成对阵</h2><p>请先在抽签结果中确认对阵，再进入赛程管理补齐比赛时间和场地。</p><div><el-button @click="returnScheduleOverview">{{ scheduleReturnLabel }}</el-button><el-button type="primary" @click="router.push({ path:`/tournaments/${tournamentId}/draw`,query:{ divisionId:activeDivisionId } })">进入抽签结果</el-button></div></section>
       <template v-else>
-        <div class="saved-schedule-config"><span><el-icon><CircleCheck /></el-icon><strong>已保存并复用赛程设置</strong><small>{{ savedScheduleConfigSummary }}</small></span><el-button plain type="success" @click="openScheduleConfigDialog('preview')">查看或修改已保存设置</el-button></div>
+        <div class="saved-schedule-config"><span><el-icon><CircleCheck /></el-icon><strong>{{ workbenchStats.pending ? `已生成 ${workbenchStats.total} 场对阵，${workbenchStats.pending} 场待排` : '赛程已全部安排' }}</strong><small>{{ workbenchStats.pending ? '抽签对阵已保留，完成时间与场地配置后才能发布正式日程' : savedScheduleConfigSummary }}</small></span><el-button plain type="success" @click="openScheduleConfigDialog('preview')">{{ workbenchStats.pending ? '配置时间与场地' : '查看或修改已保存设置' }}</el-button></div>
         <div v-if="scheduleNeedsLatestRuleReflow" class="schedule-engine-upgrade"><span><el-icon><WarningFilled /></el-icon><strong>当前赛程由旧排序规则生成</strong><small>按最新规则，所有普通排位赛结束后才进入决赛阶段：半决赛 → 决赛 / 三四名决赛。</small></span><el-button type="warning" @click="openLatestRuleReflow">按最新规则重新编排</el-button></div>
         <div class="workbench-actions"><div><el-button :loading="undoingScheduleAdjustment" @click="undoLastScheduleAdjustment">撤销上次调整</el-button><el-button type="success" plain @click="ruleImpactVisible=true"><el-icon><Setting /></el-icon>修改生成规则</el-button><el-button @click="openConflictPanel">冲突检测 <el-tag v-if="scheduleConflicts.length" type="warning">{{ scheduleConflicts.length }}项</el-tag></el-button><el-button type="success" @click="previewSchedulePublish">竞赛文件发布</el-button></div></div>
         <div class="workbench-stats"><span><el-icon><Calendar /></el-icon><b>{{ workbenchStats.total }}</b>场比赛</span><span><el-icon><Calendar /></el-icon><b>{{ workbenchStats.arranged }}</b>场已安排</span><span><el-icon><Clock /></el-icon><b>{{ workbenchStats.pending }}</b>场待安排</span><span><el-icon><Football /></el-icon><b>{{ workbenchStats.venues }}</b>块场地</span><span><el-icon><Document /></el-icon>最近保存 {{ workbenchStats.lastSaved }}</span></div>
@@ -754,7 +754,7 @@ const publicationPages = computed(() => { const pageSize=publicationOrientation.
 const publicationVenueSummary = computed(() => [...new Set(publicationMatches.value.map(match=>String(match.venue || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN',{numeric:true})).join('、') || '场地待定')
 const publicationPreparedDate = computed(() => new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}))
 function configuredTeamCount(division) {
-  const candidates = [division?.expectedTeams,division?.requiredTeams,division?.teamRequirement,division?.participantTeams,division?.maxTeams]
+  const candidates = [division?.expectedTeams,division?.requiredTeams,division?.teamRequirement,division?.participantTeams,division?.maxTeams,division?.teamLimit]
   const value = candidates.map(Number).find(item => Number.isFinite(item) && item > 0)
   return value || 0
 }
@@ -762,7 +762,7 @@ const overviewRows = computed(() => divisionOptions.value.map(division => { cons
 const filteredOverviewRows = computed(() => overviewRows.value.filter(row => overviewFilter.value === 'all' || overviewFilter.value === 'conflict' && row.conflicts > 0 || overviewFilter.value === 'draft' && !row.published && row.conflicts === 0))
 const overviewStats = computed(() => ({ teams:overviewRows.value.reduce((sum,row) => sum + row.teams, 0), matches:allTournamentMatches.value.length, published:allTournamentMatches.value.filter(match => match.schedulePublished || match.published || match.status === 'published').length }))
 const overviewReadiness = computed(() => { const total = Math.max(1, divisionOptions.value.length); const rules = divisionOptions.value.filter(item => item.rulesLocked || ['locked','finalized'].includes(String(item.ruleStatus || '').toLowerCase()) || item.ruleFinalized).length; const draw = overviewRows.value.filter(item => item.drawConfirmed && item.teamsReady).length; const venues = divisionOptions.value.filter(item => item.venueConfigured || item.scheduleVenueConfigured).length; return { rules:Math.round(rules / total * 100), draw:Math.round(draw / total * 100), venues:Math.round(venues / total * 100) } })
-const overviewTodo = computed(() => overviewRows.value.flatMap(row => { const items = []; if (!row.teamsReady) items.push({ id:`${row.id}-teams`, text:`${row.name} 已通过 ${row.teams} 支，目标 ${row.expectedTeams || '未配置'} 支` }); if (!row.drawConfirmed) items.push({ id:`${row.id}-draw`, text:`${row.name} 抽签结果尚未正式确认` }); if (row.conflicts) items.push({ id:`${row.id}-conflict`, text:`${row.name} 有 ${row.conflicts} 项场地或时间冲突` }); if (row.teamsReady && row.drawConfirmed && !row.matches) items.push({ id:`${row.id}-empty`, text:`${row.name} 尚未生成赛程` }); else if (row.matches && !row.published && !row.conflicts) items.push({ id:`${row.id}-publish`, text:`${row.name} 赛程待发布` }); return items }).slice(0, 8))
+const overviewTodo = computed(() => overviewRows.value.flatMap(row => { const items = []; if (!row.teamsReady) items.push({ id:`${row.id}-teams`, text:`${row.name} 已通过 ${row.teams} 支，目标 ${row.expectedTeams || '未配置'} 支` }); if (!row.drawConfirmed) items.push({ id:`${row.id}-draw`, text:`${row.name} 抽签结果尚未正式确认` }); if (row.conflicts) items.push({ id:`${row.id}-conflict`, text:`${row.name} 有 ${row.conflicts} 项场地或时间冲突` }); if (row.teamsReady && row.drawConfirmed && !row.matches) items.push({ id:`${row.id}-empty`, text:`${row.name} 尚未生成对阵` }); else if (row.matches && !row.published && !row.conflicts && row.progress < 100) items.push({ id:`${row.id}-schedule`, text:`${row.name} 有 ${row.matches - Math.round(row.matches * row.progress / 100)} 场待排` }); else if (row.matches && !row.published && !row.conflicts) items.push({ id:`${row.id}-publish`, text:`${row.name} 赛程待发布` }); return items }).slice(0, 8))
 const activeSchedulePrerequisite = computed(() => {
   const row = overviewRows.value.find(item => item.id === activeDivisionId.value) || { teamsReady:false,drawConfirmed:false }
   return { ...row,ready:row.teamsReady === true && row.drawConfirmed === true }
@@ -800,7 +800,7 @@ function theoreticalMatchesForDivision(division,row) {
   if(format==='cup'&&groupCount>1&&teamsPerGroup>1){const groupMatches=groupCount*teamsPerGroup*(teamsPerGroup-1)/2;const placement=division?.fullRankingEnabled===false?Math.max(0,groupCount*Number(division?.advancePerGroup || 2)-1):teamsPerGroup*groupCount*Math.log2(groupCount)/2;return groupMatches+placement}
   return 0
 }
-const jointScheduleDivisions = computed(() => divisionOptions.value.map(division => { const row=overviewRows.value.find(item => item.id===division.id);const matchFormat=divisionMatchFormat(division);return { ...division,row,matchFormat,matchFormatLabel:fieldFormatLabel(matchFormat).replace('场地',''),matchCount:theoreticalMatchesForDivision(division,row),matchMinutes:Number(division.matchMinutes || division.rulesSnapshot?.matchMinutes || 0),formatLabel:phaseLabels[division.formatType || division.tournamentType] || division.formatType || '待设置' } }).filter(item => item.row?.teamsReady && item.row?.drawConfirmed))
+const jointScheduleDivisions = computed(() => divisionOptions.value.map(division => { const row=overviewRows.value.find(item => item.id===division.id);const matchFormat=divisionMatchFormat(division);return { ...division,row,matchFormat,matchFormatLabel:fieldFormatLabel(matchFormat).replace('场地',''),matchCount:row?.matches || theoreticalMatchesForDivision(division,row),matchMinutes:Number(division.matchMinutes || division.rulesSnapshot?.matchMinutes || 0),formatLabel:phaseLabels[division.formatType || division.tournamentType] || division.formatType || '待设置' } }).filter(item => item.row?.teamsReady && item.row?.drawConfirmed))
 const jointTheoreticalMatchCount = computed(() => jointScheduleDivisions.value.reduce((sum,item) => sum+item.matchCount,0))
 const jointTeamCount = computed(() => jointScheduleDivisions.value.reduce((sum,item) => sum+Number(item.row?.teams || 0),0))
 const selectedScheduleDivision = computed(() => jointScheduleDivisions.value.find(item => item.id===selectedScheduleDivisionId.value) || jointScheduleDivisions.value[0])
@@ -2086,7 +2086,7 @@ async function handleGenerate() {
   rememberGenerationVenues()
   showConfigDialog.value = false
   try {
-    await ElMessageBox.confirm(scheduleGenerationMode.value==='joint' ? '生成成功后将覆盖全部所选组别已有赛程；若场地时段不足，原赛程会保留。确定继续吗？' : `生成成功后将覆盖${selectedScheduleDivision.value?.name || '当前组别'}已有赛程，其他组别不变；若场地时段不足，原赛程会保留。确定继续吗？`, '生成赛程', { type: 'warning' })
+    await ElMessageBox.confirm(scheduleGenerationMode.value==='joint' ? '系统将为全部所选组别的既有对阵补齐日期、时间和场地；抽签对阵与场序不会改变。确定继续吗？' : `系统将为${selectedScheduleDivision.value?.name || '当前组别'}的既有对阵补齐日期、时间和场地；抽签对阵与场序不会改变。确定继续吗？`, '生成赛程', { type: 'warning' })
   } catch {
     showConfigDialog.value = true
     return
@@ -2096,12 +2096,11 @@ async function handleGenerate() {
   try {
     const selectedDivision=selectedScheduleDivision.value
     const result = await callFunction('generateSchedule', {
+      action: 'scheduleExistingPairings',
       tournamentId,
-      scheduleAllDivisions: scheduleGenerationMode.value==='joint',
       divisionIds: scheduleGenerationMode.value==='joint' ? targetScheduleDivisions.value.map(item => item.id) : undefined,
       divisionId: scheduleGenerationMode.value==='separate' ? selectedDivision?.id : undefined,
       divisionName: scheduleGenerationMode.value==='separate' ? selectedDivision?.name : undefined,
-      scheduleType: scheduleGenerationMode.value==='separate' ? generationTypeForDivision(selectedDivision) : undefined,
       scheduleConfig: {
         startDate: scheduleConfig.value.startDate,
         endDate: scheduleConfig.value.endDate,
@@ -2122,7 +2121,7 @@ async function handleGenerate() {
     })
 
     if (result && result.success) {
-      ElMessage.success(`赛程生成成功！共 ${result.matchCount || 0} 场比赛`)
+      ElMessage.success(`已为 ${result.matchCount || 0} 场对阵补齐时间和场地`)
       await loadMatches({ focusCalendar: true })
       if (scheduleGenerationMode.value==='separate' && selectedDivision?.id) activeDivisionId.value=selectedDivision.id
       tournament.value={ ...tournament.value,scheduleConfig:{ ...scheduleConfig.value,venues:[...generationVenues.value],venueResources:venueResourceConfigs.value,timeSlots:[...generatedTimeSlots.value] },scheduleGenerated:true,scheduleGenerationMode:scheduleGenerationMode.value,scheduleEngineVersion:result.scheduleEngineVersion || CURRENT_SCHEDULE_ENGINE_VERSION }

@@ -1040,8 +1040,8 @@
           <div>
 
             <h3>专业版抽签结果</h3>
-            <p>
-              结果已写入当前赛事抽签配置；进入赛程编排前仍可返回操作台复核。
+          <p>
+              抽签结果已确认，对阵已生成；比赛时间和场地可在赛程管理中后补。
             </p>
           </div>
           <el-tag type="success">已确认</el-tag>
@@ -1054,7 +1054,7 @@
           ><span
             ><b>每组 {{ groupCapacity }} 支</b></span
           ><el-tag type="success">校验通过</el-tag
-          ><el-tag type="warning">待最终确认</el-tag>
+          ><el-tag type="warning">时间待排</el-tag>
         </div>
         <div class="result-tools">
           <el-select v-model="resultGroupFilter"
@@ -1071,6 +1071,7 @@
           ><el-button @click="goProfessionalStep('console')"
             >查看抽签过程</el-button
           ><el-button @click="exportGroupResult">导出分组表</el-button>
+          <el-button plain @click="exportPairingResult">导出对阵表</el-button>
         </div>
         <div class="result-groups" :class="{ list: resultView === 'list' }">
           <article v-for="group in assignmentGroups" :key="group.name">
@@ -1089,6 +1090,10 @@
             </ol>
           </article>
         </div>
+        <section v-if="pairingMatches.length" class="pairing-result-table">
+          <header><div><h4>最终对阵</h4><p>场序已确定，比赛时间和场地待后续编排</p></div><el-tag type="warning">{{ pairingMatches.length }} 场待排</el-tag></header>
+          <div class="pairing-result-scroll"><table><thead><tr><th>场序</th><th>阶段</th><th>主队/来源</th><th>客队/来源</th><th>状态</th></tr></thead><tbody><tr v-for="match in pairingMatches" :key="match._id || match.pairingCode || match.matchNo"><td>{{ match.matchNo || match.matchIndex }}</td><td>{{ match.roundName || match.phase || '比赛' }}</td><td>{{ match.homeTeamName || match.homeSourceLabel || '待产生' }}</td><td>{{ match.awayTeamName || match.awaySourceLabel || '待产生' }}</td><td><el-tag size="small" type="warning">时间待排</el-tag></td></tr></tbody></table></div>
+        </section>
         <footer class="result-footer">
           <dl>
             <div>
@@ -1105,7 +1110,7 @@
             </div>
             <div>
               <dt>结果状态</dt>
-              <dd class="pending">待确认</dd>
+              <dd class="pending">{{ pairingCount ? `已生成 ${pairingCount} 场对阵` : "待生成对阵" }}</dd>
             </div>
           </dl>
           <div>
@@ -1113,12 +1118,9 @@
               >返回操作台</el-button
             ><el-button
               type="primary"
-              @click="
-                router.push(
-                  `/tournaments/${tournamentId}/schedule?divisionId=${activeDivision.id || activeDivision._id}`,
-                )
-              "
-              >确认并完成</el-button
+              :loading="pairingGenerating"
+              @click="goToScheduleAfterPairing"
+              >{{ pairingCount ? "进入赛程管理" : "生成对阵并进入赛程" }}</el-button
             >
           </div>
         </footer>
@@ -1143,7 +1145,7 @@ import {
   View,
 } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { queryById, queryList, updateRecord } from "../../utils/cloud";
+import { callFunction, queryById, queryList, updateRecord } from "../../utils/cloud";
 import { permissions } from "../../utils/permissions";
 import previewField from "../../assets/images/football-field-dual.jpg";
 
@@ -1159,6 +1161,9 @@ const initialDrawConfig =
   initialVisualQaSnapshot?.tournament?.professionalDrawConfigs?.[
     initialDivisionId
   ] || {};
+const pairingGenerating = ref(false);
+const pairingCount = ref(Number(initialDrawConfig.pairingCount || 0));
+const pairingMatches = ref([]);
 function normalizeVisualQaTeams(snapshot) {
   if (!snapshot) return [];
   const divisionId = String(route.query.divisionId || "");
@@ -1677,8 +1682,21 @@ const previewGroups = computed(() => [
 ]);
 const screenDeviceOnline = computed(() => route.query.scenario !== "screen-offline");
 const screenReady = computed(() => canManage.value && teams.value.length > 0 && canContinuePool.value && screenDeviceOnline.value);
-const screenAddress = computed(() => `https://screen.sxffootball.cn/draw/${encodeURIComponent(tournamentId)}?divisionId=${encodeURIComponent(String(activeDivision.value.id || activeDivision.value._id || "default"))}`);
+const screenAddress = computed(() => `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(String(activeDivision.value.id || activeDivision.value._id || "default"))}`);
 const screenAddressLabel = computed(() => screenAddress.value.replace(/^https:\/\//, ""));
+const projectionChannelName = computed(() => `sxf-draw-screen-${tournamentId}-${String(activeDivision.value.id || activeDivision.value._id || "default")}`);
+let projectionChannel = null;
+function projectionPayload(stage = "intro", extra = {}) {
+  return { stage, tournamentName: tournament.value.name || "足球赛事", divisionName: activeDivision.value.name || "抽签仪式", teams: teams.value, assignments: drawAssignments.value, screen: screenConfig.value, assignedCount: drawAssignments.value.length, updatedAt: new Date().toISOString(), ...extra };
+}
+function broadcastProjection(stage = "intro", extra = {}) {
+  const payload = projectionPayload(stage, extra);
+  try { localStorage.setItem(projectionChannelName.value, JSON.stringify(payload)); } catch {}
+  if (typeof BroadcastChannel !== "undefined") {
+    if (!projectionChannel || projectionChannel.name !== projectionChannelName.value) { projectionChannel?.close(); projectionChannel = new BroadcastChannel(projectionChannelName.value); }
+    projectionChannel.postMessage(payload);
+  }
+}
 function isSeed(team) {
   return seedIds.value.includes(team.id);
 }
@@ -1772,6 +1790,11 @@ async function load() {
       ? config.value.drawAssignments
       : [];
     drawGeneratedAt.value = config.value.drawGeneratedAt || "";
+    if (config.value.pairingGenerated || route.query.step === "result") {
+      const rows = await queryList("matches", { where: { tournamentId, divisionId: divId }, limit: 1000 });
+      pairingMatches.value = rows.filter((row) => row.pairingStatus === "confirmed");
+      pairingCount.value = pairingMatches.value.length || Number(config.value.pairingCount || 0);
+    }
   } finally {
     loading.value = false;
   }
@@ -1955,7 +1978,10 @@ function openDrawScreen() {
     ElMessage.success("抽签大屏已在安全预览窗口打开");
     return;
   }
+  const projectionStage = consoleStage.value === "intro" ? "intro" : consoleStage.value === "teams" ? "teams" : "drawing";
+  broadcastProjection(projectionStage);
   const opened = window.open(screenAddress.value, "_blank", "noopener,noreferrer");
+  if (opened) broadcastProjection(projectionStage);
   if (!opened) ElMessage.warning("浏览器阻止了大屏窗口，请允许弹窗后重试");
 }
 function requestPreviewFullscreen() {
@@ -2054,6 +2080,7 @@ function projectConsoleStage() {
   }
   introProjected.value = true;
   screenSynced.value = true;
+  broadcastProjection(consoleStage.value === "intro" ? "intro" : consoleStage.value === "teams" ? "teams" : consoleStage.value === "slots" ? "drawing" : "result");
   if (visualQa) {
     window.__sxfProfessionalIntroProjection = {
       tournamentId,
@@ -2070,6 +2097,7 @@ function projectTeamDisplay() {
     return;
   }
   screenSynced.value = true;
+  broadcastProjection("teams");
   if (visualQa) {
     window.__sxfProfessionalTeamProjection = {
       tournamentId,
@@ -2222,6 +2250,54 @@ async function confirmDrawResult() {
     return;
   }
   await saveConfig("result", payload);
+  broadcastProjection("result");
+  await generatePairingsAfterDraw(payload);
+}
+
+async function generatePairingsAfterDraw(payload) {
+  if (visualQa || pairingGenerating.value) return true;
+  pairingGenerating.value = true;
+  try {
+    const divisionId = String(activeDivision.value.id || activeDivision.value._id || "default");
+    const result = await callFunction("generateSchedule", {
+      action: "generatePairings",
+      tournamentId,
+      divisionId,
+      divisionName: activeDivision.value.name || activeDivision.value.divisionName || "默认组",
+      drawAssignments: payload.drawAssignments || drawAssignments.value,
+    });
+    if (!result?.success) throw new Error(result?.message || result?.error || "生成对阵失败");
+    pairingMatches.value = Array.isArray(result.matches) ? result.matches : [];
+    pairingCount.value = Number(result.matchCount || pairingMatches.value.length || 0);
+    const all = { ...(tournament.value.professionalDrawConfigs || {}) };
+    all[divisionId] = { ...(all[divisionId] || {}), ...payload, pairingGenerated: true, pairingCount: pairingCount.value, updatedAt: new Date().toISOString() };
+    await updateRecord("tournaments", tournamentId, { professionalDrawConfigs: all, updateTime: new Date() });
+    tournament.value = { ...tournament.value, professionalDrawConfigs: all };
+    ElMessage.success(`已生成 ${pairingCount.value} 场对阵，比赛时间待排`);
+    return true;
+  } catch (error) {
+    ElMessage.error(error.message || "生成对阵失败");
+    return false;
+  } finally {
+    pairingGenerating.value = false;
+  }
+}
+
+async function goToScheduleAfterPairing() {
+  if (!pairingCount.value) {
+    const ok = await generatePairingsAfterDraw({ drawAssignments: drawAssignments.value, drawGeneratedAt: drawGeneratedAt.value, drawStatus: "confirmed" });
+    if (!ok) return;
+  }
+  router.push(`/tournaments/${tournamentId}/schedule?divisionId=${activeDivision.value.id || activeDivision.value._id}`);
+}
+
+function exportPairingResult() {
+  const rows = pairingMatches.value.length ? pairingMatches.value : assignmentGroups.value.flatMap((group) => group.teams.map((team, index) => ({ matchNo: "", roundName: group.name, homeTeamName: `${group.name}${index + 1}`, awayTeamName: team.name })));
+  if (!rows.length) { ElMessage.warning("暂无可导出的对阵"); return; }
+  const csv = ["场次,阶段,主队/来源,客队/来源", ...rows.map((row) => [row.matchNo || "", row.roundName || row.phase || "", row.homeTeamName || row.homeSourceLabel || "待产生", row.awayTeamName || row.awaySourceLabel || "待产生"].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))].join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${tournament.value.name || "赛事"}-${activeDivision.value.name || "组别"}-对阵表.csv`; link.click(); URL.revokeObjectURL(link.href);
+  ElMessage.success("对阵表已导出");
 }
 onMounted(async () => {
   if (window.__sxfVisualQaModulePromise)
@@ -2244,6 +2320,8 @@ onUnmounted(() => {
   if (window.__sxfVisualQaModulePromise)
     window.removeEventListener("sxf-visual-qa-ready", applyVisualQaSnapshot);
   if (visualQaRetryTimer) window.clearInterval(visualQaRetryTimer);
+  projectionChannel?.close();
+  projectionChannel = null;
 });
 </script>
 
@@ -4051,6 +4129,25 @@ h2 small {
 .result-panel {
   padding: 18px;
 }
+.pairing-result-table {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #e0e8e2;
+  border-radius: 8px;
+  background: #fff;
+}
+.pairing-result-table > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.pairing-result-table h4 { margin: 0; font-size: 17px; }
+.pairing-result-table p { margin: 4px 0 0; color: #748078; font-size: 12px; }
+.pairing-result-scroll { max-height: 360px; overflow: auto; }
+.pairing-result-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pairing-result-table th, .pairing-result-table td { padding: 9px 10px; border-bottom: 1px solid #edf1ee; text-align: left; white-space: nowrap; }
+.pairing-result-table th { color: #536158; background: #f7faf8; }
 .result-panel > header {
   align-items: center;
 }

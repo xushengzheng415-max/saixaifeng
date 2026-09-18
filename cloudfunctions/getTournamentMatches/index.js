@@ -43,7 +43,8 @@ exports.main = async (event, context) => {
       .get()
 
     // 补充球队名称
-    const matches = res.data || []
+    // 抽签确认后的待排对阵只供后台继续编排，不进入公开竞赛日程。
+    const matches = (res.data || []).filter(m => !(m.pairingStatus === 'confirmed' && m.scheduleStatus !== 'scheduled' && !m.schedulePublished))
     const teamIds = [...new Set([
       ...matches.map(m => m.homeTeamId),
       ...matches.map(m => m.awayTeamId)

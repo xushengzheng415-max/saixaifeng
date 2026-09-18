@@ -82,6 +82,16 @@
           </div>
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
+        <section class="synthetic-player-panel staff-roster-panel">
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div></div>
+          <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table">
+            <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="工作人员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
+            <el-table-column prop="name" label="姓名" min-width="130" />
+            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼球员</el-tag></template></el-table-column>
+            <el-table-column label="出生日期" width="130"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+          </el-table>
+        </section>
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
             <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '正式名单' }}</h2><p>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
@@ -100,7 +110,8 @@
             <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="86" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button></template></el-table-column>
+            <el-table-column label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <el-table-column label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
         </section>
         <section v-if="importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
@@ -1277,6 +1288,7 @@ function onCityChange() {
 }
 const team = ref(qaTeam || {})
 const players = ref([])
+const staffMembers = ref([])
 const importedDraftPlayers = ref([])
 const kitSaving = ref(false)
 const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
@@ -1383,6 +1395,7 @@ const avatarReadyCount = computed(() => avatarImportRows.value.filter(row => !ro
 
 // 编辑球队相关
 const showEditTeam = ref(false)
+const playerReviewingId = ref('')
 const teamEditForm = ref({
   name: '',
   teamCode: '',
@@ -3576,10 +3589,21 @@ async function loadPlayers() {
   try {
     // 同时查询 teamId 和 teamCode，合并去重
     // 因为历史数据有的用 teamId，有的用 teamCode
-    const [byTeamId, byTeamCode] = await Promise.all([
+    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode] = await Promise.all([
       queryList('players', { where: { teamId: teamId } }),
-      queryList('players', { where: { teamCode: teamId } })
+      queryList('players', { where: { teamCode: teamId } }),
+      queryList('coaches', { where: { teamId: teamId } }),
+      queryList('coaches', { where: { teamCode: teamId } })
     ])
+
+    const staffMap = new Map()
+    ;[...(staffByTeamId || []), ...(staffByTeamCode || [])].forEach(person => { if (person?._id) staffMap.set(String(person._id), person) })
+    staffMembers.value = await Promise.all(Array.from(staffMap.values()).map(async person => {
+      if (person.photoUrl && person.photoUrl.startsWith('cloud://')) {
+        try { return { ...person, photoUrl: await getFileUrl(person.photoUrl) } } catch { return person }
+      }
+      return person
+    }))
 
     // 合并并去重（按 _id）
     const playerMap = new Map()
@@ -3626,6 +3650,18 @@ async function loadPlayers() {
   }
 }
 
+async function deletePlayer(player) {
+  if (!player?._id) return
+  try {
+    await ElMessageBox.confirm(`确定删除球员“${player.name || '未命名'}”吗？删除后不可恢复。`, '删除球员', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
+    await deleteRecord('players', player._id)
+    players.value = players.value.filter(item => String(item._id) !== String(player._id))
+    ElMessage.success('球员已删除')
+  } catch (error) {
+    if (!['cancel', 'close'].includes(error)) ElMessage.error(error.message || '删除球员失败')
+  }
+}
+
 function playerProfileLabel(player) {
   const identityStatus = String(player?.identityStatus || '').toLowerCase()
   if (!['verified', 'approved', 'complete'].includes(identityStatus)) return '待人证核验'
@@ -3636,12 +3672,30 @@ function playerProfileLabel(player) {
   return isSyntheticTeam.value ? '测试资料' : '待完善'
 }
 
+function playerOrganizerReviewStatus(player) {
+  return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
+}
+
+async function reviewPlayer(player) {
+  if (!player?._id || playerOrganizerReviewStatus(player) === 'approved') return
+  playerReviewingId.value = String(player._id)
+  try {
+    await updateRecord('players', player._id, { organizerReviewStatus: 'approved', organizerReviewedAt: new Date().toISOString(), organizerReviewedBy: '赛事主办方' })
+    player.organizerReviewStatus = 'approved'
+    ElMessage.success(`${player.name || '球员'}已审核`)
+  } catch (error) {
+    ElMessage.error(error.message || '球员审核失败')
+  } finally {
+    playerReviewingId.value = ''
+  }
+}
+
 function playerIdentityLabel(player) {
   const explicit = String(player?.dualRoleLabel || '').trim()
-  if (explicit) return explicit.startsWith('球员') ? explicit : `球员／${explicit.replace(/^兼/, '')}`
+  if (explicit) return explicit
   const role = String(player?.dualRoleType || '').trim()
-  const roleLabels = { head_coach_player: '教练', team_leader_player: '领队', doctor_player: '队医' }
-  return roleLabels[role] ? `球员／${roleLabels[role]}` : '球员'
+  const roleLabels = { head_coach_player: '主教练兼球员', team_leader_player: '领队兼球员', doctor_player: '队医兼球员' }
+  return roleLabels[role] || '球员'
 }
 
 function playerProfileTagType(player) {
@@ -4068,7 +4122,7 @@ function compressBase64(dataUrl, maxSize = 300) {
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
-.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.synthetic-player-table .player-avatar-img{width:38px;height:38px;border-radius:50%;object-fit:cover;background:#edf3ee}
+.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
 .match-stats { display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: 23px; border-bottom: 1px solid #e8ece9; }
 .match-stats.lower { grid-template-columns: repeat(2, 1fr); padding: 24px 0 0; border: 0; }
 .match-stats dl { display: block; padding: 0 10px; text-align: center; }

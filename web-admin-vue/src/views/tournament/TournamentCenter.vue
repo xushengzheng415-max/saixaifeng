@@ -445,7 +445,7 @@ function normalizeSignupDivisions(source) {
   return (Array.isArray(source) ? source : []).map(item => ({
     id: String(item && (item.id || item._id || item.divisionId || item.division || item.divisionKey) || '').trim(),
     name: String(item && (item.name || item.divisionName || item.label || item.ageGroup) || '当前竞赛组别').trim(),
-    maxTeams: Number(item && (item.maxTeams || item.teamLimit) || 0),
+    maxTeams: Number([item && item.expectedTeams, item && item.requiredTeams, item && item.teamRequirement, item && item.participantTeams, item && item.maxTeams, item && item.teamLimit].map(Number).find(value => Number.isFinite(value) && value > 0) || 0),
     registrationEnabled: item && item.registrationEnabled === true
   })).filter(item => item.id)
 }
