@@ -1,5 +1,14 @@
 <template>
-  <section class="quick-tournament">
+  <section v-if="isScreen" class="draw-screen">
+    <header><strong>{{ tournament.name || '赛事抽签大屏' }}</strong><span>{{ divisionName }} · 抽签分组</span></header>
+    <main>
+      <h1>抽签分组</h1>
+      <div class="screen-groups">
+        <article v-for="group in screenGroups" :key="group.code"><h2>{{ group.name }} <small>{{ group.slots.filter(Boolean).length }}/{{ group.slots.length }}</small></h2><ol><li v-for="(team,index) in group.slots" :key="index"><b>{{ group.code }}{{ index + 1 }}</b><span v-if="team">{{ team.name }}</span><em v-else>待抽取</em></li></ol></article>
+      </div>
+    </main>
+  </section>
+  <section v-else class="quick-tournament">
     <header class="event-context">
       <div class="event-context-main">
         <span class="event-crest"><el-icon><Trophy /></el-icon></span>
@@ -24,7 +33,7 @@
         <span>已分配 <b>{{ assigned }}</b></span><i />
         <span>待分配 <em>{{ pool.length }}</em></span><i />
         <span>{{ groupCount }}组</span><i />
-        <span>每组 {{ teamsPerGroup }} 支</span><i />
+        <span>签位 {{ groupSizes.join(' + ') }}</span><i />
         <span>自动保存 <b class="on">已开启</b></span>
         <el-button plain @click="back"><el-icon><Back /></el-icon>返回分组设置</el-button>
       </div>
@@ -45,9 +54,10 @@
 
         <section class="groups-panel">
           <header>
-            <div><h2>分组情况</h2><p>已分配 {{ assigned }}/{{ teams.length }}　|　{{ groupCount }} 个小组　|　每组 {{ teamsPerGroup }} 支</p></div>
+            <div><h2>分组情况</h2><p>已分配 {{ assigned }}/{{ teams.length }}　|　{{ groupCount }} 个小组　|　签位 {{ groupSizes.join(' + ') }}</p></div>
             <div class="console-actions">
               <el-select v-model="visibleGroupFilter"><el-option label="全部小组" value="all" /><el-option v-for="group in groups" :key="group.code" :label="group.name" :value="group.code" /></el-select>
+              <el-button plain @click="projectScreen"><el-icon><Monitor /></el-icon>投大屏</el-button>
               <el-button plain><el-icon><Setting /></el-icon>签位编号设置</el-button>
               <el-button plain :disabled="!undoStack.length" @click="undo"><el-icon><Back /></el-icon>撤销一步</el-button>
               <el-button plain @click="clearGroups"><el-icon><Delete /></el-icon>清空分组</el-button>
@@ -57,7 +67,7 @@
           <div class="avoidance">同地区规避 <b>{{ avoidSameRegion ? '已开启' : '已关闭' }}</b><el-switch v-model="avoidSameRegion" /></div>
           <div class="groups-grid" :class="{ filtered: visibleGroupFilter !== 'all' }">
             <article v-for="group in visibleGroups" :key="group.code">
-              <header><h3>{{ group.name }}</h3><b>{{ group.slots.filter(Boolean).length }}/{{ teamsPerGroup }}</b></header>
+                <header><h3>{{ group.name }}</h3><b>{{ group.slots.filter(Boolean).length }}/{{ group.slots.length }}</b></header>
               <ol>
                 <li v-for="(team,index) in group.slots" :key="index" :class="{ empty: !team }" @dragover.prevent @drop="dropInto(group,index)" @click="team && remove(team)">
                   <b>{{ group.code }}{{ index + 1 }}</b>
@@ -82,7 +92,7 @@
 import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Back, Calendar, Check, CircleCheckFilled, Delete, Grid, Location, Lock, Refresh, Search, Setting, SwitchButton, Trophy, WarningFilled } from '@element-plus/icons-vue'
+import { Back, Calendar, Check, CircleCheckFilled, Delete, Grid, Location, Lock, Monitor, Refresh, Search, Setting, SwitchButton, Trophy, WarningFilled } from '@element-plus/icons-vue'
 import { addRecord, deleteRecord, queryById, queryList } from '../../utils/cloud'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
 
@@ -91,8 +101,10 @@ const route = useRoute()
 const router = useRouter()
 const componentInstance = getCurrentInstance()
 const divisionId = ref(String(route.query.divisionId || 'default'))
+const isScreen = computed(() => route.query.display === 'screen')
 const savedGroupCount = ref(0)
 const savedTeamsPerGroup = ref(0)
+const configuredGroupSizes = ref([])
 const groupCount = computed(() => Math.max(2, Math.min(16, Number(route.query.groupCount) || savedGroupCount.value || 4)))
 const teamsPerGroup = computed(() => Math.max(2, Math.min(8, Number(route.query.teamsPerGroup) || savedTeamsPerGroup.value || 4)))
 const visualQa = import.meta.env.DEV && typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
@@ -102,6 +114,16 @@ const qaNames = ['洛阳龙门U10','许昌未来U10','商丘雄狮U10','新乡�
 const tournament = ref(qaSnapshot ? qaSnapshot.tournament : {})
 const divisionOptions = ref(qaSnapshot ? qaSnapshot.divisions.map(item => ({ id:String(item.id || item._id),name:item.name || '竞赛组别' })) : [])
 const teams = ref(visualQa ? qaNames.map((name,index) => ({ id:`qa-quick-team-${index + 1}`, name, region:name.slice(0,2) })) : [])
+const groupSizes = computed(() => {
+  let querySizes = []
+  try { const parsed = JSON.parse(String(route.query.groupSizes || '[]')); if (Array.isArray(parsed)) querySizes = parsed.map(Number) } catch {}
+  const source = querySizes.length ? querySizes : configuredGroupSizes.value
+  if (source.length === groupCount.value && source.every(value => value > 0)) return source
+  const total = Math.max(teams.value.length, teamsPerGroup.value * groupCount.value)
+  const base = Math.floor(total / groupCount.value)
+  const remainder = total % groupCount.value
+  return Array.from({ length: groupCount.value }, (_, index) => base + (index < remainder ? 1 : 0))
+})
 const divisionName = computed(() => divisionOptions.value.find(item => item.id === divisionId.value)?.name || tournament.value.divisions?.find(item => String(item.id || item._id) === divisionId.value)?.name || (visualQa ? 'U10组' : '当前组别'))
 const dateRange = computed(() => {
   const start = String(tournament.value.startDate || '').replaceAll('-', '.')
@@ -111,6 +133,7 @@ const dateRange = computed(() => {
 const eventLocation = computed(() => tournament.value.province || tournament.value.city || tournament.value.location || '地点待定')
 const keyword = ref('')
 const groups = ref(makeGroups())
+const screenGroups = ref([])
 const avoidSameRegion = ref(route.query.avoidSameRegion !== '0')
 const visibleGroupFilter = ref('all')
 const poolExpanded = ref(false)
@@ -120,9 +143,23 @@ const undoStack = ref([])
 const saving = ref(false)
 const confirming = ref(false)
 const renderVersion = ref(0)
+let drawChannel = null
+
+function drawChannelKey() { return `sxf-draw-screen:${props.tournamentId}:${divisionId.value}` }
+function publishScreenState() {
+  const state = { groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name } : null) })), updatedAt: Date.now() }
+  screenGroups.value = state.groups
+  try { localStorage.setItem(drawChannelKey(), JSON.stringify(state)); drawChannel?.postMessage(state) } catch {}
+}
+function projectScreen() {
+  const url = router.resolve({ path: route.path, query: { ...route.query, display: 'screen' } }).href
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (!opened) ElMessage.warning('浏览器阻止了大屏窗口，请允许弹窗后重试')
+  publishScreenState()
+}
 
 function makeGroups(){
-  return Array.from({ length: groupCount.value }, (_,index) => ({ name:`${String.fromCharCode(65 + index)}组`, code:String.fromCharCode(65 + index), slots:Array(teamsPerGroup.value).fill(null) }))
+  return Array.from({ length: groupCount.value }, (_,index) => ({ name:`${String.fromCharCode(65 + index)}组`, code:String.fromCharCode(65 + index), slots:Array(groupSizes.value[index] || teamsPerGroup.value).fill(null) }))
 }
 function seedVisualQaGroups(){
   groups.value = makeGroups()
@@ -141,6 +178,7 @@ function commitGroups(){
   renderVersion.value += 1
   componentInstance?.update?.()
   nextTick(() => componentInstance?.update?.())
+  publishScreenState()
 }
 const assigned = computed(() => groups.value.flatMap(group => group.slots).filter(Boolean).length)
 const pool = computed(() => teams.value.filter(team => !groups.value.some(group => group.slots.some(slot => slot?.id === team.id))))
@@ -192,9 +230,10 @@ async function load(){
     teams.value = scoped.map(row => { const team=lookup.get(String(row.teamId)); return { id:String(row.teamId),name:String(team?.name || team?.teamName || row.teamName || '未命名球队'),region:String(team?.city || team?.region || ''),logo:String(team?.logo || team?.logoUrl || row.logo || row.logoUrl || ''),logoUrl:String(team?.logoUrl || team?.logo || row.logoUrl || row.logo || '') } })
     const saved = await queryList('tournament_groups',{ where:{ tournamentId:props.tournamentId },limit:1000 })
     const current = saved.filter(row => String(row.divisionId || 'default') === divisionId.value && row.type === 'tournament' && row.status !== 'archived')
-    if(current.length){ savedGroupCount.value=current.length; savedTeamsPerGroup.value=Math.max(...current.map(row=>Number(row.maxTeams || row.teams?.length || 0)),4) }
+    if(current.length){ savedGroupCount.value=current.length; configuredGroupSizes.value=current.map(row => Number(row.maxTeams || row.teams?.length || 0)).filter(Boolean); savedTeamsPerGroup.value=Math.max(...configuredGroupSizes.value,4) }
     const byId = new Map(teams.value.map(team => [team.id,team]))
-    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const slots=Array.isArray(source?.teams) ? source.teams.map(item => byId.get(String(item.teamId)) || null).slice(0,teamsPerGroup.value) : []; return { ...group,slots:[...slots,...Array(Math.max(0,teamsPerGroup.value-slots.length)).fill(null)] } })
+    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const capacity = Number(source?.maxTeams || group.slots.length || teamsPerGroup.value); const slots=Array.isArray(source?.teams) ? source.teams.map(item => byId.get(String(item.teamId)) || null).slice(0,capacity) : []; return { ...group,slots:[...slots,...Array(Math.max(0,capacity-slots.length)).fill(null)] } })
+    publishScreenState()
   }catch(error){ teams.value=[]; groups.value=makeGroups(); ElMessage.error(error.message || '加载赛会制分组数据失败') }
 }
 async function persistGroups(status){
@@ -223,9 +262,15 @@ async function proceedToResult(){
   }catch(error){ if(error !== 'cancel') ElMessage.error(error.message || '保存抽签结果失败') }finally{ confirming.value=false }
 }
 if(visualQa) seedVisualQaGroups()
-onMounted(load)
+onMounted(() => {
+  if (typeof BroadcastChannel !== 'undefined') { drawChannel = new BroadcastChannel(drawChannelKey()); drawChannel.onmessage = event => { if (isScreen.value && event.data?.groups) screenGroups.value = event.data.groups } }
+  window.addEventListener('storage', event => { if (isScreen.value && event.key === drawChannelKey()) { try { const state = JSON.parse(event.newValue || 'null'); if (state?.groups) screenGroups.value = state.groups } catch {} } })
+  try { const saved = JSON.parse(localStorage.getItem(drawChannelKey()) || 'null'); if (saved?.groups) screenGroups.value = saved.groups } catch {}
+  load().then(() => { if (!isScreen.value) publishScreenState() })
+})
 </script>
 
 <style scoped>
+.draw-screen{min-height:100vh;color:#eef8f1;background:radial-gradient(circle at top,#145c3a,#061d13 68%)}.draw-screen>header{display:flex;align-items:center;justify-content:space-between;padding:28px 54px;border-bottom:1px solid rgba(255,255,255,.15)}.draw-screen>header strong{font-size:28px}.draw-screen>header span{color:#b8d8c5}.draw-screen>main{width:min(1400px,calc(100% - 80px));margin:0 auto;padding:46px 0}.draw-screen h1{margin:0 0 28px;font-size:42px}.screen-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.screen-groups article{padding:20px;border:1px solid rgba(255,255,255,.18);border-radius:14px;background:rgba(255,255,255,.08)}.screen-groups h2{display:flex;justify-content:space-between;margin:0 0 14px;color:#9df0bb}.screen-groups h2 small{color:#d2e7d9;font-size:14px;font-weight:500}.screen-groups ol{margin:0;padding:0;list-style:none}.screen-groups li{display:flex;align-items:center;gap:12px;min-height:48px;border-top:1px solid rgba(255,255,255,.1)}.screen-groups li b{width:36px;color:#9fcab0}.screen-groups li span{font-size:17px}.screen-groups li em{color:#88a494;font-style:normal}
 .quick-tournament{min-height:100%;color:#18211b;background:#fafcfb}.event-context{display:flex;min-height:76px;align-items:center;justify-content:space-between;padding:0 30px;border-bottom:1px solid #e1e6e2;background:#fff}.event-context-main{display:flex;min-width:0;align-items:center;gap:13px}.event-context-main>strong{max-width:355px;overflow:hidden;font-size:21px;text-overflow:ellipsis;white-space:nowrap}.event-crest{display:grid;width:43px;height:50px;place-items:center;border:2px solid #183f2d;border-radius:13px 13px 18px 18px;color:#183f2d;background:#f3f8f4;font-size:22px}.event-meta{display:flex;align-items:center;gap:8px;padding-left:18px;border-left:1px solid #e1e6e2;color:#48534b;white-space:nowrap}.console-body{width:min(1340px,calc(100% - 48px));margin:0 auto;padding:20px 0 18px}.page-heading{display:flex;min-height:62px;align-items:center;justify-content:space-between}.page-heading>div{display:flex;align-items:baseline;gap:28px}.page-heading h1{margin:0;font-size:29px}.page-heading p{margin:0;color:#555f58;font-size:15px}.page-heading label{display:flex;align-items:center;gap:13px;font-size:15px;font-weight:650}.division-lock{display:flex;width:170px;min-height:38px;align-items:center;justify-content:space-between;box-sizing:border-box;padding:0 14px;border:1px solid #dce3de;border-radius:6px;background:#f7f9f7;color:#26352c;font-weight:600}.division-lock .el-icon{color:#748078}.flow-tabs{display:flex;height:52px;align-items:flex-end;gap:35px;border-bottom:1px solid #dce3de}.flow-tabs button,.flow-tabs strong{display:flex;height:52px;align-items:center;padding:0 24px;border:0;border-bottom:3px solid transparent;background:transparent;font-size:17px;cursor:pointer}.flow-tabs strong{border-bottom-color:#08783c;color:#08783c}.summary{display:flex;min-height:46px;align-items:center;gap:18px;margin-top:13px;padding:0 16px;border:1px solid #dfe5e1;border-radius:7px;background:#fff;font-size:14px}.summary span{white-space:nowrap}.summary i{height:18px;border-left:1px solid #dfe5e1}.summary em{color:#e56f16;font-style:normal}.summary .on{color:#08783c}.summary .el-button{margin-left:auto}.quick-tournament main{display:grid;grid-template-columns:270px 1fr;gap:12px;margin-top:12px}.team-pool,.groups-panel{height:516px;border:1px solid #dde4df;border-radius:8px;background:#fff}.team-pool{padding:14px}.team-pool h2,.groups-panel h2{margin:0;color:#08783c;font-size:22px}.team-pool h2 em{color:#08783c;font-style:normal}.team-pool>p{margin:4px 0 10px;color:#68736b;font-size:14px}.team-pool>small{display:block;margin:10px 0 6px;color:#68736b;font-size:13px}.team-pool ol,.groups-panel ol{margin:0;padding:0;list-style:none}.team-pool li{display:grid;grid-template-columns:32px 1fr 42px 18px;min-height:44px;align-items:center;gap:8px;border-bottom:1px solid #edf1ee;cursor:grab}.team-pool li b{overflow:hidden;font-size:14px;text-overflow:ellipsis;white-space:nowrap}.team-pool li small{overflow:hidden;color:#727c75;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.team-crest{display:grid;width:30px;height:30px;overflow:hidden;place-items:center;border:1px solid #dce7df;border-radius:50%;color:#08783c;background:#eaf4ec;font-size:12px}.team-crest img{display:block;width:100%;height:100%;object-fit:contain;background:#fff}.team-crest em{font-style:normal}.team-pool>button{display:flex;width:100%;align-items:center;justify-content:center;gap:5px;margin-top:7px;border:0;color:#606b63;background:transparent;font-size:13px;cursor:pointer}.groups-panel{position:relative;padding:15px}.groups-panel>header{display:flex;align-items:flex-start;justify-content:space-between}.groups-panel>header p{margin:7px 0 0;color:#667169;font-size:14px}.console-actions{display:flex;gap:8px}.console-actions .el-select{width:120px}.avoidance{display:flex;height:36px;align-items:center;justify-content:flex-end;gap:9px;color:#414c44;font-size:14px}.avoidance b{color:#08783c}.groups-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.groups-grid.filtered{grid-template-columns:minmax(280px,380px)}.groups-grid article{padding:10px 11px 6px;border:1px solid #dde4df;border-radius:7px}.groups-grid article>header{display:flex;align-items:center;justify-content:space-between}.groups-grid h3{margin:0;color:#08783c;font-size:17px}.groups-grid article>header>b{font-size:15px}.groups-grid li{display:flex;min-height:42px;align-items:center;gap:8px;border-bottom:1px solid #edf1ee;cursor:pointer}.groups-grid li>b{width:28px;font-size:14px}.groups-grid li strong{flex:1;overflow:hidden;font-size:14px;text-overflow:ellipsis;white-space:nowrap}.groups-grid li.empty{color:#98a29b}.groups-grid li.empty em{font-size:14px;font-style:normal}.validation-footer{display:flex;min-height:68px;align-items:center;justify-content:space-between;margin-top:12px;padding:0 16px;border:1px solid #dfe5e1;border-radius:8px;background:#fff;font-size:14px}.validation-footer>div{display:flex;align-items:center;gap:22px}.validation-footer span,.validation-footer em{display:flex;align-items:center;gap:7px;color:#08783c;font-style:normal}.validation-footer em{color:#e56f16}.validation-footer>div:last-child{position:relative}.validation-footer small{position:absolute;right:0;top:41px;width:230px;color:#747e77;text-align:center}
 </style>
