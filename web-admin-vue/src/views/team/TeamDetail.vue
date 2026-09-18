@@ -26,7 +26,7 @@
         </nav>
         <div class="detail-heading">
           <div><h1>球队详情</h1></div>
-          <el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button>
+          <div class="detail-heading-actions"><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
         </div>
 
         <section class="team-event-summary">
@@ -104,7 +104,7 @@
           </el-table>
         </section>
         <section v-if="importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
-          <div class="synthetic-player-heading"><div><h2>报名表导入资料</h2><p>共 {{ importedDraftPlayers.length }} 人；主办方导入即为本届正式名单，此处保留导入原始资料供核对。</p></div><el-tag type="info" effect="plain">导入记录</el-tag></div>
+          <div class="synthetic-player-heading"><div><h2>报名表导入资料</h2><p>共 {{ importedDraftPlayers.length }} 人；历史导入资料先在此保留，确认后进入正式球员库。</p></div><el-tag type="info" effect="plain">导入记录</el-tag></div>
           <el-table :data="importedDraftPlayers" class="synthetic-player-table">
             <el-table-column label="姓名" prop="name" min-width="110" />
             <el-table-column label="身份" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
@@ -1323,7 +1323,8 @@ const maskedPhone = computed(() => {
     tournamentRelation.value.contactPhone || tournamentRelation.value.managerPhone || tournamentRelation.value.ownerPhone ||
     team.value.contactPhone || team.value.managerPhone || team.value.ownerPhone || team.value.creatorPhone || team.value.phoneNumber || team.value.phone || team.value.mobile || ''
   )
-  return /^\d{11}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : (phone || '—')
+  // 主办方后台属于已授权的赛事工作区，显示完整联系方式；公开端仍使用脱敏数据。
+  return phone || '—'
 })
 const clearingPlayers = ref(false)
 const showAddPlayer = ref(false)
@@ -3605,16 +3606,9 @@ async function loadPlayers() {
     }))
 
     players.value = processedPlayers
-    if (sourceTournamentId.value && tournamentRelation.value?._id) {
-      try {
-        importedDraftPlayers.value = await queryList('registration_player_drafts', { where: { teamId }, limit: 500 })
-      } catch (error) {
-        importedDraftPlayers.value = []
-        console.warn('加载报名表球员资料失败:', error.message || error)
-      }
-    } else {
-      importedDraftPlayers.value = []
-    }
+
+    // 普通主办方工作台只读取正式 players；无权访问的导入草稿和批次不再作为详情页回退。
+    importedDraftPlayers.value = []
 
     // 普通球队资料页沿用历史同步行为；赛事内查看只读，不因打开页面改写球队资产。
     if (!sourceTournamentId.value) {
@@ -3697,6 +3691,7 @@ function openTournamentMatches() {
 
 onMounted(async () => {
   await loadTeam()
+  if (route.query.edit === '1') editTeam()
   if (sourceTournamentId.value) {
     await loadTournamentTeamContext()
     await loadPlayers()
