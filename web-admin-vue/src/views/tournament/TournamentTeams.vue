@@ -1969,7 +1969,9 @@ function openTeamPlayers(team) {
   }
   router.push({
     path: `/tournaments/${tournamentId}/teams/${teamId}`,
-    query: { divisionId: activeDivisionId.value, from: 'registration' }
+    // 报名管理与球队管理共用球队详情页与「查看球队」入口，来源必须按当前工作区判断：
+    // 固定写 registration 会让球队管理侧返回时错误跳回报名管理。
+    query: { divisionId: activeDivisionId.value, from: isRegistrationWorkspace.value ? 'registration' : 'teams' }
   })
 }
 
@@ -1978,7 +1980,7 @@ function openTeamEdit(team) {
   if (!teamId) return ElMessage.warning('未找到球队信息')
   router.push({
     path: `/tournaments/${tournamentId}/teams/${teamId}`,
-    query: { divisionId: activeDivisionId.value, from: 'registration', edit: '1' }
+    query: { divisionId: activeDivisionId.value, from: isRegistrationWorkspace.value ? 'registration' : 'teams', edit: '1' }
   })
 }
 

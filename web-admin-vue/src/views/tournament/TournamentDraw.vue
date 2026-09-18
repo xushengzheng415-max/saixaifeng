@@ -34,7 +34,7 @@
           <el-alert title="本页仅设置分组结构，赛制及晋级规则请前往“竞赛管理”设置。" type="primary" :closable="false" show-icon />
           <div class="quick-setting-row"><strong>参赛球队</strong><span class="quick-readonly-value">{{ divisionTeamCount(activeDivision) }}支</span><small>按当前组别统计</small></div>
           <div class="quick-setting-row"><strong>小组数量</strong><select v-model.number="configForm.groupCount"><option v-for="count in quickGroupCountOptions" :key="count" :value="count">{{ count }}组</option></select></div>
-          <div class="quick-setting-row"><strong>每组球队</strong><select v-model.number="configForm.teamsPerGroup"><option v-for="count in quickTeamCountOptions" :key="count" :value="count">{{ count }}支</option></select></div>
+          <div class="quick-setting-row"><strong>每组球队</strong><span class="quick-group-size-summary">{{ quickGroupSizePlan.map((size, index) => `${String.fromCharCode(65 + index)}组 ${size}支`).join('、') }}</span><small>按参赛球队数均衡分配，可含轮空</small></div>
           <div class="quick-setting-row"><strong>组别命名</strong><span>{{ quickGroupNameRange }}</span><el-button plain>编辑组名</el-button></div>
           <div class="quick-setting-row"><strong>组内编号</strong><span>{{ quickNumberingPreview }}</span><el-button plain>编号设置</el-button></div>
           <div class="quick-setting-row"><strong>同地区球队规避</strong><el-switch v-model="configForm.avoidSameRegion" /><small>可关闭</small></div>
@@ -44,9 +44,9 @@
         <section class="quick-preview-card">
           <h2>分组结构预览</h2>
           <div class="quick-group-preview">
-            <article v-for="group in quickGroupPreview" :key="group.name"><h3>{{ group.name }} <small>（{{ configForm.teamsPerGroup }} 个签位）</small></h3><div><span v-for="slot in group.slots" :key="slot">{{ slot }}</span></div></article>
+            <article v-for="group in quickGroupPreview" :key="group.name"><h3>{{ group.name }} <small>（{{ group.slots.length }} 个签位）</small></h3><div><span v-for="slot in group.slots" :key="slot">{{ slot }}</span></div></article>
           </div>
-          <footer><span><el-icon><User /></el-icon>总签位 {{ quickCapacity }}</span><span><el-icon><Grid /></el-icon>已配置 {{ configForm.groupCount }} 组</span><span><el-icon><UserFilled /></el-icon>每组 {{ configForm.teamsPerGroup }} 支</span></footer>
+          <footer><span><el-icon><User /></el-icon>总签位 {{ quickCapacity }}</span><span><el-icon><Grid /></el-icon>已配置 {{ configForm.groupCount }} 组</span><span><el-icon><UserFilled /></el-icon>{{ quickGroupSizeSummary }}</span></footer>
         </section>
       </div>
       <footer class="quick-setup-footer"><p><el-icon><InfoFilled /></el-icon>保存后进入分组操作台，将左侧球队拖入右侧各组签位。</p><div><el-button @click="resetQuickConfig">恢复默认设置</el-button><el-button type="success" :disabled="!quickCapacityValid" @click="enterQuickConsole">保存并进入分组操作台</el-button></div></footer>
@@ -641,6 +641,7 @@ const configForm = ref({
   tournamentType: 'tournament',
   groupCount: 4,
   teamsPerGroup: 4,
+  groupSizes: [],
   avoidSameRegion: true,
   balancedDistribution: true,
   knockoutSize: 16,
@@ -676,14 +677,31 @@ const overviewDateRange = computed(() => {
 const overviewLocation = computed(() => tournament.value.province || tournament.value.city || tournament.value.location || '地点待定')
 const quickGroupCountOptions = computed(() => Array.from({ length: 7 }, (_, index) => index + 2))
 const quickTeamCountOptions = computed(() => Array.from({ length: 7 }, (_, index) => index + 2))
-const quickCapacity = computed(() => configForm.value.groupCount * configForm.value.teamsPerGroup)
+function configuredGroupSizes(division, count, teamCount) {
+  const source = division?.groupSizes || division?.groupCapacities || division?.groupTeamCounts || division?.formatConfig?.groupSizes
+  const parsed = Array.isArray(source) ? source.map(Number).filter(value => Number.isFinite(value) && value > 0).slice(0, count) : []
+  if (parsed.length === count && parsed.reduce((sum, value) => sum + value, 0) >= teamCount) return parsed
+  const configuredPerGroup = Number(division?.teamsPerGroup || division?.formatConfig?.teamsPerGroup || 0)
+  const total = Math.max(teamCount, configuredPerGroup * count, count * 2)
+  const base = Math.floor(total / count)
+  const remainder = total % count
+  return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0))
+}
+const quickGroupSizePlan = computed(() => {
+  const count = Math.max(2, Number(configForm.value.groupCount) || 2)
+  const saved = Array.isArray(configForm.value.groupSizes) ? configForm.value.groupSizes.map(Number) : []
+  if (saved.length === count && saved.every(value => value > 0)) return saved
+  return configuredGroupSizes(activeDivision.value, count, divisionTeamCount(activeDivision.value))
+})
+const quickCapacity = computed(() => quickGroupSizePlan.value.reduce((sum, size) => sum + size, 0))
 const quickCapacityValid = computed(() => quickCapacity.value >= divisionTeamCount(activeDivision.value))
-const quickCapacityLabel = computed(() => `${divisionTeamCount(activeDivision.value)}支球队 ÷ ${configForm.value.groupCount}个小组 = 每组${configForm.value.teamsPerGroup}支`)
+const quickGroupSizeSummary = computed(() => quickGroupSizePlan.value.join(' + '))
+const quickCapacityLabel = computed(() => `${divisionTeamCount(activeDivision.value)}支球队 ÷ ${configForm.value.groupCount}个小组 = ${quickGroupSizeSummary.value}支`)
 const quickGroupNameRange = computed(() => `A组—${String.fromCharCode(64 + configForm.value.groupCount)}组`)
-const quickNumberingPreview = computed(() => Array.from({ length: configForm.value.teamsPerGroup }, (_, index) => `A${index + 1}`).join('、'))
+const quickNumberingPreview = computed(() => Array.from({ length: quickGroupSizePlan.value[0] || 0 }, (_, index) => `A${index + 1}`).join('、'))
 const quickGroupPreview = computed(() => Array.from({ length: configForm.value.groupCount }, (_, groupIndex) => {
   const code = String.fromCharCode(65 + groupIndex)
-  return { name: `${code}组`, slots: Array.from({ length: configForm.value.teamsPerGroup }, (_, slotIndex) => `${code}${slotIndex + 1}`) }
+  return { name: `${code}组`, slots: Array.from({ length: quickGroupSizePlan.value[groupIndex] || 0 }, (_, slotIndex) => `${code}${slotIndex + 1}`) }
 }))
 
 function divisionIsProfessional(division) {
@@ -769,8 +787,11 @@ async function modifyDivisionDraw(division) {
 function returnToDrawOverview() { router.push({ path: route.path, query: {} }) }
 function resetQuickConfig() {
   const approvedCount = divisionTeamCount(activeDivision.value)
-  configForm.value.groupCount = approvedCount >= 28 ? 8 : 4
-  configForm.value.teamsPerGroup = 4
+  const configuredCount = Number(activeDivision.value?.groupCount || activeDivision.value?.formatConfig?.groupCount || 0)
+  configForm.value.groupCount = configuredCount >= 2 ? configuredCount : (approvedCount >= 28 ? 8 : 4)
+  const configuredPerGroup = Number(activeDivision.value?.teamsPerGroup || activeDivision.value?.formatConfig?.teamsPerGroup || 0)
+  configForm.value.teamsPerGroup = configuredPerGroup || Math.ceil(approvedCount / configForm.value.groupCount)
+  configForm.value.groupSizes = []
   configForm.value.avoidSameRegion = true
   configForm.value.balancedDistribution = true
 }
@@ -784,7 +805,8 @@ function enterQuickConsole() {
       view: 'console',
       format: configForm.value.tournamentType,
       groupCount: String(configForm.value.groupCount),
-      teamsPerGroup: String(configForm.value.teamsPerGroup),
+      teamsPerGroup: String(Math.max(...quickGroupSizePlan.value)),
+      groupSizes: JSON.stringify(quickGroupSizePlan.value),
       avoidSameRegion: configForm.value.avoidSameRegion ? '1' : '0',
       balancedDistribution: configForm.value.balancedDistribution ? '1' : '0'
     }
@@ -1097,6 +1119,7 @@ async function loadTournament() {
     const preferred = props.divisionId || tournament.value.defaultDivisionId || tournament.value.divisions?.[0]?.id || 'default'
     activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
     configForm.value.tournamentType = activeDivision.value.tournamentType || tournament.value.type || tournament.value.tournamentType || 'tournament'
+    resetQuickConfig()
     if (route.query.mode === 'quick' && route.query.view === 'config') {
       const format = drawWorkflowFormat(activeDivision.value)
       if (format !== 'tournament') await router.replace({ path:route.path,query:{ ...route.query,view:'console',format,knockoutSize:String(activeDivision.value.knockoutSize || ''),knockoutType:String(activeDivision.value.knockoutType || '') } })
@@ -1277,6 +1300,7 @@ async function loadGroupsData() {
     groupCount.value = groups.value.length
     // 恢复配置
     configForm.value.groupCount = groups.value.length
+    configForm.value.groupSizes = groups.value.map(group => group.slots.length)
     if (list.length > 0 && list[0].maxTeams) {
       teamsPerGroup.value = list[0].maxTeams
       configForm.value.teamsPerGroup = list[0].maxTeams
@@ -2022,7 +2046,7 @@ async function saveGroupsData() {
       groupCode: group.code || group.name?.[0] || `G${groupIndex + 1}`,
       teams: teamList,
       teamCount: teamList.length,
-      maxTeams: teamsPerGroup.value,
+      maxTeams: group.slots.length,
       type: 'group',
       createTime: new Date(),
       updateTime: new Date()
@@ -3442,6 +3466,7 @@ onMounted(async () => {
 .quick-setting-row strong { font-size: 15px; }
 .quick-setting-row small { color: #737e76; font-size: 13px; }
 .quick-setting-row select { width: 200px; min-height: 40px; padding: 0 13px; border: 1px solid #dce3de; border-radius: 6px; color: #303a33; background: #fff; font: inherit; }
+.quick-group-size-summary { min-height: 40px; display: flex; align-items: center; padding: 0 13px; border: 1px solid #e0e5e1; border-radius: 6px; color: #303a33; background: #f7f8f7; }
 .quick-setting-row :deep(.el-switch.is-checked .el-switch__core) { border-color: #087b3b; background-color: #087b3b; }
 .quick-setting-row .el-button { justify-self: end; }
 .quick-readonly-value { padding: 9px 13px; border: 1px solid #e0e5e1; border-radius: 6px; color: #6c766f; background: #f7f8f7; }
