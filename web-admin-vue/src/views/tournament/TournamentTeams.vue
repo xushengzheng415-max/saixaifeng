@@ -261,7 +261,7 @@
             <button type="button" :class="{ selected: claimShareMethod === 'link' }" @click="claimShareMethod = 'link'"><span class="claim-option-icon"><el-icon><Link /></el-icon></span><span><strong>复制认领链接</strong><small>复制后通过微信发送给球队负责人</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
             <button type="button" :class="{ selected: claimShareMethod === 'scan' }" @click="claimShareMethod = 'scan'"><span class="claim-option-icon claim-option-qr"><el-icon><Grid /></el-icon></span><span><strong>手机扫码分享</strong><small>主办方用手机扫码进入小程序，再转发认领卡片</small></span><el-icon class="claim-option-check"><CircleCheckFilled /></el-icon></button>
           </div>
-          <label class="claim-link-field"><strong>正式版球队认领</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input :value="claimInviteUrlLink || '正在生成正式版认领链接…'" readonly /></div></label>
+          <label class="claim-link-field"><strong>{{ claimInviteEnvLabel }}球队认领</strong><span>（有效期至 {{ claimExpiryText }}）</span><div><input :value="claimInviteUrlLink || claimInviteLinkPlaceholder" readonly /></div></label>
           <div class="claim-code-row"><img v-if="claimInviteCodeUrl" :src="claimInviteCodeUrl" class="claim-qr-image" alt="球队认领小程序码" /><div v-else-if="claimInvitePath" class="claim-qr-vector" role="img" aria-label="球队认领二维码" v-html="claimQrSvg"></div><div v-else class="claim-qr-placeholder" role="status">{{ claimInviteLoading ? '生成中' : '待生成' }}</div><div><strong>球队认领小程序码</strong><p>{{ claimInviteCodeUrl ? '扫码后可转发小程序卡片' : (claimInviteLoading ? '正在生成小程序码…' : '认领链接生成后显示可扫码二维码') }}</p></div></div>
           <div class="claim-after-note"><el-icon><InfoFilled /></el-icon><span>认领完成后，如球队资料或参赛名单未完善，再由系统发送资料完善提醒。</span></div>
         </div>
@@ -669,7 +669,18 @@ import TeamRegistrationWordImporter from '../../components/tournament/TeamRegist
 const route = useRoute()
 const router = useRouter()
 // 预览站点对应微信小程序体验版；正式站点才请求 release。
-const miniProgramQrEnvVersion = String(import.meta.env.VITE_MINIPROGRAM_ENV_VERSION || (String(import.meta.env.BASE_URL || '').includes('/preview/') ? 'trial' : 'release')).toLowerCase()
+// 注意：BASE_URL 判断必须放在最外层——构建 shell 里若残留 VITE_MINIPROGRAM_ENV_VERSION，
+// Vite 会把它注入 import.meta.env，`VITE_MINIPROGRAM_ENV_VERSION || (...)` 会被常量折叠成
+// 该变量值（2026-09-18 22:49 的 /preview/admin/ 构建因此被编译成常量 release，预览站无法生成体验版码）。
+const miniProgramQrEnvVersion = String(String(import.meta.env.BASE_URL || '').includes('/preview/')
+  ? 'trial'
+  : (import.meta.env.VITE_MINIPROGRAM_ENV_VERSION || 'release')).toLowerCase()
+// 逐队认领邀请沿用同一环境口径：预览站生成体验版小程序码（供内部扫码验证），正式站生成正式版。
+// 体验版没有 URL Link，只能扫码，所以链接占位文案单独给一句可执行的说明。
+const claimInviteEnvLabel = computed(() => (miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版'))
+const claimInviteLinkPlaceholder = computed(() => (miniProgramQrEnvVersion === 'trial'
+  ? '体验版不提供小程序链接，请用下方小程序码扫码测试'
+  : '正在生成正式版认领链接…'))
 const isRegistrationWorkspace = computed(() => /\/registration$/.test(route.path))
 const publicBase = import.meta.env.BASE_URL
 const tournamentId = route.params.id
@@ -2497,11 +2508,11 @@ async function ensureClaimInvite() {
       tournamentId,
       divisionId: activeDivisionId.value,
       tournamentTeamId: relationId,
-      envVersion:'release'
+      envVersion: miniProgramQrEnvVersion
     })
     if (claimInviteRequestKey.value !== requestKey) return
     if (!result || !result.success || !result.inviteId) throw new Error(result?.message || '认领邀请生成失败')
-    if (result.envVersion !== 'release' || result.testOnly) throw new Error('未生成正式版认领邀请，请稍后重试')
+    if (result.envVersion !== miniProgramQrEnvVersion || (miniProgramQrEnvVersion === 'release' && result.testOnly)) throw new Error(`未生成${miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版'}认领邀请，请稍后重试`)
     claimInviteId.value = String(result.inviteId)
     claimInvitePathValue.value = String(result.path || '')
     claimInviteUrlLink.value = String(result.urlLink || '')
