@@ -12,8 +12,9 @@ function checkSession(token) {
   })
 }
 const server = http.createServer(async (req, res) => {
+  console.log(`[screen-state] ${req.method} ${req.url}`)
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
   if (req.url.split('?')[0] !== '/state') { res.writeHead(404); return res.end('not found') }
   if (req.method === 'GET') {
@@ -21,7 +22,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST') {
     const auth = String(req.headers.authorization || '')
-    if (!auth.startsWith('Bearer ') || !(await checkSession(auth.slice(7)))) { res.writeHead(401); return res.end('{"success":false,"error":"unauthorized"}') }
+    const authorized = auth.startsWith('Bearer ') && await checkSession(auth.slice(7))
+    console.log(`[screen-state] write authorized=${authorized}`)
+    if (!authorized) { res.writeHead(401); return res.end('{"success":false,"error":"unauthorized"}') }
     let body = ''
     req.on('data', chunk => { body += chunk; if (body.length > 1024 * 1024) req.destroy() })
     req.on('end', () => { try { const state = JSON.parse(body); fs.writeFileSync(file, JSON.stringify(state)); res.setHeader('Content-Type', 'application/json'); res.end('{"success":true}') } catch { res.writeHead(400); res.end('{"success":false}') } })
