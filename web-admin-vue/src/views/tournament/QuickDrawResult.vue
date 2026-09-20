@@ -13,7 +13,7 @@
     <nav class="steps"><button v-if="!isConfirmed && !isArchived" @click="backConfig">分组设置</button><button v-if="!isConfirmed && !isArchived" @click="backConsole">分组操作台</button><button class="active">分组结果</button></nav>
 
     <section v-if="hasSavedResult" class="summary">
-      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">确认状态：{{ statusLabel }}</el-tag><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认当前签位结果</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndEnterSchedule">生成对阵并进入赛程</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button>
+      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">确认状态：{{ statusLabel }}</el-tag><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认当前签位结果</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">生成对阵并查看</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button>
     </section>
 
     <section v-if="hasSavedResult" class="toolbar">
@@ -45,7 +45,7 @@
 
     <footer v-if="hasSavedResult" class="action-bar">
       <div class="checks"><span><el-icon><CircleCheckFilled /></el-icon>分组校验通过</span><span><el-icon><CircleCheckFilled /></el-icon>球队无重复</span><span><el-icon><CircleCheckFilled /></el-icon>{{ sizeLabel }}</span><span><el-icon><CircleCheckFilled /></el-icon>签位编号正确</span><i /><em>{{ isArchived ? '归档结果只读' : isConfirmed ? '当前结果已确认' : '当前结果尚未确认' }}</em></div>
-      <div v-if="!isConfirmed && !isArchived" class="footer-actions"><el-button @click="backConsole"><el-icon><Refresh /></el-icon>继续调整</el-button><el-button type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组结果</el-button><small>确认即完成本组抽签；后续修改须从抽签总览发起。</small></div><div v-else class="footer-actions confirmed-actions"><el-button type="primary" :loading="pairingGenerating" @click="generatePairingsAndEnterSchedule">生成对阵并进入赛程</el-button><el-button type="success" @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button><small>当前结果已锁定；生成对阵后再补齐比赛时间和场地。</small></div>
+      <div v-if="!isConfirmed && !isArchived" class="footer-actions"><el-button @click="backConsole"><el-icon><Refresh /></el-icon>继续调整</el-button><el-button type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组结果</el-button><small>确认即完成本组抽签；后续修改须从抽签总览发起。</small></div><div v-else class="footer-actions confirmed-actions"><el-button type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">生成对阵并查看</el-button><el-button type="success" @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button><small>当前结果已锁定；对阵单独查看，日期时间在赛历中安排。</small></div>
     </footer>
 
     <el-dialog v-model="posterVisible" title="生成分组海报" width="min(1120px, calc(100vw - 48px))" destroy-on-close>
@@ -315,14 +315,14 @@ async function confirm() {
     if (error !== 'cancel') ElMessage.error(error.message || '确认失败')
   } finally { confirming.value = false }
 }
-async function generatePairingsAndEnterSchedule() {
+async function generatePairingsAndViewPairings() {
   if (!isConfirmed.value || pairingGenerating.value) return
   pairingGenerating.value = true
   try {
     const result = await callFunction('generateSchedule', { action: 'generatePairings', tournamentId, divisionId: divisionId.value, divisionName: divisionName.value })
     if (!result?.success) throw new Error(result?.message || result?.error || '生成对阵失败')
     ElMessage.success(`已生成 ${result.matchCount || 0} 场对阵，比赛时间待排`)
-    router.push({ path: `/tournaments/${tournamentId}/schedule`, query: { divisionId: divisionId.value } })
+    router.push({ path: `/tournaments/${tournamentId}/pairings`, query: { divisionId: divisionId.value, divisionName: divisionName.value } })
   } catch (error) { ElMessage.error(error.message || '生成对阵失败') } finally { pairingGenerating.value = false }
 }
 
