@@ -541,6 +541,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick, Calendar, Grid, List, MapLocation, ArrowLeft, ArrowRight, Plus, Download, Picture, Delete, UserFilled, User, Football, Clock, Document, Lock, CircleCheck, Trophy, Check, Setting, Warning, WarningFilled, InfoFilled, Refresh, Close, Connection, Printer } from '@element-plus/icons-vue'
 import { queryById, queryList, callFunction, deleteRecord, addRecord, getFileUrl } from '../../utils/cloud'
+import { buildPublicationSettings, buildPublicationSettingsText, normalizePublicationVenues, summarizePublicationVenues } from '../../utils/publicationSettings'
 import TournamentDraw from './TournamentDraw.vue'
 
 const route = useRoute()
@@ -751,12 +752,12 @@ const publicationScheduleReady = computed(() => { if(!publicationMatches.value.l
 const publicationRegulationsReady = computed(() => { const division=publicationDivision.value || {};return division.rulesLocked===true || division.ruleFinalized===true || ['finalized','locked','published'].includes(String(division.ruleStatus || '').toLowerCase()) })
 const publicationRows = computed(() => publicationMatches.value.map((match,index)=>({ key:String(match._id || index),date:match.matchDate || '待定',time:match.matchTime || '待定',stage:matchScheduleStageLabel(match),round:matchRoundLabel(match),division:publicationDivision.value?.name || match.divisionName || '当前组别',pool:match.group || match.pool || '—',teams:exportMatchTeams(match),venue:match.venue || '待定',serial:match.matchNo || match.matchIndex || index+1 })))
 const publicationPages = computed(() => { const pageSize=publicationOrientation.value==='landscape'?15:24;const pages=[];for(let index=0;index<publicationRows.value.length;index+=pageSize)pages.push({ number:pages.length+1,rows:publicationRows.value.slice(index,index+pageSize) });return pages.length?pages:[{number:1,rows:[]}] })
-// 竞赛文件里的场地与赛期优先取真实比赛结果；赛程尚未编排时退回赛程设置里已保存的赛期、比赛日与场地，
-// 避免整份正式文件只显示“场地待定”。
-const publicationConfiguredSettings = computed(() => { const config=tournament.value?.scheduleConfig || scheduleConfig.value || {};const resources=Array.isArray(config.venueResources) ? config.venueResources : [];const names=[...resources.map(resource=>String(resource?.name || resource?.venue || '').trim()),...normalizeGenerationVenues(config.venues)].filter(Boolean);return { period:config.startDate && config.endDate ? `${config.startDate}—${config.endDate}` : '',matchDays:Array.isArray(config.matchDays) && config.matchDays.length ? config.matchDays.join('、') : '',venues:[...new Set(names)].sort((a,b)=>a.localeCompare(b,'zh-CN',{numeric:true})) } })
-const publicationMatchVenues = computed(() => [...new Set(publicationMatches.value.map(match=>String(match.venue || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN',{numeric:true})))
-const publicationSettingsText = computed(() => { const settings=publicationConfiguredSettings.value;return [settings.period ? `比赛周期：${settings.period}` : '',settings.matchDays ? `比赛日：${settings.matchDays}` : ''].filter(Boolean).join('　·　') })
-const publicationVenueSummary = computed(() => (publicationMatchVenues.value.length ? publicationMatchVenues.value : publicationConfiguredSettings.value.venues).join('、') || '场地待定')
+// 竞赛文件里的场地与赛期：优先真实比赛结果，其次赛程设置里已保存的赛期、比赛日与场地，
+// 未编排的场次仍如实显示“待定”，不编造日期。口径与用例见 web-admin-vue/src/utils/publicationSettings.js
+const publicationConfiguredSettings = computed(() => buildPublicationSettings(tournament.value?.scheduleConfig || scheduleConfig.value))
+const publicationMatchVenues = computed(() => normalizePublicationVenues(publicationMatches.value.map(match => match.venue)))
+const publicationSettingsText = computed(() => buildPublicationSettingsText(publicationConfiguredSettings.value))
+const publicationVenueSummary = computed(() => summarizePublicationVenues(publicationMatchVenues.value, publicationConfiguredSettings.value.venues))
 const publicationPreparedDate = computed(() => new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}))
 function configuredTeamCount(division) {
   const candidates = [division?.expectedTeams,division?.requiredTeams,division?.teamRequirement,division?.participantTeams,division?.maxTeams,division?.teamLimit]
