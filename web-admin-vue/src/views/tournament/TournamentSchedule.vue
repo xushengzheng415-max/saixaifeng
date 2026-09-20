@@ -46,7 +46,7 @@
     </div>
 
     <section v-if="showOverview" class="schedule-overview">
-      <header class="overview-heading"><div><span class="crumb">赛事空间　/　赛程管理</span><h1>赛程管理</h1></div><div><el-button plain @click="openScheduleEditor(activeDivisionId)">导入赛程</el-button><el-button v-if="overviewStats.matches" type="primary" @click="openScheduleEditor(activeDivisionId)"><el-icon><MapLocation /></el-icon>进入赛程地图</el-button><el-button v-else type="primary" :loading="generating" :disabled="!activeSchedulePrerequisite.ready" @click="openOverviewGenerate">生成赛程</el-button></div></header>
+      <header class="overview-heading"><div><span class="crumb">赛事空间　/　赛程管理</span><h1>赛程管理</h1></div><div><el-button plain @click="openOverviewScheduleSettings"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="openScheduleEditor(activeDivisionId)">导入赛程</el-button><el-button v-if="overviewStats.matches" type="primary" @click="openScheduleEditor(activeDivisionId)"><el-icon><MapLocation /></el-icon>进入赛程地图</el-button><el-button v-else type="primary" :loading="generating" :disabled="!activeSchedulePrerequisite.ready" @click="openOverviewGenerate">生成赛程</el-button></div></header>
       <div class="overview-stats">
         <article><span class="stat-icon"><el-icon><UserFilled /></el-icon></span><strong>{{ divisionOptions.length }}<small>个组别</small></strong></article>
         <article><span class="stat-icon"><el-icon><User /></el-icon></span><strong>{{ overviewStats.teams }}<small>支球队</small></strong></article>
@@ -933,6 +933,8 @@ async function handleDivisionChange() {
 }
 function openScheduleEditor(divisionId) { if (divisionId) activeDivisionId.value = String(divisionId); showConfigDialog.value=false; showOverview.value = false; const query={ ...route.query,divisionId:String(divisionId || activeDivisionId.value),view:'editor' };delete query.generator;delete query.panel;router.replace({ path:route.path,query }) }
 function openOverviewGenerate() { if (!jointScheduleDivisions.value.length) { ElMessage.warning('没有已完成球队审核和正式抽签的组别'); return } openScheduleEditor(activeDivisionId.value); openScheduleConfigDialog() }
+// 总览“赛程设置”：已保存过赛程设置时进入已保存设置核对与修改，未设置过则从设置向导起始步骤开始。
+function openOverviewScheduleSettings() { if (!jointScheduleDivisions.value.length) { ElMessage.warning('没有已完成球队审核和正式抽签的组别'); return } openScheduleEditor(activeDivisionId.value); openScheduleConfigDialog(hasConfiguredSchedule.value ? 'preview' : 'basic') }
 async function openConflictPanel() { await loadMatches(); conflictPanelVisible.value = true }
 function closeConflictPanel() { conflictPanelVisible.value = false }
 function completeConflictCheck() { conflictPanelVisible.value = false; ElMessage.success('冲突检测结果已确认') }
