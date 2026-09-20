@@ -45,6 +45,7 @@
               <div class="operation-cell">
                 <el-button size="small" :type="division.primaryActionType" :disabled="!canManage" @click="openDivisionEditor(division)">{{ division.primaryAction }}</el-button>
                 <el-button v-if="division.finalized" size="small" plain :disabled="!canManage" @click="startRuleRevision(division)">调整规则</el-button>
+                <el-button v-if="division.pairingGenerated || division.teamCount > 0" size="small" type="danger" plain :disabled="!canManage" @click="resetDivisionPairings(division)">清空赛程并重新抽签</el-button>
                 <div class="row-menu"><el-button text circle aria-label="组别更多操作" @click.stop="toggleRowMenu(division.id)"><el-icon><MoreFilled /></el-icon></el-button><div v-if="activeMenuId === division.id" class="row-menu-panel"><button type="button" :disabled="togglingRegistrationId === division.id" @click="toggleDivisionRegistration(division)">{{ togglingRegistrationId === division.id ? '正在处理…' : (division.registrationEnabled ? '关闭报名' : '开启报名') }}</button><button type="button" :disabled="renamingDivisionId === division.id" @click="handleRenameDivision(division)">{{ renamingDivisionId === division.id ? '正在重命名…' : '重命名组别' }}</button><button type="button" @click="openDivisionEditor(division)">编辑竞赛设置</button><button type="button" :disabled="division.finalized" @click="openModeGuide(division)">升级为专业模式</button><button type="button" @click="openModeGuide(division)">查看模式对比</button><button type="button" @click="handleRowCommand('teams', division)">查看参赛球队</button><button type="button" @click="handleRowCommand('draw', division)">进入抽签分组</button><button type="button" @click="handleRowCommand('schedule', division)">进入赛程管理</button><button class="danger-action" type="button" :disabled="deletingDivisionId === division.id" @click="handleDeleteDivision(division)">{{ deletingDivisionId === division.id ? '正在删除…' : '删除组别' }}</button></div></div>
               </div>
             </td>
@@ -201,6 +202,19 @@ function handleRowCommand(command, division) {
 }
 function toggleRowMenu(divisionId) { activeMenuId.value = activeMenuId.value === divisionId ? '' : divisionId }
 function closeRowMenu() { activeMenuId.value = '' }
+async function resetDivisionPairings(division) {
+  if (!canManage.value || !division?.id) return
+  activeMenuId.value = ''
+  try {
+    await ElMessageBox.confirm(`将清空“${division.name}”当前未开赛的对阵结果，并回到抽签页面重新抽签。已排赛、已发布或已有赛果的组别不能清空。是否继续？`, '清空赛程并重新抽签', { type:'warning', confirmButtonText:'确认清空并重抽', cancelButtonText:'取消' })
+  } catch { return }
+  try {
+    const result = await callFunction('generateSchedule', { action:'resetPairings', tournamentId:id, divisionId:division.id })
+    if (!result?.success) throw new Error(result?.message || '清空对阵失败')
+    ElMessage.success(result.message || '已清空，可以重新抽签')
+    router.push({ path:`/tournaments/${id}/draw`, query:{ divisionId:division.id, reset:'1' } })
+  } catch (error) { ElMessage.error(error.message || '清空对阵失败') }
+}
 async function handleRenameDivision(division) {
   if (!canManage.value || !division?.id || renamingDivisionId.value) return
   activeMenuId.value = ''
