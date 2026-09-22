@@ -63,7 +63,7 @@
               <td><div class="overview-progress"><i><b :style="{ width: `${row.progress}%` }"></b></i><span>{{ row.progress }}%</span></div></td>
               <td><span :class="row.conflicts ? 'conflict-count' : 'ok-count'">{{ row.conflicts }}项</span></td>
               <td><span class="schedule-status" :class="`is-${row.state}`">{{ row.state === 'published' ? '已发布' : row.state === 'conflict' ? '待处理' : row.state === 'editing' ? '编排中' : '待发布' }}</span></td>
-              <td><button class="table-action" type="button" @click="openDivisionScheduleDetail(row.id)">查看详情</button></td>
+              <td><button class="table-action" type="button" @click="openDivisionScheduleDetail(row.id)">赛程详情</button></td>
               <td><button class="table-action" type="button" @click="openScheduleEditor(row.id)">{{ row.matches ? '进入赛程地图' : '配置并生成' }}</button></td>
             </tr>
           </tbody>
