@@ -52,3 +52,12 @@ export function summarizePublicationVenues(matchVenues, configuredVenues) {
   const venues = resolvePublicationVenues(matchVenues, configuredVenues)
   return venues.length ? venues.join('、') : '场地待定'
 }
+
+/** 该组别赛程的排定情况：日期、时间、场地三者齐全才算已排，其余计入待排。 */
+export function summarizeSchedulePlacement(matches) {
+  const list = Array.isArray(matches) ? matches : []
+  const arranged = list.filter(match => Boolean(
+    match && cleanText(match.matchDate) && cleanText(match.matchTime) && cleanText(match.venue)
+  )).length
+  return { total: list.length, arranged, pending: list.length - arranged }
+}

@@ -4,7 +4,8 @@ import {
   buildPublicationSettings,
   buildPublicationSettingsText,
   resolvePublicationVenues,
-  summarizePublicationVenues
+  summarizePublicationVenues,
+  summarizeSchedulePlacement
 } from '../web-admin-vue/src/utils/publicationSettings.js'
 
 let passed = 0
@@ -90,3 +91,47 @@ test('未排场次的“待定”不属于本口径，文件行仍由比赛数�
 })
 
 console.log(`竞赛文件场地与赛期口径：${passed}/${passed} PASS`)
+
+let detailPassed = 0
+function detailTest(name, fn) {
+  fn()
+  detailPassed += 1
+  console.log('  ✓', name)
+}
+
+console.log('赛程详情排定情况口径：')
+
+detailTest('日期、时间、场地三者齐全才算已排', () => {
+  assert.deepEqual(summarizeSchedulePlacement([
+    { matchDate: '2026-10-01', matchTime: '09:00', venue: '1号场地' },
+    { matchDate: '2026-10-01', matchTime: '10:00', venue: '' },
+    { matchDate: '', matchTime: '11:00', venue: '2号场地' },
+    { matchDate: '2026-10-02', matchTime: '', venue: '2号场地' }
+  ]), { total: 4, arranged: 1, pending: 3 })
+})
+
+detailTest('空白字符串与缺失字段都算未排', () => {
+  assert.deepEqual(summarizeSchedulePlacement([
+    { matchDate: '   ', matchTime: '09:00', venue: '1号场地' },
+    { matchDate: '2026-10-01', matchTime: '  ', venue: '1号场地' },
+    {}
+  ]), { total: 3, arranged: 0, pending: 3 })
+})
+
+detailTest('空数组与非数组输入都返回 0 场', () => {
+  assert.deepEqual(summarizeSchedulePlacement([]), { total: 0, arranged: 0, pending: 0 })
+  assert.deepEqual(summarizeSchedulePlacement(null), { total: 0, arranged: 0, pending: 0 })
+  assert.deepEqual(summarizeSchedulePlacement(undefined), { total: 0, arranged: 0, pending: 0 })
+  assert.deepEqual(summarizeSchedulePlacement('2026-10-01'), { total: 0, arranged: 0, pending: 0 })
+})
+
+detailTest('全部排定时待排为 0，不出现负数', () => {
+  const matches = Array.from({ length: 28 }, (_, index) => ({ matchDate: '2026-10-01', matchTime: '09:00', venue: `1号场地`, serial: index + 1 }))
+  assert.deepEqual(summarizeSchedulePlacement(matches), { total: 28, arranged: 28, pending: 0 })
+})
+
+detailTest('场上含空值项时不抛错', () => {
+  assert.deepEqual(summarizeSchedulePlacement([null, undefined, { matchDate: '2026-10-01', matchTime: '09:00', venue: '1号场地' }]), { total: 3, arranged: 1, pending: 2 })
+})
+
+console.log(`赛程详情排定情况口径：${detailPassed}/${detailPassed} PASS`)

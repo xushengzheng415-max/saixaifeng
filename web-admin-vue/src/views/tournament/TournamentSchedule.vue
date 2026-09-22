@@ -63,7 +63,7 @@
               <td><div class="overview-progress"><i><b :style="{ width: `${row.progress}%` }"></b></i><span>{{ row.progress }}%</span></div></td>
               <td><span :class="row.conflicts ? 'conflict-count' : 'ok-count'">{{ row.conflicts }}项</span></td>
               <td><span class="schedule-status" :class="`is-${row.state}`">{{ row.state === 'published' ? '已发布' : row.state === 'conflict' ? '待处理' : row.state === 'editing' ? '编排中' : '待发布' }}</span></td>
-              <td><button class="table-action" type="button" @click="openScheduleEditor(row.id)">{{ row.matches ? '进入赛程地图' : '配置并生成' }}</button></td>
+              <td><button class="table-action" type="button" @click="openScheduleEditor(row.id)">{{ row.matches ? '进入赛程地图' : '配置并生成' }}</button><button class="table-action is-detail" type="button" @click="openDivisionScheduleDetail(row.id)">赛程详情</button></td>
             </tr>
           </tbody>
         </table>
@@ -472,6 +472,25 @@
       </footer>
     </section>
 
+    <el-dialog v-model="divisionDetailVisible" width="min(760px,94vw)" class="division-detail-dialog" :close-on-click-modal="false">
+      <template #header><div class="publication-dialog-title"><span><el-icon><Document /></el-icon></span><div><h2>赛程详情</h2><p>{{ divisionDetailRow?.name || '当前组别' }} · 只读核对，不修改任何比赛</p></div></div></template>
+      <section class="division-detail-grid">
+        <article><span>赛制</span><strong>{{ divisionDetailRow?.format || '待设置' }}</strong></article>
+        <article><span>球队</span><strong>{{ divisionDetailRow?.teams || 0 }} 支<small v-if="divisionDetailRow?.expectedTeams">　目标 {{ divisionDetailRow.expectedTeams }} 支</small></strong></article>
+        <article><span>比赛场次</span><strong>{{ divisionDetailSummary.total }} 场</strong></article>
+        <article><span>已排 / 待排</span><strong>{{ divisionDetailSummary.arranged }} 场 / {{ divisionDetailSummary.pending }} 场</strong></article>
+        <article><span>冲突</span><strong :class="{ 'is-warning': divisionDetailRow?.conflicts }">{{ divisionDetailRow?.conflicts || 0 }} 项</strong></article>
+        <article><span>发布状态</span><strong>{{ divisionDetailStatusLabel }}</strong></article>
+        <article class="wide"><span>比赛周期</span><strong>{{ divisionDetailSettings.period || '未设置' }}</strong></article>
+        <article class="wide"><span>比赛日</span><strong>{{ divisionDetailSettings.matchDays || '未设置' }}</strong></article>
+        <article class="wide"><span>场地</span><strong>{{ divisionDetailVenueSummary }}</strong></article>
+      </section>
+      <el-alert v-if="divisionDetailSummary.pending" type="warning" :closable="false" :title="`该组别还有 ${divisionDetailSummary.pending} 场未排定日期、时间或场地，正式竞赛文件与发布以实际编排结果为准。`" />
+      <el-alert v-else-if="divisionDetailSummary.total" type="success" :closable="false" title="该组别全部场次已排定日期、时间与场地。" />
+      <el-alert v-else type="info" :closable="false" title="该组别尚未生成对阵，请先完成球队审核与正式抽签。" />
+      <template #footer><el-button @click="openSettingsFromDivisionDetail">赛程设置</el-button><el-button type="primary" :disabled="!divisionDetailSummary.total" @click="enterMapFromDivisionDetail">进入赛程地图</el-button></template>
+    </el-dialog>
+
     <el-dialog v-model="publicationCenterVisible" width="min(1220px,96vw)" top="3vh" class="competition-publication-dialog" :close-on-click-modal="false">
       <template #header><div class="publication-dialog-title"><span><el-icon><Document /></el-icon></span><div><h2>竞赛文件发布中心</h2><p>竞赛规程与竞赛日程分别按真实竞赛组别发布，版本互不混用。</p></div><el-select v-model="publicationDivisionId"><el-option v-for="division in divisionOptions" :key="division.id" :label="division.name" :value="division.id" /></el-select></div></template>
       <div class="publication-status-grid"><article><header><span>竞赛规程</span><el-tag :type="publicationDivision?.regulationsPublished ? 'success' : 'warning'">{{ publicationDivision?.regulationsPublished ? '已发布' : '待发布' }}</el-tag></header><strong>{{ publicationDivision?.name || '当前组别' }}竞赛规程</strong><p>版本：{{ publicationDivision?.regulationsPublishedVersion || publicationDivision?.rulesVersion || '规则定版版本' }}</p><footer><el-button plain @click="openRegulationsPage">预览规程</el-button><el-button type="primary" :loading="publishingDocument==='regulations'" @click="publishRegulations">{{ publicationDivision?.regulationsPublished ? '发布新版本' : '正式发布' }}</el-button></footer></article><article><header><span>竞赛日程</span><el-tag :type="publicationSchedulePublished ? 'success' : 'warning'">{{ publicationSchedulePublished ? '已发布' : '待发布' }}</el-tag></header><strong>{{ publicationDivision?.name || '当前组别' }}竞赛日程</strong><p>{{ publicationMatches.length }}场比赛 · {{ publicationVenueSummary }}</p><p v-if="publicationSettingsText">{{ publicationSettingsText }}</p><footer><el-button plain :loading="exportingTable" @click="exportFormalSchedule">导出Excel</el-button><el-button type="primary" :loading="publishingDocument==='schedule'" :disabled="!publicationScheduleReady" @click="publishScheduleDocument">{{ publicationSchedulePublished ? '发布新版本' : '正式发布' }}</el-button></footer></article></div>
@@ -541,7 +560,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick, Calendar, Grid, List, MapLocation, ArrowLeft, ArrowRight, Plus, Download, Picture, Delete, UserFilled, User, Football, Clock, Document, Lock, CircleCheck, Trophy, Check, Setting, Warning, WarningFilled, InfoFilled, Refresh, Close, Connection, Printer } from '@element-plus/icons-vue'
 import { queryById, queryList, callFunction, deleteRecord, addRecord, getFileUrl } from '../../utils/cloud'
-import { buildPublicationSettings, buildPublicationSettingsText, normalizePublicationVenues, summarizePublicationVenues } from '../../utils/publicationSettings'
+import { buildPublicationSettings, buildPublicationSettingsText, normalizePublicationVenues, summarizePublicationVenues, summarizeSchedulePlacement } from '../../utils/publicationSettings'
 import TournamentDraw from './TournamentDraw.vue'
 
 const route = useRoute()
@@ -759,6 +778,18 @@ const publicationMatchVenues = computed(() => normalizePublicationVenues(publica
 const publicationSettingsText = computed(() => buildPublicationSettingsText(publicationConfiguredSettings.value))
 const publicationVenueSummary = computed(() => summarizePublicationVenues(publicationMatchVenues.value, publicationConfiguredSettings.value.venues))
 const publicationPreparedDate = computed(() => new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'}))
+// 各组别赛程进度表的“赛程详情”：只读展示该组别真实排定情况，不修改任何比赛，也不编造日期或场地。
+const divisionDetailId = ref('')
+const divisionDetailVisible = ref(false)
+const divisionDetailRow = computed(() => overviewRows.value.find(row => row.id === String(divisionDetailId.value)) || null)
+const divisionDetailMatches = computed(() => allTournamentMatches.value.filter(match => String(match.divisionId || 'default') === String(divisionDetailId.value) && !match.isBye && match.status !== 'cancelled'))
+const divisionDetailSummary = computed(() => summarizeSchedulePlacement(divisionDetailMatches.value))
+const divisionDetailSettings = computed(() => buildPublicationSettings(tournament.value?.scheduleConfig || scheduleConfig.value))
+const divisionDetailVenueSummary = computed(() => summarizePublicationVenues(divisionDetailMatches.value.map(match => match.venue), divisionDetailSettings.value.venues))
+const divisionDetailStatusLabel = computed(() => { const state=divisionDetailRow.value?.state;return state === 'published' ? '已发布' : state === 'conflict' ? '待处理' : state === 'editing' ? '编排中' : '待发布' })
+function openDivisionScheduleDetail(divisionId) { divisionDetailId.value = String(divisionId || activeDivisionId.value);divisionDetailVisible.value = true }
+function enterMapFromDivisionDetail() { const divisionId = divisionDetailId.value;divisionDetailVisible.value = false;openScheduleEditor(divisionId) }
+function openSettingsFromDivisionDetail() { activeDivisionId.value = String(divisionDetailId.value);divisionDetailVisible.value = false;openScheduleConfigDialog(hasConfiguredSchedule.value ? 'preview' : 'basic') }
 function configuredTeamCount(division) {
   const candidates = [division?.expectedTeams,division?.requiredTeams,division?.teamRequirement,division?.participantTeams,division?.maxTeams,division?.teamLimit]
   const value = candidates.map(Number).find(item => Number.isFinite(item) && item > 0)
@@ -2811,4 +2842,7 @@ onBeforeUnmount(() => {
 .venue-resource-list>article>header{grid-template-columns:minmax(0,1fr) 190px auto}.venue-resource-list article>footer>strong{margin-right:6px;color:#087b29}.capacity-analysis{margin-top:16px;padding:20px;border:1px solid #e4ba86;border-radius:9px;background:#fffaf4}.capacity-analysis.ready{border-color:#b8d9c1;background:#f8fcf9}.capacity-analysis>header{display:flex;align-items:center;justify-content:space-between}.capacity-analysis h3{margin:0;font-size:20px}.capacity-analysis header p{margin:5px 0 0;color:#6c7871}.capacity-format-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:15px}.capacity-format-grid article{padding:14px;border:1px solid #c9dfcf;border-radius:7px;background:#fff}.capacity-format-grid article.shortage{border-color:#efbc8d;background:#fffaf5}.capacity-format-grid article>header{display:flex;justify-content:space-between}.capacity-format-grid article>header strong{font-size:17px}.capacity-format-grid dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.capacity-format-grid dl>div{display:flex;justify-content:space-between;padding:7px;background:#f6f8f7}.capacity-format-grid dt{color:#69766e}.capacity-format-grid dd{margin:0;font-weight:700}.capacity-format-grid dd.danger{color:#df5f28}.capacity-format-grid article>p{margin:0;color:#6a756f;line-height:1.6}.capacity-analysis>footer{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:15px;padding-top:14px;border-top:1px solid #eadbca}.capacity-analysis>footer>span{font-weight:700}.capacity-analysis>footer small{width:100%;color:#7a837e}.preview-stats article.blocked{border-color:#efb583;color:#e36d28;background:#fff8f1}.preview-stats article.blocked span{margin-left:auto;padding:5px 9px;color:#d65d21;background:#ffeadb;font-size:13px}
 .joint-division-specs{gap:12px;margin-top:18px}.joint-division-specs article{grid-template-columns:190px minmax(130px,.8fr) minmax(240px,1.35fr) 76px;min-height:76px;box-sizing:border-box;gap:20px;padding:13px 18px}.joint-division-identity{display:flex;align-items:flex-start;flex-direction:column;gap:7px;min-width:0}.joint-division-identity strong{font-size:18px;line-height:1.25;white-space:nowrap}.joint-division-identity em{display:inline-flex;padding:3px 9px;border:1px solid #acd5ba;border-radius:12px;color:#087b29;background:#eef8f1;font-size:13px;font-style:normal;font-weight:700}.joint-division-specs article>span{font-size:15px;line-height:1.5}.joint-division-specs article>b{font-size:18px;white-space:nowrap}
 @media(max-width:1100px){.conflict-page-actions{flex-wrap:wrap}.conflict-stat-grid{grid-template-columns:1fr 1fr}.conflict-page-body{grid-template-columns:320px 1fr}.schedule-business-mask{padding-left:0}.venue-session-grid{grid-template-columns:1fr}.joint-division-specs article{grid-template-columns:160px 1fr}.joint-division-specs article b{text-align:left}.venue-resource-list>article>header{grid-template-columns:1fr}}
+.table-action+.table-action{margin-left:14px}.table-action.is-detail{color:#3f6b55}
+.division-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.division-detail-grid article{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 16px;border:1px solid #e1e7e3;border-radius:7px;background:#fafcfb}.division-detail-grid article.wide{grid-column:1/-1}.division-detail-grid article>span{color:#6b7871;white-space:nowrap}.division-detail-grid article>strong{color:#17452d;text-align:right}.division-detail-grid article>strong small{color:#7a857f;font-weight:400}.division-detail-grid article>strong.is-warning{color:#e0761f}.division-detail-dialog .el-alert{margin-top:14px}
+@media(max-width:640px){.division-detail-grid{grid-template-columns:1fr}}
 </style>
