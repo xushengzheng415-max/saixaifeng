@@ -766,13 +766,12 @@ function backToDivisions() { router.push(`/tournaments/${tournamentId}/competiti
 function goToDraw() { router.push({ path: `/tournaments/${tournamentId}/draw`, query: { divisionId } }) }
 function goToSchedule() { router.push({ path: `/tournaments/${tournamentId}/schedule`, query: { divisionId } }) }
 function exitTournament() { router.push('/tournament-space') }
-function printRules() { window.print() }
 function escapeDocumentText(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
 }
-function exportRules() {
-  const title = escapeDocumentText(`${division.value.name || '竞赛组别'}竞赛规程`)
-  const sections = [
+// 正式《竞赛规程》文档：打印与导出共用同一份正文，避免把侧边菜单、卡片、按钮和表单印进 PDF。
+function regulationsSections() {
+  return [
     ['一、赛制结构', `${formatLabel.value}；${formatStructureSummary.value}。`],
     ['二、参赛资格', `${division.value.name || '当前组别'}出生日期范围：${eligibilityBirthRange.value}；每队赛事名单${form.minimumRoster}—${form.rosterLimit}人；${form.singleDivisionOnly ? '同一球员限报一个组别' : '允许跨组报名'}。${form.eligibilityNotes || ''}`],
     ['三、比赛办法', `上场${form.playersOnField}人，${periodModeLabel.value}每段${form.matchMinutes}分钟，中场休息${form.breakMinutes}分钟，${substitutionModeLabel.value}。`],
@@ -780,9 +779,47 @@ function exportRules() {
     ['五、晋级规则', advancementSummary.value],
     ['六、纪律处罚', `红黄牌与停赛按结构化比赛事件执行；淘汰赛平局采用${knockoutTieBreakLabel.value}。`]
   ]
-  const body = sections.map(([heading, content]) => `<h2>${escapeDocumentText(heading)}</h2><p>${escapeDocumentText(content)}</p>`).join('')
-  const documentHtml = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:"Microsoft YaHei",sans-serif;padding:32px;color:#17231c}h1{text-align:center}h2{margin-top:24px;font-size:18px}p{line-height:1.8}</style></head><body><h1>${title}</h1><p>方案版本：Draft ${escapeDocumentText(draftVersion.value)}</p>${body}</body></html>`
-  const blob = new Blob(['\ufeff', documentHtml], { type: 'application/msword;charset=utf-8' })
+}
+function regulationsDocumentTitle() { return `${division.value.name || '竞赛组别'}竞赛规程` }
+function regulationsVersionLabel() { return effective.value ? `已生效版本 ${division.value.rulesVersion || draftVersion.value}` : `方案版本 Draft ${draftVersion.value}` }
+function regulationsPreparedDate() { return new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }) }
+function buildRegulationsDocumentHtml() {
+  const title = escapeDocumentText(regulationsDocumentTitle())
+  const meta = [tournament.value?.name || '当前赛事', division.value.name || '竞赛组别', regulationsVersionLabel()].map(escapeDocumentText).join('　·　')
+  const body = regulationsSections().map(([heading, content]) => `<h2>${escapeDocumentText(heading)}</h2><p>${escapeDocumentText(content)}</p>`).join('')
+  const style = '@page{size:A4;margin:18mm}*{box-sizing:border-box}html,body{margin:0;color:#111;background:#fff;font-family:"Microsoft YaHei","SimSun",sans-serif}.doc{width:210mm;min-height:297mm;margin:0 auto;padding:16mm 14mm;background:#fff}.brand{font-size:11px;color:#087b29;letter-spacing:2px}.doc h1{margin:8px 0 6px;text-align:center;font-size:22px}.doc .meta{padding-bottom:12px;border-bottom:1px solid #cfe0d3;color:#555;font-size:11px;text-align:center}.doc h2{margin:20px 0 8px;color:#0b5c2c;font-size:16px}.doc p{margin:0;font-size:13px;line-height:2;text-align:justify;word-break:break-word}.doc .note{display:flex;justify-content:space-between;gap:12px;margin-top:22px;padding-top:10px;border-top:1px solid #ddd;color:#555;font-size:11px}@media print{.doc{width:auto;min-height:0;padding:0}}'
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${title}</title><style>${style}</style></head><body><main class="doc"><div class="brand">赛小蜂足球 · 正式竞赛文件</div><h1>${title}</h1><div class="meta">${meta}</div>${body}<div class="note"><span>本规程按已定版竞赛规则自动生成，规则修改后版本号同步更新。</span><b>制表日期：${escapeDocumentText(regulationsPreparedDate())}</b></div></main></body></html>`
+}
+function printRules() {
+  const frame = document.createElement('iframe')
+  frame.setAttribute('title', '竞赛规程打印')
+  frame.style.position = 'fixed'
+  frame.style.right = '0'
+  frame.style.bottom = '0'
+  frame.style.width = '1px'
+  frame.style.height = '1px'
+  frame.style.border = '0'
+  frame.style.opacity = '0'
+  document.body.appendChild(frame)
+  const printDocument = frame.contentDocument
+  printDocument.open()
+  printDocument.write(buildRegulationsDocumentHtml())
+  printDocument.close()
+  const cleanup = () => { if (frame.parentNode) frame.parentNode.removeChild(frame) }
+  window.setTimeout(() => {
+    try {
+      frame.contentWindow.focus()
+      frame.contentWindow.print()
+      frame.contentWindow.onafterprint = cleanup
+      window.setTimeout(cleanup, 30000)
+    } catch (error) {
+      cleanup()
+      ElMessage.error('当前内置浏览器不支持系统打印，请在 Chrome 或 Edge 中打开后打印/另存 PDF')
+    }
+  }, 500)
+}
+function exportRules() {
+  const blob = new Blob(['\ufeff', buildRegulationsDocumentHtml()], { type: 'application/msword;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
