@@ -268,7 +268,7 @@ function mergeDuplicatePlayer(target, source) {
   }
 }
 
-export async function parseTeamRegistrationDocx(file) {
+export async function parseTeamRegistrationDocx(file, options = {}) {
   const rawFile = file?.raw || file
   if (!rawFile || !String(rawFile.name || '').toLowerCase().endsWith('.docx')) throw new Error('请选择 .docx 格式的球队报名表')
   if (rawFile.size > 20 * 1024 * 1024) throw new Error('单份报名表不能超过 20MB')
@@ -300,7 +300,8 @@ export async function parseTeamRegistrationDocx(file) {
   const teamName = cleanValue(teamValueCell?.text || teamLabel?.text || paragraphTeamName, ['球队名称', '队名']).slice(0, 50)
   const logoCell = headerRow.cells.find((cell, index) => index > headerRow.cells.findIndex(item => /队徽/.test(item.text)) && cell.imageIds.length)
     || headerRow.cells.find(cell => cell.imageIds.length)
-  const logoFile = logoCell?.imageIds?.[0]
+  const skipImages = options.skipImages === true
+  const logoFile = !skipImages && logoCell?.imageIds?.[0]
     ? await imageFileFromRelationship(zip, relationships, logoCell.imageIds[0], `team-logo-${Date.now()}`)
     : null
 
@@ -361,8 +362,9 @@ export async function parseTeamRegistrationDocx(file) {
       // 的行为、线上已生效，因此不再恢复 type === 'player' 守卫。
       const jerseyNumber = jerseyNumberFromText(jerseyText)
       // 先取模板约定位置（角色行 +1、同列），取不到再在该人所在的人物块内同列兜底查找
-      const photoRelationshipId = firstImageInColumn(personRows, personColumn)
+      const photoRelationshipId = skipImages ? '' : (firstImageInColumn(personRows, personColumn)
         || firstImageInColumn(personRows, roleCell.column)
+      )
       const photoFile = photoRelationshipId
         ? await imageFileFromRelationship(zip, relationships, photoRelationshipId, `person-${people.length + 1}-${Date.now()}`)
         : null
@@ -392,7 +394,7 @@ export async function parseTeamRegistrationDocx(file) {
           ? `「${name}」球服号码「${jerseyText.slice(0, 12)}」无法识别`
           : `「${name}」未填写球服号码`)
       }
-      if (!photoFile) warnings.push(`「${name}」未找到照片`)
+      if (!photoFile && !skipImages) warnings.push(`「${name}」未找到照片`)
       if (person.error) errors.push(`「${name}」${person.error}`)
       people.push(person)
     }
@@ -468,7 +470,7 @@ export async function parseTeamRegistrationDocx(file) {
   if (!contactName) warnings.push('未识别到领队姓名')
   if (!/^1[3-9]\d{9}$/.test(contactPhone)) errors.push('未识别到有效的领队手机号')
   if (!players.length) errors.push('未识别到球员资料')
-  if (!logoFile) warnings.push('未找到队徽，可在导入前手动上传')
+  if (!logoFile && !skipImages) warnings.push('未找到队徽，可在导入前手动上传')
 
   const jerseyCounts = new Map()
   players.forEach(player => {

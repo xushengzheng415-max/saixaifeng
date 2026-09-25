@@ -398,6 +398,24 @@ async function listTeamExportRoster(event, identity) {
   return { success:true, teamId:context.teamId, players:Array.from(map.values()) }
 }
 
+async function getTeamRegistrationSource(event, identity) {
+  const context = await teamAccessContext(event, identity)
+  let fileId = text(context.team.registrationSourceFileId, 500)
+  let fileName = text(context.team.registrationSourceFileName, 160) || '球队报名表.docx'
+  if (!fileId) {
+    const batches = await safeGet('registration_import_batches', { teamId:context.teamId, tournamentId:context.tournamentId }, 20)
+    batches.sort((left, right) => toTime(right.updateTime || right.createTime) - toTime(left.updateTime || left.createTime))
+    const batch = batches[0]
+    fileId = text(batch && batch.sourceFileId, 500)
+    fileName = text(batch && batch.sourceFileName, 160) || fileName
+  }
+  if (!fileId || !fileId.startsWith('cloud://')) return { success:true, available:false, message:'未找到原始报名表' }
+  const result = await cloud.getTempFileURL({ fileList:[fileId] })
+  const file = (result.fileList || [])[0] || {}
+  if (!file.tempFileURL) return { success:true, available:false, message:'原始报名表暂时无法读取' }
+  return { success:true, available:true, fileId, fileName, url:file.tempFileURL }
+}
+
 function photoFileId(record) {
   return [record && record.photoFileID, record && record.photoFileId, record && record.photoUrl]
     .map(value => String(value || '').trim())
@@ -747,6 +765,7 @@ exports.main = async function(event) {
   try {
     const identity = await currentUser(event || {})
     if (event && event.action === 'getTeamExportPhotos') return await getTeamExportPhotos(event, identity)
+    if (event && event.action === 'getTeamRegistrationSource') return await getTeamRegistrationSource(event, identity)
     if (event && event.action === 'listTeamExportRoster') return await listTeamExportRoster(event, identity)
     if (event && event.action === 'removeTeamAccess') return await removeTeamAccess(event, identity)
     if (event && event.action === 'listTeamAccess') return await listTeamAccess(event, identity)

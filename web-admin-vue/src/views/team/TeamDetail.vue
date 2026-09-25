@@ -1426,6 +1426,63 @@ const exportPlayers = computed(() => {
   })
   return Array.from(result.values())
 })
+
+function identityMatchParts(person) {
+  return {
+    name:String(person.name || '').replace(/\s/g, '').toLowerCase(),
+    birthDate:String(person.birthDate || '').slice(0, 10),
+    jerseyNumber:String(Number(person.jerseyNumber || 0) || '')
+  }
+}
+
+function registerUniqueIdentity(map, key, identityNumber) {
+  if (!key || !identityNumber) return
+  if (!map.has(key)) map.set(key, identityNumber)
+  else if (map.get(key) !== identityNumber) map.set(key, '')
+}
+
+async function loadRegistrationIdentityIndex() {
+  if (!sourceTournamentId.value || !tournamentRelation.value?._id) return null
+  const source = await callFunction('organizerClaimInvite', {
+    action:'getTeamRegistrationSource',
+    tournamentId:sourceTournamentId.value,
+    divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+    tournamentTeamId:String(tournamentRelation.value._id)
+  })
+  if (!source?.success || !source.available || !source.url) return null
+  const response = await fetch(source.url, { cache:'no-store' })
+  if (!response.ok) throw new Error(`原始报名表读取失败（${response.status}）`)
+  const blob = await response.blob()
+  const rawFileName = String(source.fileName || '球队报名表.docx')
+  const fileName = rawFileName.toLowerCase().endsWith('.docx') ? rawFileName : `${rawFileName}.docx`
+  const file = new File([blob], fileName, { type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+  const { parseTeamRegistrationDocx } = await import('../../utils/teamRegistrationDocx.js')
+  const parsed = await parseTeamRegistrationDocx(file, { skipImages:true })
+  const exact = new Map()
+  const nameBirth = new Map()
+  const nameJersey = new Map()
+  const names = new Map()
+  ;[...(parsed.staff || []), ...(parsed.players || [])].forEach(person => {
+    const identityNumber = String(person.identityNumber || '').trim().toUpperCase()
+    if (!identityNumber) return
+    const parts = identityMatchParts(person)
+    registerUniqueIdentity(exact, `${parts.name}|${parts.birthDate}|${parts.jerseyNumber}`, identityNumber)
+    registerUniqueIdentity(nameBirth, `${parts.name}|${parts.birthDate}`, identityNumber)
+    registerUniqueIdentity(nameJersey, `${parts.name}|${parts.jerseyNumber}`, identityNumber)
+    registerUniqueIdentity(names, parts.name, identityNumber)
+  })
+  return { exact, nameBirth, nameJersey, names }
+}
+
+function sourceIdentityNumber(record, index) {
+  if (!index) return ''
+  const parts = identityMatchParts(record)
+  return index.exact.get(`${parts.name}|${parts.birthDate}|${parts.jerseyNumber}`)
+    || index.nameBirth.get(`${parts.name}|${parts.birthDate}`)
+    || index.nameJersey.get(`${parts.name}|${parts.jerseyNumber}`)
+    || index.names.get(parts.name)
+    || ''
+}
 function openExportDialog() {
   exportFields.value = exportFieldOptions.map(item => item.key)
   exportDialogVisible.value = true
@@ -1480,7 +1537,7 @@ function exportMemberValue(row, key) {
   if (key === 'photo') return ''
   if (key === 'memberType') return row._memberType
   if (key === 'role') return row._memberType === '工作人员' ? (row.role || row.type || '工作人员') : playerIdentityLabel(row)
-  if (key === 'identityNumber') return row.identityNumber || row.idCard || row.idNumber || ''
+  if (key === 'identityNumber') return row.identityNumber || row.idCard || row.idNumber || row._exportIdentityNumber || ''
   if (key === 'phone') return row.phone || row.contactPhone || ''
   if (key === 'position') return row._memberType === '球员' ? getPositionLabel(row.position) : ''
   if (key === 'organizerReviewStatus') return row._memberType === '球员' ? (playerOrganizerReviewStatus(row) === 'approved' ? '已审核' : '待审核') : ''
@@ -1528,6 +1585,19 @@ async function exportTeamData() {
       ...staffMembers.value.map(item => ({ ...item, _memberType:'工作人员' })),
       ...exportPlayers.value.map(item => ({ ...item, _memberType:'球员' }))
     ]
+    let missingIdentityCount = 0
+    if (selectedFields.some(item => item.key === 'identityNumber')) {
+      try {
+        const identityIndex = await loadRegistrationIdentityIndex()
+        records.forEach(record => {
+          if (!record.identityNumber && !record.idCard && !record.idNumber) record._exportIdentityNumber = sourceIdentityNumber(record, identityIndex)
+          if (!record.identityNumber && !record.idCard && !record.idNumber && !record._exportIdentityNumber) missingIdentityCount += 1
+        })
+      } catch (error) {
+        console.warn('从原始报名表补充身份证号失败:', error.message)
+        missingIdentityCount = records.filter(record => !record.identityNumber && !record.idCard && !record.idNumber).length
+      }
+    }
     const photoColumn = selectedFields.findIndex(item => item.key === 'photo')
     const photoSource = record => record._exportPhotoFileId || record.photoFileID || record.photoFileId || record.photoUrl || ''
     const prefetchedPhotos = new Map()
@@ -1614,7 +1684,10 @@ async function exportTeamData() {
     link.click()
     link.remove()
     URL.revokeObjectURL(downloadUrl)
-    ElMessage.success(failedPhotos ? `球队资料已导出，${failedPhotos} 张照片未能写入` : '球队资料已导出')
+    const exportWarnings = []
+    if (failedPhotos) exportWarnings.push(`${failedPhotos} 张照片未能写入`)
+    if (missingIdentityCount) exportWarnings.push(`${missingIdentityCount} 人未在原始报名表中匹配到完整身份证号`)
+    ElMessage.success(exportWarnings.length ? `球队资料已导出；${exportWarnings.join('，')}` : '球队资料已导出')
     exportDialogVisible.value = false
   } catch (error) { ElMessage.error(error.message || '导出失败') } finally { exporting.value = false }
 }
