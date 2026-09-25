@@ -144,6 +144,167 @@ function userOwnsTournament(tournament, identity, actorOrgId) {
     .includes(String(identity.user._id))
 }
 
+const TEAM_ACCESS_ROLE_LABELS = {
+  team_leader: '领队',
+  head_coach: '主教练',
+  liaison: '联络员'
+}
+
+function normalizeClaimPhone(value) {
+  const phone = String(value || '').replace(/\D/g, '')
+  return /^1[3-9]\d{9}$/.test(phone) ? phone : ''
+}
+
+async function teamAccessContext(event, identity) {
+  const tournamentId = text(event.tournamentId, 80)
+  const divisionId = text(event.divisionId || 'default', 80)
+  const tournamentTeamId = text(event.tournamentTeamId, 80)
+  if (!tournamentId || !tournamentTeamId) throw new Error('缺少赛事或参赛球队关系')
+  const [tournamentResult, relationResult] = await Promise.all([
+    db.collection('tournaments').doc(tournamentId).get(),
+    db.collection('tournament_teams').doc(tournamentTeamId).get()
+  ])
+  const tournament = asObject(tournamentResult.data)
+  const relation = asObject(relationResult.data)
+  const actorOrgId = text(event.__actorOrgId || identity.user.orgId, 80)
+  if (!userOwnsTournament(tournament, identity, actorOrgId)) throw new Error('当前账号无权管理该球队账号')
+  if (!relation || String(relation.tournamentId || '') !== tournamentId) throw new Error('参赛球队关系不存在或不属于当前赛事')
+  if (relation.divisionId && String(relation.divisionId) !== divisionId) throw new Error('参赛球队不属于当前竞赛组别')
+  const teamId = text(relation.teamId, 80)
+  if (!teamId) throw new Error('参赛关系缺少球队')
+  const team = asObject((await db.collection('teams').doc(teamId).get()).data)
+  if (!team) throw new Error('球队不存在')
+  const relationOrgId = text(relation.orgId || relation.organizationId, 80)
+  const teamOrgId = text(team.orgId || team.organizationId, 80)
+  if (actorOrgId && relationOrgId && actorOrgId !== relationOrgId) throw new Error('参赛球队关系不属于当前机构')
+  if (actorOrgId && teamOrgId && actorOrgId !== teamOrgId) throw new Error('球队不属于当前机构')
+  return { tournamentId, divisionId, tournamentTeamId, tournament, relation, teamId, team, actorOrgId }
+}
+
+async function userByPhone(phone) {
+  if (!phone) return null
+  const result = await db.collection('users').where(_.or([{ phone }, { phoneNumber:phone }])).limit(3).get()
+  const users = result.data || []
+  if (users.length > 1) throw new Error(`手机号 ${maskPhone(phone)} 对应多个账号，请先处理重复账号`)
+  return users[0] || null
+}
+
+async function latestTeamAccessInvite(context) {
+  const rows = await safeGet('team_invitations', {
+    tournamentId:context.tournamentId,
+    teamId:context.teamId,
+    type:'prebuilt_tournament_team'
+  }, 50)
+  const scoped = rows.filter(item => !context.actorOrgId || !item.organizerOrgId || String(item.organizerOrgId) === context.actorOrgId)
+  scoped.sort((left, right) => toTime(right.updateTime || right.createTime) - toTime(left.updateTime || left.createTime))
+  return scoped[0] || null
+}
+
+async function listTeamAccess(event, identity) {
+  const context = await teamAccessContext(event, identity)
+  const invite = await latestTeamAccessInvite(context)
+  let personnel = Array.isArray(invite && invite.claimantCandidates) ? invite.claimantCandidates : []
+  if (!personnel.length) {
+    const fallbackPhone = normalizeClaimPhone(context.team.ownerPhone || context.team.contactPhone || context.team.managerPhone)
+    const fallbackName = text(context.team.ownerName || context.team.contactName || context.team.managerName, 40)
+    if (fallbackName || fallbackPhone) personnel = [{ role:'team_leader', roleLabel:'领队', name:fallbackName, phone:fallbackPhone, accountType:'owner' }]
+  }
+  const memberships = await safeGet('team_memberships', { teamId:context.teamId }, 100)
+  const pendingInvites = await safeGet('team_invitations', { teamId:context.teamId, type:'team_member', status:'active' }, 100)
+  const ownerId = String(context.team.ownerId || context.team.ownerUserId || context.team.claimedByUserId || '')
+  const primary = personnel.find(item => item.accountType === 'owner') || personnel[0] || null
+  const rows = []
+  for (const item of personnel) {
+    const role = String(item.role || '')
+    if (!TEAM_ACCESS_ROLE_LABELS[role]) continue
+    const phone = normalizeClaimPhone(item.phone)
+    const user = await userByPhone(phone)
+    const membership = user ? memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id)) : null
+    const pending = pendingInvites.find(row => String(row.inviteePhone || '') === phone)
+    const isPrimary = Boolean(primary && primary.role === role)
+    let status = isPrimary ? '待认领' : '待授权'
+    if (user && ownerId && String(user._id) === ownerId) status = '主账号'
+    else if (membership && String(membership.status || 'accepted') === 'accepted') status = '已加入'
+    else if (pending) status = '待登录'
+    rows.push({ role, roleLabel:TEAM_ACCESS_ROLE_LABELS[role], name:text(item.name, 40), phone, accountType:isPrimary ? 'owner' : 'member', status })
+  }
+  return { success:true, teamId:context.teamId, primaryRole:primary ? String(primary.role || '') : '', personnel:rows }
+}
+
+async function saveTeamAccess(event, identity) {
+  const context = await teamAccessContext(event, identity)
+  const rawPersonnel = Array.isArray(event.personnel) ? event.personnel : []
+  const personnel = []
+  const seenRoles = new Set()
+  for (const raw of rawPersonnel.slice(0, 3)) {
+    const role = String(raw && raw.role || '').trim()
+    if (!TEAM_ACCESS_ROLE_LABELS[role] || seenRoles.has(role)) continue
+    const name = text(raw && raw.name, 40)
+    const phone = normalizeClaimPhone(raw && raw.phone)
+    if (!name && !phone) continue
+    if (!name || !phone) throw new Error(`${TEAM_ACCESS_ROLE_LABELS[role]}姓名和有效手机号均不能为空`)
+    seenRoles.add(role)
+    personnel.push({ role, roleLabel:TEAM_ACCESS_ROLE_LABELS[role], name, phone })
+  }
+  if (!personnel.length) throw new Error('请至少设置一名球队管理人员')
+  const requestedPrimaryRole = String(event.primaryRole || '').trim()
+  const primary = personnel.find(item => item.role === requestedPrimaryRole) || personnel[0]
+  const candidates = personnel.map(item => ({ ...item, accountType:item.role === primary.role ? 'owner' : 'member' }))
+  const now = db.serverDate()
+  let invite = await latestTeamAccessInvite(context)
+  if (!invite) {
+    const added = await db.collection('team_invitations').add({ data:{
+      type:'prebuilt_tournament_team', status:'pending', tournamentId:context.tournamentId, divisionId:context.divisionId,
+      teamId:context.teamId, tournamentTeamId:context.tournamentTeamId, organizerOrgId:context.actorOrgId,
+      organizerUserId:identity.user._id, organizerName:text(context.tournament.organizerName || context.tournament.organizer, 80),
+      divisionName:text(context.relation.divisionName || context.divisionId, 40), inviteExpireAt:inviteExpiry(context.tournament || {}),
+      source:'pc_team_access', createTime:now, updateTime:now
+    } })
+    invite = { _id:added._id }
+  }
+  await db.collection('team_invitations').doc(String(invite._id)).update({ data:{
+    allowedClaimPhones:[primary.phone], claimantCandidates:candidates,
+    managerName:primary.name, managerPhone:primary.phone, updateTime:now
+  } })
+
+  const memberships = await safeGet('team_memberships', { teamId:context.teamId }, 200)
+  const currentOwnerId = String(context.team.ownerId || context.team.ownerUserId || context.team.claimedByUserId || '')
+  const resolved = []
+  for (const person of candidates) resolved.push({ person, user:await userByPhone(person.phone) })
+  const primaryResolved = resolved.find(item => item.person.role === primary.role)
+  if (currentOwnerId && primaryResolved && primaryResolved.user && currentOwnerId !== String(primaryResolved.user._id)) {
+    await db.collection('teams').doc(context.teamId).update({ data:{
+      ownerId:primaryResolved.user._id, ownerUserId:primaryResolved.user._id, claimedByUserId:primaryResolved.user._id,
+      ownerPhone:primary.phone, claimStatus:'claimed', updateTime:now
+    } })
+    for (const membership of memberships) {
+      const memberUserId = String(membership.userId || membership.memberUserId || '')
+      if (memberUserId === currentOwnerId) {
+        await db.collection('team_memberships').doc(String(membership._id)).update({ data:{ role:'member', roles:['member'], permissions:['team.view'], updateTime:now } })
+      }
+    }
+  }
+  for (const item of resolved) {
+    const person = item.person
+    const user = item.user
+    const isPrimary = person.role === primary.role
+    if (user) {
+      const existing = memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id))
+      const memberRole = isPrimary ? 'owner' : (person.role === 'head_coach' ? 'coach' : 'member')
+      const permissions = isPrimary ? ['team.view','team.manage'] : ['team.view']
+      const data = { teamId:context.teamId, orgId:context.actorOrgId, userId:user._id, role:memberRole, roles:[memberRole], permissions, status:'accepted', phone:person.phone, source:'organizer_team_access', updateTime:now }
+      if (existing && existing._id) await db.collection('team_memberships').doc(String(existing._id)).update({ data })
+      else await db.collection('team_memberships').add({ data:{ ...data, createTime:now } })
+    } else if (!isPrimary) {
+      const pending = (await safeGet('team_invitations', { teamId:context.teamId, type:'team_member', inviteePhone:person.phone, status:'active' }, 10))[0]
+      const data = { teamId:context.teamId, orgId:context.actorOrgId, type:'team_member', status:'active', usageMode:'single', inviterUserId:identity.user._id, inviteePhone:person.phone, inviteeName:person.name, memberRole:person.role === 'head_coach' ? 'coach' : 'member', permissions:['team.view'], roleText:person.roleLabel, source:'organizer_team_access', updateTime:now }
+      if (pending && pending._id) await db.collection('team_invitations').doc(String(pending._id)).update({ data })
+      else await db.collection('team_invitations').add({ data:{ ...data, expiresAt:new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), createTime:now } })
+    }
+  }
+  return await listTeamAccess(event, identity)
+}
+
 function inviteExpiry(tournament) {
   const value = tournament.registrationDeadline || tournament.signupDeadline || tournament.endDate
   if (value) return value
@@ -438,6 +599,8 @@ async function decideClaimReview(event, identity) {
 exports.main = async function(event) {
   try {
     const identity = await currentUser(event || {})
+    if (event && event.action === 'listTeamAccess') return await listTeamAccess(event, identity)
+    if (event && event.action === 'saveTeamAccess') return await saveTeamAccess(event, identity)
     if (event && event.action === 'listClaimReviewRequests') return await listClaimReviewRequests(event, identity)
     if (event && event.action === 'getClaimReviewProofUrls') return await getClaimReviewProofUrls(event, identity)
     if (event && event.action === 'decideClaimReview') return await decideClaimReview(event, identity)

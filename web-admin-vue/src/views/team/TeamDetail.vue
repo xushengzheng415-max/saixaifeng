@@ -63,6 +63,19 @@
             </template>
           </section>
         </div>
+        <section class="team-access-panel">
+          <header>
+            <div><h2>球队管理权限</h2><p>主账号负责球队管理，其他账号按分配权限协作。</p></div>
+            <el-button type="primary" plain @click="openTeamAccess"><el-icon><Plus /></el-icon>分配账号</el-button>
+          </header>
+          <el-table :data="teamAccessRows" v-loading="teamAccessLoading" empty-text="暂未分配球队管理账号" class="team-access-table">
+            <el-table-column prop="roleLabel" label="身份" width="120" />
+            <el-table-column prop="name" label="姓名" min-width="140" />
+            <el-table-column label="手机号" min-width="160"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column>
+            <el-table-column label="账号关系" width="150"><template #default="{ row }"><el-tag :type="row.accountType === 'owner' ? 'success' : 'info'" size="small">{{ row.accountType === 'owner' ? '主账号' : '协作账号' }}</el-tag></template></el-table-column>
+            <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === '主账号' || row.status === '已加入' ? 'success' : 'warning'" effect="plain" size="small">{{ row.status || '待授权' }}</el-tag></template></el-table-column>
+          </el-table>
+        </section>
         <section class="team-kit-panel">
           <header><div><h2>比赛服颜色</h2><p>设置球队常用主、备用比赛服；单场比赛可根据撞色情况另行调整，历史比赛快照不会被覆盖。</p></div><el-button type="success" :loading="kitSaving" @click="saveTeamKitColors">保存颜色设置</el-button></header>
           <div class="kit-set-grid">
@@ -1196,12 +1209,23 @@
       <template #footer><el-button @click="showAddStaff=false">取消</el-button><el-button type="primary" :loading="staffSubmitting" @click="submitStaff">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="exportDialogVisible" title="导出球队资料" width="720px" :close-on-click-modal="false">
-      <el-alert type="info" :closable="false" title="可选择导出范围和字段，导出文件包含球队资料、工作人员和球员三个工作表。" />
-      <div class="export-dialog-section"><strong>导出范围</strong><el-checkbox v-model="exportOptions.team">球队资料</el-checkbox><el-checkbox v-model="exportOptions.staff">工作人员</el-checkbox><el-checkbox v-model="exportOptions.players">球员资料</el-checkbox></div>
-      <div v-if="exportOptions.players" class="export-dialog-section"><strong>球员选择</strong><el-checkbox :model-value="exportPlayerIds.length === players.length" @change="toggleAllExportPlayers">全选球员</el-checkbox><el-checkbox-group v-model="exportPlayerIds" class="export-player-checks"><el-checkbox v-for="player in players" :key="player._id" :label="player._id">{{ player.name || '未命名球员' }}{{ player.jerseyNumber ? `（${player.jerseyNumber}号）` : '' }}</el-checkbox></el-checkbox-group></div>
-      <div class="export-dialog-section"><strong>字段</strong><el-checkbox-group v-model="exportFields" class="export-field-checks"><el-checkbox v-for="field in exportFieldOptions" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group></div>
-      <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="!exportOptions.team && !exportOptions.staff && !exportOptions.players" @click="exportTeamData">导出 Excel</el-button></template>
+    <el-dialog v-model="showTeamAccess" title="球队管理权限" width="720px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" title="主账号可管理球队；协作账号由主账号分配权限。这里的账号不会进入工作人员名单。" />
+      <div class="team-access-form">
+        <div v-for="item in teamAccessForm" :key="item.role" class="team-access-form-row">
+          <strong>{{ item.roleLabel }}</strong>
+          <el-input v-model="item.name" placeholder="姓名" maxlength="30" />
+          <el-input v-model="item.phone" placeholder="手机号" maxlength="11" />
+          <el-radio v-model="teamAccessPrimaryRole" :value="item.role" :disabled="!item.name || !item.phone">主账号</el-radio>
+        </div>
+      </div>
+      <template #footer><el-button @click="showTeamAccess=false">取消</el-button><el-button type="primary" :loading="teamAccessSaving" @click="saveTeamAccess">保存权限</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="exportDialogVisible" title="导出球队资料" width="680px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" title="默认导出全部工作人员和球员，合并到一个工作表；可按需选择字段。" />
+      <div class="export-dialog-section"><strong>导出字段</strong><el-checkbox-group v-model="exportFields" class="export-field-checks"><el-checkbox v-for="field in exportFieldOptions" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group></div>
+      <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="exportFields.length === 0" @click="exportTeamData">导出 Excel</el-button></template>
     </el-dialog>
   </div>
 </template>
@@ -1364,35 +1388,179 @@ const showAddPlayer = ref(false)
 const showAddStaff = ref(false)
 const staffSubmitting = ref(false)
 const staffForm = ref({ name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null })
+const teamAccessRoleOptions = [
+  { role:'team_leader', roleLabel:'领队' },
+  { role:'head_coach', roleLabel:'主教练' },
+  { role:'liaison', roleLabel:'联络员' }
+]
+const teamAccessRows = ref([])
+const teamAccessLoading = ref(false)
+const teamAccessSaving = ref(false)
+const showTeamAccess = ref(false)
+const teamAccessPrimaryRole = ref('team_leader')
+const teamAccessForm = ref(teamAccessRoleOptions.map(item => ({ ...item, name:'', phone:'' })))
 const exportDialogVisible = ref(false)
 const exporting = ref(false)
-const exportOptions = ref({ team:true, staff:true, players:true })
-const exportPlayerIds = ref([])
 const exportFieldOptions = [
-  { key:'name', label:'姓名' }, { key:'role', label:'职务/身份' }, { key:'jerseyNumber', label:'球衣号码' },
-  { key:'jerseyName', label:'球衣英文' }, { key:'birthDate', label:'出生日期' }, { key:'nativePlace', label:'籍贯' },
-  { key:'identityNumberMasked', label:'身份证（脱敏）' }, { key:'phone', label:'手机号' }, { key:'position', label:'位置' },
-  { key:'organizerReviewStatus', label:'主办方审核' }
+  { key:'photo', label:'照片', width:14 }, { key:'name', label:'姓名', width:14 }, { key:'memberType', label:'人员类型', width:12 },
+  { key:'role', label:'职务/身份', width:18 }, { key:'jerseyNumber', label:'球衣号码', width:11 }, { key:'jerseyName', label:'球衣英文', width:16 },
+  { key:'gender', label:'性别', width:9 }, { key:'birthDate', label:'出生日期', width:14 }, { key:'age', label:'年龄', width:9 },
+  { key:'nativePlace', label:'籍贯', width:18 }, { key:'identityNumberMasked', label:'身份证（脱敏）', width:23 },
+  { key:'phone', label:'手机号', width:16 }, { key:'position', label:'位置', width:12 }, { key:'organizerReviewStatus', label:'主办方审核', width:14 }
 ]
 const exportFields = ref(exportFieldOptions.map(item => item.key))
-function openExportDialog() { exportPlayerIds.value = players.value.map(item => item._id); exportDialogVisible.value = true }
-function toggleAllExportPlayers(value) { exportPlayerIds.value = value ? players.value.map(item => item._id) : [] }
+function openExportDialog() {
+  exportFields.value = exportFieldOptions.map(item => item.key)
+  exportDialogVisible.value = true
+}
+
+function excelImageExtension(dataUrl) {
+  const type = String(dataUrl || '').match(/^data:image\/(png|jpe?g|gif);/i)?.[1]?.toLowerCase()
+  return type === 'jpg' ? 'jpeg' : (type || 'png')
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('照片读取失败'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function photoForExcel(source) {
+  let url = String(source || '').trim()
+  if (!url) return null
+  if (url.startsWith('cloud://')) url = await getFileUrl(url)
+  if (url.startsWith('data:image/')) return { base64:url, extension:excelImageExtension(url) }
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`照片下载失败（${response.status}）`)
+  const blob = await response.blob()
+  if (/^image\/(png|jpe?g|gif)$/i.test(blob.type)) {
+    const base64 = await blobToDataUrl(blob)
+    return { base64, extension:excelImageExtension(base64) }
+  }
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image()
+      element.onload = () => resolve(element)
+      element.onerror = () => reject(new Error('照片格式转换失败'))
+      element.src = objectUrl
+    })
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth || image.width
+    canvas.height = image.naturalHeight || image.height
+    canvas.getContext('2d').drawImage(image, 0, 0)
+    return { base64:canvas.toDataURL('image/png'), extension:'png' }
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+function exportMemberValue(row, key) {
+  if (key === 'photo') return ''
+  if (key === 'memberType') return row._memberType
+  if (key === 'role') return row._memberType === '工作人员' ? (row.role || row.type || '工作人员') : playerIdentityLabel(row)
+  if (key === 'identityNumberMasked') return row.identityNumberMasked || row.identityMasked || maskIdCard(row.idCard || row.idNumber || '')
+  if (key === 'phone') return row.phone || row.contactPhone || ''
+  if (key === 'position') return row._memberType === '球员' ? getPositionLabel(row.position) : ''
+  if (key === 'organizerReviewStatus') return row._memberType === '球员' ? (playerOrganizerReviewStatus(row) === 'approved' ? '已审核' : '待审核') : ''
+  if (key === 'gender') return ({ male:'男', female:'女' })[String(row.gender || '').toLowerCase()] || row.gender || ''
+  if (key === 'age') return row.birthDate ? calculateAge(row.birthDate) : ''
+  if (key === 'birthDate' && row.birthDate) {
+    const match = String(row.birthDate).match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  }
+  return row[key] ?? ''
+}
+
 async function exportTeamData() {
   exporting.value = true
   try {
-    const XLSX = await import('xlsx')
-    const workbook = XLSX.utils.book_new()
-    const valueOf = (row, key) => key === 'role' ? (row.role || row.type || row.dualRoleLabel || '球员') : (row[key] ?? '')
-    const headers = exportFieldOptions.filter(item => exportFields.value.includes(item.key)).map(item => item.label)
-    const keys = exportFieldOptions.filter(item => exportFields.value.includes(item.key)).map(item => item.key)
-    if (exportOptions.value.team) XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['球队名称', team.value.name || '', '赛事编号', tournamentParticipationCode.value], ['负责人', tournamentContactName.value, '联系方式', maskedPhone.value]]), '球队资料')
-    if (exportOptions.value.staff) XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(staffMembers.value.map(row => Object.fromEntries(keys.map((key,index) => [headers[index], valueOf(row,key)])))), '工作人员')
-    if (exportOptions.value.players) {
-      const selected = players.value.filter(row => exportPlayerIds.value.includes(row._id))
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(selected.map(row => Object.fromEntries(keys.map((key,index) => [headers[index], valueOf(row,key)])))), '球员资料')
+    const ExcelJSImport = await import('exceljs')
+    const ExcelJS = ExcelJSImport.default || ExcelJSImport
+    const selectedFields = exportFieldOptions.filter(item => exportFields.value.includes(item.key))
+    if (!selectedFields.length) return ElMessage.warning('请至少选择一个导出字段')
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = '赛小蜂足球'
+    workbook.created = new Date()
+    const worksheet = workbook.addWorksheet('球队资料', { views:[{ showGridLines:false, state:'frozen', ySplit:4 }] })
+    const columnCount = selectedFields.length
+    if (columnCount > 1) worksheet.mergeCells(1, 1, 1, columnCount)
+    worksheet.getCell(1, 1).value = `${team.value.name || '球队'}资料`
+    worksheet.getCell(1, 1).font = { name:'Microsoft YaHei', size:16, bold:true, color:{ argb:'FF123D27' } }
+    worksheet.getCell(1, 1).alignment = { horizontal:'center', vertical:'middle' }
+    worksheet.getRow(1).height = 32
+    if (columnCount > 1) worksheet.mergeCells(2, 1, 2, columnCount)
+    worksheet.getCell(2, 1).value = `赛事编号：${tournamentParticipationCode.value}    负责人：${tournamentContactName.value}    联系方式：${maskedPhone.value}`
+    worksheet.getCell(2, 1).font = { name:'Microsoft YaHei', size:10, color:{ argb:'FF52635A' } }
+    worksheet.getCell(2, 1).alignment = { horizontal:'center', vertical:'middle' }
+    worksheet.getRow(2).height = 24
+    const headerRow = worksheet.getRow(4)
+    headerRow.values = selectedFields.map(item => item.label)
+    headerRow.height = 30
+    headerRow.eachCell(cell => {
+      cell.font = { name:'Microsoft YaHei', size:10, bold:true, color:{ argb:'FFFFFFFF' } }
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF147A45' } }
+      cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true }
+    })
+    selectedFields.forEach((field, index) => { worksheet.getColumn(index + 1).width = field.width })
+    const records = [
+      ...staffMembers.value.map(item => ({ ...item, _memberType:'工作人员' })),
+      ...players.value.map(item => ({ ...item, _memberType:'球员' }))
+    ]
+    const photoColumn = selectedFields.findIndex(item => item.key === 'photo')
+    let failedPhotos = 0
+    for (const record of records) {
+      const row = worksheet.addRow(selectedFields.map(field => exportMemberValue(record, field.key)))
+      row.height = photoColumn >= 0 ? 58 : 32
+      row.eachCell({ includeEmpty:true }, cell => {
+        cell.font = { name:'Microsoft YaHei', size:10, color:{ argb:'FF25342B' } }
+        cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true }
+        cell.border = {
+          top:{ style:'thin', color:{ argb:'FFBFCBC3' } }, bottom:{ style:'thin', color:{ argb:'FFBFCBC3' } },
+          left:{ style:'thin', color:{ argb:'FFBFCBC3' } }, right:{ style:'thin', color:{ argb:'FFBFCBC3' } }
+        }
+        if (row.number % 2 === 0) cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFF3F8F5' } }
+      })
+      const birthDateIndex = selectedFields.findIndex(item => item.key === 'birthDate')
+      if (birthDateIndex >= 0 && row.getCell(birthDateIndex + 1).value instanceof Date) row.getCell(birthDateIndex + 1).numFmt = 'yyyy-mm-dd'
+      if (photoColumn >= 0) {
+        const source = record.photoUrl || record.photoFileID || record.photoFileId || ''
+        if (source) {
+          try {
+            const photo = await photoForExcel(source)
+            if (photo) {
+              const imageId = workbook.addImage(photo)
+              worksheet.addImage(imageId, { tl:{ col:photoColumn + 0.18, row:row.number - 0.88 }, ext:{ width:48, height:62 }, editAs:'oneCell' })
+            }
+          } catch (error) {
+            failedPhotos += 1
+            console.warn('导出照片失败:', record.name, error.message)
+          }
+        }
+      }
     }
-    XLSX.writeFile(workbook, `${team.value.name || '球队'}-资料.xlsx`)
-    ElMessage.success('球队资料已导出')
+    for (let column = 1; column <= columnCount; column += 1) {
+      headerRow.getCell(column).border = {
+        top:{ style:'thin', color:{ argb:'FF0F5F37' } }, bottom:{ style:'thin', color:{ argb:'FF0F5F37' } },
+        left:{ style:'thin', color:{ argb:'FFFFFFFF' } }, right:{ style:'thin', color:{ argb:'FFFFFFFF' } }
+      }
+    }
+    if (records.length) worksheet.autoFilter = { from:{ row:4, column:1 }, to:{ row:4 + records.length, column:columnCount } }
+    worksheet.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, margins:{ left:0.3, right:0.3, top:0.5, bottom:0.5, header:0.2, footer:0.2 } }
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const downloadUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = `${team.value.name || '球队'}-资料.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(downloadUrl)
+    ElMessage.success(failedPhotos ? `球队资料已导出，${failedPhotos} 张照片未能写入` : '球队资料已导出')
     exportDialogVisible.value = false
   } catch (error) { ElMessage.error(error.message || '导出失败') } finally { exporting.value = false }
 }
@@ -2022,6 +2190,74 @@ function openAddPlayer() {
 function openAddStaff() {
   staffForm.value = { name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null }
   showAddStaff.value = true
+}
+
+async function loadTeamAccess() {
+  if (!sourceTournamentId.value || !tournamentRelation.value?._id) return
+  if (qaSnapshot) {
+    teamAccessRows.value = [{ role:'team_leader', roleLabel:'领队', name:tournamentContactName.value, phone:maskedPhone.value === '—' ? '' : maskedPhone.value, accountType:'owner', status:'主账号' }]
+    return
+  }
+  teamAccessLoading.value = true
+  try {
+    const result = await callFunction('organizerClaimInvite', {
+      action:'listTeamAccess',
+      tournamentId:sourceTournamentId.value,
+      divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+      tournamentTeamId:String(tournamentRelation.value._id)
+    })
+    if (!result?.success) throw new Error(result?.message || '球队管理权限加载失败')
+    teamAccessRows.value = Array.isArray(result.personnel) ? result.personnel : []
+    teamAccessPrimaryRole.value = result.primaryRole || teamAccessRows.value.find(item => item.accountType === 'owner')?.role || 'team_leader'
+  } catch (error) {
+    console.error('加载球队管理权限失败:', error)
+    teamAccessRows.value = []
+  } finally {
+    teamAccessLoading.value = false
+  }
+}
+
+async function openTeamAccess() {
+  if (!tournamentRelation.value?._id) return ElMessage.error('当前球队参赛关系不存在，无法分配账号')
+  if (!teamAccessRows.value.length) await loadTeamAccess()
+  const existing = new Map(teamAccessRows.value.map(item => [item.role, item]))
+  teamAccessForm.value = teamAccessRoleOptions.map(option => ({
+    ...option,
+    name:String(existing.get(option.role)?.name || ''),
+    phone:String(existing.get(option.role)?.phone || '')
+  }))
+  teamAccessPrimaryRole.value = teamAccessRows.value.find(item => item.accountType === 'owner')?.role || teamAccessForm.value.find(item => item.name && item.phone)?.role || 'team_leader'
+  showTeamAccess.value = true
+}
+
+async function saveTeamAccess() {
+  const personnel = teamAccessForm.value
+    .map(item => ({ role:item.role, name:String(item.name || '').trim(), phone:String(item.phone || '').replace(/\D/g, '') }))
+    .filter(item => item.name || item.phone)
+  if (!personnel.length) return ElMessage.warning('请至少设置一名球队管理人员')
+  for (const item of personnel) {
+    if (!item.name || !/^1[3-9]\d{9}$/.test(item.phone)) return ElMessage.warning('请填写完整且有效的姓名和手机号')
+  }
+  if (!personnel.some(item => item.role === teamAccessPrimaryRole.value)) return ElMessage.warning('请选择一名主账号')
+  teamAccessSaving.value = true
+  try {
+    const result = await callFunction('organizerClaimInvite', {
+      action:'saveTeamAccess',
+      tournamentId:sourceTournamentId.value,
+      divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+      tournamentTeamId:String(tournamentRelation.value._id),
+      primaryRole:teamAccessPrimaryRole.value,
+      personnel
+    })
+    if (!result?.success) throw new Error(result?.message || '球队管理权限保存失败')
+    teamAccessRows.value = Array.isArray(result.personnel) ? result.personnel : []
+    showTeamAccess.value = false
+    ElMessage.success('球队管理权限已保存')
+  } catch (error) {
+    ElMessage.error(error.message || '球队管理权限保存失败')
+  } finally {
+    teamAccessSaving.value = false
+  }
 }
 
 async function submitStaff() {
@@ -3846,7 +4082,7 @@ onMounted(async () => {
   if (route.query.edit === '1') editTeam()
   if (sourceTournamentId.value) {
     await loadTournamentTeamContext()
-    await loadPlayers()
+    await Promise.all([loadPlayers(), loadTeamAccess()])
   }
   else await loadPlayers()
 })
@@ -4217,6 +4453,7 @@ function compressBase64(dataUrl, maxSize = 300) {
 .collaboration-status dt { margin-bottom: 14px; }
 .match-summary { padding-bottom: 12px; }
 .professional-roster-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}.professional-roster-stats article{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:end;min-height:88px;padding:14px;border:1px solid #e6ebe7;border-radius:7px;background:#fbfdfb}.professional-roster-stats span{grid-column:1/-1;color:#667269;font-size:12px}.professional-roster-stats strong{color:#167f42;font-size:26px}.professional-roster-stats small{margin-bottom:4px;color:#536158}.professional-roster-stats article.pending strong{color:#d98b15}.professional-team-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}.professional-team-actions .el-button{height:41px;margin:0}
+.team-access-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-access-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-access-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-access-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.team-access-form{display:grid;gap:12px;margin-top:18px}.team-access-form-row{display:grid;grid-template-columns:90px minmax(150px,1fr) minmax(180px,1fr) 100px;gap:12px;align-items:center}.team-access-form-row>strong{color:#344139;font-size:14px}.team-access-form-row :deep(.el-radio){margin-right:0}.export-dialog-section{margin-top:18px}.export-dialog-section>strong{display:block;margin-bottom:10px;color:#344139}.export-field-checks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px}.export-field-checks :deep(.el-checkbox){margin-right:0}
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
@@ -4234,5 +4471,7 @@ function compressBase64(dataUrl, maxSize = 300) {
   .summary-identity { grid-column: 1 / -1; }
   .team-detail-grid { grid-template-columns: 1fr; }
   .kit-set-grid { grid-template-columns: 1fr; }
+  .team-access-form-row { grid-template-columns: 80px 1fr; }
+  .export-field-checks { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 </style>
