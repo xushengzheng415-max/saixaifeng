@@ -26,7 +26,7 @@
         </nav>
         <div class="detail-heading">
           <div><h1>球队详情</h1></div>
-          <div class="detail-heading-actions"><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
+          <div class="detail-heading-actions"><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
         </div>
 
         <section class="team-event-summary">
@@ -1195,6 +1195,14 @@
       </el-form>
       <template #footer><el-button @click="showAddStaff=false">取消</el-button><el-button type="primary" :loading="staffSubmitting" @click="submitStaff">保存</el-button></template>
     </el-dialog>
+
+    <el-dialog v-model="exportDialogVisible" title="导出球队资料" width="720px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" title="可选择导出范围和字段，导出文件包含球队资料、工作人员和球员三个工作表。" />
+      <div class="export-dialog-section"><strong>导出范围</strong><el-checkbox v-model="exportOptions.team">球队资料</el-checkbox><el-checkbox v-model="exportOptions.staff">工作人员</el-checkbox><el-checkbox v-model="exportOptions.players">球员资料</el-checkbox></div>
+      <div v-if="exportOptions.players" class="export-dialog-section"><strong>球员选择</strong><el-checkbox :model-value="exportPlayerIds.length === players.length" @change="toggleAllExportPlayers">全选球员</el-checkbox><el-checkbox-group v-model="exportPlayerIds" class="export-player-checks"><el-checkbox v-for="player in players" :key="player._id" :label="player._id">{{ player.name || '未命名球员' }}{{ player.jerseyNumber ? `（${player.jerseyNumber}号）` : '' }}</el-checkbox></el-checkbox-group></div>
+      <div class="export-dialog-section"><strong>字段</strong><el-checkbox-group v-model="exportFields" class="export-field-checks"><el-checkbox v-for="field in exportFieldOptions" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group></div>
+      <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="!exportOptions.team && !exportOptions.staff && !exportOptions.players" @click="exportTeamData">导出 Excel</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1355,6 +1363,38 @@ const showAddPlayer = ref(false)
 const showAddStaff = ref(false)
 const staffSubmitting = ref(false)
 const staffForm = ref({ name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null })
+const exportDialogVisible = ref(false)
+const exporting = ref(false)
+const exportOptions = ref({ team:true, staff:true, players:true })
+const exportPlayerIds = ref([])
+const exportFieldOptions = [
+  { key:'name', label:'姓名' }, { key:'role', label:'职务/身份' }, { key:'jerseyNumber', label:'球衣号码' },
+  { key:'jerseyName', label:'球衣英文' }, { key:'birthDate', label:'出生日期' }, { key:'nativePlace', label:'籍贯' },
+  { key:'identityNumberMasked', label:'身份证（脱敏）' }, { key:'phone', label:'手机号' }, { key:'position', label:'位置' },
+  { key:'organizerReviewStatus', label:'主办方审核' }
+]
+const exportFields = ref(exportFieldOptions.map(item => item.key))
+function openExportDialog() { exportPlayerIds.value = players.value.map(item => item._id); exportDialogVisible.value = true }
+function toggleAllExportPlayers(value) { exportPlayerIds.value = value ? players.value.map(item => item._id) : [] }
+async function exportTeamData() {
+  exporting.value = true
+  try {
+    const XLSX = await import('xlsx')
+    const workbook = XLSX.utils.book_new()
+    const valueOf = (row, key) => key === 'role' ? (row.role || row.type || row.dualRoleLabel || '球员') : (row[key] ?? '')
+    const headers = exportFieldOptions.filter(item => exportFields.value.includes(item.key)).map(item => item.label)
+    const keys = exportFieldOptions.filter(item => exportFields.value.includes(item.key)).map(item => item.key)
+    if (exportOptions.value.team) XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['球队名称', team.value.name || '', '赛事编号', tournamentParticipationCode.value], ['负责人', tournamentContactName.value, '联系方式', maskedPhone.value]]), '球队资料')
+    if (exportOptions.value.staff) XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(staffMembers.value.map(row => Object.fromEntries(keys.map((key,index) => [headers[index], valueOf(row,key)])))), '工作人员')
+    if (exportOptions.value.players) {
+      const selected = players.value.filter(row => exportPlayerIds.value.includes(row._id))
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(selected.map(row => Object.fromEntries(keys.map((key,index) => [headers[index], valueOf(row,key)])))), '球员资料')
+    }
+    XLSX.writeFile(workbook, `${team.value.name || '球队'}-资料.xlsx`)
+    ElMessage.success('球队资料已导出')
+    exportDialogVisible.value = false
+  } catch (error) { ElMessage.error(error.message || '导出失败') } finally { exporting.value = false }
+}
 const showBatchImport = ref(false)
 const showBatchAvatarImport = ref(false)
 const isEditingPlayer = ref(false)
