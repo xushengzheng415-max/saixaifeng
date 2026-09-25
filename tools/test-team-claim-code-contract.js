@@ -441,7 +441,21 @@ async function run() {
     ok('主账号转移保留旧负责人为只读协作成员')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/20 通过`)
+  // 场景 21：旧体验包对“已由你认领”再次提交时，服务端幂等返回成功而不是报邀请失效。
+  {
+    const seed = baseSeed()
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { status:'accepted', acceptedChoice:'prebuilt', acceptedTeamId:'team-1', acceptedUserId:'user-1', acceptedOpenId:OPEN_ID }) : item)
+    seed.team_memberships = [{ _id:'tm-claimed', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
+    const { result } = await callWorkspace(seed, { action:'acceptPrebuiltTeamInvite', inviteId:'inv-1', choice:'prebuilt', disclaimerAgreed:true })
+    assert.strictEqual(result.success, true, `场景 21：重复提交应幂等成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(result.alreadyClaimed, true, '场景 21：应返回 alreadyClaimed')
+    assert.strictEqual(result.idempotent, true, '场景 21：应标记 idempotent')
+    assert.strictEqual(result.teamId, 'team-1', '场景 21：应返回已认领球队')
+    ok('旧体验包重复提交已认领邀请时服务端幂等恢复')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/21 通过`)
 }
 
 run().catch(error => {

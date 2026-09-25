@@ -2115,6 +2115,27 @@ async function transferImportedPlayerDrafts(invite, targetTeamId, identity) {
 
 async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
   if (event.disclaimerAgreed !== true) throw new Error('请先阅读并同意参赛免责声明')
+  const requestedInviteId = String(event.inviteId || event.token || '')
+  const existingInvite = requestedInviteId ? (await safeGet('team_invitations', { _id:requestedInviteId }, 1))[0] : null
+  if (existingInvite && String(existingInvite.type || '') === 'prebuilt_tournament_team' && String(existingInvite.status || '') === 'accepted') {
+    const acceptedTeamId = String(existingInvite.acceptedTeamId || existingInvite.teamId || '')
+    const acceptedTeam = acceptedTeamId ? (await safeGet('teams', { _id:acceptedTeamId }, 1))[0] : null
+    const ownerIds = acceptedTeam ? [acceptedTeam.ownerId, acceptedTeam.ownerUserId, acceptedTeam.claimedByUserId].map(value => String(value || '')).filter(Boolean) : []
+    const acceptedByMe = String(existingInvite.acceptedUserId || '') === String(identity.user._id || '') ||
+      String(existingInvite.acceptedOpenId || '') === String(identity.openId || '') ||
+      ownerIds.indexOf(String(identity.user._id || '')) >= 0
+    if (acceptedTeam && acceptedByMe) {
+      return {
+        success:true,
+        teamId:acceptedTeamId,
+        workspaceId:await workspaceIdForManagedTeam(acceptedTeamId, identity),
+        pendingPlayerDraftCount:Number(acceptedTeam.pendingPlayerDraftCount || 0),
+        destination:Number(acceptedTeam.pendingPlayerDraftCount || 0) > 0 ? 'imported-player-review' : 'team-center',
+        alreadyClaimed:true,
+        idempotent:true
+      }
+    }
+  }
   const preview = await prebuiltTeamInviteForWorkspace(Object.assign({}, event, { allowReviewRequired: true }), identity)
   const invite = (await safeGet('team_invitations', { _id: preview.invite.id }, 1))[0]
   if (!invite || String(invite.type || '') !== 'prebuilt_tournament_team') throw new Error('邀请不存在或已失效')
