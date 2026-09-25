@@ -74,6 +74,7 @@
             <el-table-column label="手机号" min-width="160"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column>
             <el-table-column label="账号关系" width="150"><template #default="{ row }"><el-tag :type="row.accountType === 'owner' ? 'success' : 'info'" size="small">{{ row.accountType === 'owner' ? '主账号' : '协作账号' }}</el-tag></template></el-table-column>
             <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === '主账号' || row.status === '已加入' ? 'success' : 'warning'" effect="plain" size="small">{{ row.status || '待授权' }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="110" align="center"><template #default="{ row }"><el-button link type="danger" :loading="teamAccessDeletingRole === row.role" :disabled="row.accountType === 'owner'" @click="deleteTeamAccess(row)">删除权限</el-button></template></el-table-column>
           </el-table>
         </section>
         <section class="team-kit-panel">
@@ -1217,13 +1218,14 @@
           <el-input v-model="item.name" placeholder="姓名" maxlength="30" />
           <el-input v-model="item.phone" placeholder="手机号" maxlength="11" />
           <el-radio v-model="teamAccessPrimaryRole" :value="item.role" :disabled="!item.name || !item.phone">主账号</el-radio>
+          <el-button link type="danger" :disabled="teamAccessPrimaryRole === item.role" @click="clearTeamAccessFormRow(item)">删除</el-button>
         </div>
       </div>
       <template #footer><el-button @click="showTeamAccess=false">取消</el-button><el-button type="primary" :loading="teamAccessSaving" @click="saveTeamAccess">保存权限</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="exportDialogVisible" title="导出球队资料" width="680px" :close-on-click-modal="false">
-      <el-alert type="info" :closable="false" :title="`将导出 ${staffMembers.length} 名工作人员和 ${exportPlayers.length} 名球员，合并到一个工作表；可按需选择字段。`" />
+      <el-alert type="info" :closable="false" :title="`将导出 ${staffMembers.length} 名工作人员和 ${exportPlayers.length} 名球员，合并到一个工作表；默认 A4 横版打印。`" />
       <div class="export-dialog-section"><strong>导出字段</strong><el-checkbox-group v-model="exportFields" class="export-field-checks"><el-checkbox v-for="field in exportFieldOptions" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group></div>
       <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="exportFields.length === 0" @click="exportTeamData">导出 Excel</el-button></template>
     </el-dialog>
@@ -1396,6 +1398,7 @@ const teamAccessRoleOptions = [
 const teamAccessRows = ref([])
 const teamAccessLoading = ref(false)
 const teamAccessSaving = ref(false)
+const teamAccessDeletingRole = ref('')
 const showTeamAccess = ref(false)
 const teamAccessPrimaryRole = ref('team_leader')
 const teamAccessForm = ref(teamAccessRoleOptions.map(item => ({ ...item, name:'', phone:'' })))
@@ -1405,7 +1408,7 @@ const exportFieldOptions = [
   { key:'photo', label:'照片', width:14 }, { key:'name', label:'姓名', width:14 }, { key:'memberType', label:'人员类型', width:12 },
   { key:'role', label:'职务/身份', width:18 }, { key:'jerseyNumber', label:'球衣号码', width:11 }, { key:'jerseyName', label:'球衣英文', width:16 },
   { key:'gender', label:'性别', width:9 }, { key:'birthDate', label:'出生日期', width:14 }, { key:'age', label:'年龄', width:9 },
-  { key:'nativePlace', label:'籍贯', width:18 }, { key:'identityNumberMasked', label:'身份证（脱敏）', width:23 },
+  { key:'nativePlace', label:'籍贯', width:18 }, { key:'identityNumber', label:'身份证号', width:23 },
   { key:'phone', label:'手机号', width:16 }, { key:'position', label:'位置', width:12 }, { key:'organizerReviewStatus', label:'主办方审核', width:14 }
 ]
 const exportFields = ref(exportFieldOptions.map(item => item.key))
@@ -1477,7 +1480,7 @@ function exportMemberValue(row, key) {
   if (key === 'photo') return ''
   if (key === 'memberType') return row._memberType
   if (key === 'role') return row._memberType === '工作人员' ? (row.role || row.type || '工作人员') : playerIdentityLabel(row)
-  if (key === 'identityNumberMasked') return row.identityNumberMasked || row.identityMasked || maskIdCard(row.idCard || row.idNumber || '')
+  if (key === 'identityNumber') return row.identityNumber || row.idCard || row.idNumber || ''
   if (key === 'phone') return row.phone || row.contactPhone || ''
   if (key === 'position') return row._memberType === '球员' ? getPositionLabel(row.position) : ''
   if (key === 'organizerReviewStatus') return row._memberType === '球员' ? (playerOrganizerReviewStatus(row) === 'approved' ? '已审核' : '待审核') : ''
@@ -1587,7 +1590,20 @@ async function exportTeamData() {
       }
     }
     if (records.length) worksheet.autoFilter = { from:{ row:4, column:1 }, to:{ row:4 + records.length, column:columnCount } }
-    worksheet.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, margins:{ left:0.3, right:0.3, top:0.5, bottom:0.5, header:0.2, footer:0.2 } }
+    const lastCellAddress = worksheet.getCell(Math.max(4, 4 + records.length), columnCount).address
+    worksheet.pageSetup = {
+      paperSize:9,
+      orientation:'landscape',
+      fitToPage:true,
+      fitToWidth:1,
+      fitToHeight:0,
+      horizontalCentered:true,
+      verticalCentered:false,
+      printArea:`A1:${lastCellAddress}`,
+      printTitlesRow:'1:4',
+      margins:{ left:0.25, right:0.25, top:0.45, bottom:0.45, header:0.15, footer:0.2 }
+    }
+    worksheet.headerFooter = { oddFooter:'&C第 &P 页，共 &N 页' }
     const buffer = await workbook.xlsx.writeBuffer()
     const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const downloadUrl = URL.createObjectURL(blob)
@@ -2268,6 +2284,34 @@ async function openTeamAccess() {
   showTeamAccess.value = true
 }
 
+function clearTeamAccessFormRow(item) {
+  if (teamAccessPrimaryRole.value === item.role) return ElMessage.warning('主账号不能直接删除，请先选择其他主账号')
+  item.name = ''
+  item.phone = ''
+}
+
+async function deleteTeamAccess(row) {
+  if (row.accountType === 'owner') return ElMessage.warning('主账号不能直接删除，请先在分配账号中设置新的主账号')
+  try {
+    await ElMessageBox.confirm(`确定删除“${row.name || row.roleLabel}”的球队管理权限吗？`, '删除权限', { confirmButtonText:'删除', cancelButtonText:'取消', type:'warning' })
+    teamAccessDeletingRole.value = row.role
+    const result = await callFunction('organizerClaimInvite', {
+      action:'removeTeamAccess',
+      tournamentId:sourceTournamentId.value,
+      divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+      tournamentTeamId:String(tournamentRelation.value._id),
+      role:row.role
+    })
+    if (!result?.success) throw new Error(result?.message || '删除权限失败')
+    teamAccessRows.value = Array.isArray(result.personnel) ? result.personnel : []
+    ElMessage.success('账号权限已删除')
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error.message || '删除权限失败')
+  } finally {
+    teamAccessDeletingRole.value = ''
+  }
+}
+
 async function saveTeamAccess() {
   const personnel = teamAccessForm.value
     .map(item => ({ role:item.role, name:String(item.name || '').trim(), phone:String(item.phone || '').replace(/\D/g, '') }))
@@ -2276,6 +2320,8 @@ async function saveTeamAccess() {
   for (const item of personnel) {
     if (!item.name || !/^1[3-9]\d{9}$/.test(item.phone)) return ElMessage.warning('请填写完整且有效的姓名和手机号')
   }
+  const phones = personnel.map(item => item.phone)
+  if (new Set(phones).size !== phones.length) return ElMessage.warning('同一手机号不能重复分配多个球队管理身份')
   if (!personnel.some(item => item.role === teamAccessPrimaryRole.value)) return ElMessage.warning('请选择一名主账号')
   teamAccessSaving.value = true
   try {
@@ -3959,20 +4005,28 @@ async function loadPlayers() {
   try {
     // 同时查询 teamId 和 teamCode，合并去重
     // 因为历史数据有的用 teamId，有的用 teamCode
-    const loadDraftList = async where => {
-      if (!sourceTournamentId.value) return []
-      try { return await queryList('registration_player_drafts', { where, limit:500 }) } catch (error) {
-        console.warn('加载报名表球员资料失败:', error.message || error)
+    const loadExportRoster = async () => {
+      if (!sourceTournamentId.value || !tournamentRelation.value?._id) return []
+      try {
+        const result = await callFunction('organizerClaimInvite', {
+          action:'listTeamExportRoster',
+          tournamentId:sourceTournamentId.value,
+          divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+          tournamentTeamId:String(tournamentRelation.value._id)
+        })
+        if (!result?.success) throw new Error(result?.message || '本届球员名单加载失败')
+        return Array.isArray(result.players) ? result.players : []
+      } catch (error) {
+        console.warn('加载本届球员名单失败:', error.message || error)
         return []
       }
     }
-    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, draftsByTeamId, draftsBySourceTeamId] = await Promise.all([
+    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, exportRosterPlayers] = await Promise.all([
       queryList('players', { where: { teamId: teamId } }),
       queryList('players', { where: { teamCode: teamId } }),
       queryList('coaches', { where: { teamId: teamId } }),
       queryList('coaches', { where: { teamCode: teamId } }),
-      loadDraftList({ teamId }),
-      loadDraftList({ sourceTeamId:teamId })
+      loadExportRoster()
     ])
 
     const staffMap = new Map()
@@ -4015,7 +4069,7 @@ async function loadPlayers() {
     players.value = processedPlayers
     const formalPlayerIds = new Set(processedPlayers.map(player => String(player._id || '')).filter(Boolean))
     const draftMap = new Map()
-    ;[...(draftsByTeamId || []), ...(draftsBySourceTeamId || [])].forEach(draft => {
+    ;(exportRosterPlayers || []).forEach(draft => {
       if (!draft?._id) return
       const status = String(draft.reviewStatus || '').toLowerCase()
       if (['excluded', 'rejected', 'conflict'].includes(status)) return
@@ -4513,7 +4567,7 @@ function compressBase64(dataUrl, maxSize = 300) {
 .collaboration-status dt { margin-bottom: 14px; }
 .match-summary { padding-bottom: 12px; }
 .professional-roster-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}.professional-roster-stats article{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:end;min-height:88px;padding:14px;border:1px solid #e6ebe7;border-radius:7px;background:#fbfdfb}.professional-roster-stats span{grid-column:1/-1;color:#667269;font-size:12px}.professional-roster-stats strong{color:#167f42;font-size:26px}.professional-roster-stats small{margin-bottom:4px;color:#536158}.professional-roster-stats article.pending strong{color:#d98b15}.professional-team-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}.professional-team-actions .el-button{height:41px;margin:0}
-.team-access-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-access-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-access-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-access-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.team-access-form{display:grid;gap:12px;margin-top:18px}.team-access-form-row{display:grid;grid-template-columns:90px minmax(150px,1fr) minmax(180px,1fr) 100px;gap:12px;align-items:center}.team-access-form-row>strong{color:#344139;font-size:14px}.team-access-form-row :deep(.el-radio){margin-right:0}.export-dialog-section{margin-top:18px}.export-dialog-section>strong{display:block;margin-bottom:10px;color:#344139}.export-field-checks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px}.export-field-checks :deep(.el-checkbox){margin-right:0}
+.team-access-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-access-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-access-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-access-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.team-access-form{display:grid;gap:12px;margin-top:18px}.team-access-form-row{display:grid;grid-template-columns:90px minmax(150px,1fr) minmax(180px,1fr) 100px 56px;gap:12px;align-items:center}.team-access-form-row>strong{color:#344139;font-size:14px}.team-access-form-row :deep(.el-radio){margin-right:0}.export-dialog-section{margin-top:18px}.export-dialog-section>strong{display:block;margin-bottom:10px;color:#344139}.export-field-checks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px}.export-field-checks :deep(.el-checkbox){margin-right:0}
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
