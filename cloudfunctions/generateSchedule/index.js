@@ -1326,13 +1326,13 @@ function sanitizeScheduleDraft(input) {
       turnaroundMinutes:Math.max(0,Math.min(180,Number(policy.turnaroundMinutes == null ? source.defaultTurnaroundMinutes || 10 : policy.turnaroundMinutes))),
       maxMatchesPerDay:Math.max(1,Math.min(4,Number(policy.maxMatchesPerDay || 2))),
       maxPerSession:Math.max(1,Math.min(4,Number(policy.maxPerSession || 1))),
-      minRestMinutes:Math.max(0,Math.min(4320,Number(policy.minRestMinutes || 120))),
+      minRestMinutes:Math.max(0,Math.min(4320,Number(policy.minRestMinutes == null ? 120 : policy.minRestMinutes))),
       allowedDates:Array.from(new Set((Array.isArray(policy.allowedDates)?policy.allowedDates:[]).map(function(value){return String(value || '').slice(0,10)}).filter(Boolean))).slice(0,120),
       allowedSessions:Array.from(new Set((Array.isArray(policy.allowedSessions)?policy.allowedSessions:[]).map(String).filter(function(value){return validSessions.has(value)}))).slice(0,3),
       allowedVenues:Array.from(new Set((Array.isArray(policy.allowedVenues)?policy.allowedVenues:[]).map(function(value){return String(value || '').trim().slice(0,80)}).filter(Boolean))).slice(0,50)
     }
   })
-  return { schemaVersion:2,generationMode:'joint',startDate:String(source.startDate || '').slice(0,10),endDate:String(source.endDate || '').slice(0,10),matchDays:(Array.isArray(source.matchDays)?source.matchDays:[]).filter(function(day){return validDays.has(day)}),venues:venueResources.map(function(resource){return resource.name}),venueResources:venueResources,sessionWindows:sharedWindows,calendarExtraTimeSlots:Array.from(new Set((Array.isArray(source.calendarExtraTimeSlots)?source.calendarExtraTimeSlots:[]).map(function(time){return safeTime(time,'')}).filter(Boolean))).slice(0,30),timeStepMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),slotMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),defaultTurnaroundMinutes:Math.max(0,Math.min(180,Number(source.defaultTurnaroundMinutes == null ? 10 : source.defaultTurnaroundMinutes))),frequencyPreset:['adaptive','daily_one','am_pm','custom'].indexOf(String(source.frequencyPreset || 'adaptive'))>=0?String(source.frequencyPreset || 'adaptive'):'adaptive',divisionPolicies:divisionPolicies,maxDailyOne:false,maxPerSession:1,dailyMatchLimit:0,restMinutes:Math.max(0,Math.min(4320,Number(source.restMinutes || 120))) }
+  return { schemaVersion:2,generationMode:'joint',calendarSource:String(source.calendarSource || '')==='import'?'import':'settings',startDate:String(source.startDate || '').slice(0,10),endDate:String(source.endDate || '').slice(0,10),matchDays:(Array.isArray(source.matchDays)?source.matchDays:[]).filter(function(day){return validDays.has(day)}),venues:venueResources.map(function(resource){return resource.name}),venueResources:venueResources,sessionWindows:sharedWindows,calendarExtraTimeSlots:Array.from(new Set((Array.isArray(source.calendarExtraTimeSlots)?source.calendarExtraTimeSlots:[]).map(function(time){return safeTime(time,'')}).filter(Boolean))).slice(0,30),timeStepMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),slotMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),defaultTurnaroundMinutes:Math.max(0,Math.min(180,Number(source.defaultTurnaroundMinutes == null ? 10 : source.defaultTurnaroundMinutes))),frequencyPreset:['adaptive','daily_one','am_pm','custom'].indexOf(String(source.frequencyPreset || 'adaptive'))>=0?String(source.frequencyPreset || 'adaptive'):'adaptive',divisionPolicies:divisionPolicies,maxDailyOne:false,maxPerSession:1,dailyMatchLimit:0,restMinutes:Math.max(0,Math.min(4320,Number(source.restMinutes == null ? 120 : source.restMinutes))) }
 }
 
 async function savePairingTemplate(event,tournament,actor) {
@@ -1397,11 +1397,11 @@ function scheduleAssignmentErrors(matches,config,divisionMap) {
     var parsedDay=new Date(String(match.matchDate)+'T00:00:00')
     if (Array.isArray(config.matchDays) && config.matchDays.length && !Number.isNaN(parsedDay.getTime()) && config.matchDays.indexOf(weekdayNames[parsedDay.getDay()])<0) errors.push({ matchId:String(match._id || ''),message:'该日期不是赛事允许的比赛日' })
     if (!resource) errors.push({ matchId:String(match._id || ''),message:'场地不在赛事日历设置中' })
-    else if (format && resource.fieldFormat!==format) errors.push({ matchId:String(match._id || ''),message:'比赛制式与场地不匹配' })
+    else if (config.calendarSource!=='import' && format && resource.fieldFormat!==format) errors.push({ matchId:String(match._id || ''),message:'比赛制式与场地不匹配' })
     if (policy.allowedDates.length && policy.allowedDates.indexOf(String(match.matchDate))<0) errors.push({ matchId:String(match._id || ''),message:'该日期不在组别允许范围内' })
     var session=scheduleEngine.sessionName(match.matchTime,resource && resource.sessionWindows || config.sessionWindows)
     var activeWindow=scheduleEngine.normalizeSessionWindows(resource && resource.sessionWindows || config.sessionWindows).find(function(window){return window.key===session})
-    if (!activeWindow || minutesOfDay(match.matchTime)<minutesOfDay(activeWindow.start) || start+(duration+buffer)*60000>scheduleDateTimeMs(match.matchDate,activeWindow.end)) errors.push({ matchId:String(match._id || ''),message:'比赛未完整落在已开放时段内' })
+    if (config.calendarSource!=='import' && (!activeWindow || minutesOfDay(match.matchTime)<minutesOfDay(activeWindow.start) || start+(duration+buffer)*60000>scheduleDateTimeMs(match.matchDate,activeWindow.end))) errors.push({ matchId:String(match._id || ''),message:'比赛未完整落在已开放时段内' })
     if (policy.allowedSessions.length && policy.allowedSessions.indexOf(session)<0) errors.push({ matchId:String(match._id || ''),message:'该时段不在组别允许范围内' })
     if (policy.allowedVenues.length && policy.allowedVenues.indexOf(String(match.venue))<0) errors.push({ matchId:String(match._id || ''),message:'该场地不在组别允许范围内' })
     var row={ match:match,start:start,end:start+(duration+buffer)*60000,policy:policy,session:session }
@@ -1436,6 +1436,34 @@ function scheduleAssignmentErrors(matches,config,divisionMap) {
 
 function minutesOfDay(time){var parts=String(time || '').split(':').map(Number);return (parts[0] || 0)*60+(parts[1] || 0)}
 
+function buildImportedScheduleConfig(matches,currentConfig,divisionMap) {
+  var scheduled=(Array.isArray(matches)?matches:[]).filter(function(match){return match && match.status!=='cancelled' && !match.isBye && match.matchDate && match.matchTime && match.venue})
+  var dates=Array.from(new Set(scheduled.map(function(match){return String(match.matchDate)}))).sort()
+  var weekdayNames=['周日','周一','周二','周三','周四','周五','周六']
+  var matchDays=Array.from(new Set(dates.map(function(date){var day=new Date(date+'T00:00:00');return Number.isNaN(day.getTime())?'':weekdayNames[day.getDay()]}).filter(Boolean)))
+  var venueFormats=new Map()
+  var divisionIds=new Set()
+  scheduled.forEach(function(match){
+    var divisionId=String(match.divisionId || 'default')
+    var division=divisionMap && divisionMap.get(divisionId) || {}
+    var format=String(match.matchFormat || division.matchFormat || division.playersOnField && division.playersOnField+'side' || '').toLowerCase()
+    var venue=String(match.venue || '').trim()
+    var formats=venueFormats.get(venue) || []
+    if(format && formats.indexOf(format)<0)formats.push(format)
+    venueFormats.set(venue,formats)
+    divisionIds.add(divisionId)
+  })
+  var previous=sanitizeScheduleDraft(currentConfig || {})
+  var previousResources=new Map(previous.venueResources.map(function(resource){return [resource.name,resource]}))
+  var venueResources=Array.from(venueFormats.entries()).map(function(entry){
+    var venue=entry[0],formats=entry[1],fallback=previousResources.get(venue) || {}
+    return { name:venue,fieldFormat:formats[0] || fallback.fieldFormat || '5side',sessionWindows:[] }
+  })
+  var divisionPolicies={}
+  divisionIds.forEach(function(divisionId){divisionPolicies[divisionId]={ turnaroundMinutes:0,maxMatchesPerDay:4,maxPerSession:4,minRestMinutes:0,allowedDates:[],allowedSessions:[],allowedVenues:[] }})
+  return sanitizeScheduleDraft({ schemaVersion:2,generationMode:'joint',calendarSource:'import',startDate:dates[0] || '',endDate:dates[dates.length-1] || '',matchDays:matchDays,venueResources:venueResources,sessionWindows:[],calendarExtraTimeSlots:Array.from(new Set(scheduled.map(function(match){return String(match.matchTime)}))).sort(),timeStepMinutes:5,defaultTurnaroundMinutes:0,frequencyPreset:'custom',divisionPolicies:divisionPolicies,restMinutes:0 })
+}
+
 async function importScheduleAssignments(event,tournament,actor) {
   var tournamentId=String(event.tournamentId || tournament._id || '')
   var rows=Array.isArray(event.rows)?event.rows.slice(0,1000):[]
@@ -1456,14 +1484,15 @@ async function importScheduleAssignments(event,tournament,actor) {
     if(match.schedulePublished || match.executionSnapshot || ['ongoing','live','finished','completed','archived'].indexOf(String(match.status || '').toLowerCase())>=0){rowErrors.push({ row:index+2,matchId:matchId,message:'比赛已发布或已进入执行，不能直接调整' });return}
     changed.push({ match:match,before:{ matchDate:String(match.matchDate||''),matchTime:String(match.matchTime||''),venue:String(match.venue||'') },after:{ matchDate:date,matchTime:time,venue:venue } })
   })
-  var config=sanitizeScheduleDraft(tournament.scheduleDraft || tournament.scheduleConfig || {})
-  if(!config.venueResources.length) rowErrors.push({ row:0,matchId:'',message:'请先完成赛程设置并创建赛事日历' })
   var provisional=allMatches.map(function(match){var change=changed.find(function(item){return String(item.match._id)===String(match._id)});return change?Object.assign({},match,change.after):match})
   var divisionRows=(await db.collection('divisions').where({ tournamentId:tournamentId }).limit(1000).get()).data || []
   var divisionMap=new Map(divisionRows.map(function(division){return [String(division._id || division.id),division]}))
+  var importCreatesCalendar=String(event.adjustmentType || '')==='import'
+  var config=importCreatesCalendar?buildImportedScheduleConfig(provisional,tournament.scheduleDraft || tournament.scheduleConfig || {},divisionMap):sanitizeScheduleDraft(tournament.scheduleDraft || tournament.scheduleConfig || {})
+  if(!config.venueResources.length) rowErrors.push({ row:0,matchId:'',message:importCreatesCalendar?'文件中没有可用于创建赛事日历的完整排期':'请先完成赛程设置并创建赛事日历' })
   rowErrors=rowErrors.concat(scheduleAssignmentErrors(provisional,config,divisionMap).filter(function(error){return changed.some(function(item){return String(item.match._id)===error.matchId})}))
   if(rowErrors.length)return { success:false,code:'SCHEDULE_IMPORT_INVALID',message:'排期预检未通过',validCount:0,skippedCount:rows.length-changed.length,errorCount:rowErrors.length,errors:rowErrors.slice(0,100) }
-  if(event.dryRun!==false)return { success:true,dryRun:true,validCount:changed.length,skippedCount:rows.length-changed.length,errorCount:0,changes:changed.slice(0,100).map(function(item){return { matchId:item.match._id,matchNo:item.match.matchNo || item.match.matchIndex,before:item.before,after:item.after }}) }
+  if(event.dryRun!==false)return { success:true,dryRun:true,validCount:changed.length,skippedCount:rows.length-changed.length,errorCount:0,calendarCreated:importCreatesCalendar,calendarSummary:importCreatesCalendar?{ startDate:config.startDate,endDate:config.endDate,venueCount:config.venueResources.length,matchDayCount:config.matchDays.length }:null,changes:changed.slice(0,100).map(function(item){return { matchId:item.match._id,matchNo:item.match.matchNo || item.match.matchIndex,before:item.before,after:item.after }}) }
   var operationGroupId='schedule-import-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')
   for(var i=0;i<changed.length;i+=1){
     var item=changed[i]
@@ -1473,8 +1502,8 @@ async function importScheduleAssignments(event,tournament,actor) {
     await db.collection('matches').doc(item.match._id).update({ data:{ matchDate:item.after.matchDate,matchTime:item.after.matchTime,venue:item.after.venue,date:item.after.matchDate,startTime:item.after.matchTime,timeSlot:item.after.matchTime,durationMinutes:Math.max(1,Number(item.match.durationMinutes || divisionMatchMinutes(division) || 50)),bufferMinutes:policy.turnaroundMinutes,scheduleSession:scheduleEngine.sessionName(item.after.matchTime,config.sessionWindows),scheduleStatus:'scheduled',scheduleGenerated:true,updateTime:db.serverDate() } })
     await db.collection('schedule_adjustment_logs').doc(log._id).update({ data:{ status:'applied',appliedAt:db.serverDate(),updateTime:db.serverDate() } })
   }
-  await db.collection('tournaments').doc(tournamentId).update({ data:{ scheduleConfig:db.command.set(config),scheduleGenerated:true,scheduleGenerationMode:'joint',scheduleEngineVersion:SCHEDULE_ENGINE_VERSION,updateTime:db.serverDate() } })
-  return { success:true,message:'已安排'+changed.length+'场比赛',appliedCount:changed.length,operationGroupId:operationGroupId }
+  await db.collection('tournaments').doc(tournamentId).update({ data:{ scheduleDraft:db.command.set(config),scheduleConfig:db.command.set(config),scheduleGenerated:true,scheduleGenerationMode:'joint',scheduleEngineVersion:SCHEDULE_ENGINE_VERSION,updateTime:db.serverDate() } })
+  return { success:true,message:importCreatesCalendar?'赛事日历已创建，已导入'+changed.length+'场比赛':'已安排'+changed.length+'场比赛',appliedCount:changed.length,calendarCreated:importCreatesCalendar,operationGroupId:operationGroupId }
 }
 
 async function buildDivisionScheduleTopology(tournamentId, division, sharedConfig) {
@@ -1944,5 +1973,7 @@ exports.__test = {
   validateGeneratedSchedule: validateGeneratedSchedule,
   validateParticipantSet: validateParticipantSet,
   normalizeScheduleTiming: normalizeScheduleTiming,
-  sanitizeScheduleDraft: sanitizeScheduleDraft
+  sanitizeScheduleDraft: sanitizeScheduleDraft,
+  buildImportedScheduleConfig: buildImportedScheduleConfig,
+  scheduleAssignmentErrors: scheduleAssignmentErrors
 }
