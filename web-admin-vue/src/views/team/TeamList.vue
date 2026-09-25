@@ -285,6 +285,7 @@ import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import { permissions, getCurrentRole, ROLES } from '../../utils/permissions'
 import ImageCropper from '../../components/common/ImageCropper.vue'
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
+import { actualStaffRecords } from '../../utils/staffRecords.js'
 
 // 注册组件
 defineOptions({
@@ -382,7 +383,7 @@ function autoGenerateTeamCode() {
 
 async function loadCoaches() {
   try {
-    coaches.value = await queryList('coaches', { orderBy: { createTime: 'desc' } })
+    coaches.value = actualStaffRecords(await queryList('coaches', { orderBy: { createTime: 'desc' } }))
   } catch (err) {
     console.error('加载教练列表失败:', err)
   }
@@ -471,7 +472,7 @@ async function handleTournamentChange(tournamentId) {
         ])
 
         const coachByTeam = {}
-        coaches.forEach(c => {
+        actualStaffRecords(coaches).forEach(c => {
           if (!coachByTeam[c.teamId]) coachByTeam[c.teamId] = []
           coachByTeam[c.teamId].push(c)
         })
@@ -862,7 +863,7 @@ async function loadTeams() {
 
     // 按球队ID分组统计教练（取主教练名称
       const coachByTeam = {}
-    coaches.forEach(c => {
+    actualStaffRecords(coaches).forEach(c => {
       if (!coachByTeam[c.teamId]) coachByTeam[c.teamId] = []
       coachByTeam[c.teamId].push(c)
     })

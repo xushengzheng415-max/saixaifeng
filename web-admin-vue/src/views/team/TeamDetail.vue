@@ -1221,6 +1221,7 @@ import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
 import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
 import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
+import { actualStaffRecords } from '../../utils/staffRecords.js'
 import JSZip from 'jszip'
 
 const route = useRoute()
@@ -3692,7 +3693,9 @@ async function loadPlayers() {
     ])
 
     const staffMap = new Map()
-    ;[...(staffByTeamId || []), ...(staffByTeamCode || [])].forEach(person => { if (person?._id) staffMap.set(String(person._id), person) })
+    actualStaffRecords([...(staffByTeamId || []), ...(staffByTeamCode || [])]).forEach(person => {
+      if (person?._id) staffMap.set(String(person._id), person)
+    })
     staffMembers.value = await Promise.all(Array.from(staffMap.values()).map(async person => {
       if (person.photoUrl && person.photoUrl.startsWith('cloud://')) {
         try { return { ...person, photoUrl: await getFileUrl(person.photoUrl) } } catch { return person }

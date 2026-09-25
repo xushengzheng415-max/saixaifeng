@@ -289,6 +289,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, Edit, View, Plus, Upload, Search } from '@element-plus/icons-vue'
 import { queryList, addRecord, updateRecord, deleteRecord, queryById, getCurrentUser, getFileUrl } from '../../utils/cloud'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
+import { actualStaffRecords } from '../../utils/staffRecords.js'
 
 const showDevTools = ref(false)
 const libraryKeyword = ref('')
@@ -383,10 +384,11 @@ async function loadCoachGroups() {
   loading.value = true
   try {
     // 并行获取：所有教练 + 所有球队
-    const [coaches, allTeams] = await Promise.all([
+    const [rawCoaches, allTeams] = await Promise.all([
       queryList('coaches', { orderBy: { createTime: 'desc' } }),
       queryList('teams', {})
     ])
+    const coaches = actualStaffRecords(rawCoaches)
 
     // 建立球队ID -> 球队名称的映射（始终用 teams 集合的最新名称）
     const teamNameMap = new Map()
