@@ -19,7 +19,11 @@ function matches(row, where) {
   if (!where) return true
   // db.command.or(...) 返回的是 { __or: [条件...] }，即 __or 是 where 自身的键。
   if (Array.isArray(where.__or)) return where.__or.some(sub => matches(row, sub))
-  return Object.keys(where).every(key => row[key] === where[key])
+  return Object.keys(where).every(key => {
+    const expected = where[key]
+    if (expected && Array.isArray(expected.__in)) return expected.__in.map(String).indexOf(String(row[key])) >= 0
+    return row[key] === expected
+  })
 }
 
 function createDb(seed) {
@@ -283,7 +287,89 @@ async function run() {
     ok('未同意免责声明时认领被拒且不改动归属')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/12 通过`)
+  // 场景 13：同一自然人属于多个机构时，应返回多个隔离工作空间而不是全局阻断。
+  {
+    const seed = baseSeed({
+      users: [{ _id: 'user-1', openId: OPEN_ID, phone: PHONE_A, phoneNumber: PHONE_A, orgId: 'org-a' }],
+      organizations: [{ _id: 'org-a', name: '甲机构' }, { _id: 'org-b', name: '乙机构' }],
+      organization_memberships: [
+        { _id: 'om-a', userId: 'user-1', orgId: 'org-a', status: 'active', positions: ['球队负责人'], permissions: ['team.view', 'team.manage'] },
+        { _id: 'om-b', userId: 'user-1', orgId: 'org-b', status: 'active', positions: ['球队负责人'], permissions: ['team.view', 'team.manage'] }
+      ],
+      teams: [
+        { _id: 'team-a', name: '甲队', orgId: 'org-a', ownerId: 'user-1', claimStatus: 'claimed' },
+        { _id: 'team-b', name: '乙队', orgId: 'org-b', ownerId: 'user-1', claimStatus: 'claimed' }
+      ]
+    })
+    const { result } = await callWorkspace(seed, {})
+    assert.strictEqual(result.success, true, `场景 13：多机构工作空间应加载成功，实际 ${JSON.stringify(result)}`)
+    assert.deepStrictEqual(result.workspaces.map(item => item.id).sort(), ['org:org-a', 'org:org-b'], '场景 13：应返回两个机构工作空间')
+    ok('同一账号可加载多个机构工作空间且数据边界独立')
+  }
+
+  // 场景 14：跨机构认领只新增球队关系，并返回目标工作空间；不能覆盖账号原机构。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id: 'user-1', openId: OPEN_ID, phone: PHONE_A, phoneNumber: PHONE_A, orgId: 'org-a' }]
+    seed.organizations = [{ _id: 'org-a', name: '原机构' }, { _id: 'org-b', name: '目标机构' }]
+    seed.organization_memberships = [
+      { _id: 'om-a', userId: 'user-1', orgId: 'org-a', status: 'active', positions: ['机构负责人'], permissions: ['team.view', 'team.manage'] },
+      { _id: 'om-b', userId: 'user-1', orgId: 'org-b', status: 'active', positions: ['球队负责人'], permissions: ['team.view', 'team.manage'] }
+    ]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { orgId: 'org-b' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { organizerOrgId: 'org-b' }) : item)
+    const { result, store } = await callWorkspace(seed, {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      disclaimerAgreed: true
+    })
+    assert.strictEqual(result.success, true, `场景 14：跨机构认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(result.workspaceId, 'org:org-b', '场景 14：应返回目标机构工作空间')
+    assert.strictEqual(store.users[0].orgId, 'org-a', '场景 14：不得覆盖账号原机构兼容字段')
+    assert.ok(store.team_memberships.some(item => item.teamId === 'team-1' && item.userId === 'user-1'), '场景 14：应新增目标球队成员关系')
+    ok('跨机构认领保留原账号并返回目标球队工作空间')
+  }
+
+  // 场景 15：账号已是球队有效成员时，认领不能重复写入成员关系。
+  {
+    const seed = baseSeed({
+      team_memberships: [{ _id: 'tm-existing', teamId: 'team-1', userId: 'user-1', role: 'manager', status: 'active' }]
+    })
+    const { result, store } = await callWorkspace(seed, {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      disclaimerAgreed: true
+    })
+    assert.strictEqual(result.success, true, `场景 15：已有成员认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(store.team_memberships.filter(item => item.teamId === 'team-1' && item.userId === 'user-1').length, 1, '场景 15：不得重复创建球队成员关系')
+    ok('已有有效球队成员关系时认领保持幂等')
+  }
+
+  // 场景 16：只认领外部机构球队、不属于目标机构时，只开放该球队协作空间。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id: 'user-1', openId: OPEN_ID, phone: PHONE_A, phoneNumber: PHONE_A, orgId: 'org-a' }]
+    seed.organizations = [{ _id: 'org-a', name: '原机构' }, { _id: 'org-b', name: '外部机构' }]
+    seed.organization_memberships = [
+      { _id: 'om-a', userId: 'user-1', orgId: 'org-a', status: 'active', positions: ['机构负责人'], permissions: ['team.view', 'team.manage'] }
+    ]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { orgId: 'org-b' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { organizerOrgId: 'org-b' }) : item)
+    const { result, store } = await callWorkspace(seed, {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      disclaimerAgreed: true
+    })
+    assert.strictEqual(result.success, true, `场景 16：外部球队认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(result.workspaceId, 'team:team-1', '场景 16：无目标机构成员关系时应返回单球队协作空间')
+    assert.strictEqual(store.users[0].orgId, 'org-a', '场景 16：不得修改账号原机构')
+    ok('外部机构球队认领只开放单球队协作空间')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/16 通过`)
 }
 
 run().catch(error => {

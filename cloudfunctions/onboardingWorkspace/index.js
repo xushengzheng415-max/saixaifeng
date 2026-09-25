@@ -335,7 +335,8 @@ async function loadOnboardingState(identity) {
     manageableTeams,
     canCreateOrganizationFromTeams,
     hasTournamentWithoutOrganization,
-    requiresOnboarding: !hasTeamRelation && (!organization || !hasWorkspaceCapability),
+    // 多机构账号已有真实业务关系，不能被当成“无机构账号”再次引导创建机构。
+    requiresOnboarding: !organizationConflict && !hasTeamRelation && (!organization || !hasWorkspaceCapability),
     onboarding: user.onboarding || {},
     training: trainingProvision,
     organization,

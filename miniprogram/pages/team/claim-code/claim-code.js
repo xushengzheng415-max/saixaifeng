@@ -2,6 +2,7 @@
 // 与逐队认领邀请（pages/team/prebuilt-invite）的区别：本页不带逐队 token，
 // 只带赛事级邀请码，必须由服务端按「本人已验证手机号」列出可认领球队。
 // 授权判定全部在 getMiniWorkspace 内完成，本页不做任何手机号匹配或过滤。
+var workspace = require('../../../utils/workspace')
 Page({
   data: {
     inviteKey: '',
@@ -184,11 +185,20 @@ Page({
         self.openConflict(self.data.selectedInviteId)
         return
       }
+      // 认领成功后进入目标球队实际可用的工作空间。账号原有机构关系不变，
+      // 这里只切换本机当前上下文，不扩大目标机构权限。
+      var switchPromise = result.workspaceId
+        ? workspace.switchWorkspace(result.workspaceId)
+        : Promise.resolve()
       wx.showToast({ title: '球队已认领', icon: 'success' })
       var target = Number(result.pendingPlayerDraftCount || 0) > 0
         ? '/pages/team/imported-player-review/imported-player-review?teamId='
         : '/pages/team/team?teamId='
-      wx.redirectTo({ url: target + encodeURIComponent(result.teamId) })
+      switchPromise.then(function () {
+        wx.redirectTo({ url: target + encodeURIComponent(result.teamId) })
+      }).catch(function () {
+        wx.redirectTo({ url: target + encodeURIComponent(result.teamId) })
+      })
     }).catch(function (error) {
       wx.showModal({ title: '认领失败', content: (error && error.message) || '请重试', showCancel: false })
     }).finally(function () {

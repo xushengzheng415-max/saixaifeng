@@ -199,11 +199,6 @@ Page({
     var cached = workspace.readContext()
     if (cached) this.applyContext(cached)
     return workspace.loadContext().then(function (context) { that.applyContext(context) }).catch(function (error) {
-      if (error && error.code === 'ORG_CONFLICT') {
-        workspace.clearContext()
-        that.setData({ loading: false, errorText: error.message || '当前账号关联多个机构，请联系管理员核验' })
-        return
-      }
       if (cached) { that.applyContext(cached); return }
       that.setData({ loading: false, errorText: error.message || '首页加载失败，请重试' })
     })

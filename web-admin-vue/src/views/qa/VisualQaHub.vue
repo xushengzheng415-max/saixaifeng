@@ -94,11 +94,8 @@ const groups = [
     { name: '专业 · 大屏设置', note: '步骤 3', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=screen` },
     { name: '专业 · 抽签操作台', note: '步骤 4', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=console` },
     { name: '专业 · 分组结果', note: '步骤 5', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=result` },
-    { name: '赛程总览', note: '生成与编排状态', path: `/tournaments/${tournament}/schedule?divisionId=${proDivision}` },
-    { name: '赛程基础设置', note: '生成器入口', path: `/tournaments/${tournament}/schedule?divisionId=${proDivision}&view=editor&generator=basic` },
-    { name: '场地与时间', note: '编排工作台', path: `/tournaments/${tournament}/schedule?divisionId=${proDivision}&view=editor` },
-    { name: '冲突检测', note: '冲突面板', path: `/tournaments/${tournament}/schedule?divisionId=${proDivision}&view=editor&panel=conflicts` },
-    { name: '手动修改场次', note: '指定场次编辑', path: `/tournaments/${tournament}/schedule?divisionId=${proDivision}&view=editor&editMatchId=qa-match-upcoming` }
+    { name: '赛事地图', note: '待排池与联合场地日历', path: `/tournaments/${tournament}/schedule?visualQa=1` },
+    { name: '赛程设置', note: '赛事公共资源与组别策略', path: `/tournaments/${tournament}/schedule?view=settings&visualQa=1` }
   ] },
   { code: 'P5', title: '比赛管理、复核归档与裁判', pages: [
     { name: '比赛管理 · 选择组别', note: '组别入口', path: `/tournaments/${tournament}/matches` },

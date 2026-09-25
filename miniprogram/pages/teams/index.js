@@ -106,12 +106,7 @@ Page({
 
   onSwitchWorkspace: function() {
     if (this.data.guestMode) return workspace.promptLogin('登录后可查看和切换已授权的机构球队空间。')
-    var that = this
-    workspace.chooseWorkspace(workspace.readContext()).then(function(context) {
-      that.applyContext(context)
-    }).catch(function(error) {
-      wx.showToast({ title: error.message || '切换失败', icon: 'none' })
-    })
+    wx.navigateTo({ url: '/pages/workspace/select/select' })
   },
 
   onCreateTeam: function() {
