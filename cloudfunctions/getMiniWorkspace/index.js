@@ -356,9 +356,9 @@ async function loadWorkspaceCatalog(user, openId) {
     ? await safeGet('organizations', { _id: _.in(candidateOrgIds) }, 100)
     : []
   const orgIds = unique(organizations.map(item => item._id))
-  if (orgIds.length > 1) {
-    throw workspaceError('ORG_CONFLICT', '当前账号关联多个机构，请联系管理员核验')
-  }
+  // User 是自然人账号，机构只是可切换的数据工作空间。一个人可以在多个
+  // 机构任职，也可以只凭球队成员关系管理其他机构下的一支球队。这里返回
+  // 全部已验证工作空间，后续读写仍按当前 workspaceId 逐项校验边界。
   const organizationMap = {}
   organizations.forEach(item => { organizationMap[String(item._id)] = item })
 
@@ -450,7 +450,10 @@ async function loadWorkspaceCatalog(user, openId) {
   const directTeamMap = {}
   directTeams.concat(relatedTeams).forEach(team => { directTeamMap[team._id] = team })
   const accessibleTeams = Object.keys(directTeamMap).map(id => directTeamMap[id])
-  const accessibleOrgIds = new Set(orgIds)
+  // 只有真正生成的机构工作空间才算“可访问机构”。候选 orgId 可能仅来自
+  // 本人负责的一支外部机构球队；这种关系只能开放球队协作空间，不能借此
+  // 获得整个机构的访问权，也不能因为 orgId 存在就把球队空间吞掉。
+  const accessibleOrgIds = new Set(workspaces.filter(item => item.type === 'organization').map(item => String(item.orgId || '')))
   accessibleTeams.forEach(team => {
     const teamOrgId = String(team.orgId || '')
     const claimStatus = String(team.claimStatus || '').toLowerCase()
@@ -2077,6 +2080,15 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
   if (reviewApproved && choice !== 'prebuilt') throw new Error('人工核验已通过，请确认接收主办方预建球队')
   if (choice === 'existing' && preview.prebuiltTeam.requiresReview && !reviewApproved) throw new Error('claim review required before selecting an existing team')
   const now = db.serverDate()
+  async function workspaceIdForTeam(teamId) {
+    const team = (await safeGet('teams', { _id: String(teamId || '') }, 1))[0] || {}
+    const catalog = await loadWorkspaceCatalog(identity.user, identity.openId)
+    const teamOrgId = String(team.orgId || team.organizationId || team.organization_id || '')
+    const organizationWorkspace = catalog.find(item => item.type === 'organization' && String(item.orgId || '') === teamOrgId)
+    if (organizationWorkspace) return organizationWorkspace.id
+    const teamWorkspace = catalog.find(item => item.type === 'team' && String(item.teamId || '') === String(teamId || ''))
+    return teamWorkspace ? teamWorkspace.id : ''
+  }
   if (choice === 'existing') {
     const teamId = String(event.existingTeamId || '')
     const candidate = preview.candidateTeams.filter(item => item.id === teamId)[0]
@@ -2094,13 +2106,16 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
     await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'accepted', acceptedChoice: 'existing', acceptedTeamId: teamId, acceptedUserId: identity.user._id, acceptedOpenId: identity.openId || '', updateTime: now } })
     const pendingPlayerDraftCount = await transferImportedPlayerDrafts(invite, teamId, identity)
     await createRegistrationReviewArtifacts(invite, relationId, teamId, identity)
-    return { success: true, teamId, registrationId:relationId, pendingPlayerDraftCount, destination: pendingPlayerDraftCount ? 'imported-player-review' : 'team-center' }
+    const workspaceId = await workspaceIdForTeam(teamId)
+    return { success: true, teamId, workspaceId, registrationId:relationId, pendingPlayerDraftCount, destination: pendingPlayerDraftCount ? 'imported-player-review' : 'team-center' }
   }
   if (preview.prebuiltTeam.requiresReview && !reviewApproved) {
     await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'review_required', reviewReason: '预建队存在归属或认领冲突，禁止自动合并', reviewRequestedBy: identity.user._id, updateTime: now } })
     return { success: true, reviewRequired: true, destination: 'claim-conflict' }
   }
-  const membership = await safeGet('team_memberships', { teamId: preview.prebuiltTeam.id, userId: identity.user._id, status: 'accepted' }, 1)
+  const membership = (await safeGet('team_memberships', { teamId: preview.prebuiltTeam.id, userId: identity.user._id }, 20)).filter(function(item) {
+    return ['active', 'accepted', 'claimed'].indexOf(String(item.status || 'active').toLowerCase()) >= 0
+  })
   if (!membership.length) await db.collection('team_memberships').add({ data: { teamId: preview.prebuiltTeam.id, userId: identity.user._id, openId: identity.openId || '', role: 'owner', status: 'accepted', source: 'prebuilt_invite_claim', createTime: now, updateTime: now } })
   await db.collection('teams').doc(preview.prebuiltTeam.id).update({ data: { claimStatus: 'claimed', ownerId: identity.user._id, claimedByUserId: identity.user._id, updateTime: now } })
   await db.collection('team_invitations').doc(preview.invite.id).update({ data: { status: 'accepted', acceptedChoice: 'prebuilt', acceptedTeamId: preview.prebuiltTeam.id, acceptedUserId: identity.user._id, acceptedOpenId: identity.openId || '', reviewStatus: reviewApproved ? 'confirmed' : '', updateTime: now } })
@@ -2118,7 +2133,8 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
     relationId = String(created._id)
   }
   await createRegistrationReviewArtifacts(invite, relationId, preview.prebuiltTeam.id, identity)
-  return { success: true, teamId: preview.prebuiltTeam.id, registrationId:relationId, pendingPlayerDraftCount, destination: pendingPlayerDraftCount ? 'imported-player-review' : 'team-center' }
+  const workspaceId = await workspaceIdForTeam(preview.prebuiltTeam.id)
+  return { success: true, teamId: preview.prebuiltTeam.id, workspaceId, registrationId:relationId, pendingPlayerDraftCount, destination: pendingPlayerDraftCount ? 'imported-player-review' : 'team-center' }
 }
 
 async function requestPrebuiltTeamClaimReview(event, identity) {

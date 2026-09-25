@@ -226,16 +226,6 @@ Page({
       var signupRedirect = that.getTournamentSignupRedirect()
       var teamMemberRedirect = that.getTeamMemberInviteRedirect()
       var teamPlayerRedirect = that.getTeamPlayerInviteRedirect()
-      if (result.success && result.organizationConflict) {
-        workspace.clearContext()
-        that.clearAuthSession()
-        wx.showModal({
-          title: '机构关系待核验',
-          content: '当前账号关联了多个机构，系统不会自动选择。请联系管理员完成机构归属核验。',
-          showCancel: false
-        })
-        return
-      }
       if (result.success && result.requiresOnboarding) {
         if (teamPlayerRedirect) {
           wx.redirectTo({ url: teamPlayerRedirect })
