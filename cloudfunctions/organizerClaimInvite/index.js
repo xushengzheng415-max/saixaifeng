@@ -305,6 +305,60 @@ async function saveTeamAccess(event, identity) {
   return await listTeamAccess(event, identity)
 }
 
+function photoFileId(record) {
+  return [record && record.photoFileID, record && record.photoFileId, record && record.photoUrl]
+    .map(value => String(value || '').trim())
+    .find(value => value.startsWith('cloud://')) || ''
+}
+
+function photoMimeType(fileId, buffer) {
+  const lower = String(fileId || '').toLowerCase()
+  if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg'
+  if (lower.includes('.gif')) return 'image/gif'
+  if (lower.includes('.webp')) return 'image/webp'
+  if (buffer && buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8) return 'image/jpeg'
+  if (buffer && buffer.length > 3 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'image/gif'
+  if (buffer && buffer.length > 11 && buffer.slice(8, 12).toString('ascii') === 'WEBP') return 'image/webp'
+  return 'image/png'
+}
+
+async function getTeamExportPhotos(event, identity) {
+  const context = await teamAccessContext(event, identity)
+  const requested = Array.from(new Set((Array.isArray(event.fileIds) ? event.fileIds : [])
+    .map(value => text(value, 500))
+    .filter(value => value.startsWith('cloud://')))).slice(0, 50)
+  if (!requested.length) return { success:true, photos:[] }
+  const [playersById, playersByCode, staffById, staffByCode, draftsById, draftsBySource] = await Promise.all([
+    safeGet('players', { teamId:context.teamId }, 500),
+    safeGet('players', { teamCode:context.teamId }, 500),
+    safeGet('coaches', { teamId:context.teamId }, 500),
+    safeGet('coaches', { teamCode:context.teamId }, 500),
+    safeGet('registration_player_drafts', { teamId:context.teamId }, 500),
+    safeGet('registration_player_drafts', { sourceTeamId:context.teamId }, 500)
+  ])
+  const allowed = new Set([...playersById, ...playersByCode, ...staffById, ...staffByCode, ...draftsById, ...draftsBySource].map(photoFileId).filter(Boolean))
+  const photos = []
+  let totalBytes = 0
+  for (const fileId of requested) {
+    if (!allowed.has(fileId)) continue
+    try {
+      const result = await cloud.downloadFile({ fileID:fileId })
+      const buffer = result && result.fileContent
+      if (!buffer || !buffer.length) continue
+      if (buffer.length > 1024 * 1024 || totalBytes + buffer.length > 5 * 1024 * 1024) {
+        photos.push({ fileId, status:'too_large' })
+        continue
+      }
+      totalBytes += buffer.length
+      photos.push({ fileId, status:'ready', mimeType:photoMimeType(fileId, buffer), base64:buffer.toString('base64') })
+    } catch (error) {
+      console.warn('[organizerClaimInvite] export photo skipped:', fileId, error.message)
+      photos.push({ fileId, status:'unavailable' })
+    }
+  }
+  return { success:true, photos }
+}
+
 function inviteExpiry(tournament) {
   const value = tournament.registrationDeadline || tournament.signupDeadline || tournament.endDate
   if (value) return value
@@ -599,6 +653,7 @@ async function decideClaimReview(event, identity) {
 exports.main = async function(event) {
   try {
     const identity = await currentUser(event || {})
+    if (event && event.action === 'getTeamExportPhotos') return await getTeamExportPhotos(event, identity)
     if (event && event.action === 'listTeamAccess') return await listTeamAccess(event, identity)
     if (event && event.action === 'saveTeamAccess') return await saveTeamAccess(event, identity)
     if (event && event.action === 'listClaimReviewRequests') return await listClaimReviewRequests(event, identity)

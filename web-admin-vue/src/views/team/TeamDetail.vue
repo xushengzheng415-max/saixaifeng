@@ -1223,7 +1223,7 @@
     </el-dialog>
 
     <el-dialog v-model="exportDialogVisible" title="导出球队资料" width="680px" :close-on-click-modal="false">
-      <el-alert type="info" :closable="false" title="默认导出全部工作人员和球员，合并到一个工作表；可按需选择字段。" />
+      <el-alert type="info" :closable="false" :title="`将导出 ${staffMembers.length} 名工作人员和 ${exportPlayers.length} 名球员，合并到一个工作表；可按需选择字段。`" />
       <div class="export-dialog-section"><strong>导出字段</strong><el-checkbox-group v-model="exportFields" class="export-field-checks"><el-checkbox v-for="field in exportFieldOptions" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group></div>
       <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="exportFields.length === 0" @click="exportTeamData">导出 Excel</el-button></template>
     </el-dialog>
@@ -1409,6 +1409,20 @@ const exportFieldOptions = [
   { key:'phone', label:'手机号', width:16 }, { key:'position', label:'位置', width:12 }, { key:'organizerReviewStatus', label:'主办方审核', width:14 }
 ]
 const exportFields = ref(exportFieldOptions.map(item => item.key))
+function exportPlayerKey(player) {
+  const identity = String(player.identityDigest || player.idCard || player.idNumber || '').replace(/\s/g, '').toUpperCase()
+  if (identity) return `identity:${identity}`
+  if (player.confirmedPlayerId) return `player:${player.confirmedPlayerId}`
+  return `person:${String(player.name || '').trim()}|${String(player.birthDate || '').slice(0, 10)}|${String(player.jerseyNumber || '')}`
+}
+const exportPlayers = computed(() => {
+  const result = new Map()
+  ;[...players.value, ...importedDraftPlayers.value].forEach(player => {
+    const key = exportPlayerKey(player)
+    if (!result.has(key) || player._exportSource !== 'registration_player_draft') result.set(key, player)
+  })
+  return Array.from(result.values())
+})
 function openExportDialog() {
   exportFields.value = exportFieldOptions.map(item => item.key)
   exportDialogVisible.value = true
@@ -1428,11 +1442,12 @@ function blobToDataUrl(blob) {
   })
 }
 
-async function photoForExcel(source) {
+async function photoForExcel(source, prefetchedPhoto) {
+  if (prefetchedPhoto) source = prefetchedPhoto
   let url = String(source || '').trim()
   if (!url) return null
   if (url.startsWith('cloud://')) url = await getFileUrl(url)
-  if (url.startsWith('data:image/')) return { base64:url, extension:excelImageExtension(url) }
+  if (/^data:image\/(png|jpe?g|gif);/i.test(url)) return { base64:url, extension:excelImageExtension(url) }
   const response = await fetch(url)
   if (!response.ok) throw new Error(`照片下载失败（${response.status}）`)
   const blob = await response.blob()
@@ -1508,9 +1523,32 @@ async function exportTeamData() {
     selectedFields.forEach((field, index) => { worksheet.getColumn(index + 1).width = field.width })
     const records = [
       ...staffMembers.value.map(item => ({ ...item, _memberType:'工作人员' })),
-      ...players.value.map(item => ({ ...item, _memberType:'球员' }))
+      ...exportPlayers.value.map(item => ({ ...item, _memberType:'球员' }))
     ]
     const photoColumn = selectedFields.findIndex(item => item.key === 'photo')
+    const photoSource = record => record._exportPhotoFileId || record.photoFileID || record.photoFileId || record.photoUrl || ''
+    const prefetchedPhotos = new Map()
+    if (photoColumn >= 0 && sourceTournamentId.value && tournamentRelation.value?._id) {
+      const fileIds = Array.from(new Set(records.map(photoSource).filter(value => String(value).startsWith('cloud://'))))
+      if (fileIds.length) {
+        try {
+          const photoResult = await callFunction('organizerClaimInvite', {
+            action:'getTeamExportPhotos',
+            tournamentId:sourceTournamentId.value,
+            divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+            tournamentTeamId:String(tournamentRelation.value._id),
+            fileIds
+          })
+          if (photoResult?.success) {
+            ;(photoResult.photos || []).forEach(item => {
+              if (item.status === 'ready' && item.base64 && item.mimeType) prefetchedPhotos.set(item.fileId, `data:${item.mimeType};base64,${item.base64}`)
+            })
+          }
+        } catch (error) {
+          console.warn('批量读取导出照片失败，将尝试逐张读取:', error.message)
+        }
+      }
+    }
     let failedPhotos = 0
     for (const record of records) {
       const row = worksheet.addRow(selectedFields.map(field => exportMemberValue(record, field.key)))
@@ -1527,10 +1565,10 @@ async function exportTeamData() {
       const birthDateIndex = selectedFields.findIndex(item => item.key === 'birthDate')
       if (birthDateIndex >= 0 && row.getCell(birthDateIndex + 1).value instanceof Date) row.getCell(birthDateIndex + 1).numFmt = 'yyyy-mm-dd'
       if (photoColumn >= 0) {
-        const source = record.photoUrl || record.photoFileID || record.photoFileId || ''
+        const source = photoSource(record)
         if (source) {
           try {
-            const photo = await photoForExcel(source)
+            const photo = await photoForExcel(source, prefetchedPhotos.get(source))
             if (photo) {
               const imageId = workbook.addImage(photo)
               worksheet.addImage(imageId, { tl:{ col:photoColumn + 0.18, row:row.number - 0.88 }, ext:{ width:48, height:62 }, editAs:'oneCell' })
@@ -3921,11 +3959,20 @@ async function loadPlayers() {
   try {
     // 同时查询 teamId 和 teamCode，合并去重
     // 因为历史数据有的用 teamId，有的用 teamCode
-    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode] = await Promise.all([
+    const loadDraftList = async where => {
+      if (!sourceTournamentId.value) return []
+      try { return await queryList('registration_player_drafts', { where, limit:500 }) } catch (error) {
+        console.warn('加载报名表球员资料失败:', error.message || error)
+        return []
+      }
+    }
+    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, draftsByTeamId, draftsBySourceTeamId] = await Promise.all([
       queryList('players', { where: { teamId: teamId } }),
       queryList('players', { where: { teamCode: teamId } }),
       queryList('coaches', { where: { teamId: teamId } }),
-      queryList('coaches', { where: { teamCode: teamId } })
+      queryList('coaches', { where: { teamCode: teamId } }),
+      loadDraftList({ teamId }),
+      loadDraftList({ sourceTeamId:teamId })
     ])
 
     const staffMap = new Map()
@@ -3933,8 +3980,9 @@ async function loadPlayers() {
       if (person?._id) staffMap.set(String(person._id), person)
     })
     staffMembers.value = await Promise.all(Array.from(staffMap.values()).map(async person => {
-      if (person.photoUrl && person.photoUrl.startsWith('cloud://')) {
-        try { return { ...person, photoUrl: await getFileUrl(person.photoUrl) } } catch { return person }
+      const exportPhotoFileId = [person.photoFileID, person.photoFileId, person.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
+      if (exportPhotoFileId) {
+        try { return { ...person, _exportPhotoFileId:exportPhotoFileId, photoUrl:await getFileUrl(exportPhotoFileId) } } catch { return { ...person, _exportPhotoFileId:exportPhotoFileId } }
       }
       return person
     }))
@@ -3951,22 +3999,34 @@ async function loadPlayers() {
 
     // 处理头像URL：如果是 cloudId，需要转换成临时URL
     const processedPlayers = await Promise.all(result.map(async (player) => {
-      if (player.photoUrl && player.photoUrl.startsWith('cloud://')) {
+      const exportPhotoFileId = [player.photoFileID, player.photoFileId, player.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
+      if (exportPhotoFileId) {
         try {
-          const tempUrl = await getFileUrl(player.photoUrl)
-          return { ...player, photoUrl: tempUrl }
+          const tempUrl = await getFileUrl(exportPhotoFileId)
+          return { ...player, _exportPhotoFileId:exportPhotoFileId, photoUrl:tempUrl }
         } catch (err) {
           console.error('获取头像临时URL失败:', err)
-          return player
+          return { ...player, _exportPhotoFileId:exportPhotoFileId }
         }
       }
       return player
     }))
 
     players.value = processedPlayers
-
-    // 普通主办方工作台只读取正式 players；无权访问的导入草稿和批次不再作为详情页回退。
-    importedDraftPlayers.value = []
+    const formalPlayerIds = new Set(processedPlayers.map(player => String(player._id || '')).filter(Boolean))
+    const draftMap = new Map()
+    ;[...(draftsByTeamId || []), ...(draftsBySourceTeamId || [])].forEach(draft => {
+      if (!draft?._id) return
+      const status = String(draft.reviewStatus || '').toLowerCase()
+      if (['excluded', 'rejected', 'conflict'].includes(status)) return
+      if (draft.confirmedPlayerId && formalPlayerIds.has(String(draft.confirmedPlayerId))) return
+      draftMap.set(String(draft._id), { ...draft, _exportSource:'registration_player_draft' })
+    })
+    importedDraftPlayers.value = await Promise.all(Array.from(draftMap.values()).map(async draft => {
+      const exportPhotoFileId = [draft.photoFileID, draft.photoFileId, draft.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
+      if (!exportPhotoFileId) return draft
+      try { return { ...draft, _exportPhotoFileId:exportPhotoFileId, photoUrl:await getFileUrl(exportPhotoFileId) } } catch { return { ...draft, _exportPhotoFileId:exportPhotoFileId } }
+    }))
 
     // 普通球队资料页沿用历史同步行为；赛事内查看只读，不因打开页面改写球队资产。
     if (!sourceTournamentId.value) {
