@@ -97,7 +97,7 @@ function teamProfileLogo(record) {
 }
 
 async function resolveTeamLogoUrls(directory) {
-  const cloudIds = [...new Set(Object.values(directory).map(item => text(item.logo)).filter(value => value.startsWith('cloud://')))]
+  const cloudIds = [...new Set(Object.values(directory).map(item => text(item.logo)).filter(value => value && !/^https?:\/\//i.test(value)))]
   const urlByFileId = new Map()
   for (let index = 0; index < cloudIds.length; index += 50) {
     try {
@@ -124,7 +124,9 @@ async function buildTeamDirectory(matchRows, registrationRows) {
   const directory = {}
   teamRows.forEach(row => {
     const id = text(row._id || row.id)
-    if (id) directory[id] = { name: teamProfileName(row), logo: teamProfileLogo(row) }
+    const profile = { name: teamProfileName(row), logo: teamProfileLogo(row) }
+    if (id) directory[id] = profile
+    if (profile.name) directory[`name:${profile.name}`] = profile
   })
   ;(registrationRows || []).forEach(row => {
     const id = text(row.teamId || row._id)
@@ -134,6 +136,7 @@ async function buildTeamDirectory(matchRows, registrationRows) {
       name: teamProfileName(row) || current.name,
       logo: teamProfileLogo(row) || current.logo
     }
+    if (directory[id].name) directory[`name:${directory[id].name}`] = directory[id]
   })
   return resolveTeamLogoUrls(directory)
 }
@@ -240,8 +243,10 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
   const division = divisionsById[divisionId] || {}
   const homeTeamId = teamIdOf(match, 'home')
   const awayTeamId = teamIdOf(match, 'away')
-  const homeProfile = teamDirectory[homeTeamId] || {}
-  const awayProfile = teamDirectory[awayTeamId] || {}
+  const rawHomeName = text(match.homeTeamName || (match.homeTeam && (match.homeTeam.name || match.homeTeam.teamName)))
+  const rawAwayName = text(match.awayTeamName || (match.awayTeam && (match.awayTeam.name || match.awayTeam.teamName)))
+  const homeProfile = teamDirectory[homeTeamId] || teamDirectory[`name:${rawHomeName}`] || {}
+  const awayProfile = teamDirectory[awayTeamId] || teamDirectory[`name:${rawAwayName}`] || {}
   const homeScore = scoreReady(match) ? number(match.homeScore) : null
   const awayScore = scoreReady(match) ? number(match.awayScore) : null
   const winnerTeamId = winnerTeamIdOf(match)
