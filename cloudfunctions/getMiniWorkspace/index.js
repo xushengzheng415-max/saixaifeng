@@ -1961,10 +1961,16 @@ async function claimableTeamsForWorkspace(event, identity) {
   const invites = await listClaimableInvites(tournamentId)
   const teams = []
   for (const invite of invites) {
-    if (!claimPhoneAllowed(invite, phone)) continue
     // pending/review_approved 可认领；accepted 仅供原接受人回访。
     const status = String(invite.status || 'pending')
     if (['pending', 'review_approved', 'accepted'].indexOf(status) < 0) continue
+    const acceptedIdentityMatch = status === 'accepted' && (
+      String(invite.acceptedUserId || '') === String(identity.user._id || '') ||
+      String(invite.acceptedOpenId || '') === String(identity.openId || '')
+    )
+    // 待认领仍严格按最新登记手机号；已接受邀请允许原 acceptedUserId 回访，
+    // 避免主办方后改联系电话后把真实认领人挡在球队入口之外。
+    if (!acceptedIdentityMatch && !claimPhoneAllowed(invite, phone)) continue
     if (status !== 'accepted') {
       try { assertPrebuiltInviteActive(invite, tournament) } catch (error) { continue }
     }
@@ -1975,11 +1981,7 @@ async function claimableTeamsForWorkspace(event, identity) {
     const ownerIds = [team.ownerId, team.ownerUserId, team.claimedByUserId].map(value => String(value || '')).filter(Boolean)
     const hasOwnership = ownerIds.length > 0 || Boolean(team.orgId && String(team.orgId) !== String(invite.organizerOrgId || ''))
     const claimedByMe = ownerIds.indexOf(String(identity.user._id || '')) >= 0
-    const acceptedByMe = status === 'accepted' && (
-      String(invite.acceptedUserId || '') === String(identity.user._id || '') ||
-      String(invite.acceptedOpenId || '') === String(identity.openId || '') ||
-      claimedByMe
-    )
+    const acceptedByMe = status === 'accepted' && (acceptedIdentityMatch || claimedByMe)
     if (status === 'accepted' && !acceptedByMe) continue
     const alreadyClaimed = status === 'accepted' && acceptedByMe
     const workspaceId = alreadyClaimed ? await workspaceIdForManagedTeam(teamId, identity) : ''

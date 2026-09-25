@@ -373,11 +373,11 @@ async function run() {
   {
     const seed = baseSeed()
     seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', claimedByUserId:'user-1' }) : item)
-    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { status:'accepted', acceptedChoice:'prebuilt', acceptedTeamId:'team-1', acceptedUserId:'user-1', acceptedOpenId:OPEN_ID }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { status:'accepted', acceptedChoice:'prebuilt', acceptedTeamId:'team-1', acceptedUserId:'user-1', acceptedOpenId:OPEN_ID, allowedClaimPhones:[PHONE_B], managerPhone:PHONE_B }) : item)
     seed.team_memberships = [{ _id:'tm-claimed', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
     const { result } = await callWorkspace(seed, { action:'claimableTeams', inviteKey:'key-1' })
     const row = result.teams.find(item => item.inviteId === 'inv-1')
-    assert.ok(row, '场景 17：已接受邀请应对原接受人可见')
+    assert.ok(row, '场景 17：即使后台后来改了登记手机号，已接受邀请仍应对原 acceptedUserId 可见')
     assert.strictEqual(row.alreadyClaimed, true, '场景 17：应标记 alreadyClaimed')
     assert.strictEqual(row.statusText, '已由你认领', '场景 17：应显示已由你认领')
     assert.strictEqual(row.workspaceId, 'team:team-1', '场景 17：应返回可进入的球队工作空间')
