@@ -476,7 +476,30 @@ async function run() {
     ok('单球队空间隔离其他球队报名草稿待办')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/22 通过`)
+  // 场景 23：可删除待办只写当前用户隐藏记录，不删除原业务任务。
+  {
+    const seed = baseSeed()
+    seed.teams = [{ _id:'team-1', name:'当前球队', ownerId:'user-1', claimStatus:'claimed' }]
+    seed.team_memberships = [{ _id:'tm-1', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
+    seed.tournament_tasks = [{ _id:'draft-1', recipientUserId:'user-1', tournamentId:'t-1', divisionId:'default', teamId:'team-1', type:'registration_draft', status:'pending', title:'继续完成赛事报名' }]
+    const dismissed = await callWorkspace(seed, { action:'dismissWorkspaceTask', workspaceId:'team:team-1', taskId:'registration-draft:draft-1' })
+    assert.strictEqual(dismissed.result.success, true, `场景 23：删除提醒应成功，实际 ${JSON.stringify(dismissed.result)}`)
+    assert.strictEqual(dismissed.store.tournament_tasks.length, 1, '场景 23：不得删除原业务任务')
+    assert.strictEqual(dismissed.store.task_dismissals.length, 1, '场景 23：应写入个人隐藏记录')
+    const refreshed = await callWorkspace(dismissed.store, { workspaceId:'team:team-1' })
+    assert.ok(!refreshed.result.eventTasks.some(item => item.id === 'registration-draft:draft-1'), '场景 23：刷新后该用户不再看到已隐藏提醒')
+    ok('右滑删除仅隐藏个人提醒并保留业务任务')
+  }
+
+  // 场景 24：强制业务待办没有 dismissible 标记，服务端必须拒绝删除。
+  {
+    const { result } = await callWorkspace(baseSeed(), { action:'dismissWorkspaceTask', workspaceId:'team:team-1', taskId:'registration:required-1' })
+    assert.strictEqual(result.success, false, '场景 24：强制待办删除应失败')
+    assert.strictEqual(result.code, 'TASK_NOT_DISMISSIBLE', '场景 24：应返回 TASK_NOT_DISMISSIBLE')
+    ok('强制业务待办不可删除')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/24 通过`)
 }
 
 run().catch(error => {

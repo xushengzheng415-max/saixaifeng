@@ -723,7 +723,8 @@ function buildRegistrationDraftTasks(rows) {
     teamId: item.teamId || '',
     divisionId: item.divisionId || 'default',
     inviteKey: item.inviteKey || '',
-    deadlineText: item.detail || '请继续完成关注与报名确认'
+    deadlineText: item.detail || '请继续完成关注与报名确认',
+    dismissible: true
   }))
 }
 
@@ -1045,6 +1046,32 @@ async function markMessagesRead(event, identity) {
   }
   const refreshed = await loadMessagesForWorkspace(workspace, identity.user, identity.openId)
   return Object.assign({ success: true }, refreshed)
+}
+
+async function dismissWorkspaceTask(event, identity) {
+  const taskId = String(event.taskId || '')
+  if (taskId.indexOf('registration-draft:') !== 0) throw workspaceError('TASK_NOT_DISMISSIBLE', '该待办必须完成，不能删除')
+  const rawTaskId = taskId.slice('registration-draft:'.length)
+  if (!rawTaskId) throw workspaceError('TASK_NOT_FOUND', '待办不存在')
+  const task = (await safeGet('tournament_tasks', { _id:rawTaskId }, 1))[0]
+  if (!task || String(task.type || '') !== 'registration_draft') throw workspaceError('TASK_NOT_FOUND', '待办不存在或已处理')
+  if (['completed', 'done', 'cancelled'].indexOf(String(task.status || '').toLowerCase()) >= 0) return { success:true, taskId, idempotent:true }
+  const scoped = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const workspace = scoped.workspace
+  const accessibleTeams = await loadTeams(workspace, identity.user, identity.openId)
+  const accessibleTeamIds = unique(accessibleTeams.map(item => item._id).concat(workspace.teamId || []))
+  const taskTeamId = String(task.teamId || '')
+  const directUser = String(task.recipientUserId || '') === String(identity.user._id || '') || String(task.recipientMiniOpenId || '') === String(identity.openId || '')
+  if (!directUser && (!taskTeamId || accessibleTeamIds.indexOf(taskTeamId) < 0)) throw workspaceError('TASK_ACCESS_DENIED', '当前账号无权删除该待办')
+  if (taskTeamId && accessibleTeamIds.indexOf(taskTeamId) < 0) throw workspaceError('TASK_ACCESS_DENIED', '该待办不属于当前球队空间')
+  try { await db.createCollection('task_dismissals') } catch (error) {}
+  const uniqueKey = String(identity.user._id || '') + ':' + taskId
+  const existing = (await safeGet('task_dismissals', { uniqueKey }, 1))[0]
+  const now = db.serverDate()
+  const data = { uniqueKey, taskId, rawTaskId, userId:String(identity.user._id || ''), workspaceId:String(workspace.id || ''), teamId:taskTeamId, status:'dismissed', dismissedAt:now, updateTime:now }
+  if (existing && existing._id) await db.collection('task_dismissals').doc(String(existing._id)).update({ data })
+  else await db.collection('task_dismissals').add({ data:{ ...data, createTime:now } })
+  return { success:true, taskId }
 }
 
 async function saveHomeIdentity(event, identity) {
@@ -2941,6 +2968,7 @@ exports.main = async function(event) {
       return Object.assign({ success: true, workspaceId: scoped.workspace.id }, messages)
     }
     if (event.action === 'markMessageRead') return await markMessagesRead(event, identity)
+    if (event.action === 'dismissWorkspaceTask') return await dismissWorkspaceTask(event, identity)
     if (event.action === 'setHomeIdentity') return await saveHomeIdentity(event, identity)
     if (event.action === 'teamPlayers') return await loadTeamPlayersForWorkspace(event, identity)
     if (event.action === 'importedPlayerDrafts') return await importedPlayerDraftsForWorkspace(event, identity)
@@ -3054,7 +3082,10 @@ exports.main = async function(event) {
       await Promise.all(staleDraftRows.map(item => db.collection('tournament_tasks').doc(item._id).update({ data: { status: 'completed', completedAt: db.serverDate(), updateTime: db.serverDate() } }).catch(() => null)))
     }
     const activeDraftRows = scopedRegistrationDraftRows.filter(item => staleDraftRows.indexOf(item) < 0)
-    const eventTasks = buildRegistrationDraftTasks(activeDraftRows).concat(buildTasks(registrations), buildOrganizerTasks(hostedRegistrations))
+    const rawEventTasks = buildRegistrationDraftTasks(activeDraftRows).concat(buildTasks(registrations), buildOrganizerTasks(hostedRegistrations))
+    const taskDismissals = await safeGet('task_dismissals', { userId:String(identity.user._id || ''), status:'dismissed' }, 300)
+    const dismissedTaskIds = new Set(taskDismissals.map(item => String(item.taskId || '')))
+    const eventTasks = rawEventTasks.filter(item => !item.dismissible || !dismissedTaskIds.has(String(item.id || '')))
     const tasks = eventTasks.concat(education.tasks)
     const teamIds = unique(teams.map(item => item._id))
     const players = canViewTeams && teamIds.length

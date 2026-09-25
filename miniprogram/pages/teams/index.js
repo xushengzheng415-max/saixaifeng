@@ -87,6 +87,8 @@ Page({
     var teams = context.teams || []
     var teamTasks = (context.eventTasks || []).filter(function(item) {
       return item.audience === 'team'
+    }).map(function(item) {
+      return Object.assign({}, item, { swipeStyle:'transform:translateX(0px)', swipeOpen:false })
     })
     this.setData({
       loading: false,
@@ -137,6 +139,9 @@ Page({
     if (this.data.guestMode) return workspace.promptLogin('当前展示示例任务。登录后可处理正式名单和比赛阵容。')
     var tournamentId = event.currentTarget.dataset.tournament
     var teamId = event.currentTarget.dataset.team
+    var taskId = String(event.currentTarget.dataset.id || '')
+    var swiped = (this.data.teamTasks || []).find(function(item) { return String(item.id || '') === taskId && item.swipeOpen })
+    if (swiped) { this.updateTaskSwipe(taskId, 0); return }
     if (!tournamentId) return
     var team = (this.data.teams || []).find(function(item) { return item.id === teamId })
     if (team) {
@@ -151,6 +156,69 @@ Page({
     }
     wx.navigateTo({
       url: '/pages/tournament/signup/signup?id=' + encodeURIComponent(tournamentId) + '&teamId=' + encodeURIComponent(teamId || '')
+    })
+  },
+
+  updateTaskSwipe: function(taskId, offset) {
+    var tasks = (this.data.teamTasks || []).map(function(item) {
+      var active = String(item.id || '') === String(taskId || '')
+      var nextOffset = active ? offset : 0
+      return Object.assign({}, item, { swipeOpen:nextOffset >= 64, swipeStyle:'transform:translateX(' + nextOffset + 'px)' })
+    })
+    this.setData({ teamTasks:tasks })
+  },
+
+  onTaskTouchStart: function(event) {
+    var touch = event.touches && event.touches[0]
+    if (!touch) return
+    this.taskSwipeStartX = touch.clientX
+    this.taskSwipeStartY = touch.clientY
+    this.taskSwipeId = String(event.currentTarget.dataset.id || '')
+  },
+
+  onTaskTouchMove: function(event) {
+    var touch = event.touches && event.touches[0]
+    if (!touch || !this.taskSwipeId) return
+    var task = (this.data.teamTasks || []).find(function(item) { return String(item.id || '') === String(this.taskSwipeId || '') }, this)
+    if (!task || !task.dismissible) return
+    var deltaX = touch.clientX - Number(this.taskSwipeStartX || 0)
+    var deltaY = touch.clientY - Number(this.taskSwipeStartY || 0)
+    if (Math.abs(deltaX) <= Math.abs(deltaY) || deltaX < 0) return
+    this.updateTaskSwipe(this.taskSwipeId, Math.min(82, deltaX))
+  },
+
+  onTaskTouchEnd: function(event) {
+    var taskId = this.taskSwipeId
+    this.taskSwipeId = ''
+    if (!taskId) return
+    var task = (this.data.teamTasks || []).find(function(item) { return String(item.id || '') === String(taskId) })
+    if (!task || !task.dismissible) return
+    this.updateTaskSwipe(taskId, task.swipeOpen ? 82 : 0)
+  },
+
+  dismissTask: function(event) {
+    var taskId = String(event.currentTarget.dataset.id || '')
+    var task = (this.data.teamTasks || []).find(function(item) { return String(item.id || '') === taskId })
+    if (!task || !task.dismissible) return
+    var self = this
+    wx.showModal({
+      title:'删除待办提醒',
+      content:'只对当前账号隐藏这条提醒，不会删除球队、赛事或报名记录。',
+      confirmText:'删除提醒',
+      confirmColor:'#c63b32',
+      success:function(modal) {
+        if (!modal.confirm) return
+        var context = workspace.readContext() || {}
+        wx.cloud.callFunction({ name:'getMiniWorkspace', data:{ action:'dismissWorkspaceTask', workspaceId:(context.currentWorkspace || {}).id || '', taskId:taskId } }).then(function(response) {
+          var result = response.result || {}
+          if (!result.success) throw new Error(result.message || '待办删除失败')
+          var tasks = (self.data.teamTasks || []).filter(function(item) { return String(item.id || '') !== taskId })
+          self.setData({ teamTasks:tasks, hasTasks:tasks.length > 0 })
+          wx.showToast({ title:'提醒已删除', icon:'success' })
+        }).catch(function(error) {
+          wx.showToast({ title:error.message || '待办删除失败', icon:'none' })
+        })
+      }
     })
   },
 
