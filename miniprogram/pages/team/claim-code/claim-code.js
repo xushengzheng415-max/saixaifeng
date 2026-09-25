@@ -87,7 +87,7 @@ Page({
       }
       var teams = (result.teams || []).map(function (item) {
         var row = Object.assign({}, item)
-        row.className = 'team-row'
+        row.className = item.alreadyClaimed ? 'team-row team-row-claimed' : 'team-row'
         return row
       })
       self.setData({ teams: teams, hasTeams: teams.length > 0, needsPhone: Boolean(result.needsPhone) })
@@ -128,6 +128,11 @@ Page({
   chooseTeam: function (event) {
     var id = String(event.currentTarget.dataset.id || '')
     var name = String(event.currentTarget.dataset.name || '')
+    var selected = this.data.teams.filter(function(item) { return item.inviteId === id })[0] || {}
+    if (selected.alreadyClaimed) {
+      this.enterClaimedTeam(selected)
+      return
+    }
     if (event.currentTarget.dataset.review === true) {
       this.openConflict(id)
       return
@@ -138,6 +143,18 @@ Page({
       return row
     })
     this.setData({ teams: teams, selectedInviteId: id, selectedTeamName: name }, this.refreshActionState)
+  },
+
+  enterClaimedTeam: function (team) {
+    var targetTeamId = String(team.teamId || '')
+    if (!targetTeamId) return wx.showToast({ title: '球队信息不完整，请稍后重试', icon: 'none' })
+    wx.setStorageSync('teamInfo', { _id: targetTeamId, teamId: targetTeamId, teamName: team.teamName || '' })
+    var switchPromise = team.workspaceId ? workspace.switchWorkspace(team.workspaceId) : Promise.resolve()
+    switchPromise.then(function () {
+      wx.navigateTo({ url: '/pages/team/team?teamId=' + encodeURIComponent(targetTeamId) })
+    }).catch(function (error) {
+      wx.showToast({ title: (error && error.message) || '球队空间切换失败', icon: 'none' })
+    })
   },
 
   toggleDisclaimer: function () {

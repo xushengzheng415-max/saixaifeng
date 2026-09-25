@@ -369,7 +369,37 @@ async function run() {
     ok('外部机构球队认领只开放单球队协作空间')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/16 通过`)
+  // 场景 17：本人认领完成后再次扫码，应返回“已由你认领”和可进入的工作空间。
+  {
+    const seed = baseSeed()
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { status:'accepted', acceptedChoice:'prebuilt', acceptedTeamId:'team-1', acceptedUserId:'user-1', acceptedOpenId:OPEN_ID }) : item)
+    seed.team_memberships = [{ _id:'tm-claimed', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
+    const { result } = await callWorkspace(seed, { action:'claimableTeams', inviteKey:'key-1' })
+    const row = result.teams.find(item => item.inviteId === 'inv-1')
+    assert.ok(row, '场景 17：已接受邀请应对原接受人可见')
+    assert.strictEqual(row.alreadyClaimed, true, '场景 17：应标记 alreadyClaimed')
+    assert.strictEqual(row.statusText, '已由你认领', '场景 17：应显示已由你认领')
+    assert.strictEqual(row.workspaceId, 'team:team-1', '场景 17：应返回可进入的球队工作空间')
+    ok('本人认领后再次扫码可直接进入球队')
+  }
+
+  // 场景 18：原参赛关系已审核通过时，认领只补认领字段，不重复创建关系或降级状态。
+  {
+    const seed = baseSeed({
+      tournament_teams: [{ _id:'reg-approved', tournamentId:'t-1', teamId:'team-1', divisionId:'default', status:'approved', claimStatus:'pending_confirmation' }]
+    })
+    const { result, store } = await callWorkspace(seed, {
+      action:'acceptPrebuiltTeamInvite', inviteId:'inv-1', choice:'prebuilt', disclaimerAgreed:true
+    })
+    assert.strictEqual(result.success, true, `场景 18：已通过关系认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(store.tournament_teams.length, 1, '场景 18：不得重复创建参赛关系')
+    assert.strictEqual(store.tournament_teams[0].status, 'approved', '场景 18：不得把已通过状态降级为 pending')
+    assert.strictEqual(store.tournament_teams[0].claimStatus, 'claimed', '场景 18：应补齐认领状态')
+    ok('已通过参赛关系认领保持单条且不降级')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/18 通过`)
 }
 
 run().catch(error => {
