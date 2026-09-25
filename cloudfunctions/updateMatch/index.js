@@ -203,8 +203,9 @@ async function authenticateHeadRefereeSession(event, match, tournament) {
 async function assignByHeadReferee(event) {
   const matchId=String(event.matchId||'')
   if(!matchId||!event.data||!event.data.refereeCrew)return {success:false,code:'ASSIGNMENT_REQUIRED',message:'缺少比赛或裁判排班信息'}
-  const matchResult=await db.collection('matches').doc(matchId).get()
-  const match=Array.isArray(matchResult.data)?matchResult.data[0]:matchResult.data
+  let matchResult=null
+  try{matchResult=await db.collection('matches').doc(matchId).get()}catch(error){if(!/does not exist|DOCUMENT_NOT_FOUND|ResourceNotFound/i.test(String(error&&error.message||'')))throw error}
+  const match=matchResult?(Array.isArray(matchResult.data)?matchResult.data[0]:matchResult.data):null
   if(!match)return {success:false,code:'MATCH_NOT_FOUND',message:'比赛不存在'}
   if(!['scheduled','pending','checked_in'].includes(String(match.status||'scheduled'))||match.refereeRecordLocked)return {success:false,code:'MATCH_ASSIGNMENT_LOCKED',message:'比赛已开始或记录已锁定，不能调整裁判'}
   const tournamentResult=await db.collection('tournaments').doc(String(match.tournamentId||'')).get()
