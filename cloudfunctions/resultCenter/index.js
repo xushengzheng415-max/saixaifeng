@@ -133,6 +133,8 @@ function phaseOf(match) {
 
 function standingsEligible(match) {
   const phase = phaseOf(match)
+  const status = text(match.status).toLowerCase()
+  if (match.isBye === true || ['cancelled', 'canceled', 'void'].includes(status)) return false
   if (match.standingsEligible === false) return false
   if (['knockout', 'cup', 'placement', 'final', 'semifinal'].includes(phase)) return false
   return match.standingsEligible === true || ['group', 'league', 'round_robin'].includes(phase)
@@ -240,6 +242,13 @@ function addTeam(table, id, name, logo) {
   return table[key]
 }
 
+function addScheduledTeam(table, id, name, logo) {
+  const normalizedId = text(id)
+  const normalizedName = text(name)
+  if (!normalizedId && (!normalizedName || ['主队待定', '客队待定'].includes(normalizedName))) return
+  addTeam(table, normalizedId, normalizedName || '球队待定', text(logo))
+}
+
 function applyResult(table, match, rule, provisional) {
   const home = addTeam(table, match.homeTeamId, match.homeTeamName, match.homeTeamLogo)
   const away = addTeam(table, match.awayTeamId, match.awayTeamName, match.awayTeamLogo)
@@ -302,28 +311,36 @@ function rankTeams(teams, officialMatches, rule) {
 
 function buildStandings(matches, divisionsById) {
   const buckets = {}
-  matches.filter(match => match.scoreReady && match.standingsEligible && !['returned', 'warning'].includes(match.resultStatus)).forEach(match => {
+  matches.filter(match => match.standingsEligible).forEach(match => {
     const key = `${match.divisionId}:${match.groupName}`
-    const bucket = buckets[key] ||= { divisionId: match.divisionId, divisionName: match.divisionName, groupName: match.groupName, official: [], all: [] }
+    const bucket = buckets[key] ||= { divisionId: match.divisionId, divisionName: match.divisionName, groupName: match.groupName, teams: {}, official: [], all: [] }
+    addScheduledTeam(bucket.teams, match.homeTeamId, match.homeTeamName, match.homeTeamLogo)
+    addScheduledTeam(bucket.teams, match.awayTeamId, match.awayTeamName, match.awayTeamLogo)
+    if (!match.scoreReady || ['returned', 'warning'].includes(match.resultStatus)) return
     bucket.all.push(match)
     if (match.resultStatus === 'approved') bucket.official.push(match)
   })
   return Object.values(buckets).map(bucket => {
     const rule = pointsRule(divisionsById[bucket.divisionId] || {})
-    const officialTable = {}; bucket.official.forEach(match => applyResult(officialTable, match, rule, false))
-    const previewTable = {}; bucket.all.forEach(match => applyResult(previewTable, match, rule, match.resultStatus !== 'approved'))
+    const officialTable = {}; const previewTable = {}
+    Object.values(bucket.teams).forEach(team => {
+      addTeam(officialTable, team.teamId, team.teamName, team.logo)
+      addTeam(previewTable, team.teamId, team.teamName, team.logo)
+    })
+    bucket.official.forEach(match => applyResult(officialTable, match, rule, false))
+    bucket.all.forEach(match => applyResult(previewTable, match, rule, match.resultStatus !== 'approved'))
     return {
       divisionId: bucket.divisionId,
       divisionName: bucket.divisionName,
       groupName: bucket.groupName,
       pointsRule: rule,
       tieBreakers: ['积分', '相互比赛积分', '相互比赛净胜球', '相互比赛进球数', '总净胜球', '总进球', '红牌数少者', '黄牌数少者', '抽签决定'],
-      officialTeams: rankTeams(Object.values(officialTable), bucket.official, rule),
-      previewTeams: rankTeams(Object.values(previewTable), bucket.all, rule),
+      officialTeams: bucket.official.length ? rankTeams(Object.values(officialTable), bucket.official, rule) : [],
+      previewTeams: bucket.all.length ? rankTeams(Object.values(previewTable), bucket.all, rule) : [],
       officialMatchCount: bucket.official.length,
       provisionalMatchCount: bucket.all.length - bucket.official.length
     }
-  })
+  }).sort((a, b) => a.divisionName.localeCompare(b.divisionName, 'zh-CN', { numeric: true }) || a.groupName.localeCompare(b.groupName, 'zh-CN', { numeric: true }))
 }
 
 function normalizedGroupName(value) {
