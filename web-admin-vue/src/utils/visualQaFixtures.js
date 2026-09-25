@@ -36,11 +36,11 @@ const divisions = [
 ]
 
 const scheduleDivisionMeta = [
-  { id: ids.divisionU8, name: 'U8组', tournamentType: 'tournament', teamCount: 8, scheduleProgress: 100, rulesLocked: true, drawCompleted: true, venueConfigured: true },
-  { id: 'qa-division-u10', name: 'U10组', tournamentType: 'tournament', teamCount: 8, scheduleProgress: 100, rulesLocked: true, drawCompleted: true, venueConfigured: true },
-  { id: 'qa-division-u12', name: 'U12组', tournamentType: 'cup', teamCount: 8, scheduleProgress: 80, rulesLocked: true, drawCompleted: true, venueConfigured: true },
-  { id: 'qa-division-u14', name: 'U14组', tournamentType: 'league', teamCount: 8, scheduleProgress: 100, rulesLocked: true, drawCompleted: true, venueConfigured: false },
-  { id: ids.divisionU16, name: 'U16组', tournamentType: 'hybrid', teamCount: 6, scheduleProgress: 40, rulesLocked: true, drawCompleted: false, venueConfigured: false }
+  { id: ids.divisionU8, name: 'U8组', tournamentType: 'tournament', matchFormat:'5side',matchMinutes:35,teamCount: 8, scheduleProgress: 100, rulesLocked: true, drawCompleted: true, venueConfigured: true },
+  { id: 'qa-division-u10', name: 'U10组', tournamentType: 'tournament', matchFormat:'7side',matchMinutes:50,teamCount: 8, scheduleProgress: 100, rulesLocked: true, drawCompleted: true, venueConfigured: true },
+  { id: 'qa-division-u12', name: 'U12组', tournamentType: 'cup', matchFormat:'8side',matchMinutes:60,teamCount: 8, scheduleProgress: 80, rulesLocked: true, drawCompleted: true, venueConfigured: true },
+  { id: 'qa-division-u14', name: 'U14组', tournamentType: 'league', matchFormat:'11side',matchMinutes:80,teamCount: 8, scheduleProgress: 100, rulesLocked: true, drawCompleted: true, venueConfigured: false },
+  { id: ids.divisionU16, name: 'U16组', tournamentType: 'hybrid', matchFormat:'11side',matchMinutes:90,teamCount: 6, scheduleProgress: 40, rulesLocked: true, drawCompleted: false, venueConfigured: false }
 ]
 
 scheduleDivisionMeta.forEach(meta => {
@@ -62,6 +62,18 @@ const tournament = {
   status: 'ongoing',
   rosterLocked: false,
   divisions,
+  scheduleDraft: {
+    schemaVersion: 2,
+    startDate: '2026-07-20',
+    endDate: '2026-07-28',
+    matchDays: ['周一','周二','周三','周四','周五','周六','周日'],
+    defaultTurnaroundMinutes: 10,
+    timeStepMinutes: 5,
+    frequencyPreset: 'adaptive',
+    sessionWindows: [{ key:'morning',label:'上午',enabled:true,start:'09:00',end:'12:00' },{ key:'afternoon',label:'下午',enabled:true,start:'14:00',end:'18:00' },{ key:'evening',label:'晚间',enabled:false,start:'18:30',end:'21:30' }],
+    venueResources: [{ name:'1号场地',fieldFormat:'5side' },{ name:'2号场地',fieldFormat:'7side' },{ name:'3号场地',fieldFormat:'8side' },{ name:'中心场',fieldFormat:'11side' }],
+    divisionPolicies: {}
+  },
   professionalDrawConfigs: {
     [ids.divisionU16]: {
       setupSavedAt: '2026-07-26T09:00:00+08:00',
@@ -146,11 +158,11 @@ const matches = [
 ]
 
 const scheduleMatchTargets = [
-  { divisionId: ids.divisionU8, divisionName: 'U8组', count: 16, published: 16, conflicts: 0 },
-  { divisionId: 'qa-division-u10', divisionName: 'U10组', count: 16, published: 16, conflicts: 0 },
-  { divisionId: 'qa-division-u12', divisionName: 'U12组', count: 19, published: 12, conflicts: 2 },
-  { divisionId: 'qa-division-u14', divisionName: 'U14组', count: 28, published: 18, conflicts: 0 },
-  { divisionId: ids.divisionU16, divisionName: 'U16组', count: 13, published: 2, conflicts: 1 }
+  { divisionId: ids.divisionU8, divisionName: 'U8组', count: 16, published: 16, conflicts: 0,matchFormat:'5side',pending:0 },
+  { divisionId: 'qa-division-u10', divisionName: 'U10组', count: 16, published: 12, conflicts: 0,matchFormat:'7side',pending:2 },
+  { divisionId: 'qa-division-u12', divisionName: 'U12组', count: 19, published: 12, conflicts: 2,matchFormat:'8side',pending:3 },
+  { divisionId: 'qa-division-u14', divisionName: 'U14组', count: 28, published: 18, conflicts: 0,matchFormat:'11side',pending:2 },
+  { divisionId: ids.divisionU16, divisionName: 'U16组', count: 13, published: 2, conflicts: 1,matchFormat:'11side',pending:3 }
 ]
 
 scheduleMatchTargets.forEach((target, targetIndex) => {
@@ -172,6 +184,7 @@ scheduleMatchTargets.forEach((target, targetIndex) => {
       tournamentId: ids.tournament,
       divisionId: target.divisionId,
       divisionName: target.divisionName,
+      matchFormat: target.matchFormat,
       matchSequence: `${target.divisionName.replace('组', '')}-${String(sequence).padStart(3, '0')}`,
       matchDate,
       matchTime,
@@ -189,6 +202,16 @@ scheduleMatchTargets.forEach((target, targetIndex) => {
       hasConflict: isConflict,
       scheduleConflict: isConflict,
       conflictStatus: isConflict ? 'conflict' : ''
+    })
+  }
+  if (target.pending) {
+    matches.filter(match => match.divisionId === target.divisionId).slice(-target.pending).forEach(match => {
+      match.matchDate = ''
+      match.matchTime = ''
+      match.venue = ''
+      match.scheduleStatus = 'unassigned'
+      match.schedulePublished = false
+      match.published = false
     })
   }
 })

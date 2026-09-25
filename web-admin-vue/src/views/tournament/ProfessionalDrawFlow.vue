@@ -176,6 +176,15 @@
           />
         </section>
       </section>
+      <PairingRuleEditor
+        v-if="drawSetup.mode === 'group' || drawSetup.mode === 'league'"
+        :tournament-id="String(tournamentId)"
+        :division="activeDivision"
+        :group-count="drawSetup.mode === 'league' ? 1 : drawSetup.groupCount"
+        :teams-per-group="drawSetup.mode === 'league' ? teams.length : drawSetup.teamsPerGroup"
+        :group-sizes="drawSetup.mode === 'league' ? [teams.length] : []"
+        :disabled="!setupValid || !canManage"
+      />
       <section class="setup-options">
         <span>展示时间</span
         ><el-select v-model="drawSetup.displaySeconds"
@@ -1148,6 +1157,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { callFunction, queryById, queryList, updateRecord } from "../../utils/cloud";
 import { permissions } from "../../utils/permissions";
 import previewField from "../../assets/images/football-field-dual.jpg";
+import PairingRuleEditor from "../../components/tournament/PairingRuleEditor.vue";
 
 const props = defineProps({ tournamentId: { type: String, required: true } });
 const route = useRoute();

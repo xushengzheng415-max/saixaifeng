@@ -49,6 +49,14 @@
           <footer><span><el-icon><User /></el-icon>总签位 {{ quickCapacity }}</span><span><el-icon><Grid /></el-icon>已配置 {{ configForm.groupCount }} 组</span><span><el-icon><UserFilled /></el-icon>{{ quickGroupSizeSummary }}</span></footer>
         </section>
       </div>
+      <PairingRuleEditor
+        :tournament-id="String(tournamentId)"
+        :division="activeDivision"
+        :group-count="configForm.groupCount"
+        :teams-per-group="configForm.teamsPerGroup"
+        :group-sizes="quickGroupSizePlan"
+        :disabled="!quickCapacityValid"
+      />
       <footer class="quick-setup-footer"><p><el-icon><InfoFilled /></el-icon>保存后进入分组操作台，将左侧球队拖入右侧各组签位。</p><div><el-button @click="resetQuickConfig">恢复默认设置</el-button><el-button type="success" :disabled="!quickCapacityValid" @click="enterQuickConsole">保存并进入分组操作台</el-button></div></footer>
     </main>
   </section>
@@ -120,7 +128,7 @@
     <el-dialog
       v-model="showConfigDialog"
       title="新建抽签规则"
-      width="600px"
+      width="min(980px, 94vw)"
       :close-on-click-modal="false"
     >
       <div class="config-dialog-content">
@@ -187,6 +195,15 @@
           </div>
         </div>
       </div>
+
+      <PairingRuleEditor
+        v-if="configForm.tournamentType !== 'cup'"
+        :tournament-id="String(tournamentId)"
+        :division="activeDivision"
+        :group-count="configForm.tournamentType === 'league' && !configForm.leagueGrouped ? 1 : configForm.groupCount"
+        :teams-per-group="configForm.tournamentType === 'league' && !configForm.leagueGrouped ? divisionTeamCount(activeDivision) : configForm.teamsPerGroup"
+        :group-sizes="configForm.tournamentType === 'league' && !configForm.leagueGrouped ? [divisionTeamCount(activeDivision)] : []"
+      />
 
       <template #footer>
         <el-button @click="showConfigDialog = false; resetConfig()">取消</el-button>
@@ -574,6 +591,7 @@ import ProfessionalDrawFlow from './ProfessionalDrawFlow.vue'
 import QuickHybridConsole from './QuickHybridConsole.vue'
 import QuickTournamentConsole from './QuickTournamentConsole.vue'
 import QuickDrawResult from './QuickDrawResult.vue'
+import PairingRuleEditor from '../../components/tournament/PairingRuleEditor.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
 
 const props = defineProps({

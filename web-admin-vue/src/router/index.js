@@ -353,7 +353,7 @@ const routes = [
     children: [
       {
         path: '',
-        component: () => import('../views/tournament/TournamentSchedule.vue')
+        component: () => import('../views/tournament/TournamentScheduleV2.vue')
       }
     ]
   },

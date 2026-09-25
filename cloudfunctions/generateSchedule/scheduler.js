@@ -39,7 +39,7 @@ function buildTimeSlots(config) {
   config = config || {}
   const windows = normalizeSessionWindows(config.sessionWindows)
   if (windows.length === 0) return (config.timeSlots || config.timeslots || []).slice().sort()
-  const slotMinutes = Math.max(1,Number(config.slotMinutes || 60))
+  const slotMinutes = Math.max(1,Number(config.timeStepMinutes || config.slotMinutes || 60))
   const slots = []
   windows.forEach(window => {
     const end = minuteOfDay(window.end)
@@ -66,8 +66,13 @@ function buildVenueSlots(config) {
   const resources = normalizeVenueResources(config)
   const slots = []
   resources.forEach(resource => {
+    const windows = normalizeSessionWindows(resource.sessionWindows)
     const times = buildTimeSlots({ ...config,sessionWindows:resource.sessionWindows })
-    times.forEach(time => slots.push({ venue:resource.venue,fieldFormat:resource.fieldFormat,time,session:sessionName(time,resource.sessionWindows) }))
+    times.forEach(time => {
+      const session = sessionName(time,resource.sessionWindows)
+      const window = windows.find(item => item.key === session)
+      slots.push({ venue:resource.venue,fieldFormat:resource.fieldFormat,time,session,windowEnd:window && window.end || '' })
+    })
   })
   return slots.sort((left,right) => left.time.localeCompare(right.time) || left.venue.localeCompare(right.venue,'zh-CN',{ numeric:true }))
 }
@@ -111,6 +116,10 @@ function participantIds(match, matchMap, cache, visiting) {
   return Array.from(new Set(direct.concat(sourced).map(String)))
 }
 
+function matchParticipantKeysForHistory(match) {
+  return Array.from(new Set([match && match.homeTeamId,match && match.awayTeamId].filter(Boolean).map(String)))
+}
+
 function dependencyDepth(match, matchMap, cache, visiting) {
   const matchNo = Number(match.matchNo || match.matchIndex || 0)
   const key=scopedMatchKey(match,matchNo)
@@ -130,6 +139,24 @@ function dependencyDepth(match, matchMap, cache, visiting) {
 
 function timestamp(matchDate, matchTime) {
   return new Date(`${matchDate}T${matchTime}:00`).getTime()
+}
+
+function schedulePolicyForMatch(match, config) {
+  const scope = matchScope(match)
+  const policies = config && config.divisionPolicies && typeof config.divisionPolicies === 'object' ? config.divisionPolicies : {}
+  const override = policies[scope] || {}
+  const format = String(match && (match.requiredVenueFormat || match.matchFormat) || config && config.matchFormat || '').toLowerCase()
+  const adaptive = Number(config && config.schemaVersion || 1) >= 2 && String(config && config.frequencyPreset || 'adaptive') === 'adaptive'
+  const elevenSide = format === '11side'
+  const maxMatchesPerDay = Math.max(1, Number(override.maxMatchesPerDay || (adaptive ? (elevenSide ? 1 : 2) : config.maxMatchesPerDay || 99)))
+  const maxPerSession = Math.max(1, Number(override.maxPerSession || config.maxPerSession || 1))
+  const minRestMinutes = Math.max(0, Number(override.minRestMinutes != null ? override.minRestMinutes : (adaptive ? (elevenSide ? 1080 : 120) : config.restMinutes == null ? 90 : config.restMinutes)))
+  const turnaroundMinutes = Math.max(0, Number(override.turnaroundMinutes != null ? override.turnaroundMinutes : config.defaultTurnaroundMinutes != null ? config.defaultTurnaroundMinutes : config.matchInterval || 0))
+  return { maxMatchesPerDay,maxPerSession,minRestMinutes,turnaroundMinutes,allowedDates:Array.isArray(override.allowedDates)?override.allowedDates.map(String):[],allowedSessions:Array.isArray(override.allowedSessions)?override.allowedSessions.map(String):[],allowedVenues:Array.isArray(override.allowedVenues)?override.allowedVenues.map(String):[] }
+}
+
+function overlaps(leftStart, leftEnd, rightStart, rightEnd) {
+  return leftStart < rightEnd && rightStart < leftEnd
 }
 
 function schedulingPriority(match) {
@@ -176,8 +203,7 @@ function assign(matches, config, occupiedInput) {
 
   const endDate = config.endDate ? new Date(config.endDate) : null
   const defaultDurationMinutes = Math.max(1, Number(config.matchDuration || config.durationMinutes || 50))
-  const defaultBufferMinutes = Math.max(0, Number(config.matchInterval || config.bufferMinutes || 0))
-  const restMinutes = Math.max(0, Number(config.restMinutes == null ? 90 : config.restMinutes))
+  const defaultBufferMinutes = Math.max(0, Number(config.defaultTurnaroundMinutes != null ? config.defaultTurnaroundMinutes : config.matchInterval || config.bufferMinutes || 0))
   const dailyLimit = Math.max(0, Number(config.dailyMatchLimit || 0))
   const maxDailyOne = config.maxDailyOne === true
   const maxPerSession = Math.max(1, Number(config.maxPerSession || 1))
@@ -199,15 +225,37 @@ function assign(matches, config, occupiedInput) {
   ordered.forEach(match=>{if(Number(match.scheduleStageOrder)>0 && match.scheduleStageName)return;const stages=scopeStages.get(matchScope(match)) || [schedulingPriority(match)];const index=stages.indexOf(schedulingPriority(match))+1;match.scheduleStageOrder=index;match.scheduleStageName=stageName(index)})
   const teamHistory = new Map()
   const sessionCounts = new Map()
+  const teamDailyCounts = new Map()
   const dailyCounts = new Map()
   const keyTimeUse = new Set()
+  const venueIntervals = new Map()
+  ;(Array.isArray(config.occupiedMatches) ? config.occupiedMatches : []).forEach(item => {
+    if (!item || !item.matchDate || !item.matchTime || !item.venue) return
+    const startMs = timestamp(item.matchDate,item.matchTime)
+    const duration = Math.max(1,Number(item.durationMinutes || item.matchDuration || defaultDurationMinutes))
+    const buffer = Math.max(0,Number(item.bufferMinutes == null ? defaultBufferMinutes : item.bufferMinutes))
+    const list = venueIntervals.get(String(item.venue)) || []
+    list.push({ startMs,endMs:startMs+(duration+buffer)*60000,matchId:item._id || '' })
+    venueIntervals.set(String(item.venue),list)
+    const session=sessionName(item.matchTime,config.sessionWindows)
+    matchParticipantKeysForHistory(item).forEach(teamId=>{
+      const history=teamHistory.get(teamId) || []
+      history.push({ startMs,endMs:startMs+duration*60000 })
+      teamHistory.set(teamId,history)
+      const dailyKey=`${teamId}|${item.matchDate}`
+      const sessionKey=`${dailyKey}|${session}`
+      teamDailyCounts.set(dailyKey,(teamDailyCounts.get(dailyKey)||0)+1)
+      sessionCounts.set(sessionKey,(sessionCounts.get(sessionKey)||0)+1)
+    })
+  })
   const reasons = []
   let assigned = 0
 
   ordered.forEach(match => {
     if (match.isBye) return
+    const policy=schedulePolicyForMatch(match,config)
     const durationMinutes=Math.max(1,Number(match.durationMinutes || defaultDurationMinutes))
-    const bufferMinutes=Math.max(0,Number(match.bufferMinutes == null ? defaultBufferMinutes : match.bufferMinutes))
+    const bufferMinutes=Math.max(0,Number(match.bufferMinutes == null ? policy.turnaroundMinutes : match.bufferMinutes))
     const participantKeys = participantIds(match, matchMap, idCache, new Set())
     const requiredFieldFormat=String(match.requiredVenueFormat || match.matchFormat || config.matchFormat || '').toLowerCase()
     const eligibleVenueSlots=requiredFieldFormat ? venueSlots.filter(slot => slot.fieldFormat===requiredFieldFormat) : []
@@ -232,12 +280,19 @@ function assign(matches, config, occupiedInput) {
       if (!dayAllowed(day, config.matchDays)) continue
       checkedDays += 1
       const currentDate = dateText(day)
+      if (policy.allowedDates.length && policy.allowedDates.indexOf(currentDate) < 0) continue
       if (dailyLimit > 0 && (dailyCounts.get(currentDate) || 0) >= dailyLimit) continue
       for (let slotIndex = 0; slotIndex < eligibleVenueSlots.length && !placed; slotIndex += 1) {
         const currentTime = eligibleVenueSlots[slotIndex].time
         const venue = eligibleVenueSlots[slotIndex].venue
         const startMs = timestamp(currentDate, currentTime)
         const session = eligibleVenueSlots[slotIndex].session
+        if (policy.allowedSessions.length && policy.allowedSessions.indexOf(session) < 0) continue
+        if (policy.allowedVenues.length && policy.allowedVenues.indexOf(venue) < 0) continue
+        const occupiedEndMs=startMs+(durationMinutes+bufferMinutes)*60000
+        if (eligibleVenueSlots[slotIndex].windowEnd && occupiedEndMs>timestamp(currentDate,eligibleVenueSlots[slotIndex].windowEnd)) continue
+        const venueBlocked=(venueIntervals.get(venue) || []).some(item=>overlaps(startMs,occupiedEndMs,item.startMs,item.endMs))
+        if(venueBlocked) continue
         const barrierBlocked=barrierMatches.some(item=>{
           if(!item.matchDate || !item.matchTime) return true
           const itemDuration=Math.max(1,Number(item.durationMinutes || defaultDurationMinutes))
@@ -249,16 +304,17 @@ function assign(matches, config, occupiedInput) {
           if (!dependency || !dependency.matchDate || !dependency.matchTime) return true
           const dependencyDuration=Math.max(1,Number(dependency.durationMinutes || defaultDurationMinutes))
           const dependencyEnd = timestamp(dependency.matchDate, dependency.matchTime) + dependencyDuration * 60000
-          return startMs - dependencyEnd < restMinutes * 60000
+          return startMs - dependencyEnd < policy.minRestMinutes * 60000
         })
         if (dependencyBlocked) continue
         const teamBlocked = participantKeys.some(teamId => {
           const history = teamHistory.get(teamId) || []
-          if (history.some(item => startMs - item.endMs < restMinutes * 60000)) return true
+          if (history.some(item => startMs - item.endMs < policy.minRestMinutes * 60000)) return true
           const dailyKey = `${teamId}|${currentDate}`
-          if (maxDailyOne && (sessionCounts.get(dailyKey) || 0) >= 1) return true
+          if ((maxDailyOne || policy.maxMatchesPerDay <= 1) && (teamDailyCounts.get(dailyKey) || 0) >= 1) return true
+          if ((teamDailyCounts.get(dailyKey) || 0) >= policy.maxMatchesPerDay) return true
           const sessionKey = `${dailyKey}|${session}`
-          return (sessionCounts.get(sessionKey) || 0) >= maxPerSession
+          return (sessionCounts.get(sessionKey) || 0) >= Math.min(maxPerSession,policy.maxPerSession)
         })
         if (teamBlocked) continue
         const critical = /决赛|半决赛/.test(String(match.roundName || ''))
@@ -268,6 +324,9 @@ function assign(matches, config, occupiedInput) {
         const key = slotKey(currentDate, currentTime, venue)
         if (occupied.has(key)) continue
         occupied.add(key)
+        const intervals=venueIntervals.get(venue) || []
+        intervals.push({ startMs,endMs:occupiedEndMs,matchId:match._id || '' })
+        venueIntervals.set(venue,intervals)
         match.matchDate = currentDate
         match.date = currentDate
         match.matchTime = currentTime
@@ -286,7 +345,7 @@ function assign(matches, config, occupiedInput) {
           teamHistory.set(teamId, history)
           const dailyKey = `${teamId}|${currentDate}`
           const sessionKey = `${dailyKey}|${session}`
-          sessionCounts.set(dailyKey, (sessionCounts.get(dailyKey) || 0) + 1)
+          teamDailyCounts.set(dailyKey, (teamDailyCounts.get(dailyKey) || 0) + 1)
           sessionCounts.set(sessionKey, (sessionCounts.get(sessionKey) || 0) + 1)
         })
         assigned += 1
@@ -302,4 +361,4 @@ function assign(matches, config, occupiedInput) {
   return { assigned, unassigned: ordered.filter(match => !match.isBye && !match.matchDate).length, reasons }
 }
 
-module.exports = { assign, participantIds, sessionName, buildTimeSlots, normalizeSessionWindows, normalizeVenueResources, buildVenueSlots, schedulingPriority, stageName, finalStageOrder }
+module.exports = { assign, participantIds, sessionName, buildTimeSlots, normalizeSessionWindows, normalizeVenueResources, buildVenueSlots, schedulingPriority, stageName, finalStageOrder, schedulePolicyForMatch, overlaps }
