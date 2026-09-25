@@ -37,6 +37,11 @@ function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '').slice(-11)
 }
 
+function notificationUrl(value) {
+  const url = String(value || '').trim()
+  return /^https:\/\/www\.sxffootball\.cn\//i.test(url) ? url : CONFIG.h5Url
+}
+
 function hasValidRelayProof(event) {
   const phone = normalizePhone(event && event.phone)
   const timestamp = Number(event && event.__relayTimestamp)
@@ -194,7 +199,7 @@ async function sendOne(notification) {
   const message = {
     touser: identity.serviceAccountOpenId,
     template_id: CONFIG.templateId,
-    url: CONFIG.h5Url,
+    url: notificationUrl(notification.url),
     data
   }
   let result

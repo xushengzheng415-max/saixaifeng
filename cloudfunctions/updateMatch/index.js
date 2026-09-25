@@ -142,7 +142,8 @@ function refereeTemplate(format) {
       ]
 }
 
-async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, operationRefereeId, recordKeeperId) {
+async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, operationRefereeId, recordKeeperId, options) {
+  const config = options || {}
   const template = refereeTemplate(format)
   const crew = {}
   const ids = []
@@ -153,9 +154,10 @@ async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, op
     if (ids.includes(refereeId)) throw new Error('同一名裁判不能重复担任多个岗位')
     const result = await db.collection('referees').doc(refereeId).get()
     const referee = Array.isArray(result.data) ? result.data[0] : result.data
-    const approvedRealReferee = referee && referee.status === 'approved' && recordBelongsToActor(referee, actor)
-    const scopedSyntheticReferee = referee && referee.synthetic === true && String(referee.tournamentId || '') === String(tournamentId || '')
-    if (!approvedRealReferee && !scopedSyntheticReferee) {
+    const approvedTemporaryReferee = referee && referee.temporaryReferee === true && referee.status === 'approved' && referee.canOperate !== false && referee.eventScoped === true && referee.organizerTemporaryApproval === true && referee.temporaryClaimStatus === 'approved' && referee.wechatBound === true && recordBelongsToActor(referee, actor) && String(referee.tournamentId || '') === String(tournamentId || '')
+    const approvedRealReferee = referee && referee.temporaryReferee !== true && referee.status === 'approved' && recordBelongsToActor(referee, actor)
+    const scopedSyntheticReferee = config.allowSynthetic !== false && referee && referee.synthetic === true && String(referee.tournamentId || '') === String(tournamentId || '')
+    if (!approvedRealReferee && !approvedTemporaryReferee && !scopedSyntheticReferee) {
       throw new Error(role.label + '必须从本机构已审核裁判或当前赛事虚拟裁判中选择')
     }
     ids.push(refereeId)
@@ -167,6 +169,59 @@ async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, op
   if (!ids.includes(keeperId)) throw new Error('裁判记录员必须从本场4名裁判中选择')
   if (!ids.includes(operatorId)) throw new Error('操作负责人必须从本场4名裁判中选择')
   return { crew, template, keeperId, operatorId }
+}
+
+async function authenticateHeadRefereeSession(event, match, tournament) {
+  const token = String(event && event.__refereeSessionToken || '').trim()
+  if (!token) throw new Error('服务号登录状态已失效，请重新进入裁判任务')
+  const sessions = (await db.collection('referee_h5_sessions').where({ tokenHash:hashSessionToken(token),active:true,expiresAt:_.gt(new Date()) }).limit(2).get()).data || []
+  if (sessions.length !== 1 || !sessions[0].workflowOpenId) throw new Error('服务号登录状态已失效，请重新进入裁判任务')
+  const openId = String(sessions[0].workflowOpenId)
+  const identities = (await db.collection('service_identities').where(_.or([{openId},{miniProgramOpenId:openId},{serviceWorkflowOpenId:openId}])).limit(2).get()).data || []
+  if (identities.length !== 1) throw new Error('裁判手机号身份不存在或存在冲突')
+  const phone = normalizePhone(identities[0].phone)
+  if (!phone || identities[0].phoneVerified !== true) throw new Error('请先验证组委会登记的手机号')
+  const referees = (await db.collection('referees').where(_.or([{phone},{phoneNumber:phone},{mobile:phone},{contactPhone:phone}])).limit(50).get()).data || []
+  const approvedReferees = referees.filter(item => item && item.status === 'approved' && item.canOperate !== false)
+  const refereeIds = approvedReferees.map(item => String(item._id || '')).filter(Boolean)
+  if (!refereeIds.length) throw new Error('当前账号没有已审核裁判身份')
+  const tournamentId = String(match && match.tournamentId || '')
+  let relation = null
+  let headReferee = null
+  for (const refereeId of refereeIds) {
+    const rows = (await db.collection('tournament_referees').where({ tournamentId,refereeId,isHeadReferee:true }).limit(2).get()).data || []
+    if (rows.length) { relation = rows[0]; headReferee = approvedReferees.find(item => String(item._id || '') === refereeId) || null; break }
+  }
+  if (!relation) throw new Error('您不是该赛事的裁判长')
+  const orgId = String(tournament && (tournament.orgId || tournament.organizationId) || relation.orgId || '').trim()
+  if (!orgId || (relation.orgId && String(relation.orgId) !== orgId)) throw new Error('裁判长赛事权限校验失败')
+  if (!headReferee || !recordBelongsToActor(headReferee, { orgId })) throw new Error('裁判长机构权限校验失败')
+  if (headReferee.temporaryReferee === true && (headReferee.eventScoped !== true || headReferee.organizerTemporaryApproval !== true || headReferee.temporaryClaimStatus !== 'approved' || String(headReferee.tournamentId || '') !== tournamentId)) throw new Error('临时裁判长资格已失效')
+  return { orgId,relation,identity:identities[0] }
+}
+
+async function assignByHeadReferee(event) {
+  const matchId=String(event.matchId||'')
+  if(!matchId||!event.data||!event.data.refereeCrew)return {success:false,code:'ASSIGNMENT_REQUIRED',message:'缺少比赛或裁判排班信息'}
+  const matchResult=await db.collection('matches').doc(matchId).get()
+  const match=Array.isArray(matchResult.data)?matchResult.data[0]:matchResult.data
+  if(!match)return {success:false,code:'MATCH_NOT_FOUND',message:'比赛不存在'}
+  if(!['scheduled','pending','checked_in'].includes(String(match.status||'scheduled'))||match.refereeRecordLocked)return {success:false,code:'MATCH_ASSIGNMENT_LOCKED',message:'比赛已开始或记录已锁定，不能调整裁判'}
+  const tournamentResult=await db.collection('tournaments').doc(String(match.tournamentId||'')).get()
+  const tournament=Array.isArray(tournamentResult.data)?tournamentResult.data[0]:tournamentResult.data
+  if(!tournament)return {success:false,code:'TOURNAMENT_NOT_FOUND',message:'赛事不存在'}
+  const actor=await authenticateHeadRefereeSession(event,match,tournament)
+  const assignment=await normalizeRefereeCrew(event.data.refereeCrew,match.matchFormat||(tournament&&tournament.matchFormat)||'11side',actor,match.tournamentId,event.data.operationRefereeId,event.data.refereeRecordKeeperId,{allowSynthetic:false})
+  await ensureNoRefereeScheduleConflicts(matchId,match,assignment.crew)
+  const planState=await getCompetitionPlanState(match,tournament)
+  if(planState.readError)return {success:false,code:'COMPETITION_PLAN_STATE_UNAVAILABLE',message:'无法确认当前竞赛方案状态，请稍后重试'}
+  const updateData={refereeCrew:assignment.crew,refereeRecordKeeperId:assignment.keeperId,operationRefereeId:assignment.operatorId,refereeAssignmentStatus:'assigned',orgId:actor.orgId,updatedByHeadReferee:true,updateTime:db.serverDate()}
+  if(!match.executionSnapshot&&planState.locked){updateData.executionSnapshot=buildExecutionSnapshot(match,tournament,actor);updateData.executionSnapshotAt=db.serverDate()}
+  await db.collection('matches').doc(matchId).update({data:updateData})
+  await syncMatchReferees(matchId,assignment.crew,match.tournamentId,actor.orgId,assignment)
+  await db.collection('registration_audit_logs').add({data:{sport:'football',action:'head_referee_assignment_saved',tournamentId:String(match.tournamentId||''),actorOrgId:actor.orgId,result:'success',detail:{matchId,headRefereeRelationId:String(actor.relation._id||''),refereeIds:Object.values(assignment.crew).map(item=>String(item._id||''))},createTime:db.serverDate()}})
+  const notification=await queueOperatorNotification(matchId,{...match,...updateData,_id:matchId},tournament,assignment,actor.orgId)
+  return {success:true,message:'裁判排班已保存',__notificationRelay:notification||null}
 }
 
 async function ensureNoRefereeScheduleConflicts(matchId, match, refereeCrew) {
@@ -200,6 +255,10 @@ exports.main = async (event, context) => {
 
   if(event.action==='undoLastScheduleAdjustment') {
     try{return await undoLastScheduleAdjustment(event)}catch(err){console.error('撤销赛程调整失败:',err);return { success:false,message:'撤销失败: '+err.message }}
+  }
+
+  if(event.action==='assignByHeadReferee') {
+    try{return await assignByHeadReferee(event)}catch(err){console.error('裁判长排班失败:',err);return {success:false,message:err.message||'裁判排班失败',code:err.code||'HEAD_REFEREE_ASSIGNMENT_FAILED'}}
   }
 
   if (!matchId || !data || typeof data !== 'object') {
