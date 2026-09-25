@@ -4,6 +4,18 @@ const crypto = require('crypto')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
+let scheduleAdjustmentLogsReady = false
+
+async function ensureScheduleAdjustmentLogs() {
+  if (scheduleAdjustmentLogsReady) return
+  try {
+    await db.createCollection('schedule_adjustment_logs')
+  } catch (error) {
+    const message=String(error && (error.message || error.errMsg) || '').toLowerCase()
+    if (!message.includes('exist') && !message.includes('duplicate') && !message.includes('已存在')) throw error
+  }
+  scheduleAdjustmentLogsReady = true
+}
 
 function hashSessionToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex')
@@ -107,6 +119,7 @@ async function authenticateActor(event) {
 
 async function undoLastScheduleAdjustment(event) {
   const actor=await authenticateActor(event)
+  await ensureScheduleAdjustmentLogs()
   const tournamentId=String(event.tournamentId || '')
   if(!tournamentId) return { success:false,message:'缺少赛事信息' }
   const tournamentResult=await db.collection('tournaments').doc(tournamentId).get()
@@ -331,7 +344,7 @@ exports.main = async (event, context) => {
 
     const scheduleChanged=['matchDate','matchTime','venue'].some(field=>safeData[field]!==undefined && String(safeData[field] || '')!==String(match[field] || ''))
     let adjustmentLogId=''
-    if(scheduleChanged){const operationGroupId=String(event.adjustmentGroupId || ('adjust-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')));const logResult=await db.collection('schedule_adjustment_logs').add({ data:{ tournamentId:String(match.tournamentId || ''),divisionId:String(match.divisionId || 'default'),matchId:String(matchId),operationGroupId,adjustmentType:String(event.adjustmentType || 'manual'),before:{ matchDate:String(match.matchDate || ''),matchTime:String(match.matchTime || ''),venue:String(match.venue || '') },after:{ matchDate:String(safeData.matchDate!==undefined?safeData.matchDate:match.matchDate || ''),matchTime:String(safeData.matchTime!==undefined?safeData.matchTime:match.matchTime || ''),venue:String(safeData.venue!==undefined?safeData.venue:match.venue || '') },actorUserId:String(actor.user._id || ''),actorOrgId:actor.orgId,status:'pending',undone:false,createTime:db.serverDate(),updateTime:db.serverDate() } });adjustmentLogId=String(logResult._id || '')}
+    if(scheduleChanged){await ensureScheduleAdjustmentLogs();const operationGroupId=String(event.adjustmentGroupId || ('adjust-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')));const logResult=await db.collection('schedule_adjustment_logs').add({ data:{ tournamentId:String(match.tournamentId || ''),divisionId:String(match.divisionId || 'default'),matchId:String(matchId),operationGroupId,adjustmentType:String(event.adjustmentType || 'manual'),before:{ matchDate:String(match.matchDate || ''),matchTime:String(match.matchTime || ''),venue:String(match.venue || '') },after:{ matchDate:String(safeData.matchDate!==undefined?safeData.matchDate:match.matchDate || ''),matchTime:String(safeData.matchTime!==undefined?safeData.matchTime:match.matchTime || ''),venue:String(safeData.venue!==undefined?safeData.venue:match.venue || '') },actorUserId:String(actor.user._id || ''),actorOrgId:actor.orgId,status:'pending',undone:false,createTime:db.serverDate(),updateTime:db.serverDate() } });adjustmentLogId=String(logResult._id || '')}
 
     // 更新 matches 集合
     await db.collection('matches').doc(matchId).update({

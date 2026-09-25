@@ -8,6 +8,18 @@ const SCHEDULE_ENGINE_VERSION = '2026-09-25-event-calendar-v4'
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
+let scheduleAdjustmentLogsReady = false
+
+async function ensureScheduleAdjustmentLogs() {
+  if (scheduleAdjustmentLogsReady) return
+  try {
+    await db.createCollection('schedule_adjustment_logs')
+  } catch (error) {
+    var message=String(error && (error.message || error.errMsg) || '').toLowerCase()
+    if (message.indexOf('exist')<0 && message.indexOf('duplicate')<0 && message.indexOf('已存在')<0) throw error
+  }
+  scheduleAdjustmentLogsReady = true
+}
 
 function hashSessionToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex')
@@ -1493,6 +1505,7 @@ async function importScheduleAssignments(event,tournament,actor) {
   rowErrors=rowErrors.concat(scheduleAssignmentErrors(provisional,config,divisionMap).filter(function(error){return changed.some(function(item){return String(item.match._id)===error.matchId})}))
   if(rowErrors.length)return { success:false,code:'SCHEDULE_IMPORT_INVALID',message:'排期预检未通过',validCount:0,skippedCount:rows.length-changed.length,errorCount:rowErrors.length,errors:rowErrors.slice(0,100) }
   if(event.dryRun!==false)return { success:true,dryRun:true,validCount:changed.length,skippedCount:rows.length-changed.length,errorCount:0,calendarCreated:importCreatesCalendar,calendarSummary:importCreatesCalendar?{ startDate:config.startDate,endDate:config.endDate,venueCount:config.venueResources.length,matchDayCount:config.matchDays.length }:null,changes:changed.slice(0,100).map(function(item){return { matchId:item.match._id,matchNo:item.match.matchNo || item.match.matchIndex,before:item.before,after:item.after }}) }
+  if(changed.length)await ensureScheduleAdjustmentLogs()
   var operationGroupId='schedule-import-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')
   for(var i=0;i<changed.length;i+=1){
     var item=changed[i]
