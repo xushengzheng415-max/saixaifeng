@@ -68,7 +68,7 @@
 
       <template v-if="importFileName">
         <section class="recognition-summary">
-          <div><span>已识别文件</span><strong>{{ importFileName }}</strong></div><span><b>{{ recognitionStats.total }}</b>行比赛</span><span><b>{{ recognitionStats.recognized }}</b>场已匹配</span><span class="ready"><b>{{ recognitionStats.ready + recognitionStats.plannedKnockout }}</b>场地图预览</span><span v-if="recognitionStats.plannedKnockout" class="planned"><b>{{ recognitionStats.plannedKnockout }}</b>场淘汰赛后台站位</span><span><b>{{ recognitionStats.pairingOnly }}</b>场时间待填</span><span :class="{ danger:recognitionStats.unmatched || recognitionStats.incomplete }"><b>{{ recognitionStats.unmatched + recognitionStats.incomplete }}</b>项待处理</span><el-tag v-if="recognitionStats.plannedKnockout" type="warning" effect="plain">{{ preparingKnockout ? '后台正在自动创建占位' : scheduleImportWriteEnabled ? '后台自动创建' : '自动创建待服务部署' }}</el-tag><el-button v-else type="success" :disabled="!scheduleImportWriteEnabled || !recognitionStats.ready || recognitionStats.unmatched > 0 || recognitionStats.incomplete > 0" @click="prepareRecognizedImport">{{ scheduleImportWriteEnabled ? '映射到赛事地图' : '写入地图待开放' }}</el-button>
+          <div><span>已识别文件</span><strong>{{ importFileName }}</strong></div><span><b>{{ recognitionStats.total }}</b>行比赛</span><span><b>{{ recognitionStats.recognized }}</b>场已匹配</span><span class="ready"><b>{{ recognitionStats.ready + recognitionStats.plannedKnockout }}</b>场地图预览</span><span v-if="recognitionStats.plannedKnockout" class="planned"><b>{{ recognitionStats.plannedKnockout }}</b>场淘汰赛后台站位</span><span><b>{{ recognitionStats.pairingOnly }}</b>场时间待填</span><span :class="{ danger:recognitionStats.unmatched || recognitionStats.incomplete }"><b>{{ recognitionStats.unmatched + recognitionStats.incomplete }}</b>项待处理</span><el-tag v-if="recognitionStats.plannedKnockout" :type="knockoutPrepareError ? 'danger' : 'warning'" effect="plain">{{ preparingKnockout ? '后台正在自动创建占位' : knockoutPrepareError ? '自动创建失败' : scheduleImportWriteEnabled ? '等待自动创建' : '自动创建待服务部署' }}</el-tag><el-button v-else type="success" :disabled="!scheduleImportWriteEnabled || !recognitionStats.ready || recognitionStats.unmatched > 0 || recognitionStats.incomplete > 0" @click="prepareRecognizedImport">{{ scheduleImportWriteEnabled ? '映射到赛事地图' : '写入地图待开放' }}</el-button>
         </section>
 
         <section class="recognition-card">
@@ -81,7 +81,7 @@
           <div class="recognized-map"><article v-for="date in recognitionMapDates" :key="date"><header><strong>{{ date }}</strong><span>{{ recognitionMapRows.filter(row => row.matchDate === date).length }}场</span></header><div class="recognized-map-grid"><section v-for="venue in recognitionMapVenues(date)" :key="venue"><h3>{{ venue }}</h3><div v-for="row in recognizedMapMatches(date,venue)" :key="`${row.sourceRow}-${row.matchNo}`"><time>{{ row.matchTime }}</time><span><small>{{ row.division }}<em v-if="row.status === 'planned_knockout'">淘汰赛占位</em></small><strong>{{ row.home }}<em>VS</em>{{ row.away }}</strong></span></div></section></div></article></div>
         </section>
         <section class="import-confirm-bar">
-          <div><strong>确认导入赛事地图</strong><span v-if="recognitionStats.plannedKnockout">后台正在准备 {{ recognitionStats.plannedKnockout }} 场淘汰赛占位，完成后可确认导入。</span><span v-else-if="recognitionStats.unmatched || recognitionStats.incomplete">请先处理 {{ recognitionStats.unmatched + recognitionStats.incomplete }} 项未匹配或不完整排期。</span><span v-else>将把 {{ recognitionStats.ready }} 场比赛的日期、时间和场地写入赛事地图。</span></div><el-button plain @click="clearRecognition">取消本次识别</el-button><el-button type="success" size="large" :disabled="!canConfirmRecognizedImport" @click="prepareRecognizedImport">确认导入赛事地图</el-button>
+          <div><strong>确认导入赛事地图</strong><span v-if="preparingKnockout">后台正在准备 {{ recognitionStats.plannedKnockout }} 场淘汰赛占位。</span><span v-else-if="knockoutPrepareError" class="danger">自动创建失败：{{ knockoutPrepareError }}</span><span v-else-if="recognitionStats.plannedKnockout">还有 {{ recognitionStats.plannedKnockout }} 场淘汰赛占位未创建。</span><span v-else-if="recognitionStats.unmatched || recognitionStats.incomplete">请先处理 {{ recognitionStats.unmatched + recognitionStats.incomplete }} 项未匹配或不完整排期。</span><span v-else>将把 {{ recognitionStats.ready }} 场比赛的日期、时间和场地写入赛事地图。</span></div><el-button v-if="recognitionStats.plannedKnockout && !preparingKnockout && scheduleImportWriteEnabled" plain type="warning" @click="autoPrepareKnockoutPairings">重试自动创建</el-button><el-button plain @click="clearRecognition">取消本次识别</el-button><el-button type="success" size="large" :disabled="!canConfirmRecognizedImport" @click="prepareRecognizedImport">确认导入赛事地图</el-button>
         </section>
       </template>
 
@@ -125,7 +125,7 @@ import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recogniz
 
 const route = useRoute(), router = useRouter(), tournamentId = String(route.params.id || '')
 const scheduleImportWriteEnabled = import.meta.env.VITE_ENABLE_SCHEDULE_IMPORT_WRITE === 'true'
-const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(false), savingAssignment = ref(false), applyingImport = ref(false), preparingKnockout = ref(false)
+const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(false), savingAssignment = ref(false), applyingImport = ref(false), preparingKnockout = ref(false), knockoutPrepareError = ref('')
 const tournament = ref({}), divisions = ref([]), matches = ref([]), divisionFilter = ref('all'), selectedDate = ref(''), draggedMatchId = ref('')
 const view = ref(['settings','imports','map'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
 const fileInput = ref(null), importVisible = ref(false), importRows = ref([]), importPreview = ref({})
@@ -253,7 +253,8 @@ function importedDivisionId(row) {
 async function autoPrepareKnockoutPairings() {
   const planned=recognitionRows.value.filter(row=>row.status==='planned_knockout')
   const divisionIds=[...new Set(planned.map(importedDivisionId).filter(Boolean))]
-  if(!divisionIds.length)return ElMessage.error('无法确定淘汰赛所属竞赛组别')
+  if(!divisionIds.length){knockoutPrepareError.value='无法确定淘汰赛所属竞赛组别';return ElMessage.error(knockoutPrepareError.value)}
+  knockoutPrepareError.value=''
   preparingKnockout.value=true
   try {
     let added=0
@@ -261,14 +262,14 @@ async function autoPrepareKnockoutPairings() {
     await load()
     recognitionRows.value=recognizeScheduleRows(recognitionSourceRows.value,matches.value,config.venueResources)
     ElMessage.success(added ? `已生成 ${added} 场淘汰/排位赛占位对阵` : '淘汰/排位赛占位对阵已完整')
-  } catch(error) { ElMessage.error(error.message || '淘汰赛占位对阵生成失败') } finally { preparingKnockout.value=false }
+  } catch(error) { knockoutPrepareError.value=error.message || '淘汰赛占位对阵生成失败';ElMessage.error(knockoutPrepareError.value) } finally { preparingKnockout.value=false }
 }
 async function prepareRecognizedImport() {
   if(!recognitionReadyRows.value.length)return ElMessage.warning('当前没有可映射到地图的完整排期')
   importRows.value=recognitionReadyRows.value.map(row=>({matchId:row.matchId,matchDate:row.matchDate,matchTime:row.matchTime,venue:row.venue}))
   try { importPreview.value=await assignRows(importRows.value,false,'import');importVisible.value=true } catch(error) { ElMessage.error(error.message || '地图映射预检失败') }
 }
-function clearRecognition(){importFileName.value='';recognitionSourceRows.value=[];recognitionRows.value=[];importRows.value=[];importPreview.value={};recognitionFilter.value='all'}
+function clearRecognition(){importFileName.value='';recognitionSourceRows.value=[];recognitionRows.value=[];importRows.value=[];importPreview.value={};recognitionFilter.value='all';knockoutPrepareError.value=''}
 async function applyImport() { applyingImport.value=true;try{const result=await assignRows(importRows.value,true,'import');if(!result?.success)throw new Error(result?.message || '导入失败');const applied=Number(result.appliedCount || importRows.value.length || 0);importVisible.value=false;const firstDate=recognitionReadyRows.value[0]?.matchDate;await load();if(firstDate)selectedDate.value=firstDate;setView('map');ElMessage.success(`已将 ${applied} 场比赛导入赛事地图`)}catch(error){ElMessage.error(error.message || '导入失败')}finally{applyingImport.value=false} }
 async function publishSchedules() { if(!canPublish.value)return;try{await ElMessageBox.confirm('将按组别生成新的正式竞赛日程版本，确定发布吗？','发布竞赛日程',{type:'warning'});for(const division of divisions.value.filter(item=>matches.value.some(match=>String(match.divisionId)===String(item.id)))){const result=await callFunction('generateSchedule',{action:'publishSchedule',tournamentId,divisionId:division.id});if(!result?.success)throw new Error(`${division.name}：${result?.message || '发布失败'}`)}ElMessage.success('竞赛日程已发布');await load()}catch(error){if(error!=='cancel'&&error!=='close')ElMessage.error(error.message || '发布失败')} }
 

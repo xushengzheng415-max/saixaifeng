@@ -251,6 +251,15 @@ function pairingIdentity(match) {
   return [String(match.phase || ''),source(match.homeSource,match.homeSourceLabel || match.homeTeamName),source(match.awaySource,match.awaySourceLabel || match.awayTeamName)].join('|')
 }
 
+function staleKnockoutPairings(existing,templateVersion) {
+  var targetVersion=String(templateVersion || '')
+  return (Array.isArray(existing)?existing:[]).filter(function(match){
+    var phase=String(match && match.phase || '').toLowerCase()
+    var currentVersion=String(match && match.pairingTemplateVersion || '')
+    return phase && phase!=='group' && currentVersion && targetVersion && currentVersion!==targetVersion
+  })
+}
+
 async function ensureKnockoutPairings(event,tournament,actor) {
   var tournamentId=String(event.tournamentId || tournament._id || '')
   var divisionId=String(event.divisionId || '')
@@ -265,6 +274,18 @@ async function ensureKnockoutPairings(event,tournament,actor) {
   var expected=built.matches.filter(function(match){return String(match.phase || '').toLowerCase()!=='group'})
   if(!expected.length)return { success:true,message:'当前组别没有需要提前创建的淘汰或排位赛',addedCount:0,matches:[] }
   var existing=(await loadAllTournamentMatches(tournamentId)).filter(function(match){return belongsToDivision(match,divisionId) && match.status!=='cancelled'})
+  var stale=staleKnockoutPairings(existing,built.templateVersion)
+  var protectedStale=stale.find(matchIsProtectedFromPairingReplace)
+  if(protectedStale)return { success:false,code:'PAIRING_MIGRATION_BLOCKED',message:'旧版淘汰赛占位中已有排期、发布或赛果，请先人工核对后再升级对阵' }
+  if(stale.length){
+    var replacedAt=db.serverDate()
+    await Promise.all(stale.map(function(match){
+      return db.collection('matches').doc(match._id).update({ data:{ status:'cancelled',pairingStatus:'replaced',replacedByTemplateVersion:built.templateVersion,pairingReplacedAt:replacedAt,updateTime:replacedAt } })
+    }))
+    var staleIds=new Set(stale.map(function(match){return String(match._id || '')}))
+    existing=existing.filter(function(match){return !staleIds.has(String(match._id || ''))})
+    await db.collection('registration_audit_logs').add({ data:{ sport:'football',action:'knockout_pairing_template_migrated',tournamentId:tournamentId,divisionId:divisionId,actorOrgId:String(actor && actor.orgId || ''),result:'success',detail:{ replacedCount:stale.length,fromVersions:Array.from(new Set(stale.map(function(match){return String(match.pairingTemplateVersion || '')}))).filter(Boolean),toVersion:built.templateVersion,matchIds:Array.from(staleIds).filter(Boolean) },createTime:replacedAt } }).catch(function(error){ console.warn('淘汰赛占位迁移审计写入失败:',error && error.message || error) })
+  }
   var existingCodes=new Set(existing.map(function(match){return String(match.pairingCode || '')}).filter(Boolean))
   var existingIdentities=new Set(existing.map(pairingIdentity))
   var existingByNo=new Map(existing.map(function(match){return [Number(match.matchNo || match.matchIndex || 0),match]}))
@@ -292,7 +313,7 @@ async function ensureKnockoutPairings(event,tournament,actor) {
     await db.collection('divisions').doc(divisionId).update({ data:{ pairingGenerated:true,pairingTemplateVersion:built.templateVersion,knockoutPairingsPrepared:true,knockoutPairingsPreparedAt:db.serverDate(),updateTime:db.serverDate() } }).catch(function(){})
     await db.collection('tournaments').doc(tournamentId).update({ data:{ pairingGenerated:true,schedulePublished:false,updateTime:db.serverDate(),orgId:actor.orgId } })
   }
-  return { success:true,message:missing.length?'已补齐'+missing.length+'场淘汰/排位赛占位对阵':'淘汰/排位赛占位对阵已完整',addedCount:missing.length,matchCount:expected.length,matches:missing }
+  return { success:true,message:missing.length?'已补齐'+missing.length+'场淘汰/排位赛占位对阵':'淘汰/排位赛占位对阵已完整',addedCount:missing.length,replacedCount:stale.length,matchCount:expected.length,matches:missing }
 }
 
 async function resetPairings(event, tournament, actor) {
@@ -1918,6 +1939,7 @@ exports.__test = {
   buildPairingsFromTemplate: pairingTemplates.buildPairingsFromTemplate,
   clearScheduleAssignment: clearScheduleAssignment,
   matchIsProtectedFromPairingReplace: matchIsProtectedFromPairingReplace,
+  staleKnockoutPairings: staleKnockoutPairings,
   scheduleExistingPairings: scheduleExistingPairings,
   validateGeneratedSchedule: validateGeneratedSchedule,
   validateParticipantSet: validateParticipantSet,

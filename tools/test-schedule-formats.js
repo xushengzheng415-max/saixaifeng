@@ -59,6 +59,16 @@ function assertNoDuplicatePair(matches) {
   })
 }
 
+const stalePlaceholders = generator.staleKnockoutPairings([
+  { _id:'group-v1',phase:'group',pairingTemplateVersion:'liyang-youth-v1' },
+  { _id:'knockout-v1',phase:'knockout',pairingTemplateVersion:'liyang-youth-v1' },
+  { _id:'placement-v1',phase:'placement',pairingTemplateVersion:'liyang-youth-v1' },
+  { _id:'knockout-v2',phase:'knockout',pairingTemplateVersion:'liyang-youth-v2' }
+], 'liyang-youth-v2')
+assert.deepStrictEqual(stalePlaceholders.map(match => match._id), ['knockout-v1','placement-v1'], '只迁移旧模板的非小组赛占位')
+assert.strictEqual(generator.matchIsProtectedFromPairingReplace({ phase:'knockout',pairingTemplateVersion:'liyang-youth-v1',status:'scheduled' }), false, '未排期旧占位可安全迁移')
+assert.strictEqual(generator.matchIsProtectedFromPairingReplace({ phase:'knockout',pairingTemplateVersion:'liyang-youth-v1',status:'scheduled',matchDate:'2026-10-17' }), true, '已排期旧占位必须阻止自动迁移')
+
 const config = {
   startDate: '2026-09-01',
   endDate: '2026-12-31',
