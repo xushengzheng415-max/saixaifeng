@@ -2779,7 +2779,15 @@ async function reviewRefereeRecordForWorkspace(event, identity) {
     Object.assign(updateData, { refereeRecord: record, refereeReviewStatus: 'returned', returnRequest: request })
   }
   await db.collection('matches').doc(matchId).update({ data: updateData })
-  return { success: true, reviewStatus: updateData.refereeReviewStatus, message: operation === 'archive' ? '赛果已确认归档' : '电子记录已退回裁判限定修正' }
+  let pairingResolutionUpdated=0
+  if(operation==='archive'){
+    try{
+      const resolved=await cloud.callFunction({name:'resultCenter',data:{action:'resolvePairingSources',tournamentId:String(match.tournamentId || ''),__authToken:String(event.__authToken || '')}})
+      const result=resolved && resolved.result || {}
+      pairingResolutionUpdated=Number(result.pairingResolution && result.pairingResolution.updatedCount || 0)
+    }catch(error){console.warn('赛果归档后自动解析淘汰赛站位失败，可在赛果中心重试',error && error.message)}
+  }
+  return { success: true, reviewStatus: updateData.refereeReviewStatus,pairingResolutionUpdated, message: operation === 'archive' ? '赛果已确认归档' : '电子记录已退回裁判限定修正' }
 }
 
 async function reportMatchExceptionForWorkspace(event, identity) {

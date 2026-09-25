@@ -326,6 +326,115 @@ function buildStandings(matches, divisionsById) {
   })
 }
 
+function normalizedGroupName(value) {
+  return text(value).replace(/[\s　]/g,'').toUpperCase()
+}
+
+function sourceForSide(match, side) {
+  const direct = side === 'home' ? match.homeSource : match.awaySource
+  if (direct && typeof direct === 'object' && direct.type) return direct
+  const type = text(side === 'home' ? match.homeSourceType : match.awaySourceType)
+  const label = text(side === 'home' ? match.homeSourceLabel : match.awaySourceLabel)
+  if (type === 'group_rank') {
+    const group = label.match(/^(.+?组)第?(\d+)$/)
+    return group ? { type:'group_rank',groupName:group[1],rank:Number(group[2]) } : null
+  }
+  if (type === 'match_winner' || type === 'match_loser') {
+    const no = Number((label.match(/(?:场序)?(\d+)/) || [])[1] || 0)
+    return no ? { type,matchNo:no } : null
+  }
+  return null
+}
+
+function teamFromMatch(match, side) {
+  return {
+    teamId: teamIdOf(match, side),
+    teamName: teamNameOf(match, side),
+    logo: teamLogoOf(match, side)
+  }
+}
+
+function resolvedWinnerAndLoser(match) {
+  if (!match || resultStatus(match) !== 'approved') return null
+  const home = teamFromMatch(match,'home'), away = teamFromMatch(match,'away')
+  let winnerId = winnerTeamIdOf(match)
+  if (!winnerId && scoreReady(match) && number(match.homeScore) !== number(match.awayScore)) winnerId = number(match.homeScore) > number(match.awayScore) ? home.teamId : away.teamId
+  if (!winnerId || !home.teamId || !away.teamId) return null
+  if (winnerId === home.teamId) return { winner:home,loser:away }
+  if (winnerId === away.teamId) return { winner:away,loser:home }
+  return null
+}
+
+function buildOfficialGroupRankMap(matches, standings) {
+  const completeGroups = new Set()
+  const groupBuckets = {}
+  matches.filter(match => phaseOf(match) === 'group').forEach(match => {
+    const key = `${divisionIdOf(match)}:${normalizedGroupName(groupNameOf(match))}`
+    ;(groupBuckets[key] ||= []).push(match)
+  })
+  Object.entries(groupBuckets).forEach(([key,rows]) => {
+    if (rows.length && rows.every(match => resultStatus(match) === 'approved')) completeGroups.add(key)
+  })
+  const rankMap = new Map()
+  standings.forEach(table => {
+    const key = `${table.divisionId}:${normalizedGroupName(table.groupName)}`
+    if (!completeGroups.has(key)) return
+    table.officialTeams.forEach(team => rankMap.set(`${key}:${team.rank}`,{ teamId:text(team.teamId),teamName:text(team.teamName),logo:text(team.logo) }))
+  })
+  return rankMap
+}
+
+function resolveSourceTeam(source,targetMatch,matchByNo,groupRankMap) {
+  if (!source) return null
+  const divisionId = divisionIdOf(targetMatch)
+  if (source.type === 'group_rank') {
+    return groupRankMap.get(`${divisionId}:${normalizedGroupName(source.groupName)}:${Number(source.rank || 0)}`) || null
+  }
+  if (source.type === 'match_winner' || source.type === 'match_loser') {
+    const sourceMatch = matchByNo.get(`${divisionId}:${Number(source.matchNo || 0)}`)
+    const result = resolvedWinnerAndLoser(sourceMatch)
+    return result ? (source.type === 'match_winner' ? result.winner : result.loser) : null
+  }
+  return null
+}
+
+async function resolvePairingSources(tournamentId,matches,standings,actor) {
+  const matchByNo = new Map(matches.map(match => [`${divisionIdOf(match)}:${Number(match.matchNo || match.matchIndex || 0)}`,match]))
+  const groupRankMap = buildOfficialGroupRankMap(matches,standings)
+  const changes = []
+  for (const match of matches) {
+    if (!match || match.isBye || match.executionSnapshot || ['ongoing','live','finished','completed','archived'].includes(text(match.status).toLowerCase())) continue
+    const update = {}
+    for (const side of ['home','away']) {
+      const source = sourceForSide(match,side)
+      if (!source || !['group_rank','match_winner','match_loser'].includes(source.type)) continue
+      const team = resolveSourceTeam(source,match,matchByNo,groupRankMap)
+      if (!team || !team.teamId) continue
+      if (text(match[`${side}TeamId`]) !== team.teamId) {
+        update[`${side}TeamId`] = team.teamId
+        update[`${side}TeamName`] = team.teamName
+        if (team.logo) update[`${side}TeamLogo`] = team.logo
+        update[`${side}SourceResolvedAt`] = db.serverDate()
+        update[`${side}SourceResolvedFrom`] = source.type
+      }
+    }
+    const homeId = text(update.homeTeamId || match.homeTeamId)
+    const awayId = text(update.awayTeamId || match.awayTeamId)
+    if (!Object.keys(update).length) continue
+    update.pairingResolutionStatus = homeId && awayId ? 'resolved' : 'partial'
+    update.placeholderUntilResolved = !(homeId && awayId)
+    update.statusText = homeId && awayId ? '未开始' : '待产生'
+    update.updateTime = db.serverDate()
+    await db.collection('matches').doc(text(match._id)).update({ data:update })
+    Object.assign(match,update)
+    changes.push({ matchId:text(match._id),matchNo:Number(match.matchNo || match.matchIndex || 0),divisionId:divisionIdOf(match),homeTeamId:homeId,awayTeamId:awayId,status:update.pairingResolutionStatus })
+  }
+  if (changes.length) {
+    await db.collection('registration_audit_logs').add({ data:{ sport:'football',action:'pairing_sources_auto_resolved',tournamentId:text(tournamentId),actorOrgId:text(actor && actor.orgId),result:'success',detail:{ count:changes.length,matches:changes.slice(0,100) },createTime:db.serverDate() } })
+  }
+  return { updatedCount:changes.length,changes }
+}
+
 function buildKnockout(matches) {
   return matches.filter(match => ['knockout', 'cup', 'placement', 'final', 'semifinal'].includes(match.phase)).map(match => ({
     ...match,
@@ -367,16 +476,23 @@ async function buildDashboard(event, actor) {
   ])
   const divisions = divisionRows.length ? divisionRows : Array.isArray(tournament.divisions) ? tournament.divisions : []
   const divisionsById = Object.fromEntries(divisions.map(item => [text(item._id || item.id), item]))
-  const matches = matchRows.map(item => normalizedMatch(item, divisionsById)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
+  let matches = matchRows.map(item => normalizedMatch(item, divisionsById)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
+  let standings = buildStandings(matches, divisionsById)
+  const pairingResolution = await resolvePairingSources(tournamentId,matchRows,standings,actor)
+  if (pairingResolution.updatedCount) {
+    matches = matchRows.map(item => normalizedMatch(item, divisionsById)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
+    standings = buildStandings(matches, divisionsById)
+  }
   return {
     success: true,
     tournament: { id: tournamentId, name: text(tournament.name) || '当前赛事', startDate: rawDate(tournament.startDate), endDate: rawDate(tournament.endDate), location: text(tournament.location || tournament.province), logo: text(tournament.logo || tournament.logoUrl) },
     divisions: divisions.map(item => ({ id: text(item._id || item.id), name: text(item.name) || '未命名组别', pointsRule: pointsRule(item) })),
     matches,
     summary: summary(matches),
-    standings: buildStandings(matches, divisionsById),
+    standings,
     knockout: buildKnockout(matches),
     publications,
+    pairingResolution,
     generatedAt: new Date().toISOString()
   }
 }
@@ -404,6 +520,7 @@ exports.main = async (event = {}) => {
     const actor = await authenticate(event)
     const action = text(event.action || 'dashboard')
     if (action === 'dashboard') return await buildDashboard(event, actor)
+    if (action === 'resolvePairingSources') return await buildDashboard(event, actor)
     if (action === 'publishStandings') return await publishStandings(event, actor)
     return { success: false, code: 'UNSUPPORTED_ACTION', message: '不支持的赛果中心操作' }
   } catch (error) {
@@ -411,3 +528,5 @@ exports.main = async (event = {}) => {
     return { success: false, code: 'RESULT_CENTER_FAILED', message: error.message || '赛果中心加载失败' }
   }
 }
+
+exports.__test = { resultStatus,winnerTeamIdOf,buildStandings,buildOfficialGroupRankMap,sourceForSide,resolveSourceTeam,resolvedWinnerAndLoser }
