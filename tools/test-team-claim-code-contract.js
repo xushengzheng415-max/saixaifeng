@@ -399,7 +399,49 @@ async function run() {
     ok('已通过参赛关系认领保持单条且不降级')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/18 通过`)
+  // 场景 19：新负责人手机号只能看到明确发给自己的主账号转移邀请。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id:'user-2', openId:OPEN_ID, phone:PHONE_B, phoneNumber:PHONE_B }]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_invitations = seed.team_invitations.concat([{
+      _id:'transfer-1', type:'team_owner_transfer', status:'active', tournamentId:'t-1', teamId:'team-1',
+      fromOwnerId:'user-1', targetPhone:PHONE_B, inviteePhone:PHONE_B, inviteeUserId:'user-2', targetName:'新负责人', expiresAt:FUTURE
+    }])
+    const { result } = await callWorkspace(seed, { action:'claimableTeams', inviteKey:'key-1' })
+    const transfer = result.teams.find(item => item.transferId === 'transfer-1')
+    assert.ok(transfer, '场景 19：目标手机号应看到主账号转移邀请')
+    assert.strictEqual(transfer.ownershipTransfer, true, '场景 19：应标记 ownershipTransfer')
+    assert.strictEqual(transfer.statusText, '待接收主账号', '场景 19：应显示待接收主账号')
+    ok('新负责人可通过赛事认领码发现待接收主账号邀请')
+  }
+
+  // 场景 20：接受主账号转移后，新账号成为 owner，旧账号保留为只读协作成员。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id:'user-2', openId:OPEN_ID, phone:PHONE_B, phoneNumber:PHONE_B }]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', ownerUserId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_memberships = [{ _id:'tm-old-owner', teamId:'team-1', userId:'user-1', role:'owner', roles:['owner'], permissions:['team.view','team.manage'], status:'accepted' }]
+    seed.team_invitations = seed.team_invitations.concat([{
+      _id:'transfer-1', type:'team_owner_transfer', status:'active', tournamentId:'t-1', teamId:'team-1',
+      organizerOrgId:'org-1', fromOwnerId:'user-1', targetPhone:PHONE_B, inviteePhone:PHONE_B,
+      inviteeUserId:'user-2', targetName:'新负责人', expiresAt:FUTURE
+    }])
+    const { result, store } = await callWorkspace(seed, { action:'acceptTeamOwnerTransfer', transferId:'transfer-1' })
+    assert.strictEqual(result.success, true, `场景 20：主账号转移应成功，实际 ${JSON.stringify(result)}`)
+    const team = store.teams.find(item => item._id === 'team-1')
+    assert.strictEqual(team.ownerId, 'user-2', '场景 20：新账号应成为 owner')
+    const oldMembership = store.team_memberships.find(item => item.userId === 'user-1')
+    assert.strictEqual(oldMembership.role, 'member', '场景 20：旧主账号应降为协作成员')
+    assert.deepStrictEqual(oldMembership.permissions, ['team.view'], '场景 20：旧主账号只保留查看权限')
+    const newMembership = store.team_memberships.find(item => item.userId === 'user-2')
+    assert.strictEqual(newMembership.role, 'owner', '场景 20：新账号成员关系应为 owner')
+    assert.deepStrictEqual(newMembership.permissions, ['team.view','team.manage'], '场景 20：新主账号获得管理权限')
+    assert.strictEqual(store.team_invitations.find(item => item._id === 'transfer-1').status, 'accepted', '场景 20：转移邀请应完成')
+    ok('主账号转移保留旧负责人为只读协作成员')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/20 通过`)
 }
 
 run().catch(error => {

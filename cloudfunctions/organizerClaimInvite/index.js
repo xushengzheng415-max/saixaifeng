@@ -200,9 +200,21 @@ async function latestTeamAccessInvite(context) {
   return scoped[0] || null
 }
 
+async function latestOwnerTransfer(context) {
+  const rows = await safeGet('team_invitations', {
+    tournamentId:context.tournamentId,
+    teamId:context.teamId,
+    type:'team_owner_transfer',
+    status:'active'
+  }, 20)
+  rows.sort((left, right) => toTime(right.updateTime || right.createTime) - toTime(left.updateTime || left.createTime))
+  return rows[0] || null
+}
+
 async function listTeamAccess(event, identity) {
   const context = await teamAccessContext(event, identity)
   const invite = await latestTeamAccessInvite(context)
+  const ownerTransfer = await latestOwnerTransfer(context)
   let personnel = Array.isArray(invite && invite.claimantCandidates) ? invite.claimantCandidates : []
   if (!personnel.length) {
     const fallbackPhone = normalizeClaimPhone(context.team.ownerPhone || context.team.contactPhone || context.team.managerPhone)
@@ -222,13 +234,15 @@ async function listTeamAccess(event, identity) {
     const membership = user ? memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id)) : null
     const pending = pendingInvites.find(row => String(row.inviteePhone || '') === phone)
     const isPrimary = Boolean(primary && primary.role === role)
+    const transferPending = Boolean(ownerTransfer && normalizeClaimPhone(ownerTransfer.targetPhone || ownerTransfer.inviteePhone) === phone)
     let status = isPrimary ? '待认领' : '待授权'
-    if (user && ownerId && String(user._id) === ownerId) status = '主账号'
+    if (transferPending) status = '待接收主账号'
+    else if (user && ownerId && String(user._id) === ownerId) status = '主账号'
     else if (membership && String(membership.status || 'accepted') === 'accepted') status = '已加入'
     else if (pending) status = '待登录'
-    rows.push({ role, roleLabel:TEAM_ACCESS_ROLE_LABELS[role], name:text(item.name, 40), phone, accountType:isPrimary ? 'owner' : 'member', status })
+    rows.push({ role, roleLabel:TEAM_ACCESS_ROLE_LABELS[role], name:text(item.name, 40), phone, accountType:transferPending ? 'pending_owner' : (isPrimary ? 'owner' : 'member'), status })
   }
-  return { success:true, teamId:context.teamId, primaryRole:primary ? String(primary.role || '') : '', personnel:rows }
+  return { success:true, teamId:context.teamId, primaryRole:primary ? String(primary.role || '') : '', personnel:rows, ownerTransferPending:Boolean(ownerTransfer) }
 }
 
 async function revokeTeamAccessPhone(context, phone, protectedOwnerId) {
@@ -294,24 +308,38 @@ async function saveTeamAccess(event, identity) {
   const resolved = []
   for (const person of candidates) resolved.push({ person, user:await userByPhone(person.phone) })
   const primaryResolved = resolved.find(item => item.person.role === primary.role)
-  let effectiveOwnerId = currentOwnerId
-  if (currentOwnerId && primaryResolved && primaryResolved.user && currentOwnerId !== String(primaryResolved.user._id)) {
-    await db.collection('teams').doc(context.teamId).update({ data:{
-      ownerId:primaryResolved.user._id, ownerUserId:primaryResolved.user._id, claimedByUserId:primaryResolved.user._id,
-      ownerPhone:primary.phone, claimStatus:'claimed', updateTime:now
-    } })
-    effectiveOwnerId = String(primaryResolved.user._id)
-    for (const membership of memberships) {
-      const memberUserId = String(membership.userId || membership.memberUserId || '')
-      if (memberUserId === currentOwnerId) {
-        await db.collection('team_memberships').doc(String(membership._id)).update({ data:{ role:'member', roles:['member'], permissions:['team.view'], updateTime:now } })
-      }
+  const targetOwnerId = String(primaryResolved && primaryResolved.user && primaryResolved.user._id || '')
+  const transferPending = Boolean(currentOwnerId && targetOwnerId !== currentOwnerId)
+  const activeTransfers = await safeGet('team_invitations', { teamId:context.teamId, type:'team_owner_transfer', status:'active' }, 20)
+  let matchingTransfer = null
+  for (const transfer of activeTransfers) {
+    const sameTarget = normalizeClaimPhone(transfer.targetPhone || transfer.inviteePhone) === primary.phone && String(transfer.fromOwnerId || '') === currentOwnerId
+    if (transferPending && sameTarget && !matchingTransfer) {
+      matchingTransfer = transfer
+      continue
     }
+    await db.collection('team_invitations').doc(String(transfer._id)).update({ data:{ status:'cancelled', cancelledAt:now, cancelledBy:identity.user._id, updateTime:now } })
   }
+  if (transferPending) {
+    const transferData = {
+      type:'team_owner_transfer', status:'active', usageMode:'single', tournamentId:context.tournamentId,
+      divisionId:context.divisionId, tournamentTeamId:context.tournamentTeamId, teamId:context.teamId,
+      organizerOrgId:context.actorOrgId, fromOwnerId:currentOwnerId, targetPhone:primary.phone,
+      targetName:primary.name, targetRole:primary.role, inviteePhone:primary.phone,
+      inviteeUserId:targetOwnerId, keepPreviousOwnerAsMember:true, transferKey:crypto.randomBytes(18).toString('base64url'),
+      expiresAt:new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), requestedBy:identity.user._id,
+      source:'organizer_team_access_owner_transfer', updateTime:now
+    }
+    if (matchingTransfer && matchingTransfer._id) await db.collection('team_invitations').doc(String(matchingTransfer._id)).update({ data:transferData })
+    else await db.collection('team_invitations').add({ data:{ ...transferData, createTime:now } })
+    await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'team_owner_transfer_requested', tournamentId:context.tournamentId, teamId:context.teamId, actorUserId:identity.user._id, actorOrgId:context.actorOrgId, result:'pending_acceptance', detail:{ fromOwnerId:currentOwnerId, targetPhoneMasked:maskPhone(primary.phone), keepPreviousOwnerAsMember:true }, createTime:now } })
+  }
+  const effectiveOwnerId = currentOwnerId
   for (const item of resolved) {
     const person = item.person
     const user = item.user
     const isPrimary = person.role === primary.role
+    if (isPrimary && (!currentOwnerId || transferPending)) continue
     if (user) {
       const existing = memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id))
       const memberRole = isPrimary ? 'owner' : (person.role === 'head_coach' ? 'coach' : 'member')

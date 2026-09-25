@@ -1890,6 +1890,7 @@ async function requestTeamDataExportForWorkspace(event, identity) {
 // 否则报名表没登记负责人手机号的球队会变成“谁扫到谁认领”。
 function claimPhoneAllowed(invite, phone) {
   const allowed = unique((Array.isArray(invite && invite.allowedClaimPhones) ? invite.allowedClaimPhones : [])
+    .concat([invite && invite.targetPhone, invite && invite.inviteePhone])
     .map(value => String(value || '').replace(/\D/g, ''))
     .filter(value => /^1[3-9]\d{9}$/.test(value)))
   if (!allowed.length) return false
@@ -1910,21 +1911,23 @@ async function resolveClaimCode(inviteKey) {
 // 一个赛事可能导入上百支待认领球队，分页读取并设置上界，避免单次查询超时。
 async function listClaimableInvites(tournamentId) {
   const rows = []
-  for (let offset = 0; offset < 500; offset += 100) {
-    let page = []
-    try {
-      const result = await db.collection('team_invitations')
-        .where({ tournamentId, type: 'prebuilt_tournament_team' })
-        .skip(offset)
-        .limit(100)
-        .get()
-      page = result.data || []
-    } catch (error) {
-      console.warn('[getMiniWorkspace] claim invite page skipped:', error.message)
-      break
+  for (const type of ['prebuilt_tournament_team', 'team_owner_transfer']) {
+    for (let offset = 0; offset < 500; offset += 100) {
+      let page = []
+      try {
+        const result = await db.collection('team_invitations')
+          .where({ tournamentId, type })
+          .skip(offset)
+          .limit(100)
+          .get()
+        page = result.data || []
+      } catch (error) {
+        console.warn('[getMiniWorkspace] claim invite page skipped:', type, error.message)
+        break
+      }
+      rows.push.apply(rows, page)
+      if (page.length < 100) break
     }
-    rows.push.apply(rows, page)
-    if (page.length < 100) break
   }
   return rows
 }
@@ -1961,6 +1964,25 @@ async function claimableTeamsForWorkspace(event, identity) {
   const invites = await listClaimableInvites(tournamentId)
   const teams = []
   for (const invite of invites) {
+    const inviteType = String(invite.type || '')
+    if (inviteType === 'team_owner_transfer') {
+      if (String(invite.status || '') !== 'active' || !claimPhoneAllowed(invite, phone)) continue
+      try { assertPrebuiltInviteActive(invite, tournament) } catch (error) { continue }
+      if (invite.inviteeUserId && String(invite.inviteeUserId) !== String(identity.user._id)) continue
+      const transferTeamId = String(invite.teamId || '')
+      const transferTeam = (await safeGet('teams', { _id:transferTeamId }, 1))[0]
+      if (!transferTeam) continue
+      const currentOwnerId = String(transferTeam.ownerId || transferTeam.ownerUserId || transferTeam.claimedByUserId || '')
+      if (!currentOwnerId || currentOwnerId !== String(invite.fromOwnerId || '') || currentOwnerId === String(identity.user._id || '')) continue
+      teams.push({
+        inviteId:String(invite._id || ''), transferId:String(invite._id || ''), teamId:transferTeamId,
+        teamName:String(transferTeam.name || transferTeam.teamName || '未命名球队'), divisionName:String(invite.divisionName || ''),
+        claimantRoleLabel:'新主账号', managerPhoneMasked:maskPhone(phone), ownershipTransfer:true,
+        targetName:String(invite.targetName || ''), claimedByMe:false, alreadyClaimed:false, workspaceId:'', requiresReview:false,
+        statusText:'待接收主账号'
+      })
+      continue
+    }
     // pending/review_approved 可认领；accepted 仅供原接受人回访。
     const status = String(invite.status || 'pending')
     if (['pending', 'review_approved', 'accepted'].indexOf(status) < 0) continue
@@ -2156,6 +2178,42 @@ async function acceptPrebuiltTeamInviteForWorkspace(event, identity) {
   await createRegistrationReviewArtifacts(invite, relationId, preview.prebuiltTeam.id, identity)
   const workspaceId = await workspaceIdForManagedTeam(preview.prebuiltTeam.id, identity)
   return { success: true, teamId: preview.prebuiltTeam.id, workspaceId, registrationId:relationId, pendingPlayerDraftCount, destination: pendingPlayerDraftCount ? 'imported-player-review' : 'team-center' }
+}
+
+async function acceptTeamOwnerTransferForWorkspace(event, identity) {
+  const transferId = String(event.transferId || event.inviteId || '')
+  if (!transferId) throw workspaceError('OWNER_TRANSFER_REQUIRED', '缺少主账号转移邀请')
+  const transfer = (await safeGet('team_invitations', { _id:transferId }, 1))[0]
+  if (!transfer || String(transfer.type || '') !== 'team_owner_transfer') throw workspaceError('OWNER_TRANSFER_INVALID', '主账号转移邀请不存在')
+  const teamId = String(transfer.teamId || '')
+  if (String(transfer.status || '') === 'accepted' && String(transfer.acceptedUserId || '') === String(identity.user._id || '')) {
+    return { success:true, teamId, workspaceId:await workspaceIdForManagedTeam(teamId, identity), idempotent:true }
+  }
+  if (String(transfer.status || '') !== 'active') throw workspaceError('OWNER_TRANSFER_INACTIVE', '主账号转移邀请已失效')
+  assertPrebuiltInviteActive(transfer)
+  const phone = verifiedUserPhone(identity.user)
+  if (!phone || !claimPhoneAllowed(transfer, phone)) throw workspaceError('OWNER_TRANSFER_PHONE_MISMATCH', '请使用被邀请的新负责人手机号登录')
+  if (transfer.inviteeUserId && String(transfer.inviteeUserId) !== String(identity.user._id)) throw workspaceError('OWNER_TRANSFER_ACCOUNT_MISMATCH', '该主账号转移邀请不属于当前账号')
+  const team = (await safeGet('teams', { _id:teamId }, 1))[0]
+  if (!team) throw workspaceError('OWNER_TRANSFER_TEAM_MISSING', '球队不存在或已被删除')
+  const oldOwnerId = String(team.ownerId || team.ownerUserId || team.claimedByUserId || '')
+  if (!oldOwnerId || oldOwnerId !== String(transfer.fromOwnerId || '')) throw workspaceError('OWNER_TRANSFER_STALE', '球队负责人已变化，请主办方重新发起转移')
+  if (oldOwnerId === String(identity.user._id || '')) throw workspaceError('OWNER_TRANSFER_SAME_ACCOUNT', '当前账号已经是球队负责人')
+  const memberships = await safeGet('team_memberships', { teamId }, 200)
+  const now = db.serverDate()
+  const oldMembership = memberships.find(item => String(item.userId || item.memberUserId || '') === oldOwnerId)
+  const oldMemberData = { role:'member', roles:['member'], permissions:['team.view'], status:'accepted', retainedAfterOwnerTransfer:true, ownerTransferId:transferId, updateTime:now }
+  if (oldMembership && oldMembership._id) await db.collection('team_memberships').doc(String(oldMembership._id)).update({ data:oldMemberData })
+  else await db.collection('team_memberships').add({ data:{ ...oldMemberData, teamId, orgId:String(team.orgId || ''), userId:oldOwnerId, source:'owner_transfer_retained_member', createTime:now } })
+  const newOwnerId = String(identity.user._id || '')
+  const newMembership = memberships.find(item => String(item.userId || item.memberUserId || '') === newOwnerId)
+  const newOwnerData = { teamId, orgId:String(team.orgId || ''), userId:newOwnerId, phone, role:'owner', roles:['owner'], permissions:['team.view','team.manage'], status:'accepted', source:'team_owner_transfer', ownerTransferId:transferId, updateTime:now }
+  if (newMembership && newMembership._id) await db.collection('team_memberships').doc(String(newMembership._id)).update({ data:newOwnerData })
+  else await db.collection('team_memberships').add({ data:{ ...newOwnerData, createTime:now } })
+  await db.collection('teams').doc(teamId).update({ data:{ ownerId:newOwnerId, ownerUserId:newOwnerId, claimedByUserId:newOwnerId, ownerPhone:phone, ownerName:String(transfer.targetName || ''), claimStatus:'claimed', updateTime:now } })
+  await db.collection('team_invitations').doc(transferId).update({ data:{ status:'accepted', acceptedUserId:newOwnerId, acceptedOpenId:String(identity.openId || ''), acceptedAt:now, keepPreviousOwnerAsMember:true, updateTime:now } })
+  await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'team_owner_transfer_accepted', tournamentId:String(transfer.tournamentId || ''), teamId, actorUserId:newOwnerId, actorOrgId:String(transfer.organizerOrgId || ''), result:'success', detail:{ previousOwnerId:oldOwnerId, newOwnerId, previousOwnerRetainedAsMember:true }, createTime:now } })
+  return { success:true, teamId, workspaceId:await workspaceIdForManagedTeam(teamId, identity), previousOwnerRetainedAsMember:true }
 }
 
 async function requestPrebuiltTeamClaimReview(event, identity) {
@@ -2887,6 +2945,7 @@ exports.main = async function(event) {
     if (event.action === 'requestTeamDataExport') return await requestTeamDataExportForWorkspace(event, identity)
     if (event.action === 'prebuiltTeamInvite') return await prebuiltTeamInviteForWorkspace(Object.assign({}, event, { allowReviewRequired: true }), identity)
     if (event.action === 'acceptPrebuiltTeamInvite') return await acceptPrebuiltTeamInviteForWorkspace(event, identity)
+    if (event.action === 'acceptTeamOwnerTransfer') return await acceptTeamOwnerTransferForWorkspace(event, identity)
     if (event.action === 'requestPrebuiltTeamClaimReview') return await requestPrebuiltTeamClaimReview(event, identity)
     if (event.action === 'claimCodeContext') return await claimCodeContextForWorkspace(event, identity)
     if (event.action === 'claimableTeams') return await claimableTeamsForWorkspace(event, identity)

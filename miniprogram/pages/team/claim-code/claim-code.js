@@ -129,6 +129,10 @@ Page({
     var id = String(event.currentTarget.dataset.id || '')
     var name = String(event.currentTarget.dataset.name || '')
     var selected = this.data.teams.filter(function(item) { return item.inviteId === id })[0] || {}
+    if (selected.ownershipTransfer) {
+      this.acceptOwnerTransfer(selected)
+      return
+    }
     if (selected.alreadyClaimed) {
       this.enterClaimedTeam(selected)
       return
@@ -146,14 +150,40 @@ Page({
   },
 
   enterClaimedTeam: function (team) {
-    var targetTeamId = String(team.teamId || '')
+    this.enterTeamWorkspace(team.teamId, team.teamName, team.workspaceId)
+  },
+
+  enterTeamWorkspace: function (teamId, teamName, workspaceId) {
+    var targetTeamId = String(teamId || '')
     if (!targetTeamId) return wx.showToast({ title: '球队信息不完整，请稍后重试', icon: 'none' })
-    wx.setStorageSync('teamInfo', { _id: targetTeamId, teamId: targetTeamId, teamName: team.teamName || '' })
-    var switchPromise = team.workspaceId ? workspace.switchWorkspace(team.workspaceId) : Promise.resolve()
+    wx.setStorageSync('teamInfo', { _id: targetTeamId, teamId: targetTeamId, teamName: teamName || '' })
+    var switchPromise = workspaceId ? workspace.switchWorkspace(workspaceId) : Promise.resolve()
     switchPromise.then(function () {
       wx.navigateTo({ url: '/pages/team/team?teamId=' + encodeURIComponent(targetTeamId) })
     }).catch(function (error) {
       wx.showToast({ title: (error && error.message) || '球队空间切换失败', icon: 'none' })
+    })
+  },
+
+  acceptOwnerTransfer: function (team) {
+    if (this.data.accepting) return
+    var self = this
+    wx.showModal({
+      title:'接收球队主账号',
+      content:'确认后你将成为“' + String(team.teamName || '当前球队') + '”的主账号，原负责人保留为协作成员。',
+      confirmText:'确认接收',
+      success:function(modal) {
+        if (!modal.confirm) return
+        self.setData({ accepting:true })
+        self.call('acceptTeamOwnerTransfer', { transferId:team.transferId || team.inviteId }).then(function(res) {
+          var result = res.result || {}
+          if (!result.success) throw new Error(result.message || '主账号接收失败')
+          wx.showToast({ title:'主账号已转移', icon:'success' })
+          self.enterTeamWorkspace(result.teamId || team.teamId, team.teamName, result.workspaceId || '')
+        }).catch(function(error) {
+          wx.showModal({ title:'接收失败', content:(error && error.message) || '请稍后重试', showCancel:false })
+        }).finally(function() { self.setData({ accepting:false }) })
+      }
     })
   },
 

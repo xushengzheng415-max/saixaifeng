@@ -72,7 +72,7 @@
             <el-table-column prop="roleLabel" label="身份" width="120" />
             <el-table-column prop="name" label="姓名" min-width="140" />
             <el-table-column label="手机号" min-width="160"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column>
-            <el-table-column label="账号关系" width="150"><template #default="{ row }"><el-tag :type="row.accountType === 'owner' ? 'success' : 'info'" size="small">{{ row.accountType === 'owner' ? '主账号' : '协作账号' }}</el-tag></template></el-table-column>
+            <el-table-column label="账号关系" width="150"><template #default="{ row }"><el-tag :type="row.accountType === 'owner' ? 'success' : (row.accountType === 'pending_owner' ? 'warning' : 'info')" size="small">{{ row.accountType === 'owner' ? '主账号' : (row.accountType === 'pending_owner' ? '待接收主账号' : '协作账号') }}</el-tag></template></el-table-column>
             <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === '主账号' || row.status === '已加入' ? 'success' : 'warning'" effect="plain" size="small">{{ row.status || '待授权' }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="110" align="center"><template #default="{ row }"><el-button link type="danger" :loading="teamAccessDeletingRole === row.role" :disabled="row.accountType === 'owner'" @click="deleteTeamAccess(row)">删除权限</el-button></template></el-table-column>
           </el-table>
@@ -2409,7 +2409,7 @@ async function saveTeamAccess() {
     if (!result?.success) throw new Error(result?.message || '球队管理权限保存失败')
     teamAccessRows.value = Array.isArray(result.personnel) ? result.personnel : []
     showTeamAccess.value = false
-    ElMessage.success('球队管理权限已保存')
+    ElMessage.success(result.ownerTransferPending ? '主账号转移已发起，请让新负责人用该手机号登录并扫描赛事认领码' : '球队管理权限已保存')
   } catch (error) {
     ElMessage.error(error.message || '球队管理权限保存失败')
   } finally {
