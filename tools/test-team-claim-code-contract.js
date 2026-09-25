@@ -455,7 +455,28 @@ async function run() {
     ok('旧体验包重复提交已认领邀请时服务端幂等恢复')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/21 通过`)
+  // 场景 22：进入单球队空间时，不得显示同账号其他球队的报名草稿待办。
+  {
+    const seed = baseSeed()
+    seed.teams = [
+      { _id:'team-1', name:'当前球队', ownerId:'user-1', claimStatus:'claimed' },
+      { _id:'team-2', name:'其他球队', ownerId:'user-1', claimStatus:'claimed' }
+    ]
+    seed.team_memberships = [
+      { _id:'tm-1', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' },
+      { _id:'tm-2', teamId:'team-2', userId:'user-1', role:'owner', status:'accepted' }
+    ]
+    seed.tournament_tasks = [{
+      _id:'draft-other-team', recipientUserId:'user-1', tournamentId:'t-other', divisionId:'default',
+      teamId:'team-2', type:'registration_draft', status:'pending', title:'继续完成赛事报名'
+    }]
+    const { result } = await callWorkspace(seed, { workspaceId:'team:team-1' })
+    assert.strictEqual(result.success, true, `场景 22：当前球队空间应加载成功，实际 ${JSON.stringify(result)}`)
+    assert.ok(!result.eventTasks.some(item => item.teamId === 'team-2'), '场景 22：不得显示其他球队的报名草稿')
+    ok('单球队空间隔离其他球队报名草稿待办')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/22 通过`)
 }
 
 run().catch(error => {

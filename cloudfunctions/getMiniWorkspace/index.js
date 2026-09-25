@@ -3042,12 +3042,18 @@ exports.main = async function(event) {
     ]
     if (accessibleTeamIds.length) draftConditions.push({ teamId: _.in(accessibleTeamIds) })
     const registrationDraftRows = await safeGet('tournament_tasks', _.or(draftConditions), 100)
+    // 用户可能同时管理多支球队；直接发给本人的报名草稿仍必须受当前球队空间约束，
+    // 否则 A 队页面会显示 B 队的“继续完成赛事报名”。无 teamId 的个人任务保留。
+    const scopedRegistrationDraftRows = registrationDraftRows.filter(item => {
+      const taskTeamId = String(item.teamId || '')
+      return !taskTeamId || accessibleTeamIds.indexOf(taskTeamId) >= 0
+    })
     const activeRegistrationKeys = new Set(registrations.filter(item => ['pending', 'approved', 'confirmed', 'active', 'locked'].indexOf(String(item.status || '').toLowerCase()) >= 0).map(item => String(item.tournamentId || '') + ':' + String(item.teamId || '') + ':' + registrationDivisionId(item)))
-    const staleDraftRows = registrationDraftRows.filter(item => activeRegistrationKeys.has(String(item.tournamentId || '') + ':' + String(item.teamId || '') + ':' + String(item.divisionId || 'default')))
+    const staleDraftRows = scopedRegistrationDraftRows.filter(item => activeRegistrationKeys.has(String(item.tournamentId || '') + ':' + String(item.teamId || '') + ':' + String(item.divisionId || 'default')))
     if (staleDraftRows.length) {
       await Promise.all(staleDraftRows.map(item => db.collection('tournament_tasks').doc(item._id).update({ data: { status: 'completed', completedAt: db.serverDate(), updateTime: db.serverDate() } }).catch(() => null)))
     }
-    const activeDraftRows = registrationDraftRows.filter(item => staleDraftRows.indexOf(item) < 0)
+    const activeDraftRows = scopedRegistrationDraftRows.filter(item => staleDraftRows.indexOf(item) < 0)
     const eventTasks = buildRegistrationDraftTasks(activeDraftRows).concat(buildTasks(registrations), buildOrganizerTasks(hostedRegistrations))
     const tasks = eventTasks.concat(education.tasks)
     const teamIds = unique(teams.map(item => item._id))
