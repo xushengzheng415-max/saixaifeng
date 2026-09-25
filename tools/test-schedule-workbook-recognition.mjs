@@ -42,7 +42,7 @@ assert.equal(recognized[0].venue, '1号场地')
 assert.equal(recognized[0].status, 'ready')
 assert.equal(recognized[1].matchId, 'm2')
 assert.equal(recognized[1].status, 'ready')
-assert.deepEqual(recognitionSummary(recognized), { total:2,recognized:2,ready:2,pairingOnly:0,incomplete:0,unmatched:0 })
+assert.deepEqual(recognitionSummary(recognized), { total:2,recognized:2,ready:2,pairingOnly:0,plannedKnockout:0,incomplete:0,unmatched:0 })
 
 const pairingOnlySheet = XLSX.utils.aoa_to_sheet([
   ['场序','组别','比赛对阵','比赛日期','开赛时间','比赛场地'],
@@ -64,4 +64,8 @@ const dependencyMatches = [
 const dependencyRecognized = recognizeScheduleRows(dependencyRows,dependencyMatches,[{name:'1号场地'},{name:'2号场地'}])
 assert.deepEqual(dependencyRecognized.map(row=>row.matchId),['q1','q2','p1'])
 
-console.log(JSON.stringify({ passed:true,recognized:recognized.length,pairingOnly:pairingOnly.length,dependencyReferences:dependencyRecognized.length },null,2))
+const plannedKnockout = recognizeScheduleRows([{ sourceRow:43,matchNo:41,division:'青年组',home:'A组第3',away:'B组第4',matchDate:'2026-10-17',matchTime:'15:00',venueRaw:'2' }],[],[{name:'2号场地'}])
+assert.equal(plannedKnockout[0].status,'planned_knockout')
+assert.equal(recognitionSummary(plannedKnockout).plannedKnockout,1)
+
+console.log(JSON.stringify({ passed:true,recognized:recognized.length,pairingOnly:pairingOnly.length,dependencyReferences:dependencyRecognized.length,plannedKnockout:plannedKnockout.length },null,2))

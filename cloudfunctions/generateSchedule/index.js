@@ -85,15 +85,21 @@ async function loadDivisionConfiguration(tournament, divisionId, actor) {
 }
 
 function configuredPairingTemplate(division, tournament) {
+  var tournamentName = String(tournament && tournament.name || '')
+  var divisionName = String(division && (division.name || division.divisionName || '') || '')
   var configured = (division && (division.pairingTemplate ||
     division.pairingTemplateSnapshot ||
     division.rulesSnapshot && division.rulesSnapshot.pairingTemplate ||
     division.competitionRule && division.competitionRule.pairingTemplate)) || null
-  if (configured) return configured
+  if (configured) {
+    var configuredVersion=String(configured.version || '')
+    if((tournamentName.indexOf('立洋杯')>=0 || tournamentName.toLowerCase().indexOf('liyang')>=0) && (
+      divisionName.indexOf('青年')>=0 || divisionName.toLowerCase().indexOf('youth')>=0
+    ) && configuredVersion==='liyang-youth-v1') return pairingTemplates.liyangYouthTemplate()
+    return configured
+  }
   var key = division && (division.pairingTemplateKey || division.rulesSnapshot && division.rulesSnapshot.pairingTemplateKey || division.competitionRule && division.competitionRule.pairingTemplateKey)
   if (key) return pairingTemplates.resolveTemplate(key)
-  var tournamentName = String(tournament && tournament.name || '')
-  var divisionName = String(division && (division.name || division.divisionName || '') || '')
   if (tournamentName.indexOf('立洋杯') >= 0 || tournamentName.toLowerCase().indexOf('liyang') >= 0) {
     if (divisionName.indexOf('青年') >= 0 || divisionName.toLowerCase().indexOf('youth') >= 0) return pairingTemplates.liyangYouthTemplate()
     if (divisionName.indexOf('中年') >= 0 || divisionName.toLowerCase().indexOf('middle') >= 0) return pairingTemplates.liyangMiddleTemplate()
@@ -232,6 +238,61 @@ async function generatePairingsOnly(event, tournament, actor) {
   await db.collection('divisions').doc(divisionId).update({ data: divisionUpdate }).catch(function() {})
   await db.collection('tournaments').doc(tournamentId).update({ data: { pairingGenerated: true, pairingGeneratedDivisionId: divisionId, scheduleGenerated: false, schedulePublished: false, updateTime: now, orgId: actor.orgId } })
   return { success: true, message: '已生成' + built.matches.length + '场对阵，比赛时间待排', pairingOnly: true, pairingStatus: 'confirmed', scheduleStatus: 'unassigned', matchCount: built.matches.length, divisionId: divisionId, templateVersion: built.templateVersion, matches: built.matches }
+}
+
+function pairingIdentity(match) {
+  function source(value,label){
+    if(value && value.type==='group_rank')return 'group:'+String(value.groupName || '')+':'+Number(value.rank || 0)
+    if(value && value.type==='match_winner')return 'winner:'+Number(value.matchNo || 0)
+    if(value && value.type==='match_loser')return 'loser:'+Number(value.matchNo || 0)
+    if(value && value.type==='seed')return 'seed:'+String(value.teamId || value.name || value.seed || '')
+    return String(label || '')
+  }
+  return [String(match.phase || ''),source(match.homeSource,match.homeSourceLabel || match.homeTeamName),source(match.awaySource,match.awaySourceLabel || match.awayTeamName)].join('|')
+}
+
+async function ensureKnockoutPairings(event,tournament,actor) {
+  var tournamentId=String(event.tournamentId || tournament._id || '')
+  var divisionId=String(event.divisionId || '')
+  if(!divisionId)return { success:false,code:'DIVISION_REQUIRED',message:'请先选择需要补齐的竞赛组别' }
+  var divisionState=await loadDivisionConfiguration(tournament,divisionId,actor)
+  if(divisionState.scopeDenied)return { success:false,code:'DIVISION_SCOPE_DENIED',message:'无权操作其他机构的竞赛组别' }
+  if(divisionState.readError || !divisionState.division)return { success:false,code:'DIVISION_RULES_UNAVAILABLE',message:'无法读取当前竞赛组别规则' }
+  var division=divisionState.division
+  var divisionName=String(division.name || division.divisionName || '当前组别')
+  var built=await buildPairingsForDivision(tournamentId,divisionId,divisionName,division,tournament)
+  if(!built.success)return built
+  var expected=built.matches.filter(function(match){return String(match.phase || '').toLowerCase()!=='group'})
+  if(!expected.length)return { success:true,message:'当前组别没有需要提前创建的淘汰或排位赛',addedCount:0,matches:[] }
+  var existing=(await loadAllTournamentMatches(tournamentId)).filter(function(match){return belongsToDivision(match,divisionId) && match.status!=='cancelled'})
+  var existingCodes=new Set(existing.map(function(match){return String(match.pairingCode || '')}).filter(Boolean))
+  var existingIdentities=new Set(existing.map(pairingIdentity))
+  var existingByNo=new Map(existing.map(function(match){return [Number(match.matchNo || match.matchIndex || 0),match]}))
+  var missing=[]
+  for(var index=0;index<expected.length;index+=1){
+    var match=expected[index]
+    if(match.pairingCode && existingCodes.has(String(match.pairingCode)))continue
+    if(existingIdentities.has(pairingIdentity(match)))continue
+    var sameNo=existingByNo.get(Number(match.matchNo || match.matchIndex || 0))
+    if(sameNo)return { success:false,code:'PAIRING_NUMBER_CONFLICT',message:'场序'+Number(match.matchNo || match.matchIndex || 0)+'已被其他对阵占用，为避免覆盖已有赛程，本次未补齐' }
+    missing.push(match)
+  }
+  for(var addIndex=0;addIndex<missing.length;addIndex+=1){
+    var item=missing[addIndex]
+    item.orgId=actor.orgId
+    item.pairingStatus='confirmed'
+    item.scheduleStatus='unassigned'
+    item.placeholderUntilResolved=true
+    item.pairingBackfillSource='ensureKnockoutPairings'
+    item.createTime=db.serverDate()
+    item.updateTime=db.serverDate()
+    await db.collection('matches').add({ data:item })
+  }
+  if(missing.length){
+    await db.collection('divisions').doc(divisionId).update({ data:{ pairingGenerated:true,pairingTemplateVersion:built.templateVersion,knockoutPairingsPrepared:true,knockoutPairingsPreparedAt:db.serverDate(),updateTime:db.serverDate() } }).catch(function(){})
+    await db.collection('tournaments').doc(tournamentId).update({ data:{ pairingGenerated:true,schedulePublished:false,updateTime:db.serverDate(),orgId:actor.orgId } })
+  }
+  return { success:true,message:missing.length?'已补齐'+missing.length+'场淘汰/排位赛占位对阵':'淘汰/排位赛占位对阵已完整',addedCount:missing.length,matchCount:expected.length,matches:missing }
 }
 
 async function resetPairings(event, tournament, actor) {
@@ -1574,6 +1635,7 @@ exports.main = async (event, context) => {
     }
     if (event.action === 'savePairingTemplate') return await savePairingTemplate(event,tournament,actor)
     if (event.action === 'importScheduleAssignments') return await importScheduleAssignments(event,tournament,actor)
+    if (event.action === 'ensureKnockoutPairings') return await ensureKnockoutPairings(event,tournament,actor)
     if (event.action === 'generatePairings') return await generatePairingsOnly(event, tournament, actor)
     if (event.action === 'resetPairings') return await resetPairings(event, tournament, actor)
     if (event.action === 'scheduleExistingPairings') return await scheduleExistingPairings(event, tournament, actor)

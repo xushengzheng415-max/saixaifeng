@@ -152,6 +152,11 @@ function remapExternalReference(value, externalMatchMap) {
   return `场序${mapped}${match[2].startsWith('胜') ? '胜者' : '负者'}`
 }
 
+export function isDeferredOpponent(value) {
+  const raw=compact(value)
+  return /^[A-Za-z]组第?\d+$/i.test(raw) || /^(?:场序)?\d+(?:胜者|胜|负者|负)/.test(raw)
+}
+
 function findHeader(matrix) {
   for (let rowIndex = 0; rowIndex < Math.min(matrix.length, 20); rowIndex += 1) {
     const fields = matrix[rowIndex].map(headerKey)
@@ -213,9 +218,11 @@ export function recognizeScheduleRows(rows, matches, venueResources = []) {
     const venue = mapVenue(row.venueRaw, venueResources)
     const hasAnyPlacement = Boolean(row.matchDate || row.matchTime || venue)
     const completePlacement = Boolean(row.matchDate && row.matchTime && venue)
+    const plannedKnockout = !recognized.match && isDeferredOpponent(row.home) && isDeferredOpponent(row.away)
     let status = 'recognized'
     let message = recognized.reason
-    if (!recognized.match) status = 'unmatched'
+    if (plannedKnockout) { status = 'planned_knockout';message = '淘汰/排位赛来源已识别，需先创建占位对阵' }
+    else if (!recognized.match) status = 'unmatched'
     else if (hasAnyPlacement && !completePlacement) { status = 'incomplete';message = '日期、时间和场地需要同时完整' }
     else if (completePlacement) status = 'ready'
     else status = 'pairing_only'
@@ -233,11 +240,12 @@ export function recognizeScheduleRows(rows, matches, venueResources = []) {
 }
 
 export function recognitionSummary(rows) {
-  const summary = { total:rows.length,recognized:0,ready:0,pairingOnly:0,incomplete:0,unmatched:0 }
+  const summary = { total:rows.length,recognized:0,ready:0,pairingOnly:0,plannedKnockout:0,incomplete:0,unmatched:0 }
   rows.forEach(row => {
     if (row.matchedMatch) summary.recognized += 1
     if (row.status === 'ready') summary.ready += 1
     if (row.status === 'pairing_only') summary.pairingOnly += 1
+    if (row.status === 'planned_knockout') summary.plannedKnockout += 1
     if (row.status === 'incomplete') summary.incomplete += 1
     if (row.status === 'unmatched') summary.unmatched += 1
   })

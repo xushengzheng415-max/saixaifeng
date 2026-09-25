@@ -232,25 +232,19 @@ function liyangYouthTemplate() {
   ;[
     [[1, 4], [2, 3]], [[1, 3], [2, 4]], [[1, 2], [3, 4]]
   ].forEach(function(pairings, index) { stages.push(roundRobinStage('B', pairings, index + 1)) })
-  stages.push({ name: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2, phase: 'knockout', round: 1, matches: [
-    { code: 'Q1', home: { type: 'group_rank', groupName: 'A组', rank: 1 }, away: { type: 'group_rank', groupName: 'B组', rank: 4 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
-    { code: 'Q2', home: { type: 'group_rank', groupName: 'A组', rank: 2 }, away: { type: 'group_rank', groupName: 'B组', rank: 3 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
-    { code: 'Q3', home: { type: 'group_rank', groupName: 'A组', rank: 3 }, away: { type: 'group_rank', groupName: 'B组', rank: 2 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
-    { code: 'Q4', home: { type: 'group_rank', groupName: 'A组', rank: 4 }, away: { type: 'group_rank', groupName: 'B组', rank: 1 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 }
+  stages.push({ name: '交叉排位赛', stageName: '淘汰与排位阶段', stageOrder: 2, phase: 'knockout', round: 1, matches: [
+    { code: 'X1', home: { type: 'group_rank', groupName: 'A组', rank: 3 }, away: { type: 'group_rank', groupName: 'B组', rank: 4 }, phase: 'placement', roundName: '5–8名交叉排位赛', rankRange: '5-8名', stageName: '淘汰与排位阶段', stageOrder: 2 },
+    { code: 'X2', home: { type: 'group_rank', groupName: 'A组', rank: 4 }, away: { type: 'group_rank', groupName: 'B组', rank: 3 }, phase: 'placement', roundName: '5–8名交叉排位赛', rankRange: '5-8名', stageName: '淘汰与排位阶段', stageOrder: 2 },
+    { code: 'X3', home: { type: 'group_rank', groupName: 'A组', rank: 1 }, away: { type: 'group_rank', groupName: 'B组', rank: 2 }, roundName: '1–4名交叉淘汰赛', rankRange: '1-4名', stageName: '淘汰与排位阶段', stageOrder: 2 },
+    { code: 'X4', home: { type: 'group_rank', groupName: 'A组', rank: 2 }, away: { type: 'group_rank', groupName: 'B组', rank: 1 }, roundName: '1–4名交叉淘汰赛', rankRange: '1-4名', stageName: '淘汰与排位阶段', stageOrder: 2 }
   ] })
-  stages.push({ name: '淘汰赛第二轮', phase: 'knockout', round: 2, matches: [
-    { code: 'S1', home: 'Q1胜', away: 'Q2胜', roundName: '争冠半决赛', rankRange: '1/2名', stageName: '决赛阶段', stageOrder: 3 },
-    { code: 'S2', home: 'Q3胜', away: 'Q4胜', roundName: '争冠半决赛', rankRange: '1/2名', stageName: '决赛阶段', stageOrder: 3 },
-    { code: 'P1', home: 'Q1负', away: 'Q2负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名', stageName: '排位赛阶段', stageOrder: 3 },
-    { code: 'P2', home: 'Q3负', away: 'Q4负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名', stageName: '排位赛阶段', stageOrder: 3 }
+  stages.push({ name: '最终排位赛', phase: 'placement', round: 2, matches: [
+    { code: 'F7', home: 'X1负', away: 'X2负', roundName: '7–8名决赛', rankRange: '7-8名', stageName: '决赛与排位阶段', stageOrder: 3 },
+    { code: 'F5', home: 'X1胜', away: 'X2胜', roundName: '5–6名决赛', rankRange: '5-6名', stageName: '决赛与排位阶段', stageOrder: 3 },
+    { code: 'F3', home: 'X3负', away: 'X4负', roundName: '三四名决赛', rankRange: '3-4名', stageName: '决赛与排位阶段', stageOrder: 3 },
+    { code: 'F1', home: 'X3胜', away: 'X4胜', phase: 'knockout', roundName: '决赛', rankRange: '1-2名', stageName: '决赛与排位阶段', stageOrder: 3 }
   ] })
-  stages.push({ name: '淘汰赛第三轮', phase: 'knockout', round: 3, matches: [
-    { code: 'F1', home: 'S1胜', away: 'S2胜', roundName: '决赛', rankRange: '1-2名', stageName: '决赛阶段', stageOrder: 4 },
-    { code: 'F2', home: 'S1负', away: 'S2负', phase: 'placement', roundName: '三四名决赛', rankRange: '3-4名', stageName: '决赛阶段', stageOrder: 4 },
-    { code: 'F3', home: 'P1胜', away: 'P2胜', phase: 'placement', roundName: '5/6名决赛', rankRange: '5-6名', stageName: '排位赛阶段', stageOrder: 4 },
-    { code: 'F4', home: 'P1负', away: 'P2负', phase: 'placement', roundName: '7/8名决赛', rankRange: '7-8名', stageName: '排位赛阶段', stageOrder: 4 }
-  ] })
-  return { version: 'liyang-youth-v1', source: '2026立洋杯青年组对阵模板', stages: stages }
+  return { version: 'liyang-youth-v2', source: '2026立洋杯青年组对阵模板', stages: stages }
 }
 
 function liyangMiddleTemplate() {
@@ -268,7 +262,7 @@ function liyangOldTemplate() {
 
 function resolveTemplate(key) {
   var normalized = text(key).toLowerCase()
-  if (normalized === 'liyang-youth' || normalized === 'liyang-youth-v1') return liyangYouthTemplate()
+  if (normalized === 'liyang-youth' || normalized === 'liyang-youth-v1' || normalized === 'liyang-youth-v2') return liyangYouthTemplate()
   if (normalized === 'liyang-middle' || normalized === 'liyang-middle-v1') return liyangMiddleTemplate()
   if (normalized === 'liyang-old' || normalized === 'liyang-old-v1') return liyangOldTemplate()
   return null

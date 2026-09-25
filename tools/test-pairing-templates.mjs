@@ -6,7 +6,7 @@ function teams(prefix, count) {
 }
 
 const cases = [
-  ['青年组', templates.liyangYouthTemplate(), [{ groupName: 'A组', teams: teams('A', 5) }, { groupName: 'B组', teams: teams('B', 4) }], 28],
+  ['青年组', templates.liyangYouthTemplate(), [{ groupName: 'A组', teams: teams('A', 5) }, { groupName: 'B组', teams: teams('B', 4) }], 24],
   ['中年组', templates.liyangMiddleTemplate(), [{ groupName: 'A组', teams: teams('M', 7) }], 21],
   ['老年组', templates.liyangOldTemplate(), [{ groupName: 'A组', teams: teams('O', 4) }], 6]
 ]
@@ -20,14 +20,16 @@ for (const [name, template, groups, expectedCount] of cases) {
 }
 
 const youth = templates.buildPairingsFromTemplate('t', 'd', '青年组', [{ groupName: 'A组', teams: teams('A', 5) }, { groupName: 'B组', teams: teams('B', 4) }], templates.liyangYouthTemplate()).matches
-const q1 = youth.find(item => item.pairingCode === 'Q1')
+const x1 = youth.find(item => item.pairingCode === 'X1')
+const f7 = youth.find(item => item.pairingCode === 'F7')
 const f1 = youth.find(item => item.pairingCode === 'F1')
-assert.equal(q1.homeSourceLabel, 'A组第1')
-assert.equal(q1.awaySourceLabel, 'B组第4')
-assert.deepEqual(f1.dependencyMatchNos, [21, 22])
-assert.equal(q1.scheduleStageName, '淘汰赛阶段')
-assert.equal(q1.roundName, '淘汰赛第一轮')
-assert.equal(youth.find(item => item.pairingCode === 'S1').scheduleStageName, '决赛阶段')
-assert.equal(youth.find(item => item.pairingCode === 'P1').scheduleStageName, '排位赛阶段')
+assert.equal(x1.matchNo, 17)
+assert.equal(x1.homeSourceLabel, 'A组第3')
+assert.equal(x1.awaySourceLabel, 'B组第4')
+assert.deepEqual(f7.dependencyMatchNos, [17, 18])
+assert.deepEqual(f1.dependencyMatchNos, [19, 20])
+assert.equal(x1.scheduleStageName, '淘汰与排位阶段')
+assert.equal(f7.roundName, '7–8名决赛')
+assert.equal(f1.roundName, '决赛')
 
-console.log('pairing templates PASS: youth=28 middle=21 old=6')
+console.log('pairing templates PASS: youth=24 middle=21 old=6')
