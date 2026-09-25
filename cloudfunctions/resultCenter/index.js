@@ -76,6 +76,68 @@ async function listAll(collection, where, max = 1000) {
   return rows
 }
 
+async function listByDocumentIds(collection, ids) {
+  const rows = []
+  const uniqueIds = [...new Set((ids || []).map(text).filter(Boolean))]
+  for (let index = 0; index < uniqueIds.length; index += 10) {
+    const chunk = uniqueIds.slice(index, index + 10)
+    const page = (await db.collection(collection).where({ _id: db.command.in(chunk) }).limit(chunk.length).get()).data || []
+    rows.push(...page)
+  }
+  return rows
+}
+
+function teamProfileName(record) {
+  return text(record && (record.teamName || record.name))
+}
+
+function teamProfileLogo(record) {
+  if (!record) return ''
+  return text(record.teamLogo || record.logoTransparentUrl || record.logoUrl || record.logoTransparent || record.logo || record.logoOriginal || record.logoFileID || record.logoFileId)
+}
+
+async function resolveTeamLogoUrls(directory) {
+  const cloudIds = [...new Set(Object.values(directory).map(item => text(item.logo)).filter(value => value.startsWith('cloud://')))]
+  const urlByFileId = new Map()
+  for (let index = 0; index < cloudIds.length; index += 50) {
+    try {
+      const result = await cloud.getTempFileURL({ fileList: cloudIds.slice(index, index + 50) })
+      ;(result.fileList || []).forEach(item => {
+        const fileId = text(item.fileID || item.fileId)
+        const url = text(item.tempFileURL || item.tempFileUrl)
+        if (fileId && url) urlByFileId.set(fileId, url)
+      })
+    } catch (error) {
+      console.warn('球队队徽临时地址解析失败:', error && error.message)
+    }
+  }
+  Object.values(directory).forEach(item => {
+    if (urlByFileId.has(item.logo)) item.logo = urlByFileId.get(item.logo)
+  })
+  return directory
+}
+
+async function buildTeamDirectory(matchRows, registrationRows) {
+  const matchTeamIds = (matchRows || []).flatMap(match => [teamIdOf(match, 'home'), teamIdOf(match, 'away')]).filter(Boolean)
+  const registrationTeamIds = (registrationRows || []).map(row => text(row.teamId)).filter(Boolean)
+  const teamRows = await listByDocumentIds('teams', [...matchTeamIds, ...registrationTeamIds])
+  const directory = {}
+  teamRows.forEach(row => {
+    const id = text(row._id || row.id)
+    if (id) directory[id] = { name: teamProfileName(row), logo: teamProfileLogo(row) }
+  })
+  ;(registrationRows || []).forEach(row => {
+    const id = text(row.teamId || row._id)
+    if (!id) return
+    const current = directory[id] || { name: '', logo: '' }
+    directory[id] = {
+      name: teamProfileName(row) || current.name,
+      logo: teamProfileLogo(row) || current.logo
+    }
+  })
+  return resolveTeamLogoUrls(directory)
+}
+
 function divisionIdOf(match) {
   return text(match.divisionId || match.division || match.divisionKey) || 'default'
 }
@@ -90,16 +152,17 @@ function teamIdOf(match, side) {
   return text(direct || (nested && (nested._id || nested.id)))
 }
 
-function teamNameOf(match, side) {
+function teamNameOf(match, side, profile = {}) {
   const direct = side === 'home' ? match.homeTeamName : match.awayTeamName
   const nested = side === 'home' ? match.homeTeam : match.awayTeam
-  return text(direct || (nested && (nested.name || nested.teamName)) || nested) || (side === 'home' ? '主队待定' : '客队待定')
+  const nestedName = nested && typeof nested === 'object' ? nested.name || nested.teamName : nested
+  return text(direct || nestedName || profile.name) || (side === 'home' ? '主队待定' : '客队待定')
 }
 
-function teamLogoOf(match, side) {
+function teamLogoOf(match, side, profile = {}) {
   const direct = side === 'home' ? match.homeTeamLogo : match.awayTeamLogo
   const nested = side === 'home' ? match.homeTeam : match.awayTeam
-  return text(direct || (nested && (nested.logoTransparentUrl || nested.logoUrl || nested.logo)))
+  return text(direct || (nested && (nested.logoTransparentUrl || nested.logoUrl || nested.logo)) || profile.logo)
 }
 
 function scoreReady(match) {
@@ -171,10 +234,14 @@ function footballWarnings(match, status, division) {
   return warnings
 }
 
-function normalizedMatch(match, divisionsById) {
+function normalizedMatch(match, divisionsById, teamDirectory = {}) {
   const status = resultStatus(match)
   const divisionId = divisionIdOf(match)
   const division = divisionsById[divisionId] || {}
+  const homeTeamId = teamIdOf(match, 'home')
+  const awayTeamId = teamIdOf(match, 'away')
+  const homeProfile = teamDirectory[homeTeamId] || {}
+  const awayProfile = teamDirectory[awayTeamId] || {}
   const homeScore = scoreReady(match) ? number(match.homeScore) : null
   const awayScore = scoreReady(match) ? number(match.awayScore) : null
   const winnerTeamId = winnerTeamIdOf(match)
@@ -191,12 +258,12 @@ function normalizedMatch(match, divisionsById) {
     matchDate: text(match.matchDate || match.date),
     matchTime: text(match.matchTime || match.startTime),
     venue: text(match.venue || match.field) || '场地待定',
-    homeTeamId: teamIdOf(match, 'home'),
-    homeTeamName: teamNameOf(match, 'home'),
-    homeTeamLogo: teamLogoOf(match, 'home'),
-    awayTeamId: teamIdOf(match, 'away'),
-    awayTeamName: teamNameOf(match, 'away'),
-    awayTeamLogo: teamLogoOf(match, 'away'),
+    homeTeamId,
+    homeTeamName: teamNameOf(match, 'home', homeProfile),
+    homeTeamLogo: teamLogoOf(match, 'home', homeProfile),
+    awayTeamId,
+    awayTeamName: teamNameOf(match, 'away', awayProfile),
+    awayTeamLogo: teamLogoOf(match, 'away', awayProfile),
     homeScore,
     awayScore,
     scoreReady: scoreReady(match),
@@ -335,8 +402,8 @@ function buildStandings(matches, divisionsById) {
       groupName: bucket.groupName,
       pointsRule: rule,
       tieBreakers: ['积分', '相互比赛积分', '相互比赛净胜球', '相互比赛进球数', '总净胜球', '总进球', '红牌数少者', '黄牌数少者', '抽签决定'],
-      officialTeams: bucket.official.length ? rankTeams(Object.values(officialTable), bucket.official, rule) : [],
-      previewTeams: bucket.all.length ? rankTeams(Object.values(previewTable), bucket.all, rule) : [],
+      officialTeams: rankTeams(Object.values(officialTable), bucket.official, rule),
+      previewTeams: rankTeams(Object.values(previewTable), bucket.all, rule),
       officialMatchCount: bucket.official.length,
       provisionalMatchCount: bucket.all.length - bucket.official.length
     }
@@ -486,18 +553,20 @@ async function buildDashboard(event, actor) {
   if (!tournamentId) throw new Error('缺少赛事信息')
   const tournament = await getDocument('tournaments', tournamentId)
   if (!tournament || !belongsToActor(tournament, actor)) throw new Error('无权查看其他机构的赛事赛果')
-  const [divisionRows, matchRows, publications] = await Promise.all([
+  const [divisionRows, matchRows, publications, registrationRows] = await Promise.all([
     listAll('divisions', { tournamentId }, 300),
     listAll('matches', { tournamentId }, 1000),
-    latestPublications(tournamentId)
+    latestPublications(tournamentId),
+    listAll('tournament_teams', { tournamentId }, 1000)
   ])
   const divisions = divisionRows.length ? divisionRows : Array.isArray(tournament.divisions) ? tournament.divisions : []
   const divisionsById = Object.fromEntries(divisions.map(item => [text(item._id || item.id), item]))
-  let matches = matchRows.map(item => normalizedMatch(item, divisionsById)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
+  const teamDirectory = await buildTeamDirectory(matchRows, registrationRows)
+  let matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
   let standings = buildStandings(matches, divisionsById)
   const pairingResolution = await resolvePairingSources(tournamentId,matchRows,standings,actor)
   if (pairingResolution.updatedCount) {
-    matches = matchRows.map(item => normalizedMatch(item, divisionsById)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
+    matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
     standings = buildStandings(matches, divisionsById)
   }
   return {
