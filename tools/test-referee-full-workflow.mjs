@@ -53,15 +53,21 @@ function collection(name) {
   }
 }
 
+let updateMatchModule = null
 const cloudStub = {
   DYNAMIC_CURRENT_ENV:'test',
   init() {},
   getWXContext:() => ({ OPENID:activeOpenId }),
-  database:() => ({ collection, command, serverDate:() => new Date(), createCollection:async name => { rows(name); return {} } })
+  database:() => ({ collection, command, serverDate:() => new Date(), createCollection:async name => { rows(name); return {} } }),
+  callFunction:async ({name,data}) => {
+    if(name==='updateMatch'&&updateMatchModule)return {result:await updateMatchModule.main(data)}
+    throw new Error(`unsupported cloud function ${name}`)
+  }
 }
 const originalLoad = Module._load
 Module._load = function(request, parent, isMain) { if (request === 'wx-server-sdk') return cloudStub; return originalLoad.call(this, request, parent, isMain) }
 const workflow = require('../cloudfunctions/serviceMatchWorkflow/index.js')
+updateMatchModule = require('../cloudfunctions/updateMatch/index.js')
 Module._load = originalLoad
 
 function seed(name, id, data) { rows(name).set(id, { _id:id, ...clone(data) }) }
@@ -148,4 +154,31 @@ await call('open-a1','verifyLineupPlayer',{matchId:'match-3',side:'home',playerI
 activeOpenId='open-a1'
 const tampered=await workflow.main({action:'previewAdultMatchPass',matchId:'match-3',passToken:`SXFMP1.${adultPassId}.${'x'.repeat(32)}`})
 assert.equal(tampered.success,false)
+
+seed('service_identities','identity-temp',{openId:'service:official-temp',serviceWorkflowOpenId:'service:official-temp',serviceAccountOpenId:'official-temp',phone:'13800000009',phoneVerified:true})
+seed('referees','ref-temp',{tournamentId:'t-1',orgId:'org-1',name:'临时裁判',realName:'临时裁判',phone:'13800000009',temporaryReferee:true,eventScoped:true,status:'pending_claim',temporaryClaimStatus:'waiting_claim',canOperate:false})
+seed('referee_invitations','invite-temp',{token:'temp-token',status:'active',tournamentId:'t-1',targetRefereeId:'ref-temp',targetRefereeName:'临时裁判',targetRefereePhone:'13800000009',claimMode:'temporary_no_certificate',followRequired:true,followStatus:'subscribed',officialOpenId:'official-temp',stagedAvatarFileId:'cloud://avatar-temp'})
+await call('service:official-temp','acceptRefereeInvitation',{inviteToken:'temp-token',name:'临时裁判',phone:'13800000009',avatarPreviewDataUrl:'data:image/png;base64,'+Buffer.from('avatar').toString('base64')})
+assert.equal(rows('referees').get('ref-temp').temporaryClaimStatus,'claimed_pending_review')
+assert.equal(rows('referees').get('ref-temp').credentialStatus,'not_submitted')
+assert.equal(rows('referees').get('ref-temp').canOperate,false)
+
+seed('referee_invitations','invite-standard',{token:'standard-token',status:'active',tournamentId:'t-1',followRequired:false,stagedAvatarFileId:'cloud://avatar-standard'})
+activeOpenId='open-main'
+const missingCertificate=await workflow.main({action:'acceptRefereeInvitation',inviteToken:'standard-token',name:'main',phone:'13800000001',level:'一级',qualification:'CERT-1',issuingAuthority:'测试足协',avatarPreviewDataUrl:'data:image/png;base64,'+Buffer.from('avatar').toString('base64')})
+assert.equal(missingCertificate.success,false)
+assert.equal(missingCertificate.code,'REFEREE_ASSET_NOT_READY')
+
+rows('tournaments').get('t-1').orgId='org-1'
+for(const [id] of officials){rows('referees').get(`ref-${id}`).orgId='org-1';rows('referees').get(`ref-${id}`).canOperate=true}
+seed('tournament_referees','head-relation',{tournamentId:'t-1',orgId:'org-1',refereeId:'ref-main',isHeadReferee:true})
+const headSchedule=await call('open-main','getHeadRefereeSchedule',{tournamentId:'t-1'})
+assert.equal(headSchedule.data.tournaments[0].id,'t-1')
+assert.equal(headSchedule.data.referees.some(item=>item.id==='ref-temp'),false)
+const headSessionToken='head-referee-session'
+seed('referee_h5_sessions','head-session',{tokenHash:crypto.createHash('sha256').update(headSessionToken).digest('hex'),workflowOpenId:'open-main',active:true,expiresAt:new Date(Date.now()+3600000)})
+const assignedByHead=await workflow.main({action:'assignHeadRefereeCrew',__refereeSessionToken:headSessionToken,matchId:'match-2',refereeCrew:{mainReferee:'ref-main',assistant1:'ref-a1',assistant2:'ref-a2',fourthOfficial:'ref-fourth'}})
+assert.equal(assignedByHead.success,true,assignedByHead.message)
+assert.equal(rows('matches').get('match-2').updatedByHeadReferee,true)
+assert.equal(rows('registration_audit_logs').get([...rows('registration_audit_logs').keys()].pop()).action,'head_referee_assignment_saved')
 console.log('PASS referee full workflow: check-in -> lineup -> fourth -> main -> assistants -> replacement -> start -> events -> substitute -> report -> mobile signature')

@@ -65,7 +65,7 @@
 
   function beginOAuth() {
     loading('正在连接微信服务号…')
-    api({ action: 'serviceRefereeOAuthUrl' }).then(function (result) {
+    api({ action: 'serviceRefereeOAuthUrl', returnUrl: location.origin + location.pathname }).then(function (result) {
       if (!result.success) throw new Error(result.error || '服务号授权入口暂不可用')
       window.location.replace(result.authorizeUrl)
     }).catch(function (error) { showError('暂时无法进入', error.message, beginOAuth) })
@@ -112,6 +112,7 @@
   }
 
   function renderRefereeInviteForm(data,token) {
+    if(data.claimMode==='temporary_no_certificate')return renderTemporaryRefereeClaimForm(data,token)
     var claimNote=data.targetRefereeName?'<p class="muted">本次将认领模拟档案“'+escapeHtml(data.targetRefereeName)+'”。请填写本人真实资料，提交后模拟姓名会被替换。</p>':''
     app.className='page referee-invite-page'
     window.scrollTo(0,0)
@@ -122,6 +123,17 @@
     document.getElementById('refereeCertificateInput').onchange=function(event){handleRefereeCertificate(event.target.files&&event.target.files[0])}
     document.getElementById('refereeAvatarInput').onchange=function(event){handleRefereeAvatar(event.target.files&&event.target.files[0])}
     document.getElementById('submitRefereeInvite').onclick=function(){var button=this;if(!refereeInviteDraft.certificateImageDataUrl)return toast('请先上传裁判证');if(!refereeInviteDraft.avatarImageDataUrl)return toast('请上传并完成头像裁剪抠图');var level=document.getElementById('inviteRefereeLevel').value;if(!level)return toast('请选择裁判技术等级');var authority=document.getElementById('inviteRefereeAuthority').value;if(!authority)return toast('请核对发证机关');button.disabled=true;button.textContent='提交中…';workflow('acceptRefereeInvitation',{inviteToken:token,name:document.getElementById('inviteRefereeName').value,phone:document.getElementById('inviteRefereePhone').value,level:level,qualification:document.getElementById('inviteRefereeQualification').value,issuingAuthority:authority,certificateIssueDate:document.getElementById('inviteRefereeIssueDate').value,avatarPreviewDataUrl:refereeInviteDraft.avatarPreviewDataUrl,certificateRisks:refereeInviteDraft.certificateRisks}).then(function(result){if(!result.success)throw new Error(result.message || '提交失败');localStorage.removeItem(REFEREE_INVITE_KEY);refereeInviteDraft={inviteToken:'',certificateImageDataUrl:'',avatarImageDataUrl:'',avatarPreviewDataUrl:'',certificateRisks:[]};app.innerHTML='<section class="notice"><h2>资料已提交</h2><p class="muted">等待主办方完成裁判资格审核。审核通过并被指派比赛后，可从本入口查看执法任务。</p></section>'}).catch(function(error){button.disabled=false;button.textContent='提交主办方审核';var message=String(error&&error.message||'');toast(/Exceed max request payload size/i.test(message)?'提交图片数据过大，请刷新页面后重新上传':(message||'提交失败，请稍后重试'))})}
+  }
+
+  function renderTemporaryRefereeClaimForm(data,token) {
+    app.className='page referee-invite-page'
+    window.scrollTo(0,0)
+    refereeInviteDraft={inviteToken:token,certificateImageDataUrl:'',avatarImageDataUrl:'',avatarPreviewDataUrl:'',certificateRisks:[]}
+    app.innerHTML='<section class="hero referee-invite-hero"><span class="referee-invite-kicker"><i>裁</i>临时裁判认领</span><h1>确认本人身份</h1><p>'+escapeHtml(data.tournamentName||'足球赛事')+'组委会邀请您参与本届赛事执裁。</p><div class="referee-invite-steps"><span>验证手机号</span><span>上传本人头像</span><span>等待组委会确认</span></div></section><section class="card bind-form referee-invite-form"><header><div><span>第一步</span><h2>验证登记手机号</h2></div><b>'+escapeHtml(data.targetPhoneMasked||'')+'</b></header><label><span>姓名</span><input id="inviteRefereeName" value="'+escapeHtml(data.targetRefereeName||'')+'" readonly></label><label><span>手机号</span><input id="bindPhone" type="tel" maxlength="11" inputmode="numeric" autocomplete="tel" placeholder="请输入组委会登记的手机号"></label><label><span>短信验证码</span><div class="code-row"><input id="bindCode" maxlength="6" inputmode="numeric" placeholder="6位验证码"><button id="sendCode" class="secondary" type="button">获取验证码</button></div></label><header class="referee-section-head"><div><span>第二步</span><h2>上传本人头像</h2></div><b>用于本届赛事</b></header><section class="referee-upload-card avatar-upload-card"><input id="refereeAvatarInput" type="file" accept="image/jpeg,image/png" hidden><label for="refereeAvatarInput" class="referee-upload-trigger"><span class="referee-upload-icon">像</span><div><strong>拍摄或上传头像</strong><small>手动裁剪后自动去除背景</small></div><b>拍照 / 相册</b></label><img id="refereeAvatarPreview" class="referee-avatar-preview" alt="裁判头像预览" hidden></section><button id="submitRefereeInvite" class="primary wide referee-invite-submit">提交认领</button><div class="referee-invite-notice"><i>!</i><p>本次未提交裁判证，认领后仍需组委会确认；临时执裁资格仅限本届赛事。</p></div></section>'
+    document.getElementById('refereeAvatarPreview').removeAttribute('src')
+    document.getElementById('refereeAvatarInput').onchange=function(event){handleRefereeAvatar(event.target.files&&event.target.files[0])}
+    document.getElementById('sendCode').onclick=sendBindCode
+    document.getElementById('submitRefereeInvite').onclick=function(){var button=this,phone=document.getElementById('bindPhone').value.trim(),code=document.getElementById('bindCode').value.trim();if(!/^1[3-9]\d{9}$/.test(phone)||!/^\d{6}$/.test(code))return toast('请填写手机号和6位验证码');if(!refereeInviteDraft.avatarImageDataUrl)return toast('请上传并完成头像裁剪抠图');button.disabled=true;button.textContent='验证并提交…';workflow('verifyBindSms',{phone:phone,code:code}).then(function(result){if(!result.success)throw new Error(result.message||'手机号验证失败');return workflow('acceptRefereeInvitation',{inviteToken:token,name:data.targetRefereeName||'',phone:phone,avatarPreviewDataUrl:refereeInviteDraft.avatarPreviewDataUrl})}).then(function(result){if(!result.success)throw new Error(result.message||'认领失败');localStorage.removeItem(REFEREE_INVITE_KEY);refereeInviteDraft={inviteToken:'',certificateImageDataUrl:'',avatarImageDataUrl:'',avatarPreviewDataUrl:'',certificateRisks:[]};app.innerHTML='<section class="notice"><h2>认领已提交</h2><p class="muted">等待组委会确认。确认后，裁判长可以为您安排本届赛事的执法任务。</p></section>'}).catch(function(error){button.disabled=false;button.textContent='提交认领';toast(error.message||'认领失败，请稍后重试')})}
   }
 
   function prepareRefereeImage(file,maxSide,quality,label) {
@@ -223,6 +235,7 @@
       ['live', '进行中', counters.live], ['finished', '已结束', counters.finished]
     ]
     app.innerHTML = '<section class="workbench-hero"><div class="workbench-hero-copy"><span>赛小蜂足球 · 裁判端</span><h1>我的比赛任务</h1><p>已绑定 ' + escapeHtml(data.phoneMasked || '裁判身份') + '，仅显示您被授权处理的比赛。</p></div><div class="workbench-hero-summary"><strong>' + tasks.length + '</strong><span>场执法任务</span></div></section>' +
+      (data.headRefereeTournamentCount?'<section class="head-referee-entry"><div><strong>裁判长排班</strong><span>'+escapeHtml(data.headRefereeTournamentCount)+' 项赛事权限</span></div><button id="openHeadRefereeSchedule" type="button">安排执法裁判</button></section>':'')+
       '<section class="workbench-tabs" aria-label="任务状态筛选">' + tabs.map(function (tab) {
         var active = workbenchFilter === tab[0] ? ' is-active' : ''
         return '<button type="button" class="workbench-tab' + active + '" data-task-filter="' + tab[0] + '"><span>' + tab[1] + '</span><b>' + tab[2] + '</b></button>'
@@ -235,6 +248,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-match-id]'), function (node) {
       node.onclick = function () { if (node.getAttribute('data-task-kind') === 'identity') loadIdentityTask(node.getAttribute('data-match-id'), node.getAttribute('data-task-side')); else loadMatch(node.getAttribute('data-match-id')) }
     })
+    var headButton=document.getElementById('openHeadRefereeSchedule');if(headButton)headButton.onclick=function(){loadHeadRefereeSchedule('')}
   }
 
   function loadWorkbench() {
@@ -246,6 +260,33 @@
       }
       renderWorkbench(result.data || {})
     }).catch(function (error) { showError('工作台加载失败', error.message, loadWorkbench) })
+  }
+
+  function headScheduleMatchCard(match,referees) {
+    var names=Object.keys(match.crew||{}).map(function(key){var id=match.crew[key],person=referees.find(function(item){return item.id===id});return person&&person.name}).filter(Boolean)
+    return '<button class="head-schedule-match" data-head-match="'+escapeHtml(match.id)+'" type="button"><div><span>'+escapeHtml(match.sequence||'待编号')+'</span><b>'+escapeHtml(match.homeTeamName)+' vs '+escapeHtml(match.awayTeamName)+'</b><small>'+escapeHtml((match.matchDate+' '+match.matchTime).trim()||'时间待定')+' · '+escapeHtml(match.venue||'场地待定')+'</small></div><strong>'+(names.length?escapeHtml(names.join('、')):'待安排')+'</strong></button>'
+  }
+
+  function renderHeadRefereeSchedule(data) {
+    app.className='page'
+    var tournaments=data.tournaments||[],matches=data.matches||[],referees=data.referees||[]
+    app.innerHTML='<section class="match-head compact"><button id="headScheduleBack" class="ghost back">← 返回任务</button><div class="row"><span class="eyebrow">裁判长权限</span></div><h1>安排执法裁判</h1></section>'+(tournaments.length>1?'<section class="card bind-form"><label><span>赛事</span><select id="headTournamentSelect">'+tournaments.map(function(item){return '<option value="'+escapeHtml(item.id)+'"'+(item.id===data.tournamentId?' selected':'')+'>'+escapeHtml(item.name)+'</option>'}).join('')+'</select></label></section>':'')+'<div class="task-section-head"><h2>待安排比赛</h2><span>'+matches.length+' 场</span></div>'+(matches.length?'<section class="head-schedule-list">'+matches.map(function(match){return headScheduleMatchCard(match,referees)}).join('')+'</section>':'<section class="empty"><h2>暂无可调整比赛</h2><p class="muted">比赛开始或记录锁定后不能调整裁判。</p></section>')
+    document.getElementById('headScheduleBack').onclick=loadWorkbench
+    var tournamentSelect=document.getElementById('headTournamentSelect');if(tournamentSelect)tournamentSelect.onchange=function(){loadHeadRefereeSchedule(this.value)}
+    Array.prototype.forEach.call(document.querySelectorAll('[data-head-match]'),function(node){node.onclick=function(){var id=node.getAttribute('data-head-match'),match=matches.find(function(item){return item.id===id});if(match)renderHeadRefereeAssignment(data,match)}})
+  }
+
+  function renderHeadRefereeAssignment(data,match) {
+    var referees=data.referees||[]
+    function options(role){return '<option value="">请选择</option>'+referees.map(function(person){return '<option value="'+escapeHtml(person.id)+'"'+(match.crew&&match.crew[role.key]===person.id?' selected':'')+'>'+escapeHtml(person.name+(person.level?' · '+person.level:'')+(person.temporaryReferee?' · 临时':'') )+'</option>'}).join('')}
+    app.innerHTML='<section class="match-head compact"><button id="headAssignBack" class="ghost back">← 返回排班</button><div class="row"><span class="eyebrow">'+escapeHtml(match.sequence||'比赛')+'</span></div><h1>'+escapeHtml(match.homeTeamName)+' vs '+escapeHtml(match.awayTeamName)+'</h1><div class="meta inline-meta"><span>'+escapeHtml((match.matchDate+' '+match.matchTime).trim())+'</span><span>'+escapeHtml(match.venue||'场地待定')+'</span></div></section><section class="card bind-form head-assignment-form">'+(match.roles||[]).map(function(role){return '<label><span>'+escapeHtml(role.label)+'</span><select data-head-role="'+escapeHtml(role.key)+'">'+options(role)+'</select></label>'}).join('')+'<button id="saveHeadAssignment" class="primary wide" type="button">保存裁判排班</button></section>'
+    document.getElementById('headAssignBack').onclick=function(){renderHeadRefereeSchedule(data)}
+    document.getElementById('saveHeadAssignment').onclick=function(){var button=this,crew={},used={};Array.prototype.forEach.call(document.querySelectorAll('[data-head-role]'),function(node){crew[node.getAttribute('data-head-role')]=node.value});var ids=Object.keys(crew).map(function(key){return crew[key]}).filter(Boolean);if(ids.length!==(match.roles||[]).length)return toast('请完整安排全部裁判岗位');for(var i=0;i<ids.length;i+=1){if(used[ids[i]])return toast('同一名裁判不能重复担任多个岗位');used[ids[i]]=true}button.disabled=true;button.textContent='保存中…';workflow('assignHeadRefereeCrew',{matchId:match.id,refereeCrew:crew}).then(function(result){if(!result.success)throw new Error(result.message||'排班保存失败');toast('裁判排班已保存');loadHeadRefereeSchedule(data.tournamentId)}).catch(function(error){button.disabled=false;button.textContent='保存裁判排班';toast(error.message||'排班保存失败')})}
+  }
+
+  function loadHeadRefereeSchedule(tournamentId) {
+    loading('正在加载裁判排班…')
+    workflow('getHeadRefereeSchedule',{tournamentId:tournamentId||''}).then(function(result){if(!result.success)throw new Error(result.message||'排班加载失败');renderHeadRefereeSchedule(result.data||{})}).catch(function(error){showError('裁判排班加载失败',error.message,loadWorkbench)})
   }
 
   function eventCard(event, canDelete) {

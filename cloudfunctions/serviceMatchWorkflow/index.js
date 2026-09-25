@@ -748,7 +748,7 @@ async function getRefereeInvitation(openId,event) {
   if(!refereeFollowAllowed(invitation,openId))return fail('请先使用当前微信扫码关注赛小蜂足球助手，再从服务号消息进入裁判登记。','REFEREE_FOLLOW_REQUIRED')
   const tournamentResult=await db.collection('tournaments').doc(invitation.tournamentId).get()
   const tournament=Array.isArray(tournamentResult.data)?tournamentResult.data[0]:tournamentResult.data
-  return ok({ tournamentName:tournament && tournament.name || '足球赛事',targetRefereeName:invitation.targetRefereeName || '' })
+  return ok({ tournamentName:tournament && tournament.name || '足球赛事',targetRefereeName:invitation.targetRefereeName || '',targetPhoneMasked:maskPhone(invitation.targetRefereePhone),claimMode:invitation.claimMode || '',claimReason:invitation.claimReason || '' })
 }
 
 function refereeCertificateFields(rows) {
@@ -812,6 +812,7 @@ async function recognizeRefereeCertificate(openId,event) {
   const invitation=listData(inviteResult)[0]
   if(!invitation)return fail('裁判邀请不存在或已失效','REFEREE_INVITE_INVALID')
   if(!refereeFollowAllowed(invitation,openId))return fail('请先关注服务号并从服务号消息进入裁判登记。','REFEREE_FOLLOW_REQUIRED')
+  if(invitation.claimMode==='temporary_no_certificate')return fail('临时裁判认领不需要上传裁判证','REFEREE_CERTIFICATE_NOT_REQUIRED')
   const imageBase64=String(event.imageBase64||'').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/,'').replace(/\s/g,'')
   if(!imageBase64||imageBase64.length<200)return fail('请上传清晰的裁判证照片','OCR_IMAGE_REQUIRED')
   if(imageBase64.length>8*1024*1024)return fail('裁判证照片过大，请压缩后重新上传','OCR_IMAGE_TOO_LARGE')
@@ -847,11 +848,28 @@ function refereeImagePayload(value,label,maxBytes) {
 async function acceptRefereeInvitation(openId,event) {
   const token=String(event.inviteToken || ''),name=String(event.name || '').trim(),phone=normalizePhone(event.phone),level=String(event.level || '').trim(),qualification=String(event.qualification || '').trim(),issuingAuthority=String(event.issuingAuthority||'').trim().slice(0,100),certificateIssueDate=String(event.certificateIssueDate||'').trim().slice(0,30)
   if(!openId)return fail('请先完成微信授权','OPENID_REQUIRED')
-  if(!name || !/^1[3-9]\d{9}$/.test(phone)||!level||!qualification||!issuingAuthority)return fail('请核对姓名、手机号、裁判等级、证书编号和发证单位','PROFILE_REQUIRED')
   const avatarPreviewImage=refereeImagePayload(event.avatarPreviewDataUrl||event.avatarImageDataUrl,'头像预览',512*1024)
   const result=await db.collection('referee_invitations').where({ token,status:'active' }).limit(1).get();const invitation=listData(result)[0]
   if(!invitation)return fail('裁判邀请不存在或已失效','REFEREE_INVITE_INVALID')
   if(!refereeFollowAllowed(invitation,openId))return fail('请从服务号发送的裁判登记入口重新进入。','REFEREE_FOLLOW_REQUIRED')
+  const temporaryClaim=invitation.claimMode==='temporary_no_certificate'
+  if(temporaryClaim){
+    const expectedPhone=normalizePhone(invitation.targetRefereePhone)
+    const identity=await getIdentity(openId)
+    if(!name||!/^1[3-9]\d{9}$/.test(phone))return fail('请核对姓名和手机号','PROFILE_REQUIRED')
+    if(!expectedPhone||phone!==expectedPhone)return fail('手机号与组委会登记信息不一致','REFEREE_CLAIM_PHONE_MISMATCH')
+    if(!identity||identity.phoneVerified!==true||normalizePhone(identity.phone)!==expectedPhone)return fail('请先完成登记手机号验证','REFEREE_CLAIM_PHONE_NOT_VERIFIED')
+    if(!invitation.stagedAvatarFileId)return fail('请上传并完成头像裁剪抠图','REFEREE_ASSET_NOT_READY')
+    if(!invitation.targetRefereeId)return fail('临时裁判档案不存在','REFEREE_TARGET_INVALID')
+    const targetResult=await db.collection('referees').doc(invitation.targetRefereeId).get();const temporaryTarget=docData(targetResult)
+    if(!temporaryTarget||temporaryTarget.temporaryReferee!==true||String(temporaryTarget.tournamentId||'')!==String(invitation.tournamentId||''))return fail('临时裁判档案不存在或已失效','REFEREE_TARGET_INVALID')
+    if(normalizePhone(temporaryTarget.phone||temporaryTarget.phoneNumber)!==expectedPhone)return fail('临时裁判手机号已变更，请联系组委会','REFEREE_CLAIM_PHONE_MISMATCH')
+    await db.collection('referees').doc(invitation.targetRefereeId).update({data:{name:temporaryTarget.name||name,realName:temporaryTarget.realName||name,phone:expectedPhone,status:'pending',auditStatus:'pending',availabilityStatus:'pending',temporaryClaimStatus:'claimed_pending_review',organizerTemporaryApproval:false,credentialStatus:'not_submitted',certificateRequired:false,eventScoped:true,wechatWorkflowOpenId:openId,wechatBound:true,avatarFileId:invitation.stagedAvatarFileId,avatarUrl:avatarPreviewImage.dataUrl,avatarBackgroundRemoved:true,avatarProcessingMethod:'baidu_body_seg',canLogin:true,canOperate:false,claimedAt:db.serverDate(),updateTime:db.serverDate()}})
+    await db.collection('referee_invitations').doc(invitation._id).update({data:{status:'accepted',refereeId:invitation.targetRefereeId,acceptedAt:db.serverDate(),updateTime:db.serverDate()}})
+    await db.collection('registration_audit_logs').add({data:{sport:'football',action:'temporary_referee_claimed',tournamentId:String(invitation.tournamentId||''),inviteId:String(invitation._id||''),result:'success',detail:{refereeId:String(invitation.targetRefereeId),phoneMasked:maskPhone(expectedPhone)},createTime:db.serverDate()}})
+    return ok({refereeId:invitation.targetRefereeId,temporaryReferee:true},'认领已提交，等待组委会确认')
+  }
+  if(!name || !/^1[3-9]\d{9}$/.test(phone)||!level||!qualification||!issuingAuthority)return fail('请核对姓名、手机号、裁判等级、证书编号和发证单位','PROFILE_REQUIRED')
   if(!invitation.stagedCertificateFileId||!invitation.stagedAvatarFileId)return fail('请重新上传裁判证并完成头像裁剪抠图','REFEREE_ASSET_NOT_READY')
   const duplicate=listData(await db.collection('referees').where({ tournamentId:invitation.tournamentId,phone }).limit(2).get()).filter(function(item) { return item._id !== invitation.targetRefereeId })
   if(duplicate.length)return fail('该手机号已提交裁判资料，请勿重复提交','REFEREE_DUPLICATED')
@@ -1098,6 +1116,73 @@ async function getIdentityClaims(identity) {
   return listData(result).filter(function(item) { return item.status === ACTIVE_CLAIM_STATUS })
 }
 
+function refereeAssignmentTemplate(format) {
+  return /^(5|6)/.test(String(format||''))
+    ? [{key:'mainReferee',label:'主裁判'},{key:'secondReferee',label:'第二裁判'},{key:'thirdReferee',label:'第三裁判'},{key:'timekeeper',label:'计时员'}]
+    : [{key:'mainReferee',label:'主裁判'},{key:'assistant1',label:'第一助理裁判'},{key:'assistant2',label:'第二助理裁判'},{key:'fourthOfficial',label:'第四官员'}]
+}
+
+async function headRefereeTournamentScopes(identity) {
+  const refereeIds=(await getRefereeRecords(identity)).map(function(item){return String(item._id||'')}).filter(Boolean)
+  const scopes=[]
+  for(const refereeId of refereeIds){
+    const rows=listData(await db.collection('tournament_referees').where({refereeId,isHeadReferee:true}).limit(50).get())
+    rows.forEach(function(item){if(item&&item.tournamentId&&!scopes.some(function(scope){return String(scope.tournamentId)===String(item.tournamentId)}))scopes.push(item)})
+  }
+  return scopes
+}
+
+function schedulableReferee(item,tournamentId,orgId) {
+  if(!item||item.synthetic===true||item.status!=='approved'||item.canOperate===false)return false
+  if(item.temporaryReferee===true)return String(item.tournamentId||'')===String(tournamentId||'')&&item.eventScoped===true&&item.organizerTemporaryApproval===true&&item.temporaryClaimStatus==='approved'&&item.wechatBound===true
+  const itemOrgId=String(item.orgId||item.organizationId||'')
+  return !!itemOrgId&&itemOrgId===String(orgId||'')
+}
+
+async function getHeadRefereeSchedule(openId,event) {
+  const identity=await requireIdentity(openId)
+  const scopes=await headRefereeTournamentScopes(identity)
+  const tournaments=[]
+  for(const scope of scopes){
+    const tournament=await getDoc('tournaments',scope.tournamentId)
+    const tournamentOrgId=String(tournament&&(tournament.orgId||tournament.organizationId)||'')
+    if(tournament&&tournamentOrgId&&(!scope.orgId||String(scope.orgId)===tournamentOrgId))tournaments.push({id:String(scope.tournamentId),name:String(tournament.name||tournament.tournamentName||'足球赛事')})
+  }
+  const requestedId=String(event.tournamentId||'')
+  const tournamentId=requestedId||String(tournaments[0]&&tournaments[0].id||'')
+  if(!tournamentId)return ok({tournaments:[],tournamentId:'',matches:[],referees:[]})
+  if(!tournaments.some(function(item){return item.id===tournamentId}))return fail('您不是该赛事的裁判长','HEAD_REFEREE_FORBIDDEN')
+  const tournament=await getDoc('tournaments',tournamentId)
+  if(!tournament)return fail('赛事不存在','TOURNAMENT_NOT_FOUND')
+  const orgId=String(tournament.orgId||tournament.organizationId||'')
+  if(!orgId)return fail('赛事机构信息不完整，暂不能安排裁判','TOURNAMENT_ORG_REQUIRED')
+  const refereeRows=listData(await db.collection('referees').where(_.or([{orgId},{organizationId:orgId},{tournamentId}])).limit(500).get())
+  const referees=refereeRows.filter(function(item){return schedulableReferee(item,tournamentId,orgId)}).map(function(item){return {id:String(item._id),name:String(item.name||item.realName||'裁判'),level:String(item.level||item.refereeLevel||''),temporaryReferee:item.temporaryReferee===true}})
+  const matchRows=listData(await db.collection('matches').where({tournamentId}).limit(500).get())
+  const matches=matchRows.filter(function(match){return ['scheduled','pending','checked_in'].indexOf(String(match.status||'scheduled'))>=0&&!match.refereeRecordLocked}).map(function(match){
+    const roles=refereeAssignmentTemplate(match.matchFormat||tournament.matchFormat||'11side')
+    const crew=match.refereeCrew&&typeof match.refereeCrew==='object'?match.refereeCrew:{}
+    const crewIds={}
+    roles.forEach(function(role){const person=crew[role.key];crewIds[role.key]=String(person&&typeof person==='object'?(person._id||person.refereeId||''):(person||''))})
+    return {id:String(match._id),sequence:String(match.matchSequence||match.sequence||''),homeTeamName:String(match.homeTeamName||match.homeTeam&&match.homeTeam.name||'主队'),awayTeamName:String(match.awayTeamName||match.awayTeam&&match.awayTeam.name||'客队'),matchDate:String(match.matchDate||''),matchTime:String(match.matchTime||match.startTime||''),venue:String(match.venue||match.field||''),roles,crew:crewIds}
+  }).sort(function(a,b){return (a.matchDate+' '+a.matchTime).localeCompare(b.matchDate+' '+b.matchTime)})
+  return ok({tournaments,tournamentId,matches,referees})
+}
+
+async function assignHeadRefereeCrew(openId,event,sessionToken) {
+  const identity=await requireIdentity(openId)
+  const match=await getDoc('matches',String(event.matchId||''))
+  if(!match)return fail('比赛不存在','MATCH_NOT_FOUND')
+  const scopes=await headRefereeTournamentScopes(identity)
+  if(!scopes.some(function(scope){return String(scope.tournamentId||'')===String(match.tournamentId||'')}))return fail('您不是该赛事的裁判长','HEAD_REFEREE_FORBIDDEN')
+  const called=await cloud.callFunction({name:'updateMatch',data:{action:'assignByHeadReferee',__refereeSessionToken:String(sessionToken||''),matchId:String(event.matchId||''),data:{refereeCrew:event.refereeCrew||{}}}})
+  const result=called&&called.result||{}
+  if(!result.success)return fail(result.message||result.error||'裁判排班保存失败',result.code||'HEAD_REFEREE_ASSIGNMENT_FAILED')
+  const response=ok({matchId:String(event.matchId||'')},'裁判排班已保存')
+  if(result.__notificationRelay)response.__notificationRelay=result.__notificationRelay
+  return response
+}
+
 async function getWorkbench(openId) {
   const identity = await getIdentity(openId)
   if (!identity || !identity.phone) {
@@ -1112,10 +1197,12 @@ async function getWorkbench(openId) {
 
   refereeTasks.sort(function(a, b) { return String(a.matchTimeText).localeCompare(String(b.matchTimeText)) })
 
+  const headScopes=await headRefereeTournamentScopes(identity)
   return ok({
     needsPhone: false,
     phoneMasked: maskPhone(identity.phone),
-    refereeTasks
+    refereeTasks,
+    headRefereeTournamentCount:headScopes.length
   })
 }
 
@@ -2542,6 +2629,8 @@ exports.main = async function(event) {
     if (action === 'processRefereeAvatar') return await processRefereeAvatar(openId,event)
     if (action === 'verifyBindSms') return await verifyBindSms(openId, event.phone, event.code)
     if (action === 'getWorkbench') return await getWorkbench(openId)
+    if (action === 'getHeadRefereeSchedule') return await getHeadRefereeSchedule(openId,event)
+    if (action === 'assignHeadRefereeCrew') return await assignHeadRefereeCrew(openId,event,event.__refereeSessionToken)
     if (action === 'getRefereeMatch') return await getRefereeMatch(openId, event.matchId)
     if (action === 'getLineupTask') return await getLineupTask(openId, event.matchId, event.teamId)
     if (action === 'submitLineup') return await submitLineup(openId, event)

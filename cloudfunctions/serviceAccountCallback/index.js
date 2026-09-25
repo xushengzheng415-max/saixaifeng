@@ -32,6 +32,9 @@ function followReplyContent(result) {
   }
   if (result.purpose === 'referee_invite' && result.registerUrl) {
     const heading = result.eventType === 'subscribe' ? '感谢您关注赛小蜂足球助手！' : '裁判登记入口已发送！'
+    if (result.claimMode === 'temporary_no_certificate') {
+      return `${heading}\n\n组委会已将您添加为本赛事临时裁判。请点击以下链接验证登记手机号并上传本人头像：\n${result.registerUrl}\n\n认领后仍需组委会确认，确认通过后仅可参与本届赛事排班。`
+    }
     return `${heading}\n\n您已完成裁判服务号关注绑定。请点击以下链接提交裁判证、头像和执裁资料：\n${result.registerUrl}\n\n审核通过后，比赛指派、时间调整、临场变更和退回修正等事项将通过本服务号通知。`
   }
   if (result.bound) {
@@ -133,7 +136,7 @@ async function handleFollowEvent(xml) {
     const invitation = Array.isArray(invite.data) ? invite.data[0] : invite.data
     if (invitation && invitation.status === 'active') {
       await db.collection('referee_invitations').doc(gate.refereeInviteId).update({ data: { followStatus: 'subscribed', officialOpenId, followedAt: db.serverDate(), updateTime: db.serverDate() } })
-      return { eventType, officialOpenId, bound: true, shouldReply: true, purpose: 'referee_invite', registerUrl: gate.registerUrl || invitation.registerUrl || '' }
+      return { eventType, officialOpenId, bound: true, shouldReply: true, purpose: 'referee_invite', claimMode: invitation.claimMode || '', registerUrl: gate.registerUrl || invitation.registerUrl || '' }
     }
   }
   await upsertBinding(gate.miniOpenId, officialOpenId, true)

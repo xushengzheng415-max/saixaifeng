@@ -330,8 +330,19 @@ function normalizeServiceH5Url(value) {
   return url.split('#')[0]
 }
 
-async function createRefereeOAuthUrl() {
-  const redirectUri = normalizeServiceH5Url(SERVICE_ACCOUNT_CONFIG.H5_URL)
+function refereeOAuthReturnUrl(value) {
+  const url=normalizeServiceH5Url(value)
+  if(!url)return ''
+  try {
+    const parsed=new URL(url)
+    if(parsed.hostname!=='www.sxffootball.cn')return ''
+    if(!['/service-account-h5/','/preview/service-account-h5/'].includes(parsed.pathname))return ''
+    return parsed.origin+parsed.pathname
+  } catch (error) { return '' }
+}
+
+async function createRefereeOAuthUrl(returnUrl) {
+  const redirectUri = refereeOAuthReturnUrl(returnUrl) || normalizeServiceH5Url(SERVICE_ACCOUNT_CONFIG.H5_URL)
   if (!SERVICE_ACCOUNT_CONFIG.APP_ID || !SERVICE_ACCOUNT_CONFIG.APP_SECRET || !redirectUri) {
     return { success: false, error: '服务号网页授权尚未配置，请联系主办方', code: 'SERVICE_ACCOUNT_NOT_CONFIGURED' }
   }
@@ -433,6 +444,7 @@ async function handleRefereeOAuth(event) {
 
 const REFEREE_WORKFLOW_ACTIONS = new Set([
   'getWorkbench', 'sendBindSms', 'verifyBindSms', 'getRefereeInvitation', 'recognizeRefereeCertificate', 'processRefereeAvatar', 'acceptRefereeInvitation', 'getRefereeMatch',
+  'getHeadRefereeSchedule', 'assignHeadRefereeCrew',
   'updatePreMatchState',
   'reviewLineup',
   'saveRefereeReportDraft',
@@ -456,6 +468,16 @@ async function handleRefereeWorkflow(event) {
   delete payload.refereeSessionToken
   const result = await cloud.callFunction({ name: 'serviceMatchWorkflow', data: payload })
   const workflowResult = result && result.result
+  if (workflowResult && workflowResult.__notificationRelay && workflowResult.__notificationRelay.phone) {
+    const notification = workflowResult.__notificationRelay
+    const relayTimestamp = Date.now()
+    try {
+      await cloud.callFunction({ name:'sendRefereeTemplateMessages',data:{ phone:notification.phone,notificationId:notification.notificationId,__relayTimestamp:relayTimestamp,__relaySignature:createRefereeNotificationRelayProof(notification.phone,relayTimestamp) } })
+    } catch (error) {
+      console.warn('[webApi] referee workflow notification failed:', error.message)
+    }
+    delete workflowResult.__notificationRelay
+  }
   if (workflowAction === 'verifyBindSms' && workflowResult && workflowResult.success) {
     try {
       const relayPhone = String(event.phone || '').replace(/\D/g, '').slice(-11)
@@ -3842,7 +3864,7 @@ async function handleCallFunction(event) {
     })
     console.log('[webApi] 云函数调用成功:', functionName, 'result:', result.result ? '有返回' : '无返回')
     const relayResult = result.result || { success: false, error: '云函数无返回结果' }
-    if (functionName === 'updateMatch' && relayResult.__notificationRelay && relayResult.__notificationRelay.phone) {
+    if (relayResult.__notificationRelay && relayResult.__notificationRelay.phone) {
       const notification = relayResult.__notificationRelay
       const relayTimestamp = Date.now()
       try {
@@ -3856,7 +3878,7 @@ async function handleCallFunction(event) {
           }
         })
       } catch (error) {
-        console.warn('[webApi] referee assignment notification relay failed:', error.message)
+        console.warn('[webApi] referee notification relay failed:', error.message)
       }
       delete relayResult.__notificationRelay
     }
@@ -4872,7 +4894,7 @@ exports.main = async (event, context) => {
         break
       }
       case 'serviceRefereeOAuthUrl':
-        result = await createRefereeOAuthUrl(); break
+        result = await createRefereeOAuthUrl(params && params.returnUrl); break
       case 'serviceRefereeOAuth':
         result = await handleRefereeOAuth(params); break
       case 'serviceRefereeWorkflow':
