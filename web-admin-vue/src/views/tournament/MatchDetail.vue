@@ -230,12 +230,19 @@
                 暂无比赛事件<el-button v-if="!isRefereeEvidenceLocked" link type="primary" @click="openAddEventDialog">，+ 添加事件</el-button>
               </div>
               <div v-for="(evt, i) in sortedEvents" :key="i" class="event-row" :class="'event-' + evt.type">
-                <div class="event-time">{{ evt.minute }}'</div>
+                <div class="event-time">{{ eventTimeText(evt) }}</div>
                 <div class="event-icon">{{ eventIcon(evt.type) }}</div>
                 <div class="event-content">
                   <span class="event-type-label">{{ eventLabel(evt.type) }}</span>
-                  <span class="event-player">{{ evt.playerName }}</span>
-                  <span v-if="evt.assistName" class="event-assist">助攻: {{ evt.assistName }}</span>
+                  <template v-if="evt.type === 'substitution'">
+                    <span class="event-period">{{ substitutionPeriodLabel(evt.substitutionPeriod) }}</span>
+                    <span class="event-player">换上：{{ evt.playerName }}</span>
+                    <span v-if="evt.assistName" class="event-assist">换下：{{ evt.assistName }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="event-player">{{ evt.playerName }}</span>
+                    <span v-if="evt.assistName" class="event-assist">助攻：{{ evt.assistName }}</span>
+                  </template>
                   <span v-if="evt.teamSide" class="event-side">{{ evt.teamSide === 'home' ? homeName : awayName }}</span>
                 </div>
                 <el-button v-if="!isRefereeEvidenceLocked" size="small" text type="danger" @click="removeEvent(i)">
@@ -409,13 +416,19 @@
     </el-dialog>
 
     <!-- 结束比赛 / 录入比分弹窗 -->
-    <el-dialog v-model="finishDialogVisible" title="结束比赛 · 录入比分" width="400px">
+    <el-dialog v-model="finishDialogVisible" title="结束比赛 · 录入比分" width="560px" class="finish-dialog">
       <div class="finish-score-input">
-        <div class="finish-team">{{ homeName || '主队' }}</div>
-        <el-input-number v-model="finishForm.homeScore" :min="0" size="large" style="width:100px;" />
+        <article class="finish-score-team">
+          <small>主队</small>
+          <strong>{{ homeName || '主队' }}</strong>
+          <el-input-number v-model="finishForm.homeScore" :min="0" :max="99" controls-position="right" size="large" />
+        </article>
         <span class="finish-sep">:</span>
-        <el-input-number v-model="finishForm.awayScore" :min="0" size="large" style="width:100px;" />
-        <div class="finish-team">{{ awayName || '客队' }}</div>
+        <article class="finish-score-team">
+          <small>客队</small>
+          <strong>{{ awayName || '客队' }}</strong>
+          <el-input-number v-model="finishForm.awayScore" :min="0" :max="99" controls-position="right" size="large" />
+        </article>
       </div>
       <template #footer>
         <el-button @click="finishDialogVisible = false">取消</el-button>
@@ -712,10 +725,11 @@
     </el-dialog>
 
     <!-- 添加比赛事件弹窗 -->
-    <el-dialog v-model="eventDialogVisible" title="添加比赛事件" width="460px">
-      <el-form :model="eventForm" label-width="80px">
-        <el-form-item label="事件类型">
-          <el-select v-model="eventForm.type" style="width:100%;">
+    <el-dialog v-model="eventDialogVisible" title="添加比赛事件" width="680px" class="event-dialog">
+      <el-form v-loading="eventPlayersLoading" :model="eventForm" label-position="top" class="event-form">
+        <div class="event-form-grid">
+          <el-form-item label="事件类型">
+          <el-select v-model="eventForm.type" style="width:100%">
             <el-option label="进球 ⚽" value="goal" />
             <el-option label="助攻 👟" value="assist" />
             <el-option label="黄牌 🟨" value="yellow_card" />
@@ -724,21 +738,45 @@
             <el-option label="点球 ⚽" value="penalty" />
             <el-option label="乌龙球 ⚽" value="own_goal" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="时间（分钟）">
-          <el-input-number v-model="eventForm.minute" :min="0" :max="130" style="width:100%;" />
-        </el-form-item>
-        <el-form-item label="球队">
-          <el-radio-group v-model="eventForm.teamSide">
+          </el-form-item>
+          <el-form-item label="时间（分钟）">
+            <el-select v-model="eventForm.minute" filterable placeholder="选择比赛分钟" style="width:100%">
+              <el-option v-for="option in eventMinuteOptions" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item label="球队" class="event-team-item">
+          <el-radio-group v-model="eventForm.teamSide" class="event-team-options">
             <el-radio :value="'home'">{{ homeName || '主队' }}</el-radio>
             <el-radio :value="'away'">{{ awayName || '客队' }}</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="球员">
-          <el-input v-model="eventForm.playerName" placeholder="球员姓名" />
+        <template v-if="eventForm.type === 'substitution'">
+          <el-form-item label="换人时段" required>
+            <el-radio-group v-model="eventForm.substitutionPeriod" class="substitution-period-options">
+              <el-radio-button v-for="option in substitutionPeriodOptions" :key="option.value" :value="option.value">{{ option.label }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <section class="substitution-editor">
+            <header><div><strong>换人名单</strong><span>每次最多5组</span></div><el-button size="small" plain type="primary" :disabled="eventForm.substitutions.length >= 5" @click="addSubstitutionRow"><el-icon><Plus /></el-icon>增加一组</el-button></header>
+            <div v-for="(row,index) in eventForm.substitutions" :key="index" class="substitution-row">
+              <span class="substitution-index">{{ index + 1 }}</span>
+              <el-select v-model="row.outName" filterable clearable placeholder="选择换下球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-icon class="substitution-arrow"><Right /></el-icon>
+              <el-select v-model="row.inName" filterable clearable placeholder="选择换上球员"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-button v-if="eventForm.substitutions.length > 1" text type="danger" circle aria-label="删除这组换人" @click="removeSubstitutionRow(index)"><el-icon><Delete /></el-icon></el-button>
+            </div>
+          </section>
+        </template>
+        <el-form-item v-else :label="eventPlayerFieldLabel" required>
+          <el-select v-model="eventForm.playerName" filterable clearable :placeholder="eventPlayerPlaceholder" style="width:100%">
+            <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
+          </el-select>
         </el-form-item>
         <el-form-item label="助攻球员" v-if="eventForm.type === 'goal'">
-          <el-input v-model="eventForm.assistName" placeholder="助攻球员（可选）" />
+          <el-select v-model="eventForm.assistName" filterable clearable placeholder="选择助攻球员（可选）" style="width:100%">
+            <el-option v-for="player in eventAssistOptions" :key="player.value" :label="player.label" :value="player.value" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -764,7 +802,7 @@
             <span class="csl-vs-label">客队</span>
           </div>
           <div class="csl-meta-row">
-            <span>轮次：{{ match.round || '-' }}</span>
+            <span>轮次：{{ roundLabel }}</span>
             <span>场序：{{ match.matchSequence || match.sequence || '-' }}</span>
             <span>日期：{{ match.matchDate || '--' }}</span>
             <span>开球时间：{{ match.matchTime || '--:--' }}</span>
@@ -963,7 +1001,7 @@
                 <span class="csl-vs-label">客队</span>
               </div>
               <div class="csl-meta-row">
-                <span>轮次：{{ match.round || '-' }}</span>
+                <span>轮次：{{ roundLabel }}</span>
                 <span>场序：{{ match.matchSequence || match.sequence || '-' }}</span>
                 <span>日期：{{ match.matchDate || '--' }}</span>
                 <span>开球时间：{{ match.matchTime || '--:--' }}</span>
@@ -1201,11 +1239,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Delete, Plus, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
+import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
+import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 
 const route = useRoute()
@@ -1291,7 +1330,52 @@ const finishForm = ref({ homeScore: 0, awayScore: 0 })
 
 // 事件弹窗
 const eventDialogVisible = ref(false)
-const eventForm = ref({ type: 'goal', minute: 0, teamSide: 'home', playerName: '', assistName: '' })
+const eventPlayersLoading = ref(false)
+const emptySubstitution = () => ({ outName:'',inName:'' })
+const newEventForm = () => ({ type:'goal',minute:0,teamSide:'home',playerName:'',assistName:'',substitutionPeriod:'first_half',substitutions:[emptySubstitution()] })
+const eventForm = ref(newEventForm())
+const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:minute,label:`${minute}′` }))
+const substitutionPeriodOptions = [{ label:'上半场',value:'first_half' },{ label:'中场休息',value:'halftime' },{ label:'下半场',value:'second_half' }]
+const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '领牌球员' : eventForm.value.type === 'assist' ? '助攻球员' : '球员')
+const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
+const activeEventPlayers = computed(() => eventForm.value.teamSide === 'away' ? awayPlayers.value : homePlayers.value)
+const eventPlayerOptions = computed(() => {
+  const rows = new Map()
+  activeEventPlayers.value.forEach(player => {
+    const name = String(player.name || player.playerName || '').trim()
+    if (!name || rows.has(name)) return
+    const number = player.jerseyNumber ?? player.number
+    const position = formatPosition(player.position)
+    rows.set(name, { value:name,label:[number !== undefined && number !== '' ? `${number}号` : '',name,position && position !== '-' ? position : ''].filter(Boolean).join(' · ') })
+  })
+  return [...rows.values()]
+})
+const eventAssistOptions = computed(() => eventPlayerOptions.value.filter(player => player.value !== eventForm.value.playerName))
+
+watch(() => eventForm.value.teamSide, (next, previous) => {
+  if (!eventDialogVisible.value || next === previous) return
+  eventForm.value.playerName = ''
+  eventForm.value.assistName = ''
+  eventForm.value.substitutions = [emptySubstitution()]
+})
+watch(() => eventForm.value.playerName, playerName => {
+  if (eventForm.value.assistName === playerName) eventForm.value.assistName = ''
+})
+watch(() => eventForm.value.type, type => {
+  if (type !== 'goal') eventForm.value.assistName = ''
+  if (type === 'substitution' && !eventForm.value.substitutions.length) eventForm.value.substitutions = [emptySubstitution()]
+})
+
+function addSubstitutionRow() { if (eventForm.value.substitutions.length < 5) eventForm.value.substitutions.push(emptySubstitution()) }
+function removeSubstitutionRow(index) { if (eventForm.value.substitutions.length > 1) eventForm.value.substitutions.splice(index,1) }
+function substitutionOutOptions(index) {
+  const used = new Set(eventForm.value.substitutions.map((row,rowIndex) => rowIndex === index ? '' : row.outName).filter(Boolean))
+  return eventPlayerOptions.value.filter(player => !used.has(player.value) && player.value !== eventForm.value.substitutions[index]?.inName)
+}
+function substitutionInOptions(index) {
+  const used = new Set(eventForm.value.substitutions.map((row,rowIndex) => rowIndex === index ? '' : row.inName).filter(Boolean))
+  return eventPlayerOptions.value.filter(player => !used.has(player.value) && player.value !== eventForm.value.substitutions[index]?.outName)
+}
 
 // 裁判组编辑弹窗
 const refereeDialogVisible = ref(false)
@@ -1396,16 +1480,8 @@ function kitColorCss(val) {
   return named?.[1] || val
 }
 
-const phaseLabel = computed(() => {
-  const p = match.value.phase
-  return { group: '小组赛', league: '联赛', knockout: '淘汰赛', cup: '淘汰赛', final: '决赛' }[p] || p || '-'
-})
-
-const roundLabel = computed(() => {
-  if (match.value.roundName) return match.value.roundName
-  if (match.value.round) return `第${match.value.round}轮`
-  return '-'
-})
+const phaseLabel = computed(() => formatMatchPhase(match.value))
+const roundLabel = computed(() => formatMatchRound(match.value))
 
 const statusLabel = computed(() => {
   const s = match.value.status || 'scheduled'
@@ -1445,6 +1521,9 @@ const eventSummary = computed(() => {
     { key: 'subs', icon: '🔄', label: '换人', value: count('substitution') }
   ]
 })
+
+function substitutionPeriodLabel(value) { return ({ first_half:'上半场',halftime:'中场休息',second_half:'下半场' })[value] || '比赛中' }
+function eventTimeText(event) { return event?.type === 'substitution' && event?.substitutionPeriod === 'halftime' ? '中场' : `${Number(event?.minute || 0)}'` }
 
 // 裁判组
 const refereeCrew = computed(() => match.value.refereeCrew || {})
@@ -1954,17 +2033,54 @@ async function saveMatchEdit() {
 }
 
 // 比赛事件
-function openAddEventDialog() {
+async function openAddEventDialog() {
   if (!ensureEvidenceEditable()) return
-  eventForm.value = { type: 'goal', minute: 0, teamSide: 'home', playerName: '', assistName: '' }
+  eventForm.value = newEventForm()
   eventDialogVisible.value = true
+  eventPlayersLoading.value = true
+  try {
+    const [home, away] = await Promise.all([
+      homePlayers.value.length ? Promise.resolve(homePlayers.value) : loadTeamPlayers(match.value.homeTeamId),
+      awayPlayers.value.length ? Promise.resolve(awayPlayers.value) : loadTeamPlayers(match.value.awayTeamId)
+    ])
+    homePlayers.value = home
+    awayPlayers.value = away
+  } finally {
+    eventPlayersLoading.value = false
+  }
 }
 
 async function saveEvent() {
   if (!ensureEvidenceEditable()) return
+  let newEvents = []
+  if (eventForm.value.type === 'substitution') {
+    const rows = eventForm.value.substitutions.filter(row => row.outName || row.inName)
+    if (!rows.length) return ElMessage.warning('请至少填写一组换人')
+    if (rows.some(row => !row.outName || !row.inName)) return ElMessage.warning('请完整选择每组换上和换下球员')
+    if (rows.some(row => row.outName === row.inName)) return ElMessage.warning('同一组换上和换下不能是同一球员')
+    if (new Set(rows.map(row => row.outName)).size !== rows.length) return ElMessage.warning('同一球员不能重复换下')
+    if (new Set(rows.map(row => row.inName)).size !== rows.length) return ElMessage.warning('同一球员不能重复换上')
+    const batchId = `sub-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+    newEvents = rows.map((row,index) => {
+      const incoming = activeEventPlayers.value.find(player => String(player.name || player.playerName) === row.inName)
+      const outgoing = activeEventPlayers.value.find(player => String(player.name || player.playerName) === row.outName)
+      return {
+        type:'substitution',minute:Number(eventForm.value.minute || 0),teamSide:eventForm.value.teamSide,
+        playerName:row.inName,playerNumber:String(incoming?.jerseyNumber ?? incoming?.number ?? ''),
+        assistName:row.outName,assistNumber:String(outgoing?.jerseyNumber ?? outgoing?.number ?? ''),
+        substitutionPeriod:eventForm.value.substitutionPeriod,substitutionBatchId:batchId,substitutionBatchIndex:index + 1,substitutionBatchSize:rows.length,
+        source:'organizer_pc',createdAt:new Date().toISOString()
+      }
+    })
+  } else {
+    if (!eventForm.value.playerName) return ElMessage.warning('请选择事件球员')
+    const player = activeEventPlayers.value.find(item => String(item.name || item.playerName) === eventForm.value.playerName)
+    const assist = activeEventPlayers.value.find(item => String(item.name || item.playerName) === eventForm.value.assistName)
+    newEvents = [{ ...eventForm.value,substitutions:undefined,substitutionPeriod:undefined,playerNumber:String(player?.jerseyNumber ?? player?.number ?? ''),assistNumber:String(assist?.jerseyNumber ?? assist?.number ?? ''),source:'organizer_pc',createdAt:new Date().toISOString() }]
+  }
   saving.value = true
   try {
-    const events = [...(match.value.events || []), { ...eventForm.value }]
+    const events = [...(match.value.events || []), ...newEvents]
     await callFunction('updateMatch', {
       matchId,
       data: { events, updateTime: new Date() }
@@ -2752,6 +2868,10 @@ onMounted(() => {
 
 /* 顶部 Hero */
 .match-hero {
+  --hero-accent: rgba(255,255,255,0.28);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2760,27 +2880,76 @@ onMounted(() => {
   border-radius: 16px;
   margin: 20px 0;
   color: #fff;
+  box-shadow: inset 0 3px 0 var(--hero-accent), 0 12px 30px rgba(20, 33, 29, 0.1);
 }
-.status-bg-scheduled { background: linear-gradient(135deg, #1B5E20 0%, #43A047 100%); }
-.status-bg-ongoing { background: linear-gradient(135deg, #e65100 0%, #f57c00 100%); }
-.status-bg-finished { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); }
-.status-bg-completed { background: linear-gradient(135deg, #064e3b 0%, #0f766e 100%); }
-.status-bg-postponed { background: linear-gradient(135deg, #616161 0%, #9e9e9e 100%); }
-.status-bg-cancelled { background: linear-gradient(135deg, #b71c1c 0%, #c62828 100%); opacity: 0.7; }
+.match-hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 138px;
+  height: 138px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.match-hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(255,255,255,0.065) 50%, transparent calc(50% + 0.5px));
+  pointer-events: none;
+}
+.match-hero > * { position: relative; z-index: 1; }
+.status-bg-scheduled {
+  --hero-accent: rgba(71,184,129,0.72);
+  background: radial-gradient(circle at 16% 0%, rgba(71,184,129,0.16), transparent 36%), linear-gradient(135deg, #172f29 0%, #24483e 100%);
+}
+.status-bg-ongoing {
+  --hero-accent: rgba(240,162,46,0.82);
+  background: radial-gradient(circle at 50% 0%, rgba(240,162,46,0.18), transparent 38%), linear-gradient(135deg, #222831 0%, #343c49 100%);
+}
+.status-bg-finished,
+.status-bg-completed {
+  --hero-accent: rgba(111,146,201,0.76);
+  background: radial-gradient(circle at 84% 0%, rgba(111,146,201,0.17), transparent 36%), linear-gradient(135deg, #243147 0%, #384963 100%);
+}
+.status-bg-postponed {
+  --hero-accent: rgba(203,213,225,0.58);
+  background: linear-gradient(135deg, #353b43 0%, #515b66 100%);
+}
+.status-bg-cancelled {
+  --hero-accent: rgba(220,104,104,0.75);
+  background: linear-gradient(135deg, #493033 0%, #684044 100%);
+}
 .referee-review-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 16px 0; padding: 14px 16px; border: 1px solid #f1d28e; border-radius: 10px; background: #fffaf0; }
 .referee-review-bar strong, .referee-review-bar span { display: block; }
 .referee-review-bar strong { color: #72520d; }
 .referee-review-bar span { margin-top: 5px; color: #7d7160; font-size: 13px; }
 .referee-review-actions { display: flex; flex: 0 0 auto; gap: 10px; }
 
-.hero-team { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 160px; }
-.hero-logo { width: 64px; height: 64px; object-fit: contain; }
+.hero-team { display: flex; flex-direction: column; align-items: center; gap: 9px; width: 160px; }
+.hero-logo {
+  width: 68px;
+  height: 68px;
+  padding: 7px;
+  box-sizing: border-box;
+  object-fit: contain;
+  border: 1px solid rgba(255,255,255,0.78);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 8px 22px rgba(6,16,13,0.2);
+}
 .hero-logo-placeholder {
   width: 64px; height: 64px; border-radius: 50%;
-  background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center;
   font-size: 24px; color: #fff; font-weight: 700;
 }
-.hero-team-name { font-size: 15px; font-weight: 600; text-align: center; }
+.hero-team-name { font-size: 15px; font-weight: 600; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
 
 .hero-score-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .hero-score { display: flex; align-items: center; gap: 12px; }
@@ -2851,13 +3020,50 @@ onMounted(() => {
 .event-player { font-weight: 500; }
 .event-assist { color: #909399; font-size: 12px; margin-left: 6px; }
 .event-side { color: #409eff; font-size: 12px; margin-left: 6px; }
+.event-period { display: inline-flex; margin-right: 7px; padding: 2px 6px; border-radius: 4px; color: #7a5b0a; background: #fff4cc; font-size: 11px; }
+.event-form { min-height: 310px; padding: 2px 4px 0; }
+.event-form-grid { display: grid; grid-template-columns: minmax(0,1fr) 150px; gap: 14px; }
+.event-form :deep(.el-form-item) { margin-bottom: 18px; }
+.event-form :deep(.el-form-item__label) { height: auto; margin-bottom: 7px; color: #34443b; font-weight: 600; line-height: 1.4; }
+.event-team-item { padding: 12px 14px; border: 1px solid #e3e9e5; border-radius: 7px; background: #f8faf9; }
+.event-team-options { display: grid; width: 100%; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 16px; }
+.event-team-options :deep(.el-radio) { height: auto; margin: 0; white-space: normal; }
+.event-team-options :deep(.el-radio__label) { overflow: hidden; text-overflow: ellipsis; }
+.substitution-period-options { display: grid; width: 100%; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.substitution-period-options :deep(.el-radio-button__inner) { width: 100%; }
+.substitution-editor { margin-bottom: 18px; overflow: hidden; border: 1px solid #e1e8e3; border-radius: 8px; background: #fff; }
+.substitution-editor>header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; border-bottom: 1px solid #e8edea; background: #f7faf8; }
+.substitution-editor>header div { display: flex; flex-direction: column; gap: 2px; }
+.substitution-editor>header span { color: #7a877f; font-size: 11px; }
+.substitution-row { display: grid; grid-template-columns: 24px minmax(0,1fr) 20px minmax(0,1fr) 32px; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #edf1ee; }
+.substitution-row:last-child { border-bottom: 0; }
+.substitution-index { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; color: #fff; background: #087b43; font-size: 11px; }
+.substitution-arrow { color: #87948c; }
+@media (max-width: 620px) {
+  .event-form-grid { grid-template-columns: 1fr; gap: 0; }
+  .event-team-options { grid-template-columns: 1fr; }
+  .substitution-period-options { grid-template-columns: 1fr; gap: 6px; }
+  .substitution-period-options :deep(.el-radio-button__inner) { border: 1px solid #dcdfe6; border-radius: 4px; }
+  .substitution-row { grid-template-columns: 24px minmax(0,1fr) 32px; }
+  .substitution-row .substitution-arrow { display: none; }
+  .substitution-row :deep(.el-select):first-of-type { grid-column: 2; }
+  .substitution-row :deep(.el-select):last-of-type { grid-column: 2; }
+}
 
 /* 结束比赛比分输入 */
 .finish-score-input {
-  display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 0;
+  display: grid; grid-template-columns: minmax(0,1fr) 28px minmax(0,1fr); align-items: end; gap: 16px; padding: 12px 0 4px;
 }
-.finish-team { font-weight: 600; font-size: 14px; min-width: 80px; text-align: center; }
-.finish-sep { font-size: 24px; font-weight: 700; }
+.finish-score-team { display: flex; min-width: 0; align-items: center; flex-direction: column; gap: 8px; }
+.finish-score-team small { color: #7a877f; font-size: 12px; }
+.finish-score-team strong { min-height: 42px; display: grid; place-items: center; color: #26382e; font-size: 15px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+.finish-score-team :deep(.el-input-number) { width: 150px; max-width: 100%; }
+.finish-score-team :deep(.el-input__inner) { padding-right: 42px; color: #17251d; font-size: 24px; font-weight: 800; text-align: center; }
+.finish-sep { align-self: end; padding-bottom: 9px; color: #596860; font-size: 30px; font-weight: 700; text-align: center; }
+@media (max-width: 560px) {
+  .finish-score-input { grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr); gap: 8px; }
+  .finish-score-team :deep(.el-input-number) { width: 120px; }
+}
 
 /* Tab 样式 */
 .detail-tabs :deep(.el-tabs__header) { margin-bottom: 16px; }
