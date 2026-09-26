@@ -312,6 +312,7 @@
           <div v-if="hasKitColors">
             <div class="kit-row">
               <span class="kit-label">{{ homeName || '主队' }}</span>
+              <el-tag size="small" effect="plain" type="success">{{ kitSetLabel('home') }}</el-tag>
               <div class="kit-dots">
                 <el-tooltip content="上衣" placement="top">
                   <span class="kit-dot" v-if="kitColors.home?.jersey" :style="{ backgroundColor: kitColorCss(kitColors.home.jersey) }"></span>
@@ -326,6 +327,7 @@
             </div>
             <div class="kit-row">
               <span class="kit-label">{{ awayName || '客队' }}</span>
+              <el-tag size="small" effect="plain" type="success">{{ kitSetLabel('away') }}</el-tag>
               <div class="kit-dots">
                 <el-tooltip content="上衣" placement="top">
                   <span class="kit-dot" v-if="kitColors.away?.jersey" :style="{ backgroundColor: kitColorCss(kitColors.away.jersey) }"></span>
@@ -463,54 +465,16 @@
       <div class="kit-edit-section">
         <div class="kit-edit-team">
           <div class="kit-edit-title">{{ homeName || '主队' }}（主场）</div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">上衣</span>
-            <el-select v-model="kitForm.home.jersey" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.home.jersey || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">短裤</span>
-            <el-select v-model="kitForm.home.shorts" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.home.shorts || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">球袜</span>
-            <el-select v-model="kitForm.home.socks" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.home.socks || '未选' }}</span>
-          </div>
+          <div class="kit-set-picker"><span class="kit-color-label">选择套装</span><el-select v-model="kitForm.homeSet" size="small" style="width:150px"><el-option label="主比赛服" value="primary" /><el-option label="备用比赛服" value="secondary" :disabled="!hasKitSet('home','secondary')" /></el-select></div>
+          <div class="kit-preview-row"><span>上衣</span><i :style="kitPreviewStyle('home','jersey')"></i><b>{{ selectedKitColor('home','jersey') || '未设置' }}</b><span>短裤</span><i :style="kitPreviewStyle('home','shorts')"></i><b>{{ selectedKitColor('home','shorts') || '未设置' }}</b><span>球袜</span><i :style="kitPreviewStyle('home','socks')"></i><b>{{ selectedKitColor('home','socks') || '未设置' }}</b></div>
         </div>
 
         <el-divider>VS</el-divider>
 
         <div class="kit-edit-team">
           <div class="kit-edit-title away">{{ awayName || '客队' }}（客场）</div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">上衣</span>
-            <el-select v-model="kitForm.away.jersey" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.away.jersey || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">短裤</span>
-            <el-select v-model="kitForm.away.shorts" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.away.shorts || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">球袜</span>
-            <el-select v-model="kitForm.away.socks" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.away.socks || '未选' }}</span>
-          </div>
+          <div class="kit-set-picker"><span class="kit-color-label">选择套装</span><el-select v-model="kitForm.awaySet" size="small" style="width:150px"><el-option label="主比赛服" value="primary" /><el-option label="备用比赛服" value="secondary" :disabled="!hasKitSet('away','secondary')" /></el-select></div>
+          <div class="kit-preview-row"><span>上衣</span><i :style="kitPreviewStyle('away','jersey')"></i><b>{{ selectedKitColor('away','jersey') || '未设置' }}</b><span>短裤</span><i :style="kitPreviewStyle('away','shorts')"></i><b>{{ selectedKitColor('away','shorts') || '未设置' }}</b><span>球袜</span><i :style="kitPreviewStyle('away','socks')"></i><b>{{ selectedKitColor('away','socks') || '未设置' }}</b></div>
         </div>
       </div>
       <template #footer>
@@ -1249,8 +1213,8 @@ const homeName = ref('')
 const awayName = ref('')
 const homeLogo = ref('')
 const awayLogo = ref('')
-const registeredKitColors = ref({ home: {}, away: {} })
-const registeredKitColorLabels = ref({ home: {}, away: {} })
+const registeredKitColors = ref({ home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } })
+const registeredKitColorLabels = ref({ home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } })
 const refName = ref('')
 const tournamentNameStr = ref('')
 const tournamentMatchFormat = ref('')
@@ -1289,6 +1253,8 @@ const refereeForm = ref({
 // 球服颜色编辑弹窗
 const kitDialogVisible = ref(false)
 const kitForm = ref({
+  homeSet: 'primary',
+  awaySet: 'primary',
   home: { jersey: '', shorts: '', socks: '' },
   away: { jersey: '', shorts: '', socks: '' }
 })
@@ -1467,12 +1433,14 @@ const hasRefereeCrew = computed(() => {
 // 球服颜色（自动将旧 hex 值转换为颜色名）
 const kitColors = computed(() => {
   const raw = match.value.kitColors || { home: {}, away: {} }
+  const selection = match.value.kitSelection || {}
   const registered = registeredKitColors.value
   const labels = registeredKitColorLabels.value
   const valueFor = (side, key) => {
     const matchValue = normalizeKitColor(raw[side]?.[key])
     if (matchValue) return matchValue
-    const registeredValue = normalizeKitColor(registered[side]?.[key])
+    const setKey = selection[side] || 'primary'
+    const registeredValue = normalizeKitColor(registered[side]?.[setKey]?.[key])
     if (registeredValue && !String(registeredValue).startsWith('#')) return registeredValue
     return labels[side]?.[key] || registeredValue
   }
@@ -1489,6 +1457,16 @@ const kitColors = computed(() => {
     }
   }
 })
+const kitSetLabel = side => (match.value.kitSelection?.[side] || 'primary') === 'secondary' ? '备用比赛服' : '主比赛服'
+const hasKitSet = (side, setKey) => ['jersey','shorts','socks'].some(key => registeredKitColors.value[side]?.[setKey]?.[key])
+const selectedKitColor = (side, key) => {
+  const setKey = kitForm.value[`${side}Set`] || 'primary'
+  return normalizeKitColor(registeredKitColors.value[side]?.[setKey]?.[key]) || registeredKitColorLabels.value[side]?.[setKey]?.[key] || ''
+}
+const kitPreviewStyle = (side, key) => {
+  const color = selectedKitColor(side, key)
+  return { backgroundColor: kitColorCss(color) || '#eef2f0' }
+}
 const hasKitColors = computed(() => {
   const k = kitColors.value
   return ['jersey','shorts','socks'].some(key => k.home?.[key] || k.away?.[key])
@@ -1692,8 +1670,8 @@ async function loadTeamLogos(homeId, awayId) {
 
     const teamIdMap = { home: homeId, away: awayId }
     const relationMap = { home: null, away: null }
-    registeredKitColors.value = { home: {}, away: {} }
-    registeredKitColorLabels.value = { home: {}, away: {} }
+    registeredKitColors.value = { home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } }
+    registeredKitColorLabels.value = { home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } }
 
     // 1. 从当前赛事报名关系读取真实 teamId、队徽和报名时提交的主比赛服。
     try {
@@ -1726,8 +1704,8 @@ async function loadTeamLogos(homeId, awayId) {
         if (side === 'away' && relationLogo) awayLogo.value = relationLogo
         const source = relation.kitColors || relation.uniformColors || {}
         const sourceLabels = relation.kitColorLabels || {}
-        registeredKitColors.value[side] = { ...(source.primary || source.home || {}) }
-        registeredKitColorLabels.value[side] = { ...(sourceLabels.primary || sourceLabels.home || {}) }
+        registeredKitColors.value[side] = { primary: { ...(source.primary || source.home || {}) }, secondary: { ...(source.secondary || source.away || {}) } }
+        registeredKitColorLabels.value[side] = { primary: { ...(sourceLabels.primary || sourceLabels.home || {}) }, secondary: { ...(sourceLabels.secondary || sourceLabels.away || {}) } }
       })
     } catch (e) {
       console.warn('tournament_teams 查询失败:', e)
@@ -1735,7 +1713,7 @@ async function loadTeamLogos(homeId, awayId) {
 
     // 2. 报名关系没有颜色时，回退球队长期主比赛服；单场手工设置仍由 matches.kitColors 优先。
     const realTeamIds = [teamIdMap.home, teamIdMap.away].filter(Boolean)
-    const missingKit = side => !['jersey','shorts','socks'].some(key => registeredKitColors.value[side]?.[key])
+    const missingKit = side => !['jersey','shorts','socks'].some(key => registeredKitColors.value[side]?.primary?.[key] || registeredKitColors.value[side]?.secondary?.[key])
     if (realTeamIds.length > 0 && (!homeLogo.value || !awayLogo.value || missingKit('home') || missingKit('away'))) {
       try {
         const teams = (await Promise.all(realTeamIds.map(id => queryById('teams', id).catch(() => null)))).filter(Boolean)
@@ -1747,8 +1725,8 @@ async function loadTeamLogos(homeId, awayId) {
             if (!missingKit(side)) return
             const source = t.kitColors || t.uniformColors || {}
             const sourceLabels = t.kitColorLabels || {}
-            registeredKitColors.value[side] = { ...(source.primary || source.home || {}) }
-            registeredKitColorLabels.value[side] = { ...(sourceLabels.primary || sourceLabels.home || {}) }
+            registeredKitColors.value[side] = { primary: { ...(source.primary || source.home || {}) }, secondary: { ...(source.secondary || source.away || {}) } }
+            registeredKitColorLabels.value[side] = { primary: { ...(sourceLabels.primary || sourceLabels.home || {}) }, secondary: { ...(sourceLabels.secondary || sourceLabels.away || {}) } }
           })
         })
       } catch (e) {
@@ -2015,7 +1993,10 @@ async function saveRefereeCrew() {
 function openKitDialog() {
   if (!ensureEvidenceEditable()) return
   const k = kitColors.value
+  const selection = match.value.kitSelection || {}
   kitForm.value = {
+    homeSet: selection.home || 'primary',
+    awaySet: selection.away || 'primary',
     home: {
       jersey: normalizeKitColor(k.home?.jersey) || '',
       shorts: normalizeKitColor(k.home?.shorts) || '',
@@ -2034,11 +2015,25 @@ async function saveKitColors() {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
+    const kitSelection = { home: kitForm.value.homeSet || 'primary', away: kitForm.value.awaySet || 'primary' }
+    const snapshot = {
+      home: {
+        jersey: selectedKitColor('home', 'jersey') || kitForm.value.home.jersey || '',
+        shorts: selectedKitColor('home', 'shorts') || kitForm.value.home.shorts || '',
+        socks: selectedKitColor('home', 'socks') || kitForm.value.home.socks || ''
+      },
+      away: {
+        jersey: selectedKitColor('away', 'jersey') || kitForm.value.away.jersey || '',
+        shorts: selectedKitColor('away', 'shorts') || kitForm.value.away.shorts || '',
+        socks: selectedKitColor('away', 'socks') || kitForm.value.away.socks || ''
+      }
+    }
     await callFunction('updateMatch', {
       matchId,
-      data: { kitColors: kitForm.value, updateTime: new Date() }
+      data: { kitColors: snapshot, kitSelection, updateTime: new Date() }
     })
-    match.value.kitColors = kitForm.value
+    match.value.kitColors = snapshot
+    match.value.kitSelection = kitSelection
     kitDialogVisible.value = false
     ElMessage.success('球服颜色已保存')
   } catch (err) {
@@ -2860,6 +2855,7 @@ onMounted(() => {
   font-weight: 500;
   color: #606266;
 }
+.kit-row :deep(.el-tag) { flex: 0 0 auto; }
 .kit-dots { display: flex; align-items: center; gap: 6px; }
 .kit-dot {
   display: inline-block;
@@ -2954,6 +2950,10 @@ onMounted(() => {
 .kit-edit-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #303133; }
 .kit-edit-title.away { color: #e53935; }
 .kit-color-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.kit-set-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.kit-preview-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 10px; border-radius: 6px; background: #f6f9f7; color: #66746b; font-size: 12px; }
+.kit-preview-row i { width: 18px; height: 18px; border: 1px solid #d5dfd9; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.6); }
+.kit-preview-row b { margin-right: 8px; color: #304238; font-weight: 600; }
 .kit-color-label { width: 50px; font-size: 13px; color: #606266; flex-shrink: 0; }
 .kit-color-hex { font-size: 12px; color: #909399; min-width: 70px; }
 
