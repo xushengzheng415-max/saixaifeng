@@ -295,7 +295,7 @@ function handleImageError(e) {
 .card-bg img {
   width: 100%;
   height: 100%;
-  /* 三张新卡面裁切比例略有差异，拉伸到统一卡体可保留底部尖角。 */
+  /* 2026 卡面与组件均为 300 × 430，完整贴合卡体画布。 */
   object-fit: fill;
 }
 
@@ -322,7 +322,7 @@ function handleImageError(e) {
 }
 
 .jersey-number-large {
-  font-size: 48px;
+  font-size: 52px;
   font-weight: 900;
   color: #1a1a1a;
   line-height: 1;
@@ -332,7 +332,7 @@ function handleImageError(e) {
 }
 
 .position-text {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   color: #1a1a1a;
   text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.6);
@@ -344,11 +344,11 @@ function handleImageError(e) {
    ============================================ */
 .player-photo-wrapper {
   position: absolute;
-  top: 49px;
+  top: 29px;
   left: 50%;
   transform: translateX(-50%);
-  width: 200px;
-  height: 200px;
+  width: 220px;
+  height: 220px;
   overflow: visible;
   /* 图片底部与新卡面中段横向切面保持同一水平线。 */
 }
@@ -358,9 +358,9 @@ function handleImageError(e) {
   height: 100%;
   object-fit: contain;
   object-position: center bottom;
-  transform: scale(1.08);
+  transform: scale(1.12);
   transform-origin: center bottom;
-  /* 缩小人物主体，保留抠图边缘并让脚部贴近切面。 */
+  /* 适度放大人物主体，保留抠图边缘并让底部贴近切面。 */
 }
 
 /* ============================================
@@ -377,7 +377,7 @@ function handleImageError(e) {
 }
 
 .player-name {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   color: #1a1a1a;
   margin-bottom: 2px;
@@ -387,7 +387,7 @@ function handleImageError(e) {
 }
 
 .player-jersey-name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
   letter-spacing: 2px;
@@ -413,7 +413,7 @@ function handleImageError(e) {
 
 .physical-label,
 .physical-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #1a1a1a;
   text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.5);
