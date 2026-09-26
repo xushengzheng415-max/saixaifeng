@@ -792,7 +792,7 @@ async function modifyDivisionDraw(division) {
     const matches = await queryList('matches',{ where:{ tournamentId },limit:1000,silent:true })
     const scopedMatches = (matches || []).filter(match => String(match.divisionId || 'default') === id && !['cancelled','void'].includes(String(match.status || '')))
     if (scopedMatches.length) {
-      await ElMessageBox.alert(`“${division.name}”已经生成 ${scopedMatches.length} 场赛程或比赛，不能直接修改分组。请先在赛程管理完成影响范围核对和赛程撤回，再返回此处调整。`, '分组已影响赛程', { type:'error',confirmButtonText:'我知道了' })
+      await ElMessageBox.alert(`“${division.name}”已经生成 ${scopedMatches.length} 场赛程或比赛，不能直接修改分组。请先在比赛地图完成影响范围核对和赛程撤回，再返回此处调整。`, '分组已影响赛程', { type:'error',confirmButtonText:'我知道了' })
       return
     }
     await ElMessageBox.prompt(`分组结果决定后续赛程。请输入完整组别名称“${division.name}”以确认进入修改。`, '谨慎修改分组', { type:'warning',confirmButtonText:'下一步',cancelButtonText:'取消',inputPlaceholder:division.name,inputValidator:value => String(value || '').trim() === String(division.name || '').trim() || '请输入完整且一致的组别名称' })

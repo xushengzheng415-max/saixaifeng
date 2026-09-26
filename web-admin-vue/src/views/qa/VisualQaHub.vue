@@ -85,7 +85,7 @@ const groups = [
     { name: '名单异常处理', note: '异常与待补资料', path: `/tournaments/${tournament}/roster-exceptions?divisionId=${proDivision}` },
     { name: '名单变更', note: '审核留痕', path: `/tournaments/${tournament}/roster-changes?divisionId=${proDivision}&mode=professional` }
   ] },
-  { code: 'P4', title: '抽签、分组与赛程管理', pages: [
+  { code: 'P4', title: '抽签、分组与比赛管理', pages: [
     { name: '抽签模式选择', note: '简易 / 专业入口', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}` },
     { name: '快速分组设置', note: '基础模式', path: `/tournaments/${tournament}/draw?divisionId=${simpleDivision}&mode=quick&view=config` },
     { name: '快速分组操作台', note: '混合制', path: `/tournaments/${tournament}/draw?divisionId=${simpleDivision}&mode=quick&format=hybrid&view=console` },
@@ -94,13 +94,12 @@ const groups = [
     { name: '专业 · 大屏设置', note: '步骤 3', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=screen` },
     { name: '专业 · 抽签操作台', note: '步骤 4', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=console` },
     { name: '专业 · 分组结果', note: '步骤 5', path: `/tournaments/${tournament}/draw?divisionId=${proDivision}&mode=professional&step=result` },
-    { name: '赛事地图', note: '待排池与联合场地日历', path: `/tournaments/${tournament}/schedule?visualQa=1` },
-    { name: '赛程设置', note: '赛事公共资源与组别策略', path: `/tournaments/${tournament}/schedule?view=settings&visualQa=1` }
+    { name: '比赛管理 · 赛事地图', note: '比赛状态、待排池与联合场地日历', path: `/tournaments/${tournament}/matches?visualQa=1` },
+    { name: '比赛管理 · 赛程设置', note: '赛事公共资源与组别策略', path: `/tournaments/${tournament}/matches?view=settings&visualQa=1` },
+    { name: '比赛管理 · 导入导出', note: 'Excel识别、预检与写入地图', path: `/tournaments/${tournament}/matches?view=imports&visualQa=1` }
   ] },
   { code: 'P5', title: '比赛管理、复核归档与裁判', pages: [
-    { name: '比赛管理 · 选择组别', note: '组别入口', path: `/tournaments/${tournament}/matches` },
-    { name: 'U8 比赛列表', note: '基础版', path: `/tournaments/${tournament}/matches?divisionId=${simpleDivision}` },
-    { name: 'U16 比赛列表', note: '专业版', path: `/tournaments/${tournament}/matches?divisionId=${proDivision}` },
+    { name: '比赛管理 · 全赛事地图', note: '点击比赛按状态进入处理', path: `/tournaments/${tournament}/matches` },
     { name: '赛中只读监控', note: '专业比赛现场状态', path: `/tournaments/${tournament}/match/qa-match-u16-013/monitor` },
     { name: '赛后资料接收', note: '主办方补充', path: `/tournaments/${tournament}/match/qa-match-u8-012/post-match` },
     { name: '赛果复核', note: '受控审核', path: `/tournaments/${tournament}/match/qa-match-u16-013/review` },

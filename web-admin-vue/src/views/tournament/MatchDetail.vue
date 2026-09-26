@@ -1554,7 +1554,7 @@ function formatDateTimeCN(date) {
 
 function goBack() {
   router.push({
-    path: `/tournaments/${tournamentId}/schedule`,
+    path: `/tournaments/${tournamentId}/matches`,
     query: sourceDivisionId ? { divisionId: sourceDivisionId } : {}
   })
 }
