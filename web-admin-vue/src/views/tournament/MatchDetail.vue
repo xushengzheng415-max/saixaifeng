@@ -734,6 +734,7 @@
         :awayTeamLogo="awayLogo"
         :homePlayersList="homePlayers"
         :awayPlayersList="awayPlayers"
+        :playerCount="currentPlayerCount"
         :homeInitialLineup="match.lineups?.home"
         :awayInitialLineup="match.lineups?.away"
         @save="handleVisualLineupSave"
@@ -1431,6 +1432,7 @@ const eventSummary = computed(() => {
 // 裁判组
 const refereeCrew = computed(() => match.value.refereeCrew || {})
 const currentMatchFormat = computed(() => match.value.matchFormat || tournamentMatchFormat.value || '11side')
+const currentPlayerCount = computed(() => Number.parseInt(String(currentMatchFormat.value), 10) || 11)
 const currentMatchFormatLabel = computed(() => {
   const number = String(currentMatchFormat.value).match(/\d+/)?.[0] || '11'
   return `${number}人制`
