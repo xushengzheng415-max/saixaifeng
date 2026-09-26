@@ -344,13 +344,13 @@ function handleImageError(e) {
    ============================================ */
 .player-photo-wrapper {
   position: absolute;
-  top: 29px;
+  top: -4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 220px;
-  height: 220px;
+  width: 264px;
+  height: 264px;
   overflow: visible;
-  /* 图片底部与新卡面中段横向切面保持同一水平线。 */
+  /* 放大 20%，底部固定在卡面腰线（约 260px）上。 */
 }
 
 .player-photo {
@@ -377,7 +377,7 @@ function handleImageError(e) {
 }
 
 .player-name {
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 800;
   color: #1a1a1a;
   margin-bottom: 2px;
