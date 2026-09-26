@@ -1735,23 +1735,21 @@ async function returnRefereeRecord() {
   } catch (error) { ElMessage.error(error.message || '退回失败') } finally { reviewSaving.value = false }
 }
 
-function resolveSubstitutePlayerLimit(...sources) {
+function resolveSubstitutePlayerLimit(playerCount, ...sources) {
   for (const source of sources) {
     if (!source || typeof source !== 'object') continue
     const details = source.regulationDetails && typeof source.regulationDetails === 'object'
       ? source.regulationDetails
       : source
-    const playerLimit = Number(details.benchPlayerLimit)
-    if (Number.isFinite(playerLimit) && playerLimit >= 0) return playerLimit
+    // 阵容编辑器的替补席只承载可参赛人员，不单独扣除球队官员名额。
     const totalLimit = Number(details.benchTotalLimit)
     if (Number.isFinite(totalLimit) && totalLimit >= 0) {
-      const officialLimit = Number(details.benchOfficialLimit)
-      return Number.isFinite(officialLimit) && officialLimit >= 0
-        ? Math.max(0, totalLimit - officialLimit)
-        : totalLimit
+      return totalLimit
     }
+    const playerLimit = Number(details.benchPlayerLimit)
+    if (Number.isFinite(playerLimit) && playerLimit >= 0) return playerLimit
   }
-  return null
+  return Number(playerCount) === 8 ? 8 : null
 }
 
 // 加载赛事名称与当前组别规程
@@ -1768,7 +1766,9 @@ async function loadTournamentName(tid, divisionId = '') {
     if (tournament) {
       const division = divisionRecord || (tournament.divisions || []).find(item => item && effectiveDivisionId && (item.id === effectiveDivisionId || item._id === effectiveDivisionId))
       tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
+      const playerCount = Number.parseInt(String(division?.matchFormat || tournamentMatchFormat.value || tournament.matchFormat || ''), 10)
       substitutePlayerLimit.value = resolveSubstitutePlayerLimit(
+        playerCount,
         division,
         division?.publishedRegulationsSnapshot,
         division?.rulesSnapshot,
