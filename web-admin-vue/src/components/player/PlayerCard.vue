@@ -254,12 +254,7 @@ function handleImageError(e) {
 </script>
 
 <style scoped>
-/* ============================================
-   球员卡样式 - 已锁定，禁止修改
-   版本: 2026-05-07
-   说明: 以下所有参数经过精确调试，确保卡片
-         在任何场景下显示一致，请勿随意更改
-   ============================================ */
+/* 球员卡样式：固定卡面比例，内容位置按卡面横向切面校准。 */
 
 /* 容器 */
 .player-card-container {
@@ -300,7 +295,8 @@ function handleImageError(e) {
 .card-bg img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* 三张新卡面裁切比例略有差异，拉伸到统一卡体可保留底部尖角。 */
+  object-fit: fill;
 }
 
 /* 内容层 */
@@ -319,7 +315,7 @@ function handleImageError(e) {
    ============================================ */
 .card-header-info {
   position: absolute;
-  top: 55px;
+  top: 63px;
   left: 25px;
   text-align: center;
   /* 左上角信息位置，居中对齐 */
@@ -348,13 +344,13 @@ function handleImageError(e) {
    ============================================ */
 .player-photo-wrapper {
   position: absolute;
-  top: 35px;
+  top: 49px;
   left: 50%;
   transform: translateX(-50%);
-  width: 220px;
-  height: 220px;
+  width: 200px;
+  height: 200px;
   overflow: visible;
-  /* 锁定: 头像容器 220x220px, 距顶 35px */
+  /* 图片底部与新卡面中段横向切面保持同一水平线。 */
 }
 
 .player-photo {
@@ -362,9 +358,9 @@ function handleImageError(e) {
   height: 100%;
   object-fit: contain;
   object-position: center bottom;
-  transform: scale(1.28);
+  transform: scale(1.08);
   transform-origin: center bottom;
-  /* 锁定: 图片适配模式 contain, 底部对齐 */
+  /* 缩小人物主体，保留抠图边缘并让脚部贴近切面。 */
 }
 
 /* ============================================
@@ -372,12 +368,12 @@ function handleImageError(e) {
    ============================================ */
 .player-info-section {
   position: absolute;
-  bottom: 35px;
+  bottom: 28px;
   left: 0;
   right: 0;
   text-align: center;
   padding: 0 20px;
-  /* 锁定: 信息区域距底 35px */
+  /* 让姓名、身体数据和徽章落在卡面下方弧形区域内。 */
 }
 
 .player-name {
