@@ -13,7 +13,7 @@
     <!-- 比赛核心信息 -->
     <div class="match-hero" :class="'status-bg-' + (match.status || 'scheduled')">
       <div class="hero-team hero-home">
-        <img v-if="homeLogo" :src="homeLogo" class="hero-logo" @error="$event.target.style.display='none'" />
+        <img v-if="homeLogo" :src="homeLogo" :alt="`${homeName || '主队'}队徽`" class="hero-logo" @error="handleTeamLogoError('home')" />
         <div class="hero-logo-placeholder" v-else>{{ homeName?.[0] || '?' }}</div>
         <div class="hero-team-name">{{ homeName || '待定' }}</div>
       </div>
@@ -36,7 +36,7 @@
       </div>
 
       <div class="hero-team hero-away">
-        <img v-if="awayLogo" :src="awayLogo" class="hero-logo" @error="$event.target.style.display='none'" />
+        <img v-if="awayLogo" :src="awayLogo" :alt="`${awayName || '客队'}队徽`" class="hero-logo" @error="handleTeamLogoError('away')" />
         <div class="hero-logo-placeholder" v-else>{{ awayName?.[0] || '?' }}</div>
         <div class="hero-team-name">{{ awayName || '待定' }}</div>
       </div>
@@ -113,7 +113,10 @@
               <!-- 主队阵容 -->
               <div class="lineup-side">
                 <div class="lineup-team-header">
-                  <span class="team-badge">{{ homeName?.[0] || '主' }}</span>
+                  <span class="team-badge">
+                    <img v-if="homeLogo" :src="homeLogo" :alt="`${homeName || '主队'}队徽`" @error="handleTeamLogoError('home')" />
+                    <span v-else>{{ homeName?.[0] || '主' }}</span>
+                  </span>
                   <div>
                     <div class="team-name">{{ homeName || '主队' }}</div>
                     <div class="team-formation" v-if="lineups.home?.formation">阵型 {{ lineups.home.formation }}</div>
@@ -160,7 +163,10 @@
               <!-- 客队阵容 -->
               <div class="lineup-side">
                 <div class="lineup-team-header">
-                  <span class="team-badge away">{{ awayName?.[0] || '客' }}</span>
+                  <span class="team-badge away">
+                    <img v-if="awayLogo" :src="awayLogo" :alt="`${awayName || '客队'}队徽`" @error="handleTeamLogoError('away')" />
+                    <span v-else>{{ awayName?.[0] || '客' }}</span>
+                  </span>
                   <div>
                     <div class="team-name">{{ awayName || '客队' }}</div>
                     <div class="team-formation" v-if="lineups.away?.formation">阵型 {{ lineups.away.formation }}</div>
@@ -1199,7 +1205,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, Plus, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
-import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord } from '../../utils/cloud'
+import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 
 const route = useRoute()
@@ -1216,6 +1222,51 @@ const homeLogo = ref('')
 const awayLogo = ref('')
 const registeredKitColors = ref({ home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } })
 const registeredKitColorLabels = ref({ home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } })
+
+function handleTeamLogoError(side) {
+  if (side === 'home') homeLogo.value = ''
+  if (side === 'away') awayLogo.value = ''
+}
+
+function getTeamLogoSource(record, side = '') {
+  if (!record || typeof record !== 'object') return ''
+  const scoped = side ? [
+    record[`${side}Logo`],
+    record[`${side}TeamLogo`],
+    record[`${side}TeamLogoUrl`],
+    record[`${side}LogoUrl`],
+    record[`${side}LogoFileID`],
+    record[`${side}LogoFileId`]
+  ] : []
+  return [
+    ...scoped,
+    record.logo,
+    record.logoUrl,
+    record.logoImage,
+    record.teamLogo,
+    record.teamLogoUrl,
+    record.teamLogoImage,
+    record.logoFileID,
+    record.logoFileId,
+    record.teamLogoFileId
+  ].map(value => String(value || '').trim()).find(Boolean) || ''
+}
+
+async function resolveTeamLogoSource(source) {
+  const value = String(source || '').trim()
+  if (!value) return ''
+  if (/^cloud:\/\//i.test(value)) {
+    const resolved = await getFileUrl(value)
+    return /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+  }
+  return /^(https?:\/\/|\/)/i.test(value) ? value : ''
+}
+
+async function applyTeamLogo(side, source) {
+  const logo = await resolveTeamLogoSource(source)
+  if (side === 'home' && logo) homeLogo.value = logo
+  if (side === 'away' && logo) awayLogo.value = logo
+}
 const refName = ref('')
 const tournamentNameStr = ref('')
 const tournamentMatchFormat = ref('')
@@ -1629,6 +1680,10 @@ async function loadMatch() {
     }
     homeName.value = m.homeTeamName || ''
     awayName.value = m.awayTeamName || ''
+    await Promise.all([
+      applyTeamLogo('home', getTeamLogoSource(m, 'home')),
+      applyTeamLogo('away', getTeamLogoSource(m, 'away'))
+    ])
     refName.value = m.refereeName || ''
     // 加载赛事名称
     await loadTournamentName(m.tournamentId || tournamentId)
@@ -1697,18 +1752,17 @@ async function loadTeamLogos(homeId, awayId) {
           .sort((left, right) => relationScore(right) - relationScore(left))[0] || null
       }
       ;[relationMap.home, relationMap.away] = await Promise.all([loadRelation(homeId), loadRelation(awayId)])
-      ;(['home','away']).forEach(side => {
+      for (const side of ['home','away']) {
         const relation = relationMap[side]
-        if (!relation) return
+        if (!relation) continue
         if (relation.teamId) teamIdMap[side] = relation.teamId
-        const relationLogo = relation.logo || relation.logoUrl || relation.teamLogo || ''
-        if (side === 'home' && relationLogo) homeLogo.value = relationLogo
-        if (side === 'away' && relationLogo) awayLogo.value = relationLogo
+        const relationLogo = getTeamLogoSource(relation)
+        if (relationLogo) await applyTeamLogo(side, relationLogo)
         const source = relation.kitColors || relation.uniformColors || {}
         const sourceLabels = relation.kitColorLabels || {}
         registeredKitColors.value[side] = { primary: { ...(source.primary || source.home || {}) }, secondary: { ...(source.secondary || source.away || {}) } }
         registeredKitColorLabels.value[side] = { primary: { ...(sourceLabels.primary || sourceLabels.home || {}) }, secondary: { ...(sourceLabels.secondary || sourceLabels.away || {}) } }
-      })
+      }
     } catch (e) {
       console.warn('tournament_teams 查询失败:', e)
     }
@@ -1719,18 +1773,18 @@ async function loadTeamLogos(homeId, awayId) {
     if (realTeamIds.length > 0 && (!homeLogo.value || !awayLogo.value || missingKit('home') || missingKit('away'))) {
       try {
         const teams = (await Promise.all(realTeamIds.map(id => queryById('teams', id).catch(() => null)))).filter(Boolean)
-        ;(teams || []).forEach(t => {
-          ;(['home','away']).forEach(side => {
-            if (String(t._id) !== String(teamIdMap[side])) return
-            if (side === 'home') homeLogo.value = t.logo || t.logoUrl || t.logoImage || homeLogo.value
-            if (side === 'away') awayLogo.value = t.logo || t.logoUrl || t.logoImage || awayLogo.value
-            if (!missingKit(side)) return
+        for (const t of teams || []) {
+          for (const side of ['home','away']) {
+            if (String(t._id) !== String(teamIdMap[side])) continue
+            const logoSource = getTeamLogoSource(t)
+            if (logoSource) await applyTeamLogo(side, logoSource)
+            if (!missingKit(side)) continue
             const source = t.kitColors || t.uniformColors || {}
             const sourceLabels = t.kitColorLabels || {}
             registeredKitColors.value[side] = { primary: { ...(source.primary || source.home || {}) }, secondary: { ...(source.secondary || source.away || {}) } }
             registeredKitColorLabels.value[side] = { primary: { ...(sourceLabels.primary || sourceLabels.home || {}) }, secondary: { ...(sourceLabels.secondary || sourceLabels.away || {}) } }
-          })
-        })
+          }
+        }
       } catch (e) {
         console.warn('teams 查询失败:', e)
       }
@@ -2902,6 +2956,7 @@ onMounted(() => {
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; font-weight: 700; flex-shrink: 0;
 }
+.team-badge img { width: 30px; height: 30px; object-fit: contain; border-radius: 50%; background: #fff; }
 .team-badge.away { background: #e53935; }
 .team-name { font-size: 14px; font-weight: 600; color: #303133; }
 .team-formation { font-size: 12px; color: #909399; margin-top: 2px; }
