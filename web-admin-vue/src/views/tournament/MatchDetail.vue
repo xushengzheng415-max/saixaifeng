@@ -314,13 +314,13 @@
               <span class="kit-label">{{ homeName || '主队' }}</span>
               <div class="kit-dots">
                 <el-tooltip content="上衣" placement="top">
-                  <span class="kit-dot" v-if="kitColors.home?.jersey" :style="{ backgroundColor: kitColors.home.jersey }"></span>
+                  <span class="kit-dot" v-if="kitColors.home?.jersey" :style="{ backgroundColor: kitColorCss(kitColors.home.jersey) }"></span>
                 </el-tooltip>
                 <el-tooltip content="短裤" placement="top">
-                  <span class="kit-dot" v-if="kitColors.home?.shorts" :style="{ backgroundColor: kitColors.home.shorts }"></span>
+                  <span class="kit-dot" v-if="kitColors.home?.shorts" :style="{ backgroundColor: kitColorCss(kitColors.home.shorts) }"></span>
                 </el-tooltip>
                 <el-tooltip content="球袜" placement="top">
-                  <span class="kit-dot" v-if="kitColors.home?.socks" :style="{ backgroundColor: kitColors.home.socks }"></span>
+                  <span class="kit-dot" v-if="kitColors.home?.socks" :style="{ backgroundColor: kitColorCss(kitColors.home.socks) }"></span>
                 </el-tooltip>
               </div>
             </div>
@@ -328,13 +328,13 @@
               <span class="kit-label">{{ awayName || '客队' }}</span>
               <div class="kit-dots">
                 <el-tooltip content="上衣" placement="top">
-                  <span class="kit-dot" v-if="kitColors.away?.jersey" :style="{ backgroundColor: kitColors.away.jersey }"></span>
+                  <span class="kit-dot" v-if="kitColors.away?.jersey" :style="{ backgroundColor: kitColorCss(kitColors.away.jersey) }"></span>
                 </el-tooltip>
                 <el-tooltip content="短裤" placement="top">
-                  <span class="kit-dot" v-if="kitColors.away?.shorts" :style="{ backgroundColor: kitColors.away.shorts }"></span>
+                  <span class="kit-dot" v-if="kitColors.away?.shorts" :style="{ backgroundColor: kitColorCss(kitColors.away.shorts) }"></span>
                 </el-tooltip>
                 <el-tooltip content="球袜" placement="top">
-                  <span class="kit-dot" v-if="kitColors.away?.socks" :style="{ backgroundColor: kitColors.away.socks }"></span>
+                  <span class="kit-dot" v-if="kitColors.away?.socks" :style="{ backgroundColor: kitColorCss(kitColors.away.socks) }"></span>
                 </el-tooltip>
               </div>
             </div>
@@ -1249,6 +1249,8 @@ const homeName = ref('')
 const awayName = ref('')
 const homeLogo = ref('')
 const awayLogo = ref('')
+const registeredKitColors = ref({ home: {}, away: {} })
+const registeredKitColorLabels = ref({ home: {}, away: {} })
 const refName = ref('')
 const tournamentNameStr = ref('')
 const tournamentMatchFormat = ref('')
@@ -1353,6 +1355,12 @@ const hexToColorName = {
   '#283593': '藏青', '#1a237e': '藏青', '#303f9f': '藏青', '#3f51b5': '藏青',
 }
 
+const colorNameToHex = {
+  '红':'#E53935', '黄':'#FDD835', '蓝':'#1E88E5', '白':'#FFFFFF', '绿':'#43A047', '黑':'#212121',
+  '橙':'#FB8C00', '紫':'#8E24AA', '粉':'#D81B60', '灰':'#757575', '深绿':'#1B5E20', '浅蓝':'#42A5F5',
+  '藏青':'#283593', '棕':'#795548'
+}
+
 // 将颜色值（可能是 hex 或颜色名）转换为显示用的颜色名
 function normalizeKitColor(val) {
   if (!val) return ''
@@ -1361,6 +1369,13 @@ function normalizeKitColor(val) {
   if (normalized) return normalized
   // 如果都不匹配，返回原值
   return val
+}
+
+function kitColorCss(val) {
+  if (!val) return ''
+  if (colorNameToHex[val]) return colorNameToHex[val]
+  const named = Object.entries(colorNameToHex).find(([name]) => String(val).includes(name))
+  return named?.[1] || val
 }
 
 const phaseLabel = computed(() => {
@@ -1452,22 +1467,31 @@ const hasRefereeCrew = computed(() => {
 // 球服颜色（自动将旧 hex 值转换为颜色名）
 const kitColors = computed(() => {
   const raw = match.value.kitColors || { home: {}, away: {} }
+  const registered = registeredKitColors.value
+  const labels = registeredKitColorLabels.value
+  const valueFor = (side, key) => {
+    const matchValue = normalizeKitColor(raw[side]?.[key])
+    if (matchValue) return matchValue
+    const registeredValue = normalizeKitColor(registered[side]?.[key])
+    if (registeredValue && !String(registeredValue).startsWith('#')) return registeredValue
+    return labels[side]?.[key] || registeredValue
+  }
   return {
     home: {
-      jersey: normalizeKitColor(raw.home?.jersey),
-      shorts: normalizeKitColor(raw.home?.shorts),
-      socks: normalizeKitColor(raw.home?.socks)
+      jersey: valueFor('home', 'jersey'),
+      shorts: valueFor('home', 'shorts'),
+      socks: valueFor('home', 'socks')
     },
     away: {
-      jersey: normalizeKitColor(raw.away?.jersey),
-      shorts: normalizeKitColor(raw.away?.shorts),
-      socks: normalizeKitColor(raw.away?.socks)
+      jersey: valueFor('away', 'jersey'),
+      shorts: valueFor('away', 'shorts'),
+      socks: valueFor('away', 'socks')
     }
   }
 })
 const hasKitColors = computed(() => {
   const k = kitColors.value
-  return !!(k.home?.jersey || k.away?.jersey)
+  return ['jersey','shorts','socks'].some(key => k.home?.[key] || k.away?.[key])
 })
 
 // 首发阵容
@@ -1512,10 +1536,12 @@ const awaySubsPadded = computed(() => {
 
 function kitStyle(kit) {
   if (!kit || !kit.jersey) return {}
+  const jersey = kitColorCss(kit.jersey)
+  const shorts = kitColorCss(kit.shorts || kit.jersey)
   return {
-    backgroundColor: kit.jersey,
-    color: isLightColor(kit.jersey) ? '#333' : '#fff',
-    border: `2px solid ${kit.shorts || kit.jersey}`,
+    backgroundColor: jersey,
+    color: isLightColor(jersey) ? '#333' : '#fff',
+    border: `2px solid ${shorts}`,
   }
 }
 
@@ -1627,7 +1653,7 @@ async function loadMatch() {
     // 加载赛事名称
     await loadTournamentName(m.tournamentId || tournamentId)
     // 加载队徽（先尝试从 tournament_teams 加载）
-    loadTeamLogos(m.homeTeamId, m.awayTeamId)
+    await loadTeamLogos(m.homeTeamId, m.awayTeamId)
     // 如果场序为空，自动计算
     if (!m.matchSequence && !m.sequence) {
       calculateMatchSequence(m)
@@ -1665,32 +1691,65 @@ async function loadTeamLogos(homeId, awayId) {
     if (ids.length === 0) return
 
     const teamIdMap = { home: homeId, away: awayId }
+    const relationMap = { home: null, away: null }
+    registeredKitColors.value = { home: {}, away: {} }
+    registeredKitColorLabels.value = { home: {}, away: {} }
 
-    // 1. 先从 tournament_teams 获取关联的真实 teamId 和其上的 logo
+    // 1. 从当前赛事报名关系读取真实 teamId、队徽和报名时提交的主比赛服。
     try {
-      const ttList = await queryList('tournament_teams', { where: { _id: { $in: ids } }, limit: 10 })
-      ;(ttList || []).forEach(t => {
-        if (t._id === homeId) {
-          if (t.teamId) teamIdMap.home = t.teamId
-          if (t.logo || t.logoUrl) homeLogo.value = t.logo || t.logoUrl
-        }
-        if (t._id === awayId) {
-          if (t.teamId) teamIdMap.away = t.teamId
-          if (t.logo || t.logoUrl) awayLogo.value = t.logo || t.logoUrl
-        }
+      const eventId = String(match.value.tournamentId || tournamentId || '')
+      const divisionId = String(match.value.divisionId || sourceDivisionId || '')
+      const [byRelationId, byTeamId] = await Promise.all([
+        queryList('tournament_teams', { where: { _id: { $in: ids } }, limit: 20 }),
+        eventId ? queryList('tournament_teams', { where: { tournamentId:eventId, teamId:{ $in:ids } }, limit: 100 }) : Promise.resolve([])
+      ])
+      const unique = new Map([...(byRelationId || []), ...(byTeamId || [])].map(item => [String(item._id), item]))
+      const rows = [...unique.values()]
+      const relationScore = row => {
+        const sameDivision = divisionId && String(row.divisionId || 'default') === divisionId ? 100 : 0
+        const status = String(row.status || row.participationStatus || '').toLowerCase()
+        const statusScore = ['approved','confirmed','accepted'].includes(status) ? 20 : ['pending','pending_review','claimed'].includes(status) ? 10 : 0
+        const time = new Date(row.updateTime?.$date || row.updateTime || row.createTime?.$date || row.createTime || 0).getTime() || 0
+        return sameDivision + statusScore + time / 1e15
+      }
+      const pickRelation = sourceId => rows
+        .filter(row => (!eventId || String(row.tournamentId || '') === eventId) && (String(row._id) === String(sourceId) || String(row.teamId) === String(sourceId)))
+        .sort((left, right) => relationScore(right) - relationScore(left))[0] || null
+      relationMap.home = pickRelation(homeId)
+      relationMap.away = pickRelation(awayId)
+      ;(['home','away']).forEach(side => {
+        const relation = relationMap[side]
+        if (!relation) return
+        if (relation.teamId) teamIdMap[side] = relation.teamId
+        const relationLogo = relation.logo || relation.logoUrl || relation.teamLogo || ''
+        if (side === 'home' && relationLogo) homeLogo.value = relationLogo
+        if (side === 'away' && relationLogo) awayLogo.value = relationLogo
+        const source = relation.kitColors || relation.uniformColors || {}
+        const sourceLabels = relation.kitColorLabels || {}
+        registeredKitColors.value[side] = { ...(source.primary || source.home || {}) }
+        registeredKitColorLabels.value[side] = { ...(sourceLabels.primary || sourceLabels.home || {}) }
       })
     } catch (e) {
       console.warn('tournament_teams 查询失败:', e)
     }
 
-    // 2. 用真实 teamId 查 teams 集合获取 logo
+    // 2. 报名关系没有颜色时，回退球队长期主比赛服；单场手工设置仍由 matches.kitColors 优先。
     const realTeamIds = [teamIdMap.home, teamIdMap.away].filter(Boolean)
-    if (realTeamIds.length > 0 && (!homeLogo.value || !awayLogo.value)) {
+    const missingKit = side => !['jersey','shorts','socks'].some(key => registeredKitColors.value[side]?.[key])
+    if (realTeamIds.length > 0 && (!homeLogo.value || !awayLogo.value || missingKit('home') || missingKit('away'))) {
       try {
         const teams = await queryList('teams', { where: { _id: { $in: realTeamIds } }, limit: 10 })
         ;(teams || []).forEach(t => {
-          if (t._id === teamIdMap.home) homeLogo.value = t.logo || t.logoUrl || t.logoImage || homeLogo.value
-          if (t._id === teamIdMap.away) awayLogo.value = t.logo || t.logoUrl || t.logoImage || awayLogo.value
+          ;(['home','away']).forEach(side => {
+            if (String(t._id) !== String(teamIdMap[side])) return
+            if (side === 'home') homeLogo.value = t.logo || t.logoUrl || t.logoImage || homeLogo.value
+            if (side === 'away') awayLogo.value = t.logo || t.logoUrl || t.logoImage || awayLogo.value
+            if (!missingKit(side)) return
+            const source = t.kitColors || t.uniformColors || {}
+            const sourceLabels = t.kitColorLabels || {}
+            registeredKitColors.value[side] = { ...(source.primary || source.home || {}) }
+            registeredKitColorLabels.value[side] = { ...(sourceLabels.primary || sourceLabels.home || {}) }
+          })
         })
       } catch (e) {
         console.warn('teams 查询失败:', e)
@@ -1955,7 +2014,7 @@ async function saveRefereeCrew() {
 // 球服颜色编辑
 function openKitDialog() {
   if (!ensureEvidenceEditable()) return
-  const k = match.value.kitColors || {}
+  const k = kitColors.value
   kitForm.value = {
     home: {
       jersey: normalizeKitColor(k.home?.jersey) || '',
