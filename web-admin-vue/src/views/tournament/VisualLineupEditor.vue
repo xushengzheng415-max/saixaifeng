@@ -982,7 +982,7 @@ function getSubstituteRule(playerCount) {
   const rules = {
     5: { maxSubs: 7, maxSwap: 99, maxSwapTimes: 99 },
     7: { maxSubs: 7, maxSwap: 14, maxSwapTimes: 3 },
-    8: { maxSubs: 7, maxSwap: 7, maxSwapTimes: 3 },
+    8: { maxSubs: 8, maxSwap: 7, maxSwapTimes: 3 },
     9: { maxSubs: 11, maxSwap: 99, maxSwapTimes: 3 },
     11: { maxSubs: 12, maxSwap: 5, maxSwapTimes: 3 }
   }
