@@ -39,10 +39,10 @@
 
       <section v-if="activeTab==='review'" class="review-layout">
         <article class="review-list panel">
-          <header><div><h2>比赛赛果</h2><p>统一读取正式赛程和裁判/后台提交记录</p></div><span>{{ visibleMatches.length }} 场</span></header>
+          <header><div><h2>比赛赛果</h2><p>{{ reviewScopeLabel }} · 小组赛、淘汰赛和排位赛按阶段、场序排列</p></div><span>{{ visibleMatches.length }} 场</span></header>
           <div class="result-table-head result-row"><span>场次</span><span>对阵与比分</span><span>时间 / 场地</span><span>来源</span><span>复核状态</span><span>操作</span></div>
           <button v-for="row in visibleMatches" :key="row.id" type="button" class="result-row result-data-row" :class="{ selected:selectedMatch?.id===row.id }" @click="selectedMatchId=row.id">
-            <span><b>{{ row.matchNo || '—' }}</b><small>{{ row.divisionName }} · {{ row.groupName }}</small></span>
+            <span><b>{{ row.matchNo || '—' }}</b><small>{{ row.divisionName }} · {{ row.reviewStageLabel || row.groupName }}</small></span>
             <span class="versus"><b>{{ row.homeTeamName }}</b><strong>{{ scoreText(row) }}</strong><b>{{ row.awayTeamName }}</b><small v-if="row.resolution==='penalties' || row.resolution==='penalty_shootout'">点球决胜</small></span>
             <span><b>{{ row.matchDate || '日期待定' }} {{ row.matchTime }}</b><small>{{ row.venue }}</small></span>
             <span>{{ row.source }}</span>
@@ -114,8 +114,15 @@ const reportPoster = ref(null)
 const failedTeamLogos = ref({})
 const statusOptions = [{ value:'not_submitted',label:'待录入' },{ value:'pending_review',label:'待复核' },{ value:'warning',label:'异常' },{ value:'returned',label:'已退回' },{ value:'approved',label:'正式赛果' }]
 
-const filteredByScope = computed(() => (dashboard.value.matches || []).filter(row => (!divisionFilter.value || row.divisionId===divisionFilter.value) && (!dateFilter.value || row.matchDate===dateFilter.value)))
-const visibleMatches = computed(() => filteredByScope.value.filter(row => (!statusFilter.value || row.resultStatus===statusFilter.value) && (!keyword.value.trim() || `${row.matchNo} ${row.homeTeamName} ${row.awayTeamName}`.toLowerCase().includes(keyword.value.trim().toLowerCase()))))
+const selectedDivision = computed(() => (dashboard.value.divisions || []).find(item => item.id===divisionFilter.value) || null)
+const reviewScopeLabel = computed(() => selectedDivision.value?.name || '全部竞赛组别')
+function normalizedDivisionName(value){ return String(value || '').replace(/[\s　]/g,'').toLowerCase() }
+function matchesSelectedDivision(row){ return !divisionFilter.value || row.divisionId===divisionFilter.value || Boolean(selectedDivision.value && normalizedDivisionName(row.divisionName)===normalizedDivisionName(selectedDivision.value.name)) }
+function reviewStageOrder(row){ return ({group:0,knockout:1,placement:2,other:3}[row.reviewStage] ?? 3) }
+function matchSequenceValue(row){ const parts=String(row.matchNo || '').match(/\d+/g) || []; return parts.length?Number(parts.at(-1)):Number.MAX_SAFE_INTEGER }
+function compareReviewRows(a,b){ return reviewStageOrder(a)-reviewStageOrder(b)||matchSequenceValue(a)-matchSequenceValue(b)||`${a.matchDate} ${a.matchTime}`.localeCompare(`${b.matchDate} ${b.matchTime}`,'zh-CN') }
+const filteredByScope = computed(() => (dashboard.value.matches || []).filter(row => matchesSelectedDivision(row) && (!dateFilter.value || row.matchDate===dateFilter.value)))
+const visibleMatches = computed(() => filteredByScope.value.filter(row => (!statusFilter.value || row.resultStatus===statusFilter.value) && (!keyword.value.trim() || `${row.matchNo} ${row.homeTeamName} ${row.awayTeamName}`.toLowerCase().includes(keyword.value.trim().toLowerCase()))).sort(compareReviewRows))
 const selectedMatch = computed(() => visibleMatches.value.find(row => row.id===selectedMatchId.value) || visibleMatches.value[0] || null)
 const dateOptions = computed(() => [...new Set((dashboard.value.matches || []).map(row => row.matchDate).filter(Boolean))].sort())
 const approvedDateOptions = computed(() => [...new Set((dashboard.value.matches || []).filter(row => row.resultStatus==='approved').map(row => row.matchDate).filter(Boolean))].sort())
