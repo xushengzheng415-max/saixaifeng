@@ -718,6 +718,7 @@
         :homePlayersList="homePlayers"
         :awayPlayersList="awayPlayers"
         :playerCount="currentPlayerCount"
+        :substitutePlayerLimit="substitutePlayerLimit"
         :homeInitialLineup="match.lineups?.home"
         :awayInitialLineup="match.lineups?.away"
         @save="handleVisualLineupSave"
@@ -1309,6 +1310,7 @@ async function applyTeamLogo(side, source) {
 const refName = ref('')
 const tournamentNameStr = ref('')
 const tournamentMatchFormat = ref('')
+const substitutePlayerLimit = ref(null)
 const saving = ref(false)
 const reviewSaving = ref(false)
 const returnRecordDialogVisible = ref(false)
@@ -1733,16 +1735,45 @@ async function returnRefereeRecord() {
   } catch (error) { ElMessage.error(error.message || '退回失败') } finally { reviewSaving.value = false }
 }
 
-// 加载赛事名称
-async function loadTournamentName(tid) {
+function resolveSubstitutePlayerLimit(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue
+    const details = source.regulationDetails && typeof source.regulationDetails === 'object'
+      ? source.regulationDetails
+      : source
+    const playerLimit = Number(details.benchPlayerLimit)
+    if (Number.isFinite(playerLimit) && playerLimit >= 0) return playerLimit
+    const totalLimit = Number(details.benchTotalLimit)
+    if (Number.isFinite(totalLimit) && totalLimit >= 0) {
+      const officialLimit = Number(details.benchOfficialLimit)
+      return Number.isFinite(officialLimit) && officialLimit >= 0
+        ? Math.max(0, totalLimit - officialLimit)
+        : totalLimit
+    }
+  }
+  return null
+}
+
+// 加载赛事名称与当前组别规程
+async function loadTournamentName(tid, divisionId = '') {
   try {
-    const tournament = await queryById('tournaments', tid)
+    const effectiveDivisionId = String(divisionId || sourceDivisionId || '')
+    const [tournament, divisionRecord] = await Promise.all([
+      queryById('tournaments', tid),
+      effectiveDivisionId ? queryById('divisions', effectiveDivisionId).catch(() => null) : Promise.resolve(null)
+    ])
     if (tournament && tournament.name) {
       tournamentNameStr.value = tournament.name
     }
     if (tournament) {
-      const division = (tournament.divisions || []).find(item => item && sourceDivisionId && (item.id === sourceDivisionId || item._id === sourceDivisionId))
+      const division = divisionRecord || (tournament.divisions || []).find(item => item && effectiveDivisionId && (item.id === effectiveDivisionId || item._id === effectiveDivisionId))
       tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
+      substitutePlayerLimit.value = resolveSubstitutePlayerLimit(
+        division,
+        division?.publishedRegulationsSnapshot,
+        division?.rulesSnapshot,
+        tournament
+      )
     }
   } catch (e) {
     console.warn('加载赛事名称失败:', e)
@@ -1765,7 +1796,7 @@ async function loadMatch() {
     ])
     refName.value = m.refereeName || ''
     // 加载赛事名称
-    await loadTournamentName(m.tournamentId || tournamentId)
+    await loadTournamentName(m.tournamentId || tournamentId, m.divisionId || sourceDivisionId)
     // 加载队徽（先尝试从 tournament_teams 加载）
     await loadTeamLogos(m.homeTeamId, m.awayTeamId)
     // 如果场序为空，自动计算
