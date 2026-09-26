@@ -416,13 +416,19 @@
     </el-dialog>
 
     <!-- 结束比赛 / 录入比分弹窗 -->
-    <el-dialog v-model="finishDialogVisible" title="结束比赛 · 录入比分" width="400px">
+    <el-dialog v-model="finishDialogVisible" title="结束比赛 · 录入比分" width="560px" class="finish-dialog">
       <div class="finish-score-input">
-        <div class="finish-team">{{ homeName || '主队' }}</div>
-        <el-input-number v-model="finishForm.homeScore" :min="0" size="large" style="width:100px;" />
+        <article class="finish-score-team">
+          <small>主队</small>
+          <strong>{{ homeName || '主队' }}</strong>
+          <el-input-number v-model="finishForm.homeScore" :min="0" :max="99" controls-position="right" size="large" />
+        </article>
         <span class="finish-sep">:</span>
-        <el-input-number v-model="finishForm.awayScore" :min="0" size="large" style="width:100px;" />
-        <div class="finish-team">{{ awayName || '客队' }}</div>
+        <article class="finish-score-team">
+          <small>客队</small>
+          <strong>{{ awayName || '客队' }}</strong>
+          <el-input-number v-model="finishForm.awayScore" :min="0" :max="99" controls-position="right" size="large" />
+        </article>
       </div>
       <template #footer>
         <el-button @click="finishDialogVisible = false">取消</el-button>
@@ -3053,10 +3059,18 @@ onMounted(() => {
 
 /* 结束比赛比分输入 */
 .finish-score-input {
-  display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 0;
+  display: grid; grid-template-columns: minmax(0,1fr) 28px minmax(0,1fr); align-items: end; gap: 16px; padding: 12px 0 4px;
 }
-.finish-team { font-weight: 600; font-size: 14px; min-width: 80px; text-align: center; }
-.finish-sep { font-size: 24px; font-weight: 700; }
+.finish-score-team { display: flex; min-width: 0; align-items: center; flex-direction: column; gap: 8px; }
+.finish-score-team small { color: #7a877f; font-size: 12px; }
+.finish-score-team strong { min-height: 42px; display: grid; place-items: center; color: #26382e; font-size: 15px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+.finish-score-team :deep(.el-input-number) { width: 150px; max-width: 100%; }
+.finish-score-team :deep(.el-input__inner) { padding-right: 42px; color: #17251d; font-size: 24px; font-weight: 800; text-align: center; }
+.finish-sep { align-self: end; padding-bottom: 9px; color: #596860; font-size: 30px; font-weight: 700; text-align: center; }
+@media (max-width: 560px) {
+  .finish-score-input { grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr); gap: 8px; }
+  .finish-score-team :deep(.el-input-number) { width: 120px; }
+}
 
 /* Tab 样式 */
 .detail-tabs :deep(.el-tabs__header) { margin-bottom: 16px; }
