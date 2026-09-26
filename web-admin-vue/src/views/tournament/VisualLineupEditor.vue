@@ -513,6 +513,7 @@ const props = defineProps({
   initialLineup: { type: Object, default: undefined },
   onSave: { type: Function, default: undefined },
   playerCount: { type: Number, default: undefined },
+  substitutePlayerLimit: { type: Number, default: undefined },
   // 双队模式
   mode: { type: String, default: 'single' },
   homeTeamName: { type: String, default: '' },
@@ -722,6 +723,8 @@ const selectingForBench = ref(false)
 
 // 替补席容量
 const maxBenchSlots = computed(() => {
+  const ruleLimit = Number(props.substitutePlayerLimit)
+  if (Number.isFinite(ruleLimit) && ruleLimit >= 0) return ruleLimit
   const rule = getSubstituteRule(selectedPlayerCount.value || 11)
   return rule.maxSubs
 })
