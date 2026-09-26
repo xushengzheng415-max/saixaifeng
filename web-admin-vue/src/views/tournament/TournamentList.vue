@@ -72,8 +72,8 @@
               <el-button type="primary" link size="small" @click="$router.push('/tournaments/' + tournament._id + '/teams')">
                 球队管理
               </el-button>
-              <el-button type="primary" link size="small" @click="$router.push('/tournaments/' + tournament._id + '/schedule')">
-                赛程安排
+              <el-button type="primary" link size="small" @click="$router.push('/tournaments/' + tournament._id + '/matches')">
+                比赛管理
               </el-button>
               <el-button type="danger" link size="small" @click="quickDelete(tournament)">
                 删除

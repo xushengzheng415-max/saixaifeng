@@ -1050,7 +1050,7 @@
 
             <h3>专业版抽签结果</h3>
           <p>
-              抽签结果已确认，对阵已生成；比赛时间和场地可在赛程管理中后补。
+              抽签结果已确认，对阵已生成；比赛时间和场地可在比赛地图中补齐。
             </p>
           </div>
           <el-tag type="success">已确认</el-tag>
@@ -1129,7 +1129,7 @@
               type="primary"
               :loading="pairingGenerating"
               @click="goToScheduleAfterPairing"
-              >{{ pairingCount ? "进入赛程管理" : "生成对阵并进入赛程" }}</el-button
+              >{{ pairingCount ? "打开比赛地图" : "生成对阵并安排比赛" }}</el-button
             >
           </div>
         </footer>

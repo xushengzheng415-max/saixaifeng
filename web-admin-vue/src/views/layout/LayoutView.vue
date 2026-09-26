@@ -762,19 +762,12 @@ const organizerNavItems = computed(() => [
     activeWhen: () => route.path.includes('/draw')
   },
   {
-    path: tournamentWorkspacePath('/schedule'),
-    label: '赛程管理',
-    icon: 'Calendar',
-    requiresTournament: true,
-    activeWhen: () => route.path.includes('/schedule')
-  },
-  {
     path: tournamentWorkspacePath('/matches'),
     label: '比赛管理',
     icon: 'Football',
     requiresTournament: true,
     activeWhen: () => Boolean(currentTournamentId.value) &&
-      /\/tournaments\/[^/]+\/(?:matches|match\/[^/]+(?:\/monitor|\/post-match|\/review|\/archive)?)$/.test(route.path)
+      /\/tournaments\/[^/]+\/(?:matches|schedule|match\/[^/]+(?:\/monitor|\/post-match|\/review|\/archive)?)$/.test(route.path)
   },
   {
     path: tournamentWorkspacePath('/results'),

@@ -29,7 +29,7 @@
 
     <div class="bottom-grid">
       <section class="panel division-panel"><h2>组别进度</h2><el-empty v-if="divisions.length === 0" :image-size="64" description="尚未创建竞赛组别"><el-button type="primary" size="small" @click="go(`/tournaments/${id}/edit?section=divisions`)">添加组别</el-button></el-empty><ul v-else><li v-for="division in divisions" :key="division.id || division._id || division.name"><span class="division-symbol"><el-icon><Grid /></el-icon></span><strong>{{ division.name || '未命名组别' }}</strong><span class="division-mode">{{ divisionMode(division) }}</span><span class="division-progress"><i><b :style="{ width: `${divisionProgress(division)}%` }"></b></i><em>{{ divisionProgressLabel(division) }}</em></span><el-button v-if="!competitionPlanLocked(division)" size="small" type="primary" plain :loading="confirmingDivisionId === divisionId(division)" @click="confirmPlan(division)">确认方案</el-button><el-tag v-else size="small" type="success" effect="plain">已锁定</el-tag></li></ul></section>
-      <section class="panel matches-panel"><h2>近期比赛</h2><el-empty v-if="recentMatches.length === 0" :image-size="64" description="尚未编排比赛"><el-button type="primary" size="small" @click="go(`/tournaments/${id}/schedule`)">去编排赛程</el-button></el-empty><ul v-else><li v-for="match in recentMatches" :key="match._id"><time><strong>{{ matchDate(match) }}</strong><span>{{ matchTime(match) }}</span></time><p>{{ teamName(match, 'home') }}<b>VS</b>{{ teamName(match, 'away') }}</p><span class="match-state" :class="`match-${match.status || 'pending'}`">{{ matchStatus(match.status) }}</span></li></ul><button v-if="recentMatches.length" type="button" class="all-link" @click="go(`/tournaments/${id}/schedule`)">查看全部赛程 <el-icon><ArrowRight /></el-icon></button></section>
+      <section class="panel matches-panel"><h2>近期比赛</h2><el-empty v-if="recentMatches.length === 0" :image-size="64" description="尚未编排比赛"><el-button type="primary" size="small" @click="go(`/tournaments/${id}/matches`)">打开比赛地图</el-button></el-empty><ul v-else><li v-for="match in recentMatches" :key="match._id"><time><strong>{{ matchDate(match) }}</strong><span>{{ matchTime(match) }}</span></time><p>{{ teamName(match, 'home') }}<b>VS</b>{{ teamName(match, 'away') }}</p><span class="match-state" :class="`match-${match.status || 'pending'}`">{{ matchStatus(match.status) }}</span></li></ul><button v-if="recentMatches.length" type="button" class="all-link" @click="go(`/tournaments/${id}/matches`)">进入比赛管理 <el-icon><ArrowRight /></el-icon></button></section>
       <section class="panel shortcuts-panel"><h2>快捷入口</h2><div class="shortcut-grid"><button v-for="item in shortcuts" :key="item.label" type="button" @click="go(item.target)"><span><el-icon><component :is="item.icon" /></el-icon></span><strong>{{ item.label }}</strong><small>{{ item.note }}</small></button></div></section>
     </div>
   </section>
@@ -80,17 +80,17 @@ const stages = computed(() => [
   { label: '组别规则', note: divisions.value.length ? `${divisions.value.length} 个已创建` : '待创建', icon: DocumentChecked, done: divisions.value.length > 0, active: divisions.value.length === 0, target: `/tournaments/${id}/edit?section=divisions` },
   { label: '球队入驻', note: `${approvedTeams.value.length}/${registrations.value.length || 0} 已确认`, icon: UserFilled, done: registrations.value.length > 0 && pendingTeams.value.length === 0, active: pendingTeams.value.length > 0, target: `/tournaments/${id}/teams` },
   { label: '抽签分组', note: tournament.value.drawCompleted ? '已完成' : '待配置', icon: Tickets, done: tournament.value.drawCompleted === true, active: divisions.value.length > 0 && !tournament.value.drawCompleted, target: `/tournaments/${id}/draw` },
-  { label: '赛程发布', note: matches.value.length ? `${matches.value.length} 场已编排` : '待编排', icon: Calendar, done: matches.value.length > 0 && tournament.value.schedulePublished === true, active: matches.value.length > 0 && !tournament.value.schedulePublished, target: `/tournaments/${id}/schedule` },
-  { label: '比赛执行', note: activeMatches.value.length ? `${activeMatches.value.length} 场进行中` : '待开赛', icon: Promotion, done: matches.value.some(item => ['completed', 'finished'].includes(item.status)), active: activeMatches.value.length > 0, target: `/tournaments/${id}/schedule` },
-  { label: '赛果归档', note: reviewMatches.value.length ? `${reviewMatches.value.length} 场待复核` : '待赛后复核', icon: CircleCheck, done: matches.value.length > 0 && reviewMatches.value.length === 0 && matches.value.every(item => ['completed', 'finished', 'archived'].includes(item.status)), active: reviewMatches.value.length > 0, target: `/tournaments/${id}/schedule` }
+  { label: '赛程发布', note: matches.value.length ? `${matches.value.length} 场已编排` : '待编排', icon: Calendar, done: matches.value.length > 0 && tournament.value.schedulePublished === true, active: matches.value.length > 0 && !tournament.value.schedulePublished, target: `/tournaments/${id}/matches` },
+  { label: '比赛执行', note: activeMatches.value.length ? `${activeMatches.value.length} 场进行中` : '待开赛', icon: Promotion, done: matches.value.some(item => ['completed', 'finished'].includes(item.status)), active: activeMatches.value.length > 0, target: `/tournaments/${id}/matches` },
+  { label: '赛果归档', note: reviewMatches.value.length ? `${reviewMatches.value.length} 场待复核` : '待赛后复核', icon: CircleCheck, done: matches.value.length > 0 && reviewMatches.value.length === 0 && matches.value.every(item => ['completed', 'finished', 'archived'].includes(item.status)), active: reviewMatches.value.length > 0, target: `/tournaments/${id}/matches` }
 ])
 const stageCompletion = computed(() => Math.round((stages.value.filter(item => item.done).length / stages.value.length) * 100))
 const todos = computed(() => {
   const list = []
   if (!divisions.value.length) list.push({ key: 'division', text: '尚未创建竞赛组别', icon: Grid, tone: 'orange', target: `/tournaments/${id}/edit?section=divisions` })
   if (pendingTeams.value.length) list.push({ key: 'teams', text: `${pendingTeams.value.length} 支球队待确认或认领`, icon: UserFilled, tone: 'green', target: `/tournaments/${id}/teams` })
-  if (divisions.value.length && !matches.value.length) list.push({ key: 'schedule', text: '尚未编排比赛赛程', icon: Calendar, tone: 'blue', target: `/tournaments/${id}/schedule` })
-  if (reviewMatches.value.length) list.push({ key: 'review', text: `${reviewMatches.value.length} 场赛果待复核归档`, icon: DocumentChecked, tone: 'orange', target: `/tournaments/${id}/schedule` })
+  if (divisions.value.length && !matches.value.length) list.push({ key: 'schedule', text: '尚未编排比赛赛程', icon: Calendar, tone: 'blue', target: `/tournaments/${id}/matches` })
+  if (reviewMatches.value.length) list.push({ key: 'review', text: `${reviewMatches.value.length} 场赛果待复核归档`, icon: DocumentChecked, tone: 'orange', target: `/tournaments/${id}/matches` })
   return list
 })
 const shortcuts = computed(() => [
@@ -98,8 +98,7 @@ const shortcuts = computed(() => [
   { label: '球队入驻', note: '邀请申请与认领', icon: UserFilled, target: `/tournaments/${id}/teams` },
   { label: '参赛名单', note: '审核名单与异常', icon: DocumentChecked, target: `/tournaments/${id}/signups` },
   { label: '抽签分组', note: '分组与抽签管理', icon: Tickets, target: `/tournaments/${id}/draw` },
-  { label: '赛程编排', note: '赛程制定与发布', icon: Calendar, target: `/tournaments/${id}/schedule` },
-  { label: '比赛管理', note: '赛中只读与复核', icon: Football, target: `/tournaments/${id}/matches` }
+  { label: '比赛管理', note: '排赛、监控与复核', icon: Football, target: `/tournaments/${id}/matches` }
 ])
 
 async function loadConsole() {

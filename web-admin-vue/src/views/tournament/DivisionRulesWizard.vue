@@ -204,7 +204,7 @@
     <footer class="wizard-footer">
       <div class="footer-summary"><el-icon><CircleCheck /></el-icon><span>{{ footerSummary }}</span></div>
       <div class="footer-actions">
-        <template v-if="effective"><el-button type="primary" :loading="saving" :disabled="!canManage" @click="startRuleRevision">调整规则</el-button><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">进入赛程管理</el-button></template>
+        <template v-if="effective"><el-button type="primary" :loading="saving" :disabled="!canManage" @click="startRuleRevision">调整规则</el-button><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">打开比赛地图</el-button></template>
         <template v-else>
           <el-button v-if="activeIndex > 0 && (activeKey !== 'finalize' || !isProfessional)" :disabled="saving" @click="previous">上一步</el-button>
           <el-button v-if="activeKey !== 'finalize'" type="primary" :loading="saving" :disabled="!canManage" @click="next">{{ nextButtonText }} <el-icon><ArrowRight /></el-icon></el-button>
@@ -764,7 +764,7 @@ async function finalize() {
 function stepStatusText(index) { if (effective.value) return index === steps.value.length - 1 ? '已完成' : '已生效'; if (index < activeIndex.value) return '已完成'; if (index === activeIndex.value) return isProfessional.value ? '当前步骤' : steps.value[index].description; return isProfessional.value ? '待配置' : steps.value[index].description }
 function backToDivisions() { router.push(`/tournaments/${tournamentId}/competition`) }
 function goToDraw() { router.push({ path: `/tournaments/${tournamentId}/draw`, query: { divisionId } }) }
-function goToSchedule() { router.push({ path: `/tournaments/${tournamentId}/schedule`, query: { divisionId } }) }
+function goToSchedule() { router.push({ path: `/tournaments/${tournamentId}/matches`, query: { divisionId } }) }
 function exitTournament() { router.push('/tournament-space') }
 function escapeDocumentText(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
