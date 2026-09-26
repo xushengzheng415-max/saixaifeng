@@ -197,6 +197,32 @@ function phaseOf(match) {
   return text(match.phase || match.scheduleType || match.stage).toLowerCase()
 }
 
+function reviewStageOf(match) {
+  const phase = phaseOf(match)
+  const hint = `${phase} ${text(match.phaseLabel || match.roundName || match.stageName)}`.toLowerCase()
+  if (['group', 'league', 'round_robin'].includes(phase) || /小组|联赛|循环/.test(hint)) return 'group'
+  if (['knockout', 'cup', 'final', 'semifinal'].includes(phase) || /淘汰|半决|决赛|八强|四强|杯赛/.test(hint)) return 'knockout'
+  if (phase === 'placement' || /排位|名次/.test(hint)) return 'placement'
+  return 'other'
+}
+
+function reviewStageOrder(stage) {
+  return ({ group: 0, knockout: 1, placement: 2, other: 3 }[stage] ?? 3)
+}
+
+function matchSequenceValue(match) {
+  const value = text(match.matchNo || match.matchSequence || match.sequence || match.matchIndex)
+  const parts = value.match(/\d+/g) || []
+  return parts.length ? number(parts.at(-1), Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER
+}
+
+function compareReviewMatches(a, b) {
+  return text(a.divisionName).localeCompare(text(b.divisionName), 'zh-CN', { numeric: true }) ||
+    reviewStageOrder(a.reviewStage) - reviewStageOrder(b.reviewStage) ||
+    matchSequenceValue(a) - matchSequenceValue(b) ||
+    `${a.matchDate} ${a.matchTime}`.localeCompare(`${b.matchDate} ${b.matchTime}`, 'zh-CN')
+}
+
 function standingsEligible(match) {
   const phase = phaseOf(match)
   const status = text(match.status).toLowerCase()
@@ -250,15 +276,20 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
   const homeScore = scoreReady(match) ? number(match.homeScore) : null
   const awayScore = scoreReady(match) ? number(match.awayScore) : null
   const winnerTeamId = winnerTeamIdOf(match)
+  const phaseLabel = text(match.phaseLabel || match.roundName || match.stageName) || '比赛阶段'
+  const reviewStage = reviewStageOf(match)
+  const groupName = reviewStage === 'group' ? groupNameOf(match) : phaseLabel
   const warnings = footballWarnings(match, status, division)
   return {
     id: text(match._id || match.id),
     matchNo: text(match.matchNo || match.matchSequence || match.sequence || match.matchIndex),
     divisionId,
     divisionName: text(match.divisionName || (divisionsById[divisionId] && divisionsById[divisionId].name)) || '未分组别',
-    groupName: groupNameOf(match),
+    groupName,
     phase: phaseOf(match),
-    phaseLabel: text(match.phaseLabel || match.roundName || match.stageName) || '比赛阶段',
+    phaseLabel,
+    reviewStage,
+    reviewStageLabel: reviewStage === 'group' ? groupName : phaseLabel,
     roundName: text(match.roundName || match.roundLabel || match.round),
     matchDate: text(match.matchDate || match.date),
     matchTime: text(match.matchTime || match.startTime),
@@ -525,7 +556,7 @@ async function resolvePairingSources(tournamentId,matches,standings,actor) {
 }
 
 function buildKnockout(matches) {
-  return matches.filter(match => ['knockout', 'cup', 'placement', 'final', 'semifinal'].includes(match.phase)).map(match => ({
+  return matches.filter(match => ['knockout', 'placement'].includes(match.reviewStage)).map(match => ({
     ...match,
     progressionReady: match.resultStatus === 'approved' && (match.homeScore !== match.awayScore || Boolean(match.winnerTeamId)),
     progressionLabel: match.resultStatus !== 'approved' ? '待正式赛果' : match.homeScore === match.awayScore && !match.winnerTeamId ? '待确认点球/晋级者' : '晋级关系可用'
@@ -567,11 +598,11 @@ async function buildDashboard(event, actor) {
   const divisions = divisionRows.length ? divisionRows : Array.isArray(tournament.divisions) ? tournament.divisions : []
   const divisionsById = Object.fromEntries(divisions.map(item => [text(item._id || item.id), item]))
   const teamDirectory = await buildTeamDirectory(matchRows, registrationRows)
-  let matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
+  let matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort(compareReviewMatches)
   let standings = buildStandings(matches, divisionsById)
   const pairingResolution = await resolvePairingSources(tournamentId,matchRows,standings,actor)
   if (pairingResolution.updatedCount) {
-    matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort((a, b) => `${a.matchDate} ${a.matchTime} ${a.matchNo}`.localeCompare(`${b.matchDate} ${b.matchTime} ${b.matchNo}`, 'zh-CN'))
+    matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort(compareReviewMatches)
     standings = buildStandings(matches, divisionsById)
   }
   return {
