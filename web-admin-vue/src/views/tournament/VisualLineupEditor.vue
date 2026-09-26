@@ -512,6 +512,8 @@ const props = defineProps({
   players: { type: Array, default: () => [] },
   initialLineup: { type: Object, default: undefined },
   onSave: { type: Function, default: undefined },
+  playerCount: { type: Number, default: undefined },
+  substitutePlayerLimit: { type: Number, default: undefined },
   // 双队模式
   mode: { type: String, default: 'single' },
   homeTeamName: { type: String, default: '' },
@@ -642,12 +644,18 @@ const availableFormations = computed(() => {
   const key = selectedPlayerCount.value + '人制'
   const data = formationData[key]
   if (!data || !data.formations) return []
-  return Object.entries(data.formations).map(([id, f]) => ({
-    id,
-    name: f.name,
-    description: f.description,
-    positions: f.positions
-  }))
+  return Object.entries(data.formations)
+    .filter(([, formation]) => {
+      const positions = Array.isArray(formation.positions) ? formation.positions : []
+      const goalkeeperCount = positions.filter(position => position.role === 'GK').length
+      return positions.length === selectedPlayerCount.value && goalkeeperCount === 1
+    })
+    .map(([id, f]) => ({
+      id,
+      name: f.name,
+      description: f.description,
+      positions: f.positions
+    }))
 })
 
 // ==================== 单队模式状态 ====================
@@ -715,6 +723,8 @@ const selectingForBench = ref(false)
 
 // 替补席容量
 const maxBenchSlots = computed(() => {
+  const ruleLimit = Number(props.substitutePlayerLimit)
+  if (Number.isFinite(ruleLimit) && ruleLimit >= 0) return ruleLimit
   const rule = getSubstituteRule(selectedPlayerCount.value || 11)
   return rule.maxSubs
 })
@@ -948,12 +958,31 @@ function inferPlayerCountFromFormation(formationId) {
   return null
 }
 
+const legacyFormationAliases = {
+  8: {
+    '3-3-2': '3-3-1',
+    '4-2-2': '3-2-2',
+    '4-3-1': '4-2-1',
+    '1-3-3-1': '1-3-2-1'
+  }
+}
+
+function normalizeFormationId(formationId, playerCount) {
+  return legacyFormationAliases[playerCount]?.[formationId] || formationId
+}
+
+watch(() => props.playerCount, (count) => {
+  if (playerCounts.value.includes(count)) {
+    selectedPlayerCount.value = count
+  }
+}, { immediate: true })
+
 // ==================== 替补规则：根据赛制获取参数 ====================
 function getSubstituteRule(playerCount) {
   const rules = {
     5: { maxSubs: 7, maxSwap: 99, maxSwapTimes: 99 },
     7: { maxSubs: 7, maxSwap: 14, maxSwapTimes: 3 },
-    8: { maxSubs: 7, maxSwap: 7, maxSwapTimes: 3 },
+    8: { maxSubs: 8, maxSwap: 7, maxSwapTimes: 3 },
     9: { maxSubs: 11, maxSwap: 99, maxSwapTimes: 3 },
     11: { maxSubs: 12, maxSwap: 5, maxSwapTimes: 3 }
   }
@@ -1280,13 +1309,13 @@ async function handleExportImageDual() {
 // ==================== 双队模式：加载已保存阵容 ====================
 watch(() => props.homeInitialLineup, (v) => {
   homeAssignedPlayers.value = {}
-  const formation = v?.formation || ''
-  homeSelectedFormationId.value = formation
+  const savedFormation = v?.formation || ''
   // 自动推断比赛人数
-  const count = inferPlayerCountFromFormation(formation)
+  const count = props.playerCount || inferPlayerCountFromFormation(savedFormation)
   if (count && !selectedPlayerCount.value) {
     selectedPlayerCount.value = count
   }
+  homeSelectedFormationId.value = normalizeFormationId(savedFormation, count)
   // 延迟自动分配，等待阵型数据计算完成
   nextTick(() => {
     if (homeCurrentPositions.value.length > 0) {
@@ -1297,13 +1326,13 @@ watch(() => props.homeInitialLineup, (v) => {
 
 watch(() => props.awayInitialLineup, (v) => {
   awayAssignedPlayers.value = {}
-  const formation = v?.formation || ''
-  awaySelectedFormationId.value = formation
+  const savedFormation = v?.formation || ''
   // 自动推断比赛人数（如果主队已经设置了，用同一个）
-  const count = inferPlayerCountFromFormation(formation)
+  const count = props.playerCount || inferPlayerCountFromFormation(savedFormation)
   if (count && !selectedPlayerCount.value) {
     selectedPlayerCount.value = count
   }
+  awaySelectedFormationId.value = normalizeFormationId(savedFormation, count)
   // 延迟自动分配，等待阵型数据计算完成
   nextTick(() => {
     if (awayCurrentPositions.value.length > 0) {
@@ -1337,7 +1366,12 @@ async function handleSaveDual() {
 // ==================== 单队模式：加载已保存阵容 ====================
 watch(() => props.initialLineup, (v) => {
   assignedPlayers.value = {}
-  selectedFormationId.value = v?.formation || ''
+  const savedFormation = v?.formation || ''
+  const count = props.playerCount || inferPlayerCountFromFormation(savedFormation)
+  if (count && !selectedPlayerCount.value) {
+    selectedPlayerCount.value = count
+  }
+  selectedFormationId.value = normalizeFormationId(savedFormation, count)
   if (v?.players?.forEach) {
     v.players.forEach(p => { if (p.role) assignedPlayers.value[p.role] = p })
   }

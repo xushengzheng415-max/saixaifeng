@@ -59,6 +59,16 @@ function assertNoDuplicatePair(matches) {
   })
 }
 
+const stalePlaceholders = generator.staleKnockoutPairings([
+  { _id:'group-v1',phase:'group',pairingTemplateVersion:'liyang-youth-v1' },
+  { _id:'knockout-v1',phase:'knockout',pairingTemplateVersion:'liyang-youth-v1' },
+  { _id:'placement-v1',phase:'placement',pairingTemplateVersion:'liyang-youth-v1' },
+  { _id:'knockout-v2',phase:'knockout',pairingTemplateVersion:'liyang-youth-v2' }
+], 'liyang-youth-v2')
+assert.deepStrictEqual(stalePlaceholders.map(match => match._id), ['knockout-v1','placement-v1'], '只迁移旧模板的非小组赛占位')
+assert.strictEqual(generator.matchIsProtectedFromPairingReplace({ phase:'knockout',pairingTemplateVersion:'liyang-youth-v1',status:'scheduled' }), false, '未排期旧占位可安全迁移')
+assert.strictEqual(generator.matchIsProtectedFromPairingReplace({ phase:'knockout',pairingTemplateVersion:'liyang-youth-v1',status:'scheduled',matchDate:'2026-10-17' }), true, '已排期旧占位必须阻止自动迁移')
+
 const config = {
   startDate: '2026-09-01',
   endDate: '2026-12-31',
@@ -210,6 +220,23 @@ assert.deepStrictEqual(sanitizedDraft.matchDays,['周一'])
 assert.strictEqual(sanitizedDraft.venueResources.length,1)
 assert.strictEqual(sanitizedDraft.venueResources[0].fieldFormat,'5side')
 assert.strictEqual(Object.prototype.hasOwnProperty.call(sanitizedDraft,'secret'),false)
+const importedCalendar=generator.buildImportedScheduleConfig([
+  { _id:'import-1',divisionId:'youth',matchDate:'2026-10-17',matchTime:'09:00',venue:'1号场地',matchFormat:'5side',status:'scheduled' },
+  { _id:'import-2',divisionId:'youth',matchDate:'2026-10-24',matchTime:'16:30',venue:'2号场地',matchFormat:'5side',status:'scheduled' },
+  { _id:'cancelled',divisionId:'youth',matchDate:'2026-11-01',matchTime:'09:00',venue:'3号场地',matchFormat:'5side',status:'cancelled' }
+],{},new Map())
+assert.strictEqual(importedCalendar.calendarSource,'import')
+assert.strictEqual(importedCalendar.startDate,'2026-10-17')
+assert.strictEqual(importedCalendar.endDate,'2026-10-24')
+assert.deepStrictEqual(importedCalendar.matchDays,['周六'])
+assert.deepStrictEqual(importedCalendar.venues,['1号场地','2号场地'])
+assert.deepStrictEqual(importedCalendar.calendarExtraTimeSlots,['09:00','16:30'])
+assert.strictEqual(importedCalendar.sessionWindows.length,0)
+assert.strictEqual(importedCalendar.divisionPolicies.youth.minRestMinutes,0)
+assert.deepStrictEqual(generator.scheduleAssignmentErrors([
+  { _id:'import-1',divisionId:'youth',matchDate:'2026-10-17',matchTime:'09:00',venue:'1号场地',matchFormat:'5side',homeTeamId:'A',awayTeamId:'B',durationMinutes:50,status:'scheduled' },
+  { _id:'import-2',divisionId:'youth',matchDate:'2026-10-24',matchTime:'16:30',venue:'2号场地',matchFormat:'7side',homeTeamId:'A',awayTeamId:'C',durationMinutes:50,status:'scheduled' }
+],importedCalendar,new Map()),[],'导入日历不应要求预先设置场地制式或开放时段')
 
 const expectedIds = u10Teams.map(team => team.teamId)
 assert.strictEqual(generator.validateParticipantSet(u10Teams,expectedIds,8).valid,true)

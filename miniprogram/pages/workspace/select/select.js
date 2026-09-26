@@ -1,66 +1,50 @@
-// pages/workspace/select/select.js
-Page({
+var workspace = require('../../../utils/workspace')
 
-  /**
-   * 页面的初始数据
-   */
-  data: {
-
-  },
-
-  /**
-   * 生命周期函数--监听页面加载
-   */
-  onLoad(options) {
-
-  },
-
-  /**
-   * 生命周期函数--监听页面初次渲染完成
-   */
-  onReady() {
-
-  },
-
-  /**
-   * 生命周期函数--监听页面显示
-   */
-  onShow() {
-
-  },
-
-  /**
-   * 生命周期函数--监听页面隐藏
-   */
-  onHide() {
-
-  },
-
-  /**
-   * 生命周期函数--监听页面卸载
-   */
-  onUnload() {
-
-  },
-
-  /**
-   * 页面相关事件处理函数--监听用户下拉动作
-   */
-  onPullDownRefresh() {
-
-  },
-
-  /**
-   * 页面上拉触底事件的处理函数
-   */
-  onReachBottom() {
-
-  },
-
-  /**
-   * 用户点击右上角分享
-   */
-  onShareAppMessage() {
-
+function formatWorkspace(item, currentId) {
+  var positions = item.positions || []
+  return {
+    id: String(item.id || ''),
+    name: item.name || '未命名工作空间',
+    logo: item.logo || '',
+    hasLogo: Boolean(item.logo),
+    typeText: item.type === 'team' ? '球队协作空间' : '机构工作空间',
+    positionText: positions.length ? positions.join('、') : (item.type === 'team' ? '球队负责人' : '机构成员'),
+    isCurrent: String(item.id || '') === String(currentId || ''),
+    rowClass: String(item.id || '') === String(currentId || '') ? 'workspace-row current' : 'workspace-row'
   }
+}
+
+Page({
+  data: { loading: true, switching: false, errorText: '', workspaces: [], hasWorkspaces: false },
+
+  onLoad: function() { this.load() },
+
+  load: function() {
+    var self = this
+    var cached = workspace.readContext()
+    var source = cached ? Promise.resolve(cached) : workspace.loadContext()
+    source.then(function(context) {
+      var currentId = context.currentWorkspace && context.currentWorkspace.id
+      var rows = (context.workspaces || []).map(function(item) { return formatWorkspace(item, currentId) })
+      self.setData({ loading: false, workspaces: rows, hasWorkspaces: rows.length > 0, errorText: '' })
+    }).catch(function(error) {
+      self.setData({ loading: false, errorText: error.message || '工作空间加载失败' })
+    })
+  },
+
+  select: function(event) {
+    var targetId = String(event.currentTarget.dataset.id || '')
+    if (!targetId || this.data.switching) return
+    var target = this.data.workspaces.filter(function(item) { return item.id === targetId })[0]
+    if (!target || target.isCurrent) { wx.navigateBack(); return }
+    var self = this
+    this.setData({ switching: true, errorText: '' })
+    workspace.switchWorkspace(targetId).then(function() {
+      wx.switchTab({ url: '/pages/teams/index' })
+    }).catch(function(error) {
+      self.setData({ switching: false, errorText: error.message || '切换失败，请重试' })
+    })
+  },
+
+  back: function() { wx.navigateBack() }
 })

@@ -4,10 +4,22 @@ const crypto = require('crypto')
 const topology = require('./topology')
 const scheduleEngine = require('./scheduler')
 const pairingTemplates = require('./pairingTemplates')
-const SCHEDULE_ENGINE_VERSION = '2026-08-30-unified-final-stage-v3'
+const SCHEDULE_ENGINE_VERSION = '2026-09-25-event-calendar-v4'
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
+let scheduleAdjustmentLogsReady = false
+
+async function ensureScheduleAdjustmentLogs() {
+  if (scheduleAdjustmentLogsReady) return
+  try {
+    await db.createCollection('schedule_adjustment_logs')
+  } catch (error) {
+    var message=String(error && (error.message || error.errMsg) || '').toLowerCase()
+    if (message.indexOf('exist')<0 && message.indexOf('duplicate')<0 && message.indexOf('已存在')<0) throw error
+  }
+  scheduleAdjustmentLogsReady = true
+}
 
 function hashSessionToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex')
@@ -85,15 +97,21 @@ async function loadDivisionConfiguration(tournament, divisionId, actor) {
 }
 
 function configuredPairingTemplate(division, tournament) {
+  var tournamentName = String(tournament && tournament.name || '')
+  var divisionName = String(division && (division.name || division.divisionName || '') || '')
   var configured = (division && (division.pairingTemplate ||
     division.pairingTemplateSnapshot ||
     division.rulesSnapshot && division.rulesSnapshot.pairingTemplate ||
     division.competitionRule && division.competitionRule.pairingTemplate)) || null
-  if (configured) return configured
+  if (configured) {
+    var configuredVersion=String(configured.version || '')
+    if((tournamentName.indexOf('立洋杯')>=0 || tournamentName.toLowerCase().indexOf('liyang')>=0) && (
+      divisionName.indexOf('青年')>=0 || divisionName.toLowerCase().indexOf('youth')>=0
+    ) && configuredVersion==='liyang-youth-v1') return pairingTemplates.liyangYouthTemplate()
+    return configured
+  }
   var key = division && (division.pairingTemplateKey || division.rulesSnapshot && division.rulesSnapshot.pairingTemplateKey || division.competitionRule && division.competitionRule.pairingTemplateKey)
   if (key) return pairingTemplates.resolveTemplate(key)
-  var tournamentName = String(tournament && tournament.name || '')
-  var divisionName = String(division && (division.name || division.divisionName || '') || '')
   if (tournamentName.indexOf('立洋杯') >= 0 || tournamentName.toLowerCase().indexOf('liyang') >= 0) {
     if (divisionName.indexOf('青年') >= 0 || divisionName.toLowerCase().indexOf('youth') >= 0) return pairingTemplates.liyangYouthTemplate()
     if (divisionName.indexOf('中年') >= 0 || divisionName.toLowerCase().indexOf('middle') >= 0) return pairingTemplates.liyangMiddleTemplate()
@@ -234,6 +252,82 @@ async function generatePairingsOnly(event, tournament, actor) {
   return { success: true, message: '已生成' + built.matches.length + '场对阵，比赛时间待排', pairingOnly: true, pairingStatus: 'confirmed', scheduleStatus: 'unassigned', matchCount: built.matches.length, divisionId: divisionId, templateVersion: built.templateVersion, matches: built.matches }
 }
 
+function pairingIdentity(match) {
+  function source(value,label){
+    if(value && value.type==='group_rank')return 'group:'+String(value.groupName || '')+':'+Number(value.rank || 0)
+    if(value && value.type==='match_winner')return 'winner:'+Number(value.matchNo || 0)
+    if(value && value.type==='match_loser')return 'loser:'+Number(value.matchNo || 0)
+    if(value && value.type==='seed')return 'seed:'+String(value.teamId || value.name || value.seed || '')
+    return String(label || '')
+  }
+  return [String(match.phase || ''),source(match.homeSource,match.homeSourceLabel || match.homeTeamName),source(match.awaySource,match.awaySourceLabel || match.awayTeamName)].join('|')
+}
+
+function staleKnockoutPairings(existing,templateVersion) {
+  var targetVersion=String(templateVersion || '')
+  return (Array.isArray(existing)?existing:[]).filter(function(match){
+    var phase=String(match && match.phase || '').toLowerCase()
+    var currentVersion=String(match && match.pairingTemplateVersion || '')
+    return phase && phase!=='group' && currentVersion && targetVersion && currentVersion!==targetVersion
+  })
+}
+
+async function ensureKnockoutPairings(event,tournament,actor) {
+  var tournamentId=String(event.tournamentId || tournament._id || '')
+  var divisionId=String(event.divisionId || '')
+  if(!divisionId)return { success:false,code:'DIVISION_REQUIRED',message:'请先选择需要补齐的竞赛组别' }
+  var divisionState=await loadDivisionConfiguration(tournament,divisionId,actor)
+  if(divisionState.scopeDenied)return { success:false,code:'DIVISION_SCOPE_DENIED',message:'无权操作其他机构的竞赛组别' }
+  if(divisionState.readError || !divisionState.division)return { success:false,code:'DIVISION_RULES_UNAVAILABLE',message:'无法读取当前竞赛组别规则' }
+  var division=divisionState.division
+  var divisionName=String(division.name || division.divisionName || '当前组别')
+  var built=await buildPairingsForDivision(tournamentId,divisionId,divisionName,division,tournament)
+  if(!built.success)return built
+  var expected=built.matches.filter(function(match){return String(match.phase || '').toLowerCase()!=='group'})
+  if(!expected.length)return { success:true,message:'当前组别没有需要提前创建的淘汰或排位赛',addedCount:0,matches:[] }
+  var existing=(await loadAllTournamentMatches(tournamentId)).filter(function(match){return belongsToDivision(match,divisionId) && match.status!=='cancelled'})
+  var stale=staleKnockoutPairings(existing,built.templateVersion)
+  var protectedStale=stale.find(matchIsProtectedFromPairingReplace)
+  if(protectedStale)return { success:false,code:'PAIRING_MIGRATION_BLOCKED',message:'旧版淘汰赛占位中已有排期、发布或赛果，请先人工核对后再升级对阵' }
+  if(stale.length){
+    var replacedAt=db.serverDate()
+    await Promise.all(stale.map(function(match){
+      return db.collection('matches').doc(match._id).update({ data:{ status:'cancelled',pairingStatus:'replaced',replacedByTemplateVersion:built.templateVersion,pairingReplacedAt:replacedAt,updateTime:replacedAt } })
+    }))
+    var staleIds=new Set(stale.map(function(match){return String(match._id || '')}))
+    existing=existing.filter(function(match){return !staleIds.has(String(match._id || ''))})
+    await db.collection('registration_audit_logs').add({ data:{ sport:'football',action:'knockout_pairing_template_migrated',tournamentId:tournamentId,divisionId:divisionId,actorOrgId:String(actor && actor.orgId || ''),result:'success',detail:{ replacedCount:stale.length,fromVersions:Array.from(new Set(stale.map(function(match){return String(match.pairingTemplateVersion || '')}))).filter(Boolean),toVersion:built.templateVersion,matchIds:Array.from(staleIds).filter(Boolean) },createTime:replacedAt } }).catch(function(error){ console.warn('淘汰赛占位迁移审计写入失败:',error && error.message || error) })
+  }
+  var existingCodes=new Set(existing.map(function(match){return String(match.pairingCode || '')}).filter(Boolean))
+  var existingIdentities=new Set(existing.map(pairingIdentity))
+  var existingByNo=new Map(existing.map(function(match){return [Number(match.matchNo || match.matchIndex || 0),match]}))
+  var missing=[]
+  for(var index=0;index<expected.length;index+=1){
+    var match=expected[index]
+    if(match.pairingCode && existingCodes.has(String(match.pairingCode)))continue
+    if(existingIdentities.has(pairingIdentity(match)))continue
+    var sameNo=existingByNo.get(Number(match.matchNo || match.matchIndex || 0))
+    if(sameNo)return { success:false,code:'PAIRING_NUMBER_CONFLICT',message:'场序'+Number(match.matchNo || match.matchIndex || 0)+'已被其他对阵占用，为避免覆盖已有赛程，本次未补齐' }
+    missing.push(match)
+  }
+  for(var addIndex=0;addIndex<missing.length;addIndex+=1){
+    var item=missing[addIndex]
+    item.orgId=actor.orgId
+    item.pairingStatus='confirmed'
+    item.scheduleStatus='unassigned'
+    item.placeholderUntilResolved=true
+    item.pairingBackfillSource='ensureKnockoutPairings'
+    item.createTime=db.serverDate()
+    item.updateTime=db.serverDate()
+    await db.collection('matches').add({ data:item })
+  }
+  if(missing.length){
+    await db.collection('divisions').doc(divisionId).update({ data:{ pairingGenerated:true,pairingTemplateVersion:built.templateVersion,knockoutPairingsPrepared:true,knockoutPairingsPreparedAt:db.serverDate(),updateTime:db.serverDate() } }).catch(function(){})
+    await db.collection('tournaments').doc(tournamentId).update({ data:{ pairingGenerated:true,schedulePublished:false,updateTime:db.serverDate(),orgId:actor.orgId } })
+  }
+  return { success:true,message:missing.length?'已补齐'+missing.length+'场淘汰/排位赛占位对阵':'淘汰/排位赛占位对阵已完整',addedCount:missing.length,replacedCount:stale.length,matchCount:expected.length,matches:missing }
+}
+
 async function resetPairings(event, tournament, actor) {
   var tournamentId = String(event.tournamentId || tournament._id || '')
   var divisionId = String(event.divisionId || 'default')
@@ -257,7 +351,8 @@ async function scheduleExistingPairings(event, tournament, actor) {
   var ids = Array.isArray(event.divisionIds) && event.divisionIds.length
     ? event.divisionIds.map(String)
     : [String(event.divisionId || 'default')]
-  var config = event.scheduleConfig || {}
+  var config = sanitizeScheduleDraft(event.scheduleConfig || tournament.scheduleDraft || tournament.scheduleConfig || {})
+  var fullReflow = event.fullReflow === true
   var allMatches = await loadAllTournamentMatches(tournamentId)
   var selected = []
   var divisions = []
@@ -270,18 +365,23 @@ async function scheduleExistingPairings(event, tournament, actor) {
     if (normalized.error) return { success: false, code: normalized.code, message: normalized.error }
     var rows = allMatches.filter(function(match) { return belongsToDivision(match, divisionId) && !match.isBye && match.status !== 'cancelled' })
     if (!rows.length) return { success: false, code: 'PAIRING_REQUIRED', message: '当前组别尚未生成对阵，请先确认抽签结果' }
-    if (rows.some(function(match) { return match.executionSnapshot || match.schedulePublished || ['ongoing','live','finished','completed'].indexOf(String(match.status || '').toLowerCase()) >= 0 })) {
+    if (fullReflow && rows.some(function(match) { return match.executionSnapshot || match.schedulePublished || ['ongoing','live','finished','completed'].indexOf(String(match.status || '').toLowerCase()) >= 0 })) {
       return { success: false, code: 'SCHEDULE_REPLACE_BLOCKED', message: '当前组别已有已发布或已进入比赛执行的场次，不能重新编排' }
     }
-    rows.forEach(clearScheduleAssignment)
-    selected = selected.concat(rows)
+    var pending = fullReflow ? rows : rows.filter(function(match){return !match.matchDate || !match.matchTime || !match.venue || match.scheduleStatus==='unassigned'})
+    if (fullReflow) pending.forEach(clearScheduleAssignment)
+    selected = selected.concat(pending)
     divisions.push({ id: divisionId, state: state, normalized: normalized })
   }
-  var occupied = buildOccupiedSlotSet(allMatches.filter(function(match) { return ids.indexOf(String(match.divisionId || 'default')) < 0 }))
+  if (!selected.length) return { success:true,message:'当前范围没有待安排比赛',matchCount:0,generationMode:'joint',matches:[] }
+  var selectedIds=new Set(selected.map(function(match){return String(match._id || '')}))
+  var occupiedMatches=allMatches.filter(function(match){return !selectedIds.has(String(match._id || '')) && match.matchDate && match.matchTime && match.venue})
+  var occupied = buildOccupiedSlotSet(occupiedMatches)
   var occupiedBeforeAssignment = new Set(occupied)
   var assigned = []
   divisions.forEach(function(item) {
     var rows = selected.filter(function(match) { return String(match.divisionId || 'default') === item.id })
+    item.normalized.config.occupiedMatches=occupiedMatches.concat(assigned)
     assignDateTimeVenue(rows, item.normalized.config, config.cupMode || '', occupied)
     rows.forEach(function(match) { match.scheduleStatus = match.matchDate && match.matchTime && match.venue ? 'scheduled' : 'unassigned' })
     assigned = assigned.concat(rows)
@@ -290,10 +390,10 @@ async function scheduleExistingPairings(event, tournament, actor) {
   if (validation.missingAssignments.length || validation.conflicts.length || validation.dailyLimitExceeded.length) {
     return { success: false, code: 'SCHEDULE_CAPACITY_INSUFFICIENT', message: '当前日期、场地或阶段容量不足，仍有' + validation.missingAssignments.length + '场比赛未完成安排', unassigned: validation.missingAssignments.length, conflicts: validation.conflicts }
   }
-  await Promise.all(assigned.map(function(match) { return db.collection('matches').doc(match._id).update({ data: { matchDate: match.matchDate, matchTime: match.matchTime, venue: match.venue, date: match.date || match.matchDate, startTime: match.startTime || match.matchTime, timeSlot: match.timeSlot || match.matchTime, scheduleStatus: 'scheduled', scheduleGenerated: true, updateTime: db.serverDate() } }) }))
+  await Promise.all(assigned.map(function(match) { return db.collection('matches').doc(match._id).update({ data: { matchDate: match.matchDate, matchTime: match.matchTime, venue: match.venue, date: match.date || match.matchDate, startTime: match.startTime || match.matchTime, timeSlot: match.timeSlot || match.matchTime,durationMinutes:Number(match.durationMinutes || 0),bufferMinutes:Number(match.bufferMinutes || 0),scheduleSession:String(match.scheduleSession || ''), scheduleStatus: 'scheduled', scheduleGenerated: true, updateTime: db.serverDate() } }) }))
   var now = db.serverDate()
-  await db.collection('tournaments').doc(tournamentId).update({ data: { scheduleGenerated: true, scheduleGenerationMode: ids.length > 1 ? 'joint' : 'separate', scheduleConfig: db.command.set(config), scheduleDraft: db.command.set(null), updateTime: now, orgId: actor.orgId } })
-  return { success: true, message: '已为' + assigned.length + '场对阵安排日期、时间和场地', matchCount: assigned.length, generationMode: ids.length > 1 ? 'joint' : 'separate', matches: assigned }
+  await db.collection('tournaments').doc(tournamentId).update({ data: { scheduleGenerated: true, scheduleGenerationMode: 'joint', scheduleConfig: db.command.set(config), scheduleDraft: db.command.set(null),scheduleEngineVersion:SCHEDULE_ENGINE_VERSION, updateTime: now, orgId: actor.orgId } })
+  return { success: true, message: '已为' + assigned.length + '场待排对阵安排日期、时间和场地', matchCount: assigned.length, generationMode: 'joint', matches: assigned,scheduleEngineVersion:SCHEDULE_ENGINE_VERSION }
 }
 
 function finalRankingMode(record, scheduleType) {
@@ -371,14 +471,26 @@ function normalizeScheduleTiming(scheduleConfig, division) {
   }
   if (!matchMinutes) return { error: '当前竞赛组别没有已定版的单场比赛时长，请先返回竞赛规则设置', code: 'DIVISION_MATCH_MINUTES_REQUIRED' }
   if (!matchFormat) return { error: '当前竞赛组别没有已定版的几人制规则，请先返回竞赛规则设置', code: 'DIVISION_MATCH_FORMAT_REQUIRED' }
-  if (matchMinutes > 60) return { error: '当前组别单场比赛时长超过60分钟，不能使用一小时排赛格，请先确认长时比赛排程规则', code: 'MATCH_DURATION_EXCEEDS_SLOT' }
   config.matchDuration = matchMinutes
   config.matchFormat = matchFormat
-  config.slotMinutes = 60
-  config.matchInterval = 60 - matchMinutes
-  config.maxDailyOne = false
-  config.maxPerSession = 1
-  config.dailyMatchLimit = 0
+  if (Number(config.schemaVersion || 1) >= 2) {
+    var divisionId=String(division && (division._id || division.id) || 'default')
+    var policy=config.divisionPolicies && config.divisionPolicies[divisionId] || {}
+    config.timeStepMinutes=Math.max(5,Math.min(30,Number(config.timeStepMinutes || 5)))
+    config.slotMinutes=config.timeStepMinutes
+    config.defaultTurnaroundMinutes=Math.max(0,Math.min(180,Number(config.defaultTurnaroundMinutes == null ? 10 : config.defaultTurnaroundMinutes)))
+    config.matchInterval=Math.max(0,Math.min(180,Number(policy.turnaroundMinutes == null ? config.defaultTurnaroundMinutes : policy.turnaroundMinutes)))
+    config.maxDailyOne=Number(policy.maxMatchesPerDay || 0)===1
+    config.maxPerSession=Math.max(1,Math.min(4,Number(policy.maxPerSession || config.maxPerSession || 1)))
+    config.dailyMatchLimit=0
+  } else {
+    if (matchMinutes > 60) return { error: '当前组别单场比赛时长超过60分钟，请在赛程设置中升级为新版事件日历', code: 'MATCH_DURATION_EXCEEDS_SLOT' }
+    config.slotMinutes = 60
+    config.matchInterval = 60 - matchMinutes
+    config.maxDailyOne = false
+    config.maxPerSession = 1
+    config.dailyMatchLimit = 0
+  }
   var resources = scheduleEngine.normalizeVenueResources(config)
   if (resources.length === 0) return { error: '请至少填写一块真实比赛场地', code: 'VENUE_RESOURCES_REQUIRED' }
   var invalidResource = resources.find(function(resource) { return scheduleEngine.buildTimeSlots(Object.assign({},config,{ sessionWindows:resource.sessionWindows })).length === 0 })
@@ -1210,13 +1322,201 @@ function sanitizeScheduleDraft(input) {
   var validFormats=new Set(['5side','7side','8side','9side','11side'])
   var validSessions=new Set(['morning','afternoon','evening'])
   function safeTime(value,fallback){var text=String(value || '');return /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/.test(text)?text:fallback}
+  function sanitizeWindows(input){return (Array.isArray(input)?input:[]).filter(function(window){return validSessions.has(String(window && window.key || ''))}).slice(0,3).map(function(window){var key=String(window.key);var defaults=key==='morning'?['09:00','12:00']:key==='afternoon'?['14:00','18:00']:['18:30','21:30'];return { key:key,label:({ morning:'上午',afternoon:'下午',evening:'晚间' })[key],enabled:window.enabled===true,start:safeTime(window.start,defaults[0]),end:safeTime(window.end,defaults[1]) }})}
+  var sharedWindows=sanitizeWindows(source.sessionWindows)
   var venueResources=(Array.isArray(source.venueResources)?source.venueResources:[]).slice(0,50).map(function(resource){
     var fieldFormat=String(resource && resource.fieldFormat || '').toLowerCase()
     if (!validFormats.has(fieldFormat)) fieldFormat=''
-    var windows=(Array.isArray(resource && resource.sessionWindows)?resource.sessionWindows:[]).filter(function(window){return validSessions.has(String(window && window.key || ''))}).slice(0,3).map(function(window){return { key:String(window.key),label:({ morning:'上午',afternoon:'下午',evening:'晚上' })[String(window.key)],enabled:window.enabled===true,start:safeTime(window.start,'09:00'),end:safeTime(window.end,'12:00') }})
+    var windows=sanitizeWindows(Array.isArray(resource && resource.sessionWindows) && resource.sessionWindows.length?resource.sessionWindows:sharedWindows)
     return { name:String(resource && (resource.name || resource.venue) || '').trim().slice(0,80),fieldFormat:fieldFormat,sessionWindows:windows }
   }).filter(function(resource){return resource.name && resource.fieldFormat})
-  return { generationMode:source.generationMode==='separate'?'separate':'joint',selectedDivisionId:String(source.selectedDivisionId || '').slice(0,80),startDate:String(source.startDate || '').slice(0,10),endDate:String(source.endDate || '').slice(0,10),matchDays:(Array.isArray(source.matchDays)?source.matchDays:[]).filter(function(day){return validDays.has(day)}),venues:venueResources.map(function(resource){return resource.name}),venueResources:venueResources,calendarExtraTimeSlots:Array.from(new Set((Array.isArray(source.calendarExtraTimeSlots)?source.calendarExtraTimeSlots:[]).map(function(time){return safeTime(time,'')}).filter(Boolean))).slice(0,30),slotMinutes:60,maxDailyOne:false,maxPerSession:1,dailyMatchLimit:0,restMinutes:Math.max(0,Math.min(1440,Number(source.restMinutes || 90))) }
+  var divisionPolicies={}
+  var rawPolicies=source.divisionPolicies && typeof source.divisionPolicies==='object' ? source.divisionPolicies : {}
+  Object.keys(rawPolicies).slice(0,64).forEach(function(divisionId){
+    var policy=rawPolicies[divisionId] || {}
+    divisionPolicies[String(divisionId).slice(0,80)]={
+      turnaroundMinutes:Math.max(0,Math.min(180,Number(policy.turnaroundMinutes == null ? source.defaultTurnaroundMinutes || 10 : policy.turnaroundMinutes))),
+      maxMatchesPerDay:Math.max(1,Math.min(4,Number(policy.maxMatchesPerDay || 2))),
+      maxPerSession:Math.max(1,Math.min(4,Number(policy.maxPerSession || 1))),
+      minRestMinutes:Math.max(0,Math.min(4320,Number(policy.minRestMinutes == null ? 120 : policy.minRestMinutes))),
+      allowedDates:Array.from(new Set((Array.isArray(policy.allowedDates)?policy.allowedDates:[]).map(function(value){return String(value || '').slice(0,10)}).filter(Boolean))).slice(0,120),
+      allowedSessions:Array.from(new Set((Array.isArray(policy.allowedSessions)?policy.allowedSessions:[]).map(String).filter(function(value){return validSessions.has(value)}))).slice(0,3),
+      allowedVenues:Array.from(new Set((Array.isArray(policy.allowedVenues)?policy.allowedVenues:[]).map(function(value){return String(value || '').trim().slice(0,80)}).filter(Boolean))).slice(0,50)
+    }
+  })
+  return { schemaVersion:2,generationMode:'joint',calendarSource:String(source.calendarSource || '')==='import'?'import':'settings',startDate:String(source.startDate || '').slice(0,10),endDate:String(source.endDate || '').slice(0,10),matchDays:(Array.isArray(source.matchDays)?source.matchDays:[]).filter(function(day){return validDays.has(day)}),venues:venueResources.map(function(resource){return resource.name}),venueResources:venueResources,sessionWindows:sharedWindows,calendarExtraTimeSlots:Array.from(new Set((Array.isArray(source.calendarExtraTimeSlots)?source.calendarExtraTimeSlots:[]).map(function(time){return safeTime(time,'')}).filter(Boolean))).slice(0,30),timeStepMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),slotMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),defaultTurnaroundMinutes:Math.max(0,Math.min(180,Number(source.defaultTurnaroundMinutes == null ? 10 : source.defaultTurnaroundMinutes))),frequencyPreset:['adaptive','daily_one','am_pm','custom'].indexOf(String(source.frequencyPreset || 'adaptive'))>=0?String(source.frequencyPreset || 'adaptive'):'adaptive',divisionPolicies:divisionPolicies,maxDailyOne:false,maxPerSession:1,dailyMatchLimit:0,restMinutes:Math.max(0,Math.min(4320,Number(source.restMinutes == null ? 120 : source.restMinutes))) }
+}
+
+async function savePairingTemplate(event,tournament,actor) {
+  var tournamentId=String(event.tournamentId || tournament._id || '')
+  var divisionId=String(event.divisionId || '')
+  if (!divisionId || divisionId==='default') return { success:false,code:'DIVISION_REQUIRED',message:'请先选择竞赛组别' }
+  var state=await loadDivisionConfiguration(tournament,divisionId,actor)
+  if (state.scopeDenied) return { success:false,code:'DIVISION_SCOPE_DENIED',message:'无权修改其他机构的竞赛组别' }
+  if (!state.division) return { success:false,code:'DIVISION_NOT_FOUND',message:'竞赛组别不存在' }
+  var existing=(await loadAllTournamentMatches(tournamentId)).filter(function(match){return belongsToDivision(match,divisionId) && match.status!=='cancelled'})
+  if (existing.length) return { success:false,code:'PAIRING_TEMPLATE_LOCKED',message:'当前组别已生成对阵，需先在抽签总览撤回对阵后再修改规则' }
+  var template=event.pairingTemplate && typeof event.pairingTemplate==='object' ? event.pairingTemplate : null
+  var validation=pairingTemplates.validatePairingTemplate(template)
+  if (!validation.valid) return { success:false,code:'PAIRING_TEMPLATE_INVALID',message:validation.error }
+  var serialized=JSON.stringify(template)
+  if (serialized.length>300000) return { success:false,code:'PAIRING_TEMPLATE_TOO_LARGE',message:'对阵模板过大' }
+  var safeTemplate=JSON.parse(serialized)
+  safeTemplate.version=String(safeTemplate.version || ('custom-'+Date.now())).slice(0,80)
+  safeTemplate.source=String(safeTemplate.source || '自定义对阵').slice(0,120)
+  safeTemplate.updatedAt=new Date().toISOString()
+  await db.collection('divisions').doc(divisionId).update({ data:{ pairingTemplate:db.command.set(safeTemplate),pairingTemplateVersion:safeTemplate.version,pairingTemplateUpdatedAt:db.serverDate(),updateTime:db.serverDate() } })
+  return { success:true,message:'对阵规则已保存',templateVersion:safeTemplate.version,totalMatches:validation.totalMatches }
+}
+
+function scheduleDateTimeMs(date,time) {
+  var normalizedTime=String(time || '')
+  if(normalizedTime==='24:00'){
+    var nextDay=new Date(String(date || '')+'T00:00:00')
+    nextDay.setDate(nextDay.getDate()+1)
+    return nextDay.getTime()
+  }
+  var value=new Date(String(date || '')+'T'+normalizedTime+':00').getTime()
+  return Number.isFinite(value)?value:NaN
+}
+
+function matchParticipantKeys(match) {
+  return Array.from(new Set([match && match.homeTeamId,match && match.awayTeamId].filter(Boolean).map(String)))
+}
+
+function scheduleAssignmentErrors(matches,config,divisionMap) {
+  var errors=[]
+  var resources=scheduleEngine.normalizeVenueResources(config)
+  var resourceMap=new Map(resources.map(function(resource){return [resource.venue,resource]}))
+  var venueRows=new Map()
+  var teamRows=new Map()
+  var matchNoMap=new Map()
+  matches.forEach(function(match){
+    var scope=String(match.divisionId || 'default')
+    var matchNo=Number(match.matchNo || match.matchIndex || 0)
+    if (matchNo) matchNoMap.set(scope+':'+matchNo,match)
+    if (!match.matchDate || !match.matchTime || !match.venue || match.isBye || match.status==='cancelled') return
+    var division=divisionMap.get(scope) || {}
+    var policy=scheduleEngine.schedulePolicyForMatch(match,config)
+    var duration=Math.max(1,Number(match.durationMinutes || divisionMatchMinutes(division) || config.matchDuration || 50))
+    var buffer=Math.max(0,Number(match.bufferMinutes == null ? policy.turnaroundMinutes : match.bufferMinutes))
+    var start=scheduleDateTimeMs(match.matchDate,match.matchTime)
+    var resource=resourceMap.get(String(match.venue))
+    var format=String(match.matchFormat || division.matchFormat || division.playersOnField && division.playersOnField+'side' || '').toLowerCase()
+    if (!Number.isFinite(start)) errors.push({ matchId:String(match._id || ''),message:'比赛日期或时间无效' })
+    if (config.startDate && String(match.matchDate)<String(config.startDate) || config.endDate && String(match.matchDate)>String(config.endDate)) errors.push({ matchId:String(match._id || ''),message:'比赛日期超出赛事日历范围' })
+    var weekdayNames=['周日','周一','周二','周三','周四','周五','周六']
+    var parsedDay=new Date(String(match.matchDate)+'T00:00:00')
+    if (Array.isArray(config.matchDays) && config.matchDays.length && !Number.isNaN(parsedDay.getTime()) && config.matchDays.indexOf(weekdayNames[parsedDay.getDay()])<0) errors.push({ matchId:String(match._id || ''),message:'该日期不是赛事允许的比赛日' })
+    if (!resource) errors.push({ matchId:String(match._id || ''),message:'场地不在赛事日历设置中' })
+    else if (config.calendarSource!=='import' && format && resource.fieldFormat!==format) errors.push({ matchId:String(match._id || ''),message:'比赛制式与场地不匹配' })
+    if (policy.allowedDates.length && policy.allowedDates.indexOf(String(match.matchDate))<0) errors.push({ matchId:String(match._id || ''),message:'该日期不在组别允许范围内' })
+    var session=scheduleEngine.sessionName(match.matchTime,resource && resource.sessionWindows || config.sessionWindows)
+    var activeWindow=scheduleEngine.normalizeSessionWindows(resource && resource.sessionWindows || config.sessionWindows).find(function(window){return window.key===session})
+    if (config.calendarSource!=='import' && (!activeWindow || minutesOfDay(match.matchTime)<minutesOfDay(activeWindow.start) || start+(duration+buffer)*60000>scheduleDateTimeMs(match.matchDate,activeWindow.end))) errors.push({ matchId:String(match._id || ''),message:'比赛未完整落在已开放时段内' })
+    if (policy.allowedSessions.length && policy.allowedSessions.indexOf(session)<0) errors.push({ matchId:String(match._id || ''),message:'该时段不在组别允许范围内' })
+    if (policy.allowedVenues.length && policy.allowedVenues.indexOf(String(match.venue))<0) errors.push({ matchId:String(match._id || ''),message:'该场地不在组别允许范围内' })
+    var row={ match:match,start:start,end:start+(duration+buffer)*60000,policy:policy,session:session }
+    var venueList=venueRows.get(String(match.venue)) || []
+    venueList.push(row);venueRows.set(String(match.venue),venueList)
+    matchParticipantKeys(match).forEach(function(teamId){var list=teamRows.get(teamId)||[];list.push(row);teamRows.set(teamId,list)})
+  })
+  venueRows.forEach(function(rows,venue){
+    rows.sort(function(a,b){return a.start-b.start})
+    for(var i=1;i<rows.length;i+=1) if(scheduleEngine.overlaps(rows[i-1].start,rows[i-1].end,rows[i].start,rows[i].end)){errors.push({ matchId:String(rows[i-1].match._id || ''),message:venue+'存在时间区间重叠' });errors.push({ matchId:String(rows[i].match._id || ''),message:venue+'存在时间区间重叠' })}
+  })
+  teamRows.forEach(function(rows){
+    rows.sort(function(a,b){return a.start-b.start})
+    var counts={}
+    var sessions={}
+    rows.forEach(function(row){
+      var date=String(row.match.matchDate),sessionKey=date+'|'+row.session
+      counts[date]=(counts[date]||0)+1;sessions[sessionKey]=(sessions[sessionKey]||0)+1
+      if(counts[date]>row.policy.maxMatchesPerDay) errors.push({ matchId:String(row.match._id || ''),message:'球队当日比赛数超过组别上限' })
+      if(sessions[sessionKey]>row.policy.maxPerSession) errors.push({ matchId:String(row.match._id || ''),message:'球队同一时段比赛数超过组别上限' })
+    })
+    for(var i=1;i<rows.length;i+=1){var required=Math.max(rows[i-1].policy.minRestMinutes,rows[i].policy.minRestMinutes)*60000;if(rows[i].start-rows[i-1].end<required){errors.push({ matchId:String(rows[i-1].match._id || ''),message:'球队两场比赛之间休息时间不足' });errors.push({ matchId:String(rows[i].match._id || ''),message:'球队两场比赛之间休息时间不足' })}}
+  })
+  matches.forEach(function(match){
+    if(!match.matchDate || !match.matchTime)return
+    var scope=String(match.divisionId || 'default'),start=scheduleDateTimeMs(match.matchDate,match.matchTime)
+    ;(match.dependencyMatchNos || []).map(Number).filter(Boolean).forEach(function(no){var dependency=matchNoMap.get(scope+':'+no);if(dependency && dependency.matchDate && dependency.matchTime){var end=scheduleDateTimeMs(dependency.matchDate,dependency.matchTime)+Math.max(1,Number(dependency.durationMinutes || 50))*60000;if(start<=end)errors.push({ matchId:String(match._id || ''),message:'比赛时间早于前置场次结束' })}})
+  })
+  var seen=new Set()
+  return errors.filter(function(error){var key=error.matchId+'|'+error.message;if(seen.has(key))return false;seen.add(key);return true})
+}
+
+function minutesOfDay(time){var parts=String(time || '').split(':').map(Number);return (parts[0] || 0)*60+(parts[1] || 0)}
+
+function buildImportedScheduleConfig(matches,currentConfig,divisionMap) {
+  var scheduled=(Array.isArray(matches)?matches:[]).filter(function(match){return match && match.status!=='cancelled' && !match.isBye && match.matchDate && match.matchTime && match.venue})
+  var dates=Array.from(new Set(scheduled.map(function(match){return String(match.matchDate)}))).sort()
+  var weekdayNames=['周日','周一','周二','周三','周四','周五','周六']
+  var matchDays=Array.from(new Set(dates.map(function(date){var day=new Date(date+'T00:00:00');return Number.isNaN(day.getTime())?'':weekdayNames[day.getDay()]}).filter(Boolean)))
+  var venueFormats=new Map()
+  var divisionIds=new Set()
+  scheduled.forEach(function(match){
+    var divisionId=String(match.divisionId || 'default')
+    var division=divisionMap && divisionMap.get(divisionId) || {}
+    var format=String(match.matchFormat || division.matchFormat || division.playersOnField && division.playersOnField+'side' || '').toLowerCase()
+    var venue=String(match.venue || '').trim()
+    var formats=venueFormats.get(venue) || []
+    if(format && formats.indexOf(format)<0)formats.push(format)
+    venueFormats.set(venue,formats)
+    divisionIds.add(divisionId)
+  })
+  var previous=sanitizeScheduleDraft(currentConfig || {})
+  var previousResources=new Map(previous.venueResources.map(function(resource){return [resource.name,resource]}))
+  var venueResources=Array.from(venueFormats.entries()).map(function(entry){
+    var venue=entry[0],formats=entry[1],fallback=previousResources.get(venue) || {}
+    return { name:venue,fieldFormat:formats[0] || fallback.fieldFormat || '5side',sessionWindows:[] }
+  })
+  var divisionPolicies={}
+  divisionIds.forEach(function(divisionId){divisionPolicies[divisionId]={ turnaroundMinutes:0,maxMatchesPerDay:4,maxPerSession:4,minRestMinutes:0,allowedDates:[],allowedSessions:[],allowedVenues:[] }})
+  return sanitizeScheduleDraft({ schemaVersion:2,generationMode:'joint',calendarSource:'import',startDate:dates[0] || '',endDate:dates[dates.length-1] || '',matchDays:matchDays,venueResources:venueResources,sessionWindows:[],calendarExtraTimeSlots:Array.from(new Set(scheduled.map(function(match){return String(match.matchTime)}))).sort(),timeStepMinutes:5,defaultTurnaroundMinutes:0,frequencyPreset:'custom',divisionPolicies:divisionPolicies,restMinutes:0 })
+}
+
+async function importScheduleAssignments(event,tournament,actor) {
+  var tournamentId=String(event.tournamentId || tournament._id || '')
+  var rows=Array.isArray(event.rows)?event.rows.slice(0,1000):[]
+  var allMatches=await loadAllTournamentMatches(tournamentId)
+  var matchMap=new Map(allMatches.map(function(match){return [String(match._id),match]}))
+  var changed=[],rowErrors=[],seen=new Set()
+  rows.forEach(function(row,index){
+    var matchId=String(row && row.matchId || '').trim()
+    var date=String(row && row.matchDate || '').trim(),time=String(row && row.matchTime || '').trim(),venue=String(row && row.venue || '').trim()
+    if(!date && !time && !venue)return
+    if(!matchId || seen.has(matchId)){rowErrors.push({ row:index+2,matchId:matchId,message:seen.has(matchId)?'比赛ID重复':'缺少比赛ID' });return}
+    seen.add(matchId)
+    var match=matchMap.get(matchId)
+    if(!match){rowErrors.push({ row:index+2,matchId:matchId,message:'比赛不存在或不属于当前赛事' });return}
+    if(!date || !time || !venue){rowErrors.push({ row:index+2,matchId:matchId,message:'日期、时间和场地必须同时填写' });return}
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)){rowErrors.push({ row:index+2,matchId:matchId,message:'日期或时间格式不正确' });return}
+    if(date===String(match.matchDate || '') && time===String(match.matchTime || '') && venue===String(match.venue || ''))return
+    if(match.schedulePublished || match.executionSnapshot || ['ongoing','live','finished','completed','archived'].indexOf(String(match.status || '').toLowerCase())>=0){rowErrors.push({ row:index+2,matchId:matchId,message:'比赛已发布或已进入执行，不能直接调整' });return}
+    changed.push({ match:match,before:{ matchDate:String(match.matchDate||''),matchTime:String(match.matchTime||''),venue:String(match.venue||'') },after:{ matchDate:date,matchTime:time,venue:venue } })
+  })
+  var provisional=allMatches.map(function(match){var change=changed.find(function(item){return String(item.match._id)===String(match._id)});return change?Object.assign({},match,change.after):match})
+  var divisionRows=(await db.collection('divisions').where({ tournamentId:tournamentId }).limit(1000).get()).data || []
+  var divisionMap=new Map(divisionRows.map(function(division){return [String(division._id || division.id),division]}))
+  var importCreatesCalendar=String(event.adjustmentType || '')==='import'
+  var config=importCreatesCalendar?buildImportedScheduleConfig(provisional,tournament.scheduleDraft || tournament.scheduleConfig || {},divisionMap):sanitizeScheduleDraft(tournament.scheduleDraft || tournament.scheduleConfig || {})
+  if(!config.venueResources.length) rowErrors.push({ row:0,matchId:'',message:importCreatesCalendar?'文件中没有可用于创建赛事日历的完整排期':'请先完成赛程设置并创建赛事日历' })
+  rowErrors=rowErrors.concat(scheduleAssignmentErrors(provisional,config,divisionMap).filter(function(error){return changed.some(function(item){return String(item.match._id)===error.matchId})}))
+  if(rowErrors.length)return { success:false,code:'SCHEDULE_IMPORT_INVALID',message:'排期预检未通过',validCount:0,skippedCount:rows.length-changed.length,errorCount:rowErrors.length,errors:rowErrors.slice(0,100) }
+  if(event.dryRun!==false)return { success:true,dryRun:true,validCount:changed.length,skippedCount:rows.length-changed.length,errorCount:0,calendarCreated:importCreatesCalendar,calendarSummary:importCreatesCalendar?{ startDate:config.startDate,endDate:config.endDate,venueCount:config.venueResources.length,matchDayCount:config.matchDays.length }:null,changes:changed.slice(0,100).map(function(item){return { matchId:item.match._id,matchNo:item.match.matchNo || item.match.matchIndex,before:item.before,after:item.after }}) }
+  if(changed.length)await ensureScheduleAdjustmentLogs()
+  var operationGroupId='schedule-import-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')
+  for(var i=0;i<changed.length;i+=1){
+    var item=changed[i]
+    var log=await db.collection('schedule_adjustment_logs').add({ data:{ tournamentId:tournamentId,divisionId:String(item.match.divisionId || 'default'),matchId:String(item.match._id),operationGroupId:operationGroupId,adjustmentType:String(event.adjustmentType || 'import'),before:item.before,after:item.after,actorUserId:String(actor.user._id || ''),actorOrgId:actor.orgId,status:'pending',undone:false,createTime:db.serverDate(),updateTime:db.serverDate() } })
+    var division=divisionMap.get(String(item.match.divisionId || 'default')) || {}
+    var policy=scheduleEngine.schedulePolicyForMatch(item.match,config)
+    await db.collection('matches').doc(item.match._id).update({ data:{ matchDate:item.after.matchDate,matchTime:item.after.matchTime,venue:item.after.venue,date:item.after.matchDate,startTime:item.after.matchTime,timeSlot:item.after.matchTime,durationMinutes:Math.max(1,Number(item.match.durationMinutes || divisionMatchMinutes(division) || 50)),bufferMinutes:policy.turnaroundMinutes,scheduleSession:scheduleEngine.sessionName(item.after.matchTime,config.sessionWindows),scheduleStatus:'scheduled',scheduleGenerated:true,updateTime:db.serverDate() } })
+    await db.collection('schedule_adjustment_logs').doc(log._id).update({ data:{ status:'applied',appliedAt:db.serverDate(),updateTime:db.serverDate() } })
+  }
+  await db.collection('tournaments').doc(tournamentId).update({ data:{ scheduleDraft:db.command.set(config),scheduleConfig:db.command.set(config),scheduleGenerated:true,scheduleGenerationMode:'joint',scheduleEngineVersion:SCHEDULE_ENGINE_VERSION,updateTime:db.serverDate() } })
+  return { success:true,message:importCreatesCalendar?'赛事日历已创建，已导入'+changed.length+'场比赛':'已安排'+changed.length+'场比赛',appliedCount:changed.length,calendarCreated:importCreatesCalendar,operationGroupId:operationGroupId }
 }
 
 async function buildDivisionScheduleTopology(tournamentId, division, sharedConfig) {
@@ -1396,6 +1696,9 @@ exports.main = async (event, context) => {
       await db.collection('tournaments').doc(tournamentId).update({ data:{ scheduleDraft:db.command.set(draftConfig),scheduleDraftUpdatedAt:db.serverDate(),orgId:actor.orgId,updateTime:db.serverDate() } })
       return { success:true,message:'赛程时间与场地配置草稿已保存',scheduleDraftUpdated:true }
     }
+    if (event.action === 'savePairingTemplate') return await savePairingTemplate(event,tournament,actor)
+    if (event.action === 'importScheduleAssignments') return await importScheduleAssignments(event,tournament,actor)
+    if (event.action === 'ensureKnockoutPairings') return await ensureKnockoutPairings(event,tournament,actor)
     if (event.action === 'generatePairings') return await generatePairingsOnly(event, tournament, actor)
     if (event.action === 'resetPairings') return await resetPairings(event, tournament, actor)
     if (event.action === 'scheduleExistingPairings') return await scheduleExistingPairings(event, tournament, actor)
@@ -1678,9 +1981,12 @@ exports.__test = {
   buildPairingsFromTemplate: pairingTemplates.buildPairingsFromTemplate,
   clearScheduleAssignment: clearScheduleAssignment,
   matchIsProtectedFromPairingReplace: matchIsProtectedFromPairingReplace,
+  staleKnockoutPairings: staleKnockoutPairings,
   scheduleExistingPairings: scheduleExistingPairings,
   validateGeneratedSchedule: validateGeneratedSchedule,
   validateParticipantSet: validateParticipantSet,
   normalizeScheduleTiming: normalizeScheduleTiming,
-  sanitizeScheduleDraft: sanitizeScheduleDraft
+  sanitizeScheduleDraft: sanitizeScheduleDraft,
+  buildImportedScheduleConfig: buildImportedScheduleConfig,
+  scheduleAssignmentErrors: scheduleAssignmentErrors
 }

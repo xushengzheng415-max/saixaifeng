@@ -13,7 +13,7 @@
     <!-- 比赛核心信息 -->
     <div class="match-hero" :class="'status-bg-' + (match.status || 'scheduled')">
       <div class="hero-team hero-home">
-        <img v-if="homeLogo" :src="homeLogo" class="hero-logo" @error="$event.target.style.display='none'" />
+        <img v-if="homeLogo" :src="homeLogo" :alt="`${homeName || '主队'}队徽`" class="hero-logo" @error="handleTeamLogoError('home')" />
         <div class="hero-logo-placeholder" v-else>{{ homeName?.[0] || '?' }}</div>
         <div class="hero-team-name">{{ homeName || '待定' }}</div>
       </div>
@@ -36,7 +36,7 @@
       </div>
 
       <div class="hero-team hero-away">
-        <img v-if="awayLogo" :src="awayLogo" class="hero-logo" @error="$event.target.style.display='none'" />
+        <img v-if="awayLogo" :src="awayLogo" :alt="`${awayName || '客队'}队徽`" class="hero-logo" @error="handleTeamLogoError('away')" />
         <div class="hero-logo-placeholder" v-else>{{ awayName?.[0] || '?' }}</div>
         <div class="hero-team-name">{{ awayName || '待定' }}</div>
       </div>
@@ -113,7 +113,10 @@
               <!-- 主队阵容 -->
               <div class="lineup-side">
                 <div class="lineup-team-header">
-                  <span class="team-badge">{{ homeName?.[0] || '主' }}</span>
+                  <span class="team-badge">
+                    <img v-if="homeLogo" :src="homeLogo" :alt="`${homeName || '主队'}队徽`" @error="handleTeamLogoError('home')" />
+                    <span v-else>{{ homeName?.[0] || '主' }}</span>
+                  </span>
                   <div>
                     <div class="team-name">{{ homeName || '主队' }}</div>
                     <div class="team-formation" v-if="lineups.home?.formation">阵型 {{ lineups.home.formation }}</div>
@@ -160,7 +163,10 @@
               <!-- 客队阵容 -->
               <div class="lineup-side">
                 <div class="lineup-team-header">
-                  <span class="team-badge away">{{ awayName?.[0] || '客' }}</span>
+                  <span class="team-badge away">
+                    <img v-if="awayLogo" :src="awayLogo" :alt="`${awayName || '客队'}队徽`" @error="handleTeamLogoError('away')" />
+                    <span v-else>{{ awayName?.[0] || '客' }}</span>
+                  </span>
                   <div>
                     <div class="team-name">{{ awayName || '客队' }}</div>
                     <div class="team-formation" v-if="lineups.away?.formation">阵型 {{ lineups.away.formation }}</div>
@@ -224,12 +230,19 @@
                 暂无比赛事件<el-button v-if="!isRefereeEvidenceLocked" link type="primary" @click="openAddEventDialog">，+ 添加事件</el-button>
               </div>
               <div v-for="(evt, i) in sortedEvents" :key="i" class="event-row" :class="'event-' + evt.type">
-                <div class="event-time">{{ evt.minute }}'</div>
+                <div class="event-time">{{ eventTimeText(evt) }}</div>
                 <div class="event-icon">{{ eventIcon(evt.type) }}</div>
                 <div class="event-content">
                   <span class="event-type-label">{{ eventLabel(evt.type) }}</span>
-                  <span class="event-player">{{ evt.playerName }}</span>
-                  <span v-if="evt.assistName" class="event-assist">助攻: {{ evt.assistName }}</span>
+                  <template v-if="evt.type === 'substitution'">
+                    <span class="event-period">{{ substitutionPeriodLabel(evt.substitutionPeriod) }}</span>
+                    <span class="event-player">换上：{{ evt.playerName }}</span>
+                    <span v-if="evt.assistName" class="event-assist">换下：{{ evt.assistName }}</span>
+                  </template>
+                  <template v-else>
+                    <span class="event-player">{{ evt.playerName }}</span>
+                    <span v-if="evt.assistName" class="event-assist">助攻：{{ evt.assistName }}</span>
+                  </template>
                   <span v-if="evt.teamSide" class="event-side">{{ evt.teamSide === 'home' ? homeName : awayName }}</span>
                 </div>
                 <el-button v-if="!isRefereeEvidenceLocked" size="small" text type="danger" @click="removeEvent(i)">
@@ -312,29 +325,31 @@
           <div v-if="hasKitColors">
             <div class="kit-row">
               <span class="kit-label">{{ homeName || '主队' }}</span>
+              <el-tag size="small" effect="plain" type="success">{{ kitSetLabel('home') }}</el-tag>
               <div class="kit-dots">
                 <el-tooltip content="上衣" placement="top">
-                  <span class="kit-dot" v-if="kitColors.home?.jersey" :style="{ backgroundColor: kitColors.home.jersey }"></span>
+                  <span class="kit-dot" v-if="kitColors.home?.jersey" :style="{ backgroundColor: kitColorCss(kitColors.home.jersey) }"></span>
                 </el-tooltip>
                 <el-tooltip content="短裤" placement="top">
-                  <span class="kit-dot" v-if="kitColors.home?.shorts" :style="{ backgroundColor: kitColors.home.shorts }"></span>
+                  <span class="kit-dot" v-if="kitColors.home?.shorts" :style="{ backgroundColor: kitColorCss(kitColors.home.shorts) }"></span>
                 </el-tooltip>
                 <el-tooltip content="球袜" placement="top">
-                  <span class="kit-dot" v-if="kitColors.home?.socks" :style="{ backgroundColor: kitColors.home.socks }"></span>
+                  <span class="kit-dot" v-if="kitColors.home?.socks" :style="{ backgroundColor: kitColorCss(kitColors.home.socks) }"></span>
                 </el-tooltip>
               </div>
             </div>
             <div class="kit-row">
               <span class="kit-label">{{ awayName || '客队' }}</span>
+              <el-tag size="small" effect="plain" type="success">{{ kitSetLabel('away') }}</el-tag>
               <div class="kit-dots">
                 <el-tooltip content="上衣" placement="top">
-                  <span class="kit-dot" v-if="kitColors.away?.jersey" :style="{ backgroundColor: kitColors.away.jersey }"></span>
+                  <span class="kit-dot" v-if="kitColors.away?.jersey" :style="{ backgroundColor: kitColorCss(kitColors.away.jersey) }"></span>
                 </el-tooltip>
                 <el-tooltip content="短裤" placement="top">
-                  <span class="kit-dot" v-if="kitColors.away?.shorts" :style="{ backgroundColor: kitColors.away.shorts }"></span>
+                  <span class="kit-dot" v-if="kitColors.away?.shorts" :style="{ backgroundColor: kitColorCss(kitColors.away.shorts) }"></span>
                 </el-tooltip>
                 <el-tooltip content="球袜" placement="top">
-                  <span class="kit-dot" v-if="kitColors.away?.socks" :style="{ backgroundColor: kitColors.away.socks }"></span>
+                  <span class="kit-dot" v-if="kitColors.away?.socks" :style="{ backgroundColor: kitColorCss(kitColors.away.socks) }"></span>
                 </el-tooltip>
               </div>
             </div>
@@ -401,13 +416,19 @@
     </el-dialog>
 
     <!-- 结束比赛 / 录入比分弹窗 -->
-    <el-dialog v-model="finishDialogVisible" title="结束比赛 · 录入比分" width="400px">
+    <el-dialog v-model="finishDialogVisible" title="结束比赛 · 录入比分" width="560px" class="finish-dialog">
       <div class="finish-score-input">
-        <div class="finish-team">{{ homeName || '主队' }}</div>
-        <el-input-number v-model="finishForm.homeScore" :min="0" size="large" style="width:100px;" />
+        <article class="finish-score-team">
+          <small>主队</small>
+          <strong>{{ homeName || '主队' }}</strong>
+          <el-input-number v-model="finishForm.homeScore" :min="0" :max="99" controls-position="right" size="large" />
+        </article>
         <span class="finish-sep">:</span>
-        <el-input-number v-model="finishForm.awayScore" :min="0" size="large" style="width:100px;" />
-        <div class="finish-team">{{ awayName || '客队' }}</div>
+        <article class="finish-score-team">
+          <small>客队</small>
+          <strong>{{ awayName || '客队' }}</strong>
+          <el-input-number v-model="finishForm.awayScore" :min="0" :max="99" controls-position="right" size="large" />
+        </article>
       </div>
       <template #footer>
         <el-button @click="finishDialogVisible = false">取消</el-button>
@@ -463,54 +484,16 @@
       <div class="kit-edit-section">
         <div class="kit-edit-team">
           <div class="kit-edit-title">{{ homeName || '主队' }}（主场）</div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">上衣</span>
-            <el-select v-model="kitForm.home.jersey" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.home.jersey || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">短裤</span>
-            <el-select v-model="kitForm.home.shorts" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.home.shorts || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">球袜</span>
-            <el-select v-model="kitForm.home.socks" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.home.socks || '未选' }}</span>
-          </div>
+          <div class="kit-set-picker"><span class="kit-color-label">选择套装</span><el-select v-model="kitForm.homeSet" size="small" style="width:150px"><el-option label="主比赛服" value="primary" /><el-option label="备用比赛服" value="secondary" :disabled="!hasKitSet('home','secondary')" /></el-select></div>
+          <div class="kit-preview-row"><span>上衣</span><i :style="kitPreviewStyle('home','jersey')"></i><b>{{ selectedKitColor('home','jersey') || '未设置' }}</b><span>短裤</span><i :style="kitPreviewStyle('home','shorts')"></i><b>{{ selectedKitColor('home','shorts') || '未设置' }}</b><span>球袜</span><i :style="kitPreviewStyle('home','socks')"></i><b>{{ selectedKitColor('home','socks') || '未设置' }}</b></div>
         </div>
 
         <el-divider>VS</el-divider>
 
         <div class="kit-edit-team">
           <div class="kit-edit-title away">{{ awayName || '客队' }}（客场）</div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">上衣</span>
-            <el-select v-model="kitForm.away.jersey" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.away.jersey || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">短裤</span>
-            <el-select v-model="kitForm.away.shorts" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.away.shorts || '未选' }}</span>
-          </div>
-          <div class="kit-color-row">
-            <span class="kit-color-label">球袜</span>
-            <el-select v-model="kitForm.away.socks" size="small" style="width:100px" clearable placeholder="选择">
-              <el-option v-for="c in kitColorOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <span class="kit-color-name">{{ kitForm.away.socks || '未选' }}</span>
-          </div>
+          <div class="kit-set-picker"><span class="kit-color-label">选择套装</span><el-select v-model="kitForm.awaySet" size="small" style="width:150px"><el-option label="主比赛服" value="primary" /><el-option label="备用比赛服" value="secondary" :disabled="!hasKitSet('away','secondary')" /></el-select></div>
+          <div class="kit-preview-row"><span>上衣</span><i :style="kitPreviewStyle('away','jersey')"></i><b>{{ selectedKitColor('away','jersey') || '未设置' }}</b><span>短裤</span><i :style="kitPreviewStyle('away','shorts')"></i><b>{{ selectedKitColor('away','shorts') || '未设置' }}</b><span>球袜</span><i :style="kitPreviewStyle('away','socks')"></i><b>{{ selectedKitColor('away','socks') || '未设置' }}</b></div>
         </div>
       </div>
       <template #footer>
@@ -734,6 +717,8 @@
         :awayTeamLogo="awayLogo"
         :homePlayersList="homePlayers"
         :awayPlayersList="awayPlayers"
+        :playerCount="currentPlayerCount"
+        :substitutePlayerLimit="substitutePlayerLimit"
         :homeInitialLineup="match.lineups?.home"
         :awayInitialLineup="match.lineups?.away"
         @save="handleVisualLineupSave"
@@ -741,10 +726,11 @@
     </el-dialog>
 
     <!-- 添加比赛事件弹窗 -->
-    <el-dialog v-model="eventDialogVisible" title="添加比赛事件" width="460px">
-      <el-form :model="eventForm" label-width="80px">
-        <el-form-item label="事件类型">
-          <el-select v-model="eventForm.type" style="width:100%;">
+    <el-dialog v-model="eventDialogVisible" title="添加比赛事件" width="680px" class="event-dialog">
+      <el-form v-loading="eventPlayersLoading" :model="eventForm" label-position="top" class="event-form">
+        <div class="event-form-grid">
+          <el-form-item label="事件类型">
+          <el-select v-model="eventForm.type" style="width:100%">
             <el-option label="进球 ⚽" value="goal" />
             <el-option label="助攻 👟" value="assist" />
             <el-option label="黄牌 🟨" value="yellow_card" />
@@ -753,21 +739,45 @@
             <el-option label="点球 ⚽" value="penalty" />
             <el-option label="乌龙球 ⚽" value="own_goal" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="时间（分钟）">
-          <el-input-number v-model="eventForm.minute" :min="0" :max="130" style="width:100%;" />
-        </el-form-item>
-        <el-form-item label="球队">
-          <el-radio-group v-model="eventForm.teamSide">
+          </el-form-item>
+          <el-form-item label="时间（分钟）">
+            <el-select v-model="eventForm.minute" filterable placeholder="选择比赛分钟" style="width:100%">
+              <el-option v-for="option in eventMinuteOptions" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item label="球队" class="event-team-item">
+          <el-radio-group v-model="eventForm.teamSide" class="event-team-options">
             <el-radio :value="'home'">{{ homeName || '主队' }}</el-radio>
             <el-radio :value="'away'">{{ awayName || '客队' }}</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="球员">
-          <el-input v-model="eventForm.playerName" placeholder="球员姓名" />
+        <template v-if="eventForm.type === 'substitution'">
+          <el-form-item label="换人时段" required>
+            <el-radio-group v-model="eventForm.substitutionPeriod" class="substitution-period-options">
+              <el-radio-button v-for="option in substitutionPeriodOptions" :key="option.value" :value="option.value">{{ option.label }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <section class="substitution-editor">
+            <header><div><strong>换人名单</strong><span>每次最多5组</span></div><el-button size="small" plain type="primary" :disabled="eventForm.substitutions.length >= 5" @click="addSubstitutionRow"><el-icon><Plus /></el-icon>增加一组</el-button></header>
+            <div v-for="(row,index) in eventForm.substitutions" :key="index" class="substitution-row">
+              <span class="substitution-index">{{ index + 1 }}</span>
+              <el-select v-model="row.outName" filterable clearable placeholder="选择换下球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-icon class="substitution-arrow"><Right /></el-icon>
+              <el-select v-model="row.inName" filterable clearable placeholder="选择换上球员"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-button v-if="eventForm.substitutions.length > 1" text type="danger" circle aria-label="删除这组换人" @click="removeSubstitutionRow(index)"><el-icon><Delete /></el-icon></el-button>
+            </div>
+          </section>
+        </template>
+        <el-form-item v-else :label="eventPlayerFieldLabel" required>
+          <el-select v-model="eventForm.playerName" filterable clearable :placeholder="eventPlayerPlaceholder" style="width:100%">
+            <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
+          </el-select>
         </el-form-item>
         <el-form-item label="助攻球员" v-if="eventForm.type === 'goal'">
-          <el-input v-model="eventForm.assistName" placeholder="助攻球员（可选）" />
+          <el-select v-model="eventForm.assistName" filterable clearable placeholder="选择助攻球员（可选）" style="width:100%">
+            <el-option v-for="player in eventAssistOptions" :key="player.value" :label="player.label" :value="player.value" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -793,7 +803,7 @@
             <span class="csl-vs-label">客队</span>
           </div>
           <div class="csl-meta-row">
-            <span>轮次：{{ match.round || '-' }}</span>
+            <span>轮次：{{ roundLabel }}</span>
             <span>场序：{{ match.matchSequence || match.sequence || '-' }}</span>
             <span>日期：{{ match.matchDate || '--' }}</span>
             <span>开球时间：{{ match.matchTime || '--:--' }}</span>
@@ -992,7 +1002,7 @@
                 <span class="csl-vs-label">客队</span>
               </div>
               <div class="csl-meta-row">
-                <span>轮次：{{ match.round || '-' }}</span>
+                <span>轮次：{{ roundLabel }}</span>
                 <span>场序：{{ match.matchSequence || match.sequence || '-' }}</span>
                 <span>日期：{{ match.matchDate || '--' }}</span>
                 <span>开球时间：{{ match.matchTime || '--:--' }}</span>
@@ -1230,11 +1240,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Delete, Plus, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
-import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord } from '../../utils/cloud'
+import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
+import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
+import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 
 const route = useRoute()
@@ -1249,9 +1260,57 @@ const homeName = ref('')
 const awayName = ref('')
 const homeLogo = ref('')
 const awayLogo = ref('')
+const registeredKitColors = ref({ home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } })
+const registeredKitColorLabels = ref({ home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } })
+
+function handleTeamLogoError(side) {
+  if (side === 'home') homeLogo.value = ''
+  if (side === 'away') awayLogo.value = ''
+}
+
+function getTeamLogoSource(record, side = '') {
+  if (!record || typeof record !== 'object') return ''
+  const scoped = side ? [
+    record[`${side}Logo`],
+    record[`${side}TeamLogo`],
+    record[`${side}TeamLogoUrl`],
+    record[`${side}LogoUrl`],
+    record[`${side}LogoFileID`],
+    record[`${side}LogoFileId`]
+  ] : []
+  return [
+    ...scoped,
+    record.logo,
+    record.logoUrl,
+    record.logoImage,
+    record.teamLogo,
+    record.teamLogoUrl,
+    record.teamLogoImage,
+    record.logoFileID,
+    record.logoFileId,
+    record.teamLogoFileId
+  ].map(value => String(value || '').trim()).find(Boolean) || ''
+}
+
+async function resolveTeamLogoSource(source) {
+  const value = String(source || '').trim()
+  if (!value) return ''
+  if (/^cloud:\/\//i.test(value)) {
+    const resolved = await getFileUrl(value)
+    return /^https?:\/\//i.test(String(resolved || '')) ? resolved : ''
+  }
+  return /^(https?:\/\/|\/)/i.test(value) ? value : ''
+}
+
+async function applyTeamLogo(side, source) {
+  const logo = await resolveTeamLogoSource(source)
+  if (side === 'home' && logo) homeLogo.value = logo
+  if (side === 'away' && logo) awayLogo.value = logo
+}
 const refName = ref('')
 const tournamentNameStr = ref('')
 const tournamentMatchFormat = ref('')
+const substitutePlayerLimit = ref(null)
 const saving = ref(false)
 const reviewSaving = ref(false)
 const returnRecordDialogVisible = ref(false)
@@ -1273,7 +1332,52 @@ const finishForm = ref({ homeScore: 0, awayScore: 0 })
 
 // 事件弹窗
 const eventDialogVisible = ref(false)
-const eventForm = ref({ type: 'goal', minute: 0, teamSide: 'home', playerName: '', assistName: '' })
+const eventPlayersLoading = ref(false)
+const emptySubstitution = () => ({ outName:'',inName:'' })
+const newEventForm = () => ({ type:'goal',minute:0,teamSide:'home',playerName:'',assistName:'',substitutionPeriod:'first_half',substitutions:[emptySubstitution()] })
+const eventForm = ref(newEventForm())
+const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:minute,label:`${minute}′` }))
+const substitutionPeriodOptions = [{ label:'上半场',value:'first_half' },{ label:'中场休息',value:'halftime' },{ label:'下半场',value:'second_half' }]
+const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '领牌球员' : eventForm.value.type === 'assist' ? '助攻球员' : '球员')
+const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
+const activeEventPlayers = computed(() => eventForm.value.teamSide === 'away' ? awayPlayers.value : homePlayers.value)
+const eventPlayerOptions = computed(() => {
+  const rows = new Map()
+  activeEventPlayers.value.forEach(player => {
+    const name = String(player.name || player.playerName || '').trim()
+    if (!name || rows.has(name)) return
+    const number = player.jerseyNumber ?? player.number
+    const position = formatPosition(player.position)
+    rows.set(name, { value:name,label:[number !== undefined && number !== '' ? `${number}号` : '',name,position && position !== '-' ? position : ''].filter(Boolean).join(' · ') })
+  })
+  return [...rows.values()]
+})
+const eventAssistOptions = computed(() => eventPlayerOptions.value.filter(player => player.value !== eventForm.value.playerName))
+
+watch(() => eventForm.value.teamSide, (next, previous) => {
+  if (!eventDialogVisible.value || next === previous) return
+  eventForm.value.playerName = ''
+  eventForm.value.assistName = ''
+  eventForm.value.substitutions = [emptySubstitution()]
+})
+watch(() => eventForm.value.playerName, playerName => {
+  if (eventForm.value.assistName === playerName) eventForm.value.assistName = ''
+})
+watch(() => eventForm.value.type, type => {
+  if (type !== 'goal') eventForm.value.assistName = ''
+  if (type === 'substitution' && !eventForm.value.substitutions.length) eventForm.value.substitutions = [emptySubstitution()]
+})
+
+function addSubstitutionRow() { if (eventForm.value.substitutions.length < 5) eventForm.value.substitutions.push(emptySubstitution()) }
+function removeSubstitutionRow(index) { if (eventForm.value.substitutions.length > 1) eventForm.value.substitutions.splice(index,1) }
+function substitutionOutOptions(index) {
+  const used = new Set(eventForm.value.substitutions.map((row,rowIndex) => rowIndex === index ? '' : row.outName).filter(Boolean))
+  return eventPlayerOptions.value.filter(player => !used.has(player.value) && player.value !== eventForm.value.substitutions[index]?.inName)
+}
+function substitutionInOptions(index) {
+  const used = new Set(eventForm.value.substitutions.map((row,rowIndex) => rowIndex === index ? '' : row.inName).filter(Boolean))
+  return eventPlayerOptions.value.filter(player => !used.has(player.value) && player.value !== eventForm.value.substitutions[index]?.outName)
+}
 
 // 裁判组编辑弹窗
 const refereeDialogVisible = ref(false)
@@ -1287,6 +1391,8 @@ const refereeForm = ref({
 // 球服颜色编辑弹窗
 const kitDialogVisible = ref(false)
 const kitForm = ref({
+  homeSet: 'primary',
+  awaySet: 'primary',
   home: { jersey: '', shorts: '', socks: '' },
   away: { jersey: '', shorts: '', socks: '' }
 })
@@ -1353,6 +1459,12 @@ const hexToColorName = {
   '#283593': '藏青', '#1a237e': '藏青', '#303f9f': '藏青', '#3f51b5': '藏青',
 }
 
+const colorNameToHex = {
+  '红':'#E53935', '黄':'#FDD835', '蓝':'#1E88E5', '白':'#FFFFFF', '绿':'#43A047', '黑':'#212121',
+  '橙':'#FB8C00', '紫':'#8E24AA', '粉':'#D81B60', '灰':'#757575', '深绿':'#1B5E20', '浅蓝':'#42A5F5',
+  '藏青':'#283593', '棕':'#795548'
+}
+
 // 将颜色值（可能是 hex 或颜色名）转换为显示用的颜色名
 function normalizeKitColor(val) {
   if (!val) return ''
@@ -1363,16 +1475,15 @@ function normalizeKitColor(val) {
   return val
 }
 
-const phaseLabel = computed(() => {
-  const p = match.value.phase
-  return { group: '小组赛', league: '联赛', knockout: '淘汰赛', cup: '淘汰赛', final: '决赛' }[p] || p || '-'
-})
+function kitColorCss(val) {
+  if (!val) return ''
+  if (colorNameToHex[val]) return colorNameToHex[val]
+  const named = Object.entries(colorNameToHex).find(([name]) => String(val).includes(name))
+  return named?.[1] || val
+}
 
-const roundLabel = computed(() => {
-  if (match.value.roundName) return match.value.roundName
-  if (match.value.round) return `第${match.value.round}轮`
-  return '-'
-})
+const phaseLabel = computed(() => formatMatchPhase(match.value))
+const roundLabel = computed(() => formatMatchRound(match.value))
 
 const statusLabel = computed(() => {
   const s = match.value.status || 'scheduled'
@@ -1413,9 +1524,13 @@ const eventSummary = computed(() => {
   ]
 })
 
+function substitutionPeriodLabel(value) { return ({ first_half:'上半场',halftime:'中场休息',second_half:'下半场' })[value] || '比赛中' }
+function eventTimeText(event) { return event?.type === 'substitution' && event?.substitutionPeriod === 'halftime' ? '中场' : `${Number(event?.minute || 0)}'` }
+
 // 裁判组
 const refereeCrew = computed(() => match.value.refereeCrew || {})
 const currentMatchFormat = computed(() => match.value.matchFormat || tournamentMatchFormat.value || '11side')
+const currentPlayerCount = computed(() => Number.parseInt(String(currentMatchFormat.value), 10) || 11)
 const currentMatchFormatLabel = computed(() => {
   const number = String(currentMatchFormat.value).match(/\d+/)?.[0] || '11'
   return `${number}人制`
@@ -1452,22 +1567,43 @@ const hasRefereeCrew = computed(() => {
 // 球服颜色（自动将旧 hex 值转换为颜色名）
 const kitColors = computed(() => {
   const raw = match.value.kitColors || { home: {}, away: {} }
+  const selection = match.value.kitSelection || {}
+  const registered = registeredKitColors.value
+  const labels = registeredKitColorLabels.value
+  const valueFor = (side, key) => {
+    const matchValue = normalizeKitColor(raw[side]?.[key])
+    if (matchValue) return matchValue
+    const setKey = selection[side] || 'primary'
+    const registeredValue = normalizeKitColor(registered[side]?.[setKey]?.[key])
+    if (registeredValue && !String(registeredValue).startsWith('#')) return registeredValue
+    return labels[side]?.[key] || registeredValue
+  }
   return {
     home: {
-      jersey: normalizeKitColor(raw.home?.jersey),
-      shorts: normalizeKitColor(raw.home?.shorts),
-      socks: normalizeKitColor(raw.home?.socks)
+      jersey: valueFor('home', 'jersey'),
+      shorts: valueFor('home', 'shorts'),
+      socks: valueFor('home', 'socks')
     },
     away: {
-      jersey: normalizeKitColor(raw.away?.jersey),
-      shorts: normalizeKitColor(raw.away?.shorts),
-      socks: normalizeKitColor(raw.away?.socks)
+      jersey: valueFor('away', 'jersey'),
+      shorts: valueFor('away', 'shorts'),
+      socks: valueFor('away', 'socks')
     }
   }
 })
+const kitSetLabel = side => (match.value.kitSelection?.[side] || 'primary') === 'secondary' ? '备用比赛服' : '主比赛服'
+const hasKitSet = (side, setKey) => ['jersey','shorts','socks'].some(key => registeredKitColors.value[side]?.[setKey]?.[key])
+const selectedKitColor = (side, key) => {
+  const setKey = kitForm.value[`${side}Set`] || 'primary'
+  return normalizeKitColor(registeredKitColors.value[side]?.[setKey]?.[key]) || registeredKitColorLabels.value[side]?.[setKey]?.[key] || ''
+}
+const kitPreviewStyle = (side, key) => {
+  const color = selectedKitColor(side, key)
+  return { backgroundColor: kitColorCss(color) || '#eef2f0' }
+}
 const hasKitColors = computed(() => {
   const k = kitColors.value
-  return !!(k.home?.jersey || k.away?.jersey)
+  return ['jersey','shorts','socks'].some(key => k.home?.[key] || k.away?.[key])
 })
 
 // 首发阵容
@@ -1512,10 +1648,12 @@ const awaySubsPadded = computed(() => {
 
 function kitStyle(kit) {
   if (!kit || !kit.jersey) return {}
+  const jersey = kitColorCss(kit.jersey)
+  const shorts = kitColorCss(kit.shorts || kit.jersey)
   return {
-    backgroundColor: kit.jersey,
-    color: isLightColor(kit.jersey) ? '#333' : '#fff',
-    border: `2px solid ${kit.shorts || kit.jersey}`,
+    backgroundColor: jersey,
+    color: isLightColor(jersey) ? '#333' : '#fff',
+    border: `2px solid ${shorts}`,
   }
 }
 
@@ -1554,7 +1692,7 @@ function formatDateTimeCN(date) {
 
 function goBack() {
   router.push({
-    path: `/tournaments/${tournamentId}/schedule`,
+    path: `/tournaments/${tournamentId}/matches`,
     query: sourceDivisionId ? { divisionId: sourceDivisionId } : {}
   })
 }
@@ -1597,16 +1735,45 @@ async function returnRefereeRecord() {
   } catch (error) { ElMessage.error(error.message || '退回失败') } finally { reviewSaving.value = false }
 }
 
-// 加载赛事名称
-async function loadTournamentName(tid) {
+function resolveSubstitutePlayerLimit(playerCount, ...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue
+    const details = source.regulationDetails && typeof source.regulationDetails === 'object'
+      ? source.regulationDetails
+      : source
+    // 阵容编辑器的替补席只承载可参赛人员，不单独扣除球队官员名额。
+    const totalLimit = Number(details.benchTotalLimit)
+    if (Number.isFinite(totalLimit) && totalLimit >= 0) {
+      return totalLimit
+    }
+    const playerLimit = Number(details.benchPlayerLimit)
+    if (Number.isFinite(playerLimit) && playerLimit >= 0) return playerLimit
+  }
+  return Number(playerCount) === 8 ? 8 : null
+}
+
+// 加载赛事名称与当前组别规程
+async function loadTournamentName(tid, divisionId = '') {
   try {
-    const tournament = await queryById('tournaments', tid)
+    const effectiveDivisionId = String(divisionId || sourceDivisionId || '')
+    const [tournament, divisionRecord] = await Promise.all([
+      queryById('tournaments', tid),
+      effectiveDivisionId ? queryById('divisions', effectiveDivisionId).catch(() => null) : Promise.resolve(null)
+    ])
     if (tournament && tournament.name) {
       tournamentNameStr.value = tournament.name
     }
     if (tournament) {
-      const division = (tournament.divisions || []).find(item => item && sourceDivisionId && (item.id === sourceDivisionId || item._id === sourceDivisionId))
+      const division = divisionRecord || (tournament.divisions || []).find(item => item && effectiveDivisionId && (item.id === effectiveDivisionId || item._id === effectiveDivisionId))
       tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
+      const playerCount = Number.parseInt(String(division?.matchFormat || tournamentMatchFormat.value || tournament.matchFormat || ''), 10)
+      substitutePlayerLimit.value = resolveSubstitutePlayerLimit(
+        playerCount,
+        division,
+        division?.publishedRegulationsSnapshot,
+        division?.rulesSnapshot,
+        tournament
+      )
     }
   } catch (e) {
     console.warn('加载赛事名称失败:', e)
@@ -1623,11 +1790,15 @@ async function loadMatch() {
     }
     homeName.value = m.homeTeamName || ''
     awayName.value = m.awayTeamName || ''
+    await Promise.all([
+      applyTeamLogo('home', getTeamLogoSource(m, 'home')),
+      applyTeamLogo('away', getTeamLogoSource(m, 'away'))
+    ])
     refName.value = m.refereeName || ''
     // 加载赛事名称
-    await loadTournamentName(m.tournamentId || tournamentId)
+    await loadTournamentName(m.tournamentId || tournamentId, m.divisionId || sourceDivisionId)
     // 加载队徽（先尝试从 tournament_teams 加载）
-    loadTeamLogos(m.homeTeamId, m.awayTeamId)
+    await loadTeamLogos(m.homeTeamId, m.awayTeamId)
     // 如果场序为空，自动计算
     if (!m.matchSequence && !m.sequence) {
       calculateMatchSequence(m)
@@ -1665,33 +1836,65 @@ async function loadTeamLogos(homeId, awayId) {
     if (ids.length === 0) return
 
     const teamIdMap = { home: homeId, away: awayId }
+    const relationMap = { home: null, away: null }
+    registeredKitColors.value = { home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } }
+    registeredKitColorLabels.value = { home: { primary: {}, secondary: {} }, away: { primary: {}, secondary: {} } }
 
-    // 1. 先从 tournament_teams 获取关联的真实 teamId 和其上的 logo
+    // 1. 从当前赛事报名关系读取真实 teamId、队徽和报名时提交的主比赛服。
     try {
-      const ttList = await queryList('tournament_teams', { where: { _id: { $in: ids } }, limit: 10 })
-      ;(ttList || []).forEach(t => {
-        if (t._id === homeId) {
-          if (t.teamId) teamIdMap.home = t.teamId
-          if (t.logo || t.logoUrl) homeLogo.value = t.logo || t.logoUrl
-        }
-        if (t._id === awayId) {
-          if (t.teamId) teamIdMap.away = t.teamId
-          if (t.logo || t.logoUrl) awayLogo.value = t.logo || t.logoUrl
-        }
-      })
+      const eventId = String(match.value.tournamentId || tournamentId || '')
+      const divisionId = String(match.value.divisionId || sourceDivisionId || '')
+      const relationScore = row => {
+        const sameDivision = divisionId && String(row.divisionId || 'default') === divisionId ? 100 : 0
+        const status = String(row.status || row.participationStatus || '').toLowerCase()
+        const statusScore = ['approved','confirmed','accepted'].includes(status) ? 20 : ['pending','pending_review','claimed'].includes(status) ? 10 : 0
+        const time = new Date(row.updateTime?.$date || row.updateTime || row.createTime?.$date || row.createTime || 0).getTime() || 0
+        return sameDivision + statusScore + time / 1e15
+      }
+      const loadRelation = async sourceId => {
+        const [byRelationId, byTeamId] = await Promise.all([
+          queryById('tournament_teams', sourceId).catch(() => null),
+          eventId ? queryList('tournament_teams', { where: { tournamentId:eventId, teamId:String(sourceId) }, limit: 100, silent:true }) : Promise.resolve([])
+        ])
+        const unique = new Map([byRelationId, ...(byTeamId || [])].filter(Boolean).map(item => [String(item._id), item]))
+        return [...unique.values()]
+          .filter(row => (!eventId || String(row.tournamentId || '') === eventId) && (String(row._id) === String(sourceId) || String(row.teamId) === String(sourceId)))
+          .sort((left, right) => relationScore(right) - relationScore(left))[0] || null
+      }
+      ;[relationMap.home, relationMap.away] = await Promise.all([loadRelation(homeId), loadRelation(awayId)])
+      for (const side of ['home','away']) {
+        const relation = relationMap[side]
+        if (!relation) continue
+        if (relation.teamId) teamIdMap[side] = relation.teamId
+        const relationLogo = getTeamLogoSource(relation)
+        if (relationLogo) await applyTeamLogo(side, relationLogo)
+        const source = relation.kitColors || relation.uniformColors || {}
+        const sourceLabels = relation.kitColorLabels || {}
+        registeredKitColors.value[side] = { primary: { ...(source.primary || source.home || {}) }, secondary: { ...(source.secondary || source.away || {}) } }
+        registeredKitColorLabels.value[side] = { primary: { ...(sourceLabels.primary || sourceLabels.home || {}) }, secondary: { ...(sourceLabels.secondary || sourceLabels.away || {}) } }
+      }
     } catch (e) {
       console.warn('tournament_teams 查询失败:', e)
     }
 
-    // 2. 用真实 teamId 查 teams 集合获取 logo
+    // 2. 报名关系没有颜色时，回退球队长期主比赛服；单场手工设置仍由 matches.kitColors 优先。
     const realTeamIds = [teamIdMap.home, teamIdMap.away].filter(Boolean)
-    if (realTeamIds.length > 0 && (!homeLogo.value || !awayLogo.value)) {
+    const missingKit = side => !['jersey','shorts','socks'].some(key => registeredKitColors.value[side]?.primary?.[key] || registeredKitColors.value[side]?.secondary?.[key])
+    if (realTeamIds.length > 0 && (!homeLogo.value || !awayLogo.value || missingKit('home') || missingKit('away'))) {
       try {
-        const teams = await queryList('teams', { where: { _id: { $in: realTeamIds } }, limit: 10 })
-        ;(teams || []).forEach(t => {
-          if (t._id === teamIdMap.home) homeLogo.value = t.logo || t.logoUrl || t.logoImage || homeLogo.value
-          if (t._id === teamIdMap.away) awayLogo.value = t.logo || t.logoUrl || t.logoImage || awayLogo.value
-        })
+        const teams = (await Promise.all(realTeamIds.map(id => queryById('teams', id).catch(() => null)))).filter(Boolean)
+        for (const t of teams || []) {
+          for (const side of ['home','away']) {
+            if (String(t._id) !== String(teamIdMap[side])) continue
+            const logoSource = getTeamLogoSource(t)
+            if (logoSource) await applyTeamLogo(side, logoSource)
+            if (!missingKit(side)) continue
+            const source = t.kitColors || t.uniformColors || {}
+            const sourceLabels = t.kitColorLabels || {}
+            registeredKitColors.value[side] = { primary: { ...(source.primary || source.home || {}) }, secondary: { ...(source.secondary || source.away || {}) } }
+            registeredKitColorLabels.value[side] = { primary: { ...(sourceLabels.primary || sourceLabels.home || {}) }, secondary: { ...(sourceLabels.secondary || sourceLabels.away || {}) } }
+          }
+        }
       } catch (e) {
         console.warn('teams 查询失败:', e)
       }
@@ -1861,17 +2064,54 @@ async function saveMatchEdit() {
 }
 
 // 比赛事件
-function openAddEventDialog() {
+async function openAddEventDialog() {
   if (!ensureEvidenceEditable()) return
-  eventForm.value = { type: 'goal', minute: 0, teamSide: 'home', playerName: '', assistName: '' }
+  eventForm.value = newEventForm()
   eventDialogVisible.value = true
+  eventPlayersLoading.value = true
+  try {
+    const [home, away] = await Promise.all([
+      homePlayers.value.length ? Promise.resolve(homePlayers.value) : loadTeamPlayers(match.value.homeTeamId),
+      awayPlayers.value.length ? Promise.resolve(awayPlayers.value) : loadTeamPlayers(match.value.awayTeamId)
+    ])
+    homePlayers.value = home
+    awayPlayers.value = away
+  } finally {
+    eventPlayersLoading.value = false
+  }
 }
 
 async function saveEvent() {
   if (!ensureEvidenceEditable()) return
+  let newEvents = []
+  if (eventForm.value.type === 'substitution') {
+    const rows = eventForm.value.substitutions.filter(row => row.outName || row.inName)
+    if (!rows.length) return ElMessage.warning('请至少填写一组换人')
+    if (rows.some(row => !row.outName || !row.inName)) return ElMessage.warning('请完整选择每组换上和换下球员')
+    if (rows.some(row => row.outName === row.inName)) return ElMessage.warning('同一组换上和换下不能是同一球员')
+    if (new Set(rows.map(row => row.outName)).size !== rows.length) return ElMessage.warning('同一球员不能重复换下')
+    if (new Set(rows.map(row => row.inName)).size !== rows.length) return ElMessage.warning('同一球员不能重复换上')
+    const batchId = `sub-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+    newEvents = rows.map((row,index) => {
+      const incoming = activeEventPlayers.value.find(player => String(player.name || player.playerName) === row.inName)
+      const outgoing = activeEventPlayers.value.find(player => String(player.name || player.playerName) === row.outName)
+      return {
+        type:'substitution',minute:Number(eventForm.value.minute || 0),teamSide:eventForm.value.teamSide,
+        playerName:row.inName,playerNumber:String(incoming?.jerseyNumber ?? incoming?.number ?? ''),
+        assistName:row.outName,assistNumber:String(outgoing?.jerseyNumber ?? outgoing?.number ?? ''),
+        substitutionPeriod:eventForm.value.substitutionPeriod,substitutionBatchId:batchId,substitutionBatchIndex:index + 1,substitutionBatchSize:rows.length,
+        source:'organizer_pc',createdAt:new Date().toISOString()
+      }
+    })
+  } else {
+    if (!eventForm.value.playerName) return ElMessage.warning('请选择事件球员')
+    const player = activeEventPlayers.value.find(item => String(item.name || item.playerName) === eventForm.value.playerName)
+    const assist = activeEventPlayers.value.find(item => String(item.name || item.playerName) === eventForm.value.assistName)
+    newEvents = [{ ...eventForm.value,substitutions:undefined,substitutionPeriod:undefined,playerNumber:String(player?.jerseyNumber ?? player?.number ?? ''),assistNumber:String(assist?.jerseyNumber ?? assist?.number ?? ''),source:'organizer_pc',createdAt:new Date().toISOString() }]
+  }
   saving.value = true
   try {
-    const events = [...(match.value.events || []), { ...eventForm.value }]
+    const events = [...(match.value.events || []), ...newEvents]
     await callFunction('updateMatch', {
       matchId,
       data: { events, updateTime: new Date() }
@@ -1955,8 +2195,11 @@ async function saveRefereeCrew() {
 // 球服颜色编辑
 function openKitDialog() {
   if (!ensureEvidenceEditable()) return
-  const k = match.value.kitColors || {}
+  const k = kitColors.value
+  const selection = match.value.kitSelection || {}
   kitForm.value = {
+    homeSet: selection.home || 'primary',
+    awaySet: selection.away || 'primary',
     home: {
       jersey: normalizeKitColor(k.home?.jersey) || '',
       shorts: normalizeKitColor(k.home?.shorts) || '',
@@ -1975,11 +2218,25 @@ async function saveKitColors() {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
+    const kitSelection = { home: kitForm.value.homeSet || 'primary', away: kitForm.value.awaySet || 'primary' }
+    const snapshot = {
+      home: {
+        jersey: selectedKitColor('home', 'jersey') || kitForm.value.home.jersey || '',
+        shorts: selectedKitColor('home', 'shorts') || kitForm.value.home.shorts || '',
+        socks: selectedKitColor('home', 'socks') || kitForm.value.home.socks || ''
+      },
+      away: {
+        jersey: selectedKitColor('away', 'jersey') || kitForm.value.away.jersey || '',
+        shorts: selectedKitColor('away', 'shorts') || kitForm.value.away.shorts || '',
+        socks: selectedKitColor('away', 'socks') || kitForm.value.away.socks || ''
+      }
+    }
     await callFunction('updateMatch', {
       matchId,
-      data: { kitColors: kitForm.value, updateTime: new Date() }
+      data: { kitColors: snapshot, kitSelection, updateTime: new Date() }
     })
-    match.value.kitColors = kitForm.value
+    match.value.kitColors = snapshot
+    match.value.kitSelection = kitSelection
     kitDialogVisible.value = false
     ElMessage.success('球服颜色已保存')
   } catch (err) {
@@ -2642,6 +2899,10 @@ onMounted(() => {
 
 /* 顶部 Hero */
 .match-hero {
+  --hero-accent: rgba(255,255,255,0.28);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2650,27 +2911,76 @@ onMounted(() => {
   border-radius: 16px;
   margin: 20px 0;
   color: #fff;
+  box-shadow: inset 0 3px 0 var(--hero-accent), 0 12px 30px rgba(20, 33, 29, 0.1);
 }
-.status-bg-scheduled { background: linear-gradient(135deg, #1B5E20 0%, #43A047 100%); }
-.status-bg-ongoing { background: linear-gradient(135deg, #e65100 0%, #f57c00 100%); }
-.status-bg-finished { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); }
-.status-bg-completed { background: linear-gradient(135deg, #064e3b 0%, #0f766e 100%); }
-.status-bg-postponed { background: linear-gradient(135deg, #616161 0%, #9e9e9e 100%); }
-.status-bg-cancelled { background: linear-gradient(135deg, #b71c1c 0%, #c62828 100%); opacity: 0.7; }
+.match-hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 138px;
+  height: 138px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.match-hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(255,255,255,0.065) 50%, transparent calc(50% + 0.5px));
+  pointer-events: none;
+}
+.match-hero > * { position: relative; z-index: 1; }
+.status-bg-scheduled {
+  --hero-accent: rgba(71,184,129,0.72);
+  background: radial-gradient(circle at 16% 0%, rgba(71,184,129,0.16), transparent 36%), linear-gradient(135deg, #172f29 0%, #24483e 100%);
+}
+.status-bg-ongoing {
+  --hero-accent: rgba(240,162,46,0.82);
+  background: radial-gradient(circle at 50% 0%, rgba(240,162,46,0.18), transparent 38%), linear-gradient(135deg, #222831 0%, #343c49 100%);
+}
+.status-bg-finished,
+.status-bg-completed {
+  --hero-accent: rgba(111,146,201,0.76);
+  background: radial-gradient(circle at 84% 0%, rgba(111,146,201,0.17), transparent 36%), linear-gradient(135deg, #243147 0%, #384963 100%);
+}
+.status-bg-postponed {
+  --hero-accent: rgba(203,213,225,0.58);
+  background: linear-gradient(135deg, #353b43 0%, #515b66 100%);
+}
+.status-bg-cancelled {
+  --hero-accent: rgba(220,104,104,0.75);
+  background: linear-gradient(135deg, #493033 0%, #684044 100%);
+}
 .referee-review-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 16px 0; padding: 14px 16px; border: 1px solid #f1d28e; border-radius: 10px; background: #fffaf0; }
 .referee-review-bar strong, .referee-review-bar span { display: block; }
 .referee-review-bar strong { color: #72520d; }
 .referee-review-bar span { margin-top: 5px; color: #7d7160; font-size: 13px; }
 .referee-review-actions { display: flex; flex: 0 0 auto; gap: 10px; }
 
-.hero-team { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 160px; }
-.hero-logo { width: 64px; height: 64px; object-fit: contain; }
+.hero-team { display: flex; flex-direction: column; align-items: center; gap: 9px; width: 160px; }
+.hero-logo {
+  width: 68px;
+  height: 68px;
+  padding: 7px;
+  box-sizing: border-box;
+  object-fit: contain;
+  border: 1px solid rgba(255,255,255,0.78);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 8px 22px rgba(6,16,13,0.2);
+}
 .hero-logo-placeholder {
   width: 64px; height: 64px; border-radius: 50%;
-  background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center;
   font-size: 24px; color: #fff; font-weight: 700;
 }
-.hero-team-name { font-size: 15px; font-weight: 600; text-align: center; }
+.hero-team-name { font-size: 15px; font-weight: 600; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
 
 .hero-score-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .hero-score { display: flex; align-items: center; gap: 12px; }
@@ -2741,13 +3051,50 @@ onMounted(() => {
 .event-player { font-weight: 500; }
 .event-assist { color: #909399; font-size: 12px; margin-left: 6px; }
 .event-side { color: #409eff; font-size: 12px; margin-left: 6px; }
+.event-period { display: inline-flex; margin-right: 7px; padding: 2px 6px; border-radius: 4px; color: #7a5b0a; background: #fff4cc; font-size: 11px; }
+.event-form { min-height: 310px; padding: 2px 4px 0; }
+.event-form-grid { display: grid; grid-template-columns: minmax(0,1fr) 150px; gap: 14px; }
+.event-form :deep(.el-form-item) { margin-bottom: 18px; }
+.event-form :deep(.el-form-item__label) { height: auto; margin-bottom: 7px; color: #34443b; font-weight: 600; line-height: 1.4; }
+.event-team-item { padding: 12px 14px; border: 1px solid #e3e9e5; border-radius: 7px; background: #f8faf9; }
+.event-team-options { display: grid; width: 100%; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 16px; }
+.event-team-options :deep(.el-radio) { height: auto; margin: 0; white-space: normal; }
+.event-team-options :deep(.el-radio__label) { overflow: hidden; text-overflow: ellipsis; }
+.substitution-period-options { display: grid; width: 100%; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.substitution-period-options :deep(.el-radio-button__inner) { width: 100%; }
+.substitution-editor { margin-bottom: 18px; overflow: hidden; border: 1px solid #e1e8e3; border-radius: 8px; background: #fff; }
+.substitution-editor>header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; border-bottom: 1px solid #e8edea; background: #f7faf8; }
+.substitution-editor>header div { display: flex; flex-direction: column; gap: 2px; }
+.substitution-editor>header span { color: #7a877f; font-size: 11px; }
+.substitution-row { display: grid; grid-template-columns: 24px minmax(0,1fr) 20px minmax(0,1fr) 32px; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #edf1ee; }
+.substitution-row:last-child { border-bottom: 0; }
+.substitution-index { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; color: #fff; background: #087b43; font-size: 11px; }
+.substitution-arrow { color: #87948c; }
+@media (max-width: 620px) {
+  .event-form-grid { grid-template-columns: 1fr; gap: 0; }
+  .event-team-options { grid-template-columns: 1fr; }
+  .substitution-period-options { grid-template-columns: 1fr; gap: 6px; }
+  .substitution-period-options :deep(.el-radio-button__inner) { border: 1px solid #dcdfe6; border-radius: 4px; }
+  .substitution-row { grid-template-columns: 24px minmax(0,1fr) 32px; }
+  .substitution-row .substitution-arrow { display: none; }
+  .substitution-row :deep(.el-select):first-of-type { grid-column: 2; }
+  .substitution-row :deep(.el-select):last-of-type { grid-column: 2; }
+}
 
 /* 结束比赛比分输入 */
 .finish-score-input {
-  display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 0;
+  display: grid; grid-template-columns: minmax(0,1fr) 28px minmax(0,1fr); align-items: end; gap: 16px; padding: 12px 0 4px;
 }
-.finish-team { font-weight: 600; font-size: 14px; min-width: 80px; text-align: center; }
-.finish-sep { font-size: 24px; font-weight: 700; }
+.finish-score-team { display: flex; min-width: 0; align-items: center; flex-direction: column; gap: 8px; }
+.finish-score-team small { color: #7a877f; font-size: 12px; }
+.finish-score-team strong { min-height: 42px; display: grid; place-items: center; color: #26382e; font-size: 15px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
+.finish-score-team :deep(.el-input-number) { width: 150px; max-width: 100%; }
+.finish-score-team :deep(.el-input__inner) { padding-right: 42px; color: #17251d; font-size: 24px; font-weight: 800; text-align: center; }
+.finish-sep { align-self: end; padding-bottom: 9px; color: #596860; font-size: 30px; font-weight: 700; text-align: center; }
+@media (max-width: 560px) {
+  .finish-score-input { grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr); gap: 8px; }
+  .finish-score-team :deep(.el-input-number) { width: 120px; }
+}
 
 /* Tab 样式 */
 .detail-tabs :deep(.el-tabs__header) { margin-bottom: 16px; }
@@ -2801,6 +3148,7 @@ onMounted(() => {
   font-weight: 500;
   color: #606266;
 }
+.kit-row :deep(.el-tag) { flex: 0 0 auto; }
 .kit-dots { display: flex; align-items: center; gap: 6px; }
 .kit-dot {
   display: inline-block;
@@ -2845,6 +3193,7 @@ onMounted(() => {
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; font-weight: 700; flex-shrink: 0;
 }
+.team-badge img { width: 30px; height: 30px; object-fit: contain; border-radius: 50%; background: #fff; }
 .team-badge.away { background: #e53935; }
 .team-name { font-size: 14px; font-weight: 600; color: #303133; }
 .team-formation { font-size: 12px; color: #909399; margin-top: 2px; }
@@ -2895,6 +3244,10 @@ onMounted(() => {
 .kit-edit-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #303133; }
 .kit-edit-title.away { color: #e53935; }
 .kit-color-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.kit-set-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.kit-preview-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 10px; border-radius: 6px; background: #f6f9f7; color: #66746b; font-size: 12px; }
+.kit-preview-row i { width: 18px; height: 18px; border: 1px solid #d5dfd9; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.6); }
+.kit-preview-row b { margin-right: 8px; color: #304238; font-weight: 600; }
 .kit-color-label { width: 50px; font-size: 13px; color: #606266; flex-shrink: 0; }
 .kit-color-hex { font-size: 12px; color: #909399; min-width: 70px; }
 

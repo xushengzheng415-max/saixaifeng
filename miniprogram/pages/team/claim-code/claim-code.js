@@ -2,6 +2,7 @@
 // 与逐队认领邀请（pages/team/prebuilt-invite）的区别：本页不带逐队 token，
 // 只带赛事级邀请码，必须由服务端按「本人已验证手机号」列出可认领球队。
 // 授权判定全部在 getMiniWorkspace 内完成，本页不做任何手机号匹配或过滤。
+var workspace = require('../../../utils/workspace')
 Page({
   data: {
     inviteKey: '',
@@ -20,7 +21,8 @@ Page({
     disclaimerAgreed: false,
     checkboxClass: '',
     acceptDisabled: true,
-    accepting: false
+    accepting: false,
+    autoEnteringClaimed: false
   },
 
   onLoad: function (options) {
@@ -86,10 +88,15 @@ Page({
       }
       var teams = (result.teams || []).map(function (item) {
         var row = Object.assign({}, item)
-        row.className = 'team-row'
+        row.className = item.alreadyClaimed ? 'team-row team-row-claimed' : 'team-row'
         return row
       })
-      self.setData({ teams: teams, hasTeams: teams.length > 0, needsPhone: Boolean(result.needsPhone) })
+      var autoClaimed = teams.length === 1 && teams[0].alreadyClaimed === true
+      self.setData({ teams: teams, hasTeams: teams.length > 0, needsPhone: Boolean(result.needsPhone) }, function() {
+        if (!autoClaimed || self.data.autoEnteringClaimed) return
+        self.setData({ autoEnteringClaimed:true })
+        self.enterClaimedTeam(teams[0])
+      })
     }).catch(function (error) {
       self.setData({ errorText: (error && error.message) || '网络异常，请重试' })
     })
@@ -127,6 +134,15 @@ Page({
   chooseTeam: function (event) {
     var id = String(event.currentTarget.dataset.id || '')
     var name = String(event.currentTarget.dataset.name || '')
+    var selected = this.data.teams.filter(function(item) { return item.inviteId === id })[0] || {}
+    if (selected.ownershipTransfer) {
+      this.acceptOwnerTransfer(selected)
+      return
+    }
+    if (selected.alreadyClaimed) {
+      this.enterClaimedTeam(selected)
+      return
+    }
     if (event.currentTarget.dataset.review === true) {
       this.openConflict(id)
       return
@@ -137,6 +153,46 @@ Page({
       return row
     })
     this.setData({ teams: teams, selectedInviteId: id, selectedTeamName: name }, this.refreshActionState)
+  },
+
+  enterClaimedTeam: function (team) {
+    this.enterTeamWorkspace(team.teamId, team.teamName, team.workspaceId)
+  },
+
+  enterTeamWorkspace: function (teamId, teamName, workspaceId) {
+    var self = this
+    var targetTeamId = String(teamId || '')
+    if (!targetTeamId) return wx.showToast({ title: '球队信息不完整，请稍后重试', icon: 'none' })
+    wx.setStorageSync('teamInfo', { _id: targetTeamId, teamId: targetTeamId, teamName: teamName || '' })
+    var switchPromise = workspaceId ? workspace.switchWorkspace(workspaceId) : Promise.resolve()
+    switchPromise.then(function () {
+      wx.navigateTo({ url: '/pages/team/team?teamId=' + encodeURIComponent(targetTeamId) })
+    }).catch(function (error) {
+      self.setData({ autoEnteringClaimed:false })
+      wx.showToast({ title: (error && error.message) || '球队空间切换失败', icon: 'none' })
+    })
+  },
+
+  acceptOwnerTransfer: function (team) {
+    if (this.data.accepting) return
+    var self = this
+    wx.showModal({
+      title:'接收球队主账号',
+      content:'确认后你将成为“' + String(team.teamName || '当前球队') + '”的主账号，原负责人保留为协作成员。',
+      confirmText:'确认接收',
+      success:function(modal) {
+        if (!modal.confirm) return
+        self.setData({ accepting:true })
+        self.call('acceptTeamOwnerTransfer', { transferId:team.transferId || team.inviteId }).then(function(res) {
+          var result = res.result || {}
+          if (!result.success) throw new Error(result.message || '主账号接收失败')
+          wx.showToast({ title:'主账号已转移', icon:'success' })
+          self.enterTeamWorkspace(result.teamId || team.teamId, team.teamName, result.workspaceId || '')
+        }).catch(function(error) {
+          wx.showModal({ title:'接收失败', content:(error && error.message) || '请稍后重试', showCancel:false })
+        }).finally(function() { self.setData({ accepting:false }) })
+      }
+    })
   },
 
   toggleDisclaimer: function () {
@@ -184,11 +240,20 @@ Page({
         self.openConflict(self.data.selectedInviteId)
         return
       }
+      // 认领成功后进入目标球队实际可用的工作空间。账号原有机构关系不变，
+      // 这里只切换本机当前上下文，不扩大目标机构权限。
+      var switchPromise = result.workspaceId
+        ? workspace.switchWorkspace(result.workspaceId)
+        : Promise.resolve()
       wx.showToast({ title: '球队已认领', icon: 'success' })
       var target = Number(result.pendingPlayerDraftCount || 0) > 0
         ? '/pages/team/imported-player-review/imported-player-review?teamId='
         : '/pages/team/team?teamId='
-      wx.redirectTo({ url: target + encodeURIComponent(result.teamId) })
+      switchPromise.then(function () {
+        wx.redirectTo({ url: target + encodeURIComponent(result.teamId) })
+      }).catch(function () {
+        wx.redirectTo({ url: target + encodeURIComponent(result.teamId) })
+      })
     }).catch(function (error) {
       wx.showModal({ title: '认领失败', content: (error && error.message) || '请重试', showCancel: false })
     }).finally(function () {

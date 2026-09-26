@@ -69,9 +69,9 @@
         <span>抽签分组</span>
         <em>查看分组</em>
       </div>
-      <div class="action-card" @click="$router.push(`/tournaments/${id}/schedule`)">
+      <div class="action-card" @click="$router.push(`/tournaments/${id}/matches`)">
         <el-icon :size="32"><Calendar /></el-icon>
-        <span>赛程安排</span>
+        <span>比赛管理</span>
         <em>{{ getMatchCount() }} 场</em>
       </div>
       <div class="action-card" @click="$router.push(`/tournaments/${id}/signups`)">
@@ -105,9 +105,9 @@
         <span>分组情况</span>
         <em>查看分组</em>
       </div>
-      <div class="action-card" @click="$router.push(`/tournaments/${id}/schedule`)">
+      <div class="action-card" @click="$router.push(`/tournaments/${id}/matches`)">
         <el-icon :size="32"><Calendar /></el-icon>
-        <span>赛程安排</span>
+        <span>比赛管理</span>
         <em>{{ getMatchCount() }} 场</em>
       </div>
       <div class="action-card" @click="scrollToRules">
@@ -362,8 +362,8 @@
 
     <!-- 底部操作 - 仅主办方显示管理按钮 -->
     <div class="detail-actions" v-if="isOrganizer">
-      <el-button type="primary" size="large" @click="$router.push(`/tournaments/${id}/schedule`)">
-        <el-icon><Calendar /></el-icon>管理赛程
+      <el-button type="primary" size="large" @click="$router.push(`/tournaments/${id}/matches`)">
+        <el-icon><Calendar /></el-icon>比赛管理
       </el-button>
       <el-button size="large" @click="$router.push(`/tournaments/${id}/edit`)">
         <el-icon><Edit /></el-icon>编辑赛事

@@ -348,14 +348,8 @@ const routes = [
   {
     path: '/tournaments/:id/schedule',
     name: 'TournamentSchedule',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '赛程管理', embeddedPageHeader: true },
-    children: [
-      {
-        path: '',
-        component: () => import('../views/tournament/TournamentSchedule.vue')
-      }
-    ]
+    redirect: to => ({ path: `/tournaments/${to.params.id}/matches`, query: to.query }),
+    meta: { requiresAuth: true, title: '比赛管理', embeddedPageHeader: true }
   },
   {
     path: '/tournaments/:id/pairings',
@@ -369,7 +363,7 @@ const routes = [
     name: 'TournamentMatchManagement',
     component: () => import('../views/layout/LayoutView.vue'),
     meta: { requiresAuth: true, title: '比赛管理', embeddedPageHeader: true },
-    children: [{ path: '', component: () => import('../views/tournament/TournamentMatchManagement.vue') }]
+    children: [{ path: '', component: () => import('../views/tournament/TournamentScheduleV2.vue') }]
   },
   {
     path: '/tournaments/:id/results',

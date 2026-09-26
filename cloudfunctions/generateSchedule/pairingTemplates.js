@@ -137,6 +137,93 @@ function roundRobinStage(code, pairings, round) {
   return { name: '小组赛 ' + code + '组 · 第' + round + '轮', stageName: '小组赛阶段', stageOrder: 1, phase: 'group', group: code + '组', round: round, matches: pairings.map(function(pair, index) { return { code: code + '-R' + round + '-' + (index + 1), home: code + pair[0], away: code + pair[1], roundName: '小组赛 ' + code + '组第' + round + '轮', stageName: '小组赛阶段', stageOrder: 1 } }) }
 }
 
+// 标准循环赛轮转法。奇数球队使用内部轮空位，不生成虚假比赛。
+function standardRoundRobinRounds(teamCount, loopType) {
+  var size = Math.max(2, Math.min(64, Number(teamCount || 0)))
+  var entries = Array.from({ length: size }, function(_, index) { return index + 1 })
+  if (entries.length % 2 === 1) entries.push(null)
+  var rounds = []
+  var count = entries.length
+  for (var roundIndex = 0; roundIndex < count - 1; roundIndex += 1) {
+    var pairings = []
+    for (var pairIndex = 0; pairIndex < count / 2; pairIndex += 1) {
+      var home = entries[pairIndex]
+      var away = entries[count - 1 - pairIndex]
+      if (!home || !away) continue
+      if ((roundIndex + pairIndex) % 2 === 1) {
+        var swap = home
+        home = away
+        away = swap
+      }
+      pairings.push([home, away])
+    }
+    rounds.push(pairings)
+    entries = [entries[0], entries[count - 1]].concat(entries.slice(1, count - 1))
+  }
+  if (String(loopType || 'single') === 'double') {
+    var returnLegs = rounds.map(function(round) {
+      return round.map(function(pair) { return [pair[1], pair[0]] })
+    })
+    rounds = rounds.concat(returnLegs)
+  }
+  return rounds
+}
+
+function standardRoundRobinTemplate(options) {
+  options = options || {}
+  var groupSizes = Array.isArray(options.groupSizes) && options.groupSizes.length
+    ? options.groupSizes.map(Number)
+    : Array.from({ length: Math.max(1, Number(options.groupCount || 1)) }, function() { return Number(options.teamsPerGroup || options.teamCount || 0) })
+  var loopType = String(options.loopType || 'single') === 'double' ? 'double' : 'single'
+  var stages = []
+  groupSizes.forEach(function(size, groupIndex) {
+    var code = String.fromCharCode(65 + groupIndex)
+    standardRoundRobinRounds(size, loopType).forEach(function(pairings, roundIndex) {
+      stages.push(roundRobinStage(code, pairings, roundIndex + 1))
+    })
+  })
+  return {
+    version: text(options.version || ('standard-rotation-' + loopType + '-v1')),
+    source: text(options.source || '标准循环赛轮转法'),
+    mode: 'standard_rotation',
+    loopType: loopType,
+    groupSizes: groupSizes,
+    stages: stages
+  }
+}
+
+function validatePairingTemplate(template) {
+  if (!template || !Array.isArray(template.stages) || !template.stages.length) return { valid:false,error:'对阵模板为空' }
+  if (template.stages.length > 256) return { valid:false,error:'对阵轮次过多' }
+  var codes = new Set()
+  var total = 0
+  for (var stageIndex = 0; stageIndex < template.stages.length; stageIndex += 1) {
+    var stage = template.stages[stageIndex] || {}
+    var matches = Array.isArray(stage.matches) ? stage.matches : []
+    if (!matches.length) return { valid:false,error:'第' + (stageIndex + 1) + '个轮次没有对阵' }
+    var roundParticipants = new Set()
+    for (var matchIndex = 0; matchIndex < matches.length; matchIndex += 1) {
+      total += 1
+      if (total > 1000) return { valid:false,error:'对阵场次过多' }
+      var item = matches[matchIndex] || {}
+      var code = text(item.code || item.matchCode || ('M' + total))
+      if (codes.has(code)) return { valid:false,error:'对阵编号重复：' + code }
+      codes.add(code)
+      var home = text(item.home || item.homeRef)
+      var away = text(item.away || item.awayRef)
+      if (!home || !away) return { valid:false,error:'第' + (stageIndex + 1) + '轮存在未填完的对阵' }
+      if (home === away) return { valid:false,error:'对阵双方不能相同：' + home }
+      var groupRound = String(stage.phase || item.phase || '') === 'group'
+      if (groupRound) {
+        if (roundParticipants.has(home) || roundParticipants.has(away)) return { valid:false,error:'同一轮内同一签位不能参加多场比赛' }
+        roundParticipants.add(home)
+        roundParticipants.add(away)
+      }
+    }
+  }
+  return { valid:true,totalMatches:total }
+}
+
 function liyangYouthTemplate() {
   var stages = []
   ;[
@@ -145,25 +232,19 @@ function liyangYouthTemplate() {
   ;[
     [[1, 4], [2, 3]], [[1, 3], [2, 4]], [[1, 2], [3, 4]]
   ].forEach(function(pairings, index) { stages.push(roundRobinStage('B', pairings, index + 1)) })
-  stages.push({ name: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2, phase: 'knockout', round: 1, matches: [
-    { code: 'Q1', home: { type: 'group_rank', groupName: 'A组', rank: 1 }, away: { type: 'group_rank', groupName: 'B组', rank: 4 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
-    { code: 'Q2', home: { type: 'group_rank', groupName: 'A组', rank: 2 }, away: { type: 'group_rank', groupName: 'B组', rank: 3 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
-    { code: 'Q3', home: { type: 'group_rank', groupName: 'A组', rank: 3 }, away: { type: 'group_rank', groupName: 'B组', rank: 2 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 },
-    { code: 'Q4', home: { type: 'group_rank', groupName: 'A组', rank: 4 }, away: { type: 'group_rank', groupName: 'B组', rank: 1 }, roundName: '淘汰赛第一轮', stageName: '淘汰赛阶段', stageOrder: 2 }
+  stages.push({ name: '交叉排位赛', stageName: '淘汰与排位阶段', stageOrder: 2, phase: 'knockout', round: 1, matches: [
+    { code: 'X1', home: { type: 'group_rank', groupName: 'A组', rank: 3 }, away: { type: 'group_rank', groupName: 'B组', rank: 4 }, phase: 'placement', roundName: '5–8名交叉排位赛', rankRange: '5-8名', stageName: '淘汰与排位阶段', stageOrder: 2 },
+    { code: 'X2', home: { type: 'group_rank', groupName: 'A组', rank: 4 }, away: { type: 'group_rank', groupName: 'B组', rank: 3 }, phase: 'placement', roundName: '5–8名交叉排位赛', rankRange: '5-8名', stageName: '淘汰与排位阶段', stageOrder: 2 },
+    { code: 'X3', home: { type: 'group_rank', groupName: 'A组', rank: 1 }, away: { type: 'group_rank', groupName: 'B组', rank: 2 }, roundName: '1–4名交叉淘汰赛', rankRange: '1-4名', stageName: '淘汰与排位阶段', stageOrder: 2 },
+    { code: 'X4', home: { type: 'group_rank', groupName: 'A组', rank: 2 }, away: { type: 'group_rank', groupName: 'B组', rank: 1 }, roundName: '1–4名交叉淘汰赛', rankRange: '1-4名', stageName: '淘汰与排位阶段', stageOrder: 2 }
   ] })
-  stages.push({ name: '淘汰赛第二轮', phase: 'knockout', round: 2, matches: [
-    { code: 'S1', home: 'Q1胜', away: 'Q2胜', roundName: '争冠半决赛', rankRange: '1/2名', stageName: '决赛阶段', stageOrder: 3 },
-    { code: 'S2', home: 'Q3胜', away: 'Q4胜', roundName: '争冠半决赛', rankRange: '1/2名', stageName: '决赛阶段', stageOrder: 3 },
-    { code: 'P1', home: 'Q1负', away: 'Q2负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名', stageName: '排位赛阶段', stageOrder: 3 },
-    { code: 'P2', home: 'Q3负', away: 'Q4负', phase: 'placement', roundName: '5/8名排位赛', rankRange: '5-8名', stageName: '排位赛阶段', stageOrder: 3 }
+  stages.push({ name: '最终排位赛', phase: 'placement', round: 2, matches: [
+    { code: 'F7', home: 'X1负', away: 'X2负', roundName: '7–8名决赛', rankRange: '7-8名', stageName: '决赛与排位阶段', stageOrder: 3 },
+    { code: 'F5', home: 'X1胜', away: 'X2胜', roundName: '5–6名决赛', rankRange: '5-6名', stageName: '决赛与排位阶段', stageOrder: 3 },
+    { code: 'F3', home: 'X3负', away: 'X4负', roundName: '三四名决赛', rankRange: '3-4名', stageName: '决赛与排位阶段', stageOrder: 3 },
+    { code: 'F1', home: 'X3胜', away: 'X4胜', phase: 'knockout', roundName: '决赛', rankRange: '1-2名', stageName: '决赛与排位阶段', stageOrder: 3 }
   ] })
-  stages.push({ name: '淘汰赛第三轮', phase: 'knockout', round: 3, matches: [
-    { code: 'F1', home: 'S1胜', away: 'S2胜', roundName: '决赛', rankRange: '1-2名', stageName: '决赛阶段', stageOrder: 4 },
-    { code: 'F2', home: 'S1负', away: 'S2负', phase: 'placement', roundName: '三四名决赛', rankRange: '3-4名', stageName: '决赛阶段', stageOrder: 4 },
-    { code: 'F3', home: 'P1胜', away: 'P2胜', phase: 'placement', roundName: '5/6名决赛', rankRange: '5-6名', stageName: '排位赛阶段', stageOrder: 4 },
-    { code: 'F4', home: 'P1负', away: 'P2负', phase: 'placement', roundName: '7/8名决赛', rankRange: '7-8名', stageName: '排位赛阶段', stageOrder: 4 }
-  ] })
-  return { version: 'liyang-youth-v1', source: '2026立洋杯青年组对阵模板', stages: stages }
+  return { version: 'liyang-youth-v2', source: '2026立洋杯青年组对阵模板', stages: stages }
 }
 
 function liyangMiddleTemplate() {
@@ -181,10 +262,10 @@ function liyangOldTemplate() {
 
 function resolveTemplate(key) {
   var normalized = text(key).toLowerCase()
-  if (normalized === 'liyang-youth' || normalized === 'liyang-youth-v1') return liyangYouthTemplate()
+  if (normalized === 'liyang-youth' || normalized === 'liyang-youth-v1' || normalized === 'liyang-youth-v2') return liyangYouthTemplate()
   if (normalized === 'liyang-middle' || normalized === 'liyang-middle-v1') return liyangMiddleTemplate()
   if (normalized === 'liyang-old' || normalized === 'liyang-old-v1') return liyangOldTemplate()
   return null
 }
 
-module.exports = { buildPairingsFromTemplate, sourceLabel, resolveTemplate, liyangYouthTemplate, liyangMiddleTemplate, liyangOldTemplate }
+module.exports = { buildPairingsFromTemplate, sourceLabel, resolveTemplate, liyangYouthTemplate, liyangMiddleTemplate, liyangOldTemplate, standardRoundRobinRounds, standardRoundRobinTemplate, validatePairingTemplate }

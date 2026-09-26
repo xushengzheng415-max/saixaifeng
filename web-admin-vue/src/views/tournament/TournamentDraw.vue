@@ -49,6 +49,14 @@
           <footer><span><el-icon><User /></el-icon>总签位 {{ quickCapacity }}</span><span><el-icon><Grid /></el-icon>已配置 {{ configForm.groupCount }} 组</span><span><el-icon><UserFilled /></el-icon>{{ quickGroupSizeSummary }}</span></footer>
         </section>
       </div>
+      <PairingRuleEditor
+        :tournament-id="String(tournamentId)"
+        :division="activeDivision"
+        :group-count="configForm.groupCount"
+        :teams-per-group="configForm.teamsPerGroup"
+        :group-sizes="quickGroupSizePlan"
+        :disabled="!quickCapacityValid"
+      />
       <footer class="quick-setup-footer"><p><el-icon><InfoFilled /></el-icon>保存后进入分组操作台，将左侧球队拖入右侧各组签位。</p><div><el-button @click="resetQuickConfig">恢复默认设置</el-button><el-button type="success" :disabled="!quickCapacityValid" @click="enterQuickConsole">保存并进入分组操作台</el-button></div></footer>
     </main>
   </section>
@@ -120,7 +128,7 @@
     <el-dialog
       v-model="showConfigDialog"
       title="新建抽签规则"
-      width="600px"
+      width="min(980px, 94vw)"
       :close-on-click-modal="false"
     >
       <div class="config-dialog-content">
@@ -187,6 +195,15 @@
           </div>
         </div>
       </div>
+
+      <PairingRuleEditor
+        v-if="configForm.tournamentType !== 'cup'"
+        :tournament-id="String(tournamentId)"
+        :division="activeDivision"
+        :group-count="configForm.tournamentType === 'league' && !configForm.leagueGrouped ? 1 : configForm.groupCount"
+        :teams-per-group="configForm.tournamentType === 'league' && !configForm.leagueGrouped ? divisionTeamCount(activeDivision) : configForm.teamsPerGroup"
+        :group-sizes="configForm.tournamentType === 'league' && !configForm.leagueGrouped ? [divisionTeamCount(activeDivision)] : []"
+      />
 
       <template #footer>
         <el-button @click="showConfigDialog = false; resetConfig()">取消</el-button>
@@ -574,6 +591,7 @@ import ProfessionalDrawFlow from './ProfessionalDrawFlow.vue'
 import QuickHybridConsole from './QuickHybridConsole.vue'
 import QuickTournamentConsole from './QuickTournamentConsole.vue'
 import QuickDrawResult from './QuickDrawResult.vue'
+import PairingRuleEditor from '../../components/tournament/PairingRuleEditor.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
 
 const props = defineProps({
@@ -774,7 +792,7 @@ async function modifyDivisionDraw(division) {
     const matches = await queryList('matches',{ where:{ tournamentId },limit:1000,silent:true })
     const scopedMatches = (matches || []).filter(match => String(match.divisionId || 'default') === id && !['cancelled','void'].includes(String(match.status || '')))
     if (scopedMatches.length) {
-      await ElMessageBox.alert(`“${division.name}”已经生成 ${scopedMatches.length} 场赛程或比赛，不能直接修改分组。请先在赛程管理完成影响范围核对和赛程撤回，再返回此处调整。`, '分组已影响赛程', { type:'error',confirmButtonText:'我知道了' })
+      await ElMessageBox.alert(`“${division.name}”已经生成 ${scopedMatches.length} 场赛程或比赛，不能直接修改分组。请先在比赛地图完成影响范围核对和赛程撤回，再返回此处调整。`, '分组已影响赛程', { type:'error',confirmButtonText:'我知道了' })
       return
     }
     await ElMessageBox.prompt(`分组结果决定后续赛程。请输入完整组别名称“${division.name}”以确认进入修改。`, '谨慎修改分组', { type:'warning',confirmButtonText:'下一步',cancelButtonText:'取消',inputPlaceholder:division.name,inputValidator:value => String(value || '').trim() === String(division.name || '').trim() || '请输入完整且一致的组别名称' })

@@ -17,6 +17,7 @@ let serviceAccessTokenCache = null
 let miniAccessTokenCache = null
 
 function text(value) { return String(value == null ? '' : value).trim() }
+function normalizePhone(value) { return text(value).replace(/\D/g, '').slice(-11) }
 function randomKey(bytes) { return crypto.randomBytes(bytes).toString('base64url') }
 function miniReviewTemplateId() { return text(process.env.SXF_FOOTBALL_MINI_TEMPLATE_TOURNAMENT_REVIEW || 'CxBgS7fgjeNoKTSwl0q0o_lErclh_ffpIj2IeL6mpRw') }
 function serviceReviewTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_REVIEW || 'ovXRAzKHZE3Rsex7SVtl2zR-cMNznM_P3azxG8olz1g') }
@@ -1136,6 +1137,32 @@ async function createFollowGate(event) {
   return { success: true, data: { gateId: gate._id, status: gate.status, subscribed: gate.subscribed === true, configured, followUrl } }
 }
 
+async function createRefereeFollowInviteRecord(actor,tournament,target,options) {
+  const config=options||{}
+  const tournamentId=text(tournament&&tournament._id)
+  const targetRefereeId=text(target&&target._id)
+  const claimMode=text(config.claimMode || (target&&target.temporaryReferee===true?'temporary_no_certificate':''))
+  const targetPhone=normalizePhone(target&&(target.phone||target.phoneNumber))
+  let boundOfficialOpenId=text(config.officialOpenId)
+  if(claimMode==='temporary_no_certificate'&&targetPhone&&!boundOfficialOpenId){
+    const identities=(await db.collection('service_identities').where({phone:targetPhone,phoneVerified:true}).limit(5).get()).data||[]
+    const bound=identities.filter(function(item){return text(item.serviceAccountOpenId)})
+    if(bound.length>1){const error=new Error('该手机号存在重复服务号身份，请先人工核验');error.code='SERVICE_IDENTITY_CONFLICT';throw error}
+    boundOfficialOpenId=text(bound[0]&&bound[0].serviceAccountOpenId)
+  }
+  const alreadyBound=!!boundOfficialOpenId
+  const token='ref-'+Date.now()+'-'+randomKey(12)
+  const scene=text(config.scene)||'rf_'+randomKey(12)
+  const h5Path=config.previewMode===true?'/preview/service-account-h5/':'/service-account-h5/'
+  const registerUrl='https://www.sxffootball.cn'+h5Path+'?refereeInvite='+encodeURIComponent(token)
+  const code=config.code||await serviceFollowCode(scene)
+  const invitationAdded=await db.collection('referee_invitations').add({data:{tournamentId,orgId:actor.orgId,targetRefereeId,targetRefereeName:text(target&&(target.name||target.realName)),targetRefereePhone:targetPhone,claimMode,claimReason:text(target&&target.temporaryReason).slice(0,200),token,status:'active',source:claimMode==='temporary_no_certificate'?'organizer_temporary_referee_claim_follow':(target?'synthetic_profile_claim_follow':'organizer_follow_qr'),followRequired:true,followStatus:alreadyBound?'subscribed':'waiting',officialOpenId:boundOfficialOpenId,followedAt:alreadyBound?db.serverDate():null,scene,registerUrl,createTime:db.serverDate(),updateTime:db.serverDate()}})
+  const gateAdded=await db.collection('service_follow_gates').add({data:{sport:SPORT,tournamentId,purpose:'referee_invite',refereeInviteId:invitationAdded._id,scene,status:alreadyBound?'subscribed':'waiting',subscribed:alreadyBound,officialOpenId:boundOfficialOpenId,registerUrl,followUrl:code.url,qrTicket:code.ticket,qrExpireAt:new Date(Date.now()+code.expireSeconds*1000),createTime:db.serverDate(),updateTime:db.serverDate()}})
+  await db.collection('referee_invitations').doc(invitationAdded._id).update({data:{followGateId:gateAdded._id,followQrCodeUrl:code.url,updateTime:db.serverDate()}})
+  await addAudit('referee_follow_invite_created',{tournamentId,inviteId:invitationAdded._id,actorUserId:actor.userId,actorOrgId:actor.orgId,detail:{gateId:gateAdded._id,targetRefereeId,claimMode}})
+  return { invitationId:invitationAdded._id,gateId:gateAdded._id,qrCodeUrl:code.url,registerUrl,claimMode }
+}
+
 async function createRefereeFollowInvite(event) {
   const actor=await webActor(event)
   if(!actor)return {success:false,code:'AUTH_REQUIRED',message:'登录会话或机构信息已失效，请重新登录'}
@@ -1145,15 +1172,52 @@ async function createRefereeFollowInvite(event) {
   const targetRefereeId=text(event.targetRefereeId)
   let target=null
   if(targetRefereeId){target=await getDocument('referees',targetRefereeId);if(!target||text(target.tournamentId)!==tournamentId)return {success:false,code:'REFEREE_SCOPE_DENIED',message:'待绑定裁判不属于当前赛事'}}
-  const token='ref-'+Date.now()+'-'+randomKey(12)
+  const invite=await createRefereeFollowInviteRecord(actor,tournament,target,{previewMode:event.previewMode===true})
+  const temporary=invite.claimMode==='temporary_no_certificate'
+  return {success:true,message:temporary?'临时裁判认领二维码已生成':'裁判关注登记二维码已生成',data:{inviteId:invite.invitationId,gateId:invite.gateId,qrCodeUrl:invite.qrCodeUrl,registerUrl:invite.registerUrl,status:'waiting',followRequired:true,claimMode:invite.claimMode,guideSteps:temporary?['扫码关注赛小蜂足球助手','验证组委会登记的手机号','上传头像并提交认领']:['扫码关注赛小蜂足球助手','在服务号消息中点击裁判登记入口','提交裁判证与头像等待审核']}}
+}
+
+function temporaryClaimTimeText() {
+  const now=new Date(Date.now()+8*60*60*1000)
+  return now.toISOString().slice(0,16).replace('T',' ')
+}
+
+async function createTemporaryRefereeClaim(event) {
+  const actor=await webActor(event)
+  if(!actor)return {success:false,code:'AUTH_REQUIRED',message:'登录会话或机构信息已失效，请重新登录'}
+  const tournamentId=text(event.tournamentId)
+  const tournament=await getDocument('tournaments',tournamentId)
+  if(!tournament||recordOrgId(tournament)!==actor.orgId)return {success:false,code:'TOURNAMENT_SCOPE_DENIED',message:'赛事不存在或无权添加临时裁判'}
+  const name=text(event.name).slice(0,40)
+  const phone=normalizePhone(event.phone)
+  const reason=text(event.reason).slice(0,200)
+  if(name.length<2)return {success:false,code:'REFEREE_NAME_REQUIRED',message:'请填写裁判姓名'}
+  if(!/^1[3-9]\d{9}$/.test(phone))return {success:false,code:'REFEREE_PHONE_INVALID',message:'请填写正确的手机号'}
+  if(reason.length<4)return {success:false,code:'TEMPORARY_REASON_REQUIRED',message:'请填写组委会添加原因'}
+  const duplicates=(await db.collection('referees').where(_.or([{tournamentId,phone},{tournamentId,phoneNumber:phone}])).limit(5).get()).data||[]
+  if(duplicates.length)return {success:false,code:'REFEREE_DUPLICATED',message:'该手机号已在本赛事裁判名单中'}
   const scene='rf_'+randomKey(12)
-  const registerUrl='https://www.sxffootball.cn/service-account-h5/?refereeInvite='+encodeURIComponent(token)
   const code=await serviceFollowCode(scene)
-  const invitationAdded=await db.collection('referee_invitations').add({data:{tournamentId,orgId:actor.orgId,targetRefereeId,targetRefereeName:text(target&&(target.name||target.realName)),token,status:'active',source:target?'synthetic_profile_claim_follow':'organizer_follow_qr',followRequired:true,followStatus:'waiting',scene,registerUrl,createTime:db.serverDate(),updateTime:db.serverDate()}})
-  const gateAdded=await db.collection('service_follow_gates').add({data:{sport:SPORT,tournamentId,purpose:'referee_invite',refereeInviteId:invitationAdded._id,scene,status:'waiting',subscribed:false,registerUrl,followUrl:code.url,qrTicket:code.ticket,qrExpireAt:new Date(Date.now()+code.expireSeconds*1000),createTime:db.serverDate(),updateTime:db.serverDate()}})
-  await db.collection('referee_invitations').doc(invitationAdded._id).update({data:{followGateId:gateAdded._id,followQrCodeUrl:code.url,updateTime:db.serverDate()}})
-  await addAudit('referee_follow_invite_created',{tournamentId,inviteId:invitationAdded._id,actorUserId:actor.userId,actorOrgId:actor.orgId,detail:{gateId:gateAdded._id,targetRefereeId}})
-  return {success:true,message:'裁判关注登记二维码已生成',data:{inviteId:invitationAdded._id,gateId:gateAdded._id,qrCodeUrl:code.url,registerUrl,status:'waiting',followRequired:true,guideSteps:['扫码关注赛小蜂足球助手','在服务号消息中点击裁判登记入口','提交裁判证与头像等待审核']}}
+  const added=await db.collection('referees').add({data:{tournamentId,orgId:actor.orgId,name,realName:name,phone,temporaryReferee:true,temporaryReason:reason,credentialStatus:'not_submitted',certificateRequired:false,eventScoped:true,status:'pending_claim',auditStatus:'not_claimed',availabilityStatus:'pending',temporaryClaimStatus:'waiting_claim',organizerTemporaryApproval:false,wechatBound:false,canLogin:false,canOperate:false,source:'organizer_temporary_referee',createdByUserId:actor.userId,createTime:db.serverDate(),updateTime:db.serverDate()}})
+  const target={_id:added._id,tournamentId,orgId:actor.orgId,name,realName:name,phone,temporaryReferee:true,temporaryReason:reason}
+  const invite=await createRefereeFollowInviteRecord(actor,tournament,target,{claimMode:'temporary_no_certificate',code,scene,previewMode:event.previewMode===true})
+  const notificationAdded=await db.collection('referee_notifications').add({data:{type:'temporary_referee_claim',status:'pending',orgId:actor.orgId,tournamentId,refereeId:added._id,phone,refereeName:name,roleLabel:'赛事临时裁判认领',tournamentName:text(tournament.name||tournament.tournamentName||'足球赛事'),teamsText:'组委会邀请认领',matchTimeText:temporaryClaimTimeText(),url:invite.registerUrl,inviteId:invite.invitationId,updateTime:db.serverDate(),createTime:db.serverDate()}})
+  await addAudit('temporary_referee_created',{tournamentId,inviteId:invite.invitationId,actorUserId:actor.userId,actorOrgId:actor.orgId,detail:{refereeId:added._id,phoneMasked:phone.slice(0,3)+'****'+phone.slice(-4),reason}})
+  return {success:true,message:'临时裁判已添加，等待本人认领',data:{refereeId:added._id,inviteId:invite.invitationId,gateId:invite.gateId,qrCodeUrl:invite.qrCodeUrl,registerUrl:invite.registerUrl,claimMode:invite.claimMode,notificationStatus:'pending'},__notificationRelay:{notificationId:notificationAdded._id,phone}}
+}
+
+async function reviewTemporaryRefereeClaim(event) {
+  const actor=await webActor(event)
+  if(!actor)return {success:false,code:'AUTH_REQUIRED',message:'登录会话或机构信息已失效，请重新登录'}
+  const refereeId=text(event.refereeId)
+  const referee=await getDocument('referees',refereeId)
+  if(!referee||referee.temporaryReferee!==true||recordOrgId(referee)!==actor.orgId)return {success:false,code:'REFEREE_SCOPE_DENIED',message:'临时裁判不存在或不属于当前机构'}
+  const tournament=await getDocument('tournaments',text(referee.tournamentId))
+  if(!tournament||recordOrgId(tournament)!==actor.orgId)return {success:false,code:'TOURNAMENT_SCOPE_DENIED',message:'赛事不存在或不属于当前机构'}
+  if(referee.temporaryClaimStatus!=='claimed_pending_review'||referee.wechatBound!==true)return {success:false,code:'REFEREE_NOT_CLAIMED',message:'请等待裁判完成手机号和头像认领'}
+  await db.collection('referees').doc(refereeId).update({data:{status:'approved',auditStatus:'approved',availabilityStatus:'available',temporaryClaimStatus:'approved',organizerTemporaryApproval:true,approvedByUserId:actor.userId,approvedAt:db.serverDate(),canLogin:true,canOperate:true,updateTime:db.serverDate()}})
+  await addAudit('temporary_referee_approved',{tournamentId:text(referee.tournamentId),actorUserId:actor.userId,actorOrgId:actor.orgId,detail:{refereeId,reason:text(referee.temporaryReason)}})
+  return {success:true,message:'临时裁判已确认，可由裁判长安排本赛事执裁'}
 }
 
 async function miniDraftActor() {
@@ -2031,6 +2095,8 @@ exports.main = async (event) => {
     if (action === 'createFollowGate') return await createFollowGate(event)
     if (action === 'createOrganizerServiceGate') return await createOrganizerServiceGate(event)
     if (action === 'createRefereeFollowInvite') return await createRefereeFollowInvite(event)
+    if (action === 'createTemporaryRefereeClaim') return await createTemporaryRefereeClaim(event)
+    if (action === 'reviewTemporaryRefereeClaim') return await reviewTemporaryRefereeClaim(event)
     if (action === 'getFollowGateStatus') return await followGateStatus(event)
     if (action === 'getOrganizerServiceBindingStatus') return await organizerServiceBindingStatus(event)
     if (action === 'generateTeamMemberInviteAssets') return await generateTeamMemberInviteAssets(event)

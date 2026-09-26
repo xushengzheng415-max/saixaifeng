@@ -25,7 +25,7 @@
 
     <block wx:else>
       <view wx:if="{{hasTeams}}" class="card">
-        <view class="card-title">选择要认领的球队</view>
+        <view class="card-title">选择球队</view>
         <view wx:for="{{teams}}" wx:key="inviteId" class="{{item.className}}" data-id="{{item.inviteId}}" data-name="{{item.teamName}}" data-review="{{item.requiresReview}}" bindtap="chooseTeam">
           <view class="team-main">
             <view class="team-name">{{item.teamName}}</view>

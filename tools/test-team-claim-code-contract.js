@@ -19,7 +19,11 @@ function matches(row, where) {
   if (!where) return true
   // db.command.or(...) 返回的是 { __or: [条件...] }，即 __or 是 where 自身的键。
   if (Array.isArray(where.__or)) return where.__or.some(sub => matches(row, sub))
-  return Object.keys(where).every(key => row[key] === where[key])
+  return Object.keys(where).every(key => {
+    const expected = where[key]
+    if (expected && Array.isArray(expected.__in)) return expected.__in.map(String).indexOf(String(row[key])) >= 0
+    return row[key] === expected
+  })
 }
 
 function createDb(seed) {
@@ -283,7 +287,219 @@ async function run() {
     ok('未同意免责声明时认领被拒且不改动归属')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/12 通过`)
+  // 场景 13：同一自然人属于多个机构时，应返回多个隔离工作空间而不是全局阻断。
+  {
+    const seed = baseSeed({
+      users: [{ _id: 'user-1', openId: OPEN_ID, phone: PHONE_A, phoneNumber: PHONE_A, orgId: 'org-a' }],
+      organizations: [{ _id: 'org-a', name: '甲机构' }, { _id: 'org-b', name: '乙机构' }],
+      organization_memberships: [
+        { _id: 'om-a', userId: 'user-1', orgId: 'org-a', status: 'active', positions: ['球队负责人'], permissions: ['team.view', 'team.manage'] },
+        { _id: 'om-b', userId: 'user-1', orgId: 'org-b', status: 'active', positions: ['球队负责人'], permissions: ['team.view', 'team.manage'] }
+      ],
+      teams: [
+        { _id: 'team-a', name: '甲队', orgId: 'org-a', ownerId: 'user-1', claimStatus: 'claimed' },
+        { _id: 'team-b', name: '乙队', orgId: 'org-b', ownerId: 'user-1', claimStatus: 'claimed' }
+      ]
+    })
+    const { result } = await callWorkspace(seed, {})
+    assert.strictEqual(result.success, true, `场景 13：多机构工作空间应加载成功，实际 ${JSON.stringify(result)}`)
+    assert.deepStrictEqual(result.workspaces.map(item => item.id).sort(), ['org:org-a', 'org:org-b'], '场景 13：应返回两个机构工作空间')
+    ok('同一账号可加载多个机构工作空间且数据边界独立')
+  }
+
+  // 场景 14：跨机构认领只新增球队关系，并返回目标工作空间；不能覆盖账号原机构。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id: 'user-1', openId: OPEN_ID, phone: PHONE_A, phoneNumber: PHONE_A, orgId: 'org-a' }]
+    seed.organizations = [{ _id: 'org-a', name: '原机构' }, { _id: 'org-b', name: '目标机构' }]
+    seed.organization_memberships = [
+      { _id: 'om-a', userId: 'user-1', orgId: 'org-a', status: 'active', positions: ['机构负责人'], permissions: ['team.view', 'team.manage'] },
+      { _id: 'om-b', userId: 'user-1', orgId: 'org-b', status: 'active', positions: ['球队负责人'], permissions: ['team.view', 'team.manage'] }
+    ]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { orgId: 'org-b' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { organizerOrgId: 'org-b' }) : item)
+    const { result, store } = await callWorkspace(seed, {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      disclaimerAgreed: true
+    })
+    assert.strictEqual(result.success, true, `场景 14：跨机构认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(result.workspaceId, 'org:org-b', '场景 14：应返回目标机构工作空间')
+    assert.strictEqual(store.users[0].orgId, 'org-a', '场景 14：不得覆盖账号原机构兼容字段')
+    assert.ok(store.team_memberships.some(item => item.teamId === 'team-1' && item.userId === 'user-1'), '场景 14：应新增目标球队成员关系')
+    ok('跨机构认领保留原账号并返回目标球队工作空间')
+  }
+
+  // 场景 15：账号已是球队有效成员时，认领不能重复写入成员关系。
+  {
+    const seed = baseSeed({
+      team_memberships: [{ _id: 'tm-existing', teamId: 'team-1', userId: 'user-1', role: 'manager', status: 'active' }]
+    })
+    const { result, store } = await callWorkspace(seed, {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      disclaimerAgreed: true
+    })
+    assert.strictEqual(result.success, true, `场景 15：已有成员认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(store.team_memberships.filter(item => item.teamId === 'team-1' && item.userId === 'user-1').length, 1, '场景 15：不得重复创建球队成员关系')
+    ok('已有有效球队成员关系时认领保持幂等')
+  }
+
+  // 场景 16：只认领外部机构球队、不属于目标机构时，只开放该球队协作空间。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id: 'user-1', openId: OPEN_ID, phone: PHONE_A, phoneNumber: PHONE_A, orgId: 'org-a' }]
+    seed.organizations = [{ _id: 'org-a', name: '原机构' }, { _id: 'org-b', name: '外部机构' }]
+    seed.organization_memberships = [
+      { _id: 'om-a', userId: 'user-1', orgId: 'org-a', status: 'active', positions: ['机构负责人'], permissions: ['team.view', 'team.manage'] }
+    ]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { orgId: 'org-b' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { organizerOrgId: 'org-b' }) : item)
+    const { result, store } = await callWorkspace(seed, {
+      action: 'acceptPrebuiltTeamInvite',
+      inviteId: 'inv-1',
+      choice: 'prebuilt',
+      disclaimerAgreed: true
+    })
+    assert.strictEqual(result.success, true, `场景 16：外部球队认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(result.workspaceId, 'team:team-1', '场景 16：无目标机构成员关系时应返回单球队协作空间')
+    assert.strictEqual(store.users[0].orgId, 'org-a', '场景 16：不得修改账号原机构')
+    ok('外部机构球队认领只开放单球队协作空间')
+  }
+
+  // 场景 17：本人认领完成后再次扫码，应返回“已由你认领”和可进入的工作空间。
+  {
+    const seed = baseSeed()
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { status:'accepted', acceptedChoice:'prebuilt', acceptedTeamId:'team-1', acceptedUserId:'user-1', acceptedOpenId:OPEN_ID, allowedClaimPhones:[PHONE_B], managerPhone:PHONE_B }) : item)
+    seed.team_memberships = [{ _id:'tm-claimed', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
+    const { result } = await callWorkspace(seed, { action:'claimableTeams', inviteKey:'key-1' })
+    const row = result.teams.find(item => item.inviteId === 'inv-1')
+    assert.ok(row, '场景 17：即使后台后来改了登记手机号，已接受邀请仍应对原 acceptedUserId 可见')
+    assert.strictEqual(row.alreadyClaimed, true, '场景 17：应标记 alreadyClaimed')
+    assert.strictEqual(row.statusText, '已由你认领', '场景 17：应显示已由你认领')
+    assert.strictEqual(row.workspaceId, 'team:team-1', '场景 17：应返回可进入的球队工作空间')
+    ok('本人认领后再次扫码可直接进入球队')
+  }
+
+  // 场景 18：原参赛关系已审核通过时，认领只补认领字段，不重复创建关系或降级状态。
+  {
+    const seed = baseSeed({
+      tournament_teams: [{ _id:'reg-approved', tournamentId:'t-1', teamId:'team-1', divisionId:'default', status:'approved', claimStatus:'pending_confirmation' }]
+    })
+    const { result, store } = await callWorkspace(seed, {
+      action:'acceptPrebuiltTeamInvite', inviteId:'inv-1', choice:'prebuilt', disclaimerAgreed:true
+    })
+    assert.strictEqual(result.success, true, `场景 18：已通过关系认领应成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(store.tournament_teams.length, 1, '场景 18：不得重复创建参赛关系')
+    assert.strictEqual(store.tournament_teams[0].status, 'approved', '场景 18：不得把已通过状态降级为 pending')
+    assert.strictEqual(store.tournament_teams[0].claimStatus, 'claimed', '场景 18：应补齐认领状态')
+    ok('已通过参赛关系认领保持单条且不降级')
+  }
+
+  // 场景 19：新负责人手机号只能看到明确发给自己的主账号转移邀请。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id:'user-2', openId:OPEN_ID, phone:PHONE_B, phoneNumber:PHONE_B }]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_invitations = seed.team_invitations.concat([{
+      _id:'transfer-1', type:'team_owner_transfer', status:'active', tournamentId:'t-1', teamId:'team-1',
+      fromOwnerId:'user-1', targetPhone:PHONE_B, inviteePhone:PHONE_B, inviteeUserId:'user-2', targetName:'新负责人', expiresAt:FUTURE
+    }])
+    const { result } = await callWorkspace(seed, { action:'claimableTeams', inviteKey:'key-1' })
+    const transfer = result.teams.find(item => item.transferId === 'transfer-1')
+    assert.ok(transfer, '场景 19：目标手机号应看到主账号转移邀请')
+    assert.strictEqual(transfer.ownershipTransfer, true, '场景 19：应标记 ownershipTransfer')
+    assert.strictEqual(transfer.statusText, '待接收主账号', '场景 19：应显示待接收主账号')
+    ok('新负责人可通过赛事认领码发现待接收主账号邀请')
+  }
+
+  // 场景 20：接受主账号转移后，新账号成为 owner，旧账号保留为只读协作成员。
+  {
+    const seed = baseSeed()
+    seed.users = [{ _id:'user-2', openId:OPEN_ID, phone:PHONE_B, phoneNumber:PHONE_B }]
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', ownerUserId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_memberships = [{ _id:'tm-old-owner', teamId:'team-1', userId:'user-1', role:'owner', roles:['owner'], permissions:['team.view','team.manage'], status:'accepted' }]
+    seed.team_invitations = seed.team_invitations.concat([{
+      _id:'transfer-1', type:'team_owner_transfer', status:'active', tournamentId:'t-1', teamId:'team-1',
+      organizerOrgId:'org-1', fromOwnerId:'user-1', targetPhone:PHONE_B, inviteePhone:PHONE_B,
+      inviteeUserId:'user-2', targetName:'新负责人', expiresAt:FUTURE
+    }])
+    const { result, store } = await callWorkspace(seed, { action:'acceptTeamOwnerTransfer', transferId:'transfer-1' })
+    assert.strictEqual(result.success, true, `场景 20：主账号转移应成功，实际 ${JSON.stringify(result)}`)
+    const team = store.teams.find(item => item._id === 'team-1')
+    assert.strictEqual(team.ownerId, 'user-2', '场景 20：新账号应成为 owner')
+    const oldMembership = store.team_memberships.find(item => item.userId === 'user-1')
+    assert.strictEqual(oldMembership.role, 'member', '场景 20：旧主账号应降为协作成员')
+    assert.deepStrictEqual(oldMembership.permissions, ['team.view'], '场景 20：旧主账号只保留查看权限')
+    const newMembership = store.team_memberships.find(item => item.userId === 'user-2')
+    assert.strictEqual(newMembership.role, 'owner', '场景 20：新账号成员关系应为 owner')
+    assert.deepStrictEqual(newMembership.permissions, ['team.view','team.manage'], '场景 20：新主账号获得管理权限')
+    assert.strictEqual(store.team_invitations.find(item => item._id === 'transfer-1').status, 'accepted', '场景 20：转移邀请应完成')
+    ok('主账号转移保留旧负责人为只读协作成员')
+  }
+
+  // 场景 21：旧体验包对“已由你认领”再次提交时，服务端幂等返回成功而不是报邀请失效。
+  {
+    const seed = baseSeed()
+    seed.teams = seed.teams.map(item => item._id === 'team-1' ? Object.assign({}, item, { claimStatus:'claimed', ownerId:'user-1', claimedByUserId:'user-1' }) : item)
+    seed.team_invitations = seed.team_invitations.map(item => item._id === 'inv-1' ? Object.assign({}, item, { status:'accepted', acceptedChoice:'prebuilt', acceptedTeamId:'team-1', acceptedUserId:'user-1', acceptedOpenId:OPEN_ID }) : item)
+    seed.team_memberships = [{ _id:'tm-claimed', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
+    const { result } = await callWorkspace(seed, { action:'acceptPrebuiltTeamInvite', inviteId:'inv-1', choice:'prebuilt', disclaimerAgreed:true })
+    assert.strictEqual(result.success, true, `场景 21：重复提交应幂等成功，实际 ${JSON.stringify(result)}`)
+    assert.strictEqual(result.alreadyClaimed, true, '场景 21：应返回 alreadyClaimed')
+    assert.strictEqual(result.idempotent, true, '场景 21：应标记 idempotent')
+    assert.strictEqual(result.teamId, 'team-1', '场景 21：应返回已认领球队')
+    ok('旧体验包重复提交已认领邀请时服务端幂等恢复')
+  }
+
+  // 场景 22：进入单球队空间时，不得显示同账号其他球队的报名草稿待办。
+  {
+    const seed = baseSeed()
+    seed.teams = [
+      { _id:'team-1', name:'当前球队', ownerId:'user-1', claimStatus:'claimed' },
+      { _id:'team-2', name:'其他球队', ownerId:'user-1', claimStatus:'claimed' }
+    ]
+    seed.team_memberships = [
+      { _id:'tm-1', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' },
+      { _id:'tm-2', teamId:'team-2', userId:'user-1', role:'owner', status:'accepted' }
+    ]
+    seed.tournament_tasks = [{
+      _id:'draft-other-team', recipientUserId:'user-1', tournamentId:'t-other', divisionId:'default',
+      teamId:'team-2', type:'registration_draft', status:'pending', title:'继续完成赛事报名'
+    }]
+    const { result } = await callWorkspace(seed, { workspaceId:'team:team-1' })
+    assert.strictEqual(result.success, true, `场景 22：当前球队空间应加载成功，实际 ${JSON.stringify(result)}`)
+    assert.ok(!result.eventTasks.some(item => item.teamId === 'team-2'), '场景 22：不得显示其他球队的报名草稿')
+    ok('单球队空间隔离其他球队报名草稿待办')
+  }
+
+  // 场景 23：可删除待办只写当前用户隐藏记录，不删除原业务任务。
+  {
+    const seed = baseSeed()
+    seed.teams = [{ _id:'team-1', name:'当前球队', ownerId:'user-1', claimStatus:'claimed' }]
+    seed.team_memberships = [{ _id:'tm-1', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
+    seed.tournament_tasks = [{ _id:'draft-1', recipientUserId:'user-1', tournamentId:'t-1', divisionId:'default', teamId:'team-1', type:'registration_draft', status:'pending', title:'继续完成赛事报名' }]
+    const dismissed = await callWorkspace(seed, { action:'dismissWorkspaceTask', workspaceId:'team:team-1', taskId:'registration-draft:draft-1' })
+    assert.strictEqual(dismissed.result.success, true, `场景 23：删除提醒应成功，实际 ${JSON.stringify(dismissed.result)}`)
+    assert.strictEqual(dismissed.store.tournament_tasks.length, 1, '场景 23：不得删除原业务任务')
+    assert.strictEqual(dismissed.store.task_dismissals.length, 1, '场景 23：应写入个人隐藏记录')
+    const refreshed = await callWorkspace(dismissed.store, { workspaceId:'team:team-1' })
+    assert.ok(!refreshed.result.eventTasks.some(item => item.id === 'registration-draft:draft-1'), '场景 23：刷新后该用户不再看到已隐藏提醒')
+    ok('右滑删除仅隐藏个人提醒并保留业务任务')
+  }
+
+  // 场景 24：强制业务待办没有 dismissible 标记，服务端必须拒绝删除。
+  {
+    const { result } = await callWorkspace(baseSeed(), { action:'dismissWorkspaceTask', workspaceId:'team:team-1', taskId:'registration:required-1' })
+    assert.strictEqual(result.success, false, '场景 24：强制待办删除应失败')
+    assert.strictEqual(result.code, 'TASK_NOT_DISMISSIBLE', '场景 24：应返回 TASK_NOT_DISMISSIBLE')
+    ok('强制业务待办不可删除')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/24 通过`)
 }
 
 run().catch(error => {

@@ -176,6 +176,15 @@
           />
         </section>
       </section>
+      <PairingRuleEditor
+        v-if="drawSetup.mode === 'group' || drawSetup.mode === 'league'"
+        :tournament-id="String(tournamentId)"
+        :division="activeDivision"
+        :group-count="drawSetup.mode === 'league' ? 1 : drawSetup.groupCount"
+        :teams-per-group="drawSetup.mode === 'league' ? teams.length : drawSetup.teamsPerGroup"
+        :group-sizes="drawSetup.mode === 'league' ? [teams.length] : []"
+        :disabled="!setupValid || !canManage"
+      />
       <section class="setup-options">
         <span>展示时间</span
         ><el-select v-model="drawSetup.displaySeconds"
@@ -1041,7 +1050,7 @@
 
             <h3>专业版抽签结果</h3>
           <p>
-              抽签结果已确认，对阵已生成；比赛时间和场地可在赛程管理中后补。
+              抽签结果已确认，对阵已生成；比赛时间和场地可在比赛地图中补齐。
             </p>
           </div>
           <el-tag type="success">已确认</el-tag>
@@ -1120,7 +1129,7 @@
               type="primary"
               :loading="pairingGenerating"
               @click="goToScheduleAfterPairing"
-              >{{ pairingCount ? "进入赛程管理" : "生成对阵并进入赛程" }}</el-button
+              >{{ pairingCount ? "打开比赛地图" : "生成对阵并安排比赛" }}</el-button
             >
           </div>
         </footer>
@@ -1148,6 +1157,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { callFunction, queryById, queryList, updateRecord } from "../../utils/cloud";
 import { permissions } from "../../utils/permissions";
 import previewField from "../../assets/images/football-field-dual.jpg";
+import PairingRuleEditor from "../../components/tournament/PairingRuleEditor.vue";
 
 const props = defineProps({ tournamentId: { type: String, required: true } });
 const route = useRoute();

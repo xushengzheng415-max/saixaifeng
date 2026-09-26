@@ -80,6 +80,11 @@
   background: #f1faf5;
 }
 
+.team-row-claimed {
+  border-color: #b8ddc7;
+  background: #f3faf6;
+}
+
 .team-main {
   flex: 1;
 }
