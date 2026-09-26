@@ -1701,12 +1701,6 @@ async function loadTeamLogos(homeId, awayId) {
     try {
       const eventId = String(match.value.tournamentId || tournamentId || '')
       const divisionId = String(match.value.divisionId || sourceDivisionId || '')
-      const [byRelationId, byTeamId] = await Promise.all([
-        queryList('tournament_teams', { where: { _id: { $in: ids } }, limit: 20 }),
-        eventId ? queryList('tournament_teams', { where: { tournamentId:eventId, teamId:{ $in:ids } }, limit: 100 }) : Promise.resolve([])
-      ])
-      const unique = new Map([...(byRelationId || []), ...(byTeamId || [])].map(item => [String(item._id), item]))
-      const rows = [...unique.values()]
       const relationScore = row => {
         const sameDivision = divisionId && String(row.divisionId || 'default') === divisionId ? 100 : 0
         const status = String(row.status || row.participationStatus || '').toLowerCase()
@@ -1714,11 +1708,17 @@ async function loadTeamLogos(homeId, awayId) {
         const time = new Date(row.updateTime?.$date || row.updateTime || row.createTime?.$date || row.createTime || 0).getTime() || 0
         return sameDivision + statusScore + time / 1e15
       }
-      const pickRelation = sourceId => rows
-        .filter(row => (!eventId || String(row.tournamentId || '') === eventId) && (String(row._id) === String(sourceId) || String(row.teamId) === String(sourceId)))
-        .sort((left, right) => relationScore(right) - relationScore(left))[0] || null
-      relationMap.home = pickRelation(homeId)
-      relationMap.away = pickRelation(awayId)
+      const loadRelation = async sourceId => {
+        const [byRelationId, byTeamId] = await Promise.all([
+          queryById('tournament_teams', sourceId).catch(() => null),
+          eventId ? queryList('tournament_teams', { where: { tournamentId:eventId, teamId:String(sourceId) }, limit: 100, silent:true }) : Promise.resolve([])
+        ])
+        const unique = new Map([byRelationId, ...(byTeamId || [])].filter(Boolean).map(item => [String(item._id), item]))
+        return [...unique.values()]
+          .filter(row => (!eventId || String(row.tournamentId || '') === eventId) && (String(row._id) === String(sourceId) || String(row.teamId) === String(sourceId)))
+          .sort((left, right) => relationScore(right) - relationScore(left))[0] || null
+      }
+      ;[relationMap.home, relationMap.away] = await Promise.all([loadRelation(homeId), loadRelation(awayId)])
       ;(['home','away']).forEach(side => {
         const relation = relationMap[side]
         if (!relation) return
@@ -1740,7 +1740,7 @@ async function loadTeamLogos(homeId, awayId) {
     const missingKit = side => !['jersey','shorts','socks'].some(key => registeredKitColors.value[side]?.[key])
     if (realTeamIds.length > 0 && (!homeLogo.value || !awayLogo.value || missingKit('home') || missingKit('away'))) {
       try {
-        const teams = await queryList('teams', { where: { _id: { $in: realTeamIds } }, limit: 10 })
+        const teams = (await Promise.all(realTeamIds.map(id => queryById('teams', id).catch(() => null)))).filter(Boolean)
         ;(teams || []).forEach(t => {
           ;(['home','away']).forEach(side => {
             if (String(t._id) !== String(teamIdMap[side])) return
