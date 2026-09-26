@@ -734,7 +734,9 @@
           </el-select>
           </el-form-item>
           <el-form-item label="时间（分钟）">
-            <el-input-number v-model="eventForm.minute" :min="0" :max="130" controls-position="right" style="width:100%" />
+            <el-select v-model="eventForm.minute" filterable placeholder="选择比赛分钟" style="width:100%">
+              <el-option v-for="option in eventMinuteOptions" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
           </el-form-item>
         </div>
         <el-form-item label="球队" class="event-team-item">
@@ -760,8 +762,8 @@
             </div>
           </section>
         </template>
-        <el-form-item v-else label="球员" required>
-          <el-select v-model="eventForm.playerName" filterable clearable placeholder="选择本队球员" style="width:100%">
+        <el-form-item v-else :label="eventPlayerFieldLabel" required>
+          <el-select v-model="eventForm.playerName" filterable clearable :placeholder="eventPlayerPlaceholder" style="width:100%">
             <el-option v-for="player in eventPlayerOptions" :key="player.value" :label="player.label" :value="player.value" />
           </el-select>
         </el-form-item>
@@ -1325,7 +1327,10 @@ const eventPlayersLoading = ref(false)
 const emptySubstitution = () => ({ outName:'',inName:'' })
 const newEventForm = () => ({ type:'goal',minute:0,teamSide:'home',playerName:'',assistName:'',substitutionPeriod:'first_half',substitutions:[emptySubstitution()] })
 const eventForm = ref(newEventForm())
+const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:minute,label:`${minute}′` }))
 const substitutionPeriodOptions = [{ label:'上半场',value:'first_half' },{ label:'中场休息',value:'halftime' },{ label:'下半场',value:'second_half' }]
+const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '领牌球员' : eventForm.value.type === 'assist' ? '助攻球员' : '球员')
+const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
 const activeEventPlayers = computed(() => eventForm.value.teamSide === 'away' ? awayPlayers.value : homePlayers.value)
 const eventPlayerOptions = computed(() => {
   const rows = new Map()
