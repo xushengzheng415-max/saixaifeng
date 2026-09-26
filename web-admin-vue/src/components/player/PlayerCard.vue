@@ -344,13 +344,13 @@ function handleImageError(e) {
    ============================================ */
 .player-photo-wrapper {
   position: absolute;
-  top: -4px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
   width: 264px;
   height: 264px;
   overflow: visible;
-  /* 放大 20%，底部固定在卡面腰线（约 260px）上。 */
+  /* 放大 20%，底部贴合卡面下方圆弧线（约 274px）。 */
 }
 
 .player-photo {
