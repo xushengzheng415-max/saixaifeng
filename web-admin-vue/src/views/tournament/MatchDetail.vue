@@ -802,7 +802,7 @@
             <span class="csl-vs-label">客队</span>
           </div>
           <div class="csl-meta-row">
-            <span>轮次：{{ match.round || '-' }}</span>
+            <span>轮次：{{ roundLabel }}</span>
             <span>场序：{{ match.matchSequence || match.sequence || '-' }}</span>
             <span>日期：{{ match.matchDate || '--' }}</span>
             <span>开球时间：{{ match.matchTime || '--:--' }}</span>
@@ -1001,7 +1001,7 @@
                 <span class="csl-vs-label">客队</span>
               </div>
               <div class="csl-meta-row">
-                <span>轮次：{{ match.round || '-' }}</span>
+                <span>轮次：{{ roundLabel }}</span>
                 <span>场序：{{ match.matchSequence || match.sequence || '-' }}</span>
                 <span>日期：{{ match.matchDate || '--' }}</span>
                 <span>开球时间：{{ match.matchTime || '--:--' }}</span>
@@ -1244,6 +1244,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
+import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 
 const route = useRoute()
@@ -1479,16 +1480,8 @@ function kitColorCss(val) {
   return named?.[1] || val
 }
 
-const phaseLabel = computed(() => {
-  const p = match.value.phase
-  return { group: '小组赛', league: '联赛', knockout: '淘汰赛', cup: '淘汰赛', final: '决赛' }[p] || p || '-'
-})
-
-const roundLabel = computed(() => {
-  if (match.value.roundName) return match.value.roundName
-  if (match.value.round) return `第${match.value.round}轮`
-  return '-'
-})
+const phaseLabel = computed(() => formatMatchPhase(match.value))
+const roundLabel = computed(() => formatMatchRound(match.value))
 
 const statusLabel = computed(() => {
   const s = match.value.status || 'scheduled'
