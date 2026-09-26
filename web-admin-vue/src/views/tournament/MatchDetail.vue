@@ -2864,6 +2864,10 @@ onMounted(() => {
 
 /* 顶部 Hero */
 .match-hero {
+  --hero-accent: rgba(255,255,255,0.28);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2872,27 +2876,76 @@ onMounted(() => {
   border-radius: 16px;
   margin: 20px 0;
   color: #fff;
+  box-shadow: inset 0 3px 0 var(--hero-accent), 0 12px 30px rgba(20, 33, 29, 0.1);
 }
-.status-bg-scheduled { background: linear-gradient(135deg, #1B5E20 0%, #43A047 100%); }
-.status-bg-ongoing { background: linear-gradient(135deg, #e65100 0%, #f57c00 100%); }
-.status-bg-finished { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); }
-.status-bg-completed { background: linear-gradient(135deg, #064e3b 0%, #0f766e 100%); }
-.status-bg-postponed { background: linear-gradient(135deg, #616161 0%, #9e9e9e 100%); }
-.status-bg-cancelled { background: linear-gradient(135deg, #b71c1c 0%, #c62828 100%); opacity: 0.7; }
+.match-hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 138px;
+  height: 138px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.match-hero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(255,255,255,0.065) 50%, transparent calc(50% + 0.5px));
+  pointer-events: none;
+}
+.match-hero > * { position: relative; z-index: 1; }
+.status-bg-scheduled {
+  --hero-accent: rgba(71,184,129,0.72);
+  background: radial-gradient(circle at 16% 0%, rgba(71,184,129,0.16), transparent 36%), linear-gradient(135deg, #172f29 0%, #24483e 100%);
+}
+.status-bg-ongoing {
+  --hero-accent: rgba(240,162,46,0.82);
+  background: radial-gradient(circle at 50% 0%, rgba(240,162,46,0.18), transparent 38%), linear-gradient(135deg, #222831 0%, #343c49 100%);
+}
+.status-bg-finished,
+.status-bg-completed {
+  --hero-accent: rgba(111,146,201,0.76);
+  background: radial-gradient(circle at 84% 0%, rgba(111,146,201,0.17), transparent 36%), linear-gradient(135deg, #243147 0%, #384963 100%);
+}
+.status-bg-postponed {
+  --hero-accent: rgba(203,213,225,0.58);
+  background: linear-gradient(135deg, #353b43 0%, #515b66 100%);
+}
+.status-bg-cancelled {
+  --hero-accent: rgba(220,104,104,0.75);
+  background: linear-gradient(135deg, #493033 0%, #684044 100%);
+}
 .referee-review-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 16px 0; padding: 14px 16px; border: 1px solid #f1d28e; border-radius: 10px; background: #fffaf0; }
 .referee-review-bar strong, .referee-review-bar span { display: block; }
 .referee-review-bar strong { color: #72520d; }
 .referee-review-bar span { margin-top: 5px; color: #7d7160; font-size: 13px; }
 .referee-review-actions { display: flex; flex: 0 0 auto; gap: 10px; }
 
-.hero-team { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 160px; }
-.hero-logo { width: 64px; height: 64px; object-fit: contain; }
+.hero-team { display: flex; flex-direction: column; align-items: center; gap: 9px; width: 160px; }
+.hero-logo {
+  width: 68px;
+  height: 68px;
+  padding: 7px;
+  box-sizing: border-box;
+  object-fit: contain;
+  border: 1px solid rgba(255,255,255,0.78);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 8px 22px rgba(6,16,13,0.2);
+}
 .hero-logo-placeholder {
   width: 64px; height: 64px; border-radius: 50%;
-  background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center;
   font-size: 24px; color: #fff; font-weight: 700;
 }
-.hero-team-name { font-size: 15px; font-weight: 600; text-align: center; }
+.hero-team-name { font-size: 15px; font-weight: 600; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
 
 .hero-score-area { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .hero-score { display: flex; align-items: center; gap: 12px; }
