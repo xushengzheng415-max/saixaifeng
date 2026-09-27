@@ -17,6 +17,11 @@ function number(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function scoreValue(value) {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 99 ? parsed : null
+}
+
 function rawDate(value) {
   return value && typeof value === 'object' && value.$date ? value.$date : value
 }
@@ -83,6 +88,21 @@ async function listByDocumentIds(collection, ids) {
     const chunk = uniqueIds.slice(index, index + 10)
     const page = (await db.collection(collection).where({ _id: db.command.in(chunk) }).limit(chunk.length).get()).data || []
     rows.push(...page)
+  }
+  return rows
+}
+
+async function listMatchEvents(matchIds) {
+  const uniqueIds = [...new Set((matchIds || []).map(text).filter(Boolean))]
+  const rows = []
+  for (let index = 0; index < uniqueIds.length; index += 50) {
+    const chunk = uniqueIds.slice(index, index + 50)
+    try {
+      const page = (await db.collection('match_events').where({ matchId: db.command.in(chunk) }).limit(200).get()).data || []
+      rows.push(...page)
+    } catch (error) {
+      console.warn('比赛事件读取失败:', error && error.message)
+    }
   }
   return rows
 }
@@ -305,9 +325,24 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
     scoreReady: scoreReady(match),
     resultStatus: warnings.length ? 'warning' : status,
     warnings,
-    source: match.refereeRecord || match.refereeSubmittedAt ? '裁判/计分台回传' : match.resultVersionId ? '赛果版本' : scoreReady(match) ? '后台记录' : '尚未录入',
+    source: match.resultCorrection ? '归档后异常纠错' : (match.refereeRecord || match.refereeSubmittedAt ? '裁判/计分台回传' : match.resultVersionId ? '赛果版本' : scoreReady(match) ? '后台记录' : '尚未录入'),
     submittedAt: rawDate(match.refereeSubmittedAt || match.resultSubmittedAt || match.updateTime || ''),
-    reviewedAt: rawDate(match.refereeRecordArchivedAt || match.resultReviewedAt || match.updateTime || ''),
+    reviewedAt: rawDate(match.resultCorrectedAt || (match.resultCorrection && match.resultCorrection.correctedAt) || match.refereeRecordArchivedAt || match.resultReviewedAt || match.updateTime || ''),
+    resultCorrection: match.resultCorrection && typeof match.resultCorrection === 'object' ? {
+      correctionId: text(match.resultCorrection.correctionId),
+      previousVersionId: text(match.resultCorrection.previousVersionId),
+      reason: text(match.resultCorrection.reason),
+      actorName: text(match.resultCorrection.actorName || match.resultCorrection.correctedByName),
+      correctedAt: rawDate(match.resultCorrection.correctedAt || match.resultCorrection.updateTime),
+      before: match.resultCorrection.before && typeof match.resultCorrection.before === 'object' ? {
+        homeScore: number(match.resultCorrection.before.homeScore),
+        awayScore: number(match.resultCorrection.before.awayScore)
+      } : null,
+      after: match.resultCorrection.after && typeof match.resultCorrection.after === 'object' ? {
+        homeScore: number(match.resultCorrection.after.homeScore),
+        awayScore: number(match.resultCorrection.after.awayScore)
+      } : null
+    } : null,
     winnerTeamId,
     homePenaltyScore: number(match.homePenaltyScore ?? match.penaltyHomeScore ?? match.penaltiesHome, 0),
     awayPenaltyScore: number(match.awayPenaltyScore ?? match.penaltyAwayScore ?? match.penaltiesAway, 0),
@@ -598,11 +633,23 @@ async function buildDashboard(event, actor) {
   const divisions = divisionRows.length ? divisionRows : Array.isArray(tournament.divisions) ? tournament.divisions : []
   const divisionsById = Object.fromEntries(divisions.map(item => [text(item._id || item.id), item]))
   const teamDirectory = await buildTeamDirectory(matchRows, registrationRows)
-  let matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort(compareReviewMatches)
+  const eventRows = await listMatchEvents(matchRows.map(item => item._id || item.id))
+  const eventsByMatchId = eventRows.reduce((map, item) => {
+    const matchId = text(item.matchId || item.match_id)
+    if (!matchId) return map
+    if (!map[matchId]) map[matchId] = []
+    map[matchId].push(item)
+    return map
+  }, {})
+  const normalizeWithEvents = item => {
+    const normalized = normalizedMatch(item, divisionsById, teamDirectory)
+    return { ...normalized, events: eventsByMatchId[normalized.id] || (Array.isArray(item.events) ? item.events : []) }
+  }
+  let matches = matchRows.map(normalizeWithEvents).sort(compareReviewMatches)
   let standings = buildStandings(matches, divisionsById)
   const pairingResolution = await resolvePairingSources(tournamentId,matchRows,standings,actor)
   if (pairingResolution.updatedCount) {
-    matches = matchRows.map(item => normalizedMatch(item, divisionsById, teamDirectory)).sort(compareReviewMatches)
+    matches = matchRows.map(normalizeWithEvents).sort(compareReviewMatches)
     standings = buildStandings(matches, divisionsById)
   }
   return {
@@ -610,6 +657,7 @@ async function buildDashboard(event, actor) {
     tournament: { id: tournamentId, name: text(tournament.name) || '当前赛事', startDate: rawDate(tournament.startDate), endDate: rawDate(tournament.endDate), location: text(tournament.location || tournament.province), logo: text(tournament.logo || tournament.logoUrl) },
     divisions: divisions.map(item => ({ id: text(item._id || item.id), name: text(item.name) || '未命名组别', pointsRule: pointsRule(item) })),
     matches,
+    events: eventRows,
     summary: summary(matches),
     standings,
     knockout: buildKnockout(matches),
@@ -637,6 +685,91 @@ async function publishStandings(event, actor) {
   return { success: true, snapshotId: added._id, version, message: `积分榜 V${version} 已生成正式发布快照` }
 }
 
+async function correctArchivedScore(event, actor) {
+  const matchId = text(event.matchId)
+  const tournamentId = text(event.tournamentId)
+  const reason = text(event.reason).slice(0, 300)
+  const homeScore = scoreValue(event.homeScore)
+  const awayScore = scoreValue(event.awayScore)
+  if (!matchId || !tournamentId) return { success: false, code: 'MATCH_REQUIRED', message: '缺少比赛信息' }
+  if (homeScore === null || awayScore === null) return { success: false, code: 'SCORE_INVALID', message: '请输入0至99之间的整数比分' }
+  if (reason.length < 2) return { success: false, code: 'CORRECTION_REASON_REQUIRED', message: '请填写比分更正原因' }
+
+  const match = await getDocument('matches', matchId)
+  if (!match || text(match.tournamentId) !== tournamentId) return { success: false, code: 'MATCH_NOT_FOUND', message: '比赛不存在或不属于当前赛事' }
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament || !belongsToActor(tournament, actor) || (match.orgId && !belongsToActor(match, actor))) {
+    return { success: false, code: 'ORG_FORBIDDEN', message: '无权更正其他机构的比赛赛果' }
+  }
+  if (resultStatus(match) !== 'approved') return { success: false, code: 'MATCH_NOT_ARCHIVED', message: '只有已归档的正式赛果可以发起异常纠错' }
+
+  const beforeHome = scoreValue(match.homeScore)
+  const beforeAway = scoreValue(match.awayScore)
+  if (beforeHome === homeScore && beforeAway === awayScore) return { success: false, code: 'SCORE_UNCHANGED', message: '更正后的比分与当前归档比分相同' }
+
+  const actorName = text(actor.user.nickname || actor.user.userName || actor.user.phone || actor.user._id) || '赛事主办方'
+  const correctionId = `COR-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
+  const correctedAt = new Date()
+  const correction = {
+    correctionId,
+    previousVersionId: text(match.resultVersionId),
+    reason,
+    actorName,
+    correctedByUserId: text(actor.user._id),
+    correctedAt,
+    before: { homeScore: beforeHome === null ? number(match.homeScore) : beforeHome, awayScore: beforeAway === null ? number(match.awayScore) : beforeAway },
+    after: { homeScore, awayScore }
+  }
+  const history = Array.isArray(match.resultCorrectionHistory) ? match.resultCorrectionHistory.slice(-49) : []
+  history.push(correction)
+  const updateData = {
+    homeScore,
+    awayScore,
+    scoreHome: homeScore,
+    scoreAway: awayScore,
+    resultVersionId: correctionId,
+    resultCorrection: correction,
+    resultCorrectionHistory: history,
+    resultCorrectedAt: db.serverDate(),
+    resultCorrectedBy: text(actor.user._id),
+    resultCorrectionReason: reason,
+    updateTime: db.serverDate()
+  }
+  const phase = phaseOf(match)
+  const currentResolution = text(match.resolution || match.decisionMethod).toLowerCase()
+  if (!['penalties', 'penalty_shootout', 'shootout'].includes(currentResolution)) {
+    if (homeScore === awayScore) updateData.winnerTeamId = db.command.remove()
+    else updateData.winnerTeamId = homeScore > awayScore ? teamIdOf(match, 'home') : teamIdOf(match, 'away')
+  }
+  const auditData = {
+    sport: 'football',
+    action: 'archived_match_score_corrected',
+    tournamentId,
+    divisionId: divisionIdOf(match),
+    matchId,
+    actorUserId: text(actor.user._id),
+    actorOrgId: text(actor.orgId),
+    result: 'pending',
+    detail: { correctionId, previousVersionId: correction.previousVersionId, reason, before: correction.before, after: correction.after, phase },
+    createTime: db.serverDate(),
+    updateTime: db.serverDate()
+  }
+  const audit = await db.collection('registration_audit_logs').add({ data: auditData })
+  try {
+    await db.collection('matches').doc(matchId).update({ data: updateData })
+    await db.collection('registration_audit_logs').doc(audit._id).update({ data: { result: 'success', completedAt: db.serverDate(), updateTime: db.serverDate() } })
+  } catch (error) {
+    await db.collection('registration_audit_logs').doc(audit._id).update({ data: { result: 'failed', error: text(error && error.message) || '比赛更新失败', completedAt: db.serverDate(), updateTime: db.serverDate() } }).catch(() => {})
+    throw error
+  }
+  return {
+    success: true,
+    correctionId,
+    requiresStandingsRepublish: standingsEligible(match),
+    message: standingsEligible(match) ? '比分已更正，积分榜需重新发布' : '比分已更正，已记录异常纠错'
+  }
+}
+
 exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(event)
@@ -644,6 +777,7 @@ exports.main = async (event = {}) => {
     if (action === 'dashboard') return await buildDashboard(event, actor)
     if (action === 'resolvePairingSources') return await buildDashboard(event, actor)
     if (action === 'publishStandings') return await publishStandings(event, actor)
+    if (action === 'correctArchivedScore') return await correctArchivedScore(event, actor)
     return { success: false, code: 'UNSUPPORTED_ACTION', message: '不支持的赛果中心操作' }
   } catch (error) {
     console.error('resultCenter failed:', error)
@@ -651,4 +785,4 @@ exports.main = async (event = {}) => {
   }
 }
 
-exports.__test = { resultStatus,winnerTeamIdOf,buildStandings,buildOfficialGroupRankMap,sourceForSide,resolveSourceTeam,resolvedWinnerAndLoser }
+exports.__test = { resultStatus,winnerTeamIdOf,buildStandings,buildOfficialGroupRankMap,sourceForSide,resolveSourceTeam,resolvedWinnerAndLoser,scoreValue }
