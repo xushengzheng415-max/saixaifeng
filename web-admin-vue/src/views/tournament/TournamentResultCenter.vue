@@ -219,6 +219,9 @@ onMounted(loadDashboard)
 .board-poster{background-image:url('../../assets/report/flat-blue-v1.png')!important}
 .board-poster.emerald{background-image:url('../../assets/report/flat-green-v1.png')!important}
 .board-poster.paper{background-image:url('../../assets/report/flat-white-v1.png')!important}
+.board-footer{display:grid!important;grid-template-columns:1fr auto!important;align-items:end!important;min-height:88px!important;margin-top:24px!important;padding:18px 6px 20px!important}
+.board-footer::before{content:'赛事数据由赛小蜂足球提供';grid-column:1/-1;justify-self:center;min-height:36px;padding-left:126px;background:url('../../assets/logo-saixiaofeng.png') left center/112px auto no-repeat;font-size:11px;font-weight:700;line-height:36px;letter-spacing:.04em;opacity:.92}
+.board-footer>span,.board-footer>b{font-size:9px;opacity:.72}
 </style>
 <style scoped>
 .portrait-poster.paper .poster-header{padding:12px 10px;background:rgba(255,255,255,.82);border-radius:12px}
