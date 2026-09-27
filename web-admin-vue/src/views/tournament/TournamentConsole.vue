@@ -73,14 +73,14 @@ const tournamentStatus = computed(() => ({ draft: '筹备中', registering: '报
 const metrics = computed(() => [
   { label: '竞赛组别', value: `${divisions.value.length} 个`, note: divisions.value.length ? `已创建 ${divisions.value.length} 个组别` : '待创建组别', icon: Grid, tone: 'green' },
   { label: '参赛球队', value: `${approvedTeams.value.length} 支`, note: pendingTeams.value.length ? `待确认 ${pendingTeams.value.length} 支` : '参赛关系已确认', icon: UserFilled, tone: 'green' },
-  { label: '已排比赛', value: `${matches.value.length} 场`, note: activeMatches.value.length ? `进行中 ${activeMatches.value.length} 场` : matches.value.length ? '已生成，可查看赛程' : '待编排', icon: Calendar, tone: 'orange' },
+  { label: '已排比赛', value: `${matches.value.length} 场`, note: activeMatches.value.length ? `进行中 ${activeMatches.value.length} 场` : '待发布或执行', icon: Calendar, tone: 'orange' },
   { label: '当前待处理', value: `${todos.value.length} 项`, note: todos.value.length ? '需主办方处理' : '暂无待办', icon: WarningFilled, tone: 'orange' }
 ])
 const stages = computed(() => [
   { label: '组别规则', note: divisions.value.length ? `${divisions.value.length} 个已创建` : '待创建', icon: DocumentChecked, done: divisions.value.length > 0, active: divisions.value.length === 0, target: `/tournaments/${id}/edit?section=divisions` },
   { label: '球队入驻', note: `${approvedTeams.value.length}/${registrations.value.length || 0} 已确认`, icon: UserFilled, done: registrations.value.length > 0 && pendingTeams.value.length === 0, active: pendingTeams.value.length > 0, target: `/tournaments/${id}/teams` },
   { label: '抽签分组', note: tournament.value.drawCompleted ? '已完成' : '待配置', icon: Tickets, done: tournament.value.drawCompleted === true, active: divisions.value.length > 0 && !tournament.value.drawCompleted, target: `/tournaments/${id}/draw` },
-  { label: '查看赛程', note: matches.value.length ? `${matches.value.length} 场可查看` : '待编排', icon: Calendar, done: matches.value.length > 0, active: matches.value.length === 0 && divisions.value.length > 0, target: `/tournaments/${id}/matches` },
+  { label: '赛程发布', note: matches.value.length ? `${matches.value.length} 场已编排` : '待编排', icon: Calendar, done: matches.value.length > 0 && tournament.value.schedulePublished === true, active: matches.value.length > 0 && !tournament.value.schedulePublished, target: `/tournaments/${id}/matches` },
   { label: '比赛执行', note: activeMatches.value.length ? `${activeMatches.value.length} 场进行中` : '待开赛', icon: Promotion, done: matches.value.some(item => ['completed', 'finished'].includes(item.status)), active: activeMatches.value.length > 0, target: `/tournaments/${id}/matches` },
   { label: '赛果归档', note: reviewMatches.value.length ? `${reviewMatches.value.length} 场待复核` : '待赛后复核', icon: CircleCheck, done: matches.value.length > 0 && reviewMatches.value.length === 0 && matches.value.every(item => ['completed', 'finished', 'archived'].includes(item.status)), active: reviewMatches.value.length > 0, target: `/tournaments/${id}/matches` }
 ])
