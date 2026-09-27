@@ -794,14 +794,14 @@ const organizerNavItems = computed(() => [
     icon: 'Football',
     requiresTournament: true,
     activeWhen: () => Boolean(currentTournamentId.value) &&
-      /\/tournaments\/[^/]+\/(?:matches|schedule|match\/[^/]+(?:\/monitor|\/post-match|\/review|\/archive)?)$/.test(route.path)
+      /\/tournaments\/[^/]+\/(?:matches|schedule|match\/[^/]+(?:\/monitor|\/post-match|\/review)?)$/.test(route.path)
   },
   {
     path: tournamentWorkspacePath('/results'),
     label: '赛果管理',
     icon: 'DataAnalysis',
     requiresTournament: true,
-    activeWhen: () => /\/tournaments\/[^/]+\/results$/.test(route.path)
+    activeWhen: () => /\/tournaments\/[^/]+\/results(?:\/match\/[^/]+\/archive)?$/.test(route.path)
   },
   {
     path: tournamentWorkspacePath('/referees'),

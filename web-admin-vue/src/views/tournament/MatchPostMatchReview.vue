@@ -74,7 +74,7 @@
         </article>
 
         <article class="material-panel upload-panel">
-          <div class="panel-title"><h2>补充材料 <small>（可选）</small></h2><span>由主办方补充上传</span></div>
+          <div class="panel-title"><h2>比赛报告 <small>（{{ manualSupplement ? '必传 1–2 张' : '可选' }}）</small></h2><span>{{ manualSupplement ? '主办方补录赛果必传' : '由主办方补充上传' }}</span></div>
           <el-upload
             class="supplement-upload"
             drag
@@ -87,7 +87,7 @@
             <el-icon><UploadFilled /></el-icon>
             <div>上传<small>图片 / PDF</small></div>
           </el-upload>
-          <p class="upload-hint">支持图片、PDF，单个文件不超过 10MB；多个文件请逐个上传。</p>
+          <p class="upload-hint">支持图片、PDF，单个文件不超过 10MB；{{ manualSupplement ? '请上传 1–2 张纸质裁判报告。' : '多个文件请逐个上传。' }}</p>
           <ul class="file-list">
             <li v-for="(file, index) in supplements" :key="file.fileId || file.url || index">
               <el-icon><Document /></el-icon><span><strong>{{ file.name }}</strong><small>{{ file.sizeText || formatSize(file.size) }}</small></span>
@@ -153,6 +153,7 @@ const matchDateText = computed(() => [match.value.matchDate, match.value.matchTi
 const submittedAtText = computed(() => formatDate(match.value.refereeSubmittedAt || match.value.refereeRecord?.submittedAt || match.value.updatedAt))
 const supplementUpdatedText = computed(() => formatDate(match.value.organizerSupplementUpdatedAt) || '未上传')
 const reviewStatusText = computed(() => ({ under_review: '待复核', returned: '已退回', archived: '已归档' }[match.value.refereeReviewStatus] || '待复核'))
+const manualSupplement = computed(() => Boolean(match.value.resultCorrection || match.value.organizerSupplementFiles?.length) || ['postState', 'resultSource', 'resultEntryMode', 'scoreSource', 'source'].some(key => /supplement|manual|organizer|后台|补录/i.test(String(match.value[key] || ''))))
 const refereeCrew = computed(() => {
   const crew = match.value.refereeCrew || match.value.refereeRecord?.crew || {}
   return [
@@ -170,7 +171,7 @@ const requiredRecords = computed(() => {
   ].map(item => ({ ...item, ready: Boolean(item.value) }))
 })
 const requiredRecordsReady = computed(() => requiredRecords.value.every(item => item.ready))
-const canSubmitReview = computed(() => Boolean(match.value.refereeRecord) && !saving.value)
+const canSubmitReview = computed(() => Boolean(match.value.refereeRecord) && !saving.value && (!manualSupplement.value || (supplements.value.length >= 1 && supplements.value.length <= 2)))
 
 function normalizeRecord(value) { return Array.isArray(value) ? value[0] || {} : value || {} }
 function teamById(id) { return teams.value.find(item => item._id === id || item.id === id) }
@@ -218,6 +219,7 @@ async function load() {
 async function onFileSelected(uploadFile) {
   const file = uploadFile.raw
   if (!file) return
+  if (manualSupplement.value && supplements.value.length >= 2) return ElMessage.warning('补录赛果最多上传 2 张比赛报告')
   if (file.size > 10 * 1024 * 1024) return ElMessage.warning('单个文件不能超过 10MB')
   saving.value = true
   try {

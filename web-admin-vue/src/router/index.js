@@ -384,7 +384,8 @@ const routes = [
   },
   { path: '/tournaments/:id/match/:matchId/post-match', name: 'MatchPostMatchReview', component: () => import('../views/layout/LayoutView.vue'), meta: { requiresAuth: true, title: '赛后资料接收与补充', embeddedPageHeader: true }, children: [{ path: '', component: () => import('../views/tournament/MatchPostMatchReview.vue') }] },
   { path: '/tournaments/:id/match/:matchId/review', name: 'MatchReviewWorkspace', component: () => import('../views/layout/LayoutView.vue'), meta: { requiresAuth: true, title: '赛果复核', embeddedPageHeader: true }, children: [{ path: '', component: () => import('../views/tournament/MatchReviewWorkspace.vue') }] },
-  { path: '/tournaments/:id/match/:matchId/archive', name: 'MatchArchiveWorkspace', component: () => import('../views/layout/LayoutView.vue'), meta: { requiresAuth: true, title: '比赛归档详情', embeddedPageHeader: true }, children: [{ path: '', component: () => import('../views/tournament/MatchReviewWorkspace.vue') }] },
+  { path: '/tournaments/:id/results/match/:matchId/archive', name: 'ResultArchiveWorkspace', component: () => import('../views/layout/LayoutView.vue'), meta: { requiresAuth: true, title: '赛果归档详情', embeddedPageHeader: true }, children: [{ path: '', component: () => import('../views/tournament/MatchReviewWorkspace.vue') }] },
+  { path: '/tournaments/:id/match/:matchId/archive', name: 'MatchArchiveWorkspace', redirect: to => ({ path: `/tournaments/${to.params.id}/results/match/${to.params.matchId}/archive`, query: to.query }), meta: { requiresAuth: true, title: '赛果归档详情', embeddedPageHeader: true } },
   // 比赛详情页
   {
     path: '/tournaments/:id/match/:matchId',
