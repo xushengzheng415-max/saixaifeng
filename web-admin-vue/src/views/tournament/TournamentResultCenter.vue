@@ -136,8 +136,7 @@ function normalizedDivisionName(value){ return String(value || '').replace(/[\s�
 function matchesSelectedDivision(row){ return !divisionFilter.value || row.divisionId===divisionFilter.value || Boolean(selectedDivision.value && normalizedDivisionName(row.divisionName)===normalizedDivisionName(selectedDivision.value.name)) }
 function reviewStageOrder(row){ return ({group:0,knockout:1,placement:2,other:3}[row.reviewStage] ?? 3) }
 function matchSequenceValue(row){ const parts=String(row.matchNo || '').match(/\d+/g) || []; return parts.length?Number(parts.at(-1)):Number.MAX_SAFE_INTEGER }
-function scheduleValue(row){ const date=String(row?.matchDate||'9999-12-31').slice(0,10); const time=String(row?.matchTime||'23:59').slice(0,5); const value=Date.parse(`${date}T${/^\d{2}:\d{2}$/.test(time)?time:'23:59'}:00`); return Number.isFinite(value)?value:Number.MAX_SAFE_INTEGER }
-function compareReviewRows(a,b){ return scheduleValue(a)-scheduleValue(b)||reviewStageOrder(a)-reviewStageOrder(b)||matchSequenceValue(a)-matchSequenceValue(b)||String(a.id||'').localeCompare(String(b.id||'')) }
+function compareReviewRows(a,b){ return reviewStageOrder(a)-reviewStageOrder(b)||matchSequenceValue(a)-matchSequenceValue(b)||`${a.matchDate} ${a.matchTime}`.localeCompare(`${b.matchDate} ${b.matchTime}`,'zh-CN') }
 const filteredByScope = computed(() => (dashboard.value.matches || []).filter(row => matchesSelectedDivision(row) && (!dateFilter.value || row.matchDate===dateFilter.value)))
 const visibleMatches = computed(() => filteredByScope.value.filter(row => (!statusFilter.value || row.resultStatus===statusFilter.value) && (!keyword.value.trim() || `${row.matchNo} ${row.homeTeamName} ${row.awayTeamName}`.toLowerCase().includes(keyword.value.trim().toLowerCase()))).sort(compareReviewRows))
 const selectedMatch = computed(() => visibleMatches.value.find(row => row.id===selectedMatchId.value) || visibleMatches.value[0] || null)
@@ -147,7 +146,7 @@ const filteredSummary = computed(() => visibleMatches.value.reduce((sum,row)=>{ 
 const visibleStandings = computed(() => (dashboard.value.standings || []).filter(item => !divisionFilter.value || item.divisionId===divisionFilter.value).sort((a,b)=>String(a.divisionName||'').localeCompare(String(b.divisionName||''),'zh-CN',{numeric:true})||String(a.groupName||'').localeCompare(String(b.groupName||''),'zh-CN',{numeric:true})))
 const visibleKnockout = computed(() => (dashboard.value.knockout || []).filter(item => (!divisionFilter.value || item.divisionId===divisionFilter.value) && (!dateFilter.value || item.matchDate===dateFilter.value)))
 const reportEvents = computed(() => Array.isArray(dashboard.value.events) ? dashboard.value.events : [])
-const reportMatches = computed(() => (dashboard.value.matches || []).filter(row => row.resultStatus==='approved' && (!divisionFilter.value || row.divisionId===divisionFilter.value) && (!reportDate.value || row.matchDate===reportDate.value)).sort(compareReviewRows).map(row => ({ ...row, events: Array.isArray(row.events) ? row.events : reportEvents.value.filter(event => String(event.matchId || event.match_id || '') === String(row.id)) })))
+const reportMatches = computed(() => (dashboard.value.matches || []).filter(row => row.resultStatus==='approved' && (!divisionFilter.value || row.divisionId===divisionFilter.value) && (!reportDate.value || row.matchDate===reportDate.value)).map(row => ({ ...row, events: Array.isArray(row.events) ? row.events : reportEvents.value.filter(event => String(event.matchId || event.match_id || '') === String(row.id)) })))
 const latestStandingPublication = computed(() => { const item=(dashboard.value.publications || []).find(row=>row.type==='standings'&&(!divisionFilter.value||row.divisionId===divisionFilter.value));return item?`最新发布 V${item.version}`:'尚未发布正式快照' })
 const reportVersionText = computed(() => latestStandingPublication.value==='尚未发布正式快照' ? `赛果读取 ${formatDate(dashboard.value.generatedAt)}` : latestStandingPublication.value)
 
@@ -168,9 +167,9 @@ function cardEventClass(event){ return ['red_card','red'].includes(String(event?
 function resolutionLabel(row){ return ({regular_time:'常规时间',extra_time:'加时赛',penalties:'点球大战',penalty_shootout:'点球大战',walkover:'弃权判定'}[row.resolution] || (row.scoreReady?'正式比分待复核':'尚未录入')) }
 function formatDate(value){ if(!value)return'—';const date=new Date(value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString('zh-CN',{hour12:false}).replaceAll('/','-') }
 function formatReportDate(value){ const text=String(value || '').slice(0,10); return text ? text.replaceAll('-','.') : '比赛日期待定' }
-function openMatchResult(row){ const path=row.resultStatus==='approved'?`/tournaments/${tournamentId}/results/match/${row.id}/archive`:row.scoreReady?`/tournaments/${tournamentId}/match/${row.id}/review`:`/tournaments/${tournamentId}/match/${row.id}`;router.push({path,query:row.divisionId?{divisionId:row.divisionId}:{}}) }
+function openMatchResult(row){ const suffix=row.resultStatus==='approved'?'/archive':row.scoreReady?'/review':'';router.push({path:`/tournaments/${tournamentId}/match/${row.id}${suffix}`,query:row.divisionId?{divisionId:row.divisionId}:{}}) }
 
-async function loadDashboard(){ loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=[...result.matches].sort(compareReviewRows)[0]?.id||'';if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
+async function loadDashboard(){ loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=result.matches[0].id;if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
 const correctionVisible = ref(false)
 const correctionSaving = ref(false)
 const correctionForm = ref({ matchId:'', homeScore:0, awayScore:0, reason:'' })
@@ -204,9 +203,9 @@ async function exportReportPng(){
     const html2canvas=(await import('html2canvas')).default
     const target=reportPoster.value
     const rect=target.getBoundingClientRect()
-    const posterWidth=Math.ceil(rect.width)
+    const posterWidth=Math.ceil(target.clientWidth||rect.width)
     const posterHeight=Math.ceil(target.scrollHeight)
-    const canvas=await html2canvas(target,{scale:2,useCORS:true,allowTaint:false,backgroundColor:null,logging:false,imageTimeout:15000,width:posterWidth,height:posterHeight,windowWidth:Math.max(window.innerWidth,1280),windowHeight:Math.max(window.innerHeight,posterHeight),onclone:(doc)=>{const cloned=doc.querySelector('.board-poster');if(cloned){cloned.style.width=`${posterWidth}px`;cloned.style.height='auto';cloned.style.minHeight='0';cloned.style.overflow='visible'}}})
+    const canvas=await html2canvas(target,{scale:2,useCORS:true,allowTaint:false,backgroundColor:null,logging:false,imageTimeout:15000,width:posterWidth,height:posterHeight,windowWidth:Math.max(window.innerWidth,1280),windowHeight:Math.max(window.innerHeight,posterHeight),onclone:(doc)=>{const cloned=doc.querySelector('.board-poster');if(cloned){cloned.style.width=`${posterWidth}px`;cloned.style.height='auto';cloned.style.minHeight='0';cloned.style.overflow='visible';cloned.querySelectorAll('.board-match-main').forEach((el)=>{el.style.width='100%';el.style.maxWidth='100%';el.style.gridTemplateColumns='minmax(0,1fr) 108px minmax(0,1fr)' });cloned.querySelectorAll('.board-team').forEach((el)=>{el.style.minWidth='0';el.style.maxWidth='100%'});cloned.querySelectorAll('.board-team strong').forEach((el)=>{el.style.minWidth='0';el.style.maxWidth='100%';el.style.overflowWrap='anywhere';el.style.wordBreak='break-all'})}}})
     const safeName=String(dashboard.value.tournament?.name||'足球赛事').replace(/[\\/:*?"<>|]/g,'-')
     const modeName=reportMode.value==='scorers'?'比分与进球球员':'比分'
     const cardName=reportShowCards.value?'-含红黄牌':''
@@ -248,6 +247,8 @@ onMounted(loadDashboard)
 .board-poster.scorers .board-scorers>div{gap:1px!important}
 .board-poster.scorers .board-scorers span{line-height:1.2!important}
 .board-team{overflow:hidden}
+.board-match-main{width:100%;min-width:0}
+.board-team{max-width:100%}
 .board-team strong{min-width:0;overflow:hidden;white-space:normal;overflow-wrap:anywhere;word-break:break-all;line-height:1.25}
 .board-footer>span,.board-footer>b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .board-card-events{display:flex;flex-wrap:wrap;gap:3px 7px;margin-top:3px}
