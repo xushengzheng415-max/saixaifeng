@@ -33,6 +33,8 @@
       <label>事件类型<select name="type" id="eventType">
         <option value="goal">进球</option><option value="yellow_card">黄牌</option>
         <option value="red_card">红牌</option><option value="substitution">换人</option>
+        <option value="penalty_scored">点球打进（P）</option><option value="penalty_missed">点球未进</option>
+        <option value="own_goal">乌龙球（OG）</option>
         <option value="stoppage_time">补时</option><option value="other">其他事件</option>
       </select></label>
       <div class="two-col"><label>球队<select name="teamSide" id="eventTeamSide"><option value="home">主队</option><option value="away">客队</option></select></label><label>分钟<input name="minute" type="number" min="0" max="130" required inputmode="numeric"></label></div>
