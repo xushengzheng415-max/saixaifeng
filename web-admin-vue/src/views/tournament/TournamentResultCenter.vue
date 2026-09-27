@@ -163,8 +163,9 @@ function reportLogoKey(row, side){ return `${row?.id || 'match'}:${side}` }
 function reportTeamLogo(row, side){ const key=reportLogoKey(row,side); if(failedReportLogos.value[key])return''; return side==='home' ? (row?.homeTeamLogo || '') : (row?.awayTeamLogo || '') }
 function markReportLogoFailed(row, side){ failedReportLogos.value={...failedReportLogos.value,[reportLogoKey(row,side)]:true} }
 function reportGoalEvents(row, side){ const teamId=side==='home'?row?.homeTeamId:row?.awayTeamId; const teamName=side==='home'?row?.homeTeamName:row?.awayTeamName; return (Array.isArray(row?.events)?row.events:[]).filter(event=>isGoalEvent(event) && (event.teamSide===side || (teamId && String(event.teamId||'')===String(teamId)) || (teamName && String(event.teamName||'')===String(teamName)))).map(event=>({...event,playerName:scorerDisplayName(event)})).sort((a,b)=>Number(a.minute||0)-Number(b.minute||0)) }
-function reportCardEvents(row, side){ const teamId=side==='home'?row?.homeTeamId:row?.awayTeamId; const teamName=side==='home'?row?.homeTeamName:row?.awayTeamName; return (Array.isArray(row?.events)?row.events:[]).filter(event=>['yellow_card','red_card','second_yellow_red','yellow','red'].includes(String(event?.type||'').toLowerCase()) && (event.teamSide===side || (teamId && String(event.teamId||'')===String(teamId)) || (teamName && String(event.teamName||'')===String(teamName)))).sort((a,b)=>Number(a.minute||0)-Number(b.minute||0)) }
-function cardEventClass(event){ return ['red_card','second_yellow_red','red'].includes(String(event?.type||'').toLowerCase())?'red':'yellow' }
+function cardEventKind(event){ const type=String(event?.type||'').toLowerCase().replace(/\s+/g,'_'); if(['second_yellow','second_yellow_red','yellow_red','yellow_red_card','yellow-red','two_yellow'].includes(type)||event?.secondYellow===true||event?.isSecondYellow===true)return'yellow-red'; if(['red_card','red','redcard'].includes(type))return'red'; if(['yellow_card','yellow','yellowcard'].includes(type))return'yellow'; return'' }
+function reportCardEvents(row, side){ const teamId=side==='home'?row?.homeTeamId:row?.awayTeamId; const teamName=side==='home'?row?.homeTeamName:row?.awayTeamName; return (Array.isArray(row?.events)?row.events:[]).filter(event=>cardEventKind(event) && (event.teamSide===side || (teamId && String(event.teamId||'')===String(teamId)) || (teamName && String(event.teamName||'')===String(teamName)))).sort((a,b)=>Number(a.minute||0)-Number(b.minute||0)) }
+function cardEventClass(event){ return cardEventKind(event)||'yellow' }
 function resolutionLabel(row){ return ({regular_time:'常规时间',extra_time:'加时赛',penalties:'点球大战',penalty_shootout:'点球大战',walkover:'弃权判定'}[row.resolution] || (row.scoreReady?'正式比分待复核':'尚未录入')) }
 function formatDate(value){ if(!value)return'—';const date=new Date(value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString('zh-CN',{hour12:false}).replaceAll('/','-') }
 function formatReportDate(value){ const text=String(value || '').slice(0,10); return text ? text.replaceAll('-','.') : '比赛日期待定' }
@@ -243,6 +244,16 @@ onMounted(loadDashboard)
 /* 主客队进球明细各自从顶部向下排列，避免短列表被网格拉伸到中间。 */
 .board-scorers{align-items:start}
 .board-scorers>div{align-content:start;grid-auto-rows:max-content}
+</style>
+<style scoped>
+/* 进球使用足球图标，牌面使用提供的黄牌、红牌和黄红牌图标。 */
+.board-scorers>div>span{display:flex;align-items:center;gap:4px}
+.board-scorers>div:last-child>span{justify-content:flex-end}
+.board-scorers>div>span::before{content:'';display:inline-block;width:13px;height:13px;flex:none;background:url('../../assets/report/events/football.svg') center/contain no-repeat}
+.board-card-chip{width:10px;height:13px;border:0;border-radius:0;box-shadow:none;background-color:transparent!important;background-position:center;background-repeat:no-repeat;background-size:contain}
+.board-card-chip.yellow{background-image:url('../../assets/report/events/yellow-card.svg')!important}
+.board-card-chip.red{background-image:url('../../assets/report/events/red-card.svg')!important}
+.board-card-chip.yellow-red{background-image:url('../../assets/report/events/yellow-red-card.svg')!important}
 </style>
 <style scoped>
 /* 赛事战报卡片顶部的时间与组别是识别比赛的关键信息。 */
