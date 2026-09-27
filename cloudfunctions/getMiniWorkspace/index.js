@@ -56,6 +56,51 @@ function dateText(value) {
   return month + '-' + day + ' ' + hour + ':' + minute
 }
 
+function dateOnlyText(value) {
+  const time = toTime(value)
+  if (!time) return ''
+  const date = new Date(time)
+  return String(date.getMonth() + 1) + '月' + String(date.getDate()) + '日'
+}
+
+function isClockTime(value) {
+  return /^\d{1,2}:\d{2}$/.test(String(value || '').trim())
+}
+
+// 赛事后台可能分别保存日期和开赛时间，不能把“09:00”当作完整日期解析。
+function matchDateValue(match) {
+  return firstValue(match && match.matchDate, match && match.date, match && match.startDate, match && match.playDate)
+}
+
+function matchTimeValue(match) {
+  const direct = firstValue(match && match.matchTime, match && match.timeSlot, match && match.time, match && match.kickoffTime)
+  if (isClockTime(direct)) {
+    const parts = String(direct).split(':')
+    return String(parts[0]).padStart(2, '0') + ':' + String(parts[1]).padStart(2, '0')
+  }
+  const timestamp = firstValue(match && match.startTime, match && match.kickoffAt, direct)
+  const time = toTime(timestamp)
+  if (!time) return '时间待定'
+  const date = new Date(time)
+  return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0')
+}
+
+function matchDateText(match) {
+  const direct = dateOnlyText(matchDateValue(match))
+  if (direct) return direct
+  return dateOnlyText(firstValue(match && match.startTime, match && match.kickoffAt, match && match.matchTime)) || '日期待定'
+}
+
+function matchDateTimeMs(match) {
+  const date = String(matchDateValue(match) || '')
+  const time = matchTimeValue(match)
+  if (date && isClockTime(time)) {
+    const combined = toTime(date + 'T' + time + ':00')
+    if (combined) return combined
+  }
+  return toTime(firstValue(match && match.startTime, match && match.kickoffAt, match && match.matchTime, match && match.matchDate, match && match.date, match && match.startDate, match && match.playDate))
+}
+
 function maskPhone(value) {
   const phone = String(value || '')
   return /^1\d{10}$/.test(phone) ? phone.slice(0, 3) + '****' + phone.slice(-4) : ''
@@ -642,10 +687,10 @@ function formatTeam(item, summary) {
 }
 
 function formatMatch(item, teamMap) {
-  const startValue = firstValue(item.matchTime, item.startTime, item.matchDate, item.date)
   const home = teamMap[item.homeTeamId] || {}
   const away = teamMap[item.awayTeamId] || {}
-  const status = String(item.status || 'scheduled')
+  const status = String(item.status || 'scheduled').toLowerCase()
+  const isLive = ['ongoing', 'live', 'in_progress', 'inprogress'].indexOf(status) >= 0
   return {
     id: String(item._id),
     tournamentId: String(item.tournamentId || ''),
@@ -655,13 +700,15 @@ function formatMatch(item, teamMap) {
     title: firstValue(item.tournamentName, '赛事比赛'),
     subtitle: firstValue(item.homeTeamName, home.name, home.teamName, '主队') +
       ' vs ' + firstValue(item.awayTeamName, away.name, away.teamName, '客队'),
-    time: toTime(startValue),
-    timeText: dateText(startValue),
-    location: firstValue(item.venue, item.location, '场地待定'),
+    time: matchDateTimeMs(item),
+    timeText: matchDateText(item) + ' ' + matchTimeValue(item),
+    dateText: matchDateText(item),
+    divisionText: firstValue(item.divisionName, item.division, item.groupName, '组别待定'),
+    location: firstValue(item.venue, item.location, item.fieldName, item.field, '场地待定'),
     status,
     statusText: status === 'completed' || status === 'finished'
       ? '已结束'
-      : (status === 'ongoing' ? '进行中' : '未开始')
+      : (isLive ? '进行中' : '待开始')
   }
 }
 
@@ -2686,16 +2733,48 @@ async function teamParticipationForWorkspace(event, identity) {
     const tournamentId = String(item.tournamentId || '')
     const tournament = tournamentMap[tournamentId] || {}, status = String(item.status || 'pending')
     const divisionId = registrationDivisionId(item)
+    const divisionName = String(firstValue(item.divisionName, tournament.divisionName, '默认组别'))
     const sameTournamentRegistrations = registrationsByTournament[tournamentId] || []
     const allowLegacySnapshot = unique(sameTournamentRegistrations.map(registrationDivisionId)).length === 1
     const rosters = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
       .filter(snapshot => snapshotMatchesDivision(snapshot, divisionId, allowLegacySnapshot))
     const roster = rosters.sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
-    const matches = await safeGet('matches', { tournamentId }, 200)
-    const next = matches.filter(row => [String(row.homeTeamId || ''), String(row.awayTeamId || '')].indexOf(teamId) >= 0 && snapshotMatchesDivision(row, divisionId, allowLegacySnapshot) && ['completed','finished','archived'].indexOf(String(row.status || '')) < 0).sort((a,b)=>toTime(a.matchTime || a.matchDate)-toTime(b.matchTime || b.matchDate))[0]
-    return { id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '赛事'), divisionName: String(item.divisionName || tournament.divisionName || '默认组别'), status, statusText: status === 'confirmed' || status === 'active' ? '已确认' : '待确认', rosterText: roster ? (String(roster.status || '') === 'approved' ? '正式名单已审核' : '正式名单待处理') : '尚未提交正式名单', nextMatchId: next ? String(next._id) : '', nextMatchText: next ? dateText(firstValue(next.matchTime, next.matchDate, next.startTime)) : '暂无待进行比赛' }
+    const matches = (await safeGet('matches', { tournamentId }, 300)).filter(row => {
+      const involved = [String(row.homeTeamId || ''), String(row.awayTeamId || '')].indexOf(teamId) >= 0 || [String(row.homeTeamName || ''), String(row.awayTeamName || '')].indexOf(String(team.name || '')) >= 0
+      return involved && snapshotMatchesDivision(row, divisionId, allowLegacySnapshot)
+    }).sort((a, b) => (matchDateTimeMs(a) || Number.MAX_SAFE_INTEGER) - (matchDateTimeMs(b) || Number.MAX_SAFE_INTEGER))
+    const completedStatuses = ['completed', 'finished', 'archived']
+    const matchRows = matches.map(row => {
+      const rawStatus = String(row.status || 'scheduled').toLowerCase()
+      const homeTeamId = String(row.homeTeamId || '')
+      const isHome = homeTeamId === teamId || (!homeTeamId && String(row.homeTeamName || '') === String(team.name || ''))
+      const opponentName = isHome ? String(row.awayTeamName || '客队待定') : String(row.homeTeamName || '主队待定')
+      const statusText = ({ scheduled: '待开始', pending: '待开始', checked_in: '已报到', ongoing: '进行中', live: '进行中', finished: '已结束', completed: '已结束', archived: '已归档', postponed: '已延期', cancelled: '已取消' })[rawStatus] || '待确认'
+      return {
+        id: String(row._id), dateText: matchDateText(row), timeText: matchTimeValue(row), opponentName,
+        sideText: isHome ? '主场' : '客场', roundText: String(firstValue(row.roundName, row.roundText, row.round, '轮次待定')),
+        venueText: String(firstValue(row.venue, row.field, row.location, row.fieldName, '场地待定')),
+        status: rawStatus, statusText,
+        statusClass: completedStatuses.indexOf(rawStatus) >= 0 ? 'match-status-done' : (['ongoing', 'live'].indexOf(rawStatus) >= 0 ? 'match-status-live' : 'match-status-wait'),
+        canSubmitLineup: ['scheduled', 'pending', 'checked_in'].indexOf(rawStatus) >= 0
+      }
+    })
+    const next = matchRows.find(row => completedStatuses.indexOf(row.status) < 0)
+    const normalizedStatus = status.toLowerCase()
+    const hasOngoingMatch = matchRows.some(row => ['ongoing', 'live'].indexOf(row.status) >= 0)
+    const hasCompletedMatch = matchRows.length > 0 && matchRows.every(row => completedStatuses.indexOf(row.status) >= 0 || row.status === 'cancelled')
+    const competitionStatus = hasOngoingMatch ? 'ongoing' : (hasCompletedMatch ? 'completed' : 'not_started')
+    return {
+      id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '赛事'), divisionName, status,
+      statusText: ['approved', 'confirmed', 'active', 'accepted', 'claimed'].indexOf(normalizedStatus) >= 0 ? '已参赛' : '待确认',
+      statusClass: ['approved', 'confirmed', 'active', 'accepted', 'claimed'].indexOf(normalizedStatus) >= 0 ? 'state-ok' : 'state-wait',
+      rosterText: roster ? (String(roster.status || '') === 'approved' ? '正式名单已审核' : '正式名单待处理') : '尚未提交正式名单',
+      matches: matchRows, matchCount: matchRows.length, hasMatches: matchRows.length > 0, competitionStatus,
+      nextMatchId: next ? next.id : '', nextMatchText: next ? next.dateText + ' ' + next.timeText : '赛程待公布',
+      actionText: '查看赛事', actionClass: 'event-secondary'
+    }
   }))
-  return { success: true, team: { id: teamId, name: String(team.name || '') }, items, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
+  return { success: true, team: { id: teamId, name: String(team.name || ''), logo: String(firstValue(team.logo, team.logoUrl, team.teamLogo, '') || '') }, items, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
 }
 
 async function teamTournamentDetailForWorkspace(event, identity) {
