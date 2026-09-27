@@ -244,6 +244,9 @@ onMounted(loadDashboard)
 .board-poster.scorers .board-scorers{gap:5px!important;margin-top:4px!important;padding:4px 8px!important;line-height:1.2!important}
 .board-poster.scorers .board-scorers>div{gap:1px!important}
 .board-poster.scorers .board-scorers span{line-height:1.2!important}
+.board-team{overflow:hidden}
+.board-team strong{min-width:0;overflow:hidden;white-space:normal;overflow-wrap:anywhere;word-break:break-all;line-height:1.25}
+.board-footer>span,.board-footer>b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .board-card-events{display:flex;flex-wrap:wrap;gap:3px 7px;margin-top:3px}
 .board-scorers>div:last-child .board-card-events{justify-content:flex-end}
 .board-card-events span{display:inline-flex;align-items:center;gap:4px;font-size:9px;line-height:1.2}
