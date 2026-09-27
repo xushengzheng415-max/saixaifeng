@@ -229,7 +229,7 @@
               <div v-if="sortedEvents.length === 0" class="events-empty">
                 暂无比赛事件<el-button v-if="!isRefereeEvidenceLocked" link type="primary" @click="openAddEventDialog">，+ 添加事件</el-button>
               </div>
-              <div v-for="(evt, i) in sortedEvents" :key="i" class="event-row" :class="'event-' + evt.type">
+              <div v-for="(evt, i) in sortedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
                 <div class="event-icon">{{ eventIcon(evt.type) }}</div>
                 <div class="event-content">
@@ -245,7 +245,7 @@
                   </template>
                   <span v-if="evt.teamSide" class="event-side">{{ evt.teamSide === 'home' ? homeName : awayName }}</span>
                 </div>
-                <el-button v-if="!isRefereeEvidenceLocked" size="small" text type="danger" @click="removeEvent(i)">
+                <el-button v-if="!isRefereeEvidenceLocked" size="small" text type="danger" @click="removeEvent(evt)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
               </div>
@@ -2126,8 +2126,33 @@ async function saveEvent() {
   }
 }
 
-async function removeEvent(index) {
+function eventRowKey(event,index) {
+  return String(event?.eventId || event?._id || `${event?.createdAt || ''}:${event?.substitutionBatchId || ''}:${event?.substitutionBatchIndex || ''}:${event?.minute || 0}:${event?.type || ''}:${event?.teamSide || ''}:${event?.playerName || ''}:${event?.assistName || ''}:${index}`)
+}
+
+function eventIndexInSource(target) {
+  const events = match.value.events || []
+  const sameReference = events.indexOf(target)
+  if (sameReference >= 0) return sameReference
+  const eventId = String(target?.eventId || '')
+  if (eventId) return events.findIndex(item => String(item?.eventId || '') === eventId)
+  return events.findIndex(item => item && item.createdAt === target?.createdAt && item.type === target?.type && item.minute === target?.minute && item.teamSide === target?.teamSide && item.playerName === target?.playerName && item.assistName === target?.assistName && item.substitutionBatchIndex === target?.substitutionBatchIndex)
+}
+
+async function removeEvent(event) {
   if (!ensureEvidenceEditable()) return
+  try {
+    await ElMessageBox.confirm('删除后无法恢复，确认删除这条比赛事件吗？', '确认删除比赛事件', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  const index = eventIndexInSource(event)
+  if (index < 0) return ElMessage.warning('事件已更新，请刷新后再试')
+  saving.value = true
   try {
     const events = [...(match.value.events || [])]
     events.splice(index, 1)
@@ -2139,6 +2164,8 @@ async function removeEvent(index) {
     ElMessage.success('已删除')
   } catch (err) {
     ElMessage.error('删除失败: ' + err.message)
+  } finally {
+    saving.value = false
   }
 }
 
