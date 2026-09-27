@@ -308,6 +308,8 @@ import {
 } from '../../utils/permissions'
 
 const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
+const LAYOUT_BOOTSTRAP_CACHE_KEY = 'sxfLayoutBootstrapAt'
+const LAYOUT_BOOTSTRAP_CACHE_TTL = 5 * 60 * 1000
 
 const router = useRouter()
 const route = useRoute()
@@ -364,6 +366,31 @@ const organizationRecord = ref(initialStoredOrganization || {})
 const organizationTypeOptions = [{ value:'event_company', label:'赛事公司' }, { value:'club', label:'足球俱乐部' }, { value:'school', label:'学校' }, { value:'association', label:'足协/体育组织' }, { value:'other', label:'其他机构' }]
 const provinceOptions = provincesData
 const organizationCityOptions = computed(() => cityMapData[organizationForm.provinceCode] || [])
+
+function layoutBootstrapIdentity() {
+  const stored = readStoredObject('userInfo')
+  return String(stored._id || stored.uid || localStorage.getItem('userId') || '')
+}
+
+function shouldLoadLayoutBootstrap() {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(LAYOUT_BOOTSTRAP_CACHE_KEY) || 'null')
+    return !cached || cached.identity !== layoutBootstrapIdentity() || Date.now() - Number(cached.loadedAt || 0) > LAYOUT_BOOTSTRAP_CACHE_TTL
+  } catch {
+    return true
+  }
+}
+
+function markLayoutBootstrapLoaded() {
+  sessionStorage.setItem(LAYOUT_BOOTSTRAP_CACHE_KEY, JSON.stringify({
+    identity: layoutBootstrapIdentity(),
+    loadedAt: Date.now()
+  }))
+}
+
+function clearLayoutBootstrapCache() {
+  sessionStorage.removeItem(LAYOUT_BOOTSTRAP_CACHE_KEY)
+}
 
 function persistWorkspaceOrganization(organization) {
   if (!organization) return
@@ -841,6 +868,7 @@ function handleUserCommand(command) {
       openOrganizationDialog()
       break
     case 'refresh':
+      clearLayoutBootstrapCache()
       router.go(0)
       break
     case 'logout':
@@ -938,8 +966,14 @@ onMounted(() => {
   }
   loginType.value = localStorage.getItem('loginType') || 'anonymous'
   currentRole.value = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
-  loadWorkspaceAccount()
-  loadCurrentAccountProfile();
+  if (shouldLoadLayoutBootstrap()) {
+    // 机构状态和账号资料在会话内短时间稳定；菜单切换不需要重复等待这两次请求。
+    Promise.all([loadWorkspaceAccount(), loadCurrentAccountProfile()]).finally(markLayoutBootstrapLoaded)
+  } else {
+    const phone = userInfo.value.phone || ''
+    accountPhoneMasked.value = maskAccountPhone(phone)
+    accountPhoneVerified.value = Boolean(accountPhoneMasked.value)
+  }
 
   ['needBindPhone', 'needSetPassword', 'needBindEmail', 'phone', 'phoneNumber']
     .forEach(key => localStorage.removeItem(key))
