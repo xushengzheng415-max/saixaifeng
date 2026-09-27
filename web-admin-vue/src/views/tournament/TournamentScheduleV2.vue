@@ -189,7 +189,7 @@ function minutes(value) { const [hour,minute] = String(value || '00:00').split('
 function timeText(value) { return `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}` }
 function timesByStep(step) { const rows=[]; for (const session of enabledSessions.value) for (let value=minutes(session.start);value<minutes(session.end);value+=step) rows.push(timeText(value)); return [...new Set(rows)].sort() }
 const preciseTimes = computed(() => timesByStep(Math.max(5,Number(config.timeStepMinutes || 5))))
-const mapTimes = computed(() => [...new Set([...timesByStep(30),...selectedDayMatches.value.map(match => match.matchTime).filter(Boolean)])].sort())
+const mapTimes = computed(() => [...new Set(selectedDayMatches.value.map(match => match.matchTime).filter(Boolean))].sort())
 function sessionLabel(time) { const value=minutes(time); return enabledSessions.value.find(item => value>=minutes(item.start) && value<minutes(item.end))?.label || '' }
 function compatibleVenues(match) { const division=divisions.value.find(item => String(item.id) === String(match?.divisionId)); const format=String(match?.matchFormat || matchFormat(division)); return config.venueResources.filter(item => !format || item.fieldFormat === format) }
 function matchesForCell(venue,time) { return selectedDayMatches.value.filter(match => match.venue === venue && match.matchTime === time) }
