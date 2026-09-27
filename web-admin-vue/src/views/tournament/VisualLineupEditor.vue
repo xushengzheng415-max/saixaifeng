@@ -66,7 +66,7 @@
               @click="handlePlayerSlotClick(pos)"
             >
               <PlayerCard
-                :player="assignedPlayers[pos.role] || null"
+                :player="toCardPlayer(assignedPlayers[pos.role])"
                 :mini="true"
                 :slot-label="pos.label"
               />
@@ -83,20 +83,12 @@
                 <div
                   v-for="player in substitutePlayers"
                   :key="player.id"
-                  class="substitute-card"
+                  class="substitute-card substitute-player-card"
                   :class="{ 'is-assigned': isPlayerAssigned(player.id) }"
                   @click="handleSubstituteClick(player)"
                 >
-                  <div class="sub-avatar">
-                    <img v-if="player.photo" :src="player.photo" :alt="player.name" />
-                    <div v-else class="sub-avatar-placeholder">{{ getInitials(player.name) }}</div>
-                  </div>
-                  <div class="sub-info">
-                    <div class="sub-name">{{ player.name }}</div>
-                    <div class="sub-meta">
-                      <span v-if="player.number" class="sub-number">#{{ player.number }}</span>
-                      <span v-if="player.position" class="sub-position">{{ player.position }}</span>
-                    </div>
+                  <div class="sub-player-card-wrap">
+                    <PlayerCard :player="toCardPlayer(player)" />
                   </div>
                   <div v-if="isPlayerAssigned(player.id)" class="sub-status">
                     <el-tag size="small" type="success">首发</el-tag>
@@ -300,16 +292,11 @@
               <div
                 v-for="player in homeBench"
                 :key="'hb-' + getPlayerId(player)"
-                class="bench-card has-remove"
+                class="bench-card bench-player-card has-remove"
                 @click="handleHomeBenchRemove(player)"
               >
-                <div class="bench-avatar">
-                  <img v-if="player.photo" :src="player.photo" :alt="player.name" />
-                  <div v-else class="bench-placeholder" style="background: linear-gradient(135deg, #f56c6c 0%, #c62828 100%);">{{ getInitials(player.name) }}</div>
-                </div>
-                <div class="bench-name">{{ player.name }}</div>
-                <div class="bench-meta">
-                  <span v-if="player.number" class="bench-num">#{{ player.number }}</span>
+                <div class="bench-player-card-wrap">
+                  <PlayerCard :player="toCardPlayer(player)" :teamLogo="props.homeTeamLogo" />
                 </div>
               </div>
               <div
@@ -335,16 +322,11 @@
               <div
                 v-for="player in awayBench"
                 :key="'ab-' + getPlayerId(player)"
-                class="bench-card has-remove"
+                class="bench-card bench-player-card has-remove"
                 @click="handleAwayBenchRemove(player)"
               >
-                <div class="bench-avatar">
-                  <img v-if="player.photo" :src="player.photo" :alt="player.name" />
-                  <div v-else class="bench-placeholder" style="background: linear-gradient(135deg, #e6a23c 0%, #d48806 100%);">{{ getInitials(player.name) }}</div>
-                </div>
-                <div class="bench-name">{{ player.name }}</div>
-                <div class="bench-meta">
-                  <span v-if="player.number" class="bench-num">#{{ player.number }}</span>
+                <div class="bench-player-card-wrap">
+                  <PlayerCard :player="toCardPlayer(player)" :teamLogo="props.awayTeamLogo" />
                 </div>
               </div>
               <div
@@ -393,7 +375,7 @@
             @click="handlePlayerSelect(player)"
           >
             <div class="player-avatar">
-              <img v-if="player.photo" :src="player.photo" :alt="player.name" />
+              <img v-if="getPlayerPhoto(player)" :src="getPlayerPhoto(player)" :alt="player.name" @error="handlePlayerPhotoError(player)" />
               <div v-else class="avatar-placeholder">{{ getInitials(player.name) }}</div>
             </div>
             <div class="player-details">
@@ -459,7 +441,7 @@
             @click="handleDualPlayerSelect(player)"
           >
             <div class="player-avatar">
-              <img v-if="player.photo" :src="player.photo" :alt="player.name" />
+              <img v-if="getPlayerPhoto(player)" :src="getPlayerPhoto(player)" :alt="player.name" @error="handlePlayerPhotoError(player)" />
               <div v-else class="avatar-placeholder">{{ getInitials(player.name) }}</div>
             </div>
             <div class="player-details">
@@ -503,6 +485,7 @@ import {
 import PlayerCard from '@/components/player/PlayerCard.vue'
 import formationData from '@/data/formation-data.json'
 import fieldBgImage from '@/assets/images/football-field-dual.jpg'
+import { getTempFileURL } from '@/utils/upload'
 
 // ==================== Props ====================
 const props = defineProps({
@@ -565,13 +548,76 @@ function getPlayerId(player) {
   return player.id || player._id || null
 }
 
+// 球员头像字段在历史数据中同时存在 photo、photoUrl、avatarUrl 和 headUrl。
+// 选择列表/替补席是普通 img，CloudBase fileID 还需要先换成临时 HTTPS 地址。
+const resolvedPlayerPhotos = ref({})
+const resolvingPlayerPhotos = new Map()
+const failedPlayerPhotos = new Set()
+
+function getPlayerPhotoSource(player) {
+  if (!player) return ''
+  return [
+    player.photo,
+    player.photoUrl,
+    player.photoFileID,
+    player.photoFileId,
+    player.avatarUrl,
+    player.avatarFileId,
+    player.headUrl,
+    player.imageUrl
+  ]
+    .map(value => String(value || '').trim())
+    .find(Boolean) || ''
+}
+
+function isDirectImageUrl(value) {
+  return /^(?:https?:|data:image\/|blob:|\/)/i.test(String(value || ''))
+}
+
+function getPlayerPhoto(player) {
+  const source = getPlayerPhotoSource(player)
+  const id = String(getPlayerId(player) || source || '')
+  if (!source || !id || failedPlayerPhotos.has(id)) return ''
+  if (resolvedPlayerPhotos.value[id]) return resolvedPlayerPhotos.value[id]
+
+  if (isDirectImageUrl(source)) {
+    resolvedPlayerPhotos.value = { ...resolvedPlayerPhotos.value, [id]: source }
+    return source
+  }
+
+  if (!resolvingPlayerPhotos.has(id)) {
+    const promise = getTempFileURL(source)
+      .then(result => {
+        const url = result?.success && isDirectImageUrl(result.url) ? result.url : ''
+        if (url) {
+          resolvedPlayerPhotos.value = { ...resolvedPlayerPhotos.value, [id]: url }
+        } else {
+          failedPlayerPhotos.add(id)
+        }
+      })
+      .catch(() => failedPlayerPhotos.add(id))
+      .finally(() => resolvingPlayerPhotos.delete(id))
+    resolvingPlayerPhotos.set(id, promise)
+  }
+  return ''
+}
+
+function handlePlayerPhotoError(player) {
+  const id = String(getPlayerId(player) || getPlayerPhotoSource(player) || '')
+  if (!id) return
+  failedPlayerPhotos.add(id)
+  const next = { ...resolvedPlayerPhotos.value }
+  delete next[id]
+  resolvedPlayerPhotos.value = next
+}
+
 // 把阵容中的球员数据映射为 PlayerCard 需要的格式
 function toCardPlayer(player) {
   if (!player) return null
   return {
     ...player,
     jerseyNumber: player.number || player.jerseyNumber || '--',
-    photoUrl: player.photo || player.photoUrl || '',
+    photoUrl: getPlayerPhotoSource(player),
     position: player.position || '',
     appearances: player.appearances || 0,
     jerseyName: player.jerseyName || ''
@@ -671,10 +717,13 @@ const saving = ref(false)
 // 字段映射：将球员数据库字段 jerseyNumber 映射为 number（兼容两种字段名）
 function mapPlayerFields(player) {
   if (!player) return player
+  const photoUrl = getPlayerPhotoSource(player)
   return {
     ...player,
     number: player.number ?? player.jerseyNumber ?? null,
     id: player.id || player._id || player.name,
+    photo: photoUrl,
+    photoUrl
   }
 }
 const teamPlayers = ref((props.players || []).map(mapPlayerFields))
@@ -892,11 +941,13 @@ function buildSingleLineup(assigned, formationId, subs) {
     formation: formationId,
     players: Object.entries(assigned).map(([role, p]) => ({
       id: p.id, name: p.name, number: p.number, position: p.position,
+      photoUrl: getPlayerPhotoSource(p), photoFileID: p.photoFileID || p.photoFileId || '',
       jerseyName: p.jerseyName || '', isCaptain: p.isCaptain || false,
       isForeign: p.isForeign || false, role
     })),
     substitutes: subs.map(p => ({
       id: p.id, name: p.name, number: p.number, position: p.position,
+      photoUrl: getPlayerPhotoSource(p), photoFileID: p.photoFileID || p.photoFileId || '',
       jerseyName: p.jerseyName || '', isCaptain: p.isCaptain || false,
       isForeign: p.isForeign || false
     }))
@@ -1615,6 +1666,49 @@ function handlePlayerSearch() {}
     }
   }
 
+  // 单队模式替补席也使用统一球员卡，保持头像和场上卡片一致。
+  .substitute-player-card {
+    width: 66px;
+    height: 95px;
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+    border: 0;
+
+    &:hover {
+      background: transparent;
+      border-color: transparent;
+    }
+
+    .sub-player-card-wrap {
+      position: relative;
+      width: 66px;
+      height: 95px;
+      overflow: visible;
+
+      :deep(.player-card) {
+        position: absolute;
+        top: 0;
+        left: 0;
+        transform: scale(0.22);
+        transform-origin: left top;
+        box-shadow: none !important;
+      }
+
+      :deep(.player-card:hover) {
+        transform: scale(0.22) !important;
+      }
+
+      :deep(.player-card-container) {
+        gap: 0;
+      }
+
+      :deep(.card-level-indicator) {
+        display: none;
+      }
+    }
+  }
+
   .empty-substitutes {
     color: #888;
     font-size: 13px;
@@ -1968,6 +2062,48 @@ function handlePlayerSearch() {}
   }
 }
 
+.bench-player-card {
+  width: 66px;
+  height: 95px;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+
+  &:hover {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  .bench-player-card-wrap {
+    position: relative;
+    width: 66px;
+    height: 95px;
+    overflow: visible;
+
+    :deep(.player-card) {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: scale(0.22);
+      transform-origin: left top;
+      box-shadow: none !important;
+    }
+
+    :deep(.player-card:hover) {
+      transform: scale(0.22) !important;
+    }
+
+    :deep(.player-card-container) {
+      gap: 0;
+    }
+
+    :deep(.card-level-indicator) {
+      display: none;
+    }
+  }
+}
+
 .squad-avatar,
 .bench-avatar {
   width: 32px;
@@ -2129,7 +2265,7 @@ function handlePlayerSearch() {}
 // ==================== 替补席空槽位 ====================
 .bench-empty-slot {
   width: 64px;
-  height: 78px;
+  height: 95px;
   background: #3a3a3a;
   border-radius: 6px;
   display: flex;
