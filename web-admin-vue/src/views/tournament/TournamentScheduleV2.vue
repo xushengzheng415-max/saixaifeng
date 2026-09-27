@@ -149,14 +149,16 @@ function teamLogoKey(match,side) { return `${String(match?._id || '')}:${side}` 
 function teamLogo(match,side) { const key=teamLogoKey(match,side); if(hiddenTeamLogoKeys.value.has(key))return ''; const direct=match?.[`${side}TeamLogo`] || match?.[`${side}Logo`] || match?.[`${side}Team`]?.logoTransparentUrl || match?.[`${side}Team`]?.logoUrl || match?.[`${side}Team`]?.logo || ''; return String(direct || teamLogoMap.value.get(String(match?.[`${side}TeamId`] || '')) || '') }
 function hideTeamLogo(match,side) { hiddenTeamLogoKeys.value=new Set([...hiddenTeamLogoKeys.value,teamLogoKey(match,side)]) }
 function hasMatchScore(match) { return match?.homeScore !== null && match?.homeScore !== undefined && match?.homeScore !== '' && match?.awayScore !== null && match?.awayScore !== undefined && match?.awayScore !== '' }
-function scoreText(match) { const state=managementState(match).key; return ['scheduled','supplement'].includes(state) && !hasMatchScore(match) ? '- : -' : match?.homeScore == null && match?.awayScore == null ? '— : —' : `${match.homeScore ?? '—'} : ${match.awayScore ?? '—'}` }
+function scoreText(match) { const state=managementState(match).key; return state==='scheduled' || state==='supplement' && !hasMatchScore(match) ? '- : -' : match?.homeScore == null && match?.awayScore == null ? '— : —' : `${match.homeScore ?? '—'} : ${match.awayScore ?? '—'}` }
 function managementState(match) {
   const status=String(match?.status || '').toLowerCase(),postState=String(match?.postState || '').toLowerCase(),reviewStatus=String(match?.refereeReviewStatus || match?.reviewStatus || '').toLowerCase(),recordState=String(match?.recordState || '')
   const hasScore=hasMatchScore(match)
   const refereeSubmitted=reviewStatus === 'under_review' || reviewStatus === 'returned' || reviewStatus === 'archived' || recordState === '电子记录待复核' || recordState === '电子记录已归档' || Boolean(match?.refereeRecord || match?.refereeReport || match?.refereeSubmittedAt || match?.refereeReportSubmittedAt)
+  const preMatchStatus=['scheduled','pending','checked_in','not_started','upcoming'].includes(status)
   if(status==='archived' || postState==='archived' || reviewStatus==='archived' || recordState==='电子记录已归档')return { key:'archived',label:'已归档' }
   if(['live','in_progress','playing'].includes(status) || match?.executionState==='recording')return { key:'live',label:'进行中' }
   if(refereeSubmitted || status==='pending_review' || postState==='review')return { key:'review',label:'待复核' }
+  if(preMatchStatus)return { key:'scheduled',label:'待开始' }
   if(hasScore)return { key:'completed',label:'已完赛' }
   if(postState==='supplement' || ['pending_result','awaiting_result','completed','finished'].includes(status))return { key:'supplement',label:'完赛未补录' }
   return { key:'scheduled',label:'待开始' }
