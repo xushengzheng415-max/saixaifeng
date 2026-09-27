@@ -516,14 +516,7 @@
               <span class="let-team-name">{{ homeName || '主队' }}</span>
               <div style="display:flex;gap:8px;align-items:center;">
                 <el-select v-model="lineupForm.home.formation" placeholder="阵型" style="width: 100px;" size="small" clearable>
-                  <el-option label="4-4-2" value="4-4-2" />
-                  <el-option label="4-3-3" value="4-3-3" />
-                  <el-option label="4-2-3-1" value="4-2-3-1" />
-                  <el-option label="3-5-2" value="3-5-2" />
-                  <el-option label="5-3-2" value="5-3-2" />
-                  <el-option label="4-1-4-1" value="4-1-4-1" />
-                  <el-option label="4-5-1" value="4-5-1" />
-                  <el-option label="3-4-3" value="3-4-3" />
+                  <el-option v-for="formation in formationOptions" :key="formation.value" :label="formation.label" :value="formation.value" />
                 </el-select>
               </div>
             </div>
@@ -538,7 +531,7 @@
             <span class="le-col-flags">标记</span>
             <span class="le-col-act"></span>
           </div>
-          <div class="lineup-edit-subtitle">首发（11人）</div>
+          <div class="lineup-edit-subtitle">首发（{{ currentPlayerCount }}人）</div>
           <div
             v-for="(p, i) in lineupForm.home.players"
             :key="'h-'+i"
@@ -565,7 +558,7 @@
             </el-button>
           </div>
           <div class="lineup-edit-add">
-            <el-button size="small" text type="primary" @click="addPlayer('home', 'starting')" :disabled="lineupForm.home.players.length >= 11">
+            <el-button size="small" text type="primary" @click="addPlayer('home', 'starting')" :disabled="lineupForm.home.players.length >= currentPlayerCount">
               + 添加首发
             </el-button>
           </div>
@@ -608,14 +601,7 @@
               <span class="let-team-name">{{ awayName || '客队' }}</span>
               <div style="display:flex;gap:8px;align-items:center;">
                 <el-select v-model="lineupForm.away.formation" placeholder="阵型" style="width: 100px;" size="small" clearable>
-                  <el-option label="4-4-2" value="4-4-2" />
-                  <el-option label="4-3-3" value="4-3-3" />
-                  <el-option label="4-2-3-1" value="4-2-3-1" />
-                  <el-option label="3-5-2" value="3-5-2" />
-                  <el-option label="5-3-2" value="5-3-2" />
-                  <el-option label="4-1-4-1" value="4-1-4-1" />
-                  <el-option label="4-5-1" value="4-5-1" />
-                  <el-option label="3-4-3" value="3-4-3" />
+                  <el-option v-for="formation in formationOptions" :key="formation.value" :label="formation.label" :value="formation.value" />
                 </el-select>
               </div>
             </div>
@@ -630,7 +616,7 @@
             <span class="le-col-flags">标记</span>
             <span class="le-col-act"></span>
           </div>
-          <div class="lineup-edit-subtitle">首发（11人）</div>
+          <div class="lineup-edit-subtitle">首发（{{ currentPlayerCount }}人）</div>
           <div
             v-for="(p, i) in lineupForm.away.players"
             :key="'a-'+i"
@@ -657,7 +643,7 @@
             </el-button>
           </div>
           <div class="lineup-edit-add">
-            <el-button size="small" text type="primary" @click="addPlayer('away', 'starting')" :disabled="lineupForm.away.players.length >= 11">
+            <el-button size="small" text type="primary" @click="addPlayer('away', 'starting')" :disabled="lineupForm.away.players.length >= currentPlayerCount">
               + 添加首发
             </el-button>
           </div>
@@ -1247,6 +1233,7 @@ import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, V
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import VisualLineupEditor from './VisualLineupEditor.vue'
+import formationData from '../../data/formation-data.json'
 
 const route = useRoute()
 const router = useRouter()
@@ -1318,6 +1305,10 @@ const returnRecordForm = ref({ reason: '', fields: [] })
 const activeTab = ref('lineup')
 const homePlayers = ref([])
 const awayPlayers = ref([])
+
+const teamHeadCoachCache = new Map()
+const teamHeadCoachRequests = new Map()
+const TEAM_HEAD_COACH_CACHE_TTL = 2 * 60 * 1000
 
 // 编辑弹窗
 const editDialogVisible = ref(false)
@@ -1529,11 +1520,31 @@ function eventTimeText(event) { return event?.type === 'substitution' && event?.
 
 // 裁判组
 const refereeCrew = computed(() => match.value.refereeCrew || {})
-const currentMatchFormat = computed(() => match.value.matchFormat || tournamentMatchFormat.value || '11side')
-const currentPlayerCount = computed(() => Number.parseInt(String(currentMatchFormat.value), 10) || 11)
+const formatPlayerCount = value => {
+  const text = String(value || '').trim().toLowerCase()
+  if (!text) return 0
+  const chinese = text.match(/(十一|九|八|七|五)人制?/)
+  if (chinese) return { 五: 5, 七: 7, 八: 8, 九: 9, 十一: 11 }[chinese[1]] || 0
+  const number = text.match(/(?:^|[^0-9])(5|7|8|9|11)(?:\s*(?:人制|人|side|v\s*[sv]?))?/i)
+  return number ? Number(number[1]) : 0
+}
+const currentMatchFormat = computed(() => {
+  if (match.value.matchFormat) return match.value.matchFormat
+  if (Number(match.value.playersOnField) > 0) return `${Number(match.value.playersOnField)}side`
+  return tournamentMatchFormat.value || '11side'
+})
+const currentPlayerCount = computed(() => formatPlayerCount(currentMatchFormat.value) || 11)
 const currentMatchFormatLabel = computed(() => {
-  const number = String(currentMatchFormat.value).match(/\d+/)?.[0] || '11'
+  const number = currentPlayerCount.value
   return `${number}人制`
+})
+const formationOptions = computed(() => {
+  const data = formationData[`${currentPlayerCount.value}人制`]
+  const options = Object.entries(data?.formations || {}).map(([value, formation]) => ({
+    value,
+    label: formation.name || value
+  }))
+  return options.length ? options : ['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-3-2', '4-1-4-1', '4-5-1', '3-4-3'].map(value => ({ value, label: value }))
 })
 const refereeRoleOptions = computed(() => /^(5|6)/.test(String(currentMatchFormat.value))
   ? [
@@ -1764,9 +1775,12 @@ async function loadTournamentName(tid, divisionId = '') {
       tournamentNameStr.value = tournament.name
     }
     if (tournament) {
-      const division = divisionRecord || (tournament.divisions || []).find(item => item && effectiveDivisionId && (item.id === effectiveDivisionId || item._id === effectiveDivisionId))
-      tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
-      const playerCount = Number.parseInt(String(division?.matchFormat || tournamentMatchFormat.value || tournament.matchFormat || ''), 10)
+      const division = divisionRecord || (tournament.divisions || []).find(item => item && effectiveDivisionId && String(item.id || item._id || item.divisionId) === effectiveDivisionId)
+      const configuredFormat = division?.matchFormat || (division?.playersOnField
+        ? `${division.playersOnField}side`
+        : (division?.rulesSnapshot?.matchFormat || (division?.rulesSnapshot?.playersOnField ? `${division.rulesSnapshot.playersOnField}side` : '')))
+      tournamentMatchFormat.value = configuredFormat || tournament.matchFormat || ''
+      const playerCount = formatPlayerCount(configuredFormat || tournamentMatchFormat.value || tournament.matchFormat || '')
       substitutePlayerLimit.value = resolveSubstitutePlayerLimit(
         playerCount,
         division,
@@ -2284,31 +2298,97 @@ async function loadTeamPlayers(teamId) {
   }
 }
 
+function coachNameFromRecord(record) {
+  if (!record) return ''
+  return String(record.name || record.coachName || record.headCoachName || record.realName || record.staffName || record.contactName || '').trim()
+}
+
+function coachNameFromTeamRecord(record) {
+  if (!record) return ''
+  return String(record.coachName || record.headCoachName || record.contactName || record.managerName || record.ownerName || '').trim()
+}
+
+function isHeadCoachRecord(record) {
+  const role = String(record?.type || record?.role || record?.roleType || record?.position || '').trim().toLowerCase()
+  return ['head_coach', 'headcoach', 'coach', '主教练'].includes(role) || role.includes('主教练')
+}
+
+async function loadTeamHeadCoach(teamId) {
+  if (!teamId) return ''
+  const key = String(teamId)
+  const cached = teamHeadCoachCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.name
+  const pending = teamHeadCoachRequests.get(key)
+  if (pending) return pending
+
+  const request = (async () => {
+    try {
+      const relation = await queryById('tournament_teams', teamId).catch(() => null)
+      const ids = Array.from(new Set([teamId, relation?.teamId].filter(Boolean).map(String)))
+      const [coachRows, teamRows] = await Promise.all([
+        Promise.all(ids.flatMap(id => [
+          queryList('coaches', { where: { teamId: id }, limit: 100, silent: true }),
+          queryList('coaches', { where: { teamCode: id }, limit: 100, silent: true })
+        ])).then(rows => rows.flat()),
+        Promise.all(ids.map(id => queryById('teams', id).catch(() => null)))
+      ])
+      const uniqueCoaches = Array.from(new Map(coachRows.filter(Boolean).map(row => [String(row._id || `${row.teamId}-${row.name}`), row])).values())
+      const headCoach = uniqueCoaches.find(isHeadCoachRecord)
+      const coachName = coachNameFromRecord(headCoach) || coachNameFromRecord(uniqueCoaches[0])
+      const team = teamRows.find(Boolean) || {}
+      const fallbackName = coachNameFromTeamRecord(relation) || coachNameFromTeamRecord(team)
+      const name = coachName || fallbackName
+      if (name) teamHeadCoachCache.set(key, { name, expiresAt: Date.now() + TEAM_HEAD_COACH_CACHE_TTL })
+      return name
+    } catch (error) {
+      console.warn('加载主教练失败:', error)
+      return ''
+    }
+  })()
+
+  teamHeadCoachRequests.set(key, request)
+  try {
+    return await request
+  } finally {
+    teamHeadCoachRequests.delete(key)
+  }
+}
+
+function savedLineupCoach(lineup) {
+  return String(lineup?.coach || lineup?.coachName || lineup?.headCoach || lineup?.headCoachName || '').trim()
+}
+
 // 阵容编辑
 async function openLineupDialog() {
   if (!ensureEvidenceEditable()) return
   const l = match.value.lineups || {}
+  const savedHomeCoach = savedLineupCoach(l.home)
+  const savedAwayCoach = savedLineupCoach(l.away)
   lineupForm.value = {
     home: {
       formation: l.home?.formation || '',
-      coach: l.home?.coach || '',
+      coach: savedHomeCoach,
       players: (l.home?.players || []).map(p => ({ ...p })),
       substitutes: (l.home?.substitutes || []).map(p => ({ ...p }))
     },
     away: {
       formation: l.away?.formation || '',
-      coach: l.away?.coach || '',
+      coach: savedAwayCoach,
       players: (l.away?.players || []).map(p => ({ ...p })),
       substitutes: (l.away?.substitutes || []).map(p => ({ ...p }))
     }
   }
   // 加载两队报名球员
-  const [home, away] = await Promise.all([
+  const [home, away, homeCoach, awayCoach] = await Promise.all([
     loadTeamPlayers(match.value.homeTeamId),
-    loadTeamPlayers(match.value.awayTeamId)
+    loadTeamPlayers(match.value.awayTeamId),
+    savedHomeCoach ? Promise.resolve(savedHomeCoach) : loadTeamHeadCoach(match.value.homeTeamId),
+    savedAwayCoach ? Promise.resolve(savedAwayCoach) : loadTeamHeadCoach(match.value.awayTeamId)
   ])
   homePlayers.value = home
   awayPlayers.value = away
+  if (!lineupForm.value.home.coach) lineupForm.value.home.coach = homeCoach || ''
+  if (!lineupForm.value.away.coach) lineupForm.value.away.coach = awayCoach || ''
   lineupDialogVisible.value = true
 }
 
