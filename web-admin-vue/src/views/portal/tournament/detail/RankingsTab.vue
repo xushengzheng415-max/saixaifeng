@@ -59,7 +59,7 @@ import { callFunction } from '@/utils/cloud'
 import TeamLogo from '../../components/TeamLogo.vue'
 import PlayerAvatar from '../../components/PlayerAvatar.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { isPenaltyScored, isScorerGoalEvent } from '@/utils/matchEvent'
+import { cardEventCounts, isPenaltyScored, isScorerGoalEvent } from '@/utils/matchEvent'
 
 /**
  * 榜单组件 — 支持动态积分规则 & 同分排序
@@ -290,15 +290,13 @@ function calculateStandings(matches, rule) {
     map[h].played++; map[a].played++
 
     // 黄红牌统计
-    if (m.events) {
+        if (m.events) {
       ;(m.events || []).forEach(evt => {
         if (evt.teamId === h) {
-          if (evt.type === 'yellow_card') map[h].yellowCards++
-          if (evt.type === 'red_card') map[h].redCards++
+          const counts = cardEventCounts(evt); map[h].yellowCards += counts.yellow; map[h].redCards += counts.red
         }
         if (evt.teamId === a) {
-          if (evt.type === 'yellow_card') map[a].yellowCards++
-          if (evt.type === 'red_card') map[a].redCards++
+          const counts = cardEventCounts(evt); map[a].yellowCards += counts.yellow; map[a].redCards += counts.red
         }
       })
     }

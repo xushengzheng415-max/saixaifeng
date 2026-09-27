@@ -348,7 +348,7 @@
   function quickActions(match) {
     if (!match.canRecordEvents) return ''
     var actions = [
-      ['goal', '', '进球'], ['penalty_scored', '', '点球打进（P）'], ['penalty_missed', '', '点球未进'], ['own_goal', '', '乌龙球（OG）'], ['yellow_card', '', '黄牌'], ['red_card', '', '红牌'],
+      ['goal', '', '进球'], ['penalty_scored', '', '点球打进（P）'], ['penalty_missed', '', '点球未进'], ['own_goal', '', '乌龙球（OG）'], ['yellow_card', '', '黄牌'], ['red_card', '', '红牌'], ['second_yellow_red', '', '2黄变1红'],
       ['substitution', '', '换人'], ['stoppage_time', '', '补时'], ['other', '', '其他']
     ]
     return '<section class="quick-panel"><div class="panel-title"><strong>快捷记录</strong><span>自动带入当前 ' + currentMatchMinute() + '′</span></div><div class="quick-grid">' + actions.map(function (item) {
@@ -909,7 +909,7 @@
     form.reset()
     form.elements.type.value = type || 'goal'
     form.elements.minute.value = currentMatchMinute()
-    document.getElementById('eventDialogTitle').textContent = ({ goal: '记录进球', penalty_scored: '记录点球打进（P）', penalty_missed: '记录点球未进', own_goal: '记录乌龙球（OG）', yellow_card: '记录黄牌', red_card: '记录红牌', substitution: '记录换人', stoppage_time: '记录补时', other: '记录其他事件' })[type] || '记录比赛事件'
+    document.getElementById('eventDialogTitle').textContent = ({ goal: '记录进球', penalty_scored: '记录点球打进（P）', penalty_missed: '记录点球未进', own_goal: '记录乌龙球（OG）', yellow_card: '记录黄牌', red_card: '记录红牌', second_yellow_red: '记录2黄变1红', substitution: '记录换人', stoppage_time: '记录补时', other: '记录其他事件' })[type] || '记录比赛事件'
     document.getElementById('eventType').dispatchEvent(new Event('change'))
     updateEventPlayerOptions()
     eventDialog.showModal()
