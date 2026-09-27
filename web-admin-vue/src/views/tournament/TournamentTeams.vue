@@ -668,15 +668,10 @@ import TeamRegistrationWordImporter from '../../components/tournament/TeamRegist
 
 const route = useRoute()
 const router = useRouter()
-// 预览站点对应微信小程序体验版；正式站点才请求 release。
-// 注意：BASE_URL 判断必须放在最外层——构建 shell 里若残留 VITE_MINIPROGRAM_ENV_VERSION，
-// Vite 会把它注入 import.meta.env，`VITE_MINIPROGRAM_ENV_VERSION || (...)` 会被常量折叠成
-// 该变量值（2026-09-18 22:49 的 /preview/admin/ 构建因此被编译成常量 release，预览站无法生成体验版码）。
-const miniProgramQrEnvVersion = String(String(import.meta.env.BASE_URL || '').includes('/preview/')
-  ? 'trial'
-  : (import.meta.env.VITE_MINIPROGRAM_ENV_VERSION || 'release')).toLowerCase()
-// 逐队认领邀请沿用同一环境口径：预览站生成体验版小程序码（供内部扫码验证），正式站生成正式版。
-// 体验版没有 URL Link，只能扫码，所以链接占位文案单独给一句可执行的说明。
+// 球队认领码统一使用正式版小程序。
+// 预览站仍可用于后台页面验收，但不再生成体验版认领码，避免把生产认领二维码发成测试入口。
+const miniProgramQrEnvVersion = 'release'
+// 正式版认领码提供 URL Link，便于群发或转发。
 const claimInviteEnvLabel = computed(() => (miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版'))
 const claimInviteLinkPlaceholder = computed(() => (miniProgramQrEnvVersion === 'trial'
   ? '体验版不提供小程序链接，请用下方小程序码扫码测试'
