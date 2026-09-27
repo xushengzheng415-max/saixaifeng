@@ -210,11 +210,7 @@ function resultStatus(match) {
   if (statuses.some(value => ['archived', 'approved', 'official'].includes(value))) return 'approved'
   if (statuses.some(value => ['returned', 'rejected'].includes(value))) return 'returned'
   if (statuses.some(value => ['warning', 'conflict', 'abandoned'].includes(value))) return 'warning'
-  const refereeSubmitted = Boolean(match.refereeRecord || match.refereeReport || match.refereeSubmittedAt ||
-    match.refereeReportSubmittedAt || match.refereeRecordLocked || match.refereeReviewStatus)
-  if (refereeSubmitted || statuses.includes('pending_review') || statuses.includes('under_review')) return 'pending_review'
-  // 主办方在 PC 端赛后补录的完整比分不需要再走裁判复核，直接作为正式赛果。
-  return 'approved'
+  return 'pending_review'
 }
 
 function phaseOf(match) {
@@ -329,7 +325,7 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
     scoreReady: scoreReady(match),
     resultStatus: warnings.length ? 'warning' : status,
     warnings,
-    source: match.resultCorrection ? '归档后异常纠错' : (match.refereeRecord || match.refereeReport || match.refereeSubmittedAt || match.refereeReportSubmittedAt ? '裁判/计分台回传' : match.resultVersionId ? '赛果版本' : scoreReady(match) ? '后台记录' : '尚未录入'),
+    source: match.resultCorrection ? '归档后异常纠错' : (match.refereeRecord || match.refereeSubmittedAt ? '裁判/计分台回传' : match.resultVersionId ? '赛果版本' : scoreReady(match) ? '后台记录' : '尚未录入'),
     submittedAt: rawDate(match.refereeSubmittedAt || match.resultSubmittedAt || match.updateTime || ''),
     reviewedAt: rawDate(match.resultCorrectedAt || (match.resultCorrection && match.resultCorrection.correctedAt) || match.refereeRecordArchivedAt || match.resultReviewedAt || match.updateTime || ''),
     resultCorrection: match.resultCorrection && typeof match.resultCorrection === 'object' ? {

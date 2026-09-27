@@ -5,12 +5,6 @@
 
 import { callFunction } from './cloud'
 
-// 阵容页会同时渲染多张球员卡；同一张队徽或头像不应重复换取临时 URL。
-// 缓存已完成结果和进行中的 Promise，既复用会话内 URL，也合并首屏并发请求。
-const TEMP_URL_CACHE_TTL = 10 * 60 * 1000
-const tempUrlCache = new Map()
-const tempUrlRequests = new Map()
-
 /**
  * 将 Base64 图片上传到云存储
  * @param {string} base64Data - Base64 编码的图片数据（带 data:image/xxx;base64, 前缀）
@@ -103,50 +97,26 @@ export function generateFileName(originalName = '') {
  * @returns {Promise<{success: boolean, url?: string, message?: string}>}
  */
 export async function getTempFileURL(fileID) {
-  const key = String(fileID || '').trim()
-  if (!key) return { success: false, message: '缺少 fileID 参数' }
+  try {
+    const result = await callFunction('uploadFile', {
+      action: 'getTempFileURL',
+      fileID: fileID
+    })
 
-  const cached = tempUrlCache.get(key)
-  if (cached && cached.expiresAt > Date.now() && cached.url) {
-    return { success: true, url: cached.url, cached: true }
-  }
-
-  const pending = tempUrlRequests.get(key)
-  if (pending) return pending
-
-  const request = (async () => {
-    try {
-      const result = await callFunction('uploadFile', {
-        action: 'getTempFileURL',
-        fileID: key
-      })
-
-      if (result && result.success && result.url) {
-        tempUrlCache.set(key, {
-          url: result.url,
-          // 服务端未返回过期时间，使用保守 TTL，过期后自动重新换取。
-          expiresAt: Date.now() + TEMP_URL_CACHE_TTL
-        })
-        return { success: true, url: result.url }
-      }
-      throw new Error(result?.message || '获取文件 URL 失败')
-    } catch (err) {
-      console.error('[Upload] 获取临时 URL 失败:', err)
+    if (result && result.success) {
       return {
-        success: false,
-        message: err.message || '获取文件 URL 失败'
+        success: true,
+        url: result.url
       }
-    } finally {
-      tempUrlRequests.delete(key)
+    } else {
+      throw new Error(result?.message || '获取文件 URL 失败')
     }
-  })()
 
-  tempUrlRequests.set(key, request)
-  return request
-}
-
-/** 上传或替换文件后可清除指定文件的会话缓存。 */
-export function clearTempFileURLCache(fileID) {
-  const key = String(fileID || '').trim()
-  if (key) tempUrlCache.delete(key)
+  } catch (err) {
+    console.error('[Upload] 获取临时 URL 失败:', err)
+    return {
+      success: false,
+      message: err.message || '获取文件 URL 失败'
+    }
+  }
 }

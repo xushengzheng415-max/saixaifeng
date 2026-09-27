@@ -14,26 +14,13 @@ Page({
       this.loadVisualFixture()
       return
     }
-    this._initialShowPending = true
     this.setData({ teamId: String(options.teamId || '') }); this.loadPlayers()
   },
-  onShow: function() {
-    if (!this.data.teamId || this.data.visualQa) return
-    // onLoad 后微信还会触发一次 onShow；首屏请求已经在 onLoad 发出，跳过这次重复请求。
-    if (this._initialShowPending) {
-      this._initialShowPending = false
-      return
-    }
-    if (this._loadingRequest) return
-    // 从添加/编辑/资料详情页返回时刷新，保证新增或修改后的球员立即可见。
-    this.loadPlayers(true)
-  },
+  onShow: function() { if (this.data.teamId && !this.data.visualQa) this.loadPlayers(true) },
   loadPlayers: function(silent) {
-    if (this._loadingRequest) return this._loadingPromise || Promise.resolve()
     var that = this
-    this._loadingRequest = true
     if (!silent) this.setData({ loading: true, errorText: '' })
-    var request = wx.cloud.callFunction({ name: 'getMiniWorkspace', data: { action: 'teamPlayers', workspaceId: (workspace.readContext() || {}).currentWorkspace && (workspace.readContext() || {}).currentWorkspace.id, teamId: this.data.teamId } })
+    return wx.cloud.callFunction({ name: 'getMiniWorkspace', data: { action: 'teamPlayers', workspaceId: (workspace.readContext() || {}).currentWorkspace && (workspace.readContext() || {}).currentWorkspace.id, teamId: this.data.teamId } })
       .then(function(res) {
         var result = res.result || {}
         if (!result.success) throw new Error(result.message || '球员库加载失败')
@@ -41,12 +28,6 @@ Page({
         that.setData({ loading: false, teamId: result.team.id, teamName: result.team.name, teamLogo: result.team.logo || '', canManage: result.canManage, allPlayers: result.players || [], completeCount: completeCount, pendingCount: pendingCount, exceptionCount: exceptionCount, totalCount: completeCount + pendingCount + exceptionCount, hasPending: Boolean(pendingCount), pendingImportCount:Number(result.pendingImportCount || 0), hasPendingImport:Boolean(result.hasPendingImport) })
         that.applyFilters()
       }).catch(function(error) { that.setData({ loading: false, errorText: error.message || '球员库加载失败' }) })
-      .finally(function() {
-        that._loadingRequest = false
-        that._loadingPromise = null
-      })
-    this._loadingPromise = request
-    return request
   },
   openImportedReview: function() { wx.navigateTo({ url:'/pages/team/imported-player-review/imported-player-review?teamId=' + encodeURIComponent(this.data.teamId) }) },
   applyFilters: function() {

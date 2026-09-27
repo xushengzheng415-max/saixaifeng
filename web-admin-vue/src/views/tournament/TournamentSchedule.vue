@@ -2080,6 +2080,7 @@ async function saveManualMatch() {
       tournamentId,
       divisionId: activeDivisionId.value,
       divisionName: activeDivision.value.name,
+      matchFormat: divisionMatchFormat(activeDivision.value),
       scheduleType: tournamentType.value,
       phase: 'group',
       roundName: f.roundName || '手动添加',
