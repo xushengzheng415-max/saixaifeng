@@ -197,7 +197,7 @@ function printBoardReport(){
     const popup=window.open('','_blank','width=760,height=1140')
     if(!popup)return ElMessage.warning('浏览器拦截了打印窗口，请允许弹窗后重试')
     const styles=[...document.querySelectorAll('style')].map(style=>style.textContent||'').join('\n')
-    popup.document.write(`<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>赛事战报</title><style>${styles}@page{size:1080px 1620px;margin:0}body{margin:0;padding:24px;background:#eef2ef;font-family:Arial,"Microsoft YaHei",sans-serif}@media print{body{padding:0;background:#fff}}</style></head><body>${reportPoster.value.outerHTML}<script>setTimeout(()=>window.print(),300)<\/script></body></html>`)
+    popup.document.write(`<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>赛事战报</title><style>${styles}@page{size:auto;margin:0}body{margin:0;padding:24px;background:#eef2ef;font-family:Arial,"Microsoft YaHei",sans-serif}@media print{body{padding:0;background:#fff}}</style></head><body>${reportPoster.value.outerHTML}<script>setTimeout(()=>window.print(),300)<\/script></body></html>`)
     popup.document.close()
   })
 }
@@ -222,6 +222,11 @@ onMounted(loadDashboard)
 .board-footer{display:grid!important;grid-template-columns:1fr auto!important;align-items:end!important;min-height:88px!important;margin-top:24px!important;padding:18px 6px 20px!important}
 .board-footer::before{content:'赛事数据由赛小蜂足球提供';grid-column:1/-1;justify-self:center;min-height:36px;padding-left:126px;background:url('../../assets/logo-saixiaofeng.png') left center/112px auto no-repeat;font-size:11px;font-weight:700;line-height:36px;letter-spacing:.04em;opacity:.92}
 .board-footer>span,.board-footer>b{font-size:9px;opacity:.72}
+.board-poster{height:auto!important;min-height:0!important;aspect-ratio:auto!important;overflow:hidden!important;padding-bottom:28px!important}
+.board-poster.scorers .board-match{padding-bottom:10px!important;margin-bottom:7px!important}
+.board-poster.scorers .board-scorers{gap:5px!important;margin-top:4px!important;padding:4px 8px!important;line-height:1.2!important}
+.board-poster.scorers .board-scorers>div{gap:1px!important}
+.board-poster.scorers .board-scorers span{line-height:1.2!important}
 </style>
 <style scoped>
 .portrait-poster.paper .poster-header{padding:12px 10px;background:rgba(255,255,255,.82);border-radius:12px}
