@@ -847,7 +847,7 @@
                 <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                 <td>{{ p.jerseyName || '-' }}</td>
                 <td>{{ p.age || '-' }}</td>
-                <td>{{ p.appearances || '-' }}</td>
+                <td>{{ formatAppearance(p) }}</td>
                 <td>{{ p.goals ?? '-' }}</td>
                 <td>{{ p.cards || '-' }}</td>
               </tr>
@@ -874,7 +874,7 @@
                 <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                 <td>{{ p.jerseyName || '-' }}</td>
                 <td>{{ p.age || '-' }}</td>
-                <td>{{ p.appearances || '-' }}</td>
+                <td>{{ formatAppearance(p) }}</td>
                 <td>{{ p.goals ?? '-' }}</td>
                 <td>{{ p.cards || '-' }}</td>
               </tr>
@@ -905,7 +905,7 @@
                 <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                 <td>{{ p.jerseyName || '-' }}</td>
                 <td>{{ p.age || '-' }}</td>
-                <td>{{ p.appearances || '-' }}</td>
+                <td>{{ formatAppearance(p) }}</td>
                 <td>{{ p.goals ?? '-' }}</td>
                 <td>{{ p.cards || '-' }}</td>
               </tr>
@@ -931,7 +931,7 @@
                 <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                 <td>{{ p.jerseyName || '-' }}</td>
                 <td>{{ p.age || '-' }}</td>
-                <td>{{ p.appearances || '-' }}</td>
+                <td>{{ formatAppearance(p) }}</td>
                 <td>{{ p.goals ?? '-' }}</td>
                 <td>{{ p.cards || '-' }}</td>
               </tr>
@@ -1045,7 +1045,7 @@
                     <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                     <td>{{ p.jerseyName || '-' }}</td>
                     <td>{{ p.age || '-' }}</td>
-                    <td>{{ p.appearances || '-' }}</td>
+                    <td>{{ formatAppearance(p) }}</td>
                     <td>{{ p.goals ?? '-' }}</td>
                     <td>{{ p.cards || '-' }}</td>
                   </tr>
@@ -1071,7 +1071,7 @@
                     <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                     <td>{{ p.jerseyName || '-' }}</td>
                     <td>{{ p.age || '-' }}</td>
-                    <td>{{ p.appearances || '-' }}</td>
+                    <td>{{ formatAppearance(p) }}</td>
                     <td>{{ p.goals ?? '-' }}</td>
                     <td>{{ p.cards || '-' }}</td>
                   </tr>
@@ -1102,7 +1102,7 @@
                     <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                     <td>{{ p.jerseyName || '-' }}</td>
                     <td>{{ p.age || '-' }}</td>
-                    <td>{{ p.appearances || '-' }}</td>
+                    <td>{{ formatAppearance(p) }}</td>
                     <td>{{ p.goals ?? '-' }}</td>
                     <td>{{ p.cards || '-' }}</td>
                   </tr>
@@ -1128,7 +1128,7 @@
                     <td>{{ p.name }}<span v-if="p.isCaptain" class="csl-tag">(C)</span><span v-if="p.isForeign" class="csl-tag">(F)</span><span v-if="p.isYoung" class="csl-tag">(☆)</span><span v-if="p.isOverage" class="csl-tag">(◇)</span></td>
                     <td>{{ p.jerseyName || '-' }}</td>
                     <td>{{ p.age || '-' }}</td>
-                    <td>{{ p.appearances || '-' }}</td>
+                    <td>{{ formatAppearance(p) }}</td>
                     <td>{{ p.goals ?? '-' }}</td>
                     <td>{{ p.cards || '-' }}</td>
                   </tr>
@@ -1297,6 +1297,7 @@ async function applyTeamLogo(side, source) {
 const refName = ref('')
 const tournamentNameStr = ref('')
 const tournamentMatchFormat = ref('')
+const tournamentMatchMinutes = ref(0)
 const substitutePlayerLimit = ref(null)
 const saving = ref(false)
 const reviewSaving = ref(false)
@@ -1537,6 +1538,20 @@ const currentPlayerCount = computed(() => formatPlayerCount(currentMatchFormat.v
 const currentMatchFormatLabel = computed(() => {
   const number = currentPlayerCount.value
   return `${number}人制`
+})
+const matchDurationMinutes = computed(() => {
+  const candidates = [
+    match.value.matchDurationMinutes,
+    match.value.durationMinutes,
+    match.value.regulationMinutes,
+    match.value.matchMinutes,
+    match.value.periodMinutes,
+    tournamentMatchMinutes.value
+  ]
+  const explicit = candidates.map(Number).find(value => Number.isFinite(value) && value > 0)
+  if (explicit) return Math.round(explicit)
+  // 历史记录缺少时长字段时，只作为兼容兜底；有规则字段时优先使用规则字段。
+  return currentPlayerCount.value === 11 ? 90 : 60
 })
 const formationOptions = computed(() => {
   const data = formationData[`${currentPlayerCount.value}人制`]
@@ -1780,6 +1795,15 @@ async function loadTournamentName(tid, divisionId = '') {
         ? `${division.playersOnField}side`
         : (division?.rulesSnapshot?.matchFormat || (division?.rulesSnapshot?.playersOnField ? `${division.rulesSnapshot.playersOnField}side` : '')))
       tournamentMatchFormat.value = configuredFormat || tournament.matchFormat || ''
+      const minuteCandidates = [
+        division?.matchMinutes,
+        division?.periodMinutes,
+        division?.publishedRegulationsSnapshot?.matchMinutes,
+        division?.rulesSnapshot?.matchMinutes,
+        division?.competitionRule?.matchMinutes,
+        tournament?.matchMinutes
+      ]
+      tournamentMatchMinutes.value = minuteCandidates.map(Number).find(value => Number.isFinite(value) && value > 0) || 0
       const playerCount = formatPlayerCount(configuredFormat || tournamentMatchFormat.value || tournament.matchFormat || '')
       substitutePlayerLimit.value = resolveSubstitutePlayerLimit(
         playerCount,
@@ -2298,6 +2322,146 @@ async function loadTeamPlayers(teamId) {
   }
 }
 
+function playerBirthDate(player) {
+  return player?.birthDate || player?.birthday || player?.dateOfBirth || player?.birth || ''
+}
+
+function playerAgeAtMatch(player) {
+  const birthValue = playerBirthDate(player)
+  const birth = new Date(birthValue)
+  const reference = new Date(match.value.matchDate || new Date())
+  if (!birthValue || Number.isNaN(birth.getTime()) || Number.isNaN(reference.getTime())) return ''
+  let age = reference.getFullYear() - birth.getFullYear()
+  const beforeBirthday = reference.getMonth() < birth.getMonth() || (reference.getMonth() === birth.getMonth() && reference.getDate() < birth.getDate())
+  if (beforeBirthday) age -= 1
+  return age >= 0 && age < 100 ? age : ''
+}
+
+function cleanLineupPlayerName(value) {
+  return String(value || '').replace(/^\s*\d+号?\s*/, '').trim()
+}
+
+function findRosterPlayer(side, player) {
+  const list = side === 'home' ? homePlayers.value : awayPlayers.value
+  const id = String(player?.id || player?._id || player?.playerId || '')
+  const name = cleanLineupPlayerName(player?.name || player?.playerName || '')
+  return list.find(item => {
+    const itemId = String(item?.id || item?._id || item?.playerId || '')
+    const itemName = cleanLineupPlayerName(item?.name || item?.playerName || '')
+    return (id && itemId === id) || (name && itemName === name)
+  }) || {}
+}
+
+function enrichLineupPlayer(side, player, role) {
+  const source = findRosterPlayer(side, player)
+  const merged = { ...source, ...player, role }
+  const calculatedAge = playerAgeAtMatch(merged)
+  if (calculatedAge !== '') merged.age = calculatedAge
+  else if (merged.age === null || merged.age === undefined || merged.age === '') merged.age = ''
+  const existingAppearances = Number(merged.appearances ?? merged.appearanceCount)
+  const existingMinutes = Number(merged.minutes ?? merged.minutesPlayed ?? merged.appearanceMinutes)
+  merged.appearances = Number.isFinite(existingAppearances) ? existingAppearances : 0
+  merged.minutes = Number.isFinite(existingMinutes) ? existingMinutes : 0
+  merged.appearanceCount = merged.appearances
+  merged.minutesPlayed = merged.minutes
+  return merged
+}
+
+function lineupEventSide(event) {
+  if (event?.teamSide === 'home' || event?.side === 'home') return 'home'
+  if (event?.teamSide === 'away' || event?.side === 'away') return 'away'
+  const teamName = String(event?.teamName || '').trim()
+  if (teamName && teamName === awayName.value) return 'away'
+  return 'home'
+}
+
+function substitutionPair(event) {
+  const incomingExplicit = event?.incomingPlayerName || event?.substituteInName
+  const outgoingExplicit = event?.outgoingPlayerName || event?.substituteOutName
+  if (incomingExplicit || outgoingExplicit) return { incoming: incomingExplicit || event?.playerName || '', outgoing: outgoingExplicit || event?.assistName || '' }
+  if (event?.assistName && !String(event.playerName || '').includes('/')) return { incoming: event.playerName || '', outgoing: event.assistName }
+  const names = String(event?.playerName || '').split(/\s*[\/／]\s*/).map(item => item.trim()).filter(Boolean)
+  return names.length > 1
+    ? { incoming: names[1], outgoing: names[0] }
+    : { incoming: names[0] || '', outgoing: '' }
+}
+
+function findLineupPlayer(players, name) {
+  const target = cleanLineupPlayerName(name)
+  if (!target) return null
+  return players.find(player => {
+    const candidate = cleanLineupPlayerName(player.name || player.playerName)
+    return candidate === target || candidate.includes(target) || target.includes(candidate)
+  }) || null
+}
+
+function syncLineupSide(sideData, side) {
+  const source = sideData || {}
+  const rawPlayers = Array.isArray(source.players) ? source.players : []
+  const starters = rawPlayers.length
+    ? rawPlayers.filter(player => player?.role !== 'substitute').map(player => enrichLineupPlayer(side, player, 'starter'))
+    : (Array.isArray(source.starters) ? source.starters.map(player => enrichLineupPlayer(side, player, 'starter')) : [])
+  const substitutes = Array.isArray(source.substitutes)
+    ? source.substitutes.map(player => enrichLineupPlayer(side, player, 'substitute'))
+    : rawPlayers.filter(player => player?.role === 'substitute').map(player => enrichLineupPlayer(side, player, 'substitute'))
+
+  const duration = matchDurationMinutes.value
+  starters.forEach(player => {
+    player.appearances = 1
+    player.minutes = duration
+    player.appearanceCount = 1
+    player.minutesPlayed = duration
+  })
+  substitutes.forEach(player => {
+    player.appearances = 0
+    player.minutes = 0
+    player.appearanceCount = 0
+    player.minutesPlayed = 0
+  })
+
+  for (const event of match.value.events || []) {
+    if (event?.type !== 'substitution' || lineupEventSide(event) !== side) continue
+    const minute = Math.max(0, Math.min(duration, Number(event.minute) || 0))
+    const pair = substitutionPair(event)
+    const outgoing = findLineupPlayer([...starters, ...substitutes], pair.outgoing)
+    const incoming = findLineupPlayer([...starters, ...substitutes], pair.incoming)
+    if (outgoing) {
+      outgoing.appearances = Math.max(1, Number(outgoing.appearances) || 0)
+      outgoing.minutes = Math.min(Number(outgoing.minutes) || duration, minute)
+      outgoing.appearanceCount = outgoing.appearances
+      outgoing.minutesPlayed = outgoing.minutes
+    }
+    if (incoming) {
+      incoming.appearances = Math.max(1, Number(incoming.appearances) || 0)
+      incoming.minutes = Math.max(0, duration - minute)
+      incoming.appearanceCount = incoming.appearances
+      incoming.minutesPlayed = incoming.minutes
+    }
+  }
+
+  return { ...source, players: starters, starters, substitutes }
+}
+
+async function prepareLineupsForExport(sourceLineups = match.value.lineups || {}) {
+  const [home, away] = await Promise.all([
+    homePlayers.value.length ? Promise.resolve(homePlayers.value) : loadTeamPlayers(match.value.homeTeamId),
+    awayPlayers.value.length ? Promise.resolve(awayPlayers.value) : loadTeamPlayers(match.value.awayTeamId)
+  ])
+  homePlayers.value = home || []
+  awayPlayers.value = away || []
+  return {
+    home: syncLineupSide(sourceLineups.home, 'home'),
+    away: syncLineupSide(sourceLineups.away, 'away')
+  }
+}
+
+function formatAppearance(player) {
+  const appearances = Number(player?.appearances ?? player?.appearanceCount)
+  const minutes = Number(player?.minutes ?? player?.minutesPlayed ?? player?.appearanceMinutes)
+  if (!Number.isFinite(appearances) || appearances <= 0) return '-'
+  return `${appearances}次 / ${Number.isFinite(minutes) ? minutes : 0}′`
+}
+
 function coachNameFromRecord(record) {
   if (!record) return ''
   return String(record.name || record.coachName || record.headCoachName || record.realName || record.staffName || record.contactName || '').trim()
@@ -2408,20 +2572,21 @@ async function openDualVisualEditor() {
 async function handleVisualLineupSave(data) {
   if (!ensureEvidenceEditable()) return
   try {
+    const mergedLineups = data && data.home && data.away
+      ? data
+      : { ...(match.value.lineups || {}), [currentTeamSide.value]: data }
+    const normalizedLineups = await prepareLineupsForExport(mergedLineups)
     let updateData
     if (data && data.home && data.away) {
       // dual 模式：同时保存双方阵容
       updateData = {
-        lineups: {
-          home: data.home,
-          away: data.away
-        },
+        lineups: normalizedLineups,
         updateTime: new Date()
       }
     } else {
       // single 模式（兼容旧逻辑）
       updateData = {}
-      updateData['lineups.' + currentTeamSide.value] = data
+      updateData['lineups.' + currentTeamSide.value] = normalizedLineups[currentTeamSide.value]
       updateData.updateTime = new Date()
     }
 
@@ -2433,10 +2598,10 @@ async function handleVisualLineupSave(data) {
     // 更新本地数据
     if (!match.value.lineups) match.value.lineups = {}
     if (data && data.home && data.away) {
-      match.value.lineups.home = data.home
-      match.value.lineups.away = data.away
+      match.value.lineups.home = normalizedLineups.home
+      match.value.lineups.away = normalizedLineups.away
     } else {
-      match.value.lineups[currentTeamSide.value] = data
+      match.value.lineups[currentTeamSide.value] = normalizedLineups[currentTeamSide.value]
     }
 
     visualEditorVisible.value = false
@@ -2447,7 +2612,13 @@ async function handleVisualLineupSave(data) {
 }
 
 // 打开预览对话框
-function openPreviewDialog() {
+async function openPreviewDialog() {
+  try {
+    match.value.lineups = await prepareLineupsForExport(match.value.lineups || {})
+  } catch (error) {
+    console.warn('同步首发名单导出数据失败:', error)
+    ElMessage.warning('部分球员资料未同步，仍可继续导出')
+  }
   previewDialogVisible.value = true
 }
 
@@ -2748,17 +2919,9 @@ function onPlayerSelect(side, type, index, playerName) {
     p.jerseyName = computeJerseyName(player.name)
   }
   // 年龄
-  if (player.age) {
-    p.age = player.age
-  } else if (player.birthDate) {
-    const birth = new Date(player.birthDate)
-    if (!isNaN(birth.getTime())) {
-      const now = new Date()
-      let age = now.getFullYear() - birth.getFullYear()
-      if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--
-      p.age = age
-    }
-  }
+  const ageAtMatch = playerAgeAtMatch(player)
+  p.age = ageAtMatch === '' ? (player.age ?? '') : ageAtMatch
+  p.birthDate = playerBirthDate(player) || p.birthDate || ''
   // 自动映射位置
   const posMap = {
     GK: 'GK', 守门员: 'GK', 门将: 'GK',
@@ -2955,11 +3118,12 @@ async function saveLineup() {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
+    const normalizedLineups = await prepareLineupsForExport(lineupForm.value)
     await callFunction('updateMatch', {
       matchId,
-      data: { lineups: lineupForm.value, updateTime: new Date() }
+      data: { lineups: normalizedLineups, updateTime: new Date() }
     })
-    match.value.lineups = lineupForm.value
+    match.value.lineups = normalizedLineups
     lineupDialogVisible.value = false
     ElMessage.success('阵容已保存')
   } catch (err) {
