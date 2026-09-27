@@ -216,6 +216,23 @@ async function load() {
   }
 }
 
+async function compressSupplementImage(file) {
+  if (!file?.type?.startsWith('image/')) return file
+  try {
+    const url = URL.createObjectURL(file)
+    const image = await new Promise((resolve, reject) => { const value = new Image(); value.onload = () => resolve(value); value.onerror = reject; value.src = url })
+    const maxSide = 2200
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale))
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale))
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.78))
+    URL.revokeObjectURL(url)
+    if (!blob) return file
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() })
+  } catch { return file }
+}
 async function onFileSelected(uploadFile) {
   const file = uploadFile.raw
   if (!file) return
@@ -223,13 +240,14 @@ async function onFileSelected(uploadFile) {
   if (file.size > 10 * 1024 * 1024) return ElMessage.warning('单个文件不能超过 10MB')
   saving.value = true
   try {
-    const suffix = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : ''
+    const optimizedFile = await compressSupplementImage(file)
+    const suffix = optimizedFile.name.includes('.') ? optimizedFile.name.slice(optimizedFile.name.lastIndexOf('.')) : ''
     // 单个文件上限 10MB，Base64 后约 13.7MB，整包发送必然触发 HTTP 413。
     // 统一走 32KB 分片上传，避免大文件塞进单个请求体。
-    const result = await uploadLargeFileViaCloud(`match-supplements/${matchId}/${Date.now()}${suffix}`, file, { chunkSize: 32 * 1024 })
+    const result = await uploadLargeFileViaCloud(`match-supplements/${matchId}/${Date.now()}${suffix}`, optimizedFile, { chunkSize: 32 * 1024 })
     const fileId = result.fileID || result.fileId || result.url || result.data?.fileID
     if (!fileId) throw new Error('文件上传结果缺少地址')
-    supplements.value.push({ name: file.name, size: file.size, sizeText: formatSize(file.size), fileId, url: await getFileUrl(fileId).catch(() => '') })
+    supplements.value.push({ name: optimizedFile.name, size: optimizedFile.size, sizeText: formatSize(optimizedFile.size), fileId, url: await getFileUrl(fileId).catch(() => '') })
     await persistSupplements()
     ElMessage.success('补充材料已上传')
   } catch (error) {
