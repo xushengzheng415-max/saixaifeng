@@ -724,8 +724,7 @@
             <el-option label="换人 🔄" value="substitution" />
             <el-option label="点球打进 ⚽（P）" value="penalty_scored" />
             <el-option label="点球未进" value="penalty_missed" />
-            <el-option label="历史点球记录（按命中处理）" value="penalty" />
-            <el-option label="乌龙球 ⚽" value="own_goal" />
+            <el-option label="乌龙球 ⚽（OG）" value="own_goal" />
           </el-select>
           </el-form-item>
           <el-form-item label="时间（分钟）">
