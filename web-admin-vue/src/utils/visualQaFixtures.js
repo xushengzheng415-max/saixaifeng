@@ -271,6 +271,58 @@ const store = {
   tournament_league_tables: []
 }
 
+// 赛事战报竖版样板：仅在 DEV + visualQa=1 时提供，正式环境继续读取 resultCenter 云函数。
+function resultCenterQaDashboard() {
+  const sourceMatches = [matches.find(item => item._id === ids.matchU16), matches.find(item => item._id === ids.matchU8)].filter(Boolean)
+  const qaEvents = events.filter(item => sourceMatches.some(match => match._id === item.matchId))
+  const rows = sourceMatches.map((match, index) => {
+    const home = teams.find(team => team._id === match.homeTeamId) || {}
+    const away = teams.find(team => team._id === match.awayTeamId) || {}
+    const rowEvents = qaEvents.filter(item => item.matchId === match._id)
+    return {
+      id: match._id,
+      matchNo: match.matchSequence,
+      divisionId: match.divisionId,
+      divisionName: match.divisionName,
+      groupName: index === 0 ? 'A组 · 第2轮' : '小组赛 · 第3轮',
+      phaseLabel: '小组赛',
+      reviewStage: 'group',
+      reviewStageLabel: '小组赛',
+      roundName: index === 0 ? '第2轮' : '第3轮',
+      matchDate: '2026-09-26',
+      matchTime: index === 0 ? '10:30' : '16:30',
+      venue: match.venue,
+      homeTeamId: match.homeTeamId,
+      homeTeamName: match.homeTeamName,
+      homeTeamLogo: home.logo || '/admin/logo-saixiaofeng.png',
+      awayTeamId: match.awayTeamId,
+      awayTeamName: match.awayTeamName,
+      awayTeamLogo: away.logo || '/admin/organization-logo-placeholder.svg',
+      homeScore: match.homeScore,
+      awayScore: match.awayScore,
+      scoreReady: true,
+      resultStatus: 'approved',
+      source: '裁判/计分台回传',
+      resolution: 'regular_time',
+      standingsEligible: true,
+      warnings: [],
+      events: rowEvents
+    }
+  })
+  return {
+    success: true,
+    tournament: { id: ids.tournament, name: tournament.name, location: tournament.location },
+    divisions: [{ id: ids.divisionU8, name: 'U8组' }, { id: ids.divisionU16, name: 'U16组' }],
+    matches: rows,
+    events: qaEvents,
+    summary: { total: rows.length, notSubmitted: 0, pendingReview: 0, warning: 0, approved: rows.length },
+    standings: [],
+    knockout: [],
+    publications: [],
+    generatedAt: '2026-09-27T09:30:00+08:00'
+  }
+}
+
 export function visualQaActive() {
   if (!import.meta.env.DEV || typeof window === 'undefined') return false
   const hashQuery = window.location.hash.includes('?') ? window.location.hash.slice(window.location.hash.indexOf('?') + 1) : ''
@@ -319,6 +371,9 @@ export function handleVisualQaHttp(action, data = {}) {
     return { handled: true, result: { success: true, message: data.reviewOperation === 'archive' ? '本地验收：赛果已归档。' : '本地验收：已退回限时修正。' } }
   }
   if (action === 'callFunction') {
+    if (data.functionName === 'resultCenter' && data.functionParams?.action === 'dashboard') {
+      return { handled: true, result: resultCenterQaDashboard() }
+    }
     if (data.functionName === 'updateMatch') {
       const match = matches.find(item => item._id === data.functionParams?.matchId)
       if (match) Object.assign(match, data.functionParams?.data || {})
