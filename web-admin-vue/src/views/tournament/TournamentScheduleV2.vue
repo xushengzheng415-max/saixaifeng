@@ -148,7 +148,7 @@ function teamInitial(name) { return String(name || '队').trim().slice(0,1) || '
 function teamLogoKey(match,side) { return `${String(match?._id || '')}:${side}` }
 function teamLogo(match,side) { const key=teamLogoKey(match,side); if(hiddenTeamLogoKeys.value.has(key))return ''; const direct=match?.[`${side}TeamLogo`] || match?.[`${side}Logo`] || match?.[`${side}Team`]?.logoTransparentUrl || match?.[`${side}Team`]?.logoUrl || match?.[`${side}Team`]?.logo || ''; return String(direct || teamLogoMap.value.get(String(match?.[`${side}TeamId`] || '')) || '') }
 function hideTeamLogo(match,side) { hiddenTeamLogoKeys.value=new Set([...hiddenTeamLogoKeys.value,teamLogoKey(match,side)]) }
-function scoreText(match) { return match?.homeScore == null && match?.awayScore == null ? 'VS' : `${match.homeScore ?? '—'} : ${match.awayScore ?? '—'}` }
+function scoreText(match) { return managementState(match).key === 'scheduled' ? '- : -' : match?.homeScore == null && match?.awayScore == null ? '— : —' : `${match.homeScore ?? '—'} : ${match.awayScore ?? '—'}` }
 function managementState(match) {
   const status=String(match?.status || '').toLowerCase(),postState=String(match?.postState || '').toLowerCase(),reviewStatus=String(match?.refereeReviewStatus || match?.reviewStatus || '').toLowerCase(),recordState=String(match?.recordState || '')
   if(status==='archived' || postState==='archived' || reviewStatus==='archived' || recordState==='电子记录已归档')return { key:'archived',label:'已归档' }
