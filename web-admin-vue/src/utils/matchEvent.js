@@ -22,7 +22,8 @@ export function isSecondYellowRed(event) {
 }
 
 export function cardEventCounts(event) {
-  if (isSecondYellowRed(event)) return { yellow: 2, red: 1 }
+  // 本场第一张黄牌已经单独记账；本事件只新增第二张黄牌对应的纪律结果：黄1、红1。
+  if (isSecondYellowRed(event)) return { yellow: 1, red: 1 }
   const type = text(event?.type)
   return { yellow: type === 'yellow_card' ? 1 : 0, red: type === 'red_card' ? 1 : 0 }
 }
