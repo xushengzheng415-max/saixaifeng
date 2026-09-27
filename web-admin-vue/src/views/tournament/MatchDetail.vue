@@ -233,7 +233,7 @@
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
                 <div class="event-icon">{{ eventIcon(evt.type) }}</div>
                 <div class="event-content">
-                  <span class="event-type-label">{{ eventLabel(evt.type) }}</span>
+                  <span class="event-type-label">{{ eventLabel(evt) }}</span>
                   <template v-if="evt.type === 'substitution'">
                     <span class="event-period">{{ substitutionPeriodLabel(evt.substitutionPeriod) }}</span>
                     <span class="event-player">换上：{{ evt.playerName }}</span>
@@ -736,8 +736,9 @@
             <el-option label="黄牌 🟨" value="yellow_card" />
             <el-option label="红牌 🔴" value="red_card" />
             <el-option label="换人 🔄" value="substitution" />
-            <el-option label="点球 ⚽" value="penalty" />
-            <el-option label="乌龙球 ⚽" value="own_goal" />
+            <el-option label="点球打进 ⚽（P）" value="penalty_scored" />
+            <el-option label="点球未进" value="penalty_missed" />
+            <el-option label="乌龙球 ⚽（OG）" value="own_goal" />
           </el-select>
           </el-form-item>
           <el-form-item label="时间（分钟）">
@@ -1246,6 +1247,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
+import { goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored } from '../../utils/matchEvent'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 
 const route = useRoute()
@@ -1510,7 +1512,7 @@ const isRefereeEvidenceLocked = computed(() => Boolean(
 const lineupEmptyDescription = computed(() => isRefereeEvidenceLocked.value
   ? '裁判电子记录已锁定，阵容证据仅可查看'
   : '暂无阵容信息，点击上方按钮录入')
-const returnableEvents = computed(() => (match.value.events || []).filter(item => item && item.type === 'goal' && item.eventId))
+const returnableEvents = computed(() => (match.value.events || []).filter(item => item && isGoalEvent(item) && item.eventId))
 
 const sortedEvents = computed(() => {
   const events = match.value.events || []
@@ -1522,7 +1524,7 @@ const eventSummary = computed(() => {
   const count = (...types) => events.filter(event => types.includes(event.type)).length
   return [
     { key: 'total', icon: '📋', label: '全部事件', value: events.length },
-    { key: 'goals', icon: '⚽', label: '进球', value: count('goal', 'penalty', 'own_goal') },
+    { key: 'goals', icon: '⚽', label: '进球', value: events.filter(isGoalEvent).length },
     { key: 'yellow', icon: '🟨', label: '黄牌', value: count('yellow_card') },
     { key: 'red', icon: '🟥', label: '红牌', value: count('red_card') },
     { key: 'subs', icon: '🔄', label: '换人', value: count('substitution') }
@@ -1672,11 +1674,13 @@ function isLightColor(hex) {
 }
 
 function eventIcon(type) {
-  return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🟥', substitution: '🔄', stoppage_time: '⏱', other: '•••', penalty: '⚽', own_goal: '⚽' }[type] || '•'
+  return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🔴', substitution: '🔄', stoppage_time: '⏱', other: '•••', penalty: '⚽', penalty_scored: '⚽', penalty_missed: '⚽', own_goal: '⚽' }[type] || '•'
 }
 
-function eventLabel(type) {
-  return { goal: '进球', assist: '助攻', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', stoppage_time: '补时', other: '其他', penalty: '点球', own_goal: '乌龙球' }[type] || type
+function eventLabel(event) {
+  if (isGoalEvent(event)) return goalEventLabel(event)
+  const type = event?.type || event
+  return { assist: '助攻', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', stoppage_time: '补时', other: '其他' }[type] || type
 }
 
 function formatPosition(pos) {
@@ -2114,7 +2118,19 @@ async function saveEvent() {
     if (!eventForm.value.playerName) return ElMessage.warning('请选择事件球员')
     const player = activeEventPlayers.value.find(item => String(item.name || item.playerName) === eventForm.value.playerName)
     const assist = activeEventPlayers.value.find(item => String(item.name || item.playerName) === eventForm.value.assistName)
-    newEvents = [{ ...eventForm.value,substitutions:undefined,substitutionPeriod:undefined,playerNumber:String(player?.jerseyNumber ?? player?.number ?? ''),assistNumber:String(assist?.jerseyNumber ?? assist?.number ?? ''),source:'organizer_pc',createdAt:new Date().toISOString() }]
+    const penalty = isPenaltyScored(eventForm.value) || isPenaltyMissed(eventForm.value)
+    newEvents = [{
+      ...eventForm.value,
+      substitutions: undefined,
+      substitutionPeriod: undefined,
+      playerNumber: String(player?.jerseyNumber ?? player?.number ?? ''),
+      assistNumber: String(assist?.jerseyNumber ?? assist?.number ?? ''),
+      isGoal: isGoalEvent(eventForm.value),
+      isPenalty: penalty,
+      penaltyOutcome: isPenaltyMissed(eventForm.value) ? 'missed' : (isPenaltyScored(eventForm.value) ? 'scored' : undefined),
+      source: 'organizer_pc',
+      createdAt: new Date().toISOString()
+    }]
   }
   saving.value = true
   try {

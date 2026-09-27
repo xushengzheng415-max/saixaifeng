@@ -10,7 +10,7 @@ const _ = db.command
 const CLAIM_TTL_MS = 48 * 60 * 60 * 1000
 const ACTIVE_CLAIM_STATUS = 'claimed'
 const ROSTER_READY_STATUS = ['approved', 'confirmed', 'locked']
-const REFEREE_EVENT_TYPES = ['goal', 'yellow_card', 'red_card', 'substitution', 'stoppage_time', 'other']
+const REFEREE_EVENT_TYPES = ['goal', 'penalty_scored', 'penalty_missed', 'own_goal', 'yellow_card', 'red_card', 'substitution', 'stoppage_time', 'other']
 
 const OCR_HOST = 'ocr.tencentcloudapi.com'
 const OCR_SERVICE = 'ocr'
@@ -362,6 +362,10 @@ function refereeActionText(status) {
 function eventTypeText(type) {
   const map = {
     goal: '进球',
+    penalty: '点球打进（P）',
+    penalty_scored: '点球打进（P）',
+    penalty_missed: '点球未进',
+    own_goal: '乌龙球（OG）',
     yellow_card: '黄牌',
     red_card: '红牌',
     substitution: '换人',
@@ -374,6 +378,9 @@ function eventTypeText(type) {
 function eventTypeIcon(type) {
   const map = {
     goal: '⚽',
+    penalty_scored: '⚽',
+    penalty_missed: '⚽',
+    own_goal: '⚽',
     yellow_card: '🟨',
     red_card: '🟥',
     substitution: '🔄',
@@ -381,6 +388,14 @@ function eventTypeIcon(type) {
     other: '📝'
   }
   return map[type] || '•'
+}
+
+function eventScoredGoal(type) {
+  return ['goal', 'penalty', 'penalty_scored', 'own_goal'].indexOf(String(type || '')) >= 0
+}
+
+function eventScoreSide(type, teamSide) {
+  return String(type || '') === 'own_goal' ? (teamSide === 'away' ? 'home' : 'away') : teamSide
 }
 
 function refereeEventView(item, index, homeTeamName, awayTeamName) {
@@ -2004,8 +2019,9 @@ async function addRefereeEvent(openId, event) {
     }),
     updateTime: db.serverDate()
   }
-  if (type === 'goal') {
-    if (teamSide === 'home') updateData.homeScore = Math.min(99, currentHomeScore + 1)
+  if (eventScoredGoal(type)) {
+    const scoringSide = eventScoreSide(type, teamSide)
+    if (scoringSide === 'home') updateData.homeScore = Math.min(99, currentHomeScore + 1)
     else updateData.awayScore = Math.min(99, currentAwayScore + 1)
   }
 
@@ -2039,8 +2055,9 @@ async function deleteRefereeEvent(openId, event) {
     }),
     updateTime: db.serverDate()
   }
-  if (removed.type === 'goal') {
-    const scoreField = removed.teamSide === 'away' ? 'awayScore' : 'homeScore'
+  if (eventScoredGoal(removed.type)) {
+    const scoreSide = eventScoreSide(removed.type, removed.teamSide)
+    const scoreField = scoreSide === 'away' ? 'awayScore' : 'homeScore'
     const currentScore = scoreNumber(context.match[scoreField]) === null ? 0 : scoreNumber(context.match[scoreField])
     updateData[scoreField] = Math.max(0, currentScore - 1)
   }
