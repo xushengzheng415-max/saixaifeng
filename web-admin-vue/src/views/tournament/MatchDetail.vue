@@ -231,7 +231,7 @@
               </div>
               <div v-for="(evt, i) in sortedEvents" :key="i" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
-                <div class="event-icon">{{ eventIcon(evt.type) }}</div>
+                <div class="event-icon"><img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" /><span v-else>{{ eventIcon(evt.type) }}</span></div>
                 <div class="event-content">
                   <span class="event-type-label">{{ eventLabel(evt) }}</span>
                   <template v-if="evt.type === 'substitution'">
@@ -721,6 +721,7 @@
             <el-option label="助攻 👟" value="assist" />
             <el-option label="黄牌 🟨" value="yellow_card" />
             <el-option label="红牌 🔴" value="red_card" />
+            <el-option label="2黄变1红 🟨🔴" value="second_yellow_red" />
             <el-option label="换人 🔄" value="substitution" />
             <el-option label="点球打进 ⚽（P）" value="penalty_scored" />
             <el-option label="点球未进" value="penalty_missed" />
@@ -1233,12 +1234,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
-import { goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored } from '../../utils/matchEvent'
+import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 import formationData from '../../data/formation-data.json'
 
 const route = useRoute()
 const router = useRouter()
+const yellowRedCardIcon = `${import.meta.env.BASE_URL}images/match-events/yellow-red.svg`
 
 const tournamentId = route.params.id
 const matchId = route.params.matchId
@@ -1332,8 +1334,8 @@ const newEventForm = () => ({ type:'goal',minute:0,teamSide:'home',playerName:''
 const eventForm = ref(newEventForm())
 const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:minute,label:`${minute}′` }))
 const substitutionPeriodOptions = [{ label:'上半场',value:'first_half' },{ label:'中场休息',value:'halftime' },{ label:'下半场',value:'second_half' }]
-const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '领牌球员' : eventForm.value.type === 'assist' ? '助攻球员' : '球员')
-const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
+const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '领牌球员' : eventForm.value.type === 'assist' ? '助攻球员' : '球员')
+const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
 const activeEventPlayers = computed(() => eventForm.value.teamSide === 'away' ? awayPlayers.value : homePlayers.value)
 const eventPlayerOptions = computed(() => {
   const rows = new Map()
@@ -1512,8 +1514,8 @@ const eventSummary = computed(() => {
   return [
     { key: 'total', icon: '📋', label: '全部事件', value: events.length },
     { key: 'goals', icon: '⚽', label: '进球', value: events.filter(isGoalEvent).length },
-    { key: 'yellow', icon: '🟨', label: '黄牌', value: count('yellow_card') },
-    { key: 'red', icon: '🟥', label: '红牌', value: count('red_card') },
+    { key: 'yellow', icon: '🟨', label: '黄牌', value: events.reduce((sum, event) => sum + cardEventCounts(event).yellow, 0) },
+    { key: 'red', icon: '🟥', label: '红牌', value: events.reduce((sum, event) => sum + cardEventCounts(event).red, 0) },
     { key: 'subs', icon: '🔄', label: '换人', value: count('substitution') }
   ]
 })
@@ -1695,13 +1697,13 @@ function isLightColor(hex) {
 }
 
 function eventIcon(type) {
-  return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🔴', substitution: '🔄', stoppage_time: '⏱', other: '•••', penalty: '⚽', penalty_scored: '⚽', penalty_missed: '⚽', own_goal: '⚽' }[type] || '•'
+  return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🔴', second_yellow_red: '🟨🔴', substitution: '🔄', stoppage_time: '⏱', other: '•••', penalty: '⚽', penalty_scored: '⚽', penalty_missed: '⚽', own_goal: '⚽' }[type] || '•'
 }
 
 function eventLabel(event) {
   if (isGoalEvent(event)) return goalEventLabel(event)
   const type = event?.type || event
-  return { assist: '助攻', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', stoppage_time: '补时', other: '其他' }[type] || type
+  return { assist: '助攻', yellow_card: '黄牌', red_card: '红牌', second_yellow_red: '2黄变1红', substitution: '换人', stoppage_time: '补时', other: '其他' }[type] || type
 }
 
 function formatPosition(pos) {
@@ -2159,6 +2161,9 @@ async function saveEvent() {
       isGoal: isGoalEvent(eventForm.value),
       isPenalty: penalty,
       penaltyOutcome: isPenaltyMissed(eventForm.value) ? 'missed' : (isPenaltyScored(eventForm.value) ? 'scored' : undefined),
+      disciplinaryOutcome: eventForm.value.type === 'second_yellow_red' ? 'second_yellow_red' : undefined,
+      yellowCardCount: eventForm.value.type === 'second_yellow_red' ? 2 : undefined,
+      redCardCount: eventForm.value.type === 'second_yellow_red' ? 1 : undefined,
       source: 'organizer_pc',
       createdAt: new Date().toISOString()
     }]
@@ -3306,6 +3311,7 @@ onMounted(() => {
 .event-row.event-own_goal { border-left-color: #909399; }
 .event-time { font-weight: 700; color: #409eff; min-width: 36px; }
 .event-icon { font-size: 16px; }
+.event-icon img { width: 18px; height: 18px; object-fit: contain; vertical-align: middle; }
 .event-content { flex: 1; }
 .event-type-label { color: #909399; margin-right: 6px; font-size: 12px; }
 .event-player { font-weight: 500; }

@@ -16,6 +16,17 @@ export function isOwnGoal(event) {
   return text(event?.type) === 'own_goal' || event?.goalType === 'own_goal'
 }
 
+export function isSecondYellowRed(event) {
+  const type = text(event?.type)
+  return type === 'second_yellow_red' || type === 'yellow_red' || event?.disciplinaryOutcome === 'second_yellow_red'
+}
+
+export function cardEventCounts(event) {
+  if (isSecondYellowRed(event)) return { yellow: 2, red: 1 }
+  const type = text(event?.type)
+  return { yellow: type === 'yellow_card' ? 1 : 0, red: type === 'red_card' ? 1 : 0 }
+}
+
 export function isGoalEvent(event) {
   const type = text(event?.type)
   return type === 'goal' || type === 'score' || isPenaltyScored(event) || isOwnGoal(event)
