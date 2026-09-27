@@ -106,6 +106,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheckFilled, Clock, DataAnalysis, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
 import { callFunction } from '../../utils/cloud'
+import { isGoalEvent, scorerDisplayName } from '../../utils/matchEvent'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,7 +162,7 @@ function markTeamLogoFailed(team){ failedTeamLogos.value={...failedTeamLogos.val
 function reportLogoKey(row, side){ return `${row?.id || 'match'}:${side}` }
 function reportTeamLogo(row, side){ const key=reportLogoKey(row,side); if(failedReportLogos.value[key])return''; return side==='home' ? (row?.homeTeamLogo || '') : (row?.awayTeamLogo || '') }
 function markReportLogoFailed(row, side){ failedReportLogos.value={...failedReportLogos.value,[reportLogoKey(row,side)]:true} }
-function reportGoalEvents(row, side){ const teamId=side==='home'?row?.homeTeamId:row?.awayTeamId; const teamName=side==='home'?row?.homeTeamName:row?.awayTeamName; return (Array.isArray(row?.events)?row.events:[]).filter(event=>String(event?.type||'').toLowerCase()==='goal' && (event.teamSide===side || (teamId && String(event.teamId||'')===String(teamId)) || (teamName && String(event.teamName||'')===String(teamName)))).sort((a,b)=>Number(a.minute||0)-Number(b.minute||0)) }
+function reportGoalEvents(row, side){ const teamId=side==='home'?row?.homeTeamId:row?.awayTeamId; const teamName=side==='home'?row?.homeTeamName:row?.awayTeamName; return (Array.isArray(row?.events)?row.events:[]).filter(event=>isGoalEvent(event) && (event.teamSide===side || (teamId && String(event.teamId||'')===String(teamId)) || (teamName && String(event.teamName||'')===String(teamName)))).map(event=>({...event,playerName:scorerDisplayName(event)})).sort((a,b)=>Number(a.minute||0)-Number(b.minute||0)) }
 function reportCardEvents(row, side){ const teamId=side==='home'?row?.homeTeamId:row?.awayTeamId; const teamName=side==='home'?row?.homeTeamName:row?.awayTeamName; return (Array.isArray(row?.events)?row.events:[]).filter(event=>['yellow_card','red_card','yellow','red'].includes(String(event?.type||'').toLowerCase()) && (event.teamSide===side || (teamId && String(event.teamId||'')===String(teamId)) || (teamName && String(event.teamName||'')===String(teamName)))).sort((a,b)=>Number(a.minute||0)-Number(b.minute||0)) }
 function cardEventClass(event){ return ['red_card','red'].includes(String(event?.type||'').toLowerCase())?'red':'yellow' }
 function resolutionLabel(row){ return ({regular_time:'常规时间',extra_time:'加时赛',penalties:'点球大战',penalty_shootout:'点球大战',walkover:'弃权判定'}[row.resolution] || (row.scoreReady?'正式比分待复核':'尚未录入')) }

@@ -59,6 +59,7 @@ import { callFunction } from '@/utils/cloud'
 import TeamLogo from '../../components/TeamLogo.vue'
 import PlayerAvatar from '../../components/PlayerAvatar.vue'
 import EmptyState from '../../components/EmptyState.vue'
+import { isPenaltyScored, isScorerGoalEvent } from '@/utils/matchEvent'
 
 /**
  * 榜单组件 — 支持动态积分规则 & 同分排序
@@ -113,7 +114,8 @@ const statColumns = computed(() => {
   return [
     { key: 'team', label: '所属球队' },
     { key: 'played', label: '出场' },
-    { key: 'goals', label: activeType.value === 'assist' ? '助攻' : '进球' }
+    { key: 'goals', label: activeType.value === 'assist' ? '助攻' : '进球' },
+    ...(activeType.value === 'player' ? [{ key: 'penalties', label: '点球' }] : [])
   ]
 })
 
@@ -136,6 +138,7 @@ const playerList = ref([])
 function switchType(value) {
   activeType.value = value
   if (value === 'team') recalculateStandings()
+  else recalculatePlayerStats()
 }
 
 function rankClass(index) {
@@ -398,6 +401,28 @@ function recalculateStandings() {
   }
 }
 
+function recalculatePlayerStats() {
+  const stats = new Map()
+  ;(allMatches.value || []).forEach(match => {
+    if (match.status !== 'completed') return
+    const seenInMatch = new Set()
+    ;(match.events || []).forEach(event => {
+      if (!isScorerGoalEvent(event) || !event.playerName) return
+      const teamName = event.teamSide === 'away' ? match.awayTeamName : match.homeTeamName
+      const teamId = event.teamId || (event.teamSide === 'away' ? match.awayTeamId : match.homeTeamId) || ''
+      const playerId = event.playerId || `${teamId}:${event.playerNumber || ''}:${event.playerName}`
+      const key = String(playerId)
+      if (!stats.has(key)) stats.set(key, { id:key, name:String(event.playerName), logo:'', team:teamName || '球队待定', played:0, goals:0, penalties:0 })
+      const row = stats.get(key)
+      row.goals += 1
+      if (isPenaltyScored(event)) row.penalties += 1
+      seenInMatch.add(key)
+    })
+    seenInMatch.forEach(key => { stats.get(key).played += 1 })
+  })
+  playerList.value = [...stats.values()].sort((a, b) => b.goals - a.goals || a.penalties - b.penalties || b.played - a.played || String(a.name).localeCompare(String(b.name), 'zh-CN'))
+}
+
 // ============================================================
 // 数据加载
 // ============================================================
@@ -433,6 +458,7 @@ async function loadMatches() {
       allMatches.value = matchesRes.value.data || []
       // 数据就绪后立即计算
       recalculateStandings()
+      recalculatePlayerStats()
     }
   } catch (e) {
     console.error('加载比赛数据失败:', e)
