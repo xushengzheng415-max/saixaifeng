@@ -203,7 +203,10 @@ async function exportReportPng(){
     await nextTick()
     const html2canvas=(await import('html2canvas')).default
     const target=reportPoster.value
-    const canvas=await html2canvas(target,{scale:2,useCORS:true,allowTaint:false,backgroundColor:null,logging:false,imageTimeout:15000,width:target.scrollWidth,height:target.scrollHeight,windowWidth:target.scrollWidth,windowHeight:target.scrollHeight})
+    const rect=target.getBoundingClientRect()
+    const posterWidth=Math.ceil(rect.width)
+    const posterHeight=Math.ceil(target.scrollHeight)
+    const canvas=await html2canvas(target,{scale:2,useCORS:true,allowTaint:false,backgroundColor:null,logging:false,imageTimeout:15000,width:posterWidth,height:posterHeight,windowWidth:Math.max(window.innerWidth,1280),windowHeight:Math.max(window.innerHeight,posterHeight),onclone:(doc)=>{const cloned=doc.querySelector('.board-poster');if(cloned){cloned.style.width=`${posterWidth}px`;cloned.style.height='auto';cloned.style.minHeight='0';cloned.style.overflow='visible'}}})
     const safeName=String(dashboard.value.tournament?.name||'足球赛事').replace(/[\\/:*?"<>|]/g,'-')
     const modeName=reportMode.value==='scorers'?'比分与进球球员':'比分'
     const cardName=reportShowCards.value?'-含红黄牌':''
@@ -234,7 +237,7 @@ onMounted(loadDashboard)
 <style scoped>
 .board-poster{background-image:url('../../assets/report/flat-blue-v1.png')!important}
 .board-poster.emerald{background-image:url('../../assets/report/flat-green-v1.png')!important}
-.board-poster.paper{background-image:url('../../assets/report/flat-white-v1.png')!important}
+.board-poster.paper{background-image:linear-gradient(90deg,#f7f5ee 0 24px,transparent 24px calc(100% - 24px),#f7f5ee calc(100% - 24px) 100%),url('../../assets/report/flat-white-v1.png')!important}
 .board-poster.emerald .board-score{border:0!important;background:#123f2b!important;clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px)!important;box-shadow:inset 0 0 0 1px #d8bc70!important}
 .board-footer{display:grid!important;grid-template-columns:1fr auto!important;align-items:end!important;min-height:88px!important;margin-top:24px!important;padding:18px 6px 20px!important}
 .board-footer::before{content:'赛事数据由赛小蜂足球提供';grid-column:1/-1;justify-self:center;min-height:36px;padding-left:126px;background:url('../../assets/logo-saixiaofeng.png') left center/112px auto no-repeat;font-size:11px;font-weight:700;line-height:36px;letter-spacing:.04em;opacity:.92}
