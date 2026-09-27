@@ -90,7 +90,7 @@
     <template v-else-if="view === 'map'">
       <section v-if="!calendarConfigured" class="calendar-empty"><el-icon><Calendar /></el-icon><h2>先创建赛事日历</h2><p>统一设置比赛日、场地和时段，然后再手动、Excel或自动排期。</p><el-button type="success" @click="setView('settings')">进入赛程设置</el-button></section>
       <template v-else>
-        <section class="map-summary"><span><b>{{ matches.length }}</b>场比赛</span><span class="live"><b>{{ managementCounts.live }}</b>场进行中</span><span class="supplement"><b>{{ managementCounts.supplement }}</b>场待补录</span><span class="review"><b>{{ managementCounts.review }}</b>场待复核</span><span class="pending"><b>{{ pendingMatches.length }}</b>场待排</span><span :class="{ danger:conflicts.length }"><b>{{ conflicts.length }}</b>项冲突</span><i /><el-button plain @click="setView('settings')"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="setView('imports')"><el-icon><Upload /></el-icon>导入导出</el-button><el-button type="success" :loading="autoScheduling" :disabled="!pendingMatches.length" @click="autoSchedule"><el-icon><MagicStick /></el-icon>自动排程</el-button></section>
+        <section class="map-summary"><span><b>{{ matches.length }}</b>场比赛</span><span class="live"><b>{{ managementCounts.live }}</b>场进行中</span><span class="supplement"><b>{{ managementCounts.supplement }}</b>场完赛未补录</span><span class="review"><b>{{ managementCounts.review }}</b>场待复核</span><span class="pending"><b>{{ pendingMatches.length }}</b>场待排</span><span :class="{ danger:conflicts.length }"><b>{{ conflicts.length }}</b>项冲突</span><i /><el-button plain @click="setView('settings')"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="setView('imports')"><el-icon><Upload /></el-icon>导入导出</el-button><el-button type="success" :loading="autoScheduling" :disabled="!pendingMatches.length" @click="autoSchedule"><el-icon><MagicStick /></el-icon>自动排程</el-button></section>
 
         <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select><div class="date-tabs"><button v-for="day in calendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }}</small></button></div><div class="status-legend" aria-label="比赛状态"><span v-for="item in managementLegend" :key="item.key" :class="item.key"><i></i>{{ item.label }}</span></div><el-button :disabled="!canPublish" @click="publishSchedules">发布竞赛日程</el-button></section>
 
@@ -148,20 +148,21 @@ function teamInitial(name) { return String(name || '队').trim().slice(0,1) || '
 function teamLogoKey(match,side) { return `${String(match?._id || '')}:${side}` }
 function teamLogo(match,side) { const key=teamLogoKey(match,side); if(hiddenTeamLogoKeys.value.has(key))return ''; const direct=match?.[`${side}TeamLogo`] || match?.[`${side}Logo`] || match?.[`${side}Team`]?.logoTransparentUrl || match?.[`${side}Team`]?.logoUrl || match?.[`${side}Team`]?.logo || ''; return String(direct || teamLogoMap.value.get(String(match?.[`${side}TeamId`] || '')) || '') }
 function hideTeamLogo(match,side) { hiddenTeamLogoKeys.value=new Set([...hiddenTeamLogoKeys.value,teamLogoKey(match,side)]) }
-function scoreText(match) { return managementState(match).key === 'scheduled' ? '- : -' : match?.homeScore == null && match?.awayScore == null ? '— : —' : `${match.homeScore ?? '—'} : ${match.awayScore ?? '—'}` }
+function hasMatchScore(match) { return match?.homeScore !== null && match?.homeScore !== undefined && match?.homeScore !== '' && match?.awayScore !== null && match?.awayScore !== undefined && match?.awayScore !== '' }
+function scoreText(match) { const state=managementState(match).key; return ['scheduled','supplement'].includes(state) && !hasMatchScore(match) ? '- : -' : match?.homeScore == null && match?.awayScore == null ? '— : —' : `${match.homeScore ?? '—'} : ${match.awayScore ?? '—'}` }
 function managementState(match) {
   const status=String(match?.status || '').toLowerCase(),postState=String(match?.postState || '').toLowerCase(),reviewStatus=String(match?.refereeReviewStatus || match?.reviewStatus || '').toLowerCase(),recordState=String(match?.recordState || '')
-  const hasScore=match?.homeScore !== null && match?.homeScore !== undefined && match?.homeScore !== '' && match?.awayScore !== null && match?.awayScore !== undefined && match?.awayScore !== ''
+  const hasScore=hasMatchScore(match)
   const refereeSubmitted=reviewStatus === 'under_review' || reviewStatus === 'returned' || reviewStatus === 'archived' || recordState === '电子记录待复核' || recordState === '电子记录已归档' || Boolean(match?.refereeRecord || match?.refereeReport || match?.refereeSubmittedAt || match?.refereeReportSubmittedAt)
   if(status==='archived' || postState==='archived' || reviewStatus==='archived' || recordState==='电子记录已归档')return { key:'archived',label:'已归档' }
   if(['live','in_progress','playing'].includes(status) || match?.executionState==='recording')return { key:'live',label:'进行中' }
   if(refereeSubmitted || status==='pending_review' || postState==='review')return { key:'review',label:'待复核' }
-  if(hasScore || ['completed','finished'].includes(status))return { key:'completed',label:'已完赛' }
-  if(postState==='supplement' || ['pending_result','awaiting_result'].includes(status))return { key:'supplement',label:'待补录' }
+  if(hasScore)return { key:'completed',label:'已完赛' }
+  if(postState==='supplement' || ['pending_result','awaiting_result','completed','finished'].includes(status))return { key:'supplement',label:'完赛未补录' }
   return { key:'scheduled',label:'待开始' }
 }
-function scoreStateClass(match) { const state=managementState(match).key;return state==='live'?'score-live':state==='scheduled'?'score-upcoming':'score-finished' }
-const managementLegend = [{ key:'scheduled',label:'待开始' },{ key:'live',label:'进行中' },{ key:'completed',label:'已完赛' },{ key:'supplement',label:'待补录' },{ key:'review',label:'待复核' },{ key:'archived',label:'已归档' }]
+function scoreStateClass(match) { const state=managementState(match).key;return state==='live'?'score-live':['scheduled','supplement'].includes(state)?'score-upcoming':'score-finished' }
+const managementLegend = [{ key:'scheduled',label:'待开始' },{ key:'live',label:'进行中' },{ key:'completed',label:'已完赛' },{ key:'supplement',label:'完赛未补录' },{ key:'review',label:'待复核' },{ key:'archived',label:'已归档' }]
 const managementCounts = computed(() => matches.value.reduce((counts,match)=>{const key=managementState(match).key;counts[key]=(counts[key] || 0)+1;return counts},{ scheduled:0,live:0,completed:0,supplement:0,review:0,archived:0 }))
 function matchRoute(match,suffix=''){return { path:`/tournaments/${tournamentId}/match/${match._id}${suffix}`,query:match.divisionId?{ divisionId:match.divisionId }:{} }}
 function openMatchWorkspace(match){const state=managementState(match).key;if(state==='live')return router.push(matchRoute(match,'/monitor'));if(state==='supplement')return router.push(matchRoute(match,'/post-match'));if(state==='review')return router.push(matchRoute(match,'/review'));if(state==='archived')return router.push(matchRoute(match,'/archive'));return router.push(matchRoute(match))}
