@@ -1319,6 +1319,11 @@ const activeTab = ref('lineup')
 const homePlayers = ref([])
 const awayPlayers = ref([])
 
+// 同一场比赛内反复打开阵容编辑器时，球队球员库无需重复查询。
+const teamPlayersCache = new Map()
+const teamPlayersRequests = new Map()
+const TEAM_PLAYERS_CACHE_TTL = 2 * 60 * 1000
+
 // 编辑弹窗
 const editDialogVisible = ref(false)
 const editForm = ref({})
@@ -1795,10 +1800,12 @@ async function loadMatch() {
       applyTeamLogo('away', getTeamLogoSource(m, 'away'))
     ])
     refName.value = m.refereeName || ''
-    // 加载赛事名称
-    await loadTournamentName(m.tournamentId || tournamentId, m.divisionId || sourceDivisionId)
-    // 加载队徽（先尝试从 tournament_teams 加载）
-    await loadTeamLogos(m.homeTeamId, m.awayTeamId)
+    // 赛事名称和队徽互不依赖，并行加载，减少打开详情页的首屏等待。
+    await Promise.all([
+      loadTournamentName(m.tournamentId || tournamentId, m.divisionId || sourceDivisionId),
+      // 加载队徽（先尝试从 tournament_teams 加载）
+      loadTeamLogos(m.homeTeamId, m.awayTeamId)
+    ])
     // 如果场序为空，自动计算
     if (!m.matchSequence && !m.sequence) {
       calculateMatchSequence(m)
@@ -2276,38 +2283,58 @@ async function saveKitColors() {
 // 加载球队报名球员
 async function loadTeamPlayers(teamId) {
   if (!teamId) return []
-  try {
-    // 1. 直接查询（teamId 可能是 teams._id 或 tournament_teams._id）
-    const [byTeamId, byTeamCode] = await Promise.all([
-      queryList('players', { where: { teamId }, limit: 1000 }),
-      queryList('players', { where: { teamCode: teamId }, limit: 1000 })
-    ])
-    let all = [...(byTeamId || []), ...(byTeamCode || [])]
+  const key = String(teamId)
+  const cached = teamPlayersCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.players
+  const pending = teamPlayersRequests.get(key)
+  if (pending) return pending
 
-    // 2. 如果为空，尝试通过 tournament_teams 找到真实的 teams._id
-    if (all.length === 0) {
-      const ttList = await queryList('tournament_teams', { where: { _id: teamId }, limit: 1 })
-      if (ttList && ttList.length > 0 && ttList[0].teamId) {
-        const realTeamId = ttList[0].teamId
-        const [byRealId, byRealCode] = await Promise.all([
-          queryList('players', { where: { teamId: realTeamId }, limit: 1000 }),
-          queryList('players', { where: { teamCode: realTeamId }, limit: 1000 })
-        ])
-        all = [...(byRealId || []), ...(byRealCode || [])]
+  const request = (async () => {
+    try {
+      // 1. 直接查询（teamId 可能是 teams._id 或 tournament_teams._id）
+      const [byTeamId, byTeamCode] = await Promise.all([
+        queryList('players', { where: { teamId }, limit: 1000 }),
+        queryList('players', { where: { teamCode: teamId }, limit: 1000 })
+      ])
+      let all = [...(byTeamId || []), ...(byTeamCode || [])]
+
+      // 2. 如果为空，尝试通过 tournament_teams 找到真实的 teams._id
+      if (all.length === 0) {
+        const ttList = await queryList('tournament_teams', { where: { _id: teamId }, limit: 1 })
+        if (ttList && ttList.length > 0 && ttList[0].teamId) {
+          const realTeamId = ttList[0].teamId
+          const [byRealId, byRealCode] = await Promise.all([
+            queryList('players', { where: { teamId: realTeamId }, limit: 1000 }),
+            queryList('players', { where: { teamCode: realTeamId }, limit: 1000 })
+          ])
+          all = [...(byRealId || []), ...(byRealCode || [])]
+        }
       }
-    }
 
-    const map = new Map()
-    for (const p of all) {
-      if (p._id) map.set(p._id, p)
+      const map = new Map()
+      for (const p of all) {
+        if (p._id) map.set(p._id, p)
+      }
+      const result = Array.from(map.values())
+      // 空结果不缓存，避免临时网络异常把“暂无球员”保留到下一次打开。
+      if (result.length > 0) {
+        teamPlayersCache.set(key, {
+          players: result,
+          expiresAt: Date.now() + TEAM_PLAYERS_CACHE_TTL
+        })
+      }
+      return result
+    } catch (e) {
+      console.warn('加载球队球员失败:', e)
+      return []
     }
-    const result = Array.from(map.values())
-    if (result.length > 0) {
-    }
-    return result
-  } catch (e) {
-    console.warn('加载球队球员失败:', e)
-    return []
+  })()
+
+  teamPlayersRequests.set(key, request)
+  try {
+    return await request
+  } finally {
+    teamPlayersRequests.delete(key)
   }
 }
 
