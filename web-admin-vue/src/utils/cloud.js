@@ -148,6 +148,11 @@ export async function reviewRefereeRecord(data = {}) {
   return callFunctionHTTP('reviewRefereeRecord', data)
 }
 
+// 归档后比分异常纠错：服务端会校验正式归档状态并写入前后值审计。
+export async function correctArchivedScore(data = {}) {
+  return callFunction('resultCenter', { action: 'correctArchivedScore', ...data })
+}
+
 export async function listIdentityReviewQueue(data = {}) {
   return callFunctionHTTP('listIdentityReviewQueue', data)
 }

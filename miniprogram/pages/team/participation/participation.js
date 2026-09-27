@@ -4,24 +4,24 @@ function fixture() {
   return {
     team: { name: '赛小蜂 U12 竞技队', logo: '/images/runtime/icons/brand-v1-tab-team.png' },
     items: [
-      { id: 'a', name: '2026 河南青少年足球冠军联赛', divisionName: 'U12组', divisionId: 'qa-division-u12', statusText: '已确认', statusClass: 'state-ok', rosterText: '18/20 已审核', nextMatchText: '8月2日 10:30\nvs 洛阳龙门U12', tournamentId: 'qa-tournament-001', nextMatchId: 'qa-match-001', actionText: '进入赛事', actionClass: 'event-primary' },
-      { id: 'b', name: '2026 郑州市青少年邀请赛', divisionName: 'U12组', divisionId: 'qa-division-u12', statusText: '待确认', statusClass: 'state-wait', rosterText: '报名截止\n8月15日', nextMatchText: '资料提交\n确认参赛后提交正式名单', tournamentId: 'qa-tournament-002', actionText: '确认参赛', actionClass: 'event-secondary' }
+      { id: 'a', name: '2026 河南青少年足球冠军联赛', divisionName: 'U12组', divisionId: 'qa-division-u12', statusText: '已参赛', statusClass: 'state-ok', rosterText: '正式名单已审核', matchCount: 2, hasMatches: true, competitionStatus: 'not_started', matches: [{ id: 'qa-match-001', dateText: '8月2日', timeText: '10:30', opponentName: '洛阳龙门U12', sideText: '主场', roundText: '小组赛第3轮', venueText: '1号场', statusText: '待开始', statusClass: 'match-status-wait', canSubmitLineup: true }, { id: 'qa-match-002', dateText: '8月9日', timeText: '15:00', opponentName: '中原雄鹰U12', sideText: '客场', roundText: '小组赛第4轮', venueText: '2号场', statusText: '待开始', statusClass: 'match-status-wait', canSubmitLineup: true }], tournamentId: 'qa-tournament-001', actionText: '查看赛事', actionClass: 'event-secondary' },
+      { id: 'b', name: '2026 郑州市青少年邀请赛', divisionName: 'U12组', divisionId: 'qa-division-u12', statusText: '待确认', statusClass: 'state-wait', rosterText: '尚未提交正式名单', matchCount: 0, hasMatches: false, competitionStatus: 'not_started', matches: [], tournamentId: 'qa-tournament-002', actionText: '查看赛事', actionClass: 'event-secondary' }
     ]
   }
 }
 
 function buildFilters(mode, rows) {
-  var progress = rows.filter(function (item) { return item.nextMatchId }).length
-  var signup = rows.length - progress
+  var counts = { not_started: 0, ongoing: 0, completed: 0 }
+  rows.forEach(function (item) { counts[item.competitionStatus || 'not_started'] = Number(counts[item.competitionStatus || 'not_started'] || 0) + 1 })
   return [
-    { id: 'all', label: '全部 ' + rows.length, className: mode === 'all' ? 'event-filter active' : 'event-filter' },
-    { id: 'progress', label: '进行中 ' + progress, className: mode === 'progress' ? 'event-filter active' : 'event-filter' },
-    { id: 'signup', label: '报名中 ' + signup, className: mode === 'signup' ? 'event-filter active' : 'event-filter' }
+    { id: 'not_started', label: '待开始 ' + counts.not_started, className: mode === 'not_started' ? 'event-filter active' : 'event-filter' },
+    { id: 'ongoing', label: '进行中 ' + counts.ongoing, className: mode === 'ongoing' ? 'event-filter active' : 'event-filter' },
+    { id: 'completed', label: '已完赛 ' + counts.completed, className: mode === 'completed' ? 'event-filter active' : 'event-filter' }
   ]
 }
 
 Page({
-  data: { teamId: '', loading: true, team: {}, items: [], eventCount: 0, visible: [], filters: [], activeFilter: 'all', isDevtools: false },
+  data: { teamId: '', loading: true, team: {}, items: [], eventCount: 0, visible: [], filters: [], activeFilter: 'not_started', isDevtools: false },
   onLoad: function (options) {
     var query = options || {}
     var isDevtools = workspace.isVisualQaEnabled(query)
@@ -51,7 +51,7 @@ Page({
   filter: function () {
     var all = this.data.items || []
     var mode = this.data.activeFilter
-    var visible = all.filter(function (item) { return mode === 'all' || (mode === 'progress' && item.nextMatchId) || (mode === 'signup' && !item.nextMatchId) })
+    var visible = all.filter(function (item) { return String(item.competitionStatus || 'not_started') === mode })
     this.setData({ visible: visible, filters: buildFilters(mode, all) })
   },
   choose: function (event) {
@@ -59,11 +59,16 @@ Page({
     this.filter()
   },
   open: function (event) {
-    var item = event.currentTarget.dataset.item
-    if (!item || !item.tournamentId) return
-    var url = '/pages/tournament/detail/detail?id=' + encodeURIComponent(item.tournamentId) + '&teamId=' + encodeURIComponent(this.data.teamId)
-    if (item.divisionId) url += '&divisionId=' + encodeURIComponent(item.divisionId)
+    var tournamentId = String(event.currentTarget.dataset.tournament || '')
+    var divisionId = String(event.currentTarget.dataset.division || '')
+    if (!tournamentId) return
+    var url = '/pages/tournament/detail/detail?id=' + encodeURIComponent(tournamentId) + '&teamId=' + encodeURIComponent(this.data.teamId)
+    if (divisionId) url += '&divisionId=' + encodeURIComponent(divisionId)
     wx.navigateTo({ url: url })
+  },
+  openMatchDetail: function (event) {
+    var matchId = String(event.currentTarget.dataset.id || '')
+    if (matchId) wx.navigateTo({ url: '/pages/match/detail/detail?matchId=' + encodeURIComponent(matchId) })
   },
   openMatch: function (event) {
     var matchId = event.currentTarget.dataset.id
