@@ -125,7 +125,7 @@
             <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <el-table-column label="主办方审核" width="150" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">{{ sourceTournamentId ? '已入正式名单' : '已审核' }}</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">{{ sourceTournamentId ? '审核并入名单' : '审核' }}</el-button></template></el-table-column>
             <el-table-column label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
         </section>
@@ -1337,6 +1337,7 @@ const team = ref(qaTeam || {})
 const players = ref([])
 const staffMembers = ref([])
 const importedDraftPlayers = ref([])
+const tournamentRosterPlayerIds = ref(new Set())
 const kitSaving = ref(false)
 const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
 const kitEquipment = [{key:'jersey',label:'球衣'},{key:'shorts',label:'球裤'},{key:'socks',label:'球袜'}]
@@ -4096,13 +4097,30 @@ async function loadPlayers() {
         return []
       }
     }
-    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, exportRosterPlayers] = await Promise.all([
+    const loadTournamentRoster = async () => {
+      if (!sourceTournamentId.value || !tournamentRelation.value?._id) return []
+      try {
+        const result = await callFunction('organizerClaimInvite', {
+          action:'listTournamentRosterPlayers',
+          tournamentId:sourceTournamentId.value,
+          divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+          tournamentTeamId:String(tournamentRelation.value._id)
+        })
+        return result?.success && Array.isArray(result.playerIds) ? result.playerIds.map(String) : []
+      } catch (error) {
+        console.warn('加载本届正式名单失败:', error.message || error)
+        return []
+      }
+    }
+    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, exportRosterPlayers, tournamentRosterIds] = await Promise.all([
       queryList('players', { where: { teamId: teamId } }),
       queryList('players', { where: { teamCode: teamId } }),
       queryList('coaches', { where: { teamId: teamId } }),
       queryList('coaches', { where: { teamCode: teamId } }),
-      loadExportRoster()
+      loadExportRoster(),
+      loadTournamentRoster()
     ])
+    tournamentRosterPlayerIds.value = new Set((tournamentRosterIds || []).map(String))
 
     const staffMap = new Map()
     actualStaffRecords([...(staffByTeamId || []), ...(staffByTeamCode || [])]).forEach(person => {
@@ -4196,6 +4214,7 @@ function playerProfileLabel(player) {
 }
 
 function playerOrganizerReviewStatus(player) {
+  if (sourceTournamentId.value) return tournamentRosterPlayerIds.value.has(String(player?._id || '')) ? 'approved' : 'pending'
   return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
 }
 
@@ -4203,9 +4222,24 @@ async function reviewPlayer(player) {
   if (!player?._id || playerOrganizerReviewStatus(player) === 'approved') return
   playerReviewingId.value = String(player._id)
   try {
-    await updateRecord('players', player._id, { organizerReviewStatus: 'approved', organizerReviewedAt: new Date().toISOString(), organizerReviewedBy: '赛事主办方' })
-    player.organizerReviewStatus = 'approved'
-    ElMessage.success(`${player.name || '球员'}已审核`)
+    if (sourceTournamentId.value) {
+      if (!tournamentRelation.value?._id) throw new Error('当前赛事参赛关系不存在，无法加入正式名单')
+      const result = await callFunction('organizerClaimInvite', {
+        action:'approveTournamentPlayer',
+        tournamentId:sourceTournamentId.value,
+        divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+        tournamentTeamId:String(tournamentRelation.value._id),
+        playerId:String(player._id)
+      })
+      if (!result?.success) throw new Error(result?.message || '球员审核失败')
+      tournamentRosterPlayerIds.value = new Set([...tournamentRosterPlayerIds.value, String(player._id)])
+      player.organizerReviewStatus = 'approved'
+      ElMessage.success(`${player.name || '球员'}已审核并加入本届正式名单`)
+    } else {
+      await updateRecord('players', player._id, { organizerReviewStatus: 'approved', organizerReviewedAt: new Date().toISOString(), organizerReviewedBy: '赛事主办方' })
+      player.organizerReviewStatus = 'approved'
+      ElMessage.success(`${player.name || '球员'}已审核`)
+    }
   } catch (error) {
     ElMessage.error(error.message || '球员审核失败')
   } finally {
