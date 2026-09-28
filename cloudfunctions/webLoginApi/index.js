@@ -4632,6 +4632,14 @@ function rosterSnapshotPlayerIds(snapshot) {
   return Array.from(new Set(direct.concat(embedded).filter(Boolean).map(String)))
 }
 
+function mergeRosterPlayerRows(rows) {
+  const map = new Map()
+  ;(rows || []).flat().forEach(function (item) {
+    if (item && item._id) map.set(String(item._id), item)
+  })
+  return Array.from(map.values())
+}
+
 // PC 名单异常看板。这里刻意不复用通用 dbQuery：返回集严格限定为当前主办方的
 // 当前赛事参赛关系、名单快照以及这些快照/球队对应的球员资料，不能借看板读取球队长期私有库。
 async function handleRosterExceptionBoard(event) {
@@ -4677,11 +4685,13 @@ async function handleRosterExceptionBoard(event) {
       ? teamRelations.find(function (item) { return String(item.divisionId || item.division || 'default') === selectedDivisionId })
       : (new Set(teamRelations.map(function (item) { return String(item.divisionId || item.division || 'default') })).size > 1 ? null : teamRelations[0])
     if (!relation) return { success: false, error: selectedDivisionId ? '球队不属于当前竞赛组别' : '该球队参加了多个竞赛组别，请先选择当前组别', code: selectedDivisionId ? 'DIVISION_NOT_FOUND' : 'DIVISION_REQUIRED' }
-    const [teamResult, playerResult, snapshotResult] = await Promise.all([
+    const [teamResult, playerByTeamIdResult, playerByTeamCodeResult, snapshotResult] = await Promise.all([
       db.collection('teams').doc(teamId).get(),
       db.collection('players').where({ teamId }).limit(500).get(),
+      db.collection('players').where({ teamCode: teamId }).limit(500).get(),
       db.collection('roster_snapshots').where({ tournamentId, teamId }).limit(50).get()
     ])
+    const playerRows = mergeRosterPlayerRows([playerByTeamIdResult.data || [], playerByTeamCodeResult.data || []])
     const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
     if (!team || !organizerRecordAllowed('teams', team, scope)) return { success: false, error: '无权读取该球队资料' }
     const relationDivisionId = String(relation.divisionId || relation.division || 'default')
@@ -4694,7 +4704,7 @@ async function handleRosterExceptionBoard(event) {
     const selectedIds = new Set(rosterSnapshotPlayerIds(latest))
     const rosterConfig = await loadRosterRequirements(db, tournament, relation)
     const requirements = rosterConfig.requirements
-    const rows = (playerResult.data || []).filter(function (item) { return !latest || selectedIds.has(String(item._id)) }).map(function (item) {
+    const rows = playerRows.filter(function (item) { return !latest || selectedIds.has(String(item._id)) }).map(function (item) {
       const profileState = analyzeRosterPlayer(item, requirements)
       const profileStatus = profileState.status
       const identityRaw = String(item.identityStatus || item.verifyStatus || item.realNameStatus || '').toLowerCase()
@@ -4760,13 +4770,16 @@ async function handleRosterExceptionBoard(event) {
     ? approvedRelations.filter(function (item) { return String(item.divisionId || item.division || '') === divisionId })
     : approvedRelations
   const selectedTeamIds = new Set(selectedRelations.map(function (item) { return String(item.teamId || '') }).filter(Boolean))
-  const [teamResult, playerResult, snapshotResult] = await Promise.all([
+  const [teamResult, playerByTeamIdResult, playerByTeamCodeResult, snapshotResult] = await Promise.all([
     teamIds.length ? db.collection('teams').where({ _id: db.command.in(teamIds) }).limit(1000).get() : Promise.resolve({ data: [] }),
     teamIds.length ? db.collection('players').limit(1000).get() : Promise.resolve({ data: [] }),
+    teamIds.length ? db.collection('players').where({ teamCode: db.command.in(teamIds) }).limit(1000).get() : Promise.resolve({ data: [] }),
     db.collection('roster_snapshots').where({ tournamentId }).limit(1000).get()
   ])
   const teamMap = new Map((teamResult.data || []).map(function (item) { return [String(item._id), item] }))
-  const playersById = new Map((playerResult.data || []).filter(function (item) { return selectedTeamIds.has(String(item.teamId || '')) }).map(function (item) { return [String(item._id), item] }))
+  const playersById = new Map(mergeRosterPlayerRows([playerByTeamIdResult.data || [], playerByTeamCodeResult.data || []]).filter(function (item) {
+    return selectedTeamIds.has(String(item.teamId || item.teamCode || ''))
+  }).map(function (item) { return [String(item._id), item] }))
   const snapshots = (snapshotResult.data || []).filter(function (item) {
     if (!selectedTeamIds.has(String(item.teamId || ''))) return false
     if (!divisionId) return true
