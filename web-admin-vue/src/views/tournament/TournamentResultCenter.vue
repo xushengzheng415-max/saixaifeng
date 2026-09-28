@@ -39,7 +39,7 @@
 
       <section v-if="activeTab==='review'" class="review-layout">
         <article class="review-list panel">
-          <header><div><h2>比赛赛果</h2><p>{{ reviewScopeLabel }} · 小组赛、淘汰赛和排位赛按阶段、场序排列</p></div><span>{{ visibleMatches.length }} 场</span></header>
+          <header><div><h2>比赛赛果</h2><p>{{ reviewScopeLabel }} · 默认按比赛时间升序排列</p></div><span>{{ visibleMatches.length }} 场</span></header>
           <div class="review-list-filters"><label><span>组别</span><el-select v-model="divisionFilter" clearable placeholder="全部组别"><el-option v-for="item in dashboard.divisions || []" :key="item.id" :label="item.name" :value="item.id" /></el-select></label><label><span>日期</span><el-select v-model="dateFilter" clearable placeholder="全部日期"><el-option v-for="date in dateOptions" :key="date" :label="date" :value="date" /></el-select></label></div>
           <div class="result-table-head result-row"><span>场次</span><span>对阵与比分</span><span>时间 / 场地</span><span>来源</span><span>复核状态</span><span>操作</span></div>
           <button v-for="row in visibleMatches" :key="row.id" type="button" class="result-row result-data-row" :class="{ selected:selectedMatch?.id===row.id }" @click="selectedMatchId=row.id">
@@ -137,7 +137,26 @@ function normalizedDivisionName(value){ return String(value || '').replace(/[\s�
 function matchesSelectedDivision(row){ return !divisionFilter.value || row.divisionId===divisionFilter.value || Boolean(selectedDivision.value && normalizedDivisionName(row.divisionName)===normalizedDivisionName(selectedDivision.value.name)) }
 function reviewStageOrder(row){ return ({group:0,knockout:1,placement:2,other:3}[row.reviewStage] ?? 3) }
 function matchSequenceValue(row){ const parts=String(row.matchNo || '').match(/\d+/g) || []; return parts.length?Number(parts.at(-1)):Number.MAX_SAFE_INTEGER }
-function compareReviewRows(a,b){ return reviewStageOrder(a)-reviewStageOrder(b)||matchSequenceValue(a)-matchSequenceValue(b)||`${a.matchDate} ${a.matchTime}`.localeCompare(`${b.matchDate} ${b.matchTime}`,'zh-CN') }
+function scheduleValue(row){
+  const rawDate=String(row?.matchDate||'').trim()
+  const rawTime=String(row?.matchTime||'').trim()
+  const embeddedTime=!rawTime && rawDate.match(/\d{1,2}:\d{2}/)
+  if(embeddedTime){
+    const embeddedValue=Date.parse(rawDate)
+    if(Number.isFinite(embeddedValue))return embeddedValue
+  }
+  const dateMatch=rawDate.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+  const timeMatch=rawTime.match(/(\d{1,2}):(\d{2})/)
+  if(dateMatch){
+    const date=`${dateMatch[1]}-${dateMatch[2].padStart(2,'0')}-${dateMatch[3].padStart(2,'0')}`
+    const time=timeMatch ? `${timeMatch[1].padStart(2,'0')}:${timeMatch[2]}` : '23:59'
+    const value=Date.parse(`${date}T${time}:00`)
+    if(Number.isFinite(value))return value
+  }
+  const fallback=Date.parse(rawDate)
+  return Number.isFinite(fallback)?fallback:Number.MAX_SAFE_INTEGER
+}
+function compareReviewRows(a,b){ return scheduleValue(a)-scheduleValue(b)||reviewStageOrder(a)-reviewStageOrder(b)||matchSequenceValue(a)-matchSequenceValue(b)||String(a.id||'').localeCompare(String(b.id||'')) }
 const filteredByScope = computed(() => (dashboard.value.matches || []).filter(row => matchesSelectedDivision(row) && (!dateFilter.value || row.matchDate===dateFilter.value)))
 const visibleMatches = computed(() => filteredByScope.value.filter(row => (!statusFilter.value || row.resultStatus===statusFilter.value) && (!keyword.value.trim() || `${row.matchNo} ${row.homeTeamName} ${row.awayTeamName}`.toLowerCase().includes(keyword.value.trim().toLowerCase()))).sort(compareReviewRows))
 const selectedMatch = computed(() => visibleMatches.value.find(row => row.id===selectedMatchId.value) || visibleMatches.value[0] || null)
@@ -171,7 +190,7 @@ function formatDate(value){ if(!value)return'—';const date=new Date(value);ret
 function formatReportDate(value){ const text=String(value || '').slice(0,10); return text ? text.replaceAll('-','.') : '比赛日期待定' }
 function openMatchResult(row){ const suffix=row.resultStatus==='approved'?'/archive':row.scoreReady?'/review':'';router.push({path:`/tournaments/${tournamentId}/match/${row.id}${suffix}`,query:row.divisionId?{divisionId:row.divisionId}:{}}) }
 
-async function loadDashboard(){ loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=result.matches[0].id;if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
+async function loadDashboard(){ loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=[...result.matches].sort(compareReviewRows)[0]?.id||'';if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
 const correctionVisible = ref(false)
 const correctionSaving = ref(false)
 const correctionForm = ref({ matchId:'', homeScore:0, awayScore:0, reason:'' })
