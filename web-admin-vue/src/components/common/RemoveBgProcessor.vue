@@ -229,6 +229,10 @@ function compressImage(file, maxWidth = 500, maxHeight = 500) {
       canvas.width = width
       canvas.height = height
       const ctx = canvas.getContext('2d')
+      // 先铺白底再绘制，避免 PNG 的透明白色在 Canvas 预乘后丢失 RGB 信息；
+      // 后续边缘抠图会移除外部白底，并保留队徽内部白色。
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, width, height)
       ctx.drawImage(img, 0, 0, width, height)
       canvas.toBlob((blob) => {
         if (!blob) {
@@ -243,38 +247,6 @@ function compressImage(file, maxWidth = 500, maxHeight = 500) {
     img.onerror = () => {
       URL.revokeObjectURL(url)
       reject(new Error('图片加载失败'))
-    }
-    img.src = url
-  })
-}
-
-/**
- * 检测图片是否已有透明像素
- * 加载到 Canvas 后检查 alpha 通道，任一像素 alpha < 255 即返回 true
- */
-function hasTransparency(file) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(img, 0, 0)
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-      for (let i = 3; i < data.length; i += 4) {
-        if (data[i] < 255) {
-          resolve(true)
-          return
-        }
-      }
-      resolve(false)
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      resolve(false)
     }
     img.src = url
   })
@@ -372,23 +344,6 @@ async function handleFileChange(file) {
 
   // 显示原图预览
   originalUrl.value = URL.createObjectURL(processFile)
-
-  // 队徽/赛事Logo：检查是否已有透明通道，有则跳过 AI 抠图
-  if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
-    const hasAlpha = await hasTransparency(processFile)
-    if (hasAlpha) {
-      revokeBlobUrl()
-      const paddedFile = await addLogoSafeAreaToFile(processFile)
-      const rawUrl = URL.createObjectURL(paddedFile)
-      blobUrlCache = rawUrl
-      cropperUrl.value = rawUrl
-      showCropper.value = true
-      cropperKey.value++
-      await nextTick()
-      processing.value = false
-      return
-    }
-  }
 
   try {
 

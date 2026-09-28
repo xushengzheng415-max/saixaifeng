@@ -5,6 +5,7 @@
  */
 
 import { callFunction } from './cloud'
+import { restoreEnclosedWhitePixels } from './whiteBgRemover'
 
 /**
  * 压缩图片（百度 API 对图片大小有限制）
@@ -248,6 +249,10 @@ function removeLogoBackgroundCanvas(file) {
       const data = imageData.data
       const w = canvas.width
       const h = canvas.height
+
+      // 部分 PNG 会把队徽内部白色保存成 alpha=0；先恢复被轮廓包住的白色，
+      // 再执行外边缘背景泛洪，避免旧上传入口继续丢失内部白色。
+      restoreEnclosedWhitePixels(data, w, h)
 
       // 取四角像素颜色（假设四角都是背景）
       function getPixel(x, y) {
