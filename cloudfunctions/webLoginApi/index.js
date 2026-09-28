@@ -4868,6 +4868,354 @@ function parseHttpRequestParams(event) {
   return event
 }
 
++// 服务号公共赛事中心只消费平台负责人明确发布过的快照，不能由匿名端透传
+// collection 名或条件查询，也不能把未发布的赛事、名单和内部资料带到页面上。
+function publicPlayerAvatarUrl(player, profilesById) {
+  const item = player && typeof player === 'object' ? player : {}
+  const playerId = String(item.id || item._id || item.playerId || '').trim()
+  const profile = playerId && profilesById ? profilesById.get(playerId) || {} : {}
+  return String(item.portraitUrl || item.avatarUrl || profile.portraitUrl || profile.avatarUrl || profile.photoUrl || '').trim().slice(0, 500)
+}
+
+function publicPlayerView(player, role, profilesById, teamName) {
+  const item = player && typeof player === 'object' ? player : {}
+  const name = String(item.name || item.playerName || item.realName || '').trim()
+  if (!name) return null
+  const playerId = String(item.id || item._id || item.playerId || '').trim()
+  const playerNumber = String(item.jerseyNumber || item.number || item.shirtNumber || '').trim()
+  const lookupKey = '__public_card__|' + String(teamName || '').trim() + '|' + playerNumber + '|' + name
+  const profile = profilesById ? ((playerId && profilesById.get(playerId)) || profilesById.get(lookupKey) || {}) : {}
+  const appearances = Number(item.appearances || item.matchAppearances || profile.appearances || profile.matchAppearances || 0)
+  const metric = function (value) { const number = Number(value); return Number.isFinite(number) ? Math.max(0, Math.min(9999, Math.floor(number))) : 0 }
+  const birthDate = String(item.birthDate || item.birthday || profile.birthDate || profile.birthday || '').trim().slice(0, 10)
+  const birth = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? new Date(birthDate + 'T00:00:00+08:00') : null
+  const now = new Date()
+  const age = birth && !Number.isNaN(birth.getTime()) ? Math.max(0, now.getFullYear() - birth.getFullYear() - ((now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) ? 1 : 0)) : null
+  return {
+    name: name.slice(0, 40),
+    number: playerNumber.slice(0, 4),
+    position: String(item.positionName || item.position || '').trim().slice(0, 20),
+    role: role === 'substitute' || String(item.role || '').toLowerCase() === 'substitute' ? 'substitute' : 'starter',
+    captain: item.captain === true || item.isCaptain === true,
+    avatarUrl: publicPlayerAvatarUrl(item, profilesById),
+    appearances: metric(appearances),
+    playerId: String(item.playerId || profile.playerId || playerId || '').slice(0, 80),
+    jerseyName: String(item.jerseyName || profile.jerseyName || '').slice(0, 40),
+    nationality: String(item.nationality || profile.nationality || '中国').slice(0, 30),
+    birthDate,
+    age,
+    height: metric(item.height || profile.height),
+    weight: metric(item.weight || profile.weight),
+    nativePlace: String(item.nativePlace || item.hometown || profile.nativePlace || profile.hometown || '').slice(0, 80),
+    goals: metric(item.goals || profile.goals),
+    assists: metric(item.assists || profile.assists),
+    points: metric(item.points || profile.points)
+  }
+}
+
+function publicLineupView(source, teamName, profilesById) {
+  const item = source && typeof source === 'object' ? source : {}
+  const rawPlayers = Array.isArray(item.players) ? item.players : []
+  const rawStarters = Array.isArray(item.starters) ? item.starters : rawPlayers.filter(player => String(player && player.role || '').toLowerCase() !== 'substitute')
+  const rawSubstitutes = Array.isArray(item.substitutes) ? item.substitutes : rawPlayers.filter(player => String(player && player.role || '').toLowerCase() === 'substitute')
+  const starters = rawStarters.map(player => publicPlayerView(player, 'starter', profilesById, teamName || item.teamName)).filter(Boolean)
+  const substitutes = rawSubstitutes.map(player => publicPlayerView(player, 'substitute', profilesById, teamName || item.teamName)).filter(Boolean)
+  const status = String(item.status || item.lineupStatus || '').trim().toLowerCase()
+  if (!starters.length && !substitutes.length) return null
+  if (['draft', 'returned', 'rejected', 'cancelled', 'canceled'].includes(status)) return null
+  return {
+    teamName: String(teamName || item.teamName || '').trim(),
+    formation: String(item.formation || '').trim().slice(0, 20),
+    status: status || 'published',
+    starters,
+    substitutes,
+    starterCount: starters.length,
+    substituteCount: substitutes.length
+  }
+}
+
+function publicLineupSource(match, side) {
+  const key = side === 'away' ? 'away' : 'home'
+  const candidates = [
+    match && match[key + 'Lineup'],
+    match && match.lineups && match.lineups[key],
+    match && match.refereeRosters && match.refereeRosters[key],
+    match && match[key + 'Roster']
+  ]
+  return candidates.find(item => item && typeof item === 'object') || null
+}
+
+function publicEventView(event, match) {
+  const item = event && typeof event === 'object' ? event : {}
+  const rawType = String(item.type || item.eventType || 'other').trim().toLowerCase()
+  const description = String(item.description || item.remark || '').trim()
+  const type = /乌龙|\bOG\b/i.test(description) || ['own_goal', 'own-goal', 'og'].includes(rawType) ? 'own_goal' : /点球未进|\bPENALTY_MISSED\b/i.test(description) || ['penalty_missed', 'missed_penalty', 'penalty_miss'].includes(rawType) ? 'penalty_missed' : /点球|\bP\b/i.test(description) || ['penalty', 'penalty_goal', 'penalty_kick', 'penalty_scored'].includes(rawType) ? 'penalty' : rawType
+  const awayId = String(match && match.awayTeamId || '')
+  const side = String(item.teamSide || item.side || '').toLowerCase() === 'away' || (item.teamId && String(item.teamId) === awayId) ? 'away' : 'home'
+  const minuteValue = Number(item.minute || item.minuteOfMatch || item.matchMinute || 0)
+  return {
+    type: type.slice(0, 30),
+    minute: Number.isFinite(minuteValue) ? Math.max(0, Math.min(130, Math.round(minuteValue))) : 0,
+    teamSide: side,
+    teamName: side === 'away' ? String(match && match.awayTeamName || '客队') : String(match && match.homeTeamName || '主队'),
+    playerName: String(item.playerName || item.player || item.scorerName || '').trim().slice(0, 40),
+    playerNumber: String(item.playerNumber || item.jerseyNumber || item.number || '').trim().slice(0, 4),
+    assistName: String(item.assistName || item.assistPlayerName || '').trim().slice(0, 40),
+    assistNumber: String(item.assistNumber || item.assistJerseyNumber || '').trim().slice(0, 4),
+    description: description.slice(0, 120)
+  }
+}
+
+async function getPublicTournamentCenter() {
+  const db = cloud.database()
+  const result = await db.collection('publication_snapshots')
+    .where({ sportCode: 'football', type: 'tournament_center', status: 'published' })
+    .limit(200)
+    .get()
+  const latest = new Map()
+  ;(result.data || []).forEach(function (snapshot) {
+    const tournamentId = String(snapshot.tournamentId || '')
+    if (!tournamentId || !snapshot.payload || !snapshot.payload.tournament) return
+    const previous = latest.get(tournamentId)
+    if (!previous || Number(snapshot.version || 0) > Number(previous.version || 0)) latest.set(tournamentId, snapshot)
+  })
+  const snapshots = Array.from(latest.values()).sort(function (left, right) {
+    const leftSort = Number(left.payload && left.payload.tournament && left.payload.tournament.featuredSort || 0)
+    const rightSort = Number(right.payload && right.payload.tournament && right.payload.tournament.featuredSort || 0)
+    return leftSort - rightSort || Number(right.version || 0) - Number(left.version || 0)
+  })
+  const publishedTournamentIds = new Set(snapshots.map(function (snapshot) { return String(snapshot.tournamentId || '') }).filter(Boolean))
+  const allMatchResult = await db.collection('matches').limit(5000).get()
+  const eligibleRows = (allMatchResult.data || []).filter(function (item) {
+    const status = String(item.status || '').toLowerCase()
+    return item.schedulePublished === true || item.published === true || ['ongoing', 'live', 'completed', 'finished', 'ended'].includes(status)
+  })
+  const visibleMatchTournamentIds = new Set(eligibleRows.map(function (item) { return String(item.tournamentId || '') }).filter(Boolean))
+  const syntheticTournamentIds = Array.from(visibleMatchTournamentIds).filter(function (id) { return !publishedTournamentIds.has(id) })
+  const syntheticTournaments = []
+  if (syntheticTournamentIds.length) {
+    const tournamentResult = await db.collection('tournaments').where({ _id: db.command.in(syntheticTournamentIds.slice(0, 1000)) }).limit(1000).get()
+    ;(tournamentResult.data || []).forEach(function (item) {
+      const status = String(item.status || '').toLowerCase()
+      if (['draft', 'cancelled'].includes(status)) return
+      syntheticTournaments.push({
+        id: String(item._id || ''), name: String(item.name || item.tournamentName || '未命名赛事'), status: String(item.status || 'ongoing'),
+        startDate: String(item.startDate || item.beginDate || ''), endDate: String(item.endDate || item.finishDate || ''), city: String(item.city || item.cityName || item.location || ''), venue: String(item.venue || item.field || item.address || ''),
+        category: String(item.category || item.type || ''), formatType: String(item.formatType || item.tournamentType || ''), logo: String(item.logoTransparentUrl || item.logoUrl || item.logo || ''), cover: String(item.coverImage || item.cover || item.bannerImage || item.poster || ''), featuredSort: 0, teamCount: 0, matchCount: 0
+      })
+    })
+  }
+  syntheticTournaments.forEach(function (item) { publishedTournamentIds.add(item.id) })
+  const tournamentNames = new Map(snapshots.map(function (snapshot) { return [String(snapshot.tournamentId || ''), String(snapshot.payload && snapshot.payload.tournament && snapshot.payload.tournament.name || '公开赛事')] }))
+  syntheticTournaments.forEach(function (item) { tournamentNames.set(item.id, item.name) })
+  const rawMatches = publishedTournamentIds.size ? eligibleRows.filter(function (item) {
+    const tournamentId = String(item.tournamentId || '')
+    const status = String(item.status || '').toLowerCase()
+    return publishedTournamentIds.has(tournamentId) && (item.schedulePublished === true || item.published === true || ['ongoing', 'live', 'completed', 'finished', 'ended'].includes(status))
+  }) : []
+  const publicEventRows = []
+  const publicLineupRows = []
+  const publicSupportRows = []
+  const rawMatchIds = rawMatches.map(item => String(item._id || '')).filter(Boolean)
+  for (let index = 0; index < rawMatchIds.length; index += 50) {
+    const chunk = rawMatchIds.slice(index, index + 50)
+    try {
+      const eventResult = await db.collection('match_events').where({ matchId: db.command.in(chunk) }).limit(500).get()
+      publicEventRows.push(...(eventResult.data || []))
+    } catch (error) {
+      console.warn('[webApi] public match event lookup skipped:', error.message || error)
+    }
+    try {
+      const lineupResult = await db.collection('match_lineup_snapshots').where({ matchId: db.command.in(chunk) }).limit(500).get()
+      publicLineupRows.push(...(lineupResult.data || []))
+    } catch (error) {
+      console.warn('[webApi] public lineup lookup skipped:', error.message || error)
+    }
+    try {
+      const supportResult = await db.collection('fan_supports').where({ matchId: db.command.in(chunk) }).limit(5000).get()
+      publicSupportRows.push(...(supportResult.data || []))
+    } catch (error) {
+      console.warn('[webApi] public support lookup skipped:', error.message || error)
+    }
+  }
+  const eventRowsByMatch = new Map()
+  publicEventRows.forEach(function (row) {
+    const matchId = String(row.matchId || '')
+    if (!matchId) return
+    if (!eventRowsByMatch.has(matchId)) eventRowsByMatch.set(matchId, [])
+    eventRowsByMatch.get(matchId).push(row)
+  })
+  const lineupRowsByMatch = new Map()
+  publicLineupRows.forEach(function (row) {
+    const matchId = String(row.matchId || '')
+    if (!matchId) return
+    if (!lineupRowsByMatch.has(matchId)) lineupRowsByMatch.set(matchId, [])
+    lineupRowsByMatch.get(matchId).push(row)
+  })
+  const publicSupportByMatch = new Map()
+  publicSupportRows.forEach(function (row) {
+    const matchId = String(row.matchId || '')
+    if (!matchId) return
+    const current = publicSupportByMatch.get(matchId) || { home: 0, away: 0, total: 0 }
+    if (row.teamSide === 'away') current.away += 1
+    else if (row.teamSide === 'home') current.home += 1
+    current.total = current.home + current.away
+    publicSupportByMatch.set(matchId, current)
+  })
+  const publicPlayerIds = new Set()
+  const collectPublicPlayerIds = function (lineup) {
+    const source = lineup && typeof lineup === 'object' ? lineup : {}
+    const players = (Array.isArray(source.starters) ? source.starters : []).concat(Array.isArray(source.players) ? source.players : [], Array.isArray(source.substitutes) ? source.substitutes : [])
+    players.forEach(function (player) { const id = String(player && (player.id || player._id || player.playerId) || '').trim(); if (id) publicPlayerIds.add(id) })
+  }
+  rawMatches.forEach(function (match) { collectPublicPlayerIds(publicLineupSource(match, 'home')); collectPublicPlayerIds(publicLineupSource(match, 'away')) })
+  publicLineupRows.forEach(collectPublicPlayerIds)
+  const publicPlayerProfiles = new Map()
+  const publicPlayerIdList = Array.from(publicPlayerIds).slice(0, 1000)
+  for (let index = 0; index < publicPlayerIdList.length; index += 50) {
+    try {
+      const playerResult = await db.collection('players').where({ _id: db.command.in(publicPlayerIdList.slice(index, index + 50)) }).limit(50).get()
+      ;(playerResult.data || []).forEach(function (player) { publicPlayerProfiles.set(String(player._id || ''), player) })
+    } catch (error) {
+      console.warn('[webApi] public player avatar lookup skipped:', error.message || error)
+    }
+  }
+  const publicTeamIdList = Array.from(new Set(rawMatches.reduce(function (list, match) { ;[match.homeTeamId, match.awayTeamId].forEach(function (id) { if (id) list.push(String(id)) }); return list }, []))).slice(0, 1000)
+  for (let index = 0; index < publicTeamIdList.length; index += 50) {
+    try {
+      const playerResult = await db.collection('players').where({ teamId: db.command.in(publicTeamIdList.slice(index, index + 50)) }).limit(1000).get()
+      ;(playerResult.data || []).forEach(function (player) {
+        publicPlayerProfiles.set(String(player._id || ''), player)
+        const key = '__public_card__|' + String(player.teamName || '').trim() + '|' + String(player.jerseyNumber || player.number || '').trim() + '|' + String(player.name || '').trim()
+        if (key !== '__public_card__|||') publicPlayerProfiles.set(key, player)
+      })
+    } catch (error) {
+      console.warn('[webApi] public player card lookup skipped:', error.message || error)
+    }
+  }
+  const publicDetails = new Map()
+  rawMatches.forEach(function (item) {
+    const matchId = String(item._id || '')
+    const matchView = {
+      homeTeamId: String(item.homeTeamId || item.homeTeam && (item.homeTeam._id || item.homeTeam.id) || ''),
+      awayTeamId: String(item.awayTeamId || item.awayTeam && (item.awayTeam._id || item.awayTeam.id) || ''),
+      homeTeamName: String(item.homeTeamName || item.homeTeam && (item.homeTeam.name || item.homeTeam.teamName) || '主队'),
+      awayTeamName: String(item.awayTeamName || item.awayTeam && (item.awayTeam.name || item.awayTeam.teamName) || '客队')
+    }
+    const eventMap = new Map()
+    const addEvent = function (event) {
+      const normalized = publicEventView(event, matchView)
+      const key = String(event && (event.eventId || event._id) || '') || [normalized.type, normalized.minute, normalized.teamSide, normalized.playerName, normalized.description].join('|')
+      if (!eventMap.has(key)) eventMap.set(key, normalized)
+    }
+    if (['ongoing', 'live', 'completed', 'finished', 'ended'].includes(String(item.status || '').toLowerCase())) {
+      ;(Array.isArray(item.events) ? item.events : []).forEach(addEvent)
+      ;(eventRowsByMatch.get(matchId) || []).forEach(addEvent)
+    }
+    const rowBySide = { home: null, away: null }
+    ;(lineupRowsByMatch.get(matchId) || []).slice().sort(function (left, right) {
+      return dateValue(right.updateTime || right.createTime) - dateValue(left.updateTime || left.createTime)
+    }).forEach(function (row) {
+      const teamId = String(row.teamId || row.sourceTeamId || '')
+      const side = teamId && teamId === matchView.awayTeamId ? 'away' : teamId && teamId === matchView.homeTeamId ? 'home' : ''
+      if (side && !rowBySide[side]) rowBySide[side] = row
+    })
+    const homeLineup = publicLineupView(publicLineupSource(item, 'home'), matchView.homeTeamName, publicPlayerProfiles) || publicLineupView(rowBySide.home, matchView.homeTeamName, publicPlayerProfiles)
+    const awayLineup = publicLineupView(publicLineupSource(item, 'away'), matchView.awayTeamName, publicPlayerProfiles) || publicLineupView(rowBySide.away, matchView.awayTeamName, publicPlayerProfiles)
+    publicDetails.set(matchId, { events: Array.from(eventMap.values()).sort((left, right) => left.minute - right.minute), lineups: { home: homeLineup, away: awayLineup } })
+  })
+  const liveMatches = []
+  if (publishedTournamentIds.size) {
+    const teamIds = Array.from(new Set(rawMatches.reduce(function (list, item) {
+      ;[item.homeTeamId, item.awayTeamId].forEach(function (id) { if (id) list.push(String(id)) })
+      return list
+    }, []))).slice(0, 1000)
+    const teamMap = new Map()
+    if (teamIds.length) {
+      try {
+        const teamResult = await db.collection('teams').where({ _id: db.command.in(teamIds) }).limit(1000).get()
+        ;(teamResult.data || []).forEach(function (team) { teamMap.set(String(team._id), team) })
+      } catch (error) {
+        console.warn('[webApi] public team logo lookup skipped:', error.message || error)
+      }
+    }
+    rawMatches.forEach(function (item) {
+      const status = String(item.status || '').toLowerCase()
+      const home = teamMap.get(String(item.homeTeamId || '')) || {}
+      const away = teamMap.get(String(item.awayTeamId || '')) || {}
+      liveMatches.push({
+        id: String(item._id || ''), tournamentId: String(item.tournamentId || ''), tournamentName: tournamentNames.get(String(item.tournamentId || '')) || '公开赛事', divisionName: String(item.divisionName || item.division || ''),
+        round: String(item.roundName || item.round || item.stageName || item.phase || ''), status: status === 'ongoing' || status === 'live' ? 'ongoing' : (['completed', 'finished', 'ended'].includes(status) ? 'finished' : 'upcoming'),
+        matchDate: String(item.matchDate || item.date || ''), matchTime: String(item.startTime || item.time || item.matchTime || ''),
+        timestamp: Number(item.timestamp || Date.parse([item.matchDate || item.date, item.startTime || item.time || item.matchTime].filter(Boolean).join(' ')) || 0),
+        venue: String(item.venue || item.field || item.location || ''), homeName: String(item.homeTeamName || home.teamName || home.name || '主队待定'),
+        awayName: String(item.awayTeamName || away.teamName || away.name || '客队待定'), homeLogo: String(item.homeTeamLogo || item.homeLogo || home.logoTransparentUrl || home.logoUrl || home.logo || ''),
+        awayLogo: String(item.awayTeamLogo || item.awayLogo || away.logoTransparentUrl || away.logoUrl || away.logo || ''),
+        homeScore: Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null, awayScore: Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null
+      })
+    })
+  }
+  const snapshotMatches = snapshots.flatMap(function (snapshot) {
+    return Array.isArray(snapshot.payload && snapshot.payload.matches) ? snapshot.payload.matches : []
+  })
+  const mergedMatches = new Map()
+  snapshotMatches.forEach(function (item) { if (item && item.id) mergedMatches.set(String(item.id), item) })
+  liveMatches.forEach(function (item) { if (item.id) mergedMatches.set(String(item.id), item) })
+  mergedMatches.forEach(function (item, matchId) {
+    if (publicDetails.has(String(matchId))) return
+    const matchView = {
+      homeTeamId: String(item.homeTeamId || ''),
+      awayTeamId: String(item.awayTeamId || ''),
+      homeTeamName: String(item.homeName || item.homeTeamName || '主队'),
+      awayTeamName: String(item.awayName || item.awayTeamName || '客队')
+    }
+    const eventMap = new Map()
+    ;(Array.isArray(item.events) ? item.events : []).forEach(function (event) {
+      const normalized = publicEventView(event, matchView)
+      const key = String(event && (event.eventId || event._id) || '') || [normalized.type, normalized.minute, normalized.teamSide, normalized.playerName, normalized.description].join('|')
+      if (!eventMap.has(key)) eventMap.set(key, normalized)
+    })
+    publicDetails.set(String(matchId), {
+      events: Array.from(eventMap.values()).sort((left, right) => left.minute - right.minute),
+      lineups: {
+        home: publicLineupView(publicLineupSource(item, 'home'), matchView.homeTeamName, publicPlayerProfiles),
+        away: publicLineupView(publicLineupSource(item, 'away'), matchView.awayTeamName, publicPlayerProfiles)
+      }
+    })
+  })
+  const tournaments = snapshots.map(function (snapshot) {
+    const item = snapshot.payload.tournament || {}
+    const tournamentId = String(item.id || snapshot.tournamentId)
+    const matchCount = Array.from(mergedMatches.values()).filter(function (match) { return String(match.tournamentId || '') === tournamentId }).length
+    return {
+      id: tournamentId, name: String(item.name || '未命名赛事'), status: String(item.status || 'published'),
+      startDate: String(item.startDate || ''), endDate: String(item.endDate || ''), city: String(item.city || ''), venue: String(item.venue || ''),
+      category: String(item.category || ''), formatType: String(item.formatType || ''), logo: String(item.logo || ''), cover: String(item.cover || ''),
+      featuredSort: Number(item.featuredSort || 0), teamCount: Number(item.teamCount || 0), matchCount
+    }
+  }).concat(syntheticTournaments.map(function (item) {
+    const matchCount = Array.from(mergedMatches.values()).filter(function (match) { return String(match.tournamentId || '') === item.id }).length
+    return Object.assign({}, item, { matchCount })
+  })).sort(function (left, right) {
+    return Number(right.matchCount || 0) - Number(left.matchCount || 0) || Number(left.featuredSort || 0) - Number(right.featuredSort || 0)
+  })
+  const matches = Array.from(mergedMatches.values()).map(function (item) {
+    const details = publicDetails.get(String(item.id || '')) || { events: [], lineups: { home: null, away: null } }
+    return {
+      id: String(item.id || ''), tournamentId: String(item.tournamentId || ''), tournamentName: String(item.tournamentName || ''),
+      divisionName: String(item.divisionName || ''), round: String(item.round || ''),
+      status: ['ongoing', 'finished'].includes(String(item.status || '')) ? String(item.status) : 'upcoming',
+      matchDate: String(item.matchDate || ''), matchTime: String(item.matchTime || ''), timestamp: Number(item.timestamp || 0), venue: String(item.venue || ''),
+      homeName: String(item.homeName || '主队待定'), awayName: String(item.awayName || '客队待定'), homeLogo: String(item.homeLogo || ''), awayLogo: String(item.awayLogo || ''),
+      homeScore: Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null, awayScore: Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null,
+      support: publicSupportByMatch.get(String(item.id || '')) || { home: 0, away: 0, total: 0 },
+      events: details.events,
+      lineups: details.lineups
+    }
+  }).filter(function (item) { return item.id && item.tournamentId })
+    .sort(function (left, right) { return Number(left.timestamp || 0) - Number(right.timestamp || 0) })
+  return { success: true, data: { tournaments, matches } }
+}
 exports.main = async (event, context) => {
   // CORS：设置响应头（HTTP 触发器模式需要）
   const response = (statusCode, body) => ({
@@ -4942,6 +5290,9 @@ exports.main = async (event, context) => {
           : { success: false, loggedIn: false, error: auth.error, code: auth.code }
         break
       }
+      case 'publicTournamentCenter':
+        result = await getPublicTournamentCenter()
+        break
       case 'serviceRefereeOAuthUrl':
         result = await createRefereeOAuthUrl(params && params.returnUrl); break
       case 'serviceRefereeOAuth':
