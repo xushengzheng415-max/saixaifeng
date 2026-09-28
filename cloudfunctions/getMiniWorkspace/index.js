@@ -639,7 +639,24 @@ async function loadMatches(workspace, tournaments, teams) {
     conditions.push({ awayTeamId: _.in(teamIds) })
   }
   if (!conditions.length) return []
-  return safeGet('matches', conditions.length === 1 ? conditions[0] : _.or(conditions), 200)
+  const matches = await safeGet('matches', conditions.length === 1 ? conditions[0] : _.or(conditions), 200)
+  const matchIds = unique(matches.map(item => String(item._id || '')).filter(Boolean))
+  const legacyEvents = matchIds.length ? await safeGet('match_events', { matchId: _.in(matchIds) }, 1000) : []
+  const legacyByMatch = {}
+  legacyEvents.forEach(event => { const id = String(event.matchId || ''); if (id) (legacyByMatch[id] ||= []).push(event) })
+  return matches.map(match => {
+    const seen = new Set()
+    const events = [...(Array.isArray(match.events) ? match.events : []), ...(legacyByMatch[String(match._id || '')] || [])].map(event => {
+      if (!event || typeof event !== 'object') return null
+      const rawType = String(event.type || event.eventType || '').toLowerCase()
+      const type = ({ score: 'goal', penalty_goal: 'penalty_scored', penalty_miss: 'penalty_missed', missed_penalty: 'penalty_missed', yellow: 'yellow_card', yellowcard: 'yellow_card', red: 'red_card', redcard: 'red_card', second_yellow: 'second_yellow_red', yellow_red: 'second_yellow_red' })[rawType] || rawType
+      const identity = String(event.eventId || event._id || event.id || '') || [type, Number(event.minute || 0), event.playerId || event.player || '', event.playerName || '', event.teamSide || event.side || '', event.penaltyOutcome || ''].join('|')
+      if (seen.has(identity)) return null
+      seen.add(identity)
+      return { ...event, type, teamSide: event.teamSide === 'away' || event.side === 'away' ? 'away' : 'home', playerName: String(event.playerName || event.player || ''), assistName: String(event.assistName || event.assist || '') }
+    }).filter(Boolean).sort((a, b) => Number(a.minute || 0) - Number(b.minute || 0))
+    return { ...match, events }
+  })
 }
 
 function formatTournament(item) {
@@ -1405,10 +1422,11 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
     const appeared = new Set(matchPlayerIds(match))
     ;(Array.isArray(match.events) ? match.events : []).forEach(function(eventItem) {
       const eventPlayerId = String(eventItem.playerId || eventItem.player || '')
-      if (eventPlayerId !== playerId) return
+      const eventPlayerName = String(eventItem.playerName || eventItem.player_name || '').trim()
+      if (eventPlayerId !== playerId && eventPlayerName !== String(player.name || '').trim()) return
       appeared.add(playerId)
       const type = String(eventItem.type || eventItem.eventType || '').toLowerCase()
-      if (['goal', 'score'].indexOf(type) >= 0) stats.goals += 1
+      if (['goal', 'score', 'penalty', 'penalty_scored'].indexOf(type) >= 0) stats.goals += 1
       if (['yellow', 'yellow_card', 'yellowcard'].indexOf(type) >= 0) stats.yellowCards += 1
       if (['red', 'red_card', 'redcard'].indexOf(type) >= 0) stats.redCards += 1
     })
@@ -1922,20 +1940,29 @@ async function teamDataPackageDataForWorkspace(event, identity) {
   if (!loaded.package || loaded.package.status !== 'enabled') throw new Error('该赛事组别的球队数据包尚未开通')
   const teamId = loaded.team.id, tournamentId = loaded.tournament.id, divisionId = loaded.division.id
   const allMatches = await safeGet('matches', { tournamentId }, 500)
-  const matches = allMatches.filter(item => [String(item.homeTeamId || ''), String(item.awayTeamId || '')].indexOf(teamId) >= 0 && snapshotMatchesDivision(item, divisionId, loaded.allowLegacyMatchDivision))
+  let matches = allMatches.filter(item => [String(item.homeTeamId || ''), String(item.awayTeamId || '')].indexOf(teamId) >= 0 && snapshotMatchesDivision(item, divisionId, loaded.allowLegacyMatchDivision))
+  const legacyEvents = matches.length ? await safeGet('match_events', { matchId: _.in(matches.map(item => String(item._id || '')).filter(Boolean)) }, 1000) : []
+  const legacyByMatch = {}
+  legacyEvents.forEach(event => { const id = String(event.matchId || ''); if (id) (legacyByMatch[id] ||= []).push(event) })
+  matches = matches.map(match => ({ ...match, events: [...(Array.isArray(match.events) ? match.events : []), ...(legacyByMatch[String(match._id || '')] || [])] }))
   const players = await safeGet('players', { teamId }, 500)
   const stats = {}
-  players.forEach(item => { stats[String(item._id)] = { id: String(item._id), name: String(item.name || ''), photoUrl: String(item.photoUrl || item.photo || ''), goals: 0, assists: 0, appearances: 0 } })
+  const playerIdByName = {}
+  players.forEach(item => {
+    const id = String(item._id)
+    stats[id] = { id, name: String(item.name || ''), photoUrl: String(item.photoUrl || item.photo || ''), goals: 0, assists: 0, appearances: 0 }
+    if (item.name) playerIdByName[String(item.name).trim()] = id
+  })
   matches.forEach(match => {
     const appeared = new Set()
     ;(Array.isArray(match.events) ? match.events : []).forEach(eventItem => {
-      const eventTeam = String(eventItem.teamId || eventItem.team || '')
-      const playerId = String(eventItem.playerId || '')
-      const assistId = String(eventItem.assistPlayerId || eventItem.assistId || '')
+      const eventTeam = String(eventItem.teamId || eventItem.team || (eventItem.teamSide === 'away' ? match.awayTeamId : match.homeTeamId) || '')
+      const playerId = String(eventItem.playerId || playerIdByName[String(eventItem.playerName || '').trim()] || '')
+      const assistId = String(eventItem.assistPlayerId || eventItem.assistId || playerIdByName[String(eventItem.assistName || eventItem.assist || '').trim()] || '')
       if (eventTeam && eventTeam !== teamId) return
       if (stats[playerId]) {
         appeared.add(playerId)
-        if (String(eventItem.type || '') === 'goal') stats[playerId].goals += 1
+        if (['goal', 'score', 'penalty', 'penalty_scored'].indexOf(String(eventItem.type || '').toLowerCase()) >= 0) stats[playerId].goals += 1
       }
       if (stats[assistId]) { appeared.add(assistId); if (String(eventItem.type || '') === 'assist' || String(eventItem.type || '') === 'goal') stats[assistId].assists += 1 }
     })

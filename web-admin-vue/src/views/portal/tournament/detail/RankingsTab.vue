@@ -403,22 +403,32 @@ function recalculatePlayerStats() {
   const stats = new Map()
   ;(allMatches.value || []).forEach(match => {
     if (match.status !== 'completed') return
+    if (match.reviewStatus && match.official !== true) return
     const seenInMatch = new Set()
     ;(match.events || []).forEach(event => {
-      if (!isScorerGoalEvent(event) || !event.playerName) return
       const teamName = event.teamSide === 'away' ? match.awayTeamName : match.homeTeamName
       const teamId = event.teamId || (event.teamSide === 'away' ? match.awayTeamId : match.homeTeamId) || ''
-      const playerId = event.playerId || `${teamId}:${event.playerNumber || ''}:${event.playerName}`
-      const key = String(playerId)
-      if (!stats.has(key)) stats.set(key, { id:key, name:String(event.playerName), logo:'', team:teamName || '球队待定', played:0, goals:0, penalties:0 })
-      const row = stats.get(key)
-      row.goals += 1
-      if (isPenaltyScored(event)) row.penalties += 1
-      seenInMatch.add(key)
+      if (isScorerGoalEvent(event) && event.playerName) {
+        const playerId = event.playerId || `${teamId}:${event.playerNumber || ''}:${event.playerName}`
+        const key = String(playerId)
+        if (!stats.has(key)) stats.set(key, { id:key, name:String(event.playerName), logo:'', team:teamName || '球队待定', played:0, goals:0, assists:0, penalties:0 })
+        const row = stats.get(key)
+        row.goals += 1
+        if (isPenaltyScored(event)) row.penalties += 1
+        seenInMatch.add(key)
+      }
+      const assistName = String(event.assistName || event.assist || '').trim()
+      if (assistName) {
+        const assistId = event.assistPlayerId || `${teamId}:${event.assistNumber || ''}:${assistName}`
+        const assistKey = String(assistId)
+        if (!stats.has(assistKey)) stats.set(assistKey, { id:assistKey, name:assistName, logo:'', team:teamName || '球队待定', played:0, goals:0, assists:0, penalties:0 })
+        stats.get(assistKey).assists += 1
+        seenInMatch.add(assistKey)
+      }
     })
     seenInMatch.forEach(key => { stats.get(key).played += 1 })
   })
-  playerList.value = [...stats.values()].sort((a, b) => b.goals - a.goals || a.penalties - b.penalties || b.played - a.played || String(a.name).localeCompare(String(b.name), 'zh-CN'))
+  playerList.value = [...stats.values()].map(row => ({ ...row, goals: activeType.value === 'assist' ? row.assists : row.goals })).sort((a, b) => b.goals - a.goals || b.penalties - a.penalties || b.played - a.played || String(a.name).localeCompare(String(b.name), 'zh-CN'))
 }
 
 // ============================================================
