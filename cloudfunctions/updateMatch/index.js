@@ -47,6 +47,18 @@ function normalizeMatchEvents(events, match) {
     }
   }).filter(Boolean)
 }
+
+function eventScoreFromEvents(events) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(event => {
+    const type = String(event && (event.type || event.eventType) || '').trim().toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    let side = event && event.teamSide === 'away' ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
+}
 let scheduleAdjustmentLogsReady = false
 
 async function ensureScheduleAdjustmentLogs() {
@@ -348,7 +360,14 @@ exports.main = async (event, context) => {
     delete safeData.updateTime
     delete safeData.executionSnapshot
     delete safeData.executionSnapshotAt
-    if (Array.isArray(safeData.events)) safeData.events = normalizeMatchEvents(safeData.events, match)
+    if (Array.isArray(safeData.events)) {
+      safeData.events = normalizeMatchEvents(safeData.events, match)
+      const eventScore = eventScoreFromEvents(safeData.events)
+      safeData.homeScore = eventScore.home
+      safeData.awayScore = eventScore.away
+      safeData.scoreHome = eventScore.home
+      safeData.scoreAway = eventScore.away
+    }
     if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
@@ -429,6 +448,7 @@ exports.main = async (event, context) => {
     return {
       success: true,
       message: '更新成功',
+      ...(Array.isArray(safeData.events) ? { data: { homeScore: safeData.homeScore, awayScore: safeData.awayScore } } : {}),
       ...(notificationRelay ? { __notificationRelay: notificationRelay } : {})
     }
   } catch (err) {

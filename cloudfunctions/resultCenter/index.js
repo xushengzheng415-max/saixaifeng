@@ -242,6 +242,18 @@ function scoreReady(match) {
     ['finished', 'completed', 'archived', 'pending_review', 'pending_result', 'ended'].includes(status))
 }
 
+function scoreFromEvents(events, match) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(function (event) {
+    const type = text(event && (event.type || event.eventType)).toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    let side = text(event && (event.teamSide || event.side)).toLowerCase() === 'away' || text(event && event.teamId) === teamIdOf(match || {}, 'away') || text(event && event.teamName) === teamNameOf(match || {}, 'away') ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
+}
+
 function resultStatus(match) {
   if (!scoreReady(match)) return 'not_submitted'
   const statuses = [
@@ -337,13 +349,15 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
   const rawAwayName = text(match.awayTeamName || (match.awayTeam && (match.awayTeam.name || match.awayTeam.teamName)))
   const homeProfile = teamDirectory[homeTeamId] || teamDirectory[`name:${rawHomeName}`] || {}
   const awayProfile = teamDirectory[awayTeamId] || teamDirectory[`name:${rawAwayName}`] || {}
-  const homeScore = scoreReady(match) ? number(match.homeScore) : null
-  const awayScore = scoreReady(match) ? number(match.awayScore) : null
-  const winnerTeamId = winnerTeamIdOf(match)
+  const eventScore = Array.isArray(match.events) && !match.resultCorrection ? scoreFromEvents(match.events, match) : null
+  const scoreMatch = eventScore ? { ...match, homeScore: eventScore.home, awayScore: eventScore.away } : match
+  const homeScore = scoreReady(scoreMatch) ? number(scoreMatch.homeScore) : null
+  const awayScore = scoreReady(scoreMatch) ? number(scoreMatch.awayScore) : null
+  const winnerTeamId = winnerTeamIdOf(scoreMatch)
   const phaseLabel = text(match.phaseLabel || match.roundName || match.stageName) || '比赛阶段'
   const reviewStage = reviewStageOf(match)
   const groupName = reviewStage === 'group' ? groupNameOf(match) : phaseLabel
-  const warnings = footballWarnings(match, status, division)
+  const warnings = footballWarnings(scoreMatch, status, division)
   return {
     id: text(match._id || match.id),
     matchNo: text(match.matchNo || match.matchSequence || match.sequence || match.matchIndex),
@@ -366,7 +380,7 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
     awayTeamLogo: teamLogoOf(match, 'away', awayProfile),
     homeScore,
     awayScore,
-    scoreReady: scoreReady(match),
+    scoreReady: scoreReady(scoreMatch),
     resultStatus: warnings.length ? 'warning' : status,
     warnings,
     source: match.resultCorrection ? '归档后异常纠错' : (match.refereeRecord || match.refereeSubmittedAt ? '裁判/计分台回传' : match.resultVersionId ? '赛果版本' : scoreReady(match) ? '后台记录' : '尚未录入'),
@@ -686,8 +700,9 @@ async function buildDashboard(event, actor) {
     return map
   }, {})
   const normalizeWithEvents = item => {
-    const normalized = normalizedMatch(item, divisionsById, teamDirectory)
-    return { ...normalized, events: eventsByMatchId[normalized.id] || (Array.isArray(item.events) ? item.events : []) }
+    const sourceEvents = (eventsByMatchId[String(item._id || item.id)] || []).length ? eventsByMatchId[String(item._id || item.id)] : (Array.isArray(item.events) ? item.events : [])
+    const normalized = normalizedMatch(sourceEvents.length ? { ...item, events: sourceEvents } : item, divisionsById, teamDirectory)
+    return { ...normalized, events: sourceEvents }
   }
   let matches = matchRows.map(normalizeWithEvents).sort(compareReviewMatches)
   let standings = buildStandings(matches, divisionsById)

@@ -4966,6 +4966,20 @@ function publicEventView(event, match) {
   }
 }
 
+function publicScoreFromEvents(events, match) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(function (event) {
+    const type = String(event && (event.type || event.eventType) || '').trim().toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    const awayId = String(match && (match.awayTeamId || match.awayTeam && (match.awayTeam._id || match.awayTeam.id)) || '')
+    const awayName = String(match && (match.awayTeamName || match.awayTeam && (match.awayTeam.name || match.awayTeam.teamName)) || '')
+    let side = String(event && (event.teamSide || event.side) || '').trim().toLowerCase() === 'away' || String(event && event.teamId || '') === awayId || String(event && event.teamName || '') === awayName ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
+}
+
 async function getPublicTournamentCenter() {
   const db = cloud.database()
   const result = await db.collection('publication_snapshots')
@@ -5143,6 +5157,8 @@ async function getPublicTournamentCenter() {
       const status = String(item.status || '').toLowerCase()
       const home = teamMap.get(String(item.homeTeamId || '')) || {}
       const away = teamMap.get(String(item.awayTeamId || '')) || {}
+      const sourceEvents = (Array.isArray(item.events) ? item.events : []).concat(eventRowsByMatch.get(String(item._id || '')) || [])
+      const eventScore = sourceEvents.length && !item.resultCorrection ? publicScoreFromEvents(sourceEvents, item) : null
       liveMatches.push({
         id: String(item._id || ''), tournamentId: String(item.tournamentId || ''), tournamentName: tournamentNames.get(String(item.tournamentId || '')) || '公开赛事', divisionName: String(item.divisionName || item.division || ''),
         round: String(item.roundName || item.round || item.stageName || item.phase || ''), status: status === 'ongoing' || status === 'live' ? 'ongoing' : (['completed', 'finished', 'ended'].includes(status) ? 'finished' : 'upcoming'),
@@ -5151,7 +5167,7 @@ async function getPublicTournamentCenter() {
         venue: String(item.venue || item.field || item.location || ''), homeName: String(item.homeTeamName || home.teamName || home.name || '主队待定'),
         awayName: String(item.awayTeamName || away.teamName || away.name || '客队待定'), homeLogo: String(item.homeTeamLogo || item.homeLogo || home.logoTransparentUrl || home.logoUrl || home.logo || ''),
         awayLogo: String(item.awayTeamLogo || item.awayLogo || away.logoTransparentUrl || away.logoUrl || away.logo || ''),
-        homeScore: Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null, awayScore: Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null
+        homeScore: eventScore ? eventScore.home : (Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null), awayScore: eventScore ? eventScore.away : (Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null), resultCorrection: item.resultCorrection || null
       })
     })
   }
@@ -5201,13 +5217,14 @@ async function getPublicTournamentCenter() {
   })
   const matches = Array.from(mergedMatches.values()).map(function (item) {
     const details = publicDetails.get(String(item.id || '')) || { events: [], lineups: { home: null, away: null } }
+    const eventScore = details.events.length && !item.resultCorrection ? publicScoreFromEvents(details.events) : null
     return {
       id: String(item.id || ''), tournamentId: String(item.tournamentId || ''), tournamentName: String(item.tournamentName || ''),
       divisionName: String(item.divisionName || ''), round: String(item.round || ''),
       status: ['ongoing', 'finished'].includes(String(item.status || '')) ? String(item.status) : 'upcoming',
       matchDate: String(item.matchDate || ''), matchTime: String(item.matchTime || ''), timestamp: Number(item.timestamp || 0), venue: String(item.venue || ''),
       homeName: String(item.homeName || '主队待定'), awayName: String(item.awayName || '客队待定'), homeLogo: String(item.homeLogo || ''), awayLogo: String(item.awayLogo || ''),
-      homeScore: Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null, awayScore: Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null,
+      homeScore: eventScore ? eventScore.home : (Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null), awayScore: eventScore ? eventScore.away : (Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null),
       support: publicSupportByMatch.get(String(item.id || '')) || { home: 0, away: 0, total: 0 },
       events: details.events,
       lineups: details.lineups

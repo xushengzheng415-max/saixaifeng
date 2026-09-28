@@ -31,7 +31,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Calendar, CircleCheckFilled, Document, EditPen, InfoFilled, LocationInformation, Medal, SwitchButton, Tickets, Trophy } from '@element-plus/icons-vue'
@@ -47,6 +47,8 @@ const isArchive=computed(()=>['MatchArchiveWorkspace','ResultArchiveWorkspace'].
 const isProfessionalReview=computed(()=>match.value.matchFormat==='11side'||match.value.divisionName==='U16组')
 const isFiveSide=computed(()=>/5side|5人制|五人制/i.test(String(match.value.matchFormat||match.value.formatType||match.value.divisionName||'')))
 const divisionName=computed(()=>match.value.divisionName||'U8组'),homeName=computed(()=>match.value.homeTeamName||team(match.value.homeTeamId)?.name||'主队待定'),awayName=computed(()=>match.value.awayTeamName||team(match.value.awayTeamId)?.name||'客队待定'),homeLogo=computed(()=>match.value.homeTeamLogo||team(match.value.homeTeamId)?.logoTransparentUrl||team(match.value.homeTeamId)?.logo||''),awayLogo=computed(()=>match.value.awayTeamLogo||team(match.value.awayTeamId)?.logoTransparentUrl||team(match.value.awayTeamId)?.logo||''),mainRefereeName=computed(()=>match.value.refereeCrew?.mainReferee?.name||match.value.refereeName||'未记录'),matchDateText=computed(()=>[match.value.matchDate,match.value.matchTime].filter(Boolean).join(' ')||'待定'),submittedAtText=computed(()=>formatDate(match.value.refereeSubmittedAt||match.value.refereeRecord?.submittedAt)||'时间未记录'),sortedEvents=computed(()=>[...(events.value.length?events.value:match.value.events||[])].sort((a,b)=>(a.minute||0)-(b.minute||0)).map(event=>({...event,teamName:event.teamName||((event.teamSide||event.side)==='away'?awayName.value:homeName.value)}))),returnableEvents=computed(()=>sortedEvents.value.filter(item=>item.type==='goal'))
+function eventScoreForReview(rows){const score={home:0,away:0};(Array.isArray(rows)?rows:[]).forEach(event=>{const type=String(event?.type||event?.eventType||'').trim().toLowerCase();if(!['goal','penalty','penalty_scored','penalty_goal','own_goal','own-goal','og'].includes(type))return;let side=String(event?.teamSide||event?.side||'').trim().toLowerCase()==='away'||String(event?.teamName||'').trim()===awayName.value?'away':'home';if(['own_goal','own-goal','og'].includes(type))side=side==='home'?'away':'home';score[side]=Math.min(99,score[side]+1)});return score}
+watch(events,(rows)=>{if(!Array.isArray(rows)||!rows.length||match.value.resultCorrection)return;const score=eventScoreForReview(rows);match.value={...match.value,homeScore:score.home,awayScore:score.away,scoreHome:score.home,scoreAway:score.away}},{immediate:true})
 const refereeRecordSubmitted=computed(()=>Boolean(match.value.refereeRecord||['submitted','under_review','archived','approved'].includes(String(match.value.refereeReviewStatus||'').toLowerCase())))
 const matchStatusLabel=computed(()=>isArchive.value?'已归档':refereeRecordSubmitted.value?'待主办方复核':'待裁判提交')
 const manualSupplement=computed(()=>Boolean(match.value.resultCorrection||match.value.organizerSupplementFiles?.length)||['postState','resultSource','resultEntryMode','scoreSource','source'].some(key=>/supplement|manual|organizer|后台|补录/i.test(String(match.value[key]||''))))

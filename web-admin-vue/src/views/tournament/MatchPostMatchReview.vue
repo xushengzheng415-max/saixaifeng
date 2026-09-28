@@ -41,7 +41,7 @@
           <strong>{{ homeName }}</strong>
         </div>
         <div class="score-center">
-          <div><b>{{ match.homeScore ?? '—' }}</b><em>:</em><b>{{ match.awayScore ?? '—' }}</b></div>
+          <div><b>{{ displayHomeScore }}</b><em>:</em><b>{{ displayAwayScore }}</b></div>
           <el-tag type="success" effect="plain">赛果已由裁判提交</el-tag>
           <small>提交时间：{{ submittedAtText }}</small>
         </div>
@@ -172,6 +172,22 @@ const requiredRecords = computed(() => {
 })
 const requiredRecordsReady = computed(() => requiredRecords.value.every(item => item.ready))
 const canSubmitReview = computed(() => Boolean(match.value.refereeRecord) && !saving.value && (!manualSupplement.value || (supplements.value.length >= 1 && supplements.value.length <= 2)))
+
+function calculateEventScore(rows) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(rows) ? rows : []).forEach(event => {
+    const type = String(event?.type || event?.eventType || '').trim().toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    let side = String(event?.teamSide || event?.side || '').trim().toLowerCase() === 'away' ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
+}
+const eventSource = computed(() => events.value.length ? events.value : (Array.isArray(match.value.events) ? match.value.events : null))
+const eventScore = computed(() => calculateEventScore(eventSource.value))
+const displayHomeScore = computed(() => Array.isArray(eventSource.value) && !match.value.resultCorrection ? eventScore.value.home : (match.value.homeScore ?? '—'))
+const displayAwayScore = computed(() => Array.isArray(eventSource.value) && !match.value.resultCorrection ? eventScore.value.away : (match.value.awayScore ?? '—'))
 
 function normalizeRecord(value) { return Array.isArray(value) ? value[0] || {} : value || {} }
 function teamById(id) { return teams.value.find(item => item._id === id || item.id === id) }
