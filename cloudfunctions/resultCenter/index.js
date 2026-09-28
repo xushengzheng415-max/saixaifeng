@@ -108,7 +108,7 @@ async function listMatchEvents(matchIds) {
 }
 
 function teamProfileName(record) {
-  return text(record && (record.teamName || record.name))
+  return text(record && (record.name || record.teamName))
 }
 
 function teamProfileLogo(record) {
@@ -153,8 +153,8 @@ async function buildTeamDirectory(matchRows, registrationRows) {
     if (!id) return
     const current = directory[id] || { name: '', logo: '' }
     directory[id] = {
-      name: teamProfileName(row) || current.name,
-      logo: teamProfileLogo(row) || current.logo
+      name: current.name || teamProfileName(row),
+      logo: current.logo || teamProfileLogo(row)
     }
     if (directory[id].name) directory[`name:${directory[id].name}`] = directory[id]
   })
