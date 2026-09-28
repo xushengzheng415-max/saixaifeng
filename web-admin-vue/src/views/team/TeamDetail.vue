@@ -125,7 +125,7 @@
             <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column label="主办方审核" width="150" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">{{ sourceTournamentId ? '已入正式名单' : '已审核' }}</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">{{ sourceTournamentId ? '审核并入名单' : '审核' }}</el-button></template></el-table-column>
+            <el-table-column label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
             <el-table-column label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
         </section>
@@ -4214,7 +4214,14 @@ function playerProfileLabel(player) {
 }
 
 function playerOrganizerReviewStatus(player) {
-  if (sourceTournamentId.value) return tournamentRosterPlayerIds.value.has(String(player?._id || '')) ? 'approved' : 'pending'
+  if (sourceTournamentId.value) {
+    const playerId = String(player?._id || '')
+    const source = String(player?.source || '').toLowerCase()
+    const importedRegistrationPlayer = Boolean(player?.registrationImportBatchId || player?.importDraftId || player?.registrationSourceFileId || source.indexOf('registration_docx_import') === 0)
+    if (tournamentRosterPlayerIds.value.has(playerId)) return 'approved'
+    if (importedRegistrationPlayer && String(player?.organizerReviewStatus || '').toLowerCase() === 'approved') return 'approved'
+    return 'pending'
+  }
   return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
 }
 
