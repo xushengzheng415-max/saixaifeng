@@ -26,7 +26,7 @@
         </nav>
         <div class="detail-heading">
           <div><h1>球队详情</h1></div>
-          <div class="detail-heading-actions"><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button v-if="!fromRegistration" type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
+          <div class="detail-heading-actions"><el-button v-if="!sourceTournamentId" type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button v-else type="success" plain @click="openRosterPoster"><el-icon><Picture /></el-icon>球队名单海报</el-button><el-button v-if="!sourceTournamentId" type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
         </div>
 
         <section class="team-event-summary">
@@ -56,7 +56,7 @@
           </section>
           <section class="detail-panel match-summary">
             <h2><el-icon><Histogram /></el-icon>{{ isProfessionalTournamentTeam ? '专业版赛事协作' : '基础版比赛数据' }}</h2>
-            <template v-if="isProfessionalTournamentTeam"><div class="professional-roster-stats"><article><span>已提交</span><strong>23</strong><small>人</small></article><article><span>已审核</span><strong>23</strong><small>人</small></article><article class="pending"><span>资料待补充</span><strong>0</strong><small>人</small></article></div><div class="professional-team-actions"><el-button type="success" plain @click="openTournamentRoster"><el-icon><Tickets /></el-icon>查看参赛名单</el-button><el-button v-if="!fromRegistration" type="success" @click="sendTournamentNotification"><el-icon><Bell /></el-icon>发送赛事通知</el-button></div></template>
+            <template v-if="isProfessionalTournamentTeam"><div class="professional-roster-stats"><article><span>已提交</span><strong>23</strong><small>人</small></article><article><span>已审核</span><strong>23</strong><small>人</small></article><article class="pending"><span>资料待补充</span><strong>0</strong><small>人</small></article></div><div class="professional-team-actions"><el-button type="success" plain @click="openTournamentRoster"><el-icon><Tickets /></el-icon>查看参赛名单</el-button><el-button v-if="!sourceTournamentId" type="success" @click="sendTournamentNotification"><el-icon><Bell /></el-icon>发送赛事通知</el-button></div></template>
             <template v-else>
             <div class="match-stats"><dl><dt>比赛场次</dt><dd>{{ teamMatchStats.total }}</dd></dl><dl><dt>胜场</dt><dd>{{ teamMatchStats.wins }}</dd></dl><dl><dt>平场</dt><dd>{{ teamMatchStats.draws }}</dd></dl><dl><dt>负场</dt><dd>{{ teamMatchStats.losses }}</dd></dl></div>
             <div class="match-stats lower"><dl><dt>进球数</dt><dd>{{ teamMatchStats.goalsFor }}</dd></dl><dl><dt>失球数</dt><dd>{{ teamMatchStats.goalsAgainst }}</dd></dl></div>
@@ -66,7 +66,7 @@
         <section class="team-access-panel">
           <header>
             <div><h2>球队管理权限</h2><p>主账号负责球队管理，其他账号按分配权限协作。</p></div>
-            <el-button v-if="!fromRegistration" type="primary" plain @click="openTeamAccess"><el-icon><Plus /></el-icon>分配账号</el-button>
+            <el-button v-if="!sourceTournamentId" type="primary" plain @click="openTeamAccess"><el-icon><Plus /></el-icon>分配账号</el-button>
           </header>
           <el-table :data="teamAccessRows" v-loading="teamAccessLoading" empty-text="暂未分配球队管理账号" class="team-access-table">
             <el-table-column prop="roleLabel" label="身份" width="120" />
@@ -74,11 +74,11 @@
             <el-table-column label="手机号" min-width="160"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column>
             <el-table-column label="账号关系" width="150"><template #default="{ row }"><el-tag :type="row.accountType === 'owner' ? 'success' : (row.accountType === 'pending_owner' ? 'warning' : 'info')" size="small">{{ row.accountType === 'owner' ? '主账号' : (row.accountType === 'pending_owner' ? '待接收主账号' : '协作账号') }}</el-tag></template></el-table-column>
             <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === '主账号' || row.status === '已加入' ? 'success' : 'warning'" effect="plain" size="small">{{ row.status || '待授权' }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!fromRegistration" label="操作" width="110" align="center"><template #default="{ row }"><el-button link type="danger" :loading="teamAccessDeletingRole === row.role" :disabled="row.accountType === 'owner'" @click="deleteTeamAccess(row)">删除权限</el-button></template></el-table-column>
+            <el-table-column v-if="!sourceTournamentId" label="操作" width="110" align="center"><template #default="{ row }"><el-button link type="danger" :loading="teamAccessDeletingRole === row.role" :disabled="row.accountType === 'owner'" @click="deleteTeamAccess(row)">删除权限</el-button></template></el-table-column>
           </el-table>
         </section>
         <section class="team-kit-panel">
-          <header><div><h2>比赛服颜色</h2><p>设置球队常用主、备用比赛服；单场比赛可根据撞色情况另行调整，历史比赛快照不会被覆盖。</p></div><el-button v-if="!fromRegistration" type="success" :loading="kitSaving" @click="saveTeamKitColors">保存颜色设置</el-button></header>
+          <header><div><h2>比赛服颜色</h2><p>设置球队常用主、备用比赛服；单场比赛可根据撞色情况另行调整，历史比赛快照不会被覆盖。</p></div><el-button v-if="!sourceTournamentId" type="success" :loading="kitSaving" @click="saveTeamKitColors">保存颜色设置</el-button></header>
           <div class="kit-set-grid">
             <article v-for="kit in kitSets" :key="kit.key" class="kit-set-card">
               <div class="kit-set-title"><span>{{ kit.badge }}</span><div><strong>{{ kit.label }}</strong><small>{{ kit.description }}</small></div></div>
@@ -97,7 +97,7 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button v-if="!fromRegistration" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button v-if="!sourceTournamentId" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table">
             <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="工作人员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="130" />
@@ -109,7 +109,7 @@
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
             <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '球员' }}</h2><p>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
-            <el-button v-if="!fromRegistration" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
+            <el-button v-if="!sourceTournamentId" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
           <el-table :data="players" v-loading="loading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
@@ -125,11 +125,11 @@
             <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!fromRegistration" label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
-            <el-table-column v-if="!fromRegistration" label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
+            <el-table-column v-if="!sourceTournamentId" label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <el-table-column v-if="!sourceTournamentId" label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="removePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
         </section>
-        <section v-if="fromRegistration" class="tournament-history-panel">
+        <section v-if="sourceTournamentId" class="tournament-history-panel">
           <header class="tournament-history-heading"><div><h2>历史记录</h2><p>仅展示当前赛事球队的比赛与纪律数据，不修改历史快照。</p></div></header>
           <div class="tournament-history-grid">
             <article class="history-card"><h3>红黄牌记录</h3><el-table :data="playerDisciplineHistory" size="small" empty-text="暂无红黄牌记录"><el-table-column prop="name" label="球员" min-width="120" /><el-table-column prop="yellowCards" label="黄牌" width="80" align="center" /><el-table-column prop="redCards" label="红牌" width="80" align="center" /></el-table></article>
@@ -1243,7 +1243,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled } from '@element-plus/icons-vue'
+import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled, Picture } from '@element-plus/icons-vue'
 import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
@@ -1516,6 +1516,18 @@ function sourceIdentityNumber(record, index) {
 function openExportDialog() {
   exportFields.value = exportFieldOptions.map(item => item.key)
   exportDialogVisible.value = true
+}
+
+function openRosterPoster() {
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]))
+  const rows = players.value.map(player => `<tr><td>${escapeHtml(player.name || '未命名')}</td><td>${escapeHtml(player.jerseyNumber || '—')}</td><td>${escapeHtml(player.position || '—')}</td><td>${escapeHtml(player.birthDate || '—')}</td><td>${escapeHtml(player.birthDate ? calculateAge(player.birthDate) : '—')}</td></tr>`).join('')
+  const poster = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${escapeHtml(team.value.name || '球队')}名单</title><style>body{margin:0;padding:36px;background:#edf7f0;color:#173526;font-family:"Microsoft YaHei",Arial,sans-serif}main{max-width:900px;margin:auto;padding:34px 42px;border:1px solid #bdd9c5;border-radius:18px;background:#fff}h1{margin:0;color:#08733a;font-size:32px}p{color:#60766a}table{width:100%;margin-top:24px;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid #e3eee5;text-align:left}th{color:#53705d;background:#f4faf5}footer{margin-top:24px;color:#718278;font-size:12px}</style><main><h1>${escapeHtml(team.value.name || '球队名单')}</h1><p>${escapeHtml(tournamentContext.value.name || '')}　${escapeHtml(tournamentRelation.value.divisionName || '')}</p><table><thead><tr><th>姓名</th><th>号码</th><th>位置</th><th>出生日期</th><th>年龄</th></tr></thead><tbody>${rows || '<tr><td colspan="5">暂无球员资料</td></tr>'}</tbody></table><footer>生成时间：${escapeHtml(formatTournamentTime(new Date()))}</footer></main></html>`
+  const popup = window.open('', '_blank', 'noopener,noreferrer')
+  if (!popup) return ElMessage.warning('浏览器拦截了海报窗口，请允许弹窗后重试')
+  popup.document.write(poster)
+  popup.document.close()
+  popup.focus()
+  setTimeout(() => popup.print(), 200)
 }
 
 function excelImageExtension(dataUrl) {
