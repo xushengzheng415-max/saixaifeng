@@ -4868,7 +4868,7 @@ function parseHttpRequestParams(event) {
   return event
 }
 
-+// 服务号公共赛事中心只消费平台负责人明确发布过的快照，不能由匿名端透传
+// 服务号公共赛事中心只消费平台负责人明确发布过的快照，不能由匿名端透传
 // collection 名或条件查询，也不能把未发布的赛事、名单和内部资料带到页面上。
 function publicPlayerAvatarUrl(player, profilesById) {
   const item = player && typeof player === 'object' ? player : {}
