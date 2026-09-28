@@ -231,7 +231,11 @@
               </div>
               <div v-for="(evt, i) in sortedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
-                <div class="event-icon"><img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" /><span v-else>{{ eventIcon(evt.type) }}</span></div>
+                <div class="event-icon">
+                  <img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" />
+                  <img v-else-if="eventIconAsset(evt.type)" :src="eventIconAsset(evt.type)" :alt="eventIconAlt(evt.type)" />
+                  <span v-else>{{ eventIcon(evt.type) }}</span>
+                </div>
                 <div class="event-content">
                   <span class="event-type-label">{{ eventLabel(evt) }}</span>
                   <template v-if="evt.type === 'substitution'">
@@ -1715,10 +1719,37 @@ function eventIcon(type) {
   return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🔴', second_yellow_red: '🟨🔴', substitution: '🔄', stoppage_time: '⏱', other: '•••', penalty: '⚽', penalty_scored: '⚽', penalty_missed: '⚽', own_goal: '⚽' }[type] || '•'
 }
 
+const eventIconAssets = {
+  penalty: `${import.meta.env.BASE_URL}images/match-events/penalty.svg`,
+  penalty_scored: `${import.meta.env.BASE_URL}images/match-events/penalty.svg`,
+  penalty_missed: `${import.meta.env.BASE_URL}images/match-events/penalty-missed.svg`,
+  penalty_miss: `${import.meta.env.BASE_URL}images/match-events/penalty-missed.svg`,
+  own_goal: `${import.meta.env.BASE_URL}images/match-events/own-goal.svg`
+}
+function eventIconAsset(type) {
+  return eventIconAssets[type] || ''
+}
+function eventIconAlt(type) {
+  return { penalty: '点球', penalty_scored: '点球', penalty_missed: '点球未进', penalty_miss: '点球未进', own_goal: '乌龙球' }[type] || '比赛事件'
+}
+
 function eventLabel(event) {
   if (isGoalEvent(event)) return goalEventLabel(event)
   const type = event?.type || event
-  return { assist: '助攻', yellow_card: '黄牌', red_card: '红牌', second_yellow_red: '2黄变1红', substitution: '换人', stoppage_time: '补时', other: '其他' }[type] || type
+  return {
+    assist: '助攻',
+    yellow_card: '黄牌',
+    red_card: '红牌',
+    second_yellow_red: '2黄变1红',
+    substitution: '换人',
+    stoppage_time: '补时',
+    other: '其他',
+    penalty: '点球',
+    penalty_scored: '点球',
+    penalty_missed: '点球未进',
+    penalty_miss: '点球未进',
+    own_goal: '乌龙球'
+  }[type] || type
 }
 
 function formatPosition(pos) {
