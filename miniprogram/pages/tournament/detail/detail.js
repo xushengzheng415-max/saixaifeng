@@ -1057,79 +1057,46 @@ Page({
 
   loadStats: function () {
     var that = this
-    db.collection('match_events')
-      .where({ tournamentId: that.data.tournamentId })
-      .count({
-        success: function (cntRes) {
-          if (cntRes.total === 0) {
-            that.setData({ goalsRanking: [], assistsRanking: [] })
-            that._updateLens()
-            return
-          }
+    db.collection('matches').where({ tournamentId: that.data.tournamentId }).limit(500).get({
+      success: function (matchesRes) {
+        var goalsMap = {}
+        var assistsMap = {}
+        ;(matchesRes.data || []).filter(function (match) {
+          return ['finished', 'completed', 'ended', 'archived'].indexOf(String(match.status || '').toLowerCase()) >= 0
+        }).forEach(function (match) {
+          ;(Array.isArray(match.events) ? match.events : []).forEach(function (e) {
+            var type = String(e.type || e.eventType || '').toLowerCase()
+            if (type === 'score') type = 'goal'
+            if (type === 'penalty_goal') type = 'penalty_scored'
+            var playerName = String(e.playerName || e.player || '').trim()
+            var assistName = String(e.assistName || e.assist || '').trim()
+            if (playerName && ['goal', 'penalty', 'penalty_scored'].indexOf(type) >= 0) goalsMap[playerName] = (goalsMap[playerName] || 0) + 1
+            if (assistName) assistsMap[assistName] = (assistsMap[assistName] || 0) + 1
+            if (type === 'assist' && playerName) assistsMap[playerName] = (assistsMap[playerName] || 0) + 1
+          })
+        })
 
-          // 查询所有事件做统计
-          db.collection('match_events')
-            .where({ tournamentId: that.data.tournamentId })
-            .limit(500)
-            .get({
-              success: function (evtsRes) {
-                var evts = evtsRes.data || []
-                var goalsMap = {}
-                var assistsMap = {}
+        var goalsArr = []
+        var assistsArr = []
+        for (var k in goalsMap) if (goalsMap.hasOwnProperty(k)) goalsArr.push({ name: k, count: goalsMap[k] })
+        for (var k2 in assistsMap) if (assistsMap.hasOwnProperty(k2)) assistsArr.push({ name: k2, count: assistsMap[k2] })
 
-                for (var i = 0; i < evts.length; i++) {
-                  var e = evts[i]
-                  if (e.type === 'goal' && e.playerName) {
-                    goalsMap[e.playerName] = (goalsMap[e.playerName] || 0) + 1
-                  }
-                  if (e.type === 'assist' && e.playerName) {
-                    assistsMap[e.playerName] = (assistsMap[e.playerName] || 0) + 1
-                  }
-                }
+        goalsArr.sort(function (a, b) { return b.count - a.count })
+        assistsArr.sort(function (a, b) { return b.count - a.count })
 
-                var goalsArr = []
-                var assistsArr = []
-                for (var k in goalsMap) {
-                  if (goalsMap.hasOwnProperty(k)) {
-                    goalsArr.push({ name: k, count: goalsMap[k] })
-                  }
-                }
-                for (var k2 in assistsMap) {
-                  if (assistsMap.hasOwnProperty(k2)) {
-                    assistsArr.push({ name: k2, count: assistsMap[k2] })
-                  }
-                }
+        var gFinal = []
+        for (var gi = 0; gi < goalsArr.length && gi < 10; gi++) gFinal.push({ name: goalsArr[gi].name, count: goalsArr[gi].count, topClass: gi < 3 ? 'top3' : '' })
+        var aFinal = []
+        for (var ai = 0; ai < assistsArr.length && ai < 10; ai++) aFinal.push({ name: assistsArr[ai].name, count: assistsArr[ai].count, topClass: ai < 3 ? 'top3' : '' })
 
-                // 排序取前10，预计算topClass
-                goalsArr.sort(function (a, b) { return b.count - a.count })
-                assistsArr.sort(function (a, b) { return b.count - a.count })
-
-                var gFinal = []
-                for (var gi = 0; gi < goalsArr.length && gi < 10; gi++) {
-                  gFinal.push({
-                    name: goalsArr[gi].name,
-                    count: goalsArr[gi].count,
-                    topClass: (gi < 3) ? 'top3' : ''
-                  })
-                }
-                var aFinal = []
-                for (var ai = 0; ai < assistsArr.length && ai < 10; ai++) {
-                  aFinal.push({
-                    name: assistsArr[ai].name,
-                    count: assistsArr[ai].count,
-                    topClass: (ai < 3) ? 'top3' : ''
-                  })
-                }
-
-                that.setData({
-                  goalsRanking: gFinal,
-                  assistsRanking: aFinal
-                })
-                that._updateLens()
-              }
-            })
-        }
-      })
+        that.setData({ goalsRanking: gFinal, assistsRanking: aFinal })
+        that._updateLens()
+      },
+      fail: function () {
+        that.setData({ goalsRanking: [], assistsRanking: [] })
+        that._updateLens()
+      }
+    })
   },
 
   loadStandings: function () {

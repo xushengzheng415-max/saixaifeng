@@ -4,6 +4,49 @@ const crypto = require('crypto')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
+
+const EVENT_TYPE_ALIASES = {
+  score: 'goal',
+  penalty_goal: 'penalty_scored',
+  penalty_miss: 'penalty_missed',
+  missed_penalty: 'penalty_missed',
+  yellow: 'yellow_card',
+  yellowcard: 'yellow_card',
+  red: 'red_card',
+  redcard: 'red_card',
+  second_yellow: 'second_yellow_red',
+  yellow_red: 'second_yellow_red'
+}
+
+function normalizeMatchEvents(events, match) {
+  const seen = new Set()
+  return (Array.isArray(events) ? events : []).map((event, index) => {
+    if (!event || typeof event !== 'object') return null
+    const rawType = String(event.type || event.eventType || '').trim().toLowerCase()
+    const type = EVENT_TYPE_ALIASES[rawType] || rawType
+    const teamSide = event.teamSide === 'away' || event.side === 'away' ? 'away' : 'home'
+    const playerName = String(event.playerName || event.player || '').trim()
+    const playerId = String(event.playerId || '').trim()
+    const teamId = String(event.teamId || (teamSide === 'away' ? match.awayTeamId : match.homeTeamId) || '').trim()
+    const minute = Number.isFinite(Number(event.minute)) ? Number(event.minute) : 0
+    const identity = String(event.eventId || event._id || event.id || '') || [type, minute, playerId, playerName, teamSide, teamId, event.penaltyOutcome || ''].join('|')
+    const eventId = String(event.eventId || event._id || event.id || '') || `legacy-${crypto.createHash('sha1').update(String(match._id || '') + '|' + identity + '|' + index).digest('hex').slice(0, 16)}`
+    if (seen.has(identity)) return null
+    seen.add(identity)
+    return {
+      ...event,
+      eventId,
+      type,
+      minute,
+      teamSide,
+      teamId,
+      playerId,
+      playerName,
+      assistPlayerId: String(event.assistPlayerId || event.assistId || '').trim(),
+      assistName: String(event.assistName || event.assist || '').trim()
+    }
+  }).filter(Boolean)
+}
 let scheduleAdjustmentLogsReady = false
 
 async function ensureScheduleAdjustmentLogs() {
@@ -305,6 +348,7 @@ exports.main = async (event, context) => {
     delete safeData.updateTime
     delete safeData.executionSnapshot
     delete safeData.executionSnapshotAt
+    if (Array.isArray(safeData.events)) safeData.events = normalizeMatchEvents(safeData.events, match)
     if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
