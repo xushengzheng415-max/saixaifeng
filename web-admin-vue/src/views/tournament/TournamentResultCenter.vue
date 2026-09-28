@@ -274,6 +274,7 @@ onMounted(loadDashboard)
 .board-card-chip.yellow{background-color:#f2c94c!important;border:1px solid rgba(63,52,0,.7)!important}
 .board-card-chip.red{background-image:url('../../assets/report/events/red-card.svg')!important}
 .board-card-chip.yellow-red{background-image:url('../../assets/report/events/yellow-red-card.svg')!important}
+.board-card-chip.yellow-red{width:14px!important;height:18px!important}
 </style>
 <style scoped>
 /* 赛事战报卡片顶部的时间与组别是识别比赛的关键信息。 */
