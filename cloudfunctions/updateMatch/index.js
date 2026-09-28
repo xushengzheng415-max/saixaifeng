@@ -26,7 +26,7 @@ function normalizeMatchEvents(events, match) {
     const type = EVENT_TYPE_ALIASES[rawType] || rawType
     const teamSide = event.teamSide === 'away' || event.side === 'away' ? 'away' : 'home'
     const playerName = String(event.playerName || event.player || '').trim()
-    const playerId = String(event.playerId || event.player || '').trim()
+    const playerId = String(event.playerId || '').trim()
     const teamId = String(event.teamId || (teamSide === 'away' ? match.awayTeamId : match.homeTeamId) || '').trim()
     const minute = Number.isFinite(Number(event.minute)) ? Number(event.minute) : 0
     const identity = String(event.eventId || event._id || event.id || '') || [type, minute, playerId, playerName, teamSide, teamId, event.penaltyOutcome || ''].join('|')

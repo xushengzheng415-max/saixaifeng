@@ -151,7 +151,6 @@ function mergeMatchEvents(externalEvents, embeddedEvents) {
     return true
   })
 }
-
 function teamProfileName(record) {
   return text(record && (record.name || record.teamName))
 }
@@ -688,7 +687,7 @@ async function buildDashboard(event, actor) {
   }, {})
   const normalizeWithEvents = item => {
     const normalized = normalizedMatch(item, divisionsById, teamDirectory)
-    return { ...normalized, events: mergeMatchEvents(eventsByMatchId[normalized.id], Array.isArray(item.events) ? item.events : []) }
+    return { ...normalized, events: eventsByMatchId[normalized.id] || (Array.isArray(item.events) ? item.events : []) }
   }
   let matches = matchRows.map(normalizeWithEvents).sort(compareReviewMatches)
   let standings = buildStandings(matches, divisionsById)
