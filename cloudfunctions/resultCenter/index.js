@@ -107,6 +107,50 @@ async function listMatchEvents(matchIds) {
   return rows
 }
 
+function eventIdentity(event) {
+  const typeAlias = {
+    score: 'goal',
+    penalty_goal: 'penalty_scored',
+    penalty_miss: 'penalty_missed',
+    missed_penalty: 'penalty_missed',
+    yellow: 'yellow_card',
+    yellowcard: 'yellow_card',
+    red: 'red_card',
+    redcard: 'red_card',
+    second_yellow: 'second_yellow_red',
+    yellow_red: 'second_yellow_red'
+  }
+  const rawType = text(event && (event.type || event.eventType))
+  const stableId = text(event && (event._id || event.eventId || event.id))
+  if (stableId) return `id:${stableId}`
+  return [
+    typeAlias[rawType] || rawType,
+    number(event && event.minute, 0),
+    text(event && (event.playerId || event.player_id)),
+    text(event && (event.playerName || event.player_name)),
+    text(event && (event.teamSide || event.side)),
+    text(event && (event.teamId || event.team_id)),
+    text(event && (event.teamName || event.team_name)),
+    text(event && event.penaltyOutcome)
+  ].join('|')
+}
+
+function mergeMatchEvents(externalEvents, embeddedEvents) {
+  const seen = new Set()
+  // matches.events 是裁判电子记录的当前真源；旧 match_events 只作为历史兼容补充。
+  return [...(embeddedEvents || []), ...(externalEvents || [])].map(event => {
+    if (!event || typeof event !== 'object') return null
+    const rawType = text(event.type || event.eventType)
+    const type = ({ score: 'goal', penalty_goal: 'penalty_scored', penalty_miss: 'penalty_missed', missed_penalty: 'penalty_missed', yellow: 'yellow_card', yellowcard: 'yellow_card', red: 'red_card', redcard: 'red_card', second_yellow: 'second_yellow_red', yellow_red: 'second_yellow_red' })[rawType] || rawType
+    return { ...event, type, teamSide: event.teamSide === 'away' || event.side === 'away' ? 'away' : 'home', playerName: String(event.playerName || event.player || '').trim(), assistName: String(event.assistName || event.assist || '').trim() }
+  }).filter(event => {
+    if (!event) return false
+    const key = eventIdentity(event)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 function teamProfileName(record) {
   return text(record && (record.name || record.teamName))
 }

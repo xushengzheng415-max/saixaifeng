@@ -61,7 +61,20 @@ exports.main = async (event, context) => {
       ;(teamRes.data || []).forEach(t => { teamMap[t._id] = t })
     }
 
-    const list = matches.map(m => ({
+    const list = matches.map(m => {
+      const eventSeen = new Set()
+      const events = (Array.isArray(m.events) ? m.events : []).map((event, index) => {
+        if (!event || typeof event !== 'object') return null
+        const rawType = String(event.type || event.eventType || '').trim().toLowerCase()
+        const type = ({ score: 'goal', penalty_goal: 'penalty_scored', penalty_miss: 'penalty_missed', missed_penalty: 'penalty_missed', yellow: 'yellow_card', yellowcard: 'yellow_card', red: 'red_card', redcard: 'red_card', second_yellow: 'second_yellow_red', yellow_red: 'second_yellow_red' })[rawType] || rawType
+        const teamSide = event.teamSide === 'away' || event.side === 'away' ? 'away' : 'home'
+        const identity = String(event.eventId || event._id || event.id || '') || [type, Number(event.minute || 0), event.playerId || event.player || '', event.playerName || '', teamSide, event.penaltyOutcome || ''].join('|')
+        if (eventSeen.has(identity)) return null
+        eventSeen.add(identity)
+        return { ...event, eventId: String(event.eventId || event._id || event.id || `legacy-${index}`), type, teamSide, teamId: String(event.teamId || (teamSide === 'away' ? m.awayTeamId : m.homeTeamId) || ''), playerId: String(event.playerId || event.player || ''), playerName: String(event.playerName || event.player || ''), assistPlayerId: String(event.assistPlayerId || event.assistId || ''), assistName: String(event.assistName || event.assist || '') }
+      }).filter(Boolean).sort((a, b) => Number(a.minute || 0) - Number(b.minute || 0))
+      const reviewStatus = String(m.resultReviewStatus || m.reviewStatus || m.refereeReviewStatus || '').toLowerCase()
+      return {
       _id: m._id,
       tournamentId: m.tournamentId,
       phase: m.phase || 'league',   // group/league/cup/knockout
@@ -75,11 +88,14 @@ exports.main = async (event, context) => {
       homeScore: m.homeScore ?? null,
       awayScore: m.awayScore ?? null,
       status: m.status || 'pending',    // pending/ongoing/completed
+      reviewStatus,
+      official: ['approved', 'archived', 'official'].indexOf(reviewStatus) >= 0,
       groupName: m.groupName || '',
       round: m.round || '',
       field: m.field || '',
-      events: m.events || []
-    }))
+      events
+      }
+    })
 
     return {
       success: true,

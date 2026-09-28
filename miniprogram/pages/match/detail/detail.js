@@ -4,12 +4,12 @@ var workspace = require('../../../utils/workspace')
 
 // 辅助函数：事件类型文本映射
 function getEventTypeText(type) {
-  var map = { goal: '进球', assist: '助攻', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', penalty: '点球', own_goal: '乌龙球', second_yellow: '两黄变红' }
+  var map = { goal: '进球', score: '进球', assist: '助攻', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', penalty: '点球', penalty_scored: '点球', penalty_missed: '点球未进', penalty_miss: '点球未进', own_goal: '乌龙球', second_yellow: '两黄变红', second_yellow_red: '两黄变红' }
   return map[type] || type || ''
 }
 
 function getEventTypeIcon(type) {
-  var map = { goal: '⚽', assist: '🎯', yellow_card: '🟨', red_card: '🟥', substitution: '🔄', penalty: '🥅', own_goal: '💥', second_yellow: '🟥' }
+  var map = { goal: '⚽', score: '⚽', assist: '🎯', yellow_card: '🟨', red_card: '🟥', substitution: '🔄', penalty: '🥅', penalty_scored: '🥅', penalty_missed: '🥅', penalty_miss: '🥅', own_goal: '💥', second_yellow: '🟥', second_yellow_red: '🟥' }
   return map[type] || '📌'
 }
 

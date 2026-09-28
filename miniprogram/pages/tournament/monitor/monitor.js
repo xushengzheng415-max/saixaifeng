@@ -1,7 +1,7 @@
 var workspace = require('../../../utils/workspace')
 
 function eventLabel(type) {
-  return ({ goal: '进球', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', penalty: '点球', own_goal: '乌龙球' })[type] || '比赛事件'
+  return ({ goal: '进球', score: '进球', yellow_card: '黄牌', red_card: '红牌', substitution: '换人', penalty: '点球', penalty_scored: '点球', penalty_missed: '点球未进', penalty_miss: '点球未进', own_goal: '乌龙球', second_yellow_red: '两黄变红' })[type] || '比赛事件'
 }
 
 Page({

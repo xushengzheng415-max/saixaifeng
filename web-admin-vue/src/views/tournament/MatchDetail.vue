@@ -2156,8 +2156,9 @@ async function saveEvent() {
       const outgoing = activeEventPlayers.value.find(player => String(player.name || player.playerName) === row.outName)
       return {
         type:'substitution',minute:Number(eventForm.value.minute || 0),teamSide:eventForm.value.teamSide,
-        playerName:row.inName,playerNumber:String(incoming?.jerseyNumber ?? incoming?.number ?? ''),
-        assistName:row.outName,assistNumber:String(outgoing?.jerseyNumber ?? outgoing?.number ?? ''),
+        teamId:String(eventForm.value.teamSide === 'away' ? match.value.awayTeamId || '' : match.value.homeTeamId || ''),
+        playerName:row.inName,playerId:String(incoming?._id || incoming?.id || incoming?.playerId || ''),playerNumber:String(incoming?.jerseyNumber ?? incoming?.number ?? ''),
+        assistName:row.outName,assistPlayerId:String(outgoing?._id || outgoing?.id || outgoing?.playerId || ''),assistNumber:String(outgoing?.jerseyNumber ?? outgoing?.number ?? ''),
         substitutionPeriod:eventForm.value.substitutionPeriod,substitutionBatchId:batchId,substitutionBatchIndex:index + 1,substitutionBatchSize:rows.length,
         source:'organizer_pc',createdAt:new Date().toISOString()
       }
@@ -2169,9 +2170,12 @@ async function saveEvent() {
     const penalty = isPenaltyScored(eventForm.value) || isPenaltyMissed(eventForm.value)
     newEvents = [{
       ...eventForm.value,
+      teamId:String(eventForm.value.teamSide === 'away' ? match.value.awayTeamId || '' : match.value.homeTeamId || ''),
       substitutions: undefined,
       substitutionPeriod: undefined,
+      playerId: String(player?._id || player?.id || player?.playerId || ''),
       playerNumber: String(player?.jerseyNumber ?? player?.number ?? ''),
+      assistPlayerId: String(assist?._id || assist?.id || assist?.playerId || ''),
       assistNumber: String(assist?.jerseyNumber ?? assist?.number ?? ''),
       isGoal: isGoalEvent(eventForm.value),
       isPenalty: penalty,
