@@ -107,6 +107,31 @@ async function listMatchEvents(matchIds) {
   return rows
 }
 
+function eventIdentity(event) {
+  const stableId = text(event && (event._id || event.eventId || event.id))
+  if (stableId) return `id:${stableId}`
+  return [
+    text(event && (event.type || event.eventType)),
+    number(event && event.minute, 0),
+    text(event && (event.playerId || event.player_id)),
+    text(event && (event.playerName || event.player_name)),
+    text(event && (event.teamSide || event.side)),
+    text(event && (event.teamId || event.team_id)),
+    text(event && (event.teamName || event.team_name)),
+    text(event && event.penaltyOutcome)
+  ].join('|')
+}
+
+function mergeMatchEvents(externalEvents, embeddedEvents) {
+  const seen = new Set()
+  return [...(externalEvents || []), ...(embeddedEvents || [])].filter(event => {
+    const key = eventIdentity(event)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function teamProfileName(record) {
   return text(record && (record.teamName || record.name))
 }
@@ -643,7 +668,7 @@ async function buildDashboard(event, actor) {
   }, {})
   const normalizeWithEvents = item => {
     const normalized = normalizedMatch(item, divisionsById, teamDirectory)
-    return { ...normalized, events: eventsByMatchId[normalized.id] || (Array.isArray(item.events) ? item.events : []) }
+    return { ...normalized, events: mergeMatchEvents(eventsByMatchId[normalized.id], Array.isArray(item.events) ? item.events : []) }
   }
   let matches = matchRows.map(normalizeWithEvents).sort(compareReviewMatches)
   let standings = buildStandings(matches, divisionsById)
