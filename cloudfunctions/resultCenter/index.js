@@ -254,6 +254,10 @@ function scoreFromEvents(events, match) {
   return score
 }
 
+function refereeSubmissionExists(match) {
+  return Boolean(match && (match.refereeRecord || match.refereeSubmittedAt || match.refereeReviewStatus))
+}
+
 function resultStatus(match) {
   if (!scoreReady(match)) return 'not_submitted'
   const statuses = [
@@ -263,6 +267,13 @@ function resultStatus(match) {
     match.refereeRecord && match.refereeRecord.reviewStatus,
     match.status
   ].map(value => text(value).toLowerCase())
+  // PC 后台补录是主办方的正式录入，比分齐全且没有裁判提交时直接成为正式赛果。
+  // 只有裁判/计分台回传才进入复核状态机；保留显式异常和退回状态，避免吞掉人工阻断。
+  if (!refereeSubmissionExists(match)) {
+    if (statuses.some(value => ['warning', 'conflict', 'abandoned'].includes(value))) return 'warning'
+    if (statuses.some(value => ['returned', 'rejected'].includes(value))) return 'returned'
+    return 'approved'
+  }
   if (statuses.some(value => ['archived', 'approved', 'official'].includes(value))) return 'approved'
   if (statuses.some(value => ['returned', 'rejected'].includes(value))) return 'returned'
   if (statuses.some(value => ['warning', 'conflict', 'abandoned'].includes(value))) return 'warning'
