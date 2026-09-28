@@ -21,9 +21,9 @@
       <div class="hero-score-area">
         <template v-if="match.status === 'finished' || match.status === 'completed'">
           <div class="hero-score">
-            <span class="score-num">{{ match.homeScore ?? 0 }}</span>
+            <span class="score-num">{{ displayHomeScore }}</span>
             <span class="score-sep">:</span>
-            <span class="score-num">{{ match.awayScore ?? 0 }}</span>
+            <span class="score-num">{{ displayAwayScore }}</span>
           </div>
           <div class="hero-match-time">{{ match.matchDate }} {{ match.matchTime }}</div>
           <div class="hero-venue">{{ match.venue || '场地待定' }}</div>
@@ -265,7 +265,7 @@
             <div class="match-stats-panel">
               <div class="stats-score-row">
                 <span>{{ homeName || '主队' }}</span>
-                <strong>{{ match.homeScore ?? 0 }} : {{ match.awayScore ?? 0 }}</strong>
+                <strong>{{ displayHomeScore }} : {{ displayAwayScore }}</strong>
                 <span>{{ awayName || '客队' }}</span>
               </div>
               <div class="event-summary-grid stats-summary-grid">
@@ -425,13 +425,13 @@
         <article class="finish-score-team">
           <small>主队</small>
           <strong>{{ homeName || '主队' }}</strong>
-          <el-input-number v-model="finishForm.homeScore" :min="0" :max="99" controls-position="right" size="large" />
+          <el-input-number v-model="finishForm.homeScore" :min="0" :max="99" controls-position="right" size="large" :disabled="hasStructuredEvents" />
         </article>
         <span class="finish-sep">:</span>
         <article class="finish-score-team">
           <small>客队</small>
           <strong>{{ awayName || '客队' }}</strong>
-          <el-input-number v-model="finishForm.awayScore" :min="0" :max="99" controls-position="right" size="large" />
+          <el-input-number v-model="finishForm.awayScore" :min="0" :max="99" controls-position="right" size="large" :disabled="hasStructuredEvents" />
         </article>
       </div>
       <template #footer>
@@ -1525,6 +1525,22 @@ const sortedEvents = computed(() => {
   return [...events].sort((a, b) => (a.minute || 0) - (b.minute || 0))
 })
 
+function calculateEventScore(events) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(event => {
+    if (!isGoalEvent(event)) return
+    let side = event?.teamSide === 'away' || event?.side === 'away' ? 'away' : 'home'
+    const type = String(event?.type || event?.eventType || '').trim().toLowerCase()
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
+}
+const hasStructuredEvents = computed(() => Array.isArray(match.value.events) && !match.value.resultCorrection)
+const eventScore = computed(() => calculateEventScore(match.value.events))
+const displayHomeScore = computed(() => hasStructuredEvents.value ? eventScore.value.home : (match.value.homeScore ?? 0))
+const displayAwayScore = computed(() => hasStructuredEvents.value ? eventScore.value.away : (match.value.awayScore ?? 0))
+
 const localEventKeys = new WeakMap()
 let localEventKeySequence = 0
 function existingEventId(event) {
@@ -1985,8 +2001,8 @@ async function updateStatus(status) {
 function openFinishDialog() {
   if (!ensureEvidenceEditable()) return
   finishForm.value = {
-    homeScore: match.value.homeScore || 0,
-    awayScore: match.value.awayScore || 0
+    homeScore: displayHomeScore.value,
+    awayScore: displayAwayScore.value
   }
   finishDialogVisible.value = true
 }
@@ -1995,7 +2011,7 @@ async function finishMatch() {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: {
         homeScore: finishForm.value.homeScore,
@@ -2004,8 +2020,8 @@ async function finishMatch() {
         updateTime: new Date()
       }
     })
-    match.value.homeScore = finishForm.value.homeScore
-    match.value.awayScore = finishForm.value.awayScore
+    match.value.homeScore = result?.data?.homeScore ?? finishForm.value.homeScore
+    match.value.awayScore = result?.data?.awayScore ?? finishForm.value.awayScore
     match.value.status = 'finished'
     finishDialogVisible.value = false
     ElMessage.success('比赛已结束，比分已保存')
@@ -2190,11 +2206,13 @@ async function saveEvent() {
   saving.value = true
   try {
     const events = [...(match.value.events || []), ...newEvents]
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: { events, updateTime: new Date() }
     })
     match.value.events = events
+    match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
+    match.value.awayScore = result?.data?.awayScore ?? calculateEventScore(events).away
     eventDialogVisible.value = false
     ElMessage.success('事件已添加')
   } catch (err) {
@@ -2223,11 +2241,13 @@ async function removeEvent(targetEvent) {
     await ElMessageBox.confirm(`${eventDescription || '该比赛事件'}将被删除，删除后无法恢复。`, '确认删除比赛事件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
     saving.value = true
     events.splice(index, 1)
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: { events, updateTime: new Date() }
     })
     match.value.events = events
+    match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
+    match.value.awayScore = result?.data?.awayScore ?? calculateEventScore(events).away
     ElMessage.success('已删除')
   } catch (err) {
     if (err !== 'cancel' && err !== 'close') ElMessage.error('删除失败: ' + err.message)

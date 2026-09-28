@@ -400,6 +400,18 @@ function eventScoreSide(type, teamSide) {
   return String(type || '') === 'own_goal' ? (teamSide === 'away' ? 'home' : 'away') : teamSide
 }
 
+function eventScoreFromEvents(events) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(function (event) {
+    const type = String(event && (event.type || event.eventType) || '').trim().toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    let side = event && event.teamSide === 'away' ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
+}
+
 function refereeEventView(item, index, homeTeamName, awayTeamName) {
   const event = item || {}
   const teamSide = event.teamSide === 'away' ? 'away' : 'home'
@@ -1063,6 +1075,7 @@ async function decorateMatch(match, identity) {
   }).sort(function(a, b) {
     return a.minute - b.minute
   })
+  const eventScore = Array.isArray(match.events) ? eventScoreFromEvents(match.events) : null
   const clock = refereeClockSnapshot(match)
   const preMatch = preMatchStateView(match)
   return {
@@ -1101,8 +1114,8 @@ async function decorateMatch(match, identity) {
     clockPhase: clock.phase,
     clockPhaseText: clock.phaseText,
     clockSnapshotAt: clock.snapshotAt,
-    homeScore: scoreNumber(match.homeScore) === null ? 0 : scoreNumber(match.homeScore),
-    awayScore: scoreNumber(match.awayScore) === null ? 0 : scoreNumber(match.awayScore),
+    homeScore: eventScore ? eventScore.home : (scoreNumber(match.homeScore) === null ? 0 : scoreNumber(match.homeScore)),
+    awayScore: eventScore ? eventScore.away : (scoreNumber(match.awayScore) === null ? 0 : scoreNumber(match.awayScore)),
     drawResolution,
     penaltyWinPoints: Number(division && division.penaltyWinPoints || 2),
     penaltyLossPoints: Number(division && division.penaltyLossPoints || 0),
@@ -1914,8 +1927,9 @@ async function finishRefereeMatch(openId, event) {
   if (['finished', 'completed'].indexOf(status) >= 0) return fail('比赛已经结束', 'MATCH_ALREADY_FINISHED')
   if (['ongoing', 'live'].indexOf(status) < 0) return fail('请先点击开始执裁', 'MATCH_NOT_STARTED')
 
-  const homeScore = scoreNumber(event.homeScore)
-  const awayScore = scoreNumber(event.awayScore)
+  const eventScore = Array.isArray(context.match.events) ? eventScoreFromEvents(context.match.events) : null
+  const homeScore = eventScore ? eventScore.home : scoreNumber(event.homeScore)
+  const awayScore = eventScore ? eventScore.away : scoreNumber(event.awayScore)
   if (homeScore === null || awayScore === null) return fail('请输入0至99之间的有效比分', 'SCORE_INVALID')
 
   const division = context.match.divisionId ? await getDoc('divisions', context.match.divisionId) : null
@@ -2011,10 +2025,13 @@ async function addRefereeEvent(openId, event) {
   const events = Array.isArray(context.match.events) ? context.match.events.slice() : []
   events.push(refereeEvent)
 
-  const currentHomeScore = scoreNumber(context.match.homeScore) === null ? 0 : scoreNumber(context.match.homeScore)
-  const currentAwayScore = scoreNumber(context.match.awayScore) === null ? 0 : scoreNumber(context.match.awayScore)
+  const eventScore = eventScoreFromEvents(events)
   const updateData = {
     events,
+    homeScore: eventScore.home,
+    awayScore: eventScore.away,
+    scoreHome: eventScore.home,
+    scoreAway: eventScore.away,
     refereeWorkflowLogs: workflowLogs(context.match, 'add_event', context.identity, {
       eventId: refereeEvent.eventId,
       type,
@@ -2024,16 +2041,10 @@ async function addRefereeEvent(openId, event) {
     }),
     updateTime: db.serverDate()
   }
-  if (eventScoredGoal(type)) {
-    const scoringSide = eventScoreSide(type, teamSide)
-    if (scoringSide === 'home') updateData.homeScore = Math.min(99, currentHomeScore + 1)
-    else updateData.awayScore = Math.min(99, currentAwayScore + 1)
-  }
-
   await db.collection('matches').doc(matchId).update({
     data: updateData
   })
-  return ok({ eventId: refereeEvent.eventId }, '比赛事件已保存')
+  return ok({ eventId: refereeEvent.eventId, homeScore: eventScore.home, awayScore: eventScore.away }, '比赛事件已保存')
 }
 
 async function deleteRefereeEvent(openId, event) {
@@ -2049,8 +2060,13 @@ async function deleteRefereeEvent(openId, event) {
   if (!Number.isInteger(index) || index < 0 || index >= events.length) return fail('事件不存在或已被删除', 'EVENT_NOT_FOUND')
   const removed = events.splice(index, 1)[0] || {}
 
+  const eventScore = eventScoreFromEvents(events)
   const updateData = {
     events,
+    homeScore: eventScore.home,
+    awayScore: eventScore.away,
+    scoreHome: eventScore.home,
+    scoreAway: eventScore.away,
     refereeWorkflowLogs: workflowLogs(context.match, 'delete_event', context.identity, {
       eventId,
       type: removed.type || '',
@@ -2060,17 +2076,10 @@ async function deleteRefereeEvent(openId, event) {
     }),
     updateTime: db.serverDate()
   }
-  if (eventScoredGoal(removed.type)) {
-    const scoreSide = eventScoreSide(removed.type, removed.teamSide)
-    const scoreField = scoreSide === 'away' ? 'awayScore' : 'homeScore'
-    const currentScore = scoreNumber(context.match[scoreField]) === null ? 0 : scoreNumber(context.match[scoreField])
-    updateData[scoreField] = Math.max(0, currentScore - 1)
-  }
-
   await db.collection('matches').doc(matchId).update({
     data: updateData
   })
-  return ok({}, '事件已删除')
+  return ok({ homeScore: eventScore.home, awayScore: eventScore.away }, '事件已删除')
 }
 
 async function submitRefereeReport(openId, matchId) {
@@ -2087,8 +2096,9 @@ async function submitSignedRefereeRecord(openId, event) {
   if (match.status !== 'finished') return fail('请先结束比赛并确认比分', 'MATCH_NOT_FINISHED')
   if (!match.lineupsLocked) return fail('请先完成双方阵容核验', 'LINEUPS_NOT_LOCKED')
   if (match.refereeReportStatus !== 'draft') return fail('请先保存裁判报告，再进入电子记录确认', 'REFEREE_REPORT_DRAFT_REQUIRED')
-  const homeScore = scoreNumber(match.homeScore)
-  const awayScore = scoreNumber(match.awayScore)
+  const eventScore = Array.isArray(match.events) ? eventScoreFromEvents(match.events) : null
+  const homeScore = eventScore ? eventScore.home : scoreNumber(match.homeScore)
+  const awayScore = eventScore ? eventScore.away : scoreNumber(match.awayScore)
   if (homeScore === null || awayScore === null) return fail('比赛比分不完整', 'SCORE_INVALID')
   const signature = signatureStrokesView(event.signature)
   if (signature.pointCount < 8) return fail('请在签字区完成本人签字', 'SIGNATURE_REQUIRED')
