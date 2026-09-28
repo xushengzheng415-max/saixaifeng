@@ -116,6 +116,62 @@ function findConnectedBackground(data, width, height, background, tolerance) {
   return backgroundMask
 }
 
+function findConnectedTransparent(data, width, height, alphaThreshold = 8) {
+  const totalPixels = width * height
+  const visited = new Uint8Array(totalPixels)
+  const stack = []
+  const push = (x, y) => {
+    if (x >= 0 && x < width && y >= 0 && y < height) stack.push(y * width + x)
+  }
+
+  for (let x = 0; x < width; x += 1) {
+    push(x, 0)
+    push(x, height - 1)
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    push(0, y)
+    push(width - 1, y)
+  }
+
+  while (stack.length) {
+    const pixelIndex = stack.pop()
+    if (visited[pixelIndex]) continue
+    visited[pixelIndex] = 1
+    if (data[pixelIndex * 4 + 3] > alphaThreshold) continue
+
+    const x = pixelIndex % width
+    const y = Math.floor(pixelIndex / width)
+    push(x - 1, y)
+    push(x + 1, y)
+    push(x, y - 1)
+    push(x, y + 1)
+  }
+
+  return visited
+}
+
+/**
+ * 修复部分 PNG 队徽把内部白色保存成 alpha=0 的情况。
+ * 只有被队徽轮廓包住、且 RGB 仍然是白色的透明区域才恢复为不透明白色；
+ * 与图片边缘连通的透明背景保持透明。
+ */
+export function restoreEnclosedWhitePixels(data, width, height, options = {}) {
+  const threshold = options.threshold || 240
+  const edgeTransparent = findConnectedTransparent(data, width, height, options.alphaThreshold || 8)
+  let restoredCount = 0
+
+  for (let pixelIndex = 0; pixelIndex < width * height; pixelIndex += 1) {
+    const offset = pixelIndex * 4
+    if (edgeTransparent[pixelIndex] || data[offset + 3] >= 255) continue
+    if (isWhite(data[offset], data[offset + 1], data[offset + 2], threshold)) {
+      data[offset + 3] = 255
+      restoredCount += 1
+    }
+  }
+
+  return restoredCount
+}
+
 /**
  * 去除白色背景（主算法）
  * @param {File} file - 图片文件
@@ -142,13 +198,16 @@ export function removeWhiteBackground(file, options = {}) {
         canvas.width = img.width
         canvas.height = img.height
         
-        // 绘制原图
+        // 先铺白底再绘制，避免透明 PNG 中的白色像素在 Canvas 预乘后丢失 RGB；
+        // 后续只移除与外边缘连通的白底，内部白色会保留。
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0)
         
         // 获取像素数据
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
         const data = imageData.data
-        
+        const restoredWhiteCount = restoreEnclosedWhitePixels(data, canvas.width, canvas.height, { threshold })
         const edgeColors = collectEdgeColors(data, canvas.width, canvas.height)
         const background = inferBackgroundColor(edgeColors, threshold)
         const backgroundMask = findConnectedBackground(
@@ -178,6 +237,7 @@ export function removeWhiteBackground(file, options = {}) {
           success: true,
           data: base64,
           method: 'whiteBg',
+          restoredWhiteCount,
           warning: transparentCount === 0 ? '未检测到与外边缘连通的背景，已保留原图' : ''
         }
         
