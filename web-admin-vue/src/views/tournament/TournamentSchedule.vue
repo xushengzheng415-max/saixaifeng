@@ -2276,8 +2276,16 @@ async function loadMatches(options = {}) {
       where: { tournamentId },
       orderBy: { matchDate: 'asc', matchTime: 'asc' }
     })
-    ;(list || []).forEach(match=>{const phase=String(match?.phase || match?.scheduleType || '').toLowerCase();if(phase==='group' || phase==='league')match.roundName=matchCardRoundLabel(match)})
-    allTournamentMatches.value = [...list].sort(compareMatchesByDateTime)
+    const teamIds = [...new Set((list || []).flatMap(match => [match.homeTeamId, match.awayTeamId]).filter(Boolean).map(String))]
+    const currentTeams = teamIds.length ? await queryList('teams', { where: { _id: { $in: teamIds } }, silent: true }) : []
+    const teamMap = new Map((currentTeams || []).map(team => [String(team._id), team]))
+    const displayList = (list || []).map(match => {
+      const home = teamMap.get(String(match.homeTeamId || '')), away = teamMap.get(String(match.awayTeamId || ''))
+      const next = { ...match, homeTeamName: home?.name || home?.teamName || match.homeTeamName, awayTeamName: away?.name || away?.teamName || match.awayTeamName }
+      const phase=String(next?.phase || next?.scheduleType || '').toLowerCase(); if (phase==='group' || phase==='league') next.roundName=matchCardRoundLabel(next)
+      return next
+    })
+    allTournamentMatches.value = displayList.sort(compareMatchesByDateTime)
     matches.value = allTournamentMatches.value.filter(belongsToActiveDivision).sort(compareMatchesByRoundAndTime)
     syncGenerationVenues()
     syncVenueSelection()
@@ -2308,7 +2316,10 @@ async function loadAllTeams() {
     // 也加载 approved teams
     const approved = (await queryList('tournament_teams', { where: { tournamentId, status: 'approved' } })).filter(belongsToActiveDivision)
     approved.forEach(t => teams.push({ teamId: t.teamId || t._id, teamName: t.teamName || t.name || '' }))
-    allTeams.value = [...new Map(teams.map(t => [t.teamId, t])).values()]
+    const ids = [...new Set(teams.map(item => String(item.teamId || '')).filter(Boolean))]
+    const profiles = ids.length ? await queryList('teams', { where: { _id: { $in: ids } }, silent: true }) : []
+    const profileMap = new Map((profiles || []).map(team => [String(team._id), team]))
+    allTeams.value = [...new Map(teams.map(item => { const team = profileMap.get(String(item.teamId || '')); return { ...item, teamName: team?.name || team?.teamName || item.teamName || '未命名球队' } }).map(t => [t.teamId, t])).values()]
   } catch (err) {
     console.warn('加载球队列表失败', err)
   }

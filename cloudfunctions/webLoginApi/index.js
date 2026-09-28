@@ -4136,6 +4136,52 @@ async function readDocumentOrNull(db, collection, id) {
   }
 }
 
+// 球队长期资料为唯一真源。刷新参赛关系、球员库和未完赛赛程的展示字段；
+// 已完赛/已归档比赛快照不改写，保留历史证据。
+async function syncTeamProfileReferences(db, teamId, before, after) {
+  const id = String(teamId || '').trim()
+  if (!id || !before || !after) return { changed: false, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
+  const value = (record, keys) => {
+    for (const key of keys) {
+      if (record && record[key] !== undefined && record[key] !== null && String(record[key]).trim() !== '') return String(record[key]).trim()
+    }
+    return ''
+  }
+  const beforeName = value(before, ['name', 'teamName'])
+  const afterName = value(after, ['name', 'teamName'])
+  const beforeLogo = value(before, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo'])
+  const afterLogo = value(after, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo'])
+  const nameChanged = beforeName !== afterName
+  const logoChanged = beforeLogo !== afterLogo
+  if (!nameChanged && !logoChanged) return { changed: false, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
+  const relationPatch = {}
+  if (nameChanged) relationPatch.teamName = afterName
+  if (logoChanged) Object.assign(relationPatch, { teamLogo: afterLogo, logo: afterLogo, logoUrl: afterLogo })
+  const result = { changed: true, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
+  const updateRows = async (collection, rows, patch) => {
+    for (const row of rows || []) if (row && row._id) await db.collection(collection).doc(row._id).update({ data: { ...patch, updateTime: db.serverDate() } })
+    return (rows || []).filter(row => row && row._id).length
+  }
+  const relationRows = (await db.collection('tournament_teams').where({ teamId: id }).limit(1000).get()).data || []
+  result.tournamentTeams = await updateRows('tournament_teams', relationRows, relationPatch)
+  const invitationRows = (await db.collection('team_invitations').where({ teamId: id }).limit(1000).get()).data || []
+  result.invitations = await updateRows('team_invitations', invitationRows.filter(row => !['cancelled', 'canceled', 'expired', 'rejected'].includes(String(row.status || '').toLowerCase())), relationPatch)
+  if (nameChanged) {
+    const playerRows = (await db.collection('players').where(db.command.or([{ teamId: id }, { teamCode: id }])).limit(1000).get()).data || []
+    result.players = await updateRows('players', playerRows, { teamName: afterName })
+  }
+  const matches = (await db.collection('matches').where(db.command.or([{ homeTeamId: id }, { awayTeamId: id }])).limit(1000).get()).data || []
+  const historical = new Set(['completed', 'finished', 'archived', 'cancelled', 'canceled'])
+  for (const match of matches) {
+    if (!match || !match._id || historical.has(String(match.status || '').toLowerCase())) continue
+    const patch = {}
+    if (String(match.homeTeamId || '') === id) { if (nameChanged) patch.homeTeamName = afterName; if (logoChanged) patch.homeTeamLogo = afterLogo }
+    if (String(match.awayTeamId || '') === id) { if (nameChanged) patch.awayTeamName = afterName; if (logoChanged) patch.awayTeamLogo = afterLogo }
+    if (Object.keys(patch).length) { await db.collection('matches').doc(match._id).update({ data: { ...patch, updateTime: db.serverDate() } }); result.matches += 1 }
+  }
+  return result
+}
+
 async function handleDbQuery(event) {
   const { collection, operation, where, orderBy, limit: limitVal, skip: skipVal, id, data, assistanceGrantId } = event
   if (!collection) return { success: false, error: '缺少 collection 参数' }
@@ -4412,12 +4458,15 @@ async function handleDbQuery(event) {
           return { success: false, error: '竞赛方案已经锁定，不能直接修改已确认赛程', code: 'COMPETITION_PLAN_LOCKED' }
         }
         await db.collection(collection).doc(id).update({ data: nextUpdateData })
+        const teamSync = collection === 'teams' && !assistanceScope
+          ? await syncTeamProfileReferences(db, id, before, { ...(before || {}), ...(nextUpdateData || {}) })
+          : null
         if (assistanceScope) {
           await writeAssistanceAudit(
             db, assistanceScope, authenticated.userId, 'update', collection, id, before, { ...(before || {}), ...data }
           )
         }
-        return { success: true, message: '更新成功' }
+        return { success: true, message: '更新成功', ...(teamSync ? { teamSync } : {}) }
       }
       case 'delete': {
         if (!id) return { success: false, error: '缺少记录 ID' }

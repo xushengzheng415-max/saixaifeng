@@ -2392,6 +2392,33 @@ async function teamProfileForWorkspace(event, identity) {
   return { success: true, profile, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
 }
 
+async function syncTeamProfileReferences(teamId, before, after) {
+  const id = String(teamId || '').trim()
+  if (!id || !before || !after) return { changed: false, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
+  const value = (record, keys) => { for (const key of keys) if (record && record[key] !== undefined && record[key] !== null && String(record[key]).trim() !== '') return String(record[key]).trim(); return '' }
+  const beforeName = value(before, ['name', 'teamName']), afterName = value(after, ['name', 'teamName'])
+  const beforeLogo = value(before, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo']), afterLogo = value(after, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo'])
+  const nameChanged = beforeName !== afterName, logoChanged = beforeLogo !== afterLogo
+  if (!nameChanged && !logoChanged) return { changed: false, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
+  const patch = {}; if (nameChanged) patch.teamName = afterName; if (logoChanged) Object.assign(patch, { teamLogo: afterLogo, logo: afterLogo, logoUrl: afterLogo })
+  const counts = { changed: true, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
+  const updateRows = async (collection, rows, data) => { for (const row of rows || []) if (row && row._id) await db.collection(collection).doc(row._id).update({ data: { ...data, updateTime: db.serverDate() } }); return (rows || []).filter(row => row && row._id).length }
+  counts.tournamentTeams = await updateRows('tournament_teams', (await db.collection('tournament_teams').where({ teamId: id }).limit(1000).get()).data || [], patch)
+  const invitationRows = (await db.collection('team_invitations').where({ teamId: id }).limit(1000).get()).data || []
+  counts.invitations = await updateRows('team_invitations', invitationRows.filter(row => !['cancelled', 'canceled', 'expired', 'rejected'].includes(String(row.status || '').toLowerCase())), patch)
+  if (nameChanged) counts.players = await updateRows('players', (await db.collection('players').where(_.or([{ teamId: id }, { teamCode: id }])).limit(1000).get()).data || [], { teamName: afterName })
+  const matches = (await db.collection('matches').where(_.or([{ homeTeamId: id }, { awayTeamId: id }])).limit(1000).get()).data || []
+  const historical = new Set(['completed', 'finished', 'archived', 'cancelled', 'canceled'])
+  for (const match of matches) {
+    if (!match || !match._id || historical.has(String(match.status || '').toLowerCase())) continue
+    const matchPatch = {}
+    if (String(match.homeTeamId || '') === id) { if (nameChanged) matchPatch.homeTeamName = afterName; if (logoChanged) matchPatch.homeTeamLogo = afterLogo }
+    if (String(match.awayTeamId || '') === id) { if (nameChanged) matchPatch.awayTeamName = afterName; if (logoChanged) matchPatch.awayTeamLogo = afterLogo }
+    if (Object.keys(matchPatch).length) { await db.collection('matches').doc(match._id).update({ data: { ...matchPatch, updateTime: db.serverDate() } }); counts.matches += 1 }
+  }
+  return counts
+}
+
 async function saveTeamProfileForWorkspace(event, identity) {
   const loaded = await teamProfileForWorkspace(event, identity)
   if (!loaded.canManage) throw new Error('当前身份没有编辑球队资料的权限')
@@ -2399,7 +2426,7 @@ async function saveTeamProfileForWorkspace(event, identity) {
   if (name.length < 2) throw new Error('球队名称需为 2—30 个字')
   const patch = { name, teamName: name, shortName, ageGroup: String(event.ageGroup || '').trim().slice(0, 20), foundedYear: String(event.foundedYear || '').trim().slice(0, 8), city: String(event.city || '').trim().slice(0, 40), managerName: String(event.managerName || '').trim().slice(0, 30), updateTime: db.serverDate() }
   await db.collection('teams').doc(loaded.profile.id).update({ data: patch })
-  return { success: true }
+  return { success: true, teamSync: await syncTeamProfileReferences(loaded.profile.id, loaded.profile, { ...loaded.profile, ...patch }) }
 }
 
 async function teamMembersForWorkspace(event, identity) {

@@ -52,10 +52,12 @@ exports.main = async (event, context) => {
 
     let teamMap = {}
     if (teamIds.length > 0) {
-      const teamRes = await db.collection('tournament_teams')
-        .where({ _id: _.in(teamIds) })
-        .get()
+      const [teamRes, relationRes] = await Promise.all([
+        db.collection('teams').where({ _id: _.in(teamIds) }).get(),
+        db.collection('tournament_teams').where(_.and([{ tournamentId }, _.or([{ _id: _.in(teamIds) }, { teamId: _.in(teamIds) }])])).get()
+      ])
       teamMap = {}
+      ;(relationRes.data || []).forEach(t => { if (t._id) teamMap[t._id] = t; if (t.teamId) teamMap[t.teamId] = t })
       ;(teamRes.data || []).forEach(t => { teamMap[t._id] = t })
     }
 
@@ -66,8 +68,10 @@ exports.main = async (event, context) => {
       matchTime: m.matchTime,
       homeTeamId: m.homeTeamId,
       awayTeamId: m.awayTeamId,
-      homeTeamName: teamMap[m.homeTeamId]?.teamName || '',
-      awayTeamName: teamMap[m.awayTeamId]?.teamName || '',
+      homeTeamName: teamMap[m.homeTeamId]?.name || teamMap[m.homeTeamId]?.teamName || m.homeTeamName || '',
+      awayTeamName: teamMap[m.awayTeamId]?.name || teamMap[m.awayTeamId]?.teamName || m.awayTeamName || '',
+      homeTeamLogo: teamMap[m.homeTeamId]?.logoUrl || teamMap[m.homeTeamId]?.logo || teamMap[m.homeTeamId]?.teamLogo || m.homeTeamLogo || '',
+      awayTeamLogo: teamMap[m.awayTeamId]?.logoUrl || teamMap[m.awayTeamId]?.logo || teamMap[m.awayTeamId]?.teamLogo || m.awayTeamLogo || '',
       homeScore: m.homeScore ?? null,
       awayScore: m.awayScore ?? null,
       status: m.status || 'pending',    // pending/ongoing/completed

@@ -2291,7 +2291,7 @@ async function loadTournamentTeams() {
           tournamentId: item.tournamentId,
           divisionId: item.divisionId || 'default',
           divisionName: item.divisionName || '',
-          teamName: item.teamName || teamData.name,
+          teamName: teamData.name || teamData.teamName || item.teamName || '未命名球队',
           logoFileId,
           logo: /^https?:\/\//i.test(logoFileId) ? logoFileId : '',
           logoUrl: /^https?:\/\//i.test(logoFileId) ? logoFileId : '',
