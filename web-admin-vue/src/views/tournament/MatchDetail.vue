@@ -231,7 +231,11 @@
               </div>
               <div v-for="(evt, i) in sortedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
-                <div class="event-icon"><img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" /><span v-else>{{ eventIcon(evt.type) }}</span></div>
+                <div class="event-icon">
+                  <img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" />
+                  <img v-else-if="eventIconAsset(evt.type)" :src="eventIconAsset(evt.type)" :alt="eventIconAlt(evt.type)" />
+                  <span v-else>{{ eventIcon(evt.type) }}</span>
+                </div>
                 <div class="event-content">
                   <span class="event-type-label">{{ eventLabel(evt) }}</span>
                   <template v-if="evt.type === 'substitution'">
@@ -1521,6 +1525,21 @@ const sortedEvents = computed(() => {
   return [...events].sort((a, b) => (a.minute || 0) - (b.minute || 0))
 })
 
+const localEventKeys = new WeakMap()
+let localEventKeySequence = 0
+function existingEventId(event) {
+  return String(event?.eventId || event?._id || event?.id || '').trim()
+}
+function eventRowKey(event, index) {
+  const id = existingEventId(event)
+  if (id) return `event-${id}`
+  if (event && typeof event === 'object') {
+    if (!localEventKeys.has(event)) localEventKeys.set(event, `event-local-${++localEventKeySequence}`)
+    return localEventKeys.get(event)
+  }
+  return `event-index-${index}`
+}
+
 const eventSummary = computed(() => {
   const events = match.value.events || []
   const count = (...types) => events.filter(event => types.includes(event.type)).length
@@ -1679,10 +1698,37 @@ function eventIcon(type) {
   return { goal: '⚽', assist: '👟', yellow_card: '🟨', red_card: '🔴', second_yellow_red: '🟨🔴', substitution: '🔄', stoppage_time: '⏱', other: '•••', penalty: '⚽', penalty_scored: '⚽', penalty_missed: '⚽', own_goal: '⚽' }[type] || '•'
 }
 
+const eventIconAssets = {
+  penalty: `${import.meta.env.BASE_URL}images/match-events/penalty.svg`,
+  penalty_scored: `${import.meta.env.BASE_URL}images/match-events/penalty.svg`,
+  penalty_missed: `${import.meta.env.BASE_URL}images/match-events/penalty-missed.svg`,
+  penalty_miss: `${import.meta.env.BASE_URL}images/match-events/penalty-missed.svg`,
+  own_goal: `${import.meta.env.BASE_URL}images/match-events/own-goal.svg`
+}
+function eventIconAsset(type) {
+  return eventIconAssets[type] || ''
+}
+function eventIconAlt(type) {
+  return { penalty: '点球', penalty_scored: '点球', penalty_missed: '点球未进', penalty_miss: '点球未进', own_goal: '乌龙球' }[type] || '比赛事件'
+}
+
 function eventLabel(event) {
   if (isGoalEvent(event)) return goalEventLabel(event)
   const type = event?.type || event
-  return { assist: '助攻', yellow_card: '黄牌', red_card: '红牌', second_yellow_red: '2黄变1红', substitution: '换人', stoppage_time: '补时', other: '其他' }[type] || type
+  return {
+    assist: '助攻',
+    yellow_card: '黄牌',
+    red_card: '红牌',
+    second_yellow_red: '2黄变1红',
+    substitution: '换人',
+    stoppage_time: '补时',
+    other: '其他',
+    penalty: '点球',
+    penalty_scored: '点球',
+    penalty_missed: '点球未进',
+    penalty_miss: '点球未进',
+    own_goal: '乌龙球'
+  }[type] || type
 }
 
 function formatPosition(pos) {
@@ -2167,22 +2213,15 @@ function eventIndexInSource(target) {
   return events.findIndex(item => item && item.createdAt === target?.createdAt && item.type === target?.type && item.minute === target?.minute && item.teamSide === target?.teamSide && item.playerName === target?.playerName && item.assistName === target?.assistName && item.substitutionBatchIndex === target?.substitutionBatchIndex)
 }
 
-async function removeEvent(event) {
+async function removeEvent(targetEvent) {
   if (!ensureEvidenceEditable()) return
   try {
-    await ElMessageBox.confirm('删除后无法恢复，确认删除这条比赛事件吗？', '确认删除比赛事件', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
-  const index = eventIndexInSource(event)
-  if (index < 0) return ElMessage.warning('事件已更新，请刷新后再试')
-  saving.value = true
-  try {
     const events = [...(match.value.events || [])]
+    const index = eventIndexInSource(targetEvent)
+    if (index < 0) return ElMessage.warning('事件已更新，请刷新后再试')
+    const eventDescription = [eventTimeText(targetEvent), eventLabel(targetEvent), targetEvent?.playerName || ''].filter(Boolean).join(' ')
+    await ElMessageBox.confirm(`${eventDescription || '该比赛事件'}将被删除，删除后无法恢复。`, '确认删除比赛事件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
+    saving.value = true
     events.splice(index, 1)
     await callFunction('updateMatch', {
       matchId,
@@ -2191,7 +2230,7 @@ async function removeEvent(event) {
     match.value.events = events
     ElMessage.success('已删除')
   } catch (err) {
-    ElMessage.error('删除失败: ' + err.message)
+    if (err !== 'cancel' && err !== 'close') ElMessage.error('删除失败: ' + err.message)
   } finally {
     saving.value = false
   }

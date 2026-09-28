@@ -269,7 +269,7 @@
       </section>
     </div>
     <el-dialog v-model="targetedRegistrationLinkVisible" title="邀约球队" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="creatingTargetedRegistrationLink"><el-alert type="success" :closable="false" title="当前生成正式版球队邀约，可将二维码或完整小程序链接对外发送。"/><section v-if="targetedRegistrationResult" class="targeted-link-result"><img v-if="targetedRegistrationResult.qrCodeUrl" :src="targetedRegistrationResult.qrCodeUrl" alt="邀约球队正式版小程序码"/><div><strong>球队邀约正式版二维码已生成</strong><el-tag type="success" size="small">正式版</el-tag><span>报名时由球队选择组别</span><p>可下载二维码或复制完整链接，发送给球队负责人办理报名。</p></div></section><el-empty v-else description="正在生成正式版球队邀约…"/></div><template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.urlLink" @click="copyTargetedRegistrationLink">复制链接</el-button><el-button v-if="targetedRegistrationResult" :disabled="!targetedRegistrationResult.qrCodeUrl" @click="downloadTargetedRegistrationCode">下载二维码</el-button><el-button v-if="targetedRegistrationResult" type="primary" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重新生成</el-button></template></el-dialog>
-    <el-dialog v-model="claimCodeVisible" title="赛事认领码" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="claimCodeLoading"><el-alert type="info" :closable="false" :title="miniProgramQrEnvVersion === 'trial' ? '预览环境使用体验版认领码；请用已加入体验成员的微信扫码测试。' : '一个赛事一个认领码，可群发或张贴。球队负责人扫码后在小程序验证手机号，即可看到自己名下待认领的球队。'"/><section v-if="claimCodeResult" class="targeted-link-result"><img v-if="claimCodeResult.qrCodeUrl" :src="claimCodeResult.qrCodeUrl" alt="赛事球队认领码"/><div><strong>球队认领码已生成</strong><el-tag type="success" size="small">{{ miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版' }}</el-tag><span>有效期至 {{ claimCodeExpiryText }}</span><p>把二维码发给领队，球队负责人扫码后按报名表登记的领队或主教练手机号自助认领。</p></div></section><el-alert v-else-if="claimCodeError" type="error" :closable="false" show-icon title="赛事认领码生成失败" :description="claimCodeError"/><el-empty v-else description="正在生成球队认领码…"/></div><template #footer><el-button @click="claimCodeVisible=false">关闭</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.urlLink" @click="copyClaimCodeLink">复制链接</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.qrCodeUrl" @click="downloadTournamentClaimCode">下载二维码</el-button></template></el-dialog>
+    <el-dialog v-model="claimCodeVisible" title="赛事认领码" width="620px" destroy-on-close><div class="targeted-link-dialog" v-loading="claimCodeLoading"><el-alert type="info" :closable="false" :title="miniProgramQrEnvVersion === 'trial' ? '预览环境使用体验版认领码；请用已加入体验成员的微信扫码测试。' : '一个赛事一个认领码，可群发或张贴。球队负责人扫码后在小程序验证手机号，即可看到自己名下待认领的球队。'"/><section v-if="claimCodeResult" class="targeted-link-result"><img v-if="claimCodeResult.qrCodeUrl" :src="claimCodeResult.qrCodeUrl" alt="赛事球队认领码"/><div><strong>球队认领码已生成</strong><el-tag type="success" size="small">{{ miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版' }}</el-tag><span>有效期至 {{ claimCodeExpiryText }}</span><p>把二维码发给领队，球队负责人扫码后按报名表登记的领队或主教练手机号自助认领。</p></div></section><el-alert v-else-if="claimCodeError" type="error" :closable="false" show-icon title="赛事认领码生成失败" :description="claimCodeError"/><el-empty v-else description="正在生成球队认领码…"/></div><template #footer><el-button @click="claimCodeVisible=false">关闭</el-button><el-button v-if="claimCodeResult" type="success" @click="downloadClaimPoster">下载认领海报</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.urlLink" @click="copyClaimCodeLink">复制链接</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.qrCodeUrl" @click="downloadTournamentClaimCode">下载二维码</el-button></template></el-dialog>
     <el-dialog v-model="teamActionDialogVisible" title="更多操作" width="360px" destroy-on-close><div v-if="teamActionTarget" class="team-action-dialog"><strong>{{ teamActionTarget.name || teamActionTarget.teamName || '当前球队' }}</strong><el-button @click="openTeamEditFromDialog">编辑球队</el-button><el-button v-if="isProfessional && teamActionTarget.status === 'approved'" @click="openTeamRosterFromDialog">查看名单</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(teamActionTarget.status)" @click="retryRegistrationNotificationFromDialog">重发通知</el-button><el-button v-if="claimLabel(teamActionTarget) !== '已认领'" type="danger" plain @click="deleteTeamFromDialog">删除队伍</el-button><el-button v-else type="warning" plain @click="removeTeamFromDialog">移出赛事</el-button></div></el-dialog>
 
     <!-- 邀请球队弹窗（旧球队池入口保留给内部兼容流程，不再由“定向邀请球队”按钮触发） -->
@@ -1367,11 +1367,12 @@ function teamSource(team) {
 }
 
 function claimLabel(team) {
-  const status = team.claimStatus || team.ownerStatus
+  const status = String(team.claimStatus || team.ownerStatus || '').toLowerCase()
   if (status === 'conflict') return '认领冲突'
   if (status === 'claimed' || team.ownerId || team.coachId) return '已认领'
-  if (team.status === 'invited') return '待认领'
-  return '已关联'
+  if (team.status === 'invited' || ['pending', 'pending_claim', 'pending_confirmation', 'unclaimed'].includes(String(status || '').toLowerCase())) return '待认领'
+  // 参赛关系存在不代表负责人已经完成手机号核验；没有明确认领凭证时仍显示待认领。
+  return '待认领'
 }
 
 function claimType(team) {
@@ -2687,6 +2688,67 @@ function downloadTournamentClaimCode() {
   const item = claimCodeResult.value
   if (!item?.qrCodeUrl) return
   const link = document.createElement('a'); link.href = item.qrCodeUrl; link.download = `${tournament.value.name || '赛事'}-球队认领码.png`; link.click()
+}
+
+function drawClaimFlowPhone(context, x, y, width, height, step, title, lines) {
+  context.save()
+  context.shadowColor = 'rgba(0, 35, 22, .18)'; context.shadowBlur = 22; context.shadowOffsetY = 10
+  roundedRect(context, x, y, width, height, 26); context.fillStyle = '#ffffff'; context.fill()
+  context.shadowColor = 'transparent'
+  context.fillStyle = '#063b29'; roundedRect(context, x, y, width, 62, 26); context.fill()
+  context.fillStyle = '#8ce0b5'; context.beginPath(); context.arc(x + 25, y + 31, 6, 0, Math.PI * 2); context.fill()
+  context.fillStyle = '#ffffff'; context.font = '700 23px "Microsoft YaHei", sans-serif'; context.textAlign = 'left'; context.fillText(`步骤 ${step}`, x + 45, y + 40)
+  context.fillStyle = '#152a20'; context.font = '800 28px "Microsoft YaHei", sans-serif'; context.fillText(title, x + 28, y + 112)
+  context.fillStyle = '#587066'; context.font = '500 22px "Microsoft YaHei", sans-serif'
+  lines.forEach((line, index) => { context.fillStyle = '#0b8750'; context.beginPath(); context.arc(x + 36, y + 165 + index * 42, 5, 0, Math.PI * 2); context.fill(); context.fillStyle = '#587066'; context.fillText(line, x + 55, y + 173 + index * 42) })
+  context.fillStyle = '#078247'; roundedRect(context, x + 28, y + height - 66, width - 56, 40, 20); context.fill()
+  context.fillStyle = '#ffffff'; context.font = '700 19px "Microsoft YaHei", sans-serif'; context.textAlign = 'center'; context.fillText(step === 1 ? '打开认领页' : (step === 2 ? '手机号授权' : '进入球队管理'), x + width / 2, y + height - 39)
+  context.restore()
+}
+
+async function downloadClaimPoster() {
+  const item = claimCodeResult.value
+  if (!item?.qrCodeUrl) return ElMessage.warning('请先生成正式版认领码')
+  try {
+    const canvas = document.createElement('canvas'); canvas.width = 1200; canvas.height = 1760
+    const context = canvas.getContext('2d')
+    const gradient = context.createLinearGradient(0, 0, 1200, 1760)
+    gradient.addColorStop(0, '#063d2a'); gradient.addColorStop(.52, '#078247'); gradient.addColorStop(1, '#03291d')
+    context.fillStyle = gradient; context.fillRect(0, 0, canvas.width, canvas.height)
+    context.fillStyle = 'rgba(207,255,225,.08)'; context.fillRect(0, 0, canvas.width, 420)
+    context.textAlign = 'center'; context.fillStyle = '#a9f0c6'; context.font = '600 26px "Microsoft YaHei", sans-serif'; context.fillText('赛小蜂足球 · 球队认领指南', 600, 68)
+    context.fillStyle = '#ffffff'; context.font = '800 58px "Microsoft YaHei", sans-serif'; context.fillText('扫码认领球队', 600, 145)
+    context.fillStyle = '#d9f8e6'; context.font = '500 25px "Microsoft YaHei", sans-serif'; context.fillText('使用报名表登记的球队负责人手机号完成授权', 600, 190)
+
+    roundedRect(context, 100, 232, 1000, 485, 34); context.fillStyle = '#ffffff'; context.fill()
+    const qr = await canvasImage(item.qrCodeUrl)
+    context.drawImage(qr, 155, 286, 360, 360)
+    context.textAlign = 'left'; context.fillStyle = '#123c29'; context.font = '800 34px "Microsoft YaHei", sans-serif'; context.fillText('正式版认领码', 590, 330)
+    context.fillStyle = '#587066'; context.font = '500 24px "Microsoft YaHei", sans-serif'; context.fillText('球队负责人扫码后：', 590, 385)
+    context.fillText('1. 进入球队认领页面', 590, 430); context.fillText('2. 使用球队注册手机号登录授权', 590, 475); context.fillText('3. 认领成功后查看赛程、管理资料', 590, 520)
+    context.fillStyle = '#da6f2e'; context.font = '700 22px "Microsoft YaHei", sans-serif'; context.fillText(`有效期至 ${claimCodeExpiryText.value}`, 590, 595)
+    context.fillStyle = '#82938b'; context.font = '500 20px "Microsoft YaHei", sans-serif'; context.fillText('手机号不匹配时无法认领，请联系赛事主办方核对', 590, 642)
+
+    context.textAlign = 'left'; context.fillStyle = '#ffffff'; context.font = '800 34px "Microsoft YaHei", sans-serif'; context.fillText('认领流程', 100, 790)
+    drawClaimFlowPhone(context, 100, 835, 310, 340, 1, '扫码进入', ['打开认领页面', '选择待认领球队'])
+    drawClaimFlowPhone(context, 445, 835, 310, 340, 2, '登录授权', ['点击登录', '手机号必须与报名登记一致'])
+    drawClaimFlowPhone(context, 790, 835, 310, 340, 3, '完成认领', ['查看球队赛程', '管理球队资料与参赛信息'])
+
+    roundedRect(context, 100, 1245, 1000, 385, 34); context.fillStyle = '#ffffff'; context.fill()
+    const serviceQrUrl = `${String(import.meta.env.BASE_URL || '/').replace(/\/?$/, '/') }images/customer-service-qr.png`
+    const serviceQr = await canvasImage(serviceQrUrl)
+    context.drawImage(serviceQr, 160, 1310, 250, 250)
+    context.textAlign = 'left'; context.fillStyle = '#123c29'; context.font = '800 34px "Microsoft YaHei", sans-serif'; context.fillText('遇到问题？请联系赛小蜂足球客服', 470, 1355)
+    context.fillStyle = '#587066'; context.font = '500 25px "Microsoft YaHei", sans-serif'; context.fillText('扫码添加客服，协助处理登录、认领和', 470, 1415); context.fillText('球队资料问题。', 470, 1455)
+    context.fillStyle = '#078247'; context.font = '700 23px "Microsoft YaHei", sans-serif'; context.fillText('请勿使用他人手机号尝试认领', 470, 1530)
+    context.textAlign = 'center'; context.fillStyle = '#c8eed8'; context.font = '500 20px "Microsoft YaHei", sans-serif'; context.fillText('赛小蜂足球 · 让球队管理更清楚', 600, 1705)
+
+    const link = document.createElement('a'); link.href = canvas.toDataURL('image/png', 1); link.download = '赛小蜂足球-球队认领流程海报.png'; link.click()
+    ElMessage.success('认领流程海报已下载')
+  } catch (error) {
+    console.error('生成认领海报失败:', error)
+    ElMessage.error('海报生成失败，请先下载二维码或重试')
+  }
 }
 
 // 弹窗关闭回调
