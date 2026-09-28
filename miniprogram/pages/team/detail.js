@@ -56,7 +56,7 @@ Page({
     try {
       const db = wx.cloud.database()
       const res = await db.collection('players')
-        .where({ teamId: teamId })
+        .where(db.command.or([{ teamId: teamId }, { teamCode: teamId }]))
         .orderBy('jerseyNumber', 'asc')
         .get()
       this.setData({ players: (res.data || []).map(function(item) {
