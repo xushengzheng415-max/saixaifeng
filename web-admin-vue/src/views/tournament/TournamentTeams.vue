@@ -1367,11 +1367,12 @@ function teamSource(team) {
 }
 
 function claimLabel(team) {
-  const status = team.claimStatus || team.ownerStatus
+  const status = String(team.claimStatus || team.ownerStatus || '').toLowerCase()
   if (status === 'conflict') return '认领冲突'
   if (status === 'claimed' || team.ownerId || team.coachId) return '已认领'
-  if (team.status === 'invited') return '待认领'
-  return '已关联'
+  if (team.status === 'invited' || ['pending', 'pending_claim', 'pending_confirmation', 'unclaimed'].includes(String(status || '').toLowerCase())) return '待认领'
+  // 参赛关系存在不代表负责人已经完成手机号核验；没有明确认领凭证时仍显示待认领。
+  return '待认领'
 }
 
 function claimType(team) {
