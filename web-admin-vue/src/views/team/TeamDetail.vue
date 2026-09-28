@@ -2244,6 +2244,8 @@ async function submitPlayer() {
     const data = {
       ...playerForm.value,
       playerId: generatePlayerId(team.value.teamCode || teamId, 'C'),
+      // 球员归属同时写入主键和历史兼容字段，保证小程序与 PC 端读取一致。
+      teamId: teamId,
       photoUrl: photoUrlToSave,
       teamCode: teamId,
       teamName: team.value.name,

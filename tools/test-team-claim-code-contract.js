@@ -499,7 +499,19 @@ async function run() {
     ok('强制业务待办不可删除')
   }
 
-  console.log(`\n赛事级认领码契约：${passed}/24 通过`)
+  // 场景 25：PC 历史入口只写 teamCode 的抽签后补录球员，小程序球队库仍必须可见。
+  {
+    const seed = baseSeed()
+    seed.teams = [{ _id:'team-1', name:'当前球队', ownerId:'user-1', claimStatus:'claimed' }]
+    seed.team_memberships = [{ _id:'tm-1', teamId:'team-1', userId:'user-1', role:'owner', status:'accepted' }]
+    seed.players = [{ _id:'player-team-code', teamCode:'team-1', name:'抽签后补录球员', jerseyNumber:'72' }]
+    const { result } = await callWorkspace(seed, { action:'teamPlayers', workspaceId:'team:team-1', teamId:'team-1' })
+    assert.strictEqual(result.success, true, `场景 25：球队球员读取应成功，实际 ${JSON.stringify(result)}`)
+    assert.ok(result.players.some(item => item.id === 'player-team-code'), '场景 25：只含 teamCode 的补录球员必须可见')
+    ok('球队球员库兼容 teamCode 历史归属字段')
+  }
+
+  console.log(`\n赛事级认领码契约：${passed}/25 通过`)
 }
 
 run().catch(error => {

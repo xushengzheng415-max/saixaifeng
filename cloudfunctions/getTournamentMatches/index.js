@@ -7,6 +7,18 @@ cloud.init({
 const db = cloud.database()
 const _ = db.command
 
+function eventScoreFromEvents(events) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(function (event) {
+    const type = String(event && (event.type || event.eventType) || '').trim().toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    let side = event && event.teamSide === 'away' ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
+}
+
 /**
  * 获取赛事所有比赛
  * 用于 portal 赛事详情页的赛况、积分榜等
@@ -85,8 +97,8 @@ exports.main = async (event, context) => {
       awayTeamName: teamMap[m.awayTeamId]?.name || teamMap[m.awayTeamId]?.teamName || m.awayTeamName || '',
       homeTeamLogo: teamMap[m.homeTeamId]?.logoUrl || teamMap[m.homeTeamId]?.logo || teamMap[m.homeTeamId]?.teamLogo || m.homeTeamLogo || '',
       awayTeamLogo: teamMap[m.awayTeamId]?.logoUrl || teamMap[m.awayTeamId]?.logo || teamMap[m.awayTeamId]?.teamLogo || m.awayTeamLogo || '',
-      homeScore: m.homeScore ?? null,
-      awayScore: m.awayScore ?? null,
+      homeScore: Array.isArray(m.events) && !m.resultCorrection ? eventScoreFromEvents(m.events).home : (m.homeScore ?? null),
+      awayScore: Array.isArray(m.events) && !m.resultCorrection ? eventScoreFromEvents(m.events).away : (m.awayScore ?? null),
       status: m.status || 'pending',    // pending/ongoing/completed
       reviewStatus,
       official: ['approved', 'archived', 'official'].indexOf(reviewStatus) >= 0,
