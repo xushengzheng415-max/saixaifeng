@@ -181,6 +181,75 @@ async function teamAccessContext(event, identity) {
   return { tournamentId, divisionId, tournamentTeamId, tournament, relation, teamId, team, actorOrgId }
 }
 
+function rosterSnapshotPlayerIds(snapshot) {
+  const direct = Array.isArray(snapshot && snapshot.playerIds) ? snapshot.playerIds : []
+  const embedded = Array.isArray(snapshot && snapshot.players)
+    ? snapshot.players.map(item => item && (item.playerId || item.id || item._id))
+    : []
+  return Array.from(new Set(direct.concat(embedded).filter(Boolean).map(String)))
+}
+
+function rosterSnapshotDivisionId(snapshot) {
+  return String(snapshot && (snapshot.divisionId || snapshot.division) || 'default')
+}
+
+async function listTournamentRosterPlayers(event, identity) {
+  const context = await teamAccessContext(event, identity)
+  const snapshots = (await safeGet('roster_snapshots', { tournamentId:context.tournamentId, teamId:context.teamId }, 50))
+    .filter(item => rosterSnapshotDivisionId(item) === context.divisionId)
+    .sort((left, right) => toTime(right.updateTime || right.createTime) - toTime(left.updateTime || left.createTime))
+  const latest = snapshots[0] || null
+  return { success:true, tournamentId:context.tournamentId, teamId:context.teamId, divisionId:context.divisionId, snapshotId:String(latest && latest._id || ''), snapshotStatus:String(latest && latest.status || ''), playerIds:rosterSnapshotPlayerIds(latest) }
+}
+
+async function approveTournamentPlayer(event, identity) {
+  const context = await teamAccessContext(event, identity)
+  const playerId = text(event.playerId, 80)
+  if (!playerId) throw new Error('缺少球员 ID')
+  const playerRows = [
+    ...(await safeGet('players', { _id:playerId, teamId:context.teamId }, 2)),
+    ...(await safeGet('players', { _id:playerId, teamCode:context.teamId }, 2))
+  ]
+  const player = playerRows.find(item => String(item._id) === playerId)
+  if (!player || ['archived', 'deleted'].includes(String(player.status || '').toLowerCase())) throw new Error('球员不存在或不属于当前球队')
+
+  const snapshots = (await safeGet('roster_snapshots', { tournamentId:context.tournamentId, teamId:context.teamId }, 50))
+    .filter(item => rosterSnapshotDivisionId(item) === context.divisionId)
+    .sort((left, right) => toTime(right.updateTime || right.createTime) - toTime(left.updateTime || left.createTime))
+  const latest = snapshots[0] || null
+  const previousIds = rosterSnapshotPlayerIds(latest)
+  const playerIds = Array.from(new Set(previousIds.concat(playerId)))
+  const now = db.serverDate()
+  const nextVersion = snapshots.reduce((max, item) => Math.max(max, Number(item.version || 1)), 0) + 1
+  const snapshotData = {
+    tournamentId:context.tournamentId,
+    teamId:context.teamId,
+    divisionId:context.divisionId,
+    divisionName:String(context.relation.divisionName || ''),
+    orgId:context.actorOrgId,
+    playerIds,
+    version:nextVersion,
+    status:'approved',
+    source:'organizer_player_approval',
+    previousSnapshotId:String(latest && latest._id || ''),
+    approvedByUserId:String(identity.user._id || ''),
+    approvedAt:now,
+    createTime:now,
+    updateTime:now
+  }
+  const created = await db.collection('roster_snapshots').add({ data:snapshotData })
+  await db.collection('players').doc(playerId).update({ data:{ organizerReviewStatus:'approved', organizerReviewedAt:now, organizerReviewedBy:String(identity.user._id || ''), updateTime:now } })
+  if (context.tournamentTeamId) {
+    await db.collection('tournament_teams').doc(context.tournamentTeamId).update({ data:{ rosterStatus:'approved', rosterPlayerCount:playerIds.length, playerReviewStatus:'completed', lastRosterApprovalAt:now, updateTime:now } })
+  }
+  try {
+    await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'organizer_player_approved', tournamentId:context.tournamentId, divisionId:context.divisionId, teamId:context.teamId, playerId, actorUserId:String(identity.user._id || ''), actorOrgId:context.actorOrgId, result:'success', detail:{ snapshotId:String(created._id), version:nextVersion }, createTime:now } })
+  } catch (error) {
+    console.warn('[organizerClaimInvite] 写入球员审核日志失败:', error.message)
+  }
+  return { success:true, playerId, snapshotId:String(created._id), snapshotStatus:'approved', playerIds, message:'球员已审核并加入本届正式名单' }
+}
+
 async function userByPhone(phone) {
   if (!phone) return null
   const result = await db.collection('users').where(_.or([{ phone }, { phoneNumber:phone }])).limit(3).get()
@@ -794,6 +863,8 @@ exports.main = async function(event) {
     const identity = await currentUser(event || {})
     if (event && event.action === 'getTeamExportPhotos') return await getTeamExportPhotos(event, identity)
     if (event && event.action === 'getTeamRegistrationSource') return await getTeamRegistrationSource(event, identity)
+    if (event && event.action === 'listTournamentRosterPlayers') return await listTournamentRosterPlayers(event, identity)
+    if (event && event.action === 'approveTournamentPlayer') return await approveTournamentPlayer(event, identity)
     if (event && event.action === 'listTeamExportRoster') return await listTeamExportRoster(event, identity)
     if (event && event.action === 'removeTeamAccess') return await removeTeamAccess(event, identity)
     if (event && event.action === 'listTeamAccess') return await listTeamAccess(event, identity)
