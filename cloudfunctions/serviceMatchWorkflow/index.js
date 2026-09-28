@@ -10,7 +10,7 @@ const _ = db.command
 const CLAIM_TTL_MS = 48 * 60 * 60 * 1000
 const ACTIVE_CLAIM_STATUS = 'claimed'
 const ROSTER_READY_STATUS = ['approved', 'confirmed', 'locked']
-const REFEREE_EVENT_TYPES = ['goal', 'penalty_scored', 'penalty_missed', 'own_goal', 'yellow_card', 'red_card', 'substitution', 'stoppage_time', 'other']
+const REFEREE_EVENT_TYPES = ['goal', 'penalty_scored', 'penalty_missed', 'own_goal', 'yellow_card', 'red_card', 'second_yellow_red', 'substitution', 'stoppage_time', 'other']
 
 const OCR_HOST = 'ocr.tencentcloudapi.com'
 const OCR_SERVICE = 'ocr'
@@ -368,6 +368,7 @@ function eventTypeText(type) {
     own_goal: '乌龙球（OG）',
     yellow_card: '黄牌',
     red_card: '红牌',
+    second_yellow_red: '2黄变1红',
     substitution: '换人',
     stoppage_time: '补时',
     other: '其他事件'
@@ -381,6 +382,7 @@ function eventTypeIcon(type) {
     penalty_scored: '⚽',
     penalty_missed: '⚽',
     own_goal: '⚽',
+    second_yellow_red: '🟨🔴',
     yellow_card: '🟨',
     red_card: '🟥',
     substitution: '🔄',

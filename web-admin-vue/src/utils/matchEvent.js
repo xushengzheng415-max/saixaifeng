@@ -16,6 +16,18 @@ export function isOwnGoal(event) {
   return text(event?.type) === 'own_goal' || event?.goalType === 'own_goal'
 }
 
+export function isSecondYellowRed(event) {
+  const type = text(event?.type)
+  return type === 'second_yellow_red' || type === 'yellow_red' || event?.disciplinaryOutcome === 'second_yellow_red'
+}
+
+export function cardEventCounts(event) {
+  // 本场第一张黄牌已经单独记账；本事件只新增第二张黄牌对应的纪律结果：黄1、红1。
+  if (isSecondYellowRed(event)) return { yellow: 1, red: 1 }
+  const type = text(event?.type)
+  return { yellow: type === 'yellow_card' ? 1 : 0, red: type === 'red_card' ? 1 : 0 }
+}
+
 export function isGoalEvent(event) {
   const type = text(event?.type)
   return type === 'goal' || type === 'score' || isPenaltyScored(event) || isOwnGoal(event)

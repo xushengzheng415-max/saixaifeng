@@ -98,7 +98,7 @@
       <!-- 抠图方案提示 -->
       <div v-if="processMethod" class="method-tip">
         <el-tag :type="processMethod === 'baidu' ? 'success' : processMethod === 'whiteBg' ? 'info' : 'warning'" size="small">
-          {{ processMethod === 'baidu' ? 'AI 智能抠图（百度）' : processMethod === 'whiteBg' ? '本地抠白算法' : 'Canvas 简单去白底' }}
+          {{ processMethod === 'baidu' ? 'AI 智能抠图（百度）' : processMethod === 'whiteBg' ? '本地边缘抠白算法' : 'Canvas 简单去白底' }}
         </el-tag>
         <span v-if="methodWarning" class="method-warn">{{ methodWarning }}</span>
       </div>
