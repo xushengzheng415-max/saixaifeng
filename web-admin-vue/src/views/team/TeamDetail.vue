@@ -1237,7 +1237,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled } from '@element-plus/icons-vue'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner } from '../../utils/cloud'
+import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
@@ -4100,13 +4100,13 @@ async function loadPlayers() {
     const loadTournamentRoster = async () => {
       if (!sourceTournamentId.value || !tournamentRelation.value?._id) return []
       try {
-        const result = await callFunction('organizerClaimInvite', {
-          action:'listTournamentRosterPlayers',
+        const result = await rosterExceptionBoard({
+          rosterAction:'listRoster',
           tournamentId:sourceTournamentId.value,
+          teamId,
           divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
-          tournamentTeamId:String(tournamentRelation.value._id)
         })
-        return result?.success && Array.isArray(result.playerIds) ? result.playerIds.map(String) : []
+        return result?.success && Array.isArray(result.snapshot?.playerIds) ? result.snapshot.playerIds.map(String) : []
       } catch (error) {
         console.warn('加载本届正式名单失败:', error.message || error)
         return []
@@ -4231,11 +4231,11 @@ async function reviewPlayer(player) {
   try {
     if (sourceTournamentId.value) {
       if (!tournamentRelation.value?._id) throw new Error('当前赛事参赛关系不存在，无法加入正式名单')
-      const result = await callFunction('organizerClaimInvite', {
-        action:'approveTournamentPlayer',
+      const result = await rosterExceptionBoard({
+        rosterAction:'approvePlayer',
         tournamentId:sourceTournamentId.value,
+        teamId,
         divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
-        tournamentTeamId:String(tournamentRelation.value._id),
         playerId:String(player._id)
       })
       if (!result?.success) throw new Error(result?.message || '球员审核失败')

@@ -4676,6 +4676,46 @@ async function handleRosterExceptionBoard(event) {
   const relationByTeamId = new Map(Array.from(relationsByTeamId.entries()).map(function (entry) { return [entry[0], entry[1][0]] }))
   const teamIds = Array.from(relationByTeamId.keys()).filter(Boolean)
 
+  if (action === 'approvePlayer') {
+    const teamId = String(event.teamId || '')
+    const playerId = String(event.playerId || '')
+    const selectedDivisionId = String(event.divisionId || '')
+    if (!teamId || !playerId) return { success:false, error:'缺少球队或球员信息' }
+    const teamRelations = relationsByTeamId.get(teamId) || []
+    const relation = selectedDivisionId
+      ? teamRelations.find(function (item) { return String(item.divisionId || item.division || 'default') === selectedDivisionId })
+      : (teamRelations.length === 1 ? teamRelations[0] : null)
+    if (!relation) return { success:false, error:'球队不属于当前赛事竞赛组别', code:'DIVISION_NOT_FOUND' }
+    const [teamResult, playerByIdResult, playerByCodeResult, snapshotResult] = await Promise.all([
+      db.collection('teams').doc(teamId).get(),
+      db.collection('players').where({ _id:playerId, teamId }).limit(2).get(),
+      db.collection('players').where({ _id:playerId, teamCode:teamId }).limit(2).get(),
+      db.collection('roster_snapshots').where({ tournamentId, teamId }).limit(50).get()
+    ])
+    const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
+    if (!team || !organizerRecordAllowed('teams', team, scope)) return { success:false, error:'无权审核该球队球员' }
+    const player = mergeRosterPlayerRows([playerByIdResult.data || [], playerByCodeResult.data || []]).find(function (item) { return String(item._id) === playerId })
+    if (!player || ['archived', 'deleted'].includes(String(player.status || '').toLowerCase())) return { success:false, error:'球员不存在或不属于当前球队' }
+    const relationDivisionId = String(relation.divisionId || relation.division || 'default')
+    const snapshots = (snapshotResult.data || []).filter(function (item) {
+      const snapshotDivisionId = String(item.divisionId || item.division || '')
+      return snapshotDivisionId ? snapshotDivisionId === relationDivisionId : teamRelations.length === 1
+    }).sort(function (a, b) { return new Date(b.updateTime || b.createTime || 0).getTime() - new Date(a.updateTime || a.createTime || 0).getTime() })
+    const latest = snapshots[0] || null
+    const playerIds = Array.from(new Set(rosterSnapshotPlayerIds(latest).concat(playerId)))
+    const now = db.serverDate()
+    const nextVersion = snapshots.reduce(function (max, item) { return Math.max(max, Number(item.version || 1)) }, 0) + 1
+    const created = await db.collection('roster_snapshots').add({ data:{
+      tournamentId, teamId, divisionId:relationDivisionId, divisionName:String(relation.divisionName || ''), orgId:scope.orgId,
+      playerIds, version:nextVersion, status:'approved', source:'organizer_player_approval', previousSnapshotId:String(latest && latest._id || ''),
+      approvedByUserId:authenticated.user._id, approvedAt:now, createTime:now, updateTime:now
+    } })
+    await db.collection('players').doc(playerId).update({ data:{ organizerReviewStatus:'approved', organizerReviewedAt:now, organizerReviewedBy:String(authenticated.user._id || ''), updateTime:now } })
+    const relationId = String(relation._id || '')
+    if (relationId) await db.collection('tournament_teams').doc(relationId).update({ data:{ rosterStatus:'approved', rosterPlayerCount:playerIds.length, playerReviewStatus:'completed', lastRosterApprovalAt:now, updateTime:now } })
+    return { success:true, playerId, snapshotId:String(created._id), snapshotStatus:'approved', playerIds, message:'球员已审核并加入本届正式名单' }
+  }
+
   if (action === 'listRoster') {
     const teamId = String(event.teamId || '')
     if (!teamId || !relationByTeamId.has(teamId)) return { success: false, error: '球队不属于当前赛事参赛关系' }
@@ -4716,7 +4756,7 @@ async function handleRosterExceptionBoard(event) {
         needsPortrait: requirements.portraitRequired, needsIdentity: profileState.needsIdentity, needsParentCompletion: profileState.needsParent, canRequestCorrection: Boolean(latest && ['submitted', 'approved', 'locked'].indexOf(String(latest.status || '')) >= 0), snapshotId: String(latest && latest._id || '')
       }
     })
-    return { success: true, tournament: { id: tournamentId, name: String(tournament.name || tournament.tournamentName || '赛事'), registrationDeadline: tournament.registrationDeadline || tournament.signupDeadline || null, rosterLocked: Boolean(latest && ['approved', 'locked'].indexOf(String(latest.status || '')) >= 0) }, relation: { teamId, teamName: String(team.name || team.teamName || relation.teamName || '未命名球队'), teamLogo: String(team.logo || team.logoUrl || ''), divisionId: rosterConfig.divisionId, divisionName: rosterConfig.divisionName }, requirements, snapshot: latest ? { id: String(latest._id), status: String(latest.status || 'draft'), version: Number(latest.version || 1), returnReason: String(latest.returnReason || '') } : null, rows }
+    return { success: true, tournament: { id: tournamentId, name: String(tournament.name || tournament.tournamentName || '赛事'), registrationDeadline: tournament.registrationDeadline || tournament.signupDeadline || null, rosterLocked: Boolean(latest && ['approved', 'locked'].indexOf(String(latest.status || '')) >= 0) }, relation: { teamId, teamName: String(team.name || team.teamName || relation.teamName || '未命名球队'), teamLogo: String(team.logo || team.logoUrl || ''), divisionId: rosterConfig.divisionId, divisionName: rosterConfig.divisionName }, requirements, snapshot: latest ? { id: String(latest._id), status: String(latest.status || 'draft'), version: Number(latest.version || 1), returnReason: String(latest.returnReason || ''), playerIds: rosterSnapshotPlayerIds(latest) } : null, rows }
   }
 
   if (action === 'requestProfileCorrection') {
