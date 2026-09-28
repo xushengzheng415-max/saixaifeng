@@ -229,7 +229,7 @@
               <div v-if="sortedEvents.length === 0" class="events-empty">
                 暂无比赛事件<el-button v-if="!isRefereeEvidenceLocked" link type="primary" @click="openAddEventDialog">，+ 添加事件</el-button>
               </div>
-              <div v-for="(evt, i) in sortedEvents" :key="i" class="event-row" :class="'event-' + evt.type">
+              <div v-for="(evt, i) in sortedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
                 <div class="event-icon"><img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" /><span v-else>{{ eventIcon(evt.type) }}</span></div>
                 <div class="event-content">
@@ -245,7 +245,7 @@
                   </template>
                   <span v-if="evt.teamSide" class="event-side">{{ evt.teamSide === 'home' ? homeName : awayName }}</span>
                 </div>
-                <el-button v-if="!isRefereeEvidenceLocked" size="small" text type="danger" @click="removeEvent(i)">
+                <el-button v-if="!isRefereeEvidenceLocked" size="small" text type="danger" @click="removeEvent(evt)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
               </div>
@@ -1508,6 +1508,21 @@ const sortedEvents = computed(() => {
   return [...events].sort((a, b) => (a.minute || 0) - (b.minute || 0))
 })
 
+const localEventKeys = new WeakMap()
+let localEventKeySequence = 0
+function existingEventId(event) {
+  return String(event?.eventId || event?._id || event?.id || '').trim()
+}
+function eventRowKey(event, index) {
+  const id = existingEventId(event)
+  if (id) return `event-${id}`
+  if (event && typeof event === 'object') {
+    if (!localEventKeys.has(event)) localEventKeys.set(event, `event-local-${++localEventKeySequence}`)
+    return localEventKeys.get(event)
+  }
+  return `event-index-${index}`
+}
+
 const eventSummary = computed(() => {
   const events = match.value.events || []
   const count = (...types) => events.filter(event => types.includes(event.type)).length
@@ -2185,10 +2200,33 @@ async function saveEvent() {
   }
 }
 
-async function removeEvent(index) {
+async function removeEvent(targetEvent) {
   if (!ensureEvidenceEditable()) return
   try {
     const events = [...(match.value.events || [])]
+    const targetId = existingEventId(targetEvent)
+    let index = events.findIndex(event => event === targetEvent)
+    // 兼容接口返回时重新创建对象的情况，再用事件标识兜底；优先对象引用可避免重复旧标识误删前一项。
+    if (index < 0 && targetId) index = events.findIndex(event => existingEventId(event) === targetId)
+    if (index < 0) {
+      ElMessage.warning('未找到该事件，请刷新后重试')
+      return
+    }
+    const eventDescription = [
+      eventTimeText(targetEvent),
+      eventLabel(targetEvent),
+      targetEvent?.playerName || ''
+    ].filter(Boolean).join(' ')
+    try {
+      await ElMessageBox.confirm(
+        `${eventDescription || '该比赛事件'}将被删除，删除后无法恢复。`,
+        '确认删除比赛事件',
+        { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch (error) {
+      if (error === 'cancel' || error === 'close') return
+      throw error
+    }
     events.splice(index, 1)
     await callFunction('updateMatch', {
       matchId,
