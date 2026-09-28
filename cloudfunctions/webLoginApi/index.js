@@ -4897,7 +4897,7 @@ function publicPlayerView(player, role, profilesById, teamName) {
     position: String(item.positionName || item.position || '').trim().slice(0, 20),
     role: role === 'substitute' || String(item.role || '').toLowerCase() === 'substitute' ? 'substitute' : 'starter',
     captain: item.captain === true || item.isCaptain === true,
-    avatarUrl: publicPlayerAvatarUrl(item, profilesById),
+    avatarUrl: String(item.portraitUrl || item.avatarUrl || profile.portraitUrl || profile.avatarUrl || profile.photoUrl || '').trim().slice(0, 500),
     appearances: metric(appearances),
     playerId: String(item.playerId || profile.playerId || playerId || '').slice(0, 80),
     jerseyName: String(item.jerseyName || profile.jerseyName || '').slice(0, 40),
