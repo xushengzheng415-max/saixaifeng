@@ -250,7 +250,7 @@ onMounted(loadDashboard)
 .board-scorers>div>span{display:flex;align-items:center;gap:4px}
 .board-scorers>div:last-child>span{justify-content:flex-end}
 .board-scorers>div>span::before{content:'';display:inline-block;width:13px;height:13px;flex:none;background:url('../../assets/report/events/football.svg') center/contain no-repeat}
-.board-card-chip{width:12px!important;height:16px!important;border:0;border-radius:0;box-shadow:none!important;background-color:transparent!important;background-position:center;background-repeat:no-repeat;background-size:contain}
+.board-card-chip{width:14px!important;height:18px!important;border:0;border-radius:0;box-shadow:none!important;background-color:transparent!important;background-position:center;background-repeat:no-repeat;background-size:contain;filter:drop-shadow(0 0 1px rgba(0,0,0,.72))}
 .board-card-chip.yellow{background-image:url('../../assets/report/events/yellow-card.svg')!important}
 .board-card-chip.red{background-image:url('../../assets/report/events/red-card.svg')!important}
 .board-card-chip.yellow-red{background-image:url('../../assets/report/events/yellow-red-card.svg')!important}
