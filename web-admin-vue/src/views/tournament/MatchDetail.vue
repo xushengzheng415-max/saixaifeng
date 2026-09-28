@@ -2200,10 +2200,6 @@ async function saveEvent() {
   }
 }
 
-function eventRowKey(event,index) {
-  return String(event?.eventId || event?._id || `${event?.createdAt || ''}:${event?.substitutionBatchId || ''}:${event?.substitutionBatchIndex || ''}:${event?.minute || 0}:${event?.type || ''}:${event?.teamSide || ''}:${event?.playerName || ''}:${event?.assistName || ''}:${index}`)
-}
-
 function eventIndexInSource(target) {
   const events = match.value.events || []
   const sameReference = events.indexOf(target)
