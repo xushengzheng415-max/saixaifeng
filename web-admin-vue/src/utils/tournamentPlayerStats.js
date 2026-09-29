@@ -2,14 +2,57 @@ import { normalizeMatchEvents, cardEventCounts, isScorerGoalEvent } from './matc
 
 const id = value => String(value ?? '').trim()
 const playerIds = player => [player?._id, player?.id, player?.playerId, player?.confirmedPlayerId, player?.sourcePlayerId].map(id).filter(Boolean)
+const name = value => id(value).replace(/\s+/g, '').toLowerCase()
+const number = value => Number(value?.$numberInt ?? value?.$numberLong ?? value)
+const positive = values => values.map(number).find(value => Number.isFinite(value) && value > 0)
 
-// 本届参赛名单只按稳定 ID 关联比赛，不将同名球员或未上场替补计入数据。
-export function buildTournamentPlayerStats(players, matches, teamIds) {
+// matchMinutes 是每节时长；赛程 durationMinutes 可能是旧占位值，不能覆盖定版规则。
+export function resolveMatchPlayingMinutes(match, division = {}, tournament = {}) {
+  const rules = division.rulesSnapshot || division.rules || {}
+  const matchTime = division.matchTime || rules.matchTime || tournament.matchTime || {}
+  const periodMinutes = positive([division.matchMinutes, rules.matchMinutes, matchTime.halfDuration])
+  const periodMode = id(division.periodMode || rules.periodMode || matchTime.timeType)
+  if (periodMinutes) {
+    if (periodMode === 'halves' || periodMode === 'half' || matchTime.halfDuration) return periodMinutes * 2
+    if (periodMode === 'quarters') return periodMinutes * 4
+    if (periodMode === 'single') return periodMinutes * (positive([division.singlePeriodCount, rules.singlePeriodCount]) || 1)
+    return periodMinutes
+  }
+  return positive([match.regulationMinutes, match.matchDurationMinutes, match.matchDuration, match.durationMinutes])
+}
+
+// 兼容旧事件的姓名/号码，只在本球队本届名单内唯一命中才关联。
+export function findTournamentPlayer(players, value) {
+  if (typeof value !== 'object' || !value) return players.find(player => playerIds(player).includes(id(value)))
+  const ids = playerIds(value)
+  if (ids.length) {
+    const exact = players.filter(player => playerIds(player).some(key => ids.includes(key)))
+    if (exact.length === 1) return exact[0]
+  }
+  const targetName = name(value.name || value.playerName)
+  const targetNumber = value.jerseyNumber ?? value.playerNumber ?? value.number
+  const named = targetName ? players.filter(player => [player.name, player.jerseyName, player.shirtName].some(label => name(label) === targetName)) : []
+  if (targetNumber !== undefined && targetNumber !== null && targetNumber !== '') {
+    const candidates = (targetName ? named : players).filter(player => number(player.jerseyNumber ?? player.number) === number(targetNumber))
+    return candidates.length === 1 ? candidates[0] : undefined
+  }
+  return named.length === 1 ? named[0] : undefined
+}
+
+// 保留已经转换的头像地址；名单接口中的 cloud:// 不能直接供 img 使用。
+export function mergeTournamentRosterPlayer(source = {}, snapshot = {}) {
+  const snapshotPhoto = id(snapshot.photoUrl)
+  const photoUrl = /^https?:\/\//i.test(source.photoUrl || '') ? source.photoUrl : (snapshotPhoto || source.photoUrl || '')
+  return { ...source, ...snapshot, _id: snapshot.id || snapshot._id || source._id,
+    jerseyName: snapshot.jerseyName || snapshot.shirtName || source.jerseyName || source.shirtName || '',
+    photoUrl, _exportPhotoFileId: source._exportPhotoFileId || source.photoFileID || source.photoFileId || (snapshotPhoto.startsWith('cloud://') ? snapshotPhoto : '') }
+}
+
+// 未上场替补不计出场；历史姓名号码事件仅在本队名单内关联，不跨队合并。
+export function buildTournamentPlayerStats(players, matches, teamIds, division = {}, tournament = {}) {
   const rows = players.map(player => ({ ...player, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0, minutesIncomplete: false, appearanceIncomplete: false, goalsIncomplete: false, cardsIncomplete: false }))
-  const byId = new Map()
-  rows.forEach(row => playerIds(row).forEach(key => byId.set(key, row)))
   const teams = new Set(teamIds.map(id))
-  const find = value => typeof value === 'object' ? playerIds(value).map(key => byId.get(key)).find(Boolean) : byId.get(id(value))
+  const find = value => findTournamentPlayer(rows, value)
   matches.forEach(match => {
     const home = id(match.homeTeamId || match.teamAId)
     const away = id(match.awayTeamId || match.teamBId)
@@ -18,7 +61,7 @@ export function buildTournamentPlayerStats(players, matches, teamIds) {
     const lineup = match[`${side}Lineup`] || match.refereeRecordPayload?.[`${side}Lineup`] || match.lineups?.[side] || {}
     const starters = Array.isArray(lineup.starters) ? lineup.starters : (lineup.players || []).filter(player => player.role !== 'substitute')
     const lineupKnown = starters.length > 0
-    const duration = [match.matchDurationMinutes, match.durationMinutes, match.regulationMinutes, match.matchDuration].map(Number).find(value => Number.isFinite(value) && value > 0)
+    const duration = resolveMatchPlayingMinutes(match, division, tournament)
     const active = new Map(), played = new Set(), elapsed = new Map(), unknown = new Set()
     starters.forEach(player => { const row = find(player); if (row) { active.set(row, 0); played.add(row) } })
     const close = (row, minute) => {
@@ -32,12 +75,12 @@ export function buildTournamentPlayerStats(players, matches, teamIds) {
     events.forEach(event => {
       const belongs = event.teamId ? teams.has(id(event.teamId)) : event.teamSide === side
       if (!belongs || event.deleted || event.status === 'deleted' || event.isPenaltyShootout || ['shootout', 'penalty_shootout'].includes(event.phase)) return
-      const row = find(event.playerId)
-      // 无明确球员 ID 的人工记录不能成为官方个人统计。
+      const row = find(event)
       if (event.type === 'substitution') {
-        const incoming = find(event.incomingPlayerId || event.substituteInId || event.playerInId || event.playerId)
-        const outgoing = find(event.outgoingPlayerId || event.substituteOutId || event.playerOutId || event.assistPlayerId)
+        const incoming = find({ playerId: event.incomingPlayerId || event.substituteInId || event.playerInId || event.playerId, name: event.incomingPlayerName || event.substituteInName || event.playerName, jerseyNumber: event.incomingPlayerNumber || event.playerNumber })
+        const outgoing = find({ playerId: event.outgoingPlayerId || event.substituteOutId || event.playerOutId || event.assistPlayerId, name: event.outgoingPlayerName || event.substituteOutName || event.assistName, jerseyNumber: event.outgoingPlayerNumber || event.assistNumber })
         const minute = event._minuteKnown === false ? null : event.minute
+        if (!incoming || !outgoing) rows.forEach(player => { player.minutesIncomplete = true; player.appearanceIncomplete = true })
         close(outgoing, minute)
         if (incoming) { active.set(incoming, minute); played.add(incoming); if (minute == null) unknown.add(incoming) }
         return

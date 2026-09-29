@@ -99,8 +99,9 @@
         <section class="synthetic-player-panel staff-roster-panel">
           <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table">
-            <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="工作人员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
+            <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="130" />
+            <el-table-column label="球衣名" min-width="125"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
             <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼球员</el-tag></template></el-table-column>
             <el-table-column label="出生日期" width="130"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
@@ -114,26 +115,27 @@
           </div>
           <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
           <el-table :data="isTeamDataWorkspace ? tournamentPlayerRows : players" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
-            <el-table-column label="头像" width="72" align="center">
-              <template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="球员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
+            <el-table-column label="头像" :width="isTeamDataWorkspace ? 56 : 72" align="center">
+              <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
-            <el-table-column prop="name" label="姓名" min-width="110" />
-            <el-table-column label="身份" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
+            <el-table-column prop="name" label="姓名" :min-width="isTeamDataWorkspace ? 75 : 110" />
+            <el-table-column label="球衣名" :min-width="isTeamDataWorkspace ? 115 : 125"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column label="身份" :width="isTeamDataWorkspace ? 110 : 120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="isSyntheticTeam" prop="playerId" label="球员编号" min-width="150" />
-            <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
-            <el-table-column label="位置" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
+            <el-table-column label="球衣号码" :width="isTeamDataWorkspace ? 80 : 90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
+            <el-table-column label="位置" :width="isTeamDataWorkspace ? 60 : 100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
-            <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
+            <el-table-column label="年龄" :width="isTeamDataWorkspace ? 55 : 80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
             <template v-if="isTeamDataWorkspace">
-              <el-table-column label="出场场次" width="100" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
-              <el-table-column label="出场时间" width="115" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
-              <el-table-column label="进球" width="75" align="center"><template #default="{ row }">{{ statValue(row, 'goals') }}</template></el-table-column>
-              <el-table-column label="黄牌" width="75" align="center"><template #default="{ row }">{{ statValue(row, 'yellowCards') }}</template></el-table-column>
-              <el-table-column label="红牌" width="75" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
-              <el-table-column label="操作" width="90" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
+              <el-table-column label="出场场次" width="80" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
+              <el-table-column label="出场时间" width="100" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
+              <el-table-column label="进球" width="55" align="center"><template #default="{ row }">{{ statValue(row, 'goals') }}</template></el-table-column>
+              <el-table-column label="黄牌" width="55" align="center"><template #default="{ row }">{{ statValue(row, 'yellowCards') }}</template></el-table-column>
+              <el-table-column label="红牌" width="55" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
+              <el-table-column label="操作" width="65" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
             </template>
             <el-table-column v-else label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
@@ -142,6 +144,7 @@
           <div class="synthetic-player-heading"><div><h2>报名表导入资料</h2><p>共 {{ importedDraftPlayers.length }} 人；历史导入资料先在此保留，确认后进入正式球员库。</p></div><el-tag type="info" effect="plain">导入记录</el-tag></div>
           <el-table :data="importedDraftPlayers" class="synthetic-player-table">
             <el-table-column label="姓名" prop="name" min-width="110" />
+            <el-table-column label="球衣名" min-width="125"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
             <el-table-column label="身份" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
             <el-table-column label="出生日期" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
@@ -1257,7 +1260,7 @@ import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
 import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
 import { actualStaffRecords } from '../../utils/staffRecords.js'
-import { buildTournamentPlayerStats } from '../../utils/tournamentPlayerStats.js'
+import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
 
 const route = useRoute()
@@ -1378,7 +1381,11 @@ const playerStatsLoading = ref(false)
 const playerStatsError = ref('')
 const competitionMatches = ref([])
 const competitionRoster = ref(null)
-const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(competitionRoster.value ?? exportPlayers.value, competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean)))
+const competitionDivision = ref({})
+const playerAvatarErrors = ref(new Set())
+function markPlayerAvatarFailed(row) { playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id]) }
+function displayJerseyName(row) { return row.jerseyName || row.shirtName || generateJerseyName(row.name || '') || '—' }
+const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(competitionRoster.value ?? exportPlayers.value, competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value))
 function statValue(row, key) {
   if (playerStatsError.value || playerStatsLoading.value || (key === 'minutes' && row.minutesIncomplete) || (key === 'appearances' && row.appearanceIncomplete) || (key === 'goals' && row.goalsIncomplete) || (['yellowCards', 'redCards'].includes(key) && row.cardsIncomplete)) return '—'
   return row[key] ?? 0
@@ -1404,16 +1411,23 @@ async function loadPlayerCompetitionData() {
       return
     }
     const divisionId = sourceDivisionId.value || tournamentRelation.value.divisionId || 'default'
-    const [dashboard, roster] = await Promise.all([
+    const [dashboard, roster, division] = await Promise.all([
       callFunction('resultCenter', { action: 'dashboard', tournamentId: sourceTournamentId.value }),
-      rosterExceptionBoard({ tournamentId: sourceTournamentId.value, teamId, divisionId, rosterAction: 'listRoster' })
+      rosterExceptionBoard({ tournamentId: sourceTournamentId.value, teamId, divisionId, rosterAction: 'listRoster' }),
+      divisionId === 'default' ? Promise.resolve({}) : queryById('divisions', divisionId)
     ])
+    competitionDivision.value = Array.isArray(division) ? division[0] || {} : division || {}
     if (!dashboard?.success) throw new Error(dashboard?.message || '赛果加载失败')
     if (!roster?.success) throw new Error(roster?.error || '本届名单加载失败')
     // 已有本届名单快照时只显示快照成员；旧报名表仍保留在本届展示中。
     if (roster.snapshot) {
       const sourceById = new Map(exportPlayers.value.map(player => [String(player._id), player]))
-      competitionRoster.value = (roster.rows || []).map(player => ({ ...sourceById.get(String(player.id)), ...player, _id: player.id }))
+      competitionRoster.value = await Promise.all((roster.rows || []).map(async player => {
+        const merged = mergeTournamentRosterPlayer(sourceById.get(String(player.id)), player)
+        if (String(merged.photoUrl || '').startsWith('cloud://')) merged.photoUrl = await getFileUrl(merged._exportPhotoFileId || merged.photoUrl)
+        return merged
+      }))
+      playerAvatarErrors.value = new Set()
     }
     const ids = new Set([String(teamId), String(tournamentRelation.value._id || '')])
     const official = (dashboard.matches || []).filter(match => match.resultStatus === 'approved' && String(match.divisionId || 'default') === String(divisionId) && (ids.has(String(match.homeTeamId)) || ids.has(String(match.awayTeamId))))

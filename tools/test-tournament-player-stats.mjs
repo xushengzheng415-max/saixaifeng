@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { buildTournamentPlayerStats } from '../web-admin-vue/src/utils/tournamentPlayerStats.js'
+import { buildTournamentPlayerStats, resolveMatchPlayingMinutes, mergeTournamentRosterPlayer, findTournamentPlayer } from '../web-admin-vue/src/utils/tournamentPlayerStats.js'
 
 const players = [{ _id: 'starter', name: '同名' }, { _id: 'sub', name: '同名' }, { _id: 'bench' }]
 const match = { homeTeamId: 'relation', awayTeamId: 'other', durationMinutes: 80, homeLineup: { starters: [{ playerId: 'starter' }], substitutes: [{ playerId: 'sub' }, { playerId: 'bench' }] }, statsEvents: [
@@ -32,3 +32,41 @@ const unknownMinute = buildTournamentPlayerStats(players, [{ ...match, statsEven
 assert.equal(unknownMinute[0].minutesIncomplete, true)
 assert.equal(unknownMinute[1].minutesIncomplete, true)
 console.log('PASS: 本届球员统计、稳定ID、换人、替补席红黄牌、去重、两黄一红、缺失记录')
+
+// 线上历史记录结构：阵容使用 id/number；事件只有姓名、号码与主客队。
+const historicalRoster = [
+  { _id: 'r1', name: '球员甲', jerseyNumber: 1 }, { _id: 'r82', name: '球员乙', jerseyNumber: 82 },
+  { _id: 'r2', name: '球员丙', jerseyNumber: 2 }, { _id: 'r12', name: '球员丁', jerseyNumber: 12 },
+  { _id: 'r37', name: '球员戊', jerseyNumber: 37 }, { _id: 'r11', name: '球员己', jerseyNumber: 11 },
+  { _id: 'r8', name: '球员庚', jerseyNumber: 8 }, { _id: 'r7', name: '球员辛', jerseyNumber: 7 },
+  { _id: 'r3', name: '球员壬', jerseyNumber: 3 }, { _id: 'r5', name: '球员癸', jerseyNumber: 5 },
+  { _id: 'unused', name: '未出场', jerseyNumber: 24 }
+]
+const historicalMatch = { homeTeamId: 'other', awayTeamId: 'team', durationMinutes: 50,
+  lineups: { away: { players: historicalRoster.slice(0, 8).map(player => ({ id: player._id, name: player.name, number: player.jerseyNumber, role: 'FW1' })), substitutes: [] } },
+  events: [
+    { type: 'substitution', teamSide: 'away', minute: 12, playerName: '球员壬', playerNumber: '3', assistName: '球员己', assistNumber: '11' },
+    { type: 'substitution', teamSide: 'away', minute: 30, playerName: '球员癸', playerNumber: '5', assistName: '球员丙', assistNumber: '2' },
+    { type: 'goal', teamSide: 'away', minute: 19, playerName: '球员庚', playerNumber: '8' },
+    { type: 'goal', teamSide: 'away', minute: 46, playerName: '球员辛', playerNumber: '7' },
+    { type: 'goal', teamSide: 'away', minute: 56, playerName: '球员丁', playerNumber: '12' },
+    { type: 'yellow_card', teamSide: 'away', minute: 57, playerName: '球员庚', playerNumber: '8' },
+    { type: 'goal', teamSide: 'home', minute: 35, playerName: '球员庚', playerNumber: '8' }
+  ] }
+const division = { matchMinutes: 30, rulesSnapshot: { periodMode: 'halves', matchMinutes: 30, breakMinutes: 10 } }
+const historical = buildTournamentPlayerStats(historicalRoster, [historicalMatch], ['team'], division)
+assert.equal(resolveMatchPlayingMinutes(historicalMatch, division), 60)
+assert.equal(resolveMatchPlayingMinutes(historicalMatch, { matchMinutes: 20, periodMode: 'single', singlePeriodCount: 4 }), 80)
+assert.equal(resolveMatchPlayingMinutes(historicalMatch, {}, { matchTime: { halfDuration: 30 } }), 60)
+assert.deepEqual(historical.map(row => row.minutes), [60, 60, 30, 60, 60, 12, 60, 60, 48, 30, 0])
+assert.equal(historical.reduce((sum, row) => sum + row.goals, 0), 3)
+assert.equal(historical.reduce((sum, row) => sum + row.yellowCards, 0), 1)
+assert.equal(historical.reduce((sum, row) => sum + row.redCards, 0), 0)
+assert.equal(historical.every(row => !row.minutesIncomplete && !row.goalsIncomplete && !row.cardsIncomplete), true)
+assert.equal(findTournamentPlayer([{ _id: 'x', name: '同名', jerseyNumber: 3 }, { _id: 'y', name: '同名', jerseyNumber: 5 }], { playerName: '同名', playerNumber: 5 })._id, 'y')
+assert.equal(findTournamentPlayer([{ _id: 'x', name: '同名' }, { _id: 'y', name: '同名' }], { playerName: '同名' }), undefined)
+const merged = mergeTournamentRosterPlayer({ _id: 'x', photoUrl: 'https://example.test/photo.png', jerseyName: 'LI S.Y.' }, { id: 'x', photoUrl: 'cloud://example/photo.png', jerseyName: '' })
+assert.equal(merged.photoUrl, 'https://example.test/photo.png')
+assert.equal(merged.jerseyName, 'LI S.Y.')
+assert.equal(merged._exportPhotoFileId, 'cloud://example/photo.png')
+console.log('PASS: 历史姓名号码关联、60分钟规则、换人后12/30/48分钟、头像地址、球衣名')
