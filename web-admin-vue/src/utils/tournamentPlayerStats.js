@@ -49,11 +49,13 @@ export function mergeTournamentRosterPlayer(source = {}, snapshot = {}) {
 }
 
 // 未上场替补不计出场；历史姓名号码事件仅在本队名单内关联，不跨队合并。
-export function buildTournamentPlayerStats(players, matches, teamIds, division = {}, tournament = {}) {
+export function buildTournamentPlayerStats(players, matches, teamIds, division = {}, tournament = {}, scope = {}) {
   const rows = players.map(player => ({ ...player, appearances: 0, minutes: 0, goals: 0, yellowCards: 0, redCards: 0, minutesIncomplete: false, appearanceIncomplete: false, goalsIncomplete: false, cardsIncomplete: false }))
   const teams = new Set(teamIds.map(id))
   const find = value => findTournamentPlayer(rows, value)
   matches.forEach(match => {
+    if (scope.tournamentId && id(match.tournamentId) !== id(scope.tournamentId)) return
+    if (scope.divisionId && id(match.divisionId || match.division || 'default') !== id(scope.divisionId)) return
     const home = id(match.homeTeamId || match.teamAId)
     const away = id(match.awayTeamId || match.teamBId)
     const side = teams.has(home) ? 'home' : teams.has(away) ? 'away' : ''

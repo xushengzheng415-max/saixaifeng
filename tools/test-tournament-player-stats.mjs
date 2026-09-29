@@ -70,3 +70,12 @@ assert.equal(merged.photoUrl, 'https://example.test/photo.png')
 assert.equal(merged.jerseyName, 'LI S.Y.')
 assert.equal(merged._exportPhotoFileId, 'cloud://example/photo.png')
 console.log('PASS: 历史姓名号码关联、60分钟规则、换人后12/30/48分钟、头像地址、球衣名')
+
+const currentMatch = { ...historicalMatch, tournamentId: 'current-event', divisionId: 'current-division' }
+const scoped = buildTournamentPlayerStats(historicalRoster.map(player => ({ ...player, appearances: 999, minutes: 99999, goals: 999, yellowCards: 999, redCards: 999 })), [currentMatch, { ...currentMatch, tournamentId: 'previous-event' }, { ...currentMatch, divisionId: 'other-division' }], ['team'], division, {}, { tournamentId: 'current-event', divisionId: 'current-division' })
+assert.equal(scoped[0].appearances, 1)
+assert.equal(scoped[0].minutes, 60)
+assert.equal(scoped.reduce((sum, row) => sum + row.goals, 0), 3)
+assert.equal(scoped.reduce((sum, row) => sum + row.yellowCards, 0), 1)
+assert.equal(scoped.reduce((sum, row) => sum + row.redCards, 0), 0)
+console.log('PASS: 只累计本届当前组别，不读取生涯字段或其他赛事')

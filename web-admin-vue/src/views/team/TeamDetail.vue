@@ -109,17 +109,17 @@
         </section>
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
-            <div><h2>{{ isTeamDataWorkspace ? '球员参赛数据' : (isSyntheticTeam ? '虚拟球员资料' : '球员') }}</h2><p v-if="isTeamDataWorkspace">本届 {{ tournamentPlayerRows.length }} 人 · 统计已确认赛果</p><p v-else>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
+            <div><h2>{{ isTeamDataWorkspace ? '球员参赛数据' : (isSyntheticTeam ? '虚拟球员资料' : '球员') }}</h2><p v-if="isTeamDataWorkspace">本届累计 · {{ tournamentPlayerRows.length }} 人 · 已确认赛果</p><p v-else>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
             <el-button v-if="!isTeamDataWorkspace" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
           <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
-          <el-table :data="isTeamDataWorkspace ? tournamentPlayerRows : players" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
+          <el-table :data="isTeamDataWorkspace ? tournamentPlayerRows : players" :fit="!isTeamDataWorkspace" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
             <el-table-column label="头像" :width="isTeamDataWorkspace ? 56 : 72" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
-            <el-table-column prop="name" label="姓名" :min-width="isTeamDataWorkspace ? 75 : 110" />
-            <el-table-column label="球衣名" :min-width="isTeamDataWorkspace ? 115 : 125"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column prop="name" label="姓名" :width="isTeamDataWorkspace ? 100 : undefined" min-width="110" show-overflow-tooltip />
+            <el-table-column label="球衣名" :width="isTeamDataWorkspace ? 140 : undefined" min-width="125" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
             <el-table-column label="身份" :width="isTeamDataWorkspace ? 110 : 120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="isSyntheticTeam" prop="playerId" label="球员编号" min-width="150" />
             <el-table-column label="球衣号码" :width="isTeamDataWorkspace ? 80 : 90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
@@ -1385,7 +1385,7 @@ const competitionDivision = ref({})
 const playerAvatarErrors = ref(new Set())
 function markPlayerAvatarFailed(row) { playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id]) }
 function displayJerseyName(row) { return row.jerseyName || row.shirtName || generateJerseyName(row.name || '') || '—' }
-const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(competitionRoster.value ?? exportPlayers.value, competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value))
+const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(competitionRoster.value ?? exportPlayers.value, competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' }))
 function statValue(row, key) {
   if (playerStatsError.value || playerStatsLoading.value || (key === 'minutes' && row.minutesIncomplete) || (key === 'appearances' && row.appearanceIncomplete) || (key === 'goals' && row.goalsIncomplete) || (['yellowCards', 'redCards'].includes(key) && row.cardsIncomplete)) return '—'
   return row[key] ?? 0
