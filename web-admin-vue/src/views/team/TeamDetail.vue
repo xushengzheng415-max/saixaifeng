@@ -108,11 +108,12 @@
         </section>
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
-            <div><h2>{{ isSyntheticTeam ? '虚拟球员资料' : '球员' }}</h2><p>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
-            <el-button type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
+            <div><h2>{{ isTeamDataWorkspace ? '球员参赛数据' : (isSyntheticTeam ? '虚拟球员资料' : '球员') }}</h2><p v-if="isTeamDataWorkspace">本届 {{ tournamentPlayerRows.length }} 人 · 统计已确认赛果</p><p v-else>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
+            <el-button v-if="!isTeamDataWorkspace" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
-          <el-table :data="players" v-loading="loading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
+          <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
+          <el-table :data="isTeamDataWorkspace ? tournamentPlayerRows : players" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
             <el-table-column label="头像" width="72" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl" :src="row.photoUrl" class="player-avatar-img" alt="球员头像" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
@@ -121,15 +122,23 @@
             <el-table-column v-if="isSyntheticTeam" prop="playerId" label="球员编号" min-width="150" />
             <el-table-column label="球衣号码" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
             <el-table-column label="位置" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
-            <el-table-column label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
-            <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
-            <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
-            <el-table-column label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <template v-if="isTeamDataWorkspace">
+              <el-table-column label="出场场次" width="100" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
+              <el-table-column label="出场时间" width="115" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
+              <el-table-column label="进球" width="75" align="center"><template #default="{ row }">{{ statValue(row, 'goals') }}</template></el-table-column>
+              <el-table-column label="黄牌" width="75" align="center"><template #default="{ row }">{{ statValue(row, 'yellowCards') }}</template></el-table-column>
+              <el-table-column label="红牌" width="75" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
+              <el-table-column label="操作" width="90" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
+            </template>
+            <el-table-column v-else label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
         </section>
-        <section v-if="importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
+        <section v-if="!isTeamDataWorkspace && importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
           <div class="synthetic-player-heading"><div><h2>报名表导入资料</h2><p>共 {{ importedDraftPlayers.length }} 人；历史导入资料先在此保留，确认后进入正式球员库。</p></div><el-tag type="info" effect="plain">导入记录</el-tag></div>
           <el-table :data="importedDraftPlayers" class="synthetic-player-table">
             <el-table-column label="姓名" prop="name" min-width="110" />
@@ -142,7 +151,7 @@
         </section>
         <section v-if="isProfessionalTournamentTeam" class="collaboration-timeline"><h2>协作流程进度</h2><ol><li v-for="step in professionalTimeline" :key="step.title"><span><el-icon><CircleCheckFilled /></el-icon></span><div><strong>{{ step.title }}</strong><time>{{ step.time }}</time><small>{{ step.description }}</small></div></li></ol></section>
         <el-button v-else class="view-results" type="success" plain @click="openTournamentMatches"><el-icon><SwitchButton /></el-icon>查看赛程赛果</el-button>
-        <el-alert title="报名表上传成功后直接形成本届正式名单；球员仍须完成人证核验后才能进入比赛阵容。" type="success" :closable="false" show-icon />
+        <el-alert v-if="!isTeamDataWorkspace" title="报名表上传成功后直接形成本届正式名单；球员仍须完成人证核验后才能进入比赛阵容。" type="success" :closable="false" show-icon />
       </main>
     </template>
 
@@ -1237,7 +1246,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled } from '@element-plus/icons-vue'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner } from '../../utils/cloud'
+import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
@@ -1248,6 +1257,7 @@ import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
 import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
 import { actualStaffRecords } from '../../utils/staffRecords.js'
+import { buildTournamentPlayerStats } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
 
 const route = useRoute()
@@ -1256,6 +1266,7 @@ const teamId = String(route.params.teamId || route.params.id || '')
 const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : (route.params.teamId ? String(route.params.id || '') : ''))
 const sourceDivisionId = computed(() => typeof route.query.divisionId === 'string' ? route.query.divisionId : '')
 const fromRegistration = computed(() => route.query.from === 'registration')
+const isTeamDataWorkspace = computed(() => Boolean(sourceTournamentId.value) && !fromRegistration.value)
 const isProfessionalTournamentTeam = computed(() => route.query.mode === 'professional' || sourceDivisionId.value === 'qa-division-u16')
 const tournamentDateRange = computed(() => tournamentContext.value.startDate && tournamentContext.value.endDate
   ? `${String(tournamentContext.value.startDate).replaceAll('-', '.')}—${String(tournamentContext.value.endDate).replaceAll('-', '.')}`
@@ -1363,6 +1374,67 @@ async function resolveTournamentLogo() {
 }
 const tournamentLogoUrl = computed(() => resolvedTournamentLogo.value || tournamentLogoDirectUrl.value || `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`)
 const tournamentMatches = ref([])
+const playerStatsLoading = ref(false)
+const playerStatsError = ref('')
+const competitionMatches = ref([])
+const competitionRoster = ref(null)
+const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(competitionRoster.value ?? exportPlayers.value, competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean)))
+function statValue(row, key) {
+  if (playerStatsError.value || playerStatsLoading.value || (key === 'minutes' && row.minutesIncomplete) || (key === 'appearances' && row.appearanceIncomplete) || (key === 'goals' && row.goalsIncomplete) || (['yellowCards', 'redCards'].includes(key) && row.cardsIncomplete)) return '—'
+  return row[key] ?? 0
+}
+async function readAllRows(collection, where) {
+  const rows = []
+  for (let skip = 0; ; skip += 100) {
+    const page = await queryList(collection, { where, skip, limit: 100, throwOnError: true, silent: true, orderBy: { _id: 'asc' } })
+    rows.push(...page)
+    if (page.length < 100) return rows
+  }
+}
+async function loadPlayerCompetitionData() {
+  if (!isTeamDataWorkspace.value) return
+  playerStatsLoading.value = true
+  playerStatsError.value = ''
+  competitionMatches.value = []
+  competitionRoster.value = null
+  try {
+    if (qaSnapshot) {
+      competitionMatches.value = qaSnapshot.playerCompetitionMatches || []
+      competitionRoster.value = qaSnapshot.players || []
+      return
+    }
+    const divisionId = sourceDivisionId.value || tournamentRelation.value.divisionId || 'default'
+    const [dashboard, roster] = await Promise.all([
+      callFunction('resultCenter', { action: 'dashboard', tournamentId: sourceTournamentId.value }),
+      rosterExceptionBoard({ tournamentId: sourceTournamentId.value, teamId, divisionId, rosterAction: 'listRoster' })
+    ])
+    if (!dashboard?.success) throw new Error(dashboard?.message || '赛果加载失败')
+    if (!roster?.success) throw new Error(roster?.error || '本届名单加载失败')
+    // 已有本届名单快照时只显示快照成员；旧报名表仍保留在本届展示中。
+    if (roster.snapshot) {
+      const sourceById = new Map(exportPlayers.value.map(player => [String(player._id), player]))
+      competitionRoster.value = (roster.rows || []).map(player => ({ ...sourceById.get(String(player.id)), ...player, _id: player.id }))
+    }
+    const ids = new Set([String(teamId), String(tournamentRelation.value._id || '')])
+    const official = (dashboard.matches || []).filter(match => match.resultStatus === 'approved' && String(match.divisionId || 'default') === String(divisionId) && (ids.has(String(match.homeTeamId)) || ids.has(String(match.awayTeamId))))
+    const loaded = []
+    for (let start = 0; start < official.length; start += 4) {
+      const batch = await Promise.all(official.slice(start, start + 4).map(async summary => {
+        const [match, events] = await Promise.all([queryById('matches', summary.id), readAllRows('match_events', { matchId: summary.id })])
+        const raw = Array.isArray(match) ? match[0] : match
+        if (!raw) throw new Error('比赛记录缺失')
+        return { ...raw, statsEvents: events.length ? events : (raw.events || raw.refereeRecordPayload?.events || []) }
+      }))
+      loaded.push(...batch)
+    }
+    competitionMatches.value = loaded
+  } catch (error) {
+    playerStatsError.value = '参赛数据加载失败，请重新加载'
+    console.error('加载本届球员参赛数据失败:', error)
+  } finally {
+    playerStatsLoading.value = false
+  }
+}
 const teamMatchStats = computed(() => tournamentMatches.value.reduce((stats, match) => {
   const isHome = String(match.homeTeamId || match.teamAId || '') === String(teamId)
   const homeScore = Number(match.homeScore ?? match.teamAScore ?? 0)
@@ -2072,11 +2144,16 @@ async function handleIdCardUpload(options, side) {
 }
 
 function viewPlayerCard(row) {
+  if (isTeamDataWorkspace.value) {
+    ElMessageBox.alert(`出场场次：${statValue(row, 'appearances')}　出场时间：${statValue(row, 'minutes')} 分钟\n进球：${statValue(row, 'goals')}　黄牌：${statValue(row, 'yellowCards')}　红牌：${statValue(row, 'redCards')}`, row.name || '球员参赛数据')
+    return
+  }
   if (!sourceTournamentId.value) return router.push('/tournament-space')
   router.push({ path: `/tournaments/${sourceTournamentId.value}/players/${row._id}`, query: { teamId, divisionId: sourceDivisionId.value } })
 }
 
 function editPlayer(row) {
+  if (isTeamDataWorkspace.value) return
   isEditingPlayer.value = true
   editingPlayerId.value = row._id
   editingPlayerOriginal.value = row
@@ -2310,6 +2387,7 @@ async function submitPlayer() {
 }
 
 function openAddPlayer() {
+  if (isTeamDataWorkspace.value) return
   resetPlayerForm()
   showAddPlayer.value = true
 }
@@ -4172,6 +4250,7 @@ async function loadPlayers() {
 }
 
 async function deletePlayer(player) {
+  if (isTeamDataWorkspace.value) return
   if (!player?._id) return
   try {
     await ElMessageBox.confirm(`确定删除球员“${player.name || '未命名'}”吗？删除后不可恢复。`, '删除球员', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
@@ -4198,6 +4277,7 @@ function playerOrganizerReviewStatus(player) {
 }
 
 async function reviewPlayer(player) {
+  if (isTeamDataWorkspace.value) return
   if (!player?._id || playerOrganizerReviewStatus(player) === 'approved') return
   playerReviewingId.value = String(player._id)
   try {
@@ -4270,6 +4350,7 @@ onMounted(async () => {
   if (sourceTournamentId.value) {
     await loadTournamentTeamContext()
     await Promise.all([loadPlayers(), loadTeamAccess()])
+    await loadPlayerCompetitionData()
   }
   else await loadPlayers()
 })
