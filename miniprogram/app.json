@@ -10,6 +10,7 @@
     "pages/schedule/index",
     "pages/todo/index",
     "pages/data/index",
+    "pages/data-center/index",
     "pages/onboarding/onboarding",
     "pages/guide/team-info/team-info",
     "pages/guide/referee-info/referee-info",

@@ -96,22 +96,22 @@
               </div>
 
               <div class="info-card">
-                <h4 class="section-title">参赛统计</h4>
+                <h4 class="section-title">{{ route.params.playerId ? '本届表现' : '球员历史' }}</h4><p v-if="statisticsMessage">{{ statisticsMessage }}</p>
                 <div class="stats-grid">
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.appearances || 0 }}</div>
+                    <div class="stat-value">{{ metric(statistics.appearances) }}</div>
                     <div class="stat-label">参赛场次</div>
                   </div>
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.points || 0 }}</div>
-                    <div class="stat-label">参与积分</div>
+                    <div class="stat-value">{{ metric(statistics.minutesPlayed) }}</div>
+                    <div class="stat-label">出场分钟</div>
                   </div>
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.goals || 0 }}</div>
+                    <div class="stat-value">{{ metric(statistics.goals) }}</div>
                     <div class="stat-label">进球数</div>
                   </div>
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.assists || 0 }}</div>
+                    <div class="stat-value">{{ metric(statistics.assists) }}</div>
                     <div class="stat-label">助攻数</div>
                   </div>
                 </div>
@@ -210,18 +210,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="参赛场次">
-          <el-input-number v-model="editForm.appearances" :min="0" :max="999" />
-        </el-form-item>
-        <el-form-item label="参与积分">
-          <el-input-number v-model="editForm.points" :min="0" :max="9999" />
-        </el-form-item>
-        <el-form-item label="进球数">
-          <el-input-number v-model="editForm.goals" :min="0" :max="999" />
-        </el-form-item>
-        <el-form-item label="助攻数">
-          <el-input-number v-model="editForm.assists" :min="0" :max="999" />
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
@@ -246,7 +234,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, Edit, View, Plus, Upload } from '@element-plus/icons-vue'
-import { queryList, updateRecord } from '../../utils/cloud'
+import { queryList, updateRecord, callFunction } from '../../utils/cloud'
 import { getTempFileURL } from '../../utils/upload'
 import PlayerCard from '../../components/player/PlayerCard.vue'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
@@ -258,6 +246,9 @@ const loading = ref(false)
 const saving = ref(false)
 const playerData = ref({})
 const teamData = ref({})
+const statistics = ref({})
+const statisticsMessage = ref('')
+function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 const playerAvatarUrl = ref('')
 const showEditDialog = ref(false)
 const showPreviewDialog = ref(false)
@@ -266,10 +257,6 @@ const editForm = ref({
   name: '',
   height: null,
   weight: null,
-  appearances: 0,
-  points: 0,
-  goals: 0,
-  assists: 0,
   photoUrl: '',
   photoPreview: '',
   photoFileID: ''
@@ -391,10 +378,6 @@ function editPlayer() {
     name: playerData.value.name || '',
     height: playerData.value.height || null,
     weight: playerData.value.weight || null,
-    appearances: playerData.value.appearances || 0,
-    points: playerData.value.points || 0,
-    goals: playerData.value.goals || 0,
-    assists: playerData.value.assists || 0,
     photoUrl: playerData.value.photoUrl || '',
     photoPreview: '',
     photoFileID: ''
@@ -424,20 +407,12 @@ async function savePlayer() {
     await updateRecord('players', playerData.value._id, {
       height: editForm.value.height,
       weight: editForm.value.weight,
-      appearances: editForm.value.appearances,
-      points: editForm.value.points,
-      goals: editForm.value.goals,
-      assists: editForm.value.assists,
       photoUrl: photoUrlToSave
     })
 
     // 更新本地数据
     playerData.value.height = editForm.value.height
     playerData.value.weight = editForm.value.weight
-    playerData.value.appearances = editForm.value.appearances
-    playerData.value.points = editForm.value.points
-    playerData.value.goals = editForm.value.goals
-    playerData.value.assists = editForm.value.assists
     
     // 如果有新头像，使用预览 URL 立即显示；否则使用保存的 URL
     if (editForm.value.photoPreview) {
@@ -479,6 +454,15 @@ async function loadPlayerData() {
     
     if (players && players.length > 0) {
       playerData.value = players[0]
+      statistics.value = {}
+      statisticsMessage.value = ''
+      try {
+        const result = await callFunction('dataCenter',{action:'query',scope:{playerId:String(playerId),...(route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {})}})
+        if (!result.success) throw new Error(result.error || '统计加载失败')
+        statistics.value = result.playerTotal.metrics
+        statisticsMessage.value = result.coverage.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。'
+      } catch (error) { statisticsMessage.value = '统计暂不可用，请刷新重试。' }
+
       
       // 处理头像URL（如果是云存储fileID，获取临时URL）
       if (playerData.value.photoUrl && playerData.value.photoUrl.startsWith('cloud://')) {
@@ -493,7 +477,7 @@ async function loadPlayerData() {
       }
       
       // 加载球队数据
-      const relatedTeamId = playerData.value.teamId || route.query.teamId || playerData.value.teamCode
+      const relatedTeamId = (route.params.playerId ? route.query.teamId : '') || playerData.value.teamId || playerData.value.teamCode
       if (relatedTeamId) {
         const teams = await queryList('teams', {
           where: { _id: String(relatedTeamId) }

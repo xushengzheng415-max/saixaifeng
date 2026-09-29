@@ -30,6 +30,7 @@ if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href
 }
 
 const routes = [
+  { path:'/data-center', component:() => import('../views/layout/LayoutView.vue'), meta:{requiresAuth:true,title:'数据中心'}, children:[{path:'',component:() => import('../views/data/DataCenter.vue')}] },
   {
     path: '/draw-screen',
     name: 'DrawScreenProjection',

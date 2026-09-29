@@ -71,6 +71,7 @@ const CLOUD_FUNCTION_MAP = {
   onboardingWorkspace: 'relay',
   organizerClaimInvite: 'relay',
   resultCenter: 'relay',
+  dataCenter: 'relay',
 }
 
 /**
