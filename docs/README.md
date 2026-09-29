@@ -26,6 +26,8 @@
 
 ## 专题资料
 
+- `DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md`、`data-center/README.md`：用户已确认的数据统一规范，所有数据机制按此基准统计。
+
 - `releases/`：版本发布记录。
 - `tutorials/`：面向运营和使用人员的教程与配图。
 - `audit/`：专项审计结果。
