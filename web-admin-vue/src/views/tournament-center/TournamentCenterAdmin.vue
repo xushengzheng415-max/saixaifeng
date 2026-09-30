@@ -48,7 +48,7 @@
                     <el-tag :type="statusType(item.status)">{{ statusText(item.status) }}</el-tag><small>{{ item.teamCount }} 支球队</small>
                   </button>
                 </div>
-                <el-empty v-else description="暂无赛事数据" />
+                <el-empty v-else :description="hiddenTournaments.length ? '赛事已隐藏，可在全平台赛事展开' : '暂无赛事数据'" />
               </section>
               <section class="panel attention">
                 <div class="panel-head"><div><h2>需要跟进</h2></div></div>
@@ -103,24 +103,36 @@
           </section>
 
           <section v-else-if="activeTab === 'tournaments'" class="panel table-panel">
-            <div class="toolbar"><el-input v-model="tournamentKeyword" clearable placeholder="搜索赛事、主办方、城市"><template #prefix><el-icon><Search /></el-icon></template></el-input><el-select v-model="tournamentStatusFilter"><el-option label="全部状态" value="all" /><el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" /></el-select><span>共 {{ filteredTournaments.length }} 场赛事</span></div>
+            <div class="toolbar"><el-input v-model="tournamentKeyword" clearable placeholder="搜索赛事、主办方、城市"><template #prefix><el-icon><Search /></el-icon></template></el-input><el-select v-model="tournamentStatusFilter"><el-option label="全部状态" value="all" /><el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" /></el-select><span>显示 {{ filteredTournaments.length }} / {{ tournaments.length }} 场</span></div>
             <el-table :data="filteredTournaments" row-key="_id" @row-click="openTournament">
               <el-table-column label="赛事名称" min-width="260"><template #default="{ row }"><div class="name-cell"><span class="entity-icon"><el-icon><Trophy /></el-icon></span><div><strong>{{ row.name }}</strong><small>{{ categoryText(row.category) }} · {{ formatText(row.formatType) }}</small></div></div></template></el-table-column>
               <el-table-column label="主办方/创建人" min-width="210"><template #default="{ row }"><strong>{{ row.organizerName || '主办方待补充' }}</strong><small class="block">{{ row.creatorName || '创建人待核验' }}{{ row.creatorPhone ? ` · ${row.creatorPhone}` : '' }}</small></template></el-table-column><el-table-column label="举办地" min-width="130"><template #default="{ row }">{{ row.city || '待补充' }}</template></el-table-column>
               <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column><el-table-column prop="teamCount" label="参赛球队" width="105" align="center" /><el-table-column label="创建时间" width="150"><template #default="{ row }">{{ formatDate(row.createTime) }}</template></el-table-column>
-              <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openTournament(row)">查看</el-button></template></el-table-column>
+              <el-table-column label="操作" width="130" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openTournament(row)">查看</el-button><el-button link @click.stop="hideTournament(row)">隐藏</el-button></template></el-table-column>
               <template #empty><el-empty description="没有符合条件的赛事" /></template>
             </el-table>
+            <div v-if="hiddenTournaments.length" class="hidden-collection">
+              <button type="button" class="hidden-toggle" title="仅本浏览器隐藏，不影响统计" :aria-expanded="showHiddenTournaments" @click="showHiddenTournaments = !showHiddenTournaments"><span>已隐藏 {{ hiddenTournaments.length }} 场赛事</span><span>{{ showHiddenTournaments ? '收起' : '展开' }}</span></button>
+              <div v-if="showHiddenTournaments" class="hidden-list">
+                <div v-for="row in hiddenTournaments" :key="row._id" class="hidden-row"><div><strong>{{ row.name }}</strong><small>{{ statusText(row.status) }} · {{ row.organizerName || '主办方待补充' }}</small></div><el-button link type="primary" @click="openTournament(row)">查看</el-button><el-button link @click="restoreTournament(row)">恢复</el-button></div>
+              </div>
+            </div>
           </section>
 
           <section v-else-if="activeTab === 'teams'" class="panel table-panel">
-            <div class="toolbar"><el-input v-model="teamKeyword" clearable placeholder="搜索球队、联系人、手机号、创建方"><template #prefix><el-icon><Search /></el-icon></template></el-input><span>共 {{ filteredTeams.length }} 支长期球队</span></div>
+            <div class="toolbar"><el-input v-model="teamKeyword" clearable placeholder="搜索球队、联系人、手机号、创建方"><template #prefix><el-icon><Search /></el-icon></template></el-input><span>显示 {{ filteredTeams.length }} / {{ teams.length }} 支</span></div>
             <el-table :data="filteredTeams" row-key="_id" @row-click="openTeam">
               <el-table-column label="球队" min-width="230"><template #default="{ row }"><div class="name-cell"><span class="team-logo" :title="row.logoUnavailable ? '队徽暂不可用，请在球队资料中重新上传' : ''"><img v-if="row.logo && !row.logoUnavailable" :src="row.logo" alt="" @error="handleTeamLogoError(row)" /><el-icon v-else><Flag /></el-icon></span><div><strong>{{ row.name }}</strong><small>{{ row.city || '地区待补充' }}</small></div></div></template></el-table-column>
               <el-table-column label="创建方/所属机构" min-width="200"><template #default="{ row }">{{ row.organizerName || '归属待核验' }}</template></el-table-column><el-table-column label="球队联系人" min-width="180"><template #default="{ row }"><strong>{{ row.contact || '待补充' }}</strong><small class="block">{{ row.phone || '未填写手机号' }}</small></template></el-table-column>
-              <el-table-column prop="playerCount" label="球员数" width="90" align="center" /><el-table-column prop="tournamentCount" label="参赛次数" width="100" align="center" /><el-table-column label="创建时间" width="150"><template #default="{ row }">{{ formatDate(row.createTime) }}</template></el-table-column><el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openTeam(row)">查看</el-button></template></el-table-column>
+              <el-table-column prop="playerCount" label="球员数" width="90" align="center" /><el-table-column prop="tournamentCount" label="参赛次数" width="100" align="center" /><el-table-column label="创建时间" width="150"><template #default="{ row }">{{ formatDate(row.createTime) }}</template></el-table-column><el-table-column label="操作" width="130" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openTeam(row)">查看</el-button><el-button link @click.stop="hideTeam(row)">隐藏</el-button></template></el-table-column>
               <template #empty><el-empty description="没有符合条件的球队" /></template>
             </el-table>
+            <div v-if="hiddenTeams.length" class="hidden-collection">
+              <button type="button" class="hidden-toggle" title="仅本浏览器隐藏，不影响统计" :aria-expanded="showHiddenTeams" @click="showHiddenTeams = !showHiddenTeams"><span>已隐藏 {{ hiddenTeams.length }} 支球队</span><span>{{ showHiddenTeams ? '收起' : '展开' }}</span></button>
+              <div v-if="showHiddenTeams" class="hidden-list">
+                <div v-for="row in hiddenTeams" :key="row._id" class="hidden-row"><div><strong>{{ row.name }}</strong><small>{{ row.organizerName || '归属待核验' }}</small></div><el-button link type="primary" @click="openTeam(row)">查看</el-button><el-button link @click="restoreTeam(row)">恢复</el-button></div>
+              </div>
+            </div>
           </section>
 
           <template v-else-if="activeTab === 'support'">
@@ -187,6 +199,39 @@ const accountDeletingId = ref('')
 const organizerDrawerVisible = ref(false), detailDrawerVisible = ref(false), bannerDialogVisible = ref(false), featuredDialogVisible = ref(false), bannerCropperRef = ref(null)
 const publishingTournamentId = ref('')
 const selectedOrganizer = ref(null), selectedTournament = ref(null), selectedTeam = ref(null)
+const hiddenStorageKey = `sxfPlatformHiddenRows:v1:${getPlatformSession()?.userId || 'platform-owner'}`
+function readHiddenRows() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(hiddenStorageKey) || '{}')
+    const ids = value => Array.isArray(value) ? [...new Set(value.map(String).filter(Boolean))] : []
+    return { tournaments: ids(stored.tournaments), teams: ids(stored.teams) }
+  } catch { return { tournaments: [], teams: [] } }
+}
+const storedHiddenRows = readHiddenRows()
+const hiddenTournamentIds = ref(storedHiddenRows.tournaments)
+const hiddenTeamIds = ref(storedHiddenRows.teams)
+const showHiddenTournaments = ref(false), showHiddenTeams = ref(false)
+function saveHiddenRows() {
+  try {
+    localStorage.setItem(hiddenStorageKey, JSON.stringify({
+      tournaments: hiddenTournamentIds.value,
+      teams: hiddenTeamIds.value
+    }))
+  } catch { ElMessage.warning('隐藏设置未保存，请检查浏览器存储权限') }
+}
+function changeHiddenRow(kind, row, hidden) {
+  const id = String(row?._id || '')
+  if (!id) return
+  const target = kind === 'tournaments' ? hiddenTournamentIds : hiddenTeamIds
+  target.value = hidden
+    ? [...new Set([...target.value, id])]
+    : target.value.filter(value => value !== id)
+  saveHiddenRows()
+}
+const hideTournament = row => changeHiddenRow('tournaments', row, true)
+const restoreTournament = row => changeHiddenRow('tournaments', row, false)
+const hideTeam = row => changeHiddenRow('teams', row, true)
+const restoreTeam = row => changeHiddenRow('teams', row, false)
 const stats = reactive({ totalTournaments: 0, totalOrganizers: 0, totalTeams: 0, activeSupportCount: 0, missingContactCount: 0 })
 const bannerForm = reactive({ bannerId: '', title: '', imageUrl: '', displayImageUrl: '', link: '', sort: 0, isActive: true, storageType: 'cloud' })
 const sections = { overview: ['运营总览','掌握平台赛事、主办方和问题协助的最新情况'], organizers: ['主办方联系人','找到赛事创建者，查看联系方式及其赛事和球队'], accounts: ['账号管理','管理主办方登录账号，并安全处理无业务关联的空账号'], tournaments: ['全平台赛事','查看平台内全部赛事的创建方、状态和参赛规模'], teams: ['全平台球队','查看长期球队资产、创建方和历史参赛情况'], support: ['问题与协助','通过用户确认授权的方式安全处理实际使用问题'], content: ['内容运营','管理公开赛事中心的轮播和推荐赛事'] }
@@ -194,15 +239,17 @@ const section = computed(() => ({ title: sections[activeTab.value][0], descripti
 const navigation = computed(() => [{key:'overview',label:'运营总览',icon:Picture},{key:'organizers',label:'主办方联系人',icon:UserFilled,badge:stats.missingContactCount||''},{key:'accounts',label:'账号管理',icon:UserFilled},{key:'tournaments',label:'全平台赛事',icon:Trophy},{key:'teams',label:'全平台球队',icon:Flag},{key:'support',label:'问题与协助',icon:Headset,badge:stats.activeSupportCount||''},{key:'content',label:'内容运营',icon:Tickets}])
 const statCards = computed(() => [{key:'o',label:'主办方',value:stats.totalOrganizers,hint:'平台联系人档案',icon:UserFilled,color:'blue',target:'organizers'},{key:'t',label:'全部赛事',value:stats.totalTournaments,hint:'含草稿与历史赛事',icon:Trophy,color:'green',target:'tournaments'},{key:'m',label:'长期球队',value:stats.totalTeams,hint:'不等同于参赛快照',icon:Flag,color:'orange',target:'teams'},{key:'s',label:'协助处理中',value:stats.activeSupportCount,hint:'等待确认或授权中',icon:Service,color:'purple',target:'support'}])
 const currentUserName = computed(() => getPlatformSession()?.userName || '平台负责人')
-const recentTournaments = computed(() => tournaments.value.slice(0, 6)), featuredTournaments = computed(() => tournaments.value.filter(x => x.isFeatured).sort((a,b) => a.featuredSort-b.featuredSort))
+const recentTournaments = computed(() => tournaments.value.filter(row => !hiddenTournamentIds.value.includes(String(row._id))).slice(0, 6)), featuredTournaments = computed(() => tournaments.value.filter(x => x.isFeatured).sort((a,b) => a.featuredSort-b.featuredSort))
+const hiddenTournaments = computed(() => tournaments.value.filter(row => hiddenTournamentIds.value.includes(String(row._id))))
+const hiddenTeams = computed(() => teams.value.filter(row => hiddenTeamIds.value.includes(String(row._id))))
 const norm = value => String(value || '').trim().toLowerCase()
 const featuredCandidates = computed(() => tournaments.value.filter(x => !x.isFeatured && (!norm(featuredKeyword.value) || norm(x.name).includes(norm(featuredKeyword.value)))))
 const filteredOrganizers = computed(() => organizers.value.filter(x => { const match = !norm(organizerKeyword.value) || norm([x.name,x.contact,x.phone,x.email].join(' ')).includes(norm(organizerKeyword.value)); const f=organizerContactFilter.value; return match && (f==='all'||(f==='ready'&&x.hasContact)||(f==='missing'&&!x.hasContact)||(f==='support'&&x.activeSupportCount>0)) }))
 const filteredAccounts = computed(() => accounts.value.filter(x => !norm(accountKeyword.value) || norm([x.name,x.phone,x.email,x._id].join(' ')).includes(norm(accountKeyword.value))))
-const filteredTournaments = computed(() => tournaments.value.filter(x => (!norm(tournamentKeyword.value)||norm([x.name,x.organizerName,x.city].join(' ')).includes(norm(tournamentKeyword.value)))&&(tournamentStatusFilter.value==='all'||x.status===tournamentStatusFilter.value)))
-const filteredTeams = computed(() => teams.value.filter(x => !norm(teamKeyword.value)||norm([x.name,x.organizerName,x.contact,x.phone,x.city].join(' ')).includes(norm(teamKeyword.value))))
-const selectedOrganizerTournaments = computed(() => selectedOrganizer.value ? tournaments.value.filter(x => selectedOrganizer.value.tournamentIds.includes(String(x._id))) : [])
-const selectedOrganizerTeams = computed(() => selectedOrganizer.value ? teams.value.filter(x => selectedOrganizer.value.teamIds.includes(String(x._id))) : [])
+const filteredTournaments = computed(() => tournaments.value.filter(x => !hiddenTournamentIds.value.includes(String(x._id)) && (!norm(tournamentKeyword.value)||norm([x.name,x.organizerName,x.city].join(' ')).includes(norm(tournamentKeyword.value)))&&(tournamentStatusFilter.value==='all'||x.status===tournamentStatusFilter.value)))
+const filteredTeams = computed(() => teams.value.filter(x => !hiddenTeamIds.value.includes(String(x._id)) && (!norm(teamKeyword.value)||norm([x.name,x.organizerName,x.contact,x.phone,x.city].join(' ')).includes(norm(teamKeyword.value)))))
+const selectedOrganizerTournaments = computed(() => selectedOrganizer.value ? tournaments.value.filter(x => !hiddenTournamentIds.value.includes(String(x._id)) && selectedOrganizer.value.tournamentIds.includes(String(x._id))) : [])
+const selectedOrganizerTeams = computed(() => selectedOrganizer.value ? teams.value.filter(x => !hiddenTeamIds.value.includes(String(x._id)) && selectedOrganizer.value.teamIds.includes(String(x._id))) : [])
 const categoryMap={youth:'青少年赛事',amateur:'业余赛事',local:'地协赛',city:'城市联赛',professional:'职业联赛'},formatMap={tournament:'赛会制',cup:'杯赛制',league:'联赛制',combined:'混合制',hybrid:'混合制'},statusMap={draft:'草稿',registering:'报名中',published:'已发布',ongoing:'进行中',ended:'已结束',completed:'已结束',cancelled:'已取消'}
 const categoryText=v=>categoryMap[v]||v||'未分类',formatText=v=>formatMap[v]||v||'未设置',statusText=v=>statusMap[v]||v||'未知',statusType=v=>({draft:'info',registering:'primary',published:'success',ongoing:'warning',cancelled:'danger'}[v]||'info')
 const supportStatusText=v=>({pending:'等待确认',active:'协助中',rejected:'已拒绝',revoked:'已撤销',expired:'已过期'}[v]||'未知'),supportStatusType=v=>({pending:'warning',active:'success',rejected:'danger'}[v]||'info')
@@ -236,4 +283,13 @@ onMounted(async()=>{document.title='赛小蜂足球 - 平台运营中心';try{if
 @media(max-width:1180px){.stats{grid-template-columns:repeat(2,1fr)}.overview-grid{grid-template-columns:1fr}.organizer-cards{grid-template-columns:repeat(2,1fr)}}@media(max-width:760px){.sidebar{width:74px;padding-inline:10px}.brand{justify-content:center;padding-inline:0}.brand div,.sidebar nav span,.sidebar nav em,.owner,.sidebar-bottom .el-button span{display:none}.sidebar nav button{grid-template-columns:1fr;justify-items:center;padding:0}.platform-console>main{margin-left:74px}.topbar{align-items:flex-start;flex-direction:column;padding:20px}.workspace{padding:18px 14px 30px}.stats,.organizer-cards{grid-template-columns:1fr}.activity-list>button{grid-template-columns:34px 1fr auto}.activity-list>button>small:last-child{display:none}.toolbar{align-items:stretch!important;flex-direction:column}.toolbar .el-input,.toolbar .el-select{width:100%}.toolbar>span{margin-left:0}.support-hero{align-items:flex-start;flex-direction:column}.contact-card{grid-template-columns:1fr}}
 .account-tip{display:flex;gap:12px;padding:14px 20px;color:#8b6327;border-bottom:1px solid #eadfcf;background:#fffaf2;font-size:12px}.account-tip strong{flex:0 0 auto}.account-tip span{color:#857765}
 .embedded-system{overflow:hidden;border-radius:15px}.embedded-system :deep(.system-admin){padding:0;background:transparent}.embedded-system :deep(.page-card){max-width:none;margin:0}
+.hidden-collection{border-top:1px solid #e9eeeb;background:#fafcfb}
+.hidden-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border:0;background:transparent;color:#415349;font-size:13px;font-weight:600;text-align:left;cursor:pointer}
+.hidden-toggle span:last-child{color:#176d43}
+.hidden-list{border-top:1px solid #e9eeeb}
+.hidden-row{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid #edf1ee}
+.hidden-row:last-child{border-bottom:0}
+.hidden-row>div{min-width:0;flex:1;display:flex;flex-direction:column;gap:4px}
+.hidden-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.hidden-row small{color:#829087;font-size:11px}
 </style>
