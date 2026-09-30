@@ -1911,7 +1911,11 @@ const importMode = ref('excel') // excel=模板导入，word=快捷模式（Word
 const wordFormInfo = ref({})
 const wordTeamLogoPreview = ref('')
 const wordTeamLogoFile = ref(null)
-const getTeamLogoUrl = (teamRecord) => String(teamRecord?.logoUrl || '').trim() || String(teamRecord?.logo || '').trim() || String(teamRecord?._logoFileId || '').trim()
+const getTeamLogoUrl = (teamRecord) => {
+  const sources = [teamRecord?.logoFileID, teamRecord?.logoFileId, teamRecord?.logoCloudFileId, teamRecord?.logoUrl, teamRecord?.logo, teamRecord?._logoFileId]
+    .map(value => String(value || '').trim())
+  return sources.find(value => value.startsWith('cloud://')) || sources.find(Boolean) || ''
+}
 const teamLogoDisplayUrl = computed(() => {
   const value = String(team.value.logoUrl || team.value.logo || '')
   return /^(https?:\/\/|\/)/i.test(value) ? value : `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`

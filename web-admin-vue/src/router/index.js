@@ -1,8 +1,11 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import {
-  PLATFORM_CONSOLE_PATH,
+  activateOrganizerContext,
+  activatePlatformContext,
   clearPlatformSession,
   isOrganizerWorkspacePath,
+  isPlatformContext,
+  isPlatformWorkspacePath,
   isPlatformSession
 } from '../utils/platformSession'
 
@@ -588,34 +591,19 @@ function clearInvalidSession() {
     .forEach(key => localStorage.removeItem(key))
 }
 
-// 平台管理员会话与主办方会话是两套身份。平台会话只允许走平台路径，
-// 绝不进入机构引导、赛事空间或协助确认页（协助确认是主办方本人对自己账号的授权行为）。
-function redirectPlatformSession(to) {
-  if (!isPlatformSession()) return null
-  if (isOrganizerWorkspacePath(to.path)) return { path: PLATFORM_CONSOLE_PATH, replace: true }
-  if (to.path === '/login') return { path: PLATFORM_CONSOLE_PATH, replace: true }
-  return null
-}
-
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
-  if (to.path === '/platform-login') {
-    sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, '/tournament-center-admin')
-  }
-  // 平台会话先于主办方逻辑分流。它没有主办方的手机号会话版本和机构身份。
-  if (isPlatformSession()) {
-    if (localStorage.getItem('isLoggedIn') !== 'true' || !localStorage.getItem('authToken')) {
-      clearInvalidSession()
+  // 标签页选择自己的身份通道；同域名下另一标签页登录不覆盖当前后台。
+  if (to.path === '/platform-login') activatePlatformContext()
+  else if (isPlatformWorkspacePath(to.path)) activatePlatformContext()
+  else if (to.path === '/login' || to.path === '/wechat-callback' || to.path === '/bind-phone' || isOrganizerWorkspacePath(to.path)) activateOrganizerContext()
+  if (isPlatformContext()) {
+    if (!isPlatformSession()) {
       clearPlatformSession()
       next(to.path === '/platform-login' ? undefined : '/platform-login')
       return
     }
-    const platformRedirect = redirectPlatformSession(to)
-    next(platformRedirect || undefined)
-    return
-  }
-  if (to.path === PLATFORM_CONSOLE_PATH) {
-    next('/platform-login')
+    next()
     return
   }
   // 仅本地开发环境开放视觉验收会话。它不写入正式认证信息，也不会在生产构建中绕过登录。
