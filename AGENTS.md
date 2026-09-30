@@ -242,3 +242,9 @@ API Key 位于仓库外的 `%LOCALAPPDATA%\SxfCloud\credentials\`，由 Windows 
 ## 九、赛小蜂足球图标系统（已确认）
 
 图标规范见 [`docs/ICON_SYSTEM.md`](docs/ICON_SYSTEM.md)。对新原型和正式页面：大尺寸品牌/场景图标先按 `oil-icon` 的赛小蜂足球品牌方向生成整套候选并完成切图验收；高密度功能控件和底部导航必须使用共享、可追溯的 SVG 图标，不得把生成 PNG 缩小代替。任何页面不得使用原型裁片、粗糙临时图标或页面内重复图标文件。
+
+## 数据板块统一基准（2026-09-29）
+
+用户已确认数据中心方案。所有新增或修改的数据机制、竞技统计、榜单、导入与导出，必须先读 docs/data-center/README.md、CONTRACT.md 和 INTEGRATION.md。统一身份、历史归属、指标、权限、完整度与数据版本；禁止页面另写统计算法、姓名自动合并、缺失值记零和静默截断查询。
+
+统一源码在 cloudfunctions/dataCenter/shared，部署副本经 tools/sync-data-center.mjs 同步。交付同步入口登记，执行 sync-data-center --check、test-data-center、check-data-governance。现行用户确认的赛事免费规则优先于本文件历史专业版付费描述。Git推送、部署和生产迁移分别记录实际状态。
