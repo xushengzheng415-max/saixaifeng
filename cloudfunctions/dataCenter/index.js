@@ -26,7 +26,8 @@ exports.main = async (event = {}) => {
     if (event.action === 'playerCard') {
       const playerId = String(event.playerId || '')
       await service.query(actor, { playerId, mode:'official' })
-      return { success:true, playerCard:await service.playerCardForAuthorizedPlayer(playerId) }
+      const { metrics, ...playerCard } = await service.playerCardForAuthorizedPlayer(playerId)
+      return { success:true, playerCard }
     }
     if (['query','quality','playerCareer','teamHistory','tournamentStatistics','platformStatistics'].includes(event.action)) {
       if (event.action === 'platformStatistics' && !actor.platformOwner) throw error('DATA_FORBIDDEN','仅平台负责人可查看全平台统计')

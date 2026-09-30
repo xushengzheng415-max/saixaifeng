@@ -1450,7 +1450,7 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
   if (!player || ['archived', 'deleted'].indexOf(String(player.status || '').toLowerCase()) >= 0) throw new Error('球员不存在或已移出球队')
   const cardService = createDataService(db)
   const dataCenter = await cardService.query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, playerId })
-  const playerCard = await cardService.playerCardForAuthorizedPlayer(playerId)
+  const { metrics:cardMetrics, ...playerCard } = await cardService.playerCardForAuthorizedPlayer(playerId)
   const stats = dataCenter.playerTotal.metrics
   const formatted = formatTeamPlayer(player)
   return {
