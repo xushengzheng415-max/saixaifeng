@@ -22,11 +22,11 @@
     <el-drawer v-model="editorOpen" :title="editing ? '编辑新闻' : '新建新闻'" size="min(680px,100%)" destroy-on-close>
       <div class="editor">
         <label>类型</label>
-        <el-select v-model="form.kind" @change="form.matchId=''">
-          <el-option label="现场快讯" value="flash" /><el-option label="单场新闻" value="match" /><el-option label="每轮综述" value="round" />
+        <el-select v-model="form.kind" @change="onKindChange">
+          <el-option label="现场快讯" value="flash" :disabled="selectedApproved" /><el-option label="单场新闻" value="match" :disabled="Boolean(selectedMatch) && !selectedApproved" /><el-option label="每轮综述" value="round" />
         </el-select>
         <label>关联比赛</label>
-        <el-select v-model="form.matchId" placeholder="选择比赛" :disabled="form.kind==='round' || loadingMatches">
+        <el-select v-model="form.matchId" placeholder="选择比赛" :disabled="form.kind==='round' || loadingMatches" @change="onMatchChange">
           <el-option v-for="match in eligibleMatches" :key="match.id" :value="match.id" :label="matchLabel(match)" />
         </el-select>
         <label>现场照片</label>
@@ -52,6 +52,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { callFunction } from '@/utils/cloud'
+import { newsKindForMatch } from '@/utils/newsPreviewKind'
 
 const route = useRoute()
 const tournamentId = String(route.params.id || '')
@@ -62,16 +63,18 @@ const matches = ref([]), loadingMatches = ref(true), loadError = ref('')
 const editorOpen = ref(false), previewOpen = ref(false), generating = ref(false), editing = ref(''), filter = ref('all')
 const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '已发布' }, { id: 'draft', label: '草稿' }, { id: 'update', label: '待更新' }]
 const articles = ref([
-  { id: 'sample-1', title: '立洋杯现场快讯：老年组比赛进行中', kind: 'flash', status: 'published', detail: '示例稿 · 不在 H5 展示', photo: samplePhoto },
-  { id: 'sample-2', title: '老年组单场新闻示例', kind: 'match', status: 'draft', detail: '示例稿 · 未保存到云端', photo: samplePhoto },
+  { id: 'sample-1', title: '开封U40队 5:1 开封市老友足球二队 · 赛后新闻示例', kind: 'match', status: 'published', detail: '9 月 26 日 · 示例稿，不在 H5 展示', photo: samplePhoto },
+  { id: 'sample-2', title: '老年组赛后新闻草稿示例', kind: 'match', status: 'draft', detail: '示例稿 · 未保存到云端', photo: samplePhoto },
   { id: 'sample-3', title: '青年组本轮赛事综述示例', kind: 'round', status: 'update', detail: '示例稿 · 赛果更新待修订', photo: samplePhoto }
 ])
 const visibleArticles = computed(() => articles.value.filter(item => filter.value === 'all' || item.status === filter.value))
-const eligibleMatches = computed(() => matches.value.filter(item => form.kind === 'flash' ? item.resultStatus !== 'warning' : item.resultStatus === 'approved'))
+const eligibleMatches = computed(() => matches.value.filter(item => !['warning', 'returned'].includes(item.resultStatus)))
 const form = reactive({ kind: 'flash', matchId: '', title: '', body: '', note: '', photos: [samplePhoto] })
+const selectedMatch = computed(() => matches.value.find(item => item.id === form.matchId) || null)
+const selectedApproved = computed(() => selectedMatch.value?.resultStatus === 'approved')
 const kindLabel = kind => ({ flash: '现场快讯', match: '单场新闻', round: '每轮综述' })[kind] || '新闻'
 const statusLabel = status => ({ published: '已发布 · 示例', draft: '草稿 · 示例', update: '待更新 · 示例' })[status] || '草稿'
-const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`].filter(Boolean).join(' · ')
+const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, match.resultStatus === 'approved' ? '正式赛果' : '赛果待确认'].filter(Boolean).join(' · ')
 
 async function loadMatches() {
   loadingMatches.value = true; loadError.value = ''
@@ -80,12 +83,22 @@ async function loadMatches() {
     if (!result?.success) throw new Error(result?.message || '比赛加载失败')
     matches.value = result.matches || []
     tournamentName.value = result.tournament?.name || '当前赛事'
+    if (editorOpen.value && !form.matchId) selectDefaultMatch()
   } catch (error) { loadError.value = error.message || '比赛加载失败，请刷新重试' }
   finally { loadingMatches.value = false }
 }
 
 function reset() { Object.assign(form, { kind: 'flash', matchId: '', title: '', body: '', note: '', photos: [samplePhoto] }); editing.value = '' }
-function openNew() { reset(); editorOpen.value = true }
+function selectDefaultMatch() {
+  const approved = matches.value.find(item => item.resultStatus === 'approved')
+  if (approved) { form.matchId = approved.id; form.kind = newsKindForMatch(approved) }
+}
+function onMatchChange() { form.kind = newsKindForMatch(selectedMatch.value) }
+function onKindChange() {
+  if (form.kind === 'round') { form.matchId = ''; return }
+  if (selectedMatch.value) form.kind = newsKindForMatch(selectedMatch.value)
+}
+function openNew() { reset(); selectDefaultMatch(); editorOpen.value = true }
 function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, title: item.title, body: item.body || '', photos: [item.photo || samplePhoto] }); editorOpen.value = true }
 function selectPhotos(event) {
   const files = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/')).slice(0, 6)
@@ -94,6 +107,8 @@ function selectPhotos(event) {
 }
 async function generate() {
   if (!form.matchId || form.kind === 'round') return
+  if (selectedApproved.value && form.kind !== 'match') form.kind = newsKindForMatch(selectedMatch.value)
+  if (!selectedApproved.value && form.kind === 'match') return ElMessage.warning('赛果未确认，请先生成现场快讯')
   const token = localStorage.getItem('authToken') || ''
   if (!token) return ElMessage.warning('请先登录主办方 PC 后台')
   generating.value = true
