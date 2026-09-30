@@ -63,8 +63,8 @@ const matches = ref([]), loadingMatches = ref(true), loadError = ref('')
 const editorOpen = ref(false), previewOpen = ref(false), generating = ref(false), editing = ref(''), filter = ref('all')
 const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '已发布' }, { id: 'draft', label: '草稿' }, { id: 'update', label: '待更新' }]
 const articles = ref([
-  { id: 'sample-1', title: '立洋杯现场快讯：老年组比赛进行中', kind: 'flash', status: 'published', detail: '示例稿 · 不在 H5 展示', photo: samplePhoto },
-  { id: 'sample-2', title: '老年组单场新闻示例', kind: 'match', status: 'draft', detail: '示例稿 · 未保存到云端', photo: samplePhoto },
+  { id: 'sample-1', title: '开封U40队 5:1 开封市老友足球二队 · 赛后新闻示例', kind: 'match', status: 'published', detail: '9 月 26 日 · 示例稿，不在 H5 展示', photo: samplePhoto },
+  { id: 'sample-2', title: '老年组赛后新闻草稿示例', kind: 'match', status: 'draft', detail: '示例稿 · 未保存到云端', photo: samplePhoto },
   { id: 'sample-3', title: '青年组本轮赛事综述示例', kind: 'round', status: 'update', detail: '示例稿 · 赛果更新待修订', photo: samplePhoto }
 ])
 const visibleArticles = computed(() => articles.value.filter(item => filter.value === 'all' || item.status === filter.value))
