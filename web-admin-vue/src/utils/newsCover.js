@@ -79,3 +79,53 @@ export function createDailyNewsCover(date, tournamentName, count) {
   ctx.fillText(`${date}  ·  ${count} 场正式赛果`, 480, 421)
   return canvas.toDataURL('image/png')
 }
+
+export function createStandingsNewsSnapshot(groups, tournamentName, date) {
+  const tables = (Array.isArray(groups) ? groups : []).filter(group => group.officialMatchCount > 0 && Array.isArray(group.officialTeams) && group.officialTeams.length)
+  if (!tables.length) return ''
+  const height = 130 + tables.reduce((sum, group) => sum + 83 + group.officialTeams.length * 42, 0) + 35
+  const canvas = document.createElement('canvas')
+  canvas.width = 960
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, 960, height)
+  ctx.fillStyle = '#06412b'
+  ctx.fillRect(0, 0, 960, 118)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '700 27px sans-serif'
+  ctx.fillText(String(tournamentName || '足球赛事').slice(0, 28), 40, 48)
+  ctx.font = '20px sans-serif'
+  ctx.fillText(`正式积分榜 · 截至 ${date}`, 40, 87)
+  let y = 138
+  for (const group of tables) {
+    ctx.fillStyle = '#0b5839'
+    ctx.font = '700 21px sans-serif'
+    ctx.fillText([group.divisionName, group.groupName].filter(Boolean).join(' · '), 40, y)
+    y += 27
+    ctx.fillStyle = '#eaf3ed'
+    ctx.fillRect(40, y, 880, 34)
+    ctx.fillStyle = '#506a59'
+    ctx.font = '16px sans-serif'
+    for (const [label, x] of [['排名', 52], ['球队', 124], ['赛', 510], ['胜', 575], ['平', 640], ['负', 705], ['净胜球', 770], ['积分', 874]]) ctx.fillText(label, x, y + 23)
+    y += 34
+    for (const team of group.officialTeams) {
+      ctx.strokeStyle = '#e4eee7'
+      ctx.beginPath(); ctx.moveTo(40, y + 41); ctx.lineTo(920, y + 41); ctx.stroke()
+      ctx.fillStyle = '#243d2d'
+      ctx.font = '17px sans-serif'
+      ctx.fillText(String(team.rank), 52, y + 27)
+      let fontSize = 17
+      const name = String(team.teamName || '')
+      ctx.font = `${fontSize}px sans-serif`
+      while (ctx.measureText(name).width > 350 && fontSize > 13) { fontSize -= 1; ctx.font = `${fontSize}px sans-serif` }
+      ctx.fillText(name, 124, y + 27)
+      ctx.font = '17px sans-serif'
+      for (const [value, x] of [[team.played, 510], [team.win, 575], [team.draw, 640], [team.loss, 705], [team.goalDifference, 790], [team.points, 885]]) ctx.fillText(String(value ?? '—'), x, y + 27)
+      y += 42
+    }
+    y += 22
+  }
+  return canvas.toDataURL('image/png')
+}

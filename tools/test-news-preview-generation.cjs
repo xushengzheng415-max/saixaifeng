@@ -49,7 +49,15 @@ const dayRows = rules.officialDayRows([
 ], '2026-09-26')
 assert.equal(dayRows.length, 1)
 assert.equal(dayRows[0].matchId, 'm1')
-assert.equal(dayRows[0].goalRecordComplete, false)
-const daily = rules.parseGenerated('{"title":"立洋杯9月26日比赛日战报","summary":"当天比赛已经结束。","analysis":"主队取得一场胜利。"}', dayRows, 'daily')
-assert.match(daily.body, /比赛日综述[\s\S]*焦点场次[\s\S]*当日赛果[\s\S]*主队 5:1 客队/)
+const nextRound = rules.nextRoundFixtures([
+  { _id: 'f1', divisionId: 'old', divisionName: '老年组', matchDate: '2026-10-01', matchTime: '09:00', status: 'scheduled', schedulePublished: true, homeTeamName: '甲队', awayTeamName: '乙队' },
+  { _id: 'f2', divisionId: 'old', divisionName: '老年组', matchDate: '2026-10-04', matchTime: '09:00', status: 'scheduled', schedulePublished: true, homeTeamName: '丙队', awayTeamName: '丁队' },
+  { _id: 'f3', divisionId: 'young', divisionName: '青年组', matchDate: '2026-10-04', matchTime: '10:30', status: 'scheduled', published: true, homeTeamName: '戊队', awayTeamName: '己队' },
+  { _id: 'hidden', divisionId: 'young', matchDate: '2026-10-01', status: 'scheduled', homeTeamName: '未发布队', awayTeamName: '客队' }
+], '2026-09-26')
+assert.deepEqual(nextRound.map(item => item.home), ['甲队', '戊队'])
+const daily = rules.buildDailyArticle('立洋杯', '2026-09-26', dayRows, nextRound, true, '')
+assert.match(daily.body, /本轮赛果[\s\S]*主队 5:1 客队[\s\S]*积分榜[\s\S]*下轮对阵[\s\S]*甲队 对 乙队[\s\S]*停赛信息/)
+assert.doesNotMatch(daily.body, /焦点场次|比赛日综述/)
+assert.match(daily.body, /待主办方确认/)
 console.log('news preview generation rules: passed')

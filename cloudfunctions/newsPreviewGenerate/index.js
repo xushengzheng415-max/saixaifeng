@@ -64,13 +64,6 @@ function parseGenerated(value, fixtures = [], kind = 'match') {
   const summary = text(parsed.summary)
   const analysis = text(parsed.analysis)
   const outlook = text(parsed.outlook)
-  if (kind === 'daily') {
-    if (!title || !summary || !analysis || !fixtures.length) throw new Error('每日新闻内容不完整，请重试')
-    const results = fixtures.map(item => `${item.division ? `${item.division} · ` : ''}${item.home} ${item.score} ${item.away}`).join('\n')
-    const body = `比赛日综述\n${summary}\n\n焦点场次\n${analysis}\n\n当日赛果\n${results}`
-    if (body.length > 6000) throw new Error('当日比赛过多，请按组别分批生成')
-    return { title, body }
-  }
   if (!title || !summary || !analysis || kind === 'match' && fixtures.length && !outlook) throw new Error('生成内容不完整，请重试')
   const fixtureText = fixtures.length
     ? `根据已公布赛程，${fixtures.map(item => `${item.team}将于${item.date.slice(0, 4)}年${item.date.slice(5, 7).replace(/^0/, '')}月${item.date.slice(8, 10).replace(/^0/, '')}日${item.time}${item.venue ? `在${item.venue}` : ''}对阵${item.opponent}`).join('；')}。`
@@ -154,9 +147,34 @@ function officialDayRows(rows, date) {
     .map(item => {
       const home = text(item.homeTeamName || item.homeName)
       const away = text(item.awayTeamName || item.awayName)
-      const goals = verifiedGoalEvents(item, home, away)
-      return { matchId: text(item._id), time: text(item.matchTime || item.startTime), division: text(item.divisionName), home, away, score: `${Number(item.homeScore)}:${Number(item.awayScore)}`, goals: goals.map(goal => ({ minute: goal.minute, team: goal.team, player: goal.player })), goalRecordComplete: goals.length === Number(item.homeScore) + Number(item.awayScore) }
+      return { matchId: text(item._id), time: text(item.matchTime || item.startTime), division: text(item.divisionName), home, away, score: `${Number(item.homeScore)}:${Number(item.awayScore)}` }
     })
+}
+
+function nextRoundFixtures(rows, date) {
+  const scheduled = rows.filter(item => {
+    const day = text(item.matchDate || item.date).slice(0, 10)
+    return day > date && (item.schedulePublished === true || item.published === true) && !['cancelled', 'abandoned', 'finished', 'completed', 'ended', 'archived'].includes(text(item.status).toLowerCase())
+  }).sort((a, b) => startKey(a).localeCompare(startKey(b)))
+  const firstDateByDivision = new Map()
+  for (const row of scheduled) {
+    const key = text(row.divisionId || row.division || row.divisionName)
+    if (!firstDateByDivision.has(key)) firstDateByDivision.set(key, text(row.matchDate || row.date).slice(0, 10))
+  }
+  return scheduled.filter(row => text(row.matchDate || row.date).slice(0, 10) === firstDateByDivision.get(text(row.divisionId || row.division || row.divisionName)))
+    .map(row => ({ date: text(row.matchDate || row.date).slice(0, 10), time: text(row.matchTime || row.startTime).slice(0, 5), division: text(row.divisionName), round: text(row.roundName || row.roundLabel || row.round), home: text(row.homeTeamName || row.homeName), away: text(row.awayTeamName || row.awayName), venue: text(row.venue || row.location) }))
+}
+
+function buildDailyArticle(tournamentName, date, dayRows, fixtures, includeStandings, suspensionNote) {
+  if (!dayRows.length) throw new Error('这一天没有已归档比赛')
+  const [, month, day] = /^\d{4}-(\d{2})-(\d{2})$/.exec(date) || []
+  const title = `${tournamentName}${Number(month)}月${Number(day)}日比赛日战报`.slice(0, 80)
+  const results = dayRows.map(item => `${item.division ? `${item.division} · ` : ''}${item.home} ${item.score} ${item.away}`).join('\n')
+  const upcoming = fixtures.length ? fixtures.map(item => `${item.division ? `${item.division} · ` : ''}${item.date} ${item.time} ${item.home} 对 ${item.away}${item.venue ? ` · ${item.venue}` : ''}`).join('\n') : '下一轮赛程尚未公布。'
+  const suspension = suspensionNote ? `主办方提供：${suspensionNote}` : '下轮停赛名单尚未录入，待主办方确认。'
+  const body = `本轮赛果\n${results}\n\n积分榜\n${includeStandings ? '见随文正式积分榜快照。' : '本期未附积分榜快照。'}\n\n下轮对阵\n${upcoming}\n\n停赛信息\n${suspension}`
+  if (body.length > 6000) throw new Error('当日比赛或下轮赛程过多，请按组别分批生成')
+  return { title, body }
 }
 
 async function generate(input) {
@@ -172,14 +190,12 @@ async function generate(input) {
   const user = await authenticate(text(input.authToken), orgId)
   const note = text(input.note).slice(0, 500)
   if (kind === 'daily') {
-    const dayRows = officialDayRows(await tournamentMatches(tournamentId), date)
-    if (!dayRows.length) throw new Error('这一天没有已归档比赛')
-    const prompt = `你是地方足球赛事的战报记者。为${text(tournament.name)}写${date}的每日新闻，只返回 JSON：{"title":"...","summary":"...","analysis":"..."}。summary 是比赛日综述，先交代共有${dayRows.length}场正式比赛，再按组别写当天最值得关注的结果，不逐场照抄比分；analysis 选一至两场有确切进球记录的比赛讲清时间转折，不虚构射门方式、战术、控球、采访、排名或其他现场细节。不要根据比分推断场面压制。每场正式比分将由系统单独列在文末，正文无需机械罗列全部比赛。缺少进球记录的比赛只写比分。事实少时写短些。\n当日已归档比赛：${JSON.stringify(dayRows)}\n主办方核实的现场看点：${note || '未提供'}`
-    const output = await cloud.ai().createModel('hunyuan-v3').generateText({ model: 'hy3', messages: [{ role: 'user', content: prompt }] })
-    const article = parseGenerated(output.text, dayRows, 'daily')
-    const usage = output.usage || null
-    await db.collection('registration_audit_logs').add({ data: { sport: 'football', action: 'news_preview_generated', tournamentId, actorUserId: text(user._id), actorOrgId: orgId, result: 'success', detail: { kind, date, matchIds: dayRows.map(item => item.matchId), model: 'hy3', provider: 'hunyuan-v3', usage }, createTime: db.serverDate() } }).catch(error => console.warn('新闻预览用量记录失败', error.message))
-    return { success: true, title: article.title, body: article.body, matchIds: dayRows.map(item => item.matchId), usage, source: 'hy3' }
+    const rows = await tournamentMatches(tournamentId)
+    const dayRows = officialDayRows(rows, date)
+    const fixtures = nextRoundFixtures(rows, date)
+    const article = buildDailyArticle(text(tournament.name), date, dayRows, fixtures, input.includeStandings === true, text(input.suspensionNote).slice(0, 300))
+    await db.collection('registration_audit_logs').add({ data: { sport: 'football', action: 'news_preview_generated', tournamentId, actorUserId: text(user._id), actorOrgId: orgId, result: 'success', detail: { kind, date, matchIds: dayRows.map(item => item.matchId), fixtureCount: fixtures.length, source: 'official-results' }, createTime: db.serverDate() } }).catch(error => console.warn('新闻预览日志失败', error.message))
+    return { success: true, title: article.title, body: article.body, matchIds: dayRows.map(item => item.matchId), source: 'official-results' }
   }
   const match = await getDoc('matches', matchId)
   if (!match || text(match.tournamentId) !== tournamentId) throw new Error('比赛不存在')
@@ -208,4 +224,4 @@ exports.main = async event => {
   catch (error) { console.error('newsPreviewGenerate failed', error); return response(200, { success: false, message: error.message || '生成新闻失败' }, cors) }
 }
 
-exports.__test = { official, parseGenerated, verifiedGoalEvents, goalTimeline, officialDayRows, nextFixturesFromRows, startKey }
+exports.__test = { official, parseGenerated, verifiedGoalEvents, goalTimeline, officialDayRows, nextRoundFixtures, buildDailyArticle, nextFixturesFromRows, startKey }
