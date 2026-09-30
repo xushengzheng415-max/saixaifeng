@@ -23,14 +23,16 @@ function validateScope(input = {}) {
 
 function createDataService(db) {
   async function catalog(actor) {
+    const { synthetic } = await import('./statistics.mjs')
     const teams = actor.platformOwner ? await readAll(db, 'teams') : await readByIds(db, 'teams', '_id', actor.teamIds)
+    const syntheticTeamIds = new Set(teams.filter(synthetic).map(row => id(row._id)))
     const tournaments = actor.platformOwner ? await readAll(db, 'tournaments') : await readByIds(db, 'tournaments', '_id', actor.tournamentIds)
     const players = actor.platformOwner ? await readAll(db, 'players') : [...await readByIds(db,'players','teamId',actor.teamIds), ...await readByIds(db,'players','teamCode',actor.teamIds)]
     return {
       success:true, accessScope:actor.platformOwner ? 'platform' : 'authorized',
-      teams:teams.map(row => ({ id:id(row._id), name:id(row.name || row.teamName), orgId:id(row.orgId || row.organizationId) })),
-      tournaments:tournaments.map(row => ({ id:id(row._id), name:id(row.name), orgId:id(row.orgId || row.organizationId) })),
-      players:[...new Map(players.map(row => [id(row._id), { id:id(row._id), name:id(row.name), teamId:id(row.teamId || row.teamCode), status:id(row.status) }])).values()]
+      teams:teams.filter(row => !synthetic(row)).map(row => ({ id:id(row._id), name:id(row.name || row.teamName), orgId:id(row.orgId || row.organizationId) })),
+      tournaments:tournaments.filter(row => !synthetic(row)).map(row => ({ id:id(row._id), name:id(row.name), orgId:id(row.orgId || row.organizationId) })),
+      players:[...new Map(players.filter(row => !synthetic(row) && !syntheticTeamIds.has(id(row.teamId || row.teamCode))).map(row => [id(row._id), { id:id(row._id), name:id(row.name), teamId:id(row.teamId || row.teamCode), status:id(row.status) }])).values()]
     }
   }
   async function query(actor, input = {}) {
@@ -43,7 +45,7 @@ function createDataService(db) {
     else if (scope.teamId) matches = [...await readAll(db,'matches',{ homeTeamId:scope.teamId }), ...await readAll(db,'matches',{ awayTeamId:scope.teamId })]
     else if (actor.platformOwner) matches = await readAll(db,'matches')
     else matches = [...await readByIds(db,'matches','tournamentId',[...tournamentIds]), ...await readByIds(db,'matches','homeTeamId',[...teamIds]), ...await readByIds(db,'matches','awayTeamId',[...teamIds])]
-    const { inScope, aggregateStatistics, sumPlayerRows, calculatePlayerCardPoints, PLAYER_CARD_SCORE_VERSION, PLAYER_CARD_ENTITLEMENT_VERSION, resultState, effectiveEvents, eventType } = await import('./statistics.mjs')
+    const { inScope, aggregateStatistics, sumPlayerRows, calculatePlayerCardPoints, PLAYER_CARD_SCORE_VERSION, PLAYER_CARD_ENTITLEMENT_VERSION, resultState, effectiveEvents, eventType, matchParticipantIds, synthetic } = await import('./statistics.mjs')
     matches = [...new Map(matches.filter(row => inScope(row,scope)).map(row => [id(row._id),row])).values()]
     if (actor.matchIds) { const allowed = new Set(actor.matchIds); matches = matches.filter(row => allowed.has(id(row._id))) }
     if (scope.playerId && !actor.platformOwner) {
@@ -81,13 +83,16 @@ function createDataService(db) {
     const divisionsById = Object.fromEntries(divisions.map(row => [id(row._id || row.id),row]))
     const tournamentsById = Object.fromEntries(tournaments.map(row => [id(row._id || row.id),row]))
     const teamsById = Object.fromEntries(matchTeamProfiles.map(row => [id(row._id),row]))
-    const result = aggregateStatistics({ matches, events, scope, divisionsById, tournamentsById, teamsById, requireOriginEvidence:true })
+    const participantIds = [...new Set(matches.flatMap(match => [...matchParticipantIds(match,events)]))]
+    const matchPlayerProfiles = await readByIds(db,'players','_id',participantIds)
+    const playersById = Object.fromEntries(matchPlayerProfiles.map(row => [id(row._id),row]))
+    const result = aggregateStatistics({ matches, events, scope, divisionsById, tournamentsById, teamsById, playersById, requireOriginEvidence:true, requirePlayerOriginEvidence:true })
     // Owning one team does not grant access to the opponent's personal archive.
     if (!actor.platformOwner && !scope.tournamentId) {
       result.players = result.players.filter(row => teamIds.has(row.teamId) || tournamentIds.has(row.tournamentId))
       result.teams = result.teams.filter(row => teamIds.has(row.teamId) || tournamentIds.has(row.tournamentId))
     }
-    const profiles = actor.public ? [] : await readByIds(db,'players','_id',result.players.map(row => row.playerId))
+    const profiles = actor.public ? [] : matchPlayerProfiles
     const profileById = new Map(profiles.map(row => [id(row._id),row]))
     result.players = result.players.map(row => ({ ...row, playerName:row.playerName || id(profileById.get(row.playerId)?.name) || '历史球员' }))
     const teamById = new Map(matchTeamProfiles.map(row => [id(row._id),row]))
@@ -97,7 +102,7 @@ function createDataService(db) {
       const matchEvents = effectiveEvents(match,events)
       const cardCount = (side,types) => matchEvents.filter(event => types.includes(eventType(event)) && (event.teamSide === side || id(event.teamId) === id(match[side + 'TeamId']))).length
       const phase = id(match.phase || match.stageType || match.matchType).toLowerCase()
-      const state = resultState(match,{ teamsById,tournamentsById,requireOriginEvidence:true })
+      const state = resultState(match,{ teamsById,tournamentsById,playersById,events,requireOriginEvidence:true,requirePlayerOriginEvidence:true })
       const hasScore = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
       const divisionId = id(match.divisionId || match.division || 'default')
       return { ...match, divisionId, divisionName:id(divisionsById[divisionId]?.name || match.divisionName || '默认组别'), groupName:id(match.groupName || match.drawGroup || '联赛'),
@@ -121,6 +126,14 @@ function createDataService(db) {
       result.playerCard = fullCareer
         ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.cardScoreScopeComplete ? 'complete' : 'partial' })
         : { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:'limited', mode:scope.mode, status:'scope_limited', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+      const requestedPlayer = playersById[scope.playerId] || (await readByIds(db,'players','_id',[scope.playerId]))[0]
+      const playerTeamId = id(requestedPlayer?.teamId || requestedPlayer?.teamCode)
+      const requestedTeam = playerTeamId ? teamsById[playerTeamId] || (await readByIds(db,'teams','_id',[playerTeamId]))[0] : null
+      const testIdentity = synthetic(requestedPlayer) || synthetic(requestedTeam)
+      if (!requestedPlayer || testIdentity) {
+        for (const field of Object.keys(result.playerTotal.metrics)) { result.playerTotal.metrics[field] = null; result.playerTotal.coverage[field] = testIdentity ? 'test_data' : 'identity_unverified' }
+        result.playerCard = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:testIdentity ? 'test' : 'unknown', mode:scope.mode, status:testIdentity ? 'test_data_excluded' : 'unverified', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+      }
     }
     return { success:true, ...result }
   }

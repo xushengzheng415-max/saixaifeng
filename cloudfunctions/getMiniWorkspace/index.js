@@ -1705,15 +1705,18 @@ async function officialRosterForWorkspace(event, identity) {
   let statisticsMetadata = null
   // 查询失败保留未知状态，不把未加载的数据显示成零。
   try {
-    const { selectRosterMatches, restoreHistoricalRosterPlayers } = await import('./data-center/statistics.mjs')
+    const { selectRosterMatches, restoreHistoricalRosterPlayers, matchParticipantIds } = await import('./data-center/statistics.mjs')
     const matches = selectRosterMatches(await readDataRows(db, 'matches', { tournamentId }), teamId, rosterContext.divisionId, rosterContext.allowLegacySnapshot)
     const externalEvents = await readDataByIds(db, 'match_events', 'matchId', matches.map(match => match._id))
     const matchTeams = await readDataByIds(db, 'teams', '_id', matches.flatMap(match => [match.homeTeamId,match.awayTeamId].filter(Boolean)))
     const teamsById = Object.fromEntries(matchTeams.map(row => [String(row._id),row]))
+    const participantIds = [...new Set(matches.flatMap(match => [...matchParticipantIds(match,externalEvents)]))]
+    const matchPlayers = await readDataByIds(db, 'players', '_id', participantIds)
+    const playersById = Object.fromEntries(matchPlayers.map(row => [String(row._id),row]))
     const restored = restoreHistoricalRosterPlayers(players, matches, teamId, latest && latest.playerIds)
     players.splice(0, players.length, ...restored)
     const { aggregateStatistics, sumPlayerRows } = await import('./data-center/statistics.mjs')
-    const aggregate = aggregateStatistics({ matches, events:externalEvents, scope:{ teamId, tournamentId }, divisionsById:{ [rosterContext.divisionId]:rosterContext.division }, tournamentsById:{ [tournamentId]:tournament }, teamsById, requireOriginEvidence:true })
+    const aggregate = aggregateStatistics({ matches, events:externalEvents, scope:{ teamId, tournamentId }, divisionsById:{ [rosterContext.divisionId]:rosterContext.division }, tournamentsById:{ [tournamentId]:tournament }, teamsById, playersById, requireOriginEvidence:true, requirePlayerOriginEvidence:true })
     players.forEach(player => {
       const rows = aggregate.players.filter(row => row.playerId === String(player.id))
       const total = sumPlayerRows(rows)

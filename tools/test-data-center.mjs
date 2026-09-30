@@ -63,6 +63,9 @@ const unknownOrigin = aggregateStatistics({ matches:[before],scope:{},teamsById:
 assert.equal(unknownOrigin.summary.matchCount,0); assert.equal(unknownOrigin.coverage.originUnverifiedMatches,1); assert.equal(unknownOrigin.coverage.status,'partial')
 const scheduledUnknown = aggregateStatistics({ matches:[before,{...after,status:'scheduled',homeTeamId:'TBD'}],scope:{},teamsById:originContext.teamsById,tournamentsById:originContext.tournamentsById,requireOriginEvidence:true })
 assert.equal(scheduledUnknown.coverage.originUnverifiedMatches,0)
+const fakePlayerMatch = { ...before,homeLineup:{starters:[{playerId:'p1',name:'小明'},{playerId:'fake',name:'测试球员'}],substitutes:[]} }
+const playerOriginChecked = aggregateStatistics({ matches:[fakePlayerMatch],scope:{},teamsById:originContext.teamsById,tournamentsById:originContext.tournamentsById,playersById:{p1:{_id:'p1'},fake:{_id:'fake',synthetic:true,source:'ai_fixture'}},requireOriginEvidence:true,requirePlayerOriginEvidence:true })
+assert.equal(playerOriginChecked.summary.matchCount,0); assert.equal(playerOriginChecked.coverage.testPlayerMatches,1); assert.equal(playerOriginChecked.coverage.cardScoreScopeComplete,false)
 assert.equal(aggregateStatistics({ matches:[before],scope:{from:'2026-10-01'} }).summary.matchCount,0)
 assert.throws(() => validateScope({from:'oops'}),/日期/)
 
@@ -107,7 +110,7 @@ await assert.rejects(readAll(pagingDb,'match_events'),error => error.code === 'D
 
 const database = mockDatabase({
   teams:[{_id:'A',name:'原队',orgId:'org'},{_id:'B',name:'新队',orgId:'org'},{_id:'C',name:'外部队',orgId:'other'},{_id:'D',name:'虚拟队',orgId:'org',synthetic:true,syntheticDatasetId:'fixture'},{_id:'opponent',name:'对手',orgId:'other'}],
-  players:[{_id:'p1',name:'小明',teamId:'A',orgId:'org',guardianPhone:'private-value'}],
+  players:[{_id:'p1',name:'小明',teamId:'A',orgId:'org',guardianPhone:'private-value'},{_id:'bench',name:'替补',teamId:'A',orgId:'org'},{_id:'fake',name:'测试球员',teamId:'A',orgId:'org',synthetic:true,syntheticDatasetId:'fixture',source:'ai_fixture'},{_id:'testTeamUnmarked',name:'未标记测试球员',teamId:'D',orgId:'org'}],
   matches:[before,after,{...makeMatch('hidden','C','secret',10)},{...makeMatch('virtual','D','t3',40),schedulePublished:true}],match_events:[],match_lineup_snapshots:[],player_team_memberships:[],player_transfers:[],
   tournaments:[{_id:'t1',name:'甲赛事',orgId:'org'},{_id:'t2',name:'乙赛事',orgId:'org'},{_id:'secret',name:'外部赛事',orgId:'other'},{_id:'t3',name:'测试赛事',orgId:'org'}],platform_settings:[],auth_sessions:[],users:[],
   publication_snapshots:[{_id:'pub',tournamentId:'t1',sportCode:'football',type:'tournament_center',status:'published'}]
@@ -121,6 +124,11 @@ const platformCareer = await service.query({ ...actor, platformOwner:true }, { p
 assert.equal(platformCareer.playerCard.status,'ready')
 assert.equal(platformCareer.playerTotal.metrics.goals,18)
 assert.equal(platformCareer.coverage.excludedTestMatches,1)
+const fakeCareer = await service.query({ ...actor, platformOwner:true }, { playerId:'fake' })
+assert.equal(fakeCareer.playerCard.status,'test_data_excluded'); assert.equal(fakeCareer.playerTotal.metrics.appearances,null)
+assert.equal((await service.query({ ...actor,platformOwner:true }, { playerId:'testTeamUnmarked' })).playerCard.status,'test_data_excluded')
+assert.equal((await service.catalog({ ...actor,platformOwner:true })).players.some(row => row.id === 'fake'),false)
+assert.equal((await service.catalog({ ...actor,platformOwner:true })).players.some(row => row.id === 'testTeamUnmarked'),false)
 assert.equal(platformCareer.playerCard.scoreVersion,'football-player-card-points/1')
 assert.equal((await service.query({ ...actor, platformOwner:true }, { playerId:'p1', tournamentId:'t1' })).playerCard.status,'scope_limited')
 assert(!JSON.stringify(career).includes('private-value'))

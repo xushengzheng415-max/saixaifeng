@@ -21,7 +21,7 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 支持范围字段：`teamId, playerId, tournamentId, divisionId, matchId, sportType, mode, from, to`。`matchId` 精确限定一场比赛，不能用赛事范围替代本场榜单。
 
 - `sportType` 当前只能为 football。
-- `mode:official`：来源确认为真实比赛的审核通过结果，以及符合现行规则的主办方赛后补录。已退回、冲突、取消、未开赛、虚拟球队或明确标记测试的比赛不计入；比赛是否发布不构成真实比赛证明。球队、赛事或比赛来源无法核定时标为未知，不作为零场或正式积分。
+- `mode:official`：来源确认为真实比赛、真实球员的审核通过结果，以及符合现行规则的主办方赛后补录。已退回、冲突、取消、未开赛、测试球队、测试球员或明确标记测试的比赛不计入；比赛是否发布不构成真实比赛证明。球队、球员、赛事或比赛来源无法核定时标为未知，不作为零场或正式积分。测试球员即使挂在真实球队下也不参与正式统计。
 - `mode:provisional`：正式结果加现场暂定结果。不得混同正式排名。
 - `from` 包含开始时刻，`to` 不包含结束时刻；统一 ISO 时间格式。
 
@@ -32,7 +32,7 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 
 ## 指标与完整度
 
-可执行指标字典：`cloudfunctions/dataCenter/shared/statistics.mjs` 的 METRICS。本实施分支为 `football-metrics/3`，新增可核定首发、真实／测试来源过滤与球员卡派生分；正式环境仍须以部署回读版本为准。
+可执行指标字典：`cloudfunctions/dataCenter/shared/statistics.mjs` 的 METRICS。本实施分支为 `football-metrics/4`，新增可核定首发、真实／测试球队及球员来源过滤与球员卡派生分；正式环境仍须以部署回读版本为准。
 
 球员行按球员、当时球队、赛事、组别形成；`metrics` 是可确认值，`observed` 是已有记录中的数值，`coverage` 描述每项指标是否完整。覆盖不足时 metrics 为 null，页面显示“—”，不能把 observed 当完整累计。
 完整度按指标分别判断：缺失换人身份影响出场和时间，不把已确认的进球、红黄牌一起清空。

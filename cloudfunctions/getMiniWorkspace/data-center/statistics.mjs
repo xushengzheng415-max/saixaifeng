@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { resolveMatchDuration, calculatePlayingMinutes } from './playing-time.mjs'
 
 export const SCHEMA_VERSION = 'football-data-center/1'
-export const METRIC_VERSION = 'football-metrics/3'
+export const METRIC_VERSION = 'football-metrics/4'
 export const METRICS = Object.freeze({
   starts: { label:'首发', unit:'场', source:'match lineup', rule:'distinct matchId as starting player' },
   appearances: { label:'出场', unit:'场', source:'lineup/substitution', rule:'distinct matchId with actual appearance' },
@@ -22,13 +22,36 @@ const revision = event => Number(event.revision || event.version || 0)
 const cancelled = event => event.deleted === true || ['deleted','cancelled','canceled','void','superseded'].includes(text(event.status).toLowerCase())
 const score = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null
 
-const synthetic = row => row?.synthetic === true || row?.isTest === true || Boolean(text(row?.syntheticDatasetId)) || ['test','virtual','synthetic','demo'].includes(text(row?.originType || row?.dataKind).toLowerCase())
+export const synthetic = row => row?.synthetic === true || row?.isTest === true || Boolean(text(row?.syntheticDatasetId || row?.syntheticKey)) || text(row?.source).toLowerCase() === 'ai_fixture' || ['test','virtual','synthetic','demo'].includes(text(row?.originType || row?.dataKind).toLowerCase())
+
+export function matchParticipantIds(match, externalEvents = []) {
+  const ids = new Set()
+  for (const side of ['home','away']) {
+    const lineup = lineupOf(match,side)
+    for (const row of [...lineup.starters,...lineup.substitutes]) { const playerId = idOf(row); if (playerId) ids.add(playerId) }
+  }
+  for (const event of effectiveEvents(match,externalEvents)) {
+    const nestedId = text(event.player?.id || event.player?._id)
+    if (nestedId) ids.add(nestedId)
+    for (const field of ['playerId','playerID','athleteId','inPlayerId','outPlayerId','assistPlayerId','assistId']) {
+      const playerId = text(event[field]); if (playerId) ids.add(playerId)
+    }
+  }
+  return ids
+}
 
 export function matchOrigin(match, context = {}) {
   const home = context.teamsById?.[teamOf(match,'home')]
   const away = context.teamsById?.[teamOf(match,'away')]
   const tournament = context.tournamentsById?.[text(match.tournamentId)]
   if (synthetic(match) || synthetic(home) || synthetic(away) || synthetic(tournament)) return 'test'
+  if (context.requirePlayerOriginEvidence) {
+    for (const playerId of matchParticipantIds(match,context.events)) {
+      const profile = context.playersById?.[playerId]
+      if (!profile) return 'unverified'
+      if (synthetic(profile)) return 'test_player'
+    }
+  }
   if (['real','official'].includes(text(match.originType || match.dataKind).toLowerCase())) return 'real'
   if (context.requireOriginEvidence) return home && away && tournament ? 'real' : 'unverified'
   return 'real'
@@ -101,15 +124,17 @@ function eventTeam(event, match, participants) {
   return teams?.size === 1 ? [...teams][0] : ''
 }
 
-export function aggregateStatistics({ matches = [], events = [], scope = {}, readComplete = true, divisionsById = {}, tournamentsById = {}, teamsById = {}, requireOriginEvidence = false }) {
+export function aggregateStatistics({ matches = [], events = [], scope = {}, readComplete = true, divisionsById = {}, tournamentsById = {}, teamsById = {}, playersById = {}, requireOriginEvidence = false, requirePlayerOriginEvidence = false }) {
   const selected = [...new Map(matches.filter(match => inScope(match, scope)).map(match => [text(match._id || match.id), match])).values()]
-  const originContext = { teamsById, tournamentsById, requireOriginEvidence }
+  const originContext = { teamsById, tournamentsById, playersById, events, requireOriginEvidence, requirePlayerOriginEvidence }
   const resultCandidates = selected.filter(match => recordedResultState(match) !== 'excluded')
   const testMatches = resultCandidates.filter(match => matchOrigin(match,originContext) === 'test')
+  const testPlayerMatches = resultCandidates.filter(match => matchOrigin(match,originContext) === 'test_player')
   const originUnverifiedMatches = resultCandidates.filter(match => matchOrigin(match,originContext) === 'unverified')
   const eligible = selected.filter(match => resultState(match,originContext) === 'official' || (scope.mode === 'provisional' && resultState(match,originContext) === 'provisional'))
   const players = new Map(), teams = new Map(), issues = []
   testMatches.forEach(match => issues.push({ code:'TEST_MATCH_EXCLUDED', matchId:text(match._id || match.id) }))
+  testPlayerMatches.forEach(match => issues.push({ code:'TEST_PLAYER_IN_MATCH', matchId:text(match._id || match.id) }))
   originUnverifiedMatches.forEach(match => issues.push({ code:'MATCH_ORIGIN_UNVERIFIED', matchId:text(match._id || match.id) }))
   let unlinkedEventCount = 0, coveredMatches = 0, missingLineupSides = 0
   const blank = () => ({ starts:0, appearances:0, goals:0, assists:0, yellowCards:0, redCards:0, minutesPlayed:0 })
@@ -251,7 +276,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
     schemaVersion:SCHEMA_VERSION, metricVersion:METRIC_VERSION,
     dataVersion:crypto.createHash('sha256').update(JSON.stringify([scope,revisionInput,eligible.map(match => [text(match._id || match.id),resolveMatchDuration(match,{ division:divisionsById[text(match.divisionId || match.division || 'default')],tournament:tournamentsById[text(match.tournamentId)] })])])).digest('hex').slice(0,24),
     generatedAt:new Date().toISOString(), scope:{ sportType:'football', mode:'official', ...scope },
-    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length ? 'partial' : 'complete', cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
+    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length || testPlayerMatches.length ? 'partial' : 'complete', cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && !testPlayerMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, testPlayerMatches:testPlayerMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
     summary:{ matchCount:eligible.length, playerCount:new Set(playerRows.map(row => row.playerId)).size, teamCount:new Set(teamRows.map(row => row.teamId)).size },
     players:playerRows, teams:teamRows, issues
   }
