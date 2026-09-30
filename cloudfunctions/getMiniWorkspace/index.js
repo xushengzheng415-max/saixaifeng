@@ -1708,10 +1708,12 @@ async function officialRosterForWorkspace(event, identity) {
     const { selectRosterMatches, restoreHistoricalRosterPlayers } = await import('./data-center/statistics.mjs')
     const matches = selectRosterMatches(await readDataRows(db, 'matches', { tournamentId }), teamId, rosterContext.divisionId, rosterContext.allowLegacySnapshot)
     const externalEvents = await readDataByIds(db, 'match_events', 'matchId', matches.map(match => match._id))
+    const matchTeams = await readDataByIds(db, 'teams', '_id', matches.flatMap(match => [match.homeTeamId,match.awayTeamId].filter(Boolean)))
+    const teamsById = Object.fromEntries(matchTeams.map(row => [String(row._id),row]))
     const restored = restoreHistoricalRosterPlayers(players, matches, teamId, latest && latest.playerIds)
     players.splice(0, players.length, ...restored)
     const { aggregateStatistics, sumPlayerRows } = await import('./data-center/statistics.mjs')
-    const aggregate = aggregateStatistics({ matches, events:externalEvents, scope:{ teamId, tournamentId }, divisionsById:{ [rosterContext.divisionId]:rosterContext.division }, tournamentsById:{ [tournamentId]:tournament } })
+    const aggregate = aggregateStatistics({ matches, events:externalEvents, scope:{ teamId, tournamentId }, divisionsById:{ [rosterContext.divisionId]:rosterContext.division }, tournamentsById:{ [tournamentId]:tournament }, teamsById, requireOriginEvidence:true })
     players.forEach(player => {
       const rows = aggregate.players.filter(row => row.playerId === String(player.id))
       const total = sumPlayerRows(rows)

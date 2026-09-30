@@ -73,13 +73,15 @@ function createDataService(db) {
       }
       return row
     })
-    const [divisions, tournaments] = await Promise.all([
+    const [divisions, tournaments, matchTeamProfiles] = await Promise.all([
       readByIds(db,'divisions','tournamentId',matches.map(row => row.tournamentId)),
-      readByIds(db,'tournaments','_id',matches.map(row => row.tournamentId))
+      readByIds(db,'tournaments','_id',matches.map(row => row.tournamentId)),
+      readByIds(db,'teams','_id',matches.flatMap(row => [row.homeTeamId,row.awayTeamId].filter(Boolean)))
     ])
     const divisionsById = Object.fromEntries(divisions.map(row => [id(row._id || row.id),row]))
     const tournamentsById = Object.fromEntries(tournaments.map(row => [id(row._id || row.id),row]))
-    const result = aggregateStatistics({ matches, events, scope, divisionsById, tournamentsById })
+    const teamsById = Object.fromEntries(matchTeamProfiles.map(row => [id(row._id),row]))
+    const result = aggregateStatistics({ matches, events, scope, divisionsById, tournamentsById, teamsById, requireOriginEvidence:true })
     // Owning one team does not grant access to the opponent's personal archive.
     if (!actor.platformOwner && !scope.tournamentId) {
       result.players = result.players.filter(row => teamIds.has(row.teamId) || tournamentIds.has(row.tournamentId))
@@ -88,22 +90,21 @@ function createDataService(db) {
     const profiles = actor.public ? [] : await readByIds(db,'players','_id',result.players.map(row => row.playerId))
     const profileById = new Map(profiles.map(row => [id(row._id),row]))
     result.players = result.players.map(row => ({ ...row, playerName:row.playerName || id(profileById.get(row.playerId)?.name) || '历史球员' }))
-    const teamProfiles = await readByIds(db,'teams','_id',result.teams.map(row => row.teamId))
-    const teamById = new Map(teamProfiles.map(row => [id(row._id),row]))
+    const teamById = new Map(matchTeamProfiles.map(row => [id(row._id),row]))
     result.teams = result.teams.map(row => ({ ...row, teamName:id(teamById.get(row.teamId)?.name || teamById.get(row.teamId)?.teamName) || '历史球队' }))
     const { buildStandings } = require('./standings.cjs')
     result.standings = buildStandings(matches.map(match => {
       const matchEvents = effectiveEvents(match,events)
       const cardCount = (side,types) => matchEvents.filter(event => types.includes(eventType(event)) && (event.teamSide === side || id(event.teamId) === id(match[side + 'TeamId']))).length
       const phase = id(match.phase || match.stageType || match.matchType).toLowerCase()
-      const state = resultState(match)
+      const state = resultState(match,{ teamsById,tournamentsById,requireOriginEvidence:true })
       const hasScore = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
       const divisionId = id(match.divisionId || match.division || 'default')
       return { ...match, divisionId, divisionName:id(divisionsById[divisionId]?.name || match.divisionName || '默认组别'), groupName:id(match.groupName || match.drawGroup || '联赛'),
         homeTeamName:id(teamById.get(id(match.homeTeamId))?.name || match.homeTeamName || '主队'), awayTeamName:id(teamById.get(id(match.awayTeamId))?.name || match.awayTeamName || '客队'),
         homeScore:Number(match.homeScore ?? match.scoreHome),awayScore:Number(match.awayScore ?? match.scoreAway),scoreReady:hasScore(match.homeScore ?? match.scoreHome) && hasScore(match.awayScore ?? match.scoreAway),
         resultStatus:state === 'official' ? 'approved' : state === 'provisional' ? 'pending_review' : 'not_submitted',
-        standingsEligible:match.standingsEligible !== false && match.isBye !== true && !['knockout','cup','placement','final','semifinal'].includes(phase) && (match.standingsEligible === true || ['group','league','round_robin'].includes(phase)),
+        standingsEligible:state === 'official' && match.standingsEligible !== false && match.isBye !== true && !['knockout','cup','placement','final','semifinal'].includes(phase) && (match.standingsEligible === true || ['group','league','round_robin'].includes(phase)),
         yellowHome:cardCount('home',['yellow_card','second_yellow']),yellowAway:cardCount('away',['yellow_card','second_yellow']),redHome:cardCount('home',['red_card','second_yellow']),redAway:cardCount('away',['red_card','second_yellow']) }
     }),divisionsById)
     const memberships = scope.playerId && !actor.public ? await readAll(db,'player_team_memberships',{ playerId:scope.playerId }) : []
@@ -118,7 +119,7 @@ function createDataService(db) {
       }
       const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','matchId','from','to'].some(field => scope[field])
       result.playerCard = fullCareer
-        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.status })
+        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.cardScoreScopeComplete ? 'complete' : 'partial' })
         : { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:'limited', mode:scope.mode, status:'scope_limited', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
     }
     return { success:true, ...result }

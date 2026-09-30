@@ -54,6 +54,15 @@ assert.equal(aggregateStatistics({ matches:[before],scope:{} }).players.find(row
 assert.equal(aggregateStatistics({ matches:[before,after],scope:{tournamentId:'t1'} }).summary.matchCount,1)
 assert.equal(aggregateStatistics({ matches:[before,{...after,divisionId:'u10'}],scope:{divisionId:'u12'} }).summary.matchCount,1)
 assert.equal(aggregateStatistics({ matches:[{...before,sportType:'basketball'}] }).summary.matchCount,0)
+const originContext = { teamsById:{ A:{_id:'A'},B:{_id:'B',synthetic:true},opponent:{_id:'opponent'} }, tournamentsById:{ t1:{_id:'t1'},t2:{_id:'t2'} }, requireOriginEvidence:true }
+const originChecked = aggregateStatistics({ matches:[before,after],scope:{},...originContext })
+assert.equal(originChecked.summary.matchCount,1); assert.equal(originChecked.coverage.excludedTestMatches,1)
+assert.equal(originChecked.coverage.cardScoreScopeComplete,true)
+assert.equal(originChecked.players.every(row => row.tournamentId === 't1'),true)
+const unknownOrigin = aggregateStatistics({ matches:[before],scope:{},teamsById:{},tournamentsById:{},requireOriginEvidence:true })
+assert.equal(unknownOrigin.summary.matchCount,0); assert.equal(unknownOrigin.coverage.originUnverifiedMatches,1); assert.equal(unknownOrigin.coverage.status,'partial')
+const scheduledUnknown = aggregateStatistics({ matches:[before,{...after,status:'scheduled',homeTeamId:'TBD'}],scope:{},teamsById:originContext.teamsById,tournamentsById:originContext.tournamentsById,requireOriginEvidence:true })
+assert.equal(scheduledUnknown.coverage.originUnverifiedMatches,0)
 assert.equal(aggregateStatistics({ matches:[before],scope:{from:'2026-10-01'} }).summary.matchCount,0)
 assert.throws(() => validateScope({from:'oops'}),/日期/)
 
@@ -76,6 +85,7 @@ const unknown = aggregateStatistics({matches:[{...before,events:undefined}]})
 assert.equal(unknown.coverage.status,'partial'); assert.equal(unknown.players[0].metrics.goals,null)
 const unlinked = aggregateStatistics({matches:[{...before,events:[{eventId:'legacy',type:'goal',teamId:'A',playerName:'小明'}]}]})
 assert.equal(unlinked.coverage.unlinkedEventCount,1); assert.equal(unlinked.players[0].metrics.goals,null)
+assert.equal(unlinked.coverage.cardScoreScopeComplete,true)
 const untimed = aggregateStatistics({matches:[{...before,refereeClockElapsedSeconds:null}]})
 assert.equal(untimed.players[0].metrics.minutesPlayed,null)
 const lineupMissing = aggregateStatistics({matches:[{...before,homeLineup:undefined,awayLineup:undefined,events:[]}]})
@@ -96,10 +106,10 @@ pagingDb.fail = 'match_events'
 await assert.rejects(readAll(pagingDb,'match_events'),error => error.code === 'DATA_READ_FAILED')
 
 const database = mockDatabase({
-  teams:[{_id:'A',name:'原队',orgId:'org'},{_id:'B',name:'新队',orgId:'org'},{_id:'C',name:'外部队',orgId:'other'}],
+  teams:[{_id:'A',name:'原队',orgId:'org'},{_id:'B',name:'新队',orgId:'org'},{_id:'C',name:'外部队',orgId:'other'},{_id:'D',name:'虚拟队',orgId:'org',synthetic:true,syntheticDatasetId:'fixture'},{_id:'opponent',name:'对手',orgId:'other'}],
   players:[{_id:'p1',name:'小明',teamId:'A',orgId:'org',guardianPhone:'private-value'}],
-  matches:[before,after,{...makeMatch('hidden','C','secret',10)}],match_events:[],match_lineup_snapshots:[],player_team_memberships:[],player_transfers:[],
-  tournaments:[{_id:'t1',name:'甲赛事',orgId:'org'},{_id:'t2',name:'乙赛事',orgId:'org'}],platform_settings:[],auth_sessions:[],users:[],
+  matches:[before,after,{...makeMatch('hidden','C','secret',10)},{...makeMatch('virtual','D','t3',40),schedulePublished:true}],match_events:[],match_lineup_snapshots:[],player_team_memberships:[],player_transfers:[],
+  tournaments:[{_id:'t1',name:'甲赛事',orgId:'org'},{_id:'t2',name:'乙赛事',orgId:'org'},{_id:'secret',name:'外部赛事',orgId:'other'},{_id:'t3',name:'测试赛事',orgId:'org'}],platform_settings:[],auth_sessions:[],users:[],
   publication_snapshots:[{_id:'pub',tournamentId:'t1',sportCode:'football',type:'tournament_center',status:'published'}]
 })
 const actor = {userId:'u',orgId:'org',platformOwner:false,teamIds:['A','B'],tournamentIds:['t1','t2']}
@@ -109,6 +119,8 @@ assert.equal(career.playerTotal.metrics.goals,8); assert.equal(career.accessScop
 assert.equal(career.playerCard.status,'scope_limited')
 const platformCareer = await service.query({ ...actor, platformOwner:true }, { playerId:'p1' })
 assert.equal(platformCareer.playerCard.status,'ready')
+assert.equal(platformCareer.playerTotal.metrics.goals,18)
+assert.equal(platformCareer.coverage.excludedTestMatches,1)
 assert.equal(platformCareer.playerCard.scoreVersion,'football-player-card-points/1')
 assert.equal((await service.query({ ...actor, platformOwner:true }, { playerId:'p1', tournamentId:'t1' })).playerCard.status,'scope_limited')
 assert(!JSON.stringify(career).includes('private-value'))

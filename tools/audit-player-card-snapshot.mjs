@@ -19,13 +19,14 @@ const unwrap = value => {
 const input = unwrap(JSON.parse(raw))
 const divisionsById = Object.fromEntries((input.divisions || []).map(row => [String(row._id),row]))
 const tournamentsById = Object.fromEntries((input.tournaments || []).map(row => [String(row._id),row]))
-const result = aggregateStatistics({ matches:input.matches || [], scope:{ mode:'official' }, divisionsById, tournamentsById })
+const teamsById = Object.fromEntries((input.teams || []).map(row => [String(row._id),row]))
+const result = aggregateStatistics({ matches:input.matches || [], scope:{ mode:'official' }, divisionsById, tournamentsById, teamsById, requireOriginEvidence:true })
 const grouped = new Map()
 for (const row of result.players) {
   if (!grouped.has(row.playerId)) grouped.set(row.playerId, [])
   grouped.get(row.playerId).push(row)
 }
-const summary = { snapshotMatches:(input.matches || []).length, officialMatches:result.summary.matchCount, distinctParticipants:grouped.size, globalCoverage:result.coverage.status, certifiedReady:0, metricReady:0, unverified:0, tiersIfComplete:{ bronze:0,silver:0,gold:0 }, missing:{ appearances:0,starts:0,minutesPlayed:0,goals:0 }, unlinkedEvents:result.coverage.unlinkedEventCount, missingLineupSides:result.coverage.missingLineupSides, metricVersion:result.metricVersion, scoreVersion:'football-player-card-points/1' }
+const summary = { snapshotMatches:(input.matches || []).length, officialMatches:result.summary.matchCount, excludedTestMatches:result.coverage.excludedTestMatches, originUnverifiedMatches:result.coverage.originUnverifiedMatches, distinctParticipants:grouped.size, globalCoverage:result.coverage.status, cardScoreScopeComplete:result.coverage.cardScoreScopeComplete, certifiedReady:0, metricReady:0, unverified:0, tiersIfComplete:{ bronze:0,silver:0,gold:0 }, missing:{ appearances:0,starts:0,minutesPlayed:0,goals:0 }, unlinkedEvents:result.coverage.unlinkedEventCount, missingLineupSides:result.coverage.missingLineupSides, metricVersion:result.metricVersion, scoreVersion:'football-player-card-points/1' }
 const points = []
 for (const rows of grouped.values()) {
   const card = calculatePlayerCardPoints(sumPlayerRows(rows), { metricVersion:result.metricVersion,dataVersion:result.dataVersion })
@@ -34,5 +35,5 @@ for (const rows of grouped.values()) {
 }
 points.sort((a,b) => a - b)
 summary.points = { nonzero:points.filter(value => value > 0).length, max:points.at(-1) ?? null, median:points.length ? points[Math.floor((points.length - 1) / 2)] : null }
-summary.certifiedReady = result.coverage.status === 'complete' ? summary.metricReady : 0
+summary.certifiedReady = result.coverage.cardScoreScopeComplete ? summary.metricReady : 0
 console.log(JSON.stringify(summary,null,2))
