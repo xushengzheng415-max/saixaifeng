@@ -33,7 +33,7 @@
 
       <section class="division-toolbar">
         <div class="division-tab-section"><span class="division-tab-title">竞赛组别</span><div class="division-tabs" role="tablist" aria-label="竞赛组别"><button v-for="division in divisionOptions" :key="division.id" type="button" role="tab" class="division-tab-button" :class="{ active: division.id === activeDivisionId }" :aria-selected="division.id === activeDivisionId" @click="selectDivision(division.id)"><strong>{{ division?.name || '未命名组别' }}</strong><small>{{ divisionPlayerFormatLabel(division) || '赛制待定' }}</small><em v-if="division.id !== 'default'" :class="division.mode === 'professional' || division.isProfessional ? 'professional' : 'simple'">{{ division.mode === 'professional' || division.isProfessional ? '专业' : '简易' }}</em></button></div></div>
-        <div class="division-rule-summary">
+        <div v-if="!teamCardMode" class="division-rule-summary">
           <span>{{ formatLabel }}</span>
           <i></i>
           <span>允许报名 {{ activeDivisionCapacity || '未设置' }} 支</span>
@@ -56,12 +56,6 @@
         <article><span>已审核通过</span><strong>{{ approvedTeams.length }}</strong><small>支</small></article>
         <article><span>待领取邀请</span><strong>{{ invitedTeams.length }}</strong><small>支</small></article>
       </section>
-      <section v-else-if="!isRegistrationWorkspace && activeTab === 'all'" class="team-summary-grid">
-        <article><span>已审核球队</span><strong>{{ approvedTeams.length }}</strong><small>支</small></article>
-        <article><span>已认领</span><strong>{{ approvedClaimedTeams.length }}</strong><small>支</small></article>
-        <article><span>已确认参赛</span><strong>{{ approvedConfirmedTeams.length }}</strong><small>支</small></article>
-        <article><span>{{ isProfessional ? '名单已提交' : '当前组别' }}</span><strong :class="{ 'division-summary-value': !isProfessional }">{{ isProfessional ? submittedRosterCount : activeDivisionDisplayName }}</strong><small v-if="isProfessional">支</small></article>
-      </section>
       <section v-else-if="isSimpleChangeView" class="team-summary-grid change-summary-grid">
         <article><span class="change-summary-icon change-gray"><el-icon><Lock /></el-icon></span><span>变更入口</span><strong class="change-text">已关闭</strong></article>
         <article><span class="change-summary-icon change-green"><el-icon><CircleCheckFilled /></el-icon></span><span>历史已通过</span><strong>{{ simpleChangeApprovedCount }}</strong><small>项</small></article>
@@ -74,7 +68,7 @@
         <article><span class="professional-summary-icon icon-emerald"><el-icon><CircleCheckFilled /></el-icon></span><span>本周已通过</span><strong>{{ approvedThisWeekCount }}</strong><small>支</small></article>
         <article><span class="professional-summary-icon icon-red"><el-icon><WarningFilled /></el-icon></span><span>异常关系</span><strong>{{ applicationRiskCount }}</strong><small>项</small></article>
       </section>
-      <section v-else class="team-summary-grid" :class="{ 'simple-application-summary': isSimpleApplicationView }">
+      <section v-else-if="activeTab !== 'all'" class="team-summary-grid" :class="{ 'simple-application-summary': isSimpleApplicationView }">
         <article>
           <span v-if="isProfessional" class="professional-summary-icon icon-emerald"><el-icon><UserFilled /></el-icon></span><span v-else-if="isSimpleApplicationView" class="summary-symbol summary-symbol-pending"></span><span v-else class="simple-summary-icon simple-summary-green"><el-icon><UserFilled /></el-icon></span>
           <span>{{ simpleOverview ? '参赛球队' : (isSimpleApplicationView ? '待审核申请' : '已确认参赛') }}</span>
@@ -102,7 +96,7 @@
       </section>
 
       <el-alert
-        v-if="activeTab !== 'materials'"
+        v-if="activeTab !== 'materials' && !teamCardMode"
         class="teams-mode-notice"
         :title="isSimpleChangeView ? `本组报名已于 ${simpleChangeDeadline} 截止；参赛队名与队徽已锁定，普通流程不再允许修改。` : (isApplicationReviewView ? '球队可通过主办方邀请进入，或在赛小蜂小程序搜索赛事后申请；无论哪种入口，球队都必须在小程序完成认领与参赛确认。' : (isProfessional ? '专业版按赛事正式名单管理球员资格；审核后的名单与比赛阵容均保留独立快照。' : '基础版以球队为单位快速参赛；需要球员资格审核与正式名单时，可将组别升级为专业版。'))"
         :type="isSimpleChangeView ? 'info' : (isProfessional ? 'warning' : 'success')"
@@ -134,11 +128,7 @@
         </div>
       </section>
 
-      <section v-if="simpleOverview" class="simple-team-filters">
-        <el-input v-model="searchKeyword" placeholder="搜索球队名称" clearable :prefix-icon="Search" />
-        <el-select v-model="professionalSourceFilter" placeholder="加入来源（主办方邀请/搜索申请）" clearable><el-option label="主办方邀请" value="invite" /><el-option label="搜索赛事申请" value="apply" /></el-select>
-        <el-select v-model="professionalClaimFilter" placeholder="认领状态" clearable><el-option label="已认领" value="claimed" /><el-option label="待认领" value="pending" /></el-select>
-      </section>
+      <section v-if="teamCardMode" class="team-card-toolbar"><strong>参赛球队 <span>{{ filteredTeams.length }}</span></strong><el-input v-model="searchKeyword" aria-label="搜索球队" placeholder="搜索球队" clearable :prefix-icon="Search" /></section>
 
       <section v-if="isApplicationReviewView" class="simple-application-filters" :class="{ 'professional-application-filters': isProfessionalApplicationView }">
         <el-input v-model="searchKeyword" placeholder="搜索球队名称" clearable :prefix-icon="Search" />
@@ -156,7 +146,7 @@
         <el-button plain type="success" @click="resetApplicationFilters">重置</el-button>
       </section>
 
-      <section v-if="!isRegistrationWorkspace && isProfessional && activeTab === 'all'" class="professional-team-filters">
+      <section v-if="!teamCardMode && !isRegistrationWorkspace && isProfessional && activeTab === 'all'" class="professional-team-filters">
         <el-input v-model="searchKeyword" placeholder="搜索球队名称" clearable :prefix-icon="Search" />
         <el-select v-model="professionalSourceFilter" placeholder="加入来源" clearable><el-option label="主办方邀请" value="invite" /><el-option label="搜索赛事申请" value="apply" /></el-select>
         <el-select v-model="professionalClaimFilter" placeholder="认领状态" clearable><el-option label="已认领" value="claimed" /><el-option label="待认领" value="pending" /></el-select>
@@ -170,7 +160,16 @@
         <div class="change-principles"><div><el-icon><InfoFilled /></el-icon><span>报名截止前可修改参赛队名、队徽；截止后原则上不予变更。确需纠错时，仅由主办方异常处理并完善留痕。</span></div><div><strong>处理原则</strong><span>报名截止后普通流程不予修改</span><span>所有更改保留审计记录</span></div></div>
       </section>
 
-      <section v-if="activeTab !== 'materials' && (!isSimpleChangeView || showPendingChangeReview)" class="teams-table-panel" :class="{ 'simple-application-panel': isApplicationReviewView, 'professional-team-panel': isProfessional && activeTab === 'all', 'professional-application-panel': isProfessionalApplicationView }">
+      <section v-if="teamCardMode" class="team-card-list" aria-label="参赛球队">
+        <button v-for="row in filteredTeams" :key="getRecordId(row)" class="team-overview-card" type="button" :aria-label="`查看${row.name || row.teamName || '球队'}的球队详情`" @click="openTeamPlayers(row)">
+          <img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-card-crest" alt="" />
+          <span v-else class="team-card-crest team-card-crest-fallback">{{ teamInitial(row) }}</span>
+          <span class="team-card-content"><strong>{{ row.name || row.teamName || '未命名球队' }}</strong><small>{{ teamRegistrationNo(row) }}</small></span>
+          <span v-if="row.playerCount !== undefined || teamPlayerCount(row) > 0" class="team-card-player-count">{{ teamPlayerCount(row) }} 人</span>
+        </button>
+        <div v-if="!filteredTeams.length" class="team-card-empty"><span>{{ searchKeyword ? '没有匹配的球队' : '当前组别暂无已审核球队' }}</span><el-button v-if="searchKeyword" link type="primary" @click="searchKeyword = ''">清除搜索</el-button><el-button v-else link type="primary" @click="router.push({ path: `/tournaments/${tournamentId}/registration`, query: { divisionId: activeDivisionId } })">去报名管理</el-button></div>
+      </section>
+      <section v-if="!teamCardMode && activeTab !== 'materials' && (!isSimpleChangeView || showPendingChangeReview)" class="teams-table-panel" :class="{ 'simple-application-panel': isApplicationReviewView, 'professional-team-panel': isProfessional && activeTab === 'all', 'professional-application-panel': isProfessionalApplicationView }">
         <div class="table-toolbar">
           <div>
             <strong>{{ activeTabTitle }}</strong>
@@ -1114,6 +1113,7 @@ const isProfessional = computed(() => {
   return mode === 'professional' || activeDivision.value?.isProfessional === true
 })
 const simpleOverview = computed(() => !isRegistrationWorkspace.value && !isProfessional.value && activeTab.value === 'all')
+const teamCardMode = computed(() => !isRegistrationWorkspace.value && activeTab.value === 'all')
 const simpleTeamCapacity = computed(() => {
   const max = activeDivisionCapacity.value || Number(tournament.value.maxTeams || 0)
   return max > 0 ? max : divisionTournamentTeams.value.length
@@ -1221,13 +1221,13 @@ const filteredTeams = computed(() => {
       (t.contactName || t.coachName || '').toLowerCase().includes(kw)
     )
   }
-  if (isProfessional.value && professionalSourceFilter.value) {
+  if (!teamCardMode.value && isProfessional.value && professionalSourceFilter.value) {
     list = list.filter(team => (professionalSourceFilter.value === 'invite' ? teamSource(team) === '主办方邀请' : teamSource(team) !== '主办方邀请'))
   }
-  if (isProfessional.value && professionalClaimFilter.value) {
+  if (!teamCardMode.value && isProfessional.value && professionalClaimFilter.value) {
     list = list.filter(team => professionalClaimFilter.value === 'claimed' ? claimLabel(team) === '已认领' : claimLabel(team) !== '已认领')
   }
-  if (isProfessional.value && professionalRosterFilter.value) {
+  if (!teamCardMode.value && isProfessional.value && professionalRosterFilter.value) {
     list = list.filter(team => {
       const label = rosterLabel(team)
       if (professionalRosterFilter.value === 'submitted') return ['审核中', '已生效', '已锁定', '已提交'].includes(label)
@@ -3852,6 +3852,22 @@ onMounted(async () => {
 .pending-claim-panel .table-toolbar { min-height: 52px; padding: 0 18px; border-bottom: 1px solid #edf0ed; background: linear-gradient(90deg,#f2fbf4,#fff); }
 .pending-claim-panel .table-toolbar strong { color: #168344; }
 .teams-table-panel { overflow: hidden; border: 1px solid #dfe6e0; border-radius: 10px; background: #fff; }
+.team-card-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:20px 0 14px}
+.team-card-toolbar strong{color:#20392a;font-size:16px}
+.team-card-toolbar strong span{margin-left:4px;color:#627369;font-weight:500}
+.team-card-toolbar .el-input{width:min(300px,100%)}
+.team-card-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:stretch}
+.team-overview-card{display:flex;align-items:center;gap:13px;min-width:0;min-height:108px;padding:16px;border:1px solid #dce6df;border-radius:8px;background:#fff;color:#22362a;text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s}
+.team-overview-card:hover{border-color:#168b4c;background:#fbfefc}
+.team-overview-card:focus-visible{outline:2px solid #168b4c;outline-offset:2px}
+.team-card-crest{display:block;flex:0 0 54px;width:54px;height:54px;object-fit:contain}
+.team-card-crest-fallback{display:grid;place-items:center;border-radius:6px;background:#eef6f0;color:#187b43;font-size:18px;font-weight:700}
+.team-card-content{display:grid;gap:5px;min-width:0;flex:1}
+.team-card-content strong{overflow-wrap:anywhere;font-size:15px;line-height:1.35}
+.team-card-content small{color:#76857a;font-size:12px}
+.team-card-player-count{flex:0 0 auto;align-self:flex-end;color:#536b5b;font-size:12px;white-space:nowrap}
+.team-card-empty{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:12px;min-height:150px;border:1px solid #dce6df;border-radius:8px;background:#fff;color:#67786c;font-size:14px}
+@media(max-width:640px){.team-card-toolbar{align-items:stretch;flex-direction:column}.team-card-toolbar .el-input{width:100%}.team-card-list{min-width:0;grid-template-columns:minmax(0,1fr)}.team-overview-card{box-sizing:border-box;width:100%;min-width:0;min-height:96px;padding:12px;gap:10px}.team-card-crest{flex-basis:44px;width:44px;height:44px}}
 .table-toolbar { justify-content: space-between; gap: 18px; padding: 16px 18px; border-bottom: 1px solid #e8ece9; }
 .table-toolbar > div { display: flex; align-items: baseline; gap: 10px; }
 .table-toolbar strong { font-size: 15px; }
