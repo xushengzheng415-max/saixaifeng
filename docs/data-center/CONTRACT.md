@@ -28,6 +28,8 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 响应包含 `schemaVersion, metricVersion, dataVersion, generatedAt, scope, accessScope, coverage, summary, teams, players, issues`；球员查询另含 `playerTotal` 和授权范围内的 `memberships`。
 比赛详情的公开适配入口为 `webLoginApi.publicMatchRankings`，接收 `tournamentId, matchId`，先验证该比赛在既有赛事中心公开接口中可见，再调用同一统计引擎。其 `data` 包含单场 `scope, rankings, metrics, coverage, metricVersion, dataVersion`；不返回私有档案，不以其他比赛补齐本场数据。
 
+H5 公开球员榜 `fanRankings.data.players` 的球员卡字段为 `cardTier, cardPoints, cardScoreVersion, careerMetrics`。`careerMetrics` 仅从统一数据服务的完整正式生涯取得 `appearances, starts, minutesPlayed, goals, assists`；某项未核定时为 null，范围不完整时整个 `careerMetrics` 为 null。旧榜单快照中的同名 `appearances/goals/assists/points` 不是职业生涯真值，球员资料页不得将它们与新积分混排。应援次数单独显示。
+
 `accessScope` 为 platform、authorized 或 published。普通组织查询的“球员历史”是当前授权范围内的历史，不能声称覆盖尚未获得访问授权的全部赛事。
 
 ## 指标与完整度

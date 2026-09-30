@@ -14,9 +14,13 @@ async function applyPlayerCardScores(players, career) {
     player.cardTier = null
     player.cardPoints = null
     player.cardScoreVersion = null
+    player.careerMetrics = null
     const rows = grouped.get(String(player.playerId || ''))
     if (!rows?.length) continue
-    const score = calculatePlayerCardPoints(sumPlayerRows(rows), {
+    const total = sumPlayerRows(rows)
+    if (!career.coverage?.cardScoreScopeComplete) continue
+    player.careerMetrics = Object.fromEntries(['appearances','starts','minutesPlayed','goals','assists'].map(field => [field, total.metrics[field] ?? null]))
+    const score = calculatePlayerCardPoints(total, {
       metricVersion:career.metricVersion,
       dataVersion:career.dataVersion,
       coverageStatus:career.coverage?.cardScoreScopeComplete ? 'complete' : 'partial'
@@ -30,7 +34,7 @@ async function applyPlayerCardScores(players, career) {
 }
 
 async function enrichFanPlayerCards(db, players) {
-  for (const player of players) { player.cardTier = null; player.cardPoints = null; player.cardScoreVersion = null }
+  for (const player of players) { player.cardTier = null; player.cardPoints = null; player.cardScoreVersion = null; player.careerMetrics = null }
   if (!players.some(player => player.playerId)) return players
   try {
     const career = await createDataService(db).query({ platformOwner:true, teamIds:[], tournamentIds:[] }, { mode:'official' })

@@ -9,12 +9,20 @@ async function main() {
   await applyPlayerCardScores(players,career)
   assert.equal(players[0].cardTier,'gold')
   assert.equal(players[0].cardPoints,100)
+  assert.equal(players[0].careerMetrics.appearances,20)
+  assert.equal(players[0].careerMetrics.minutesPlayed,1800)
   assert.equal(players[1].cardTier,null)
   assert.equal(players[2].cardTier,null)
   assert.deepEqual([...officialMatchIds({teams:[{matchIds:['real-match']},{matchIds:['real-match']} ]})],['real-match'])
   assert.equal(officialMatchIds({teams:[]}).has('test-match'),false)
   await applyPlayerCardScores(players,{...career,coverage:{cardScoreScopeComplete:false}})
   assert.equal(players[0].cardTier,null)
+  assert.equal(players[0].careerMetrics,null)
+  const oneMatch = { ...row, observed:{appearances:1,starts:0,minutesPlayed:0,goals:0,assists:0}, matchIds:['one'],startMatchIds:[] }
+  const one = [{playerId:'real',appearances:0,cardPoints:null}]
+  await applyPlayerCardScores(one,{...career,players:[oneMatch]})
+  assert.equal(one[0].cardPoints,2)
+  assert.equal(one[0].careerMetrics.appearances,1)
   console.log('PASS: 公开球员榜使用生涯积分，缺 ID、测试及范围不完整不伪造等级')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
