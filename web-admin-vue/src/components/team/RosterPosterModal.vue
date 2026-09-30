@@ -163,12 +163,14 @@ async function downloadPoster() {
   if (!posterElement.value || !roster.value.length || exporting.value) return
   exporting.value = true
   try {
-    const { default: html2canvas } = await import('html2canvas')
-    const canvas = await html2canvas(posterElement.value, {
-      backgroundColor: null, useCORS: true, allowTaint: false, scale: 1.5, logging: false,
-      onclone: document => { const poster = document.querySelector('.roster-poster-canvas'); if (poster) poster.style.zoom = '1' }
+    const { toBlob } = await import('html-to-image')
+    const blob = await toBlob(posterElement.value, {
+      width: 1200,
+      height: posterElement.value.scrollHeight,
+      pixelRatio: 1.5,
+      style: { zoom: '1' },
+      skipFonts: true
     })
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
     if (!blob) throw new Error('图片生成失败')
     const href = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -204,7 +206,8 @@ function printPoster() { if (posterElement.value && roster.value.length) window.
 .roster-poster-event strong{max-width:790px;font-size:29px;line-height:1.35}
 .roster-poster-event-fallback{display:grid;place-items:center;width:85px;height:85px;border:2px solid #fff;border-radius:50%;font-size:40px}
 .roster-poster-team{display:flex;align-items:center;gap:30px;margin-top:74px}
-.roster-poster-team img,.roster-poster-team-fallback{display:grid;place-items:center;width:140px;height:140px;object-fit:contain;border:6px solid #fff;border-radius:50%;background:var(--roster-base);font-size:70px;font-weight:900}
+.roster-poster-team img,.roster-poster-team-fallback{width:152px;height:152px;flex:0 0 152px;object-fit:contain}
+.roster-poster-team-fallback{display:grid;place-items:center;font-size:70px;font-weight:900}
 .roster-poster-team small{font-size:28px;font-weight:700}
 .roster-poster-team h2{margin:8px 0;font-size:76px;line-height:1.12}
 .roster-poster-team p{margin:0;font-size:24px}
