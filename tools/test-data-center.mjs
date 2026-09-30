@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { aggregateStatistics, effectiveEvents, sumPlayerRows } from '../cloudfunctions/dataCenter/shared/statistics.mjs'
+import { aggregateStatistics, effectiveEvents, sumPlayerRows, calculatePlayerCardPoints } from '../cloudfunctions/dataCenter/shared/statistics.mjs'
 const require = createRequire(import.meta.url)
 const { readAll, readByIds } = require('../cloudfunctions/dataCenter/shared/reader.cjs')
 const { createDataService, validateScope } = require('../cloudfunctions/dataCenter/shared/service.cjs')
@@ -35,6 +35,17 @@ const makeMatch = (id,team,tournament,goals = 0) => ({
 const before = makeMatch('m1','A','t1',5), after = makeMatch('m2','B','t2',3)
 const life = aggregateStatistics({ matches:[before,after,before],scope:{playerId:'p1'} })
 assert.equal(sumPlayerRows(life.players).metrics.goals,8)
+assert.equal(sumPlayerRows(life.players).metrics.starts,2)
+const complete = metrics => ({ metrics, coverage:Object.fromEntries(['appearances','starts','minutesPlayed','goals'].map(field => [field,'complete'])) })
+assert.equal(calculatePlayerCardPoints(complete({ appearances:9,starts:9,minutesPlayed:810,goals:0 })).points,45)
+assert.equal(calculatePlayerCardPoints(complete({ appearances:20,starts:20,minutesPlayed:1800,goals:0 })).tier,'gold')
+assert.equal(calculatePlayerCardPoints(complete({ appearances:20,starts:20,minutesPlayed:1800,goals:0 })).canReplacePhoto,true)
+const capped = calculatePlayerCardPoints(complete({ appearances:10,starts:10,minutesPlayed:900,goals:20 }))
+assert.equal(capped.foundation,50); assert.equal(capped.goalBonus,10); assert.equal(capped.points,60)
+assert.equal(calculatePlayerCardPoints({ metrics:{ appearances:20,starts:20,minutesPlayed:null,goals:0 }, coverage:{ appearances:'complete',starts:'complete',minutesPlayed:'partial',goals:'complete' } }).status,'unverified')
+assert.equal(calculatePlayerCardPoints(complete({ appearances:1,starts:2,minutesPlayed:90,goals:0 })).status,'unverified')
+assert.equal(calculatePlayerCardPoints(complete({ appearances:20,starts:20,minutesPlayed:1800,goals:0 }),{coverageStatus:'partial'}).canChangeBackground,false)
+assert.equal(sumPlayerRows([life.players[0],life.players[0]]).metrics.starts,1)
 assert.equal(life.summary.matchCount,2)
 assert.equal(life.players.find(row => row.teamId === 'A').metrics.goals,5)
 assert.equal(life.players.find(row => row.teamId === 'B').metrics.goals,3)
@@ -67,6 +78,12 @@ const unlinked = aggregateStatistics({matches:[{...before,events:[{eventId:'lega
 assert.equal(unlinked.coverage.unlinkedEventCount,1); assert.equal(unlinked.players[0].metrics.goals,null)
 const untimed = aggregateStatistics({matches:[{...before,refereeClockElapsedSeconds:null}]})
 assert.equal(untimed.players[0].metrics.minutesPlayed,null)
+const lineupMissing = aggregateStatistics({matches:[{...before,homeLineup:undefined,awayLineup:undefined,events:[]}]})
+assert.equal(lineupMissing.coverage.status,'partial'); assert.equal(lineupMissing.coverage.missingLineupSides,2)
+const legacyMatch = { ...before, events:[{eventId:'legacy-goal',type:'goal',teamSide:'home',playerName:'小明',playerNumber:10,minute:12}], homeLineup:{starters:[{playerId:'p1',name:'小明',number:10}],substitutes:[]} }
+assert.equal(aggregateStatistics({matches:[legacyMatch]}).players.find(row => row.playerId === 'p1').metrics.goals,1)
+const ambiguousMatch = { ...legacyMatch,homeLineup:{starters:[{playerId:'p1',name:'小明',number:10},{playerId:'p2',name:'小明',number:10}],substitutes:[]} }
+assert.equal(aggregateStatistics({matches:[ambiguousMatch]}).players.find(row => row.playerId === 'p1').metrics.goals,null)
 const noScore = aggregateStatistics({matches:[{...before,homeScore:null}]})
 assert.equal(noScore.teams[0].wins,null)
 
@@ -89,6 +106,11 @@ const actor = {userId:'u',orgId:'org',platformOwner:false,teamIds:['A','B'],tour
 const service = createDataService(database)
 const career = await service.query(actor,{playerId:'p1'})
 assert.equal(career.playerTotal.metrics.goals,8); assert.equal(career.accessScope,'authorized')
+assert.equal(career.playerCard.status,'scope_limited')
+const platformCareer = await service.query({ ...actor, platformOwner:true }, { playerId:'p1' })
+assert.equal(platformCareer.playerCard.status,'ready')
+assert.equal(platformCareer.playerCard.scoreVersion,'football-player-card-points/1')
+assert.equal((await service.query({ ...actor, platformOwner:true }, { playerId:'p1', tournamentId:'t1' })).playerCard.status,'scope_limited')
 assert(!JSON.stringify(career).includes('private-value'))
 await assert.rejects(service.query(actor,{teamId:'C'}),error => error.code === 'DATA_FORBIDDEN')
 await assert.rejects(service.query(actor,{tournamentId:'secret'}),error => error.code === 'DATA_FORBIDDEN')

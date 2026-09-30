@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { resolveMatchDuration, calculatePlayingMinutes } from './playing-time.mjs'
 
 export const SCHEMA_VERSION = 'football-data-center/1'
-export const METRIC_VERSION = 'football-metrics/1'
+export const METRIC_VERSION = 'football-metrics/2'
 export const METRICS = Object.freeze({
   starts: { label:'首发', unit:'场', source:'match lineup', rule:'distinct matchId as starting player' },
   appearances: { label:'出场', unit:'场', source:'lineup/substitution', rule:'distinct matchId with actual appearance' },
@@ -15,7 +15,7 @@ export const METRICS = Object.freeze({
 const text = value => value == null ? '' : String(value).trim()
 const idOf = row => typeof row === 'string' ? row : text(row?.playerId || row?.id || row?._id)
 const teamOf = (match, side) => text(match[side + 'TeamId'] || match[side + 'Team']?._id || match[side + 'Team']?.id || match[side === 'home' ? 'teamAId' : 'teamBId'])
-const aliases = { score:'goal', penalty:'penalty_scored', penalty_goal:'penalty_scored', yellow:'yellow_card', yellowcard:'yellow_card', red:'red_card', redcard:'red_card', 'own-goal':'own_goal', og:'own_goal', substitute:'substitution' }
+const aliases = { score:'goal', penalty:'penalty_scored', penalty_goal:'penalty_scored', yellow:'yellow_card', yellowcard:'yellow_card', red:'red_card', redcard:'red_card', second_yellow_red:'second_yellow', 'own-goal':'own_goal', og:'own_goal', substitute:'substitution' }
 export const eventType = event => aliases[text(event.type || event.eventType).toLowerCase()] || text(event.type || event.eventType).toLowerCase()
 const eventId = event => text(event.eventId || event.sourceEventId || event._id)
 const revision = event => Number(event.revision || event.version || 0)
@@ -88,23 +88,24 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   const selected = [...new Map(matches.filter(match => inScope(match, scope)).map(match => [text(match._id || match.id), match])).values()]
   const eligible = selected.filter(match => resultState(match) === 'official' || (scope.mode === 'provisional' && resultState(match) === 'provisional'))
   const players = new Map(), teams = new Map(), issues = []
-  let unlinkedEventCount = 0, coveredMatches = 0
+  let unlinkedEventCount = 0, coveredMatches = 0, missingLineupSides = 0
   const blank = () => ({ starts:0, appearances:0, goals:0, assists:0, yellowCards:0, redCards:0, minutesPlayed:0 })
   function playerRow(playerId, teamId, match, profile = {}) {
     const key = [playerId,teamId,text(match.tournamentId),text(match.divisionId || match.division || 'default')].join('|')
-    if (!players.has(key)) players.set(key, { playerId, teamId, tournamentId:text(match.tournamentId), divisionId:text(match.divisionId || match.division || 'default'), playerName:text(profile.name || profile.playerName), observed:blank(), matchIds:new Set(), startMatches:new Set(), minuteUnknown:false, eventUnknown:false, appearanceUnknown:false })
+    if (!players.has(key)) players.set(key, { playerId, teamId, tournamentId:text(match.tournamentId), divisionId:text(match.divisionId || match.division || 'default'), playerName:text(profile.name || profile.playerName), observed:blank(), matchIds:new Set(), startMatches:new Set(), minuteUnknown:false, metricUnknown:new Set(), appearanceUnknown:false })
     return players.get(key)
   }
   for (const match of eligible) {
     const matchId = text(match._id || match.id)
     if (!matchId) { issues.push({ code:'MATCH_ID_MISSING' }); continue }
-    const matchEvents = effectiveEvents(match, events)
+    let matchEvents = effectiveEvents(match, events)
     const eventsKnown = match.eventRecordingStatus === 'complete' || match.statisticsCoverage?.events === 'complete' || (Array.isArray(match.events) && match.eventRecordingStatus !== 'partial')
     if (eventsKnown) coveredMatches++
     else issues.push({ code:'EVENT_COVERAGE_PARTIAL', matchId })
     const participants = new Map(), lineups = {}
     for (const side of ['home','away']) {
       const teamId = teamOf(match, side), lineup = lineupOf(match, side)
+      if (teamId && !lineup.known) { missingLineupSides++; issues.push({ code:'LINEUP_COVERAGE_MISSING', matchId, teamId }) }
       lineups[teamId] = lineup
       for (const profile of [...lineup.starters, ...lineup.substitutes]) {
         const playerId = idOf(profile)
@@ -114,7 +115,25 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
         playerRow(playerId, teamId, match, profile)
       }
     }
-    const appeared = new Map(), assistKeys = new Set(), teamsWithUnlinked = new Set()
+    // Link a legacy event only to an existing, unique player in that match's lineup.
+    // This never creates or merges a permanent identity from a name.
+    matchEvents = matchEvents.map(event => {
+      const teamId = eventTeam(event,match,participants), lineup = lineups[teamId]
+      if (!lineup) return event
+      const profiles = [...lineup.starters,...lineup.substitutes]
+      function resolve(name, number) {
+        if (!name || number == null || number === '') return ''
+        const ids = [...new Set(profiles.filter(profile => text(profile.name || profile.playerName) === text(name) && text(profile.number ?? profile.jerseyNumber) === text(number)).map(idOf).filter(Boolean))]
+        return ids.length === 1 ? ids[0] : ''
+      }
+      return { ...event, playerId:text(event.playerId || event.playerID || event.athleteId) || resolve(event.playerName,event.playerNumber), assistPlayerId:text(event.assistPlayerId || event.assistId) || resolve(event.assistName,event.assistNumber) }
+    })
+    const appeared = new Map(), assistKeys = new Set(), teamsWithUnlinked = new Map()
+    function markUnlinked(teamId,type) {
+      const fields = { goal:['goals'], penalty_scored:['goals'], assist:['assists'], yellow_card:['yellowCards'], red_card:['redCards','minutesPlayed'], second_yellow:['yellowCards','redCards','minutesPlayed'], substitution:['appearances','minutesPlayed'] }
+      if (!teamsWithUnlinked.has(teamId)) teamsWithUnlinked.set(teamId,new Set())
+      for (const field of fields[type] || []) teamsWithUnlinked.get(teamId).add(field)
+    }
     for (const side of ['home','away']) {
       const teamId = teamOf(match, side)
       if (!teamId) { issues.push({ code:'TEAM_ID_MISSING', matchId }); continue }
@@ -137,12 +156,12 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
       const type = eventType(event)
       if (event.shootout === true || ['shootout','penalty_shootout','penalties'].includes(text(event.phase || event.period))) continue
       const teamId = eventTeam(event, match, participants)
-      if (!teamId) { unlinkedEventCount++; ['home','away'].forEach(side => teamsWithUnlinked.add(teamOf(match,side))); issues.push({ code:'EVENT_TEAM_UNLINKED', matchId, eventId:eventId(event) }); continue }
+      if (!teamId) { unlinkedEventCount++; ['home','away'].forEach(side => markUnlinked(teamOf(match,side),type)); issues.push({ code:'EVENT_TEAM_UNLINKED', matchId, eventId:eventId(event) }); continue }
       const playerId = text((type === 'substitution' ? event.inPlayerId : '') || event.playerId || event.playerID || event.athleteId || event.player?.id || event.player?._id)
-      if (playerId && participants.has(playerId) && !participants.get(playerId).has(teamId)) { unlinkedEventCount++; teamsWithUnlinked.add(teamId); issues.push({ code:'EVENT_PLAYER_TEAM_CONFLICT', matchId, eventId:eventId(event) }); continue }
+      if (playerId && participants.has(playerId) && !participants.get(playerId).has(teamId)) { unlinkedEventCount++; markUnlinked(teamId,type); issues.push({ code:'EVENT_PLAYER_TEAM_CONFLICT', matchId, eventId:eventId(event) }); continue }
       const row = playerId ? playerRow(playerId, teamId, match, { name:event.playerName }) : null
       if (!row && ['goal','penalty_scored','own_goal','yellow_card','red_card','second_yellow','substitution'].includes(type)) {
-        unlinkedEventCount++; teamsWithUnlinked.add(teamId); issues.push({ code:'EVENT_PLAYER_UNLINKED', matchId, eventId:eventId(event) })
+        unlinkedEventCount++; markUnlinked(teamId,type); issues.push({ code:'EVENT_PLAYER_UNLINKED', matchId, eventId:eventId(event) })
       }
       if (row) {
         if (['goal','penalty_scored'].includes(type)) row.observed.goals++
@@ -174,7 +193,9 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
         if (lineup.starters.some(profile => idOf(profile) === playerId)) row.startMatches.add(matchId)
         const wasPresent = participants.get(row.playerId)?.has(teamId) || appeared.get(teamId).has(row.playerId)
         if (!wasPresent) continue
-        if (!eventsKnown || teamsWithUnlinked.has(teamId)) row.eventUnknown = true
+        const unknown = teamsWithUnlinked.get(teamId) || new Set()
+        for (const field of unknown) row.metricUnknown.add(field)
+        if (!eventsKnown) ['goals','assists','yellowCards','redCards'].forEach(field => row.metricUnknown.add(field))
         if (!lineup.known) row.appearanceUnknown = true
         if (appeared.get(teamId).has(row.playerId)) {
           row.matchIds.add(matchId)
@@ -190,11 +211,11 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
     const metrics = { ...row.observed, minutesPlayed:row.minuteUnknown ? null : Math.round(row.observed.minutesPlayed) }
     const coverage = {}
     for (const metric of Object.keys(METRICS)) {
-      const unknown = !readComplete || (metric === 'minutesPlayed' ? row.minuteUnknown : ['starts','appearances'].includes(metric) ? row.appearanceUnknown : row.eventUnknown)
+      const unknown = !readComplete || row.metricUnknown.has(metric) || (metric === 'minutesPlayed' ? row.minuteUnknown : ['starts','appearances'].includes(metric) ? row.appearanceUnknown : false)
       coverage[metric] = unknown ? 'partial' : 'complete'
       if (unknown) metrics[metric] = null
     }
-    return { playerId:row.playerId, teamId:row.teamId, tournamentId:row.tournamentId, divisionId:row.divisionId, playerName:row.playerName, metrics, observed:{ ...row.observed, minutesPlayed:Math.round(row.observed.minutesPlayed) }, coverage, matchIds:[...row.matchIds] }
+    return { playerId:row.playerId, teamId:row.teamId, tournamentId:row.tournamentId, divisionId:row.divisionId, playerName:row.playerName, metrics, observed:{ ...row.observed, minutesPlayed:Math.round(row.observed.minutesPlayed) }, coverage, matchIds:[...row.matchIds], startMatchIds:[...row.startMatches] }
   })
   if (scope.playerId) playerRows = playerRows.filter(row => row.playerId === text(scope.playerId))
   if (scope.teamId) playerRows = playerRows.filter(row => row.teamId === text(scope.teamId))
@@ -207,7 +228,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
     schemaVersion:SCHEMA_VERSION, metricVersion:METRIC_VERSION,
     dataVersion:crypto.createHash('sha256').update(JSON.stringify([scope,revisionInput,eligible.map(match => [text(match._id || match.id),resolveMatchDuration(match,{ division:divisionsById[text(match.divisionId || match.division || 'default')],tournament:tournamentsById[text(match.tournamentId)] })])])).digest('hex').slice(0,24),
     generatedAt:new Date().toISOString(), scope:{ sportType:'football', mode:'official', ...scope },
-    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount ? 'partial' : 'complete', expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, pendingReviewCount:selected.filter(match => resultState(match) === 'provisional').length, readComplete },
+    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides ? 'partial' : 'complete', expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, pendingReviewCount:selected.filter(match => resultState(match) === 'provisional').length, readComplete },
     summary:{ matchCount:eligible.length, playerCount:new Set(playerRows.map(row => row.playerId)).size, teamCount:new Set(teamRows.map(row => row.teamId)).size },
     players:playerRows, teams:teamRows, issues
   }
@@ -223,7 +244,32 @@ export function sumPlayerRows(rows) {
   // A player who legitimately represents two teams in a match still played one match.
   observed.appearances = new Set(rows.flatMap(row => row.matchIds)).size
   if (coverage.appearances === 'complete') metrics.appearances = observed.appearances
+  observed.starts = new Set(rows.flatMap(row => row.startMatchIds || [])).size
+  if (coverage.starts === 'complete') metrics.starts = observed.starts
   return { metrics, observed, coverage }
+}
+
+export const PLAYER_CARD_SCORE_VERSION = 'football-player-card-points/1'
+export const PLAYER_CARD_ENTITLEMENT_VERSION = 'football-player-card-entitlements/1'
+
+export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
+  const fields = ['appearances','starts','minutesPlayed','goals']
+  const metrics = playerTotal?.metrics || {}
+  const coverage = playerTotal?.coverage || {}
+  const missing = fields.filter(field => coverage[field] !== 'complete' || !Number.isSafeInteger(metrics[field]) || metrics[field] < 0)
+  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion:metadata.dataVersion || null, scope:'career', mode:'official' }
+  if (metadata.coverageStatus && metadata.coverageStatus !== 'complete') return { ...base, status:'unverified', missing:['dataCoverage'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+  if (missing.length || metrics.starts > metrics.appearances) {
+    return { ...base, status:'unverified', missing:metrics.starts > metrics.appearances ? [...new Set([...missing,'starts'])] : missing, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+  }
+  const appearances = metrics.appearances, starts = metrics.starts, minutesPlayed = metrics.minutesPlayed, goals = metrics.goals
+  const foundation = 2 * appearances + starts + Math.floor(minutesPlayed / 45)
+  const goalBonus = Math.min(2 * goals, Math.floor(foundation / 5))
+  const points = foundation + goalBonus
+  if (!Number.isSafeInteger(points)) return { ...base, status:'unverified', missing:fields, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+  const tier = points >= 100 ? 'gold' : points >= 45 ? 'silver' : 'bronze'
+  const nextAt = tier === 'gold' ? null : tier === 'silver' ? 100 : 45
+  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
 }
 
 export function selectRosterMatches(matches, teamId, divisionId, allowLegacy) {

@@ -43,7 +43,7 @@ function createDataService(db) {
     else if (scope.teamId) matches = [...await readAll(db,'matches',{ homeTeamId:scope.teamId }), ...await readAll(db,'matches',{ awayTeamId:scope.teamId })]
     else if (actor.platformOwner) matches = await readAll(db,'matches')
     else matches = [...await readByIds(db,'matches','tournamentId',[...tournamentIds]), ...await readByIds(db,'matches','homeTeamId',[...teamIds]), ...await readByIds(db,'matches','awayTeamId',[...teamIds])]
-    const { inScope, aggregateStatistics, sumPlayerRows, resultState, effectiveEvents, eventType } = await import('./statistics.mjs')
+    const { inScope, aggregateStatistics, sumPlayerRows, calculatePlayerCardPoints, PLAYER_CARD_SCORE_VERSION, PLAYER_CARD_ENTITLEMENT_VERSION, resultState, effectiveEvents, eventType } = await import('./statistics.mjs')
     matches = [...new Map(matches.filter(row => inScope(row,scope)).map(row => [id(row._id),row])).values()]
     if (actor.matchIds) { const allowed = new Set(actor.matchIds); matches = matches.filter(row => allowed.has(id(row._id))) }
     if (scope.playerId && !actor.platformOwner) {
@@ -116,6 +116,10 @@ function createDataService(db) {
       if (!result.players.length && result.summary.matchCount > 0) {
         for (const field of Object.keys(result.playerTotal.metrics)) { result.playerTotal.metrics[field] = null; result.playerTotal.coverage[field] = 'not_collected' }
       }
+      const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','matchId','from','to'].some(field => scope[field])
+      result.playerCard = fullCareer
+        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.status })
+        : { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:'limited', mode:scope.mode, status:'scope_limited', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
     }
     return { success:true, ...result }
   }
