@@ -23,21 +23,23 @@
       <div class="editor">
         <label>类型</label>
         <el-select v-model="form.kind" @change="onKindChange">
-          <el-option label="现场快讯" value="flash" /><el-option label="单场新闻" value="match" /><el-option label="每日综述" value="round" />
+          <el-option label="单场新闻" value="match" /><el-option label="每日新闻" value="daily" />
         </el-select>
-        <label>{{ form.kind === 'round' ? '关联比赛' : `关联比赛${form.kind === 'match' ? ` · 已归档 ${approvedMatches.length} 场` : ''}` }}</label>
-        <el-select v-model="form.matchId" placeholder="选择比赛" :disabled="form.kind==='round' || loadingMatches" @change="onMatchChange">
-          <el-option v-for="match in eligibleMatches" :key="match.id" :value="match.id" :label="matchLabel(match)" />
+        <label>{{ form.kind === 'daily' ? '比赛日期' : `关联比赛 · 已归档 ${approvedMatches.length} 场` }}</label>
+        <el-select v-if="form.kind === 'daily'" v-model="form.date" placeholder="选择日期" :disabled="loadingMatches" @change="onDateChange">
+          <el-option v-for="date in approvedDates" :key="date" :value="date" :label="`${date} · ${dayMatches(date).length} 场`" />
+        </el-select>
+        <el-select v-else v-model="form.matchId" placeholder="选择比赛" :disabled="loadingMatches" @change="onMatchChange">
+          <el-option v-for="match in approvedMatches" :key="match.id" :value="match.id" :label="matchLabel(match)" />
         </el-select>
         <label>现场照片</label>
         <div class="photos"><img v-for="photo in form.photos" :key="photo" :src="photo" alt="赛事照片"><label class="photo-select">选择照片<input type="file" accept="image/*" multiple @change="selectPhotos"></label></div>
         <img v-if="!form.photos.length && coverUrl" class="cover-preview" :src="coverUrl" alt="自动生成的比赛战报封面">
         <label>现场看点</label>
         <el-input v-model="form.note" type="textarea" :rows="2" maxlength="500" placeholder="只填写已核实的信息" />
-        <el-button type="success" plain :loading="generating" :disabled="!form.matchId || form.kind==='round' || loadingMatches" @click="generate">生成新闻</el-button>
-        <span v-if="form.kind==='round'" class="hint">每日综述将在单场新闻验收后接入。</span>
+        <el-button type="success" plain :loading="generating" :disabled="!(form.kind === 'daily' ? form.date : form.matchId) || loadingMatches" @click="generate">生成新闻</el-button>
         <label>标题</label><el-input v-model="form.title" maxlength="80" />
-        <label>正文</label><el-input v-model="form.body" type="textarea" :rows="10" maxlength="1500" />
+        <label>正文</label><el-input v-model="form.body" type="textarea" :rows="10" :maxlength="form.kind === 'daily' ? 6000 : 1800" />
         <footer><el-button @click="showPreview">预览</el-button><el-button @click="saveLocal">存草稿</el-button><el-button type="success" @click="publishLocal">模拟发布</el-button></footer>
       </div>
     </el-drawer>
@@ -53,8 +55,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { callFunction } from '@/utils/cloud'
-import { newsKindForMatch } from '@/utils/newsPreviewKind'
-import { createMatchNewsCover } from '@/utils/newsCover'
+import { createMatchNewsCover, createDailyNewsCover } from '@/utils/newsCover'
 
 const route = useRoute()
 const tournamentId = String(route.params.id || '')
@@ -67,13 +68,13 @@ const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '模�
 const articles = ref([])
 const visibleArticles = computed(() => articles.value.filter(item => filter.value === 'all' || item.status === filter.value))
 const approvedMatches = computed(() => matches.value.filter(item => item.resultStatus === 'approved'))
-const eligibleMatches = computed(() => form.kind === 'match' ? approvedMatches.value : matches.value.filter(item => item.resultStatus !== 'approved' && !['warning', 'returned'].includes(item.resultStatus)))
-const form = reactive({ kind: 'match', matchId: '', title: '', body: '', note: '', photos: [] })
+const approvedDates = computed(() => [...new Set(approvedMatches.value.map(item => item.matchDate).filter(Boolean))].sort().reverse())
+const dayMatches = date => approvedMatches.value.filter(item => item.matchDate === date)
+const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], title: '', body: '', note: '', photos: [] })
 const selectedMatch = computed(() => matches.value.find(item => item.id === form.matchId) || null)
-const selectedApproved = computed(() => selectedMatch.value?.resultStatus === 'approved')
-const kindLabel = kind => ({ flash: '现场快讯', match: '单场新闻', round: '每日综述' })[kind] || '新闻'
+const kindLabel = kind => ({ match: '单场新闻', daily: '每日新闻' })[kind] || '新闻'
 const statusLabel = status => ({ published: '模拟发布', draft: '草稿', update: '待更新' })[status] || '草稿'
-const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, match.resultStatus === 'approved' ? `${match.homeScore}:${match.awayScore}` : '赛果待确认'].filter(Boolean).join(' · ')
+const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
 
 async function loadMatches() {
   loadingMatches.value = true; loadError.value = ''
@@ -82,36 +83,37 @@ async function loadMatches() {
     if (!result?.success) throw new Error(result?.message || '比赛加载失败')
     matches.value = result.matches || []
     tournamentName.value = result.tournament?.name || '当前赛事'
-    if (form.matchId) updateCover()
+    if (form.kind === 'daily' && !form.date) form.date = approvedDates.value[0] || ''
+    updateCover()
   } catch (error) { loadError.value = error.message || '比赛加载失败，请刷新重试' }
   finally { loadingMatches.value = false }
 }
 
-function reset() { Object.assign(form, { kind: 'match', matchId: '', title: '', body: '', note: '', photos: [] }); coverUrl.value = ''; editing.value = '' }
-function updateCover() { coverUrl.value = form.kind === 'match' ? createMatchNewsCover(selectedMatch.value, tournamentName.value) : '' }
-function onMatchChange() { form.kind = newsKindForMatch(selectedMatch.value); updateCover() }
+function reset() { Object.assign(form, { kind: 'match', matchId: '', date: '', matchIds: [], title: '', body: '', note: '', photos: [] }); coverUrl.value = ''; editing.value = '' }
+function updateCover() { coverUrl.value = form.kind === 'daily' ? createDailyNewsCover(form.date, tournamentName.value, form.matchIds.length || dayMatches(form.date).length) : createMatchNewsCover(selectedMatch.value, tournamentName.value) }
+function clearGenerated() { form.title = ''; form.body = ''; form.matchIds = [] }
+function onMatchChange() { clearGenerated(); updateCover() }
+function onDateChange() { clearGenerated(); updateCover() }
 function onKindChange() {
-  form.matchId = ''; coverUrl.value = ''
+  form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; clearGenerated(); updateCover()
 }
 function openNew() { reset(); editorOpen.value = true }
-function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', title: item.title, body: item.body || '', photos: item.photo ? [item.photo] : [] }); coverUrl.value = item.cover || ''; editorOpen.value = true }
+function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], title: item.title, body: item.body || '', photos: item.photo ? [item.photo] : [] }); coverUrl.value = item.cover || ''; editorOpen.value = true }
 function selectPhotos(event) {
   const files = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/')).slice(0, 6)
   event.target.value = ''
   if (files.length) form.photos = files.map(file => URL.createObjectURL(file))
 }
 async function generate() {
-  if (!form.matchId || form.kind === 'round') return
-  if (selectedApproved.value && form.kind !== 'match') form.kind = newsKindForMatch(selectedMatch.value)
-  if (!selectedApproved.value && form.kind === 'match') return ElMessage.warning('赛果未确认，请先生成现场快讯')
+  if (!(form.kind === 'daily' ? form.date : form.matchId)) return
   const token = localStorage.getItem('authToken') || ''
   if (!token) return ElMessage.warning('请先登录主办方 PC 后台')
   generating.value = true
   try {
-    const response = await fetch(generateUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ authToken: token, tournamentId, matchId: form.matchId, kind: form.kind, note: form.note }) })
+    const response = await fetch(generateUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ authToken: token, tournamentId, matchId: form.matchId, date: form.date, kind: form.kind, note: form.note }) })
     const result = await response.json()
     if (!result?.success) throw new Error(result?.message || '生成失败')
-    form.title = result.title; form.body = result.body
+    form.title = result.title; form.body = result.body; form.matchIds = result.matchIds || (form.matchId ? [form.matchId] : []); updateCover()
     ElMessage.success('标题和正文已生成')
   } catch (error) { ElMessage.error(error.message || '生成失败，请重试') }
   finally { generating.value = false }
@@ -119,13 +121,13 @@ async function generate() {
 function showPreview() { if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文'); previewOpen.value = true }
 function saveLocal() {
   if (!form.title.trim()) return ElMessage.warning('请填写标题')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, status: 'draft', detail: '仅当前页面 · 未保存到云端', photo: form.photos[0] || '', cover: coverUrl.value }
+  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, status: 'draft', detail: '仅当前页面 · 未保存到云端', photo: form.photos[0] || '', cover: coverUrl.value }
   articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
   editing.value = row.id; editorOpen.value = false; ElMessage.success('已在当前页面保存草稿')
 }
 function publishLocal() {
   if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, status: 'published', detail: '仅当前页面 · 未发布到 H5', photo: form.photos[0] || '', cover: coverUrl.value }
+  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, status: 'published', detail: '仅当前页面 · 未发布到 H5', photo: form.photos[0] || '', cover: coverUrl.value }
   articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
   editing.value = row.id; editorOpen.value = false; ElMessage.success('已模拟发布，未写入公开新闻')
 }

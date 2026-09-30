@@ -47,3 +47,35 @@ export function createMatchNewsCover(match, tournamentName) {
   ctx.fillText([match.matchTime, match.venue].filter(Boolean).join('  ·  '), 480, 482)
   return canvas.toDataURL('image/png')
 }
+
+export function createDailyNewsCover(date, tournamentName, count) {
+  if (!date || !count) return ''
+  const canvas = document.createElement('canvas')
+  canvas.width = 960
+  canvas.height = 540
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
+  ctx.fillStyle = '#053825'
+  ctx.fillRect(0, 0, 960, 540)
+  ctx.fillStyle = '#075039'
+  ctx.fillRect(0, 0, 960, 228)
+  ctx.strokeStyle = 'rgba(219,190,119,.45)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(28, 28, 904, 484)
+  ctx.fillStyle = '#d8bd7b'
+  ctx.font = '600 23px sans-serif'
+  ctx.fillText('赛小蜂足球  /  每日新闻', 65, 79)
+  ctx.fillStyle = '#ffffff'
+  let size = 32
+  const eventName = String(tournamentName || '足球赛事')
+  ctx.font = `700 ${size}px sans-serif`
+  while (ctx.measureText(eventName).width > 830 && size > 20) { size -= 1; ctx.font = `700 ${size}px sans-serif` }
+  ctx.fillText(eventName, 65, 137)
+  ctx.textAlign = 'center'
+  ctx.font = '800 58px sans-serif'
+  ctx.fillText('比赛日战报', 480, 348)
+  ctx.font = '27px sans-serif'
+  ctx.fillStyle = '#d8bd7b'
+  ctx.fillText(`${date}  ·  ${count} 场正式赛果`, 480, 421)
+  return canvas.toDataURL('image/png')
+}

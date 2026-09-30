@@ -42,5 +42,14 @@ assert.match(article.body, /本场比赛综述[\s\S]*比赛形势分析[\s\S]*�
 assert.match(article.body, /2026年10月4日09:00在1号场地对阵下一队/)
 assert.match(article.body, /若延续本场得分效率/)
 assert.doesNotMatch(article.body, /预告：|观点及预测：/)
-assert.deepEqual(rules.parseGenerated('{"title":"现场快讯","summary":"双方已经入场。","analysis":"现场节奏加快。"}', [], 'flash'), { title: '现场快讯', body: '双方已经入场。\n\n现场节奏加快。' })
+const dayRows = rules.officialDayRows([
+  { _id: 'm1', matchDate: '2026-09-26', matchTime: '09:00', status: 'finished', homeScore: 5, awayScore: 1, homeTeamName: '主队', awayTeamName: '客队', divisionName: '老年组', events: [{ type: 'goal', minute: 21, teamSide: 'home', playerName: '甲' }] },
+  { _id: 'm2', matchDate: '2026-09-26', status: 'finished', homeScore: 1, awayScore: 0, refereeReviewStatus: 'under_review', refereeRecord: {}, homeTeamName: '待复核队', awayTeamName: '客队' },
+  { _id: 'm3', matchDate: '2026-10-04', status: 'finished', homeScore: 2, awayScore: 0, homeTeamName: '另一日', awayTeamName: '客队' }
+], '2026-09-26')
+assert.equal(dayRows.length, 1)
+assert.equal(dayRows[0].matchId, 'm1')
+assert.equal(dayRows[0].goalRecordComplete, false)
+const daily = rules.parseGenerated('{"title":"立洋杯9月26日比赛日战报","summary":"当天比赛已经结束。","analysis":"主队取得一场胜利。"}', dayRows, 'daily')
+assert.match(daily.body, /比赛日综述[\s\S]*焦点场次[\s\S]*当日赛果[\s\S]*主队 5:1 客队/)
 console.log('news preview generation rules: passed')
