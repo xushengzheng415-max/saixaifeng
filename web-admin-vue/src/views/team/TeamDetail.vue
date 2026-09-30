@@ -26,7 +26,7 @@
         </nav>
         <div class="detail-heading">
           <div><h1>球队详情</h1></div>
-          <div class="detail-heading-actions"><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
+          <div class="detail-heading-actions"><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button v-if="isReadOnlyTournament" type="success" plain @click="openRosterPoster"><el-icon><Picture /></el-icon>球队名单海报</el-button><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
         </div>
 
         <section class="team-event-summary">
@@ -56,7 +56,7 @@
           </section>
           <section class="detail-panel match-summary">
             <h2><el-icon><Histogram /></el-icon>{{ isProfessionalTournamentTeam ? '专业版赛事协作' : '基础版比赛数据' }}</h2>
-            <template v-if="isProfessionalTournamentTeam"><div class="professional-roster-stats"><article><span>已提交</span><strong>23</strong><small>人</small></article><article><span>已审核</span><strong>23</strong><small>人</small></article><article class="pending"><span>资料待补充</span><strong>0</strong><small>人</small></article></div><div class="professional-team-actions"><el-button type="success" plain @click="openTournamentRoster"><el-icon><Tickets /></el-icon>查看参赛名单</el-button><el-button type="success" @click="sendTournamentNotification"><el-icon><Bell /></el-icon>发送赛事通知</el-button></div></template>
+            <template v-if="isProfessionalTournamentTeam"><div class="professional-roster-stats"><article><span>已提交</span><strong>23</strong><small>人</small></article><article><span>已审核</span><strong>23</strong><small>人</small></article><article class="pending"><span>资料待补充</span><strong>0</strong><small>人</small></article></div><div class="professional-team-actions"><el-button type="success" plain @click="openTournamentRoster"><el-icon><Tickets /></el-icon>查看参赛名单</el-button><el-button v-if="!isReadOnlyTournament" type="success" @click="sendTournamentNotification"><el-icon><Bell /></el-icon>发送赛事通知</el-button></div></template>
             <template v-else>
             <div class="match-stats"><dl><dt>比赛场次</dt><dd>{{ teamMatchStats.total }}</dd></dl><dl><dt>胜场</dt><dd>{{ teamMatchStats.wins }}</dd></dl><dl><dt>平场</dt><dd>{{ teamMatchStats.draws }}</dd></dl><dl><dt>负场</dt><dd>{{ teamMatchStats.losses }}</dd></dl></div>
             <div class="match-stats lower"><dl><dt>进球数</dt><dd>{{ teamMatchStats.goalsFor }}</dd></dl><dl><dt>失球数</dt><dd>{{ teamMatchStats.goalsAgainst }}</dd></dl></div>
@@ -66,7 +66,7 @@
         <section class="team-access-panel">
           <header>
             <div><h2>球队管理权限</h2><p>主账号负责球队管理，其他账号按分配权限协作。</p></div>
-            <el-button type="primary" plain @click="openTeamAccess"><el-icon><Plus /></el-icon>分配账号</el-button>
+            <el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openTeamAccess"><el-icon><Plus /></el-icon>分配账号</el-button>
           </header>
           <el-table :data="teamAccessRows" v-loading="teamAccessLoading" empty-text="暂未分配球队管理账号" class="team-access-table">
             <el-table-column prop="roleLabel" label="身份" width="120" />
@@ -74,11 +74,11 @@
             <el-table-column label="手机号" min-width="160"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column>
             <el-table-column label="账号关系" width="150"><template #default="{ row }"><el-tag :type="row.accountType === 'owner' ? 'success' : (row.accountType === 'pending_owner' ? 'warning' : 'info')" size="small">{{ row.accountType === 'owner' ? '主账号' : (row.accountType === 'pending_owner' ? '待接收主账号' : '协作账号') }}</el-tag></template></el-table-column>
             <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === '主账号' || row.status === '已加入' ? 'success' : 'warning'" effect="plain" size="small">{{ row.status || '待授权' }}</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="110" align="center"><template #default="{ row }"><el-button link type="danger" :loading="teamAccessDeletingRole === row.role" :disabled="row.accountType === 'owner'" @click="deleteTeamAccess(row)">删除权限</el-button></template></el-table-column>
+            <el-table-column v-if="!isReadOnlyTournament" label="操作" width="110" align="center"><template #default="{ row }"><el-button link type="danger" :loading="teamAccessDeletingRole === row.role" :disabled="row.accountType === 'owner'" @click="deleteTeamAccess(row)">删除权限</el-button></template></el-table-column>
           </el-table>
         </section>
         <section class="team-kit-panel">
-          <header><div><h2>比赛服颜色</h2><p>设置球队常用主、备用比赛服；单场比赛可根据撞色情况另行调整，历史比赛快照不会被覆盖。</p></div><el-button type="success" :loading="kitSaving" @click="saveTeamKitColors">保存颜色设置</el-button></header>
+          <header><div><h2>比赛服颜色</h2><p>设置球队常用主、备用比赛服；单场比赛可根据撞色情况另行调整，历史比赛快照不会被覆盖。</p></div><el-button v-if="!isReadOnlyTournament" type="success" :loading="kitSaving" @click="saveTeamKitColors">保存颜色设置</el-button></header>
           <div class="kit-set-grid">
             <article v-for="kit in kitSets" :key="kit.key" class="kit-set-card">
               <div class="kit-set-title"><span>{{ kit.badge }}</span><div><strong>{{ kit.label }}</strong><small>{{ kit.description }}</small></div></div>
@@ -97,7 +97,7 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table">
             <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="130" />
@@ -139,6 +139,13 @@
             </template>
             <el-table-column v-else label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
+        </section>
+        <section v-if="isReadOnlyTournament" class="tournament-history-panel">
+          <header class="tournament-history-heading"><div><h2>历史记录</h2><p>仅展示当前赛事球队的比赛与纪律数据，不修改历史快照。</p></div></header>
+          <div class="tournament-history-grid">
+            <article class="history-card"><h3>红黄牌记录</h3><el-table :data="playerDisciplineHistory" size="small" empty-text="暂无红黄牌记录"><el-table-column prop="name" label="球员" min-width="120" /><el-table-column prop="yellowCards" label="黄牌" width="80" align="center" /><el-table-column prop="redCards" label="红牌" width="80" align="center" /></el-table></article>
+            <article class="history-card"><h3>比赛时间记录</h3><el-table :data="matchHistoryRows" size="small" empty-text="暂无比赛记录"><el-table-column prop="dateTime" label="比赛时间" width="150" /><el-table-column prop="opponent" label="对手" min-width="130" /><el-table-column prop="score" label="比分" width="80" align="center" /><el-table-column prop="status" label="状态" width="90" align="center" /></el-table></article>
+          </div>
         </section>
         <section v-if="!isTeamDataWorkspace && importedDraftPlayers.length" class="synthetic-player-panel imported-draft-player-panel">
           <div class="synthetic-player-heading"><div><h2>报名表导入资料</h2><p>共 {{ importedDraftPlayers.length }} 人；历史导入资料先在此保留，确认后进入正式球员库。</p></div><el-tag type="info" effect="plain">导入记录</el-tag></div>
@@ -1248,7 +1255,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled } from '@element-plus/icons-vue'
+import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled, Picture } from '@element-plus/icons-vue'
 import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
@@ -1269,6 +1276,7 @@ const teamId = String(route.params.teamId || route.params.id || '')
 const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : (route.params.teamId ? String(route.params.id || '') : ''))
 const sourceDivisionId = computed(() => typeof route.query.divisionId === 'string' ? route.query.divisionId : '')
 const fromRegistration = computed(() => route.query.from === 'registration')
+const isReadOnlyTournament = computed(() => Boolean(sourceTournamentId.value) && !fromRegistration.value)
 const isTeamDataWorkspace = computed(() => Boolean(sourceTournamentId.value) && !fromRegistration.value)
 const isProfessionalTournamentTeam = computed(() => route.query.mode === 'professional' || sourceDivisionId.value === 'qa-division-u16')
 const tournamentDateRange = computed(() => tournamentContext.value.startDate && tournamentContext.value.endDate
@@ -1351,6 +1359,8 @@ const team = ref(qaTeam || {})
 const players = ref([])
 const staffMembers = ref([])
 const importedDraftPlayers = ref([])
+const tournamentRosterPlayerIds = ref(new Set())
+const tournamentMediaStats = ref({})
 const kitSaving = ref(false)
 const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
 const kitEquipment = [{key:'jersey',label:'球衣'},{key:'shorts',label:'球裤'},{key:'socks',label:'球袜'}]
@@ -1377,6 +1387,7 @@ async function resolveTournamentLogo() {
 }
 const tournamentLogoUrl = computed(() => resolvedTournamentLogo.value || tournamentLogoDirectUrl.value || `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`)
 const tournamentMatches = ref([])
+const tournamentMatchEvents = ref([])
 const playerStatsLoading = ref(false)
 const playerStatsError = ref('')
 const competitionMatches = ref([])
@@ -1463,6 +1474,27 @@ const teamMatchStats = computed(() => tournamentMatches.value.reduce((stats, mat
   else stats.losses += 1
   return stats
 }, qaTeam ? { total: 12, wins: 8, draws: 2, losses: 2, goalsFor: 26, goalsAgainst: 10 } : { total: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 }))
+function historyEventPlayerId(event) { return String(event?.playerId || event?.player || event?.player_id || '') }
+function historyEventType(event) { return String(event?.type || event?.eventType || '').toLowerCase() }
+function firstHistoryValue() { for (const value of arguments) if (value !== undefined && value !== null && value !== '') return value; return '' }
+const playerDisciplineHistory = computed(() => players.value.map(player => {
+  const playerId = String(player?._id || '')
+  const playerName = String(player?.name || '')
+  const events = tournamentMatchEvents.value.filter(event => {
+    const eventPlayerId = historyEventPlayerId(event)
+    return (eventPlayerId && eventPlayerId === playerId) || (!eventPlayerId && String(event?.playerName || event?.name || '') === playerName)
+  })
+  return { name:playerName || '未命名球员', yellowCards:events.filter(event => ['yellow','yellow_card','yellowcard'].includes(historyEventType(event))).length, redCards:events.filter(event => ['red','red_card','redcard'].includes(historyEventType(event))).length }
+}).filter(row => row.yellowCards || row.redCards))
+const matchHistoryRows = computed(() => tournamentMatches.value.slice().sort((left, right) => new Date(firstHistoryValue(right.matchDate, right.startTime, right.matchTime, right.createTime) || 0).getTime() - new Date(firstHistoryValue(left.matchDate, left.startTime, left.matchTime, left.createTime) || 0).getTime()).map(match => {
+  const isHome = String(match.homeTeamId || match.teamAId || '') === String(teamId)
+  const ownScore = isHome ? (match.homeScore ?? match.teamAScore) : (match.awayScore ?? match.teamBScore)
+  const opponentScore = isHome ? (match.awayScore ?? match.teamBScore) : (match.homeScore ?? match.teamAScore)
+  const opponent = isHome ? (match.awayTeamName || match.awayName || '客队') : (match.homeTeamName || match.homeName || '主队')
+  const directDate = String(match.matchDate || '').slice(0, 10)
+  const directTime = /^\d{1,2}:\d{2}$/.test(String(match.matchTime || '').trim()) ? String(match.matchTime).trim() : ''
+  return { dateTime:directDate ? `${directDate}${directTime ? ` ${directTime}` : ''}` : formatTournamentTime(firstHistoryValue(match.startTime, match.kickoffAt, match.matchTime)), opponent, score:`${ownScore ?? '—'} : ${opponentScore ?? '—'}`, status:['completed','finished','archived'].includes(String(match.status || '').toLowerCase()) ? '已结束' : '待开始' }
+}))
 const maskedPhone = computed(() => {
   const phone = String(
     tournamentRelation.value.contactPhone || tournamentRelation.value.managerPhone || tournamentRelation.value.ownerPhone ||
@@ -1572,6 +1604,18 @@ function sourceIdentityNumber(record, index) {
 function openExportDialog() {
   exportFields.value = exportFieldOptions.map(item => item.key)
   exportDialogVisible.value = true
+}
+
+function openRosterPoster() {
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]))
+  const rows = players.value.map(player => `<tr><td>${escapeHtml(player.name || '未命名')}</td><td>${escapeHtml(player.jerseyNumber || '—')}</td><td>${escapeHtml(player.position || '—')}</td><td>${escapeHtml(player.birthDate || '—')}</td><td>${escapeHtml(player.birthDate ? calculateAge(player.birthDate) : '—')}</td></tr>`).join('')
+  const poster = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${escapeHtml(team.value.name || '球队')}名单</title><style>body{margin:0;padding:36px;background:#edf7f0;color:#173526;font-family:"Microsoft YaHei",Arial,sans-serif}main{max-width:900px;margin:auto;padding:34px 42px;border:1px solid #bdd9c5;border-radius:18px;background:#fff}h1{margin:0;color:#08733a;font-size:32px}p{color:#60766a}table{width:100%;margin-top:24px;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid #e3eee5;text-align:left}th{color:#53705d;background:#f4faf5}footer{margin-top:24px;color:#718278;font-size:12px}</style><main><h1>${escapeHtml(team.value.name || '球队名单')}</h1><p>${escapeHtml(tournamentContext.value.name || '')}　${escapeHtml(tournamentRelation.value.divisionName || '')}</p><table><thead><tr><th>姓名</th><th>号码</th><th>位置</th><th>出生日期</th><th>年龄</th></tr></thead><tbody>${rows || '<tr><td colspan="5">暂无球员资料</td></tr>'}</tbody></table><footer>生成时间：${escapeHtml(formatTournamentTime(new Date()))}</footer></main></html>`
+  const popup = window.open('', '_blank', 'noopener,noreferrer')
+  if (!popup) return ElMessage.warning('浏览器拦截了海报窗口，请允许弹窗后重试')
+  popup.document.write(poster)
+  popup.document.close()
+  popup.focus()
+  setTimeout(() => popup.print(), 200)
 }
 
 function excelImageExtension(dataUrl) {
@@ -2335,6 +2379,8 @@ async function submitPlayer() {
     const data = {
       ...playerForm.value,
       playerId: generatePlayerId(team.value.teamCode || teamId, 'C'),
+      // 球员归属同时写入主键和历史兼容字段，保证小程序与 PC 端读取一致。
+      teamId: teamId,
       photoUrl: photoUrlToSave,
       teamCode: teamId,
       teamName: team.value.name,
@@ -4186,13 +4232,31 @@ async function loadPlayers() {
         return []
       }
     }
-    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, exportRosterPlayers] = await Promise.all([
+    const loadTournamentRoster = async () => {
+      if (!sourceTournamentId.value || !tournamentRelation.value?._id) return []
+      try {
+        const result = await rosterExceptionBoard({
+          rosterAction:'listRoster',
+          tournamentId:sourceTournamentId.value,
+          teamId,
+          divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+        })
+        tournamentMediaStats.value = Object.fromEntries((result?.rows || []).map(row => [String(row.id || ''), row.mediaStats || {}]).filter(item => item[0]))
+        return result?.success && Array.isArray(result.snapshot?.playerIds) ? result.snapshot.playerIds.map(String) : []
+      } catch (error) {
+        console.warn('加载本届正式名单失败:', error.message || error)
+        return []
+      }
+    }
+    const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, exportRosterPlayers, tournamentRosterIds] = await Promise.all([
       queryList('players', { where: { teamId: teamId } }),
       queryList('players', { where: { teamCode: teamId } }),
       queryList('coaches', { where: { teamId: teamId } }),
       queryList('coaches', { where: { teamCode: teamId } }),
-      loadExportRoster()
+      loadExportRoster(),
+      loadTournamentRoster()
     ])
+    tournamentRosterPlayerIds.value = new Set((tournamentRosterIds || []).map(String))
 
     const staffMap = new Map()
     actualStaffRecords([...(staffByTeamId || []), ...(staffByTeamCode || [])]).forEach(person => {
@@ -4287,6 +4351,14 @@ function playerProfileLabel(player) {
 }
 
 function playerOrganizerReviewStatus(player) {
+  if (sourceTournamentId.value) {
+    const playerId = String(player?._id || '')
+    const source = String(player?.source || '').toLowerCase()
+    const importedRegistrationPlayer = Boolean(player?.registrationImportBatchId || player?.importDraftId || player?.registrationSourceFileId || source.indexOf('registration_docx_import') === 0)
+    if (tournamentRosterPlayerIds.value.has(playerId)) return 'approved'
+    if (importedRegistrationPlayer && String(player?.organizerReviewStatus || '').toLowerCase() === 'approved') return 'approved'
+    return 'pending'
+  }
   return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
 }
 
@@ -4295,9 +4367,24 @@ async function reviewPlayer(player) {
   if (!player?._id || playerOrganizerReviewStatus(player) === 'approved') return
   playerReviewingId.value = String(player._id)
   try {
-    await updateRecord('players', player._id, { organizerReviewStatus: 'approved', organizerReviewedAt: new Date().toISOString(), organizerReviewedBy: '赛事主办方' })
-    player.organizerReviewStatus = 'approved'
-    ElMessage.success(`${player.name || '球员'}已审核`)
+    if (sourceTournamentId.value) {
+      if (!tournamentRelation.value?._id) throw new Error('当前赛事参赛关系不存在，无法加入正式名单')
+      const result = await rosterExceptionBoard({
+        rosterAction:'approvePlayer',
+        tournamentId:sourceTournamentId.value,
+        teamId,
+        divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+        playerId:String(player._id)
+      })
+      if (!result?.success) throw new Error(result?.message || '球员审核失败')
+      tournamentRosterPlayerIds.value = new Set([...tournamentRosterPlayerIds.value, String(player._id)])
+      player.organizerReviewStatus = 'approved'
+      ElMessage.success(`${player.name || '球员'}已审核并加入本届正式名单`)
+    } else {
+      await updateRecord('players', player._id, { organizerReviewStatus: 'approved', organizerReviewedAt: new Date().toISOString(), organizerReviewedBy: '赛事主办方' })
+      player.organizerReviewStatus = 'approved'
+      ElMessage.success(`${player.name || '球员'}已审核`)
+    }
   } catch (error) {
     ElMessage.error(error.message || '球员审核失败')
   } finally {
@@ -4348,6 +4435,10 @@ async function loadTournamentTeamContext() {
       const awayId = String(match.awayTeamId || match.teamBId || '')
       return (homeId === String(teamId) || awayId === String(teamId)) && ['completed', 'finished', 'archived'].includes(match.status)
     })
+    const matchIds = tournamentMatches.value.map(match => match._id).filter(Boolean)
+    tournamentMatchEvents.value = matchIds.length
+      ? await queryList('match_events', { where:{ matchId:{ $in:matchIds } }, limit:1000, silent:true })
+      : []
   } catch (error) {
     console.error('加载球队赛事资料失败:', error)
     ElMessage.error('球队赛事资料加载失败')
@@ -4736,6 +4827,8 @@ function compressBase64(dataUrl, maxSize = 300) {
 .match-summary { padding-bottom: 12px; }
 .professional-roster-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}.professional-roster-stats article{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:end;min-height:88px;padding:14px;border:1px solid #e6ebe7;border-radius:7px;background:#fbfdfb}.professional-roster-stats span{grid-column:1/-1;color:#667269;font-size:12px}.professional-roster-stats strong{color:#167f42;font-size:26px}.professional-roster-stats small{margin-bottom:4px;color:#536158}.professional-roster-stats article.pending strong{color:#d98b15}.professional-team-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}.professional-team-actions .el-button{height:41px;margin:0}
 .team-access-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-access-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-access-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-access-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.team-access-form{display:grid;gap:12px;margin-top:18px}.team-access-form-row{display:grid;grid-template-columns:90px minmax(150px,1fr) minmax(180px,1fr) 100px 56px;gap:12px;align-items:center}.team-access-form-row>strong{color:#344139;font-size:14px}.team-access-form-row :deep(.el-radio){margin-right:0}.export-dialog-section{margin-top:18px}.export-dialog-section>strong{display:block;margin-bottom:10px;color:#344139}.export-field-checks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px}.export-field-checks :deep(.el-checkbox){margin-right:0}
+.tournament-history-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.tournament-history-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}.tournament-history-heading h2{margin:0;color:#1d2b21;font-size:19px}.tournament-history-heading p{margin:7px 0 0;color:#69766d;font-size:13px}.tournament-history-grid{display:grid;grid-template-columns:1fr 1.35fr;gap:18px}.history-card{min-width:0}.history-card h3{margin:0 0 10px;color:#344139;font-size:15px}.history-card :deep(.el-table){border:1px solid #edf1ee;border-radius:6px}.history-card :deep(.el-table th.el-table__cell){background:#f8faf8}.history-card :deep(.el-table td.el-table__cell),.history-card :deep(.el-table th.el-table__cell){padding:7px 0}@media(max-width:900px){.tournament-history-grid{grid-template-columns:1fr}}
+.red-card-value{color:#d83a3a;font-weight:700}.yellow-card-value{color:#d88b03;font-weight:700}
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
