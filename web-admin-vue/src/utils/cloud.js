@@ -298,12 +298,14 @@ export async function queryList(collection, options = {}) {
       skip: options.skip
     })
     if (!result.success) {
+      if (options.throwOnError) throw new Error(result.error || '数据加载失败')
       console.error(`[queryList] ${collection} 失败:`, result.error)
       if (!options.silent) ElMessage.warning(`查询 ${collection} 失败: ${result.error || '未知错误'}`)
       return []
     }
     return result.data || []
   } catch (err) {
+    if (options.throwOnError) throw err
     console.error(`[queryList] ${collection} 异常:`, err)
     if (!options.silent) ElMessage.error(`查询 ${collection} 异常: ${err.message}`)
     return []
