@@ -373,6 +373,13 @@ const routes = [
     children: [{ path: '', component: () => import('../views/tournament/TournamentResultCenter.vue') }]
   },
   {
+    path: '/tournaments/:id/news',
+    name: 'TournamentNewsCenter',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '新闻中心', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentNewsCenterPreview.vue') }]
+  },
+  {
     path: '/tournaments/:id/referees',
     name: 'TournamentReferees',
     component: () => import('../views/layout/LayoutView.vue'),
