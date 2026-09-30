@@ -41,4 +41,13 @@ async function enrichFanPlayerCards(db, players) {
   }
 }
 
-module.exports = { enrichFanPlayerCards, applyPlayerCardScores }
+function officialMatchIds(career) {
+  return new Set((career.teams || []).flatMap(row => row.matchIds || []).map(String).filter(Boolean))
+}
+
+async function loadOfficialFanScope(db) {
+  const career = await createDataService(db).query({ platformOwner:true, teamIds:[], tournamentIds:[] }, { mode:'official' })
+  return { career, matchIds:officialMatchIds(career) }
+}
+
+module.exports = { enrichFanPlayerCards, applyPlayerCardScores, officialMatchIds, loadOfficialFanScope }
