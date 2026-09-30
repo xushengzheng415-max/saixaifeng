@@ -177,6 +177,17 @@ function buildDailyArticle(tournamentName, date, dayRows, fixtures, includeStand
   return { title, body }
 }
 
+async function currentStandingsForDay(tournamentId, rows, date, authToken) {
+  if (rows.some(item => text(item.matchDate || item.date).slice(0, 10) > date && official(item))) throw new Error('该比赛日之后已有正式赛果，不能使用当前积分榜作历史快照')
+  const called = await cloud.callFunction({ name: 'resultCenter', data: { action: 'dashboard', tournamentId, __authToken: authToken } })
+  const dashboard = called && (called.result || called)
+  if (!dashboard || !dashboard.success) throw new Error(dashboard && dashboard.message || '正式积分榜读取失败，请重试')
+  const tables = (Array.isArray(dashboard.standings) ? dashboard.standings : []).filter(group => Number(group.officialMatchCount) > 0 && Array.isArray(group.officialTeams) && group.officialTeams.length)
+    .map(group => ({ divisionName: text(group.divisionName), groupName: text(group.groupName), officialMatchCount: Number(group.officialMatchCount), officialTeams: group.officialTeams.map(team => ({ rank: Number(team.rank || 0), teamName: text(team.teamName), played: Number(team.played || 0), win: Number(team.win || 0), draw: Number(team.draw || 0), loss: Number(team.loss || 0), goalDifference: Number(team.goalDifference || 0), points: Number(team.points || 0) })) }))
+  if (!tables.length) throw new Error('当前没有可附的正式积分榜，请到赛果管理核对')
+  return { tables, generatedAt: text(dashboard.generatedAt) }
+}
+
 async function generate(input) {
   if (process.env.NEWS_FREE_GENERATION_ENABLED === 'false') throw new Error('生成新闻暂不可用')
   const tournamentId = text(input.tournamentId)
@@ -193,9 +204,10 @@ async function generate(input) {
     const rows = await tournamentMatches(tournamentId)
     const dayRows = officialDayRows(rows, date)
     const fixtures = nextRoundFixtures(rows, date)
-    const article = buildDailyArticle(text(tournament.name), date, dayRows, fixtures, input.includeStandings === true, text(input.suspensionNote).slice(0, 300))
+    const standingsSnapshot = input.includeStandings === true ? await currentStandingsForDay(tournamentId, rows, date, text(input.authToken)) : null
+    const article = buildDailyArticle(text(tournament.name), date, dayRows, fixtures, Boolean(standingsSnapshot), text(input.suspensionNote).slice(0, 300))
     await db.collection('registration_audit_logs').add({ data: { sport: 'football', action: 'news_preview_generated', tournamentId, actorUserId: text(user._id), actorOrgId: orgId, result: 'success', detail: { kind, date, matchIds: dayRows.map(item => item.matchId), fixtureCount: fixtures.length, source: 'official-results' }, createTime: db.serverDate() } }).catch(error => console.warn('新闻预览日志失败', error.message))
-    return { success: true, title: article.title, body: article.body, matchIds: dayRows.map(item => item.matchId), source: 'official-results' }
+    return { success: true, title: article.title, body: article.body, matchIds: dayRows.map(item => item.matchId), dayResults: dayRows, nextFixtures: fixtures, standingsSnapshot, source: 'official-results' }
   }
   const match = await getDoc('matches', matchId)
   if (!match || text(match.tournamentId) !== tournamentId) throw new Error('比赛不存在')

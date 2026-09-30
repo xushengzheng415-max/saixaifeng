@@ -37,8 +37,8 @@
         <img v-if="!form.photos.length && coverUrl" class="cover-preview" :src="coverUrl" alt="自动生成的比赛战报封面">
         <template v-if="form.kind === 'daily'">
           <label>积分榜快照</label>
-          <el-checkbox v-model="form.includeStandings" :disabled="!canAttachStandings" @change="onStandingsChange">附正式积分榜</el-checkbox>
-          <span v-if="!canAttachStandings" class="hint">{{ standingsUnavailableReason }}</span>
+          <el-checkbox v-model="form.includeStandings" @change="onStandingsChange">附正式积分榜</el-checkbox>
+          <span v-if="standingsError" class="hint">{{ standingsError }}</span>
           <img v-if="standingsSnapshotUrl" class="standings-preview" :src="standingsSnapshotUrl" alt="正式积分榜快照">
           <label>停赛信息</label>
           <el-input v-model="form.suspensionNote" type="textarea" :rows="2" maxlength="300" placeholder="仅填写主办方已确认名单" @change="clearGenerated" />
@@ -46,12 +46,13 @@
         <template v-else><label>现场看点</label><el-input v-model="form.note" type="textarea" :rows="2" maxlength="500" placeholder="只填写已核实的信息" /></template>
         <el-button type="success" plain :loading="generating" :disabled="!(form.kind === 'daily' ? form.date : form.matchId) || loadingMatches" @click="generate">生成新闻</el-button>
         <label>标题</label><el-input v-model="form.title" maxlength="80" />
-        <label>正文</label><el-input v-model="form.body" type="textarea" :rows="10" :maxlength="form.kind === 'daily' ? 6000 : 1800" />
+        <template v-if="form.kind === 'daily'"><label>内容预览</label><NewsDailyContent v-if="form.dayResults.length" :results="form.dayResults" :fixtures="form.nextFixtures" :standings-image="standingsSnapshotUrl" :suspension-note="form.suspensionNote" /></template>
+        <template v-else><label>正文</label><el-input v-model="form.body" type="textarea" :rows="10" maxlength="1800" /></template>
         <footer><el-button @click="showPreview">预览</el-button><el-button @click="saveLocal">存草稿</el-button><el-button type="success" @click="publishLocal">模拟发布</el-button></footer>
       </div>
     </el-drawer>
     <el-dialog v-model="previewOpen" :title="form.title || '新闻预览'" width="min(660px,94vw)">
-      <article class="article-preview"><img v-if="form.photos[0] || coverUrl" :src="form.photos[0] || coverUrl" alt="新闻封面"><template v-if="form.kind === 'daily' && standingsSnapshotUrl"><p>{{ dailyBeforeStandings }}</p><img :src="standingsSnapshotUrl" alt="正式积分榜快照"><p>{{ dailyAfterStandings }}</p></template><p v-else>{{ form.body }}</p><img v-for="photo in form.photos.slice(1)" :key="photo" :src="photo" alt="赛事照片"></article>
+      <article class="article-preview"><img v-if="form.photos[0] || coverUrl" :src="form.photos[0] || coverUrl" alt="新闻封面"><NewsDailyContent v-if="form.kind === 'daily'" :results="form.dayResults" :fixtures="form.nextFixtures" :standings-image="standingsSnapshotUrl" :suspension-note="form.suspensionNote" /><p v-else>{{ form.body }}</p><img v-for="photo in form.photos.slice(1)" :key="photo" :src="photo" alt="赛事照片"></article>
       <template #footer><el-button @click="previewOpen=false">关闭</el-button></template>
     </el-dialog>
   </main>
@@ -63,13 +64,14 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { callFunction } from '@/utils/cloud'
 import { createMatchNewsCover, createDailyNewsCover, createStandingsNewsSnapshot } from '@/utils/newsCover'
+import NewsDailyContent from './NewsDailyContent.vue'
 
 const route = useRoute()
 const tournamentId = String(route.params.id || '')
 const generateUrl = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/newsPreviewGenerate'
 const tournamentName = ref('当前赛事')
 const matches = ref([]), loadingMatches = ref(true), loadError = ref('')
-const standings = ref([]), standingsSnapshotUrl = ref('')
+const standingsSnapshotUrl = ref(''), standingsError = ref('')
 const editorOpen = ref(false), previewOpen = ref(false), generating = ref(false), editing = ref(''), filter = ref('all')
 const coverUrl = ref('')
 const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '模拟发布' }, { id: 'draft', label: '草稿' }, { id: 'update', label: '待更新' }]
@@ -78,13 +80,8 @@ const visibleArticles = computed(() => articles.value.filter(item => filter.valu
 const approvedMatches = computed(() => matches.value.filter(item => item.resultStatus === 'approved'))
 const approvedDates = computed(() => [...new Set(approvedMatches.value.map(item => item.matchDate).filter(Boolean))].sort().reverse())
 const dayMatches = date => approvedMatches.value.filter(item => item.matchDate === date)
-const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] })
+const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] })
 const selectedMatch = computed(() => matches.value.find(item => item.id === form.matchId) || null)
-const canAttachStandings = computed(() => form.kind === 'daily' && Boolean(form.date) && standings.value.some(group => group.officialMatchCount > 0 && group.officialTeams?.length) && !approvedMatches.value.some(item => item.matchDate > form.date))
-const standingsUnavailableReason = computed(() => approvedMatches.value.some(item => item.matchDate > form.date) ? '当前积分榜已包含该日之后的赛果' : '暂无正式积分榜')
-const standingsMarker = '\n\n积分榜\n见随文正式积分榜快照。'
-const dailyBeforeStandings = computed(() => form.body.includes(standingsMarker) ? `${form.body.split(standingsMarker)[0]}\n\n积分榜` : form.body)
-const dailyAfterStandings = computed(() => form.body.includes(standingsMarker) ? form.body.split(standingsMarker).slice(1).join(standingsMarker) : '')
 const kindLabel = kind => ({ match: '单场新闻', daily: '每日新闻' })[kind] || '新闻'
 const statusLabel = status => ({ published: '模拟发布', draft: '草稿', update: '待更新' })[status] || '草稿'
 const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
@@ -95,26 +92,24 @@ async function loadMatches() {
     const result = await callFunction('resultCenter', { action: 'dashboard', tournamentId })
     if (!result?.success) throw new Error(result?.message || '比赛加载失败')
     matches.value = result.matches || []
-    standings.value = result.standings || []
     tournamentName.value = result.tournament?.name || '当前赛事'
     if (form.kind === 'daily' && !form.date) form.date = approvedDates.value[0] || ''
-    updateCover(); updateStandingsSnapshot()
+    updateCover()
   } catch (error) { loadError.value = error.message || '比赛加载失败，请刷新重试' }
   finally { loadingMatches.value = false }
 }
 
-function reset() { Object.assign(form, { kind: 'match', matchId: '', date: '', matchIds: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] }); coverUrl.value = ''; standingsSnapshotUrl.value = ''; editing.value = '' }
+function reset() { Object.assign(form, { kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] }); coverUrl.value = ''; standingsSnapshotUrl.value = ''; standingsError.value = ''; editing.value = '' }
 function updateCover() { coverUrl.value = form.kind === 'daily' ? createDailyNewsCover(form.date, tournamentName.value, form.matchIds.length || dayMatches(form.date).length) : createMatchNewsCover(selectedMatch.value, tournamentName.value) }
-function updateStandingsSnapshot() { standingsSnapshotUrl.value = form.includeStandings && canAttachStandings.value ? createStandingsNewsSnapshot(standings.value, tournamentName.value, form.date) : '' }
-function clearGenerated() { form.title = ''; form.body = ''; form.matchIds = [] }
-function onStandingsChange() { clearGenerated(); updateCover(); updateStandingsSnapshot() }
-function onMatchChange() { clearGenerated(); updateCover(); updateStandingsSnapshot() }
-function onDateChange() { clearGenerated(); updateCover(); updateStandingsSnapshot() }
+function clearGenerated() { form.title = ''; form.body = ''; form.matchIds = []; form.dayResults = []; form.nextFixtures = []; standingsSnapshotUrl.value = ''; standingsError.value = '' }
+function onStandingsChange() { clearGenerated(); updateCover() }
+function onMatchChange() { clearGenerated(); updateCover() }
+function onDateChange() { clearGenerated(); updateCover() }
 function onKindChange() {
-  form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; clearGenerated(); updateCover(); updateStandingsSnapshot()
+  form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; clearGenerated(); updateCover()
 }
 function openNew() { reset(); editorOpen.value = true }
-function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photo ? [item.photo] : [] }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
+function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photo ? [item.photo] : [] }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
 function selectPhotos(event) {
   const files = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/')).slice(0, 6)
   event.target.value = ''
@@ -126,24 +121,26 @@ async function generate() {
   if (!token) return ElMessage.warning('请先登录主办方 PC 后台')
   generating.value = true
   try {
-    const response = await fetch(generateUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ authToken: token, tournamentId, matchId: form.matchId, date: form.date, kind: form.kind, note: form.note, includeStandings: Boolean(standingsSnapshotUrl.value), suspensionNote: form.suspensionNote }) })
+    const response = await fetch(generateUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ authToken: token, tournamentId, matchId: form.matchId, date: form.date, kind: form.kind, note: form.note, includeStandings: form.kind === 'daily' && form.includeStandings, suspensionNote: form.suspensionNote }) })
     const result = await response.json()
     if (!result?.success) throw new Error(result?.message || '生成失败')
-    form.title = result.title; form.body = result.body; form.matchIds = result.matchIds || (form.matchId ? [form.matchId] : []); updateCover()
+    const snapshot = result.standingsSnapshot?.tables?.length ? createStandingsNewsSnapshot(result.standingsSnapshot.tables, tournamentName.value, form.date) : ''
+    if (form.kind === 'daily' && form.includeStandings && !snapshot) throw new Error('积分榜快照生成失败，请重试')
+    form.title = result.title; form.body = result.body; form.matchIds = result.matchIds || (form.matchId ? [form.matchId] : []); form.dayResults = result.dayResults || []; form.nextFixtures = result.nextFixtures || []; standingsSnapshotUrl.value = snapshot; standingsError.value = ''; updateCover()
     ElMessage.success('标题和正文已生成')
-  } catch (error) { ElMessage.error(error.message || '生成失败，请重试') }
+  } catch (error) { standingsError.value = error.message || '生成失败，请重试'; ElMessage.error(standingsError.value) }
   finally { generating.value = false }
 }
 function showPreview() { if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文'); previewOpen.value = true }
 function saveLocal() {
   if (!form.title.trim()) return ElMessage.warning('请填写标题')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'draft', detail: '仅当前页面 · 未保存到云端', photo: form.photos[0] || '', cover: coverUrl.value }
+  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'draft', detail: '仅当前页面 · 未保存到云端', photo: form.photos[0] || '', cover: coverUrl.value }
   articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
   editing.value = row.id; editorOpen.value = false; ElMessage.success('已在当前页面保存草稿')
 }
 function publishLocal() {
   if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'published', detail: '仅当前页面 · 未发布到 H5', photo: form.photos[0] || '', cover: coverUrl.value }
+  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'published', detail: '仅当前页面 · 未发布到 H5', photo: form.photos[0] || '', cover: coverUrl.value }
   articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
   editing.value = row.id; editorOpen.value = false; ElMessage.success('已模拟发布，未写入公开新闻')
 }
