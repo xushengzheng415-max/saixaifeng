@@ -1,0 +1,7 @@
+{
+  "name": "data-center",
+  "version": "1.0.0",
+  "description": "统一球队、球员、赛事统计与数据质量服务",
+  "main": "index.js",
+  "dependencies": { "wx-server-sdk": "~2.6.3" }
+}

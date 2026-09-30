@@ -753,6 +753,7 @@ function tournamentWorkspacePath(suffix = '') {
 
 // 主办方 PC 端统一为一套赛事空间分类；赛事内入口会复用当前路由中的赛事上下文。
 const organizerNavItems = computed(() => [
+  {path:'/data-center',label:'数据中心',icon:'DataAnalysis'},
   {
     path: tournamentWorkspacePath(),
     label: '赛事主控制台',
@@ -831,6 +832,7 @@ const refereeNavItems = computed(() => [{ path: '/tournament-space', label: '赛
 
 // 赛事中心超级管理后台导航
 const adminNavItems = [
+  {path:'/data-center',label:'数据中心',icon:'DataAnalysis'},
   { path: '/tournament-center-admin', label: '平台运营中心', icon: 'Picture' },
   { path: '/admin/tournaments', label: '赛事列表', icon: 'Trophy' },
   { path: '/admin/teams', label: '球队列表', icon: 'UserFilled' },
@@ -842,7 +844,7 @@ const adminNavItems = [
 
 // 是否是赛事中心管理页面
 const isAdminPage = computed(() => {
-  return route.path.startsWith('/tournament-center-admin') ||
+  return (route.path === '/data-center' && userInfo.value.isPlatformOwner === true) || route.path.startsWith('/tournament-center-admin') ||
          route.path.startsWith('/admin/') ||
          (route.path === '/system' && userInfo.value.isPlatformOwner === true)
 })

@@ -1,6 +1,7 @@
 var workspace = require('../../utils/workspace')
 
 Page({
+  openDataCenter:function() { wx.navigateTo({url:'/pages/data-center/index'}) },
   data: {
     loading: true,
     errorText: '',

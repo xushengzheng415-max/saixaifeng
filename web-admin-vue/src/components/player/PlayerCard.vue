@@ -4,7 +4,7 @@
     <div class="player-card" :class="cardLevelClass">
       <!-- 卡片背景 -->
       <div class="card-bg">
-        <img :src="cardBgImage" alt="card bg" />
+        <img v-if="cardBgImage" :src="cardBgImage" alt="" />
       </div>
       
       <!-- 卡片内容 -->
@@ -67,9 +67,8 @@
         </div>
       </el-tooltip>
       <div class="match-count">
-        参赛场次: <strong>{{ player.appearances || 0 }}</strong> 场
-        <span v-if="nextLevelNeed > 0" class="next-level-hint">(再 {{ nextLevelNeed }} 场升级)</span>
-        <span v-else class="max-level">(已满级)</span>
+        生涯积分: <strong>{{ cardPoints }}</strong>
+        <span v-if="nextLevelNeed !== null" class="next-level-hint">(距下一级 {{ nextLevelNeed }} 分)</span>
       </div>
     </div>
   </div>
@@ -88,6 +87,10 @@ const props = defineProps({
   teamLogo: {
     type: String,
     default: ''
+  },
+  playerCard: {
+    type: Object,
+    default: () => ({})
   }
 })
 
@@ -168,10 +171,7 @@ const positionMap = {
 
 // 卡片等级计算
 const cardLevel = computed(() => {
-  const appearances = props.player.appearances || 0
-  if (appearances >= 20) return 'gold'
-  if (appearances >= 10) return 'silver'
-  return 'bronze'
+  return props.playerCard.status === 'ready' ? props.playerCard.tier : null
 })
 
 const cardLevelClass = computed(() => `card-${cardLevel.value}`)
@@ -184,25 +184,24 @@ const cardBgImage = computed(() => {
     silver: `${publicBaseUrl}images/银卡.png`,
     gold: `${publicBaseUrl}images/金卡.png`
   }
-  return images[cardLevel.value]
+  return images[cardLevel.value] || ''
 })
 
 // 卡片等级提示
 const cardLevelTooltip = computed(() => {
   const tooltips = {
-    bronze: '铜卡：参赛 0-9 场',
-    silver: '银卡：参赛 10-19 场',
-    gold: '金卡：参赛 20 场以上'
+    bronze: '铜卡：0–44 分',
+    silver: '银卡：45–99 分',
+    gold: '金卡：100 分及以上'
   }
-  return tooltips[cardLevel.value]
+  return tooltips[cardLevel.value] || '等级待核定'
 })
 
-// 升级到下一级还需要多少场
+const cardPoints = computed(() => props.playerCard.status === 'ready' ? props.playerCard.points : '—')
+
+// 升级到下一级还需要多少分
 const nextLevelNeed = computed(() => {
-  const appearances = props.player.appearances || 0
-  if (appearances < 10) return 10 - appearances
-  if (appearances < 20) return 20 - appearances
-  return 0
+  return props.playerCard.status === 'ready' && props.playerCard.nextAt !== null ? props.playerCard.pointsToNext : null
 })
 
 // 球员英文名（拼音首字母）- 备用显示

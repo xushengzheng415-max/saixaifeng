@@ -47,6 +47,7 @@
             <div class="card-section">
               <PlayerCard 
                 :player="playerData" 
+                :player-card="playerCard"
                 :team-logo="teamData.logo || teamData.logoUrl"
               />
             </div>
@@ -96,22 +97,22 @@
               </div>
 
               <div class="info-card">
-                <h4 class="section-title">参赛统计</h4>
+                <h4 class="section-title">{{ route.params.playerId ? '本届表现' : '球员历史' }}</h4><p v-if="statisticsMessage">{{ statisticsMessage }}</p>
                 <div class="stats-grid">
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.appearances || 0 }}</div>
+                    <div class="stat-value">{{ metric(statistics.appearances) }}</div>
                     <div class="stat-label">参赛场次</div>
                   </div>
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.points || 0 }}</div>
-                    <div class="stat-label">参与积分</div>
+                    <div class="stat-value">{{ metric(statistics.minutesPlayed) }}</div>
+                    <div class="stat-label">出场分钟</div>
                   </div>
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.goals || 0 }}</div>
+                    <div class="stat-value">{{ metric(statistics.goals) }}</div>
                     <div class="stat-label">进球数</div>
                   </div>
                   <div class="stat-item">
-                    <div class="stat-value">{{ playerData.assists || 0 }}</div>
+                    <div class="stat-value">{{ metric(statistics.assists) }}</div>
                     <div class="stat-label">助攻数</div>
                   </div>
                 </div>
@@ -122,10 +123,10 @@
                 <h4 class="section-title">卡片等级</h4>
                 <div class="level-progress">
                   <div class="level-info">
-                    <span class="current-level">当前: {{ currentLevelText }}</span>
-                    <span v-if="nextLevelText" class="next-level">下一级: {{ nextLevelText }}</span>
+                    <span class="current-level">{{ currentLevelText }} · {{ cardPointsText }} 分</span>
+                    <span v-if="nextLevelText" class="next-level">下一级：{{ nextLevelText }}</span>
                   </div>
-                  <el-progress 
+                  <el-progress v-if="playerCard.status === 'ready' && nextLevelText"
                     :percentage="levelProgress" 
                     :color="levelColor"
                     :stroke-width="12"
@@ -210,18 +211,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="参赛场次">
-          <el-input-number v-model="editForm.appearances" :min="0" :max="999" />
-        </el-form-item>
-        <el-form-item label="参与积分">
-          <el-input-number v-model="editForm.points" :min="0" :max="9999" />
-        </el-form-item>
-        <el-form-item label="进球数">
-          <el-input-number v-model="editForm.goals" :min="0" :max="999" />
-        </el-form-item>
-        <el-form-item label="助攻数">
-          <el-input-number v-model="editForm.assists" :min="0" :max="999" />
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
@@ -234,6 +223,7 @@
       <div class="preview-container">
         <PlayerCard 
           :player="playerData" 
+          :player-card="playerCard"
           :team-logo="teamData.logo || teamData.logoUrl"
         />
       </div>
@@ -246,7 +236,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, Edit, View, Plus, Upload } from '@element-plus/icons-vue'
-import { queryList, updateRecord } from '../../utils/cloud'
+import { queryList, updateRecord, callFunction } from '../../utils/cloud'
 import { getTempFileURL } from '../../utils/upload'
 import PlayerCard from '../../components/player/PlayerCard.vue'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
@@ -258,6 +248,10 @@ const loading = ref(false)
 const saving = ref(false)
 const playerData = ref({})
 const teamData = ref({})
+const statistics = ref({})
+const playerCard = ref({ status:'unverified', points:null, tier:null })
+const statisticsMessage = ref('')
+function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 const playerAvatarUrl = ref('')
 const showEditDialog = ref(false)
 const showPreviewDialog = ref(false)
@@ -266,10 +260,6 @@ const editForm = ref({
   name: '',
   height: null,
   weight: null,
-  appearances: 0,
-  points: 0,
-  goals: 0,
-  assists: 0,
   photoUrl: '',
   photoPreview: '',
   photoFileID: ''
@@ -326,52 +316,33 @@ const jerseyName = computed(() => {
 
 // 当前等级文本
 const currentLevelText = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) return '金卡'
-  if (appearances >= 10) return '银卡'
-  return '铜卡'
+  return playerCard.value.status === 'ready' ? ({ bronze:'铜卡', silver:'银卡', gold:'金卡' }[playerCard.value.tier] || '待核定') : '待核定'
 })
 
 // 下一级文本
 const nextLevelText = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances < 10) return '银卡'
-  if (appearances < 20) return '金卡'
-  return ''
+  return playerCard.value.status === 'ready' ? ({ bronze:'银卡', silver:'金卡' }[playerCard.value.tier] || '') : ''
 })
+const cardPointsText = computed(() => playerCard.value.status === 'ready' ? playerCard.value.points : '—')
 
 // 等级进度百分比
 const levelProgress = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) return 100
-  if (appearances >= 10) {
-    // 银卡阶段：10-20场
-    return ((appearances - 10) / 10) * 100
-  }
-  // 铜卡阶段：0-10场
-  return (appearances / 10) * 100
+  const score = playerCard.value
+  if (score.status !== 'ready' || score.nextAt == null) return 100
+  const start = score.tier === 'silver' ? 45 : 0
+  return Math.max(0, Math.min(100, Math.round((score.points - start) * 100 / (score.nextAt - start))))
 })
 
 // 进度条颜色
 const levelColor = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) return '#FFD700'
-  if (appearances >= 10) return '#C0C0C0'
-  return '#CD7F32'
+  return ({ gold:'#D2A748', silver:'#8D99A4', bronze:'#A76C45' })[playerCard.value.tier] || '#8D99A4'
 })
 
 // 进度提示
 const progressHint = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) {
-    return '恭喜！已达到最高等级金卡'
-  }
-  if (appearances >= 10) {
-    const need = 20 - appearances
-    return `再参赛 ${need} 场即可升级为金卡`
-  }
-  const need = 10 - appearances
-  return `再参赛 ${need} 场即可升级为银卡`
+  const score = playerCard.value
+  if (score.status !== 'ready') return '生涯积分待核定'
+  return score.nextAt == null ? '已达金卡，可更换照片和背景' : `距${nextLevelText.value}还差 ${score.pointsToNext} 分`
 })
 
 function goBack() {
@@ -391,10 +362,6 @@ function editPlayer() {
     name: playerData.value.name || '',
     height: playerData.value.height || null,
     weight: playerData.value.weight || null,
-    appearances: playerData.value.appearances || 0,
-    points: playerData.value.points || 0,
-    goals: playerData.value.goals || 0,
-    assists: playerData.value.assists || 0,
     photoUrl: playerData.value.photoUrl || '',
     photoPreview: '',
     photoFileID: ''
@@ -424,20 +391,12 @@ async function savePlayer() {
     await updateRecord('players', playerData.value._id, {
       height: editForm.value.height,
       weight: editForm.value.weight,
-      appearances: editForm.value.appearances,
-      points: editForm.value.points,
-      goals: editForm.value.goals,
-      assists: editForm.value.assists,
       photoUrl: photoUrlToSave
     })
 
     // 更新本地数据
     playerData.value.height = editForm.value.height
     playerData.value.weight = editForm.value.weight
-    playerData.value.appearances = editForm.value.appearances
-    playerData.value.points = editForm.value.points
-    playerData.value.goals = editForm.value.goals
-    playerData.value.assists = editForm.value.assists
     
     // 如果有新头像，使用预览 URL 立即显示；否则使用保存的 URL
     if (editForm.value.photoPreview) {
@@ -479,6 +438,20 @@ async function loadPlayerData() {
     
     if (players && players.length > 0) {
       playerData.value = players[0]
+      statistics.value = {}
+      playerCard.value = { status:'unverified', points:null, tier:null }
+      statisticsMessage.value = ''
+      try {
+        const result = await callFunction('dataCenter',{action:'query',scope:{playerId:String(playerId),...(route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {})}})
+        if (!result.success) throw new Error(result.error || '统计加载失败')
+        statistics.value = result.playerTotal.metrics
+        statisticsMessage.value = result.coverage.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。'
+      } catch (error) { statisticsMessage.value = '统计暂不可用，请刷新重试。' }
+      try {
+        const scoreResult = await callFunction('dataCenter', { action:'playerCard', playerId:String(playerId) })
+        if (scoreResult.success && scoreResult.playerCard) playerCard.value = scoreResult.playerCard
+      } catch (error) { /* Unknown is not zero. */ }
+
       
       // 处理头像URL（如果是云存储fileID，获取临时URL）
       if (playerData.value.photoUrl && playerData.value.photoUrl.startsWith('cloud://')) {
@@ -493,7 +466,7 @@ async function loadPlayerData() {
       }
       
       // 加载球队数据
-      const relatedTeamId = playerData.value.teamId || route.query.teamId || playerData.value.teamCode
+      const relatedTeamId = (route.params.playerId ? route.query.teamId : '') || playerData.value.teamId || playerData.value.teamCode
       if (relatedTeamId) {
         const teams = await queryList('teams', {
           where: { _id: String(relatedTeamId) }
