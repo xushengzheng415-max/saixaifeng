@@ -16,6 +16,13 @@ const { chromium } = require(process.env.SXF_PLAYWRIGHT_MODULE)
   await modal.waitFor()
   const canvas = modal.locator('.roster-poster-canvas')
   await canvas.locator('.roster-poster-player').first().waitFor()
+  const crestStyle = await canvas.locator('.roster-poster-team img, .roster-poster-team-fallback').first().evaluate(element => {
+    const style = getComputedStyle(element)
+    return { border:style.borderTopWidth, radius:style.borderTopLeftRadius, background:style.backgroundColor }
+  })
+  assert.equal(crestStyle.border, '0px')
+  assert.equal(crestStyle.radius, '0px')
+  assert.equal(crestStyle.background, 'rgba(0, 0, 0, 0)')
   assert.equal(await canvas.locator('.roster-poster-player').count(), 22)
   assert.ok((await canvas.innerText()).includes('2026河南青少年足球冠军联赛'))
   assert.ok((await canvas.innerText()).includes('本海报数据由赛小蜂足球提供'))
