@@ -124,10 +124,10 @@
             <el-table-column label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
             <el-table-column label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="年龄" width="80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
-            <el-table-column v-if="isReadOnlyTournament" label="首发/出场" width="105" align="center"><template #default="{ row }">{{ tournamentMediaStats[row._id]?.starts || 0 }} / {{ tournamentMediaStats[row._id]?.appearances || 0 }}</template></el-table-column>
-            <el-table-column v-if="isReadOnlyTournament" label="出场时间" width="90" align="center"><template #default="{ row }">{{ tournamentMediaStats[row._id]?.minutes || 0 }}′</template></el-table-column>
-            <el-table-column v-if="isReadOnlyTournament" label="进球" width="70" align="center"><template #default="{ row }">{{ tournamentMediaStats[row._id]?.goals || 0 }}</template></el-table-column>
-            <el-table-column v-if="isReadOnlyTournament" label="红/黄牌" width="90" align="center"><template #default="{ row }"><span class="red-card-value">{{ tournamentMediaStats[row._id]?.redCards || 0 }}</span> / <span class="yellow-card-value">{{ tournamentMediaStats[row._id]?.yellowCards || 0 }}</span></template></el-table-column>
+            <el-table-column v-if="isReadOnlyTournament" label="出场" width="105" align="center"><template #default="{ row }">{{ knownMetric(tournamentMediaStats[row._id]?.appearances) }}</template></el-table-column>
+            <el-table-column v-if="isReadOnlyTournament" label="出场时间" width="90" align="center"><template #default="{ row }">{{ knownMetric(tournamentMediaStats[row._id]?.minutes) }}′</template></el-table-column>
+            <el-table-column v-if="isReadOnlyTournament" label="进球" width="70" align="center"><template #default="{ row }">{{ knownMetric(tournamentMediaStats[row._id]?.goals) }}</template></el-table-column>
+            <el-table-column v-if="isReadOnlyTournament" label="红/黄牌" width="90" align="center"><template #default="{ row }"><span class="red-card-value">{{ knownMetric(tournamentMediaStats[row._id]?.redCards) }}</span> / <span class="yellow-card-value">{{ knownMetric(tournamentMediaStats[row._id]?.yellowCards) }}</span></template></el-table-column>
             <el-table-column label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="!isReadOnlyTournament" label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
             <el-table-column v-if="!isReadOnlyTournament" label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="removePlayer(row)">删除</el-button></template></el-table-column>
@@ -1351,6 +1351,22 @@ const staffMembers = ref([])
 const importedDraftPlayers = ref([])
 const tournamentRosterPlayerIds = ref(new Set())
 const tournamentMediaStats = ref({})
+const dataCenterStatistics = ref(null)
+function knownMetric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
+async function loadUnifiedStatistics() {
+  dataCenterStatistics.value = null
+  const response = await callFunction('dataCenter', {action:'query',scope:{teamId:String(teamId),...(sourceTournamentId.value ? {tournamentId:sourceTournamentId.value,...(sourceDivisionId.value ? {divisionId:sourceDivisionId.value} : {})} : {})}})
+  if (!response.success) throw new Error(response.error || '统计加载失败')
+  dataCenterStatistics.value = response
+  if (sourceTournamentId.value) {
+    const existing = new Set(players.value.map(row => String(row._id)))
+    response.players.forEach(row => { if (!existing.has(row.playerId)) { existing.add(row.playerId); players.value.push({_id:row.playerId,name:row.playerName,teamId:row.teamId,profileStatus:'historical',statusText:'历史参赛球员'}) } })
+  }
+  const byPlayer = {}
+  response.players.forEach(row => { const total = byPlayer[row.playerId] ||= {}; for (const field of ['appearances','goals','assists','yellowCards','redCards','minutesPlayed']) { if (total[field] === null || row.metrics[field] === null) total[field] = null; else total[field] = (total[field] || 0) + row.metrics[field] } })
+  tournamentMediaStats.value = Object.fromEntries(Object.entries(byPlayer).map(([playerId,value]) => [playerId,{...value,minutes:value.minutesPlayed}]))
+}
+
 const kitSaving = ref(false)
 const kitSets = [{key:'primary',label:'主比赛服',badge:'主',description:'常规比赛优先使用'},{key:'secondary',label:'备用比赛服',badge:'备',description:'撞色时切换使用'}]
 const kitEquipment = [{key:'jersey',label:'球衣'},{key:'shorts',label:'球裤'},{key:'socks',label:'球袜'}]
@@ -1378,32 +1394,15 @@ async function resolveTournamentLogo() {
 const tournamentLogoUrl = computed(() => resolvedTournamentLogo.value || tournamentLogoDirectUrl.value || `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`)
 const tournamentMatches = ref([])
 const tournamentMatchEvents = ref([])
-const teamMatchStats = computed(() => tournamentMatches.value.reduce((stats, match) => {
-  const isHome = String(match.homeTeamId || match.teamAId || '') === String(teamId)
-  const homeScore = Number(match.homeScore ?? match.teamAScore ?? 0)
-  const awayScore = Number(match.awayScore ?? match.teamBScore ?? 0)
-  const own = isHome ? homeScore : awayScore
-  const opponent = isHome ? awayScore : homeScore
-  stats.total += 1
-  stats.goalsFor += own
-  stats.goalsAgainst += opponent
-  if (own > opponent) stats.wins += 1
-  else if (own === opponent) stats.draws += 1
-  else stats.losses += 1
-  return stats
-}, qaTeam ? { total: 12, wins: 8, draws: 2, losses: 2, goalsFor: 26, goalsAgainst: 10 } : { total: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 }))
+const teamMatchStats = computed(() => {
+  const rows = dataCenterStatistics.value?.teams || []
+  const sum = field => dataCenterStatistics.value && rows.every(row => row[field] !== null) ? rows.reduce((total,row) => total + row[field],0) : '—'
+  return {total:dataCenterStatistics.value?.summary.matchCount ?? '—',wins:sum('wins'),draws:sum('draws'),losses:sum('losses'),goalsFor:sum('goalsFor'),goalsAgainst:sum('goalsAgainst')}
+})
 function historyEventPlayerId(event) { return String(event?.playerId || event?.player || event?.player_id || '') }
 function historyEventType(event) { return String(event?.type || event?.eventType || '').toLowerCase() }
 function firstHistoryValue() { for (const value of arguments) if (value !== undefined && value !== null && value !== '') return value; return '' }
-const playerDisciplineHistory = computed(() => players.value.map(player => {
-  const playerId = String(player?._id || '')
-  const playerName = String(player?.name || '')
-  const events = tournamentMatchEvents.value.filter(event => {
-    const eventPlayerId = historyEventPlayerId(event)
-    return (eventPlayerId && eventPlayerId === playerId) || (!eventPlayerId && String(event?.playerName || event?.name || '') === playerName)
-  })
-  return { name:playerName || '未命名球员', yellowCards:events.filter(event => ['yellow','yellow_card','yellowcard'].includes(historyEventType(event))).length, redCards:events.filter(event => ['red','red_card','redcard'].includes(historyEventType(event))).length }
-}).filter(row => row.yellowCards || row.redCards))
+const playerDisciplineHistory = computed(() => (dataCenterStatistics.value?.players || []).filter(row => row.observed.yellowCards || row.observed.redCards).map(row => ({name:row.playerName,yellowCards:knownMetric(row.metrics.yellowCards),redCards:knownMetric(row.metrics.redCards)})))
 const matchHistoryRows = computed(() => tournamentMatches.value.slice().sort((left, right) => new Date(firstHistoryValue(right.matchDate, right.startTime, right.matchTime, right.createTime) || 0).getTime() - new Date(firstHistoryValue(left.matchDate, left.startTime, left.matchTime, left.createTime) || 0).getTime()).map(match => {
   const isHome = String(match.homeTeamId || match.teamAId || '') === String(teamId)
   const ownScore = isHome ? (match.homeScore ?? match.teamAScore) : (match.awayScore ?? match.teamBScore)
@@ -4235,6 +4234,7 @@ async function loadPlayers() {
   } catch (err) {
     console.error('加载球员列表失败:', err)
   } finally {
+    try { await loadUnifiedStatistics() } catch (error) { console.warn('统一统计加载失败:',error.message) }
     loading.value = false
   }
 }

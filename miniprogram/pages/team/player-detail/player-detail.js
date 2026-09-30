@@ -1,5 +1,7 @@
 var workspace = require('../../../utils/workspace')
 
+function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
+
 function display(value, fallback) {
   if (value === 0) return '0'
   return value ? String(value) : (fallback || '待完善')
@@ -13,7 +15,8 @@ Page({
     teamId: '',
     player: {},
     teamInfo: {},
-    stats: { appearances: 0, goals: 0, yellowCards: 0, redCards: 0 },
+    stats: { appearances: '—', goals: '—', yellowCards: '—', redCards: '—' },
+    statisticsNote: '',
     detailItems: [],
     canManage: false,
     visualQa: false
@@ -54,13 +57,13 @@ Page({
     }).then(function(response) {
       var result = response.result || {}
       if (!result.success) throw new Error(result.message || '球员详情加载失败')
-      that.hydrate(result.player || {}, result.team || {}, result.stats || {}, result.canManage === true)
+      that.hydrate(result.player || {}, result.team || {}, result.stats || {}, result.canManage === true, result.dataCenter)
     }).catch(function(error) {
       that.setData({ loading: false, errorText: error.message || '球员详情加载失败' })
     })
   },
 
-  hydrate: function(raw, team, stats, canManage) {
+  hydrate: function(raw, team, stats, canManage, dataCenter) {
     var positionMap = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
     var genderMap = { male: '男', female: '女', '男': '男', '女': '女' }
     var footMap = { left: '左脚', right: '右脚', both: '双脚' }
@@ -108,7 +111,7 @@ Page({
       { id: 'identity', label: '人证核验', value: player.identityStatusText },
       { id: 'portrait', label: '标准形象照', value: player.portraitStatusText }
     ]
-    this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: Number(stats.appearances || 0), goals: Number(stats.goals || 0), yellowCards: Number(stats.yellowCards || 0), redCards: Number(stats.redCards || 0) }, detailItems: detailItems, canManage: canManage })
+    this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
     wx.setNavigationBarTitle({ title: player.name || '球员详情' })
   },
 

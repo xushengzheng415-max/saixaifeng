@@ -2,6 +2,8 @@
 // 当前兼容 users.orgId；未来 organization_memberships / organizations 建立后可直接接管。
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const { readAll: readDataRows, readByIds: readDataByIds } = require('./data-center/reader.cjs')
+const { createDataService } = require('./data-center/service.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
@@ -170,21 +172,12 @@ async function safeGet(collection, where, limit) {
 // 分开查询可沿用两边已有的单字段索引，避免 OR 查询因环境索引差异
 // 被 safeGet 降级为空列表；随后按 _id 合并去重。
 async function safeGetTeamPlayers(teamId, limit, extra) {
-  const id = String(teamId || '')
   const base = extra && typeof extra === 'object' ? extra : {}
   const rows = await Promise.all([
-    safeGet('players', Object.assign({}, base, { teamId: id }), limit),
-    safeGet('players', Object.assign({}, base, { teamCode: id }), limit)
+    readDataRows(db,'players',Object.assign({},base,{teamId:String(teamId)})),
+    readDataRows(db,'players',Object.assign({},base,{teamCode:String(teamId)}))
   ])
-  const merged = []
-  const seen = new Set()
-  rows.flat().forEach(function(item) {
-    const key = String(item && item._id || '') || JSON.stringify(item)
-    if (seen.has(key)) return
-    seen.add(key)
-    merged.push(item)
-  })
-  return limit ? merged.slice(0, limit) : merged
+  return [...new Map(rows.flat().map(row => [String(row._id),row])).values()]
 }
 
 async function safeGetPlayersForTeams(teamIds, limit) {
@@ -1455,23 +1448,8 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
   const rows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   const player = rows[0]
   if (!player || ['archived', 'deleted'].indexOf(String(player.status || '').toLowerCase()) >= 0) throw new Error('球员不存在或已移出球队')
-  const matchResult = await db.collection('matches').where(_.or([{ homeTeamId: teamId }, { awayTeamId: teamId }])).limit(500).get()
-  const matches = matchResult.data || []
-  const stats = { appearances: 0, goals: 0, yellowCards: 0, redCards: 0 }
-  matches.forEach(function(match) {
-    const appeared = new Set(matchPlayerIds(match))
-    ;(Array.isArray(match.events) ? match.events : []).forEach(function(eventItem) {
-      const eventPlayerId = String(eventItem.playerId || eventItem.player || '')
-      const eventPlayerName = String(eventItem.playerName || eventItem.player_name || '').trim()
-      if (eventPlayerId !== playerId && eventPlayerName !== String(player.name || '').trim()) return
-      appeared.add(playerId)
-      const type = String(eventItem.type || eventItem.eventType || '').toLowerCase()
-      if (['goal', 'score', 'penalty', 'penalty_scored'].indexOf(type) >= 0) stats.goals += 1
-      if (['yellow', 'yellow_card', 'yellowcard'].indexOf(type) >= 0) stats.yellowCards += 1
-      if (['red', 'red_card', 'redcard'].indexOf(type) >= 0) stats.redCards += 1
-    })
-    if (appeared.has(playerId)) stats.appearances += 1
-  })
+  const dataCenter = await createDataService(db).query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, playerId })
+  const stats = dataCenter.playerTotal.metrics
   const formatted = formatTeamPlayer(player)
   return {
     success: true,
@@ -1500,7 +1478,7 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
       portraitStatus: String(firstValue(player.portraitStatus, player.avatarProcessingStatus) || ''),
       remark: String(firstValue(player.remark, player.notes) || '')
     },
-    stats
+    stats, dataCenter
   }
 }
 
@@ -1514,8 +1492,7 @@ async function archiveTeamPlayerForWorkspace(event, identity) {
   if (!teams.some(item => String(item._id) === teamId)) throw new Error('球队不存在或不属于当前工作空间')
   const rows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   if (!rows.length) throw new Error('球员不存在或不属于该球队')
-  await db.collection('players').doc(playerId).update({ data: { status: 'archived', archivedAt: db.serverDate(), archivedBy: identity.user._id, updateTime: db.serverDate() } })
-  return { success: true, archived: true }
+  return require('./data-center/membership.cjs').archiveMembership(db, { userId:String(identity.user._id), orgId:String(workspace.orgId || ''), teamIds:[teamId] }, playerId, teamId)
 }
 
 async function loadTeamPlayerForEditForWorkspace(event, identity) {
@@ -1681,6 +1658,33 @@ async function regenerateParentProfileInviteForWorkspace(event, identity) {
   return { success: true, invite: formatParentProfileInvite(invite, team, players[0]), canManage: true }
 }
 
+async function dataCenterForWorkspace(event, identity) {
+  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const permissions = result.workspace.permissions || []
+  if (!permissions.some(permission => ['team.view', 'team.manage', 'event.view', 'event.manage', 'tournament.view', 'tournament.manage'].includes(permission))) throw workspaceError('DATA_FORBIDDEN', '当前身份无权查看统计数据')
+  const teams = await loadTeams(result.workspace, identity.user, identity.openId)
+  const loaded = await loadTournaments(result.workspace, identity.user, identity.openId, teams)
+  const actor = {
+    userId:String(identity.user._id), orgId:String(result.workspace.orgId || ''), platformOwner:false,
+    teamIds:teams.map(team => String(team._id)),
+    tournamentIds:(permissions.includes('event.manage') || permissions.includes('tournament.manage')) ? loaded.tournaments.filter(item => ['hosted', 'both'].includes(item.workspaceRelation)).map(item => String(item._id)) : []
+  }
+  const service = createDataService(db)
+  return event.operation === 'catalog' ? service.catalog(actor) : service.query(actor, event.scope || event)
+}
+
+async function tournamentDataForWorkspace(event, identity) {
+  const tournamentId = String(event.tournamentId || '')
+  if (!tournamentId) throw new Error('缺少赛事信息')
+  const dataCenter = await dataCenterForWorkspace(Object.assign({},event,{scope:{tournamentId}}),identity)
+  const tournament = (await readDataRows(db,'tournaments',{_id:tournamentId}))[0]
+  const divisions = await readDataRows(db,'divisions',{tournamentId})
+  const teamMap = Object.fromEntries(dataCenter.teams.map(row => [row.teamId,row]))
+  const standings = dataCenter.standings.flatMap(group => group.officialTeams.map(row => ({...row,divisionId:group.divisionId,divisionName:group.divisionName,groupName:group.groupName,wins:row.win,draws:row.draw,losses:row.loss,goalDiff:row.goalDifference})))
+  const ranking = field => dataCenter.players.filter(row => row.observed[field] > 0).map(row => ({playerId:row.playerId,playerName:row.playerName,teamId:row.teamId,teamName:teamMap[row.teamId]?.teamName || row.teamId,divisionId:row.divisionId,count:row.metrics[field],observedCount:row.observed[field],statisticsCoverage:row.coverage[field]})).sort((left,right) => right.observedCount-left.observedCount)
+  return {success:true,tournament:{id:tournamentId,name:String(tournament?.name || '')},divisions:divisions.map(row => ({id:String(row._id),name:String(row.name || '')})),divisionGroups:[],standings,goalsRanking:ranking('goals'),yellowCards:ranking('yellowCards'),redCards:ranking('redCards'),dataCenter}
+}
+
 async function officialRosterForWorkspace(event, identity) {
   const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
   const permissions = result.workspace.permissions || []
@@ -1697,8 +1701,29 @@ async function officialRosterForWorkspace(event, identity) {
   const snapshots = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
     .filter(item => snapshotMatchesDivision(item, rosterContext.divisionId, rosterContext.allowLegacySnapshot))
   const latest = snapshots.sort((a, b) => toTime(b.updateTime || b.createTime) - toTime(a.updateTime || a.createTime))[0] || null
+  let statisticsStatus = 'unavailable'
+  let statisticsMetadata = null
+  // 查询失败保留未知状态，不把未加载的数据显示成零。
+  try {
+    const { selectRosterMatches, restoreHistoricalRosterPlayers } = await import('./data-center/statistics.mjs')
+    const matches = selectRosterMatches(await readDataRows(db, 'matches', { tournamentId }), teamId, rosterContext.divisionId, rosterContext.allowLegacySnapshot)
+    const externalEvents = await readDataByIds(db, 'match_events', 'matchId', matches.map(match => match._id))
+    const restored = restoreHistoricalRosterPlayers(players, matches, teamId, latest && latest.playerIds)
+    players.splice(0, players.length, ...restored)
+    const { aggregateStatistics, sumPlayerRows } = await import('./data-center/statistics.mjs')
+    const aggregate = aggregateStatistics({ matches, events:externalEvents, scope:{ teamId, tournamentId }, divisionsById:{ [rosterContext.divisionId]:rosterContext.division }, tournamentsById:{ [tournamentId]:tournament } })
+    players.forEach(player => {
+      const rows = aggregate.players.filter(row => row.playerId === String(player.id))
+      const total = sumPlayerRows(rows)
+      player.tournamentStats = rows.length ? total.metrics : { appearances:null, goals:null, assists:null, yellowCards:null, redCards:null, minutesPlayed:null }
+      player.statisticsCoverage = rows.length ? total.coverage : { status:'not_collected' }
+    })
+    statisticsStatus = aggregate.coverage.status === 'complete' ? 'ready' : 'partial'
+    statisticsMetadata = { schemaVersion:aggregate.schemaVersion, metricVersion:aggregate.metricVersion, dataVersion:aggregate.dataVersion, coverage:aggregate.coverage }
+
+  } catch (error) { console.warn('[officialRoster] statistics unavailable:', error.message) }
   const division = rosterContext.division || {}
-  return { success: true, team: { id: teamId, name: firstValue(team.name, team.teamName), logo: firstValue(team.logo, team.logoUrl) }, tournament: { id: tournamentId, name: tournament.name || '赛事', divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, '默认组别'), maxPlayers: Number(firstValue(division.rosterLimit, division.maxPlayersPerTeam, rosterContext.registration.maxPlayersPerTeam, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)), deadlineText: dateText(firstValue(division.registrationDeadline, tournament.registrationDeadline, tournament.signupDeadline)) }, requirements: rosterContext.requirements, players, snapshot: latest ? { id: String(latest._id), status: latest.status || 'draft', playerIds: latest.playerIds || [], divisionId: String(latest.divisionId || latest.division || rosterContext.divisionId), version: Number(latest.version || 1), returnReason: latest.returnReason || '', returnedAtText: dateText(latest.returnedAt) } : null, canManage: permissions.indexOf('team.manage') >= 0 }
+  return { success: true, statisticsStatus, statisticsMetadata, team: { id: teamId, name: firstValue(team.name, team.teamName), logo: firstValue(team.logo, team.logoUrl) }, tournament: { id: tournamentId, name: tournament.name || '赛事', divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, '默认组别'), maxPlayers: Number(firstValue(division.rosterLimit, division.maxPlayersPerTeam, rosterContext.registration.maxPlayersPerTeam, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)), deadlineText: dateText(firstValue(division.registrationDeadline, tournament.registrationDeadline, tournament.signupDeadline)) }, requirements: rosterContext.requirements, players, snapshot: latest ? { id: String(latest._id), status: latest.status || 'draft', playerIds: latest.playerIds || [], divisionId: String(latest.divisionId || latest.division || rosterContext.divisionId), version: Number(latest.version || 1), returnReason: latest.returnReason || '', returnedAtText: dateText(latest.returnedAt) } : null, canManage: permissions.indexOf('team.manage') >= 0 }
 }
 
 async function submitOfficialRosterForWorkspace(event, identity) {
@@ -1961,57 +1986,24 @@ async function teamDataPackageForWorkspace(event, identity) {
   const locked = isLockedDivision(division)
   const packages = await safeGet('team_data_packages', { teamId, tournamentId, divisionId, orgId: result.workspace.orgId || '' }, 20)
   const latest = packages.sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
-  return { success: true, tournament: { id: tournamentId, name: String(tournament.name || '') }, team: { id: teamId, name: String(team.name || team.teamName || '') }, division: { id: divisionId, name: String(division.name || division.divisionName || '默认组别'), professional, locked }, package: latest ? { id: String(latest._id), status: String(latest.status || ''), requestedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null, allowLegacyMatchDivision: activeDivisionIds.length === 1, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0, canRequest: !professional && locked && (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
+  return { success: true, tournament: { id: tournamentId, name: String(tournament.name || '') }, team: { id: teamId, name: String(team.name || team.teamName || '') }, division: { id: divisionId, name: String(division.name || division.divisionName || '默认组别'), professional, locked }, package: { id: latest ? String(latest._id) : '', status: 'enabled', free: true }, allowLegacyMatchDivision: activeDivisionIds.length === 1, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0, canRequest: false }
 }
 
 async function requestTeamDataPackageForWorkspace(event, identity) {
   const loaded = await teamDataPackageForWorkspace(event, identity)
-  const workspaceContext = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
-  const workspaceOrgId = String(workspaceContext.workspace.orgId || '')
-  if (!loaded.canRequest) throw new Error('该组别当前不满足数据包开通申请条件')
-  if (loaded.package && ['requested', 'enabled'].indexOf(loaded.package.status) >= 0) throw new Error('该数据包已申请或已开通')
-  const now = db.serverDate()
-  const created = await db.collection('team_data_packages').add({ data: { teamId: loaded.team.id, tournamentId: loaded.tournament.id, divisionId: loaded.division.id, orgId: workspaceOrgId, status: 'requested', requestedBy: identity.user._id, createTime: now, updateTime: now } })
-  return { success: true, requestId: String(created._id), status: 'requested' }
+  return { success: true, requestId: loaded.package.id, status: 'enabled', free: true }
 }
 
 async function teamDataPackageDataForWorkspace(event, identity) {
   const loaded = await teamDataPackageForWorkspace(event, identity)
   if (!loaded.package || loaded.package.status !== 'enabled') throw new Error('该赛事组别的球队数据包尚未开通')
   const teamId = loaded.team.id, tournamentId = loaded.tournament.id, divisionId = loaded.division.id
-  const allMatches = await safeGet('matches', { tournamentId }, 500)
-  let matches = allMatches.filter(item => [String(item.homeTeamId || ''), String(item.awayTeamId || '')].indexOf(teamId) >= 0 && snapshotMatchesDivision(item, divisionId, loaded.allowLegacyMatchDivision))
-  const legacyEvents = matches.length ? await safeGet('match_events', { matchId: _.in(matches.map(item => String(item._id || '')).filter(Boolean)) }, 1000) : []
-  const legacyByMatch = {}
-  legacyEvents.forEach(event => { const id = String(event.matchId || ''); if (id) (legacyByMatch[id] ||= []).push(event) })
-  matches = matches.map(match => ({ ...match, events: [...(Array.isArray(match.events) ? match.events : []), ...(legacyByMatch[String(match._id || '')] || [])] }))
-  const players = await safeGetTeamPlayers(teamId, 500)
-  const stats = {}
-  const playerIdByName = {}
-  players.forEach(item => {
-    const id = String(item._id)
-    stats[id] = { id, name: String(item.name || ''), photoUrl: String(item.photoUrl || item.photo || ''), goals: 0, assists: 0, appearances: 0 }
-    if (item.name) playerIdByName[String(item.name).trim()] = id
-  })
-  matches.forEach(match => {
-    const appeared = new Set()
-    ;(Array.isArray(match.events) ? match.events : []).forEach(eventItem => {
-      const eventTeam = String(eventItem.teamId || eventItem.team || (eventItem.teamSide === 'away' ? match.awayTeamId : match.homeTeamId) || '')
-      const playerId = String(eventItem.playerId || playerIdByName[String(eventItem.playerName || '').trim()] || '')
-      const assistId = String(eventItem.assistPlayerId || eventItem.assistId || playerIdByName[String(eventItem.assistName || eventItem.assist || '').trim()] || '')
-      if (eventTeam && eventTeam !== teamId) return
-      if (stats[playerId]) {
-        appeared.add(playerId)
-        if (['goal', 'score', 'penalty', 'penalty_scored'].indexOf(String(eventItem.type || '').toLowerCase()) >= 0) stats[playerId].goals += 1
-      }
-      if (stats[assistId]) { appeared.add(assistId); if (String(eventItem.type || '') === 'assist' || String(eventItem.type || '') === 'goal') stats[assistId].assists += 1 }
-    })
-    appeared.forEach(id => { stats[id].appearances += 1 })
-  })
-  const playerStats = Object.keys(stats).map(id => stats[id]).sort((a,b) => b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name, 'zh-CN'))
-  const summary = { matchCount: matches.length, goals: playerStats.reduce((sum,item) => sum + item.goals, 0), assists: playerStats.reduce((sum,item) => sum + item.assists, 0), appearancePlayers: playerStats.filter(item => item.appearances > 0).length }
+  const matches = (await readDataRows(db,'matches',{ tournamentId })).filter(item => [String(item.homeTeamId || ''),String(item.awayTeamId || '')].includes(teamId) && snapshotMatchesDivision(item,divisionId,loaded.allowLegacyMatchDivision))
+  const dataCenter = await createDataService(db).query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, tournamentId, ...(loaded.allowLegacyMatchDivision ? {} : { divisionId }) })
+  const playerStats = dataCenter.players.map(row => ({ id:row.playerId, name:row.playerName, ...row.metrics, coverage:row.coverage, observed:row.observed }))
+  const summary = { matchCount:dataCenter.summary.matchCount, goals:dataCenter.teams.every(row => row.goalsFor !== null) ? dataCenter.teams.reduce((sum,row) => sum + row.goalsFor,0) : null, assists:playerStats.every(row => row.assists !== null) ? playerStats.reduce((sum,row) => sum + row.assists,0) : null, appearancePlayers:playerStats.filter(row => row.observed.appearances > 0).length }
   const recent = matches.sort((a,b)=>toTime(b.matchTime || b.matchDate)-toTime(a.matchTime || a.matchDate))[0]
-  return { success: true, tournament: loaded.tournament, team: loaded.team, division: loaded.division, summary, players: playerStats, recentMatch: recent ? { id: String(recent._id), homeTeamName: String(recent.homeTeamName || '主队'), awayTeamName: String(recent.awayTeamName || '客队'), homeScore: String(firstValue(recent.homeScore, recent.scoreHome, 0)), awayScore: String(firstValue(recent.awayScore, recent.scoreAway, 0)), status: String(recent.status || ''), timeText: dateText(firstValue(recent.matchTime, recent.matchDate, recent.startTime)) } : null, canManage: loaded.canManage }
+  return { success: true, tournament: loaded.tournament, team: loaded.team, division: loaded.division, summary, dataCenter, players: playerStats, recentMatch: recent ? { id: String(recent._id), homeTeamName: String(recent.homeTeamName || '主队'), awayTeamName: String(recent.awayTeamName || '客队'), homeScore: String(firstValue(recent.homeScore, recent.scoreHome, 0)), awayScore: String(firstValue(recent.awayScore, recent.scoreAway, 0)), status: String(recent.status || ''), timeText: dateText(firstValue(recent.matchTime, recent.matchDate, recent.startTime)) } : null, canManage: loaded.canManage }
 }
 
 async function requestTeamDataExportForWorkspace(event, identity) {
@@ -3013,22 +3005,15 @@ async function teamHistoryForWorkspace(event, identity) {
     const isExited = ['withdrawn', 'exited', 'cancelled'].indexOf(registrationStatus) >= 0
     const isArchived = archivedStatuses.indexOf(registrationStatus) >= 0 || archivedStatuses.indexOf(tournamentStatus) >= 0
     if (!isArchived) return null
-    const matches = await safeGet('matches', { tournamentId }, 200)
-    const teamMatches = matches.filter(row => [String(row.homeTeamId || ''), String(row.awayTeamId || '')].indexOf(teamId) >= 0 && snapshotMatchesDivision(row, divisionId, allowLegacySnapshot) && ['completed', 'finished', 'archived'].indexOf(String(row.status || '').toLowerCase()) >= 0)
-    let wins = 0, draws = 0, losses = 0
-    teamMatches.forEach(row => {
-      const isHome = String(row.homeTeamId || '') === teamId
-      const own = Number(isHome ? firstValue(row.homeScore, row.scoreHome, 0) : firstValue(row.awayScore, row.scoreAway, 0))
-      const opponent = Number(isHome ? firstValue(row.awayScore, row.scoreAway, 0) : firstValue(row.homeScore, row.scoreHome, 0))
-      if (own > opponent) wins += 1
-      else if (own < opponent) losses += 1
-      else draws += 1
-    })
+    const dataCenter = await createDataService(db).query({ platformOwner:false, teamIds:[teamId], tournamentIds:[] }, { teamId, tournamentId, ...(allowLegacySnapshot ? {} : { divisionId }) })
+    const totals = dataCenter.teams
+    const sum = field => totals.every(row => row[field] !== null) ? totals.reduce((value,row) => value + row[field],0) : null
+    const matchCount = dataCenter.summary.matchCount, wins = sum('wins'), draws = sum('draws'), losses = sum('losses')
     const rank = String(firstValue(item.finalRank, item.rank, item.placement, ''))
     const start = firstValue(tournament.startDate, tournament.startTime, item.startDate)
     const end = firstValue(tournament.endDate, item.endDate)
     return {
-      id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '已归档赛事'), divisionName: String(item.divisionName || tournament.divisionName || '竞赛组别待定'), dateText: dateText(start) + (end ? '—' + dateText(end) : ''), resultText: isExited ? '已退出' : (rank || '已归档'), resultClass: isExited ? 'withdrawn' : 'ranked', recordText: teamMatches.length + '场 ' + wins + '胜 ' + draws + '平 ' + losses + '负', archiveStatusText: isExited ? '退出记录' : '已归档'
+      id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '已归档赛事'), divisionName: String(item.divisionName || tournament.divisionName || '竞赛组别待定'), dateText: dateText(start) + (end ? '—' + dateText(end) : ''), resultText: isExited ? '已退出' : (rank || '已归档'), resultClass: isExited ? 'withdrawn' : 'ranked', recordText: matchCount + '场 ' + (wins ?? '—') + '胜 ' + (draws ?? '—') + '平 ' + (losses ?? '—') + '负', archiveStatusText: isExited ? '退出记录' : '已归档'
     }
   }))
   const history = items.filter(Boolean).sort((a, b) => String(b.dateText).localeCompare(String(a.dateText)))
@@ -3154,6 +3139,8 @@ exports.main = async function(event) {
     if (event.action === 'markMessageRead') return await markMessagesRead(event, identity)
     if (event.action === 'dismissWorkspaceTask') return await dismissWorkspaceTask(event, identity)
     if (event.action === 'setHomeIdentity') return await saveHomeIdentity(event, identity)
+    if (event.action === 'tournamentData') return await tournamentDataForWorkspace(event,identity)
+    if (event.action === 'dataCenter') return await dataCenterForWorkspace(event, identity)
     if (event.action === 'teamPlayers') return await loadTeamPlayersForWorkspace(event, identity)
     if (event.action === 'importedPlayerDrafts') return await importedPlayerDraftsForWorkspace(event, identity)
     if (event.action === 'reviewImportedPlayerDrafts') return await reviewImportedPlayerDraftsForWorkspace(event, identity)
