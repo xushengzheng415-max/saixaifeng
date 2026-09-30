@@ -121,7 +121,14 @@ async function generate() {
   if (!token) return ElMessage.warning('请先登录主办方 PC 后台')
   generating.value = true
   try {
-    const response = await fetch(generateUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ authToken: token, tournamentId, matchId: form.matchId, date: form.date, kind: form.kind, note: form.note, includeStandings: form.kind === 'daily' && form.includeStandings, suspensionNote: form.suspensionNote }) })
+    const requestBody = JSON.stringify({ authToken: token, tournamentId, matchId: form.matchId, date: form.date, kind: form.kind, note: form.note, includeStandings: form.kind === 'daily' && form.includeStandings, suspensionNote: form.suspensionNote })
+    let response
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      response = await fetch(generateUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: requestBody })
+      if (response.status !== 429 || attempt === 1) break
+      await new Promise(resolve => setTimeout(resolve, 800))
+    }
+    if (response.status === 429) throw new Error('服务繁忙，请稍后再生成')
     const result = await response.json()
     if (!result?.success) throw new Error(result?.message || '生成失败')
     const snapshot = result.standingsSnapshot?.tables?.length ? createStandingsNewsSnapshot(result.standingsSnapshot.tables, tournamentName.value, form.date) : ''

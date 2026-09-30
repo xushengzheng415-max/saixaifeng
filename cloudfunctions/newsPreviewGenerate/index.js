@@ -6,6 +6,23 @@ const db = cloud.database()
 const command = db.command
 const text = value => String(value == null ? '' : value).trim()
 const hash = value => crypto.createHash('sha256').update(text(value)).digest('hex')
+const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+
+async function with429Retry(operation) {
+  for (let attempt = 0; ; attempt += 1) {
+    try { return await operation() }
+    catch (error) {
+      const statusValue = error && (error.statusCode || error.status || error.response && error.response.status)
+      const status = Number(statusValue || (/status code 429/i.test(text(error && error.message)) ? 429 : 0))
+      if (status !== 429 || attempt >= 2) {
+        if (status === 429) throw new Error('服务繁忙，请稍后再生成')
+        throw error
+      }
+      const retryAfter = Number(error && error.response && error.response.headers && error.response.headers['retry-after'])
+      await delay(retryAfter > 0 ? Math.min(retryAfter * 1000, 3000) : 700 * (attempt + 1))
+    }
+  }
+}
 
 function response(statusCode, data, origin) {
   return { statusCode, headers: {
@@ -179,8 +196,16 @@ function buildDailyArticle(tournamentName, date, dayRows, fixtures, includeStand
 
 async function currentStandingsForDay(tournamentId, rows, date, authToken) {
   if (rows.some(item => text(item.matchDate || item.date).slice(0, 10) > date && official(item))) throw new Error('该比赛日之后已有正式赛果，不能使用当前积分榜作历史快照')
-  const called = await cloud.callFunction({ name: 'resultCenter', data: { action: 'dashboard', tournamentId, __authToken: authToken } })
-  const dashboard = called && (called.result || called)
+  const dashboard = await with429Retry(async () => {
+    const called = await cloud.callFunction({ name: 'resultCenter', data: { action: 'dashboard', tournamentId, __authToken: authToken } })
+    const value = called && (called.result || called)
+    if (value && !value.success && /429|请求频繁|繁忙/.test(text(value.message))) {
+      const error = new Error(text(value.message) || 'Request failed with status code 429')
+      error.statusCode = 429
+      throw error
+    }
+    return value
+  })
   if (!dashboard || !dashboard.success) throw new Error(dashboard && dashboard.message || '正式积分榜读取失败，请重试')
   const tables = (Array.isArray(dashboard.standings) ? dashboard.standings : []).filter(group => Number(group.officialMatchCount) > 0 && Array.isArray(group.officialTeams) && group.officialTeams.length)
     .map(group => ({ divisionName: text(group.divisionName), groupName: text(group.groupName), officialMatchCount: Number(group.officialMatchCount), officialTeams: group.officialTeams.map(team => ({ rank: Number(team.rank || 0), teamName: text(team.teamName), played: Number(team.played || 0), win: Number(team.win || 0), draw: Number(team.draw || 0), loss: Number(team.loss || 0), goalDifference: Number(team.goalDifference || 0), points: Number(team.points || 0) })) }))
@@ -220,7 +245,7 @@ async function generate(input) {
   facts.goalTimelineComplete = goals.length === Number(match.homeScore) + Number(match.awayScore)
   facts.nextFixtures = await nextFixturesForMatch(match, tournamentId)
   const prompt = `你是地方足球赛事的战报记者，为读者写一篇可直接阅读的赛后报道，不写数据清单或公文。只返回 JSON：{"title":"...","summary":"...","analysis":"...","outlook":"..."}。三个字段分别对应页面的“本场比赛综述”“比赛形势分析”“下场比赛预告与观点预测”，不要在字段内容中重复小标题。\n写法：标题抓住本场最值得说的一个事实（如进球人物或比分转折），避免把赛事全称、日期、比分和两队名称机械串成一行。综述第一句交代结果，接着按进球时间顺序选关键节点讲清比赛如何走到终场；用自然段落和准确的比分变化，不逐个罗列全部进球。形势分析只从已记录的比分变化和进球人物谈看点，不把比分优势说成控球或场面压制，也不重复综述。下场观点只谈值得观察的本场事实，给出有条件的判断；赛程文字由系统另行加入，outlook 不要复述日期、对手和场地。\n事实边界：goalTimeline 已按分钟排序，scoreAfter 是每球后的比分；goalTimelineComplete=false 表示进球记录不全，不得据此还原整场进球顺序。没有现场看点就不要描写射门方式、传球、战术、攻防场面、观众、采访或天气，也不要用“火力全开”“一边倒”“止颓”“方能”“值得期待”等套话。不要预测具体比分、胜率或必胜。事实少时写短些，不凑字数。\n已核实比赛事实：${JSON.stringify(facts)}\n主办方核实的现场看点：${note || '未提供'}`
-  const output = await cloud.ai().createModel('hunyuan-v3').generateText({ model: 'hy3', messages: [{ role: 'user', content: prompt }] })
+  const output = await with429Retry(() => cloud.ai().createModel('hunyuan-v3').generateText({ model: 'hy3', messages: [{ role: 'user', content: prompt }] }))
   const article = parseGenerated(output.text, facts.nextFixtures, kind)
   const usage = output.usage || null
   await db.collection('registration_audit_logs').add({ data: { sport: 'football', action: 'news_preview_generated', tournamentId, matchId, actorUserId: text(user._id), actorOrgId: orgId, result: 'success', detail: { kind, model: 'hy3', provider: 'hunyuan-v3', usage }, createTime: db.serverDate() } }).catch(error => console.warn('新闻预览用量记录失败', error.message))
@@ -236,4 +261,4 @@ exports.main = async event => {
   catch (error) { console.error('newsPreviewGenerate failed', error); return response(200, { success: false, message: error.message || '生成新闻失败' }, cors) }
 }
 
-exports.__test = { official, parseGenerated, verifiedGoalEvents, goalTimeline, officialDayRows, nextRoundFixtures, buildDailyArticle, currentStandingsForDay, nextFixturesFromRows, startKey }
+exports.__test = { official, parseGenerated, verifiedGoalEvents, goalTimeline, officialDayRows, nextRoundFixtures, buildDailyArticle, currentStandingsForDay, with429Retry, nextFixturesFromRows, startKey }
