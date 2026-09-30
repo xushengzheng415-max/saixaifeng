@@ -18,7 +18,7 @@ PC：`callFunction('dataCenter', { action, scope })`，经 webLoginApi 验证会
 
 H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事。只统计 `schedulePublished` 或 `published` 的比赛，返回正式结果和公开姓名；不读取私有档案字段，不返回成员关系。
 
-支持范围字段：`teamId, playerId, tournamentId, divisionId, sportType, mode, from, to`。
+支持范围字段：`teamId, playerId, tournamentId, divisionId, matchId, sportType, mode, from, to`。`matchId` 精确限定一场比赛，不能用赛事范围替代本场榜单。
 
 - `sportType` 当前只能为 football。
 - `mode:official`：审核通过的有效结果，以及符合现行规则的主办方赛后补录。已退回、冲突、取消、未开赛不计入。
@@ -26,6 +26,7 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 - `from` 包含开始时刻，`to` 不包含结束时刻；统一 ISO 时间格式。
 
 响应包含 `schemaVersion, metricVersion, dataVersion, generatedAt, scope, accessScope, coverage, summary, teams, players, issues`；球员查询另含 `playerTotal` 和授权范围内的 `memberships`。
+比赛详情的公开适配入口为 `webLoginApi.publicMatchRankings`，接收 `tournamentId, matchId`，先验证该比赛在既有赛事中心公开接口中可见，再调用同一统计引擎。其 `data` 包含单场 `scope, rankings, metrics, coverage, metricVersion, dataVersion`；不返回私有档案，不以其他比赛补齐本场数据。
 
 `accessScope` 为 platform、authorized 或 published。普通组织查询的“球员历史”是当前授权范围内的历史，不能声称覆盖尚未获得访问授权的全部赛事。
 
@@ -34,8 +35,10 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 可执行指标字典：`cloudfunctions/dataCenter/shared/statistics.mjs` 的 METRICS。当前版本 `football-metrics/1`。
 
 球员行按球员、当时球队、赛事、组别形成；`metrics` 是可确认值，`observed` 是已有记录中的数值，`coverage` 描述每项指标是否完整。覆盖不足时 metrics 为 null，页面显示“—”，不能把 observed 当完整累计。
+完整度按指标分别判断：缺失换人身份影响出场和时间，不把已确认的进球、红黄牌一起清空。
 
 - 首发：在正式首发阵容中的不同比赛 ID。
+- 球员卡积分：统一按 [球员卡积分与等级规则 v1](PLAYER_CARD_POINTS.md) 使用完整职业生涯的出场、首发、出场分钟和有效进球；积分与等级是派生结果，不能由客户端或人工档案字段直接写成统计真值。当前统计模块尚未提供 `starts`，因此新积分不能冒充已上线指标。
 - 出场：实际出场的不同比赛 ID；替补未上场不算出场。
 - 进球：有效进球与已进点球；乌龙球、点球大战排除。
 - 助攻：同一进球同一助攻者只计一次。
@@ -43,7 +46,7 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 - 时间：裁判计时优先；已完赛且有明确比赛/组别规则时可按规则时长计算。仍需要完整首发与上下场依据；缺少依据为未知。规则时长不等于裁判实测，应在字段来源中注明。
 - 球队进失球、胜平负：正式比分记录；比分缺失为未知。常规比分平局与点球决胜需通过赛事规则解释，不能用跨赛事的积分相加生成平台排名。
 
-嵌入与外部事件按 eventId 和 revision 合并；外部相同版本优先，撤销标记生效。无 ID 的旧记录不按姓名生成永久身份；无法确定身份时进入质量队列。空事件数组仅在现有记录明确提供时作为已记录集合，只有外部事件但没有完整采集声明时标记为部分记录。
+嵌入与外部事件按 eventId 和 revision 合并；外部相同版本优先，撤销标记生效。无 ID 的旧记录不按姓名生成永久身份；仅可用本场当时球队阵容中的唯一姓名与号码组合关联已经存在的 ID，歧义不关联。无法确定身份时进入质量队列。空事件数组仅在现有记录明确提供时作为已记录集合，只有外部事件但没有完整采集声明时标记为部分记录。
 
 ## 更新、读取与权限
 
