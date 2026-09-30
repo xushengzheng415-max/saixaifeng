@@ -114,27 +114,27 @@
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
           <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
-          <el-table :data="isTeamDataWorkspace ? tournamentPlayerRows : players" :fit="!isTeamDataWorkspace" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard">
+          <el-table :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="!isTeamDataWorkspace" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort">
             <el-table-column label="头像" :width="isTeamDataWorkspace ? 56 : 72" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
-            <el-table-column prop="name" label="姓名" :width="isTeamDataWorkspace ? 100 : undefined" min-width="110" show-overflow-tooltip />
-            <el-table-column label="球衣名" :width="isTeamDataWorkspace ? 140 : undefined" min-width="125" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
-            <el-table-column label="身份" :width="isTeamDataWorkspace ? 110 : 120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
+            <el-table-column prop="name" label="姓名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 100 : undefined" min-width="110" show-overflow-tooltip />
+            <el-table-column prop="jerseyName" label="球衣名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 125 : undefined" min-width="125" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column prop="identityLabel" label="身份" :sortable="isTeamDataWorkspace ? 'custom' : false" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="isSyntheticTeam" prop="playerId" label="球员编号" min-width="150" />
-            <el-table-column label="球衣号码" :width="isTeamDataWorkspace ? 80 : 90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
-            <el-table-column label="位置" :width="isTeamDataWorkspace ? 60 : 100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
+            <el-table-column prop="jerseyNumber" label="球衣号码" :sortable="isTeamDataWorkspace ? 'custom' : false" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
+            <el-table-column prop="position" label="位置" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 68 : 100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
-            <el-table-column label="年龄" :width="isTeamDataWorkspace ? 55 : 80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
+            <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
             <template v-if="isTeamDataWorkspace">
-              <el-table-column label="出场场次" width="80" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
-              <el-table-column label="出场时间" width="100" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
-              <el-table-column label="进球" width="55" align="center"><template #default="{ row }">{{ statValue(row, 'goals') }}</template></el-table-column>
-              <el-table-column label="黄牌" width="55" align="center"><template #default="{ row }">{{ statValue(row, 'yellowCards') }}</template></el-table-column>
-              <el-table-column label="红牌" width="55" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
+              <el-table-column prop="appearances" label="出场场次" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="90" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
+              <el-table-column prop="minutes" label="出场时间" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="105" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
+              <el-table-column prop="goals" label="进球" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'goals') }}</template></el-table-column>
+              <el-table-column prop="yellowCards" label="黄牌" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'yellowCards') }}</template></el-table-column>
+              <el-table-column prop="redCards" label="红牌" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
               <el-table-column label="操作" width="65" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
             </template>
             <el-table-column v-else label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
@@ -1269,6 +1269,7 @@ import { generateJerseyName } from '../../utils/jerseyName.js'
 import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
 import { actualStaffRecords } from '../../utils/staffRecords.js'
 import { withLinkedStaffPhotos } from '../../utils/rosterPosterData.js'
+import { sortPlayerTableRows } from '../../utils/teamPlayerTableSort.js'
 import RosterPosterModal from '../../components/team/RosterPosterModal.vue'
 import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
@@ -1419,6 +1420,27 @@ const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(withLinke
 function statValue(row, key) {
   if (playerStatsError.value || playerStatsLoading.value || (key === 'minutes' && row.minutesIncomplete) || (key === 'appearances' && row.appearanceIncomplete) || (key === 'goals' && row.goalsIncomplete) || (['yellowCards', 'redCards'].includes(key) && row.cardsIncomplete)) return '—'
   return row[key] ?? 0
+}
+const tournamentPlayerSort = ref({ prop: '', order: '' })
+function tournamentPlayerSortValue(row, prop) {
+  if (prop === 'name') return String(row.name || '').trim() || null
+  if (prop === 'jerseyName') return displayJerseyName(row).replace(/^—$/, '') || null
+  if (prop === 'identityLabel') return playerIdentityLabel(row)
+  if (prop === 'position') return getPositionLabel(row.position).replace(/^[-—]$/, '') || null
+  if (prop === 'age') { const age = calculateAge(row.birthDate); return typeof age === 'number' ? age : null }
+  if (prop === 'jerseyNumber') {
+    const raw = String(row.jerseyNumber ?? '').trim()
+    return raw && raw !== '0' && Number.isFinite(Number(raw)) ? Number(raw) : null
+  }
+  if (['appearances', 'minutes', 'goals', 'yellowCards', 'redCards'].includes(prop)) {
+    const value = statValue(row, prop)
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+  return null
+}
+const sortedTournamentPlayerRows = computed(() => sortPlayerTableRows(tournamentPlayerRows.value, tournamentPlayerSort.value.prop, tournamentPlayerSort.value.order, tournamentPlayerSortValue))
+function onTournamentPlayerSort({ prop, order }) {
+  if (isTeamDataWorkspace.value) tournamentPlayerSort.value = { prop: prop || '', order: order || '' }
 }
 async function readAllRows(collection, where) {
   const rows = []
