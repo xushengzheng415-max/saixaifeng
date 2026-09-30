@@ -32,8 +32,8 @@
         <el-select v-else v-model="form.matchId" placeholder="选择比赛" :disabled="loadingMatches" @change="onMatchChange">
           <el-option v-for="match in approvedMatches" :key="match.id" :value="match.id" :label="matchLabel(match)" />
         </el-select>
-        <label>比赛图片</label>
-        <div class="photos"><img v-for="photo in form.photos" :key="photo" :src="photo" alt="赛事照片"><label class="photo-select">选择照片<input type="file" accept="image/*" multiple @change="selectPhotos"></label></div>
+        <template v-if="form.kind === 'match'"><label>比赛图片 · 最多3张</label>
+        <div class="photos"><img v-for="photo in form.photos" :key="photo" :src="photo" alt="比赛现场照片"><label class="photo-select">选择照片<input type="file" accept="image/*" multiple @change="selectPhotos"></label></div></template>
         <img v-if="!form.photos.length && coverUrl" class="cover-preview" :src="coverUrl" alt="自动生成的比赛战报封面">
         <template v-if="form.kind === 'daily'">
           <label>积分榜快照</label>
@@ -52,7 +52,7 @@
       </div>
     </el-drawer>
     <el-dialog v-model="previewOpen" :title="form.title || '新闻预览'" width="min(660px,94vw)">
-      <article class="article-preview"><img v-if="form.photos[0] || coverUrl" :src="form.photos[0] || coverUrl" alt="新闻封面"><NewsDailyContent v-if="form.kind === 'daily'" :results="form.dayResults" :fixtures="form.nextFixtures" :standings-image="standingsSnapshotUrl" :suspension-note="form.suspensionNote" /><p v-else>{{ form.body }}</p><img v-for="photo in form.photos.slice(1)" :key="photo" :src="photo" alt="赛事照片"></article>
+      <article class="article-preview"><img v-if="!form.photos.length && coverUrl" :src="coverUrl" alt="新闻封面"><NewsDailyContent v-if="form.kind === 'daily'" :results="form.dayResults" :fixtures="form.nextFixtures" :standings-image="standingsSnapshotUrl" :suspension-note="form.suspensionNote" /><template v-else><template v-for="(block,index) in previewBlocks" :key="index"><p v-if="block.text">{{ block.text }}</p><img v-for="(photo,photoIndex) in block.photos" :key="`${index}-${photoIndex}`" :src="photo" alt="比赛现场照片"></template></template></article>
       <template #footer><el-button @click="previewOpen=false">关闭</el-button></template>
     </el-dialog>
   </main>
@@ -82,6 +82,17 @@ const approvedDates = computed(() => [...new Set(approvedMatches.value.map(item 
 const dayMatches = date => approvedMatches.value.filter(item => item.matchDate === date)
 const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] })
 const selectedMatch = computed(() => matches.value.find(item => item.id === form.matchId) || null)
+const previewBlocks = computed(() => {
+  let paragraphs = String(form.body || '').split(/\n\s*\n/).map(item => item.trim()).filter(Boolean)
+  if (paragraphs.length === 1 && form.photos.length > 1) paragraphs = paragraphs[0].match(/[^。！？]+[。！？]?/g)?.map(item => item.trim()).filter(Boolean) || paragraphs
+  if (!paragraphs.length) return []
+  const slots = paragraphs.map(() => [])
+  form.photos.forEach((photo, index) => {
+    const target = Math.min(paragraphs.length - 1, Math.floor(((index + 1) * paragraphs.length) / (form.photos.length + 1)))
+    slots[target].push(photo)
+  })
+  return paragraphs.map((text, index) => ({ text, photos: slots[index] }))
+})
 const kindLabel = kind => ({ match: '单场新闻', daily: '每日新闻' })[kind] || '新闻'
 const statusLabel = status => ({ published: '模拟发布', draft: '草稿', update: '待更新' })[status] || '草稿'
 const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
@@ -106,14 +117,15 @@ function onStandingsChange() { clearGenerated(); updateCover() }
 function onMatchChange() { clearGenerated(); updateCover() }
 function onDateChange() { clearGenerated(); updateCover() }
 function onKindChange() {
-  form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; clearGenerated(); updateCover()
+  form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; form.photos = []; clearGenerated(); updateCover()
 }
 function openNew() { reset(); editorOpen.value = true }
-function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photo ? [item.photo] : [] }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
+function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []) }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
 function selectPhotos(event) {
-  const files = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/')).slice(0, 6)
+  const selected = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/'))
   event.target.value = ''
-  if (files.length) form.photos = files.map(file => URL.createObjectURL(file))
+  if (selected.length > 3) ElMessage.warning('最多选择3张，已保留前3张')
+  form.photos = selected.slice(0, 3).map(file => URL.createObjectURL(file))
 }
 async function generate() {
   if (!(form.kind === 'daily' ? form.date : form.matchId)) return
@@ -141,13 +153,13 @@ async function generate() {
 function showPreview() { if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文'); previewOpen.value = true }
 function saveLocal() {
   if (!form.title.trim()) return ElMessage.warning('请填写标题')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'draft', detail: '仅当前页面 · 未保存到云端', photo: form.photos[0] || '', cover: coverUrl.value }
+  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'draft', detail: '仅当前页面 · 未保存到云端', photo: form.photos[0] || '', photos: form.photos, cover: coverUrl.value }
   articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
   editing.value = row.id; editorOpen.value = false; ElMessage.success('已在当前页面保存草稿')
 }
 function publishLocal() {
   if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'published', detail: '仅当前页面 · 未发布到 H5', photo: form.photos[0] || '', cover: coverUrl.value }
+  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'published', detail: '仅当前页面 · 未发布到 H5', photo: form.photos[0] || '', photos: form.photos, cover: coverUrl.value }
   articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
   editing.value = row.id; editorOpen.value = false; ElMessage.success('已模拟发布，未写入公开新闻')
 }
