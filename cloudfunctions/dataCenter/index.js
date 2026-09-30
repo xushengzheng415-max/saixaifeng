@@ -23,6 +23,11 @@ exports.main = async (event = {}) => {
       return { success:true, items }
     }
     if (event.action === 'catalog') return await service.catalog(actor)
+    if (event.action === 'playerCard') {
+      const playerId = String(event.playerId || '')
+      await service.query(actor, { playerId, mode:'official' })
+      return { success:true, playerCard:await service.playerCardForAuthorizedPlayer(playerId) }
+    }
     if (['query','quality','playerCareer','teamHistory','tournamentStatistics','platformStatistics'].includes(event.action)) {
       if (event.action === 'platformStatistics' && !actor.platformOwner) throw error('DATA_FORBIDDEN','仅平台负责人可查看全平台统计')
       return await service.query(actor,event.scope || event)

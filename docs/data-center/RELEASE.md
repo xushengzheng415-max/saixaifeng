@@ -1,5 +1,7 @@
 # 数据中心上线与验收
 
+2026-09-30 本轮实施状态：积分 v1 的三端显示和服务端权益门禁已在 `codex/player-card-points-implementation` 分支实现，`test-data-center`、`test-player-card-entitlement`、语法检查和 PC 构建通过。PC 使用 `dataCenter.playerCard`，小程序球员详情在原球队授权后取完整生涯卡级，C 端 H5 使用 `list/get/saveMyPlayerCard` 的共享服务积分并在保存时重查 100 分权益。本轮代码尚未部署与真实账号回读；旧卡保级快照及预生成图片的可信校验仍是发布门槛。下方部署回读均为上一阶段，不能据此宣称三端已上线。
+
 球员卡积分与来源过滤尚未完成正式站点和各端切换。2026-09-30 已部署新的 `dataCenter`、`webLoginApi` 外置统计模块，以及 `getMiniWorkspace`、`resultCenter` 的来源过滤入口；PC、H5 和小程序页面仍须逐项验收，不能把服务端局部切换称为全端上线。
 
 球员卡积分 v1 的规则已登记于 [PLAYER_CARD_POINTS.md](PLAYER_CARD_POINTS.md)。截至 2026-09-30，正式环境及既有球员卡页面仍使用场次分级；完成服务端门禁、旧卡迁移和三端消费后，需单独完成预览与正式回读，不能把规则同步称作积分系统上线。

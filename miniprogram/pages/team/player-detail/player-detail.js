@@ -16,6 +16,7 @@ Page({
     player: {},
     teamInfo: {},
     stats: { appearances: '—', goals: '—', yellowCards: '—', redCards: '—' },
+    cardScore: { level:'待核定', points:'—', progress:'生涯积分待核定', canCustomize:false },
     statisticsNote: '',
     detailItems: [],
     canManage: false,
@@ -57,13 +58,13 @@ Page({
     }).then(function(response) {
       var result = response.result || {}
       if (!result.success) throw new Error(result.message || '球员详情加载失败')
-      that.hydrate(result.player || {}, result.team || {}, result.stats || {}, result.canManage === true, result.dataCenter)
+      that.hydrate(result.player || {}, result.team || {}, result.stats || {}, result.canManage === true, result.dataCenter, result.playerCard)
     }).catch(function(error) {
       that.setData({ loading: false, errorText: error.message || '球员详情加载失败' })
     })
   },
 
-  hydrate: function(raw, team, stats, canManage, dataCenter) {
+  hydrate: function(raw, team, stats, canManage, dataCenter, playerCard) {
     var positionMap = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
     var genderMap = { male: '男', female: '女', '男': '男', '女': '女' }
     var footMap = { left: '左脚', right: '右脚', both: '双脚' }
@@ -111,7 +112,9 @@ Page({
       { id: 'identity', label: '人证核验', value: player.identityStatusText },
       { id: 'portrait', label: '标准形象照', value: player.portraitStatusText }
     ]
-    this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
+    var ready = playerCard && playerCard.status === 'ready'
+    var cardScore = { level:ready ? ({bronze:'铜卡', silver:'银卡', gold:'金卡'}[playerCard.tier] || '待核定') : '待核定', points:ready ? String(playerCard.points) : '—', progress:ready ? (playerCard.nextAt == null ? '已达金卡' : '距下一级 ' + playerCard.pointsToNext + ' 分') : '生涯积分待核定', canCustomize:ready && playerCard.canChangeBackground === true }
+    this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, cardScore:cardScore, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
     wx.setNavigationBarTitle({ title: player.name || '球员详情' })
   },
 

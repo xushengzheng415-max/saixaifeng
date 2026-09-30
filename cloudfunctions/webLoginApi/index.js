@@ -14,6 +14,7 @@ const cloud = require('wx-server-sdk')
 const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
+const { createPlayerCards } = require('./playerCards.cjs')
 
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 
@@ -5379,6 +5380,11 @@ exports.main = async (event, context) => {
       }
       case 'publicDataCenter':
         result = await require('./publicDataCenter.cjs')(cloud.database(), params)
+        break
+      case 'listMyPlayerCards':
+      case 'getMyPlayerCard':
+      case 'saveMyPlayerCard':
+        result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
       case 'publicTournamentCenter':
         result = await getPublicTournamentCenter()

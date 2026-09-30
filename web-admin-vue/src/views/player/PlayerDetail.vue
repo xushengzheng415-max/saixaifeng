@@ -47,6 +47,7 @@
             <div class="card-section">
               <PlayerCard 
                 :player="playerData" 
+                :player-card="playerCard"
                 :team-logo="teamData.logo || teamData.logoUrl"
               />
             </div>
@@ -122,10 +123,10 @@
                 <h4 class="section-title">卡片等级</h4>
                 <div class="level-progress">
                   <div class="level-info">
-                    <span class="current-level">当前: {{ currentLevelText }}</span>
-                    <span v-if="nextLevelText" class="next-level">下一级: {{ nextLevelText }}</span>
+                    <span class="current-level">{{ currentLevelText }} · {{ cardPointsText }} 分</span>
+                    <span v-if="nextLevelText" class="next-level">下一级：{{ nextLevelText }}</span>
                   </div>
-                  <el-progress 
+                  <el-progress v-if="playerCard.status === 'ready' && nextLevelText"
                     :percentage="levelProgress" 
                     :color="levelColor"
                     :stroke-width="12"
@@ -222,6 +223,7 @@
       <div class="preview-container">
         <PlayerCard 
           :player="playerData" 
+          :player-card="playerCard"
           :team-logo="teamData.logo || teamData.logoUrl"
         />
       </div>
@@ -247,6 +249,7 @@ const saving = ref(false)
 const playerData = ref({})
 const teamData = ref({})
 const statistics = ref({})
+const playerCard = ref({ status:'unverified', points:null, tier:null })
 const statisticsMessage = ref('')
 function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 const playerAvatarUrl = ref('')
@@ -313,52 +316,33 @@ const jerseyName = computed(() => {
 
 // 当前等级文本
 const currentLevelText = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) return '金卡'
-  if (appearances >= 10) return '银卡'
-  return '铜卡'
+  return playerCard.value.status === 'ready' ? ({ bronze:'铜卡', silver:'银卡', gold:'金卡' }[playerCard.value.tier] || '待核定') : '待核定'
 })
 
 // 下一级文本
 const nextLevelText = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances < 10) return '银卡'
-  if (appearances < 20) return '金卡'
-  return ''
+  return playerCard.value.status === 'ready' ? ({ bronze:'银卡', silver:'金卡' }[playerCard.value.tier] || '') : ''
 })
+const cardPointsText = computed(() => playerCard.value.status === 'ready' ? playerCard.value.points : '—')
 
 // 等级进度百分比
 const levelProgress = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) return 100
-  if (appearances >= 10) {
-    // 银卡阶段：10-20场
-    return ((appearances - 10) / 10) * 100
-  }
-  // 铜卡阶段：0-10场
-  return (appearances / 10) * 100
+  const score = playerCard.value
+  if (score.status !== 'ready' || score.nextAt == null) return 100
+  const start = score.tier === 'silver' ? 45 : 0
+  return Math.max(0, Math.min(100, Math.round((score.points - start) * 100 / (score.nextAt - start))))
 })
 
 // 进度条颜色
 const levelColor = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) return '#FFD700'
-  if (appearances >= 10) return '#C0C0C0'
-  return '#CD7F32'
+  return ({ gold:'#D2A748', silver:'#8D99A4', bronze:'#A76C45' })[playerCard.value.tier] || '#8D99A4'
 })
 
 // 进度提示
 const progressHint = computed(() => {
-  const appearances = playerData.value.appearances || 0
-  if (appearances >= 20) {
-    return '恭喜！已达到最高等级金卡'
-  }
-  if (appearances >= 10) {
-    const need = 20 - appearances
-    return `再参赛 ${need} 场即可升级为金卡`
-  }
-  const need = 10 - appearances
-  return `再参赛 ${need} 场即可升级为银卡`
+  const score = playerCard.value
+  if (score.status !== 'ready') return '生涯积分待核定'
+  return score.nextAt == null ? '已达金卡，可更换照片和背景' : `距${nextLevelText.value}还差 ${score.pointsToNext} 分`
 })
 
 function goBack() {
@@ -455,6 +439,7 @@ async function loadPlayerData() {
     if (players && players.length > 0) {
       playerData.value = players[0]
       statistics.value = {}
+      playerCard.value = { status:'unverified', points:null, tier:null }
       statisticsMessage.value = ''
       try {
         const result = await callFunction('dataCenter',{action:'query',scope:{playerId:String(playerId),...(route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {})}})
@@ -462,6 +447,10 @@ async function loadPlayerData() {
         statistics.value = result.playerTotal.metrics
         statisticsMessage.value = result.coverage.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。'
       } catch (error) { statisticsMessage.value = '统计暂不可用，请刷新重试。' }
+      try {
+        const scoreResult = await callFunction('dataCenter', { action:'playerCard', playerId:String(playerId) })
+        if (scoreResult.success && scoreResult.playerCard) playerCard.value = scoreResult.playerCard
+      } catch (error) { /* Unknown is not zero. */ }
 
       
       // 处理头像URL（如果是云存储fileID，获取临时URL）

@@ -122,6 +122,7 @@ assert.equal(career.playerTotal.metrics.goals,8); assert.equal(career.accessScop
 assert.equal(career.playerCard.status,'scope_limited')
 const platformCareer = await service.query({ ...actor, platformOwner:true }, { playerId:'p1' })
 assert.equal(platformCareer.playerCard.status,'ready')
+assert.deepEqual(await service.playerCardForAuthorizedPlayer('p1'),platformCareer.playerCard)
 assert.equal(platformCareer.playerTotal.metrics.goals,18)
 assert.equal(platformCareer.coverage.excludedTestMatches,1)
 const fakeCareer = await service.query({ ...actor, platformOwner:true }, { playerId:'fake' })

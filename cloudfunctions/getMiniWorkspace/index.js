@@ -1448,7 +1448,9 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
   const rows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   const player = rows[0]
   if (!player || ['archived', 'deleted'].indexOf(String(player.status || '').toLowerCase()) >= 0) throw new Error('球员不存在或已移出球队')
-  const dataCenter = await createDataService(db).query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, playerId })
+  const cardService = createDataService(db)
+  const dataCenter = await cardService.query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, playerId })
+  const playerCard = await cardService.playerCardForAuthorizedPlayer(playerId)
   const stats = dataCenter.playerTotal.metrics
   const formatted = formatTeamPlayer(player)
   return {
@@ -1478,7 +1480,7 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
       portraitStatus: String(firstValue(player.portraitStatus, player.avatarProcessingStatus) || ''),
       remark: String(firstValue(player.remark, player.notes) || '')
     },
-    stats, dataCenter
+    stats, dataCenter, playerCard
   }
 }
 

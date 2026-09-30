@@ -22,6 +22,13 @@ function validateScope(input = {}) {
 }
 
 function createDataService(db) {
+  // Call only after the caller has independently authorized access to this player.
+  // A team-scoped query cannot prove full career coverage after transfers.
+  async function playerCardForAuthorizedPlayer(playerId) {
+    if (!id(playerId)) throw error('DATA_SCOPE_INVALID', '缺少球员信息')
+    const result = await query({ platformOwner:true, teamIds:[], tournamentIds:[] }, { playerId:id(playerId), mode:'official' })
+    return result.playerCard
+  }
   async function catalog(actor) {
     const { synthetic } = await import('./statistics.mjs')
     const teams = actor.platformOwner ? await readAll(db, 'teams') : await readByIds(db, 'teams', '_id', actor.teamIds)
@@ -137,6 +144,6 @@ function createDataService(db) {
     }
     return { success:true, ...result }
   }
-  return { query, catalog }
+  return { query, catalog, playerCardForAuthorizedPlayer }
 }
 module.exports = { createDataService, validateScope, error }
