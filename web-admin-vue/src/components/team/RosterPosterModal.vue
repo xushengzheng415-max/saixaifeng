@@ -163,12 +163,14 @@ async function downloadPoster() {
   if (!posterElement.value || !roster.value.length || exporting.value) return
   exporting.value = true
   try {
-    const { default: html2canvas } = await import('html2canvas')
-    const canvas = await html2canvas(posterElement.value, {
-      backgroundColor: null, useCORS: true, allowTaint: false, scale: 1.5, logging: false,
-      onclone: document => { const poster = document.querySelector('.roster-poster-canvas'); if (poster) poster.style.zoom = '1' }
+    const { toBlob } = await import('html-to-image')
+    const blob = await toBlob(posterElement.value, {
+      width: 1200,
+      height: posterElement.value.scrollHeight,
+      pixelRatio: 1.5,
+      style: { zoom: '1' },
+      skipFonts: true
     })
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
     if (!blob) throw new Error('图片生成失败')
     const href = URL.createObjectURL(blob)
     const link = document.createElement('a')
