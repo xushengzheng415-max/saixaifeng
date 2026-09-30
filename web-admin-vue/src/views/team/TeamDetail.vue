@@ -114,7 +114,7 @@
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
           <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
-          <el-table :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="!isTeamDataWorkspace" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort">
+          <el-table :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="!isTeamDataWorkspace" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort">
             <el-table-column label="头像" :width="isTeamDataWorkspace ? 56 : 72" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
@@ -4898,6 +4898,9 @@ function compressBase64(dataUrl, maxSize = 300) {
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
 .synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
+.tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .cell){display:flex;align-items:center;justify-content:center;gap:2px;padding:0 4px;white-space:nowrap}
+.tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .caret-wrapper){width:12px;flex:0 0 12px}
+.tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .sort-caret){left:1px}
 .match-stats { display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: 23px; border-bottom: 1px solid #e8ece9; }
 .match-stats.lower { grid-template-columns: repeat(2, 1fr); padding: 24px 0 0; border: 0; }
 .match-stats dl { display: block; padding: 0 10px; text-align: center; }
