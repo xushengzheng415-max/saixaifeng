@@ -1268,6 +1268,7 @@ import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
 import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
 import { actualStaffRecords } from '../../utils/staffRecords.js'
+import { withLinkedStaffPhotos } from '../../utils/rosterPosterData.js'
 import RosterPosterModal from '../../components/team/RosterPosterModal.vue'
 import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
@@ -1398,7 +1399,7 @@ const competitionDivision = ref({})
 const playerAvatarErrors = ref(new Set())
 function markPlayerAvatarFailed(row) { playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id]) }
 function displayJerseyName(row) { return row.jerseyName || row.shirtName || generateJerseyName(row.name || '') || '—' }
-const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(competitionRoster.value ?? exportPlayers.value, competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' }))
+const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(withLinkedStaffPhotos(competitionRoster.value ?? exportPlayers.value, staffMembers.value), competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' }))
 function statValue(row, key) {
   if (playerStatsError.value || playerStatsLoading.value || (key === 'minutes' && row.minutesIncomplete) || (key === 'appearances' && row.appearanceIncomplete) || (key === 'goals' && row.goalsIncomplete) || (['yellowCards', 'redCards'].includes(key) && row.cardsIncomplete)) return '—'
   return row[key] ?? 0
@@ -1551,7 +1552,7 @@ const posterRosterPlayers = computed(() => {
   if (!isReadOnlyTournament.value) return []
   const currentIds = tournamentRosterPlayerIds.value
   const source = competitionRoster.value ?? (isProfessionalTournamentTeam.value ? [] : players.value)
-  return source.filter(person => {
+  const eligible = source.filter(person => {
     if (!person?._id) return false
     if (currentIds.size && !currentIds.has(String(person._id))) return false
     const review = String(person.reviewStatus || '').toLowerCase()
@@ -1562,6 +1563,7 @@ const posterRosterPlayers = computed(() => {
     }
     return true
   }).map(person => ({ ...person, jerseyName: person.jerseyName || person.shirtName || generateJerseyName(person.name || '') }))
+  return withLinkedStaffPhotos(eligible, staffMembers.value)
 })
 
 function identityMatchParts(person) {

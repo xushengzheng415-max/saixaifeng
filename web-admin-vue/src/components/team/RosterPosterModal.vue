@@ -62,10 +62,10 @@
           <h3>球员 <small>PLAYERS</small></h3>
           <template v-if="roster.length">
             <div v-if="palette === 'red'" class="roster-poster-positions">
-              <section v-for="group in positionGroups" :key="group.key" v-show="group.rows.length">
-                <h4>{{ group.label }} <small>{{ group.key }} · {{ group.rows.length }} 人</small></h4>
+              <section>
+                <h4>一线队球员 <small>{{ roster.length }} 人</small></h4>
                 <div class="roster-poster-red-grid">
-                  <div v-for="player in group.rows" :key="player._id" class="roster-poster-red-player">
+                  <div v-for="player in roster" :key="player._id" class="roster-poster-red-player">
                     <b>{{ formatNumber(player.jerseyNumber) }}</b>
                     <div class="roster-poster-red-copy"><strong>{{ player.name || '未命名球员' }}</strong><small>{{ player.jerseyName || '—' }}</small></div>
                     <img v-if="photoUrl(player) && !failedPhotos.has(`player-${player._id}`)" :src="photoUrl(player)" alt="" crossorigin="anonymous" @error="markPhotoFailed(`player-${player._id}`)" />
@@ -144,13 +144,6 @@ const roster = computed(() => (props.players || []).filter(person => person && p
 const headCoach = computed(() => (props.staff || []).find(person => /主教练|head[_ -]?coach/i.test(staffRole(person))) || null)
 const coaches = computed(() => (props.staff || []).filter(person => person !== headCoach.value && /教练|coach|体能/i.test(staffRole(person))))
 const supportStaff = computed(() => (props.staff || []).filter(person => person !== headCoach.value && !coaches.value.includes(person)))
-const positionGroups = computed(() => [
-  { key: 'GK', label: '守门员', rows: roster.value.filter(person => positionKey(person.position) === 'GK') },
-  { key: 'DF', label: '后卫', rows: roster.value.filter(person => positionKey(person.position) === 'DF') },
-  { key: 'MF', label: '中场', rows: roster.value.filter(person => positionKey(person.position) === 'MF') },
-  { key: 'FW', label: '前锋', rows: roster.value.filter(person => positionKey(person.position) === 'FW') },
-  { key: 'OTHER', label: '其他球员', rows: roster.value.filter(person => positionKey(person.position) === 'OTHER') }
-])
 function firstChar(value) { return String(value || '队')[0] }
 function photoUrl(person) {
   const fileId = person?._exportPhotoFileId || person?.photoFileID || person?.photoFileId || ''
@@ -240,12 +233,13 @@ function printPoster() { if (posterElement.value && roster.value.length) window.
 .roster-poster-positions h4{display:flex;justify-content:space-between;margin:0 0 16px;padding:13px 16px;border-left:7px solid #fff;background:var(--roster-dark);font-size:37px}
 .roster-poster-positions h4 small{color:var(--roster-muted);font-size:21px}
 .roster-poster-red-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-.roster-poster-red-player{position:relative;display:grid;grid-template-columns:80px 1fr 185px;align-items:center;min-height:200px;overflow:hidden;background:linear-gradient(135deg,var(--roster-bright),var(--roster-base) 60%,var(--roster-dark))}
+.roster-poster-red-player{position:relative;height:200px;overflow:hidden;background:linear-gradient(135deg,var(--roster-bright),var(--roster-base) 60%,var(--roster-dark))}
 .roster-poster-red-player::after{position:absolute;right:175px;top:0;width:30px;height:100%;transform:skew(-12deg);background:rgba(255,255,255,.85);content:''}
-.roster-poster-red-player>b{z-index:2;align-self:start;padding:15px 0 0 15px;font-size:58px}
-.roster-poster-red-copy{z-index:2;align-self:end;display:grid;gap:4px;padding-bottom:20px}
-.roster-poster-red-copy strong{font-size:27px}.roster-poster-red-copy small{font-size:16px}
-.roster-poster-red-player img,.roster-poster-red-player>.roster-poster-photo-fallback{position:relative;right:auto;bottom:auto;z-index:2;width:190px;height:200px;object-fit:cover;object-position:top center;border:0;border-radius:0}
+.roster-poster-red-player>b{position:absolute;top:18px;left:24px;z-index:2;max-width:285px;color:#fff;font-size:66px;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.roster-poster-red-copy{position:absolute;right:215px;bottom:20px;left:25px;z-index:2;display:grid;gap:5px;min-width:0}
+.roster-poster-red-copy strong,.roster-poster-red-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.roster-poster-red-copy strong{font-size:29px}.roster-poster-red-copy small{font-size:17px}
+.roster-poster-red-player img,.roster-poster-red-player>.roster-poster-photo-fallback{position:absolute;right:0;bottom:0;z-index:2;width:200px;height:200px;object-fit:cover;object-position:top center;border:0;border-radius:0}
 .roster-poster-red-player>.roster-poster-photo-fallback{display:grid;place-items:center;background:var(--roster-dark);font-size:75px}
 .roster-poster-credit{display:flex;align-items:center;gap:20px;margin:62px 62px 0;padding:25px 0 60px;border-top:2px solid rgba(255,255,255,.45)}
 .roster-poster-credit img{width:190px;height:68px;object-fit:contain;padding:7px 12px;border-radius:5px;background:#fff}
