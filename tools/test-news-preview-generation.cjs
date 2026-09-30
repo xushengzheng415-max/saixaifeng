@@ -4,7 +4,7 @@ const path = require('node:path')
 
 const originalLoad = Module._load
 Module._load = function (request) {
-  if (request === 'wx-server-sdk') return { DYNAMIC_CURRENT_ENV: 'test', init() {}, database() { return { command: {} } } }
+  if (request === 'wx-server-sdk') return { DYNAMIC_CURRENT_ENV: 'test', init() {}, database() { return { command: {} } }, async callFunction() { return { result: { success: true, standings: [{ divisionName: '老年组', groupName: '联赛积分榜', officialMatchCount: 1, officialTeams: [{ rank: 1, teamName: '主队', played: 1, win: 1, draw: 0, loss: 0, goalDifference: 4, points: 3 }] }] } } } }
   return originalLoad.apply(this, arguments)
 }
 const rules = require(path.join(__dirname, '../cloudfunctions/newsPreviewGenerate/index.js')).__test
@@ -60,4 +60,9 @@ const daily = rules.buildDailyArticle('立洋杯', '2026-09-26', dayRows, nextRo
 assert.match(daily.body, /本轮赛果[\s\S]*主队 5:1 客队[\s\S]*积分榜[\s\S]*下轮对阵[\s\S]*甲队 对 乙队[\s\S]*停赛信息/)
 assert.doesNotMatch(daily.body, /焦点场次|比赛日综述/)
 assert.match(daily.body, /待主办方确认/)
-console.log('news preview generation rules: passed')
+;(async () => {
+  const standing = await rules.currentStandingsForDay('t1', [{ _id: 'm1', matchDate: '2026-09-26', homeScore: 5, awayScore: 1, status: 'finished' }], '2026-09-26', 'test-token')
+  assert.equal(standing.tables[0].officialTeams[0].points, 3)
+  await assert.rejects(rules.currentStandingsForDay('t1', [{ _id: 'future', matchDate: '2026-10-01', homeScore: 1, awayScore: 0, status: 'finished' }], '2026-09-26', 'test-token'), /历史快照/)
+  console.log('news preview generation rules: passed')
+})().catch(error => { console.error(error); process.exitCode = 1 })

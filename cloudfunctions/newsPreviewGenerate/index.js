@@ -236,4 +236,4 @@ exports.main = async event => {
   catch (error) { console.error('newsPreviewGenerate failed', error); return response(200, { success: false, message: error.message || '生成新闻失败' }, cors) }
 }
 
-exports.__test = { official, parseGenerated, verifiedGoalEvents, goalTimeline, officialDayRows, nextRoundFixtures, buildDailyArticle, nextFixturesFromRows, startKey }
+exports.__test = { official, parseGenerated, verifiedGoalEvents, goalTimeline, officialDayRows, nextRoundFixtures, buildDailyArticle, currentStandingsForDay, nextFixturesFromRows, startKey }
