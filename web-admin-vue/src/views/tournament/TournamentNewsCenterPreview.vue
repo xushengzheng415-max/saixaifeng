@@ -33,7 +33,15 @@
           <el-option v-for="match in approvedMatches" :key="match.id" :value="match.id" :label="matchLabel(match)" />
         </el-select>
         <template v-if="form.kind === 'match'"><label>比赛图片 · 最多3张</label>
-        <div class="photos"><img v-for="photo in form.photos" :key="photo" :src="photo" alt="比赛现场照片"><label class="photo-select">选择照片<input type="file" accept="image/*" multiple @change="selectPhotos"></label></div></template>
+        <div class="photo-manager" @dragover.prevent @drop.prevent="dropPhotoFiles">
+          <div v-for="(photo,index) in form.photos" :key="photo" class="photo-item" draggable="true" @dragstart="startPhotoDrag(index)" @dragover.prevent @drop.stop.prevent="dropPhotoOrder(index)">
+            <img :src="photo" :alt="index === 0 ? '封面图片' : `比赛现场照片${index+1}`">
+            <strong v-if="index === 0" class="cover-badge">封面</strong><small v-else class="photo-order">{{ index + 1 }}</small>
+            <button type="button" class="remove-photo" :aria-label="`删除第${index+1}张图片`" @click="removePhoto(index)">×</button>
+          </div>
+          <label v-if="form.photos.length < 3" class="photo-select" @dragover.prevent>选择或拖入照片<input type="file" accept="image/*" multiple @change="selectPhotos"></label>
+          <div class="photo-limit" :class="{ full: form.photos.length === 3 }">{{ form.photos.length }}/3 · 首张为封面，可拖动调整顺序</div>
+        </div></template>
         <img v-if="!form.photos.length && coverUrl" class="cover-preview" :src="coverUrl" alt="自动生成的比赛战报封面">
         <template v-if="form.kind === 'daily'">
           <label>积分榜快照</label>
@@ -52,7 +60,7 @@
       </div>
     </el-drawer>
     <el-dialog v-model="previewOpen" :title="form.title || '新闻预览'" width="min(660px,94vw)">
-      <article class="article-preview"><img v-if="!form.photos.length && coverUrl" :src="coverUrl" alt="新闻封面"><NewsDailyContent v-if="form.kind === 'daily'" :results="form.dayResults" :fixtures="form.nextFixtures" :standings-image="standingsSnapshotUrl" :suspension-note="form.suspensionNote" /><template v-else><template v-for="(block,index) in previewBlocks" :key="index"><p v-if="block.text">{{ block.text }}</p><img v-for="(photo,photoIndex) in block.photos" :key="`${index}-${photoIndex}`" :src="photo" alt="比赛现场照片"></template></template></article>
+      <article class="article-preview"><img v-if="form.kind === 'match' && form.photos.length" :src="form.photos[0]" alt="封面图片"><img v-else-if="coverUrl" :src="coverUrl" alt="新闻封面"><NewsDailyContent v-if="form.kind === 'daily'" :results="form.dayResults" :fixtures="form.nextFixtures" :standings-image="standingsSnapshotUrl" :suspension-note="form.suspensionNote" /><template v-else><template v-for="(block,index) in previewBlocks" :key="index"><p v-if="block.text">{{ block.text }}</p><img v-for="(photo,photoIndex) in block.photos" :key="`${index}-${photoIndex}`" :src="photo" alt="比赛现场照片"></template></template></article>
       <template #footer><el-button @click="previewOpen=false">关闭</el-button></template>
     </el-dialog>
   </main>
@@ -81,13 +89,14 @@ const approvedMatches = computed(() => matches.value.filter(item => item.resultS
 const approvedDates = computed(() => [...new Set(approvedMatches.value.map(item => item.matchDate).filter(Boolean))].sort().reverse())
 const dayMatches = date => approvedMatches.value.filter(item => item.matchDate === date)
 const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] })
+const draggingPhotoIndex = ref(-1)
 const selectedMatch = computed(() => matches.value.find(item => item.id === form.matchId) || null)
 const previewBlocks = computed(() => {
   let paragraphs = String(form.body || '').split(/\n\s*\n/).map(item => item.trim()).filter(Boolean)
   if (paragraphs.length === 1 && form.photos.length > 1) paragraphs = paragraphs[0].match(/[^。！？]+[。！？]?/g)?.map(item => item.trim()).filter(Boolean) || paragraphs
   if (!paragraphs.length) return []
   const slots = paragraphs.map(() => [])
-  form.photos.forEach((photo, index) => {
+  form.photos.slice(1).forEach((photo, index) => {
     const target = Math.min(paragraphs.length - 1, Math.floor(((index + 1) * paragraphs.length) / (form.photos.length + 1)))
     slots[target].push(photo)
   })
@@ -121,11 +130,32 @@ function onKindChange() {
 }
 function openNew() { reset(); editorOpen.value = true }
 function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []) }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
+function addPhotos(files) {
+  const selected = Array.from(files || []).filter(file => file.type.startsWith('image/'))
+  const remaining = 3 - form.photos.length
+  if (selected.length > remaining) ElMessage.warning(`最多3张，还能添加${remaining}张`)
+  form.photos = [...form.photos, ...selected.slice(0, remaining).map(file => URL.createObjectURL(file))]
+}
 function selectPhotos(event) {
-  const selected = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/'))
+  addPhotos(event.target.files)
   event.target.value = ''
-  if (selected.length > 3) ElMessage.warning('最多选择3张，已保留前3张')
-  form.photos = selected.slice(0, 3).map(file => URL.createObjectURL(file))
+}
+function dropPhotoFiles(event) {
+  if (event.dataTransfer?.files?.length) addPhotos(event.dataTransfer.files)
+}
+function startPhotoDrag(index) { draggingPhotoIndex.value = index }
+function dropPhotoOrder(targetIndex) {
+  const sourceIndex = draggingPhotoIndex.value
+  if (sourceIndex < 0 || sourceIndex === targetIndex) return
+  const photos = [...form.photos]
+  const [photo] = photos.splice(sourceIndex, 1)
+  photos.splice(targetIndex, 0, photo)
+  form.photos = photos
+  draggingPhotoIndex.value = -1
+}
+function removePhoto(index) {
+  const [photo] = form.photos.splice(index, 1)
+  if (String(photo).startsWith('blob:')) URL.revokeObjectURL(photo)
 }
 async function generate() {
   if (!(form.kind === 'daily' ? form.date : form.matchId)) return
@@ -167,7 +197,7 @@ onMounted(loadMatches)
 </script>
 
 <style scoped>
-.news-center{padding:24px 30px;color:#173025}.heading{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:27px}.heading h1{font-size:26px;margin:18px 0 5px}.heading p{margin:0;color:#748379}.preview-label{display:inline-block;padding:5px 9px;background:#eaf6ee;border:1px solid #cae4d1;border-radius:4px;color:#126845;font-size:12px}.filters{display:flex;align-items:center;gap:28px;border-bottom:1px solid #dce6df}.filters button{border:0;border-bottom:3px solid transparent;padding:13px 2px;background:transparent;color:#687a6e;cursor:pointer}.filters button.active{color:#087e4b;border-bottom-color:#078a50;font-weight:700}.filters span{margin-left:auto;color:#748379;font-size:13px}.load-alert{margin-top:18px}.article-list{margin-top:5px;background:#fff;border:1px solid #e0e8e2;border-radius:7px}.article-row{display:flex;align-items:center;gap:18px;width:100%;padding:15px 20px;border:0;border-bottom:1px solid #e6ede7;background:#fff;text-align:left;color:inherit;cursor:pointer}.article-row:last-child{border-bottom:0}.article-row:hover{background:#f9fcfa}.article-row img{width:112px;height:72px;object-fit:cover}.article-copy{display:grid;gap:8px;flex:1;min-width:0}.article-copy strong{font-size:16px}.article-copy small{font-size:12px;color:#708076}.article-row em{font-size:12px;font-style:normal;padding:4px 8px;border-radius:4px;color:#117845;background:#e8f7ee}.article-row em.draft{color:#647268;background:#f0f2f0}.article-row em.update{color:#a96116;background:#fff1de}.arrow{color:#92a298;font-size:22px}.empty{padding:70px 20px;text-align:center;color:#748379}.editor{display:grid;gap:12px;padding:0 10px 30px}.editor>label{font-weight:600;margin-top:7px}.photos{display:flex;gap:10px;flex-wrap:wrap}.photos img{width:116px;height:82px;object-fit:cover}.photo-select{display:grid;place-items:center;width:116px;height:82px;border:1px dashed #9dbda7;color:#087b48;cursor:pointer}.photo-select input{display:none}.cover-preview{display:block;width:100%;max-width:360px;height:auto}.hint{font-size:12px;color:#a46523}.editor footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-top:16px;border-top:1px solid #e0e8e2}.article-preview p{white-space:pre-wrap;line-height:1.8}.article-preview img{display:block;width:100%;height:auto;margin-top:14px}
+.news-center{padding:24px 30px;color:#173025}.heading{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:27px}.heading h1{font-size:26px;margin:18px 0 5px}.heading p{margin:0;color:#748379}.preview-label{display:inline-block;padding:5px 9px;background:#eaf6ee;border:1px solid #cae4d1;border-radius:4px;color:#126845;font-size:12px}.filters{display:flex;align-items:center;gap:28px;border-bottom:1px solid #dce6df}.filters button{border:0;border-bottom:3px solid transparent;padding:13px 2px;background:transparent;color:#687a6e;cursor:pointer}.filters button.active{color:#087e4b;border-bottom-color:#078a50;font-weight:700}.filters span{margin-left:auto;color:#748379;font-size:13px}.load-alert{margin-top:18px}.article-list{margin-top:5px;background:#fff;border:1px solid #e0e8e2;border-radius:7px}.article-row{display:flex;align-items:center;gap:18px;width:100%;padding:15px 20px;border:0;border-bottom:1px solid #e6ede7;background:#fff;text-align:left;color:inherit;cursor:pointer}.article-row:last-child{border-bottom:0}.article-row:hover{background:#f9fcfa}.article-row img{width:112px;height:72px;object-fit:cover}.article-copy{display:grid;gap:8px;flex:1;min-width:0}.article-copy strong{font-size:16px}.article-copy small{font-size:12px;color:#708076}.article-row em{font-size:12px;font-style:normal;padding:4px 8px;border-radius:4px;color:#117845;background:#e8f7ee}.article-row em.draft{color:#647268;background:#f0f2f0}.article-row em.update{color:#a96116;background:#fff1de}.arrow{color:#92a298;font-size:22px}.empty{padding:70px 20px;text-align:center;color:#748379}.editor{display:grid;gap:12px;padding:0 10px 30px}.editor>label{font-weight:600;margin-top:7px}.photo-manager{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;min-height:86px;padding:4px 0}.photo-item{position:relative;width:116px;height:82px;flex:none;cursor:grab;border:1px solid #dfe8e1;background:#f6faf7}.photo-item:active{cursor:grabbing}.photo-item img{width:100%;height:100%;object-fit:cover}.cover-badge,.photo-order{position:absolute;left:5px;top:5px;padding:3px 6px;border-radius:3px;background:rgba(4,63,40,.88);color:#fff;font-size:11px;font-weight:600}.photo-order{background:rgba(20,35,26,.72)}.remove-photo{position:absolute;right:4px;top:4px;width:22px;height:22px;border:0;border-radius:50%;background:rgba(25,35,28,.76);color:#fff;font-size:16px;line-height:20px;cursor:pointer}.photo-select{display:grid;place-items:center;width:116px;height:82px;border:1px dashed #9dbda7;color:#087b48;cursor:pointer;background:#fff;font-size:13px;text-align:center}.photo-select:hover{background:#f4faf6}.photo-select input{display:none}.photo-limit{flex-basis:100%;color:#687a6e;font-size:12px}.photo-limit.full{color:#a96116}.cover-preview{display:block;width:100%;max-width:360px;height:auto}.hint{font-size:12px;color:#a46523}.editor footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;padding-top:16px;border-top:1px solid #e0e8e2}.article-preview p{white-space:pre-wrap;line-height:1.8}.article-preview img{display:block;width:100%;height:auto;margin:14px 0}
 </style>
 <style scoped>
 .standings-preview{display:block;width:100%;max-width:360px;max-height:300px;object-fit:contain;object-position:top;border:1px solid #dce7df;background:#fff}
