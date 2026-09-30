@@ -3,7 +3,7 @@
 //   登录 → fetch() → webLoginApi HTTP API
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
-import { PLATFORM_SESSION_KEY } from './platformSession'
+import { PLATFORM_SESSION_KEY, isPlatformSession } from './platformSession'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
@@ -125,12 +125,15 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
       clearAssistanceContext()
     }
     if (result && result.code === 'AUTH_REQUIRED') {
+      const platformSessionExpired = isPlatformSession()
       await logout()
       const localPreview = import.meta.env.DEV || ['127.0.0.1', 'localhost'].includes(window.location.hostname)
-      window.location.href = localPreview
+      window.location.href = platformSessionExpired
+        ? `${window.location.origin}${import.meta.env.BASE_URL}#/platform-login`
+        : localPreview
         ? `${window.location.origin}${import.meta.env.BASE_URL}#/login`
         : 'https://www.sxffootball.cn/'
-      throw new Error(result.error || '登录会话已失效，请重新微信扫码登录')
+      throw new Error(result.error || (platformSessionExpired ? '平台登录已失效，请重新登录' : '登录会话已失效，请重新微信扫码登录'))
     }
     return result
   } catch (err) {

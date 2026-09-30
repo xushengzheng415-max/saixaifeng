@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import {
   PLATFORM_CONSOLE_PATH,
+  clearPlatformSession,
   isOrganizerWorkspacePath,
   isPlatformSession
 } from '../utils/platformSession'
@@ -86,7 +87,7 @@ const routes = [
     component: () => import('../views/tournament/TournamentCenter.vue'),
     meta: { requiresAuth: false, title: '赛事中心' }
   },
-  // 平台运营独立登录入口。认证仍复用统一微信登录，但固定记录登录后的目标页面。
+  // 平台运营独立账号密码登录入口。
   {
     path: '/platform-login',
     name: 'PlatformLogin',
@@ -601,10 +602,20 @@ router.beforeEach(async (to, from, next) => {
   if (to.path === '/platform-login') {
     sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, '/tournament-center-admin')
   }
-  // 平台会话先于主办方逻辑分流，避免平台身份被当成无机构主办方触发机构引导。
-  const platformRedirect = redirectPlatformSession(to)
-  if (platformRedirect) {
-    next(platformRedirect)
+  // 平台会话先于主办方逻辑分流。它没有主办方的手机号会话版本和机构身份。
+  if (isPlatformSession()) {
+    if (localStorage.getItem('isLoggedIn') !== 'true' || !localStorage.getItem('authToken')) {
+      clearInvalidSession()
+      clearPlatformSession()
+      next(to.path === '/platform-login' ? undefined : '/platform-login')
+      return
+    }
+    const platformRedirect = redirectPlatformSession(to)
+    next(platformRedirect || undefined)
+    return
+  }
+  if (to.path === PLATFORM_CONSOLE_PATH) {
+    next('/platform-login')
     return
   }
   // 仅本地开发环境开放视觉验收会话。它不写入正式认证信息，也不会在生产构建中绕过登录。
