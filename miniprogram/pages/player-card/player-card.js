@@ -16,10 +16,7 @@ Page({
   },
 
   normalizePlayer: function(player, teamName) {
-    const age = player.age || this.calculateAge(player.birthday || player.birthDate)
-    let tier = 'bronze'
-    if (age >= 18) tier = 'gold'
-    else if (age >= 16) tier = 'silver'
+    const tier = null
 
     const bgMap = {
       bronze: 'cloud://cloud1-7g8ckb3c7815a011.636c-cloud1-7g8ckb3c7815a011-1419431905/player-cards/bronze-card.png',
@@ -91,28 +88,8 @@ Page({
     wx.showToast({ title: '分享功能开发中', icon: 'none' })
   },
 
-  async generateCard(e) {
-    const playerId = e.currentTarget.dataset.id
-    wx.showLoading({ title: '生成中...' })
-
-    try {
-      const res = await wx.cloud.callFunction({
-        name: 'generatePlayerCard',
-        data: { playerId }
-      })
-
-      wx.hideLoading()
-      if (res.result && res.result.cardUrl) {
-        wx.showToast({ title: '生成成功', icon: 'success' })
-        this.loadPlayers()
-      } else {
-        wx.showToast({ title: '生成失败', icon: 'none' })
-      }
-    } catch (err) {
-      wx.hideLoading()
-      console.error('生成球员卡失败:', err)
-      wx.showToast({ title: '生成失败', icon: 'none' })
-    }
+  generateCard() {
+    wx.showToast({ title: '请从球员详情查看积分卡', icon: 'none' })
   },
 
   goCreate() {

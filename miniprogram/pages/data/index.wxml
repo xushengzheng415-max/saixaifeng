@@ -1,4 +1,5 @@
 <view class="page">
+  <button bindtap="openDataCenter">历史统计</button>
   <view class="head" bindtap="onSwitchWorkspace">
     <view>
       <text class="head-label">{{workspaceTypeText}}</text>

@@ -484,3 +484,4 @@ page {
   font-weight: bold;
   letter-spacing: 2rpx;
 }
+.card-score-line { display:flex; justify-content:center; flex-wrap:wrap; gap:12rpx; margin-top:12rpx; font-size:24rpx; color:#21693b; }

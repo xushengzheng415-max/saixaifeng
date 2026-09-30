@@ -7,8 +7,8 @@ Page({
     avatarUrl: '',
     teamLogoUrl: '',
     cardImagePath: '',
-    tier: 'bronze',
-    tierName: '青铜'
+    tier: '',
+    tierName: '等级待核定'
   },
 
   onLoad(options) {
@@ -24,10 +24,6 @@ Page({
       const res = await db.collection('identity_cards').doc(cardId).get()
       const card = res.data
 
-      const points = card.participationPoints || 0
-      const tier = points >= 1000 ? 'gold' : points >= 500 ? 'silver' : 'bronze'
-      const tierNames = { gold: '黄金', silver: '白银', bronze: '青铜' }
-
       this.setData({
         playerData: {
           number: String(card.jerseyNumber || ''),
@@ -40,8 +36,8 @@ Page({
         },
         avatarUrl: card.avatarUrl || '',
         teamLogoUrl: card.teamLogo || '',
-        tier,
-        tierName: tierNames[tier],
+        tier: '',
+        tierName: '等级待核定',
         _cardId: cardId
       })
     } catch (err) {
@@ -53,6 +49,7 @@ Page({
 
   // 生成卡片图片
   async generateCard() {
+    if (!this.data.tier) { wx.showToast({ title:'生涯积分待核定', icon:'none' }); return }
     wx.showLoading({ title: '生成中...' })
     try {
       const ctx = wx.createCanvasContext('playerCard')
