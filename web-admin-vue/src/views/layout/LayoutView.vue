@@ -227,8 +227,8 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
-                  <el-dropdown-item divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
-                  <el-dropdown-item command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
                   <el-dropdown-item command="refresh"><el-icon><Refresh /></el-icon>刷新数据</el-dropdown-item>
                   <el-dropdown-item divided command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
                 </el-dropdown-menu>
@@ -241,7 +241,7 @@
             <span class="page-title">{{ currentPageTitle }}</span>
           </div>
           <div class="header-right">
-            <div class="header-role">主办方管理</div>
+            <div class="header-role">{{ isPlatformContext() ? '平台运营' : '主办方管理' }}</div>
             <span class="header-divider" aria-hidden="true"></span>
             <el-dropdown trigger="click" @command="handleUserCommand">
               <div class="user-avatar-wrapper">
@@ -265,8 +265,8 @@
                       <div class="user-phone-summary">{{ accountPhoneSummary }}</div>
                     </div>
                   </el-dropdown-item>
-                  <el-dropdown-item command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
-                  <el-dropdown-item command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
                   <el-dropdown-item divided command="refresh">
                     <el-icon><Refresh /></el-icon>刷新数据
                   </el-dropdown-item>
@@ -300,6 +300,7 @@ import {
   Postcard, Place, QuestionFilled, Bell
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
+import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
 import productLogo from '../../assets/logo-saixiaofeng.png'
 import { provincesData, cityMapData } from '../team/areaData.js'
 import {
@@ -329,14 +330,14 @@ function showNotifications() {
 function readStoredObject(key) {
   try { return JSON.parse(localStorage.getItem(key) || 'null') || {} } catch { return {} }
 }
-const initialStoredUser = readStoredObject('userInfo')
-const initialStoredOrganization = readStoredObject('currentOrganization')
+const initialStoredUser = isPlatformContext() ? (getPlatformSession()?.user || {}) : readStoredObject('userInfo')
+const initialStoredOrganization = isPlatformContext() ? {} : readStoredObject('currentOrganization')
 const userInfo = ref({
   userName: initialStoredUser.userName || initialStoredUser.nickname || '',
   avatarUrl: initialStoredUser.avatarUrl || '',
   phone: initialStoredUser.phone || '',
   email: initialStoredUser.email || '',
-  organizationName: initialStoredOrganization.name || initialStoredOrganization.organizationName || initialStoredUser.organizationName || '',
+  organizationName: isPlatformContext() ? '平台运营中心' : (initialStoredOrganization.name || initialStoredOrganization.organizationName || initialStoredUser.organizationName || ''),
   organizationLogo: initialStoredOrganization.logo || initialStoredOrganization.logoUrl || initialStoredUser.organizationLogo || '',
   isPlatformOwner: initialStoredUser.isPlatformOwner === true
 })
@@ -725,7 +726,7 @@ async function confirmBindEmail() {
 
 // 确认选择身份已移至独立页面 /select-role（SelectRoleView.vue）
 
-const roleLabel = computed(() => ROLE_NAMES[currentRole.value] || '未知')
+const roleLabel = computed(() => isPlatformContext() ? '平台管理员' : (ROLE_NAMES[currentRole.value] || '未知'))
 
 // 展开的子菜单列表
 const expandedMenus = ref([])
@@ -908,6 +909,22 @@ function isChildActive(parentPath) {
 }
 
 onMounted(() => {
+  if (isPlatformContext()) {
+    const platformUser = getPlatformSession()?.user || {}
+    userInfo.value = {
+      userName: platformUser.userName || '平台负责人',
+      avatarUrl: '',
+      phone: '',
+      email: platformUser.email || '',
+      uid: platformUser._id || 'platform-owner',
+      organizationName: '平台运营中心',
+      organizationLogo: '',
+      isPlatformOwner: true
+    }
+    loginType.value = PLATFORM_LOGIN_TYPE
+    currentRole.value = 'platform_owner'
+    return
+  }
   const savedInfo = localStorage.getItem('userInfo')
   if (savedInfo) {
     try {

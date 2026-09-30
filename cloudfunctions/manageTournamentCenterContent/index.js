@@ -214,6 +214,27 @@ async function getOverview(db) {
     loadAllOptional(db, 'assistance_requests', 1000)
   ])
 
+  // 旧版 Word 导入把限时 URL 写进 logo/logoUrl，同时保留了永久 cloud 文件 ID。
+  // 每次读取时从永久 ID 换取新地址，避免 URL 到期后在长期球队列表显示破图。
+  const logoFileIdOf = team => [
+    team.logoFileID, team.logoFileId, team.logoCloudFileId,
+    team.logoTransparentFileId, team.logo, team.logoUrl
+  ].map(value => String(value || '').trim()).find(value => value.startsWith('cloud://')) || ''
+  const logoFileIds = [...new Set(teamRows.map(logoFileIdOf).filter(Boolean))]
+  const logoUrls = new Map()
+  for (let offset = 0; offset < logoFileIds.length; offset += 50) {
+    try {
+      const result = await cloud.getTempFileURL({ fileList: logoFileIds.slice(offset, offset + 50) })
+      ;(result.fileList || []).forEach(item => {
+        const fileId = String(item.fileID || item.fileId || '').trim()
+        const url = String(item.tempFileURL || item.tempFileUrl || '').trim()
+        if (fileId && /^https?:\/\//i.test(url)) logoUrls.set(fileId, url)
+      })
+    } catch (error) {
+      console.warn('[manageTournamentCenterContent] 球队队徽地址刷新失败:', error && error.message)
+    }
+  }
+
   const usersById = new Map(userRows.map(item => [String(item._id), item]))
   const organizationsById = new Map(organizationRows.map(item => [String(item._id), item]))
   const tournamentTeamCounts = new Map()
@@ -305,6 +326,10 @@ async function getOverview(db) {
     .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
   const teams = teamRows.map(team => {
+    const logoFileId = logoFileIdOf(team)
+    const fallbackLogo = [team.logo, team.logoUrl, team.logoTransparentUrl]
+      .map(value => String(value || '').trim())
+      .find(value => /^https?:\/\//i.test(value)) || ''
     const orgId = recordOrgId(team)
     const creatorId = recordCreatorId(team)
     const organization = organizationsById.get(orgId)
@@ -316,7 +341,8 @@ async function getOverview(db) {
     return {
       _id: team._id,
       name: team.name || team.teamName || '未命名球队',
-      logo: team.logo || team.logoUrl || '',
+      logo: logoFileId ? (logoUrls.get(logoFileId) || '') : fallbackLogo,
+      logoUnavailable: Boolean(logoFileId && !logoUrls.has(logoFileId)),
       city: team.city || team.cityName || team.region || '',
       contact: team.contactName || team.managerName || '',
       phone: normalizePhone(team.contactPhone || team.managerPhone || team.ownerPhone),

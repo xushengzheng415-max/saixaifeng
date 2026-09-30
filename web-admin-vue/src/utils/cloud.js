@@ -3,7 +3,7 @@
 //   登录 → fetch() → webLoginApi HTTP API
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
-import { PLATFORM_SESSION_KEY, isPlatformSession } from './platformSession'
+import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
@@ -85,13 +85,14 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
     const qa = handleVisualQaHttp(action, data)
     if (qa.handled) return qa.result
   }
-  const assistance = getAssistanceContext()
+  const platformRequest = isPlatformContext()
+  const assistance = platformRequest ? null : getAssistanceContext()
   const bypassAssistance = action === 'callFunction' &&
     ['platformOwner', 'manageTournamentCenterContent', 'generateMiniProgramCode'].includes(data.functionName)
   const payload = {
     ...data,
     action,
-    authToken: localStorage.getItem(AUTH_TOKEN_KEY) || '',
+    authToken: platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || ''),
     assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : ''
   }
   console.log(`[callFunctionHTTP] → ${action}`)
@@ -119,13 +120,14 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
       throw new Error(result?.error || result?.message || `HTTP ${response.status}: ${response.statusText}`)
     }
     if (result && result.authToken) {
-      localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
+      if (platformRequest) setPlatformAuthToken(result.authToken)
+      else localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
     }
     if (result && result.code === 'ASSISTANCE_EXPIRED') {
       clearAssistanceContext()
     }
     if (result && result.code === 'AUTH_REQUIRED') {
-      const platformSessionExpired = isPlatformSession()
+      const platformSessionExpired = platformRequest
       await logout()
       const localPreview = import.meta.env.DEV || ['127.0.0.1', 'localhost'].includes(window.location.hostname)
       window.location.href = platformSessionExpired
@@ -172,6 +174,10 @@ export async function rosterExceptionBoard(data = {}) {
 // ========== 登录认证 ==========
 
 export async function logout() {
+  if (isPlatformContext()) {
+    clearPlatformSession()
+    return
+  }
   localStorage.removeItem('isLoggedIn')
   localStorage.removeItem('userInfo')
   localStorage.removeItem('role')
@@ -192,8 +198,6 @@ export async function logout() {
   localStorage.removeItem('authSessionVersion')
   localStorage.removeItem(AUTH_TOKEN_KEY)
   localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
-  // 平台管理员会话的独立键位，避免退出主办方后仍残留平台身份标记。
-  localStorage.removeItem(PLATFORM_SESSION_KEY)
   // 机构缓存属于账号会话，退出后必须清理，避免下一个账号误显示或误用旧机构。
   localStorage.removeItem('organizationInfo')
   localStorage.removeItem('currentOrganization')
@@ -203,10 +207,12 @@ export async function logout() {
 }
 
 export async function checkAuth() {
+  if (isPlatformContext()) return Boolean(getPlatformAuthToken())
   return localStorage.getItem('isLoggedIn') === 'true' && Boolean(localStorage.getItem(AUTH_TOKEN_KEY))
 }
 
 export function getCurrentUser() {
+  if (isPlatformContext()) return getPlatformSession()?.user || null
   // 零 SDK 模式：从 localStorage 获取用户信息
   const userInfo = localStorage.getItem('userInfo')
   if (!userInfo) return null
@@ -219,6 +225,7 @@ export function getCurrentUser() {
 }
 
 export function getCurrentOwner() {
+  if (isPlatformContext()) return getPlatformSession()?.userId || null
   const assistance = getAssistanceContext()
   if (assistance && assistance.targetOwnerKey) return assistance.targetOwnerKey
   return localStorage.getItem('phone') || localStorage.getItem('userId') || null

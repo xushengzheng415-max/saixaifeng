@@ -45,6 +45,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Loading, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
+import { isPlatformWorkspacePath } from '@/utils/platformSession'
 
 // webLoginApi HTTP 访问服务地址（与 cloud.js 中 WEB_LOGIN_API_URL 保持一致）
 const API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
@@ -106,25 +107,9 @@ function consumePostLoginPath() {
   const key = 'sxfPostLoginRedirect'
   const target = sessionStorage.getItem(key) || '/tournament-space'
   sessionStorage.removeItem(key)
-  return target.startsWith('/') ? target : '/tournament-space'
-}
-
-async function verifyPlatformOwner(authToken) {
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'callFunction',
-      functionName: 'platformOwner',
-      functionParams: { action: 'status' },
-      authToken
-    })
-  })
-  let result = await response.json()
-  if (result && typeof result.body === 'string') {
-    try { result = JSON.parse(result.body) } catch { /* 交给下方权限判断 */ }
-  }
-  return result
+  return target.startsWith('/') && !isPlatformWorkspacePath(target.split('?')[0])
+    ? target
+    : '/tournament-space'
 }
 
 onMounted(async () => {
@@ -165,16 +150,6 @@ onMounted(async () => {
     if (result.success && result.directLogin && result.authToken && result.user) {
       storeDirectLogin(result)
       const target = consumePostLoginPath()
-      if (target === '/tournament-center-admin') {
-        hint.value = '正在校验平台管理员权限...'
-        const ownerResult = await verifyPlatformOwner(result.authToken)
-        if (!ownerResult?.success || !ownerResult.isPlatformOwner) {
-          clearStoredAuthSession()
-          status.value = 'error'
-          errorMessage.value = '当前微信账号不是平台负责人，无法登录平台运营管理后台'
-          return
-        }
-      }
       status.value='success'
       setTimeout(()=>router.replace(target),500)
     } else if (result.success && result.requiresPhoneAuthorization && result.loginChallenge) {
