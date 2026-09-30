@@ -1,6 +1,12 @@
 # 数据中心上线与验收
 
-2026-09-30 本轮实施状态：积分 v1 的三端显示和服务端权益门禁已在 `codex/player-card-points-implementation` 分支实现，`test-data-center`、`test-player-card-entitlement`、语法检查和 PC 构建通过。PC 使用 `dataCenter.playerCard`，小程序球员详情在原球队授权后取完整生涯卡级，C 端 H5 使用 `list/get/saveMyPlayerCard` 的共享服务积分并在保存时重查 100 分权益。`dataCenter` 与 `getMiniWorkspace` 已基于各自最新线上代码差量部署，回下载分别核对 11、10 个文件 SHA-256 全部一致；`webLoginApi` 保留线上 82,000 余行主包，仅替换 `playerCards.cjs` 与共享 `service.cjs`，回下载 12 文件全一致，11 个环境变量仍在，匿名制卡接口返回 `PLAYER_CARD_AUTH_REQUIRED`。H5 五个静态文件已发布，正式域名逐文件 HTTP 200 且哈希一致。PC 仍须走 preview 验收；小程序包尚未上传；真实账号尚未回读。旧卡保级快照及预生成图片的可信校验仍需处理，不能称三端正式验收完成。
+2026-09-30 本轮实施状态：积分 v1 的三端显示和服务端权益门禁已在 `codex/player-card-points-implementation` 分支实现，`test-data-center`、`test-player-card-entitlement`、语法检查和 PC 构建通过。PC 使用 `dataCenter.playerCard`，小程序球员详情在原球队授权后取完整生涯卡级，C 端 H5 使用 `list/get/saveMyPlayerCard` 的共享服务积分并在保存时重查 100 分权益。`dataCenter` 与 `getMiniWorkspace` 已基于各自最新线上代码差量部署，回下载分别核对 11、10 个文件 SHA-256 全部一致；`webLoginApi` 保留线上主包并更新球员卡模块，11 个环境变量仍在，匿名制卡接口返回 `PLAYER_CARD_AUTH_REQUIRED`。H5 五个静态文件已发布并回读。PC 预览已部署，小程序开发版已上传；真实账号尚未回读。旧卡保级快照及预生成图片的可信校验仍需处理，不能称三端正式验收完成。
+
+同日后续：PC `preview` 已合并当前实施分支并部署 `/preview/admin/`，入口与 PlayerDetail/PlayerCard 两个分包均通过正式域名 HTTP 200 和 SHA-256 回读；正式 `/admin/` 仍可访问。小程序开发版 `1.0.33` 已通过微信开发者工具上传，AppID `wx57164cca8676f411`，包体 2,676,263 字节；尚未设为体验版或正式版。H5 公开球员榜原按场次赋等级，现于线上主包的 `fanRankings` 路径接入 `fanPlayerCardScores.cjs`，一次读取正式生涯并按稳定 ID 派生积分；匿名回读 210 行中 189 行可核定、21 行待核定，最高 4 分。赛事中心实际加载的 `tournament-center-player-list-20260930.js` 与入口 HTML 已基于现网版本差量发布，未知等级不显示铜卡；两文件正式域名 HTTP 200、哈希一致。服务端第二次回下载 13 个源文件与发布包一致。上述公开接口验收不等于本人/监护、真实 PC 工作空间和小程序真机验收。
+
+当前线上 `webLoginApi/index.js` 是其他 C 端功能的打包主文件，赛事中心实际 H5 脚本也尚未完整进入 Git 主分支。本轮只在最新线上主包加公开榜积分适配调用，仓库已保存适配模块及测试；后续合并 C 端源码时必须把 `fanRankings` 路由调用和赛事中心点击页的待核定处理一并合入，禁止直接从本功能分支的旧入口文件整包覆盖线上。
+
+旧 `generatePlayerCard` 云函数接受客户端提交的等级，已改为直接返回 `PLAYER_CARD_LEGACY_DISABLED`。Nodejs16.13、3 秒、256 MB 的既有配置保持，线上源码回下载哈希一致；用伪造 `tier=gold` 的只读调用返回该错误码，未生成图片或写入球员。旧页面需引导到新球员详情，不能继续调用该接口。
 
 球员卡积分与来源过滤尚未完成正式站点和各端切换。2026-09-30 已部署新的 `dataCenter`、`webLoginApi` 外置统计模块，以及 `getMiniWorkspace`、`resultCenter` 的来源过滤入口；PC、H5 和小程序页面仍须逐项验收，不能把服务端局部切换称为全端上线。
 
