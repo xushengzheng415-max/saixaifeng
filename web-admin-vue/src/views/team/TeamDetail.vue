@@ -26,7 +26,7 @@
         </nav>
         <div class="detail-heading">
           <div><h1>球队详情</h1></div>
-          <div class="detail-heading-actions"><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button v-if="isReadOnlyTournament" type="success" plain @click="openRosterPoster"><el-icon><Picture /></el-icon>球队名单海报</el-button><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
+          <div class="detail-heading-actions"><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button v-if="isReadOnlyTournament" type="success" plain :loading="loading || playerStatsLoading" @click="openRosterPoster"><el-icon><Picture /></el-icon>球队名单海报</el-button><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
         </div>
 
         <section class="team-event-summary">
@@ -1248,6 +1248,7 @@
       <div class="export-dialog-section"><strong>导出字段</strong><el-checkbox-group v-model="exportFields" class="export-field-checks"><el-checkbox v-for="field in exportFieldOptions" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group></div>
       <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="exportFields.length === 0" @click="exportTeamData">导出 Excel</el-button></template>
     </el-dialog>
+    <RosterPosterModal v-model="rosterPosterVisible" :tournament="tournamentContext" :tournament-logo="tournamentLogoUrl" :division-name="tournamentRelation.divisionName || sourceDivisionId" :team="team" :team-logo="teamLogoDisplayUrl" :players="posterRosterPlayers" :staff="staffMembers" :photo-data-urls="rosterPosterPhotos" :loading="loading || playerStatsLoading || rosterPosterPhotosLoading" />
   </div>
 </template>
 
@@ -1267,6 +1268,8 @@ import { provincesData, cityMapData, districtMapData } from './areaData.js'
 import { generateJerseyName } from '../../utils/jerseyName.js'
 import { KIT_COLOR_OPTIONS } from '../../utils/registrationKitColors.js'
 import { actualStaffRecords } from '../../utils/staffRecords.js'
+import { withLinkedStaffPhotos } from '../../utils/rosterPosterData.js'
+import RosterPosterModal from '../../components/team/RosterPosterModal.vue'
 import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
 
@@ -1396,7 +1399,7 @@ const competitionDivision = ref({})
 const playerAvatarErrors = ref(new Set())
 function markPlayerAvatarFailed(row) { playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id]) }
 function displayJerseyName(row) { return row.jerseyName || row.shirtName || generateJerseyName(row.name || '') || '—' }
-const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(competitionRoster.value ?? exportPlayers.value, competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' }))
+const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(withLinkedStaffPhotos(competitionRoster.value ?? exportPlayers.value, staffMembers.value), competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' }))
 function statValue(row, key) {
   if (playerStatsError.value || playerStatsLoading.value || (key === 'minutes' && row.minutesIncomplete) || (key === 'appearances' && row.appearanceIncomplete) || (key === 'goals' && row.goalsIncomplete) || (['yellowCards', 'redCards'].includes(key) && row.cardsIncomplete)) return '—'
   return row[key] ?? 0
@@ -1521,6 +1524,7 @@ const showTeamAccess = ref(false)
 const teamAccessPrimaryRole = ref('team_leader')
 const teamAccessForm = ref(teamAccessRoleOptions.map(item => ({ ...item, name:'', phone:'' })))
 const exportDialogVisible = ref(false)
+const rosterPosterVisible = ref(false)
 const exporting = ref(false)
 const exportFieldOptions = [
   { key:'photo', label:'照片', width:14 }, { key:'name', label:'姓名', width:14 }, { key:'memberType', label:'人员类型', width:12 },
@@ -1543,6 +1547,23 @@ const exportPlayers = computed(() => {
     if (!result.has(key) || player._exportSource !== 'registration_player_draft') result.set(key, player)
   })
   return Array.from(result.values())
+})
+const posterRosterPlayers = computed(() => {
+  if (!isReadOnlyTournament.value) return []
+  const currentIds = tournamentRosterPlayerIds.value
+  const source = competitionRoster.value ?? (isProfessionalTournamentTeam.value ? [] : players.value)
+  const eligible = source.filter(person => {
+    if (!person?._id) return false
+    if (currentIds.size && !currentIds.has(String(person._id))) return false
+    const review = String(person.reviewStatus || '').toLowerCase()
+    if (['excluded', 'rejected', 'conflict'].includes(review)) return false
+    if (isProfessionalTournamentTeam.value) {
+      if (['exception', 'pending', 'incomplete', 'rejected'].includes(String(person.profileStatus || '').toLowerCase())) return false
+      if (['pending', 'failed', 'rejected'].includes(String(person.identityStatus || '').toLowerCase())) return false
+    }
+    return true
+  }).map(person => ({ ...person, jerseyName: person.jerseyName || person.shirtName || generateJerseyName(person.name || '') }))
+  return withLinkedStaffPhotos(eligible, staffMembers.value)
 })
 
 function identityMatchParts(person) {
@@ -1606,16 +1627,34 @@ function openExportDialog() {
   exportDialogVisible.value = true
 }
 
-function openRosterPoster() {
-  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]))
-  const rows = players.value.map(player => `<tr><td>${escapeHtml(player.name || '未命名')}</td><td>${escapeHtml(player.jerseyNumber || '—')}</td><td>${escapeHtml(player.position || '—')}</td><td>${escapeHtml(player.birthDate || '—')}</td><td>${escapeHtml(player.birthDate ? calculateAge(player.birthDate) : '—')}</td></tr>`).join('')
-  const poster = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${escapeHtml(team.value.name || '球队')}名单</title><style>body{margin:0;padding:36px;background:#edf7f0;color:#173526;font-family:"Microsoft YaHei",Arial,sans-serif}main{max-width:900px;margin:auto;padding:34px 42px;border:1px solid #bdd9c5;border-radius:18px;background:#fff}h1{margin:0;color:#08733a;font-size:32px}p{color:#60766a}table{width:100%;margin-top:24px;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid #e3eee5;text-align:left}th{color:#53705d;background:#f4faf5}footer{margin-top:24px;color:#718278;font-size:12px}</style><main><h1>${escapeHtml(team.value.name || '球队名单')}</h1><p>${escapeHtml(tournamentContext.value.name || '')}　${escapeHtml(tournamentRelation.value.divisionName || '')}</p><table><thead><tr><th>姓名</th><th>号码</th><th>位置</th><th>出生日期</th><th>年龄</th></tr></thead><tbody>${rows || '<tr><td colspan="5">暂无球员资料</td></tr>'}</tbody></table><footer>生成时间：${escapeHtml(formatTournamentTime(new Date()))}</footer></main></html>`
-  const popup = window.open('', '_blank', 'noopener,noreferrer')
-  if (!popup) return ElMessage.warning('浏览器拦截了海报窗口，请允许弹窗后重试')
-  popup.document.write(poster)
-  popup.document.close()
-  popup.focus()
-  setTimeout(() => popup.print(), 200)
+const rosterPosterPhotos = ref({})
+const rosterPosterPhotosLoading = ref(false)
+async function openRosterPoster() {
+  rosterPosterVisible.value = true
+  rosterPosterPhotos.value = {}
+  const fileIds = Array.from(new Set([...posterRosterPlayers.value, ...staffMembers.value]
+    .map(person => person._exportPhotoFileId || person.photoFileID || person.photoFileId || person.photoUrl)
+    .filter(value => String(value || '').startsWith('cloud://'))))
+  if (!fileIds.length || !sourceTournamentId.value || !tournamentRelation.value?._id) return
+  rosterPosterPhotosLoading.value = true
+  try {
+    const result = await callFunction('organizerClaimInvite', {
+      action: 'getTeamExportPhotos',
+      tournamentId: sourceTournamentId.value,
+      divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
+      tournamentTeamId: String(tournamentRelation.value._id),
+      fileIds: fileIds.slice(0, 50)
+    })
+    if (result?.success) {
+      rosterPosterPhotos.value = Object.fromEntries((result.photos || [])
+        .filter(item => item.status === 'ready' && item.base64 && item.mimeType)
+        .map(item => [item.fileId, `data:${item.mimeType};base64,${item.base64}`]))
+    }
+  } catch (error) {
+    console.warn('名单海报读取照片失败:', error.message || error)
+  } finally {
+    rosterPosterPhotosLoading.value = false
+  }
 }
 
 function excelImageExtension(dataUrl) {
