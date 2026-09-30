@@ -66,20 +66,33 @@ function parseGenerated(value, fixtures = [], kind = 'match') {
   const outlook = text(parsed.outlook)
   if (!title || !summary || !analysis || kind === 'match' && fixtures.length && !outlook) throw new Error('生成内容不完整，请重试')
   if (kind === 'flash') return { title, body: `${summary}\n\n${analysis}`.slice(0, 1000) }
-  const fixtureText = fixtures.length ? fixtures.map(item => `${item.team}下一场：${item.date} ${item.time} 对 ${item.opponent}${item.venue ? `，${item.venue}` : ''}。`).join('\n') : '目前没有已公布的下一场赛程。'
-  const body = `本场比赛综述\n${summary}\n\n比赛形势分析\n${analysis}\n\n下场比赛预告与观点预测\n预告：${fixtureText}\n观点及预测：${fixtures.length ? outlook : '赛程未公布，暂不预测。'}`.slice(0, 1500)
+  const fixtureText = fixtures.length
+    ? `根据已公布赛程，${fixtures.map(item => `${item.team}将于${item.date.slice(0, 4)}年${item.date.slice(5, 7).replace(/^0/, '')}月${item.date.slice(8, 10).replace(/^0/, '')}日${item.time}${item.venue ? `在${item.venue}` : ''}对阵${item.opponent}`).join('；')}。`
+    : '两队下一场赛程尚未公布。'
+  const body = `本场比赛综述\n${summary}\n\n比赛形势分析\n${analysis}\n\n下场比赛预告与观点预测\n${fixtureText}${fixtures.length ? `\n${outlook}` : ''}`.slice(0, 1800)
   return { title, body }
 }
 
 function verifiedGoalEvents(match, homeName, awayName) {
   return (Array.isArray(match.events) ? match.events : [])
     .filter(event => ['goal', 'penalty_goal'].includes(text(event.type || event.eventType).toLowerCase()))
-    .slice(0, 12)
     .map(event => {
       const side = text(event.teamSide || event.side).toLowerCase()
       const team = side === 'home' ? homeName : side === 'away' ? awayName : ''
-      return { minute: event.minute, team, player: text(event.playerName || event.player), type: text(event.type || event.eventType) }
+      return { minute: Number(event.minute), team, player: text(event.playerName || event.player), type: text(event.type || event.eventType), side }
     })
+    .filter(event => Number.isFinite(event.minute) && event.minute >= 0 && event.team)
+    .sort((left, right) => left.minute - right.minute)
+    .slice(0, 12)
+}
+
+function goalTimeline(events) {
+  let home = 0; let away = 0
+  return events.map(event => {
+    if (event.side === 'home') home += 1
+    else away += 1
+    return { minute: event.minute, team: event.team, player: event.player, scoreAfter: `${home}:${away}` }
+  })
 }
 
 function startKey(match) {
@@ -142,13 +155,15 @@ async function generate(input) {
   const facts = { tournament: text(tournament.name), date: text(match.matchDate || match.date), time: text(match.matchTime), division: text(match.divisionName), round: text(match.roundName || match.roundLabel || match.round), home: text(match.homeTeamName || match.homeName), away: text(match.awayTeamName || match.awayName) }
   if (kind === 'match') {
     facts.score = `${Number(match.homeScore)}:${Number(match.awayScore)}`
-    facts.events = verifiedGoalEvents(match, facts.home, facts.away)
+    const goals = verifiedGoalEvents(match, facts.home, facts.away)
+    facts.goalTimeline = goalTimeline(goals)
+    facts.goalTimelineComplete = goals.length === Number(match.homeScore) + Number(match.awayScore)
     facts.nextFixtures = await nextFixturesForMatch(match, tournamentId)
   }
   const note = text(input.note).slice(0, 500)
   const prompt = kind === 'flash'
     ? `为足球赛事新闻中心写一篇现场快讯。只使用下列事实，不虚构照片内容、进球者、过程、比分或胜负。请给出简洁标题、现场概况和基于现有信息的观察，不写下一场预测。只返回 JSON：{"title":"...","summary":"...","analysis":"..."}。\n比赛事实：${JSON.stringify(facts)}\n主办方核实的现场看点：${note || '未提供'}`
-    : `为足球赛事官方写一篇赛后新闻。正文按三个部分完成：1. 本场比赛综述，交代对阵、正式比分、已记录的关键进球顺序；2. 比赛形势分析，仅分析这些进球与比分呈现的走势，不编造控球率、射门、战术布置或采访；3. 下场比赛预告与观点预测，预告仅按已公布的两队各自下一场赛程，预测只写基于本场表现的条件性看法，不写具体预测比分、赔率、胜率或必胜判断。用自然中文，具体、克制，不要口号、模板结尾或逐条照抄事件。只返回 JSON：{"title":"...","summary":"约120字","analysis":"约110字","outlook":"约80字"}。如果 nextFixtures 为空，outlook 设为空字符串。\n已核实比赛及后续赛程：${JSON.stringify(facts)}\n主办方核实的现场看点：${note || '未提供'}`
+    : `你是地方足球赛事的战报记者，为读者写一篇可直接阅读的赛后报道，不写数据清单或公文。只返回 JSON：{"title":"...","summary":"...","analysis":"...","outlook":"..."}。三个字段分别对应页面的“本场比赛综述”“比赛形势分析”“下场比赛预告与观点预测”，不要在字段内容中重复小标题。\n写法：标题抓住本场最值得说的一个事实（如进球人物或比分转折），避免把赛事全称、日期、比分和两队名称机械串成一行。综述第一句交代结果，接着按进球时间顺序选关键节点讲清比赛如何走到终场；用自然段落和准确的比分变化，不逐个罗列全部进球。形势分析只从已记录的比分变化和进球人物谈看点，不把比分优势说成控球或场面压制，也不重复综述。下场观点只谈值得观察的本场事实，给出有条件的判断；赛程文字由系统另行加入，outlook 不要复述日期、对手和场地。\n事实边界：goalTimeline 已按分钟排序，scoreAfter 是每球后的比分；goalTimelineComplete=false 表示进球记录不全，不得据此还原整场进球顺序。没有现场看点就不要描写射门方式、传球、战术、攻防场面、观众、采访或天气，也不要用“火力全开”“一边倒”“止颓”“方能”“值得期待”等套话。不要预测具体比分、胜率或必胜。事实少时写短些，不凑字数。\n已核实比赛事实：${JSON.stringify(facts)}\n主办方核实的现场看点：${note || '未提供'}`
   const output = await cloud.ai().createModel('hunyuan-v3').generateText({ model: 'hy3', messages: [{ role: 'user', content: prompt }] })
   const article = parseGenerated(output.text, kind === 'match' ? facts.nextFixtures : [], kind)
   if (kind === 'flash' && (/\d+\s*[:：]\s*\d+/.test(article.title + article.body) || /战胜|击败|获胜|失利|比分/.test(article.title + article.body))) throw new Error('生成内容含未确认赛果，请重新生成')
@@ -166,4 +181,4 @@ exports.main = async event => {
   catch (error) { console.error('newsPreviewGenerate failed', error); return response(200, { success: false, message: error.message || '生成新闻失败' }, cors) }
 }
 
-exports.__test = { official, parseGenerated, verifiedGoalEvents, nextFixturesFromRows, startKey }
+exports.__test = { official, parseGenerated, verifiedGoalEvents, goalTimeline, nextFixturesFromRows, startKey }
