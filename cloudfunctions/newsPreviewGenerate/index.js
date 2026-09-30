@@ -56,13 +56,18 @@ function official(match) {
   return !match.refereeRecord && !match.refereeSubmittedAt && ['finished', 'completed', 'ended'].includes(text(match.status).toLowerCase())
 }
 
-function parseGenerated(value) {
+function parseGenerated(value, fixtures = [], kind = 'match') {
   const raw = text(value).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   let parsed
   try { parsed = JSON.parse(raw) } catch (_) { throw new Error('生成内容格式异常，请重试') }
   const title = text(parsed.title).slice(0, 80)
-  const body = text(parsed.body).slice(0, 1500)
-  if (!title || !body) throw new Error('生成内容不完整，请重试')
+  const summary = text(parsed.summary)
+  const analysis = text(parsed.analysis)
+  const outlook = text(parsed.outlook)
+  if (!title || !summary || !analysis || kind === 'match' && fixtures.length && !outlook) throw new Error('生成内容不完整，请重试')
+  if (kind === 'flash') return { title, body: `${summary}\n\n${analysis}`.slice(0, 1000) }
+  const fixtureText = fixtures.length ? fixtures.map(item => `${item.team}下一场：${item.date} ${item.time} 对 ${item.opponent}${item.venue ? `，${item.venue}` : ''}。`).join('\n') : '目前没有已公布的下一场赛程。'
+  const body = `本场比赛综述\n${summary}\n\n比赛形势分析\n${analysis}\n\n下场比赛预告与观点预测\n预告：${fixtureText}\n观点及预测：${fixtures.length ? outlook : '赛程未公布，暂不预测。'}`.slice(0, 1500)
   return { title, body }
 }
 
@@ -75,6 +80,49 @@ function verifiedGoalEvents(match, homeName, awayName) {
       const team = side === 'home' ? homeName : side === 'away' ? awayName : ''
       return { minute: event.minute, team, player: text(event.playerName || event.player), type: text(event.type || event.eventType) }
     })
+}
+
+function startKey(match) {
+  const date = text(match.matchDate || match.date).slice(0, 10)
+  const time = text(match.matchTime || match.startTime || '00:00').slice(0, 5)
+  return date ? `${date}T${time}` : ''
+}
+
+function nextFixturesFromRows(match, rows) {
+  const homeId = text(match.homeTeamId), awayId = text(match.awayTeamId)
+  if (!homeId && !awayId) return []
+  const divisionId = text(match.divisionId || match.division)
+  const currentStart = startKey(match)
+  const future = rows.filter(item => {
+    if (text(item._id) === text(match._id)) return false
+    if (divisionId && text(item.divisionId || item.division) !== divisionId) return false
+    if (!(item.schedulePublished === true || item.published === true)) return false
+    if (['cancelled', 'abandoned', 'finished', 'completed', 'ended', 'archived'].includes(text(item.status).toLowerCase())) return false
+    if (!startKey(item) || startKey(item) <= currentStart) return false
+    return [homeId, awayId].some(id => id && [item.homeTeamId, item.awayTeamId].map(text).includes(id))
+  }).sort((left, right) => startKey(left).localeCompare(startKey(right)))
+  const selected = []
+  for (const [teamId, team] of [[homeId, text(match.homeTeamName || match.homeName)], [awayId, text(match.awayTeamName || match.awayName)]]) {
+    if (!teamId) continue
+    const next = future.find(item => [item.homeTeamId, item.awayTeamId].map(text).includes(teamId))
+    if (!next || selected.some(item => item.matchId === text(next._id))) continue
+    const isHome = text(next.homeTeamId) === teamId
+    selected.push({ matchId: text(next._id), team, opponent: text(isHome ? next.awayTeamName || next.awayName : next.homeTeamName || next.homeName) || '对手待定', date: text(next.matchDate || next.date).slice(0, 10), time: text(next.matchTime || next.startTime).slice(0, 5), venue: text(next.venue || next.location), round: text(next.roundName || next.roundLabel || next.round) })
+  }
+  return selected
+}
+
+async function nextFixturesForMatch(match, tournamentId) {
+  const rows = []
+  let lastId = ''
+  while (true) {
+    const where = lastId ? command.and({ tournamentId }, { _id: command.gt(lastId) }) : { tournamentId }
+    const page = (await db.collection('matches').where(where).orderBy('_id', 'asc').limit(100).get()).data || []
+    rows.push(...page)
+    if (rows.length > 20000) throw new Error('赛事比赛超出当前读取范围')
+    if (!page.length) return nextFixturesFromRows(match, rows)
+    lastId = text(page[page.length - 1]._id)
+  }
 }
 
 async function generate(input) {
@@ -95,11 +143,14 @@ async function generate(input) {
   if (kind === 'match') {
     facts.score = `${Number(match.homeScore)}:${Number(match.awayScore)}`
     facts.events = verifiedGoalEvents(match, facts.home, facts.away)
+    facts.nextFixtures = await nextFixturesForMatch(match, tournamentId)
   }
   const note = text(input.note).slice(0, 500)
-  const prompt = `为足球赛事新闻中心撰写一篇${kind === 'flash' ? '现场快讯' : '单场赛后新闻'}，同时给出标题和正文。仅使用提供的事实与现场看点，不虚构照片内容、比赛过程、进球者、采访或比分。语气自然，避免宣传口号和空泛套话。正文约 150–250 字。只返回 JSON 对象：{"title":"...","body":"..."}。\n比赛事实：${JSON.stringify(facts)}\n主办方核实的现场看点：${note || '未提供'}\n${kind === 'flash' ? '现场快讯禁止写比分、胜负和比赛结论。' : '比分只能按提供的正式赛果书写。'}`
+  const prompt = kind === 'flash'
+    ? `为足球赛事新闻中心写一篇现场快讯。只使用下列事实，不虚构照片内容、进球者、过程、比分或胜负。请给出简洁标题、现场概况和基于现有信息的观察，不写下一场预测。只返回 JSON：{"title":"...","summary":"...","analysis":"..."}。\n比赛事实：${JSON.stringify(facts)}\n主办方核实的现场看点：${note || '未提供'}`
+    : `为足球赛事官方写一篇赛后新闻。正文按三个部分完成：1. 本场比赛综述，交代对阵、正式比分、已记录的关键进球顺序；2. 比赛形势分析，仅分析这些进球与比分呈现的走势，不编造控球率、射门、战术布置或采访；3. 下场比赛预告与观点预测，预告仅按已公布的两队各自下一场赛程，预测只写基于本场表现的条件性看法，不写具体预测比分、赔率、胜率或必胜判断。用自然中文，具体、克制，不要口号、模板结尾或逐条照抄事件。只返回 JSON：{"title":"...","summary":"约120字","analysis":"约110字","outlook":"约80字"}。如果 nextFixtures 为空，outlook 设为空字符串。\n已核实比赛及后续赛程：${JSON.stringify(facts)}\n主办方核实的现场看点：${note || '未提供'}`
   const output = await cloud.ai().createModel('hunyuan-v3').generateText({ model: 'hy3', messages: [{ role: 'user', content: prompt }] })
-  const article = parseGenerated(output.text)
+  const article = parseGenerated(output.text, kind === 'match' ? facts.nextFixtures : [], kind)
   if (kind === 'flash' && (/\d+\s*[:：]\s*\d+/.test(article.title + article.body) || /战胜|击败|获胜|失利|比分/.test(article.title + article.body))) throw new Error('生成内容含未确认赛果，请重新生成')
   const usage = output.usage || null
   await db.collection('registration_audit_logs').add({ data: { sport: 'football', action: 'news_preview_generated', tournamentId, matchId, actorUserId: text(user._id), actorOrgId: orgId, result: 'success', detail: { kind, model: 'hy3', provider: 'hunyuan-v3', usage }, createTime: db.serverDate() } }).catch(error => console.warn('新闻预览用量记录失败', error.message))
@@ -115,4 +166,4 @@ exports.main = async event => {
   catch (error) { console.error('newsPreviewGenerate failed', error); return response(200, { success: false, message: error.message || '生成新闻失败' }, cors) }
 }
 
-exports.__test = { official, parseGenerated, verifiedGoalEvents }
+exports.__test = { official, parseGenerated, verifiedGoalEvents, nextFixturesFromRows, startKey }
