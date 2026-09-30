@@ -23,6 +23,7 @@
 | `ICON_SYSTEM.md` | 图标系统规范 |
 | `ICON_ASSET_CATALOG.md` | 图标来源、映射和资产台账 |
 | `UI_DELIVERY.md` | UI 交付与实现记录 |
+| `PLAYER_CARD_INTEGRATION.md` | 球员卡跨页面、跨端调用规范与验收 |
 
 ## 专题资料
 
