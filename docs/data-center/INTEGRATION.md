@@ -97,3 +97,10 @@ H5 getMyPreloadedPlayerCard、previewMyPreloadedPlayerCard、saveMyPreloadedPlay
 ## 2026-10-01 比赛管理修复
 
 PC 赛程日历与详情、监控、补录、复核的返回入口使用独立 `listDate/listDivision/listView`，比赛所属组别不再改变列表筛选。返回重新读取比赛，保留所选日期和全组别。主办方事件保存/删除、状态和完赛先检查服务端 success，再更新 UI。受控完赛动作从共享 statistics.mjs 的有效事件结算，并以事件版本和事务防止并发覆盖；重复完赛不重复累加旧积分缓存。原权限、现场快照和报告锁仍有效。专项结算与日期/筛选测试、正式仓库构建和业务/治理检查已通过；完整 main 的治理与全量副本检查有既存缺口（缺 support.cjs、小程序入口登记）。尚未部署后台或云函数，未改生产比分。
+
+## 赛制修改门禁与换人规则读取（2026-10-01）
+
+- PC `DivisionRulesWizard.vue` 只在比赛未排程前进入完整规则修订；比赛中展示白名单内的换人设置入口。
+- `webLoginApi` 的 `reviseDivisionRules` / `confirmDivisionRules` 在赛程生成、赛程锁定或赛事开始后拒绝整套修改；通用 `update` 仍拒绝直接改定版规则。中途仅允许 `updateDivisionSubstitutionRules` 修改换人设置并保留规则版本、旧值历史和权限校验。
+- `dataCenter/shared/substitution.mjs` 对未开赛场次优先读取组别最新活动换人规则；已开始或完赛场次继续读取其比赛快照。部署副本同步至 `updateMatch`、`serviceMatchWorkflow` 等入口，避免 PC 补录与服务号裁判登记口径分离。
+- 冻结字段分类与边界见 `docs/PRODUCT_RULES.md`；生产或预览状态须单独登记于 `RELEASE.md`。
