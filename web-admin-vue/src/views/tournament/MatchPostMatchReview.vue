@@ -117,6 +117,7 @@
 </template>
 
 <script setup>
+import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -203,7 +204,7 @@ function formatSize(size) {
   if (!size) return ''
   return size < 1024 * 1024 ? `${Math.ceil(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
 }
-function backToList() { router.push({ path: `/tournaments/${tournamentId}/matches`, query: { divisionId: match.value.divisionId } }) }
+function backToList() { router.push({ path: `/tournaments/${tournamentId}/matches`, query: matchListQuery(route.query) }) }
 
 async function load() {
   if (visualQaSnapshot) {
@@ -304,7 +305,7 @@ async function previewRecord(record) {
 function openReview() {
   router.push({
     path: `/tournaments/${tournamentId}/match/${matchId}/review`,
-    query: match.value.divisionId ? { divisionId: match.value.divisionId } : {}
+    query: { ...matchSourceQuery(route.query), ...(match.value.divisionId ? { divisionId: match.value.divisionId } : {}) }
   })
 }
 

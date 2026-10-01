@@ -93,3 +93,7 @@ H5 getMyPreloadedPlayerCard、previewMyPreloadedPlayerCard、saveMyPreloadedPlay
 用户要求保存排版供其他卡沿用。平台负责人通过 savePlayerCardLayoutPreset 将文字布局及全部样式、人物大小／位置、国旗／队徽大小／位置保存为命名方案；listPlayerCardLayoutPresets 支持分页及名称检索，getPlayerCardLayoutPreset 返回经过同一校验器检查的配置。集合 player_card_layout_presets 保存方案、schemaVersion、创建人和时间，同名方案不覆盖，修改另存新名称。
 
 沿用复制到当前卡草稿，仅修改 layout/photo/badges；卡名、背景、遮罩、等级、预装对象、球员事实、已发布版本和其他卡片均不改变。保存排版不等于保存卡片草稿或发布，不携带任何照片、卡面文件、球队或球员身份。应用后需预览并保存当前卡草稿，后续编辑与方案及其他卡互不联动。本地专项及页面联测通过；集合和接口未上线。
+
+## 主办方完赛结算补充（2026-10-01）
+
+`updateMatch.finishOrganizerMatch` 校验原赛事机构权限、比赛记录锁及 `expectedEventRevision`，在事务中核对事件版本和状态后保存 `finished` 与两套比分字段。完整嵌入事件数组由共享 `calculateMatchEventScore` 结算有效进球、已进点球和反向乌龙球；撤销、重复 ID 与点球大战不计常规比分。缺少事件数组保留手录兼容；明确空数组为 0:0；有效进球缺少球队时拒绝结算。不得改写正在裁判记录或已提交/锁定的记录。该动作不等于裁判报告审核、正式赛果发布或生产历史数据修复。

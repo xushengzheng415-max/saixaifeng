@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const source = path.join(root,'cloudfunctions/dataCenter/shared')
 const consumers = ['getMiniWorkspace','webLoginApi','resultCenter','updateMatch','serviceMatchWorkflow']
-const files = ['reader.cjs','statistics.mjs','service.cjs','support.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs']
+const allFiles = ['reader.cjs','statistics.mjs','service.cjs','support.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs']
+const requestedFiles = process.argv.filter(arg => arg.startsWith('--file=')).map(arg => arg.slice(7))
+if (requestedFiles.some(file => !allFiles.includes(file))) throw new Error('Unknown shared file')
+const files = requestedFiles.length ? requestedFiles : allFiles
 const check = process.argv.includes('--check')
 let mismatch = false
 for (const consumer of consumers) {

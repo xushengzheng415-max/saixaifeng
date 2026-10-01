@@ -107,6 +107,26 @@ export function effectiveEvents(match, externalEvents = []) {
   return [...byId.values(), ...unkeyed].filter(event => !cancelled(event))
 }
 
+// Official match score from effective events; shootout attempts are separate.
+export function calculateMatchEventScore(match) {
+  if (!Array.isArray(match.events)) return null
+  const result = { home: 0, away: 0 }
+  for (const event of effectiveEvents(match)) {
+    const type = eventType(event)
+    if (!['goal', 'penalty_scored', 'own_goal'].includes(type)) continue
+    if (event.isShootout === true || ['shootout', 'penalty_shootout'].includes(text(event.phase || event.period).toLowerCase())) continue
+    let side = text(event.teamSide || event.side)
+    if (!['home', 'away'].includes(side)) {
+      if (event.teamId && text(event.teamId) === text(match.homeTeamId)) side = 'home'
+      else if (event.teamId && text(event.teamId) === text(match.awayTeamId)) side = 'away'
+      else throw Object.assign(new Error('进球事件缺少有效球队，请修正后结束比赛'), { code: 'GOAL_TEAM_REQUIRED' })
+    }
+    if (type === 'own_goal') side = side === 'home' ? 'away' : 'home'
+    result[side] += 1
+  }
+  return result
+}
+
 function lineupOf(match, side) {
   const source = match[side + 'Lineup'] || match['lineup' + (side === 'home' ? 'Home' : 'Away')] || match.lineups?.[side]
   if (Array.isArray(source)) return { known:true, starters:source, substitutes:[] }
@@ -297,35 +317,27 @@ export function sumPlayerRows(rows) {
   return { metrics, observed, coverage }
 }
 
-export const PLAYER_CARD_SCORE_VERSION = 'football-player-card-points/2'
-export const PLAYER_CARD_ENTITLEMENT_VERSION = 'football-player-card-entitlements/2'
+export const PLAYER_CARD_SCORE_VERSION = 'football-player-card-points/1'
+export const PLAYER_CARD_ENTITLEMENT_VERSION = 'football-player-card-entitlements/1'
 
 export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
   const fields = ['appearances','starts','minutesPlayed','goals']
   const metrics = playerTotal?.metrics || {}
   const coverage = playerTotal?.coverage || {}
   const missing = fields.filter(field => coverage[field] !== 'complete' || !Number.isSafeInteger(metrics[field]) || metrics[field] < 0)
-  const supportDrops = metadata.supportDrops
-  const supportDataVersion = metadata.supportDataVersion || null
-  const dataVersion = supportDataVersion && metadata.dataVersion
-    ? crypto.createHash('sha256').update(JSON.stringify([metadata.dataVersion,supportDataVersion])).digest('hex').slice(0,24)
-    : null
-  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion, careerDataVersion:metadata.dataVersion || null, supportDataVersion, scope:'career', mode:'official' }
+  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion:metadata.dataVersion || null, scope:'career', mode:'official' }
   if (metadata.coverageStatus && metadata.coverageStatus !== 'complete') return { ...base, status:'unverified', missing:['dataCoverage'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
-  if (metadata.supportCoverageStatus !== 'complete' || !Number.isSafeInteger(supportDrops) || supportDrops < 0 || !supportDataVersion) return { ...base, status:'unverified', missing:['supportDrops'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   if (missing.length || metrics.starts > metrics.appearances) {
     return { ...base, status:'unverified', missing:metrics.starts > metrics.appearances ? [...new Set([...missing,'starts'])] : missing, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   }
   const appearances = metrics.appearances, starts = metrics.starts, minutesPlayed = metrics.minutesPlayed, goals = metrics.goals
   const foundation = 2 * appearances + starts + Math.floor(minutesPlayed / 45)
   const goalBonus = Math.min(2 * goals, Math.floor(foundation / 5))
-  const careerPoints = foundation + goalBonus
-  const supportPoints = Math.floor(supportDrops / 10)
-  const points = careerPoints + supportPoints
+  const points = foundation + goalBonus
   if (!Number.isSafeInteger(points)) return { ...base, status:'unverified', missing:fields, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   const tier = points >= 100 ? 'gold' : points >= 45 ? 'silver' : 'bronze'
   const nextAt = tier === 'gold' ? null : tier === 'silver' ? 100 : 45
-  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, careerPoints, supportDrops, supportPoints, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
+  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
 }
 
 export function selectRosterMatches(matches, teamId, divisionId, allowLegacy) {
