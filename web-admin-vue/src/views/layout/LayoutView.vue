@@ -216,7 +216,7 @@
           </button>
           <div class="workspace-shell-actions">
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
-            <button class="notification-action" type="button" aria-label="查看通知" @click="showNotifications"><el-icon><Bell /></el-icon><i v-if="unreadNotificationCount">{{ unreadNotificationCount }}</i></button>
+            <button class="notification-action" type="button" aria-label="查看站内信" title="站内信" @click="showNotifications"><el-icon><Bell /></el-icon><i v-if="unreadNotificationCount">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</i></button>
             <el-dropdown trigger="click" @command="handleUserCommand">
               <div class="workspace-user">
                 <el-avatar v-if="userInfo.avatarUrl" :size="38" :src="userInfo.avatarUrl" />
@@ -291,7 +291,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -323,8 +323,16 @@ function openHelpCenter() {
 }
 
 function showNotifications() {
-  ElMessage.info(unreadNotificationCount.value ? `你有 ${unreadNotificationCount.value} 条未读通知` : '暂无新通知')
+  router.push('/messages')
 }
+async function refreshUnreadNotificationCount() {
+  if (isPlatformContext()) return
+  try {
+    const result = await callFunction('onboardingWorkspace', { action: 'organizerInboxList' })
+    if (result?.success) unreadNotificationCount.value = Number(result.data?.unreadCount || 0)
+  } catch { /* 站内信状态不阻断后台加载 */ }
+}
+function handleInboxUpdated() { void refreshUnreadNotificationCount() }
 
 // 用户信息
 function readStoredObject(key) {
@@ -452,6 +460,19 @@ function openPhoneBinding() {
   profileDialogVisible.value = false
   bindPhoneVisible.value = true
 }
+async function openContactInfoFromNotice() {
+  const target = route.query.openContactInfo
+  if (target !== 'profile' && target !== 'organization') return
+  if (target === 'organization' && !organizationRecord.value.id) await loadWorkspaceAccount()
+  const query = { ...route.query }
+  delete query.openContactInfo
+  router.replace({ path: route.path, query })
+  if (target === 'organization') openOrganizationDialog()
+  else openProfileDialog()
+}
+watch(() => route.query.openContactInfo, value => {
+  if (value === 'profile' || value === 'organization') void openContactInfoFromNotice()
+})
 function openOrganizationDialog() {
   const organization = organizationRecord.value || {}
   organizationForm.name = organization.name || organization.organizationName || organizationDisplayName.value
@@ -649,11 +670,7 @@ async function sendBindEmailCode() {
     const response = await fetch(WEB_LOGIN_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'emailSendCode',
-        email: email,
-        purpose: 'bind'
-      })
+      body: JSON.stringify({ action: 'emailSendCode', email, purpose: 'bind' })
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const res = await response.json()
@@ -689,12 +706,7 @@ async function confirmBindEmail() {
     const response = await fetch(WEB_LOGIN_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'emailBindEmail',
-        userId: userId,
-        email: bindEmailForm.value.email,
-        code: bindEmailForm.value.code
-      })
+      body: JSON.stringify({ action: 'emailBindEmail', userId, email: bindEmailForm.value.email, code: bindEmailForm.value.code })
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const res = await response.json()
@@ -934,6 +946,9 @@ onMounted(() => {
     currentRole.value = 'platform_owner'
     return
   }
+  if (route.query.openContactInfo === 'profile' || route.query.openContactInfo === 'organization') {
+    void openContactInfoFromNotice()
+  }
   const savedInfo = localStorage.getItem('userInfo')
   if (savedInfo) {
     try {
@@ -992,6 +1007,8 @@ onMounted(() => {
   }
   loginType.value = localStorage.getItem('loginType') || 'anonymous'
   currentRole.value = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
+  window.addEventListener('sxf-organizer-inbox-updated', handleInboxUpdated)
+  void refreshUnreadNotificationCount()
   if (shouldLoadLayoutBootstrap()) {
     // 机构状态和账号资料在会话内短时间稳定；菜单切换不需要重复等待这两次请求。
     Promise.all([loadWorkspaceAccount(), loadCurrentAccountProfile()]).finally(markLayoutBootstrapLoaded)
@@ -1028,6 +1045,7 @@ const currentPageTitle = computed(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('sxf-organizer-inbox-updated', handleInboxUpdated)
   if (countdownTimer) {
     clearInterval(countdownTimer)
     countdownTimer = null
