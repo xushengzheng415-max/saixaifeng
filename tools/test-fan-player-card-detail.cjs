@@ -27,4 +27,7 @@ const pending = render({ ...base,cardTier:null,cardPoints:null,careerMetrics:nul
 assert(pending.includes('球员卡等级待核定') || pending.includes('等级待核定'))
 assert(!pending.includes('再 10 场升级'))
 assert(!pending.includes('null-card.png'))
+const inconsistent = render({ ...base,cardTier:'bronze',cardPoints:4,careerMetrics:null },4)
+assert(inconsistent.includes('参赛场次：<strong>统计暂不可用</strong>'))
+assert(!inconsistent.includes('参赛场次：<strong>待核定</strong>'))
 console.log('PASS: H5 球员资料使用正式参赛场次、积分进度和待核定状态')

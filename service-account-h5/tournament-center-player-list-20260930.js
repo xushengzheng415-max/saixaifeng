@@ -660,7 +660,7 @@
         var ready = ['bronze', 'silver', 'gold'].indexOf(String(row.cardTier || '')) >= 0 && Number.isFinite(row.cardPoints)
         var tier = ready ? row.cardTier : null
         var tierName = ready ? { bronze:'铜卡', silver:'银卡', gold:'金卡' }[tier] : '等级待核定'
-        var appearanceText = Number.isFinite(career.appearances) ? career.appearances + ' 场' : '待核定'
+        var appearanceText = Number.isFinite(career.appearances) ? career.appearances + ' 场' : ready ? '统计暂不可用' : '待核定'
         var pointsText = ready ? row.cardPoints + ' 分' : '待核定'
         var nextHint = !ready ? '' : row.cardPoints >= 100 ? '已达金卡' : row.cardPoints >= 45 ? '距金卡 ' + (100 - row.cardPoints) + ' 分' : '距银卡 ' + (45 - row.cardPoints) + ' 分'
         function field(label, value) { return '<div><dt>' + label + '</dt><dd>' + escapeHtml(value == null || value === '' ? '—' : String(value)) + '</dd></div>' }
