@@ -5,7 +5,7 @@ const {createPlayerCards} = require('../cloudfunctions/webLoginApi/playerCards.c
 const {libraryId} = require('../cloudfunctions/webLoginApi/playerCardLibrary.cjs')
 const score = {status:'ready',tier:'bronze',points:0,metrics:{appearances:0},canChangeBackground:false,canReplacePhoto:false,scoreVersion:'test/1'}
 const publish = createPlayerCardTemplates({cloud,scoreForPlayer:async()=>score,authenticateWebSession:async()=>({success:true,principalType:'platform_owner',user:{isPlatformOwner:true},userId:'owner'})})
-const h5 = createPlayerCards({cloud,scoreForPlayer:async()=>score,hashSessionToken:value=>value,dateValue:value=>Number(value)})
+const h5 = createPlayerCards({cloud,readBaseCard:async p=>({status:p.playerCardFileId?'ready':'unavailable',fileId:p.playerCardFileId,url:p.playerCardFileId?'https://test.local/'+p.playerCardFileId:'',templateVersion:1,cardDataVersion:p.playerCardVersion,renderVersion:'resvg/1'}),scoreForPlayer:async()=>score,hashSessionToken:value=>value,dateValue:value=>Number(value)})
 const pc = (action,data={}) => publish({action,...data})
 const api = (action,data={}) => h5({action,fanSessionToken:'session1',...data})
 async function main() {

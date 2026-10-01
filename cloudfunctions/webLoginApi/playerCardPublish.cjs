@@ -8,7 +8,9 @@ const preload = require('./playerCardPreload.cjs')
 
 function createPlayerCardPublish({ cloud, scoreForPlayer }) {
   const db = cloud.database()
+  const basePublisher=require('./playerCardBasePublish.cjs').createPlayerCardPublish({cloud})
   async function begin(row, revision, userId) {
+    if(!row.draft?.preload) return basePublisher.begin(row,revision,userId)
     const tier = String(row.tier || '')
     if (!suite.TYPES.includes(tier)) throw new Error('暂不支持该卡种')
     const scope = await preload.validatePreload(db, row.draft?.preload, suite.document)
@@ -109,6 +111,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
   async function advance(jobId) {
     const job = await suite.document(db, suite.JOBS, jobId)
     if (!job || job.status !== 'pending') throw new Error('发布任务已失效')
+    if(!job.additive) return basePublisher.advance(jobId)
     if (job.failures?.length) return finish(jobId)
     const snapshot = await suite.document(db, suite.VERSIONS, suite.versionId(job.templateId, job.version))
     if (!snapshot) throw new Error('待发布模板缺失')
@@ -145,10 +148,11 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
   }
 
   async function status(tier, scope, templateId) {
+    if(!templateId) return basePublisher.status(tier)
     const key = preload.stateId(tier, scope, templateId)
     const state = await suite.document(db, suite.STATES, key)
     const jobId = state?.candidate?.jobId
-    if (!jobId) return { success:true, status:'idle' }
+    if (!jobId) { const base=await suite.document(db,suite.STATES,tier);return base?.candidate?.templateId === templateId ? basePublisher.status(tier) : {success:true,status:'idle'} }
     const job = await suite.document(db, suite.JOBS, jobId)
     return job ? { success:true, status:job.failures?.length ? 'blocked' : job.status,
       jobId, total:job.targetIds?.length || 0, completed:job.cursor || 0,
@@ -159,6 +163,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
   async function retry(jobId) {
     const job = await suite.document(db, suite.JOBS, jobId)
     if (!job || job.status !== 'pending' || !job.failures?.length) throw new Error('没有可重试的成卡')
+    if(!job.additive) return basePublisher.retry(jobId)
     const state = await suite.document(db, suite.STATES, job.stateId || job.tier)
     if (state?.candidate?.jobId !== jobId) throw new Error('发布任务已失效')
     const targetIds = [...(job.targetIds||[]), ...job.failures.map(item => item.playerId)]

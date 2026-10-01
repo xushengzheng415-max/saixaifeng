@@ -85,81 +85,6 @@ const SERVICE_ACCOUNT_CONFIG = {
   H5_URL: 'https://www.sxffootball.cn/service-account-h5/'
 }
 
-const PARENT_OCR_HOST = 'ocr.tencentcloudapi.com'
-const PARENT_OCR_SERVICE = 'ocr'
-const PARENT_OCR_VERSION = '2018-11-19'
-
-function parentOcrHmac(key, value) {
-  return crypto.createHmac('sha256', key).update(value).digest()
-}
-
-function parentOcrAuthorization(secretId, secretKey, timestamp, payload) {
-  const date = new Date(timestamp * 1000).toISOString().slice(0, 10)
-  const canonicalHeaders = 'content-type:application/json; charset=utf-8\nhost:' + PARENT_OCR_HOST + '\n'
-  const signedHeaders = 'content-type;host'
-  const hashedPayload = crypto.createHash('sha256').update(payload).digest('hex')
-  const canonicalRequest = ['POST', '/', '', canonicalHeaders, signedHeaders, hashedPayload].join('\n')
-  const credentialScope = date + '/' + PARENT_OCR_SERVICE + '/tc3_request'
-  const stringToSign = ['TC3-HMAC-SHA256', String(timestamp), credentialScope, crypto.createHash('sha256').update(canonicalRequest).digest('hex')].join('\n')
-  const dateKey = parentOcrHmac('TC3' + secretKey, date)
-  const serviceKey = parentOcrHmac(dateKey, PARENT_OCR_SERVICE)
-  const signingKey = parentOcrHmac(serviceKey, 'tc3_request')
-  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex')
-  return 'TC3-HMAC-SHA256 Credential=' + secretId + '/' + credentialScope + ', SignedHeaders=' + signedHeaders + ', Signature=' + signature
-}
-
-function callParentIdCardOcr(imageBase64) {
-  return new Promise(function(resolve, reject) {
-    const explicitSecretId = process.env.OCR_SECRET_ID || ''
-    const explicitSecretKey = process.env.OCR_SECRET_KEY || ''
-    const secretId = explicitSecretId || process.env.TENCENTCLOUD_SECRETID || process.env.TENCENT_SECRET_ID || ''
-    const secretKey = explicitSecretKey || process.env.TENCENTCLOUD_SECRETKEY || process.env.TENCENT_SECRET_KEY || ''
-    const sessionToken = explicitSecretId && explicitSecretKey ? '' : (process.env.TENCENTCLOUD_SESSIONTOKEN || '')
-    if (!secretId || !secretKey) return reject(Object.assign(new Error('身份证识别服务临时凭据不可用'), { code: 'OCR_CREDENTIAL_MISSING' }))
-    const payload = JSON.stringify({ ImageBase64: imageBase64, CardSide: 'FRONT', Config: JSON.stringify({ CropIdCard: true, CopyWarn: true, ReshootWarn: true, BorderCheckWarn: true, DetectPsWarn: true, TempIdWarn: true, InvalidDateWarn: true }) })
-    const timestamp = Math.floor(Date.now() / 1000)
-    const headers = {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Content-Length': Buffer.byteLength(payload),
-      Host: PARENT_OCR_HOST,
-      'X-TC-Action': 'IDCardOCR',
-      'X-TC-Version': PARENT_OCR_VERSION,
-      'X-TC-Timestamp': String(timestamp),
-      'X-TC-Region': process.env.TENCENTCLOUD_REGION || 'ap-shanghai',
-      Authorization: parentOcrAuthorization(secretId, secretKey, timestamp, payload)
-    }
-    if (sessionToken) headers['X-TC-Token'] = sessionToken
-    const request = https.request({ hostname: PARENT_OCR_HOST, port: 443, path: '/', method: 'POST', headers }, function(response) {
-      let body = ''
-      response.on('data', function(chunk) { body += chunk })
-      response.on('end', function() {
-        try {
-          const parsed = JSON.parse(body)
-          const result = parsed.Response || {}
-          if (result.Error) return reject(Object.assign(new Error(result.Error.Message || '身份证识别失败'), { code: result.Error.Code || 'OCR_API_ERROR' }))
-          resolve(result)
-        } catch (error) { reject(Object.assign(new Error('身份证识别结果解析失败'), { code: 'OCR_RESPONSE_INVALID' })) }
-      })
-    })
-    request.setTimeout(18000, function() { request.destroy(Object.assign(new Error('身份证识别超时，请重试'), { code: 'OCR_TIMEOUT' })) })
-    request.on('error', reject)
-    request.write(payload)
-    request.end()
-  })
-}
-
-function normalizeOcrBirthDate(value) {
-  const digits = String(value || '').replace(/\D/g, '')
-  if (digits.length !== 8) return ''
-  return digits.slice(0, 4) + '-' + digits.slice(4, 6) + '-' + digits.slice(6, 8)
-}
-
-function maskIdentityNumber(value) {
-  const normalized = String(value || '').replace(/[^0-9Xx]/g, '').toUpperCase()
-  if (normalized.length < 6) return ''
-  return normalized.slice(0, 2) + '*'.repeat(Math.max(2, normalized.length - 6)) + normalized.slice(-4)
-}
-
 function identityFeatureKey() {
   const raw = String(process.env.SXF_IDENTITY_FEATURE_KEY || '').trim()
   if (!raw) return null
@@ -560,6 +485,23 @@ function resolveParentInviteRequirements(invite, player) {
   }
 }
 
+async function resolveReusableRegistrationIdentity(db, player) {
+  if (!player || String(player.profileStatus || '') !== 'complete' || String(player.parentProfileSubmissionStatus || '') !== 'submitted') return null
+  const rows = (await db.collection('player_identity_profiles').where({ playerId: String(player._id) }).limit(2).get()).data || []
+  if (rows.length !== 1) return null
+  const profile = rows[0]
+  if (!['verified', 'manual_required'].includes(String(profile.status || '')) || !profile.verificationId || profile.revokedAt) return null
+  const proofs = (await db.collection('parent_identity_verifications').where({ _id: String(profile.verificationId), status: 'approved' }).limit(1).get()).data || []
+  const proof = proofs[0]
+  if (!proof || proof.revokedAt || !proof.parentInvite) return null
+  const invites = (await db.collection('parent_profile_invites').where({ token: proof.parentInvite, playerId: String(player._id) }).limit(2).get()).data || []
+  if (invites.length !== 1) return null
+  const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: proof.parentInvite, basicConfirmed: true }).limit(2).get()).data || []
+  if (drafts.length !== 1 || !parentDraftIsAuthorized(drafts[0]) || drafts[0].needsManualReview) return null
+  if (String(drafts[0].requestedName || '') !== String(player.name || '') || String(drafts[0].requestedBirthDate || '') !== String(player.birthDate || player.birthday || '')) return null
+  return proof
+}
+
 async function previewParentProfileInvite(event) {
   const token = String(event.parentInvite || '').trim()
   if (!/^pp_[a-z0-9]+$/i.test(token)) return { success: false, error: '球员资料邀请无效或已失效', code: 'PARENT_INVITE_INVALID' }
@@ -576,7 +518,14 @@ async function previewParentProfileInvite(event) {
   if (!player || !team || String(player.teamId || '') !== String(invite.teamId || '')) return { success: false, error: '邀请关联资料不存在，请联系球队管理员', code: 'PARENT_INVITE_BROKEN' }
   const registrantType = resolveParentRegistrantType(invite, player)
   const phone = registrantType === 'self' ? (player.playerPhone || player.contactPhone || invite.registrantPhone) : (player.guardianPhone || player.contactPhone || invite.guardianPhone || invite.registrantPhone)
-  return { success: true, data: { playerName: String(player.name || '球员'), birthDate: String(player.birthDate || player.birthday || ''), teamName: String(team.name || team.teamName || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', isSelfRegistration: registrantType === 'self', accountPhoneMasked: maskServicePhone(phone), guardianPhoneMasked: registrantType === 'guardian' ? maskServicePhone(phone) : '', requirements: resolveParentInviteRequirements(invite, player), status: String(player.profileStatus || 'pending') } }
+  const requirements = resolveParentInviteRequirements(invite, player)
+  if (requirements.realName && await resolveReusableRegistrationIdentity(db, player)) {
+    requirements.realName = false
+    requirements.identityVerificationRequired = false
+    requirements.identityAlreadyVerified = true
+    requirements.source = 'approved-stable-player-identity'
+  }
+  return { success: true, data: { playerName: String(player.name || '球员'), birthDate: String(player.birthDate || player.birthday || ''), teamName: String(team.name || team.teamName || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', isSelfRegistration: registrantType === 'self', accountPhoneMasked: maskServicePhone(phone), guardianPhoneMasked: registrantType === 'guardian' ? maskServicePhone(phone) : '', requirements, status: String(player.profileStatus || 'pending') } }
 }
 
 async function createParentProfileOAuthUrl(event) {
@@ -660,8 +609,9 @@ async function uploadParentIdentityDocument(event) {
   if (!preview.success) return preview
   if (!preview.data.requirements.realName) return { success: false, error: '本次邀请未开启人证核验要求', code: 'PARENT_IDENTITY_NOT_REQUIRED' }
   const side = String(event.side || '').toLowerCase()
-  if (side !== 'front') return { success: false, error: '当前实名流程只需上传身份证人像面', code: 'PARENT_IDENTITY_FRONT_ONLY' }
+  if (!['front', 'back'].includes(side)) return { success: false, error: '请选择证件正面或反面', code: 'PARENT_IDENTITY_SIDE_INVALID' }
   const documentType = ['resident_id','household_register','passport','mainland_travel_permit','taiwan_travel_permit'].includes(String(event.documentType || '')) ? String(event.documentType) : 'resident_id'
+  if (side === 'back' && documentType !== 'resident_id') return { success:false, error:'该证件只需上传资料页', code:'PARENT_IDENTITY_BACK_NOT_REQUIRED' }
   const db = cloud.database()
   await ensureIdentityCollections(db)
   const verificationRows = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || [], currentVerification = verificationRows[0]
@@ -675,33 +625,28 @@ async function uploadParentIdentityDocument(event) {
   if (!matched) return { success: false, error: '仅支持 JPG 或 PNG 身份材料' }
   const buffer = Buffer.from(matched[2], 'base64')
   if (!buffer.length || buffer.length > 3 * 1024 * 1024) return { success: false, error: '材料必须小于 3MB' }
+  const reviewBase64Data = String(event.reviewBase64Data || '')
+  if (!reviewBase64Data || reviewBase64Data.length > 4.2 * 1024 * 1024) return { success:false, error:'缺少裁边水印副本，请重新选择照片', code:'IDENTITY_REVIEW_COPY_REQUIRED' }
+  const reviewMatched = reviewBase64Data.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/)
+  if (!reviewMatched) return { success:false, error:'裁边水印副本格式无效，请重试', code:'IDENTITY_REVIEW_COPY_INVALID' }
+  const reviewBuffer = Buffer.from(reviewMatched[2], 'base64')
+  if (!reviewBuffer.length || reviewBuffer.length > 3 * 1024 * 1024) return { success:false, error:'裁边水印副本必须小于 3MB' }
   const digest = crypto.createHash('sha256').update(buffer).digest('hex')
+  const reviewDigest = crypto.createHash('sha256').update(reviewBuffer).digest('hex')
   const cloudPath = 'restricted/parent-identity/' + crypto.createHash('sha256').update(authenticated.session.parentInvite).digest('hex').slice(0, 20) + '/' + side + '-' + Date.now() + '.' + (matched[1] === 'jpeg' ? 'jpg' : 'png')
   const uploaded = await cloud.uploadFile({ cloudPath, fileContent: buffer })
-  let recognition = null
-  let recognitionStatus = 'recognized'
-  let recognitionErrorCode = ''
-  try {
-    if (documentType !== 'resident_id') throw Object.assign(new Error('当前证件类型转人工核验'), { code:'DOCUMENT_MANUAL_REVIEW' })
-    const ocr = await callParentIdCardOcr(matched[2])
-    recognition = {
-      name: String(ocr.Name || '').trim(),
-      birthDate: normalizeOcrBirthDate(ocr.Birth),
-      gender: ['男', '女'].indexOf(String(ocr.Sex || '').trim()) >= 0 ? String(ocr.Sex).trim() : '',
-      identityNumberMasked: maskIdentityNumber(ocr.IdNum),
-      warnings: Array.isArray(ocr.WarnInfos) ? ocr.WarnInfos.map(item => String(item)).slice(0, 12) : []
-    }
-    if (!recognition.name || !recognition.birthDate || !recognition.identityNumberMasked) recognitionStatus = 'needs_manual_review'
-  } catch (error) {
-    recognitionStatus = 'needs_manual_review'
-    recognitionErrorCode = String(error.code || 'OCR_FAILED').slice(0, 80)
-  }
+  const reviewCloudPath = cloudPath.replace(/\.(jpg|png)$/, '-review.' + (reviewMatched[1] === 'jpeg' ? 'jpg' : 'png'))
+  const reviewUploaded = await cloud.uploadFile({ cloudPath:reviewCloudPath, fileContent:reviewBuffer })
+  const recognition = null
+  const recognitionStatus = 'needs_manual_review'
+  const recognitionErrorCode = 'OCR_SKIPPED_BY_PRIVACY'
   const existing = (await db.collection('parent_identity_documents').where({ parentInvite: authenticated.session.parentInvite, side, status: 'uploaded' }).limit(20).get()).data || []
   await Promise.all(existing.map(item => db.collection('parent_identity_documents').doc(item._id).update({ data: { status: 'replaced', replacedAt: db.serverDate() } })))
   const deleteAfter = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-  const documentAdded = await db.collection('parent_identity_documents').add({ data: { parentInvite: authenticated.session.parentInvite, side, documentType, fileId: uploaded.fileID, sha256: digest, size: buffer.length, mimeType: 'image/' + matched[1], status: 'uploaded', recognitionStatus, recognizedName: recognition ? recognition.name : '', recognizedBirthDate: recognition ? recognition.birthDate : '', recognizedGender: recognition ? recognition.gender : '', identityNumberMasked: recognition ? recognition.identityNumberMasked : '', recognitionWarnings: recognition ? recognition.warnings : [], recognitionErrorCode, restrictedAccess:true, deleteAfter, retentionDays:30, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, createTime: db.serverDate(), updateTime: db.serverDate() } })
+  const documentAdded = await db.collection('parent_identity_documents').add({ data: { parentInvite: authenticated.session.parentInvite, side, documentType, fileId: uploaded.fileID, reviewFileId:reviewUploaded.fileID, sha256: digest, reviewSha256:reviewDigest, reviewSize:reviewBuffer.length, reviewMimeType:'image/' + reviewMatched[1], cropDetected:event.cropDetected === true, watermarkVersion:String(event.watermarkVersion || '').slice(0,40), size: buffer.length, mimeType: 'image/' + matched[1], status: 'uploaded', recognitionStatus, recognizedName: recognition ? recognition.name : '', recognizedBirthDate: recognition ? recognition.birthDate : '', recognizedGender: recognition ? recognition.gender : '', identityNumberMasked: recognition ? recognition.identityNumberMasked : '', recognitionWarnings: recognition ? recognition.warnings : [], recognitionErrorCode, restrictedAccess:true, deleteAfter, retentionDays:30, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, createTime: db.serverDate(), updateTime: db.serverDate() } })
   await db.collection('sensitive_file_deletion_tasks').add({ data:{ businessType:'player_identity_document', businessId:String(documentAdded._id), fileId:uploaded.fileID, status:'scheduled', executeAfter:deleteAfter, retentionDays:30, createTime:db.serverDate(), updateTime:db.serverDate() } })
-  return { success: true, side, documentType, status: 'uploaded', recognitionStatus }
+  await db.collection('sensitive_file_deletion_tasks').add({ data:{ businessType:'player_identity_document_review_copy', businessId:String(documentAdded._id), fileId:reviewUploaded.fileID, status:'scheduled', executeAfter:deleteAfter, retentionDays:30, createTime:db.serverDate(), updateTime:db.serverDate() } })
+  return { success: true, side, documentType, status: 'uploaded', recognitionStatus, cropDetected:event.cropDetected === true, watermarked:true }
 }
 
 async function submitParentIdentityVerification(event) {
@@ -718,6 +663,8 @@ async function submitParentIdentityVerification(event) {
   const docs = (await db.collection('parent_identity_documents').where({ parentInvite: authenticated.session.parentInvite, status: 'uploaded' }).limit(10).get()).data || []
   const frontDocument = docs.find(item => item.side === 'front')
   if (!frontDocument) return { success: false, error: '请先上传身份证人像面' }
+  const backDocument = docs.find(item => item.side === 'back' && item.documentType === 'resident_id')
+  if (frontDocument.documentType === 'resident_id' && !backDocument) return { success:false, error:'请上传身份证国徽面', code:'PARENT_IDENTITY_BACK_REQUIRED' }
   if (currentVerification && String(currentVerification.status || '') === 'rejected' && Array.isArray(currentVerification.documentIds)) {
     const previousDocumentIds = currentVerification.documentIds.map(item => String(item))
     if (previousDocumentIds.indexOf(String(frontDocument._id)) >= 0) {
@@ -725,7 +672,7 @@ async function submitParentIdentityVerification(event) {
     }
   }
   const records = (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
-  const recognized = String(frontDocument.recognitionStatus || '') === 'recognized'
+  const recognized = String(frontDocument.recognitionStatus || '') === 'recognized' && (!backDocument || String(backDocument.recognitionStatus || '') === 'recognized')
   const faceAssessment = event.faceAssessment && typeof event.faceAssessment === 'object' ? event.faceAssessment : {}
   const faceMethod = String(faceAssessment.method || '')
   const faceStatus = String(faceAssessment.status || '')
@@ -737,7 +684,7 @@ async function submitParentIdentityVerification(event) {
   if (!algorithmPassed && !manualPerEvent && faceStatus !== 'needs_manual_review') return { success:false, error:'请先完成人证比对或选择人工核验', code:'IDENTITY_FACE_ASSESSMENT_REQUIRED' }
   const featureEnvelope = algorithmPassed ? encryptIdentityFeature(faceAssessment.descriptor) : null
   if (algorithmPassed && !featureEnvelope) return { success:false, error:'人脸特征加密尚未配置，请联系管理员后重试', code:'IDENTITY_FEATURE_ENCRYPTION_REQUIRED' }
-  const warnings = Array.isArray(frontDocument.recognitionWarnings) ? frontDocument.recognitionWarnings : []
+  const warnings = (Array.isArray(frontDocument.recognitionWarnings) ? frontDocument.recognitionWarnings : []).concat(backDocument && Array.isArray(backDocument.recognitionWarnings) ? backDocument.recognitionWarnings : [])
   const recognizedName = String(frontDocument.recognizedName || '').trim()
   const recognizedBirthDate = String(frontDocument.recognizedBirthDate || '')
   const nameMatches = recognizedName && recognizedName === String(preview.data.playerName || '').trim()
@@ -750,9 +697,9 @@ async function submitParentIdentityVerification(event) {
   const reviewedAt = reviewStatus === 'pending_review' ? null : db.serverDate()
   const data = {
     parentInvite: authenticated.session.parentInvite,
-    documentIds: [frontDocument._id],
+    documentIds: backDocument ? [frontDocument._id, backDocument._id] : [frontDocument._id],
     documentType:String(frontDocument.documentType || 'resident_id'),
-    requiredSides: ['front'],
+    requiredSides: backDocument ? ['front', 'back'] : ['front'],
     status: reviewStatus,
     reason: reviewReason,
     rejectReason: reviewReason,
@@ -870,14 +817,21 @@ async function listIdentityReviewQueue(event) {
     if (!reviewAuth.success) continue
     const players = (await db.collection('players').where({ _id:String(invite.playerId || '') }).limit(1).get()).data || []
     const player = players[0] || {}
-    const documentId = Array.isArray(verification.documentIds) ? String(verification.documentIds[0] || '') : ''
-    const documents = documentId ? (await db.collection('parent_identity_documents').where({ _id:documentId, status:'uploaded' }).limit(1).get()).data || [] : []
-    let documentUrl = ''
-    if (documents[0] && documents[0].fileId) {
-      const urls = await cloud.getTempFileURL({ fileList:[String(documents[0].fileId)] })
-      documentUrl = String(urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || '')
+    const documentIds = Array.isArray(verification.documentIds) ? verification.documentIds.map(String).filter(Boolean) : []
+    const documents = []
+    for (const documentId of documentIds) {
+      const found = (await db.collection('parent_identity_documents').where({ _id:documentId, status:'uploaded' }).limit(1).get()).data || []
+      if (found[0]) documents.push(found[0])
     }
-    rows.push({ id:String(verification._id), playerId:String(invite.playerId || ''), playerName:String(player.name || '球员'), teamId:String(invite.teamId || ''), photoUrl:String(player.photoUrl || ''), documentUrl, documentType:String(verification.documentType || 'resident_id'), identityNumberMasked:String(verification.identityNumberMasked || ''), submittedAt:verification.submittedAt || null, faceAssessment:verification.faceAssessment || {}, reviewMode:String(verification.reviewMode || 'organizer_double_review') })
+    const fileIds = documents.flatMap(item => [String(item.reviewFileId || item.fileId || ''), String(item.fileId || '')]).filter(Boolean)
+    const urls = fileIds.length ? await cloud.getTempFileURL({ fileList:fileIds }) : { fileList:[] }
+    const urlById = {}
+    fileIds.forEach((id, index) => { urlById[id] = String((urls.fileList || [])[index] && urls.fileList[index].tempFileURL || '') })
+    const front = documents.find(item => item.side === 'front') || {}
+    const back = documents.find(item => item.side === 'back') || {}
+    const documentUrl = urlById[String(front.reviewFileId || front.fileId || '')] || ''
+    const backDocumentUrl = urlById[String(back.reviewFileId || back.fileId || '')] || ''
+    rows.push({ id:String(verification._id), playerId:String(invite.playerId || ''), playerName:String(player.name || '球员'), birthDate:String(player.birthDate || ''), teamId:String(invite.teamId || ''), photoUrl:String(player.photoUrl || ''), documentUrl, backDocumentUrl, frontCropDetected:front.cropDetected === true, backCropDetected:back.cropDetected === true, documentType:String(verification.documentType || 'resident_id'), identityNumberMasked:String(verification.identityNumberMasked || ''), submittedAt:verification.submittedAt || null, faceAssessment:verification.faceAssessment || {}, reviewMode:String(verification.reviewMode || 'organizer_double_review') })
   }
   return { success:true, rows }
 }
@@ -1035,6 +989,11 @@ async function completeParentProfile(event) {
   const requirements = preview.data.requirements || {}
   const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true }).limit(10).get()).data || []
   const verifications = requirements.realName ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite, status: 'approved' }).limit(1).get()).data || [] : []
+  if (requirements.identityAlreadyVerified) {
+    const reused = await resolveReusableRegistrationIdentity(db, player)
+    if (!reused) return { success: false, error: '身份档案状态已变化，请刷新后重新核验', code: 'PARENT_IDENTITY_REUSE_CHANGED' }
+    verifications.push(reused)
+  }
   const portraits = requirements.portrait ? (await db.collection('parent_portraits').where({ parentInvite: authenticated.session.parentInvite, status: 'confirmed' }).limit(1).get()).data || [] : []
   const authorizedDraft = drafts.find(parentDraftIsAuthorized)
   if (!authorizedDraft || (requirements.realName && !verifications[0]) || (requirements.portrait && !portraits[0])) return { success: false, error: '请先完成本次邀请已开启的资料要求' }
@@ -5449,6 +5408,7 @@ exports.main = async (event, context) => {
       case 'selectMyPlayerCard':
       case 'listMyPlayerCards':
       case 'getMyPlayerCard':
+      case 'previewMyPlayerCard':
       case 'saveMyPlayerCard':
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
@@ -5456,6 +5416,12 @@ exports.main = async (event, context) => {
       case 'getPlayerCardLayoutPreset':
       case 'savePlayerCardLayoutPreset':
       case 'listPlayerCardPreloadTargets':
+      case 'getPlayerCardsForViewer':
+      case 'getPlayerCardForViewer':
+        result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
+      case 'getAdminPlayerCard':
+      case 'saveAdminPlayerCard':
+        result = await require('./playerCardsAdmin.cjs').createAdminPlayerCards({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
       case 'listPlayerCardTemplates':
       case 'getPlayerCardTemplate':
       case 'savePlayerCardTemplate':
@@ -5538,6 +5504,7 @@ exports.main = async (event, context) => {
         result = { success: false, error: '未知操作：' + action }
     }
 
+    result = await require('./data-center/lifecycle-reader.cjs').decorateLifecycleResult(cloud.database(), result, params)
     // 如果是 HTTP 请求，返回带 status 的响应；如果是 SDK 调用，直接返回数据
     if (event.httpMethod) {
       return response(200, result)

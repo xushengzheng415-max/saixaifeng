@@ -82,7 +82,6 @@
           <player-card-canvas 
             wx:if="{{item.photoUrl}}"
             playerData="{{item}}"
-            tier="{{item.tier || 'bronze'}}"
             avatarUrl="{{item.photoUrl}}"
             teamLogoUrl="{{homeTeam.logoUrl}}"
             width="300"

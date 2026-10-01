@@ -7,7 +7,7 @@ const VERSIONS = 'player_card_template_versions'
 const STATES = 'player_card_template_states'
 const RENDERS = 'player_card_renders'
 const JOBS = 'player_card_publish_jobs'
-const RENDER_VERSION = 'resvg/2-text-styles'
+const {RENDER_VERSION}=require('./playerCardReader.cjs')
 const TYPES = ['bronze', 'silver', 'gold']
 
 const dataOf = result => Array.isArray(result && result.data) ? result.data[0] : result && result.data
@@ -23,7 +23,8 @@ const renderId = (playerId, templateId, version) => `${playerId}_${templateId}_$
 
 async function activeTemplate(db, tier, scope, templateId) {
   if (!TYPES.includes(String(tier))) return null
-  const state = await document(db, STATES, preload.stateId(tier, scope, templateId))
+  let state = await document(db, STATES, preload.stateId(tier, scope, templateId))
+  if (!state && templateId) { const base = await document(db,STATES,tier); if(base?.active?.templateId === templateId) state=base }
   if (!state || !state.active) return null
   const snapshot = await document(db, VERSIONS, versionId(state.active.templateId, state.active.version))
   return snapshot ? { ...snapshot, stateRevision: Number(state.revision || 0) } : null
@@ -58,7 +59,7 @@ async function renderPlayer(cloud, db, player, snapshot, score, overrides = {}) 
   const facts = cardFacts(player, team, score)
   const portraitId = String(overrides.portraitFileId || player.playerCardSourceFileId || '')
   if (!portraitId) throw new Error('标准形象照缺失，需先补拍')
-  const logoId = String(team && (team.logoTransparent || team.logo || team.logoUrl) || '')
+  const logoId = require('./playerCardSource.cjs').permanentFile(team && (team.logoTransparent || team.logo || team.logoUrl))
   const [backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer] = await Promise.all([
     asset(cloud, snapshot.backgroundFileId, 2 * 1024 * 1024),
     asset(cloud, snapshot.maskFileId, 2 * 1024 * 1024),
@@ -103,17 +104,26 @@ async function savedPlayers(db, tier, scopeValue, templateId) {
   }
 }
 
-async function signedCard(cloud, db, player, type, scope) {
-  const snapshot = await activeTemplate(db, type, scope)
-  if (!snapshot) return { status: 'unavailable', fileId: '', templateVersion: 0 }
-  const render = await document(db, RENDERS, renderId(player._id, snapshot.templateId, snapshot.version))
-  if (!render || render.status !== 'ready' || Number(render.cardDataVersion) !== Number(player.playerCardVersion || 0)) {
-    return { status: player.playerCardFileId ? 'pending' : 'unavailable', fileId: '', templateVersion: snapshot.version }
+async function publicationPlayers(db,tier) {
+  const rows=[];let after=''
+  for(;;){
+    const page=(await db.collection('players').where(after?{_id:db.command.gt(after)}:{}).field({_id:true,playerCardFileId:true,playerCardBackgroundId:true,playerCardTier:true}).orderBy('_id','asc').limit(100).get()).data||[]
+    for(const player of page){
+      if(player.playerCardFileId){
+        const type=String(player.playerCardBackgroundId||player.playerCardTier||'')
+        if(!TYPES.includes(type))throw new Error('历史成卡缺少卡种关联，需先修复后发布')
+        if(type===tier)rows.push(player)
+      }else rows.push(player)
+    }
+    if(page.length<100)return rows
+    after=String(page[page.length-1]._id)
   }
-  const urls = (await cloud.getTempFileURL({ fileList: [render.fileId] })).fileList || []
-  return { status: 'ready', fileId: render.fileId, url: urls.find(item => item.fileID === render.fileId)?.tempFileURL || '',
-    templateId: snapshot.templateId, templateVersion: snapshot.version, cardDataVersion: render.cardDataVersion, renderVersion: RENDER_VERSION }
+}
+
+async function signedCard(cloud, db, player, type) {
+  const [card] = await require('./playerCardReader.cjs').readCards(cloud,db,[{...player,playerCardBackgroundId:type}])
+  return {...card,url:card.cardUrl,templateVersion:card.publishedVersion}
 }
 
 module.exports = { TEMPLATES, VERSIONS, STATES, RENDERS, JOBS, TYPES, RENDER_VERSION,
-  document, versionId, renderId, activeTemplate, asset, renderPlayer, generate, savedPlayers, signedCard }
+  document, versionId, renderId, activeTemplate, asset, renderPlayer, generate, savedPlayers, publicationPlayers, signedCard }

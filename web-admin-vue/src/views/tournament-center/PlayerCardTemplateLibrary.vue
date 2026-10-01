@@ -418,6 +418,7 @@ async function finishPublish(initial) {
   while (result.status === 'pending') {
     publishJob.value = result
     publishProgress.value = `正在更新成卡 ${result.completed || 0}/${result.total || 0}`
+    if(result.busy)await new Promise(resolve=>setTimeout(resolve,1500))
     result = await playerCardTemplateRequest('continuePlayerCardTemplatePublish', { jobId: result.jobId })
     if (!result.success && result.status !== 'blocked') throw new Error(result.error || '发布失败')
   }
@@ -432,6 +433,7 @@ async function finishPublish(initial) {
   publishJob.value = null
   publishProgress.value = result.affected ? `预装已发布 · 更新 ${result.affected} 张专属卡` : '预装已发布'
   ElMessage.success('预装已发布')
+  localStorage.setItem('sxfPlayerCardTemplateUpdate',JSON.stringify({tier:form.tier,templateId:form.id,version:result.publishedVersion,at:Date.now()}))
 }
 async function resumePublish() {
   if (!publishServiceReady.value) return

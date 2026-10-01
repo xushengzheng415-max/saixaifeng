@@ -55,3 +55,4 @@
  .pc-footer { padding-inline:18px; }
 }
 .pc-background-label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;color:#425449;margin:12px 0}.pc-background-label select{font:inherit;color:#1c3025;background:#fff;border:1px solid #baccc0;border-radius:6px;padding:8px}.pc-background-label select:disabled{opacity:.55}
+.pc-preview img{display:block;width:100%;height:auto;aspect-ratio:30/43;object-fit:contain;touch-action:none;cursor:grab}.pc-controls label{display:grid;gap:8px;font-size:13px}.pc-controls input[type=number],.pc-controls select{height:40px;border:1px solid #d5dfd8;border-radius:5px;padding:6px;font:inherit;width:100%}
