@@ -1,7 +1,7 @@
 <template>
   <main class="news-center">
     <header class="heading">
-      <div><span class="preview-label">测试预览 · 新闻不会公开发布</span><h1>新闻中心</h1><p>{{ tournamentName }}</p></div>
+      <div><h1>新闻中心</h1><p>{{ tournamentName }}</p></div>
       <el-button type="success" @click="openNew">新建新闻</el-button>
     </header>
 
@@ -34,7 +34,7 @@
         </el-select>
         <template v-if="form.kind === 'match'"><label>比赛图片 · 最多3张</label>
         <div class="photo-manager" @dragover.prevent @drop.prevent="dropPhotoFiles">
-          <div v-for="(photo,index) in form.photos" :key="photo" class="photo-item" draggable="true" @dragstart="startPhotoDrag(index)" @dragover.prevent @drop.stop.prevent="dropPhotoOrder(index)">
+          <div v-for="(photo,index) in form.photos" :key="photo" class="photo-item" draggable="true" @dragstart="startPhotoDrag(index)" @dragover.prevent @drop.stop.prevent="dropOnPhoto($event,index)">
             <img :src="photo" :alt="index === 0 ? '封面图片' : `比赛现场照片${index+1}`">
             <strong v-if="index === 0" class="cover-badge">封面</strong><small v-else class="photo-order">{{ index + 1 }}</small>
             <button type="button" class="remove-photo" :aria-label="`删除第${index+1}张图片`" @click="removePhoto(index)">×</button>
@@ -56,7 +56,7 @@
         <label>标题</label><el-input v-model="form.title" maxlength="80" />
         <template v-if="form.kind === 'daily'"><label>内容预览</label><NewsDailyContent v-if="form.dayResults.length" :results="form.dayResults" :fixtures="form.nextFixtures" :standings-image="standingsSnapshotUrl" :suspension-note="form.suspensionNote" /></template>
         <template v-else><label>正文</label><el-input v-model="form.body" type="textarea" :rows="10" maxlength="1800" /></template>
-        <footer><el-button @click="showPreview">预览</el-button><el-button @click="saveLocal">存草稿</el-button><el-button type="success" @click="publishLocal">模拟发布</el-button></footer>
+        <footer><el-button @click="showPreview">预览</el-button><el-button :loading="saving" @click="saveDraft">存草稿</el-button><el-button v-if="editingStatus === 'published'" type="warning" plain :loading="saving" @click="withdrawNews">撤回</el-button><el-button type="success" :loading="saving" @click="publishNews">发布到H5</el-button></footer>
       </div>
     </el-drawer>
     <el-dialog v-model="previewOpen" :title="form.title || '新闻预览'" width="min(660px,94vw)">
@@ -70,7 +70,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { callFunction } from '@/utils/cloud'
+import { callFunction, getFileUrl, uploadImageViaWebApi } from '@/utils/cloud'
 import { createMatchNewsCover, createDailyNewsCover, createStandingsNewsSnapshot } from '@/utils/newsCover'
 import NewsDailyContent from './NewsDailyContent.vue'
 
@@ -80,15 +80,15 @@ const generateUrl = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.
 const tournamentName = ref('当前赛事')
 const matches = ref([]), loadingMatches = ref(true), loadError = ref('')
 const standingsSnapshotUrl = ref(''), standingsError = ref('')
-const editorOpen = ref(false), previewOpen = ref(false), generating = ref(false), editing = ref(''), filter = ref('all')
+const editorOpen = ref(false), previewOpen = ref(false), generating = ref(false), saving = ref(false), editing = ref(''), editingStatus = ref(''), filter = ref('all')
 const coverUrl = ref('')
-const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '模拟发布' }, { id: 'draft', label: '草稿' }, { id: 'update', label: '待更新' }]
+const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '已发布' }, { id: 'draft', label: '草稿' }, { id: 'update', label: '待更新' }]
 const articles = ref([])
 const visibleArticles = computed(() => articles.value.filter(item => filter.value === 'all' || item.status === filter.value))
 const approvedMatches = computed(() => matches.value.filter(item => item.resultStatus === 'approved'))
 const approvedDates = computed(() => [...new Set(approvedMatches.value.map(item => item.matchDate).filter(Boolean))].sort().reverse())
 const dayMatches = date => approvedMatches.value.filter(item => item.matchDate === date)
-const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] })
+const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], newsId: '', title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [], photoFiles: [], photoFileIds: [], coverFileId: '', standingsSnapshotFileId: '' })
 const draggingPhotoIndex = ref(-1)
 const selectedMatch = computed(() => matches.value.find(item => item.id === form.matchId) || null)
 const previewBlocks = computed(() => {
@@ -103,7 +103,7 @@ const previewBlocks = computed(() => {
   return paragraphs.map((text, index) => ({ text, photos: slots[index] }))
 })
 const kindLabel = kind => ({ match: '单场新闻', daily: '每日新闻' })[kind] || '新闻'
-const statusLabel = status => ({ published: '模拟发布', draft: '草稿', update: '待更新' })[status] || '草稿'
+const statusLabel = status => ({ published: '已发布', draft: '草稿', update: '待更新', withdrawn: '已撤回' })[status] || '草稿'
 const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
 
 async function loadMatches() {
@@ -119,7 +119,24 @@ async function loadMatches() {
   finally { loadingMatches.value = false }
 }
 
-function reset() { Object.assign(form, { kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] }); coverUrl.value = ''; standingsSnapshotUrl.value = ''; standingsError.value = ''; editing.value = '' }
+async function loadNews() {
+  try {
+    const result = await callFunction('newsCenter', { action: 'list', tournamentId })
+    if (!result?.success) throw new Error(result?.message || result?.error || '新闻列表加载失败')
+    articles.value = await Promise.all((result.articles || []).map(async item => {
+      const photoFileIds = Array.isArray(item.photoFileIds) ? item.photoFileIds : []
+      const [cover, photos, standingsSnapshot] = await Promise.all([
+        item.coverFileId ? getFileUrl(item.coverFileId) : Promise.resolve(''),
+        Promise.all(photoFileIds.map(getFileUrl)),
+        item.standingsSnapshotFileId ? getFileUrl(item.standingsSnapshotFileId) : Promise.resolve('')
+      ])
+      const dateLabel = item.date || ((item.matchIds || []).length ? `${item.matchIds.length}场比赛` : '')
+      return { ...item, id: item._id || item.id, rawStatus: item.status, status: item.needsUpdate ? 'update' : item.status, cover, photos, photo: photos[0] || cover, standingsSnapshot, detail: `${dateLabel}${item.needsUpdate ? ' · 赛果有更新' : item.status === 'published' ? ' · 已发布到H5' : ' · 云端草稿'}` }
+    }))
+  } catch (error) { loadError.value = error.message || '新闻列表加载失败，请刷新重试' }
+}
+
+function reset() { Object.assign(form, { kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], newsId: '', title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [], photoFiles: [], photoFileIds: [], coverFileId: '', standingsSnapshotFileId: '' }); coverUrl.value = ''; standingsSnapshotUrl.value = ''; standingsError.value = ''; editing.value = ''; editingStatus.value = '' }
 function updateCover() { coverUrl.value = form.kind === 'daily' ? createDailyNewsCover(form.date, tournamentName.value, form.matchIds.length || dayMatches(form.date).length) : createMatchNewsCover(selectedMatch.value, tournamentName.value) }
 function clearGenerated() { form.title = ''; form.body = ''; form.matchIds = []; form.dayResults = []; form.nextFixtures = []; standingsSnapshotUrl.value = ''; standingsError.value = '' }
 function onStandingsChange() { clearGenerated(); updateCover() }
@@ -129,12 +146,15 @@ function onKindChange() {
   form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; form.photos = []; clearGenerated(); updateCover()
 }
 function openNew() { reset(); editorOpen.value = true }
-function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []) }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
+function openArticle(item) { reset(); editing.value = item.id; editingStatus.value = item.rawStatus || item.status; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], newsId: item.id, title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshotFileId), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []), photoFiles: (item.photos || []).map(() => null), photoFileIds: item.photoFileIds || [], coverFileId: item.coverFileId || '', standingsSnapshotFileId: item.standingsSnapshotFileId || '' }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
 function addPhotos(files) {
   const selected = Array.from(files || []).filter(file => file.type.startsWith('image/'))
   const remaining = 3 - form.photos.length
   if (selected.length > remaining) ElMessage.warning(`最多3张，还能添加${remaining}张`)
-  form.photos = [...form.photos, ...selected.slice(0, remaining).map(file => URL.createObjectURL(file))]
+  const accepted = selected.slice(0, remaining)
+  form.photos = [...form.photos, ...accepted.map(file => URL.createObjectURL(file))]
+  form.photoFiles = [...form.photoFiles, ...accepted]
+  form.photoFileIds = [...form.photoFileIds, ...accepted.map(() => '')]
 }
 function selectPhotos(event) {
   addPhotos(event.target.files)
@@ -144,6 +164,10 @@ function dropPhotoFiles(event) {
   if (event.dataTransfer?.files?.length) addPhotos(event.dataTransfer.files)
 }
 function startPhotoDrag(index) { draggingPhotoIndex.value = index }
+function dropOnPhoto(event, index) {
+  if (event.dataTransfer?.files?.length) { addPhotos(event.dataTransfer.files); draggingPhotoIndex.value = -1; return }
+  dropPhotoOrder(index)
+}
 function dropPhotoOrder(targetIndex) {
   const sourceIndex = draggingPhotoIndex.value
   if (sourceIndex < 0 || sourceIndex === targetIndex) return
@@ -151,11 +175,14 @@ function dropPhotoOrder(targetIndex) {
   const [photo] = photos.splice(sourceIndex, 1)
   photos.splice(targetIndex, 0, photo)
   form.photos = photos
+  const files = [...form.photoFiles], [file] = files.splice(sourceIndex, 1); files.splice(targetIndex, 0, file); form.photoFiles = files
+  const ids = [...form.photoFileIds], [fileId] = ids.splice(sourceIndex, 1); ids.splice(targetIndex, 0, fileId); form.photoFileIds = ids
   draggingPhotoIndex.value = -1
 }
 function removePhoto(index) {
   const [photo] = form.photos.splice(index, 1)
   if (String(photo).startsWith('blob:')) URL.revokeObjectURL(photo)
+  form.photoFiles.splice(index, 1); form.photoFileIds.splice(index, 1)
 }
 async function generate() {
   if (!(form.kind === 'daily' ? form.date : form.matchId)) return
@@ -181,19 +208,79 @@ async function generate() {
   finally { generating.value = false }
 }
 function showPreview() { if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文'); previewOpen.value = true }
-function saveLocal() {
-  if (!form.title.trim()) return ElMessage.warning('请填写标题')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'draft', detail: '仅当前页面 · 未保存到云端', photo: form.photos[0] || '', photos: form.photos, cover: coverUrl.value }
-  articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
-  editing.value = row.id; editorOpen.value = false; ElMessage.success('已在当前页面保存草稿')
+function dataUrlFile(dataUrl, filename) {
+  const [header, encoded] = String(dataUrl || '').split(',')
+  if (!header || !encoded) throw new Error('封面图片格式不正确')
+  const mime = header.match(/^data:([^;]+)/)?.[1] || 'image/png'
+  const binary = atob(encoded)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return new File([bytes], filename, { type: mime })
 }
-function publishLocal() {
-  if (!form.title.trim() || !form.body.trim()) return ElMessage.warning('请填写标题和正文')
-  const row = { id: editing.value || `local-${Date.now()}`, title: form.title.trim(), body: form.body.trim(), kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, suspensionNote: form.suspensionNote, standingsSnapshot: standingsSnapshotUrl.value, status: 'published', detail: '仅当前页面 · 未发布到 H5', photo: form.photos[0] || '', photos: form.photos, cover: coverUrl.value }
-  articles.value = [row, ...articles.value.filter(item => item.id !== row.id)]
-  editing.value = row.id; editorOpen.value = false; ElMessage.success('已模拟发布，未写入公开新闻')
+async function uploadNewsAssets() {
+  const photoFileIds = [...form.photoFileIds]
+  for (let index = 0; index < form.photos.length; index += 1) {
+    if (photoFileIds[index]) continue
+    const file = form.photoFiles[index]
+    if (file) {
+      const uploaded = await uploadImageViaWebApi(`tournament-news/${tournamentId}`, file)
+      photoFileIds[index] = uploaded.fileId
+      form.photoFiles[index] = null
+      form.photoFileIds[index] = uploaded.fileId
+    } else if (String(form.photos[index]).startsWith('cloud://')) photoFileIds[index] = form.photos[index]
+  }
+  let coverFileId = photoFileIds[0] || form.coverFileId
+  if (!coverFileId && coverUrl.value) {
+    const uploaded = await uploadImageViaWebApi(`tournament-news/${tournamentId}`, dataUrlFile(coverUrl.value, 'news-cover.png'))
+    coverFileId = uploaded.fileId
+    form.coverFileId = coverFileId
+  }
+  let standingsSnapshotFileId = form.standingsSnapshotFileId
+  if (!standingsSnapshotFileId && standingsSnapshotUrl.value) {
+    const uploaded = await uploadImageViaWebApi(`tournament-news/${tournamentId}`, dataUrlFile(standingsSnapshotUrl.value, 'standings-snapshot.png'))
+    standingsSnapshotFileId = uploaded.fileId
+    form.standingsSnapshotFileId = standingsSnapshotFileId
+  }
+  return { photoFileIds, coverFileId, standingsSnapshotFileId }
 }
-onMounted(loadMatches)
+async function saveDraftData() {
+  if (!form.title.trim()) throw new Error('请填写标题')
+  const imageFiles = await uploadNewsAssets()
+  const result = await callFunction('newsCenter', { action: 'saveDraft', tournamentId, newsId: form.newsId, kind: form.kind, matchId: form.matchId, date: form.date, matchIds: form.matchIds, dayResults: form.dayResults, nextFixtures: form.nextFixtures, title: form.title.trim(), body: form.body.trim(), suspensionNote: form.suspensionNote, coverFileId: imageFiles.coverFileId, photoFileIds: imageFiles.photoFileIds, standingsSnapshotFileId: imageFiles.standingsSnapshotFileId })
+  if (!result?.success) throw new Error(result?.message || result?.error || '保存草稿失败')
+  form.newsId = result.newsId
+  editing.value = result.newsId
+  editingStatus.value = 'draft'
+  return result.newsId
+}
+async function saveDraft() {
+  saving.value = true
+  try { await saveDraftData(); await loadNews(); editorOpen.value = false; ElMessage.success('草稿已保存') }
+  catch (error) { ElMessage.error(error.message || '保存失败') }
+  finally { saving.value = false }
+}
+async function publishNews() {
+  if (!form.body.trim()) return ElMessage.warning('请先生成或填写正文')
+  saving.value = true
+  try {
+    const newsId = await saveDraftData()
+    const result = await callFunction('newsCenter', { action: 'publish', tournamentId, newsId })
+    if (!result?.success) throw new Error(result?.message || result?.error || '发布失败')
+    await loadNews(); editorOpen.value = false; ElMessage.success('新闻已发布到 H5')
+  } catch (error) { ElMessage.error(error.message || '发布失败') }
+  finally { saving.value = false }
+}
+async function withdrawNews() {
+  if (!form.newsId) return
+  saving.value = true
+  try {
+    const result = await callFunction('newsCenter', { action: 'withdraw', tournamentId, newsId: form.newsId })
+    if (!result?.success) throw new Error(result?.message || result?.error || '撤回失败')
+    await loadNews(); editorOpen.value = false; ElMessage.success('新闻已从 H5 撤回')
+  } catch (error) { ElMessage.error(error.message || '撤回失败') }
+  finally { saving.value = false }
+}
+onMounted(() => { loadMatches(); loadNews() })
 </script>
 
 <style scoped>

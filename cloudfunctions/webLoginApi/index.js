@@ -206,7 +206,7 @@ const ORGANIZER_PRIVATE_COLLECTIONS = new Set([
 const ORGANIZER_SCOPED_RELAY_FUNCTIONS = new Set([
   'generateSchedule', 'updateMatch', 'onboardingWorkspace', 'organizerClaimInvite',
   'reviewRosterChange', 'clearTeamPlayers', 'tournamentReview', 'applyTournament', 'getMyTeams',
-  'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter'
+  'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter', 'newsCenter'
 ])
 
 // 这些中转入口会消耗第三方 AI/微信能力，或读取受保护的球员/比赛数据。
@@ -226,7 +226,7 @@ const SESSION_REQUIRED_RELAY_FUNCTIONS = new Set([
 // 只能先完成机构引导，不能再用个人账号作为隐含租户继续写入。
 const ORGANIZER_REQUIRED_RELAY_FUNCTIONS = new Set([
   'generateSchedule', 'updateMatch', 'organizerClaimInvite', 'reviewRosterChange', 'clearTeamPlayers', 'tournamentReview', 'applyTournament', 'getMyTeams',
-  'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter'
+  'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter', 'newsCenter'
 ])
 
 // 赛事中心遗留的球队/球员/赛事入口统一收敛到本函数的租户校验，
@@ -3632,6 +3632,7 @@ const ALLOWED_FUNCTIONS = [
   'organizerClaimInvite',
   'tournamentRegistrationFlow',
   'resultCenter',
+  'newsCenter',
   'manageTournamentCenterContent',
   'generateMiniProgramCode',
   'platformOwner',
@@ -5302,7 +5303,63 @@ async function getPublicTournamentCenter() {
     }
   }).filter(function (item) { return item.id && item.tournamentId })
     .sort(function (left, right) { return Number(left.timestamp || 0) - Number(right.timestamp || 0) })
-  return { success: true, data: { tournaments, matches } }
+  const publicMatchIds = new Set(rawMatches.map(function (item) { return String(item._id || '') }).filter(Boolean))
+  const newsRows = []
+  const publicIds = tournaments.map(function (item) { return String(item.id || '') }).filter(Boolean)
+  for (let index = 0; index < publicIds.length; index += 25) {
+    try {
+      const result = await db.collection('tournament_news').where({ tournamentId: db.command.in(publicIds.slice(index, index + 25)), status: 'published' }).limit(500).get()
+      newsRows.push(...(result.data || []))
+    } catch (error) {
+      console.warn('[webApi] public news lookup skipped:', error.message || error)
+    }
+  }
+  const matchById = new Map(rawMatches.map(function (item) { return [String(item._id || ''), item] }))
+  const publicNews = []
+  for (const row of newsRows) {
+    const matchIds = Array.isArray(row.matchIds) ? row.matchIds.map(String) : []
+    if (!matchIds.length || !matchIds.every(function (id) { return publicMatchIds.has(id) })) continue
+    if (!Array.isArray(row.sourceResultVersions) || row.sourceResultVersions.length !== matchIds.length) continue
+    let valid = true
+    for (let index = 0; index < matchIds.length; index += 1) {
+      const match = matchById.get(matchIds[index])
+      const source = row.sourceResultVersions[index]
+      if (!match || String(source.matchId || '') !== matchIds[index] || String(source.version || '') !== await publicNewsResultVersion(db, match, eventRowsByMatch.get(matchIds[index]) || [])) { valid = false; break }
+    }
+    if (!valid) continue
+    publicNews.push({
+      id: String(row._id || ''), tournamentId: String(row.tournamentId || ''), kind: String(row.kind || 'match'), date: String(row.date || ''),
+      title: String(row.title || ''), body: String(row.body || ''), publishedAt: dateValue(row.publishedAt || row.updateTime) ? new Date(dateValue(row.publishedAt || row.updateTime)).toISOString() : '',
+      matchIds, dayResults: Array.isArray(row.dayResults) ? row.dayResults : [], nextFixtures: Array.isArray(row.nextFixtures) ? row.nextFixtures : [], suspensionNote: String(row.suspensionNote || ''),
+      coverFileId: String(row.coverFileId || ''), photoFileIds: Array.isArray(row.photoFileIds) ? row.photoFileIds.slice(0, 3) : [], standingsSnapshotFileId: String(row.standingsSnapshotFileId || '')
+    })
+  }
+  publicNews.sort(function (left, right) { return dateValue(right.publishedAt) - dateValue(left.publishedAt) })
+  return { success: true, data: { tournaments, matches, news: publicNews.slice(0, 200) } }
+}
+
+function newsResultOfficial(match) {
+  if (!match || match.homeScore == null || match.awayScore == null) return false
+  const states = [match.resultReviewStatus, match.reviewStatus, match.refereeReviewStatus, match.refereeRecord && match.refereeRecord.reviewStatus, match.status].map(value => String(value || '').trim().toLowerCase())
+  if (states.some(value => ['returned', 'rejected', 'warning', 'conflict', 'abandoned'].includes(value))) return false
+  if (states.some(value => ['approved', 'archived', 'official'].includes(value))) return true
+  return !match.refereeRecord && !match.refereeSubmittedAt && ['finished', 'completed', 'ended'].includes(String(match.status || '').trim().toLowerCase())
+}
+
+async function publicNewsResultVersion(db, match, separateEvents) {
+  if (!newsResultOfficial(match)) return ''
+  let events = Array.isArray(match.events) ? match.events.slice() : []
+  events = events.concat(Array.isArray(separateEvents) ? separateEvents : [])
+  const goals = events.filter(event => ['goal', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(String(event.type || event.eventType || '').trim().toLowerCase()))
+    .map(event => ({ type: String(event.type || event.eventType || '').trim(), minute: Number(event.minute), side: String(event.teamSide || event.side || '').trim(), player: String(event.playerName || event.player || '').trim() }))
+    .sort((a, b) => a.minute - b.minute || a.type.localeCompare(b.type) || a.side.localeCompare(b.side) || a.player.localeCompare(b.player))
+  const material = {
+    homeScore: match.homeScore, awayScore: match.awayScore,
+    resultVersionId: String(match.resultVersionId || '').trim(),
+    resultCorrectedAt: String(match.resultCorrectedAt || match.resultCorrection && match.resultCorrection.correctedAt || '').trim(),
+    correctionId: String(match.resultCorrection && match.resultCorrection.correctionId || '').trim(), goals
+  }
+  return crypto.createHash('sha256').update(JSON.stringify(material)).digest('hex')
 }
 exports.main = async (event, context) => {
   // CORS：设置响应头（HTTP 触发器模式需要）

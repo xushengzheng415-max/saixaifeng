@@ -28,6 +28,10 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 响应包含 `schemaVersion, metricVersion, dataVersion, generatedAt, scope, accessScope, coverage, summary, teams, players, issues`；球员查询另含 `playerTotal` 和授权范围内的 `memberships`。
 比赛详情的公开适配入口为 `webLoginApi.publicMatchRankings`，接收 `tournamentId, matchId`，先验证该比赛在既有赛事中心公开接口中可见，再调用同一统计引擎。其 `data` 包含单场 `scope, rankings, metrics, coverage, metricVersion, dataVersion`；不返回私有档案，不以其他比赛补齐本场数据。
 
+## 赛事新闻发布
+
+PC `newsCenter` 只允许赛事所属机构中有赛事管理权限的主办方读写 `tournament_news`。文章类型为 `match` 或 `daily`，单场只能关联已归档赛果；每日文章必须完整关联所选日期的全部正式赛果。保存时记录来源 `matchIds` 与赛果版本；发布时重新核验，H5 `webLoginApi.publicTournamentCenter` 只返回已发布且全部来源版本仍有效的文章，赛果发生更正后立即隐藏旧稿。封面、正文照片与积分榜图存云文件 ID；未核实的停赛信息不作推断。
+
 `accessScope` 为 platform、authorized 或 published。普通组织查询的“球员历史”是当前授权范围内的历史，不能声称覆盖尚未获得访问授权的全部赛事。
 
 ## 指标与完整度
