@@ -28,7 +28,7 @@ H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事�
 响应包含 `schemaVersion, metricVersion, dataVersion, generatedAt, scope, accessScope, coverage, summary, teams, players, issues`；球员查询另含 `playerTotal` 和授权范围内的 `memberships`。
 比赛详情的公开适配入口为 `webLoginApi.publicMatchRankings`，接收 `tournamentId, matchId`，先验证该比赛在既有赛事中心公开接口中可见，再调用同一统计引擎。其 `data` 包含单场 `scope, rankings, metrics, coverage, metricVersion, dataVersion`；不返回私有档案，不以其他比赛补齐本场数据。
 
-H5 公开球员榜 `fanRankings.data.players` 的球员卡字段为 `cardTier, cardPoints, cardScoreVersion, careerMetrics`。`careerMetrics` 仅从统一数据服务的完整正式生涯取得 `appearances, starts, minutesPlayed, goals, assists`；某项未核定时为 null，范围不完整时整个 `careerMetrics` 为 null。旧榜单快照中的同名 `appearances/goals/assists/points` 不是职业生涯真值，球员资料页不得将它们与新积分混排。应援次数单独显示。
+H5 公开球员榜 `fanRankings.data.players` 的球员卡字段为 `cardTier, cardPoints, cardScoreVersion, careerMetrics, careerPoints, supportDrops, supportPoints`。`careerMetrics` 仅从统一数据服务的完整正式生涯取得 `appearances, starts, minutesPlayed, goals, assists`；某项未核定时为 null，范围不完整时整个 `careerMetrics` 为 null。v2 综合卡片积分为比赛积分加 `floor(supportDrops/10)`；`supportDrops` 是该球员生涯累计收到的有效蜂蜜，不是本期 `supportCount`、球迷账户余额或球队应援。旧榜单快照中的同名 `appearances/goals/assists/points` 不是职业生涯真值，球员资料页不得将它们与新积分混排。
 
 `accessScope` 为 platform、authorized 或 published。普通组织查询的“球员历史”是当前授权范围内的历史，不能声称覆盖尚未获得访问授权的全部赛事。
 
@@ -40,8 +40,9 @@ H5 公开球员榜 `fanRankings.data.players` 的球员卡字段为 `cardTier, c
 完整度按指标分别判断：缺失换人身份影响出场和时间，不把已确认的进球、红黄牌一起清空。
 
 - 首发：在正式首发阵容中的不同比赛 ID。
-- 球员卡积分：统一按 [球员卡积分与等级规则 v1](PLAYER_CARD_POINTS.md) 使用完整职业生涯的出场、首发、出场分钟和有效进球；积分与等级是派生结果，不能由客户端或人工档案字段直接写成统计真值。本实施分支已计算 `starts`，正式环境尚未切换。
-- 球员卡高级权益：仅已核定积分达到 100 分时开放再次更换卡片展示照片和在平台背景库中自由切换；首次选图不受此门槛限制。权益由服务端校验，旧金卡等级、历史保留等级或客户端字段不能代替积分凭证。当前各端尚未接入这项权限。
+- 球员卡积分：统一按 [球员卡积分与等级规则 v2](PLAYER_CARD_POINTS.md) 从完整正式生涯和已确认的球员应援计算；`careerPoints, supportDrops, supportPoints, points, tier, scoreVersion, careerDataVersion, supportDataVersion, dataVersion` 同源返回，不能由客户端或人工档案字段写成统计真值。当前生产仍以实际部署回读版本为准。
+- 球员应援写入：`fan_supports` 与 `fan_points_ledger` 以同一 `supportId` 关联，均保存稳定 `playerId`；一笔确认应援对应一笔 `delta=-1` 扣费。球迷资料中的 `honeyBalance` 与两笔记录在文档事务中更新，重试用 `requestKey` 幂等；团队应援记录不得算入球员卡。历史无稳定 ID 或缺扣费证据的记录不回补。计分读取只接受状态已确认、球员 ID 一致且扣费凭证唯一的配对记录。
+- 球员卡高级权益：仅已核定**综合积分**达到 100 分时开放再次更换卡片展示照片和在平台背景库中自由切换；首次选图不受此门槛限制。权益由服务端校验，旧金卡等级、历史保留等级或客户端字段不能代替积分凭证。
 - 出场：实际出场的不同比赛 ID；替补未上场不算出场。
 - 进球：有效进球与已进点球；乌龙球、点球大战排除。
 - 助攻：同一进球同一助攻者只计一次。

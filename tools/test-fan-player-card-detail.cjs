@@ -11,7 +11,7 @@ const render = new Function('document','publicImage','escapeHtml',snippet + '\nr
   { getElementById:() => null }, () => '', value => String(value)
 )
 
-const base = { name:'样例球员',number:'26',teamName:'真实球队',cardTier:'bronze',careerMetrics:{appearances:1,starts:0,minutesPlayed:37,goals:0,assists:0},cardPoints:2,supportCount:0 }
+const base = { name:'样例球员',number:'26',teamName:'真实球队',cardTier:'bronze',cardScoreVersion:'football-player-card-points/2',careerMetrics:{appearances:1,starts:0,minutesPlayed:37,goals:0,assists:0},careerPoints:2,supportDrops:0,supportPoints:0,cardPoints:2,supportCount:0 }
 const first = render(base,1)
 assert(first.includes('参赛场次：<strong>1 场</strong>'))
 assert(first.includes('球员卡积分：<strong>2 分</strong>'))
@@ -30,4 +30,10 @@ assert(!pending.includes('null-card.png'))
 const inconsistent = render({ ...base,cardTier:'bronze',cardPoints:4,careerMetrics:null },4)
 assert(inconsistent.includes('参赛场次：<strong>统计暂不可用</strong>'))
 assert(!inconsistent.includes('参赛场次：<strong>待核定</strong>'))
+const supportOnly = render({ ...base,cardTier:'silver',cardPoints:45,careerPoints:0,supportDrops:450,supportPoints:45,careerMetrics:{appearances:0,starts:0,minutesPlayed:0,goals:0,assists:0} },5)
+assert(supportOnly.includes('参赛场次：<strong>0 场</strong>'))
+assert(supportOnly.includes('球员卡积分：<strong>45 分</strong>'))
+assert(supportOnly.includes('<dt>累计收到蜂蜜</dt><dd>450</dd>'))
+const oldVersion = render({ ...base,cardScoreVersion:'football-player-card-points/1' },6)
+assert(oldVersion.includes('统计暂不可用'))
 console.log('PASS: H5 球员资料使用正式参赛场次、积分进度和待核定状态')

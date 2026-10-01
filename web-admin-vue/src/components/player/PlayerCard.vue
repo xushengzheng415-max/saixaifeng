@@ -67,8 +67,9 @@
         </div>
       </el-tooltip>
       <div class="match-count">
-        生涯积分: <strong>{{ cardPoints }}</strong>
+        球员卡积分: <strong>{{ cardPoints }}</strong>
         <span v-if="nextLevelNeed !== null" class="next-level-hint">(距下一级 {{ nextLevelNeed }} 分)</span>
+        <span v-if="playerCard.status === 'ready'" class="next-level-hint">比赛 {{ playerCard.careerPoints }} + 应援 {{ playerCard.supportPoints }}</span>
       </div>
     </div>
   </div>

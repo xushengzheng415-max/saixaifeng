@@ -12,6 +12,7 @@
   ]
 
   function escapeHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] }) }
+  function supportRequestKey() { return window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12) }
   function api(payload) {
     return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       .then(function (response) { return response.json() })
@@ -353,7 +354,7 @@
   function renderMatchPlayerRankings(match) {
     var panel = document.getElementById('matchTabBody')
     if (!panel) return
-    var request = 0, activeSide = 'home', roster = [], publishedIds = {}, pending = {}
+    var request = 0, activeSide = 'home', roster = [], publishedIds = {}, pending = {}, supportKeys = {}
     var cached = match._fanSupportCache || null, counts = cached ? cached.counts : null
     ;['home', 'away'].forEach(function (side) {
       var lineup = match.lineups && match.lineups[side]
@@ -384,13 +385,14 @@
             if (pending[targetId]) return
             pending[targetId] = true
             button.disabled = true; button.textContent = '提交中'
-            api({ action: 'fanSupport', fanSessionToken: token, targetType: 'player', targetId: button.getAttribute('data-match-player-support'), tournamentId: match.tournamentId, matchId: match.id }).then(function (reply) {
+            api({ action: 'fanSupport', fanSessionToken: token, targetType: 'player', targetId: targetId, tournamentId: match.tournamentId, matchId: match.id, requestKey:supportKeys[targetId] || (supportKeys[targetId] = supportRequestKey()) }).then(function (reply) {
               if (!reply.success) throw new Error(reply.error || '应援失败')
               ++request
               var hadCounts = !!counts
               counts = counts || {}
               counts[targetId] = Number(reply.data && reply.data.supportCount || Number(counts[targetId] || 0) + 1)
               pending[targetId] = false
+              delete supportKeys[targetId]
               match._fanSupportCache = { counts:counts, at:Date.now() }
               if (current()) paintRows()
               if (!hadCounts) loadCounts()
@@ -628,7 +630,7 @@
       if (podium) podium.hidden = type === 'player'
       bindSubPage()
       var searchInput = document.getElementById('publicRankingSearch')
-      var rankingRows = null
+      var rankingRows = null, supportKeys = {}
       function bindSupport() {
         Array.prototype.forEach.call(app.querySelectorAll('[data-rank-support]'), function (button) {
           button.onclick = function (event) {
@@ -638,17 +640,25 @@
             var targetId = button.getAttribute('data-rank-support')
             var targetType = button.getAttribute('data-rank-support-type')
             button.disabled = true
-            api({ action:'fanSupport', fanSessionToken:token, targetType:targetType, targetId:targetId, tournamentId:scheduleTournamentId, period:period }).then(function (reply) {
+            api({ action:'fanSupport', fanSessionToken:token, targetType:targetType, targetId:targetId, tournamentId:scheduleTournamentId, period:period, requestKey:supportKeys[targetId] || (supportKeys[targetId] = supportRequestKey()) }).then(function (reply) {
               if (!reply.success) throw new Error(reply.error || '应援失败')
               var count = Number(reply.data && reply.data.supportCount)
               if (Number.isFinite(count)) {
                 var target = (rankingRows || []).filter(function (row) { return row.targetId === targetId })[0]
-                if (target) target.supportCount = count
+                if (target) {
+                  target.supportCount = count
+                  var score = reply.data && reply.data.cardScore
+                  if (score && score.scoreVersion === 'football-player-card-points/2') {
+                    target.cardPoints = score.points; target.cardTier = score.tier; target.cardScoreVersion = score.scoreVersion
+                    target.careerPoints = score.careerPoints; target.supportDrops = score.supportDrops; target.supportPoints = score.supportPoints
+                  }
+                }
                 var item = button.closest('.fan-player-row, .public-ranking-row')
                 var value = item && item.querySelector(targetType === 'player' ? '.fan-player-copy em' : 'em')
                 if (value) value.textContent = targetType === 'player' ? '应援 ' + count + ' 滴' : String(count)
               }
               button.textContent = '已应援'
+              delete supportKeys[targetId]
             }).catch(function (error) { button.disabled = false; window.alert(error.message || '应援失败') })
           }
         })
@@ -657,16 +667,17 @@
         var previous = document.getElementById('fanPlayerDetail')
         if (previous) previous.remove()
         var career = row.careerMetrics || {}
-        var ready = ['bronze', 'silver', 'gold'].indexOf(String(row.cardTier || '')) >= 0 && Number.isFinite(row.cardPoints)
+        var scoreSyncError = Number.isFinite(row.cardPoints) && row.cardScoreVersion !== 'football-player-card-points/2'
+        var ready = !scoreSyncError && row.cardScoreVersion === 'football-player-card-points/2' && ['bronze', 'silver', 'gold'].indexOf(String(row.cardTier || '')) >= 0 && Number.isFinite(row.cardPoints)
         var tier = ready ? row.cardTier : null
-        var tierName = ready ? { bronze:'铜卡', silver:'银卡', gold:'金卡' }[tier] : '等级待核定'
-        var appearanceText = Number.isFinite(career.appearances) ? career.appearances + ' 场' : ready ? '统计暂不可用' : '待核定'
-        var pointsText = ready ? row.cardPoints + ' 分' : '待核定'
+        var tierName = ready ? { bronze:'铜卡', silver:'银卡', gold:'金卡' }[tier] : scoreSyncError ? '统计暂不可用' : '等级待核定'
+        var appearanceText = Number.isFinite(career.appearances) ? career.appearances + ' 场' : ready || scoreSyncError ? '统计暂不可用' : '待核定'
+        var pointsText = ready ? row.cardPoints + ' 分' : scoreSyncError ? '统计暂不可用' : '待核定'
         var nextHint = !ready ? '' : row.cardPoints >= 100 ? '已达金卡' : row.cardPoints >= 45 ? '距金卡 ' + (100 - row.cardPoints) + ' 分' : '距银卡 ' + (45 - row.cardPoints) + ' 分'
         function field(label, value) { return '<div><dt>' + label + '</dt><dd>' + escapeHtml(value == null || value === '' ? '—' : String(value)) + '</dd></div>' }
         var physical = [row.height ? row.height + ' cm' : '', row.weight ? row.weight + ' kg' : ''].filter(Boolean).join(' / ') || '—'
         var info = field('球队', row.teamName) + field('球衣号码', row.number) + field('位置', row.position) + field('球衣名', row.jerseyName) + field('国籍', row.nationality) + field('出生日期', row.birthDate) + field('籍贯', row.nativePlace) + field('身高 / 体重', physical)
-        var stats = field('参赛场次', career.appearances) + field('首发场次', career.starts) + field('出场分钟', career.minutesPlayed) + field('进球', career.goals) + field('助攻', career.assists) + field('球员卡积分', row.cardPoints) + field('本期应援', row.supportCount)
+        var stats = field('参赛场次', career.appearances) + field('首发场次', career.starts) + field('出场分钟', career.minutesPlayed) + field('进球', career.goals) + field('助攻', career.assists) + field('比赛积分', row.careerPoints) + field('应援积分', row.supportPoints) + field('累计收到蜂蜜', row.supportDrops) + field('本期应援', row.supportCount)
         var name = escapeHtml((row.number ? row.number + '号 ' : '') + (row.name || '球员'))
         var position = { GK:'守门员', DF:'后卫', MF:'中场', FW:'前锋' }[row.position] || row.position || '未知'
         var shirtName = String(row.jerseyName || '')
@@ -684,7 +695,7 @@
         var cardWrap = detail.querySelector('[data-pc-card]'), status = detail.querySelector('.fan-pc-card-state'), retry = detail.querySelector('[data-pc-card-retry]')
         function loadCard() {
           status.textContent = '正在读取球员卡…'; retry.hidden = true; cardWrap.hidden = true
-          if (!ready) { status.textContent = '球员卡等级待核定'; return }
+          if (!ready) { status.textContent = scoreSyncError ? '统计暂不可用，请刷新' : '球员卡等级待核定'; return }
           var loadImage = function (src) { return new Promise(function (resolve, reject) { var image = new Image(); image.onload = function () { resolve(image) }; image.onerror = function () { reject(new Error('卡面素材读取失败')) }; image.src = src }) }
           Promise.all([loadImage('./assets/player-cards/' + tier + '-card.png'), loadImage('./assets/player-cards/layers/foreground-mask-source.png')]).then(function (images) {
             if (!detail.isConnected) return

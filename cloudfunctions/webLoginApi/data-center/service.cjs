@@ -1,5 +1,6 @@
 'use strict'
 const { readAll, readByIds } = require('./reader.cjs')
+const { readPlayerSupportTotals } = require('./support.cjs')
 const id = value => value == null ? '' : String(value).trim()
 
 function error(code, message) { const value = new Error(message); value.code = code; return value }
@@ -130,8 +131,13 @@ function createDataService(db) {
         for (const field of Object.keys(result.playerTotal.metrics)) { result.playerTotal.metrics[field] = null; result.playerTotal.coverage[field] = 'not_collected' }
       }
       const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','matchId','from','to'].some(field => scope[field])
+      let support = { drops:null, status:'unverified', dataVersion:null }
+      if (fullCareer) {
+        try { support = (await readPlayerSupportTotals(db,[scope.playerId])).get(scope.playerId) || support }
+        catch (failure) { result.issues.push({ code:failure.code || 'SUPPORT_READ_FAILED', playerId:scope.playerId }) }
+      }
       result.playerCard = fullCareer
-        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.cardScoreScopeComplete ? 'complete' : 'partial' })
+        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.cardScoreScopeComplete ? 'complete' : 'partial', supportDrops:support.drops, supportCoverageStatus:support.status, supportDataVersion:support.dataVersion })
         : { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:'limited', mode:scope.mode, status:'scope_limited', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
       const requestedPlayer = playersById[scope.playerId] || (await readByIds(db,'players','_id',[scope.playerId]))[0]
       const playerTeamId = id(requestedPlayer?.teamId || requestedPlayer?.teamCode)

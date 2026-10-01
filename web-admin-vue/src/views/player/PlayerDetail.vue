@@ -126,6 +126,7 @@
                     <span class="current-level">{{ currentLevelText }} · {{ cardPointsText }} 分</span>
                     <span v-if="nextLevelText" class="next-level">下一级：{{ nextLevelText }}</span>
                   </div>
+                  <div v-if="playerCard.status === 'ready'" class="progress-hint">比赛 {{ playerCard.careerPoints }} 分 · 应援 {{ playerCard.supportPoints }} 分（{{ playerCard.supportDrops }} 滴）</div>
                   <el-progress v-if="playerCard.status === 'ready' && nextLevelText"
                     :percentage="levelProgress" 
                     :color="levelColor"

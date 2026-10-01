@@ -5,7 +5,7 @@
       <text class="header-name bold">{{currentCard.nickname || '郑旭升'}}</text>
       <view class="tag-group flex-row">
         <text class="tag tag-player">球员</text>
-        <text class="tag tag-tier {{currentCard.tier || 'bronze'}}">{{currentCard.tierName || '青铜'}}</text>
+        <text class="tag tag-tier {{currentCard.tier || 'unverified'}}">{{currentCard.tierName || '等级待核定'}}</text>
         <text class="tag tag-number">#{{currentCard.jerseyNumber || '21'}}</text>
       </view>
     </view>
@@ -13,7 +13,7 @@
   </view>
 
   <view class="card-display-area flex-center">
-    <view class="player-card {{currentCard.tier || 'bronze'}}">
+    <view class="player-card {{currentCard.tier || 'unverified'}}">
       <view class="card-top-left">
         <text class="card-num">{{currentCard.jerseyNumber || '21'}}</text>
         <text class="card-pos">{{currentCard.position || '前锋'}}</text>
@@ -73,11 +73,11 @@
     </view>
     <view class="info-item">
       <text class="info-label">参赛场次</text>
-      <text class="info-value">{{currentCard.totalMatches || '0'}} 场</text>
+      <text class="info-value">{{currentCard.totalMatches || '—'}}</text>
     </view>
     <view class="info-item">
-      <text class="info-label">参与积分</text>
-      <text class="info-value green">{{currentCard.participationPoints || '0'}} 分</text>
+      <text class="info-label">球员卡积分</text>
+      <text class="info-value green">待核定</text>
     </view>
   </view>
 

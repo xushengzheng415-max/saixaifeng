@@ -551,14 +551,6 @@ function getTeamInitials(name) {
   return name.slice(0, 2)
 }
 
-// 获取球员卡等级（铜/银/金）
-function getCardLevel(player) {
-  const appearances = player?.appearances || 0
-  if (appearances >= 20) return 'gold'
-  if (appearances >= 10) return 'silver'
-  return 'bronze'
-}
-
 // 安全获取球员ID（兼容 id 和 _id）
 function getPlayerId(player) {
   if (!player) return null
@@ -573,7 +565,6 @@ function toCardPlayer(player) {
     jerseyNumber: player.number || player.jerseyNumber || '--',
     photoUrl: player.photo || player.photoUrl || '',
     position: player.position || '',
-    appearances: player.appearances || 0,
     jerseyName: player.jerseyName || ''
   }
 }

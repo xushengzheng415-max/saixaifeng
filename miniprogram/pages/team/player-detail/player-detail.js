@@ -16,7 +16,7 @@ Page({
     player: {},
     teamInfo: {},
     stats: { appearances: '—', goals: '—', yellowCards: '—', redCards: '—' },
-    cardScore: { level:'待核定', points:'—', progress:'生涯积分待核定', canCustomize:false },
+    cardScore: { level:'待核定', points:'—', progress:'球员卡积分待核定', breakdown:'', canCustomize:false },
     statisticsNote: '',
     detailItems: [],
     canManage: false,
@@ -113,7 +113,7 @@ Page({
       { id: 'portrait', label: '标准形象照', value: player.portraitStatusText }
     ]
     var ready = playerCard && playerCard.status === 'ready'
-    var cardScore = { level:ready ? ({bronze:'铜卡', silver:'银卡', gold:'金卡'}[playerCard.tier] || '待核定') : '待核定', points:ready ? String(playerCard.points) : '—', progress:ready ? (playerCard.nextAt == null ? '已达金卡' : '距下一级 ' + playerCard.pointsToNext + ' 分') : '生涯积分待核定', canCustomize:ready && playerCard.canChangeBackground === true }
+    var cardScore = { level:ready ? ({bronze:'铜卡', silver:'银卡', gold:'金卡'}[playerCard.tier] || '待核定') : '待核定', points:ready ? String(playerCard.points) : '—', progress:ready ? (playerCard.nextAt == null ? '已达金卡' : '距下一级 ' + playerCard.pointsToNext + ' 分') : '球员卡积分待核定', breakdown:ready ? '比赛 ' + playerCard.careerPoints + ' + 应援 ' + playerCard.supportPoints + '（' + playerCard.supportDrops + ' 滴）' : '', canCustomize:ready && playerCard.canChangeBackground === true }
     this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, cardScore:cardScore, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
     wx.setNavigationBarTitle({ title: player.name || '球员详情' })
   },

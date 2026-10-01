@@ -326,23 +326,12 @@ Page({
         .get()
 
       if (res.data.length > 0) {
-        const bgMap = {
-          bronze: '../../images/cards/bronze-card.png',
-          silver: '../../images/cards/silver-card.png',
-          gold: '../../images/cards/gold-card.png'
-        }
-
         const cards = res.data.map(card => {
-          const points = card.participationPoints || 0
-          let tier = 'bronze'
-          if (points >= 1000) tier = 'gold'
-          else if (points >= 500) tier = 'silver'
-          
           return {
             ...card,
-            tier,
-            tierName: tier === 'gold' ? '黄金' : tier === 'silver' ? '白银' : '青铜',
-            cardBg: bgMap[tier]
+            tier: '',
+            tierName: '等级待核定',
+            cardBg: ''
           }
         })
 
