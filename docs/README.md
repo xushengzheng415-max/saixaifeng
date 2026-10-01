@@ -24,6 +24,7 @@
 | `ICON_ASSET_CATALOG.md` | 图标来源、映射和资产台账 |
 | `UI_DELIVERY.md` | UI 交付与实现记录 |
 | `PLAYER_CARD_INTEGRATION.md` | 后台配置、统一生成、跨端调用与自动更新的球员卡套件规范 |
+| `PLAYER_CARD_EDITOR_HANDOFF.md` | 球员卡系统页面接入合同、候选接口、代码定位、发布与验收交接 |
 
 ## 专题资料
 

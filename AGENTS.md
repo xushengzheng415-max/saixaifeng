@@ -123,6 +123,8 @@
 
 ### 球员卡复用
 
+球员卡显示、编辑、制卡、模板、卡种、分享和导出任务，先读 `docs/PLAYER_CARD_INTEGRATION.md`、`docs/PLAYER_CARD_EDITOR_HANDOFF.md` 与 `docs/data-center/PLAYER_CARD_POINTS.md`。页面只接入已部署且符合其授权范围的统一读取接口；候选接口以 `docs/CURRENT_STATUS.md`、`docs/data-center/RELEASE.md` 的实际回读登记为准。平台后台控制文字和徽标排版，球员端只调整标准形象照大小、位置。
+
 球员卡是由平台后台配置模板、字段、坐标、素材和卡种，再由统一模块生成完整成卡的套件。新增页面先按 `docs/PLAYER_CARD_INTEGRATION.md` 接入套件读取；手机、平板、PC 只等比缩放整张卡，不另画或重排内部。后台发布布局后，受影响的已保存卡须自动重生成并统一切换活动版本。基础卡与限定卡并存，限定卡由服务端按已确认的独立规则发放，球员选择当前展示卡；页面不得自行判定资格或等级。现有 `PlayerCard.vue` 及各端绘制代码是待收口的实现，不能当作套件已完成的证明。
 
 开始编码前：
