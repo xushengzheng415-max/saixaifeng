@@ -18,7 +18,7 @@ assert.deepEqual(matchListQuery(matchSourceQuery(source)),{date:'2026-10-01'})
 const scheduleSource=fs.readFileSync(new URL('../web-admin-vue/src/views/tournament/TournamentScheduleV2.vue',import.meta.url),'utf8')
 const routeContext={tournamentId:'t',selectedDate:{value:'2026-10-01'},divisionFilter:{value:'all'},view:{value:'map'}}
 vm.createContext(routeContext)
-vm.runInContext(scheduleSource.match(/function matchRoute\(match,suffix=''\)\{[^\n]+/)[0],routeContext)
+vm.runInContext(scheduleSource.slice(scheduleSource.indexOf('function matchRoute('),scheduleSource.indexOf('function openMatchWorkspace')),routeContext)
 assert.deepEqual(matchListQuery(routeContext.matchRoute({_id:'m',divisionId:'middle'}).query),{date:'2026-10-01'})
 vm.runInContext('const restoreDate = '+scheduleSource.match(/watch\(calendarDays, (days => \{[^\n]+?\}), \{ immediate:true \}\)/)[1],routeContext)
 vm.runInContext('restoreDate([])',routeContext)
