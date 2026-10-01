@@ -60,3 +60,7 @@ PC `newsCenter` 只允许赛事所属机构中有赛事管理权限的主办方�
 读取使用稳定 `_id` 游标和 100 条以内分页；SDK 实际返回短页也继续读取直到空页。默认单范围预算 20,000 条，超出返回 `DATA_SCOPE_TOO_LARGE`，不是成功返回前 20,000 条。索引错误、读取失败返回 `DATA_READ_FAILED`，不能降级为空。
 
 公开数据、组织数据、个人私密档案分别授权；页面不能通过篡改 orgId、playerId、teamId 获得其他机构数据。
+
+## 平台模板编辑 action（2026-10-01）
+
+listPlayerCardTemplates、getPlayerCardTemplate、savePlayerCardTemplate、previewPlayerCardTemplate、publishPlayerCardTemplate、continuePlayerCardTemplatePublish、getPlayerCardTemplatePublishStatus、retryPlayerCardTemplatePublish 由 webLoginApi 会话校验后仅允许平台负责人访问。getActivePlayerCardTemplate 返回指定基础卡种活动模板及版本，不返回球员私有资料。save 携带 revision；preview 使用受控示例资料与正式 PNG 渲染器；publish 返回 pending/blocked/active，激活前不改变活动版本。

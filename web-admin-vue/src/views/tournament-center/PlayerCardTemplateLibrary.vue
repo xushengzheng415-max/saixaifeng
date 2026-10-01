@@ -62,7 +62,7 @@
           <p v-else class="release-note">保存草稿后可准备发布。</p>
         </div>
         <div class="preview-pane">
-          <div class="preview-title"><strong>排版预览</strong><el-button link :disabled="previewState !== 'ready'" @click="previewOpen = true">查看大图</el-button></div>
+          <div class="preview-title"><strong>排版预览</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="showFinalPreview">查看大图</el-button></div>
           <div ref="previewRef" class="card-preview" role="img" aria-label="球员卡模板预览">
             <img v-if="form.backgroundUrl" class="back" :src="form.backgroundUrl" alt="">
             <img v-if="previewState === 'ready'" class="portrait" :src="previewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag">
@@ -79,19 +79,8 @@
         </div>
       </div>
     </div>
-    <el-dialog v-model="previewOpen" title="排版大图" width="min(760px, 96vw)" append-to-body @opened="paintDialogOverlay">
-      <div class="mask-review-grid">
-        <div class="review-column"><strong>叠合效果</strong><div class="card-preview review-card" role="img" aria-label="背景、人物与遮罩叠合效果">
-          <img class="back" :src="form.backgroundUrl" alt="">
-          <img class="portrait" :src="previewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag">
-          <canvas ref="dialogMaskedCanvas" class="front" width="300" height="430" />
-          <span class="card-badge nationality" :style="badgeStyle('nationality')" title="国籍旗帜示例"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#d92d24"/><polygon points="6,2 7,5 10,5 8,7 9,10 6,8 3,10 4,7 2,5 5,5" fill="#ffdf45"/></svg></span>
-          <span class="card-badge team" :style="badgeStyle('team')" title="球队队徽示例">队</span>
-          <span v-for="field in TEXT_FIELDS" :key="field.key" class="card-text" :style="fieldStyle(field.key)">{{ field.sample }}</span>
-        </div></div>
-        <div class="review-column"><strong>遮罩原图</strong><img class="mask-source" :src="form.maskUrl" alt="黑白遮罩原图"></div>
-      </div>
-      <p class="review-note">黑色区域盖住人物，白色区域透出人物。确认后保存草稿。</p>
+    <el-dialog v-model="previewOpen" title="服务端成卡预览" width="min(650px, 96vw)" append-to-body>
+      <img v-if="finalPreviewImage" :src="finalPreviewImage" alt="服务端生成的完整球员卡" style="display:block;width:min(100%,450px);height:auto;margin:auto">
     </el-dialog>
 
   </section>
@@ -133,6 +122,7 @@ const publishProgress = ref('')
 const publishJob = ref(null)
 const selectedFiles = reactive({ background: '', mask: '' })
 const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null), maskedCanvas = ref(null), dialogMaskedCanvas = ref(null)
+const finalPreviewLoading = ref(false), finalPreviewImage = ref('')
 const previewState = ref('idle'), previewError = ref(''), previewOpen = ref(false)
 const form = reactive({ id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
   backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
@@ -173,7 +163,7 @@ async function composePreview() {
 watch([() => form.backgroundUrl, () => form.maskUrl], composePreview)
 watch(previewOpen, async open => { if (open) { await nextTick(); paintDialogOverlay() } })
 watch(previewState, state => {
-  if (state === 'ready' && pendingMaskReview) { pendingMaskReview = false; previewOpen.value = true }
+  if (state === 'ready' && pendingMaskReview) pendingMaskReview = false
   if (state === 'error') pendingMaskReview = false
 })
 
@@ -197,6 +187,7 @@ function assign(item) {
   dirty.value = false; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
 }
 async function select(item) {
+  publishServiceReady.value = false
   if (item.status === 'local') { assign({ ...item, id: '' }); return }
   try {
     const result = await request('getPlayerCardTemplate', { templateId: item.id })
@@ -276,6 +267,20 @@ async function refreshSelected(id) {
   if (index >= 0) templates.value.splice(index, 1, result.template)
   else templates.value.unshift(result.template)
   assign(result.template)
+  const status = await request('getPlayerCardTemplatePublishStatus', { tier:result.template.tier })
+  publishServiceReady.value = true
+  publishJob.value = status.jobId ? status : null
+}
+async function showFinalPreview() {
+  if (!backendReady.value || finalPreviewLoading.value) return false
+  finalPreviewLoading.value = true
+  try {
+    const result = await request('previewPlayerCardTemplate', { templateId:form.id, backgroundData:form.backgroundData, maskData:form.maskData, layout:form.layout, photo:form.photo, badges:form.badges })
+    finalPreviewImage.value = result.imageData
+    previewOpen.value = true
+    return true
+  } catch (cause) { ElMessage.error(cause.message || '成卡预览失败，请重试'); return false }
+  finally { finalPreviewLoading.value = false }
 }
 async function save() {
   if (!backendReady.value) return
@@ -311,9 +316,11 @@ async function finishPublish(initial) {
     throw new Error('部分成卡生成失败，请查看质量队列')
   }
   await refreshSelected(form.id)
+  const active = await request('getActivePlayerCardTemplate', {tier:form.tier})
+  if (active.status !== 'ready' || active.template?.id !== form.id || Number(active.template?.version) !== Number(result.publishedVersion)) throw new Error('活动版本回读不一致，请刷新核对')
   publishJob.value = null
-  publishProgress.value = `已生效 · 更新 ${result.affected || 0} 张成卡`
-  ElMessage.success('已全平台生效')
+  publishProgress.value = `已发布 · 更新 ${result.affected || 0} 张成卡`
+  ElMessage.success('模板已发布')
 }
 async function resumePublish() {
   if (!publishServiceReady.value) return

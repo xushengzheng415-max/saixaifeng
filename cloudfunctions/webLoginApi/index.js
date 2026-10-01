@@ -15,6 +15,9 @@ const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
 const { createPlayerCards } = require('./playerCards.cjs')
+function fanCenterHandlers() {
+  return require('./fanCenter.cjs')({ cloud, crypto, SERVICE_ACCOUNT_CONFIG, normalizeServiceH5Url, hashSessionToken, dateValue, httpsGet, getPublicTournamentCenter })
+}
 
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 
@@ -4944,7 +4947,8 @@ function parseHttpRequestParams(event) {
 // collection 名或条件查询，也不能把未发布的赛事、名单和内部资料带到页面上。
 function publicPlayerAvatarUrl(player, profilesById) {
   const item = player && typeof player === 'object' ? player : {}
-  const playerId = String(item.id || item._id || item.playerId || '').trim()
+  const candidateIds = [item.id,item._id,item.playerId].map(value => String(value || '').trim()).filter(Boolean)
+  const playerId = profilesById ? candidateIds.find(value => String(profilesById.get(value)?._id || '') === value) || '' : ''
   const profile = playerId && profilesById ? profilesById.get(playerId) || {} : {}
   return String(item.portraitUrl || item.avatarUrl || profile.portraitUrl || profile.avatarUrl || profile.photoUrl || '').trim().slice(0, 500)
 }
@@ -4953,7 +4957,8 @@ function publicPlayerView(player, role, profilesById, teamName) {
   const item = player && typeof player === 'object' ? player : {}
   const name = String(item.name || item.playerName || item.realName || '').trim()
   if (!name) return null
-  const playerId = String(item.id || item._id || item.playerId || '').trim()
+  const candidateIds = [item.id,item._id,item.playerId].map(value => String(value || '').trim()).filter(Boolean)
+  const playerId = profilesById ? candidateIds.find(value => String(profilesById.get(value)?._id || '') === value) || '' : ''
   const playerNumber = String(item.jerseyNumber || item.number || item.shirtNumber || '').trim()
   const lookupKey = '__public_card__|' + String(teamName || '').trim() + '|' + playerNumber + '|' + name
   const profile = profilesById ? ((playerId && profilesById.get(playerId)) || profilesById.get(lookupKey) || {}) : {}
@@ -4971,7 +4976,7 @@ function publicPlayerView(player, role, profilesById, teamName) {
     captain: item.captain === true || item.isCaptain === true,
     avatarUrl: String(item.portraitUrl || item.avatarUrl || profile.portraitUrl || profile.avatarUrl || profile.photoUrl || '').trim().slice(0, 500),
     appearances: metric(appearances),
-    playerId: String(item.playerId || profile.playerId || playerId || '').slice(0, 80),
+    playerId: playerId.slice(0, 80),
     jerseyName: String(item.jerseyName || profile.jerseyName || '').slice(0, 40),
     nationality: String(item.nationality || profile.nationality || '中国').slice(0, 30),
     birthDate,
@@ -5443,9 +5448,36 @@ exports.main = async (event, context) => {
       case 'saveMyPlayerCard':
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
+      case 'listPlayerCardTemplates':
+      case 'getPlayerCardTemplate':
+      case 'savePlayerCardTemplate':
+      case 'previewPlayerCardTemplate':
+      case 'publishPlayerCardTemplate':
+      case 'continuePlayerCardTemplatePublish':
+      case 'getPlayerCardTemplatePublishStatus':
+      case 'retryPlayerCardTemplatePublish':
+      case 'getActivePlayerCardTemplate':
+        result = await require('./playerCardTemplates.cjs').createPlayerCardTemplates({ cloud, authenticateWebSession })(params); break
       case 'publicTournamentCenter':
         result = await getPublicTournamentCenter()
         break
+      case 'fanOAuthUrl':
+        result = await fanCenterHandlers().createFanOAuthUrl(params && params.returnUrl); break
+      case 'fanOAuth':
+        result = await fanCenterHandlers().handleFanOAuth(params); break
+      case 'fanOverview':
+        result = await fanCenterHandlers().handleFanOverview(params); break
+      case 'fanCheckIn':
+        result = await fanCenterHandlers().handleFanCheckIn(params); break
+      case 'fanRankings':
+        result = await fanCenterHandlers().handleFanRankings(params); break
+      case 'fanSupport': {
+        const center = fanCenterHandlers()
+        result = ['team','player'].includes(String(params.targetType || ''))
+          ? await require('./fanSupportPlayer.cjs').handleRankingSupport(params,{ cloud, hashSessionToken, dateValue, fanPeriodKey:center.fanPeriodKey, handleFanRankings:center.handleFanRankings })
+          : await center.handleFanSupport(params)
+        break
+      }
       case 'serviceRefereeOAuthUrl':
         result = await createRefereeOAuthUrl(params && params.returnUrl); break
       case 'serviceRefereeOAuth':

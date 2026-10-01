@@ -7,8 +7,10 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "wx-server-sdk": "~2.6.3",
-    "nodemailer": "^6.9.8"
+    "@resvg/resvg-js": "2.6.2",
+    "nodemailer": "^6.9.8",
+    "pngjs": "7.0.0",
+    "wx-server-sdk": "~2.6.3"
   },
   "env": {
     "CLOUD_ENV": "cloud1-7g8ckb3c7815a011"
