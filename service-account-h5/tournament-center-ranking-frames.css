@@ -1,0 +1,93 @@
+/* The approved oil-icon frames sit outside the photo/crest; their centers stay clear. */
+.fan-player-row:nth-child(-n+3){min-height:84px}
+.fan-player-row:nth-child(-n+3) .fan-player-open{grid-template-columns:20px 64px minmax(0,1fr) 26px}
+.fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar{
+  position:relative!important;
+  display:grid!important;
+  place-items:center!important;
+  box-sizing:border-box!important;
+  width:62px!important;
+  min-width:62px!important;
+  max-width:62px!important;
+  height:62px!important;
+  min-height:62px!important;
+  max-height:62px!important;
+  overflow:visible!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+}
+.fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar>img,
+.fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar>b{
+  position:relative;
+  z-index:1;
+  width:41px!important;
+  height:41px!important;
+  border-radius:50%!important;
+  object-fit:cover!important;
+  object-position:center 25%!important;
+}
+.fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar>b{
+  display:grid!important;
+  place-items:center!important;
+  background:#f4faf6!important;
+}
+.fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar>b[hidden]{display:none!important}
+.fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar::after,
+.public-ranking-row--team:nth-child(-n+3)>.public-ranking-team-logo::after{
+  position:absolute;
+  z-index:2;
+  inset:0;
+  content:"";
+  background-position:center;
+  background-repeat:no-repeat;
+  background-size:contain;
+  pointer-events:none;
+}
+.fan-player-row:nth-child(1) .ranking-player-avatar::after{background-image:url("./assets/ranking-frames/player-gold.png")}
+.fan-player-row:nth-child(2) .ranking-player-avatar::after{background-image:url("./assets/ranking-frames/player-silver.png")}
+.fan-player-row:nth-child(3) .ranking-player-avatar::after{background-image:url("./assets/ranking-frames/player-bronze.png")}
+
+.public-ranking-row--team:nth-child(-n+3){grid-template-columns:28px 66px minmax(0,1fr) 30px 70px!important;min-height:86px!important}
+.public-ranking-row--team:nth-child(-n+3)>.public-ranking-team-logo{
+  position:relative!important;
+  display:grid!important;
+  place-items:center!important;
+  box-sizing:border-box!important;
+  width:64px!important;
+  min-width:64px!important;
+  height:64px!important;
+  overflow:visible!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+.public-ranking-row--team:nth-child(-n+3)>.public-ranking-team-logo>img,
+.public-ranking-row--team:nth-child(-n+3)>.public-ranking-team-logo>span{
+  position:relative;
+  z-index:1;
+  box-sizing:border-box!important;
+  width:41px!important;
+  max-width:41px!important;
+  height:41px!important;
+  max-height:41px!important;
+  object-fit:contain!important;
+  border:0!important;
+  border-radius:6px!important;
+  background:#fff!important;
+}
+.public-ranking-row--team:nth-child(1)>.public-ranking-team-logo::after{background-image:url("./assets/ranking-frames/team-gold.png")}
+.public-ranking-row--team:nth-child(2)>.public-ranking-team-logo::after{background-image:url("./assets/ranking-frames/team-silver.png")}
+.public-ranking-row--team:nth-child(3)>.public-ranking-team-logo::after{background-image:url("./assets/ranking-frames/team-bronze.png")}
+
+@media(max-width:360px){
+  .fan-player-row:nth-child(-n+3) .fan-player-open{grid-template-columns:18px 54px minmax(0,1fr) 22px}
+  .fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar{width:52px!important;min-width:52px!important;max-width:52px!important;height:52px!important;min-height:52px!important;max-height:52px!important}
+  .fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar>img,
+  .fan-player-row:nth-child(-n+3) .fan-player-open>.ranking-player-avatar>b{width:35px!important;height:35px!important}
+  .public-ranking-row--team:nth-child(-n+3){grid-template-columns:22px 56px minmax(0,1fr) 24px 58px!important;min-height:74px!important}
+  .public-ranking-row--team:nth-child(-n+3)>.public-ranking-team-logo{width:54px!important;min-width:54px!important;height:54px!important}
+  .public-ranking-row--team:nth-child(-n+3)>.public-ranking-team-logo>img,
+  .public-ranking-row--team:nth-child(-n+3)>.public-ranking-team-logo>span{width:35px!important;max-width:35px!important;height:35px!important;max-height:35px!important}
+}

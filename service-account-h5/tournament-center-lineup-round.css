@@ -1,0 +1,20 @@
+.pitch-player .pitch-player-portrait{
+  width:48px;height:48px;border:2px solid #e5f7ea;border-radius:50%;
+  background:#dff1e6;object-fit:cover;object-position:center 25%;box-sizing:border-box;
+}
+.pitch-team--away .pitch-player .pitch-player-portrait{border-color:#ffe1df;background:#f4e6e3}
+.pitch-player--portrait{min-height:68px}
+.pitch-player--portrait>.lineup-shirt-number{top:34px}
+.pitch-player--portrait>span{margin-top:7px}
+.substitute-player .substitute-player-portrait{
+  width:34px;height:34px;border:1px solid #cee5d6;border-radius:50%;
+  background:#edf6f0;object-fit:cover;object-position:center 25%;box-sizing:border-box;
+}
+.substitute-player--away .substitute-player-portrait{border-color:#ead1ce;background:#fbefed}
+.substitute-player>.substitute-portrait-wrap{width:34px;height:36px}
+@media(max-width:360px){
+  .pitch-player .pitch-player-portrait{width:44px;height:44px}
+  .pitch-player--portrait>.lineup-shirt-number{top:31px}
+  .substitute-player .substitute-player-portrait{width:29px;height:29px}
+  .substitute-player>.substitute-portrait-wrap{width:29px;height:32px}
+}

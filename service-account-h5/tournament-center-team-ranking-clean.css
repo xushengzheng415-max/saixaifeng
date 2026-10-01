@@ -1,0 +1,17 @@
+.public-ranking-row--team>.public-ranking-copy{
+  display:block!important;
+  min-width:0!important;
+  width:100%!important;
+  text-align:left!important;
+}
+.public-ranking-row--team>.public-ranking-copy>strong{
+  display:block!important;
+  width:100%!important;
+  overflow:visible!important;
+  white-space:normal!important;
+  text-overflow:clip!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+  line-height:1.35!important;
+}
+.public-ranking-row--team>.public-ranking-copy>small{display:none!important}

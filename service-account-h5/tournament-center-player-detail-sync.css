@@ -1,0 +1,22 @@
+.fan-player-row{grid-template-columns:minmax(0,1fr) 96px;gap:8px;min-height:82px}
+.fan-player-open{grid-template-columns:20px 51px minmax(0,1fr);gap:8px}
+.fan-player-row:nth-child(-n+3) .fan-player-open{grid-template-columns:20px 64px minmax(0,1fr)!important}
+.fan-player-open>.fan-player-copy{display:grid;gap:3px;min-width:0}
+.fan-player-open>.fan-player-copy strong{font-size:14px}
+.fan-player-open>.fan-player-copy small{font-size:11px}
+.fan-player-open>.fan-player-copy em{color:#087a48;font-size:13px;font-style:normal;font-weight:700}
+.fan-player-support{width:96px;min-height:34px;padding:7px 6px;border-radius:8px;font-size:11px;line-height:1.2}
+.fan-player-official-card{display:block;width:min(300px,100%);max-width:300px;height:auto;aspect-ratio:300/430;margin:0 auto;border-radius:16px;box-shadow:0 8px 25px #172b1e24}
+.fan-player-official-card[hidden],.fan-player-card-status[hidden]{display:none!important}
+.fan-player-card-status{min-height:21px;margin:12px 0;color:#728277;font-size:12px;text-align:center}
+.fan-player-detail-head{margin:12px 0 17px}
+.fan-player-detail-head span{color:#4d6253;font-size:12px}
+@media(max-width:360px){
+  .fan-player-row{grid-template-columns:minmax(0,1fr) 82px;gap:5px;padding:8px}
+  .fan-player-open{grid-template-columns:18px 42px minmax(0,1fr);gap:5px}
+  .fan-player-row:nth-child(-n+3) .fan-player-open{grid-template-columns:18px 54px minmax(0,1fr)!important}
+  .fan-player-open>.fan-player-copy strong{font-size:12px}
+  .fan-player-open>.fan-player-copy small{font-size:10px}
+  .fan-player-open>.fan-player-copy em{font-size:12px}
+  .fan-player-support{width:82px;min-height:32px;font-size:10px}
+}

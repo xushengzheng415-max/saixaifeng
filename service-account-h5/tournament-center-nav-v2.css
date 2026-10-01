@@ -1,0 +1,30 @@
+.bottom-tabs,.private-bottom-tabs{
+  position:fixed!important;inset:auto 0 0!important;z-index:40!important;
+  display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  width:100%!important;max-width:none!important;height:calc(66px + env(safe-area-inset-bottom,0px))!important;
+  margin:0!important;padding:0 0 env(safe-area-inset-bottom,0px)!important;
+  border-top:1px solid #e5ebe7!important;background:#fff!important;box-shadow:none!important;
+}
+.bottom-tabs>button,.bottom-tabs>a,.private-bottom-tabs>a{
+  position:relative!important;inset:auto!important;display:flex!important;flex:none!important;
+  flex-direction:column!important;align-items:center!important;justify-content:center!important;
+  gap:3px!important;width:100%!important;min-width:0!important;height:66px!important;
+  margin:0!important;padding:5px 0!important;border:0!important;background:transparent!important;
+  color:#87928b!important;font-family:inherit!important;font-size:11px!important;
+  line-height:1.2!important;font-weight:500!important;text-align:center!important;text-decoration:none!important;
+  -webkit-tap-highlight-color:transparent;
+}
+.bottom-tab-symbol{
+  position:relative;display:grid;place-items:center;width:46px;height:33px;border-radius:11px;
+  background:transparent;transition:background-color .15s ease;
+}
+.bottom-tab-symbol img{display:block;width:28px;height:28px;object-fit:contain}
+.bottom-tab-symbol .nav-active{display:none}
+.bottom-tabs>.is-active,.private-bottom-tabs>.is-active{color:#087a48!important;font-weight:700!important}
+.is-active>.bottom-tab-symbol{background:#eaf7ee}
+.is-active>.bottom-tab-symbol .nav-idle{display:none}
+.is-active>.bottom-tab-symbol .nav-active{display:block}
+.bottom-tabs>.is-active:after,.private-bottom-tabs>.is-active:after{display:none!important;content:none!important}
+.bottom-tabs>button:active .bottom-tab-symbol,.bottom-tabs>a:active .bottom-tab-symbol,.private-bottom-tabs>a:active .bottom-tab-symbol{transform:scale(.94)}
+.portal-page,.page{padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))}
+@media(max-width:360px){.bottom-tab-symbol{width:42px}.bottom-tab-symbol img{width:26px;height:26px}}
