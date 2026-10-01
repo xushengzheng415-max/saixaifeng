@@ -57,7 +57,9 @@ tools/test-data-center.mjs 使用隔离模拟数据覆盖：5+3 的转会生涯�
 
 本轮正式部署 webLoginApi、getMiniWorkspace、playerCardPublishWorker，以及完整 `/admin/` 和 H5 相关文件；从线上包差量构建，保留现有应援积分、工作空间生命周期、阵容和账户转移实现。PC 构建通过，正式域名入口、平台分包、H5 编辑器、登记 app 和赛事榜单资源 HTTP 200 且 SHA256 与发布产物一致。未登录的私有成卡/预览请求分别返回 AUTH_REQUIRED / PLAYER_CARD_AUTH_REQUIRED。
 
-新增任务续跑为 Event 函数，512 MB、60 秒、每分钟 timer；客户端 invoke 规则为 false，无 HTTP 路由。真实回读确认触发器存在，审核 1081 条来源时按现行完整积分（包含正式应援账本）认定 189 条铜卡可制、142 条指标待核定、750 条测试排除。初始同步采用已经发布的铜卡 v3，不覆盖负责人版式，不主动发布银/金草稿。正式成卡已经生成并抽查；最终任务数量在完成后补记。
+新增任务续跑为 Event 函数，512 MB、60 秒、每分钟 timer；客户端 invoke 规则为 false，无 HTTP 路由。真实回读确认触发器存在，审核 1081 条来源时按现行完整积分（包含正式应援账本）认定 189 条铜卡可制、142 条指标待核定、750 条测试排除。初始同步采用已经发布的铜卡 v3，不覆盖负责人版式，不主动发布银/金草稿。最终任务 `9bafbc0f36ee5633ba15e7ee02c741c0` 回读为 active、affected=189、failures=[]；ready 的 resvg/2 成卡记录为 189，bronze.active 仍为原模板 v3，candidate=null。142 条未知指标和 750 条测试分别列入 skipped。
+
+抽查正式 PNG 后补齐了 COS/CDN 队徽地址转永久文件 ID 的兼容，并重制所有受影响成卡。复扫新增目标曾触发批量积分缓存漏项；修正为补读新增目标且不把缓存缺失当成积分未核定，专项回归通过后恢复任务并完成。后台关闭后的 timer 续跑已用真实任务验证。正式网页最后入口 `/admin/assets/index-CZkXj3EA.js` HTTP 200 且与本地产物 SHA256 一致；三个函数的读取、发布、源图、suite、积分模块按 ZIP 回读逐文件核对摘要一致。匿名 web relay 也明确拒绝 playerCardPublishWorker。
 
 标准照补齐边界专项校验：legacy_roster 的首次标准照补齐允许；已标准照的再次替换仍受积分限制；客户端自传源图拒绝。固定读取器专项验证活动指针变化后不返回旧版 URL、资料版本不符返回 pending。语法检查、PC 正式构建和微信上传编译通过。受账号权限约束，未宣称已通过真实负责人/监护人三端 UI 全流程验收。
 
