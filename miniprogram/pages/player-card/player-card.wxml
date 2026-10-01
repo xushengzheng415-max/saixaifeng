@@ -1,17 +1,1 @@
-<view class="container">
-  <view class="header">
-    <text class="title">我的球员卡</text>
-  </view>
-
-  <view wx:if="{{PlayersLen > 0}}" class="cards-list">
-    <view class="card-item" wx:for="{{players}}" wx:key="_id">
-      <text class="card-name">{{item.name || '未知'}}</text>
-      <text class="card-number">#{{item.jerseyNumber || '?'}}</text>
-      <text class="card-position">{{item.position || '前锋'}}</text>
-    </view>
-  </view>
-
-  <view wx:else class="empty">
-    <text>暂无球员卡</text>
-  </view>
-</view>
+<view class="container"><view class="header"><text class="title">球员卡</text></view><view wx:if="{{errorText}}" class="empty"><text>{{errorText}}</text><button bindtap="loadPlayers">重新加载</button></view><view wx:elif="{{isLoading}}" class="empty">正在读取成卡…</view><view wx:else class="cards-list"><view class="card-item" wx:for="{{players}}" wx:key="id" data-id="{{item.id}}" bindtap="viewCard"><image wx:if="{{item.ready}}" src="{{item.cardUrl}}" class="saved-card" mode="aspectFit"/><view wx:else class="card-meta"><text>{{item.name}}</text><text>尚未制作成卡</text></view></view></view></view>

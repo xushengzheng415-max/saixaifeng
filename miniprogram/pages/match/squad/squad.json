@@ -1,6 +1,7 @@
 {
   "navigationStyle": "custom",
+  "pageOrientation": "auto",
   "usingComponents": {
-    "player-card-canvas": "/components/player-card-canvas/player-card-canvas"
+    "lineup-player-card": "/components/lineup-player-card/lineup-player-card"
   }
 }

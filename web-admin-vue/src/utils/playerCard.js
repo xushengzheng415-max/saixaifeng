@@ -1,0 +1,6 @@
+import { playerCardTemplateRequest, getCurrentUser } from './cloud'
+import { isPlatformContext } from './platformSession'
+const queues = new Map()
+function contextKey(){return `${isPlatformContext()?'platform':'organizer'}:${getCurrentUser()?._id || getCurrentUser()?.uid || ''}`}
+export function readPlayerCard(playerId){return new Promise((resolve,reject)=>{const key=contextKey();if(!queues.has(key)){queues.set(key,new Map());setTimeout(()=>flush(key),0)}const queue=queues.get(key);if(!queue.has(playerId))queue.set(playerId,[]);queue.get(playerId).push({resolve,reject})})}
+async function flush(key){const queue=queues.get(key);queues.delete(key);if(!queue)return;const ids=[...queue.keys()];try{if(contextKey()!==key)throw new Error('登录身份已变化');for(let offset=0;offset<ids.length;offset+=50){const batch=ids.slice(offset,offset+50);const result=await playerCardTemplateRequest('getPlayerCardsForViewer',{playerIds:batch});if(!result?.success)throw new Error(result?.error||'球员卡读取失败');const byId=new Map((result.cards||[]).map(card=>[card.playerId,card]));for(const id of batch)for(const request of queue.get(id))request.resolve({success:true,...(byId.get(id)||{status:'unavailable',cardUrl:''})})}}catch(error){for(const requests of queue.values())for(const request of requests)request.reject(error)}}

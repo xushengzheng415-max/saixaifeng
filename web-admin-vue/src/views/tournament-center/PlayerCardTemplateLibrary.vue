@@ -307,6 +307,7 @@ async function finishPublish(initial) {
   while (result.status === 'pending') {
     publishJob.value = result
     publishProgress.value = `正在更新成卡 ${result.completed || 0}/${result.total || 0}`
+    if(result.busy)await new Promise(resolve=>setTimeout(resolve,1500))
     result = await playerCardTemplateRequest('continuePlayerCardTemplatePublish', { jobId: result.jobId })
     if (!result.success && result.status !== 'blocked') throw new Error(result.error || '发布失败')
   }
@@ -319,8 +320,13 @@ async function finishPublish(initial) {
   const active = await request('getActivePlayerCardTemplate', {tier:form.tier})
   if (active.status !== 'ready' || active.template?.id !== form.id || Number(active.template?.version) !== Number(result.publishedVersion)) throw new Error('活动版本回读不一致，请刷新核对')
   publishJob.value = null
-  publishProgress.value = `已发布 · 更新 ${result.affected || 0} 张成卡`
-  ElMessage.success('模板已发布')
+  const reasons=result.skipReasons||{}
+  const notes=[]
+  if(reasons.photo_missing)notes.push(`缺照片 ${reasons.photo_missing}`)
+  if(reasons.grade_unverified)notes.push(`积分待核定 ${reasons.grade_unverified}`)
+  publishProgress.value = `已发布 · 更新 ${result.affected||0} 张${notes.length?' · '+notes.join(' · '):''}`
+  localStorage.setItem('sxfPlayerCardTemplateUpdate',JSON.stringify({tier:form.tier,templateId:form.id,version:result.publishedVersion,at:Date.now()}))
+  ElMessage.success('模板已发布，已有成卡已更新')
 }
 async function resumePublish() {
   if (!publishServiceReady.value) return

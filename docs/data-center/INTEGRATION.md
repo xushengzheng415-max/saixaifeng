@@ -39,4 +39,15 @@ PC、H5、小程序球员卡统一遵循 [PLAYER_CARD_POINTS.md](PLAYER_CARD_POI
 
 ## 平台球员卡模板服务（2026-10-01）
 
+### 全平台活动成卡接入补充
+
+- PC：`getPlayerCardsForViewer` / `getPlayerCardForViewer`，既有负责人会话、本人/监护人关联或主办方球员范围授权后，读取同一活动模板成卡。逐个页面只等比显示 PNG，无客户端等级或绘制算法。
+- H5：登记首卡与“我的球员卡”共用 `previewMyPlayerCard`、`saveMyPlayerCard`、`listMyPlayerCards`。服务端预览和保存同源；提交不得上传页面绘制的最终卡图。本人/孩子/受控登记邀请授权继续独立校验。
+- 小程序：`getMiniWorkspace.playerCardRead` / `playerCardBatchRead`；原空间、球队、正式名单授权通过后附活动版本和完整成卡。源业务状态保持原字段，不被成卡状态覆盖。名单列表、阵容、个人卡和导出使用同一 PNG。
+- 公开榜单：在原公开赛事与名单范围内，另要求 `playerCardPublic === true` 才返回个人成卡；不自动设置公开许可。未许可时仍显示原公开范围的普通资料，不伪造卡级。
+- 生成：`playerCardPublishWorker` 接续发布任务，来自同一 `playerCardPublish`、`playerCardSuite`、数据中心和字体。`playerCardsForAuthorizedPlayers` 批量读完整正式生涯及现行应援账本；积分公式不复制，读失败不置零。测试球员/球队来源、未知指标保持独立状态。
+- 来源：用户批准初始报表/名单照片；只有受控环境永久文件或指定 COS/CDN 地址可转换，禁止外站任意下载。记录 `playerCardSourceType/Field`；首次由 legacy_roster 补齐标准照片允许替换。
+- 发布：包括现有成卡及可核验名单记录；缺照片、积分待核定、测试记录分别计数。现有卡失败阻断激活，保持上一版；事务租约、资料版本、状态 mutation 和最终复扫防止并发切版。每分钟续跑，关闭后台也不中断任务。
+- 读取：版本来自活动指针和 `player_card_renders`；临时签名后再次核对指针，版本变化时返回 pending，无静态铜卡兜底。可见页面每 60 秒、重新进入和浏览器版本通知时刷新。小程序实际发布状态另见 RELEASE.md。
+
 后台模板列表、详情、保存、服务端预览、发布、进度和重试通过 webLoginApi 专用 action；写入仅限 platform_owner 会话。模板与不可变版本、活动指针、发布任务、成卡记录分集合，均设 ADMINONLY。正式积分继续调用现行 data-center/service，不新增页面等级算法。正式库首次初始化三份草稿和三个无活动版本的卡种状态；没有自动发布默认布局。新发布先校验服务端 PNG，再重生成当前已保存成卡，事务激活版本；后台回读活动指针后显示“模板已发布”。PC/H5/小程序现有个人制卡消费入口仍需依交接合同继续接入活动模板，本次不宣称三端完整成卡已同步。

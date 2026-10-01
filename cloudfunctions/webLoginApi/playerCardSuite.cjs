@@ -82,24 +82,36 @@ async function savedPlayers(db, tier) {
   let after = ''
   for (;;) {
     const where = after ? { _id: db.command.gt(after) } : {}
-    const page = (await db.collection('players').where(where).orderBy('_id', 'asc').limit(100).get()).data || []
-    for (const player of page) if (player.playerCardFileId && String(player.playerCardBackgroundId || player.playerCardTier || '') === tier) rows.push(player)
+    const page = (await db.collection('players').where(where).field({_id:true,playerCardFileId:true,playerCardBackgroundId:true,playerCardTier:true,playerCardVersion:true}).orderBy('_id', 'asc').limit(100).get()).data || []
+    for (const player of page) {
+      if (player.playerCardFileId && !TYPES.includes(String(player.playerCardBackgroundId || player.playerCardTier || ''))) throw new Error('历史成卡缺少卡种关联，需先修复后发布')
+      if (player.playerCardFileId && String(player.playerCardBackgroundId || player.playerCardTier || '') === tier) rows.push(player)
+    }
     if (page.length < 100) return rows
     after = String(page[page.length - 1]._id)
   }
 }
 
-async function signedCard(cloud, db, player, type) {
-  const snapshot = await activeTemplate(db, type)
-  if (!snapshot) return { status: 'unavailable', fileId: '', templateVersion: 0 }
-  const render = await document(db, RENDERS, renderId(player._id, snapshot.templateId, snapshot.version))
-  if (!render || render.status !== 'ready' || Number(render.cardDataVersion) !== Number(player.playerCardVersion || 0)) {
-    return { status: player.playerCardFileId ? 'pending' : 'unavailable', fileId: '', templateVersion: snapshot.version }
+async function publicationPlayers(db,tier) {
+  const rows=[];let after=''
+  for(;;){
+    const page=(await db.collection('players').where(after?{_id:db.command.gt(after)}:{}).field({_id:true,playerCardFileId:true,playerCardBackgroundId:true,playerCardTier:true}).orderBy('_id','asc').limit(100).get()).data||[]
+    for(const player of page){
+      if(player.playerCardFileId){
+        const type=String(player.playerCardBackgroundId||player.playerCardTier||'')
+        if(!TYPES.includes(type))throw new Error('历史成卡缺少卡种关联，需先修复后发布')
+        if(type===tier)rows.push(player)
+      }else rows.push(player)
+    }
+    if(page.length<100)return rows
+    after=String(page[page.length-1]._id)
   }
-  const urls = (await cloud.getTempFileURL({ fileList: [render.fileId] })).fileList || []
-  return { status: 'ready', fileId: render.fileId, url: urls.find(item => item.fileID === render.fileId)?.tempFileURL || '',
-    templateId: snapshot.templateId, templateVersion: snapshot.version, cardDataVersion: render.cardDataVersion, renderVersion: RENDER_VERSION }
+}
+
+async function signedCard(cloud, db, player, type) {
+  const [card] = await require('./playerCardReader.cjs').readCards(cloud,db,[{...player,playerCardBackgroundId:type}])
+  return {...card,url:card.cardUrl,templateVersion:card.publishedVersion}
 }
 
 module.exports = { TEMPLATES, VERSIONS, STATES, RENDERS, JOBS, TYPES, RENDER_VERSION,
-  document, versionId, renderId, activeTemplate, asset, renderPlayer, generate, savedPlayers, signedCard }
+  document, versionId, renderId, activeTemplate, asset, renderPlayer, generate, savedPlayers, publicationPlayers, signedCard }
