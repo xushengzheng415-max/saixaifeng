@@ -1,0 +1,394 @@
+<template>
+  <section class="card-library">
+    <div class="library-head">
+      <div><h2>球员卡模板</h2><span>背景与黑白遮罩使用同一张 300 × 430 画布</span></div>
+      <el-button type="primary" @click="startCreate">新建模板</el-button>
+    </div>
+    <el-alert v-if="!backendReady && !loading" title="模板保存和发布服务尚未开放，当前调整仅在本页保留" type="info" :closable="false" />
+    <el-alert v-if="error" :title="error" type="error" :closable="false"><template #default><el-button link @click="load">重试</el-button></template></el-alert>
+    <div class="library-body" v-loading="loading">
+      <aside class="template-list" aria-label="模板列表">
+        <button v-for="item in templates" :key="item.id" type="button" :class="{ selected: form.id === item.id || (!form.id && form.tier === item.tier) }" @click="select(item)">
+          <img v-if="item.backgroundUrl" :src="item.backgroundUrl" alt="">
+          <span><strong>{{ item.title }}</strong><small>{{ tierName(item.tier) }} · {{ statusName(item) }}</small></span>
+        </button>
+        <div v-if="!templates.length && !loading" class="list-empty">暂无模板</div>
+        <el-button v-if="nextCursor" text @click="loadMore" :loading="loadingMore">加载更多</el-button>
+      </aside>
+
+      <div class="template-workspace">
+        <div class="editor-fields">
+          <div class="form-head"><strong>{{ form.id ? '编辑模板' : '新建模板' }}</strong><el-tag v-if="form.id" :type="form.status === 'published' ? 'success' : 'info'">{{ statusName(form) }}</el-tag></div>
+          <label>模板名称<el-input v-model.trim="form.title" maxlength="30" @input="dirty = true" /></label>
+          <label>适用等级<el-select v-model="form.tier" :disabled="Boolean(form.id)" @change="dirty = true"><el-option label="铜卡" value="bronze" /><el-option label="银卡" value="silver" /><el-option label="金卡" value="gold" /></el-select></label>
+          <div class="file-fields">
+            <label class="file-picker"><strong>背景 PNG</strong><span class="file-target">{{ form.backgroundUrl ? '更换背景' : '上传背景' }}</span><input type="file" accept=".png,image/png" aria-label="选择背景 PNG" @change="chooseFile($event, 'background')"><small v-if="selectedFiles.background">{{ selectedFiles.background }} · 待保存</small></label>
+            <label class="file-picker"><strong>黑白遮罩 PNG</strong><span class="file-target">{{ form.maskUrl ? '更换遮罩' : '上传遮罩' }}</span><input type="file" accept=".png,image/png" aria-label="选择黑白遮罩 PNG" @change="chooseFile($event, 'mask')"><small v-if="selectedFiles.mask">{{ selectedFiles.mask }} · 待保存</small></label>
+          </div>
+          <p v-if="uploadError" class="field-error" role="alert">{{ uploadError }}</p>
+          <p v-else-if="selectedFiles.background || selectedFiles.mask" class="file-feedback" role="status">素材已选入；保存草稿后生效。</p>
+          <div class="photo-editor">
+            <div class="photo-editor-head"><strong>示例照片</strong><el-button link @click="resetPhoto">恢复默认</el-button></div>
+            <label>大小 <span>{{ form.photo.scale }}%</span><el-slider v-model="form.photo.scale" :min="50" :max="200" :step="5" @change="dirty = true" /></label>
+            <div class="photo-position"><label>横向 X<el-input-number v-model="form.photo.x" :min="0" :max="300" @change="dirty = true" /></label><label>纵向 Y<el-input-number v-model="form.photo.y" :min="0" :max="250" @change="dirty = true" /></label></div>
+          </div>
+          <div class="badge-editor">
+            <div class="photo-editor-head"><strong>国籍和球队</strong><el-button link @click="resetBadge">恢复默认</el-button></div>
+            <el-select v-model="selectedBadge" aria-label="选择国籍或球队元素"><el-option label="国籍旗帜" value="nationality" /><el-option label="球队队徽" value="team" /></el-select>
+            <div class="badge-controls"><label>大小<el-input-number v-model="currentBadge.size" :min="12" :max="80" @change="dirty = true" /></label><label>横向 X<el-input-number v-model="currentBadge.x" :min="0" :max="300" @change="dirty = true" /></label><label>纵向 Y<el-input-number v-model="currentBadge.y" :min="0" :max="430" @change="dirty = true" /></label></div>
+          </div>
+          <div class="text-editor">
+            <strong>文字字段</strong>
+            <el-select v-model="selectedField" aria-label="选择文字字段"><el-option v-for="field in TEXT_FIELDS" :key="field.key" :label="field.label" :value="field.key" /></el-select>
+            <div v-if="currentStyle" class="text-controls">
+              <label>颜色<input v-model="currentStyle.color" type="color" @input="dirty = true"></label>
+              <label>字号<el-input-number v-model="currentStyle.size" :min="8" :max="80" :step="1" @change="dirty = true" /></label>
+              <label>横向 X<el-input-number v-model="currentStyle.x" :min="0" :max="300" :step="1" @change="dirty = true" /></label>
+              <label>纵向 Y<el-input-number v-model="currentStyle.y" :min="0" :max="430" :step="1" @change="dirty = true" /></label>
+              <label>字重<el-select v-model="currentStyle.weight" @change="dirty = true"><el-option label="常规" :value="400" /><el-option label="中等" :value="500" /><el-option label="半粗" :value="600" /><el-option label="粗体" :value="700" /><el-option label="加粗" :value="800" /><el-option label="极粗" :value="900" /></el-select></label>
+            </div>
+          </div>
+          <p class="version" v-if="form.id">草稿 {{ form.draftVersion }} · 已发布 {{ form.publishedVersion || '—' }}</p>
+          <div class="editor-actions">
+            <el-button type="primary" :loading="saving" :disabled="!backendReady || !dirty || !form.title || !form.backgroundUrl || !form.maskUrl || previewState !== 'ready'" @click="save">保存草稿</el-button>
+            <el-button :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="publish">发布</el-button>
+            <el-button v-if="publishJob?.jobId" :disabled="!publishServiceReady" :loading="publishing" @click="resumePublish">{{ publishJob.status === 'blocked' ? '重试发布' : '继续发布' }}</el-button>
+          </div>
+          <div v-if="publishJob?.status === 'blocked'" class="field-error" role="alert">
+            <span>{{ publishJob.failed }} 张成卡待修复</span>
+            <p v-for="item in publishJob.failures" :key="item.playerId">{{ item.playerId }}：{{ item.reason }}</p>
+          </div>
+          <p v-if="publishProgress" class="release-note" role="status">{{ publishProgress }}</p>
+          <p v-else class="release-note">保存草稿后可准备发布。</p>
+        </div>
+        <div class="preview-pane">
+          <div class="preview-title"><strong>排版预览</strong><el-button link :disabled="previewState !== 'ready'" @click="previewOpen = true">查看大图</el-button></div>
+          <div ref="previewRef" class="card-preview" role="img" aria-label="球员卡模板预览">
+            <img v-if="form.backgroundUrl" class="back" :src="form.backgroundUrl" alt="">
+            <img v-if="previewState === 'ready'" class="portrait" :src="previewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag">
+            <canvas ref="maskedCanvas" class="front" width="300" height="430" v-show="previewState === 'ready'" />
+            <span v-if="previewState === 'ready'" class="card-badge nationality" :style="badgeStyle('nationality')" title="国籍旗帜示例" @pointerdown="beginBadgeDrag($event, 'nationality')"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#d92d24"/><polygon points="6,2 7,5 10,5 8,7 9,10 6,8 3,10 4,7 2,5 5,5" fill="#ffdf45"/></svg></span>
+            <span v-if="previewState === 'ready'" class="card-badge team" :style="badgeStyle('team')" title="球队队徽示例" @pointerdown="beginBadgeDrag($event, 'team')">队</span>
+            <span v-for="field in previewState === 'ready' ? TEXT_FIELDS : []" :key="field.key" class="card-text" :class="{ active: selectedField === field.key }"
+              :style="fieldStyle(field.key)" @pointerdown="beginTextDrag($event, field.key)">{{ field.sample }}</span>
+          </div>
+          <span v-if="!form.backgroundUrl || !form.maskUrl" class="preview-state">上传背景和遮罩后可预览</span>
+          <span v-else-if="previewState === 'loading'" class="preview-state" role="status">正在合成预览…</span>
+          <div v-else-if="previewState === 'error'" class="preview-error" role="alert"><span>{{ previewError }}</span><el-button link @click="composePreview">重试预览</el-button></div>
+          <span v-else class="preview-state">{{ selectedFiles.background || selectedFiles.mask ? '新素材预览已更新 · 待保存' : '拖动预览文字可调整位置' }}</span>
+        </div>
+      </div>
+    </div>
+    <el-dialog v-model="previewOpen" title="排版大图" width="min(760px, 96vw)" append-to-body @opened="paintDialogOverlay">
+      <div class="mask-review-grid">
+        <div class="review-column"><strong>叠合效果</strong><div class="card-preview review-card" role="img" aria-label="背景、人物与遮罩叠合效果">
+          <img class="back" :src="form.backgroundUrl" alt="">
+          <img class="portrait" :src="previewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag">
+          <canvas ref="dialogMaskedCanvas" class="front" width="300" height="430" />
+          <span class="card-badge nationality" :style="badgeStyle('nationality')" title="国籍旗帜示例"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#d92d24"/><polygon points="6,2 7,5 10,5 8,7 9,10 6,8 3,10 4,7 2,5 5,5" fill="#ffdf45"/></svg></span>
+          <span class="card-badge team" :style="badgeStyle('team')" title="球队队徽示例">队</span>
+          <span v-for="field in TEXT_FIELDS" :key="field.key" class="card-text" :style="fieldStyle(field.key)">{{ field.sample }}</span>
+        </div></div>
+        <div class="review-column"><strong>遮罩原图</strong><img class="mask-source" :src="form.maskUrl" alt="黑白遮罩原图"></div>
+      </div>
+      <p class="review-note">黑色区域盖住人物，白色区域透出人物。确认后保存草稿。</p>
+    </el-dialog>
+
+  </section>
+</template>
+
+<script setup>
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { playerCardTemplateRequest } from '@/utils/cloud'
+import { renderMaskedCardForeground } from '@/utils/playerCardMask'
+
+
+const TEXT_FIELDS = [
+  { key: 'number', label: '球衣号码', sample: '10' },
+  { key: 'position', label: '位置', sample: '前锋' },
+  { key: 'name', label: '姓名', sample: '示例球员' },
+  { key: 'jerseyName', label: '球衣名', sample: 'SAMPLE' },
+  { key: 'height', label: '身高', sample: '身高 178cm' },
+  { key: 'weight', label: '体重', sample: '体重 72kg' }
+]
+const DEFAULT_LAYOUT = {
+  number: { x: 44, y: 70, size: 52, color: '#1c241d', weight: 900 },
+  position: { x: 44, y: 130, size: 24, color: '#1c241d', weight: 700 },
+  name: { x: 150, y: 307, size: 32, color: '#1c241d', weight: 800 },
+  jerseyName: { x: 150, y: 343, size: 16, color: '#30312b', weight: 600 },
+  height: { x: 98, y: 367, size: 14, color: '#30312b', weight: 600 },
+  weight: { x: 202, y: 367, size: 14, color: '#30312b', weight: 600 }
+}
+function freshLayout() { return JSON.parse(JSON.stringify(DEFAULT_LAYOUT)) }
+const DEFAULT_PHOTO = { x: 150, y: 35, scale: 108 }
+function freshPhoto() { return { ...DEFAULT_PHOTO } }
+const DEFAULT_BADGES = { nationality: { x: 125, y: 394, size: 28 }, team: { x: 175, y: 388, size: 32 } }
+function freshBadges() { return JSON.parse(JSON.stringify(DEFAULT_BADGES)) }
+
+const backendReady = ref(false), publishServiceReady = ref(false)
+const templates = ref([]), nextCursor = ref(''), loading = ref(false), loadingMore = ref(false)
+const saving = ref(false), publishing = ref(false), error = ref(''), uploadError = ref(''), dirty = ref(false)
+const publishProgress = ref('')
+const publishJob = ref(null)
+const selectedFiles = reactive({ background: '', mask: '' })
+const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null), maskedCanvas = ref(null), dialogMaskedCanvas = ref(null)
+const previewState = ref('idle'), previewError = ref(''), previewOpen = ref(false)
+const form = reactive({ id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
+  backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
+const previewPortrait = `${import.meta.env.BASE_URL}images/player-card-layers/preview-portrait.png`
+const currentStyle = computed(() => form.layout[selectedField.value])
+const currentBadge = computed(() => form.badges[selectedBadge.value])
+const photoStyle = computed(() => {
+  const width = 270 * form.photo.scale / 100, height = 300 * form.photo.scale / 100
+  return { left: `${form.photo.x}px`, top: `${form.photo.y + 300 - height}px`,
+    width: `${width}px`, height: `${height}px`, transform: 'translateX(-50%)' }
+})
+const canPublish = computed(() => Boolean(form.id && !dirty.value && form.backgroundUrl && form.maskUrl && previewState.value === 'ready' &&
+  (form.status !== 'published' || form.draftVersion > form.publishedVersion)))
+let previewRequest = 0, renderedOverlay = null, pendingMaskReview = false
+function paintDialogOverlay() {
+  const context = dialogMaskedCanvas.value?.getContext('2d')
+  if (!context || !renderedOverlay) return
+  context.clearRect(0, 0, 300, 430); context.drawImage(renderedOverlay, 0, 0)
+}
+async function composePreview() {
+  const requestId = ++previewRequest, background = form.backgroundUrl, mask = form.maskUrl
+  previewState.value = background && mask ? 'loading' : 'idle'; previewError.value = ''; renderedOverlay = null
+  if (!background || !mask) return
+  try {
+    const source = await renderMaskedCardForeground(background, mask)
+    if (requestId !== previewRequest) return
+    await nextTick()
+    const context = maskedCanvas.value?.getContext('2d')
+    if (!context) throw new Error('预览画布暂不可用')
+    context.clearRect(0, 0, 300, 430); context.drawImage(source, 0, 0)
+    renderedOverlay = source
+    previewState.value = 'ready'
+    if (previewOpen.value) { await nextTick(); paintDialogOverlay() }
+  } catch (cause) {
+    if (requestId === previewRequest) { previewState.value = 'error'; previewError.value = cause.message || '遮罩预览失败' }
+  }
+}
+watch([() => form.backgroundUrl, () => form.maskUrl], composePreview)
+watch(previewOpen, async open => { if (open) { await nextTick(); paintDialogOverlay() } })
+watch(previewState, state => {
+  if (state === 'ready' && pendingMaskReview) { pendingMaskReview = false; previewOpen.value = true }
+  if (state === 'error') pendingMaskReview = false
+})
+
+function tierName(value) { return { bronze: '铜卡', silver: '银卡', gold: '金卡' }[value] || '未知等级' }
+function statusName(value) {
+  if (value.status === 'local') return '基础素材 · 未保存'
+  if (value.status === 'published') return value.draftVersion > value.publishedVersion ? '已发布 · 有新草稿' : '已发布'
+  return value.status === 'withdrawn' ? '已撤回' : '草稿'
+}
+async function request(action, data = {}) {
+  const result = await playerCardTemplateRequest(action, data)
+  if (!result?.success) throw new Error(result?.error || '操作失败，请重试')
+  return result
+}
+function assign(item) {
+  Object.assign(form, { id: item.id, title: item.title, tier: item.tier, status: item.status, revision: item.revision,
+    draftVersion: item.draftVersion, publishedVersion: item.publishedVersion,
+    backgroundUrl: item.backgroundData || item.backgroundUrl || '', maskUrl: item.maskData || item.maskUrl || '',
+    backgroundData: '', maskData: '', layout: JSON.parse(JSON.stringify(item.layout || DEFAULT_LAYOUT)),
+    photo: { ...(item.photo || DEFAULT_PHOTO) }, badges: JSON.parse(JSON.stringify(item.badges || DEFAULT_BADGES)) })
+  dirty.value = false; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
+}
+async function select(item) {
+  if (item.status === 'local') { assign({ ...item, id: '' }); return }
+  try {
+    const result = await request('getPlayerCardTemplate', { templateId: item.id })
+    assign(result.template)
+    const status = await request('getPlayerCardTemplatePublishStatus', { tier:item.tier })
+    publishServiceReady.value = true
+    publishJob.value = status.jobId ? status : null
+  }
+  catch (cause) { ElMessage.error(cause.message || '模板读取失败') }
+}
+function startCreate() {
+  Object.assign(form, { id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
+    backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
+  dirty.value = true; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
+  publishJob.value = null
+}
+async function load() {
+  loading.value = true; error.value = ''
+  try {
+    const result = await request('listPlayerCardTemplates')
+    backendReady.value = true
+    templates.value = result.templates || []; nextCursor.value = result.nextCursor || ''
+    if (form.id) { const current = templates.value.find(item => item.id === form.id); if (current) await select(current) }
+    else if (templates.value.length && !dirty.value) await select(templates.value[0])
+  } catch (cause) {
+    backendReady.value = false; publishServiceReady.value = false
+    const unavailable = /未知|不支持|unknown|unsupported|not found/i.test(cause.message || '')
+    error.value = unavailable ? '' : '模板读取失败，请重试'
+    templates.value = ['bronze','silver','gold'].map(tier => ({ id: `local:${tier}`, tier, title: `经典${tierName(tier)}`, status: 'local', revision: 0, draftVersion: 0, publishedVersion: 0, backgroundUrl: `${import.meta.env.BASE_URL}images/player-card-layers/${tier}-background.png`, maskUrl: `${import.meta.env.BASE_URL}images/player-card-layers/foreground-mask-source.png`, layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() }))
+    if (!dirty.value) assign({ ...templates.value[0], id: '' })
+  } finally { loading.value = false }
+}
+async function loadMore() {
+  loadingMore.value = true
+  try { const result = await request('listPlayerCardTemplates', { cursor: nextCursor.value }); templates.value.push(...(result.templates || [])); nextCursor.value = result.nextCursor || '' }
+  catch (cause) { ElMessage.error(cause.message) } finally { loadingMore.value = false }
+}
+function readDataUrl(file) {
+  return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '')); reader.onerror = () => reject(new Error('图片读取失败')); reader.readAsDataURL(file) })
+}
+function imageFrom(url) {
+  return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error('图片无法读取')); image.src = url })
+}
+async function chooseFile(event, layer) {
+  const file = event.target.files?.[0]; event.target.value = ''
+  if (!file) return
+  uploadError.value = ''
+  selectedFiles[layer] = ''
+  try {
+    if (!(file.type === 'image/png' || /\.png$/i.test(file.name)) || file.size > 2 * 1024 * 1024) throw new Error('请上传不超过 2MB 的 PNG')
+    const url = await readDataUrl(file), image = await imageFrom(url)
+    if (image.width !== 300 || image.height !== 430) throw new Error('图片尺寸必须为 300 × 430')
+    if (layer === 'mask') {
+      const canvas = document.createElement('canvas'); canvas.width = 300; canvas.height = 430
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+      const pixels = ctx.getImageData(0, 0, 300, 430).data
+      let dark = false, light = false
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i + 3] < 128) continue
+        const brightness = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3
+        if (brightness < 32) dark = true
+        if (brightness > 223) light = true
+        if (dark && light) break
+      }
+      if (!dark || !light) throw new Error('遮罩需要同时包含黑色前景区和白色透出区')
+    }
+    const previous = form[`${layer}Url`]
+    if (layer === 'mask') pendingMaskReview = true
+    form[`${layer}Url`] = url; form[`${layer}Data`] = url; dirty.value = true
+    selectedFiles[layer] = file.name
+    if (previous === url) await composePreview()
+  } catch (cause) { pendingMaskReview = false; uploadError.value = cause.message || '图片读取失败' }
+}
+async function refreshSelected(id) {
+  const result = await request('getPlayerCardTemplate', { templateId: id })
+  const index = templates.value.findIndex(item => item.id === id)
+  if (index >= 0) templates.value.splice(index, 1, result.template)
+  else templates.value.unshift(result.template)
+  assign(result.template)
+}
+async function save() {
+  if (!backendReady.value) return
+  saving.value = true
+  try {
+    const result = await request('savePlayerCardTemplate', { templateId: form.id, revision: form.revision, title: form.title,
+      tier: form.tier, backgroundData: form.backgroundData, maskData: form.maskData, layout: form.layout, photo: form.photo, badges: form.badges })
+    await refreshSelected(result.templateId); ElMessage.success('草稿已保存')
+  } catch (cause) { ElMessage.error(cause.message) } finally { saving.value = false }
+}
+async function publish() {
+  if (!publishServiceReady.value) return
+  try { await ElMessageBox.confirm('将先更新受影响的成卡，全部成功后统一生效。', '发布模板', { confirmButtonText: '发布' }) } catch { return }
+  publishing.value = true
+  publishProgress.value = '正在准备发布…'
+  try {
+    let result = await request('publishPlayerCardTemplate', { templateId: form.id, revision: form.revision })
+    await finishPublish(result)
+  }
+  catch (cause) { ElMessage.error(cause.message) } finally { publishing.value = false }
+}
+async function finishPublish(initial) {
+  let result = initial
+  while (result.status === 'pending') {
+    publishJob.value = result
+    publishProgress.value = `正在更新成卡 ${result.completed || 0}/${result.total || 0}`
+    result = await playerCardTemplateRequest('continuePlayerCardTemplatePublish', { jobId: result.jobId })
+    if (!result.success && result.status !== 'blocked') throw new Error(result.error || '发布失败')
+  }
+  if (result.status === 'blocked') {
+    publishJob.value = result
+    publishProgress.value = `${result.failed} 张成卡待修复；当前版本仍在使用`
+    throw new Error('部分成卡生成失败，请查看质量队列')
+  }
+  await refreshSelected(form.id)
+  publishJob.value = null
+  publishProgress.value = `已生效 · 更新 ${result.affected || 0} 张成卡`
+  ElMessage.success('已全平台生效')
+}
+async function resumePublish() {
+  if (!publishServiceReady.value) return
+  if (!publishJob.value?.jobId) return
+  publishing.value = true
+  try {
+    const start = publishJob.value.status === 'blocked'
+      ? await request('retryPlayerCardTemplatePublish', { jobId:publishJob.value.jobId })
+      : publishJob.value
+    await finishPublish(start)
+  } catch (cause) { ElMessage.error(cause.message) } finally { publishing.value = false }
+}
+function fieldStyle(key) {
+  const style = form.layout[key] || DEFAULT_LAYOUT[key]
+  return { left: `${style.x}px`, top: `${style.y}px`, fontSize: `${style.size}px`, color: style.color,
+    fontWeight: style.weight, transform: 'translateX(-50%)' }
+}
+function resetPhoto() { Object.assign(form.photo, DEFAULT_PHOTO); dirty.value = true }
+function resetBadge() { Object.assign(form.badges[selectedBadge.value], DEFAULT_BADGES[selectedBadge.value]); dirty.value = true }
+function badgeStyle(key) {
+  const badge = form.badges[key] || DEFAULT_BADGES[key]
+  return { left: `${badge.x}px`, top: `${badge.y}px`, width: `${badge.size}px`,
+    height: `${key === 'nationality' ? Math.round(badge.size * 2 / 3) : badge.size}px`, transform: 'translateX(-50%)' }
+}
+function beginBadgeDrag(event, key) {
+  event.preventDefault(); selectedBadge.value = key
+  const rect = event.currentTarget.closest('.card-preview')?.getBoundingClientRect(), badge = form.badges[key]
+  if (!rect || !badge) return
+  const startX = event.clientX, startY = event.clientY, x = badge.x, y = badge.y
+  const move = pointer => {
+    badge.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
+    badge.y = Math.max(0, Math.min(430, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
+    dirty.value = true
+  }
+  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
+}
+function beginPhotoDrag(event) {
+  event.preventDefault()
+  const rect = event.currentTarget.closest('.card-preview')?.getBoundingClientRect()
+  if (!rect) return
+  const startX = event.clientX, startY = event.clientY, x = form.photo.x, y = form.photo.y
+  const move = pointer => {
+    form.photo.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
+    form.photo.y = Math.max(0, Math.min(250, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
+    dirty.value = true
+  }
+  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
+}
+function beginTextDrag(event, key) {
+  event.preventDefault(); selectedField.value = key
+  const element = previewRef.value, style = form.layout[key], rect = element?.getBoundingClientRect()
+  if (!rect || !style) return
+  const startX = event.clientX, startY = event.clientY, x = style.x, y = style.y
+  const move = pointer => {
+    style.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
+    style.y = Math.max(0, Math.min(430, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
+    dirty.value = true
+  }
+  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
+}
+onMounted(load)
+</script>
+
+<style scoped>
+.card-library{padding:20px;color:#172a20;box-sizing:border-box}.platform-console .card-library{padding:20px 0 0}.library-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.library-head h2{margin:0 0 4px;font-size:20px}.library-head span{color:#6f7d73;font-size:12px}.library-body{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:620px;border:1px solid #dde7e0;background:#fff}.template-list{border-right:1px solid #e5ede8;padding:8px;overflow-y:auto}.template-list>button:not(.el-button){display:flex;align-items:center;gap:11px;width:100%;padding:9px;border:0;border-radius:6px;background:#fff;text-align:left;cursor:pointer}.template-list>button.selected{background:#eaf5ed}.template-list img{width:38px;height:55px;object-fit:contain}.template-list span{min-width:0;display:grid;gap:5px}.template-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.template-list small,.list-empty{color:#758078;font-size:11px}.list-empty{padding:20px 10px}.template-workspace{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;padding:24px}.editor-fields{max-width:470px;display:grid;align-content:start;gap:19px}.form-head{display:flex;align-items:center;gap:10px;font-size:17px}.editor-fields>label{display:grid;gap:7px;font-size:13px;font-weight:600}.file-fields{display:flex;gap:12px}.file-fields label{width:50%;display:grid;gap:7px;font-size:13px;font-weight:600}.file-fields input{position:absolute;width:1px;height:1px;opacity:0}.file-fields span{display:grid;place-items:center;height:72px;border:1px dashed #91b99f;border-radius:6px;color:#167445;font-weight:500;cursor:pointer}.field-error{margin:0;color:#b5372b;font-size:12px}.version{margin:0;color:#748078;font-size:12px}.editor-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}.preview-pane{display:grid;justify-items:center;align-content:start;gap:12px;padding:14px;background:#f1f5f2}.preview-pane>strong{font-size:13px}.card-preview{position:relative;width:300px;height:430px;overflow:hidden;background:#e4ebe5}.card-preview img{position:absolute;display:block}.card-preview .back,.card-preview .front{inset:0;width:100%;height:100%}.card-preview .back{z-index:1}.card-preview .portrait{z-index:2;top:18px;left:33px;width:234px;height:280px;object-fit:contain;object-position:center bottom}.card-preview .front{z-index:3}.card-preview b,.card-preview span,.card-preview strong{position:absolute;z-index:4;color:#1c241d}.card-preview .number{top:70px;left:25px;font-size:52px;line-height:1}.card-preview .position{top:125px;left:28px;font-size:22px;font-weight:700}.card-preview .name{right:20px;bottom:82px;left:20px;text-align:center;font-size:28px}.card-preview .jersey{right:20px;bottom:65px;left:20px;text-align:center;font-size:13px;font-weight:600}.card-preview .physical{right:20px;bottom:44px;left:20px;text-align:center;font-size:11px;font-weight:600}.preview-state{color:#758078;font-size:12px}@media(max-width:1100px){.template-workspace{grid-template-columns:minmax(0,1fr)}.preview-pane{justify-items:start}.library-body{grid-template-columns:210px minmax(0,1fr)}}@media(max-width:680px){.library-body{display:block}.template-list{display:flex;gap:4px;overflow-x:auto;border-right:0;border-bottom:1px solid #e5ede8}.template-list>button:not(.el-button){min-width:150px}.template-workspace{padding:16px}.library-head h2{font-size:18px}.card-preview{transform:scale(.85);transform-origin:top left;margin-bottom:-64px}}
+.release-note{margin:0;color:#697a6d;font-size:12px;line-height:1.5}
+.text-editor{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.text-editor>strong{font-size:14px}.text-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.text-controls label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.text-controls input[type=color]{width:100%;height:34px;padding:3px;border:1px solid #d5dfd8;border-radius:5px;background:#fff}.text-controls .el-input-number,.text-controls .el-select{width:100%}.card-preview .card-text{position:absolute;z-index:4;line-height:1;white-space:nowrap;cursor:grab;touch-action:none;user-select:none}.card-preview .card-text.active{outline:1px dashed #157d49;outline-offset:4px}
+.card-preview canvas.front{position:absolute;display:block;inset:0;width:100%;height:100%;z-index:3;pointer-events:none}
+.preview-title{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;font-size:13px}.preview-error{display:flex;align-items:center;gap:8px;color:#b5392f;font-size:12px}.preview-pane.expanded{position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:auto;padding:24px;background:#eaf0ec;box-sizing:border-box}.preview-pane.expanded .preview-title{max-width:460px}.preview-pane.expanded .card-preview{flex:none;margin:14px auto;transform:none}@media(min-width:700px){.preview-pane.expanded .card-preview{transform:scale(1.25);transform-origin:top center;margin:14px auto 122px}}
+.file-fields .file-picker{position:relative;min-width:0;cursor:pointer}.file-picker strong{font-size:13px}.file-picker .file-target{position:relative;display:grid;place-items:center;height:72px;border:1px dashed #91b99f;border-radius:6px;color:#167445;font-weight:500;box-sizing:border-box}.file-fields .file-picker input[type=file]{position:absolute;top:23px;left:0;width:100%;height:72px;opacity:0;z-index:2;cursor:pointer}.file-picker:focus-within .file-target{outline:2px solid #168149;outline-offset:2px}.file-picker small{overflow:hidden;color:#1b7245;font-size:11px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}.file-feedback{margin:0;color:#1b7245;font-size:12px}
+.mask-review-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;justify-items:center}.review-column{display:grid;justify-items:center;align-content:start;gap:10px;min-width:0}.review-column>strong{font-size:14px;color:#233d2e}.mask-source{display:block;width:300px;height:430px;max-width:100%;object-fit:fill;border:1px solid #dce6df;background:#fff;box-sizing:border-box}.review-note{margin:15px 0 0;color:#697a6d;font-size:12px;text-align:center}@media(max-width:680px){.mask-review-grid{grid-template-columns:1fr}.review-column+.review-column{margin-top:16px}}
+.photo-editor{display:grid;gap:11px;padding-top:10px;border-top:1px solid #e4ebe6}.photo-editor-head{display:flex;align-items:center;justify-content:space-between}.photo-editor-head strong{font-size:14px}.photo-editor>label{display:grid;grid-template-columns:60px 45px minmax(0,1fr);align-items:center;gap:8px;font-size:12px;color:#5d6f63}.photo-editor>label .el-slider{min-width:0}.photo-position{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.photo-position label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.photo-position .el-input-number{width:100%}.card-preview .portrait{cursor:grab;touch-action:none;user-select:none}
+.badge-editor{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.badge-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.badge-controls label{display:grid;gap:5px;color:#5d6f63;font-size:12px}.badge-controls .el-input-number{width:100%}.card-preview .card-badge{position:absolute;z-index:4;display:grid;place-items:center;overflow:hidden;cursor:grab;touch-action:none;user-select:none;box-sizing:border-box}.card-badge.nationality svg{width:100%;height:100%;display:block}.card-badge.team{border:2px solid #fff;background:#087744;color:#fff;font-size:14px;font-weight:800;clip-path:polygon(50% 0,100% 13%,100% 68%,50% 100%,0 68%,0 13%)}
+.form-head .el-button{margin-left:auto}.pc-reference{position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;width:300px}
+</style>

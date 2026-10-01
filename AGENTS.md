@@ -250,3 +250,7 @@ API Key 位于仓库外的 `%LOCALAPPDATA%\SxfCloud\credentials\`，由 Windows 
 用户已确认数据中心方案。所有新增或修改的数据机制、竞技统计、榜单、导入与导出，必须先读 docs/data-center/README.md、CONTRACT.md 和 INTEGRATION.md。统一身份、历史归属、指标、权限、完整度与数据版本；禁止页面另写统计算法、姓名自动合并、缺失值记零和静默截断查询。
 
 统一源码在 cloudfunctions/dataCenter/shared，部署副本经 tools/sync-data-center.mjs 同步。交付同步入口登记，执行 sync-data-center --check、test-data-center、check-data-governance。现行用户确认的赛事免费规则优先于本文件历史专业版付费描述。Git推送、部署和生产迁移分别记录实际状态。
+
+## 平台后台正式发布授权（2026-10-01）
+
+用户已明确要求：平台运营中心及平台后台后续界面设计与部署直接发布正式 `/admin/`，无需预览验收或测试阶段。实施后执行必要的生产构建、语法检查、权限边界核对及线上 HTTP/资源摘要回读；保留同期代码与用户改动。此授权适用于平台后台界面发布，数据库迁移、模板激活及跨端功能按各自请求范围执行。其他端口继续遵循原发布流程。

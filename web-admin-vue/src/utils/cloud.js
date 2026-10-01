@@ -155,6 +155,10 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
   }
 }
 
+export function playerCardTemplateRequest(action, data = {}) {
+  return callFunctionHTTP(action, data)
+}
+
 export async function reviewRefereeRecord(data = {}) {
   return callFunctionHTTP('reviewRefereeRecord', data)
 }
