@@ -171,6 +171,27 @@ function safeTournament(tournament, context = {}) {
   }
 }
 
+async function getStartedTournamentIds(db, event) {
+  const tournamentIds = Array.from(new Set((Array.isArray(event.tournamentIds) ? event.tournamentIds : [])
+    .map(value => cleanText(value, 128))
+    .filter(Boolean)))
+  if (tournamentIds.length > 100) {
+    return { success: false, error: '一次最多刷新 100 场赛事，请分批重试' }
+  }
+  if (!tournamentIds.length) return { success: true, data: { startedTournamentIds: [] } }
+
+  const startedStatuses = ['ongoing', 'live', 'finished', 'completed', 'ended']
+  const startedFlags = await Promise.all(tournamentIds.map(async tournamentId => {
+    const result = await db.collection('matches')
+      .where({ tournamentId, status: db.command.in(startedStatuses) })
+      .field({ _id: true })
+      .limit(1)
+      .get()
+    return (result.data || []).length ? tournamentId : ''
+  }))
+  return { success: true, data: { startedTournamentIds: startedFlags.filter(Boolean) } }
+}
+
 function safeOrganizer(user) {
   return {
     _id: user._id,
@@ -214,6 +235,27 @@ async function getOverview(db) {
     loadAllOptional(db, 'assistance_requests', 1000)
   ])
 
+  // 旧版 Word 导入把限时 URL 写进 logo/logoUrl，同时保留了永久 cloud 文件 ID。
+  // 每次读取时从永久 ID 换取新地址，避免 URL 到期后在长期球队列表显示破图。
+  const logoFileIdOf = team => [
+    team.logoFileID, team.logoFileId, team.logoCloudFileId,
+    team.logoTransparentFileId, team.logo, team.logoUrl
+  ].map(value => String(value || '').trim()).find(value => value.startsWith('cloud://')) || ''
+  const logoFileIds = [...new Set(teamRows.map(logoFileIdOf).filter(Boolean))]
+  const logoUrls = new Map()
+  for (let offset = 0; offset < logoFileIds.length; offset += 50) {
+    try {
+      const result = await cloud.getTempFileURL({ fileList: logoFileIds.slice(offset, offset + 50) })
+      ;(result.fileList || []).forEach(item => {
+        const fileId = String(item.fileID || item.fileId || '').trim()
+        const url = String(item.tempFileURL || item.tempFileUrl || '').trim()
+        if (fileId && /^https?:\/\//i.test(url)) logoUrls.set(fileId, url)
+      })
+    } catch (error) {
+      console.warn('[manageTournamentCenterContent] 球队队徽地址刷新失败:', error && error.message)
+    }
+  }
+
   const usersById = new Map(userRows.map(item => [String(item._id), item]))
   const organizationsById = new Map(organizationRows.map(item => [String(item._id), item]))
   const tournamentTeamCounts = new Map()
@@ -251,6 +293,9 @@ async function getOverview(db) {
         phone,
         phoneMasked: maskPhone(phone),
         email: firstText(user, ['email']) || firstText(organization, ['email', 'contactEmail']),
+        latestNotice: user.lastPlatformNotice && typeof user.lastPlatformNotice === 'object'
+          ? user.lastPlatformNotice
+          : null,
         isActive: user.status !== 'disabled' && user.isActive !== false,
         createTime: user.createTime || user.createdAt || organization.createTime || organization.createdAt || null,
         lastLoginTime: user.lastLoginTime || user.lastLoginAt || null,
@@ -305,6 +350,10 @@ async function getOverview(db) {
     .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
   const teams = teamRows.map(team => {
+    const logoFileId = logoFileIdOf(team)
+    const fallbackLogo = [team.logo, team.logoUrl, team.logoTransparentUrl]
+      .map(value => String(value || '').trim())
+      .find(value => /^https?:\/\//i.test(value)) || ''
     const orgId = recordOrgId(team)
     const creatorId = recordCreatorId(team)
     const organization = organizationsById.get(orgId)
@@ -316,7 +365,8 @@ async function getOverview(db) {
     return {
       _id: team._id,
       name: team.name || team.teamName || '未命名球队',
-      logo: team.logo || team.logoUrl || '',
+      logo: logoFileId ? (logoUrls.get(logoFileId) || '') : fallbackLogo,
+      logoUnavailable: Boolean(logoFileId && !logoUrls.has(logoFileId)),
       city: team.city || team.cityName || team.region || '',
       contact: team.contactName || team.managerName || '',
       phone: normalizePhone(team.contactPhone || team.managerPhone || team.ownerPhone),
@@ -362,6 +412,55 @@ async function getOverview(db) {
       }
     }
   }
+}
+
+async function sendOrganizerNotice(db, event, actor) {
+  const recipientUserId = cleanText(event.recipientUserId, 128)
+  const title = cleanText(event.title, 80)
+  const body = String(event.body || '').trim().slice(0, 2000)
+  if (!recipientUserId) return { success: false, error: '请选择接收主办方' }
+  if (!title || !body) return { success: false, error: '请填写通知标题和内容' }
+
+  let recipient
+  try {
+    const found = await db.collection('users').doc(recipientUserId).get()
+    recipient = firstRecord(found.data)
+  } catch (error) {
+    recipient = null
+  }
+  if (!recipient || recipient.status === 'disabled' || recipient.pcAccountStatus === 'cancelled') {
+    return { success: false, error: '主办方账号不存在或已停用' }
+  }
+  const role = cleanText(recipient.role, 40).toLowerCase()
+  if (role !== 'organizer' && !recordOrgId(recipient)) {
+    return { success: false, error: '接收账号不是有效主办方账号' }
+  }
+
+  const linkPath = '/tournament-space?openContactInfo=profile'
+  const noticeId = crypto.randomBytes(16).toString('hex')
+  const now = db.serverDate()
+  const latestNotice = { messageId: noticeId, title, readAt: null, createTime: now, linkPath }
+  await db.collection('platform_inbox_messages').doc(noticeId).set({
+    data: {
+      recipientUserId,
+      recipientOrgId: recordOrgId(recipient),
+      title,
+      body,
+      linkPath,
+      linkLabel: '完善联系方式',
+      readAt: null,
+      createdBy: String(actor && actor._id || 'platform-owner'),
+      createTime: now
+    }
+  })
+  try {
+    await db.collection('users').doc(recipientUserId).update({
+      data: { lastPlatformNotice: latestNotice, updateTime: now }
+    })
+  } catch (error) {
+    console.warn('[manageTournamentCenterContent] 最近站内信状态回写失败:', error && error.message)
+  }
+  return { success: true, message: '站内信已发送', data: { messageId: noticeId, recipientUserId, linkPath, readAt: null } }
 }
 
 function userReferenceConditions(user, idFields, phoneFields = []) {
@@ -739,6 +838,8 @@ exports.main = async event => {
 
     const action = params.action || 'overview'
     if (action === 'overview') return await getOverview(db)
+    if (action === 'refreshTournamentStatuses') return await getStartedTournamentIds(db, params)
+    if (action === 'sendOrganizerNotice') return await sendOrganizerNotice(db, params, user)
     if (action === 'saveBanner') return await saveBanner(db, params, user)
     if (action === 'deleteBanner') return await deleteBanner(db, params)
     if (action === 'setFeatured') return await setFeatured(db, params, user)

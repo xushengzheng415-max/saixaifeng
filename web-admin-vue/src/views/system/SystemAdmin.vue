@@ -260,6 +260,7 @@ import {
   clearAssistanceContext,
   setAssistanceContext
 } from '@/utils/cloud'
+import { isPlatformContext } from '@/utils/platformSession'
 
 const router = useRouter()
 const ownerLoading = ref(true)
@@ -302,6 +303,7 @@ async function requestPlatformOwner(action, payload = {}) {
 }
 
 function persistOwnerFlag() {
+  if (isPlatformContext()) return
   try {
     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
     userInfo.isPlatformOwner = true
