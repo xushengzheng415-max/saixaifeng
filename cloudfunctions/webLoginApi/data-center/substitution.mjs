@@ -3,11 +3,29 @@ const playerId = row => text(row?.playerId || row?.id || row?._id)
 const typeOf = row => ({ second_yellow:'second_yellow_red', yellow_red:'second_yellow_red', red:'red_card', redcard:'red_card' })[text(row?.type || row?.eventType).toLowerCase()] || text(row?.type || row?.eventType).toLowerCase()
 const liveEvent = row => row && !row.deleted && !['deleted','revoked','cancelled'].includes(text(row.status))
 const integer = value => value !== '' && value != null && Number.isInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null
+const hasSubstitutionRule = row => row && ['substitutionMode','substitutionReentryAllowed','allowSubBack','substitutionLimit','maxSubstitutions'].some(key => row[key] != null)
+const timeValue = value => { const parsed = value instanceof Date ? value.getTime() : new Date(value || '').getTime(); return Number.isFinite(parsed) ? parsed : 0 }
 
 export function substitutionRules(match = {}, division = {}, tournament = {}) {
-  const sources = [match.rulesSnapshot, match.publishedRegulationsSnapshot, division.activeRulesSnapshot,
-    division.rulesSnapshot, division.publishedRegulationsSnapshot, division, tournament.rulesSnapshot, tournament.rules?.substitutions, tournament]
-  const source = sources.find(row => row && ['substitutionMode','substitutionReentryAllowed','allowSubBack','substitutionLimit','maxSubstitutions'].some(key => row[key] != null)) || {}
+  const matchStatus = text(match.status).toLowerCase()
+  const matchStarted = ['ongoing','in_progress','live','started','halftime','completed','finished'].includes(matchStatus) ||
+    Boolean(match.refereeClockStartedAt || match.actualKickoffAt || match.refereeRecordLocked)
+  const divisionRules = division.activeRulesSnapshot || division.rulesSnapshot || division.publishedRegulationsSnapshot || division
+  let historicalRules = null
+  if (matchStarted) {
+    const startedAt = timeValue(match.refereeStartedAt || match.refereeClockStartedAt || match.actualKickoffAt || match.startedAt)
+    if (startedAt) {
+      historicalRules = (Array.isArray(division.rulesHistory) ? division.rulesHistory : [])
+        .filter(row => hasSubstitutionRule(row && row.snapshot) && timeValue(row.revisedAt) >= startedAt)
+        .sort((a,b) => timeValue(a.revisedAt) - timeValue(b.revisedAt))[0]?.snapshot || null
+    }
+  }
+  const sources = matchStarted
+    ? [match.substitutionRulesSnapshot, match.rulesSnapshot, match.publishedRegulationsSnapshot, historicalRules, division.activeRulesSnapshot,
+      division.rulesSnapshot, division.publishedRegulationsSnapshot, division, tournament.rulesSnapshot, tournament.rules?.substitutions, tournament]
+    : [divisionRules, match.substitutionRulesSnapshot, match.rulesSnapshot, match.publishedRegulationsSnapshot, division.activeRulesSnapshot,
+      division.rulesSnapshot, division.publishedRegulationsSnapshot, division, tournament.rulesSnapshot, tournament.rules?.substitutions, tournament]
+  const source = sources.find(hasSubstitutionRule) || {}
   const mode = text(source.substitutionMode) || 'limited'
   const explicit = source.substitutionReentryAllowed ?? source.allowSubBack
   const allowReentry = explicit == null ? mode === 'free' : explicit === true

@@ -93,3 +93,10 @@ H5 getMyPreloadedPlayerCard、previewMyPreloadedPlayerCard、saveMyPreloadedPlay
 用户要求保存排版供其他卡沿用。平台负责人通过 savePlayerCardLayoutPreset 将文字布局及全部样式、人物大小／位置、国旗／队徽大小／位置保存为命名方案；listPlayerCardLayoutPresets 支持分页及名称检索，getPlayerCardLayoutPreset 返回经过同一校验器检查的配置。集合 player_card_layout_presets 保存方案、schemaVersion、创建人和时间，同名方案不覆盖，修改另存新名称。
 
 沿用复制到当前卡草稿，仅修改 layout/photo/badges；卡名、背景、遮罩、等级、预装对象、球员事实、已发布版本和其他卡片均不改变。保存排版不等于保存卡片草稿或发布，不携带任何照片、卡面文件、球队或球员身份。应用后需预览并保存当前卡草稿，后续编辑与方案及其他卡互不联动。本地专项及页面联测通过；集合和接口未上线。
+
+## 赛制修改门禁与换人规则读取（2026-10-01）
+
+- PC `DivisionRulesWizard.vue` 只在比赛未排程前进入完整规则修订；比赛中展示白名单内的换人设置入口。
+- `webLoginApi` 的 `reviseDivisionRules` / `confirmDivisionRules` 在赛程生成、赛程锁定或赛事开始后拒绝整套修改；通用 `update` 仍拒绝直接改定版规则。中途仅允许 `updateDivisionSubstitutionRules` 修改换人设置并保留规则版本、旧值历史和权限校验。
+- `dataCenter/shared/substitution.mjs` 对未开赛场次优先读取组别最新活动换人规则；已开始或完赛场次继续读取其比赛快照。部署副本同步至 `updateMatch`、`serviceMatchWorkflow` 等入口，避免 PC 补录与服务号裁判登记口径分离。
+- 冻结字段分类与边界见 `docs/PRODUCT_RULES.md`；生产或预览状态须单独登记于 `RELEASE.md`。

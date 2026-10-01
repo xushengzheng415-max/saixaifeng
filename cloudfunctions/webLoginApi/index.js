@@ -15,6 +15,7 @@ const cloud = require('wx-server-sdk')
 const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
+const { statusInProgress } = require('./divisionRuleMutationPolicy.cjs')
 const { createPlayerCards } = require('./playerCards.cjs')
 function fanCenterHandlers() {
   return require('./fanCenter.cjs')({ cloud, crypto, SERVICE_ACCOUNT_CONFIG, normalizeServiceH5Url, hashSessionToken, dateValue, httpsGet, getPublicTournamentCenter })
@@ -1450,6 +1451,19 @@ function competitionPlanLocked(record) {
     ['locked', 'match_management', 'in_progress', 'completed'].includes(String(record.competitionPlanStatus || '').toLowerCase())
 }
 
+async function divisionHasScheduleOrStarted(db, division) {
+  if (!division) return false
+  if (competitionPlanLocked(division) || statusInProgress(division.status)) return true
+  const tournamentId = String(division.tournamentId || '').trim()
+  if (!tournamentId) return false
+  const tournamentResult = await db.collection('tournaments').doc(tournamentId).get()
+  const tournament = Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data
+  if (competitionPlanLocked(tournament) || statusInProgress(tournament && tournament.status)) return true
+  const divisionId = String(division._id || division.id || '').trim()
+  const matches = await queryTournamentDivisionRecords(db, 'matches', tournamentId, divisionId || 'default')
+  return matches.length > 0
+}
+
 function divisionRecordMatches(record, divisionId) {
   if (!record) return false
   const explicit = record.divisionId ?? record.division ?? record.divisionKey
@@ -2019,6 +2033,9 @@ async function reviseDivisionRules(db, id, organizerScope) {
   if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
     return { success: false, error: '无权调整其他机构的竞赛组别', code: 'DIVISION_SCOPE_DENIED' }
   }
+  if (await divisionHasScheduleOrStarted(db, before)) {
+    return { success:false, error:'赛程生成后只开放比赛执行类调整；赛制结构、资格、积分和赛程保持锁定', code:'DIVISION_RULES_LIMITED_AFTER_SCHEDULE' }
+  }
   if (!divisionRulesLocked(before)) {
     return { success: false, error: '当前规则草稿尚未定版，请继续编辑草稿', code: 'DIVISION_DRAFT_EXISTS' }
   }
@@ -2061,6 +2078,9 @@ async function confirmDivisionRules(db, id, data, organizerScope) {
   const before = Array.isArray(result.data) ? result.data[0] : result.data
   if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
     return { success: false, error: '无权确认其他机构的竞赛组别', code: 'DIVISION_SCOPE_DENIED' }
+  }
+  if (await divisionHasScheduleOrStarted(db, before)) {
+    return { success:false, error:'赛程生成后不能通过整套规则定版修改；请使用比赛中允许的规则调整入口', code:'DIVISION_RULES_LIMITED_AFTER_SCHEDULE' }
   }
   if (divisionRulesLocked(before)) {
     return { success: false, error: '竞赛规则已经定版，不能重复确认', code: 'DIVISION_RULES_LOCKED' }
