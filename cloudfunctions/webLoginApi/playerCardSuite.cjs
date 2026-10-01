@@ -6,7 +6,7 @@ const VERSIONS = 'player_card_template_versions'
 const STATES = 'player_card_template_states'
 const RENDERS = 'player_card_renders'
 const JOBS = 'player_card_publish_jobs'
-const RENDER_VERSION = 'resvg/1'
+const {RENDER_VERSION} = require('./playerCardReader.cjs')
 const TYPES = ['bronze', 'silver', 'gold']
 
 const dataOf = result => Array.isArray(result && result.data) ? result.data[0] : result && result.data
@@ -57,7 +57,7 @@ async function renderPlayer(cloud, db, player, snapshot, score, overrides = {}) 
   const facts = cardFacts(player, team, score)
   const portraitId = String(overrides.portraitFileId || player.playerCardSourceFileId || '')
   if (!portraitId) throw new Error('标准形象照缺失，需先补拍')
-  const logoId = String(team && (team.logoTransparent || team.logo || team.logoUrl) || '')
+  const logoId = require('./playerCardSource.cjs').permanentFile(team && (team.logoTransparent || team.logo || team.logoUrl))
   const [backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer] = await Promise.all([
     asset(cloud, snapshot.backgroundFileId, 2 * 1024 * 1024),
     asset(cloud, snapshot.maskFileId, 2 * 1024 * 1024),

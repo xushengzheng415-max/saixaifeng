@@ -1,4 +1,5 @@
 const TYPES = ['bronze', 'silver', 'gold']
+const RENDER_VERSION = 'resvg/2'
 const dataOf = result => Array.isArray(result?.data) ? result.data[0] : result?.data
 async function document(db, collection, id) {
   try { return dataOf(await db.collection(collection).doc(String(id)).get()) || null }
@@ -20,7 +21,7 @@ async function readCards(cloud, db, players) {
     Object.assign(base,{templateId:state.active.templateId,publishedVersion:Number(state.active.version)})
     if (!player.playerCardFileId) return base
     const render = await document(db,'player_card_renders',`${playerId}_${base.templateId}_${base.publishedVersion}`)
-    if (!render || Number(render.cardDataVersion) !== base.cardDataVersion) return {...base,status:'pending'}
+    if (!render || render.renderVersion!==RENDER_VERSION || Number(render.cardDataVersion) !== base.cardDataVersion) return {...base,status:'pending'}
     if (render.status !== 'ready' || !render.fileId) return {...base,status:render.status === 'failed' ? 'failed' : 'pending'}
     return {...base,status:'ready',fileId:render.fileId,renderVersion:render.renderVersion || ''}
   }))
@@ -39,4 +40,4 @@ async function readCards(cloud, db, players) {
     return {...row,status:urls.has(row.fileId)?'ready':'failed',cardUrl:urls.get(row.fileId)||''}
   })
 }
-module.exports = { document, readCards, TYPES }
+module.exports = { document, readCards, TYPES, RENDER_VERSION }
