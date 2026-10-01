@@ -138,12 +138,12 @@ async function loadNews() {
 
 function reset() { Object.assign(form, { kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], newsId: '', title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [], photoFiles: [], photoFileIds: [], coverFileId: '', standingsSnapshotFileId: '' }); coverUrl.value = ''; standingsSnapshotUrl.value = ''; standingsError.value = ''; editing.value = ''; editingStatus.value = '' }
 function updateCover() { coverUrl.value = form.kind === 'daily' ? createDailyNewsCover(form.date, tournamentName.value, form.matchIds.length || dayMatches(form.date).length) : createMatchNewsCover(selectedMatch.value, tournamentName.value) }
-function clearGenerated() { form.title = ''; form.body = ''; form.matchIds = []; form.dayResults = []; form.nextFixtures = []; standingsSnapshotUrl.value = ''; standingsError.value = '' }
+function clearGenerated() { form.title = ''; form.body = ''; form.matchIds = []; form.dayResults = []; form.nextFixtures = []; form.coverFileId = ''; form.standingsSnapshotFileId = ''; standingsSnapshotUrl.value = ''; standingsError.value = '' }
 function onStandingsChange() { clearGenerated(); updateCover() }
 function onMatchChange() { clearGenerated(); updateCover() }
 function onDateChange() { clearGenerated(); updateCover() }
 function onKindChange() {
-  form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; form.photos = []; clearGenerated(); updateCover()
+  form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; form.photos = []; form.photoFiles = []; form.photoFileIds = []; clearGenerated(); updateCover()
 }
 function openNew() { reset(); editorOpen.value = true }
 function openArticle(item) { reset(); editing.value = item.id; editingStatus.value = item.rawStatus || item.status; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], newsId: item.id, title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshotFileId), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []), photoFiles: (item.photos || []).map(() => null), photoFileIds: item.photoFileIds || [], coverFileId: item.coverFileId || '', standingsSnapshotFileId: item.standingsSnapshotFileId || '' }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }

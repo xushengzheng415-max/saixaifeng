@@ -25,10 +25,9 @@ function official(match) {
 
 async function resultVersion(match) {
   let events = Array.isArray(match.events) ? [...match.events] : []
-  try {
-    const rows = (await db.collection('match_events').where({ matchId: text(match._id) }).limit(300).get()).data || []
-    events = events.concat(rows)
-  } catch (error) { console.warn('新闻赛果事件版本读取失败:', error.message || error) }
+  const rows = (await db.collection('match_events').where({ matchId: text(match._id) }).limit(301).get()).data || []
+  if (rows.length > 300) throw new Error('比赛事件超过新闻核对范围')
+  events = events.concat(rows)
   const goals = events.filter(event => ['goal', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(text(event.type || event.eventType).toLowerCase()))
     .map(event => ({ type: text(event.type || event.eventType), minute: Number(event.minute), side: text(event.teamSide || event.side), player: text(event.playerName || event.player) }))
     .sort((a, b) => a.minute - b.minute || a.type.localeCompare(b.type) || a.side.localeCompare(b.side) || a.player.localeCompare(b.player))
@@ -64,8 +63,7 @@ async function authorize(event) {
   const orgId = text(event.__actorOrgId || user.orgId || user.organizationId)
   if (!orgId || event.__actorOrgId && text(user.orgId || user.organizationId) !== orgId) throw new Error('当前账号机构归属不一致')
   const organization = await getDoc('organizations', orgId)
-  const organizationIds = organization ? orgIds(organization) : []
-  if (!organization || !organizationIds.length || organizationIds.some(id => id !== orgId)) throw new Error('机构不存在或归属不一致')
+  if (!organization || text(organization._id) !== orgId) throw new Error('机构不存在或归属不一致')
   const memberships = (await db.collection('organization_memberships').where(command.or([{ userId: user._id }, { memberUserId: user._id }])).limit(100).get()).data || []
   const member = memberships.find(item => text(item.orgId || item.organizationId) === orgId && !['disabled', 'removed', 'rejected', 'inactive'].includes(text(item.status || 'active').toLowerCase()))
   const owner = [organization.ownerId, organization.creatorId, organization.createdBy].map(text).includes(text(user._id))
@@ -125,10 +123,10 @@ async function saveDraft(event, actor, tournament) {
   const body = text(event.body).slice(0, 20000)
   if (!title || !body) throw new Error('请先填写标题和正文')
   const kind = text(event.kind)
-  const matchIds = kind === 'match' ? [text(event.matchId)] : [...new Set((event.matchIds || []).map(text).filter(Boolean))]
+  const matchIds = kind === 'match' ? [text(event.matchId)] : [...new Set((event.matchIds || []).map(text).filter(Boolean))].sort()
   const tournamentMatches = await listAllMatches(text(tournament._id))
   const articleDate = kind === 'daily' ? text(event.date) : text(tournamentMatches.find(item => text(item._id) === text(event.matchId))?.matchDate || event.date)
-  const versions = await sourceRows(text(tournament._id), kind, text(event.date), text(event.matchId), matchIds, tournamentMatches)
+  const versions = (await sourceRows(text(tournament._id), kind, text(event.date), text(event.matchId), matchIds, tournamentMatches)).sort((a, b) => a.matchId.localeCompare(b.matchId))
   const data = {
     sportCode: 'football', tournamentId: text(tournament._id), orgId: actor.orgId, kind, date: articleDate,
     matchId: kind === 'match' ? text(event.matchId) : '', matchIds, sourceResultVersions: versions,
@@ -169,10 +167,10 @@ exports.main = async event => {
     if (!tournamentId) throw new Error('缺少赛事信息')
     const tournament = await tournamentAccess(tournamentId, actor.orgId)
     const action = text(event && event.action)
-    if (action === 'list') return listNews(event, actor, tournament)
-    if (action === 'saveDraft') return saveDraft(event, actor, tournament)
-    if (action === 'publish') return setStatus(event, actor, 'published')
-    if (action === 'withdraw') return setStatus(event, actor, 'withdrawn')
+    if (action === 'list') return await listNews(event, actor, tournament)
+    if (action === 'saveDraft') return await saveDraft(event, actor, tournament)
+    if (action === 'publish') return await setStatus(event, actor, 'published')
+    if (action === 'withdraw') return await setStatus(event, actor, 'withdrawn')
     throw new Error('不支持的新闻操作')
   } catch (error) {
     console.error('newsCenter failed:', error)
