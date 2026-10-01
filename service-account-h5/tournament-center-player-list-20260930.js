@@ -24,6 +24,31 @@
     var match = value.match(/^cloud:\/\/[^.]+\.([^/]+)\/(.+)$/)
     return match ? 'https://' + match[1] + '.tcb.qcloud.la/' + match[2] : ''
   }
+  function formatNewsDate(value) { var match = String(value || '').match(/^\d{4}-\d{2}-\d{2}/); return match ? match[0] : String(value || '').slice(0, 10) }
+  function newsImage(fileId) { return publicImage(fileId) }
+  function dailyNewsTables(item) {
+    var results = Array.isArray(item.dayResults) ? item.dayResults : []
+    var fixtures = Array.isArray(item.nextFixtures) ? item.nextFixtures : []
+    var resultRows = results.map(function (row) { return '<tr><td>' + escapeHtml(row.division || '—') + '</td><td>' + escapeHtml(row.home || '') + '</td><td><strong>' + escapeHtml(row.score || '') + '</strong></td><td>' + escapeHtml(row.away || '') + '</td></tr>' }).join('')
+    var fixtureRows = fixtures.map(function (row) { return '<tr><td>' + escapeHtml(row.division || '—') + '</td><td>' + escapeHtml((row.date || '') + ' ' + (row.time || '')) + '</td><td>' + escapeHtml(row.home || '') + '</td><td>' + escapeHtml(row.away || '') + '</td><td>' + escapeHtml(row.venue || '待定') + '</td></tr>' }).join('')
+    return '<section class="news-detail-section"><h2>本轮赛果</h2><div class="news-table-scroll"><table><thead><tr><th>组别</th><th>主队</th><th>比分</th><th>客队</th></tr></thead><tbody>' + resultRows + '</tbody></table></div></section>' +
+      '<section class="news-detail-section"><h2>积分榜</h2>' + (item.standingsSnapshotFileId ? '<img class="news-standings-image" src="' + escapeHtml(newsImage(item.standingsSnapshotFileId)) + '" alt="正式积分榜快照">' : '<p>本期未附积分榜快照。</p>') + '</section>' +
+      '<section class="news-detail-section"><h2>下轮对阵</h2>' + (fixtureRows ? '<div class="news-table-scroll"><table><thead><tr><th>组别</th><th>时间</th><th>主队</th><th>客队</th><th>场地</th></tr></thead><tbody>' + fixtureRows + '</tbody></table></div>' : '<p>下一轮赛程尚未公布。</p>') + '</section>' +
+      '<section class="news-detail-section"><h2>停赛信息</h2><p>' + escapeHtml(item.suspensionNote ? '主办方提供：' + item.suspensionNote : '下轮停赛名单尚未录入，待主办方确认。') + '</p></section>'
+  }
+  function renderNewsDetail(item) {
+    if (!item) return render()
+    var coverId = item.coverFileId || (item.photoFileIds && item.photoFileIds[0]) || ''
+    var body = String(item.body || '').split(/\n\s*\n/).map(function (part) { return part.trim() }).filter(Boolean)
+    var extraPhotos = (Array.isArray(item.photoFileIds) ? item.photoFileIds : []).slice(1)
+    var bodyHtml = body.map(function (paragraph, index) { return '<p>' + escapeHtml(paragraph).replace(/\n/g, '<br>') + '</p>' + (extraPhotos[index] ? '<img class="news-inline-image" src="' + escapeHtml(newsImage(extraPhotos[index])) + '" alt="比赛现场照片">' : '') }).join('')
+    app.innerHTML = '<main class="news-detail-page"><button id="newsBack" class="news-back" type="button">‹ 返回赛事</button><article><header><small>' + escapeHtml(item.kind === 'daily' ? '每日新闻' : '单场新闻') + ' · ' + escapeHtml(formatNewsDate(item.publishedAt || item.date)) + '</small><h1>' + escapeHtml(item.title || '') + '</h1></header>' +
+      (coverId ? '<img class="news-cover-image" src="' + escapeHtml(newsImage(coverId)) + '" alt="新闻封面">' : '') +
+      (item.kind === 'daily' ? dailyNewsTables(item) : '<div class="news-body">' + bodyHtml + '</div>') + '</article></main>' +
+      '<nav class="bottom-tabs"><button data-home="1">首页</button><button data-anchor="matches">比赛</button><button data-anchor="events">赛事</button><button data-anchor="rankings">榜单</button><a href="./me.html">我的</a></nav>'
+    document.getElementById('newsBack').onclick = function () { render() }
+    bind()
+  }
   function categoryOf(item) {
     var text = String((item && item.category) || '') + ' ' + String((item && item.name) || '')
     if (/青少|少年|youth|u\d+/i.test(text)) return 'youth'
@@ -758,10 +783,19 @@
     var matchHtml = matches.length ? matches.map(function (item) {
       return '<button class="match-card" data-match="' + escapeHtml(item.id) + '"><strong>' + escapeHtml(matchTime(item)) + '</strong><small>' + escapeHtml(item.divisionName || item.round || '公开比赛') + '</small><div><span>' + teamLogo(item.homeLogo, item.homeName) + '<b>' + escapeHtml(item.homeName) + '</b></span><i>' + escapeHtml(score(item)) + '</i><span>' + teamLogo(item.awayLogo, item.awayName) + '<b>' + escapeHtml(item.awayName) + '</b></span></div>' + matchEventSummary(item) + '<em class="' + escapeHtml(item.status) + '">' + escapeHtml(matchStatus(item.status)) + '</em></button>'
     }).join('') : '<p class="strip-empty">暂无已发布赛程</p>'
-    var updates = (state.news || []).slice(0, 6).map(function (item) {
-      var cover = item.photos && item.photos[0]
-      return '<a class="news-row" href="./news.html?id=' + encodeURIComponent(item.id) + '"><div class="news-image"' + (cover ? ' style="background-image:url(&quot;' + escapeHtml(cover) + '&quot;)"' : '') + '></div><div><h2>' + escapeHtml(item.title) + '</h2><p>' + escapeHtml(item.kind === 'flash' ? '现场快讯' : item.kind === 'round' ? '每轮综述' : '单场新闻') + '</p></div><i>›</i></a>'
-    }).join('') || '<p class="strip-empty">暂无赛事动态</p>'
+    var updateList = scheduleTournamentId ? list.filter(function (item) { return String(item.id) === scheduleTournamentId }) : list
+    var updateIds = new Set(updateList.map(function (item) { return String(item.id) }))
+    var publishedNews = state.news.filter(function (item) { return updateIds.has(String(item.tournamentId)) })
+    var updates = publishedNews.length ? publishedNews.slice(0, 6).map(function (item) {
+      var coverId = item.coverFileId || (item.photoFileIds && item.photoFileIds[0]) || ''
+      var cover = newsImage(coverId)
+      var background = cover ? ' style="background-image:url(\'' + escapeHtml(cover) + '\')"' : ''
+      return '<button class="news-row" data-news-id="' + escapeHtml(item.id) + '"><div class="news-image"' + background + '><span>' + (cover ? '' : mark(item.title)) + '</span></div><div><h2>' + escapeHtml(item.title || '') + '</h2><p>' + escapeHtml((item.kind === 'daily' ? '每日新闻' : '单场新闻') + ' · ' + formatNewsDate(item.publishedAt || item.date)) + '</p></div><i>›</i></button>'
+    }).join('') : updateList.slice(0, 6).map(function (item) {
+      var itemMatches = eventMatches(item)
+      var label = itemMatches.some(function (match) { return match.status === 'ongoing' }) ? '正在进行' : itemMatches.some(function (match) { return match.status === 'finished' }) ? '赛果已更新' : '赛程已发布'
+      return '<button class="news-row" data-event="' + escapeHtml(item.id) + '"><div class="news-image"' + coverStyle(item) + '><span>' + mark(item.name) + '</span></div><div><h2>' + escapeHtml(item.name + ' ' + label) + '</h2><p>' + escapeHtml(dateRange(item) + ' · ' + itemMatches.length + ' 场公开比赛') + '</p></div><i>›</i></button>'
+    }).join('')
     app.innerHTML = '<nav class="category-tabs">' + tabs + '</nav>' +
       '<section class="event-hero"' + coverStyle(featured) + '><div class="hero-shade"></div><div class="hero-copy"><span>' + escapeHtml(eventStatus(publicEventStatus(featured))) + '</span><h1>' + escapeHtml(featured.name) + '</h1><p>' + escapeHtml(dateRange(featured) + (featured.city || featured.venue ? ' · ' + (featured.city || featured.venue) : '')) + '</p></div><button class="hero-detail" data-event="' + escapeHtml(featured.id) + '">赛事详情</button><div class="pager">' + list.slice(0, 4).map(function (item) { return '<button data-event="' + escapeHtml(item.id) + '" class="' + (item.id === featured.id ? 'is-active' : '') + '" aria-label="切换赛事"></button>' }).join('') + '</div></section>' +
       '<section class="portal-section match-schedule-section"><header><h2>近期赛程' + (scheduleTournamentId ? ' · 开封立洋杯' : '') + '</h2><button data-anchor="matches">全部比赛 ›</button></header><div class="match-strip">' + matchHtml + '</div></section>' +
@@ -771,6 +805,7 @@
   }
   function bind() {
     Array.prototype.forEach.call(app.querySelectorAll('[data-category]'), function (button) { button.onclick = function () { activeCategory = this.getAttribute('data-category'); activeEventId = ''; render() } })
+    Array.prototype.forEach.call(app.querySelectorAll('[data-news-id]'), function (button) { button.onclick = function () { renderNewsDetail(state.news.filter(function (item) { return String(item.id) === String(button.getAttribute('data-news-id')) })[0]) } })
     Array.prototype.forEach.call(app.querySelectorAll('[data-event]'), function (button) { button.onclick = function () { activeEventId = this.getAttribute('data-event'); if (button.classList.contains('hero-detail') || button.classList.contains('news-row')) { location.hash = 'event-' + activeEventId; renderEventDetail(findTournament(activeEventId)) } else { window.scrollTo({ top: 0, behavior: 'smooth' }); render() } } })
     Array.prototype.forEach.call(app.querySelectorAll('[data-match]'), function (button) { button.onclick = function () { location.hash = 'match-' + this.getAttribute('data-match'); renderMatchPage(findMatch(this.getAttribute('data-match'))) } })
     Array.prototype.forEach.call(app.querySelectorAll('[data-anchor]'), function (button) { button.onclick = function () { var anchor = this.getAttribute('data-anchor'); if (anchor === 'events') { location.hash = 'events'; renderEventsPage(); return } if (anchor === 'rankings') { location.hash = 'rankings'; renderRankingsPage(); return } if (anchor === 'matches') { location.hash = 'matches'; renderMatchesPage(); return } var target = app.querySelector('.news-section'); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }) } })
@@ -783,7 +818,7 @@
       if (!result.success) throw new Error(result.error || '请稍后重试')
       state.tournaments = (result.data && result.data.tournaments) || []
       state.matches = (result.data && result.data.matches) || []
-      state.news = results[1] && results[1].success ? results[1].articles || [] : []
+      state.news = results[1] && results[1].success && (results[1].articles || []).length ? results[1].articles : (result.data && result.data.news) || []
       applyScheduleFilter()
       var matchId = location.hash.replace(/^#match-/, '')
       if (location.hash.indexOf('#match-') === 0 && findMatch(matchId)) renderMatchPage(findMatch(matchId))
