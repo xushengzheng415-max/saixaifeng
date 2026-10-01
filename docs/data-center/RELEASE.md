@@ -50,3 +50,15 @@ tools/test-data-center.mjs 使用隔离模拟数据覆盖：5+3 的转会生涯�
 旧 ID 关系映射、批量合并和生涯补录必须先提供 dry-run 报告、来源证据、冲突清单、备份和回滚策略。当前未自动执行历史数据修复或未知加入时间补写。
 
 本地浏览器验收：PC 桌面 1440px 和手机 390px，以虚构赛事验证查询、未知值和质量队列，未出现页面错误。截图留在仓库外的 outputs/data-center-20260929。提交版本从已核对的最新 origin/main 整合，未包含原工作区其他未提交改动。
+
+## 2026-10-01 平台模板保存与发布正式接通
+
+用户反馈正式编辑器不能保存/发布，授权修复并按平台后台规则直接部署正式版。源码提交 e2589b34（接口及前端），43226f8c（发布文档 ID 写入修正）。从最新线上 webLoginApi 源码差量接入模板服务，保留现网 fanCenter/fanSupportPlayer/fanWallet 与公开球员 ID 修正；未覆盖为旧函数包。
+
+建立 player_card_templates、player_card_template_versions、player_card_template_states、player_card_publish_jobs、player_card_renders 五集合，均 ADMINONLY。上传已回读的铜银金背景与黑白遮罩，初始化三份草稿（revision=1、draftVersion=1、publishedVersion=0）及三份 active=null 的卡种状态；默认布局未被自动发布。首次读库确认 players.playerCardFileId 非空数量为 0。
+
+保存使用平台负责人会话、字段/PNG 校验及 revision 冲突校验，保存后回读草稿。发布创建不可变快照和待激活任务；渲染校验、现有卡重制通过后事务切换活动指针，后台再回读活动版本。服务端大图预览使用同一 PNG 渲染器及受控示例人物资料。灰度遮罩允许少量抗锯齿彩色边缘；黑遮挡、白透出方向已在完整样例成卡中核对。
+
+webLoginApi 通过 COS 方式完成代码更新，包含 Linux x64 原生 resvg 依赖、pngjs、中文字体及 OFL 许可证。线上回下载的 index.js、四服务模块、两字体、两示例素材、Linux 原生库共 10 项与发布包 SHA-256 一致。真实线上无活动模板读回 status=unavailable，匿名保存返回 AUTH_REQUIRED；没有伪造管理员登录会话。尚未代用户执行真实模板保存或发布，三份草稿和空活动指针已读回。
+
+正式 /admin/ 生产构建并完整部署，HTTP 200；入口脚本 SHA-256 A3708573D832494133BF43D8EA2A8C729DB48A682EB6FEEA99C0F0D6D1A51DF3、平台编辑页分包 SHA-256 FF1C53EA0B9796CEF7E366A2708C0278483126658E5CEFD2F54EAC3E1273391F 均线上/本地一致。未运行测试套件。PC/H5/小程序个人成卡消费接口仍需后续接入活动模板；本次仅确认后台模板保存/发布服务已部署，不把它表述为三端成卡已统一生效。
