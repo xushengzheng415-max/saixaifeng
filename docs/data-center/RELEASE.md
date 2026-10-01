@@ -62,3 +62,11 @@ tools/test-data-center.mjs 使用隔离模拟数据覆盖：5+3 的转会生涯�
 webLoginApi 通过 COS 方式完成代码更新，包含 Linux x64 原生 resvg 依赖、pngjs、中文字体及 OFL 许可证。线上回下载的 index.js、四服务模块、两字体、两示例素材、Linux 原生库共 10 项与发布包 SHA-256 一致。真实线上无活动模板读回 status=unavailable，匿名保存返回 AUTH_REQUIRED；没有伪造管理员登录会话。尚未代用户执行真实模板保存或发布，三份草稿和空活动指针已读回。
 
 正式 /admin/ 生产构建并完整部署，HTTP 200；入口脚本 SHA-256 A3708573D832494133BF43D8EA2A8C729DB48A682EB6FEEA99C0F0D6D1A51DF3、平台编辑页分包 SHA-256 FF1C53EA0B9796CEF7E366A2708C0278483126658E5CEFD2F54EAC3E1273391F 均线上/本地一致。未运行测试套件。PC/H5/小程序个人成卡消费接口仍需后续接入活动模板；本次仅确认后台模板保存/发布服务已部署，不把它表述为三端成卡已统一生效。
+
+## 2026-10-01 发布状态空对象写入修复
+
+用户真实发布铜卡草稿3时，CloudBase 把普通对象更新展开为 candidate.jobId 等点路径；当前 candidate=null，导致 Cannot create field 'jobId' in element {candidate:null}。正式读回确认铜卡 draftVersion=3/revision=3，三种活动/候选指针仍为 null，发布任务集合为空；失败事务已回滚，用户草稿未丢失。
+
+源码 8d79eaec：candidate、active、published 和 draft 的整对象更新改用 db.command.set，兼容 null→对象及后续版本整体替换；同类写入全部核对。数据库内部错误改为可执行的简短提示，前端发布异常恢复为“发布未完成，可重试”。没有改写用户草稿，也没有手动伪造已发布状态。
+
+webLoginApi 从最新线上包仅替换两模板模块，以 COS 更新并回下载；playerCardPublish.cjs SHA-256 C91AC187431A05151B46E9C2B24C8812A143DB277D385FD32AF55EA83D0FA83E，playerCardTemplates.cjs D715246B917EF23D2A608998B1E87CC18D4C3E43E61D5F7CA9C4D02265BEDA4A，入口 index.js 与基线一致。正式前端构建、整包部署完成，HTTP 200；入口脚本 SHA-256 8CB3E24CA37B5D075A13E72DB51BAC6E9CA29E0FBE96785F077F48F1F979238D，平台页分包 CD31AEDA361BB8B3F2CD8BBA95217B3849597DF73BAD0FD6A84D8AF13A722690，线上/本地一致。未执行测试阶段；修复后的真实发布结果由平台负责人重新发布后核验。
