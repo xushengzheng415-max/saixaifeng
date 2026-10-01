@@ -2,7 +2,8 @@ const path = require('node:path')
 const { PNG } = require('pngjs')
 const { Resvg } = require('@resvg/resvg-js')
 
-const FONT_FILES = ['NotoSansSC-Regular.otf', 'NotoSansSC-Bold.otf'].map(file => path.join(__dirname, 'fonts', file))
+const {normalizeTextStyle,gradientCoordinates,contract} = require('./playerCardTextStyle.cjs')
+const FONT_FILES = contract.fonts.flatMap(font=>font.files).map(file=>path.join(__dirname,'fonts',file))
 const WIDTH = 300, HEIGHT = 430
 const escapeXml = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&apos;' })[c])
 
@@ -38,17 +39,32 @@ function makeForegroundLayer(backgroundBuffer, maskBuffer) {
   return PNG.sync.write(background)
 }
 
-function label(value, field, maxWidth = 280) {
+function label(value, field, maxWidth = 280, id = 'label', definitions = []) {
   const content = String(value == null ? '' : value).trim()
   if (!field || !content) return ''
   const size = Math.max(8, Math.min(80, Number(field.size) || 14))
-  const chars = Array.from(content)
-  const approximateWidth = value => Array.from(value).reduce((total, char) => total + (/^[\x00-\x7F]$/.test(char) ? .58 : 1), 0) * size
+  const style = normalizeTextStyle(field)
+  const approximateWidth = value => Array.from(value).reduce((total, char) => total + (/^[\x00-\x7F]$/.test(char) ? .58 : 1), 0) * size + Math.max(0,Array.from(value).length-1)*style.letterSpacing
   let shown = content
   while (approximateWidth(shown) > maxWidth && Array.from(shown).length > 1) {
     shown = Array.from(shown).slice(0, -2).join('') + '…'
   }
-  return `<text x="${Number(field.x)||0}" y="${Number(field.y)||0}" text-anchor="middle" dominant-baseline="hanging" font-family="Noto Sans SC" font-size="${size}" font-weight="${Number(field.weight)||400}" fill="${escapeXml(field.color||'#1c241d')}">${escapeXml(shown)}</text>`
+  let fill = escapeXml(field.color || '#1c241d')
+  if (style.fillMode === 'gradient') {
+    const coordinates = gradientCoordinates(style.gradient.angle), key = 'fill_' + id
+    definitions.push('<linearGradient id="'+key+'" x1="'+coordinates.x1+'%" y1="'+coordinates.y1+'%" x2="'+coordinates.x2+'%" y2="'+coordinates.y2+'%"><stop offset="0" stop-color="'+style.gradient.start+'"/>'+(style.gradient.middleEnabled?'<stop offset="0.5" stop-color="'+style.gradient.middle+'"/>':'')+'<stop offset="1" stop-color="'+style.gradient.end+'"/></linearGradient>')
+    fill = 'url(#' + key + ')'
+  }
+  let filter = ''
+  if (style.shadow.enabled) {
+    const key = 'shadow_' + id, shadow = style.shadow
+    definitions.push('<filter id="'+key+'" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="'+shadow.blur+'"/><feOffset dx="'+shadow.x+'" dy="'+shadow.y+'" result="offset"/><feFlood flood-color="'+shadow.color+'" flood-opacity="'+shadow.opacity+'"/><feComposite in2="offset" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>')
+    filter = ' filter="url(#' + key + ')"'
+  }
+  const skew = style.fontStyle === 'italic' ? ' transform="translate('+(Number(field.x)||0)+' '+(Number(field.y)||0)+') skewX(-12) translate('+(-(Number(field.x)||0))+' '+(-(Number(field.y)||0))+')"' : ''
+  const family = contract.fonts.find(font=>font.id===style.font).family + ', Noto Sans SC'
+  return '<text x="'+(Number(field.x)||0)+'" y="'+(Number(field.y)||0)+'" text-anchor="middle" dominant-baseline="hanging" font-family="'+family+'" font-size="'+size+'" font-weight="'+(Number(field.weight)||400)+'" font-style="normal" letter-spacing="'+style.letterSpacing+'" fill="'+fill+'" stroke="'+style.stroke.color+'" stroke-width="'+style.stroke.width+'" stroke-linejoin="round" paint-order="stroke fill"'+filter+skew+'>'+escapeXml(shown)+'</text>'
+
 }
 
 function star(cx, cy, radius) {
@@ -87,17 +103,21 @@ function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuff
   const position = { GK:'守门员', DF:'后卫', MF:'中场', FW:'前锋' }[player.position] || player.position
   const logo = badges.team && teamLogoBuffer ? image(teamLogoBuffer,
     `x="${badges.team.x-badges.team.size/2}" y="${badges.team.y-badges.team.size/2}" width="${badges.team.size}" height="${badges.team.size}" preserveAspectRatio="xMidYMid meet"`) : ''
+  const definitions = []
+  const textLayers = [
+    label(player.jerseyNumber,adjusted(fields.number,personal.number),85,'number',definitions),
+    label(position,fields.position,105,'position',definitions),
+    label(player.name,adjusted(fields.name,personal.name),245,'name',definitions),
+    label(player.jerseyName,fields.jerseyName,245,'jerseyName',definitions),
+    player.height == null || player.height === '' ? '' : label(`身高 ${player.height}cm`,fields.height,110,'height',definitions),
+    player.weight == null || player.weight === '' ? '' : label(`体重 ${player.weight}kg`,fields.weight,110,'weight',definitions)
+  ].join('')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-    <defs><mask id="front" maskUnits="userSpaceOnUse" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" style="mask-type:luminance">${image(mask, `width="${WIDTH}" height="${HEIGHT}"`)}</mask></defs>
+    <defs>${definitions.join('')}<mask id="front" maskUnits="userSpaceOnUse" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" style="mask-type:luminance">${image(mask, `width="${WIDTH}" height="${HEIGHT}"`)}</mask></defs>
     ${image(backgroundBuffer, `width="${WIDTH}" height="${HEIGHT}"`)}
     ${portraitBuffer ? image(portraitBuffer, `x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMax meet"`) : ''}
     ${image(backgroundBuffer, `width="${WIDTH}" height="${HEIGHT}" mask="url(#front)"`)}
-    ${label(player.jerseyNumber,adjusted(fields.number,personal.number),85)}
-    ${label(position,fields.position,105)}
-    ${label(player.name,adjusted(fields.name,personal.name),245)}
-    ${label(player.jerseyName,fields.jerseyName,245)}
-    ${player.height == null || player.height === '' ? '' : label(`身高 ${player.height}cm`,fields.height,110)}
-    ${player.weight == null || player.weight === '' ? '' : label(`体重 ${player.weight}kg`,fields.weight,110)}
+    ${textLayers}
     ${nationality(player,badges.nationality)}${logo}
   </svg>`
   return new Resvg(svg,{ fitTo:{mode:'zoom',value:size}, font:{fontFiles:FONT_FILES,loadSystemFonts:false} }).render().asPng()

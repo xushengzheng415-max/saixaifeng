@@ -1,5 +1,6 @@
 const crypto = require('node:crypto')
 const { createDataService } = require('./data-center/service.cjs')
+const { createPlayerCardLibrary } = require('./playerCardLibrary.cjs')
 
 function imageBuffer(value, limit) {
   const match = String(value || '').match(/^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/)
@@ -101,22 +102,43 @@ function createPlayerCards(deps) {
     if (!portrait || !portrait.transparentFileId) throw Object.assign(new Error('请先完成标准形象照拍摄'), { code:'PLAYER_CARD_PORTRAIT_REQUIRED' })
     return portrait
   }
+  const library = createPlayerCardLibrary({cloud})
   async function handler(event) {
     const db = cloud.database(), auth = await authorize(event, db), entries = await playersFor(auth, db)
     async function summary(entry) {
       const p = entry.player
-      const score = await createDataService(db).playerCardForAuthorizedPlayer(String(p._id))
+      const score = await (deps.scoreForPlayer ? deps.scoreForPlayer(String(p._id)) : createDataService(db).playerCardForAuthorizedPlayer(String(p._id)))
       const ready = score.status === 'ready'
-      return { id: String(p._id), name: p.name || '球员', teamName: entry.teamName || '', jerseyNumber: p.jerseyNumber || '', jerseyName: p.jerseyName || '', position: p.position || '', height: p.height ?? null, weight: p.weight ?? null, nationality: p.nationality || '', appearances: ready ? score.metrics.appearances : null, cardTier: ready ? score.tier : null, playerCard: score, cardFileId: p.playerCardFileId || '', version: Number(p.playerCardVersion || 0), mode: p.playerCardMode || 'portrait', savedTier: p.playerCardTier || '', backgroundId:p.playerCardBackgroundId || score.tier || '' }
+      return { id: String(p._id), name: p.name || '球员', teamName: entry.teamName || '', jerseyNumber: p.jerseyNumber || '', jerseyName: p.jerseyName || '', position: p.position || '', height: p.height ?? null, weight: p.weight ?? null, nationality: p.nationality || '', appearances: ready ? score.metrics.appearances : null, cardTier: ready ? score.tier : null, playerCard: score, cardFileId: p.playerCardFileId || '', version: Number(p.playerCardVersion || 0), mode: p.playerCardMode || 'portrait', savedTier: p.playerCardTier || '', backgroundId:p.playerCardBackgroundId || score.tier || '', displayTemplateId:p.playerCardDisplayTemplateId || '' }
     }
     if (event.action === 'listMyPlayerCards') {
-      const players = await Promise.all(entries.map(summary)), files = players.map(p => p.cardFileId).filter(Boolean)
+      const players = await Promise.all(entries.map(summary))
+      for (let i=0;i<players.length;i++) {
+        players[i].preloadedCards = await library.list(entries[i].player,players[i].playerCard)
+        const display = players[i].preloadedCards.find(card=>card.templateId === players[i].displayTemplateId && card.status === 'ready')
+        players[i].displayCardUrl = display?.cardUrl || ''
+        players[i].displayState = !players[i].displayTemplateId ? 'base' : display ? 'ready' : 'unavailable'
+      }
+      const files = players.map(p => p.cardFileId).filter(Boolean)
       const urls = files.length ? (await cloud.getTempFileURL({ fileList: files })).fileList || [] : []
       players.forEach(p => { const file = urls.find(f => f.fileID === p.cardFileId); p.cardUrl = file && file.tempFileURL || '' })
       return { success: true, players }
     }
     const entry = entries.find(item => String(item.player._id) === String(event.playerId || auth.playerId || ''))
     if (!entry) return { success: false, code: 'PLAYER_CARD_FORBIDDEN', error: '只能编辑本人或已绑定孩子的球员卡' }
+    const isStillOwned = current => entry.relation ? owns(current,entry.relation) : ['teamId','guardianUserId','linkedUserId','playerUserId'].every(field=>String(current[field]||'') === String(entry.player[field]||''))
+    if (['getMyPreloadedPlayerCard','previewMyPreloadedPlayerCard','saveMyPreloadedPlayerCard','selectMyPlayerCard'].includes(event.action)) {
+      const level = await summary(entry)
+      if (event.action === 'selectMyPlayerCard') return library.select(entry.player,level.playerCard,String(event.templateId || ''),isStillOwned)
+      const row = await library.resolve(entry.player,level.playerCard,event.templateId)
+      const portrait = await standardPortrait(auth,entry,db)
+      if (event.action === 'getMyPreloadedPlayerCard') return {success:true,player:level,card:{templateId:row.templateId,title:row.title,tier:row.tier,preload:row.preload,templateVersion:row.templateVersion,revision:row.revision},crop:row.grant.crop || {zoom:1,x:0,y:0}}
+      if (event.action === 'previewMyPreloadedPlayerCard') {
+        const generated = await library.render(entry.player,level.playerCard,event,portrait,normalizeCrop)
+        return {success:true,imageData:'data:image/png;base64,'+generated.png.toString('base64'),templateVersion:generated.row.templateVersion}
+      }
+      return library.save(entry.player,level.playerCard,event,portrait,normalizeCrop,isStillOwned)
+    }
     if (event.action === 'getMyPlayerCard') {
       const p = entry.player
       const portrait = await standardPortrait(auth, entry, db)

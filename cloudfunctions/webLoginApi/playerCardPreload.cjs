@@ -13,9 +13,40 @@ function normalizePreload(value) {
   }
   return { type: value.type, targetId, targetName: String(value.targetName || '').slice(0, 100) }
 }
-function stateId(tier, value) {
+function stateId(tier, value, templateId) {
   const scope = normalizePreload(value)
+  if (templateId) return `${tier}_preload_${crypto.createHash('sha256').update(String(templateId)).digest('hex').slice(0, 32)}`
   return scope.type === 'platform' ? tier : `${tier}_${scope.type}_${crypto.createHash('sha256').update(scope.targetId).digest('hex').slice(0, 32)}`
+}
+async function readAll(db, collection, where) {
+  const rows = []; let after = ''
+  for (;;) {
+    const page = (await db.collection(collection).where({ ...where, ...(after ? { _id:db.command.gt(after) } : {}) }).orderBy('_id','asc').limit(100).get()).data || []
+    rows.push(...page)
+    if (rows.length > 10000) throw new Error('球员卡关联记录过多，请联系平台处理')
+    if (page.length < 100) return rows
+    after = String(page[page.length-1]._id)
+  }
+}
+async function tournamentPlayerIds(db, tournamentId) {
+  const latest = new Map(), ids = new Set()
+  ids.evidenceByPlayer = new Map()
+  for (const row of await readAll(db, 'roster_snapshots', { tournamentId })) {
+    if (!row.teamId || !['approved','locked'].includes(row.status)) continue
+    const old = latest.get(row.teamId)
+    if (!old || Number(row.version || 0) > Number(old.version || 0)) latest.set(row.teamId,row)
+  }
+  for (const row of latest.values()) if (['approved','locked'].includes(row.status)) {
+    const players = new Set((row.playerIds || []).filter(id=>typeof id === 'string'))
+    for (const item of row.players || []) if (item && (item.playerId || item.id || item._id)) players.add(String(item.playerId || item.id || item._id))
+    for (const id of players) {
+      ids.add(id)
+      const evidence = ids.evidenceByPlayer.get(id) || []
+      evidence.push({snapshotId:String(row._id),version:Number(row.version || 0),tournamentId:String(tournamentId)})
+      ids.evidenceByPlayer.set(id,evidence)
+    }
+  }
+  return ids
 }
 function nameOf(type, row) { return String(row.name || row[`${type}Name`] || row.title || row._id) }
 async function validatePreload(db, value, document) {
@@ -45,4 +76,4 @@ async function targets(db, event) {
     .map(row => ({ id: String(row._id), name: nameOf(type, row), teamId: type === 'player' ? String(row.teamId || '') : '' })),
     nextCursor: rows.length === 25 ? String(rows[rows.length - 1]._id) : '' }
 }
-module.exports = { normalizePreload, validatePreload, stateId, targets, COLLECTIONS }
+module.exports = { normalizePreload, validatePreload, stateId, targets, readAll, tournamentPlayerIds, COLLECTIONS }

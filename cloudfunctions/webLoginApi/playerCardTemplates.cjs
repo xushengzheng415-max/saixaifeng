@@ -5,6 +5,8 @@ const { PNG } = require('pngjs')
 const { renderCard } = require('./playerCardRender.cjs')
 const suite = require('./playerCardSuite.cjs')
 const preload = require('./playerCardPreload.cjs')
+const {normalizeTextStyle} = require('./playerCardTextStyle.cjs')
+const {createPlayerCardLayoutPresets} = require('./playerCardLayoutPresets.cjs')
 const { createPlayerCardPublish } = require('./playerCardPublish.cjs')
 
 const COLLECTION = 'player_card_templates'
@@ -60,7 +62,7 @@ function normalizeLayout(value) {
         size < 8 || size > 80 || ![400, 500, 600, 700, 800, 900].includes(weight) || !/^#[0-9a-fA-F]{6}$/.test(color)) {
       throw Object.assign(new Error('文字颜色、字号或位置超出范围'), { code: 'CARD_TEMPLATE_LAYOUT_INVALID' })
     }
-    result[key] = { x, y, size, color, weight }
+    result[key] = { x, y, size, color, weight, ...normalizeTextStyle(raw) }
   }
   return result
 }
@@ -124,9 +126,10 @@ function itemOf(record, urls, publicOnly) {
   }
 }
 
-function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
+function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlayer }) {
   const db = cloud.database()
-  const publisher = createPlayerCardPublish({ cloud })
+  const publisher = createPlayerCardPublish({ cloud, scoreForPlayer })
+  const layouts = createPlayerCardLayoutPresets({cloud,normalizeLayout,normalizePhoto,normalizeBadges})
   async function urlsFor(rows, publicOnly) {
     const ids = [...new Set(rows.flatMap(row => publicOnly
       ? [row.published?.backgroundFileId, row.published?.maskFileId]
@@ -179,7 +182,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
   }
   async function active(event) {
     const tier = tierOf(event.tier)
-    const snapshot = await suite.activeTemplate(db, tier, event.preload)
+    const snapshot = await suite.activeTemplate(db, tier, event.preload, event.templateId)
     if (!snapshot) return { success:true, status:'unavailable', template:null }
     const urls = await urlsFor([{ published:snapshot }], true)
     return { success:true, status:'ready', template: {
@@ -202,8 +205,9 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
   async function save(event, auth) {
     const id = String(event.templateId || '')
     if (id && !/^[a-f0-9]{32}$/.test(id)) return { success: false, code: 'CARD_TEMPLATE_ID_INVALID', error: '模板编号无效' }
-    const tier = tierOf(event.tier), title = titleOf(event.title), layout = normalizeLayout(event.layout)
+    const tier = tierOf(event.tier), title = titleOf(event.title)
     const record = id ? await read(id) : null
+    const layout = normalizeLayout(event.layout || record?.draft?.layout)
     if (id && !record) return { success: false, code: 'CARD_TEMPLATE_NOT_FOUND', error: '模板不存在，请刷新列表' }
     if (record && record.tier !== tier) return { success: false, code: 'CARD_TEMPLATE_TIER_LOCKED', error: '已有模板不能更换等级，请新建模板' }
     const scope = await preload.validatePreload(db, event.preload ?? record?.draft?.preload, suite.document)
@@ -267,10 +271,13 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
   return async function handle(event) {
     const action = String(event.action || '')
     if (action === 'listPublishedPlayerCardTemplates') return list(event, true)
-    if (action === 'getActivePlayerCardTemplate' && !event.preload) return active(event)
+    if (action === 'getActivePlayerCardTemplate' && !event.preload && !event.templateId) return active(event)
     const auth = await owner(event)
     if (!auth.success) return auth
     try {
+      if (action === 'listPlayerCardLayoutPresets') return await layouts.list(event)
+      if (action === 'getPlayerCardLayoutPreset') return await layouts.get(event)
+      if (action === 'savePlayerCardLayoutPreset') return await layouts.save(event,auth)
       if (action === 'getActivePlayerCardTemplate') return await active(event)
       if (action === 'listPlayerCardPreloadTargets') return await preload.targets(db, event)
       if (action === 'listPlayerCardTemplates') return await list(event, false)
@@ -283,7 +290,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
         return await publisher.begin(row, Number(event.revision), auth.userId)
       }
       if (action === 'continuePlayerCardTemplatePublish') return await publisher.advance(String(event.jobId || ''))
-      if (action === 'getPlayerCardTemplatePublishStatus') return await publisher.status(tierOf(event.tier), event.preload)
+      if (action === 'getPlayerCardTemplatePublishStatus') return await publisher.status(tierOf(event.tier), event.preload, event.templateId)
       if (action === 'retryPlayerCardTemplatePublish') return await publisher.retry(String(event.jobId || ''))
       if (action === 'withdrawPlayerCardTemplate') return { success:false, code:'CARD_TEMPLATE_ACTIVE_PROTECTED', error:'活动模板不能撤回，请发布新版替换' }
       return { success: false, code: 'CARD_TEMPLATE_ACTION_INVALID', error: '未知模板操作' }

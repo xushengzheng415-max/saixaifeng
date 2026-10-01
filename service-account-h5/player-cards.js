@@ -25,8 +25,38 @@
     ].map(function (p) { return Object.assign(p, { version: demoVersions[p.id] || 0, cardUrl: demoDrafts[p.id] && demoDrafts[p.id].cardData || '' }) }) }) : api('listMyPlayerCards')
     request.then(function (r) {
       if (!r.players.length) { target.innerHTML = '<p>暂无已绑定的球员，请先完成球员登记。</p><a href="./me.html">返回我的</a>'; return }
-      target.className = 'cards'
-      target.innerHTML = r.players.map(function (p) { var level = { bronze:'铜卡', silver:'银卡', gold:'金卡' }[p.cardTier] || '等级待核定'; var score = p.playerCard && p.playerCard.status === 'ready' ? ' · ' + p.playerCard.points + ' 分' : ''; return '<article class="card">' + (p.cardUrl ? '<img src="' + html(p.cardUrl) + '" alt="' + html(p.name) + '的球员卡">' : (p.cardTier ? '<div class="card-empty"><img src="./assets/player-cards/' + p.cardTier + '-card.png" alt=""><span>待制作</span></div>' : '<div class="card-empty">等级待核定</div>')) + '<h2>' + html(p.name) + '</h2><p>' + html(level) + score + (p.teamName ? ' · ' + html(p.teamName) : '') + '</p><button type="button" data-player="' + html(p.id) + '">' + (p.cardUrl ? '编辑球员卡' : '制作球员卡') + '</button></article>' }).join('')
+      target.className = 'player-libraries'
+      target.innerHTML = r.players.map(function (p) {
+        var level = {bronze:'铜卡',silver:'银卡',gold:'金卡'}[p.cardTier] || '等级待核定', score = p.playerCard && p.playerCard.status === 'ready' ? ' · ' + p.playerCard.points + ' 分' : ''
+        var base = '<article class="card">' + (p.cardUrl ? '<img src="' + html(p.cardUrl) + '" alt="' + html(p.name) + '的基础卡">' : '<div class="card-empty"><span>基础卡待制作</span></div>') + '<h3>基础卡</h3><p>' + html(level) + '</p><button type="button" data-player="' + html(p.id) + '">' + (p.cardUrl ? '编辑基础卡' : '制作基础卡') + '</button>' + (p.cardUrl ? '<button type="button" class="card-select" data-select-player="' + html(p.id) + '" data-template="" ' + (!p.displayTemplateId ? 'disabled' : '') + '>' + (!p.displayTemplateId ? '当前展示' : '设为展示') + '</button>' : '') + '</article>'
+        var added = (p.preloadedCards || []).map(function (card) {
+          var source = {platform:'全平台',team:'球队',tournament:'赛事',player:'球员'}[card.preload.type] || ''
+          source += card.preload.targetName ? ' · ' + card.preload.targetName : ''
+          var image = card.cardUrl ? '<img src="' + html(card.cardUrl) + '" alt="' + html(card.title) + '">' : '<div class="card-empty">' + (card.backgroundUrl ? '<img src="' + html(card.backgroundUrl) + '" alt="">' : '') + '<span>' + html(card.status === 'locked' ? '暂未解锁' : card.status === 'load_failed' ? '读取失败' : card.status === 'pending' ? '待更新' : '待制作') + '</span></div>'
+          var selected = p.displayTemplateId === card.templateId
+          return '<article class="card">' + image + '<h3>' + html(card.title) + '</h3><p class="card-source">' + html(source) + '</p>' + (card.reason ? '<p>' + html(card.reason) + '</p>' : '') + '<button type="button" ' + (card.status === 'load_failed' ? 'data-library-retry="' : 'data-library-player="') + html(p.id) + '" data-template="' + html(card.templateId) + '" ' + (card.status === 'locked' ? 'disabled' : '') + '>' + (card.status === 'load_failed' ? '重新加载' : card.status === 'ready' ? '编辑此卡' : '制作此卡') + '</button>' + (card.status === 'ready' ? '<button type="button" class="card-select" data-select-player="' + html(p.id) + '" data-template="' + html(card.templateId) + '" ' + (selected ? 'disabled' : '') + '>' + (selected ? '当前展示' : '设为展示') + '</button>' : '') + '</article>'
+        }).join('')
+        return '<section class="player-library"><h2>' + html(p.name) + '</h2><p class="player-summary">' + html(level) + score + (p.teamName ? ' · ' + html(p.teamName) : '') + '</p>' + (p.displayState === 'unavailable' ? '<p class="library-error">展示卡暂不可用，请重新选择</p>' : '') + '<div class="library-grid">' + base + added + '</div></section>'
+      }).join('')
+      Array.prototype.forEach.call(target.querySelectorAll('[data-library-retry]'), function (button) { button.onclick = load })
+      Array.prototype.forEach.call(target.querySelectorAll('.card img'), function (image) { image.onerror = function () {
+        var card = image.closest('.card'); if (!card || card.querySelector('.image-retry')) return
+        var button = document.createElement('button'); button.type = 'button'; button.className = 'card-select image-retry'; button.textContent = '重新加载'; button.onclick = load; card.appendChild(button)
+      } })
+      Array.prototype.forEach.call(target.querySelectorAll('[data-library-player]'), function (button) {
+        button.onclick = function () {
+          button.disabled = true
+          api('getMyPreloadedPlayerCard', {playerId:button.getAttribute('data-library-player'),templateId:button.getAttribute('data-template')}).then(function (detail) {
+            window.SxfPlayerCardLibraryEditor.open({detail:detail,api:api,onSaved:load})
+          }).catch(function (e) { error(e.message,load) }).finally(function () {button.disabled = false})
+        }
+      })
+      Array.prototype.forEach.call(target.querySelectorAll('[data-select-player]'), function (button) {
+        button.onclick = function () {
+          button.disabled = true
+          api('selectMyPlayerCard', {playerId:button.getAttribute('data-select-player'),templateId:button.getAttribute('data-template')}).then(load).catch(function (e) {error(e.message,load)}).finally(function () {button.disabled = false})
+        }
+      })
       Array.prototype.forEach.call(target.querySelectorAll('[data-player]'), function (button) {
         button.onclick = function () {
           button.disabled = true

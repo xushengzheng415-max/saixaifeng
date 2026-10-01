@@ -6,13 +6,13 @@ const { createDataService } = require('./data-center/service.cjs')
 const suite = require('./playerCardSuite.cjs')
 const preload = require('./playerCardPreload.cjs')
 
-function createPlayerCardPublish({ cloud }) {
+function createPlayerCardPublish({ cloud, scoreForPlayer }) {
   const db = cloud.database()
   async function begin(row, revision, userId) {
     const tier = String(row.tier || '')
     if (!suite.TYPES.includes(tier)) throw new Error('暂不支持该卡种')
     const scope = await preload.validatePreload(db, row.draft?.preload, suite.document)
-    const key = preload.stateId(tier, scope)
+    const key = preload.stateId(tier, scope, row.draft?.preload ? row._id : undefined)
     let state = await suite.document(db, suite.STATES, key)
     if (!state) {
       await db.runTransaction(async tx => {
@@ -35,10 +35,10 @@ function createPlayerCardPublish({ cloud }) {
     const preview = renderCard({ backgroundBuffer,maskBuffer,portraitBuffer:fs.readFileSync(path.join(__dirname,'player-card-preview-portrait.png')),template:snapshot,
       player:{name:'示例球员',jerseyNumber:'10',position:'FW',jerseyName:'SAMPLE',height:178,weight:72,nationality:'中国'} })
     snapshot.previewDigest = crypto.createHash('sha256').update(preview).digest('hex')
-    const players = await suite.savedPlayers(db, tier, scope)
+    const players = await suite.savedPlayers(db, tier, scope, row.draft?.preload ? row._id : undefined)
     const jobId = crypto.randomBytes(16).toString('hex')
     if (await suite.document(db, suite.VERSIONS, snapshot._id)) throw new Error('此草稿已创建发布版本，请继续原发布任务')
-    const job = { _id: jobId, tier, stateId:key, preload:scope, templateId: row._id, version, templateRevision: revision,
+    const job = { _id: jobId, tier, stateId:key, preload:scope, additive:Boolean(row.draft?.preload), templateId: row._id, version, templateRevision: revision,
       targetIds: players.map(p => String(p._id)), cursor: 0, failures: [], status: 'pending',
       createdBy: userId, createdAt: db.serverDate(), updatedAt: db.serverDate(),
       stateRevision: Number(state.revision || 0) }
@@ -65,11 +65,11 @@ function createPlayerCardPublish({ cloud }) {
     if (job.cursor < job.targetIds.length) return { success:true, status:'pending', jobId,
       total:job.targetIds.length, completed:job.cursor, failed:0 }
     const stateBeforeScan = await suite.document(db, suite.STATES, job.stateId || job.tier)
-    const currentPlayers = await suite.savedPlayers(db, job.tier, job.preload)
+    const currentPlayers = await suite.savedPlayers(db, job.tier, job.preload, job.additive ? job.templateId : undefined)
     const missing = []
     for (const player of currentPlayers) {
       const render = await suite.document(db, suite.RENDERS, suite.renderId(player._id, job.templateId, job.version))
-      if (!render || render.status !== 'ready' || Number(render.cardDataVersion) !== Number(player.playerCardVersion || 0)) {
+      if (!render || render.status !== 'ready' || Number(render.cardDataVersion) !== Number(player.playerCardVersion || 0) || (job.additive && Number(render.libraryRevision || 0) !== Number(player.preloadLibraryVersion || 0))) {
         missing.push(String(player._id))
       }
     }
@@ -120,12 +120,16 @@ function createPlayerCardPublish({ cloud }) {
       const playerId = targetIds[cursor]
       try {
         const player = await suite.document(db, 'players', playerId)
-        if (!player?.playerCardFileId) continue
-        const score = await createDataService(db).playerCardForAuthorizedPlayer(playerId)
+        if (!player) continue
+        const grant = job.additive ? await suite.document(db, 'player_card_library', require('./playerCardLibrary.cjs').libraryId(playerId,job.templateId)) : null
+        if (job.additive && !grant?.fileId) continue
+        if (!job.additive && !player.playerCardFileId) continue
+        if (grant) { player.playerCardSourceFileId = grant.portraitFileId; player.playerCardCrop = grant.crop }
+        const score = await (scoreForPlayer ? scoreForPlayer(playerId) : createDataService(db).playerCardForAuthorizedPlayer(playerId))
         const generated = await suite.generate(cloud, db, player, snapshot, score)
         await db.collection(suite.RENDERS).doc(suite.renderId(playerId, job.templateId, job.version)).set({ data: {
           playerId, cardTypeId:job.tier, templateId:job.templateId, publishedVersion:job.version,
-          cardDataVersion:Number(player.playerCardVersion||0), renderVersion:suite.RENDER_VERSION,
+          cardDataVersion:Number(player.playerCardVersion||0), libraryRevision:Number(grant?.revision||0), renderVersion:suite.RENDER_VERSION,
           fileId:generated.fileId, digest:generated.digest, status:'ready', generatedAt:db.serverDate()
         } })
       } catch (error) {
@@ -140,8 +144,8 @@ function createPlayerCardPublish({ cloud }) {
     return finish(jobId)
   }
 
-  async function status(tier, scope) {
-    const key = preload.stateId(tier, scope)
+  async function status(tier, scope, templateId) {
+    const key = preload.stateId(tier, scope, templateId)
     const state = await suite.document(db, suite.STATES, key)
     const jobId = state?.candidate?.jobId
     if (!jobId) return { success:true, status:'idle' }

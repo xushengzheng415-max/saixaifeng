@@ -5443,11 +5443,18 @@ exports.main = async (event, context) => {
       case 'publicDataCenter':
         result = await require('./publicDataCenter.cjs')(cloud.database(), params)
         break
+      case 'getMyPreloadedPlayerCard':
+      case 'previewMyPreloadedPlayerCard':
+      case 'saveMyPreloadedPlayerCard':
+      case 'selectMyPlayerCard':
       case 'listMyPlayerCards':
       case 'getMyPlayerCard':
       case 'saveMyPlayerCard':
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
+      case 'listPlayerCardLayoutPresets':
+      case 'getPlayerCardLayoutPreset':
+      case 'savePlayerCardLayoutPreset':
       case 'listPlayerCardPreloadTargets':
       case 'listPlayerCardTemplates':
       case 'getPlayerCardTemplate':
