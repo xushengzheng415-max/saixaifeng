@@ -171,6 +171,27 @@ function safeTournament(tournament, context = {}) {
   }
 }
 
+async function getStartedTournamentIds(db, event) {
+  const tournamentIds = Array.from(new Set((Array.isArray(event.tournamentIds) ? event.tournamentIds : [])
+    .map(value => cleanText(value, 128))
+    .filter(Boolean)))
+  if (tournamentIds.length > 100) {
+    return { success: false, error: '一次最多刷新 100 场赛事，请分批重试' }
+  }
+  if (!tournamentIds.length) return { success: true, data: { startedTournamentIds: [] } }
+
+  const startedStatuses = ['ongoing', 'live', 'finished', 'completed', 'ended']
+  const startedFlags = await Promise.all(tournamentIds.map(async tournamentId => {
+    const result = await db.collection('matches')
+      .where({ tournamentId, status: db.command.in(startedStatuses) })
+      .field({ _id: true })
+      .limit(1)
+      .get()
+    return (result.data || []).length ? tournamentId : ''
+  }))
+  return { success: true, data: { startedTournamentIds: startedFlags.filter(Boolean) } }
+}
+
 function safeOrganizer(user) {
   return {
     _id: user._id,
@@ -817,6 +838,7 @@ exports.main = async event => {
 
     const action = params.action || 'overview'
     if (action === 'overview') return await getOverview(db)
+    if (action === 'refreshTournamentStatuses') return await getStartedTournamentIds(db, params)
     if (action === 'sendOrganizerNotice') return await sendOrganizerNotice(db, params, user)
     if (action === 'saveBanner') return await saveBanner(db, params, user)
     if (action === 'deleteBanner') return await deleteBanner(db, params)
