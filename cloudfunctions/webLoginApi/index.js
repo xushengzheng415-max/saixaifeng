@@ -5448,6 +5448,7 @@ exports.main = async (event, context) => {
       case 'saveMyPlayerCard':
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
+      case 'listPlayerCardPreloadTargets':
       case 'listPlayerCardTemplates':
       case 'getPlayerCardTemplate':
       case 'savePlayerCardTemplate':

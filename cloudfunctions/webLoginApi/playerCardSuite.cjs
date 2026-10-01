@@ -1,5 +1,6 @@
 const crypto = require('node:crypto')
 const { renderCard } = require('./playerCardRender.cjs')
+const preload = require('./playerCardPreload.cjs')
 
 const TEMPLATES = 'player_card_templates'
 const VERSIONS = 'player_card_template_versions'
@@ -20,9 +21,9 @@ async function document(db, collection, id) {
 const versionId = (templateId, version) => `${templateId}_${version}`
 const renderId = (playerId, templateId, version) => `${playerId}_${templateId}_${version}`
 
-async function activeTemplate(db, tier) {
+async function activeTemplate(db, tier, scope) {
   if (!TYPES.includes(String(tier))) return null
-  const state = await document(db, STATES, tier)
+  const state = await document(db, STATES, preload.stateId(tier, scope))
   if (!state || !state.active) return null
   const snapshot = await document(db, VERSIONS, versionId(state.active.templateId, state.active.version))
   return snapshot ? { ...snapshot, stateRevision: Number(state.revision || 0) } : null
@@ -77,20 +78,45 @@ async function generate(cloud, db, player, snapshot, score, overrides = {}) {
   return { fileId: file.fileID, digest, facts: result.facts, portraitId: result.portraitId }
 }
 
-async function savedPlayers(db, tier) {
+async function savedPlayers(db, tier, scopeValue) {
+  const scope = preload.normalizePreload(scopeValue)
+  let allowedIds = null
+  if (scope.type === 'tournament') {
+    allowedIds = new Set()
+    const snapshots = []
+    let cursor = ''
+    for (;;) {
+      const where = { tournamentId:scope.targetId, ...(cursor ? { _id:db.command.gt(cursor) } : {}) }
+      const page = (await db.collection('roster_snapshots').where(where).orderBy('_id','asc').limit(100).get()).data || []
+      // Only the latest submitted snapshot for each team is authoritative.
+      for (const row of page) snapshots.push(row)
+      if (page.length < 100) break
+      cursor = String(page[page.length-1]._id)
+    }
+    const latest = new Map()
+    for (const row of snapshots) {
+      if (!row.teamId) continue
+      const old = latest.get(row.teamId)
+      if (!old || Number(row.version || 0) > Number(old.version || 0)) latest.set(row.teamId,row)
+    }
+    for (const row of latest.values()) if (['approved','locked'].includes(row.status)) {
+      for (const id of row.playerIds || []) if (typeof id === 'string') allowedIds.add(id)
+      for (const item of row.players || []) if (item && (item.playerId || item.id || item._id)) allowedIds.add(String(item.playerId || item.id || item._id))
+    }
+  }
   const rows = []
   let after = ''
   for (;;) {
     const where = after ? { _id: db.command.gt(after) } : {}
     const page = (await db.collection('players').where(where).orderBy('_id', 'asc').limit(100).get()).data || []
-    for (const player of page) if (player.playerCardFileId && String(player.playerCardBackgroundId || player.playerCardTier || '') === tier) rows.push(player)
+    for (const player of page) if ((scope.type === 'platform' || (scope.type === 'player' && String(player._id) === scope.targetId) || (scope.type === 'team' && String(player.teamId || '') === scope.targetId) || (scope.type === 'tournament' && allowedIds.has(String(player._id)))) && player.playerCardFileId && String(player.playerCardBackgroundId || player.playerCardTier || '') === tier) rows.push(player)
     if (page.length < 100) return rows
     after = String(page[page.length - 1]._id)
   }
 }
 
-async function signedCard(cloud, db, player, type) {
-  const snapshot = await activeTemplate(db, type)
+async function signedCard(cloud, db, player, type, scope) {
+  const snapshot = await activeTemplate(db, type, scope)
   if (!snapshot) return { status: 'unavailable', fileId: '', templateVersion: 0 }
   const render = await document(db, RENDERS, renderId(player._id, snapshot.templateId, snapshot.version))
   if (!render || render.status !== 'ready' || Number(render.cardDataVersion) !== Number(player.playerCardVersion || 0)) {

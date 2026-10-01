@@ -64,3 +64,14 @@ PC `newsCenter` 只允许赛事所属机构中有赛事管理权限的主办方�
 ## 平台模板编辑 action（2026-10-01）
 
 listPlayerCardTemplates、getPlayerCardTemplate、savePlayerCardTemplate、previewPlayerCardTemplate、publishPlayerCardTemplate、continuePlayerCardTemplatePublish、getPlayerCardTemplatePublishStatus、retryPlayerCardTemplatePublish 由 webLoginApi 会话校验后仅允许平台负责人访问。getActivePlayerCardTemplate 返回指定基础卡种活动模板及版本，不返回球员私有资料。save 携带 revision；preview 使用受控示例资料与正式 PNG 渲染器；publish 返回 pending/blocked/active，激活前不改变活动版本。
+
+
+## 赛事与定向预装分类（2026-10-01）
+
+本地候选分支 codex/player-card-preload 基于新卡发布修复版本 1b046eb4。编辑器增加全平台、球队、赛事、球员分类，定向范围绑定稳定对象 ID，金银铜分别配置。旧模板缺分类时兼容全平台。对象名称由服务端回读，不接受客户端名称作为关联依据。
+
+草稿及不可变发布快照保存 preload.type/targetId/targetName。每个范围与卡级有独立活动状态和发布任务；全平台保留原 tier 状态 ID，定向状态使用目标 ID 摘要，不能覆盖全平台指针。已发布模板禁止改绑范围，须新建模板。赛事重生成对象取各球队最新正式名单（approved/locked），不按现属球队或赛事名称推断；仅更新已有成卡且所选基础卡类型对应的对象，不授予等级或改动生涯积分。
+
+对象检索、定向活动模板和发布进度仅限平台负责人。匿名模板列表只返回全平台模板，旧无 preload 的公开活动模板读取保持兼容。各业务端自动选择赛事或球队模板尚未接入，不能把后台预装发布等同于球员端已自动套用或批量发卡。
+
+本次仅本地实现与验证；未部署、未迁移生产记录。
