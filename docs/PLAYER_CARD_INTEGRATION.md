@@ -2,6 +2,8 @@
 
 状态：2026-09-30 产品负责人确认的目标架构与验收口径。本文件不表示现有三端或生产环境已经完成改造。
 
+2026-10-01 来源补充（用户明确确认）：现阶段允许现有报表、名单提取照片作为初始成卡源，保留 `legacy_roster` 来源标记与永久文件 ID；以后首次补齐登记的标准形象照允许替换，此后的换照仍按现行积分权益校验。此例外不改变测试数据排除、稳定球员身份、等级核验、资料授权或公开许可。
+
 2026-10-01 补充：本文件是球员卡系统的统一研发入口；页面接入、接口候选与实施交接见 [PLAYER_CARD_EDITOR_HANDOFF.md](PLAYER_CARD_EDITOR_HANDOFF.md)，积分和高级权益见 [data-center/PLAYER_CARD_POINTS.md](data-center/PLAYER_CARD_POINTS.md)。新增页面或修改球员卡功能时先读取这些文件，并按 [CURRENT_STATUS.md](CURRENT_STATUS.md) 和 [data-center/RELEASE.md](data-center/RELEASE.md) 核对实际发布状态。文档入库不代表候选接口已可在线调用。
 
 ## 一套配置、一套生成、各页调用

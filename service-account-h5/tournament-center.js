@@ -1,5 +1,6 @@
 (function () {
   'use strict'
+  var refreshPublicRanking = null
 
   var API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
   var app = document.getElementById('app')
@@ -563,7 +564,10 @@
         if (!rankingRows) return
         var query = String(keyword || '').trim().toLowerCase()
         var rows = query ? rankingRows.filter(function (row) { return [row.name, row.number, row.teamName].join(' ').toLowerCase().indexOf(query) >= 0 }) : rankingRows
-        var playerCards = '<div class="player-ranking-grid">' + rows.slice(0, 50).map(function (row, index) { var tier = ['bronze', 'silver', 'gold'].indexOf(String(row.cardTier || '')) >= 0 ? String(row.cardTier) : 'bronze'; var physical = (row.height ? row.height + 'cm' : '—cm') + ' / ' + (row.weight ? row.weight + 'kg' : '—kg'); return '<div class="player-ranking-entry"><div class="player-ranking-entry-meta"><b>' + (index + 1) + '</b><button data-rank-support="' + escapeHtml(row.targetId) + '" data-rank-support-type="player" type="button">+1 蜂豆</button></div><article class="player-ranking-card player-ranking-card--' + tier + '"><img class="player-ranking-card-bg" src="./assets/player-cards/' + tier + '-card.png" alt=""><b class="player-ranking-card-number">' + escapeHtml(row.number || '—') + '</b><div class="player-ranking-card-photo">' + rankingPlayerAvatar(row.avatarUrl, row.name) + '</div><strong>' + escapeHtml(row.name || '球员') + '</strong><i class="player-ranking-card-jersey">' + escapeHtml(row.jerseyName || row.name || '') + '</i><small>' + escapeHtml(row.teamName || '所属球队待公布') + '</small><span class="player-ranking-card-physical">' + escapeHtml(physical) + ' · ' + escapeHtml(row.nationality || '中国') + '</span><footer><em>' + escapeHtml(String(row.appearances || 0)) + ' 场 · ' + escapeHtml(String(row.goals || 0)) + ' 球 · ' + escapeHtml(String(row.assists || 0)) + ' 助</em></footer></article></div>' }).join('') + '</div>'
+        var playerCards = '<div class="player-ranking-grid">' + rows.slice(0,50).map(function(row,index){
+          var card = row.cardStatus === 'ready' && row.cardUrl ? '<article class="public-player-card" data-template-version="'+escapeHtml(row.publishedVersion)+'"><img src="'+escapeHtml(row.cardUrl)+'" alt="'+escapeHtml(row.name)+'的球员卡"></article>' : '<article class="public-player-info">'+(row.avatarUrl?'<img src="'+escapeHtml(row.avatarUrl)+'" alt="'+escapeHtml(row.name)+'">':'<span>'+escapeHtml(row.number||'—')+'</span>')+'<strong>'+escapeHtml(row.name||'球员')+'</strong><small>'+escapeHtml(row.teamName||'')+'</small></article>'
+          return '<div class="player-ranking-entry"><div class="player-ranking-entry-meta"><b>'+(index+1)+'</b><button data-rank-support="'+escapeHtml(row.targetId)+'" data-rank-support-type="player" type="button">+1 蜂豆</button></div>'+card+'</div>'
+        }).join('')+'</div>'
         var teamRows = '<div class="public-ranking-list">' + rows.slice(0, 50).map(function (row, index) { return '<div class="public-ranking-row public-ranking-row--team"><b>' + (index + 1) + '</b><span class="public-ranking-team-logo">' + teamLogo(row.logo, row.name) + '</span><span class="public-ranking-copy"><strong>' + escapeHtml(row.name) + '</strong><small>' + escapeHtml(String(row.supportCount || 0) + ' 人应援') + '</small></span><em>' + escapeHtml(String(row.supportCount || 0)) + '</em><button data-rank-support="' + escapeHtml(row.targetId) + '" data-rank-support-type="team" type="button">+1 蜂豆</button></div>' }).join('') + '</div>'
         var html = rows.length ? '<section class="public-ranking-card"><header><b>' + (type === 'player' ? '球员榜' : '球队榜') + '</b><span>' + periodLabel(period) + '</span></header>' + (type === 'player' ? playerCards : teamRows) + '</section>' : '<section class="ranking-empty"><strong>' + (query ? '未找到相关结果' : '暂无公开榜单') + '</strong></section>'
         document.getElementById('publicRankingBody').innerHTML = html
@@ -576,6 +580,7 @@
         showRows()
       }).catch(function (error) { document.getElementById('publicRankingBody').innerHTML = '<section class="portal-state"><strong>榜单暂时无法加载</strong><p>' + escapeHtml(error.message || '请稍后重试') + '</p></section>' })
     }
+    refreshPublicRanking = paint
     paint()
   }
   function bottomTabs(active) {
@@ -660,4 +665,8 @@
     else if (location.hash === '#matches') renderMatchesPage()
     else render()
   })
+  function refreshVisibleCards(){if(document.visibilityState==='visible'&&location.hash==='#rankings'&&refreshPublicRanking&&document.activeElement?.tagName!=='INPUT')refreshPublicRanking()}
+  document.addEventListener('visibilitychange',refreshVisibleCards)
+  window.addEventListener('storage',function(event){if(event.key==='sxfPlayerCardTemplateUpdate')refreshVisibleCards()})
+  setInterval(refreshVisibleCards,60000)
 })()

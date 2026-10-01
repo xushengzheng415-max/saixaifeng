@@ -10,12 +10,12 @@
 
 ## 基线与当前生产保护
 
-- Gitee main：`1b046eb41e528e967a8fc7b4cdcf79bf85da963e`。
+- Gitee初始main：`1b046eb41e528e967a8fc7b4cdcf79bf85da963e`；发布前最新main：`2bd319eee4b009f4ddc6db59357edd854d3b68e1`，已合并并保留新增发布缓存修复。
 - 生产源码保护提交：`9cc134a`。仅将实际下载的webLoginApi源码和匹配正式构建的三个PC球员卡文件登记，保留已上线的同日功能。部署不回退到审计下载版本。
 - PC原入口SHA-256：`3d81594daa998006b55a7b26d842a03e2f1995bf039d48103e20f08f43a97d0c`，入口`index-CZkXj3EA.js`。完整254文件正式构建已复制作为回滚包，并逐文件核对线上摘要。
 - 完整函数包和PC回滚包存于隔离工作区`deployment-20261001`，不包含生产环境变量秘密值。
 
-生产原有`webLoginApi/data-center/service.cjs`及`statistics.mjs`已与main的规范副本不同；基线`sync-data-center --check`已经在这两项失败。此次原样保留已上线的球员卡兼容代码，不运行全量同步覆盖它们。新reader在规范源和三个代码副本中一致；另外两个函数不部署。该既有源码登记偏差需要由对应数据中心工作单统一处理，不能误报本次全量同步检查通过。
+生产原有`webLoginApi/data-center/service.cjs`及`statistics.mjs`已与main的规范副本不同；基线`sync-data-center --check`已经在这两项失败。此次原样保留已上线的球员卡兼容代码，不运行全量同步覆盖它们。新reader在规范源和三个代码副本中一致；另外两个函数不部署。最新main的小程序`service.cjs`及`statistics.mjs`也存在相同既有偏差，未部署这些模块。该既有源码登记偏差需要由对应数据中心工作单统一处理，不能误报本次全量同步检查通过。
 
 ## 合并后的验证
 

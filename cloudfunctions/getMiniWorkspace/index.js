@@ -2,8 +2,7 @@
 // 当前兼容 users.orgId；未来 organization_memberships / organizations 建立后可直接接管。
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
-const { readAll: readDataRows, readByIds: readDataByIds } = require('./data-center/reader.cjs')
-const { createDataService } = require('./data-center/service.cjs')
+const createPlayerAccountTransfer = require('./playerAccountTransfer.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
@@ -69,7 +68,6 @@ function isClockTime(value) {
   return /^\d{1,2}:\d{2}$/.test(String(value || '').trim())
 }
 
-// 赛事后台可能分别保存日期和开赛时间，不能把“09:00”当作完整日期解析。
 function matchDateValue(match) {
   return firstValue(match && match.matchDate, match && match.date, match && match.startDate, match && match.playDate)
 }
@@ -88,8 +86,9 @@ function matchTimeValue(match) {
 }
 
 function matchDateText(match) {
-  const direct = dateOnlyText(matchDateValue(match))
-  if (direct) return direct
+  const direct = matchDateValue(match)
+  const dateOnly = dateOnlyText(direct)
+  if (dateOnly) return dateOnly
   return dateOnlyText(firstValue(match && match.startTime, match && match.kickoffAt, match && match.matchTime)) || '日期待定'
 }
 
@@ -168,16 +167,25 @@ async function safeGet(collection, where, limit) {
   }
 }
 
-// 球员历史记录同时存在 teamId 和 teamCode 两种归属字段。
-// 分开查询可沿用两边已有的单字段索引，避免 OR 查询因环境索引差异
-// 被 safeGet 降级为空列表；随后按 _id 合并去重。
 async function safeGetTeamPlayers(teamId, limit, extra) {
+  // 球员历史记录同时存在 teamId 和 teamCode 两种归属字段。
+  // 分开查询可沿用两边已有的单字段索引，避免 OR 查询因环境索引差异
+  // 被 safeGet 降级为空列表；随后按 _id 合并去重。
+  const id = String(teamId || '')
   const base = extra && typeof extra === 'object' ? extra : {}
   const rows = await Promise.all([
-    readDataRows(db,'players',Object.assign({},base,{teamId:String(teamId)})),
-    readDataRows(db,'players',Object.assign({},base,{teamCode:String(teamId)}))
+    safeGet('players', Object.assign({}, base, { teamId: id }), limit),
+    safeGet('players', Object.assign({}, base, { teamCode: id }), limit)
   ])
-  return [...new Map(rows.flat().map(row => [String(row._id),row])).values()]
+  const merged = []
+  const seen = new Set()
+  rows.flat().forEach(function(item) {
+    const key = String(item && item._id || '') || JSON.stringify(item)
+    if (seen.has(key)) return
+    seen.add(key)
+    merged.push(item)
+  })
+  return limit ? merged.slice(0, limit) : merged
 }
 
 async function safeGetPlayersForTeams(teamIds, limit) {
@@ -540,8 +548,14 @@ async function loadWorkspaceCatalog(user, openId) {
       claimStatus === 'pending'
     if (!needsTemporarySpace) return
     const teamMembership = acceptedTeamMemberships.find(item => String(item.teamId || '') === String(team._id))
+    const isTeamOwner = [team.ownerId, team.ownerUserId, team.claimedByUserId].some(value => String(value || '') === String(user._id || ''))
     let teamPermissions = normalizePermissions(teamMembership, false)
+    if (isTeamOwner) teamPermissions = unique(teamPermissions.concat(['team.view', 'team.manage']))
     if (!teamPermissions.length) teamPermissions = ['event.view', 'team.view', 'team.manage']
+    // 单球队协作空间必须能读取本队的参赛关系。历史成员记录可能只保存
+    // team.view/team.manage；若缺少 event.view，主流程会在读取 tournament_teams
+    // 前直接返回空赛事。这里只补只读权限，不授予 event.manage。
+    teamPermissions = unique(teamPermissions.concat(['event.view', 'team.view']))
     workspaces.push({
       id: 'team:' + team._id,
       type: 'team',
@@ -619,7 +633,26 @@ async function loadTeams(workspace, user, openId) {
 }
 
 async function loadTournaments(workspace, user, openId, teams) {
-  if (workspace.type === 'team') return []
+  // 认领后可能进入只覆盖单支球队的临时工作空间。
+  // 该空间不能读取机构赛事，但必须能读取本队已经建立的参赛关系，
+  // 否则赛事 Tab 会被错误地显示为空。
+  if (workspace.type === 'team') {
+    const teamId = String(workspace.teamId || '')
+    if (!teamId) return { tournaments: [], registrations: [], hostedRegistrations: [] }
+    const hiddenStatuses = new Set(['cancelled', 'withdrawn', 'rejected', 'replaced', 'invite_cancelled'])
+    const registrations = (await safeGet('tournament_teams', { teamId }, 200)).filter(item => {
+      return hiddenStatuses.has(String(item.status || '').toLowerCase()) === false && String(item.tournamentId || '')
+    })
+    const tournamentIds = unique(registrations.map(item => item.tournamentId))
+    const participating = tournamentIds.length
+      ? await safeGet('tournaments', { _id: _.in(tournamentIds) }, 100)
+      : []
+    return {
+      tournaments: participating.map(item => Object.assign({}, item, { workspaceRelation: 'participating' })),
+      registrations,
+      hostedRegistrations: []
+    }
+  }
   const conditions = [{ orgId: workspace.orgId }]
   if (workspace.allowOwnerRelations === true) {
     conditions.push(
@@ -663,6 +696,12 @@ async function loadTournaments(workspace, user, openId, teams) {
 async function loadMatches(workspace, tournaments, teams) {
   const tournamentIds = unique(tournaments.map(item => item._id))
   const teamIds = unique(teams.map(item => item._id))
+  if (workspace.type === 'team' && teamIds.length) {
+    return safeGet('matches', _.or([
+      { homeTeamId: _.in(teamIds) },
+      { awayTeamId: _.in(teamIds) }
+    ]), 200)
+  }
   const conditions = []
   if (workspace.type === 'organization' && workspace.orgId) conditions.push({ orgId: workspace.orgId })
   if (tournamentIds.length) conditions.push({ tournamentId: _.in(tournamentIds) })
@@ -671,31 +710,18 @@ async function loadMatches(workspace, tournaments, teams) {
     conditions.push({ awayTeamId: _.in(teamIds) })
   }
   if (!conditions.length) return []
-  const matches = await safeGet('matches', conditions.length === 1 ? conditions[0] : _.or(conditions), 200)
-  const matchIds = unique(matches.map(item => String(item._id || '')).filter(Boolean))
-  const legacyEvents = matchIds.length ? await safeGet('match_events', { matchId: _.in(matchIds) }, 1000) : []
-  const legacyByMatch = {}
-  legacyEvents.forEach(event => { const id = String(event.matchId || ''); if (id) (legacyByMatch[id] ||= []).push(event) })
-  return matches.map(match => {
-    const seen = new Set()
-    const events = [...(Array.isArray(match.events) ? match.events : []), ...(legacyByMatch[String(match._id || '')] || [])].map(event => {
-      if (!event || typeof event !== 'object') return null
-      const rawType = String(event.type || event.eventType || '').toLowerCase()
-      const type = ({ score: 'goal', penalty_goal: 'penalty_scored', penalty_miss: 'penalty_missed', missed_penalty: 'penalty_missed', yellow: 'yellow_card', yellowcard: 'yellow_card', red: 'red_card', redcard: 'red_card', second_yellow: 'second_yellow_red', yellow_red: 'second_yellow_red' })[rawType] || rawType
-      const identity = String(event.eventId || event._id || event.id || '') || [type, Number(event.minute || 0), event.playerId || event.player || '', event.playerName || '', event.teamSide || event.side || '', event.penaltyOutcome || ''].join('|')
-      if (seen.has(identity)) return null
-      seen.add(identity)
-      return { ...event, type, teamSide: event.teamSide === 'away' || event.side === 'away' ? 'away' : 'home', playerName: String(event.playerName || event.player || ''), assistName: String(event.assistName || event.assist || '') }
-    }).filter(Boolean).sort((a, b) => Number(a.minute || 0) - Number(b.minute || 0))
-    return { ...match, events }
-  })
+  return safeGet('matches', conditions.length === 1 ? conditions[0] : _.or(conditions), 200)
 }
 
-function formatTournament(item) {
+function formatTournament(item, summary) {
+  summary = summary || {}
   const status = String(item.status || 'draft')
   const statusLabels = {
     draft: '筹备中',
     pending: '待审核',
+    registering: '报名中',
+    published: '已发布',
+    upcoming: '待开始',
     ongoing: '进行中',
     completed: '已结束',
     finished: '已结束'
@@ -706,6 +732,11 @@ function formatTournament(item) {
     participating: '我参与的',
     both: '我主办并参与'
   }
+  const formatType = String(firstValue(item.formatType, item.format, item.competitionFormat, '')).toLowerCase()
+  const formatLabels = { league: '联赛制', cup: '杯赛制', tournament: '赛会制', hybrid: '混合制' }
+  const startDate = dateOnlyText(firstValue(item.startDate, item.startTime))
+  const endDate = dateOnlyText(firstValue(item.endDate, item.endTime))
+  const dateRange = startDate && endDate && startDate !== endDate ? startDate + ' — ' + endDate : (startDate || endDate || '日期待定')
   return {
     id: String(item._id),
     name: item.name || '未命名赛事',
@@ -715,7 +746,11 @@ function formatTournament(item) {
     isParticipating: relation === 'participating' || relation === 'both',
     status,
     statusText: statusLabels[status] || '进行中',
-    dateText: dateText(firstValue(item.startDate, item.createTime))
+    dateText: dateRange,
+    modeText: formatLabels[formatType] || (item.modeText || '赛事'),
+    teamCountText: summary.teamCount ? String(summary.teamCount) + ' 支球队' : (relation === 'participating' ? '已参赛' : '球队待定'),
+    matchCountText: String(summary.matchCount || 0) + ' 场比赛',
+    cardClass: item.isProfessional === true || String(item.ruleMode || '').toLowerCase() === 'professional' ? 'event-card-pro' : 'event-card-simple'
   }
 }
 
@@ -735,9 +770,31 @@ function formatTeam(item, summary) {
   }
 }
 
+function matchTeamId(item, side) {
+  return String(firstValue(item && item[side + 'TeamId'], item && item[side + 'Id'], '') || '')
+}
+
+function matchTeamName(item, side, teamMap) {
+  const id = matchTeamId(item, side)
+  const team = (teamMap && teamMap[id]) || {}
+  const current = firstValue(team.name, team.teamName)
+  if (current) return String(current)
+  const raw = firstValue(item && item[side + 'TeamName'], item && item[side + 'Name'], item && item[side + 'Team'], item && item[side])
+  if (raw && typeof raw === 'object') return String(firstValue(raw.name, raw.teamName, team.name, team.teamName, '球队待定'))
+  return String(firstValue(raw, team.name, team.teamName, '球队待定'))
+}
+
+function matchTeamLogo(item, side, teamMap) {
+  const id = matchTeamId(item, side)
+  const team = (teamMap && teamMap[id]) || {}
+  const current = firstValue(team.logo, team.logoUrl, team.teamLogo)
+  if (current) return String(current)
+  const raw = firstValue(item && item[side + 'TeamLogo'], item && item[side + 'Logo'])
+  if (raw && typeof raw === 'object') return String(firstValue(raw.url, raw.fileID, team.logo, team.logoUrl, ''))
+  return String(firstValue(raw, team.logo, team.logoUrl, team.teamLogo, ''))
+}
+
 function formatMatch(item, teamMap) {
-  const home = teamMap[item.homeTeamId] || {}
-  const away = teamMap[item.awayTeamId] || {}
   const status = String(item.status || 'scheduled').toLowerCase()
   const isLive = ['ongoing', 'live', 'in_progress', 'inprogress'].indexOf(status) >= 0
   return {
@@ -747,18 +804,38 @@ function formatMatch(item, teamMap) {
     source: 'event',
     sourceText: '赛事',
     title: firstValue(item.tournamentName, '赛事比赛'),
-    subtitle: firstValue(item.homeTeamName, home.name, home.teamName, '主队') +
-      ' vs ' + firstValue(item.awayTeamName, away.name, away.teamName, '客队'),
+    subtitle: matchTeamName(item, 'home', teamMap) + ' vs ' + matchTeamName(item, 'away', teamMap),
     time: matchDateTimeMs(item),
-    timeText: matchDateText(item) + ' ' + matchTimeValue(item),
+    // 首页分别展示日期和时间，timeText 只返回时分，避免把日期重复渲染一次。
+    timeText: matchTimeValue(item),
     dateText: matchDateText(item),
     divisionText: firstValue(item.divisionName, item.division, item.groupName, '组别待定'),
     location: firstValue(item.venue, item.location, item.fieldName, item.field, '场地待定'),
     status,
     statusText: status === 'completed' || status === 'finished'
       ? '已结束'
-      : (isLive ? '进行中' : '待开始')
+      : (isLive ? '进行中' : '待开始'),
+    homeName: matchTeamName(item, 'home', teamMap),
+    awayName: matchTeamName(item, 'away', teamMap),
+    homeLogo: matchTeamLogo(item, 'home', teamMap),
+    awayLogo: matchTeamLogo(item, 'away', teamMap)
   }
+}
+
+function taskRelevantRegistrations(registrations) {
+  const hiddenStatuses = new Set(['cancelled', 'withdrawn', 'replaced', 'invite_cancelled'])
+  const priority = { approved: 90, confirmed: 80, active: 80, locked: 80, accepted: 75, claimed: 70, pending: 60, pending_approval: 60, submitted: 60, reviewing: 55, rejected: 50, modification_requested: 45, drafting: 30, not_submitted: 20 }
+  const grouped = {}
+  ;(registrations || []).forEach(item => {
+    const status = String(item.status || 'not_submitted').toLowerCase()
+    if (hiddenStatuses.has(status)) return
+    const key = String(item.tournamentId || '') + ':' + String(item.teamId || '') + ':' + registrationDivisionId(item)
+    const current = grouped[key]
+    const currentPriority = current ? Number(priority[String(current.status || '').toLowerCase()] || 0) : -1
+    const itemPriority = Number(priority[status] || 0)
+    if (!current || itemPriority > currentPriority || (itemPriority === currentPriority && toTime(item.updateTime || item.createTime) > toTime(current.updateTime || current.createTime))) grouped[key] = item
+  })
+  return Object.keys(grouped).map(key => grouped[key])
 }
 
 function buildTasks(registrations) {
@@ -770,8 +847,8 @@ function buildTasks(registrations) {
     'rejected'
   ])
   const reviewingStatuses = new Set(['submitted', 'pending', 'pending_approval'])
-  registrations.forEach(item => {
-    const status = String(item.status || 'not_submitted')
+  taskRelevantRegistrations(registrations).forEach(item => {
+    const status = String(item.status || 'not_submitted').toLowerCase()
     if (pendingStatuses.has(status)) {
       items.push({
         id: 'registration:' + item._id,
@@ -819,8 +896,7 @@ function buildRegistrationDraftTasks(rows) {
     teamId: item.teamId || '',
     divisionId: item.divisionId || 'default',
     inviteKey: item.inviteKey || '',
-    deadlineText: item.detail || '请继续完成关注与报名确认',
-    dismissible: true
+    deadlineText: item.detail || '请继续完成关注与报名确认'
   }))
 }
 
@@ -1144,32 +1220,6 @@ async function markMessagesRead(event, identity) {
   return Object.assign({ success: true }, refreshed)
 }
 
-async function dismissWorkspaceTask(event, identity) {
-  const taskId = String(event.taskId || '')
-  if (taskId.indexOf('registration-draft:') !== 0) throw workspaceError('TASK_NOT_DISMISSIBLE', '该待办必须完成，不能删除')
-  const rawTaskId = taskId.slice('registration-draft:'.length)
-  if (!rawTaskId) throw workspaceError('TASK_NOT_FOUND', '待办不存在')
-  const task = (await safeGet('tournament_tasks', { _id:rawTaskId }, 1))[0]
-  if (!task || String(task.type || '') !== 'registration_draft') throw workspaceError('TASK_NOT_FOUND', '待办不存在或已处理')
-  if (['completed', 'done', 'cancelled'].indexOf(String(task.status || '').toLowerCase()) >= 0) return { success:true, taskId, idempotent:true }
-  const scoped = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
-  const workspace = scoped.workspace
-  const accessibleTeams = await loadTeams(workspace, identity.user, identity.openId)
-  const accessibleTeamIds = unique(accessibleTeams.map(item => item._id).concat(workspace.teamId || []))
-  const taskTeamId = String(task.teamId || '')
-  const directUser = String(task.recipientUserId || '') === String(identity.user._id || '') || String(task.recipientMiniOpenId || '') === String(identity.openId || '')
-  if (!directUser && (!taskTeamId || accessibleTeamIds.indexOf(taskTeamId) < 0)) throw workspaceError('TASK_ACCESS_DENIED', '当前账号无权删除该待办')
-  if (taskTeamId && accessibleTeamIds.indexOf(taskTeamId) < 0) throw workspaceError('TASK_ACCESS_DENIED', '该待办不属于当前球队空间')
-  try { await db.createCollection('task_dismissals') } catch (error) {}
-  const uniqueKey = String(identity.user._id || '') + ':' + taskId
-  const existing = (await safeGet('task_dismissals', { uniqueKey }, 1))[0]
-  const now = db.serverDate()
-  const data = { uniqueKey, taskId, rawTaskId, userId:String(identity.user._id || ''), workspaceId:String(workspace.id || ''), teamId:taskTeamId, status:'dismissed', dismissedAt:now, updateTime:now }
-  if (existing && existing._id) await db.collection('task_dismissals').doc(String(existing._id)).update({ data })
-  else await db.collection('task_dismissals').add({ data:{ ...data, createTime:now } })
-  return { success:true, taskId }
-}
-
 async function saveHomeIdentity(event, identity) {
   const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
   const requested = String(event.identity || '')
@@ -1229,6 +1279,15 @@ function snapshotMatchesDivision(snapshot, divisionId, allowLegacySnapshot) {
   return snapshotDivisionId === String(divisionId || 'default')
 }
 
+function matchMatchesDivision(match, divisionId, divisionName) {
+  const matchDivisionId = String(firstValue(match && match.divisionId, match && match.division, ''))
+  if (!matchDivisionId) return true
+  if (matchDivisionId === String(divisionId || 'default')) return true
+  const matchDivisionName = String(firstValue(match && match.divisionName, match && match.divisionLabel, match && match.categoryName, '')).replace(/\s+/g, '').toLowerCase()
+  const registrationDivisionName = String(divisionName || '').replace(/\s+/g, '').toLowerCase()
+  return Boolean(matchDivisionName && registrationDivisionName && matchDivisionName === registrationDivisionName)
+}
+
 async function resolveRosterContext(tournament, registrations, event) {
   const active = (registrations || []).filter(item => ['approved', 'confirmed', 'claimed', 'accepted', 'active'].indexOf(String(item.status || '').toLowerCase()) >= 0)
   const requestedDivisionId = String(event && event.divisionId || '')
@@ -1252,7 +1311,7 @@ async function resolveRosterContext(tournament, registrations, event) {
 }
 
 function formatTeamPlayer(item, requirements) {
-  const hasPhoto = Boolean(firstValue(item.photoUrl, item.photo, item.photoFileId))
+  const hasPhoto = Boolean(firstValue(item.photoUrl, item.photo, item.photoFileID, item.photoFileId))
   const hasBirth = Boolean(firstValue(item.birthDate, item.birthday))
   const hasName = Boolean(item.name)
   const identityRaw = String(firstValue(item.identityStatus, item.verifyStatus, item.realNameStatus)).toLowerCase()
@@ -1279,8 +1338,11 @@ function formatTeamPlayer(item, requirements) {
     id: String(item._id),
     name: item.name || '未命名球员',
     jerseyName: item.jerseyName || '',
+    height: item.height ?? null,
+    weight: item.weight ?? null,
+    nationality: item.nationality || '中国',
     birthDate: firstValue(item.birthDate, item.birthday),
-    photoUrl: firstValue(item.photoUrl, item.photo),
+    photoUrl: firstValue(item.photoUrl, item.photo, item.photoFileID, item.photoFileId),
     jerseyNumber: item.jerseyNumber || '',
     position: item.position || '',
     profileStatus,
@@ -1302,18 +1364,62 @@ async function loadTeamPlayersForWorkspace(event, identity) {
   const team = teams.find(item => String(item._id) === requestedTeamId) || (workspace.type === 'team' ? teams[0] : null)
   if (!team) throw new Error('球队不存在或不属于当前工作空间')
   const teamId = String(team._id)
+  const tournamentId = String(event.tournamentId || '')
+  if (tournamentId) {
+    const tournament = (await safeGet('tournaments', { _id: tournamentId }, 1))[0]
+    if (!tournament) throw new Error('赛事不存在')
+    const membershipRows = await safeGet('team_memberships', _.or([
+      { userId: identity.user._id },
+      { memberUserId: identity.user._id },
+      { phone: identity.user.phone || identity.user.phoneNumber },
+      { phoneNumber: identity.user.phone || identity.user.phoneNumber }
+    ]), 100)
+    const ownTeamIds = unique(membershipRows.filter(item => ['active', 'accepted', 'claimed'].indexOf(String(item.status || 'active').toLowerCase()) >= 0).map(item => String(item.teamId || '')))
+    if (workspace.type === 'team') ownTeamIds.push(String(workspace.teamId || ''))
+    if ([team.ownerId, team.ownerUserId, team.claimedByUserId].map(String).indexOf(String(identity.user._id || '')) >= 0) ownTeamIds.push(teamId)
+    const isOwnTeam = ownTeamIds.indexOf(teamId) >= 0
+    const isEventManager = (workspace.permissions || []).indexOf('event.manage') >= 0
+    const matches = await safeGet('matches', { tournamentId }, 300)
+    const teamMatches = matches.filter(item => [String(item.homeTeamId || ''), String(item.awayTeamId || '')].indexOf(teamId) >= 0)
+    const startedStatuses = ['ongoing', 'live', 'in_progress', 'inprogress', 'completed', 'finished', 'archived']
+    const matchStarted = teamMatches.some(item => startedStatuses.indexOf(String(item.status || '').toLowerCase()) >= 0 || (toTime(firstValue(item.matchTime, item.startTime, item.matchDate)) > 0 && toTime(firstValue(item.matchTime, item.startTime, item.matchDate)) <= Date.now()))
+    const tournamentStarted = ['ongoing', 'completed', 'finished', 'archived'].indexOf(String(tournament.status || '').toLowerCase()) >= 0
+    if (!isOwnTeam && !isEventManager && !matchStarted && !tournamentStarted) throw workspaceError('ROSTER_NOT_PUBLIC', '比赛开赛前不公开其他球队球员名单')
+  }
   const rows = (await safeGetTeamPlayers(teamId, 500)).filter(item => ['archived', 'deleted'].indexOf(String(item.status || '').toLowerCase()) < 0)
-  const importedDrafts = permissions.has('team.manage') ? await safeGet('registration_player_drafts', { teamId: String(team._id) }, 500) : []
+  const canManage = permissions.has('team.manage')
+  const importedDrafts = canManage ? await safeGet('registration_player_drafts', _.or([{ teamId }, { sourceTeamId: teamId }]), 500) : []
+  const importBatches = canManage ? await safeGet('registration_import_batches', _.or([{ teamId }, { sourceTeamId: teamId }]), 100) : []
   const pendingImportCount = importedDrafts.filter(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0).length
-  const players = rows.map(formatTeamPlayer)
+  const seen = new Set()
+  const players = []
+  function playerKey(item) {
+    return String(firstValue(item && item.identityNumber, item && item.idNumber, item && item.name, '')) + ':' + String(firstValue(item && item.birthDate, item && item.birthday, ''))
+  }
+  function appendPlayer(item, source) {
+    if (!item || ['archived', 'deleted', 'excluded'].indexOf(String(item.status || item.reviewStatus || '').toLowerCase()) >= 0) return
+    const key = playerKey(item)
+    if (key && seen.has(key)) return
+    if (key) seen.add(key)
+    const player = formatTeamPlayer(item)
+    player.id = String(firstValue(item._id, item.id, player.id, ''))
+    player.source = source
+    players.push(player)
+  }
+  rows.forEach(item => appendPlayer(item, 'player'))
+  importedDrafts.filter(item => !item.confirmedPlayerId).forEach(item => appendPlayer(item, 'import_draft'))
+  importBatches.forEach(batch => {
+    const snapshotPlayers = batch && batch.snapshot && Array.isArray(batch.snapshot.players) ? batch.snapshot.players : []
+    snapshotPlayers.forEach(item => appendPlayer(item, 'import_snapshot'))
+  })
   const counts = { complete: 0, pending: 0, exception: 0 }
   players.forEach(item => { counts[item.profileStatus] += 1 })
   return {
     success: true,
-    team: { id: String(team._id), name: firstValue(team.name, team.teamName, '未命名球队'), logo: firstValue(team.logo, team.logoUrl, team.teamLogo) },
+    team: { id: teamId, name: firstValue(team.name, team.teamName, '未命名球队'), logo: firstValue(team.logo, team.logoUrl, team.teamLogo), createTime: firstValue(team.createTime, team.createdAt) },
     players,
     counts,
-    canManage: permissions.has('team.manage'),
+    canManage,
     pendingImportCount,
     hasPendingImport: pendingImportCount > 0
   }
@@ -1448,8 +1554,8 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
   const rows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   const player = rows[0]
   if (!player || ['archived', 'deleted'].indexOf(String(player.status || '').toLowerCase()) >= 0) throw new Error('球员不存在或已移出球队')
-  const cardService = createDataService(db)
-  const dataCenter = await cardService.query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, playerId })
+  const cardService = require('./data-center/service.cjs').createDataService(db)
+  const dataCenter = await cardService.query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, playerId, mode:'official' })
   const { metrics:cardMetrics, ...playerCard } = await cardService.playerCardForAuthorizedPlayer(playerId)
   const stats = dataCenter.playerTotal.metrics
   const formatted = formatTeamPlayer(player)
@@ -1480,7 +1586,9 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
       portraitStatus: String(firstValue(player.portraitStatus, player.avatarProcessingStatus) || ''),
       remark: String(firstValue(player.remark, player.notes) || '')
     },
-    stats, dataCenter, playerCard
+    stats,
+    dataCenter: { metricVersion:dataCenter.metricVersion, dataVersion:dataCenter.dataVersion, coverage:dataCenter.coverage },
+    playerCard
   }
 }
 
@@ -1494,7 +1602,8 @@ async function archiveTeamPlayerForWorkspace(event, identity) {
   if (!teams.some(item => String(item._id) === teamId)) throw new Error('球队不存在或不属于当前工作空间')
   const rows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   if (!rows.length) throw new Error('球员不存在或不属于该球队')
-  return require('./data-center/membership.cjs').archiveMembership(db, { userId:String(identity.user._id), orgId:String(workspace.orgId || ''), teamIds:[teamId] }, playerId, teamId)
+  await db.collection('players').doc(playerId).update({ data: { status: 'archived', archivedAt: db.serverDate(), archivedBy: identity.user._id, updateTime: db.serverDate() } })
+  return { success: true, archived: true }
 }
 
 async function loadTeamPlayerForEditForWorkspace(event, identity) {
@@ -1644,8 +1753,9 @@ async function ensureParentProfileInviteForPlayer(team, player, orgId, creatorId
   return await createParentProfileInvite(team, player, orgId, creatorId)
 }
 
-function parentProfileInviteUrl(token) {
-  return 'https://www.sxffootball.cn/service-account-h5/?parentInvite=' + encodeURIComponent(String(token || '')) + '&entry=registered'
+function parentProfileInviteUrl(token, participantMode) {
+  const base = 'https://www.sxffootball.cn/service-account-h5/?parentInvite=' + encodeURIComponent(String(token || '')) + '&entry=registered'
+  return base + (['adult', 'youth'].includes(String(participantMode || '')) ? '&participantMode=' + participantMode : '')
 }
 
 async function regenerateParentProfileInviteForWorkspace(event, identity) {
@@ -1658,33 +1768,6 @@ async function regenerateParentProfileInviteForWorkspace(event, identity) {
   const players = await safeGetTeamPlayers(String(event.teamId || ''), 1, { _id: String(event.playerId || '') })
   const invite = await createParentProfileInvite(team, players[0], result.workspace.orgId || '', identity.user._id)
   return { success: true, invite: formatParentProfileInvite(invite, team, players[0]), canManage: true }
-}
-
-async function dataCenterForWorkspace(event, identity) {
-  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
-  const permissions = result.workspace.permissions || []
-  if (!permissions.some(permission => ['team.view', 'team.manage', 'event.view', 'event.manage', 'tournament.view', 'tournament.manage'].includes(permission))) throw workspaceError('DATA_FORBIDDEN', '当前身份无权查看统计数据')
-  const teams = await loadTeams(result.workspace, identity.user, identity.openId)
-  const loaded = await loadTournaments(result.workspace, identity.user, identity.openId, teams)
-  const actor = {
-    userId:String(identity.user._id), orgId:String(result.workspace.orgId || ''), platformOwner:false,
-    teamIds:teams.map(team => String(team._id)),
-    tournamentIds:(permissions.includes('event.manage') || permissions.includes('tournament.manage')) ? loaded.tournaments.filter(item => ['hosted', 'both'].includes(item.workspaceRelation)).map(item => String(item._id)) : []
-  }
-  const service = createDataService(db)
-  return event.operation === 'catalog' ? service.catalog(actor) : service.query(actor, event.scope || event)
-}
-
-async function tournamentDataForWorkspace(event, identity) {
-  const tournamentId = String(event.tournamentId || '')
-  if (!tournamentId) throw new Error('缺少赛事信息')
-  const dataCenter = await dataCenterForWorkspace(Object.assign({},event,{scope:{tournamentId}}),identity)
-  const tournament = (await readDataRows(db,'tournaments',{_id:tournamentId}))[0]
-  const divisions = await readDataRows(db,'divisions',{tournamentId})
-  const teamMap = Object.fromEntries(dataCenter.teams.map(row => [row.teamId,row]))
-  const standings = dataCenter.standings.flatMap(group => group.officialTeams.map(row => ({...row,divisionId:group.divisionId,divisionName:group.divisionName,groupName:group.groupName,wins:row.win,draws:row.draw,losses:row.loss,goalDiff:row.goalDifference})))
-  const ranking = field => dataCenter.players.filter(row => row.observed[field] > 0).map(row => ({playerId:row.playerId,playerName:row.playerName,teamId:row.teamId,teamName:teamMap[row.teamId]?.teamName || row.teamId,divisionId:row.divisionId,count:row.metrics[field],observedCount:row.observed[field],statisticsCoverage:row.coverage[field]})).sort((left,right) => right.observedCount-left.observedCount)
-  return {success:true,tournament:{id:tournamentId,name:String(tournament?.name || '')},divisions:divisions.map(row => ({id:String(row._id),name:String(row.name || '')})),divisionGroups:[],standings,goalsRanking:ranking('goals'),yellowCards:ranking('yellowCards'),redCards:ranking('redCards'),dataCenter}
 }
 
 async function officialRosterForWorkspace(event, identity) {
@@ -1704,33 +1787,32 @@ async function officialRosterForWorkspace(event, identity) {
     .filter(item => snapshotMatchesDivision(item, rosterContext.divisionId, rosterContext.allowLegacySnapshot))
   const latest = snapshots.sort((a, b) => toTime(b.updateTime || b.createTime) - toTime(a.updateTime || a.createTime))[0] || null
   let statisticsStatus = 'unavailable'
-  let statisticsMetadata = null
   // 查询失败保留未知状态，不把未加载的数据显示成零。
   try {
-    const { selectRosterMatches, restoreHistoricalRosterPlayers, matchParticipantIds } = await import('./data-center/statistics.mjs')
-    const matches = selectRosterMatches(await readDataRows(db, 'matches', { tournamentId }), teamId, rosterContext.divisionId, rosterContext.allowLegacySnapshot)
-    const externalEvents = await readDataByIds(db, 'match_events', 'matchId', matches.map(match => match._id))
-    const matchTeams = await readDataByIds(db, 'teams', '_id', matches.flatMap(match => [match.homeTeamId,match.awayTeamId].filter(Boolean)))
-    const teamsById = Object.fromEntries(matchTeams.map(row => [String(row._id),row]))
-    const participantIds = [...new Set(matches.flatMap(match => [...matchParticipantIds(match,externalEvents)]))]
-    const matchPlayers = await readDataByIds(db, 'players', '_id', participantIds)
-    const playersById = Object.fromEntries(matchPlayers.map(row => [String(row._id),row]))
+    const { selectRosterMatches, restoreHistoricalRosterPlayers } = await import('./officialRosterStats.mjs')
+    const matchResult = await db.collection('matches').where({ tournamentId }).limit(500).get()
+    const matches = selectRosterMatches(matchResult.data || [], teamId, rosterContext.divisionId, rosterContext.allowLegacySnapshot)
+    let externalEvents = []
+    if (matches.some(match => !Array.isArray(match.events))) {
+      externalEvents = (await db.collection('match_events').where({ tournamentId }).limit(1000).get()).data || []
+    }
     const restored = restoreHistoricalRosterPlayers(players, matches, teamId, latest && latest.playerIds)
     players.splice(0, players.length, ...restored)
-    const { aggregateStatistics, sumPlayerRows } = await import('./data-center/statistics.mjs')
-    const aggregate = aggregateStatistics({ matches, events:externalEvents, scope:{ teamId, tournamentId }, divisionsById:{ [rosterContext.divisionId]:rosterContext.division }, tournamentsById:{ [tournamentId]:tournament }, teamsById, playersById, requireOriginEvidence:true, requirePlayerOriginEvidence:true })
+    const scope = { teamId, tournamentId, mode:'official', ...(rosterContext.allowLegacySnapshot ? {} : { divisionId:rosterContext.divisionId }) }
+    const center = await require('./data-center/service.cjs').createDataService(db).query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, scope)
+    const { sumPlayerRows } = await import('./data-center/statistics.mjs')
     players.forEach(player => {
-      const rows = aggregate.players.filter(row => row.playerId === String(player.id))
-      const total = sumPlayerRows(rows)
-      player.tournamentStats = rows.length ? total.metrics : { appearances:null, goals:null, assists:null, yellowCards:null, redCards:null, minutesPlayed:null }
-      player.statisticsCoverage = rows.length ? total.coverage : { status:'not_collected' }
+      const rows = center.players.filter(row => row.playerId === String(player.id))
+      if (rows.length) player.tournamentStats = sumPlayerRows(rows).metrics
+      else {
+        const empty = center.summary.matchCount === 0 || center.coverage.status === 'complete' ? 0 : null
+        player.tournamentStats = { appearances:empty, minutesPlayed:empty, goals:empty, assists:empty, yellowCards:empty, redCards:empty }
+      }
     })
-    statisticsStatus = aggregate.coverage.status === 'complete' ? 'ready' : 'partial'
-    statisticsMetadata = { schemaVersion:aggregate.schemaVersion, metricVersion:aggregate.metricVersion, dataVersion:aggregate.dataVersion, coverage:aggregate.coverage }
-
+    statisticsStatus = center.coverage.status === 'complete' ? 'ready' : 'partial'
   } catch (error) { console.warn('[officialRoster] statistics unavailable:', error.message) }
   const division = rosterContext.division || {}
-  return { success: true, statisticsStatus, statisticsMetadata, team: { id: teamId, name: firstValue(team.name, team.teamName), logo: firstValue(team.logo, team.logoUrl) }, tournament: { id: tournamentId, name: tournament.name || '赛事', divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, '默认组别'), maxPlayers: Number(firstValue(division.rosterLimit, division.maxPlayersPerTeam, rosterContext.registration.maxPlayersPerTeam, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)), deadlineText: dateText(firstValue(division.registrationDeadline, tournament.registrationDeadline, tournament.signupDeadline)) }, requirements: rosterContext.requirements, players, snapshot: latest ? { id: String(latest._id), status: latest.status || 'draft', playerIds: latest.playerIds || [], divisionId: String(latest.divisionId || latest.division || rosterContext.divisionId), version: Number(latest.version || 1), returnReason: latest.returnReason || '', returnedAtText: dateText(latest.returnedAt) } : null, canManage: permissions.indexOf('team.manage') >= 0 }
+  return { success: true, statisticsStatus, team: { id: teamId, name: firstValue(team.name, team.teamName), logo: firstValue(team.logo, team.logoUrl) }, tournament: { id: tournamentId, name: tournament.name || '赛事', divisionId: rosterContext.divisionId, divisionName: firstValue(rosterContext.registration.divisionName, division.name, division.divisionName, tournament.divisionName, '默认组别'), maxPlayers: Number(firstValue(division.rosterLimit, division.maxPlayersPerTeam, rosterContext.registration.maxPlayersPerTeam, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)), deadlineText: dateText(firstValue(division.registrationDeadline, tournament.registrationDeadline, tournament.signupDeadline)) }, requirements: rosterContext.requirements, players, snapshot: latest ? { id: String(latest._id), status: latest.status || 'draft', playerIds: latest.playerIds || [], divisionId: String(latest.divisionId || latest.division || rosterContext.divisionId), version: Number(latest.version || 1), returnReason: latest.returnReason || '', returnedAtText: dateText(latest.returnedAt) } : null, canManage: permissions.indexOf('team.manage') >= 0 }
 }
 
 async function submitOfficialRosterForWorkspace(event, identity) {
@@ -1761,7 +1843,7 @@ async function submitOfficialRosterForWorkspace(event, identity) {
   const created = await db.collection('roster_snapshots').add({ data: snapshot })
   const team = teams.find(item => String(item._id) === teamId) || {}
   const organizerUserIds = await findOrganizationUserIds(result.workspace.orgId, 'event.manage')
-  await publishWorkspaceMessage({
+  if (snapshotStatus === 'submitted') await publishWorkspaceMessage({
     orgId: result.workspace.orgId,
     recipientUserIds: organizerUserIds,
     category: 'event',
@@ -1796,8 +1878,23 @@ async function returnOfficialRosterForOrganizer(event, identity) {
   return { success: true, status: 'returned' }
 }
 
+function lineupPlayerCount(match) {
+  const format = /^([5789]|11)side$/.exec(String(match.matchFormat || '').trim().toLowerCase())
+  if (format) return Number(format[1])
+  const count = Number(match.minPlayers)
+  return [5, 7, 8, 9, 11].indexOf(count) >= 0 ? count : 11
+}
+
+function lineupBenchLimit(match, tournament) {
+  const recognized = tournament && tournament.regulationRecognitionData && tournament.regulationRecognitionData.sharedRegulationDetails || {}
+  const values = [match.lineupBenchLimit, match.benchPlayerLimit, recognized.benchPlayerLimit]
+  const configured = values.map(Number).find(value => Number.isSafeInteger(value) && value > 0 && value <= 30)
+  return configured || 5
+}
+
 async function matchLineupForWorkspace(event, identity) {
-  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const targetWorkspaceId = await workspaceIdForManagedTeam(String(event.teamId || ''), identity)
+  const result = await findWorkspaceForAction(identity.user, identity.openId, targetWorkspaceId || event.workspaceId)
   if ((result.workspace.permissions || []).indexOf('team.view') < 0 && (result.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有访问比赛阵容的权限')
   const matchId = String(event.matchId || ''), teamId = String(event.teamId || '')
   const teams = await loadTeams(result.workspace, identity.user, identity.openId)
@@ -1805,17 +1902,53 @@ async function matchLineupForWorkspace(event, identity) {
   const match = (await safeGet('matches', { _id: matchId }, 1))[0]
   if (!match || [String(match.homeTeamId || ''), String(match.awayTeamId || '')].indexOf(teamId) < 0) throw new Error('比赛不存在或球队不参与该比赛')
   const tournamentId = String(match.tournamentId || '')
+  const tournament = (await safeGet('tournaments', { _id: tournamentId }, 1))[0] || {}
   const registrations = await safeGet('tournament_teams', { tournamentId, teamId }, 20)
-  const matchDivisionId = String(match.divisionId || match.division || '')
   const registrationDivisionIds = unique(registrations.map(registrationDivisionId))
-  if (!matchDivisionId && registrationDivisionIds.length > 1) throw new Error('比赛缺少竞赛组别信息，不能安全读取正式名单')
-  const rosterDivisionId = matchDivisionId || registrationDivisionIds[0] || 'default'
+  // 历史比赛的 division 可能保存组别名称，正式名单保存的是参赛关系的组别 ID。
+  const matchDivisionValues = unique([
+    match.divisionId,
+    match.division,
+    match.divisionName
+  ].map(value => String(value || '').trim()).filter(Boolean))
+  const declaredDivisionId = String(match.divisionId || '').trim()
+  const exactRegistration = registrations.find(registration => registrationDivisionId(registration) === declaredDivisionId)
+  const matchingRegistrations = registrations.filter(registration => {
+    const aliases = unique([
+      registration.divisionId,
+      registration.division,
+      registration.divisionName
+    ].map(value => String(value || '').trim()).filter(Boolean))
+    return matchDivisionValues.some(value => aliases.indexOf(value) >= 0)
+  })
+  let rosterDivisionId = ''
+  if (exactRegistration) rosterDivisionId = registrationDivisionId(exactRegistration)
+  else if (matchingRegistrations.length === 1) rosterDivisionId = registrationDivisionId(matchingRegistrations[0])
+  else if (registrationDivisionIds.length === 1) rosterDivisionId = registrationDivisionIds[0]
+  else if (!matchDivisionValues.length && registrationDivisionIds.length > 1) throw new Error('比赛缺少竞赛组别信息，不能安全读取正式名单')
+  else if (registrationDivisionIds.length > 1) throw new Error('比赛组别与球队参赛组别不匹配，不能安全读取正式名单')
+  else rosterDivisionId = matchDivisionValues[0] || registrationDivisionIds[0] || 'default'
   const allowLegacyRoster = registrationDivisionIds.length <= 1
-  const roster = (await safeGet('roster_snapshots', { tournamentId, teamId, status: 'approved' }, 20))
+  const roster = (await safeGet('roster_snapshots', { tournamentId, teamId, status: 'approved' }, 1000))
     .filter(snapshot => snapshotMatchesDivision(snapshot, rosterDivisionId, allowLegacyRoster))
-    .sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
+    .sort((a,b)=>toTime(b.updateTime || b.createTime)-toTime(a.updateTime || a.createTime))[0]
   if (!roster) throw new Error('尚未形成已审核赛事正式名单，不能编排单场阵容')
   const players = await safeGetTeamPlayers(teamId, 100, { _id: _.in(roster.playerIds || []) })
+  const cardFileIds = unique(players.map(item => String(item.playerCardFileId || '')).filter(Boolean))
+  let cardUrls = {}
+  let cardAssetsError = false
+  if (cardFileIds.length) {
+    try {
+      for (let index = 0; index < cardFileIds.length; index += 50) {
+        const files = (await cloud.getTempFileURL({ fileList: cardFileIds.slice(index, index + 50) })).fileList || []
+        files.forEach(file => { if (file.fileID && file.tempFileURL) cardUrls[String(file.fileID)] = String(file.tempFileURL) })
+      }
+      cardAssetsError = Object.keys(cardUrls).length !== cardFileIds.length
+    } catch (error) {
+      cardAssetsError = true
+      console.error('[getMiniWorkspace] player cards unavailable:', error)
+    }
+  }
   const lineups = await safeGet('match_lineup_snapshots', { matchId, teamId }, 20)
   const latest = lineups.sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
   const opponentIds = unique([String(match.homeTeamId || ''), String(match.awayTeamId || '')].filter(Boolean))
@@ -1824,25 +1957,60 @@ async function matchLineupForWorkspace(event, identity) {
   matchTeams.forEach(item => { teamMap[String(item._id)] = item })
   const home = teamMap[String(match.homeTeamId || '')] || {}
   const away = teamMap[String(match.awayTeamId || '')] || {}
+  let coachResult = { coach: null, state: 'unavailable' }
+  try { coachResult = await require('./lineupHeadCoach.cjs').loadLineupHeadCoach({ db, cloud, teamId, team: teamMap[teamId] || {}, players }) }
+  catch (error) { console.error('[getMiniWorkspace] head coach unavailable:', error.message) }
   const side = String(match.homeTeamId || '') === teamId ? 'home' : 'away'
   const preMatchState = match.preMatchState && typeof match.preMatchState === 'object' ? match.preMatchState : {}
   const teamArrivals = preMatchState.teamArrivals && typeof preMatchState.teamArrivals === 'object' ? preMatchState.teamArrivals : {}
   const refereeArrived = Boolean(preMatchState.refereeArrival && preMatchState.refereeArrival.confirmedAt)
   const homeArrived = Boolean(teamArrivals.home && teamArrivals.home.confirmedAt)
   const awayArrived = Boolean(teamArrivals.away && teamArrivals.away.confirmedAt)
+  const matchStartTime = firstValue(match.matchTime, match.startTime, match.matchDate, match.date)
+  const matchStartMs = toTime(matchStartTime)
+  const nowMs = Date.now()
+  const matchStatus = String(match.status || 'scheduled').toLowerCase()
+  const matchStarted = ['ongoing', 'live', 'in_progress', 'inprogress', 'finished', 'completed', 'archived', 'cancelled'].indexOf(matchStatus) >= 0 || (matchStartMs > 0 && matchStartMs <= nowMs)
+  const finalWindowOpen = !matchStarted && matchStartMs > 0 && nowMs >= matchStartMs - 60 * 60 * 1000
+  const preSubmitAllowed = !matchStarted && !finalWindowOpen
+  const latestStatus = String(latest && latest.status || '')
+  const lineupLocked = ['submitted', 'locked'].indexOf(latestStatus) >= 0
   return {
     success: true,
     workspaceOrgId: String(result.workspace.orgId || ''),
-     match: { id: matchId, tournamentId, divisionId: rosterDivisionId, side, minPlayers: Number(match.minPlayers || 11), name: String(match.name || ''), matchDate: String(match.matchDate || ''), venue: String(match.venue || ''), divisionName: String(match.divisionName || match.division || ''), homeTeamName: String(home.name || match.homeTeamName || '主队'), awayTeamName: String(away.name || match.awayTeamName || '客队'), homeLogo: String(home.logoUrl || home.logo || ''), awayLogo: String(away.logoUrl || away.logo || ''), refereeArrived, homeArrived, awayArrived, teamArrived:side === 'home' ? homeArrived : awayArrived, allArrived:refereeArrived && homeArrived && awayArrived },
+     match: { id: matchId, tournamentId, divisionId: rosterDivisionId, side, minPlayers: lineupPlayerCount(match), benchLimit: lineupBenchLimit(match, tournament), matchFormat: String(match.matchFormat || ''), name: String(match.name || ''), matchDate: String(match.matchDate || ''), startTime: matchStartTime, status: matchStatus, venue: String(match.venue || ''), divisionName: String(match.divisionName || match.division || ''), homeTeamName: String(home.name || match.homeTeamName || '主队'), awayTeamName: String(away.name || match.awayTeamName || '客队'), homeLogo: String(home.logoTransparent || home.logoUrl || home.logo || ''), awayLogo: String(away.logoTransparent || away.logoUrl || away.logo || ''), refereeArrived, homeArrived, awayArrived, teamArrived:side === 'home' ? homeArrived : awayArrived, allArrived:refereeArrived && homeArrived && awayArrived },
+    headCoach: coachResult.coach,
+    headCoachState: coachResult.state,
     rosterId: String(roster._id),
-    players: players.map(formatTeamPlayer),
-    lineup: latest ? { id: String(latest._id), formation: String(latest.formation || ''), starters: latest.starters || [], substitutes: latest.substitutes || [], status: String(latest.status || ''), returnReason: String(latest.returnReason || ''), submittedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null,
+    players: players.map(item => {
+      const cardFileId = String(item.playerCardFileId || '')
+      const cardUrl = cardUrls[cardFileId] || ''
+      const playerTeamId = String(item.teamId || item.teamCode || teamId)
+      const playerTeam = teamMap[playerTeamId] || teamMap[teamId] || {}
+      const cardTier = ['bronze', 'silver', 'gold'].includes(String(item.playerCardTier || '')) && cardFileId
+        ? String(item.playerCardTier)
+        : ''
+      return Object.assign(formatTeamPlayer(item), {
+        cardUrl, cardTier, teamLogo: String(playerTeam.logoTransparent || playerTeam.logoUrl || playerTeam.logo || ''),
+        cardState: cardUrl ? 'ready' : (cardFileId ? 'load_failed' : 'missing')
+      })
+    }),
+    cardAssetsError,
+    lineup: latest ? { id: String(latest._id), formation: String(latest.formation || ''), starters: latest.starters || [], substitutes: latest.substitutes || [], status: latestStatus, returnReason: String(latest.returnReason || ''), submittedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null,
+    locked: lineupLocked,
+    preSubmitted: latestStatus === 'pre_submitted',
+    preSubmitAllowed,
+    finalWindowOpen,
+    canSubmit: (result.workspace.permissions || []).indexOf('team.manage') >= 0 && !lineupLocked && (preSubmitAllowed || (finalWindowOpen && Boolean(refereeArrived && homeArrived && awayArrived))),
+    submitButtonText: preSubmitAllowed ? '赛前预提交阵容' : (finalWindowOpen ? '确认并提交本场阵容' : '提交窗口已关闭'),
+    submissionWindowText: preSubmitAllowed ? '可提前预提交；比赛前1小时进入正式提交窗口。' : (finalWindowOpen ? '已进入正式提交窗口，提交后将锁定阵容。' : '比赛已开始，阵容已锁定。'),
     canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0
   }
 }
 
 async function confirmTeamArrivalForWorkspace(event, identity) {
-  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const targetWorkspaceId = await workspaceIdForManagedTeam(String(event.teamId || ''), identity)
+  const result = await findWorkspaceForAction(identity.user, identity.openId, targetWorkspaceId || event.workspaceId)
   if ((result.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有确认球队到场的权限')
   const matchId = String(event.matchId || ''), teamId = String(event.teamId || '')
   const teams = await loadTeams(result.workspace, identity.user, identity.openId)
@@ -1905,22 +2073,30 @@ async function adultElectronicPassForWorkspace(event, identity) {
 async function submitMatchLineupForWorkspace(event, identity) {
   const loaded = await matchLineupForWorkspace(event, identity)
   if (!loaded.canManage) throw new Error('当前身份没有提交比赛阵容的权限')
-  if (!loaded.match.refereeArrived || !loaded.match.homeArrived || !loaded.match.awayArrived) throw new Error('请等待主裁判和双方球队负责人完成赛前报到')
+  const startMs = toTime(loaded.match.startTime)
+  const finalWindowOpen = startMs > 0 && Date.now() >= startMs - 60 * 60 * 1000
+  if (startMs > 0 && Date.now() >= startMs) throw new Error('比赛已经开始，阵容已锁定')
+  if (finalWindowOpen && (!loaded.match.refereeArrived || !loaded.match.homeArrived || !loaded.match.awayArrived)) throw new Error('正式提交需等待主裁判和双方球队负责人完成赛前报到')
   const starters = Array.isArray(event.starters) ? event.starters : []
   const substitutes = Array.isArray(event.substitutes) ? event.substitutes : []
   const ids = unique(starters.map(item => item.playerId).concat(substitutes.map(item => item.playerId)))
   const allowed = new Set(loaded.players.map(item => item.id))
-  if (starters.length !== loaded.match.minPlayers || ids.length !== starters.length + substitutes.length || ids.some(id => !allowed.has(id))) throw new Error('首发人数或阵容成员不符合已审核正式名单')
+  if (starters.length !== loaded.match.minPlayers || substitutes.length > loaded.match.benchLimit || ids.length !== starters.length + substitutes.length || ids.some(id => !allowed.has(id))) throw new Error('首发人数、替补上限或阵容成员不符合本场规则与已审核正式名单')
   const existing = await safeGet('match_lineup_snapshots', { matchId: loaded.match.id, teamId: String(event.teamId || '') }, 20)
   if (existing.some(item => ['submitted', 'locked'].indexOf(String(item.status || '')) >= 0)) throw new Error('该场阵容已提交或锁定')
   const version = existing.reduce((max, item) => Math.max(max, Number(item.version || 1)), 0) + 1
   const now = db.serverDate()
-  const created = await db.collection('match_lineup_snapshots').add({ data: { matchId: loaded.match.id, tournamentId: loaded.match.tournamentId, teamId: String(event.teamId || ''), rosterId: loaded.rosterId, formation: String(event.formation || ''), starters, substitutes, version, status: 'submitted', submittedBy: identity.user._id, createTime: now, updateTime: now } })
+  const snapshotStatus = finalWindowOpen ? 'submitted' : 'pre_submitted'
+  const snapshotData = { matchId: loaded.match.id, tournamentId: loaded.match.tournamentId, teamId: String(event.teamId || ''), rosterId: loaded.rosterId, formation: String(event.formation || ''), starters, substitutes, version, status: snapshotStatus, submittedBy: identity.user._id, createTime: now, updateTime: now }
+  const existingDraft = existing.find(item => String(item.status || '') === 'pre_submitted')
+  const created = existingDraft
+    ? (await db.collection('match_lineup_snapshots').doc(String(existingDraft._id)).update({ data: snapshotData }), { _id: String(existingDraft._id) })
+    : await db.collection('match_lineup_snapshots').add({ data: snapshotData })
   const playerMap = {}
   loaded.players.forEach(item => { playerMap[String(item.id)] = item })
-  const lineup = { teamId:String(event.teamId || ''), formation:String(event.formation || ''), starters:starters.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId), slotId:String(item.slotId || '') })), substitutes:substitutes.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId) })), status:'submitted', submitted:true, version, snapshotId:String(created._id), confirmations:{}, identityChecks:{}, submittedAt:now, submittedByUserId:String(identity.user._id) }
+  const lineup = { teamId:String(event.teamId || ''), formation:String(event.formation || ''), starters:starters.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId), slotId:String(item.slotId || '') })), substitutes:substitutes.map(item => Object.assign({}, playerMap[String(item.playerId)] || {}, { _id:String(item.playerId), playerId:String(item.playerId) })), status:snapshotStatus, submitted:snapshotStatus === 'submitted', preSubmitted:snapshotStatus === 'pre_submitted', version, snapshotId:String(created._id), confirmations:{}, identityChecks:{}, submittedAt:now, submittedByUserId:String(identity.user._id) }
   const side = loaded.match.side
-  const matchUpdate = { lineupsLocked:false, identityVerificationStatus:'pending_lineup_confirmation', updateTime:now }
+  const matchUpdate = { lineupsLocked:false, identityVerificationStatus:snapshotStatus === 'submitted' ? 'pending_lineup_confirmation' : 'pre_submitted', updateTime:now }
   matchUpdate[side === 'home' ? 'homeLineup' : 'awayLineup'] = lineup
   matchUpdate[side === 'home' ? 'homeLineupStatus' : 'awayLineupStatus'] = 'submitted'
   await db.collection('matches').doc(loaded.match.id).update({ data:matchUpdate })
@@ -1934,7 +2110,7 @@ async function submitMatchLineupForWorkspace(event, identity) {
     path: '/pages/event/index?matchId=' + encodeURIComponent(loaded.match.id),
     dedupeKey: 'lineup-submitted:' + String(created._id)
   })
-  return { success: true, lineupId: String(created._id), status: 'submitted' }
+  return { success: true, lineupId: String(created._id), status: snapshotStatus, preSubmitted: snapshotStatus === 'pre_submitted' }
 }
 
 async function returnMatchLineupForOrganizer(event, identity) {
@@ -1993,24 +2169,48 @@ async function teamDataPackageForWorkspace(event, identity) {
   const locked = isLockedDivision(division)
   const packages = await safeGet('team_data_packages', { teamId, tournamentId, divisionId, orgId: result.workspace.orgId || '' }, 20)
   const latest = packages.sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
-  return { success: true, tournament: { id: tournamentId, name: String(tournament.name || '') }, team: { id: teamId, name: String(team.name || team.teamName || '') }, division: { id: divisionId, name: String(division.name || division.divisionName || '默认组别'), professional, locked }, package: { id: latest ? String(latest._id) : '', status: 'enabled', free: true }, allowLegacyMatchDivision: activeDivisionIds.length === 1, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0, canRequest: false }
+  return { success: true, tournament: { id: tournamentId, name: String(tournament.name || '') }, team: { id: teamId, name: String(team.name || team.teamName || '') }, division: { id: divisionId, name: String(division.name || division.divisionName || '默认组别'), professional, locked }, package: latest ? { id: String(latest._id), status: String(latest.status || ''), requestedAtText: dateText(firstValue(latest.updateTime, latest.createTime)) } : null, allowLegacyMatchDivision: activeDivisionIds.length === 1, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0, canRequest: !professional && locked && (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
 }
 
 async function requestTeamDataPackageForWorkspace(event, identity) {
   const loaded = await teamDataPackageForWorkspace(event, identity)
-  return { success: true, requestId: loaded.package.id, status: 'enabled', free: true }
+  const workspaceContext = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const workspaceOrgId = String(workspaceContext.workspace.orgId || '')
+  if (!loaded.canRequest) throw new Error('该组别当前不满足数据包开通申请条件')
+  if (loaded.package && ['requested', 'enabled'].indexOf(loaded.package.status) >= 0) throw new Error('该数据包已申请或已开通')
+  const now = db.serverDate()
+  const created = await db.collection('team_data_packages').add({ data: { teamId: loaded.team.id, tournamentId: loaded.tournament.id, divisionId: loaded.division.id, orgId: workspaceOrgId, status: 'requested', requestedBy: identity.user._id, createTime: now, updateTime: now } })
+  return { success: true, requestId: String(created._id), status: 'requested' }
 }
 
 async function teamDataPackageDataForWorkspace(event, identity) {
   const loaded = await teamDataPackageForWorkspace(event, identity)
   if (!loaded.package || loaded.package.status !== 'enabled') throw new Error('该赛事组别的球队数据包尚未开通')
   const teamId = loaded.team.id, tournamentId = loaded.tournament.id, divisionId = loaded.division.id
-  const matches = (await readDataRows(db,'matches',{ tournamentId })).filter(item => [String(item.homeTeamId || ''),String(item.awayTeamId || '')].includes(teamId) && snapshotMatchesDivision(item,divisionId,loaded.allowLegacyMatchDivision))
-  const dataCenter = await createDataService(db).query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, tournamentId, ...(loaded.allowLegacyMatchDivision ? {} : { divisionId }) })
-  const playerStats = dataCenter.players.map(row => ({ id:row.playerId, name:row.playerName, ...row.metrics, coverage:row.coverage, observed:row.observed }))
-  const summary = { matchCount:dataCenter.summary.matchCount, goals:dataCenter.teams.every(row => row.goalsFor !== null) ? dataCenter.teams.reduce((sum,row) => sum + row.goalsFor,0) : null, assists:playerStats.every(row => row.assists !== null) ? playerStats.reduce((sum,row) => sum + row.assists,0) : null, appearancePlayers:playerStats.filter(row => row.observed.appearances > 0).length }
+  const allMatches = await safeGet('matches', { tournamentId }, 500)
+  const matches = allMatches.filter(item => [String(item.homeTeamId || ''), String(item.awayTeamId || '')].indexOf(teamId) >= 0 && snapshotMatchesDivision(item, divisionId, loaded.allowLegacyMatchDivision))
+  const players = await safeGetTeamPlayers(teamId, 500)
+  const stats = {}
+  players.forEach(item => { stats[String(item._id)] = { id: String(item._id), name: String(item.name || ''), photoUrl: String(item.photoUrl || item.photo || ''), goals: 0, assists: 0, appearances: 0 } })
+  matches.forEach(match => {
+    const appeared = new Set()
+    ;(Array.isArray(match.events) ? match.events : []).forEach(eventItem => {
+      const eventTeam = String(eventItem.teamId || eventItem.team || '')
+      const playerId = String(eventItem.playerId || '')
+      const assistId = String(eventItem.assistPlayerId || eventItem.assistId || '')
+      if (eventTeam && eventTeam !== teamId) return
+      if (stats[playerId]) {
+        appeared.add(playerId)
+        if (String(eventItem.type || '') === 'goal') stats[playerId].goals += 1
+      }
+      if (stats[assistId]) { appeared.add(assistId); if (String(eventItem.type || '') === 'assist' || String(eventItem.type || '') === 'goal') stats[assistId].assists += 1 }
+    })
+    appeared.forEach(id => { stats[id].appearances += 1 })
+  })
+  const playerStats = Object.keys(stats).map(id => stats[id]).sort((a,b) => b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name, 'zh-CN'))
+  const summary = { matchCount: matches.length, goals: playerStats.reduce((sum,item) => sum + item.goals, 0), assists: playerStats.reduce((sum,item) => sum + item.assists, 0), appearancePlayers: playerStats.filter(item => item.appearances > 0).length }
   const recent = matches.sort((a,b)=>toTime(b.matchTime || b.matchDate)-toTime(a.matchTime || a.matchDate))[0]
-  return { success: true, tournament: loaded.tournament, team: loaded.team, division: loaded.division, summary, dataCenter, players: playerStats, recentMatch: recent ? { id: String(recent._id), homeTeamName: String(recent.homeTeamName || '主队'), awayTeamName: String(recent.awayTeamName || '客队'), homeScore: String(firstValue(recent.homeScore, recent.scoreHome, 0)), awayScore: String(firstValue(recent.awayScore, recent.scoreAway, 0)), status: String(recent.status || ''), timeText: dateText(firstValue(recent.matchTime, recent.matchDate, recent.startTime)) } : null, canManage: loaded.canManage }
+  return { success: true, tournament: loaded.tournament, team: loaded.team, division: loaded.division, summary, players: playerStats, recentMatch: recent ? { id: String(recent._id), homeTeamName: String(recent.homeTeamName || '主队'), awayTeamName: String(recent.awayTeamName || '客队'), homeScore: String(firstValue(recent.homeScore, recent.scoreHome, 0)), awayScore: String(firstValue(recent.awayScore, recent.scoreAway, 0)), status: String(recent.status || ''), timeText: dateText(firstValue(recent.matchTime, recent.matchDate, recent.startTime)) } : null, canManage: loaded.canManage }
 }
 
 async function requestTeamDataExportForWorkspace(event, identity) {
@@ -2469,29 +2669,64 @@ async function teamProfileForWorkspace(event, identity) {
   return { success: true, profile, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
 }
 
+// 小程序编辑入口与 PC 共用同一套球队长期资料同步边界：更新当前球队后，
+// 刷新参赛关系、球员库和未完赛赛程的展示字段；已完赛/已归档快照保持不变。
 async function syncTeamProfileReferences(teamId, before, after) {
   const id = String(teamId || '').trim()
   if (!id || !before || !after) return { changed: false, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
-  const value = (record, keys) => { for (const key of keys) if (record && record[key] !== undefined && record[key] !== null && String(record[key]).trim() !== '') return String(record[key]).trim(); return '' }
-  const beforeName = value(before, ['name', 'teamName']), afterName = value(after, ['name', 'teamName'])
-  const beforeLogo = value(before, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo']), afterLogo = value(after, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo'])
-  const nameChanged = beforeName !== afterName, logoChanged = beforeLogo !== afterLogo
+  const value = (record, keys) => {
+    for (const key of keys) {
+      if (record && record[key] !== undefined && record[key] !== null && String(record[key]).trim() !== '') return String(record[key]).trim()
+    }
+    return ''
+  }
+  const beforeName = value(before, ['name', 'teamName'])
+  const afterName = value(after, ['name', 'teamName'])
+  const beforeLogo = value(before, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo'])
+  const afterLogo = value(after, ['logo', 'logoUrl', 'logoTransparent', 'teamLogo'])
+  const nameChanged = beforeName !== afterName
+  const logoChanged = beforeLogo !== afterLogo
   if (!nameChanged && !logoChanged) return { changed: false, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
-  const patch = {}; if (nameChanged) patch.teamName = afterName; if (logoChanged) Object.assign(patch, { teamLogo: afterLogo, logo: afterLogo, logoUrl: afterLogo })
+
+  const patch = {}
+  if (nameChanged) patch.teamName = afterName
+  if (logoChanged) {
+    patch.teamLogo = afterLogo
+    patch.logo = afterLogo
+    patch.logoUrl = afterLogo
+  }
   const counts = { changed: true, tournamentTeams: 0, players: 0, matches: 0, invitations: 0 }
-  const updateRows = async (collection, rows, data) => { for (const row of rows || []) if (row && row._id) await db.collection(collection).doc(row._id).update({ data: { ...data, updateTime: db.serverDate() } }); return (rows || []).filter(row => row && row._id).length }
-  counts.tournamentTeams = await updateRows('tournament_teams', (await db.collection('tournament_teams').where({ teamId: id }).limit(1000).get()).data || [], patch)
+  const updateRows = async (collection, rows, data) => {
+    for (const row of rows || []) {
+      if (row && row._id) await db.collection(collection).doc(row._id).update({ data: { ...data, updateTime: db.serverDate() } })
+    }
+    return (rows || []).filter(row => row && row._id).length
+  }
+  const relationRows = (await db.collection('tournament_teams').where({ teamId: id }).limit(1000).get()).data || []
+  counts.tournamentTeams = await updateRows('tournament_teams', relationRows, patch)
   const invitationRows = (await db.collection('team_invitations').where({ teamId: id }).limit(1000).get()).data || []
   counts.invitations = await updateRows('team_invitations', invitationRows.filter(row => !['cancelled', 'canceled', 'expired', 'rejected'].includes(String(row.status || '').toLowerCase())), patch)
-  if (nameChanged) counts.players = await updateRows('players', (await db.collection('players').where(_.or([{ teamId: id }, { teamCode: id }])).limit(1000).get()).data || [], { teamName: afterName })
-  const matches = (await db.collection('matches').where(_.or([{ homeTeamId: id }, { awayTeamId: id }])).limit(1000).get()).data || []
+  if (nameChanged) {
+    const playerRows = (await db.collection('players').where(_.or([{ teamId: id }, { teamCode: id }])).limit(1000).get()).data || []
+    counts.players = await updateRows('players', playerRows, { teamName: afterName })
+  }
+  const matchRows = (await db.collection('matches').where(_.or([{ homeTeamId: id }, { awayTeamId: id }])).limit(1000).get()).data || []
   const historical = new Set(['completed', 'finished', 'archived', 'cancelled', 'canceled'])
-  for (const match of matches) {
+  for (const match of matchRows) {
     if (!match || !match._id || historical.has(String(match.status || '').toLowerCase())) continue
     const matchPatch = {}
-    if (String(match.homeTeamId || '') === id) { if (nameChanged) matchPatch.homeTeamName = afterName; if (logoChanged) matchPatch.homeTeamLogo = afterLogo }
-    if (String(match.awayTeamId || '') === id) { if (nameChanged) matchPatch.awayTeamName = afterName; if (logoChanged) matchPatch.awayTeamLogo = afterLogo }
-    if (Object.keys(matchPatch).length) { await db.collection('matches').doc(match._id).update({ data: { ...matchPatch, updateTime: db.serverDate() } }); counts.matches += 1 }
+    if (String(match.homeTeamId || '') === id) {
+      if (nameChanged) matchPatch.homeTeamName = afterName
+      if (logoChanged) matchPatch.homeTeamLogo = afterLogo
+    }
+    if (String(match.awayTeamId || '') === id) {
+      if (nameChanged) matchPatch.awayTeamName = afterName
+      if (logoChanged) matchPatch.awayTeamLogo = afterLogo
+    }
+    if (Object.keys(matchPatch).length) {
+      await db.collection('matches').doc(match._id).update({ data: { ...matchPatch, updateTime: db.serverDate() } })
+      counts.matches += 1
+    }
   }
   return counts
 }
@@ -2503,7 +2738,8 @@ async function saveTeamProfileForWorkspace(event, identity) {
   if (name.length < 2) throw new Error('球队名称需为 2—30 个字')
   const patch = { name, teamName: name, shortName, ageGroup: String(event.ageGroup || '').trim().slice(0, 20), foundedYear: String(event.foundedYear || '').trim().slice(0, 8), city: String(event.city || '').trim().slice(0, 40), managerName: String(event.managerName || '').trim().slice(0, 30), updateTime: db.serverDate() }
   await db.collection('teams').doc(loaded.profile.id).update({ data: patch })
-  return { success: true, teamSync: await syncTeamProfileReferences(loaded.profile.id, loaded.profile, { ...loaded.profile, ...patch }) }
+  const teamSync = await syncTeamProfileReferences(loaded.profile.id, loaded.profile, { ...loaded.profile, ...patch })
+  return { success: true, teamSync }
 }
 
 async function teamMembersForWorkspace(event, identity) {
@@ -2512,15 +2748,96 @@ async function teamMembersForWorkspace(event, identity) {
   const teamId = String(event.teamId || ''), teams = await loadTeams(result.workspace, identity.user, identity.openId)
   const team = teams.filter(item => String(item._id) === teamId)[0]
   if (!team) throw new Error('球队不属于当前工作空间')
-  const memberships = await safeGet('team_memberships', { teamId }, 200)
-  const userIds = unique(memberships.map(item => item.userId || item.memberUserId))
+  const [memberships, staffRows] = await Promise.all([
+    safeGet('team_memberships', { teamId }, 200),
+    safeGet('coaches', _.or([{ teamId }, { teamCode: teamId }]), 500)
+  ])
+  const ownerIds = unique([team.ownerId, team.ownerUserId, team.claimedByUserId].filter(Boolean))
+  const userIds = unique(memberships.map(item => item.userId || item.memberUserId || item.ownerId).concat(ownerIds).filter(Boolean))
   const users = userIds.length ? await safeGet('users', { _id: _.in(userIds) }, 200) : []
   const userMap = {}; users.forEach(item => { userMap[String(item._id)] = item })
-  const members = memberships.map(item => { const user = userMap[String(item.userId || item.memberUserId)] || {}; const roles = item.roles || (item.role ? [item.role] : []); const roleText = roles.indexOf('owner') >= 0 || roles.indexOf('team_manager') >= 0 ? '负责人 / 管理员' : (roles.indexOf('coach') >= 0 ? '教练' : '成员'); return { id: String(item._id), name: String(user.name || user.nickName || item.name || '未命名成员'), avatar: String(user.avatarUrl || item.avatarUrl || ''), phoneMasked: maskPhone(String(user.phone || user.phoneNumber || item.phone || '')), roleText, statusText: String(item.status || '').toLowerCase() === 'accepted' || String(item.status || '').toLowerCase() === 'active' ? '已加入' : '待确认', pending: String(item.status || '').toLowerCase() !== 'accepted' && String(item.status || '').toLowerCase() !== 'active' } })
+  const permissionLabels = {
+    'team.view': '查看球队',
+    'team.manage': '管理球队',
+    'team.invite': '邀请成员',
+    'team.player.view': '查看球员',
+    'team.player.manage': '管理球员',
+    'event.view': '查看赛事',
+    'event.manage': '赛事协作'
+  }
+  const members = memberships.map(item => {
+    const userId = String(item.userId || item.memberUserId || item.ownerId || '')
+    const user = userMap[userId] || {}
+    const rawRoles = normalizePositions(item, false).concat([item.memberRole, item.roleText, item.positionName].filter(Boolean))
+    const roles = unique(rawRoles.filter(Boolean).map(value => String(value).trim()).filter(Boolean))
+    const roleTokens = roles.map(value => value.toLowerCase())
+    const isManager = roleTokens.some(value => ['owner', 'team_manager', 'manager', 'team_leader', 'leader', '管理员', '领队', '负责人'].indexOf(value) >= 0)
+    const isCoach = roleTokens.some(value => value.indexOf('coach') >= 0 || value.indexOf('教练') >= 0)
+    const kind = isCoach ? 'coach' : (isManager ? 'manager' : 'other')
+    const roleText = roles.length ? roles.map(value => ({ owner: '负责人', team_manager: '管理员', manager: '管理员', team_leader: '领队', leader: '领队', head_coach: '主教练', assistant_coach: '助理教练', coach: '教练', doctor: '队医' }[value.toLowerCase()] || value)).join(' / ') : '成员'
+    const permissions = unique(normalizePermissions(item, false).map(String).filter(Boolean))
+    const permissionText = permissions.length ? permissions.map(value => permissionLabels[value] || value).join('、') : '未配置专项权限'
+    const active = ['accepted', 'active', 'claimed'].indexOf(String(item.status || 'active').toLowerCase()) >= 0
+    const phone = String(firstValue(user.phone, user.phoneNumber, item.phone, item.phoneNumber, '') || '')
+    return {
+      id: String(item._id),
+      userId,
+      name: String(firstValue(user.realName, user.name, user.nickname, user.nickName, user.userName, item.name, item.memberName, item.nickname, '未命名成员')),
+      avatar: String(firstValue(user.avatarUrl, user.avatar, user.headimgurl, item.avatarUrl, item.avatar, '') || ''),
+      phoneMasked: maskPhone(phone),
+      _phoneKey: phone,
+      roleText,
+      roles,
+      kind,
+      permissionText,
+      permissions,
+      statusText: active ? '已加入' : '待确认',
+      pending: !active
+    }
+  })
+  const memberUserIds = new Set(members.map(item => item.userId).filter(Boolean))
+  ownerIds.forEach(ownerId => {
+    const id = String(ownerId || '')
+    if (!id || memberUserIds.has(id)) return
+    const user = userMap[id] || {}
+    const phone = String(firstValue(user.phone, user.phoneNumber, '') || '')
+    members.push({ id: 'owner:' + id, userId: id, name: String(firstValue(user.realName, user.name, user.nickname, user.nickName, user.userName, team.managerName, '球队负责人')), avatar: String(firstValue(user.avatarUrl, user.avatar, user.headimgurl, '') || ''), phoneMasked: maskPhone(phone), _phoneKey: phone, roleText: '负责人', roles: ['owner'], kind: 'manager', permissionText: '查看球队、管理球队、邀请成员、管理球员', permissions: ['team.view', 'team.manage', 'team.invite', 'team.player.manage'], statusText: '已加入', pending: false })
+  })
+  const memberByPhone = {}
+  const memberByName = {}
+  members.forEach(member => {
+    if (member._phoneKey) memberByPhone[member._phoneKey] = member
+    if (member.name && member.name !== '未命名成员' && !memberByName[member.name]) memberByName[member.name] = member
+  })
+  const staffMap = {}
+  staffRows.forEach(item => { staffMap[String(item._id || '')] = item })
+  const staffRoleLabels = { head_coach: '主教练', coach: '教练', assistant_coach: '助理教练', assistant: '助理教练', team_leader: '领队', leader: '领队', doctor: '队医', medic: '队医', manager: '管理员' }
+  Object.keys(staffMap).forEach(id => {
+    const staff = staffMap[id]
+    const name = String(firstValue(staff.name, staff.coachName, staff.memberName, '未命名工作人员'))
+    const phone = String(firstValue(staff.phone, staff.phoneNumber, '') || '')
+    const roleToken = String(firstValue(staff.type, staff.roleType, staff.position, staff.role, 'coach'))
+    const roleText = String(firstValue(staff.roleLabel, staffRoleLabels[roleToken.toLowerCase()], staff.role, '教练'))
+    const kind = roleToken.toLowerCase().indexOf('coach') >= 0 || roleText.indexOf('教练') >= 0 ? 'coach' : (['team_leader', 'leader', 'manager'].indexOf(roleToken.toLowerCase()) >= 0 || /领队|管理/.test(roleText) ? 'manager' : 'other')
+    const existing = (phone && memberByPhone[phone]) || memberByName[name]
+    const avatar = String(firstValue(staff.photoUrl, staff.photoFileID, staff.avatarUrl, staff.photo, '') || '')
+    if (existing) {
+      if (!existing.avatar && avatar) existing.avatar = avatar
+      if (existing.roleText === '成员') existing.roleText = roleText
+      else if (existing.roleText.indexOf(roleText) < 0) existing.roleText += ' / ' + roleText
+      if (existing.kind === 'other') existing.kind = kind
+      return
+    }
+    const row = { id: 'staff:' + id, staffId: id, name, avatar, phoneMasked: maskPhone(phone), _phoneKey: phone, roleText, roles: [roleToken], kind, permissionText: '工作人员资料，未绑定管理账号', permissions: [], statusText: '资料档案', pending: false }
+    members.push(row)
+    if (phone) memberByPhone[phone] = row
+    if (name !== '未命名工作人员') memberByName[name] = row
+  })
   const invitations = await safeGet('team_invitations', { teamId }, 100)
   invitations.filter(item => String(item.type || '') === 'team_member' && String(item.status || '') === 'pending' &&
     Boolean(item.inviteeName || item.inviteePhone) && (!item.expiresAt || toTime(item.expiresAt) > Date.now())
-  ).forEach(item => members.push({ id: 'invite:' + item._id, inviteId: String(item._id), name: String(item.inviteeName || '待确认成员'), avatar: '', phoneMasked: maskPhone(String(item.inviteePhone || '')), roleText: String(item.roleText || '成员'), statusText: '待确认', pending: true }))
+  ).forEach(item => members.push({ id: 'invite:' + item._id, inviteId: String(item._id), name: String(item.inviteeName || '待确认成员'), avatar: '', phoneMasked: maskPhone(String(item.inviteePhone || '')), roleText: String(item.roleText || '成员'), kind: 'other', permissionText: '加入后按邀请岗位授权', statusText: '待确认', pending: true }))
+  members.forEach(item => { delete item._phoneKey })
   return { success: true, team: { id: teamId, name: String(team.name || team.teamName || ''), logo: String(team.logo || team.logoTransparent || '') }, members, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
 }
 
@@ -2642,6 +2959,25 @@ async function acceptTeamMemberInviteForWorkspace(event, identity) {
   return { success: true, teamId: preview.team.id, destination: '/pages/team/detail/detail?teamId=' + encodeURIComponent(preview.team.id) }
 }
 
+async function teamPlayerInviteCompetition(teamId, tournamentId) {
+  if (!tournamentId) return { tournamentId: '', participantMode: '' }
+  const tournament = (await safeGet('tournaments', { _id: tournamentId }, 1))[0]
+  if (!tournament) throw new Error('赛事不存在，不能按赛事模式发出邀请')
+  const registrations = (await safeGet('tournament_teams', { tournamentId, teamId }, 50))
+    .filter(item => !['cancelled', 'withdrawn', 'replaced'].includes(String(item.status || '').toLowerCase()))
+  if (!registrations.length) throw new Error('当前球队不属于该赛事，不能按赛事模式发出邀请')
+  let mode = String(tournament.participantMode || '')
+  if (!['adult', 'youth'].includes(mode)) {
+    const divisionIds = new Set(registrations.map(registrationDivisionId))
+    const divisions = (await safeGet('divisions', { tournamentId }, 100)).concat(Array.isArray(tournament.divisions) ? tournament.divisions : []).filter(item => divisionIds.has(String(item._id || item.id)))
+    const modes = [...new Set(divisions.map(item => String(item.participantMode || '')).filter(value => ['adult', 'youth'].includes(value)))]
+    mode = modes.length === 1 ? modes[0] : ''
+  }
+  // 旧赛事尚无 participantMode：这两个稳定赛事 ID 的展示模式由产品负责人确认，仅用于邀请文案。
+  if (!mode) mode = ({ '22dda3756aa93fd70002a29257a61fe6': 'adult', 'c1dc89f26a884b2a002042f7385deabe': 'youth' })[tournamentId] || ''
+  return { tournamentId, participantMode: mode }
+}
+
 async function createTeamPlayerInviteForWorkspace(event, identity) {
   const scope = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
   if ((scope.workspace.permissions || []).indexOf('team.manage') < 0) throw new Error('当前身份没有邀请球员的权限')
@@ -2649,10 +2985,11 @@ async function createTeamPlayerInviteForWorkspace(event, identity) {
   const teams = await loadTeams(scope.workspace, identity.user, identity.openId)
   const team = teams.find(item => String(item._id) === teamId)
   if (!team) throw new Error('球队不存在或不属于当前工作空间')
+  const competition = await teamPlayerInviteCompetition(teamId, String(event.tournamentId || ''))
   const rows = await safeGet('team_invitations', { teamId, type: 'team_player', inviterUserId: identity.user._id }, 50)
-  const reusable = rows.find(item => ['active', 'pending'].indexOf(String(item.status || '')) >= 0 && String(item.token || '').indexOf('tp_') === 0 && toTime(item.expiresAt) > Date.now())
+  const reusable = rows.find(item => ['active', 'pending'].indexOf(String(item.status || '')) >= 0 && String(item.tournamentId || '') === competition.tournamentId && String(item.token || '').indexOf('tp_') === 0 && toTime(item.expiresAt) > Date.now())
   if (reusable) {
-    if (String(reusable.registrantMode || '') !== 'age_based') await db.collection('team_invitations').doc(String(reusable._id)).update({ data: { registrantMode: 'age_based', updateTime: db.serverDate() } })
+    if (String(reusable.registrantMode || '') !== 'age_based' || String(reusable.participantMode || '') !== competition.participantMode) await db.collection('team_invitations').doc(String(reusable._id)).update({ data: { registrantMode: 'age_based', participantMode: competition.participantMode, updateTime: db.serverDate() } })
     return {
       success: true,
       reused: true,
@@ -2660,6 +2997,8 @@ async function createTeamPlayerInviteForWorkspace(event, identity) {
       token: String(reusable.token),
       expiresAtText: dateText(reusable.expiresAt),
       registrantMode: 'age_based',
+      participantMode: competition.participantMode,
+      tournamentId: competition.tournamentId,
       path: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId) + '&playerInviteId=' + encodeURIComponent(String(reusable.token))
     }
   }
@@ -2669,6 +3008,8 @@ async function createTeamPlayerInviteForWorkspace(event, identity) {
   const created = await db.collection('team_invitations').add({ data: {
     token,
     teamId,
+    tournamentId: competition.tournamentId,
+    participantMode: competition.participantMode,
     orgId: String(scope.workspace.orgId || ''),
     type: 'team_player',
     purpose: 'player_profile_onboarding',
@@ -2688,6 +3029,8 @@ async function createTeamPlayerInviteForWorkspace(event, identity) {
     token,
     expiresAtText: dateText(expiresAt),
     registrantMode: 'age_based',
+    participantMode: competition.participantMode,
+    tournamentId: competition.tournamentId,
     path: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId) + '&playerInviteId=' + encodeURIComponent(token)
   }
 }
@@ -2717,10 +3060,10 @@ async function teamPlayerInviteForWorkspace(event, identity) {
   const existingRegistrantType = existing && ((userId && [existing.linkedUserId, existing.playerUserId].filter(Boolean).map(String).indexOf(userId) >= 0) || (openId && [existing.linkedOpenId, existing.playerOpenId].filter(Boolean).map(String).indexOf(openId) >= 0)) ? 'self' : 'guardian'
   return {
     success: true,
-    invitation: { id: String(invite._id), token: String(invite.token || ''), expiresAtText: dateText(invite.expiresAt), registrantMode: 'age_based' },
+    invitation: { id: String(invite._id), token: String(invite.token || ''), expiresAtText: dateText(invite.expiresAt), registrantMode: 'age_based', tournamentId: String(invite.tournamentId || ''), participantMode: String(invite.participantMode || '') },
     team: { id: teamId, name: String(team.name || team.teamName || ''), logo: String(team.logoTransparent || team.logo || team.logoUrl || '') },
     accountPhoneMasked: maskPhone(verifiedUserPhone(identity.user)),
-    existingPlayer: existing ? { id: String(existing._id), name: String(existing.name || '球员'), birthDate: String(firstValue(existing.birthDate, existing.birthday) || ''), profileStatus: String(existing.profileStatus || 'pending'), registrantType: existingRegistrantType, registrantLabel: existingRegistrantType === 'self' ? '球员本人' : '家长或监护人' } : null
+    existingPlayer: existing ? { id: String(existing._id), name: String(existing.name || '球员'), birthDate: String(firstValue(existing.birthDate, existing.birthday) || ''), profileStatus: String(existing.profileStatus || 'pending'), registrationComplete: String(existing.profileStatus || '') === 'complete' || String(existing.parentProfileSubmissionStatus || '') === 'submitted' || Boolean(existing.parentProfileCompletedAt), registrantType: existingRegistrantType, registrantLabel: existingRegistrantType === 'self' ? '球员本人' : '家长或监护人' } : null
   }
 }
 
@@ -2729,12 +3072,22 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
   const invite = (await safeGet('team_invitations', { _id: preview.invitation.id }, 1))[0]
   if (!invite || ['active', 'pending'].indexOf(String(invite.status || 'active')) < 0) throw new Error('球员邀请不存在或已停用')
   const teamRecord = (await safeGet('teams', { _id: preview.team.id }, 1))[0] || { _id: preview.team.id, name: preview.team.name }
+  const submittedProfile = Object.prototype.hasOwnProperty.call(event, 'name') || Object.prototype.hasOwnProperty.call(event, 'birthDate')
   if (preview.existingPlayer) {
     const existingRows = await safeGetTeamPlayers(preview.team.id, 1, { _id: preview.existingPlayer.id })
     const existingPlayer = existingRows[0]
     if (!existingPlayer) throw new Error('已关联的球员档案不存在，请联系球队管理员')
+    if (submittedProfile) {
+      const submittedName = String(event.name || '').trim()
+      const submittedBirthDate = String(event.birthDate || '').trim()
+      const existingBirthDate = String(firstValue(existingPlayer.birthDate, existingPlayer.birthday) || '')
+      if (submittedName !== String(existingPlayer.name || '').trim() || submittedBirthDate !== existingBirthDate) {
+        return await playerAccountTransfer.overwriteIncomplete(event, identity, preview, invite, teamRecord, existingPlayer)
+      }
+      if (event.authorizationAgreed !== true) throw new Error('请确认登记身份并授权资料使用')
+    }
     const parentInvite = await ensureParentProfileInviteForPlayer(teamRecord, existingPlayer, String(invite.orgId || ''), identity.user._id)
-    return { success: true, idempotent: true, player: preview.existingPlayer, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token) }
+    return { success: true, idempotent: true, player: preview.existingPlayer, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token, preview.invitation.participantMode) }
   }
   const name = String(event.name || '').trim().slice(0, 30)
   const birthDate = String(event.birthDate || '').trim()
@@ -2754,6 +3107,8 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
   const teamPlayers = await safeGetTeamPlayers(preview.team.id, 500)
   const duplicates = teamPlayers.filter(item => String(item.name || '') === name && String(firstValue(item.birthDate, item.birthday) || '') === birthDate)
   if (duplicates.length) {
+    const prior = await playerAccountTransfer.priorChoice(event, identity, preview, '')
+    if (prior) return prior
     const currentUserId = String(identity.user._id || '')
     const currentOpenId = String(identity.openId || '')
     const owned = duplicates.find(item => {
@@ -2763,7 +3118,7 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     })
     if (owned) {
       const parentInvite = await ensureParentProfileInviteForPlayer(teamRecord, owned, String(invite.orgId || ''), identity.user._id)
-      return { success: true, idempotent: true, player: { id: String(owned._id), name: String(owned.name || name), profileStatus: String(owned.profileStatus || 'pending') }, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token) }
+      return { success: true, idempotent: true, player: { id: String(owned._id), name: String(owned.name || name), profileStatus: String(owned.profileStatus || 'pending') }, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token, preview.invitation.participantMode) }
     }
     throw workspaceError('PLAYER_PROFILE_CONFLICT', '球队中已有同名且出生日期相同的球员，请联系球队管理员人工核验，系统不会自动合并')
   }
@@ -2813,7 +3168,350 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     lastAcceptedAt: now,
     updateTime: now
   } })
-  return { success: true, player: { id: String(created._id), name, profileStatus: 'pending' }, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token) }
+  return { success: true, player: { id: String(created._id), name, profileStatus: 'pending' }, team: preview.team, parentProfileUrl: parentProfileInviteUrl(parentInvite.token, preview.invitation.participantMode) }
+}
+
+async function tournamentOperationsForWorkspace(event, identity) {
+  const scoped = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
+  const workspace = scoped.workspace
+  const tournamentId = String(event.tournamentId || '')
+  if (!tournamentId) throw new Error('缺少赛事信息')
+  const tournament = (await safeGet('tournaments', { _id: tournamentId }, 1))[0]
+  if (!tournament) throw new Error('赛事不存在')
+  const teams = await loadTeams(workspace, identity.user, identity.openId)
+  const accessibleTeamIds = unique(teams.map(item => item._id))
+  const allRegistrations = await safeGet('tournament_teams', { tournamentId }, 500)
+  const canManage = (workspace.permissions || []).indexOf('event.manage') >= 0 && String(workspace.orgId || '') === String(tournament.orgId || tournament.organizationId || '')
+  const ownRegistration = allRegistrations.some(item => accessibleTeamIds.indexOf(String(item.teamId || '')) >= 0)
+  if (!canManage && !ownRegistration) throw new Error('当前账号无权查看该赛事运营数据')
+
+  const divisionRows = await safeGet('divisions', { tournamentId }, 100)
+  const divisionMap = {}
+  divisionRows.forEach(item => { divisionMap[String(item._id || item.id)] = String(item.name || item.divisionName || '竞赛组别') })
+  ;(Array.isArray(tournament.divisions) ? tournament.divisions : []).forEach(item => {
+    divisionMap[String(item._id || item.id)] = String(item.name || item.divisionName || '竞赛组别')
+  })
+  const officialStatuses = new Set(['approved', 'confirmed', 'active', 'locked', 'accepted', 'claimed'])
+  const officialRegistrations = taskRelevantRegistrations(allRegistrations).filter(item => officialStatuses.has(String(item.status || '').toLowerCase()))
+  const registeredTeamIds = unique(officialRegistrations.map(item => item.teamId))
+  const teamRows = registeredTeamIds.length ? await safeGet('teams', { _id: _.in(registeredTeamIds) }, 500) : []
+  const teamMap = {}
+  teamRows.concat(teams).forEach(item => { teamMap[String(item._id || item.id)] = item })
+  const operationTeams = officialRegistrations.map(item => {
+    const team = teamMap[String(item.teamId || '')] || {}
+    const divisionId = registrationDivisionId(item)
+    return {
+      id: String(item._id || ''),
+      teamId: String(item.teamId || ''),
+      teamName: String(firstValue(team.name, team.teamName, item.teamName, '未命名球队')),
+      teamLogo: String(firstValue(team.logo, team.logoUrl, team.teamLogo, item.teamLogo, '')),
+      divisionId,
+      divisionName: String(firstValue(item.divisionName, divisionMap[divisionId], '默认组别')),
+      playerCount: Number(firstValue(team.playerCount, item.playerCount, 0))
+    }
+  })
+  const divisionOptions = Object.keys(divisionMap).map(id => ({ id, name: divisionMap[id] }))
+  operationTeams.forEach(item => {
+    if (!divisionMap[item.divisionId]) {
+      divisionMap[item.divisionId] = item.divisionName
+      divisionOptions.push({ id: item.divisionId, name: item.divisionName })
+    }
+  })
+
+  const groupRows = await safeGet('tournament_groups', { tournamentId }, 500)
+  const formalGroupMap = {}
+  groupRows.forEach(item => {
+    const status = String(item.status || '').toLowerCase()
+    const groupName = String(firstValue(item.groupName, item.groupCode, ''))
+    const members = Array.isArray(item.teams) ? item.teams : []
+    if (!groupName || !members.length || ['draft', 'archived'].indexOf(status) >= 0) return
+    const divisionId = String(item.divisionId || 'default')
+    const key = divisionId + ':' + groupName
+    const current = formalGroupMap[key]
+    if (!current || toTime(item.updateTime || item.confirmedAt || item.createTime) > toTime(current.updateTime || current.confirmedAt || current.createTime)) formalGroupMap[key] = item
+  })
+  const divisionGroupsMap = {}
+  Object.keys(formalGroupMap).map(key => formalGroupMap[key]).forEach(item => {
+    const divisionId = String(item.divisionId || 'default')
+    const groupName = String(firstValue(item.groupName, item.groupCode, '分组'))
+    if (!divisionGroupsMap[divisionId]) divisionGroupsMap[divisionId] = { divisionId, divisionName: String(firstValue(item.divisionName, divisionMap[divisionId], '默认组别')), groups: [] }
+    const groupTeams = (item.teams || []).map((member, index) => {
+      const team = teamMap[String(member.teamId || '')] || {}
+      return {
+        order: Number(member.order || member.sort || member.sequence || index + 1),
+        teamId: String(member.teamId || ''),
+        teamName: String(firstValue(team.name, team.teamName, member.teamName, member.name, '轮空')),
+        teamLogo: String(firstValue(team.logo, team.logoUrl, team.teamLogo, member.teamLogo, '') || '')
+      }
+    })
+    divisionGroupsMap[divisionId].groups.push({
+      order: Number(item.order || item.sort || item.sequence || divisionGroupsMap[divisionId].groups.length + 1),
+      groupName,
+      teams: groupTeams,
+      teamsLen: groupTeams.length
+    })
+  })
+  const divisionGroups = Object.keys(divisionGroupsMap).map(key => divisionGroupsMap[key]).sort((left, right) => left.divisionName.localeCompare(right.divisionName, 'zh-CN')).map(item => {
+    item.groups.sort((left, right) => Number(left.order || 0) - Number(right.order || 0) || left.groupName.localeCompare(right.groupName, 'zh-CN'))
+    return item
+  })
+
+  const allMatches = await safeGet('matches', { tournamentId }, 500)
+  const schedule = allMatches.filter(item => {
+    const homeName = matchTeamName(item, 'home', teamMap)
+    const awayName = matchTeamName(item, 'away', teamMap)
+    const placeholder = item.isBye === true || item.isPlaceholder === true || item.placeholder === true || /胜者|负者|待定/.test(homeName + awayName)
+    return !placeholder && String(item.status || '').toLowerCase() !== 'cancelled' && Boolean(matchDateValue(item) && isClockTime(matchTimeValue(item)))
+  }).sort((left, right) => matchDateTimeMs(left) - matchDateTimeMs(right)).map(item => {
+    const status = String(item.status || 'scheduled').toLowerCase()
+    const live = ['ongoing', 'live', 'in_progress', 'inprogress'].indexOf(status) >= 0
+    const finished = ['finished', 'completed', 'archived'].indexOf(status) >= 0
+    const hasScore = item.homeScore !== undefined && item.homeScore !== null && item.awayScore !== undefined && item.awayScore !== null
+    const notStarted = ['scheduled', 'pending', 'upcoming'].indexOf(status) >= 0
+    const divisionId = String(item.divisionId || item.division || 'default')
+    return {
+      id: String(item._id || ''),
+      divisionId,
+      divisionName: String(firstValue(item.divisionName, divisionMap[divisionId], '默认组别')),
+      groupName: String(firstValue(item.groupName, item.group, item.drawGroup, '联赛')),
+      dateText: matchDateText(item),
+      timeText: matchTimeValue(item),
+      venueText: String(firstValue(item.venue, item.location, item.fieldName, item.field, '场地待定')),
+      homeName: matchTeamName(item, 'home', teamMap),
+      awayName: matchTeamName(item, 'away', teamMap),
+      homeLogo: matchTeamLogo(item, 'home', teamMap),
+      awayLogo: matchTeamLogo(item, 'away', teamMap),
+      scoreText: !notStarted && hasScore ? String(item.homeScore) + ' : ' + String(item.awayScore) : '- : -',
+      statusText: finished ? '已结束' : (live ? '进行中' : '待开始'),
+      statusClass: live ? 'match-live' : (finished ? 'match-finished' : 'match-upcoming'),
+      hasScore: hasScore
+    }
+  })
+  return {
+    success: true,
+    tournament: { id: tournamentId, name: String(tournament.name || '赛事'), type: String(firstValue(tournament.formatType, tournament.type, tournament.format, '')) },
+    divisions: divisionOptions.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')),
+    teams: operationTeams,
+    divisionGroups,
+    schedule
+  }
+}
+
+async function tournamentDataForWorkspace(event, identity) {
+  const tournamentId = String(event.tournamentId || '')
+  if (!tournamentId) throw new Error('缺少赛事信息')
+  const operations = await tournamentOperationsForWorkspace(Object.assign({}, event, { divisionId: '' }), identity)
+  const requestedDivisionId = ''
+  const teamMap = {}
+  ;(operations.teams || []).forEach(item => { teamMap[String(item.teamId || '')] = item })
+  const divisionNameMap = {}
+  ;(operations.divisions || []).forEach(item => { divisionNameMap[String(item.id || 'default')] = String(item.name || '默认组别') })
+  const teamGroupMap = {}
+  ;(operations.divisionGroups || []).forEach(division => {
+    const divisionId = String(division.divisionId || 'default')
+    ;(division.groups || []).forEach(group => {
+      const groupName = String(group.groupName || '联赛')
+      ;(group.teams || []).forEach(team => { teamGroupMap[divisionId + ':' + String(team.teamId || '')] = groupName })
+    })
+  })
+  const standingsDocs = await safeGet('standings', { tournamentId }, 50)
+  const standingsRows = []
+  standingsDocs.forEach(doc => {
+    if (Array.isArray(doc.teams)) standingsRows.push(...doc.teams.map(item => Object.assign({}, item, { divisionId: item.divisionId || doc.divisionId || '', groupName: item.groupName || doc.groupName || doc.drawGroup || '' })))
+    ;(Array.isArray(doc.groups) ? doc.groups : []).forEach(group => {
+      ;(Array.isArray(group.teams) ? group.teams : []).forEach(item => standingsRows.push(Object.assign({}, item, { groupName: item.groupName || group.groupName || '', divisionId: item.divisionId || group.divisionId || doc.divisionId || '' })))
+    })
+    if (doc.teamId) standingsRows.push(doc)
+  })
+  const filteredStandingsRows = requestedDivisionId ? standingsRows.filter(item => !item.divisionId || String(item.divisionId) === requestedDivisionId) : standingsRows
+  function rankStandingsByDivision(rows) {
+    const grouped = {}
+    rows.forEach(item => {
+      const divisionId = String(item.divisionId || 'default')
+      const groupName = String(item.groupName || '联赛')
+      const key = divisionId + ':' + groupName
+      if (!grouped[key]) grouped[key] = []
+      grouped[key].push(item)
+    })
+    return Object.keys(grouped).sort((left, right) => left.localeCompare(right, 'zh-CN')).reduce((all, key) => {
+      const ranked = grouped[key].sort((a, b) => b.points - a.points || b.goalDiff - a.goalDiff || b.goalsFor - a.goalsFor || a.teamName.localeCompare(b.teamName, 'zh-CN')).map((item, index) => Object.assign({}, item, { rank: index + 1 }))
+      return all.concat(ranked)
+    }, [])
+  }
+  let standings = filteredStandingsRows.map((item, index) => {
+    const teamId = String(item.teamId || '')
+    const team = teamMap[teamId] || {}
+    const divisionId = String(firstValue(item.divisionId, team.divisionId, 'default'))
+    const groupName = String(firstValue(item.groupName, item.drawGroup, teamGroupMap[divisionId + ':' + teamId], '联赛'))
+    return {
+      rank: Number(item.rank || item.position || index + 1),
+      teamId,
+      // standings 中的 teamName/teamLogo 是积分快照；当前赛事展示优先使用
+      // operations 已从 teams 读取的长期资料。
+      teamName: String(firstValue(team.teamName, team.name, item.teamName, '球队待定')),
+      teamLogo: String(firstValue(team.teamLogo, team.logo, item.teamLogo, '') || ''),
+      divisionId,
+      divisionName: String(firstValue(item.divisionName, team.divisionName, divisionNameMap[divisionId], '默认组别')),
+      groupName,
+      played: Number(firstValue(item.played, item.matches, 0)),
+      wins: Number(item.wins || item.win || 0),
+      draws: Number(item.draws || item.draw || item.ties || 0),
+      losses: Number(item.losses || item.loss || 0),
+      goalsFor: Number(firstValue(item.goalsFor, item.gf, item.goals, 0)),
+      goalsAgainst: Number(firstValue(item.goalsAgainst, item.ga, 0)),
+      goalDiff: Number(firstValue(item.goalDiff, item.gd, Number(item.goalsFor || item.gf || 0) - Number(item.goalsAgainst || item.ga || 0))),
+      points: Number(item.points || 0)
+    }
+  })
+  standings = rankStandingsByDivision(standings)
+
+  const matches = await safeGet('matches', { tournamentId }, 500)
+  if (!standings.length) {
+    const tables = {}
+    function ensureDivisionTable(divisionId, groupName) {
+      const id = String(divisionId || 'default')
+      const group = String(groupName || '联赛')
+      if (!tables[id]) tables[id] = {}
+      if (!tables[id][group]) tables[id][group] = {}
+      return tables[id][group]
+    }
+    ;(operations.teams || []).forEach(item => {
+      const divisionId = String(item.divisionId || 'default')
+      const teamId = String(item.teamId || '')
+      const groupName = String(firstValue(teamGroupMap[divisionId + ':' + teamId], '联赛'))
+      const table = ensureDivisionTable(divisionId, groupName)
+      table[teamId] = { rank: 0, divisionId, divisionName: String(firstValue(item.divisionName, divisionNameMap[divisionId], '默认组别')), groupName, teamId, teamName: String(item.teamName || '球队待定'), teamLogo: String(item.teamLogo || ''), played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, goalDiff: 0, points: 0 }
+    })
+    matches.forEach(match => {
+      const status = String(match.status || '').toLowerCase()
+      const homeScore = Number(firstValue(match.homeScore, match.scoreHome, NaN))
+      const awayScore = Number(firstValue(match.awayScore, match.scoreAway, NaN))
+      const divisionId = String(match.divisionId || match.division || 'default')
+      if (!['completed', 'finished', 'archived'].includes(status) || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return
+      const homeId = String(match.homeTeamId || ''), awayId = String(match.awayTeamId || '')
+      const groupName = String(firstValue(match.groupName, match.drawGroup, teamGroupMap[divisionId + ':' + homeId], teamGroupMap[divisionId + ':' + awayId], '联赛'))
+      const table = ensureDivisionTable(divisionId, groupName)
+      if (!table[homeId]) table[homeId] = { rank: 0, divisionId, divisionName: String(firstValue(match.divisionName, divisionNameMap[divisionId], '默认组别')), groupName, teamId: homeId, teamName: String(match.homeTeamName || '主队'), teamLogo: String(match.homeTeamLogo || ''), played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, goalDiff: 0, points: 0 }
+      if (!table[awayId]) table[awayId] = { rank: 0, divisionId, divisionName: String(firstValue(match.divisionName, divisionNameMap[divisionId], '默认组别')), groupName, teamId: awayId, teamName: String(match.awayTeamName || '客队'), teamLogo: String(match.awayTeamLogo || ''), played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, goalDiff: 0, points: 0 }
+      const home = table[homeId], away = table[awayId]
+      home.played += 1; away.played += 1; home.goalsFor += homeScore; home.goalsAgainst += awayScore; away.goalsFor += awayScore; away.goalsAgainst += homeScore
+      if (homeScore > awayScore) { home.wins += 1; away.losses += 1; home.points += 3 } else if (homeScore < awayScore) { away.wins += 1; home.losses += 1; away.points += 3 } else { home.draws += 1; away.draws += 1; home.points += 1; away.points += 1 }
+      home.goalDiff = home.goalsFor - home.goalsAgainst; away.goalDiff = away.goalsFor - away.goalsAgainst
+    })
+    standings = rankStandingsByDivision(Object.keys(tables).reduce((all, divisionId) => {
+      return all.concat(Object.keys(tables[divisionId]).reduce((groupRows, groupName) => groupRows.concat(Object.keys(tables[divisionId][groupName]).map(teamId => tables[divisionId][groupName][teamId])), []))
+    }, []))
+  }
+  const matchMap = {}
+  matches.forEach(match => { matchMap[String(match._id || match.id || '')] = match })
+  const matchEvents = await safeGet('match_events', { tournamentId }, 500)
+  const events = matchEvents.concat(matches.reduce((all, match) => {
+    const divisionId = String(match.divisionId || match.division || 'default')
+    return all.concat((Array.isArray(match.events) ? match.events : []).map(item => Object.assign({}, item, { matchId: match._id, tournamentId, divisionId, divisionName: String(firstValue(match.divisionName, divisionNameMap[divisionId], '默认组别')) })))
+  }, []))
+  const goals = {}
+  const yellow = {}
+  const red = {}
+  function eventPlayerId(eventItem) {
+    const embedded = eventItem.player && typeof eventItem.player === 'object' ? eventItem.player : {}
+    return String(firstValue(eventItem.playerId, eventItem.playerID, eventItem.athleteId, embedded._id, embedded.id, '') || '')
+  }
+  function eventPlayerName(eventItem) {
+    const embedded = eventItem.player && typeof eventItem.player === 'object' ? eventItem.player : {}
+    return String(firstValue(eventItem.playerName, embedded.name, typeof eventItem.player === 'string' ? eventItem.player : '', eventItem.name, '')).trim()
+  }
+  function eventDivision(eventItem, teamId) {
+    const matchId = String(firstValue(eventItem.matchId, eventItem.matchID, eventItem.gameId, '') || '')
+    const match = matchMap[matchId] || {}
+    const team = teamMap[teamId] || {}
+    const divisionId = String(firstValue(eventItem.divisionId, eventItem.division, match.divisionId, match.division, team.divisionId, 'default'))
+    return {
+      id: divisionId,
+      name: String(firstValue(eventItem.divisionName, match.divisionName, team.divisionName, divisionNameMap[divisionId], '默认组别')),
+      groupName: String(firstValue(eventItem.groupName, eventItem.drawGroup, match.groupName, match.drawGroup, teamGroupMap[divisionId + ':' + teamId], '联赛'))
+    }
+  }
+  function addCount(target, eventItem) {
+    const name = eventPlayerName(eventItem)
+    if (!name) return
+    const embedded = eventItem.player && typeof eventItem.player === 'object' ? eventItem.player : {}
+    const embeddedTeam = eventItem.team && typeof eventItem.team === 'object' ? eventItem.team : {}
+    const teamId = String(firstValue(eventItem.teamId, embeddedTeam._id, embeddedTeam.id, typeof eventItem.team === 'string' ? eventItem.team : '', embedded.teamId, '') || '')
+    const playerId = eventPlayerId(eventItem)
+    const division = eventDivision(eventItem, teamId)
+    const key = (playerId || name) + ':' + teamId + ':' + division.id + ':' + division.groupName
+    if (!target[key]) target[key] = {
+      playerId,
+      playerName: name,
+      playerAvatar: String(firstValue(eventItem.playerAvatar, eventItem.playerPhoto, eventItem.photoUrl, eventItem.avatarUrl, embedded.photoUrl, embedded.photo, embedded.avatarUrl, '') || ''),
+      teamId,
+      teamName: String(firstValue(eventItem.teamName, embeddedTeam.name, embedded.teamName, '') || ''),
+      divisionId: division.id,
+      divisionName: division.name,
+      groupName: division.groupName,
+      count: 0
+    }
+    target[key].count += 1
+  }
+  events.forEach(item => {
+    const type = String(item.type || '').toLowerCase()
+    if (type === 'goal' || type === 'own_goal') addCount(goals, item)
+    if (['yellow_card', 'yellow', 'yellowcard'].indexOf(type) >= 0) addCount(yellow, item)
+    if (['red_card', 'red', 'redcard', 'second_yellow'].indexOf(type) >= 0) addCount(red, item)
+  })
+  const eventPlayerIds = unique(events.map(eventPlayerId).filter(Boolean)).slice(0, 100)
+  const eventPlayerNames = unique(events.map(eventPlayerName).filter(Boolean)).slice(0, 100)
+  const playerQueries = []
+  if (eventPlayerIds.length) playerQueries.push(safeGet('players', { _id: _.in(eventPlayerIds) }, 100))
+  if (eventPlayerNames.length) playerQueries.push(safeGet('players', { name: _.in(eventPlayerNames) }, 100))
+  const playerRows = (await Promise.all(playerQueries)).reduce((all, rows) => all.concat(rows || []), [])
+  const playersById = {}
+  const playersByTeamName = {}
+  const playersByName = {}
+  playerRows.forEach(player => {
+    const playerId = String(player._id || '')
+    const teamId = String(firstValue(player.teamId, player.sourceTeamId, '') || '')
+    const name = String(player.name || '').trim()
+    if (playerId) playersById[playerId] = player
+    if (teamId && name) playersByTeamName[teamId + ':' + name] = player
+    if (teamId && name && teamMap[teamId]) {
+      if (playersByName[name] === undefined) playersByName[name] = player
+      else if (playersByName[name] && String(playersByName[name]._id || '') !== playerId) playersByName[name] = null
+    }
+  })
+  function ranking(source) {
+    return Object.keys(source).map(key => {
+      const item = source[key]
+      const player = playersById[item.playerId] || playersByTeamName[item.teamId + ':' + item.playerName] || playersByName[item.playerName] || {}
+      const resolvedTeamId = String(firstValue(item.teamId, player.teamId, player.sourceTeamId, '') || '')
+      const team = teamMap[resolvedTeamId] || {}
+      const itemDivisionId = String(item.divisionId || '')
+      const divisionId = itemDivisionId && itemDivisionId !== 'default' ? itemDivisionId : String(firstValue(team.divisionId, 'default'))
+      const itemGroupName = String(item.groupName || '')
+      const groupName = itemGroupName && itemGroupName !== '联赛' ? itemGroupName : String(firstValue(teamGroupMap[divisionId + ':' + resolvedTeamId], itemGroupName, '联赛'))
+      return Object.assign({}, item, {
+        playerId: String(firstValue(item.playerId, player._id, '')),
+        playerAvatar: String(firstValue(item.playerAvatar, player.photoUrl, player.photo, player.avatarUrl, '') || ''),
+        teamName: String(firstValue(team.teamName, team.name, item.teamName, player.teamName, '') || ''),
+        teamId: resolvedTeamId,
+        teamLogo: String(firstValue(team.teamLogo, team.logo, item.teamLogo, player.teamLogo, '') || ''),
+        divisionId,
+        divisionName: String(firstValue(item.divisionName, team.divisionName, divisionNameMap[divisionId], '默认组别')),
+        groupName
+      })
+    }).sort((a, b) => b.count - a.count || a.playerName.localeCompare(b.playerName, 'zh-CN')).slice(0, 200)
+  }
+  return {
+    success: true,
+    tournament: operations.tournament,
+    divisions: operations.divisions || [],
+    divisionGroups: operations.divisionGroups || [],
+    standings,
+    goalsRanking: ranking(goals),
+    yellowCards: ranking(yellow),
+    redCards: ranking(red),
+    eventCount: events.length
+  }
 }
 
 async function teamParticipationForWorkspace(event, identity) {
@@ -2823,7 +3521,23 @@ async function teamParticipationForWorkspace(event, identity) {
   const team = teams.filter(item => String(item._id) === teamId)[0]
   if (!team) throw new Error('球队不属于当前工作空间')
   const registrations = await safeGet('tournament_teams', { teamId }, 200)
-  const ids = unique(registrations.map(item => item.tournamentId))
+  const hiddenStatuses = ['cancelled', 'withdrawn', 'rejected', 'replaced', 'invite_cancelled']
+  const statusPriority = { approved: 90, confirmed: 80, active: 80, accepted: 75, claimed: 70, pending: 60, reviewing: 55, invited: 40, draft: 20 }
+  const groupedRegistrations = {}
+  registrations.forEach(item => {
+    const tournamentId = String(item.tournamentId || '')
+    const status = String(item.status || 'pending').toLowerCase()
+    if (!tournamentId || hiddenStatuses.indexOf(status) >= 0) return
+    const divisionId = registrationDivisionId(item)
+    const divisionNameKey = String(firstValue(item.divisionName, item.groupName, '')).replace(/\s+/g, '').toLowerCase()
+    const key = tournamentId + ':' + (divisionNameKey ? 'name:' + divisionNameKey : 'id:' + divisionId)
+    const current = groupedRegistrations[key]
+    const currentPriority = current ? Number(statusPriority[String(current.status || '').toLowerCase()] || 0) : -1
+    const itemPriority = Number(statusPriority[status] || 0)
+    if (!current || itemPriority > currentPriority || (itemPriority === currentPriority && toTime(item.updateTime || item.createTime) > toTime(current.updateTime || current.createTime))) groupedRegistrations[key] = item
+  })
+  const uniqueRegistrations = Object.keys(groupedRegistrations).map(key => groupedRegistrations[key])
+  const ids = unique(uniqueRegistrations.map(item => item.tournamentId))
   const tournaments = ids.length ? await safeGet('tournaments', { _id: _.in(ids) }, 200) : []
   const tournamentMap = {}; tournaments.forEach(item => { tournamentMap[String(item._id)] = item })
   const registrationsByTournament = {}
@@ -2833,52 +3547,99 @@ async function teamParticipationForWorkspace(event, identity) {
     if (!registrationsByTournament[key]) registrationsByTournament[key] = []
     registrationsByTournament[key].push(item)
   })
-  const items = await Promise.all(registrations.map(async item => {
+  const items = await Promise.all(uniqueRegistrations.map(async item => {
     const tournamentId = String(item.tournamentId || '')
     const tournament = tournamentMap[tournamentId] || {}, status = String(item.status || 'pending')
-    const divisionId = registrationDivisionId(item)
-    const divisionName = String(firstValue(item.divisionName, tournament.divisionName, '默认组别'))
     const sameTournamentRegistrations = registrationsByTournament[tournamentId] || []
-    const allowLegacySnapshot = unique(sameTournamentRegistrations.map(registrationDivisionId)).length === 1
+    const divisionName = String(firstValue(item.divisionName, tournament.divisionName, '默认组别'))
+    const divisionNameKey = divisionName.replace(/\s+/g, '').toLowerCase()
+    const sameDivisionRegistrations = sameTournamentRegistrations.filter(row => String(firstValue(row.divisionName, row.groupName, tournament.divisionName, '默认组别')).replace(/\s+/g, '').toLowerCase() === divisionNameKey)
+    const explicitDivisionId = sameDivisionRegistrations.map(registrationDivisionId).find(value => value && value !== 'default')
+    const divisionId = explicitDivisionId || registrationDivisionId(item)
+    const logicalDivisionKeys = unique(sameTournamentRegistrations.map(row => {
+      const nameKey = String(firstValue(row.divisionName, row.groupName, '')).replace(/\s+/g, '').toLowerCase()
+      return nameKey ? 'name:' + nameKey : 'id:' + registrationDivisionId(row)
+    }))
+    const allowLegacySnapshot = logicalDivisionKeys.length === 1
     const rosters = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
       .filter(snapshot => snapshotMatchesDivision(snapshot, divisionId, allowLegacySnapshot))
     const roster = rosters.sort((a,b)=>toTime(b.updateTime)-toTime(a.updateTime))[0]
     const matches = (await safeGet('matches', { tournamentId }, 300)).filter(row => {
       const involved = [String(row.homeTeamId || ''), String(row.awayTeamId || '')].indexOf(teamId) >= 0 || [String(row.homeTeamName || ''), String(row.awayTeamName || '')].indexOf(String(team.name || '')) >= 0
       return involved && snapshotMatchesDivision(row, divisionId, allowLegacySnapshot)
-    }).sort((a, b) => (matchDateTimeMs(a) || Number.MAX_SAFE_INTEGER) - (matchDateTimeMs(b) || Number.MAX_SAFE_INTEGER))
+    }).sort((a,b) => {
+      const left = matchDateTimeMs(a) || Number.MAX_SAFE_INTEGER
+      const right = matchDateTimeMs(b) || Number.MAX_SAFE_INTEGER
+      return left - right
+    })
     const completedStatuses = ['completed', 'finished', 'archived']
     const matchRows = matches.map(row => {
       const rawStatus = String(row.status || 'scheduled').toLowerCase()
+      const matchTimeMs = matchDateTimeMs(row)
+      const matchDate = matchTimeMs ? new Date(matchTimeMs) : null
+      const now = new Date()
+      const isToday = Boolean(matchDate && matchDate.getFullYear() === now.getFullYear() && matchDate.getMonth() === now.getMonth() && matchDate.getDate() === now.getDate())
       const homeTeamId = String(row.homeTeamId || '')
       const isHome = homeTeamId === teamId || (!homeTeamId && String(row.homeTeamName || '') === String(team.name || ''))
       const opponentName = isHome ? String(row.awayTeamName || '客队待定') : String(row.homeTeamName || '主队待定')
       const statusText = ({ scheduled: '待开始', pending: '待开始', checked_in: '已报到', ongoing: '进行中', live: '进行中', finished: '已结束', completed: '已结束', archived: '已归档', postponed: '已延期', cancelled: '已取消' })[rawStatus] || '待确认'
       return {
-        id: String(row._id), dateText: matchDateText(row), timeText: matchTimeValue(row), opponentName,
-        sideText: isHome ? '主场' : '客场', roundText: String(firstValue(row.roundName, row.roundText, row.round, '轮次待定')),
-        venueText: String(firstValue(row.venue, row.field, row.location, row.fieldName, '场地待定')),
-        status: rawStatus, statusText,
+        id: String(row._id),
+        dateText: matchDateText(row),
+        timeText: matchTimeValue(row),
+        opponentName,
+        sideText: isHome ? '主场' : '客场',
+        roundText: String(firstValue(row.roundName, row.roundText, row.round, '轮次待定')),
+        venueText: String(firstValue(row.venue, row.field, row.location, '场地待定')),
+        status: rawStatus,
+        statusText,
         statusClass: completedStatuses.indexOf(rawStatus) >= 0 ? 'match-status-done' : (['ongoing', 'live'].indexOf(rawStatus) >= 0 ? 'match-status-live' : 'match-status-wait'),
+        isToday,
         canSubmitLineup: ['scheduled', 'pending', 'checked_in'].indexOf(rawStatus) >= 0
       }
     })
-    const next = matchRows.find(row => completedStatuses.indexOf(row.status) < 0)
-    const normalizedStatus = status.toLowerCase()
+    const next = matchRows.find(row => ['completed', 'finished', 'archived', 'cancelled'].indexOf(row.status) < 0)
+    const normalizedStatus = String(status || 'pending').toLowerCase()
     const hasOngoingMatch = matchRows.some(row => ['ongoing', 'live'].indexOf(row.status) >= 0)
-    const hasCompletedMatch = matchRows.length > 0 && matchRows.every(row => completedStatuses.indexOf(row.status) >= 0 || row.status === 'cancelled')
+    const hasCompletedMatch = matchRows.length > 0 && matchRows.every(row => ['completed', 'finished', 'archived', 'cancelled'].indexOf(row.status) >= 0)
+    const hasTodayMatch = matchRows.some(row => row.isToday)
     const competitionStatus = hasOngoingMatch ? 'ongoing' : (hasCompletedMatch ? 'completed' : 'not_started')
+    const competitionFilter = hasTodayMatch ? 'today' : (hasCompletedMatch ? 'completed' : 'upcoming')
     return {
-      id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '赛事'), divisionName, status,
+      id: tournamentId + ':' + divisionId,
+      registrationId: String(item._id),
+      tournamentId,
+      divisionId,
+      name: String(tournament.name || '赛事'),
+      divisionName,
+      status,
       statusText: ['approved', 'confirmed', 'active', 'accepted', 'claimed'].indexOf(normalizedStatus) >= 0 ? '已参赛' : '待确认',
       statusClass: ['approved', 'confirmed', 'active', 'accepted', 'claimed'].indexOf(normalizedStatus) >= 0 ? 'state-ok' : 'state-wait',
       rosterText: roster ? (String(roster.status || '') === 'approved' ? '正式名单已审核' : '正式名单待处理') : '尚未提交正式名单',
-      matches: matchRows, matchCount: matchRows.length, hasMatches: matchRows.length > 0, competitionStatus,
-      nextMatchId: next ? next.id : '', nextMatchText: next ? next.dateText + ' ' + next.timeText : '赛程待公布',
-      actionText: '查看赛事', actionClass: 'event-secondary'
+      matches: matchRows,
+      matchCount: matchRows.length,
+      hasMatches: matchRows.length > 0,
+      competitionStatus,
+      competitionFilter,
+      nextMatchId: next ? next.id : '',
+      nextMatchText: next ? next.dateText + ' ' + next.timeText : '赛程待公布',
+      actionText: '查看赛事',
+      actionClass: 'event-secondary'
     }
   }))
-  return { success: true, team: { id: teamId, name: String(team.name || ''), logo: String(firstValue(team.logo, team.logoUrl, team.teamLogo, '') || '') }, items, canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
+  // 历史报名关系可能同时存在“待确认”和“已参赛”等重复记录。
+  // 页面展示口径是球队 + 赛事 + 标准化组别名称，每个逻辑参赛关系只保留一张卡片。
+  const displayPriority = { approved: 90, confirmed: 80, active: 80, accepted: 75, claimed: 70, pending: 60, reviewing: 55, invited: 40, draft: 20 }
+  const displayItems = {}
+  items.forEach(item => {
+    const divisionNameKey = String(item.divisionName || '').replace(/\s+/g, '').toLowerCase()
+    const key = String(item.tournamentId || '') + ':' + (divisionNameKey ? 'name:' + divisionNameKey : 'id:' + String(item.divisionId || 'default'))
+    const current = displayItems[key]
+    const currentPriority = current ? Number(displayPriority[String(current.status || '').toLowerCase()] || 0) : -1
+    const itemPriority = Number(displayPriority[String(item.status || '').toLowerCase()] || 0)
+    if (!current || itemPriority > currentPriority || (itemPriority === currentPriority && String(item.registrationId || '') > String(current.registrationId || ''))) displayItems[key] = item
+  })
+  return { success: true, team: { id: teamId, name: String(team.name || ''), logo: String(firstValue(team.logo, team.logoUrl, team.teamLogo, '') || '') }, items: Object.keys(displayItems).map(key => displayItems[key]), canManage: (result.workspace.permissions || []).indexOf('team.manage') >= 0 }
 }
 
 async function teamTournamentDetailForWorkspace(event, identity) {
@@ -2909,24 +3670,47 @@ async function teamTournamentDetailForWorkspace(event, identity) {
   if (!division && Array.isArray(tournament.divisions)) division = tournament.divisions.find(item => String(item && (item._id || item.id) || '') === divisionId) || null
   division = division || {}
 
+  const divisionName = String(firstValue(registration.divisionName, division.name, division.divisionName, ''))
   const allMatches = await safeGet('matches', { tournamentId }, 300)
   const teamMatches = allMatches.filter(item => {
     const involved = [String(item.homeTeamId || ''), String(item.awayTeamId || '')].indexOf(teamId) >= 0 || [String(item.homeTeamName || ''), String(item.awayTeamName || '')].indexOf(String(team.name || '')) >= 0
     if (!involved) return false
-    const matchDivisionId = String(item.divisionId || item.division || '')
-    return !matchDivisionId || matchDivisionId === divisionId
+    return matchMatchesDivision(item, divisionId, divisionName)
   })
   const completedStatuses = ['completed', 'finished', 'archived']
   const completedMatches = teamMatches.filter(item => completedStatuses.indexOf(String(item.status || '').toLowerCase()) >= 0)
   const nextMatch = teamMatches.filter(item => completedStatuses.indexOf(String(item.status || '').toLowerCase()) < 0).sort((a, b) => {
-    const left = toTime(firstValue(a.matchTime, a.matchDate, a.startTime)) || Number.MAX_SAFE_INTEGER
-    const right = toTime(firstValue(b.matchTime, b.matchDate, b.startTime)) || Number.MAX_SAFE_INTEGER
+    const left = matchDateTimeMs(a) || Number.MAX_SAFE_INTEGER
+    const right = matchDateTimeMs(b) || Number.MAX_SAFE_INTEGER
     return left - right
   })[0] || null
 
   const opponentIds = unique(teamMatches.reduce((ids, item) => ids.concat([item.homeTeamId, item.awayTeamId]), []).filter(id => String(id || '') !== teamId))
   const opponentRows = opponentIds.length ? await safeGet('teams', { _id: _.in(opponentIds) }, 100) : []
   const teamMap = {}; teams.concat(opponentRows).forEach(item => { teamMap[String(item._id)] = item })
+  function teamBrief(id, fallbackName, fallbackLogo) {
+    const row = teamMap[String(id || '')] || {}
+    return { id: String(id || ''), name: String(row.name || row.teamName || fallbackName || '球队待定'), logo: String(row.logo || row.logoTransparent || row.logoOriginal || fallbackLogo || '') }
+  }
+  const scheduleMatches = teamMatches.map(item => {
+    const start = firstValue(item.matchTime, item.matchDate, item.startTime)
+    const rawStatus = String(item.status || 'scheduled').toLowerCase()
+    const home = teamBrief(item.homeTeamId, item.homeTeamName, item.homeTeamLogo)
+    const away = teamBrief(item.awayTeamId, item.awayTeamName, item.awayTeamLogo)
+    return {
+      id: String(item._id || ''),
+      dateText: matchDateText(item),
+      timeText: matchTimeValue(item),
+      venueText: String(firstValue(item.venue, item.location, item.fieldName, item.field, '场地待定')),
+      homeName: home.name,
+      homeLogo: home.logo,
+      awayName: away.name,
+      awayLogo: away.logo,
+      scoreText: ['scheduled', 'pending', 'upcoming'].indexOf(rawStatus) < 0 && item.homeScore !== undefined && item.homeScore !== null && item.awayScore !== undefined && item.awayScore !== null ? String(item.homeScore) + ' : ' + String(item.awayScore) : '- : -',
+      statusText: ({ scheduled: '待开始', pending: '待开始', checked_in: '已报到', ongoing: '进行中', live: '进行中', finished: '已结束', completed: '已结束', archived: '已归档', postponed: '已延期', cancelled: '已取消' })[rawStatus] || '待确认',
+      statusClass: ['ongoing', 'live'].indexOf(rawStatus) >= 0 ? 'match-live' : (completedStatuses.indexOf(rawStatus) >= 0 ? 'match-finished' : 'match-upcoming')
+    }
+  })
   const standings = await safeGet('standings', { tournamentId }, 200)
   const divisionStandings = standings.filter(item => {
     const itemDivisionId = String(item.divisionId || item.division || '')
@@ -2951,18 +3735,14 @@ async function teamTournamentDetailForWorkspace(event, identity) {
   const statusText = ['approved', 'confirmed', 'active', 'locked'].indexOf(registrationStatus) >= 0 ? '已确认' : (registrationStatus === 'pending' ? '审核中' : '待确认')
   const isProfessional = division.mode === 'professional' || division.isProfessional === true || String(division.ruleMode || '').toLowerCase() === 'professional'
 
-  function teamBrief(id, fallbackName, fallbackLogo) {
-    const row = teamMap[String(id || '')] || {}
-    return { id: String(id || ''), name: String(row.name || row.teamName || fallbackName || '球队待定'), logo: String(row.logo || row.logoTransparent || row.logoOriginal || fallbackLogo || '') }
-  }
   let next = null
   if (nextMatch) {
-    const start = firstValue(nextMatch.matchTime, nextMatch.matchDate, nextMatch.startTime)
+    const start = firstValue(nextMatch.startTime, nextMatch.matchDate, nextMatch.matchTime)
     next = {
       id: String(nextMatch._id || ''),
       startTime: start,
-      dateText: dateText(start),
-      timeText: start ? new Date(toTime(start)).toISOString().slice(11, 16) : '时间待定',
+      dateText: matchDateText(nextMatch),
+      timeText: matchTimeValue(nextMatch),
       venue: String(firstValue(nextMatch.venue, nextMatch.location, nextMatch.fieldName, '场地待定')),
       home: teamBrief(nextMatch.homeTeamId, nextMatch.homeTeamName, nextMatch.homeTeamLogo),
       away: teamBrief(nextMatch.awayTeamId, nextMatch.awayTeamName, nextMatch.awayTeamLogo)
@@ -2976,8 +3756,9 @@ async function teamTournamentDetailForWorkspace(event, identity) {
     division: { id: divisionId, name: String(registration.divisionName || division.name || division.divisionName || '默认组别'), modeText: (isProfessional ? 'PRO · ' : '简易 · ') + String(registration.divisionName || division.name || division.divisionName || '默认组别') },
     registration: { id: String(registration._id), status: registrationStatus, statusText },
     team: { id: teamId, name: String(team.name || team.teamName || registration.teamName || '当前球队'), logo: String(team.logo || team.logoTransparent || team.logoOriginal || registration.teamLogo || '') },
-    summary: { rank: standingIndex >= 0 ? standingIndex + 1 : 0, rankTotal: divisionStandings.length, played: Number(firstValue(standing && standing.played, standing && standing.matches, completedMatches.length, 0)), points: Number(firstValue(standing && standing.points, computedPoints, 0)) },
+    summary: { rank: standingIndex >= 0 ? standingIndex + 1 : 0, rankTotal: divisionStandings.length, played: teamMatches.length, completed: completedMatches.length, points: Number(firstValue(standing && standing.points, computedPoints, 0)) },
     roster: { exists: Boolean(roster), approved: rosterApproved, status: rosterStatus, playerCount: Array.isArray(rosterPlayers) ? rosterPlayers.length : Number(roster && roster.playerCount || 0), maxPlayers: Number(firstValue(division.maxPlayersPerTeam, division.maxPlayers, tournament.maxPlayersPerTeam, tournament.maxPlayers, 20)) },
+    matches: scheduleMatches,
     nextMatch: next,
     canSubmitLineup: Boolean(next && rosterApproved && ['approved', 'confirmed', 'active', 'locked'].indexOf(registrationStatus) >= 0)
   }
@@ -3012,15 +3793,22 @@ async function teamHistoryForWorkspace(event, identity) {
     const isExited = ['withdrawn', 'exited', 'cancelled'].indexOf(registrationStatus) >= 0
     const isArchived = archivedStatuses.indexOf(registrationStatus) >= 0 || archivedStatuses.indexOf(tournamentStatus) >= 0
     if (!isArchived) return null
-    const dataCenter = await createDataService(db).query({ platformOwner:false, teamIds:[teamId], tournamentIds:[] }, { teamId, tournamentId, ...(allowLegacySnapshot ? {} : { divisionId }) })
-    const totals = dataCenter.teams
-    const sum = field => totals.every(row => row[field] !== null) ? totals.reduce((value,row) => value + row[field],0) : null
-    const matchCount = dataCenter.summary.matchCount, wins = sum('wins'), draws = sum('draws'), losses = sum('losses')
+    const matches = await safeGet('matches', { tournamentId }, 200)
+    const teamMatches = matches.filter(row => [String(row.homeTeamId || ''), String(row.awayTeamId || '')].indexOf(teamId) >= 0 && snapshotMatchesDivision(row, divisionId, allowLegacySnapshot) && ['completed', 'finished', 'archived'].indexOf(String(row.status || '').toLowerCase()) >= 0)
+    let wins = 0, draws = 0, losses = 0
+    teamMatches.forEach(row => {
+      const isHome = String(row.homeTeamId || '') === teamId
+      const own = Number(isHome ? firstValue(row.homeScore, row.scoreHome, 0) : firstValue(row.awayScore, row.scoreAway, 0))
+      const opponent = Number(isHome ? firstValue(row.awayScore, row.scoreAway, 0) : firstValue(row.homeScore, row.scoreHome, 0))
+      if (own > opponent) wins += 1
+      else if (own < opponent) losses += 1
+      else draws += 1
+    })
     const rank = String(firstValue(item.finalRank, item.rank, item.placement, ''))
     const start = firstValue(tournament.startDate, tournament.startTime, item.startDate)
     const end = firstValue(tournament.endDate, item.endDate)
     return {
-      id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '已归档赛事'), divisionName: String(item.divisionName || tournament.divisionName || '竞赛组别待定'), dateText: dateText(start) + (end ? '—' + dateText(end) : ''), resultText: isExited ? '已退出' : (rank || '已归档'), resultClass: isExited ? 'withdrawn' : 'ranked', recordText: matchCount + '场 ' + (wins ?? '—') + '胜 ' + (draws ?? '—') + '平 ' + (losses ?? '—') + '负', archiveStatusText: isExited ? '退出记录' : '已归档'
+      id: String(item._id), tournamentId, divisionId, name: String(tournament.name || '已归档赛事'), divisionName: String(item.divisionName || tournament.divisionName || '竞赛组别待定'), dateText: dateText(start) + (end ? '—' + dateText(end) : ''), resultText: isExited ? '已退出' : (rank || '已归档'), resultClass: isExited ? 'withdrawn' : 'ranked', recordText: teamMatches.length + '场 ' + wins + '胜 ' + draws + '平 ' + losses + '负', archiveStatusText: isExited ? '退出记录' : '已归档'
     }
   }))
   const history = items.filter(Boolean).sort((a, b) => String(b.dateText).localeCompare(String(a.dateText)))
@@ -3134,20 +3922,41 @@ async function listMatchExceptionsForWorkspace(event, identity) {
   return { success: true, reports: reports.sort(function(a, b) { return toTime(b.updateTime || b.createdAt) - toTime(a.updateTime || a.createdAt) }).map(function(item) { return { id: String(item._id), type: String(item.type || ''), description: String(item.description || ''), status: String(item.status || 'reported'), reporterName: String(item.reporterName || ''), createdAtText: dateText(item.createdAt), timeline: Array.isArray(item.timeline) ? item.timeline.slice(-8).map(function(row) { return { type: String(row.type || ''), text: String(row.text || ''), actor: String(row.actor || ''), atText: dateText(row.at) } }) : [] } }) }
 }
 
+const playerAccountTransfer = createPlayerAccountTransfer({
+  db,
+  invitePreview: teamPlayerInviteForWorkspace,
+  teamPlayers: safeGetTeamPlayers,
+  ensureProfileInvite: ensureParentProfileInviteForPlayer,
+  profileInviteUrl: parentProfileInviteUrl,
+  verifiedPhone: verifiedUserPhone,
+  error: workspaceError,
+  toTime
+})
+
 exports.main = async function(event) {
   event = event || {}
   try {
     const identity = await findCurrentUser()
+    if (event.action === 'playerCardRead') {
+      const reader = require('./playerCardReader.cjs')
+      const playerId = String(event.playerId || '').trim()
+      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(playerId)) return {success:false,error:'球员编号无效'}
+      const player = await reader.document(db,'players',playerId)
+      if (!player) return {success:true,status:'unavailable',cardUrl:'',playerId}
+      const self = [player.linkedUserId,player.playerUserId,player.guardianUserId].some(id=>id && String(id)===String(identity.user._id))
+      if (!self) await loadTeamPlayerDetailForWorkspace({...event,playerId,teamId:String(player.teamId || event.teamId || '')},identity)
+      const [card] = await reader.readCards(cloud,db,[player])
+      return {success:true,...card}
+    }
+
+
     if (event.action === 'messages') {
       const scoped = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
       const messages = await loadMessagesForWorkspace(scoped.workspace, identity.user, identity.openId)
       return Object.assign({ success: true, workspaceId: scoped.workspace.id }, messages)
     }
     if (event.action === 'markMessageRead') return await markMessagesRead(event, identity)
-    if (event.action === 'dismissWorkspaceTask') return await dismissWorkspaceTask(event, identity)
     if (event.action === 'setHomeIdentity') return await saveHomeIdentity(event, identity)
-    if (event.action === 'tournamentData') return await tournamentDataForWorkspace(event,identity)
-    if (event.action === 'dataCenter') return await dataCenterForWorkspace(event, identity)
     if (event.action === 'teamPlayers') return await loadTeamPlayersForWorkspace(event, identity)
     if (event.action === 'importedPlayerDrafts') return await importedPlayerDraftsForWorkspace(event, identity)
     if (event.action === 'reviewImportedPlayerDrafts') return await reviewImportedPlayerDraftsForWorkspace(event, identity)
@@ -3185,6 +3994,13 @@ exports.main = async function(event) {
     if (event.action === 'createTeamPlayerInvite') return await createTeamPlayerInviteForWorkspace(event, identity)
     if (event.action === 'teamPlayerInvite') return await teamPlayerInviteForWorkspace(event, identity)
     if (event.action === 'acceptTeamPlayerInvite') return await acceptTeamPlayerInviteForWorkspace(event, identity)
+    if (event.action === 'requestPlayerAccountTransfer') return await playerAccountTransfer.request(event, identity)
+    if (event.action === 'inspectPlayerAccountTransfer') return await playerAccountTransfer.inspect(event, identity)
+    if (event.action === 'adoptIncompletePlayer') return await playerAccountTransfer.adoptIncomplete(event, identity)
+    if (event.action === 'beginPlayerAccountTransfer') return await playerAccountTransfer.begin(event, identity)
+    if (event.action === 'redeemPlayerAccountTransfer') return await playerAccountTransfer.finish(event, identity)
+    if (event.action === 'tournamentOperations') return await tournamentOperationsForWorkspace(event, identity)
+    if (event.action === 'tournamentData') return await tournamentDataForWorkspace(event, identity)
     if (event.action === 'teamParticipation') return await teamParticipationForWorkspace(event, identity)
     if (event.action === 'teamTournamentDetail') return await teamTournamentDetailForWorkspace(event, identity)
     if (event.action === 'teamHistory') return await teamHistoryForWorkspace(event, identity)
@@ -3220,22 +4036,22 @@ exports.main = async function(event) {
     const hostedRegistrations = Array.isArray(tournamentResult)
       ? []
       : (tournamentResult.hostedRegistrations || [])
-    if (current.type === 'team' && canViewEvents) {
-      registrations = await safeGet('tournament_teams', { teamId: current.teamId }, 100)
-      const ids = unique(registrations.map(item => item.tournamentId))
-      if (ids.length) {
-        const participated = await safeGet('tournaments', { _id: _.in(ids) }, 100)
-        participated.forEach(item => {
-          item.workspaceRelation = 'participating'
-          tournaments.push(item)
-        })
-      }
-    }
     const matches = canViewEvents
       ? await loadMatches(current, tournaments, teams)
       : []
+    const tournamentSummaryMap = {}
+    tournaments.forEach(item => {
+      const tournamentId = String(item._id || '')
+      const activeRegistrations = registrations.filter(row => String(row.tournamentId || '') === tournamentId && ['cancelled', 'withdrawn', 'rejected', 'replaced'].indexOf(String(row.status || '').toLowerCase()) < 0)
+      tournamentSummaryMap[tournamentId] = {
+        teamCount: unique(activeRegistrations.map(row => row.teamId)).length,
+        matchCount: matches.filter(row => String(row.tournamentId || '') === tournamentId && String(row.status || '').toLowerCase() !== 'cancelled').length
+      }
+    })
+    const matchTeamIds = unique(matches.reduce((ids, item) => ids.concat([matchTeamId(item, 'home'), matchTeamId(item, 'away')]), []))
+    const matchTeams = matchTeamIds.length ? await safeGet('teams', { _id: _.in(matchTeamIds) }, 300) : []
     const teamMap = {}
-    teams.forEach(team => { teamMap[team._id] = team })
+    teams.concat(matchTeams).forEach(team => { teamMap[team._id] = team })
     const eventSchedule = matches
       .map(item => formatMatch(item, teamMap))
       .sort((a, b) => a.time - b.time)
@@ -3260,10 +4076,7 @@ exports.main = async function(event) {
       await Promise.all(staleDraftRows.map(item => db.collection('tournament_tasks').doc(item._id).update({ data: { status: 'completed', completedAt: db.serverDate(), updateTime: db.serverDate() } }).catch(() => null)))
     }
     const activeDraftRows = scopedRegistrationDraftRows.filter(item => staleDraftRows.indexOf(item) < 0)
-    const rawEventTasks = buildRegistrationDraftTasks(activeDraftRows).concat(buildTasks(registrations), buildOrganizerTasks(hostedRegistrations))
-    const taskDismissals = await safeGet('task_dismissals', { userId:String(identity.user._id || ''), status:'dismissed' }, 300)
-    const dismissedTaskIds = new Set(taskDismissals.map(item => String(item.taskId || '')))
-    const eventTasks = rawEventTasks.filter(item => !item.dismissible || !dismissedTaskIds.has(String(item.id || '')))
+    const eventTasks = buildRegistrationDraftTasks(activeDraftRows).concat(buildTasks(registrations), buildOrganizerTasks(hostedRegistrations))
     const tasks = eventTasks.concat(education.tasks)
     const teamIds = unique(teams.map(item => item._id))
     const players = canViewTeams && teamIds.length
@@ -3303,7 +4116,7 @@ exports.main = async function(event) {
       currentIdentity: resolveHomeIdentity(current, identity.user),
       modules: buildModules(current),
       teams: teams.map(team => formatTeam(team, teamSummaryMap[String(team._id)])),
-      tournaments: tournaments.map(formatTournament),
+      tournaments: tournaments.map(item => formatTournament(item, tournamentSummaryMap[String(item._id || '')])),
       registrations: registrations.map(item => ({ tournamentId: String(item.tournamentId || ''), teamId: String(item.teamId || ''), divisionId: registrationDivisionId(item), status: String(item.status || '') })),
       schedule,
       eventSchedule,
@@ -3334,5 +4147,48 @@ exports.main = async function(event) {
       code: error.code || 'WORKSPACE_LOAD_FAILED',
       message: error.message || '工作空间加载失败'
     }
+  }
+}
+
+// Unified lifecycle response decorator: preserve authorization and mutation handlers.
+const workspaceMainBeforeLifecycle = exports.main
+exports.main = async function(event, context) {
+  const result = await workspaceMainBeforeLifecycle(event, context)
+  try {
+    return await require('./data-center/lifecycle-reader.cjs').decorateLifecycleResult(db, result)
+  } catch (error) {
+    return { success: false, code: error.code || 'LIFECYCLE_READ_FAILED', message: error.message || '赛事状态读取失败，请刷新重试' }
+  }
+}
+
+// Add active-version card metadata only after the original workspace authorization succeeds.
+const workspaceMain = exports.main
+exports.main = async (event,context) => {
+  if (event?.action === 'playerCardBatchRead') {
+    try {
+    const response = await workspaceMain({...event,action:'teamPlayers'},context)
+    if (!response?.success) return response
+    const requested = new Set((Array.isArray(event.playerIds)?event.playerIds:[]).map(String))
+    if (requested.size>100) return {success:false,message:'一次最多读取100名球员'}
+    const reader = require('./playerCardReader.cjs')
+    const allowed = (response.players||[]).filter(player=>requested.has(String(player._id || player.id || '')))
+    const sources = await Promise.all(allowed.map(player=>reader.document(db,'players',String(player._id || player.id))))
+    const cards = await reader.readCards(cloud,db,sources.map((player,index)=>player||{_id:allowed[index].id}))
+    return {success:true,cards}
+    } catch(error) { return {success:false,code:'PLAYER_CARD_READ_FAILED',message:'球员卡读取失败，请重试'} }
+  }
+  const result = await workspaceMain(event,context)
+  if (!result?.success || !['teamPlayers','teamPlayerDetail','matchLineup'].includes(String(event?.action || ''))) return result
+  const reader = require('./playerCardReader.cjs')
+  const items = result.player ? [result.player] : (result.players || [])
+  try {
+    const rows = await Promise.all(items.map(item=>reader.document(db,'players',String(item._id || item.id || ''))))
+    const cards = await reader.readCards(cloud,db,rows.map((row,index)=>row || {_id:items[index]._id || items[index].id}))
+    const attached = items.map((item,index)=>({...item,cardUrl:cards[index].cardUrl,cardState:cards[index].status,cardTypeId:cards[index].cardTypeId,templateId:cards[index].templateId,publishedVersion:cards[index].publishedVersion,cardDataVersion:cards[index].cardDataVersion,renderVersion:cards[index].renderVersion,cardProtocolVersion:cards[index].protocolVersion}))
+    return result.player ? {...result,player:attached[0]} : {...result,players:attached}
+  } catch (error) {
+    console.error('[player-card-read]',error.message)
+    const attached = items.map(item=>({...item,cardUrl:'',cardState:'failed',cardStatus:'failed'}))
+    return result.player ? {...result,player:attached[0]} : {...result,players:attached,cardAssetsError:true}
   }
 }
