@@ -1,12 +1,13 @@
 const crypto = require('node:crypto')
 const { renderCard } = require('./playerCardRender.cjs')
+const preload = require('./playerCardPreload.cjs')
 
 const TEMPLATES = 'player_card_templates'
 const VERSIONS = 'player_card_template_versions'
 const STATES = 'player_card_template_states'
 const RENDERS = 'player_card_renders'
 const JOBS = 'player_card_publish_jobs'
-const {RENDER_VERSION} = require('./playerCardReader.cjs')
+const {RENDER_VERSION}=require('./playerCardReader.cjs')
 const TYPES = ['bronze', 'silver', 'gold']
 
 const dataOf = result => Array.isArray(result && result.data) ? result.data[0] : result && result.data
@@ -20,9 +21,10 @@ async function document(db, collection, id) {
 const versionId = (templateId, version) => `${templateId}_${version}`
 const renderId = (playerId, templateId, version) => `${playerId}_${templateId}_${version}`
 
-async function activeTemplate(db, tier) {
+async function activeTemplate(db, tier, scope, templateId) {
   if (!TYPES.includes(String(tier))) return null
-  const state = await document(db, STATES, tier)
+  let state = await document(db, STATES, preload.stateId(tier, scope, templateId))
+  if (!state && templateId) { const base = await document(db,STATES,tier); if(base?.active?.templateId === templateId) state=base }
   if (!state || !state.active) return null
   const snapshot = await document(db, VERSIONS, versionId(state.active.templateId, state.active.version))
   return snapshot ? { ...snapshot, stateRevision: Number(state.revision || 0) } : null
@@ -77,16 +79,26 @@ async function generate(cloud, db, player, snapshot, score, overrides = {}) {
   return { fileId: file.fileID, digest, facts: result.facts, portraitId: result.portraitId }
 }
 
-async function savedPlayers(db, tier) {
+async function savedPlayers(db, tier, scopeValue, templateId) {
+  const scope = preload.normalizePreload(scopeValue)
+  let allowedIds = null
+  if (templateId) {
+    const grants = await preload.readAll(db, 'player_card_library', {templateId})
+    const players = []
+    for (const grant of grants) {
+      if (!grant.fileId) continue
+      const player = await document(db, 'players', grant.playerId)
+      if (player) players.push({...player, playerCardSourceFileId:grant.portraitFileId || player.playerCardSourceFileId, playerCardCrop:grant.crop || player.playerCardCrop, preloadLibraryVersion:Number(grant.revision || 0)})
+    }
+    return players
+  }
+  if (scope.type === 'tournament') allowedIds = await preload.tournamentPlayerIds(db, scope.targetId)
   const rows = []
   let after = ''
   for (;;) {
     const where = after ? { _id: db.command.gt(after) } : {}
-    const page = (await db.collection('players').where(where).field({_id:true,playerCardFileId:true,playerCardBackgroundId:true,playerCardTier:true,playerCardVersion:true}).orderBy('_id', 'asc').limit(100).get()).data || []
-    for (const player of page) {
-      if (player.playerCardFileId && !TYPES.includes(String(player.playerCardBackgroundId || player.playerCardTier || ''))) throw new Error('历史成卡缺少卡种关联，需先修复后发布')
-      if (player.playerCardFileId && String(player.playerCardBackgroundId || player.playerCardTier || '') === tier) rows.push(player)
-    }
+    const page = (await db.collection('players').where(where).orderBy('_id', 'asc').limit(100).get()).data || []
+    for (const player of page) if ((scope.type === 'platform' || (scope.type === 'player' && String(player._id) === scope.targetId) || (scope.type === 'team' && String(player.teamId || '') === scope.targetId) || (scope.type === 'tournament' && allowedIds.has(String(player._id)))) && player.playerCardFileId && String(player.playerCardBackgroundId || player.playerCardTier || '') === tier) rows.push(player)
     if (page.length < 100) return rows
     after = String(page[page.length - 1]._id)
   }

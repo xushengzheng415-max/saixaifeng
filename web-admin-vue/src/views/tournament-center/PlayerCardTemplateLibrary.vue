@@ -2,31 +2,49 @@
   <section class="card-library">
     <div class="library-head">
       <div><h2>球员卡模板</h2><span>背景与黑白遮罩使用同一张 300 × 430 画布</span></div>
-      <el-button type="primary" @click="startCreate">新建模板</el-button>
+      <el-button type="primary" @click="startCreate">新建卡片</el-button>
     </div>
     <el-alert v-if="!backendReady && !loading" title="模板保存和发布服务尚未开放，当前调整仅在本页保留" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false"><template #default><el-button link @click="load">重试</el-button></template></el-alert>
     <div class="library-body" v-loading="loading">
       <aside class="template-list" aria-label="模板列表">
-        <button v-for="item in templates" :key="item.id" type="button" :class="{ selected: form.id === item.id || (!form.id && form.tier === item.tier) }" @click="select(item)">
+        <label class="preload-filter">预装分类<el-select v-model="category"><el-option label="全部" value="all" /><el-option v-for="scope in PRELOAD_TYPES" :key="scope.value" :label="scope.label" :value="scope.value" /></el-select></label>
+        <button v-for="item in visibleTemplates" :key="item.id" type="button" :class="{ selected: form.id === item.id || (!form.id && form.tier === item.tier) }" @click="select(item)">
           <img v-if="item.backgroundUrl" :src="item.backgroundUrl" alt="">
-          <span><strong>{{ item.title }}</strong><small>{{ tierName(item.tier) }} · {{ statusName(item) }}</small></span>
+          <span><strong>{{ item.title }}</strong><small>{{ tierName(item.tier) }} · {{ statusName(item) }} · {{ preloadName(item.preload) }}{{ item.preload?.targetName ? ' · ' + item.preload.targetName : '' }}</small></span>
         </button>
-        <div v-if="!templates.length && !loading" class="list-empty">暂无模板</div>
+        <div v-if="!visibleTemplates.length && !loading" class="list-empty">暂无模板</div>
         <el-button v-if="nextCursor" text @click="loadMore" :loading="loadingMore">加载更多</el-button>
       </aside>
 
       <div class="template-workspace">
         <div class="editor-fields">
-          <div class="form-head"><strong>{{ form.id ? '编辑模板' : '新建模板' }}</strong><el-tag v-if="form.id" :type="form.status === 'published' ? 'success' : 'info'">{{ statusName(form) }}</el-tag></div>
+          <div class="form-head"><strong>{{ form.id ? '编辑卡片' : '新建卡片' }}</strong><el-tag v-if="form.id" :type="form.status === 'published' ? 'success' : 'info'">{{ statusName(form) }}</el-tag></div>
           <label>模板名称<el-input v-model.trim="form.title" maxlength="30" @input="dirty = true" /></label>
           <label>适用等级<el-select v-model="form.tier" :disabled="Boolean(form.id)" @change="dirty = true"><el-option label="铜卡" value="bronze" /><el-option label="银卡" value="silver" /><el-option label="金卡" value="gold" /></el-select></label>
+          <label>预装分类<el-select v-model="form.preload.type" :disabled="Boolean(form.publishedVersion) || publishing" @change="changePreload"><el-option v-for="scope in PRELOAD_TYPES" :key="scope.value" :label="scope.label" :value="scope.value" /></el-select></label>
+          <label v-if="form.preload.type !== 'platform'">预装{{ preloadName(form.preload) }}
+            <el-select v-model="form.preload.targetId" filterable remote :remote-method="searchTargets" :loading="targetsLoading" :disabled="Boolean(form.publishedVersion) || publishing" placeholder="搜索名称" @visible-change="openTargets" @change="chooseTarget">
+              <el-option v-for="target in targetOptions" :key="target.id" :value="target.id" :label="target.name + ' · ' + target.id" />
+              <template #footer><el-button v-if="targetCursor" link :loading="targetsLoading" @click="loadTargetPage(true)">加载更多</el-button></template>
+            </el-select>
+          </label>
+          <p v-if="targetsError" class="field-error" role="alert">{{ targetsError }} <el-button link @click="searchTargets(targetKeyword)">重试</el-button></p>
           <div class="file-fields">
             <label class="file-picker"><strong>背景 PNG</strong><span class="file-target">{{ form.backgroundUrl ? '更换背景' : '上传背景' }}</span><input type="file" accept=".png,image/png" aria-label="选择背景 PNG" @change="chooseFile($event, 'background')"><small v-if="selectedFiles.background">{{ selectedFiles.background }} · 待保存</small></label>
             <label class="file-picker"><strong>黑白遮罩 PNG</strong><span class="file-target">{{ form.maskUrl ? '更换遮罩' : '上传遮罩' }}</span><input type="file" accept=".png,image/png" aria-label="选择黑白遮罩 PNG" @change="chooseFile($event, 'mask')"><small v-if="selectedFiles.mask">{{ selectedFiles.mask }} · 待保存</small></label>
           </div>
           <p v-if="uploadError" class="field-error" role="alert">{{ uploadError }}</p>
           <p v-else-if="selectedFiles.background || selectedFiles.mask" class="file-feedback" role="status">素材已选入；保存草稿后生效。</p>
+          <div class="layout-presets">
+            <strong>排版模板</strong>
+            <el-select v-model="selectedLayoutPreset" filterable remote :remote-method="searchLayoutPresets" :loading="layoutsLoading" :disabled="layoutApplying" placeholder="选择模板" no-data-text="暂无模板" no-match-text="未找到模板" @visible-change="openLayoutPresets">
+              <el-option v-for="preset in layoutPresets" :key="preset.id" :label="preset.title" :value="preset.id" />
+              <template #footer><el-button v-if="layoutCursor" link :loading="layoutsLoading" @click="loadLayoutPresets(true)">加载更多</el-button></template>
+            </el-select>
+            <div class="layout-actions"><el-button size="small" :loading="layoutSaving" :disabled="!backendReady || layoutApplying" @click="saveLayoutPreset">新建模板</el-button><el-button size="small" :loading="layoutApplying" :disabled="!selectedLayoutPreset || publishing || saving" @click="applyLayoutPreset">导入模板</el-button></div>
+            <p v-if="layoutsError" class="field-error" role="alert">{{ layoutsError }} <el-button link @click="loadLayoutPresets(false)">重试</el-button></p>
+          </div>
           <div class="photo-editor">
             <div class="photo-editor-head"><strong>示例照片</strong><el-button link @click="resetPhoto">恢复默认</el-button></div>
             <label>大小 <span>{{ form.photo.scale }}%</span><el-slider v-model="form.photo.scale" :min="50" :max="200" :step="5" @change="dirty = true" /></label>
@@ -41,16 +59,41 @@
             <strong>文字字段</strong>
             <el-select v-model="selectedField" aria-label="选择文字字段"><el-option v-for="field in TEXT_FIELDS" :key="field.key" :label="field.label" :value="field.key" /></el-select>
             <div v-if="currentStyle" class="text-controls">
-              <label>颜色<input v-model="currentStyle.color" type="color" @input="dirty = true"></label>
+              <label>字体<el-select v-model="currentStyle.font" @change="dirty = true"><el-option v-for="font in TEXT_STYLE_CONTRACT.fonts" :key="font.id" :value="font.id" :label="font.label" /></el-select></label>
+              <label>填色<el-select v-model="currentStyle.fillMode" @change="dirty = true"><el-option label="纯色" value="solid" /><el-option label="渐变" value="gradient" /></el-select></label>
+              <label v-if="currentStyle.fillMode === 'solid'">颜色<input v-model="currentStyle.color" type="color" @input="dirty = true"></label>
               <label>字号<el-input-number v-model="currentStyle.size" :min="8" :max="80" :step="1" @change="dirty = true" /></label>
               <label>横向 X<el-input-number v-model="currentStyle.x" :min="0" :max="300" :step="1" @change="dirty = true" /></label>
               <label>纵向 Y<el-input-number v-model="currentStyle.y" :min="0" :max="430" :step="1" @change="dirty = true" /></label>
               <label>字重<el-select v-model="currentStyle.weight" @change="dirty = true"><el-option label="常规" :value="400" /><el-option label="中等" :value="500" /><el-option label="半粗" :value="600" /><el-option label="粗体" :value="700" /><el-option label="加粗" :value="800" /><el-option label="极粗" :value="900" /></el-select></label>
             </div>
+            <div v-if="currentStyle" class="text-effects">
+              <div class="effect-presets"><el-button size="small" @click="applyTextPreset('gold')">金色渐变</el-button><el-button size="small" @click="applyTextPreset('silver')">银色渐变</el-button><el-button link @click="clearTextEffects">清除效果</el-button></div>
+              <div v-if="currentStyle.fillMode === 'gradient'" class="gradient-controls">
+                <label>起始色<input v-model="currentStyle.gradient.start" type="color" @input="dirty = true"></label>
+                <label>结束色<input v-model="currentStyle.gradient.end" type="color" @input="dirty = true"></label>
+                <label>中间色<el-switch v-model="currentStyle.gradient.middleEnabled" @change="dirty = true" /><input v-if="currentStyle.gradient.middleEnabled" v-model="currentStyle.gradient.middle" type="color" @input="dirty = true"></label>
+                <label>方向<el-input-number v-model="currentStyle.gradient.angle" :min="0" :max="360" :step="15" @change="dirty = true" /></label>
+              </div>
+              <div class="text-controls">
+                <label>字距<el-input-number v-model="currentStyle.letterSpacing" :min="-2" :max="20" :step="0.5" @change="dirty = true" /></label>
+                <label>倾斜<el-select v-model="currentStyle.fontStyle" @change="dirty = true"><el-option label="常规" value="normal" /><el-option label="斜体" value="italic" /></el-select></label>
+                <label>描边宽度<el-input-number v-model="currentStyle.stroke.width" :min="0" :max="5" :step="0.2" @change="dirty = true" /></label>
+                <label v-if="currentStyle.stroke.width > 0">描边色<input v-model="currentStyle.stroke.color" type="color" @input="dirty = true"></label>
+                <label>阴影<el-switch v-model="currentStyle.shadow.enabled" @change="dirty = true" /></label>
+              </div>
+              <div v-if="currentStyle.shadow.enabled" class="text-controls">
+                <label>阴影色<input v-model="currentStyle.shadow.color" type="color" @input="dirty = true"></label>
+                <label>透明度<el-input-number v-model="currentStyle.shadow.opacity" :min="0" :max="1" :step="0.1" @change="dirty = true" /></label>
+                <label>横向偏移<el-input-number v-model="currentStyle.shadow.x" :min="-10" :max="10" @change="dirty = true" /></label>
+                <label>纵向偏移<el-input-number v-model="currentStyle.shadow.y" :min="-10" :max="10" @change="dirty = true" /></label>
+                <label>模糊<el-input-number v-model="currentStyle.shadow.blur" :min="0" :max="6" :step="0.5" @change="dirty = true" /></label>
+              </div>
+            </div>
           </div>
           <p class="version" v-if="form.id">草稿 {{ form.draftVersion }} · 已发布 {{ form.publishedVersion || '—' }}</p>
           <div class="editor-actions">
-            <el-button type="primary" :loading="saving" :disabled="!backendReady || !dirty || !form.title || !form.backgroundUrl || !form.maskUrl || previewState !== 'ready'" @click="save">保存草稿</el-button>
+            <el-button type="primary" :loading="saving" :disabled="!backendReady || !scopeReady || !dirty || !form.title || !form.backgroundUrl || !form.maskUrl || previewState !== 'ready'" @click="save">保存草稿</el-button>
             <el-button :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="publish">发布</el-button>
             <el-button v-if="publishJob?.jobId" :disabled="!publishServiceReady" :loading="publishing" @click="resumePublish">{{ publishJob.status === 'blocked' ? '重试发布' : '继续发布' }}</el-button>
           </div>
@@ -59,7 +102,7 @@
             <p v-for="item in publishJob.failures" :key="item.playerId">{{ item.playerId }}：{{ item.reason }}</p>
           </div>
           <p v-if="publishProgress" class="release-note" role="status">{{ publishProgress }}</p>
-          <p v-else class="release-note">保存草稿后可准备发布。</p>
+          <p v-else class="release-note">发布后添加到符合范围的球员 H5 卡库。</p>
         </div>
         <div class="preview-pane">
           <div class="preview-title"><strong>排版预览</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="showFinalPreview">查看大图</el-button></div>
@@ -91,6 +134,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { playerCardTemplateRequest } from '@/utils/cloud'
 import { renderMaskedCardForeground } from '@/utils/playerCardMask'
+import TEXT_STYLE_CONTRACT from '../../../../cloudfunctions/webLoginApi/player-card-text-styles.json'
 
 
 const TEXT_FIELDS = [
@@ -109,7 +153,9 @@ const DEFAULT_LAYOUT = {
   height: { x: 98, y: 367, size: 14, color: '#30312b', weight: 600 },
   weight: { x: 202, y: 367, size: 14, color: '#30312b', weight: 600 }
 }
-function freshLayout() { return JSON.parse(JSON.stringify(DEFAULT_LAYOUT)) }
+const freshTextStyle = () => JSON.parse(JSON.stringify(TEXT_STYLE_CONTRACT.defaults))
+function styleLayout(value) { return Object.fromEntries(Object.entries(DEFAULT_LAYOUT).map(([key,base]) => { const raw = value?.[key] || base, defaults=freshTextStyle(); return [key,{...base,...defaults,...raw,gradient:{...defaults.gradient,...raw.gradient},stroke:{...defaults.stroke,...raw.stroke},shadow:{...defaults.shadow,...raw.shadow}}] })) }
+function freshLayout() { return styleLayout(DEFAULT_LAYOUT) }
 const DEFAULT_PHOTO = { x: 150, y: 35, scale: 108 }
 function freshPhoto() { return { ...DEFAULT_PHOTO } }
 const DEFAULT_BADGES = { nationality: { x: 125, y: 394, size: 28 }, team: { x: 175, y: 388, size: 32 } }
@@ -124,7 +170,16 @@ const selectedFiles = reactive({ background: '', mask: '' })
 const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null), maskedCanvas = ref(null), dialogMaskedCanvas = ref(null)
 const finalPreviewLoading = ref(false), finalPreviewImage = ref('')
 const previewState = ref('idle'), previewError = ref(''), previewOpen = ref(false)
-const form = reactive({ id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
+const PRELOAD_TYPES = [{ value:'platform', label:'全平台' }, { value:'team', label:'球队' }, { value:'tournament', label:'赛事' }, { value:'player', label:'球员' }]
+const freshPreload = () => ({ type:'platform', targetId:'', targetName:'' })
+const category = ref('all'), targets = ref([]), targetsLoading = ref(false), targetsError = ref(''), targetCursor = ref(''), targetKeyword = ref('')
+let targetRequest = 0, formEpoch = 0
+const layoutPresets=ref([]),selectedLayoutPreset=ref(''),layoutsLoading=ref(false),layoutsError=ref(''),layoutCursor=ref(''),layoutKeyword=ref(''),layoutSaving=ref(false),layoutApplying=ref(false)
+let layoutRequest=0
+const visibleTemplates = computed(() => templates.value.filter(item => category.value === 'all' || (item.preload?.type || 'platform') === category.value))
+const targetOptions = computed(() => form.preload.targetId && !targets.value.some(item => item.id === form.preload.targetId) ? [{id:form.preload.targetId,name:form.preload.targetName || form.preload.targetId}, ...targets.value] : targets.value)
+const scopeReady = computed(() => form.preload.type === 'platform' || Boolean(form.preload.targetId))
+const form = reactive({ preload:freshPreload(), id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
   backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
 const previewPortrait = `${import.meta.env.BASE_URL}images/player-card-layers/preview-portrait.png`
 const currentStyle = computed(() => form.layout[selectedField.value])
@@ -134,7 +189,7 @@ const photoStyle = computed(() => {
   return { left: `${form.photo.x}px`, top: `${form.photo.y + 300 - height}px`,
     width: `${width}px`, height: `${height}px`, transform: 'translateX(-50%)' }
 })
-const canPublish = computed(() => Boolean(form.id && !dirty.value && form.backgroundUrl && form.maskUrl && previewState.value === 'ready' &&
+const canPublish = computed(() => Boolean(scopeReady.value && form.id && !dirty.value && form.backgroundUrl && form.maskUrl && previewState.value === 'ready' &&
   (form.status !== 'published' || form.draftVersion > form.publishedVersion)))
 let previewRequest = 0, renderedOverlay = null, pendingMaskReview = false
 function paintDialogOverlay() {
@@ -167,6 +222,58 @@ watch(previewState, state => {
   if (state === 'error') pendingMaskReview = false
 })
 
+function openLayoutPresets(open) { if(open && !layoutPresets.value.length) searchLayoutPresets('') }
+function searchLayoutPresets(keyword) { layoutKeyword.value=keyword;return loadLayoutPresets(false) }
+async function loadLayoutPresets(more=false) {
+  const id=++layoutRequest;layoutsLoading.value=true;layoutsError.value=''
+  try {
+    const result=await request('listPlayerCardLayoutPresets',{keyword:layoutKeyword.value,cursor:more?layoutCursor.value:''})
+    if(id!==layoutRequest) return
+    layoutPresets.value=more?[...layoutPresets.value,...result.presets]:result.presets
+    layoutCursor.value=result.nextCursor || ''
+  } catch(cause) { if(id===layoutRequest) layoutsError.value=cause.message }
+  finally { if(id===layoutRequest) layoutsLoading.value=false }
+}
+async function saveLayoutPreset() {
+  let title
+  try { const result=await ElMessageBox.prompt('保存文字样式、人物构图和徽标位置。','新建模板',{confirmButtonText:'创建',inputPlaceholder:'模板名称',inputValidator:value=>String(value || '').trim().length>=2 && String(value || '').trim().length<=30 || '名称须为 2–30 个字'});title=result.value.trim() } catch { return }
+  layoutSaving.value=true
+  try {
+    const result=await request('savePlayerCardLayoutPreset',{title,layout:form.layout,photo:form.photo,badges:form.badges})
+    layoutPresets.value.unshift({id:result.preset.id,title:result.preset.title});selectedLayoutPreset.value=result.preset.id;ElMessage.success('模板已创建')
+  } catch(cause) { ElMessage.error(cause.message) } finally { layoutSaving.value=false }
+}
+async function applyLayoutPreset() {
+  if(!selectedLayoutPreset.value || layoutApplying.value) return
+  const epoch=formEpoch;layoutApplying.value=true
+  try {
+    const result=await request('getPlayerCardLayoutPreset',{presetId:selectedLayoutPreset.value})
+    if(epoch!==formEpoch) return
+    form.layout=styleLayout(result.preset.layout);form.photo={...result.preset.photo};form.badges=JSON.parse(JSON.stringify(result.preset.badges))
+    dirty.value=true;ElMessage.success('模板已导入，待保存草稿')
+  } catch(cause) { ElMessage.error(cause.message) } finally { layoutApplying.value=false }
+}
+function preloadName(value) { return PRELOAD_TYPES.find(item => item.value === (value?.type || 'platform'))?.label || '全平台' }
+function changePreload() {
+  form.preload.targetId = ''; form.preload.targetName = ''; dirty.value = true
+  targetRequest++; targetsLoading.value = false; targets.value = []; targetsError.value = ''; targetCursor.value = ''; targetKeyword.value = ''
+  publishJob.value = null; publishProgress.value = ''
+}
+function chooseTarget(id) { form.preload.targetName = targets.value.find(item => item.id === id)?.name || ''; dirty.value = true }
+function openTargets(open) { if (open && !targets.value.length) searchTargets('') }
+function searchTargets(keyword) { targetKeyword.value = keyword; return loadTargetPage(false) }
+async function loadTargetPage(more) {
+  const id = ++targetRequest, type = form.preload.type
+  if (type === 'platform') return
+  targetsLoading.value = true; targetsError.value = ''
+  try {
+    const result = await request('listPlayerCardPreloadTargets', { type, keyword:targetKeyword.value, cursor:more ? targetCursor.value : '' })
+    if (id !== targetRequest || type !== form.preload.type) return
+    targets.value = more ? [...targets.value, ...(result.targets || [])] : (result.targets || [])
+    targetCursor.value = result.nextCursor || ''
+  } catch (cause) { if (id === targetRequest) { targetsError.value = cause.message; if (!more) { targets.value = []; targetCursor.value = '' } } }
+  finally { if (id === targetRequest) targetsLoading.value = false }
+}
 function tierName(value) { return { bronze: '铜卡', silver: '银卡', gold: '金卡' }[value] || '未知等级' }
 function statusName(value) {
   if (value.status === 'local') return '基础素材 · 未保存'
@@ -179,10 +286,12 @@ async function request(action, data = {}) {
   return result
 }
 function assign(item) {
-  Object.assign(form, { id: item.id, title: item.title, tier: item.tier, status: item.status, revision: item.revision,
+  formEpoch++;selectedLayoutPreset.value=''
+  targetRequest++; targetsLoading.value = false; targets.value = []; targetsError.value = ''; targetCursor.value = ''
+  Object.assign(form, { preload:{...freshPreload(), ...item.preload}, id: item.id, title: item.title, tier: item.tier, status: item.status, revision: item.revision,
     draftVersion: item.draftVersion, publishedVersion: item.publishedVersion,
     backgroundUrl: item.backgroundData || item.backgroundUrl || '', maskUrl: item.maskData || item.maskUrl || '',
-    backgroundData: '', maskData: '', layout: JSON.parse(JSON.stringify(item.layout || DEFAULT_LAYOUT)),
+    backgroundData: '', maskData: '', layout: styleLayout(item.layout),
     photo: { ...(item.photo || DEFAULT_PHOTO) }, badges: JSON.parse(JSON.stringify(item.badges || DEFAULT_BADGES)) })
   dirty.value = false; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
 }
@@ -192,14 +301,16 @@ async function select(item) {
   try {
     const result = await request('getPlayerCardTemplate', { templateId: item.id })
     assign(result.template)
-    const status = await request('getPlayerCardTemplatePublishStatus', { tier:item.tier })
+    const status = await request('getPlayerCardTemplatePublishStatus', { tier:item.tier, preload:item.preload || freshPreload(), templateId:item.id })
     publishServiceReady.value = true
     publishJob.value = status.jobId ? status : null
   }
   catch (cause) { ElMessage.error(cause.message || '模板读取失败') }
 }
 function startCreate() {
-  Object.assign(form, { id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
+  formEpoch++;selectedLayoutPreset.value=''
+  targetRequest++; targetsLoading.value = false; targets.value = []; targetsError.value = ''; targetCursor.value = ''
+  Object.assign(form, { preload:freshPreload(), id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
     backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
   dirty.value = true; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
   publishJob.value = null
@@ -267,7 +378,7 @@ async function refreshSelected(id) {
   if (index >= 0) templates.value.splice(index, 1, result.template)
   else templates.value.unshift(result.template)
   assign(result.template)
-  const status = await request('getPlayerCardTemplatePublishStatus', { tier:result.template.tier })
+  const status = await request('getPlayerCardTemplatePublishStatus', { tier:result.template.tier, preload:result.template.preload || freshPreload(), templateId:result.template.id })
   publishServiceReady.value = true
   publishJob.value = status.jobId ? status : null
 }
@@ -287,13 +398,13 @@ async function save() {
   saving.value = true
   try {
     const result = await request('savePlayerCardTemplate', { templateId: form.id, revision: form.revision, title: form.title,
-      tier: form.tier, backgroundData: form.backgroundData, maskData: form.maskData, layout: form.layout, photo: form.photo, badges: form.badges })
+      tier: form.tier, preload:form.preload, backgroundData: form.backgroundData, maskData: form.maskData, layout: form.layout, photo: form.photo, badges: form.badges })
     await refreshSelected(result.templateId); ElMessage.success('草稿已保存')
   } catch (cause) { ElMessage.error(cause.message) } finally { saving.value = false }
 }
 async function publish() {
   if (!publishServiceReady.value) return
-  try { await ElMessageBox.confirm('将先更新受影响的成卡，全部成功后统一生效。', '发布模板', { confirmButtonText: '发布' }) } catch { return }
+  try { await ElMessageBox.confirm(`将添加到${preloadName(form.preload)}${form.preload.targetName ? '：' + form.preload.targetName : ''}球员的 H5 卡库，保留已有卡。该模板已制作的成卡全部更新成功后生效。`, '发布模板', { confirmButtonText: '发布' }) } catch { return }
   publishing.value = true
   publishProgress.value = '正在准备发布…'
   try {
@@ -317,16 +428,12 @@ async function finishPublish(initial) {
     throw new Error('部分成卡生成失败，请查看质量队列')
   }
   await refreshSelected(form.id)
-  const active = await request('getActivePlayerCardTemplate', {tier:form.tier})
+  const active = await request('getActivePlayerCardTemplate', {tier:form.tier, preload:form.preload, templateId:form.id})
   if (active.status !== 'ready' || active.template?.id !== form.id || Number(active.template?.version) !== Number(result.publishedVersion)) throw new Error('活动版本回读不一致，请刷新核对')
   publishJob.value = null
-  const reasons=result.skipReasons||{}
-  const notes=[]
-  if(reasons.photo_missing)notes.push(`缺照片 ${reasons.photo_missing}`)
-  if(reasons.grade_unverified)notes.push(`积分待核定 ${reasons.grade_unverified}`)
-  publishProgress.value = `已发布 · 更新 ${result.affected||0} 张${notes.length?' · '+notes.join(' · '):''}`
+  publishProgress.value = result.affected ? `预装已发布 · 更新 ${result.affected} 张专属卡` : '预装已发布'
+  ElMessage.success('预装已发布')
   localStorage.setItem('sxfPlayerCardTemplateUpdate',JSON.stringify({tier:form.tier,templateId:form.id,version:result.publishedVersion,at:Date.now()}))
-  ElMessage.success('模板已发布，已有成卡已更新')
 }
 async function resumePublish() {
   if (!publishServiceReady.value) return
@@ -339,10 +446,21 @@ async function resumePublish() {
     await finishPublish(start)
   } catch (cause) { publishProgress.value = '发布未完成，可重试'; ElMessage.error(cause.message) } finally { publishing.value = false }
 }
+function clearTextEffects() { Object.assign(currentStyle.value,freshTextStyle()); dirty.value = true }
+function applyTextPreset(type) {
+  const style=currentStyle.value
+  Object.assign(style,freshTextStyle(),{fillMode:'gradient',font:selectedField.value === 'number' ? 'sport' : selectedField.value === 'name' ? 'brush' : 'sans'})
+  if (type === 'silver') { style.gradient={start:'#ffffff',middle:'#c6d2df',end:'#66768c',middleEnabled:true,angle:90};style.stroke={width:0.6,color:'#445061'} }
+  else style.stroke={width:0.6,color:'#755018'}
+  style.shadow.enabled=true;dirty.value=true
+}
 function fieldStyle(key) {
   const style = form.layout[key] || DEFAULT_LAYOUT[key]
-  return { left: `${style.x}px`, top: `${style.y}px`, fontSize: `${style.size}px`, color: style.color,
-    fontWeight: style.weight, transform: 'translateX(-50%)' }
+  const font=TEXT_STYLE_CONTRACT.fonts.find(item=>item.id===style.font) || TEXT_STYLE_CONTRACT.fonts[0], colors=style.gradient ? [style.gradient.start,...(style.gradient.middleEnabled?[style.gradient.middle]:[]),style.gradient.end] : []
+  return {left:style.x+'px',top:style.y+'px',fontSize:style.size+'px',fontWeight:style.weight,transform:'translateX(-50%)'+(style.fontStyle==='italic'?' skewX(-12deg)':''),fontFamily:font.family+', Noto Sans SC, sans-serif',fontStyle:'normal',letterSpacing:(style.letterSpacing || 0)+'px',fontSynthesis:'none',
+    color:style.fillMode==='gradient'?'transparent':style.color,backgroundImage:style.fillMode==='gradient'?'linear-gradient('+((style.gradient.angle || 0)+90)+'deg,'+colors.join(',')+')':'none',backgroundClip:style.fillMode==='gradient'?'text':'border-box',WebkitBackgroundClip:style.fillMode==='gradient'?'text':'border-box',WebkitTextStroke:style.stroke?.width ? style.stroke.width+'px '+style.stroke.color : '0',paintOrder:'stroke fill',
+    filter:style.shadow?.enabled?'drop-shadow('+style.shadow.x+'px '+style.shadow.y+'px '+style.shadow.blur+'px '+style.shadow.color+Math.round(style.shadow.opacity*255).toString(16).padStart(2,'0')+')':'none'}
+
 }
 function resetPhoto() { Object.assign(form.photo, DEFAULT_PHOTO); dirty.value = true }
 function resetBadge() { Object.assign(form.badges[selectedBadge.value], DEFAULT_BADGES[selectedBadge.value]); dirty.value = true }
@@ -390,7 +508,14 @@ function beginTextDrag(event, key) {
   const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
   window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
 }
-onMounted(load)
+onMounted(() => {
+  if(!document.getElementById('player-card-fonts')) {
+    const sheet=document.createElement('style');sheet.id='player-card-fonts'
+    sheet.textContent=TEXT_STYLE_CONTRACT.fonts.filter(font=>font.id!=='sans').map(font=>'@font-face{font-family:"'+font.family+'";src:url("'+import.meta.env.BASE_URL+'fonts/player-card/'+font.files[0]+'");font-weight:400;font-style:normal;font-display:swap}').join('')
+    document.head.appendChild(sheet)
+  }
+  load()
+})
 </script>
 
 <style scoped>
@@ -404,4 +529,7 @@ onMounted(load)
 .photo-editor{display:grid;gap:11px;padding-top:10px;border-top:1px solid #e4ebe6}.photo-editor-head{display:flex;align-items:center;justify-content:space-between}.photo-editor-head strong{font-size:14px}.photo-editor>label{display:grid;grid-template-columns:60px 45px minmax(0,1fr);align-items:center;gap:8px;font-size:12px;color:#5d6f63}.photo-editor>label .el-slider{min-width:0}.photo-position{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.photo-position label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.photo-position .el-input-number{width:100%}.card-preview .portrait{cursor:grab;touch-action:none;user-select:none}
 .badge-editor{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.badge-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.badge-controls label{display:grid;gap:5px;color:#5d6f63;font-size:12px}.badge-controls .el-input-number{width:100%}.card-preview .card-badge{position:absolute;z-index:4;display:grid;place-items:center;overflow:hidden;cursor:grab;touch-action:none;user-select:none;box-sizing:border-box}.card-badge.nationality svg{width:100%;height:100%;display:block}.card-badge.team{border:2px solid #fff;background:#087744;color:#fff;font-size:14px;font-weight:800;clip-path:polygon(50% 0,100% 13%,100% 68%,50% 100%,0 68%,0 13%)}
 .form-head .el-button{margin-left:auto}.pc-reference{position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;width:300px}
+.preload-filter{display:grid;gap:6px;font-size:13px;margin-bottom:8px}.editor-fields,.template-workspace,.preview-pane{min-width:0}.template-list small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:680px){.preload-filter{flex:0 0 140px}.preview-pane{overflow:hidden}}
+.text-effects{display:grid;gap:12px}.gradient-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.gradient-controls label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.gradient-controls input[type=color]{width:100%;height:30px;padding:2px;border:1px solid #cbd9d0;border-radius:4px}.effect-presets{display:flex;flex-wrap:wrap;gap:6px}.effect-presets .el-button+.el-button{margin-left:0}
+.layout-presets{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.layout-presets>strong{font-size:14px}.layout-actions{display:flex;gap:8px}.layout-actions .el-button+.el-button{margin-left:0}
 </style>

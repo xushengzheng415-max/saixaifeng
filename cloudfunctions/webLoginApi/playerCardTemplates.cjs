@@ -4,6 +4,9 @@ const path = require('node:path')
 const { PNG } = require('pngjs')
 const { renderCard } = require('./playerCardRender.cjs')
 const suite = require('./playerCardSuite.cjs')
+const preload = require('./playerCardPreload.cjs')
+const {normalizeTextStyle} = require('./playerCardTextStyle.cjs')
+const {createPlayerCardLayoutPresets} = require('./playerCardLayoutPresets.cjs')
 const { createPlayerCardPublish } = require('./playerCardPublish.cjs')
 
 const COLLECTION = 'player_card_templates'
@@ -59,7 +62,7 @@ function normalizeLayout(value) {
         size < 8 || size > 80 || ![400, 500, 600, 700, 800, 900].includes(weight) || !/^#[0-9a-fA-F]{6}$/.test(color)) {
       throw Object.assign(new Error('文字颜色、字号或位置超出范围'), { code: 'CARD_TEMPLATE_LAYOUT_INVALID' })
     }
-    result[key] = { x, y, size, color, weight }
+    result[key] = { x, y, size, color, weight, ...normalizeTextStyle(raw) }
   }
   return result
 }
@@ -105,14 +108,14 @@ function titleOf(value) {
 function itemOf(record, urls, publicOnly) {
   const published = record.published || null
   if (publicOnly) return {
-    id: record._id, title: published.title, tier: record.tier,
+    id: record._id, title: published.title, tier: record.tier, preload: preload.normalizePreload(published.preload),
     version: record.publishedVersion, backgroundUrl: urls[published.backgroundFileId] || '',
     maskUrl: urls[published.maskFileId] || '', layout: normalizeLayout(published.layout),
     photo: normalizePhoto(published.photo), badges: normalizeBadges(published.badges)
   }
   const draft = record.draft || null
   return {
-    id: record._id, title: draft?.title || published?.title || '', tier: record.tier,
+    id: record._id, title: draft?.title || published?.title || '', tier: record.tier, preload: preload.normalizePreload(draft?.preload || published?.preload),
     status: record.status || 'draft', revision: Number(record.revision || 0),
     draftVersion: Number(record.draftVersion || 0), publishedVersion: Number(record.publishedVersion || 0),
     backgroundUrl: draft ? urls[draft.backgroundFileId] || '' : '',
@@ -123,9 +126,10 @@ function itemOf(record, urls, publicOnly) {
   }
 }
 
-function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
+function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlayer }) {
   const db = cloud.database()
-  const publisher = createPlayerCardPublish({ cloud })
+  const publisher = createPlayerCardPublish({ cloud, scoreForPlayer })
+  const layouts = createPlayerCardLayoutPresets({cloud,normalizeLayout,normalizePhoto,normalizeBadges})
   async function urlsFor(rows, publicOnly) {
     const ids = [...new Set(rows.flatMap(row => publicOnly
       ? [row.published?.backgroundFileId, row.published?.maskFileId]
@@ -154,8 +158,9 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
     if (cursor && !/^[a-f0-9]{32}$/.test(cursor)) return { success: false, code: 'CARD_TEMPLATE_CURSOR_INVALID', error: '列表游标无效' }
     const filter = { ...(publicOnly ? { status: 'published' } : {}), ...(cursor ? { _id: db.command.gt(cursor) } : {}) }
     const page = (await db.collection(COLLECTION).where(filter).orderBy('_id', 'asc').limit(PAGE_SIZE).get()).data || []
-    const urls = await urlsFor(page, publicOnly)
-    return { success: true, templates: page.map(row => itemOf(row, urls, publicOnly)), nextCursor: page.length === PAGE_SIZE ? String(page[page.length - 1]._id) : '' }
+    const visible = publicOnly ? page.filter(row => preload.normalizePreload(row.published?.preload).type === 'platform') : page
+    const urls = await urlsFor(visible, publicOnly)
+    return { success: true, templates: visible.map(row => itemOf(row, urls, publicOnly)), nextCursor: page.length === PAGE_SIZE ? String(page[page.length - 1]._id) : '' }
   }
   async function get(event) {
     const id = String(event.templateId || '')
@@ -177,11 +182,11 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
   }
   async function active(event) {
     const tier = tierOf(event.tier)
-    const snapshot = await suite.activeTemplate(db, tier)
+    const snapshot = await suite.activeTemplate(db, tier, event.preload, event.templateId)
     if (!snapshot) return { success:true, status:'unavailable', template:null }
     const urls = await urlsFor([{ published:snapshot }], true)
     return { success:true, status:'ready', template: {
-      id:snapshot.templateId, tier, version:snapshot.version, title:snapshot.title,
+      id:snapshot.templateId, tier, version:snapshot.version, title:snapshot.title, preload:preload.normalizePreload(snapshot.preload),
       backgroundUrl:urls[snapshot.backgroundFileId] || '', maskUrl:urls[snapshot.maskFileId] || '',
       layout:normalizeLayout(snapshot.layout), photo:normalizePhoto(snapshot.photo),
       badges:normalizeBadges(snapshot.badges)
@@ -200,10 +205,13 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
   async function save(event, auth) {
     const id = String(event.templateId || '')
     if (id && !/^[a-f0-9]{32}$/.test(id)) return { success: false, code: 'CARD_TEMPLATE_ID_INVALID', error: '模板编号无效' }
-    const tier = tierOf(event.tier), title = titleOf(event.title), layout = normalizeLayout(event.layout)
+    const tier = tierOf(event.tier), title = titleOf(event.title)
     const record = id ? await read(id) : null
+    const layout = normalizeLayout(event.layout || record?.draft?.layout)
     if (id && !record) return { success: false, code: 'CARD_TEMPLATE_NOT_FOUND', error: '模板不存在，请刷新列表' }
     if (record && record.tier !== tier) return { success: false, code: 'CARD_TEMPLATE_TIER_LOCKED', error: '已有模板不能更换等级，请新建模板' }
+    const scope = await preload.validatePreload(db, event.preload ?? record?.draft?.preload, suite.document)
+    if (record?.publishedVersion && preload.stateId(tier, scope) !== preload.stateId(tier, record.published?.preload)) return { success:false, code:'CARD_PRELOAD_LOCKED', error:'已发布模板不能改绑，请新建模板' }
     const photo = normalizePhoto(event.photo || record?.draft?.photo)
     const badges = normalizeBadges(event.badges || record?.draft?.badges)
     const background = event.backgroundData ? pngBuffer(event.backgroundData, 'background') : null
@@ -220,7 +228,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
       if (background) uploaded.push(backgroundFileId)
       const maskFileId = mask ? (await cloud.uploadFile({ cloudPath: `${folder}/mask.png`, fileContent: mask })).fileID : record.draft.maskFileId
       if (mask) uploaded.push(maskFileId)
-      const draft = { title, backgroundFileId, maskFileId, layout, photo, badges }
+      const draft = { title, backgroundFileId, maskFileId, layout, photo, badges, preload: scope }
       if (record) {
         await db.runTransaction(async tx => {
           const currentResult = await tx.collection(COLLECTION).doc(templateId).get()
@@ -263,10 +271,15 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
   return async function handle(event) {
     const action = String(event.action || '')
     if (action === 'listPublishedPlayerCardTemplates') return list(event, true)
-    if (action === 'getActivePlayerCardTemplate') return active(event)
+    if (action === 'getActivePlayerCardTemplate' && !event.preload && !event.templateId) return active(event)
     const auth = await owner(event)
     if (!auth.success) return auth
     try {
+      if (action === 'listPlayerCardLayoutPresets') return await layouts.list(event)
+      if (action === 'getPlayerCardLayoutPreset') return await layouts.get(event)
+      if (action === 'savePlayerCardLayoutPreset') return await layouts.save(event,auth)
+      if (action === 'getActivePlayerCardTemplate') return await active(event)
+      if (action === 'listPlayerCardPreloadTargets') return await preload.targets(db, event)
       if (action === 'listPlayerCardTemplates') return await list(event, false)
       if (action === 'getPlayerCardTemplate') return await get(event)
       if (action === 'previewPlayerCardTemplate') return await preview(event)
@@ -277,7 +290,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
         return await publisher.begin(row, Number(event.revision), auth.userId)
       }
       if (action === 'continuePlayerCardTemplatePublish') return await publisher.advance(String(event.jobId || ''))
-      if (action === 'getPlayerCardTemplatePublishStatus') return await publisher.status(tierOf(event.tier))
+      if (action === 'getPlayerCardTemplatePublishStatus') return await publisher.status(tierOf(event.tier), event.preload, event.templateId)
       if (action === 'retryPlayerCardTemplatePublish') return await publisher.retry(String(event.jobId || ''))
       if (action === 'withdrawPlayerCardTemplate') return { success:false, code:'CARD_TEMPLATE_ACTIVE_PROTECTED', error:'活动模板不能撤回，请发布新版替换' }
       return { success: false, code: 'CARD_TEMPLATE_ACTION_INVALID', error: '未知模板操作' }
@@ -290,4 +303,3 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
 }
 
 module.exports = { createPlayerCardTemplates, pngBuffer, normalizeLayout, normalizePhoto, normalizeBadges, DEFAULT_LAYOUT, DEFAULT_PHOTO, DEFAULT_BADGES }
-
