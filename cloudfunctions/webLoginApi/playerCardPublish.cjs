@@ -124,6 +124,8 @@ function createPlayerCardPublish({ cloud }) {
     let generatedCount=0
     const batchEnd = Math.min(cursor + Math.min(20,Number(options.batchSize)||3), targetIds.length)
     const scores=options.scores||await createDataService(db).playerCardsForAuthorizedPlayers(targetIds.slice(cursor,batchEnd))
+    const uncached=targetIds.slice(cursor,batchEnd).filter(id=>!scores.has(String(id)))
+    if(uncached.length){const fresh=await createDataService(db).playerCardsForAuthorizedPlayers(uncached);for(const [id,score] of fresh)scores.set(id,score)}
     for (; cursor < batchEnd; cursor++) {
       if(options.deadline&&Date.now()>=options.deadline)break
       const playerId = targetIds[cursor]

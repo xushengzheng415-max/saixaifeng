@@ -6,6 +6,7 @@ const suite=require('./playerCardSuite.cjs')
 exports.main=async event=>{
   const db=cloud.database(),publisher=createPlayerCardPublish({cloud})
   if(event?.action==='synchronizeActive')return publisher.synchronizeActive(String(event.tier||''))
+  if(event?.action==='retry')return publisher.retry(String(event.jobId||''))
   if(event?.action==='audit'){
     const players=await suite.publicationPlayers(db,String(event.tier||'bronze'))
     const scores=await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id)))
@@ -17,7 +18,7 @@ exports.main=async event=>{
     let status=await publisher.status(tier)
     if(status.status!=='pending')continue
     const job=await suite.document(db,suite.JOBS,status.jobId)
-    const scores=await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers((job.targetIds||[]).slice(Number(job.cursor||0)))
+    const scores=await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(job.targetIds||[])
     while(status.status==='pending'&&Date.now()-started<45000){
       status=await publisher.advance(status.jobId,{scores,batchSize:12,deadline:started+45000})
       if(status.busy)break
