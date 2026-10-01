@@ -26,6 +26,17 @@ function makeForegroundMask(buffer) {
   return PNG.sync.write(mask)
 }
 
+function makePortraitMask(buffer) {
+  const mask=PNG.sync.read(buffer)
+  if(mask.width!==WIDTH||mask.height!==HEIGHT)throw new Error('遮罩须为 300 × 430 PNG')
+  for(let i=0;i<mask.data.length;i+=4){
+    const luma=mask.data[i]*.2126+mask.data[i+1]*.7152+mask.data[i+2]*.0722
+    mask.data[i+3]=Math.round(mask.data[i+3]*luma/255)
+    mask.data[i]=mask.data[i+1]=mask.data[i+2]=255
+  }
+  return PNG.sync.write(mask)
+}
+
 function makeForegroundLayer(backgroundBuffer, maskBuffer) {
   const background = PNG.sync.read(backgroundBuffer)
   const mask = PNG.sync.read(maskBuffer)
@@ -94,7 +105,7 @@ function adjusted(field, delta) {
 function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer, template, player = {}, crop, personalLayout, size = 3 }) {
   const bg = PNG.sync.read(backgroundBuffer)
   if (bg.width !== WIDTH || bg.height !== HEIGHT) throw new Error('背景须为 300 × 430 PNG')
-  const mask = makeForegroundMask(maskBuffer)
+  const mask = makePortraitMask(maskBuffer)
   const photo = template.photo || { x:150,y:35,scale:108 }
   const c = crop || { zoom:1,x:0,y:0 }, zoom = Math.max(1,Math.min(4,Number(c.zoom)||1))
   const w = 270*Number(photo.scale||100)/100*zoom, h = 300*Number(photo.scale||100)/100*zoom
@@ -113,14 +124,13 @@ function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuff
     player.weight == null || player.weight === '' ? '' : label(`体重 ${player.weight}kg`,fields.weight,110,'weight',definitions)
   ].join('')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-    <defs>${definitions.join('')}<mask id="front" maskUnits="userSpaceOnUse" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" style="mask-type:luminance">${image(mask, `width="${WIDTH}" height="${HEIGHT}"`)}</mask></defs>
+    <defs>${definitions.join('')}<mask id="portrait" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" style="mask-type:alpha">${image(mask, `width="${WIDTH}" height="${HEIGHT}"`)}</mask></defs>
     ${image(backgroundBuffer, `width="${WIDTH}" height="${HEIGHT}"`)}
-    ${portraitBuffer ? image(portraitBuffer, `x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMax meet"`) : ''}
-    ${image(backgroundBuffer, `width="${WIDTH}" height="${HEIGHT}" mask="url(#front)"`)}
+    ${portraitBuffer ? `<g mask="url(#portrait)">${image(portraitBuffer, `x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMax meet"`)}</g>` : ''}
     ${textLayers}
     ${nationality(player,badges.nationality)}${logo}
   </svg>`
   return new Resvg(svg,{ fitTo:{mode:'zoom',value:size}, font:{fontFiles:FONT_FILES,loadSystemFonts:false} }).render().asPng()
 }
 
-module.exports = { renderCard, makeForegroundMask, makeForegroundLayer, WIDTH, HEIGHT }
+module.exports = { renderCard, makeForegroundMask, makeForegroundLayer, makePortraitMask, WIDTH, HEIGHT }

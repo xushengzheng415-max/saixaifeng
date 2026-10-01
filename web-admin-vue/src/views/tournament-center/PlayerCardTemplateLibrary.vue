@@ -104,24 +104,25 @@
           <p v-if="publishProgress" class="release-note" role="status">{{ publishProgress }}</p>
           <p v-else class="release-note">发布后添加到符合范围的球员 H5 卡库。</p>
         </div>
-        <div class="preview-pane">
+        <div ref="previewSlot" class="preview-slot"><div id="player-card-editor-preview" v-show="previewVisible" class="preview-pane preview-docked" :style="dockStyle">
           <div class="preview-title"><strong>排版预览</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="showFinalPreview">查看大图</el-button></div>
-          <div ref="previewRef" class="card-preview" role="img" aria-label="球员卡模板预览">
+          <div class="preview-size" :style="previewSizeStyle"><div ref="previewRef" class="card-preview" :style="previewScaleStyle" role="img" aria-label="球员卡模板预览">
             <img v-if="form.backgroundUrl" class="back" :src="form.backgroundUrl" alt="">
-            <img v-if="previewState === 'ready'" class="portrait" :src="previewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag">
-            <canvas ref="maskedCanvas" class="front" width="300" height="430" v-show="previewState === 'ready'" />
+            <div v-if="previewState === 'ready'" class="portrait-mask" :style="portraitMaskStyle"><img class="portrait" :src="previewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag"></div>
+
             <span v-if="previewState === 'ready'" class="card-badge nationality" :style="badgeStyle('nationality')" title="国籍旗帜示例" @pointerdown="beginBadgeDrag($event, 'nationality')"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#d92d24"/><polygon points="6,2 7,5 10,5 8,7 9,10 6,8 3,10 4,7 2,5 5,5" fill="#ffdf45"/></svg></span>
             <span v-if="previewState === 'ready'" class="card-badge team" :style="badgeStyle('team')" title="球队队徽示例" @pointerdown="beginBadgeDrag($event, 'team')">队</span>
             <span v-for="field in previewState === 'ready' ? TEXT_FIELDS : []" :key="field.key" class="card-text" :class="{ active: selectedField === field.key }"
               :style="fieldStyle(field.key)" @pointerdown="beginTextDrag($event, field.key)">{{ field.sample }}</span>
-          </div>
+          </div></div>
           <span v-if="!form.backgroundUrl || !form.maskUrl" class="preview-state">上传背景和遮罩后可预览</span>
           <span v-else-if="previewState === 'loading'" class="preview-state" role="status">正在合成预览…</span>
           <div v-else-if="previewState === 'error'" class="preview-error" role="alert"><span>{{ previewError }}</span><el-button link @click="composePreview">重试预览</el-button></div>
           <span v-else class="preview-state">{{ selectedFiles.background || selectedFiles.mask ? '新素材预览已更新 · 待保存' : '拖动预览文字可调整位置' }}</span>
-        </div>
+        </div></div>
       </div>
     </div>
+    <el-button class="preview-toggle" type="primary" :aria-expanded="previewVisible" aria-controls="player-card-editor-preview" @click="previewVisible = !previewVisible">{{ previewVisible ? '隐藏预览' : '显示预览' }}</el-button>
     <el-dialog v-model="previewOpen" title="服务端成卡预览" width="min(650px, 96vw)" append-to-body>
       <img v-if="finalPreviewImage" :src="finalPreviewImage" alt="服务端生成的完整球员卡" style="display:block;width:min(100%,450px);height:auto;margin:auto">
     </el-dialog>
@@ -130,10 +131,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { playerCardTemplateRequest } from '@/utils/cloud'
-import { renderMaskedCardForeground } from '@/utils/playerCardMask'
+import { renderMaskedCardLayers } from '@/utils/playerCardMask'
 import TEXT_STYLE_CONTRACT from '../../../../cloudfunctions/webLoginApi/player-card-text-styles.json'
 
 
@@ -159,7 +160,7 @@ function freshLayout() { return styleLayout(DEFAULT_LAYOUT) }
 const DEFAULT_PHOTO = { x: 150, y: 35, scale: 108 }
 function freshPhoto() { return { ...DEFAULT_PHOTO } }
 const DEFAULT_BADGES = { nationality: { x: 125, y: 394, size: 28 }, team: { x: 175, y: 388, size: 32 } }
-function freshBadges() { return JSON.parse(JSON.stringify(DEFAULT_BADGES)) }
+function freshBadges(value = {}) { return Object.fromEntries(Object.entries(DEFAULT_BADGES).map(([key, defaults]) => [key, { ...defaults, ...(value?.[key] || {}) }])) }
 
 const backendReady = ref(false), publishServiceReady = ref(false)
 const templates = ref([]), nextCursor = ref(''), loading = ref(false), loadingMore = ref(false)
@@ -167,7 +168,7 @@ const saving = ref(false), publishing = ref(false), error = ref(''), uploadError
 const publishProgress = ref('')
 const publishJob = ref(null)
 const selectedFiles = reactive({ background: '', mask: '' })
-const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null), maskedCanvas = ref(null), dialogMaskedCanvas = ref(null)
+const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null), previewSlot = ref(null)
 const finalPreviewLoading = ref(false), finalPreviewImage = ref('')
 const previewState = ref('idle'), previewError = ref(''), previewOpen = ref(false)
 const PRELOAD_TYPES = [{ value:'platform', label:'全平台' }, { value:'team', label:'球队' }, { value:'tournament', label:'赛事' }, { value:'player', label:'球员' }]
@@ -191,32 +192,34 @@ const photoStyle = computed(() => {
 })
 const canPublish = computed(() => Boolean(scopeReady.value && form.id && !dirty.value && form.backgroundUrl && form.maskUrl && previewState.value === 'ready' &&
   (form.status !== 'published' || form.draftVersion > form.publishedVersion)))
-let previewRequest = 0, renderedOverlay = null, pendingMaskReview = false
-function paintDialogOverlay() {
-  const context = dialogMaskedCanvas.value?.getContext('2d')
-  if (!context || !renderedOverlay) return
-  context.clearRect(0, 0, 300, 430); context.drawImage(renderedOverlay, 0, 0)
+const previewVisible=ref(true),portraitMaskUrl=ref(''),dockBounds=reactive({left:0,width:340,height:800})
+const dockStyle=computed(()=>({left:`${dockBounds.left}px`,width:`${dockBounds.width}px`}))
+const previewScale=computed(()=>Math.max(.25,Math.min(1,(dockBounds.width-28)/300,(dockBounds.height-112)/430)))
+const previewSizeStyle=computed(()=>({width:`${300*previewScale.value}px`,height:`${430*previewScale.value}px`}))
+const previewScaleStyle=computed(()=>({transform:`scale(${previewScale.value})`,transformOrigin:'top left'}))
+const portraitMaskStyle=computed(()=>({maskImage:`url("${portraitMaskUrl.value}")`,WebkitMaskImage:`url("${portraitMaskUrl.value}")`,maskSize:'300px 430px',WebkitMaskSize:'300px 430px',maskRepeat:'no-repeat',WebkitMaskRepeat:'no-repeat'}))
+let dockObserver=null,dockFrame=0,activeDragEnd=null,previewRequest=0,pendingMaskReview=false
+function updateDock(){
+  if(dockFrame)return
+  dockFrame=requestAnimationFrame(()=>{dockFrame=0;const rect=previewSlot.value?.getBoundingClientRect();if(!rect)return;const width=Math.min(window.innerWidth<900?250:340,rect.width,window.innerWidth-24);dockBounds.width=width;dockBounds.height=window.innerHeight;dockBounds.left=window.innerWidth<1100?Math.max(12,window.innerWidth-width-16):Math.max(12,Math.min(rect.left,window.innerWidth-width-12))})
 }
-async function composePreview() {
-  const requestId = ++previewRequest, background = form.backgroundUrl, mask = form.maskUrl
-  previewState.value = background && mask ? 'loading' : 'idle'; previewError.value = ''; renderedOverlay = null
-  if (!background || !mask) return
-  try {
-    const source = await renderMaskedCardForeground(background, mask)
-    if (requestId !== previewRequest) return
-    await nextTick()
-    const context = maskedCanvas.value?.getContext('2d')
-    if (!context) throw new Error('预览画布暂不可用')
-    context.clearRect(0, 0, 300, 430); context.drawImage(source, 0, 0)
-    renderedOverlay = source
-    previewState.value = 'ready'
-    if (previewOpen.value) { await nextTick(); paintDialogOverlay() }
-  } catch (cause) {
-    if (requestId === previewRequest) { previewState.value = 'error'; previewError.value = cause.message || '遮罩预览失败' }
-  }
+async function composePreview(){
+  const requestId=++previewRequest,background=form.backgroundUrl,mask=form.maskUrl
+  previewState.value=background&&mask?'loading':'idle';previewError.value='';portraitMaskUrl.value=''
+  if(!background||!mask)return
+  try{const layers=await renderMaskedCardLayers(background,mask);if(requestId!==previewRequest)return;portraitMaskUrl.value=layers.portraitMaskUrl;previewState.value='ready'}
+  catch(cause){if(requestId===previewRequest){previewState.value='error';previewError.value=cause.message||'遮罩预览失败'}}
 }
-watch([() => form.backgroundUrl, () => form.maskUrl], composePreview)
-watch(previewOpen, async open => { if (open) { await nextTick(); paintDialogOverlay() } })
+watch([()=>form.backgroundUrl,()=>form.maskUrl],composePreview)
+onMounted(async()=>{await nextTick();dockObserver=new ResizeObserver(updateDock);if(previewSlot.value)dockObserver.observe(previewSlot.value);window.addEventListener('resize',updateDock);updateDock()})
+onBeforeUnmount(()=>{previewRequest++;dockObserver?.disconnect();window.removeEventListener('resize',updateDock);cancelAnimationFrame(dockFrame);activeDragEnd?.()})
+function trackDrag(event,apply){
+  activeDragEnd?.();let pending=null,frame=0
+  const flush=()=>{frame=0;if(pending){apply(pending);pending=null;dirty.value=true}}
+  const move=pointer=>{if(pointer.pointerId!==event.pointerId)return;pending=pointer;if(!frame)frame=requestAnimationFrame(flush)}
+  const end=()=>{if(frame)cancelAnimationFrame(frame);flush();window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);activeDragEnd=null}
+  activeDragEnd=end;window.addEventListener('pointermove',move);window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end)
+}
 watch(previewState, state => {
   if (state === 'ready' && pendingMaskReview) pendingMaskReview = false
   if (state === 'error') pendingMaskReview = false
@@ -249,7 +252,7 @@ async function applyLayoutPreset() {
   try {
     const result=await request('getPlayerCardLayoutPreset',{presetId:selectedLayoutPreset.value})
     if(epoch!==formEpoch) return
-    form.layout=styleLayout(result.preset.layout);form.photo={...result.preset.photo};form.badges=JSON.parse(JSON.stringify(result.preset.badges))
+    form.layout=styleLayout(result.preset.layout);form.photo={...result.preset.photo};form.badges=freshBadges(result.preset.badges)
     dirty.value=true;ElMessage.success('模板已导入，待保存草稿')
   } catch(cause) { ElMessage.error(cause.message) } finally { layoutApplying.value=false }
 }
@@ -292,7 +295,7 @@ function assign(item) {
     draftVersion: item.draftVersion, publishedVersion: item.publishedVersion,
     backgroundUrl: item.backgroundData || item.backgroundUrl || '', maskUrl: item.maskData || item.maskUrl || '',
     backgroundData: '', maskData: '', layout: styleLayout(item.layout),
-    photo: { ...(item.photo || DEFAULT_PHOTO) }, badges: JSON.parse(JSON.stringify(item.badges || DEFAULT_BADGES)) })
+    photo: { ...(item.photo || DEFAULT_PHOTO) }, badges: freshBadges(item.badges) })
   dirty.value = false; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
 }
 async function select(item) {
@@ -474,39 +477,30 @@ function beginBadgeDrag(event, key) {
   const rect = event.currentTarget.closest('.card-preview')?.getBoundingClientRect(), badge = form.badges[key]
   if (!rect || !badge) return
   const startX = event.clientX, startY = event.clientY, x = badge.x, y = badge.y
-  const move = pointer => {
+  trackDrag(event, pointer => {
     badge.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
     badge.y = Math.max(0, Math.min(430, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
-    dirty.value = true
-  }
-  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
+  })
 }
 function beginPhotoDrag(event) {
   event.preventDefault()
   const rect = event.currentTarget.closest('.card-preview')?.getBoundingClientRect()
   if (!rect) return
   const startX = event.clientX, startY = event.clientY, x = form.photo.x, y = form.photo.y
-  const move = pointer => {
+  trackDrag(event, pointer => {
     form.photo.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
     form.photo.y = Math.max(0, Math.min(250, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
-    dirty.value = true
-  }
-  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
+  })
 }
 function beginTextDrag(event, key) {
   event.preventDefault(); selectedField.value = key
   const element = previewRef.value, style = form.layout[key], rect = element?.getBoundingClientRect()
   if (!rect || !style) return
   const startX = event.clientX, startY = event.clientY, x = style.x, y = style.y
-  const move = pointer => {
+  trackDrag(event, pointer => {
     style.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
     style.y = Math.max(0, Math.min(430, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
-    dirty.value = true
-  }
-  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
+  })
 }
 onMounted(() => {
   if(!document.getElementById('player-card-fonts')) {
@@ -532,4 +526,6 @@ onMounted(() => {
 .preload-filter{display:grid;gap:6px;font-size:13px;margin-bottom:8px}.editor-fields,.template-workspace,.preview-pane{min-width:0}.template-list small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:680px){.preload-filter{flex:0 0 140px}.preview-pane{overflow:hidden}}
 .text-effects{display:grid;gap:12px}.gradient-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.gradient-controls label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.gradient-controls input[type=color]{width:100%;height:30px;padding:2px;border:1px solid #cbd9d0;border-radius:4px}.effect-presets{display:flex;flex-wrap:wrap;gap:6px}.effect-presets .el-button+.el-button{margin-left:0}
 .layout-presets{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.layout-presets>strong{font-size:14px}.layout-actions{display:flex;gap:8px}.layout-actions .el-button+.el-button{margin-left:0}
+
+.preview-slot{min-width:0}.preview-pane.preview-docked{position:fixed;top:50%;transform:translateY(-50%);z-index:30;box-sizing:border-box;max-height:calc(100dvh - 32px);overflow:auto;align-content:start;justify-items:center;box-shadow:0 4px 18px #163a2218;contain:layout paint}.preview-size{position:relative;flex:none}.preview-docked .card-preview{margin:0}.portrait-mask{position:absolute;inset:0;width:300px;height:430px;z-index:2;pointer-events:none}.portrait-mask .portrait{pointer-events:auto}.preview-toggle{position:fixed;right:22px;bottom:20px;z-index:40;margin:0!important}.preview-docked .preview-state{line-height:1.5;text-align:center}.preview-docked .preview-title{gap:8px}.preview-docked .preview-error{flex-wrap:wrap}@media(max-width:1100px){.preview-slot{min-height:1px}.preview-docked{justify-items:center}}@media(max-width:680px){.preview-docked .card-preview{margin:0;transform-origin:top left}.preview-toggle{right:16px;bottom:16px}}
 </style>

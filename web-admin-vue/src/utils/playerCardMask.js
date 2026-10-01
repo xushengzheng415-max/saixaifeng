@@ -10,7 +10,7 @@ function loadImage(src) {
   })
 }
 
-export function renderMaskedCardForeground(backgroundSrc, maskSrc) {
+export function renderMaskedCardLayers(backgroundSrc, maskSrc) {
   if (!backgroundSrc || !maskSrc) return Promise.resolve('')
   const cacheable = !backgroundSrc.startsWith('data:') && !maskSrc.startsWith('data:')
   const key = `${backgroundSrc}|${maskSrc}`
@@ -25,19 +25,31 @@ export function renderMaskedCardForeground(backgroundSrc, maskSrc) {
     const foreground = context.getImageData(0, 0, 300, 430)
     context.clearRect(0, 0, 300, 430)
     context.drawImage(mask, 0, 0)
-    const pixels = context.getImageData(0, 0, 300, 430).data
+    const maskPixels = context.getImageData(0, 0, 300, 430)
+    const pixels = maskPixels.data
     for (let i = 0; i < foreground.data.length; i += 4) {
       const luminance = (0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]) / 255
       foreground.data[i + 3] = Math.round(foreground.data[i + 3] * (1 - luminance) * pixels[i + 3] / 255)
+      pixels[i + 3] = Math.round(luminance * pixels[i + 3])
+      pixels[i] = pixels[i + 1] = pixels[i + 2] = 255
     }
+    context.putImageData(maskPixels, 0, 0)
+    const portraitMaskUrl = canvas.toDataURL('image/png')
     context.clearRect(0, 0, 300, 430)
     context.putImageData(foreground, 0, 0)
-    return canvas
+    return { foreground:canvas, portraitMaskUrl }
   }).catch(error => {
     if (cacheable) cache.delete(key)
     if (error?.name === 'SecurityError') throw new Error('图片地址不允许预览，请重新上传背景和遮罩 PNG')
     throw error
   })
-  if (cacheable) cache.set(key, pending)
+  if (cacheable) {
+    cache.set(key, pending)
+    while (cache.size > 12) cache.delete(cache.keys().next().value)
+  }
   return pending
+}
+
+export function renderMaskedCardForeground(backgroundSrc, maskSrc) {
+  return renderMaskedCardLayers(backgroundSrc,maskSrc).then(result=>result?.foreground || '')
 }
