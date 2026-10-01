@@ -1001,6 +1001,7 @@
     var type = event.target.value
     document.getElementById('playerField').style.display = ['stoppage_time', 'other'].indexOf(type) >= 0 ? 'none' : 'grid'
     document.getElementById('assistField').style.display = ['goal', 'substitution'].indexOf(type) >= 0 ? 'grid' : 'none'
+    document.getElementById('assistField').firstChild.nodeValue = type === 'substitution' ? '换下球员' : '助攻／换下球员'
   }
   document.getElementById('closeEventDialog').onclick = function () { eventDialog.close() }
   document.getElementById('closeFinishDialog').onclick = function () { finishDialog.close() }
@@ -1008,13 +1009,14 @@
     event.preventDefault()
     var form = new FormData(event.target); var minute = Number(form.get('minute'))
     if (!Number.isInteger(minute) || minute < 0 || minute > 130) return toast('请输入0至130之间的比赛分钟')
-    eventDialog.close()
     var selectedPlayer = parseRosterSelection(form.get('playerName'))
     var selectedAssist = parseRosterSelection(form.get('assistName'))
+    if(form.get('type')==='substitution'&&!selectedAssist.name)return toast('请选择换下球员')
+    eventDialog.close()
     runMatchAction('addRefereeEvent', {
       type: form.get('type'), teamSide: form.get('teamSide'), minute: minute,
-      playerName: selectedPlayer.name, playerNumber: selectedPlayer.number,
-      assistName: selectedAssist.name, assistNumber: selectedAssist.number,
+      playerName: selectedPlayer.name, playerNumber: selectedPlayer.number,playerId:selectedPlayer.id,
+      assistName: selectedAssist.name, assistNumber: selectedAssist.number,assistPlayerId:selectedAssist.id,
       description: String(form.get('description') || '').trim()
     }, '比赛事件已保存')
     event.target.reset()

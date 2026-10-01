@@ -360,19 +360,35 @@ exports.main = async (event, context) => {
     delete safeData.updateTime
     delete safeData.executionSnapshot
     delete safeData.executionSnapshotAt
+    let eventValidation = null
+    delete safeData.matchEventRevision
     if (Array.isArray(safeData.events)) {
-      safeData.events = normalizeMatchEvents(safeData.events, match)
+      if (event.expectedEventRevision != null && Number(event.expectedEventRevision) !== Number(match.matchEventRevision || 0)) {
+        return { success:false, code:'MATCH_EVENTS_CHANGED', message:'比赛事件已更新，请刷新后重新录入' }
+      }
+      let division = null
+      if (match.divisionId && match.divisionId !== 'default') {
+        const record = await db.collection('divisions').doc(String(match.divisionId)).get()
+        division = Array.isArray(record.data) ? record.data[0] : record.data
+      }
+      division = division || (tournament?.divisions || []).find(row=>String(row._id || row.id || '')===String(match.divisionId || '')) || {}
+      const { substitutionRules, assertSubstitutionChange, normalizeSubstitutionRecords } = await import('./data-center/substitution.mjs')
+      eventValidation = assertSubstitutionChange(match,substitutionRules(match,division,tournament || {}),safeData.events)
+      safeData.events = normalizeMatchEvents(normalizeSubstitutionRecords(match,safeData.events), match)
+      safeData.matchEventRevision = Number(match.matchEventRevision || 0) + 1
       const eventScore = eventScoreFromEvents(safeData.events)
       safeData.homeScore = eventScore.home
       safeData.awayScore = eventScore.away
       safeData.scoreHome = eventScore.home
       safeData.scoreAway = eventScore.away
     }
-    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field))) {
+    const canSupplement = Boolean(eventValidation) && ['finished','ended'].includes(String(match.status || '').toLowerCase()) && !match.refereeRecordLocked
+    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway'].includes(field)))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
     if (planState.locked) {
-      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field))
+      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision'])
+      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已经锁定，当前只允许调整受控裁判指派', code: 'COMPETITION_PLAN_LOCKED' }
       }
@@ -410,13 +426,23 @@ exports.main = async (event, context) => {
     if(scheduleChanged){await ensureScheduleAdjustmentLogs();const operationGroupId=String(event.adjustmentGroupId || ('adjust-'+Date.now()+'-'+crypto.randomBytes(3).toString('hex')));const logResult=await db.collection('schedule_adjustment_logs').add({ data:{ tournamentId:String(match.tournamentId || ''),divisionId:String(match.divisionId || 'default'),matchId:String(matchId),operationGroupId,adjustmentType:String(event.adjustmentType || 'manual'),before:{ matchDate:String(match.matchDate || ''),matchTime:String(match.matchTime || ''),venue:String(match.venue || '') },after:{ matchDate:String(safeData.matchDate!==undefined?safeData.matchDate:match.matchDate || ''),matchTime:String(safeData.matchTime!==undefined?safeData.matchTime:match.matchTime || ''),venue:String(safeData.venue!==undefined?safeData.venue:match.venue || '') },actorUserId:String(actor.user._id || ''),actorOrgId:actor.orgId,status:'pending',undone:false,createTime:db.serverDate(),updateTime:db.serverDate() } });adjustmentLogId=String(logResult._id || '')}
 
     // 更新 matches 集合
-    await db.collection('matches').doc(matchId).update({
+    const saveMatch = async target => target.collection('matches').doc(matchId).update({
       data: {
         ...safeData,
         orgId: actor.orgId,
         updateTime: db.serverDate()
       }
     })
+    if (eventValidation) {
+      await db.runTransaction(async transaction => {
+        const freshResult = await transaction.collection('matches').doc(matchId).get()
+        const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
+        if (!fresh || fresh.refereeRecordLocked || Number(fresh.matchEventRevision || 0) !== Number(match.matchEventRevision || 0) || JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || []) || JSON.stringify(fresh.lineups || {}) !== JSON.stringify(match.lineups || {}) || JSON.stringify(fresh.homeLineup || {}) !== JSON.stringify(match.homeLineup || {}) || JSON.stringify(fresh.awayLineup || {}) !== JSON.stringify(match.awayLineup || {})) {
+          throw Object.assign(new Error('比赛事件或阵容已更新，请刷新后重试'),{code:'MATCH_EVENTS_CHANGED'})
+        }
+        await saveMatch(transaction)
+      })
+    } else await saveMatch(db)
     if(adjustmentLogId) await db.collection('schedule_adjustment_logs').doc(adjustmentLogId).update({ data:{ status:'applied',appliedAt:db.serverDate(),updateTime:db.serverDate() } })
 
     let notificationRelay = null
@@ -448,12 +474,12 @@ exports.main = async (event, context) => {
     return {
       success: true,
       message: '更新成功',
-      ...(Array.isArray(safeData.events) ? { data: { homeScore: safeData.homeScore, awayScore: safeData.awayScore } } : {}),
+      ...(Array.isArray(safeData.events) ? { data: { homeScore: safeData.homeScore, awayScore: safeData.awayScore, matchEventRevision:safeData.matchEventRevision, substitutionIssues:eventValidation?.issues || [] } } : {}),
       ...(notificationRelay ? { __notificationRelay: notificationRelay } : {})
     }
   } catch (err) {
     console.error('更新比赛失败:', err)
-    return { success: false, message: '更新失败: ' + err.message }
+    return { success: false, code:err.code || 'MATCH_UPDATE_FAILED', message: '更新失败: ' + err.message }
   }
 }
 

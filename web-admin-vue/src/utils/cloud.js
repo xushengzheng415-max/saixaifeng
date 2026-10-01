@@ -770,6 +770,10 @@ if (name in CLOUD_FUNCTION_MAP) {
   }
 }
 
+export function updateDivisionSubstitutionRules(divisionId, data = {}) {
+  return callFunctionHTTP('updateDivisionSubstitutionRules', { divisionId, ...data })
+}
+
 export async function getPublicTournamentCenter() {
   return callFunctionHTTP('publicTournamentCenter', {})
 }

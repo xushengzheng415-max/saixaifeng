@@ -5391,6 +5391,8 @@ exports.main = async (event, context) => {
       case 'saveMyPlayerCard':
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
+      case 'updateDivisionSubstitutionRules':
+        result = await require('./divisionSubstitutionRules.cjs').createDivisionSubstitutionRules({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
       case 'publicTournamentCenter':
         result = await getPublicTournamentCenter()
         break

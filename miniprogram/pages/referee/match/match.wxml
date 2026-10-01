@@ -162,7 +162,7 @@
       </view>
       <view class="form-item" wx:if="{{showAssistField}}">
         <text class="form-label">{{eventAssistLabel}}</text>
-        <input class="text-input" maxlength="30" placeholder="选填" value="{{eventAssistName}}" bindinput="onEventAssistInput" />
+        <input class="text-input" maxlength="30" placeholder="{{eventAssistPlaceholder}}" value="{{eventAssistName}}" bindinput="onEventAssistInput" />
       </view>
       <view class="form-item" wx:if="{{showDescriptionField}}">
         <text class="form-label">事件说明</text>

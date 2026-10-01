@@ -51,6 +51,7 @@ Page({
     eventDescription: '',
     eventPlayerLabel: '进球球员',
     eventAssistLabel: '助攻球员（选填）',
+    eventAssistPlaceholder: '选填',
     showAssistField: true,
     showPlayerField: true,
     showDescriptionField: false
@@ -280,6 +281,7 @@ Page({
       eventDescription: '',
       eventPlayerLabel: '进球球员',
       eventAssistLabel: '助攻球员（选填）',
+      eventAssistPlaceholder: '选填',
       showAssistField: true,
       showPlayerField: true,
       showDescriptionField: false
@@ -304,7 +306,8 @@ Page({
       eventType: option.value,
       eventTypeLabel: option.label,
       eventPlayerLabel: isSubstitution ? '换上球员' : (isGoal ? '进球球员' : '球员姓名'),
-      eventAssistLabel: isSubstitution ? '换下球员（选填）' : '助攻球员（选填）',
+      eventAssistLabel: isSubstitution ? '换下球员' : '助攻球员（选填）',
+      eventAssistPlaceholder: isSubstitution ? '请选择' : '选填',
       showAssistField: isSubstitution || isGoal,
       showPlayerField: needsPlayer,
       showDescriptionField: option.value === 'other',
@@ -345,6 +348,10 @@ Page({
     }
     if (['stoppage_time', 'other'].indexOf(this.data.eventType) < 0 && !playerName) {
       wx.showToast({ title: '请输入球员姓名', icon: 'none' })
+      return
+    }
+    if (this.data.eventType === 'substitution' && !String(this.data.eventAssistName || '').trim()) {
+      wx.showToast({ title: '请选择换下球员', icon: 'none' })
       return
     }
     var that = this

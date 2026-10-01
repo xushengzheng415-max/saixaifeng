@@ -3,8 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const source = path.join(root,'cloudfunctions/dataCenter/shared')
-const consumers = ['getMiniWorkspace','webLoginApi','resultCenter']
-const files = ['reader.cjs','statistics.mjs','service.cjs','support.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs']
+const consumers = ['getMiniWorkspace','webLoginApi','resultCenter','updateMatch','serviceMatchWorkflow']
+const files = ['reader.cjs','statistics.mjs','service.cjs','support.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs']
 const check = process.argv.includes('--check')
 let mismatch = false
 for (const consumer of consumers) {

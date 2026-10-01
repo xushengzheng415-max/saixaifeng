@@ -25,7 +25,8 @@
         <el-select class="division-selector" :model-value="divisionId" disabled aria-label="当前组别">
           <el-option :label="`当前组别：${division.name || '竞赛组别'}`" :value="divisionId" />
         </el-select>
-        <el-button v-if="effective && canManage" type="primary" :loading="saving" @click="startRuleRevision">调整规则</el-button>
+        <el-button v-if="(effective || division.activeRulesVersion) && canManage" type="primary" @click="openSubstitutionSettings">修改换人</el-button>
+        <el-button v-if="effective && canManage" plain :loading="saving" @click="startRuleRevision">调整规则</el-button>
         <el-button v-if="effective" plain @click="backToDivisions">返回组别管理</el-button>
         <span v-else class="draft-version">草稿 {{ draftVersion }}</span>
       </div>
@@ -215,6 +216,14 @@
       </div>
     </footer>
     <el-alert v-if="!canManage" class="permission-alert" type="warning" :closable="false" show-icon title="你只有查看该赛事的权限，不能修改竞赛规则。" />
+    <el-dialog v-model="substitutionSettingsVisible" title="换人设置" width="min(520px,94vw)">
+      <el-form label-position="top">
+        <el-form-item label="换人方式"><el-radio-group v-model="substitutionSettings.substitutionMode"><el-radio-button value="limited">限定换人</el-radio-button><el-radio-button value="free">无限换人</el-radio-button></el-radio-group></el-form-item>
+        <template v-if="substitutionSettings.substitutionMode === 'limited'"><el-form-item label="换人人数"><el-input-number v-model="substitutionSettings.substitutionLimit" :min="0" :max="100" /></el-form-item><el-form-item label="换人窗口"><el-input-number v-model="substitutionSettings.substitutionWindows" :min="0" :max="100" /></el-form-item></template>
+        <el-form-item label="允许再次上场"><el-switch v-model="substitutionSettings.substitutionReentryAllowed" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="substitutionSettingsVisible=false">取消</el-button><el-button type="primary" :loading="substitutionSettingsSaving" @click="saveSubstitutionSettings">保存</el-button></template>
+    </el-dialog>
   </section>
 </template>
 
@@ -223,7 +232,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, Check, CircleCheck, CircleCheckFilled, Document, Grid, Location, MagicStick, Printer, Tickets, Trophy, View, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord } from '../../utils/cloud'
+import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import DivisionRegulationFields from './DivisionRegulationFields.vue'
@@ -238,6 +247,24 @@ const localEffectiveQa = localVisualQa && window.location.href.includes('step=ef
 const localProfessionalQa = localVisualQa && (divisionId === 'qa-division-u16' || window.location.href.includes('mode=professional'))
 const loading = ref(false)
 const saving = ref(false)
+const substitutionSettingsVisible=ref(false),substitutionSettingsSaving=ref(false)
+const substitutionSettings=reactive({substitutionMode:'limited',substitutionLimit:5,substitutionWindows:3,substitutionReentryAllowed:false})
+function openSubstitutionSettings(){
+  Object.assign(substitutionSettings,{substitutionMode:division.value.substitutionMode || 'limited',substitutionLimit:division.value.substitutionLimit ?? 5,substitutionWindows:division.value.substitutionWindows ?? 3,substitutionReentryAllowed:division.value.substitutionReentryAllowed===true})
+  substitutionSettingsVisible.value=true
+}
+watch(()=>substitutionSettings.substitutionMode,mode=>{if(mode==='free')substitutionSettings.substitutionReentryAllowed=true})
+async function saveSubstitutionSettings(){
+  if(!canManage.value)return
+  substitutionSettingsSaving.value=true
+  try{
+    const result=await updateDivisionSubstitutionRules(divisionId,{...substitutionSettings,expectedRulesVersion:String(division.value.rulesVersion || 'V1.0')})
+    if(!result?.success)throw new Error(result?.error || '换人设置保存失败')
+    Object.assign(division.value,result.data);hydrateForm(division.value)
+    substitutionSettingsVisible.value=false;ElMessage.success('换人规则已更新')
+  }catch(error){ElMessage.error(error.message || '保存失败，请重试')}
+  finally{substitutionSettingsSaving.value=false}
+}
 const recognizingRegulation = ref(false)
 const tournament = ref(localVisualQa ? { name: '2026河南青少年足球冠军联赛', status: 'ongoing', divisionCount: 5, startDate: '2026-07-20', endDate: '2026-08-18', region: '河南省' } : {})
 const division = ref(localVisualQa ? { _id: 'qa-division-u16', name: 'U16组', mode: localProfessionalQa ? 'professional' : 'simple', isProfessional: localProfessionalQa, rulesLocked: localEffectiveQa, ruleFinalized: localEffectiveQa, ruleStatus: localEffectiveQa ? 'finalized' : 'draft', ruleProgress: localEffectiveQa ? 100 : 0, expectedTeams: 16, groupCount: 4, teamsPerGroup: 4, groupCycle: 'single', advancePerGroup: 2, formatType: 'cup', draftVersion: 'V1.1', rulesVersion: localEffectiveQa && localProfessionalQa ? 'V1.1' : 'V1.0' } : {})
@@ -441,6 +468,8 @@ function validateRegistrationDeadline() {
     return false
   }
   if (deadline.getTime() + 60000 <= Date.now()) {
+    const prior=parseLocalMinute(division.value.activeRulesSnapshot?.registrationDeadline)
+    if(division.value.rulesRevisionPending && prior && deadline.getTime()===prior.getTime())return true
     ElMessage.warning('报名截止时间不能早于当前时间')
     return false
   }
@@ -474,11 +503,13 @@ function validateCompetitionRuleInputs() {
 function synchronizeRegulationDetails() {
   const details = form.regulationDetails || {}
   const windows = [details.firstHalfSubstitutionWindows, details.secondHalfSubstitutionWindows, details.halftimeSubstitutionWindows]
-  if (windows.some(value => value != null && value !== '')) {
+  if(form.substitutionMode==='free'){
+    form.substitutionLimit=null;form.substitutionWindows=null
+    Object.assign(details,{firstHalfSubstitutionWindows:null,secondHalfSubstitutionWindows:null,halftimeSubstitutionWindows:null,substitutionReentryForbidden:!form.substitutionReentryAllowed})
+  } else if (windows.some(value => value != null && value !== '')) {
     form.substitutionWindows = windows.reduce((sum, value) => sum + Number(value || 0), 0)
-    form.substitutionMode = 'limited'
   }
-  if (details.substitutionReentryForbidden === true) form.substitutionReentryAllowed = false
+  if (form.substitutionMode!=='free' && details.substitutionReentryForbidden === true) form.substitutionReentryAllowed = false
   if (details.cardsCarryToNextStage === true) form.knockoutYellowReset = false
 }
 const periodModeLabel = computed(() => form.periodMode === 'single' ? '单节制' : '上下半场制')
@@ -576,7 +607,7 @@ function hydrateForm(source) {
   if (form.formatType === 'league') form.finalRankingMode = 'full'
   const registrationDeadline = parseLocalMinute(form.registrationDeadline)
   if (registrationDeadline) form.registrationDeadline = formatLocalMinute(registrationDeadline)
-  if (!effective.value && (!registrationDeadline || registrationDeadline.getTime() + 60000 <= Date.now())) {
+  if (!effective.value && !source.rulesRevisionPending && (!registrationDeadline || registrationDeadline.getTime() + 60000 <= Date.now())) {
     form.registrationDeadline = defaultRegistrationDeadline()
   }
   formRenderKey.value += 1
