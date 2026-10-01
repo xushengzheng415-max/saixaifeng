@@ -30,6 +30,6 @@
 
     <view wx:if="{{player.remark}}" class="remark-card"><view class="card-title-bar"><view class="title-accent orange"></view><text class="card-title">备注</text></view><text class="remark-content">{{player.remark}}</text></view>
 
-    <view wx:if="{{canManage}}" class="action-bar"><button class="action-btn edit-btn" bindtap="onEdit"><text class="btn-text">编辑信息</text></button><button class="action-btn delete-btn" bindtap="onDelete"><text class="btn-text">移出球队</text></button></view>
+    <view wx:if="{{canManage}}" class="action-bar"><button class="action-btn edit-btn" bindtap="onEdit"><text class="btn-text">补充资料</text></button><button class="action-btn delete-btn" bindtap="onDelete"><text class="btn-text">移出球队</text></button></view>
   </block>
 </view>

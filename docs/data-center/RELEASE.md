@@ -1,5 +1,15 @@
 # 数据中心上线与验收
 
+## 2026-10-01 照片优先展示补充
+
+按用户确认的“报名提取头像/自主登记形象照基本都有图”调整展示：完整成卡可用时显示成卡，其余情况优先显示已授权照片；仅实际缺图提示资料补充，图片/网络异常保留重试。未修改报名照片要求、测试排除或卡级算法，也未重制已完成的 189 张成卡。
+
+正式 webLoginApi、getMiniWorkspace 的照片读取元数据与补充入口已差量部署；从最新线上包接入，模块 ZIP 回读摘要一致。正式 PC 完整包和 H5 我的球员卡已部署：入口 `/admin/assets/index-C1FLG24j.js`、H5 JS/HTML HTTP 200 且摘要匹配。未登录 PC/个人读取仍返回 AUTH_REQUIRED/PLAYER_CARD_AUTH_REQUIRED。H5 编辑链接复核活跃邀请、有效期及稳定球员关联。
+
+照片独立于成卡生成的专项、发布续跑回归、JS/WXML 检查、PC 构建及数据中心业务检查通过。数据中心治理检查存在 HEAD 基线已有缺口：getMiniWorkspace 的 dataCenter 入口检查及两个函数中四个统计部署副本同步检查未通过，非本轮照片改动引入，未声明治理检查全通过。
+
+1.0.34 开发版已覆盖上传本次照片展示修订，AppID wx57164cca8676f411，总包 2230686 字节、主包 1540388 字节；仍未提交微信审核/正式发布。
+
 2026-09-30 本轮实施状态：积分 v1 的三端显示和服务端权益门禁已在 `codex/player-card-points-implementation` 分支实现，`test-data-center`、`test-player-card-entitlement`、语法检查和 PC 构建通过。PC 使用 `dataCenter.playerCard`，小程序球员详情在原球队授权后取完整生涯卡级，C 端 H5 使用 `list/get/saveMyPlayerCard` 的共享服务积分并在保存时重查 100 分权益。`dataCenter` 与 `getMiniWorkspace` 已基于各自最新线上代码差量部署，回下载分别核对 11、10 个文件 SHA-256 全部一致；`webLoginApi` 保留线上主包并更新球员卡模块，11 个环境变量仍在，匿名制卡接口返回 `PLAYER_CARD_AUTH_REQUIRED`。H5 五个静态文件已发布并回读。PC 预览已部署，小程序开发版已上传；真实账号尚未回读。旧卡保级快照及预生成图片的可信校验仍需处理，不能称三端正式验收完成。
 
 同日后续：PC `preview` 已合并当前实施分支并部署 `/preview/admin/`，入口与 PlayerDetail/PlayerCard 两个分包均通过正式域名 HTTP 200 和 SHA-256 回读；正式 `/admin/` 仍可访问。小程序开发版 `1.0.33` 已通过微信开发者工具上传，AppID `wx57164cca8676f411`，包体 2,676,263 字节；尚未设为体验版或正式版。H5 公开球员榜原按场次赋等级，现于线上主包的 `fanRankings` 路径接入 `fanPlayerCardScores.cjs`，一次读取正式生涯并按稳定 ID 派生积分；匿名回读 210 行中 189 行可核定、21 行待核定，最高 4 分。赛事中心实际加载的 `tournament-center-player-list-20260930.js` 与入口 HTML 已基于现网版本差量发布，未知等级不显示铜卡；两文件正式域名 HTTP 200、哈希一致。服务端第二次回下载 13 个源文件与发布包一致。上述公开接口验收不等于本人/监护、真实 PC 工作空间和小程序真机验收。

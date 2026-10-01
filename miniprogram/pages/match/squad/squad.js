@@ -67,7 +67,7 @@ Page({
     cardService.batch(rows.map(function(player){return player.id}),this.data.teamId).then(function(result){
       if(generation!==(self._cardGeneration||0))return
       var byId={};(result.cards||[]).forEach(function(card){byId[card.playerId]=card})
-      function metadata(item,id){var card=byId[id];return card?Object.assign({},item,{cardUrl:card.cardUrl||'',cardState:card.status,templateId:card.templateId||'',publishedVersion:card.publishedVersion||0,cardDataVersion:card.cardDataVersion||0}):item}
+      function metadata(item,id){var card=byId[id];return card?Object.assign({},item,{cardUrl:card.cardUrl||'',cardState:card.status,portraitUrl:card.portraitUrl||'',avatar:card.portraitUrl||item.avatar||'',photoUrl:card.portraitUrl||item.photoUrl||'',templateId:card.templateId||'',publishedVersion:card.publishedVersion||0,cardDataVersion:card.cardDataVersion||0}):item}
       self._rosterPlayers=rows.map(function(player){return metadata(player,player.id)})
       self.setData({slots:self.data.slots.map(function(slot){return metadata(slot,slot.playerId)}),substitutes:self.data.substitutes.map(function(player){return metadata(player,player.id)}),pickerPlayers:self.data.pickerPlayers.map(function(player){return metadata(player,player.id)}),pickerAllPlayers:self.data.pickerAllPlayers.map(function(player){return metadata(player,player.id)})})
     }).catch(function(error){console.warn('[card-refresh]',error.message)}).finally(function(){self._readingCards=false})

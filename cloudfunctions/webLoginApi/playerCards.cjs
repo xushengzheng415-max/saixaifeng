@@ -121,6 +121,14 @@ function createPlayerCards(deps) {
         const type = String(item.backgroundId || item.cardTier || '')
         const active = await suite.signedCard(cloud, db, entry.player, type)
         item.cardStatus = active.status
+        item.portraitUrl=active.portraitUrl||''
+        item.portraitStatus=active.portraitStatus||'missing'
+        item.profileEditUrl=''
+        const token=auth.parentInvite||entry.relation?.parentInvite
+        if(token){
+          const invites=(await db.collection('parent_profile_invites').where({token:String(token),status:'active'}).limit(2).get()).data||[]
+          if(invites.length===1&&String(invites[0].playerId)===String(entry.player._id)&&dateValue(invites[0].expiresAt)>Date.now())item.profileEditUrl='/service-account-h5/?parentInvite='+encodeURIComponent(String(token))
+        }
         item.templateId = active.templateId || ''
         item.publishedVersion = active.templateVersion || 0
         item.cardDataVersion = active.cardDataVersion || 0

@@ -144,7 +144,7 @@
           <!-- 底部操作按钮 -->
           <div class="action-buttons">
             <el-button type="primary" size="large" @click="editPlayer">
-              <el-icon><Edit /></el-icon>编辑
+              <el-icon><Edit /></el-icon>补充资料
             </el-button>
             <el-button type="warning" size="large" @click="previewCard">
               <el-icon><View /></el-icon>预览

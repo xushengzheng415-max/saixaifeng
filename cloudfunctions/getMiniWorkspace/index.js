@@ -4184,7 +4184,7 @@ exports.main = async (event,context) => {
   try {
     const rows = await Promise.all(items.map(item=>reader.document(db,'players',String(item._id || item.id || ''))))
     const cards = await reader.readCards(cloud,db,rows.map((row,index)=>row || {_id:items[index]._id || items[index].id}))
-    const attached = items.map((item,index)=>({...item,cardUrl:cards[index].cardUrl,cardState:cards[index].status,cardTypeId:cards[index].cardTypeId,templateId:cards[index].templateId,publishedVersion:cards[index].publishedVersion,cardDataVersion:cards[index].cardDataVersion,renderVersion:cards[index].renderVersion,cardProtocolVersion:cards[index].protocolVersion}))
+    const attached = items.map((item,index)=>({...item,cardUrl:cards[index].cardUrl,cardState:cards[index].status,portraitUrl:cards[index].portraitUrl,portraitStatus:cards[index].portraitStatus,photoUrl:cards[index].portraitUrl||item.photoUrl,cardTypeId:cards[index].cardTypeId,templateId:cards[index].templateId,publishedVersion:cards[index].publishedVersion,cardDataVersion:cards[index].cardDataVersion,renderVersion:cards[index].renderVersion,cardProtocolVersion:cards[index].protocolVersion}))
     return result.player ? {...result,player:attached[0]} : {...result,players:attached}
   } catch (error) {
     console.error('[player-card-read]',error.message)

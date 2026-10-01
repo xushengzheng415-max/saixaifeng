@@ -41,6 +41,8 @@ PC、H5、小程序球员卡统一遵循 [PLAYER_CARD_POINTS.md](PLAYER_CARD_POI
 
 ### 全平台活动成卡接入补充
 
+2026-10-01 照片优先展示：统一读取器在既有授权后额外返回 `portraitUrl/portraitStatus`，优先已确认登记形象照，其次既有成卡源与报名头像。没有成卡、卡级待核定不意味着头像不存在；PC/H5/小程序显示普通球员照片，不推测卡级。仅真实缺图提示资料补充。H5 自有补充链接还检查活跃邀请、有效期与稳定球员绑定；过期邀请不展示直接编辑地址。报名、审核与原照片要求不新增门禁，统计与既有成卡版本不被改写。
+
 - PC：`getPlayerCardsForViewer` / `getPlayerCardForViewer`，既有负责人会话、本人/监护人关联或主办方球员范围授权后，读取同一活动模板成卡。逐个页面只等比显示 PNG，无客户端等级或绘制算法。
 - H5：登记首卡与“我的球员卡”共用 `previewMyPlayerCard`、`saveMyPlayerCard`、`listMyPlayerCards`。服务端预览和保存同源；提交不得上传页面绘制的最终卡图。本人/孩子/受控登记邀请授权继续独立校验。
 - 小程序：`getMiniWorkspace.playerCardRead` / `playerCardBatchRead`；原空间、球队、正式名单授权通过后附活动版本和完整成卡。源业务状态保持原字段，不被成卡状态覆盖。名单列表、阵容、个人卡和导出使用同一 PNG。
