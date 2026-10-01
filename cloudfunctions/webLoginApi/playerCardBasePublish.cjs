@@ -65,7 +65,7 @@ function createPlayerCardPublish({ cloud }) {
     }
     for(const player of currentPlayers){
       const render=renders.get(suite.renderId(player._id,job.templateId,job.version))
-      if(!render || render.status!=='ready' || Number(render.cardDataVersion)!==Number(player.playerCardVersion||0))missing.push(String(player._id))
+      if(!render || render.status!=='ready' || render.renderVersion!==suite.RENDER_VERSION || Number(render.cardDataVersion)!==Number(player.playerCardVersion||0))missing.push(String(player._id))
     }
     if (missing.length) {
       const next = [...(job.targetIds || []), ...missing]
@@ -94,6 +94,7 @@ function createPlayerCardPublish({ cloud }) {
         publishedAt:db.serverDate(), publishedBy:job.createdBy, updateAt:db.serverDate()
       } })
       await tx.collection(suite.JOBS).doc(jobId).update({ data: { status:'active',
+        affected:currentPlayers.length,
         completedAt:db.serverDate(), updatedAt:db.serverDate() } })
     })
     return { success:true, status:'active', jobId, templateId:job.templateId,
@@ -103,7 +104,7 @@ function createPlayerCardPublish({ cloud }) {
 
   async function advance(jobId,options={}) {
     const job = await suite.document(db, suite.JOBS, jobId)
-    if(job?.status==='active')return {success:true,status:'active',jobId,templateId:job.templateId,publishedVersion:job.version,affected:job.generated||0,skipped:job.skipped?.length||0,skipReasons:(job.skipped||[]).reduce((counts,row)=>{counts[row.reason]=(counts[row.reason]||0)+1;return counts},{}),failed:0}
+    if(job?.status==='active')return {success:true,status:'active',jobId,templateId:job.templateId,publishedVersion:job.version,affected:job.affected??job.generated??0,skipped:job.skipped?.length||0,skipReasons:(job.skipped||[]).reduce((counts,row)=>{counts[row.reason]=(counts[row.reason]||0)+1;return counts},{}),failed:0}
     if (!job || job.status !== 'pending') throw new Error('发布任务已失效')
     if (job.failures?.length) return finish(jobId)
     const leaseToken=crypto.randomBytes(12).toString('hex')
@@ -123,6 +124,8 @@ function createPlayerCardPublish({ cloud }) {
     let generatedCount=0
     const batchEnd = Math.min(cursor + Math.min(20,Number(options.batchSize)||3), targetIds.length)
     const scores=options.scores||await createDataService(db).playerCardsForAuthorizedPlayers(targetIds.slice(cursor,batchEnd))
+    const uncached=targetIds.slice(cursor,batchEnd).filter(id=>!scores.has(String(id)))
+    if(uncached.length){const fresh=await createDataService(db).playerCardsForAuthorizedPlayers(uncached);for(const [id,score] of fresh)scores.set(id,score)}
     for (; cursor < batchEnd; cursor++) {
       if(options.deadline&&Date.now()>=options.deadline)break
       const playerId = targetIds[cursor]

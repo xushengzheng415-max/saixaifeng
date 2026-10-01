@@ -108,10 +108,10 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
       publishedVersion:job.version, affected:currentPlayers.length, failed:0 }
   }
 
-  async function advance(jobId) {
+  async function advance(jobId,options={}) {
     const job = await suite.document(db, suite.JOBS, jobId)
     if (!job || job.status !== 'pending') throw new Error('发布任务已失效')
-    if(!job.additive) return basePublisher.advance(jobId)
+    if(!job.additive) return basePublisher.advance(jobId,options)
     if (job.failures?.length) return finish(jobId)
     const snapshot = await suite.document(db, suite.VERSIONS, suite.versionId(job.templateId, job.version))
     if (!snapshot) throw new Error('待发布模板缺失')
@@ -171,7 +171,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
     return { success:true, status:'pending', jobId, total:targetIds.length, completed:job.cursor, failed:0 }
   }
 
-  return { begin, advance, status, retry }
+  return { begin, advance, status, retry, synchronizeActive:basePublisher.synchronizeActive }
 }
 
 module.exports = { createPlayerCardPublish }
