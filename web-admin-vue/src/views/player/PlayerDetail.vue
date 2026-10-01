@@ -240,6 +240,7 @@ import { queryList, updateRecord, callFunction } from '../../utils/cloud'
 import { getTempFileURL } from '../../utils/upload'
 import PlayerCard from '../../components/player/PlayerCard.vue'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
+import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -486,6 +487,17 @@ async function loadPlayerData() {
   }
 }
 
+useReadCacheRefresh({
+  tags: ['players', 'statistics'],
+  refresh: loadPlayerData,
+  clear: () => {
+    playerData.value = {}
+    statistics.value = {}
+    playerCard.value = { status: 'unverified', points: null, tier: null }
+    statisticsMessage.value = '数据暂不可用，请重新加载。'
+  },
+  onError: () => { statisticsMessage.value = '数据更新失败，请重试。' }
+})
 onMounted(() => {
   loadPlayerData()
 })

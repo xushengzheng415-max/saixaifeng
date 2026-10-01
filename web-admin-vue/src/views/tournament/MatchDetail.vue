@@ -1775,9 +1775,12 @@ function formatDateTimeCN(date) {
 }
 
 function goBack() {
+  const query = {}, matchDate = String(match.value.matchDate || route.query.matchDate || '').slice(0, 10)
+  if (matchDate) query.matchDate = matchDate
+  if (sourceDivisionId) query.divisionId = sourceDivisionId
   router.push({
     path: `/tournaments/${tournamentId}/matches`,
-    query: sourceDivisionId ? { divisionId: sourceDivisionId } : {}
+    query
   })
 }
 
@@ -2033,10 +2036,12 @@ async function finishMatch() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '服务器未确认比分已保存')
     match.value.homeScore = result?.data?.homeScore ?? finishForm.value.homeScore
     match.value.awayScore = result?.data?.awayScore ?? finishForm.value.awayScore
     match.value.status = 'finished'
     finishDialogVisible.value = false
+    await loadMatch()
     ElMessage.success('比赛已结束，比分已保存')
   } catch (err) {
     ElMessage.error('保存比分失败: ' + err.message)
@@ -2123,7 +2128,7 @@ async function saveMatchEdit() {
       ? (allTeams.value.find(t => t.teamId === f.awayTeamId)?.teamName || match.value.awayTeamName || '')
       : (match.value.awayTeamName || '')
 
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId: f._id,
       data: {
         matchDate: f.matchDate,
@@ -2141,9 +2146,10 @@ async function saveMatchEdit() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '服务器未确认修改已保存')
+    await loadMatch()
     ElMessage.success('保存成功')
     editDialogVisible.value = false
-    loadMatch()
   } catch (err) {
     ElMessage.error('保存失败: ' + err.message)
   } finally {

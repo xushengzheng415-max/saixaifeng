@@ -129,6 +129,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { queryAll, queryList, deleteRecord, updateRecord } from '../../utils/cloud'
 import { permissions, getCurrentRole, ROLES } from '../../utils/permissions'
+import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -489,6 +490,12 @@ async function associateAITeams() {
   }
 }
 
+useReadCacheRefresh({
+  tags: ['players', 'teams'],
+  refresh: () => Promise.all([loadPlayers(), loadTeams()]),
+  clear: () => { players.value = []; teamOptions.value = [] },
+  onError: () => ElMessage.warning('数据更新失败，请重试。')
+})
 onMounted(() => {
   // 检查是否从球队菜单进入
   fromTeam.value = route.query.from === 'team'

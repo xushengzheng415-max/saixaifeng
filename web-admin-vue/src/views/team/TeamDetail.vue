@@ -1273,6 +1273,7 @@ import { sortPlayerTableRows } from '../../utils/teamPlayerTableSort.js'
 import RosterPosterModal from '../../components/team/RosterPosterModal.vue'
 import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
+import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -4513,6 +4514,12 @@ function openTournamentMatches() {
   router.push({ path: `/tournaments/${sourceTournamentId.value}/matches`, query: sourceDivisionId.value ? { divisionId: sourceDivisionId.value } : {} })
 }
 
+useReadCacheRefresh({
+  tags: ['players', 'statistics'],
+  refresh: loadPlayers,
+  clear: () => { team.value = {}; players.value = []; dataCenterStatistics.value = null },
+  onError: () => ElMessage.warning('数据更新失败，请重试。')
+})
 onMounted(async () => {
   await loadTeam()
   if (route.query.edit === '1') editTeam()

@@ -203,7 +203,12 @@ function formatSize(size) {
   if (!size) return ''
   return size < 1024 * 1024 ? `${Math.ceil(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
 }
-function backToList() { router.push({ path: `/tournaments/${tournamentId}/matches`, query: { divisionId: match.value.divisionId } }) }
+function backToList() {
+  const query = {}, matchDate = String(route.query.matchDate || match.value.matchDate || '').slice(0, 10)
+  if (matchDate) query.matchDate = matchDate
+  if (route.query.divisionId) query.divisionId = route.query.divisionId
+  router.push({ path: `/tournaments/${tournamentId}/matches`, query })
+}
 
 async function load() {
   if (visualQaSnapshot) {

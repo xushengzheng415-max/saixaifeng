@@ -10,6 +10,8 @@
  * 当前浏览器标签页的身份通道由 sessionStorage 选择，另一标签页登录不覆盖本页身份。
  */
 
+import { clearSessionReadCaches } from './sessionReadCache.js'
+
 export const PLATFORM_LOGIN_TYPE = 'platform-password'
 export const PLATFORM_SESSION_KEY = 'platformSession'
 export const PLATFORM_AUTH_TOKEN_KEY = 'platformAuthToken'
@@ -45,10 +47,12 @@ export function isPlatformWorkspacePath(path) {
 
 export function activatePlatformContext() {
   sessionStorage.setItem(PLATFORM_CONTEXT_KEY, 'platform')
+  clearSessionReadCaches('identity')
 }
 
 export function activateOrganizerContext() {
   sessionStorage.removeItem(PLATFORM_CONTEXT_KEY)
+  clearSessionReadCaches('identity')
 }
 
 export function isPlatformContext() {
