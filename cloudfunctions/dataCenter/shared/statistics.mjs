@@ -107,6 +107,26 @@ export function effectiveEvents(match, externalEvents = []) {
   return [...byId.values(), ...unkeyed].filter(event => !cancelled(event))
 }
 
+// Official match score from effective events; shootout attempts are separate.
+export function calculateMatchEventScore(match) {
+  if (!Array.isArray(match.events)) return null
+  const result = { home: 0, away: 0 }
+  for (const event of effectiveEvents(match)) {
+    const type = eventType(event)
+    if (!['goal', 'penalty_scored', 'own_goal'].includes(type)) continue
+    if (event.isShootout === true || ['shootout', 'penalty_shootout'].includes(text(event.phase || event.period).toLowerCase())) continue
+    let side = text(event.teamSide || event.side)
+    if (!['home', 'away'].includes(side)) {
+      if (event.teamId && text(event.teamId) === text(match.homeTeamId)) side = 'home'
+      else if (event.teamId && text(event.teamId) === text(match.awayTeamId)) side = 'away'
+      else throw Object.assign(new Error('进球事件缺少有效球队，请修正后结束比赛'), { code: 'GOAL_TEAM_REQUIRED' })
+    }
+    if (type === 'own_goal') side = side === 'home' ? 'away' : 'home'
+    result[side] += 1
+  }
+  return result
+}
+
 function lineupOf(match, side) {
   const source = match[side + 'Lineup'] || match['lineup' + (side === 'home' ? 'Home' : 'Away')] || match.lineups?.[side]
   if (Array.isArray(source)) return { known:true, starters:source, substitutes:[] }

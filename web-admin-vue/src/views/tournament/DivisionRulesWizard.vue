@@ -190,7 +190,7 @@
           <section class="effective-rule-row"><span class="final-rule-number">4</span><div><h4>报名与锁定</h4><p>报名截止时间：{{ form.registrationDeadline || '按赛事公告执行' }}</p><p>报名截止后，球员、球队名称及队徽锁定；正常变更进入受控申请</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
           <section class="effective-rule-row"><span class="final-rule-number">5</span><div><h4>积分排名与晋级</h4><p>{{ pointsSummary }} · {{ rankingLabel }}</p><p>{{ advancementSummary }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
         </article>
-        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>状态</dt><dd class="effective-state">已生效</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>基于版本</dt><dd>V1.0</dd></div></dl><hr /><h4>启用后影响</h4><div class="impact-tags effective-impact"><span>抽签分组</span><span>赛程编排</span><span>积分排名</span><span>比赛执行</span></div><div class="effective-warning"><el-icon><WarningFilled /></el-icon><span>已进入正式比赛管理，版本不可降级；规则调整将生成新版本并保留审计，不能解除报名截止后的身份锁定。</span></div><div v-if="tournament.regulationsFileId" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出{{ division.name || '当前组别' }}规则</el-button></div></aside>
+        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>状态</dt><dd class="effective-state">已生效</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>基于版本</dt><dd>V1.0</dd></div></dl><hr /><h4>启用后影响</h4><div class="impact-tags effective-impact"><span>抽签分组</span><span>赛程编排</span><span>积分排名</span><span>比赛执行</span></div><div class="effective-warning"><el-icon><WarningFilled /></el-icon><span>已进入正式比赛管理，版本不可降级；规则调整将生成新版本并保留审计，不能解除报名截止后的身份锁定。</span></div><div v-if="tournament.regulationsFileId && !midCompetition" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出{{ division.name || '当前组别' }}规则</el-button></div></aside>
       </template>
       <template v-else>
         <article class="effective-main panel-card">
@@ -198,14 +198,14 @@
           <section class="summary-section effective-section"><div class="summary-heading"><span>1</span><h4>赛制设置</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span v-for="item in formatSummaryItems" :key="item">{{ item }}</span></div></section>
           <section class="summary-section effective-section"><div class="summary-heading"><span>2</span><h4>基础规则</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span>{{ periodModeLabel }}</span><span>单段 {{ form.matchMinutes }} 分钟</span><span>中场 {{ form.breakMinutes }} 分钟</span><span>{{ substitutionModeLabel }}</span><span>{{ rankingLabel }}</span></div></section>
         </article>
-        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">本组精简正式规程已根据定版规则生成，可预览、导出并进入发布中心正式发布。</p><div v-if="tournament.regulationsFileId" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" title="已进入正式竞赛管理，规则调整将生成新版本并保留审计记录。" /></aside>
+        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">本组精简正式规程已根据定版规则生成，可预览、导出并进入发布中心正式发布。</p><div v-if="tournament.regulationsFileId && !midCompetition" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" :title="midCompetition ? '赛程生成后仅换人规则可调整，其他结构性规则保持锁定。' : '规则调整会生成新版本并保留审计记录。'" /></aside>
       </template>
     </main>
 
     <footer class="wizard-footer">
       <div class="footer-summary"><el-icon><CircleCheck /></el-icon><span>{{ footerSummary }}</span></div>
       <div class="footer-actions">
-        <template v-if="effective"><el-button type="primary" :loading="saving" :disabled="!canManage" @click="startRuleRevision">调整规则</el-button><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">打开比赛地图</el-button></template>
+        <template v-if="effective"><el-button type="primary" :loading="saving || substitutionSettingsSaving" :disabled="!canManage" @click="midCompetition ? openSubstitutionSettings() : startRuleRevision()">{{ midCompetition ? '调整比赛规则' : '修改赛制规则' }}</el-button><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">打开比赛地图</el-button></template>
         <template v-else>
           <el-button v-if="activeIndex > 0 && (activeKey !== 'finalize' || !isProfessional)" :disabled="saving" @click="previous">上一步</el-button>
           <el-button v-if="activeKey !== 'finalize'" type="primary" :loading="saving" :disabled="!canManage" @click="next">{{ nextButtonText }} <el-icon><ArrowRight /></el-icon></el-button>
@@ -217,6 +217,7 @@
     </footer>
     <el-alert v-if="!canManage" class="permission-alert" type="warning" :closable="false" show-icon title="你只有查看该赛事的权限，不能修改竞赛规则。" />
     <el-dialog v-model="substitutionSettingsVisible" title="换人设置" width="min(520px,94vw)">
+      <el-alert v-if="midCompetition" class="rule-edit-policy" type="info" :closable="false" title="赛程生成后仅能调整换人规则；赛制、资格、积分和赛程保持锁定。新规则用于尚未开赛的场次。" />
       <el-form label-position="top">
         <el-form-item label="换人方式"><el-radio-group v-model="substitutionSettings.substitutionMode"><el-radio-button value="limited">限定换人</el-radio-button><el-radio-button value="free">无限换人</el-radio-button></el-radio-group></el-form-item>
         <template v-if="substitutionSettings.substitutionMode === 'limited'"><el-form-item label="换人人数"><el-input-number v-model="substitutionSettings.substitutionLimit" :min="0" :max="100" /></el-form-item><el-form-item label="换人窗口"><el-input-number v-model="substitutionSettings.substitutionWindows" :min="0" :max="100" /></el-form-item></template>
@@ -385,6 +386,10 @@ const isProfessional = computed(() => division.value.mode === 'professional' || 
 const steps = computed(() => isProfessional.value ? professionalSteps : simpleSteps)
 const activeKey = computed(() => steps.value[activeIndex.value]?.key || 'finalize')
 const effective = computed(() => division.value.rulesLocked === true || ['finalized', 'locked', 'published'].includes(String(division.value.ruleStatus || '').toLowerCase()))
+const midCompetition = computed(() => {
+  const states = [division.value.competitionPlanStatus, tournament.value.competitionPlanStatus, tournament.value.status]
+  return division.value.competitionPlanLocked === true || division.value.finalPlanLocked === true || tournament.value.competitionPlanLocked === true || tournament.value.finalPlanLocked === true || tournament.value.matchManagementReady === true || states.some(value => ['locked','match_management','in_progress','ongoing','live','completed','finished'].includes(String(value || '').toLowerCase()))
+})
 const canManage = computed(() => permissions.tournament.manage(tournament.value))
 const tournamentLogo = computed(() => tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
 const divisionCount = computed(() => Math.max(Number(tournament.value.divisionCount || 0), Array.isArray(tournament.value.divisions) ? tournament.value.divisions.length : 0, 1))
@@ -760,7 +765,7 @@ async function next() {
 
 function previous() { activeIndex.value = Math.max(0, activeIndex.value - 1); replaceStep(activeKey.value) }
 function goToCompletedStep(index) { if (effective.value) return; if (index <= activeIndex.value) { activeIndex.value = index; replaceStep(activeKey.value) } }
-function jumpToStep(key) { const index = steps.value.findIndex(item => item.key === key); if (index >= 0) { activeIndex.value = index; replaceStep(key) } }
+function jumpToStep(key) { if (effective.value) return; const index = steps.value.findIndex(item => item.key === key); if (index >= 0) { activeIndex.value = index; replaceStep(key) } }
 function replaceStep(step) { router.replace({ query: { ...route.query, divisionId, step } }) }
 
 async function finalize() {

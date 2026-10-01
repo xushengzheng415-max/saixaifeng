@@ -125,7 +125,7 @@ import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recogniz
 const route = useRoute(), router = useRouter(), tournamentId = String(route.params.id || '')
 const scheduleImportWriteEnabled = import.meta.env.VITE_ENABLE_SCHEDULE_IMPORT_WRITE === 'true'
 const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(false), savingAssignment = ref(false), applyingImport = ref(false), preparingKnockout = ref(false), knockoutPrepareError = ref('')
-const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), hiddenTeamLogoKeys = ref(new Set()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(String(route.query.matchDate || '').slice(0, 10)), draggedMatchId = ref('')
+const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), hiddenTeamLogoKeys = ref(new Set()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(typeof route.query.date === 'string' ? route.query.date : ''), draggedMatchId = ref('')
 const view = ref(['settings','imports','map'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
 const fileInput = ref(null), importVisible = ref(false), importRows = ref([]), importPreview = ref({})
 const importFileName = ref(''), recognitionSourceRows = ref([]), recognitionRows = ref([]), recognitionFilter = ref('all')
@@ -138,7 +138,7 @@ const config = reactive({ schemaVersion:2,startDate:'',endDate:'',matchDays:['�
 
 const viewTitle = computed(() => ({ settings:'赛程设置',imports:'赛程导入导出',map:'赛事地图' })[view.value] || '赛事地图')
 function setView(next) { view.value = next; const query={ ...route.query }; if(next === 'map')delete query.view;else query.view=next;router.replace({ path:route.path,query }) }
-function viewSchedule() { const query = {}; if (selectedDate.value) query.matchDate = selectedDate.value; if (divisionFilter.value !== 'all') query.divisionId = divisionFilter.value; router.push({ path:`/tournaments/${tournamentId}/matches`, query }) }
+function viewSchedule() { const query = divisionFilter.value === 'all' ? {} : { divisionId: divisionFilter.value }; router.push({ path:`/tournaments/${tournamentId}/matches`, query }) }
 function fieldFormatLabel(value) { return fieldFormats.find(item => item.value === value)?.label || '制式待设置' }
 function matchFormat(division) { const raw = String(division?.matchFormat || ''); const number = raw.match(/(5|7|8|9|11)/)?.[1] || Number(division?.playersOnField || 0); return number ? `${number}side` : '' }
 function formatLabel(division) { return `${fieldFormatLabel(matchFormat(division))} · ${{league:'联赛制',cup:'小组+淘汰',tournament:'淘汰赛',hybrid:'复合赛制'}[division?.formatType || division?.tournamentType] || '赛制待设置'}` }
@@ -168,12 +168,7 @@ function scoreStateClass(match) { const state=managementState(match).key;return 
 const managementCounts = computed(() => matches.value.reduce((counts,match)=>{const key=managementState(match).key;counts[key]=(counts[key] || 0)+1;return counts},{ scheduled:0,live:0,completed:0,supplement:0,review:0,archived:0 }))
 const playedMatches = computed(() => matches.value.filter(match => managementState(match).key !== 'scheduled').length)
 const remainingMatches = computed(() => Math.max(0, matches.value.length - playedMatches.value))
-function matchRoute(match,suffix=''){
-  const query = {}, matchDate = String(match.matchDate || selectedDate.value || '').slice(0, 10)
-  if (matchDate) query.matchDate = matchDate
-  if (divisionFilter.value !== 'all' && match.divisionId) query.divisionId = match.divisionId
-  return { path:`/tournaments/${tournamentId}/match/${match._id}${suffix}`, query }
-}
+function matchRoute(match,suffix=''){return { path:`/tournaments/${tournamentId}/match/${match._id}${suffix}`,query:{ ...(match.divisionId ? { divisionId:match.divisionId } : {}),listDate:selectedDate.value,listDivision:divisionFilter.value,listView:view.value } }}
 function openMatchWorkspace(match){const state=managementState(match).key;if(state==='live')return router.push(matchRoute(match,'/monitor'));if(state==='supplement')return router.push(matchRoute(match,'/post-match'));if(state==='review')return router.push(matchRoute(match,'/review'));if(state==='archived')return router.push(matchRoute(match,'/archive'));return router.push(matchRoute(match))}
 function pendingCountForDivision(id) { return matches.value.filter(match => String(match.divisionId || 'default') === String(id) && (!match.matchDate || !match.matchTime || !match.venue)).length }
 function defaultPolicy(division) { const eleven = matchFormat(division) === '11side'; const onePerDay=config.frequencyPreset === 'daily_one' || config.frequencyPreset === 'adaptive' && eleven; return { turnaroundMinutes:Number(config.defaultTurnaroundMinutes || 10),maxMatchesPerDay:onePerDay ? 1 : 2,maxPerSession:1,minRestMinutes:onePerDay ? 1080 : 120,allowedDates:[],allowedSessions:[],allowedVenues:[] } }
@@ -195,11 +190,8 @@ const pendingMatches = computed(() => matches.value.filter(match => !match.match
 const filteredPendingMatches = computed(() => pendingMatches.value.filter(match => divisionFilter.value === 'all' || String(match.divisionId || 'default') === divisionFilter.value))
 const allCalendarDays = computed(() => { if (!config.startDate || !config.endDate) return []; const start = new Date(`${config.startDate}T00:00:00`), end = new Date(`${config.endDate}T00:00:00`), names=['周日','周一','周二','周三','周四','周五','周六'], rows=[]; for (let day=new Date(start);day<=end;day.setDate(day.getDate()+1)) { const weekday=names[day.getDay()]; if (!config.matchDays.includes(weekday)) continue; const date=`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`; rows.push({ date,weekday,short:`${day.getMonth()+1}.${day.getDate()}` }) } return rows })
 const calendarDays = computed(() => { const dates=new Set(arrangedMatches.value.map(match => String(match.matchDate || '').slice(0,10)).filter(Boolean)); return allCalendarDays.value.filter(day => dates.has(day.date)) })
-watch(calendarDays, days => {
-  if (days.some(day => day.date === selectedDate.value)) return
-  const requestedDate = String(route.query.matchDate || '').slice(0, 10)
-  selectedDate.value = days.some(day => day.date === requestedDate) ? requestedDate : days[0]?.date || ''
-})
+watch(calendarDays, days => { if (!days.length) return; if (!days.some(day => day.date === selectedDate.value)) selectedDate.value = days[0]?.date || '' }, { immediate:true })
+watch([selectedDate, divisionFilter], ([date, division]) => { if (!date) return; const query = { ...route.query, date }; if (division === 'all') delete query.divisionId; else query.divisionId = division; router.replace({ path:route.path, query }) })
 const selectedDateLabel = computed(() => { const day=calendarDays.value.find(item => item.date === selectedDate.value); return day ? `${day.date} ${day.weekday}` : '请选择比赛日' })
 const selectedDayMatches = computed(() => arrangedMatches.value.filter(match => match.matchDate === selectedDate.value && (divisionFilter.value === 'all' || String(match.divisionId || 'default') === divisionFilter.value)))
 function minutes(value) { const [hour,minute] = String(value || '00:00').split(':').map(Number); return hour*60+minute }

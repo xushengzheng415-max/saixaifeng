@@ -1250,6 +1250,7 @@
 </template>
 
 <script setup>
+import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1775,12 +1776,9 @@ function formatDateTimeCN(date) {
 }
 
 function goBack() {
-  const query = {}, matchDate = String(match.value.matchDate || route.query.matchDate || '').slice(0, 10)
-  if (matchDate) query.matchDate = matchDate
-  if (sourceDivisionId) query.divisionId = sourceDivisionId
   router.push({
     path: `/tournaments/${tournamentId}/matches`,
-    query
+    query: matchListQuery(route.query)
   })
 }
 
@@ -2000,10 +1998,11 @@ async function updateStatus(status) {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: { status, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.status = status
     ElMessage.success('状态已更新')
   } catch (err) {
@@ -2029,6 +2028,8 @@ async function finishMatch() {
   try {
     const result = await callFunction('updateMatch', {
       matchId,
+      action: 'finishOrganizerMatch',
+      expectedEventRevision: Number(match.value.matchEventRevision || 0),
       data: {
         homeScore: finishForm.value.homeScore,
         awayScore: finishForm.value.awayScore,
@@ -2036,12 +2037,11 @@ async function finishMatch() {
         updateTime: new Date()
       }
     })
-    if (!result?.success) throw new Error(result?.message || result?.error || '服务器未确认比分已保存')
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.homeScore = result?.data?.homeScore ?? finishForm.value.homeScore
     match.value.awayScore = result?.data?.awayScore ?? finishForm.value.awayScore
-    match.value.status = 'finished'
-    finishDialogVisible.value = false
     await loadMatch()
+    finishDialogVisible.value = false
     ElMessage.success('比赛已结束，比分已保存')
   } catch (err) {
     ElMessage.error('保存比分失败: ' + err.message)
@@ -2128,7 +2128,7 @@ async function saveMatchEdit() {
       ? (allTeams.value.find(t => t.teamId === f.awayTeamId)?.teamName || match.value.awayTeamName || '')
       : (match.value.awayTeamName || '')
 
-    const result = await callFunction('updateMatch', {
+    await callFunction('updateMatch', {
       matchId: f._id,
       data: {
         matchDate: f.matchDate,
@@ -2146,10 +2146,9 @@ async function saveMatchEdit() {
         updateTime: new Date()
       }
     })
-    if (!result?.success) throw new Error(result?.message || result?.error || '服务器未确认修改已保存')
-    await loadMatch()
     ElMessage.success('保存成功')
     editDialogVisible.value = false
+    loadMatch()
   } catch (err) {
     ElMessage.error('保存失败: ' + err.message)
   } finally {
@@ -2230,6 +2229,7 @@ async function saveEvent() {
       expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.events = events
     match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
@@ -2268,6 +2268,7 @@ async function removeEvent(targetEvent) {
       expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.events = events
     match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
