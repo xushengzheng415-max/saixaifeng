@@ -62,6 +62,19 @@ export function setPlatformAuthToken(token) {
   if (token) localStorage.setItem(PLATFORM_AUTH_TOKEN_KEY, token)
 }
 
+/** 迁移旧版共用令牌，保留平台登录并清除已覆盖的机构标记。 */
+export function migrateLegacyPlatformSession() {
+  if (!isPlatformLoginType(localStorage.getItem('loginType'))) return
+  const token = localStorage.getItem('authToken') || ''
+  if (token && !getPlatformAuthToken()) setPlatformAuthToken(token)
+  if (!getPlatformSession()) {
+    let user = {}
+    try { user = JSON.parse(localStorage.getItem('userInfo') || '{}') || {} } catch { /* 旧缓存损坏不阻断迁移 */ }
+    localStorage.setItem(PLATFORM_SESSION_KEY, JSON.stringify({ user, userName: user.userName || '平台负责人' }))
+  }
+  ;['isLoggedIn', 'authToken', 'loginType', 'userId', 'userInfo'].forEach(key => localStorage.removeItem(key))
+}
+
 /** 当前标签页是否持有平台管理员会话 */
 export function isPlatformSession() {
   return isPlatformContext() && Boolean(getPlatformAuthToken())

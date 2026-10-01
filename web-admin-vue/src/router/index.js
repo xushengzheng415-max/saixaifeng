@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import {
+  migrateLegacyPlatformSession,
   activateOrganizerContext,
   activatePlatformContext,
   clearPlatformSession,
@@ -601,10 +602,11 @@ function clearInvalidSession() {
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
+  migrateLegacyPlatformSession()
   // 标签页选择自己的身份通道；同域名下另一标签页登录不覆盖当前后台。
   if (to.path === '/platform-login') activatePlatformContext()
   else if (isPlatformWorkspacePath(to.path)) activatePlatformContext()
-  else if (to.path === '/login' || to.path === '/wechat-callback' || to.path === '/bind-phone' || isOrganizerWorkspacePath(to.path)) activateOrganizerContext()
+  else activateOrganizerContext()
   if (isPlatformContext()) {
     if (!isPlatformSession()) {
       clearPlatformSession()

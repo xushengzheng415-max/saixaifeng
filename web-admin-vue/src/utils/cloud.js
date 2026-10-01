@@ -88,13 +88,14 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
     if (qa.handled) return qa.result
   }
   const platformRequest = isPlatformContext()
+  const requestToken = platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')
   const assistance = platformRequest ? null : getAssistanceContext()
   const bypassAssistance = action === 'callFunction' &&
     ['platformOwner', 'manageTournamentCenterContent', 'generateMiniProgramCode'].includes(data.functionName)
   const payload = {
     ...data,
     action,
-    authToken: platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || ''),
+    authToken: requestToken,
     assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : ''
   }
   console.log(`[callFunctionHTTP] → ${action}`)
@@ -121,7 +122,7 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
     if (!response.ok) {
       throw new Error(result?.error || result?.message || `HTTP ${response.status}: ${response.statusText}`)
     }
-    if (result && result.authToken) {
+    if (result && result.authToken && (platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')) === requestToken) {
       if (platformRequest) setPlatformAuthToken(result.authToken)
       else localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
     }
@@ -130,7 +131,10 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
     }
     if (result && result.code === 'AUTH_REQUIRED') {
       const platformSessionExpired = platformRequest
-      await logout()
+      if ((platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')) !== requestToken) throw new Error(result.error || '旧登录请求已失效，请重试')
+      const currentPlatformContext = isPlatformContext()
+      await logout(platformRequest)
+      if (platformRequest !== currentPlatformContext) throw new Error(result.error || '原后台登录已失效')
       const localPreview = import.meta.env.DEV || ['127.0.0.1', 'localhost'].includes(window.location.hostname)
       window.location.href = platformSessionExpired
         ? `${window.location.origin}${import.meta.env.BASE_URL}#/platform-login`
@@ -175,8 +179,8 @@ export async function rosterExceptionBoard(data = {}) {
 
 // ========== 登录认证 ==========
 
-export async function logout() {
-  if (isPlatformContext()) {
+export async function logout(platform = isPlatformContext()) {
+  if (platform) {
     clearPlatformSession()
     return
   }
