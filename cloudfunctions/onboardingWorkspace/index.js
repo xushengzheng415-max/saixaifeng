@@ -809,11 +809,77 @@ async function createTrainingConsultation(identity) {
   return { success: true, requestId: result._id, duplicate: false }
 }
 
+function inboxTimestamp(value) {
+  const raw = value && typeof value === 'object' && value.$date ? value.$date : value
+  const timestamp = new Date(raw || 0).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+async function organizerInboxList(identity) {
+  const recipientUserId = String(identity.user._id || '')
+  let rows = []
+  try {
+    const result = await db.collection('platform_inbox_messages')
+      .where({ recipientUserId })
+      .orderBy('createTime', 'desc')
+      .limit(100)
+      .get()
+    rows = result.data || []
+  } catch (error) {
+    const message = String(error && (error.message || error.errMsg) || '').toLowerCase()
+    const code = String(error && (error.code || error.errCode) || '').toLowerCase()
+    const missing = code.includes('collection_not_exist') || code.includes('resourcenotfound') ||
+      message.includes('collection not exist') || message.includes('collection does not exist') ||
+      message.includes('table not exist') || message.includes('not found collection')
+    if (!missing) throw error
+  }
+  const messages = rows.map(row => ({
+    _id: String(row._id || ''),
+    title: String(row.title || ''),
+    body: String(row.body || ''),
+    linkPath: String(row.linkPath || ''),
+    linkLabel: String(row.linkLabel || '查看'),
+    readAt: row.readAt || null,
+    createTime: row.createTime || null
+  })).sort((a, b) => inboxTimestamp(b.createTime) - inboxTimestamp(a.createTime))
+  return { success: true, data: { messages, unreadCount: messages.filter(item => !item.readAt).length } }
+}
+
+async function organizerInboxMarkRead(identity, event) {
+  const messageId = String(event.messageId || '').trim()
+  const recipientUserId = String(identity.user._id || '')
+  if (!messageId) return { success: false, error: '缺少站内信标识', code: 'INBOX_MESSAGE_ID_REQUIRED' }
+  let found
+  try {
+    const result = await db.collection('platform_inbox_messages').doc(messageId).get()
+    found = Array.isArray(result.data) ? result.data[0] : result.data
+  } catch (error) {
+    return { success: false, error: '站内信不存在', code: 'INBOX_MESSAGE_NOT_FOUND' }
+  }
+  if (!found || String(found.recipientUserId || '') !== recipientUserId) {
+    return { success: false, error: '站内信不存在或无权查看', code: 'INBOX_MESSAGE_SCOPE_DENIED' }
+  }
+  if (found.readAt) return { success: true, data: { messageId, readAt: found.readAt }, alreadyRead: true }
+  const readAt = db.serverDate()
+  await db.collection('platform_inbox_messages').doc(messageId).update({
+    data: { readAt, status: 'read', updateTime: readAt }
+  })
+  const latest = identity.user.lastPlatformNotice
+  if (latest && String(latest.messageId || '') === messageId) {
+    await db.collection('users').doc(recipientUserId).update({
+      data: { lastPlatformNotice: { ...latest, readAt }, updateTime: readAt }
+    })
+  }
+  return { success: true, data: { messageId, readAt } }
+}
+
 exports.main = async function(event) {
   event = event || {}
   try {
     const identity = await currentUser(event)
     if (event.action === 'state') return await loadOnboardingState(identity)
+    if (event.action === 'organizerInboxList') return await organizerInboxList(identity)
+    if (event.action === 'organizerInboxMarkRead') return await organizerInboxMarkRead(identity, event)
     if (event.action === 'updateProfile') return await updateProfile(identity, event)
     if (event.action === 'updateOrganization') return await updateOrganization(identity, event)
     if (event.action === 'createOrganization') return await createOrganization(identity, event)

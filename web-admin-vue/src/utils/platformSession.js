@@ -30,6 +30,7 @@ const PLATFORM_WORKSPACE_PREFIXES = [
 export const ORGANIZER_WORKSPACE_PREFIXES = [
   '/organization-onboarding',
   '/tournament-space',
+  '/messages',
   '/assistance'
 ]
 
