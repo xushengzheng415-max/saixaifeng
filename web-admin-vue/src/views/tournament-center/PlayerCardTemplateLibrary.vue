@@ -300,7 +300,7 @@ async function publish() {
     let result = await request('publishPlayerCardTemplate', { templateId: form.id, revision: form.revision })
     await finishPublish(result)
   }
-  catch (cause) { ElMessage.error(cause.message) } finally { publishing.value = false }
+  catch (cause) { publishProgress.value = '发布未完成，可重试'; ElMessage.error(cause.message) } finally { publishing.value = false }
 }
 async function finishPublish(initial) {
   let result = initial
@@ -331,7 +331,7 @@ async function resumePublish() {
       ? await request('retryPlayerCardTemplatePublish', { jobId:publishJob.value.jobId })
       : publishJob.value
     await finishPublish(start)
-  } catch (cause) { ElMessage.error(cause.message) } finally { publishing.value = false }
+  } catch (cause) { publishProgress.value = '发布未完成，可重试'; ElMessage.error(cause.message) } finally { publishing.value = false }
 }
 function fieldStyle(key) {
   const style = form.layout[key] || DEFAULT_LAYOUT[key]

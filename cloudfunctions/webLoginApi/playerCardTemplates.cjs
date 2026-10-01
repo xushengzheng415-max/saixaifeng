@@ -226,7 +226,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
           const currentResult = await tx.collection(COLLECTION).doc(templateId).get()
           const current = Array.isArray(currentResult.data) ? currentResult.data[0] : currentResult.data
           if (!current || Number(current.revision || 0) !== revision) throw Object.assign(new Error('模板已更新，请重新加载'), { code: 'CARD_TEMPLATE_CONFLICT' })
-          await tx.collection(COLLECTION).doc(templateId).update({ data: { draft, draftVersion, revision: revision + 1, updateAt: db.serverDate(), updatedBy: auth.userId } })
+          await tx.collection(COLLECTION).doc(templateId).update({ data: { draft: db.command.set(draft), draftVersion, revision: revision + 1, updateAt: db.serverDate(), updatedBy: auth.userId } })
         })
       } else {
         await db.collection(COLLECTION).doc(templateId).set({ data: { tier, draft, draftVersion, publishedVersion: 0, status: 'draft', revision: 1, createAt: db.serverDate(), updateAt: db.serverDate(), createdBy: auth.userId, updatedBy: auth.userId } })
@@ -251,7 +251,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
       if (action === 'publish') {
         if (!row.draft?.backgroundFileId || !row.draft?.maskFileId) throw Object.assign(new Error('请先上传背景图和黑白遮罩'), { code: 'CARD_TEMPLATE_INCOMPLETE' })
         publishedVersion = Number(row.draftVersion || 0)
-        await tx.collection(COLLECTION).doc(id).update({ data: { published: row.draft, publishedVersion, status: 'published', revision: revision + 1, publishedAt: db.serverDate(), publishedBy: auth.userId, updateAt: db.serverDate() } })
+        await tx.collection(COLLECTION).doc(id).update({ data: { published: db.command.set(row.draft), publishedVersion, status: 'published', revision: revision + 1, publishedAt: db.serverDate(), publishedBy: auth.userId, updateAt: db.serverDate() } })
       } else {
         if (row.status !== 'published') throw Object.assign(new Error('模板尚未发布'), { code: 'CARD_TEMPLATE_NOT_PUBLISHED' })
         publishedVersion = Number(row.publishedVersion || 0)
@@ -282,9 +282,12 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession }) {
       if (action === 'withdrawPlayerCardTemplate') return { success:false, code:'CARD_TEMPLATE_ACTIVE_PROTECTED', error:'活动模板不能撤回，请发布新版替换' }
       return { success: false, code: 'CARD_TEMPLATE_ACTION_INVALID', error: '未知模板操作' }
     } catch (error) {
-      return { success: false, code: error.code || 'CARD_TEMPLATE_ERROR', error: error.message || '模板操作失败，请重试' }
+      console.error('[playerCardTemplates]', action, error.code || '', error.message)
+      const databaseFailure = /document\.(update|set)|database request fail|DATABASE_REQUEST_FAILED|FailedOperation.Update/i.test(String(error.message || ''))
+      return { success: false, code: error.code || 'CARD_TEMPLATE_ERROR', error: databaseFailure ? '模板状态写入失败，请重试' : error.message || '模板操作失败，请重试' }
     }
   }
 }
 
 module.exports = { createPlayerCardTemplates, pngBuffer, normalizeLayout, normalizePhoto, normalizeBadges, DEFAULT_LAYOUT, DEFAULT_PHOTO, DEFAULT_BADGES }
+

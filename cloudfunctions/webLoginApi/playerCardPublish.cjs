@@ -41,7 +41,7 @@ function createPlayerCardPublish({ cloud }) {
           !template || Number(template.revision || 0) !== revision) throw new Error('发布状态已变化，请刷新后重试')
       await tx.collection(suite.VERSIONS).doc(snapshot._id).set({ data: snapshotData })
       await tx.collection(suite.JOBS).doc(jobId).set({ data: jobData })
-      await tx.collection(suite.STATES).doc(tier).update({ data: { candidate: { jobId, templateId: row._id, version },
+      await tx.collection(suite.STATES).doc(tier).update({ data: { candidate: db.command.set({ jobId, templateId: row._id, version }),
         revision: job.stateRevision + 1, updatedAt: db.serverDate() } })
     })
     return players.length ? { success:true, status:'pending', jobId, total:players.length, completed:0, failed:0 } : finish(jobId)
@@ -80,12 +80,12 @@ function createPlayerCardPublish({ cloud }) {
       const snapshot = await suite.document(tx, suite.VERSIONS, suite.versionId(job.templateId, job.version))
       if (!snapshot) throw new Error('待发布模板缺失')
       await tx.collection(suite.STATES).doc(job.tier).update({ data: {
-        active: { templateId: job.templateId, version: job.version }, candidate: null,
+        active: db.command.set({ templateId: job.templateId, version: job.version }), candidate: null,
         revision: Number(state.revision || 0) + 1, activatedAt: db.serverDate(), activatedBy: job.createdBy
       } })
       await tx.collection(suite.TEMPLATES).doc(job.templateId).update({ data: {
-        published: { title:snapshot.title, backgroundFileId:snapshot.backgroundFileId,
-          maskFileId:snapshot.maskFileId, layout:snapshot.layout, photo:snapshot.photo, badges:snapshot.badges },
+        published: db.command.set({ title:snapshot.title, backgroundFileId:snapshot.backgroundFileId,
+          maskFileId:snapshot.maskFileId, layout:snapshot.layout, photo:snapshot.photo, badges:snapshot.badges }),
         publishedVersion:job.version, status:'published', revision:Number(row.revision||0)+1,
         publishedAt:db.serverDate(), publishedBy:job.createdBy, updateAt:db.serverDate()
       } })
