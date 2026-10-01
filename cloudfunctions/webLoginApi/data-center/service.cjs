@@ -1,5 +1,6 @@
 'use strict'
 const { readAll, readByIds } = require('./reader.cjs')
+const { readPlayerSupportTotals } = require('./support.cjs')
 const id = value => value == null ? '' : String(value).trim()
 
 function error(code, message) { const value = new Error(message); value.code = code; return value }
@@ -22,6 +23,29 @@ function validateScope(input = {}) {
 }
 
 function createDataService(db) {
+  // One canonical career dataset per batch; identical scope and scoring rules to
+  // playerCardForAuthorizedPlayer, without re-reading every match per player.
+  async function playerCardsForAuthorizedPlayers(ids) {
+    const playerIds=[...new Set(ids.map(id).filter(Boolean))]
+    const result=await query({platformOwner:true,teamIds:[],tournamentIds:[]},{mode:'official'})
+    const {sumPlayerRows,calculatePlayerCardPoints,synthetic}=await import('./statistics.mjs')
+    const profiles=await readByIds(db,'players','_id',playerIds)
+    const teams=await readByIds(db,'teams','_id',profiles.map(p=>id(p.teamId||p.teamCode)))
+    const teamById=new Map(teams.map(t=>[id(t._id),t]))
+    const profileById=new Map(profiles.map(p=>[id(p._id),p]))
+    let supportTotals=new Map()
+    try{supportTotals=await readPlayerSupportTotals(db,playerIds)}catch(failure){/* Fail closed, matching the single-player service. */}
+    return new Map(playerIds.map(playerId=>{
+      const profile=profileById.get(playerId)
+      if(!profile||synthetic(profile)||synthetic(teamById.get(id(profile.teamId||profile.teamCode))))return [playerId,{status:profile?'test_data_excluded':'unverified',tier:null}]
+      const rows=result.players.filter(row=>row.playerId===playerId)
+      const total=sumPlayerRows(rows)
+      if(!rows.length&&result.summary.matchCount>0)for(const key of Object.keys(total.metrics)){total.metrics[key]=null;total.coverage[key]='not_collected'}
+      const support=supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null}
+      return [playerId,calculatePlayerCardPoints(total,{metricVersion:result.metricVersion,dataVersion:result.dataVersion,coverageStatus:result.coverage.cardScoreScopeComplete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion})]
+    }))
+  }
+
   // Call only after the caller has independently authorized access to this player.
   // A team-scoped query cannot prove full career coverage after transfers.
   async function playerCardForAuthorizedPlayer(playerId) {
@@ -130,8 +154,13 @@ function createDataService(db) {
         for (const field of Object.keys(result.playerTotal.metrics)) { result.playerTotal.metrics[field] = null; result.playerTotal.coverage[field] = 'not_collected' }
       }
       const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','matchId','from','to'].some(field => scope[field])
+      let support = { drops:null, status:'unverified', dataVersion:null }
+      if (fullCareer) {
+        try { support = (await readPlayerSupportTotals(db,[scope.playerId])).get(scope.playerId) || support }
+        catch (failure) { result.issues.push({ code:failure.code || 'SUPPORT_READ_FAILED', playerId:scope.playerId }) }
+      }
       result.playerCard = fullCareer
-        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.cardScoreScopeComplete ? 'complete' : 'partial' })
+        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.cardScoreScopeComplete ? 'complete' : 'partial', supportDrops:support.drops, supportCoverageStatus:support.status, supportDataVersion:support.dataVersion })
         : { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:'limited', mode:scope.mode, status:'scope_limited', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
       const requestedPlayer = playersById[scope.playerId] || (await readByIds(db,'players','_id',[scope.playerId]))[0]
       const playerTeamId = id(requestedPlayer?.teamId || requestedPlayer?.teamCode)
@@ -144,6 +173,6 @@ function createDataService(db) {
     }
     return { success:true, ...result }
   }
-  return { query, catalog, playerCardForAuthorizedPlayer }
+  return { query, catalog, playerCardForAuthorizedPlayer, playerCardsForAuthorizedPlayers }
 }
 module.exports = { createDataService, validateScope, error }
