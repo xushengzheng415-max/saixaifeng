@@ -2,7 +2,6 @@
 // 当前兼容 users.orgId；未来 organization_memberships / organizations 建立后可直接接管。
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
-const { readAll: readDataRows, readByIds: readDataByIds } = require('./data-center/reader.cjs')
 const createPlayerAccountTransfer = require('./playerAccountTransfer.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -169,26 +168,42 @@ async function safeGet(collection, where, limit) {
 }
 
 async function safeGetTeamPlayers(teamId, limit, extra) {
+  // 球员历史记录同时存在 teamId 和 teamCode 两种归属字段。
+  // 分开查询可沿用两边已有的单字段索引，避免 OR 查询因环境索引差异
+  // 被 safeGet 降级为空列表；随后按 _id 合并去重。
+  const id = String(teamId || '')
   const base = extra && typeof extra === 'object' ? extra : {}
   const rows = await Promise.all([
-    readDataRows(db,'players',Object.assign({},base,{teamId:String(teamId)})),
-    readDataRows(db,'players',Object.assign({},base,{teamCode:String(teamId)}))
+    safeGet('players', Object.assign({}, base, { teamId: id }), limit),
+    safeGet('players', Object.assign({}, base, { teamCode: id }), limit)
   ])
-  return [...new Map(rows.flat().map(row => [String(row._id),row])).values()]
+  const merged = []
+  const seen = new Set()
+  rows.flat().forEach(function(item) {
+    const key = String(item && item._id || '') || JSON.stringify(item)
+    if (seen.has(key)) return
+    seen.add(key)
+    merged.push(item)
+  })
+  return limit ? merged.slice(0, limit) : merged
 }
 
 async function safeGetPlayersForTeams(teamIds, limit) {
   const ids = unique(teamIds)
-  const merged = new Map()
-  for (let index = 0; index < ids.length; index += 20) {
-    const chunk = ids.slice(index, index + 20)
-    const rows = await readDataRows(db, 'players', _.or([
-      { teamId: _.in(chunk) }, { teamCode: _.in(chunk) }
-    ]), { fields: { teamId: true, teamCode: true } })
-    rows.forEach(row => merged.set(String(row._id), row))
-    if (merged.size > 20000) throw workspaceError('DATA_SCOPE_TOO_LARGE', '球员数据范围过大，请缩小工作空间范围')
-  }
-  return [...merged.values()]
+  if (!ids.length) return []
+  const rows = await Promise.all([
+    safeGet('players', { teamId: _.in(ids) }, limit),
+    safeGet('players', { teamCode: _.in(ids) }, limit)
+  ])
+  const merged = []
+  const seen = new Set()
+  rows.flat().forEach(function(item) {
+    const key = String(item && item._id || '') || JSON.stringify(item)
+    if (seen.has(key)) return
+    seen.add(key)
+    merged.push(item)
+  })
+  return limit ? merged.slice(0, limit) : merged
 }
 
 async function findCurrentUser() {
@@ -592,24 +607,22 @@ async function workspaceIdForManagedTeam(teamId, identity) {
 async function loadTeams(workspace, user, openId) {
   if (workspace.type === 'team') return safeGet('teams', { _id: workspace.teamId }, 1)
 
+  const orgTeams = await safeGet('teams', { orgId: workspace.orgId }, 100)
+  const membershipRows = await safeGet('team_memberships', _.or([
+    { userId: user._id }, { memberUserId: user._id },
+    { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }
+  ]), 100)
+  const acceptedTeamIds = unique(membershipRows.filter(item => {
+    return ['active', 'accepted', 'claimed'].includes(String(item.status || 'active').toLowerCase())
+  }).map(item => item.teamId))
+  const memberTeams = acceptedTeamIds.length ? await safeGet('teams', { _id: _.in(acceptedTeamIds) }, 100) : []
   const ownerValues = unique([user._id, user.phone, user.phoneNumber, openId])
   const ownerConditions = []
   ownerValues.forEach(value => ownerConditions.push(
     { creatorId: value }, { ownerId: value }, { ownerUserId: value },
     { userId: value }, { openId: value }, { _openid: value }
   ))
-  const [orgTeams, membershipRows, ownedTeams] = await Promise.all([
-    readDataRows(db, 'teams', { orgId: workspace.orgId }),
-    readDataRows(db, 'team_memberships', _.or([
-      { userId: user._id }, { memberUserId: user._id },
-      { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }
-    ])),
-    ownerConditions.length ? readDataRows(db, 'teams', _.or(ownerConditions)) : []
-  ])
-  const acceptedTeamIds = unique(membershipRows.filter(item => {
-    return ['active', 'accepted', 'claimed'].includes(String(item.status || 'active').toLowerCase())
-  }).map(item => item.teamId))
-  const memberTeams = acceptedTeamIds.length ? await readDataByIds(db, 'teams', '_id', acceptedTeamIds) : []
+  const ownedTeams = ownerConditions.length ? await safeGet('teams', _.or(ownerConditions), 100) : []
   const visible = {}
   orgTeams.concat(memberTeams, ownedTeams).forEach(team => {
     const teamOrgId = String(team.orgId || team.organizationId || '')
@@ -4011,11 +4024,9 @@ exports.main = async function(event) {
     const teams = canViewTeams
       ? await loadTeams(current, identity.user, identity.openId)
       : []
-    const teamIds = unique(teams.map(item => item._id))
-    const [tournamentResult, players] = await Promise.all([
-      canViewEvents ? loadTournaments(current, identity.user, identity.openId, teams) : { tournaments: [], registrations: [], hostedRegistrations: [] },
-      canViewTeams && teamIds.length ? safeGetPlayersForTeams(teamIds) : []
-    ])
+    const tournamentResult = canViewEvents
+      ? await loadTournaments(current, identity.user, identity.openId, teams)
+      : { tournaments: [], registrations: [], hostedRegistrations: [] }
     const tournaments = Array.isArray(tournamentResult)
       ? tournamentResult
       : tournamentResult.tournaments
@@ -4067,6 +4078,10 @@ exports.main = async function(event) {
     const activeDraftRows = scopedRegistrationDraftRows.filter(item => staleDraftRows.indexOf(item) < 0)
     const eventTasks = buildRegistrationDraftTasks(activeDraftRows).concat(buildTasks(registrations), buildOrganizerTasks(hostedRegistrations))
     const tasks = eventTasks.concat(education.tasks)
+    const teamIds = unique(teams.map(item => item._id))
+    const players = canViewTeams && teamIds.length
+      ? await safeGetPlayersForTeams(teamIds, 500)
+      : []
 
     const teamSummaryMap = {}
     teams.forEach(team => {
