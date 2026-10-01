@@ -272,6 +272,9 @@ async function getOverview(db) {
         phone,
         phoneMasked: maskPhone(phone),
         email: firstText(user, ['email']) || firstText(organization, ['email', 'contactEmail']),
+        latestNotice: user.lastPlatformNotice && typeof user.lastPlatformNotice === 'object'
+          ? user.lastPlatformNotice
+          : null,
         isActive: user.status !== 'disabled' && user.isActive !== false,
         createTime: user.createTime || user.createdAt || organization.createTime || organization.createdAt || null,
         lastLoginTime: user.lastLoginTime || user.lastLoginAt || null,
@@ -388,6 +391,55 @@ async function getOverview(db) {
       }
     }
   }
+}
+
+async function sendOrganizerNotice(db, event, actor) {
+  const recipientUserId = cleanText(event.recipientUserId, 128)
+  const title = cleanText(event.title, 80)
+  const body = String(event.body || '').trim().slice(0, 2000)
+  if (!recipientUserId) return { success: false, error: '请选择接收主办方' }
+  if (!title || !body) return { success: false, error: '请填写通知标题和内容' }
+
+  let recipient
+  try {
+    const found = await db.collection('users').doc(recipientUserId).get()
+    recipient = firstRecord(found.data)
+  } catch (error) {
+    recipient = null
+  }
+  if (!recipient || recipient.status === 'disabled' || recipient.pcAccountStatus === 'cancelled') {
+    return { success: false, error: '主办方账号不存在或已停用' }
+  }
+  const role = cleanText(recipient.role, 40).toLowerCase()
+  if (role !== 'organizer' && !recordOrgId(recipient)) {
+    return { success: false, error: '接收账号不是有效主办方账号' }
+  }
+
+  const linkPath = '/tournament-space?openContactInfo=profile'
+  const noticeId = crypto.randomBytes(16).toString('hex')
+  const now = db.serverDate()
+  const latestNotice = { messageId: noticeId, title, readAt: null, createTime: now, linkPath }
+  await db.collection('platform_inbox_messages').doc(noticeId).set({
+    data: {
+      recipientUserId,
+      recipientOrgId: recordOrgId(recipient),
+      title,
+      body,
+      linkPath,
+      linkLabel: '完善联系方式',
+      readAt: null,
+      createdBy: String(actor && actor._id || 'platform-owner'),
+      createTime: now
+    }
+  })
+  try {
+    await db.collection('users').doc(recipientUserId).update({
+      data: { lastPlatformNotice: latestNotice, updateTime: now }
+    })
+  } catch (error) {
+    console.warn('[manageTournamentCenterContent] 最近站内信状态回写失败:', error && error.message)
+  }
+  return { success: true, message: '站内信已发送', data: { messageId: noticeId, recipientUserId, linkPath, readAt: null } }
 }
 
 function userReferenceConditions(user, idFields, phoneFields = []) {
@@ -765,6 +817,7 @@ exports.main = async event => {
 
     const action = params.action || 'overview'
     if (action === 'overview') return await getOverview(db)
+    if (action === 'sendOrganizerNotice') return await sendOrganizerNotice(db, params, user)
     if (action === 'saveBanner') return await saveBanner(db, params, user)
     if (action === 'deleteBanner') return await deleteBanner(db, params)
     if (action === 'setFeatured') return await setFeatured(db, params, user)

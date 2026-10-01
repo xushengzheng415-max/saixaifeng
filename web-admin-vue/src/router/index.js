@@ -202,6 +202,13 @@ const routes = [
       }
     ]
   },
+  {
+    path: '/messages',
+    name: 'OrganizerInbox',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '站内信', parent: 'tournaments', workspaceShell: true },
+    children: [{ path: '', component: () => import('../views/messages/OrganizerInboxView.vue') }]
+  },
   // 平台运营中心（复用主办方会话，页面内继续校验平台负责人身份）
   {
     path: '/tournament-center-admin',
