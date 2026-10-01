@@ -6,7 +6,8 @@ export function playerReadCacheTags(action, data = {}) {
     return data.collection === 'players' ? ['players'] : ['teams']
   }
   if (['getPlayerCardForViewer', 'getPlayerCardsForViewer'].includes(action)) return ['playerCards']
-  if (action === 'callFunction' && data.functionName === 'dataCenter' && ['query', 'playerCard'].includes(data.functionParams?.action)) return ['statistics']
+  // Statistics and career grades always read the current server snapshot. Raw
+  // profile cache entries must not turn historical/unknown fields into a grade.
   return null
 }
 
@@ -17,6 +18,7 @@ export function isReadOnlyRequest(action, data = {}) {
   if (action === 'callFunction') {
     const name = data.functionName || ''
     const operation = data.functionParams?.action || ''
+    if (name === 'dataCenter' && ['query', 'playerCard', 'playerDetail', 'catalog'].includes(operation)) return true
     // Temporary file/image processing does not modify player/team facts.
     if (['uploadFile', 'baiduRemoveBg', 'removeImageBg', 'removeLogoBg', 'generateAIImage'].includes(name)) return true
     return /^(get|list)/.test(name) || /^(get|list|query|preview|check|probe)/.test(operation)

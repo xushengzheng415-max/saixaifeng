@@ -120,12 +120,13 @@ await test('LRU and byte budgets bound memory without truncating returned data',
   assert.equal((await f.cache.read('big', async () => ({ success: true, data: big }))).data.length, 1000)
   assert.equal(f.cache.inspect().entries, 2)
 })
-await test('only player/team and authoritative card/statistics reads are cached', async () => {
+await test('player/team profiles are cached while authoritative grade snapshots remain live', async () => {
   assert.deepEqual(playerReadCacheTags('dbQuery', { collection: 'players', operation: 'list' }), ['players'])
   assert.equal(playerReadCacheTags('dbQuery', { collection: 'players', operation: 'update' }), null)
   assert.equal(playerReadCacheTags('dbQuery', { collection: 'users', operation: 'get' }), null)
   assert.equal(playerReadCacheTags('platformCapacityOverview', {}), null)
-  assert.deepEqual(playerReadCacheTags('callFunction', { functionName: 'dataCenter', functionParams: { action: 'playerCard' } }), ['statistics'])
+  assert.equal(playerReadCacheTags('callFunction', { functionName: 'dataCenter', functionParams: { action: 'playerCard' } }), null)
+  assert.equal(isReadOnlyRequest('callFunction', { functionName: 'dataCenter', functionParams: { action: 'playerDetail' } }), true)
   assert.equal(isReadOnlyRequest('callFunction', { functionName: 'updateMatch', functionParams: {} }), false)
 })
 
@@ -205,7 +206,7 @@ await test('real authoritative grade response retains null, coverage and rule ve
   const h = await harness(() => value)
   const first = await h.api.callFunction('dataCenter', { action: 'playerCard', playerId: 'fixture-p' })
   const second = await h.api.callFunction('dataCenter', { action: 'playerCard', playerId: 'fixture-p' })
-  assert.deepEqual(JSON.parse(JSON.stringify(first)), value); assert.deepEqual(JSON.parse(JSON.stringify(second)), value); assert.equal(h.calls.length, 1)
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), value); assert.deepEqual(JSON.parse(JSON.stringify(second)), value); assert.equal(h.calls.length, 2)
 })
 await test('platform capacity remains live instead of using the player session cache', async () => {
   const h = await harness(() => ({ success: true, generatedAt: h.calls.length }))

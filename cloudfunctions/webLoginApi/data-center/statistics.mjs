@@ -379,27 +379,35 @@ export function sumPlayerRows(rows) {
   return { metrics, observed, coverage }
 }
 
-export const PLAYER_CARD_SCORE_VERSION = 'football-player-card-points/1'
-export const PLAYER_CARD_ENTITLEMENT_VERSION = 'football-player-card-entitlements/1'
+export const PLAYER_CARD_SCORE_VERSION = 'football-player-card-points/2'
+export const PLAYER_CARD_ENTITLEMENT_VERSION = 'football-player-card-entitlements/2'
 
 export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
   const fields = ['appearances','starts','minutesPlayed','goals']
   const metrics = playerTotal?.metrics || {}
   const coverage = playerTotal?.coverage || {}
   const missing = fields.filter(field => coverage[field] !== 'complete' || !Number.isSafeInteger(metrics[field]) || metrics[field] < 0)
-  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion:metadata.dataVersion || null, scope:'career', mode:'official' }
+  const supportDrops = metadata.supportDrops
+  const supportDataVersion = metadata.supportDataVersion || null
+  const dataVersion = supportDataVersion && metadata.dataVersion
+    ? crypto.createHash('sha256').update(JSON.stringify([metadata.dataVersion,supportDataVersion])).digest('hex').slice(0,24)
+    : null
+  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion, careerDataVersion:metadata.dataVersion || null, supportDataVersion, scope:'career', mode:'official' }
   if (metadata.coverageStatus && metadata.coverageStatus !== 'complete') return { ...base, status:'unverified', missing:['dataCoverage'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+  if (metadata.supportCoverageStatus !== 'complete' || !Number.isSafeInteger(supportDrops) || supportDrops < 0 || !supportDataVersion) return { ...base, status:'unverified', missing:['supportDrops'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   if (missing.length || metrics.starts > metrics.appearances) {
     return { ...base, status:'unverified', missing:metrics.starts > metrics.appearances ? [...new Set([...missing,'starts'])] : missing, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   }
   const appearances = metrics.appearances, starts = metrics.starts, minutesPlayed = metrics.minutesPlayed, goals = metrics.goals
   const foundation = 2 * appearances + starts + Math.floor(minutesPlayed / 45)
   const goalBonus = Math.min(2 * goals, Math.floor(foundation / 5))
-  const points = foundation + goalBonus
+  const careerPoints = foundation + goalBonus
+  const supportPoints = Math.floor(supportDrops / 10)
+  const points = careerPoints + supportPoints
   if (!Number.isSafeInteger(points)) return { ...base, status:'unverified', missing:fields, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   const tier = points >= 100 ? 'gold' : points >= 45 ? 'silver' : 'bronze'
   const nextAt = tier === 'gold' ? null : tier === 'silver' ? 100 : 45
-  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
+  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, careerPoints, supportDrops, supportPoints, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
 }
 
 // Every API uses this same constructor, including single-player, batch and fan

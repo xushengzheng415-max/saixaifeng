@@ -236,7 +236,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, Edit, View, Plus, Upload } from '@element-plus/icons-vue'
-import { queryList, updateRecord, callFunction } from '../../utils/cloud'
+import { queryList, updateRecord, callFunction, getPlayerReadIdentity } from '../../utils/cloud'
 import { getTempFileURL } from '../../utils/upload'
 import PlayerCard from '../../components/player/PlayerCard.vue'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
@@ -254,6 +254,7 @@ const playerCard = ref({ status:'unverified', points:null, tier:null })
 const statisticsMessage = ref('')
 const statisticsLoading = ref(false)
 let statisticsRequest = 0
+let profileRequest = 0
 function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 const playerAvatarUrl = ref('')
 const showEditDialog = ref(false)
@@ -432,17 +433,18 @@ async function refreshStatistics() {
   const playerId = String(route.params.playerId || route.params.id || '')
   if (!playerId || statisticsLoading.value) return
   const request = ++statisticsRequest
+  const identity = getPlayerReadIdentity()
   statisticsLoading.value = true
   try {
     const scope = route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {}
     const result = await callFunction('dataCenter',{action:'playerDetail',playerId,scope})
     if (!result.success || !result.statistics || !result.playerCard) throw Object.assign(new Error(result.error || '统计加载失败'),{code:result.code})
-    if (request !== statisticsRequest) return
+    if (request !== statisticsRequest || identity !== getPlayerReadIdentity()) return
     statistics.value = result.statistics.playerTotal?.metrics || {}
     playerCard.value = result.playerCard
     statisticsMessage.value = result.statistics.coverage?.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。'
   } catch (error) {
-    if (request !== statisticsRequest) return
+    if (request !== statisticsRequest || identity !== getPlayerReadIdentity()) return
     statistics.value = {}
     playerCard.value = {status:error.code === 'DATA_ACTION_INVALID' ? 'not_connected' : 'request_failed',points:null,tier:null,progress:null}
     statisticsMessage.value = '统计暂不可用，请刷新重试。'
@@ -451,6 +453,9 @@ async function refreshStatistics() {
 function refreshOnVisibility() { if (document.visibilityState === 'visible') refreshStatistics() }
 
 async function loadPlayerData() {
+  const request = ++profileRequest
+  const identity = getPlayerReadIdentity()
+  const current = () => request === profileRequest && identity === getPlayerReadIdentity()
   const playerId = route.params.playerId || route.params.id
   if (!playerId) {
     ElMessage.error('球员ID不存在')
@@ -463,16 +468,18 @@ async function loadPlayerData() {
     const players = await queryList('players', {
       where: { _id: playerId }
     })
+    if (!current()) return
     
     if (players && players.length > 0) {
       playerData.value = players[0]
       await refreshStatistics()
+      if (!current()) return
 
       // 处理头像URL（如果是云存储fileID，获取临时URL）
       if (playerData.value.photoUrl && playerData.value.photoUrl.startsWith('cloud://')) {
         try {
           const result = await getTempFileURL(playerData.value.photoUrl)
-          if (result.success && result.url) {
+          if (current() && result.success && result.url) {
             playerAvatarUrl.value = result.url
           }
         } catch (err) {
@@ -486,6 +493,7 @@ async function loadPlayerData() {
         const teams = await queryList('teams', {
           where: { _id: String(relatedTeamId) }
         })
+        if (!current()) return
         if (teams && teams.length > 0) {
           teamData.value = teams[0]
         }
@@ -494,10 +502,11 @@ async function loadPlayerData() {
       ElMessage.error('球员不存在')
     }
   } catch (err) {
+    if (!current()) return
     console.error('加载球员数据失败:', err)
     ElMessage.error('加载失败')
   } finally {
-    loading.value = false
+    if (current()) loading.value = false
   }
 }
 
@@ -505,7 +514,13 @@ useReadCacheRefresh({
   tags: ['players', 'statistics'],
   refresh: loadPlayerData,
   clear: () => {
+    ++statisticsRequest
+    ++profileRequest
+    statisticsLoading.value = false
+    loading.value = false
     playerData.value = {}
+    teamData.value = {}
+    playerAvatarUrl.value = ''
     statistics.value = {}
     playerCard.value = { status: 'unverified', points: null, tier: null }
     statisticsMessage.value = '数据暂不可用，请重新加载。'
@@ -518,11 +533,13 @@ onMounted(() => {
   window.addEventListener('focus',refreshStatistics)
 })
 watch(() => route.fullPath,() => {
+  ++profileRequest
   ++statisticsRequest; statisticsLoading.value = false
   statistics.value = {}; playerCard.value = {status:'loading',points:null,tier:null}
   loadPlayerData()
 })
 onUnmounted(() => {
+  ++profileRequest
   ++statisticsRequest
   document.removeEventListener('visibilitychange',refreshOnVisibility)
   window.removeEventListener('focus',refreshStatistics)
