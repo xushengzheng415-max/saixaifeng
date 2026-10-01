@@ -2,7 +2,7 @@
   <section class="card-library">
     <div class="library-head">
       <div><h2>球员卡模板</h2><span>背景与黑白遮罩使用同一张 300 × 430 画布</span></div>
-      <el-button type="primary" @click="startCreate">新建模板</el-button>
+      <el-button type="primary" @click="startCreate">新建卡片</el-button>
     </div>
     <el-alert v-if="!backendReady && !loading" title="模板保存和发布服务尚未开放，当前调整仅在本页保留" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false"><template #default><el-button link @click="load">重试</el-button></template></el-alert>
@@ -19,7 +19,7 @@
 
       <div class="template-workspace">
         <div class="editor-fields">
-          <div class="form-head"><strong>{{ form.id ? '编辑模板' : '新建模板' }}</strong><el-tag v-if="form.id" :type="form.status === 'published' ? 'success' : 'info'">{{ statusName(form) }}</el-tag></div>
+          <div class="form-head"><strong>{{ form.id ? '编辑卡片' : '新建卡片' }}</strong><el-tag v-if="form.id" :type="form.status === 'published' ? 'success' : 'info'">{{ statusName(form) }}</el-tag></div>
           <label>模板名称<el-input v-model.trim="form.title" maxlength="30" @input="dirty = true" /></label>
           <label>适用等级<el-select v-model="form.tier" :disabled="Boolean(form.id)" @change="dirty = true"><el-option label="铜卡" value="bronze" /><el-option label="银卡" value="silver" /><el-option label="金卡" value="gold" /></el-select></label>
           <label>预装分类<el-select v-model="form.preload.type" :disabled="Boolean(form.publishedVersion) || publishing" @change="changePreload"><el-option v-for="scope in PRELOAD_TYPES" :key="scope.value" :label="scope.label" :value="scope.value" /></el-select></label>
@@ -37,12 +37,12 @@
           <p v-if="uploadError" class="field-error" role="alert">{{ uploadError }}</p>
           <p v-else-if="selectedFiles.background || selectedFiles.mask" class="file-feedback" role="status">素材已选入；保存草稿后生效。</p>
           <div class="layout-presets">
-            <strong>排版方案</strong>
-            <el-select v-model="selectedLayoutPreset" filterable remote :remote-method="searchLayoutPresets" :loading="layoutsLoading" :disabled="layoutApplying" placeholder="选择排版方案" no-data-text="暂无排版" no-match-text="未找到排版" @visible-change="openLayoutPresets">
+            <strong>排版模板</strong>
+            <el-select v-model="selectedLayoutPreset" filterable remote :remote-method="searchLayoutPresets" :loading="layoutsLoading" :disabled="layoutApplying" placeholder="选择模板" no-data-text="暂无模板" no-match-text="未找到模板" @visible-change="openLayoutPresets">
               <el-option v-for="preset in layoutPresets" :key="preset.id" :label="preset.title" :value="preset.id" />
               <template #footer><el-button v-if="layoutCursor" link :loading="layoutsLoading" @click="loadLayoutPresets(true)">加载更多</el-button></template>
             </el-select>
-            <div class="layout-actions"><el-button size="small" :loading="layoutSaving" :disabled="!backendReady || layoutApplying" @click="saveLayoutPreset">保存排版</el-button><el-button size="small" :loading="layoutApplying" :disabled="!selectedLayoutPreset || publishing || saving" @click="applyLayoutPreset">沿用排版</el-button></div>
+            <div class="layout-actions"><el-button size="small" :loading="layoutSaving" :disabled="!backendReady || layoutApplying" @click="saveLayoutPreset">新建模板</el-button><el-button size="small" :loading="layoutApplying" :disabled="!selectedLayoutPreset || publishing || saving" @click="applyLayoutPreset">导入模板</el-button></div>
             <p v-if="layoutsError" class="field-error" role="alert">{{ layoutsError }} <el-button link @click="loadLayoutPresets(false)">重试</el-button></p>
           </div>
           <div class="photo-editor">
@@ -236,11 +236,11 @@ async function loadLayoutPresets(more=false) {
 }
 async function saveLayoutPreset() {
   let title
-  try { const result=await ElMessageBox.prompt('保存文字样式、人物构图和徽标位置。','保存排版',{confirmButtonText:'保存',inputPlaceholder:'排版名称',inputValidator:value=>String(value || '').trim().length>=2 && String(value || '').trim().length<=30 || '名称须为 2–30 个字'});title=result.value.trim() } catch { return }
+  try { const result=await ElMessageBox.prompt('保存文字样式、人物构图和徽标位置。','新建模板',{confirmButtonText:'创建',inputPlaceholder:'模板名称',inputValidator:value=>String(value || '').trim().length>=2 && String(value || '').trim().length<=30 || '名称须为 2–30 个字'});title=result.value.trim() } catch { return }
   layoutSaving.value=true
   try {
     const result=await request('savePlayerCardLayoutPreset',{title,layout:form.layout,photo:form.photo,badges:form.badges})
-    layoutPresets.value.unshift({id:result.preset.id,title:result.preset.title});selectedLayoutPreset.value=result.preset.id;ElMessage.success('排版已保存')
+    layoutPresets.value.unshift({id:result.preset.id,title:result.preset.title});selectedLayoutPreset.value=result.preset.id;ElMessage.success('模板已创建')
   } catch(cause) { ElMessage.error(cause.message) } finally { layoutSaving.value=false }
 }
 async function applyLayoutPreset() {
@@ -250,7 +250,7 @@ async function applyLayoutPreset() {
     const result=await request('getPlayerCardLayoutPreset',{presetId:selectedLayoutPreset.value})
     if(epoch!==formEpoch) return
     form.layout=styleLayout(result.preset.layout);form.photo={...result.preset.photo};form.badges=JSON.parse(JSON.stringify(result.preset.badges))
-    dirty.value=true;ElMessage.success('排版已沿用，待保存草稿')
+    dirty.value=true;ElMessage.success('模板已导入，待保存草稿')
   } catch(cause) { ElMessage.error(cause.message) } finally { layoutApplying.value=false }
 }
 function preloadName(value) { return PRELOAD_TYPES.find(item => item.value === (value?.type || 'platform'))?.label || '全平台' }
