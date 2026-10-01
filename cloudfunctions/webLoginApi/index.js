@@ -1,3 +1,4 @@
+const { createBaiduPlayerFace } = require('./baiduPlayerFace.cjs')
 // webLoginApi - 赛小蜂网页端登录 API（HTTP 触发器代理）
 // 浏览器通过 fetch() 直接调用，无需任何 SDK
 //
@@ -20,6 +21,7 @@ function fanCenterHandlers() {
 }
 
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
+const baiduPlayerFace = createBaiduPlayerFace({ cloud })
 
 // ========== 邮件配置 ==========
 const EMAIL_CONFIG = {
@@ -969,8 +971,20 @@ async function confirmParentPortrait(event) {
   const avatarCrop = normalizeParentPortraitCrop(event.crop)
   const existing = (await db.collection('parent_portraits').where({ parentInvite: authenticated.session.parentInvite, status: 'confirmed' }).limit(20).get()).data || []
   await Promise.all(existing.map(item => db.collection('parent_portraits').doc(item._id).update({ data: { status: 'superseded', supersededAt: db.serverDate(), updateTime: db.serverDate() } })))
-  await db.collection('parent_portraits').doc(portraitId).update({ data: { status: 'confirmed', processingStatus: 'confirmed', avatarFileId: avatarUpload.fileID, avatarCrop, avatarProcessingStatus: 'confirmed', confirmedAt: db.serverDate(), updateTime: db.serverDate() } })
+  await db.collection('parent_portraits').doc(portraitId).update({ data: { status: 'confirmed', processingStatus: 'confirmed', avatarFileId: avatarUpload.fileID, avatarCrop, avatarProcessingStatus: 'confirmed', baiduFaceConsent:event.baiduFaceConsent === true, baiduFaceConsentAt:event.baiduFaceConsent === true ? db.serverDate() : null, baiduFaceConsentVersion:event.baiduFaceConsent === true ? 'baidu-match-face/1' : '', baiduFaceConsent:event.baiduFaceConsent === true, baiduFaceConsentAt:event.baiduFaceConsent === true ? db.serverDate() : null, baiduFaceConsentVersion:event.baiduFaceConsent === true ? 'baidu-match-face/1' : '', confirmedAt: db.serverDate(), updateTime: db.serverDate() } })
   return { success: true, portraitId, version: Number(portrait.version || 0), status: 'confirmed' }
+}
+
+async function retryParentFaceRegistration(event) {
+  const auth = await authenticateParentH5Session(event)
+  if (!auth.success) return auth
+  const preview = await previewParentProfileInvite({ parentInvite:auth.session.parentInvite })
+  if (!preview.success) return preview
+  const db = cloud.database()
+  const invites = (await db.collection('parent_profile_invites').where({ token:auth.session.parentInvite, status:'active' }).limit(1).get()).data || []
+  if (!invites[0]) return { success:false, error:'请重新打开登记邀请' }
+  const faceRegistration = await baiduPlayerFace.register(String(invites[0].playerId))
+  return { success:true, faceRegistration }
 }
 
 async function completeParentProfile(event) {
@@ -1030,8 +1044,10 @@ async function completeParentProfile(event) {
       await db.collection('player_electronic_passes').add({ data:{ sport:'football', playerId:String(invite.playerId), ownerUserId:String(invite.registrantUserId || ''), certificateNumber, status:'active', issuedAt:db.serverDate(), source:'adult_identity_verification', createTime:db.serverDate(), updateTime:db.serverDate() } })
     }
   }
+  const faceRegistration = player.faceRegistrationStatus === 'registered' ? { status:'registered' } : (portrait && portrait.baiduFaceConsent === true ? { status:'pending' } : { status:'consent_required' })
   return {
     success: true,
+    faceRegistration,
     status: 'submitted',
     submissionStatus: 'submitted',
     playerId: String(invite.playerId),
@@ -5492,6 +5508,8 @@ exports.main = async (event, context) => {
         result = await uploadAndProcessParentPortrait(params); break
       case 'confirmParentPortrait':
         result = await confirmParentPortrait(params); break
+      case 'retryParentFaceRegistration':
+        result = await retryParentFaceRegistration(params); break
       case 'completeParentProfile':
         result = await completeParentProfile(params); break
       case 'reviewRefereeRecord':
