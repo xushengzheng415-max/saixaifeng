@@ -1212,17 +1212,22 @@ function recordTeamKeys(record) {
     .filter(Boolean)
 }
 
-async function buildOrganizerScope(db, rawUser) {
+async function buildOrganizerScope(db, rawUser, collection) {
   const user = await ensureUserOrgId(db, rawUser)
-  const [teamResult, tournamentResult] = await Promise.all([
-    db.collection('teams').limit(1000).get(),
-    db.collection('tournaments').limit(1000).get()
+  const { dependencies, tenantWhere } = require('./organizerReads.cjs')
+  const { readAll } = require('./data-center/reader.cjs')
+  const needed = dependencies(collection)
+  const tenant = user.orgId ? tenantWhere(db, user.orgId) : null
+  const fields = { orgId: true, organizationId: true, organization_id: true, teamCode: true, code: true }
+  const [teamRows, tournamentRows] = await Promise.all([
+    tenant && needed.teams ? readAll(db, 'teams', tenant, { fields }) : [],
+    tenant && needed.tournaments ? readAll(db, 'tournaments', tenant, { fields }) : []
   ])
 
   // creatorId/ownerId 只记录具体创建人，不能替代当前机构租户。
   // 缺少一致机构字段的历史记录不进入工作空间索引，避免被间接读写。
-  const teams = (teamResult.data || []).filter(team => recordHasOrg(team, user.orgId))
-  const tournaments = (tournamentResult.data || []).filter(tournament => recordHasOrg(tournament, user.orgId))
+  const teams = teamRows.filter(team => recordHasOrg(team, user.orgId))
+  const tournaments = tournamentRows.filter(tournament => recordHasOrg(tournament, user.orgId))
 
   const scope = {
     user,
@@ -1235,8 +1240,17 @@ async function buildOrganizerScope(db, rawUser) {
     matchIds: new Set()
   }
 
-  const matchResult = await db.collection('matches').limit(1000).get()
-  ;(matchResult.data || []).forEach(match => {
+  const matchConditions = tenant ? [tenant] : []
+  const addMatchIds = (field, ids) => {
+    const values = Array.from(ids)
+    for (let index = 0; index < values.length; index += 20) matchConditions.push({ [field]: db.command.in(values.slice(index, index + 20)) })
+  }
+  addMatchIds('tournamentId', scope.tournamentIds)
+  addMatchIds('homeTeamId', scope.teamIds)
+  addMatchIds('awayTeamId', scope.teamIds)
+  const matchRows = needed.matches && matchConditions.length
+    ? await readAll(db, 'matches', db.command.or(matchConditions), { fields: { orgId: true, organizationId: true, organization_id: true, tournamentId: true, homeTeamId: true, awayTeamId: true } }) : []
+  matchRows.forEach(match => {
     if (recordHasOrg(match, scope.orgId) || scope.tournamentIds.has(match.tournamentId) ||
         scope.teamIds.has(match.homeTeamId) || scope.teamIds.has(match.awayTeamId)) {
       if (match._id) scope.matchIds.add(match._id)
@@ -4184,7 +4198,7 @@ async function handleDbQuery(event) {
 
   let organizerScope = null
   if (!assistanceScope) {
-    organizerScope = await buildOrganizerScope(db, authenticated.user)
+    organizerScope = await buildOrganizerScope(db, authenticated.user, ['list', 'get', 'count'].includes(operation) ? collection : undefined)
     if (organizerScope.organizationConflict) {
       return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
     }
@@ -4268,6 +4282,10 @@ async function handleDbQuery(event) {
         return confirmCompetitionPlan(db, id, data, organizerScope)
       }
       case 'list': {
+        if (organizerScope) {
+          const records = await require('./organizerReads.cjs').readPage(db, collection, { where, orderBy, limit: limitVal, skip: skipVal }, organizerScope, organizerRecordAllowed)
+          return { success: true, data: records, total: records.length }
+        }
         let query = db.collection(collection)
         if (where && Object.keys(where).length > 0) query = query.where(where)
         if (orderBy) {
@@ -4319,7 +4337,9 @@ async function handleDbQuery(event) {
           }
         }
         if (organizerScope) {
-          const records = (await q.limit(1000).get()).data || []
+          const candidate = require('./organizerReads.cjs').candidateWhere(db, collection, organizerScope)
+          const condition = where && Object.keys(where).length ? db.command.and([candidate, where]) : candidate
+          const records = candidate ? await require('./data-center/reader.cjs').readAll(db, collection, condition) : []
           return {
             success: true,
             total: records.filter(record => organizerRecordAllowed(collection, record, organizerScope)).length
@@ -4463,7 +4483,7 @@ async function handleDbQuery(event) {
     }
   } catch (err) {
     console.error('[webApi] dbQuery', operation, 'error:', err.message || err)
-    return { success: false, error: err.message || ('数据库操作失败: ' + operation) }
+    return { success: false, error: err.message || ('数据库操作失败: ' + operation), ...(err.code ? { code: err.code } : {}) }
   }
 }
 
@@ -5016,12 +5036,24 @@ function publicScoreFromEvents(events, match) {
   return score
 }
 
+let capacityMonitorHandler = null
+function platformCapacityMonitor() {
+  if (!capacityMonitorHandler) capacityMonitorHandler = require('./capacityMonitor.cjs').createCapacityMonitor({ cloud, authenticateWebSession })
+  return capacityMonitorHandler
+}
+
 async function getPublicTournamentCenter() {
   const db = cloud.database()
-  const result = await db.collection('publication_snapshots')
-    .where({ sportCode: 'football', type: 'tournament_center', status: 'published' })
-    .limit(200)
-    .get()
+  const { readAll } = require('./data-center/reader.cjs')
+  const { related } = require('./publicReads.cjs')
+  const [snapshotRows, eligibleMatchRows] = await Promise.all([
+    readAll(db, 'publication_snapshots', { sportCode: 'football', type: 'tournament_center', status: 'published' }),
+    readAll(db, 'matches', db.command.or([
+      { schedulePublished: true }, { published: true },
+      { status: db.RegExp({ regexp: '^(ongoing|live|completed|finished|ended)$', options: 'i' }) }
+    ]))
+  ])
+  const result = { data: snapshotRows }
   const latest = new Map()
   ;(result.data || []).forEach(function (snapshot) {
     const tournamentId = String(snapshot.tournamentId || '')
@@ -5035,7 +5067,7 @@ async function getPublicTournamentCenter() {
     return leftSort - rightSort || Number(right.version || 0) - Number(left.version || 0)
   })
   const publishedTournamentIds = new Set(snapshots.map(function (snapshot) { return String(snapshot.tournamentId || '') }).filter(Boolean))
-  const allMatchResult = await db.collection('matches').limit(5000).get()
+  const allMatchResult = { data: eligibleMatchRows }
   const eligibleRows = (allMatchResult.data || []).filter(function (item) {
     const status = String(item.status || '').toLowerCase()
     return item.schedulePublished === true || item.published === true || ['ongoing', 'live', 'completed', 'finished', 'ended'].includes(status)
@@ -5044,7 +5076,8 @@ async function getPublicTournamentCenter() {
   const syntheticTournamentIds = Array.from(visibleMatchTournamentIds).filter(function (id) { return !publishedTournamentIds.has(id) })
   const syntheticTournaments = []
   if (syntheticTournamentIds.length) {
-    const tournamentResult = await db.collection('tournaments').where({ _id: db.command.in(syntheticTournamentIds.slice(0, 1000)) }).limit(1000).get()
+    const [tournamentRows] = await related(db, [{ collection: 'tournaments', field: '_id', ids: syntheticTournamentIds }])
+    const tournamentResult = { data: tournamentRows }
     ;(tournamentResult.data || []).forEach(function (item) {
       const status = String(item.status || '').toLowerCase()
       if (['draft', 'cancelled'].includes(status)) return
@@ -5063,31 +5096,12 @@ async function getPublicTournamentCenter() {
     const status = String(item.status || '').toLowerCase()
     return publishedTournamentIds.has(tournamentId) && (item.schedulePublished === true || item.published === true || ['ongoing', 'live', 'completed', 'finished', 'ended'].includes(status))
   }) : []
-  const publicEventRows = []
-  const publicLineupRows = []
-  const publicSupportRows = []
   const rawMatchIds = rawMatches.map(item => String(item._id || '')).filter(Boolean)
-  for (let index = 0; index < rawMatchIds.length; index += 50) {
-    const chunk = rawMatchIds.slice(index, index + 50)
-    try {
-      const eventResult = await db.collection('match_events').where({ matchId: db.command.in(chunk) }).limit(500).get()
-      publicEventRows.push(...(eventResult.data || []))
-    } catch (error) {
-      console.warn('[webApi] public match event lookup skipped:', error.message || error)
-    }
-    try {
-      const lineupResult = await db.collection('match_lineup_snapshots').where({ matchId: db.command.in(chunk) }).limit(500).get()
-      publicLineupRows.push(...(lineupResult.data || []))
-    } catch (error) {
-      console.warn('[webApi] public lineup lookup skipped:', error.message || error)
-    }
-    try {
-      const supportResult = await db.collection('fan_supports').where({ matchId: db.command.in(chunk) }).limit(5000).get()
-      publicSupportRows.push(...(supportResult.data || []))
-    } catch (error) {
-      console.warn('[webApi] public support lookup skipped:', error.message || error)
-    }
-  }
+  const [publicEventRows, publicLineupRows, publicSupportRows] = await related(db, [
+    { collection: 'match_events', field: 'matchId', ids: rawMatchIds },
+    { collection: 'match_lineup_snapshots', field: 'matchId', ids: rawMatchIds },
+    { collection: 'fan_supports', field: 'matchId', ids: rawMatchIds, fields: { matchId: true, teamSide: true } }
+  ])
   const eventRowsByMatch = new Map()
   publicEventRows.forEach(function (row) {
     const matchId = String(row.matchId || '')
@@ -5121,28 +5135,45 @@ async function getPublicTournamentCenter() {
   rawMatches.forEach(function (match) { collectPublicPlayerIds(publicLineupSource(match, 'home')); collectPublicPlayerIds(publicLineupSource(match, 'away')) })
   publicLineupRows.forEach(collectPublicPlayerIds)
   const publicPlayerProfiles = new Map()
-  const publicPlayerIdList = Array.from(publicPlayerIds).slice(0, 1000)
-  for (let index = 0; index < publicPlayerIdList.length; index += 50) {
-    try {
-      const playerResult = await db.collection('players').where({ _id: db.command.in(publicPlayerIdList.slice(index, index + 50)) }).limit(50).get()
-      ;(playerResult.data || []).forEach(function (player) { publicPlayerProfiles.set(String(player._id || ''), player) })
-    } catch (error) {
-      console.warn('[webApi] public player avatar lookup skipped:', error.message || error)
-    }
+  const publicPlayerIdList = Array.from(publicPlayerIds)
+  const publicTeamIdList = Array.from(new Set(rawMatches.flatMap(match => [match.homeTeamId, match.awayTeamId]).filter(Boolean).map(String)))
+  // Only fields used by the existing public serializer; no identity documents,
+  // guardian contacts or registration payloads enter this read path.
+  const profileFields = Object.fromEntries(['name', 'teamName', 'teamId', 'jerseyNumber', 'number', 'portraitUrl', 'avatarUrl', 'photoUrl', 'appearances', 'matchAppearances', 'birthDate', 'birthday', 'jerseyName', 'nationality', 'height', 'weight', 'nativePlace', 'hometown', 'goals', 'assists', 'points'].map(field => [field, true]))
+  const [idProfiles, publicTeams] = await related(db, [
+    { collection: 'players', field: '_id', ids: publicPlayerIdList, fields: profileFields },
+    { collection: 'teams', field: '_id', ids: publicTeamIdList, fields: { teamName: true, name: true, logoTransparentUrl: true, logoUrl: true, logo: true } }
+  ])
+  idProfiles.forEach(player => publicPlayerProfiles.set(String(player._id || ''), player))
+  const fallbackTeamIds = new Set()
+  const needsProfileFallback = source => {
+    const lineup = source && typeof source === 'object' ? source : {}
+    return [...(Array.isArray(lineup.starters) ? lineup.starters : []), ...(Array.isArray(lineup.players) ? lineup.players : []), ...(Array.isArray(lineup.substitutes) ? lineup.substitutes : [])].some(player => {
+      if (!player || !(player.name || player.playerName || player.realName)) return false
+      return ![player.id, player._id, player.playerId].some(id => id && publicPlayerProfiles.has(String(id)))
+    })
   }
-  const publicTeamIdList = Array.from(new Set(rawMatches.reduce(function (list, match) { ;[match.homeTeamId, match.awayTeamId].forEach(function (id) { if (id) list.push(String(id)) }); return list }, []))).slice(0, 1000)
-  for (let index = 0; index < publicTeamIdList.length; index += 50) {
-    try {
-      const playerResult = await db.collection('players').where({ teamId: db.command.in(publicTeamIdList.slice(index, index + 50)) }).limit(1000).get()
-      ;(playerResult.data || []).forEach(function (player) {
-        publicPlayerProfiles.set(String(player._id || ''), player)
-        const key = '__public_card__|' + String(player.teamName || '').trim() + '|' + String(player.jerseyNumber || player.number || '').trim() + '|' + String(player.name || '').trim()
-        if (key !== '__public_card__|||') publicPlayerProfiles.set(key, player)
-      })
-    } catch (error) {
-      console.warn('[webApi] public player card lookup skipped:', error.message || error)
-    }
-  }
+  rawMatches.forEach(match => {
+    if (needsProfileFallback(publicLineupSource(match, 'home'))) fallbackTeamIds.add(String(match.homeTeamId || ''))
+    if (needsProfileFallback(publicLineupSource(match, 'away'))) fallbackTeamIds.add(String(match.awayTeamId || ''))
+  })
+  const rawMatchById = new Map(rawMatches.map(match => [String(match._id), match]))
+  publicLineupRows.forEach(lineup => {
+    if (!needsProfileFallback(lineup)) return
+    const match = rawMatchById.get(String(lineup.matchId)) || {}
+    const teamId = String(lineup.teamId || lineup.sourceTeamId || '')
+    if (publicTeamIdList.includes(teamId)) fallbackTeamIds.add(teamId)
+    else [match.homeTeamId, match.awayTeamId].filter(Boolean).forEach(id => fallbackTeamIds.add(String(id)))
+  })
+  // Historical snapshot-only matches could use the existing name/number
+  // fallback. Preserve that compatibility rather than dropping their profiles.
+  if (snapshots.some(snapshot => (Array.isArray(snapshot.payload.matches) ? snapshot.payload.matches : []).some(match => match && !rawMatchById.has(String(match.id))))) publicTeamIdList.forEach(id => fallbackTeamIds.add(id))
+  const [teamProfiles] = await related(db, [{ collection: 'players', field: 'teamId', ids: fallbackTeamIds.size ? publicTeamIdList : [], fields: profileFields }])
+  teamProfiles.forEach(player => {
+    publicPlayerProfiles.set(String(player._id || ''), player)
+    const key = '__public_card__|' + String(player.teamName || '').trim() + '|' + String(player.jerseyNumber || player.number || '').trim() + '|' + String(player.name || '').trim()
+    if (key !== '__public_card__|||') publicPlayerProfiles.set(key, player)
+  })
   const publicDetails = new Map()
   rawMatches.forEach(function (item) {
     const matchId = String(item._id || '')
@@ -5176,19 +5207,7 @@ async function getPublicTournamentCenter() {
   })
   const liveMatches = []
   if (publishedTournamentIds.size) {
-    const teamIds = Array.from(new Set(rawMatches.reduce(function (list, item) {
-      ;[item.homeTeamId, item.awayTeamId].forEach(function (id) { if (id) list.push(String(id)) })
-      return list
-    }, []))).slice(0, 1000)
-    const teamMap = new Map()
-    if (teamIds.length) {
-      try {
-        const teamResult = await db.collection('teams').where({ _id: db.command.in(teamIds) }).limit(1000).get()
-        ;(teamResult.data || []).forEach(function (team) { teamMap.set(String(team._id), team) })
-      } catch (error) {
-        console.warn('[webApi] public team logo lookup skipped:', error.message || error)
-      }
-    }
+    const teamMap = new Map(publicTeams.map(team => [String(team._id), team]))
     rawMatches.forEach(function (item) {
       const status = String(item.status || '').toLowerCase()
       const home = teamMap.get(String(item.homeTeamId || '')) || {}
@@ -5268,16 +5287,8 @@ async function getPublicTournamentCenter() {
   }).filter(function (item) { return item.id && item.tournamentId })
     .sort(function (left, right) { return Number(left.timestamp || 0) - Number(right.timestamp || 0) })
   const publicMatchIds = new Set(rawMatches.map(function (item) { return String(item._id || '') }).filter(Boolean))
-  const newsRows = []
-  const publicIds = tournaments.map(function (item) { return String(item.id || '') }).filter(Boolean)
-  for (let index = 0; index < publicIds.length; index += 25) {
-    try {
-      const result = await db.collection('tournament_news').where({ tournamentId: db.command.in(publicIds.slice(index, index + 25)), status: 'published' }).limit(500).get()
-      newsRows.push(...(result.data || []))
-    } catch (error) {
-      console.warn('[webApi] public news lookup skipped:', error.message || error)
-    }
-  }
+  const publicIds = tournaments.map(item => String(item.id || '')).filter(Boolean)
+  const [newsRows] = await related(db, [{ collection: 'tournament_news', field: 'tournamentId', ids: publicIds, where: { status: 'published' } }])
   const matchById = new Map(rawMatches.map(function (item) { return [String(item._id || ''), item] }))
   const publicNews = []
   for (const row of newsRows) {
@@ -5424,6 +5435,9 @@ exports.main = async (event, context) => {
       case 'retryPlayerCardTemplatePublish':
       case 'getActivePlayerCardTemplate':
         result = await require('./playerCardTemplates.cjs').createPlayerCardTemplates({ cloud, authenticateWebSession })(params); break
+      case 'platformCapacityOverview':
+        result = await platformCapacityMonitor()(params)
+        break
       case 'publicTournamentCenter':
         result = await getPublicTournamentCenter()
         break

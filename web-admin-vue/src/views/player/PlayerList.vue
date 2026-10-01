@@ -127,7 +127,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { queryList, deleteRecord, updateRecord } from '../../utils/cloud'
+import { queryAll, queryList, deleteRecord, updateRecord } from '../../utils/cloud'
 import { permissions, getCurrentRole, ROLES } from '../../utils/permissions'
 
 const router = useRouter()
@@ -362,34 +362,19 @@ async function loadPlayers() {
     // 根据角色加载不同的球员数据
     if (canViewAllPlayers.value) {
       // 主办方/管理员可以查看所有球员
-      rawPlayers = await queryList('players', { orderBy: { createTime: 'desc' } })
+      rawPlayers = await queryAll('players', { orderBy: { createTime: 'desc' } })
     } else if (currentRole.value === ROLES.COACH) {
       // 教练加载所有球员（前端按权限控制操作按钮）
       // 避免因 creatorId/userId 格式不匹配导致数据加载失败
-      rawPlayers = await queryList('players', { orderBy: { createTime: 'desc' } })
+      rawPlayers = await queryAll('players', { orderBy: { createTime: 'desc' } })
     }
     
-    // 按球员姓名+出生日期合并，聚合所属球队
-    const playerMap = new Map()
-    for (const p of rawPlayers) {
-      const key = `${p.name}-${p.birthDate || ''}`
-      if (playerMap.has(key)) {
-        const existing = playerMap.get(key)
-        // 添加球队到集合（去重）
-        if (p.teamCode && !existing.teamCodes.includes(p.teamCode)) {
-          existing.teamCodes.push(p.teamCode)
-          existing.records.push(p)
-        }
-      } else {
-        playerMap.set(key, {
-          ...p,
-          teamCodes: p.teamCode ? [p.teamCode] : [],
-          records: [p]
-        })
-      }
-    }
-    
-    players.value = Array.from(playerMap.values())
+    // Stable player IDs remain distinct even when names and birthdays match.
+    players.value = rawPlayers.map(player => ({
+      ...player,
+      teamCodes: [...new Set([...(Array.isArray(player.teamCodes) ? player.teamCodes : []), ...(Array.isArray(player.teamIds) ? player.teamIds : []), player.teamCode, player.teamId].filter(Boolean))],
+      records: [player]
+    }))
   } catch (err) {
     console.error('加载球员列表失败:', err)
   } finally {
@@ -399,7 +384,7 @@ async function loadPlayers() {
 
 async function loadTeams() {
   try {
-    teamOptions.value = await queryList('teams')
+    teamOptions.value = await queryAll('teams')
   } catch (err) {
     console.error('加载球队列表失败:', err)
   }

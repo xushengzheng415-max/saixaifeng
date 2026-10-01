@@ -5,6 +5,8 @@
 import { ElMessage } from 'element-plus'
 import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
+import { createInflightReads } from './inflightReads'
+import { readAllPages } from './pagedReads'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
 const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
@@ -80,7 +82,25 @@ const CLOUD_FUNCTION_MAP = {
  * @param {string} action - webLoginApi 的 action 参数
  * @param {object} data - 请求数据
  */
-async function callFunctionHTTP(action, data = {}, timeout = 60000) {
+const shareRead = createInflightReads()
+function readIdentityKey() {
+  const platform = isPlatformContext()
+  const token = platform ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')
+  return JSON.stringify([platform, token, localStorage.getItem('currentUser'), localStorage.getItem('userInfo'), localStorage.getItem('currentOrganization'), localStorage.getItem('currentOrg'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY)])
+}
+export function callFunctionHTTP(action, data = {}, timeout = 60000) {
+  const readable = (action === 'dbQuery' && ['list', 'get', 'count'].includes(data.operation)) || action === 'platformCapacityOverview'
+  if (!readable) return performFunctionHTTP(action, data, timeout)
+  const identity = readIdentityKey()
+  const key = JSON.stringify([identity, action, data, timeout])
+  return shareRead(key, async () => {
+    const result = await performFunctionHTTP(action, data, timeout)
+    if (identity !== readIdentityKey()) throw Object.assign(new Error('账号或机构已切换，请重新加载'), { code: 'SESSION_ACCOUNT_MISMATCH' })
+    return result
+  })
+}
+
+async function performFunctionHTTP(action, data = {}, timeout = 60000) {
   // 视觉验收样例仅在 Vite 开发模式按需加载；生产构建不会打包样例数据。
   if (import.meta.env.DEV) {
     const { handleVisualQaHttp } = await loadVisualQaModule()
@@ -334,6 +354,19 @@ export async function queryList(collection, options = {}) {
 /**
  * 查询单条记录
  */
+export async function queryAll(collection, options = {}) {
+  const identity = readIdentityKey()
+  return readAllPages(async page => {
+    const assertIdentity = () => {
+      if (identity !== readIdentityKey()) throw Object.assign(new Error('账号或机构已切换，请重新加载'), { code: 'SESSION_ACCOUNT_MISMATCH' })
+    }
+    assertIdentity()
+    const rows = await queryList(collection, page)
+    assertIdentity()
+    return rows
+  }, { orderBy: { _id: 'asc' }, ...options })
+}
+
 export async function queryById(collection, id) {
   const result = await dbQuery(collection, 'get', { id })
   if (!result.success) throw new Error(result.error || '查询失败')
