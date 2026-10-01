@@ -32,13 +32,15 @@ function createPlayerCardPublish({ cloud }) {
       targetIds: players.map(p => String(p._id)), cursor: 0, failures: [], status: 'pending',
       createdBy: userId, createdAt: db.serverDate(), updatedAt: db.serverDate(),
       stateRevision: Number(state.revision || 0) }
+    const snapshotData = { ...snapshot }; delete snapshotData._id
+    const jobData = { ...job }; delete jobData._id
     await db.runTransaction(async tx => {
       const current = await suite.document(tx, suite.STATES, tier)
       const template = await suite.document(tx, suite.TEMPLATES, row._id)
       if (!current || current.candidate || Number(current.revision || 0) !== job.stateRevision ||
           !template || Number(template.revision || 0) !== revision) throw new Error('发布状态已变化，请刷新后重试')
-      await tx.collection(suite.VERSIONS).doc(snapshot._id).set({ data: snapshot })
-      await tx.collection(suite.JOBS).doc(jobId).set({ data: job })
+      await tx.collection(suite.VERSIONS).doc(snapshot._id).set({ data: snapshotData })
+      await tx.collection(suite.JOBS).doc(jobId).set({ data: jobData })
       await tx.collection(suite.STATES).doc(tier).update({ data: { candidate: { jobId, templateId: row._id, version },
         revision: job.stateRevision + 1, updatedAt: db.serverDate() } })
     })
