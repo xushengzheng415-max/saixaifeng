@@ -58,7 +58,7 @@ const cloudStub = {
   DYNAMIC_CURRENT_ENV:'test',
   init() {},
   getWXContext:() => ({ OPENID:activeOpenId }),
-  database:() => ({ collection, command, serverDate:() => new Date(), createCollection:async name => { rows(name); return {} } }),
+  database:() => ({ collection, command, serverDate:() => new Date(), createCollection:async name => { rows(name); return {} },runTransaction:async callback => callback({collection}) }),
   callFunction:async ({name,data}) => {
     if(name==='updateMatch'&&updateMatchModule)return {result:await updateMatchModule.main(data)}
     throw new Error(`unsupported cloud function ${name}`)
@@ -83,7 +83,7 @@ for (const [id, openId, phone, role, canOperate] of officials) {
   seed('match_referees', `assignment-${id}`, { matchId:'match-1', refereeId:`ref-${id}`, role, roleLabel:role, canOperate, isRecordKeeper:canOperate })
 }
 seed('teams','team-home',{name:'主队'}); seed('teams','team-away',{name:'客队'})
-seed('tournaments','t-1',{name:'测试赛事'}); seed('divisions','d-1',{name:'U12组',participantType:'youth'})
+seed('tournaments','t-1',{name:'测试赛事'}); seed('divisions','d-1',{name:'U12组',participantType:'youth',rulesLocked:true,rulesVersion:'fixture-v1',rulesSnapshot:{periodMode:'halves',matchMinutes:30},substitutionMode:'free',substitutionReentryAllowed:true})
 const player = (id,name,number) => ({ _id:id, id, playerId:id, name, jerseyNumber:number, photoUrl:`/${id}.png`, identityStatus:'verified', identityVerificationLabel:'人证核验通过' })
 seed('matches','match-1',{
   tournamentId:'t-1',divisionId:'d-1',status:'scheduled',homeTeamId:'team-home',awayTeamId:'team-away',homeTeamName:'主队',awayTeamName:'客队',
@@ -110,6 +110,10 @@ await call('open-a1','verifyLineupPlayer',{matchId:'match-1',side:'home',playerI
 await call('open-a2','verifyLineupPlayer',{matchId:'match-1',side:'away',playerId:'away-1',decision:'passed',method:'visual'})
 assert.equal(rows('matches').get('match-1').lineupsLocked,true)
 await call('open-main','startRefereeMatch',{matchId:'match-1'})
+assert.equal(rows('matches').get('match-1').durationRulesSnapshot?.totalMinutes,60)
+rows('divisions').get('d-1').rulesSnapshot.matchMinutes=36
+await call('open-main','startRefereeMatch',{matchId:'match-1'})
+assert.equal(rows('matches').get('match-1').durationRulesSnapshot.totalMinutes,60)
 await call('open-fourth','verifySubstituteIdentity',{matchId:'match-1',side:'home',playerId:'home-sub',decision:'passed',method:'visual'})
 await call('open-fourth','addRefereeEvent',{matchId:'match-1',type:'substitution',minute:15,teamSide:'home',playerName:'主队替补',assistName:'主队首发'})
 await call('open-fourth','addRefereeEvent',{matchId:'match-1',type:'goal',minute:20,teamSide:'home',playerName:'主队替补'})

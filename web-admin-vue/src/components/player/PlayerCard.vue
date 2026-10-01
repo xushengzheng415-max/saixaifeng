@@ -7,6 +7,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { readPlayerCard } from '@/utils/playerCard'
+import { useReadCacheRefresh } from '@/utils/useReadCacheRefresh.js'
 const props = defineProps({ player:{type:Object,required:true}, teamLogo:{type:String,default:''}, playerCard:{type:Object,default:()=>({})} })
 const card = ref({status:'pending',cardUrl:''})
 const portraitFailed=ref(false)
@@ -19,21 +20,22 @@ const stateText = computed(()=>{
   if(card.value.status==='failed')return '加载异常，请重试'
   return ['loading','pending'].includes(card.value.status)?'正在加载…':card.value.portraitStatus==='failed'?'图片加载异常，请重试':'资料待补充'
 })
-async function load() {
+async function load(forceRefresh = false) {
   const playerId = String(props.player?._id || props.player?.id || props.player?.playerId || '')
   if (!playerId) { card.value={status:'unavailable',cardUrl:''}; return }
   const version = ++requestVersion
   fetching = true
   if (!card.value.cardUrl) card.value={status:'loading',cardUrl:''}
-  try { const result=await readPlayerCard(playerId); if(version !== requestVersion)return;card.value=result?.success ? result : {status:'failed',cardUrl:''} }
+  try { const result=await readPlayerCard(playerId, { cache: forceRefresh ? 'reload' : undefined }); if(version !== requestVersion)return;card.value=result?.success ? result : {status:'failed',cardUrl:''} }
   catch { if(version === requestVersion)card.value={status:'failed',cardUrl:''} }
   finally { if(version === requestVersion)fetching=false }
 }
 function imageFailed(){card.value={...card.value,status:'failed',cardUrl:''}}
-function retry(){portraitFailed.value=false;void load()}
+function retry(){portraitFailed.value=false;void load(true)}
 function visible(){if(document.visibilityState==='visible' && !fetching)void load()}
-function versionChanged(event){if(event.key==='sxfPlayerCardTemplateUpdate')visible()}
+function versionChanged(event){if(event.key==='sxfPlayerCardTemplateUpdate' && document.visibilityState==='visible')void load(true)}
 watch(()=>[props.player?._id,props.player?.id,props.player?.playerId],()=>{portraitFailed.value=false;card.value={status:'loading',cardUrl:''};void load()},{immediate:true})
+useReadCacheRefresh({ tags: ['playerCards'], refresh: () => load(), clear: () => { requestVersion++; card.value={status:'forbidden',cardUrl:''} } })
 onMounted(()=>{document.addEventListener('visibilitychange',visible);window.addEventListener('storage',versionChanged);timer=window.setInterval(visible,60000)})
 onBeforeUnmount(()=>{requestVersion++;window.clearInterval(timer);document.removeEventListener('visibilitychange',visible);window.removeEventListener('storage',versionChanged)})
 </script>

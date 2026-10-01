@@ -7,6 +7,8 @@ import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatf
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
 import { createInflightReads } from './inflightReads'
 import { readAllPages } from './pagedReads'
+import { createSessionReadCache, stableReadKey } from './sessionReadCache.js'
+import { isReadOnlyRequest, playerReadCacheTags } from './playerReadCachePolicy.js'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
 const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
@@ -86,18 +88,43 @@ const shareRead = createInflightReads()
 function readIdentityKey() {
   const platform = isPlatformContext()
   const token = platform ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')
-  return JSON.stringify([platform, token, localStorage.getItem('currentUser'), localStorage.getItem('userInfo'), localStorage.getItem('currentOrganization'), localStorage.getItem('currentOrg'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY)])
+  return JSON.stringify([platform, token, platform ? getPlatformSession() : null, localStorage.getItem('currentUser'), localStorage.getItem('userInfo'), localStorage.getItem('currentOrganization'), localStorage.getItem('currentOrg'), localStorage.getItem('role'), localStorage.getItem('currentRole'), localStorage.getItem('authSessionVersion'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY)])
 }
-export function callFunctionHTTP(action, data = {}, timeout = 60000) {
+const playerReadCache = createSessionReadCache({
+  identity: () => (isPlatformContext() ? getPlatformAuthToken() : localStorage.getItem(AUTH_TOKEN_KEY)) ? readIdentityKey() : '',
+  onChange: detail => {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sxf-read-cache-change', { detail }))
+  }
+})
+if (typeof window !== 'undefined') {
+  const identityKeys = new Set(['authToken', 'platformAuthToken', 'platformSession', 'userInfo', 'currentUser', 'currentOrganization', 'currentOrg', 'role', 'currentRole', 'authSessionVersion', ASSISTANCE_CONTEXT_KEY])
+  window.addEventListener('storage', event => {
+    if (event.key === null || identityKeys.has(event.key)) playerReadCache.clear('identity')
+    else if (event.key === 'sxfPlayerCardTemplateUpdate') playerReadCache.clear('mutation')
+  })
+}
+export function invalidatePlayerReadCache() { playerReadCache.clear('mutation') }
+export function getPlayerReadIdentity() { return readIdentityKey() }
+
+export function callFunctionHTTP(action, data = {}, timeout = 60000, requestOptions = {}) {
   const readable = (action === 'dbQuery' && ['list', 'get', 'count'].includes(data.operation)) || action === 'platformCapacityOverview'
-  if (!readable) return performFunctionHTTP(action, data, timeout)
+  const tags = playerReadCacheTags(action, data)
+  if (!isReadOnlyRequest(action, data)) {
+    playerReadCache.clear('mutation', false)
+    return performFunctionHTTP(action, data, timeout).finally(() => playerReadCache.clear('mutation'))
+  }
+  if (!tags && !readable) return performFunctionHTTP(action, data, timeout)
   const identity = readIdentityKey()
-  const key = JSON.stringify([identity, action, data, timeout])
-  return shareRead(key, async () => {
+  const load = async () => {
     const result = await performFunctionHTTP(action, data, timeout)
     if (identity !== readIdentityKey()) throw Object.assign(new Error('账号或机构已切换，请重新加载'), { code: 'SESSION_ACCOUNT_MISMATCH' })
     return result
-  })
+  }
+  if (tags && requestOptions.cache !== 'bypass') {
+    return playerReadCache.read(stableReadKey([action, data, timeout]), load, { tags, bypass: requestOptions.cache === 'reload' })
+  }
+  const key = JSON.stringify([identity, playerReadCache.generation(), action, data, timeout])
+  return readable ? shareRead(key, load) : load()
 }
 
 async function performFunctionHTTP(action, data = {}, timeout = 60000) {
@@ -175,8 +202,8 @@ async function performFunctionHTTP(action, data = {}, timeout = 60000) {
   }
 }
 
-export function playerCardTemplateRequest(action, data = {}) {
-  return callFunctionHTTP(action, data)
+export function playerCardTemplateRequest(action, data = {}, requestOptions = {}) {
+  return callFunctionHTTP(action, data, 60000, requestOptions)
 }
 
 export async function reviewRefereeRecord(data = {}) {
@@ -204,6 +231,7 @@ export async function rosterExceptionBoard(data = {}) {
 // ========== 登录认证 ==========
 
 export async function logout(platform = isPlatformContext()) {
+  playerReadCache.clear('session')
   if (platform) {
     clearPlatformSession()
     return
@@ -288,10 +316,12 @@ export function setAssistanceContext(context) {
     targetOwnerKey: context.targetOwnerKey || context.targetUserId || '',
     expiresAt: context.expiresAt
   }))
+  playerReadCache.clear('identity')
 }
 
 export function clearAssistanceContext() {
   localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+  playerReadCache.clear('identity')
 }
 
 export async function ensureLogin() {
@@ -321,8 +351,8 @@ export function getAuth() { return null }
 /**
  * 通过 HTTP API 执行数据库查询
  */
-async function dbQuery(collection, operation, params = {}) {
-  return callFunctionHTTP('dbQuery', { collection, operation, ...params })
+async function dbQuery(collection, operation, params = {}, requestOptions = {}) {
+  return callFunctionHTTP('dbQuery', { collection, operation, ...params }, 60000, requestOptions)
 }
 
 /**
@@ -335,7 +365,7 @@ export async function queryList(collection, options = {}) {
       orderBy: options.orderBy,
       limit: options.limit || 100,
       skip: options.skip
-    })
+    }, { cache: options.cache })
     if (!result.success) {
       if (options.throwOnError) throw new Error(result.error || '数据加载失败')
       console.error(`[queryList] ${collection} 失败:`, result.error)
@@ -356,15 +386,20 @@ export async function queryList(collection, options = {}) {
  */
 export async function queryAll(collection, options = {}) {
   const identity = readIdentityKey()
-  return readAllPages(async page => {
+  const load = () => readAllPages(async page => {
     const assertIdentity = () => {
       if (identity !== readIdentityKey()) throw Object.assign(new Error('账号或机构已切换，请重新加载'), { code: 'SESSION_ACCOUNT_MISMATCH' })
     }
     assertIdentity()
-    const rows = await queryList(collection, page)
+    const rows = await queryList(collection, { ...page, cache: 'bypass' })
     assertIdentity()
     return rows
   }, { orderBy: { _id: 'asc' }, ...options })
+  const tags = playerReadCacheTags('dbQuery', { collection, operation: 'list' })
+  if (!tags || options.cache === 'bypass') return load()
+  const { cache: cacheMode, ...queryOptions } = options
+  const result = await playerReadCache.read(stableReadKey(['queryAll', collection, queryOptions]), async () => ({ success: true, data: await load() }), { tags, bypass: cacheMode === 'reload' })
+  return result.data
 }
 
 export async function queryById(collection, id) {

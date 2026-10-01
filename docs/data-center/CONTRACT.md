@@ -20,7 +20,7 @@
 
 PC：`callFunction('dataCenter', { action, scope })`，经 webLoginApi 验证会话后转发，数据中心再次验证原会话。机构范围来自服务端账号；平台所有者可以查看平台范围。
 
-小程序：`getMiniWorkspace` 的 `action:'dataCenter'`，传工作空间和 scope。服务端校验空间与角色权限，从已授权球队和主办赛事确定范围；参与赛事不自动授予全赛事个人数据。
+小程序球员详情：`getMiniWorkspace` 的 `action:'teamPlayerDetail'`，传工作空间、teamId和playerId，服务端校验空间与球队权限后调用共享服务。当前main未登记通用dataCenter dispatcher；不能把接口规划当作已接入。参与赛事不自动授予全赛事个人数据。
 
 H5：webLoginApi 的 `action:'publicDataCenter'`，必须指定已发布赛事。只统计 `schedulePublished` 或 `published` 的比赛，返回正式结果和公开姓名；不读取私有档案字段，不返回成员关系。
 
@@ -54,7 +54,7 @@ PC `newsCenter` 只允许赛事所属机构中有赛事管理权限的主办方�
 - 进球：有效进球与已进点球；乌龙球、点球大战排除。
 - 助攻：同一进球同一助攻者只计一次。
 - 第二张黄牌：计一张黄牌、一张红牌；按有效事件版本计算。
-- 时间：裁判计时优先；已完赛且有明确比赛/组别规则时可按规则时长计算。仍需要完整首发与上下场依据；缺少依据为未知。规则时长不等于裁判实测，应在字段来源中注明。
+- 时间：正式统计以赛前保存并核定来源及单位的单场总时长为边界，再按首发与上下场区间计算。已完赛时旧计时器和当前规则不得覆盖原时长；缺少可靠赛前证据为未知。现场暂定值可在已证实的单场边界内使用当前钟，不能混入正式积分。
 - 球队进失球、胜平负：正式比分记录；比分缺失为未知。常规比分平局与点球决胜需通过赛事规则解释，不能用跨赛事的积分相加生成平台排名。
 
 嵌入与外部事件按 eventId 和 revision 合并；外部相同版本优先，撤销标记生效。无 ID 的旧记录不按姓名生成永久身份；仅可用本场当时球队阵容中的唯一姓名与号码组合关联已经存在的 ID，歧义不关联。无法确定身份时进入质量队列。空事件数组仅在现有记录明确提供时作为已记录集合，只有外部事件但没有完整采集声明时标记为部分记录。
@@ -97,3 +97,22 @@ H5 getMyPreloadedPlayerCard、previewMyPreloadedPlayerCard、saveMyPreloadedPlay
 ## 主办方完赛结算补充（2026-10-01）
 
 `updateMatch.finishOrganizerMatch` 校验原赛事机构权限、比赛记录锁及 `expectedEventRevision`，在事务中核对事件版本和状态后保存 `finished` 与两套比分字段。完整嵌入事件数组由共享 `calculateMatchEventScore` 结算有效进球、已进点球和反向乌龙球；撤销、重复 ID 与点球大战不计常规比分。缺少事件数组保留手录兼容；明确空数组为 0:0；有效进球缺少球队时拒绝结算。不得改写正在裁判记录或已提交/锁定的记录。该动作不等于裁判报告审核、正式赛果发布或生产历史数据修复。
+
+
+## 球员卡统一快照（本地候选，2026-10-01）
+
+权威源是后台正式比赛事实、稳定球员 ID、赛前保存的单场时长及配对确认的应援扣款。PC 档案字段和任何端的卡面颜色都不是竞技积分权威。共享实现位于 dataCenter/shared；各函数副本通过 sync-data-center 生成，禁止分别改公式。本次指标版本 football-metrics/6，保持现网 points/2、entitlements/2 和银45／金100门槛。
+
+所有等级读取返回 playerCard：snapshotSchemaVersion、playerId、scope、mode、status、points、tier、progress、missing、reasonCodes、coverage、scoreVersion、metricVersion、entitlementVersion、careerDataVersion、supportDataVersion、snapshotRevision 和服务端权益。ready 时 progress 含 levelStart、nextAt、pointsToNext、percent；未知时 points／tier／progress 为 null。状态保留 unverified、scope_limited、test_data_excluded；请求失败由客户端单独标记，不转成 unverified 或 0。确认的 0 分仍是 ready、bronze、progress.percent=0。
+
+snapshotRevision 包含事实版本、完整度、核验原因、规则和应援版本，不包含响应生成时间或签名图片 URL。dataVersion 也包含被排除／来源未知的候选记录、事件撤销修订和覆盖状态。playerId 是返回行筛选；同一事实范围的单人和批量查询采用相同生涯版本及快照。coverage.playerCardComplete 按稳定 ID 核验：无关场次只有在完整的稳定 ID 阵容和事件能证明未参与时才不阻塞目标球员；缺名单或身份／事件歧义仍待核定，不以当前队籍推断历史。
+
+PC 新入口 dataCenter.playerDetail 返回授权范围的 statistics 与独立完整生涯 playerCard。服务端先执行范围鉴权；本届／球队数据不能冒充生涯总分。原 playerCard 入口保持兼容。小程序实际球员详情入口为 getMiniWorkspace.teamPlayerDetail，使用同一服务；当前 main 未登记通用 getMiniWorkspace.dataCenter dispatcher。H5 私有卡库使用 listMyPlayerCards 批量快照，公开应援摘要使用同一构造器；不扩大公开档案权限。
+
+### 单场时长证据
+
+新场次在授权开赛工作流中保存 durationRulesSnapshot（football-match-duration/1）：matchId、minutesBasis(total 或 period)、minutes、periodCount（仅 period）、totalMinutes、source(kind/id/version)、frozenAt、kickoffAt。配置的 matchMinutes 在现有 halves／single UI 中表示每半场／每节，必须携带明确 periodMode 和节数；明确 total 输入不可再次乘节数。frozenAt 不得晚于开赛，来源范围必须匹配该场次。开赛后保留原快照，后来改组别／赛事规程不改历史。
+
+正式分钟来自该快照限定下的首发／换上／换下／罚下区间，自由换回累加实际区间。历史规则证据缺失、冲突或无单位时分钟为 null，返回 MATCH_DURATION_* 原因；当前规程、旧计时器、90分钟和0都不能补成历史权威值。已完赛正式统计不采用旧钟；现场暂定可在已证实时长内显示当前钟。读取不生成历史快照，不执行自动回填。没有可靠证据的旧场次将保持待核定。
+
+通用浏览器 matches 写入不得伪造 durationRulesSnapshot／rulesSnapshot；服务端保存钩子只处理未开赛场次，并用事务防止并发重复开赛覆盖快照。此代码尚未发布。

@@ -4219,6 +4219,11 @@ async function handleDbQuery(event) {
   const authenticated = await authenticateWebSession(event)
   if (!authenticated.success) return authenticated
 
+  if (collection === 'matches' && ['add','update'].includes(operation)) {
+    try { require('./data-center/write-policy.cjs').assertMatchRuleSnapshotWrite(data) }
+    catch (error) { return {success:false,code:error.code,error:error.message} }
+  }
+
   let assistanceScope = null
   if (assistanceGrantId) {
     if (!ASSISTANCE_COLLECTIONS.has(collection)) {

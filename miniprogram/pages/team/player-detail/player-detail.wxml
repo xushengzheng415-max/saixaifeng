@@ -6,7 +6,7 @@
     <view class="player-card-fifa">
       <view wx:if="{{player.hasJerseyNumber}}" class="jersey-badge"><text class="jersey-num">{{player.jerseyNumber}}</text></view>
       <view class="avatar-section"><view class="avatar-frame"><image class="player-avatar" src="{{player.displayPhoto}}" mode="aspectFill" bindtap="previewImage"></image></view><view class="avatar-glow"></view></view>
-      <view class="info-section"><text class="player-name">{{player.name}}</text><view wx:if="{{player.hasJerseyName}}" class="jersey-name">{{player.jerseyName}}</view><view wx:if="{{player.hasPosition}}" class="position-tag"><text class="tag-text">{{player.positionLabel}}</text></view><view class="profile-state-tag">{{player.profileStatusText}}</view><view class="card-score-line"><text>{{cardScore.level}}</text><text>{{cardScore.points}} 分</text><text>{{cardScore.progress}}</text></view></view>
+      <view class="info-section"><text class="player-name">{{player.name}}</text><view wx:if="{{player.hasJerseyName}}" class="jersey-name">{{player.jerseyName}}</view><view wx:if="{{player.hasPosition}}" class="position-tag"><text class="tag-text">{{player.positionLabel}}</text></view><view class="profile-state-tag">{{player.profileStatusText}}</view><view class="card-score-line"><text>{{cardScore.level}}</text><text>{{cardScore.points}} 分</text><text>{{cardScore.progress}}</text></view><view wx:if="{{cardScore.hasProgress}}" class="card-grade-progress"><view style="width: {{cardScore.progressWidth}};"></view></view></view>
     </view>
 
     <view class="core-stats-card">

@@ -23,6 +23,14 @@ exports.main = async (event = {}) => {
       return { success:true, items }
     }
     if (event.action === 'catalog') return await service.catalog(actor)
+    if (event.action === 'playerDetail') {
+      const playerId = String(event.playerId || '')
+      if (!playerId) throw error('DATA_SCOPE_INVALID','缺少球员信息')
+      const statistics = await service.query(actor,{...(event.scope || {}),playerId,mode:'official'})
+      const card = statistics.playerCard?.scope === 'career' ? statistics.playerCard : await service.playerCardForAuthorizedPlayer(playerId)
+      const {metrics,...playerCard} = card
+      return {success:true,statistics,playerCard}
+    }
     if (event.action === 'playerCard') {
       const playerId = String(event.playerId || '')
       await service.query(actor, { playerId, mode:'official' })

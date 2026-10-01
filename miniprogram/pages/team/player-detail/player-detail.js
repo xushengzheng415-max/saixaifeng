@@ -113,7 +113,11 @@ Page({
       { id: 'portrait', label: '标准形象照', value: player.portraitStatusText }
     ]
     var ready = playerCard && playerCard.status === 'ready'
-    var cardScore = { level:ready ? ({bronze:'铜卡', silver:'银卡', gold:'金卡'}[playerCard.tier] || '待核定') : '待核定', points:ready ? String(playerCard.points) : '—', progress:ready ? (playerCard.nextAt == null ? '已达金卡' : '距下一级 ' + playerCard.pointsToNext + ' 分') : '生涯积分待核定', canCustomize:ready && playerCard.canChangeBackground === true }
+    var progress = playerCard && playerCard.progress
+    var progressText = !playerCard ? '等级统计接口待接入' : ready && !progress ? '升级进度接口待接入' : '生涯比赛记录待核定'
+    if (playerCard && (playerCard.reasonCodes || []).some(function(code){return code.indexOf('MATCH_DURATION_') === 0})) progressText = '比赛时长来源待核对，升级进度待核定'
+    if (ready && progress) progressText = progress.nextAt == null ? '已达金卡' : '距下一级 ' + progress.pointsToNext + ' 分'
+    var cardScore = { level:ready ? ({bronze:'铜卡', silver:'银卡', gold:'金卡'}[playerCard.tier] || '待核定') : '待核定', points:ready ? String(playerCard.points) : '—', progress:progressText, hasProgress:ready && progress && typeof progress.percent === 'number', progressWidth:ready && progress ? progress.percent + '%' : '', canCustomize:ready && playerCard.canChangeBackground === true }
     this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, cardScore:cardScore, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
     wx.setNavigationBarTitle({ title: player.name || '球员详情' })
   },

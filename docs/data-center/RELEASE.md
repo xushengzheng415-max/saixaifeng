@@ -114,3 +114,10 @@ webLoginApi 从最新线上包仅替换两模板模块，以 COS 更新并回下
 PC 用已正式发布功能的源码基线构建完整 260 文件包，上传 `/admin/`。正式域名及托管域名 HTTP 200、入口仅引用 `/admin/assets/`；入口 `index-BydhH3nz.js` SHA-256 `E4D5980F370AB1C661AFA54B5B650F6A4B0CD15B64A9E2D5583EABEEFFB8019B`，`TournamentScheduleV2-0YSzJuE4.js` 和 `MatchDetail-Crnq82yY.js` 均与公网字节一致；另三个比赛处理分包也通过字节回读。预览 `/preview/admin/` 仍为 HTTP 200 并引用预览资源。最新 main 已合入修复，正式站本次专用构建没有发布 main 的未上线赛制调整候选。
 
 生产只读核对：2026-10-01 中年组场序 #16（当前 `ongoing`）、#17（当前 `scheduled`）均无内嵌进球事件，独立 `match_events` 表也无两场事件；无法仅凭旧页面输入恢复进球或推断比分，未改写生产比赛记录。需由有权限的现场/主办方按实际赛况重新记录并结束比赛。未使用真实主办方会话对新写入链路做业务回读，本次只确认代码、权限拒绝及静态资源上线。
+
+
+## 2026-10-01 球员卡统一候选：本地验证，未部署
+
+初始基于 main 93ce4890，交付前跟进 main 69da0c28，隔离分支 codex/player-card-unify-local。统一指标版本 football-metrics/6，等级／权益保持现网 v2。PC build、数据中心回归、12组统一合同、裁判全流程、卡权限与治理检查通过。当前只交付本地集成提交；没有 main 推送、云函数部署、资源或数据初始化、历史回填、小程序上传或正式账号跨端验收。
+
+正式回读显示 dataCenter 和 getMiniWorkspace 为 metrics/5，webLoginApi 和 playerCardPublishWorker 为 metrics/4，四者都为 points/2。因此不能用未核验的旧 main 整包覆盖生产。指定发布线程先合入此候选、同步共享模块并复测，再按精确文件差量串行发布。历史缺证据场次保持待核定；恢复真实进度需要逐场可追溯的旧时长证据和另行授权的数据修复，不能用当前组别配置补写。详见 PLAYER_CARD_UNIFY_HANDOFF.md。
