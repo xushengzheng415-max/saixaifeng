@@ -1852,6 +1852,11 @@ async function startRefereeMatch(openId, matchId) {
   if (!preMatchStateView(context.match).completed) return fail('请先完成赛前报到、到场和检查确认', 'PRE_MATCH_INCOMPLETE')
   if (!context.match.lineupsLocked) return fail('请先完成双方阵容与身份核验', 'LINEUP_NOT_VERIFIED')
 
+  const { freezePreMatchDuration } = await import('./data-center/playing-time.mjs')
+  const division = context.match.divisionId && context.match.divisionId !== 'default' ? await getDoc('divisions',context.match.divisionId) : null
+  const tournament = context.match.tournamentId ? await getDoc('tournaments',context.match.tournamentId) : null
+  const durationRulesSnapshot = freezePreMatchDuration(context.match,division || {},tournament || {})
+
   const updateData = {
       status: 'ongoing',
       refereeStartedAt: db.serverDate(),
@@ -1864,11 +1869,23 @@ async function startRefereeMatch(openId, matchId) {
       refereeWorkflowLogs: workflowLogs(context.match, 'start_match', context.identity),
       updateTime: db.serverDate()
   }
+  if (!context.match.durationRulesSnapshot && durationRulesSnapshot) updateData.durationRulesSnapshot = durationRulesSnapshot
   if (!context.match.executionSnapshot) {
     updateData.executionSnapshot = await buildExecutionSnapshot(context.match)
     updateData.executionSnapshotAt = db.serverDate()
   }
-  await db.collection('matches').doc(matchId).update({ data: updateData })
+  await db.runTransaction(async transaction => {
+    const response = await transaction.collection('matches').doc(matchId).get()
+    const fresh = Array.isArray(response.data) ? response.data[0] : response.data
+    if (['ongoing','live'].includes(String(fresh?.status || ''))) return
+    if (!fresh || fresh.refereeRecordLocked || ['finished','completed','archived','cancelled','postponed'].includes(String(fresh.status || '')) ||
+        !fresh.lineupsLocked || !preMatchStateView(fresh).completed) {
+      throw Object.assign(new Error('比赛状态已变化，请刷新后重试'),{code:'MATCH_STATE_CHANGED'})
+    }
+    if (fresh.durationRulesSnapshot) delete updateData.durationRulesSnapshot
+    updateData.refereeWorkflowLogs = workflowLogs(fresh,'start_match',context.identity)
+    await transaction.collection('matches').doc(matchId).update({data:updateData})
+  })
   return ok({}, '已开始执裁')
 }
 

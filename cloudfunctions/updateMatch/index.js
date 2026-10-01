@@ -349,6 +349,10 @@ exports.main = async (event, context) => {
     delete safeData.updateTime
     delete safeData.executionSnapshot
     delete safeData.executionSnapshotAt
+    // A browser cannot overwrite the server's frozen duration provenance.
+    delete safeData.durationRulesSnapshot
+    delete safeData.rulesSnapshot
+    for (const field of Object.keys(safeData)) if (/^(durationRulesSnapshot|rulesSnapshot)\./.test(field)) delete safeData[field]
     let eventValidation = null
     delete safeData.matchEventRevision
     if (Array.isArray(safeData.events)) {
@@ -402,6 +406,17 @@ exports.main = async (event, context) => {
       return { success: false, message: '裁判报告已提交，比赛记录已锁定' }
     }
 
+    if (!match.durationRulesSnapshot && ['ongoing','live'].includes(String(safeData.status || ''))) {
+      let division = null
+      if (match.divisionId && match.divisionId !== 'default') {
+        const record = await db.collection('divisions').doc(String(match.divisionId)).get()
+        division = Array.isArray(record.data) ? record.data[0] : record.data
+      }
+      const { freezePreMatchDuration } = await import('./data-center/playing-time.mjs')
+      const snapshot = freezePreMatchDuration(match,division || {},tournament || {})
+      if (snapshot) safeData.durationRulesSnapshot = snapshot
+    }
+
     let assignment = null
     if (safeData.refereeCrew) {
       assignment = await normalizeRefereeCrew(
@@ -436,10 +451,11 @@ exports.main = async (event, context) => {
         updateTime: db.serverDate()
       }
     })
-    if (eventValidation || finishing) {
+    if (eventValidation || finishing || safeData.durationRulesSnapshot) {
       await db.runTransaction(async transaction => {
         const freshResult = await transaction.collection('matches').doc(matchId).get()
         const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
+        if (fresh?.durationRulesSnapshot) delete safeData.durationRulesSnapshot
         if (!fresh || fresh.refereeRecordLocked || fresh.status !== match.status || fresh.executionState !== match.executionState || Number(fresh.matchEventRevision || 0) !== Number(match.matchEventRevision || 0) || JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || []) || JSON.stringify(fresh.lineups || {}) !== JSON.stringify(match.lineups || {}) || JSON.stringify(fresh.homeLineup || {}) !== JSON.stringify(match.homeLineup || {}) || JSON.stringify(fresh.awayLineup || {}) !== JSON.stringify(match.awayLineup || {})) {
           throw Object.assign(new Error('比赛事件或阵容已更新，请刷新后重试'),{code:'MATCH_EVENTS_CHANGED'})
         }

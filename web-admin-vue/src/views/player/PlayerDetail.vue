@@ -120,13 +120,13 @@
 
               <!-- 卡片升级进度 -->
               <div class="info-card">
-                <h4 class="section-title">卡片等级</h4>
+                <h4 class="section-title">卡片等级 <el-button text :loading="statisticsLoading" @click="refreshStatistics">刷新统计</el-button></h4>
                 <div class="level-progress">
                   <div class="level-info">
                     <span class="current-level">{{ currentLevelText }} · {{ cardPointsText }} 分</span>
                     <span v-if="nextLevelText" class="next-level">下一级：{{ nextLevelText }}</span>
                   </div>
-                  <el-progress v-if="playerCard.status === 'ready' && nextLevelText"
+                  <el-progress v-if="playerCard.status === 'ready' && playerCard.progress && nextLevelText"
                     :percentage="levelProgress" 
                     :color="levelColor"
                     :stroke-width="12"
@@ -232,7 +232,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, Edit, View, Plus, Upload } from '@element-plus/icons-vue'
@@ -252,6 +252,8 @@ const teamData = ref({})
 const statistics = ref({})
 const playerCard = ref({ status:'unverified', points:null, tier:null })
 const statisticsMessage = ref('')
+const statisticsLoading = ref(false)
+let statisticsRequest = 0
 function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 const playerAvatarUrl = ref('')
 const showEditDialog = ref(false)
@@ -327,12 +329,7 @@ const nextLevelText = computed(() => {
 const cardPointsText = computed(() => playerCard.value.status === 'ready' ? playerCard.value.points : '—')
 
 // 等级进度百分比
-const levelProgress = computed(() => {
-  const score = playerCard.value
-  if (score.status !== 'ready' || score.nextAt == null) return 100
-  const start = score.tier === 'silver' ? 45 : 0
-  return Math.max(0, Math.min(100, Math.round((score.points - start) * 100 / (score.nextAt - start))))
-})
+const levelProgress = computed(() => playerCard.value.progress?.percent ?? 0)
 
 // 进度条颜色
 const levelColor = computed(() => {
@@ -342,8 +339,16 @@ const levelColor = computed(() => {
 // 进度提示
 const progressHint = computed(() => {
   const score = playerCard.value
-  if (score.status !== 'ready') return '生涯积分待核定'
-  return score.nextAt == null ? '已达金卡，可更换照片和背景' : `距${nextLevelText.value}还差 ${score.pointsToNext} 分`
+  if (score.status === 'request_failed') return '等级暂时读取失败，请刷新重试'
+  if (score.status === 'not_connected') return '等级统计接口待接入'
+  if (score.status === 'loading') return '正在读取生涯积分'
+  if (score.status !== 'ready') {
+    if (score.reasonCodes?.some(code => code.startsWith('MATCH_DURATION_'))) return '比赛时长来源待核对，升级进度待核定'
+    if (score.reasonCodes?.includes('PLAYER_CARD_SUPPORT_UNVERIFIED')) return '应援数据待核定，升级进度待核定'
+    return '生涯比赛记录待核定'
+  }
+  if (!score.progress) return '升级进度接口待接入'
+  return score.progress.nextAt == null ? '已达金卡，可更换照片和背景' : `距${nextLevelText.value}还差 ${score.progress.pointsToNext} 分`
 })
 
 function goBack() {
@@ -423,6 +428,28 @@ function createIdentityCard() {
   ElMessage.info('身份卡功能开发中...')
 }
 
+async function refreshStatistics() {
+  const playerId = String(route.params.playerId || route.params.id || '')
+  if (!playerId || statisticsLoading.value) return
+  const request = ++statisticsRequest
+  statisticsLoading.value = true
+  try {
+    const scope = route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {}
+    const result = await callFunction('dataCenter',{action:'playerDetail',playerId,scope})
+    if (!result.success || !result.statistics || !result.playerCard) throw Object.assign(new Error(result.error || '统计加载失败'),{code:result.code})
+    if (request !== statisticsRequest) return
+    statistics.value = result.statistics.playerTotal?.metrics || {}
+    playerCard.value = result.playerCard
+    statisticsMessage.value = result.statistics.coverage?.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。'
+  } catch (error) {
+    if (request !== statisticsRequest) return
+    statistics.value = {}
+    playerCard.value = {status:error.code === 'DATA_ACTION_INVALID' ? 'not_connected' : 'request_failed',points:null,tier:null,progress:null}
+    statisticsMessage.value = '统计暂不可用，请刷新重试。'
+  } finally { if (request === statisticsRequest) statisticsLoading.value = false }
+}
+function refreshOnVisibility() { if (document.visibilityState === 'visible') refreshStatistics() }
+
 async function loadPlayerData() {
   const playerId = route.params.playerId || route.params.id
   if (!playerId) {
@@ -439,21 +466,8 @@ async function loadPlayerData() {
     
     if (players && players.length > 0) {
       playerData.value = players[0]
-      statistics.value = {}
-      playerCard.value = { status:'unverified', points:null, tier:null }
-      statisticsMessage.value = ''
-      try {
-        const result = await callFunction('dataCenter',{action:'query',scope:{playerId:String(playerId),...(route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {})}})
-        if (!result.success) throw new Error(result.error || '统计加载失败')
-        statistics.value = result.playerTotal.metrics
-        statisticsMessage.value = result.coverage.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。'
-      } catch (error) { statisticsMessage.value = '统计暂不可用，请刷新重试。' }
-      try {
-        const scoreResult = await callFunction('dataCenter', { action:'playerCard', playerId:String(playerId) })
-        if (scoreResult.success && scoreResult.playerCard) playerCard.value = scoreResult.playerCard
-      } catch (error) { /* Unknown is not zero. */ }
+      await refreshStatistics()
 
-      
       // 处理头像URL（如果是云存储fileID，获取临时URL）
       if (playerData.value.photoUrl && playerData.value.photoUrl.startsWith('cloud://')) {
         try {
@@ -500,6 +514,18 @@ useReadCacheRefresh({
 })
 onMounted(() => {
   loadPlayerData()
+  document.addEventListener('visibilitychange',refreshOnVisibility)
+  window.addEventListener('focus',refreshStatistics)
+})
+watch(() => route.fullPath,() => {
+  ++statisticsRequest; statisticsLoading.value = false
+  statistics.value = {}; playerCard.value = {status:'loading',points:null,tier:null}
+  loadPlayerData()
+})
+onUnmounted(() => {
+  ++statisticsRequest
+  document.removeEventListener('visibilitychange',refreshOnVisibility)
+  window.removeEventListener('focus',refreshStatistics)
 })
 </script>
 

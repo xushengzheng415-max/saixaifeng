@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { aggregateStatistics, effectiveEvents, sumPlayerRows, calculatePlayerCardPoints } from '../cloudfunctions/dataCenter/shared/statistics.mjs'
+import { aggregateStatistics, effectiveEvents, sumPlayerRows, calculatePlayerCardPoints as scorePoints } from '../cloudfunctions/dataCenter/shared/statistics.mjs'
+import { createMatchDurationSnapshot } from '../cloudfunctions/dataCenter/shared/playing-time.mjs'
 const require = createRequire(import.meta.url)
+const {EMPTY_SUPPORT_VERSION} = require('../cloudfunctions/dataCenter/shared/support.cjs')
+// These pure scoring fixtures explicitly assume a complete, zero support ledger.
+const verifiedSupport = {dataVersion:'fixture-career',supportDrops:0,supportCoverageStatus:'complete',supportDataVersion:EMPTY_SUPPORT_VERSION}
+const calculatePlayerCardPoints = (total,metadata={}) => scorePoints(total,{...verifiedSupport,...metadata})
 const { readAll, readByIds } = require('../cloudfunctions/dataCenter/shared/reader.cjs')
 const { createDataService, validateScope } = require('../cloudfunctions/dataCenter/shared/service.cjs')
 const { requestTransfer, acceptTransfer } = require('../cloudfunctions/dataCenter/transfers.cjs')
@@ -28,7 +33,8 @@ function mockDatabase(initial, cap = 100) {
 
 const makeMatch = (id,team,tournament,goals = 0) => ({
   _id:id, tournamentId:tournament, divisionId:'u12', homeTeamId:team, awayTeamId:'opponent', status:'completed', homeScore:goals, awayScore:0,
-  matchDate:'2026-09-01', refereeMatchPhase:'finished', refereeClockElapsedSeconds:3600,
+  matchDate:'2026-09-01', refereeMatchPhase:'finished', refereeClockElapsedSeconds:5400,
+  durationRulesSnapshot:createMatchDurationSnapshot({matchId:id,minutes:60,minutesBasis:'total',source:{kind:'match',id,version:'fixture-v1'},frozenAt:'2026-09-01T07:59:00Z',kickoffAt:'2026-09-01T08:00:00Z'}),
   homeLineup:{ starters:[{ playerId:'p1',name:'小明' }],substitutes:[{ playerId:'bench',name:'替补' }] }, awayLineup:{ starters:[] },
   events:Array.from({length:goals},(_,index) => ({ eventId:`${id}-g${index}`,type:'goal',playerId:'p1',teamId:team,minute:10 + index }))
 })
@@ -89,7 +95,7 @@ assert.equal(unknown.coverage.status,'partial'); assert.equal(unknown.players[0]
 const unlinked = aggregateStatistics({matches:[{...before,events:[{eventId:'legacy',type:'goal',teamId:'A',playerName:'小明'}]}]})
 assert.equal(unlinked.coverage.unlinkedEventCount,1); assert.equal(unlinked.players[0].metrics.goals,null)
 assert.equal(unlinked.coverage.cardScoreScopeComplete,true)
-const untimed = aggregateStatistics({matches:[{...before,refereeClockElapsedSeconds:null}]})
+const untimed = aggregateStatistics({matches:[{...before,durationRulesSnapshot:undefined,refereeClockElapsedSeconds:null}]})
 assert.equal(untimed.players[0].metrics.minutesPlayed,null)
 const lineupMissing = aggregateStatistics({matches:[{...before,homeLineup:undefined,awayLineup:undefined,events:[]}]})
 assert.equal(lineupMissing.coverage.status,'partial'); assert.equal(lineupMissing.coverage.missingLineupSides,2)
@@ -130,7 +136,7 @@ assert.equal(fakeCareer.playerCard.status,'test_data_excluded'); assert.equal(fa
 assert.equal((await service.query({ ...actor,platformOwner:true }, { playerId:'testTeamUnmarked' })).playerCard.status,'test_data_excluded')
 assert.equal((await service.catalog({ ...actor,platformOwner:true })).players.some(row => row.id === 'fake'),false)
 assert.equal((await service.catalog({ ...actor,platformOwner:true })).players.some(row => row.id === 'testTeamUnmarked'),false)
-assert.equal(platformCareer.playerCard.scoreVersion,'football-player-card-points/1')
+assert.equal(platformCareer.playerCard.scoreVersion,'football-player-card-points/2')
 assert.equal((await service.query({ ...actor, platformOwner:true }, { playerId:'p1', tournamentId:'t1' })).playerCard.status,'scope_limited')
 assert(!JSON.stringify(career).includes('private-value'))
 await assert.rejects(service.query(actor,{teamId:'C'}),error => error.code === 'DATA_FORBIDDEN')

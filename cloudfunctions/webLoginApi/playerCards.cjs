@@ -111,9 +111,11 @@ function createPlayerCards(deps) {
   const library=createPlayerCardLibrary({cloud})
   async function handler(event) {
     const db = cloud.database(), auth = await authorize(event, db), entries = await playersFor(auth, db)
+    const batchScores = event.action === 'listMyPlayerCards' && !deps.scoreForPlayer
+      ? await createDataService(db).playerCardsForAuthorizedPlayers(entries.map(entry => String(entry.player._id))) : null
     async function summary(entry) {
       const p = entry.player
-      const score = await (deps.scoreForPlayer ? deps.scoreForPlayer(String(p._id)) : createDataService(db).playerCardForAuthorizedPlayer(String(p._id)))
+      const score = batchScores?.get(String(p._id)) || await (deps.scoreForPlayer ? deps.scoreForPlayer(String(p._id)) : createDataService(db).playerCardForAuthorizedPlayer(String(p._id)))
       const ready = score.status === 'ready'
       return { id: String(p._id), name: p.name || '球员', teamName: entry.teamName || '', jerseyNumber: p.jerseyNumber || '', jerseyName: p.jerseyName || '', position: p.position || '', height: p.height ?? null, weight: p.weight ?? null, nationality: p.nationality || '', appearances: ready ? score.metrics.appearances : null, cardTier: ready ? score.tier : null, playerCard: score, cardFileId: p.playerCardFileId || '', version: Number(p.playerCardVersion || 0), mode: p.playerCardMode || 'portrait', savedTier: p.playerCardTier || '', backgroundId:p.playerCardBackgroundId || score.tier || '',displayTemplateId:p.playerCardDisplayTemplateId || '' }
     }

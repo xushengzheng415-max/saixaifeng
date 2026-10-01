@@ -108,3 +108,17 @@ PC 赛程日历与详情、监控、补录、复核的返回入口使用独立 `
 ## 2026-10-02 比赛管理修复上线状态
 
 PC 结算页面、赛事日历返回上下文与 `updateMatch` 受控完赛入口已部署正式环境并回读文件摘要；当前生产 10 月 1 日中年组 #16/#17 无持久化进球事件，未自动补写赛果。真实主办方重新录入进球、结束比赛、返回 10 月 1 日全组别的交互验收仍待现场执行。
+
+
+## 球员卡等级合同统一候选（2026-10-01，未发布）
+
+| 入口 | 实现与范围 | 本地状态 |
+|---|---|---|
+| PC 球员详情 | dataCenter.playerDetail：先鉴权统计范围，再返回生涯快照；手动刷新、返回可见刷新 | 构建通过 |
+| 小程序球队球员详情 | getMiniWorkspace.teamPlayerDetail → shared/service；显示服务器 progress，未知为— | 离线展示与工作流验证通过，未上传 |
+| H5 本人／监护人卡库 | listMyPlayerCards 一次批量读取，等级取 playerCard；保留基础／预装卡库 | 离线合同及权益验证通过 |
+| H5 公开应援摘要 | fanPlayerCardScores → 同一 createPlayerCardSnapshot，不自行算级 | 合同测试通过 |
+| 新比赛时长保存 | serviceMatchWorkflow.startRefereeMatch、updateMatch 开赛路径；不可写旧完赛记录 | 完整裁判流程测试通过 |
+| 共享副本 | getMiniWorkspace、webLoginApi、resultCenter、worker 全模块；两个写函数只需要 playing-time／substitution | sync --check 通过；worker 是生成目录，集成后先运行 sync |
+
+不部署 playerCardPublishWorker 的 index.js 或任何未登记的生产模块。仅按交接清单更新所需共享文件；保留正式生产差量功能、卡模板、照片显示与遮罩修复。此候选不含 candidate:null 补丁，不触发发布队列，不回填历史，不更改 points v2 或历史授予。
