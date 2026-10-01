@@ -104,3 +104,11 @@ webLoginApi 从最新线上包仅替换两模板模块，以 COS 更新并回下
 ## 2026-10-01 赛制修改门禁（发布候选）
 
 赛制分阶段修改门禁、比赛中换人白名单和未开赛场次读取新规则的代码已合入 Gitee `main`（提交 `1b0ad7a`）；PC 正式构建成功，函数入口语法检查通过。生产函数仍未更新：CloudBase CLI 当前要求交互确认“Update with current config”；无 TTY 模式失败。已停止交互调用，未触碰函数配置或环境变量。正式部署和线上回读待安全恢复 CLI 交互后完成。
+
+## 2026-10-02 比赛管理结算与日历返回正式发布
+
+用户明确授权修复并发布。函数 `updateMatch` 以线上回下载包为基线，只更新入口并加入共享 `statistics.mjs`、`playing-time.mjs`；线上 `substitution.mjs` 保持原摘要。CloudBase 回读 `Active/Available`、`Nodejs16.13`、20 秒、256 MB、`index.main`、原环境变量数量 0；回下载入口 SHA-256 `068AA5642753723217D33033B17EE1BA9F760351D6DFABDB665508EA3FD8AE75`，统计模块 `6B6C8A511F275F882DA9928B210493CAF578AAFAC26C5314542CFC0DA6450985`，均与发布包一致。无登录会话的只读探针被拒绝。
+
+PC 用已正式发布功能的源码基线构建完整 260 文件包，上传 `/admin/`。正式域名及托管域名 HTTP 200、入口仅引用 `/admin/assets/`；入口 `index-BydhH3nz.js` SHA-256 `E4D5980F370AB1C661AFA54B5B650F6A4B0CD15B64A9E2D5583EABEEFFB8019B`，`TournamentScheduleV2-0YSzJuE4.js` 和 `MatchDetail-Crnq82yY.js` 均与公网字节一致；另三个比赛处理分包也通过字节回读。预览 `/preview/admin/` 仍为 HTTP 200 并引用预览资源。最新 main 已合入修复，正式站本次专用构建没有发布 main 的未上线赛制调整候选。
+
+生产只读核对：2026-10-01 中年组场序 #16（当前 `ongoing`）、#17（当前 `scheduled`）均无内嵌进球事件，独立 `match_events` 表也无两场事件；无法仅凭旧页面输入恢复进球或推断比分，未改写生产比赛记录。需由有权限的现场/主办方按实际赛况重新记录并结束比赛。未使用真实主办方会话对新写入链路做业务回读，本次只确认代码、权限拒绝及静态资源上线。

@@ -104,3 +104,7 @@ PC 赛程日历与详情、监控、补录、复核的返回入口使用独立 `
 - `webLoginApi` 的 `reviseDivisionRules` / `confirmDivisionRules` 在赛程生成、赛程锁定或赛事开始后拒绝整套修改；通用 `update` 仍拒绝直接改定版规则。中途仅允许 `updateDivisionSubstitutionRules` 修改换人设置并保留规则版本、旧值历史和权限校验。
 - `dataCenter/shared/substitution.mjs` 对未开赛场次优先读取组别最新活动换人规则；已开始或完赛场次继续读取其比赛快照。部署副本同步至 `updateMatch`、`serviceMatchWorkflow` 等入口，避免 PC 补录与服务号裁判登记口径分离。
 - 冻结字段分类与边界见 `docs/PRODUCT_RULES.md`；生产或预览状态须单独登记于 `RELEASE.md`。
+
+## 2026-10-02 比赛管理修复上线状态
+
+PC 结算页面、赛事日历返回上下文与 `updateMatch` 受控完赛入口已部署正式环境并回读文件摘要；当前生产 10 月 1 日中年组 #16/#17 无持久化进球事件，未自动补写赛果。真实主办方重新录入进球、结束比赛、返回 10 月 1 日全组别的交互验收仍待现场执行。
