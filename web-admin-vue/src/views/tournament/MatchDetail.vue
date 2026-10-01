@@ -216,6 +216,7 @@
           <!-- 比赛事件 -->
           <el-tab-pane name="events">
             <template #label><el-icon><Soccer /></el-icon> 比赛事件</template>
+            <el-alert v-if="substitutionAudit.issues.length" type="warning" :closable="false" show-icon :title="`换人记录存在 ${substitutionAudit.issues.length} 项异常`" :description="substitutionAudit.issues.map(item => `${item.side === 'home' ? homeName : awayName} ${item.minute}′：${item.message}`).join('；')" />
             <div v-if="sortedEvents.length" class="event-summary-grid">
               <div v-for="item in eventSummary" :key="item.key" class="event-summary-item">
                 <span class="event-summary-icon">{{ item.icon }}</span>
@@ -759,6 +760,9 @@
           </el-radio-group>
         </el-form-item>
         <template v-if="eventForm.type === 'substitution'">
+          <el-alert :title="effectiveSubstitutionRules.label" type="info" :closable="false" />
+          <el-alert v-if="!substitutionInputState.known" title="缺少本场首发名单，请先补齐阵容" type="warning" :closable="false" />
+          <el-alert v-else-if="substitutionInputState.issues.length" :title="`本队已有换人异常：${substitutionInputState.issues[0].message}`" type="warning" :closable="false" />
           <el-form-item label="换人时段" required>
             <el-radio-group v-model="eventForm.substitutionPeriod" class="substitution-period-options">
               <el-radio-button v-for="option in substitutionPeriodOptions" :key="option.value" :value="option.value">{{ option.label }}</el-radio-button>
@@ -768,9 +772,9 @@
             <header><div><strong>换人名单</strong><span>每次最多5组</span></div><el-button size="small" plain type="primary" :disabled="eventForm.substitutions.length >= 5" @click="addSubstitutionRow"><el-icon><Plus /></el-icon>增加一组</el-button></header>
             <div v-for="(row,index) in eventForm.substitutions" :key="index" class="substitution-row">
               <span class="substitution-index">{{ index + 1 }}</span>
-              <el-select v-model="row.outName" filterable clearable placeholder="选择换下球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-select v-model="row.outId" filterable clearable placeholder="选择当前在场球员"><el-option v-for="player in substitutionOutOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
               <el-icon class="substitution-arrow"><Right /></el-icon>
-              <el-select v-model="row.inName" filterable clearable placeholder="选择换上球员"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
+              <el-select v-model="row.inId" filterable clearable placeholder="选择可用替补"><el-option v-for="player in substitutionInOptions(index)" :key="player.value" :label="player.label" :value="player.value" /></el-select>
               <el-button v-if="eventForm.substitutions.length > 1" text type="danger" circle aria-label="删除这组换人" @click="removeSubstitutionRow(index)"><el-icon><Delete /></el-icon></el-button>
             </div>
           </section>
@@ -1254,6 +1258,7 @@ import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, 
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import VisualLineupEditor from './VisualLineupEditor.vue'
+import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
 const route = useRoute()
 const router = useRouter()
@@ -1264,6 +1269,9 @@ const matchId = route.params.matchId
 const sourceDivisionId = typeof route.query.divisionId === 'string' ? route.query.divisionId : ''
 
 const match = ref({})
+const substitutionDivision = ref({}), substitutionTournament = ref({})
+const effectiveSubstitutionRules = computed(() => substitutionRules(match.value,substitutionDivision.value,substitutionTournament.value))
+const substitutionAudit = computed(() => substitutionState(match.value,effectiveSubstitutionRules.value))
 const homeName = ref('')
 const awayName = ref('')
 const homeLogo = ref('')
@@ -1346,7 +1354,7 @@ const finishForm = ref({ homeScore: 0, awayScore: 0 })
 // 事件弹窗
 const eventDialogVisible = ref(false)
 const eventPlayersLoading = ref(false)
-const emptySubstitution = () => ({ outName:'',inName:'' })
+const emptySubstitution = () => ({ outId:'',inId:'' })
 const newEventForm = () => ({ type:'goal',minute:0,teamSide:'home',playerName:'',assistName:'',substitutionPeriod:'first_half',substitutions:[emptySubstitution()] })
 const eventForm = ref(newEventForm())
 const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:minute,label:`${minute}′` }))
@@ -1383,14 +1391,17 @@ watch(() => eventForm.value.type, type => {
 
 function addSubstitutionRow() { if (eventForm.value.substitutions.length < 5) eventForm.value.substitutions.push(emptySubstitution()) }
 function removeSubstitutionRow(index) { if (eventForm.value.substitutions.length > 1) eventForm.value.substitutions.splice(index,1) }
-function substitutionOutOptions(index) {
-  const used = new Set(eventForm.value.substitutions.map((row,rowIndex) => rowIndex === index ? '' : row.outName).filter(Boolean))
-  return eventPlayerOptions.value.filter(player => !used.has(player.value) && player.value !== eventForm.value.substitutions[index]?.inName)
+const substitutionInputState = computed(() => substitutionState(match.value,effectiveSubstitutionRules.value,match.value.events || [],Number(eventForm.value.minute)).sides[eventForm.value.teamSide])
+const substitutionOption = player => ({ value:String(player.playerId || player.id || player._id || ''), label:[player.number ?? player.jerseyNumber,player.name || player.playerName].filter(value=>value!==''&&value!=null).join(' · ') })
+function substitutionOptions(index,kind) {
+  const used = new Set(eventForm.value.substitutions.flatMap((row,rowIndex) => rowIndex===index ? [kind==='incoming'?row.outId:row.inId] : [row.outId,row.inId]).filter(Boolean))
+  return substitutionInputState.value[kind].map(substitutionOption).filter(player=>player.value&&!used.has(player.value))
 }
-function substitutionInOptions(index) {
-  const used = new Set(eventForm.value.substitutions.map((row,rowIndex) => rowIndex === index ? '' : row.inName).filter(Boolean))
-  return eventPlayerOptions.value.filter(player => !used.has(player.value) && player.value !== eventForm.value.substitutions[index]?.outName)
-}
+function substitutionOutOptions(index) { return substitutionOptions(index,'outgoing') }
+function substitutionInOptions(index) { return substitutionOptions(index,'incoming') }
+watch(() => [eventForm.value.minute,eventForm.value.teamSide], () => {
+  if(eventDialogVisible.value && eventForm.value.type==='substitution')eventForm.value.substitutions=[emptySubstitution()]
+})
 
 // 裁判组编辑弹窗
 const refereeDialogVisible = ref(false)
@@ -1838,6 +1849,8 @@ async function loadTournamentName(tid, divisionId = '') {
     }
     if (tournament) {
       const division = divisionRecord || (tournament.divisions || []).find(item => item && effectiveDivisionId && (item.id === effectiveDivisionId || item._id === effectiveDivisionId))
+      substitutionDivision.value = division || {}
+      substitutionTournament.value = tournament
       tournamentMatchFormat.value = division?.matchFormat || tournament.matchFormat || ''
       const playerCount = Number.parseInt(String(division?.matchFormat || tournamentMatchFormat.value || tournament.matchFormat || ''), 10)
       substitutePlayerLimit.value = resolveSubstitutePlayerLimit(
@@ -2160,21 +2173,20 @@ async function saveEvent() {
   if (!ensureEvidenceEditable()) return
   let newEvents = []
   if (eventForm.value.type === 'substitution') {
-    const rows = eventForm.value.substitutions.filter(row => row.outName || row.inName)
+    const rows = eventForm.value.substitutions.filter(row => row.outId || row.inId)
     if (!rows.length) return ElMessage.warning('请至少填写一组换人')
-    if (rows.some(row => !row.outName || !row.inName)) return ElMessage.warning('请完整选择每组换上和换下球员')
-    if (rows.some(row => row.outName === row.inName)) return ElMessage.warning('同一组换上和换下不能是同一球员')
-    if (new Set(rows.map(row => row.outName)).size !== rows.length) return ElMessage.warning('同一球员不能重复换下')
-    if (new Set(rows.map(row => row.inName)).size !== rows.length) return ElMessage.warning('同一球员不能重复换上')
+    if (rows.some(row => !row.outId || !row.inId)) return ElMessage.warning('请完整选择每组换上和换下球员')
+    if (new Set(rows.flatMap(row => [row.outId,row.inId])).size !== rows.length * 2) return ElMessage.warning('同一批换人不能重复选择球员')
     const batchId = `sub-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
     newEvents = rows.map((row,index) => {
-      const incoming = activeEventPlayers.value.find(player => String(player.name || player.playerName) === row.inName)
-      const outgoing = activeEventPlayers.value.find(player => String(player.name || player.playerName) === row.outName)
+      const incoming = substitutionInputState.value.incoming.find(player => String(player.playerId || player.id || player._id) === row.inId)
+      const outgoing = substitutionInputState.value.outgoing.find(player => String(player.playerId || player.id || player._id) === row.outId)
       return {
         type:'substitution',minute:Number(eventForm.value.minute || 0),teamSide:eventForm.value.teamSide,
         teamId:String(eventForm.value.teamSide === 'away' ? match.value.awayTeamId || '' : match.value.homeTeamId || ''),
-        playerName:row.inName,playerId:String(incoming?._id || incoming?.id || incoming?.playerId || ''),playerNumber:String(incoming?.jerseyNumber ?? incoming?.number ?? ''),
-        assistName:row.outName,assistPlayerId:String(outgoing?._id || outgoing?.id || outgoing?.playerId || ''),assistNumber:String(outgoing?.jerseyNumber ?? outgoing?.number ?? ''),
+        eventId:`${batchId}-${index+1}`,
+        playerName:String(incoming?.name || incoming?.playerName || ''),playerId:row.inId,inPlayerId:row.inId,playerNumber:String(incoming?.jerseyNumber ?? incoming?.number ?? ''),
+        assistName:String(outgoing?.name || outgoing?.playerName || ''),assistPlayerId:row.outId,outPlayerId:row.outId,assistNumber:String(outgoing?.jerseyNumber ?? outgoing?.number ?? ''),
         substitutionPeriod:eventForm.value.substitutionPeriod,substitutionBatchId:batchId,substitutionBatchIndex:index + 1,substitutionBatchSize:rows.length,
         source:'organizer_pc',createdAt:new Date().toISOString()
       }
@@ -2206,11 +2218,14 @@ async function saveEvent() {
   saving.value = true
   try {
     const events = [...(match.value.events || []), ...newEvents]
+    assertSubstitutionChange(match.value,effectiveSubstitutionRules.value,events)
     const result = await callFunction('updateMatch', {
       matchId,
+      expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
     match.value.events = events
+    match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
     match.value.awayScore = result?.data?.awayScore ?? calculateEventScore(events).away
     eventDialogVisible.value = false
@@ -2241,11 +2256,14 @@ async function removeEvent(targetEvent) {
     await ElMessageBox.confirm(`${eventDescription || '该比赛事件'}将被删除，删除后无法恢复。`, '确认删除比赛事件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
     saving.value = true
     events.splice(index, 1)
+    assertSubstitutionChange(match.value,effectiveSubstitutionRules.value,events)
     const result = await callFunction('updateMatch', {
       matchId,
+      expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
     match.value.events = events
+    match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
     match.value.awayScore = result?.data?.awayScore ?? calculateEventScore(events).away
     ElMessage.success('已删除')

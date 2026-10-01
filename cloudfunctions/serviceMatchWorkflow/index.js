@@ -1993,17 +1993,34 @@ async function addRefereeEvent(openId, event) {
   if (type === 'other' && !description) return fail('请输入事件说明', 'EVENT_DESCRIPTION_REQUIRED')
   const teamSide = event.teamSide === 'away' ? 'away' : 'home'
   const rosterPlayers = refereeRosterView(context.match, teamSide).players || []
-  const rosterPlayer = rosterPlayers.find(function(item) { return item.name === playerName })
-  const rosterAssist = rosterPlayers.find(function(item) { return item.name === assistName })
+  function selectedRosterPlayer(name,number,id) {
+    const matches=rosterPlayers.filter(item=>id ? String(item.id || '')===String(id) : item.name===name && (!number || String(item.jerseyNumber || '')===String(number)))
+    return matches.length===1?matches[0]:null
+  }
+  const rosterPlayer = type==='substitution' ? selectedRosterPlayer(playerName,event.playerNumber,event.playerId) : rosterPlayers.find(function(item) { return item.name === playerName })
+  const rosterAssist = type==='substitution' ? selectedRosterPlayer(assistName,event.assistNumber,event.assistPlayerId) : rosterPlayers.find(function(item) { return item.name === assistName })
   const playerNumber = String(event.playerNumber || (rosterPlayer && rosterPlayer.jerseyNumber) || '').replace(/\D/g, '').slice(0, 3)
   const assistNumber = String(event.assistNumber || (rosterAssist && rosterAssist.jerseyNumber) || '').replace(/\D/g, '').slice(0, 3)
   if (type === 'substitution') {
-    if (!rosterPlayer) return fail('换上球员必须来自本场替补名单', 'SUBSTITUTE_NOT_IN_LINEUP')
+    if (!assistName || !rosterAssist) return fail('请选择换下球员', 'SUBSTITUTION_OUT_REQUIRED')
+    if (!rosterPlayer) return fail('请从本场名单中准确选择换上球员', 'SUB_PLAYER_UNKNOWN')
+    if (rosterPlayerId(rosterPlayer) === rosterPlayerId(rosterAssist)) return fail('同一球员不能同时换上和换下', 'SUB_SAME_PLAYER')
+    if ((rosterPlayers.filter(item=>item.name===playerName).length>1&&!event.playerNumber&&!event.playerId) || (rosterPlayers.filter(item=>item.name===assistName).length>1&&!event.assistNumber&&!event.assistPlayerId)) return fail('本场存在同名球员，请同时核对号码', 'SUB_PLAYER_AMBIGUOUS')
+    const division = context.match.divisionId ? await getDoc('divisions',context.match.divisionId) : null
+    const { substitutionRules, assertSubstitutionChange } = await import('./data-center/substitution.mjs')
+    try {
+      assertSubstitutionChange(context.match,substitutionRules(context.match,division || {}),[...(context.match.events || []),{
+        eventId:'__pending_substitution__',type,minute,teamSide,teamId:teamSide==='away'?String(context.match.awayTeamId||''):String(context.match.homeTeamId||''),
+        playerId:rosterPlayerId(rosterPlayer),inPlayerId:rosterPlayerId(rosterPlayer),playerName,playerNumber,
+        assistPlayerId:rosterPlayerId(rosterAssist),outPlayerId:rosterPlayerId(rosterAssist),assistName,assistNumber
+      }])
+    } catch(error) { return fail(error.message || '换人记录异常，请重新核对',error.code || 'SUBSTITUTION_INVALID') }
     const sourceLineup = context.match[lineupField(teamSide)] || {}
     const substituteIds = lineupPlayers(sourceLineup, 'substitute').map(rosterPlayerId)
-    if (substituteIds.indexOf(rosterPlayerId(rosterPlayer)) < 0) return fail('换上球员不在本场替补名单中', 'SUBSTITUTE_NOT_IN_LINEUP')
-    const substituteCheck = sourceLineup.substituteIdentityChecks && sourceLineup.substituteIdentityChecks[rosterPlayerId(rosterPlayer)]
-    if (!substituteCheck || substituteCheck.status !== 'passed') return fail('请先由第四官员完成该替补的身份核验', 'SUBSTITUTE_IDENTITY_CHECK_REQUIRED')
+    if (substituteIds.includes(rosterPlayerId(rosterPlayer))) {
+      const substituteCheck = sourceLineup.substituteIdentityChecks && sourceLineup.substituteIdentityChecks[rosterPlayerId(rosterPlayer)]
+      if (!substituteCheck || substituteCheck.status !== 'passed') return fail('请先由第四官员完成该替补的身份核验', 'SUBSTITUTE_IDENTITY_CHECK_REQUIRED')
+    }
   }
   const refereeEvent = {
     eventId: crypto.randomBytes(8).toString('hex'),
@@ -2013,9 +2030,11 @@ async function addRefereeEvent(openId, event) {
     teamId: teamSide === 'away' ? String(context.match.awayTeamId || '') : String(context.match.homeTeamId || ''),
     playerName,
     playerId: rosterPlayer ? rosterPlayerId(rosterPlayer) : '',
+    inPlayerId: type==='substitution'&&rosterPlayer ? rosterPlayerId(rosterPlayer) : '',
     playerNumber,
     assistName,
     assistPlayerId: rosterAssist ? rosterPlayerId(rosterAssist) : '',
+    outPlayerId: type==='substitution'&&rosterAssist ? rosterPlayerId(rosterAssist) : '',
     assistNumber,
     description,
     source: 'referee_service',
@@ -2028,6 +2047,7 @@ async function addRefereeEvent(openId, event) {
   const eventScore = eventScoreFromEvents(events)
   const updateData = {
     events,
+    matchEventRevision: Number(context.match.matchEventRevision || 0) + 1,
     homeScore: eventScore.home,
     awayScore: eventScore.away,
     scoreHome: eventScore.home,
@@ -2041,10 +2061,14 @@ async function addRefereeEvent(openId, event) {
     }),
     updateTime: db.serverDate()
   }
-  await db.collection('matches').doc(matchId).update({
-    data: updateData
-  })
-  return ok({ eventId: refereeEvent.eventId, homeScore: eventScore.home, awayScore: eventScore.away }, '比赛事件已保存')
+  try {
+    await db.runTransaction(async transaction=>{
+      const result=await transaction.collection('matches').doc(matchId).get(),current=Array.isArray(result.data)?result.data[0]:result.data
+      if(!current||current.refereeRecordLocked||Number(current.matchEventRevision||0)!==Number(context.match.matchEventRevision||0)||JSON.stringify(current.events||[])!==JSON.stringify(context.match.events||[])||JSON.stringify(current.lineups||{})!==JSON.stringify(context.match.lineups||{})||JSON.stringify(current.homeLineup||{})!==JSON.stringify(context.match.homeLineup||{})||JSON.stringify(current.awayLineup||{})!==JSON.stringify(context.match.awayLineup||{}))throw Object.assign(new Error('比赛事件或阵容已更新，请刷新后重新录入'),{code:'MATCH_EVENTS_CHANGED'})
+      await transaction.collection('matches').doc(matchId).update({data:updateData})
+    })
+  } catch(error) { return fail(error.message||'比赛事件保存失败，请刷新后重试',error.code||'MATCH_EVENT_SAVE_FAILED') }
+  return ok({ eventId: refereeEvent.eventId, homeScore: eventScore.home, awayScore: eventScore.away,matchEventRevision:updateData.matchEventRevision }, '比赛事件已保存')
 }
 
 async function deleteRefereeEvent(openId, event) {
@@ -2063,6 +2087,7 @@ async function deleteRefereeEvent(openId, event) {
   const eventScore = eventScoreFromEvents(events)
   const updateData = {
     events,
+    matchEventRevision: Number(context.match.matchEventRevision || 0) + 1,
     homeScore: eventScore.home,
     awayScore: eventScore.away,
     scoreHome: eventScore.home,
@@ -2076,10 +2101,14 @@ async function deleteRefereeEvent(openId, event) {
     }),
     updateTime: db.serverDate()
   }
-  await db.collection('matches').doc(matchId).update({
-    data: updateData
-  })
-  return ok({ homeScore: eventScore.home, awayScore: eventScore.away }, '事件已删除')
+  try {
+    await db.runTransaction(async transaction=>{
+      const result=await transaction.collection('matches').doc(matchId).get(),current=Array.isArray(result.data)?result.data[0]:result.data
+      if(!current||current.refereeRecordLocked||Number(current.matchEventRevision||0)!==Number(context.match.matchEventRevision||0)||JSON.stringify(current.events||[])!==JSON.stringify(context.match.events||[])||JSON.stringify(current.lineups||{})!==JSON.stringify(context.match.lineups||{})||JSON.stringify(current.homeLineup||{})!==JSON.stringify(context.match.homeLineup||{})||JSON.stringify(current.awayLineup||{})!==JSON.stringify(context.match.awayLineup||{}))throw Object.assign(new Error('比赛事件或阵容已更新，请刷新后重试'),{code:'MATCH_EVENTS_CHANGED'})
+      await transaction.collection('matches').doc(matchId).update({data:updateData})
+    })
+  } catch(error) { return fail(error.message||'比赛事件删除失败，请刷新后重试',error.code||'MATCH_EVENT_DELETE_FAILED') }
+  return ok({ homeScore: eventScore.home, awayScore: eventScore.away,matchEventRevision:updateData.matchEventRevision }, '事件已删除')
 }
 
 async function submitRefereeReport(openId, matchId) {

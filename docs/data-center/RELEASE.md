@@ -92,3 +92,7 @@ webLoginApi 通过 COS 方式完成代码更新，包含 Linux x64 原生 resvg 
 源码 8d79eaec：candidate、active、published 和 draft 的整对象更新改用 db.command.set，兼容 null→对象及后续版本整体替换；同类写入全部核对。数据库内部错误改为可执行的简短提示，前端发布异常恢复为“发布未完成，可重试”。没有改写用户草稿，也没有手动伪造已发布状态。
 
 webLoginApi 从最新线上包仅替换两模板模块，以 COS 更新并回下载；playerCardPublish.cjs SHA-256 C91AC187431A05151B46E9C2B24C8812A143DB277D385FD32AF55EA83D0FA83E，playerCardTemplates.cjs D715246B917EF23D2A608998B1E87CC18D4C3E43E61D5F7CA9C4D02265BEDA4A，入口 index.js 与基线一致。正式前端构建、整包部署完成，HTTP 200；入口脚本 SHA-256 8CB3E24CA37B5D075A13E72DB51BAC6E9CA29E0FBE96785F077F48F1F979238D，平台页分包 CD31AEDA361BB8B3F2CD8BBA95217B3849597DF73BAD0FD6A84D8AF13A722690，线上/本地一致。未执行测试阶段；修复后的真实发布结果由平台负责人重新发布后核验。
+
+## 2026-10-01 立洋杯老年组无限换人
+
+用户确认正式发布后，本次功能变更合入正式主线。生产老年组规则已更新为自由无限换人并允许换回；共享校验覆盖 PC 补录与服务号裁判登记。正式 PC 前端正在按 /admin/ 构建与发布流程部署，完成后记录入口和资源 SHA-256 回读。
