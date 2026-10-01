@@ -1250,6 +1250,7 @@
 </template>
 
 <script setup>
+import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1777,7 +1778,7 @@ function formatDateTimeCN(date) {
 function goBack() {
   router.push({
     path: `/tournaments/${tournamentId}/matches`,
-    query: sourceDivisionId ? { divisionId: sourceDivisionId } : {}
+    query: matchListQuery(route.query)
   })
 }
 
@@ -1997,10 +1998,11 @@ async function updateStatus(status) {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: { status, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.status = status
     ElMessage.success('状态已更新')
   } catch (err) {
@@ -2026,6 +2028,8 @@ async function finishMatch() {
   try {
     const result = await callFunction('updateMatch', {
       matchId,
+      action: 'finishOrganizerMatch',
+      expectedEventRevision: Number(match.value.matchEventRevision || 0),
       data: {
         homeScore: finishForm.value.homeScore,
         awayScore: finishForm.value.awayScore,
@@ -2033,9 +2037,10 @@ async function finishMatch() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.homeScore = result?.data?.homeScore ?? finishForm.value.homeScore
     match.value.awayScore = result?.data?.awayScore ?? finishForm.value.awayScore
-    match.value.status = 'finished'
+    await loadMatch()
     finishDialogVisible.value = false
     ElMessage.success('比赛已结束，比分已保存')
   } catch (err) {
@@ -2224,6 +2229,7 @@ async function saveEvent() {
       expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.events = events
     match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
@@ -2262,6 +2268,7 @@ async function removeEvent(targetEvent) {
       expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.events = events
     match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home

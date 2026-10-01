@@ -48,17 +48,6 @@ function normalizeMatchEvents(events, match) {
   }).filter(Boolean)
 }
 
-function eventScoreFromEvents(events) {
-  const score = { home: 0, away: 0 }
-  ;(Array.isArray(events) ? events : []).forEach(event => {
-    const type = String(event && (event.type || event.eventType) || '').trim().toLowerCase()
-    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
-    let side = event && event.teamSide === 'away' ? 'away' : 'home'
-    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
-    score[side] = Math.min(99, score[side] + 1)
-  })
-  return score
-}
 let scheduleAdjustmentLogsReady = false
 
 async function ensureScheduleAdjustmentLogs() {
@@ -376,18 +365,32 @@ exports.main = async (event, context) => {
       eventValidation = assertSubstitutionChange(match,substitutionRules(match,division,tournament || {}),safeData.events)
       safeData.events = normalizeMatchEvents(normalizeSubstitutionRecords(match,safeData.events), match)
       safeData.matchEventRevision = Number(match.matchEventRevision || 0) + 1
-      const eventScore = eventScoreFromEvents(safeData.events)
+      const { calculateMatchEventScore } = await import('./data-center/statistics.mjs')
+      const eventScore = calculateMatchEventScore({ ...match, events:safeData.events })
       safeData.homeScore = eventScore.home
       safeData.awayScore = eventScore.away
       safeData.scoreHome = eventScore.home
       safeData.scoreAway = eventScore.away
     }
-    const canSupplement = Boolean(eventValidation) && ['finished','ended'].includes(String(match.status || '').toLowerCase()) && !match.refereeRecordLocked
-    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway'].includes(field)))) {
+    const finishing = event.action === 'finishOrganizerMatch'
+    if (finishing) {
+      if (safeData.status !== 'finished' || Object.keys(safeData).some(key => !['status','homeScore','awayScore'].includes(key))) return { success:false, code:'FINISH_FIELDS_INVALID', message:'结束比赛只能提交最终比分和状态' }
+      if (event.expectedEventRevision == null || Number(event.expectedEventRevision) !== Number(match.matchEventRevision || 0)) return { success:false, code:'MATCH_EVENTS_CHANGED', message:'比赛事件已更新，请刷新后结束比赛' }
+      const { calculateMatchEventScore } = await import('./data-center/statistics.mjs')
+      const score = calculateMatchEventScore(match)
+      const home = score ? score.home : safeData.homeScore, away = score ? score.away : safeData.awayScore
+      if (![home,away].every(value => Number.isInteger(value) && value >= 0 && value <= 99)) return { success:false, code:'SCORE_INVALID', message:'请录入0至99之间的整数比分' }
+      Object.assign(safeData, { homeScore:home, awayScore:away, scoreHome:home, scoreAway:away })
+    }
+    const organizerRecordAllowed = !match.refereeRecordLocked && !['ongoing','live','in_progress','playing','archived','cancelled'].includes(String(match.status || '').toLowerCase()) && match.executionState !== 'recording' && !match.refereeReportSubmittedAt && !match.refereeRecord && !match.refereeReport && !['under_review','archived'].includes(String(match.refereeReviewStatus || ''))
+    if (finishing && !organizerRecordAllowed) return { success:false, code:'MATCH_RECORD_LOCKED', message:'当前比赛由裁判记录或已锁定，不能从此入口结束比赛' }
+    const canSupplement = organizerRecordAllowed && (Array.isArray(safeData.events) || finishing)
+
+    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status'] : [])].includes(field)))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
     if (planState.locked) {
-      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision'])
+      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['status'] : [])])
       const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已经锁定，当前只允许调整受控裁判指派', code: 'COMPETITION_PLAN_LOCKED' }
@@ -433,11 +436,11 @@ exports.main = async (event, context) => {
         updateTime: db.serverDate()
       }
     })
-    if (eventValidation) {
+    if (eventValidation || finishing) {
       await db.runTransaction(async transaction => {
         const freshResult = await transaction.collection('matches').doc(matchId).get()
         const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
-        if (!fresh || fresh.refereeRecordLocked || Number(fresh.matchEventRevision || 0) !== Number(match.matchEventRevision || 0) || JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || []) || JSON.stringify(fresh.lineups || {}) !== JSON.stringify(match.lineups || {}) || JSON.stringify(fresh.homeLineup || {}) !== JSON.stringify(match.homeLineup || {}) || JSON.stringify(fresh.awayLineup || {}) !== JSON.stringify(match.awayLineup || {})) {
+        if (!fresh || fresh.refereeRecordLocked || fresh.status !== match.status || fresh.executionState !== match.executionState || Number(fresh.matchEventRevision || 0) !== Number(match.matchEventRevision || 0) || JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || []) || JSON.stringify(fresh.lineups || {}) !== JSON.stringify(match.lineups || {}) || JSON.stringify(fresh.homeLineup || {}) !== JSON.stringify(match.homeLineup || {}) || JSON.stringify(fresh.awayLineup || {}) !== JSON.stringify(match.awayLineup || {})) {
           throw Object.assign(new Error('比赛事件或阵容已更新，请刷新后重试'),{code:'MATCH_EVENTS_CHANGED'})
         }
         await saveMatch(transaction)
@@ -463,7 +466,7 @@ exports.main = async (event, context) => {
     }
 
     // 如果更新了比分且状态为 finished，同时更新联赛/小组积分榜
-    if (safeData.status === 'finished' && safeData.homeScore != null && safeData.awayScore != null) {
+    if (safeData.status === 'finished' && !['finished','completed','ended'].includes(String(match.status || '').toLowerCase()) && safeData.homeScore != null && safeData.awayScore != null) {
       try {
         await updateStandings(matchId, safeData, actor.orgId)
       } catch (e) {
@@ -474,7 +477,7 @@ exports.main = async (event, context) => {
     return {
       success: true,
       message: '更新成功',
-      ...(Array.isArray(safeData.events) ? { data: { homeScore: safeData.homeScore, awayScore: safeData.awayScore, matchEventRevision:safeData.matchEventRevision, substitutionIssues:eventValidation?.issues || [] } } : {}),
+      ...((Array.isArray(safeData.events) || finishing) ? { data: { homeScore: safeData.homeScore, awayScore: safeData.awayScore, matchEventRevision:safeData.matchEventRevision, substitutionIssues:eventValidation?.issues || [] } } : {}),
       ...(notificationRelay ? { __notificationRelay: notificationRelay } : {})
     }
   } catch (err) {

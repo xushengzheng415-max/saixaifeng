@@ -10,7 +10,7 @@
     </header>
 
     <section class="monitor-content">
-      <header class="page-heading"><div><h1>比赛管理 / {{ divisionName }} / 赛中只读监控</h1><el-tag v-if="!isProfessionalMonitor" type="success" effect="plain">现场记录由裁判手机端执行，PC端仅同步查看</el-tag></div><el-button plain @click="backToList"><el-icon><ArrowLeft /></el-icon>返回{{ divisionName }}比赛列表</el-button></header>
+      <header class="page-heading"><div><h1>比赛管理 / {{ divisionName }} / 赛中只读监控</h1><el-tag v-if="!isProfessionalMonitor" type="success" effect="plain">现场记录由裁判手机端执行，PC端仅同步查看</el-tag></div><el-button plain @click="backToList"><el-icon><ArrowLeft /></el-icon>返回比赛列表</el-button></header>
       <el-alert class="readonly-alert" title="本页面所有数据均来自裁判手机端实时同步，PC端仅提供查看，不可修改比赛相关信息。" type="info" :closable="false" show-icon />
       <section class="score-banner" :class="{ 'professional-score-banner': isProfessionalMonitor }">
         <div class="match-meta"><small>场序</small><strong>{{ displayMatch.matchSequence || '—' }}</strong><span><el-icon><Calendar /></el-icon>{{ shortDate(displayMatch.matchDate) }} {{ displayMatch.matchTime || '待定' }}</span><span>{{ displayMatch.venue || '场地待定' }}</span><em><i></i>进行中 {{ displayMatch.liveMinute || 0 }}′</em></div>
@@ -38,6 +38,7 @@
 </template>
 
 <script setup>
+import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -87,7 +88,7 @@ const eventDateText = computed(() => { const f = value => { const d = new Date(v
 function teamInitial(name) { return Array.from(name || '?')[0] || '?' }
 function shortDate(value) { return String(value || '日期待定').replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$2月$3日') }
 function eventLabel(event) { return ({ goal:'进球', yellow_card:'黄牌', red_card:'红牌', substitution:'换人', corner:'角球', start:'比赛开始', end:'比赛结束' })[event.type] || event.label || '比赛事件' }
-function backToList() { router.push({ path:`/tournaments/${tournamentId}/matches`, query:displayMatch.value.divisionId ? { divisionId:displayMatch.value.divisionId } : {} }) }
+function backToList() { router.push({ path:`/tournaments/${tournamentId}/matches`, query:matchListQuery(route.query) }) }
 function contactReferee() { const phone = displayMatch.value.refereeCrew?.mainReferee?.phone || displayMatch.value.refereePhone; if (!phone) return ElMessage.info('当前裁判未登记可联系号码'); window.location.href = `tel:${phone}` }
 async function load() { if (visualQaSnapshot) return; loading.value = true; try { const [currentMatch, currentTournament, currentEvents] = await Promise.all([queryById('matches', matchId), queryById('tournaments', tournamentId), queryList('match_events', { where:{ matchId }, orderBy:{ minute:'asc' }, silent:true })]); match.value = Array.isArray(currentMatch) ? currentMatch[0] || {} : currentMatch || {}; tournament.value = Array.isArray(currentTournament) ? currentTournament[0] || {} : currentTournament || {}; events.value = currentEvents || []; const ids = [match.value.homeTeamId || match.value.teamAId, match.value.awayTeamId || match.value.teamBId].filter(Boolean); teams.value = ids.length ? await queryList('teams', { where:{ _id:{ $in:ids } }, silent:true }) : [] } catch (error) { ElMessage.error(error.message || '赛中记录加载失败') } finally { loading.value = false } }
 onMounted(load)
