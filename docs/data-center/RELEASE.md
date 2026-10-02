@@ -101,9 +101,11 @@ webLoginApi 从最新线上包仅替换两模板模块，以 COS 更新并回下
 
 本地专项回归覆盖事件结算、空事件、乌龙球、点球、重复/撤销事件、全组别与指定组别返回、记录锁、并发事件修订和事务完赛。正式仓库 PC 构建与数据中心业务/治理检查通过；隔离 main 基线全量治理仍缺小程序登记及 support.cjs，仅本次 statistics.mjs 副本专项检查通过。发布须同时包含 PC 前端与 updateMatch 的 statistics.mjs 部署副本，禁止只发布前端造成新完赛动作被旧后端误处理。发布前从线上包核对同期修改；未授权生产数据修复，旧错比分需另行按原事件核对。
 
-## 2026-10-01 赛制修改门禁（发布候选）
+## 2026-10-02 赛制修改门禁正式部署
 
-赛制分阶段修改门禁、比赛中换人白名单和未开赛场次读取新规则的代码已合入 Gitee `main`（提交 `1b0ad7a`）；PC 正式构建成功，函数入口语法检查通过。生产函数仍未更新：CloudBase CLI 当前要求交互确认“Update with current config”；无 TTY 模式失败。已停止交互调用，未触碰函数配置或环境变量。正式部署和线上回读待安全恢复 CLI 交互后完成。
+赛制分阶段修改门禁、比赛中换人白名单和未开赛比赛读取组别最新规则已推送 Gitee `main`（代码 `1b0ad7a`，发布记录 `69da0c2`）。正式组别管理、比赛补录与裁判登记函数均已更新代码并下载回读：`webLoginApi/index.js` 与 `divisionRuleMutationPolicy.cjs`、`updateMatch/data-center/substitution.mjs`、`serviceMatchWorkflow/data-center/substitution.mjs` 的 SHA-256 与发布包一致。更新只改函数代码，函数配置与环境变量保持原值。
+
+正式 `/admin/` 完整上传 259 个文件。正式入口 HTTP 200 且只引用 `/admin/assets/`；入口、DivisionRulesWizard、MatchDetail、MatchReviewWorkspace 资源线上 SHA-256 均与发布包一致。`/preview/admin/` 仍返回 HTTP 200 且继续使用预览资源路径。规则变更只用于尚未开赛的比赛；已开赛与完赛场次保留原规则快照。
 
 ## 2026-10-02 比赛管理结算与日历返回正式发布
 
