@@ -97,6 +97,14 @@ function setTableWidthAndCenter(tableXml, width) {
   })
 }
 
+function setExplicitTableGrid(tableXml, widths) {
+  const grid = `<w:tblGrid>${widths.map(width => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>`
+  const withGrid = /<w:tblGrid\b/.test(tableXml)
+    ? tableXml.replace(/<w:tblGrid\b[^>]*>[\s\S]*?<\/w:tblGrid>/, grid)
+    : tableXml.replace('</w:tblPr>', `</w:tblPr>${grid}`)
+  return setTableWidthAndCenter(withGrid, widths.reduce((sum, width) => sum + width, 0))
+}
+
 function alignTeamTableRow(rowXml) {
   return rowXml
     .replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
@@ -184,7 +192,7 @@ function updateParagraphText(xml, predicate, value) {
 }
 
 function logoDrawingXml(relationshipId) {
-  const width = 914400
+  const width = 1230924
   const height = 457200
   return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${width}" cy="${height}"/><wp:docPr id="1" name="赛小蜂足球 Logo"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="logo-saixiaofeng.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${width}" cy="${height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`
 }
@@ -279,7 +287,7 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
     : `足球比赛${formatLabel ? `（${formatLabel}）` : ''}`
   const dateTime = [formatLocalDate(match.matchDate), String(match.matchTime || '').trim()].filter(Boolean).join(' ')
   const place = [input.location, match.venue].filter((value, index, all) => value && all.indexOf(value) === index).join('　') || '待定'
-  const sequence = match.matchSequence || match.sequence || '待定'
+  const sequence = match.matchSequence || match.matchNo || match.sequence || match.matchIndex || '待定'
   const divisionName = input.divisionName || '未设置'
 
   let xml = replaceTableAt(templateXml, 0, tableXml => {
@@ -298,30 +306,22 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
     const sourceCells = [...templateRow.matchAll(WORD_CELL)].map(item => item[0])
     const makeRoleRow = labels => {
       let index = 0
-      let roleIndex = 0
       return templateRow.replace(WORD_CELL, () => {
-        const sourceCell = sourceCells[index]
         const current = index++
-        if (current % 4) return ''
-        let cell = setCellText(sourceCell, `${labels[roleIndex++]}  ____________`)
-        cell = setCellWidth(cell, 4680)
-        return cell.replace(/<w:tcPr\b[^>]*>([\s\S]*?)<\/w:tcPr>/, '<w:tcPr>$1<w:gridSpan w:val="4"/></w:tcPr>')
+        if (current !== 0 && current !== 4) return ''
+        const sourceCell = sourceCells[current]
+        const label = labels[current === 0 ? 0 : 1]
+        return setCellWidth(setCellText(sourceCell, `${label}  ____________`), 4680)
       })
     }
-    return setTableWidthAndCenter(withRows(tableXml, [
+    return setExplicitTableGrid(withRows(tableXml, [
       makeRoleRow(['主裁判：', '第一助理裁判：']),
-      makeRoleRow(['第二助理裁判：', '第四官员：'])
-    ]), 9360)
+      makeRoleRow(['第二助理裁判：', '第四官员：']),
+      makeRoleRow(['裁判监督：', '比赛监督：'])
+    ]), [4680, 4680])
   })
 
-  xml = replaceTableAt(xml, 3, tableXml => {
-    const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
-    if (!rows.length) return tableXml
-    const widths = [1450, 3230, 1450, 3230]
-    let index = 0
-    const row = rows[0].replace(WORD_CELL, cell => setCellWidth(cell, widths[index++]))
-    return setTableWidthAndCenter(withRows(tableXml, [row]), 9360)
-  })
+  xml = replaceTableAt(xml, 3, () => '')
 
   xml = replaceTableAt(xml, 1, tableXml => {
     const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
@@ -400,7 +400,7 @@ export async function createRefereeLineupSheet(input, templateBytes = null, logo
 
 export function refereeLineupSheetFileName(match, homeName, awayName) {
   const safePart = value => String(value || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().replace(/\s+/g, '-')
-  const sequence = match?.matchSequence || match?.sequence || ''
+  const sequence = match?.matchSequence || match?.matchNo || match?.sequence || match?.matchIndex || ''
   const safeTime = safePart([match?.matchDate, match?.matchTime].filter(Boolean).join('-')) || '比赛时间待定'
   const safeSequence = safePart(sequence).replace(/[^\dA-Za-z-]/g, '')
   const safeHome = safePart(homeName || match?.homeTeamName || '主队')
