@@ -154,6 +154,10 @@ export async function reviewRefereeRecord(data = {}) {
   return callFunctionHTTP('reviewRefereeRecord', data)
 }
 
+export function playerCardTemplateRequest(action, data = {}) {
+  return callFunctionHTTP(action, data)
+}
+
 // 归档后比分异常纠错：服务端会校验正式归档状态并写入前后值审计。
 export async function correctArchivedScore(data = {}) {
   return callFunction('resultCenter', { action: 'correctArchivedScore', ...data })

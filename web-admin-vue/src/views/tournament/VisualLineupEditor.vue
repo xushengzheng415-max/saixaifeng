@@ -1782,28 +1782,25 @@ function handlePlayerSearch() {}
 
   &:hover {
     z-index: 20;
-    transform: translate(-50%, -50%) scale(1.12);
+    transform: translate(-50%, -50%) scale(1.06);
   }
 
-  // ===== PlayerCard 缩小容器 =====
+  // 已生成卡片按原始比例填满球场槽位。
   .slot-card-wrapper {
-    width: 66px;
-    height: 95px;
+    width: 126px;
+    height: 181px;
     position: relative;
     overflow: visible;
 
     :deep(.player-card) {
-      transform: scale(0.44);
-      transform-origin: left top;
-      position: absolute;
-      top: -47px;   /* -(189-95)/2 垂直居中 */
-      left: -33px;  /* -(132-66)/2 水平居中 */
+      position: static;
+      transform: none;
       box-shadow: none !important;
     }
 
     :deep(.player-card:hover) {
       box-shadow: none !important;
-      transform: scale(0.44) !important;
+      transform: none !important;
     }
 
     :deep(.player-card-container) {
