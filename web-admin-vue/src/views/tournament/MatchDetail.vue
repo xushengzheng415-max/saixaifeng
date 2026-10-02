@@ -2569,7 +2569,7 @@ async function downloadRefereeLineupSheet() {
     const url = URL.createObjectURL(file)
     const link = document.createElement('a')
     link.href = url
-    link.download = refereeLineupSheetFileName(match.value)
+    link.download = refereeLineupSheetFileName(match.value, homeName.value, awayName.value)
     document.body.appendChild(link)
     link.click()
     link.remove()
