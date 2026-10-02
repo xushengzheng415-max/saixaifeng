@@ -119,6 +119,22 @@ const EXECUTION_SNAPSHOT_BLOCKED_FIELDS = new Set([
   'scoreHome', 'scoreAway'
 ])
 
+const ORGANIZER_FINISHABLE_STATUSES = new Set(['ongoing', 'live', 'in_progress', 'playing'])
+
+function refereeHasTakenOverOrLocked(match) {
+  const reportStatus = String(match && match.refereeReportStatus || '').toLowerCase()
+  const reviewStatus = String(match && match.refereeReviewStatus || '').toLowerCase()
+  return Boolean(match && (
+    match.refereeRecordLocked === true ||
+    match.executionState === 'recording' ||
+    match.refereeReportSubmittedAt ||
+    match.refereeRecord ||
+    match.refereeReport ||
+    ['draft', 'submitted', 'approved', 'archived'].includes(reportStatus) ||
+    ['under_review', 'returned', 'archived'].includes(reviewStatus)
+  ))
+}
+
 function buildExecutionSnapshot(match, tournament, actor) {
   return {
     matchId: String(match && match._id || ''),
@@ -386,9 +402,12 @@ exports.main = async (event, context) => {
       if (![home,away].every(value => Number.isInteger(value) && value >= 0 && value <= 99)) return { success:false, code:'SCORE_INVALID', message:'请录入0至99之间的整数比分' }
       Object.assign(safeData, { homeScore:home, awayScore:away, scoreHome:home, scoreAway:away })
     }
-    const organizerRecordAllowed = !match.refereeRecordLocked && !['ongoing','live','in_progress','playing','archived','cancelled'].includes(String(match.status || '').toLowerCase()) && match.executionState !== 'recording' && !match.refereeReportSubmittedAt && !match.refereeRecord && !match.refereeReport && !['under_review','archived'].includes(String(match.refereeReviewStatus || ''))
-    if (finishing && !organizerRecordAllowed) return { success:false, code:'MATCH_RECORD_LOCKED', message:'当前比赛由裁判记录或已锁定，不能从此入口结束比赛' }
-    const canSupplement = organizerRecordAllowed && (Array.isArray(safeData.events) || finishing)
+    const currentStatus = String(match.status || '').toLowerCase()
+    const organizerCanFinish = ORGANIZER_FINISHABLE_STATUSES.has(currentStatus) && !refereeHasTakenOverOrLocked(match)
+    if (finishing && !ORGANIZER_FINISHABLE_STATUSES.has(currentStatus)) return { success:false, code:'MATCH_NOT_IN_PROGRESS', message:'只有进行中的比赛可以结束' }
+    if (finishing && !organizerCanFinish) return { success:false, code:'MATCH_RECORD_LOCKED', message:'裁判已接管或裁判报告已提交/锁定，请通过裁判记录流程结束比赛' }
+    const organizerRecordAllowed = !refereeHasTakenOverOrLocked(match) && !['ongoing','live','in_progress','playing','archived','cancelled'].includes(currentStatus)
+    const canSupplement = (organizerRecordAllowed && Array.isArray(safeData.events)) || (finishing && organizerCanFinish)
 
     if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status'] : [])].includes(field)))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
@@ -456,7 +475,7 @@ exports.main = async (event, context) => {
         const freshResult = await transaction.collection('matches').doc(matchId).get()
         const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
         if (fresh?.durationRulesSnapshot) delete safeData.durationRulesSnapshot
-        if (!fresh || fresh.refereeRecordLocked || fresh.status !== match.status || fresh.executionState !== match.executionState || Number(fresh.matchEventRevision || 0) !== Number(match.matchEventRevision || 0) || JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || []) || JSON.stringify(fresh.lineups || {}) !== JSON.stringify(match.lineups || {}) || JSON.stringify(fresh.homeLineup || {}) !== JSON.stringify(match.homeLineup || {}) || JSON.stringify(fresh.awayLineup || {}) !== JSON.stringify(match.awayLineup || {})) {
+        if (!fresh || refereeHasTakenOverOrLocked(fresh) || fresh.status !== match.status || fresh.executionState !== match.executionState || Number(fresh.matchEventRevision || 0) !== Number(match.matchEventRevision || 0) || JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || []) || JSON.stringify(fresh.lineups || {}) !== JSON.stringify(match.lineups || {}) || JSON.stringify(fresh.homeLineup || {}) !== JSON.stringify(match.homeLineup || {}) || JSON.stringify(fresh.awayLineup || {}) !== JSON.stringify(match.awayLineup || {})) {
           throw Object.assign(new Error('比赛事件或阵容已更新，请刷新后重试'),{code:'MATCH_EVENTS_CHANGED'})
         }
         await saveMatch(transaction)

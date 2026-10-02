@@ -55,7 +55,7 @@
         :loading="saving"
       >开始比赛</el-button>
       <el-button
-        v-if="match.status === 'ongoing'"
+        v-if="match.status === 'ongoing' && !isRefereeEvidenceLocked"
         type="warning"
         size="small"
         @click="openFinishDialog"
@@ -1523,6 +1523,11 @@ const statusTagType = computed(() => {
 const canReviewRefereeRecord = computed(() => Boolean(match.value.refereeRecord && match.value.refereeReviewStatus === 'under_review'))
 const isRefereeEvidenceLocked = computed(() => Boolean(
   match.value.refereeRecordLocked ||
+  match.value.executionState === 'recording' ||
+  match.value.refereeReportSubmittedAt ||
+  match.value.refereeRecord ||
+  match.value.refereeReport ||
+  ['draft', 'submitted', 'approved', 'archived'].includes(String(match.value.refereeReportStatus || '').toLowerCase()) ||
   match.value.refereeReviewStatus === 'under_review' ||
   match.value.refereeReviewStatus === 'returned' ||
   match.value.refereeReviewStatus === 'archived'
