@@ -61,6 +61,29 @@ function setRowCells(rowXml, values) {
   })
 }
 
+function setCellWidth(cellXml, width) {
+  return cellXml.replace(/(<w:tcW\b[^>]*\bw:w=")\d+(")/, (_, prefix, suffix) => `${prefix}${width}${suffix}`)
+}
+
+function setCellFontSize(cellXml, size) {
+  return cellXml.replace(/(<w:sz(?:Cs)?\b[^>]*\bw:val=")\d+(")/g, (_, prefix, suffix) => `${prefix}${size}${suffix}`)
+}
+
+function formatRosterRow(rowXml, isHeader = false) {
+  let cellIndex = 0
+  let result = rowXml.replace(WORD_CELL, cellXml => {
+    const sideColumn = cellIndex % 8
+    cellIndex += 1
+    let next = cellXml
+    if (sideColumn === 5) next = setCellWidth(next, 850)
+    if (sideColumn === 6) next = setCellWidth(next, 1070)
+    if (!isHeader && sideColumn === 1) next = setCellFontSize(next, 16)
+    return next
+  })
+  if (!isHeader) result = result.replace(/(<w:trHeight\b[^>]*\bw:val=")\d+(")/, (_, prefix, suffix) => `${prefix}350${suffix}`)
+  return result
+}
+
 function withRows(tableXml, rows) {
   const firstRow = tableXml.search(/<w:tr\b/)
   const lastRow = tableXml.lastIndexOf('</w:tr>')
@@ -141,7 +164,7 @@ function buildDocumentXml(templateXml, input) {
     const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
     if (rows.length < 2) throw new Error('裁判名单表模板的比赛信息栏不完整')
     const titleRow = setRowCells(rows[0], ['比赛名称：', matchName])
-    const dateRow = setRowCells(rows[1], ['比赛日期、时间：', dateTime])
+    const dateRow = setRowCells(rows[1], ['比赛时间：', dateTime])
     const placeRow = setRowCells(rows[1], ['比赛地点：', `${place}　场序：第${sequence}场　组别：${divisionName}`])
     return withRows(tableXml, [titleRow, dateRow, placeRow])
   })
@@ -149,22 +172,22 @@ function buildDocumentXml(templateXml, input) {
   xml = replaceTableAt(xml, 1, tableXml => {
     const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
     if (rows.length < 7) throw new Error('裁判名单表模板的队员栏不完整')
-    const headingRows = rows.slice(0, 5).map(addRepeatingHeader)
+    const headingRows = [rows[0], ...rows.slice(2, 5)].map(addRepeatingHeader)
     headingRows[0] = setRowCells(headingRows[0], [`主队：${input.homeName || '主队'}`, `客队：${input.awayName || '客队'}`])
-    headingRows[4] = setRowCells(headingRows[4], [
-      '序号', '队员姓名', '号码', '首发', '替补', '备注', '比赛记录（进球及处罚）', '犯规',
-      '序号', '队员姓名', '号码', '首发', '替补', '备注', '比赛记录（进球及处罚）', '犯规'
-    ])
+    headingRows[3] = formatRosterRow(setRowCells(headingRows[3], [
+      '序号', '队员姓名', '号码', '首发', '替补', '换上/换下时间', '进球/黄牌/红牌时间', '犯规',
+      '序号', '队员姓名', '号码', '首发', '替补', '换上/换下时间', '进球/黄牌/红牌时间', '犯规'
+    ]), true)
     const rosterTemplate = rows[5]
     const signatureRow = rows.at(-1)
     const rowCount = Math.max(1, Number(input.rowCount) || 0, input.homePlayers.length, input.awayPlayers.length)
     const rosterRows = Array.from({ length: rowCount }, (_, index) => {
       const home = input.homePlayers[index] || {}
       const away = input.awayPlayers[index] || {}
-      return setRowCells(rosterTemplate, [
+      return formatRosterRow(setRowCells(rosterTemplate, [
         String(index + 1), home.name || '', home.number || '', '', '', '', '', '',
         String(index + 1), away.name || '', away.number || '', '', '', '', '', ''
-      ])
+      ]))
     })
     const pageCount = rowCount > 20 ? Math.ceil(rowCount / 20) : 1
     const rowsPerPage = Math.floor(rowCount / pageCount)
