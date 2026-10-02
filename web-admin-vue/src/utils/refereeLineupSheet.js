@@ -78,6 +78,13 @@ function setTableGrid(tableXml, widths) {
   return result
 }
 
+function alignTeamTableRow(rowXml) {
+  return rowXml
+    .replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
+    .replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}9${suffix}`)
+    .replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}7${suffix}`)
+}
+
 function setCellFontSize(cellXml, size) {
   return cellXml.replace(/(<w:sz(?:Cs)?\b[^>]*\bw:val=")\d+(")/g, (_, prefix, suffix) => `${prefix}${size}${suffix}`)
 }
@@ -245,14 +252,14 @@ function buildDocumentXml(templateXml, input) {
   xml = replaceTableAt(xml, 1, tableXml => {
     const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
     if (rows.length < 7) throw new Error('裁判名单表模板的队员栏不完整')
-    const headingRows = [rows[0], ...rows.slice(2, 5)].map(addRepeatingHeader)
+    const headingRows = [rows[0], ...rows.slice(2, 5)].map(row => alignTeamTableRow(addRepeatingHeader(row)))
     headingRows[0] = setRowCells(headingRows[0], [`主队：${input.homeName || '主队'}`, `客队：${input.awayName || '客队'}`])
     headingRows[3] = formatRosterRow(setRowCells(expandRosterRow(headingRows[3]), [
       '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上', '换下', '比赛记录',
       '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上', '换下', '比赛记录'
     ]), true)
     const rosterTemplate = rows[5]
-    const signatureRow = rows.at(-1)
+    const signatureRow = alignTeamTableRow(rows.at(-1))
     const rowCount = Math.max(1, Number(input.rowCount) || 0, input.homePlayers.length, input.awayPlayers.length)
     const rosterRows = Array.from({ length: rowCount }, (_, index) => {
       const home = input.homePlayers[index] || {}
