@@ -8,8 +8,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { readPlayerCard } from '@/utils/playerCard'
 import { useReadCacheRefresh } from '@/utils/useReadCacheRefresh.js'
-const props = defineProps({ player:{type:Object,required:true}, teamLogo:{type:String,default:''}, playerCard:{type:Object,default:()=>({})} })
-const card = ref(props.playerCard?.status ? { ...props.playerCard } : {status:'pending',cardUrl:''})
+const props = defineProps({ player:{type:Object,required:true}, teamLogo:{type:String,default:''} })
+const card = ref({status:'pending',cardUrl:''})
 const portraitFailed=ref(false)
 const portraitUrl=computed(()=>card.value.status==='forbidden'?'':(card.value.portraitUrl || [props.player?.photoUrl,props.player?.avatarUrl].find(value=>/^https:\/\//.test(String(value||''))) || ''))
 let requestVersion = 0
@@ -20,29 +20,22 @@ const stateText = computed(()=>{
   if(card.value.status==='failed')return '加载异常，请重试'
   return ['loading','pending'].includes(card.value.status)?'读取卡库…':card.value.portraitStatus==='failed'?'图片加载异常，请重试':'资料待补充'
 })
-async function load() {
+async function load(forceRefresh = false) {
   const playerId = String(props.player?._id || props.player?.id || props.player?.playerId || '')
   if (!playerId) { card.value={status:'unavailable',cardUrl:''}; return }
   const version = ++requestVersion
   if (!card.value.cardUrl) card.value={status:'loading',cardUrl:''}
-  try { const result=await readPlayerCard(playerId); if(version !== requestVersion)return;card.value=result?.success ? result : {status:'failed',cardUrl:''} }
+  try { const result=await readPlayerCard(playerId, { cache: forceRefresh ? 'reload' : undefined }); if(version !== requestVersion)return;card.value=result?.success ? result : {status:'failed',cardUrl:''} }
   catch { if(version === requestVersion)card.value={status:'failed',cardUrl:''} }
 }
 function imageFailed(){card.value={...card.value,status:'failed',cardUrl:''}}
-function applyPlayerCard(value) {
-  if (!value?.status) return false
-  requestVersion++
-  portraitFailed.value = false
-  card.value = { ...value }
-  return true
-}
-function retry(){portraitFailed.value=false;void load()}
-function versionChanged(event){if(event.key==='sxfPlayerCardTemplateUpdate' && document.visibilityState==='visible' && !props.playerCard?.status)void load()}
-watch(()=>[props.player?._id,props.player?.id,props.player?.playerId],()=>{portraitFailed.value=false;if(applyPlayerCard(props.playerCard))return;card.value={status:'loading',cardUrl:''};void load()},{immediate:true})
-watch(()=>props.playerCard,value=>applyPlayerCard(value))
-useReadCacheRefresh({ tags: ['playerCards'], refresh: () => { if (!props.playerCard?.status) return load() }, clear: () => { requestVersion++; card.value={status:'forbidden',cardUrl:''} } })
-onMounted(()=>{window.addEventListener('storage',versionChanged)})
-onBeforeUnmount(()=>{requestVersion++;window.removeEventListener('storage',versionChanged)})
+function retry(){portraitFailed.value=false;void load(true)}
+function visible(){if(document.visibilityState==='visible')void load()}
+function versionChanged(event){if(event.key==='sxfPlayerCardTemplateUpdate' && document.visibilityState==='visible')void load(true)}
+watch(()=>[props.player?._id,props.player?.id,props.player?.playerId],()=>{portraitFailed.value=false;card.value={status:'loading',cardUrl:''};void load()},{immediate:true})
+useReadCacheRefresh({ tags: ['playerCards'], refresh: () => load(), clear: () => { requestVersion++; card.value={status:'forbidden',cardUrl:''} } })
+onMounted(()=>{document.addEventListener('visibilitychange',visible);window.addEventListener('storage',versionChanged)})
+onBeforeUnmount(()=>{requestVersion++;document.removeEventListener('visibilitychange',visible);window.removeEventListener('storage',versionChanged)})
 </script>
 <style scoped>
 .player-card-container{width:100%;max-width:300px;margin:auto}.player-card{width:100%;aspect-ratio:30/43;overflow:hidden}.published-card{display:block;width:100%;height:100%;object-fit:contain}.player-card-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#f2f6f3;color:#617167;border:1px solid #e1e8e3;font-size:13px}.player-card-state.is-loading{background:rgba(7,45,25,.18);border:1px dashed rgba(255,255,255,.28);color:rgba(255,255,255,.82)}.player-card-state strong{color:#26362d;font-size:16px}.player-card-state.is-loading strong{color:#fff}.player-card-state button{border:0;background:transparent;color:#087744;cursor:pointer}

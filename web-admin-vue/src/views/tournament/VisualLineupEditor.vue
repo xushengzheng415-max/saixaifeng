@@ -67,7 +67,6 @@
             >
               <PlayerCard
                 :player="assignedPlayers[pos.role] || null"
-                :player-card="props.playerCards[getPlayerId(assignedPlayers[pos.role])]"
                 :mini="true"
                 :slot-label="pos.label"
               />
@@ -246,7 +245,7 @@
               <!-- 已分配球员：PlayerCard 缩小版 -->
               <template v-if="homeAssignedPlayers[pos.role]">
                 <div class="slot-card-wrapper">
-                  <PlayerCard :player="toCardPlayer(homeAssignedPlayers[pos.role])" :player-card="props.playerCards[getPlayerId(homeAssignedPlayers[pos.role])]" :teamLogo="props.homeTeamLogo" />
+                  <PlayerCard :player="toCardPlayer(homeAssignedPlayers[pos.role])" :teamLogo="props.homeTeamLogo" />
                 </div>
               </template>
               <!-- 空位 -->
@@ -273,7 +272,7 @@
               <!-- 已分配球员：PlayerCard 缩小版 -->
               <template v-if="awayAssignedPlayers[pos.role]">
                 <div class="slot-card-wrapper">
-                  <PlayerCard :player="toCardPlayer(awayAssignedPlayers[pos.role])" :player-card="props.playerCards[getPlayerId(awayAssignedPlayers[pos.role])]" :teamLogo="props.awayTeamLogo" />
+                  <PlayerCard :player="toCardPlayer(awayAssignedPlayers[pos.role])" :teamLogo="props.awayTeamLogo" />
                 </div>
               </template>
               <!-- 空位 -->
@@ -523,7 +522,6 @@ const props = defineProps({
   awayTeamLogo: { type: String, default: '' },
   homePlayersList: { type: Array, default: () => [] },
   awayPlayersList: { type: Array, default: () => [] },
-  playerCards: { type: Object, default: () => ({}) },
   homeInitialLineup: { type: Object, default: undefined },
   awayInitialLineup: { type: Object, default: undefined },
 })
