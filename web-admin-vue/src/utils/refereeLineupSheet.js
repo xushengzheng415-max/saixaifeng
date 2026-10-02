@@ -69,15 +69,24 @@ function setCellFontSize(cellXml, size) {
   return cellXml.replace(/(<w:sz(?:Cs)?\b[^>]*\bw:val=")\d+(")/g, (_, prefix, suffix) => `${prefix}${size}${suffix}`)
 }
 
+function expandRosterRow(rowXml) {
+  const cells = [...rowXml.matchAll(WORD_CELL)].map(item => item[0])
+  if (cells.length < 16) throw new Error('裁判名单表队员栏列数不完整')
+  const expanded = []
+  for (const offset of [0, 8]) expanded.push(...cells.slice(offset, offset + 5), cells[offset + 5], cells[offset + 5], cells[offset + 6], cells[offset + 7])
+  let index = 0
+  return rowXml.replace(WORD_CELL, () => expanded[index++] || '')
+}
+
 function formatRosterRow(rowXml, isHeader = false) {
   let cellIndex = 0
   let result = rowXml.replace(WORD_CELL, cellXml => {
-    const sideColumn = cellIndex % 8
+    const sideColumn = cellIndex % 9
     cellIndex += 1
     let next = cellXml
-    const widths = [350, 1100, 420, 350, 350, 700, 1280, 700]
+    const widths = [300, 1050, 350, 280, 280, 450, 380, 1700, 460]
     next = setCellWidth(next, widths[sideColumn])
-    if (!isHeader && sideColumn === 1) next = setCellFontSize(next, 16)
+    if (!isHeader && sideColumn === 1) next = setCellFontSize(next, 20).replace(/<w:rPr\b[^>]*>/g, opening => `${opening}<w:b/>`)
     return next
   })
   if (!isHeader) result = result.replace(/(<w:trHeight\b[^>]*\bw:val=")\d+(")/, (_, prefix, suffix) => `${prefix}350${suffix}`)
@@ -179,14 +188,37 @@ function buildDocumentXml(templateXml, input) {
     return withRows(tableXml, [titleRow, dateRow, placeRow])
   })
 
+  xml = replaceTableAt(xml, 2, tableXml => {
+    const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
+    if (!rows.length) return tableXml
+    const templateRow = rows[0]
+    const sourceCells = [...templateRow.matchAll(WORD_CELL)].map(item => item[0])
+    const makeRoleRow = labels => {
+      let index = 0
+      let roleIndex = 0
+      return templateRow.replace(WORD_CELL, () => {
+        const sourceCell = sourceCells[index]
+        const current = index++
+        if (current % 4) return ''
+        let cell = setCellText(sourceCell, `${labels[roleIndex++]}  ____________`)
+        cell = setCellWidth(cell, 10400)
+        return cell.replace(/<w:tcPr\b[^>]*>([\s\S]*?)<\/w:tcPr>/, '<w:tcPr>$1<w:gridSpan w:val="4"/></w:tcPr>')
+      })
+    }
+    return withRows(tableXml, [
+      makeRoleRow(['主裁判：', '第一助理裁判：']),
+      makeRoleRow(['第二助理裁判：', '第四官员：'])
+    ])
+  })
+
   xml = replaceTableAt(xml, 1, tableXml => {
     const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
     if (rows.length < 7) throw new Error('裁判名单表模板的队员栏不完整')
     const headingRows = [rows[0], ...rows.slice(2, 5)].map(addRepeatingHeader)
     headingRows[0] = setRowCells(headingRows[0], [`主队：${input.homeName || '主队'}`, `客队：${input.awayName || '客队'}`])
-    headingRows[3] = formatRosterRow(setRowCells(headingRows[3], [
-      '序号', '队员姓名', '号码', '首发', '替补', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min',
-      '序号', '队员姓名', '号码', '首发', '替补', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min'
+    headingRows[3] = formatRosterRow(setRowCells(expandRosterRow(headingRows[3]), [
+      '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min',
+      '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min'
     ]), true)
     const rosterTemplate = rows[5]
     const signatureRow = rows.at(-1)
@@ -194,9 +226,9 @@ function buildDocumentXml(templateXml, input) {
     const rosterRows = Array.from({ length: rowCount }, (_, index) => {
       const home = input.homePlayers[index] || {}
       const away = input.awayPlayers[index] || {}
-      return formatRosterRow(setRowCells(rosterTemplate, [
-        String(index + 1), home.name || '', home.number || '', '', '', '', '', '',
-        String(index + 1), away.name || '', away.number || '', '', '', '', '', ''
+      return formatRosterRow(setRowCells(expandRosterRow(rosterTemplate), [
+        String(index + 1), home.name || '', home.number || '', '', '', home.note || '', '', '', '',
+        String(index + 1), away.name || '', away.number || '', '', '', away.note || '', '', '', ''
       ]))
     })
     const pageCount = rowCount > 20 ? Math.ceil(rowCount / 20) : 1
