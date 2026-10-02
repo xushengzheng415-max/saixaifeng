@@ -719,7 +719,6 @@
       width="95%"
       :close-on-click-modal="false"
       top="2vh"
-      @closed="clearVisualEditorPlayerCards"
     >
       <VisualLineupEditor
         v-if="visualEditorVisible"
@@ -730,7 +729,6 @@
         :awayTeamLogo="awayLogo"
         :homePlayersList="homePlayers"
         :awayPlayersList="awayPlayers"
-        :playerCards="visualEditorPlayerCards"
         :playerCount="currentPlayerCount"
         :substitutePlayerLimit="substitutePlayerLimit"
         :homeInitialLineup="match.lineups?.home"
@@ -1269,7 +1267,6 @@ import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
 import { createRefereeLineupSheet, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
-import { readPlayerCards } from '../../utils/playerCard'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
@@ -1438,7 +1435,6 @@ const kitForm = ref({
 // 可视化阵容编辑弹窗
 const visualEditorVisible = ref(false)
 const visualEditorOpening = ref(false)
-const visualEditorPlayerCards = ref({})
 const currentTeamSide = ref('home')
 const currentLineupData = ref(null)
 
@@ -2613,32 +2609,15 @@ async function openDualVisualEditor() {
   if (!ensureEvidenceEditable()) return
   if (visualEditorOpening.value) return
   visualEditorOpening.value = true
-  visualEditorPlayerCards.value = {}
   try {
     if (homePlayers.value.length === 0) homePlayers.value = await loadTeamPlayers(match.value.homeTeamId)
     if (awayPlayers.value.length === 0) awayPlayers.value = await loadTeamPlayers(match.value.awayTeamId)
-    const playerIds = [...new Set([...homePlayers.value, ...awayPlayers.value]
-      .map(player => String(player?._id || player?.id || player?.playerId || '').trim())
-      .filter(Boolean))]
-    try {
-      const result = await readPlayerCards(playerIds)
-      const cardsById = new Map((result.cards || []).map(card => [String(card.playerId || ''), card]))
-      visualEditorPlayerCards.value = Object.fromEntries(playerIds.map(id => [id, cardsById.get(id) || { status: 'unavailable', cardUrl: '' }]))
-    } catch (error) {
-      visualEditorPlayerCards.value = Object.fromEntries(playerIds.map(id => [id, { status: 'failed', cardUrl: '' }]))
-      console.warn('[VisualLineupEditor] 批量读取卡库失败:', error)
-      ElMessage.warning('卡库暂不可用，可在球员卡上重试')
-    }
     visualEditorVisible.value = true
   } catch (error) {
     ElMessage.error(error.message || '读取双方球员名单失败')
   } finally {
     visualEditorOpening.value = false
   }
-}
-
-function clearVisualEditorPlayerCards() {
-  visualEditorPlayerCards.value = {}
 }
 
 async function handleVisualLineupSave(data) {
