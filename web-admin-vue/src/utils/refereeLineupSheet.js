@@ -65,6 +65,19 @@ function setCellWidth(cellXml, width) {
   return cellXml.replace(/(<w:tcW\b[^>]*\bw:w=")\d+(")/, (_, prefix, suffix) => `${prefix}${width}${suffix}`)
 }
 
+function setTableGrid(tableXml, widths) {
+  const grid = `<w:tblGrid>${widths.map(width => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>`
+  let result = /<w:tblGrid\b/.test(tableXml)
+    ? tableXml.replace(/<w:tblGrid\b[^>]*>[\s\S]*?<\/w:tblGrid>/, grid)
+    : tableXml.replace('</w:tblPr>', `</w:tblPr>${grid}`)
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0)
+  result = result.replace(/<w:tblW\b[^>]*\/>/, `<w:tblW w:w="${totalWidth}" w:type="dxa"/>`)
+  result = result.replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
+  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}9${suffix}`)
+  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}7${suffix}`)
+  return result
+}
+
 function setCellFontSize(cellXml, size) {
   return cellXml.replace(/(<w:sz(?:Cs)?\b[^>]*\bw:val=")\d+(")/g, (_, prefix, suffix) => `${prefix}${size}${suffix}`)
 }
@@ -74,8 +87,10 @@ function expandRosterRow(rowXml) {
   if (cells.length < 16) throw new Error('裁判名单表队员栏列数不完整')
   const expanded = []
   for (const offset of [0, 8]) expanded.push(...cells.slice(offset, offset + 5), cells[offset + 5], cells[offset + 5], cells[offset + 6], cells[offset + 7])
-  let index = 0
-  return rowXml.replace(WORD_CELL, () => expanded[index++] || '')
+  const firstCell = rowXml.search(/<w:tc\b/)
+  const lastCell = rowXml.lastIndexOf('</w:tc>')
+  if (firstCell < 0 || lastCell < firstCell) throw new Error('裁判名单表队员栏结构不完整')
+  return `${rowXml.slice(0, firstCell)}${expanded.join('')}${rowXml.slice(lastCell + '</w:tc>'.length)}`
 }
 
 function formatRosterRow(rowXml, isHeader = false) {
@@ -84,7 +99,7 @@ function formatRosterRow(rowXml, isHeader = false) {
     const sideColumn = cellIndex % 9
     cellIndex += 1
     let next = cellXml
-    const widths = [300, 1050, 350, 280, 280, 450, 380, 1700, 460]
+    const widths = [360, 1150, 350, 320, 320, 320, 300, 300, 1260]
     next = setCellWidth(next, widths[sideColumn])
     if (!isHeader && sideColumn === 1) next = setCellFontSize(next, 20).replace(/<w:rPr\b[^>]*>/g, opening => `${opening}<w:b/>`)
     return next
@@ -123,6 +138,22 @@ function updateTextNode(xml, predicate, value) {
     if (!predicate(unescapeXml(content))) return token
     updated = true
     return textTagWithContent(token, value)
+  })
+}
+
+function updateParagraphText(xml, predicate, value) {
+  return xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, paragraph => {
+    const text = [...paragraph.matchAll(WORD_TEXT)].map(([token]) => {
+      const content = token.match(/^<w:t\b[^>]*>([\s\S]*?)<\/w:t>$/)?.[1] || ''
+      return unescapeXml(content)
+    }).join('')
+    if (!predicate(text)) return paragraph
+    let first = true
+    return paragraph.replace(WORD_TEXT, token => {
+      const next = textTagWithContent(token, first ? value : '')
+      first = false
+      return next
+    })
   })
 }
 
@@ -217,8 +248,8 @@ function buildDocumentXml(templateXml, input) {
     const headingRows = [rows[0], ...rows.slice(2, 5)].map(addRepeatingHeader)
     headingRows[0] = setRowCells(headingRows[0], [`主队：${input.homeName || '主队'}`, `客队：${input.awayName || '客队'}`])
     headingRows[3] = formatRosterRow(setRowCells(expandRosterRow(headingRows[3]), [
-      '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min',
-      '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min'
+      '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上', '换下', '比赛记录',
+      '序号', '队员姓名', '号码', '首发', '替补', '说明', '换上', '换下', '比赛记录'
     ]), true)
     const rosterTemplate = rows[5]
     const signatureRow = rows.at(-1)
@@ -240,12 +271,14 @@ function buildDocumentXml(templateXml, input) {
       const pageRows = rowsPerPage + (page < extraRows ? 1 : 0)
       const chunk = rosterRows.slice(offset, offset + pageRows)
       offset += pageRows
-      pageTables.push(withRows(tableXml, [...headingRows, ...chunk, ...(page === pageCount - 1 ? [signatureRow] : [])]))
+      const gridWidths = [360, 1150, 350, 320, 320, 320, 300, 300, 1260]
+      pageTables.push(withRows(setTableGrid(tableXml, [...gridWidths, ...gridWidths]), [...headingRows, ...chunk, ...(page === pageCount - 1 ? [signatureRow] : [])]))
     }
     return pageTables.join('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
   })
 
   xml = updateTextNode(xml, value => value.includes('参赛队首发、替补队员名单及比赛记录表'), '裁判首发阵容信息表')
+  xml = updateParagraphText(xml, value => value.includes('说明：') && value.includes('停赛'), '说明：首发打√，替补打○；队长标C，守门员标GK，不上场标×，停赛标S。换上、换下填写分钟；比赛记录填写进球、黄牌、红牌及发生时间。')
   xml = removeParagraphMatching(xml, value => value.replace(/\s/g, '') === '赛小蜂足球赛事')
   xml = updateTextNode(xml, value => value.includes('五人制比赛正式用表'), '本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！')
   return xml
