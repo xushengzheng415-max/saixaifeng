@@ -92,7 +92,7 @@
       <template v-else>
         <section class="map-summary"><span><b>{{ matches.length }}</b>场比赛</span><span class="played"><b>{{ playedMatches }}</b>场已进行</span><span class="remaining"><b>{{ remainingMatches }}</b>场剩余</span><i /><el-button plain @click="setView('settings')"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="setView('imports')"><el-icon><Upload /></el-icon>导入导出</el-button><el-button type="success" :loading="autoScheduling" :disabled="!pendingMatches.length" @click="autoSchedule"><el-icon><MagicStick /></el-icon>自动排程</el-button></section>
 
-        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select><div class="date-tabs"><button v-for="day in calendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }}</small></button></div><el-button plain @click="viewSchedule">查看赛程</el-button></section>
+        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select><div class="date-tabs"><button v-for="day in calendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }}</small></button></div><el-button plain @click="openRefereePreMatchDocs">裁判赛前文档</el-button><el-button plain @click="viewSchedule">查看赛程</el-button></section>
 
         <section class="calendar-workspace" :class="{ 'without-pending': !filteredPendingMatches.length }">
           <aside v-if="filteredPendingMatches.length" class="pending-pool" @dragover.prevent @drop="dropBackToPending">
@@ -111,6 +111,18 @@
     <el-dialog v-model="policyVisible" :title="`${policyDivision?.name || ''}资源限制`" width="620px"><el-form label-position="top"><el-form-item label="允许比赛的日期"><el-date-picker v-model="policyDraft.allowedDates" type="dates" value-format="YYYY-MM-DD" :disabled-date="policyDateDisabled" style="width:100%" placeholder="不选表示使用全部比赛日" /></el-form-item><el-form-item label="允许时段"><el-checkbox-group v-model="policyDraft.allowedSessions"><el-checkbox v-for="session in enabledSessions" :key="session.key" :label="session.key">{{ session.label }}</el-checkbox></el-checkbox-group><small>不选表示使用所有已开放时段</small></el-form-item><el-form-item label="允许场地"><el-select v-model="policyDraft.allowedVenues" multiple clearable style="width:100%" placeholder="不选表示使用全部兼容场地"><el-option v-for="venue in policyCompatibleVenues" :key="venue.name" :label="venue.name" :value="venue.name" /></el-select></el-form-item></el-form><template #footer><el-button @click="clearPolicyLimits">清除限制</el-button><el-button @click="policyVisible=false">取消</el-button><el-button type="success" @click="savePolicyLimits">保存限制</el-button></template></el-dialog>
 
     <el-dialog v-model="importVisible" title="导入赛事地图前最后检查" width="720px"><div class="import-summary"><span><b>{{ importPreview.validCount || 0 }}</b>场将更新</span><span><b>{{ importPreview.skippedCount || 0 }}</b>行跳过</span><span :class="{ danger:importPreview.errorCount }"><b>{{ importPreview.errorCount || 0 }}</b>项错误</span></div><el-alert v-if="importPreview.errorCount" type="error" :closable="false" title="请修正文件后重新导入" /><ul v-if="importPreview.errors?.length" class="import-errors"><li v-for="(error,index) in importPreview.errors" :key="index">第{{ error.row || '-' }}行：{{ error.message }}</li></ul><table v-else class="import-changes"><thead><tr><th>场序</th><th>原安排</th><th>新安排</th></tr></thead><tbody><tr v-for="change in importPreview.changes || []" :key="change.matchId"><td>#{{ change.matchNo || '-' }}</td><td>{{ arrangementText(change.before) }}</td><td>{{ arrangementText(change.after) }}</td></tr></tbody></table><template #footer><el-button @click="importVisible=false">返回检查</el-button><el-button type="success" :disabled="Boolean(importPreview.errorCount) || !importPreview.validCount" :loading="applyingImport" @click="applyImport">确认导入赛事地图</el-button></template></el-dialog>
+
+    <el-dialog v-model="refereeDocsVisible" title="裁判赛前文档" width="760px" class="referee-doc-dialog">
+      <div class="referee-doc-toolbar">
+        <label><span>比赛日</span><el-select v-model="refereeDocsDate" placeholder="选择比赛日" style="width:240px"><el-option v-for="day in calendarDays" :key="day.date" :label="`${day.date} ${day.weekday}`" :value="day.date" /></el-select></label>
+        <span class="referee-doc-count">{{ refereePreMatchList.length }} 场待开始比赛</span>
+      </div>
+      <div v-if="refereePreMatchList.length" class="referee-doc-list">
+        <article v-for="match in refereePreMatchList" :key="match._id"><time>{{ match.matchTime || '待定' }}</time><div><small>{{ divisionName(match.divisionId) }} · 场序{{ match.matchSequence || match.matchNo || match.sequence || '—' }}</small><strong>{{ teamLabel(match,'home') }} <em>VS</em> {{ teamLabel(match,'away') }}</strong></div><span>{{ match.venue || '场地待定' }}</span></article>
+      </div>
+      <el-empty v-else :image-size="64" :description="refereeDocsDate ? '当天没有待开始比赛' : '当前赛事尚无已排比赛日'" />
+      <template #footer><el-button @click="refereeDocsVisible=false">取消</el-button><el-button :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && refereePrintMode" @click="printRefereePreMatchDocs">批量打印</el-button><el-button type="success" :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && !refereePrintMode" @click="downloadRefereePreMatchDocs">批量下载</el-button></template>
+    </el-dialog>
   </main>
 </template>
 
@@ -119,9 +131,13 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Calendar, Download, MagicStick, Setting, Upload } from '@element-plus/icons-vue'
-import { callFunction, getFileUrl, queryById, queryList } from '../../utils/cloud'
+import JSZip from 'jszip'
+import { callFunction, getFileUrl, queryById, queryList, rosterExceptionBoard } from '../../utils/cloud'
 import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recognizeScheduleRows } from '../../utils/scheduleWorkbookRecognition'
 import { firstUnfinishedMatchDate } from '../../utils/matchCalendarSelection'
+import { createRefereeLineupSheet, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
+import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
+import { calculatePreMatchSuspensions } from '../../utils/refereeSuspension'
 
 const route = useRoute(), router = useRouter(), tournamentId = String(route.params.id || '')
 const scheduleImportWriteEnabled = import.meta.env.VITE_ENABLE_SCHEDULE_IMPORT_WRITE === 'true'
@@ -130,6 +146,7 @@ const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap 
 const view = ref(['settings','imports','map'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
 const fileInput = ref(null), importVisible = ref(false), importRows = ref([]), importPreview = ref({})
 const importFileName = ref(''), recognitionSourceRows = ref([]), recognitionRows = ref([]), recognitionFilter = ref('all')
+const refereeDocsVisible = ref(false), refereeDocsDate = ref(''), refereeDocsLoading = ref(false), refereePrintMode = ref(false)
 const editVisible = ref(false), editingMatch = ref(null), editForm = reactive({ matchDate:'',matchTime:'',venue:'' })
 const policyVisible = ref(false), policyDivision = ref(null), policyDraft = reactive({ allowedDates:[],allowedSessions:[],allowedVenues:[] })
 const weekDays = ['周一','周二','周三','周四','周五','周六','周日']
@@ -200,6 +217,10 @@ watch(calendarDays, days => {
 watch([selectedDate, divisionFilter], ([date, division]) => { if (!date) return; const query = { ...route.query, date }; if (division === 'all') delete query.divisionId; else query.divisionId = division; router.replace({ path:route.path, query }) })
 const selectedDateLabel = computed(() => { const day=calendarDays.value.find(item => item.date === selectedDate.value); return day ? `${day.date} ${day.weekday}` : '请选择比赛日' })
 const selectedDayMatches = computed(() => arrangedMatches.value.filter(match => match.matchDate === selectedDate.value && (divisionFilter.value === 'all' || String(match.divisionId || 'default') === divisionFilter.value)))
+const refereePreMatchList = computed(() => arrangedMatches.value
+  .filter(match => match.matchDate === refereeDocsDate.value && managementState(match).key === 'scheduled')
+  .slice()
+  .sort((a,b) => String(a.matchTime || '').localeCompare(String(b.matchTime || '')) || Number(a.matchSequence || a.matchNo || 0)-Number(b.matchSequence || b.matchNo || 0)))
 function minutes(value) { const [hour,minute] = String(value || '00:00').split(':').map(Number); return hour*60+minute }
 function timeText(value) { return `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}` }
 function timesByStep(step) { const rows=[]; for (const session of enabledSessions.value) for (let value=minutes(session.start);value<minutes(session.end);value+=step) rows.push(timeText(value)); return [...new Set(rows)].sort() }
@@ -208,6 +229,192 @@ const mapTimes = computed(() => [...new Set(selectedDayMatches.value.map(match =
 function sessionLabel(time) { const value=minutes(time); return enabledSessions.value.find(item => value>=minutes(item.start) && value<minutes(item.end))?.label || '' }
 function compatibleVenues(match) { const division=divisions.value.find(item => String(item.id) === String(match?.divisionId)); const format=String(match?.matchFormat || matchFormat(division)); return config.venueResources.filter(item => !format || item.fieldFormat === format) }
 function matchesForCell(venue,time) { return selectedDayMatches.value.filter(match => match.venue === venue && match.matchTime === time) }
+
+function openRefereePreMatchDocs() {
+  refereeDocsDate.value = selectedDate.value || calendarDays.value[0]?.date || ''
+  refereeDocsVisible.value = true
+}
+
+function refereeRosterLimit(match, division, registration) {
+  for (const source of [division, division?.rulesSnapshot, division?.publishedRegulationsSnapshot, registration, tournament.value]) {
+    if (!source || typeof source !== 'object') continue
+    for (const field of ['rosterLimit', 'maxPlayersPerTeam', 'maxPlayers']) {
+      const value = Number(source[field])
+      if (Number.isFinite(value) && value > 0) return Math.floor(value)
+    }
+  }
+  const formatValue = String(match.matchFormat || division?.matchFormat || tournament.value.matchFormat || '')
+  const format = /side/i.test(formatValue) ? formatValue.toLowerCase() : `${formatValue.match(/(11|9|8|7|5)/)?.[1] || ''}side`
+  return Number(MATCH_FORMAT_DEFAULTS[format] || 0)
+}
+
+async function loadApprovedRefereeRoster(match, side, cache) {
+  const sourceTeamId = String(match[`${side}TeamId`] || '')
+  const matchTournamentId = String(match.tournamentId || tournamentId)
+  let divisionId = String(match.divisionId || '')
+  if (!sourceTeamId || !matchTournamentId) throw new Error('比赛球队或赛事信息不完整')
+  const cacheKey = `${matchTournamentId}:${divisionId}:${sourceTeamId}`
+  if (cache.has(cacheKey)) return cache.get(cacheKey)
+
+  const request = (async () => {
+    const directValue = await queryById('tournament_teams', sourceTeamId).catch(() => null)
+    const direct = Array.isArray(directValue) ? directValue[0] || null : directValue
+    const teamIds = [...new Set([sourceTeamId, direct?.teamId].map(value => String(value || '')).filter(Boolean))]
+    const lists = await Promise.all(teamIds.map(teamId => queryList('tournament_teams', {
+      where:{ tournamentId:matchTournamentId, teamId }, limit:100, silent:true, cache:'bypass', throwOnError:true
+    })))
+    const registrations = [...new Map([direct, ...(lists || []).flat()]
+      .filter(row => row && String(row.tournamentId || '') === matchTournamentId)
+      .filter(row => teamIds.includes(String(row.teamId || '')) || String(row._id || '') === sourceTeamId)
+      .map(row => [String(row._id || `${row.teamId}:${row.divisionId}`), row])).values()]
+    const divisionIds = [...new Set(registrations.map(row => String(row.divisionId || row.division || '')).filter(Boolean))]
+    if (!divisionId && divisionIds.length > 1) throw new Error('比赛缺少组别信息，无法安全选择赛事名单')
+    if (!divisionId && divisionIds.length === 1) divisionId = divisionIds[0]
+    if (!divisionId) throw new Error('比赛缺少组别信息，无法安全选择赛事名单')
+    const registration = registrations.find(row => String(row.divisionId || row.division || 'default') === divisionId) || null
+    const actualTeamId = String(registration?.teamId || direct?.teamId || sourceTeamId)
+    const result = await rosterExceptionBoard({ tournamentId:matchTournamentId, teamId:actualTeamId, divisionId, rosterAction:'listRoster' })
+    if (!result?.success) throw new Error(result?.error || '赛事正式名单加载失败')
+    const resolvedDivision = String(result.relation?.divisionId || '')
+    if (resolvedDivision && resolvedDivision !== divisionId) throw new Error('球队名单与比赛组别不一致')
+    if (!['approved','confirmed','locked'].includes(String(result.snapshot?.status || '').toLowerCase())) {
+      throw new Error('尚未形成已审核赛事正式名单')
+    }
+    const players = (result.rows || []).map(player => ({
+      playerId:String(player._id || player.playerId || player.id || '').trim(),
+      name:String(player.name || '').trim(),
+      number:String(player.jerseyNumber || '').trim()
+    })).filter(player => player.name)
+      .sort((left,right) => String(left.number).localeCompare(String(right.number),'zh-CN',{numeric:true}) || left.name.localeCompare(right.name,'zh-CN'))
+    if (!players.length) throw new Error('已审核名单中没有可读取的队员资料')
+    const division = divisions.value.find(item => String(item.id) === divisionId) || {}
+    return { players, limit:refereeRosterLimit(match,division,registration), registeredCount:players.length }
+  })()
+  cache.set(cacheKey, request)
+  try { return await request } catch(error) { cache.delete(cacheKey); throw error }
+}
+
+function suspensionRuleFor(match) {
+  const division = divisions.value.find(item => String(item.id) === String(match.divisionId || '')) || {}
+  const sources = [division.suspensionRule,division.rulesSnapshot?.suspensionRule,division.publishedRegulationsSnapshot?.suspensionRule,tournament.value.suspensionRule,tournament.value.rules?.suspensionRule]
+  return sources.find(Boolean) || null
+}
+
+async function buildRefereePreMatchEntries() {
+  const selected = refereePreMatchList.value
+  if (!selected.length) throw new Error('所选比赛日没有待开始比赛')
+  const rosterCache = new Map()
+  const entries = []
+  const warnings = new Set()
+  for (let offset=0; offset<selected.length; offset+=3) {
+    const batch = selected.slice(offset,offset+3)
+    const built = await Promise.all(batch.map(async match => {
+      const [home,away] = await Promise.all([
+        loadApprovedRefereeRoster(match,'home',rosterCache),
+        loadApprovedRefereeRoster(match,'away',rosterCache)
+      ])
+      const suspension = calculatePreMatchSuspensions({
+        matches:matches.value,currentMatch:match,homeRoster:home,awayRoster:away,rules:suspensionRuleFor(match),
+        tournamentId,divisionId:String(match.divisionId || '')
+      })
+      if (suspension.complete) {
+        home.players.forEach(player => { if (suspension.ids.has(player.playerId)) player.note='S' })
+        away.players.forEach(player => { if (suspension.ids.has(player.playerId)) player.note='S' })
+      } else if (suspension.reason) warnings.add(suspension.reason)
+      const division = divisions.value.find(item => String(item.id) === String(match.divisionId || '')) || {}
+      const rowCount = Math.max(home.limit,away.limit,home.players.length,away.players.length)
+      const workMatch = { ...match, matchSequence:match.matchSequence || match.matchNo || match.sequence || match.matchIndex }
+      return {
+        match:workMatch,
+        input:{
+          match:workMatch,
+          matchFormat:match.matchFormat || division.matchFormat || tournament.value.matchFormat || '',
+          tournamentName:tournament.value.name || match.tournamentName || '',
+          divisionName:division.name || division.divisionName || match.divisionName || match.division || '',
+          location:tournament.value.location || tournament.value.address || tournament.value.venue || '',
+          homeName:teamLabel(match,'home'),awayName:teamLabel(match,'away'),
+          homePlayers:home.players,awayPlayers:away.players,rowCount
+        }
+      }
+    }))
+    entries.push(...built)
+  }
+  return { entries, warnings:[...warnings] }
+}
+
+function safeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]))
+}
+
+function printSheetHtml(input) {
+  const widths=[360,1150,350,360,360,360,320,320,1100]
+  const allWidths=[...widths,...widths]
+  const maxRows=Math.max(Number(input.rowCount)||0,input.homePlayers.length,input.awayPlayers.length,1)
+  const colgroup=`<colgroup>${allWidths.map(value=>`<col style="width:${(value/9360*100).toFixed(3)}%">`).join('')}</colgroup>`
+  const heading=['序号','队员姓名','号码','首发','替补','说明','换上','换下','比赛记录','序号','队员姓名','号码','首发','替补','说明','换上','换下','比赛记录']
+  const header=`<tr>${heading.map(label=>`<th>${label}</th>`).join('')}</tr>`
+  const rows=Array.from({length:maxRows},(_,index)=>{
+    const home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
+    const cells=[String(index+1),home.name||'',home.number||'','','',home.note||'','','','',String(index+1),away.name||'',away.number||'','','',away.note||'','','','']
+    return `<tr>${cells.map((value,cell)=>`<td${cell%9===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
+  }).join('')
+  const match=input.match||{}
+  const day=String(match.matchDate||'').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/,'$1年$2月$3日')
+  const logo=`${window.location.origin}${import.meta.env.BASE_URL}logo-saixiaofeng.png`
+  return `<section class="sheet"><h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${safeHtml(`${input.tournamentName||'足球比赛'}（${String(input.matchFormat||'').replace('side','人制')}）`)}</b></div><div><span>比赛时间：</span><b>${safeHtml(`${day} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${safeHtml(`${input.location||''}　${match.venue||''}　场序：第${match.matchSequence||match.matchNo||match.sequence||'待定'}场　组别：${input.divisionName||''}`)}</b></div></div><table class="teams"><tbody><tr><td>主队：${safeHtml(input.homeName)}</td><td>客队：${safeHtml(input.awayName)}</td></tr><tr><td>领队/主教练：________________</td><td>领队/主教练：________________</td></tr><tr><td>工作人员/队医：____________</td><td>工作人员/队医：____________</td></tr></tbody></table><table class="roster">${colgroup}<thead>${header}</thead><tbody>${rows}</tbody></table><div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><p class="legend">说明：首发打√，替补打○；队长标C，守门员标GK，不上场标×，停赛标S。换上、换下填写分钟；比赛记录填写进球、黄牌、红牌及发生时间。</p><p class="result">比赛结果：______:______　加时赛（点球决胜）结果：______:______　获胜队：____________________</p><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer></section>`
+}
+
+function refereePrintDocumentHtml(entries) {
+  const pages=entries.map(({input})=>printSheetHtml(input)).join('')
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>裁判赛前工作单</title><style>@page{size:A4 portrait;margin:11mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:"SimSun","Songti SC",serif}.sheet{width:100%;min-height:275mm;page-break-after:always;break-after:page;display:flex;flex-direction:column}.sheet:last-child{page-break-after:auto;break-after:auto}h1{margin:0 0 7mm;text-align:center;font-size:18pt}.meta{margin:0 5mm 7mm;font-size:10pt}.meta div{display:grid;grid-template-columns:27mm 1fr;margin:2mm 0}.teams{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10pt}.teams td{height:9mm;padding:2mm;border:0.5pt solid #777}.roster{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8pt}.roster th,.roster td{height:6.3mm;padding:1mm .4mm;border:.5pt solid #777;text-align:center;overflow-wrap:anywhere}.roster th{height:13mm;font-weight:400}.roster td.player-name{font-size:9pt;font-weight:bold}.team-sign{display:grid;grid-template-columns:2fr 1fr 2fr 1fr;gap:1mm;padding:2mm 0;border:0.5pt solid #777;font-size:8pt}.team-sign span{text-align:center}.legend,.result{margin:2mm 0;font-size:8pt}.officials{display:grid;grid-template-columns:1fr 1fr;gap:5mm 14mm;margin:5mm 14mm 0;font-size:10pt}.officials span{min-height:8mm}footer{display:flex;align-items:center;gap:4mm;margin:auto 0 0;padding-top:4mm;font-size:8pt}footer img{width:34mm;height:auto}footer strong{font-weight:bold}@media screen{body{background:#e9ecef}.sheet{width:186mm;min-height:273mm;margin:8mm auto;padding:0;background:#fff;box-shadow:0 2mm 8mm #0002}}</style></head><body>${pages}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(img=>img.decode?.().catch(()=>{})));setTimeout(()=>window.print(),300)})<\/script></body></html>`
+}
+
+function downloadBlob(blob, filename) {
+  const url=URL.createObjectURL(blob),link=document.createElement('a')
+  link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove()
+  window.setTimeout(()=>URL.revokeObjectURL(url),30000)
+}
+
+async function prepareRefereePreMatchDocs() {
+  const {entries,warnings}=await buildRefereePreMatchEntries()
+  const [templateResponse,logoResponse]=await Promise.all([
+    fetch(`${import.meta.env.BASE_URL}templates/referee-match-sheet-template.docx`,{cache:'force-cache'}),
+    fetch(`${import.meta.env.BASE_URL}logo-saixiaofeng.png`,{cache:'force-cache'})
+  ])
+  if(!templateResponse.ok||!logoResponse.ok)throw new Error('裁判工作单模板或Logo加载失败，请刷新后重试')
+  const [templateBytes,logoBytes]=await Promise.all([templateResponse.arrayBuffer(),logoResponse.arrayBuffer()])
+  return {entries,warnings,templateBytes,logoBytes}
+}
+
+async function downloadRefereePreMatchDocs() {
+  if(refereeDocsLoading.value)return
+  refereeDocsLoading.value=true;refereePrintMode.value=false
+  try {
+    const {entries,warnings,templateBytes,logoBytes}=await prepareRefereePreMatchDocs()
+    const archive=new JSZip()
+    const documents=await Promise.all(entries.map(({input})=>createRefereeLineupSheet(input,templateBytes,logoBytes)))
+    entries.forEach(({input},index)=>archive.file(refereeLineupSheetFileName(input.match,input.homeName,input.awayName),documents[index]))
+    const blob=await archive.generateAsync({type:'blob',mimeType:'application/zip'})
+    downloadBlob(blob,`${refereeDocsDate.value}-裁判赛前工作单.zip`)
+    if(warnings.length)ElMessage.warning(`已打包${entries.length}场；${warnings[0]}`)
+    else ElMessage.success(`已打包${entries.length}份裁判工作单`)
+  } catch(error) { ElMessage.error(error.message||'批量下载失败') }
+  finally { refereeDocsLoading.value=false }
+}
+
+async function printRefereePreMatchDocs() {
+  if(refereeDocsLoading.value)return
+  const printWindow=window.open('','_blank')
+  if(!printWindow)return ElMessage.warning('请允许浏览器打开打印窗口后重试')
+  refereeDocsLoading.value=true;refereePrintMode.value=true
+  try {
+    const {entries,warnings}=await buildRefereePreMatchEntries()
+    printWindow.document.open();printWindow.document.write(refereePrintDocumentHtml(entries));printWindow.document.close()
+    if(warnings.length)ElMessage.warning(`已生成${entries.length}场打印稿；${warnings[0]}`)
+    else ElMessage.success(`已生成${entries.length}场打印稿`)
+  } catch(error) { printWindow.close();ElMessage.error(error.message||'批量打印准备失败') }
+  finally { refereeDocsLoading.value=false }
+}
 
 function capacityForDivision(division) { const required=matches.value.filter(match => String(match.divisionId || 'default') === String(division.id)).length; const policy=policyFor(division), occupancy=Math.max(5,matchMinutes(division)+Number(policy.turnaroundMinutes || 0)); const dailyMinutes=enabledSessions.value.reduce((sum,item)=>sum+Math.max(0,minutes(item.end)-minutes(item.start)),0); const fields=config.venueResources.filter(item=>item.fieldFormat===matchFormat(division)).length; const capacity=Math.floor(dailyMinutes/occupancy)*fields*allCalendarDays.value.length; return { required,capacity,shortage:Math.max(0,required-capacity),ready:capacity>=required && fields>0 } }
 const totalCapacity = computed(() => divisions.value.reduce((sum,division) => sum + capacityForDivision(division).capacity,0))
@@ -314,4 +521,17 @@ onMounted(load)
 .subview-bar{display:flex;align-items:center;gap:12px;margin-top:14px;padding-bottom:10px;border-bottom:1px solid #dfe6e1}.subview-bar span{color:#66746b;font-size:13px}.map-summary{flex-wrap:wrap;gap:16px}.map-summary .played b{color:#087b43}.map-summary .remaining b{color:#c67a00}.match-state{display:inline-flex;align-items:center;gap:5px}.match-state i{width:7px;height:7px;border-radius:50%;background:#87928b}.match-state.live i{background:#d92d20}.match-state.completed i{background:#159447}.match-state.supplement i{background:#e77710}.match-state.review i{background:#c59100}.match-state.archived i{background:#557064}.calendar-match{cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease}.calendar-match:hover{border-color:#83ad94;box-shadow:0 3px 10px rgba(31,58,42,.1)}.calendar-match.state-scheduled{border-left-color:#a7b0aa;background:#fff}.calendar-match.state-live{border-left-color:#d92d20;background:#fff5f3}.calendar-match.state-completed{border-left-color:#159447;background:#eef9f1}.calendar-match.state-supplement{border-left-color:#e77710;background:#fff9f2}.calendar-match.state-review{border-left-color:#c59100;background:#fffbee}.calendar-match.state-archived{border-left-color:#718079;background:#f7f9f8}.calendar-match>strong em{min-width:34px;text-align:center}.calendar-match footer{align-items:center;margin-top:8px}.card-actions{display:flex;align-items:center;gap:5px}.card-actions button{padding:2px 5px;border:0;border-radius:3px;color:#516158;background:transparent;font-size:10px;cursor:pointer}.card-actions button:hover{color:#087b43;background:#eaf4ee}.drag-handle{cursor:grab!important}.pending-list article{cursor:pointer}
 .match-sides{grid-template-columns:minmax(0,1fr) 86px minmax(0,1fr)}.match-sides>.calendar-score{display:block;min-width:86px;color:#9ca3af;font-size:28px;font-style:normal;font-variant-numeric:tabular-nums;font-weight:900;line-height:1;text-align:center;letter-spacing:.5px}.match-sides>.calendar-score.score-finished{color:#111827}.match-sides>.calendar-score.score-live{color:#d92d20}.match-sides>.calendar-score.score-upcoming{color:#9ca3af}
 .match-sides{display:grid;align-items:center;gap:8px;margin:10px 0}.match-team{display:flex;min-width:0;align-items:center;gap:10px}.match-team.away{justify-content:flex-end;text-align:right}.match-team strong{overflow:hidden;color:#102e1d;font-size:18px;font-weight:800;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.team-crest{display:grid;width:38px;height:38px;flex:0 0 38px;place-items:center;overflow:hidden;border:1px solid #d9e6de;border-radius:50%;background:#fff;color:#168957;font-size:15px;font-style:normal}.team-crest img{display:block;width:100%;height:100%;object-fit:contain}.team-crest b{font-size:15px}
+</style>
+
+<style scoped>
+.referee-doc-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+.referee-doc-toolbar label{display:flex;align-items:center;gap:10px}
+.referee-doc-toolbar label>span,.referee-doc-count{color:#617067;font-size:13px}
+.referee-doc-list{max-height:440px;overflow:auto;border-top:1px solid #e7ede9}
+.referee-doc-list article{display:grid;grid-template-columns:60px minmax(0,1fr) 100px;align-items:center;gap:14px;padding:11px 8px;border-bottom:1px solid #e7ede9}
+.referee-doc-list time{font-variant-numeric:tabular-nums;font-weight:700;color:#183a27}
+.referee-doc-list article>div{display:flex;min-width:0;flex-direction:column;gap:4px}
+.referee-doc-list small,.referee-doc-list article>span{color:#758178;font-size:12px}
+.referee-doc-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.referee-doc-list em{margin:0 6px;color:#89958d;font-size:11px;font-style:normal}
 </style>
