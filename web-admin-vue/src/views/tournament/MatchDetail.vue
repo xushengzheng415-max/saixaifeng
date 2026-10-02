@@ -113,7 +113,7 @@
                   :loading="refereeSheetLoading"
                   title="文件只下载到本机，裁判填写内容不会上传平台"
                   @click="downloadRefereeLineupSheet"
-                >下载裁判名单表</el-button>
+                >下载裁判工作单</el-button>
               </div>
             </div>
             <div v-if="hasLineups" ref="lineupExportArea" class="lineup-container">
@@ -2558,7 +2558,7 @@ async function downloadRefereeLineupSheet() {
     const url = URL.createObjectURL(file)
     const link = document.createElement('a')
     link.href = url
-    link.download = refereeLineupSheetFileName(tournamentNameStr.value, match.value.matchSequence || match.value.sequence)
+    link.download = refereeLineupSheetFileName(match.value)
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -2566,10 +2566,10 @@ async function downloadRefereeLineupSheet() {
     if (homeRoster.limit && homeRoster.players.length > homeRoster.limit || awayRoster.limit && awayRoster.players.length > awayRoster.limit) {
       ElMessage.warning('有球队名单人数超过登记上限，表格已完整列出全部队员')
     } else {
-      ElMessage.success('裁判名单表已下载到本机')
+      ElMessage.success('裁判工作单已下载到本机')
     }
   } catch (error) {
-    ElMessage.error(error.message || '名单表生成失败，请检查已审核赛事名单')
+    ElMessage.error(error.message || '工作单生成失败，请检查已审核赛事名单')
   } finally {
     refereeSheetLoading.value = false
   }
