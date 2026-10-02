@@ -85,7 +85,16 @@ const coverUrl = ref('')
 const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '已发布' }, { id: 'draft', label: '草稿' }, { id: 'update', label: '待更新' }]
 const articles = ref([])
 const visibleArticles = computed(() => articles.value.filter(item => filter.value === 'all' || item.status === filter.value))
-const approvedMatches = computed(() => matches.value.filter(item => item.resultStatus === 'approved'))
+function matchSequenceValue(match) {
+  const parts = String(match.matchNo || '').match(/\d+/g) || []
+  return parts.length ? Number(parts.at(-1)) : Number.MAX_SAFE_INTEGER
+}
+const approvedMatches = computed(() => matches.value.filter(item => item.resultStatus === 'approved').sort((a, b) =>
+  matchSequenceValue(a) - matchSequenceValue(b) ||
+  String(a.matchDate || '').localeCompare(String(b.matchDate || '')) ||
+  String(a.matchTime || '').localeCompare(String(b.matchTime || '')) ||
+  String(a.id || '').localeCompare(String(b.id || ''))
+))
 const approvedDates = computed(() => [...new Set(approvedMatches.value.map(item => item.matchDate).filter(Boolean))].sort().reverse())
 const dayMatches = date => approvedMatches.value.filter(item => item.matchDate === date)
 const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], newsId: '', title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [], photoFiles: [], photoFileIds: [], coverFileId: '', standingsSnapshotFileId: '' })
@@ -104,7 +113,7 @@ const previewBlocks = computed(() => {
 })
 const kindLabel = kind => ({ match: '单场新闻', daily: '每日新闻' })[kind] || '新闻'
 const statusLabel = status => ({ published: '已发布', draft: '草稿', update: '待更新', withdrawn: '已撤回' })[status] || '草稿'
-const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
+const matchLabel = match => [`场序${match.matchNo || '—'}`, `${match.matchDate || '日期待定'} ${match.matchTime || '时间待定'}`, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
 
 async function loadMatches() {
   loadingMatches.value = true; loadError.value = ''
@@ -145,8 +154,8 @@ function onDateChange() { clearGenerated(); updateCover() }
 function onKindChange() {
   form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; form.photos = []; form.photoFiles = []; form.photoFileIds = []; clearGenerated(); updateCover()
 }
-function openNew() { reset(); editorOpen.value = true }
-function openArticle(item) { reset(); editing.value = item.id; editingStatus.value = item.rawStatus || item.status; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], newsId: item.id, title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshotFileId), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []), photoFiles: (item.photos || []).map(() => null), photoFileIds: item.photoFileIds || [], coverFileId: item.coverFileId || '', standingsSnapshotFileId: item.standingsSnapshotFileId || '' }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
+function openNew() { reset(); editorOpen.value = true; loadMatches() }
+function openArticle(item) { reset(); editing.value = item.id; editingStatus.value = item.rawStatus || item.status; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], newsId: item.id, title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshotFileId), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []), photoFiles: (item.photos || []).map(() => null), photoFileIds: item.photoFileIds || [], coverFileId: item.coverFileId || '', standingsSnapshotFileId: item.standingsSnapshotFileId || '' }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true; loadMatches() }
 function addPhotos(files) {
   const selected = Array.from(files || []).filter(file => file.type.startsWith('image/'))
   const remaining = 3 - form.photos.length
