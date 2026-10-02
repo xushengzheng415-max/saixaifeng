@@ -239,12 +239,12 @@ export async function createRefereeLineupSheet(input, templateBytes = null) {
   })
 }
 
-export function refereeLineupSheetFileName(match) {
+export function refereeLineupSheetFileName(match, homeName, awayName) {
   const safePart = value => String(value || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().replace(/\s+/g, '-')
   const sequence = match?.matchSequence || match?.sequence || ''
-  const matchNumber = match?.matchNo || match?.matchIndex || match?.matchNumber || match?.sequence || match?.matchSequence || ''
   const safeTime = safePart([match?.matchDate, match?.matchTime].filter(Boolean).join('-')) || '比赛时间待定'
   const safeSequence = safePart(sequence).replace(/[^\dA-Za-z-]/g, '')
-  const safeMatchNumber = safePart(matchNumber).replace(/[^\dA-Za-z-]/g, '')
-  return `${safeTime}-${safeSequence ? `场序${safeSequence}` : '场序待定'}-${safeMatchNumber ? `场次${safeMatchNumber}` : '场次待定'}.docx`
+  const safeHome = safePart(homeName || match?.homeTeamName || '主队')
+  const safeAway = safePart(awayName || match?.awayTeamName || '客队')
+  return `${safeTime}-${safeSequence ? `场序${safeSequence}` : '场序待定'}-${safeHome}-vs-${safeAway}.docx`
 }
