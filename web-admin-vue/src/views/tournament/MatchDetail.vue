@@ -1262,7 +1262,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
-import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl } from '../../utils/cloud'
+import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard } from '../../utils/cloud'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
@@ -2482,10 +2482,11 @@ function getRosterLimit(...sources) {
 async function loadApprovedMatchRoster(side) {
   const sourceTeamId = String(match.value[`${side}TeamId`] || '')
   const currentTournamentId = String(match.value.tournamentId || tournamentId || '')
-  const currentDivisionId = String(match.value.divisionId || sourceDivisionId || '')
+  let currentDivisionId = String(match.value.divisionId || sourceDivisionId || '')
   if (!sourceTeamId || !currentTournamentId) throw new Error('比赛球队或赛事信息不完整')
 
-  const directRelation = await queryById('tournament_teams', sourceTeamId).catch(() => null)
+  const directResult = await queryById('tournament_teams', sourceTeamId).catch(() => null)
+  const directRelation = Array.isArray(directResult) ? directResult[0] || null : directResult
   const teamIds = uniqueIds([sourceTeamId, directRelation?.teamId])
   const registrationLists = await Promise.all(teamIds.map(teamId => queryList('tournament_teams', {
     where: { tournamentId: currentTournamentId, teamId },
@@ -2498,84 +2499,38 @@ async function loadApprovedMatchRoster(side) {
     directRelation,
     ...(registrationLists || []).flat()
   ].filter(row => row && String(row.tournamentId || '') === currentTournamentId)
-    .filter(row => !currentDivisionId || String(row.divisionId || '') === currentDivisionId)
     .filter(row => teamIds.includes(String(row.teamId || '')) || String(row._id || '') === sourceTeamId)
     .map(row => [String(row._id || `${row.teamId}:${row.divisionId}`), row])).values()]
-  const registration = registrations.sort((left, right) => {
-    const approved = row => ['approved', 'confirmed', 'accepted'].includes(String(row.rosterStatus || row.status || '').toLowerCase()) ? 1 : 0
-    return approved(right) - approved(left)
-  })[0] || null
+  const divisionIds = uniqueIds(registrations.map(row => row.divisionId || row.division))
+  if (!currentDivisionId && divisionIds.length > 1) throw new Error('比赛缺少组别信息，无法安全选择赛事名单')
+  if (!currentDivisionId && divisionIds.length === 1) currentDivisionId = divisionIds[0]
+  const registration = registrations.find(row => !currentDivisionId || String(row.divisionId || row.division || 'default') === currentDivisionId) || null
   const actualTeamId = String(registration?.teamId || directRelation?.teamId || sourceTeamId)
+  if (!currentDivisionId) throw new Error('比赛缺少组别信息，无法安全选择赛事名单')
 
-  const snapshotRows = await queryList('roster_snapshots', {
-    where: { tournamentId: currentTournamentId, teamId: actualTeamId },
-    limit: 1000,
-    silent: true,
-    cache: 'bypass',
-    throwOnError: true
+  const result = await rosterExceptionBoard({
+    tournamentId: currentTournamentId,
+    teamId: actualTeamId,
+    divisionId: currentDivisionId,
+    rosterAction: 'listRoster'
   })
-  const approvedSnapshots = (snapshotRows || []).filter(snapshot =>
-    String(snapshot.tournamentId || '') === currentTournamentId &&
-    String(snapshot.teamId || '') === actualTeamId &&
-    ['approved', 'confirmed', 'locked'].includes(String(snapshot.status || '').toLowerCase())
-  )
-  let candidates = currentDivisionId
-    ? approvedSnapshots.filter(snapshot => rosterSnapshotDivision(snapshot) === currentDivisionId)
-    : approvedSnapshots
-  if (!candidates.length) {
-    const legacySnapshots = approvedSnapshots.filter(snapshot => !rosterSnapshotDivision(snapshot))
-    const registeredDivisions = uniqueIds(registrations.map(row => row.divisionId))
-    if (legacySnapshots.length && registeredDivisions.length <= 1 && (!currentDivisionId || registeredDivisions[0] === currentDivisionId)) {
-      candidates = legacySnapshots
-    }
+  if (!result?.success) throw new Error(result?.error || '赛事正式名单加载失败')
+  const resolvedDivisionId = String(result.relation?.divisionId || '')
+  if (resolvedDivisionId && resolvedDivisionId !== currentDivisionId) throw new Error('球队名单与比赛组别不一致')
+  const snapshotStatus = String(result.snapshot?.status || '').toLowerCase()
+  if (!['approved', 'confirmed', 'locked'].includes(snapshotStatus)) {
+    throw new Error('尚未形成已审核赛事正式名单，请先完成球队名单审核')
   }
-  const candidateDivisionIds = uniqueIds(approvedSnapshots.map(rosterSnapshotDivision))
-  if (!currentDivisionId && candidateDivisionIds.length > 1) {
-    throw new Error('比赛缺少组别信息，无法安全选择赛事名单')
-  }
-  if (!candidates.length) throw new Error('尚未形成已审核赛事正式名单，请先完成球队名单审核')
-  candidates.sort((left, right) => {
-    const time = row => new Date(row.updateTime?.$date || row.updateTime || row.createTime?.$date || row.createTime || 0).getTime() || 0
-    return time(right) - time(left)
-  })
-  const roster = candidates[0]
-  const embeddedValues = [
-    ...(Array.isArray(roster.players) ? roster.players : []),
-    ...(Array.isArray(roster.rosterPlayers) ? roster.rosterPlayers : [])
-  ]
-  const embeddedPlayers = embeddedValues.filter(player => player && typeof player === 'object')
-  const idValues = [
-    ...(Array.isArray(roster.playerIds) ? roster.playerIds : Array.isArray(roster.rosterPlayerIds) ? roster.rosterPlayerIds : []),
-    ...embeddedValues.filter(value => typeof value === 'string')
-  ]
-  const playerIds = uniqueIds([...idValues.map(value => typeof value === 'object' ? rosterSnapshotPlayerId(value) : value), ...embeddedPlayers.map(rosterSnapshotPlayerId)])
-  const currentPlayers = playerIds.length ? await queryList('players', {
-    where: { _id: { $in: playerIds } },
-    limit: Math.max(100, playerIds.length),
-    silent: true,
-    cache: 'bypass',
-    throwOnError: true
-  }) : []
-  const currentPlayerById = new Map((currentPlayers || []).map(player => [String(player._id || player.id || ''), player]))
-  const embeddedPlayerById = new Map(embeddedPlayers.map(player => [rosterSnapshotPlayerId(player), player]))
-  const entries = (playerIds.length ? playerIds : embeddedPlayers.map((_, index) => String(index)))
-    .map((id, index) => {
-      const snapshotPlayer = embeddedPlayerById.get(id) || (playerIds.length ? null : embeddedPlayers[index]) || {}
-      const currentPlayer = currentPlayerById.get(id) || {}
-      const firstText = (...values) => values.map(value => String(value ?? '').trim()).find(Boolean) || ''
-      return {
-        name: firstText(snapshotPlayer.name, snapshotPlayer.playerName, currentPlayer.name, currentPlayer.playerName, currentPlayer.realName),
-        number: firstText(snapshotPlayer.jerseyNumber, snapshotPlayer.number, snapshotPlayer.shirtNumber, currentPlayer.jerseyNumber, currentPlayer.number, currentPlayer.shirtNumber)
-      }
-    })
-    .filter(player => player.name)
+  const players = (result.rows || []).map(player => ({
+    name: String(player.name || '').trim(),
+    number: String(player.jerseyNumber || '').trim()
+  })).filter(player => player.name)
     .sort((left, right) => String(left.number).localeCompare(String(right.number), 'zh-CN', { numeric: true }) || left.name.localeCompare(right.name, 'zh-CN'))
-  if (!entries.length) throw new Error('已审核名单中没有可读取的队员资料')
+  if (!players.length) throw new Error('已审核名单中没有可读取的队员资料')
 
-  const limit = getRosterLimit(substitutionDivision.value, registration, roster, substitutionTournament.value)
-  return { players: entries, limit, registeredCount: entries.length }
+  const limit = getRosterLimit(substitutionDivision.value, registration, substitutionTournament.value)
+  return { players, limit, registeredCount: players.length }
 }
-
 async function downloadRefereeLineupSheet() {
   if (!canDownloadRefereeSheet.value) return
   if (!match.value.homeTeamId || !match.value.awayTeamId) return ElMessage.warning('比赛缺少主客队信息，暂时无法生成名单表')
