@@ -6,6 +6,7 @@ const WORD_ROW = /<w:tr\b[^>]*>[\s\S]*?<\/w:tr>/g
 const WORD_CELL = /<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g
 const TEMPLATE_BASE = import.meta.env?.BASE_URL || '/admin/'
 const TEMPLATE_PATH = `${TEMPLATE_BASE}templates/referee-match-sheet-template.docx`
+const LOGO_PATH = `${TEMPLATE_BASE}logo-saixiaofeng.png`
 
 function escapeXml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({
@@ -72,10 +73,28 @@ function setTableGrid(tableXml, widths) {
     : tableXml.replace('</w:tblPr>', `</w:tblPr>${grid}`)
   const totalWidth = widths.reduce((sum, width) => sum + width, 0)
   result = result.replace(/<w:tblW\b[^>]*\/>/, `<w:tblW w:w="${totalWidth}" w:type="dxa"/>`)
+  result = result.replace(/(<w:tblPr\b[^>]*>)([\s\S]*?)(<\/w:tblPr>)/, (whole, open, properties, close) => {
+    if (/<w:jc\b/.test(properties)) return whole
+    const widthTag = properties.match(/<w:tblW\b[^>]*\/>/)?.[0]
+    const centered = widthTag
+      ? properties.replace(widthTag, `${widthTag}<w:jc w:val="center"/>`)
+      : `<w:jc w:val="center"/>${properties}`
+    return `${open}${centered}${close}`
+  })
   result = result.replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
   result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}9${suffix}`)
   result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}7${suffix}`)
   return result
+}
+
+function setTableWidthAndCenter(tableXml, width) {
+  let result = tableXml.replace(/<w:tblW\b[^>]*\/>/, `<w:tblW w:w="${width}" w:type="dxa"/>`)
+  return result.replace(/(<w:tblPr\b[^>]*>)([\s\S]*?)(<\/w:tblPr>)/, (whole, open, properties, close) => {
+    const centered = /<w:jc\b/.test(properties)
+      ? properties.replace(/<w:jc\b[^>]*\/>/, '<w:jc w:val="center"/>')
+      : properties.replace(/(<w:tblW\b[^>]*\/>)/, '$1<w:jc w:val="center"/>')
+    return `${open}${centered}${close}`
+  })
 }
 
 function alignTeamTableRow(rowXml) {
@@ -106,7 +125,7 @@ function formatRosterRow(rowXml, isHeader = false) {
     const sideColumn = cellIndex % 9
     cellIndex += 1
     let next = cellXml
-    const widths = [360, 1150, 350, 320, 320, 320, 320, 320, 1220]
+    const widths = [360, 1150, 350, 360, 360, 360, 320, 320, 1100]
     next = setCellWidth(next, widths[sideColumn])
     if (!isHeader && sideColumn === 1) next = setCellFontSize(next, 20).replace(/<w:rPr\b[^>]*>/g, opening => `${opening}<w:b/>`)
     return next
@@ -164,6 +183,52 @@ function updateParagraphText(xml, predicate, value) {
   })
 }
 
+function logoDrawingXml(relationshipId) {
+  const width = 914400
+  const height = 457200
+  return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${width}" cy="${height}"/><wp:docPr id="1" name="赛小蜂足球 Logo"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="logo-saixiaofeng.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${width}" cy="${height}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`
+}
+
+function replaceAttributionWithLogo(xml, relationshipId) {
+  let replaced = false
+  let result = xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, paragraph => {
+    const text = [...paragraph.matchAll(WORD_TEXT)].map(([token]) => {
+      const content = token.match(/^<w:t\b[^>]*>([\s\S]*?)<\/w:t>$/)?.[1] || ''
+      return unescapeXml(content)
+    }).join('')
+    if (!text.includes('本名单由赛小蜂足球后台自动生成') && !text.includes('五人制比赛正式用表')) return paragraph
+    replaced = true
+    const open = paragraph.match(/^<w:p\b[^>]*>/)?.[0] || '<w:p>'
+    let properties = paragraph.match(/<w:pPr\b[^>]*>[\s\S]*?<\/w:pPr>/)?.[0] || '<w:pPr><w:spacing w:before="70" w:after="0"/></w:pPr>'
+    if (/<w:jc\b[^>]*\/>/.test(properties)) properties = properties.replace(/<w:jc\b[^>]*\/>/, '<w:jc w:val="left"/>')
+    else properties = properties.replace('</w:pPr>', '<w:jc w:val="left"/></w:pPr>')
+    const statement = '<w:r><w:rPr><w:rFonts w:ascii="SimSun" w:eastAsia="宋体" w:hAnsi="SimSun"/><w:b/><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t xml:space="preserve">  本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</w:t></w:r>'
+    return `${open}${properties}${logoDrawingXml(relationshipId)}${statement}</w:p>`
+  })
+  if (!replaced) throw new Error('工作单页脚缺少版权说明位置')
+  result = result.replace(/<w:document\b([^>]*)>/, (opening, attributes) => {
+    let next = attributes
+    if (!/xmlns:wp=/.test(next)) next += ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+    if (!/xmlns:a=/.test(next)) next += ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    if (!/xmlns:pic=/.test(next)) next += ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"'
+    if (!/xmlns:r=/.test(next)) next += ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    return `<w:document${next}>`
+  })
+  return result
+}
+
+function addImageRelationship(xml) {
+  const ids = [...xml.matchAll(/\bId="rId(\d+)"/g)].map(([, value]) => Number(value))
+  const relationshipId = `rId${Math.max(0, ...ids) + 1}`
+  const relationship = `<Relationship Id="${relationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/logo-saixiaofeng.png"/>`
+  return { relationshipId, xml: xml.replace('</Relationships>', `${relationship}</Relationships>`) }
+}
+
+function addPngContentType(xml) {
+  if (/<Default\b[^>]*Extension="png"/.test(xml)) return xml
+  return xml.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>')
+}
+
 function removeParagraphMatching(xml, predicate) {
   return xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, paragraph => {
     const text = [...paragraph.matchAll(new RegExp(WORD_TEXT.source, 'g'))]
@@ -206,7 +271,7 @@ function formatCoreProperties(xml) {
     .replace(/(<dcterms:modified\b[^>]*>)[\s\S]*?(<\/dcterms:modified>)/, `$1${now}$2`)
 }
 
-function buildDocumentXml(templateXml, input) {
+function buildDocumentXml(templateXml, input, logoRelationshipId) {
   const match = input.match || {}
   const formatLabel = formatMatchLabel(input.matchFormat)
   const matchName = input.tournamentName
@@ -239,14 +304,23 @@ function buildDocumentXml(templateXml, input) {
         const current = index++
         if (current % 4) return ''
         let cell = setCellText(sourceCell, `${labels[roleIndex++]}  ____________`)
-        cell = setCellWidth(cell, 10400)
+        cell = setCellWidth(cell, 4680)
         return cell.replace(/<w:tcPr\b[^>]*>([\s\S]*?)<\/w:tcPr>/, '<w:tcPr>$1<w:gridSpan w:val="4"/></w:tcPr>')
       })
     }
-    return withRows(tableXml, [
+    return setTableWidthAndCenter(withRows(tableXml, [
       makeRoleRow(['主裁判：', '第一助理裁判：']),
       makeRoleRow(['第二助理裁判：', '第四官员：'])
-    ])
+    ]), 9360)
+  })
+
+  xml = replaceTableAt(xml, 3, tableXml => {
+    const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
+    if (!rows.length) return tableXml
+    const widths = [1450, 3230, 1450, 3230]
+    let index = 0
+    const row = rows[0].replace(WORD_CELL, cell => setCellWidth(cell, widths[index++]))
+    return setTableWidthAndCenter(withRows(tableXml, [row]), 9360)
   })
 
   xml = replaceTableAt(xml, 1, tableXml => {
@@ -278,7 +352,7 @@ function buildDocumentXml(templateXml, input) {
       const pageRows = rowsPerPage + (page < extraRows ? 1 : 0)
       const chunk = rosterRows.slice(offset, offset + pageRows)
       offset += pageRows
-      const gridWidths = [360, 1150, 350, 320, 320, 320, 320, 320, 1220]
+      const gridWidths = [360, 1150, 350, 360, 360, 360, 320, 320, 1100]
       pageTables.push(withRows(setTableGrid(tableXml, [...gridWidths, ...gridWidths]), [...headingRows, ...chunk, ...(page === pageCount - 1 ? [signatureRow] : [])]))
     }
     return pageTables.join('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
@@ -287,11 +361,11 @@ function buildDocumentXml(templateXml, input) {
   xml = updateTextNode(xml, value => value.includes('参赛队首发、替补队员名单及比赛记录表'), '裁判首发阵容信息表')
   xml = updateParagraphText(xml, value => value.includes('说明：') && value.includes('停赛'), '说明：首发打√，替补打○；队长标C，守门员标GK，不上场标×，停赛标S。换上、换下填写分钟；比赛记录填写进球、黄牌、红牌及发生时间。')
   xml = removeParagraphMatching(xml, value => value.replace(/\s/g, '') === '赛小蜂足球赛事')
-  xml = updateTextNode(xml, value => value.includes('五人制比赛正式用表'), '本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！')
+  xml = replaceAttributionWithLogo(xml, logoRelationshipId)
   return xml
 }
 
-export async function createRefereeLineupSheet(input, templateBytes = null) {
+export async function createRefereeLineupSheet(input, templateBytes = null, logoBytes = null) {
   let sourceBytes = templateBytes
   if (!sourceBytes) {
     const response = await fetch(TEMPLATE_PATH, { cache: 'force-cache' })
@@ -301,8 +375,21 @@ export async function createRefereeLineupSheet(input, templateBytes = null) {
   const zip = await JSZip.loadAsync(sourceBytes)
   const document = zip.file('word/document.xml')
   if (!document) throw new Error('名单表模板文件无法读取')
+  let imageBytes = logoBytes
+  if (!imageBytes) {
+    const response = await fetch(LOGO_PATH, { cache: 'force-cache' })
+    if (!response.ok) throw new Error('裁判工作单 Logo 加载失败，请刷新页面后重试')
+    imageBytes = await response.arrayBuffer()
+  }
+  const relationships = zip.file('word/_rels/document.xml.rels')
+  const contentTypes = zip.file('[Content_Types].xml')
+  if (!relationships || !contentTypes) throw new Error('裁判工作单模板关系文件不完整')
+  const { relationshipId, xml: relationshipXml } = addImageRelationship(await relationships.async('string'))
   const documentXml = await document.async('string')
-  zip.file('word/document.xml', buildDocumentXml(documentXml, input))
+  zip.file('word/document.xml', buildDocumentXml(documentXml, input, relationshipId))
+  zip.file('word/_rels/document.xml.rels', relationshipXml)
+  zip.file('[Content_Types].xml', addPngContentType(await contentTypes.async('string')))
+  zip.file('word/media/logo-saixiaofeng.png', imageBytes)
   const coreProperties = zip.file('docProps/core.xml')
   if (coreProperties) zip.file('docProps/core.xml', formatCoreProperties(await coreProperties.async('string')))
   return zip.generateAsync({
