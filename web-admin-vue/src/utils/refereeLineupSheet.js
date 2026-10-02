@@ -75,8 +75,8 @@ function formatRosterRow(rowXml, isHeader = false) {
     const sideColumn = cellIndex % 8
     cellIndex += 1
     let next = cellXml
-    if (sideColumn === 5) next = setCellWidth(next, 850)
-    if (sideColumn === 6) next = setCellWidth(next, 1070)
+    const widths = [350, 1100, 420, 350, 350, 700, 1280, 700]
+    next = setCellWidth(next, widths[sideColumn])
     if (!isHeader && sideColumn === 1) next = setCellFontSize(next, 16)
     return next
   })
@@ -114,6 +114,16 @@ function updateTextNode(xml, predicate, value) {
     if (!predicate(unescapeXml(content))) return token
     updated = true
     return textTagWithContent(token, value)
+  })
+}
+
+function removeParagraphMatching(xml, predicate) {
+  return xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, paragraph => {
+    const text = [...paragraph.matchAll(new RegExp(WORD_TEXT.source, 'g'))]
+      .map(([token]) => token.match(/^<w:t\b[^>]*>([\s\S]*?)<\/w:t>$/)?.[1] || '')
+      .map(unescapeXml)
+      .join('')
+    return predicate(text) ? '' : paragraph
   })
 }
 
@@ -175,8 +185,8 @@ function buildDocumentXml(templateXml, input) {
     const headingRows = [rows[0], ...rows.slice(2, 5)].map(addRepeatingHeader)
     headingRows[0] = setRowCells(headingRows[0], [`主队：${input.homeName || '主队'}`, `客队：${input.awayName || '客队'}`])
     headingRows[3] = formatRosterRow(setRowCells(headingRows[3], [
-      '序号', '队员姓名', '号码', '首发', '替补', '换上/换下时间', '进球/黄牌/红牌时间', '犯规',
-      '序号', '队员姓名', '号码', '首发', '替补', '换上/换下时间', '进球/黄牌/红牌时间', '犯规'
+      '序号', '队员姓名', '号码', '首发', '替补', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min',
+      '序号', '队员姓名', '号码', '首发', '替补', '换上 min', '比赛记录（进球/黄牌/红牌及时间）', '换下 min'
     ]), true)
     const rosterTemplate = rows[5]
     const signatureRow = rows.at(-1)
@@ -204,7 +214,8 @@ function buildDocumentXml(templateXml, input) {
   })
 
   xml = updateTextNode(xml, value => value.includes('参赛队首发、替补队员名单及比赛记录表'), '裁判首发阵容信息表')
-  xml = updateTextNode(xml, value => value.includes('五人制比赛正式用表'), `赛小蜂足球赛事  ·  ${formatLabel || '足球'}比赛正式用表`)
+  xml = removeParagraphMatching(xml, value => value.replace(/\s/g, '') === '赛小蜂足球赛事')
+  xml = updateTextNode(xml, value => value.includes('五人制比赛正式用表'), '本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！')
   return xml
 }
 
@@ -228,8 +239,12 @@ export async function createRefereeLineupSheet(input, templateBytes = null) {
   })
 }
 
-export function refereeLineupSheetFileName(tournamentName, sequence) {
-  const safeName = String(tournamentName || '比赛').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim() || '比赛'
-  const safeSequence = String(sequence || '').replace(/[^\dA-Za-z-]/g, '')
-  return `${safeName}${safeSequence ? `-场序${safeSequence}` : ''}-裁判名单表.docx`
+export function refereeLineupSheetFileName(match) {
+  const safePart = value => String(value || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().replace(/\s+/g, '-')
+  const sequence = match?.matchSequence || match?.sequence || ''
+  const matchNumber = match?.matchNo || match?.matchIndex || match?.matchNumber || match?.sequence || match?.matchSequence || ''
+  const safeTime = safePart([match?.matchDate, match?.matchTime].filter(Boolean).join('-')) || '比赛时间待定'
+  const safeSequence = safePart(sequence).replace(/[^\dA-Za-z-]/g, '')
+  const safeMatchNumber = safePart(matchNumber).replace(/[^\dA-Za-z-]/g, '')
+  return `${safeTime}-${safeSequence ? `场序${safeSequence}` : '场序待定'}-${safeMatchNumber ? `场次${safeMatchNumber}` : '场次待定'}.docx`
 }
