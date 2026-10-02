@@ -1250,6 +1250,7 @@
 </template>
 
 <script setup>
+import { matchListQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1777,7 +1778,7 @@ function formatDateTimeCN(date) {
 function goBack() {
   router.push({
     path: `/tournaments/${tournamentId}/matches`,
-    query: sourceDivisionId ? { divisionId: sourceDivisionId } : {}
+    query: matchListQuery(route.query)
   })
 }
 

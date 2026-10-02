@@ -32,6 +32,7 @@
 </template>
 
 <script setup>
+import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -85,7 +86,7 @@ const reportModeLabel=computed(()=>manualSupplement.value?'主办方补录报告
 const reportActionLabel=computed(()=>manualSupplement.value?'上传比赛报告（1–2张）':'上传电子裁判报告')
 const reportFiles=computed(()=>Array.isArray(match.value.organizerSupplementFiles)?match.value.organizerSupplementFiles:[])
 const eventDateText=computed(()=>{const f=v=>{const d=new Date(v?.$date||v);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`};const a=f(tournament.value.startDate),b=f(tournament.value.endDate);return a&&b?`${a}—${b}`:a||b||'日期待定'})
-function team(id){return teams.value.find(item=>item._id===id||item.id===id)}function teamInitial(name){return Array.from(name||'?')[0]||'?'}function eventLabel(event){return({goal:'进球',yellow_card:'黄牌',red_card:'红牌',second_yellow_red:'2黄变1红',substitution:'换人'}[event.type]||'比赛事件')}function formatDate(value){if(!value)return'';const date=new Date(value?.$date||value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString('zh-CN',{hour12:false}).replaceAll('/','-')}function backToList(){router.push(isArchive.value?{path:`/tournaments/${tournamentId}/results`,query:{tab:'review',divisionId:match.value.divisionId}}:{path:`/tournaments/${tournamentId}/matches`,query:{divisionId:match.value.divisionId}})}function openSupplementPage(){router.push({path:`/tournaments/${tournamentId}/match/${matchId}/post-match`,query:match.value.divisionId?{divisionId:match.value.divisionId}:{}})}
+function team(id){return teams.value.find(item=>item._id===id||item.id===id)}function teamInitial(name){return Array.from(name||'?')[0]||'?'}function eventLabel(event){return({goal:'进球',yellow_card:'黄牌',red_card:'红牌',second_yellow_red:'2黄变1红',substitution:'换人'}[event.type]||'比赛事件')}function formatDate(value){if(!value)return'';const date=new Date(value?.$date||value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString('zh-CN',{hour12:false}).replaceAll('/','-')}function backToList(){router.push(isArchive.value && !route.query.listDate ? {path:`/tournaments/${tournamentId}/results`,query:{tab:'review',divisionId:match.value.divisionId}} : {path:`/tournaments/${tournamentId}/matches`,query:matchListQuery(route.query)})}function openSupplementPage(){router.push({path:`/tournaments/${tournamentId}/match/${matchId}/post-match`,query:{...matchSourceQuery(route.query),...(match.value.divisionId?{divisionId:match.value.divisionId}:{})}})}
 function openScoreCorrection(){
   if(!isArchive.value)return ElMessage.warning('只有已归档的正式赛果可以异常纠错')
   correctionForm.value={homeScore:Number(match.value.homeScore ?? 0),awayScore:Number(match.value.awayScore ?? 0),reason:''}
