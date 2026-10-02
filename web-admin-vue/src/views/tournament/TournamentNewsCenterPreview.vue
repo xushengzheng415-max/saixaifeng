@@ -25,13 +25,16 @@
         <el-select v-model="form.kind" @change="onKindChange">
           <el-option label="单场新闻" value="match" /><el-option label="每日新闻" value="daily" />
         </el-select>
-        <label>{{ form.kind === 'daily' ? '比赛日期' : `关联比赛 · 已归档 ${approvedMatches.length} 场` }}</label>
-        <el-select v-if="form.kind === 'daily'" v-model="form.date" placeholder="选择日期" :disabled="loadingMatches" @change="onDateChange">
+        <label>比赛日期</label>
+        <el-select v-model="form.date" placeholder="选择比赛日" :disabled="loadingMatches" @change="onDateChange">
           <el-option v-for="date in approvedDates" :key="date" :value="date" :label="`${date} · ${dayMatches(date).length} 场`" />
         </el-select>
-        <el-select v-else v-model="form.matchId" placeholder="选择比赛" :disabled="loadingMatches" @change="onMatchChange">
-          <el-option v-for="match in approvedMatches" :key="match.id" :value="match.id" :label="matchLabel(match)" />
-        </el-select>
+        <template v-if="form.kind === 'match'">
+          <label>关联比赛 · 已归档 {{ dayMatches(form.date).length }} 场</label>
+          <el-select v-model="form.matchId" :placeholder="form.date ? '选择比赛' : '先选比赛日'" :disabled="loadingMatches || !form.date" @change="onMatchChange">
+            <el-option v-for="match in dayMatches(form.date)" :key="match.id" :value="match.id" :label="matchLabel(match)" />
+          </el-select>
+        </template>
         <template v-if="form.kind === 'match'"><label>比赛图片 · 最多3张</label>
         <div class="photo-manager" @dragover.prevent @drop.prevent="dropPhotoFiles">
           <div v-for="(photo,index) in form.photos" :key="photo" class="photo-item" draggable="true" @dragstart="startPhotoDrag(index)" @dragover.prevent @drop.stop.prevent="dropPhotoOrder(index)">
@@ -85,7 +88,16 @@ const coverUrl = ref('')
 const filters = [{ id: 'all', label: '全部' }, { id: 'published', label: '模拟发布' }, { id: 'draft', label: '草稿' }, { id: 'update', label: '待更新' }]
 const articles = ref([])
 const visibleArticles = computed(() => articles.value.filter(item => filter.value === 'all' || item.status === filter.value))
-const approvedMatches = computed(() => matches.value.filter(item => item.resultStatus === 'approved'))
+function matchSequenceValue(match) {
+  const parts = String(match.matchNo || '').match(/\d+/g) || []
+  return parts.length ? Number(parts.at(-1)) : Number.MAX_SAFE_INTEGER
+}
+const approvedMatches = computed(() => matches.value.filter(item => item.resultStatus === 'approved').sort((a, b) =>
+  matchSequenceValue(a) - matchSequenceValue(b) ||
+  String(a.matchDate || '').localeCompare(String(b.matchDate || '')) ||
+  String(a.matchTime || '').localeCompare(String(b.matchTime || '')) ||
+  String(a.id || '').localeCompare(String(b.id || ''))
+))
 const approvedDates = computed(() => [...new Set(approvedMatches.value.map(item => item.matchDate).filter(Boolean))].sort().reverse())
 const dayMatches = date => approvedMatches.value.filter(item => item.matchDate === date)
 const form = reactive({ kind: 'match', matchId: '', date: '', matchIds: [], dayResults: [], nextFixtures: [], title: '', body: '', note: '', suspensionNote: '', includeStandings: true, photos: [] })
@@ -104,7 +116,7 @@ const previewBlocks = computed(() => {
 })
 const kindLabel = kind => ({ match: '单场新闻', daily: '每日新闻' })[kind] || '新闻'
 const statusLabel = status => ({ published: '模拟发布', draft: '草稿', update: '待更新' })[status] || '草稿'
-const matchLabel = match => [match.matchDate, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
+const matchLabel = match => [`场序${match.matchNo || '—'}`, `${match.matchDate || '日期待定'} ${match.matchTime || '时间待定'}`, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
 
 async function loadMatches() {
   loadingMatches.value = true; loadError.value = ''
@@ -113,6 +125,7 @@ async function loadMatches() {
     if (!result?.success) throw new Error(result?.message || '比赛加载失败')
     matches.value = result.matches || []
     tournamentName.value = result.tournament?.name || '当前赛事'
+    if (form.kind === 'match' && form.matchId && selectedMatch.value) form.date = selectedMatch.value.matchDate || ''
     if (form.kind === 'daily' && !form.date) form.date = approvedDates.value[0] || ''
     updateCover()
   } catch (error) { loadError.value = error.message || '比赛加载失败，请刷新重试' }
@@ -124,12 +137,12 @@ function updateCover() { coverUrl.value = form.kind === 'daily' ? createDailyNew
 function clearGenerated() { form.title = ''; form.body = ''; form.matchIds = []; form.dayResults = []; form.nextFixtures = []; standingsSnapshotUrl.value = ''; standingsError.value = '' }
 function onStandingsChange() { clearGenerated(); updateCover() }
 function onMatchChange() { clearGenerated(); updateCover() }
-function onDateChange() { clearGenerated(); updateCover() }
+function onDateChange() { if (form.kind === 'match') { form.matchId = ''; form.photos = [] }; clearGenerated(); updateCover() }
 function onKindChange() {
   form.matchId = ''; form.date = form.kind === 'daily' ? approvedDates.value[0] || '' : ''; form.photos = []; clearGenerated(); updateCover()
 }
-function openNew() { reset(); editorOpen.value = true }
-function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []) }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true }
+function openNew() { reset(); editorOpen.value = true; loadMatches() }
+function openArticle(item) { reset(); editing.value = item.id; Object.assign(form, { kind: item.kind, matchId: item.matchId || '', date: item.date || '', matchIds: item.matchIds || [], dayResults: item.dayResults || [], nextFixtures: item.nextFixtures || [], title: item.title, body: item.body || '', includeStandings: Boolean(item.standingsSnapshot), suspensionNote: item.suspensionNote || '', photos: item.photos || (item.photo ? [item.photo] : []) }); coverUrl.value = item.cover || ''; standingsSnapshotUrl.value = item.standingsSnapshot || ''; editorOpen.value = true; loadMatches() }
 function addPhotos(files) {
   const selected = Array.from(files || []).filter(file => file.type.startsWith('image/'))
   const remaining = 3 - form.photos.length
