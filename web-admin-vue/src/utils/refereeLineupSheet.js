@@ -99,7 +99,7 @@ function formatRosterRow(rowXml, isHeader = false) {
     const sideColumn = cellIndex % 9
     cellIndex += 1
     let next = cellXml
-    const widths = [360, 1150, 350, 320, 320, 320, 300, 300, 1260]
+    const widths = [360, 1150, 350, 320, 320, 320, 320, 320, 1220]
     next = setCellWidth(next, widths[sideColumn])
     if (!isHeader && sideColumn === 1) next = setCellFontSize(next, 20).replace(/<w:rPr\b[^>]*>/g, opening => `${opening}<w:b/>`)
     return next
@@ -271,7 +271,7 @@ function buildDocumentXml(templateXml, input) {
       const pageRows = rowsPerPage + (page < extraRows ? 1 : 0)
       const chunk = rosterRows.slice(offset, offset + pageRows)
       offset += pageRows
-      const gridWidths = [360, 1150, 350, 320, 320, 320, 300, 300, 1260]
+      const gridWidths = [360, 1150, 350, 320, 320, 320, 320, 320, 1220]
       pageTables.push(withRows(setTableGrid(tableXml, [...gridWidths, ...gridWidths]), [...headingRows, ...chunk, ...(page === pageCount - 1 ? [signatureRow] : [])]))
     }
     return pageTables.join('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
