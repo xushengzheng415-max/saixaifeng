@@ -70,7 +70,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { callFunction, getFileUrl, uploadImageViaWebApi } from '@/utils/cloud'
+import { callFunction, getFileUrl, uploadLargeFileViaCloud } from '@/utils/cloud'
 import { createMatchNewsCover, createDailyNewsCover, createStandingsNewsSnapshot } from '@/utils/newsCover'
 import NewsDailyContent from './NewsDailyContent.vue'
 
@@ -218,12 +218,13 @@ function dataUrlFile(dataUrl, filename) {
   return new File([bytes], filename, { type: mime })
 }
 async function uploadNewsAssets() {
+  const uploadNewsFile = file => uploadLargeFileViaCloud(`tournament-news/${tournamentId}/${file.name}`, file, { fallbackChunkSize: 32 * 1024 })
   const photoFileIds = [...form.photoFileIds]
   for (let index = 0; index < form.photos.length; index += 1) {
     if (photoFileIds[index]) continue
     const file = form.photoFiles[index]
     if (file) {
-      const uploaded = await uploadImageViaWebApi(`tournament-news/${tournamentId}`, file)
+      const uploaded = await uploadNewsFile(file)
       photoFileIds[index] = uploaded.fileId
       form.photoFiles[index] = null
       form.photoFileIds[index] = uploaded.fileId
@@ -231,13 +232,13 @@ async function uploadNewsAssets() {
   }
   let coverFileId = photoFileIds[0] || form.coverFileId
   if (!coverFileId && coverUrl.value) {
-    const uploaded = await uploadImageViaWebApi(`tournament-news/${tournamentId}`, dataUrlFile(coverUrl.value, 'news-cover.png'))
+    const uploaded = await uploadNewsFile(dataUrlFile(coverUrl.value, 'news-cover.png'))
     coverFileId = uploaded.fileId
     form.coverFileId = coverFileId
   }
   let standingsSnapshotFileId = form.standingsSnapshotFileId
   if (!standingsSnapshotFileId && standingsSnapshotUrl.value) {
-    const uploaded = await uploadImageViaWebApi(`tournament-news/${tournamentId}`, dataUrlFile(standingsSnapshotUrl.value, 'standings-snapshot.png'))
+    const uploaded = await uploadNewsFile(dataUrlFile(standingsSnapshotUrl.value, 'standings-snapshot.png'))
     standingsSnapshotFileId = uploaded.fileId
     form.standingsSnapshotFileId = standingsSnapshotFileId
   }
