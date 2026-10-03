@@ -1,8 +1,6 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const staffPolicy = require('./staffPolicy.cjs')
-const { readAll, readByIds } = require('./data-center/reader.cjs')
-const { pointsRule, buildStandings } = require('./data-center/standings.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -69,7 +67,8 @@ async function staffMatches(event, actor) {
   if (!await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'result.supplement')) throw new Error('当前赛事没有补录权限')
   const tournament = await getDocument('tournaments', tournamentId)
   if (!tournament || !belongsToActor(tournament, actor)) throw new Error('赛事不存在或无权访问')
-  const rows = await readAll(db, 'matches', { tournamentId }, { maxRows: 20000 })
+  const rows = await listAll('matches', { tournamentId }, 20000)
+  if (rows.length >= 20000) throw new Error('赛事比赛超过补录读取范围')
   return { success: true, orgId: actor.orgId, tournament: { id: tournamentId, name: text(tournament.name) }, matches: rows.map(match => ({
     id: text(match._id), homeName: text(match.homeTeamName || match.homeName), awayName: text(match.awayTeamName || match.awayName),
     homeTeamId: text(match.homeTeamId), awayTeamId: text(match.awayTeamId), date: text(match.matchDate || match.date), time: text(match.matchTime), divisionName: text(match.divisionName),
@@ -128,7 +127,13 @@ async function getDocument(collection, id) {
 }
 
 async function listAll(collection, where, max = 1000) {
-  return readAll(db, collection, where, { maxRows: Math.max(max, 20000) })
+  const rows = []
+  for (let skip = 0; skip < max; skip += 100) {
+    const page = (await db.collection(collection).where(where).skip(skip).limit(Math.min(100, max - skip)).get()).data || []
+    rows.push(...page)
+    if (page.length < 100) break
+  }
+  return rows
 }
 
 async function listByDocumentIds(collection, ids) {
@@ -143,7 +148,18 @@ async function listByDocumentIds(collection, ids) {
 }
 
 async function listMatchEvents(matchIds) {
-  return readByIds(db, 'match_events', 'matchId', matchIds)
+  const uniqueIds = [...new Set((matchIds || []).map(text).filter(Boolean))]
+  const rows = []
+  for (let index = 0; index < uniqueIds.length; index += 50) {
+    const chunk = uniqueIds.slice(index, index + 50)
+    try {
+      const page = (await db.collection('match_events').where({ matchId: db.command.in(chunk) }).limit(200).get()).data || []
+      rows.push(...page)
+    } catch (error) {
+      console.warn('比赛事件读取失败:', error && error.message)
+    }
+  }
+  return rows
 }
 
 function eventIdentity(event) {
@@ -227,7 +243,7 @@ async function buildTeamDirectory(matchRows, registrationRows) {
   const directory = {}
   teamRows.forEach(row => {
     const id = text(row._id || row.id)
-    const profile = { name: teamProfileName(row), logo: teamProfileLogo(row) }
+    const profile = { name: teamProfileName(row), logo: teamProfileLogo(row), synthetic:row.synthetic === true, syntheticDatasetId:text(row.syntheticDatasetId) }
     if (id) directory[id] = profile
     if (profile.name) directory[`name:${profile.name}`] = profile
   })
@@ -237,7 +253,9 @@ async function buildTeamDirectory(matchRows, registrationRows) {
     const current = directory[id] || { name: '', logo: '' }
     directory[id] = {
       name: current.name || teamProfileName(row),
-      logo: current.logo || teamProfileLogo(row)
+      logo: current.logo || teamProfileLogo(row),
+      synthetic:current.synthetic === true || row.synthetic === true,
+      syntheticDatasetId:current.syntheticDatasetId || text(row.syntheticDatasetId)
     }
     if (directory[id].name) directory[`name:${directory[id].name}`] = directory[id]
   })
@@ -463,6 +481,132 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
   }
 }
 
+function pointsRule(division) {
+  const ranking = division && (division.rankingRules || division.rankingRule || division.rules && division.rules.ranking) || {}
+  const points = ranking.points || {}
+  const drawResolution = text(points.drawResolution || (division && division.drawResolution) || 'draw').toLowerCase()
+  return {
+    win: number(points.win ?? (division && division.winPoints), 3),
+    draw: number(points.draw ?? (division && division.drawPoints), 1),
+    loss: number(points.loss ?? (division && division.lossPoints), 0),
+    drawResolution: ['penalties', 'penalty_shootout', 'shootout'].includes(drawResolution) ? 'penalties' : 'draw',
+    penaltyWin: number(points.penaltyWin ?? (division && division.penaltyWinPoints), 2),
+    penaltyLoss: number(points.penaltyLoss ?? (division && division.penaltyLossPoints), 0),
+    tieBreakers: Array.isArray(division && division.rankingTieBreakers) ? division.rankingTieBreakers : [
+      'headToHeadPoints', 'headToHeadGoalDifference', 'headToHeadGoalsFor',
+      'goalDifference', 'goalsFor', 'redCardsFewest', 'yellowCardsFewest', 'drawingLots'
+    ],
+    source: points.win != null || division && division.winPoints != null ? '组别规则' : '足球标准规则'
+  }
+}
+
+function addTeam(table, id, name, logo) {
+  const key = id || `name:${name}`
+  if (!table[key]) table[key] = { teamId: id, teamName: name, logo, played: 0, win: 0, draw: 0, loss: 0, penaltyWin: 0, penaltyLoss: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0, fairPlay: 0, yellowCards: 0, redCards: 0, provisionalMatches: 0 }
+  return table[key]
+}
+
+function addScheduledTeam(table, id, name, logo) {
+  const normalizedId = text(id)
+  const normalizedName = text(name)
+  if (!normalizedId && (!normalizedName || ['主队待定', '客队待定'].includes(normalizedName))) return
+  addTeam(table, normalizedId, normalizedName || '球队待定', text(logo))
+}
+
+function applyResult(table, match, rule, provisional) {
+  const home = addTeam(table, match.homeTeamId, match.homeTeamName, match.homeTeamLogo)
+  const away = addTeam(table, match.awayTeamId, match.awayTeamName, match.awayTeamLogo)
+  home.played += 1; away.played += 1
+  home.goalsFor += match.homeScore; home.goalsAgainst += match.awayScore
+  away.goalsFor += match.awayScore; away.goalsAgainst += match.homeScore
+  if (match.homeScore > match.awayScore) { home.win += 1; away.loss += 1; home.points += rule.win; away.points += rule.loss }
+  else if (match.homeScore < match.awayScore) { away.win += 1; home.loss += 1; away.points += rule.win; home.points += rule.loss }
+  else if (rule.drawResolution === 'penalties') {
+    const homeWon = text(match.winnerTeamId) === text(match.homeTeamId)
+    const awayWon = text(match.winnerTeamId) === text(match.awayTeamId)
+    if (homeWon) { home.win += 1; home.penaltyWin += 1; away.loss += 1; away.penaltyLoss += 1; home.points += rule.penaltyWin; away.points += rule.penaltyLoss }
+    else if (awayWon) { away.win += 1; away.penaltyWin += 1; home.loss += 1; home.penaltyLoss += 1; away.points += rule.penaltyWin; home.points += rule.penaltyLoss }
+  } else { home.draw += 1; away.draw += 1; home.points += rule.draw; away.points += rule.draw }
+  home.fairPlay -= match.yellowHome + match.redHome * 3
+  away.fairPlay -= match.yellowAway + match.redAway * 3
+  home.yellowCards += match.yellowHome; away.yellowCards += match.yellowAway
+  home.redCards += match.redHome; away.redCards += match.redAway
+  if (provisional) { home.provisionalMatches += 1; away.provisionalMatches += 1 }
+  home.goalDifference = home.goalsFor - home.goalsAgainst
+  away.goalDifference = away.goalsFor - away.goalsAgainst
+}
+
+function headToHeadScore(team, tied, matches, rule) {
+  const ids = new Set(tied.map(item => item.teamId || `name:${item.teamName}`))
+  const mini = { points: 0, goalsFor: 0, goalsAgainst: 0 }
+  matches.forEach(match => {
+    const homeKey = match.homeTeamId || `name:${match.homeTeamName}`
+    const awayKey = match.awayTeamId || `name:${match.awayTeamName}`
+    if (!ids.has(homeKey) || !ids.has(awayKey)) return
+    const currentKey = team.teamId || `name:${team.teamName}`
+    if (currentKey !== homeKey && currentKey !== awayKey) return
+    const currentHome = currentKey === homeKey
+    const scored = currentHome ? match.homeScore : match.awayScore
+    const conceded = currentHome ? match.awayScore : match.homeScore
+    mini.goalsFor += scored; mini.goalsAgainst += conceded
+    if (scored > conceded) mini.points += rule.win
+    else if (scored < conceded) mini.points += rule.loss
+    else if (rule.drawResolution === 'penalties') mini.points += text(match.winnerTeamId) === text(team.teamId) ? rule.penaltyWin : rule.penaltyLoss
+    else mini.points += rule.draw
+  })
+  return { ...mini, goalDifference: mini.goalsFor - mini.goalsAgainst }
+}
+
+function rankTeams(teams, officialMatches, rule) {
+  const byPoints = {}
+  teams.forEach(team => { (byPoints[team.points] ||= []).push(team) })
+  Object.values(byPoints).forEach(tied => tied.forEach(team => { team.headToHead = headToHeadScore(team, tied, officialMatches, rule) }))
+  return teams.sort((a, b) => b.points - a.points ||
+    b.headToHead.points - a.headToHead.points ||
+    b.headToHead.goalDifference - a.headToHead.goalDifference ||
+    b.headToHead.goalsFor - a.headToHead.goalsFor ||
+    b.goalDifference - a.goalDifference ||
+    b.goalsFor - a.goalsFor ||
+    a.redCards - b.redCards ||
+    a.yellowCards - b.yellowCards ||
+    a.teamName.localeCompare(b.teamName, 'zh-CN'))
+    .map((team, index) => ({ ...team, rank: index + 1 }))
+}
+
+function buildStandings(matches, divisionsById) {
+  const buckets = {}
+  matches.filter(match => match.standingsEligible).forEach(match => {
+    const key = `${match.divisionId}:${match.groupName}`
+    const bucket = buckets[key] ||= { divisionId: match.divisionId, divisionName: match.divisionName, groupName: match.groupName, teams: {}, official: [], all: [] }
+    addScheduledTeam(bucket.teams, match.homeTeamId, match.homeTeamName, match.homeTeamLogo)
+    addScheduledTeam(bucket.teams, match.awayTeamId, match.awayTeamName, match.awayTeamLogo)
+    if (!match.scoreReady || ['returned', 'warning'].includes(match.resultStatus)) return
+    bucket.all.push(match)
+    if (match.resultStatus === 'approved') bucket.official.push(match)
+  })
+  return Object.values(buckets).map(bucket => {
+    const rule = pointsRule(divisionsById[bucket.divisionId] || {})
+    const officialTable = {}; const previewTable = {}
+    Object.values(bucket.teams).forEach(team => {
+      addTeam(officialTable, team.teamId, team.teamName, team.logo)
+      addTeam(previewTable, team.teamId, team.teamName, team.logo)
+    })
+    bucket.official.forEach(match => applyResult(officialTable, match, rule, false))
+    bucket.all.forEach(match => applyResult(previewTable, match, rule, match.resultStatus !== 'approved'))
+    return {
+      divisionId: bucket.divisionId,
+      divisionName: bucket.divisionName,
+      groupName: bucket.groupName,
+      pointsRule: rule,
+      tieBreakers: ['积分', '相互比赛积分', '相互比赛净胜球', '相互比赛进球数', '总净胜球', '总进球', '红牌数少者', '黄牌数少者', '抽签决定'],
+      officialTeams: rankTeams(Object.values(officialTable), bucket.official, rule),
+      previewTeams: rankTeams(Object.values(previewTable), bucket.all, rule),
+      officialMatchCount: bucket.official.length,
+      provisionalMatchCount: bucket.all.length - bucket.official.length
+    }
+  }).sort((a, b) => a.divisionName.localeCompare(b.divisionName, 'zh-CN', { numeric: true }) || a.groupName.localeCompare(b.groupName, 'zh-CN', { numeric: true }))
+}
+
 function normalizedGroupName(value) {
   return text(value).replace(/[\s　]/g,'').toUpperCase()
 }
@@ -601,8 +745,13 @@ async function latestPublications(tournamentId) {
   }
 }
 
+function applyMatchOrigin(normalized, events, origin) {
+  return { ...normalized, events, originStatus:origin,
+    resultStatus:origin === 'real' ? normalized.resultStatus : 'not_submitted',
+    standingsEligible:origin === 'real' && normalized.standingsEligible }
+}
+
 async function buildDashboard(event, actor) {
-  const { effectiveEvents: canonicalEvents, aggregateStatistics } = await import('./data-center/statistics.mjs')
   const tournamentId = text(event.tournamentId)
   if (!tournamentId) throw new Error('缺少赛事信息')
   const tournament = await getDocument('tournaments', tournamentId)
@@ -617,6 +766,13 @@ async function buildDashboard(event, actor) {
   const divisionsById = Object.fromEntries(divisions.map(item => [text(item._id || item.id), item]))
   const teamDirectory = await buildTeamDirectory(matchRows, registrationRows)
   const eventRows = await listMatchEvents(matchRows.map(item => item._id || item.id))
+  const { matchOrigin, matchParticipantIds } = await import('./data-center/statistics.mjs')
+  const preliminaryOrigin = { teamsById:teamDirectory, tournamentsById:{ [tournamentId]:tournament }, requireOriginEvidence:true }
+  const participantMatches = matchRows.filter(match => resultStatus(match) !== 'not_submitted' && matchOrigin(match,preliminaryOrigin) === 'real')
+  const participantIds = [...new Set(participantMatches.flatMap(match => [...matchParticipantIds(match,eventRows)]))]
+  const playerProfiles = await listByDocumentIds('players',participantIds)
+  const playersById = Object.fromEntries(playerProfiles.map(player => [text(player._id),player]))
+  const originContext = { teamsById:teamDirectory, tournamentsById:{ [tournamentId]:tournament }, playersById, events:eventRows, requireOriginEvidence:true, requirePlayerOriginEvidence:true }
   const eventsByMatchId = eventRows.reduce((map, item) => {
     const matchId = text(item.matchId || item.match_id)
     if (!matchId) return map
@@ -625,9 +781,10 @@ async function buildDashboard(event, actor) {
     return map
   }, {})
   const normalizeWithEvents = item => {
-    const sourceEvents = canonicalEvents(item,eventRows)
+    const sourceEvents = (eventsByMatchId[String(item._id || item.id)] || []).length ? eventsByMatchId[String(item._id || item.id)] : (Array.isArray(item.events) ? item.events : [])
     const normalized = normalizedMatch(sourceEvents.length ? { ...item, events: sourceEvents } : item, divisionsById, teamDirectory)
-    return { ...normalized, events: sourceEvents }
+    const origin = matchOrigin(item,originContext)
+    return applyMatchOrigin(normalized,sourceEvents,origin)
   }
   let matches = matchRows.map(normalizeWithEvents).sort(compareReviewMatches)
   let standings = buildStandings(matches, divisionsById)
@@ -639,7 +796,6 @@ async function buildDashboard(event, actor) {
   return {
     success: true,
     tournament: { id: tournamentId, name: text(tournament.name) || '当前赛事', startDate: rawDate(tournament.startDate), endDate: rawDate(tournament.endDate), location: text(tournament.location || tournament.province), logo: text(tournament.logo || tournament.logoUrl) },
-    dataCenter: aggregateStatistics({ matches:matchRows, events:eventRows, scope:{tournamentId} }),
     divisions: divisions.map(item => ({ id: text(item._id || item.id), name: text(item.name) || '未命名组别', pointsRule: pointsRule(item) })),
     matches,
     events: eventRows,
@@ -774,4 +930,4 @@ exports.main = async (event = {}) => {
   }
 }
 
-exports.__test = { resultStatus,winnerTeamIdOf,buildStandings,buildOfficialGroupRankMap,sourceForSide,resolveSourceTeam,resolvedWinnerAndLoser,scoreValue }
+exports.__test = { resultStatus,winnerTeamIdOf,buildStandings,buildOfficialGroupRankMap,sourceForSide,resolveSourceTeam,resolvedWinnerAndLoser,scoreValue,applyMatchOrigin }
