@@ -1427,6 +1427,7 @@ async function parseRegulations() {
     else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) fileType = 'image'
 
     const result = await callFunction('parseTournamentRegulations', {
+      tournamentId: id,
       fileID: form.value.regulationsFileId,
       fileType: fileType,
       fileName: form.value.regulationsFileName

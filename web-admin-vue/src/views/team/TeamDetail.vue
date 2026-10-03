@@ -63,7 +63,7 @@
             </template>
           </section>
         </div>
-        <section class="team-access-panel">
+        <section v-if="!isTournamentStaff" class="team-access-panel">
           <header>
             <div><h2>球队管理权限</h2><p>主账号负责球队管理，其他账号按分配权限协作。</p></div>
             <el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openTeamAccess"><el-icon><Plus /></el-icon>分配账号</el-button>
@@ -3713,7 +3713,8 @@ async function auditAndRemoveAvatarBackground(sourceFile) {
   const imageBase64 = await blobToRawBase64(auditFile)
   const result = await callFunction('baiduRemoveBg', {
     action: 'removeBackground',
-    imageBase64
+    imageBase64,
+    ...(isTournamentStaff ? { tournamentId:sourceTournamentId.value } : {})
   })
   if (!result.success || !result.data) {
     throw new Error(result.message || '未检测到有效人像')
@@ -4525,7 +4526,7 @@ onMounted(async () => {
   if (route.query.edit === '1') editTeam()
   if (sourceTournamentId.value) {
     await loadTournamentTeamContext()
-    await Promise.all([loadPlayers(), loadTeamAccess()])
+    await Promise.all([loadPlayers(), ...(isTournamentStaff ? [] : [loadTeamAccess()])])
     await loadPlayerCompetitionData()
   }
   else await loadPlayers()

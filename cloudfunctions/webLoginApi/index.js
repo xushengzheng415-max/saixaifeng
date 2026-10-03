@@ -4267,6 +4267,16 @@ async function handleUploadImage(event) {
     console.log('[webApi] uploadImage:', cloudPath, 'size:', buffer.length)
     const uploadResult = await cloud.uploadFile({ cloudPath, fileContent: buffer })
     console.log('[webApi] uploadImage 成功:', uploadResult.fileID)
+    const uploadOrgId = String(auth.authenticated.orgId || '')
+    const uploadTournamentId = String(event.staffTournamentId || '')
+    if (uploadOrgId && uploadTournamentId && await staffPolicy.isStaff(cloud.database(), auth.authenticated.userId, uploadOrgId) && !await staffPolicy.owner(cloud.database(), auth.authenticated.userId, uploadOrgId)) {
+      await cloud.database().collection('tournament_staff_audit').add({ data: {
+        action:'upload.file', orgId:uploadOrgId, tournamentId:uploadTournamentId,
+        actorUserId:auth.authenticated.userId, fileID:String(uploadResult.fileID),
+        folder:safeFolder, permission:safeFolder.startsWith('tournament-news/') ? 'event.news' : safeFolder.startsWith('match-result-evidence/') ? 'event.results' : 'event.teams',
+        createTime:cloud.database().serverDate()
+      } })
+    }
 
     // 获取临时 URL
     let tempUrl = ''

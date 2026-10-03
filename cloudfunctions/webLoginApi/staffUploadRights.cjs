@@ -34,7 +34,16 @@ async function staffUploadRight(db, params, tournamentId, orgId, userId) {
     const fileId = text(params.fileID)
     const path = fileId.replace(/^cloud:\/\/[^/]+\//, '').split('?')[0]
     if (!fileId.startsWith('cloud://') || path === fileId) return ''
-    return folderRight(db, path.split('/').slice(0, path.startsWith('tournament-news/') || /^(?:match-supplements|match-reports|team-logos|player-photos|idcard-photos)\//.test(path) ? 2 : 1).join('/'), tournamentId)
+    const folder = path.split('/').slice(0, path.startsWith('tournament-news/') || /^(?:match-supplements|match-reports|team-logos|player-photos|idcard-photos)\//.test(path) ? 2 : 1).join('/')
+    const right = await folderRight(db, folder, tournamentId)
+    if (!right) return ''
+    if (['tournament-logos','tournament-logo-source','tournament-regulations','team-logos'].includes(folder)) {
+      const event = await read(db, 'tournaments', tournamentId)
+      const saved = [event?.logo, event?.logoUrl, event?.logoSourceUrl, event?.regulationsFileId, event?.regulationsUrl].map(text).includes(fileId)
+      const audited = (await db.collection('tournament_staff_audit').where({ orgId, tournamentId, fileID:fileId }).limit(2).get()).data || []
+      if (!saved && !audited.length) return ''
+    }
+    return right
   }
   return ''
 }

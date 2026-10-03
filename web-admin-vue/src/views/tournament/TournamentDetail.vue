@@ -972,6 +972,7 @@ async function viewRegulations() {
   try {
     // 通过云函数代理获取文件（服务器侧下载，无 CORS 限制）
     const res = await callFunction('getRegulations', {
+      tournamentId: id,
       fileUrl: tournament.value.regulationsUrl
     })
 

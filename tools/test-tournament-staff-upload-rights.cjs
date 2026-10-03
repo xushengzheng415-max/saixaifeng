@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict')
 const { staffUploadRight } = require('../cloudfunctions/webLoginApi/staffUploadRights.cjs')
+const fs = require('node:fs')
+const path = require('node:path')
+assert.equal(fs.readFileSync(path.join(__dirname, '../cloudfunctions/uploadFile/staffUploadRights.cjs'), 'utf8'), fs.readFileSync(path.join(__dirname, '../cloudfunctions/webLoginApi/staffUploadRights.cjs'), 'utf8'))
 const rows = {
+  tournaments:[{ _id:'event-a', regulationsFileId:'cloud://env/tournament-regulations/saved.pdf' }],
+  tournament_staff_audit:[{ orgId:'org-a', tournamentId:'event-a', fileID:'cloud://env/tournament-regulations/uploaded.pdf', action:'upload.file' }],
   matches:[{ _id:'match-a', tournamentId:'event-a' },{ _id:'match-b', tournamentId:'event-b' }],
   tournament_teams:[{ tournamentId:'event-a', teamId:'team-a' }],
   chunk_sessions:[{ _id:'chunk-a', staffTournamentId:'event-a', staffOrgId:'org-a', staffUserId:'user-a', folder:'match-reports/match-a' }]
@@ -18,6 +23,9 @@ async function main() {
   assert.equal(await right({ action:'uploadChunk', uploadId:'chunk-a' }), 'event.results')
   assert.equal(await right({ action:'uploadChunk', uploadId:'chunk-a' }, 'event-a', 'user-b'), '')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/match-reports/match-b/photo.png' }), '')
+  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/saved.pdf' }), 'event.settings')
+  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/uploaded.pdf' }), 'event.settings')
+  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/other.pdf' }), '')
   assert.equal(await right({ action:'legacy', cloudPath:'team-logos/whatever.png' }), '')
   console.log('tournament staff upload rights: folder, chunk owner, file URL and cross-event checks passed')
 }

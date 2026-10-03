@@ -12,8 +12,7 @@ const refereeActions = new Set([
 ])
 const teamActions = new Set([
   'getTeamExportPhotos', 'getTeamRegistrationSource', 'listTournamentRosterPlayers',
-  'approveTournamentPlayer', 'listTeamExportRoster', 'removeTeamAccess',
-  'listTeamAccess', 'saveTeamAccess'
+  'approveTournamentPlayer', 'listTeamExportRoster'
 ])
 const claimReviewActions = new Set(['listClaimReviewRequests', 'getClaimReviewProofUrls', 'decideClaimReview'])
 const drawActions = new Set(['savePairingTemplate', 'ensureKnockoutPairings', 'generatePairings', 'resetPairings'])
@@ -46,7 +45,11 @@ function relayRights(name, params = {}) {
   if (name === 'tournamentReview') return ['getRequests', 'approve', 'reject'].includes(action) ? ['event.registration'] : null
   if (name === 'reviewRosterChange') return ['event.teams']
   if (name === 'setHeadReferee') return ['event.referees']
-  if (name === 'parseTournamentRegulations' || name === 'getRegulations') return ['event.competition']
+  if (name === 'getSignatureStatus') return ['event.matches']
+  if (name === 'getTournaments') return ['event.registration']
+  if (name === 'baiduRemoveBg') return ['event.teams']
+  if (name === 'parseTournamentRegulations') return ['event.competition']
+  if (name === 'getRegulations') return { any:['event.dashboard','event.competition','event.settings'] }
   if (name === 'dataCenter') return { any: ['event.dashboard', 'event.teams', 'event.results'] }
   return null
 }

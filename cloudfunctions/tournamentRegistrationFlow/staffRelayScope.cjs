@@ -18,8 +18,23 @@ async function validateStaffRelayScope(db, functionName, params = {}, tournament
   ].map(string).filter(Boolean)
   if (nested.some(value => value !== expected)) return false
   let scoped = nested.length > 0
+  if (functionName === 'getRegulations') {
+    const event = await read(db, 'tournaments', expected)
+    const fileUrl = string(params.fileUrl || params.fileID)
+    const allowed = [event && event.regulationsUrl, event && event.regulationsFileId, event && event.regulationsFileURL, event && event.regulations && event.regulations.url].map(string).filter(Boolean)
+    if (!event || !fileUrl || !allowed.includes(fileUrl)) return false
+  }
+  if (functionName === 'parseTournamentRegulations') {
+    const fileId = string(params.fileID)
+    if (fileId) {
+      const event = await read(db, 'tournaments', expected)
+      const saved = [event && event.regulationsFileId, event && event.regulationsUrl].map(string).includes(fileId)
+      const uploads = (await db.collection('tournament_staff_audit').where({ tournamentId:expected, fileID:fileId, action:'upload.file' }).limit(2).get()).data || []
+      if (!saved && !uploads.length) return false
+    }
+  }
   const references = [
-    ['matchId', 'matches'], ['registrationId', 'tournament_teams'],
+    ['matchId', 'matches'], ['registrationId', 'tournament_teams'], ['tournamentTeamId', 'tournament_teams'],
     ['divisionId', 'divisions'], ['newsId', 'tournament_news']
   ]
   if (functionName === 'reviewRosterChange') references.push(['requestId', 'roster_change_requests'])

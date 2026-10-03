@@ -8,6 +8,8 @@ for (const name of ['tournamentRegistrationFlow', 'tournamentReview', 'organizer
 )
 
 const rows = {
+  tournaments: [{ _id:'event-a', regulationsUrl:'cloud://env/tournament-regulations/event-a.pdf' }],
+  tournament_staff_audit: [{ tournamentId:'event-a', fileID:'cloud://env/tournament-regulations/uploaded.pdf', action:'upload.file' }],
   matches: [{ _id: 'match-a', tournamentId: 'event-a' }, { _id: 'match-b', tournamentId: 'event-b' }],
   tournament_teams: [{ _id: 'registration-a', tournamentId: 'event-a', teamId: 'team-a' }],
   divisions: [{ _id: 'division-a', tournamentId: 'event-a' }],
@@ -26,7 +28,13 @@ async function main() {
   assert.equal(await validateStaffRelayScope(db, 'generateSchedule', { tournamentId: 'event-b' }, 'event-a'), false)
   assert.equal(await validateStaffRelayScope(db, 'dataCenter', { scope: { tournamentId: 'event-a' } }, 'event-a'), true)
   assert.equal(await validateStaffRelayScope(db, 'dataCenter', { scope: {} }, 'event-a'), false)
+  assert.equal(await validateStaffRelayScope(db, 'getRegulations', { tournamentId:'event-a', fileUrl:'cloud://env/tournament-regulations/event-a.pdf' }, 'event-a'), true)
+  assert.equal(await validateStaffRelayScope(db, 'getRegulations', { tournamentId:'event-a', fileUrl:'cloud://env/private/other.pdf' }, 'event-a'), false)
+  assert.equal(await validateStaffRelayScope(db, 'parseTournamentRegulations', { tournamentId:'event-a', fileID:'cloud://env/tournament-regulations/uploaded.pdf' }, 'event-a'), true)
+  assert.equal(await validateStaffRelayScope(db, 'parseTournamentRegulations', { tournamentId:'event-a', fileID:'cloud://env/private/other.pdf' }, 'event-a'), false)
   assert.equal(await validateStaffRelayScope(db, 'tournamentRegistrationFlow', { registrationId: 'registration-a' }, 'event-a'), true)
+  assert.equal(await validateStaffRelayScope(db, 'organizerClaimInvite', { tournamentTeamId: 'registration-a' }, 'event-a'), true)
+  assert.equal(await validateStaffRelayScope(db, 'organizerClaimInvite', { tournamentTeamId: 'missing' }, 'event-a'), false)
   assert.equal(await validateStaffRelayScope(db, 'tournamentRegistrationFlow', { inviteId: 'invite-a' }, 'event-a'), true)
   assert.equal(await validateStaffRelayScope(db, 'setHeadReferee', { refereeId: 'referee-a' }, 'event-a'), true)
   assert.equal(await validateStaffRelayScope(db, 'setHeadReferee', { tournamentId: 'event-a', refereeId: 'referee-b' }, 'event-a'), true)

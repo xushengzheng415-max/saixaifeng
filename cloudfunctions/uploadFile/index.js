@@ -1,5 +1,8 @@
 // 云函数：文件上传（通过云函数中转，解决CORS问题）
 const cloud = require('wx-server-sdk')
+const crypto = require('node:crypto')
+const staffPolicy = require('./staffPolicy.cjs')
+const { staffUploadRight } = require('./staffUploadRights.cjs')
 
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV
@@ -23,18 +26,26 @@ exports.main = async (event, context) => {
   const { action, cloudPath, fileContent, fileType, base64Data, folder, fileID, fileName, totalChunks, uploadId, chunkIndex, data: chunkData } = data
 
   try {
+    const authorized = await authorizeUploadRequest(data)
+    if (!authorized.success) return authorized
     // 根据 action 执行不同操作
     switch (action) {
-      case 'uploadBase64':
-        return await uploadBase64(base64Data, folder)
+      case 'uploadBase64': {
+        const result = await uploadBase64(base64Data, folder)
+        await auditStaffUpload(authorized, result)
+        return result
+      }
       case 'getTempFileURL':
         return await getTempFileURL(fileID)
       case 'startChunk':
         return await startChunkUpload({ fileName, totalChunks, folder, staffUserId:data.__actorUserId, staffOrgId:data.__actorOrgId, staffTournamentId:data.__staffTournamentId })
       case 'uploadChunk':
         return await uploadSingleChunk({ uploadId, chunkIndex, data: chunkData })
-      case 'finishChunk':
-        return await finishChunkUpload({ uploadId })
+      case 'finishChunk': {
+        const result = await finishChunkUpload({ uploadId })
+        await auditStaffUpload(authorized, result)
+        return result
+      }
       case 'abortChunk':
         return await abortChunkUpload({ uploadId })
       default:
@@ -50,6 +61,38 @@ exports.main = async (event, context) => {
       error: err.message
     }
   }
+}
+
+async function authorizeUploadRequest(event) {
+  const token = String(event.__authToken || '').trim()
+  if (!token) return { success:false, code:'AUTH_REQUIRED', message:'请先登录' }
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  const sessions = (await db.collection('auth_sessions').where({ tokenHash, active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || []
+  if (sessions.length !== 1) return { success:false, code:'AUTH_REQUIRED', message:'登录已失效，请重新登录' }
+  const session = sessions[0]
+  if (event.__actorUserId && String(event.__actorUserId) !== String(session.userId)) return { success:false, code:'AUTH_REQUIRED', message:'账号身份不一致' }
+  if (session.principalType === 'platform_owner') return { success:true }
+  const result = await db.collection('users').doc(session.userId).get()
+  const user = Array.isArray(result.data) ? result.data[0] : result.data
+  if (!user) return { success:false, code:'AUTH_REQUIRED', message:'账号不存在' }
+  const orgId = String(session.activeOrgId || user.orgId || user.organizationId || '')
+  if (event.__actorOrgId && String(event.__actorOrgId) !== orgId) return { success:false, code:'AUTH_REQUIRED', message:'机构身份不一致' }
+  const staff = orgId && await staffPolicy.isStaff(db, session.userId, orgId) && !await staffPolicy.owner(db, session.userId, orgId)
+  if (!staff) return { success:true }
+  const tournamentId = String(event.__staffTournamentId || '')
+  const right = tournamentId && await staffUploadRight(db, event, tournamentId, orgId, String(session.userId))
+  if (!right || !await staffPolicy.hasRight(db, session.userId, orgId, tournamentId, right)) return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', message:'当前赛事没有文件操作权限' }
+  const chunk = event.uploadId ? (await db.collection('chunk_sessions').doc(String(event.uploadId)).get()).data : null
+  return { success:true, staff:true, userId:String(session.userId), orgId, tournamentId, right, folder:String(chunk && chunk.folder || event.folder || '') }
+}
+
+async function auditStaffUpload(actor, result) {
+  if (!actor.staff || !result?.success || !result.fileID) return
+  await db.collection('tournament_staff_audit').add({ data: {
+    action:'upload.file', orgId:actor.orgId, tournamentId:actor.tournamentId,
+    actorUserId:actor.userId, fileID:String(result.fileID), folder:actor.folder,
+    permission:actor.right, createTime:db.serverDate()
+  } })
 }
 
 /**
