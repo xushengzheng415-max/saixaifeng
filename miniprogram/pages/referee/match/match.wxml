@@ -99,7 +99,7 @@
 
   <block wx:if="{{showIdentityTask}}">
     <view class="identity-summary"><text>{{refereeRoleLabel}}</text><text>{{identityTask.teamName}}</text><text>已通过 {{identityTask.progress.passed}} / {{identityTask.progress.total}}</text></view>
-    <button wx:if="{{showAdultScan}}" class="primary-btn scan-pass" bindtap="scanAdultPass">扫描成人电子参赛证</button>
+    <button wx:if="{{showAdultScan}}" class="primary-btn scan-pass" bindtap="scanAdultPass">扫描电子参赛证</button>
     <view class="identity-roster"><view wx:for="{{identityPlayers}}" wx:key="id" class="identity-row"><image wx:if="{{item.photoUrl}}" src="{{item.photoUrl}}" mode="aspectFill"/><view wx:else class="identity-avatar">{{item.name}}</view><view><text>{{item.jerseyNumber}}号 {{item.name}}</text><text>{{item.identityVerificationLabel}} · {{item.checkStatusText}}</text></view><button wx:if="{{showAdultScan}}" data-id="{{item.id}}" bindtap="manualVerifyPlayer">无手机核验</button></view></view>
   </block>
 

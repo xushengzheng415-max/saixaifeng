@@ -22,9 +22,23 @@ exports.main = async (event, context) => {
     envVersion      // 开发环境：develop/trial/release
   } = event
 
-  console.log('生成分享小程序码参数:', event)
+  console.log('开始生成二维码，类型:', String(event.type || 'mini_program'))
 
   try {
+    if (event.type === 'service_account_player_invite') {
+      const token = String(event.parentInvite || '').trim()
+      if (!/^pp_[a-z0-9]+$/i.test(token)) return { success:false, message:'球员资料邀请无效或已失效' }
+      const inviteRows = (await db.collection('parent_profile_invites').where({ token, status:'active' }).limit(1).get()).data || []
+      const invite = inviteRows[0]
+      if (!invite || (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now())) return { success:false, message:'球员资料邀请已失效' }
+      const link = 'https://www.sxffootball.cn/service-account-h5/?parentInvite=' + encodeURIComponent(token) + '&entry=registered'
+      const buffer = await QRCode.toBuffer(link, { type:'png', width:Math.max(280, Math.min(720, Number(width || 430))), margin:2, errorCorrectionLevel:'M', color:{ dark:'#083d27', light:'#ffffff' } })
+      const safeToken = require('crypto').createHash('sha256').update(token).digest('hex').slice(0,24)
+      const cloudPath = 'restricted/service-account-invites/' + safeToken + '.png'
+      const uploadResult = await cloud.uploadFile({ cloudPath, fileContent:buffer })
+      const fileList = await cloud.getTempFileURL({ fileList:[uploadResult.fileID] })
+      return { success:true, message:'服务号邀请二维码已生成', data:{ fileID:uploadResult.fileID, tempUrl:String(fileList.fileList && fileList.fileList[0] && fileList.fileList[0].tempFileURL || ''), cloudPath } }
+    }
     if (event.type === 'adult_match_pass') {
       const passToken = String(event.passToken || '').trim()
       const passId = String(event.passId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0,40)

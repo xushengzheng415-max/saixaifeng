@@ -1209,9 +1209,15 @@ function resolveRosterRequirements(tournament, division) {
   const sources = [division, division && division.rulesSnapshot, tournament]
   const identity = readBooleanSetting(sources, ['identityVerificationRequired', 'requiresRealName', 'requireRealName'])
   const portrait = readBooleanSetting(sources, ['portraitRequired', 'requiresPortrait', 'requirePortrait'])
+  const identityDocument = readBooleanSetting(sources, ['identityDocumentRequired'])
+  const insurance = readBooleanSetting(sources, ['insuranceRequired'])
+  const electronicPass = readBooleanSetting(sources, ['electronicPassVerificationRequired'])
   const parent = readBooleanSetting(sources, ['parentSupplementRequired', 'parentProfileRequired', 'parentCompletionRequired'])
   return {
     identityVerificationRequired: identity.defined ? identity.value : false,
+    identityDocumentRequired: identityDocument.defined ? identityDocument.value : false,
+    insuranceRequired: insurance.defined ? insurance.value : false,
+    electronicPassVerificationRequired: electronicPass.defined ? electronicPass.value : false,
     portraitRequired: portrait.defined ? portrait.value : false,
     parentSupplementConfigured: parent.defined,
     parentSupplementRequired: parent.defined ? parent.value : undefined,
@@ -1258,20 +1264,23 @@ function formatTeamPlayer(item, requirements) {
   const identityRaw = String(firstValue(item.identityStatus, item.verifyStatus, item.realNameStatus)).toLowerCase()
   const identityRequired = Boolean(requirements && requirements.identityVerificationRequired)
   const portraitRequired = requirements && hasOwnValue(requirements, 'portraitRequired') ? Boolean(requirements.portraitRequired) : false
+  const insuranceRequired = Boolean(requirements && requirements.insuranceRequired)
   const parentRequired = requirements && requirements.parentSupplementConfigured
     ? Boolean(requirements.parentSupplementRequired)
     : false
   const identityReady = ['verified', 'approved', 'complete', 'manual_required'].indexOf(identityRaw) >= 0
   const needsIdentity = identityRequired && !identityReady
   const needsPortrait = portraitRequired && !hasPhoto
+  const needsInsurance = insuranceRequired && item.eventInsuranceStatus !== 'submitted'
   const needsParentCompletion = parentRequired && Boolean(item.needsParentCompletion)
   const registrantType = registrantTypeForPlayer(item)
   const rejected = ['rejected', 'failed', 'exception', 'invalid'].indexOf(String(firstValue(item.profileStatus, item.verifyStatus, item.identityStatus, item.status)).toLowerCase()) >= 0
-  const incomplete = needsPortrait || !hasBirth || !hasName || needsParentCompletion || needsIdentity
+  const incomplete = needsPortrait || needsInsurance || !hasBirth || !hasName || needsParentCompletion || needsIdentity
   const profileStatus = rejected ? 'exception' : (incomplete ? 'pending' : 'complete')
   let statusText = '资料完整'
   if (profileStatus === 'exception') statusText = '资料异常'
   else if (needsIdentity) statusText = '待人证核验'
+  else if (needsInsurance) statusText = '待投保资料'
   else if (needsPortrait) statusText = '待形象照'
   else if (needsParentCompletion) statusText = registrantType === 'self' ? '待本人补充' : '待家长补充'
   else if (!hasBirth || !hasName) statusText = '待完善基础资料'
@@ -1287,9 +1296,29 @@ function formatTeamPlayer(item, requirements) {
     statusText,
     identityStatus: identityRequired ? (identityRaw === 'manual_required' ? 'manual_required' : (identityReady ? 'verified' : 'not_verified')) : 'not_required',
     needsPortrait,
+    needsInsurance,
     needsParentCompletion,
     requirementSource: requirements && requirements.source ? requirements.source : 'legacy-compatibility'
   }
+}
+
+async function applyEventQualifications(tournamentId, divisionId, players, requirements) {
+  const rows = Array.isArray(players) ? players : []
+  if (!rows.length || !(requirements && (requirements.identityVerificationRequired || requirements.insuranceRequired))) return rows
+  const ids = rows.map(item => String(item._id || '')).filter(Boolean)
+  const qualifications = await safeGet('tournament_player_qualifications', { tournamentId:String(tournamentId), divisionId:String(divisionId || 'default'), playerId:_.in(ids) }, 500)
+  qualifications.sort((a, b) => toTime(b.updateTime || b.createTime) - toTime(a.updateTime || a.createTime))
+  const latest = new Map()
+  qualifications.forEach(item => { const id=String(item.playerId || ''); if (id && !latest.has(id)) latest.set(id, item) })
+  const verificationIds = Array.from(new Set(Array.from(latest.values()).map(item => String(item.identityVerificationId || '')).filter(Boolean)))
+  const verifications = verificationIds.length ? await safeGet('parent_identity_verifications', { _id:_.in(verificationIds) }, 500) : []
+  const verificationById = new Map(verifications.map(item => [String(item._id), item]))
+  return rows.map(player => {
+    const qualification = latest.get(String(player._id || ''))
+    const verification = qualification && verificationById.get(String(qualification.identityVerificationId || ''))
+    const identityStatus = requirements.identityVerificationRequired ? (verification ? String(verification.status || 'pending_review') : 'pending') : 'not_required'
+    return Object.assign({}, player, { identityStatus, eventInsuranceStatus:qualification && qualification.status === 'submitted' ? 'submitted' : 'pending' })
+  })
 }
 
 async function loadTeamPlayersForWorkspace(event, identity) {
@@ -1591,10 +1620,22 @@ async function parentProfileInviteForWorkspace(event, identity) {
   const playerRows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   const player = playerRows[0]
   if (!player) throw new Error('球员不存在或不属于当前球队')
-  const activeRows = await safeGet('parent_profile_invites', { playerId, teamId, status: 'active' }, 20)
+  let scope = null
+  if (event.tournamentId) {
+    const tournamentId = String(event.tournamentId)
+    const tournament = (await safeGet('tournaments', { _id: tournamentId }, 1))[0]
+    if (!tournament) throw new Error('赛事不存在')
+    const registrations = await safeGet('tournament_teams', { tournamentId, teamId }, 20)
+    const context = await resolveRosterContext(tournament, registrations, { divisionId: event.divisionId })
+    const req = context.requirements || {}
+    if (!req.identityVerificationRequired && !req.insuranceRequired && !req.portraitRequired && !req.waiverRequired) throw new Error('本赛事组别没有待提交的球员资料要求')
+    scope = { profileScope: 'tournament', tournamentId, divisionId: context.divisionId, organizerOrgId:String(tournament.orgId || tournament.organizationId || ''), tournamentName: String(tournament.name || '赛事'), divisionName: String(firstValue(context.registration.divisionName, context.division && context.division.name, '当前组别')), identityVerificationRequired: Boolean(req.identityVerificationRequired), identityDocumentRequired: Boolean(req.identityDocumentRequired || req.insuranceRequired), insuranceRequired: Boolean(req.insuranceRequired), electronicPassVerificationRequired: Boolean(req.identityVerificationRequired && req.electronicPassVerificationRequired), portraitRequired: Boolean(req.portraitRequired), waiverRequired: Boolean(req.waiverRequired) }
+  }
+  const inviteQuery = Object.assign({ playerId, teamId, status: 'active' }, scope || { profileScope: 'team' })
+  const activeRows = await safeGet('parent_profile_invites', inviteQuery, 20)
   const active = activeRows.filter(item => !item.expiresAt || toTime(item.expiresAt) > Date.now()).sort((a, b) => toTime(b.updateTime) - toTime(a.updateTime))[0]
   if (active) return { success: true, invite: formatParentProfileInvite(active, team, player), canManage: true }
-  const created = await createParentProfileInvite(team, player, result.workspace.orgId || '', identity.user._id)
+  const created = await createParentProfileInvite(team, player, result.workspace.orgId || '', identity.user._id, scope)
   return { success: true, invite: formatParentProfileInvite(created, team, player), canManage: true }
 }
 
@@ -1605,6 +1646,7 @@ function formatParentInviteChecklist(invite, player) {
   const registrantType = registrantTypeForPlayer(player, invite)
   const items = ['核对姓名和出生年月', registrantType === 'self' ? '本人授权' : '监护人授权']
   if (identity.defined && identity.value) items.push('人证核验')
+  if (invite.insuranceRequired === true && invite.identityVerificationRequired !== true) items.push('投保身份证正反面')
   if (portrait.defined && portrait.value) items.push('标准形象照')
   return items
 }
@@ -1613,10 +1655,10 @@ function formatParentProfileInvite(invite, team, player) {
   const expiresAt = invite.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   const registrantType = registrantTypeForPlayer(player, invite)
   const phone = registrantType === 'self' ? firstValue(player.playerPhone, player.contactPhone, invite.registrantPhone) : firstValue(player.guardianPhone, player.contactPhone, invite.guardianPhone, invite.registrantPhone)
-  return { id: String(invite._id || ''), token: String(invite.token || ''), playerId: String(player._id), playerName: String(player.name || '球员'), teamName: String(team.name || team.teamName || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', accountPhoneMasked: maskPhone(String(phone || '')), guardianPhoneMasked: registrantType === 'guardian' ? maskPhone(String(phone || '')) : '', status: String(invite.status || 'active'), expiresAtText: dateText(expiresAt), h5Path: '/service-account-h5/?parentInvite=' + encodeURIComponent(String(invite.token || '')), requirements: formatParentInviteChecklist(invite, player) }
+  return { id: String(invite._id || ''), token: String(invite.token || ''), playerId: String(player._id), playerName: String(player.name || '球员'), teamName: String(team.name || team.teamName || ''), profileScope: String(invite.profileScope || 'team'), tournamentName: String(invite.tournamentName || ''), divisionName: String(invite.divisionName || ''), tournamentId: String(invite.tournamentId || ''), divisionId: String(invite.divisionId || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', accountPhoneMasked: maskPhone(String(phone || '')), guardianPhoneMasked: registrantType === 'guardian' ? maskPhone(String(phone || '')) : '', status: String(invite.status || 'active'), expiresAtText: dateText(expiresAt), h5Path: '/service-account-h5/?parentInvite=' + encodeURIComponent(String(invite.token || '')), requirements: formatParentInviteChecklist(invite, player) }
 }
 
-async function createParentProfileInvite(team, player, orgId, creatorId) {
+async function createParentProfileInvite(team, player, orgId, creatorId, scope) {
   const now = db.serverDate(), token = 'pp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)
   const standardFlow = String(player.source || '') === 'team_player_invite' || player.standardProfileFlow === true
   const identity = readBooleanSetting([player], ['identityVerificationRequired', 'requiresRealName', 'requireRealName'])
@@ -1624,7 +1666,7 @@ async function createParentProfileInvite(team, player, orgId, creatorId) {
   const registrantType = registrantTypeForPlayer(player)
   const registrantPhone = registrantType === 'self' ? firstValue(player.playerPhone, player.contactPhone) : firstValue(player.guardianPhone, player.contactPhone)
   const registrantUserId = registrantType === 'self' ? firstValue(player.playerUserId, player.linkedUserId) : player.guardianUserId
-  const data = { token, teamId: String(team._id), playerId: String(player._id), orgId, registrantMode: 'age_based', registrantType, registrantUserId: String(registrantUserId || ''), registrantPhone: String(registrantPhone || ''), guardianPhone: registrantType === 'guardian' ? String(registrantPhone || '') : '', status: 'active', creatorId, parentSupplementRequired: true, identityVerificationRequired: identity.defined ? identity.value : standardFlow, portraitRequired: portrait.defined ? portrait.value : standardFlow, standardProfileFlow: standardFlow, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now }
+  const data = Object.assign({ token, teamId: String(team._id), playerId: String(player._id), orgId, profileScope: 'team', registrantMode: 'age_based', registrantType, registrantUserId: String(registrantUserId || ''), registrantPhone: String(registrantPhone || ''), guardianPhone: registrantType === 'guardian' ? String(registrantPhone || '') : '', status: 'active', creatorId, parentSupplementRequired: true, identityVerificationRequired: identity.defined ? identity.value : false, portraitRequired: portrait.defined ? portrait.value : false, portraitOptionalAvailable: true, standardProfileFlow: standardFlow, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), createTime: now, updateTime: now }, scope || {})
   const added = await db.collection('parent_profile_invites').add({ data })
   return Object.assign({ _id: added._id }, data)
 }
@@ -1634,11 +1676,6 @@ async function ensureParentProfileInviteForPlayer(team, player, orgId, creatorId
   const active = rows.find(item => !item.expiresAt || toTime(item.expiresAt) > Date.now())
   if (active) {
     const standardFlow = String(player.source || '') === 'team_player_invite' || player.standardProfileFlow === true
-    const needsUpgrade = standardFlow && (active.identityVerificationRequired !== true || active.portraitRequired !== true || active.parentSupplementRequired !== true)
-    if (needsUpgrade) {
-      await db.collection('parent_profile_invites').doc(String(active._id)).update({ data: { parentSupplementRequired: true, identityVerificationRequired: true, portraitRequired: true, standardProfileFlow: true, updateTime: db.serverDate() } })
-      return Object.assign({}, active, { parentSupplementRequired: true, identityVerificationRequired: true, portraitRequired: true, standardProfileFlow: true })
-    }
     return active
   }
   return await createParentProfileInvite(team, player, orgId, creatorId)
@@ -1652,12 +1689,7 @@ async function regenerateParentProfileInviteForWorkspace(event, identity) {
   const loaded = await parentProfileInviteForWorkspace(event, identity)
   const now = db.serverDate()
   if (loaded.invite.id) await db.collection('parent_profile_invites').doc(loaded.invite.id).update({ data: { status: 'expired', expiredAt: now, updateTime: now } })
-  const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
-  const teams = await loadTeams(result.workspace, identity.user, identity.openId)
-  const team = teams.find(item => String(item._id) === String(event.teamId || ''))
-  const players = await safeGetTeamPlayers(String(event.teamId || ''), 1, { _id: String(event.playerId || '') })
-  const invite = await createParentProfileInvite(team, players[0], result.workspace.orgId || '', identity.user._id)
-  return { success: true, invite: formatParentProfileInvite(invite, team, players[0]), canManage: true }
+  return await parentProfileInviteForWorkspace(event, identity)
 }
 
 async function dataCenterForWorkspace(event, identity) {
@@ -1699,7 +1731,9 @@ async function officialRosterForWorkspace(event, identity) {
   if (!tournament) throw new Error('赛事不存在')
   const registrations = await safeGet('tournament_teams', { tournamentId, teamId }, 20)
   const rosterContext = await resolveRosterContext(tournament, registrations, event)
-  const players = (await safeGetTeamPlayers(teamId, 500)).map(item => formatTeamPlayer(item, rosterContext.requirements))
+  const rawPlayers = await safeGetTeamPlayers(teamId, 500)
+  const qualifiedPlayers = await applyEventQualifications(tournamentId, rosterContext.divisionId, rawPlayers, rosterContext.requirements)
+  const players = qualifiedPlayers.map(item => formatTeamPlayer(item, rosterContext.requirements))
   const snapshots = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
     .filter(item => snapshotMatchesDivision(item, rosterContext.divisionId, rosterContext.allowLegacySnapshot))
   const latest = snapshots.sort((a, b) => toTime(b.updateTime || b.createTime) - toTime(a.updateTime || a.createTime))[0] || null
@@ -1751,7 +1785,8 @@ async function submitOfficialRosterForWorkspace(event, identity) {
   if (!playerIds.length || playerIds.length > max) throw new Error('请选择符合上限的参赛球员')
   const rows = await safeGetTeamPlayers(teamId, 500, { _id: _.in(playerIds) })
   if (rows.length !== playerIds.length) throw new Error('名单包含不属于当前球队的球员')
-  if (rows.some(item => formatTeamPlayer(item, Object.assign({}, rosterContext.requirements, { identityVerificationRequired:true })).profileStatus !== 'complete')) throw new Error('资料不完整、异常或未完成人证核验的球员不能进入正式名单')
+  const qualifiedRows = await applyEventQualifications(tournamentId, rosterContext.divisionId, rows, rosterContext.requirements)
+  if (qualifiedRows.some(item => formatTeamPlayer(item, rosterContext.requirements).profileStatus !== 'complete')) throw new Error('资料不完整或存在异常的球员不能进入正式名单')
   const existing = (await safeGet('roster_snapshots', { tournamentId, teamId }, 20))
     .filter(item => snapshotMatchesDivision(item, rosterContext.divisionId, rosterContext.allowLegacySnapshot))
   if (existing.some(item => ['submitted', 'approved', 'locked'].indexOf(String(item.status || '')) >= 0)) throw new Error('该赛事名单已提交或锁定，不能重复提交')
@@ -1871,14 +1906,18 @@ async function adultElectronicPassForWorkspace(event, identity) {
   const match = (await safeGet('matches', { _id:matchId }, 1))[0]
   const player = (await safeGet('players', { _id:playerId }, 1))[0]
   if (!match || !player) throw workspaceError('ADULT_PASS_NOT_FOUND', '比赛或球员不存在')
-  const phone = String(identity.phone || '').replace(/\D/g,'')
-  const playerPhones = unique([player.playerPhone, player.contactPhone, player.phone, player.phoneNumber].map(value => String(value || '').replace(/\D/g,'')))
-  if (!phone || playerPhones.indexOf(phone) < 0 || String(player.registrantType || '') !== 'self') throw workspaceError('ADULT_PASS_OWNER_REQUIRED', '只能由已验证手机号的成人球员本人调取参赛证')
-  if (['verified','approved','complete','manual_required'].indexOf(String(player.identityStatus || '').toLowerCase()) < 0) throw workspaceError('PLAYER_IDENTITY_REQUIRED', '请先完成人证核验')
   const division = match.divisionId ? (await safeGet('divisions', { _id:String(match.divisionId) }, 1))[0] : null
-  const participantType = String(firstValue(division && division.participantType, division && division.audienceType, match.participantType, '')).toLowerCase()
-  const label = String(firstValue(division && division.name, match.divisionName, ''))
-  if (participantType !== 'adult' && !/成人|公开组/i.test(label)) throw workspaceError('ADULT_PASS_NOT_APPLICABLE', '青少年赛事由助理裁判直接按名单核验，不使用二维码')
+  const tournament = match.tournamentId ? (await safeGet('tournaments', { _id:String(match.tournamentId) }, 1))[0] : null
+  const requirements = resolveRosterRequirements(tournament || {}, division || {})
+  if (!requirements.identityVerificationRequired || !requirements.electronicPassVerificationRequired) throw workspaceError('ELECTRONIC_PASS_NOT_ENABLED', '本赛事组别未启用身份核验电子参赛证')
+  const phone = String(identity.phone || '').replace(/\D/g,'')
+  const isYouth = String(player.registrantType || '') === 'guardian' || String(player.participantType || '').toLowerCase() === 'youth'
+  const playerPhones = unique((isYouth ? [player.guardianPhone, player.contactPhone] : [player.playerPhone, player.contactPhone, player.phone, player.phoneNumber]).map(value => String(value || '').replace(/\D/g,'')))
+  if (!phone || playerPhones.indexOf(phone) < 0) throw workspaceError('PASS_OWNER_REQUIRED', isYouth ? '请由已验证手机号的监护人调取参赛证' : '请由已验证手机号的球员本人调取参赛证')
+  const qualifications = (await safeGet('tournament_player_qualifications', { tournamentId:String(match.tournamentId || ''), divisionId:String(match.divisionId || 'default'), playerId }, 5)).filter(item => item.status === 'submitted')
+  const qualification = qualifications[qualifications.length - 1]
+  const identityRecords = qualification && qualification.identityVerificationId ? (await safeGet('parent_identity_verifications', { _id:String(qualification.identityVerificationId), status:'approved' }, 1)) : []
+  if (!identityRecords.length) throw workspaceError('PLAYER_IDENTITY_REQUIRED', '请先完成本赛事的人证核验')
   const side = String(match.homeTeamId || '') === String(player.teamId || '') ? 'home' : (String(match.awayTeamId || '') === String(player.teamId || '') ? 'away' : '')
   if (!side) throw workspaceError('PLAYER_NOT_IN_MATCH_TEAM', '球员所属球队不参加本场比赛')
   const lineup = match[side === 'home' ? 'homeLineup' : 'awayLineup'] || {}
@@ -1899,7 +1938,7 @@ async function adultElectronicPassForWorkspace(event, identity) {
     pass = { _id:passId, expiresAt }
   }
   const token = 'SXFMP1.' + String(pass._id) + '.' + matchPassSignature(pass._id)
-  return { success:true, certificate:{ id:String(certificate._id || ''), number:String(certificate.certificateNumber || '') }, matchPass:{ id:String(pass._id), token, expiresAt:pass.expiresAt || null }, player:{ id:playerId, name:String(player.name || '球员'), jerseyNumber:String(player.jerseyNumber || ''), photoUrl:String(player.photoUrl || ''), identityLabel:'人证核验通过' }, match:{ id:matchId, teamsText:String(firstValue(match.homeTeamName,'主队')) + ' vs ' + String(firstValue(match.awayTeamName,'客队')), timeText:dateText(firstValue(match.matchTime, match.matchDate, match.startTime)) } }
+  return { success:true, certificate:{ id:String(certificate._id || ''), number:String(certificate.certificateNumber || '') }, matchPass:{ id:String(pass._id), token, expiresAt:pass.expiresAt || null }, player:{ id:playerId, name:String(player.name || '球员'), jerseyNumber:String(player.jerseyNumber || ''), photoUrl:String(player.photoUrl || ''), identityLabel:'本赛事身份已核验' }, match:{ id:matchId, teamsText:String(firstValue(match.homeTeamName,'主队')) + ' vs ' + String(firstValue(match.awayTeamName,'客队')), timeText:dateText(firstValue(match.matchTime, match.matchDate, match.startTime)) } }
 }
 
 async function submitMatchLineupForWorkspace(event, identity) {
