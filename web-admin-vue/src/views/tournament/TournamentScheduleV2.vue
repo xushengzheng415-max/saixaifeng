@@ -249,6 +249,10 @@ const conflictingRefereeIds = computed(() => {
 function refereeUsedByOtherRole(id,currentRole) { return assignmentRoles.value.some(role => role.key !== currentRole && assignmentForm[role.key] === id) }
 function refereeLabel(referee) { const phone=String(referee.phone || referee.phoneNumber || ''); const masked=phone.length===11 ? `${phone.slice(0,3)}****${phone.slice(-4)}` : '';return [referee.name || referee.realName || '未命名裁判',masked].filter(Boolean).join(' · ') }
 function kitColorCss(color) { return kitColorHex[color] || (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(String(color || '')) ? color : '#eef2f0') }
+function kitColorLabel(color) {
+  const value=String(color || '').trim()
+  return Object.keys(kitColorHex).find(name => kitColorHex[name].toLowerCase() === value.toLowerCase()) || value
+}
 function kitColorChoices(current) { return current && !kitColorNames.includes(current) ? [current,...kitColorNames] : kitColorNames }
 async function loadKitDefaults(match,side) {
   const sourceId=String(match?.[`${side}TeamId`] || '')
@@ -459,6 +463,8 @@ async function buildRefereePreMatchEntries(onProgress) {
       } else if (suspension.reason) warnings.add(suspension.reason)
       const division = divisions.value.find(item => String(item.id) === String(match.divisionId || '')) || {}
       const rowCount = Math.max(home.limit,away.limit,home.players.length,away.players.length)
+      const kitDefaults = await Promise.all(['home','away'].map(side => loadKitDefaults(match,side)))
+      const kitColors = Object.fromEntries(['home','away'].map((side,index) => [side,Object.fromEntries(kitParts.map(part => [part.key,kitColorLabel(match.kitColors?.[side]?.[part.key] || kitDefaults[index]?.[part.key])]))]))
       const workMatch = { ...match, matchSequence:match.matchSequence || match.matchNo || match.sequence || match.matchIndex }
       const entry = {
         match:workMatch,
@@ -469,6 +475,7 @@ async function buildRefereePreMatchEntries(onProgress) {
           divisionName:division.name || division.divisionName || match.divisionName || match.division || '',
           location:tournament.value.location || tournament.value.address || tournament.value.venue || '',
           homeName:teamLabel(match,'home'),awayName:teamLabel(match,'away'),
+          kitColors,
           homePlayers:home.players,awayPlayers:away.players,rowCount
         }
       }
@@ -484,13 +491,16 @@ async function buildRefereePreMatchEntries(onProgress) {
 function safeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]))
 }
+function kitLine(colors) {
+  return `球衣颜色：上衣${colors?.jersey || '____'}　短裤${colors?.shorts || '____'}　球袜${colors?.socks || '____'}`
+}
 
 function printSheetHtml(input) {
-  const widths=[360,1150,350,360,360,360,320,320,1100]
+  const widths=[280,1150,280,340,340,340,300,300,450,450,450]
   const allWidths=[...widths,...widths]
   const maxRows=Math.max(Number(input.rowCount)||0,input.homePlayers.length,input.awayPlayers.length,1)
   const colgroup=`<colgroup>${allWidths.map(value=>`<col style="width:${(value/9360*100).toFixed(3)}%">`).join('')}</colgroup>`
-  const heading=['序号','队员姓名','号码','首发','替补','说明','换上','换下','比赛记录','序号','队员姓名','号码','首发','替补','说明','换上','换下','比赛记录']
+  const heading=['序号','队员姓名','号码','首发','替补','说明','换上','换下','进球','黄牌','红牌','序号','队员姓名','号码','首发','替补','说明','换上','换下','进球','黄牌','红牌']
   const header=`<tr>${heading.map(label=>`<th>${label}</th>`).join('')}</tr>`
   const match=input.match||{}
   const day=String(match.matchDate||'').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/,'$1年$2月$3日')
@@ -503,14 +513,14 @@ function printSheetHtml(input) {
     const count=rowsPerPage+(page<extraRows?1:0)
     const rows=Array.from({length:count},(_,row)=>{
       const index=offset+row,home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
-      const cells=[String(index+1),home.name||'',home.number||'','','',home.note||'','','','',String(index+1),away.name||'',away.number||'','','',away.note||'','','','']
-      return `<tr>${cells.map((value,cell)=>`<td${cell%9===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
+      const cells=[String(index+1),home.name||'',home.number||'','','',home.note||'','','','','','',String(index+1),away.name||'',away.number||'','','',away.note||'','','','','','']
+      return `<tr>${cells.map((value,cell)=>`<td${cell%11===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
     }).join('')
     offset+=count
     const firstPage=page===0,lastPage=page===pageCount-1
     const title=firstPage?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${safeHtml(`${input.tournamentName||'足球比赛'}（${String(input.matchFormat||'').replace('side','人制')}）`)}</b></div><div><span>比赛时间：</span><b>${safeHtml(`${day} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${safeHtml(`${input.location||''}　${match.venue||''}　场序：第${match.matchSequence||match.matchNo||match.sequence||'待定'}场　组别：${input.divisionName||''}`)}</b></div></div>`:''
-    const signatures=lastPage?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><p class="legend">说明：首发打√，替补打○；队长标C，守门员标GK，不上场标×，停赛标S。换上、换下填写分钟；比赛记录填写进球、黄牌、红牌及发生时间。</p><p class="result">比赛结果：______:______　加时赛（点球决胜）结果：______:______　获胜队：____________________</p><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
-    pages.push(`<section class="sheet">${title}<table class="teams"><tbody><tr><td>主队：${safeHtml(input.homeName)}</td><td>客队：${safeHtml(input.awayName)}</td></tr><tr><td>领队/主教练：________________</td><td>领队/主教练：________________</td></tr><tr><td>工作人员/队医：____________</td><td>工作人员/队医：____________</td></tr></tbody></table><table class="roster">${colgroup}<thead>${header}</thead><tbody>${rows}</tbody></table>${signatures}</section>`)
+    const signatures=lastPage?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><p class="legend">说明：首发打√，替补打○；队长标C，守门员标GK，不上场标×，停赛标S。换上、换下填写分钟；进球、黄牌、红牌各栏填写发生分钟。</p><p class="result">比赛结果：______:______　加时赛（点球决胜）结果：______:______　获胜队：____________________</p><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
+    pages.push(`<section class="sheet">${title}<table class="teams"><tbody><tr><td>主队：${safeHtml(input.homeName)}</td><td>客队：${safeHtml(input.awayName)}</td></tr><tr><td>${safeHtml(kitLine(input.kitColors?.home))}</td><td>${safeHtml(kitLine(input.kitColors?.away))}</td></tr><tr><td>领队/主教练：________________</td><td>领队/主教练：________________</td></tr><tr><td>工作人员/队医：____________</td><td>工作人员/队医：____________</td></tr></tbody></table><table class="roster">${colgroup}<thead>${header}</thead><tbody>${rows}</tbody></table>${signatures}</section>`)
   }
   return pages.join('')
 }
