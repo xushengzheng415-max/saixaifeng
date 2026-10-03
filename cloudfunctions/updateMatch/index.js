@@ -415,7 +415,7 @@ exports.main = async (event, context) => {
     const preMatchSetupEditable = !match.refereeRecordLocked && !match.refereeReportSubmittedAt && match.executionState !== 'recording' && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
     if (planState.locked) {
       const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['status'] : [])])
-      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
+      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'kitSelection' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已锁定，当前只能安排裁判或修改未开赛比赛的球服颜色与场序', code: 'COMPETITION_PLAN_LOCKED' }
       }
@@ -435,8 +435,13 @@ exports.main = async (event, context) => {
           cleaned[side][part] = color
         }
       }
-      if (!cleaned.home.jersey || !cleaned.away.jersey) return { success:false, code:'MATCH_KIT_INCOMPLETE', message:'请先设置双方上衣颜色' }
       safeData.kitColors = db.command.set(cleaned)
+    }
+    if (safeData.kitSelection !== undefined) {
+      if (!preMatchSetupEditable) return { success:false, code:'MATCH_KIT_LOCKED', message:'比赛已进入执行或记录已锁定，不能修改球服套装' }
+      const selection = safeData.kitSelection
+      if (!selection || typeof selection !== 'object' || Array.isArray(selection) || Object.keys(selection).some(key => !['home','away'].includes(key)) || !['home','away'].every(side => ['primary','secondary'].includes(selection[side]))) return { success:false, code:'MATCH_KIT_INVALID', message:'球服套装格式不正确' }
+      safeData.kitSelection = db.command.set({ home:selection.home,away:selection.away })
     }
     if (safeData.matchSequence !== undefined) {
       if (match.executionSnapshot || !preMatchSetupEditable) {
@@ -488,7 +493,8 @@ exports.main = async (event, context) => {
       await ensureNoRefereeScheduleConflicts(matchId, match, assignment.crew)
     }
 
-    if (!match.executionSnapshot && planState.locked) {
+    const setupOnly = Object.keys(safeData).every(field => field === 'kitColors' || field === 'kitSelection' || field === 'matchSequence')
+    if (!match.executionSnapshot && planState.locked && !setupOnly) {
       safeData.executionSnapshot = buildExecutionSnapshot(match, tournament, actor)
       safeData.executionSnapshotAt = db.serverDate()
     }

@@ -52,7 +52,7 @@ assert.equal(failedSaveContext.finishDialogVisible.value,true)
 const sourceCode = fs.readFileSync(new URL('../cloudfunctions/updateMatch/index.js',import.meta.url),'utf8').replaceAll("await import('./data-center/statistics.mjs')",'await __statistics()')
 async function finish(overrides={}, request={}, race=false) {
   const rows = {
-    matches:{m:{_id:'m',orgId:'org',tournamentId:'t',divisionId:'default',status:'scheduled',events:[goal('1'),goal('2','goal','away'),goal('3')],matchEventRevision:2,executionSnapshot:{homeTeamId:'h'},...overrides}},
+    matches:{m:{_id:'m',orgId:'org',tournamentId:'t',divisionId:'default',status:'ongoing',events:[goal('1'),goal('2','goal','away'),goal('3')],matchEventRevision:2,executionSnapshot:{homeTeamId:'h'},...overrides}},
     tournaments:{t:{_id:'t',orgId:'org',competitionPlanLocked:true}},
     auth_sessions:{s:{_id:'s',userId:'u',orgId:'org',expiresAt:new Date(Date.now()+600000)}},
     users:{u:{_id:'u',orgId:'org',role:'organizer'}},
@@ -81,7 +81,7 @@ const empty=await finish({events:[]})
 assert.equal(empty.match.homeScore,0)
 for (const [overrides,request,race] of [
   [{refereeRecordLocked:true},{},false],
-  [{status:'ongoing'},{},false],
+  [{status:'scheduled'},{},false],
   [{},{expectedEventRevision:1},false],
   [{},{data:{status:'finished',venue:'other'}},false],
   [{},{},true]
