@@ -766,7 +766,6 @@ function tournamentWorkspacePath(suffix = '') {
 
 // 主办方 PC 端统一为一套赛事空间分类；赛事内入口会复用当前路由中的赛事上下文。
 const organizerNavItems = computed(() => [
-  {path:'/data-center',label:'数据中心',icon:'DataAnalysis'},
   {
     path: tournamentWorkspacePath(),
     label: '赛事主控制台',
