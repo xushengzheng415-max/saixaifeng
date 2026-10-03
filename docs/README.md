@@ -17,6 +17,7 @@
 | 文档 | 用途 |
 |---|---|
 | `PRODUCT_RULES.md` | 产品定位、角色、权限、收费与数据归属等已确认规则 |
+| `PLAYER_REGISTRATION_EVENT_IDENTITY_STANDARD.md` | 球员注册、制卡、赛事证件、保险、电子参赛证与人脸核验的跨端统一标准 |
 | `CURRENT_STATUS.md` | 当前进度、线上/本地状态和验证记录 |
 | `ADR.md` | 决策记录及被替代规则 |
 | `PRODUCTION_EXTERNAL_CONFIGURATION.md` | 生产外部配置名称、归属、验收方式和安全边界 |

@@ -50,6 +50,8 @@
 
 当前产品边界以 `docs/PRODUCT_RULES.md` 为准，不根据目录名称推断角色或权限。
 
+球员注册、球员卡、赛事证件和现场核验的跨端实现统一遵循 `docs/PLAYER_REGISTRATION_EVENT_IDENTITY_STANDARD.md`；球队注册不得因赛事核验规则而强制收集身份证。
+
 ---
 
 ## 三、不可违反的技术红线

@@ -173,6 +173,10 @@ export async function listIdentityReviewQueue(data = {}) {
   return callFunctionHTTP('listIdentityReviewQueue', data)
 }
 
+export async function listTournamentInsuranceQueue(data = {}) {
+  return callFunctionHTTP('listTournamentInsuranceQueue', data)
+}
+
 export async function reviewIdentityVerification(data = {}) {
   return callFunctionHTTP('reviewIdentityVerification', data)
 }

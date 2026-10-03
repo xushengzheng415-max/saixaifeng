@@ -113,7 +113,7 @@
           <article class="panel-card eligibility-card"><h3><span>1</span>年龄与组别资格</h3><el-form label-position="top" class="eligibility-form"><el-form-item label="组别"><strong>{{ division.name || '当前组别' }}</strong></el-form-item><el-form-item label="参赛性别"><strong>{{ division.gender || '不限' }}</strong></el-form-item><div class="eligibility-date-grid"><el-form-item label="最早出生日期"><el-date-picker v-model="form.birthDateStart" type="date" value-format="YYYY-MM-DD" placeholder="不限" clearable /></el-form-item><el-form-item label="最晚出生日期"><el-date-picker v-model="form.birthDateEnd" type="date" value-format="YYYY-MM-DD" placeholder="不限" clearable /></el-form-item></div><el-form-item label="资格补充说明"><el-input v-model.trim="form.eligibilityNotes" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="如：女性球员年满18周岁；中年、老年组只限制出生年份" /></el-form-item></el-form></article>
           <article class="panel-card eligibility-card"><h3><span>2</span>球队与赛事参赛名单</h3><dl><div><dt>球队上限</dt><dd>{{ form.expectedTeams }}支</dd></div><div><dt>每队球员人数</dt><dd>{{ form.minimumRoster }}—{{ form.rosterLimit }}人</dd></div><div><dt>教练人数</dt><dd>最多2人</dd></div></dl><p>参赛名单从球队长期球员库中选定，用于参加本赛事全部场次；与单场比赛的出场名单不同。</p></article>
           <article class="panel-card eligibility-card"><h3><span>3</span>报名与锁定</h3><dl><div><dt>报名截止</dt><dd>{{ form.registrationDeadline }}</dd></div><div><dt>截止前变更</dt><dd>需主办方审核</dd></div><div><dt>截止后锁定</dt><dd>球员、球队名称和队徽锁定，正常变更关闭</dd></div></dl></article>
-          <article class="panel-card eligibility-card verification-card"><h3><span>4</span>资格核验开关</h3><div class="verification-switch"><span>实名认证</span><el-switch v-model="form.identityVerificationRequired" /><em>{{ form.identityVerificationRequired ? '必须核验' : '不要求（可选）' }}</em></div><div class="verification-switch"><span>标准形象照</span><el-switch v-model="form.portraitRequired" /><em>{{ form.portraitRequired ? '必须提交' : '建议补充（可选）' }}</em></div><div class="verification-switch"><span>身份证/护照原件</span><el-switch v-model="form.identityDocumentRequired" /><em>{{ form.identityDocumentRequired ? '赛前备查' : '不要求' }}</em></div><div class="verification-switch"><span>意外保险</span><el-switch v-model="form.insuranceRequired" /><em>{{ form.insuranceRequired ? '报名必交' : '不要求' }}</em></div><div class="verification-switch"><span>免责协议</span><el-switch v-model="form.waiverRequired" /><em>{{ form.waiverRequired ? '报名必签' : '不要求' }}</em></div><div class="verification-switch"><span>同一球员限报一个组别</span><el-switch v-model="form.singleDivisionOnly" /><em>{{ form.singleDivisionOnly ? '已列入资格规则' : '允许跨组' }}</em></div><p>以上要求按当前组别独立保存；系统核验能力按报名与名单流程逐项执行。</p></article>
+          <article class="panel-card eligibility-card verification-card"><h3><span>4</span>参赛资料要求</h3><el-radio-group v-model="documentPolicy" class="certificate-policy"><el-radio value="none">不收集证件</el-radio><el-radio value="insurance">仅用于投保</el-radio><el-radio value="identity">人证资格核验</el-radio><el-radio value="both">投保并核验</el-radio></el-radio-group><div v-if="form.identityVerificationRequired" class="verification-switch"><span>赛前电子证扫码</span><el-switch v-model="form.electronicPassVerificationRequired" /><em>{{ form.electronicPassVerificationRequired ? '启用' : '关闭' }}</em></div><div class="verification-switch"><span>标准形象照</span><el-switch v-model="form.portraitRequired" /><em>{{ form.portraitRequired ? '报名必交' : '可后补' }}</em></div><div class="verification-switch"><span>免责协议</span><el-switch v-model="form.waiverRequired" /><em>{{ form.waiverRequired ? '报名必签' : '不要求' }}</em></div><div class="verification-switch"><span>同一球员限报一个组别</span><el-switch v-model="form.singleDivisionOnly" /><em>{{ form.singleDivisionOnly ? '仅报一个组别' : '允许跨组' }}</em></div></article>
         </section>
         <section class="eligibility-checks"><div><el-icon><CircleCheckFilled /></el-icon><strong>{{ division.name || '当前组别' }}年龄范围</strong><span>{{ eligibilityBirthRange }}</span></div><div><el-icon><CircleCheckFilled /></el-icon><strong>重复参赛核验</strong><span>{{ form.singleDivisionOnly ? '同一球员仅报一个组别' : '允许跨组报名' }}</span></div><div><el-icon><CircleCheckFilled /></el-icon><strong>名单配额符合要求</strong><span>每队 {{ form.minimumRoster }}—{{ form.rosterLimit }} 人</span></div><div><el-icon><CircleCheckFilled /></el-icon><strong>报名材料</strong><span>{{ [form.identityDocumentRequired ? '证件' : '', form.insuranceRequired ? '保险' : '', form.waiverRequired ? '免责协议' : ''].filter(Boolean).join('、') || '无强制材料' }}</span></div></section>
         <section class="professional-discipline panel-card"><header><h3>红黄牌纪律</h3><span>影响停赛与参赛资格</span></header><el-form class="discipline-inline-form" label-position="top"><el-form-item label="黄牌累计"><div class="discipline-value"><el-input-number v-model="form.yellowCardSuspension" :min="1" :max="10" /><span class="unit">张停1场</span></div></el-form-item><el-form-item label="直接红牌"><div class="discipline-value"><el-input-number v-model="form.redCardSuspension" :min="1" :max="10" /><span class="unit">场</span></div></el-form-item><el-form-item label="两黄变一红"><el-switch v-model="form.secondYellowRed" /></el-form-item><el-form-item label="淘汰赛前清零"><el-switch v-model="form.knockoutYellowReset" /></el-form-item></el-form></section>
@@ -387,12 +387,26 @@ const regulationDetailDefaults = {
 const form = reactive({
   formatType: 'cup', expectedTeams: 16, groupCount: 4, teamsPerGroup: 4, groupCycle: 'single', advancePerGroup: 2, finalRankingMode: 'top4',
   knockoutSize: 8, knockoutType: 'single', knockoutLegs: 'single', venueMode: 'centralized', homeAwayEnabled: false, thirdPlaceEnabled: true, knockoutTieBreak: 'extra-penalties',
-  birthDateCutoff: '', birthDateStart: '', birthDateEnd: '', eligibilityNotes: '', rosterLimit: 30, minimumRoster: 11, identityVerificationRequired: true, eligibilityReviewRequired: true, portraitRequired: true, identityDocumentRequired: false, insuranceRequired: false, waiverRequired: false, singleDivisionOnly: true, overageAllowed: false, exceptionPolicy: 'return',
+  birthDateCutoff: '', birthDateStart: '', birthDateEnd: '', eligibilityNotes: '', rosterLimit: 30, minimumRoster: 11, identityVerificationRequired: false, eligibilityReviewRequired: true, portraitRequired: false, identityDocumentRequired: false, insuranceRequired: false, electronicPassVerificationRequired: false, waiverRequired: false, singleDivisionOnly: true, overageAllowed: false, exceptionPolicy: 'return',
   registrationDeadline: defaultRegistrationDeadline(), lockRosterAfterDeadline: true, matchFormat: '11side', periodMode: 'halves', matchMinutes: 35, singlePeriodCount: 4, breakMinutes: 10, playersOnField: 11, substitutionMode: 'free', substitutionLimit: 5, substitutionWindows: 3, substitutionReentryAllowed: true, scoreRequired: true, playerEventsEnabled: true, refereeReportRequired: true,
   disciplineEnabled: true, yellowCardSuspension: 2, redCardSuspension: 1, secondYellowRed: true, knockoutYellowReset: false,
   winPoints: 3, drawPoints: 1, lossPoints: 0, drawResolution: 'draw', penaltyWinPoints: 2, penaltyLossPoints: 0, rankingRule: 'points-headtohead-goaldiff', rankingTieBreakers: ['headToHeadPoints','headToHeadGoalDifference','headToHeadGoalsFor','goalDifference','goalsFor','redCardsFewest','yellowCardsFewest','drawingLots'], awayGoalsEnabled: false, liveRankingEnabled: true, manualRankingReview: false,
   advancementRule: 'group-top', sameGroupAvoidance: true,
   regulationDetails: { ...regulationDetailDefaults }
+})
+const documentPolicy = computed({
+  get() {
+    if (form.identityVerificationRequired && form.insuranceRequired) return 'both'
+    if (form.identityVerificationRequired) return 'identity'
+    if (form.insuranceRequired) return 'insurance'
+    return 'none'
+  },
+  set(value) {
+    form.identityVerificationRequired = value === 'identity' || value === 'both'
+    form.insuranceRequired = value === 'insurance' || value === 'both'
+    form.identityDocumentRequired = form.identityVerificationRequired || form.insuranceRequired
+    form.electronicPassVerificationRequired = form.identityVerificationRequired && form.electronicPassVerificationRequired
+  }
 })
 const playerFormatOptions = [5,7,8,9,11].map(players => ({ value:`${players}side`,label:`${players}人制`,players }))
 function applyMatchFormat(value) {
@@ -456,6 +470,9 @@ const advancementSummary = computed(() => {
 watch(() => form.formatType, type => {
   if (type === 'league') form.finalRankingMode = 'full'
   if (['tournament', 'hybrid'].includes(type) && !knockoutSizeOptions.includes(Number(form.knockoutSize))) form.knockoutSize = 8
+})
+watch(() => form.identityVerificationRequired, enabled => {
+  if (!enabled) form.electronicPassVerificationRequired = false
 })
 function disablePastRegistrationDate(date) {
   const today = new Date()
