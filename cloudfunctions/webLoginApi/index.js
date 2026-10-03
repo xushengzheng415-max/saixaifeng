@@ -4559,7 +4559,9 @@ async function handleDbQuery(event) {
       const requestedModule = String(event.staffModule || '').trim()
       const needed = ['list', 'get', 'count'].includes(operation)
         ? (staffDbRights.readRights(collection).includes(requestedModule) ? [requestedModule] : [])
-        : staffDbRights.writeRights(collection, operation, data)
+        : collection === 'teams' && operation === 'add' && requestedModule === 'event.registration'
+          ? (staffDbRights.writeRights(collection, operation, data).length ? ['event.registration'] : [])
+          : staffDbRights.writeRights(collection, operation, data)
       if (!tournamentId || !needed.length || !(await Promise.all(needed.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).every(Boolean)) {
         return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有该模块或操作权限' }
       }
@@ -5818,7 +5820,9 @@ exports.main = async (event, context) => {
             const teamImageMatch = folder.match(/^(?:team-logos|player-photos|idcard-photos)\/([^/]+)$/)
             const teamImage = teamImageMatch && await validateStaffRelayScope(db, 'teamImage', { teamId:teamImageMatch[1] }, tournamentId) &&
               await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.teams')
-            const newTeamLogo = folder === 'team-logos' && await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.teams')
+            const newTeamLogo = folder === 'team-logos' && (
+              await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.teams') ||
+              await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.registration'))
             if (!news && !evidence && !teamImage && !newTeamLogo) return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有上传权限' })
           } else if (!permittedSessionActions.includes(action)) {
             return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' })
