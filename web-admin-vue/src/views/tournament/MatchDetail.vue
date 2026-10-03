@@ -2324,7 +2324,7 @@ async function saveRefereeCrew() {
     if (!roleIds.includes(refereeForm.value.operationRefereeId)) throw new Error('操作负责人必须从本场裁判中选择')
     const data = {}
     refereeRoleOptions.value.forEach(role => { data[role.key] = refereeForm.value[role.key] })
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: {
         refereeCrew: data,
@@ -2333,6 +2333,7 @@ async function saveRefereeCrew() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || '裁判指派未保存')
     await loadMatch()
     refereeDialogVisible.value = false
     ElMessage.success('裁判信息已保存')
@@ -3318,7 +3319,9 @@ async function saveLineup() {
 }
 
 onMounted(() => {
-  loadMatch()
+  loadMatch().then(() => {
+    if (route.query.editReferees === '1' && match.value?._id) openRefereeDialog()
+  })
 })
 </script>
 

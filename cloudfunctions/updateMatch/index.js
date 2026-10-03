@@ -388,10 +388,27 @@ exports.main = async (event, context) => {
     }
     if (planState.locked) {
       const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision'])
-      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(canSupplement && supplementFields.has(field)))
+      const sequenceEditable = !match.executionSnapshot && !match.refereeRecordLocked && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
+      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(sequenceEditable && field === 'matchSequence') && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已经锁定，当前只允许调整受控裁判指派', code: 'COMPETITION_PLAN_LOCKED' }
       }
+    }
+    if (safeData.matchSequence !== undefined) {
+      if (match.executionSnapshot || match.refereeRecordLocked || !['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())) {
+        return { success:false, code:'MATCH_SEQUENCE_LOCKED', message:'比赛已进入执行或记录已锁定，不能修改场序' }
+      }
+      const sequence = Number(safeData.matchSequence)
+      if (!Number.isInteger(sequence) || sequence < 1 || sequence > 9999) {
+        return { success:false, code:'MATCH_SEQUENCE_INVALID', message:'场序号须为1至9999的整数' }
+      }
+      const peersResult = await db.collection('matches').where({ tournamentId:match.tournamentId }).limit(1000).get()
+      const peers = (peersResult.data || []).filter(item => String(item.divisionId || 'default') === String(match.divisionId || 'default'))
+      if ((peersResult.data || []).length >= 1000) return { success:false, code:'MATCH_SEQUENCE_CHECK_INCOMPLETE', message:'当前赛事场次过多，无法确认场序是否重复' }
+      if (peers.some(item => String(item._id) !== String(matchId) && Number(item.matchSequence ?? item.matchNo ?? item.matchIndex) === sequence)) {
+        return { success:false, code:'MATCH_SEQUENCE_CONFLICT', message:'该组别已有相同场序号，请换一个' }
+      }
+      safeData.matchSequence = sequence
     }
     // 电子记录进入复核后，所有比赛现场字段均为不可变快照。归档/退回应
     // 仅可经 webLoginApi 的 reviewRefereeRecord 执行，不能绕过该入口直接 updateMatch。

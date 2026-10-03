@@ -1493,7 +1493,7 @@ async function importScheduleAssignments(event,tournament,actor) {
     if(!date || !time || !venue){rowErrors.push({ row:index+2,matchId:matchId,message:'日期、时间和场地必须同时填写' });return}
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)){rowErrors.push({ row:index+2,matchId:matchId,message:'日期或时间格式不正确' });return}
     if(date===String(match.matchDate || '') && time===String(match.matchTime || '') && venue===String(match.venue || ''))return
-    if(match.schedulePublished || match.executionSnapshot || ['ongoing','live','finished','completed','archived'].indexOf(String(match.status || '').toLowerCase())>=0){rowErrors.push({ row:index+2,matchId:matchId,message:'比赛已发布或已进入执行，不能直接调整' });return}
+    if((match.schedulePublished && event.adjustmentType !== 'manual') || match.executionSnapshot || match.refereeRecordLocked || ['ongoing','live','finished','completed','archived','cancelled'].indexOf(String(match.status || '').toLowerCase())>=0){rowErrors.push({ row:index+2,matchId:matchId,message:'比赛已进入执行或记录已锁定，不能调整排期' });return}
     changed.push({ match:match,before:{ matchDate:String(match.matchDate||''),matchTime:String(match.matchTime||''),venue:String(match.venue||'') },after:{ matchDate:date,matchTime:time,venue:venue } })
   })
   var provisional=allMatches.map(function(match){var change=changed.find(function(item){return String(item.match._id)===String(match._id)});return change?Object.assign({},match,change.after):match})

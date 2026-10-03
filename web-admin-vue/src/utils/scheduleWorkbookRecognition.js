@@ -113,7 +113,7 @@ function recognizeRow(row, matches) {
   const scored = matches.map(match => {
     let score = 0
     const reasons = []
-    if (row.matchNo && Number(match.matchNo || match.matchIndex || 0) === Number(row.matchNo)) { score += 34;reasons.push('场序') }
+    if (row.matchNo && Number(match.matchSequence ?? match.matchNo ?? match.matchIndex ?? 0) === Number(row.matchNo)) { score += 34;reasons.push('场序') }
     if (row.divisionId && String(match.divisionId || '') === row.divisionId) { score += 35;reasons.push('组别ID') }
     else if (row.division && divisionCompatible(row.division, match.divisionName || '')) { score += 24;reasons.push('组别') }
     const importedPool = parseDivisionAndPool(row.division).pool
