@@ -337,14 +337,34 @@ async function resetPairings(event, tournament, actor) {
   if (state.readError || !state.division) return { success:false, code:'DIVISION_RULES_UNAVAILABLE', message:'无法读取当前竞赛组别规则' }
   var planState = await competitionPlanState(tournament, divisionId)
   if (planState.locked) return { success:false, code:'COMPETITION_PLAN_LOCKED', message:'竞赛方案已经锁定，不能清空并重新抽签' }
-  var matches = (await loadAllTournamentMatches(tournamentId)).filter(function(match) { return belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
+  var allMatches = await loadAllTournamentMatches(tournamentId)
+  var matches = allMatches.filter(function(match) { return belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
   var protectedMatch = matches.find(matchIsProtectedFromPairingReplace)
   if (protectedMatch) return { success:false, code:'PAIRING_REPLACE_BLOCKED', message:'当前组别已有已排赛、已发布或已产生赛果的比赛，不能清空重抽' }
+  var type = String(event.tournamentType || '')
+  if (type && !['cup','league','tournament'].includes(type)) return { success:false, code:'DRAW_TYPE_INVALID', message:'抽签类型无效' }
+  var delegated = await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId)
+  var auditId = ''
+  if (delegated) {
+    var audit = await db.collection('tournament_staff_audit').add({ data: {
+      action:'draw.reset', orgId:actor.orgId, tournamentId, actorUserId:actor.user._id,
+      before:{ divisionId, matchIds:matches.map(function(match) { return match._id }) },
+      after:{ status:'started', tournamentType:type }, createTime:db.serverDate()
+    } })
+    auditId = audit._id
+  }
   await Promise.all(matches.map(function(match) { return db.collection('matches').doc(match._id).remove() }))
   var now = db.serverDate()
   await db.collection('divisions').doc(divisionId).update({ data:{ pairingGenerated:false, pairingGeneratedAt:null, scheduleGenerated:false, schedulePublished:false, updateTime:now } })
-  await db.collection('tournaments').doc(tournamentId).update({ data:{ pairingGenerated:false, scheduleGenerated:false, schedulePublished:false, updateTime:now } })
-  return { success:true, message:'已清空当前组别对阵，可以重新抽签', divisionId, deletedMatchCount:matches.length }
+  var hasOtherDivisionMatches = allMatches.some(function(match) { return !belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
+  var hasOtherPublishedMatches = allMatches.some(function(match) { return !belongsToDivision(match, divisionId) && (match.schedulePublished === true || match.published === true) })
+  var data = { pairingGenerated:hasOtherDivisionMatches, scheduleGenerated:hasOtherDivisionMatches, schedulePublished:hasOtherPublishedMatches, updateTime:now }
+  if (type && Array.isArray(tournament.divisions) && tournament.divisions.length) {
+    data.divisions = tournament.divisions.map(function(item) { return String(item.id || item._id || item.divisionId) === divisionId ? Object.assign({}, item, { tournamentType:type }) : item })
+  } else if (type) { data.type = type; data.tournamentType = type }
+  await db.collection('tournaments').doc(tournamentId).update({ data })
+  if (auditId) await db.collection('tournament_staff_audit').doc(auditId).update({ data:{ after:{ status:'completed', tournamentType:type, deletedMatchCount:matches.length, hasOtherDivisionMatches } } })
+  return { success:true, message:'已清空当前组别对阵，可以重新抽签', divisionId, deletedMatchCount:matches.length, hasOtherDivisionMatches }
 }
 
 async function scheduleExistingPairings(event, tournament, actor) {
