@@ -241,7 +241,7 @@ async function approveTournamentPlayer(event, identity) {
     updateTime:now
   }
   const created = await db.collection('roster_snapshots').add({ data:snapshotData })
-  await db.collection('players').doc(playerId).update({ data:{ organizerReviewStatus:'approved', organizerReviewedAt:now, organizerReviewedBy:String(identity.user._id || ''), updateTime:now } })
+  if (!identity.staff) await db.collection('players').doc(playerId).update({ data:{ organizerReviewStatus:'approved', organizerReviewedAt:now, organizerReviewedBy:String(identity.user._id || ''), updateTime:now } })
   if (context.tournamentTeamId) {
     await db.collection('tournament_teams').doc(context.tournamentTeamId).update({ data:{ rosterStatus:'approved', rosterPlayerCount:playerIds.length, playerReviewStatus:'completed', lastRosterApprovalAt:now, updateTime:now } })
   }

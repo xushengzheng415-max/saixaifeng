@@ -50,6 +50,7 @@ function readRights(collection) {
 function writeRights(collection, operation, data = {}) {
   if (SPECIAL[operation]) return [SPECIAL[operation]]
   if (!['add', 'update', 'delete'].includes(operation) || !RIGHTS[collection]) return []
+  if (collection === 'referees') return [] // Global referee credentials are not event-scoped.
   const fields = Object.keys(data || {}).filter(field => !['updateTime', 'updatedAt', 'tournamentId'].includes(field))
   // An event grant cannot change the owner, organization, record identity or
   // authorization graph, even when the caller has the settings module.

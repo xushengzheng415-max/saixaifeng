@@ -8,6 +8,7 @@ async function read(db, name, id) {
 async function folderRight(db, folder, tournamentId) {
   const path = text(folder).replace(/^\/+|\/+$/g, '')
   if (path === `tournament-news/${tournamentId}`) return 'event.news'
+  if (path === `referee-avatars/${tournamentId}` || path === `referee-certificates/${tournamentId}`) return 'event.referees'
   if (['tournament-logos','tournament-logo-source','tournament-regulations'].includes(path)) return 'event.settings'
   if (path === 'team-logos') return 'event.teams'
   const team = path.match(/^(?:team-logos|player-photos|idcard-photos)\/([^/]+)$/)
@@ -34,7 +35,7 @@ async function staffUploadRight(db, params, tournamentId, orgId, userId) {
     const fileId = text(params.fileID)
     const path = fileId.replace(/^cloud:\/\/[^/]+\//, '').split('?')[0]
     if (!fileId.startsWith('cloud://') || path === fileId) return ''
-    const folder = path.split('/').slice(0, path.startsWith('tournament-news/') || /^(?:match-supplements|match-reports|team-logos|player-photos|idcard-photos)\//.test(path) ? 2 : 1).join('/')
+    const folder = path.split('/').slice(0, path.startsWith('tournament-news/') || /^(?:match-supplements|match-reports|team-logos|player-photos|idcard-photos|referee-avatars|referee-certificates)\//.test(path) ? 2 : 1).join('/')
     const right = await folderRight(db, folder, tournamentId)
     if (!right) return ''
     if (['tournament-logos','tournament-logo-source','tournament-regulations','team-logos'].includes(folder)) {

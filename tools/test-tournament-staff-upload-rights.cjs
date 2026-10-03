@@ -23,6 +23,8 @@ async function main() {
   assert.equal(await right({ action:'uploadChunk', uploadId:'chunk-a' }), 'event.results')
   assert.equal(await right({ action:'uploadChunk', uploadId:'chunk-a' }, 'event-a', 'user-b'), '')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/match-reports/match-b/photo.png' }), '')
+  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/referee-certificates/event-a/cert.jpg' }), 'event.referees')
+  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/referee-certificates/event-b/cert.jpg' }), '')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/saved.pdf' }), 'event.settings')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/uploaded.pdf' }), 'event.settings')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/other.pdf' }), '')
