@@ -1114,7 +1114,7 @@
     if (!token) return showError('邀请已失效', '未找到家长协作邀请，请从球队发送的链接重新进入。', function () { location.reload() })
     parentOAuthBusy = true
     loading('正在连接服务号授权…')
-    api({ action: 'parentProfileOAuthUrl', parentInvite: token }).then(function (result) {
+    api({ action: 'parentProfileOAuthUrl', parentInvite: token, preview: location.pathname.indexOf('/preview/service-account-h5/') === 0 }).then(function (result) {
       if (!result.success) throw new Error(result.error || '服务号授权入口暂不可用')
       sessionStorage.setItem(PARENT_PENDING_KEY, token)
       window.location.replace(result.authorizeUrl)

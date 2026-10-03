@@ -592,7 +592,9 @@ async function createParentProfileOAuthUrl(event) {
   const parentInvite = String(event.parentInvite || '').trim()
   const preview = await previewParentProfileInvite({ parentInvite })
   if (!preview.success) return preview
-  const redirectUri = normalizeServiceH5Url(SERVICE_ACCOUNT_CONFIG.H5_URL)
+  const redirectUri = event.preview === true
+    ? refereeOAuthReturnUrl('https://www.sxffootball.cn/preview/service-account-h5/')
+    : normalizeServiceH5Url(SERVICE_ACCOUNT_CONFIG.H5_URL)
   if (!SERVICE_ACCOUNT_CONFIG.APP_ID || !SERVICE_ACCOUNT_CONFIG.APP_SECRET || !redirectUri) return { success: false, error: '服务号网页授权尚未配置，请联系球队管理员', code: 'SERVICE_ACCOUNT_NOT_CONFIGURED' }
   const db = cloud.database(), state = crypto.randomBytes(20).toString('hex')
   await db.collection('parent_oauth_states').doc(state).set({ data: { state, parentInvite, redirectUri, used: false, expiresAt: new Date(Date.now() + REFEREE_OAUTH_STATE_TTL_MS), createTime: db.serverDate() } })
