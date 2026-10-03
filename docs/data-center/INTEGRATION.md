@@ -2,8 +2,8 @@
 
 | 入口 | 权限与范围 | 统一实现 | 状态 |
 |---|---|---|---|
-| PC 赛事子账号授权 | 机构主账号为指定赛事分发补录、新闻编辑、新闻发布权限；手机号本人接受；停用即时生效 | tournamentStaffAccess + tournament_staff_grants，按用户/机构/赛事/动作校验 | 本地候选；未创建生产集合、未部署、未做真实账号验收 |
-| PC 子账号补录与新闻 | 仅授权赛事；补录须完赛、无裁判记录及既有赛果，并上传纸质记录；新闻发布独立授权 | resultCenter、newsCenter、newsPreviewGenerate 与 webLoginApi 中转校验 | 本地候选；PC 构建和静态权限测试通过，真实云端待验收 |
+| PC 赛事子账号授权 | 机构主账号为指定赛事分发补录、新闻编辑、新闻发布权限；手机号本人接受；停用即时生效 | tournamentStaffAccess + tournament_staff_grants，按用户/机构/赛事/动作校验 | 测试版前端及共享后端已发布、空集合 ADMINONLY；真实主子账号闭环待验收 |
+| PC 子账号补录与新闻 | 仅授权赛事；补录须完赛、无裁判记录及既有赛果，并上传纸质记录；新闻发布独立授权 | resultCenter、newsCenter、newsPreviewGenerate 与 webLoginApi 中转校验 | 服务端已发布并完成匿名拒绝、源码回读；真实授权操作及新闻/赛果业务验收未完成 |
 | 小程序子账号联动 | 待 PC 授权验收后复用同一授权记录及赛果/新闻数据 | 尚未接入 | 未开始 |
 
 ## 比赛补录换人规则

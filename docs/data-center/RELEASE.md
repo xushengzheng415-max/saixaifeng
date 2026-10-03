@@ -2,11 +2,13 @@
 
 2026-10-01 球员榜资料排版：根因是球员卡容器缺少一个结束标签，后续资料和比赛数据被错误包进卡面容器并缩窄。正式 H5 已补正结构，“基本资料”改为双列字段表，“比赛数据”改为三列数据网格，保留卡面与统计口径。新样式 `tournament-center-player-detail-layout.css`、球员榜脚本与入口 HTML 依次上传，正式域名三文件 HTTP 200 且逐字节回读一致；入口脚本版本 `20261001-detail-grid2`，新闻样式与上一轮删除“赛事数据”链接的修复保留。浏览器正式页白波实例回读：桌面资料宽 608px、两列各 292px，比赛数据三列各约 202px；375px 手机视口资料两列各 161px、数据三列各约 112px，无横向溢出，截图核对通过。仓库同时补入现网入口依赖的 12 份样式，避免再次发布旧入口导致显示回退。`test-fan-player-card-detail.cjs` 与脚本语法检查通过。
 
-## 2026-10-03 赛事子账号授权候选
+## 2026-10-03 赛事子账号授权测试版
 
-当前仅在隔离工作树实现 PC 端人员与权限、受邀接受、授权赛事入口及服务端动作校验。需在隔离环境创建 `tournament_staff_grants`、`tournament_staff_audit`，验证手机号账号、机构成员、赛事归属、撤权旧会话、图片上传与跨赛事拒绝；再按最新线上函数包逐个差量合入。PC 真实账号验收通过后才接入小程序。此记录不代表云函数、PC 静态包或小程序已发布。
+用户明确授权在唯一 CloudBase 环境更新共享后端，先供常规 PC 测试版验收。已创建空的 `tournament_staff_grants`、`tournament_staff_audit`，权限均回读 `ADMINONLY`，授权集合回读 0 条。新建 `tournamentStaffAccess` Event 云函数并回下载 `index.js`、`policy.cjs` 哈希一致；从最新线上下载包仅差量更新 `newsCenter`、`newsPreviewGenerate`、`resultCenter`、`webLoginApi`，不变更现有函数配置。`newsCenter`、`resultCenter`、`webLoginApi` 的新增策略与索引源码回下载一致；`webLoginApi` 的球员卡及服务入口模块仍与发布包一致。`newsPreviewGenerate` 下载接口报 `ERR_INVALID_URL`，改用云函数详情 `CodeInfo` 与候选源码逐字比较一致，且无效请求返回受控业务错误；其独立策略文件未能通过下载包单独核哈希。
 
-本地 `web-admin-vue npm run build`、授权服务模拟流程、授权策略检查、新闻发布与版本冲突测试、`tools/test-data-center.mjs` 和数据治理检查通过。`tools/finish-data-change.mjs` 与共享模块一致性检查因既有 `playerCardPublishWorker` 九个部署副本缺失而失败；本轮未扩大到该独立模块修复。
+`preview` 分支推进到 `e22dc18c`，常规 `/preview/admin/` 静态包 257 文件已部署。公网入口、`LayoutView`、账号管理和补录页面分包 HTTP 200，SHA-256 与本地一致；头像菜单显示“账号管理”，主办方侧栏不显示“数据中心”。正式 `/admin/` 入口未变，未上传小程序，也未修改服务号 H5。线上匿名访问授权服务、新闻管理和赛果管理均被拒绝；主账号真实邀请、受邀手机号接受、撤权旧会话、证据上传和跨端状态尚待有权限的真实账号验收。PC 验收通过后再接入小程序。
+
+本地 `web-admin-vue npm run build`、授权服务模拟流程、授权策略检查、新闻发布与版本冲突测试及 `tools/test-data-center.mjs` 通过。当前 `preview` 分支没有 `tools/finish-data-change.mjs`，无法执行该门禁；`tools/check-data-governance.mjs` 因现有成绩中心读取截断断言失败。本轮未扩大到该独立统计口径修复，不把数据治理门禁记为通过。
 
 ## 2026-10-03 赛程工作台正式发布
 
