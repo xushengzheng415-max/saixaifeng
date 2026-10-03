@@ -17,7 +17,7 @@
       <span>{{ viewTitle }}</span>
     </section>
 
-    <section v-if="view === 'workbench'" class="schedule-workbench">
+    <section v-if="view === 'workbench'" ref="workbenchRoot" class="schedule-workbench">
       <div class="workbench-controls">
         <el-select v-model="workbenchDivision" aria-label="筛选组别"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select>
         <el-select v-model="workbenchStatus" aria-label="筛选状态"><el-option label="全部状态" value="all" /><el-option label="待排" value="pending" /><el-option label="待开始" value="scheduled" /><el-option label="进行中" value="live" /><el-option label="已完赛" value="completed" /></el-select>
@@ -26,7 +26,7 @@
       </div>
       <div class="workbench-table-wrap">
         <table class="workbench-table"><thead><tr><th>场序</th><th>组别</th><th>比赛日期</th><th>时间</th><th>场地</th><th>对阵</th><th>状态</th><th>裁判</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="match in workbenchMatches" :key="match._id"><td>{{ sequenceLabel(match) }}</td><td>{{ divisionName(match.divisionId) }}</td><td>{{ match.matchDate || '待排' }}</td><td>{{ match.matchTime || '—' }}</td><td>{{ match.venue || '—' }}</td><td class="workbench-teams">{{ teamLabel(match,'home') }}　vs　{{ teamLabel(match,'away') }}</td><td>{{ match.matchDate ? managementState(match).label : '待排' }}</td><td>{{ match.refereeCrew?.mainReferee?.name || '未指派' }}</td><td class="workbench-actions"><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openEdit(match)">调时间</el-button><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openSequenceEdit(match)">改场序</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'referee')">安排裁判</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'kit')">球衣颜色</el-button><el-button link @click="openMatchWorkspace(match)">详情</el-button></td></tr>
+          <tr v-for="match in workbenchMatches" :key="match._id" :data-match-id="match._id" :class="{ 'next-match-row':String(match._id) === nextMatchId }"><td>{{ sequenceLabel(match) }}</td><td>{{ divisionName(match.divisionId) }}</td><td>{{ match.matchDate || '待排' }}</td><td>{{ match.matchTime || '—' }}</td><td>{{ match.venue || '—' }}</td><td class="workbench-teams">{{ teamLabel(match,'home') }}　vs　{{ teamLabel(match,'away') }}</td><td>{{ match.matchDate ? managementState(match).label : '待排' }}</td><td>{{ match.refereeCrew?.mainReferee?.name || '未指派' }}</td><td class="workbench-actions"><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openEdit(match)">调时间</el-button><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openSequenceEdit(match)">改场序</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'referee')">安排裁判</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'kit')">球衣颜色</el-button><el-button link @click="openMatchWorkspace(match)">详情</el-button></td></tr>
         </tbody></table>
         <el-empty v-if="!loading && !workbenchMatches.length" description="当前筛选下没有比赛" />
       </div>
@@ -169,7 +169,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Calendar, Download, MagicStick, Setting, Upload } from '@element-plus/icons-vue'
@@ -177,6 +177,7 @@ import JSZip from 'jszip'
 import { callFunction, getFileUrl, queryById, queryList, rosterExceptionBoard } from '../../utils/cloud'
 import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recognizeScheduleRows } from '../../utils/scheduleWorkbookRecognition'
 import { firstUnfinishedMatchDate } from '../../utils/matchCalendarSelection'
+import { findWorkbenchFocusMatch } from '../../utils/matchScheduleFocus'
 import { createRefereeLineupSheet, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
 import { calculatePreMatchSuspensions } from '../../utils/refereeSuspension'
@@ -187,6 +188,7 @@ const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(fa
 const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), hiddenTeamLogoKeys = ref(new Set()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(typeof route.query.date === 'string' ? route.query.date : ''), draggedMatchId = ref('')
 const view = ref(['settings','imports','map','workbench'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
 const workbenchDivision = ref('all'), workbenchStatus = ref('all'), workbenchSearch = ref('')
+const workbenchRoot = ref(null), nextMatchId = ref('')
 const sequenceVisible = ref(false), sequenceMatch = ref(null), sequenceNumber = ref(1), savingSequence = ref(false)
 const assignmentVisible = ref(false), assignmentMatch = ref(null), assignmentTab = ref('referee')
 const assignmentLoading = ref(false), kitLoading = ref(false), savingReferees = ref(false), savingKit = ref(false)
@@ -207,8 +209,8 @@ const defaultSessions = () => [{ key:'morning',label:'上午',enabled:true,start
 const config = reactive({ schemaVersion:2,startDate:'',endDate:'',matchDays:['周一','周二','周三','周四','周五','周六','周日'],sessionWindows:defaultSessions(),venueResources:[],defaultTurnaroundMinutes:10,timeStepMinutes:5,frequencyPreset:'adaptive',divisionPolicies:{} })
 
 const viewTitle = computed(() => ({ settings:'赛程设置',imports:'赛程导入导出',map:'赛事地图',workbench:'赛程工作台' })[view.value] || '赛事地图')
-function setView(next) { view.value = next; const query={ ...route.query }; if(next === 'map')delete query.view;else query.view=next;router.replace({ path:route.path,query }) }
-function viewSchedule() { workbenchDivision.value='all'; setView('workbench') }
+function setView(next) { view.value = next; const query={ ...route.query }; if(next === 'map')delete query.view;else query.view=next;return router.replace({ path:route.path,query }) }
+async function viewSchedule() { workbenchDivision.value='all';workbenchStatus.value='all';workbenchSearch.value='';await setView('workbench');await focusNextWorkbenchMatch() }
 function sequenceLabel(match) { return match.matchSequence ?? match.matchNo ?? match.matchIndex ?? '—' }
 function canAdjustSchedule(match) { return !match.executionSnapshot && !match.refereeRecordLocked && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase()) }
 function canAssignReferee(match) { return !match.refereeRecordLocked && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase()) }
@@ -219,6 +221,15 @@ const workbenchMatches = computed(() => matches.value.filter(match => {
   const keyword = workbenchSearch.value.trim().toLowerCase()
   return !keyword || [sequenceLabel(match),match.homeTeamName,match.awayTeamName].some(value => String(value || '').toLowerCase().includes(keyword))
 }).sort((a,b) => String(a.matchDate || '9999').localeCompare(String(b.matchDate || '9999')) || String(a.matchTime || '99:99').localeCompare(String(b.matchTime || '99:99')) || Number(sequenceLabel(a) || 0)-Number(sequenceLabel(b) || 0)))
+async function focusNextWorkbenchMatch() {
+  await nextTick()
+  const target=findWorkbenchFocusMatch(workbenchMatches.value,selectedDate.value,managementState)
+  nextMatchId.value=target ? String(target._id) : ''
+  if (!target) return
+  await nextTick()
+  const row=Array.from(workbenchRoot.value?.querySelectorAll('tr[data-match-id]') || []).find(item => item.dataset.matchId === nextMatchId.value)
+  row?.scrollIntoView({ block:'center',behavior:'auto' })
+}
 function openSequenceEdit(match) { sequenceMatch.value=match;sequenceNumber.value=Number(sequenceLabel(match)) || 1;sequenceVisible.value=true }
 async function saveSequence() { const match=sequenceMatch.value, number=Number(sequenceNumber.value);if(!match || !Number.isInteger(number) || number<1)return ElMessage.warning('请输入有效场序号');savingSequence.value=true;try{const result=await callFunction('updateMatch',{matchId:match._id,data:{matchSequence:number}});if(!result?.success)throw new Error(result?.message || '场序保存失败');sequenceVisible.value=false;ElMessage.success('场序已更新');await load()}catch(error){ElMessage.error(error.message || '场序保存失败')}finally{savingSequence.value=false} }
 const assignmentFormat = computed(() => assignmentMatch.value?.matchFormat || divisions.value.find(item => String(item.id) === String(assignmentMatch.value?.divisionId))?.matchFormat || '11side')
@@ -694,7 +705,7 @@ async function prepareRecognizedImport() {
 }
 function clearRecognition(){importFileName.value='';recognitionSourceRows.value=[];recognitionRows.value=[];importRows.value=[];importPreview.value={};recognitionFilter.value='all';knockoutPrepareError.value=''}
 async function applyImport() { applyingImport.value=true;try{const result=await assignRows(importRows.value,true,'import');if(!result?.success)throw new Error(result?.message || '导入失败');const applied=Number(result.appliedCount || importRows.value.length || 0);importVisible.value=false;const firstDate=recognitionReadyRows.value[0]?.matchDate;await load();if(firstDate)selectedDate.value=firstDate;setView('map');ElMessage.success(`已将 ${applied} 场比赛导入赛事地图`)}catch(error){ElMessage.error(error.message || '导入失败')}finally{applyingImport.value=false} }
-onMounted(load)
+onMounted(async () => { await load();if(view.value==='workbench')await focusNextWorkbenchMatch() })
 </script>
 
 <style scoped>
@@ -705,6 +716,7 @@ onMounted(load)
 .match-sides{display:grid;align-items:center;gap:8px;margin:10px 0}.match-team{display:flex;min-width:0;align-items:center;gap:10px}.match-team.away{justify-content:flex-end;text-align:right}.match-team strong{overflow:hidden;color:#102e1d;font-size:18px;font-weight:800;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.team-crest{display:grid;width:38px;height:38px;flex:0 0 38px;place-items:center;overflow:hidden;border:1px solid #d9e6de;border-radius:50%;background:#fff;color:#168957;font-size:15px;font-style:normal}.team-crest img{display:block;width:100%;height:100%;object-fit:contain}.team-crest b{font-size:15px}
 .schedule-workbench{margin-top:16px;background:#fff;border:1px solid #dce4df;border-radius:8px}.workbench-controls{display:flex;align-items:center;gap:10px;padding:14px;border-bottom:1px solid #e4eae6}.workbench-controls .el-select{width:160px}.workbench-controls .el-input{width:240px}.workbench-controls>span{margin-left:auto;color:#617168;white-space:nowrap}.workbench-table-wrap{overflow-x:auto}.workbench-table{width:100%;min-width:1120px;border-collapse:collapse}.workbench-table th,.workbench-table td{padding:11px 12px;border-bottom:1px solid #edf1ee;text-align:left;white-space:nowrap}.workbench-table th{color:#64746a;background:#f6f8f6;font-size:12px;font-weight:600}.workbench-table td{font-size:13px}.workbench-table .workbench-teams{min-width:260px;white-space:normal}.workbench-actions{min-width:265px}.workbench-actions .el-button{margin:0 8px 0 0}@media(max-width:700px){.workbench-controls{flex-wrap:wrap}.workbench-controls .el-select,.workbench-controls .el-input{width:calc(50% - 5px)}.workbench-controls>span{margin-left:0}}
 .assignment-summary{display:flex;flex-direction:column;gap:4px;padding:0 0 12px;border-bottom:1px solid #e3e9e5}.assignment-summary strong{font-size:15px}.assignment-summary span{color:#68776e;font-size:12px}.assignment-tabs{margin-top:10px}.assignment-form{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.assignment-save{display:flex;justify-content:flex-end;margin-top:8px}.kit-assignment section{padding:12px 0;border-bottom:1px solid #e7ece8}.kit-assignment h3{margin:0 0 12px;font-size:14px}.kit-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.kit-fields label>span{display:block;margin-bottom:6px;color:#627168;font-size:12px}.kit-fields .el-select{width:100%}.kit-color-swatch{display:inline-block;width:14px;height:14px;margin-right:8px;border:1px solid #bfc9c2;border-radius:2px;vertical-align:-2px}@media(max-width:600px){.assignment-form,.kit-fields{grid-template-columns:1fr}}
+.workbench-table tr.next-match-row{background:#edf7f0}.workbench-table tr.next-match-row td:first-child{box-shadow:inset 3px 0 #087b43}
 </style>
 
 <style scoped>
