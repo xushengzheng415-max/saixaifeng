@@ -3,6 +3,9 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const { dedupeImportedPlayerRows, registerImportedPlayerIdentity } = require('./importDualRole')
+const staffPolicy = require('./staffPolicy.cjs')
+const { relayRights } = require('./staffRelayRights.cjs')
+const { validateStaffRelayScope } = require('./staffRelayScope.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -246,7 +249,20 @@ async function webActor(event) {
   const orgId = text(event.__actorOrgId)
   if (!userId || !orgId) return null
   const user = await getDocument('users', userId)
-  if (!user || text(user.orgId || user.organizationId) !== orgId) return null
+  if (!user) return null
+  const token = text(event.__authToken)
+  if (!token) return null
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  const sessions = (await db.collection('auth_sessions').where({ tokenHash, active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || []
+  if (sessions.length !== 1 || text(sessions[0].userId) !== userId) return null
+  const session = sessions[0]
+  if (text(user.orgId || user.organizationId) !== orgId && text(session && session.activeOrgId) !== orgId) return null
+  if (await staffPolicy.isStaff(db, userId, orgId) && !await staffPolicy.owner(db, userId, orgId)) {
+    const tournamentId = text(event.__staffTournamentId || event.tournamentId)
+    const rule = relayRights('tournamentRegistrationFlow', event)
+    if (!Array.isArray(rule) || !rule.length || !await validateStaffRelayScope(db, 'tournamentRegistrationFlow', event, tournamentId)) return null
+    if (!(await Promise.all(rule.map(right => staffPolicy.hasRight(db, userId, orgId, tournamentId, right)))).every(Boolean)) return null
+  }
   return { userId, orgId, user }
 }
 

@@ -15,7 +15,7 @@
     <section class="work-area">
       <div class="title-row">
         <div><h1>裁判管理</h1></div>
-        <div class="title-actions"><el-button type="warning" plain @click="addDialog = true"><el-icon><Plus /></el-icon>添加临时裁判</el-button><el-button plain type="warning" @click="openSyntheticPool">导入虚拟裁判资料</el-button><el-button plain type="success" @click="exportList"><el-icon><Download /></el-icon>导出裁判名单</el-button><el-button type="success" @click="openRefereeInvite()"><el-icon><Plus /></el-icon>邀请持证裁判</el-button></div>
+        <div class="title-actions"><el-button type="warning" plain @click="addDialog = true"><el-icon><Plus /></el-icon>添加临时裁判</el-button><el-button v-if="!isTournamentStaff" plain type="warning" @click="openSyntheticPool">导入虚拟裁判资料</el-button><el-button plain type="success" @click="exportList"><el-icon><Download /></el-icon>导出裁判名单</el-button><el-button type="success" @click="openRefereeInvite()"><el-icon><Plus /></el-icon>邀请持证裁判</el-button></div>
       </div>
 
       <el-alert class="qualification-note" type="success" :closable="false" show-icon title="仅通过资格审核且处于可用状态的裁判，可被指派至赛事场次。" />
@@ -43,7 +43,7 @@
             <td><strong>{{ referee.temporaryReferee ? '未提交裁判证' : (referee.level || referee.refereeLevel || '未定级') }}</strong><small>{{ referee.temporaryReferee ? '组委会添加 · 仅限本赛事' : (referee.qualification || referee.certificateName || '资格资料待补充') }}</small><small v-if="referee.groupRoleLabel">{{ referee.groupRoleLabel }}</small></td>
             <td><span>{{ tournament?.startDate || '未设置' }}</span><small>～ {{ tournament?.endDate || '未设置' }}</small></td>
             <td>{{ assignmentCount(referee) }} 场</td><td><span class="state" :class="stateOf(referee)"><i />{{ stateLabel(stateOf(referee)) }}</span></td><td>{{ assignmentCount(referee) }} 场比赛</td>
-            <td class="row-actions"><el-button @click="showProfile(referee)">查看资料</el-button><el-button v-if="stateOf(referee) === 'pending_claim'" type="warning" plain @click="openRefereeInvite(referee)">重新发送认领</el-button><el-button v-else-if="stateOf(referee) === 'pending_temporary_review'" type="warning" plain @click="approve(referee)">确认临时执裁</el-button><el-button v-else-if="stateOf(referee) === 'pending'" type="warning" plain @click="approve(referee)">审核资格</el-button><el-button v-else-if="stateOf(referee) === 'test'" type="warning" plain @click="openRefereeInvite(referee)">邀请扫码绑定</el-button><el-button v-else type="success" plain @click="openAssign(referee)">指派场次</el-button></td>
+            <td class="row-actions"><el-button @click="showProfile(referee)">查看资料</el-button><el-button v-if="stateOf(referee) === 'pending_claim'" type="warning" plain @click="openRefereeInvite(referee)">重新发送认领</el-button><el-button v-else-if="stateOf(referee) === 'pending_temporary_review'" type="warning" plain @click="approve(referee)">确认临时执裁</el-button><span v-else-if="stateOf(referee) === 'pending' && isTournamentStaff">资格待审核</span><el-button v-else-if="stateOf(referee) === 'pending'" type="warning" plain @click="approve(referee)">审核资格</el-button><el-button v-else-if="stateOf(referee) === 'test'" type="warning" plain @click="openRefereeInvite(referee)">邀请扫码绑定</el-button><el-button v-else type="success" plain @click="openAssign(referee)">指派场次</el-button></td>
           </tr></tbody>
         </table>
       </section>
@@ -67,6 +67,7 @@ import { addRecord, callFunction, getFileUrl, queryList, updateRecord } from '..
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 
 const route = useRoute(), router = useRouter()
+const isTournamentStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
 const previewMode=import.meta.env.BASE_URL.includes('/preview/')
 const qaSnapshot = import.meta.env.DEV && visualQaActive() ? getVisualQaSnapshot() : null
 const tournaments = ref(qaSnapshot?.tournament ? [qaSnapshot.tournament] : []), referees = ref(qaSnapshot?.referees || []), matches = ref(qaSnapshot?.matches || []), selectedTournamentId = ref(String(route.query.tournamentId || qaSnapshot?.tournament?._id || ''))

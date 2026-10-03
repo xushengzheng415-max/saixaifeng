@@ -1,6 +1,8 @@
 // 云函数：更新比赛信息
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
+const { writeRights } = require('./staffDbRights.cjs')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
@@ -162,7 +164,7 @@ async function authenticateActor(event) {
   const userResult = await db.collection('users').doc(sessions[0].userId).get()
   const user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!user) throw new Error('登录账号不存在')
-  const orgId = String(user.orgId || user.organizationId || '').trim()
+  const orgId = String(sessions[0].activeOrgId || event.__actorOrgId || user.orgId || user.organizationId || '').trim()
   if (!orgId) throw new Error('当前账号尚未关联机构，请先完成机构引导')
   if (event.__actorUserId && event.__actorUserId !== user._id) throw new Error('登录身份校验失败')
   if (event.__actorOrgId && String(event.__actorOrgId) !== orgId) throw new Error('机构归属校验失败')
@@ -177,6 +179,7 @@ async function undoLastScheduleAdjustment(event) {
   await ensureScheduleAdjustmentLogs()
   const tournamentId=String(event.tournamentId || '')
   if(!tournamentId) return { success:false,message:'缺少赛事信息' }
+  if (await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId) && !await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'event.matches')) return { success:false,message:'当前赛事没有比赛管理权限' }
   const tournamentResult=await db.collection('tournaments').doc(tournamentId).get()
   const tournament=Array.isArray(tournamentResult.data)?tournamentResult.data[0]:tournamentResult.data
   if(!recordBelongsToActor(tournament,actor)) return { success:false,message:'无权恢复其他机构的赛程' }
@@ -347,6 +350,10 @@ exports.main = async (event, context) => {
     }
     if (!recordBelongsToActor(match, actor) && !recordBelongsToActor(tournament, actor)) {
       return { success: false, message: '无权修改其他账号的比赛' }
+    }
+    if (await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId)) {
+      const required = event.action === 'finishOrganizerMatch' ? ['event.results'] : writeRights('matches', 'update', data)
+      if (!required.length || !(await Promise.all(required.map(right => staffPolicy.hasRight(db, actor.user._id, actor.orgId, match.tournamentId, right)))).every(Boolean)) return { success:false,message:'当前赛事没有对应比赛操作权限' }
     }
 
     const planState = await getCompetitionPlanState(match, tournament)

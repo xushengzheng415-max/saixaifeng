@@ -303,6 +303,7 @@ import {
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
+import { sidebarRightForRoute } from '../../utils/tournamentStaffRights'
 import productLogo from '../../assets/logo-saixiaofeng.png'
 import { provincesData, cityMapData } from '../team/areaData.js'
 import {
@@ -867,7 +868,16 @@ const isAdminPage = computed(() => {
 
 // 根据角色返回对应导航菜单
 const currentNavItems = computed(() => {
-  if (sessionStorage.getItem('sxfTournamentStaff') === '1') return [{ path: '/tournament-staff', label: '我的赛事', icon: 'Trophy' }]
+  void route.fullPath
+  if (sessionStorage.getItem('sxfTournamentStaff') === '1') {
+    let rights = []
+    try { rights = JSON.parse(sessionStorage.getItem('sxfStaffPermissions') || '[]') } catch { /* 丢弃损坏的菜单缓存 */ }
+    const sameEvent = currentTournamentId.value && currentTournamentId.value === sessionStorage.getItem('sxfStaffTournamentId')
+    return [
+      { path: '/tournament-staff', label: '我的赛事', icon: 'Trophy' },
+      ...(sameEvent ? organizerNavItems.value.filter(item => rights.includes(sidebarRightForRoute(item.path))) : [])
+    ]
+  }
   const ownerOnly = (items) => userInfo.value.isPlatformOwner
     ? items
     : items.filter(item => item.path !== '/system')

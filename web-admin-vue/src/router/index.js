@@ -8,6 +8,7 @@ import {
   isPlatformWorkspacePath,
   isPlatformSession
 } from '../utils/platformSession'
+import { sidebarRightForRoute, visibleSidebarKeys } from '../utils/tournamentStaffRights'
 
 // 深链截图会在首个路由组件加载前访问数据，开发模式需先于路由守卫同步激活隔离样例。
 if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href.includes('visualQa=1')) {
@@ -709,13 +710,24 @@ router.beforeEach(async (to, from, next) => {
         sessionStorage.setItem('sxfTournamentStaff', staff ? '1' : '0')
         if (staff) {
           const grant = (scope.grants || []).find(item => item.tournamentId === String(to.params.id || ''))
-          const rights = grant?.permissions || []
-          const allowed = to.path === '/tournament-staff' ||
-            /\/tournaments\/[^/]+\/staff-results$/.test(to.path) && rights.includes('result.supplement') ||
-            /\/tournaments\/[^/]+\/news$/.test(to.path) && rights.some(right => right === 'news.edit' || right === 'news.publish')
+          const sameOrganization = grant && grant.orgId === scope.activeOrgId
+          const rights = sameOrganization ? visibleSidebarKeys(grant.permissions) : new Set()
+          sessionStorage.setItem('sxfStaffPermissions', JSON.stringify([...rights]))
+          sessionStorage.setItem('sxfStaffTournamentId', sameOrganization ? grant.tournamentId : '')
+          const required = sidebarRightForRoute(to.path)
+          const resultOnly = sameOrganization && grant.permissions.includes('result.supplement') && !grant.permissions.includes('event.results')
+          if (resultOnly && to.path === `/tournaments/${grant.tournamentId}/results`) {
+            next(`/tournaments/${grant.tournamentId}/staff-results`); return
+          }
+          if (resultOnly && required === 'event.results' && to.path !== `/tournaments/${grant.tournamentId}/staff-results`) {
+            next('/tournament-staff'); return
+          }
+          const allowed = to.path === '/tournament-staff' || Boolean(sameOrganization && required && rights.has(required))
           if (!allowed) { next('/tournament-staff'); return }
           next(); return
         }
+        sessionStorage.removeItem('sxfStaffPermissions')
+        sessionStorage.removeItem('sxfStaffTournamentId')
       } catch (_) { /* 旧环境部署前仍沿用现有主办方路由；服务端会独立拒绝越权请求。 */ }
     }
     if (String(localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toLowerCase() !== 'organizer' && to.path !== '/tournament-staff') {

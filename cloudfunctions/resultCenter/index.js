@@ -915,8 +915,16 @@ exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(event)
     const action = text(event.action || 'dashboard')
-    if (actor.staff && action === 'dashboard' && (await staffPolicy.hasRight(db, actor.user._id, actor.orgId, text(event.tournamentId), 'news.edit') || await staffPolicy.hasRight(db, actor.user._id, actor.orgId, text(event.tournamentId), 'news.publish'))) return await buildDashboard(event, actor)
-    if (actor.staff && !['staffMatches', 'supplementResult'].includes(action)) throw new Error('当前子账号无权执行该赛果操作')
+    if (actor.staff) {
+      const eventId = text(event.tournamentId)
+      const right = key => staffPolicy.hasRight(db, actor.user._id, actor.orgId, eventId, key)
+      const allowed = action === 'dashboard'
+        ? await right('event.dashboard') || await right('event.results') || await right('event.news') || await right('news.edit') || await right('news.publish')
+        : ['staffMatches', 'supplementResult'].includes(action)
+          ? await right('event.results') || await right('result.supplement')
+          : ['resolvePairingSources', 'publishStandings', 'correctArchivedScore'].includes(action) && await right('event.results')
+      if (!allowed) throw new Error('当前子账号无权执行该赛果操作')
+    }
     if (action === 'staffMatches') return await staffMatches(event, actor)
     if (action === 'supplementResult') return await supplementResult(event, actor)
     if (action === 'dashboard') return await buildDashboard(event, actor)

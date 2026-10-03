@@ -5,9 +5,9 @@ const db = cloud.database()
 const _ = db.command
 const value = input => String(input == null ? '' : input).trim()
 const hash = input => crypto.createHash('sha256').update(value(input)).digest('hex')
-const RIGHTS = ['result.supplement', 'news.edit', 'news.publish']
-const GRANTS = 'tournament_staff_grants'
 const policy = require('./policy.cjs')
+const RIGHTS = [...policy.SIDEBAR_RIGHTS, 'result.supplement', 'news.edit', 'news.publish']
+const GRANTS = 'tournament_staff_grants'
 
 async function doc(name, id) {
   if (!id) return null
@@ -161,7 +161,7 @@ exports.main = async (event = {}) => {
       const pending = await invitations(identity)
       const isOwner = Boolean(identity.orgId && await owner(value(identity.user._id), identity.orgId))
       const isStaff = Boolean(own.grants.length || pending.invitations.length || identity.orgId && await policy.isStaff(db, identity.user._id, identity.orgId))
-      return { success: true, isOwner, isStaff, grants: own.grants, invitations: pending.invitations }
+      return { success: true, isOwner, isStaff, activeOrgId: identity.orgId, grants: own.grants, invitations: pending.invitations }
     }
     if (action === 'mine') return await listOwn(identity)
     if (action === 'invitations') return await invitations(identity)

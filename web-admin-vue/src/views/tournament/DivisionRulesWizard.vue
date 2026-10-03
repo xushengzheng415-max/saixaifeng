@@ -22,6 +22,7 @@
         <p>{{ pageSubtitle }}</p>
       </div>
       <div class="heading-actions">
+        <el-upload v-if="canManage" :show-file-list="false" :before-upload="beforeRuleSourceUpload" :http-request="uploadRuleSource" accept=".pdf,.docx"><el-button :loading="uploadingRuleSource">上传规程</el-button></el-upload>
         <el-select class="division-selector" :model-value="divisionId" disabled aria-label="当前组别">
           <el-option :label="`当前组别：${division.name || '竞赛组别'}`" :value="divisionId" />
         </el-select>
@@ -232,7 +233,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, Check, CircleCheck, CircleCheckFilled, Document, Grid, Location, MagicStick, Printer, Tickets, Trophy, View, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules } from '../../utils/cloud'
+import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules, uploadLargeFileViaCloud } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import DivisionRegulationFields from './DivisionRegulationFields.vue'
@@ -241,6 +242,24 @@ import { findRecognizedDivision, recognizedDivisionRulePayload } from '../../uti
 const route = useRoute()
 const router = useRouter()
 const tournamentId = String(route.params.id || '')
+const uploadingRuleSource = ref(false)
+function beforeRuleSourceUpload(file) {
+  if (!/\.(pdf|docx)$/i.test(file.name) || file.size > 10 * 1024 * 1024) { ElMessage.error('请选择不超过 10MB 的 PDF 或 Word 文件'); return false }
+  return true
+}
+async function uploadRuleSource({ file }) {
+  uploadingRuleSource.value = true
+  try {
+    const uploaded = await uploadLargeFileViaCloud(`tournament-regulations/${Date.now()}-${file.name}`, file, { chunkSize:32 * 1024 })
+    const fileId = uploaded.fileId || uploaded.fileID
+    if (!fileId) throw new Error('未获取到文件地址')
+    const data = { regulationsFileId:fileId, regulationsUrl:uploaded.tempUrl || '', regulationsFileName:file.name }
+    await updateRecord('tournaments', tournamentId, data)
+    tournament.value = { ...tournament.value, ...data }
+    ElMessage.success('规程已上传')
+  } catch (error) { ElMessage.error(error.message || '上传失败') }
+  finally { uploadingRuleSource.value = false }
+}
 const divisionId = String(route.query.divisionId || '')
 const localVisualQa = typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
 const localEffectiveQa = localVisualQa && window.location.href.includes('step=effective')
