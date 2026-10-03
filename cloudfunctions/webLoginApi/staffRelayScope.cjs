@@ -11,39 +11,59 @@ async function read(db, name, id) {
 async function validateStaffRelayScope(db, functionName, params = {}, tournamentId) {
   const expected = string(tournamentId)
   if (!expected) return false
+  if (functionName === 'dataCenter' && string(params.scope && params.scope.tournamentId) !== expected) return false
   const nested = [
     params.tournamentId, params.eventId, params.tournament && (params.tournament._id || params.tournament.id),
     params.scope && params.scope.tournamentId, params.data && params.data.tournamentId
   ].map(string).filter(Boolean)
   if (nested.some(value => value !== expected)) return false
+  let scoped = nested.length > 0
   const references = [
     ['matchId', 'matches'], ['registrationId', 'tournament_teams'],
     ['divisionId', 'divisions'], ['newsId', 'tournament_news']
   ]
   if (functionName === 'reviewRosterChange') references.push(['requestId', 'roster_change_requests'])
+  if (functionName === 'tournamentReview') references.push(['requestId', 'tournament_team_requests'])
+  if (functionName === 'organizerClaimInvite') references.push(['requestId', 'team_claim_review_requests'])
   for (const [key, collection] of references) {
     const id = string(params[key])
     if (!id) continue
     const row = await read(db, collection, id)
     if (!row || string(row.tournamentId || row.eventId) !== expected) return false
+    scoped = true
   }
   const inviteId = string(params.inviteId)
   if (inviteId) {
     const rows = (await Promise.all(['team_invitations', 'tournament_invites'].map(name => read(db, name, inviteId)))).filter(Boolean)
     if (rows.length !== 1 || string(rows[0].tournamentId) !== expected) return false
+    scoped = true
   }
   const teamId = string(params.teamId)
   if (teamId) {
     const rows = (await db.collection('tournament_teams').where({ tournamentId: expected, teamId }).limit(2).get()).data || []
     if (rows.length !== 1) return false
+    scoped = true
+  }
+  const teamIds = Array.isArray(params.teamIds) ? params.teamIds.map(string).filter(Boolean) : []
+  for (const teamId of teamIds) {
+    const rows = (await db.collection('tournament_teams').where({ tournamentId: expected, teamId }).limit(2).get()).data || []
+    if (rows.length !== 1) return false
+    scoped = true
   }
   const refereeId = string(params.refereeId || params.targetRefereeId)
-  if (refereeId) {
+  const creatingRefereeRelation = functionName === 'setHeadReferee' || functionName === 'tournamentRegistrationFlow' && ['createRefereeFollowInvite', 'createTemporaryRefereeClaim'].includes(string(params.action))
+  if (refereeId && !creatingRefereeRelation) {
     const rows = (await db.collection('tournament_referees').where({ tournamentId: expected, refereeId }).limit(2).get()).data || []
     const profile = await read(db, 'referees', refereeId)
     if (rows.length !== 1 && string(profile && profile.tournamentId) !== expected) return false
+    scoped = true
   }
-  return true
+  if (refereeId && creatingRefereeRelation && !scoped) {
+    const rows = (await db.collection('tournament_referees').where({ tournamentId: expected, refereeId }).limit(2).get()).data || []
+    if (rows.length !== 1) return false
+    scoped = true
+  }
+  return scoped
 }
 
 module.exports = { validateStaffRelayScope }

@@ -1,5 +1,11 @@
 const assert = require('node:assert/strict')
 const { validateStaffRelayScope } = require('../cloudfunctions/webLoginApi/staffRelayScope.cjs')
+const fs = require('node:fs')
+const path = require('node:path')
+for (const name of ['tournamentRegistrationFlow', 'tournamentReview', 'organizerClaimInvite']) assert.equal(
+  fs.readFileSync(path.join(__dirname, `../cloudfunctions/${name}/staffRelayScope.cjs`), 'utf8'),
+  fs.readFileSync(path.join(__dirname, '../cloudfunctions/webLoginApi/staffRelayScope.cjs'), 'utf8')
+)
 
 const rows = {
   matches: [{ _id: 'match-a', tournamentId: 'event-a' }, { _id: 'match-b', tournamentId: 'event-b' }],
@@ -18,10 +24,13 @@ async function main() {
   assert.equal(await validateStaffRelayScope(db, 'updateMatch', { matchId: 'match-a' }, 'event-a'), true)
   assert.equal(await validateStaffRelayScope(db, 'updateMatch', { matchId: 'match-b' }, 'event-a'), false)
   assert.equal(await validateStaffRelayScope(db, 'generateSchedule', { tournamentId: 'event-b' }, 'event-a'), false)
+  assert.equal(await validateStaffRelayScope(db, 'dataCenter', { scope: { tournamentId: 'event-a' } }, 'event-a'), true)
+  assert.equal(await validateStaffRelayScope(db, 'dataCenter', { scope: {} }, 'event-a'), false)
   assert.equal(await validateStaffRelayScope(db, 'tournamentRegistrationFlow', { registrationId: 'registration-a' }, 'event-a'), true)
   assert.equal(await validateStaffRelayScope(db, 'tournamentRegistrationFlow', { inviteId: 'invite-a' }, 'event-a'), true)
   assert.equal(await validateStaffRelayScope(db, 'setHeadReferee', { refereeId: 'referee-a' }, 'event-a'), true)
-  assert.equal(await validateStaffRelayScope(db, 'setHeadReferee', { refereeId: 'referee-b' }, 'event-a'), false)
+  assert.equal(await validateStaffRelayScope(db, 'setHeadReferee', { tournamentId: 'event-a', refereeId: 'referee-b' }, 'event-a'), true)
+  assert.equal(await validateStaffRelayScope(db, 'tournamentRegistrationFlow', { action: 'reviewTemporaryRefereeClaim', refereeId: 'referee-b' }, 'event-a'), false)
   rows.tournament_invites.push({ _id: 'invite-a', tournamentId: 'event-a' })
   assert.equal(await validateStaffRelayScope(db, 'tournamentRegistrationFlow', { inviteId: 'invite-a' }, 'event-a'), false)
   console.log('tournament staff relay scope: match, registration, invitation and referee boundaries passed')

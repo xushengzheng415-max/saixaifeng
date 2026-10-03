@@ -35,7 +35,7 @@ async function buildStaffEventScope(db, userId, orgId, tournamentId) {
   const playerIds = ids(rosterSnapshots.flatMap(row => personIds(row.playerIds).concat(personIds(row.players)))
     .concat(registrations.flatMap(row => personIds(row.playerIds).concat(personIds(row.players)))))
   return {
-    staff: true, userId: string(userId), orgId: string(orgId), tournamentId: string(tournamentId),
+    staff: true, user: { _id:string(userId) }, userId: string(userId), orgId: string(orgId), tournamentId: string(tournamentId),
     tournamentIds: new Set([string(tournamentId)]),
     teamIds: new Set(teamIds),
     teamCodes: new Set(ids(teamRows.flatMap(row => [row.teamCode, row.code]))),

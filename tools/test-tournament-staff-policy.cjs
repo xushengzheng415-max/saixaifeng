@@ -17,7 +17,7 @@ const db = { collection(name) { return {
 async function main() {
   assert.equal(policy.SIDEBAR_RIGHTS.length, 10)
   const source = fs.readFileSync(path.join(__dirname, '../cloudfunctions/tournamentStaffAccess/policy.cjs'), 'utf8')
-  for (const name of ['newsCenter', 'newsPreviewGenerate', 'resultCenter', 'webLoginApi', 'updateMatch', 'generateSchedule']) {
+  for (const name of ['newsCenter', 'newsPreviewGenerate', 'resultCenter', 'webLoginApi', 'updateMatch', 'generateSchedule', 'tournamentRegistrationFlow', 'tournamentReview', 'organizerClaimInvite', 'reviewRosterChange', 'dataCenter']) {
     assert.equal(fs.readFileSync(path.join(__dirname, `../cloudfunctions/${name}/staffPolicy.cjs`), 'utf8'), source, `${name} policy copy drifted`)
   }
   assert.equal(await policy.owner(db, 'owner-a', 'org-a'), true)

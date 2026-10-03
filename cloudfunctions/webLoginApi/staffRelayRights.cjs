@@ -35,7 +35,7 @@ function relayRights(name, params = {}) {
   }
   if (name === 'newsPreviewGenerate') return ['event.news']
   if (name === 'tournamentRegistrationFlow') return registrationActions.has(action) ? ['event.registration'] : refereeActions.has(action) ? ['event.referees'] : null
-  if (name === 'organizerClaimInvite') return teamActions.has(action) ? ['event.teams'] : claimReviewActions.has(action) ? ['event.registration'] : null
+  if (name === 'organizerClaimInvite') return teamActions.has(action) ? ['event.teams'] : claimReviewActions.has(action) || action === '' ? ['event.registration'] : null
   if (name === 'generateSchedule') return drawActions.has(action) ? ['event.draw'] : matchActions.has(action) ? ['event.matches'] : action === 'publishRegulations' ? ['event.competition'] : null
   if (name === 'updateMatch') {
     if (action === 'assignByHeadReferee') return null // Head referee uses a separate personal identity.

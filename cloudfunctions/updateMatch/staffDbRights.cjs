@@ -51,6 +51,9 @@ function writeRights(collection, operation, data = {}) {
   if (SPECIAL[operation]) return [SPECIAL[operation]]
   if (!['add', 'update', 'delete'].includes(operation) || !RIGHTS[collection]) return []
   const fields = Object.keys(data || {}).filter(field => !['updateTime', 'updatedAt', 'tournamentId'].includes(field))
+  // An event grant cannot change the owner, organization, record identity or
+  // authorization graph, even when the caller has the settings module.
+  if (fields.some(field => /^(?:_id|orgId|organizationId|organization_id|ownerId|organizerId|auth(?:orization)?|permission(?:s)?|staffGrants?|createdByUserId)$/i.test(field))) return []
   const required = new Set()
   if (collection === 'tournaments') {
     for (const field of fields) required.add(drawField.test(field) ? 'event.draw' : registrationField.test(field) ? 'event.registration' : resultField.test(field) ? 'event.results' : 'event.settings')

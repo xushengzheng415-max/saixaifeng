@@ -10,6 +10,12 @@ exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(cloud,db,event)
     const service = createDataService(db)
+    if (actor.staff) {
+      const tournamentId = String(actor.tournamentIds[0] || '')
+      const requested = String(event.scope && event.scope.tournamentId || event.tournamentId || '')
+      if (event.action !== 'catalog' && requested !== tournamentId) throw error('DATA_FORBIDDEN','只能查看获授权赛事的数据')
+      if (!['catalog','query','quality','tournamentStatistics'].includes(event.action)) throw error('DATA_FORBIDDEN','当前操作未授权')
+    }
     if (event.action === 'initializeCollections') {
       if (!actor.platformOwner) throw error('DATA_FORBIDDEN','仅平台负责人可初始化数据中心')
       const items = []

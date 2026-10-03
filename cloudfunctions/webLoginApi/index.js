@@ -21,6 +21,7 @@ const { buildStaffEventScope, recordBelongsToStaffEvent } = require('./staffEven
 const { readAll: readStaffRows } = require('./data-center/reader.cjs')
 const { relayRights } = require('./staffRelayRights.cjs')
 const { validateStaffRelayScope } = require('./staffRelayScope.cjs')
+const { projectStaffRead } = require('./staffReadProjection.cjs')
 const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
@@ -4104,6 +4105,8 @@ async function handleCallFunction(event) {
   try {
     let authenticated = null
     let assistanceGrant = null
+    let delegatedStaff = false
+    let delegatedTournamentId = ''
     const requiresSession = functionName === 'uploadFile' ||
       functionName === 'platformOwner' ||
       functionName === 'manageTournamentCenterContent' ||
@@ -4118,8 +4121,10 @@ async function handleCallFunction(event) {
       const db = cloud.database()
       const staff = await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
       if (staff) {
+        delegatedStaff = true
         const rule = relayRights(functionName, functionParams || {})
         const tournamentId = String(event.staffTournamentId || '').trim()
+        delegatedTournamentId = tournamentId
         const allowed = Array.isArray(rule) && rule.length === 0 && functionName === 'tournamentStaffAccess' ||
           Boolean(rule && tournamentId && await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId) && (
             Array.isArray(rule)
@@ -4160,6 +4165,7 @@ async function handleCallFunction(event) {
       ...(authenticated && !assistanceGrant ? {
         __actorUserId: authenticated.userId,
         __actorOrgId: authenticated.orgId,
+        ...(delegatedStaff && functionName !== 'tournamentStaffAccess' ? { __staffTournamentId: delegatedTournamentId } : {}),
         ...(functionName === 'updateMatch' ? { __notificationRelay: true } : {}),
         ...(functionName === 'reviewRosterChange' ? {
           __actorUserName: String(authenticated.user.nickname || authenticated.user.userName || authenticated.user.phone || '主办方').slice(0, 50)
@@ -4639,7 +4645,7 @@ async function handleDbQuery(event) {
           }
           const start = Math.max(Number(skipVal) || 0, 0)
           const size = Math.min(Math.max(Number(limitVal) || 100, 1), 1000)
-          return { success: true, data: allowed.slice(start, start + size), total: allowed.length }
+          return { success: true, data: allowed.slice(start, start + size).map(record => projectStaffRead(collection, record, event.staffModule)), total: allowed.length }
         }
         let query = db.collection(collection)
         if (where && Object.keys(where).length > 0) query = query.where(where)
@@ -4679,7 +4685,7 @@ async function handleDbQuery(event) {
         if (organizerScope && !organizerRecordAllowed(collection, normalized, organizerScope)) {
           return { success: false, error: '无权查看其他账号的资料' }
         }
-        return { success: true, data: normalized }
+        return { success: true, data: organizerScope && organizerScope.staff ? projectStaffRead(collection, normalized, event.staffModule) : normalized }
       }
       case 'count': {
         if (organizerScope && organizerScope.staff) {
@@ -4848,7 +4854,12 @@ async function handleRefereeRecordReview(event) {
   const authenticated = await authenticateWebSession(event)
   if (!authenticated.success) return authenticated
   const db = cloud.database()
-  const scope = await buildOrganizerScope(db, authenticated.user)
+  const delegated = authenticated.orgId && await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
+  const staffTournamentId = String(event.staffTournamentId || '').trim()
+  if (delegated && (!staffTournamentId || !await staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, staffTournamentId, 'event.results'))) return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'当前赛事没有赛果复核权限' }
+  const scope = delegated
+    ? await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, staffTournamentId)
+    : await buildOrganizerScope(db, authenticated.user)
   if (scope.organizationConflict) {
     return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
   }
@@ -5003,9 +5014,13 @@ async function handleRosterExceptionBoard(event) {
   const authenticated = await authenticateWebSession(event)
   if (!authenticated.success) return authenticated
   const db = cloud.database()
-  const scope = await buildOrganizerScope(db, authenticated.user)
   const tournamentId = String(event.tournamentId || '')
   const action = String(event.rosterAction || 'list')
+  const delegated = authenticated.orgId && await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
+  if (delegated && (tournamentId !== String(event.staffTournamentId || '') || !await staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, 'event.teams'))) return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'当前赛事没有名单管理权限' }
+  const scope = delegated
+    ? await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, tournamentId)
+    : await buildOrganizerScope(db, authenticated.user)
   if (scope.organizationConflict) {
     return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
   }
@@ -5734,13 +5749,23 @@ exports.main = async (event, context) => {
       if (session.success && session.orgId) {
         const db = cloud.database()
         if (await staffPolicy.isStaff(db, session.userId, session.orgId) && !await staffPolicy.owner(db, session.userId, session.orgId)) {
-          const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery']
+          const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery', 'reviewRefereeRecord', 'rosterExceptionBoard']
           if (action === 'uploadImage') {
-            const tournamentId = String(params.tournamentId || '')
+            const tournamentId = String(params.staffTournamentId || '')
+            if (params.tournamentId && String(params.tournamentId) !== tournamentId) return response(200, { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'赛事范围不一致' })
             const folder = String(params.folder || '')
-            const news = folder === `tournament-news/${tournamentId}` && await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'news.edit')
-            const evidence = /^match-result-evidence\/[^/]+\/[^/]+$/.test(folder) && folder.startsWith(`match-result-evidence/${session.orgId}/`) && await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'result.supplement')
-            if (!news && !evidence) return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有上传权限' })
+            const news = folder === `tournament-news/${tournamentId}` && (
+              await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.news') ||
+              await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'news.edit'))
+            const evidenceMatch = folder.match(/^match-result-evidence\/([^/]+)\/([^/]+)$/)
+            const evidence = evidenceMatch && evidenceMatch[1] === session.orgId &&
+              (await validateStaffRelayScope(db, 'resultCenter', { matchId:evidenceMatch[2] }, tournamentId)) && (
+                await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.results') ||
+                await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'result.supplement'))
+            const teamImageMatch = folder.match(/^(?:team-logos|player-photos)\/([^/]+)$/)
+            const teamImage = teamImageMatch && await validateStaffRelayScope(db, 'teamImage', { teamId:teamImageMatch[1] }, tournamentId) &&
+              await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.teams')
+            if (!news && !evidence && !teamImage) return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有上传权限' })
           } else if (!permittedSessionActions.includes(action)) {
             return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' })
           }

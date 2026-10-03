@@ -1,5 +1,8 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
+const { relayRights } = require('./staffRelayRights.cjs')
+const { validateStaffRelayScope } = require('./staffRelayScope.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
@@ -861,6 +864,17 @@ async function decideClaimReview(event, identity) {
 exports.main = async function(event) {
   try {
     const identity = await currentUser(event || {})
+    const orgId = String(event && event.__actorOrgId || identity.user.orgId || identity.user.organizationId || '').trim()
+    if (orgId && await staffPolicy.isStaff(db, identity.user._id, orgId) && !await staffPolicy.owner(db, identity.user._id, orgId)) {
+      const token = String(event && event.__authToken || '').trim()
+      const sessions = token ? (await db.collection('auth_sessions').where({ tokenHash:hashSessionToken(token), userId:String(identity.user._id), active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || [] : []
+      const tournamentId = String(event && (event.__staffTournamentId || event.tournamentId) || '').trim()
+      const rights = relayRights('organizerClaimInvite', event || {})
+      if (sessions.length !== 1 || sessions[0].activeOrgId && String(sessions[0].activeOrgId) !== orgId ||
+          !Array.isArray(rights) || !rights.length ||
+          !await validateStaffRelayScope(db, 'organizerClaimInvite', event || {}, tournamentId) ||
+          !(await Promise.all(rights.map(right => staffPolicy.hasRight(db, identity.user._id, orgId, tournamentId, right)))).every(Boolean)) throw new Error('当前赛事没有该认领管理权限')
+    }
     if (event && event.action === 'getTeamExportPhotos') return await getTeamExportPhotos(event, identity)
     if (event && event.action === 'getTeamRegistrationSource') return await getTeamRegistrationSource(event, identity)
     if (event && event.action === 'listTournamentRosterPlayers') return await listTournamentRosterPlayers(event, identity)

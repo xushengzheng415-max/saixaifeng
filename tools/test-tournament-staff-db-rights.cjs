@@ -11,6 +11,8 @@ assert.deepEqual(writeRights('matches', 'update', { refereeCrew: {} }), ['event.
 assert.deepEqual(writeRights('divisions', 'update', { name: 'U12' }), ['event.competition'])
 assert.deepEqual(writeRights('divisions', 'update', { registrationEnabled: true }), ['event.registration'])
 assert.deepEqual(writeRights('tournaments', 'update', { status: 'ongoing' }), ['event.settings'])
+assert.deepEqual(writeRights('tournaments', 'update', { orgId: 'another-org' }), [])
+assert.deepEqual(writeRights('teams', 'update', { ownerId: 'another-user' }), [])
 assert.deepEqual(writeRights('divisions', 'confirmDivisionRules'), ['event.competition'])
 assert.deepEqual(writeRights('tournaments', 'deleteTournamentWorkspace'), ['event.settings'])
 assert.deepEqual(writeRights('users', 'update', { role: 'owner' }), [])

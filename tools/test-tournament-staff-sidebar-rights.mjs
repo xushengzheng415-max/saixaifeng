@@ -9,6 +9,8 @@ for (const item of TOURNAMENT_SIDEBAR_RIGHTS) {
 assert.equal(sidebarRightForRoute('/tournaments/event-1/match/m-1/review'), 'event.results')
 assert.equal(sidebarRightForRoute('/tournaments/event-1/match/m-1/monitor'), 'event.matches')
 assert.equal(sidebarRightForRoute('/tournaments/event-1/teams/t-1'), 'event.teams')
+assert.equal(sidebarRightForRoute('/tournaments/event-1/signups'), 'event.registration')
+assert.equal(sidebarRightForRoute('/tournaments/event-1/roster-exceptions'), 'event.teams')
 assert.equal(sidebarRightForRoute('/tournaments/event-1/unknown'), '')
 assert.equal(visibleSidebarKeys(['result.supplement']).has('event.results'), true)
 assert.equal(visibleSidebarKeys(['news.edit']).has('event.news'), true)

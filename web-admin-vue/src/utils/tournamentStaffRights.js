@@ -26,8 +26,8 @@ export function sidebarRightForRoute(path) {
   const remainder = String(path || '').replace(/^\/tournaments\/[^/]+/, '')
   if (!remainder) return 'event.dashboard'
   if (/^\/competition(?:\/|$)/.test(remainder)) return 'event.competition'
-  if (/^\/(?:registration|claim-reviews)(?:\/|$)/.test(remainder)) return 'event.registration'
-  if (/^\/(?:teams|players)(?:\/|$)/.test(remainder)) return 'event.teams'
+  if (/^\/(?:registration|claim-reviews|signups)(?:\/|$)/.test(remainder)) return 'event.registration'
+  if (/^\/(?:teams|players|roster-changes|roster-exceptions)(?:\/|$)/.test(remainder)) return 'event.teams'
   if (/^\/(?:draw|pairings)(?:\/|$)/.test(remainder)) return 'event.draw'
   if (/^\/(?:matches|schedule)(?:\/|$)/.test(remainder)) return 'event.matches'
   if (/^\/results(?:\/|$)/.test(remainder)) return 'event.results'
