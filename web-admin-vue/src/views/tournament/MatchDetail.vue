@@ -2393,10 +2393,11 @@ async function saveKitColors() {
         socks: selectedKitColor('away', 'socks') || kitForm.value.away.socks || ''
       }
     }
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: { kitColors: snapshot, kitSelection, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || '球服颜色未保存')
     match.value.kitColors = snapshot
     match.value.kitSelection = kitSelection
     kitDialogVisible.value = false

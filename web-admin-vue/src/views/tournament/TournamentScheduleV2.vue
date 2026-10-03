@@ -26,7 +26,7 @@
       </div>
       <div class="workbench-table-wrap">
         <table class="workbench-table"><thead><tr><th>场序</th><th>组别</th><th>比赛日期</th><th>时间</th><th>场地</th><th>对阵</th><th>状态</th><th>裁判</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="match in workbenchMatches" :key="match._id"><td>{{ sequenceLabel(match) }}</td><td>{{ divisionName(match.divisionId) }}</td><td>{{ match.matchDate || '待排' }}</td><td>{{ match.matchTime || '—' }}</td><td>{{ match.venue || '—' }}</td><td class="workbench-teams">{{ teamLabel(match,'home') }}　vs　{{ teamLabel(match,'away') }}</td><td>{{ match.matchDate ? managementState(match).label : '待排' }}</td><td>{{ match.refereeCrew?.mainReferee?.name || '未指派' }}</td><td class="workbench-actions"><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openEdit(match)">调时间</el-button><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openSequenceEdit(match)">改场序</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match)">安排裁判</el-button><el-button link @click="openMatchWorkspace(match)">详情</el-button></td></tr>
+          <tr v-for="match in workbenchMatches" :key="match._id"><td>{{ sequenceLabel(match) }}</td><td>{{ divisionName(match.divisionId) }}</td><td>{{ match.matchDate || '待排' }}</td><td>{{ match.matchTime || '—' }}</td><td>{{ match.venue || '—' }}</td><td class="workbench-teams">{{ teamLabel(match,'home') }}　vs　{{ teamLabel(match,'away') }}</td><td>{{ match.matchDate ? managementState(match).label : '待排' }}</td><td>{{ match.refereeCrew?.mainReferee?.name || '未指派' }}</td><td class="workbench-actions"><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openEdit(match)">调时间</el-button><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openSequenceEdit(match)">改场序</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'referee')">安排裁判</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'kit')">球衣颜色</el-button><el-button link @click="openMatchWorkspace(match)">详情</el-button></td></tr>
         </tbody></table>
         <el-empty v-if="!loading && !workbenchMatches.length" description="当前筛选下没有比赛" />
       </div>
@@ -124,6 +124,31 @@
     <el-dialog v-model="editVisible" title="安排比赛" width="520px"><div v-if="editingMatch" class="edit-summary"><small>{{ divisionName(editingMatch.divisionId) }} · 第{{ editingMatch.matchNo || editingMatch.matchIndex || '-' }}场</small><strong>{{ teamLabel(editingMatch,'home') }}　VS　{{ teamLabel(editingMatch,'away') }}</strong></div><el-form label-position="top"><el-form-item label="比赛日期"><el-date-picker v-model="editForm.matchDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item><el-form-item label="开赛时间"><el-select v-model="editForm.matchTime" filterable style="width:100%"><el-option v-for="time in preciseTimes" :key="time" :label="time" :value="time" /></el-select></el-form-item><el-form-item label="比赛场地"><el-select v-model="editForm.venue" style="width:100%"><el-option v-for="venue in compatibleVenues(editingMatch)" :key="venue.name" :label="`${venue.name} · ${fieldFormatLabel(venue.fieldFormat)}`" :value="venue.name" /></el-select></el-form-item></el-form><template #footer><el-button @click="editVisible=false">取消</el-button><el-button type="success" :loading="savingAssignment" @click="saveEdit">保存并校验</el-button></template></el-dialog>
     <el-dialog v-model="sequenceVisible" title="修改场序" width="420px"><p v-if="sequenceMatch">{{ divisionName(sequenceMatch.divisionId) }} · {{ teamLabel(sequenceMatch,'home') }} vs {{ teamLabel(sequenceMatch,'away') }}</p><el-form label-position="top"><el-form-item label="场序号"><el-input-number v-model="sequenceNumber" :min="1" :max="9999" :step="1" /></el-form-item></el-form><template #footer><el-button @click="sequenceVisible=false">取消</el-button><el-button type="success" :loading="savingSequence" @click="saveSequence">保存</el-button></template></el-dialog>
 
+    <el-dialog v-model="assignmentVisible" title="赛前安排" width="660px" :close-on-click-modal="false">
+      <div v-if="assignmentMatch" class="assignment-summary"><strong>{{ teamLabel(assignmentMatch,'home') }}　vs　{{ teamLabel(assignmentMatch,'away') }}</strong><span>{{ divisionName(assignmentMatch.divisionId) }} · {{ assignmentMatch.matchDate || '待排' }} {{ assignmentMatch.matchTime || '' }} · {{ assignmentMatch.venue || '场地待定' }}</span></div>
+      <el-tabs v-model="assignmentTab" class="assignment-tabs">
+        <el-tab-pane label="裁判安排" name="referee">
+          <div v-loading="assignmentLoading">
+            <el-form label-position="top" class="assignment-form">
+              <el-form-item v-for="role in assignmentRoles" :key="role.key" :label="role.label" required>
+                <el-select v-model="assignmentForm[role.key]" filterable :placeholder="`选择${role.label}`" style="width:100%"><el-option v-for="referee in assignableReferees" :key="referee._id" :label="refereeLabel(referee)" :value="referee._id" :disabled="refereeUsedByOtherRole(referee._id,role.key) || conflictingRefereeIds.has(String(referee._id))" /></el-select>
+              </el-form-item>
+              <el-form-item label="操作负责人" required><el-select v-model="assignmentForm.operationRefereeId" placeholder="从本场裁判组选择" style="width:100%"><el-option v-for="referee in selectedCrewReferees" :key="referee._id" :label="referee.name || referee.realName" :value="referee._id" /></el-select></el-form-item>
+            </el-form>
+            <el-empty v-if="!assignmentLoading && !assignableReferees.length" :image-size="54" description="当前赛事没有可指派的裁判" />
+            <div class="assignment-save"><el-button type="success" :loading="savingReferees" :disabled="assignmentLoading || !assignableReferees.length" @click="saveWorkbenchReferees">保存裁判</el-button></div>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="球衣颜色" name="kit">
+          <div v-loading="kitLoading" class="kit-assignment">
+            <section v-for="side in ['home','away']" :key="side"><h3>{{ side === 'home' ? '主队' : '客队' }} · {{ teamLabel(assignmentMatch,side) }}</h3><div class="kit-fields"><label v-for="part in kitParts" :key="part.key"><span>{{ part.label }}</span><el-select v-model="kitForm[side][part.key]" clearable :placeholder="`选择${part.label}颜色`"><el-option v-for="color in kitColorChoices(kitForm[side][part.key])" :key="color" :label="color" :value="color"><span class="kit-color-swatch" :style="{ backgroundColor:kitColorCss(color) }"></span>{{ color }}</el-option></el-select></label></div></section>
+            <div class="assignment-save"><el-button type="success" :loading="savingKit" :disabled="kitLoading" @click="saveWorkbenchKit">保存球衣颜色</el-button></div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+      <template #footer><el-button @click="assignmentVisible=false">关闭</el-button></template>
+    </el-dialog>
+
     <el-dialog v-model="policyVisible" :title="`${policyDivision?.name || ''}资源限制`" width="620px"><el-form label-position="top"><el-form-item label="允许比赛的日期"><el-date-picker v-model="policyDraft.allowedDates" type="dates" value-format="YYYY-MM-DD" :disabled-date="policyDateDisabled" style="width:100%" placeholder="不选表示使用全部比赛日" /></el-form-item><el-form-item label="允许时段"><el-checkbox-group v-model="policyDraft.allowedSessions"><el-checkbox v-for="session in enabledSessions" :key="session.key" :label="session.key">{{ session.label }}</el-checkbox></el-checkbox-group><small>不选表示使用所有已开放时段</small></el-form-item><el-form-item label="允许场地"><el-select v-model="policyDraft.allowedVenues" multiple clearable style="width:100%" placeholder="不选表示使用全部兼容场地"><el-option v-for="venue in policyCompatibleVenues" :key="venue.name" :label="venue.name" :value="venue.name" /></el-select></el-form-item></el-form><template #footer><el-button @click="clearPolicyLimits">清除限制</el-button><el-button @click="policyVisible=false">取消</el-button><el-button type="success" @click="savePolicyLimits">保存限制</el-button></template></el-dialog>
 
     <el-dialog v-model="importVisible" title="导入赛事地图前最后检查" width="720px"><div class="import-summary"><span><b>{{ importPreview.validCount || 0 }}</b>场将更新</span><span><b>{{ importPreview.skippedCount || 0 }}</b>行跳过</span><span :class="{ danger:importPreview.errorCount }"><b>{{ importPreview.errorCount || 0 }}</b>项错误</span></div><el-alert v-if="importPreview.errorCount" type="error" :closable="false" title="请修正文件后重新导入" /><ul v-if="importPreview.errors?.length" class="import-errors"><li v-for="(error,index) in importPreview.errors" :key="index">第{{ error.row || '-' }}行：{{ error.message }}</li></ul><table v-else class="import-changes"><thead><tr><th>场序</th><th>原安排</th><th>新安排</th></tr></thead><tbody><tr v-for="change in importPreview.changes || []" :key="change.matchId"><td>#{{ change.matchNo || '-' }}</td><td>{{ arrangementText(change.before) }}</td><td>{{ arrangementText(change.after) }}</td></tr></tbody></table><template #footer><el-button @click="importVisible=false">返回检查</el-button><el-button type="success" :disabled="Boolean(importPreview.errorCount) || !importPreview.validCount" :loading="applyingImport" @click="applyImport">确认导入赛事地图</el-button></template></el-dialog>
@@ -163,6 +188,13 @@ const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap 
 const view = ref(['settings','imports','map','workbench'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
 const workbenchDivision = ref('all'), workbenchStatus = ref('all'), workbenchSearch = ref('')
 const sequenceVisible = ref(false), sequenceMatch = ref(null), sequenceNumber = ref(1), savingSequence = ref(false)
+const assignmentVisible = ref(false), assignmentMatch = ref(null), assignmentTab = ref('referee')
+const assignmentLoading = ref(false), kitLoading = ref(false), savingReferees = ref(false), savingKit = ref(false)
+const refereeRows = ref([]), assignmentForm = reactive({ mainReferee:'',assistant1:'',assistant2:'',fourthOfficial:'',secondReferee:'',thirdReferee:'',timekeeper:'',operationRefereeId:'' })
+const kitForm = reactive({ home:{ jersey:'',shorts:'',socks:'' },away:{ jersey:'',shorts:'',socks:'' } })
+const kitParts = [{ key:'jersey',label:'上衣' },{ key:'shorts',label:'短裤' },{ key:'socks',label:'球袜' }]
+const kitColorNames = ['红','黄','蓝','白','绿','黑','橙','紫','粉','灰','深绿','浅蓝','藏青','棕']
+const kitColorHex = { 红:'#E53935',黄:'#FDD835',蓝:'#1E88E5',白:'#FFFFFF',绿:'#43A047',黑:'#212121',橙:'#FB8C00',紫:'#8E24AA',粉:'#D81B60',灰:'#757575',深绿:'#1B5E20',浅蓝:'#42A5F5',藏青:'#283593',棕:'#795548' }
 const fileInput = ref(null), importVisible = ref(false), importRows = ref([]), importPreview = ref({})
 const importFileName = ref(''), recognitionSourceRows = ref([]), recognitionRows = ref([]), recognitionFilter = ref('all')
 const refereeDocsVisible = ref(false), refereeDocsDate = ref(''), refereeDocsLoading = ref(false), refereePrintMode = ref(false)
@@ -189,7 +221,65 @@ const workbenchMatches = computed(() => matches.value.filter(match => {
 }).sort((a,b) => String(a.matchDate || '9999').localeCompare(String(b.matchDate || '9999')) || String(a.matchTime || '99:99').localeCompare(String(b.matchTime || '99:99')) || Number(sequenceLabel(a) || 0)-Number(sequenceLabel(b) || 0)))
 function openSequenceEdit(match) { sequenceMatch.value=match;sequenceNumber.value=Number(sequenceLabel(match)) || 1;sequenceVisible.value=true }
 async function saveSequence() { const match=sequenceMatch.value, number=Number(sequenceNumber.value);if(!match || !Number.isInteger(number) || number<1)return ElMessage.warning('请输入有效场序号');savingSequence.value=true;try{const result=await callFunction('updateMatch',{matchId:match._id,data:{matchSequence:number}});if(!result?.success)throw new Error(result?.message || '场序保存失败');sequenceVisible.value=false;ElMessage.success('场序已更新');await load()}catch(error){ElMessage.error(error.message || '场序保存失败')}finally{savingSequence.value=false} }
-function openRefereeAssignment(match) { router.push({ ...matchRoute(match),query:{...matchRoute(match).query,editReferees:'1'} }) }
+const assignmentFormat = computed(() => assignmentMatch.value?.matchFormat || divisions.value.find(item => String(item.id) === String(assignmentMatch.value?.divisionId))?.matchFormat || '11side')
+const assignmentRoles = computed(() => /^(5|6)/.test(String(assignmentFormat.value)) ? [{key:'mainReferee',label:'主裁判'},{key:'secondReferee',label:'第二裁判'},{key:'thirdReferee',label:'第三裁判'},{key:'timekeeper',label:'计时员'}] : [{key:'mainReferee',label:'主裁判'},{key:'assistant1',label:'第一助理裁判'},{key:'assistant2',label:'第二助理裁判'},{key:'fourthOfficial',label:'第四官员'}])
+const assignableReferees = computed(() => refereeRows.value.filter(item => item.canOperate !== false && (item.status === 'approved' || item.synthetic === true && String(item.tournamentId || '') === tournamentId)))
+const selectedCrewReferees = computed(() => assignableReferees.value.filter(item => assignmentRoles.value.some(role => assignmentForm[role.key] === item._id)))
+const conflictingRefereeIds = computed(() => {
+  const current=assignmentMatch.value
+  if (!current?.matchDate || !current?.matchTime) return new Set()
+  const ids=new Set()
+  matches.value.forEach(match => {
+    if (match._id === current._id || ['cancelled','canceled','postponed'].includes(String(match.status || '').toLowerCase()) || match.matchDate !== current.matchDate || match.matchTime !== current.matchTime) return
+    Object.values(match.refereeCrew || {}).forEach(person => { const id=typeof person === 'string' ? person : person?._id || person?.refereeId; if(id)ids.add(String(id)) })
+  })
+  return ids
+})
+function refereeUsedByOtherRole(id,currentRole) { return assignmentRoles.value.some(role => role.key !== currentRole && assignmentForm[role.key] === id) }
+function refereeLabel(referee) { const phone=String(referee.phone || referee.phoneNumber || ''); const masked=phone.length===11 ? `${phone.slice(0,3)}****${phone.slice(-4)}` : '';return [referee.name || referee.realName || '未命名裁判',masked].filter(Boolean).join(' · ') }
+function kitColorCss(color) { return kitColorHex[color] || (/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(String(color || '')) ? color : '#eef2f0') }
+function kitColorChoices(current) { return current && !kitColorNames.includes(current) ? [current,...kitColorNames] : kitColorNames }
+async function loadKitDefaults(match,side) {
+  const sourceId=String(match?.[`${side}TeamId`] || '')
+  if (!sourceId) return {}
+  const direct=await queryById('tournament_teams',sourceId).catch(() => null)
+  const byTeam=await queryList('tournament_teams',{where:{tournamentId,teamId:sourceId},limit:100,silent:true}).catch(() => [])
+  const relations=[direct,...(byTeam || [])].filter(row => row && String(row.tournamentId || '') === tournamentId)
+  const relation=relations.sort((a,b) => Number(String(b.divisionId || '')===String(match.divisionId || ''))-Number(String(a.divisionId || '')===String(match.divisionId || '')))[0]
+  const teamId=String(relation?.teamId || sourceId)
+  const team=await queryById('teams',teamId).catch(() => null)
+  const source=relation?.kitColors || relation?.uniformColors || team?.kitColors || team?.uniformColors || {}
+  const labels=relation?.kitColorLabels || team?.kitColorLabels || {}
+  const set=match.kitSelection?.[side] || 'primary'
+  return { ...(labels[set] || labels.primary || labels.home || {}),...(source[set] || source.primary || source.home || source) }
+}
+async function openRefereeAssignment(match,tab='referee') {
+  assignmentMatch.value=match;assignmentTab.value=tab;assignmentVisible.value=true
+  const crew=match.refereeCrew || {}
+  Object.keys(assignmentForm).forEach(key => { assignmentForm[key]='' })
+  assignmentRoles.value.forEach(role => { const person=crew[role.key];assignmentForm[role.key]=typeof person === 'string' ? person : person?._id || person?.refereeId || '' })
+  assignmentForm.operationRefereeId=match.operationRefereeId || match.refereeRecordKeeperId || assignmentForm[/^(5|6)/.test(String(assignmentFormat.value)) ? 'timekeeper' : 'fourthOfficial'] || ''
+  for(const side of ['home','away'])for(const part of kitParts)kitForm[side][part.key]=String(match.kitColors?.[side]?.[part.key] || '')
+  assignmentLoading.value=true;kitLoading.value=true
+  const refereeTask=Promise.all([queryList('referees',{where:{status:'approved'},limit:500,silent:true}),queryList('referees',{where:{tournamentId},limit:500,silent:true})]).then(groups => {refereeRows.value=[...new Map(groups.flat().filter(Boolean).map(item => [String(item._id),item])).values()] }).catch(error => {refereeRows.value=[];ElMessage.error(error.message || '裁判名单加载失败')}).finally(() => {assignmentLoading.value=false})
+  const kitTask=Promise.all(['home','away'].map(side => loadKitDefaults(match,side).then(defaults => {for(const part of kitParts)if(!kitForm[side][part.key])kitForm[side][part.key]=String(defaults[part.key] || '')}))).catch(error => ElMessage.error(error.message || '球服颜色加载失败')).finally(() => {kitLoading.value=false})
+  await Promise.all([refereeTask,kitTask])
+}
+async function refreshAssignmentMatch() { const fresh=await queryById('matches',assignmentMatch.value._id);if(!fresh)throw new Error('保存后未读到比赛，请刷新赛程');matches.value=matches.value.map(item => item._id===fresh._id ? {...item,...fresh} : item);assignmentMatch.value=matches.value.find(item => item._id===fresh._id) || fresh }
+async function saveWorkbenchReferees() {
+  const ids=assignmentRoles.value.map(role => assignmentForm[role.key])
+  if(ids.some(id => !id))return ElMessage.warning('请完整安排4名裁判')
+  if(new Set(ids).size!==ids.length)return ElMessage.warning('同一裁判不能担任多个岗位')
+  if(!ids.includes(assignmentForm.operationRefereeId))return ElMessage.warning('操作负责人须从本场裁判组选择')
+  savingReferees.value=true
+  try { const crew=Object.fromEntries(assignmentRoles.value.map(role => [role.key,assignmentForm[role.key]]));const result=await callFunction('updateMatch',{matchId:assignmentMatch.value._id,data:{refereeCrew:crew,refereeRecordKeeperId:assignmentForm.operationRefereeId,operationRefereeId:assignmentForm.operationRefereeId}});if(!result?.success)throw new Error(result?.message || '裁判安排未保存');await refreshAssignmentMatch();ElMessage.success('裁判组已保存') }catch(error){ElMessage.error(error.message || '裁判安排失败')}finally{savingReferees.value=false}
+}
+async function saveWorkbenchKit() {
+  const snapshot=Object.fromEntries(['home','away'].map(side => [side,Object.fromEntries(kitParts.map(part => [part.key,String(kitForm[side][part.key] || '').trim()]))]))
+  if(!snapshot.home.jersey || !snapshot.away.jersey)return ElMessage.warning('请先选择双方上衣颜色')
+  savingKit.value=true
+  try {const result=await callFunction('updateMatch',{matchId:assignmentMatch.value._id,data:{kitColors:snapshot}});if(!result?.success)throw new Error(result?.message || '球衣颜色未保存');await refreshAssignmentMatch();ElMessage.success('球衣颜色已保存')}catch(error){ElMessage.error(error.message || '球衣颜色保存失败')}finally{savingKit.value=false}
+}
 function fieldFormatLabel(value) { return fieldFormats.find(item => item.value === value)?.label || '制式待设置' }
 function matchFormat(division) { const raw = String(division?.matchFormat || ''); const number = raw.match(/(5|7|8|9|11)/)?.[1] || Number(division?.playersOnField || 0); return number ? `${number}side` : '' }
 function formatLabel(division) { return `${fieldFormatLabel(matchFormat(division))} · ${{league:'联赛制',cup:'小组+淘汰',tournament:'淘汰赛',hybrid:'复合赛制'}[division?.formatType || division?.tournamentType] || '赛制待设置'}` }
@@ -614,6 +704,7 @@ onMounted(load)
 .match-sides{grid-template-columns:minmax(0,1fr) 86px minmax(0,1fr)}.match-sides>.calendar-score{display:block;min-width:86px;color:#9ca3af;font-size:28px;font-style:normal;font-variant-numeric:tabular-nums;font-weight:900;line-height:1;text-align:center;letter-spacing:.5px}.match-sides>.calendar-score.score-finished{color:#111827}.match-sides>.calendar-score.score-live{color:#d92d20}.match-sides>.calendar-score.score-upcoming{color:#9ca3af}
 .match-sides{display:grid;align-items:center;gap:8px;margin:10px 0}.match-team{display:flex;min-width:0;align-items:center;gap:10px}.match-team.away{justify-content:flex-end;text-align:right}.match-team strong{overflow:hidden;color:#102e1d;font-size:18px;font-weight:800;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.team-crest{display:grid;width:38px;height:38px;flex:0 0 38px;place-items:center;overflow:hidden;border:1px solid #d9e6de;border-radius:50%;background:#fff;color:#168957;font-size:15px;font-style:normal}.team-crest img{display:block;width:100%;height:100%;object-fit:contain}.team-crest b{font-size:15px}
 .schedule-workbench{margin-top:16px;background:#fff;border:1px solid #dce4df;border-radius:8px}.workbench-controls{display:flex;align-items:center;gap:10px;padding:14px;border-bottom:1px solid #e4eae6}.workbench-controls .el-select{width:160px}.workbench-controls .el-input{width:240px}.workbench-controls>span{margin-left:auto;color:#617168;white-space:nowrap}.workbench-table-wrap{overflow-x:auto}.workbench-table{width:100%;min-width:1120px;border-collapse:collapse}.workbench-table th,.workbench-table td{padding:11px 12px;border-bottom:1px solid #edf1ee;text-align:left;white-space:nowrap}.workbench-table th{color:#64746a;background:#f6f8f6;font-size:12px;font-weight:600}.workbench-table td{font-size:13px}.workbench-table .workbench-teams{min-width:260px;white-space:normal}.workbench-actions{min-width:265px}.workbench-actions .el-button{margin:0 8px 0 0}@media(max-width:700px){.workbench-controls{flex-wrap:wrap}.workbench-controls .el-select,.workbench-controls .el-input{width:calc(50% - 5px)}.workbench-controls>span{margin-left:0}}
+.assignment-summary{display:flex;flex-direction:column;gap:4px;padding:0 0 12px;border-bottom:1px solid #e3e9e5}.assignment-summary strong{font-size:15px}.assignment-summary span{color:#68776e;font-size:12px}.assignment-tabs{margin-top:10px}.assignment-form{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.assignment-save{display:flex;justify-content:flex-end;margin-top:8px}.kit-assignment section{padding:12px 0;border-bottom:1px solid #e7ece8}.kit-assignment h3{margin:0 0 12px;font-size:14px}.kit-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.kit-fields label>span{display:block;margin-bottom:6px;color:#627168;font-size:12px}.kit-fields .el-select{width:100%}.kit-color-swatch{display:inline-block;width:14px;height:14px;margin-right:8px;border:1px solid #bfc9c2;border-radius:2px;vertical-align:-2px}@media(max-width:600px){.assignment-form,.kit-fields{grid-template-columns:1fr}}
 </style>
 
 <style scoped>
