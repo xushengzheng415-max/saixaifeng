@@ -365,6 +365,45 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
   return xml
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[character])
+}
+
+export function createRefereeLineupPrintHtml(input) {
+  const widths=[360,1150,350,360,360,360,320,320,1100]
+  const allWidths=[...widths,...widths]
+  const rowCount=Math.max(Number(input.rowCount)||0,input.homePlayers.length,input.awayPlayers.length,1)
+  const grid=`<colgroup>${allWidths.map(width=>`<col style="width:${(width/9360*100).toFixed(3)}%">`).join('')}</colgroup>`
+  const labels=['序号','队员姓名','号码','首发','替补','说明','换上','换下','比赛记录','序号','队员姓名','号码','首发','替补','说明','换上','换下','比赛记录']
+  const header=`<tr>${labels.map(label=>`<th>${label}</th>`).join('')}</tr>`
+  const match=input.match||{}
+  const date=String(match.matchDate||'').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/,'$1年$2月$3日')
+  const sequence=match.matchSequence||match.matchNo||match.sequence||match.matchIndex||'待定'
+  const format=String(input.matchFormat||'').replace('side','人制')
+  const location=[input.location,match.venue].filter(Boolean).filter((value,index,array)=>array.indexOf(value)===index).join('　')
+  const logo=new URL(LOGO_PATH,window.location.origin).href
+  const pageCount=rowCount>20?Math.ceil(rowCount/20):1
+  const rowsPerPage=Math.floor(rowCount/pageCount),extraRows=rowCount%pageCount
+  const pages=[]
+  let offset=0
+  for(let page=0;page<pageCount;page+=1){
+    const count=rowsPerPage+(page<extraRows?1:0)
+    const rowHtml=Array.from({length:count},(_,row)=>{
+      const index=offset+row,home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
+      const cells=[String(index+1),home.name||'',home.number||'','','',home.note||'','','','',String(index+1),away.name||'',away.number||'','','',away.note||'','','','']
+      return `<tr>${cells.map((value,cell)=>`<td${cell%9===1?' class="player-name"':''}>${escapeHtml(value)}</td>`).join('')}</tr>`
+    }).join('')
+    offset+=count
+    const first=page===0,last=page===pageCount-1
+    const title=first?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${escapeHtml(`${input.tournamentName||'足球比赛'}（${format}）`)}</b></div><div><span>比赛时间：</span><b>${escapeHtml(`${date} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${escapeHtml(`${location}　场序：第${sequence}场　组别：${input.divisionName||''}`)}</b></div></div>`:''
+    const bottom=last?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><p class="legend">说明：首发打√，替补打○；队长标C，守门员标GK，不上场标×，停赛标S。换上、换下填写分钟；比赛记录填写进球、黄牌、红牌及发生时间。</p><p class="result">比赛结果：______:______　加时赛（点球决胜）结果：______:______　获胜队：____________________</p><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
+    pages.push(`<section class="sheet">${title}<table class="teams"><tbody><tr><td>主队：${escapeHtml(input.homeName)}</td><td>客队：${escapeHtml(input.awayName)}</td></tr><tr><td>领队/主教练：________________</td><td>领队/主教练：________________</td></tr><tr><td>工作人员/队医：____________</td><td>工作人员/队医：____________</td></tr></tbody></table><table class="roster">${grid}<thead>${header}</thead><tbody>${rowHtml}</tbody></table>${bottom}</section>`)
+  }
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>裁判工作单</title><style>@page{size:A4 portrait;margin:11mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:"SimSun","Songti SC",serif}.sheet{width:100%;min-height:275mm;page-break-after:always;break-after:page;display:flex;flex-direction:column}.sheet:last-child{page-break-after:auto;break-after:auto}h1{margin:0 0 7mm;text-align:center;font-size:18pt}.meta{margin:0 5mm 7mm;font-size:10pt}.meta div{display:grid;grid-template-columns:27mm 1fr;margin:2mm 0}.teams{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10pt}.teams td{height:9mm;padding:2mm;border:.5pt solid #777}.roster{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8pt}.roster th,.roster td{height:6.3mm;padding:1mm .4mm;border:.5pt solid #777;text-align:center;overflow-wrap:anywhere}.roster th{height:13mm;font-weight:400}.roster td.player-name{font-size:9pt;font-weight:bold}.team-sign{display:grid;grid-template-columns:2fr 1fr 2fr 1fr;gap:1mm;padding:2mm 0;border:.5pt solid #777;font-size:8pt}.team-sign span{text-align:center}.legend,.result{margin:2mm 0;font-size:8pt}.officials{display:grid;grid-template-columns:1fr 1fr;gap:5mm 14mm;margin:5mm 14mm 0;font-size:10pt}.officials span{min-height:8mm}footer{display:flex;align-items:center;gap:4mm;margin:auto 0 0;padding-top:4mm;font-size:8pt}footer img{width:34mm;height:auto}footer strong{font-weight:bold}@media screen{body{background:#e9ecef}.sheet{width:186mm;min-height:273mm;margin:8mm auto;padding:0;background:#fff;box-shadow:0 2mm 8mm #0002}}</style></head><body>${pages}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(image=>image.decode?.().catch(()=>{})));setTimeout(()=>window.print(),300)})<\/script></body></html>`
+}
+
 export async function createRefereeLineupSheet(input, templateBytes = null, logoBytes = null) {
   let sourceBytes = templateBytes
   if (!sourceBytes) {
