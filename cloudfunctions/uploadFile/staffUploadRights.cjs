@@ -9,7 +9,8 @@ async function folderRight(db, folder, tournamentId) {
   const path = text(folder).replace(/^\/+|\/+$/g, '')
   if (path === `tournament-news/${tournamentId}`) return 'event.news'
   if (path === `referee-avatars/${tournamentId}` || path === `referee-certificates/${tournamentId}`) return 'event.referees'
-  if (['tournament-logos','tournament-logo-source','tournament-regulations'].includes(path)) return 'event.settings'
+  if (path === 'tournament-regulations') return 'event.competition'
+  if (['tournament-logos','tournament-logo-source'].includes(path)) return 'event.settings'
   if (path === 'team-logos') return 'event.teams'
   const team = path.match(/^(?:team-logos|player-photos|idcard-photos)\/([^/]+)$/)
   if (team) {

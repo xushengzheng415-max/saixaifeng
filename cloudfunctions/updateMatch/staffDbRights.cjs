@@ -57,10 +57,10 @@ function writeRights(collection, operation, data = {}) {
   if (fields.some(field => /^(?:_id|orgId|organizationId|organization_id|ownerId|organizerId|auth(?:orization)?|permission(?:s)?|staffGrants?|createdByUserId)$/i.test(field))) return []
   const required = new Set()
   if (collection === 'tournaments') {
-    for (const field of fields) required.add(drawField.test(field) ? 'event.draw' : registrationField.test(field) ? 'event.registration' : resultField.test(field) ? 'event.results' : 'event.settings')
+    for (const field of fields) required.add(/^regulations?(?:[A-Z_]|$)|^regulationRecognition/.test(field) ? 'event.competition' : drawField.test(field) ? 'event.draw' : registrationField.test(field) ? 'event.registration' : resultField.test(field) ? 'event.results' : 'event.settings')
     if (!fields.length) required.add('event.settings')
   } else if (collection === 'divisions') {
-    for (const field of fields) required.add(drawField.test(field) ? 'event.draw' : registrationField.test(field) ? 'event.registration' : 'event.competition')
+    for (const field of fields) required.add(/^(?:draw[A-Z_]|pairing[A-Z_]|bracket[A-Z_])/.test(field) ? 'event.draw' : registrationField.test(field) ? 'event.registration' : 'event.competition')
     if (!fields.length) required.add('event.competition')
   } else if (collection === 'matches') {
     for (const field of fields) required.add(resultField.test(field) ? 'event.results' : refereeField.test(field) ? 'event.referees' : 'event.matches')

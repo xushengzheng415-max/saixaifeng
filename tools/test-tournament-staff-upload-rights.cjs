@@ -16,7 +16,7 @@ const db = { collection(name) { return {
 } } }
 const right = (params, eventId = 'event-a', userId = 'user-a') => staffUploadRight(db, params, eventId, 'org-a', userId)
 async function main() {
-  assert.equal(await right({ action:'startChunk', folder:'tournament-regulations' }), 'event.settings')
+  assert.equal(await right({ action:'startChunk', folder:'tournament-regulations' }), 'event.competition')
   assert.equal(await right({ action:'startChunk', folder:'match-reports/match-a' }), 'event.results')
   assert.equal(await right({ action:'startChunk', folder:'match-reports/match-b' }), '')
   assert.equal(await right({ action:'startChunk', folder:'player-photos/team-a' }), 'event.teams')
@@ -25,8 +25,8 @@ async function main() {
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/match-reports/match-b/photo.png' }), '')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/referee-certificates/event-a/cert.jpg' }), 'event.referees')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/referee-certificates/event-b/cert.jpg' }), '')
-  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/saved.pdf' }), 'event.settings')
-  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/uploaded.pdf' }), 'event.settings')
+  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/saved.pdf' }), 'event.competition')
+  assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/uploaded.pdf' }), 'event.competition')
   assert.equal(await right({ action:'getTempFileURL', fileID:'cloud://env/tournament-regulations/other.pdf' }), '')
   assert.equal(await right({ action:'legacy', cloudPath:'team-logos/whatever.png' }), '')
   console.log('tournament staff upload rights: folder, chunk owner, file URL and cross-event checks passed')

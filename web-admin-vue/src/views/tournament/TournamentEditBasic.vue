@@ -2,17 +2,17 @@
   <section class="edit-page">
     <div class="toolbar">
       <el-button link @click="router.push('/tournaments/' + id)">← 返回赛事详情</el-button>
-      <el-button plain @click="router.push('/tournaments/' + id + '/competition')">竞赛管理</el-button>
+      <el-button v-if="canCompetition" plain @click="router.push('/tournaments/' + id + '/competition')">竞赛管理</el-button>
     </div>
     <h1>赛事资料</h1>
     <el-form ref="formRef" v-loading="loading" :model="form" :rules="rules" label-position="top" class="edit-form">
-      <section class="regulation-first">
+      <section v-if="canCompetition" class="regulation-first">
         <div class="section-title"><h2>竞赛规程</h2><span>优先上传</span></div>
-        <p class="recognition-tip">上传后可自动生成赛事资料、组织架构和竞赛规则草稿。</p>
+        <p v-if="canCompetition" class="recognition-tip">上传后可生成竞赛规则草稿。</p>
         <div class="regulations">
           <div v-if="form.regulationsFileId" class="file-row"><el-icon><Document /></el-icon><span>{{ form.regulationsFileName || '竞赛规程' }}</span><el-button link type="primary" @click="viewRegulations">查看</el-button><el-button link type="danger" @click="removeRegulations">移除</el-button></div>
           <el-upload ref="regulationsUploadRef" :show-file-list="false" :before-upload="beforeRegulationsUpload" :http-request="handleRegulationsUpload" accept=".pdf,.docx"><el-button :loading="uploadingRegulations">{{ uploadingRegulations ? '上传中' : '上传规程' }}</el-button></el-upload>
-          <el-button v-if="form.regulationsFileId" type="primary" plain :loading="recognizing" @click="recognizeRegulations">{{ recognizing ? '识别中' : '识别并生成' }}</el-button>
+          <el-button v-if="canCompetition && form.regulationsFileId" type="primary" plain :loading="recognizing" @click="recognizeRegulations">{{ recognizing ? '识别中' : '识别并生成' }}</el-button>
           <small>支持 PDF、Word（.docx），最大 10MB</small>
         </div>
       </section>
@@ -74,6 +74,8 @@ import { normalizeRecognizedGender, recognizedDivisionRulePayload } from '../../
 const route = useRoute()
 const router = useRouter()
 const id = route.params.id
+const staffRights = (() => { try { return JSON.parse(sessionStorage.getItem('sxfStaffPermissions') || '[]') } catch { return [] } })()
+const canCompetition = sessionStorage.getItem('sxfTournamentStaff') !== '1' || staffRights.includes('event.competition')
 const formRef = ref(null)
 const regulationsUploadRef = ref(null)
 const loading = ref(true)
@@ -226,8 +228,8 @@ async function handleRegulationsUpload(options) {
       regulationsUrl: form.value.regulationsUrl,
       regulationsFileName: form.value.regulationsFileName
     })
-    ElMessage.success('竞赛规程已上传，正在识别赛事资料')
-    await recognizeRegulations()
+    ElMessage.success('竞赛规程已上传')
+    if (canCompetition) await recognizeRegulations()
   } catch (error) { ElMessage.error('规程上传失败：' + (error.message || '请重试')) } finally { uploadingRegulations.value = false }
 }
 
@@ -426,8 +428,8 @@ async function handleSubmit() {
       },
       contactName: form.value.contactName.trim(), contactPhone: form.value.contactPhone.trim(),
       logo: form.value.logo, logoFileId: form.value.logoFileId,
-      regulationsFileId: form.value.regulationsFileId, regulationsUrl: form.value.regulationsUrl,
-      regulationsFileName: form.value.regulationsFileName
+      ...(canCompetition ? { regulationsFileId: form.value.regulationsFileId, regulationsUrl: form.value.regulationsUrl,
+        regulationsFileName: form.value.regulationsFileName } : {})
     })
     ElMessage.success('赛事资料已保存'); router.push('/tournaments/' + id)
   } catch (error) { ElMessage.error('保存失败：' + (error.message || '请稍后重试')) } finally { submitting.value = false }
