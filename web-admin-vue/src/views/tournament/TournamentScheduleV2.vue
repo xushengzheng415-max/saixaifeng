@@ -112,11 +112,12 @@
 
     <el-dialog v-model="importVisible" title="导入赛事地图前最后检查" width="720px"><div class="import-summary"><span><b>{{ importPreview.validCount || 0 }}</b>场将更新</span><span><b>{{ importPreview.skippedCount || 0 }}</b>行跳过</span><span :class="{ danger:importPreview.errorCount }"><b>{{ importPreview.errorCount || 0 }}</b>项错误</span></div><el-alert v-if="importPreview.errorCount" type="error" :closable="false" title="请修正文件后重新导入" /><ul v-if="importPreview.errors?.length" class="import-errors"><li v-for="(error,index) in importPreview.errors" :key="index">第{{ error.row || '-' }}行：{{ error.message }}</li></ul><table v-else class="import-changes"><thead><tr><th>场序</th><th>原安排</th><th>新安排</th></tr></thead><tbody><tr v-for="change in importPreview.changes || []" :key="change.matchId"><td>#{{ change.matchNo || '-' }}</td><td>{{ arrangementText(change.before) }}</td><td>{{ arrangementText(change.after) }}</td></tr></tbody></table><template #footer><el-button @click="importVisible=false">返回检查</el-button><el-button type="success" :disabled="Boolean(importPreview.errorCount) || !importPreview.validCount" :loading="applyingImport" @click="applyImport">确认导入赛事地图</el-button></template></el-dialog>
 
-    <el-dialog v-model="refereeDocsVisible" title="裁判赛前文档" width="760px" class="referee-doc-dialog">
+    <el-dialog v-model="refereeDocsVisible" title="裁判赛前文档" width="760px" class="referee-doc-dialog" :close-on-click-modal="!refereeDocsLoading" :close-on-press-escape="!refereeDocsLoading" :show-close="!refereeDocsLoading">
       <div class="referee-doc-toolbar">
         <label><span>比赛日</span><el-select v-model="refereeDocsDate" placeholder="选择比赛日" style="width:240px"><el-option v-for="day in calendarDays" :key="day.date" :label="`${day.date} ${day.weekday}`" :value="day.date" /></el-select></label>
         <span class="referee-doc-count">{{ refereePreMatchList.length }} 场待开始比赛</span>
       </div>
+      <div v-if="refereeDocsLoading" class="referee-doc-progress"><span>{{ refereeDocsProgress.label }}</span><b>{{ refereeDocsProgress.percent }}%</b><el-progress :percentage="refereeDocsProgress.percent" :stroke-width="8" :show-text="false" /></div>
       <div v-if="refereePreMatchList.length" class="referee-doc-list">
         <article v-for="match in refereePreMatchList" :key="match._id"><time>{{ match.matchTime || '待定' }}</time><div><small>{{ divisionName(match.divisionId) }} · 场序{{ match.matchSequence || match.matchNo || match.sequence || '—' }}</small><strong>{{ teamLabel(match,'home') }} <em>VS</em> {{ teamLabel(match,'away') }}</strong></div><span>{{ match.venue || '场地待定' }}</span></article>
       </div>
@@ -147,6 +148,7 @@ const view = ref(['settings','imports','map'].includes(String(route.query.view |
 const fileInput = ref(null), importVisible = ref(false), importRows = ref([]), importPreview = ref({})
 const importFileName = ref(''), recognitionSourceRows = ref([]), recognitionRows = ref([]), recognitionFilter = ref('all')
 const refereeDocsVisible = ref(false), refereeDocsDate = ref(''), refereeDocsLoading = ref(false), refereePrintMode = ref(false)
+const refereeDocsProgress = ref({ percent:0,label:'' })
 const editVisible = ref(false), editingMatch = ref(null), editForm = reactive({ matchDate:'',matchTime:'',venue:'' })
 const policyVisible = ref(false), policyDivision = ref(null), policyDraft = reactive({ allowedDates:[],allowedSessions:[],allowedVenues:[] })
 const weekDays = ['周一','周二','周三','周四','周五','周六','周日']
@@ -232,6 +234,7 @@ function matchesForCell(venue,time) { return selectedDayMatches.value.filter(mat
 
 function openRefereePreMatchDocs() {
   refereeDocsDate.value = selectedDate.value || calendarDays.value[0]?.date || ''
+  refereeDocsProgress.value = { percent:0,label:'' }
   refereeDocsVisible.value = true
 }
 
@@ -300,12 +303,13 @@ function suspensionRuleFor(match) {
   return sources.find(Boolean) || null
 }
 
-async function buildRefereePreMatchEntries() {
+async function buildRefereePreMatchEntries(onProgress) {
   const selected = refereePreMatchList.value
   if (!selected.length) throw new Error('所选比赛日没有待开始比赛')
   const rosterCache = new Map()
   const entries = []
   const warnings = new Set()
+  let completed = 0
   for (let offset=0; offset<selected.length; offset+=3) {
     const batch = selected.slice(offset,offset+3)
     const built = await Promise.all(batch.map(async match => {
@@ -324,7 +328,7 @@ async function buildRefereePreMatchEntries() {
       const division = divisions.value.find(item => String(item.id) === String(match.divisionId || '')) || {}
       const rowCount = Math.max(home.limit,away.limit,home.players.length,away.players.length)
       const workMatch = { ...match, matchSequence:match.matchSequence || match.matchNo || match.sequence || match.matchIndex }
-      return {
+      const entry = {
         match:workMatch,
         input:{
           match:workMatch,
@@ -336,6 +340,9 @@ async function buildRefereePreMatchEntries() {
           homePlayers:home.players,awayPlayers:away.players,rowCount
         }
       }
+      completed += 1
+      onProgress?.(completed,selected.length)
+      return entry
     }))
     entries.push(...built)
   }
@@ -387,8 +394,9 @@ function downloadBlob(blob, filename) {
   window.setTimeout(()=>URL.revokeObjectURL(url),30000)
 }
 
-async function prepareRefereePreMatchDocs() {
-  const {entries,warnings}=await buildRefereePreMatchEntries()
+async function prepareRefereePreMatchDocs(onProgress) {
+  const {entries,warnings}=await buildRefereePreMatchEntries(onProgress)
+  onProgress?.(1,1,'正在准备工作单模板')
   const [templateResponse,logoResponse]=await Promise.all([
     fetch(`${import.meta.env.BASE_URL}templates/referee-match-sheet-template.docx`,{cache:'force-cache'}),
     fetch(`${import.meta.env.BASE_URL}logo-saixiaofeng.png`,{cache:'force-cache'})
@@ -398,19 +406,52 @@ async function prepareRefereePreMatchDocs() {
   return {entries,warnings,templateBytes,logoBytes}
 }
 
+function updateRefereeDocsProgress(percent,label,printWindow=null) {
+  const value=Math.max(0,Math.min(100,Math.round(percent)))
+  refereeDocsProgress.value={percent:value,label}
+  if(!printWindow||printWindow.closed)return
+  try {
+    const fill=printWindow.document.getElementById('referee-progress-fill')
+    const percentLabel=printWindow.document.getElementById('referee-progress-percent')
+    const message=printWindow.document.getElementById('referee-progress-label')
+    if(fill)fill.style.width=`${value}%`
+    if(percentLabel)percentLabel.textContent=`${value}%`
+    if(message)message.textContent=label
+  } catch {}
+}
+
+function refereePrintLoadingHtml(total) {
+  const logo=`${window.location.origin}${import.meta.env.BASE_URL}logo-saixiaofeng.png`
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>正在生成裁判工作单</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f7f5;color:#183a27;font-family:"Microsoft YaHei",sans-serif}.box{width:min(420px,calc(100vw - 48px));padding:32px;background:#fff;border:1px solid #dce5df;border-radius:10px;text-align:center;box-shadow:0 8px 32px #183a2712}.box img{width:150px;height:auto}.spin{width:28px;height:28px;margin:20px auto 12px;border:3px solid #d7e8dc;border-top-color:#078747;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.track{height:8px;margin-top:12px;overflow:hidden;border-radius:8px;background:#edf2ee}.track i{display:block;width:0;height:100%;background:#078747;transition:width .2s}.progress{display:flex;justify-content:space-between;margin-top:8px;color:#6c7b71;font-size:12px}</style></head><body><main class="box"><img src="${logo}" alt="赛小蜂"><div class="spin"></div><strong>正在生成裁判工作单</strong><div class="track"><i id="referee-progress-fill"></i></div><div class="progress"><span id="referee-progress-label">准备${total}场比赛</span><span id="referee-progress-percent">0%</span></div></main></body></html>`
+}
+
+function refereePrintErrorHtml(message) {
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>工作单生成失败</title><style>body{font-family:"Microsoft YaHei",sans-serif;background:#f6f8f6;color:#183a27;padding:48px}main{max-width:520px;margin:auto;padding:28px;background:#fff;border:1px solid #e5e9e6;border-radius:8px}strong{color:#b42318}</style></head><body><main><strong>裁判工作单生成失败</strong><p>${safeHtml(message)}</p><p>请返回赛事页面重试。</p></main></body></html>`
+}
+
 async function downloadRefereePreMatchDocs() {
   if(refereeDocsLoading.value)return
   refereeDocsLoading.value=true;refereePrintMode.value=false
+  updateRefereeDocsProgress(0,'准备读取比赛名单')
   try {
-    const {entries,warnings,templateBytes,logoBytes}=await prepareRefereePreMatchDocs()
+    const {entries,warnings,templateBytes,logoBytes}=await prepareRefereePreMatchDocs((done,total,stage)=>{
+      if(stage)updateRefereeDocsProgress(42,stage)
+      else updateRefereeDocsProgress(5+(done/total)*35,`读取正式名单 ${done}/${total}`)
+    })
     const archive=new JSZip()
-    const documents=await Promise.all(entries.map(({input})=>createRefereeLineupSheet(input,templateBytes,logoBytes)))
-    entries.forEach(({input},index)=>archive.file(refereeLineupSheetFileName(input.match,input.homeName,input.awayName),documents[index]))
-    const blob=await archive.generateAsync({type:'blob',mimeType:'application/zip'})
+    for(let index=0;index<entries.length;index+=1){
+      updateRefereeDocsProgress(42+(index/entries.length)*40,`生成 Word 工作单 ${index+1}/${entries.length}`)
+      const {input}=entries[index]
+      const document=await createRefereeLineupSheet(input,templateBytes,logoBytes)
+      archive.file(refereeLineupSheetFileName(input.match,input.homeName,input.awayName),document)
+    }
+    updateRefereeDocsProgress(84,'正在打包工作单')
+    const blob=await archive.generateAsync({type:'blob',mimeType:'application/zip'},metadata=>updateRefereeDocsProgress(84+(metadata.percent||0)*.16,`正在打包工作单 ${Math.round(metadata.percent||0)}%`))
     downloadBlob(blob,`${refereeDocsDate.value}-裁判赛前工作单.zip`)
+    updateRefereeDocsProgress(100,'工作单已下载')
     if(warnings.length)ElMessage.warning(`已打包${entries.length}场；${warnings[0]}`)
     else ElMessage.success(`已打包${entries.length}份裁判工作单`)
-  } catch(error) { ElMessage.error(error.message||'批量下载失败') }
+  } catch(error) { updateRefereeDocsProgress(0,'生成失败');ElMessage.error(error.message||'批量下载失败') }
   finally { refereeDocsLoading.value=false }
 }
 
@@ -419,12 +460,20 @@ async function printRefereePreMatchDocs() {
   const printWindow=window.open('','_blank')
   if(!printWindow)return ElMessage.warning('请允许浏览器打开打印窗口后重试')
   refereeDocsLoading.value=true;refereePrintMode.value=true
+  refereeDocsProgress.value={percent:0,label:'正在准备打印稿'}
+  printWindow.document.open();printWindow.document.write(refereePrintLoadingHtml(refereePreMatchList.value.length));printWindow.document.close()
   try {
-    const {entries,warnings}=await buildRefereePreMatchEntries()
+    const {entries,warnings}=await buildRefereePreMatchEntries((done,total)=>updateRefereeDocsProgress(5+(done/total)*65,`读取正式名单 ${done}/${total}`,printWindow))
+    updateRefereeDocsProgress(78,'正在排版打印页面',printWindow)
     printWindow.document.open();printWindow.document.write(refereePrintDocumentHtml(entries));printWindow.document.close()
+    updateRefereeDocsProgress(100,'打印页面已就绪',null)
     if(warnings.length)ElMessage.warning(`已生成${entries.length}场打印稿；${warnings[0]}`)
     else ElMessage.success(`已生成${entries.length}场打印稿`)
-  } catch(error) { printWindow.close();ElMessage.error(error.message||'批量打印准备失败') }
+  } catch(error) {
+    try { printWindow.document.open();printWindow.document.write(refereePrintErrorHtml(error.message||'批量打印准备失败'));printWindow.document.close() } catch { printWindow.close() }
+    updateRefereeDocsProgress(0,'生成失败',printWindow)
+    ElMessage.error(error.message||'批量打印准备失败')
+  }
   finally { refereeDocsLoading.value=false }
 }
 
@@ -539,6 +588,8 @@ onMounted(load)
 .referee-doc-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
 .referee-doc-toolbar label{display:flex;align-items:center;gap:10px}
 .referee-doc-toolbar label>span,.referee-doc-count{color:#617067;font-size:13px}
+.referee-doc-progress{display:grid;grid-template-columns:1fr auto;align-items:center;gap:7px;margin:12px 0 16px;padding:10px 12px;background:#f5f8f6;border-radius:6px;color:#58675e;font-size:12px}
+.referee-doc-progress .el-progress{grid-column:1/-1}
 .referee-doc-list{max-height:440px;overflow:auto;border-top:1px solid #e7ede9}
 .referee-doc-list article{display:grid;grid-template-columns:60px minmax(0,1fr) 100px;align-items:center;gap:14px;padding:11px 8px;border-bottom:1px solid #e7ede9}
 .referee-doc-list time{font-variant-numeric:tabular-nums;font-weight:700;color:#183a27}
