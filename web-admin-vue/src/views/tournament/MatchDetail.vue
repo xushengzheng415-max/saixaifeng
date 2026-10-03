@@ -1270,7 +1270,7 @@ import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, 
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
-import { createRefereeLineupPrintHtml, createRefereeLineupSheet, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
+import { createRefereeLineupPrintHtml, createRefereeLineupSheet, createRefereePrintLoadingHtml, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
@@ -2674,7 +2674,7 @@ function handleRefereeSheetCommand(command) {
 }
 
 async function downloadRefereeLineupSheet() {
-  if (!canDownloadRefereeSheet.value) return
+  if (!canDownloadRefereeSheet.value || refereeSheetLoading.value) return
   refereeSheetLoading.value = true
   try {
     const { input,homeRoster,awayRoster,suspension } = await prepareRefereeLineupSheetInput()
@@ -2696,12 +2696,17 @@ async function downloadRefereeLineupSheet() {
 }
 
 async function printRefereeLineupSheet() {
-  if (!canDownloadRefereeSheet.value) return
+  if (!canDownloadRefereeSheet.value || refereeSheetLoading.value) return
   const printWindow = window.open('', '_blank')
   if (!printWindow) return ElMessage.warning('请允许浏览器打开打印窗口后重试')
   refereeSheetLoading.value = true
+  printWindow.document.open()
+  printWindow.document.write(createRefereePrintLoadingHtml('正在读取已审核名单和停赛规则'))
+  printWindow.document.close()
   try {
     const { input,homeRoster,awayRoster,suspension } = await prepareRefereeLineupSheetInput()
+    const stage = printWindow.document.getElementById('referee-print-stage')
+    if (stage) stage.textContent = '名单已核对，正在排版打印页面'
     printWindow.document.open()
     printWindow.document.write(createRefereeLineupPrintHtml(input))
     printWindow.document.close()
