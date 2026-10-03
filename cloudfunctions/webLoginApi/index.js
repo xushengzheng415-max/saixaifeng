@@ -1164,6 +1164,8 @@ async function listTournamentInsuranceQueue(event) {
   const auth = await authenticateWebSession(event)
   if (!auth.success) return auth
   const db = cloud.database()
+  for (const name of ['tournament_player_qualifications', 'parent_insurance_documents']) { try { await db.createCollection(name) } catch (error) {} }
+  for (const name of ['tournament_player_qualifications', 'parent_insurance_documents']) { try { await db.createCollection(name) } catch (error) {} }
   const qualifications = (await db.collection('tournament_player_qualifications').where({ status:'submitted' }).limit(300).get()).data || []
   const rows = []
   for (const qualification of qualifications) {
@@ -1414,6 +1416,8 @@ async function completeParentProfile(event) {
   if (requirements.identityVerificationRequired && !verifications.some(item => ['approved','pending_review'].includes(String(item.status || '')))) return { success:false, error:'人证审核状态异常，请联系赛事主办方', code:'PARENT_IDENTITY_REVIEW_STATE_INVALID' }
   if (requirements.profileScope === 'tournament') {
     if (requirements.identityVerificationRequired && !verifications.some(item => String(item.status || '') === 'approved')) return { success:false, error:'赛事身份核验尚未通过，请等待主办方审核', code:'PARENT_EVENT_IDENTITY_PENDING' }
+    try { await db.createCollection('tournament_player_qualifications') } catch (error) {}
+    try { await db.createCollection('tournament_player_qualifications') } catch (error) {}
     const qualifications = (await db.collection('tournament_player_qualifications').where({ tournamentId:String(requirements.tournamentId), divisionId:String(requirements.divisionId), playerId:String(invite.playerId) }).limit(1).get()).data || []
     const qualification = { tournamentId:String(requirements.tournamentId), divisionId:String(requirements.divisionId), teamId:String(invite.teamId), playerId:String(invite.playerId), inviteId:String(invite._id), requirementSnapshot:requirements, identityVerificationId:verifications[0] ? String(verifications[0]._id) : '', identityStatus:verifications[0] ? 'verified' : 'not_required', insuranceDocumentIds:insuranceDocuments.map(item => String(item._id)), portraitId:portraits[0] ? String(portraits[0]._id) : '', status:'submitted', submittedByOpenId:String(authenticated.session.serviceAccountOpenId || ''), updateTime:db.serverDate() }
     if (qualifications[0]) await db.collection('tournament_player_qualifications').doc(String(qualifications[0]._id)).update({ data:qualification })
