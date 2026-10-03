@@ -1,4 +1,13 @@
 const string = value => String(value == null ? '' : value).trim()
+const SIDEBAR_RIGHTS = Object.freeze([
+  'event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw',
+  'event.matches', 'event.results', 'event.news', 'event.referees', 'event.settings'
+])
+const RIGHT_ALIASES = Object.freeze({
+  'result.supplement': 'event.results',
+  'news.edit': 'event.news',
+  'news.publish': 'event.news'
+})
 
 async function read(db, collection, id) {
   if (!id) return null
@@ -27,7 +36,10 @@ async function hasRight(db, userId, orgId, tournamentId, right) {
   const event = await read(db, 'tournaments', string(tournamentId))
   if (!event || string(event.orgId || event.organizationId) !== string(orgId)) return false
   const rows = (await db.collection('tournament_staff_grants').where({ orgId: string(orgId), tournamentId: string(tournamentId), userId: string(userId), status: 'active' }).limit(20).get()).data || []
-  return rows.some(row => Array.isArray(row.permissions) && row.permissions.includes(right))
+  return rows.some(row => {
+    const rights = Array.isArray(row.permissions) ? row.permissions : []
+    return rights.includes(right) || Boolean(RIGHT_ALIASES[right] && rights.includes(RIGHT_ALIASES[right]))
+  })
 }
 
-module.exports = { owner, isStaff, hasRight }
+module.exports = { SIDEBAR_RIGHTS, owner, isStaff, hasRight }

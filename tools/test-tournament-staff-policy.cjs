@@ -15,6 +15,7 @@ const db = { collection(name) { return {
 } } }
 
 async function main() {
+  assert.equal(policy.SIDEBAR_RIGHTS.length, 10)
   const source = fs.readFileSync(path.join(__dirname, '../cloudfunctions/tournamentStaffAccess/policy.cjs'), 'utf8')
   for (const name of ['newsCenter', 'newsPreviewGenerate', 'resultCenter', 'webLoginApi']) {
     assert.equal(fs.readFileSync(path.join(__dirname, `../cloudfunctions/${name}/staffPolicy.cjs`), 'utf8'), source, `${name} policy copy drifted`)
@@ -24,10 +25,13 @@ async function main() {
   assert.equal(await policy.isStaff(db, 'staff-a', 'org-a'), true)
   assert.equal(await policy.hasRight(db, 'staff-a', 'org-a', 'event-a', 'result.supplement'), true)
   assert.equal(await policy.hasRight(db, 'staff-a', 'org-a', 'event-a', 'news.edit'), false)
+  records.tournament_staff_grants[0].permissions = ['event.results', 'event.news']
+  assert.equal(await policy.hasRight(db, 'staff-a', 'org-a', 'event-a', 'result.supplement'), true)
+  assert.equal(await policy.hasRight(db, 'staff-a', 'org-a', 'event-a', 'news.publish'), true)
   assert.equal(await policy.hasRight(db, 'staff-a', 'org-b', 'event-b', 'result.supplement'), false)
   records.tournament_staff_grants[0].status = 'disabled'
   assert.equal(await policy.hasRight(db, 'staff-a', 'org-a', 'event-a', 'result.supplement'), false)
   assert.equal(await policy.isStaff(db, 'staff-a', 'org-a'), true)
-  console.log('tournament staff policy: 7 behavior checks and 4 deployment-copy checks passed')
+  console.log('tournament staff policy: sidebar aliases, scope, revoke and deployment copies passed')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
