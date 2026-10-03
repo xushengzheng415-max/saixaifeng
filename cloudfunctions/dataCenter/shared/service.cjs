@@ -35,7 +35,7 @@ function createDataService(db) {
     const teams = actor.platformOwner ? await readAll(db, 'teams') : await readByIds(db, 'teams', '_id', actor.teamIds)
     const syntheticTeamIds = new Set(teams.filter(synthetic).map(row => id(row._id)))
     const tournaments = actor.platformOwner ? await readAll(db, 'tournaments') : await readByIds(db, 'tournaments', '_id', actor.tournamentIds)
-    const players = actor.staff ? [] : actor.platformOwner ? await readAll(db, 'players') : [...await readByIds(db,'players','teamId',actor.teamIds), ...await readByIds(db,'players','teamCode',actor.teamIds)]
+    const players = actor.platformOwner ? await readAll(db, 'players') : [...await readByIds(db,'players','teamId',actor.teamIds), ...await readByIds(db,'players','teamCode',actor.teamIds)]
     return {
       success:true, accessScope:actor.platformOwner ? 'platform' : 'authorized',
       teams:teams.filter(row => !synthetic(row)).map(row => ({ id:id(row._id), name:id(row.name || row.teamName), orgId:id(row.orgId || row.organizationId) })),
@@ -45,7 +45,6 @@ function createDataService(db) {
   }
   async function query(actor, input = {}) {
     const scope = validateScope(input)
-    if (actor.staff && (!scope.tournamentId || scope.tournamentId !== id(actor.tournamentIds?.[0]))) throw error('DATA_FORBIDDEN', '只能查看获授权赛事的数据')
     const teamIds = new Set((actor.teamIds || []).map(String)), tournamentIds = new Set((actor.tournamentIds || []).map(String))
     if (scope.teamId && !actor.platformOwner && !teamIds.has(scope.teamId)) throw error('DATA_FORBIDDEN', '无权查看该球队的数据')
     if (scope.tournamentId && !actor.platformOwner && !tournamentIds.has(scope.tournamentId) && !scope.teamId) throw error('DATA_FORBIDDEN', '无权查看该赛事的数据')

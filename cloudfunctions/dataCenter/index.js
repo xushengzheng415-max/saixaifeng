@@ -28,7 +28,10 @@ exports.main = async (event = {}) => {
       }
       return { success:true, items }
     }
-    if (event.action === 'catalog') return await service.catalog(actor)
+    if (event.action === 'catalog') {
+      const result = await service.catalog(actor)
+      return actor.staff ? { ...result, players:[] } : result
+    }
     if (event.action === 'playerCard') {
       const playerId = String(event.playerId || '')
       await service.query(actor, { playerId, mode:'official' })

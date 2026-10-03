@@ -1,8 +1,8 @@
 # 数据契约 v1
 
-## 赛事子账号授权（本地候选，未部署）
+## 赛事子账号授权（PC 测试版）
 
-`tournament_staff_grants` 以机构、赛事、受邀手机号建立唯一邀请；受邀者用已核验的自然人账号接受后，记录 `userId` 与 `active` 状态。权限仅含 `result.supplement`、`news.edit`、`news.publish`，停用后新请求立即拒绝。`organization_memberships` 仅为新子账号建立 `event.view` 成员关系，不写入宽泛的 `event.manage`。同一用户可在不同机构或赛事拥有不同授权。
+`tournament_staff_grants` 以机构、赛事、受邀手机号建立唯一邀请；受邀者用已核验的自然人账号接受后，记录 `userId` 与 `active` 状态。新授权按当前主办方侧栏十项 `event.*` 权限保存，“全部权限”展开为这十项，不存永久通配符。旧 `result.supplement`、`news.edit`、`news.publish` 继续按原操作范围校验，停用后新请求立即拒绝。`organization_memberships` 仅为新子账号建立 `event.view` 成员关系，不写入宽泛的 `event.manage`。同一用户可在不同机构或赛事拥有不同授权。
 
 PC 经 `webLoginApi` 会话中转调用 `tournamentStaffAccess` 的 `scope/mine/invitations/managed/invite/accept/activate/update/disable`。`resultCenter.staffMatches/supplementResult` 和 `newsCenter.list/saveDraft/publish/withdraw` 每次写入前按当前用户、机构、赛事和动作重新验权；PC 通用查询、上传与云函数中转对该类账号单独收口。补录赛果使用既有 `matches` 正式结果字段与审计记录，不新建独立比分表。小程序尚未接入本授权接口。
 
