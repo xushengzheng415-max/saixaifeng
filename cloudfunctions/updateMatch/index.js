@@ -386,16 +386,34 @@ exports.main = async (event, context) => {
     if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway'].includes(field)))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
+    const preMatchSetupEditable = !match.refereeRecordLocked && !match.refereeReportSubmittedAt && match.executionState !== 'recording' && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
     if (planState.locked) {
       const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision'])
-      const sequenceEditable = !match.executionSnapshot && !match.refereeRecordLocked && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
-      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(sequenceEditable && field === 'matchSequence') && !(canSupplement && supplementFields.has(field)))
+      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
-        return { success: false, message: '竞赛方案已经锁定，当前只允许调整受控裁判指派', code: 'COMPETITION_PLAN_LOCKED' }
+        return { success: false, message: '竞赛方案已锁定，当前只能安排裁判或修改未开赛比赛的球服颜色与场序', code: 'COMPETITION_PLAN_LOCKED' }
       }
     }
+    if (safeData.kitColors !== undefined) {
+      if (!preMatchSetupEditable) return { success:false, code:'MATCH_KIT_LOCKED', message:'比赛已进入执行或记录已锁定，不能修改球服颜色' }
+      const incoming = safeData.kitColors
+      if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming) || Object.keys(incoming).some(key => !['home','away'].includes(key))) return { success:false, code:'MATCH_KIT_INVALID', message:'球服颜色格式不正确' }
+      const cleaned = {}
+      for (const side of ['home','away']) {
+        const partColors = incoming[side]
+        if (!partColors || typeof partColors !== 'object' || Array.isArray(partColors) || Object.keys(partColors).some(key => !['jersey','shorts','socks'].includes(key))) return { success:false, code:'MATCH_KIT_INVALID', message:'球服颜色格式不正确' }
+        cleaned[side] = {}
+        for (const part of ['jersey','shorts','socks']) {
+          const color = String(partColors[part] || '').trim()
+          if (color && !/^(?:[\u4e00-\u9fa5]{1,12}|#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?)$/.test(color)) return { success:false, code:'MATCH_KIT_INVALID', message:'请使用颜色名称或十六进制颜色值' }
+          cleaned[side][part] = color
+        }
+      }
+      if (!cleaned.home.jersey || !cleaned.away.jersey) return { success:false, code:'MATCH_KIT_INCOMPLETE', message:'请先设置双方上衣颜色' }
+      safeData.kitColors = db.command.set(cleaned)
+    }
     if (safeData.matchSequence !== undefined) {
-      if (match.executionSnapshot || match.refereeRecordLocked || !['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())) {
+      if (match.executionSnapshot || !preMatchSetupEditable) {
         return { success:false, code:'MATCH_SEQUENCE_LOCKED', message:'比赛已进入执行或记录已锁定，不能修改场序' }
       }
       const sequence = Number(safeData.matchSequence)

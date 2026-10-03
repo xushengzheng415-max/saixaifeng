@@ -50,3 +50,5 @@ PC、H5、小程序球员卡统一遵循 [PLAYER_CARD_POINTS.md](PLAYER_CARD_POI
 PC 比赛地图的“赛程工作台”读取同一赛事 `matches`，默认列出全部组别和日期，支持组别、状态、球队与场序筛选。排期调整复用 `generateSchedule.importScheduleAssignments` 的预检、冲突校验和调整日志；已发布但未进入执行快照的比赛可受控调整，已执行或记录锁定的比赛拒绝。显示场序使用独立 `matchSequence`，不改作为淘汰赛依赖键的 `matchNo`；`updateMatch` 校验未开赛状态和同组别场序唯一性。裁判指派进入比赛详情并复用现有权限、人员和冲突校验。赛事统计口径未变。
 
 2026-10-03：`preview` 提交 `e553b519` 的 PC 完整包已部署到 `https://www.sxffootball.cn/preview/admin/`（253 文件）。公网入口、`TournamentScheduleV2` JS/CSS 与 `MatchDetail` JS/CSS 均为 HTTP 200 且 SHA-256 与本地预览构建一致；正式 `/admin/` 保持 HTTP 200 且引用正式资源路径。`generateSchedule` 与 `updateMatch` 仅在 Git 预览分支，未部署云函数，因此新开放的已发布赛程调整和锁定方案后的场序保存尚未完成在线功能验收；预览前端仍连接正式后端。未修改真实比赛数据。
+
+后续预览候选：赛程工作台列表可直接打开赛前安排弹窗，在同一弹窗分别保存四人裁判组、操作负责人及双方上衣/短裤/球袜颜色，保存成功后重新读取比赛。裁判冲突由页面预判、`updateMatch` 再校验；球服颜色沿用 `matches.kitColors`，未开赛且记录未锁定时允许受控修改，已执行比赛拒绝。此处新增的 `updateMatch` 放行与颜色校验仍须独立部署并回读；只发布 PC 测试版时不将其视为线上保存已验收。
