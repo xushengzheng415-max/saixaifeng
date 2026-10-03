@@ -1,5 +1,13 @@
 # 数据契约 v1
 
+## 赛事子账号授权（本地候选，未部署）
+
+`tournament_staff_grants` 以机构、赛事、受邀手机号建立唯一邀请；受邀者用已核验的自然人账号接受后，记录 `userId` 与 `active` 状态。权限仅含 `result.supplement`、`news.edit`、`news.publish`，停用后新请求立即拒绝。`organization_memberships` 仅为新子账号建立 `event.view` 成员关系，不写入宽泛的 `event.manage`。同一用户可在不同机构或赛事拥有不同授权。
+
+PC 经 `webLoginApi` 会话中转调用 `tournamentStaffAccess` 的 `scope/mine/invitations/managed/invite/accept/activate/update/disable`。`resultCenter.staffMatches/supplementResult` 和 `newsCenter.list/saveDraft/publish/withdraw` 每次写入前按当前用户、机构、赛事和动作重新验权；PC 通用查询、上传与云函数中转对该类账号单独收口。补录赛果使用既有 `matches` 正式结果字段与审计记录，不新建独立比分表。小程序尚未接入本授权接口。
+
+新闻草稿、发布和撤回使用 `version` 乐观版本。更新请求须传上次读取的版本；服务端在事务内核对并递增，冲突返回“已在其他设备更新”，客户端刷新后再编辑。
+
 ## 比赛事件换人规则
 
 单场换人规则从锁定快照读取，次选组别已生效版本。首发仅初始化在场状态，不计换人次数。换下球员必须当前在场；换入球员须在场外，并能唯一关联本场稳定球员 ID。普通组别遵守换人次数、窗口和换回规程；free 组别不设人数和窗口上限，可否再次上场由 `substitutionReentryAllowed` 决定。罚下球员不能再次上场。未知规程、号码/姓名歧义、名单缺失、分钟缺失和过期整场事件数组均不能转成有效换人；历史异常显示原因，修正后才接受后续录入。
@@ -18,7 +26,7 @@
 
 ## 统一调用
 
-PC：`callFunction('dataCenter', { action, scope })`，经 webLoginApi 验证会话后转发，数据中心再次验证原会话。机构范围来自服务端账号；平台所有者可以查看平台范围。
+PC 的独立“数据中心”页面归平台运营后台，`/data-center` 走平台会话，不在主办方侧栏展示。底层 `dataCenter` 服务仍可由既有业务入口在授权范围内调用；经 webLoginApi 验证会话后转发，数据中心再次验证原会话，不因页面入口调整扩大或删除统计权限。
 
 小程序：`getMiniWorkspace` 的 `action:'dataCenter'`，传工作空间和 scope。服务端校验空间与角色权限，从已授权球队和主办赛事确定范围；参与赛事不自动授予全赛事个人数据。
 

@@ -226,9 +226,10 @@
               </div>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
+                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · {{ accountRoleLabel }}</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>账号管理</el-dropdown-item>
                   <el-dropdown-item command="refresh"><el-icon><Refresh /></el-icon>刷新数据</el-dropdown-item>
                   <el-dropdown-item divided command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
                 </el-dropdown-menu>
@@ -267,6 +268,7 @@
                   </el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>账号管理</el-dropdown-item>
                   <el-dropdown-item divided command="refresh">
                     <el-icon><Refresh /></el-icon>刷新数据
                   </el-dropdown-item>
@@ -738,7 +740,9 @@ async function confirmBindEmail() {
 
 // 确认选择身份已移至独立页面 /select-role（SelectRoleView.vue）
 
-const roleLabel = computed(() => isPlatformContext() ? '平台管理员' : (ROLE_NAMES[currentRole.value] || '未知'))
+const isTournamentStaff = computed(() => { void route.path; return sessionStorage.getItem('sxfTournamentStaff') === '1' })
+const accountRoleLabel = computed(() => isTournamentStaff.value ? '赛事工作人员' : '机构负责人')
+const roleLabel = computed(() => isPlatformContext() ? '平台管理员' : isTournamentStaff.value ? '赛事工作人员' : (ROLE_NAMES[currentRole.value] || '未知'))
 
 // 展开的子菜单列表
 const expandedMenus = ref([])
@@ -863,6 +867,7 @@ const isAdminPage = computed(() => {
 
 // 根据角色返回对应导航菜单
 const currentNavItems = computed(() => {
+  if (sessionStorage.getItem('sxfTournamentStaff') === '1') return [{ path: '/tournament-staff', label: '我的赛事', icon: 'Trophy' }]
   const ownerOnly = (items) => userInfo.value.isPlatformOwner
     ? items
     : items.filter(item => item.path !== '/system')
@@ -887,6 +892,9 @@ function handleUserCommand(command) {
       break
     case 'organization':
       openOrganizationDialog()
+      break
+    case 'account-management':
+      router.push('/tournament-staff')
       break
     case 'refresh':
       clearLayoutBootstrapCache()

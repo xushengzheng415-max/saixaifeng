@@ -1,5 +1,6 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
 const { readAll, readByIds } = require('./data-center/reader.cjs')
 const { pointsRule, buildStandings } = require('./data-center/standings.cjs')
 
@@ -56,11 +57,64 @@ async function authenticate(event) {
   const userResult = await db.collection('users').doc(sessions[0].userId).get()
   const user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!user) throw new Error('登录账号不存在')
-  const orgId = text(user.orgId || user.organizationId)
+  const orgId = text(sessions[0].activeOrgId || event.__actorOrgId || user.orgId || user.organizationId)
   if (!orgId) throw new Error('当前账号尚未关联机构，请先完成机构引导')
   if (event.__actorUserId && text(event.__actorUserId) !== text(user._id)) throw new Error('登录身份校验失败')
   if (event.__actorOrgId && text(event.__actorOrgId) !== orgId) throw new Error('机构归属校验失败')
-  return { user, orgId }
+  return { user, orgId, staff: await staffPolicy.isStaff(db, user._id, orgId) && !await staffPolicy.owner(db, user._id, orgId) }
+}
+
+async function staffMatches(event, actor) {
+  const tournamentId = text(event.tournamentId)
+  if (!await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'result.supplement')) throw new Error('当前赛事没有补录权限')
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament || !belongsToActor(tournament, actor)) throw new Error('赛事不存在或无权访问')
+  const rows = await readAll(db, 'matches', { tournamentId }, { maxRows: 20000 })
+  return { success: true, orgId: actor.orgId, tournament: { id: tournamentId, name: text(tournament.name) }, matches: rows.map(match => ({
+    id: text(match._id), homeName: text(match.homeTeamName || match.homeName), awayName: text(match.awayTeamName || match.awayName),
+    homeTeamId: text(match.homeTeamId), awayTeamId: text(match.awayTeamId), date: text(match.matchDate || match.date), time: text(match.matchTime), divisionName: text(match.divisionName),
+    status: text(match.status), homeScore: match.homeScore == null ? null : Number(match.homeScore), awayScore: match.awayScore == null ? null : Number(match.awayScore),
+    phase: text(match.phase || match.scheduleType || match.stage), hasRefereeRecord: Boolean(match.refereeRecord || match.refereeSubmittedAt),
+    hasResult: Boolean(match.resultVersionId || match.resultSubmittedAt || [match.homeScore, match.awayScore].every(score => score !== null && score !== undefined && score !== ''))
+  })) }
+}
+
+async function supplementResult(event, actor) {
+  const tournamentId = text(event.tournamentId), matchId = text(event.matchId)
+  if (!await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'result.supplement')) throw new Error('当前赛事没有补录权限')
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament || !belongsToActor(tournament, actor)) throw new Error('赛事不存在或无权访问')
+  const scores = [event.homeScore, event.awayScore].map(Number)
+  if (!matchId || [event.homeScore, event.awayScore].some(score => score === '' || score === null || score === undefined) || scores.some(score => !Number.isInteger(score) || score < 0 || score > 99)) throw new Error('请输入 0 至 99 的整数比分')
+  const files = Array.isArray(event.evidenceFileIds) ? event.evidenceFileIds.map(text) : []
+  if (files.length < 1 || files.length > 2 || files.some(id => !id.startsWith('cloud://') || !id.includes('/match-result-evidence/' + actor.orgId + '/' + matchId + '/'))) throw new Error('请上传 1 至 2 张本场纸质比赛记录')
+  const checked = await cloud.getTempFileURL({ fileList: files }).catch(() => ({ fileList: [] }))
+  if ((checked.fileList || []).filter(item => item.tempFileURL || item.tempFileUrl).length !== files.length) throw new Error('比赛记录照片读取失败，请重新上传')
+  const versionId = 'ORG-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex')
+  await db.runTransaction(async transaction => {
+    const response = await transaction.collection('matches').doc(matchId).get()
+    const match = Array.isArray(response.data) ? response.data[0] : response.data
+    if (!match || text(match.tournamentId) !== tournamentId || match.orgId && text(match.orgId) !== actor.orgId) throw new Error('比赛不存在或无权访问')
+    if (!['finished', 'completed', 'ended', 'pending_result', 'pending_review'].includes(text(match.status).toLowerCase())) throw new Error('比赛尚未完赛')
+    if (match.refereeRecord || match.refereeSubmittedAt || match.refereeReviewStatus) throw new Error('已有裁判记录，请走赛果复核')
+    if (match.resultVersionId || match.resultSubmittedAt || [match.homeScore, match.awayScore].every(score => score !== null && score !== undefined && score !== '') || ['approved', 'archived', 'official'].includes(text(match.resultReviewStatus).toLowerCase())) throw new Error('已有赛果，请走异常纠错')
+    const knockout = /knockout|elimination|淘汰/i.test(text(match.phase || match.scheduleType || match.stage))
+    const homeId = text(match.homeTeamId), awayId = text(match.awayTeamId)
+    if (!homeId || !awayId || homeId === awayId) throw new Error('本场球队身份不完整，请先核对对阵')
+    const winnerTeamId = scores[0] === scores[1] ? text(event.winnerTeamId) : scores[0] > scores[1] ? homeId : awayId
+    if (knockout && scores[0] === scores[1] && (![homeId, awayId].includes(winnerTeamId) || !['penalties', 'extra_time'].includes(text(event.resolution)))) throw new Error('淘汰赛平局须填写决胜方式和晋级球队')
+    const data = {
+      homeScore: scores[0], awayScore: scores[1], scoreHome: scores[0], scoreAway: scores[1],
+      resultReviewStatus: 'approved', resultSource: 'organizer_supplement', resultEntryMode: 'organizer_supplement', resultVersionId: versionId,
+      resultSubmittedAt: db.serverDate(), resultArchivedAt: db.serverDate(), resultArchivedBy: text(actor.user._id),
+      organizerSupplementFiles: files, organizerSupplementNote: text(event.note).slice(0, 300), organizerSupplementUpdatedAt: db.serverDate(), updateTime: db.serverDate()
+    }
+    if (winnerTeamId) data.winnerTeamId = winnerTeamId
+    if (event.resolution) data.resolution = text(event.resolution)
+    await transaction.collection('matches').doc(matchId).update({ data })
+    await transaction.collection('registration_audit_logs').add({ data: { sport: 'football', action: 'organizer_result_supplement_archived', tournamentId, matchId, actorUserId: text(actor.user._id), actorOrgId: actor.orgId, detail: { versionId, homeScore: scores[0], awayScore: scores[1], evidenceFileIds: files }, createTime: db.serverDate() } })
+  })
+  return { success: true, resultVersionId: versionId }
 }
 
 async function getDocument(collection, id) {
@@ -705,6 +759,10 @@ exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(event)
     const action = text(event.action || 'dashboard')
+    if (actor.staff && action === 'dashboard' && (await staffPolicy.hasRight(db, actor.user._id, actor.orgId, text(event.tournamentId), 'news.edit') || await staffPolicy.hasRight(db, actor.user._id, actor.orgId, text(event.tournamentId), 'news.publish'))) return await buildDashboard(event, actor)
+    if (actor.staff && !['staffMatches', 'supplementResult'].includes(action)) throw new Error('当前子账号无权执行该赛果操作')
+    if (action === 'staffMatches') return await staffMatches(event, actor)
+    if (action === 'supplementResult') return await supplementResult(event, actor)
     if (action === 'dashboard') return await buildDashboard(event, actor)
     if (action === 'resolvePairingSources') return await buildDashboard(event, actor)
     if (action === 'publishStandings') return await publishStandings(event, actor)

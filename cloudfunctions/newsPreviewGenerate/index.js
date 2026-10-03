@@ -1,4 +1,5 @@
 const cloud = require('wx-server-sdk')
+const staffPolicy = require('./staffPolicy.cjs')
 const crypto = require('crypto')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV, timeout: 90000 })
@@ -48,7 +49,7 @@ async function getDoc(collection, id) {
   catch (_) { return null }
 }
 
-async function authenticate(token, orgId) {
+async function authenticate(token, orgId, tournamentId) {
   if (!token || !orgId) throw new Error('请先登录主办方 PC 后台')
   const sessions = (await db.collection('auth_sessions').where({ tokenHash: hash(token), active: true, expiresAt: command.gt(new Date()) }).limit(2).get()).data || []
   if (sessions.length !== 1) throw new Error('登录会话已失效，请重新登录')
@@ -58,7 +59,11 @@ async function authenticate(token, orgId) {
   if (!organization) throw new Error('机构不存在')
   const memberships = (await db.collection('organization_memberships').where(command.or([{ userId: user._id }, { memberUserId: user._id }])).limit(100).get()).data || []
   const member = memberships.find(row => text(row.orgId || row.organizationId) === orgId && ['active', 'accepted', 'claimed'].includes(text(row.status || 'active').toLowerCase()))
-  const owner = !member && [organization.ownerId, organization.creatorId, organization.createdBy].map(text).includes(text(user._id))
+  const owner = [organization.ownerId, organization.creatorId, organization.createdBy].map(text).includes(text(user._id))
+  if (await staffPolicy.isStaff(db, user._id, orgId) && !owner) {
+    if (!await staffPolicy.hasRight(db, user._id, orgId, tournamentId, 'news.edit')) throw new Error('当前赛事没有新闻编辑权限')
+    return user
+  }
   const permissions = member && Array.isArray(member.permissions) ? member.permissions.map(text) : member && member.permissions && typeof member.permissions === 'object' ? Object.keys(member.permissions).filter(key => member.permissions[key]) : []
   const roles = member ? [member.role, member.position].concat(member.roles || [], member.positions || []).map(text).join(',').toLowerCase() : ''
   if (!owner && !(permissions.length ? permissions.includes('event.manage') : /赛事|负责人|机构管理员|event|organizer|owner/.test(roles))) throw new Error('当前身份没有赛事管理权限')
@@ -223,7 +228,7 @@ async function generate(input) {
   const tournament = await getDoc('tournaments', tournamentId)
   if (!tournament) throw new Error('赛事不存在')
   const orgId = text(tournament.orgId || tournament.organizationId)
-  const user = await authenticate(text(input.authToken), orgId)
+  const user = await authenticate(text(input.authToken), orgId, tournamentId)
   const note = text(input.note).slice(0, 500)
   if (kind === 'daily') {
     const rows = await tournamentMatches(tournamentId)

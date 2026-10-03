@@ -71,6 +71,8 @@ const CLOUD_FUNCTION_MAP = {
   onboardingWorkspace: 'relay',
   organizerClaimInvite: 'relay',
   resultCenter: 'relay',
+  newsCenter: 'relay',
+  tournamentStaffAccess: 'relay',
   dataCenter: 'relay',
 }
 
@@ -604,9 +606,9 @@ function fileToBase64(file) {
  * Upload small compressed images directly to cloud storage through webLoginApi.
  * Database records should store only the returned URL/fileId, not image base64.
  */
-export async function uploadImageViaWebApi(folder, file) {
+export async function uploadImageViaWebApi(folder, file, tournamentId = '') {
   const base64Data = await fileToBase64(file)
-  const result = await callFunctionHTTP('uploadImage', { base64Data, folder })
+  const result = await callFunctionHTTP('uploadImage', { base64Data, folder, tournamentId })
   if (result && result.success) {
     return {
       success: true,

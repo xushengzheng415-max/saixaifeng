@@ -392,6 +392,20 @@ const routes = [
     children: [{ path: '', component: () => import('../views/tournament/TournamentNewsCenterPreview.vue') }]
   },
   {
+    path: '/tournament-staff',
+    name: 'TournamentStaffAccess',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '账号管理', workspaceShell: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentStaffAccess.vue') }]
+  },
+  {
+    path: '/tournaments/:id/staff-results',
+    name: 'TournamentStaffResults',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '补录成绩', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentStaffResults.vue') }]
+  },
+  {
     path: '/tournaments/:id/referees',
     name: 'TournamentReferees',
     component: () => import('../views/layout/LayoutView.vue'),
@@ -542,7 +556,7 @@ function hasOrganizerSession() {
   // 只承认微信主办方会话。平台管理员会话由上面的 redirectPlatformSession 单独分流；
   // 这里不再接受 platform-password（历史实现把它伪装成 organizer 才放行，正是串味来源）。
   return loginType === 'wechat' &&
-    role.toLowerCase() === 'organizer' &&
+    Boolean(role) &&
     version === 'phone-canonical-web-v1' &&
     Boolean(authToken)
 }
@@ -563,7 +577,7 @@ function needsOrganizerOnboarding(to) {
   // needsOrganizerOnboarding 只服务主办方。平台管理员没有 orgId 也不该有机构，
   // 历史实现让它走到这里，于是平台负责人被当成“尚未开户的主办方”推进了机构引导。
   if (isPlatformSession()) return false
-  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/service-account-binding' || to.path === '/assistance') return false
+  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/service-account-binding' || to.path === '/assistance' || to.path === '/tournament-staff') return false
   if (to.meta.requiresAuth !== true) return false
   try {
     const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
@@ -685,6 +699,27 @@ router.beforeEach(async (to, from, next) => {
     if (!hasOrganizerSession()) {
       clearInvalidSession()
       next('/login')
+      return
+    }
+    if (to.meta.requiresAuth === true || to.path === '/') {
+      try {
+        const { callFunction } = await import('../utils/cloud')
+        const scope = await callFunction('tournamentStaffAccess', { action: 'scope' })
+        const staff = scope?.success && scope.isStaff && !scope.isOwner
+        sessionStorage.setItem('sxfTournamentStaff', staff ? '1' : '0')
+        if (staff) {
+          const grant = (scope.grants || []).find(item => item.tournamentId === String(to.params.id || ''))
+          const rights = grant?.permissions || []
+          const allowed = to.path === '/tournament-staff' ||
+            /\/tournaments\/[^/]+\/staff-results$/.test(to.path) && rights.includes('result.supplement') ||
+            /\/tournaments\/[^/]+\/news$/.test(to.path) && rights.some(right => right === 'news.edit' || right === 'news.publish')
+          if (!allowed) { next('/tournament-staff'); return }
+          next(); return
+        }
+      } catch (_) { /* 旧环境部署前仍沿用现有主办方路由；服务端会独立拒绝越权请求。 */ }
+    }
+    if (String(localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toLowerCase() !== 'organizer' && to.path !== '/tournament-staff') {
+      next('/tournament-staff')
       return
     }
     // 纯微信会话已通过版本与主办方角色校验。

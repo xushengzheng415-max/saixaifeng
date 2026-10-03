@@ -215,6 +215,7 @@ const ORGANIZER_SCOPED_RELAY_FUNCTIONS = new Set([
 // 这些中转入口会消耗第三方 AI/微信能力，或读取受保护的球员/比赛数据。
 // 即使当前调用不写入数据库，也必须先通过网页会话，不能把 relay 当作匿名代理。
 const SESSION_REQUIRED_RELAY_FUNCTIONS = new Set([
+  'tournamentStaffAccess',
   'dataCenter',
   'generatePlayerCard', 'generateQRCode', 'removeImageBg', 'baiduRemoveBg',
   'generateAIImage',
@@ -1107,6 +1108,11 @@ async function authenticateWebSession(event) {
   const rawUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!rawUser) return { success: false, error: '登录账号不存在，请重新登录', code: 'AUTH_REQUIRED' }
   const user = await ensureUserOrgId(db, rawUser)
+  const activeOrgId = String(session.activeOrgId || '')
+  if (activeOrgId && (user.organizationIds || []).includes(activeOrgId)) {
+    user.orgId = activeOrgId
+    user.organizationConflict = false
+  }
   db.collection('auth_sessions').doc(session._id).update({ data: { lastUsedAt: db.serverDate() } }).catch(() => {})
   return { success: true, session, user, userId: user._id, orgId: user.orgId }
 }
@@ -3602,6 +3608,7 @@ async function handleCheckLogin(event) {
 // 用于浏览器端调用非登录类云函数（如 uploadFile）
 // ★ 添加云函数白名单，防止调用危险云函数
 const ALLOWED_FUNCTIONS = [
+  'tournamentStaffAccess',
   'dataCenter',
   'uploadFile',
   'parseTournamentRegulations',
@@ -3822,6 +3829,16 @@ async function handleCallFunction(event) {
     if (requiresSession) {
       authenticated = await authenticateWebSession(event)
       if (!authenticated.success) return authenticated
+    }
+    if (authenticated && authenticated.orgId) {
+      const staffPolicy = require('./staffPolicy.cjs')
+      const staff = await staffPolicy.isStaff(cloud.database(), authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(cloud.database(), authenticated.userId, authenticated.orgId)
+      if (staff) {
+        const allowed = functionName === 'tournamentStaffAccess' ||
+          functionName === 'newsCenter' && ['list', 'saveDraft', 'publish', 'withdraw'].includes(String(functionParams && functionParams.action || '')) ||
+          functionName === 'resultCenter' && ['staffMatches', 'supplementResult', 'dashboard'].includes(String(functionParams && functionParams.action || ''))
+        if (!allowed) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
+      }
     }
     if (authenticated && !assistanceGrantId && ORGANIZER_REQUIRED_RELAY_FUNCTIONS.has(functionName)) {
       if (authenticated.user.organizationConflict) {
@@ -5330,6 +5347,25 @@ exports.main = async (event, context) => {
   console.log('[webApi] action:', action, 'params keys:', Object.keys(params))
 
   try {
+    if (params.authToken && !['checkLogin', 'callFunction'].includes(action)) {
+      const session = await authenticateWebSession(params)
+      if (session.success && session.orgId) {
+        const staffPolicy = require('./staffPolicy.cjs')
+        const db = cloud.database()
+        if (await staffPolicy.isStaff(db, session.userId, session.orgId) && !await staffPolicy.owner(db, session.userId, session.orgId)) {
+          const readOnlySessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization']
+          if (action === 'uploadImage') {
+            const tournamentId = String(params.tournamentId || '')
+            const folder = String(params.folder || '')
+            const news = folder === `tournament-news/${tournamentId}` && await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'news.edit')
+            const evidence = /^match-result-evidence\/[^/]+\/[^/]+$/.test(folder) && folder.startsWith(`match-result-evidence/${session.orgId}/`) && await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'result.supplement')
+            if (!news && !evidence) return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有上传权限' })
+          } else if (!readOnlySessionActions.includes(action)) {
+            return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' })
+          }
+        }
+      }
+    }
     let result
     switch (action) {
       case 'sendSms':
