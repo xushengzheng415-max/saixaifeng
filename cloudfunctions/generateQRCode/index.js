@@ -31,7 +31,8 @@ exports.main = async (event, context) => {
       const inviteRows = (await db.collection('parent_profile_invites').where({ token, status:'active' }).limit(1).get()).data || []
       const invite = inviteRows[0]
       if (!invite || (invite.expiresAt && new Date(invite.expiresAt).getTime() <= Date.now())) return { success:false, message:'球员资料邀请已失效' }
-      const link = 'https://www.sxffootball.cn/service-account-h5/?parentInvite=' + encodeURIComponent(token) + '&entry=registered'
+      const h5Path = event.preview === true ? '/preview/service-account-h5/' : '/service-account-h5/'
+      const link = 'https://www.sxffootball.cn' + h5Path + '?parentInvite=' + encodeURIComponent(token) + '&entry=registered'
       const buffer = await QRCode.toBuffer(link, { type:'png', width:Math.max(280, Math.min(720, Number(width || 430))), margin:2, errorCorrectionLevel:'M', color:{ dark:'#083d27', light:'#ffffff' } })
       const safeToken = require('crypto').createHash('sha256').update(token).digest('hex').slice(0,24)
       const cloudPath = 'restricted/service-account-invites/' + safeToken + '.png'

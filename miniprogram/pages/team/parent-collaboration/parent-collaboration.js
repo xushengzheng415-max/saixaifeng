@@ -31,7 +31,10 @@ Page({
   generateInviteQr: function(invite) {
     var page = this
     if (!invite.token || this.data.visualQa) return
-    wx.cloud.callFunction({ name:'generateQRCode', data:{ type:'service_account_player_invite', parentInvite:invite.token, width:430 } }).then(function(response) {
+    var accountInfo = wx.getAccountInfoSync ? wx.getAccountInfoSync() : {}
+    var miniProgram = accountInfo.miniProgram || {}
+    var preview = String(miniProgram.envVersion || 'release') !== 'release'
+    wx.cloud.callFunction({ name:'generateQRCode', data:{ type:'service_account_player_invite', parentInvite:invite.token, preview:preview, width:430 } }).then(function(response) {
       var result = (response.result || {}).data || {}
       if (result.tempUrl && page.data.invite.token === invite.token) page.setData({ 'invite.qrUrl':result.tempUrl })
     }).catch(function() {})
