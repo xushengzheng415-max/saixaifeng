@@ -660,7 +660,7 @@ import QRCode from 'qrcode'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, Upload, UserFilled, DocumentChecked, WarningFilled, Timer, CircleCheckFilled, Lock, Download, Link, Grid, CopyDocument, Key } from '@element-plus/icons-vue'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, getFileUrl, assignTournamentTeamDivision } from '../../utils/cloud'
+import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, assignTournamentTeamDivision } from '../../utils/cloud'
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import TeamRegistrationWordImporter from '../../components/tournament/TeamRegistrationWordImporter.vue'
@@ -1930,8 +1930,9 @@ function compressCreateLogo(file) {
 
 async function uploadCreateLogoFile(file) {
   const compressedFile = await compressCreateLogo(file)
-  const cloudPath = `team-logos/${Date.now()}-${compressedFile.name}`
-  const result = await uploadLargeFileViaCloud(cloudPath, compressedFile, { chunkSize: 32 * 1024 })
+  const result = sessionStorage.getItem('sxfTournamentStaff') === '1'
+    ? await uploadImageViaWebApi('team-logos', compressedFile, tournamentId)
+    : await uploadLargeFileViaCloud(`team-logos/${Date.now()}-${compressedFile.name}`, compressedFile, { chunkSize: 32 * 1024 })
   if (!result.success) throw new Error(result.message || '上传失败')
   return {
     url: result.tempUrl || await getFileUrl(result.fileId),
@@ -2110,11 +2111,12 @@ async function submitCreateTeam() {
         description: form.description || ''
       })
     }
-    const created = await addRecord('teams', teamData)
+    const delegatedStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
+    const created = await addRecord('teams', delegatedStaff ? { ...teamData, staffDivisionId:activeDivisionId.value } : teamData)
     createdTeamId = created._id
     if (!createdTeamId) throw new Error('球队创建成功但未返回球队ID')
 
-    const createdRelation = await addRecord('tournament_teams', {
+    const createdRelation = created.tournamentTeamId ? { _id:created.tournamentTeamId } : await addRecord('tournament_teams', {
       tournamentId,
       teamId: createdTeamId,
       teamName: teamData.name,

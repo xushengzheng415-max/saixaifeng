@@ -50,9 +50,9 @@ function recordBelongsToStaffEvent(collection, record, scope) {
   const eventId = string(record.tournamentId || record.eventId)
   if (collection === 'tournaments') return string(record._id) === scope.tournamentId
   if (collection === 'teams') return scope.teamIds.has(string(record._id))
-  if (collection === 'players') return scope.playerIds.has(string(record._id))
+  if (collection === 'players') return scope.playerIds.has(string(record._id)) || scope.teamIds.has(string(record.teamId || record.teamCode))
   if (collection === 'referees') return scope.refereeIds.has(string(record._id)) || eventId === scope.tournamentId
-  if (['coaches', 'management'].includes(collection)) return scope.teamIds.has(string(record.teamId)) && eventId === scope.tournamentId
+  if (['coaches', 'management'].includes(collection)) return scope.teamIds.has(string(record.teamId || record.teamCode))
   if (collection === 'matches') return scope.matchIds.has(string(record._id)) && eventId === scope.tournamentId
   if (['match_events', 'match_referees', 'squads'].includes(collection)) return scope.matchIds.has(string(record.matchId))
   if (['player_library', 'coach_library'].includes(collection)) return false

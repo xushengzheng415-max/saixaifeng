@@ -30,7 +30,7 @@ exports.main = async (event, context) => {
       case 'getTempFileURL':
         return await getTempFileURL(fileID)
       case 'startChunk':
-        return await startChunkUpload({ fileName, totalChunks, folder })
+        return await startChunkUpload({ fileName, totalChunks, folder, staffUserId:data.__actorUserId, staffOrgId:data.__actorOrgId, staffTournamentId:data.__staffTournamentId })
       case 'uploadChunk':
         return await uploadSingleChunk({ uploadId, chunkIndex, data: chunkData })
       case 'finishChunk':
@@ -176,7 +176,7 @@ const CHUNK_DOCS_COLLECTION = 'chunk_data'
 /**
  * 初始化分片上传
  */
-async function startChunkUpload({ fileName, totalChunks, folder }) {
+async function startChunkUpload({ fileName, totalChunks, folder, staffUserId, staffOrgId, staffTournamentId }) {
   const uploadId = 'chunk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8)
   
   await db.collection(CHUNK_SESSIONS_COLLECTION).add({
@@ -184,6 +184,7 @@ async function startChunkUpload({ fileName, totalChunks, folder }) {
       _id: uploadId,
       fileName,
       folder: folder || 'regulations',
+      ...(staffTournamentId ? { staffUserId, staffOrgId, staffTournamentId } : {}),
       totalChunks,
       createdAt: Date.now()
     }

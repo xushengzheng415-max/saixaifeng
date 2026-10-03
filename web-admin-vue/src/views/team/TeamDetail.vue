@@ -559,7 +559,7 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="从库中选择" name="library">
+        <el-tab-pane v-if="!isTournamentStaff" label="从库中选择" name="library">
           <div class="tab-content">
             <!-- 搜索栏 -->
             <div class="library-search">
@@ -1274,11 +1274,18 @@ import RosterPosterModal from '../../components/team/RosterPosterModal.vue'
 import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
 
+const isTournamentStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
 const route = useRoute()
 const router = useRouter()
 const teamId = String(route.params.teamId || route.params.id || '')
 const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : (route.params.teamId ? String(route.params.id || '') : ''))
 const sourceDivisionId = computed(() => typeof route.query.divisionId === 'string' ? route.query.divisionId : '')
+async function uploadScopedTeamFile(cloudPath, file, options = {}) {
+  if (!isTournamentStaff) return uploadLargeFileViaCloud(cloudPath, file, options)
+  const folder = String(cloudPath).split('/').slice(0, 2).join('/')
+  const uploaded = await uploadImageViaWebApi(folder, file, sourceTournamentId.value)
+  return { ...uploaded, fileID: uploaded.fileId }
+}
 const fromRegistration = computed(() => route.query.from === 'registration')
 const isReadOnlyTournament = computed(() => Boolean(sourceTournamentId.value) && !fromRegistration.value)
 const isTeamDataWorkspace = computed(() => Boolean(sourceTournamentId.value) && !fromRegistration.value)
@@ -2202,7 +2209,7 @@ async function handleAvatarCropSuccess(base64Image) {
 
     // ★ 网页登录接口请求体限制较小，统一使用 32KB 小分片避免 HTTP 413
     const cloudPath = `player-photos/${teamId}/${Date.now()}-avatar.png`
-    const result = await uploadLargeFileViaCloud(cloudPath, file, { chunkSize: 32 * 1024 })
+    const result = await uploadScopedTeamFile(cloudPath, file, { chunkSize: 32 * 1024 })
 
     if (result.success) {
       playerForm.value.photoUrl = result.tempUrl || ''
@@ -2225,7 +2232,7 @@ async function handlePhotoUpload(options) {
     const { file } = options
     const cloudPath = `player-photos/${teamId}/${Date.now()}-${file.name}`
     // ★ 分片上传（32KB/片）
-    const result = await uploadLargeFileViaCloud(cloudPath, file, { chunkSize: 32 * 1024 })
+    const result = await uploadScopedTeamFile(cloudPath, file, { chunkSize: 32 * 1024 })
     if (result.success) {
       playerForm.value.photoUrl = result.tempUrl || ''
       playerForm.value.photoFileID = result.fileId || result.fileID || ''
@@ -2247,7 +2254,7 @@ async function handleIdCardUpload(options, side) {
     const { file } = options
     const cloudPath = `idcard-photos/${teamId}/${Date.now()}-${side}-${file.name}`
     // ★ 分片上传（32KB/片）
-    const result = await uploadLargeFileViaCloud(cloudPath, file, { chunkSize: 32 * 1024 })
+    const result = await uploadScopedTeamFile(cloudPath, file, { chunkSize: 32 * 1024 })
     if (result.success) {
       if (side === 'front') {
         playerForm.value.idCardFront = result.tempUrl || ''
@@ -2459,7 +2466,7 @@ async function submitPlayer() {
       await addRecord('players', data)
 
       // 同步到球员库（按身份证号去重）
-      try {
+      if (!isTournamentStaff) try {
         const owner = getCurrentOwner()
         const existWhere = owner
           ? { idCard: playerForm.value.idCard, owner }
@@ -3027,8 +3034,7 @@ async function handleAISuccess(url) {
 
 watch(showAddPlayer, (val) => {
   if (val) {
-    // 打开弹窗时预加载球员库
-    loadPlayerLibrary()
+    if (!isTournamentStaff) loadPlayerLibrary()
   } else {
     resetPlayerForm()
     clearImportData()
@@ -3737,7 +3743,7 @@ async function processAvatarImportRow(row) {
   row.status = 'uploading'
   const safeName = String(targetPlayer.playerId || targetPlayer._id || row.photoName).replace(/[^a-zA-Z0-9_-]/g, '') || 'avatar'
   const cloudPath = `player-photos/${teamId}/batch-${Date.now()}-${safeName}.png`
-  const uploadResult = await uploadLargeFileViaCloud(cloudPath, processedFile, {
+  const uploadResult = await uploadScopedTeamFile(cloudPath, processedFile, {
     chunkSize: 32 * 1024,
     onProgress: (received, total) => {
       row.progress = Math.round((received / total) * 100)
@@ -4123,7 +4129,7 @@ async function handleLogoCropConfirm(croppedBlob) {
     // 2. 上传处理后的图片
     const cloudPath = `team-logos/${teamId}/${Date.now()}-logo.png`
     // ★ 分片上传（32KB/片）
-    const result = await uploadLargeFileViaCloud(cloudPath, processedFile, { chunkSize: 32 * 1024 })
+    const result = await uploadScopedTeamFile(cloudPath, processedFile, { chunkSize: 32 * 1024 })
 
     if (result.success) {
       teamEditForm.value.logoUrl = result.tempUrl
