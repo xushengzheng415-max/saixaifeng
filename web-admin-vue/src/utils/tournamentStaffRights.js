@@ -34,7 +34,7 @@ export function sidebarRightForRoute(path) {
   if (/^\/news(?:\/|$)/.test(remainder)) return 'event.news'
   if (/^\/referees(?:\/|$)/.test(remainder)) return 'event.referees'
   if (/^\/edit(?:\/|$)/.test(remainder)) return 'event.settings'
-  if (/^\/match\/[^/]+\/(?:review|archive)(?:\/|$)/.test(remainder)) return 'event.results'
+  if (/^\/match\/[^/]+\/(?:post-match|review|archive)(?:\/|$)/.test(remainder)) return 'event.results'
   if (/^\/match\/[^/]+(?:\/|$)/.test(remainder)) return 'event.matches'
   if (/^\/staff-results(?:\/|$)/.test(remainder)) return 'event.results'
   return ''

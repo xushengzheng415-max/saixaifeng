@@ -7,6 +7,7 @@ for (const item of TOURNAMENT_SIDEBAR_RIGHTS) {
   assert.equal(sidebarRightForRoute(`/tournaments/event-1${item.suffix}`), item.key, item.label)
 }
 assert.equal(sidebarRightForRoute('/tournaments/event-1/match/m-1/review'), 'event.results')
+assert.equal(sidebarRightForRoute('/tournaments/event-1/match/m-1/post-match'), 'event.results')
 assert.equal(sidebarRightForRoute('/tournaments/event-1/match/m-1/monitor'), 'event.matches')
 assert.equal(sidebarRightForRoute('/tournaments/event-1/teams/t-1'), 'event.teams')
 assert.equal(sidebarRightForRoute('/tournaments/event-1/signups'), 'event.registration')

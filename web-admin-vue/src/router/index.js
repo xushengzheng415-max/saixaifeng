@@ -715,6 +715,13 @@ router.beforeEach(async (to, from, next) => {
           sessionStorage.setItem('sxfStaffPermissions', JSON.stringify([...rights]))
           sessionStorage.setItem('sxfStaffTournamentId', sameOrganization ? grant.tournamentId : '')
           const required = sidebarRightForRoute(to.path)
+          const resultOnly = sameOrganization && grant.permissions.includes('result.supplement') && !grant.permissions.includes('event.results')
+          if (resultOnly && to.path === `/tournaments/${grant.tournamentId}/results`) {
+            next(`/tournaments/${grant.tournamentId}/staff-results`); return
+          }
+          if (resultOnly && required === 'event.results' && to.path !== `/tournaments/${grant.tournamentId}/staff-results`) {
+            next('/tournament-staff'); return
+          }
           const allowed = to.path === '/tournament-staff' || Boolean(sameOrganization && required && rights.has(required))
           if (!allowed) { next('/tournament-staff'); return }
           next(); return

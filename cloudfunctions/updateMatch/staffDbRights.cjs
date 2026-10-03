@@ -38,7 +38,7 @@ const SPECIAL = Object.freeze({
   deleteTournamentWorkspace: 'event.settings'
 })
 
-const resultField = /^(?:homeScore|awayScore|scoreHome|scoreAway|winnerTeamId|resolution|result[A-Z_]|refereeReviewStatus|refereeRecordArchivedAt|refereeRecordLocked)/
+const resultField = /^(?:homeScore|awayScore|scoreHome|scoreAway|winnerTeamId|resolution|result[A-Z_]|organizerSupplement[A-Z_]|refereeReviewStatus|refereeRecordArchivedAt|refereeRecordLocked)/
 const refereeField = /^(?:referee[A-Z_]|operationRefereeId|refereeRecordKeeperId|headRefereeId)/
 const drawField = /^(?:draw[A-Z_]|group[A-Z_]|pairing[A-Z_]|bracket[A-Z_])/
 const registrationField = /^(?:registration[A-Z_]|signup[A-Z_]|application[A-Z_])/

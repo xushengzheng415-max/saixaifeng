@@ -6,6 +6,7 @@ assert.equal(fs.readFileSync(path.join(__dirname, '../cloudfunctions/updateMatch
 
 assert.deepEqual(writeRights('matches', 'update', { matchTime: '10:00' }), ['event.matches'])
 assert.deepEqual(writeRights('matches', 'update', { homeScore: 1 }), ['event.results'])
+assert.deepEqual(writeRights('matches', 'update', { organizerSupplementFiles: [] }), ['event.results'])
 assert.deepEqual(writeRights('matches', 'update', { homeScore: 1, matchTime: '10:00' }), ['event.results', 'event.matches'])
 assert.deepEqual(writeRights('matches', 'update', { refereeCrew: {} }), ['event.referees'])
 assert.deepEqual(writeRights('divisions', 'update', { name: 'U12' }), ['event.competition'])
