@@ -1,5 +1,13 @@
 # 数据中心上线与验收
 
+## 2026-10-03 赛程工作台正式发布
+
+用户确认正式发布后，最新 `main` 的本次功能提交 `fb9ee8c0` 已推送 Gitee。PC 完整构建 263 文件部署 `/admin/`；正式域名入口、`TournamentScheduleV2` 和 `MatchDetail` 的 JS/CSS 均为 HTTP 200，SHA-256 与本地构建一致。`admin/index.html` 摘要为 `E711A678666A823C04130B672F2BF8B259B6DD529ADF081EAA4C5A6AD727B87B`；赛程 JS 为 `9E4D900A253CDC7DDC524C982CA692ACB39EAD4015673ED51EB98C533B64863A`。预览 `/preview/admin/` 仍为 HTTP 200 且引用预览资源。
+
+`updateMatch` 与 `generateSchedule` 均从线上配置拉取并只更新必要源码，恢复为 `Active`，回下载 `index.js` 与发布包 SHA-256 分别为 `0617AE59AAB320648788FDA5BB7E9868FA6C513380B86CE6F2AFA28C4D60BEB5` 和 `5BA7126FD8E65FBD948196B42F5B4205F362262DA286D1656843F19A33604C4F`。前者保留 Nodejs16.13／20 秒／256 MB，后者保留 Nodejs16.13／60 秒／512 MB，均为 `index.main` 且环境变量数 0。两函数的无会话探针均拒绝访问，未写真实比赛。`generateSchedule` 的线上比赛时长逻辑在发布源码中保留。首次不带正式配置的函数更新曾返回 `UpdateFailed/ResourceNotFound.Entryfile`；从线上拉取配置后重试成功，最终状态和代码已读回。
+
+本地赛程、场序、裁判及球服门禁测试与 PC 构建通过，`check-data-governance` 通过。`finish-data-change` 因现有 `playerCardPublishWorker` 共享副本未同步而失败；该缺口与本次赛程代码无关。真实主办方账号在正式页面调整一场未开赛比赛并回读结果的交互验收仍待现场执行。
+
 ## 2026-10-01 照片优先展示补充
 
 按用户确认的“报名提取头像/自主登记形象照基本都有图”调整展示：完整成卡可用时显示成卡，其余情况优先显示已授权照片；仅实际缺图提示资料补充，图片/网络异常保留重试。未修改报名照片要求、测试排除或卡级算法，也未重制已完成的 189 张成卡。
