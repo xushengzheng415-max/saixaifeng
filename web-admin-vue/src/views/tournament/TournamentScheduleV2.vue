@@ -496,11 +496,11 @@ function kitLine(colors) {
 }
 
 function printSheetHtml(input) {
-  const widths=[280,1150,280,340,340,340,300,300,450,450,450]
+  const widths=[280,1240,280,360,360,360,360,360,360,360,360]
   const allWidths=[...widths,...widths]
   const maxRows=Math.max(Number(input.rowCount)||0,input.homePlayers.length,input.awayPlayers.length,1)
   const colgroup=`<colgroup>${allWidths.map(value=>`<col style="width:${(value/9360*100).toFixed(3)}%">`).join('')}</colgroup>`
-  const heading=['序号','队员姓名','号码','首发','替补','说明','换上','换下','进球','黄牌','红牌','序号','队员姓名','号码','首发','替补','说明','换上','换下','进球','黄牌','红牌']
+  const heading=['序号','队员姓名','号码','首发','替补','身份','换上','换下','进球','黄牌','红牌','序号','队员姓名','号码','首发','替补','身份','换上','换下','进球','黄牌','红牌']
   const header=`<tr>${heading.map(label=>`<th>${label}</th>`).join('')}</tr>`
   const match=input.match||{}
   const day=String(match.matchDate||'').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/,'$1年$2月$3日')

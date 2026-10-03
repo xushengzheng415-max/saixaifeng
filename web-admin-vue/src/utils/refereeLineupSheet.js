@@ -7,8 +7,8 @@ const WORD_CELL = /<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g
 const TEMPLATE_BASE = import.meta.env?.BASE_URL || '/admin/'
 const TEMPLATE_PATH = `${TEMPLATE_BASE}templates/referee-match-sheet-template.docx`
 const LOGO_PATH = `${TEMPLATE_BASE}logo-saixiaofeng.png`
-const ROSTER_WIDTHS = [280, 1150, 280, 340, 340, 340, 300, 300, 450, 450, 450]
-const ROSTER_LABELS = ['序号', '队员姓名', '号码', '首发', '替补', '说明', '换上', '换下', '进球', '黄牌', '红牌']
+const ROSTER_WIDTHS = [280, 1240, 280, 360, 360, 360, 360, 360, 360, 360, 360]
+const ROSTER_LABELS = ['序号', '队员姓名', '号码', '首发', '替补', '身份', '换上', '换下', '进球', '黄牌', '红牌']
 
 function kitLine(colors) {
   return `球衣颜色：上衣${colors?.jersey || '____'}　短裤${colors?.shorts || '____'}　球袜${colors?.socks || '____'}`
@@ -337,7 +337,7 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
     headingRows.splice(1, 0, kitRow)
     headingRows[4] = formatRosterRow(setRowCells(expandRosterRow(headingRows[4]), [...ROSTER_LABELS, ...ROSTER_LABELS]), true)
     const rosterTemplate = rows[5]
-    const signatureRow = alignTeamTableRow(rows.at(-1))
+    const signatureRow = alignTeamTableRow(rows.at(-1)).replaceAll('球席', '球衣')
     const rowCount = Math.max(1, Number(input.rowCount) || 0, input.homePlayers.length, input.awayPlayers.length)
     const rosterRows = Array.from({ length: rowCount }, (_, index) => {
       const home = input.homePlayers[index] || {}
