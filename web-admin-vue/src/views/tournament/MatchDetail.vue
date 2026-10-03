@@ -2650,6 +2650,7 @@ async function prepareRefereeLineupSheetInput() {
       location:substitutionTournament.value.location || substitutionTournament.value.venue || '',
       homeName:homeName.value,
       awayName:awayName.value,
+      kitColors:kitColors.value,
       homePlayers:homeRoster.players,
       awayPlayers:awayRoster.players,
       rowCount
