@@ -16,6 +16,7 @@ assert.deepEqual(matchListQuery(source),{date:'2026-10-01'})
 assert.deepEqual(matchListQuery({...source,listDivision:'middle'}),{date:'2026-10-01',divisionId:'middle'})
 assert.deepEqual(matchListQuery({...source,listDate:'invalid'}),{})
 assert.deepEqual(matchListQuery(matchSourceQuery(source)),{date:'2026-10-01'})
+assert.deepEqual(matchListQuery({...source,listView:'workbench'}),{date:'2026-10-01',view:'workbench'})
 const scheduleSource=fs.readFileSync(new URL('../web-admin-vue/src/views/tournament/TournamentScheduleV2.vue',import.meta.url),'utf8')
 const routeContext={tournamentId:'t',selectedDate:{value:'2026-10-01'},divisionFilter:{value:'all'},view:{value:'map'},arrangedMatches:{value:[]},firstUnfinishedMatchDate,managementState:match=>({key:match.state})}
 vm.createContext(routeContext)
