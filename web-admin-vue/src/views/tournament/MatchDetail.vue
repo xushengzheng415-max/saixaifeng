@@ -107,13 +107,17 @@
                 <el-button v-if="hasLineups" type="success" size="small" @click="openPreviewDialog">
                   <el-icon><View /></el-icon> 预览首发名单（中超版）
                 </el-button>
-                <el-button
-                  v-if="canDownloadRefereeSheet"
-                  size="small"
-                  :loading="refereeSheetLoading"
-                  title="文件只下载到本机，裁判填写内容不会上传平台"
-                  @click="downloadRefereeLineupSheet"
-                >下载裁判工作单</el-button>
+                <el-dropdown v-if="canDownloadRefereeSheet" trigger="click" @command="handleRefereeSheetCommand">
+                  <el-button size="small" :loading="refereeSheetLoading" title="工作单只在本机生成，不会上传裁判填写内容">
+                    裁判工作单<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="download">下载 Word 工作单</el-dropdown-item>
+                      <el-dropdown-item command="print">打印工作单</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
             </div>
             <div v-if="hasLineups" ref="lineupExportArea" class="lineup-container">
@@ -1261,12 +1265,12 @@ import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
+import { ArrowDown, Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard } from '../../utils/cloud'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
-import { createRefereeLineupSheet, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
+import { createRefereeLineupPrintHtml, createRefereeLineupSheet, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
@@ -2620,53 +2624,91 @@ function calculateSuspendedPlayerIds(matches, currentMatch, homeRoster, awayRost
   return { ids, complete: true, reason: '' }
 }
 
+async function prepareRefereeLineupSheetInput() {
+  if (!match.value.homeTeamId || !match.value.awayTeamId) throw new Error('比赛缺少主客队信息，暂时无法生成工作单')
+  const [homeRoster, awayRoster] = await Promise.all([
+    loadApprovedMatchRoster('home'),
+    loadApprovedMatchRoster('away')
+  ])
+  const allMatches = await queryList('matches', { where:{ tournamentId:String(match.value.tournamentId || tournamentId) }, limit:1000, silent:true, throwOnError:true })
+  const suspension = calculateSuspendedPlayerIds(allMatches || [], match.value, homeRoster, awayRoster)
+  if (suspension.complete) {
+    homeRoster.players.forEach(player => { if (suspension.ids.has(player.playerId)) player.note='S' })
+    awayRoster.players.forEach(player => { if (suspension.ids.has(player.playerId)) player.note='S' })
+  }
+  if (!match.value.matchSequence && !match.value.sequence && !match.value.matchNo && !match.value.matchIndex) await calculateMatchSequence(match.value)
+  const rowCount = Math.max(homeRoster.limit,awayRoster.limit,homeRoster.players.length,awayRoster.players.length)
+  const matchFormat = match.value.matchFormat || substitutionDivision.value.matchFormat || substitutionTournament.value.matchFormat || ''
+  return {
+    input:{
+      match:match.value,
+      matchFormat,
+      tournamentName:tournamentNameStr.value || match.value.tournamentName || '',
+      divisionName:substitutionDivision.value.name || substitutionDivision.value.divisionName || match.value.divisionName || match.value.division || '',
+      location:substitutionTournament.value.location || substitutionTournament.value.venue || '',
+      homeName:homeName.value,
+      awayName:awayName.value,
+      homePlayers:homeRoster.players,
+      awayPlayers:awayRoster.players,
+      rowCount
+    },
+    homeRoster,
+    awayRoster,
+    suspension
+  }
+}
+
+function notifyRefereeSheetIssues(homeRoster, awayRoster, suspension, actionLabel) {
+  if (homeRoster.limit && homeRoster.players.length > homeRoster.limit || awayRoster.limit && awayRoster.players.length > awayRoster.limit) {
+    ElMessage.warning(`工作单${actionLabel}；有球队名单人数超过登记上限，已完整列出全部队员`)
+  } else if (!suspension.complete) {
+    ElMessage.warning(`工作单${actionLabel}；${suspension.reason}`)
+  } else {
+    ElMessage.success(`裁判工作单${actionLabel}`)
+  }
+}
+
+function handleRefereeSheetCommand(command) {
+  if (command === 'print') printRefereeLineupSheet()
+  else downloadRefereeLineupSheet()
+}
+
 async function downloadRefereeLineupSheet() {
   if (!canDownloadRefereeSheet.value) return
-  if (!match.value.homeTeamId || !match.value.awayTeamId) return ElMessage.warning('比赛缺少主客队信息，暂时无法生成名单表')
   refereeSheetLoading.value = true
   try {
-    const [homeRoster, awayRoster] = await Promise.all([
-      loadApprovedMatchRoster('home'),
-      loadApprovedMatchRoster('away')
-    ])
-    const allMatches = await queryList('matches', { where: { tournamentId: String(match.value.tournamentId || tournamentId) }, limit: 1000, silent: true, throwOnError: true })
-    const suspension = calculateSuspendedPlayerIds(allMatches || [], match.value, homeRoster, awayRoster)
-    if (suspension.complete) {
-      homeRoster.players.forEach(player => { if (suspension.ids.has(player.playerId)) player.note = 'S' })
-      awayRoster.players.forEach(player => { if (suspension.ids.has(player.playerId)) player.note = 'S' })
-    }
-    if (!match.value.matchSequence && !match.value.sequence) await calculateMatchSequence(match.value)
-    const rowCount = Math.max(homeRoster.limit, awayRoster.limit, homeRoster.players.length, awayRoster.players.length)
-    const matchFormat = match.value.matchFormat || substitutionDivision.value.matchFormat || substitutionTournament.value.matchFormat || ''
-    const file = await createRefereeLineupSheet({
-      match: match.value,
-      matchFormat,
-      tournamentName: tournamentNameStr.value || match.value.tournamentName || '',
-      divisionName: substitutionDivision.value.name || substitutionDivision.value.divisionName || match.value.divisionName || match.value.division || '',
-      location: substitutionTournament.value.location || substitutionTournament.value.venue || '',
-      homeName: homeName.value,
-      awayName: awayName.value,
-      homePlayers: homeRoster.players,
-      awayPlayers: awayRoster.players,
-      rowCount
-    })
+    const { input,homeRoster,awayRoster,suspension } = await prepareRefereeLineupSheetInput()
+    const file = await createRefereeLineupSheet(input)
     const url = URL.createObjectURL(file)
     const link = document.createElement('a')
     link.href = url
-    link.download = refereeLineupSheetFileName(match.value, homeName.value, awayName.value)
+    link.download = refereeLineupSheetFileName(input.match, input.homeName, input.awayName)
     document.body.appendChild(link)
     link.click()
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 30000)
-    if (homeRoster.limit && homeRoster.players.length > homeRoster.limit || awayRoster.limit && awayRoster.players.length > awayRoster.limit) {
-      ElMessage.warning('有球队名单人数超过登记上限，表格已完整列出全部队员')
-    } else if (!suspension.complete) {
-      ElMessage.warning(`工作单已下载；${suspension.reason}`)
-    } else {
-      ElMessage.success('裁判工作单已下载到本机')
-    }
+    notifyRefereeSheetIssues(homeRoster,awayRoster,suspension,'已下载到本机')
   } catch (error) {
     ElMessage.error(error.message || '工作单生成失败，请检查已审核赛事名单')
+  } finally {
+    refereeSheetLoading.value = false
+  }
+}
+
+async function printRefereeLineupSheet() {
+  if (!canDownloadRefereeSheet.value) return
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) return ElMessage.warning('请允许浏览器打开打印窗口后重试')
+  refereeSheetLoading.value = true
+  try {
+    const { input,homeRoster,awayRoster,suspension } = await prepareRefereeLineupSheetInput()
+    printWindow.document.open()
+    printWindow.document.write(createRefereeLineupPrintHtml(input))
+    printWindow.document.close()
+    notifyRefereeSheetIssues(homeRoster,awayRoster,suspension,'已打开打印预览')
+  } catch (error) {
+    printWindow.close()
+    ElMessage.error(error.message || '工作单打印准备失败，请检查已审核赛事名单')
   } finally {
     refereeSheetLoading.value = false
   }
