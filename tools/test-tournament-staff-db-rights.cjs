@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict')
 const { readRights, writeRights } = require('../cloudfunctions/webLoginApi/staffDbRights.cjs')
+const fs = require('node:fs')
+const path = require('node:path')
+assert.equal(fs.readFileSync(path.join(__dirname, '../cloudfunctions/updateMatch/staffDbRights.cjs'), 'utf8'), fs.readFileSync(path.join(__dirname, '../cloudfunctions/webLoginApi/staffDbRights.cjs'), 'utf8'))
 
 assert.deepEqual(writeRights('matches', 'update', { matchTime: '10:00' }), ['event.matches'])
 assert.deepEqual(writeRights('matches', 'update', { homeScore: 1 }), ['event.results'])

@@ -4,6 +4,7 @@
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
 import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
+import { sidebarRightForRoute } from './tournamentStaffRights'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
@@ -92,11 +93,14 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
   const assistance = platformRequest ? null : getAssistanceContext()
   const bypassAssistance = action === 'callFunction' &&
     ['platformOwner', 'manageTournamentCenterContent', 'generateMiniProgramCode'].includes(data.functionName)
+  const staff = !platformRequest && sessionStorage.getItem('sxfTournamentStaff') === '1'
+  const staffPath = staff ? window.location.hash.replace(/^#/, '').split('?')[0] : ''
   const payload = {
     ...data,
     action,
     authToken: platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || ''),
-    assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : ''
+    assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : '',
+    ...(staff ? { staffTournamentId: sessionStorage.getItem('sxfStaffTournamentId') || '', staffModule: sidebarRightForRoute(staffPath) } : {})
   }
   console.log(`[callFunctionHTTP] → ${action}`)
 

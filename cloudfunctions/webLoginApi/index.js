@@ -16,6 +16,11 @@ const path = require('path')
 const os = require('os')
 const cloud = require('wx-server-sdk')
 const staffPolicy = require('./staffPolicy.cjs')
+const staffDbRights = require('./staffDbRights.cjs')
+const { buildStaffEventScope, recordBelongsToStaffEvent } = require('./staffEventScope.cjs')
+const { readAll: readStaffRows } = require('./data-center/reader.cjs')
+const { relayRights } = require('./staffRelayRights.cjs')
+const { validateStaffRelayScope } = require('./staffRelayScope.cjs')
 const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
@@ -1570,6 +1575,7 @@ async function buildOrganizerScope(db, rawUser) {
 
 function organizerRecordAllowed(collection, record, scope) {
   if (!record || !scope) return false
+  if (scope.staff) return recordBelongsToStaffEvent(collection, record, scope)
   if (recordHasOrg(record, scope.orgId)) return true
 
   if (collection === 'teams') {
@@ -1623,6 +1629,7 @@ function organizerRecordAllowed(collection, record, scope) {
 
 function organizerRelationAllowed(collection, record, scope) {
   if (!record || !scope) return false
+  if (scope.staff) return recordBelongsToStaffEvent(collection, record, scope)
   if (collection === 'teams' || collection === 'tournaments' || collection === 'referees' ||
       collection === 'referee_invitations' || collection === 'player_library' ||
       collection === 'coach_library') return true
@@ -4111,9 +4118,14 @@ async function handleCallFunction(event) {
       const db = cloud.database()
       const staff = await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
       if (staff) {
-        const allowed = functionName === 'tournamentStaffAccess' ||
-          functionName === 'newsCenter' && ['list', 'saveDraft', 'publish', 'withdraw'].includes(String(functionParams && functionParams.action || '')) ||
-          functionName === 'resultCenter' && ['staffMatches', 'supplementResult', 'dashboard'].includes(String(functionParams && functionParams.action || ''))
+        const rule = relayRights(functionName, functionParams || {})
+        const tournamentId = String(event.staffTournamentId || '').trim()
+        const allowed = Array.isArray(rule) && rule.length === 0 && functionName === 'tournamentStaffAccess' ||
+          Boolean(rule && tournamentId && await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId) && (
+            Array.isArray(rule)
+              ? (await Promise.all(rule.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).every(Boolean)
+              : Array.isArray(rule.any) && (await Promise.all(rule.any.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).some(Boolean)
+          ))
         if (!allowed) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
       }
     }
@@ -4502,6 +4514,8 @@ async function handleDbQuery(event) {
   const db = cloud.database()
   const authenticated = await authenticateWebSession(event)
   if (!authenticated.success) return authenticated
+  const delegatedStaff = Boolean(authenticated.orgId) && await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
+  if (delegatedStaff && assistanceGrantId) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '赛事子账号不能叠加远程协助授权' }
 
   let assistanceScope = null
   if (assistanceGrantId) {
@@ -4518,7 +4532,18 @@ async function handleDbQuery(event) {
 
   let organizerScope = null
   if (!assistanceScope) {
-    organizerScope = await buildOrganizerScope(db, authenticated.user)
+    if (delegatedStaff) {
+      const tournamentId = String(event.staffTournamentId || '').trim()
+      const requestedModule = String(event.staffModule || '').trim()
+      const needed = ['list', 'get', 'count'].includes(operation)
+        ? (staffDbRights.readRights(collection).includes(requestedModule) ? [requestedModule] : [])
+        : staffDbRights.writeRights(collection, operation, data)
+      if (!tournamentId || !needed.length || !(await Promise.all(needed.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).every(Boolean)) {
+        return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有该模块或操作权限' }
+      }
+      try { organizerScope = await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, tournamentId) }
+      catch (error) { return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: error.message || '赛事授权范围读取失败' } }
+    } else organizerScope = await buildOrganizerScope(db, authenticated.user)
     if (organizerScope.organizationConflict) {
       return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
     }
@@ -4602,6 +4627,20 @@ async function handleDbQuery(event) {
         return confirmCompetitionPlan(db, id, data, organizerScope)
       }
       case 'list': {
+        if (organizerScope && organizerScope.staff) {
+          const rows = await readStaffRows(db, collection, where && typeof where === 'object' ? where : {}, { maxRows: 20000 })
+          const allowed = rows.filter(record => organizerRecordAllowed(collection, record, organizerScope))
+          const orders = Array.isArray(orderBy) ? orderBy : orderBy ? [orderBy] : []
+          for (const entry of orders.slice().reverse()) {
+            const field = entry && typeof entry === 'object' ? Object.keys(entry)[0] : ''
+            if (!field) continue
+            const direction = String(entry[field]).toLowerCase() === 'asc' ? 1 : -1
+            allowed.sort((left, right) => String(left[field] == null ? '' : left[field]).localeCompare(String(right[field] == null ? '' : right[field]), 'zh-CN', { numeric: true }) * direction)
+          }
+          const start = Math.max(Number(skipVal) || 0, 0)
+          const size = Math.min(Math.max(Number(limitVal) || 100, 1), 1000)
+          return { success: true, data: allowed.slice(start, start + size), total: allowed.length }
+        }
         let query = db.collection(collection)
         if (where && Object.keys(where).length > 0) query = query.where(where)
         if (orderBy) {
@@ -4643,6 +4682,10 @@ async function handleDbQuery(event) {
         return { success: true, data: normalized }
       }
       case 'count': {
+        if (organizerScope && organizerScope.staff) {
+          const rows = await readStaffRows(db, collection, where && typeof where === 'object' ? where : {}, { maxRows: 20000 })
+          return { success: true, total: rows.filter(record => organizerRecordAllowed(collection, record, organizerScope)).length }
+        }
         let q = db.collection(collection)
         if (where && Object.keys(where).length > 0) q = q.where(where)
         if (assistanceScope) {
@@ -5691,7 +5734,7 @@ exports.main = async (event, context) => {
       if (session.success && session.orgId) {
         const db = cloud.database()
         if (await staffPolicy.isStaff(db, session.userId, session.orgId) && !await staffPolicy.owner(db, session.userId, session.orgId)) {
-          const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization']
+          const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery']
           if (action === 'uploadImage') {
             const tournamentId = String(params.tournamentId || '')
             const folder = String(params.folder || '')

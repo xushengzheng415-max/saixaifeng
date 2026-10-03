@@ -50,7 +50,7 @@ function readRights(collection) {
 function writeRights(collection, operation, data = {}) {
   if (SPECIAL[operation]) return [SPECIAL[operation]]
   if (!['add', 'update', 'delete'].includes(operation) || !RIGHTS[collection]) return []
-  const fields = Object.keys(data || {}).filter(field => !['updateTime', 'updatedAt'].includes(field))
+  const fields = Object.keys(data || {}).filter(field => !['updateTime', 'updatedAt', 'tournamentId'].includes(field))
   const required = new Set()
   if (collection === 'tournaments') {
     for (const field of fields) required.add(drawField.test(field) ? 'event.draw' : registrationField.test(field) ? 'event.registration' : resultField.test(field) ? 'event.results' : 'event.settings')

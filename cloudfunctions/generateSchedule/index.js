@@ -1,6 +1,7 @@
 // 云函数入口文件 - 赛程生成（支持4种赛制）
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
 const topology = require('./topology')
 const scheduleEngine = require('./scheduler')
 const pairingTemplates = require('./pairingTemplates')
@@ -419,7 +420,7 @@ async function authenticateActor(event) {
   var userResult = await db.collection('users').doc(sessions[0].userId).get()
   var user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!user) throw new Error('登录账号不存在')
-  var orgId = String(user.orgId || user.organizationId || '').trim()
+  var orgId = String(sessions[0].activeOrgId || event.__actorOrgId || user.orgId || user.organizationId || '').trim()
   if (!orgId) throw new Error('当前账号尚未关联机构，请先完成机构引导')
   if (event.__actorUserId && event.__actorUserId !== user._id) throw new Error('登录身份校验失败')
   if (event.__actorOrgId && String(event.__actorOrgId) !== orgId) throw new Error('机构归属校验失败')
@@ -1690,6 +1691,14 @@ exports.main = async (event, context) => {
     if (!tournament) return { success: false, message: '赛事不存在' }
     if (!recordBelongsToActor(tournament, actor)) {
       return { success: false, message: '无权为其他账号的赛事生成赛程' }
+    }
+    if (await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId)) {
+      const action = String(event.action || '')
+      const draw = ['savePairingTemplate', 'ensureKnockoutPairings', 'generatePairings', 'resetPairings'].includes(action)
+      const schedule = ['', 'saveDraft', 'importScheduleAssignments', 'scheduleExistingPairings', 'publishSchedule'].includes(action)
+      if (!draw && !schedule && action !== 'publishRegulations') return { success:false, message:'当前子账号不能执行该赛程动作' }
+      const right = draw ? 'event.draw' : action === 'publishRegulations' ? 'event.competition' : 'event.matches'
+      if (!await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, right)) return { success:false, message:'当前赛事没有对应赛程或竞赛权限' }
     }
     if (event.action==='saveDraft') {
       var draftConfig=sanitizeScheduleDraft(event.scheduleConfig)
