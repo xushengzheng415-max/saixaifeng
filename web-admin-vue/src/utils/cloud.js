@@ -219,6 +219,7 @@ export async function logout() {
   localStorage.removeItem('currentOrg')
   sessionStorage.removeItem('sxfServiceBoundCheck')
   sessionStorage.removeItem('sxfAfterServiceBinding')
+  sessionStorage.removeItem('sxfStaffInvitationPrompted')
 }
 
 export async function checkAuth() {
