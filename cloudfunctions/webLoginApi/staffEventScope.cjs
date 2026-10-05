@@ -1,6 +1,8 @@
-const { readAll, readByIds } = require('./data-center/reader.cjs')
+const { readByIds } = require('./data-center/reader.cjs')
 const string = value => String(value == null ? '' : value).trim()
 const ids = values => [...new Set((values || []).map(string).filter(Boolean))]
+const STAFF_SCOPE_MAX_ROWS = 20000
+const STAFF_SCOPE_PAGE_SIZE = 1000
 const EVENT_COLLECTIONS = new Set([
   'divisions', 'tournament_teams', 'tournament_groups', 'tournament_bracket',
   'tournament_league_tables', 'rosters', 'roster_change_requests', 'standings',
@@ -21,14 +23,49 @@ function personIds(value) {
   return ids(value.map(item => typeof item === 'string' ? item : item && (item.playerId || item._id || item.id)))
 }
 
+// Staff event reads use an equality filter plus skip pagination without adding
+// an `_id` sort. Sorting by `_id` here requires a tournamentId+_id compound
+// index on every event collection and makes the entire console fail when one
+// collection lacks that index. These rows are permission scope inputs only;
+// final access still requires the exact tournament relation below.
+async function readScopedRows(db, collection, where = {}, options = {}) {
+  const maxRows = Number(options.maxRows) > 0 ? Number(options.maxRows) : STAFF_SCOPE_MAX_ROWS
+  const pageSize = Math.min(Number(options.pageSize) > 0 ? Number(options.pageSize) : STAFF_SCOPE_PAGE_SIZE, 1000)
+  const rows = []
+  let offset = 0
+  for (;;) {
+    const limit = Math.min(pageSize, maxRows - rows.length + 1)
+    let page
+    try {
+      page = (await db.collection(collection).where(where || {}).skip(offset).limit(limit).get()).data || []
+    } catch (cause) {
+      const error = new Error('数据读取失败，请重试或检查索引')
+      error.code = 'DATA_READ_FAILED'
+      error.collection = collection
+      error.cause = cause
+      throw error
+    }
+    if (!page.length) return rows
+    rows.push(...page)
+    if (rows.length > maxRows) {
+      const error = new Error('赛事数据量过大，暂时无法读取完整授权范围')
+      error.code = 'DATA_SCOPE_TOO_LARGE'
+      error.collection = collection
+      throw error
+    }
+    offset += page.length
+    if (page.length < limit) return rows
+  }
+}
+
 async function buildStaffEventScope(db, userId, orgId, tournamentId) {
   const event = await document(db, 'tournaments', tournamentId)
   if (!event || string(event.orgId || event.organizationId || event.organization_id) !== string(orgId)) throw new Error('赛事不存在或不属于当前机构')
   const [registrations, matches, rosterSnapshots, refereeRelations] = await Promise.all([
-    readAll(db, 'tournament_teams', { tournamentId }, { maxRows: 20000 }),
-    readAll(db, 'matches', { tournamentId }, { maxRows: 20000 }),
-    readAll(db, 'roster_snapshots', { tournamentId }, { maxRows: 20000 }),
-    readAll(db, 'tournament_referees', { tournamentId }, { maxRows: 20000 })
+    readScopedRows(db, 'tournament_teams', { tournamentId }),
+    readScopedRows(db, 'matches', { tournamentId }),
+    readScopedRows(db, 'roster_snapshots', { tournamentId }),
+    readScopedRows(db, 'tournament_referees', { tournamentId })
   ])
   const teamIds = ids(registrations.map(row => row.teamId))
   const teamRows = teamIds.length ? await readByIds(db, 'teams', '_id', teamIds) : []
@@ -59,4 +96,4 @@ function recordBelongsToStaffEvent(collection, record, scope) {
   return EVENT_COLLECTIONS.has(collection) && eventId === scope.tournamentId
 }
 
-module.exports = { buildStaffEventScope, recordBelongsToStaffEvent }
+module.exports = { buildStaffEventScope, recordBelongsToStaffEvent, readScopedRows }
