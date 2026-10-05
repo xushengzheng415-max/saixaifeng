@@ -4710,7 +4710,7 @@ async function handleDbQuery(event) {
       if (!tournamentId || !needed.length || !(await Promise.all(needed.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).every(Boolean)) {
         return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有该模块或操作权限' }
       }
-      try { organizerScope = await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, tournamentId) }
+      try { organizerScope = await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, tournamentId, event.staffModule) }
       catch (error) { return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: error.message || '赛事授权范围读取失败' } }
     } else organizerScope = await buildOrganizerScope(db, authenticated.user)
     if (organizerScope.organizationConflict) {
@@ -5058,7 +5058,7 @@ async function handleRefereeRecordReview(event) {
   const staffTournamentId = String(event.staffTournamentId || '').trim()
   if (delegated && (!staffTournamentId || !await staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, staffTournamentId, 'event.results'))) return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'当前赛事没有赛果复核权限' }
   const scope = delegated
-    ? await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, staffTournamentId)
+    ? await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, staffTournamentId, 'event.results')
     : await buildOrganizerScope(db, authenticated.user)
   if (scope.organizationConflict) {
     return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
@@ -5225,7 +5225,7 @@ async function handleRosterExceptionBoard(event) {
   const delegated = authenticated.orgId && await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
   if (delegated && (tournamentId !== String(event.staffTournamentId || '') || !await staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, 'event.teams'))) return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'当前赛事没有名单管理权限' }
   const scope = delegated
-    ? await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, tournamentId)
+    ? await buildStaffEventScope(db, authenticated.userId, authenticated.orgId, tournamentId, 'event.teams')
     : await buildOrganizerScope(db, authenticated.user)
   if (scope.organizationConflict) {
     return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }

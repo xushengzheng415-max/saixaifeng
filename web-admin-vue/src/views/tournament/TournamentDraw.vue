@@ -16,7 +16,7 @@
         <span class="quick-event-meta"><el-icon><Calendar /></el-icon>{{ overviewDateRange }}</span>
         <span class="quick-event-meta"><el-icon><Location /></el-icon>{{ overviewLocation }}</span>
       </div>
-      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>返回赛事空间</el-button>
     </header>
     <main>
       <div class="quick-setup-heading">
@@ -70,7 +70,7 @@
         <span class="overview-meta"><el-icon><Calendar /></el-icon>{{ overviewDateRange }}</span>
         <span class="overview-meta"><el-icon><Location /></el-icon>{{ overviewLocation }}</span>
       </div>
-      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>返回赛事空间</el-button>
     </header>
     <main>
       <h1>抽签与分组</h1>

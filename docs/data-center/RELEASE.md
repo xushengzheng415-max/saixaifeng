@@ -1,5 +1,9 @@
 # 数据中心上线与验收
 
+## 2026-10-05 PC 子账号共享赛事空间与索引修复
+
+受邀账号的赛事主控台之前显示 0，是因为 `tournament_teams`、`divisions`、`matches` 缺少页面筛选排序使用的复合索引；`roster_snapshots` 缺少 `tournamentId` 索引。现已追加赛事查询索引，并在 `staffEventScope` 中仅于裁判模块读取 `tournament_referees`，避免无关集合阻断赛事主控台。受邀账号返回 `/tournament-space` 后由 `tournamentStaffAccess mine` 按自然人授权列出共享赛事卡片，卡片标明“共享赛事”；工作区共用按钮文案改为“返回赛事空间”。共享后端已发布并回读 `Active`，入口哈希一致、函数配置保留；PC 静态资源待发布到 `/preview/admin/`，正式 UI 与小程序未发布。
+
 ## 2026-10-05 PC 子账号赛事主控台读取修复
 
 截图表现为受邀账号已进入赛事主控台，但 `tournament_teams`、`divisions`、`matches` 查询均失败并显示 0。根因是 `webLoginApi` 为子账号构建赛事授权范围时，公共 `readAll` 同时按 `tournamentId` 过滤并按 `_id` 游标排序；集合缺少相应复合索引时授权范围构建失败。现在 `staffEventScope.cjs` 使用按赛事条件分页读取，仍执行授权赛事关系校验；普通数据中心读取器不变。线上 `webLoginApi` 基于现网包差量更新，状态 Active，`index.js` 与 `staffEventScope.cjs` 回下载哈希一致；球员卡/人脸模块哈希一致，环境变量配置数保持 14。受邀账号刷新后真实数据呈现仍待现场确认。

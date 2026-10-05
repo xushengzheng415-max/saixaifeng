@@ -9,7 +9,7 @@
         <span><el-icon><Calendar /></el-icon>{{ eventDateText }}</span>
         <span><el-icon><LocationInformation /></el-icon>{{ tournament.province || tournament.location || '举办地待定' }}</span>
       </div>
-      <el-button plain @click="router.push('/tournament-space')">退出赛事空间</el-button>
+      <el-button plain @click="router.push('/tournament-space')">返回赛事空间</el-button>
     </section>
 
     <header v-if="!selectedDivision" class="match-heading">

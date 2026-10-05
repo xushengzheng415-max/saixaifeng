@@ -10,7 +10,7 @@
         <span class="header-meta"><el-icon><Calendar /></el-icon>{{ dateRange }}</span>
         <span class="header-meta"><el-icon><Location /></el-icon>{{ tournament.region || tournament.location || '地区待定' }}</span>
       </div>
-      <el-button plain :icon="Back" @click="router.push('/tournament-space')">退出赛事空间</el-button>
+      <el-button plain :icon="Back" @click="router.push('/tournament-space')">返回赛事空间</el-button>
     </header>
 
     <div class="page-heading">

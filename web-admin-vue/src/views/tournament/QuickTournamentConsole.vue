@@ -19,7 +19,7 @@
         <span class="event-meta"><el-icon><Calendar /></el-icon>{{ dateRange }}</span>
         <span class="event-meta"><el-icon><Location /></el-icon>{{ eventLocation }}</span>
       </div>
-      <el-button plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+      <el-button plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>返回赛事空间</el-button>
     </header>
 
     <div class="console-body">
