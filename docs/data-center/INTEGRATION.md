@@ -6,6 +6,7 @@
 | PC 侧栏十模块授权 | 按赛事分发十项模块权限；“全部权限”展开为十项；旧三项授权仍按原范围执行 | tournamentStaffAccess、webLoginApi、各业务云函数及 PC 路由共同验权 | `preview` b039aee8 与共享后端差量已部署、源码和关键分包回读一致；报名单项的球队详情等跨模块操作及真实主子账号闭环待验收，正式 PC 未发布 |
 | PC 子账号补录与新闻 | 仅授权赛事；补录须完赛、无裁判记录及既有赛果，并上传纸质记录；新闻发布独立授权 | resultCenter、newsCenter、newsPreviewGenerate 与 webLoginApi 中转校验 | 服务端已发布并完成匿名拒绝、源码回读；真实授权操作及新闻/赛果业务验收未完成 |
 | PC 服务号个人绑定与赛事机构选择 | 二维码绑定已验证自然人 `userId`；球队机构不推断赛事机构；进入赛事工作空间仍按赛事授权校验 | webLoginApi/onboardingWorkspace 的 organizationScope、tournamentRegistrationFlow、serviceAccountCallback | 2026-10-05 共享后端已差量部署，真实账号扫码待验收 |
+| PC 赛事子账号邀请提醒 | 待接受的赛事授权显示在站内信未读数和消息列表，链接到账号管理处理邀请 | tournamentStaffAccess invitations + LayoutView/OrganizerInboxView | 已实现，待预览发布；邀请手机号需与受邀人已验证手机号一致 |
 | 小程序子账号联动 | 待 PC 授权验收后复用同一授权记录及赛果/新闻数据 | 尚未接入 | 未开始 |
 
 ## 比赛补录换人规则
