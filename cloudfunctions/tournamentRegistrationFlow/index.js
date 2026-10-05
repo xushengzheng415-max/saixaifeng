@@ -266,70 +266,56 @@ async function webActor(event) {
   return { userId, orgId, user }
 }
 
-
-function activeMembership(row) {
-  return ['active', 'accepted', 'claimed'].includes(text(row && row.status || 'active').toLowerCase())
+async function pcPersonActor(event) {
+  const token = text(event.__authToken)
+  if (!token) return null
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  const sessions = (await db.collection('auth_sessions').where({ tokenHash, active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || []
+  if (sessions.length !== 1 || event.__actorUserId && text(event.__actorUserId) !== text(sessions[0].userId)) return null
+  const userId = text(sessions[0].userId)
+  const user = await getDocument('users', userId)
+  const phone = text(user && (user.phone || user.phoneNumber))
+  if (!user || user.phoneVerified !== true || !/^1[3-9]\d{9}$/.test(phone) || user.pcAccountStatus === 'cancelled' || user.pcLoginEnabled === false) return null
+  const phoneRows = (await db.collection('users').where(_.or([{ phone }, { phoneNumber:phone }])).limit(3).get()).data || []
+  if (new Set(phoneRows.map(row => text(row._id))).size !== 1 || text(phoneRows[0]?._id) !== userId) return null
+  return { userId, user }
 }
 
-async function organizerContext(actor) {
-  if (!actor || !actor.userId || !actor.orgId) return null
-  const organization = await getDocument('organizations', actor.orgId)
-  if (!organization) return null
-  const isOwner = [organization.ownerId, organization.creatorId, organization.createdBy].some(value => text(value) === actor.userId)
-  const memberships = (await db.collection('organization_memberships').where(_.or([
-    { orgId: actor.orgId, userId: actor.userId },
-    { orgId: actor.orgId, memberUserId: actor.userId },
-    { organizationId: actor.orgId, userId: actor.userId },
-    { organizationId: actor.orgId, memberUserId: actor.userId }
-  ])).limit(20).get()).data || []
-  const membership = memberships.find(activeMembership) || null
-  if (!isOwner && !membership) return null
-  const positions = Array.isArray(membership && membership.positions) ? membership.positions : []
-  const roles = Array.isArray(membership && membership.roles) ? membership.roles : []
-  return {
-    orgId: actor.orgId,
-    organizationName: text(organization.name || organization.organizationName).slice(0, 80),
-    roleLabel: text(isOwner ? '机构负责人' : positions[0] || roles[0] || membership && (membership.roleLabel || membership.position || membership.role) || '机构成员').slice(0, 30)
-  }
-}
 
-async function organizerServiceBinding(user, context) {
+async function organizerServiceBinding(user) {
   const userId = text(user && user._id)
   const direct = (await db.collection('service_account_bindings').where({ sport: SPORT, userId, organizerPcBound: true, subscribed: true }).limit(2).get()).data || []
   if (direct.length > 1) throw new Error('当前账号存在重复服务号绑定，请联系平台处理')
-  if (direct[0] && text(direct[0].officialOpenId)) {
-    if (text(direct[0].orgId) && text(direct[0].orgId) !== context.orgId) throw new Error('当前账号的服务号绑定指向其他机构，请联系平台核验')
-    await db.collection('service_account_bindings').doc(direct[0]._id).update({ data: { orgId: context.orgId, organizationName: context.organizationName, roleLabel: context.roleLabel, updateTime: db.serverDate() } })
-    return { ...direct[0], ...context }
-  }
+  if (direct[0] && text(direct[0].officialOpenId)) return direct[0]
   if (user && user.pcServiceRebindRequired === true) return null
   const miniIds = [user && user.openId, user && user._openid, user && user.miniProgramOpenId].filter(Boolean).map(text)
   for (const miniOpenId of miniIds) {
     const rows = (await db.collection('service_account_bindings').where({ sport: SPORT, miniOpenId, subscribed: true }).limit(2).get()).data || []
     if (rows.length > 1) throw new Error('当前微信存在重复服务号绑定，请联系平台处理')
     if (rows[0] && text(rows[0].officialOpenId)) {
-      await db.collection('service_account_bindings').doc(rows[0]._id).update({ data: { userId, orgId: context.orgId, organizationName: context.organizationName, roleLabel: context.roleLabel, organizerPcBound: true, updateTime: db.serverDate() } })
-      return { ...rows[0], ...context, userId, organizerPcBound: true }
+      if (rows[0].userId && text(rows[0].userId) !== userId) throw new Error('该服务号微信已关联其他手机号账号，请联系平台核验')
+      const otherUsers = (await db.collection('service_account_bindings').where({ sport:SPORT, officialOpenId:text(rows[0].officialOpenId), subscribed:true }).limit(10).get()).data || []
+      if (otherUsers.some(row => row.userId && text(row.userId) !== userId)) throw new Error('该服务号微信已关联其他手机号账号，请联系平台核验')
+      await db.collection('service_account_bindings').doc(rows[0]._id).update({ data: { userId, organizerPcBound: true, updateTime: db.serverDate() } })
+      return { ...rows[0], userId, organizerPcBound: true }
     }
   }
   return null
 }
 
 async function createOrganizerServiceGate(event) {
-  const actor = await webActor(event)
-  if (!actor) return { success: false, code: 'ORG_REQUIRED', message: '请先完成机构创建或机构关系核验' }
-  const context = await organizerContext(actor)
-  if (!context) return { success: false, code: 'ORG_MEMBERSHIP_REQUIRED', message: '当前账号不属于该机构，请先完成机构关系核验' }
-  const binding = await organizerServiceBinding(actor.user, context)
-  if (binding) return { success: true, data: { subscribed: true, status: 'subscribed', gateId: '', followUrl: '', ...context } }
-  const existing = (await db.collection('service_follow_gates').where({ sport: SPORT, purpose: 'organizer_pc_bind', userId: actor.userId, orgId: context.orgId }).limit(20).get()).data || []
+  const actor = await pcPersonActor(event)
+  if (!actor) return { success: false, code: 'AUTH_REQUIRED', message: '请先用已验证手机号的账号登录' }
+  const binding = await organizerServiceBinding(actor.user)
+  if (binding) return { success: true, data: { subscribed: true, status: 'subscribed', gateId: '', followUrl: '' } }
+  const existing = (await db.collection('service_follow_gates').where({ sport: SPORT, purpose: 'organizer_pc_bind', userId: actor.userId }).limit(20).get()).data || []
   let gate = existing.find(item => item.subscribed === true && text(item.officialOpenId)) ||
     existing.find(item => text(item.status) === 'waiting' && dateValue(item.qrExpireAt) > Date.now() + 60000) ||
     null
-  if (gate && gate.subscribed === true) return { success: true, data: { subscribed: true, status: 'subscribed', gateId: gate._id, followUrl: '', ...context } }
+  if (gate && gate.subscribed === true) return { success: true, data: { subscribed: true, status: 'subscribed', gateId: gate._id, followUrl: '' } }
   if (!gate) {
     const scene = 'op_' + randomKey(12)
-    const created = await db.collection('service_follow_gates').add({ data: { sport: SPORT, purpose: 'organizer_pc_bind', userId: actor.userId, orgId: context.orgId, organizationName: context.organizationName, roleLabel: context.roleLabel, scene, status: 'waiting', subscribed: false, createTime: db.serverDate(), updateTime: db.serverDate() } })
+    const created = await db.collection('service_follow_gates').add({ data: { sport: SPORT, purpose: 'organizer_pc_bind', userId: actor.userId, scene, status: 'waiting', subscribed: false, createTime: db.serverDate(), updateTime: db.serverDate() } })
     gate = { _id: created._id, scene, status: 'waiting', subscribed: false }
   }
   let followUrl = text(gate.followUrl)
@@ -338,23 +324,21 @@ async function createOrganizerServiceGate(event) {
     followUrl = code.url
     await db.collection('service_follow_gates').doc(gate._id).update({ data: { followUrl, qrTicket: code.ticket, qrExpireAt: new Date(Date.now() + code.expireSeconds * 1000), updateTime: db.serverDate() } })
   }
-  return { success: true, data: { subscribed: false, status: 'waiting', gateId: gate._id, followUrl, ...context } }
+  return { success: true, data: { subscribed: false, status: 'waiting', gateId: gate._id, followUrl } }
 }
 
 async function organizerServiceBindingStatus(event) {
-  const actor = await webActor(event)
-  if (!actor) return { success: false, code: 'ORG_REQUIRED', message: '请先完成机构创建或机构关系核验' }
-  const context = await organizerContext(actor)
-  if (!context) return { success: false, code: 'ORG_MEMBERSHIP_REQUIRED', message: '当前账号不属于该机构，请先完成机构关系核验' }
-  const binding = await organizerServiceBinding(actor.user, context)
-  if (binding) return { success: true, data: { subscribed: true, status: 'subscribed', gateId: text(event.gateId), ...context } }
+  const actor = await pcPersonActor(event)
+  if (!actor) return { success: false, code: 'AUTH_REQUIRED', message: '请先用已验证手机号的账号登录' }
+  const binding = await organizerServiceBinding(actor.user)
+  if (binding) return { success: true, data: { subscribed: true, status: 'subscribed', gateId: text(event.gateId) } }
   const gateId = text(event.gateId)
   if (gateId) {
     const gate = await getDocument('service_follow_gates', gateId)
-    if (!gate || text(gate.userId) !== actor.userId || text(gate.orgId) !== context.orgId || text(gate.purpose) !== 'organizer_pc_bind') return { success: false, code: 'FOLLOW_GATE_DENIED', message: '服务号绑定申请不存在或不属于当前机构' }
-    return { success: true, data: { subscribed: gate.subscribed === true, status: text(gate.status || 'waiting'), gateId, ...context } }
+    if (!gate || text(gate.userId) !== actor.userId || text(gate.purpose) !== 'organizer_pc_bind') return { success: false, code: 'FOLLOW_GATE_DENIED', message: '服务号绑定申请不存在或不属于当前账号' }
+    return { success: true, data: { subscribed: gate.subscribed === true, status: text(gate.status || 'waiting'), gateId } }
   }
-  return { success: true, data: { subscribed: false, status: 'required', gateId: '', ...context } }
+  return { success: true, data: { subscribed: false, status: 'required', gateId: '' } }
 }
 
 async function addAudit(action, data) {

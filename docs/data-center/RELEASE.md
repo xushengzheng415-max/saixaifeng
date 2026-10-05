@@ -1,5 +1,9 @@
 # 数据中心上线与验收
 
+## 2026-10-05 PC 服务号个人绑定与机构误判修正
+
+`webLoginApi`、`onboardingWorkspace`、`tournamentRegistrationFlow`、`serviceAccountCallback` 基于现网代码包差量更新到共享 CloudBase，保留在线球员注册、球员卡和服务号回调其他入口。四函数回读 Active，`index.js` 与更新包一致。服务号二维码仅需已验证手机号账号，不以球队所属机构数量阻断；赛事机构选择仅参考赛事归属和授权。PC 测试版继续使用现有 `/preview/admin/` 页面，正式 PC 与小程序包未发布。真实账号登录、二维码生成及微信扫码绑定待现场验收。
+
 ## 2026-10-03 PC 侧栏十模块授权测试版
 
 用户要求部署到测试版。`preview` 合并提交 `b039aee8` 已推送 Gitee 并将 257 个文件上传到 `/preview/admin/`；正式域名入口和账号、球队、新闻、赛果关键分包 HTTP 200、SHA-256 与预览构建一致。正式 `/admin/` HTTP 200 且仍使用正式资源路径，本次未部署正式 PC 或小程序。

@@ -1,5 +1,6 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const { chooseOrganizerOrganization } = require('./organizationScope.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -319,8 +320,15 @@ async function loadOnboardingState(identity) {
   )
   const hasTeamRelation = allTeamRows.length > 0
   const trainingProvision = await findTrainingProvision(identity)
-  const organizationConflict = validOrganizationRows.length > 1
-  const organization = organizationConflict ? null : (validOrganizationRows[0] || null)
+  const choice = chooseOrganizerOrganization({
+    validIds: validOrganizationRows.map(row => row._id),
+    explicitIds: [user.orgId, user.organizationId],
+    memberships: organizationMemberships,
+    tournamentOrgIds: (directTournaments.data || []).map(row => row.orgId || row.organizationId || row.organization_id)
+  })
+  const organizationConflict = choice.organizationConflict
+  const selectedOrgId = choice.orgId || (!organizationConflict && validOrganizationRows.length === 1 ? String(validOrganizationRows[0]._id) : '')
+  const organization = validOrganizationRows.find(row => String(row._id) === selectedOrgId) || null
   const attachableTeams = manageableTeams.filter(function(team) { return team.attachable })
   const hasTournamentWithoutOrganization = !organization && (directTournaments.data || []).length > 0
   const canCreateOrganizationFromTeams = Boolean(

@@ -27,7 +27,12 @@ function textReply(toUser, fromUser, content) {
 }
 function followReplyContent(result) {
   if (result.purpose === 'organizer_pc_bind') {
-    if (result.bound) return `绑定成功\n机构：${result.organizationName}\n身份：${result.roleLabel}\n\n请返回电脑继续。`
+    if (result.bound) return [
+      '绑定成功',
+      result.organizationName ? `机构：${result.organizationName}` : '',
+      result.organizationName && result.roleLabel ? `身份：${result.roleLabel}` : '',
+      '请返回电脑继续。'
+    ].filter(Boolean).join('\n')
     return '本次主办方账号绑定未完成。\n\n请返回电脑后台刷新二维码后重试；如仍失败，请联系赛小蜂客服核验账号。'
   }
   if (result.purpose === 'referee_invite' && result.registerUrl) {
@@ -54,19 +59,23 @@ async function upsertBinding(miniOpenId, officialOpenId, subscribed) {
 }
 
 async function organizerGateContext(gate, user) {
+  const personal = { orgId:'', organizationName:'', roleLabel:'账号本人' }
   const userId = text(user && user._id)
   const orgId = text(gate && gate.orgId)
-  if (!userId || !orgId) return null
-  const organizationResult = await db.collection('organizations').doc(orgId).get()
-  const organization = Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data
-  if (!organization) return null
+  if (!userId || !orgId) return personal
+  let organization = null
+  try {
+    const organizationResult = await db.collection('organizations').doc(orgId).get()
+    organization = Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data
+  } catch { return personal }
+  if (!organization) return personal
   const isOwner = [organization.ownerId, organization.creatorId, organization.createdBy].some(value => text(value) === userId)
   const memberships = (await db.collection('organization_memberships').where(_.or([
     { orgId, userId }, { orgId, memberUserId: userId },
     { organizationId: orgId, userId }, { organizationId: orgId, memberUserId: userId }
   ])).limit(20).get()).data || []
   const membership = memberships.find(row => ['active', 'accepted', 'claimed'].includes(text(row && row.status || 'active').toLowerCase())) || null
-  if (!isOwner && !membership) return null
+  if (!isOwner && !membership) return personal
   const positions = Array.isArray(membership && membership.positions) ? membership.positions : []
   const roles = Array.isArray(membership && membership.roles) ? membership.roles : []
   return {
@@ -85,10 +94,6 @@ async function bindOrganizerPcAccount(gate, officialOpenId, eventType) {
     return { eventType, officialOpenId, bound: false, shouldReply: true, purpose: 'organizer_pc_bind' }
   }
   const context = await organizerGateContext(gate, user)
-  if (!context) {
-    await db.collection('service_follow_gates').doc(gate._id).update({ data: { status: 'organization_invalid', subscribed: false, updateTime: db.serverDate() } })
-    return { eventType, officialOpenId, bound: false, shouldReply: true, purpose: 'organizer_pc_bind' }
-  }
   const officialBindings = (await db.collection('service_account_bindings').where({ sport: SPORT, officialOpenId, subscribed: true }).limit(10).get()).data || []
   if (officialBindings.some(item => !text(item.userId) || text(item.userId) !== userId)) {
     await db.collection('service_follow_gates').doc(gate._id).update({ data: { status: 'identity_conflict', subscribed: false, officialOpenId, updateTime: db.serverDate() } })
