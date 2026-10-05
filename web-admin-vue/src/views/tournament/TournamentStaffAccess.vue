@@ -1,6 +1,6 @@
 <template>
   <main class="staff-page">
-    <header><h1>账号管理</h1><el-button v-if="isOwner" type="primary" @click="openInvite">分发账号</el-button></header>
+    <header><div class="header-title"><el-button v-if="isOwner" link @click="router.push('/tournament-space')">← 返回赛事空间</el-button><h1>账号管理</h1></div><el-button v-if="isOwner" type="primary" @click="openInvite">分发账号</el-button></header>
     <el-alert v-if="error" type="error" :title="error" show-icon :closable="false"><el-button link @click="load">重试</el-button></el-alert>
     <div v-if="loading" class="state">加载中…</div>
     <template v-else>
@@ -76,7 +76,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.staff-page{max-width:1060px;margin:0 auto;padding:28px;color:#203027}.staff-page header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #dfe7e1;padding-bottom:18px}.staff-page h1{font-size:24px;margin:0}.staff-page section{margin-top:28px}.staff-page h2{font-size:17px;margin:0 0 8px}.line{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:74px;border-bottom:1px solid #e6ece7}.line span{display:grid;gap:5px}.line small{color:#6c7b70}.state{padding:30px 0;color:#748078}.full{width:100%}.line :deep(.el-button),.staff-page :deep(.el-button){display:inline-flex;align-items:center;justify-content:center}@media(max-width:720px){.staff-page{padding:18px}.line{align-items:flex-start;flex-direction:column;padding:12px 0}}
+.staff-page{max-width:1060px;margin:0 auto;padding:28px;color:#203027}.staff-page header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #dfe7e1;padding-bottom:18px}.header-title{display:flex;align-items:center;gap:18px}.staff-page h1{font-size:24px;margin:0}.staff-page section{margin-top:28px}.staff-page h2{font-size:17px;margin:0 0 8px}.line{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:74px;border-bottom:1px solid #e6ece7}.line span{display:grid;gap:5px}.line small{color:#6c7b70}.state{padding:30px 0;color:#748078}.full{width:100%}.line :deep(.el-button),.staff-page :deep(.el-button){display:inline-flex;align-items:center;justify-content:center}@media(max-width:720px){.staff-page{padding:18px}.staff-page header{align-items:flex-start;gap:12px}.header-title{flex-wrap:wrap;gap:6px}.line{align-items:flex-start;flex-direction:column;padding:12px 0}}
 .rights-select{display:grid;gap:8px;width:100%}.rights-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;padding-top:8px;border-top:1px solid #e6ece7}.rights-grid :deep(.el-checkbox){margin-right:0}.rights-grid :deep(.el-checkbox__label){white-space:normal}@media(max-width:520px){.rights-grid{grid-template-columns:1fr}}
 .legacy-warning{margin:0;color:#9a6400;font-size:12px}
 </style>
