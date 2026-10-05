@@ -24,6 +24,7 @@ const { readAll: readStaffRows } = require('./data-center/reader.cjs')
 const { relayRights } = require('./staffRelayRights.cjs')
 const { validateStaffRelayScope } = require('./staffRelayScope.cjs')
 const { projectStaffRead } = require('./staffReadProjection.cjs')
+const { chooseOrganizerOrganization, grantsEventAccess } = require('./organizationScope.cjs')
 const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
@@ -207,6 +208,7 @@ const ORGANIZER_REQUIRED_RELAY_FUNCTIONS = new Set([
   'generateSchedule', 'updateMatch', 'organizerClaimInvite', 'reviewRosterChange', 'clearTeamPlayers', 'tournamentReview', 'applyTournament', 'getMyTeams',
   'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter', 'newsCenter'
 ])
+const PERSONAL_SERVICE_BINDING_ACTIONS = new Set(['createOrganizerServiceGate', 'getOrganizerServiceBindingStatus'])
 
 // 赛事中心遗留的球队/球员/赛事入口统一收敛到本函数的租户校验，
 // 不再把未鉴权的旧云函数直接暴露给网页 relay。
@@ -1580,9 +1582,7 @@ async function safeOrganizationRows(db, collection, query, limit) {
 async function resolveUserOrganization(db, user) {
   const _ = db.command
   const candidates = new Set()
-  addOrganizationCandidate(candidates, user.orgId, user)
-  addOrganizationCandidate(candidates, user.organizationId, user)
-  addOrganizationCandidate(candidates, user.organization_id, user)
+  const explicitIds = [user.orgId, user.organizationId, user.organization_id]
 
   const identityValues = normalizedUserIdentityValues(user)
   const membershipConditions = []
@@ -1592,9 +1592,12 @@ async function resolveUserOrganization(db, user) {
   const memberships = membershipConditions.length
     ? await safeOrganizationRows(db, 'organization_memberships', _.or(membershipConditions), 100)
     : []
-  memberships.forEach(item => {
+  const activeMemberships = memberships.filter(item => {
     const status = String(item.status || 'active').toLowerCase()
-    if (['disabled', 'removed', 'rejected', 'inactive'].includes(status)) return
+    return !['disabled', 'removed', 'rejected', 'inactive'].includes(status)
+  })
+  const eventMemberships = activeMemberships.filter(grantsEventAccess)
+  eventMemberships.forEach(item => {
     addOrganizationCandidate(candidates, item.orgId || item.organizationId || item.organization_id, user)
   })
 
@@ -1605,15 +1608,13 @@ async function resolveUserOrganization(db, user) {
       { userId: value }, { createdBy: value }, { creator: value }
     )
   })
-  const [teams, tournaments] = ownerConditions.length
-    ? await Promise.all([
-        safeOrganizationRows(db, 'teams', _.or(ownerConditions), 100),
-        safeOrganizationRows(db, 'tournaments', _.or(ownerConditions), 100)
-      ])
-    : [[], []]
-  teams.concat(tournaments).forEach(item => {
+  const tournaments = ownerConditions.length
+    ? await safeOrganizationRows(db, 'tournaments', _.or(ownerConditions), 100)
+    : []
+  tournaments.forEach(item => {
     addOrganizationCandidate(candidates, item.orgId || item.organizationId || item.organization_id, user)
   })
+  if (!candidates.size) explicitIds.forEach(item => addOrganizationCandidate(candidates, item, user))
 
   const candidateIds = Array.from(candidates)
   if (!candidateIds.length) {
@@ -1623,11 +1624,12 @@ async function resolveUserOrganization(db, user) {
   const validIds = Array.from(new Set(
     organizations.map(item => String(item && item._id || '')).filter(Boolean)
   ))
-  return {
-    orgId: validIds.length === 1 ? validIds[0] : '',
-    organizationIds: validIds,
-    organizationConflict: validIds.length > 1
-  }
+  return { ...chooseOrganizerOrganization({
+    validIds,
+    explicitIds,
+    memberships: eventMemberships,
+    tournamentOrgIds: tournaments.map(item => item.orgId || item.organizationId || item.organization_id)
+  }), organizationIds: validIds }
 }
 
 async function ensureUserOrgId(db, user) {
@@ -4254,6 +4256,7 @@ async function handleCallFunction(event) {
     let assistanceGrant = null
     let delegatedStaff = false
     let delegatedTournamentId = ''
+    const personalServiceBinding = functionName === 'tournamentRegistrationFlow' && PERSONAL_SERVICE_BINDING_ACTIONS.has(String(functionParams?.action || ''))
     const requiresSession = functionName === 'uploadFile' ||
       functionName === 'platformOwner' ||
       functionName === 'manageTournamentCenterContent' ||
@@ -4264,7 +4267,7 @@ async function handleCallFunction(event) {
       authenticated = await authenticateWebSession(event)
       if (!authenticated.success) return authenticated
     }
-    if (authenticated && authenticated.orgId) {
+    if (authenticated && authenticated.orgId && !personalServiceBinding) {
       const db = cloud.database()
       const staff = await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
       if (staff) {
@@ -4283,7 +4286,7 @@ async function handleCallFunction(event) {
         if (!allowed) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
       }
     }
-    if (authenticated && !assistanceGrantId && ORGANIZER_REQUIRED_RELAY_FUNCTIONS.has(functionName)) {
+    if (authenticated && !assistanceGrantId && ORGANIZER_REQUIRED_RELAY_FUNCTIONS.has(functionName) && !personalServiceBinding) {
       if (authenticated.user.organizationConflict) {
         return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
       }
