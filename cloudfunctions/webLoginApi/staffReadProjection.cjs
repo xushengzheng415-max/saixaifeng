@@ -1,6 +1,7 @@
-const PUBLIC_TEAM_FIELDS = ['_id', 'orgId', 'teamId', 'teamCode', 'name', 'teamName', 'logo', 'logoUrl', 'crest', 'status']
+const PUBLIC_LOGO_FIELDS = ['logo', 'logoUrl', 'logoTransparentUrl', 'logoTransparent', 'logoOriginal', 'logoImage', 'logoFileID', 'logoFileId', 'teamLogo', 'teamLogoUrl', 'teamLogoImage', 'teamLogoFileID', 'teamLogoFileId', 'crest']
+const PUBLIC_TEAM_FIELDS = ['_id', 'orgId', 'teamId', 'teamCode', 'name', 'teamName', ...PUBLIC_LOGO_FIELDS, 'status']
 const PUBLIC_PLAYER_FIELDS = ['_id', 'teamId', 'teamCode', 'name', 'playerName', 'number', 'jerseyNumber', 'avatarUrl', 'photoUrl', 'position']
-const PUBLIC_REGISTRATION_FIELDS = ['_id', 'tournamentId', 'divisionId', 'teamId', 'teamName', 'status', 'registrationStatus', 'logo', 'logoUrl']
+const PUBLIC_REGISTRATION_FIELDS = ['_id', 'tournamentId', 'divisionId', 'teamId', 'teamCode', 'teamName', ...PUBLIC_LOGO_FIELDS, 'status', 'registrationStatus']
 const PUBLIC_MATCH_FIELDS = ['_id', 'orgId', 'tournamentId', 'divisionId', 'divisionName', 'matchDate', 'matchTime', 'venue', 'homeTeamId', 'awayTeamId', 'homeTeamName', 'awayTeamName', 'homeScore', 'awayScore', 'status', 'resultReviewStatus', 'schedulePublished']
 
 function pick(record, fields) {

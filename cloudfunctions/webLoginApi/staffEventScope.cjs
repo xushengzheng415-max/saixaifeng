@@ -71,13 +71,14 @@ async function buildStaffEventScope(db, userId, orgId, tournamentId, moduleRight
   ])
   const teamIds = ids(registrations.map(row => row.teamId))
   const teamRows = teamIds.length ? await readByIds(db, 'teams', '_id', teamIds) : []
+  const teamCodes = ids(registrations.flatMap(row => [row.teamCode]).concat(teamRows.flatMap(row => [row.teamCode, row.code])))
   const playerIds = ids(rosterSnapshots.flatMap(row => personIds(row.playerIds).concat(personIds(row.players)))
     .concat(registrations.flatMap(row => personIds(row.playerIds).concat(personIds(row.players)))))
   return {
     staff: true, user: { _id:string(userId) }, userId: string(userId), orgId: string(orgId), tournamentId: string(tournamentId),
     tournamentIds: new Set([string(tournamentId)]),
     teamIds: new Set(teamIds),
-    teamCodes: new Set(ids(teamRows.flatMap(row => [row.teamCode, row.code]))),
+    teamCodes: new Set(teamCodes),
     playerIds: new Set(playerIds),
     matchIds: new Set(ids(matches.map(row => row._id))),
     refereeIds: new Set(ids(refereeRelations.map(row => row.refereeId)))
@@ -89,7 +90,10 @@ function recordBelongsToStaffEvent(collection, record, scope) {
   const eventId = string(record.tournamentId || record.eventId)
   if (collection === 'tournaments') return string(record._id) === scope.tournamentId
   if (collection === 'teams') return scope.teamIds.has(string(record._id))
-  if (collection === 'players') return scope.playerIds.has(string(record._id)) || scope.teamIds.has(string(record.teamId || record.teamCode))
+  if (collection === 'players') {
+    const teamKeys = [record.teamId, record.teamCode].map(string).filter(Boolean)
+    return scope.playerIds.has(string(record._id)) || teamKeys.some(key => scope.teamIds.has(key) || scope.teamCodes.has(key))
+  }
   if (collection === 'referees') return scope.refereeIds.has(string(record._id)) || eventId === scope.tournamentId
   if (['coaches', 'management'].includes(collection)) return scope.teamIds.has(string(record.teamId || record.teamCode))
   if (collection === 'matches') return scope.matchIds.has(string(record._id)) && eventId === scope.tournamentId
