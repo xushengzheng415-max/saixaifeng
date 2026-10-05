@@ -9,6 +9,7 @@ import { createInflightReads } from './inflightReads'
 import { readAllPages } from './pagedReads'
 import { createSessionReadCache, stableReadKey } from './sessionReadCache.js'
 import { isReadOnlyRequest, playerReadCacheTags } from './playerReadCachePolicy.js'
+import { sidebarRightForRoute } from './tournamentStaffRights'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
 const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
@@ -76,6 +77,7 @@ const CLOUD_FUNCTION_MAP = {
   organizerClaimInvite: 'relay',
   resultCenter: 'relay',
   newsCenter: 'relay',
+  tournamentStaffAccess: 'relay',
   dataCenter: 'relay',
 }
 
@@ -139,11 +141,14 @@ async function performFunctionHTTP(action, data = {}, timeout = 60000) {
   const assistance = platformRequest ? null : getAssistanceContext()
   const bypassAssistance = action === 'callFunction' &&
     ['platformOwner', 'manageTournamentCenterContent', 'generateMiniProgramCode'].includes(data.functionName)
+  const staff = !platformRequest && sessionStorage.getItem('sxfTournamentStaff') === '1'
+  const staffPath = staff ? window.location.hash.replace(/^#/, '').split('?')[0] : ''
   const payload = {
     ...data,
     action,
     authToken: requestToken,
-    assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : ''
+    assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : '',
+    ...(staff ? { staffTournamentId: sessionStorage.getItem('sxfStaffTournamentId') || '', staffModule: sidebarRightForRoute(staffPath) } : {})
   }
   console.log(`[callFunctionHTTP] → ${action}`)
 

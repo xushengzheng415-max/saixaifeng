@@ -1,6 +1,8 @@
 // 云函数：审核换人申请
 // action: 'getList' | 'approve' | 'reject'
 const cloud = require('wx-server-sdk')
+const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
 
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV
@@ -40,6 +42,13 @@ async function authorizeTournament(event, tournamentId) {
   if (!tournament) return { ok: false, result: { success: false, message: '赛事不存在' } }
   if (!recordBelongsToOrganization(tournament, actor.actor.orgId)) {
     return { ok: false, result: { success: false, message: '无权访问当前机构之外的赛事名单变更', code: 'ORG_ACCESS_DENIED' } }
+  }
+  if (await staffPolicy.isStaff(db, actor.actor.userId, actor.actor.orgId) && !await staffPolicy.owner(db, actor.actor.userId, actor.actor.orgId)) {
+    const token = String(event.__authToken || '').trim()
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const sessions = token ? (await db.collection('auth_sessions').where({ tokenHash, userId: actor.actor.userId, active: true, expiresAt: _.gt(new Date()) }).limit(2).get()).data || [] : []
+    if (sessions.length !== 1 || String(event.__staffTournamentId || '') !== id ||
+        !await staffPolicy.hasRight(db, actor.actor.userId, actor.actor.orgId, id, 'event.teams')) return { ok: false, result: { success: false, message: '当前赛事没有名单审核权限', code: 'TOURNAMENT_STAFF_SCOPE_DENIED' } }
   }
   return { ok: true, actor: actor.actor, tournament }
 }

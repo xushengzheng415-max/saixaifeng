@@ -3,7 +3,8 @@ const suite = require('./playerCardSuite.cjs')
 const preload = require('./playerCardPreload.cjs')
 const LIBRARY = 'player_card_library'
 const libraryId = (playerId, templateId) => crypto.createHash('sha256').update(JSON.stringify([String(playerId),String(templateId)])).digest('hex')
-function tierPermission(score, tier) {
+function tierPermission(score, tier, scopeType) {
+  if(scopeType==='player')return score?.status==='test_data_excluded'?'测试资料不能生成正式卡':''
   if (score.status !== 'ready' || !score.tier) return '生涯积分待核定'
   if (tier !== score.tier && !score.canChangeBackground) return '当前等级暂不能使用此卡'
   return ''
@@ -43,8 +44,8 @@ function createPlayerCardLibrary({ cloud }) {
       }
       const render = await suite.document(db,suite.RENDERS,suite.renderId(player._id,template._id,snapshot.version))
       const ready = render?.status === 'ready' && Number(render.cardDataVersion) === Number(player.playerCardVersion || 0) && Number(render.libraryRevision || 0) === Number(grant.revision || 0)
-      const reason = tierPermission(score,template.tier)
-      result.push({id:libraryId(player._id,template._id),templateId:template._id,title:snapshot.title,tier:template.tier,
+      const reason = tierPermission(score,template.tier,scope.type)
+      result.push({id:libraryId(player._id,template._id),cardId:ready?String(render.cardId||render._id||suite.renderId(player._id,template._id,snapshot.version)):'',templateId:template._id,title:snapshot.title,tier:template.tier,
         preload:scope,templateVersion:snapshot.version,revision:Number(grant.revision || 0),
         status:reason ? 'locked' : ready ? 'ready' : grant.fileId ? 'pending' : 'unmade',reason,renderVersion:render?.renderVersion || suite.RENDER_VERSION,
         fileId:!reason && ready ? render.fileId : '',backgroundFileId:snapshot.backgroundFileId,
@@ -84,6 +85,7 @@ function createPlayerCardLibrary({ cloud }) {
     const generated = await render(player,score,event,portrait,normalizeCrop), row = generated.row
     if (row.revision !== revision) throw Object.assign(new Error('此卡已更新，请重新打开'),{code:'PLAYER_CARD_LIBRARY_CONFLICT'})
     const file = await cloud.uploadFile({cloudPath:`restricted/player-cards/library/${row.id}/${crypto.randomBytes(12).toString('hex')}.png`,fileContent:generated.png})
+    const renderId=suite.renderId(player._id,row.templateId,row.templateVersion),digest=crypto.createHash('sha256').update(generated.png).digest('hex'),cardId=require('./playerCardHistory.cjs').cardId(renderId,digest)
     try {
       await db.runTransaction(async tx => {
         const current = await suite.document(tx,'players',player._id), grant = await suite.document(tx,LIBRARY,row.id)
@@ -91,15 +93,17 @@ function createPlayerCardLibrary({ cloud }) {
         if (!current || !isStillOwned(current)) throw Object.assign(new Error('球员绑定已变化，请重新进入'),{code:'PLAYER_CARD_FORBIDDEN'})
         if (!grant || Number(grant.revision || 0) !== revision || Number(current.playerCardVersion || 0) !== Number(player.playerCardVersion || 0)) throw Object.assign(new Error('此卡或资料已更新，请重新打开'),{code:'PLAYER_CARD_LIBRARY_CONFLICT'})
         if (state?.active?.templateId !== row.templateId || Number(state.active.version) !== row.templateVersion) throw Object.assign(new Error('卡面已更新，请重新打开'),{code:'PLAYER_CARD_TEMPLATE_CHANGED'})
+        const previousRender=await suite.document(tx,suite.RENDERS,renderId)
+        await require('./playerCardHistory.cjs').archiveCurrentRender(tx,db,renderId,previousRender)
         await tx.collection(LIBRARY).doc(row.id).update({data:{fileId:file.fileID,crop:generated.crop,portraitFileId:generated.portraitFileId,
           revision:revision+1,templateVersion:row.templateVersion,updatedAt:db.serverDate()}})
-        await tx.collection(suite.RENDERS).doc(suite.renderId(player._id,row.templateId,row.templateVersion)).set({data:{playerId:String(player._id),
+        await tx.collection(suite.RENDERS).doc(renderId).set({data:{playerId:String(player._id),
           templateId:row.templateId,publishedVersion:row.templateVersion,cardTypeId:row.tier,fileId:file.fileID,status:'ready',
           cardDataVersion:Number(player.playerCardVersion || 0),libraryRevision:revision+1,renderVersion:suite.RENDER_VERSION,
-          digest:crypto.createHash('sha256').update(generated.png).digest('hex'),generatedAt:db.serverDate()}})
+          cardId,editRevision:Number(previousRender?.editRevision||0)+1,digest,generatedAt:db.serverDate()}})
         await tx.collection(suite.STATES).doc(key).update({data:{mutation:Number(state.mutation || 0)+1}})
       })
-      return {success:true,revision:revision+1,templateId:row.templateId}
+      return {success:true,revision:revision+1,templateId:row.templateId,cardId}
     } catch (error) { await cloud.deleteFile({fileList:[file.fileID]}).catch(()=>{});throw error }
   }
   async function select(player, score, templateId, isStillOwned) {

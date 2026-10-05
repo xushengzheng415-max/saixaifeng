@@ -8,7 +8,7 @@
       <div class="event-context">
         <strong>{{ tournament.name || '当前赛事' }}</strong>
         <el-tag type="success" effect="plain">{{ divisions.length }}个组别</el-tag>
-        <el-button plain @click="router.push('/tournament-space')">退出赛事空间</el-button>
+        <el-button plain @click="router.push('/tournament-space')">返回赛事空间</el-button>
       </div>
     </header>
 

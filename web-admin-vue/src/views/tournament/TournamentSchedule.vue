@@ -2,7 +2,7 @@
   <div class="tournament-schedule">
     <header class="schedule-context-header">
       <div class="schedule-event"><span class="event-icon"><el-icon><Trophy /></el-icon></span><strong>{{ tournament.name || '当前赛事' }}</strong><el-tag type="primary" effect="plain">{{ divisionOptions.length }}个组别</el-tag><span class="event-state"><i></i>进行中</span><span><el-icon><Calendar /></el-icon>{{ eventDateText }}</span><span><el-icon><MapLocation /></el-icon>{{ tournament.province || tournament.location || '举办地待定' }}</span></div>
-      <el-button plain @click="$router.push('/tournament-space')">退出赛事空间</el-button>
+      <el-button plain @click="$router.push('/tournament-space')">返回赛事空间</el-button>
     </header>
 
     <section v-if="showWorkbenchCanvas" class="schedule-workbench-overlay">

@@ -1,6 +1,7 @@
 // 云函数入口文件 - 赛程生成（支持4种赛制）
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
 const topology = require('./topology')
 const scheduleEngine = require('./scheduler')
 const pairingTemplates = require('./pairingTemplates')
@@ -336,14 +337,34 @@ async function resetPairings(event, tournament, actor) {
   if (state.readError || !state.division) return { success:false, code:'DIVISION_RULES_UNAVAILABLE', message:'无法读取当前竞赛组别规则' }
   var planState = await competitionPlanState(tournament, divisionId)
   if (planState.locked) return { success:false, code:'COMPETITION_PLAN_LOCKED', message:'竞赛方案已经锁定，不能清空并重新抽签' }
-  var matches = (await loadAllTournamentMatches(tournamentId)).filter(function(match) { return belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
+  var allMatches = await loadAllTournamentMatches(tournamentId)
+  var matches = allMatches.filter(function(match) { return belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
   var protectedMatch = matches.find(matchIsProtectedFromPairingReplace)
   if (protectedMatch) return { success:false, code:'PAIRING_REPLACE_BLOCKED', message:'当前组别已有已排赛、已发布或已产生赛果的比赛，不能清空重抽' }
+  var type = String(event.tournamentType || '')
+  if (type && !['cup','league','tournament'].includes(type)) return { success:false, code:'DRAW_TYPE_INVALID', message:'抽签类型无效' }
+  var delegated = await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId)
+  var auditId = ''
+  if (delegated) {
+    var audit = await db.collection('tournament_staff_audit').add({ data: {
+      action:'draw.reset', orgId:actor.orgId, tournamentId, actorUserId:actor.user._id,
+      before:{ divisionId, matchIds:matches.map(function(match) { return match._id }) },
+      after:{ status:'started', tournamentType:type }, createTime:db.serverDate()
+    } })
+    auditId = audit._id
+  }
   await Promise.all(matches.map(function(match) { return db.collection('matches').doc(match._id).remove() }))
   var now = db.serverDate()
   await db.collection('divisions').doc(divisionId).update({ data:{ pairingGenerated:false, pairingGeneratedAt:null, scheduleGenerated:false, schedulePublished:false, updateTime:now } })
-  await db.collection('tournaments').doc(tournamentId).update({ data:{ pairingGenerated:false, scheduleGenerated:false, schedulePublished:false, updateTime:now } })
-  return { success:true, message:'已清空当前组别对阵，可以重新抽签', divisionId, deletedMatchCount:matches.length }
+  var hasOtherDivisionMatches = allMatches.some(function(match) { return !belongsToDivision(match, divisionId) && match.status !== 'cancelled' })
+  var hasOtherPublishedMatches = allMatches.some(function(match) { return !belongsToDivision(match, divisionId) && (match.schedulePublished === true || match.published === true) })
+  var data = { pairingGenerated:hasOtherDivisionMatches, scheduleGenerated:hasOtherDivisionMatches, schedulePublished:hasOtherPublishedMatches, updateTime:now }
+  if (type && Array.isArray(tournament.divisions) && tournament.divisions.length) {
+    data.divisions = tournament.divisions.map(function(item) { return String(item.id || item._id || item.divisionId) === divisionId ? Object.assign({}, item, { tournamentType:type }) : item })
+  } else if (type) { data.type = type; data.tournamentType = type }
+  await db.collection('tournaments').doc(tournamentId).update({ data })
+  if (auditId) await db.collection('tournament_staff_audit').doc(auditId).update({ data:{ after:{ status:'completed', tournamentType:type, deletedMatchCount:matches.length, hasOtherDivisionMatches } } })
+  return { success:true, message:'已清空当前组别对阵，可以重新抽签', divisionId, deletedMatchCount:matches.length, hasOtherDivisionMatches }
 }
 
 async function scheduleExistingPairings(event, tournament, actor) {
@@ -381,7 +402,6 @@ async function scheduleExistingPairings(event, tournament, actor) {
   var assigned = []
   divisions.forEach(function(item) {
     var rows = selected.filter(function(match) { return String(match.divisionId || 'default') === item.id })
-    rows.forEach(function(match) { match.durationMinutes = divisionMatchMinutes(item.state.division) })
     item.normalized.config.occupiedMatches=occupiedMatches.concat(assigned)
     assignDateTimeVenue(rows, item.normalized.config, config.cupMode || '', occupied)
     rows.forEach(function(match) { match.scheduleStatus = match.matchDate && match.matchTime && match.venue ? 'scheduled' : 'unassigned' })
@@ -420,7 +440,7 @@ async function authenticateActor(event) {
   var userResult = await db.collection('users').doc(sessions[0].userId).get()
   var user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!user) throw new Error('登录账号不存在')
-  var orgId = String(user.orgId || user.organizationId || '').trim()
+  var orgId = String(sessions[0].activeOrgId || event.__actorOrgId || user.orgId || user.organizationId || '').trim()
   if (!orgId) throw new Error('当前账号尚未关联机构，请先完成机构引导')
   if (event.__actorUserId && event.__actorUserId !== user._id) throw new Error('登录身份校验失败')
   if (event.__actorOrgId && String(event.__actorOrgId) !== orgId) throw new Error('机构归属校验失败')
@@ -458,10 +478,8 @@ function getTimeSlots(sc) {
 }
 
 function divisionMatchMinutes(division) {
-  var rules = division && (division.rulesSnapshot || division.activeRulesSnapshot || division) || {}
-  var minutes = Number(rules.matchMinutes || 0)
-  var count = rules.periodMode === 'halves' ? 2 : rules.periodMode === 'single' ? Number(rules.singlePeriodCount || rules.periodCount || 1) : 1
-  return Number.isFinite(minutes) && minutes > 0 && Number.isFinite(count) && count > 0 ? minutes * count : 0
+  var value = Number(division && (division.matchMinutes || (division.rulesSnapshot && division.rulesSnapshot.matchMinutes)) || 0)
+  return Number.isFinite(value) && value > 0 ? value : 0
 }
 
 function normalizeScheduleTiming(scheduleConfig, division) {
@@ -1201,8 +1219,7 @@ function decorateGeneratedMatches(matches, tournamentId, divisionId, divisionNam
     match.date = match.date || match.matchDate || ''
     match.startTime = match.startTime || match.matchTime || ''
     match.timeSlot = match.timeSlot || match.matchTime || ''
-    if (Number(scheduleConfig.matchDuration) > 0) match.durationMinutes = Number(scheduleConfig.matchDuration)
-    else delete match.durationMinutes
+    match.durationMinutes = Number(match.durationMinutes || scheduleConfig.matchDuration || 50)
     match.bufferMinutes = Number(match.bufferMinutes || scheduleConfig.matchInterval || 0)
     match.scheduleStatus = match.scheduleStatus || (match.matchDate ? 'scheduled' : 'unassigned')
     match.createTime = match.createTime || db.serverDate()
@@ -1402,7 +1419,7 @@ function scheduleAssignmentErrors(matches,config,divisionMap) {
     if (!match.matchDate || !match.matchTime || !match.venue || match.isBye || match.status==='cancelled') return
     var division=divisionMap.get(scope) || {}
     var policy=scheduleEngine.schedulePolicyForMatch(match,config)
-    var duration=Math.max(1,Number(divisionMatchMinutes(division)))
+    var duration=Math.max(1,Number(match.durationMinutes || divisionMatchMinutes(division) || config.matchDuration || 50))
     var buffer=Math.max(0,Number(match.bufferMinutes == null ? policy.turnaroundMinutes : match.bufferMinutes))
     var start=scheduleDateTimeMs(match.matchDate,match.matchTime)
     var resource=resourceMap.get(String(match.venue))
@@ -1444,7 +1461,7 @@ function scheduleAssignmentErrors(matches,config,divisionMap) {
   matches.forEach(function(match){
     if(!match.matchDate || !match.matchTime)return
     var scope=String(match.divisionId || 'default'),start=scheduleDateTimeMs(match.matchDate,match.matchTime)
-    ;(match.dependencyMatchNos || []).map(Number).filter(Boolean).forEach(function(no){var dependency=matchNoMap.get(scope+':'+no);if(dependency && dependency.matchDate && dependency.matchTime){var end=scheduleDateTimeMs(dependency.matchDate,dependency.matchTime)+Math.max(1,Number(divisionMatchMinutes(divisionMap.get(String(dependency.divisionId)))))*60000;if(start<=end)errors.push({ matchId:String(match._id || ''),message:'比赛时间早于前置场次结束' })}})
+    ;(match.dependencyMatchNos || []).map(Number).filter(Boolean).forEach(function(no){var dependency=matchNoMap.get(scope+':'+no);if(dependency && dependency.matchDate && dependency.matchTime){var end=scheduleDateTimeMs(dependency.matchDate,dependency.matchTime)+Math.max(1,Number(dependency.durationMinutes || 50))*60000;if(start<=end)errors.push({ matchId:String(match._id || ''),message:'比赛时间早于前置场次结束' })}})
   })
   var seen=new Set()
   return errors.filter(function(error){var key=error.matchId+'|'+error.message;if(seen.has(key))return false;seen.add(key);return true})
@@ -1497,7 +1514,7 @@ async function importScheduleAssignments(event,tournament,actor) {
     if(!date || !time || !venue){rowErrors.push({ row:index+2,matchId:matchId,message:'日期、时间和场地必须同时填写' });return}
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)){rowErrors.push({ row:index+2,matchId:matchId,message:'日期或时间格式不正确' });return}
     if(date===String(match.matchDate || '') && time===String(match.matchTime || '') && venue===String(match.venue || ''))return
-    if((match.schedulePublished && !(event.adjustmentType === 'manual' && rows.length === 1)) || match.executionSnapshot || match.refereeRecordLocked || ['ongoing','live','finished','completed','archived','cancelled'].indexOf(String(match.status || '').toLowerCase())>=0){rowErrors.push({ row:index+2,matchId:matchId,message:'已发布比赛须逐场手动调整；已进入执行或锁定的比赛不能调整' });return}
+    if((match.schedulePublished && event.adjustmentType !== 'manual') || match.executionSnapshot || match.refereeRecordLocked || ['ongoing','live','finished','completed','archived','cancelled'].indexOf(String(match.status || '').toLowerCase())>=0){rowErrors.push({ row:index+2,matchId:matchId,message:'比赛已进入执行或记录已锁定，不能调整排期' });return}
     changed.push({ match:match,before:{ matchDate:String(match.matchDate||''),matchTime:String(match.matchTime||''),venue:String(match.venue||'') },after:{ matchDate:date,matchTime:time,venue:venue } })
   })
   var provisional=allMatches.map(function(match){var change=changed.find(function(item){return String(item.match._id)===String(match._id)});return change?Object.assign({},match,change.after):match})
@@ -1516,7 +1533,7 @@ async function importScheduleAssignments(event,tournament,actor) {
     var log=await db.collection('schedule_adjustment_logs').add({ data:{ tournamentId:tournamentId,divisionId:String(item.match.divisionId || 'default'),matchId:String(item.match._id),operationGroupId:operationGroupId,adjustmentType:String(event.adjustmentType || 'import'),before:item.before,after:item.after,actorUserId:String(actor.user._id || ''),actorOrgId:actor.orgId,status:'pending',undone:false,createTime:db.serverDate(),updateTime:db.serverDate() } })
     var division=divisionMap.get(String(item.match.divisionId || 'default')) || {}
     var policy=scheduleEngine.schedulePolicyForMatch(item.match,config)
-    await db.collection('matches').doc(item.match._id).update({ data:{ matchDate:item.after.matchDate,matchTime:item.after.matchTime,venue:item.after.venue,date:item.after.matchDate,startTime:item.after.matchTime,timeSlot:item.after.matchTime,durationMinutes:Math.max(1,Number(divisionMatchMinutes(division))),bufferMinutes:policy.turnaroundMinutes,scheduleSession:scheduleEngine.sessionName(item.after.matchTime,config.sessionWindows),scheduleStatus:'scheduled',scheduleGenerated:true,updateTime:db.serverDate() } })
+    await db.collection('matches').doc(item.match._id).update({ data:{ matchDate:item.after.matchDate,matchTime:item.after.matchTime,venue:item.after.venue,date:item.after.matchDate,startTime:item.after.matchTime,timeSlot:item.after.matchTime,durationMinutes:Math.max(1,Number(item.match.durationMinutes || divisionMatchMinutes(division) || 50)),bufferMinutes:policy.turnaroundMinutes,scheduleSession:scheduleEngine.sessionName(item.after.matchTime,config.sessionWindows),scheduleStatus:'scheduled',scheduleGenerated:true,updateTime:db.serverDate() } })
     await db.collection('schedule_adjustment_logs').doc(log._id).update({ data:{ status:'applied',appliedAt:db.serverDate(),updateTime:db.serverDate() } })
   }
   await db.collection('tournaments').doc(tournamentId).update({ data:{ scheduleDraft:db.command.set(config),scheduleConfig:db.command.set(config),scheduleGenerated:true,scheduleGenerationMode:'joint',scheduleEngineVersion:SCHEDULE_ENGINE_VERSION,updateTime:db.serverDate() } })
@@ -1694,6 +1711,14 @@ exports.main = async (event, context) => {
     if (!tournament) return { success: false, message: '赛事不存在' }
     if (!recordBelongsToActor(tournament, actor)) {
       return { success: false, message: '无权为其他账号的赛事生成赛程' }
+    }
+    if (await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId)) {
+      const action = String(event.action || '')
+      const draw = ['savePairingTemplate', 'ensureKnockoutPairings', 'generatePairings', 'resetPairings'].includes(action)
+      const schedule = ['', 'saveDraft', 'importScheduleAssignments', 'scheduleExistingPairings', 'publishSchedule'].includes(action)
+      if (!draw && !schedule && action !== 'publishRegulations') return { success:false, message:'当前子账号不能执行该赛程动作' }
+      const right = draw ? 'event.draw' : action === 'publishRegulations' ? 'event.competition' : 'event.matches'
+      if (!await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, right)) return { success:false, message:'当前赛事没有对应赛程或竞赛权限' }
     }
     if (event.action==='saveDraft') {
       var draftConfig=sanitizeScheduleDraft(event.scheduleConfig)

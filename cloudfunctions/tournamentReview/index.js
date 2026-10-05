@@ -1,6 +1,9 @@
 // 赛事球队审核云函数
 // 处理教练提交参赛请求，主办方审核的流程
 const cloud = require('wx-server-sdk')
+const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
+const { validateStaffRelayScope } = require('./staffRelayScope.cjs')
 const db = cloud.database()
 
 // 审核状态常量
@@ -28,11 +31,25 @@ async function requireActor(event) {
   const userResult = await db.collection('users').doc(userId).get()
   const user = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!user) return { ok: false, result: actorFailure('登录账号不存在') }
-  const actualOrgId = String(user.orgId || user.organizationId || '').trim()
+  const token = String(event.__authToken || '').trim()
+  let session = null
+  if (token) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const rows = (await db.collection('auth_sessions').where({ tokenHash, active: true, expiresAt: db.command.gt(new Date()) }).limit(2).get()).data || []
+    if (rows.length !== 1 || String(rows[0].userId) !== userId) return { ok: false, result: actorFailure('登录会话已失效') }
+    session = rows[0]
+  }
+  const actualOrgId = String(session && session.activeOrgId || user.orgId || user.organizationId || '').trim()
   if (!actualOrgId || actualOrgId !== orgId) return { ok: false, result: actorFailure('当前账号尚未关联有效机构', 'ORG_REQUIRED') }
   const organizationResult = await db.collection('organizations').doc(orgId).get()
   const organization = Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data
   if (!organization) return { ok: false, result: actorFailure('当前机构不存在或已失效', 'ORG_REQUIRED') }
+  if (await staffPolicy.isStaff(db, userId, orgId) && !await staffPolicy.owner(db, userId, orgId)) {
+    const tournamentId = String(event.__staffTournamentId || event.tournamentId || '').trim()
+    if (!session || !['getRequests', 'approve', 'reject'].includes(String(event.action || '')) ||
+        !await validateStaffRelayScope(db, 'tournamentReview', event, tournamentId) ||
+        !await staffPolicy.hasRight(db, userId, orgId, tournamentId, 'event.registration')) return { ok: false, result: actorFailure('当前赛事没有报名审核权限', 'TOURNAMENT_STAFF_SCOPE_DENIED') }
+  }
   const phone = String(user.phone || user.phoneNumber || user.mobile || '').trim()
   return { ok: true, actor: { userId, orgId, phone, name: String(user.nickname || user.userName || user.name || phone || '主办方').trim().slice(0, 50) } }
 }

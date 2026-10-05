@@ -37,6 +37,21 @@ function cardChangePermission(level, player, portrait, event) {
   if (backgroundId !== level.cardTier && !level.playerCard.canChangeBackground) return { code:'PLAYER_CARD_BACKGROUND_LOCKED', error:'满 100 分后可更换卡片背景' }
   return { backgroundId }
 }
+async function cardVersionsForPlayer(cloud,db,player) {
+  const playerId=String(player._id||'')
+  const result=await db.collection(suite.RENDERS).where({playerId,status:'ready'}).orderBy('_id','desc').limit(100).get()
+  const rows=(result.data||[]).filter(row=>row.fileId),fileIds=[...new Set(rows.map(row=>String(row.fileId)))],urls=new Map()
+  for(let i=0;i<fileIds.length;i+=50){const files=await cloud.getTempFileURL({fileList:fileIds.slice(i,i+50)});for(const item of files.fileList||[])if(item.tempFileURL)urls.set(item.fileID,item.tempFileURL)}
+  const cards=[]
+  for(const row of rows){
+    const templateId=String(row.templateId||''),version=Number(row.publishedVersion||0)
+    const snapshot=templateId?await suite.document(db,suite.VERSIONS,suite.versionId(templateId,version)):null
+    cards.push({cardId:String(row.cardId||row._id),renderId:String(row._id),playerId,cardUrl:urls.get(String(row.fileId))||'',
+      title:String(snapshot?.title||'球员卡'),cardTypeId:String(row.cardTypeId||''),templateId,publishedVersion:version,
+      cardDataVersion:Number(row.cardDataVersion||0),editRevision:Number(row.editRevision||0),isHistory:Boolean(row.isSnapshot),generatedAt:row.generatedAt||null})
+  }
+  return cards
+}
 function createPlayerCards(deps) {
   const { cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue } = deps
   async function readAll(db, collection, where) {
@@ -72,7 +87,7 @@ function createPlayerCards(deps) {
       if (!player || String(player.teamId || '') !== auth.teamId) return []
       const teamResult = await db.collection('teams').doc(auth.teamId).get()
       const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
-      return [{ player, relation: null, teamName: auth.teamName, teamLogo: String(team && (team.logoTransparent || team.logo || team.logoUrl) || '') }]
+      return [{ player, relation: null, teamName: auth.teamName, teamLogo: require('./playerCardSource.cjs').teamLogoFileId(team) }]
     }
     const submissions = await readAll(db, 'parent_profile_submissions', { serviceAccountOpenId: auth.openId, status: 'submitted' })
     const unique = new Map()
@@ -83,7 +98,7 @@ function createPlayerCards(deps) {
       if (!player || !owns(player, relation)) continue
       const teamResult = player.teamId ? await db.collection('teams').doc(String(player.teamId)).get() : { data: null }
       const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
-      unique.set(playerId, { player, relation, teamName: team && (team.name || team.teamName) || '', teamLogo: String(team && (team.logoTransparent || team.logo || team.logoUrl) || '') })
+      unique.set(playerId, { player, relation, teamName: team && (team.name || team.teamName) || '', teamLogo: require('./playerCardSource.cjs').teamLogoFileId(team) })
     }
     return Array.from(unique.values())
   }
@@ -111,11 +126,9 @@ function createPlayerCards(deps) {
   const library=createPlayerCardLibrary({cloud})
   async function handler(event) {
     const db = cloud.database(), auth = await authorize(event, db), entries = await playersFor(auth, db)
-    const batchScores = event.action === 'listMyPlayerCards' && !deps.scoreForPlayer
-      ? await createDataService(db).playerCardsForAuthorizedPlayers(entries.map(entry => String(entry.player._id))) : null
     async function summary(entry) {
       const p = entry.player
-      const score = batchScores?.get(String(p._id)) || await (deps.scoreForPlayer ? deps.scoreForPlayer(String(p._id)) : createDataService(db).playerCardForAuthorizedPlayer(String(p._id)))
+      const score = await (deps.scoreForPlayer ? deps.scoreForPlayer(String(p._id)) : createDataService(db).playerCardForAuthorizedPlayer(String(p._id)))
       const ready = score.status === 'ready'
       return { id: String(p._id), name: p.name || '球员', teamName: entry.teamName || '', jerseyNumber: p.jerseyNumber || '', jerseyName: p.jerseyName || '', position: p.position || '', height: p.height ?? null, weight: p.weight ?? null, nationality: p.nationality || '', appearances: ready ? score.metrics.appearances : null, cardTier: ready ? score.tier : null, playerCard: score, cardFileId: p.playerCardFileId || '', version: Number(p.playerCardVersion || 0), mode: p.playerCardMode || 'portrait', savedTier: p.playerCardTier || '', backgroundId:p.playerCardBackgroundId || score.tier || '',displayTemplateId:p.playerCardDisplayTemplateId || '' }
     }
@@ -125,23 +138,19 @@ function createPlayerCards(deps) {
         const type = String(item.backgroundId || item.cardTier || '')
         const active = await (deps.readBaseCard ? deps.readBaseCard(entry.player,type) : suite.signedCard(cloud, db, entry.player, type))
         item.cardStatus = active.status
-        item.portraitUrl=active.portraitUrl||''
-        item.portraitStatus=active.portraitStatus||'missing'
-        item.profileEditUrl=''
-        const token=auth.parentInvite||entry.relation?.parentInvite
-        if(token){
-          const invites=(await db.collection('parent_profile_invites').where({token:String(token),status:'active'}).limit(2).get()).data||[]
-          if(invites.length===1&&String(invites[0].playerId)===String(entry.player._id)&&dateValue(invites[0].expiresAt)>Date.now())item.profileEditUrl='/service-account-h5/?parentInvite='+encodeURIComponent(String(token))
-        }
         item.templateId = active.templateId || ''
+        item.cardId = active.cardId || ''
         item.publishedVersion = active.templateVersion || 0
         item.cardDataVersion = active.cardDataVersion || 0
         item.renderVersion = active.renderVersion || ''
         item.cardUrl = active.url || ''
         item.cardFileId = active.fileId || ''
         item.preloadedCards=await library.list(entry.player,item.playerCard)
+        item.cardVersions=await cardVersionsForPlayer(cloud,db,entry.player)
+        const currentCardIds=new Set([item.cardId,...item.preloadedCards.filter(card=>card.status==='ready').map(card=>card.cardId)].filter(Boolean))
+        item.cardVersions.forEach(card=>{card.isCurrent=currentCardIds.has(card.cardId)})
         const display=item.preloadedCards.find(card=>card.templateId === item.displayTemplateId && card.status === 'ready')
-        item.displayCardUrl=display?.cardUrl || '';item.displayState=!item.displayTemplateId?'base':display?'ready':'unavailable'
+        item.displayCardUrl=display?.cardUrl || '';item.displayCardId=display?.cardId || '';item.displayState=!item.displayTemplateId?'base':display?'ready':'unavailable'
         return item
       }))
       return { success: true, players }
@@ -154,10 +163,10 @@ function createPlayerCards(deps) {
       if (event.action === 'selectMyPlayerCard') return library.select(entry.player,level.playerCard,String(event.templateId || ''),isStillOwned)
       const row = await library.resolve(entry.player,level.playerCard,event.templateId)
       const portrait = await standardPortrait(auth,entry,db)
-      if (event.action === 'getMyPreloadedPlayerCard') return {success:true,player:level,card:{templateId:row.templateId,title:row.title,tier:row.tier,preload:row.preload,templateVersion:row.templateVersion,revision:row.revision},crop:row.grant.crop || {zoom:1,x:0,y:0}}
+      if (event.action === 'getMyPreloadedPlayerCard') return {success:true,player:level,card:{cardId:row.cardId,templateId:row.templateId,title:row.title,tier:row.tier,preload:row.preload,templateVersion:row.templateVersion,revision:row.revision},crop:row.grant.crop || {zoom:1,x:0,y:0}}
       if (event.action === 'previewMyPreloadedPlayerCard') {
         const generated = await library.render(entry.player,level.playerCard,event,portrait,normalizeCrop)
-        return {success:true,imageData:'data:image/png;base64,'+generated.png.toString('base64'),templateVersion:generated.row.templateVersion}
+        return {success:true,imageData:'data:image/png;base64,'+generated.png.toString('base64'),cardId:generated.row.cardId,templateVersion:generated.row.templateVersion}
       }
       return library.save(entry.player,level.playerCard,event,portrait,normalizeCrop,isStillOwned)
     }
@@ -205,6 +214,7 @@ function createPlayerCards(deps) {
       const generated = await suite.generate(cloud, db, entry.player, active, level.playerCard,
         { portraitFileId:portrait.transparentFileId, crop, layout })
       uploaded.push(generated.fileId)
+      const renderId=suite.renderId(entry.player._id,active.templateId,active.version),cardId=require('./playerCardHistory.cjs').cardId(renderId,generated.digest)
       await db.runTransaction(async transaction => {
         const currentResult = await transaction.collection('players').doc(String(entry.player._id)).get()
         const current = Array.isArray(currentResult.data) ? currentResult.data[0] : currentResult.data
@@ -214,17 +224,19 @@ function createPlayerCards(deps) {
         if (!state?.active || state.active.templateId !== active.templateId || Number(state.active.version) !== active.version) {
           throw Object.assign(new Error('球员卡模板已更新，请重新打开编辑器'), { code:'PLAYER_CARD_TEMPLATE_CHANGED' })
         }
-        await transaction.collection(suite.RENDERS).doc(suite.renderId(entry.player._id, active.templateId, active.version)).set({ data: {
+        const previousRender=await suite.document(transaction,suite.RENDERS,renderId)
+        await require('./playerCardHistory.cjs').archiveCurrentRender(transaction,db,renderId,previousRender)
+        await transaction.collection(suite.RENDERS).doc(renderId).set({ data: {
           playerId:String(entry.player._id), cardTypeId:backgroundId, templateId:active.templateId,
           publishedVersion:active.version, cardDataVersion:expectedVersion+1, renderVersion:suite.RENDER_VERSION,
-          fileId:generated.fileId, digest:generated.digest, status:'ready', generatedAt:db.serverDate()
+          cardId,editRevision:Number(previousRender?.editRevision||0)+1,fileId:generated.fileId, digest:generated.digest, status:'ready', generatedAt:db.serverDate()
         } })
         await transaction.collection(suite.STATES).doc(backgroundId).update({ data: {
           mutation:Number(state.mutation||0)+1, updatedAt:db.serverDate()
         } })
         await transaction.collection('players').doc(String(entry.player._id)).update({ data: { playerCardSourceFileId: portrait.transparentFileId, playerCardSourceType: portrait.sourceType || 'standard_portrait', playerCardFileId: generated.fileId, playerCardCrop: db.command.set(crop), playerCardLayout: db.command.set(layout), playerCardMode: mode, playerCardTier: level.cardTier, playerCardBackgroundId:backgroundId, playerCardPoints:level.playerCard.points, playerCardScoreVersion:level.playerCard.scoreVersion, playerCardAppearances: level.appearances, playerCardVersion: expectedVersion + 1, playerCardSchemaVersion: 'player-card/3', playerCardTemplateId:active.templateId, playerCardTemplateVersion:active.version, playerCardUpdatedBy: auth.openId, playerCardUpdatedAt: db.serverDate() } })
       })
-      return { success: true, version: expectedVersion + 1, cardFileId: generated.fileId,
+      return { success: true, version: expectedVersion + 1, cardFileId: generated.fileId,cardId,
         templateId:active.templateId, publishedVersion:active.version, renderVersion:suite.RENDER_VERSION }
     } catch (error) {
       if (uploaded.length) await cloud.deleteFile({ fileList: uploaded }).catch(() => {})
@@ -235,4 +247,4 @@ function createPlayerCards(deps) {
     try { return await handler(event) } catch (error) { return { success: false, error: error.message || '球员卡保存失败，请重试', code: error.code || 'PLAYER_CARD_ERROR' } }
   }
 }
-module.exports = { createPlayerCards, imageBuffer, normalizeCrop, normalizeLayout, owns, cardChangePermission }
+module.exports = { createPlayerCards, imageBuffer, normalizeCrop, normalizeLayout, owns, cardChangePermission, cardVersionsForPlayer }

@@ -48,6 +48,28 @@ async function tournamentPlayerIds(db, tournamentId) {
   }
   return ids
 }
+async function playersForScope(db, value) {
+  const scope=normalizePreload(value)
+  let rows=[]
+  if(scope.type==='player') {
+    const result=await db.collection('players').doc(scope.targetId).get()
+    const player=Array.isArray(result.data)?result.data[0]:result.data
+    if(player)rows.push(player)
+  } else if(scope.type==='team') rows=await readAll(db,'players',{teamId:scope.targetId})
+  else if(scope.type==='platform') rows=await readAll(db,'players',{})
+  else {
+    const ids=await tournamentPlayerIds(db,scope.targetId)
+    for(const id of ids) {
+      const result=await db.collection('players').doc(id).get()
+      const player=Array.isArray(result.data)?result.data[0]:result.data
+      if(player)rows.push(player)
+    }
+    const unique=[...new Map(rows.filter(row=>row.deleted!==true&&row.isDeleted!==true&&row.status!=='deleted').map(row=>[String(row._id),row])).values()]
+    return {scope,players:unique,evidenceByPlayer:ids.evidenceByPlayer}
+  }
+  rows=rows.filter(row=>row.deleted!==true&&row.isDeleted!==true&&row.status!=='deleted')
+  return {scope,players:[...new Map(rows.map(row=>[String(row._id),row])).values()],evidenceByPlayer:new Map()}
+}
 function nameOf(type, row) { return String(row.name || row[`${type}Name`] || row.title || row._id) }
 async function validatePreload(db, value, document) {
   const scope = normalizePreload(value)
@@ -76,4 +98,4 @@ async function targets(db, event) {
     .map(row => ({ id: String(row._id), name: nameOf(type, row), teamId: type === 'player' ? String(row.teamId || '') : '' })),
     nextCursor: rows.length === 25 ? String(rows[rows.length - 1]._id) : '' }
 }
-module.exports = { normalizePreload, validatePreload, stateId, targets, readAll, tournamentPlayerIds, COLLECTIONS }
+module.exports = { normalizePreload, validatePreload, stateId, targets, readAll, tournamentPlayerIds, playersForScope, COLLECTIONS }

@@ -32,7 +32,7 @@ function createAdminPlayerCards({ cloud, authenticateWebSession, buildOrganizerS
           String(player.playerCardBackgroundId || player.playerCardTier || tier)) : { status:'unavailable', url:'' }
         return { success: true, playerId, version, tier, appearances: tier ? appearances : null,
           cardState: card.status === 'ready' ? 'ready' : card.status === 'pending' ? 'pending' : 'missing',
-          cardUrl:card.url || '', publishedVersion:card.templateVersion || 0, savedTier: String(player.playerCardTier || '') }
+          cardUrl:card.url || '', cardId:card.cardId || '', publishedVersion:card.templateVersion || 0, savedTier: String(player.playerCardTier || '') }
       }
       if (event.action !== 'saveAdminPlayerCard') return { success: false, error: '未知球员卡操作' }
       // PC 导入名单只补齐未保存的卡；已由球员/监护人在注册端制作的卡不能覆盖。
@@ -49,6 +49,7 @@ function createAdminPlayerCards({ cloud, authenticateWebSession, buildOrganizerS
       const layout = normalizeLayout(event.layout)
       const generated = await suite.generate(cloud, db, player, snapshot, score,
         { portraitFileId:photo, crop, layout })
+      const renderId=suite.renderId(playerId,snapshot.templateId,snapshot.version),cardId=require('./playerCardHistory.cjs').cardId(renderId,generated.digest)
       try {
         await db.runTransaction(async transaction => {
           const currentResult = await transaction.collection('players').doc(playerId).get()
@@ -59,9 +60,9 @@ function createAdminPlayerCards({ cloud, authenticateWebSession, buildOrganizerS
           const state = await suite.document(transaction, suite.STATES, tier)
           if (!state?.active || state.active.templateId !== snapshot.templateId ||
               Number(state.active.version) !== snapshot.version) throw new Error('模板已更新，请刷新后重试')
-          await transaction.collection(suite.RENDERS).doc(suite.renderId(playerId, snapshot.templateId, snapshot.version)).set({ data: {
+          await transaction.collection(suite.RENDERS).doc(renderId).set({ data: {
             playerId, cardTypeId:tier, templateId:snapshot.templateId, publishedVersion:snapshot.version,
-            cardDataVersion:version+1, renderVersion:suite.RENDER_VERSION, fileId:generated.fileId,
+            cardDataVersion:version+1, renderVersion:suite.RENDER_VERSION, cardId, fileId:generated.fileId,
             digest:generated.digest, status:'ready', generatedAt:db.serverDate()
           } })
           await transaction.collection(suite.STATES).doc(tier).update({ data: {
@@ -82,7 +83,7 @@ function createAdminPlayerCards({ cloud, authenticateWebSession, buildOrganizerS
         await cloud.deleteFile({ fileList: [generated.fileId] }).catch(() => {})
         throw error
       }
-      return { success:true, playerId, version:version+1, cardFileId:generated.fileId,
+      return { success:true, playerId, version:version+1, cardFileId:generated.fileId, cardId,
         templateId:snapshot.templateId, publishedVersion:snapshot.version }
     } catch (error) {
       return { success: false, code: error.code || 'PLAYER_CARD_ERROR', error: error.message || '球员卡暂不可用' }

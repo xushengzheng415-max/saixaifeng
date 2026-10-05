@@ -8,7 +8,7 @@ function validateScope(input = {}) {
   const scope = { sportType:'football', mode:input.mode || 'official' }
   if (!['official','provisional'].includes(scope.mode)) throw error('DATA_MODE_INVALID', '请选择正式或现场统计')
   if (input.sportType && input.sportType !== 'football') throw error('DATA_SPORT_INVALID', '当前接口仅支持足球统计')
-  for (const field of ['teamId','playerId','tournamentId','divisionId','matchId']) {
+  for (const field of ['teamId','playerId','tournamentId','divisionId']) {
     if (input[field] != null && (typeof input[field] !== 'string' || input[field].length > 100)) throw error('DATA_SCOPE_INVALID', '统计范围格式错误')
     if (id(input[field])) scope[field] = id(input[field])
   }
@@ -23,43 +23,27 @@ function validateScope(input = {}) {
 }
 
 function createDataService(db) {
-  async function buildPlayerCard(result, playerId, options = {}) {
-    const {createPlayerCardSnapshot,synthetic}=await import('./statistics.mjs')
-    const rows=result.players.filter(row=>row.playerId===playerId)
-    const profile=options.profile === undefined ? (await readByIds(db,'players','_id',[playerId]))[0] : options.profile
-    const teamId=id(profile?.teamId || profile?.teamCode)
-    const team=options.team === undefined && teamId ? (await readByIds(db,'teams','_id',[teamId]))[0] : options.team
-    const testIdentity=synthetic(profile)||synthetic(team), fullCareer=options.fullCareer===true
-    const coverageComplete=result.coverage.playerCardComplete?.[playerId] ?? result.coverage.cardScoreScopeComplete
-    const issues=[...result.issues]
-    let support=options.support || {drops:null,status:'unverified',dataVersion:null}
-    if(options.supportFailure)issues.push({code:'SUPPORT_READ_FAILED',playerId})
-    if(fullCareer && options.support===undefined && !options.supportFailure){
-      try{support=(await readPlayerSupportTotals(db,[playerId])).get(playerId)||support}
-      catch(failure){issues.push({code:'SUPPORT_READ_FAILED',playerId})}
-    }
-    const built=createPlayerCardSnapshot(rows,{playerId,fullCareer,identityVerified:Boolean(profile),testIdentity,
-      matchCount:result.summary.matchCount,metricVersion:result.metricVersion,dataVersion:result.dataVersion,mode:result.scope.mode,
-      coverageStatus:coverageComplete?'complete':'partial',supportDrops:support.drops,
-      supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues})
-    return {...built,issues}
-  }
   // One canonical career dataset per batch; identical scope and scoring rules to
   // playerCardForAuthorizedPlayer, without re-reading every match per player.
   async function playerCardsForAuthorizedPlayers(ids) {
     const playerIds=[...new Set(ids.map(id).filter(Boolean))]
     const result=await query({platformOwner:true,teamIds:[],tournamentIds:[]},{mode:'official'})
+    const {sumPlayerRows,calculatePlayerCardPoints,synthetic}=await import('./statistics.mjs')
     const profiles=await readByIds(db,'players','_id',playerIds)
     const teams=await readByIds(db,'teams','_id',profiles.map(p=>id(p.teamId||p.teamCode)))
     const teamById=new Map(teams.map(t=>[id(t._id),t]))
     const profileById=new Map(profiles.map(p=>[id(p._id),p]))
-    let supportTotals=new Map(), supportFailure=false
-    try{supportTotals=await readPlayerSupportTotals(db,playerIds)}catch(failure){supportFailure=true}
-    return new Map(await Promise.all(playerIds.map(async playerId=>{
+    let supportTotals=new Map()
+    try{supportTotals=await readPlayerSupportTotals(db,playerIds)}catch(failure){/* Fail closed, matching the single-player service. */}
+    return new Map(playerIds.map(playerId=>{
       const profile=profileById.get(playerId)
-      const built=await buildPlayerCard(result,playerId,{fullCareer:true,profile,team:teamById.get(id(profile?.teamId||profile?.teamCode)),support:supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null},supportFailure})
-      return [playerId,built.card]
-    })))
+      if(!profile||synthetic(profile)||synthetic(teamById.get(id(profile.teamId||profile.teamCode))))return [playerId,{status:profile?'test_data_excluded':'unverified',tier:null}]
+      const rows=result.players.filter(row=>row.playerId===playerId)
+      const total=sumPlayerRows(rows)
+      if(!rows.length&&result.summary.matchCount>0)for(const key of Object.keys(total.metrics)){total.metrics[key]=null;total.coverage[key]='not_collected'}
+      const support=supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null}
+      return [playerId,calculatePlayerCardPoints(total,{metricVersion:result.metricVersion,dataVersion:result.dataVersion,coverageStatus:result.coverage.cardScoreScopeComplete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion})]
+    }))
   }
 
   // Call only after the caller has independently authorized access to this player.
@@ -92,7 +76,7 @@ function createDataService(db) {
     else if (scope.teamId) matches = [...await readAll(db,'matches',{ homeTeamId:scope.teamId }), ...await readAll(db,'matches',{ awayTeamId:scope.teamId })]
     else if (actor.platformOwner) matches = await readAll(db,'matches')
     else matches = [...await readByIds(db,'matches','tournamentId',[...tournamentIds]), ...await readByIds(db,'matches','homeTeamId',[...teamIds]), ...await readByIds(db,'matches','awayTeamId',[...teamIds])]
-    const { inScope, aggregateStatistics, resultState, effectiveEvents, eventType, matchParticipantIds, synthetic } = await import('./statistics.mjs')
+    const { inScope, aggregateStatistics, sumPlayerRows, calculatePlayerCardPoints, PLAYER_CARD_SCORE_VERSION, PLAYER_CARD_ENTITLEMENT_VERSION, resultState, effectiveEvents, eventType, matchParticipantIds, synthetic } = await import('./statistics.mjs')
     matches = [...new Map(matches.filter(row => inScope(row,scope)).map(row => [id(row._id),row])).values()]
     if (actor.matchIds) { const allowed = new Set(actor.matchIds); matches = matches.filter(row => allowed.has(id(row._id))) }
     if (scope.playerId && !actor.platformOwner) {
@@ -165,15 +149,27 @@ function createDataService(db) {
     result.coverage.accessScope = result.accessScope
     result.summary.playerCount = new Set(result.players.map(row => row.playerId)).size
     if (scope.playerId) {
+      result.playerTotal = sumPlayerRows(result.players)
+      if (!result.players.length && result.summary.matchCount > 0) {
+        for (const field of Object.keys(result.playerTotal.metrics)) { result.playerTotal.metrics[field] = null; result.playerTotal.coverage[field] = 'not_collected' }
+      }
       const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','matchId','from','to'].some(field => scope[field])
-      const built=await buildPlayerCard(result,scope.playerId,{fullCareer})
-      result.playerTotal=built.total
-      result.playerCard=built.card
-      result.issues=built.issues
-    }
-    if (!actor.platformOwner) {
-      const visible = new Set(result.players.map(row => row.playerId))
-      result.coverage.playerCardComplete = Object.fromEntries(Object.entries(result.coverage.playerCardComplete || {}).filter(([playerId]) => visible.has(playerId)))
+      let support = { drops:null, status:'unverified', dataVersion:null }
+      if (fullCareer) {
+        try { support = (await readPlayerSupportTotals(db,[scope.playerId])).get(scope.playerId) || support }
+        catch (failure) { result.issues.push({ code:failure.code || 'SUPPORT_READ_FAILED', playerId:scope.playerId }) }
+      }
+      result.playerCard = fullCareer
+        ? calculatePlayerCardPoints(result.playerTotal, { metricVersion:result.metricVersion, dataVersion:result.dataVersion, coverageStatus:result.coverage.cardScoreScopeComplete ? 'complete' : 'partial', supportDrops:support.drops, supportCoverageStatus:support.status, supportDataVersion:support.dataVersion })
+        : { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:'limited', mode:scope.mode, status:'scope_limited', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+      const requestedPlayer = playersById[scope.playerId] || (await readByIds(db,'players','_id',[scope.playerId]))[0]
+      const playerTeamId = id(requestedPlayer?.teamId || requestedPlayer?.teamCode)
+      const requestedTeam = playerTeamId ? teamsById[playerTeamId] || (await readByIds(db,'teams','_id',[playerTeamId]))[0] : null
+      const testIdentity = synthetic(requestedPlayer) || synthetic(requestedTeam)
+      if (!requestedPlayer || testIdentity) {
+        for (const field of Object.keys(result.playerTotal.metrics)) { result.playerTotal.metrics[field] = null; result.playerTotal.coverage[field] = testIdentity ? 'test_data' : 'identity_unverified' }
+        result.playerCard = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:result.metricVersion, dataVersion:result.dataVersion, scope:testIdentity ? 'test' : 'unknown', mode:scope.mode, status:testIdentity ? 'test_data_excluded' : 'unverified', points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+      }
     }
     return { success:true, ...result }
   }

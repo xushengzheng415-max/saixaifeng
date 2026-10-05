@@ -1,10 +1,8 @@
 import crypto from 'node:crypto'
-import { resolveMatchDuration, resolveMatchDurationEvidence, calculatePlayingMinutes } from './playing-time.mjs'
-import snapshotTools from './player-card-snapshot.cjs'
-const { digest, playerCardSnapshot } = snapshotTools
+import { resolveMatchDuration, calculatePlayingMinutes } from './playing-time.mjs'
 
 export const SCHEMA_VERSION = 'football-data-center/1'
-export const METRIC_VERSION = 'football-metrics/6'
+export const METRIC_VERSION = 'football-metrics/4'
 export const METRICS = Object.freeze({
   starts: { label:'首发', unit:'场', source:'match lineup', rule:'distinct matchId as starting player' },
   appearances: { label:'出场', unit:'场', source:'lineup/substitution', rule:'distinct matchId with actual appearance' },
@@ -12,7 +10,7 @@ export const METRICS = Object.freeze({
   assists: { label:'助攻', unit:'次', source:'goal.assistPlayerId/assist', rule:'one assist per player and goal' },
   yellowCards: { label:'黄牌', unit:'张', source:'yellow_card/second_yellow', rule:'second yellow adds one yellow and one red' },
   redCards: { label:'红牌', unit:'张', source:'red_card/second_yellow', rule:'effective event' },
-  minutesPlayed: { label:'出场时间', unit:'分钟', source:'pre-match duration snapshot/lineup/substitution', rule:'played intervals bounded by proven pre-match total; missing evidence is unknown' }
+  minutesPlayed: { label:'出场时间', unit:'分钟', source:'referee clock or match rules/lineup/substitution', rule:'played intervals; measured clock first, configured duration fallback' }
 })
 const text = value => value == null ? '' : String(value).trim()
 const idOf = row => typeof row === 'string' ? row : text(row?.playerId || row?.id || row?._id)
@@ -78,7 +76,6 @@ export function resultState(match, context = {}) {
 }
 
 export function inScope(match, scope = {}) {
-  if (scope.matchId && text(match._id || match.id) !== text(scope.matchId)) return false
   if (scope.tournamentId && text(match.tournamentId) !== text(scope.tournamentId)) return false
   const division = text(match.divisionId || match.division || 'default')
   if (scope.divisionId && division !== text(scope.divisionId)) return false
@@ -110,26 +107,6 @@ export function effectiveEvents(match, externalEvents = []) {
   return [...byId.values(), ...unkeyed].filter(event => !cancelled(event))
 }
 
-// Official match score from effective events; shootout attempts are separate.
-export function calculateMatchEventScore(match) {
-  if (!Array.isArray(match.events)) return null
-  const result = { home: 0, away: 0 }
-  for (const event of effectiveEvents(match)) {
-    const type = eventType(event)
-    if (!['goal', 'penalty_scored', 'own_goal'].includes(type)) continue
-    if (event.isShootout === true || ['shootout', 'penalty_shootout'].includes(text(event.phase || event.period).toLowerCase())) continue
-    let side = text(event.teamSide || event.side)
-    if (!['home', 'away'].includes(side)) {
-      if (event.teamId && text(event.teamId) === text(match.homeTeamId)) side = 'home'
-      else if (event.teamId && text(event.teamId) === text(match.awayTeamId)) side = 'away'
-      else throw Object.assign(new Error('进球事件缺少有效球队，请修正后结束比赛'), { code: 'GOAL_TEAM_REQUIRED' })
-    }
-    if (type === 'own_goal') side = side === 'home' ? 'away' : 'home'
-    result[side] += 1
-  }
-  return result
-}
-
 function lineupOf(match, side) {
   const source = match[side + 'Lineup'] || match['lineup' + (side === 'home' ? 'Home' : 'Away')] || match.lineups?.[side]
   if (Array.isArray(source)) return { known:true, starters:source, substitutes:[] }
@@ -155,41 +132,6 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   const testPlayerMatches = resultCandidates.filter(match => matchOrigin(match,originContext) === 'test_player')
   const originUnverifiedMatches = resultCandidates.filter(match => matchOrigin(match,originContext) === 'unverified')
   const eligible = selected.filter(match => resultState(match,originContext) === 'official' || (scope.mode === 'provisional' && resultState(match,originContext) === 'provisional'))
-  // Include completeness, excluded facts and tombstones. Losing a verified source
-  // must invalidate caches even when the eligible score stays numerically equal.
-  const factVersions = new Map(selected.map(match => [text(match._id || match.id), digest({
-    matchId:text(match._id || match.id), origin:matchOrigin(match,originContext), state:recordedResultState(match),
-    status:match.status, review:match.refereeReviewStatus, resultVersionId:match.resultVersionId,
-    resultCorrection:match.resultCorrection, homeTeamId:teamOf(match,'home'), awayTeamId:teamOf(match,'away'),
-    homeScore:match.homeScore ?? match.scoreHome, awayScore:match.awayScore ?? match.scoreAway,
-    homeLineup:lineupOf(match,'home'), awayLineup:lineupOf(match,'away'),
-    eventRecordingStatus:match.eventRecordingStatus, statisticsCoverage:match.statisticsCoverage,
-    events:effectiveEvents(match,events).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
-    eventRevisions:[...(Array.isArray(match.events)?match.events:[]),...events.filter(event => text(event.matchId || event.match_id) === text(match._id || match.id))]
-      .map(event => ({id:eventId(event),revision:revision(event),status:event.status,deleted:event.deleted}))
-      .sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
-    duration:resolveMatchDurationEvidence(match),
-    participantOrigin:[...matchParticipantIds(match,events)].sort().map(playerId => [playerId,Boolean(playersById[playerId]),synthetic(playersById[playerId])])
-  })]))
-  const officialCandidates = selected.filter(match => recordedResultState(match) === 'official' && matchOrigin(match,originContext) !== 'test')
-  const candidateIds = [...new Set(selected.flatMap(match => [...matchParticipantIds(match,events)]))].sort()
-  function hasAbsenceEvidence(match) {
-    const rosters = ['home','away'].map(side => lineupOf(match,side))
-    if (!rosters.every(lineup => lineup.known && [...lineup.starters,...lineup.substitutes].every(row => idOf(row)))) return false
-    const knownEvents = match.eventRecordingStatus === 'complete' || match.statisticsCoverage?.events === 'complete' || (Array.isArray(match.events) && match.eventRecordingStatus !== 'partial')
-    if (!knownEvents) return false
-    const contributionTypes = ['goal','penalty_scored','own_goal','assist','yellow_card','red_card','second_yellow','substitution']
-    if (effectiveEvents(match,events).some(event => contributionTypes.includes(eventType(event)) && !text(event.inPlayerId || event.playerId || event.playerID || event.athleteId || event.player?.id || event.player?._id))) return false
-    return true
-  }
-  // An unrelated incomplete record cannot block an identified player's grade
-  // when complete stable-ID lineups and events prove they did not participate.
-  // Missing/ambiguous lineups still fail closed; current team is never a proxy.
-  const uncertainCandidates = officialCandidates.filter(match => matchOrigin(match,originContext) !== 'real' ||
-    !['home','away'].every(side => teamOf(match,side) && lineupOf(match,side).known))
-    .map(match => ({hasAbsenceEvidence:hasAbsenceEvidence(match),participants:matchParticipantIds(match,events)}))
-  const playerCardComplete = Object.fromEntries(candidateIds.map(playerId => [playerId,Boolean(readComplete &&
-    uncertainCandidates.every(item => item.hasAbsenceEvidence && !item.participants.has(playerId)))]))
   const players = new Map(), teams = new Map(), issues = []
   testMatches.forEach(match => issues.push({ code:'TEST_MATCH_EXCLUDED', matchId:text(match._id || match.id) }))
   testPlayerMatches.forEach(match => issues.push({ code:'TEST_PLAYER_IN_MATCH', matchId:text(match._id || match.id) }))
@@ -198,15 +140,12 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   const blank = () => ({ starts:0, appearances:0, goals:0, assists:0, yellowCards:0, redCards:0, minutesPlayed:0 })
   function playerRow(playerId, teamId, match, profile = {}) {
     const key = [playerId,teamId,text(match.tournamentId),text(match.divisionId || match.division || 'default')].join('|')
-    if (!players.has(key)) players.set(key, { playerId, teamId, tournamentId:text(match.tournamentId), divisionId:text(match.divisionId || match.division || 'default'), playerName:text(profile.name || profile.playerName), observed:blank(), matchIds:new Set(), startMatches:new Set(), factsVersions:new Set(), minuteUnknown:false, metricUnknown:new Set(), appearanceUnknown:false })
-    players.get(key).factsVersions.add(factVersions.get(text(match._id || match.id)))
+    if (!players.has(key)) players.set(key, { playerId, teamId, tournamentId:text(match.tournamentId), divisionId:text(match.divisionId || match.division || 'default'), playerName:text(profile.name || profile.playerName), observed:blank(), matchIds:new Set(), startMatches:new Set(), minuteUnknown:false, metricUnknown:new Set(), appearanceUnknown:false })
     return players.get(key)
   }
   for (const match of eligible) {
     const matchId = text(match._id || match.id)
     if (!matchId) { issues.push({ code:'MATCH_ID_MISSING' }); continue }
-    const durationEvidence = resolveMatchDurationEvidence(match)
-    if (durationEvidence.status !== 'ready') issues.push({ code:durationEvidence.reason, matchId })
     let matchEvents = effectiveEvents(match, events)
     const eventsKnown = match.eventRecordingStatus === 'complete' || match.statisticsCoverage?.events === 'complete' || (Array.isArray(match.events) && match.eventRecordingStatus !== 'partial')
     if (eventsKnown) coveredMatches++
@@ -238,23 +177,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
       return { ...event, playerId:text(event.playerId || event.playerID || event.athleteId) || resolve(event.playerName,event.playerNumber), assistPlayerId:text(event.assistPlayerId || event.assistId) || resolve(event.assistName,event.assistNumber) }
     })
     const appeared = new Map(), assistKeys = new Set(), teamsWithUnlinked = new Map()
-    function markUnlinked(teamId,type,event) {
-      // 未关联换入者只影响可能的替补，不抹掉已核实首发和换出者的数据。
-      if (type === 'substitution' && event) {
-        const lineup = lineups[teamId]
-        const outgoing = text(event.outPlayerId || event.assistPlayerId)
-        const incoming = text(event.inPlayerId || event.playerId)
-        if (lineup?.known) {
-          for (const profile of lineup.substitutes) {
-            if (!incoming && !matchEvents.some(item => eventType(item) === 'substitution' && text(item.inPlayerId || item.playerId) === idOf(profile))) {
-              const row = playerRow(idOf(profile),teamId,match,profile)
-              row.metricUnknown.add('appearances'); row.metricUnknown.add('minutesPlayed')
-            }
-          }
-          if (!outgoing) for (const profile of lineup.starters) playerRow(idOf(profile),teamId,match,profile).metricUnknown.add('minutesPlayed')
-          return
-        }
-      }
+    function markUnlinked(teamId,type) {
       const fields = { goal:['goals'], penalty_scored:['goals'], assist:['assists'], yellow_card:['yellowCards'], red_card:['redCards','minutesPlayed'], second_yellow:['yellowCards','redCards','minutesPlayed'], substitution:['appearances','minutesPlayed'] }
       if (!teamsWithUnlinked.has(teamId)) teamsWithUnlinked.set(teamId,new Set())
       for (const field of fields[type] || []) teamsWithUnlinked.get(teamId).add(field)
@@ -286,7 +209,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
       if (playerId && participants.has(playerId) && !participants.get(playerId).has(teamId)) { unlinkedEventCount++; markUnlinked(teamId,type); issues.push({ code:'EVENT_PLAYER_TEAM_CONFLICT', matchId, eventId:eventId(event) }); continue }
       const row = playerId ? playerRow(playerId, teamId, match, { name:event.playerName }) : null
       if (!row && ['goal','penalty_scored','own_goal','yellow_card','red_card','second_yellow','substitution'].includes(type)) {
-        unlinkedEventCount++; markUnlinked(teamId,type,event); issues.push({ code:'EVENT_PLAYER_UNLINKED', matchId, eventId:eventId(event) })
+        unlinkedEventCount++; markUnlinked(teamId,type); issues.push({ code:'EVENT_PLAYER_UNLINKED', matchId, eventId:eventId(event) })
       }
       if (row) {
         if (['goal','penalty_scored'].includes(type)) row.observed.goals++
@@ -307,7 +230,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
     for (const side of ['home','away']) {
       const teamId = teamOf(match, side), lineup = lineups[teamId]
       if (!teamId) continue
-      const duration = resolveMatchDuration(match, { mode:scope.mode })
+      const duration = resolveMatchDuration(match, { division:divisionsById[text(match.divisionId || match.division || 'default')], tournament:tournamentsById[text(match.tournamentId)] })
       const timeline = matchEvents.filter(event => eventTeam(event, match, participants) === teamId && ['substitution','red_card','second_yellow'].includes(eventType(event))).sort((a,b) => Number(a.minute) - Number(b.minute))
       const intervals = calculatePlayingMinutes(lineup.starters.map(idOf).filter(Boolean), timeline.map(event => ({ type:eventType(event), id:text(event.inPlayerId || event.playerId), out:text(event.outPlayerId || event.assistPlayerId), outName:event.assistName, minute:event.minute })), duration)
       const valid = lineup.known && eventsKnown && intervals.available
@@ -340,7 +263,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
       coverage[metric] = unknown ? 'partial' : 'complete'
       if (unknown) metrics[metric] = null
     }
-    return { playerId:row.playerId, teamId:row.teamId, tournamentId:row.tournamentId, divisionId:row.divisionId, playerName:row.playerName, metrics, observed:{ ...row.observed, minutesPlayed:Math.round(row.observed.minutesPlayed) }, coverage, matchIds:[...row.matchIds], startMatchIds:[...row.startMatches], factsVersion:digest([...row.factsVersions].sort()) }
+    return { playerId:row.playerId, teamId:row.teamId, tournamentId:row.tournamentId, divisionId:row.divisionId, playerName:row.playerName, metrics, observed:{ ...row.observed, minutesPlayed:Math.round(row.observed.minutesPlayed) }, coverage, matchIds:[...row.matchIds], startMatchIds:[...row.startMatches] }
   })
   if (scope.playerId) playerRows = playerRows.filter(row => row.playerId === text(scope.playerId))
   if (scope.teamId) playerRows = playerRows.filter(row => row.teamId === text(scope.teamId))
@@ -348,20 +271,15 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
     const known = readComplete && row.scoreCoveredMatches === row.played
     return { ...row, wins:known ? row.wins : null, draws:known ? row.draws : null, losses:known ? row.losses : null, goalsFor:known ? row.goalsFor : null, goalsAgainst:known ? row.goalsAgainst : null, scoreCoverage:known ? 'complete' : 'partial' }
   })
-  const result = {
+  const revisionInput = eligible.map(match => [text(match._id || match.id),match.updateTime || '',match.resultVersionId || '',match.resultCorrection || '',match.homeScore,match.awayScore,match.homeLineup || match.lineups || '',match.awayLineup || '',effectiveEvents(match, events)]).sort((a,b) => a[0].localeCompare(b[0]))
+  return {
     schemaVersion:SCHEMA_VERSION, metricVersion:METRIC_VERSION,
+    dataVersion:crypto.createHash('sha256').update(JSON.stringify([scope,revisionInput,eligible.map(match => [text(match._id || match.id),resolveMatchDuration(match,{ division:divisionsById[text(match.divisionId || match.division || 'default')],tournament:tournamentsById[text(match.tournamentId)] })])])).digest('hex').slice(0,24),
     generatedAt:new Date().toISOString(), scope:{ sportType:'football', mode:'official', ...scope },
-    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length || testPlayerMatches.length ? 'partial' : 'complete', cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && !testPlayerMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), playerCardComplete, expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, testPlayerMatches:testPlayerMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
+    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length || testPlayerMatches.length ? 'partial' : 'complete', cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && !testPlayerMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, testPlayerMatches:testPlayerMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
     summary:{ matchCount:eligible.length, playerCount:new Set(playerRows.map(row => row.playerId)).size, teamCount:new Set(teamRows.map(row => row.teamId)).size },
     players:playerRows, teams:teamRows, issues
   }
-  // playerId selects returned rows, not the underlying career fact scope. Single
-  // and batch calls therefore share the same career version and card revision.
-  const factScope = { sportType:'football',mode:'official',...scope }; delete factScope.playerId
-  result.dataVersion = digest({ schemaVersion:SCHEMA_VERSION,metricVersion:METRIC_VERSION,scope:factScope,
-    facts:[...factVersions.entries()].sort((a,b) => a[0].localeCompare(b[0])),coverage:result.coverage,
-    issues:issues.slice().sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) })
-  return result
 }
 
 export function sumPlayerRows(rows) {
@@ -408,26 +326,6 @@ export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
   const tier = points >= 100 ? 'gold' : points >= 45 ? 'silver' : 'bronze'
   const nextAt = tier === 'gold' ? null : tier === 'silver' ? 100 : 45
   return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, careerPoints, supportDrops, supportPoints, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
-}
-
-// Every API uses this same constructor, including single-player, batch and fan
-// summaries. An empty set is confirmed zero only with a verified empty fact scope.
-export function createPlayerCardSnapshot(rows, metadata = {}) {
-  const total = sumPlayerRows(rows)
-  if (!rows.length && metadata.matchCount > 0) for (const field of Object.keys(total.metrics)) {
-    total.metrics[field] = null; total.coverage[field] = 'not_collected'
-  }
-  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION,
-    metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion:metadata.dataVersion || null,
-    mode:metadata.mode || 'official', points:null,tier:null,canReplacePhoto:false,canChangeBackground:false }
-  let score = metadata.fullCareer === true ? calculatePlayerCardPoints(total,metadata)
-    : {...base,scope:'limited',status:'scope_limited'}
-  if (metadata.identityVerified === false || metadata.testIdentity === true) {
-    for (const field of Object.keys(total.metrics)) { total.metrics[field] = null; total.coverage[field] = metadata.testIdentity ? 'test_data' : 'identity_unverified' }
-    score = {...base,scope:metadata.testIdentity?'test':'unknown',status:metadata.testIdentity?'test_data_excluded':'unverified',missing:[metadata.testIdentity?'testIdentity':'playerIdentity']}
-  }
-  return { total,card:playerCardSnapshot(score,{playerId:metadata.playerId,playerTotal:total,rows,
-    issues:metadata.issues || [],coverageStatus:metadata.coverageStatus,careerDataVersion:metadata.dataVersion}) }
 }
 
 export function selectRosterMatches(matches, teamId, divisionId, allowLegacy) {

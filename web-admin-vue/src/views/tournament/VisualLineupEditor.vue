@@ -551,14 +551,6 @@ function getTeamInitials(name) {
   return name.slice(0, 2)
 }
 
-// 获取球员卡等级（铜/银/金）
-function getCardLevel(player) {
-  const appearances = player?.appearances || 0
-  if (appearances >= 20) return 'gold'
-  if (appearances >= 10) return 'silver'
-  return 'bronze'
-}
-
 // 安全获取球员ID（兼容 id 和 _id）
 function getPlayerId(player) {
   if (!player) return null
@@ -573,7 +565,6 @@ function toCardPlayer(player) {
     jerseyNumber: player.number || player.jerseyNumber || '--',
     photoUrl: player.photo || player.photoUrl || '',
     position: player.position || '',
-    appearances: player.appearances || 0,
     jerseyName: player.jerseyName || ''
   }
 }
@@ -708,6 +699,8 @@ const homeSelectedFormationId = ref('')
 const awaySelectedFormationId = ref('')
 const homeAssignedPlayers = ref({})
 const awayAssignedPlayers = ref({})
+const homeLineupEdited = ref(false)
+const awayLineupEdited = ref(false)
 const dualDialogTeamSide = ref('home')
 const dualCurrentSlot = ref(null)
 
@@ -1047,6 +1040,8 @@ function autoAssignAll() {
 function handlePlayerCountChangeDual() {
   homeSelectedFormationId.value = ''
   awaySelectedFormationId.value = ''
+  homeLineupEdited.value = true
+  awayLineupEdited.value = true
   homeAssignedPlayers.value = {}
   awayAssignedPlayers.value = {}
   homeBench.value = []
@@ -1136,6 +1131,8 @@ function handleDualPlayerSelect(player) {
 
   // ===== 替补席选择模式 =====
   if (selectingForBench.value) {
+    if (dualDialogTeamSide.value === 'home') homeLineupEdited.value = true
+    else awayLineupEdited.value = true
     const targetBench = dualDialogTeamSide.value === 'home' ? homeBench : awayBench
     const targetAssigned = dualDialogTeamSide.value === 'home' ? homeAssignedPlayers : awayAssignedPlayers
 
@@ -1160,6 +1157,8 @@ function handleDualPlayerSelect(player) {
 
   // ===== 场上位置选择模式 =====
   if (!currentSlot.value) return
+  if (dualDialogTeamSide.value === 'home') homeLineupEdited.value = true
+  else awayLineupEdited.value = true
   const target = dualDialogTeamSide.value === 'home' ? homeAssignedPlayers : awayAssignedPlayers
 
   const dup = Object.entries(target.value).find(([, p]) => getPlayerId(p) === playerId)
@@ -1180,6 +1179,8 @@ function handleDualPlayerSelect(player) {
 
 function handleDualPlayerRemove() {
   if (!currentSlot.value) return
+  if (dualDialogTeamSide.value === 'home') homeLineupEdited.value = true
+  else awayLineupEdited.value = true
   const target = dualDialogTeamSide.value === 'home' ? homeAssignedPlayers : awayAssignedPlayers
   const next = { ...target.value }
   delete next[currentSlot.value.role]
@@ -1192,6 +1193,7 @@ function handleDualPlayerRemove() {
 function handleHomeSquadClick(player) {
   if (!homeSelectedFormationId.value) { ElMessage.warning('请先选择主队阵型'); return }
   const empty = homeCurrentPositions.value.find(pos => !homeAssignedPlayers.value[pos.role])
+  homeLineupEdited.value = true
   if (empty) {
     homeAssignedPlayers.value = { ...homeAssignedPlayers.value, [empty.role]: player }
     ElMessage.success(player.name + ' 已首发')
@@ -1204,6 +1206,7 @@ function handleHomeSquadClick(player) {
 function handleAwaySquadClick(player) {
   if (!awaySelectedFormationId.value) { ElMessage.warning('请先选择客队阵型'); return }
   const empty = awayCurrentPositions.value.find(pos => !awayAssignedPlayers.value[pos.role])
+  awayLineupEdited.value = true
   if (empty) {
     awayAssignedPlayers.value = { ...awayAssignedPlayers.value, [empty.role]: player }
     ElMessage.success(player.name + ' 已首发')
@@ -1219,6 +1222,7 @@ function handleHomeBenchClick(player) {
   const empty = homeCurrentPositions.value.find(pos => !homeAssignedPlayers.value[pos.role])
   const pid = getPlayerId(player)
   if (empty) {
+    homeLineupEdited.value = true
     homeAssignedPlayers.value = { ...homeAssignedPlayers.value, [empty.role]: player }
     homeBench.value = homeBench.value.filter(p => getPlayerId(p) !== pid)
     ElMessage.success(player.name + ' 已进入首发')
@@ -1232,6 +1236,7 @@ function handleAwayBenchClick(player) {
   const empty = awayCurrentPositions.value.find(pos => !awayAssignedPlayers.value[pos.role])
   const pid = getPlayerId(player)
   if (empty) {
+    awayLineupEdited.value = true
     awayAssignedPlayers.value = { ...awayAssignedPlayers.value, [empty.role]: player }
     awayBench.value = awayBench.value.filter(p => getPlayerId(p) !== pid)
     ElMessage.success(player.name + ' 已进入首发')
@@ -1274,6 +1279,7 @@ function handleAwayBenchSlotClick() {
 
 // 从主队替补席移除球员
 function handleHomeBenchRemove(player) {
+  homeLineupEdited.value = true
   const pid = getPlayerId(player)
   homeBench.value = homeBench.value.filter(p => getPlayerId(p) !== pid)
   ElMessage.success(player.name + ' 已从替补席移除')
@@ -1281,6 +1287,7 @@ function handleHomeBenchRemove(player) {
 
 // 从客队替补席移除球员
 function handleAwayBenchRemove(player) {
+  awayLineupEdited.value = true
   const pid = getPlayerId(player)
   awayBench.value = awayBench.value.filter(p => getPlayerId(p) !== pid)
   ElMessage.success(player.name + ' 已从替补席移除')
@@ -1308,6 +1315,8 @@ async function handleExportImageDual() {
 
 // ==================== 双队模式：加载已保存阵容 ====================
 watch(() => props.homeInitialLineup, (v) => {
+  // 用户开始编辑后，比赛数据刷新不能覆盖本地未保存阵容。
+  if (homeLineupEdited.value) return
   homeAssignedPlayers.value = {}
   const savedFormation = v?.formation || ''
   // 自动推断比赛人数
@@ -1325,6 +1334,7 @@ watch(() => props.homeInitialLineup, (v) => {
 }, { immediate: true })
 
 watch(() => props.awayInitialLineup, (v) => {
+  if (awayLineupEdited.value) return
   awayAssignedPlayers.value = {}
   const savedFormation = v?.formation || ''
   // 自动推断比赛人数（如果主队已经设置了，用同一个）
