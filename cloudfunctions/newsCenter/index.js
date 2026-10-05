@@ -1,5 +1,6 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -60,10 +61,11 @@ async function authorize(event) {
   const user = await getDoc('users', text(sessions[0].userId))
   if (!user) throw new Error('登录账号不存在')
   if (event.__actorUserId && text(event.__actorUserId) !== text(user._id)) throw new Error('登录身份校验失败')
-  const orgId = text(event.__actorOrgId || user.orgId || user.organizationId)
-  if (!orgId || event.__actorOrgId && text(user.orgId || user.organizationId) !== orgId) throw new Error('当前账号机构归属不一致')
+  const orgId = text(sessions[0].activeOrgId || event.__actorOrgId || user.orgId || user.organizationId)
+  if (!orgId || event.__actorOrgId && text(event.__actorOrgId) !== orgId) throw new Error('当前账号机构归属不一致')
   const organization = await getDoc('organizations', orgId)
   if (!organization || text(organization._id) !== orgId) throw new Error('机构不存在或归属不一致')
+  if (await staffPolicy.isStaff(db, user._id, orgId) && !await staffPolicy.owner(db, user._id, orgId)) return { user, orgId, staff: true }
   const memberships = (await db.collection('organization_memberships').where(command.or([{ userId: user._id }, { memberUserId: user._id }])).limit(100).get()).data || []
   const member = memberships.find(item => text(item.orgId || item.organizationId) === orgId && !['disabled', 'removed', 'rejected', 'inactive'].includes(text(item.status || 'active').toLowerCase()))
   const owner = [organization.ownerId, organization.creatorId, organization.createdBy].map(text).includes(text(user._id))
@@ -114,7 +116,10 @@ async function revalidate(news) {
 async function listNews(event, actor, tournament) {
   const rows = (await db.collection('tournament_news').where({ tournamentId: text(tournament._id), orgId: actor.orgId }).orderBy('updateTime', 'desc').limit(200).get()).data || []
   const articles = []
-  for (const row of rows) articles.push({ ...row, id: text(row._id), needsUpdate: row.status === 'published' && !await revalidate(row) })
+  for (const row of rows) {
+    if (row.status === 'deleted') continue
+    articles.push({ ...row, id: text(row._id), needsUpdate: row.status === 'published' && !await revalidate(row) })
+  }
   return { success: true, articles }
 }
 
@@ -139,25 +144,63 @@ async function saveDraft(event, actor, tournament) {
   if (id) {
     const existing = await getDoc('tournament_news', id)
     if (!existing || text(existing.orgId) !== actor.orgId || text(existing.tournamentId) !== text(tournament._id)) throw new Error('新闻不存在或无权编辑')
-    await db.collection('tournament_news').doc(id).update({ data })
-    return { success: true, newsId: id, status: 'draft' }
+    if (existing.status === 'deleted') throw new Error('新闻已删除，不能继续编辑')
+    if (existing.status === 'published') throw new Error('已发布新闻请先撤回')
+    await db.runTransaction(async transaction => {
+      const response = await transaction.collection('tournament_news').doc(id).get()
+      const current = Array.isArray(response.data) ? response.data[0] : response.data
+      if (!current || current.status === 'deleted' || Number(event.version) !== Number(current.version || 1)) throw Object.assign(new Error('草稿已在其他设备更新，请刷新'), { code: 'NEWS_VERSION_CONFLICT' })
+      data.version = Number(current.version || 1) + 1
+      await transaction.collection('tournament_news').doc(id).update({ data })
+    })
+    return { success: true, newsId: id, status: 'draft', version: data.version }
   }
-  data.createdBy = text(actor.user._id); data.createTime = db.serverDate()
+  data.version = 1; data.createdBy = text(actor.user._id); data.createTime = db.serverDate()
   const added = await db.collection('tournament_news').add({ data })
-  return { success: true, newsId: text(added._id), status: 'draft' }
+  return { success: true, newsId: text(added._id), status: 'draft', version: 1 }
 }
 
 async function setStatus(event, actor, status) {
   const id = text(event.newsId)
   const news = await getDoc('tournament_news', id)
-  if (!news || text(news.orgId) !== actor.orgId) throw new Error('新闻不存在或无权操作')
+  if (!news || text(news.orgId) !== actor.orgId || text(news.tournamentId) !== text(event.tournamentId)) throw new Error('新闻不存在或无权操作')
+  if (news.status === 'deleted') throw new Error('新闻已删除，不能发布或撤回')
   await tournamentAccess(text(news.tournamentId), actor.orgId)
   if (status === 'published') {
     if (!text(news.title) || !text(news.body)) throw new Error('标题和正文不能为空')
     if (!await revalidate(news)) throw new Error('关联赛果已更正，请重新生成或编辑新闻后再发布')
   }
-  await db.collection('tournament_news').doc(id).update({ data: { status, publishedAt: status === 'published' ? db.serverDate() : news.publishedAt || null, publishedBy: status === 'published' ? text(actor.user._id) : news.publishedBy || '', updatedBy: text(actor.user._id), updateTime: db.serverDate() } })
-  return { success: true, newsId: id, status }
+  let version
+  await db.runTransaction(async transaction => {
+    const response = await transaction.collection('tournament_news').doc(id).get()
+    const current = Array.isArray(response.data) ? response.data[0] : response.data
+    if (!current || current.status === 'deleted' || Number(event.version) !== Number(current.version || 1)) throw Object.assign(new Error('新闻已在其他设备更新，请刷新'), { code: 'NEWS_VERSION_CONFLICT' })
+    version = Number(current.version || 1) + 1
+    await transaction.collection('tournament_news').doc(id).update({ data: { status, version, publishedAt: status === 'published' ? db.serverDate() : current.publishedAt || null, publishedBy: status === 'published' ? text(actor.user._id) : current.publishedBy || '', updatedBy: text(actor.user._id), updateTime: db.serverDate() } })
+  })
+  return { success: true, newsId: id, status, version }
+}
+
+async function deleteNews(event, actor, tournament) {
+  const id = text(event.newsId)
+  if (!id) throw new Error('缺少新闻 ID')
+  const existing = await getDoc('tournament_news', id)
+  if (!existing || text(existing.orgId) !== actor.orgId || text(existing.tournamentId) !== text(tournament._id)) throw new Error('新闻不存在或无权删除')
+  if (existing.status === 'deleted') throw new Error('新闻已删除')
+
+  let version
+  await db.runTransaction(async transaction => {
+    const response = await transaction.collection('tournament_news').doc(id).get()
+    const current = Array.isArray(response.data) ? response.data[0] : response.data
+    if (!current || text(current.orgId) !== actor.orgId || text(current.tournamentId) !== text(tournament._id)) throw new Error('新闻不存在或无权删除')
+    if (current.status === 'deleted' || Number(event.version) !== Number(current.version || 1)) {
+      throw Object.assign(new Error('新闻已在其他设备更新，请刷新'), { code: 'NEWS_VERSION_CONFLICT' })
+    }
+    version = Number(current.version || 1) + 1
+    await transaction.collection('tournament_news').doc(id).update({ data: { status: 'deleted', version, deletedAt: db.serverDate(), deletedBy: text(actor.user._id), updatedBy: text(actor.user._id), updateTime: db.serverDate() } })
+  })
+
+  return { success: true, newsId: id, status: 'deleted', version }
 }
 
 exports.main = async event => {
@@ -167,13 +210,23 @@ exports.main = async event => {
     if (!tournamentId) throw new Error('缺少赛事信息')
     const tournament = await tournamentAccess(tournamentId, actor.orgId)
     const action = text(event && event.action)
+    if (actor.staff) {
+      const required = action === 'saveDraft' ? 'news.edit' : ['publish', 'withdraw'].includes(action) ? 'news.publish' : ''
+      const allowed = required
+        ? await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, required)
+        : action === 'delete'
+          ? await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'news.edit') || await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'news.publish')
+          : action === 'list' && (await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'news.edit') || await staffPolicy.hasRight(db, actor.user._id, actor.orgId, tournamentId, 'news.publish'))
+      if (!allowed) throw new Error('当前赛事没有对应新闻权限')
+    }
     if (action === 'list') return await listNews(event, actor, tournament)
     if (action === 'saveDraft') return await saveDraft(event, actor, tournament)
     if (action === 'publish') return await setStatus(event, actor, 'published')
     if (action === 'withdraw') return await setStatus(event, actor, 'withdrawn')
+    if (action === 'delete') return await deleteNews(event, actor, tournament)
     throw new Error('不支持的新闻操作')
   } catch (error) {
     console.error('newsCenter failed:', error)
-    return { success: false, message: error && error.message || '新闻操作失败' }
+    return { success: false, code: error && error.code || 'NEWS_OPERATION_FAILED', message: error && error.message || '新闻操作失败' }
   }
 }
