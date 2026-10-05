@@ -10,7 +10,7 @@
         <span class="context-meta"><el-icon><Calendar /></el-icon>{{ dateRange }}</span>
         <span class="context-meta"><el-icon><Location /></el-icon>{{ tournament.region || tournament.location || '地区待定' }}</span>
       </div>
-      <el-button plain type="primary" :icon="Back" @click="router.push('/tournament-space')">退出赛事空间</el-button>
+      <el-button plain type="primary" :icon="Back" @click="router.push('/tournament-space')">返回赛事空间</el-button>
     </header>
 
     <div class="console-title"><div><h2>赛事主控制台</h2><p>查看各组别准备进度、当前待办与近期比赛。</p></div><el-button :icon="Refresh" plain :loading="loading" @click="loadConsole">刷新</el-button></div>

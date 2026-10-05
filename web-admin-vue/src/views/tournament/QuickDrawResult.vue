@@ -2,7 +2,7 @@
   <section class="quick-result" v-loading="loading">
     <header class="event-header">
       <div class="event-main"><span class="event-mark">赛</span><div><h2>{{ tournament.name || '2026 赛小蜂青少年足球邀请赛' }}</h2><p>{{ eventMeta }}</p></div><el-tag>{{ divisionName }}</el-tag><el-tag type="success">进行中</el-tag></div>
-      <el-button plain @click="exitSpace"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+      <el-button plain @click="exitSpace"><el-icon><SwitchButton /></el-icon>返回赛事空间</el-button>
     </header>
 
     <div class="page-heading">

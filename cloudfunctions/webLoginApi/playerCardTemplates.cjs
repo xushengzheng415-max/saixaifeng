@@ -58,11 +58,12 @@ function normalizeLayout(value) {
     const raw = value?.[key] || defaults
     const x = Number(raw.x), y = Number(raw.y), size = Number(raw.size), weight = Number(raw.weight)
     const color = String(raw.color || '')
+    if (raw.hidden != null && typeof raw.hidden !== 'boolean') throw Object.assign(new Error('文字显示设置无效'), { code:'CARD_TEMPLATE_LAYOUT_INVALID' })
     if (![x, y, size, weight].every(Number.isFinite) || x < 0 || x > 300 || y < 0 || y > 430 ||
         size < 8 || size > 80 || ![400, 500, 600, 700, 800, 900].includes(weight) || !/^#[0-9a-fA-F]{6}$/.test(color)) {
       throw Object.assign(new Error('文字颜色、字号或位置超出范围'), { code: 'CARD_TEMPLATE_LAYOUT_INVALID' })
     }
-    result[key] = { x, y, size, color, weight, ...normalizeTextStyle(raw) }
+    result[key] = { x, y, size, color, weight, hidden:key==='position'?false:raw.hidden === true, ...normalizeTextStyle(raw) }
   }
   return result
 }
@@ -105,24 +106,33 @@ function titleOf(value) {
   return title
 }
 
+function normalizePositionOverride(value, scope) {
+  const text=String(value||'').trim()
+  if(text.length>16)throw Object.assign(new Error('位置最多填写 16 个字'),{code:'CARD_TEMPLATE_POSITION_INVALID'})
+  if(text&&scope.type!=='player')throw Object.assign(new Error('手动补充位置仅适用于单人定制卡'),{code:'CARD_TEMPLATE_POSITION_SCOPE_INVALID'})
+  return text
+}
+
 function itemOf(record, urls, publicOnly) {
   const published = record.published || null
   if (publicOnly) return {
     id: record._id, title: published.title, tier: record.tier, preload: preload.normalizePreload(published.preload),
     version: record.publishedVersion, backgroundUrl: urls[published.backgroundFileId] || '',
     maskUrl: urls[published.maskFileId] || '', layout: normalizeLayout(published.layout),
-    photo: normalizePhoto(published.photo), badges: normalizeBadges(published.badges)
+    photo: normalizePhoto(published.photo), badges: normalizeBadges(published.badges), positionOverride:String(published.positionOverride||'')
   }
   const draft = record.draft || null
   return {
     id: record._id, title: draft?.title || published?.title || '', tier: record.tier, preload: preload.normalizePreload(draft?.preload || published?.preload),
     status: record.status || 'draft', revision: Number(record.revision || 0),
     draftVersion: Number(record.draftVersion || 0), publishedVersion: Number(record.publishedVersion || 0),
+    backgroundFileId: draft?.backgroundFileId || '', maskFileId: draft?.maskFileId || '',
     backgroundUrl: draft ? urls[draft.backgroundFileId] || '' : '',
     maskUrl: draft ? urls[draft.maskFileId] || '' : '',
     publishedBackgroundUrl: published ? urls[published.backgroundFileId] || '' : '',
     publishedMaskUrl: published ? urls[published.maskFileId] || '' : '',
-    layout: normalizeLayout(draft?.layout), photo: normalizePhoto(draft?.photo), badges: normalizeBadges(draft?.badges)
+    layout: normalizeLayout(draft?.layout), photo: normalizePhoto(draft?.photo), badges: normalizeBadges(draft?.badges),
+    positionOverride:String(draft?.positionOverride??published?.positionOverride??'')
   }
 }
 
@@ -169,16 +179,38 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     if (!record) return { success: false, code: 'CARD_TEMPLATE_NOT_FOUND', error: '模板不存在' }
     const urls = await urlsFor([record], false)
     const template = itemOf(record, urls, false)
-    if (record.draft?.backgroundFileId && record.draft?.maskFileId) {
-      const [background, mask] = await Promise.all([
-        cloud.downloadFile({ fileID: record.draft.backgroundFileId }),
-        cloud.downloadFile({ fileID: record.draft.maskFileId })
-      ])
-      if (background.fileContent?.length > MAX_IMAGE_BYTES || mask.fileContent?.length > MAX_IMAGE_BYTES) throw new Error('模板素材过大，请重新上传')
-      template.backgroundData = 'data:image/png;base64,' + background.fileContent.toString('base64')
-      template.maskData = 'data:image/png;base64,' + mask.fileContent.toString('base64')
-    }
     return { success: true, template }
+  }
+  async function preloadPlayer(event) {
+    const playerId=String(event.playerId||'').trim()
+    if(!playerId || playerId.length>128 || /[\s/\\]/.test(playerId)) return {success:false,code:'CARD_PRELOAD_PLAYER_INVALID',error:'请选择有效球员'}
+    const result=await db.collection('players').doc(playerId).get()
+    const player=Array.isArray(result.data)?result.data[0]:result.data
+    if(!player || player.deleted===true || player.isDeleted===true || player.status==='deleted') return {success:false,code:'CARD_PRELOAD_PLAYER_NOT_FOUND',error:'球员不存在或已停用'}
+    const score=scoreForPlayer ? await scoreForPlayer(playerId) : await require('./data-center/service.cjs').createDataService(db).playerCardForAuthorizedPlayer(playerId)
+    const source=await require('./playerCardSource.cjs').resolveSource(db,player)
+    const team=player.teamId ? await suite.document(db,'teams',player.teamId) : null
+    const teamLogo=require('./playerCardSource.cjs').teamLogoFileId(team)
+    const logoBuffer=teamLogo.startsWith('cloud://')?await suite.asset(cloud,teamLogo,1024*1024).catch(()=>null):null
+    const teamLogoTransparent=Boolean(require('./playerCardRender.cjs').isTransparentPng(logoBuffer))
+    const fileIds=[source?.fileId,teamLogoTransparent?teamLogo:''].filter(Boolean)
+    const urls=fileIds.length ? await cloud.getTempFileURL({fileList:fileIds}) : {fileList:[]}
+    const byId=new Map((urls.fileList||[]).map(file=>[file.fileID,file.tempFileURL||'']))
+    return {success:true,player:{
+      id:playerId,name:String(player.name||''),jerseyNumber:String(player.jerseyNumber||''),jerseyName:String(player.jerseyName||''),
+      position:String(player.position||''),height:player.height??null,weight:player.weight??null,nationality:String(player.nationality||''),
+      teamId:String(player.teamId||''),teamName:String(team && (team.name||team.teamName)||''),
+      tier:score?.status==='ready'?String(score.tier||''):'',tierStatus:String(score?.status||'unavailable'),
+      appearances:score?.status==='ready'?Number(score.metrics?.appearances||0):null,version:Number(player.playerCardVersion||0),
+      portraitUrl:source?byId.get(source.fileId)||'':'',portraitSource:source?.type||'',teamLogoUrl:teamLogoTransparent?byId.get(teamLogo)||'':'',
+      teamLogoStatus:!teamLogo?'missing':teamLogoTransparent?'transparent':'transparent_png_required'
+    }}
+  }
+  async function stagedBuffer(value,layer) {
+    const id=String(value || '')
+    if(!/^cloud:\/\/[^/]+\/player-card-template-uploads\/[a-zA-Z0-9_-]+\/(background|mask)\/[^/]+\.png$/.test(id) || !id.includes('/'+layer+'/')) throw Object.assign(new Error('素材引用无效，请重新上传'),{code:'CARD_TEMPLATE_ASSET_INVALID'})
+    const bytes=await suite.asset(cloud,id,MAX_IMAGE_BYTES)
+    return pngBuffer('data:image/png;base64,'+bytes.toString('base64'),layer)
   }
   async function active(event) {
     const tier = tierOf(event.tier)
@@ -189,18 +221,42 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
       id:snapshot.templateId, tier, version:snapshot.version, title:snapshot.title, preload:preload.normalizePreload(snapshot.preload),
       backgroundUrl:urls[snapshot.backgroundFileId] || '', maskUrl:urls[snapshot.maskFileId] || '',
       layout:normalizeLayout(snapshot.layout), photo:normalizePhoto(snapshot.photo),
-      badges:normalizeBadges(snapshot.badges)
+      badges:normalizeBadges(snapshot.badges),positionOverride:String(snapshot.positionOverride||'')
     } }
   }
   async function preview(event) {
     const record = event.templateId ? await read(String(event.templateId)) : null
     const draft = record?.draft || {}
-    const backgroundBuffer = event.backgroundData ? pngBuffer(event.backgroundData, 'background') : await suite.asset(cloud, draft.backgroundFileId, MAX_IMAGE_BYTES)
-    const maskBuffer = event.maskData ? pngBuffer(event.maskData, 'mask') : await suite.asset(cloud, draft.maskFileId, MAX_IMAGE_BYTES)
-    const template = { layout:normalizeLayout(event.layout || draft.layout), photo:normalizePhoto(event.photo || draft.photo), badges:normalizeBadges(event.badges || draft.badges) }
-    const png = renderCard({ backgroundBuffer, maskBuffer, portraitBuffer:fs.readFileSync(path.join(__dirname,'player-card-preview-portrait.png')), teamLogoBuffer:fs.readFileSync(path.join(__dirname,'player-card-preview-team.png')), template,
-      player:{ name:'示例球员', jerseyNumber:'10', position:'FW', jerseyName:'SAMPLE', height:178, weight:72, nationality:'中国' } })
-    return { success:true, renderVersion:suite.RENDER_VERSION, imageData:'data:image/png;base64,'+png.toString('base64') }
+    const backgroundBuffer = event.backgroundFileId ? await stagedBuffer(event.backgroundFileId,'background') : event.backgroundData ? pngBuffer(event.backgroundData, 'background') : await suite.asset(cloud, draft.backgroundFileId, MAX_IMAGE_BYTES)
+    const maskBuffer = event.maskFileId ? await stagedBuffer(event.maskFileId,'mask') : event.maskData ? pngBuffer(event.maskData, 'mask') : await suite.asset(cloud, draft.maskFileId, MAX_IMAGE_BYTES)
+    const scope=preload.normalizePreload(event.preload||draft.preload)
+    const positionOverride=normalizePositionOverride(event.positionOverride??draft.positionOverride,scope)
+    const template = { layout:normalizeLayout(event.layout || draft.layout), photo:normalizePhoto(event.photo || draft.photo), badges:normalizeBadges(event.badges || draft.badges),preload:scope,positionOverride }
+    let player={name:'示例球员',jerseyNumber:'10',position:'FW',jerseyName:'SAMPLE',height:178,weight:72,nationality:'中国'},portraitBuffer,teamLogoBuffer
+    if(event.playerId) {
+      const scope=preload.normalizePreload(event.preload||draft.preload)
+      if(scope.type!=='player'||scope.targetId!==String(event.playerId)) throw Object.assign(new Error('单人预览对象与预装球员不一致'),{code:'CARD_PREVIEW_PLAYER_SCOPE_MISMATCH'})
+      const details=await preloadPlayer({playerId:event.playerId})
+      if(!details.success) return details
+      const row=await suite.document(db,'players',event.playerId),source=await require('./playerCardSource.cjs').resolveSource(db,row)
+      if(!source?.fileId) throw Object.assign(new Error('该球员没有可用头像，暂不能预览'),{code:'PLAYER_CARD_PORTRAIT_REQUIRED'})
+      portraitBuffer=await suite.asset(cloud,source.fileId)
+      const logoId=require('./playerCardSource.cjs').teamLogoFileId(details.player.teamId && await suite.document(db,'teams',details.player.teamId))
+      player={...details.player,id:undefined}
+      if(positionOverride&&!player.position)player.position=positionOverride
+      const logoBytes=logoId.startsWith('cloud://')?await suite.asset(cloud,logoId,1024*1024).catch(()=>null):null
+      teamLogoBuffer=require('./playerCardRender.cjs').isTransparentPng(logoBytes)?logoBytes:null
+    } else {
+      portraitBuffer=fs.readFileSync(require('./playerCardFontCache.cjs').pathFor('player-card-preview-portrait.png'))
+      teamLogoBuffer=fs.readFileSync(require('./playerCardFontCache.cjs').pathFor('player-card-preview-team.png'))
+    }
+    await require('./playerCardRender.cjs').ensureFonts()
+    const png = renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer, template, player })
+    const file=await cloud.uploadFile({cloudPath:'restricted/player-card-template-previews/'+crypto.randomBytes(16).toString('hex')+'.png',fileContent:png})
+    const urls=await cloud.getTempFileURL({fileList:[file.fileID]})
+    const imageUrl=urls.fileList?.find(item=>item.fileID===file.fileID)?.tempFileURL
+    if(!imageUrl) throw new Error('预览图片读取失败，请重试')
+    return {success:true,renderVersion:suite.RENDER_VERSION,imageUrl}
   }
   async function save(event, auth) {
     const id = String(event.templateId || '')
@@ -211,11 +267,12 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     if (id && !record) return { success: false, code: 'CARD_TEMPLATE_NOT_FOUND', error: '模板不存在，请刷新列表' }
     if (record && record.tier !== tier) return { success: false, code: 'CARD_TEMPLATE_TIER_LOCKED', error: '已有模板不能更换等级，请新建模板' }
     const scope = await preload.validatePreload(db, event.preload ?? record?.draft?.preload, suite.document)
+    const positionOverride=normalizePositionOverride(event.positionOverride??record?.draft?.positionOverride,scope)
     if (record?.publishedVersion && preload.stateId(tier, scope) !== preload.stateId(tier, record.published?.preload)) return { success:false, code:'CARD_PRELOAD_LOCKED', error:'已发布模板不能改绑，请新建模板' }
     const photo = normalizePhoto(event.photo || record?.draft?.photo)
     const badges = normalizeBadges(event.badges || record?.draft?.badges)
-    const background = event.backgroundData ? pngBuffer(event.backgroundData, 'background') : null
-    const mask = event.maskData ? pngBuffer(event.maskData, 'mask') : null
+    const background = event.backgroundFileId ? await stagedBuffer(event.backgroundFileId,'background') : event.backgroundData ? pngBuffer(event.backgroundData, 'background') : null
+    const mask = event.maskFileId ? await stagedBuffer(event.maskFileId,'mask') : event.maskData ? pngBuffer(event.maskData, 'mask') : null
     if ((!background && !record?.draft?.backgroundFileId) || (!mask && !record?.draft?.maskFileId)) return { success: false, code: 'CARD_TEMPLATE_INCOMPLETE', error: '请上传背景图和黑白遮罩' }
     const revision = Number(event.revision || 0)
     if (record && revision !== Number(record.revision || 0)) return { success: false, code: 'CARD_TEMPLATE_CONFLICT', error: '模板已更新，请重新加载' }
@@ -228,7 +285,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
       if (background) uploaded.push(backgroundFileId)
       const maskFileId = mask ? (await cloud.uploadFile({ cloudPath: `${folder}/mask.png`, fileContent: mask })).fileID : record.draft.maskFileId
       if (mask) uploaded.push(maskFileId)
-      const draft = { title, backgroundFileId, maskFileId, layout, photo, badges, preload: scope }
+      const draft = { title, backgroundFileId, maskFileId, layout, photo, badges, preload: scope, positionOverride }
       if (record) {
         await db.runTransaction(async tx => {
           const currentResult = await tx.collection(COLLECTION).doc(templateId).get()
@@ -280,6 +337,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
       if (action === 'savePlayerCardLayoutPreset') return await layouts.save(event,auth)
       if (action === 'getActivePlayerCardTemplate') return await active(event)
       if (action === 'listPlayerCardPreloadTargets') return await preload.targets(db, event)
+      if (action === 'getPlayerCardPreloadPlayer') return await preloadPlayer(event)
       if (action === 'listPlayerCardTemplates') return await list(event, false)
       if (action === 'getPlayerCardTemplate') return await get(event)
       if (action === 'previewPlayerCardTemplate') return await preview(event)
@@ -290,10 +348,14 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
         return await publisher.begin(row, Number(event.revision), auth.userId)
       }
       if (action === 'continuePlayerCardTemplatePublish') return await publisher.advance(String(event.jobId || ''))
+      if (action === 'listPlayerCardTemplatePublishPreviews') return await publisher.previews(String(event.jobId || ''),event.offset,event.limit)
+      if (action === 'confirmPlayerCardTemplatePublish') return await publisher.confirm(String(event.jobId || ''),auth.userId)
+      if (action === 'rejectPlayerCardTemplatePublish') return await publisher.reject(String(event.jobId || ''),auth.userId)
       if (action === 'getPlayerCardTemplatePublishStatus') return await publisher.status(tierOf(event.tier), event.preload, event.templateId)
       if (action === 'retryPlayerCardTemplatePublish') return await publisher.retry(String(event.jobId || ''))
       if (action === 'withdrawPlayerCardTemplate') return { success:false, code:'CARD_TEMPLATE_ACTIVE_PROTECTED', error:'活动模板不能撤回，请发布新版替换' }
-      return { success: false, code: 'CARD_TEMPLATE_ACTION_INVALID', error: '未知模板操作' }
+      console.warn('[playerCardTemplates] unknown action:', action)
+      return { success: false, code: 'CARD_TEMPLATE_ACTION_INVALID', error: `未知模板操作：${action || '空操作'}` }
     } catch (error) {
       console.error('[playerCardTemplates]', action, error.code || '', error.message)
       const databaseFailure = /document\.(update|set)|database request fail|DATABASE_REQUEST_FAILED|FailedOperation.Update/i.test(String(error.message || ''))

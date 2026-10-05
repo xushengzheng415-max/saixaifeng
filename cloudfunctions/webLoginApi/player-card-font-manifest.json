@@ -1,0 +1,32 @@
+[
+  {
+    "name": "NotoSansSC-Regular.otf",
+    "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
+    "url": "https://www.sxffootball.cn/admin/fonts/player-card/NotoSansSC-Regular.otf"
+  },
+  {
+    "name": "NotoSansSC-Bold.otf",
+    "sha256": "c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0",
+    "url": "https://www.sxffootball.cn/admin/fonts/player-card/NotoSansSC-Bold.otf"
+  },
+  {
+    "name": "MaShanZheng-Regular.ttf",
+    "sha256": "6d2546bb189c732a8ca29af9e22457b152387d158aa459e4ac2ce1e51788b7fb",
+    "url": "https://www.sxffootball.cn/admin/fonts/player-card/MaShanZheng-Regular.ttf"
+  },
+  {
+    "name": "Anton-Regular.ttf",
+    "sha256": "a4ba3a92350ebb031da0cb47630ac49eb265082ca1bc0450442f4a83ab947cab",
+    "url": "https://www.sxffootball.cn/admin/fonts/player-card/Anton-Regular.ttf"
+  },
+  {
+    "name": "player-card-preview-portrait.png",
+    "sha256": "68867f7f42f06314b8dcaec96734f51f2efe4841161981b70e24b39d442cded0",
+    "url": "https://www.sxffootball.cn/admin/images/player-card-runtime-preview/player-card-preview-portrait.png"
+  },
+  {
+    "name": "player-card-preview-team.png",
+    "sha256": "bd20cfc84520e3cf80015b2ef29ebdd423d82f939aafe87463da214842cd70fa",
+    "url": "https://www.sxffootball.cn/admin/images/player-card-runtime-preview/player-card-preview-team.png"
+  }
+]

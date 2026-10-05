@@ -18,9 +18,7 @@ async function readAll(db, collection, where = {}, options = {}) {
     const condition = cursor ? db.command.and([where, { _id: db.command.gt(cursor) }]) : where
     let page
     try {
-      let query = db.collection(collection).where(condition)
-      if (options.fields) query = query.field({ ...options.fields, _id: true })
-      page = (await query.orderBy('_id', 'asc').limit(Math.min(pageSize, maxRows - rows.length + 1)).get()).data || []
+      page = (await db.collection(collection).where(condition).orderBy('_id', 'asc').limit(Math.min(pageSize, maxRows - rows.length + 1)).get()).data || []
     } catch (error) {
       throw new DataReadError('DATA_READ_FAILED', collection, '数据读取失败，请重试或检查索引')
     }

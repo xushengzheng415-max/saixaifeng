@@ -1,5 +1,8 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const staffPolicy = require('./staffPolicy.cjs')
+const { relayRights } = require('./staffRelayRights.cjs')
+const { validateStaffRelayScope } = require('./staffRelayScope.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
@@ -238,7 +241,7 @@ async function approveTournamentPlayer(event, identity) {
     updateTime:now
   }
   const created = await db.collection('roster_snapshots').add({ data:snapshotData })
-  await db.collection('players').doc(playerId).update({ data:{ organizerReviewStatus:'approved', organizerReviewedAt:now, organizerReviewedBy:String(identity.user._id || ''), updateTime:now } })
+  if (!identity.staff) await db.collection('players').doc(playerId).update({ data:{ organizerReviewStatus:'approved', organizerReviewedAt:now, organizerReviewedBy:String(identity.user._id || ''), updateTime:now } })
   if (context.tournamentTeamId) {
     await db.collection('tournament_teams').doc(context.tournamentTeamId).update({ data:{ rosterStatus:'approved', rosterPlayerCount:playerIds.length, playerReviewStatus:'completed', lastRosterApprovalAt:now, updateTime:now } })
   }
@@ -486,7 +489,7 @@ async function listTeamExportRoster(event, identity) {
     safeGet('registration_player_drafts', { sourceTeamId:context.teamId }, 500)
   ])
   const map = new Map()
-  ;[...byTeamId, ...bySourceTeamId].forEach(row => {
+  ;[...byTeamId, ...bySourceTeamId].filter(row => !identity.staff || String(row.tournamentId || '') === context.tournamentId).forEach(row => {
     if (!row || !row._id) return
     const status = String(row.reviewStatus || '').toLowerCase()
     if (['excluded', 'rejected', 'conflict'].includes(status)) return
@@ -497,8 +500,8 @@ async function listTeamExportRoster(event, identity) {
 
 async function getTeamRegistrationSource(event, identity) {
   const context = await teamAccessContext(event, identity)
-  let fileId = text(context.team.registrationSourceFileId, 500)
-  let fileName = text(context.team.registrationSourceFileName, 160) || '球队报名表.docx'
+  let fileId = identity.staff ? '' : text(context.team.registrationSourceFileId, 500)
+  let fileName = identity.staff ? '球队报名表.docx' : text(context.team.registrationSourceFileName, 160) || '球队报名表.docx'
   if (!fileId) {
     const batches = await safeGet('registration_import_batches', { teamId:context.teamId, tournamentId:context.tournamentId }, 20)
     batches.sort((left, right) => toTime(right.updateTime || right.createTime) - toTime(left.updateTime || left.createTime))
@@ -544,7 +547,8 @@ async function getTeamExportPhotos(event, identity) {
     safeGet('registration_player_drafts', { teamId:context.teamId }, 500),
     safeGet('registration_player_drafts', { sourceTeamId:context.teamId }, 500)
   ])
-  const allowed = new Set([...playersById, ...playersByCode, ...staffById, ...staffByCode, ...draftsById, ...draftsBySource].map(photoFileId).filter(Boolean))
+  const drafts = [...draftsById, ...draftsBySource].filter(row => !identity.staff || String(row.tournamentId || '') === context.tournamentId)
+  const allowed = new Set([...playersById, ...playersByCode, ...staffById, ...staffByCode, ...drafts].map(photoFileId).filter(Boolean))
   const photos = []
   let totalBytes = 0
   for (const fileId of requested) {
@@ -861,6 +865,18 @@ async function decideClaimReview(event, identity) {
 exports.main = async function(event) {
   try {
     const identity = await currentUser(event || {})
+    const orgId = String(event && event.__actorOrgId || identity.user.orgId || identity.user.organizationId || '').trim()
+    if (orgId && await staffPolicy.isStaff(db, identity.user._id, orgId) && !await staffPolicy.owner(db, identity.user._id, orgId)) {
+      const token = String(event && event.__authToken || '').trim()
+      const sessions = token ? (await db.collection('auth_sessions').where({ tokenHash:hashSessionToken(token), userId:String(identity.user._id), active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || [] : []
+      const tournamentId = String(event && (event.__staffTournamentId || event.tournamentId) || '').trim()
+      const rights = relayRights('organizerClaimInvite', event || {})
+      if (sessions.length !== 1 || sessions[0].activeOrgId && String(sessions[0].activeOrgId) !== orgId ||
+          !Array.isArray(rights) || !rights.length ||
+          !await validateStaffRelayScope(db, 'organizerClaimInvite', event || {}, tournamentId) ||
+          !(await Promise.all(rights.map(right => staffPolicy.hasRight(db, identity.user._id, orgId, tournamentId, right)))).every(Boolean)) throw new Error('当前赛事没有该认领管理权限')
+      identity.staff = true
+    }
     if (event && event.action === 'getTeamExportPhotos') return await getTeamExportPhotos(event, identity)
     if (event && event.action === 'getTeamRegistrationSource') return await getTeamRegistrationSource(event, identity)
     if (event && event.action === 'listTournamentRosterPlayers') return await listTournamentRosterPlayers(event, identity)

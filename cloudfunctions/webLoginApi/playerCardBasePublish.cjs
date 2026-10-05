@@ -23,7 +23,8 @@ function createPlayerCardPublish({ cloud }) {
       maskFileId: row.draft.maskFileId, layout: row.draft.layout, photo: row.draft.photo,
       badges: row.draft.badges, createdAt: db.serverDate(), createdBy: userId }
     const [backgroundBuffer, maskBuffer] = await Promise.all([suite.asset(cloud,snapshot.backgroundFileId,2*1024*1024),suite.asset(cloud,snapshot.maskFileId,2*1024*1024)])
-    const preview = renderCard({ backgroundBuffer,maskBuffer,portraitBuffer:fs.readFileSync(path.join(__dirname,'player-card-preview-portrait.png')),template:snapshot,
+    await require('./playerCardRender.cjs').ensureFonts()
+    const preview = renderCard({ backgroundBuffer,maskBuffer,portraitBuffer:fs.readFileSync(require('./playerCardFontCache.cjs').pathFor('player-card-preview-portrait.png')),template:snapshot,
       player:{name:'示例球员',jerseyNumber:'10',position:'FW',jerseyName:'SAMPLE',height:178,weight:72,nationality:'中国'} })
     snapshot.previewDigest = crypto.createHash('sha256').update(preview).digest('hex')
     const players = await suite.publicationPlayers(db, tier)
@@ -148,10 +149,11 @@ function createPlayerCardPublish({ cloud }) {
           const live=await suite.document(tx,'players',playerId)
           const state=await suite.document(tx,suite.STATES,job.tier)
           if(state?.candidate?.jobId!==jobId||!live||Number(live.playerCardVersion||0)!==Number(player.playerCardVersion||0)||['name','teamId','jerseyNumber','height','weight','position','photoUrl','recentPortraitId','playerCardSourceFileId'].some(key=>String(live[key]||'')!==String(player[key]||'')))throw new Error('球员资料已更新，请重试')
-          await tx.collection(suite.RENDERS).doc(suite.renderId(playerId, job.templateId, job.version)).set({ data: {
+          const renderId=suite.renderId(playerId,job.templateId,job.version),cardId=require('./playerCardHistory.cjs').cardId(renderId,generated.digest)
+          await tx.collection(suite.RENDERS).doc(renderId).set({ data: {
           playerId, cardTypeId:job.tier, templateId:job.templateId, publishedVersion:job.version,
           cardDataVersion:nextVersion, renderVersion:suite.RENDER_VERSION,
-          fileId:generated.fileId, digest:generated.digest, status:'ready', generatedAt:db.serverDate()
+          cardId,fileId:generated.fileId, digest:generated.digest, status:'ready', generatedAt:db.serverDate()
           } })
           if(initial){
             await tx.collection('players').doc(playerId).update({data:{playerCardSourceFileId:source.fileId,playerCardSourceType:source.type,playerCardSourceField:source.field,playerCardFileId:generated.fileId,playerCardTier:score.tier,playerCardBackgroundId:job.tier,playerCardVersion:nextVersion,playerCardPoints:score.points,playerCardScoreVersion:score.scoreVersion,playerCardTemplateId:job.templateId,playerCardTemplateVersion:job.version,playerCardCrop:db.command.set({zoom:1,x:0,y:0}),playerCardLayout:db.command.set({}),playerCardSchemaVersion:'player-card/4',playerCardUpdatedAt:db.serverDate()}})

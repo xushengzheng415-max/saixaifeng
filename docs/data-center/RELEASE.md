@@ -1,5 +1,13 @@
 # 数据中心上线与验收
 
+## 2026-10-05 PC 子账号正式发布
+
+用户明确要求发布正式 PC。`preview` 中已验收的子账号、站内信、共享赛事卡片、返回赛事空间和球队阵容读取更新合入最新 `main` 并部署 `/admin/`。发布前增补 CloudBase 文档型数据库索引 `tournament_teams(tournamentId,teamId)`，此前已建 `tournamentId+createTime`、`matches(tournamentId,matchDate)`、`divisions(tournamentId,createTime)` 和 `roster_snapshots(tournamentId)`，索引回读符合补录和队徽查询。`resultCenter` 返回球队名称及临时队徽地址；`webLoginApi` 为受邀成员保留队徽字段并校验 `teamId`/`teamCode` 任一有效关联；`updateMatch`、`resultCenter`、`webLoginApi` 线上函数更新为 Active，入口代码哈希匹配，运行配置保留。线上正式 PC 关键分包回读及静态部署摘要见本节补录。真实受邀账号登录、补录列表、球员选择、保存归档仍需现场确认。本次未上传小程序、服务号 H5 或球员卡 UI。
+
+## 2026-10-05 PC 子账号补录名单与队徽
+
+受邀账号进入比赛详情时，补录相关赛事/球队关联读取依赖 `tournamentId+teamId` 索引；子账号读取投影还漏掉透明队徽和队徽文件字段，球员归属判断也只比较 `teamId` 或 `teamCode` 其中之一。现已追加 `tournament_teams(tournamentId,teamId)` 索引；staff 投影公开赛事需要展示的队徽字段，球队/球员范围同时校验两种关联键；`resultCenter.staffMatches` 返回主客队名称和队徽，比赛阵容编辑器过滤历史空占位。`resultCenter`、`webLoginApi`、`updateMatch` 已按线上包差量更新并回读 Active，线上入口源码哈希匹配，函数配置保留。正式 PC 静态发布及真实受邀账号补录、球员列表和队徽显示待现场确认。
+
 ## 2026-10-03 赛程工作台正式发布
 
 用户确认正式发布后，最新 `main` 的本次功能提交 `fb9ee8c0` 已推送 Gitee。PC 完整构建 263 文件部署 `/admin/`；正式域名入口、`TournamentScheduleV2` 和 `MatchDetail` 的 JS/CSS 均为 HTTP 200，SHA-256 与本地构建一致。`admin/index.html` 摘要为 `E711A678666A823C04130B672F2BF8B259B6DD529ADF081EAA4C5A6AD727B87B`；赛程 JS 为 `9E4D900A253CDC7DDC524C982CA692ACB39EAD4015673ED51EB98C533B64863A`。预览 `/preview/admin/` 仍为 HTTP 200 且引用预览资源。

@@ -3,7 +3,7 @@ const { createDataService } = require('./data-center/service.cjs')
 const { readPlayerSupportTotals, EMPTY_SUPPORT_VERSION } = require('./data-center/support.cjs')
 
 async function applyPlayerCardScores(players, career, supportTotals) {
-  const { createPlayerCardSnapshot } = await import('./data-center/statistics.mjs')
+  const { sumPlayerRows, calculatePlayerCardPoints } = await import('./data-center/statistics.mjs')
   const grouped = new Map()
   for (const row of career.players || []) {
     const playerId = String(row.playerId || '')
@@ -20,16 +20,19 @@ async function applyPlayerCardScores(players, career, supportTotals) {
     player.supportDrops = null
     player.supportPoints = null
     const rows = grouped.get(String(player.playerId || ''))
+    if (!rows?.length) continue
+    const total = sumPlayerRows(rows)
+    if (!career.coverage?.cardScoreScopeComplete) continue
+    player.careerMetrics = Object.fromEntries(['appearances','starts','minutesPlayed','goals','assists'].map(field => [field, total.metrics[field] ?? null]))
     const support = supportTotals instanceof Map ? supportTotals.get(String(player.playerId || '')) || { drops:0, status:'complete', dataVersion:EMPTY_SUPPORT_VERSION } : null
-    const built = createPlayerCardSnapshot(rows || [], {playerId:String(player.playerId || ''),fullCareer:true,
-      identityVerified:Boolean(rows?.length),matchCount:career.summary?.matchCount || 0,
-      metricVersion:career.metricVersion,dataVersion:career.dataVersion,
-      coverageStatus:(career.coverage?.playerCardComplete?.[String(player.playerId || '')] ?? career.coverage?.cardScoreScopeComplete) ? 'complete' : 'partial',
-      supportDrops:support?.drops,supportCoverageStatus:support?.status,supportDataVersion:support?.dataVersion,
-      issues:career.issues || []})
-    const score=built.card
-    player.playerCard=score
-    player.careerMetrics=Object.fromEntries(['appearances','starts','minutesPlayed','goals','assists'].map(field=>[field,built.total.metrics[field] ?? null]))
+    const score = calculatePlayerCardPoints(total, {
+      metricVersion:career.metricVersion,
+      dataVersion:career.dataVersion,
+      coverageStatus:career.coverage?.cardScoreScopeComplete ? 'complete' : 'partial',
+      supportDrops:support?.drops,
+      supportCoverageStatus:support?.status,
+      supportDataVersion:support?.dataVersion
+    })
     if (score.status !== 'ready') continue
     player.careerPoints = score.careerPoints
     player.supportDrops = score.supportDrops

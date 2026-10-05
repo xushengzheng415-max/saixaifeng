@@ -2,6 +2,17 @@
  * 权限控制工具
  * 定义不同角色的操作权限
  */
+import { sidebarRightForRoute } from './tournamentStaffRights'
+
+function staffCanManageCurrentModule(tournament) {
+  if (sessionStorage.getItem('sxfTournamentStaff') !== '1') return null
+  const eventId = String(tournament?._id || tournament?.id || '')
+  if (!eventId || eventId !== sessionStorage.getItem('sxfStaffTournamentId')) return false
+  const path = window.location.hash.replace(/^#/, '').split('?')[0]
+  const right = sidebarRightForRoute(path)
+  try { return Boolean(right && JSON.parse(sessionStorage.getItem('sxfStaffPermissions') || '[]').includes(right)) }
+  catch { return false }
+}
 
 // 登录身份只有 ORGANIZER；其余值仅作为主办方管理业务对象时的兼容标签。
 export const ROLES = {
@@ -208,6 +219,8 @@ export const permissions = {
     },
     // 管理赛事（抽签、赛程等）
     manage: (tournament) => {
+      const staffPermission = staffCanManageCurrentModule(tournament)
+      if (staffPermission !== null) return staffPermission
       if (isVisualQaSession()) return true
       if (isPlatformOwner() || hasActiveAssistance()) return true
       if (hasRole([ROLES.ADMIN])) return true

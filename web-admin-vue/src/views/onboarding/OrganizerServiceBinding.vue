@@ -17,8 +17,9 @@
             <div v-else-if="loading" class="loading-state"><i></i><span>正在生成专属二维码…</span></div>
             <div v-else class="error-state"><strong>二维码暂未生成</strong><span>{{ errorMessage || '请检查网络后重试' }}</span></div>
           </div>
-          <button type="button" :disabled="loading" @click="createGate">{{ loading ? '正在处理…' : '刷新专属二维码' }}</button>
-          <p>二维码与当前登录账号一一对应，请勿转发给他人。</p>
+          <button v-if="organizationConflict" type="button" @click="router.replace('/tournament-staff')">查看账号邀请</button>
+          <button v-else type="button" :disabled="loading" @click="createGate">{{ loading ? '正在处理…' : '刷新专属二维码' }}</button>
+          <p>{{ organizationConflict ? '没有待接受邀请时，请联系平台核验机构关系。' : '二维码与当前登录账号一一对应，请勿转发给他人。' }}</p>
         </section>
       </div>
     </section>
@@ -36,12 +37,17 @@ const followUrl = ref('')
 const gateId = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
+const organizationConflict = ref(false)
 const statusText = ref('等待扫码')
 let timer = null
 
 async function requestBinding(action, payload = {}) {
   const result = await callFunction('tournamentRegistrationFlow', { action, ...payload })
-  if (!result || !result.success) throw new Error(result && (result.message || result.error) || '服务号绑定服务不可用')
+  if (!result || !result.success) {
+    const error = new Error(result && (result.message || result.error) || '服务号绑定服务不可用')
+    error.code = result?.code || ''
+    throw error
+  }
   return result.data || {}
 }
 function continueToBackend() {
@@ -71,6 +77,7 @@ async function createGate() {
   if (loading.value) return
   loading.value = true
   errorMessage.value = ''
+  organizationConflict.value = false
   try {
     const data = await requestBinding('createOrganizerServiceGate')
     if (data.subscribed) {
@@ -85,6 +92,7 @@ async function createGate() {
     timer = setInterval(checkStatus, 2500)
   } catch (error) {
     errorMessage.value = error.message || '生成绑定二维码失败'
+    organizationConflict.value = error.code === 'ORG_CONFLICT'
     statusText.value = '等待重新生成'
   } finally {
     loading.value = false

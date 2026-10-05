@@ -127,9 +127,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction } from '../../utils/cloud'
 
+const route = useRoute()
 const loading = ref(false)
 const actionLoading = ref(false)
 const requests = ref([])
@@ -154,7 +156,7 @@ onMounted(() => {
  */
 async function loadTournaments() {
   try {
-    const result = await callFunction('getTournaments', { limit: 100 })
+    const result = await callFunction('getTournaments', { limit: 100, tournamentId:String(route.params.id || '') })
     if (result && result.success) {
       tournaments.value = result.data || []
     }

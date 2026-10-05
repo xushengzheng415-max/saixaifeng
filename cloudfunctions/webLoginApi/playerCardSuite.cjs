@@ -37,8 +37,10 @@ async function asset(cloud, fileId, maxBytes = 5 * 1024 * 1024) {
   return result.fileContent
 }
 
-function cardFacts(player, team, score) {
-  if (!score || score.status !== 'ready' || !score.tier) throw new Error('生涯积分尚未核定')
+function cardFacts(player, team, score, snapshot) {
+  const personalCustom=preload.normalizePreload(snapshot?.preload).type==='player'
+  if(score?.status==='test_data_excluded')throw new Error('测试资料不能生成正式球员卡')
+  if (!personalCustom&&(!score || score.status !== 'ready' || !score.tier)) throw new Error('生涯积分尚未核定')
   return {
     name: String(player.name || '').trim(),
     jerseyNumber: String(player.jerseyNumber || ''),
@@ -49,23 +51,26 @@ function cardFacts(player, team, score) {
     nationality: String(player.nationality || ''),
     teamId: String(player.teamId || ''),
     teamName: String(team && (team.name || team.teamName) || ''),
-    tier: score.tier,
-    scoreVersion: score.scoreVersion || ''
+    tier: score?.tier || snapshot?.cardTypeId || snapshot?.tier || '',
+    scoreVersion: score?.scoreVersion || ''
   }
 }
 
 async function renderPlayer(cloud, db, player, snapshot, score, overrides = {}) {
   const team = player.teamId ? await document(db, 'teams', player.teamId) : null
-  const facts = cardFacts(player, team, score)
+  const cardPlayer=preload.normalizePreload(snapshot?.preload).type==='player'&&snapshot.positionOverride&&!player.position
+    ? {...player,position:snapshot.positionOverride}:player
+  const facts = cardFacts(cardPlayer, team, score, snapshot)
   const portraitId = String(overrides.portraitFileId || player.playerCardSourceFileId || '')
   if (!portraitId) throw new Error('标准形象照缺失，需先补拍')
-  const logoId = require('./playerCardSource.cjs').permanentFile(team && (team.logoTransparent || team.logo || team.logoUrl))
+  const logoId = require('./playerCardSource.cjs').teamLogoFileId(team)
   const [backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer] = await Promise.all([
     asset(cloud, snapshot.backgroundFileId, 2 * 1024 * 1024),
     asset(cloud, snapshot.maskFileId, 2 * 1024 * 1024),
     asset(cloud, portraitId),
-    logoId.startsWith('cloud://') ? asset(cloud, logoId, 1024 * 1024).catch(() => null) : null
+    logoId.startsWith('cloud://') ? asset(cloud, logoId, 1024 * 1024).then(buffer=>require('./playerCardRender.cjs').isTransparentPng(buffer)?buffer:null).catch(() => null) : null
   ])
+  await require('./playerCardRender.cjs').ensureFonts()
   const png = renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer,
     template: snapshot, player: facts, crop: overrides.crop || player.playerCardCrop,
     personalLayout: overrides.layout || player.playerCardLayout })
@@ -121,7 +126,7 @@ async function publicationPlayers(db,tier) {
 }
 
 async function signedCard(cloud, db, player, type) {
-  const [card] = await require('./playerCardReader.cjs').readCards(cloud,db,[{...player,playerCardBackgroundId:type}])
+  const [card] = await require('./playerCardReader.cjs').readCards(cloud,db,[{...player,playerCardBackgroundId:type}],{baseOnly:true})
   return {...card,url:card.cardUrl,templateVersion:card.publishedVersion}
 }
 

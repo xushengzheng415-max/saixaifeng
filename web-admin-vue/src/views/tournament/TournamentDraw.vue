@@ -16,7 +16,7 @@
         <span class="quick-event-meta"><el-icon><Calendar /></el-icon>{{ overviewDateRange }}</span>
         <span class="quick-event-meta"><el-icon><Location /></el-icon>{{ overviewLocation }}</span>
       </div>
-      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>返回赛事空间</el-button>
     </header>
     <main>
       <div class="quick-setup-heading">
@@ -70,7 +70,7 @@
         <span class="overview-meta"><el-icon><Calendar /></el-icon>{{ overviewDateRange }}</span>
         <span class="overview-meta"><el-icon><Location /></el-icon>{{ overviewLocation }}</span>
       </div>
-      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+      <el-button type="success" plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>返回赛事空间</el-button>
     </header>
     <main>
       <h1>抽签与分组</h1>
@@ -586,7 +586,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Monitor, Delete, Trophy, Lock, Medal, Warning, CircleCheck, CircleClose, Calendar, Location, SwitchButton, User, Grid, UserFilled, InfoFilled, Loading } from '@element-plus/icons-vue'
 import html2canvas from 'html2canvas'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord } from '../../utils/cloud'
+import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction } from '../../utils/cloud'
 import ProfessionalDrawFlow from './ProfessionalDrawFlow.vue'
 import QuickHybridConsole from './QuickHybridConsole.vue'
 import QuickTournamentConsole from './QuickTournamentConsole.vue'
@@ -1937,6 +1937,13 @@ async function saveGroups() {
 
   saving.value = true
   try {
+    const delegatedStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
+    let scheduleResult = null
+    if (delegatedStaff) {
+      const reset = await callFunction('generateSchedule', { action:'resetPairings', tournamentId, divisionId:activeDivisionId.value, tournamentType:tournamentType.value })
+      if (!reset?.success) throw new Error(reset?.message || reset?.error || '当前对阵不能重新抽签')
+      scheduleResult = { deletedCount:Number(reset.deletedMatchCount || 0), hasOtherDivisionMatches:Boolean(reset.hasOtherDivisionMatches) }
+    }
     if (tournamentType.value === 'cup') {
       await saveBracket()
     } else if (tournamentType.value === 'league') {
@@ -1946,8 +1953,10 @@ async function saveGroups() {
     }
 
     await clearOtherSavedDrawTypes()
-    const scheduleResult = await clearCurrentDivisionSchedule()
-    await syncSavedTournamentState(scheduleResult.hasOtherDivisionMatches)
+    if (!delegatedStaff) {
+      scheduleResult = await clearCurrentDivisionSchedule()
+      await syncSavedTournamentState(scheduleResult.hasOtherDivisionMatches)
+    }
 
     hasSavedGroups.value = true
     if (scheduleResult.deletedCount > 0) {
