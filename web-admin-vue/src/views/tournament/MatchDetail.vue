@@ -142,7 +142,7 @@
                   <span class="col-jersey">球衣名</span>
                 </div>
                 <div
-                  v-for="(p, i) in lineups.home?.players || []"
+                  v-for="(p, i) in homeLineupPlayers"
                   :key="'h-'+i"
                   class="lineup-player"
                   :class="{ 'is-captain': p.isCaptain, 'is-foreign': p.isForeign }"
@@ -157,9 +157,9 @@
                   <span class="col-jersey">{{ p.jerseyName || '-' }}</span>
                 </div>
                 <!-- 替补 -->
-                <div class="lineup-section-title" v-if="lineups.home?.substitutes?.length">替补球员</div>
+                <div class="lineup-section-title" v-if="homeLineupSubstitutes.length">替补球员</div>
                 <div
-                  v-for="(p, i) in lineups.home?.substitutes || []"
+                  v-for="(p, i) in homeLineupSubstitutes"
                   :key="'hs-'+i"
                   class="lineup-player sub"
                 >
@@ -192,7 +192,7 @@
                   <span class="col-jersey">球衣名</span>
                 </div>
                 <div
-                  v-for="(p, i) in lineups.away?.players || []"
+                  v-for="(p, i) in awayLineupPlayers"
                   :key="'a-'+i"
                   class="lineup-player"
                   :class="{ 'is-captain': p.isCaptain, 'is-foreign': p.isForeign }"
@@ -207,9 +207,9 @@
                   <span class="col-jersey">{{ p.jerseyName || '-' }}</span>
                 </div>
                 <!-- 替补 -->
-                <div class="lineup-section-title" v-if="lineups.away?.substitutes?.length">替补球员</div>
+                <div class="lineup-section-title" v-if="awayLineupSubstitutes.length">替补球员</div>
                 <div
-                  v-for="(p, i) in lineups.away?.substitutes || []"
+                  v-for="(p, i) in awayLineupSubstitutes"
                   :key="'as-'+i"
                   class="lineup-player sub"
                 >
@@ -1711,6 +1711,11 @@ const hasKitColors = computed(() => {
 
 // 首发阵容
 const lineups = computed(() => match.value.lineups || { home: null, away: null })
+const getLineupRows = rows => Array.isArray(rows) ? rows.filter(player => player && typeof player === 'object' && !Array.isArray(player)) : []
+const homeLineupPlayers = computed(() => getLineupRows(lineups.value.home?.players))
+const homeLineupSubstitutes = computed(() => getLineupRows(lineups.value.home?.substitutes))
+const awayLineupPlayers = computed(() => getLineupRows(lineups.value.away?.players))
+const awayLineupSubstitutes = computed(() => getLineupRows(lineups.value.away?.substitutes))
 const hasLineups = computed(() => {
   const l = lineups.value
   return !!(l.home?.players?.length || l.away?.players?.length)
@@ -1725,25 +1730,25 @@ const awayRecord = computed(() => '-')
 
 // 固定行数的阵容表格（首发11人，替补12人，不够的补空行）
 const homeStartersPadded = computed(() => {
-  const arr = lineups.value.home?.players || []
+  const arr = getLineupRows(lineups.value.home?.players)
   const padded = [...arr]
   while (padded.length < 11) padded.push({})
   return padded
 })
 const awayStartersPadded = computed(() => {
-  const arr = lineups.value.away?.players || []
+  const arr = getLineupRows(lineups.value.away?.players)
   const padded = [...arr]
   while (padded.length < 11) padded.push({})
   return padded
 })
 const homeSubsPadded = computed(() => {
-  const arr = lineups.value.home?.substitutes || []
+  const arr = getLineupRows(lineups.value.home?.substitutes)
   const padded = [...arr]
   while (padded.length < 12) padded.push({})
   return padded
 })
 const awaySubsPadded = computed(() => {
-  const arr = lineups.value.away?.substitutes || []
+  const arr = getLineupRows(lineups.value.away?.substitutes)
   const padded = [...arr]
   while (padded.length < 12) padded.push({})
   return padded
@@ -2563,7 +2568,7 @@ async function loadApprovedMatchRoster(side) {
   if (!['approved', 'confirmed', 'locked'].includes(snapshotStatus)) {
     throw new Error('尚未形成已审核赛事正式名单，请先完成球队名单审核')
   }
-  const players = (result.rows || []).map(player => ({
+  const players = (Array.isArray(result.rows) ? result.rows : []).filter(player => player && typeof player === 'object').map(player => ({
     playerId: String(player._id || player.playerId || player.id || '').trim(),
     name: String(player.name || '').trim(),
     number: String(player.jerseyNumber || '').trim()
