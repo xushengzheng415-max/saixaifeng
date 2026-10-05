@@ -4131,7 +4131,7 @@ async function handleCallFunction(event) {
         const tournamentId = String(event.staffTournamentId || '').trim()
         delegatedTournamentId = tournamentId
         const uploadRight = functionName === 'uploadFile' && tournamentId
-          ? await staffUploadRight(db, functionParams || {}, tournamentId, authenticated.orgId, authenticated.userId) : ''
+          ? await staffUploadRight(db, { ...(functionParams || {}), staffModule: event.staffModule }, tournamentId, authenticated.orgId, authenticated.userId) : ''
         const rule = uploadRight ? [uploadRight] : relayRights(functionName, functionParams || {})
         const allowed = Array.isArray(rule) && rule.length === 0 && functionName === 'tournamentStaffAccess' ||
           Boolean(rule && tournamentId && (functionName === 'uploadFile' || await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId)) && (
@@ -4173,7 +4173,7 @@ async function handleCallFunction(event) {
       ...(authenticated && !assistanceGrant ? {
         __actorUserId: authenticated.userId,
         __actorOrgId: authenticated.orgId,
-        ...(delegatedStaff && functionName !== 'tournamentStaffAccess' ? { __staffTournamentId: delegatedTournamentId } : {}),
+        ...(delegatedStaff && functionName !== 'tournamentStaffAccess' ? { __staffTournamentId: delegatedTournamentId, __staffModule: String(event.staffModule || '') } : {}),
         ...(functionName === 'updateMatch' ? { __notificationRelay: true } : {}),
         ...(functionName === 'reviewRosterChange' ? {
           __actorUserName: String(authenticated.user.nickname || authenticated.user.userName || authenticated.user.phone || '主办方').slice(0, 50)
@@ -5807,6 +5807,7 @@ exports.main = async (event, context) => {
         const db = cloud.database()
         if (await staffPolicy.isStaff(db, session.userId, session.orgId) && !await staffPolicy.owner(db, session.userId, session.orgId)) {
           const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery', 'reviewRefereeRecord', 'rosterExceptionBoard']
+          const playerCardViewerActions = ['getPlayerCardsForViewer', 'getPlayerCardForViewer', 'getPlayerCardById']
           if (action === 'uploadImage') {
             const tournamentId = String(params.staffTournamentId || '')
             if (params.tournamentId && String(params.tournamentId) !== tournamentId) return response(200, { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'赛事范围不一致' })
@@ -5826,6 +5827,14 @@ exports.main = async (event, context) => {
               await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.teams') ||
               await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.registration'))
             if (!news && !evidence && !teamImage && !newTeamLogo) return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有上传权限' })
+          } else if (playerCardViewerActions.includes(action)) {
+            const tournamentId = String(params.staffTournamentId || '').trim()
+            const moduleRight = String(params.staffModule || '').trim()
+            const validModule = ['event.dashboard','event.registration','event.teams','event.draw','event.matches','event.results'].includes(moduleRight)
+            const hasModuleRight = tournamentId && validModule && await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, moduleRight)
+            if (!hasModuleRight) return response(200, { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'当前子账号没有查看本赛事球员卡的权限' })
+            params.__staffTournamentId = tournamentId
+            params.__staffModule = moduleRight
           } else if (!permittedSessionActions.includes(action)) {
             return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' })
           }
@@ -5901,7 +5910,7 @@ exports.main = async (event, context) => {
       case 'getPlayerCardsForViewer':
       case 'getPlayerCardForViewer':
       case 'getPlayerCardById':
-        result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
+        result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,buildStaffEventScope,recordBelongsToStaffEvent})(params); break
       case 'getAdminPlayerCard':
       case 'saveAdminPlayerCard':
         result = await require('./playerCardsAdmin.cjs').createAdminPlayerCards({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break

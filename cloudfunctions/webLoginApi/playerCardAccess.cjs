@@ -1,5 +1,5 @@
 const { document, readCards } = require('./playerCardReader.cjs')
-function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerScope, organizerRecordAllowed }) {
+function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerScope, organizerRecordAllowed, buildStaffEventScope, recordBelongsToStaffEvent }) {
   return async event => {
     try {
       const auth = await authenticateWebSession(event)
@@ -23,7 +23,13 @@ function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerS
         if(!player)return {success:false,code:'PLAYER_CARD_NOT_FOUND',error:'球员资料不存在'}
         const owner=auth.principalType==='platform_owner'&&auth.user?.isPlatformOwner===true
         const related=[player.linkedUserId,player.playerUserId,player.guardianUserId].some(key=>key&&String(key)===String(auth.userId))
-        if(!owner&&!related){const scope=await buildOrganizerScope(db,auth.user);if(!organizerRecordAllowed('players',player,scope))return {success:false,code:'PLAYER_CARD_FORBIDDEN',error:'无权查看此成卡'}}
+        const staffTournamentId=String(event.__staffTournamentId||'').trim()
+        const staffModule=String(event.__staffModule||'').trim()
+        const staffScope=staffTournamentId&&['event.dashboard','event.registration','event.teams','event.draw','event.matches','event.results'].includes(staffModule)
+          ? await buildStaffEventScope(db,auth.userId,auth.orgId,staffTournamentId,staffModule) : null
+        if(!owner&&!related){const scope=staffScope||await buildOrganizerScope(db,auth.user);const allowed=staffScope
+          ? recordBelongsToStaffEvent('players',player,staffScope)
+          : organizerRecordAllowed('players',player,scope);if(!allowed)return {success:false,code:'PLAYER_CARD_FORBIDDEN',error:'无权查看此成卡'}}
         if(legacy){if(Number(player.playerCardVersion||0)!==Number(legacy[2])||!player.playerCardFileId)return {success:false,code:'PLAYER_CARD_NOT_FOUND',error:'成卡已更新或不存在'};render={_id:cardId,playerId,fileId:player.playerCardFileId,status:'ready',cardDataVersion:Number(player.playerCardVersion||0),publishedVersion:Number(player.playerCardTemplateVersion||0),templateId:String(player.playerCardTemplateId||'')}}
         if(!render||render.status!=='ready'||!render.fileId)return {success:false,code:'PLAYER_CARD_NOT_READY',error:'成卡正在更新或暂不可用'}
         const files=await cloud.getTempFileURL({fileList:[render.fileId]}),url=(files.fileList||[]).find(file=>file.fileID===render.fileId)?.tempFileURL||''
@@ -34,13 +40,19 @@ function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerS
       const db=cloud.database(),sources=new Map()
       for(let start=0;start<ids.length;start+=50){const page=await db.collection('players').where({_id:db.command.in(ids.slice(start,start+50))}).limit(50).get();for(const player of page.data||[])sources.set(String(player._id),player)}
       const owner=auth.principalType==='platform_owner'&&auth.user?.isPlatformOwner===true
+      const staffTournamentId=String(event.__staffTournamentId||'').trim()
+      const staffModule=String(event.__staffModule||'').trim()
+      const staffScope=staffTournamentId&&['event.dashboard','event.registration','event.teams','event.draw','event.matches','event.results'].includes(staffModule)
+        ? await buildStaffEventScope(db,auth.userId,auth.orgId,staffTournamentId,staffModule) : null
       let scope=null
       const allowed=[],denied=new Map()
       for(const id of ids){
         const player=sources.get(id)
         if(!player){denied.set(id,{playerId:id,status:'unavailable',cardUrl:''});continue}
         const related=[player.linkedUserId,player.playerUserId,player.guardianUserId].some(key=>key&&String(key)===String(auth.userId))
-        if(!owner&&!related){scope=scope||await buildOrganizerScope(db,auth.user);if(!organizerRecordAllowed('players',player,scope)){denied.set(id,{playerId:id,status:'forbidden',cardUrl:''});continue}}
+        if(!owner&&!related){scope=scope||staffScope||await buildOrganizerScope(db,auth.user);const permitted=staffScope
+          ? recordBelongsToStaffEvent('players',player,staffScope)
+          : organizerRecordAllowed('players',player,scope);if(!permitted){denied.set(id,{playerId:id,status:'forbidden',cardUrl:''});continue}}
         allowed.push(player)
       }
       const cards=await readCards(cloud,db,allowed),byId=new Map(cards.map(card=>[card.playerId,card]))
