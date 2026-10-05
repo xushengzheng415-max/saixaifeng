@@ -1376,7 +1376,12 @@ const eventMinuteOptions = Array.from({ length:131 }, (_,minute) => ({ value:min
 const substitutionPeriodOptions = [{ label:'上半场',value:'first_half' },{ label:'中场休息',value:'halftime' },{ label:'下半场',value:'second_half' }]
 const eventPlayerFieldLabel = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '领牌球员' : eventForm.value.type === 'assist' ? '助攻球员' : '球员')
 const eventPlayerPlaceholder = computed(() => ['yellow_card','red_card','second_yellow_red'].includes(eventForm.value.type) ? '选择领牌球员' : eventForm.value.type === 'assist' ? '选择助攻球员' : '选择本队球员')
-const activeEventPlayers = computed(() => eventForm.value.teamSide === 'away' ? awayPlayers.value : homePlayers.value)
+const isPlayerRecord = player => Boolean(player && typeof player === 'object' && !Array.isArray(player))
+const getPlayerId = player => isPlayerRecord(player) ? String(player.playerId || player.id || player._id || '') : ''
+const activeEventPlayers = computed(() => {
+  const players = eventForm.value.teamSide === 'away' ? awayPlayers.value : homePlayers.value
+  return Array.isArray(players) ? players.filter(isPlayerRecord) : []
+})
 const eventPlayerOptions = computed(() => {
   const rows = new Map()
   activeEventPlayers.value.forEach(player => {
@@ -1406,11 +1411,29 @@ watch(() => eventForm.value.type, type => {
 
 function addSubstitutionRow() { if (eventForm.value.substitutions.length < 5) eventForm.value.substitutions.push(emptySubstitution()) }
 function removeSubstitutionRow(index) { if (eventForm.value.substitutions.length > 1) eventForm.value.substitutions.splice(index,1) }
-const substitutionInputState = computed(() => substitutionState(match.value,effectiveSubstitutionRules.value,match.value.events || [],Number(eventForm.value.minute)).sides[eventForm.value.teamSide])
-const substitutionOption = player => ({ value:String(player.playerId || player.id || player._id || ''), label:[player.number ?? player.jerseyNumber,player.name || player.playerName].filter(value=>value!==''&&value!=null).join(' · ') })
+const substitutionInputState = computed(() => {
+  const state = substitutionState(match.value,effectiveSubstitutionRules.value,match.value.events || [],Number(eventForm.value.minute))
+  const side = state?.sides?.[eventForm.value.teamSide] || {}
+  return {
+    ...side,
+    incoming: Array.isArray(side.incoming) ? side.incoming.filter(isPlayerRecord) : [],
+    outgoing: Array.isArray(side.outgoing) ? side.outgoing.filter(isPlayerRecord) : [],
+    issues: Array.isArray(side.issues) ? side.issues : []
+  }
+})
+function substitutionOption(player) {
+  if (!isPlayerRecord(player)) return null
+  const value = getPlayerId(player)
+  if (!value) return null
+  const name = String(player.name || player.playerName || '').trim()
+  const number = player.number ?? player.jerseyNumber
+  return { value, label:[number !== undefined && number !== '' ? `${number}号` : '',name].filter(Boolean).join(' · ') || '未命名球员' }
+}
 function substitutionOptions(index,kind) {
-  const used = new Set(eventForm.value.substitutions.flatMap((row,rowIndex) => rowIndex===index ? [kind==='incoming'?row.outId:row.inId] : [row.outId,row.inId]).filter(Boolean))
-  return substitutionInputState.value[kind].map(substitutionOption).filter(player=>player.value&&!used.has(player.value))
+  const rows = Array.isArray(eventForm.value.substitutions) ? eventForm.value.substitutions.filter(row => row && typeof row === 'object') : []
+  const used = new Set(rows.flatMap((row,rowIndex) => rowIndex===index ? [kind==='incoming'?row.outId:row.inId] : [row.outId,row.inId]).filter(Boolean).map(String))
+  const players = Array.isArray(substitutionInputState.value[kind]) ? substitutionInputState.value[kind] : []
+  return players.map(substitutionOption).filter(option => option && !used.has(option.value))
 }
 function substitutionOutOptions(index) { return substitutionOptions(index,'outgoing') }
 function substitutionInOptions(index) { return substitutionOptions(index,'incoming') }
@@ -2192,14 +2215,20 @@ async function saveEvent() {
   if (!ensureEvidenceEditable()) return
   let newEvents = []
   if (eventForm.value.type === 'substitution') {
-    const rows = eventForm.value.substitutions.filter(row => row.outId || row.inId)
+    const rows = (Array.isArray(eventForm.value.substitutions) ? eventForm.value.substitutions : []).filter(row => row && typeof row === 'object' && (row.outId || row.inId))
     if (!rows.length) return ElMessage.warning('请至少填写一组换人')
     if (rows.some(row => !row.outId || !row.inId)) return ElMessage.warning('请完整选择每组换上和换下球员')
     if (new Set(rows.flatMap(row => [row.outId,row.inId])).size !== rows.length * 2) return ElMessage.warning('同一批换人不能重复选择球员')
+    const input = substitutionInputState.value
+    const hasStaleSelection = rows.some(row =>
+      !input.incoming.some(player => getPlayerId(player) === String(row.inId)) ||
+      !input.outgoing.some(player => getPlayerId(player) === String(row.outId))
+    )
+    if (hasStaleSelection) return ElMessage.warning('换人名单已变化，请重新选择球员')
     const batchId = `sub-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
     newEvents = rows.map((row,index) => {
-      const incoming = substitutionInputState.value.incoming.find(player => String(player.playerId || player.id || player._id) === row.inId)
-      const outgoing = substitutionInputState.value.outgoing.find(player => String(player.playerId || player.id || player._id) === row.outId)
+      const incoming = input.incoming.find(player => getPlayerId(player) === String(row.inId))
+      const outgoing = input.outgoing.find(player => getPlayerId(player) === String(row.outId))
       return {
         type:'substitution',minute:Number(eventForm.value.minute || 0),teamSide:eventForm.value.teamSide,
         teamId:String(eventForm.value.teamSide === 'away' ? match.value.awayTeamId || '' : match.value.homeTeamId || ''),

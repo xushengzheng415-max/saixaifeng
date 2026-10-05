@@ -66,6 +66,7 @@ const CLOUD_FUNCTION_MAP = {
   getTournaments: 'relay',
   getTournamentDetail: 'relay', // 公开赛事详情只读查询
   getTournamentMatches: 'relay', // 公开赛事赛况只读查询
+  updateMatch: 'relay', // 比赛事件与中场换人通过会话代理保存
   setHeadReferee: 'relay', // 设置赛事裁判长必须经过机构会话中转
   getRegulations: 'relay', // PC 规程文件读取需登录后中转
   reviewRosterChange: 'relay', // 名单变更审核必须经过当前机构门禁

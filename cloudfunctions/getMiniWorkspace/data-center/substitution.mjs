@@ -21,8 +21,13 @@ export function matchLineup(match, side) {
   const direct = match[side + 'Lineup']
   const raw = direct && (direct.submitted || direct.starters?.length || direct.players?.length) ? direct : match.refereeRosters?.[side] || match.lineups?.[side] || direct
   if (!raw) return { known:false, starters:[], substitutes:[] }
-  const starters = raw.starters || raw.players || [], substitutes = raw.substitutes || raw.bench || []
-  return { known:Array.isArray(starters) && starters.length > 0, starters:Array.isArray(starters) ? starters : [], substitutes:Array.isArray(substitutes) ? substitutes : [] }
+  const starterRows = raw.starters || raw.players || []
+  const substituteRows = raw.substitutes || raw.bench || []
+  // Old imported lineups can contain null/empty slots. They are not players
+  // and must not reach name/number resolution or the substitution pickers.
+  const starters = Array.isArray(starterRows) ? starterRows.filter(row => row && typeof row === 'object' && !Array.isArray(row)) : []
+  const substitutes = Array.isArray(substituteRows) ? substituteRows.filter(row => row && typeof row === 'object' && !Array.isArray(row)) : []
+  return { known:starters.length > 0, starters, substitutes }
 }
 
 export function eventIdentity(event) {
@@ -33,8 +38,9 @@ export function eventIdentity(event) {
 const eventContent = event => JSON.stringify([typeOf(event),event.minute,event.teamSide,event.teamId,event.inPlayerId || event.playerId,event.playerName,event.playerNumber,event.outPlayerId || event.assistPlayerId,event.assistName,event.assistNumber].map(text))
 
 function findPlayer(pool, id, name, number) {
-  if (text(id)) return pool.find(row => playerId(row) === text(id)) || null
-  const rows = pool.filter(row => text(row.name || row.playerName) === text(name) &&
+  const players = Array.isArray(pool) ? pool.filter(row => row && typeof row === 'object' && !Array.isArray(row)) : []
+  if (text(id)) return players.find(row => playerId(row) === text(id)) || null
+  const rows = players.filter(row => text(row.name || row.playerName) === text(name) &&
     (number == null || number === '' || text(row.number ?? row.jerseyNumber) === text(number)))
   // Compatibility resolves only an unambiguous player in this exact match roster.
   return rows.length === 1 && playerId(rows[0]) ? rows[0] : null
