@@ -229,7 +229,7 @@
                   <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · {{ accountRoleLabel }}</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
-                  <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>账号管理</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>{{ accountManagementLabel }}</el-dropdown-item>
                   <el-dropdown-item command="refresh"><el-icon><Refresh /></el-icon>刷新数据</el-dropdown-item>
                   <el-dropdown-item divided command="logout"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item>
                 </el-dropdown-menu>
@@ -268,7 +268,7 @@
                   </el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
-                  <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>账号管理</el-dropdown-item>
+                  <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>{{ accountManagementLabel }}</el-dropdown-item>
                   <el-dropdown-item divided command="refresh">
                     <el-icon><Refresh /></el-icon>刷新数据
                   </el-dropdown-item>
@@ -320,6 +320,10 @@ const route = useRoute()
 const usesWorkspaceShell = computed(() => route.meta.workspaceShell === true)
 const usesEmbeddedPageHeader = computed(() => route.meta.embeddedPageHeader === true)
 const unreadNotificationCount = ref(0)
+const pendingStaffInvitationCount = ref(0)
+const accountManagementLabel = computed(() => pendingStaffInvitationCount.value
+  ? `账号管理（待接受 ${pendingStaffInvitationCount.value}）`
+  : '账号管理')
 
 function openHelpCenter() {
   router.push(userInfo.value.isPlatformOwner === true ? '/system' : '/assistance')
@@ -330,12 +334,25 @@ function showNotifications() {
 }
 async function refreshUnreadNotificationCount() {
   if (isPlatformContext()) return
-  try {
-    const result = await callFunction('onboardingWorkspace', { action: 'organizerInboxList' })
-    if (result?.success) unreadNotificationCount.value = Number(result.data?.unreadCount || 0)
-  } catch { /* 站内信状态不阻断后台加载 */ }
+  const [inbox, invitations] = await Promise.allSettled([
+    callFunction('onboardingWorkspace', { action: 'organizerInboxList' }),
+    callFunction('tournamentStaffAccess', { action: 'invitations' })
+  ])
+  const inboxResult = inbox.status === 'fulfilled' ? inbox.value : null
+  const invitationResult = invitations.status === 'fulfilled' ? invitations.value : null
+  if (invitations.status === 'fulfilled') {
+    pendingStaffInvitationCount.value = invitationResult?.success && Array.isArray(invitationResult.invitations)
+      ? invitationResult.invitations.length
+      : 0
+  }
+  if (inboxResult?.success || invitationResult?.success) {
+    unreadNotificationCount.value = Number(inboxResult?.data?.unreadCount || 0) + pendingStaffInvitationCount.value
+  }
 }
 function handleInboxUpdated() { void refreshUnreadNotificationCount() }
+function handleInboxVisibility() {
+  if (document.visibilityState === 'visible') void refreshUnreadNotificationCount()
+}
 
 // 用户信息
 function readStoredObject(key) {
@@ -1025,6 +1042,7 @@ onMounted(() => {
   loginType.value = localStorage.getItem('loginType') || 'anonymous'
   currentRole.value = localStorage.getItem('currentRole') || localStorage.getItem('role') || ''
   window.addEventListener('sxf-organizer-inbox-updated', handleInboxUpdated)
+  document.addEventListener('visibilitychange', handleInboxVisibility)
   void refreshUnreadNotificationCount()
   if (shouldLoadLayoutBootstrap()) {
     // 机构状态和账号资料在会话内短时间稳定；菜单切换不需要重复等待这两次请求。
@@ -1063,6 +1081,7 @@ const currentPageTitle = computed(() => {
 
 onUnmounted(() => {
   window.removeEventListener('sxf-organizer-inbox-updated', handleInboxUpdated)
+  document.removeEventListener('visibilitychange', handleInboxVisibility)
   if (countdownTimer) {
     clearInterval(countdownTimer)
     countdownTimer = null

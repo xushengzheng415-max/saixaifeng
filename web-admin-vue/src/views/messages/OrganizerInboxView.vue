@@ -7,9 +7,17 @@
       </div>
       <el-button :loading="loading" @click="loadMessages"><el-icon><Refresh /></el-icon>刷新</el-button>
     </header>
+    <el-alert v-if="invitationLoadError" type="warning" :closable="false" title="赛事邀请暂时未能加载，请刷新重试" />
 
-    <div v-if="loading && !messages.length" class="inbox-loading">正在加载站内信…</div>
-    <div v-else-if="messages.length" class="inbox-list" v-loading="loading">
+    <div v-if="loading && !messages.length && !invitations.length" class="inbox-loading">正在加载站内信…</div>
+    <div v-else-if="messages.length || invitations.length" class="inbox-list" v-loading="loading">
+      <article v-for="invite in invitations" :key="`invite-${invite.id}`" class="inbox-item unread invitation-item">
+        <div class="inbox-item-heading">
+          <div><h3>赛事账号邀请</h3><el-tag type="warning" size="small">待接受</el-tag></div>
+        </div>
+        <p class="inbox-preview">{{ invite.tournamentName || '赛事' }}：{{ permissionSummary(invite.permissions) }}</p>
+        <footer><el-button type="primary" link @click="openInvitations">查看并处理</el-button></footer>
+      </article>
       <article v-for="message in messages" :key="message._id" class="inbox-item" :class="{ unread: !message.readAt }">
         <div class="inbox-item-heading">
           <div><h3>{{ message.title }}</h3><el-tag v-if="!message.readAt" type="warning" size="small">未读</el-tag></div>
@@ -36,11 +44,14 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { callFunction } from '@/utils/cloud'
+import { TOURNAMENT_SIDEBAR_RIGHTS, visibleSidebarKeys } from '@/utils/tournamentStaffRights'
 
 const router = useRouter()
 const loading = ref(false)
 const loadError = ref(false)
 const messages = ref([])
+const invitations = ref([])
+const invitationLoadError = ref(false)
 const unreadCount = ref(0)
 const detailVisible = ref(false)
 const selectedMessage = ref(null)
@@ -51,15 +62,29 @@ function formatTime(value) {
   return Number.isNaN(date.getTime()) ? '时间待补充' : date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function permissionSummary(permissions = []) {
+  const visible = visibleSidebarKeys(permissions)
+  return TOURNAMENT_SIDEBAR_RIGHTS.filter(right => visible.has(right.key)).map(right => right.label).join('、') || '权限待确认'
+}
+
+function openInvitations() {
+  router.push('/tournament-staff')
+}
+
 async function loadMessages() {
   if (loading.value) return
   loading.value = true
   loadError.value = false
   try {
-    const result = await callFunction('onboardingWorkspace', { action: 'organizerInboxList' })
+    const [result, invitationResult] = await Promise.all([
+      callFunction('onboardingWorkspace', { action: 'organizerInboxList' }),
+      callFunction('tournamentStaffAccess', { action: 'invitations' }).catch(() => null)
+    ])
     if (!result?.success) throw new Error(result?.message || '站内信加载失败')
     messages.value = Array.isArray(result.data?.messages) ? result.data.messages : []
-    unreadCount.value = Number(result.data?.unreadCount || 0)
+    invitations.value = Array.isArray(invitationResult?.invitations) ? invitationResult.invitations : []
+    invitationLoadError.value = !invitationResult?.success
+    unreadCount.value = Number(result.data?.unreadCount || 0) + invitations.value.length
   } catch (error) {
     loadError.value = true
     ElMessage.error(error.message || '站内信加载失败')
