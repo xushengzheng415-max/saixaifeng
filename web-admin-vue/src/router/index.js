@@ -8,7 +8,7 @@ import {
   isPlatformWorkspacePath,
   isPlatformSession
 } from '../utils/platformSession'
-import { sidebarRightForRoute, visibleSidebarKeys } from '../utils/tournamentStaffRights'
+import { invitationLandingPath, sidebarRightForRoute, visibleSidebarKeys } from '../utils/tournamentStaffRights'
 
 // 深链截图会在首个路由组件加载前访问数据，开发模式需先于路由守卫同步激活隔离样例。
 if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href.includes('visualQa=1')) {
@@ -588,7 +588,7 @@ function needsOrganizerOnboarding(to) {
 }
 
 async function needsOrganizerServiceBinding(to) {
-  if (to.path === '/service-account-binding') return false
+  if (to.path === '/service-account-binding' || to.path === '/tournament-staff') return false
   if (!hasLocalOrganization()) return false
   const loginType = localStorage.getItem('loginType') || ''
   if (loginType !== 'wechat') return false
@@ -706,6 +706,11 @@ router.beforeEach(async (to, from, next) => {
       try {
         const { callFunction } = await import('../utils/cloud')
         const scope = await callFunction('tournamentStaffAccess', { action: 'scope' })
+        const invitationTarget = invitationLandingPath(scope, to.path, sessionStorage.getItem('sxfStaffInvitationPrompted') === '1')
+        if (invitationTarget) {
+          if (to.path !== '/service-account-binding') sessionStorage.setItem('sxfStaffInvitationPrompted', '1')
+          next(invitationTarget); return
+        }
         const staff = scope?.success && scope.isStaff && !scope.isOwner
         sessionStorage.setItem('sxfTournamentStaff', staff ? '1' : '0')
         if (staff) {

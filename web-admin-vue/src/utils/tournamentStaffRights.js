@@ -22,6 +22,13 @@ export function visibleSidebarKeys(permissions = []) {
   return values
 }
 
+export function invitationLandingPath(scope, path, prompted = false) {
+  if (!scope?.success || !Array.isArray(scope.invitations) || !scope.invitations.length) return ''
+  if (path === '/service-account-binding') return '/tournament-staff'
+  if (!prompted && ['/', '/tournament-space', '/organization-onboarding'].includes(path)) return '/tournament-staff'
+  return ''
+}
+
 export function sidebarRightForRoute(path) {
   const remainder = String(path || '').replace(/^\/tournaments\/[^/]+/, '')
   if (!remainder) return 'event.dashboard'

@@ -187,7 +187,7 @@ async function handleBind() {
 
     ElMessage.success('手机号验证成功，正在进入系统...')
 
-    setTimeout(() => router.push('/organization-onboarding'), 800)
+    setTimeout(() => router.push('/tournament-space'), 800)
   } catch (err) {
     console.error('[BindPhone] 绑定异常:', err)
     ElMessage.error('绑定失败：' + (err.message || '网络错误'))
