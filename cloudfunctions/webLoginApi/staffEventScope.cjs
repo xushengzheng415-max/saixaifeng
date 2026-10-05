@@ -58,14 +58,16 @@ async function readScopedRows(db, collection, where = {}, options = {}) {
   }
 }
 
-async function buildStaffEventScope(db, userId, orgId, tournamentId) {
+async function buildStaffEventScope(db, userId, orgId, tournamentId, moduleRight = '') {
   const event = await document(db, 'tournaments', tournamentId)
   if (!event || string(event.orgId || event.organizationId || event.organization_id) !== string(orgId)) throw new Error('赛事不存在或不属于当前机构')
   const [registrations, matches, rosterSnapshots, refereeRelations] = await Promise.all([
     readScopedRows(db, 'tournament_teams', { tournamentId }),
     readScopedRows(db, 'matches', { tournamentId }),
     readScopedRows(db, 'roster_snapshots', { tournamentId }),
-    readScopedRows(db, 'tournament_referees', { tournamentId })
+    moduleRight === 'event.referees'
+      ? readScopedRows(db, 'tournament_referees', { tournamentId })
+      : Promise.resolve([])
   ])
   const teamIds = ids(registrations.map(row => row.teamId))
   const teamRows = teamIds.length ? await readByIds(db, 'teams', '_id', teamIds) : []

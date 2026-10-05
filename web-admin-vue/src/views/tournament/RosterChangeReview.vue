@@ -2,7 +2,7 @@
   <div class="roster-change-review" v-loading="loading">
     <header class="change-context-header">
       <div class="context-event"><img :src="brandLogo" alt="赛事徽标" /><strong>{{ tournament.name || '当前赛事' }}</strong><el-tag type="primary" effect="plain">{{ tournament.divisions?.length || 1 }}个组别</el-tag><el-tag type="success" effect="plain">进行中</el-tag><span class="context-divider"></span><span class="context-meta"><el-icon><Calendar /></el-icon>{{ tournamentDateRange }}</span><span class="context-meta"><el-icon><Location /></el-icon>{{ tournament.province || '赛事地点待定' }}</span></div>
-      <el-button type="success" plain @click="router.push('/tournament-space')">退出赛事空间</el-button>
+      <el-button type="success" plain @click="router.push('/tournament-space')">返回赛事空间</el-button>
     </header>
 
     <main class="change-page">

@@ -6,7 +6,7 @@
         <el-tag type="primary" effect="plain">{{ divisionsCount }} 个组别</el-tag><el-tag type="success" effect="plain">进行中</el-tag>
         <span><el-icon><Calendar /></el-icon>{{ eventDateText }}</span><span><el-icon><LocationInformation /></el-icon>{{ tournament.province || tournament.location || '举办地待定' }}</span>
       </div>
-      <el-button plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>退出赛事空间</el-button>
+      <el-button plain @click="router.push('/tournament-space')"><el-icon><SwitchButton /></el-icon>返回赛事空间</el-button>
     </header>
 
     <section class="monitor-content">

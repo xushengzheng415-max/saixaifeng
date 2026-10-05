@@ -38,7 +38,7 @@
           plain
           :icon="Back"
           @click="router.push(`/tournaments/${tournamentId}`)"
-          >退出赛事空间</el-button
+          >返回赛事空间</el-button
         >
       </div>
     </header>

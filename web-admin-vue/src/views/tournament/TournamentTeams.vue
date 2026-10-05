@@ -17,7 +17,7 @@
           {{ isProfessional ? '专业版' : '基础版 · 免费' }}
         </el-tag>
       </div>
-      <el-button plain @click="router.push('/tournament-space')">退出赛事</el-button>
+      <el-button plain @click="router.push('/tournament-space')">返回赛事空间</el-button>
     </header>
 
     <main class="teams-page-content">

@@ -727,7 +727,7 @@ router.beforeEach(async (to, from, next) => {
           if (resultOnly && required === 'event.results' && to.path !== `/tournaments/${grant.tournamentId}/staff-results`) {
             next('/tournament-staff'); return
           }
-          const allowed = ['/tournament-staff', '/messages'].includes(to.path) || Boolean(sameOrganization && required && rights.has(required))
+          const allowed = ['/tournament-staff', '/messages', '/tournament-space'].includes(to.path) || Boolean(sameOrganization && required && rights.has(required))
           if (!allowed) { next('/tournament-staff'); return }
           next(); return
         }
