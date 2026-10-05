@@ -216,7 +216,7 @@
           </button>
           <div class="workspace-shell-actions">
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
-            <button class="notification-action" type="button" aria-label="查看站内信" title="站内信" @click="showNotifications"><el-icon><Bell /></el-icon><i v-if="unreadNotificationCount">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</i></button>
+            <button class="notification-action" type="button" aria-label="查看站内信" title="站内信" @click="showNotifications"><el-icon><Bell /></el-icon><span>站内信</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
             <el-dropdown trigger="click" @command="handleUserCommand">
               <div class="workspace-user">
                 <el-avatar v-if="userInfo.avatarUrl" :size="38" :src="userInfo.avatarUrl" />
@@ -1306,9 +1306,11 @@ onUnmounted(() => {
 .workspace-shell-actions { gap: 22px; }
 .header-action,.notification-action { border: 0; color: #59645e; background: transparent; cursor: pointer; }
 .header-action { gap: 7px; font-size: 14px; }
-.header-action .el-icon,.notification-action { font-size: 21px; }
-.notification-action { position: relative; justify-content: center; width: 34px; height: 34px; }
-.notification-action i { position: absolute; right: -2px; top: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 10px; color: #fff; font-size: 11px; font-style: normal; line-height: 18px; background: #f04438; }
+.header-action .el-icon { font-size: 21px; }
+.notification-action { justify-content: center; gap: 6px; min-height: 34px; padding: 0 10px; border: 1px solid #dce6df; border-radius: 6px; color: #34443a; font-size: 14px; white-space: nowrap; }
+.notification-action:hover { border-color: #a9cdb5; background: #f5faf6; }
+.notification-action .el-icon { color: #118a47; font-size: 17px; }
+.notification-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 10px; color: #fff; font-size: 11px; font-weight: 600; line-height: 18px; background: #e5484d; }
 .workspace-user { gap: 9px; min-height: 46px; color: #4d5952; font-size: 14px; cursor: pointer; }
 .workspace-user-avatar { color: #fff; background: #087b45; }
 .workspace-account-copy,.header-account-copy { display:flex; min-width:0; flex-direction:column; align-items:flex-start; gap:3px; line-height:1.15; }
