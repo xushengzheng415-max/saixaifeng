@@ -8,7 +8,7 @@
 | PC 服务号个人绑定与赛事机构选择 | 二维码绑定已验证自然人 `userId`；球队机构不推断赛事机构；进入赛事工作空间仍按赛事授权校验 | webLoginApi/onboardingWorkspace 的 organizationScope、tournamentRegistrationFlow、serviceAccountCallback | 2026-10-05 共享后端已差量部署，真实账号扫码待验收 |
 | PC 赛事子账号邀请提醒 | 待接受的赛事授权显示在站内信未读数和消息列表，链接到账号管理处理邀请 | tournamentStaffAccess invitations + LayoutView/OrganizerInboxView | 2026-10-05 已发布 `/preview/admin/`；邀请手机号需与受邀人已验证手机号一致 |
 | PC 子账号赛事主控台读取 | 主控台仅读取授权赛事关联的组别、报名球队、比赛及名单关系；集合读取失败必须明确报错，不能用 0 冒充无数据 | webLoginApi `staffEventScope.cjs` + `staffDbRights.cjs` | 2026-10-05 共享后端修复已发布；避免依赖 `tournamentId+_id` 复合索引，源码回读一致，真实账号刷新待确认 |
-| PC 共享赛事空间 | 已接受的授权赛事通过账号 `userId` 单独列卡，不用当前机构 `orgId` 推断可见赛事；卡片明确显示共享状态，进入时继续按事件授权校验 | tournamentStaffAccess mine + TournamentSpace + router event scope | 前端已实现待发布；共享账号返回赛事空间可见其授权卡片 |
+| PC 共享赛事空间 | 已接受的授权赛事通过账号 `userId` 单独列卡，不用当前机构 `orgId` 推断可见赛事；卡片明确显示共享状态，进入时继续按事件授权校验 | tournamentStaffAccess mine + TournamentSpace + router event scope | 2026-10-05 已部署 `/preview/admin/`；真实受邀账号回访待确认 |
 | 小程序子账号联动 | 待 PC 授权验收后复用同一授权记录及赛果/新闻数据 | 尚未接入 | 未开始 |
 
 ## 比赛补录换人规则

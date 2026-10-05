@@ -1,6 +1,6 @@
 # 赛小蜂足球当前状态
 
-2026-10-05 PC 子账号赛事空间关联修正：接受邀请后，路由允许受邀账号返回 `/tournament-space`；受邀账号在赛事空间看到自己的有效授权赛事卡片及“共享赛事”标识，并可从卡片进入赛事；共享账号不显示“创建新赛事”。赛事页返回按钮及赛事工作页同类入口统一改为“返回赛事空间”。共享 `webLoginApi` 按赛事模块惰性读取裁判关联数据，避免无关缺失集合阻断主控台。文档型数据库已补 `tournament_teams(tournamentId,createTime desc)`、`divisions(tournamentId,createTime asc)`、`matches(tournamentId,matchDate asc)` 和 `roster_snapshots(tournamentId)` 索引。测试版静态资源待部署；正式 PC 页面未改，小程序未改，受邀账号现场刷新和共享卡片实际加载待确认。
+2026-10-05 PC 子账号赛事空间关联修正已部署测试版：接受邀请后可返回 `/tournament-space`；受邀账号看到按本人有效授权列出的赛事卡片及“共享赛事”标识，并可进入授权赛事；共享账号不显示“创建新赛事”。赛事相关页按钮统一为“返回赛事空间”。共享 `webLoginApi` 仅在裁判模块读取裁判关联；文档型数据库缺少的 `tournament_teams(tournamentId,createTime desc)`、`divisions(tournamentId,createTime asc)`、`matches(tournamentId,matchDate asc)`、`roster_snapshots(tournamentId)` 索引已创建并回读。PC 测试版 `preview` 提交 `93025105` 上传 257 个文件；赛事空间、赛事主控台及路由分包 HTTP 200 且 SHA-256 一致。正式 PC 静态页面和小程序未改；真实受邀账号刷新后数据及共享卡片显示仍待确认。本轮未使用独立测试环境。
 
 2026-10-05 PC 子账号接受邀请后赛事主控台数据读取失败已修复：赛事权限范围查询不再依赖各赛事集合的 `tournamentId+_id` 复合索引，改为按赛事条件分页读取后继续校验赛事归属。共享 `webLoginApi` 已基于现网包差量更新，状态 Active、入口代码与新 `staffEventScope.cjs` 回下载哈希一致；球员人脸及球员卡目录模块哈希未变，14 项函数环境变量配置保留。该修复适用于调用共享后端的正式和测试 PC 页面；小程序未改。真实受邀账号刷新后的主控台数据仍待现场确认。
 

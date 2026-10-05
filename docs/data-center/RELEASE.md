@@ -2,7 +2,7 @@
 
 ## 2026-10-05 PC 子账号共享赛事空间与索引修复
 
-受邀账号的赛事主控台之前显示 0，是因为 `tournament_teams`、`divisions`、`matches` 缺少页面筛选排序使用的复合索引；`roster_snapshots` 缺少 `tournamentId` 索引。现已追加赛事查询索引，并在 `staffEventScope` 中仅于裁判模块读取 `tournament_referees`，避免无关集合阻断赛事主控台。受邀账号返回 `/tournament-space` 后由 `tournamentStaffAccess mine` 按自然人授权列出共享赛事卡片，卡片标明“共享赛事”；工作区共用按钮文案改为“返回赛事空间”。共享后端已发布并回读 `Active`，入口哈希一致、函数配置保留；PC 静态资源待发布到 `/preview/admin/`，正式 UI 与小程序未发布。
+受邀账号的赛事主控台之前显示 0，是因为 `tournament_teams`、`divisions`、`matches` 缺少页面筛选排序使用的复合索引；`roster_snapshots` 缺少 `tournamentId` 索引。现已追加赛事查询索引，索引列表回读匹配。`staffEventScope` 仅在裁判模块读取 `tournament_referees`，避免无关集合阻断主控台。受邀账号返回 `/tournament-space` 后由 `tournamentStaffAccess mine` 按本人授权列出共享赛事卡片，卡片标明“共享赛事”；赛事工作页按钮统一为“返回赛事空间”。共享 `webLoginApi` 回读 Active，`index.js` 哈希一致，14 项环境变量保持，球员卡及人脸模块哈希一致。PC 测试版 `/preview/admin/` 257 个文件上传；TournamentSpace、TournamentConsole 和路由入口分包 HTTP 200 且哈希一致。正式 PC 静态页面与小程序未发布。真实受邀账号刷新后卡片和三类赛事数据仍待现场确认。
 
 ## 2026-10-05 PC 子账号赛事主控台读取修复
 
