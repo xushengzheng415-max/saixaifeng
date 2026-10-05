@@ -19,10 +19,9 @@
 | PC 球队赛事球员指标 | 本队、赛事、组别 | dataCenter 服务 | 已接入最新 main 的独立提交版本 |
 | PC 成绩中心 | 主办方赛事；排名沿用当前赛事规则 | shared/reader 完整读取、事件修订合并；提供 dataCenter 响应 | 2026-09-30 resultCenter 正式函数已接入测试来源过滤并回读代码；真实主办方会话榜单待验收 |
 | PC 新闻中心与 H5 赛事动态 | 主办方只能管理所属赛事；H5 公开读取已发布且来源赛果版本有效的新闻 | `newsCenter` 保存云端草稿、发布/撤回及来源赛果版本；图片保存云文件 ID；`webLoginApi.publicTournamentCenter` 返回已发布新闻，赛果变化后隐藏旧稿；每日新闻按赛果表、正式积分榜、下轮赛程和主办方提供的停赛信息排版 | 2026-10-01 已部署正式 `/admin/`、服务号 H5、`newsCenter` 与 `webLoginApi`；网页及函数源码回读一致，新闻集合 ADMINONLY；公开接口成功返回 3 赛事 / 151 场 / 0 新闻，匿名管理请求被拒绝；主办方真实账号发文、刷新与 H5 图文回读待验收 |
-| PC 子账号赛事空间和模块访问 | 有效授权按本人账号列出共享赛事；赛事和动作在 PC 中转层重新校验 | `tournamentStaffAccess` + `webLoginApi` staff policy + TournamentSpace | 已发布测试版；本次正式版合入并部署后记录回读 |
-| PC 子账号补录、球队名单和队徽 | 只读授权赛事比赛、报名球队、球员及允许展示的公开队徽字段 | `resultCenter.staffMatches`、`webLoginApi.staffEventScope`、`staffReadProjection`、赛事集合索引 | 2026-10-05 已补齐赛事/球队复合查询索引并更新服务端字段投影；正式 PC 发布后现场确认球员名单和队徽加载 |
+| PC 子账号赛事空间和模块访问 | 有效授权按本人账号列出共享赛事；赛事和动作在 PC 中转层重新校验 | `tournamentStaffAccess` + `webLoginApi` staff policy + TournamentSpace | 2026-10-05 已发布正式 `/admin/`；小程序未接入 |
+| PC 子账号补录、球队名单、阵容和队徽 | 只读授权赛事比赛、报名球队、球员及允许展示的公开队徽字段 | `resultCenter.staffMatches`、`webLoginApi.staffEventScope`、`staffReadProjection`、`updateMatch`、赛事集合索引 | 2026-10-05 已发布正式 `/admin/` 和共享后端；真实账号补录、球员选择和队徽显示待现场确认 |
 | PC 球员详情与编辑 | 原业务鉴权；卡级须先获该球员访问权 | dataCenter.playerCard 返回完整生涯等级、积分与进度；编辑只改原始档案 | `preview/admin` 已部署并回读分包，真实账号待验收；正式 `/admin/` 未切换 |
-| PC 子账号补录球队及阵容 | 指定赛事的授权成员；只读本赛事球队、球员和比赛关联 | `resultCenter.staffMatches`、`webLoginApi.staffEventScope`、`staffReadProjection`、`updateMatch` | 2026-10-05 正式后端及 PC 已部署；赛事/球队索引和队徽字段已补，现场真实账号补录待确认 |
 | PC 子账号共享赛事空间 | 已接受授权按 `userId` 列卡；进入时再次校验赛事和模块权限 | `tournamentStaffAccess mine` + PC 路由 | 2026-10-05 正式 PC 发布；小程序未接入 |
 | PC 名单/球员媒体指标 | 原业务鉴权 | shared/service，不再单独计算 | 已接入 |
 | 小程序赛事榜单、历史参赛展示 | 原业务权限 | shared/service；积分和排序来自共享 standings | 已接入 |

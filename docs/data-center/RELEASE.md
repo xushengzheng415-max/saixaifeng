@@ -2,7 +2,7 @@
 
 ## 2026-10-05 PC 子账号正式发布
 
-用户明确要求发布正式 PC。`preview` 中已验收的子账号、站内信、共享赛事卡片、返回赛事空间和球队阵容读取更新合入最新 `main` 并部署 `/admin/`。发布前增补 CloudBase 文档型数据库索引 `tournament_teams(tournamentId,teamId)`，此前已建 `tournamentId+createTime`、`matches(tournamentId,matchDate)`、`divisions(tournamentId,createTime)` 和 `roster_snapshots(tournamentId)`，索引回读符合补录和队徽查询。`resultCenter` 返回球队名称及临时队徽地址；`webLoginApi` 为受邀成员保留队徽字段并校验 `teamId`/`teamCode` 任一有效关联；`updateMatch`、`resultCenter`、`webLoginApi` 线上函数更新为 Active，入口代码哈希匹配，运行配置保留。线上正式 PC 关键分包回读及静态部署摘要见本节补录。真实受邀账号登录、补录列表、球员选择、保存归档仍需现场确认。本次未上传小程序、服务号 H5 或球员卡 UI。
+用户明确要求发布正式 PC。`preview` 中的子账号、站内信、共享赛事卡片、返回赛事空间和补录队徽更新已合入 `main`。正式构建 266 个文件已上传 `/admin/`；官网正式入口、入口 JS、TournamentSpace、TournamentConsole、TournamentStaffResults、MatchDetail 等 26 个相关 JS/CSS 资源均 HTTP 200，SHA-256 与本地构建一致；`/preview/admin/` 仍 HTTP 200 并引用预览资源。发布前补充 CloudBase 索引 `tournament_teams(tournamentId,teamId)`；此前已建 `tournament_teams(tournamentId,createTime desc)`、`divisions(tournamentId,createTime asc)`、`matches(tournamentId,matchDate asc)`、`roster_snapshots(tournamentId)`，索引列表回读一致。`resultCenter` 返回主客队名称和临时队徽地址；`webLoginApi` 子账号投影包含队徽字段并按 `teamId`/`teamCode` 关系验证球员；`resultCenter`、`webLoginApi`、`updateMatch` 均回读 Active，入口 `index.js` 哈希匹配且配置保留。没有上传小程序、服务号 H5 或球员卡 UI。真实受邀账号刷新后补录比赛、球员列表和队徽显示仍待现场确认。
 
 ## 2026-10-05 PC 子账号补录名单与队徽
 
