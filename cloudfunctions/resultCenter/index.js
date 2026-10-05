@@ -69,8 +69,14 @@ async function staffMatches(event, actor) {
   if (!tournament || !belongsToActor(tournament, actor)) throw new Error('赛事不存在或无权访问')
   const rows = await listAll('matches', { tournamentId }, 20000)
   if (rows.length >= 20000) throw new Error('赛事比赛超过补录读取范围')
+  const registrations = await listAll('tournament_teams', { tournamentId }, 20000)
+  const teamDirectory = await buildTeamDirectory(rows, registrations)
   return { success: true, orgId: actor.orgId, tournament: { id: tournamentId, name: text(tournament.name) }, matches: rows.map(match => ({
-    id: text(match._id), homeName: text(match.homeTeamName || match.homeName), awayName: text(match.awayTeamName || match.awayName),
+    id: text(match._id),
+    homeName: teamNameOf(match, 'home', teamDirectory[teamIdOf(match, 'home')] || {}),
+    homeLogo: teamLogoOf(match, 'home', teamDirectory[teamIdOf(match, 'home')] || {}),
+    awayName: teamNameOf(match, 'away', teamDirectory[teamIdOf(match, 'away')] || {}),
+    awayLogo: teamLogoOf(match, 'away', teamDirectory[teamIdOf(match, 'away')] || {}),
     homeTeamId: text(match.homeTeamId), awayTeamId: text(match.awayTeamId), date: text(match.matchDate || match.date), time: text(match.matchTime), divisionName: text(match.divisionName),
     status: text(match.status), homeScore: match.homeScore == null ? null : Number(match.homeScore), awayScore: match.awayScore == null ? null : Number(match.awayScore),
     phase: text(match.phase || match.scheduleType || match.stage), hasRefereeRecord: Boolean(match.refereeRecord || match.refereeSubmittedAt),
@@ -257,6 +263,8 @@ async function buildTeamDirectory(matchRows, registrationRows) {
       synthetic:current.synthetic === true || row.synthetic === true,
       syntheticDatasetId:current.syntheticDatasetId || text(row.syntheticDatasetId)
     }
+    const relationId = text(row._id)
+    if (relationId) directory[relationId] = directory[id]
     if (directory[id].name) directory[`name:${directory[id].name}`] = directory[id]
   })
   return resolveTeamLogoUrls(directory)
