@@ -1,5 +1,9 @@
 # 数据中心上线与验收
 
+## 2026-10-05 PC 子账号赛事主控台读取修复
+
+截图表现为受邀账号已进入赛事主控台，但 `tournament_teams`、`divisions`、`matches` 查询均失败并显示 0。根因是 `webLoginApi` 为子账号构建赛事授权范围时，公共 `readAll` 同时按 `tournamentId` 过滤并按 `_id` 游标排序；集合缺少相应复合索引时授权范围构建失败。现在 `staffEventScope.cjs` 使用按赛事条件分页读取，仍执行授权赛事关系校验；普通数据中心读取器不变。线上 `webLoginApi` 基于现网包差量更新，状态 Active，`index.js` 与 `staffEventScope.cjs` 回下载哈希一致；球员卡/人脸模块哈希一致，环境变量配置数保持 14。受邀账号刷新后真实数据呈现仍待现场确认。
+
 ## 2026-10-05 PC 服务号个人绑定与机构误判修正
 
 `webLoginApi`、`onboardingWorkspace`、`tournamentRegistrationFlow`、`serviceAccountCallback` 基于现网代码包差量更新到共享 CloudBase，保留在线球员注册、球员卡和服务号回调其他入口。四函数回读 Active，`index.js` 与更新包一致。服务号二维码仅需已验证手机号账号，不以球队所属机构数量阻断；赛事机构选择仅参考赛事归属和授权。PC 测试版继续使用现有 `/preview/admin/` 页面，正式 PC 与小程序包未发布。真实账号登录、二维码生成及微信扫码绑定待现场验收。
