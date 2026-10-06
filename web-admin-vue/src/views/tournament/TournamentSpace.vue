@@ -5,15 +5,15 @@
         <h1 id="tournament-space-title">赛事空间</h1>
 
       </div>
-      <div class="space-heading"><i></i><h2>{{ isStaffAccount ? '共享赛事' : '我的赛事' }}</h2></div>
+      <div class="space-heading"><i></i><h2>赛事</h2></div>
     </div>
 
     <div v-loading="loading" class="tournament-grid">
-      <button v-if="!isStaffAccount" class="create-card" type="button" @click="goToCreate">
+      <button class="create-card" type="button" @click="goToCreate">
         <span class="create-border">
           <span class="create-icon" aria-hidden="true"><el-icon><Plus /></el-icon></span>
-          <strong>创建新赛事</strong>
-          <small>创建赛事项目并完成基础设置</small>
+          <strong>创建我的赛事</strong>
+          <small>{{ hasOwnOrganization ? '创建一场新赛事' : '先建立自己的机构' }}</small>
         </span>
       </button>
 
@@ -47,8 +47,7 @@
 
         <div class="card-body">
           <h3>{{ tournament.name || '未命名赛事' }}</h3>
-          <p v-if="tournament.isShared" class="category-line">主办方共享给你的赛事</p>
-          <p v-else class="category-line">{{ divisionLabel(tournament) }} · {{ regionLabel(tournament) }}</p>
+          <p v-if="!tournament.isShared" class="category-line">{{ divisionLabel(tournament) }} · {{ regionLabel(tournament) }}</p>
           <p v-if="tournament.isShared" class="shared-rights">授权模块：{{ sharedRightsLabel(tournament.permissions) }}</p>
           <div v-if="!tournament.isShared" class="card-metrics">
             <span><el-icon><UserFilled /></el-icon>{{ displayNumber(tournament.registeredTeams || tournament.teamCount) }} 支球队</span>
@@ -61,19 +60,14 @@
             <el-progress :percentage="progressOf(tournament)" :stroke-width="6" :show-text="false" :color="progressColor(tournament.status)" />
             <p class="updated-at">最近更新：{{ updatedAt(tournament) }}</p>
           </template>
-          <button class="enter-button" type="button" @click.stop="openTournament(tournament)">{{ tournament.isShared ? '进入共享赛事' : '进入赛事空间' }}</button>
+          <button class="enter-button" type="button" @click.stop="openTournament(tournament)">进入赛事</button>
         </div>
       </article>
     </div>
 
     <div v-if="!loading && visibleTournaments.length === 0" class="empty-note">
-      {{ isStaffAccount ? '当前账号暂无共享赛事授权。' : '当前机构还没有赛事，使用左侧“创建新赛事”开始配置。' }}
+      {{ hasOwnOrganization ? '当前机构还没有赛事。' : '当前没有赛事，可创建自己的赛事。' }}
     </div>
-
-    <aside class="guidance-panel">
-      <span class="guidance-icon" aria-hidden="true"><el-icon><Document /></el-icon></span>
-      <div><strong>使用说明</strong><p v-if="isStaffAccount">返回赛事空间可查看主办方共享给你的赛事；进入后只能使用获授权的模块。</p><p v-else>进入赛事空间后，报名、抽签、赛程、比赛、裁判和数据操作均针对当前赛事。</p></div>
-    </aside>
   </section>
 </template>
 
@@ -81,7 +75,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Calendar, Document, Football, MoreFilled, Plus, Trophy, UserFilled } from '@element-plus/icons-vue'
+import { Calendar, Football, MoreFilled, Plus, Trophy, UserFilled } from '@element-plus/icons-vue'
 import { callFunction, deleteTournamentWorkspace, getFileUrl, queryList } from '../../utils/cloud'
 import { TOURNAMENT_SIDEBAR_RIGHTS, visibleSidebarKeys } from '../../utils/tournamentStaffRights'
 import defaultCover from '../../assets/images/tournament-space-emerald-field-v1.png'
@@ -89,7 +83,7 @@ import defaultCover from '../../assets/images/tournament-space-emerald-field-v1.
 const router = useRouter()
 const loading = ref(false)
 const tournaments = ref([])
-const isStaffAccount = ref(false)
+const hasOwnOrganization = ref(false)
 const deletingTournamentId = ref('')
 const isVisualQa = import.meta.env.DEV && (window.location.href.includes('visualQa=1') || localStorage.getItem('sxfVisualQa') === '1')
 const visibleTournaments = computed(() => {
@@ -113,37 +107,34 @@ function getCurrentOrgId() {
 }
 
 async function loadTournaments() {
-  isStaffAccount.value = sessionStorage.getItem('sxfTournamentStaff') === '1'
-  if (isStaffAccount.value) {
-    loading.value = true
+  const orgId = getCurrentOrgId()
+  hasOwnOrganization.value = Boolean(orgId)
+  loading.value = true
+  try {
+    let ownTournaments = []
+    if (orgId) {
+      try {
+        const ownRows = await queryList('tournaments', { where: { orgId }, orderBy: { createTime: 'desc' } })
+        ownTournaments = await Promise.all((ownRows || []).map(resolveTournamentLogo))
+      } catch (error) {
+        ElMessage.error(error.message || '本人赛事加载失败')
+      }
+    }
+    const ownIds = new Set(ownTournaments.map(item => String(item._id)))
+    let sharedTournaments = []
     try {
       const result = await callFunction('tournamentStaffAccess', { action: 'mine' })
       if (!result?.success) throw new Error(result?.error || '共享赛事加载失败')
-      tournaments.value = (result.grants || []).map(grant => ({
+      sharedTournaments = (result.grants || []).map(grant => ({
         _id: String(grant.tournamentId || ''),
         name: grant.tournamentName || grant.tournamentId || '赛事',
         isShared: true,
         permissions: Array.isArray(grant.permissions) ? grant.permissions : []
-      })).filter(item => item._id)
+      })).filter(item => item._id && !ownIds.has(item._id))
     } catch (error) {
-      tournaments.value = []
       ElMessage.error(error.message || '共享赛事加载失败')
-    } finally {
-      loading.value = false
     }
-    return
-  }
-  const orgId = getCurrentOrgId()
-  if (!orgId) {
-    tournaments.value = []
-    ElMessage.info('请先选择业务场景并建立机构工作空间')
-    router.replace('/organization-onboarding')
-    return
-  }
-  loading.value = true
-  try {
-    const rows = await queryList('tournaments', { where: { orgId }, orderBy: { createTime: 'desc' } })
-    tournaments.value = await Promise.all((rows || []).map(resolveTournamentLogo))
+    tournaments.value = [...ownTournaments, ...sharedTournaments]
   } finally {
     loading.value = false
   }
@@ -154,7 +145,22 @@ function sharedRightsLabel(permissions = []) {
   return TOURNAMENT_SIDEBAR_RIGHTS.filter(right => visible.has(right.key)).map(right => right.label).join('、') || '权限待确认'
 }
 
-function goToCreate() { router.push('/tournaments/create') }
+async function goToCreate() {
+  if (!hasOwnOrganization.value) {
+    router.push({ path: '/organization-onboarding', query: { createPersonalWorkspace: '1' } })
+    return
+  }
+  if (sessionStorage.getItem('sxfTournamentStaff') === '1') {
+    try {
+      const activated = await callFunction('tournamentStaffAccess', { action: 'activateOrganizerWorkspace', orgId: getCurrentOrgId() })
+      if (!activated?.success) throw new Error(activated?.error || activated?.message || '无法切换到自己的机构')
+    } catch (error) {
+      ElMessage.error(error.message || '无法切换到自己的机构')
+      return
+    }
+  }
+  router.push('/tournaments/create')
+}
 function openTournament(tournament) { if (tournament?._id) router.push(`/tournaments/${tournament._id}`) }
 async function handleMenu(command, tournament) {
   if (command === 'edit') {

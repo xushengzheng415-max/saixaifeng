@@ -215,6 +215,7 @@
             <img :src="productLogo" alt="赛小蜂足球" />
           </button>
           <div class="workspace-shell-actions">
+            <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" plain @click="returnToTournamentSpace">返回赛事空间</el-button>
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
             <button class="notification-action" type="button" aria-label="查看站内信" title="站内信" @click="showNotifications"><el-icon><Bell /></el-icon><span>站内信</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
             <el-dropdown trigger="click" @command="handleUserCommand">
@@ -239,6 +240,7 @@
         </header>
         <header v-else-if="!usesEmbeddedPageHeader" class="top-header">
           <div class="header-left">
+            <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" link type="primary" @click="returnToTournamentSpace">返回赛事空间</el-button>
             <span class="page-title">{{ currentPageTitle }}</span>
           </div>
           <div class="header-right">
@@ -921,6 +923,20 @@ function handleUserCommand(command) {
   window.location.replace('https://www.sxffootball.cn/')
       break
   }
+}
+
+async function returnToTournamentSpace() {
+  const ownOrgId = String(userInfo.value.orgId || userInfo.value.organizationId || '')
+  if (isTournamentStaff.value && ownOrgId) {
+    try {
+      const activated = await callFunction('tournamentStaffAccess', { action: 'activateOrganizerWorkspace', orgId: ownOrgId })
+      if (!activated?.success) throw new Error(activated?.error || activated?.message || '无法切换到自己的机构')
+    } catch (error) {
+      ElMessage.error(error.message || '无法切换到自己的机构')
+      return
+    }
+  }
+  router.push('/tournament-space')
 }
 
 function handleNavClick(item) {

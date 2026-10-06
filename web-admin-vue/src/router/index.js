@@ -708,15 +708,30 @@ router.beforeEach(async (to, from, next) => {
       try {
         const { callFunction } = await import('../utils/cloud')
         const scope = await callFunction('tournamentStaffAccess', { action: 'scope' })
-        const invitationTarget = invitationLandingPath(scope, to.path, sessionStorage.getItem('sxfStaffInvitationPrompted') === '1')
+        const creatingPersonalWorkspace = to.path === '/organization-onboarding' && to.query.createPersonalWorkspace === '1'
+        const invitationTarget = creatingPersonalWorkspace ? null : invitationLandingPath(scope, to.path, sessionStorage.getItem('sxfStaffInvitationPrompted') === '1')
         if (invitationTarget) {
           if (to.path !== '/service-account-binding') sessionStorage.setItem('sxfStaffInvitationPrompted', '1')
           next(invitationTarget); return
         }
         const grants = Array.isArray(scope?.grants) ? scope.grants : []
+        if (scope?.success && to.path === '/tournament-space' && hasLocalOrganization()) {
+          let personalOrgId = ''
+          try {
+            const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
+            personalOrgId = String(user.orgId || user.organizationId || '')
+          } catch { /* 身份缓存无效时不切换机构 */ }
+          if (personalOrgId && String(scope.activeOrgId || '') !== personalOrgId) {
+            const activated = await callFunction('tournamentStaffAccess', { action: 'activateOrganizerWorkspace', orgId: personalOrgId })
+            if (activated?.success) {
+              scope.activeOrgId = personalOrgId
+              scope.isOwner = Boolean(activated.isOwner)
+            }
+          }
+        }
         const routeGrant = grants.find(item => item.tournamentId === String(to.params.id || ''))
         const sharedAccountNeedsWorkspace = grants.length > 0 && !hasLocalOrganization()
-        if (scope?.success && to.path === '/organization-onboarding' && sharedAccountNeedsWorkspace) {
+        if (scope?.success && to.path === '/organization-onboarding' && sharedAccountNeedsWorkspace && !creatingPersonalWorkspace) {
           const landingGrant = grants[0]
           const activated = scope.activeOrgId === landingGrant.orgId
             ? { success: true }
@@ -734,7 +749,7 @@ router.beforeEach(async (to, from, next) => {
         // 共享授权按当前赛事路由识别，不能被账号在其他机构的负责人身份遮住。
         const staff = scope?.success && ((scope.isStaff && !scope.isOwner) || Boolean(routeGrant) || sharedAccountNeedsWorkspace)
         sessionStorage.setItem('sxfTournamentStaff', staff ? '1' : '0')
-        if (staff) {
+        if (staff && !creatingPersonalWorkspace) {
           const grant = routeGrant || (sharedAccountNeedsWorkspace ? grants[0] : null)
           let sameOrganization = grant && grant.orgId === scope.activeOrgId
           if (grant && !sameOrganization) {
@@ -755,6 +770,11 @@ router.beforeEach(async (to, from, next) => {
           const allowed = ['/tournament-staff', '/messages', '/tournament-space'].includes(to.path) || Boolean(sameOrganization && required && rights.has(required))
           if (!allowed) { next('/tournament-staff'); return }
           next(); return
+        }
+        if (creatingPersonalWorkspace) {
+          sessionStorage.setItem('sxfTournamentStaff', '0')
+          sessionStorage.removeItem('sxfStaffPermissions')
+          sessionStorage.removeItem('sxfStaffTournamentId')
         }
         sessionStorage.removeItem('sxfStaffPermissions')
         sessionStorage.removeItem('sxfStaffTournamentId')
