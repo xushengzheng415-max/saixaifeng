@@ -145,3 +145,9 @@ PC 用已正式发布功能的源码基线构建完整 260 文件包，上传 `/
 初始基于 main 93ce4890，交付前跟进 main 69da0c28，隔离分支 codex/player-card-unify-local。统一指标版本 football-metrics/6，等级／权益保持现网 v2。PC build、数据中心回归、12组统一合同、裁判全流程、卡权限与治理检查通过。当前只交付本地集成提交；没有 main 推送、云函数部署、资源或数据初始化、历史回填、小程序上传或正式账号跨端验收。
 
 正式回读显示 dataCenter 和 getMiniWorkspace 为 metrics/5，webLoginApi 和 playerCardPublishWorker 为 metrics/4，四者都为 points/2。因此不能用未核验的旧 main 整包覆盖生产。指定发布线程先合入此候选、同步共享模块并复测，再按精确文件差量串行发布。历史缺证据场次保持待核定；恢复真实进度需要逐场可追溯的旧时长证据和另行授权的数据修复，不能用当前组别配置补写。详见 PLAYER_CARD_UNIFY_HANDOFF.md。
+
+## 2026-10-06 主办方侧栏隐藏平台数据中心
+
+回归原因：2026-09-29 的数据中心功能提交将 `/data-center` 加进主办方 `organizerNavItems`。2026-10-03 曾移除，但后续主办方子账号合并从旧快照带回了这一行；正式页面整包部署时再次显示。数据中心一直配置在 `adminNavItems` 和平台会话路由中，本次只从主办方菜单移除，平台运营后台保留。
+
+修复提交 `e6aad0d` 已合入并推送 Gitee `main`，合并提交 `8086ad5f`。正式 `/admin/` 完整上传 267 个文件，入口、主入口脚本与 `LayoutView-BWOhtd6V.js` 均 HTTP 200，线上 SHA-256 与构建产物一致；侧栏分包不再包含主办方数据中心路径，仍保留平台后台“数据中心”标签。预览 `/preview/admin/` 返回 HTTP 200 且继续引用预览资源。没有改云函数或业务数据，也未运行独立测试套件。
