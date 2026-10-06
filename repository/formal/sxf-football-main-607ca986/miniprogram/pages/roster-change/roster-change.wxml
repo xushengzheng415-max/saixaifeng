@@ -1,0 +1,134 @@
+<!-- pages/roster-change/roster-change.wxml - 换人申请页（严格遵循 WXML 铁律：仅 {{变量}} / {{!变量}} / {{a || b}}） -->
+<view class="page">
+
+  <!-- 加载中 -->
+  <view class="loading-box" wx:if="{{loading}}">
+    <text class="lb-spin">⏳</text>
+    <text style="font-size:28rpx;color:#999;margin-top:16rpx;display:block;">加载中...</text>
+  </view>
+
+  <block wx:else>
+
+    <view class="legacy-notice" wx:if="{{legacyFlowUnavailable}}">
+      <text class="legacy-notice-icon">!</text>
+      <text class="legacy-notice-title">普通换人申请已关闭</text>
+      <text class="legacy-notice-body">报名截止后的名单变化须由主办方在异常处理流程中核验，当前入口不直接提交。</text>
+    </view>
+
+    <block wx:else>
+
+    <!-- 上限与剩余次数提示 -->
+    <view class="tip-card">
+      <view class="tip-row">{{rosterLimitText}}</view>
+      <view class="tip-row tip-remain">{{remainingChangesText}}</view>
+    </view>
+
+    <!-- 无剩余次数提示 -->
+    <view class="empty-box" wx:if="{{noRemainingChanges}}">
+      <text class="eb-emoji">🚫</text>
+      <text class="eb-text">换人申请次数已用完</text>
+      <text style="font-size:24rpx;color:#bbb;margin-top:8rpx;">每阶段最多 {{maxRosterChanges}} 次</text>
+    </view>
+
+    <block wx:else>
+
+      <!-- 换出球员选择（从当前淘汰赛大名单中选） -->
+      <view class="section">
+        <view class="section-header">
+          <text class="section-title">换出球员</text>
+          <text class="section-count" wx:if="{{rosterPlayersLen > 0}}">{{rosterPlayersLen}}人可选</text>
+        </view>
+        <view class="player-list" wx:if="{{rosterPlayersLen > 0}}">
+          <view
+            class="player-item {{item.selectedClass}}"
+            wx:for="{{rosterPlayers}}"
+            wx:key="_id"
+            data-index="{{index}}"
+            bindtap="onSelectOutPlayer"
+          >
+            <view class="p-avatar">#{{item.number || (index + 1)}}</view>
+            <view class="p-info">
+              <text class="p-name">{{item.name}}</text>
+              <text class="p-num" wx:if="{{item.position}}">{{item.position}}</text>
+            </view>
+            <text class="p-tag" wx:if="{{item.selectedTag}}">{{item.selectedTag}}</text>
+          </view>
+        </view>
+        <view class="empty-inline" wx:else>
+          <text>暂无淘汰赛大名单，请先提交第二阶段名单</text>
+        </view>
+      </view>
+
+      <!-- 换入球员选择（从球队球员库中选，排除已在名单中的） -->
+      <view class="section">
+        <view class="section-header">
+          <text class="section-title">换入球员</text>
+          <text class="section-count" wx:if="{{availablePlayersLen > 0}}">{{availablePlayersLen}}人可选</text>
+        </view>
+        <view class="player-list" wx:if="{{availablePlayersLen > 0}}">
+          <view
+            class="player-item {{item.selectedClass}}"
+            wx:for="{{availablePlayers}}"
+            wx:key="_id"
+            data-index="{{index}}"
+            bindtap="onSelectInPlayer"
+          >
+            <view class="p-avatar">#{{item.number || (index + 1)}}</view>
+            <view class="p-info">
+              <text class="p-name">{{item.name}}</text>
+              <text class="p-num" wx:if="{{item.position}}">{{item.position}}</text>
+            </view>
+            <text class="p-tag" wx:if="{{item.selectedTag}}">{{item.selectedTag}}</text>
+          </view>
+        </view>
+        <view class="empty-inline" wx:else>
+          <text>球员库中无可换入球员</text>
+        </view>
+      </view>
+
+      <!-- 换人原因选择 -->
+      <view class="section">
+        <view class="section-header">
+          <text class="section-title">换人原因</text>
+        </view>
+        <view class="reason-list">
+          <view
+            class="reason-item {{item.selectedClass}}"
+            wx:for="{{reasonOptions}}"
+            wx:key="value"
+            data-index="{{index}}"
+            bindtap="onSelectReason"
+          >
+            <text class="reason-text">{{item.label}}</text>
+          </view>
+        </view>
+
+        <!-- 其他原因文字说明 -->
+        <view class="reason-text-input" wx:if="{{showReasonTextInput}}">
+          <textarea
+            class="reason-textarea"
+            placeholder="请输入换人原因说明"
+            maxlength="100"
+            value="{{reasonText}}"
+            bindinput="onReasonTextInput"
+          />
+        </view>
+      </view>
+
+      <!-- 提交按钮 -->
+      <view class="submit-bar">
+        <view class="sb-summary">
+          <text wx:if="{{outPlayerSelected}}">换出：{{outPlayerName}}</text>
+          <text wx:if="{{inPlayerSelected}}">换入：{{inPlayerName}}</text>
+        </view>
+        <view class="sb-btn {{submitBtnClass}}" bindtap="onSubmitChange">
+          提交换人申请
+        </view>
+      </view>
+
+    </block>
+
+    </block>
+
+  </block>
+</view>

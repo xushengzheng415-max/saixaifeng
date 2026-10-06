@@ -1,0 +1,6 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "player-card-canvas": "/components/player-card-canvas/player-card-canvas"
+  }
+}

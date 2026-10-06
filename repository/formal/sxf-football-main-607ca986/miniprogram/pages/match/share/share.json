@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "首发阵容分享",
+  "usingComponents": {
+    "player-card-canvas": "/components/player-card-canvas/player-card-canvas"
+  }
+}

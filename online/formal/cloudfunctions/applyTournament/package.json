@@ -1,0 +1,9 @@
+{
+  "name": "applyTournament",
+  "version": "1.0.0",
+  "description": "球队报名参赛（外部报名）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

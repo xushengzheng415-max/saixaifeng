@@ -1,0 +1,138 @@
+<!-- pages/player/detail.wxml - 球员创建/编辑 -->
+<view class="container">
+  <view class="form-section">
+
+    <!-- 球员照片 -->
+    <view class="form-item photo-item">
+      <text class="label">球员照片</text>
+      <view class="photo-upload" bindtap="choosePhoto">
+        <image wx:if="{{photo}}" class="photo-preview" src="{{photo}}" mode="aspectFill"></image>
+        <view wx:else class="photo-placeholder">
+          <text class="photo-icon">📷</text>
+          <text class="photo-hint">点击上传照片</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 姓名 -->
+    <view class="form-item">
+      <text class="label">姓名 *</text>
+      <input class="input" placeholder="请输入球员姓名" value="{{name}}" bindinput="onNameInput" />
+      <text class="auto-hint">输入姓名自动生成球衣名（ZH/CH/SH取前两个字母）</text>
+    </view>
+
+    <!-- 球衣名 -->
+    <view class="form-item">
+      <text class="label">球衣名</text>
+      <view class="jersey-name-box">
+        <input class="input jersey-input" placeholder="如 ZHENG X.SH." value="{{jerseyName}}" bindinput="onJerseyNameInput" />
+        <text class="example">例: 郑旭升 → ZHENG X.SH. / 金洋洋 → JIN Y.Y.</text>
+      </view>
+    </view>
+
+    <!-- 球衣号码 -->
+    <view class="form-item">
+      <text class="label">球衣号码</text>
+      <input class="input" placeholder="请输入球衣号码" value="{{jerseyNumber}}" bindinput="onJerseyInput" type="number" />
+    </view>
+
+    <!-- 场上位置 -->
+    <view class="form-item">
+      <text class="label">场上位置</text>
+      <view class="position-list">
+        <view class="pos-tag "
+              wx:for="{{positions}}" wx:key="*this"
+              data-pos="{{item}}" bindtap="selectPosition">
+          {{item}}
+        </view>
+      </view>
+    </view>
+
+    <!-- 是否队长 -->
+    <view class="form-item row">
+      <text class="label">是否队长</text>
+      <switch checked="{{isCaptain}}" bindchange="toggleCaptain" color="#2E7D32" />
+    </view>
+
+    <!-- 身份证号 -->
+    <view class="form-item">
+      <text class="label">身份证号</text>
+      <input class="input" placeholder="请输入18位身份证号" value="{{idCard}}" bindinput="onIdCardInput" maxlength="18" />
+      <text class="auto-hint">输入身份证号自动识别出生日期和年龄</text>
+    </view>
+
+    <!-- 出生日期 -->
+    <view class="form-item">
+      <text class="label">出生日期</text>
+      <view class="auto-field" wx:if="{{birthDate}}">
+        <text class="auto-value">{{birthDate}}</text>
+        <text class="auto-badge">自动识别</text>
+      </view>
+      <picker mode="date" value="{{birthDate}}" bindchange="onBirthDateChange" wx:else>
+        <view class="picker-value">{{birthDate || '请选择出生日期'}}</view>
+      </picker>
+    </view>
+
+    <!-- 年龄 -->
+    <view class="form-item">
+      <text class="label">年龄</text>
+      <view class="auto-field" wx:if="{{age}}">
+        <text class="auto-value">{{age}}岁</text>
+        <text class="auto-badge">自动识别</text>
+      </view>
+      <input class="input" wx:else placeholder="请输入年龄" value="{{age}}" bindinput="onAgeInput" type="number" />
+    </view>
+
+    <!-- 联系电话 -->
+    <view class="form-item">
+      <text class="label">联系电话</text>
+      <input class="input" placeholder="请输入联系电话" value="{{phone}}" bindinput="onPhoneInput" type="number" />
+    </view>
+
+    <!-- 国籍 -->
+    <view class="form-item">
+      <text class="label">国籍</text>
+      <picker mode="selector" range="{{nationalities}}" bindchange="onNationalityChange">
+        <view class="picker-value">{{nationality || '中国'}}</view>
+      </picker>
+    </view>
+
+    <!-- 身高体重 -->
+    <view class="form-item">
+      <text class="label">身高/体重</text>
+      <view class="form-row">
+        <input class="input" placeholder="身高(cm)" value="{{height}}" bindinput="onHeightInput" type="number" />
+        <text class="input-sep">/</text>
+        <input class="input" placeholder="体重(kg)" value="{{weight}}" bindinput="onWeightInput" type="number" />
+      </view>
+    </view>
+
+    <!-- 籍贯 -->
+    <view class="form-item">
+      <text class="label">籍贯</text>
+      <view class="form-row">
+        <view class="input-group">
+          <input class="input" placeholder="省" value="{{province}}" bindinput="onProvinceInput" />
+        </view>
+        <text class="input-sep">-</text>
+        <view class="input-group">
+          <input class="input" placeholder="市" value="{{city}}" bindinput="onCityInput" />
+        </view>
+        <text class="input-sep">-</text>
+        <view class="input-group">
+          <input class="input" placeholder="区/县" value="{{district}}" bindinput="onDistrictInput" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 备注 -->
+    <view class="form-item">
+      <text class="label">备注</text>
+      <textarea class="textarea" placeholder="请输入备注" value="{{remark}}" bindinput="onRemarkInput" maxlength="200"></textarea>
+    </view>
+  </view>
+
+  <button class="save-btn" bindtap="savePlayer">
+    
+  </button>
+</view>

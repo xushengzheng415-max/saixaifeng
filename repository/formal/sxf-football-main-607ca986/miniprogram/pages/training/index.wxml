@@ -1,0 +1,32 @@
+<view class="training-page">
+  <image class="training-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"/>
+  <view class="training-content">
+    <view class="training-nav"><text>青训中心</text></view>
+    <view class="training-note" wx:if="{{guestMode}}" bindtap="onSwitchWorkspace">
+      <image src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"/>
+      <view><text>当前未登录　去登录 ›</text><text>青训功能演示 · 示例数据不保存</text></view>
+    </view>
+    <view class="training-hero" bindtap="onSwitchWorkspace">
+      <view><text class="training-name">{{workspaceName}}</text><text class="training-entitlement">{{entitlementText}}</text></view>
+      <image src="/images/runtime/icons/brand-v2-15.png" mode="aspectFit"/>
+    </view>
+    <view wx:if="{{loading}}" class="training-loading">正在核验青训权益…</view>
+    <view wx:if="{{errorText}}" class="training-error">{{errorText}}</view>
+    <view wx:if="{{isTemporary}}" class="training-access"><image src="/images/runtime/icons/brand-v2-11.png" mode="aspectFit"/><view><text>临时球队空间不开放青训数据</text><text>认领并进入正式机构后，才能由机构统一开通青训经营能力。</text></view></view>
+    <view wx:if="{{showNoEntitlement}}" class="training-access"><image src="/images/runtime/icons/brand-v2-02.png" mode="aspectFit"/><view><text>当前机构尚未开通青训</text><text>青训是机构付费能力，包含课程、签到、请假、消课和课后执行。</text><button bindtap="onOpenRequest">了解开通方式</button></view></view>
+    <view wx:if="{{showNoPermission}}" class="training-access"><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit"/><view><text>当前岗位暂无青训权限</text><text>机构已开通后，仍需由负责人授予相应岗位权限。</text></view></view>
+    <block wx:if="{{canUseTraining}}">
+      <view class="training-note"><image src="/images/runtime/icons/brand-v2-15.png" mode="aspectFit"/><view><text>青训移动执行</text><text>复杂建档与排课在 PC 完成；小程序负责课程执行、签到、请假与课后记录。</text></view></view>
+      <view class="training-section">
+        <view class="training-section-head"><text>课程安排</text><text>当前岗位授权范围</text></view>
+        <view wx:if="{{!hasSchedule}}" class="training-empty">暂无课程安排</view>
+        <view wx:for="{{trainingSchedule}}" wx:key="id" class="training-card"><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"/><view><text>{{item.title}}</text><text>{{item.timeText}} · {{item.location}}</text></view><text>{{item.statusText}}</text></view>
+      </view>
+      <view class="training-section">
+        <view class="training-section-head"><text>青训待办</text><text>请假、签到与异常处理</text></view>
+        <view wx:if="{{!hasTasks}}" class="training-empty">暂无青训待办</view>
+        <view wx:for="{{trainingTasks}}" wx:key="id" class="training-card"><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit"/><view><text>{{item.title}}</text></view><text>仅供查看</text></view>
+      </view>
+    </block>
+  </view>
+</view>

@@ -1,0 +1,12 @@
+.lineup-pitch{min-height:670px}
+.pitch-player--portrait{width:78px;max-width:78px}
+.pitch-player .pitch-player-portrait{display:block;width:48px;height:54px;object-fit:contain;object-position:center bottom;border:0;border-radius:0;background:transparent}
+.pitch-player--portrait>span{max-width:78px;overflow:visible;font-size:10px;white-space:nowrap}
+.pitch-player--portrait>span small{font-size:8px;color:#e1f4e7}
+.pitch-player--portrait>.player-change{right:0}
+.pitch-player--portrait>i{top:41px;right:0}
+.substitute-player{grid-template-columns:34px minmax(0,1fr) auto;min-height:51px}
+.substitute-player .substitute-player-portrait{display:block;width:30px;height:37px;object-fit:contain;object-position:center bottom;border:0;border-radius:0;background:transparent}
+.substitute-player>span{white-space:normal;line-height:1.3;font-size:10px}
+.pitch-player [hidden],.substitute-player [hidden]{display:none!important}
+@media(max-width:360px){.lineup-pitch{min-height:630px}.pitch-player--portrait{width:68px;max-width:68px}.pitch-player .pitch-player-portrait{width:43px;height:49px}.pitch-player--portrait>span{max-width:68px;font-size:9px}.substitute-player{grid-template-columns:29px minmax(0,1fr);gap:4px}.substitute-player .substitute-player-portrait{width:27px;height:34px}}

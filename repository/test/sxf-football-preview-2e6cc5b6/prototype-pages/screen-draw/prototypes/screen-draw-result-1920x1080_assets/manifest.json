@@ -1,0 +1,125 @@
+{
+  "prototype": "E:\\Documents\\sxf-football\\prototype-pages\\screen-draw\\prototypes\\screen-draw-result-1920x1080.png",
+  "asset_dir": "E:\\Documents\\sxf-football\\prototype-pages\\screen-draw\\prototypes\\screen-draw-result-1920x1080_assets",
+  "generated_at": "2026-08-19",
+  "tool": "yuanxing prototype decomposition",
+  "status": "awaiting-user-confirmation",
+  "screen": {
+    "width": 1920,
+    "height": 1080
+  },
+  "summary": "专业版抽签公众大屏结果状态，展示8组32支球队和发布版本。",
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "00-source/screen-draw-result-1920x1080.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 1080
+      },
+      "sha256": "2aac4ebbae7b7acd37a09066384fae5e25f7b5d9f467aac52db8f2c1bfd218f3",
+      "notes": "Canonical approved prototype copied for traceability."
+    },
+    {
+      "id": "screen-header",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 108
+      },
+      "notes": "固定品牌、赛事、组别、阶段和连接状态头部。"
+    },
+    {
+      "id": "state-content",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 60,
+        "y": 145,
+        "width": 1800,
+        "height": 850
+      },
+      "notes": "分组结果的主体内容区域，由代码渲染。"
+    },
+    {
+      "id": "screen-footer",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 1016,
+        "width": 1920,
+        "height": 64
+      },
+      "notes": "固定只读大屏标识、发布版本和正式域名。"
+    },
+    {
+      "id": "header-reference",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/header.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 108
+      },
+      "notes": "头部比例、层级和连接状态参考。"
+    },
+    {
+      "id": "content-reference",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/content.png",
+      "source_bbox": {
+        "x": 60,
+        "y": 145,
+        "width": 1800,
+        "height": 850
+      },
+      "notes": "分组结果主体结构参考，不作为生产图片。"
+    },
+    {
+      "id": "visible-text",
+      "category": "text",
+      "implementation": "text-code",
+      "text": "U16组抽签结果；32支球队已完成分组；结果版本DRAW-U16-V3。",
+      "notes": "所有可见文字由正式代码和只读快照渲染。"
+    },
+    {
+      "id": "state-transition",
+      "category": "interaction",
+      "implementation": "code",
+      "action": "sync-published-draw-snapshot",
+      "target": "same public screen route",
+      "states": [
+        "loading",
+        "result",
+        "revoked",
+        "invalid",
+        "offline"
+      ],
+      "notes": "读取已发布快照的result阶段；旧版本撤回或替换后令牌失效。"
+    },
+    {
+      "id": "canonical-logo",
+      "category": "production-asset",
+      "implementation": "code",
+      "notes": "复用 web-admin-vue/public/logo-saixiaofeng.png，不复制页面局部资产。"
+    },
+    {
+      "id": "annotated-layout-overlay",
+      "category": "overlay",
+      "implementation": "overlay",
+      "output": "06-overlays/annotated-layout.png",
+      "notes": "Generated bounding-box overlay for comparison only."
+    }
+  ]
+}

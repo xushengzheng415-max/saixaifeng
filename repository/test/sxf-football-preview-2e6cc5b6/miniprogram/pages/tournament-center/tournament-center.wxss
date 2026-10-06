@@ -1,0 +1,55 @@
+.page { min-height: 100vh; background: #f5f7f6; color: #1d3027; }
+.hero { min-height: 316rpx; padding: 72rpx 30rpx 0; box-sizing: border-box; background-image: linear-gradient(135deg, rgba(3, 53, 35, .96), rgba(12, 101, 69, .88)), url('/images/runtime/stadium-tech-bg.jpg'); background-size: cover; background-position: center; }
+.topbar { display: flex; align-items: center; justify-content: space-between; }
+.page-title { font-size: 51rpx; line-height: 1; color: #fff; font-weight: 700; letter-spacing: 2rpx; }
+.workspace-switch { display: flex; max-width: 480rpx; align-items: center; gap: 10rpx; padding: 12rpx 17rpx; border: 1rpx solid rgba(255,255,255,.28); border-radius: 30rpx; background: rgba(0,0,0,.12); }
+.workspace-name { overflow: hidden; color: rgba(255,255,255,.94); font-size: 28rpx; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-arrow { color: #d5eee0; font-size: 29rpx; line-height: 24rpx; }
+.segment-row { display: flex; width: 420rpx; margin-top: 70rpx; padding: 7rpx; border-radius: 40rpx; background: rgba(0,0,0,.18); }
+.segment-item { width: 50%; padding: 15rpx 0; border-radius: 31rpx; color: rgba(255,255,255,.72); font-size: 29rpx; line-height: 1; text-align: center; }
+.segment-item.active { background: #fff; color: #176b4c; font-weight: 600; box-shadow: 0 6rpx 15rpx rgba(0, 0, 0, .11); }
+.content { position: relative; margin-top: -28rpx; padding: 0 24rpx 90rpx; }
+.filter-row { display: flex; align-items: center; min-height: 92rpx; padding: 0 7rpx; }
+.status-filter { margin-right: 14rpx; padding: 12rpx 18rpx; border-radius: 25rpx; background: transparent; color: #849089; font-size: 24rpx; line-height: 1; }
+.status-filter.active { background: #dff0e7; color: #176f4e; font-weight: 600; }
+.todo-entry { display: flex; align-items: center; margin-left: auto; color: #46755f; font-size: 23rpx; white-space: nowrap; }
+.todo-arrow, .enter-arrow, .guide-arrow { margin-left: 7rpx; font-size: 34rpx; font-weight: 300; line-height: 20rpx; }
+.loading, .error { padding: 100rpx 0; color: #829088; font-size: 25rpx; text-align: center; }
+.error { color: #bd5146; }
+.tournament-card { overflow: hidden; margin-bottom: 20rpx; padding: 30rpx; border-radius: 24rpx; box-sizing: border-box; background: #fff; box-shadow: 0 10rpx 28rpx rgba(23, 56, 41, .06); }
+.tournament-card.feature-card { color: #fff; background: linear-gradient(135deg, #0e5a3e, #147653 57%, #a17d35 150%); box-shadow: 0 15rpx 34rpx rgba(13, 83, 57, .20); }
+.card-top, .tag-group, .metrics-row { display: flex; align-items: center; }
+.card-top { justify-content: space-between; }
+.tag-group { gap: 10rpx; }
+.relation-tag, .mode-tag, .status-tag { padding: 7rpx 12rpx; border-radius: 15rpx; font-size: 20rpx; line-height: 1; }
+.relation-tag { color: #167151; background: #def1e7; }
+.relation-tag.participating { color: #96671f; background: #fceed5; }
+.mode-tag { color: #60756b; background: #f0f4f1; }
+.status-tag { color: #26825e; background: #e5f4ec; }
+.status-tag.status-upcoming { color: #9a6a1e; background: #fff1d6; }
+.status-tag.status-ended { color: #7e8984; background: #eef1ef; }
+.feature-card .relation-tag { color: #ddf9e9; background: rgba(255,255,255,.15); }
+.feature-card .relation-tag.participating { color: #fff1ca; background: rgba(181,136,45,.32); }
+.feature-card .mode-tag, .feature-card .status-tag { color: rgba(255,255,255,.85); background: rgba(0,0,0,.14); }
+.tournament-name { display: block; margin-top: 27rpx; font-size: 39rpx; font-weight: 700; letter-spacing: .5rpx; }
+.tournament-date { display: block; margin-top: 13rpx; color: #87938d; font-size: 23rpx; }
+.feature-card .tournament-date { color: rgba(255,255,255,.66); }
+.metrics-row { min-height: 54rpx; margin-top: 28rpx; padding-top: 22rpx; border-top: 1rpx solid #edf1ee; }
+.feature-card .metrics-row { border-top-color: rgba(255,255,255,.16); }
+.metric { display: flex; align-items: baseline; margin-right: 27rpx; }
+.metric-number { font-size: 31rpx; font-weight: 700; }
+.metric-label { margin-left: 5rpx; color: #85928b; font-size: 20rpx; }
+.feature-card .metric-label { color: rgba(255,255,255,.63); }
+.card-enter { display: flex; align-items: center; margin-left: auto; color: #197653; font-size: 27rpx; }
+.feature-card .card-enter { color: #f5d68d; }
+.pc-guide { display: flex; align-items: center; margin-top: 28rpx; padding: 25rpx; border-radius: 20rpx; background: #eaf3ee; }
+.guide-icon { width: 55rpx; height: 55rpx; margin-right: 17rpx; border-radius: 16rpx; color: #2b7858; background: #d1eadb; font-size: 35rpx; line-height: 55rpx; text-align: center; }
+.guide-copy { flex: 1; min-width: 0; }
+.guide-title, .guide-desc { display: block; }
+.guide-title { color: #315b48; font-size: 29rpx; font-weight: 600; }
+.guide-desc { margin-top: 7rpx; color: #789285; font-size: 20rpx; }
+.guide-arrow { color: #6e9b85; }
+.empty { margin-top: 120rpx; text-align: center; }
+.empty-icon { display: block; width: 92rpx; height: 92rpx; margin: 0 auto; border-radius: 30rpx; color: #1e7857; background: #dff0e7; font-size: 34rpx; font-weight: 700; line-height: 92rpx; }
+.empty-title { display: block; margin-top: 25rpx; color: #263c31; font-size: 34rpx; font-weight: 600; }
+.empty-desc { display: block; margin: 14rpx auto; color: #849089; font-size: 23rpx; }

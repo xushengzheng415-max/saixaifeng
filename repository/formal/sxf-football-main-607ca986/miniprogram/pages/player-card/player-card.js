@@ -1,0 +1,9 @@
+var workspace=require('../../utils/workspace')
+Page({
+ data:{players:[],PlayersLen:0,isLoading:true,errorText:'',teamId:''},
+ onLoad:function(options){var info=wx.getStorageSync('teamInfo')||{};this.setData({teamId:String(options.teamId||info._id||info.teamId||'')})},
+ onShow:function(){var self=this;this.loadPlayers();clearInterval(this._timer);this._timer=setInterval(function(){self.loadPlayers()},60000)},onHide:function(){clearInterval(this._timer)},onUnload:function(){clearInterval(this._timer)},onPullDownRefresh:function(){this.loadPlayers().finally(function(){wx.stopPullDownRefresh()})},
+ loadPlayers:function(){if(this._busy)return Promise.resolve();this._busy=true;var self=this;return workspace.loadContext(false).then(function(context){var teamId=self.data.teamId||((context.teams||[])[0]||{}).id||((context.teams||[])[0]||{})._id;if(!teamId){self.setData({isLoading:false,players:[],PlayersLen:0,errorText:'请选择已关联球队'});return}self.setData({teamId:String(teamId)});return wx.cloud.callFunction({name:'getMiniWorkspace',data:{action:'teamPlayers',workspaceId:(context.currentWorkspace||{}).id,teamId:String(teamId)}}).then(function(r){var data=r.result||{};if(!data.success)throw new Error(data.message||data.error||'球员卡读取失败');var players=(data.players||[]).map(function(p){return Object.assign({},p,{id:String(p.id||p._id),ready:p.cardState==='ready'&&!!p.cardUrl,portraitUrl:p.portraitUrl||p.photoUrl||'',needsSupplement:!(p.portraitUrl||p.photoUrl)})});self.setData({players:players,PlayersLen:players.length,isLoading:false,errorText:''})})}).catch(function(e){self.setData({isLoading:false,errorText:e.message||'读取失败'})}).finally(function(){self._busy=false})},
+ viewCard:function(e){wx.navigateTo({url:'/pages/card-preview/card-preview?playerId='+encodeURIComponent(e.currentTarget.dataset.id)+'&teamId='+encodeURIComponent(this.data.teamId)})},
+ goCreate:function(){wx.switchTab({url:'/pages/team/team'})}
+})

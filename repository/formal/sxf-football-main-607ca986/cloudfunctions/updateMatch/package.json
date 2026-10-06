@@ -1,0 +1,9 @@
+{
+  "name": "updateMatch",
+  "version": "1.0.0",
+  "description": "更新比赛信息（比分/状态/事件等）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

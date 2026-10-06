@@ -1,0 +1,7 @@
+{
+  "name": "migrateData",
+  "version": "1.0.0",
+  "description": "数据迁移：把匿名数据归属到指定手机号",
+  "main": "index.js",
+  "dependencies": {}
+}

@@ -1,0 +1,9 @@
+{
+  "name": "generateContent",
+  "version": "1.0.0",
+  "description": "AI 内容生成云函数 - 使用微信云开发 AI 能力",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

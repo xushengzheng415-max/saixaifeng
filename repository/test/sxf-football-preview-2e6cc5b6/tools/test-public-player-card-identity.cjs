@@ -1,0 +1,15 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const source = fs.readFileSync(path.join(__dirname,'../cloudfunctions/webLoginApi/index.js'),'utf8')
+const start = source.indexOf('function publicPlayerView(')
+const end = source.indexOf('function publicLineupView(',start)
+assert(start >= 0 && end > start)
+const view = new Function(source.slice(start,end) + '\nreturn publicPlayerView')()
+const stable = 'stable-player', team = 'team-id'
+const profile = {_id:stable,name:'样例球员',teamId:team}
+const exact = view({id:stable,playerId:team,name:'样例球员',number:26},'starter',new Map([[stable,profile]]),'真实球队')
+assert.equal(exact.playerId,stable)
+const legacy = view({id:team,playerId:team,name:'样例球员',number:26},'starter',new Map([['__public_card__|真实球队|26|样例球员',profile]]),'真实球队')
+assert.equal(legacy.playerId,'')
+console.log('PASS: 公开阵容仅用精确球员档案 ID；球队 ID 与姓名回退不得冒充球员 ID')

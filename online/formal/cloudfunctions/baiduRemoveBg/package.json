@@ -1,0 +1,10 @@
+{
+  "name": "baiduRemoveBg",
+  "version": "1.0.0",
+  "description": "百度智能云人像分割",
+  "main": "index.js",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "wx-server-sdk": "latest"
+  }
+}

@@ -1,0 +1,14 @@
+[Unit]
+Description=SXF draw screen state service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /var/www/screen/screen-state-server.js
+Restart=always
+User=www-data
+WorkingDirectory=/var/www/screen
+Environment=SXF_SCREEN_TOKEN=4SZ7F_EvsBUUDKYxltrELwr60SO98W78
+
+[Install]
+WantedBy=multi-user.target

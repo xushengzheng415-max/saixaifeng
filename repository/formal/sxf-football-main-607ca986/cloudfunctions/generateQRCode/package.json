@@ -1,0 +1,13 @@
+{
+  "name": "generateQRCode",
+  "version": "1.0.0",
+  "description": "首发阵容分享专用 - 生成小程序码",
+  "main": "index.js",
+  "keywords": ["wechat", "miniprogram", "qrcode"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "wx-server-sdk": "4.0.2"
+  }
+}

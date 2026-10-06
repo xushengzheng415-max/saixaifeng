@@ -1,0 +1,9 @@
+{
+  "name": "saveBanner",
+  "version": "1.0.0",
+  "description": "保存轮播图",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

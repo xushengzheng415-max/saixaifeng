@@ -1,0 +1,843 @@
+{
+  "startUrl": "https://www.sxffootball.cn/",
+  "origin": "https://www.sxffootball.cn",
+  "pathPrefix": "/",
+  "fetchedAt": "2026-10-06T12:23:44.588Z",
+  "fileCount": 103,
+  "failures": [
+    {
+      "url": "https://www.sxffootball.cn/assets/backgrounds/pc-landing-emerald-stadium-v1.png",
+      "status": 404
+    },
+    {
+      "url": "https://www.sxffootball.cn/team-placeholder.png",
+      "status": 404
+    }
+  ],
+  "files": [
+    {
+      "url": "https://www.sxffootball.cn/",
+      "finalUrl": "https://www.sxffootball.cn/",
+      "status": 200,
+      "bytes": 118270,
+      "sha256": "590B4B3FD75F9F57ABBA93856D67F59A6411F91152821CC3547AC43F046FF864",
+      "contentType": "text/html"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/AIImageGenerator-Db25NBrW.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/AIImageGenerator-Db25NBrW.js",
+      "status": 200,
+      "bytes": 4586,
+      "sha256": "11E414EBB5158CF3F17CC063A8AB90DFDBC2A8BF2144E08A2E75C36027417310",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/browser-CBFMFOK_.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/browser-CBFMFOK_.js",
+      "status": 200,
+      "bytes": 24540,
+      "sha256": "5CEC14EA7E74943A6A822434F29B9DF1423F6431B37251585BCF1885E56217EF",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/ChatPage-C1QNLR7x.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/ChatPage-C1QNLR7x.js",
+      "status": 200,
+      "bytes": 10658,
+      "sha256": "D1B0E4DDA898CEDEB48698B1875D52B360AD6E951FAAD99D0741B04D6FE82A90",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/ClaimReviewBoard-qjMKUmAC.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/ClaimReviewBoard-qjMKUmAC.js",
+      "status": 200,
+      "bytes": 9605,
+      "sha256": "1A686F61D7DFEEE1211C7428F8D58610E9F9F71016720A301DA53A950D5C1090",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/cloud-BgUS7l8L.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/cloud-BgUS7l8L.js",
+      "status": 200,
+      "bytes": 10630,
+      "sha256": "BB33BA86A8532230531CEBA554E9964E8E4826FBF0CC87607669E1A9356A207D",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/cloud-BgUS7l8L.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/cloud-BgUS7l8L.js",
+      "status": 200,
+      "bytes": 10630,
+      "sha256": "BB33BA86A8532230531CEBA554E9964E8E4826FBF0CC87607669E1A9356A207D",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/cloud-BgUS7l8L.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/cloud-BgUS7l8L.js",
+      "status": 200,
+      "bytes": 10630,
+      "sha256": "BB33BA86A8532230531CEBA554E9964E8E4826FBF0CC87607669E1A9356A207D",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/CoachList-D3Scxu07.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/CoachList-D3Scxu07.js",
+      "status": 200,
+      "bytes": 17092,
+      "sha256": "C949884A4CDD730BD8DFB11CB9F836D9A89F0D19D1B83D03B3565F2761D12419",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/DashboardView-nDvzW8Bi.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/DashboardView-nDvzW8Bi.js",
+      "status": 200,
+      "bytes": 5988,
+      "sha256": "5ECC87BBD84AD112358C5FF20C0B8B5654F81220A256692BB405BB1DFF30658A",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/DataManager-CMHK5y1m.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/DataManager-CMHK5y1m.js",
+      "status": 200,
+      "bytes": 5507,
+      "sha256": "41B2C16EF97414157C5A16010406B9DBB34D1530375C81C636D5AEAF42CC3C67",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/DivisionManagement-rHTQVeNB.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/DivisionManagement-rHTQVeNB.js",
+      "status": 200,
+      "bytes": 10114,
+      "sha256": "3A15A4CBC45F1F42577D4F17BEA180326B47B7310D4F531E85A232AD51AEF59B",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/DivisionRulesWizard-B0hhNg3u.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/DivisionRulesWizard-B0hhNg3u.js",
+      "status": 200,
+      "bytes": 61081,
+      "sha256": "651ACC26939BBF2DE280E6E9228EAE3A99CEB75133E8A78763E50DB5749F14E6",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/el-tooltip-l0sNRNKZ.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/el-tooltip-l0sNRNKZ.js",
+      "status": 200,
+      "bytes": 1,
+      "sha256": "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/el-tooltip-l0sNRNKZ.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/el-tooltip-l0sNRNKZ.js",
+      "status": 200,
+      "bytes": 1,
+      "sha256": "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/element-plus-CMVyjDO1.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/element-plus-CMVyjDO1.js",
+      "status": 200,
+      "bytes": 1055980,
+      "sha256": "9B9B661E9A22A407FC10B55E4DA02F0C5030819D19BE26714F8FC50B67EFA734",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/EmptyState-RYXd1v9v.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/EmptyState-RYXd1v9v.js",
+      "status": 200,
+      "bytes": 1069,
+      "sha256": "7B3F2E8ABA17C523FBD89B92A3434C24BA155B7404ACA28D61A3B82BF1490BD1",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/EmptyState-RYXd1v9v.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/EmptyState-RYXd1v9v.js",
+      "status": 200,
+      "bytes": 1069,
+      "sha256": "7B3F2E8ABA17C523FBD89B92A3434C24BA155B7404ACA28D61A3B82BF1490BD1",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/football-field-dual-8MGgc7dU.jpg",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/football-field-dual-8MGgc7dU.jpg",
+      "status": 200,
+      "bytes": 884332,
+      "sha256": "3C1B9E2BFEBFB13A14A17E1B517A935730B3E72B895B393ECE5E55F8CA0C397D",
+      "contentType": "image/jpeg"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/HeadRefereeManagement-C0O1bsx4.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/HeadRefereeManagement-C0O1bsx4.js",
+      "status": 200,
+      "bytes": 15344,
+      "sha256": "943FF51BE3D43E03669E49D80529E876ED5FBE98DF47916DD7BF514BDCDC1B91",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/HomePage-mr8K6pOr.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/HomePage-mr8K6pOr.js",
+      "status": 200,
+      "bytes": 13568,
+      "sha256": "9B052D7AEBAF31A42F0C21FC41FEDA94C07C573D379F8ED99E117D9B047CD13E",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/html2canvas.esm-CBrSDip1.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/html2canvas.esm-CBrSDip1.js",
+      "status": 200,
+      "bytes": 202301,
+      "sha256": "B4F3ADD809A6D59F46260E8FD56CAB240F3153DEF977386B230A839E8CB0B281",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/html2canvas.esm-CBrSDip1.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/html2canvas.esm-CBrSDip1.js",
+      "status": 200,
+      "bytes": 202301,
+      "sha256": "B4F3ADD809A6D59F46260E8FD56CAB240F3153DEF977386B230A839E8CB0B281",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/ImageCropper-DJZF-uTl.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/ImageCropper-DJZF-uTl.js",
+      "status": 200,
+      "bytes": 41401,
+      "sha256": "9EEF8029241961B36F5EDF83E1B1F6BC879934AE46EF7B97FB81F729813159BE",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/index-B9Is9pUN.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/index-B9Is9pUN.js",
+      "status": 200,
+      "bytes": 34726,
+      "sha256": "4590002412A9BC2884DAE26FB1AE7D96761FC3F8887709755E4D7D7EC1040E91",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/index-C5s7LWWt.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/index-C5s7LWWt.js",
+      "status": 200,
+      "bytes": 401914,
+      "sha256": "CA079CAA9CD821AE174026FE545A135998FAB07000F42FA3C5EC4C09463BF78C",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/index-DpOb8WhM.css",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/index-DpOb8WhM.css",
+      "status": 200,
+      "bytes": 360940,
+      "sha256": "5A9F81E048C7F762D87CE2F505C614336A07BBB532C1E672513F57D9B14537AF",
+      "contentType": "text/css"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/index.es-DyqsQkqN.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/index.es-DyqsQkqN.js",
+      "status": 200,
+      "bytes": 150841,
+      "sha256": "B6748F8F6A60CAE03B307F44DA509D76FEB1F6D8F00D38298D3E97BB6C99440C",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/jspdf.es.min-Qh5Yavj2.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/jspdf.es.min-Qh5Yavj2.js",
+      "status": 200,
+      "bytes": 390406,
+      "sha256": "ED6593BCA39C5CEE9811182FEC0C81601611C00CEFCEC131F6EA98AC81293022",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/jszip.min-Br_xTBvC.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/jszip.min-Br_xTBvC.js",
+      "status": 200,
+      "bytes": 97043,
+      "sha256": "62EA5330E22EE641C0F6CFB0810E76A617BB315D33410DABFD6AB108DD7EF20D",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/LayoutView-D1lZXn5j.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/LayoutView-D1lZXn5j.js",
+      "status": 200,
+      "bytes": 12045,
+      "sha256": "B4392BC26AA1576665F6E67EC820C7F3302148FC520C60E5CAE415FCB970EA2D",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/LoginView-BLJ9jumY.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/LoginView-BLJ9jumY.js",
+      "status": 200,
+      "bytes": 1950,
+      "sha256": "D4861B3B1B420E02E152A7F8AA513A585A31C8D38ABD18FA7B6134AF79DF626C",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/logo-saixiaofeng-BIHtiuZt.png",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/logo-saixiaofeng-BIHtiuZt.png",
+      "status": 200,
+      "bytes": 97308,
+      "sha256": "61B6B55EBC6E8B82D5CD72DF0F3D0372C109ADD93DF8104E67B925AB952E25E3",
+      "contentType": "image/png"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/logo-saixiaofeng-C-n05rdj.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/logo-saixiaofeng-C-n05rdj.js",
+      "status": 200,
+      "bytes": 70,
+      "sha256": "D5C28CE5AE44658E8B68DAAE1E751E3C3BB74EF895BEEEFC3079F46E851A3336",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MatchCard-Ca6Nb2ZA.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MatchCard-Ca6Nb2ZA.js",
+      "status": 200,
+      "bytes": 5329,
+      "sha256": "856000F9AE91FDC170696578372F4DEEB4FE1DFF3F8A1D520713EB8B479C8F13",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MatchCard-Ca6Nb2ZA.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MatchCard-Ca6Nb2ZA.js",
+      "status": 200,
+      "bytes": 5329,
+      "sha256": "856000F9AE91FDC170696578372F4DEEB4FE1DFF3F8A1D520713EB8B479C8F13",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MatchDetail-DBibl2gx.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MatchDetail-DBibl2gx.js",
+      "status": 200,
+      "bytes": 131501,
+      "sha256": "6185B1CAE71E57226C7B1DDCB93831C3A04F2D97DD2C522F36F54F98F553E92A",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MatchDetailPage-CFBzrqlO.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MatchDetailPage-CFBzrqlO.js",
+      "status": 200,
+      "bytes": 2264,
+      "sha256": "2C85459AA29A56329D331F3E2EC2BD5D9B86B4C6CB1BD22DDF8543803387B923",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MatchLiveMonitor--53L6YEc.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MatchLiveMonitor--53L6YEc.js",
+      "status": 200,
+      "bytes": 14174,
+      "sha256": "FBD1694663FBC19E660A450EE45B854733AC50534558EE1803FAE44C9B706D57",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MatchPostMatchReview-Cbg8GTxo.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MatchPostMatchReview-Cbg8GTxo.js",
+      "status": 200,
+      "bytes": 12424,
+      "sha256": "78A9D74430341712CE0303874940D96B565AE23DBB8BCF06415F111EF987D39C",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MatchReviewWorkspace-C2O6iCLM.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MatchReviewWorkspace-C2O6iCLM.js",
+      "status": 200,
+      "bytes": 22452,
+      "sha256": "A9049B501257F549A2515B612436D276F228261C7B7E24AE4492E764D639801E",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/MyTournaments-QCyUd6X_.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/MyTournaments-QCyUd6X_.js",
+      "status": 200,
+      "bytes": 10409,
+      "sha256": "553253A8F59067516B5CB9DDF779D8726E4221BA3797D2950026901AAE381EE7",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/OrganizationOnboarding-CK32rxjq.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/OrganizationOnboarding-CK32rxjq.js",
+      "status": 200,
+      "bytes": 7713,
+      "sha256": "C7E92B87A1E979C2C5D6590898946ABF915FFC4D9D347D31A177DC076BF69AD3",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/permissions-oE-I1g-7.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/permissions-oE-I1g-7.js",
+      "status": 200,
+      "bytes": 2674,
+      "sha256": "F5D7AC6C4B061D8AB71843F69684A2489D843DE7EE62047FCA2AD6F7475D1659",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/permissions-oE-I1g-7.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/permissions-oE-I1g-7.js",
+      "status": 200,
+      "bytes": 2674,
+      "sha256": "F5D7AC6C4B061D8AB71843F69684A2489D843DE7EE62047FCA2AD6F7475D1659",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/PlayerCard-pGWBcSqT.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/PlayerCard-pGWBcSqT.js",
+      "status": 200,
+      "bytes": 4889,
+      "sha256": "B380D385527B9253100109EBA1BA4052F638413E99E629BDC876417E616FBDDE",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/PlayerDetail-CFnCysSp.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/PlayerDetail-CFnCysSp.js",
+      "status": 200,
+      "bytes": 12431,
+      "sha256": "1AD9E3786D69628E13B3E81C790BE328F738C128BAD247506FCC96260AE473E3",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/PlayerList-CMhrpSVb.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/PlayerList-CMhrpSVb.js",
+      "status": 200,
+      "bytes": 11063,
+      "sha256": "A219EF659F783A4D2A999C7DF88881C35D4B41461B6DACC7D648923FD2DFFB5A",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/PortalLayout-Tni1Tzkp.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/PortalLayout-Tni1Tzkp.js",
+      "status": 200,
+      "bytes": 4968,
+      "sha256": "252D76849959A954BDE40FAB318787C929AD3F875C68F0A9D9D447F924222EFF",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/PosterEditor-QpTtbIB9.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/PosterEditor-QpTtbIB9.js",
+      "status": 200,
+      "bytes": 26804,
+      "sha256": "9AF4710B0F22991437947836493E02C6CB016F06A6A6A945953BC190EBD0857B",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/ProfessionalTournamentRoster-PpSM8fA8.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/ProfessionalTournamentRoster-PpSM8fA8.js",
+      "status": 200,
+      "bytes": 13896,
+      "sha256": "55B97C1CD3630F677832CE91C1248A8A27EF19A75FD954EE5A2D7DB8AECD4D16",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/ProfilePage-Cz7e4Om_.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/ProfilePage-Cz7e4Om_.js",
+      "status": 200,
+      "bytes": 9425,
+      "sha256": "C60195935310580DA4B60EDF38DB54323F6A84C03AD21D9D364CBFED85DA6F29",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/purify.es-8E279hYE.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/purify.es-8E279hYE.js",
+      "status": 200,
+      "bytes": 25613,
+      "sha256": "0E04E6E10ECED0AD9AF353AD1362C9AECB2F183518FF5FFE795CCAE94119EC42",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/RefereeList-BB4EyeKw.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/RefereeList-BB4EyeKw.js",
+      "status": 200,
+      "bytes": 21714,
+      "sha256": "1CA3679D134DB832F8A9CACFF9A6F7F772D48302A1637C94FCC7D509D8D3CCAE",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/RefereeMatchDetail-DtiyGSF6.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/RefereeMatchDetail-DtiyGSF6.js",
+      "status": 200,
+      "bytes": 4703,
+      "sha256": "BC5C2033311692D7749AEC620A95649DA9531428AD13B966354819ADA665D9D5",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/RefereeMyMatches-D_WSqTAS.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/RefereeMyMatches-D_WSqTAS.js",
+      "status": 200,
+      "bytes": 2795,
+      "sha256": "646F56AFED80E38CD3B76B883DFD039DB2CE75C30D861AB6BBE2285BA9877AB8",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/removeBg-CBAAfSiM.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/removeBg-CBAAfSiM.js",
+      "status": 200,
+      "bytes": 1605,
+      "sha256": "7C8C28D8241F44D224E8F9081981092E7972C8DE92094878B5B7B4CD7D0AC8EF",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/RemoveBgDemo-C6I_xP7-.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/RemoveBgDemo-C6I_xP7-.js",
+      "status": 200,
+      "bytes": 2768,
+      "sha256": "ACA330558488AFFDBBCB1B118381D20EB290E7A619994564FFD1451486F3EF07",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/RemoveBgProcessor-gIOq9xFO.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/RemoveBgProcessor-gIOq9xFO.js",
+      "status": 200,
+      "bytes": 44146,
+      "sha256": "7AD0AA1F31A78E929270A143AF287A3A5F318E6FB2A805AE5C42ADCE3A333D69",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/RosterChangeReview-BYDkoGCX.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/RosterChangeReview-BYDkoGCX.js",
+      "status": 200,
+      "bytes": 15824,
+      "sha256": "88E4C4598ADF5AD06B11B3070FCD1A21E3BD7ADD6D50BDE3C4FDEEA807AA23A6",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/RosterExceptionBoard-C-cWnDMW.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/RosterExceptionBoard-C-cWnDMW.js",
+      "status": 200,
+      "bytes": 11316,
+      "sha256": "089DFCAC22E22A4BB88B57575D20B0535335B24CCB82B965539ADBEB2B00E81D",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/SignatureView-jycP7QkU.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/SignatureView-jycP7QkU.js",
+      "status": 200,
+      "bytes": 4992,
+      "sha256": "C780926B4165E7D894D940F71C4AFB3F9D60E29F339395A40A558F9E664C3D52",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/SystemAdmin-H4QSnCAT.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/SystemAdmin-H4QSnCAT.js",
+      "status": 200,
+      "bytes": 16310,
+      "sha256": "06FD538D054E8E119DA3DD14E8BB973AF2BF3B4812D06A82A2A75E3A0459D4E6",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/teamCodeRegions-D3iATgh0.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/teamCodeRegions-D3iATgh0.js",
+      "status": 200,
+      "bytes": 8640,
+      "sha256": "DB3F8DCA4B3274380FDC3EC0F693AB7440696836D90F00C72BFD058C9AB60C6B",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TeamDetail-DUg9xReI.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TeamDetail-DUg9xReI.js",
+      "status": 200,
+      "bytes": 234755,
+      "sha256": "3E865A9DAE492A0BE913F3B22AD1199D28FA3E6A8D51B19D68A1C93016C4354F",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TeamList-JoZsMmd0.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TeamList-JoZsMmd0.js",
+      "status": 200,
+      "bytes": 22220,
+      "sha256": "0D2D45BB65F127C701F22CB6D0A9835E38AD23386BC07141DEF328828A725781",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TestDataView-DYvYNFsd.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TestDataView-DYvYNFsd.js",
+      "status": 200,
+      "bytes": 9182,
+      "sha256": "32E8B5BB5F12109BE60791B38C7EF38DC7CF64C47F6577AC3581E7ABD945FFFD",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/tournament-space-emerald-field-v1-Dgo3g5da.png",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/tournament-space-emerald-field-v1-Dgo3g5da.png",
+      "status": 200,
+      "bytes": 1522536,
+      "sha256": "AF679AA9518C6E3C011085F637982B44173113694E0AB953EF7D69A409C0AA27",
+      "contentType": "image/png"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentCenter-asmRroUD.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentCenter-asmRroUD.js",
+      "status": 200,
+      "bytes": 12227,
+      "sha256": "90AA00A55D696239D5816AD54DE79462848F22DC96EA4F275FB5FB1062EB079C",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentCenterAdmin-Bz96uEVo.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentCenterAdmin-Bz96uEVo.js",
+      "status": 200,
+      "bytes": 18003,
+      "sha256": "AC17418A3C86AFB23E2F3642395D7871B709A62EA41135745E0D46C0600F4AAC",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentConsole-D4PaoEDF.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentConsole-D4PaoEDF.js",
+      "status": 200,
+      "bytes": 13819,
+      "sha256": "8C0807E45DE10F8C1171FF47B85885C398FF3BDBE3FEC920CA45FDFC1CD2E9B2",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentCreateBasic-DSK7azHg.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentCreateBasic-DSK7azHg.js",
+      "status": 200,
+      "bytes": 9893,
+      "sha256": "798274AAF02555D85B311E29D89736CEEFD596846580107F7154A4C702FCCA49",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentDetailPage-DpCSaNr1.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentDetailPage-DpCSaNr1.js",
+      "status": 200,
+      "bytes": 22347,
+      "sha256": "BEA47360F57F631E39D88AF5D0C7B042663D34CE37E03A45C19140D6349268A4",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentDivisionCreate-cZDIi32V.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentDivisionCreate-cZDIi32V.js",
+      "status": 200,
+      "bytes": 13594,
+      "sha256": "7D25E39D667E2232FDEFDA86A48330B67B3E43381E0E67F9AB0B37E7C0791603",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentDraw-CfWSZ9hT.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentDraw-CfWSZ9hT.js",
+      "status": 200,
+      "bytes": 173042,
+      "sha256": "E8F7FD2F55E05AFB061CD6D669A9EDE3B623869D32405510C9FB500C71176120",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentEdit-CKKNmxEh.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentEdit-CKKNmxEh.js",
+      "status": 200,
+      "bytes": 58618,
+      "sha256": "1B4EB8D9A9B24B0FF92C5C834AA05C7F89CA8263A8599D705EDEA25506C0BCB0",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentList-DJUFQhqm.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentList-DJUFQhqm.js",
+      "status": 200,
+      "bytes": 6073,
+      "sha256": "4E496036D4D8822591963C7CD516E682F1EF2B16F454EA9AA0D85766C9975C69",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentListPage-B4lYLe10.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentListPage-B4lYLe10.js",
+      "status": 200,
+      "bytes": 6277,
+      "sha256": "2A73E90E55F8552196D471E96C9AD60612681149943F8EF2BDF094BC8ED930AA",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentMatchManagement-CcLovP7U.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentMatchManagement-CcLovP7U.js",
+      "status": 200,
+      "bytes": 18961,
+      "sha256": "702CA67427E273F4E431AD459500349DA421C420B480BBED427F2D577861DC38",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentSchedule-BZsQ6eyh.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentSchedule-BZsQ6eyh.js",
+      "status": 200,
+      "bytes": 90382,
+      "sha256": "0EF6879E86223399845DE37A4FC246BCBD657AB946060C0950A87F5A328C80B3",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentSignups-Cvj-jzJM.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentSignups-Cvj-jzJM.js",
+      "status": 200,
+      "bytes": 5227,
+      "sha256": "9957B82D53E40A7297CADBC12C1EE74E9ACDF3872A1A7A3E555EE28CC2699949",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentSpace-yeoQg4d8.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentSpace-yeoQg4d8.js",
+      "status": 200,
+      "bytes": 7140,
+      "sha256": "19ED49E2054A94B0A5BBCF9C416D13EF7E57DAC1020842319F5A848818F6DD9B",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentTeams-Du4HFhnu.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentTeams-Du4HFhnu.js",
+      "status": 200,
+      "bytes": 86730,
+      "sha256": "70BEE257878259D98D64C6FF4FE405CCAF4205FA3931ED10DC2663E620455E5F",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/TournamentWebsite-BMEqskKp.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/TournamentWebsite-BMEqskKp.js",
+      "status": 200,
+      "bytes": 8405,
+      "sha256": "571A56EBB9869316D18B8FC8D7A938F57C277FA1EDAEFD19A06293F27B6E81A4",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/upload-DqA8jUgZ.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/upload-DqA8jUgZ.js",
+      "status": 200,
+      "bytes": 771,
+      "sha256": "307151734B074F13A11F4D86D2A3CCBA58CFE3453F053735CD2DA2E1BB81D113",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/UserAvatar-2ky1k1o8.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/UserAvatar-2ky1k1o8.js",
+      "status": 200,
+      "bytes": 1319,
+      "sha256": "576371193CBE1708263DE054A7CD91E6CFF259B524980DD6061A364F9ADB898B",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/useResponsive-qQjxllPu.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/useResponsive-qQjxllPu.js",
+      "status": 200,
+      "bytes": 512,
+      "sha256": "E2215520D07981C0D94B3762FFB9CB8E8F329B53B6EB8EEB2A86A8D606E92738",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/useResponsive-qQjxllPu.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/useResponsive-qQjxllPu.js",
+      "status": 200,
+      "bytes": 512,
+      "sha256": "E2215520D07981C0D94B3762FFB9CB8E8F329B53B6EB8EEB2A86A8D606E92738",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/visualQaFixtures-CLU6Ebxu.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/visualQaFixtures-CLU6Ebxu.js",
+      "status": 200,
+      "bytes": 10518,
+      "sha256": "10A6A3990685372A1E186FE2BA7A4D915F94DF292BC988A0F7CD8BAB954AA53D",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/vue-vendor-C9beSz07.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/vue-vendor-C9beSz07.js",
+      "status": 200,
+      "bytes": 107120,
+      "sha256": "1C7864B65B1818D62FBF0D93A5B82FE0D16D0023FE9DF56A133FE5BEA0A53AD4",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/WechatCallbackView-7UUOVkYG.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/WechatCallbackView-7UUOVkYG.js",
+      "status": 200,
+      "bytes": 3780,
+      "sha256": "C6B9B6F36D13BF930F843FD07F8525F485918E39745F9AFF49602294F1CD5E42",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/assets/xlsx-D_0l8YDs.js",
+      "finalUrl": "https://www.sxffootball.cn/admin/assets/xlsx-D_0l8YDs.js",
+      "status": 200,
+      "bytes": 429487,
+      "sha256": "0B43B64C8E0A7BBECFD4EF17CA5CC32E2102ADCC74EDEDA912FD380637DD6F2E",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/formation-designer.html",
+      "finalUrl": "https://www.sxffootball.cn/admin/formation-designer.html",
+      "status": 200,
+      "bytes": 39861,
+      "sha256": "8C399D3F2700215FDAB500F490700D2808B54CCA4D223D04800874903A81810F",
+      "contentType": "text/html"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/images/avatar-frame.png",
+      "finalUrl": "https://www.sxffootball.cn/admin/images/avatar-frame.png",
+      "status": 200,
+      "bytes": 2120,
+      "sha256": "D54251781F5224EF080C7A11719590CEA69F0EBBDF50C4C063992EC623701163",
+      "contentType": "image/png"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/logo-saixiaofeng.png",
+      "finalUrl": "https://www.sxffootball.cn/admin/logo-saixiaofeng.png",
+      "status": 200,
+      "bytes": 97308,
+      "sha256": "61B6B55EBC6E8B82D5CD72DF0F3D0372C109ADD93DF8104E67B925AB952E25E3",
+      "contentType": "image/png"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/logo.png",
+      "finalUrl": "https://www.sxffootball.cn/admin/logo.png",
+      "status": 200,
+      "bytes": 97308,
+      "sha256": "61B6B55EBC6E8B82D5CD72DF0F3D0372C109ADD93DF8104E67B925AB952E25E3",
+      "contentType": "image/png"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/LOGO2.png",
+      "finalUrl": "https://www.sxffootball.cn/admin/LOGO2.png",
+      "status": 200,
+      "bytes": 97308,
+      "sha256": "61B6B55EBC6E8B82D5CD72DF0F3D0372C109ADD93DF8104E67B925AB952E25E3",
+      "contentType": "image/png"
+    },
+    {
+      "url": "https://www.sxffootball.cn/admin/organization-logo-placeholder.svg",
+      "finalUrl": "https://www.sxffootball.cn/admin/organization-logo-placeholder.svg",
+      "status": 200,
+      "bytes": 894,
+      "sha256": "0E2A1F5854897A18306039C49CD2DAA6D7ED15231E0FB4744D88CCDDB2AA9E0E",
+      "contentType": "image/svg+xml"
+    },
+    {
+      "url": "https://www.sxffootball.cn/assets/backgrounds/pc-landing-emerald-stadium-v1.png",
+      "finalUrl": "https://www.sxffootball.cn/assets/backgrounds/pc-landing-emerald-stadium-v1.png",
+      "status": 404,
+      "bytes": 510,
+      "sha256": "C9A35AC993E48FF6463A675B6E0FB7D319FF6D0BBECEB428DD8F9B2320B38255",
+      "contentType": "text/html"
+    },
+    {
+      "url": "https://www.sxffootball.cn/cloudbase-sdk.js?v=20260619e",
+      "finalUrl": "https://www.sxffootball.cn/cloudbase-sdk.js?v=20260619e",
+      "status": 200,
+      "bytes": 531106,
+      "sha256": "EFB20457762F1830F0531B18771C684B6FFA73C8628419C5726ED619BDAF1E69",
+      "contentType": "application/javascript"
+    },
+    {
+      "url": "https://www.sxffootball.cn/hero-video.mp4",
+      "finalUrl": "https://www.sxffootball.cn/hero-video.mp4",
+      "status": 200,
+      "bytes": 8585427,
+      "sha256": "EDFDAEA107D39D169504CD7BD1CF1AED4629BB7F0EBBE27B80972E6121945B8A",
+      "contentType": "video/mp4"
+    },
+    {
+      "url": "https://www.sxffootball.cn/logo-saixiaofeng.png",
+      "finalUrl": "https://www.sxffootball.cn/logo-saixiaofeng.png",
+      "status": 200,
+      "bytes": 97308,
+      "sha256": "61B6B55EBC6E8B82D5CD72DF0F3D0372C109ADD93DF8104E67B925AB952E25E3",
+      "contentType": "image/png"
+    },
+    {
+      "url": "https://www.sxffootball.cn/team-placeholder.png",
+      "finalUrl": "https://www.sxffootball.cn/team-placeholder.png",
+      "status": 404,
+      "bytes": 474,
+      "sha256": "3CB8C78BE3E04EF6888AA2437120FCF4F6FF048AD1F568CCF56DF9B8B134F567",
+      "contentType": "text/html"
+    }
+  ]
+}

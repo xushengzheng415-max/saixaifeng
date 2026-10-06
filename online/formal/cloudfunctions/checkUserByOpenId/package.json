@@ -1,0 +1,9 @@
+{
+  "name": "checkUserByOpenId",
+  "version": "1.0.0",
+  "description": "小程序微信授权手机号主账号登录",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.7.0"
+  }
+}

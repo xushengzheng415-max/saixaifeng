@@ -1,0 +1,9 @@
+{
+  "name": "updateMatchLineup",
+  "version": "1.0.0",
+  "description": "更新比赛首发阵容",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

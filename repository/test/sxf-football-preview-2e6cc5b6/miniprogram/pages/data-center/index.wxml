@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="filters"><picker range="{{subjects}}" range-key="label" value="{{subjectIndex}}" bindchange="changeSubject"><view class="field">{{subjectLabel}}</view></picker><picker range="{{options}}" range-key="name" value="{{objectIndex}}" bindchange="changeObject" disabled="{{catalogLoading}}"><view class="field">{{objectName || '请选择对象'}}</view></picker><button class="query" bindtap="query" loading="{{loading}}" disabled="{{queryDisabled}}">查询</button></view>
+  <view wx:if="{{catalogLoading || loading}}" class="state">正在加载…</view>
+  <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="retry">重新加载</button></view>
+  <block wx:elif="{{hasResult}}">
+    <view class="meta"><text>正式结果 · 当前授权范围</text><text>覆盖 {{coveredMatches}}/{{expectedMatches}} 场</text></view><view wx:if="{{partial}}" class="note">部分比赛记录不完整，“—”表示未知。</view>
+    <view wx:if="{{hasPlayerTotal}}" class="totals"><view wx:for="{{playerTotals}}" wx:key="id"><text>{{item.value}}</text><text>{{item.label}}</text></view></view>
+    <view wx:if="{{hasTeams}}"><text class="section-title">球队成绩</text><view class="row" wx:for="{{teams}}" wx:key="key"><view class="row-head"><text>{{item.teamName}}</text><text>{{item.tournamentName}}</text></view><text>{{item.played}}场 · {{item.winsText}}胜 {{item.drawsText}}平 {{item.lossesText}}负</text><text>进 {{item.goalsForText}} · 失 {{item.goalsAgainstText}}</text></view></view>
+    <text class="section-title">历史贡献</text><view wx:if="{{!hasPlayers}}" class="state">暂无可确认的球员记录</view><view class="row" wx:for="{{players}}" wx:key="key"><view class="row-head"><text>{{item.playerName}}</text><text>{{item.teamName}}</text></view><text>{{item.tournamentName}} · {{item.divisionId}}</text><view class="metrics"><text>出场 {{item.appearancesText}}</text><text>进球 {{item.goalsText}}</text><text>助攻 {{item.assistsText}}</text><text>黄牌 {{item.yellowCardsText}}</text><text>红牌 {{item.redCardsText}}</text></view></view>
+    <text class="version">数据版本 {{dataVersion}}</text>
+  </block><view wx:else class="state">选择统计对象后查询。</view>
+</view>

@@ -1,0 +1,1 @@
+{"name":"prepare-parent-identity-image","version":"1.0.0","main":"index.js","dependencies":{"jimp":"0.22.12","wx-server-sdk":"~2.6.3"}}

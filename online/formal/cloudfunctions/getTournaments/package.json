@@ -1,0 +1,9 @@
+{
+  "name": "getTournaments",
+  "version": "1.0.0",
+  "description": "获取所有赛事列表（供赛事中心管理后台使用）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

@@ -1,0 +1,1 @@
+{"name":"playerCardPublishWorker","version":"1.0.0","main":"index.js","dependencies":{"wx-server-sdk":"~2.6.3","@resvg/resvg-js":"2.6.2","pngjs":"7.0.0"}}

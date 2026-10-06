@@ -1,0 +1,26 @@
+{
+  "football": {
+    "headContent": "您好，欢迎试用赛小蜂足球。\n\n电脑端官网：www.sxffootball.cn\n打开官网首页后，点击顶部“立即登录”，使用微信扫码登录管理后台。\n\n手机端可点击下方入口直接打开小程序。",
+    "items": [
+      {
+        "type": "miniprogram",
+        "appid": "wx57164cca8676f411",
+        "pagepath": "pages/login/login.html",
+        "content": "打开赛小蜂足球小程序"
+      }
+    ],
+    "tailContent": "试用过程中遇到问题，直接把页面截图和操作步骤发给我们即可。"
+  },
+  "basketball": {
+    "headContent": "您好，欢迎试用赛小蜂篮球。\n\n电脑端官网：www.sxfbasketball.cn\n打开官网首页后，点击顶部“进入机构后台”，使用微信扫码登录管理后台。\n\n手机或 PAD 可点击下方入口直接打开小程序。",
+    "items": [
+      {
+        "type": "miniprogram",
+        "appid": "wx06d735da15276acd",
+        "pagepath": "pages/home/index.html",
+        "content": "打开赛小蜂篮球小程序"
+      }
+    ],
+    "tailContent": "试用过程中遇到问题，直接把页面截图和操作步骤发给我们即可。"
+  }
+}

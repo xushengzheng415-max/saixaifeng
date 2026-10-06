@@ -1,0 +1,30 @@
+<view class="page">
+  <view class="hero">
+    <view class="nav">
+      <text class="back" bindtap="onBackTap">‹</text>
+      <text class="title">异常处理</text>
+    </view>
+    <view class="score-card" wx:if="{{!denied}}">
+      <view class="score-top"><text>{{match.divisionText}}</text><text>{{match.statusText}}</text></view>
+      <view class="score-row"><text>{{match.homeName}}</text><text class="score-value">{{match.homeScore}} : {{match.awayScore}}</text><text>{{match.awayName}}</text></view>
+      <text class="readonly">异常入口用于联系、上报和跟踪，不直接修改比赛数据。</text>
+    </view>
+  </view>
+  <view class="content">
+    <view class="loading" wx:if="{{loading}}">正在加载异常跟踪…</view>
+    <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
+    <view class="denied" wx:if="{{denied}}">当前工作空间无异常处理权限</view>
+    <view wx:if="{{!loading}}">
+      <view class="panel"><text class="panel-title">异常类型</text><view class="types"><view wx:for="{{types}}" wx:key="id" class="type {{item.itemClass}}" data-id="{{item.id}}" bindtap="onTypeTap">{{item.text}}</view></view></view>
+      <view class="panel">
+        <text class="panel-title">异常说明</text>
+        <textarea value="{{description}}" bindinput="onDescriptionInput" maxlength="500" placeholder="请详细描述异常情况（必填）"></textarea>
+        <view class="field"><text>现场联系人</text><input value="{{contactName}}" bindinput="onContactNameInput" placeholder="姓名（必填）" /></view>
+        <view class="field"><text>联系电话</text><input value="{{contactPhone}}" bindinput="onContactPhoneInput" placeholder="手机号（必填）" type="number" /></view>
+        <view class="evidence" bindtap="onChooseEvidence"><text>上传证据</text><text>{{evidenceCountText}} · 最多 3 项</text></view>
+      </view>
+      <view class="actions"><button bindtap="onCallReferee">联系本场裁判</button><button class="submit" loading="{{submitting}}" bindtap="onSubmit">提交异常</button></view>
+      <view class="panel" wx:if="{{hasReports}}"><text class="panel-title">处理记录</text><view class="report" wx:for="{{reports}}" wx:key="id"><text>{{item.createdAtText}} · {{item.reporterName}}</text><text class="report-description">{{item.description}}</text><text>{{item.status}}</text></view></view>
+    </view>
+  </view>
+</view>

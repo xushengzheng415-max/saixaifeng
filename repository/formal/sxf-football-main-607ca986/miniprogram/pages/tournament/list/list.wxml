@@ -1,0 +1,115 @@
+<!-- 赛事列表页 -->
+<view class="container">
+  <!-- 顶部搜索栏 -->
+  <view class="search-bar">
+    <view class="search-input-wrapper">
+      <text class="search-icon">🔍</text>
+      <input class="search-input" placeholder="搜索赛事名称" value="{{searchText}}" bindinput="onSearch" />
+    </view>
+  </view>
+
+  <!-- Tab 导航 -->
+  <view class="tab-bar">
+    <view 
+      class="tab-item " 
+      data-tab="all" 
+      bindtap="onTabChange"
+    >
+      全部
+    </view>
+    <view 
+      class="tab-item " 
+      data-tab="registering" 
+      bindtap="onTabChange"
+    >
+      报名中
+    </view>
+    <view 
+      class="tab-item " 
+      data-tab="ongoing" 
+      bindtap="onTabChange"
+    >
+      进行中
+    </view>
+    <view 
+      class="tab-item " 
+      data-tab="completed" 
+      bindtap="onTabChange"
+    >
+      已结束
+    </view>
+  </view>
+
+  <!-- 加载中 -->
+  <view class="loading-wrapper" wx:if="{{loading}}">
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <!-- 赛事列表 -->
+  <scroll-view class="tournament-list" scroll-y="true" wx:else>
+    <block wx:if="{{TournamentsLen > 0}}">
+      <view 
+        class="tournament-card" 
+        wx:for="{{tournaments}}" wx:key="_id"
+        wx:key="_id"
+        bindtap="onViewTournament"
+        data-id="{{item._id}}"
+      >
+        <!-- 赛事头部 -->
+        <view class="card-header">
+          <view class="tournament-type-tag {{item.type}}">
+            <text class="type-icon"></text>
+            <text class="type-text">{{item.typeName}}</text>
+          </view>
+          <view class="status-tag {{item.status}}">
+            {{item.statusLabel}}
+          </view>
+        </view>
+
+        <!-- 赛事信息 -->
+        <view class="card-body">
+          <text class="tournament-name">{{item.name}}</text>
+          
+          <view class="info-row">
+            <view class="info-item">
+              <text class="info-icon">📅</text>
+              <text class="info-text">{{item.dateRange}}</text>
+            </view>
+          </view>
+
+          <view class="info-row" wx:if="{{item.location}}">
+            <view class="info-item">
+              <text class="info-icon">📍</text>
+              <text class="info-text">{{item.location}}</text>
+            </view>
+          </view>
+
+          <!-- 统计数据 -->
+          <view class="stats-row">
+            <view class="stat-item">
+              <text class="stat-value">{{item.registeredTeams || 0}}</text>
+              <text class="stat-label">/ {{item.maxTeams}} 队</text>
+            </view>
+            <view class="stat-divider"></view>
+            <view class="stat-item">
+              <text class="stat-value">{{item.maxPlayers}}</text>
+              <text class="stat-label">人/队</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- 空状态 -->
+    <view class="empty-state" wx:else>
+      <text class="empty-icon">🏆</text>
+      <text class="empty-title">暂无赛事</text>
+      <text class="empty-desc">点击右下角按钮创建第一个赛事吧</text>
+    </view>
+  </scroll-view>
+
+  <!-- 创建赛事按钮 -->
+  <view class="fab-btn" bindtap="onCreateTournament">
+    <text class="fab-icon">+</text>
+  </view>
+</view>

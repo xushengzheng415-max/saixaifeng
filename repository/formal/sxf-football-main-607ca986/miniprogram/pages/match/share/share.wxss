@@ -1,0 +1,393 @@
+/* pages/match/share/share.wxss */
+/* 首发阵容分享页面 - 支持分享链接、二维码、下载 */
+
+.container {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding-bottom: 40rpx;
+}
+
+/* ===== 比赛信息 ===== */
+.match-info {
+  background: linear-gradient(135deg, #1B5E20 0%, #43A047 100%);
+  padding: 40rpx 30rpx;
+  color: #fff;
+}
+
+.match-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.match-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #fff;
+}
+
+.match-format {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 6rpx 16rpx;
+  border-radius: 8rpx;
+}
+
+.match-teams {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  margin-bottom: 20rpx;
+  padding: 20rpx 0;
+}
+
+.team-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.team-logo {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.team-name {
+  font-size: 28rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+.vs-text {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #FFD700;
+}
+
+.match-detail {
+  display: flex;
+  gap: 30rpx;
+}
+
+.detail-item {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ===== 首发阵容展示 ===== */
+.squad-section {
+  background-color: #fff;
+  margin: 20rpx 30rpx;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+/* 阵型视图 */
+.formation-pitch {
+  background: linear-gradient(180deg, #2E7D32 0%, #43A047 50%, #66BB6A 100%);
+  border-radius: 12rpx;
+  padding: 30rpx 20rpx;
+  min-height: 500rpx;
+  margin-bottom: 30rpx;
+}
+
+.formation-row {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  margin-bottom: 30rpx;
+}
+
+.formation-row:last-child {
+  margin-bottom: 0;
+}
+
+.formation-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+/* 迷你球员卡片（阵型视图中） */
+.player-card-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+  min-width: 100rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+}
+
+.player-number-mini {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1B5E20;
+}
+
+.player-name-mini {
+  font-size: 18rpx;
+  color: #333;
+  max-width: 100rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-gk-mini {
+  background-color: #FFE082;
+}
+
+/* 球员卡片列表 */
+.player-cards-list {
+  margin-top: 30rpx;
+  padding-top: 30rpx;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.list-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+
+.player-card-item {
+  width: calc(50% - 10rpx);
+  background-color: #f8f8f8;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.player-info-simple {
+  padding: 20rpx;
+  text-align: center;
+}
+
+.player-name-full {
+  display: block;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.player-number-full {
+  display: block;
+  font-size: 24rpx;
+  color: #43A047;
+  margin-bottom: 4rpx;
+}
+
+.player-position {
+  display: block;
+  font-size: 22rpx;
+  color: #999;
+}
+
+/* ===== 分享区域 ===== */
+.share-section {
+  background-color: #fff;
+  margin: 20rpx 30rpx;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.share-link-box {
+  margin-bottom: 30rpx;
+}
+
+.share-label {
+  display: block;
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 12rpx;
+}
+
+.link-input-box {
+  display: flex;
+  align-items: center;
+  background-color: #f5f5f5;
+  border-radius: 8rpx;
+  padding: 16rpx;
+  gap: 16rpx;
+}
+
+.link-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-copy {
+  min-width: 120rpx;
+  height: 60rpx;
+  line-height: 60rpx;
+  background-color: #43A047;
+  color: #fff;
+  font-size: 24rpx;
+  border-radius: 8rpx;
+  padding: 0 20rpx;
+}
+
+.btn-copy::after {
+  border: none;
+}
+
+/* 二维码 */
+.qrcode-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30rpx 0;
+  margin-bottom: 20rpx;
+}
+
+.qrcode-image {
+  width: 400rpx;
+  height: 400rpx;
+  margin-bottom: 16rpx;
+  border: 1rpx solid #f0f0f0;
+  border-radius: 8rpx;
+}
+
+.qrcode-hint {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.qrcode-generate {
+  display: flex;
+  justify-content: center;
+  padding: 20rpx 0;
+}
+
+.btn-generate {
+  width: 60%;
+  height: 80rpx;
+  line-height: 80rpx;
+  background: linear-gradient(135deg, #1B5E20 0%, #43A047 100%);
+  color: #fff;
+  font-size: 28rpx;
+  border-radius: 40rpx;
+}
+
+.btn-generate::after {
+  border: none;
+}
+
+.generating-hint {
+  text-align: center;
+  padding: 30rpx;
+  color: #999;
+  font-size: 26rpx;
+}
+
+/* ===== 下载区域 ===== */
+.download-section {
+  background-color: #fff;
+  margin: 20rpx 30rpx;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.download-options {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 20rpx;
+}
+
+.btn-download {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  background-color: #43A047;
+  color: #fff;
+  font-size: 26rpx;
+  border-radius: 12rpx;
+}
+
+.btn-download::after {
+  border: none;
+}
+
+.btn-download-pdf {
+  background-color: #1976D2;
+}
+
+.share-canvas {
+  position: fixed;
+  left: -9999rpx;
+  top: -9999rpx;
+}
+
+/* ===== 分享按钮 ===== */
+.share-buttons {
+  padding: 30rpx;
+  display: flex;
+  gap: 20rpx;
+}
+
+.btn-share {
+  flex: 1;
+  height: 90rpx;
+  line-height: 90rpx;
+  background: linear-gradient(135deg, #1B5E20 0%, #43A047 100%);
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: bold;
+  border-radius: 45rpx;
+}
+
+.btn-share::after {
+  border: none;
+}
+
+.btn-timeline {
+  background: linear-gradient(135deg, #F57C00 0%, #FFA726 100%);
+}
+
+/* ===== 加载状态 ===== */
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 400rpx;
+  color: #999;
+  font-size: 28rpx;
+}

@@ -1,0 +1,161 @@
+<!-- pages/match/share/share.wxml -->
+<!-- 首发阵容分享页面 - 支持分享链接、二维码、下载 -->
+
+<view class="container">
+  <!-- 比赛信息 -->
+  <view class="match-info" wx:if="{{match}}">
+    <view class="match-header">
+      <text class="match-title">{{match.name}}</text>
+      <text class="match-format">{{formatText}}</text>
+    </view>
+    <view class="match-teams">
+      <view class="team-info">
+        <image wx:if="{{homeTeam.logoUrl}}" class="team-logo" src="{{homeTeam.logoUrl}}" mode="aspectFit"></image>
+        <text class="team-name">{{homeTeam.name}}</text>
+      </view>
+      <text class="vs-text">VS</text>
+      <view class="team-info">
+        <image wx:if="{{awayTeam.logoUrl}}" class="team-logo" src="{{awayTeam.logoUrl}}" mode="aspectFit"></image>
+        <text class="team-name">{{awayTeam.name}}</text>
+      </view>
+    </view>
+    <view class="match-detail">
+      <text class="detail-item">📅 {{match.matchDate}}</text>
+      <text class="detail-item">📍 {{match.venue || '待定'}}</text>
+    </view>
+  </view>
+
+  <!-- 首发阵容展示 -->
+  <view class="squad-section" wx:if="{{HomeStartingLen > 0}}">
+    <view class="section-header">
+      <text class="section-title">{{homeTeam.name}} - 首发阵容</text>
+    </view>
+    
+    <!-- 阵型视图 -->
+    <view class="formation-pitch">
+      <!-- 前锋 -->
+      <view class="formation-row">
+        <view class="formation-player" wx:for="{{homeStartingByPosition.FW}}" wx:key="_id">
+          <view class="player-card-mini">
+            <text class="player-number-mini">{{item.jerseyNumber}}</text>
+            <text class="player-name-mini">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 中场 -->
+      <view class="formation-row">
+        <view class="formation-player" wx:for="{{homeStartingByPosition.MF}}" wx:key="_id">
+          <view class="player-card-mini">
+            <text class="player-number-mini">{{item.jerseyNumber}}</text>
+            <text class="player-name-mini">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 后卫 -->
+      <view class="formation-row">
+        <view class="formation-player" wx:for="{{homeStartingByPosition.DF}}" wx:key="_id">
+          <view class="player-card-mini">
+            <text class="player-number-mini">{{item.jerseyNumber}}</text>
+            <text class="player-name-mini">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 门将 -->
+      <view class="formation-row">
+        <view class="formation-player" wx:for="{{homeStartingByPosition.GK}}" wx:key="_id">
+          <view class="player-card-mini player-gk-mini">
+            <text class="player-number-mini">{{item.jerseyNumber}}</text>
+            <text class="player-name-mini">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 球员卡详情列表 -->
+    <view class="player-cards-list">
+      <text class="list-title">球员详情</text>
+      <view class="card-grid">
+        <view class="player-card-item" wx:for="{{homeStarting}}" wx:key="_id">
+          <player-card-canvas 
+            wx:if="{{item.photoUrl}}"
+            playerData="{{item}}"
+            avatarUrl="{{item.photoUrl}}"
+            teamLogoUrl="{{homeTeam.logoUrl}}"
+            width="300"
+            height="450"
+          />
+          <view class="player-info-simple" wx:else>
+            <text class="player-name-full">{{item.name}}</text>
+            <text class="player-number-full">#{{item.jerseyNumber}}</text>
+            <text class="player-position">{{item.position}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 分享区域 -->
+  <view class="share-section">
+    <view class="section-header">
+      <text class="section-title">分享首发阵容</text>
+    </view>
+
+    <!-- 分享链接 -->
+    <view class="share-link-box">
+      <text class="share-label">分享链接</text>
+      <view class="link-input-box">
+        <text class="link-text">{{shareLink}}</text>
+        <button class="btn-copy" bindtap="onCopyLink">复制链接</button>
+      </view>
+    </view>
+
+    <!-- 二维码 -->
+    <view class="qrcode-box" wx:if="{{qrcodeUrl}}">
+      <text class="share-label">扫码查看</text>
+      <image class="qrcode-image" src="{{qrcodeUrl}}" mode="aspectFit"></image>
+      <text class="qrcode-hint">使用微信扫码查看完整阵容</text>
+    </view>
+
+    <!-- 生成二维码按钮（如果还没生成） -->
+    <view class="qrcode-generate" wx:if="{{showGenerateQrcode}}">
+      <button class="btn-generate" bindtap="onGenerateQRCode">生成分享二维码</button>
+    </view>
+
+    <view class="generating-hint" wx:if="{{generating}}">
+      <text>正在生成二维码...</text>
+    </view>
+  </view>
+
+  <!-- 下载区域 -->
+  <view class="download-section">
+    <view class="section-header">
+      <text class="section-title">下载阵容图片</text>
+    </view>
+    
+    <view class="download-options">
+      <button class="btn-download" bindtap="onDownloadImage">下载阵容图片</button>
+      <button class="btn-download btn-download-pdf" bindtap="onDownloadPDF">PDF导出待配置</button>
+    </view>
+
+    <!-- canvas用于生成图片 -->
+    <canvas 
+      canvas-id="shareCanvas" 
+      class="share-canvas"
+      style="width: 750px; height: 1334px;"
+    ></canvas>
+  </view>
+
+  <!-- 分享按钮 -->
+  <view class="share-buttons">
+    <button class="btn-share" open-type="share">分享给好友</button>
+    <button class="btn-share btn-timeline" open-type="share">分享到朋友圈</button>
+  </view>
+
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="loading-state">
+    <text>加载中...</text>
+  </view>
+</view>

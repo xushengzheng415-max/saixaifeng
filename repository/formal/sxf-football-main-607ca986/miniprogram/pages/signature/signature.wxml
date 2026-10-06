@@ -1,0 +1,49 @@
+<view class="signature-page">
+  <!-- 顶部信息 -->
+  <view class="match-info" wx:if="{{matchInfo}}">
+    <view class="match-title">{{matchInfo.homeTeam}} vs {{matchInfo.awayTeam}}</view>
+    <view class="match-meta">{{matchInfo.tournamentName}} · 第{{matchInfo.round}}轮</view>
+  </view>
+
+  <!-- 签字区域 -->
+  <view class="canvas-section">
+    <view class="section-title">请在下方区域签字</view>
+    <view class="canvas-wrapper">
+      <canvas
+        type="2d"
+        id="signatureCanvas"
+        class="signature-canvas"
+        bindtouchstart="onTouchStart"
+        bindtouchmove="onTouchMove"
+        bindtouchend="onTouchEnd"
+      ></canvas>
+      <!-- 提示文字 -->
+      <view class="canvas-placeholder" wx:if="{{!hasSigned}}">
+        <text class="placeholder-text">请在此处手写签名</text>
+      </view>
+    </view>
+    <view class="canvas-actions">
+      <button class="btn-clear" bindtap="clearSignature">重新签字</button>
+    </view>
+  </view>
+
+  <!-- 预览签名 -->
+  <view class="preview-section" wx:if="{{signatureData}}">
+    <view class="section-title">签字预览</view>
+    <image class="preview-img" src="{{signatureData}}" mode="aspectFit"></image>
+  </view>
+
+  <!-- 提交按钮 -->
+  <view class="submit-section">
+    <button class="btn-submit" bindtap="submitSignature" loading="{{submitting}}">
+      确认提交签字
+    </button>
+  </view>
+
+  <!-- 已提交状态 -->
+  <view class="success-section" wx:if="{{submitted}}">
+    <view class="success-icon">✓</view>
+    <view class="success-text">签字已提交</view>
+    <view class="success-hint">请在电脑端查看签字结果</view>
+  </view>
+</view>

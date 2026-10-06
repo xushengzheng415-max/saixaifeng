@@ -1,0 +1,530 @@
+[
+  {
+    "name": "tournamentStaffAccess",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-06 14:26:00",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "prepareParentIdentityImage",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-02 12:45:33",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "playerCardPublishWorker",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-02 02:46:23",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "newsCenter",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-05 20:06:44",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "purgeSensitiveIdentityFiles",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-01 10:43:33",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "newsPreviewGenerate",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-03 21:59:14",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "dataCenter",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-03 22:24:39",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "resultCenter",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-06 13:10:08",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "serviceAccountCallback",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-05 14:10:58",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "tournamentRegistrationFlow",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-05 14:11:16",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "tournamentReview",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-03 21:52:16",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "clearTournamentTeams",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-08-15 00:34:07",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "manageTournamentCenterContent",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-01 11:11:47",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "reviewRosterChange",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-03 21:51:16",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateQRCode",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-03 23:26:57",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "organizerClaimInvite",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-03 21:56:00",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getMiniWorkspace",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-03 23:00:25",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "workspaceAccess",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-08-14 18:31:02",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "onboardingWorkspace",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-06 14:23:20",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "profileContentSecurity",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-08-15 00:26:58",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "sendRefereeTemplateMessages",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-09-25 17:20:53",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "backfillOrganizerOrgId",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-08-15 00:28:00",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "serviceMatchWorkflow",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-10-03 23:01:50",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "platformOwner",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-09-05 16:15:39",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "deleteTeam",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-29 15:45:59",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "migrateTeamPhoneBindings",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-29 13:54:11",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "uploadCosDirect",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-29 12:58:02",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "updateTeam",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-09-28 17:41:33",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "createTeam",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-07-04 15:52:08",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getTeams",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-28 15:49:46",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getTournaments",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-28 12:02:54",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "manageTournamentCenterAccounts",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-28 11:27:56",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "setTournamentCenterPassword",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-28 11:27:24",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "tournamentCenterLogin",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-28 11:37:50",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getTournamentMatches",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-09-28 19:52:08",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getTournamentDetail",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-08-14 23:25:40",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "clearTeamPlayers",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-08-15 00:44:44",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "webLoginApi",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-10-06 19:22:32",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "wechatWebLogin",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-06-18 20:40:15",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "phoneLogin",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-07-16 12:47:15",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "updateUserRole",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-07-16 12:25:14",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "migrateData",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-06 14:19:02",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "bindPhone",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-07-16 12:47:20",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "verifyPassword",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-05 21:26:18",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "verifySmsCode",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-07-04 15:51:58",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "sendSms",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-09-12 16:19:59",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "sendEmail",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-04 18:54:22",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "emailLogin",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-17 16:28:05",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "bindPhoneToOpenId",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-07-16 12:47:25",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "checkUserByOpenId",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-09-18 13:36:48",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "decodePhoneNumber",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-07-06 12:47:07",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getOpenId",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-23 15:09:32",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "testEnv",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-02 15:16:09",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getMyTeams",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-15 00:57:38",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "updateMatchLineup",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-15 01:51:33",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateMiniProgramCode",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-14 22:16:58",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "updateMatchSignature",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-15 01:46:17",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getSignatureStatus",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-15 01:46:21",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "saveSignature",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-15 01:46:20",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "manageRefereeCommittee",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-24 12:50:26",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getTournamentReferees",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-20 12:41:54",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "updateMatch",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-10-06 13:08:14",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getRegulations",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-21 13:02:56",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "parseTournamentRegulations",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-09-13 17:34:08",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "cleanupOrphanTournamentTeams",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-16 15:13:03",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "applyTournament",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-23 19:59:06",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "migrateCoachData",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-15 17:30:28",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateInviteCode",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-14 22:23:45",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateAIImage",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-14 17:13:48",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateImage-yQOBxs",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-05-09 15:59:01",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateContent",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-08 18:45:00",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "uploadToCOS",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-08 18:27:25",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getTournamentList",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-27 13:07:25",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "getBanners",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-08-14 22:12:46",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "saveBanner",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-08 18:27:38",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "removeLogoBg",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-07 19:48:15",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "baiduRemoveBg",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-06-29 11:10:45",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "uploadFile",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-10-06 00:26:53",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "webBatchUpdate",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-15 21:18:51",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "webBatchDelete",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-06 11:10:40",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "deleteRecord",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-16 15:35:13",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "clearDatabase",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-05-06 11:13:49",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateSchedule",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-10-03 21:53:32",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "deleteTournament",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-04-30 16:27:00",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generateTestData",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-04-30 16:26:59",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "generatePlayerCard",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-09-30 17:57:23",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "imageProcess",
+    "runtime": "Nodejs16.13",
+    "modifyTime": "2026-04-30 16:26:58",
+    "status": "Deployment completed"
+  },
+  {
+    "name": "user",
+    "runtime": "Nodejs18.15",
+    "modifyTime": "2026-04-30 16:26:58",
+    "status": "Deployment completed"
+  }
+]

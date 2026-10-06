@@ -1,0 +1,9 @@
+{
+  "name": "manageRefereeCommittee",
+  "version": "1.0.0",
+  "description": "管理赛事裁判委员会成员",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

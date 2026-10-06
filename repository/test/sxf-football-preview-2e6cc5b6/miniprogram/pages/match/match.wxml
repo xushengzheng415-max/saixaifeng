@@ -1,0 +1,56 @@
+<view class="container">
+  <view class="page-header">
+    <view>
+      <text class="page-title">{{labels.title}}</text>
+
+    </view>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">{{labels.loading}}</text>
+  </view>
+
+  <view class="empty-state" wx:if="{{showEmpty}}">
+    <text class="empty-icon">&#128203;</text>
+    <text class="empty-text">{{labels.empty}}</text>
+    <text class="empty-hint">{{labels.emptyHint}}</text>
+  </view>
+
+  <scroll-view class="referee-list" scroll-y="true" wx:if="{{showList}}">
+    <view class="referee-card" wx:for="{{referees}}" wx:key="_id">
+      <view class="card-header">
+        <view class="referee-avatar">
+          <image wx:if="{{item.avatarUrl}}" class="avatar-img" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+          <text wx:else class="avatar-text">{{item.nameFirstLetter}}</text>
+        </view>
+        <view class="card-info">
+          <text class="referee-name">{{item.name}}</text>
+          <view class="tag-row">
+            <text class="level-tag level-{{item.levelClass}}">{{item.levelText}}</text>
+            <text class="status-tag status-{{item.statusClass}}">{{item.statusText}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="card-body">
+        <view class="info-row" wx:if="{{item.phone}}">
+          <text class="info-label">{{labels.phone}}</text>
+          <text class="info-value phone-value">{{item.phone}}</text>
+        </view>
+        <view class="info-row" wx:if="{{item.region}}">
+          <text class="info-label">{{labels.region}}</text>
+          <text class="info-value">{{item.region}}</text>
+        </view>
+        <view class="info-row" wx:if="{{item.certNumber}}">
+          <text class="info-label">{{labels.cert}}</text>
+          <text class="info-value cert-value">{{item.certNumber}}</text>
+        </view>
+        <view class="info-row" wx:if="{{item.hasMatchCount}}">
+          <text class="info-label">{{labels.matchCount}}</text>
+          <text class="info-value">{{item.matchCount}} {{labels.matchUnit}}</text>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

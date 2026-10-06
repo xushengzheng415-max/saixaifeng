@@ -1,0 +1,52 @@
+<view class="page">
+  <view class="card">
+    <view class="section-title">头像</view>
+    <view class="avatar-row">
+      <image wx:if="{{avatarUrl}}" class="avatar-preview" src="{{avatarUrl}}" mode="aspectFill" />
+      <view wx:else class="avatar-preview avatar-empty">
+        <text>头像</text>
+      </view>
+      <view class="avatar-actions">
+        <button
+          class="action-btn action-btn-wechat"
+          open-type="chooseAvatar"
+          bindchooseavatar="onChooseAvatar"
+          disabled="{{isSaving}}"
+        >选择头像</button>
+        <text class="security-tip">头像将在保存时自动进行内容安全检测</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">昵称</view>
+    <input
+      class="input"
+      value="{{nickName}}"
+      placeholder="请输入昵称"
+      maxlength="20"
+      bindinput="onNickNameInput"
+      disabled="{{isSaving}}"
+    />
+
+    <view class="meta-row" wx:if="{{currentPhone}}">
+      <text class="meta-label">手机号</text>
+      <text class="meta-value">{{currentPhone}}</text>
+    </view>
+    <view class="meta-row" wx:if="{{workspaceName}}">
+      <text class="meta-label">当前机构</text>
+      <text class="meta-value">{{workspaceName}}</text>
+    </view>
+    <view class="meta-row" wx:if="{{positionsText}}">
+      <text class="meta-label">机构岗位</text>
+      <text class="meta-value">{{positionsText}}</text>
+    </view>
+  </view>
+
+  <view class="footer">
+    <button class="save-btn" bindtap="saveProfile" disabled="{{isSaving}}">
+      <text wx:if="{{isSaving}}">正在检测</text>
+      <text wx:else>保存资料</text>
+    </button>
+  </view>
+</view>

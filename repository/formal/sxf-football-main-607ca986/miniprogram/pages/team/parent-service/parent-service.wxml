@@ -1,0 +1,2 @@
+<view wx:if="{{errorText}}" class="error"><text>{{errorText}}</text><button bindtap="back">返回</button></view>
+<web-view wx:if="{{url}}" src="{{url}}"></web-view>

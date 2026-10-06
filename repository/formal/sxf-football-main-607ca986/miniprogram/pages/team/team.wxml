@@ -1,0 +1,14 @@
+<view class="page">
+  <image class="stadium-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image><view class="shade"></view>
+  <view class="content">
+    <view class="top"><text bindtap="onBack">‹</text><text>球队详情</text></view>
+  <view class="empty" wx:if="{{!hasTeam}}"><image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image><text>当前还没有球队</text><button bindtap="onCreateTeam">创建球队</button></view>
+    <block wx:if="{{hasTeam}}">
+  <view class="team-summary"><view class="hero"><image wx:if="{{teamLogo}}" src="{{teamLogo}}" mode="aspectFit"></image><view class="logo-fallback" wx:if="{{!teamLogo}}"><image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image></view><view class="hero-main"><text class="name">{{teamName}}</text><view class="hero-meta"><text class="claim">{{claimText}}</text><text class="leader" wx:if="{{leaderText}}">{{leaderText}}</text></view><view class="hero-meta"><text wx:if="{{foundedText}}">{{foundedText}}</text><text class="completion">{{completionText}}</text></view></view><text class="summary-arrow">›</text></view><view class="metrics"><view><text>{{playerCount}}</text><text>名球员</text></view><view><text>{{coachCount}}</text><text>名教练</text></view><view><text>{{tournamentCount}}</text><text>项赛事</text></view></view></view>
+      <view class="menu"><view class="menu-row" wx:for="{{menuItems}}" wx:key="id" data-id="{{item.id}}" bindtap="onMenuTap"><image src="{{item.icon}}" mode="aspectFit"></image><view><text>{{item.title}}</text></view><text>›</text></view></view>
+      <view class="current" wx:if="{{hasCurrentTournament}}" bindtap="enterTournament"><text class="section">当前参赛</text><text class="event-name">{{currentTournamentName}}</text><text>{{currentTournamentMeta}}</text><button>进入赛事</button></view>
+      <view class="notice">球队资料的修改不会覆盖已审核名单和已完成的比赛快照，请放心使用。</view>
+    </block>
+    <view class="loading" wx:if="{{loading}}">正在加载球队详情…</view><view class="error" wx:if="{{errorText}}">{{errorText}}</view>
+  </view>
+</view>

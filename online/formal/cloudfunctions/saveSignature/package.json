@@ -1,0 +1,9 @@
+{
+  "name": "saveSignature",
+  "version": "1.0.0",
+  "description": "保存裁判签字记录到比赛数据",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

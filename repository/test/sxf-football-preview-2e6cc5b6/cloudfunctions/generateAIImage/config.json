@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "openapi": [
+      "hunyuan.image.generateImage",
+      "hunyuan.submitTextToImageJob",
+      "aiart.submitTextToImageJob",
+      "aiart.textToImageLite"
+    ]
+  },
+  "timeout": 120,
+  "memorySize": 512,
+  "desc": "AI生图云函数 - 调用微信混元生图API"
+}

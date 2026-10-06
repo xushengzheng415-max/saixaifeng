@@ -1,0 +1,17 @@
+<!-- components/player-card-canvas/player-card-canvas.wxml -->
+<view class="card-container">
+  <canvas
+    type="2d"
+    canvas-id="playerCardCanvas"
+    class="card-canvas"
+    style="width: {{canvasWidth}}px; height: {{canvasHeight}}px;"
+  ></canvas>
+  
+  <!-- 生成后显示图片预览 -->
+  <image wx:if="{{renderedImagePath}}" 
+         class="card-preview" 
+         src="{{renderedImagePath}}" 
+         mode="aspectFit"
+         bindtap="previewImage"
+         show-menu-by-longpress="true"></image>
+</view>

@@ -1,0 +1,18 @@
+<view class="page">
+  <view class="hero">
+    <view class="nav"><text class="back" bindtap="onBackTap">‹</text><text class="title">赛前工作台</text></view>
+    <view class="event-card" wx:if="{{!accessDenied}}">
+      <view class="tag-row"><text class="host-tag">我主办的</text><text class="pro-tag">赛事协作</text></view>
+      <text class="event-name">{{name}}</text><text class="event-meta">{{divisionText}} · {{dateVenueText}}</text>
+      <view class="event-stats"><view><text>{{rosterCountText}}</text><text>名单进度</text></view><view><text>{{matchCountText}}</text><text>比赛场次</text></view><view><text>{{pendingCountText}}</text><text>待处理</text></view></view>
+    </view>
+    <view class="readiness" wx:if="{{!accessDenied}}"><view wx:for="{{readinessItems}}" wx:key="id" class="ready-step {{item.itemClass}}"><text class="step-dot">✓</text><text>{{item.label}}</text><text class="step-value">{{item.value}}</text></view></view>
+  </view>
+  <view class="content">
+    <view class="loading" wx:if="{{loading}}">正在加载赛前工作台…</view><view class="error" wx:if="{{errorText}}">{{errorText}}</view>
+    <view class="denied" wx:if="{{accessDenied}}"><text class="denied-icon">！</text><text class="denied-title">当前工作空间无赛前管理权限</text><text class="denied-desc">请切换至赛事主办方工作空间后再继续。</text></view>
+    <view class="card-list" wx:if="{{hasCards}}"><view wx:for="{{cards}}" wx:key="id" class="work-card {{item.itemClass}}" data-type="{{item.routeType}}" bindtap="onCardTap"><view class="glyph"><image src="{{item.icon}}" mode="aspectFit"/></view><view class="card-copy"><text class="card-title">{{item.title}}</text><text class="card-main">{{item.mainText}}</text><text class="card-sub">{{item.subText}}</text></view><view class="card-action">{{item.actionText}}</view><text class="arrow">›</text></view></view>
+    <view class="note" wx:if="{{hasCards}}">单场首发与替补由球队小程序提交；现场核验由裁判手机端完成。</view>
+    <button class="todo-button" wx:if="{{hasCards}}" bindtap="onTodoTap">查看未完成事项</button>
+  </view>
+</view>

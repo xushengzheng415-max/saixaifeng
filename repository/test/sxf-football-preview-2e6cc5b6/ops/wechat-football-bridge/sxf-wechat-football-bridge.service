@@ -1,0 +1,21 @@
+[Unit]
+Description=Saixiaofeng Football WeChat API Bridge
+After=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/sxf-wechat-football-bridge
+EnvironmentFile=/etc/sxf-wechat-football-bridge.env
+ExecStart=/usr/bin/node /opt/sxf-wechat-football-bridge/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

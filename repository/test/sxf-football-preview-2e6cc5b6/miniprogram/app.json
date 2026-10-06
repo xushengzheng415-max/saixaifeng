@@ -1,0 +1,142 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/home/home",
+    "pages/login/agreement/agreement",
+    "pages/event/index",
+    "pages/teams/index",
+    "pages/training/index",
+    "pages/messages/index",
+    "pages/schedule/index",
+    "pages/todo/index",
+    "pages/data/index",
+    "pages/data-center/index",
+    "pages/onboarding/onboarding",
+    "pages/guide/team-info/team-info",
+    "pages/guide/referee-info/referee-info",
+    "pages/player/detail/detail",
+    "pages/player/electronic-pass/electronic-pass",
+    "pages/card-preview/card-preview",
+    "pages/tournament-center/tournament-center",
+    "pages/roster-change/roster-change",
+    "pages/referee/index",
+    "pages/referee/match/match",
+    "pages/service/workbench/workbench",
+    "pages/service/claim/claim",
+    "pages/service/lineup/lineup",
+    "pages/profile/profile",
+    "pages/profile/version-log/version-log",
+    "pages/admin/index",
+    "pages/profile/info/info",
+    "pages/manage/manage",
+    "pages/invite/invite",
+    "pages/workspace/select/select",
+    "pages/workspace/switch/switch",
+    "pages/workspace/temp-team/temp-team"
+    ,"pages/workspace/restricted/restricted"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#2E7D32",
+    "navigationBarTitleText": "赛小蜂足球赛事",
+    "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#757575",
+    "selectedColor": "#2E7D32",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/event/index",
+        "text": "赛事"
+      },
+      {
+        "pagePath": "pages/teams/index",
+        "text": "球队"
+      },
+      {
+        "pagePath": "pages/training/index",
+        "text": "青训"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
+    ]
+  },
+  "subpackages": [
+    {
+      "root": "packageA",
+      "pages": [
+        "pages/signature/signature",
+        "pages/lineup/lineup"
+      ]
+    },
+    {
+      "root": "pages/team",
+      "pages": [
+        "team",
+        "player-library/player-library",
+        "imported-player-review/imported-player-review",
+        "parent-collaboration/parent-collaboration",
+        "parent-service/parent-service",
+        "profile-progress/profile-progress",
+        "profile-exception/profile-exception",
+        "official-roster/official-roster",
+        "data-package/data-package",
+        "data-package-events/data-package-events",
+        "prebuilt-invite/prebuilt-invite",
+        "claim-code/claim-code",
+        "claim-conflict/claim-conflict",
+        "create-team-invite/create-team-invite",
+        "profile/profile",
+        "members/members",
+        "participation/participation",
+        "history/history",
+        "detail/detail",
+        "player-add/player-add",
+        "player-invite/player-invite",
+        "player-detail/player-detail",
+        "management-add/management-add",
+        "management-detail/management-detail"
+      ]
+    },
+    {
+      "root": "pages/match",
+      "pages": [
+        "detail/detail",
+        "share/share",
+        "squad/squad",
+        "lineup-result/lineup-result",
+        "lineup-returned/lineup-returned"
+      ]
+    },
+    {
+      "root": "pages/tournament",
+      "pages": [
+        "flow-handoff/flow-handoff",
+        "list/list",
+        "teams/teams",
+        "draw/draw",
+        "signup/signup",
+        "schedule/schedule",
+        "create/create",
+        "detail/detail",
+        "pre-match/pre-match",
+        "monitor/monitor",
+        "review/review",
+        "exception/exception",
+        "rules/rules"
+      ]
+    }
+  ],
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

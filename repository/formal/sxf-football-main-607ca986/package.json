@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@cloudbase/node-sdk": "^3.18.1",
+    "wx-server-sdk": "^3.0.4",
+    "xlsx": "^0.18.5"
+  }
+}

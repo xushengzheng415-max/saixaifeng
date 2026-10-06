@@ -1,0 +1,79 @@
+{
+  "backup": "sxf-football pre-1.1 baseline",
+  "createdAt": "2026-10-06 20:26:51 +08:00",
+  "gitee": {
+    "testPreview": "2e6cc5b62f2c779b90afc418fb21bd410f959743",
+    "formalMain": "607ca986944e222b935c46c4e13ebf7d892973cf"
+  },
+  "miniProgram": {
+    "testSourceStatus": "开发体验版",
+    "formalSourceVersion": "1.0.34",
+    "platformSourceDownload": "not supported by available WeChat Developer Tools CLI",
+    "testSourceVersion": "1.0.34",
+    "formalSourceStatus": "开发版"
+  },
+  "live": {
+    "formalPc": {
+      "entrySha256": "604820920BCBF12BF141FADA29AC3E107787F627FFFACFDA1F17C0135ACA80B1",
+      "status": 200,
+      "js": "/admin/assets/index-C4Mu1z7E.js",
+      "unresolvedCandidates": 31,
+      "css": "/admin/assets/index-DW9I1r72.css",
+      "url": "https://www.sxffootball.cn/admin/",
+      "files": 148
+    },
+    "testH5": {
+      "unresolvedCandidates": 0,
+      "files": 9,
+      "onlineAppJsSha": "1EC759E229C4EA66ACC74FAC9D8EA77F766B26C5466971C1186BE085ED6EECBC",
+      "url": "https://www.sxffootball.cn/preview/service-account-h5/"
+    },
+    "formalLanding": {
+      "unresolvedCandidates": 2,
+      "files": 103,
+      "url": "https://www.sxffootball.cn/"
+    },
+    "formalH5": {
+      "unresolvedCandidates": 0,
+      "files": 21,
+      "onlineAppJsSha": "474FCF49DFEA332D96BC52246E01D930FF66F142FE6A0818C58E849674F51F7E",
+      "url": "https://www.sxffootball.cn/service-account-h5/"
+    },
+    "testPc": {
+      "entrySha256": "B377E4D1541C8D2A7E08AF007B234E0BA2BEB0F39D107FE9CBA84BF42B47DCBD",
+      "status": 200,
+      "js": "/preview/admin/assets/index-DAza6Ubn.js",
+      "unresolvedCandidates": 0,
+      "css": "/preview/admin/assets/index-CKETlIH8.css",
+      "url": "https://www.sxffootball.cn/preview/admin/",
+      "files": 81
+    }
+  },
+  "cloudBase": {
+    "exactPackagesLocalPath": "cloudfunctions/formal/",
+    "exactPackagesLocalSizeBytes": 3019481498,
+    "functionsDownloaded": 88,
+    "functionsListed": 88,
+    "environment": "cloud1-7g8ckb3c7815a011",
+    "differsRepoIndex": 27,
+    "matchesRepoIndex": 56,
+    "missingRepoIndex": 5
+  },
+  "localBuilds": {
+    "formal": {
+      "indexRefs": [
+        "/admin/assets/index-DZWlVDvQ.js",
+        "/admin/assets/index-DW9I1r72.css"
+      ],
+      "sha256": "1430CCA2157D938C111CEF7F1B04F583F71957035D58681A7758CF0D5EDBA63B"
+    },
+    "test": {
+      "indexRefs": [
+        "/preview/admin/assets/index-BRPbApyG.js",
+        "/preview/admin/assets/index-D2kWrns6.css"
+      ],
+      "sha256": "EE3237EDF5248216BA0148B91A158D829FA218F93484DE33D7DC0E0DC9EA2270"
+    }
+  },
+  "repoStashCount": 18
+}

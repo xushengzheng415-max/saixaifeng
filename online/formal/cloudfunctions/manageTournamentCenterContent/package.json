@@ -1,0 +1,9 @@
+{
+  "name": "manage-tournament-center-content",
+  "version": "1.0.0",
+  "description": "平台负责人管理赛事中心内容",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

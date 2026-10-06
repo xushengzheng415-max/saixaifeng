@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="hero">
+    <view class="nav"><text class="back" bindtap="onBackTap">‹</text><text class="title">赛中监控</text></view>
+    <view class="score-card" wx:if="{{!denied}}">
+      <view class="score-top"><text>{{match.divisionText}} · {{match.roundText}}</text><text class="live-tag">{{match.statusText}}</text></view>
+      <view class="score-row"><view class="team"><image wx:if="{{match.homeLogo}}" src="{{match.homeLogo}}" mode="aspectFit"></image><text>{{match.homeName}}</text></view><text class="score">{{match.homeScore}} : {{match.awayScore}}</text><view class="team"><image wx:if="{{match.awayLogo}}" src="{{match.awayLogo}}" mode="aspectFit"></image><text>{{match.awayName}}</text></view></view>
+      <text class="readonly">主办方只读查看；现场数据由本场授权裁判通过手机端记录。</text>
+    </view>
+  </view>
+  <view class="content">
+    <view class="loading" wx:if="{{loading}}">正在同步现场数据…</view><view class="error" wx:if="{{errorText}}">{{errorText}}</view><view class="denied" wx:if="{{denied}}">当前工作空间无此赛事访问权限</view>
+    <view wx:if="{{!loading}}">
+      <view class="panel"><view class="panel-title">现场状态</view><view class="state-row"><view><text>主裁判</text><text class="state-value">{{match.refereeName}}</text></view><view><text>比赛场地</text><text class="state-value">{{match.venueText}}</text></view><view><text>现场同步</text><text class="state-value">{{match.arrivalText}}</text></view></view></view>
+      <view class="panel"><view class="panel-title">事件流水（只读）</view><view wx:if="{{hasEvents}}"><view class="event" wx:for="{{events}}" wx:key="id"><text class="minute">{{item.minuteText}}</text><text class="event-type">{{item.typeText}}</text><text class="event-player">{{item.teamText}} {{item.playerText}}</text><text>{{item.scoreText}}</text></view></view><view class="empty" wx:if="{{!hasEvents}}">暂未同步比赛事件</view></view>
+      <view class="panel"><view class="panel-title">异常状态</view><view class="normal">{{normalText}}</view></view>
+      <view class="support"><button bindtap="onCallReferee">联系本场裁判</button><button class="warn" bindtap="onAbnormal">发起异常处理</button><button bindtap="loadMonitor">刷新数据</button></view>
+    </view>
+  </view>
+</view>

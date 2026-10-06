@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "身份卡",
+  "navigationBarBackgroundColor": "#1a1a2e",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#1a1a2e",
+  "enablePullDownRefresh": true,
+  "usingComponents": {}
+}

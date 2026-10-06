@@ -1,0 +1,14 @@
+{
+  "functionRoot": ".",
+  "envId": "cloud1-7g8ckb3c7815a011",
+  "functions": [
+    {
+      "installDependency": false,
+      "handler": "index.main",
+      "memorySize": 256,
+      "name": "generatePlayerCard",
+      "timeout": 3,
+      "runtime": "Nodejs16.13"
+    }
+  ]
+}

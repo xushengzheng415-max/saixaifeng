@@ -1,0 +1,20 @@
+<view class="page">
+  <view class="hero">
+
+    <text class="version">V{{version}}</text>
+    <text class="title">{{title}}</text>
+    <text class="summary">{{summary}}</text>
+    <view class="meta"><text>{{releaseDate}}</text><text>{{status}}</text></view>
+  </view>
+  <view class="notice">{{notice}}</view>
+  <view class="section" wx:for="{{sections}}" wx:key="title" wx:for-item="section">
+    <view class="section-title"><view></view><text>{{section.title}}</text></view>
+    <view class="log-row" wx:for="{{section.items}}" wx:key="*this" wx:for-item="logItem">
+      <text class="dot">✓</text><text class="log-text">{{logItem}}</text>
+    </view>
+  </view>
+  <view class="footer">
+    <text>感谢你使用赛小蜂足球</text>
+    <text>每次更新公告将持续收录在这里</text>
+  </view>
+</view>

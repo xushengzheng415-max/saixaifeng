@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b3d2e">
+  <title>赛事工作台｜赛小蜂足球</title>
+  <link rel="stylesheet" href="./styles.css?v=20261001-idcardbg5">
+  <link rel="stylesheet" href="./player-card-editor.css?v=20261001-global-version1">
+  <link rel="stylesheet" href="./referee-avatar-upload.css?v=20260929-1">
+</head>
+<body>
+  <header class="topbar">
+    <img class="brand-logo" src="./assets/logo-saixiaofeng-football.png" alt="赛小蜂足球">
+    <div class="brand-copy"><strong>赛事工作台</strong><span>裁判服务中心</span></div>
+  </header>
+  <main id="app" class="page" aria-live="polite"></main>
+
+  <dialog id="refereeAvatarCropDialog" class="referee-crop-dialog">
+    <section>
+      <header><div><span>裁判二寸照</span><h2>裁剪并去除背景</h2></div><button id="refereeCropClose" type="button" aria-label="关闭">×</button></header>
+      <p>拖动和缩放照片，让头发、下巴、颈部与双肩贴合灰色人物模板；确认后将通过百度人像分割去除背景。</p>
+      <div class="referee-crop-stage">
+        <canvas id="refereeCropCanvas" width="500" height="700"></canvas>
+        <img class="referee-portrait-guide" src="./assets/referee-portrait-guide-v1.png" alt="" aria-hidden="true">
+      </div>
+      <div class="referee-crop-zoom"><b>缩小</b><input id="refereeCropZoom" type="range" min="100" max="260" value="100"><b>放大</b></div>
+      <footer><button id="refereeCropCancel" class="secondary" type="button">取消</button><button id="refereeCropConfirm" class="primary" type="button">确认裁剪并抠图</button></footer>
+    </section>
+  </dialog>
+
+  <dialog id="eventDialog" class="sheet">
+    <form id="eventForm" method="dialog">
+      <div class="sheet-head"><div><span class="sheet-kicker">比赛记录</span><h2 id="eventDialogTitle">记录比赛事件</h2></div><button id="closeEventDialog" class="icon-btn" type="button" aria-label="关闭">×</button></div>
+      <label>事件类型<select name="type" id="eventType">
+        <option value="goal">进球</option><option value="yellow_card">黄牌</option>
+        <option value="red_card">红牌</option><option value="substitution">换人</option>
+        <option value="stoppage_time">补时</option><option value="other">其他事件</option>
+      </select></label>
+      <div class="two-col"><label>球队<select name="teamSide" id="eventTeamSide"><option value="home">主队</option><option value="away">客队</option></select></label><label>分钟<input name="minute" type="number" min="0" max="130" required inputmode="numeric"></label></div>
+      <label id="playerField">球员姓名<input name="playerName" maxlength="30" list="eventPlayerOptions" autocomplete="off"><datalist id="eventPlayerOptions"></datalist></label>
+      <label id="assistField">助攻／换下球员<input name="assistName" maxlength="30" list="eventAssistOptions" autocomplete="off"><datalist id="eventAssistOptions"></datalist></label>
+      <label>备注<input name="description" maxlength="100"></label>
+      <button type="submit" class="primary wide sheet-submit">保存事件</button>
+    </form>
+  </dialog>
+
+  <dialog id="rosterDialog" class="sheet roster-sheet">
+    <form id="rosterForm" method="dialog">
+      <div class="sheet-head"><div><span class="sheet-kicker">拍照录入名单</span><h2 id="rosterDialogTitle">核对球队名单</h2></div><button id="closeRosterDialog" class="icon-btn" type="button" aria-label="关闭">×</button></div>
+      <p class="muted roster-tip">OCR 可能存在误识别。请核对号码、姓名和首发／替补身份后再保存。</p>
+      <div id="rosterWarnings"></div>
+      <div class="roster-table-head"><span>号码</span><span>姓名</span><span>身份</span><span></span></div>
+      <div id="rosterRows" class="roster-rows"></div>
+      <button id="addRosterPlayer" class="secondary wide roster-add" type="button">＋ 手动添加球员</button>
+      <details id="ocrRawDetails" class="ocr-raw"><summary>查看 OCR 原始文字</summary><pre id="ocrRawLines"></pre></details>
+      <button type="submit" class="primary wide sheet-submit">确认并保存本场名单</button>
+    </form>
+  </dialog>
+
+  <input id="rosterPhotoInput" class="visually-hidden" type="file" accept="image/jpeg,image/png" capture="environment">
+  <dialog id="finishDialog" class="sheet">
+    <form id="finishForm" method="dialog">
+      <div class="sheet-head"><div><span class="sheet-kicker">结束比赛</span><h2>确认本场比分</h2></div><button id="closeFinishDialog" class="icon-btn" type="button" aria-label="关闭">×</button></div>
+      <p class="muted">确认后比赛进入报告待提交状态，仍可核对事件。</p>
+      <div class="score-inputs"><label id="finishHomeLabel">主队<input name="homeScore" type="number" min="0" max="99" required inputmode="numeric"></label><b>:</b><label id="finishAwayLabel">客队<input name="awayScore" type="number" min="0" max="99" required inputmode="numeric"></label></div>
+      <section id="finishPenaltyFields" class="penalty-score-panel" hidden><p>常规时间战平，本组必须通过点球分出胜负。</p><div class="score-inputs"><label id="finishPenaltyHomeLabel">主队点球<input name="homePenaltyScore" type="number" min="0" max="99" inputmode="numeric"></label><b>:</b><label id="finishPenaltyAwayLabel">客队点球<input name="awayPenaltyScore" type="number" min="0" max="99" inputmode="numeric"></label></div><small id="finishPenaltyPoints">点球积分以当前组别设置为准。</small></section>
+      <button type="submit" class="primary wide">结束比赛并保存比分</button>
+    </form>
+  </dialog>
+  <script src="./player-card-editor.js?v=20261001-global-version1"></script>
+  <script src="./app.js?v=20261001-global-card1"></script>
+</body>
+</html>

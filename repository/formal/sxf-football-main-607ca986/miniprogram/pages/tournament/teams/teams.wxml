@@ -1,0 +1,124 @@
+<view class="page">
+  <view class="loading-box" wx:if="{{errorMsg}}">
+    <text>{{errorMsg}}</text>
+    <text bindtap="loadData" style="color:#1B5E20;margin-top:16rpx;">点击重试</text>
+  </view>
+
+  <block wx:else>
+    <view class="header">
+      <text class="h-title">{{tournamentName}}</text>
+      <text class="h-count">{{activeDivisionName}} · 共 {{teamsLen}} 支球队</text>
+    </view>
+
+    <scroll-view wx:if="{{showDivisionTabs}}" class="division-tabs" scroll-x enhanced show-scrollbar="false">
+      <view class="division-tabs-inner">
+        <view
+          wx:for="{{divisionOptions}}"
+          wx:key="id"
+          class="division-tab {{item.tabClass}}"
+          data-id="{{item.id}}"
+          bindtap="onDivisionTap"
+        >{{item.name}}</view>
+      </view>
+    </scroll-view>
+
+    <view class="organizer-actions" wx:if="{{isOrganizer}}">
+      <button class="action-btn invite-btn" open-type="share">邀请球队</button>
+      <button class="action-btn add-team-btn" bindtap="openCreateTeam">添加球队</button>
+    </view>
+
+    <view class="team-list" wx:if="{{hasTeamsLen}}">
+      <view
+        class="team-card"
+        wx:for="{{teams}}"
+        wx:key="_id"
+        bindtap="onViewTeam"
+        data-id="{{item.teamId}}"
+      >
+        <view class="tc-logo">
+          <image wx:if="{{item.teamLogo}}" src="{{item.teamLogo}}" mode="aspectFill"></image>
+          <text wx:else class="tc-letter">{{item.firstChar}}</text>
+        </view>
+        <view class="tc-info">
+          <text class="tc-name">{{item.teamName}}</text>
+          <text class="tc-city" wx:if="{{item.teamCity}}">{{item.teamCity}}</text>
+        </view>
+        <view class="tc-right">
+          <text class="tc-count">{{item.playerCount}}人</text>
+          <button
+            wx:if="{{isOrganizer}}"
+            class="add-player-btn"
+            catchtap="onAddPlayer"
+            data-id="{{item.teamId}}"
+            data-code="{{item.teamCode}}"
+            data-name="{{item.teamName}}"
+          >添加球员</button>
+        </view>
+      </view>
+    </view>
+
+    <view class="empty" wx:else>
+      <text>暂无参赛球队</text>
+    </view>
+  </block>
+
+  <!-- 主办方直接添加球队：字段与球队身份创建球队保持一致 -->
+  <view class="modal-mask" wx:if="{{showCreateTeam}}" catchtap="closeCreateTeam">
+    <view class="create-modal" catchtap="stopTap">
+      <view class="modal-header">
+        <text class="modal-title">添加球队 · {{activeDivisionName}}</text>
+        <text class="modal-close" bindtap="closeCreateTeam">×</text>
+      </view>
+
+      <scroll-view class="modal-body" scroll-y>
+        <view class="form-item">
+          <text class="form-label">球队全称 *</text>
+          <input class="form-input" value="{{createForm.name}}" maxlength="50" placeholder="请输入球队全称" bindinput="onCreateNameInput" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">球队简称 *</text>
+          <input class="form-input" value="{{createForm.shortName}}" maxlength="20" placeholder="请输入球队简称" bindinput="onCreateShortNameInput" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">所属地区 *</text>
+          <picker mode="region" bindchange="onCreateRegionChange">
+            <view wx:if="{{regionText}}" class="picker-value">{{regionText}}</view>
+            <view wx:else class="picker-value placeholder">请选择省市区</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">队伍类型 *</text>
+          <picker range="{{teamTypeOptions}}" range-key="label" value="{{teamTypeIndex}}" bindchange="onCreateTeamTypeChange">
+            <view class="picker-value">{{teamTypeText}}</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">成立时间 *</text>
+          <picker mode="date" value="{{createForm.establishedDate}}" bindchange="onCreateDateChange">
+            <view wx:if="{{createForm.establishedDate}}" class="picker-value">{{createForm.establishedDate}}</view>
+            <view wx:else class="picker-value placeholder">请选择成立时间</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">球队Logo</text>
+          <view class="logo-row">
+            <view class="logo-picker" bindtap="chooseCreateLogo">
+              <image wx:if="{{createForm.logo}}" src="{{createForm.logo}}" mode="aspectFit"></image>
+              <text wx:else>+ 上传Logo</text>
+            </view>
+            <text class="logo-tip">选择后自动压缩上传</text>
+          </view>
+        </view>
+        <view class="form-item">
+          <text class="form-label">球队简介</text>
+          <textarea class="form-textarea" value="{{createForm.description}}" maxlength="200" placeholder="请输入球队简介" bindinput="onCreateDescriptionInput"></textarea>
+        </view>
+      </scroll-view>
+
+      <view class="modal-footer">
+        <button class="cancel-btn" bindtap="closeCreateTeam">取消</button>
+        <button class="submit-btn" loading="{{submittingTeam}}" disabled="{{submittingTeam}}" bindtap="submitCreateTeam">创建并加入赛事</button>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,157 @@
+<view class="page">
+  <image class="stadium-bg" src="/images/runtime/home-roles-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="page-shade"></view>
+
+  <view class="content">
+    <view class="topbar {{topbarClass}}" wx:if="{{isLoggedIn}}">
+      <view class="topbar-left">
+        <view class="message-button" bindtap="goToMessages">
+          <image src="/images/icons/bell-white.svg" mode="aspectFit"></image>
+          <text class="message-badge" wx:if="{{hasUnreadMessages}}">{{unreadMessageCount}}</text>
+        </view>
+        <text class="role-title">{{roleTitle}}</text>
+      </view>
+    </view>
+
+    <block wx:if="{{!isLoggedIn}}">
+      <view class="guest-login-guide" bindtap="goToLogin">
+        <view class="guest-login-copy">
+          <text class="guest-login-title">当前未登录</text>
+
+        </view>
+        <text class="guest-login-action">去登录 ›</text>
+      </view>
+
+      <view class="guest-section-heading"><text>首页功能演示</text><text>示例数据 · 不保存</text></view>
+      <view class="guest-demo-overview">
+        <view class="guest-demo-top">
+          <view><text class="guest-demo-label">功能演示</text><text class="guest-demo-title">今日工作概览</text></view>
+          <image src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
+        </view>
+        <view class="guest-demo-metrics">
+          <view class="guest-demo-metric" wx:for="{{guestDemoMetrics}}" wx:key="label">
+            <image src="{{item.icon}}" mode="aspectFit"></image>
+            <text class="guest-demo-value">{{item.value}}</text>
+            <text class="guest-demo-name">{{item.label}}</text>
+          </view>
+        </view>
+        <text class="guest-demo-note">以下内容用于了解首页能力，不代表真实赛事或球队数据</text>
+      </view>
+
+      <view class="guest-section-heading guest-task-heading"><text>需要我处理</text><text>演示任务</text></view>
+      <view class="guest-demo-tasks">
+        <view class="guest-demo-task" wx:for="{{guestDemoTasks}}" wx:key="id" bindtap="openGuestDemoAction">
+          <image src="{{item.icon}}" mode="aspectFit"></image>
+          <view><text class="guest-demo-task-title">{{item.title}}</text></view>
+          <text class="guest-demo-arrow">›</text>
+        </view>
+      </view>
+
+      <view class="guest-section-heading"><text>赛事服务</text><text bindtap="goToPublicTournaments">全部赛事 ›</text></view>
+      <view class="guest-public-card" bindtap="goToPublicTournaments">
+        <view class="guest-public-copy">
+          <text class="guest-public-label">公开赛事</text>
+          <text class="guest-public-title">查看赛程、比分与排名</text>
+
+        </view>
+        <image src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
+        <view class="guest-public-action">免登录浏览公开赛事　›</view>
+      </view>
+
+      <view class="guest-section-heading guest-service-heading"><text>平台功能</text><text>浏览后，可自行选择登录</text></view>
+      <view class="guest-service-grid">
+        <view class="guest-service-card" bindtap="goToPublicTournaments">
+          <image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit"></image>
+          <text class="guest-service-title">赛事</text>
+
+        </view>
+        <view class="guest-service-card" bindtap="goToLogin">
+          <image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image>
+          <text class="guest-service-title">球队</text>
+
+        </view>
+        <view class="guest-service-card" bindtap="goToLogin">
+          <image src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image>
+          <text class="guest-service-title">青训</text>
+
+        </view>
+      </view>
+    </block>
+
+    <view class="loading" wx:if="{{loading}}">正在准备首页…</view>
+    <view class="error-card" wx:if="{{errorText}}"><text>{{errorText}}</text><text bindtap="loadData">重新加载</text></view>
+
+    <block wx:if="{{isLoggedIn}}">
+      <view class="overview-card {{overviewClass}}">
+
+        <text class="overview-name" wx:if="{{hasOverviewName}}">{{overviewName}}</text>
+        <text class="overview-status" wx:if="{{hasOverviewStatus}}">{{overviewStatus}}</text>
+        <image class="overview-logo" wx:if="{{hasOverviewLogo}}" src="{{overviewLogo}}" mode="aspectFit"></image>
+        <image class="overview-ball" wx:if="{{!hasOverviewLogo}}" src="/images/runtime/icons/brand-v2-16.png" mode="aspectFit"></image>
+        <view class="metrics">
+          <view class="metric" wx:for="{{metrics}}" wx:key="label">
+            <image class="metric-icon" src="{{item.icon}}" mode="aspectFit"></image>
+            <text class="metric-value">{{item.value}}</text>
+            <text class="metric-label">{{item.label}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="task-card">
+        <view class="card-heading"><text>需要我处理</text><text bindtap="goToTodo">全部任务 ›</text></view>
+        <view class="task-grid" wx:if="{{hasTaskCards}}">
+          <view class="task-item" wx:for="{{homeTaskCards}}" wx:key="id" bindtap="goToTodo">
+            <view class="task-icon-wrap {{item.toneClass}} {{item.assetClass}}" style="{{item.taskWrapStyle}}">
+              <image src="{{item.icon}}" mode="aspectFit" style="{{item.taskImageStyle}}"></image>
+              <text class="task-badge" wx:if="{{!item.isPrototypeReference}}">{{item.count}}</text>
+            </view>
+            <text class="task-title">{{item.title}}</text>
+
+          </view>
+        </view>
+        <view class="empty-card" wx:if="{{!hasTaskCards}}">当前没有需要处理的事项</view>
+      </view>
+
+      <view class="section" wx:if="{{isTeamCoach}}">
+        <view class="section-heading"><text>我的球队</text><text bindtap="goToTeams">全部球队 ›</text></view>
+        <view class="team-card" wx:for="{{teams}}" wx:key="id" data-id="{{item.id}}" bindtap="onTeamTap">
+          <image class="team-logo" src="{{item.logo}}" mode="aspectFit"></image>
+          <view class="team-main">
+            <view class="team-title-row"><text class="team-name">{{item.name}}</text><text class="team-owner">{{item.ownerText}}</text></view>
+            <view class="team-meta"><text>{{item.playerText}}</text><text>{{item.coachText}}</text><text>{{item.eventText}}</text></view>
+            <text class="completion">{{item.completionText}}</text>
+          </view>
+          <text class="row-arrow">›</text>
+        </view>
+        <view class="empty-card light-empty" wx:if="{{!hasTeams}}">当前没有可管理球队</view>
+      </view>
+
+      <view class="section match-section" wx:if="{{isTeamCoach || isOrganizer}}">
+        <view class="section-heading"><text>{{matchSectionTitle}}</text><text bindtap="goToSchedule">全部赛程 ›</text></view>
+        <view class="match-card" wx:for="{{matches}}" wx:key="id" data-id="{{item.tournamentId}}" bindtap="onTournamentTap">
+          <view class="match-date"><text>{{item.dateText}}</text><text>{{item.timeText}}</text><text>{{item.divisionText}}</text><text class="live-dot">{{item.statusText}}</text></view>
+          <view class="match-main">
+            <view class="match-meta"><text>{{item.roundText}}</text><text>{{item.venueText}}</text></view>
+            <view class="versus-row"><view class="match-team"><image src="{{item.homeLogo}}" mode="aspectFit"></image><text>{{item.homeName}}</text></view><text class="versus">VS</text><view class="match-team"><image src="{{item.awayLogo}}" mode="aspectFit"></image><text>{{item.awayName}}</text></view></view>
+          </view>
+        </view>
+        <view class="empty-card light-empty" wx:if="{{!hasMatches}}">当前没有可见比赛</view>
+      </view>
+
+      <view class="section other-role" wx:if="{{showOtherRoleContent}}">
+        <view class="section-heading"><text>{{otherSectionTitle}}</text><text bindtap="goToOtherSection">查看全部 ›</text></view>
+        <view class="empty-card light-empty">{{otherSectionEmptyText}}</view>
+      </view>
+
+      <view class="section training-home-section" wx:if="{{isTrainingCoach}}">
+        <view class="section-heading"><text>今日课程</text><text bindtap="goToOtherSection">全部课程 ›</text></view>
+        <view class="training-course-card" wx:for="{{trainingCourses}}" wx:key="id" bindtap="goToOtherSection">
+          <view class="training-course-time"><text>{{item.timeText}}</text><text>{{item.venueText}}</text></view>
+          <view class="training-course-main"><text class="training-course-name">{{item.classText}}</text><text class="training-course-coach">{{item.coachText}} · {{item.studentText}}</text></view>
+        </view>
+        <view class="empty-card light-empty" wx:if="{{!hasTrainingCourses}}">当前没有课程安排</view>
+        <view class="training-permission-note"><image src="/images/icons/check.svg" mode="aspectFit"></image><text>青训经营数据仅对有权限的机构成员开放</text></view>
+      </view>
+    </block>
+  </view>
+</view>

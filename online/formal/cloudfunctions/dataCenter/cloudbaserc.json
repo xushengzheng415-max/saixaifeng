@@ -1,0 +1,14 @@
+{
+  "functions": [
+    {
+      "handler": "index.main",
+      "runtime": "Nodejs18.15",
+      "timeout": 30,
+      "installDependency": true,
+      "name": "dataCenter",
+      "memorySize": 512
+    }
+  ],
+  "envId": "cloud1-7g8ckb3c7815a011",
+  "functionRoot": "."
+}

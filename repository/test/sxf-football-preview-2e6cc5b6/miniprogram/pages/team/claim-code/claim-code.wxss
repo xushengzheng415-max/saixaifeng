@@ -1,0 +1,145 @@
+.page {
+  min-height: 100vh;
+  background: #f4f7f4;
+  padding-bottom: 40rpx;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 88rpx;
+  padding: 0 24rpx;
+  background: #ffffff;
+  border-bottom: 1rpx solid #e6ece6;
+}
+
+.nav-back,
+.nav-holder {
+  width: 96rpx;
+  font-size: 28rpx;
+  color: #178a50;
+}
+
+.nav-holder {
+  color: transparent;
+}
+
+.nav-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #283b31;
+}
+
+.state-box {
+  margin: 40rpx 24rpx;
+  padding: 40rpx 24rpx;
+  background: #ffffff;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: #6b7d70;
+  text-align: center;
+}
+
+.state-error {
+  color: #c0392b;
+}
+
+.card {
+  margin: 24rpx;
+  padding: 28rpx 24rpx;
+  background: #ffffff;
+  border-radius: 16rpx;
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #283b31;
+  margin-bottom: 12rpx;
+}
+
+.card-line {
+  font-size: 26rpx;
+  color: #6b7d70;
+  line-height: 1.7;
+}
+
+.team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  padding: 20rpx;
+  border: 2rpx solid #e6ece6;
+  border-radius: 12rpx;
+}
+
+.team-row-selected {
+  border-color: #178a50;
+  background: #f1faf5;
+}
+
+.team-row-claimed {
+  border-color: #b8ddc7;
+  background: #f3faf6;
+}
+
+.team-main {
+  flex: 1;
+}
+
+.team-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #283b31;
+}
+
+.team-meta {
+  font-size: 24rpx;
+  color: #8a9a8f;
+  margin-top: 4rpx;
+}
+
+.team-status {
+  font-size: 24rpx;
+  color: #178a50;
+  padding-left: 16rpx;
+}
+
+.disclaimer-row {
+  display: flex;
+  align-items: center;
+  margin-top: 20rpx;
+}
+
+.checkbox {
+  width: 36rpx;
+  height: 36rpx;
+  border: 2rpx solid #b7c6bb;
+  border-radius: 6rpx;
+  margin-right: 16rpx;
+}
+
+.checkbox.checked {
+  background: #178a50;
+  border-color: #178a50;
+}
+
+.disclaimer-text {
+  font-size: 26rpx;
+  color: #3b5b48;
+}
+
+.primary-button {
+  margin-top: 28rpx;
+  background: #178a50;
+  color: #ffffff;
+  font-size: 30rpx;
+  border-radius: 12rpx;
+}
+
+.primary-button[disabled] {
+  background: #b7c6bb;
+  color: #ffffff;
+}

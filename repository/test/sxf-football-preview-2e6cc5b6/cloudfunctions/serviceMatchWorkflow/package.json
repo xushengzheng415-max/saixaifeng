@@ -1,0 +1,9 @@
+{
+  "name": "serviceMatchWorkflow",
+  "version": "1.0.0",
+  "description": "服务号赛事工作台：球队认领、首发提交与裁判核验",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.7.0"
+  }
+}

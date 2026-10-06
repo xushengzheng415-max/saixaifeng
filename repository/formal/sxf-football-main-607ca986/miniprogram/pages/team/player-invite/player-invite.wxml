@@ -1,0 +1,94 @@
+<view class="page">
+  <block wx:if="{{modeManager}}">
+    <image class="manager-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"/>
+    <view class="manager-nav"><text class="back" bindtap="onBack">‹</text><text>球员入队邀请</text></view>
+    <view wx:if="{{loading}}" class="state"><text>正在生成球员邀请…</text></view>
+    <view wx:elif="{{errorText}}" class="state error"><text>{{errorText}}</text><button bindtap="createInviteAssets">重新生成</button></view>
+    <block wx:else>
+      <view class="invite-hero">
+        <view><text>{{team.name}}</text><text>球员入队邀请已生成</text><text>扫码后按出生日期进入本人或家长登记。</text></view>
+        <image wx:if="{{team.logo}}" src="{{team.logo}}" mode="aspectFit"/>
+      </view>
+      <view class="invite-sheet">
+        <view class="qr-actions">
+          <view class="qr-box"><image wx:if="{{qrReady}}" src="{{qrUrl || qrFileId}}" mode="aspectFit" bindtap="previewQr"/><text wx:else>二维码将在真实环境生成</text></view>
+          <view class="qr-side"><text>有效期 <b>7 天</b></text><text>{{expiresAtText}} 前有效</text><button style="width:100%;min-width:0;box-sizing:border-box" bindtap="createInviteAssets">重新生成</button><button style="width:100%;min-width:0;box-sizing:border-box" class="solid" open-type="share">转发邀请</button><button style="width:100%;min-width:0;box-sizing:border-box" bindtap="saveQr">保存二维码</button></view>
+        </view>
+        <view class="invite-link-row"><view><text>可点击邀请链接</text><text>{{linkDisplayText}}</text></view><button disabled="{{linkDisabled}}" bindtap="copyLink">复制链接</button></view>
+        <view class="section-title"><i></i><text>本次邀请内容</text></view>
+        <view class="requirements">
+          <view><span class="req-icon green"><image style="width:40rpx;height:40rpx" src="/images/icons/players.svg" mode="aspectFit"/></span><view><text>登记球员资料</text><text>系统按出生日期分流</text></view><b>必填</b></view>
+          <view><span class="req-icon orange"><image style="width:40rpx;height:40rpx" src="/images/icons/shield.svg" mode="aspectFit"/></span><view><text>资料授权</text><text>本人或监护人确认</text></view><b class="orange-text">必填</b></view>
+          <view><span class="req-icon gray"><image style="width:40rpx;height:40rpx" src="/images/runtime/icons/brand-v2-12.png" mode="aspectFit"/></span><view><text>人证核验</text><text>按当前赛事与球队要求完成</text></view><b class="gray-text">按要求</b></view>
+          <view><span class="req-icon blue"><image style="width:40rpx;height:40rpx" src="/images/runtime/icons/brand-v2-04.png" mode="aspectFit"/></span><view><text>标准形象照</text><text>拍摄并确认透明标准形象照</text></view><b class="blue-text">推荐</b></view>
+        </view>
+        <view class="privacy-note">资料仅用于球队球员库、赛事报名与身份核验；不会自动进入赛事正式名单。</view>
+        <view class="poster-actions"><button bindtap="generatePoster">生成入队海报</button><button bindtap="savePoster">保存海报</button></view>
+      </view>
+    </block>
+  </block>
+
+  <block wx:elif="{{modeRecipient}}">
+    <view class="parent-header">
+      <text class="parent-back" bindtap="onBack">‹</text>
+      <view><text>{{pageTitle}}</text><text>{{team.name}} · {{recipientEntryLabel}}</text></view>
+      <text wx:if="{{showMatchStep}}" class="step" style="position:absolute;right:230rpx;top:98rpx">1/5</text>
+      <text wx:if="{{showRegisterStep}}" class="step" style="position:absolute;right:230rpx;top:98rpx">2/5</text>
+      <text wx:if="{{submitted}}" class="step" style="position:absolute;right:230rpx;top:98rpx">完成</text>
+    </view>
+    <view class="parent-body">
+      <view wx:if="{{loading}}" class="parent-state">正在读取球员资料…</view>
+      <view wx:elif="{{errorText}}" class="parent-state parent-error"><text>{{errorText}}</text><button bindtap="loadInvitation">重新加载</button></view>
+
+      <block wx:elif="{{showMatchStep}}">
+        <view class="match-card" style="margin-top:0;padding:32rpx;">
+          <view style="display:flex;align-items:center;justify-content:space-between;gap:18rpx;"><text class="card-title">{{confirmTitle}}</text><text style="padding:8rpx 16rpx;border-radius:22rpx;background:#e8f6ed;color:#087b46;font-size:21rpx;white-space:nowrap;">账号已验证</text></view>
+          <text class="card-desc">{{matchIntro}}</text>
+          <block wx:if="{{hasMatchedPlayer}}">
+            <text class="match-hint">请选择已匹配的孩子</text>
+            <view class="child-card"><view class="jersey" style="background:#edf7f1"><image style="width:92rpx;height:92rpx" src="/images/runtime/icons/brand-v2-04.png" mode="aspectFit"/></view><view><text>{{submittedPlayer.name}}</text><text>出生年月 {{submittedPlayer.birthDate}}</text><text>状态 {{submittedPlayer.profileStatus}}</text></view></view>
+            <button class="primary-button" style="width:100%;box-sizing:border-box" loading="{{submitting}}" disabled="{{submitting}}" bindtap="confirmMatchedPlayer">{{confirmActionText}}</button>
+            <button style="width:100%;height:62rpx;margin:12rpx 0 0;padding:0;border:0;background:transparent;color:#6d7972;font-size:23rpx;line-height:62rpx;" bindtap="startRegistration">资料不符？重新登记</button>
+          </block>
+          <block wx:else>
+            <view class="no-match-tip" style="margin-top:26rpx;padding:28rpx 18rpx;"><text style="display:block;color:#24342b;font-size:28rpx;font-weight:700;">未找到球员档案</text><text style="display:block;margin-top:8rpx;color:#77827c;font-size:22rpx;">填写出生日期后自动分流</text></view>
+            <button class="primary-button" style="width:100%;height:94rpx;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:0;font-size:32rpx;font-weight:800;line-height:1;text-align:center;" bindtap="startRegistration">登记球员资料</button>
+            <text class="register-note" style="margin-top:20rpx;">提交后由球队负责人确认</text>
+          </block>
+        </view>
+        <view class="entry-note" style="margin-top:24rpx;padding:18rpx 22rpx;text-align:center;">资料仅用于当前球队办理，不公开其他球员信息。</view>
+        <view style="height:80rpx"></view>
+      </block>
+
+      <block wx:elif="{{showRegisterStep}}">
+
+        <view class="form-card">
+          <text class="card-title">球员基础信息</text>
+          <view class="form-row"><text>球员姓名</text><input value="{{name}}" maxlength="30" placeholder="请输入真实姓名" bindinput="inputName"/></view>
+          <view class="form-row"><text>出生日期</text><picker mode="date" value="{{birthDate}}" end="{{maxBirthDate}}" bindchange="changeBirth"><view>{{birthDateText}}</view></picker></view>
+          <view class="form-row readonly"><text>所属球队</text><b>{{team.name}}</b><image style="width:30rpx;height:30rpx" src="/images/icons/check.svg" mode="aspectFit"/></view>
+        </view>
+        <view wx:if="{{showGuardianFields}}" class="form-card relation-card">
+          <text class="card-title">监护关系</text>
+          <view class="relation-options"><view class="{{relationFatherClass}}" data-relation="father" bindtap="chooseRelation"><i></i><text>父亲</text></view><view class="{{relationMotherClass}}" data-relation="mother" bindtap="chooseRelation"><i></i><text>母亲</text></view><view class="{{relationOtherClass}}" data-relation="other" bindtap="chooseRelation"><i></i><text>其他监护人</text></view></view>
+          <view class="phone-row"><text>监护人手机号</text><b style="min-width:0;flex:1;text-align:right;font-size:26rpx">{{accountPhoneMasked}}</b></view>
+        </view>
+        <view wx:else class="form-card relation-card"><text class="card-title">登记身份</text><view class="phone-row"><text>球员本人</text><b style="min-width:0;flex:1;text-align:right;font-size:26rpx">{{accountPhoneMasked}}</b></view></view>
+        <view class="correction-note">如姓名或出生日期与已有档案冲突，系统会提交人工核验，不会自动合并。</view>
+        <view class="{{authorizationClass}}" bindtap="toggleAuthorization"><image wx:if="{{authorizationAgreed}}" style="width:38rpx;height:38rpx;flex:none" src="/images/icons/check.svg" mode="aspectFit"/><text wx:else class="authorization-check"></text><text>{{authorizationText}}</text></view>
+        <button class="primary-button" style="width:100%;box-sizing:border-box" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submitPlayer">登记信息，下一步</button>
+        <button class="outline-button" style="width:100%;box-sizing:border-box" bindtap="loadInvitation">返回重新匹配</button>
+        <view style="height:80rpx"></view>
+      </block>
+
+      <block wx:elif="{{submitted}}">
+        <view class="success-card"><view class="success-icon"><image style="width:64rpx;height:64rpx" src="/images/icons/check.svg" mode="aspectFit"/></view><text>{{successTitle}}</text><text>{{submittedPlayer.name}} 已提交至 {{team.name}} 球员库，等待球队负责人确认。</text>
+          <view class="success-list"><view style="display:flex;align-items:center;gap:12rpx;padding:9rpx 0"><image style="width:28rpx;height:28rpx" src="/images/icons/check.svg" mode="aspectFit"/><text>基础信息已提交</text></view><view style="display:flex;align-items:center;gap:12rpx;padding:9rpx 0"><image style="width:28rpx;height:28rpx" src="/images/icons/check.svg" mode="aspectFit"/><text>{{successAuthorizationText}}</text></view><view style="display:flex;align-items:center;gap:12rpx;padding:9rpx 0"><i style="width:24rpx;height:24rpx;border:3rpx solid #91a198;border-radius:50%;box-sizing:border-box"></i><text>人证核验待完成</text></view><view style="display:flex;align-items:center;gap:12rpx;padding:9rpx 0"><i style="width:24rpx;height:24rpx;border:3rpx solid #91a198;border-radius:50%;box-sizing:border-box"></i><text>标准形象照待完成</text></view></view>
+          <button wx:if="{{canContinueProfile}}" class="primary-button" style="width:100%;box-sizing:border-box" bindtap="openParentProfile">继续实名与形象照资料</button><button class="outline-button" style="width:100%;box-sizing:border-box" bindtap="goHome">稍后处理，返回首页</button>
+          <view style="height:80rpx"></view>
+        </view>
+      </block>
+    </view>
+  </block>
+  <canvas canvas-id="playerInviteCanvas" class="poster-canvas"></canvas>
+</view>

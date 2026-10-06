@@ -1,0 +1,7 @@
+{
+  "button": [
+    { "type": "view", "name": "赛事中心", "url": "https://www.sxffootball.cn/admin/#/portal/home" },
+    { "type": "view", "name": "裁判任务", "url": "https://www.sxffootball.cn/service-account-h5/?entry=workbench" },
+    { "type": "view", "name": "我的", "url": "https://www.sxffootball.cn/service-account-h5/me.html" }
+  ]
+}

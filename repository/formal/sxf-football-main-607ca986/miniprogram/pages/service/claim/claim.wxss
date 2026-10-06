@@ -1,0 +1,27 @@
+page { background: #F4F7F4; min-height: 100%; }
+.page { min-height: 100vh; padding: 30rpx 24rpx 48rpx; box-sizing: border-box; }
+.header { padding: 24rpx 12rpx 32rpx; }
+.header-step, .header-title, .header-desc { display: block; }
+.header-step { color: #2E7D32; font-size: 23rpx; font-weight: 700; }
+.header-title { margin-top: 10rpx; color: #15351B; font-size: 44rpx; font-weight: 800; }
+.header-desc { margin-top: 12rpx; color: #758078; font-size: 25rpx; line-height: 1.55; }
+.code-card, .team-card, .success-card, .loading-card, .error-card { padding: 34rpx; border-radius: 24rpx; background: #fff; box-shadow: 0 8rpx 28rpx rgba(23,76,32,.08); }
+.card-title { display: block; color: #203924; font-size: 30rpx; font-weight: 750; }
+.code-input { height: 94rpx; margin: 26rpx 0; padding: 0 24rpx; border: 2rpx solid #C9D8CB; border-radius: 16rpx; background: #F9FBF9; color: #17351C; font-size: 34rpx; letter-spacing: 3rpx; text-align: center; box-sizing: border-box; }
+.primary-btn { margin-top: 26rpx; height: 92rpx; line-height: 92rpx; border-radius: 46rpx; color: #fff; font-size: 31rpx; font-weight: 700; background: linear-gradient(135deg, #1B5E20, #43A047); }
+.loading-card, .error-card { margin-bottom: 20rpx; color: #667168; font-size: 27rpx; text-align: center; }
+.error-card { color: #C62828; background: #FFF4F3; }
+.tournament-name, .team-name, .vs-text { display: block; text-align: center; }
+.tournament-name { color: #6F7A71; font-size: 24rpx; }
+.team-name { margin-top: 20rpx; color: #17351C; font-size: 42rpx; font-weight: 800; }
+.vs-text { margin-top: 12rpx; color: #657068; font-size: 27rpx; }
+.match-meta { display: flex; flex-direction: column; gap: 8rpx; margin-top: 28rpx; padding: 22rpx; color: #657068; font-size: 25rpx; background: #F5F8F5; border-radius: 16rpx; text-align: center; }
+.safe-tip { display: flex; align-items: center; gap: 12rpx; margin-top: 22rpx; padding: 18rpx 20rpx; color: #1B5E20; font-size: 25rpx; background: #E8F3E9; border-radius: 14rpx; }
+.safe-icon { display: flex; align-items: center; justify-content: center; width: 34rpx; height: 34rpx; color: #fff; background: #2E7D32; border-radius: 50%; }
+.success-card { margin-top: 24rpx; text-align: center; }
+.success-icon { display: flex; align-items: center; justify-content: center; width: 100rpx; height: 100rpx; margin: 0 auto; color: #fff; font-size: 52rpx; background: #2E7D32; border-radius: 50%; }
+.success-title, .success-desc { display: block; }
+.success-title { margin-top: 22rpx; color: #17351C; font-size: 38rpx; font-weight: 800; }
+.success-desc { margin-top: 10rpx; color: #758078; font-size: 26rpx; }
+.text-btn { margin-top: 12rpx; color: #2E7D32; font-size: 27rpx; background: transparent; }
+button::after { border: none; }

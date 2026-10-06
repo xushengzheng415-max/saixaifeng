@@ -1,0 +1,140 @@
+<!-- pages/team/management-detail/management-detail.wxml -->
+<!-- 官员详情页 - 卡片式设计 -->
+
+<view class="management-detail-container">
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-state">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <!-- 官员信息 -->
+  <block wx:else>
+    <!-- 顶部背景装饰 -->
+    <view class="hero-bg">
+      <view class="bg-circle circle-1"></view>
+      <view class="bg-circle circle-2"></view>
+      <view class="bg-pattern"></view>
+    </view>
+
+    <!-- 官员主卡片 -->
+    <view class="management-card">
+      <!-- 职位角标 -->
+      <view class="position-badge" wx:if="{{management.positionLabel}}">
+        <text class="position-text">{{management.positionLabel}}</text>
+      </view>
+      
+      <!-- 头像区域 -->
+      <view class="avatar-section">
+        <view class="avatar-frame">
+          <image 
+            class="management-avatar" 
+            src="{{management.avatarUrl || '/images/logo.png'}}"
+            mode="aspectFill"
+            bindtap="previewImage"
+          ></image>
+        </view>
+        <view class="avatar-glow"></view>
+      </view>
+      
+      <!-- 基本信息 -->
+      <view class="info-section">
+        <text class="management-name">{{management.name}}</text>
+        <view class="role-tag" wx:if="{{management.roleLabel}}">
+          <text class="tag-text">{{management.roleLabel}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 详细信息卡片 -->
+    <view class="info-card">
+      <view class="info-title-bar">
+        <view class="title-accent"></view>
+        <text class="info-title">详细信息</text>
+      </view>
+      
+      <view class="info-grid">
+        <view class="info-item" wx:if="{{management.genderLabel}}">
+          <text class="info-icon">👤</text>
+          <view class="info-content">
+            <text class="info-label">性别</text>
+            <text class="info-value">{{management.genderLabel}}</text>
+          </view>
+        </view>
+        
+        <view class="info-item" wx:if="{{management.nationality}}">
+          <text class="info-icon">🌍</text>
+          <view class="info-content">
+            <text class="info-label">国籍</text>
+            <text class="info-value">{{management.nationality}}</text>
+          </view>
+        </view>
+        
+        <view class="info-item" wx:if="{{management.birthday}}">
+          <text class="info-icon">🎂</text>
+          <view class="info-content">
+            <text class="info-label">出生日期</text>
+            <text class="info-value">{{management.birthday}}</text>
+          </view>
+        </view>
+        
+        <view class="info-item" wx:if="{{management.phone}}">
+          <text class="info-icon">📱</text>
+          <view class="info-content">
+            <text class="info-label">联系电话</text>
+            <text class="info-value phone-link" bindtap="callPhone">{{management.phone}}</text>
+          </view>
+        </view>
+        
+        <view class="info-item" wx:if="{{management.email}}">
+          <text class="info-icon">📧</text>
+          <view class="info-content">
+            <text class="info-label">邮箱</text>
+            <text class="info-value">{{management.email}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 所属球队 -->
+    <view class="team-card" wx:if="{{teamInfo.teamName}}">
+      <view class="team-title-bar">
+        <view class="title-accent green"></view>
+        <text class="team-title">所属球队</text>
+      </view>
+      
+      <view class="team-info-row">
+        <image 
+          class="team-logo-small" 
+          src="{{teamInfo.teamLogo || '/images/default-team.png'}}" 
+          mode="aspectFit"
+        ></image>
+        <view class="team-meta">
+          <text class="team-name-text">{{teamInfo.teamName}}</text>
+          <text class="team-code-text">球队代码: {{teamInfo.teamCode}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 备注 -->
+    <view class="remark-card" wx:if="{{management.remark}}">
+      <view class="remark-title-bar">
+        <view class="title-accent orange"></view>
+        <text class="remark-title">备注</text>
+      </view>
+      <text class="remark-content">{{management.remark}}</text>
+    </view>
+
+    <!-- 底部操作按钮 -->
+    <view class="action-bar">
+      <button class="action-btn edit-btn" bindtap="onEdit">
+        <text class="btn-icon">✏️</text>
+        <text class="btn-text">编辑信息</text>
+      </button>
+      <button class="action-btn delete-btn" bindtap="onDelete">
+        <text class="btn-icon">🗑️</text>
+        <text class="btn-text">删除官员</text>
+      </button>
+    </view>
+  </block>
+</view>

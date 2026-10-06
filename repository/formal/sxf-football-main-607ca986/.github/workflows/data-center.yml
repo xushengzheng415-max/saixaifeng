@@ -1,0 +1,15 @@
+name: Data center contract
+on:
+  push:
+  pull_request:
+jobs:
+  data-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: node tools/sync-data-center.mjs --check
+      - run: node tools/test-data-center.mjs
+      - run: node tools/check-data-governance.mjs

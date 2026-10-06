@@ -1,0 +1,44 @@
+.fan-pc-card-host{display:flex;flex-direction:column;align-items:center;width:100%;box-sizing:border-box;min-height:24px}
+.fan-pc-card-state{margin:0 0 12px;color:#718078;font-size:12px;text-align:center}
+.fan-pc-card-retry{margin:0 0 12px;padding:7px 14px;border:1px solid #b9dac8;border-radius:6px;background:#f4fbf7;color:#087a48;font:inherit}
+.fan-pc-card-host [hidden]{display:none!important}
+.fan-pc-card-host .player-card-container{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%}
+.fan-pc-card-host .player-card{position:relative;width:min(300px,100%);aspect-ratio:300/430;overflow:hidden;border-radius:16px;flex:0 0 auto;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.fan-pc-card-host .card-bg,.fan-pc-card-host .card-foreground{position:absolute;inset:0;width:100%;height:100%}
+.fan-pc-card-host .card-bg{z-index:1}
+.fan-pc-card-host .card-bg img,.fan-pc-card-host .card-foreground canvas{display:block;width:100%;height:100%;object-fit:fill}
+.fan-pc-card-host .player-photo-wrapper{position:absolute;z-index:2;top:2px;left:50%;width:90%;height:69.77%;transform:translateX(-50%);overflow:visible}
+.fan-pc-card-host .player-photo-wrapper:before{position:absolute;inset:12% 4% 0;background:radial-gradient(ellipse at 50% 55%,rgba(255,255,255,.32),rgba(255,255,255,0) 72%);content:'';pointer-events:none}
+.fan-pc-card-host .player-photo{width:100%;height:100%;object-fit:contain;object-position:center bottom;transform:scale(1.08);transform-origin:center bottom}
+.fan-pc-card-host .player-photo-empty{position:absolute;top:42%;left:0;width:100%;color:#4a3b31;font-size:14px;text-align:center}
+.fan-pc-card-host .card-foreground{z-index:3;pointer-events:none}
+.fan-pc-card-host .card-content{position:relative;z-index:4;height:100%;padding:20px;color:#1a1a1a}
+.fan-pc-card-host .card-header-info{position:absolute;top:14.65%;left:8.33%;text-align:center}
+.fan-pc-card-host .jersey-number-large{margin-bottom:4px;color:#1a1a1a;font-size:52px;font-weight:900;line-height:1;text-shadow:2px 2px 4px rgba(255,255,255,.6)}
+.fan-pc-card-host .position-text{color:#1a1a1a;font-size:24px;font-weight:700;text-shadow:1px 1px 2px rgba(255,255,255,.6)}
+.fan-pc-card-host .player-info-section{position:absolute;right:0;bottom:28px;left:0;padding:0 20px;text-align:center}
+.fan-pc-card-host .player-name{margin-bottom:2px;color:#1a1a1a;font-size:32px;font-weight:800;letter-spacing:4px;text-shadow:1px 1px 2px rgba(255,255,255,.6)}
+.fan-pc-card-host .player-jersey-name{margin-bottom:8px;color:#333;font-size:16px;font-weight:600;letter-spacing:2px;text-shadow:1px 1px 2px rgba(255,255,255,.5)}
+.fan-pc-card-host .player-physical{display:flex;justify-content:center;gap:24px;margin-bottom:10px}
+.fan-pc-card-host .physical-item{display:flex;align-items:center;gap:4px}
+.fan-pc-card-host .physical-label,.fan-pc-card-host .physical-value{color:#1a1a1a;font-size:14px;font-weight:600;text-shadow:1px 1px 2px rgba(255,255,255,.5)}
+.fan-pc-card-host .player-badges{display:flex;align-items:center;justify-content:center;gap:40px;margin-top:4px}
+.fan-pc-card-host .badge-item{display:flex;flex-direction:column;align-items:center;gap:2px}
+.fan-pc-card-host .flag-icon{width:28px;height:20px;border-radius:3px;object-fit:cover;box-shadow:0 2px 4px rgba(0,0,0,.2)}
+.fan-pc-card-host .team-logo-small{width:40px;height:40px;object-fit:contain;background:transparent;mix-blend-mode:multiply}
+.fan-pc-card-host .card-level-indicator{padding:12px 20px;border-radius:12px;background:rgba(0,0,0,.6);color:#fff;text-align:center;backdrop-filter:blur(10px)}
+.fan-pc-card-host .level-badges{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px}
+.fan-pc-card-host .level-badge{padding:4px 12px;border-radius:12px;background:rgba(255,255,255,.1);color:#aaa;font-size:12px;font-weight:600}
+.fan-pc-card-host .level-badge.active{background:linear-gradient(135deg,#ffd700,#ffa500);color:#1a1a1a;box-shadow:0 2px 8px rgba(255,215,0,.4)}
+.fan-pc-card-host .card-bronze .level-badge.active{background:linear-gradient(135deg,#cd7f32,#a0522d);color:#fff}
+.fan-pc-card-host .card-silver .level-badge.active{background:linear-gradient(135deg,#c0c0c0,#808080);color:#1a1a1a}
+.fan-pc-card-host .level-arrow{color:#666;font-size:12px}
+.fan-pc-card-host .match-count{color:#ccc;font-size:13px}
+.fan-pc-card-host .match-count strong{color:#ffd700;font-size:16px}
+.fan-pc-card-host .next-level-hint{margin-left:8px;color:#4caf50;font-size:12px}
+.fan-pc-card-host .max-level{margin-left:8px;color:#ffd700}
+.fan-pc-card-host .card-gold{box-shadow:0 8px 32px rgba(255,215,0,.3)}
+.fan-pc-card-host .card-silver{box-shadow:0 8px 32px rgba(192,192,192,.3)}
+.fan-pc-card-host .card-bronze{box-shadow:0 8px 32px rgba(205,127,50,.3)}
+.fan-player-detail-content{display:block;width:min(540px,100%);box-sizing:border-box}
+.fan-player-detail-content>section{display:block;width:100%;box-sizing:border-box}

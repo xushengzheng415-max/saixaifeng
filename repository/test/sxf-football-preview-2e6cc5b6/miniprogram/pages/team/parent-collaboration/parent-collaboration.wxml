@@ -1,0 +1,18 @@
+<view class="page">
+  <image class="bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="content">
+    <view class="nav"><text bindtap="back" class="back">‹</text><text>家长协作</text></view>
+    <view wx:if="{{loading}}" class="loading">正在生成资料补充邀请…</view>
+    <block wx:else>
+      <view class="hero"><text>{{invite.playerName}} · {{invite.teamName}}</text><text>{{scopeTitle}}</text></view>
+      <view class="panel">
+        <view class="qr"><image wx:if="{{invite.qrUrl}}" src="{{invite.qrUrl}}" mode="aspectFit"/><text wx:else>二维码生成中</text><text>服务号登记入口</text></view>
+        <view class="actions"><text>{{invite.expiresAtText}}</text><button bindtap="copy" class="primary">复制服务号链接</button><button wx:if="{{canManage}}" bindtap="regenerate" class="link">重新生成</button></view>
+        <view class="section-title">本次邀请内容</view>
+        <view wx:for="{{requirements}}" wx:key="*this" class="requirement"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit"/><text>{{item}}</text></view>
+        <view class="privacy"><image src="/images/runtime/icons/brand-v2-09.png" mode="aspectFit"/><text>{{scopeMessage}}</text></view>
+        <view class="record"><text>登记人 {{invite.guardianPhoneMasked || invite.accountPhoneMasked}}</text></view>
+      </view>
+    </block>
+  </view>
+</view>

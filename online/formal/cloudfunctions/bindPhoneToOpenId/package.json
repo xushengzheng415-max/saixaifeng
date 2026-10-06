@@ -1,0 +1,9 @@
+{
+  "name": "bindPhoneToOpenId",
+  "version": "1.0.0",
+  "description": "将手机号绑定到 openId",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.7.0"
+  }
+}

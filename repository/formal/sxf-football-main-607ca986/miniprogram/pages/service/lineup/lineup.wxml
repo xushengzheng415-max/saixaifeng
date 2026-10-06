@@ -1,0 +1,59 @@
+<view class="page">
+  <view class="match-header">
+    <text class="tournament-name">{{tournamentName}}</text>
+    <text class="team-name">{{teamName}}</text>
+    <text class="opponent-name">本场对阵 {{opponentName}}</text>
+    <text class="match-meta">{{matchTimeText}} · {{venue}}</text>
+  </view>
+
+  <view class="loading-card" wx:if="{{loading}}">正在加载主办方确认名单...</view>
+
+  <view class="error-card" wx:if="{{errorMsg}}">
+    <text>{{errorMsg}}</text>
+    <button class="plain-btn" bindtap="retryLoad">重新加载</button>
+  </view>
+
+  <block wx:if="{{!loading}}">
+    <view class="progress-card" wx:if="{{hasPlayers}}">
+      <view>
+        <text class="progress-title">{{requirementText}}</text>
+
+      </view>
+      <text class="count-badge">{{countText}}</text>
+    </view>
+
+    <view class="readonly-tip" wx:if="{{readOnly}}">{{lineupStatusText}}</view>
+
+    <view class="player-list" wx:if="{{hasPlayers}}">
+      <view
+        class="player-row {{item.rowClass}}"
+        wx:for="{{players}}"
+        wx:key="_id"
+        data-player-id="{{item._id}}"
+        bindtap="togglePlayer"
+      >
+        <view class="number-box">{{item.jerseyNumber}}</view>
+        <view class="player-info">
+          <text class="player-name">{{item.name}}</text>
+          <text class="player-position">{{item.position}}</text>
+        </view>
+        <view class="check-box {{item.rowClass}}">{{item.checkText}}</view>
+      </view>
+    </view>
+
+    <view class="empty-card" wx:if="{{!hasPlayers}}">
+      <text>主办方确认名单中暂无可选球员</text>
+    </view>
+
+    <view class="bottom-space"></view>
+    <view class="bottom-bar" wx:if="{{hasPlayers}}">
+      <view class="bottom-count">
+        <text class="bottom-label">已选首发</text>
+        <text class="bottom-number">{{countText}}</text>
+      </view>
+      <button class="submit-btn" bindtap="submitLineup" disabled="{{!canSubmit}}" loading="{{submitting}}">{{submitButtonText}}</button>
+    </view>
+
+    <button class="back-btn" wx:if="{{submitted}}" bindtap="backWorkbench">返回赛事工作台</button>
+  </block>
+</view>

@@ -1,0 +1,52 @@
+{
+  "name": "Saixiaofeng Football Shared Icon Library",
+  "version": "1.0.0",
+  "status": "active",
+  "design_system": {
+    "style": "rounded professional line icons",
+    "default_stroke": "#087A48",
+    "default_stroke_width": "1.8",
+    "view_box": "24x24",
+    "usage": "Use one semantic source per icon. Recolor only through documented variants; never copy an icon into a page folder."
+  },
+  "icons": [
+    { "semantic": "guest-home-entry", "file": "home-entry-white.svg", "source_type": "project-authored-vector", "targets": ["mini-login"] },
+    { "semantic": "tab-home", "file": "../runtime/icons/brand-v1-tab-home.png", "active_file": "../runtime/icons/brand-v1-tab-home.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-event", "file": "../runtime/icons/brand-v1-tab-event.png", "active_file": "../runtime/icons/brand-v1-tab-event.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-team", "file": "../runtime/icons/brand-v1-tab-team.png", "active_file": "../runtime/icons/brand-v1-tab-team.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-training", "file": "../runtime/icons/brand-v1-tab-training.png", "active_file": "../runtime/icons/brand-v1-tab-training.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },
+    { "semantic": "tab-profile", "file": "../runtime/icons/brand-v1-tab-profile.png", "active_file": "../runtime/icons/brand-v1-tab-profile.png", "source_type": "oil-icon-football-brand-v1", "targets": ["mini-tab-bar"] },
+    { "semantic": "team-members", "file": "players.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "team", "file": "team.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "schedule", "file": "event.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "task-list", "file": "list.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "success", "file": "check.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "identity-protection", "file": "shield.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "risk", "file": "warning.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "notifications", "file": "bell.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "performance-data", "file": "chart.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "football", "file": "ball.svg", "source_type": "existing-football-project-vector", "targets": ["mini", "pc", "service"] },
+    { "semantic": "tournament-calendar-spot", "file": "../runtime/icons/brand-v2-01.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "trophy-spot", "file": "../runtime/icons/brand-v2-02.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "official-roster-spot", "file": "../runtime/icons/brand-v2-03.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "lineup-player-spot", "file": "../runtime/icons/brand-v2-04.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "notification-spot", "file": "../runtime/icons/brand-v2-05.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "wechat-invite-spot", "file": "../runtime/icons/brand-v2-06.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "invite-qr-spot", "file": "../runtime/icons/brand-v2-07.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "member-invite-spot", "file": "../runtime/icons/brand-v2-08.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "approved-status-spot", "file": "../runtime/icons/brand-v2-09.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "pending-status-spot", "file": "../runtime/icons/brand-v2-10.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "team-lineup-spot", "file": "../runtime/icons/brand-v2-11.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "player-identity-spot", "file": "../runtime/icons/brand-v2-12.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "document-task-spot", "file": "../runtime/icons/brand-v2-13.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "referee-whistle-spot", "file": "../runtime/icons/brand-v2-14.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "tactics-spot", "file": "../runtime/icons/brand-v2-15.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] },
+    { "semantic": "match-field-spot", "file": "../runtime/icons/brand-v2-16.png", "source_type": "oil-icon-football-brand-v2", "targets": ["mini", "pc", "service"] }
+  ],
+  "gaps": [
+    "credential-verification",
+    "document-review",
+    "crest-upload"
+  ],
+  "acquisition_policy": "Search this manifest first, then the approved basketball common library. When neither provides a visually suitable semantic match, archive a licensed Iconfont SVG with its source metadata before use."
+}

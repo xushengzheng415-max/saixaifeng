@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#087744">
+  <title>我的球员卡｜赛小蜂足球</title>
+  <link rel="stylesheet" href="./player-card-editor.css?v=20261001-global-version1">
+  <style>
+    body{margin:0;background:#f5f7f6;color:#172a20;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}main{max-width:900px;margin:auto;padding:24px 20px}header{display:flex;align-items:center;gap:16px;border-bottom:1px solid #dce4df;padding-bottom:18px}header a{color:#52645a;text-decoration:none}h1{font-size:22px;margin:0}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:28px;margin-top:24px}.card>img,.card-empty{width:100%;aspect-ratio:30/43;object-fit:contain}.card-empty{position:relative;display:flex;align-items:center;justify-content:center;color:#718078}.card-empty img{display:block;width:100%;height:100%;object-fit:contain}.card-empty span{position:absolute;bottom:13%;left:0;right:0;text-align:center;color:#29392e;font-weight:700}.card h2{font-size:17px;margin:12px 0 6px}.card p{color:#718078;font-size:13px;min-height:20px;margin:0 0 12px}.card button,.state button{font:inherit;background:#087744;color:white;border:0;border-radius:6px;padding:12px 18px;cursor:pointer}.card button{width:100%}.state{padding:64px 0;text-align:center}.state p{color:#718078}.saved{color:#087744;font-size:13px;margin-top:16px}@media(max-width:520px){.cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card button{padding-inline:6px;font-size:14px}}
+    .player-photo{height:330px;display:flex;align-items:center;justify-content:center}.player-photo img{width:100%;height:100%;object-fit:contain}.player-photo.photo-error{flex-direction:column;gap:12px;color:#718078}.profile-note{line-height:1.6}@media(max-width:520px){.player-photo{height:250px}}
+  .player-library{margin-top:24px}.player-library h2{font-size:18px;margin:0 0 6px}.player-summary{margin:0 0 18px;color:#65766c;font-size:13px}.library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:24px}.card{min-width:0}.card h3{font-size:15px;margin:10px 0 6px;overflow-wrap:anywhere}.card p.card-source{min-height:0;overflow-wrap:anywhere}.card button.card-select{margin-top:8px;background:transparent;color:#087744;border:1px solid #cadbd0}.card button:disabled{opacity:.5;cursor:default}.library-error{color:#a9362c;font-size:13px}.pc-preview>img{display:block;width:100%;max-width:300px;aspect-ratio:30/43;object-fit:contain}.library-adjust{display:grid;grid-template-columns:75px minmax(0,1fr) 44px;align-items:center;gap:10px;margin:18px 0;font-size:14px}.library-adjust input{min-width:0;accent-color:#087744}@media(max-width:520px){main{padding:18px 16px}.library-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 12px}.card button{font-size:13px;padding:10px 5px}.card h3{font-size:14px}.card p{font-size:12px}}
+  </style>
+</head>
+<body><main><header><a href="./me.html">返回我的</a><h1>我的球员卡</h1></header><div id="cards" class="state" role="status">正在读取球员卡…</div></main>
+<script src="./player-card-editor.js?v=20261001-global-version1"></script>
+<script src="./player-card-library-editor.js?v=20261001-preload-add"></script>
+<script src="./player-cards.js?v=20261001-preload-add"></script>
+</body></html>

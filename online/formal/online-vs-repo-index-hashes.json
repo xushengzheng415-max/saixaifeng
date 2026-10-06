@@ -1,0 +1,926 @@
+{
+  "environment": "cloud1-7g8ckb3c7815a011",
+  "functionsListed": 88,
+  "functionsDownloaded": 88,
+  "repoIndexMatches": 56,
+  "repoIndexDiffers": 27,
+  "noRepoIndex": 5,
+  "missingFromRepo": [
+    "prepareParentIdentityImage",
+    "manageTournamentCenterAccounts",
+    "setTournamentCenterPassword",
+    "tournamentCenterLogin",
+    "generateImage-yQOBxs"
+  ],
+  "different": [
+    "purgeSensitiveIdentityFiles",
+    "dataCenter",
+    "serviceAccountCallback",
+    "tournamentRegistrationFlow",
+    "organizerClaimInvite",
+    "getMiniWorkspace",
+    "serviceMatchWorkflow",
+    "updateTeam",
+    "getTournaments",
+    "webLoginApi",
+    "wechatWebLogin",
+    "migrateData",
+    "verifySmsCode",
+    "sendEmail",
+    "emailLogin",
+    "generateMiniProgramCode",
+    "manageRefereeCommittee",
+    "updateMatch",
+    "applyTournament",
+    "uploadToCOS",
+    "getTournamentList",
+    "saveBanner",
+    "removeLogoBg",
+    "baiduRemoveBg",
+    "clearDatabase",
+    "generateSchedule",
+    "user"
+  ],
+  "functions": [
+    {
+      "name": "tournamentStaffAccess",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-06 14:26:00",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "2bef463f72f418eba53852e6a11ed06196a2a99a",
+      "repoBlob": "2bef463f72f418eba53852e6a11ed06196a2a99a",
+      "sameBlob": true
+    },
+    {
+      "name": "prepareParentIdentityImage",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-02 12:45:33",
+      "downloaded": true,
+      "repoHasIndex": false,
+      "onlineBlob": "63a4bef041937a740bbb9359409db502769a81a8",
+      "repoBlob": null,
+      "sameBlob": false
+    },
+    {
+      "name": "playerCardPublishWorker",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-02 02:46:23",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "08faca6681686f6fc4d245a0c99edd265ba82896",
+      "repoBlob": "08faca6681686f6fc4d245a0c99edd265ba82896",
+      "sameBlob": true
+    },
+    {
+      "name": "newsCenter",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-05 20:06:44",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "71aa30b64d494340a01681f2a9ba68969a5d0119",
+      "repoBlob": "71aa30b64d494340a01681f2a9ba68969a5d0119",
+      "sameBlob": true
+    },
+    {
+      "name": "purgeSensitiveIdentityFiles",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-01 10:43:33",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "4651b43ee224e51d232242999917469916759d5b",
+      "repoBlob": "6ad38532eee19c203b25aca9f1bec77f1ef8c715",
+      "sameBlob": false
+    },
+    {
+      "name": "newsPreviewGenerate",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-03 21:59:14",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "0f39fba7555cab9c67b98602e1a9097c2de39e66",
+      "repoBlob": "0f39fba7555cab9c67b98602e1a9097c2de39e66",
+      "sameBlob": true
+    },
+    {
+      "name": "dataCenter",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-03 22:24:39",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "af5753806d11997666434f0ee99e8a025945ba6c",
+      "repoBlob": "f09fe2735ad520164670bc7ebb91f1904f3b0b24",
+      "sameBlob": false
+    },
+    {
+      "name": "resultCenter",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-06 13:10:08",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "a68c7b9c6924c8d87e8630c3c20096260358c026",
+      "repoBlob": "a68c7b9c6924c8d87e8630c3c20096260358c026",
+      "sameBlob": true
+    },
+    {
+      "name": "serviceAccountCallback",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-05 14:10:58",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "c016bc06c2d66b87d596efc80d3bd8af34697765",
+      "repoBlob": "12eb9b9140ac47c2f9b9bbea5255a5763d46ba85",
+      "sameBlob": false
+    },
+    {
+      "name": "tournamentRegistrationFlow",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-05 14:11:16",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "bf4ea773a0c73c57c66c2f554587b95ea3f3e0e8",
+      "repoBlob": "067b827f34c66085c7472da08899c0ff21b182fd",
+      "sameBlob": false
+    },
+    {
+      "name": "tournamentReview",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-03 21:52:16",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "524cec2c20713d7156e25225ee8e73fe557b9f9e",
+      "repoBlob": "524cec2c20713d7156e25225ee8e73fe557b9f9e",
+      "sameBlob": true
+    },
+    {
+      "name": "clearTournamentTeams",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-08-15 00:34:07",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "d73233e66dcece1933873168d1a8959af6475903",
+      "repoBlob": "d73233e66dcece1933873168d1a8959af6475903",
+      "sameBlob": true
+    },
+    {
+      "name": "manageTournamentCenterContent",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-01 11:11:47",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "ef84f52d512b82b4a927bd68b770b43a890fdd76",
+      "repoBlob": "ef84f52d512b82b4a927bd68b770b43a890fdd76",
+      "sameBlob": true
+    },
+    {
+      "name": "reviewRosterChange",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-03 21:51:16",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "c3cfac70739286e77ea1626507dc2d81d9ed291f",
+      "repoBlob": "c3cfac70739286e77ea1626507dc2d81d9ed291f",
+      "sameBlob": true
+    },
+    {
+      "name": "generateQRCode",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-03 23:26:57",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "a0f24af4c58e5348d3173590016dd69a697e9014",
+      "repoBlob": "a0f24af4c58e5348d3173590016dd69a697e9014",
+      "sameBlob": true
+    },
+    {
+      "name": "organizerClaimInvite",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-03 21:56:00",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "edc646deb72c69995b12dcedf5dea974420213e7",
+      "repoBlob": "5091096ff576ba616f4667b9cfb355cee883e4a2",
+      "sameBlob": false
+    },
+    {
+      "name": "getMiniWorkspace",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-03 23:00:25",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "ba81adfce3681cf390081e4122d485b3684e1d07",
+      "repoBlob": "187a212ca22bb8b8f92a5dc1eb05bb4b804451f6",
+      "sameBlob": false
+    },
+    {
+      "name": "workspaceAccess",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-08-14 18:31:02",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "c819678b75f8caa8fa4a77bf89ecbf8b9b250381",
+      "repoBlob": "c819678b75f8caa8fa4a77bf89ecbf8b9b250381",
+      "sameBlob": true
+    },
+    {
+      "name": "onboardingWorkspace",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-06 14:23:20",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "7e55064be7bfe60a8c1e2fc85325e4e678d753b3",
+      "repoBlob": "7e55064be7bfe60a8c1e2fc85325e4e678d753b3",
+      "sameBlob": true
+    },
+    {
+      "name": "profileContentSecurity",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-08-15 00:26:58",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "eae601eb071294388e37d89f0c1d970217279a58",
+      "repoBlob": "eae601eb071294388e37d89f0c1d970217279a58",
+      "sameBlob": true
+    },
+    {
+      "name": "sendRefereeTemplateMessages",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-09-25 17:20:53",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "7bb86c5c6d5ca2ccea650c0c8d45c35de67a3c80",
+      "repoBlob": "7bb86c5c6d5ca2ccea650c0c8d45c35de67a3c80",
+      "sameBlob": true
+    },
+    {
+      "name": "backfillOrganizerOrgId",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-08-15 00:28:00",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "90830328c8037e2d551556f167f8ef8594dab033",
+      "repoBlob": "90830328c8037e2d551556f167f8ef8594dab033",
+      "sameBlob": true
+    },
+    {
+      "name": "serviceMatchWorkflow",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-10-03 23:01:50",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "872be8f7fc0d749e2dd8dbb75675128dc0c7cccf",
+      "repoBlob": "f7a2a0e07904edd501f55c50e03ebae8d26a598e",
+      "sameBlob": false
+    },
+    {
+      "name": "platformOwner",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-09-05 16:15:39",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "4280c340938191d42041d54052ac0c997ddd71d5",
+      "repoBlob": "4280c340938191d42041d54052ac0c997ddd71d5",
+      "sameBlob": true
+    },
+    {
+      "name": "deleteTeam",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-29 15:45:59",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "22883d6eb2113b98ed1a1c786e6cdeb6747f7474",
+      "repoBlob": "22883d6eb2113b98ed1a1c786e6cdeb6747f7474",
+      "sameBlob": true
+    },
+    {
+      "name": "migrateTeamPhoneBindings",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-29 13:54:11",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "ba2e7377957d9913bb3045f41aff8537f8fddc25",
+      "repoBlob": "ba2e7377957d9913bb3045f41aff8537f8fddc25",
+      "sameBlob": true
+    },
+    {
+      "name": "uploadCosDirect",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-29 12:58:02",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "e34e86404e90169707b789ff401a5059d78f9f86",
+      "repoBlob": "e34e86404e90169707b789ff401a5059d78f9f86",
+      "sameBlob": true
+    },
+    {
+      "name": "updateTeam",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-09-28 17:41:33",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "ca8b0b382154aa82dbda9975df5f1b22b1436732",
+      "repoBlob": "52e0ed9a50691d22b528e5d78e1df40fff5b947b",
+      "sameBlob": false
+    },
+    {
+      "name": "createTeam",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-07-04 15:52:08",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "4fc4522dd8b569d868a141030050a5fbf76fec34",
+      "repoBlob": "4fc4522dd8b569d868a141030050a5fbf76fec34",
+      "sameBlob": true
+    },
+    {
+      "name": "getTeams",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-28 15:49:46",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "006fcf317f925e9b697e1d6756ec91eba7d78926",
+      "repoBlob": "006fcf317f925e9b697e1d6756ec91eba7d78926",
+      "sameBlob": true
+    },
+    {
+      "name": "getTournaments",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-28 12:02:54",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "8351ef52904db185d256602c9e35b9ce6d7a668b",
+      "repoBlob": "35923896751ab77d47fc5bf851e3b54d4885ccb0",
+      "sameBlob": false
+    },
+    {
+      "name": "manageTournamentCenterAccounts",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-28 11:27:56",
+      "downloaded": true,
+      "repoHasIndex": false,
+      "onlineBlob": "f7964113881740683d36be129995e77d17bbb4cc",
+      "repoBlob": null,
+      "sameBlob": false
+    },
+    {
+      "name": "setTournamentCenterPassword",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-28 11:27:24",
+      "downloaded": true,
+      "repoHasIndex": false,
+      "onlineBlob": "c535f4b4c10dcb5f494a0f4e0c1d80608f59a9bc",
+      "repoBlob": null,
+      "sameBlob": false
+    },
+    {
+      "name": "tournamentCenterLogin",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-28 11:37:50",
+      "downloaded": true,
+      "repoHasIndex": false,
+      "onlineBlob": "9d006856dcff692e004af625802f11d2a6663609",
+      "repoBlob": null,
+      "sameBlob": false
+    },
+    {
+      "name": "getTournamentMatches",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-09-28 19:52:08",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "8fa857be353a099f181f0a1a0f929d5836ad3160",
+      "repoBlob": "8fa857be353a099f181f0a1a0f929d5836ad3160",
+      "sameBlob": true
+    },
+    {
+      "name": "getTournamentDetail",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-08-14 23:25:40",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "3c3425d607b574043884cc360231018693ac1991",
+      "repoBlob": "3c3425d607b574043884cc360231018693ac1991",
+      "sameBlob": true
+    },
+    {
+      "name": "clearTeamPlayers",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-08-15 00:44:44",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "f16b7b77d48002b11892be710b7d82816ef4e86a",
+      "repoBlob": "f16b7b77d48002b11892be710b7d82816ef4e86a",
+      "sameBlob": true
+    },
+    {
+      "name": "webLoginApi",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-10-06 19:22:32",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "b335878bc058eed3e4c4a135716155258f9d39f7",
+      "repoBlob": "4f892628b14d351f01eb6d96969be427cf2cd64b",
+      "sameBlob": false
+    },
+    {
+      "name": "wechatWebLogin",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-06-18 20:40:15",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "f2cf56cd624e801295e9a39c4439d47d607dda0e",
+      "repoBlob": "6ae80525a04fb3a0e655c4ad47c75ddcdb5d1020",
+      "sameBlob": false
+    },
+    {
+      "name": "phoneLogin",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-07-16 12:47:15",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "24e1e40101e2d654736d02b5c441d1115eff6d35",
+      "repoBlob": "24e1e40101e2d654736d02b5c441d1115eff6d35",
+      "sameBlob": true
+    },
+    {
+      "name": "updateUserRole",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-07-16 12:25:14",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "230031b3e50569b611d57a0550d61b3fd0b9f642",
+      "repoBlob": "230031b3e50569b611d57a0550d61b3fd0b9f642",
+      "sameBlob": true
+    },
+    {
+      "name": "migrateData",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-06 14:19:02",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "e3591c562da558e350788324df11a1ea0a54c77d",
+      "repoBlob": "1623be3071578f7a9d71b17a6d2d9c9d028e4e27",
+      "sameBlob": false
+    },
+    {
+      "name": "bindPhone",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-07-16 12:47:20",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "c2fcee72f960aa66ab2c940bab9fd42b7f423ab9",
+      "repoBlob": "c2fcee72f960aa66ab2c940bab9fd42b7f423ab9",
+      "sameBlob": true
+    },
+    {
+      "name": "verifyPassword",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-05 21:26:18",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "87fe040acbdf3bc8ca7d13852b86315ab3ce443d",
+      "repoBlob": "87fe040acbdf3bc8ca7d13852b86315ab3ce443d",
+      "sameBlob": true
+    },
+    {
+      "name": "verifySmsCode",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-07-04 15:51:58",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "1db8c78218f977b8d05a48199e251758a8754e41",
+      "repoBlob": "f0b319995d8436d37c6f4a7906dfc3acc0148b65",
+      "sameBlob": false
+    },
+    {
+      "name": "sendSms",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-09-12 16:19:59",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "0e943b1513f6e81a61af81a813999be2178b0b77",
+      "repoBlob": "0e943b1513f6e81a61af81a813999be2178b0b77",
+      "sameBlob": true
+    },
+    {
+      "name": "sendEmail",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-04 18:54:22",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "6829a67122932f056e10efc532bff3fb8f725e7d",
+      "repoBlob": "e6c747b144f0a11e85e5483419a5b65caa3a8385",
+      "sameBlob": false
+    },
+    {
+      "name": "emailLogin",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-17 16:28:05",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "8b098e8bd35dc3d08dc47de7d860bfc1b6339a47",
+      "repoBlob": "51d49fccc47b01d876196fe1d909da333c62b88b",
+      "sameBlob": false
+    },
+    {
+      "name": "bindPhoneToOpenId",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-07-16 12:47:25",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "7189b3aa74ea3e355a0183397c8b42d6b48fcb07",
+      "repoBlob": "7189b3aa74ea3e355a0183397c8b42d6b48fcb07",
+      "sameBlob": true
+    },
+    {
+      "name": "checkUserByOpenId",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-09-18 13:36:48",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "2d19734c651078e1de182e05f575b9efb615cb4e",
+      "repoBlob": "2d19734c651078e1de182e05f575b9efb615cb4e",
+      "sameBlob": true
+    },
+    {
+      "name": "decodePhoneNumber",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-07-06 12:47:07",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "8b1caadcf7feca2a6658d0137707121757c61d0c",
+      "repoBlob": "8b1caadcf7feca2a6658d0137707121757c61d0c",
+      "sameBlob": true
+    },
+    {
+      "name": "getOpenId",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-23 15:09:32",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "67cca5dae0f83290aa9f80d4dea78ed417a869ce",
+      "repoBlob": "67cca5dae0f83290aa9f80d4dea78ed417a869ce",
+      "sameBlob": true
+    },
+    {
+      "name": "testEnv",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-02 15:16:09",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "44141d1ea428ccf4f4580e8051451700fec7a88d",
+      "repoBlob": "44141d1ea428ccf4f4580e8051451700fec7a88d",
+      "sameBlob": true
+    },
+    {
+      "name": "getMyTeams",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-15 00:57:38",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "5e5b93469984cd67dbdb435b494f6aab61dc2be9",
+      "repoBlob": "5e5b93469984cd67dbdb435b494f6aab61dc2be9",
+      "sameBlob": true
+    },
+    {
+      "name": "updateMatchLineup",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-15 01:51:33",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "99383e8f87a65400ff60e85b8cf9d320c0699656",
+      "repoBlob": "99383e8f87a65400ff60e85b8cf9d320c0699656",
+      "sameBlob": true
+    },
+    {
+      "name": "generateMiniProgramCode",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-14 22:16:58",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "2c5f45f00531ca3d0aa3ea478aed73819b574e03",
+      "repoBlob": "30b23a019cc43f758e56ec29980a63f517aa65f4",
+      "sameBlob": false
+    },
+    {
+      "name": "updateMatchSignature",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-15 01:46:17",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "86db2dc6774000101c46698ef5fe58c81ed9b259",
+      "repoBlob": "86db2dc6774000101c46698ef5fe58c81ed9b259",
+      "sameBlob": true
+    },
+    {
+      "name": "getSignatureStatus",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-15 01:46:21",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "5fbd09ec69977e91206d7e2aa17f9c03f6337a8d",
+      "repoBlob": "5fbd09ec69977e91206d7e2aa17f9c03f6337a8d",
+      "sameBlob": true
+    },
+    {
+      "name": "saveSignature",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-15 01:46:20",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "c2367eca331040ef68fbec7501c60e38ecb730c5",
+      "repoBlob": "c2367eca331040ef68fbec7501c60e38ecb730c5",
+      "sameBlob": true
+    },
+    {
+      "name": "manageRefereeCommittee",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-24 12:50:26",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "d10526d937084d2806f0a03bfcf8ee6343721c51",
+      "repoBlob": "035e1fa423bb88d60650a048b4a034628eb76568",
+      "sameBlob": false
+    },
+    {
+      "name": "getTournamentReferees",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-20 12:41:54",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "26255d4a2e0118eb0bbba53a0bfaa70e1aa50b4b",
+      "repoBlob": "26255d4a2e0118eb0bbba53a0bfaa70e1aa50b4b",
+      "sameBlob": true
+    },
+    {
+      "name": "updateMatch",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-10-06 13:08:14",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "7ddf43b7f0b111beede328f4383e5307f0f42ec5",
+      "repoBlob": "fa8029f32497b9ddba56337717a0b6eac6470e6e",
+      "sameBlob": false
+    },
+    {
+      "name": "getRegulations",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-21 13:02:56",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "53161de6f9b9224d0392e352a9e0f144b5ab0f77",
+      "repoBlob": "53161de6f9b9224d0392e352a9e0f144b5ab0f77",
+      "sameBlob": true
+    },
+    {
+      "name": "parseTournamentRegulations",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-09-13 17:34:08",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "7dbbe8ba84d8b2c6f1179b32b70b1c912972da3f",
+      "repoBlob": "7dbbe8ba84d8b2c6f1179b32b70b1c912972da3f",
+      "sameBlob": true
+    },
+    {
+      "name": "cleanupOrphanTournamentTeams",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-16 15:13:03",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "805786691f5f4af9acea27a38c83cd2166c94409",
+      "repoBlob": "805786691f5f4af9acea27a38c83cd2166c94409",
+      "sameBlob": true
+    },
+    {
+      "name": "applyTournament",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-23 19:59:06",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "d7691102417a3f8863c75b4c6deefe2fcad2e3fd",
+      "repoBlob": "0e35f1b47f948f22e92a1e56e63543a749d98610",
+      "sameBlob": false
+    },
+    {
+      "name": "migrateCoachData",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-15 17:30:28",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "5a64b356c498b533515e2379324e090271c7a99a",
+      "repoBlob": "5a64b356c498b533515e2379324e090271c7a99a",
+      "sameBlob": true
+    },
+    {
+      "name": "generateInviteCode",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-14 22:23:45",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "6dede86eb14756573aa6bd6a91e45afed3a79482",
+      "repoBlob": "6dede86eb14756573aa6bd6a91e45afed3a79482",
+      "sameBlob": true
+    },
+    {
+      "name": "generateAIImage",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-14 17:13:48",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "32c04f0941c98b7513b78aa73271a7ad4b7fb1a1",
+      "repoBlob": "32c04f0941c98b7513b78aa73271a7ad4b7fb1a1",
+      "sameBlob": true
+    },
+    {
+      "name": "generateImage-yQOBxs",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-05-09 15:59:01",
+      "downloaded": true,
+      "repoHasIndex": false,
+      "onlineBlob": "9f18c47bfde3c3e202b81ffb7d08a6d1ae8d755b",
+      "repoBlob": null,
+      "sameBlob": false
+    },
+    {
+      "name": "generateContent",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-08 18:45:00",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "5bf1375b562f1b79979e227d80d61eea8ef87780",
+      "repoBlob": "5bf1375b562f1b79979e227d80d61eea8ef87780",
+      "sameBlob": true
+    },
+    {
+      "name": "uploadToCOS",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-08 18:27:25",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "fbc09d683a52efbc2118e2498e7a647e6ab095cf",
+      "repoBlob": "d18072a152e8df9fb511945c5f504103e72f8067",
+      "sameBlob": false
+    },
+    {
+      "name": "getTournamentList",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-27 13:07:25",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "73774b4bf26a2679abc9527c4a75e35e95a801ac",
+      "repoBlob": "c9d3dc0356ae6527057a9f4ce34ad3e6562ef37c",
+      "sameBlob": false
+    },
+    {
+      "name": "getBanners",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-08-14 22:12:46",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "b015842cd4496e38772b1af6cece8f252b6d7d71",
+      "repoBlob": "b015842cd4496e38772b1af6cece8f252b6d7d71",
+      "sameBlob": true
+    },
+    {
+      "name": "saveBanner",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-08 18:27:38",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "ecfaab0acf4f9dc69c0db8258261ce33b23b81a1",
+      "repoBlob": "27e38a78d66f86fec2dbf542626247c11866a225",
+      "sameBlob": false
+    },
+    {
+      "name": "removeLogoBg",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-07 19:48:15",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "ab92b567e671d9ebf6a23920f136c7d266198a71",
+      "repoBlob": "5d42dc176ab40960aa948c06d29a33603ab5ebed",
+      "sameBlob": false
+    },
+    {
+      "name": "baiduRemoveBg",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-06-29 11:10:45",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "d5aba4a238cca25a9ce9fa325b9c2e9327d1cf31",
+      "repoBlob": "f5679764e56b661f808805c5808dd075187aa6f9",
+      "sameBlob": false
+    },
+    {
+      "name": "uploadFile",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-10-06 00:26:53",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "a7f1227dd415ac9c6dd9b9983437b5196a086e47",
+      "repoBlob": "a7f1227dd415ac9c6dd9b9983437b5196a086e47",
+      "sameBlob": true
+    },
+    {
+      "name": "webBatchUpdate",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-15 21:18:51",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "9bb066ac72dbb16999cc2ea383b589a6bfd74fc7",
+      "repoBlob": "9bb066ac72dbb16999cc2ea383b589a6bfd74fc7",
+      "sameBlob": true
+    },
+    {
+      "name": "webBatchDelete",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-06 11:10:40",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "f84cdf0e7d4e94f87124a9f4982d0faf49a99284",
+      "repoBlob": "f84cdf0e7d4e94f87124a9f4982d0faf49a99284",
+      "sameBlob": true
+    },
+    {
+      "name": "deleteRecord",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-16 15:35:13",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "a67693edf04dd0abcfd5e22b687de1242d8335cf",
+      "repoBlob": "a67693edf04dd0abcfd5e22b687de1242d8335cf",
+      "sameBlob": true
+    },
+    {
+      "name": "clearDatabase",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-05-06 11:13:49",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "b0091fed8ddd2178da583304dbb218fbf28703f1",
+      "repoBlob": "14ba1691d3b2464646a4c60d2755dfd950abf3ce",
+      "sameBlob": false
+    },
+    {
+      "name": "generateSchedule",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-10-03 21:53:32",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "b8bb4ac2e595333a19e3e47e3943e6bd2ab16ff0",
+      "repoBlob": "62313e11f65bb7ef84b304e2eaed34c7ee6a0261",
+      "sameBlob": false
+    },
+    {
+      "name": "deleteTournament",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-04-30 16:27:00",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "b15d017e8a283728ca580aeec194427afed2c4a7",
+      "repoBlob": "b15d017e8a283728ca580aeec194427afed2c4a7",
+      "sameBlob": true
+    },
+    {
+      "name": "generateTestData",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-04-30 16:26:59",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "cdf28199ac5daea576ff60ca6dfc3587ea82883f",
+      "repoBlob": "cdf28199ac5daea576ff60ca6dfc3587ea82883f",
+      "sameBlob": true
+    },
+    {
+      "name": "generatePlayerCard",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-09-30 17:57:23",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "a364a98833371b7368b0b754e5034ff59f4869a8",
+      "repoBlob": "a364a98833371b7368b0b754e5034ff59f4869a8",
+      "sameBlob": true
+    },
+    {
+      "name": "imageProcess",
+      "runtime": "Nodejs16.13",
+      "modifyTime": "2026-04-30 16:26:58",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "a844a11160c17ff46cc272090cf0820ec18defc2",
+      "repoBlob": "a844a11160c17ff46cc272090cf0820ec18defc2",
+      "sameBlob": true
+    },
+    {
+      "name": "user",
+      "runtime": "Nodejs18.15",
+      "modifyTime": "2026-04-30 16:26:58",
+      "downloaded": true,
+      "repoHasIndex": true,
+      "onlineBlob": "9001387c535713c4c0beb832da35266a774fa1d5",
+      "repoBlob": "439e54f76764694c9e6bd7abbc6e64f1547efd04",
+      "sameBlob": false
+    }
+  ]
+}

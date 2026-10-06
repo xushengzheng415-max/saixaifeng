@@ -1,0 +1,11 @@
+{
+  "name": "generatePlayerCard",
+  "version": "1.0.0",
+  "description": "球员卡云函数 - 头像处理+AI抠图+卡片合成",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3",
+    "sharp": "^0.33.2",
+    "got": "^11.8.6"
+  }
+}

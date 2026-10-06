@@ -1,0 +1,16 @@
+<view class="page">
+  <view class="nav"><text bindtap="back">返回</text><text>切换空间</text><text></text></view>
+  <view wx:if="{{loading}}" class="state">正在加载…</view>
+  <view wx:elif="{{errorText}}" class="state error">{{errorText}}</view>
+  <view wx:elif="{{!hasWorkspaces}}" class="state">暂无可用工作空间</view>
+  <view wx:else class="workspace-list">
+    <view wx:for="{{workspaces}}" wx:key="id" class="{{item.rowClass}}" data-id="{{item.id}}" bindtap="select">
+      <image wx:if="{{item.hasLogo}}" src="{{item.logo}}" mode="aspectFit"></image>
+      <view wx:else class="workspace-logo">队</view>
+      <view class="workspace-main"><text>{{item.name}}</text><text>{{item.typeText}} · {{item.positionText}}</text></view>
+      <text wx:if="{{item.isCurrent}}" class="current-text">当前</text>
+      <text wx:else class="arrow">›</text>
+    </view>
+  </view>
+  <view wx:if="{{switching}}" class="switching">正在切换…</view>
+</view>

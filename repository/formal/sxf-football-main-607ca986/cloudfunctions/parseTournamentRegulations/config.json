@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "openapi": [
+      "hunyuan.text.generateText",
+      "hunyuan.image.generateImage"
+    ]
+  },
+  "timeout": 240,
+  "memorySize": 512,
+  "desc": "解析竞赛规程文档(PDF/Word/图片)，AI识别赛制信息"
+}

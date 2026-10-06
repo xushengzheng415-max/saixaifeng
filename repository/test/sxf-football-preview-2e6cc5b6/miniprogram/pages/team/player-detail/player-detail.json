@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "球员详情",
+  "navigationBarBackgroundColor": "#1B5E20",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#2E7D32",
+  "backgroundTextStyle": "light",
+  "enablePullDownRefresh": false
+}

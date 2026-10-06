@@ -1,0 +1,88 @@
+<view class="page">
+  <view class="hero">
+    <view class="topbar">
+      <text class="page-title">赛事</text>
+      <view class="workspace-switch" bindtap="onSwitchWorkspace">
+        <text class="workspace-name">{{workspaceName}}</text>
+        <text class="workspace-arrow">⌄</text>
+      </view>
+    </view>
+    <view class="segment-row">
+      <view
+        wx:for="{{relationFilters}}"
+        wx:key="id"
+        class="segment-item {{item.itemClass}}"
+        data-id="{{item.id}}"
+        bindtap="onRelationFilterTap"
+      >{{item.text}}</view>
+    </view>
+  </view>
+
+  <view class="content">
+    <view class="filter-row">
+      <view
+        wx:for="{{statusFilters}}"
+        wx:key="id"
+        class="status-filter {{item.itemClass}}"
+        data-id="{{item.id}}"
+        bindtap="onStatusFilterTap"
+      >{{item.text}}</view>
+      <view class="todo-entry" bindtap="onTodoTap">
+        <text>赛事待办</text>
+        <text class="todo-arrow">›</text>
+      </view>
+    </view>
+
+    <view class="loading" wx:if="{{loading}}">正在加载赛事…</view>
+    <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
+
+    <view wx:if="{{hasTournaments}}">
+      <view
+        wx:for="{{visibleTournaments}}"
+        wx:key="id"
+        class="tournament-card {{item.cardClass}}"
+        data-id="{{item.id}}"
+        bindtap="onTournamentTap"
+      >
+        <view class="card-top">
+          <view class="tag-group">
+            <text class="relation-tag {{item.relationClass}}">{{item.relationText}}</text>
+            <text class="mode-tag">{{item.modeText}}</text>
+          </view>
+          <text class="status-tag {{item.statusClass}}">{{item.statusText}}</text>
+        </view>
+        <text class="tournament-name">{{item.name}}</text>
+        <text class="tournament-date">{{item.dateVenueText}}</text>
+        <view class="metrics-row">
+          <view class="metric" wx:if="{{item.showTeamCount}}">
+            <text class="metric-number">{{item.teamCountText}}</text>
+            <text class="metric-label">支球队</text>
+          </view>
+          <view class="metric" wx:if="{{item.showMatchCount}}">
+            <text class="metric-number">{{item.matchCountText}}</text>
+            <text class="metric-label">场比赛</text>
+          </view>
+          <view class="card-enter">
+            <text>进入赛事</text>
+            <text class="enter-arrow">›</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="pc-guide" wx:if="{{canManageEvents}}" bindtap="showPcHint">
+      <view class="guide-icon">⌘</view>
+      <view class="guide-copy">
+        <text class="guide-title">需要创建或配置赛事？</text>
+        <text class="guide-desc">复杂建赛、组别、赛程请在 PC 管理后台完成</text>
+      </view>
+      <text class="guide-arrow">›</text>
+    </view>
+
+    <view class="empty" wx:if="{{!loading}}" hidden="{{hasTournaments}}">
+      <text class="empty-icon">赛</text>
+      <text class="empty-title">当前暂无关联赛事</text>
+
+    </view>
+  </view>
+</view>

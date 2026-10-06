@@ -1,0 +1,18 @@
+{
+  "name": "webLoginApi",
+  "version": "1.0.0",
+  "description": "网页端登录 API（HTTP 触发器代理，零浏览器 SDK 依赖）",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "nodemailer": "^6.9.8",
+    "pngjs": "7.0.0",
+    "wx-server-sdk": "~2.6.3"
+  },
+  "env": {
+    "CLOUD_ENV": "cloud1-7g8ckb3c7815a011"
+  }
+}

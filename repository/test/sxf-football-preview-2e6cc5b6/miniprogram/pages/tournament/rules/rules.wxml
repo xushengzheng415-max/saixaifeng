@@ -1,0 +1,128 @@
+<!--pages/tournament/rules/rules.wxml-->
+<view class="container">
+  <view class="card">
+    <view class="card-title">竞赛规程配置</view>
+
+    <!-- AI识别入口 -->
+    <view class="ai-section">
+      <view class="ai-title">AI智能识别</view>
+
+      <button class="btn-primary ai-btn" bindtap="onUploadDoc">
+        上传规程文档
+      </button>
+      <view class="ai-tips" wx:if="{{parsing}}">
+        <text>正在识别中，请稍候...</text>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- 竞赛规程 -->
+    <view class="form-group">
+      <view class="form-label-row">
+        <text class="form-label">竞赛规程</text>
+
+      </view>
+      <textarea
+        class="form-textarea large"
+        placeholder="请输入或粘贴竞赛规程"
+        value="{{rules.regulations}}"
+        bindinput="onInputChange"
+        data-field="regulations"
+      />
+    </view>
+
+    <!-- 比赛规则 -->
+    <view class="form-group">
+      <view class="form-label-row">
+        <text class="form-label">比赛规则</text>
+
+      </view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入比赛规则"
+        value="{{rules.matchRules}}"
+        bindinput="onInputChange"
+        data-field="matchRules"
+      />
+    </view>
+
+    <!-- 积分规则 -->
+    <view class="form-group">
+      <view class="form-label-row">
+        <text class="form-label">积分规则</text>
+
+      </view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入积分规则（如：胜3分，平1分，负0分）"
+        value="{{rules.pointsRules}}"
+        bindinput="onInputChange"
+        data-field="pointsRules"
+      />
+    </view>
+
+    <!-- 晋级规则 -->
+    <view class="form-group">
+      <view class="form-label-row">
+        <text class="form-label">晋级规则</text>
+
+      </view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入晋级规则"
+        value="{{rules.advancementRules}}"
+        bindinput="onInputChange"
+        data-field="advancementRules"
+      />
+    </view>
+
+    <!-- 奖惩规则 -->
+    <view class="form-group">
+      <view class="form-label-row">
+        <text class="form-label">奖惩规则</text>
+
+      </view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入奖惩规则"
+        value="{{rules.rewardRules}}"
+        bindinput="onInputChange"
+        data-field="rewardRules"
+      />
+    </view>
+
+    <!-- 申诉规则 -->
+    <view class="form-group">
+      <view class="form-label-row">
+        <text class="form-label">申诉规则</text>
+
+      </view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入申诉规则"
+        value="{{rules.appealRules}}"
+        bindinput="onInputChange"
+        data-field="appealRules"
+      />
+    </view>
+
+    <!-- 其他规则 -->
+    <view class="form-group">
+      <text class="form-label">其他规则</text>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入其他需要说明的规则"
+        value="{{rules.otherRules}}"
+        bindinput="onInputChange"
+        data-field="otherRules"
+      />
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="btn-group">
+    <button class="btn-secondary" bindtap="onCancel">取消</button>
+    <button class="btn-primary" bindtap="onSave">保存规则</button>
+  </view>
+</view>

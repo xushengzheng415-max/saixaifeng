@@ -1,0 +1,25 @@
+<view class="event-page">
+  <image class="event-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="event-content">
+    <view class="event-nav"><text class="event-back" bindtap="back">‹</text><text>参赛管理</text></view>
+    <view wx:if="{{loading}}" class="event-loading">正在读取赛事关系…</view>
+    <block wx:else>
+      <view class="event-team"><image src="{{team.logo}}" mode="aspectFit" /><view><text>{{team.name}}</text><view class="event-count"><image src="/images/runtime/icons/brand-v2-02.png" mode="aspectFit" /><text>{{eventCount}} 项赛事</text></view></view></view>
+      <view class="event-tabs"><text wx:for="{{filters}}" wx:key="id" class="{{item.className}}" data-id="{{item.id}}" bindtap="choose">{{item.label}}</text></view>
+      <view wx:for="{{visible}}" wx:key="id" class="event-card">
+        <view class="event-title"><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit" /><view><text>{{item.name}}</text><text>{{item.divisionName}}</text></view><text class="{{item.statusClass}}">{{item.statusText}}</text></view>
+        <view class="event-meta"><text>{{item.rosterText}}</text><text>{{item.matchCount}} 场比赛</text></view>
+        <view wx:if="{{item.hasMatches}}" class="match-list">
+          <view wx:for="{{item.matches}}" wx:for-item="match" wx:key="id" class="match-row" data-id="{{match.id}}" bindtap="openMatchDetail">
+            <view class="match-time"><text>{{match.dateText}}</text><text>{{match.timeText}}</text></view>
+            <view class="match-main"><text>{{match.sideText}}　VS {{match.opponentName}}</text><text>{{match.roundText}} · {{match.venueText}}</text></view>
+            <view class="match-actions"><text class="{{match.statusClass}}">{{match.statusText}}</text><button wx:if="{{match.canSubmitLineup}}" data-id="{{match.id}}" catchtap="openMatch">提交阵容</button></view>
+          </view>
+        </view>
+        <view wx:else class="match-empty">赛程待公布</view>
+        <button data-tournament="{{item.tournamentId}}" data-division="{{item.divisionId}}" bindtap="open" class="{{item.actionClass}}">{{item.actionText}}</button>
+      </view>
+      <view class="event-note">参赛管理按赛事和组别去重，比赛时间以主办方最新赛程为准。</view>
+    </block>
+  </view>
+</view>

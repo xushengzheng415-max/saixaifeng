@@ -1,0 +1,9 @@
+{
+  "name": "getTournamentDetail",
+  "version": "1.0.0",
+  "description": "Get tournament detail",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

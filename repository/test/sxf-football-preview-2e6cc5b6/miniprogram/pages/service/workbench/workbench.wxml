@@ -1,0 +1,66 @@
+<view class="page">
+  <view class="hero">
+    <text class="hero-kicker">赛小蜂足球</text>
+    <text class="hero-title">裁判工作台</text>
+
+  </view>
+
+  <view class="loading-card" wx:if="{{loading}}">
+    <view class="spinner"></view>
+    <text>正在加载裁判任务...</text>
+  </view>
+
+  <view class="phone-card" wx:if="{{needsPhone}}">
+    <text class="card-icon">🧑‍⚖️</text>
+    <text class="card-title">验证裁判手机号</text>
+    <text class="card-desc">微信授权后，请用主办方登记的手机号完成短信验证。只有本场操作负责人会获得比赛任务。</text>
+    <input class="bind-input" type="number" maxlength="11" placeholder="请输入手机号" value="{{bindPhone}}" bindinput="onBindPhoneInput" />
+    <view class="code-row">
+      <input class="bind-input code-input" type="number" maxlength="6" placeholder="6位验证码" value="{{bindCode}}" bindinput="onBindCodeInput" />
+      <button class="code-btn" bindtap="sendBindCode" loading="{{sendingCode}}">获取验证码</button>
+    </view>
+    <button class="primary-btn" bindtap="verifyBindCode" loading="{{bindingPhone}}">绑定身份并进入</button>
+  </view>
+
+  <view class="error-card" wx:if="{{errorMsg}}">
+    <text class="error-text">{{errorMsg}}</text>
+    <button class="plain-btn" bindtap="retryLoad">重新加载</button>
+  </view>
+
+  <block wx:if="{{!loading}}">
+    <view class="identity-bar" wx:if="{{phoneMasked}}">
+      <text>当前裁判手机号</text>
+      <text class="identity-phone">{{phoneMasked}}</text>
+    </view>
+
+    <view class="section" wx:if="{{hasRefereeTasks}}">
+      <view class="section-heading">
+        <text class="section-title">我的比赛</text>
+
+      </view>
+      <view
+        class="task-card"
+        wx:for="{{refereeTasks}}"
+        wx:key="matchId"
+        data-match-id="{{item.matchId}}"
+        bindtap="openRefereeTask"
+      >
+        <view class="task-topline">
+          <text class="task-tournament">{{item.tournamentName}}</text>
+          <text class="task-status">{{item.matchStatusText}}</text>
+        </view>
+        <text class="task-teams">{{item.teamsText}}</text>
+        <text class="task-meta">{{item.matchTimeText}} · {{item.venue}}</text>
+        <text class="task-meta">本场岗位：{{item.refereeRoleLabel}}</text>
+        <view class="task-action">{{item.actionText}} ›</view>
+      </view>
+    </view>
+
+    <view class="empty-card" wx:if="{{hasNoTasks}}">
+      <text class="empty-icon">⚽</text>
+      <text class="card-title">暂时没有裁判任务</text>
+      <text class="card-desc">请让主办方在场次中指派您，并确认裁判资料手机号与当前授权手机号一致。</text>
+      <button class="plain-btn" bindtap="retryLoad">刷新比赛任务</button>
+    </view>
+  </block>
+</view>

@@ -1,0 +1,38 @@
+<view class="page">
+  <view class="nav"><text bindtap="back" class="back">‹</text><text class="nav-title">单场比赛阵容</text><text class="nav-more">•••</text></view>
+  <view wx:if="{{loading}}" class="loading">正在核验已审核正式名单…</view>
+  <block wx:else>
+    <view class="match-card">
+      <view class="crest no-frame"><image wx:if="{{match.homeLogo}}" src="{{match.homeLogo}}" mode="aspectFit"/><text wx:else>主</text></view>
+      <view class="match-content"><text class="team-line">{{match.homeTeamName}} <text class="vs">VS</text> {{match.awayTeamName}}</text><text class="match-meta">{{match.matchDate}}　{{match.venue}}　{{minPlayers}}人制</text></view>
+      <view class="crest no-frame"><image wx:if="{{match.awayLogo}}" src="{{match.awayLogo}}" mode="aspectFit"/><text wx:else>客</text></view>
+    </view>
+    <view wx:if="{{returned}}" class="returned">退回修改：{{returnReason}}</view>
+    <view wx:if="{{locked}}" class="locked">阵容已提交，等待主办方处理</view>
+    <view class="arrival-card"><view><text>赛前报到</text><text>{{arrivalStatusText}}</text></view><button bindtap="confirmArrival" disabled="{{arrivalButtonDisabled}}">{{arrivalButtonText}}</button></view>
+    <view class="formation-tabs"><text class="tab-label">首发阵型</text><view class="tabs"><text wx:for="{{formationOptions}}" wx:key="id" data-id="{{item.id}}" bindtap="selectFormation" class="formation-tab {{item.tabClass}}">{{item.label}}</text></view></view>
+    <view wx:if="{{dragging}}" class="drag-tip">正在拖动「{{draggingPlayerName}}」：轻点场上空位完成落位 <text bindtap="cancelPlayerDrag">取消</text></view>
+    <view class="pitch-card">
+      <view class="pitch">
+        <view wx:for="{{slots}}" wx:key="id" class="slot {{item.slotClass}}" style="{{item.slotStyle}}" data-id="{{item.id}}" bindtap="chooseSlot" bindlongpress="removeSlotPlayer">
+          <image wx:if="{{item.avatar}}" src="{{item.avatar}}" class="player-avatar" mode="aspectFill"/>
+          <text wx:else class="slot-number">{{item.jerseyText}}</text><text class="slot-name">{{item.playerName}}</text><text class="slot-position">{{item.title}}</text>
+        </view>
+      </view>
+      <text class="tap-hint">点选位置后再点名单球员；长按已落位球员可移除</text>
+    </view>
+    <view class="bench-card"><view class="bench-head"><text>替补席（{{substituteCount}}/5）</text><text>从名单中选择</text></view><view class="bench"><view wx:for="{{substitutes}}" wx:key="id" class="bench-player" data-id="{{item.id}}" bindtap="removeSubstitute"><image wx:if="{{item.photoUrl}}" src="{{item.photoUrl}}" mode="aspectFill"/><text wx:else class="bench-avatar">{{item.jerseyNumber}}</text><text>{{item.name}}</text></view></view></view>
+    <view wx:if="{{emptyPlayers}}" class="empty"><text>没有可用于本场的已审核正式名单球员</text></view>
+    <view wx:else class="roster-card"><view class="roster-head"><text>正式名单</text><text>{{selectedCount}} 人已安排</text></view><view wx:for="{{players}}" wx:key="id" class="roster-player {{item.rowClass}}"><view data-id="{{item.id}}" bindtap="choosePlayer" bindlongpress="startPlayerDrag" class="player-main"><image wx:if="{{item.photoUrl}}" src="{{item.photoUrl}}" mode="aspectFill"/><text wx:else class="list-avatar">{{item.jerseyNumber}}</text><text>{{item.name}}</text><text class="position">{{item.position}}</text></view><text wx:if="{{item.selected}}" class="assigned">已安排</text><text wx:else data-id="{{item.id}}" bindtap="addSubstitute" class="bench-add">+ 替补</text></view><text class="drag-help">长按未安排球员后点按场上位置可完成拖拽式落位；普通点按仍可兜底选择。</text></view>
+    <view class="bottom"><button bindtap="submit" disabled="{{submitDisabled || saving}}" class="submit">确认并提交本场阵容</button><text class="bottom-tip">提交后将锁定阵容，无法再次修改</text></view>
+    <view wx:if="{{playerPickerVisible}}" class="picker-mask" bindtap="closePlayerPicker">
+      <view class="player-picker" catchtap="noop">
+        <view class="picker-handle"></view>
+        <view class="picker-head"><view><text class="picker-title">{{pickerTitle}}</text><text class="picker-hint">{{pickerHint}}</text></view><text class="picker-close" bindtap="closePlayerPicker">关闭</text></view>
+        <view class="picker-tabs"><text class="picker-tab active">位置优先</text><text class="picker-tab" bindtap="showAllPickerPlayers">全部名单</text></view>
+        <scroll-view scroll-y="true" class="picker-list"><view wx:for="{{pickerPlayers}}" wx:key="id" class="picker-player" data-id="{{item.id}}" bindtap="choosePlayer"><image wx:if="{{item.photoUrl}}" src="{{item.photoUrl}}" mode="aspectFill"/><text wx:else class="picker-avatar">{{item.jerseyNumber}}</text><view class="picker-player-copy"><text>{{item.name}}</text><text>{{item.pickerPositionText}}</text></view><text class="picker-add">+</text></view><view wx:if="{{pickerEmpty}}" class="picker-empty">当前没有可安排的正式名单球员</view></scroll-view>
+        <text class="picker-footer">选择后将填入当前场上空位</text>
+      </view>
+    </view>
+  </block>
+</view>

@@ -1,0 +1,9 @@
+{
+  "name": "submitRosterChange",
+  "version": "1.0.0",
+  "description": "提交淘汰赛换人申请",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

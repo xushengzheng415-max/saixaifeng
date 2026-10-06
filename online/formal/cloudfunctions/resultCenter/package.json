@@ -1,0 +1,9 @@
+{
+  "name": "resultCenter",
+  "version": "1.0.0",
+  "description": "足球赛事赛果复核、积分排名、晋级与发布快照服务",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

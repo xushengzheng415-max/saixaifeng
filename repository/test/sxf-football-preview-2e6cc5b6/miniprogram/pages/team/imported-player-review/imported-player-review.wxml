@@ -1,0 +1,21 @@
+<view class="review-page">
+  <view class="review-nav"><text bindtap="back">‹</text><view><text>确认球员</text><text>{{teamName}}</text></view><button bindtap="goTeam">稍后处理</button></view>
+  <view wx:if="{{loading}}" class="review-state">正在加载…</view>
+  <view wx:elif="{{errorText}}" class="review-state"><text>{{errorText}}</text><button bindtap="loadDrafts">重新加载</button></view>
+  <block wx:else>
+    <view class="review-summary"><text>主办方导入的球员需要由你确认后，才会进入球队长期球员库。</text></view>
+    <view class="review-tabs"><text class="{{tabPendingClass}}" data-tab="pending" bindtap="setTab">可确认 {{pendingCount}}</text><text class="{{tabConflictClass}}" data-tab="conflict" bindtap="setTab">冲突 {{conflictCount}}</text><text class="{{tabExcludedClass}}" data-tab="excluded" bindtap="setTab">已排除 {{excludedCount}}</text></view>
+    <view wx:if="{{hasRows}}" class="draft-list">
+      <view wx:for="{{visibleDrafts}}" wx:key="id" class="{{item.rowClass}}">
+        <view wx:if="{{item.canConfirm}}" class="draft-check" data-id="{{item.id}}" bindtap="toggleSelect"><text wx:if="{{item.selected}}">✓</text></view>
+        <view wx:else class="draft-lock">!</view>
+        <image wx:if="{{item.photoUrl}}" src="{{item.photoUrl}}" mode="aspectFill" />
+        <view wx:else class="draft-avatar">{{item.name}}</view>
+        <view class="draft-main"><view class="draft-name"><text>{{item.name}}</text><text wx:if="{{item.isStaffPlayer}}">{{item.dualRoleLabel}}</text></view><text>{{item.birthDate}} · {{item.identityMasked}}</text><text wx:if="{{item.conflictReason}}" class="draft-reason">{{item.conflictReason}}</text></view>
+        <button wx:if="{{item.canExclude}}" data-id="{{item.id}}" bindtap="excludeOne">排除</button>
+      </view>
+    </view>
+    <view wx:else class="review-empty">当前分组暂无资料</view>
+    <view wx:if="{{tabPendingClass}}" class="review-footer"><button bindtap="selectAll">全选安全项</button><button class="primary" bindtap="confirmSelected" disabled="{{!canBatchConfirm}}">确认入库 {{selectedCount}}</button></view>
+  </block>
+</view>

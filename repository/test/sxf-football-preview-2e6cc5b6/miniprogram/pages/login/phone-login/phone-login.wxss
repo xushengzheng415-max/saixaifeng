@@ -1,0 +1,7 @@
+.phone-login-page { min-height: 100vh; box-sizing: border-box; padding: 112rpx 42rpx 80rpx; background: linear-gradient(180deg, #063c28, #eff7f1 56%); }
+.phone-login-card { padding: 58rpx 42rpx 48rpx; border-radius: 32rpx; background: #fff; box-shadow: 0 24rpx 70rpx rgba(0, 42, 26, .18); text-align: center; }
+.phone-login-icon { display: flex; align-items: center; justify-content: center; width: 108rpx; height: 108rpx; margin: 0 auto 34rpx; border-radius: 54rpx; background: #e7f5eb; color: #087a48; font-size: 24rpx; font-weight: 700; }
+.phone-login-title { color: #14261d; font-size: 38rpx; font-weight: 800; }
+.phone-login-copy { margin-top: 24rpx; color: #718078; font-size: 26rpx; line-height: 1.8; text-align: left; }
+.phone-login-main { margin-top: 52rpx; border-radius: 48rpx; background: #087a48; color: #fff; font-size: 30rpx; }
+.phone-login-link { margin-top: 28rpx; color: #087a48; font-size: 25rpx; }

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>赛小蜂足球｜专业版抽签大屏原型</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .trophy-mark { color: transparent; }
+      .trophy-mark::before { content: "赛"; color: #dffff0; transform: rotate(-45deg); }
+      .result-grid { height: calc(100% - 155px); }
+    </style>
+  </head>
+  <body>
+    <main id="screenApp" class="screen-app" aria-live="polite"></main>
+    <script src="./app.js"></script>
+  </body>
+</html>

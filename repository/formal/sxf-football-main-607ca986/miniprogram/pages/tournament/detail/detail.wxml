@@ -1,0 +1,252 @@
+<!-- pages/tournament/detail/detail.wxml - 赛事详情页（无WXS、无===/!==/&&/三元） -->
+<view class="page {{teamPageClass}}">
+  <block wx:if="{{showTeamTournamentDetail}}">
+    <image class="team-event-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+    <view class="team-event-shade"></view>
+    <view class="team-event-nav">
+      <view class="team-event-back" bindtap="onTeamEventBack"><view class="team-event-back-icon"></view></view>
+      <text>赛事详情</text>
+    </view>
+    <view class="team-event-content">
+      <view class="team-event-hero">
+        <view class="team-event-tags"><text>{{teamEventTag}}</text><text>{{teamEventMode}}</text></view>
+        <text class="team-event-name">{{teamEventName}}</text>
+        <view class="team-event-meta"><image src="/images/icons/event.svg" mode="aspectFit"></image><text>{{teamEventDateVenue}}</text></view>
+        <view class="team-event-team-row">
+          <view class="team-event-current-team"><image src="{{teamEventTeamLogo}}" mode="aspectFit"></image><view><text>当前球队</text><text>{{teamEventTeamName}}</text></view></view>
+          <view class="team-event-registration"><text>参赛状态</text><view><image src="/images/icons/check.svg" mode="aspectFit"></image><text>{{teamEventStatusText}}</text></view></view>
+        </view>
+      </view>
+
+      <view class="team-event-summary">
+        <view><text class="team-event-summary-label">小组排名</text><text class="team-event-summary-value">{{teamEventRank}}</text><text class="team-event-summary-unit">/ {{teamEventRankTotal}}</text></view>
+        <view><text class="team-event-summary-label">比赛场次</text><text class="team-event-summary-value">{{teamEventPlayed}}</text><text class="team-event-summary-unit">场</text></view>
+        <view><text class="team-event-summary-label">积分</text><text class="team-event-summary-value">{{teamEventPoints}}</text><text class="team-event-summary-unit">分</text></view>
+      </view>
+
+      <view class="team-event-actions">
+        <view class="team-event-action" bindtap="onTeamEventNotice"><view><image src="/images/icons/bell.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛事通知</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventRoster"><view><image src="/images/icons/players.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">正式名单</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventLineup"><view><image src="/images/icons/team.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">比赛阵容</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+        <view class="team-event-action" bindtap="onTeamEventSchedule"><view><image src="/images/icons/event.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛程赛果</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
+      </view>
+
+      <view class="team-event-section-title"><view></view><text>下一场比赛</text></view>
+      <view class="team-event-next" wx:if="{{showNextMatch}}">
+        <view class="team-event-next-meta"><text>{{nextMatchDateTime}}</text><text>{{nextMatchVenue}}</text></view>
+        <view class="team-event-versus"><view><image src="{{nextHomeLogo}}" mode="aspectFit"></image><text>{{nextHomeName}}</text></view><text class="team-event-vs">VS</text><view><image src="{{nextAwayLogo}}" mode="aspectFit"></image><text>{{nextAwayName}}</text></view></view>
+        <button class="team-event-lineup-button {{nextLineupButtonClass}}" disabled="{{!canSubmitNextLineup}}" bindtap="onTeamEventLineup">{{nextLineupButtonText}}</button>
+        <view class="team-event-lineup-note"><image src="/images/icons/shield.svg" mode="aspectFit"></image><text>阵容只能从审核通过的正式参赛名单中选择，开赛后锁定为比赛快照。</text></view>
+      </view>
+      <view class="team-event-next team-event-next-empty" wx:if="{{showNextMatchEmpty}}" bindtap="onTeamEventSchedule"><image src="/images/icons/event.svg" mode="aspectFit"></image><text>赛程尚未公布</text><text class="team-event-empty-desc">点击查看赛事赛程与最新安排</text></view>
+    </view>
+
+    <view class="team-event-tabbar">
+      <view bindtap="onTeamEventTabHome"><image src="/images/runtime/icons/brand-v1-tab-home.png" mode="aspectFit"></image><text>首页</text></view>
+      <view class="active" bindtap="onTeamEventTabEvent"><image src="/images/runtime/icons/brand-v1-tab-event.png" mode="aspectFit"></image><text>赛事</text></view>
+      <view bindtap="onTeamEventTabTeam"><image src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image><text>球队</text></view>
+      <view bindtap="onTeamEventTabTraining"><image src="/images/runtime/icons/brand-v1-tab-training.png" mode="aspectFit"></image><text>青训</text></view>
+      <view bindtap="onTeamEventTabProfile"><image src="/images/runtime/icons/brand-v1-tab-profile.png" mode="aspectFit"></image><text>我的</text></view>
+    </view>
+  </block>
+  <block wx:elif="{{visualQa}}">
+    <image class="visual-detail-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+    <view class="visual-detail-nav"><text>‹</text><text>赛事详情</text></view>
+    <view class="visual-detail-hero"><view class="visual-detail-tags"><text>{{visualSummary.tag}}</text><text>{{visualSummary.mode}}</text></view><text class="visual-detail-name">{{visualSummary.name}}</text><text class="visual-detail-meta">{{visualSummary.dateVenue}}</text><text class="visual-detail-status">● {{visualSummary.status}}</text><view class="visual-detail-stats"><view><text>{{visualSummary.teamCount}}</text><text>参赛球队</text></view><view><text>{{visualSummary.matchCount}}</text><text>比赛场次</text></view><view><text>{{visualSummary.pendingCount}}</text><text>待处理</text></view></view></view>
+    <view class="visual-detail-panel"><view class="visual-detail-head"><text>赛前管理</text><text>共 10 项待处理 ›</text></view><view class="visual-detail-grid"><view wx:for="{{visualPreTasks}}" wx:key="title" class="visual-detail-task" data-route="{{item.route}}" bindtap="onVisualRoute"><image src="{{item.icon}}" mode="aspectFit"/><text>{{item.title}}</text><text>{{item.count}}</text></view></view></view>
+    <view class="visual-detail-panel visual-match-panel" data-route="schedule" bindtap="onVisualRoute"><view class="visual-detail-head"><text>比赛管理</text><text>今日比赛 ›</text></view><view class="visual-match-row"><image src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"/><view><text>8 场</text><text>今日比赛场次</text></view><button>查看今日比赛</button></view></view>
+    <view class="visual-detail-panel"><view class="visual-detail-head"><text>赛后处理</text><text>共 3 项待处理 ›</text></view><view class="visual-detail-grid visual-detail-grid-short"><view wx:for="{{visualPostTasks}}" wx:key="title" class="visual-detail-task" data-route="{{item.route}}" bindtap="onVisualRoute"><image src="{{item.icon}}" mode="aspectFit"/><text>{{item.title}}</text><text>{{item.count}}</text></view></view></view>
+    <view class="visual-detail-note">复杂赛制、抽签和赛程配置请在 PC 后台完成。</view>
+  </block>
+  <block wx:else>
+
+  <!-- 加载中 -->
+  <!-- 错误提示 -->
+  <view class="loading-box" wx:if="{{errorMsg}}">
+    <text class="lb-spin">❌</text>
+    <text style="font-size:28rpx;color:#c62828;margin-top:16rpx;display:block;">{{errorMsg}}</text>
+    <text style="font-size:24rpx;color:#999;margin-top:8rpx;" bindtap="loadTournament">点击重试</text>
+  </view>
+
+  <view class="loading-box" wx:if="{{showLoading}}">
+    <text class="lb-spin">⏳</text>
+    <text style="font-size:28rpx;color:#999;margin-top:16rpx;display:block;">加载中...</text>
+  </view>
+
+  <block wx:else>
+
+    <!-- 赛事头部 -->
+    <view class="t-header">
+      <view class="th-main">
+        <view class="th-copy">
+          <text class="th-name">{{name}}</text>
+          <view class="th-meta">
+            <text wx:if="{{showStartDate}}">{{startDate}}</text>
+            <text wx:if="{{showDateSeparator}}"> ~ </text>
+            <text wx:if="{{showEndDate}}">{{endDate}}</text>
+            <text wx:if="{{location}}" style="margin-left:16rpx;">📍 {{location}}</text>
+          </view>
+        </view>
+        <image class="th-logo" wx:if="{{logoUrl}}" src="{{logoUrl}}" mode="aspectFill"></image>
+      </view>
+      <button class="signup-btn" wx:if="{{!isOrganizer}}" data-id="{{tournamentId}}" bindtap="goSignup">报名参赛</button>
+      <view class="th-footer" wx:if="{{isOrganizer}}">
+        <view class="th-qr">
+          <text class="qr-num">{{approvedTeamsLen || 0}}</text>
+          <text class="qr-lbl">球队</text>
+        </view>
+        <button class="t-invite-btn" open-type="share" data-share-type="tournamentSignup">邀请球队</button>
+      </view>
+    </view>
+
+    <!-- ★ 赛事头部增强：状态标签 + 描述（信息同步） -->
+
+    <view class="t-tags">
+      <text class="t-tag type-tag" wx:if="{{typeText}}">{{typeText}}</text>
+      <text class="t-tag status-tag">{{statusText}}</text>
+    </view>
+
+    <view class="t-desc" wx:if="{{description}}">{{description}}</view>
+
+    <!-- ★ 关键数据卡（信息同步） -->
+    <view class="t-stats">
+      <view class="ts-item">
+        <text class="ts-val">{{approvedTeamsLen}}</text>
+        <text class="ts-lbl">已参赛</text>
+      </view>
+      <view class="ts-item">
+        <text class="ts-val">{{maxTeams}}</text>
+        <text class="ts-lbl">总球队数</text>
+      </view>
+      <view class="ts-item">
+        <text class="ts-val">{{matchesLen}}</text>
+        <text class="ts-lbl">比赛场次</text>
+      </view>
+      <view class="ts-item">
+        <text class="ts-val">{{dayCount}}</text>
+        <text class="ts-lbl">赛程天数</text>
+      </view>
+    </view>
+
+    <!-- ★ 基本信息区（信息同步） -->
+    <view class="t-info-section">
+      <view class="ti-row" wx:if="{{registerDeadline}}">
+        <text class="ti-label">报名截止</text>
+        <text class="ti-value">{{registerDeadline}}</text>
+      </view>
+      <view class="ti-row" wx:if="{{createTimeText}}">
+        <text class="ti-label">创建时间</text>
+        <text class="ti-value">{{createTimeText}}</text>
+      </view>
+      <view class="ti-row" wx:if="{{maxTeams}}">
+        <text class="ti-label">参赛球队</text>
+        <text class="ti-value">{{approvedTeamsLen}} / {{maxTeams}} 队</text>
+      </view>
+    </view>
+
+    <!-- 竞赛规程文件 -->
+    <view class="t-regulations" wx:if="{{showRegulationsCard}}">
+      <view class="tr-card">
+        <view class="tr-icon">DOC</view>
+        <view class="tr-info">
+          <text class="tr-name">{{regulationsFileName}}</text>
+          <text class="tr-meta">{{regulationsStatusText}}</text>
+        </view>
+        <view class="tr-actions">
+          <view class="tr-btn tr-download" wx:if="{{hasRegulationsFile}}" bindtap="onDownloadRegulations">下载</view>
+          <view class="tr-btn tr-upload" wx:if="{{isOrganizer}}" bindtap="onUploadRegulations">{{regulationsActionText}}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ★ HTML 规程内容（rules 为字符串时） -->
+    <view class="t-rules-html" wx:if="{{hasRulesString}}">{{rulesStringContent}}</view>
+
+    <!-- Tab 切换 -->
+
+    <!-- ★ 卡片快捷操作（信息同步 - 仿网页端 quick-actions） -->
+    <view class="quick-cards" wx:if="{{showQuickActions}}">
+      <view class="qc-card" bindtap="onQuickCard1">
+        <text class="qc-icon">{{quickCard1Icon}}</text>
+        <view class="qc-body">
+          <text class="qc-title">{{quickCard1Title}}</text>
+
+        </view>
+      </view>
+      <view class="qc-card" bindtap="onQuickCard2">
+        <text class="qc-icon">{{quickCard2Icon}}</text>
+        <view class="qc-body">
+          <text class="qc-title">{{quickCard2Title}}</text>
+
+        </view>
+      </view>
+      <view class="qc-card" bindtap="onQuickCard3">
+        <text class="qc-icon">{{quickCard3Icon}}</text>
+        <view class="qc-body">
+          <text class="qc-title">{{quickCard3Title}}</text>
+
+        </view>
+      </view>
+      <view class="qc-card" bindtap="onQuickCard4">
+        <text class="qc-icon">{{quickCard4Icon}}</text>
+        <view class="qc-body">
+          <text class="qc-title">{{quickCard4Title}}</text>
+
+        </view>
+      </view>
+    </view>
+
+  <!-- 竞赛规则 -->
+  <view class="rules-section" wx:if="{{hasRules}}">
+    <view class="rules-header" bindtap="toggleRules">
+      <text class="rules-title">📋 竞赛规则</text>
+      <text class="rules-arrow">{{rulesToggleIcon}}</text>
+    </view>
+    <view class="rules-body" wx:if="{{showRules}}">
+      <view class="rule-block" wx:if="{{rulePoints}}">
+        <text class="rule-block-title">积分规则</text>
+        <text class="rule-text">胜 {{rulePoints.win}} 分 / 平 {{rulePoints.draw}} 分 / 负 {{rulePoints.loss}} 分</text>
+        <text class="rule-text" wx:if="{{hasForfeitRule}}">弃权 {{rulePoints.forfeit}} 分</text>
+        <text class="rule-text" wx:if="{{rulePointsEnableGoalBonus}}">进球加分：每球 {{rulePointsGoalBonus}} 分</text>
+        <text class="rule-text" wx:if="{{rulePointsEnableCardDeduction}}">黄牌扣 {{rulePointsYellowCardDeduction}} 分 / 红牌扣 {{rulePointsRedCardDeduction}} 分</text>
+      </view>
+      <view class="rule-block" wx:if="{{ruleSubs}}">
+        <text class="rule-block-title">换人规则</text>
+        <text class="rule-text">最大换人次数：{{ruleSubs.maxSubstitutions || '不限'}}</text>
+        <text class="rule-text">允许换回：{{allowSubBackText}}</text>
+        <text class="rule-text" wx:if="{{ruleSubsExtraHalftime}}">中场额外换人：{{ruleSubsHalftimeCount}} 次</text>
+      </view>
+      <view class="rule-block" wx:if="{{ruleSuspend}}">
+        <text class="rule-block-title">停赛规则</text>
+        <text class="rule-text">累计黄牌 {{ruleSuspend.accumulatedYellowCards || 3}} 张停赛 {{ruleSuspend.suspensionMatches || 1}} 场</text>
+        <text class="rule-text">直接红牌停赛 {{ruleSuspend.directRedCardSuspension || 2}} 场</text>
+        <text class="rule-text" wx:if="{{ruleSuspendTwoYellowMatches}}">两黄变红停赛 {{ruleSuspendTwoYellowMatches}} 场</text>
+        <text class="rule-text" wx:if="{{ruleSuspendCarryRed}}">红牌带入下赛季</text>
+        <text class="rule-text" wx:if="{{ruleSuspendCarryYellow}}">黄牌带入下赛季</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- ★ 赛事官网链接（信息同步） -->
+  <view class="t-website" wx:if="{{websiteUrl}}">
+    <view class="tw-row">
+      <text class="tw-label">赛事官网</text>
+      <text class="tw-url">{{websiteUrl}}</text>
+      <view class="tw-btn" bindtap="onCopyWebsiteUrl">复制</view>
+    </view>
+  </view>
+
+  <!-- 报名状态（非主办方） -->
+  <view class="signup-section" wx:if="{{showSignupSection}}">
+    <view class="signup-card signup-{{signupStatus}}">
+      <text class="signup-icon">{{signupIcon}}</text>
+      <view class="signup-text">
+        <text class="signup-title">{{signupTitle}}</text>
+        <text class="signup-desc">{{signupDesc}}</text>
+      </view>
+    </view>
+  </view>
+
+  </block>
+  </block>
+</view>

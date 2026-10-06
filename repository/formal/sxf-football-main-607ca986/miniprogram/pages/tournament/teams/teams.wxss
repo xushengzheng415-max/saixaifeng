@@ -1,0 +1,47 @@
+.page { padding: 0; background: #f5f5f5; min-height:100vh; }
+.loading-box { display:flex; flex-direction:column; align-items:center; padding:100rpx 0; color:#999; }
+.header { background: linear-gradient(135deg, #1B5E20, #43A047); padding: 30rpx 24rpx; color:#fff; }
+.h-title { font-size: 36rpx; font-weight: 700; display: block; }
+.h-count { font-size: 24rpx; margin-top: 8rpx; opacity: 0.85; display: block; }
+.division-tabs { width:100%; background:#fff; white-space:nowrap; border-bottom:1rpx solid #eee; }
+.division-tabs-inner { display:inline-flex; gap:14rpx; padding:18rpx 24rpx; }
+.division-tab { padding:12rpx 28rpx; color:#606266; background:#f4f6f8; border-radius:30rpx; font-size:26rpx; }
+.division-tab.active { color:#fff; background:#1B5E20; font-weight:600; }
+.organizer-actions { display:flex; gap:20rpx; padding:20rpx 24rpx 0; }
+.action-btn { flex:1; height:76rpx; line-height:76rpx; border-radius:12rpx; font-size:28rpx; padding:0; }
+.action-btn::after, .add-player-btn::after, .cancel-btn::after, .submit-btn::after { border:none; }
+.invite-btn { color:#1B5E20; background:#fff; border:2rpx solid #1B5E20; }
+.add-team-btn { color:#fff; background:#1B5E20; }
+.team-list { padding: 20rpx 24rpx; }
+.team-card { display:flex; align-items:center; gap:20rpx; padding:24rpx; background:#fff; border-radius:12rpx; margin-bottom:16rpx; }
+.tc-logo { width:80rpx; height:80rpx; border-radius:50%; background:#E8F5E9; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.tc-logo image { width:100%; height:100%; }
+.tc-letter { font-size:32rpx; color:#1B5E20; font-weight:700; }
+.tc-info { flex:1; display:flex; flex-direction:column; }
+.tc-name { font-size:30rpx; font-weight:600; color:#333; }
+.tc-city { font-size:24rpx; color:#999; margin-top:4rpx; }
+.tc-right { display:flex; flex-direction:column; align-items:flex-end; gap:10rpx; }
+.tc-count { font-size:26rpx; color:#666; }
+.add-player-btn { margin:0; padding:0 18rpx; min-width:132rpx; height:54rpx; line-height:54rpx; border-radius:27rpx; background:#E8F5E9; color:#1B5E20; font-size:24rpx; }
+.empty { text-align:center; padding:100rpx 0; color:#999; font-size:28rpx; }
+
+.modal-mask { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.48); display:flex; align-items:flex-end; }
+.create-modal { width:100%; max-height:90vh; background:#fff; border-radius:28rpx 28rpx 0 0; overflow:hidden; }
+.modal-header { height:96rpx; padding:0 28rpx; display:flex; align-items:center; justify-content:space-between; border-bottom:1rpx solid #eee; }
+.modal-title { font-size:34rpx; font-weight:700; color:#222; }
+.modal-close { padding:16rpx; font-size:44rpx; line-height:1; color:#999; }
+.modal-body { height:calc(90vh - 210rpx); padding:24rpx 28rpx; box-sizing:border-box; }
+.form-item { margin-bottom:26rpx; }
+.form-label { display:block; margin-bottom:12rpx; color:#333; font-size:27rpx; font-weight:600; }
+.form-input, .picker-value, .form-textarea { width:100%; box-sizing:border-box; background:#F7F8FA; border:1rpx solid #E5E7EB; border-radius:12rpx; color:#222; font-size:28rpx; }
+.form-input, .picker-value { height:78rpx; line-height:78rpx; padding:0 22rpx; }
+.form-textarea { height:150rpx; padding:20rpx 22rpx; }
+.placeholder { color:#A8ABB2; }
+.logo-row { display:flex; align-items:center; gap:20rpx; }
+.logo-picker { width:150rpx; height:150rpx; border:2rpx dashed #B7C1C8; border-radius:14rpx; background:#F7F8FA; display:flex; align-items:center; justify-content:center; color:#1B5E20; font-size:24rpx; overflow:hidden; }
+.logo-picker image { width:100%; height:100%; }
+.logo-tip { color:#999; font-size:24rpx; }
+.modal-footer { display:flex; gap:20rpx; padding:20rpx 28rpx 30rpx; border-top:1rpx solid #eee; background:#fff; }
+.cancel-btn, .submit-btn { flex:1; height:76rpx; line-height:76rpx; border-radius:12rpx; font-size:28rpx; padding:0; }
+.cancel-btn { background:#F2F3F5; color:#555; }
+.submit-btn { background:#1B5E20; color:#fff; }

@@ -1,0 +1,265 @@
+.page {
+  min-height: 100vh;
+  padding: 28rpx;
+  box-sizing: border-box;
+  background: #f3f7f4;
+  color: #263238;
+}
+
+.hero {
+  padding: 42rpx 34rpx;
+  border-radius: 26rpx;
+  background: linear-gradient(135deg, #14532d, #43a047);
+  color: #fff;
+  box-shadow: 0 14rpx 34rpx rgba(27, 94, 32, 0.22);
+}
+
+.service-badge,
+.hero-title,
+.hero-subtitle,
+.section-title,
+.safe-tip,
+.preview-title,
+.preview-subtitle,
+.grant-reason,
+.grant-expiry,
+.footer-tip text {
+  display: block;
+}
+
+.service-badge {
+  display: inline-block;
+  padding: 7rpx 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.55);
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 21rpx;
+}
+
+.hero-title {
+  margin-top: 20rpx;
+  font-size: 42rpx;
+  font-weight: 700;
+}
+
+.hero-subtitle {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.7;
+  opacity: 0.88;
+}
+
+.code-card,
+.preview-card,
+.records-card {
+  margin-top: 24rpx;
+  padding: 30rpx;
+  border-radius: 22rpx;
+  background: #fff;
+  box-shadow: 0 6rpx 22rpx rgba(0, 0, 0, 0.06);
+}
+
+.section-title {
+  color: #1b5e20;
+  font-size: 31rpx;
+  font-weight: 700;
+}
+
+.code-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.code-input {
+  flex: 1;
+  height: 88rpx;
+  padding: 0 24rpx;
+  border: 2rpx solid #c8e6c9;
+  border-radius: 14rpx;
+  box-sizing: border-box;
+  background: #f9fcfa;
+  font-size: 34rpx;
+  letter-spacing: 6rpx;
+}
+
+.check-button,
+.accept-button,
+.reject-button,
+.revoke-button {
+  margin: 0;
+  border-radius: 14rpx;
+  font-size: 27rpx;
+}
+
+.check-button,
+.accept-button {
+  background: #2e7d32;
+  color: #fff;
+}
+
+.check-button::after,
+.accept-button::after,
+.reject-button::after,
+.revoke-button::after {
+  border: 0;
+}
+
+.safe-tip {
+  margin-top: 18rpx;
+  color: #78909c;
+  font-size: 23rpx;
+  line-height: 1.6;
+}
+
+.preview-card {
+  border-top: 5rpx solid #43a047;
+}
+
+.preview-head,
+.grant-head,
+.detail-row,
+.action-row {
+  display: flex;
+  align-items: center;
+}
+
+.preview-head {
+  gap: 18rpx;
+  margin-bottom: 26rpx;
+}
+
+.shield {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.preview-title {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.preview-subtitle {
+  margin-top: 5rpx;
+  color: #78909c;
+  font-size: 23rpx;
+}
+
+.detail-row {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 30rpx;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #edf2ee;
+  font-size: 26rpx;
+}
+
+.detail-row text:first-child {
+  flex-shrink: 0;
+  color: #78909c;
+}
+
+.detail-row text:last-child {
+  text-align: right;
+}
+
+.warning-box {
+  margin-top: 24rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 13rpx;
+  background: #fff8e1;
+  color: #8d6e00;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.action-row {
+  gap: 18rpx;
+  margin-top: 26rpx;
+}
+
+.action-row button {
+  flex: 1;
+}
+
+.reject-button,
+.revoke-button {
+  background: #fff;
+  color: #c62828;
+  border: 1rpx solid #ef9a9a;
+}
+
+.loading-line,
+.empty-line {
+  padding: 42rpx 0 18rpx;
+  color: #90a4ae;
+  text-align: center;
+  font-size: 25rpx;
+}
+
+.grant-item {
+  margin-top: 22rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: #f7faf8;
+}
+
+.grant-head {
+  justify-content: space-between;
+  gap: 14rpx;
+}
+
+.grant-name {
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.status-tag {
+  padding: 6rpx 13rpx;
+  border-radius: 13rpx;
+  font-size: 21rpx;
+}
+
+.status-active {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-ended {
+  background: #eceff1;
+  color: #607d8b;
+}
+
+.grant-reason {
+  margin-top: 15rpx;
+  color: #455a64;
+  font-size: 25rpx;
+  line-height: 1.6;
+}
+
+.grant-expiry {
+  margin-top: 10rpx;
+  color: #90a4ae;
+  font-size: 22rpx;
+}
+
+.revoke-button {
+  margin-top: 20rpx;
+  font-size: 25rpx;
+}
+
+.footer-tip {
+  padding: 34rpx 0 18rpx;
+  color: #90a4ae;
+  text-align: center;
+  font-size: 22rpx;
+  line-height: 1.8;
+}

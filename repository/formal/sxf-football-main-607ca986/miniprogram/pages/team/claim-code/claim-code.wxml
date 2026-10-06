@@ -1,0 +1,55 @@
+<view class="page">
+  <view class="nav">
+    <view class="nav-back" bindtap="back">返回</view>
+    <view class="nav-title">球队认领</view>
+    <view class="nav-holder"></view>
+  </view>
+
+  <view wx:if="{{loading}}" class="state-box">正在加载认领码…</view>
+
+  <view wx:elif="{{errorText}}" class="state-box state-error">{{errorText}}</view>
+
+  <view wx:else class="content">
+    <view class="card">
+      <view class="card-title">{{tournamentName}}</view>
+      <view class="card-line">主办方：{{organizerName}}</view>
+      <view class="card-line">报名截止：{{deadlineText}}</view>
+      <view class="card-line">认领码有效期至：{{expiresAtText}}</view>
+    </view>
+
+    <view wx:if="{{needsPhone}}" class="card">
+      <view class="card-title">请先验证手机号</view>
+      <view class="card-line">认领球队需要验证您的手机号，仅用于匹配报名表登记的领队或主教练。</view>
+      <button class="primary-button" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" loading="{{binding}}">微信手机号快捷验证</button>
+    </view>
+
+    <block wx:else>
+      <view wx:if="{{hasTeams}}" class="card">
+        <view class="card-title">选择球队</view>
+        <view wx:for="{{teams}}" wx:key="inviteId" class="{{item.className}}" data-id="{{item.inviteId}}" data-name="{{item.teamName}}" data-review="{{item.requiresReview}}" bindtap="chooseTeam">
+          <view class="team-main">
+            <view class="team-name">{{item.teamName}}</view>
+            <view class="team-meta">{{item.divisionName}}</view>
+            <view class="team-meta">{{item.managerPhoneMasked}}</view>
+          </view>
+          <view class="team-status">{{item.statusText}}</view>
+        </view>
+      </view>
+
+      <view wx:else class="card">
+        <view class="card-title">未找到你名下待认领的球队</view>
+        <view class="card-line">本认领码只匹配报名表登记的领队或主教练手机号。</view>
+        <view class="card-line">如果确实有球队待认领，请联系赛事主办方核对报名表上的手机号，或请主办方发送该球队的定向认领链接。</view>
+      </view>
+
+      <view wx:if="{{selectedTeamName}}" class="card">
+        <view class="card-title">即将认领：{{selectedTeamName}}</view>
+        <view class="disclaimer-row" bindtap="toggleDisclaimer">
+          <view class="checkbox {{checkboxClass}}"></view>
+          <view class="disclaimer-text">我已阅读并同意参赛免责声明</view>
+        </view>
+        <button class="primary-button" disabled="{{acceptDisabled}}" loading="{{accepting}}" bindtap="acceptClaim">确认认领</button>
+      </view>
+    </block>
+  </view>
+</view>

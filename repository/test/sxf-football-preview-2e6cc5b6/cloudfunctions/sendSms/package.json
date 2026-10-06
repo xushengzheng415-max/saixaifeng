@@ -1,0 +1,10 @@
+{
+  "name": "sendSms",
+  "version": "1.0.0",
+  "description": "发送短信验证码 - 赛小蜂",
+  "main": "index.js",
+  "dependencies": {
+    "uuid": "^14.0.0",
+    "wx-server-sdk": "~2.6.3"
+  }
+}

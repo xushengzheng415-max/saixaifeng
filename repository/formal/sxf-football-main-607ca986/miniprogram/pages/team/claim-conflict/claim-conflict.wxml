@@ -1,0 +1,36 @@
+<view class="claim-page">
+  <image class="claim-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill" />
+  <view class="claim-content">
+    <view class="claim-nav">
+      <text class="claim-back" bindtap="onBack">‹</text>
+      <text class="claim-title">认领球队</text>
+    </view>
+    <view class="claim-alert-card">
+      <image class="claim-alert-icon" src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit" />
+      <text class="claim-alert-title">发现球队归属冲突</text>
+      <text class="claim-alert-desc">球队名称相似，但负责人信息不一致，暂时不能自动认领。</text>
+    </view>
+    <view class="claim-team-card">
+      <view class="claim-team-main">
+        <image class="claim-crest" src="/images/runtime/icons/brand-v2-11.png" mode="aspectFit" />
+        <text class="claim-team-name">{{teamName}}</text>
+        <text class="claim-meta">● 现任负责人：{{manager}}</text>
+        <text class="claim-meta">● 当前申请账号：{{applicant}}</text>
+        <text class="claim-meta">♛ 历史参赛：{{matchRecord}}</text>
+      </view>
+      <view class="claim-reasons">
+        <text class="claim-section-title">冲突原因</text>
+        <view wx:for="{{conflictReasons}}" wx:key="*this" class="claim-reason"><text class="claim-dot">•</text><text>{{item}}</text></view>
+      </view>
+    </view>
+    <button class="claim-primary" bindtap="onSubmitReview">{{submitLabel}}</button>
+    <button class="claim-secondary" bindtap="onBack">返回重新选择</button>
+    <view class="claim-proof-card">
+      <view class="claim-proof-heading"><image src="/images/runtime/icons/brand-v2-13.png" mode="aspectFit" /><view><text>请准备相关证明材料（至少一项）</text><text>提交后由主办方人工联系核验，审核前不会自动认领或合并</text></view></view>
+      <view class="claim-proof-list"><view wx:for="{{proofItems}}" wx:key="id" class="{{item.className || 'claim-proof'}}" data-id="{{item.id}}" bindtap="onSelectProofType"><image src="{{item.icon}}" mode="aspectFit" /><text>{{item.title}}</text><text>{{item.desc}}</text></view></view>
+      <text class="claim-proof-selected-label">当前材料类型：{{activeProofLabel}}</text>
+      <button class="claim-proof-upload" bindtap="onChooseProof" disabled="{{submitting || submitted}}">选择并上传材料（{{proofMaterialCountText}}）</button>
+      <view wx:if="{{hasProofMaterials}}" class="claim-proof-files"><view wx:for="{{proofMaterials}}" wx:key="fileId" class="claim-proof-file"><text>{{item.fileName}}</text><text>{{item.proofType}}</text><button data-index="{{index}}" bindtap="onRemoveProof" disabled="{{submitting || submitted}}">移除</button></view></view>
+    </view>
+  </view>
+</view>

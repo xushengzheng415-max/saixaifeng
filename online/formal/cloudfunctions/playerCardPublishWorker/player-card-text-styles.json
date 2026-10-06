@@ -1,0 +1,13 @@
+{
+  "fonts": [
+    { "id": "sans", "label": "标准黑体", "family": "Noto Sans SC", "files": ["NotoSansSC-Regular.otf", "NotoSansSC-Bold.otf"] },
+    { "id": "brush", "label": "毛笔楷体", "family": "Ma Shan Zheng", "files": ["MaShanZheng-Regular.ttf"] },
+    { "id": "sport", "label": "运动数字", "family": "Anton", "files": ["Anton-Regular.ttf"] }
+  ],
+  "defaults": {
+    "font": "sans", "fontStyle": "normal", "letterSpacing": 0, "fillMode": "solid",
+    "gradient": { "start": "#fff3ba", "middle": "#e9c46b", "end": "#ad7623", "middleEnabled": true, "angle": 90 },
+    "stroke": { "width": 0, "color": "#755018" },
+    "shadow": { "enabled": false, "color": "#000000", "opacity": 0.4, "x": 1, "y": 2, "blur": 1 }
+  }
+}

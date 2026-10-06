@@ -1,0 +1,36 @@
+<view class="referee-handoff">
+  <view class="hero">
+    <view class="hero-icon">裁</view>
+    <text class="hero-title">裁判服务入口</text>
+
+  </view>
+
+  <view class="handoff-card">
+    <text class="card-title">请前往赛小蜂足球服务号</text>
+    <text class="card-body">小程序不保存裁判注册资料，也不会在本地生成裁判身份。请通过服务号完成微信授权、手机号绑定、裁判资料提交、比赛任务接收和电子记录签字。</text>
+
+    <view class="steps">
+      <view class="step">
+        <text class="step-number">1</text>
+        <text class="step-text">微信授权</text>
+      </view>
+      <view class="step">
+        <text class="step-number">2</text>
+        <text class="step-text">手机号绑定</text>
+      </view>
+      <view class="step">
+        <text class="step-number">3</text>
+        <text class="step-text">接收指派并执裁</text>
+      </view>
+    </view>
+
+    <button class="primary-btn" bindtap="openRefereeService">复制服务号入口</button>
+    <button class="secondary-btn" bindtap="backHome">返回首页</button>
+  </view>
+
+  <view class="url-card">
+    <text class="url-label">入口地址</text>
+    <text class="url-value">{{handoffUrl}}</text>
+    <text class="url-status" wx:if="{{copied}}">已复制，可在微信中打开</text>
+  </view>
+</view>

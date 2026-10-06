@@ -1,0 +1,91 @@
+﻿{
+  "envId": "cloud1-7g8ckb3c7815a011",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "phoneLogin",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "envVariables": {},
+      "installDependency": true
+    },
+    {
+      "name": "emailLogin",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "envVariables": {},
+      "installDependency": true
+    },
+    {
+      "name": "wechatWebLogin",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "envVariables": {
+        "WECHAT_WEB_APPID": "wx5a42aae0e5d0669c",
+        "WECHAT_WEB_APPSECRET": "{{WECHAT_WEB_APPSECRET}}"
+      },
+      "installDependency": true
+    },
+    {
+      "name": "bindPhone",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "envVariables": {},
+      "installDependency": true
+    },
+    {
+      "name": "webLoginApi",
+      "timeout": 20,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "envVariables": {
+        "WECHAT_WEB_APPID": "wx5a42aae0e5d0669c",
+        "WECHAT_WEB_APPSECRET": "{{WECHAT_WEB_APPSECRET}}",
+        "SMS_SECRET_ID": "{{SMS_SECRET_ID}}",
+        "SMS_SECRET_KEY": "{{SMS_SECRET_KEY}}",
+        "SMS_SDK_APP_ID": "{{SMS_SDK_APP_ID}}",
+        "SMTP_USER": "saixiaofeng@yeah.net",
+        "SMTP_PASS": "{{SMTP_PASS}}"
+      },
+      "installDependency": true
+    },
+    {
+      "name": "uploadFile",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "envVariables": {},
+      "installDependency": true,
+      "triggers": [
+        {
+          "name": "http-trigger",
+          "type": "http",
+          "config": {
+            "authRequired": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "parseTournamentRegulations",
+      "timeout": 120,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "envVariables": {},
+      "installDependency": true,
+      "triggers": [
+        {
+          "name": "http-trigger",
+          "type": "http",
+          "config": {
+            "authRequired": false
+          }
+        }
+      ]
+    }
+  ]
+}

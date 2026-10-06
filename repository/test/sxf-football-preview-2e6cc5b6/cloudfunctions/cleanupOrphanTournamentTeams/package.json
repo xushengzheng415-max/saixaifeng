@@ -1,0 +1,9 @@
+{
+  "name": "cleanupOrphanTournamentTeams",
+  "version": "1.0.0",
+  "description": "清理 tournament_teams 中关联赛事已不存在的孤立记录",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

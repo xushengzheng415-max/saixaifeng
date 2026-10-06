@@ -1,0 +1,28 @@
+<view class="login-page">
+  <image class="bg-image" src="/images/login-bg.jpg" mode="aspectFill"></image>
+  <view class="login-shade"></view>
+
+  <view class="guest-home" style="{{guestHomeStyle}}" role="button" aria-label="免登录浏览首页" bindtap="goToGuestHome">
+    <image src="/images/icons/home-entry-white.svg" mode="aspectFit"></image>
+  </view>
+
+  <view class="content-overlay">
+    <view class="login-card">
+      <view class="login-action">
+        <button class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="loginWithPhone" disabled="{{loginDisabled}}">{{loginButtonText}}</button>
+      </view>
+      <text class="phone-auth-note">手机号用于识别唯一账号并加载已有权限</text>
+
+      <view class="agreement-row">
+        <view class="checkbox {{checkboxClass}}" bindtap="toggleAgreement">
+          <text wx:if="{{agreementChecked}}">✓</text>
+        </view>
+        <text class="agreement-text" bindtap="toggleAgreement">我已阅读并同意</text>
+        <text class="agreement-link" catchtap="showUserAgreement">《用户协议》</text>
+        <text class="agreement-text">和</text>
+        <text class="agreement-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
+      </view>
+
+    </view>
+  </view>
+</view>

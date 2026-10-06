@@ -1,0 +1,7 @@
+{
+  "navigationStyle": "custom",
+  "pageOrientation": "auto",
+  "usingComponents": {
+    "lineup-player-card": "/components/lineup-player-card/lineup-player-card"
+  }
+}

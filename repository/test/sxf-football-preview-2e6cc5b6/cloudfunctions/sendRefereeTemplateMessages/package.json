@@ -1,0 +1,9 @@
+{
+  "name": "sendRefereeTemplateMessages",
+  "version": "1.0.0",
+  "description": "发送服务号裁判任务模板消息",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.7.0"
+  }
+}

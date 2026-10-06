@@ -1,0 +1,51 @@
+<view class="page">
+  <view class="nav"><text bindtap="back" class="back">‹</text><text class="nav-title">单场比赛阵容</text></view>
+  <view wx:if="{{loading}}" class="loading">正在加载正式名单</view>
+  <block wx:else>
+    <view class="match-card">
+      <image wx:if="{{match.homeLogo}}" class="crest" src="{{match.homeLogo}}" mode="aspectFit"/>
+      <view class="match-content"><text class="team-line">{{match.homeTeamName}} <text class="vs">VS</text> {{match.awayTeamName}}</text><text class="match-meta">{{match.matchDate}} · {{match.venue}} · {{minPlayers}}人制</text></view>
+      <image wx:if="{{match.awayLogo}}" class="crest" src="{{match.awayLogo}}" mode="aspectFit"/>
+    </view>
+    <view wx:if="{{returned}}" class="returned">退回修改：{{returnReason}}</view>
+    <view wx:if="{{locked}}" class="locked">阵容已提交</view>
+    <view wx:elif="{{preSubmitted}}" class="pre-submitted">已预提交 · 赛前1小时可调整</view>
+    <view wx:if="{{submissionWindowText}}" class="submission-window">{{submissionWindowText}}</view>
+    <view wx:if="{{cardAssetsError}}" class="card-error" bindtap="load">球员卡暂未加载 · 重新加载</view>
+    <view class="arrival-card"><view><text>赛前报到</text><text>{{arrivalStatusText}}</text></view><button bindtap="confirmArrival" disabled="{{arrivalButtonDisabled}}">{{arrivalButtonText}}</button></view>
+    <view class="formation-tabs"><view class="formation-label"><text>首发 {{starterCount}}/{{minPlayers}}</text><text class="rotate-hint">旋转手机切换横竖版</text></view><view class="tabs"><text wx:for="{{formationOptions}}" wx:key="id" data-id="{{item.id}}" bindtap="selectFormation" class="formation-tab {{item.tabClass}}">{{item.label}}</text></view></view>
+    <view class="pitch-card">
+      <view class="pitch">
+        <view class="pitch-outline"></view><view class="pitch-center"></view><view class="pitch-box pitch-box-top"></view><view class="pitch-box pitch-box-bottom"></view>
+        <view class="coach-slot">
+          <lineup-player-card wx:if="{{headCoach}}" size="coach" card-role="coach" card-url="{{headCoach.cardUrl}}" card-state="{{headCoach.cardState}}" card-tier="{{headCoach.cardTier}}" photo-url="{{headCoach.photoUrl}}" number="M" name="{{headCoach.name}}" position="主教练" jersey-name="{{headCoach.jerseyName}}" nationality="{{headCoach.nationality}}" team-logo="{{headCoach.teamLogo}}"/>
+          <view wx:else class="coach-empty"><text class="coach-mark">M</text><text>主教练</text><text class="coach-state">{{headCoachStateText}}</text></view>
+        </view>
+        <view wx:for="{{slots}}" wx:key="id" class="slot {{item.slotClass}}" style="{{item.slotStyle}}" data-id="{{item.id}}" bindtap="chooseSlot" bindlongpress="removeSlotPlayer">
+          <view wx:if="{{item.empty}}" class="player-card"><text class="card-add">+</text></view>
+          <lineup-player-card wx:else size="pitch" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.avatar}}" number="{{item.jerseyText}}" name="{{item.playerName}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
+          <text wx:if="{{item.empty}}" class="slot-name">{{item.title}}</text>
+        </view>
+      </view>
+    <view class="bench-card"><view class="bench-head"><text>替补 {{substituteCount}}/{{benchLimit}}</text></view><scroll-view scroll-x="true" class="bench-scroll"><view class="bench"><view wx:for="{{substitutes}}" wx:key="id" class="bench-player" data-id="{{item.id}}" bindtap="removeSubstitute"><lineup-player-card size="bench" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/></view><view wx:if="{{showBenchAdd}}" class="bench-add-tile {{benchAddClass}}" bindtap="openSubstitutePicker"><text>+</text><text>添加替补</text></view></view></scroll-view></view>
+    </view>
+    <view wx:if="{{emptyPlayers}}" class="empty">没有可用的已审核正式名单球员</view>
+    <view wx:if="{{showSubmit}}" class="bottom"><button bindtap="submit" disabled="{{submitDisabled || saving}}" class="submit">{{submitButtonText}}</button></view>
+    <view wx:if="{{playerPickerVisible}}" class="picker-mask" bindtap="closePlayerPicker">
+      <view class="player-picker" catchtap="noop">
+        <view class="picker-handle"></view>
+        <view class="picker-head"><view><text class="picker-title">{{pickerTitle}}</text><text class="picker-hint">{{pickerHint}}</text></view><text class="picker-close" bindtap="closePlayerPicker">关闭</text></view>
+        <view wx:if="{{pickerIsStarter}}" class="picker-tabs"><text class="picker-tab active">位置优先</text><text class="picker-tab" bindtap="showAllPickerPlayers">全部名单</text></view>
+        <scroll-view scroll-y="true" class="picker-list">
+          <view class="picker-grid">
+            <view wx:for="{{pickerPlayers}}" wx:key="id" class="picker-option" data-id="{{item.id}}" bindtap="choosePlayer">
+              <lineup-player-card size="selection" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
+              <text wx:if="{{item.pickerStatusText}}" class="picker-status">{{item.pickerStatusText}}</text>
+            </view>
+          </view>
+          <view wx:if="{{pickerEmpty}}" class="picker-empty">当前没有可选球员</view>
+        </scroll-view>
+      </view>
+    </view>
+  </block>
+</view>

@@ -1,0 +1,12 @@
+{
+  "name": "clearDatabase",
+  "version": "1.0.0",
+  "description": "清空云数据库云函数",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  },
+  "keywords": ["wechat", "cloud", "database", "clear"],
+  "author": "",
+  "license": "MIT"
+}

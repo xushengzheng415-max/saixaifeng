@@ -1,0 +1,88 @@
+<!-- pages/logs/logs.wxml -->
+<view class="container">
+  <!-- 统计卡片 -->
+  <view class="stats-card">
+    <view class="stat-item">
+      <text class="stat-num">{{stats.total}}</text>
+      <text class="stat-label">全部</text>
+    </view>
+    <view class="stat-item info">
+      <text class="stat-num">{{stats.info}}</text>
+      <text class="stat-label">INFO</text>
+    </view>
+    <view class="stat-item warn">
+      <text class="stat-num">{{stats.warn}}</text>
+      <text class="stat-label">WARN</text>
+    </view>
+    <view class="stat-item error">
+      <text class="stat-num">{{stats.error}}</text>
+      <text class="stat-label">ERROR</text>
+    </view>
+  </view>
+
+  <!-- 筛选区域 -->
+  <view class="filter-section">
+    <picker mode="selector" range="{{levels}}" bindchange="onLevelChange">
+      <view class="filter-item">
+        <text>{{currentLevel}}</text>
+        <text class="icon">▼</text>
+      </view>
+    </picker>
+    
+    <picker mode="selector" range="{{pages}}" bindchange="onPageChange">
+      <view class="filter-item">
+        <text>{{currentPage || '全部页面'}}</text>
+        <text class="icon">▼</text>
+      </view>
+    </picker>
+    
+    <view class="filter-item search">
+      <input placeholder="搜索日志..." bindinput="onSearchInput" value="{{searchKeyword}}" />
+    </view>
+  </view>
+
+  <!-- 日志列表 -->
+  <scroll-view 
+    class="log-list" 
+    scroll-y 
+    bindscrolltolower="loadMore"
+    refresher-enabled
+    bindrefresherrefresh="refreshLogs"
+    refresher-triggered="{{refreshing}}"
+  >
+    <block wx:for="{{filteredLogs}}" wx:key="timestamp">
+      <view 
+        class="log-item level-{{item._LevelLower}}" 
+        bindtap="onLogTap" 
+        data-log="{{item}}"
+      >
+        <view class="log-header">
+          <text class="log-level level-{{item._LevelLower}}">{{item.level}}</text>
+          <text class="log-time">{{item.date}}</text>
+        </view>
+        <view class="log-page">{{item.page}}</view>
+        <view class="log-message">{{item.message}}</view>
+        <view class="log-user">👤 {{item.userName}}</view>
+      </view>
+    </block>
+
+    <!-- 加载状态 -->
+    <view class="loading-more" wx:if="{{loading}}">
+      <text>加载中...</text>
+    </view>
+    <view class="no-more" wx:elif="{{!hasMore}}">
+      <text>没有更多了</text>
+    </view>
+    <view class="empty-state">
+      <text class="empty-icon">📋</text>
+      <text class="empty-text">暂无日志记录</text>
+    </view>
+  </scroll-view>
+
+  <!-- 底部操作栏 -->
+  <view class="action-bar">
+    <button class="btn" bindtap="onExport" hover-class="hover">📤 导出</button>
+    <button class="btn" bindtap="onClear" hover-class="hover">🗑️ 清理</button>
+    <button class="btn btn-error" bindtap="onTestError" hover-class="hover">🧪 测试上报</button>
+  </view>
+</view>

@@ -1,0 +1,13 @@
+{
+  "name": "generateAIImage",
+  "version": "1.0.0",
+  "description": "AI生图云函数 - 调用混元生图",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "~3.16.0",
+    "ws": "latest"
+  },
+  "keywords": ["wechat", "cloud", "AI", "hunyuan"],
+  "author": "",
+  "license": "MIT"
+}
