@@ -171,3 +171,9 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 主办方/平台会话通道在路由没有改变身份时不再重复清空读取缓存；读取身份键加入共享工作人员状态、赛事和权限。由导航或账号上下文切换造成的 `READ_CACHE_INVALIDATED`、`SESSION_ACCOUNT_MISMATCH` 仅按过期读取取消处理，不再由 `queryList` 显示为权限异常。真实授权拒绝仍沿用原错误反馈。
 
 改动已合入并推送 Gitee `main`（功能提交 `1651e77`，合并提交 `14743acf`）。正式 `/admin/` 完整上传 268 个文件；`index.html`、主入口、`cloud`、`LayoutView`、`TournamentTeams` 分包均 HTTP 200，线上 SHA-256 与构建产物一致；预览 `/preview/admin/` 仍正常。没有修改云函数或授权数据，未运行独立测试套件。
+
+## 2026-10-06 补齐竞赛管理读取参赛球队权限
+
+原因：子账号授权项包含 `event.competition`，但 `staffDbRights.readRights('tournament_teams')` 未把竞赛管理模块纳入读取白名单，导致“全部权限”账号进入竞赛管理时仍被拒绝读取本赛事的参赛关系。现只补 `event.competition` 的读取映射；行级范围继续限制为当前获授权赛事，新增、修改和删除权限保持原口径。
+
+功能提交 `4ee46ee` 已合入并推送 Gitee `main`（合并提交 `a45f6611`）。生产 `webLoginApi` 从线上包差量更新；线上 `index.js` 保持原摘要 `2BD303520AFB5607034CA3A616D72CF8B34EB792E4EAA58BAF876459962C85A5`，`staffDbRights.cjs` 回下载 SHA-256 `7FD55D76D8CCC56FFDA2163ECD9E784DE2C4A408FABA0C86744CB0E07E2E8D9E` 与部署包一致。没有修改授权记录或赛事数据，也未运行独立测试套件。
