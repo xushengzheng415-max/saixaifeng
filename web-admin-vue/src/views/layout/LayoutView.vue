@@ -217,7 +217,7 @@
           <div class="workspace-shell-actions">
             <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" plain @click="returnToTournamentSpace">返回赛事空间</el-button>
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
-            <button class="notification-action" type="button" aria-label="查看站内信" title="站内信" @click="showNotifications"><el-icon><Bell /></el-icon><span>站内信</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
+            <button class="notification-action" type="button" :aria-label="pendingStaffInvitationCount ? '查看共享赛事邀请' : '查看站内信'" :title="pendingStaffInvitationCount ? '有共享赛事邀请待接受' : '站内信'" @click="showNotifications"><el-icon><Bell /></el-icon><span>{{ pendingStaffInvitationCount ? '赛事邀请' : '站内信' }}</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
             <el-dropdown trigger="click" @command="handleUserCommand">
               <div class="workspace-user">
                 <el-avatar v-if="userInfo.avatarUrl" :size="38" :src="userInfo.avatarUrl" />
@@ -331,7 +331,7 @@ function openHelpCenter() {
 }
 
 function showNotifications() {
-  router.push('/messages')
+  router.push(pendingStaffInvitationCount.value ? '/tournament-staff' : '/messages')
 }
 async function refreshUnreadNotificationCount() {
   if (isPlatformContext()) return
