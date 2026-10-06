@@ -1,0 +1,40 @@
+{
+  "checkedAt": "2026-10-06T13:10:29.284Z",
+  "entries": [
+    {
+      "name": "formal-pc",
+      "url": "https://www.sxffootball.cn/admin/",
+      "status": 200,
+      "sha256": "604820920BCBF12BF141FADA29AC3E107787F627FFFACFDA1F17C0135ACA80B1",
+      "matchesSnapshot": true
+    },
+    {
+      "name": "test-pc",
+      "url": "https://www.sxffootball.cn/preview/admin/",
+      "status": 200,
+      "sha256": "B377E4D1541C8D2A7E08AF007B234E0BA2BEB0F39D107FE9CBA84BF42B47DCBD",
+      "matchesSnapshot": true
+    },
+    {
+      "name": "formal-landing",
+      "url": "https://www.sxffootball.cn/",
+      "status": 200,
+      "sha256": "590B4B3FD75F9F57ABBA93856D67F59A6411F91152821CC3547AC43F046FF864",
+      "matchesSnapshot": true
+    },
+    {
+      "name": "formal-h5",
+      "url": "https://www.sxffootball.cn/service-account-h5/",
+      "status": 200,
+      "sha256": "7DD440AE9A8498902B8BAB9FDA2492D769979E716806AFD8DF2FDF86345731E4",
+      "matchesSnapshot": true
+    },
+    {
+      "name": "test-h5",
+      "url": "https://www.sxffootball.cn/preview/service-account-h5/",
+      "status": 200,
+      "sha256": "4882067C3668F313CC4371598C609CA0C8CB3AFDB23B079698F067851EAAB094",
+      "matchesSnapshot": true
+    }
+  ]
+}
