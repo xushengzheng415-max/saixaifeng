@@ -3,7 +3,7 @@
 const RIGHTS = Object.freeze({
   tournaments: ['event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results', 'event.news', 'event.referees', 'event.settings'],
   divisions: ['event.dashboard', 'event.competition', 'event.registration', 'event.draw', 'event.matches', 'event.results', 'event.settings'],
-  tournament_teams: ['event.dashboard', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results'],
+  tournament_teams: ['event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results'],
   teams: ['event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results', 'event.news'],
   players: ['event.registration', 'event.teams', 'event.matches', 'event.results'],
   coaches: ['event.teams', 'event.matches'],
