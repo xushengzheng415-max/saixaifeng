@@ -4560,7 +4560,7 @@ async function handleDbQuery(event) {
       const tournamentId = String(event.staffTournamentId || '').trim()
       const requestedModule = String(event.staffModule || '').trim()
       const needed = ['list', 'get', 'count'].includes(operation)
-        ? (staffDbRights.readRights(collection).includes(requestedModule) ? [requestedModule] : [])
+        ? staffDbRights.requiredReadRights(collection, requestedModule)
         : collection === 'teams' && operation === 'add' && requestedModule === 'event.registration'
           ? (staffDbRights.writeRights(collection, operation, data).length ? ['event.registration'] : [])
           : staffDbRights.writeRights(collection, operation, data)

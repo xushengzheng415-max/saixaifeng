@@ -47,6 +47,13 @@ function readRights(collection) {
   return RIGHTS[collection] || []
 }
 
+function requiredReadRights(collection, requestedModule) {
+  // Draw pages may finish a team-roster read after navigation changes the active
+  // module. Keep player PII behind both draw and team-management grants.
+  if (collection === 'players' && requestedModule === 'event.draw') return ['event.draw', 'event.teams']
+  return readRights(collection).includes(requestedModule) ? [requestedModule] : []
+}
+
 function writeRights(collection, operation, data = {}) {
   if (SPECIAL[operation]) return [SPECIAL[operation]]
   if (!['add', 'update', 'delete'].includes(operation) || !RIGHTS[collection]) return []
@@ -77,4 +84,4 @@ function writeRights(collection, operation, data = {}) {
   return [...required]
 }
 
-module.exports = { readRights, writeRights }
+module.exports = { readRights, requiredReadRights, writeRights }

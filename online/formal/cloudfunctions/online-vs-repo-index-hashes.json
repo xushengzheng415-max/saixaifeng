@@ -2,8 +2,8 @@
   "environment": "cloud1-7g8ckb3c7815a011",
   "functionsListed": 88,
   "functionsDownloaded": 88,
-  "repoIndexMatches": 56,
-  "repoIndexDiffers": 27,
+  "repoIndexMatches": 57,
+  "repoIndexDiffers": 26,
   "noRepoIndex": 5,
   "missingFromRepo": [
     "prepareParentIdentityImage",
@@ -22,7 +22,6 @@
     "serviceMatchWorkflow",
     "updateTeam",
     "getTournaments",
-    "webLoginApi",
     "wechatWebLogin",
     "migrateData",
     "verifySmsCode",
@@ -415,12 +414,12 @@
     {
       "name": "webLoginApi",
       "runtime": "Nodejs18.15",
-      "modifyTime": "2026-10-06 19:22:32",
+      "modifyTime": "2026-10-06 19:39:12",
       "downloaded": true,
       "repoHasIndex": true,
-      "onlineBlob": "b335878bc058eed3e4c4a135716155258f9d39f7",
+      "onlineBlob": "4f892628b14d351f01eb6d96969be427cf2cd64b",
       "repoBlob": "4f892628b14d351f01eb6d96969be427cf2cd64b",
-      "sameBlob": false
+      "sameBlob": true
     },
     {
       "name": "wechatWebLogin",

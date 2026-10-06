@@ -9,7 +9,7 @@ This branch stores a frozen copy for the transition from 1.0.x to 1.1.
 - `online/formal/cloudfunctions/` contains source files downloaded from the 88 functions in CloudBase `cloud1-7g8ckb3c7815a011`. `node_modules` is excluded here; the local backup keeps full downloaded packages and their runtime dependencies.
 - Function environment variable values and database contents are not included.
 
-The currently served PC bundles differ from the local builds. Of 88 deployed CloudBase function entry files, 56 match Gitee `main` byte for byte, 27 differ, and 5 have no corresponding entry file in the repository. See `online/formal/cloudfunctions/online-vs-repo-index-hashes.json` for the comparison. The snapshots keep online and repository code in separate paths so this branch does not imply that they are identical.
+The currently served PC bundles differ from the local builds. Of 88 deployed CloudBase function entry files, 57 match Gitee `main` byte for byte, 26 differ, and 5 have no corresponding entry file in the repository. See `online/formal/cloudfunctions/online-vs-repo-index-hashes.json` for the comparison. The snapshots keep online and repository code in separate paths so this branch does not imply that they are identical.
 
 The repository labels its mini-program source `1.0.34` (development / development-experience). The WeChat Developer Tools CLI is upload-only for code packages; it cannot download the exact platform release or experience package. This snapshot therefore preserves the available repository source and records that platform-package limit in `metadata`.
 
@@ -19,4 +19,6 @@ Backup branch: `backup/pre-1.1-20261006`. This branch is a source snapshot and d
 
 
 Credential literals in three online CloudBase source files are replaced with environment variable reads in this public snapshot. The local backup keeps the exact downloaded code; see metadata/redacted-credentials.md.
+
+
 
