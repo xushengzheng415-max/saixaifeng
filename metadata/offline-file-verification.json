@@ -1,0 +1,45 @@
+{
+  "verifiedAt": "2026-10-06T12:52:47.466Z",
+  "snapshots": [
+    {
+      "name": "formal-pc",
+      "manifestRecords": 148,
+      "verified": 117,
+      "missing": 0,
+      "mismatch": 0,
+      "non2xxCandidates": 31
+    },
+    {
+      "name": "test-pc",
+      "manifestRecords": 81,
+      "verified": 81,
+      "missing": 0,
+      "mismatch": 0,
+      "non2xxCandidates": 0
+    },
+    {
+      "name": "formal-landing",
+      "manifestRecords": 103,
+      "verified": 101,
+      "missing": 0,
+      "mismatch": 0,
+      "non2xxCandidates": 2
+    },
+    {
+      "name": "formal-h5",
+      "manifestRecords": 21,
+      "verified": 21,
+      "missing": 0,
+      "mismatch": 0,
+      "non2xxCandidates": 0
+    },
+    {
+      "name": "test-h5",
+      "manifestRecords": 9,
+      "verified": 9,
+      "missing": 0,
+      "mismatch": 0,
+      "non2xxCandidates": 0
+    }
+  ]
+}

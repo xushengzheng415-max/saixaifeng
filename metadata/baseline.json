@@ -75,5 +75,11 @@
       "sha256": "EE3237EDF5248216BA0148B91A158D829FA218F93484DE33D7DC0E0DC9EA2270"
     }
   },
-  "repoStashCount": 18
+  "repoStashCount": 18,
+  "onlineFileVerification": {
+    "http200Files": 329,
+    "missing": 0,
+    "sha256Mismatches": 0
+  },
+  "githubBackupBranch": "backup/pre-1.1-20261006"
 }
