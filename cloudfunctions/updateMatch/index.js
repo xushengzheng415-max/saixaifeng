@@ -327,6 +327,100 @@ async function ensureNoRefereeScheduleConflicts(matchId, match, refereeCrew) {
   throw new Error(`${Array.from(names).join('、')}在${matchDate} ${matchTime}已有执法场次，请调整后再指派`)
 }
 
+async function forfeitMatch(event) {
+  const matchId = String(event.matchId || '').trim()
+  const data = event.data && typeof event.data === 'object' && !Array.isArray(event.data) ? event.data : {}
+  const forfeitingTeamId = String(data.forfeitTeamId || '').trim()
+  if (!matchId || !forfeitingTeamId || Object.keys(data).some(key => key !== 'forfeitTeamId')) {
+    return { success:false, code:'FORFEIT_DATA_INVALID', message:'请选择本场弃赛球队' }
+  }
+
+  const actor = await authenticateActor(event)
+  const matchResult = await db.collection('matches').doc(matchId).get()
+  const match = Array.isArray(matchResult.data) ? matchResult.data[0] : matchResult.data
+  if (!match) return { success:false, code:'MATCH_NOT_FOUND', message:'比赛不存在' }
+  if (event.expectedEventRevision == null || Number(event.expectedEventRevision) !== Number(match.matchEventRevision || 0)) {
+    return { success:false, code:'MATCH_EVENTS_CHANGED', message:'比赛事件已更新，请刷新后再登记弃赛' }
+  }
+  const tournamentResult = match.tournamentId ? await db.collection('tournaments').doc(String(match.tournamentId)).get() : null
+  const tournament = tournamentResult && (Array.isArray(tournamentResult.data) ? tournamentResult.data[0] : tournamentResult.data)
+  if (!recordBelongsToActor(match, actor) && !recordBelongsToActor(tournament, actor)) {
+    return { success:false, code:'MATCH_SCOPE_DENIED', message:'无权修改其他账号的比赛' }
+  }
+  if (await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId) &&
+      !await staffPolicy.hasRight(db, actor.user._id, actor.orgId, String(match.tournamentId || ''), 'event.matches')) {
+    return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', message:'当前赛事没有比赛管理权限' }
+  }
+
+  const canForfeitStatus = status => ['scheduled','ongoing','live','in_progress','playing'].includes(String(status || '').toLowerCase())
+  if (!canForfeitStatus(match.status)) return { success:false, code:'MATCH_FORFEIT_STATUS_INVALID', message:'只有未开始或进行中的比赛可以登记弃赛' }
+  if (refereeHasTakenOverOrLocked(match)) return { success:false, code:'MATCH_RECORD_LOCKED', message:'裁判已接管或记录已锁定，请通过裁判记录流程处理' }
+  if (Array.isArray(match.events) && match.events.length) return { success:false, code:'MATCH_HAS_EVENTS', message:'本场已有比赛事件，不能直接登记弃赛' }
+  try {
+    const externalEvents = (await db.collection('match_events').where({ matchId }).limit(1).get()).data || []
+    if (externalEvents.length) return { success:false, code:'MATCH_HAS_EVENTS', message:'本场已有比赛事件，不能直接登记弃赛' }
+  } catch (error) {
+    const message = String(error && (error.message || error.errMsg) || '').toLowerCase()
+    const code = String(error && (error.code || error.errCode) || '').toLowerCase()
+    const collectionMissing = code.includes('collection_not_exist') || message.includes('collection not exist') ||
+      message.includes('collection does not exist') || message.includes('table not exist')
+    if (!collectionMissing) return { success:false, code:'MATCH_EVENT_CHECK_FAILED', message:'暂时无法核实比赛事件，请重试' }
+  }
+  const homeTeamId = String(match.homeTeamId || '')
+  const awayTeamId = String(match.awayTeamId || '')
+  if (!homeTeamId || !awayTeamId || homeTeamId === awayTeamId || ![homeTeamId, awayTeamId].includes(forfeitingTeamId)) {
+    return { success:false, code:'FORFEIT_TEAM_INVALID', message:'弃赛方必须是本场参赛球队' }
+  }
+
+  const homeForfeited = forfeitingTeamId === homeTeamId
+  const resultData = {
+    homeScore:homeForfeited ? 0 : 3,
+    awayScore:homeForfeited ? 3 : 0,
+    scoreHome:homeForfeited ? 0 : 3,
+    scoreAway:homeForfeited ? 3 : 0,
+    status:'finished',
+    resultType:'forfeit',
+    resolution:'forfeit',
+    forfeitingTeamId,
+    winnerTeamId:homeForfeited ? awayTeamId : homeTeamId
+  }
+  await db.runTransaction(async transaction => {
+    const freshResult = await transaction.collection('matches').doc(matchId).get()
+    const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
+    if (!fresh || String(fresh.homeTeamId || '') !== homeTeamId || String(fresh.awayTeamId || '') !== awayTeamId ||
+        !canForfeitStatus(fresh.status) || Number(fresh.matchEventRevision || 0) !== Number(event.expectedEventRevision) ||
+        JSON.stringify(fresh.events || []) !== JSON.stringify(match.events || [])) {
+      throw Object.assign(new Error('比赛状态已变化，请刷新后重试'), { code:'MATCH_FORFEIT_CONFLICT' })
+    }
+    if (refereeHasTakenOverOrLocked(fresh)) {
+      throw Object.assign(new Error('裁判已接管或记录已锁定，请通过裁判记录流程处理'), { code:'MATCH_RECORD_LOCKED' })
+    }
+    if (Array.isArray(fresh.events) && fresh.events.length) {
+      throw Object.assign(new Error('本场已有比赛事件，不能直接登记弃赛'), { code:'MATCH_HAS_EVENTS' })
+    }
+    await transaction.collection('matches').doc(matchId).update({ data:{ ...resultData, orgId:actor.orgId, updateTime:db.serverDate() } })
+    await transaction.collection('registration_audit_logs').add({ data:{
+      sport:'football',
+      action:'match_forfeit_recorded',
+      tournamentId:String(match.tournamentId || ''),
+      matchId,
+      actorUserId:String(actor.user._id || ''),
+      actorOrgId:actor.orgId,
+      result:'success',
+      detail:{
+        forfeitingTeamId,
+        winnerTeamId:resultData.winnerTeamId,
+        before:{ status:String(fresh.status || ''), homeScore:fresh.homeScore ?? null, awayScore:fresh.awayScore ?? null },
+        after:{ status:resultData.status, homeScore:resultData.homeScore, awayScore:resultData.awayScore, resultType:resultData.resultType }
+      },
+      createTime:db.serverDate()
+    } })
+  })
+  try { await updateStandings(matchId, resultData, actor.orgId) }
+  catch (error) { console.warn('弃赛赛果已保存，旧版积分缓存同步失败:', error.message || error) }
+  return { success:true, message:'弃赛结果已保存', data:resultData }
+}
+
 exports.main = async (event, context) => {
   const { matchId, data } = event
 
@@ -336,6 +430,14 @@ exports.main = async (event, context) => {
 
   if(event.action==='assignByHeadReferee') {
     try{return await assignByHeadReferee(event)}catch(err){console.error('裁判长排班失败:',err);return {success:false,message:err.message||'裁判排班失败',code:err.code||'HEAD_REFEREE_ASSIGNMENT_FAILED'}}
+  }
+
+  if (event.action === 'forfeitMatch') {
+    try { return await forfeitMatch(event) }
+    catch (err) {
+      console.error('登记弃赛失败:', err)
+      return { success:false, code:err.code || 'MATCH_FORFEIT_FAILED', message:err.message || '弃赛结果保存失败' }
+    }
   }
 
   if (!matchId || !data || typeof data !== 'object') {

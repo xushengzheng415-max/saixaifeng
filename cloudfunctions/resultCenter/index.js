@@ -425,7 +425,7 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
   const rawAwayName = text(match.awayTeamName || (match.awayTeam && (match.awayTeam.name || match.awayTeam.teamName)))
   const homeProfile = teamDirectory[homeTeamId] || teamDirectory[`name:${rawHomeName}`] || {}
   const awayProfile = teamDirectory[awayTeamId] || teamDirectory[`name:${rawAwayName}`] || {}
-  const eventScore = Array.isArray(match.events) && !match.resultCorrection ? scoreFromEvents(match.events, match) : null
+  const eventScore = Array.isArray(match.events) && !match.resultCorrection && match.resultType !== 'forfeit' ? scoreFromEvents(match.events, match) : null
   const scoreMatch = eventScore ? { ...match, homeScore: eventScore.home, awayScore: eventScore.away } : match
   const homeScore = scoreReady(scoreMatch) ? number(scoreMatch.homeScore) : null
   const awayScore = scoreReady(scoreMatch) ? number(scoreMatch.awayScore) : null

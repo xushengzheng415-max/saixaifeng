@@ -55,6 +55,13 @@
         :loading="saving"
       >开始比赛</el-button>
       <el-button
+        v-if="['scheduled', 'ongoing'].includes(String(match.status || '').toLowerCase())"
+        type="danger"
+        size="small"
+        @click="openForfeitDialog"
+        :loading="saving"
+      >弃赛</el-button>
+      <el-button
         v-if="match.status === 'ongoing' && !isRefereeEvidenceLocked"
         type="warning"
         size="small"
@@ -449,6 +456,22 @@
       <template #footer>
         <el-button @click="finishDialogVisible = false">取消</el-button>
         <el-button type="success" @click="finishMatch" :loading="saving">确认结束</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="forfeitDialogVisible" title="确认弃赛" width="420px" :close-on-click-modal="false">
+      <el-form label-width="88px">
+        <el-form-item label="弃赛方">
+          <el-radio-group v-model="forfeitTeamId">
+            <el-radio :label="match.homeTeamId">{{ homeName }}</el-radio>
+            <el-radio :label="match.awayTeamId">{{ awayName }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <div class="forfeit-note">弃赛方按 0:3 判负，不记录进球事件。</div>
+      <template #footer>
+        <el-button @click="forfeitDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="saving" :disabled="!forfeitTeamId" @click="confirmForfeit">确认弃赛</el-button>
       </template>
     </el-dialog>
 
@@ -1371,6 +1394,8 @@ const venueOptions = ref([])
 // 结束比赛弹窗
 const finishDialogVisible = ref(false)
 const finishForm = ref({ homeScore: 0, awayScore: 0 })
+const forfeitDialogVisible = ref(false)
+const forfeitTeamId = ref('')
 
 // 事件弹窗
 const eventDialogVisible = ref(false)
@@ -1599,7 +1624,7 @@ function calculateEventScore(events) {
   })
   return score
 }
-const hasStructuredEvents = computed(() => Array.isArray(match.value.events) && !match.value.resultCorrection)
+const hasStructuredEvents = computed(() => Array.isArray(match.value.events) && !match.value.resultCorrection && match.value.resultType !== 'forfeit')
 const eventScore = computed(() => calculateEventScore(match.value.events))
 const displayHomeScore = computed(() => hasStructuredEvents.value ? eventScore.value.home : (match.value.homeScore ?? 0))
 const displayAwayScore = computed(() => hasStructuredEvents.value ? eventScore.value.away : (match.value.awayScore ?? 0))
@@ -2076,6 +2101,51 @@ function openFinishDialog() {
     awayScore: displayAwayScore.value
   }
   finishDialogVisible.value = true
+}
+
+function openForfeitDialog() {
+  if (!ensureEvidenceEditable()) return
+  forfeitTeamId.value = ''
+  forfeitDialogVisible.value = true
+}
+
+async function confirmForfeit() {
+  const losingTeamId = String(forfeitTeamId.value || '')
+  if (!losingTeamId || saving.value) return
+  const homeForfeited = losingTeamId === String(match.value.homeTeamId || '')
+  const forfeitingName = homeForfeited ? homeName.value : awayName.value
+  try {
+    await ElMessageBox.confirm(
+      forfeitingName + '将按弃赛判负，比分记为 ' + (homeForfeited ? '0:3' : '3:0') + '。此操作不会记录进球事件。',
+      '确认弃赛',
+      { type: 'warning', confirmButtonText: '确认弃赛', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  saving.value = true
+  try {
+    const result = await callFunction('updateMatch', {
+      matchId,
+      action: 'forfeitMatch',
+      expectedEventRevision: Number(match.value.matchEventRevision || 0),
+      data: { forfeitTeamId: losingTeamId }
+    })
+    if (!result?.success) throw new Error(result?.message || result?.error || '弃赛结果未保存，请重试')
+    Object.assign(match.value, result.data || {})
+    match.value.homeScore = homeForfeited ? 0 : 3
+    match.value.awayScore = homeForfeited ? 3 : 0
+    match.value.status = 'finished'
+    match.value.resultType = 'forfeit'
+    match.value.forfeitingTeamId = losingTeamId
+    forfeitDialogVisible.value = false
+    ElMessage.success('已按 ' + match.value.homeScore + ':' + match.value.awayScore + ' 判负')
+  } catch (err) {
+    ElMessage.error('弃赛结果保存失败: ' + err.message)
+  } finally {
+    saving.value = false
+  }
 }
 
 async function finishMatch() {
@@ -3515,6 +3585,7 @@ onMounted(() => {
 .event-summary-item span:last-child { margin-top: 4px; color: #909399; font-size: 12px; }
 .events-timeline { display: flex; flex-direction: column; gap: 8px; }
 .events-empty { text-align: center; padding: 20px 0; color: #909399; font-size: 13px; }
+.forfeit-note { margin: -4px 0 0 88px; color: #909399; font-size: 13px; line-height: 1.5; }
 .event-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; border-radius: 8px; background: #f9fafb;
