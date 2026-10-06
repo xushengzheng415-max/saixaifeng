@@ -165,3 +165,9 @@ PC 用已正式发布功能的源码基线构建完整 260 文件包，上传 `/
 新增统一操作规范 `docs/SHARED_TOURNAMENT_ACCESS.md`，并在 `docs/README.md` 登记。PC 账号管理页的分发和受邀入口链接到同一份线上说明；顶部有待接受邀请时显示“赛事邀请”，点击后直达待接受邀请。线上规范页面提供打印/另存 PDF，供主办方线下交接；纸质交接提醒本人仍须登录并在线接受。
 
 Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71123b`）。正式 `/admin/` 完整上传 268 个文件；入口、规范 HTML、`LayoutView-DyKYkt6M.js`、`TournamentStaffAccess-WKCnzBfD.js` 均 HTTP 200，线上 SHA-256 与构建产物一致。预览 `/preview/admin/` 仍为 HTTP 200 且使用预览资源路径。本次没有发送短信/微信，没有打印或转交纸质文件，也未运行独立测试套件。
+
+## 2026-10-06 共享赛事导航读取取消提示修正
+
+主办方/平台会话通道在路由没有改变身份时不再重复清空读取缓存；读取身份键加入共享工作人员状态、赛事和权限。由导航或账号上下文切换造成的 `READ_CACHE_INVALIDATED`、`SESSION_ACCOUNT_MISMATCH` 仅按过期读取取消处理，不再由 `queryList` 显示为权限异常。真实授权拒绝仍沿用原错误反馈。
+
+改动已合入并推送 Gitee `main`（功能提交 `1651e77`，合并提交 `14743acf`）。正式 `/admin/` 完整上传 268 个文件；`index.html`、主入口、`cloud`、`LayoutView`、`TournamentTeams` 分包均 HTTP 200，线上 SHA-256 与构建产物一致；预览 `/preview/admin/` 仍正常。没有修改云函数或授权数据，未运行独立测试套件。

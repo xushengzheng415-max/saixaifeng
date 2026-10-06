@@ -1,5 +1,7 @@
 # 赛小蜂足球当前状态
 
+2026-10-06 共享赛事路由读取噪声已修复正式版：无效缓存请求原先因每次页面导航都清空而被 `queryList` 记录成异常；现只在平台/主办方身份通道真正切换时清缓存，并把共享授权赛事/权限纳入读取上下文。`READ_CACHE_INVALIDATED` 与 `SESSION_ACCOUNT_MISMATCH` 作为过期读取取消处理，不再显示为权限错误；服务器真实权限拒绝仍保留。正式 `/admin/` 入口和 `cloud`、`LayoutView`、`TournamentTeams` 分包 HTTP/哈希回读一致，预览地址仍正常。未运行独立测试套件。
+
 2026-10-06 赛事共享授权线上/线下告知已发布：主办方分发页、受邀账号页可打开统一说明；顶部有待接受邀请时提示“赛事邀请”并直达接受页面；同一说明可打印或另存 PDF 线下交接。正式 guide 页面、`LayoutView`、`TournamentStaffAccess` 和入口均 HTTP 200，线上 SHA-256 与构建产物一致。规范文本为 `docs/SHARED_TOURNAMENT_ACCESS.md`，尚未代主办方发送短信/微信或打印纸质件。
 
 2026-10-06 个人赛事与共享赛事并存已发布正式版：赛事空间合并显示本人赛事和共享赛事；共享卡只显示一个标识；共享账号可创建自己的机构/赛事；从共享赛事“返回赛事空间”会切回本人机构上下文，不撤销授权。`onboardingWorkspace` 与 `tournamentStaffAccess` 按线上包差量更新并回下载核对。正式 `/admin/` 完整静态包与赛事空间/布局分包均通过 HTTP 和 SHA-256 回读；没有使用真实账号创建机构或赛事，也未运行独立测试套件。详见 `docs/data-center/RELEASE.md`。
