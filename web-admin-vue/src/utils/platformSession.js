@@ -46,13 +46,17 @@ export function isPlatformWorkspacePath(path) {
 }
 
 export function activatePlatformContext() {
-  sessionStorage.setItem(PLATFORM_CONTEXT_KEY, 'platform')
-  clearSessionReadCaches('identity')
+  if (!isPlatformContext()) {
+    sessionStorage.setItem(PLATFORM_CONTEXT_KEY, 'platform')
+    clearSessionReadCaches('identity')
+  }
 }
 
 export function activateOrganizerContext() {
-  sessionStorage.removeItem(PLATFORM_CONTEXT_KEY)
-  clearSessionReadCaches('identity')
+  if (isPlatformContext()) {
+    sessionStorage.removeItem(PLATFORM_CONTEXT_KEY)
+    clearSessionReadCaches('identity')
+  }
 }
 
 export function isPlatformContext() {

@@ -90,7 +90,7 @@ const shareRead = createInflightReads()
 function readIdentityKey() {
   const platform = isPlatformContext()
   const token = platform ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')
-  return JSON.stringify([platform, token, platform ? getPlatformSession() : null, localStorage.getItem('currentUser'), localStorage.getItem('userInfo'), localStorage.getItem('currentOrganization'), localStorage.getItem('currentOrg'), localStorage.getItem('role'), localStorage.getItem('currentRole'), localStorage.getItem('authSessionVersion'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY)])
+  return JSON.stringify([platform, token, platform ? getPlatformSession() : null, localStorage.getItem('currentUser'), localStorage.getItem('userInfo'), localStorage.getItem('currentOrganization'), localStorage.getItem('currentOrg'), localStorage.getItem('role'), localStorage.getItem('currentRole'), localStorage.getItem('authSessionVersion'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY), sessionStorage.getItem('sxfTournamentStaff'), sessionStorage.getItem('sxfStaffTournamentId'), sessionStorage.getItem('sxfStaffPermissions')])
 }
 const playerReadCache = createSessionReadCache({
   identity: () => (isPlatformContext() ? getPlatformAuthToken() : localStorage.getItem(AUTH_TOKEN_KEY)) ? readIdentityKey() : '',
@@ -380,6 +380,7 @@ export async function queryList(collection, options = {}) {
     return result.data || []
   } catch (err) {
     if (options.throwOnError) throw err
+    if (err?.code === 'READ_CACHE_INVALIDATED' || err?.code === 'SESSION_ACCOUNT_MISMATCH') return []
     console.error(`[queryList] ${collection} 异常:`, err)
     if (!options.silent) ElMessage.error(`查询 ${collection} 异常: ${err.message}`)
     return []
