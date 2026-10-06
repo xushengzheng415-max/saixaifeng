@@ -177,3 +177,9 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 原因：子账号授权项包含 `event.competition`，但 `staffDbRights.readRights('tournament_teams')` 未把竞赛管理模块纳入读取白名单，导致“全部权限”账号进入竞赛管理时仍被拒绝读取本赛事的参赛关系。现只补 `event.competition` 的读取映射；行级范围继续限制为当前获授权赛事，新增、修改和删除权限保持原口径。
 
 功能提交 `4ee46ee` 已合入并推送 Gitee `main`（合并提交 `a45f6611`）。生产 `webLoginApi` 从线上包差量更新；线上 `index.js` 保持原摘要 `2BD303520AFB5607034CA3A616D72CF8B34EB792E4EAA58BAF876459962C85A5`，`staffDbRights.cjs` 回下载 SHA-256 `7FD55D76D8CCC56FFDA2163ECD9E784DE2C4A408FABA0C86744CB0E07E2E8D9E` 与部署包一致。没有修改授权记录或赛事数据，也未运行独立测试套件。
+
+## 2026-10-06 抽签页球员读取权限收敛与完整权限修复
+
+抽签模块加载中的球员读取现在需要同时拥有 `event.draw` 和 `event.teams`；只获得抽签权限的账号仍不能读取球员资料。“全部权限”包含这两项，因此该账号完整授权可通过。行级校验仍限制在本赛事登记球队关联的球员。
+
+源码提交 `8f1fb0d` 已合入并推送 Gitee `main`（合并提交 `56d8becc`）。生产 `webLoginApi` 代码更新命令返回成功；函数详情为 Active/Available、Nodejs18.15、`index.main`，ModTime `2026-10-06 19:39:12`。部署后 `fn code download` 两次返回 CLI `Invalid URL`，因此尚未完成文件级摘要回读；未写入赛事数据、未使用真实账号操作，也未运行独立测试套件。
