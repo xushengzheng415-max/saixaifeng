@@ -159,3 +159,9 @@ PC 用已正式发布功能的源码基线构建完整 260 文件包，上传 `/
 源码 `8b53304` 已合入并推送 Gitee `main`（合并提交 `c0a002e`）。PC 构建成功后完整上传正式 `/admin/`，共 267 个文件。正式入口 `index.html`、主入口 `index-urNFXls5.js`、布局分包 `LayoutView-BDV4jEyZ.js`、赛事空间分包 `TournamentSpace-TepU4wmp.js` 均 HTTP 200，线上 SHA-256 与构建产物一致；赛事空间分包包含“创建我的赛事”和单个共享标识，布局分包包含“返回赛事空间”及本人机构切换动作。预览 `/preview/admin/` 仍返回 HTTP 200 并引用预览资源。
 
 `onboardingWorkspace` 与 `tournamentStaffAccess` 从各自线上包差量更新，回下载入口 SHA-256 分别为 `A9A90C9C1B0D09052F93023F7590B9621FF5C34D13A05641A5546036ED6ED0BE`、`C08EF18AF3671D645B6EECAA112C0406A3A9DCCE9E4AF44FC0792B9AD8E0D355`，均与部署包一致。没有改集合结构、写业务数据或使用真实账号创建机构/赛事，也未运行独立测试套件。
+
+## 2026-10-06 共享授权线上与线下告知正式发布
+
+新增统一操作规范 `docs/SHARED_TOURNAMENT_ACCESS.md`，并在 `docs/README.md` 登记。PC 账号管理页的分发和受邀入口链接到同一份线上说明；顶部有待接受邀请时显示“赛事邀请”，点击后直达待接受邀请。线上规范页面提供打印/另存 PDF，供主办方线下交接；纸质交接提醒本人仍须登录并在线接受。
+
+Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71123b`）。正式 `/admin/` 完整上传 268 个文件；入口、规范 HTML、`LayoutView-DyKYkt6M.js`、`TournamentStaffAccess-WKCnzBfD.js` 均 HTTP 200，线上 SHA-256 与构建产物一致。预览 `/preview/admin/` 仍为 HTTP 200 且使用预览资源路径。本次没有发送短信/微信，没有打印或转交纸质文件，也未运行独立测试套件。
