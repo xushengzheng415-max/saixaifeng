@@ -10,7 +10,7 @@
     </header>
 
     <section class="monitor-content">
-      <header class="page-heading"><div><h1>比赛管理 / {{ divisionName }} / 赛中只读监控</h1><el-tag v-if="!isProfessionalMonitor" type="success" effect="plain">现场记录由裁判手机端执行，PC端仅同步查看</el-tag></div><el-button plain @click="backToList"><el-icon><ArrowLeft /></el-icon>返回{{ divisionName }}比赛列表</el-button></header>
+      <header class="page-heading"><div><h1>比赛管理 / {{ divisionName }} / 赛中只读监控</h1><el-tag v-if="!isProfessionalMonitor" type="success" effect="plain">现场记录由裁判手机端执行，PC端仅同步查看</el-tag></div><el-button plain @click="backToList"><el-icon><ArrowLeft /></el-icon>返回比赛列表</el-button></header>
       <el-alert class="readonly-alert" title="本页面所有数据均来自裁判手机端实时同步，PC端仅提供查看，不可修改比赛相关信息。" type="info" :closable="false" show-icon />
       <section class="score-banner" :class="{ 'professional-score-banner': isProfessionalMonitor }">
         <div class="match-meta"><small>场序</small><strong>{{ displayMatch.matchSequence || '—' }}</strong><span><el-icon><Calendar /></el-icon>{{ shortDate(displayMatch.matchDate) }} {{ displayMatch.matchTime || '待定' }}</span><span>{{ displayMatch.venue || '场地待定' }}</span><em><i></i>进行中 {{ displayMatch.liveMinute || 0 }}′</em></div>
@@ -38,7 +38,7 @@
 </template>
 
 <script setup>
-import { matchListQuery } from '../../utils/matchListContext'
+import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

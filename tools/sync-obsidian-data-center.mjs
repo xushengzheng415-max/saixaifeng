@@ -7,7 +7,6 @@ const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
   ['docs/DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md','DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md'],
-  ['docs/PLAYER_CARD_INTEGRATION.md','球员卡统一调用规范.md'],
   ...['README.md','CONTRACT.md','INTEGRATION.md','RELEASE.md','AUTO_SYNC.md','PLAYER_CARD_POINTS.md'].map(name => ['docs/data-center/' + name,'data-center/' + name])
 ]
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
@@ -53,9 +52,7 @@ export async function synchronize({ repoRoot = defaultRepo, vaultRoot = 'E:/Docu
   // remain intact; automatic synchronization never resolves conflicts by force.
   for (const job of jobs) {
     job.sourceHash = hash(job.bytes)
-    job.targetPath = job.target === '球员卡统一调用规范.md'
-      ? within(vaultRoot,'01_Raw/01_赛小蜂足球/小程序与PC/' + job.target)
-      : within(destination,job.target)
+    job.targetPath = within(destination,job.target)
     job.previous = await optionalRead(job.targetPath)
     job.targetHash = job.previous ? hash(job.previous) : null
     const previous = state.files[job.target]

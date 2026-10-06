@@ -3,7 +3,7 @@
 const RIGHTS = Object.freeze({
   tournaments: ['event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results', 'event.news', 'event.referees', 'event.settings'],
   divisions: ['event.dashboard', 'event.competition', 'event.registration', 'event.draw', 'event.matches', 'event.results', 'event.settings'],
-  tournament_teams: ['event.dashboard', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results'],
+  tournament_teams: ['event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results'],
   teams: ['event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results', 'event.news'],
   players: ['event.registration', 'event.teams', 'event.matches', 'event.results'],
   coaches: ['event.teams', 'event.matches'],
@@ -16,9 +16,9 @@ const RIGHTS = Object.freeze({
   tournament_referees: ['event.referees', 'event.matches'],
   referees: ['event.referees'],
   referee_invitations: ['event.referees'],
-  tournament_groups: ['event.draw', 'event.competition'],
-  tournament_bracket: ['event.draw', 'event.results'],
-  tournament_league_tables: ['event.draw', 'event.results'],
+  tournament_groups: ['event.draw', 'event.competition', 'event.matches'],
+  tournament_bracket: ['event.draw', 'event.results', 'event.matches'],
+  tournament_league_tables: ['event.draw', 'event.results', 'event.matches'],
   rosters: ['event.teams'],
   roster_change_requests: ['event.teams'],
   squads: ['event.teams', 'event.matches'],
@@ -45,6 +45,13 @@ const registrationField = /^(?:registration[A-Z_]|signup[A-Z_]|application[A-Z_]
 
 function readRights(collection) {
   return RIGHTS[collection] || []
+}
+
+function requiredReadRights(collection, requestedModule) {
+  // Draw pages may finish a team-roster read after navigation changes the active
+  // module. Keep player PII behind both draw and team-management grants.
+  if (collection === 'players' && requestedModule === 'event.draw') return ['event.draw', 'event.teams']
+  return readRights(collection).includes(requestedModule) ? [requestedModule] : []
 }
 
 function writeRights(collection, operation, data = {}) {
@@ -77,4 +84,4 @@ function writeRights(collection, operation, data = {}) {
   return [...required]
 }
 
-module.exports = { readRights, writeRights }
+module.exports = { readRights, requiredReadRights, writeRights }

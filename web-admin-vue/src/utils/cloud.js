@@ -4,8 +4,12 @@
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
 import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
-import { sidebarRightForRoute } from './tournamentStaffRights'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
+import { createInflightReads } from './inflightReads'
+import { readAllPages } from './pagedReads'
+import { createSessionReadCache, stableReadKey } from './sessionReadCache.js'
+import { isReadOnlyRequest, playerReadCacheTags } from './playerReadCachePolicy.js'
+import { sidebarRightForRoute } from './tournamentStaffRights'
 
 // ★ webLoginApi HTTP 访问服务 URL（零 SDK 登录方案）
 const WEB_LOGIN_API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
@@ -66,7 +70,6 @@ const CLOUD_FUNCTION_MAP = {
   getTournaments: 'relay',
   getTournamentDetail: 'relay', // 公开赛事详情只读查询
   getTournamentMatches: 'relay', // 公开赛事赛况只读查询
-  updateMatch: 'relay', // 比赛事件与中场换人通过会话代理保存
   setHeadReferee: 'relay', // 设置赛事裁判长必须经过机构会话中转
   getRegulations: 'relay', // PC 规程文件读取需登录后中转
   reviewRosterChange: 'relay', // 名单变更审核必须经过当前机构门禁
@@ -83,7 +86,50 @@ const CLOUD_FUNCTION_MAP = {
  * @param {string} action - webLoginApi 的 action 参数
  * @param {object} data - 请求数据
  */
-async function callFunctionHTTP(action, data = {}, timeout = 60000) {
+const shareRead = createInflightReads()
+function readIdentityKey() {
+  const platform = isPlatformContext()
+  const token = platform ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')
+  return JSON.stringify([platform, token, platform ? getPlatformSession() : null, localStorage.getItem('currentUser'), localStorage.getItem('userInfo'), localStorage.getItem('currentOrganization'), localStorage.getItem('currentOrg'), localStorage.getItem('role'), localStorage.getItem('currentRole'), localStorage.getItem('authSessionVersion'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY), sessionStorage.getItem('sxfTournamentStaff'), sessionStorage.getItem('sxfStaffTournamentId'), sessionStorage.getItem('sxfStaffPermissions')])
+}
+const playerReadCache = createSessionReadCache({
+  identity: () => (isPlatformContext() ? getPlatformAuthToken() : localStorage.getItem(AUTH_TOKEN_KEY)) ? readIdentityKey() : '',
+  onChange: detail => {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sxf-read-cache-change', { detail }))
+  }
+})
+if (typeof window !== 'undefined') {
+  const identityKeys = new Set(['authToken', 'platformAuthToken', 'platformSession', 'userInfo', 'currentUser', 'currentOrganization', 'currentOrg', 'role', 'currentRole', 'authSessionVersion', ASSISTANCE_CONTEXT_KEY])
+  window.addEventListener('storage', event => {
+    if (event.key === null || identityKeys.has(event.key)) playerReadCache.clear('identity')
+    else if (event.key === 'sxfPlayerCardTemplateUpdate') playerReadCache.clear('mutation')
+  })
+}
+export function invalidatePlayerReadCache() { playerReadCache.clear('mutation') }
+export function getPlayerReadIdentity() { return readIdentityKey() }
+
+export function callFunctionHTTP(action, data = {}, timeout = 60000, requestOptions = {}) {
+  const readable = (action === 'dbQuery' && ['list', 'get', 'count'].includes(data.operation)) || action === 'platformCapacityOverview'
+  const tags = playerReadCacheTags(action, data)
+  if (!isReadOnlyRequest(action, data)) {
+    playerReadCache.clear('mutation', false)
+    return performFunctionHTTP(action, data, timeout).finally(() => playerReadCache.clear('mutation'))
+  }
+  if (!tags && !readable) return performFunctionHTTP(action, data, timeout)
+  const identity = readIdentityKey()
+  const load = async () => {
+    const result = await performFunctionHTTP(action, data, timeout)
+    if (identity !== readIdentityKey()) throw Object.assign(new Error('账号或机构已切换，请重新加载'), { code: 'SESSION_ACCOUNT_MISMATCH' })
+    return result
+  }
+  if (tags && requestOptions.cache !== 'bypass') {
+    return playerReadCache.read(stableReadKey([action, data, timeout]), load, { tags, bypass: requestOptions.cache === 'reload' })
+  }
+  const key = JSON.stringify([identity, playerReadCache.generation(), action, data, timeout])
+  return readable ? shareRead(key, load) : load()
+}
+
+async function performFunctionHTTP(action, data = {}, timeout = 60000) {
   // 视觉验收样例仅在 Vite 开发模式按需加载；生产构建不会打包样例数据。
   if (import.meta.env.DEV) {
     const { handleVisualQaHttp } = await loadVisualQaModule()
@@ -91,6 +137,7 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
     if (qa.handled) return qa.result
   }
   const platformRequest = isPlatformContext()
+  const requestToken = platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')
   const assistance = platformRequest ? null : getAssistanceContext()
   const bypassAssistance = action === 'callFunction' &&
     ['platformOwner', 'manageTournamentCenterContent', 'generateMiniProgramCode'].includes(data.functionName)
@@ -99,7 +146,7 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
   const payload = {
     ...data,
     action,
-    authToken: platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || ''),
+    authToken: requestToken,
     assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : '',
     ...(staff ? { staffTournamentId: sessionStorage.getItem('sxfStaffTournamentId') || '', staffModule: sidebarRightForRoute(staffPath) } : {})
   }
@@ -127,7 +174,7 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
     if (!response.ok) {
       throw new Error(result?.error || result?.message || `HTTP ${response.status}: ${response.statusText}`)
     }
-    if (result && result.authToken) {
+    if (result && result.authToken && (platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')) === requestToken) {
       if (platformRequest) setPlatformAuthToken(result.authToken)
       else localStorage.setItem(AUTH_TOKEN_KEY, result.authToken)
     }
@@ -136,7 +183,10 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
     }
     if (result && result.code === 'AUTH_REQUIRED') {
       const platformSessionExpired = platformRequest
-      await logout()
+      if ((platformRequest ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')) !== requestToken) throw new Error(result.error || '旧登录请求已失效，请重试')
+      const currentPlatformContext = isPlatformContext()
+      await logout(platformRequest)
+      if (platformRequest !== currentPlatformContext) throw new Error(result.error || '原后台登录已失效')
       const localPreview = import.meta.env.DEV || ['127.0.0.1', 'localhost'].includes(window.location.hostname)
       window.location.href = platformSessionExpired
         ? `${window.location.origin}${import.meta.env.BASE_URL}#/platform-login`
@@ -157,12 +207,12 @@ async function callFunctionHTTP(action, data = {}, timeout = 60000) {
   }
 }
 
-export async function reviewRefereeRecord(data = {}) {
-  return callFunctionHTTP('reviewRefereeRecord', data)
+export function playerCardTemplateRequest(action, data = {}, requestOptions = {}) {
+  return callFunctionHTTP(action, data, 60000, requestOptions)
 }
 
-export function playerCardTemplateRequest(action, data = {}) {
-  return callFunctionHTTP(action, data)
+export async function reviewRefereeRecord(data = {}) {
+  return callFunctionHTTP('reviewRefereeRecord', data)
 }
 
 // 归档后比分异常纠错：服务端会校验正式归档状态并写入前后值审计。
@@ -172,10 +222,6 @@ export async function correctArchivedScore(data = {}) {
 
 export async function listIdentityReviewQueue(data = {}) {
   return callFunctionHTTP('listIdentityReviewQueue', data)
-}
-
-export async function listTournamentInsuranceQueue(data = {}) {
-  return callFunctionHTTP('listTournamentInsuranceQueue', data)
 }
 
 export async function reviewIdentityVerification(data = {}) {
@@ -189,8 +235,9 @@ export async function rosterExceptionBoard(data = {}) {
 
 // ========== 登录认证 ==========
 
-export async function logout() {
-  if (isPlatformContext()) {
+export async function logout(platform = isPlatformContext()) {
+  playerReadCache.clear('session')
+  if (platform) {
     clearPlatformSession()
     return
   }
@@ -220,7 +267,6 @@ export async function logout() {
   localStorage.removeItem('currentOrg')
   sessionStorage.removeItem('sxfServiceBoundCheck')
   sessionStorage.removeItem('sxfAfterServiceBinding')
-  sessionStorage.removeItem('sxfStaffInvitationPrompted')
 }
 
 export async function checkAuth() {
@@ -275,10 +321,12 @@ export function setAssistanceContext(context) {
     targetOwnerKey: context.targetOwnerKey || context.targetUserId || '',
     expiresAt: context.expiresAt
   }))
+  playerReadCache.clear('identity')
 }
 
 export function clearAssistanceContext() {
   localStorage.removeItem(ASSISTANCE_CONTEXT_KEY)
+  playerReadCache.clear('identity')
 }
 
 export async function ensureLogin() {
@@ -308,8 +356,8 @@ export function getAuth() { return null }
 /**
  * 通过 HTTP API 执行数据库查询
  */
-async function dbQuery(collection, operation, params = {}) {
-  return callFunctionHTTP('dbQuery', { collection, operation, ...params })
+async function dbQuery(collection, operation, params = {}, requestOptions = {}) {
+  return callFunctionHTTP('dbQuery', { collection, operation, ...params }, 60000, requestOptions)
 }
 
 /**
@@ -322,7 +370,7 @@ export async function queryList(collection, options = {}) {
       orderBy: options.orderBy,
       limit: options.limit || 100,
       skip: options.skip
-    })
+    }, { cache: options.cache })
     if (!result.success) {
       if (options.throwOnError) throw new Error(result.error || '数据加载失败')
       console.error(`[queryList] ${collection} 失败:`, result.error)
@@ -332,6 +380,7 @@ export async function queryList(collection, options = {}) {
     return result.data || []
   } catch (err) {
     if (options.throwOnError) throw err
+    if (err?.code === 'READ_CACHE_INVALIDATED' || err?.code === 'SESSION_ACCOUNT_MISMATCH') return []
     console.error(`[queryList] ${collection} 异常:`, err)
     if (!options.silent) ElMessage.error(`查询 ${collection} 异常: ${err.message}`)
     return []
@@ -341,6 +390,24 @@ export async function queryList(collection, options = {}) {
 /**
  * 查询单条记录
  */
+export async function queryAll(collection, options = {}) {
+  const identity = readIdentityKey()
+  const load = () => readAllPages(async page => {
+    const assertIdentity = () => {
+      if (identity !== readIdentityKey()) throw Object.assign(new Error('账号或机构已切换，请重新加载'), { code: 'SESSION_ACCOUNT_MISMATCH' })
+    }
+    assertIdentity()
+    const rows = await queryList(collection, { ...page, cache: 'bypass' })
+    assertIdentity()
+    return rows
+  }, { orderBy: { _id: 'asc' }, ...options })
+  const tags = playerReadCacheTags('dbQuery', { collection, operation: 'list' })
+  if (!tags || options.cache === 'bypass') return load()
+  const { cache: cacheMode, ...queryOptions } = options
+  const result = await playerReadCache.read(stableReadKey(['queryAll', collection, queryOptions]), async () => ({ success: true, data: await load() }), { tags, bypass: cacheMode === 'reload' })
+  return result.data
+}
+
 export async function queryById(collection, id) {
   const result = await dbQuery(collection, 'get', { id })
   if (!result.success) throw new Error(result.error || '查询失败')
@@ -616,9 +683,9 @@ function fileToBase64(file) {
  * Upload small compressed images directly to cloud storage through webLoginApi.
  * Database records should store only the returned URL/fileId, not image base64.
  */
-export async function uploadImageViaWebApi(folder, file, tournamentId = '') {
+export async function uploadImageViaWebApi(folder, file) {
   const base64Data = await fileToBase64(file)
-  const result = await callFunctionHTTP('uploadImage', { base64Data, folder, tournamentId })
+  const result = await callFunctionHTTP('uploadImage', { base64Data, folder })
   if (result && result.success) {
     return {
       success: true,

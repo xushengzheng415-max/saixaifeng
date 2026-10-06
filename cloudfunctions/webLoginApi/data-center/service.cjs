@@ -23,6 +23,29 @@ function validateScope(input = {}) {
 }
 
 function createDataService(db) {
+  // One canonical career dataset per batch; identical scope and scoring rules to
+  // playerCardForAuthorizedPlayer, without re-reading every match per player.
+  async function playerCardsForAuthorizedPlayers(ids) {
+    const playerIds=[...new Set(ids.map(id).filter(Boolean))]
+    const result=await query({platformOwner:true,teamIds:[],tournamentIds:[]},{mode:'official'})
+    const {sumPlayerRows,calculatePlayerCardPoints,synthetic}=await import('./statistics.mjs')
+    const profiles=await readByIds(db,'players','_id',playerIds)
+    const teams=await readByIds(db,'teams','_id',profiles.map(p=>id(p.teamId||p.teamCode)))
+    const teamById=new Map(teams.map(t=>[id(t._id),t]))
+    const profileById=new Map(profiles.map(p=>[id(p._id),p]))
+    let supportTotals=new Map()
+    try{supportTotals=await readPlayerSupportTotals(db,playerIds)}catch(failure){/* Fail closed, matching the single-player service. */}
+    return new Map(playerIds.map(playerId=>{
+      const profile=profileById.get(playerId)
+      if(!profile||synthetic(profile)||synthetic(teamById.get(id(profile.teamId||profile.teamCode))))return [playerId,{status:profile?'test_data_excluded':'unverified',tier:null}]
+      const rows=result.players.filter(row=>row.playerId===playerId)
+      const total=sumPlayerRows(rows)
+      if(!rows.length&&result.summary.matchCount>0)for(const key of Object.keys(total.metrics)){total.metrics[key]=null;total.coverage[key]='not_collected'}
+      const support=supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null}
+      return [playerId,calculatePlayerCardPoints(total,{metricVersion:result.metricVersion,dataVersion:result.dataVersion,coverageStatus:result.coverage.cardScoreScopeComplete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion})]
+    }))
+  }
+
   // Call only after the caller has independently authorized access to this player.
   // A team-scoped query cannot prove full career coverage after transfers.
   async function playerCardForAuthorizedPlayer(playerId) {
@@ -150,6 +173,6 @@ function createDataService(db) {
     }
     return { success:true, ...result }
   }
-  return { query, catalog, playerCardForAuthorizedPlayer }
+  return { query, catalog, playerCardForAuthorizedPlayer, playerCardsForAuthorizedPlayers }
 }
 module.exports = { createDataService, validateScope, error }

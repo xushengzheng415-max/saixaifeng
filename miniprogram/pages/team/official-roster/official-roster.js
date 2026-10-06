@@ -105,7 +105,7 @@ Page({
     this.setData({ selected: ids, count: ids.length, players: nextRows, overview: makeOverview(nextRows, ids, this.data.overview.libraryCount) })
     this.applyFilter()
   },
-  handleProblem: function (event) { var id = event.currentTarget.dataset.id; var req = this.data.requirements || {}; if (req.identityVerificationRequired || req.insuranceRequired || req.portraitRequired) { wx.navigateTo({ url: '/pages/team/parent-collaboration/parent-collaboration?playerId=' + encodeURIComponent(id) + '&teamId=' + encodeURIComponent(this.data.teamId) + '&tournamentId=' + encodeURIComponent(this.data.tournamentId) + '&divisionId=' + encodeURIComponent(this.data.divisionId) }) } else { wx.navigateTo({ url: '/pages/team/profile-exception/profile-exception?playerId=' + encodeURIComponent(id) + '&teamId=' + encodeURIComponent(this.data.teamId) }) } },
+  handleProblem: function (event) { var id = event.currentTarget.dataset.id; wx.navigateTo({ url: '/pages/team/profile-exception/profile-exception?playerId=' + encodeURIComponent(id) + '&teamId=' + encodeURIComponent(this.data.teamId) }) },
   submit: function () {
     var self = this
     var context = workspace.readContext() || {}

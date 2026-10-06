@@ -656,6 +656,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
 import QRCode from 'qrcode'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -3124,6 +3125,12 @@ async function rejectCancel(team) {
   }
 }
 
+useReadCacheRefresh({
+  tags: ['players', 'teams'],
+  refresh: () => Promise.all([loadTournamentTeams(), loadAllTeams()]),
+  clear: () => { tournamentTeams.value = []; allTeams.value = [] },
+  onError: () => ElMessage.warning('数据更新失败，请重试。')
+})
 onMounted(async () => {
   await loadTournament()
   await Promise.all([loadTournamentTeams(), loadAllTeams()])

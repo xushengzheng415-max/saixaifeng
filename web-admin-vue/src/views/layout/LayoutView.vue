@@ -215,8 +215,9 @@
             <img :src="productLogo" alt="赛小蜂足球" />
           </button>
           <div class="workspace-shell-actions">
+            <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" plain @click="returnToTournamentSpace">返回赛事空间</el-button>
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
-            <button class="notification-action" type="button" aria-label="查看站内信" title="站内信" @click="showNotifications"><el-icon><Bell /></el-icon><span>站内信</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
+            <button class="notification-action" type="button" :aria-label="pendingStaffInvitationCount ? '查看共享赛事邀请' : '查看站内信'" :title="pendingStaffInvitationCount ? '有共享赛事邀请待接受' : '站内信'" @click="showNotifications"><el-icon><Bell /></el-icon><span>{{ pendingStaffInvitationCount ? '赛事邀请' : '站内信' }}</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
             <el-dropdown trigger="click" @command="handleUserCommand">
               <div class="workspace-user">
                 <el-avatar v-if="userInfo.avatarUrl" :size="38" :src="userInfo.avatarUrl" />
@@ -226,7 +227,7 @@
               </div>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · {{ accountRoleLabel }}</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
+                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>{{ accountManagementLabel }}</el-dropdown-item>
@@ -239,6 +240,7 @@
         </header>
         <header v-else-if="!usesEmbeddedPageHeader" class="top-header">
           <div class="header-left">
+            <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" link type="primary" @click="returnToTournamentSpace">返回赛事空间</el-button>
             <span class="page-title">{{ currentPageTitle }}</span>
           </div>
           <div class="header-right">
@@ -303,7 +305,6 @@ import {
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
-import { sidebarRightForRoute } from '../../utils/tournamentStaffRights'
 import productLogo from '../../assets/logo-saixiaofeng.png'
 import { provincesData, cityMapData } from '../team/areaData.js'
 import {
@@ -330,7 +331,7 @@ function openHelpCenter() {
 }
 
 function showNotifications() {
-  router.push('/messages')
+  router.push(pendingStaffInvitationCount.value ? '/tournament-staff' : '/messages')
 }
 async function refreshUnreadNotificationCount() {
   if (isPlatformContext()) return
@@ -758,9 +759,7 @@ async function confirmBindEmail() {
 
 // 确认选择身份已移至独立页面 /select-role（SelectRoleView.vue）
 
-const isTournamentStaff = computed(() => { void route.path; return sessionStorage.getItem('sxfTournamentStaff') === '1' })
-const accountRoleLabel = computed(() => isTournamentStaff.value ? '赛事工作人员' : '机构负责人')
-const roleLabel = computed(() => isPlatformContext() ? '平台管理员' : isTournamentStaff.value ? '赛事工作人员' : (ROLE_NAMES[currentRole.value] || '未知'))
+const roleLabel = computed(() => isPlatformContext() ? '平台管理员' : (ROLE_NAMES[currentRole.value] || '未知'))
 
 // 展开的子菜单列表
 const expandedMenus = ref([])
@@ -885,16 +884,6 @@ const isAdminPage = computed(() => {
 
 // 根据角色返回对应导航菜单
 const currentNavItems = computed(() => {
-  void route.fullPath
-  if (sessionStorage.getItem('sxfTournamentStaff') === '1') {
-    let rights = []
-    try { rights = JSON.parse(sessionStorage.getItem('sxfStaffPermissions') || '[]') } catch { /* 丢弃损坏的菜单缓存 */ }
-    const sameEvent = currentTournamentId.value && currentTournamentId.value === sessionStorage.getItem('sxfStaffTournamentId')
-    return [
-      { path: '/tournament-staff', label: '我的赛事', icon: 'Trophy' },
-      ...(sameEvent ? organizerNavItems.value.filter(item => rights.includes(sidebarRightForRoute(item.path))) : [])
-    ]
-  }
   const ownerOnly = (items) => userInfo.value.isPlatformOwner
     ? items
     : items.filter(item => item.path !== '/system')
@@ -934,6 +923,20 @@ function handleUserCommand(command) {
   window.location.replace('https://www.sxffootball.cn/')
       break
   }
+}
+
+async function returnToTournamentSpace() {
+  const ownOrgId = String(userInfo.value.orgId || userInfo.value.organizationId || '')
+  if (isTournamentStaff.value && ownOrgId) {
+    try {
+      const activated = await callFunction('tournamentStaffAccess', { action: 'activateOrganizerWorkspace', orgId: ownOrgId })
+      if (!activated?.success) throw new Error(activated?.error || activated?.message || '无法切换到自己的机构')
+    } catch (error) {
+      ElMessage.error(error.message || '无法切换到自己的机构')
+      return
+    }
+  }
+  router.push('/tournament-space')
 }
 
 function handleNavClick(item) {

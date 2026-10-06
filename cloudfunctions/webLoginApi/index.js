@@ -98,13 +98,6 @@ const SERVICE_ACCOUNT_CONFIG = {
   // 否则微信授权完成后会落入 saixiaofeng.com 的 404 页面。
   H5_URL: 'https://www.sxffootball.cn/service-account-h5/'
 }
-async function isServiceAccountSubscriber(openId) {
-  const token = await officialAccountAccessToken()
-  const url = 'https://api.weixin.qq.com/cgi-bin/user/info?access_token=' + encodeURIComponent(token) + '&openid=' + encodeURIComponent(String(openId || '')) + '&lang=zh_CN'
-  const result = await httpsGet(url)
-  if (!result || result.errcode) throw Object.assign(new Error('暂时无法确认服务号关注状态，请稍后重试'), { code:'SERVICE_ACCOUNT_FOLLOW_CHECK_FAILED' })
-  return Number(result.subscribe) === 1
-}
 
 function identityFeatureKey() {
   const raw = String(process.env.SXF_IDENTITY_FEATURE_KEY || '').trim()
@@ -529,19 +522,10 @@ function resolveParentInviteRequirements(invite, player) {
     guardianAuthorization: registrantType === 'guardian',
     parentSupplementRequired: parent.defined ? parent.value : true,
     parentSupplementConfigured: true,
-    identityVerificationRequired: identity.defined ? identity.value : false,
-    portraitRequired: portrait.defined ? portrait.value : false,
-    portraitOptionalAvailable: invite.portraitOptionalAvailable === true,
-    identityDocumentRequired: invite.identityDocumentRequired === true,
-    insuranceRequired: invite.insuranceRequired === true,
-    electronicPassVerificationRequired: invite.electronicPassVerificationRequired === true,
-    profileScope: String(invite.profileScope || 'team'),
-    tournamentId: String(invite.tournamentId || ''),
-    divisionId: String(invite.divisionId || ''),
-    tournamentName: String(invite.tournamentName || ''),
-    divisionName: String(invite.divisionName || ''),
-    realName: identity.defined ? identity.value : false,
-    portrait: portrait.defined ? portrait.value : false,
+    identityVerificationRequired: identity.defined ? identity.value : standardFlow,
+    portraitRequired: portrait.defined ? portrait.value : standardFlow,
+    realName: identity.defined ? identity.value : standardFlow,
+    portrait: portrait.defined ? portrait.value : standardFlow,
     source: standardFlow ? 'standard-player-onboarding' : (identity.defined || portrait.defined || parent.defined ? 'invite-or-player' : 'invite')
   }
 }
@@ -586,16 +570,14 @@ async function previewParentProfileInvite(event) {
     requirements.identityAlreadyVerified = true
     requirements.source = 'approved-stable-player-identity'
   }
-  return { success: true, data: { playerId: String(player._id), teamId:String(team._id), playerName: String(player.name || '球员'), birthDate: String(player.birthDate || player.birthday || ''), teamName: String(team.name || team.teamName || ''), tournamentName: String(invite.tournamentName || ''), divisionName: String(invite.divisionName || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', isSelfRegistration: registrantType === 'self', accountPhoneMasked: maskServicePhone(phone), guardianPhoneMasked: registrantType === 'guardian' ? maskServicePhone(phone) : '', requirements, status: String(player.profileStatus || 'pending') } }
+  return { success: true, data: { playerName: String(player.name || '球员'), birthDate: String(player.birthDate || player.birthday || ''), teamName: String(team.name || team.teamName || ''), registrantMode: 'age_based', registrantType, registrantLabel: registrantType === 'self' ? '球员本人' : '家长或监护人', isSelfRegistration: registrantType === 'self', accountPhoneMasked: maskServicePhone(phone), guardianPhoneMasked: registrantType === 'guardian' ? maskServicePhone(phone) : '', requirements, status: String(player.profileStatus || 'pending') } }
 }
 
 async function createParentProfileOAuthUrl(event) {
   const parentInvite = String(event.parentInvite || '').trim()
   const preview = await previewParentProfileInvite({ parentInvite })
   if (!preview.success) return preview
-  const redirectUri = event.preview === true
-    ? refereeOAuthReturnUrl('https://www.sxffootball.cn/preview/service-account-h5/')
-    : normalizeServiceH5Url(SERVICE_ACCOUNT_CONFIG.H5_URL)
+  const redirectUri = normalizeServiceH5Url(SERVICE_ACCOUNT_CONFIG.H5_URL)
   if (!SERVICE_ACCOUNT_CONFIG.APP_ID || !SERVICE_ACCOUNT_CONFIG.APP_SECRET || !redirectUri) return { success: false, error: '服务号网页授权尚未配置，请联系球队管理员', code: 'SERVICE_ACCOUNT_NOT_CONFIGURED' }
   const db = cloud.database(), state = crypto.randomBytes(20).toString('hex')
   await db.collection('parent_oauth_states').doc(state).set({ data: { state, parentInvite, redirectUri, used: false, expiresAt: new Date(Date.now() + REFEREE_OAUTH_STATE_TTL_MS), createTime: db.serverDate() } })
@@ -615,19 +597,11 @@ async function handleParentProfileOAuth(event) {
   const oauth = await httpsGet(tokenUrl)
   if (!oauth || !oauth.openid || oauth.errcode) return { success: false, error: '服务号授权失败，请重新打开邀请' }
   const serviceFirstInvites = (await db.collection('parent_profile_invites').where({ token: record.parentInvite, status: 'active', serviceFirst: true }).limit(2).get()).data || []
-  let serviceFollowed = false
   if (serviceFirstInvites.length) {
     const serviceInvite = serviceFirstInvites[0]
     if (serviceFirstInvites.length !== 1 || String(serviceInvite.serviceAccountOpenId || '') !== String(oauth.openid)) return { success: false, error: '请使用扫码关注服务号的同一微信继续登记' }
     const bindings = (await db.collection('service_account_bindings').where({ sport: 'football', userId: String(serviceInvite.registrantUserId || ''), officialOpenId: String(oauth.openid), subscribed: true }).limit(2).get()).data || []
     if (!bindings.length) return { success: false, error: '服务号关注状态已变化，请重新扫码' }
-    serviceFollowed = true
-  }
-  try {
-    if (!serviceFollowed && !await isServiceAccountSubscriber(oauth.openid)) return { success:false, error:'请先关注赛小蜂足球服务号，再重新打开球员登记邀请', code:'SERVICE_ACCOUNT_FOLLOW_REQUIRED', followRequired:true }
-  } catch (error) {
-    console.warn('[webApi] Official Account follow check unavailable:', error.code || 'UNKNOWN')
-    return { success:false, error:error.message || '暂时无法确认服务号关注状态，请稍后重试', code:error.code || 'SERVICE_ACCOUNT_FOLLOW_CHECK_FAILED' }
   }
   const sessionToken = crypto.randomBytes(32).toString('hex')
   await db.collection('parent_h5_sessions').add({ data: { tokenHash: hashSessionToken(sessionToken), parentInvite: record.parentInvite, serviceAccountOpenId: oauth.openid, unionId: oauth.unionid || '', active: true, expiresAt: new Date(Date.now() + REFEREE_H5_SESSION_TTL_MS), createTime: db.serverDate(), lastUsedAt: db.serverDate() } })
@@ -769,19 +743,18 @@ async function saveParentBasicProfile(event) {
   if (!authenticated.success) return authenticated
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
-  const requirements = preview.data.requirements || {}
   const name = String(event.name || '').trim(), birthDate = String(event.birthDate || '').trim(), registrantAuthorized = Boolean(event.registrantAuthorized || event.guardianAuthorized || event.selfAuthorized)
   const registrantType = String(preview.data.registrantType || 'guardian') === 'self' ? 'self' : 'guardian'
   const requestedRelation = String(event.guardianRelation || '').trim().toLowerCase()
   const guardianRelation = ['father', 'mother', 'other'].includes(requestedRelation) ? requestedRelation : 'other'
   if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !registrantAuthorized) return { success: false, error: registrantType === 'self' ? '请确认本人姓名、出生日期和资料授权' : '请确认孩子姓名、出生日期和监护人授权' }
-  if (requirements.insuranceRequired && event.insuranceAuthorized !== true) return { success:false, error:'请确认将身份证正反面提供给本赛事授权投保人员', code:'PARENT_INSURANCE_CONSENT_REQUIRED' }
   const needsReview = name !== String(preview.data.playerName || '') || birthDate !== String(preview.data.birthDate || '')
   const db = cloud.database(), oldRows = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
-  const data = { parentInvite: authenticated.session.parentInvite, registrantType, basicConfirmed: !needsReview, registrantAuthorized: true, insuranceAuthorized: requirements.insuranceRequired ? true : false, guardianAuthorized: registrantType === 'guardian', selfAuthorized: registrantType === 'self', guardianRelation: registrantType === 'guardian' ? guardianRelation : 'self', requestedName: name, requestedBirthDate: birthDate, needsManualReview: needsReview, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, updateTime: db.serverDate() }
+  const data = { parentInvite: authenticated.session.parentInvite, registrantType, basicConfirmed: !needsReview, registrantAuthorized: true, guardianAuthorized: registrantType === 'guardian', selfAuthorized: registrantType === 'self', guardianRelation: registrantType === 'guardian' ? guardianRelation : 'self', requestedName: name, requestedBirthDate: birthDate, needsManualReview: needsReview, serviceAccountOpenId: authenticated.session.serviceAccountOpenId, updateTime: db.serverDate() }
   if (oldRows[0]) await db.collection('parent_profile_drafts').doc(oldRows[0]._id).update({ data })
   else await db.collection('parent_profile_drafts').add({ data: Object.assign({}, data, { createTime: db.serverDate() }) })
-  const nextStep = needsReview ? 'manual-review' : (requirements.realName ? 'real-name' : (requirements.insuranceRequired ? 'insurance' : (requirements.portrait ? 'portrait' : (requirements.portraitOptionalAvailable ? 'portrait-optional' : 'submit'))))
+  const requirements = preview.data.requirements || {}
+  const nextStep = needsReview ? 'manual-review' : (requirements.realName ? 'real-name' : (requirements.portrait ? 'portrait' : 'submit'))
   return { success: true, nextStep, needsManualReview: needsReview, requirements }
 }
 
@@ -902,35 +875,6 @@ async function uploadParentIdentityDocument(event) {
   return { success: true, side, documentType, status: 'uploaded', recognitionStatus, cropDetected:event.cropDetected === true, watermarked:true }
 }
 
-async function uploadParentInsuranceDocument(event) {
-  const authenticated = await authenticateParentH5Session(event)
-  if (!authenticated.success) return authenticated
-  const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
-  if (!preview.success) return preview
-  if (!preview.data.requirements.insuranceRequired) return { success:false, error:'本次赛事未要求统一投保资料', code:'PARENT_INSURANCE_NOT_REQUIRED' }
-  const side = String(event.side || '').toLowerCase()
-  if (side !== 'front' && side !== 'back') return { success:false, error:'请选择身份证正面或反面' }
-  const drafts = (await cloud.database().collection('parent_profile_drafts').where({ parentInvite:authenticated.session.parentInvite, basicConfirmed:true }).limit(10).get()).data || []
-  if (!drafts.some(item => parentDraftIsAuthorized(item) && item.insuranceAuthorized === true)) return { success:false, error:'请先同意本赛事投保资料用途', code:'PARENT_INSURANCE_CONSENT_REQUIRED' }
-  const base64Data = String(event.base64Data || '')
-  if (base64Data.length > 4.2 * 1024 * 1024) return { success:false, error:'材料必须小于3MB' }
-  const matched = base64Data.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/)
-  if (!matched) return { success:false, error:'仅支持JPG或PNG图片' }
-  const buffer = Buffer.from(matched[2], 'base64')
-  if (!buffer.length || buffer.length > 3 * 1024 * 1024) return { success:false, error:'材料必须小于3MB' }
-  const db = cloud.database()
-  try { await db.createCollection('parent_insurance_documents') } catch (error) {}
-  const digest = crypto.createHash('sha256').update(buffer).digest('hex')
-  const cloudPath = 'restricted/parent-insurance/' + crypto.createHash('sha256').update(authenticated.session.parentInvite).digest('hex').slice(0,20) + '/' + side + '-' + Date.now() + '.' + (matched[1] === 'jpeg' ? 'jpg' : 'png')
-  const uploaded = await cloud.uploadFile({ cloudPath, fileContent:buffer })
-  const existing = (await db.collection('parent_insurance_documents').where({ parentInvite:authenticated.session.parentInvite, side, status:'uploaded' }).limit(20).get()).data || []
-  await Promise.all(existing.map(item => db.collection('parent_insurance_documents').doc(item._id).update({ data:{ status:'replaced', replacedAt:db.serverDate() } })))
-  const deleteAfter = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-  const saved = await db.collection('parent_insurance_documents').add({ data:{ parentInvite:authenticated.session.parentInvite, tournamentId:String(preview.data.requirements.tournamentId || ''), divisionId:String(preview.data.requirements.divisionId || ''), playerId:String(preview.data.playerId || ''), teamId:String(preview.data.teamId || ''), side, fileId:uploaded.fileID, sha256:digest, size:buffer.length, mimeType:'image/' + matched[1], status:'uploaded', purpose:'tournament_insurance', restrictedAccess:true, deleteAfter, retentionDays:30, serviceAccountOpenId:authenticated.session.serviceAccountOpenId, createTime:db.serverDate(), updateTime:db.serverDate() } })
-  await db.collection('sensitive_file_deletion_tasks').add({ data:{ businessType:'player_insurance_document', businessId:String(saved._id), fileId:uploaded.fileID, status:'scheduled', executeAfter:deleteAfter, retentionDays:30, createTime:db.serverDate(), updateTime:db.serverDate() } })
-  return { success:true, side, status:'uploaded', size:buffer.length }
-}
-
 async function submitParentIdentityVerification(event) {
   const authenticated = await authenticateParentH5Session(event)
   if (!authenticated.success) return authenticated
@@ -979,11 +923,6 @@ async function submitParentIdentityVerification(event) {
   const reviewedAt = reviewStatus === 'pending_review' ? null : db.serverDate()
   const data = {
     parentInvite: authenticated.session.parentInvite,
-    profileScope:String((preview.data.requirements || {}).profileScope || 'team'),
-    tournamentId:String((preview.data.requirements || {}).tournamentId || ''),
-    divisionId:String((preview.data.requirements || {}).divisionId || ''),
-    teamId:String(preview.data.teamId || ''),
-    playerId:String(preview.data.playerId || ''),
     documentIds: backDocument ? [frontDocument._id, backDocument._id] : [frontDocument._id],
     documentType:String(frontDocument.documentType || 'resident_id'),
     requiredSides: backDocument ? ['front', 'back'] : ['front'],
@@ -1013,11 +952,7 @@ async function submitParentIdentityVerification(event) {
   let verificationId = records[0] ? String(records[0]._id) : ''
   if (records[0]) await db.collection('parent_identity_verifications').doc(records[0]._id).update({ data })
   else { const added = await db.collection('parent_identity_verifications').add({ data: Object.assign({}, data, { createTime: db.serverDate() }) }); verificationId = String(added._id) }
-  await db.collection('identity_verification_attempts').add({ data:{ parentInvite:authenticated.session.parentInvite, playerId:String(preview.data.playerId || ''), tournamentId:String((preview.data.requirements || {}).tournamentId || ''), divisionId:String((preview.data.requirements || {}).divisionId || ''), profileScope:String((preview.data.requirements || {}).profileScope || 'team'), verificationId, method:data.identityMethod, status:reviewStatus, faceAssessment:data.faceAssessment, documentType:String(frontDocument.documentType || 'resident_id'), serviceAccountOpenId:authenticated.session.serviceAccountOpenId, createTime:db.serverDate() } })
-  if (reviewStatus === 'pending_review') {
-    const invites = (await db.collection('parent_profile_invites').where({ token:authenticated.session.parentInvite, status:'active' }).limit(1).get()).data || []
-    if (invites[0] && invites[0].tournamentId) await notifyTournamentQualification(db, invites[0], { _id:preview.data.playerId, name:preview.data.playerName }, '球员身份核验待审核', String(invites[0].tournamentName || '赛事') + ' · ' + String(invites[0].divisionName || '组别') + ' · ' + String(preview.data.playerName || '球员'), 'identity-review')
-  }
+  await db.collection('identity_verification_attempts').add({ data:{ parentInvite:authenticated.session.parentInvite, playerId:String(preview.data.playerId || ''), verificationId, method:data.identityMethod, status:reviewStatus, faceAssessment:data.faceAssessment, documentType:String(frontDocument.documentType || 'resident_id'), serviceAccountOpenId:authenticated.session.serviceAccountOpenId, createTime:db.serverDate() } })
   return { success: true, status: reviewStatus }
 }
 
@@ -1031,8 +966,6 @@ async function getParentIdentityVerification(event) {
   const publicPlayer = {
     playerName: String(preview.data.playerName || '球员'),
     teamName: String(preview.data.teamName || ''),
-    tournamentName:String(preview.data.tournamentName || ''),
-    divisionName:String(preview.data.divisionName || ''),
     birthDate: String(preview.data.birthDate || ''),
     registrantType: String(preview.data.registrantType || 'guardian'),
     isSelfRegistration: preview.data.isSelfRegistration === true
@@ -1066,16 +999,6 @@ async function getParentIdentityVerification(event) {
 }
 
 async function identityOrganizerOrgIds(db, invite) {
-  if (invite && invite.tournamentId) {
-    const tournamentRows = (await db.collection('tournaments').where({ _id:String(invite.tournamentId) }).limit(1).get()).data || []
-    const tournament = tournamentRows[0]
-    if (!tournament) return []
-    const registrations = (await db.collection('tournament_teams').where({ tournamentId:String(invite.tournamentId), teamId:String(invite.teamId || '') }).limit(100).get()).data || []
-    const matching = registrations.some(item => String(item.divisionId || item.division || 'default') === String(invite.divisionId || 'default') && ['approved','confirmed','claimed','accepted','active'].indexOf(String(item.status || '').toLowerCase()) >= 0)
-    if (!matching) return []
-    const scopedOrg = String(tournament.orgId || tournament.organizationId || '')
-    return scopedOrg ? [scopedOrg] : []
-  }
   const relations = (await db.collection('tournament_teams').where({ teamId:String(invite.teamId || '') }).limit(100).get()).data || []
   const active = relations.filter(item => ['cancelled','withdrawn','rejected','replaced','invite_cancelled'].indexOf(String(item.status || '').toLowerCase()) < 0)
   const tournamentIds = Array.from(new Set(active.map(item => String(item.tournamentId || '')).filter(Boolean)))
@@ -1085,27 +1008,6 @@ async function identityOrganizerOrgIds(db, invite) {
     tournaments.forEach(item => { const orgId=String(item.orgId || item.organizationId || ''); if (orgId && result.indexOf(orgId) < 0) result.push(orgId) })
   }
   return result
-}
-
-async function notifyTournamentQualification(db, invite, player, title, subtitle, suffix) {
-  if (!invite || !invite.tournamentId || !invite.organizerOrgId) return 0
-  const orgId = String(invite.organizerOrgId)
-  const memberships = (await db.collection('organization_memberships').where({ orgId, status:'accepted' }).limit(300).get()).data || []
-  const recipients = Array.from(new Set(memberships.filter(function(item) {
-    const role = String(item.role || item.memberRole || '').toLowerCase()
-    const permissions = Array.isArray(item.permissions) ? item.permissions : Object.keys(item.permissions || {}).filter(function(key) { return item.permissions[key] === true })
-    return ['owner','admin','organizer','event_manager'].indexOf(role) >= 0 || permissions.indexOf('event.manage') >= 0 || permissions.indexOf('identity.review') >= 0
-  }).map(function(item) { return String(item.userId || item.memberUserId || '') }).filter(Boolean)))
-  if (!recipients.length) return 0
-  const dedupeKey = 'player-qualification:' + String(invite._id || '') + ':' + String(suffix || 'submitted')
-  let written = 0
-  for (const userId of recipients) {
-    const prior = (await db.collection('messages').where({ orgId, userId, dedupeKey }).limit(1).get()).data || []
-    if (prior.length) continue
-    await db.collection('messages').add({ data:{ orgId, userId, isOrgBroadcast:false, category:'event', title:String(title || '赛事球员资料待处理').slice(0,120), subtitle:String(subtitle || '').slice(0,300), path:'/pages/todo/index?tab=event&tournamentId=' + encodeURIComponent(String(invite.tournamentId)) + '&teamId=' + encodeURIComponent(String(invite.teamId || '')) + '&divisionId=' + encodeURIComponent(String(invite.divisionId || '')) + '&playerId=' + encodeURIComponent(String(invite.playerId || '')), dedupeKey, createdAt:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate() } })
-    written += 1
-  }
-  return written
 }
 
 async function identityReviewerAuth(event, orgIds) {
@@ -1141,9 +1043,6 @@ async function listIdentityReviewQueue(event) {
     if (!reviewAuth.success) continue
     const players = (await db.collection('players').where({ _id:String(invite.playerId || '') }).limit(1).get()).data || []
     const player = players[0] || {}
-    const teams = (await db.collection('teams').where({ _id:String(invite.teamId || '') }).limit(1).get()).data || []
-    const team = teams[0] || {}
-
     const documentIds = Array.isArray(verification.documentIds) ? verification.documentIds.map(String).filter(Boolean) : []
     const documents = []
     for (const documentId of documentIds) {
@@ -1158,35 +1057,7 @@ async function listIdentityReviewQueue(event) {
     const back = documents.find(item => item.side === 'back') || {}
     const documentUrl = urlById[String(front.reviewFileId || front.fileId || '')] || ''
     const backDocumentUrl = urlById[String(back.reviewFileId || back.fileId || '')] || ''
-    rows.push({ id:String(verification._id), playerId:String(invite.playerId || ''), playerName:String(player.name || '球员'), birthDate:String(player.birthDate || ''), teamId:String(invite.teamId || ''), teamName:String(team.name || team.teamName || ''), tournamentId:String(invite.tournamentId || ''), tournamentName:String(invite.tournamentName || '球队资料'), divisionId:String(invite.divisionId || ''), divisionName:String(invite.divisionName || ''), photoUrl:String(player.photoUrl || ''), documentUrl, backDocumentUrl, frontCropDetected:front.cropDetected === true, backCropDetected:back.cropDetected === true, documentType:String(verification.documentType || 'resident_id'), identityNumberMasked:String(verification.identityNumberMasked || ''), submittedAt:verification.submittedAt || null, faceAssessment:verification.faceAssessment || {}, reviewMode:String(verification.reviewMode || 'organizer_double_review') })
-  }
-  return { success:true, rows }
-}
-
-async function listTournamentInsuranceQueue(event) {
-  const auth = await authenticateWebSession(event)
-  if (!auth.success) return auth
-  const db = cloud.database()
-  for (const name of ['tournament_player_qualifications', 'parent_insurance_documents']) { try { await db.createCollection(name) } catch (error) {} }
-  for (const name of ['tournament_player_qualifications', 'parent_insurance_documents']) { try { await db.createCollection(name) } catch (error) {} }
-  const qualifications = (await db.collection('tournament_player_qualifications').where({ status:'submitted' }).limit(300).get()).data || []
-  const rows = []
-  for (const qualification of qualifications) {
-    if (!qualification.requirementSnapshot || qualification.requirementSnapshot.insuranceRequired !== true) continue
-    const invites = (await db.collection('parent_profile_invites').where({ _id:String(qualification.inviteId || '') }).limit(1).get()).data || []
-    const invite = invites[0]
-    if (!invite || String(invite.tournamentId || '') !== String(qualification.tournamentId || '')) continue
-    const orgId = String(invite.organizerOrgId || '')
-    const reviewAuth = await identityReviewerAuth(event, orgId ? [orgId] : [])
-    if (!reviewAuth.success) continue
-    const playerRows = (await db.collection('players').where({ _id:String(qualification.playerId || '') }).limit(1).get()).data || []
-    const teamRows = (await db.collection('teams').where({ _id:String(qualification.teamId || '') }).limit(1).get()).data || []
-    const documents = qualification.insuranceDocumentIds && qualification.insuranceDocumentIds.length
-      ? (await db.collection('parent_insurance_documents').where({ _id:db.command.in(qualification.insuranceDocumentIds.map(String)), status:'uploaded' }).limit(10).get()).data || []
-      : []
-    const urls = documents.length ? await cloud.getTempFileURL({ fileList:documents.map(item => String(item.fileId || '')).filter(Boolean) }) : { fileList:[] }
-    const urlById = new Map((urls.fileList || []).map(item => [String(item.fileID || item.fileId || ''), String(item.tempFileURL || '')]))
-    rows.push({ id:String(qualification._id), tournamentId:String(qualification.tournamentId || ''), tournamentName:String(invite.tournamentName || ''), divisionName:String(invite.divisionName || ''), teamName:String((teamRows[0] || {}).name || (teamRows[0] || {}).teamName || ''), playerName:String((playerRows[0] || {}).name || '球员'), submittedAt:qualification.updateTime || qualification.createTime || null, documents:documents.map(item => ({ side:String(item.side || ''), url:urlById.get(String(item.fileId || '')) || '' })).filter(item => item.url) })
+    rows.push({ id:String(verification._id), playerId:String(invite.playerId || ''), playerName:String(player.name || '球员'), birthDate:String(player.birthDate || ''), teamId:String(invite.teamId || ''), photoUrl:String(player.photoUrl || ''), documentUrl, backDocumentUrl, frontCropDetected:front.cropDetected === true, backCropDetected:back.cropDetected === true, documentType:String(verification.documentType || 'resident_id'), identityNumberMasked:String(verification.identityNumberMasked || ''), submittedAt:verification.submittedAt || null, faceAssessment:verification.faceAssessment || {}, reviewMode:String(verification.reviewMode || 'organizer_double_review') })
   }
   return { success:true, rows }
 }
@@ -1288,7 +1159,7 @@ async function uploadAndProcessParentPortrait(event) {
   if (!authenticated.success) return authenticated
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
-  if (!preview.data.requirements.portrait && !preview.data.requirements.portraitOptionalAvailable) return { success: false, error: '本次邀请未开放标准形象照', code: 'PARENT_PORTRAIT_NOT_AVAILABLE' }
+  if (!preview.data.requirements.portrait) return { success: false, error: '本次邀请未开启标准形象照要求', code: 'PARENT_PORTRAIT_NOT_REQUIRED' }
   const needsIdentity = Boolean(preview.data.requirements.realName)
   const db = cloud.database(), checks = needsIdentity ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite, status: 'approved' }).limit(1).get()).data || [] : []
   if (needsIdentity && !checks[0] && preview.data.requirements.identityAlreadyVerified !== true) {
@@ -1337,7 +1208,7 @@ async function confirmParentPortrait(event) {
   if (!authenticated.success) return authenticated
   const preview = await previewParentProfileInvite({ parentInvite: authenticated.session.parentInvite })
   if (!preview.success) return preview
-  if (!preview.data.requirements.portrait && !preview.data.requirements.portraitOptionalAvailable) return { success: false, error: '本次邀请未开放标准形象照', code: 'PARENT_PORTRAIT_NOT_AVAILABLE' }
+  if (!preview.data.requirements.portrait) return { success: false, error: '本次邀请未开启标准形象照要求', code: 'PARENT_PORTRAIT_NOT_REQUIRED' }
   const portraitId = String(event.portraitId || '')
   if (!portraitId) return { success: false, error: '缺少待确认的人像版本' }
   const avatarData = String(event.avatarData || '')
@@ -1392,43 +1263,29 @@ async function completeParentProfile(event) {
   }
   const requirements = preview.data.requirements || {}
   const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true }).limit(10).get()).data || []
-  let verifications = requirements.identityVerificationRequired ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || [] : []
+  let verifications = requirements.realName ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || [] : []
   if (requirements.identityAlreadyVerified) {
     const reused = await resolveReusableRegistrationIdentity(db, player)
     if (!reused) return { success: false, error: '身份档案状态已变化，请刷新后重新核验', code: 'PARENT_IDENTITY_REUSE_CHANGED' }
     verifications.push(reused)
   }
-  const portraits = requirements.portrait || requirements.portraitOptionalAvailable ? (await db.collection('parent_portraits').where({ parentInvite: authenticated.session.parentInvite, status: 'confirmed' }).limit(1).get()).data || [] : []
-  const identityDocs = requirements.identityVerificationRequired && !requirements.identityAlreadyVerified ? (await db.collection('parent_identity_documents').where({ parentInvite:authenticated.session.parentInvite, status:'uploaded' }).limit(10).get()).data || [] : []
+  const portraits = requirements.portrait ? (await db.collection('parent_portraits').where({ parentInvite: authenticated.session.parentInvite, status: 'confirmed' }).limit(1).get()).data || [] : []
+  const identityDocs = requirements.realName ? (await db.collection('parent_identity_documents').where({ parentInvite:authenticated.session.parentInvite, status:'uploaded' }).limit(10).get()).data || [] : []
   const identityFront = identityDocs.find(item => item.side === 'front')
   const identityBack = identityDocs.find(item => item.side === 'back' && item.documentType === 'resident_id')
-  const insuranceDocuments = requirements.insuranceRequired ? (await db.collection('parent_insurance_documents').where({ parentInvite:authenticated.session.parentInvite, status:'uploaded' }).limit(10).get()).data || [] : []
-  const insuranceSides = new Set(insuranceDocuments.map(item => String(item.side || '')))
   const authorizedDraft = drafts.find(parentDraftIsAuthorized)
   const hasExistingIdentity = verifications.some(item => ['approved','pending_review'].includes(String(item.status || ''))) || requirements.identityAlreadyVerified === true
-  if (!authorizedDraft || (requirements.identityVerificationRequired && !hasExistingIdentity && (!identityFront || (identityFront.documentType === 'resident_id' && !identityBack))) || (requirements.portrait && !portraits[0]) || (requirements.insuranceRequired && (!insuranceSides.has('front') || !insuranceSides.has('back')))) return { success: false, error: '请先完成本次邀请已开启的资料步骤' }
+  if (!authorizedDraft || (requirements.realName && !hasExistingIdentity && (!identityFront || (identityFront.documentType === 'resident_id' && !identityBack))) || (requirements.portrait && !portraits[0])) return { success: false, error: '请先完成本次邀请已开启的全部资料步骤' }
   const guardianPhone = String(player.guardianPhone || player.contactPhone || invite.guardianPhone || invite.registrantPhone || '').replace(/\D/g, '')
   if (String(preview.data.registrantType || '') === 'guardian' && !/^1[3-9]\d{9}$/.test(guardianPhone)) return { success:false, error:'请先由球队补充监护人电话，再提交资料', code:'GUARDIAN_PHONE_REQUIRED' }
   const playerPhone = String(player.playerPhone || player.contactPhone || invite.registrantPhone || '').replace(/\D/g, '')
   if (String(preview.data.registrantType || '') === 'self' && !/^1[3-9]\d{9}$/.test(playerPhone)) return { success:false, error:'请先补充球员本人电话，再提交资料', code:'PLAYER_PHONE_REQUIRED' }
-  if (requirements.identityVerificationRequired && !verifications.some(item => ['approved','pending_review'].includes(String(item.status || '')))) {
+  if (requirements.realName && !verifications.some(item => ['approved','pending_review'].includes(String(item.status || '')))) {
     const identitySubmission = await submitParentIdentityVerification({ parentSessionToken:event.parentSessionToken, parentInvite:authenticated.session.parentInvite, faceAssessment:event.faceAssessment })
     if (!identitySubmission || !identitySubmission.success) return identitySubmission || { success:false, error:'人证资料提交失败，请重试' }
     verifications = (await db.collection('parent_identity_verifications').where({ parentInvite:authenticated.session.parentInvite }).limit(1).get()).data || []
   }
-  if (requirements.identityVerificationRequired && !verifications.some(item => ['approved','pending_review'].includes(String(item.status || '')))) return { success:false, error:'人证审核状态异常，请联系赛事主办方', code:'PARENT_IDENTITY_REVIEW_STATE_INVALID' }
-  if (requirements.profileScope === 'tournament') {
-    if (requirements.identityVerificationRequired && !verifications.some(item => String(item.status || '') === 'approved')) return { success:false, error:'赛事身份核验尚未通过，请等待主办方审核', code:'PARENT_EVENT_IDENTITY_PENDING' }
-    try { await db.createCollection('tournament_player_qualifications') } catch (error) {}
-    try { await db.createCollection('tournament_player_qualifications') } catch (error) {}
-    const qualifications = (await db.collection('tournament_player_qualifications').where({ tournamentId:String(requirements.tournamentId), divisionId:String(requirements.divisionId), playerId:String(invite.playerId) }).limit(1).get()).data || []
-    const qualification = { tournamentId:String(requirements.tournamentId), divisionId:String(requirements.divisionId), teamId:String(invite.teamId), playerId:String(invite.playerId), inviteId:String(invite._id), requirementSnapshot:requirements, identityVerificationId:verifications[0] ? String(verifications[0]._id) : '', identityStatus:verifications[0] ? 'verified' : 'not_required', insuranceDocumentIds:insuranceDocuments.map(item => String(item._id)), portraitId:portraits[0] ? String(portraits[0]._id) : '', status:'submitted', submittedByOpenId:String(authenticated.session.serviceAccountOpenId || ''), updateTime:db.serverDate() }
-    if (qualifications[0]) await db.collection('tournament_player_qualifications').doc(String(qualifications[0]._id)).update({ data:qualification })
-    else await db.collection('tournament_player_qualifications').add({ data:Object.assign({}, qualification, { createTime:db.serverDate() }) })
-    await notifyTournamentQualification(db, invite, player, '赛事球员资料待审核', String(invite.tournamentName || '赛事') + ' · ' + String(invite.divisionName || '组别') + ' · ' + String(player.name || '球员'), 'qualification-submitted')
-    if (portraits[0]) await db.collection('players').doc(String(invite.playerId)).update({ data:{ photoUrl:String(portraits[0].avatarFileId || portraits[0].transparentFileId || ''), photoFileID:String(portraits[0].avatarFileId || portraits[0].transparentFileId || ''), recentPortraitId:String(portraits[0]._id || ''), recentPortraitConfirmedAt:portraits[0].confirmedAt || db.serverDate(), updateTime:db.serverDate() } })
-    return { success:true, status:'submitted', requirements, eventScoped:true, message:'赛事资格资料已提交' }
-  }
+  if (requirements.realName && !verifications.some(item => ['approved','pending_review'].includes(String(item.status || '')))) return { success:false, error:'人证审核状态异常，请联系球队负责人', code:'PARENT_IDENTITY_REVIEW_STATE_INVALID' }
   const submissionRows = (await db.collection('parent_profile_submissions').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || []
   const previous = submissionRows[0] || {}
   const registrantType = String(preview.data.registrantType || 'guardian') === 'self' ? 'self' : 'guardian'
@@ -1974,7 +1831,7 @@ function compactCompetitionSnapshot(division, relations, drawRecords, matches) {
     'knockoutLegs', 'bracketSource', 'venueMode', 'homeAwayEnabled', 'thirdPlaceEnabled',
     'knockoutTieBreak', 'birthDateCutoff', 'birthDateStart', 'birthDateEnd', 'eligibilityNotes', 'rosterLimit', 'minimumRoster',
     'identityVerificationRequired', 'eligibilityReviewRequired', 'portraitRequired',
-    'identityDocumentRequired', 'insuranceRequired', 'electronicPassVerificationRequired', 'waiverRequired', 'singleDivisionOnly',
+    'identityDocumentRequired', 'insuranceRequired', 'waiverRequired', 'singleDivisionOnly',
     'registrationDeadline', 'lockRosterAfterDeadline', 'periodMode', 'matchMinutes',
     'singlePeriodCount', 'breakMinutes', 'playersOnField', 'substitutionMode', 'substitutionLimit',
     'substitutionWindows', 'substitutionReentryAllowed',
@@ -4274,7 +4131,7 @@ async function handleCallFunction(event) {
         const tournamentId = String(event.staffTournamentId || '').trim()
         delegatedTournamentId = tournamentId
         const uploadRight = functionName === 'uploadFile' && tournamentId
-          ? await staffUploadRight(db, functionParams || {}, tournamentId, authenticated.orgId, authenticated.userId) : ''
+          ? await staffUploadRight(db, { ...(functionParams || {}), staffModule: event.staffModule }, tournamentId, authenticated.orgId, authenticated.userId) : ''
         const rule = uploadRight ? [uploadRight] : relayRights(functionName, functionParams || {})
         const allowed = Array.isArray(rule) && rule.length === 0 && functionName === 'tournamentStaffAccess' ||
           Boolean(rule && tournamentId && (functionName === 'uploadFile' || await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId)) && (
@@ -4316,7 +4173,7 @@ async function handleCallFunction(event) {
       ...(authenticated && !assistanceGrant ? {
         __actorUserId: authenticated.userId,
         __actorOrgId: authenticated.orgId,
-        ...(delegatedStaff && functionName !== 'tournamentStaffAccess' ? { __staffTournamentId: delegatedTournamentId } : {}),
+        ...(delegatedStaff && functionName !== 'tournamentStaffAccess' ? { __staffTournamentId: delegatedTournamentId, __staffModule: String(event.staffModule || '') } : {}),
         ...(functionName === 'updateMatch' ? { __notificationRelay: true } : {}),
         ...(functionName === 'reviewRosterChange' ? {
           __actorUserName: String(authenticated.user.nickname || authenticated.user.userName || authenticated.user.phone || '主办方').slice(0, 50)
@@ -4703,7 +4560,7 @@ async function handleDbQuery(event) {
       const tournamentId = String(event.staffTournamentId || '').trim()
       const requestedModule = String(event.staffModule || '').trim()
       const needed = ['list', 'get', 'count'].includes(operation)
-        ? (staffDbRights.readRights(collection).includes(requestedModule) ? [requestedModule] : [])
+        ? staffDbRights.requiredReadRights(collection, requestedModule)
         : collection === 'teams' && operation === 'add' && requestedModule === 'event.registration'
           ? (staffDbRights.writeRights(collection, operation, data).length ? ['event.registration'] : [])
           : staffDbRights.writeRights(collection, operation, data)
@@ -5128,15 +4985,9 @@ function resolveRosterRequirements(tournament, division) {
   const sources = [division, division && division.rulesSnapshot, tournament]
   const identity = readRosterBoolean(sources, ['identityVerificationRequired', 'requiresRealName', 'requireRealName'])
   const portrait = readRosterBoolean(sources, ['portraitRequired', 'requiresPortrait', 'requirePortrait'])
-  const identityDocument = readRosterBoolean(sources, ['identityDocumentRequired'])
-  const insurance = readRosterBoolean(sources, ['insuranceRequired'])
-  const electronicPass = readRosterBoolean(sources, ['electronicPassVerificationRequired'])
   const parent = readRosterBoolean(sources, ['parentSupplementRequired', 'parentProfileRequired', 'parentCompletionRequired'])
   return {
     identityVerificationRequired: identity.defined ? identity.value : false,
-    identityDocumentRequired: identityDocument.defined ? identityDocument.value : false,
-    insuranceRequired: insurance.defined ? insurance.value : false,
-    electronicPassVerificationRequired: electronicPass.defined ? electronicPass.value : false,
     portraitRequired: portrait.defined ? portrait.value : false,
     parentSupplementConfigured: parent.defined,
     parentSupplementRequired: parent.defined ? parent.value : undefined,
@@ -5956,6 +5807,7 @@ exports.main = async (event, context) => {
         const db = cloud.database()
         if (await staffPolicy.isStaff(db, session.userId, session.orgId) && !await staffPolicy.owner(db, session.userId, session.orgId)) {
           const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery', 'reviewRefereeRecord', 'rosterExceptionBoard']
+          const playerCardViewerActions = ['getPlayerCardsForViewer', 'getPlayerCardForViewer', 'getPlayerCardById']
           if (action === 'uploadImage') {
             const tournamentId = String(params.staffTournamentId || '')
             if (params.tournamentId && String(params.tournamentId) !== tournamentId) return response(200, { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'赛事范围不一致' })
@@ -5975,6 +5827,14 @@ exports.main = async (event, context) => {
               await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.teams') ||
               await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, 'event.registration'))
             if (!news && !evidence && !teamImage && !newTeamLogo) return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前赛事没有上传权限' })
+          } else if (playerCardViewerActions.includes(action)) {
+            const tournamentId = String(params.staffTournamentId || '').trim()
+            const moduleRight = String(params.staffModule || '').trim()
+            const validModule = ['event.dashboard','event.registration','event.teams','event.draw','event.matches','event.results'].includes(moduleRight)
+            const hasModuleRight = tournamentId && validModule && await staffPolicy.hasRight(db, session.userId, session.orgId, tournamentId, moduleRight)
+            if (!hasModuleRight) return response(200, { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'当前子账号没有查看本赛事球员卡的权限' })
+            params.__staffTournamentId = tournamentId
+            params.__staffModule = moduleRight
           } else if (!permittedSessionActions.includes(action)) {
             return response(200, { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' })
           }
@@ -6050,13 +5910,10 @@ exports.main = async (event, context) => {
       case 'getPlayerCardsForViewer':
       case 'getPlayerCardForViewer':
       case 'getPlayerCardById':
-        result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
+        result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,buildStaffEventScope,recordBelongsToStaffEvent})(params); break
       case 'getAdminPlayerCard':
       case 'saveAdminPlayerCard':
         result = await require('./playerCardsAdmin.cjs').createAdminPlayerCards({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
-      case 'listPlayerCardLayoutPresets':
-      case 'getPlayerCardLayoutPreset':
-      case 'savePlayerCardLayoutPreset':
       case 'listPlayerCardCatalog':
       case 'listPlayerCardCatalogTargets':
       case 'listPlayerCardCatalogTemplates':
@@ -6070,6 +5927,9 @@ exports.main = async (event, context) => {
         result = await require('./playerCardCatalogAdmin.cjs').createPlayerCardCatalogAdmin({cloud,authenticateWebSession})(params); break
       case 'listPlayerCardPreloadTargets':
       case 'getPlayerCardPreloadPlayer':
+      case 'listPlayerCardLayoutPresets':
+      case 'getPlayerCardLayoutPreset':
+      case 'savePlayerCardLayoutPreset':
       case 'listPlayerCardTemplates':
       case 'getPlayerCardTemplate':
       case 'savePlayerCardTemplate':
@@ -6078,6 +5938,9 @@ exports.main = async (event, context) => {
       case 'continuePlayerCardTemplatePublish':
       case 'getPlayerCardTemplatePublishStatus':
       case 'retryPlayerCardTemplatePublish':
+      case 'listPlayerCardTemplatePublishPreviews':
+      case 'confirmPlayerCardTemplatePublish':
+      case 'rejectPlayerCardTemplatePublish':
       case 'getActivePlayerCardTemplate':
         result = await require('./playerCardTemplates.cjs').createPlayerCardTemplates({ cloud, authenticateWebSession })(params); break
       case 'publicTournamentCenter':
@@ -6141,16 +6004,12 @@ exports.main = async (event, context) => {
         result = await prepareParentIdentityImage(params); break
       case 'uploadParentIdentityDocument':
         result = await uploadParentIdentityDocument(params); break
-      case 'uploadParentInsuranceDocument':
-        result = await uploadParentInsuranceDocument(params); break
       case 'submitParentIdentityVerification':
         result = await submitParentIdentityVerification(params); break
       case 'getParentIdentityVerification':
         result = await getParentIdentityVerification(params); break
       case 'listIdentityReviewQueue':
         result = await listIdentityReviewQueue(params); break
-      case 'listTournamentInsuranceQueue':
-        result = await listTournamentInsuranceQueue(params); break
       case 'reviewIdentityVerification':
         result = await reviewIdentityVerification(params); break
       case 'requestParentIdentityCorrection':

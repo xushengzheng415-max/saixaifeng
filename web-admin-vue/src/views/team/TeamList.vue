@@ -279,7 +279,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Back, Grid, List, Message, Trophy, Clock, WarningFilled } from '@element-plus/icons-vue'
-import { queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
+import { queryAll, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, getFileUrl, callFunction } from '../../utils/cloud'
 import { removeBackground } from '../../utils/removeBg'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import { permissions, getCurrentRole, ROLES } from '../../utils/permissions'
@@ -807,12 +807,12 @@ async function loadTeams() {
     // 根据角色加载不同的球队数据
       if (canViewAllTeams.value) {
       // 主办?管理员可以查看所有球队
-        const result = await queryList('teams', { orderBy: { createTime: 'desc' } })
+        const result = await queryAll('teams', { orderBy: { createTime: 'desc' } })
       teams.value = result
     } else if (currentRole.value === ROLES.COACH) {
       // 教练查看自己创建的球队
         // 匹配优先级：creatorId > contactPhone > coachPhone > 老数据无 creatorId 全显示
-      const result = await queryList('teams', { orderBy: { createTime: 'desc' } })
+      const result = await queryAll('teams', { orderBy: { createTime: 'desc' } })
       teams.value = result.filter(team => {
         // ★ 赛事中心创建的公共球队
         if (team.source === 'tournament_center') {
@@ -849,9 +849,9 @@ async function loadTeams() {
 
     // 并行加载：赛事关联+ 教练 + 球员数量
     const [tournamentTeams, coaches, players] = await Promise.all([
-      queryList('tournament_teams', { where: { teamId: { $in: allTeamIds } } }),
-      queryList('coaches', { where: { teamId: { $in: allTeamIds } } }),
-      queryList('players', { where: { teamId: { $in: allTeamIds } } })
+      queryAll('tournament_teams', { where: { teamId: { $in: allTeamIds } } }),
+      queryAll('coaches', { where: { teamId: { $in: allTeamIds } } }),
+      queryAll('players', { where: { teamId: { $in: allTeamIds } } })
     ])
 
     // 按球队ID分组统计赛事

@@ -112,7 +112,7 @@ Page({
       var result=res.result || {}
       if (!result.success) { that.setData({ loading:false, errorMsg:result.message || '身份核验任务加载失败' }); return }
       var task=result.data || {}
-      that.setData({ loading:false, errorMsg:'', needsPhone:false, showMatchContent:false, showIdentityTask:true, showAdultScan:task.electronicPassVerificationRequired === true && task.canVerifyStarters, identityTask:task, identityPlayers:task.starters || [], tournamentName:'身份核验任务', teamsText:(task.teamName || '') + ' vs ' + (task.opponentName || ''), matchTimeText:task.matchTimeText || '', venue:task.venue || '', matchStatusText:task.lineupStatus || '', refereeRoleLabel:task.roleLabel || '' })
+      that.setData({ loading:false, errorMsg:'', needsPhone:false, showMatchContent:false, showIdentityTask:true, showAdultScan:task.participantType === 'adult' && task.canVerifyStarters, identityTask:task, identityPlayers:task.starters || [], tournamentName:'身份核验任务', teamsText:(task.teamName || '') + ' vs ' + (task.opponentName || ''), matchTimeText:task.matchTimeText || '', venue:task.venue || '', matchStatusText:task.lineupStatus || '', refereeRoleLabel:task.roleLabel || '' })
     }, function() { that.setData({ loading:false, errorMsg:'网络异常，请重试' }) })
   },
 

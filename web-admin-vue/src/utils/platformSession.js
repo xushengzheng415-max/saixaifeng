@@ -10,6 +10,8 @@
  * 当前浏览器标签页的身份通道由 sessionStorage 选择，另一标签页登录不覆盖本页身份。
  */
 
+import { clearSessionReadCaches } from './sessionReadCache.js'
+
 export const PLATFORM_LOGIN_TYPE = 'platform-password'
 export const PLATFORM_SESSION_KEY = 'platformSession'
 export const PLATFORM_AUTH_TOKEN_KEY = 'platformAuthToken'
@@ -44,11 +46,17 @@ export function isPlatformWorkspacePath(path) {
 }
 
 export function activatePlatformContext() {
-  sessionStorage.setItem(PLATFORM_CONTEXT_KEY, 'platform')
+  if (!isPlatformContext()) {
+    sessionStorage.setItem(PLATFORM_CONTEXT_KEY, 'platform')
+    clearSessionReadCaches('identity')
+  }
 }
 
 export function activateOrganizerContext() {
-  sessionStorage.removeItem(PLATFORM_CONTEXT_KEY)
+  if (isPlatformContext()) {
+    sessionStorage.removeItem(PLATFORM_CONTEXT_KEY)
+    clearSessionReadCaches('identity')
+  }
 }
 
 export function isPlatformContext() {
@@ -61,6 +69,19 @@ export function getPlatformAuthToken() {
 
 export function setPlatformAuthToken(token) {
   if (token) localStorage.setItem(PLATFORM_AUTH_TOKEN_KEY, token)
+}
+
+/** 迁移旧版共用令牌，保留平台登录并清除已覆盖的机构标记。 */
+export function migrateLegacyPlatformSession() {
+  if (!isPlatformLoginType(localStorage.getItem('loginType'))) return
+  const token = localStorage.getItem('authToken') || ''
+  if (token && !getPlatformAuthToken()) setPlatformAuthToken(token)
+  if (!getPlatformSession()) {
+    let user = {}
+    try { user = JSON.parse(localStorage.getItem('userInfo') || '{}') || {} } catch { /* 旧缓存损坏不阻断迁移 */ }
+    localStorage.setItem(PLATFORM_SESSION_KEY, JSON.stringify({ user, userName: user.userName || '平台负责人' }))
+  }
+  ;['isLoggedIn', 'authToken', 'loginType', 'userId', 'userInfo'].forEach(key => localStorage.removeItem(key))
 }
 
 /** 当前标签页是否持有平台管理员会话 */

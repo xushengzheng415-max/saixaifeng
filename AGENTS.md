@@ -50,8 +50,6 @@
 
 当前产品边界以 `docs/PRODUCT_RULES.md` 为准，不根据目录名称推断角色或权限。
 
-球员注册、球员卡、赛事证件和现场核验的跨端实现统一遵循 `docs/PLAYER_REGISTRATION_EVENT_IDENTITY_STANDARD.md`；球队注册不得因赛事核验规则而强制收集身份证。
-
 ---
 
 ## 三、不可违反的技术红线
@@ -124,6 +122,8 @@
 ## 四、代码修改边界
 
 ### 球员卡复用
+
+球员卡显示、编辑、制卡、模板、卡种、分享和导出任务，先读 `docs/PLAYER_CARD_INTEGRATION.md`、`docs/PLAYER_CARD_EDITOR_HANDOFF.md` 与 `docs/data-center/PLAYER_CARD_POINTS.md`。页面只接入已部署且符合其授权范围的统一读取接口；候选接口以 `docs/CURRENT_STATUS.md`、`docs/data-center/RELEASE.md` 的实际回读登记为准。平台后台控制文字和徽标排版，球员端只调整标准形象照大小、位置。
 
 球员卡是由平台后台配置模板、字段、坐标、素材和卡种，再由统一模块生成完整成卡的套件。新增页面先按 `docs/PLAYER_CARD_INTEGRATION.md` 接入套件读取；手机、平板、PC 只等比缩放整张卡，不另画或重排内部。后台发布布局后，受影响的已保存卡须自动重生成并统一切换活动版本。基础卡与限定卡并存，限定卡由服务端按已确认的独立规则发放，球员选择当前展示卡；页面不得自行判定资格或等级。现有 `PlayerCard.vue` 及各端绘制代码是待收口的实现，不能当作套件已完成的证明。
 
@@ -250,3 +250,7 @@ API Key 位于仓库外的 `%LOCALAPPDATA%\SxfCloud\credentials\`，由 Windows 
 用户已确认数据中心方案。所有新增或修改的数据机制、竞技统计、榜单、导入与导出，必须先读 docs/data-center/README.md、CONTRACT.md 和 INTEGRATION.md。统一身份、历史归属、指标、权限、完整度与数据版本；禁止页面另写统计算法、姓名自动合并、缺失值记零和静默截断查询。
 
 统一源码在 cloudfunctions/dataCenter/shared，部署副本经 tools/sync-data-center.mjs 同步。交付同步入口登记，执行 sync-data-center --check、test-data-center、check-data-governance。现行用户确认的赛事免费规则优先于本文件历史专业版付费描述。Git推送、部署和生产迁移分别记录实际状态。
+
+## 平台后台正式发布授权（2026-10-01）
+
+用户已明确要求：平台运营中心及平台后台后续界面设计与部署直接发布正式 `/admin/`，无需预览验收或测试阶段。实施后执行必要的生产构建、语法检查、权限边界核对及线上 HTTP/资源摘要回读；保留同期代码与用户改动。此授权适用于平台后台界面发布，数据库迁移、模板激活及跨端功能按各自请求范围执行。其他端口继续遵循原发布流程。

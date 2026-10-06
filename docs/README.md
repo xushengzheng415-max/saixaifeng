@@ -17,7 +17,6 @@
 | 文档 | 用途 |
 |---|---|
 | `PRODUCT_RULES.md` | 产品定位、角色、权限、收费与数据归属等已确认规则 |
-| `PLAYER_REGISTRATION_EVENT_IDENTITY_STANDARD.md` | 球员注册、制卡、赛事证件、保险、电子参赛证与人脸核验的跨端统一标准 |
 | `CURRENT_STATUS.md` | 当前进度、线上/本地状态和验证记录 |
 | `ADR.md` | 决策记录及被替代规则 |
 | `PRODUCTION_EXTERNAL_CONFIGURATION.md` | 生产外部配置名称、归属、验收方式和安全边界 |
@@ -25,6 +24,8 @@
 | `ICON_ASSET_CATALOG.md` | 图标来源、映射和资产台账 |
 | `UI_DELIVERY.md` | UI 交付与实现记录 |
 | `PLAYER_CARD_INTEGRATION.md` | 后台配置、统一生成、跨端调用与自动更新的球员卡套件规范 |
+| `PLAYER_CARD_EDITOR_HANDOFF.md` | 球员卡系统页面接入合同、候选接口、代码定位、发布与验收交接 |
+| `SHARED_TOURNAMENT_ACCESS.md` | 赛事共享授权的主办方分发、受邀者接受、权限边界与线下交接规范 |
 
 ## 专题资料
 

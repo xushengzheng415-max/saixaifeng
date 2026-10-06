@@ -7,8 +7,8 @@
       </div>
       <el-button :loading="loading" @click="loadMessages"><el-icon><Refresh /></el-icon>刷新</el-button>
     </header>
-    <el-alert v-if="invitationLoadError" type="warning" :closable="false" title="赛事邀请暂时未能加载，请刷新重试" />
 
+    <el-alert v-if="invitationLoadError" type="warning" :closable="false" title="赛事邀请暂时未能加载，请刷新重试" />
     <div v-if="loading && !messages.length && !invitations.length" class="inbox-loading">正在加载站内信…</div>
     <div v-else-if="messages.length || invitations.length" class="inbox-list" v-loading="loading">
       <article v-for="invite in invitations" :key="`invite-${invite.id}`" class="inbox-item unread invitation-item">

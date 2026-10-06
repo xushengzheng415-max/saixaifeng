@@ -1257,7 +1257,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled, Picture } from '@element-plus/icons-vue'
-import { queryById, queryList, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
+import { queryById, queryList, queryAll, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
@@ -1273,6 +1273,7 @@ import { sortPlayerTableRows } from '../../utils/teamPlayerTableSort.js'
 import RosterPosterModal from '../../components/team/RosterPosterModal.vue'
 import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
+import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
 
 const isTournamentStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
 const route = useRoute()
@@ -1374,9 +1375,12 @@ const tournamentRosterPlayerIds = ref(new Set())
 const tournamentMediaStats = ref({})
 const dataCenterStatistics = ref(null)
 function knownMetric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
-async function loadUnifiedStatistics() {
+function requestUnifiedStatistics() {
+  return callFunction('dataCenter', {action:'query',scope:{teamId:String(teamId),...(sourceTournamentId.value ? {tournamentId:sourceTournamentId.value,...(sourceDivisionId.value ? {divisionId:sourceDivisionId.value} : {})} : {})}})
+}
+async function loadUnifiedStatistics(responsePromise) {
   dataCenterStatistics.value = null
-  const response = await callFunction('dataCenter', {action:'query',scope:{teamId:String(teamId),...(sourceTournamentId.value ? {tournamentId:sourceTournamentId.value,...(sourceDivisionId.value ? {divisionId:sourceDivisionId.value} : {})} : {})}})
+  const response = await (responsePromise || requestUnifiedStatistics())
   if (!response.success) throw new Error(response.error || '统计加载失败')
   dataCenterStatistics.value = response
   if (sourceTournamentId.value) {
@@ -1450,12 +1454,7 @@ function onTournamentPlayerSort({ prop, order }) {
   if (isTeamDataWorkspace.value) tournamentPlayerSort.value = { prop: prop || '', order: order || '' }
 }
 async function readAllRows(collection, where) {
-  const rows = []
-  for (let skip = 0; ; skip += 100) {
-    const page = await queryList(collection, { where, skip, limit: 100, throwOnError: true, silent: true, orderBy: { _id: 'asc' } })
-    rows.push(...page)
-    if (page.length < 100) return rows
-  }
+  return queryAll(collection, { where, silent: true, orderBy: { _id: 'asc' } })
 }
 async function loadPlayerCompetitionData() {
   if (!isTeamDataWorkspace.value) return
@@ -4284,6 +4283,7 @@ function generatePlayerId(teamCode, roleSuffix, overrideSeq) {
 
 async function loadPlayers() {
   loading.value = true
+  const statisticsRequest = requestUnifiedStatistics().catch(error => ({ success: false, error: error.message }))
   try {
     // 同时查询 teamId 和 teamCode，合并去重
     // 因为历史数据有的用 teamId，有的用 teamCode
@@ -4320,10 +4320,10 @@ async function loadPlayers() {
       }
     }
     const [byTeamId, byTeamCode, staffByTeamId, staffByTeamCode, exportRosterPlayers, tournamentRosterIds] = await Promise.all([
-      queryList('players', { where: { teamId: teamId } }),
-      queryList('players', { where: { teamCode: teamId } }),
-      queryList('coaches', { where: { teamId: teamId } }),
-      queryList('coaches', { where: { teamCode: teamId } }),
+      readAllRows('players', { teamId }),
+      readAllRows('players', { teamCode: teamId }),
+      readAllRows('coaches', { teamId }),
+      readAllRows('coaches', { teamCode: teamId }),
       loadExportRoster(),
       loadTournamentRoster()
     ])
@@ -4394,7 +4394,7 @@ async function loadPlayers() {
   } catch (err) {
     console.error('加载球员列表失败:', err)
   } finally {
-    try { await loadUnifiedStatistics() } catch (error) { console.warn('统一统计加载失败:',error.message) }
+    try { await loadUnifiedStatistics(statisticsRequest) } catch (error) { console.warn('统一统计加载失败:',error.message) }
     loading.value = false
   }
 }
@@ -4521,6 +4521,12 @@ function openTournamentMatches() {
   router.push({ path: `/tournaments/${sourceTournamentId.value}/matches`, query: sourceDivisionId.value ? { divisionId: sourceDivisionId.value } : {} })
 }
 
+useReadCacheRefresh({
+  tags: ['players', 'statistics'],
+  refresh: loadPlayers,
+  clear: () => { team.value = {}; players.value = []; dataCenterStatistics.value = null },
+  onError: () => ElMessage.warning('数据更新失败，请重试。')
+})
 onMounted(async () => {
   await loadTeam()
   if (route.query.edit === '1') editTeam()

@@ -55,7 +55,14 @@
         :loading="saving"
       >开始比赛</el-button>
       <el-button
-        v-if="match.status === 'ongoing'"
+        v-if="['scheduled', 'ongoing'].includes(String(match.status || '').toLowerCase())"
+        type="danger"
+        size="small"
+        @click="openForfeitDialog"
+        :loading="saving"
+      >弃赛</el-button>
+      <el-button
+        v-if="match.status === 'ongoing' && !isRefereeEvidenceLocked"
         type="warning"
         size="small"
         @click="openFinishDialog"
@@ -98,7 +105,7 @@
             <div class="lineup-header">
               <div class="lineup-title">{{ homeName }} vs {{ awayName }}</div>
               <div class="lineup-actions">
-                <el-button v-if="!isRefereeEvidenceLocked" size="small" @click="openDualVisualEditor" :loading="visualEditorOpening">
+                <el-button v-if="!isRefereeEvidenceLocked" size="small" @click="openDualVisualEditor">
                   <el-icon><Picture /></el-icon> 可视化布置
                 </el-button>
                 <el-button v-if="!isRefereeEvidenceLocked" type="primary" size="small" @click="openLineupDialog">
@@ -449,6 +456,22 @@
       <template #footer>
         <el-button @click="finishDialogVisible = false">取消</el-button>
         <el-button type="success" @click="finishMatch" :loading="saving">确认结束</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="forfeitDialogVisible" title="确认弃赛" width="420px" :close-on-click-modal="false">
+      <el-form label-width="88px">
+        <el-form-item label="弃赛方">
+          <el-radio-group v-model="forfeitTeamId">
+            <el-radio :label="match.homeTeamId">{{ homeName }}</el-radio>
+            <el-radio :label="match.awayTeamId">{{ awayName }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <div class="forfeit-note">弃赛方按 0:3 判负，不记录进球事件。</div>
+      <template #footer>
+        <el-button @click="forfeitDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="saving" :disabled="!forfeitTeamId" @click="confirmForfeit">确认弃赛</el-button>
       </template>
     </el-dialog>
 
@@ -1261,7 +1284,7 @@
 </template>
 
 <script setup>
-import { matchListQuery } from '../../utils/matchListContext'
+import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1371,6 +1394,8 @@ const venueOptions = ref([])
 // 结束比赛弹窗
 const finishDialogVisible = ref(false)
 const finishForm = ref({ homeScore: 0, awayScore: 0 })
+const forfeitDialogVisible = ref(false)
+const forfeitTeamId = ref('')
 
 // 事件弹窗
 const eventDialogVisible = ref(false)
@@ -1467,7 +1492,6 @@ const kitForm = ref({
 
 // 可视化阵容编辑弹窗
 const visualEditorVisible = ref(false)
-const visualEditorOpening = ref(false)
 const currentTeamSide = ref('home')
 const currentLineupData = ref(null)
 
@@ -1567,6 +1591,11 @@ const statusTagType = computed(() => {
 const canReviewRefereeRecord = computed(() => Boolean(match.value.refereeRecord && match.value.refereeReviewStatus === 'under_review'))
 const isRefereeEvidenceLocked = computed(() => Boolean(
   match.value.refereeRecordLocked ||
+  match.value.executionState === 'recording' ||
+  match.value.refereeReportSubmittedAt ||
+  match.value.refereeRecord ||
+  match.value.refereeReport ||
+  ['draft', 'submitted', 'approved', 'archived'].includes(String(match.value.refereeReportStatus || '').toLowerCase()) ||
   match.value.refereeReviewStatus === 'under_review' ||
   match.value.refereeReviewStatus === 'returned' ||
   match.value.refereeReviewStatus === 'archived'
@@ -1595,7 +1624,7 @@ function calculateEventScore(events) {
   })
   return score
 }
-const hasStructuredEvents = computed(() => Array.isArray(match.value.events) && !match.value.resultCorrection)
+const hasStructuredEvents = computed(() => Array.isArray(match.value.events) && !match.value.resultCorrection && match.value.resultType !== 'forfeit')
 const eventScore = computed(() => calculateEventScore(match.value.events))
 const displayHomeScore = computed(() => hasStructuredEvents.value ? eventScore.value.home : (match.value.homeScore ?? 0))
 const displayAwayScore = computed(() => hasStructuredEvents.value ? eventScore.value.away : (match.value.awayScore ?? 0))
@@ -2050,10 +2079,11 @@ async function updateStatus(status) {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
-    await callFunction('updateMatch', {
+    const result = await callFunction('updateMatch', {
       matchId,
       data: { status, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.status = status
     ElMessage.success('状态已更新')
   } catch (err) {
@@ -2073,12 +2103,59 @@ function openFinishDialog() {
   finishDialogVisible.value = true
 }
 
+function openForfeitDialog() {
+  if (!ensureEvidenceEditable()) return
+  forfeitTeamId.value = ''
+  forfeitDialogVisible.value = true
+}
+
+async function confirmForfeit() {
+  const losingTeamId = String(forfeitTeamId.value || '')
+  if (!losingTeamId || saving.value) return
+  const homeForfeited = losingTeamId === String(match.value.homeTeamId || '')
+  const forfeitingName = homeForfeited ? homeName.value : awayName.value
+  try {
+    await ElMessageBox.confirm(
+      forfeitingName + '将按弃赛判负，比分记为 ' + (homeForfeited ? '0:3' : '3:0') + '。此操作不会记录进球事件。',
+      '确认弃赛',
+      { type: 'warning', confirmButtonText: '确认弃赛', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  saving.value = true
+  try {
+    const result = await callFunction('updateMatch', {
+      matchId,
+      action: 'forfeitMatch',
+      expectedEventRevision: Number(match.value.matchEventRevision || 0),
+      data: { forfeitTeamId: losingTeamId }
+    })
+    if (!result?.success) throw new Error(result?.message || result?.error || '弃赛结果未保存，请重试')
+    Object.assign(match.value, result.data || {})
+    match.value.homeScore = homeForfeited ? 0 : 3
+    match.value.awayScore = homeForfeited ? 3 : 0
+    match.value.status = 'finished'
+    match.value.resultType = 'forfeit'
+    match.value.forfeitingTeamId = losingTeamId
+    forfeitDialogVisible.value = false
+    ElMessage.success('已按 ' + match.value.homeScore + ':' + match.value.awayScore + ' 判负')
+  } catch (err) {
+    ElMessage.error('弃赛结果保存失败: ' + err.message)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function finishMatch() {
   if (!ensureEvidenceEditable()) return
   saving.value = true
   try {
     const result = await callFunction('updateMatch', {
       matchId,
+      action: 'finishOrganizerMatch',
+      expectedEventRevision: Number(match.value.matchEventRevision || 0),
       data: {
         homeScore: finishForm.value.homeScore,
         awayScore: finishForm.value.awayScore,
@@ -2086,9 +2163,10 @@ async function finishMatch() {
         updateTime: new Date()
       }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.homeScore = result?.data?.homeScore ?? finishForm.value.homeScore
     match.value.awayScore = result?.data?.awayScore ?? finishForm.value.awayScore
-    match.value.status = 'finished'
+    await loadMatch()
     finishDialogVisible.value = false
     ElMessage.success('比赛已结束，比分已保存')
   } catch (err) {
@@ -2283,6 +2361,7 @@ async function saveEvent() {
       expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.events = events
     match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
@@ -2321,6 +2400,7 @@ async function removeEvent(targetEvent) {
       expectedEventRevision:Number(match.value.matchEventRevision || 0),
       data: { events, updateTime: new Date() }
     })
+    if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
     match.value.events = events
     match.value.matchEventRevision = result?.data?.matchEventRevision ?? Number(match.value.matchEventRevision || 0) + 1
     match.value.homeScore = result?.data?.homeScore ?? calculateEventScore(events).home
@@ -2783,17 +2863,14 @@ async function openLineupDialog() {
 // 可视化阵容编辑（双队模式）
 async function openDualVisualEditor() {
   if (!ensureEvidenceEditable()) return
-  if (visualEditorOpening.value) return
-  visualEditorOpening.value = true
-  try {
-    if (homePlayers.value.length === 0) homePlayers.value = await loadTeamPlayers(match.value.homeTeamId)
-    if (awayPlayers.value.length === 0) awayPlayers.value = await loadTeamPlayers(match.value.awayTeamId)
-    visualEditorVisible.value = true
-  } catch (error) {
-    ElMessage.error(error.message || '读取双方球员名单失败')
-  } finally {
-    visualEditorOpening.value = false
+  // 确保球员数据已加载
+  if (homePlayers.value.length === 0) {
+    homePlayers.value = await loadTeamPlayers(match.value.homeTeamId)
   }
+  if (awayPlayers.value.length === 0) {
+    awayPlayers.value = await loadTeamPlayers(match.value.awayTeamId)
+  }
+  visualEditorVisible.value = true
 }
 
 async function handleVisualLineupSave(data) {
@@ -3508,6 +3585,7 @@ onMounted(() => {
 .event-summary-item span:last-child { margin-top: 4px; color: #909399; font-size: 12px; }
 .events-timeline { display: flex; flex-direction: column; gap: 8px; }
 .events-empty { text-align: center; padding: 20px 0; color: #909399; font-size: 13px; }
+.forfeit-note { margin: -4px 0 0 88px; color: #909399; font-size: 13px; line-height: 1.5; }
 .event-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; border-radius: 8px; background: #f9fafb;

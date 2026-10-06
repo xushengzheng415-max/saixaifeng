@@ -37,27 +37,47 @@ const db = {
 }
 const originalLoad = Module._load
 Module._load = function (name) { if (name === 'wx-server-sdk') return { init() {}, database: () => db }; return originalLoad.apply(this, arguments) }
-const service = require('../cloudfunctions/newsCenter/index.js')
+const service = require(process.env.NEWS_CENTER_MODULE || '../cloudfunctions/newsCenter/index.js')
 Module._load = originalLoad
 const base = { __authToken: 'session-token', __actorUserId: 'user', __actorOrgId: 'org', tournamentId: 'tournament' }
 ;(async () => {
   assert.equal((await service.main({ ...base, tournamentId: 'other', action: 'list' })).success, false)
   const saved = await service.main({ ...base, action: 'saveDraft', kind: 'daily', date: '2026-09-26', matchIds: ['z', 'a'], title: '比赛日战报', body: '正文' })
   assert.equal(saved.success, true)
+  assert.equal(saved.version, 1)
   assert.deepEqual(tables.tournament_news[0].matchIds, ['a', 'z'])
   assert.deepEqual(tables.tournament_news[0].sourceResultVersions.map(row => row.matchId), ['a', 'z'])
   const staleDraft = await service.main({ ...base, action: 'saveDraft', newsId: saved.newsId, version: 0, kind: 'daily', date: '2026-09-26', matchIds: ['z', 'a'], title: '过期草稿', body: '正文' })
   assert.equal(staleDraft.success, false)
-  assert.match(staleDraft.message, /其他设备更新/)
-  assert.equal((await service.main({ ...base, action: 'publish', newsId: saved.newsId, version: saved.version })).status, 'published')
+  assert.equal(staleDraft.code, 'NEWS_VERSION_CONFLICT')
+  const published = await service.main({ ...base, action: 'publish', newsId: saved.newsId, version: saved.version })
+  assert.equal(published.status, 'published')
+  assert.equal(published.version, 2)
   assert.equal((await service.main({ ...base, action: 'list' })).articles[0].needsUpdate, false)
   tables.matches[0].homeScore = 6
   assert.equal((await service.main({ ...base, action: 'list' })).articles[0].needsUpdate, true)
-  const rejected = await service.main({ ...base, action: 'publish', newsId: saved.newsId, version: saved.version + 1 })
+  const rejected = await service.main({ ...base, action: 'publish', newsId: saved.newsId, version: published.version })
   assert.equal(rejected.success, false)
   assert.match(rejected.message, /赛果已更正/)
-  assert.equal((await service.main({ ...base, action: 'withdraw', newsId: saved.newsId, version: saved.version + 1 })).status, 'withdrawn')
+  const withdrawn = await service.main({ ...base, action: 'withdraw', newsId: saved.newsId, version: published.version })
+  assert.equal(withdrawn.status, 'withdrawn')
+  assert.equal(withdrawn.version, 3)
+
+  const publishedDeleteDraft = await service.main({ ...base, action: 'saveDraft', kind: 'match', matchId: 'z', title: '待删除已发布新闻', body: '正文' })
+  const publishedToDelete = await service.main({ ...base, action: 'publish', newsId: publishedDeleteDraft.newsId, version: publishedDeleteDraft.version })
+  const deletedPublished = await service.main({ ...base, action: 'delete', newsId: publishedDeleteDraft.newsId, version: publishedToDelete.version })
+  assert.equal(deletedPublished.success, true)
+  assert.equal(deletedPublished.status, 'deleted')
+  assert.equal(tables.tournament_news.find(row => row._id === publishedDeleteDraft.newsId).status, 'deleted')
+  assert.equal((await service.main({ ...base, action: 'list' })).articles.some(row => row.id === publishedDeleteDraft.newsId), false)
+
+  const draftToDelete = await service.main({ ...base, action: 'saveDraft', kind: 'match', matchId: 'a', title: '待删除草稿', body: '正文' })
+  const deletedDraft = await service.main({ ...base, action: 'delete', newsId: draftToDelete.newsId, version: draftToDelete.version })
+  assert.equal(deletedDraft.success, true)
+  assert.equal(deletedDraft.status, 'deleted')
+  assert.equal((await service.main({ ...base, action: 'list' })).articles.some(row => row.id === draftToDelete.newsId), false)
+
   const invalid = await service.main({ ...base, action: 'saveDraft', kind: 'match', matchId: 'z', title: '', body: '正文' })
   assert.equal(invalid.success, false)
-  console.log('PASS: tenant access, daily ordering, cloud draft, publish, stale-result rejection, withdraw and async error handling')
+  console.log('PASS: tenant access, daily ordering, version conflicts, draft/publish/withdraw/delete and stale-result rejection')
 })().catch(error => { console.error(error); process.exitCode = 1 })

@@ -71,6 +71,7 @@ function createPlayerCardCatalogAdmin({ cloud, authenticateWebSession, scoreForP
       const grant=grantById.get(`${playerId}\u001f${templateId}`)
       const state=stateById.get(preload.stateId(tier,scope,templateId))||stateById.get(tier)
       const active=state?.active
+      if(state?.candidate?.templateId===templateId&&Number(state.candidate.version)===publishedVersion)continue
       const versionCurrent=active?.templateId===templateId&&Number(active?.version)===publishedVersion
       const dataCurrent=Number(render.cardDataVersion||0)===Number(player.playerCardVersion||0)
       const libraryCurrent=!grant||Number(render.libraryRevision||0)===Number(grant.revision||0)

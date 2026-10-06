@@ -22,7 +22,6 @@
         <p>{{ pageSubtitle }}</p>
       </div>
       <div class="heading-actions">
-        <el-upload v-if="canManage" :show-file-list="false" :before-upload="beforeRuleSourceUpload" :http-request="uploadRuleSource" accept=".pdf,.docx"><el-button :loading="uploadingRuleSource">上传规程</el-button></el-upload>
         <el-select class="division-selector" :model-value="divisionId" disabled aria-label="当前组别">
           <el-option :label="`当前组别：${division.name || '竞赛组别'}`" :value="divisionId" />
         </el-select>
@@ -113,7 +112,7 @@
           <article class="panel-card eligibility-card"><h3><span>1</span>年龄与组别资格</h3><el-form label-position="top" class="eligibility-form"><el-form-item label="组别"><strong>{{ division.name || '当前组别' }}</strong></el-form-item><el-form-item label="参赛性别"><strong>{{ division.gender || '不限' }}</strong></el-form-item><div class="eligibility-date-grid"><el-form-item label="最早出生日期"><el-date-picker v-model="form.birthDateStart" type="date" value-format="YYYY-MM-DD" placeholder="不限" clearable /></el-form-item><el-form-item label="最晚出生日期"><el-date-picker v-model="form.birthDateEnd" type="date" value-format="YYYY-MM-DD" placeholder="不限" clearable /></el-form-item></div><el-form-item label="资格补充说明"><el-input v-model.trim="form.eligibilityNotes" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="如：女性球员年满18周岁；中年、老年组只限制出生年份" /></el-form-item></el-form></article>
           <article class="panel-card eligibility-card"><h3><span>2</span>球队与赛事参赛名单</h3><dl><div><dt>球队上限</dt><dd>{{ form.expectedTeams }}支</dd></div><div><dt>每队球员人数</dt><dd>{{ form.minimumRoster }}—{{ form.rosterLimit }}人</dd></div><div><dt>教练人数</dt><dd>最多2人</dd></div></dl><p>参赛名单从球队长期球员库中选定，用于参加本赛事全部场次；与单场比赛的出场名单不同。</p></article>
           <article class="panel-card eligibility-card"><h3><span>3</span>报名与锁定</h3><dl><div><dt>报名截止</dt><dd>{{ form.registrationDeadline }}</dd></div><div><dt>截止前变更</dt><dd>需主办方审核</dd></div><div><dt>截止后锁定</dt><dd>球员、球队名称和队徽锁定，正常变更关闭</dd></div></dl></article>
-          <article class="panel-card eligibility-card verification-card"><h3><span>4</span>参赛资料要求</h3><el-radio-group v-model="documentPolicy" class="certificate-policy"><el-radio value="none">不收集证件</el-radio><el-radio value="insurance">仅用于投保</el-radio><el-radio value="identity">人证资格核验</el-radio><el-radio value="both">投保并核验</el-radio></el-radio-group><div v-if="form.identityVerificationRequired" class="verification-switch"><span>赛前电子证扫码</span><el-switch v-model="form.electronicPassVerificationRequired" /><em>{{ form.electronicPassVerificationRequired ? '启用' : '关闭' }}</em></div><div class="verification-switch"><span>标准形象照</span><el-switch v-model="form.portraitRequired" /><em>{{ form.portraitRequired ? '报名必交' : '可后补' }}</em></div><div class="verification-switch"><span>免责协议</span><el-switch v-model="form.waiverRequired" /><em>{{ form.waiverRequired ? '报名必签' : '不要求' }}</em></div><div class="verification-switch"><span>同一球员限报一个组别</span><el-switch v-model="form.singleDivisionOnly" /><em>{{ form.singleDivisionOnly ? '仅报一个组别' : '允许跨组' }}</em></div></article>
+          <article class="panel-card eligibility-card verification-card"><h3><span>4</span>资格核验开关</h3><div class="verification-switch"><span>实名认证</span><el-switch v-model="form.identityVerificationRequired" /><em>{{ form.identityVerificationRequired ? '必须核验' : '不要求（可选）' }}</em></div><div class="verification-switch"><span>标准形象照</span><el-switch v-model="form.portraitRequired" /><em>{{ form.portraitRequired ? '必须提交' : '建议补充（可选）' }}</em></div><div class="verification-switch"><span>身份证/护照原件</span><el-switch v-model="form.identityDocumentRequired" /><em>{{ form.identityDocumentRequired ? '赛前备查' : '不要求' }}</em></div><div class="verification-switch"><span>意外保险</span><el-switch v-model="form.insuranceRequired" /><em>{{ form.insuranceRequired ? '报名必交' : '不要求' }}</em></div><div class="verification-switch"><span>免责协议</span><el-switch v-model="form.waiverRequired" /><em>{{ form.waiverRequired ? '报名必签' : '不要求' }}</em></div><div class="verification-switch"><span>同一球员限报一个组别</span><el-switch v-model="form.singleDivisionOnly" /><em>{{ form.singleDivisionOnly ? '已列入资格规则' : '允许跨组' }}</em></div><p>以上要求按当前组别独立保存；系统核验能力按报名与名单流程逐项执行。</p></article>
         </section>
         <section class="eligibility-checks"><div><el-icon><CircleCheckFilled /></el-icon><strong>{{ division.name || '当前组别' }}年龄范围</strong><span>{{ eligibilityBirthRange }}</span></div><div><el-icon><CircleCheckFilled /></el-icon><strong>重复参赛核验</strong><span>{{ form.singleDivisionOnly ? '同一球员仅报一个组别' : '允许跨组报名' }}</span></div><div><el-icon><CircleCheckFilled /></el-icon><strong>名单配额符合要求</strong><span>每队 {{ form.minimumRoster }}—{{ form.rosterLimit }} 人</span></div><div><el-icon><CircleCheckFilled /></el-icon><strong>报名材料</strong><span>{{ [form.identityDocumentRequired ? '证件' : '', form.insuranceRequired ? '保险' : '', form.waiverRequired ? '免责协议' : ''].filter(Boolean).join('、') || '无强制材料' }}</span></div></section>
         <section class="professional-discipline panel-card"><header><h3>红黄牌纪律</h3><span>影响停赛与参赛资格</span></header><el-form class="discipline-inline-form" label-position="top"><el-form-item label="黄牌累计"><div class="discipline-value"><el-input-number v-model="form.yellowCardSuspension" :min="1" :max="10" /><span class="unit">张停1场</span></div></el-form-item><el-form-item label="直接红牌"><div class="discipline-value"><el-input-number v-model="form.redCardSuspension" :min="1" :max="10" /><span class="unit">场</span></div></el-form-item><el-form-item label="两黄变一红"><el-switch v-model="form.secondYellowRed" /></el-form-item><el-form-item label="淘汰赛前清零"><el-switch v-model="form.knockoutYellowReset" /></el-form-item></el-form></section>
@@ -191,7 +190,7 @@
           <section class="effective-rule-row"><span class="final-rule-number">4</span><div><h4>报名与锁定</h4><p>报名截止时间：{{ form.registrationDeadline || '按赛事公告执行' }}</p><p>报名截止后，球员、球队名称及队徽锁定；正常变更进入受控申请</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
           <section class="effective-rule-row"><span class="final-rule-number">5</span><div><h4>积分排名与晋级</h4><p>{{ pointsSummary }} · {{ rankingLabel }}</p><p>{{ advancementSummary }}</p></div><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></section>
         </article>
-        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>状态</dt><dd class="effective-state">已生效</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>基于版本</dt><dd>V1.0</dd></div></dl><hr /><h4>启用后影响</h4><div class="impact-tags effective-impact"><span>抽签分组</span><span>赛程编排</span><span>积分排名</span><span>比赛执行</span></div><div class="effective-warning"><el-icon><WarningFilled /></el-icon><span>已进入正式比赛管理，版本不可降级；规则调整将生成新版本并保留审计，不能解除报名截止后的身份锁定。</span></div><div v-if="tournament.regulationsFileId" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出{{ division.name || '当前组别' }}规则</el-button></div></aside>
+        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>状态</dt><dd class="effective-state">已生效</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>基于版本</dt><dd>V1.0</dd></div></dl><hr /><h4>启用后影响</h4><div class="impact-tags effective-impact"><span>抽签分组</span><span>赛程编排</span><span>积分排名</span><span>比赛执行</span></div><div class="effective-warning"><el-icon><WarningFilled /></el-icon><span>已进入正式比赛管理，版本不可降级；规则调整将生成新版本并保留审计，不能解除报名截止后的身份锁定。</span></div><div v-if="tournament.regulationsFileId && !midCompetition" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出{{ division.name || '当前组别' }}规则</el-button></div></aside>
       </template>
       <template v-else>
         <article class="effective-main panel-card">
@@ -199,14 +198,14 @@
           <section class="summary-section effective-section"><div class="summary-heading"><span>1</span><h4>赛制设置</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span v-for="item in formatSummaryItems" :key="item">{{ item }}</span></div></section>
           <section class="summary-section effective-section"><div class="summary-heading"><span>2</span><h4>基础规则</h4><em><el-icon><CircleCheckFilled /></el-icon>已生效</em></div><div class="summary-items"><span>{{ periodModeLabel }}</span><span>单段 {{ form.matchMinutes }} 分钟</span><span>中场 {{ form.breakMinutes }} 分钟</span><span>{{ substitutionModeLabel }}</span><span>{{ rankingLabel }}</span></div></section>
         </article>
-        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">本组精简正式规程已根据定版规则生成，可预览、导出并进入发布中心正式发布。</p><div v-if="tournament.regulationsFileId" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" title="已进入正式竞赛管理，规则调整将生成新版本并保留审计记录。" /></aside>
+        <aside class="effective-aside panel-card"><div class="aside-title"><h3>定版信息</h3><strong>已生效</strong></div><dl><div><dt>当前版本</dt><dd>{{ division.rulesVersion || draftVersion }}</dd></div><div><dt>定版时间</dt><dd>{{ finalizedTimeText }}</dd></div><div><dt>定版人</dt><dd>{{ division.finalizedByName || '赛事管理员' }}</dd></div></dl><hr /><h4>竞赛规程</h4><p class="regulation-note">本组精简正式规程已根据定版规则生成，可预览、导出并进入发布中心正式发布。</p><div v-if="tournament.regulationsFileId && !midCompetition" class="effective-export-actions"><el-button type="warning" plain :loading="recognizingRegulation" @click="recognizeUploadedRegulations">按已上传规程创建修订草稿</el-button></div><div class="effective-export-actions"><el-button plain :icon="Printer" @click="printRules">打印预览</el-button><el-button type="primary" :icon="Document" @click="exportRules">导出规程</el-button></div><el-alert type="warning" :closable="false" :title="midCompetition ? '赛程生成后仅换人规则可调整，其他结构性规则保持锁定。' : '规则调整会生成新版本并保留审计记录。'" /></aside>
       </template>
     </main>
 
     <footer class="wizard-footer">
       <div class="footer-summary"><el-icon><CircleCheck /></el-icon><span>{{ footerSummary }}</span></div>
       <div class="footer-actions">
-        <template v-if="effective"><el-button type="primary" :loading="saving" :disabled="!canManage" @click="startRuleRevision">调整规则</el-button><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">打开比赛地图</el-button></template>
+        <template v-if="effective"><el-button type="primary" :loading="saving || substitutionSettingsSaving" :disabled="!canManage" @click="midCompetition ? openSubstitutionSettings() : startRuleRevision()">{{ midCompetition ? '调整比赛规则' : '修改赛制规则' }}</el-button><el-button plain @click="backToDivisions">返回组别管理</el-button><el-button plain @click="goToDraw">进入抽签分组</el-button><el-button type="primary" @click="goToSchedule">打开比赛地图</el-button></template>
         <template v-else>
           <el-button v-if="activeIndex > 0 && (activeKey !== 'finalize' || !isProfessional)" :disabled="saving" @click="previous">上一步</el-button>
           <el-button v-if="activeKey !== 'finalize'" type="primary" :loading="saving" :disabled="!canManage" @click="next">{{ nextButtonText }} <el-icon><ArrowRight /></el-icon></el-button>
@@ -218,6 +217,7 @@
     </footer>
     <el-alert v-if="!canManage" class="permission-alert" type="warning" :closable="false" show-icon title="你只有查看该赛事的权限，不能修改竞赛规则。" />
     <el-dialog v-model="substitutionSettingsVisible" title="换人设置" width="min(520px,94vw)">
+      <el-alert v-if="midCompetition" class="rule-edit-policy" type="info" :closable="false" title="赛程生成后仅能调整换人规则；赛制、资格、积分和赛程保持锁定。新规则用于尚未开赛的场次。" />
       <el-form label-position="top">
         <el-form-item label="换人方式"><el-radio-group v-model="substitutionSettings.substitutionMode"><el-radio-button value="limited">限定换人</el-radio-button><el-radio-button value="free">无限换人</el-radio-button></el-radio-group></el-form-item>
         <template v-if="substitutionSettings.substitutionMode === 'limited'"><el-form-item label="换人人数"><el-input-number v-model="substitutionSettings.substitutionLimit" :min="0" :max="100" /></el-form-item><el-form-item label="换人窗口"><el-input-number v-model="substitutionSettings.substitutionWindows" :min="0" :max="100" /></el-form-item></template>
@@ -233,7 +233,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, Check, CircleCheck, CircleCheckFilled, Document, Grid, Location, MagicStick, Printer, Tickets, Trophy, View, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules, uploadLargeFileViaCloud } from '../../utils/cloud'
+import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import DivisionRegulationFields from './DivisionRegulationFields.vue'
@@ -242,24 +242,6 @@ import { findRecognizedDivision, recognizedDivisionRulePayload } from '../../uti
 const route = useRoute()
 const router = useRouter()
 const tournamentId = String(route.params.id || '')
-const uploadingRuleSource = ref(false)
-function beforeRuleSourceUpload(file) {
-  if (!/\.(pdf|docx)$/i.test(file.name) || file.size > 10 * 1024 * 1024) { ElMessage.error('请选择不超过 10MB 的 PDF 或 Word 文件'); return false }
-  return true
-}
-async function uploadRuleSource({ file }) {
-  uploadingRuleSource.value = true
-  try {
-    const uploaded = await uploadLargeFileViaCloud(`tournament-regulations/${Date.now()}-${file.name}`, file, { chunkSize:32 * 1024 })
-    const fileId = uploaded.fileId || uploaded.fileID
-    if (!fileId) throw new Error('未获取到文件地址')
-    const data = { regulationsFileId:fileId, regulationsUrl:uploaded.tempUrl || '', regulationsFileName:file.name }
-    await updateRecord('tournaments', tournamentId, data)
-    tournament.value = { ...tournament.value, ...data }
-    ElMessage.success('规程已上传')
-  } catch (error) { ElMessage.error(error.message || '上传失败') }
-  finally { uploadingRuleSource.value = false }
-}
 const divisionId = String(route.query.divisionId || '')
 const localVisualQa = typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
 const localEffectiveQa = localVisualQa && window.location.href.includes('step=effective')
@@ -387,26 +369,12 @@ const regulationDetailDefaults = {
 const form = reactive({
   formatType: 'cup', expectedTeams: 16, groupCount: 4, teamsPerGroup: 4, groupCycle: 'single', advancePerGroup: 2, finalRankingMode: 'top4',
   knockoutSize: 8, knockoutType: 'single', knockoutLegs: 'single', venueMode: 'centralized', homeAwayEnabled: false, thirdPlaceEnabled: true, knockoutTieBreak: 'extra-penalties',
-  birthDateCutoff: '', birthDateStart: '', birthDateEnd: '', eligibilityNotes: '', rosterLimit: 30, minimumRoster: 11, identityVerificationRequired: false, eligibilityReviewRequired: true, portraitRequired: false, identityDocumentRequired: false, insuranceRequired: false, electronicPassVerificationRequired: false, waiverRequired: false, singleDivisionOnly: true, overageAllowed: false, exceptionPolicy: 'return',
+  birthDateCutoff: '', birthDateStart: '', birthDateEnd: '', eligibilityNotes: '', rosterLimit: 30, minimumRoster: 11, identityVerificationRequired: true, eligibilityReviewRequired: true, portraitRequired: true, identityDocumentRequired: false, insuranceRequired: false, waiverRequired: false, singleDivisionOnly: true, overageAllowed: false, exceptionPolicy: 'return',
   registrationDeadline: defaultRegistrationDeadline(), lockRosterAfterDeadline: true, matchFormat: '11side', periodMode: 'halves', matchMinutes: 35, singlePeriodCount: 4, breakMinutes: 10, playersOnField: 11, substitutionMode: 'free', substitutionLimit: 5, substitutionWindows: 3, substitutionReentryAllowed: true, scoreRequired: true, playerEventsEnabled: true, refereeReportRequired: true,
   disciplineEnabled: true, yellowCardSuspension: 2, redCardSuspension: 1, secondYellowRed: true, knockoutYellowReset: false,
   winPoints: 3, drawPoints: 1, lossPoints: 0, drawResolution: 'draw', penaltyWinPoints: 2, penaltyLossPoints: 0, rankingRule: 'points-headtohead-goaldiff', rankingTieBreakers: ['headToHeadPoints','headToHeadGoalDifference','headToHeadGoalsFor','goalDifference','goalsFor','redCardsFewest','yellowCardsFewest','drawingLots'], awayGoalsEnabled: false, liveRankingEnabled: true, manualRankingReview: false,
   advancementRule: 'group-top', sameGroupAvoidance: true,
   regulationDetails: { ...regulationDetailDefaults }
-})
-const documentPolicy = computed({
-  get() {
-    if (form.identityVerificationRequired && form.insuranceRequired) return 'both'
-    if (form.identityVerificationRequired) return 'identity'
-    if (form.insuranceRequired) return 'insurance'
-    return 'none'
-  },
-  set(value) {
-    form.identityVerificationRequired = value === 'identity' || value === 'both'
-    form.insuranceRequired = value === 'insurance' || value === 'both'
-    form.identityDocumentRequired = form.identityVerificationRequired || form.insuranceRequired
-    form.electronicPassVerificationRequired = form.identityVerificationRequired && form.electronicPassVerificationRequired
-  }
 })
 const playerFormatOptions = [5,7,8,9,11].map(players => ({ value:`${players}side`,label:`${players}人制`,players }))
 function applyMatchFormat(value) {
@@ -418,6 +386,10 @@ const isProfessional = computed(() => division.value.mode === 'professional' || 
 const steps = computed(() => isProfessional.value ? professionalSteps : simpleSteps)
 const activeKey = computed(() => steps.value[activeIndex.value]?.key || 'finalize')
 const effective = computed(() => division.value.rulesLocked === true || ['finalized', 'locked', 'published'].includes(String(division.value.ruleStatus || '').toLowerCase()))
+const midCompetition = computed(() => {
+  const states = [division.value.competitionPlanStatus, tournament.value.competitionPlanStatus, tournament.value.status]
+  return division.value.competitionPlanLocked === true || division.value.finalPlanLocked === true || tournament.value.competitionPlanLocked === true || tournament.value.finalPlanLocked === true || tournament.value.matchManagementReady === true || states.some(value => ['locked','match_management','in_progress','ongoing','live','completed','finished'].includes(String(value || '').toLowerCase()))
+})
 const canManage = computed(() => permissions.tournament.manage(tournament.value))
 const tournamentLogo = computed(() => tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
 const divisionCount = computed(() => Math.max(Number(tournament.value.divisionCount || 0), Array.isArray(tournament.value.divisions) ? tournament.value.divisions.length : 0, 1))
@@ -470,9 +442,6 @@ const advancementSummary = computed(() => {
 watch(() => form.formatType, type => {
   if (type === 'league') form.finalRankingMode = 'full'
   if (['tournament', 'hybrid'].includes(type) && !knockoutSizeOptions.includes(Number(form.knockoutSize))) form.knockoutSize = 8
-})
-watch(() => form.identityVerificationRequired, enabled => {
-  if (!enabled) form.electronicPassVerificationRequired = false
 })
 function disablePastRegistrationDate(date) {
   const today = new Date()
@@ -796,7 +765,7 @@ async function next() {
 
 function previous() { activeIndex.value = Math.max(0, activeIndex.value - 1); replaceStep(activeKey.value) }
 function goToCompletedStep(index) { if (effective.value) return; if (index <= activeIndex.value) { activeIndex.value = index; replaceStep(activeKey.value) } }
-function jumpToStep(key) { const index = steps.value.findIndex(item => item.key === key); if (index >= 0) { activeIndex.value = index; replaceStep(key) } }
+function jumpToStep(key) { if (effective.value) return; const index = steps.value.findIndex(item => item.key === key); if (index >= 0) { activeIndex.value = index; replaceStep(key) } }
 function replaceStep(step) { router.replace({ query: { ...route.query, divisionId, step } }) }
 
 async function finalize() {
