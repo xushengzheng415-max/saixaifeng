@@ -188,4 +188,4 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 
 生产只读检查确认 `tournament_referees` 尚不存在。共享账号的 `webLoginApi.staffEventScope` 原先把它当必需表读取，因此裁判模块构建授权范围失败，并连带使 `tournaments`、`referees` 的读取失败。现 `referees` 与 `tournament_referees` 仅在集合不存在时按空列表处理；已有集合的索引错误或其他数据库错误继续返回失败，不作静默吞错。
 
-功能提交 `6413b86` 已合入并推送 Gitee `main`（合并提交 `69a9abfa`）。`webLoginApi` 代码更新命令返回成功，函数详情为 Active/Available、Nodejs18.15、`index.main`。部署后 `fn detail` 的 ModTime 与 CodeSize 未变化，`fn code download` 返回 CLI `Invalid URL`，因此目前没有文件级线上摘要证据；未使用真实账号复测，也未运行独立测试套件。
+功能提交 `6413b86` 已合入并推送 Gitee `main`（合并提交 `69a9abfa`）。生产 `webLoginApi` 代码更新后，回下载的 `index.js` 与部署包 SHA-256 `8D1ACA6630D132C327F3D0BEA27754DBC5F9F5992C6E91C72CE5F92CA0FEFDD5` 一致，`staffEventScope.cjs` 与部署包 SHA-256 `AD9C9D5517D1573FB598E8D746122CDE9997AE3838E4373B405E75061E32A819` 一致；函数状态 Active/Available、Nodejs18.15、`index.main`。未使用真实账号复测，也未运行独立测试套件。

@@ -1,6 +1,6 @@
 # 赛小蜂足球当前状态
 
-2026-10-06 共享账号裁判管理空集合读取已修复：生产只读检查确认 `tournament_referees` 集合不存在；共享裁判权限范围构建原先把该可选关系表当成必需表，导致 `tournaments` 和 `referees` 页面查询一并失败。现在仅在 referee 关系集合尚未创建时按空列表处理，索引等其他读取错误仍会报错。`webLoginApi` 更新命令已返回成功，函数状态 Active/Available、Nodejs18.15、`index.main`；CLI 下载回读因 `Invalid URL` 未能完成，未使用真实账号复测，也未运行独立测试套件。
+2026-10-06 共享账号裁判管理空集合读取已修复：生产只读检查确认 `tournament_referees` 集合不存在；共享裁判权限范围构建原先把该可选关系表当成必需表，导致 `tournaments` 和 `referees` 页面查询一并失败。现在仅在 referee 关系集合尚未创建时按空列表处理，索引等其他读取错误仍会报错。生产 `webLoginApi` 回下载的 `staffEventScope.cjs` SHA-256 与部署包一致，函数状态 Active/Available、Nodejs18.15、`index.main`。未使用真实账号复测，也未运行独立测试套件。
 
 2026-10-06 抽签与分组完整授权读取修复：球员资料读取在 `event.draw` 页面需同时有抽签和球队权限；只有抽签权限不能读取球员隐私资料。“全部权限”包含这两项。生产 `webLoginApi` 代码更新返回成功，函数详情为 Active/Available、Nodejs18.15、`index.main`；代码回下载遇到 CLI `Invalid URL`，入口摘要暂不能回读。未使用真实账号复测，也未运行独立测试套件。
 
