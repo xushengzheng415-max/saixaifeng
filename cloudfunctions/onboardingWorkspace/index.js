@@ -68,6 +68,11 @@ function isActiveMembership(row) {
   return ['active', 'accepted', 'claimed'].indexOf(status) >= 0
 }
 
+function isTournamentStaffMembership(row) {
+  return String(row && row.source || '') === 'tournament_staff_invite' ||
+    String(row && row.role || '').toLowerCase() === 'tournament_staff'
+}
+
 function identityMatches(value, userId) {
   return Boolean(value) && String(value) === String(userId)
 }
@@ -177,6 +182,7 @@ async function currentUser(event) {
   const contextOpenId = String(context.OPENID || '')
   let openId = contextOpenId
   let users = []
+  let sessionId = ''
 
   if (!openId && event && event.__authToken && event.__actorUserId) {
     const sessions = await db.collection('auth_sessions').where({
@@ -186,6 +192,7 @@ async function currentUser(event) {
       expiresAt: _.gt(new Date())
     }).limit(2).get()
     if (sessions.data && sessions.data.length === 1) {
+      sessionId = String(sessions.data[0]._id || '')
       const userResult = await db.collection('users').doc(String(event.__actorUserId)).get()
       const sessionUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
       if (sessionUser) users = [sessionUser]
@@ -207,7 +214,7 @@ async function currentUser(event) {
 
   const user = users[0]
   openId = openId || String(user.openId || user.wechatOpenId || user._openid || '')
-  return { user, openId }
+  return { user, openId, sessionId }
 }
 
 async function findTrainingProvision(identity) {
@@ -253,7 +260,10 @@ async function loadOnboardingState(identity) {
     safeRows('team_memberships', _.or(membershipConditions), 100),
     db.collection('tournaments').where(_.or([{ creatorId: userId }, { organizerId: userId }, { ownerId: userId }, { userId }])).limit(20).get()
   ])
-  const organizationMemberships = (organizationMembershipResult.data || []).filter(isActiveMembership)
+  // 赛事邀请成员关系只授权指定赛事，不等于加入对方机构工作空间。
+  const organizationMemberships = (organizationMembershipResult.data || [])
+    .filter(isActiveMembership)
+    .filter(function(row) { return !isTournamentStaffMembership(row) })
   const teamMemberships = (rawTeamMembershipRows || []).filter(isActiveMembership)
   const directTeamRows = directTeams.data || []
   const teamMembershipRows = teamMemberships
@@ -453,6 +463,11 @@ async function createOrganization(identity, event) {
     await transaction.collection('users').doc(identity.user._id).update({
       data: { orgId, organizationId: orgId, onboarding, updateTime: now }
     })
+    if (identity.sessionId) {
+      await transaction.collection('auth_sessions').doc(identity.sessionId).update({
+        data: { activeOrgId: orgId, updateTime: now }
+      })
+    }
     return { orgId, attachedTeamIds: requestedTeamIds }
   })
   return {

@@ -133,6 +133,18 @@ async function activate(identity, event) {
   return { success: true, orgId: grant.orgId, tournamentId: grant.tournamentId }
 }
 
+async function activateOrganizerWorkspace(identity, event) {
+  const orgId = value(event.orgId)
+  if (!identity.sessionId || !orgId) throw new Error('机构工作空间信息缺失，请重新登录')
+  const organization = await doc('organizations', orgId)
+  if (!organization) throw new Error('机构不存在或已停用')
+  const isOwner = [organization.ownerId, organization.creatorId, organization.createdBy]
+    .map(value).includes(value(identity.user._id))
+  if (!isOwner) throw new Error('仅本人机构负责人可切换到该机构')
+  await db.collection('auth_sessions').doc(identity.sessionId).update({ data: { activeOrgId: orgId, updateTime: db.serverDate() } })
+  return { success: true, orgId, isOwner }
+}
+
 async function change(identity, event, disabled) {
   if (!identity.orgId || !await owner(value(identity.user._id), identity.orgId)) throw new Error('仅机构主账号可修改授权')
   const grant = await doc(GRANTS, value(event.grantId))
@@ -169,6 +181,7 @@ exports.main = async (event = {}) => {
     if (action === 'invite') return await invite(identity, event)
     if (action === 'accept') return await accept(identity, event)
     if (action === 'activate') return await activate(identity, event)
+    if (action === 'activateOrganizerWorkspace') return await activateOrganizerWorkspace(identity, event)
     if (action === 'update') return await change(identity, event, false)
     if (action === 'disable') return await change(identity, event, true)
     return { success: false, code: 'UNSUPPORTED_ACTION', message: '不支持的操作' }
