@@ -3,12 +3,21 @@ const string = value => String(value == null ? '' : value).trim()
 const ids = values => [...new Set((values || []).map(string).filter(Boolean))]
 const STAFF_SCOPE_MAX_ROWS = 20000
 const STAFF_SCOPE_PAGE_SIZE = 1000
+const OPTIONAL_REFEREE_COLLECTIONS = new Set(['referees', 'tournament_referees'])
 const EVENT_COLLECTIONS = new Set([
   'divisions', 'tournament_teams', 'tournament_groups', 'tournament_bracket',
   'tournament_league_tables', 'rosters', 'roster_change_requests', 'standings',
   'schedule_info', 'team_tasks', 'registration_player_drafts', 'referee_invitations',
   'tournament_referees'
 ])
+
+function missingCollection(error) {
+  const message = String(error && (error.message || error.errMsg) || '').toLowerCase()
+  const code = String(error && (error.code || error.errCode) || '').toLowerCase()
+  return code.includes('namespace_not_found') || code.includes('collection_not_exist') ||
+    message.includes('ns does not exist') || message.includes('collection not exist') ||
+    message.includes('collection does not exist') || message.includes('not found collection')
+}
 
 async function document(db, collection, id) {
   if (!id) return null
@@ -39,6 +48,7 @@ async function readScopedRows(db, collection, where = {}, options = {}) {
     try {
       page = (await db.collection(collection).where(where || {}).skip(offset).limit(limit).get()).data || []
     } catch (cause) {
+      if (offset === 0 && !rows.length && OPTIONAL_REFEREE_COLLECTIONS.has(collection) && missingCollection(cause)) return []
       const error = new Error('数据读取失败，请重试或检查索引')
       error.code = 'DATA_READ_FAILED'
       error.collection = collection
