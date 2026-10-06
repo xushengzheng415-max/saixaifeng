@@ -713,11 +713,34 @@ router.beforeEach(async (to, from, next) => {
           if (to.path !== '/service-account-binding') sessionStorage.setItem('sxfStaffInvitationPrompted', '1')
           next(invitationTarget); return
         }
-        const staff = scope?.success && scope.isStaff && !scope.isOwner
+        const grants = Array.isArray(scope?.grants) ? scope.grants : []
+        const routeGrant = grants.find(item => item.tournamentId === String(to.params.id || ''))
+        const sharedAccountNeedsWorkspace = grants.length > 0 && !hasLocalOrganization()
+        if (scope?.success && to.path === '/organization-onboarding' && sharedAccountNeedsWorkspace) {
+          const landingGrant = grants[0]
+          const activated = scope.activeOrgId === landingGrant.orgId
+            ? { success: true }
+            : await callFunction('tournamentStaffAccess', { action: 'activate', grantId: landingGrant.id })
+          if (activated?.success) {
+            sessionStorage.setItem('sxfTournamentStaff', '1')
+            sessionStorage.setItem('sxfStaffPermissions', JSON.stringify([...visibleSidebarKeys(landingGrant.permissions)]))
+            sessionStorage.setItem('sxfStaffTournamentId', landingGrant.tournamentId)
+            next('/tournament-space')
+          } else {
+            next('/tournament-staff')
+          }
+          return
+        }
+        // 共享授权按当前赛事路由识别，不能被账号在其他机构的负责人身份遮住。
+        const staff = scope?.success && ((scope.isStaff && !scope.isOwner) || Boolean(routeGrant) || sharedAccountNeedsWorkspace)
         sessionStorage.setItem('sxfTournamentStaff', staff ? '1' : '0')
         if (staff) {
-          const grant = (scope.grants || []).find(item => item.tournamentId === String(to.params.id || ''))
-          const sameOrganization = grant && grant.orgId === scope.activeOrgId
+          const grant = routeGrant || (sharedAccountNeedsWorkspace ? grants[0] : null)
+          let sameOrganization = grant && grant.orgId === scope.activeOrgId
+          if (grant && !sameOrganization) {
+            const activated = await callFunction('tournamentStaffAccess', { action: 'activate', grantId: grant.id })
+            sameOrganization = Boolean(activated?.success)
+          }
           const rights = sameOrganization ? visibleSidebarKeys(grant.permissions) : new Set()
           sessionStorage.setItem('sxfStaffPermissions', JSON.stringify([...rights]))
           sessionStorage.setItem('sxfStaffTournamentId', sameOrganization ? grant.tournamentId : '')
