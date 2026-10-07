@@ -93,7 +93,15 @@ export function createSessionReadCache({ identity, now = Date.now, freshMs = 150
     if (cached && (age < 0 || age >= staleMs)) remove(key)
     return clone(await load(key, loader, tags, false))
   }
-  const cache = { read, clear, synchronize, generation: () => epoch, inspect: () => ({ entries: entries.size, bytes, pending: pending.size }), dispose: () => registeredCaches.delete(cache) }
+  function peek(key) {
+    if (!synchronize()) return undefined
+    const cached = entries.get(key)
+    const age = cached ? now() - cached.at : Infinity
+    if (cached && age >= 0 && age < staleMs) return clone(cached.value)
+    if (cached) remove(key)
+    return undefined
+  }
+  const cache = { read, peek, clear, synchronize, generation: () => epoch, inspect: () => ({ entries: entries.size, bytes, pending: pending.size }), dispose: () => registeredCaches.delete(cache) }
   registeredCaches.add(cache)
   return cache
 }

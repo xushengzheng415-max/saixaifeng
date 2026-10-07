@@ -6,7 +6,7 @@
 </template>
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { readPlayerCard } from '@/utils/playerCard'
+import { readPlayerCard, getCachedPlayerCard } from '@/utils/playerCard'
 import { useReadCacheRefresh } from '@/utils/useReadCacheRefresh.js'
 const props = defineProps({ player:{type:Object,required:true}, teamLogo:{type:String,default:''}, playerCard:{type:Object,default:()=>({})} })
 const card = ref({status:'pending',cardUrl:''})
@@ -34,7 +34,7 @@ function imageFailed(){card.value={...card.value,status:'failed',cardUrl:''}}
 function retry(){portraitFailed.value=false;void load(true)}
 function visible(){if(document.visibilityState==='visible' && !fetching)void load()}
 function versionChanged(event){if(event.key==='sxfPlayerCardTemplateUpdate' && document.visibilityState==='visible')void load(true)}
-watch(()=>[props.player?._id,props.player?.id,props.player?.playerId],()=>{portraitFailed.value=false;card.value={status:'loading',cardUrl:''};void load()},{immediate:true})
+watch(()=>String(props.player?._id || props.player?.id || props.player?.playerId || ''), playerId=>{portraitFailed.value=false;card.value=getCachedPlayerCard(playerId) || {status:'loading',cardUrl:''};void load()},{immediate:true})
 useReadCacheRefresh({ tags: ['playerCards'], refresh: () => load(), clear: () => { requestVersion++; card.value={status:'forbidden',cardUrl:''} } })
 onMounted(()=>{document.addEventListener('visibilitychange',visible);window.addEventListener('storage',versionChanged);timer=window.setInterval(visible,60000)})
 onBeforeUnmount(()=>{requestVersion++;window.clearInterval(timer);document.removeEventListener('visibilitychange',visible);window.removeEventListener('storage',versionChanged)})
