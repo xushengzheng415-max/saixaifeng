@@ -283,6 +283,11 @@
           </div>
         </header>
 
+        <div v-if="demoModeActive" class="demo-mode-strip">
+          <span><strong>演示模式</strong> 操作会保存到当前赛事，请使用测试赛事</span>
+          <button type="button" @click="exitDemoMode">退出演示</button>
+        </div>
+
         <!-- 主内容区 -->
         <main class="content-area" :class="{ 'workspace-shell-content': usesWorkspaceShell, 'embedded-header-content': usesEmbeddedPageHeader }">
           <div class="admin-content-frame">
@@ -305,6 +310,7 @@ import {
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
+import { demoModeChangeEvent, isDemoMode, setDemoMode } from '../../utils/demoMode'
 import productLogo from '../../assets/logo-saixiaofeng.png'
 import { provincesData, cityMapData } from '../team/areaData.js'
 import {
@@ -372,7 +378,14 @@ const userInfo = ref({
 })
 const loginType = ref('')
 const currentRole = ref('')
+const demoModeActive = ref(isDemoMode(String(route.params.id || '')))
 const isHeadReferee = ref(false)
+function syncDemoMode() { demoModeActive.value = isDemoMode(String(route.params.id || '')) }
+function exitDemoMode() {
+  setDemoMode(false)
+  demoModeActive.value = false
+  router.push('/tournament-space')
+}
 const DEFAULT_ORGANIZATION_LOGO = `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
 
 const organizationBrand = computed(() => ({
@@ -778,6 +791,7 @@ function toggleSubMenu(item) {
 const coachNavItems = [{ path: '/tournament-space', label: '赛事空间', icon: 'Trophy' }]
 
 const currentTournamentId = computed(() => String(route.params.id || ''))
+watch(() => route.params.id, syncDemoMode)
 
 function tournamentWorkspacePath(suffix = '') {
   return currentTournamentId.value
@@ -967,6 +981,7 @@ function isChildActive(parentPath) {
 }
 
 onMounted(() => {
+  window.addEventListener(demoModeChangeEvent(), syncDemoMode)
   if (isPlatformContext()) {
     const platformUser = getPlatformSession()?.user || {}
     userInfo.value = {
@@ -1083,6 +1098,7 @@ const currentPageTitle = computed(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener(demoModeChangeEvent(), syncDemoMode)
   window.removeEventListener('sxf-organizer-inbox-updated', handleInboxUpdated)
   document.removeEventListener('visibilitychange', handleInboxVisibility)
   if (countdownTimer) {
@@ -1101,6 +1117,20 @@ onUnmounted(() => {
   background: #f6f8f7;
   overflow: hidden;
 }
+
+.demo-mode-strip {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid #e5d8b0;
+  color: #64552e;
+  background: #fbf7e9;
+  font-size: 13px;
+}
+.demo-mode-strip strong { margin-right: 7px; }
+.demo-mode-strip button { border: 0; color: #327a50; background: transparent; font: inherit; cursor: pointer; }
 
 /* 主容器 */
 .main-container {

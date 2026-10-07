@@ -1290,6 +1290,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard } from '../../utils/cloud'
+import { isDemoMode } from '../../utils/demoMode'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
@@ -2229,10 +2230,14 @@ async function loadAllTeams() {
 
 async function loadReferees() {
   try {
-    referees.value = await queryList('referees', {
+    const approved = await queryList('referees', {
       where: { status: 'approved' },
       orderBy: { createTime: 'desc' }
     })
+    const synthetic = isDemoMode(match.value.tournamentId) && match.value.tournamentId
+      ? await queryList('referees', { where: { tournamentId: match.value.tournamentId, synthetic: true } })
+      : []
+    referees.value = [...approved, ...synthetic]
   } catch (e) {
     console.warn('加载已通过裁判失败', e)
     referees.value = []

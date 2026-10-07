@@ -15,7 +15,7 @@
     <section class="work-area">
       <div class="title-row">
         <div><h1>裁判管理</h1></div>
-        <div class="title-actions"><el-button type="warning" plain @click="addDialog = true"><el-icon><Plus /></el-icon>添加临时裁判</el-button><el-button v-if="!isTournamentStaff" plain type="warning" @click="openSyntheticPool">导入虚拟裁判资料</el-button><el-button plain type="success" @click="exportList"><el-icon><Download /></el-icon>导出裁判名单</el-button><el-button type="success" @click="openRefereeInvite()"><el-icon><Plus /></el-icon>邀请持证裁判</el-button></div>
+        <div class="title-actions"><el-button type="warning" plain @click="addDialog = true"><el-icon><Plus /></el-icon>添加临时裁判</el-button><el-button v-if="isDemoMode(selectedTournamentId)" plain type="warning" @click="openSyntheticPool">导入虚拟裁判资料</el-button><el-button plain type="success" @click="exportList"><el-icon><Download /></el-icon>导出裁判名单</el-button><el-button type="success" @click="openRefereeInvite()"><el-icon><Plus /></el-icon>邀请持证裁判</el-button></div>
       </div>
 
       <el-alert class="qualification-note" type="success" :closable="false" show-icon title="仅通过资格审核且处于可用状态的裁判，可被指派至赛事场次。" />
@@ -65,6 +65,7 @@ import { ElMessage } from 'element-plus'
 import { Aim, Calendar, DocumentChecked, Download, Location, Plus, Search, SwitchButton, Trophy, UserFilled } from '@element-plus/icons-vue'
 import { addRecord, callFunction, getFileUrl, queryList, updateRecord } from '../../utils/cloud'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
+import { isDemoMode } from '../../utils/demoMode'
 
 const route = useRoute(), router = useRouter()
 const isTournamentStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
@@ -105,7 +106,7 @@ const availableCount = computed(() => referees.value.filter(item => stateOf(item
 const assignedCount = computed(() => referees.value.filter(item => stateOf(item) === 'assigned').length)
 const pendingCount = computed(() => referees.value.filter(item => ['pending','pending_claim','pending_temporary_review'].includes(stateOf(item))).length)
 const assignedMatchCount = computed(() => matches.value.filter(match => Object.keys(match.refereeCrew || {}).length > 0).length)
-const approvedReferees = computed(() => referees.value.filter(item => item.synthetic===true || (item.status==='approved' && item.canOperate!==false && (item.temporaryReferee!==true || (item.temporaryClaimStatus==='approved' && item.organizerTemporaryApproval===true && item.tournamentId===selectedTournamentId.value)))))
+const approvedReferees = computed(() => referees.value.filter(item => item.synthetic === true ? isDemoMode(selectedTournamentId.value) : (item.status === 'approved' && item.canOperate !== false && (item.temporaryReferee !== true || (item.temporaryClaimStatus === 'approved' && item.organizerTemporaryApproval === true && item.tournamentId === selectedTournamentId.value)))))
 const addedSyntheticKeys=computed(()=>new Set(referees.value.filter(item=>item.tournamentId===selectedTournamentId.value && item.syntheticDatasetId===syntheticDatasetId).map(item=>item.syntheticKey)))
 const assignableMatches = computed(() => matches.value.filter(match => !['finished', 'completed', 'cancelled'].includes(match.status)))
 const filteredReferees = computed(() => referees.value.filter(item => { const state = stateOf(item); const text = `${item.name || item.realName || ''}${item.phone || item.phoneNumber || ''}`; const statusMatched=statusFilter.value === 'all' || state === statusFilter.value || (statusFilter.value==='pending'&&['pending_claim','pending_temporary_review'].includes(state)); const availabilityMatched=!availabilityFilter.value || state === availabilityFilter.value || (availabilityFilter.value==='pending'&&['pending_claim','pending_temporary_review'].includes(state)); return statusMatched && availabilityMatched && (!levelFilter.value || (item.level || item.refereeLevel) === levelFilter.value) && (!keyword.value || text.includes(keyword.value.trim())) }))
