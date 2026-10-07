@@ -189,3 +189,9 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 生产只读检查确认 `tournament_referees` 尚不存在。共享账号的 `webLoginApi.staffEventScope` 原先把它当必需表读取，因此裁判模块构建授权范围失败，并连带使 `tournaments`、`referees` 的读取失败。现 `referees` 与 `tournament_referees` 仅在集合不存在时按空列表处理；已有集合的索引错误或其他数据库错误继续返回失败，不作静默吞错。
 
 功能提交 `6413b86` 已合入并推送 Gitee `main`（合并提交 `69a9abfa`）。生产 `webLoginApi` 代码更新后，回下载的 `index.js` 与部署包 SHA-256 `8D1ACA6630D132C327F3D0BEA27754DBC5F9F5992C6E91C72CE5F92CA0FEFDD5` 一致，`staffEventScope.cjs` 与部署包 SHA-256 `AD9C9D5517D1573FB598E8D746122CDE9997AE3838E4373B405E75061E32A819` 一致；函数状态 Active/Available、Nodejs18.15、`index.main`。未使用真实账号复测，也未运行独立测试套件。
+
+## 2026-10-07 球队管理共享账号读取组别修复
+
+用户明确授权“发布”后，生产 webLoginApi 从当天重新下载的线上代码包进行单文件、单行差量更新。staffDbRights.cjs 的 divisions 读取映射补入 event.teams；认证、有效赛事授权、赛事归属及行级范围校验继续生效。未修改共享授权记录、账号或业务数据，未发布 PC 静态资源。
+
+源码 e5ca091b 已推送并进入 preview。线上函数 Active、Nodejs18.15、index.main，ModTime 2026-10-07 21:39:28。回下载 staffDbRights.cjs SHA-256 A37EE3D1DE81E5DC3C02EECA8BBE39086EBEF1418C82F410F23CCB95D8D1CA47 与发布包一致；index.js 保持 8D1ACA6630D132C327F3D0BEA27754DBC5F9F5992C6E91C72CE5F92CA0FEFDD5。staffPolicy.cjs、staffEventScope.cjs 回下载也与发布包一致。CLI 3.8.5 经启动器的代码更新交互未执行发布，改用已登录 CLI 3.8.0 完成 Update with current config；未读取或更改运行配置。尚未在用户登录会话中确认球队页面恢复；未运行测试套件。
