@@ -4604,7 +4604,7 @@ async function handlePaperRefereeReport(event, confirming) {
   const events=[...existing,...entries.filter(row=>!existing.some(old=>old.eventId===row.eventId || sameEvent(old,row)))]
   const score=event.score || {}
   if (![score.home,score.away].every(value=>Number.isInteger(value)&&value>=0&&value<=99)) return {success:false,error:'请填写0至99的双方比分'}
-  const {calculateMatchEventScore}=await import('./data-center/statistics.mjs')
+  const {calculateMatchEventScore}=await import('./data-center/match-events.mjs')
   const derived=calculateMatchEventScore({...match,events})
   if (derived.home!==score.home || derived.away!==score.away) return {success:false,error:'比分与进球记录不一致，请补齐或修正进球记录'}
   if (event.expectedEventRevision == null || Number(event.expectedEventRevision)!==Number(match.matchEventRevision || 0)) return {success:false,error:'比赛记录已更新，请重新上传核对'}
