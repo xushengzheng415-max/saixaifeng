@@ -2690,7 +2690,7 @@ async function resetClaim(openId, matchId, side) {
 exports.main = async function(event) {
   event = event || {}
   const action = event.action || 'getWorkbench'
-  if(action==='organizerRecognizeReport') return require('./organizerReportOcr.cjs').run(db,event,callTencentOcr,ocrRows,parseRosterRows)
+  if(action==='organizerRecognizeReport') return {success:false,code:'PC_OCR_PENDING',message:'裁判表识别等待复用 PC 百度智能云服务'}
   const wxContext = cloud.getWXContext()
   let openId = wxContext.OPENID || ''
 
