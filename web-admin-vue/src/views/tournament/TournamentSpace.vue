@@ -2,8 +2,8 @@
   <section class="tournament-space" aria-labelledby="tournament-space-title">
     <div class="space-hero">
       <div class="hero-copy">
-        <h1 id="tournament-space-title">赛事空间</h1>
-        <p v-if="demoModeActive" class="demo-mode-copy">演示模式已开启，请选择测试赛事进行演练。</p>
+        <h1 id="tournament-space-title">{{ demoModeActive ? '模拟赛事空间' : '赛事空间' }}</h1>
+        <p v-if="demoModeActive" class="demo-mode-copy">仅使用虚拟数据，退出后清空</p>
       </div>
       <button
         v-if="demoModeAvailable"
@@ -19,8 +19,8 @@
       <button class="create-card" type="button" @click="goToCreate">
         <span class="create-border">
           <span class="create-icon" aria-hidden="true"><el-icon><Plus /></el-icon></span>
-          <strong>创建我的赛事</strong>
-          <small>{{ hasOwnOrganization ? '创建一场新赛事' : '先建立自己的机构' }}</small>
+          <strong>{{ demoModeActive ? '创建虚拟赛事' : '创建我的赛事' }}</strong>
+          <small v-if="!demoModeActive">{{ hasOwnOrganization ? '创建一场新赛事' : '先建立自己的机构' }}</small>
         </span>
       </button>
 
@@ -107,6 +107,7 @@ const visibleTournaments = computed(() => {
 })
 
 function getCurrentOrgId() {
+  if (isDemoMode()) return 'demo-organization'
   if (import.meta.env.DEV && (sessionStorage.getItem('sxfVisualQa') === '1' || localStorage.getItem('sxfVisualQa') === '1')) return 'qa-org'
   try {
     const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
@@ -156,6 +157,7 @@ function sharedRightsLabel(permissions = []) {
 }
 
 async function goToCreate() {
+  if (isDemoMode()) { router.push('/tournaments/create'); return }
   if (!hasOwnOrganization.value) {
     router.push({ path: '/organization-onboarding', query: { createPersonalWorkspace: '1' } })
     return
@@ -173,14 +175,13 @@ async function goToCreate() {
 }
 function openTournament(tournament) {
   if (!tournament?._id) return
-  if (demoModeActive.value) sessionStorage.setItem('sxfTournamentDemoId', String(tournament._id))
   router.push(`/tournaments/${tournament._id}`)
 }
 function toggleDemoMode() {
   const next = !demoModeActive.value
   setDemoMode(next)
   demoModeActive.value = next
-  if (next) ElMessage.info('请选择测试赛事，演示操作会保存到所选赛事')
+  window.location.reload()
 }
 function syncDemoMode() { demoModeActive.value = isDemoMode() }
 async function handleMenu(command, tournament) {

@@ -227,7 +227,7 @@
               </div>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }} · 机构负责人</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
+                  <el-dropdown-item disabled><div class="account-dropdown-summary"><strong>{{ organizationDisplayName }}</strong><span>{{ accountDisplayName }}</span><span>{{ accountPhoneSummary }}</span></div></el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" divided command="profile"><el-icon><User /></el-icon>修改个人资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="organization"><el-icon><Postcard /></el-icon>修改机构资料</el-dropdown-item>
                   <el-dropdown-item v-if="!isPlatformContext()" command="account-management"><el-icon><UserFilled /></el-icon>{{ accountManagementLabel }}</el-dropdown-item>
@@ -284,7 +284,7 @@
         </header>
 
         <div v-if="demoModeActive" class="demo-mode-strip">
-          <span><strong>演示模式</strong> 操作会保存到当前赛事，请使用测试赛事</span>
+          <span><strong>演示模式</strong> 仅使用虚拟数据，退出后清空</span>
           <button type="button" @click="exitDemoMode">退出演示</button>
         </div>
 
@@ -366,7 +366,9 @@ function readStoredObject(key) {
   try { return JSON.parse(localStorage.getItem(key) || 'null') || {} } catch { return {} }
 }
 const initialStoredUser = isPlatformContext() ? (getPlatformSession()?.user || {}) : readStoredObject('userInfo')
-const initialStoredOrganization = isPlatformContext() ? {} : readStoredObject('currentOrganization')
+const cachedOrganization = isPlatformContext() ? {} : readStoredObject('currentOrganization')
+const ownOrganizationId = String(initialStoredUser.orgId || initialStoredUser.organizationId || '')
+const initialStoredOrganization = ownOrganizationId && String(cachedOrganization.id || cachedOrganization._id || '') === ownOrganizationId ? cachedOrganization : {}
 const userInfo = ref({
   userName: initialStoredUser.userName || initialStoredUser.nickname || '',
   avatarUrl: initialStoredUser.avatarUrl || '',
@@ -379,12 +381,14 @@ const userInfo = ref({
 const loginType = ref('')
 const currentRole = ref('')
 const demoModeActive = ref(isDemoMode(String(route.params.id || '')))
+const isTournamentStaff = computed(() => !demoModeActive.value && sessionStorage.getItem('sxfTournamentStaff') === '1')
 const isHeadReferee = ref(false)
 function syncDemoMode() { demoModeActive.value = isDemoMode(String(route.params.id || '')) }
 function exitDemoMode() {
   setDemoMode(false)
   demoModeActive.value = false
-  router.push('/tournament-space')
+  window.location.assign(`${import.meta.env.BASE_URL}#/tournament-space`)
+  window.location.reload()
 }
 const DEFAULT_ORGANIZATION_LOGO = `${import.meta.env.BASE_URL}organization-logo-placeholder.svg`
 
@@ -436,7 +440,16 @@ function clearLayoutBootstrapCache() {
 }
 
 function persistWorkspaceOrganization(organization) {
-  if (!organization) return
+  if (isDemoMode()) return
+  if (!organization) {
+    organizationRecord.value = {}
+    userInfo.value.organizationName = ''
+    userInfo.value.organizationLogo = ''
+    localStorage.removeItem('currentOrganization')
+    const stored = readStoredObject('userInfo')
+    localStorage.setItem('userInfo', JSON.stringify({ ...stored, orgId:'', organizationId:'', organizationName:'', organizationLogo:'' }))
+    return
+  }
   const id = organization.id || organization._id || ''
   const name = organization.name || organization.organizationName || ''
   organizationRecord.value = { ...organization, id, name }
@@ -450,7 +463,9 @@ function persistWorkspaceOrganization(organization) {
 async function loadWorkspaceAccount() {
   try {
     const result = await callFunction('onboardingWorkspace', { action:'state' })
-    if (result?.success && result.organization) persistWorkspaceOrganization(result.organization)
+    if (!result?.success) throw new Error(result?.error || result?.message || '机构资料读取失败，请重试')
+    if (!result.organizationConflict) persistWorkspaceOrganization(result.organization || null)
+    return result
   } catch (error) {
     console.warn('读取机构资料失败:', error.message || error)
   }
@@ -507,8 +522,16 @@ async function openContactInfoFromNotice() {
 watch(() => route.query.openContactInfo, value => {
   if (value === 'profile' || value === 'organization') void openContactInfoFromNotice()
 })
-function openOrganizationDialog() {
-  const organization = organizationRecord.value || {}
+async function openOrganizationDialog() {
+  if (isDemoMode()) return ElMessage.info('请退出演示后修改真实机构资料')
+  const state = await loadWorkspaceAccount()
+  if (!state) return ElMessage.error('机构资料读取失败，请重新打开')
+  if (state.organizationConflict) return ElMessage.warning('账号关联多个机构，请先确认机构归属')
+  if (!state.organization) {
+    router.push({ path:'/organization-onboarding', query:{ createPersonalWorkspace:'1' } })
+    return
+  }
+  const organization = state.organization
   organizationForm.name = organization.name || organization.organizationName || organizationDisplayName.value
   organizationForm.organizationType = organization.organizationType || ''
   organizationForm.provinceCode = organization.provinceCode || ''
@@ -520,7 +543,7 @@ async function saveProfile() {
   profileSubmitting.value = true
   try {
     const result = await callFunction('onboardingWorkspace', { action:'updateProfile', nickname:profileForm.nickname })
-    if (!result?.success) throw new Error(result?.message || '保存失败')
+    if (!result?.success) throw new Error(result?.error || result?.message || '保存失败')
     userInfo.value.userName = result.user?.nickname || profileForm.nickname
     const storedUser = readStoredObject('userInfo')
     localStorage.setItem('userInfo', JSON.stringify({ ...storedUser, userName:userInfo.value.userName, nickname:userInfo.value.userName }))
@@ -561,7 +584,7 @@ async function saveOrganization() {
   try {
     const province = provinceOptions.find(item => item.code === organizationForm.provinceCode)?.name || ''
     const result = await callFunction('onboardingWorkspace', { action:'updateOrganization', ...organizationForm, province })
-    if (!result?.success) throw new Error(result?.message || '保存失败')
+    if (!result?.success) throw new Error(result?.error || result?.message || '保存失败')
     persistWorkspaceOrganization(result.organization)
     organizationDialogVisible.value = false
     ElMessage.success('机构资料已更新')
@@ -898,6 +921,7 @@ const isAdminPage = computed(() => {
 
 // 根据角色返回对应导航菜单
 const currentNavItems = computed(() => {
+  if (demoModeActive.value) return organizerNavItems.value.filter(item => !item.external && item.path !== '/system')
   const ownerOnly = (items) => userInfo.value.isPlatformOwner
     ? items
     : items.filter(item => item.path !== '/system')
@@ -916,6 +940,7 @@ const currentNavItems = computed(() => {
 
 // 用户下拉菜单命令
 function handleUserCommand(command) {
+  if (isDemoMode() && !['refresh', 'logout'].includes(command)) return ElMessage.info('请退出演示后管理真实账号资料')
   switch (command) {
     case 'profile':
       openProfileDialog()
@@ -982,6 +1007,12 @@ function isChildActive(parentPath) {
 
 onMounted(() => {
   window.addEventListener(demoModeChangeEvent(), syncDemoMode)
+  if (isDemoMode()) {
+    userInfo.value.organizationName = '模拟机构'
+    userInfo.value.organizationLogo = ''
+    currentRole.value = 'organizer'
+    return
+  }
   if (isPlatformContext()) {
     const platformUser = getPlatformSession()?.user || {}
     userInfo.value = {
@@ -1005,7 +1036,7 @@ onMounted(() => {
   if (savedInfo) {
     try {
       const parsed = JSON.parse(savedInfo)
-      const storedOrganization = ['organizationInfo', 'currentOrganization', 'currentOrg']
+      const storedOrganization = ['currentOrganization']
         .map(key => {
           try {
             return JSON.parse(localStorage.getItem(key) || 'null')
@@ -1013,7 +1044,7 @@ onMounted(() => {
             return null
           }
         })
-        .find(Boolean) || {}
+        .find(item => item && String(item.id || item._id || '') === String(parsed.orgId || parsed.organizationId || '') && (parsed.orgId || parsed.organizationId)) || {}
       const organizationName = storedOrganization.name ||
         storedOrganization.organizationName ||
         parsed.organizationName ||

@@ -698,6 +698,13 @@ router.beforeEach(async (to, from, next) => {
   // 检查是否已登录（localStorage 快速检查）
   const isLoggedIn = localStorage.getItem('isLoggedIn')
   const loginType = localStorage.getItem('loginType') || ''
+  const { isDemoMode } = await import('../utils/demoMode')
+  if (isDemoMode() && isLoggedIn === 'true' && hasOrganizerSession()) {
+    const demoRoutes = /^\/(tournament-space|tournaments|teams|players|referees|head-referee|admin\/teams)(\/|$)/
+    if (!demoRoutes.test(to.path)) { next('/tournament-space'); return }
+    if (to.params.id && !String(to.params.id).startsWith('demo-')) { next('/tournament-space'); return }
+    next(); return
+  }
   if (isLoggedIn === 'true') {
     if (!hasOrganizerSession()) {
       clearInvalidSession()

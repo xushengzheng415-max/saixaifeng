@@ -1933,7 +1933,7 @@ function compressCreateLogo(file) {
 
 async function uploadCreateLogoFile(file) {
   const compressedFile = await compressCreateLogo(file)
-  const result = sessionStorage.getItem('sxfTournamentStaff') === '1'
+  const result = !isDemoMode() && sessionStorage.getItem('sxfTournamentStaff') === '1'
     ? await uploadImageViaWebApi('team-logos', compressedFile, tournamentId)
     : await uploadLargeFileViaCloud(`team-logos/${Date.now()}-${compressedFile.name}`, compressedFile, { chunkSize: 32 * 1024 })
   if (!result.success) throw new Error(result.message || '上传失败')
@@ -2114,7 +2114,7 @@ async function submitCreateTeam() {
         description: form.description || ''
       })
     }
-    const delegatedStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
+    const delegatedStaff = !isDemoMode() && sessionStorage.getItem('sxfTournamentStaff') === '1'
     const created = await addRecord('teams', delegatedStaff ? { ...teamData, staffDivisionId:activeDivisionId.value } : teamData)
     createdTeamId = created._id
     if (!createdTeamId) throw new Error('球队创建成功但未返回球队ID')
@@ -2135,6 +2135,14 @@ async function submitCreateTeam() {
       updateTime: now
     })
     linkedToTournament = true
+
+    if (isDemoMode()) {
+      await updateRecord('tournament_teams', createdRelation._id, { claimStatus:'claimed', status:'approved', participationStatus:'confirmed' })
+      showCreateTeamDialog.value = false
+      await Promise.all([loadTournamentTeams(), loadAllTeams()])
+      ElMessage.success('虚拟球队已创建')
+      return true
+    }
 
     showCreateTeamDialog.value = false
     await Promise.all([loadTournamentTeams(), loadAllTeams()])
@@ -2370,6 +2378,13 @@ async function sendInvites() {
 
   sendingInvites.value = true
   try {
+    if (isDemoMode()) {
+      const result = await callFunction('tournamentRegistrationFlow', { action:'addSyntheticTeams', tournamentId, divisionId:activeDivisionId.value, teamIds:selectedTeams.value })
+      if (!result?.success) throw new Error(result?.message || '虚拟球队添加失败')
+      await loadTournamentTeams()
+      ElMessage.success('虚拟球队已添加')
+      return
+    }
     const prepared = await callFunction('tournamentRegistrationFlow', { action:'createTargetedTeamInvitations', tournamentId, divisionId:activeDivisionId.value, teamIds:selectedTeams.value })
     if (!prepared?.success) throw new Error(prepared?.message || '邀请准备失败')
     const rows = prepared.data?.invitations || []
