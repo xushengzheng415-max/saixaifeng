@@ -199,8 +199,7 @@ Page({
     var cached = workspace.readContext()
     if (cached) this.applyContext(cached)
     return workspace.loadContext().then(function (context) { that.applyContext(context) }).catch(function (error) {
-      if (cached) { that.applyContext(cached); return }
-      that.setData({ loading: false, errorText: error.message || '首页加载失败，请重试' })
+      that.setData({ loading: false, errorText: error.message || '首页加载失败，请重试', homeTaskCards: [], hasTaskCards: false, sharedTournaments: [], matches: [], hasMatches: false, metrics: [], overviewName: '', hasOverviewName: false, hasOverviewStatus: false })
     })
   },
 
@@ -210,12 +209,14 @@ Page({
     var role = identity.id || 'team_coach'
     var isOrganizer = role === 'organizer'
     var isTrainingCoach = role === 'training_coach'
-    var isTeamCoach = !isOrganizer && !isTrainingCoach
+    var isShared = role === 'event_staff'
+    var isTeamCoach = !isOrganizer && !isTrainingCoach && !isShared
     var rawTeams = (context.teams || []).slice(0, 2)
     var teams = rawTeams.map(formatTeam)
     var matches = (context.eventSchedule || context.schedule || []).slice(0, isOrganizer ? 2 : 1).map(formatMatch)
     var eventTasks = (context.eventTasks || []).slice()
-    var localDraft = signupDraft.resolveAgainstRegistrations(signupDraft.read(), context.registrations || [])
+    var localDraft = isShared ? null : signupDraft.resolveAgainstRegistrations(signupDraft.read(), context.registrations || [])
+    if (localDraft && !(context.tournaments || []).some(function(item) { return item.id === localDraft.tournamentId && !item.isShared })) localDraft = null
     var localDraftTask = signupDraft.toTask(localDraft)
     if (localDraftTask && !eventTasks.some(function(item) {
       return item.type === 'registration_draft' && item.tournamentId === localDraftTask.tournamentId && item.teamId === localDraftTask.teamId
@@ -227,7 +228,8 @@ Page({
     var firstTeam = teams[0] || {}
     var data = {
       loading: false, isLoggedIn: true, errorText: '', roleTitle: identity.label || (isOrganizer ? '赛事负责人' : (isTrainingCoach ? '青训教练' : '球队教练')),
-      isOrganizer: isOrganizer, isTeamCoach: isTeamCoach, isTrainingCoach: isTrainingCoach,
+      isOrganizer: isOrganizer, isTeamCoach: isTeamCoach, isTrainingCoach: isTrainingCoach, isShared: isShared,
+      sharedTournaments: (context.tournaments || []).filter(function(item) { return item.isShared }),
       unreadMessageCount: Number(context.unreadMessageCount || 0), hasUnreadMessages: Number(context.unreadMessageCount || 0) > 0,
       teams: teams, hasTeams: teams.length > 0, matches: matches, hasMatches: matches.length > 0, trainingCourses: trainingCourses, hasTrainingCourses: trainingCourses.length > 0,
       homeTaskCards: cards, hasTaskCards: cards.length > 0,
@@ -238,7 +240,9 @@ Page({
       overviewClass: isOrganizer ? 'organizer-overview' : '',
       topbarClass: isOrganizer ? 'organizer-topbar' : ''
     }
-    if (isOrganizer) {
+    if (isShared) {
+      data.roleTitle = '共享协作'; data.metrics = []; data.hasTaskCards = false; data.homeTaskCards = []
+    } else if (isOrganizer) {
       var tournament = (context.tournaments || [])[0] || {}
       data.overviewTitle = '今日赛事概况'; data.overviewName = tournament.name || '暂无进行中的赛事'; data.hasOverviewName = true
       data.overviewStatus = tournament.statusText || '待创建'; data.hasOverviewStatus = true; data.overviewLogo = ''; data.hasOverviewLogo = false
@@ -255,6 +259,7 @@ Page({
   },
 
   goToMessages: function () { wx.navigateTo({ url: '/pages/messages/index' }) },
+  goToSharedEvents: function () { wx.switchTab({url:'/pages/event/index'}) },
   goToTodo: function () { wx.navigateTo({ url: '/pages/todo/index' }) },
   goToSchedule: function () { wx.navigateTo({ url: '/pages/schedule/index' }) },
   goToTeams: function () { wx.switchTab({ url: '/pages/teams/index' }) },

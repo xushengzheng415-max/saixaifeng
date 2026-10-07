@@ -52,9 +52,10 @@ function workspace(item) {
 
 function context(identity, workspaces, currentWorkspace, tournaments) {
   return { success: true, user: { id: identity.user._id, phone: identity.phone, phoneNumber: identity.phone,
+    phoneVerified: true, phoneMasked: text(identity.phone).slice(0,3) + '****' + text(identity.phone).slice(-4),
     nickName: text(identity.user.nickname || identity.user.nickName || identity.user.name) || '微信用户',
     avatarUrl: text(identity.user.avatarUrl || identity.user.headimgurl) },
-    workspaces, currentWorkspace, currentIdentity: { id:'organizer', label:'赛事工作人员' },
+    workspaces, currentWorkspace, currentIdentity: { id:'event_staff', label:'赛事协作者', available:['event_staff'] },
     modules: [{id:'event',name:'赛事',enabled:true}], tournaments,
     teams:[],schedule:[],eventSchedule:[],trainingSchedule:[],upcoming:[],tasks:[],eventTasks:[],trainingTasks:[],messages:[],unreadMessageCount:0,
     statistics:{tournamentCount:tournaments.length,teamCount:0,playerCount:0,matchCount:0,pendingCount:0} }

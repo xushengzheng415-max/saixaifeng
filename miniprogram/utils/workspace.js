@@ -53,7 +53,7 @@ function contextBelongsToActiveAccount(context) {
 function readContext() {
   var context = wx.getStorageSync(STORAGE_KEY) || null
   if (!context) return null
-  if (!contextBelongsToActiveAccount(context)) {
+  if (context.schemaVersion !== 'shared-identity-v2' || !contextBelongsToActiveAccount(context)) {
     clearContext()
     return null
   }
@@ -73,6 +73,7 @@ function saveContext(result) {
     throw mismatch
   }
   var context = {
+    schemaVersion: 'shared-identity-v2',
     user: result.user || {},
     accountOwner: { id: resultUserId, phone: resultPhone },
     accountKey: accountKey(active),
@@ -105,6 +106,7 @@ function clearContext() {
   contextGeneration += 1
   wx.removeStorageSync(STORAGE_KEY)
   wx.removeStorageSync(WORKSPACE_ID_KEY)
+  wx.removeStorageSync('workspaceExplicitChoice')
   var app = getApp()
   if (app && app.globalData) app.globalData.workspaceContext = null
 }
@@ -203,7 +205,7 @@ function loadContext(options) {
     }
     wx.cloud.callFunction({
       name: 'getMiniWorkspace',
-      data: { workspaceId: workspaceId },
+      data: { workspaceId: workspaceId, preserveWorkspace: options.preserveWorkspace === true || wx.getStorageSync('workspaceExplicitChoice') === expectedAccountKey + '|' + workspaceId },
       timeout: 15000,
       success: function(response) {
         if (requestGeneration !== contextGeneration || accountKey(activeAccount()) !== expectedAccountKey) {
@@ -250,8 +252,9 @@ function selectWorkspace(workspaceId) {
 }
 
 function switchWorkspace(workspaceId) {
+  wx.setStorageSync('workspaceExplicitChoice', accountKey() + '|' + workspaceId)
   wx.setStorageSync(WORKSPACE_ID_KEY, workspaceId)
-  return loadContext({ workspaceId: workspaceId })
+  return loadContext({ workspaceId: workspaceId, preserveWorkspace: true })
 }
 
 function chooseWorkspace(context) {
@@ -263,7 +266,7 @@ function chooseWorkspace(context) {
   return new Promise(function(resolve, reject) {
     wx.showActionSheet({
       itemList: workspaces.map(function(item) {
-        return item.name + (item.isTemporary ? '（临时协作）' : '')
+        return item.name + (item.type === 'tournament_shared' ? '（共享赛事）' : (item.isTemporary ? '（临时协作）' : ''))
       }),
       success: function(result) {
         var target = workspaces[result.tapIndex]

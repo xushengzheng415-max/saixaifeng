@@ -4021,8 +4021,12 @@ exports.main = async function(event) {
     if (!workspaces.length) throw new Error('当前账号尚未建立可用工作空间')
 
     const requestedId = String(event.workspaceId || '')
-    const current = workspaces.find(item => item.id === requestedId) || workspaces[0]
+    let current = workspaces.find(item => item.id === requestedId) || workspaces[0]
     const sharedTournaments = await sharedEvents.list(db, identity.user._id)
+    if (current.type === 'organization' && sharedTournaments.length && event.preserveWorkspace !== true) {
+      const own = await db.collection('tournaments').where({ orgId: current.orgId }).limit(1).get()
+      if (!(own.data || []).length) current = workspaces.find(item => item.type === 'tournament_shared') || current
+    }
     if (current.type === 'tournament_shared') return sharedEvents.context(identity, workspaces, current, sharedTournaments)
     if ((current.permissions || []).some(item => String(item).indexOf('event.') === 0)) {
       current.capabilities = unique((current.capabilities || []).concat(['event']))

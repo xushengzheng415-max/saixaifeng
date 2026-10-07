@@ -82,7 +82,13 @@
     <view class="error-card" wx:if="{{errorText}}"><text>{{errorText}}</text><text bindtap="loadData">重新加载</text></view>
 
     <block wx:if="{{isLoggedIn}}">
-      <view class="overview-card {{overviewClass}}">
+      <view wx:if="{{isShared}}" class="section">
+        <view class="section-heading"><text>共享赛事</text><text bindtap="goToSharedEvents">全部赛事 ›</text></view>
+        <view class="overview-card" wx:for="{{sharedTournaments}}" wx:key="id" data-id="{{item.id}}" bindtap="onTournamentTap">
+          <text class="overview-name">{{item.name}}</text><text class="overview-status">{{item.statusText}}</text>
+        </view>
+      </view>
+      <view wx:if="{{!isShared}}" class="overview-card {{overviewClass}}">
 
         <text class="overview-name" wx:if="{{hasOverviewName}}">{{overviewName}}</text>
         <text class="overview-status" wx:if="{{hasOverviewStatus}}">{{overviewStatus}}</text>
@@ -97,7 +103,7 @@
         </view>
       </view>
 
-      <view class="task-card">
+      <view wx:if="{{!isShared}}" class="task-card">
         <view class="card-heading"><text>需要我处理</text><text bindtap="goToTodo">全部任务 ›</text></view>
         <view class="task-grid" wx:if="{{hasTaskCards}}">
           <view class="task-item" wx:for="{{homeTaskCards}}" wx:key="id" bindtap="goToTodo">

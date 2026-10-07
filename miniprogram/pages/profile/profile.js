@@ -2,6 +2,7 @@ var workspace = require('../../utils/workspace')
 var release = require('../../config/release')
 
 var identityMeta = {
+  event_staff: { title: '赛事协作者', icon: '/images/icons/event.svg' },
   team_coach: { title: '球队教练', icon: '/images/icons/team.svg' },
   organizer: { title: '赛事负责人', icon: '/images/icons/event.svg' },
   training_coach: { title: '青训教练', icon: '/images/icons/training.svg' }
@@ -141,7 +142,7 @@ Page({
       workspaceName: current.name || '当前机构',
       workspaceLogo: current.logo || '',
       hasWorkspaceLogo: Boolean(current.logo),
-      currentIdentityName: currentMeta.title,
+      currentIdentityName: identity.label || currentMeta.title,
       currentIdentityIcon: currentMeta.icon,
       identityOptions: options,
       primaryMenus: primaryMenus,
