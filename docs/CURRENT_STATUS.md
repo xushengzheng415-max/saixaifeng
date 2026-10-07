@@ -1,5 +1,7 @@
 # 赛小蜂足球当前状态
 
+2026-10-07 PC 测试版源码同步与切页缓存修复：正式仓库已接入 main `2c41f2ef` 和 preview `ac66e3d7`；授权只读操作 scope/mine/invitations/managed 不再清空球员与球队缓存，邀请、接受、切换、改权、停用等操作仍清缓存。24 项缓存回归通过，PC 预览构建完成，268 个文件发布 `/preview/admin/`。公网入口、cloud、PlayerDetail、TeamDetail 和主入口 JS 均 HTTP 200、SHA-256 与构建包一致；正式入口保持原内容。未部署云函数、未写业务数据，真实账号切页耗时仍需现场核验。见 `docs/releases/pc-read-cache-preview-20261007.md`。
+
 2026-10-06 共享账号裁判管理空集合读取已修复：生产只读检查确认 `tournament_referees` 集合不存在；共享裁判权限范围构建原先把该可选关系表当成必需表，导致 `tournaments` 和 `referees` 页面查询一并失败。现在仅在 referee 关系集合尚未创建时按空列表处理，索引等其他读取错误仍会报错。生产 `webLoginApi` 回下载的 `staffEventScope.cjs` SHA-256 与部署包一致，函数状态 Active/Available、Nodejs18.15、`index.main`。未使用真实账号复测，也未运行独立测试套件。
 
 2026-10-06 抽签与分组完整授权读取修复：球员资料读取在 `event.draw` 页面需同时有抽签和球队权限；只有抽签权限不能读取球员隐私资料。“全部权限”包含这两项。生产 `webLoginApi` 代码更新返回成功，函数详情为 Active/Available、Nodejs18.15、`index.main`；代码回下载遇到 CLI `Invalid URL`，入口摘要暂不能回读。未使用真实账号复测，也未运行独立测试套件。
