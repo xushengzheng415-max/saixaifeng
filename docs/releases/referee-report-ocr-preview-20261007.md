@@ -31,3 +31,9 @@
 确认接口使用项目共享 `match-events.mjs`；线上旧 webLoginApi 统计包缺少对应导出，因此补入已提交的共享模块分发副本，没有替换旧统计包。未登录识别请求返回 `AUTH_REQUIRED`。未运行测试套件，未使用真实账号、裁判表或真实比赛进行写入验收；识别准确率、百度表格接口额度与真实上传保存链路待用户试用。
 
 最终预览发布：完整上传 280 个文件；`index.html`、`assets/index-BsskjxWo.js`、`assets/MatchDetail-4lTHaP0-.js` 均 HTTP 200，线上 SHA-256 与最终构建产物一致。入口摘要 `0074EC30621A90C5F132D7E9EC4C14D7811050CE7AF3C5A57F67F170B384A42C`，比赛详情分包摘要 `20D7B839EFF89B0B9BF6D44E15C16BB9C84AEB09171E7832A55FC55E2A365859`。正式 `/admin/` 入口回读 HTTP 200、仍使用正式资源路径，本次未上传正式前端。
+
+## 2026-10-07 上传请求超限修复
+
+用户实测照片约703KB，Base64整图传入webLoginApi被CloudBase网关以EXCEED_MAX_PAYLOAD_SIZE拒绝。现复用uploadLargeFileViaCloud的48KB分块、超限降24KB上传，保留原图；识别HTTP请求只传fileId。prepareUpload先核验比赛与授权，返回已有match-reports/比赛ID目录。后端只接受本场目录云文件，下载后验证3MB上限及图片格式，再调用百度。复用了线上uploadFile既有赛事报表目录与分块权限，不更新该函数，不更改授权记录。上传进度可见，OCR重试复用已上传图片。
+
+修复提交48c2553、09531b5已进入preview；整套预览上传375个文件，包含同期球队资料库与演示资料改动。后端从新下载的线上包差量更新；线上入口、主JS、MatchDetail分包HTTP200和SHA-256一致，webLoginApi回下载入口摘要匹配。尚未代替用户上传真实裁判表或写比赛记录，真实识别与保存仍待试用。
