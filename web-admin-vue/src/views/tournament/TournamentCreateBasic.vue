@@ -72,7 +72,16 @@
     </div>
 
     <footer class="actions"><span><el-icon><InfoFilled /></el-icon>识别结果均为草稿，可继续修改。</span><div><el-button @click="requestBack">返回赛事空间</el-button><el-button :loading="savingDraft" @click="saveDraft">保存草稿</el-button><el-button type="primary" :loading="creating" @click="createAndEnter">创建赛事并进入主控制台</el-button></div></footer>
-    <el-dialog v-model="logoDialogVisible" title="上传赛事 Logo" width="620px" destroy-on-close><RemoveBgProcessor type="tournamentLogo" @success="handleLogoReady" /><template #footer><el-button @click="logoDialogVisible=false">取消</el-button></template></el-dialog>
+    <el-dialog v-model="logoDialogVisible" title="上传赛事 Logo" width="620px" destroy-on-close>
+      <template v-if="demoModeActive">
+        <div class="demo-logo-options">
+          <button v-for="logo in demoLogos" :key="logo.file" type="button" @click="selectDemoLogo(logo)"><img :src="demoLogoUrl(logo)" :alt="logo.name" /><span>{{ logo.name }}</span></button>
+        </div>
+        <el-upload drag :auto-upload="false" :show-file-list="false" accept="image/png,image/jpeg" :on-change="handleDemoLogoFile"><el-icon><UploadFilled /></el-icon><div>上传图片</div></el-upload>
+      </template>
+      <RemoveBgProcessor v-else type="tournamentLogo" @success="handleLogoReady" />
+      <template #footer><el-button @click="logoDialogVisible=false">取消</el-button></template>
+    </el-dialog>
   </section>
 </template>
 
@@ -80,7 +89,8 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Calendar, Document, InfoFilled, Location, Trophy } from '@element-plus/icons-vue'
+import { Calendar, Document, InfoFilled, Location, Trophy, UploadFilled } from '@element-plus/icons-vue'
+import { isDemoMode } from '../../utils/demoMode'
 import { _arrayBufferToBase64, addRecord, callFunction, queryList, updateRecord, uploadLargeFileViaCloud } from '../../utils/cloud'
 import RemoveBgProcessor from '../../components/common/RemoveBgProcessor.vue'
 import { cityMapData, districtMapData, provincesData } from '../team/areaData'
@@ -94,6 +104,18 @@ const savingDraft=ref(false)
 const creating=ref(false)
 const uploadingRegulations=ref(false)
 const logoDialogVisible=ref(false)
+const demoModeActive=isDemoMode()
+const demoLogos=[{file:'field-cup',name:'绿茵杯'},{file:'city-league',name:'城市联赛'},{file:'rising-cup',name:'新星杯'}]
+const demoLogoUrl=logo=>`${import.meta.env.BASE_URL}assets/demo-tournament-logos/${logo.file}.png`
+function selectDemoLogo(logo){handleLogoReady({url:demoLogoUrl(logo)})}
+function handleDemoLogoFile(file){
+  if(!file.raw||!['image/png','image/jpeg'].includes(file.raw.type))return ElMessage.warning('请上传 PNG 或 JPG 图片')
+  if(file.raw.size>3*1024*1024)return ElMessage.warning('图片不能超过 3 MB')
+  const reader=new FileReader()
+  reader.onload=()=>handleLogoReady({url:String(reader.result||'')})
+  reader.onerror=()=>ElMessage.error('图片读取失败，请重新选择')
+  reader.readAsDataURL(file.raw)
+}
 const logoPreview=ref('')
 const pendingSourceFile=ref(null)
 const draftId=ref('')
@@ -128,7 +150,7 @@ function removeOrganization(key,index){form.value[key].splice(index,1);if(!form.
 const previewDate=computed(()=>form.value.dateRange.length===2?form.value.dateRange[0]+' — '+form.value.dateRange[1]:'赛事日期')
 const previewRegion=computed(()=>regionSelection().region||'办赛地点')
 
-function currentOrgId(){if(isVisualQa)return'qa-org';try{const user=JSON.parse(localStorage.getItem('userInfo')||'{}');return user.orgId||user.organizationId||''}catch{return''}}
+function currentOrgId(){if(isDemoMode())return'demo-organization';if(isVisualQa)return'qa-org';try{const user=JSON.parse(localStorage.getItem('userInfo')||'{}');return user.orgId||user.organizationId||''}catch{return''}}
 function handleLogoReady(asset){logoPreview.value=asset.previewUrl||asset.url;pendingSourceFile.value=asset.sourceFile||null;form.value.logoTransparentFileId=asset.fileID||'';form.value.logoTransparentUrl=asset.fileID||asset.url||'';logoDialogVisible.value=false}
 async function ensureSourceLogo(){if(!pendingSourceFile.value||form.value.logoSourceUrl)return;const extension=pendingSourceFile.value.name.split('.').pop()||'png';const result=await uploadLargeFileViaCloud('tournament-logo-source/'+Date.now()+'.'+extension,pendingSourceFile.value,{chunkSize:32*1024});form.value.logoSourceUrl=result.tempUrl||result.fileId||'';pendingSourceFile.value=null}
 function beforeRegulationsUpload(file){if(!/\.(pdf|docx)$/i.test(file.name)){ElMessage.error('自动识别仅支持 PDF、Word（.docx）');return false}if(file.size>10*1024*1024){ElMessage.error('竞赛规程不能超过 10MB');return false}return true}
@@ -180,6 +202,7 @@ async function requestBack(){const changed=form.value.name||form.value.regionPat
 </script>
 
 <style scoped>
+.demo-logo-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}.demo-logo-options button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px;border:1px solid #dfe5e1;border-radius:6px;background:#fff;color:#304338;cursor:pointer}.demo-logo-options button:hover,.demo-logo-options button:focus-visible{border-color:#087c47;outline:2px solid #087c47;outline-offset:2px}.demo-logo-options img{width:100%;max-width:112px;aspect-ratio:1;object-fit:contain}.demo-logo-options span{font-size:14px}
 .create-page{width:min(calc(100% - 64px),1240px);margin:0 auto;padding:22px 0 112px}.breadcrumb{display:flex;gap:9px;color:#68766e;font-size:13px}.breadcrumb button{padding:0;border:0;color:#4e6055;background:transparent;cursor:pointer}.create-page>header{margin:18px 0 14px}.create-page>header h1{margin:0;font-size:28px}.create-page>header p{margin:6px 0 0;color:#627168}.layout{display:grid;grid-template-columns:minmax(0,880px) 310px;gap:18px}.form-panel,.preview{border:1px solid #dfe5e1;border-radius:8px;background:#fff;box-shadow:0 3px 12px rgba(16,52,32,.05)}.form-panel>section{padding:21px 26px 7px}.form-panel>section+section{border-top:1px solid #e7ebe8}.form-panel h2,.preview>h2{margin:0 0 17px;font-size:17px}.section-title{display:flex;align-items:center;gap:8px}.section-title span{margin-bottom:17px;padding:2px 7px;border-radius:4px;color:#68766e;background:#edf2ef;font-size:12px}.regulation-first{background:#f4fbf6}.regulation-first>p{margin:-7px 0 13px;color:#5f6f65;font-size:13px}.regulations,.recognized{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.regulations small{color:#78847c}.file-row{display:flex;min-width:320px;align-items:center;gap:8px;padding:8px 11px;border:1px solid #dce6df;background:#fff}.file-row span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recognized{margin-top:12px}.recognized strong{color:#167442;font-size:13px}.identity-grid{display:grid;grid-template-columns:140px minmax(0,1fr);gap:0 22px;max-width:720px}.logo-item{grid-row:1/3}.logo-select{display:grid;width:112px;height:112px;place-items:center;overflow:hidden;border:1px dashed #c9d3cd;border-radius:6px;color:#a2aca6;background:#fff;cursor:pointer}.logo-select img{width:100%;height:100%;object-fit:contain}.logo-select .el-icon{font-size:46px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;max-width:740px}.form-panel :deep(.el-input__wrapper),.form-panel :deep(.el-select__wrapper),.form-panel :deep(.el-date-editor){min-height:40px}.form-panel :deep(.el-select),.form-panel :deep(.el-cascader),.form-panel :deep(.el-date-editor){width:100%}.org-rows{display:flex;flex-direction:column;gap:7px}.org-rows>div{display:flex;gap:6px}.preview{padding:22px}.preview-card{padding:24px 20px;border:1px solid #e3e8e5;text-align:center}.preview-card>img{width:86px;height:86px;object-fit:contain}.preview-card>.el-icon{color:#aeb7b1;font-size:52px}.preview-card h3{margin:15px 0 8px}.preview-card>span{display:inline-block;padding:3px 7px;color:#1680cf;background:#eaf5ff;font-size:12px}.preview-card p{display:flex;align-items:center;gap:7px;margin:12px 0 0;color:#5b6a61;font-size:13px;text-align:left}.next{margin-top:20px;padding-top:18px;border-top:1px solid #e3e8e5}.next h3{margin:0;font-size:15px}.next ol{display:grid;gap:12px;margin:14px 0 0;padding-left:22px;color:#4f6056;font-size:13px}.actions{position:fixed;right:0;bottom:0;left:0;z-index:10;display:flex;min-height:82px;align-items:center;justify-content:space-between;gap:18px;padding:14px 42px;border-top:1px solid #dfe5e1;background:rgba(255,255,255,.98);box-shadow:0 -4px 16px rgba(24,52,37,.06)}.actions>span{display:flex;align-items:center;gap:7px;color:#526159}.actions>div{display:flex;gap:10px}.actions :deep(.el-button){min-width:140px;min-height:44px}.actions :deep(.el-button--primary){min-width:280px;border-color:#087d47;background:#087d47}@media(max-width:1080px){.layout{grid-template-columns:1fr}.preview{display:none}}@media(max-width:720px){.create-page{width:calc(100% - 24px)}.identity-grid,.grid{grid-template-columns:1fr}.logo-item{grid-row:auto}.actions{position:static;align-items:stretch;flex-direction:column;padding:14px}.actions>div{flex-direction:column}.actions :deep(.el-button){width:100%;min-width:0}}
 .wide{grid-column:1/-1}.custom-partners{display:flex;flex-direction:column;gap:8px}.custom-partners>div{display:grid;grid-template-columns:160px minmax(0,1fr) auto;gap:8px}
 .organization-fields{display:flex;max-width:700px;flex-direction:column}.organization-input{width:620px;max-width:100%}.organization-fields .org-rows{width:680px;max-width:100%}.organization-fields .org-rows>div{display:grid;grid-template-columns:minmax(0,620px) 52px;align-items:center;gap:8px}@media(max-width:720px){.organization-input,.organization-fields .org-rows{width:100%}.organization-fields .org-rows>div{grid-template-columns:minmax(0,1fr) 52px}}
