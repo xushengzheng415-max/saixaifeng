@@ -7,3 +7,15 @@
 test-division-basics.mjs 覆盖 2026/2027、明确赛季年份、U8 包含年界、未知年份/不限年龄不猜测；仅发布 preview/admin，不发布正式后台或函数。
 
 成人组按用户补充的默认 16 岁及以上计算，以 2026 年赛事年份为例，最晚出生 2010-12-31，未指定最高年龄时最早留空。可手动修改日期，不把默认参赛年龄当作法定成年人定义。切换参赛模式清除另一类型自动建议；已定版真实组别不重算显示日期。
+
+## 发布回读
+
+青少年功能 88fd6a3，成人补充与最终构建 bcb976c4。合入最新 preview 后上传 280 个静态文件，仅 preview/admin。
+
+| 资源 | HTTP | SHA-256 |
+| --- | --- | --- |
+| index.html | 200 | 1EE79929D265C7D1CE1BA86C6F91F6545097FA1C2ADAC9B7B3D6EE421E781D94 |
+| divisionBasics-CZzs-gLz.js | 200 | 8D8EA792E39F38EF508F4D5BCC1CD9C832AFB42A493E0A7B3C642DC603A99589 |
+| TournamentDivisionCreate-DE_QH-MT.js | 200 | 676D219FE3E173EF5779D240DFA7A0AE4B9CAF0F407F8189E67A5493FE058BDC |
+
+资源与构建哈希一致。正式后台入口发布前后保持 604820920BCBF12BF141FADA29AC3E107787F627FFFACFDA1F17C0135ACA80B1，未部署正式函数。实际浏览器点击仍待用户验收。
