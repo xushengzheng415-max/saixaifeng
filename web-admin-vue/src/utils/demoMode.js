@@ -10,7 +10,7 @@ function accountKey() {
 export function demoRequest(action, data = {}) {
   const identity = accountKey()
   if (!workspace || owner !== identity) {
-    workspace = createDemoWorkspace()
+    workspace = createDemoWorkspace({assetBase:import.meta.env.BASE_URL})
     owner = identity
     try { const saved = JSON.parse(sessionStorage.getItem(DATA_KEY) || 'null'); if (saved?.owner === identity) workspace.restore(saved.data) } catch { sessionStorage.removeItem(DATA_KEY) }
   }
