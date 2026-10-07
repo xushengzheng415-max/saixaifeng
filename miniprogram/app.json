@@ -128,6 +128,7 @@
         "schedule/schedule",
         "create/create",
         "detail/detail",
+        "shared/shared",
         "pre-match/pre-match",
         "monitor/monitor",
         "review/review",

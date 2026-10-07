@@ -242,8 +242,12 @@ Page({
           })
           return
         }
-        wx.redirectTo({ url: '/pages/onboarding/onboarding' })
-        return
+          that.callCloud('getMiniWorkspace', { action: 'sharedTournaments' }, function(reply) {
+            var shared = reply.result || {}
+            if (shared.success && (shared.tournaments || []).length) that.goToHome()
+            else wx.redirectTo({ url: '/pages/onboarding/onboarding' })
+          }, function() { wx.redirectTo({ url: '/pages/onboarding/onboarding' }) }, 15000)
+          return
       }
       that.goToHome()
     }, function() {

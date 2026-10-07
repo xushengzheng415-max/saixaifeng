@@ -13,6 +13,7 @@ Page({
     activeRelation: 'hosted',
     hostedTournaments: [],
     participatingTournaments: [],
+    sharedTournaments: [],
     visibleTournaments: [],
     hasTournaments: false,
     eventSchedule: [],
@@ -80,8 +81,11 @@ Page({
     var tournaments = context.tournaments || []
     var hosted = tournaments.filter(function(item) { return item.isHosted })
     var participating = tournaments.filter(function(item) { return item.isParticipating })
+    var shared = tournaments.filter(function(item) { return item.isShared })
     var activeRelation = this.data.activeRelation
-    if (!hosted.length && participating.length) activeRelation = 'participating'
+    if (activeRelation === 'shared' && !shared.length) activeRelation = 'hosted'
+    if (activeRelation === 'hosted' && !hosted.length && participating.length) activeRelation = 'participating'
+    if (!hosted.length && !participating.length && shared.length) activeRelation = 'shared'
     var tabs = []
     if (hosted.length) {
       tabs.push({
@@ -99,11 +103,12 @@ Page({
         itemClass: activeRelation === 'participating' ? 'active' : ''
       })
     }
+    if (shared.length) tabs.push({ id: 'shared', text: '共享赛事', count: shared.length, itemClass: activeRelation === 'shared' ? 'active' : '' })
     this.setData({
       loading: false,
       errorText: '',
       workspaceName: current.name,
-      workspaceTypeText: current.isTemporary ? '临时球队赛事协作' : '当前机构赛事中心',
+      workspaceTypeText: current.type === 'tournament_shared' ? '共享赛事空间' : (current.isTemporary ? '临时球队赛事协作' : '当前机构赛事中心'),
       canSwitchWorkspace: (context.workspaces || []).length > 1,
       canManage: workspace.hasPermission('event.manage', context),
       relationTabs: tabs,
@@ -111,6 +116,7 @@ Page({
       activeRelation: activeRelation,
       hostedTournaments: hosted,
       participatingTournaments: participating,
+      sharedTournaments: shared,
       eventSchedule: (context.eventSchedule || []).slice(0, 5),
       eventTasks: (context.eventTasks || []).slice(0, 5),
       hasSchedule: (context.eventSchedule || []).length > 0,
@@ -123,7 +129,7 @@ Page({
 
   applyRelation: function() {
     var relation = this.data.activeRelation
-    var visible = relation === 'participating'
+    var visible = relation === 'shared' ? this.data.sharedTournaments : relation === 'participating'
       ? this.data.participatingTournaments
       : this.data.hostedTournaments
     var tabs = (this.data.relationTabs || []).map(function(item) {
@@ -172,7 +178,8 @@ Page({
   onTournamentTap: function(event) {
     if (this.data.guestMode) return workspace.promptLogin('当前是赛事功能演示。登录后可进入赛事管理；公开赛事可从首页免登录浏览。')
     var id = event.currentTarget.dataset.id
-    if (id) wx.navigateTo({ url: '/pages/tournament/detail/detail?id=' + id })
+    var shared = (this.data.sharedTournaments || []).some(function(item) { return item.id === id })
+    if (id) wx.navigateTo({ url: '/pages/tournament/' + (shared ? 'shared/shared' : 'detail/detail') + '?id=' + encodeURIComponent(id) })
   },
 
   onMatchTap: function(event) {

@@ -272,7 +272,7 @@ Page({
     })
   },
   goToPublicTournaments: function () { wx.navigateTo({ url: '/pages/tournament/list/list' }) },
-  onTournamentTap: function (event) { var id = event.currentTarget.dataset.id; if (id) wx.navigateTo({ url: '/pages/tournament/detail/detail?id=' + id }) },
+  onTournamentTap: function (event) { var id = event.currentTarget.dataset.id; var context = workspace.readContext() || {}; var shared = (context.tournaments || []).some(function(item) { return item.id === id && item.isShared }); if (id) wx.navigateTo({ url: '/pages/tournament/' + (shared ? 'shared/shared' : 'detail/detail') + '?id=' + encodeURIComponent(id) }) },
   onTeamTap: function (event) {
     var id = event.currentTarget.dataset.id
     var team = (this.data.teams || []).filter(function (item) { return item.id === id })[0]

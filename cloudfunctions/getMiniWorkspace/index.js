@@ -3,6 +3,7 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const createPlayerAccountTransfer = require('./playerAccountTransfer.cjs')
+const sharedEvents = require('./sharedEvents.cjs')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
@@ -412,7 +413,7 @@ async function loadWorkspaceCatalog(user, openId) {
   )
   const memberships = membershipRows.filter(item => {
     const status = String(item.status || 'active').toLowerCase()
-    return ['active', 'accepted', 'claimed'].indexOf(status) >= 0
+    return ['active', 'accepted', 'claimed'].indexOf(status) >= 0 && item.source !== 'tournament_staff_invite' && item.role !== 'tournament_staff'
   })
 
   const identityValues = unique([
@@ -582,6 +583,8 @@ async function loadWorkspaceCatalog(user, openId) {
     })
   })
 
+  const shared = await sharedEvents.list(db, user._id)
+  shared.forEach(item => workspaces.push(sharedEvents.workspace(item)))
   const deduplicated = []
   const seen = new Set()
   workspaces.forEach(item => {
@@ -1187,6 +1190,7 @@ async function findWorkspaceForAction(user, openId, workspaceId) {
     : workspaces[0]
   if (requestedWorkspaceId && !workspace) throw new Error('当前账号无权访问该工作空间')
   if (!workspace) throw new Error('当前账号没有可用工作空间')
+  if (workspace.type === 'tournament_shared') throw new Error('共享赛事请从赛事页打开，当前操作入口尚未接通')
   return { workspaces, workspace }
 }
 
@@ -3937,6 +3941,12 @@ exports.main = async function(event) {
   event = event || {}
   try {
     const identity = await findCurrentUser()
+    if (event.action === 'sharedTournaments') return { success: true, tournaments: await sharedEvents.list(db, identity.user._id) }
+    if (event.action === 'sharedTournamentDetail') {
+      const rows = await sharedEvents.list(db, identity.user._id)
+      const tournament = rows.find(item => item.id === String(event.tournamentId || ''))
+      return tournament ? { success: true, tournament } : { success: false, code: 'SHARED_EVENT_ACCESS_DENIED', message: '共享授权已失效或赛事不存在，请返回赛事列表' }
+    }
     if (event.action === 'playerCardRead') {
       const reader = require('./playerCardReader.cjs')
       const playerId = String(event.playerId || '').trim()
@@ -4012,6 +4022,8 @@ exports.main = async function(event) {
 
     const requestedId = String(event.workspaceId || '')
     const current = workspaces.find(item => item.id === requestedId) || workspaces[0]
+    const sharedTournaments = await sharedEvents.list(db, identity.user._id)
+    if (current.type === 'tournament_shared') return sharedEvents.context(identity, workspaces, current, sharedTournaments)
     if ((current.permissions || []).some(item => String(item).indexOf('event.') === 0)) {
       current.capabilities = unique((current.capabilities || []).concat(['event']))
     }
@@ -4116,7 +4128,7 @@ exports.main = async function(event) {
       currentIdentity: resolveHomeIdentity(current, identity.user),
       modules: buildModules(current),
       teams: teams.map(team => formatTeam(team, teamSummaryMap[String(team._id)])),
-      tournaments: tournaments.map(item => formatTournament(item, tournamentSummaryMap[String(item._id || '')])),
+      tournaments: tournaments.map(item => formatTournament(item, tournamentSummaryMap[String(item._id || '')])).concat(sharedTournaments.filter(item => !tournaments.some(own => String(own._id) === item.id))),
       registrations: registrations.map(item => ({ tournamentId: String(item.tournamentId || ''), teamId: String(item.teamId || ''), divisionId: registrationDivisionId(item), status: String(item.status || '') })),
       schedule,
       eventSchedule,

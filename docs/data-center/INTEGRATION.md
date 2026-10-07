@@ -10,6 +10,7 @@
 
 | 入口 | 权限与范围 | 统一实现 | 状态 |
 |---|---|---|---|
+| 小程序共享赛事列表与基础详情 | 手机号主账号对应的 active 赛事授权；逐次核验赛事所属机构，不继承机构管理权 | getMiniWorkspace.sharedTournaments / sharedTournamentDetail + sharedEvents.cjs | 2026-10-07 接入只读展示；部署和微信版本状态见 MINI_SHARED_EVENTS_2026-10-07.md |
 | PC 数据中心 | 机构所属球队/主办赛事；平台所有者全平台 | dataCenter → shared/service + statistics | 已实现、本地验证 |
 | 小程序数据中心调用 | 工作空间授权球队/主办赛事 | getMiniWorkspace.dataCenter → shared/service | 已实现、本地验证 |
 | H5 公开数据调用 | 已发布赛事、已公开比赛、正式结果 | webLoginApi.publicDataCenter → shared/service | 已实现、本地验证 |
