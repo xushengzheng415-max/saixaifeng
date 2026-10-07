@@ -45,6 +45,7 @@
               <el-dropdown trigger="click" placement="bottom-end" popper-class="competition-row-menu" @command="command => handleRowCommand(command, division)">
                 <el-button text circle :aria-label="division.name + '更多操作'"><el-icon><MoreFilled /></el-icon></el-button>
                 <template #dropdown><el-dropdown-menu>
+                  <el-dropdown-item command="settings" :disabled="!canManage">组别设置</el-dropdown-item>
                   <el-dropdown-item command="teams">参赛球队</el-dropdown-item>
                   <el-dropdown-item command="draw">抽签分组</el-dropdown-item>
                   <el-dropdown-item command="schedule">比赛地图</el-dropdown-item>
@@ -71,6 +72,7 @@ import { Back, Calendar, Location, MoreFilled, Plus, Trophy } from '@element-plu
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addRecord, callFunction, deleteDivision, getFileUrl, queryById, queryList, renameDivision, reviseDivisionRules, updateRecord } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
+import { divisionParticipantType } from '../../utils/divisionBasics'
 
 const route = useRoute()
 const router = useRouter()
@@ -143,7 +145,7 @@ function normalizeDivision(division, index) {
     capacityText: allowedTeams > 0 ? String(allowedTeams) : '未设置',
     playerFormatText: playerFormatLabel(division.matchFormat,division.playersOnField),
     formatText: division.formatName || division.tournamentTypeName || formatLabel(division.formatType || division.tournamentType),
-    modeText: modeProfessional ? '专业模式' : '基础模式 · 免费',
+    modeText: divisionParticipantType(division,tournament.value)==='adult'?'成人模式':'青少年模式',
     modeClass: modeProfessional ? 'professional' : 'simple',
     progress,
     versionText: division.rulesVersion || division.ruleVersion || (finalized ? '已定版' : '暂未定版'),
@@ -189,6 +191,7 @@ async function startRuleRevision(division) {
 
 function handleRowCommand(command, division) {
   const query = division.id ? { divisionId: division.id } : {}
+  if(command==='settings')return router.push({path:`/tournaments/${id}/competition/create`,query})
   if (command === 'registration') return toggleDivisionRegistration(division)
   if (command === 'rename') return handleRenameDivision(division)
   if (command === 'reset') return resetDivisionPairings(division)
