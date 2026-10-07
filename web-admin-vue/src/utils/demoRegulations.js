@@ -3,6 +3,9 @@ import template from '../data/demoRegulationTemplate.json'
 export const demoRegulationName = template.sourceFileName
 export const demoRegulationUrl = `${import.meta.env.BASE_URL}assets/demo-regulations/youth-football-regulations.docx`
 export function demoRegulationData() { return JSON.parse(JSON.stringify(template.data)) }
+export function demoDivisionForRules(division) {
+  return { ...division, matchMinutes:division.periodMode === 'halves' ? Number(division.matchMinutes) / 2 : division.matchMinutes }
+}
 export async function recognizeStoredDemoRegulation(tournament) {
   const source = String(tournament.regulationsFileId || '')
   let data
@@ -12,7 +15,7 @@ export async function recognizeStoredDemoRegulation(tournament) {
     data = await recognizeDemoRegulation(new File([bytes], tournament.regulationsFileName || '竞赛规程.docx'))
   } else throw new Error('请返回赛事设置，选择或上传青少年演示范本')
   // The rule wizard edits duration per period; the source gives 50 minutes total.
-  data.divisions.forEach(division => { if (division.periodMode === 'halves') division.matchMinutes /= 2 })
+  data.divisions = data.divisions.map(demoDivisionForRules)
   return data
 }
 export function matchesDemoRegulationText(text) {

@@ -48,9 +48,10 @@ try{
   assert.equal(uploaded.basicInfo.contactPhone,undefined)
   const workspace=createDemoWorkspace()
   const event=workspace.request('dbQuery',{collection:'tournaments',operation:'add',data:{name:uploaded.basicInfo.name,regulationDivisionSuggestions:uploaded.divisions}}).data
-  workspace.request('dbQuery',{collection:'divisions',operation:'add',data:{tournamentId:event._id,...source,...mapped,maxPlayersPerTeam:source.rosterLimit}})
+  workspace.request('dbQuery',{collection:'divisions',operation:'add',data:{tournamentId:event._id,...source,...storedRules,maxPlayersPerTeam:source.rosterLimit}})
   const divisions=workspace.request('dbQuery',{collection:'divisions',operation:'list',where:{tournamentId:event._id}}).data
   assert.equal(divisions.length,1,'template must not leave an extra default division')
+  assert.equal(divisions[0].matchMinutes,25,'new rule draft must use 25 minutes per half')
   const teams=workspace.request('dbQuery',{collection:'teams',operation:'list',where:{ageGroup:source.ageGroup,synthetic:true}}).data
   assert.equal(teams.length,8)
   assert.ok(teams.every(team=>team.playerCount===12))
