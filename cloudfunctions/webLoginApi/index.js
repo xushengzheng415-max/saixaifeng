@@ -4097,8 +4097,9 @@ async function handleLegacyOrganizerFunction(functionName, functionParams, event
   return handleDbQuery({ ...base, collection, operation, id, data })
 }
 
-async function handleCallFunction(event) {
+async function handleCallFunction(event, verifiedPaperReport = false) {
   const { functionName, functionParams, assistanceGrantId } = event
+  if (functionName === 'updateMatch' && functionParams?.action === 'importPaperReport' && !verifiedPaperReport) return {success:false,error:'请通过裁判表确认入口录入'}
   if (!functionName) {
     return { success: false, error: '缺少 functionName 参数' }
   }
@@ -4518,6 +4519,87 @@ async function syncTeamProfileReferences(db, teamId, before, after) {
     if (Object.keys(patch).length) { await db.collection('matches').doc(match._id).update({ data: { ...patch, updateTime: db.serverDate() } }); result.matches += 1 }
   }
   return result
+}
+
+async function handlePaperRefereeReport(event, confirming) {
+  const identity = await authenticateWebSession(event)
+  if (!identity.success) return identity
+  if (event.assistanceGrantId) return {success:false,error:'远程协助不能录入裁判表'}
+  const result = await handleDbQuery({...event, collection:'matches', operation:'get', id:String(event.matchId || ''), staffModule:'event.matches'})
+  if (!result.success) return result
+  const match=result.data
+  if (event.staffTournamentId && String(match.tournamentId)!==String(event.staffTournamentId)) return {success:false,error:'赛事范围不一致'}
+  if (identity.orgId && await staffPolicy.isStaff(cloud.database(),identity.userId,identity.orgId) && !await staffPolicy.owner(cloud.database(),identity.userId,identity.orgId)) {
+    const rights=await Promise.all(['event.matches','event.teams','event.results'].map(right=>staffPolicy.hasRight(cloud.database(),identity.userId,identity.orgId,match.tournamentId,right)))
+    if (!rights.every(Boolean)) return {success:false,error:'录入裁判表需要比赛、球队及赛果管理权限'}
+  }
+  if (match.refereeRecordLocked || match.refereeReportSubmittedAt || match.refereeRecord || match.refereeReport || match.executionState==='recording') return {success:false,error:'电子裁判记录已接管或锁定，不能覆盖'}
+  const ocr=require('./refereeReportOcr.cjs')
+  if (!confirming) {
+    const recognized=await ocr.recognize(event.imageBase64)
+    const uploaded=await cloud.uploadFile({cloudPath:`match-paper-reports/${identity.orgId}/${match._id}/${recognized.imageHash}.${recognized.extension}`,fileContent:recognized.buffer})
+    const evidence={matchId:String(match._id),fileId:uploaded.fileID,imageHash:recognized.imageHash}
+    return {success:true,data:{teams:recognized.teams,score:recognized.score,warnings:recognized.warnings,evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
+  }
+  const evidence=event.evidence
+  if (!evidence || evidence.matchId!==String(match._id) || !/^[a-f0-9]{64}$/.test(evidence.imageHash || '') || ocr.signEvidence(evidence)!==event.proof) return {success:false,error:'识别凭证无效，请重新上传'}
+  if ((match.paperReportImports || []).some(row=>row.imageHash===evidence.imageHash)) return {success:true,alreadyImported:true,message:'这张裁判表已录入'}
+  const lineups={}, entries=[], allowedPlayers={}
+  for (const side of ['home','away']) {
+    const sourceTeamId=String(match[side+'TeamId'] || '')
+    const direct=await readDocumentOrNull(cloud.database(),'tournament_teams',sourceTeamId)
+    const teamId=String(direct?.teamId || sourceTeamId)
+    const roster=await handleRosterExceptionBoard({...event,tournamentId:match.tournamentId,divisionId:match.divisionId,teamId,rosterAction:'listRoster'})
+    if (!roster.success) return roster
+    if (!['approved','confirmed','locked'].includes(String(roster.snapshot?.status || '').toLowerCase())) return {success:false,error:'请先完成双方赛事正式名单审核'}
+    const valid=new Map((roster.rows || []).map(row=>[String(row._id || row.playerId || row.id || ''),row]))
+    const rows=event.teams?.[side]
+    if (!Array.isArray(rows) || rows.length>100 || !rows.length) return {success:false,error:'请补齐双方名单'}
+    const seen=new Set(), players=[], substitutes=[]; allowedPlayers[side]=new Map()
+    for (const row of rows) {
+      if (row.role==='absent' || row.role==='skip') continue
+      const player=valid.get(String(row.playerId || ''))
+      if (!player || seen.has(String(row.playerId)) || !['starter','substitute'].includes(row.role)) return {success:false,error:'请核对球员身份、重复行及首发替补'}
+      seen.add(String(row.playerId))
+      const entry={playerId:String(row.playerId),id:String(row.playerId),name:String(player.name || ''),jerseyNumber:String(player.jerseyNumber || ''),number:String(player.jerseyNumber || ''),isCaptain:!!row.captain,isGoalkeeper:!!row.goalkeeper}
+      allowedPlayers[side].set(entry.playerId,entry)
+      ;(row.role==='starter'?players:substitutes).push(entry)
+      for (const [key,type] of [['goals','goal'],['yellow','yellow_card'],['red','red_card']]) {
+        const raw=String(row[key] || '').trim().replace(/[′'’]/g,'')
+        if (!raw) continue
+        if (!/^\d{1,3}(?:\s*[,，;；、]\s*\d{1,3})*$/.test(raw)) return {success:false,error:'事件分钟请填数字，多次用逗号分隔'}
+        for (const value of raw.split(/[,，;；、]/)) {
+          const minute=Number(value.trim()); if (minute>150) return {success:false,error:'事件分钟须在0至150之间'}
+          const eventId='paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|${side}|${entry.playerId}|${type}|${minute}`).digest('hex').slice(0,24)
+          entries.push({eventId,type,minute,teamId:sourceTeamId,teamSide:side,playerId:entry.playerId,playerName:entry.name,playerNumber:entry.number,source:'organizer_paper_report',evidenceFileId:evidence.fileId})
+        }
+      }
+    }
+    if (!players.length) return {success:false,error:'双方均须确认首发球员'}
+    const maxStarters=Number(String(match.matchFormat || '').match(/(11|9|8|7|5)/)?.[1] || 11)
+    if (players.length>maxStarters) return {success:false,error:'首发人数超过本场比赛人数'}
+    if ([...players,...substitutes].filter(row=>row.isCaptain).length>1 || [...players,...substitutes].filter(row=>row.isGoalkeeper).length>1) return {success:false,error:'请核对队长和守门员标记'}
+    lineups[side]={players,substitutes,source:'organizer_paper_report'}
+  }
+  const substitutions=Array.isArray(event.substitutions)?event.substitutions:[]
+  if (substitutions.length>100) return {success:false,error:'换人记录过多'}
+  for (const [i,row] of substitutions.entries()) {
+    const side=row.side, available=allowedPlayers[side]
+    const incoming=available?.get(String(row.inId)), outgoing=available?.get(String(row.outId))
+    if (!incoming || !outgoing || incoming.playerId===outgoing.playerId || !Number.isInteger(row.minute) || row.minute<0 || row.minute>150) return {success:false,error:'请完整核对换人双方和分钟'}
+    entries.push({eventId:'paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|sub|${i}`).digest('hex').slice(0,24),type:'substitution',minute:row.minute,teamSide:side,teamId:match[side+'TeamId'],playerId:incoming.playerId,playerName:incoming.name,outPlayerId:outgoing.playerId,assistPlayerId:outgoing.playerId,assistName:outgoing.name,source:'organizer_paper_report',evidenceFileId:evidence.fileId})
+  }
+  const existing=Array.isArray(match.events)?match.events:[]
+  const sameEvent=(a,b)=>a.type===b.type && a.playerId===b.playerId && a.teamSide===b.teamSide && Number(a.minute)===Number(b.minute) && String(a.outPlayerId || a.assistPlayerId || '')===String(b.outPlayerId || b.assistPlayerId || '')
+  const events=[...existing,...entries.filter(row=>!existing.some(old=>old.eventId===row.eventId || sameEvent(old,row)))]
+  const score=event.score || {}
+  if (![score.home,score.away].every(value=>Number.isInteger(value)&&value>=0&&value<=99)) return {success:false,error:'请填写0至99的双方比分'}
+  const {calculateMatchEventScore}=await import('./data-center/statistics.mjs')
+  const derived=calculateMatchEventScore({...match,events})
+  if (derived.home!==score.home || derived.away!==score.away) return {success:false,error:'比分与进球记录不一致，请补齐或修正进球记录'}
+  if (event.expectedEventRevision == null || Number(event.expectedEventRevision)!==Number(match.matchEventRevision || 0)) return {success:false,error:'比赛记录已更新，请重新上传核对'}
+  const data={lineups,events,paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
+  return handleCallFunction({...event,functionName:'updateMatch',functionParams:{action:'importPaperReport',matchId:match._id,expectedEventRevision:event.expectedEventRevision,paperReportProof:ocr.signImport(match._id,event.expectedEventRevision,data),data}},true)
 }
 
 async function handleDbQuery(event) {
@@ -5806,7 +5888,7 @@ exports.main = async (event, context) => {
       if (session.success && session.orgId) {
         const db = cloud.database()
         if (await staffPolicy.isStaff(db, session.userId, session.orgId) && !await staffPolicy.owner(db, session.userId, session.orgId)) {
-          const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery', 'reviewRefereeRecord', 'rosterExceptionBoard']
+          const permittedSessionActions = ['getCurrentAccountProfile', 'listServiceBindingOrganizations', 'selectActiveOrganization', 'dbQuery', 'reviewRefereeRecord', 'rosterExceptionBoard', 'recognizeRefereeReport', 'confirmRefereeReport']
           const playerCardViewerActions = ['getPlayerCardsForViewer', 'getPlayerCardForViewer', 'getPlayerCardById']
           if (action === 'uploadImage') {
             const tournamentId = String(params.staffTournamentId || '')
@@ -6026,6 +6108,10 @@ exports.main = async (event, context) => {
         result = await handleRefereeRecordReview(params); break
       case 'rosterExceptionBoard':
         result = await handleRosterExceptionBoard(params); break
+      case 'recognizeRefereeReport':
+        result = await handlePaperRefereeReport(params, false); break
+      case 'confirmRefereeReport':
+        result = await handlePaperRefereeReport(params, true); break
       case 'dbQuery':
         result = await handleDbQuery(params); break
       case 'callFunction':

@@ -105,6 +105,7 @@
             <div class="lineup-header">
               <div class="lineup-title">{{ homeName }} vs {{ awayName }}</div>
               <div class="lineup-actions">
+                <RefereeReportImport :match-id="matchId" :home-name="homeName" :away-name="awayName" :disabled="isRefereeEvidenceLocked" :load-roster="loadApprovedMatchRoster" @saved="loadMatch" />
                 <el-button v-if="!isRefereeEvidenceLocked" type="primary" size="small" @click="openDualVisualEditor">
                   <el-icon><Edit /></el-icon> 编辑阵容
                 </el-button>
@@ -1095,6 +1096,7 @@ import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenalt
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
 import { createRefereeLineupPrintHtml, createRefereeLineupSheet, createRefereePrintLoadingHtml, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import VisualLineupEditor from './VisualLineupEditor.vue'
+import RefereeReportImport from '../../components/match/RefereeReportImport.vue'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
 const route = useRoute()

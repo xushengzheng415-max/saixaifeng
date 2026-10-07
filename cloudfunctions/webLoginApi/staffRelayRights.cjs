@@ -37,6 +37,7 @@ function relayRights(name, params = {}) {
   if (name === 'organizerClaimInvite') return teamActions.has(action) ? ['event.teams'] : claimReviewActions.has(action) || action === '' ? ['event.registration'] : null
   if (name === 'generateSchedule') return drawActions.has(action) ? ['event.draw'] : matchActions.has(action) ? ['event.matches'] : action === 'publishRegulations' ? ['event.competition'] : null
   if (name === 'updateMatch') {
+    if (action === 'importPaperReport') return ['event.matches','event.teams','event.results']
     if (action === 'assignByHeadReferee') return null // Head referee uses a separate personal identity.
     if (action === 'undoLastScheduleAdjustment') return ['event.matches']
     if (action === 'finishOrganizerMatch') return ['event.results']
