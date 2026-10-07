@@ -39,11 +39,10 @@
             <el-select v-model="row.inId" filterable placeholder="换上"><el-option v-for="p in activePlayers(row.side)" :key="p.playerId" :label="`${p.number}号 ${p.name}`" :value="p.playerId" /></el-select>
             <el-button link type="danger" @click="substitutions.splice(i,1)">删除</el-button>
           </div>
-          <el-checkbox v-model="replaceLineup">以核对后的名单更新双方阵容</el-checkbox>
         </template>
       </section>
     </div>
-    <template #footer><el-button :disabled="busy" @click="visible=false">取消</el-button><el-button :disabled="busy" @click="chooseFile">重新上传</el-button><el-button v-if="error && !draft" :disabled="busy" @click="recognize">重试</el-button><el-button type="primary" :disabled="!draft || busy || !replaceLineup" :loading="saving" @click="confirm">确认录入</el-button></template>
+    <template #footer><el-button :disabled="busy" @click="visible=false">取消</el-button><el-button :disabled="busy" @click="chooseFile">重新上传</el-button><el-button v-if="error && !draft" :disabled="busy" @click="recognize">重试</el-button><el-button type="primary" :disabled="!draft || busy" :loading="saving" @click="confirm">确认录入</el-button></template>
   </el-dialog>
 </template>
 
@@ -53,7 +52,7 @@ import { ElMessage } from 'element-plus'
 import { callFunctionHTTP } from '../../utils/cloud'
 const props=defineProps({matchId:String,homeName:String,awayName:String,disabled:Boolean,loadRoster:Function})
 const emit=defineEmits(['saved'])
-const visible=ref(false),busy=ref(false),saving=ref(false),stage=ref('正在识别'),error=ref(''),preview=ref(''),draft=ref(null),fileInput=ref(null),side=ref('home'),rosters=ref({home:[],away:[]}),substitutions=ref([]),replaceLineup=ref(false)
+const visible=ref(false),busy=ref(false),saving=ref(false),stage=ref('正在识别'),error=ref(''),preview=ref(''),draft=ref(null),fileInput=ref(null),side=ref('home'),rosters=ref({home:[],away:[]}),substitutions=ref([])
 let imageBase64=''; let generation=0
 const roles=[{label:'待确认',value:'unknown'},{label:'首发',value:'starter'},{label:'替补',value:'substitute'},{label:'不出场',value:'absent'}]
 const fields=[{key:'on',label:'换上'},{key:'off',label:'换下'},{key:'goals',label:'进球'},{key:'yellow',label:'黄牌'},{key:'red',label:'红牌'}]
@@ -67,7 +66,7 @@ function addPlayer(){draft.value.teams[side.value].push({playerId:'',name:'',num
 async function readFile(event){
   const file=event.target.files?.[0];event.target.value='';if(!file)return
   if(!['image/jpeg','image/png'].includes(file.type)||file.size>3*1024*1024)return ElMessage.warning('请选择不超过3MB的JPG或PNG照片')
-  revoke();preview.value=URL.createObjectURL(file);visible.value=true;draft.value=null;replaceLineup.value=false;error.value=''
+  revoke();preview.value=URL.createObjectURL(file);visible.value=true;draft.value=null;error.value=''
   try{imageBase64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('照片读取失败，请重新选择'));reader.readAsDataURL(file)});await recognize()}catch(e){error.value=e.message}
 }
 async function recognize(){
