@@ -40,13 +40,17 @@ function marked(value, kind) {
 }
 function parseTables(tableResult, textResult) {
   const teams = { home: [], away: [] }; const warnings = []
-  for (const table of tableResult.tables_result || []) {
+  const left = table => Math.min(...(table.table_location || []).map(point=>Number(point.x)).filter(Number.isFinite), Infinity)
+  // Some providers split the two adjacent roster halves into separate tables.
+  const tables=[...(tableResult.tables_result || [])].sort((a,b)=>left(a)-left(b))
+  let singleHeaderCount=0
+  for (const table of tables) {
     const cells = (table.body || []).map(cell => ({ row: index(cell.row_start ?? cell.row), col: index(cell.col_start ?? cell.column), text: cellText(cell) }))
     const names = cells.filter(cell => /队员姓名/.test(cell.text.replace(/\s/g, ''))).sort((a,b) => a.row-b.row || a.col-b.col)
     if (!names.length) continue
     const headers = names.slice(0, 2)
     for (let i=0; i<headers.length; i++) {
-      const header=headers[i], side=i===0 ? 'home' : 'away', start=header.col-1
+      const header=headers[i], side=headers.length===1 ? (singleHeaderCount++ % 2===0?'home':'away') : i===0 ? 'home' : 'away', start=header.col-1
       const rows=[...new Set(cells.filter(cell => cell.row>header.row).map(cell=>cell.row))].sort((a,b)=>a-b)
       for (const row of rows) {
         const get=offset => cells.find(cell=>cell.row===row && cell.col===start+offset)?.text.trim() || ''
