@@ -19,7 +19,7 @@
       <article v-for="item in metrics" :key="item.label" class="metric-card" :class="item.tone"><span class="metric-icon"><el-icon><component :is="item.icon" /></el-icon></span><div><p>{{ item.label }}</p><strong>{{ item.value }}</strong><small>{{ item.note }}</small></div></article>
     </section>
 
-    <el-alert class="console-tip" type="success" :closable="false" show-icon title="基础版组别按球队、比分和赛果运行；专业版组别增加球员档案、参赛名单和个人数据。" />
+    <el-alert class="console-tip" type="success" :closable="false" show-icon title="按青少年或成人组别管理球队、参赛名单、比赛和赛果。" />
     <section v-if="!qaSnapshot && divisions.length" class="plan-confirm-panel" aria-label="最终竞赛方案确认"><div><strong>确认竞赛方案并进入比赛管理</strong><p>球队、抽签和赛程全部完成后执行；确认后当前组别版本永久锁定。</p></div><el-tag v-if="lockedDivisionCount" type="success" effect="plain">已锁定 {{ lockedDivisionCount }} 个组别</el-tag></section>
 
     <div class="middle-grid">

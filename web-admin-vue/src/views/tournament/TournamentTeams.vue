@@ -14,7 +14,7 @@
         <span class="context-divider"></span>
         <span v-if="!pageLoadError">{{ activeDivisionDisplayName }}</span>
         <el-tag :type="isProfessional ? 'warning' : 'success'" effect="plain" round>
-          {{ isProfessional ? '专业版' : '基础版 · 免费' }}
+          {{ divisionParticipantType(activeDivision,tournament)==='adult'?'成人模式':'青少年模式' }}
         </el-tag>
       </div>
       <el-button plain @click="router.push('/tournament-space')">返回赛事空间</el-button>
@@ -102,7 +102,7 @@
       <el-alert
         v-if="!isRegistrationWorkspace && activeTab !== 'materials' && !teamCardMode"
         class="teams-mode-notice"
-        :title="isSimpleChangeView ? `本组报名已于 ${simpleChangeDeadline} 截止；参赛队名与队徽已锁定，普通流程不再允许修改。` : (isApplicationReviewView ? '球队可通过主办方邀请进入，或在赛小蜂小程序搜索赛事后申请；无论哪种入口，球队都必须在小程序完成认领与参赛确认。' : (isProfessional ? '专业版按赛事正式名单管理球员资格；审核后的名单与比赛阵容均保留独立快照。' : '基础版以球队为单位快速参赛；需要球员资格审核与正式名单时，可将组别升级为专业版。'))"
+        :title="isSimpleChangeView ? `本组报名已于 ${simpleChangeDeadline} 截止；参赛队名与队徽已锁定，普通流程不再允许修改。` : (isApplicationReviewView ? '球队可通过主办方邀请进入，或在赛小蜂小程序搜索赛事后申请；无论哪种入口，球队都必须在小程序完成认领与参赛确认。' : (isProfessional ? '按赛事名单管理球员资格；审核名单与比赛阵容保留独立快照。' : '按组别设置管理球队、报名名单和参赛资格。'))"
         :type="isSimpleChangeView ? 'info' : (isProfessional ? 'warning' : 'success')"
         :closable="false"
         show-icon
@@ -580,6 +580,7 @@ import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
 import QRCode from 'qrcode'
 import DemoTeamClaim from '../../components/tournament/DemoTeamClaim.vue'
+import { divisionParticipantType, virtualTeamMatchesDivision } from '../../utils/divisionBasics'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, Upload, UserFilled, DocumentChecked, WarningFilled, Timer, CircleCheckFilled, Lock, Download, Link, Grid, CopyDocument, Key } from '@element-plus/icons-vue'
@@ -1010,7 +1011,7 @@ async function openSyntheticTeamDialog() {
     const teams = await queryList('teams', { where:{ synthetic:true }, orderBy:{ name:'asc' }, limit:100, silent:true })
     const ageGroup = syntheticAgeFilterEnabled.value ? String(activeDivision.value.ageGroup || '').toUpperCase() : ''
     const existingIds = new Set(divisionTournamentTeams.value.map(item => String(item.teamId || '')))
-    syntheticTeamCandidates.value = (teams || []).filter(team => !ageGroup || String(team.ageGroup || '').toUpperCase() === ageGroup).map(team => ({ ...team, alreadyAdded:existingIds.has(String(team._id)) }))
+    syntheticTeamCandidates.value = (teams || []).filter(team => isDemoMode(tournamentId) ? virtualTeamMatchesDivision(team,activeDivision.value,tournament.value) : (!ageGroup || String(team.ageGroup || '').toUpperCase() === ageGroup)).map(team => ({ ...team, alreadyAdded:existingIds.has(String(team._id)) }))
   } catch (error) {
     syntheticTeamCandidates.value = []
     ElMessage.error(error.message || '虚拟球队加载失败')
@@ -1973,7 +1974,7 @@ async function submitCreateTeam() {
     return false
   }
   if (!isSimpleMode && isProfessional.value && (!form.contactName.trim() || !form.contactPhone.trim())) {
-    ElMessage.warning('专业版请填写球队负责人和负责人手机号')
+    ElMessage.warning('请填写球队负责人和负责人手机号')
     return false
   }
   if (isSimpleMode) {

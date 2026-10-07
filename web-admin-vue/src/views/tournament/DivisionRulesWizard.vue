@@ -240,6 +240,7 @@ import DivisionRegulationFields from './DivisionRegulationFields.vue'
 import { findRecognizedDivision, recognizedDivisionRulePayload } from '../../utils/regulationRecognition'
 import { isDemoMode } from '../../utils/demoMode'
 import { recognizeStoredDemoRegulation } from '../../utils/demoRegulations'
+import { divisionParticipantType } from '../../utils/divisionBasics'
 
 const route = useRoute()
 const router = useRouter()
@@ -532,7 +533,7 @@ watch(() => form.drawResolution, mode => {
   }
 })
 const knockoutTieBreakLabel = computed(() => form.knockoutTieBreak === 'penalties' ? '直接点球决胜' : '加时赛 + 点球决胜')
-const modeStateText = computed(() => effective.value ? `${isProfessional.value ? '专业模式' : '基础模式'} · 已锁定` : `${isProfessional.value ? '专业模式' : '基础模式'} · ${activeKey.value === 'finalize' ? '待定版' : '当前配置'}`)
+const modeStateText = computed(() => `${divisionParticipantType(division.value,tournament.value)==='adult'?'成人模式':'青少年模式'} · ${effective.value?'已锁定':activeKey.value==='finalize'?'待定版':'当前配置'}`)
 const pageSubtitle = computed(() => {
   if (effective.value) return `查看${division.value.name || '当前组别'}已定版的竞赛规则。`
   if (!isProfessional.value) return '配置球队级赛制与基础比赛规则'

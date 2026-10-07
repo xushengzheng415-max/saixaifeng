@@ -168,6 +168,7 @@ import { findVisiblePixelBounds } from '../../utils/imageBounds'
 import { maskRegistrationIdentity, parseTeamRegistrationDocx } from '../../utils/teamRegistrationDocx'
 import { REGISTRATION_FIELDS, REGISTRATION_PRESETS, createRegistrationTemplate } from '../../utils/registrationTemplate'
 import { isDemoMode } from '../../utils/demoMode'
+import { divisionParticipantType } from '../../utils/divisionBasics'
 
 const props = defineProps({
   tournamentId: { type: String, required: true },
@@ -179,8 +180,8 @@ const emit = defineEmits(['cancel', 'success'])
 
 const teams = ref([])
 const templateDialogVisible=ref(false)
-const templatePreset=ref('youth')
-const templateFields=ref([...REGISTRATION_PRESETS.youth])
+const templatePreset=ref(divisionParticipantType(props.division))
+const templateFields=ref([...REGISTRATION_PRESETS[templatePreset.value]])
 const downloadingTemplate=ref(false)
 function applyTemplatePreset(value){templateFields.value=[...REGISTRATION_PRESETS[value]]}
 const parsingKeys = ref(new Set())
