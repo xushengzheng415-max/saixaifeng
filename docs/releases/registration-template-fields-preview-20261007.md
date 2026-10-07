@@ -9,3 +9,18 @@ Word 通用、青少年、成人文件均经过 render_docx.py 渲染并逐页�
 真实 importTeamRegistrationBatch 接口增加出生日期/位置处理，身份证缺失保留草稿并不计入正式名单 ID；本次只有代码，生产接口发布待用户独立授权（PREVIEW_RELEASE_WORKFLOW.md 第 68 行）。正式 `/admin/` 未授权覆盖。
 
 test-registration-template-fields.mjs、旧跨页号码和兼任球员检查通过；源函数语法检查通过。全数据治理原有副本漂移未在此次处理。发布后追加资源回读证据。
+
+## 发布回读
+
+功能 fc61137，预览构建 4df6070a，278 个静态文件上传成功；生产 tournamentRegistrationFlow 未更新，独立授权问题仍待用户答复。
+
+| 资源 | HTTP | SHA-256 |
+| --- | --- | --- |
+| index.html | 200 | 0AE4E899E393195A53371A83D5F1BC3C763B6BCDD80FB11DD181429DC8B2F4F7 |
+| team-registration-form-template.docx | 200 | 747FEF562A1E9D3C770C30DB915A03D1D0DB126515236E49B390F12DF0D7C7E3 |
+| team-registration-youth-template.docx | 200 | A1239E6322B9BFE0429FBF6F3F6D95B28E71D0B69C4B1A48C13F584528548800 |
+| team-registration-adult-template.docx | 200 | 7C2F161C51432842683CF4F76932B2868697AD734F2DF61C1CEF40A2DFBD77A7 |
+| demo-team-invitation.svg | 200 | 7DB12DC2D51357EB78E822E4D55AB3E3D615AD3C10365CD562238ACD08EF8D34 |
+| TournamentTeams-CdgGh0vJ.js | 200 | 7D62BE78B2A899D2AE6066C87093AABC5E71ECEC56BD560AF64A2618EAA0F2A3 |
+
+哈希与构建匹配，正式 `/admin/` 入口摘要仍为 604820920BCBF12BF141FADA29AC3E107787F627FFFACFDA1F17C0135ACA80B1。未修改用户下载目录中的旧报名表文件，也未创建真实球队、球员或发送真实邀请。
