@@ -4590,6 +4590,16 @@ async function handlePaperRefereeReport(event, confirming) {
     entries.push({eventId:'paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|sub|${i}`).digest('hex').slice(0,24),type:'substitution',minute:row.minute,teamSide:side,teamId:match[side+'TeamId'],playerId:incoming.playerId,playerName:incoming.name,outPlayerId:outgoing.playerId,assistPlayerId:outgoing.playerId,assistName:outgoing.name,source:'organizer_paper_report',evidenceFileId:evidence.fileId})
   }
   const existing=Array.isArray(match.events)?match.events:[]
+  // Existing frozen lineup evidence can only be reused, never silently replaced.
+  if (match.lineupsLocked || ['finished','completed'].includes(String(match.status || '').toLowerCase())) {
+    for (const side of ['home','away']) {
+      const old=match[side+'Lineup'] || match.refereeRosters?.[side] || match.lineups?.[side]
+      if (!old || !(old.players?.length || old.starters?.length)) continue
+      const ids=rows=>(rows || []).map(row=>String(row.playerId || row.id || row._id || '')).sort().join('|')
+      if (ids(old.starters || old.players)!==ids(lineups[side].players) || ids(old.substitutes || old.bench)!==ids(lineups[side].substitutes)) return {success:false,error:'已核定阵容与裁判表不一致，请通过阵容更正流程处理'}
+      lineups[side]=old
+    }
+  }
   const sameEvent=(a,b)=>a.type===b.type && a.playerId===b.playerId && a.teamSide===b.teamSide && Number(a.minute)===Number(b.minute) && String(a.outPlayerId || a.assistPlayerId || '')===String(b.outPlayerId || b.assistPlayerId || '')
   const events=[...existing,...entries.filter(row=>!existing.some(old=>old.eventId===row.eventId || sameEvent(old,row)))]
   const score=event.score || {}
