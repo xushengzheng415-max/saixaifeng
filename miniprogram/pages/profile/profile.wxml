@@ -16,6 +16,13 @@
       <view class="user-main"><text>{{userName}}</text><text>{{phoneMasked}}</text><text class="login-tag {{phoneStateClass}}">{{phoneVerifiedText}}</text></view>
       <text class="chevron">›</text>
     </view>
+    <view wx:if="{{isShared}}" class="shared-authority">
+      <view class="shared-authority-head"><text>共享授权</text><text wx:if="{{canSwitchWorkspace}}" bindtap="onSwitchWorkspace">切换空间 ›</text></view>
+      <text class="shared-workspace-name">{{workspaceName}}</text>
+      <text class="shared-role">赛事协作者</text>
+      <text class="shared-permissions">{{sharedPermissionText}}</text>
+    </view>
+    <block wx:if="{{!isShared}}">
     <view class="authorization-card">
       <view class="authorization-head"><text>账号授权</text><text>按手机号隔离</text></view>
       <view class="authorization-row"><text>授权岗位</text><text>{{positionsText}}</text></view>
@@ -29,6 +36,7 @@
         <view><text>{{workspaceName}}</text><text>当前使用身份</text><text class="identity-tag">{{currentIdentityName}}</text></view>
       </view>
     </view>
+    </block>
     <view class="profile-menu">
       <view class="menu-row" wx:for="{{primaryMenus}}" wx:key="action" data-action="{{item.action}}" bindtap="onMenuTap">
         <image src="{{item.icon}}" mode="aspectFit"></image><text>{{item.title}}</text><text class="menu-badge" wx:if="{{item.badgeText}}">{{item.badgeText}}</text><text class="menu-arrow">›</text>

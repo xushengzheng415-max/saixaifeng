@@ -14,3 +14,5 @@
 .identity-body text:first-child{font-size:37rpx}
 .profile-menu text:nth-child(2){font-size:32rpx}
 .logout{font-size:32rpx}
+
+.shared-authority{margin-top:24rpx;padding:24rpx;background:#fff;border-radius:14rpx;color:#203629}.shared-authority-head{display:flex;align-items:center;justify-content:space-between;font-size:29rpx;font-weight:600}.shared-authority-head text:last-child{font-size:23rpx;font-weight:400;color:#087b3d}.shared-workspace-name{display:block;margin-top:22rpx;font-size:28rpx;font-weight:500;line-height:1.5}.shared-role{display:block;margin-top:14rpx;font-size:24rpx;color:#087b3d}.shared-permissions{display:block;margin-top:18rpx;padding-top:18rpx;border-top:1rpx solid #e2eae5;color:#65746b;font-size:25rpx;line-height:1.7}

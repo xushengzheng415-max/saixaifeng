@@ -84,8 +84,8 @@
     <block wx:if="{{isLoggedIn}}">
       <view wx:if="{{isShared}}" class="section">
         <view class="section-heading"><text>共享赛事</text><text bindtap="goToSharedEvents">全部赛事 ›</text></view>
-        <view class="overview-card" wx:for="{{sharedTournaments}}" wx:key="id" data-id="{{item.id}}" bindtap="onTournamentTap">
-          <text class="overview-name">{{item.name}}</text><text class="overview-status">{{item.statusText}}</text>
+        <view class="overview-card shared-overview" wx:for="{{sharedTournaments}}" wx:key="id" data-id="{{item.id}}" bindtap="onTournamentTap">
+          <text class="overview-name">{{item.name}}</text><view class="shared-card-footer"><text class="overview-status">{{item.statusText}}</text><text>进入赛事 ›</text></view>
         </view>
       </view>
       <view wx:if="{{!isShared}}" class="overview-card {{overviewClass}}">

@@ -5,6 +5,7 @@ const RIGHTS = {
   'event.referees': '裁判管理', 'event.settings': '赛事设置',
   'result.supplement': '补录成绩', 'news.edit': '新闻编辑', 'news.publish': '新闻发布／撤回'
 }
+const { decorateTournament } = require('./data-center/lifecycle.cjs')
 const text = value => String(value == null ? '' : value).trim()
 
 async function list(db, userId) {
@@ -26,6 +27,7 @@ async function list(db, userId) {
     try { const reply = await db.collection('tournaments').doc(text(grant.tournamentId)).get(); event = Array.isArray(reply.data) ? reply.data[0] : reply.data }
     catch (error) { if (/document.*(not exist|not found)/i.test(String(error.message || ''))) continue; throw error }
     if (!event || text(event.orgId || event.organizationId || event.organization_id) !== text(grant.orgId)) continue
+    event = decorateTournament(event)
     const permissions = [...new Set((Array.isArray(grant.permissions) ? grant.permissions : []).filter(right => RIGHTS[right]))]
     if (!permissions.length) continue
     const status = text(event.status)
@@ -34,7 +36,7 @@ async function list(db, userId) {
       name: text(event.name || event.tournamentName) || '赛事',
       isShared: true, isHosted: false, isParticipating: false, relation: 'shared', relationText: '共享赛事',
       permissions, permissionText: permissions.map(right => RIGHTS[right]).join('、'),
-      status, statusText: ({draft:'待开始',upcoming:'待开始',registering:'报名中',ongoing:'进行中',completed:'已结束',finished:'已结束'})[status] || '赛事',
+      status, statusText: event.statusText,
       dateText: [text(event.startDate).slice(0,10),text(event.endDate).slice(0,10)].filter(Boolean).join(' — '),
       location: text(event.location || event.city), modeText: '',
       teamCountText: '', matchCountText: '', cardClass: 'event-card-simple'

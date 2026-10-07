@@ -1,13 +1,10 @@
 <view class="shared-page">
+  <view class="return-link" bindtap="onBack">‹ 赛事列表</view>
   <view wx:if="{{loading}}" class="state">加载中…</view>
   <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="loadSharedEvent">重新加载</button></view>
   <view wx:else>
-    <view class="name">{{name}}</view>
-    <view class="meta">{{statusText}}</view>
-    <view wx:if="{{dateText}}" class="meta">{{dateText}}</view>
-    <view wx:if="{{location}}" class="meta">{{location}}</view>
-    <view class="modules"><view class="module" wx:for="{{modules}}" wx:key="id" data-id="{{item.id}}" bindtap="onModule"><text>{{item.title}}</text><text>›</text></view></view>
+    <view class="summary"><view class="name">{{name}}</view><text class="status">{{statusText}}</text><view class="meta"><text>{{dateText}}</text><text>{{location}}</text></view></view>
+    <view class="modules"><view class="module" wx:for="{{modules}}" wx:key="id" data-id="{{item.id}}" bindtap="onModule"><text>{{item.title}}</text><view class="module-end"><text wx:if="{{item.tag}}" class="tag">{{item.tag}}</text><text>›</text></view></view></view>
     <view wx:if="{{!hasModules}}" class="note">当前未授权手机模块，请联系主办方。</view>
   </view>
-  <button class="back" bindtap="onBack">返回赛事列表</button>
 </view>

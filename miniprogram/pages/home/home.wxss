@@ -128,3 +128,5 @@ page{background:#001d12}
 .guest-service-card image{display:block;width:72rpx;height:72rpx}
 .guest-service-title{margin-top:12rpx;font-size:29rpx;font-weight:800}
 .guest-service-desc{margin-top:8rpx;color:rgba(255,255,255,.62);font-size:18rpx;line-height:1.4}
+
+.topbar.shared-topbar{height:108rpx}.shared-topbar .role-title{font-size:36rpx;font-weight:600}.shared-overview{height:auto;min-height:164rpx;padding:25rpx 26rpx;border-radius:14rpx;box-shadow:none}.shared-overview:after{display:none}.shared-overview .overview-name{max-width:100%;margin-top:0;font-size:31rpx;line-height:1.45;font-weight:600;letter-spacing:0}.shared-card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:18rpx;font-size:25rpx}.shared-card-footer .overview-status{margin-top:0;border-radius:6rpx}

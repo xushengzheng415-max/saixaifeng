@@ -238,10 +238,10 @@ Page({
       otherSectionEmptyText: isOrganizer ? '当前没有可见赛事赛程' : '当前没有课程安排',
       matchSectionTitle: isOrganizer ? '今日比赛' : '最近比赛',
       overviewClass: isOrganizer ? 'organizer-overview' : '',
-      topbarClass: isOrganizer ? 'organizer-topbar' : ''
+      topbarClass: isShared ? 'shared-topbar' : (isOrganizer ? 'organizer-topbar' : '')
     }
     if (isShared) {
-      data.roleTitle = '共享协作'; data.metrics = []; data.hasTaskCards = false; data.homeTaskCards = []
+      data.roleTitle = '赛事协作'; data.metrics = []; data.hasTaskCards = false; data.homeTaskCards = []
     } else if (isOrganizer) {
       var tournament = (context.tournaments || [])[0] || {}
       data.overviewTitle = '今日赛事概况'; data.overviewName = tournament.name || '暂无进行中的赛事'; data.hasOverviewName = true

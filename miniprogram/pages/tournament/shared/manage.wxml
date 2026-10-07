@@ -2,13 +2,14 @@
   <view wx:if="{{loading}}" class="state">加载中…</view>
   <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="onBack">重新加载</button></view>
   <block wx:else>
+    <view wx:if="{{dataWarning}}" class="data-warning">{{dataWarning}}</view>
     <block wx:if="{{!isDetail}}">
       <view wx:if="{{isReferees}}" class="actions"><button bindtap="addReferee" disabled="{{submitting}}">添加临时裁判</button><button bindtap="inviteReferee" disabled="{{submitting}}">邀请持证裁判</button></view>
       <view wx:if="{{!hasItems}}" class="state">当前赛事暂无记录</view>
       <view wx:for="{{items}}" wx:key="id" class="list-row">
         <view class="row-main" data-id="{{item.id}}" bindtap="onOpen">
           <image wx:if="{{item.hasLogo}}" class="logo" src="{{item.logo}}" mode="aspectFit"/>
-          <view class="row-copy"><text class="name">{{item.name}}</text><text class="meta">{{item.detail}}</text><text class="meta">{{item.date}} {{item.time}} {{item.venue}}</text></view>
+          <view class="row-copy"><text class="name">{{item.name}}</text><text class="meta">{{item.detail}}</text><text wx:if="{{item.missingTeam}}" class="meta">球队资料待补齐</text><text class="meta">{{item.date}} {{item.time}} {{item.venue}}</text></view>
           <view><text class="status">{{item.status}}</text><text class="score">{{item.score}}</text></view>
         </view>
         <view wx:if="{{isResults}}" class="meta">核查状态：{{item.reviewStatus}}</view>

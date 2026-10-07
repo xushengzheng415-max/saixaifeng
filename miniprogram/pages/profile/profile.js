@@ -1,4 +1,5 @@
 var workspace = require('../../utils/workspace')
+var sharedUi = require('../../utils/sharedEventUi')
 var release = require('../../config/release')
 
 var identityMeta = {
@@ -116,6 +117,8 @@ Page({
     var current = context.currentWorkspace
     var identity = context.currentIdentity || {}
     var currentId = identity.id || 'team_coach'
+    var isShared=current.type==='tournament_shared'
+    var sharedModules=sharedUi.modules(current.sharedPermissions || [])
     var available = identity.available || [currentId]
     var options = available.map(function(id) {
       var meta = identityMeta[id] || identityMeta.team_coach
@@ -131,6 +134,9 @@ Page({
     })
     this.setData({
       loading: false,
+      isShared:isShared,
+      canSwitchWorkspace:(context.workspaces || []).length>1,
+      sharedPermissionText:sharedModules.map(function(module){return module.title}).join('、') || '暂无手机模块授权',
       userName: user.nickName || '微信用户',
       userAvatar: user.avatarUrl || '',
       hasUserAvatar: Boolean(user.avatarUrl),
@@ -156,6 +162,7 @@ Page({
   },
 
   goToInfo: function() { if (this.data.guestMode) return workspace.promptLogin('登录后可维护头像、昵称和账号安全信息。'); wx.navigateTo({ url: '/pages/profile/info/info' }) },
+  onSwitchWorkspace:function(){var that=this;workspace.chooseWorkspace(workspace.readContext()).then(function(context){that.applyContext(context)}).catch(function(error){wx.showToast({title:sharedUi.message(error),icon:'none'})})},
   goToMessages: function() { if (this.data.guestMode) return workspace.promptLogin('登录后可接收并查看与你相关的赛事和球队消息。'); wx.navigateTo({ url: '/pages/messages/index' }) },
 
   onMenuTap: function(event) {

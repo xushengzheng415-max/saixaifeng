@@ -1,0 +1,4 @@
+var MODULES=[{id:'registration',title:'报名管理',right:'event.registration'},{id:'teams',title:'球队管理',right:'event.teams',tag:'只读'},{id:'matches',title:'比赛管理',right:'event.matches'},{id:'results',title:'赛果管理',right:'event.results'},{id:'referees',title:'裁判管理',right:'event.referees'}]
+function modules(rights){return MODULES.filter(function(item){return (rights || []).indexOf(item.right)>=0})}
+function message(error){var value=String(error && (error.message || error.errMsg) || error || '');if(/document\.get|document with _id|does not exist/i.test(value))return '部分资料已删除，请返回列表重新加载';if(/timeout|超时/i.test(value))return '加载超时，请重试';if(/permission|denied|权限|授权|停用/i.test(value))return '授权已变化，请返回赛事列表重新进入';if(/[A-Za-z]{5,}/.test(value))return '资料加载失败，请重试';return value || '资料加载失败，请重试'}
+module.exports={modules:modules,message:message}

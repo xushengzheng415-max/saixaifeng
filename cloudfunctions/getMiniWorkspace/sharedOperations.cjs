@@ -16,8 +16,15 @@ async function rows(db, collection, where, optional=false) {
   }
 }
 async function doc(db,collection,id) {
-  const reply=await db.collection(collection).doc(str(id)).get()
-  return Array.isArray(reply.data) ? reply.data[0] : reply.data
+  if(!str(id)) return null
+  try {
+    const reply=await db.collection(collection).doc(str(id)).get()
+    return Array.isArray(reply.data) ? reply.data[0] || null : reply.data || null
+  } catch(error) {
+    const code=str(error.code || error.errCode),message=str(error.message || error.errMsg)
+    if(/^(?:DATABASE_)?DOCUMENT_(?:NOT_EXIST|NOT_FOUND)$/i.test(code) || /(?:^|\s)document(?:\s+with\s+_id\s+\S+)?\s+(?:does not exist|not exist|not found)/i.test(message)) return null
+    throw error
+  }
 }
 async function authorized(db,identity,event,right) {
   const grant=(await shared.list(db,identity.user._id)).find(item=>item.id===str(event.tournamentId))
@@ -98,7 +105,7 @@ async function run(db,cloud,identity,event) {
     const registrations=(await rows(db,'tournament_teams',{tournamentId})).filter(row=>!['removed','deleted','replaced','invite_cancelled'].includes(str(row.status))), teams=await teamMap(db,registrations)
     let items=[]
     if(mode==='teams') items=[...teams.values()].map(item=>({id:str(item._id),name:str(item.name || item.teamName),logo:str(item.logoTransparent || item.logoUrl || item.logo),status:'查看资料',detail:str(item.cityName || item.city),description:str(item.description),shortName:str(item.shortName),teamCode:str(item.teamCode || item.code)}))
-    if(mode==='registration') items=registrations.map(item=>({id:str(item._id),name:str((teams.get(str(item.teamId)) || {}).name || item.teamName),status:statusLabel(item.status),detail:str(item.divisionName),canReview:['pending','submitted'].includes(str(item.status))}))
+    if(mode==='registration') items=registrations.map(item=>({id:str(item._id),name:str((teams.get(str(item.teamId)) || {}).name || item.teamName) || '球队资料待补齐',status:statusLabel(item.status),detail:str(item.divisionName),missingTeam:!teams.has(str(item.teamId)),canReview:teams.has(str(item.teamId)) && str(item.status)==='pending'}))
     if(mode==='matches' || mode==='results') items=(await rows(db,'matches',{tournamentId})).filter(row=>row.deleted!==true && row.isDeleted!==true && !['removed','deleted'].includes(str(row.status))).map(item=>matchView(item,teams)).sort((a,b)=>(a.date+' '+a.time).localeCompare(b.date+' '+b.time))
     if(mode==='referees') {
       const direct=await rows(db,'referees',{tournamentId},true), relations=await rows(db,'tournament_referees',{tournamentId},true)
@@ -107,7 +114,8 @@ async function run(db,cloud,identity,event) {
       for(const match of await rows(db,'matches',{tournamentId})) for(const id of refereeIds(match)) {if(records.has(id)){records.get(id).assigned=true;continue} const item=await doc(db,'referees',id);if(item)records.set(id,{item,relation:null,assigned:true})}
       items=[...records.values()].map(({item,relation,assigned})=>({id:str(item._id),name:str(item.name || item.realName),status:statusLabel(item.status),detail:item.temporaryReferee ? '赛事临时裁判' : '持证裁判',availability:str((relation || item).availabilityStatus),canConfirm:item.temporaryReferee===true && item.temporaryClaimStatus==='claimed_pending_review' && item.wechatBound===true,canManage:Boolean(relation || item.eventScoped===true || assigned || str(item.tournamentId)===tournamentId),relationId:str(relation && relation._id)}))
     }
-    return {success:true,items:await media(cloud,items)}
+    const missingTeams=[...new Set(registrations.map(item=>str(item.teamId)).filter(id=>id && !teams.has(id)))]
+    return {success:true,items:await media(cloud,items),warning:mode==='registration' && missingTeams.length ? '部分球队资料已删除，请主办方在 PC 补齐关联；其他报名可继续查看。' : ''}
   }
   if(mode==='teams' && operation==='detail') {
     const registrations=await rows(db,'tournament_teams',{tournamentId,teamId:str(event.id)})
@@ -122,7 +130,7 @@ async function run(db,cloud,identity,event) {
     const team=await doc(db,'teams',item.teamId),canReviewPlayers=grant.permissions.includes('event.teams')
     const eligible=participantIds(item,snapshots)
     const players=canReviewPlayers ? (await rows(db,'players',{teamId:str(item.teamId)})).filter(player=>eligible.has(str(player._id)) || [player.tournamentId,player.registrationTournamentId,player.sourceTournamentId].some(id=>str(id)===tournamentId)).map(player=>({id:str(player._id),name:str(player.name),jerseyNumber:str(player.jerseyNumber),birthDate:str(player.birthDate || player.birthday),qualification:str(player.identityVerificationStatus || '待核对'),status:player.organizerReviewStatus==='approved'?'已审核':'未审核',canApprove:player.organizerReviewStatus!=='approved'})) : []
-    return {success:true,item:{id:str(item._id),name:str(item.teamName || team && team.name),status:statusLabel(item.status),detail:str(item.divisionName),reason:str(item.reviewReason),canReview:str(item.status)==='pending',canReviewPlayers,players,rosters:snapshots.map(row=>({id:str(row._id),status:statusLabel(row.status),players:(row.players || []).map(player=>({id:str(player.playerId || player._id || player.id),name:str(player.name || player.playerName),jerseyNumber:str(player.jerseyNumber),qualification:str(player.status || player.identityVerificationStatus)}))}))}}
+    return {success:true,item:{id:str(item._id),name:str(item.teamName || team && team.name) || '球队资料待补齐',status:statusLabel(item.status),detail:str(item.divisionName),reason:!team ? '球队资料已删除，请主办方在 PC 补齐后再审核。' : str(item.reviewReason),canReview:Boolean(team) && str(item.status)==='pending',canReviewPlayers:Boolean(team) && canReviewPlayers,players,rosters:snapshots.map(row=>({id:str(row._id),status:statusLabel(row.status),players:(row.players || []).map(player=>({id:str(player.playerId || player._id || player.id),name:str(player.name || player.playerName),jerseyNumber:str(player.jerseyNumber),qualification:str(player.status || player.identityVerificationStatus)}))}))}}
   }
   if(mode==='registration' && operation==='approvePlayer') {
     await authorized(db,identity,event,'event.teams')
@@ -135,6 +143,7 @@ async function run(db,cloud,identity,event) {
   }
   if(mode==='registration' && operation==='review') {
     const item=await related(db,'tournament_teams',event.id,tournamentId)
+    if(!await doc(db,'teams',item.teamId)) throw new Error('球队资料已删除，请主办方在 PC 补齐后再审核')
     if(!['pending','submitted'].includes(str(item.status))) throw new Error('报名状态已变更，请刷新后审核')
     if(!['approved','rejected'].includes(str(event.decision))) throw new Error('审核决定无效')
     if(event.decision==='rejected' && !str(event.reason)) throw new Error('请填写驳回原因')
