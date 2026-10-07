@@ -4544,9 +4544,13 @@ async function handlePaperRefereeReport(event, confirming) {
     const downloaded=await cloud.downloadFile({fileID:fileId})
     const image=downloaded.fileContent
     if(!Buffer.isBuffer(image) || !image.length || image.length>3*1024*1024)return {success:false,error:'请选择不超过3MB的JPG或PNG照片'}
-    const recognized=await ocr.recognize(image.toString('base64'))
-    const evidence={matchId:String(match._id),fileId,imageHash:recognized.imageHash}
-    return {success:true,data:{teams:recognized.teams,score:recognized.score,warnings:recognized.warnings,evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
+    const db=cloud.database()
+    const [division,tournament]=await Promise.all([match.divisionId&&match.divisionId!=='default'?readDocumentOrNull(db,'divisions',String(match.divisionId)):Promise.resolve(null),readDocumentOrNull(db,'tournaments',String(match.tournamentId))])
+    if(division?.tournamentId&&String(division.tournamentId)!==String(match.tournamentId))return {success:false,error:'比赛组别范围不一致，请检查赛事配置'}
+    const timing=ocr.resolveTiming(match,division || {},tournament || {})
+    const recognized=await ocr.recognize(image.toString('base64'),timing)
+    const evidence={matchId:String(match._id),fileId,imageHash:recognized.imageHash,analysisVersion:recognized.analysisVersion,timing}
+    return {success:true,data:{teams:recognized.teams,score:recognized.score,timing,warnings:recognized.warnings,evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
   }
   const evidence=event.evidence
   if (!evidence || evidence.matchId!==String(match._id) || !/^[a-f0-9]{64}$/.test(evidence.imageHash || '') || ocr.signEvidence(evidence)!==event.proof) return {success:false,error:'识别凭证无效，请重新上传'}

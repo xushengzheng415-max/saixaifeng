@@ -8,7 +8,7 @@
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
         <div v-if="draft" class="score-row">
           <span>比分</span><el-input-number v-model="draft.score.home" :min="0" :max="99" :precision="0" aria-label="主队比分" />
-          <span>:</span><el-input-number v-model="draft.score.away" :min="0" :max="99" :precision="0" aria-label="客队比分" />
+          <span>:</span><el-input-number v-model="draft.score.away" :min="0" :max="99" :precision="0" aria-label="客队比分" /><span v-if="draft.timing?.halfMinutes" class="field-note">中场：{{ draft.timing.halfMinutes }}′</span>
         </div>
         <el-alert v-for="warning in draft?.warnings || []" :key="warning" :title="warning" type="warning" :closable="false" />
         <template v-if="draft">
@@ -21,7 +21,7 @@
               <template #default="{row}">
                 <el-select v-model="row.playerId" filterable placeholder="选择正式名单球员" @change="selectPlayer(row)">
                   <el-option v-for="p in rosters[side]" :key="p.playerId" :value="p.playerId" :label="`${p.number}号 ${p.name}`" />
-                </el-select><small v-if="row.originalName">原表：{{ row.number }}号 {{ row.originalName }}</small>
+                </el-select><small v-if="row.originalName">原表：{{ row.number }}号 {{ row.originalName }}</small><small v-if="row.reviewNotes?.length" class="analysis-note">{{ row.reviewNotes.join("；") }}</small>
               </template>
             </el-table-column>
             <el-table-column label="阵容" width="108"><template #default="{row}"><el-select v-model="row.role"><el-option v-for="r in roles" :key="r.value" :label="r.label" :value="r.value" /></el-select></template></el-table-column>
@@ -60,7 +60,7 @@ function chooseFile(){if(!busy.value&&!props.disabled)fileInput.value?.click()}
 function beforeClose(done){if(!busy.value)done()}
 function revoke(){if(preview.value)URL.revokeObjectURL(preview.value);preview.value=''}
 function activePlayers(team){return (draft.value?.teams[team]||[]).filter(row=>['starter','substitute'].includes(row.role)&&row.playerId)}
-function rowClass({row}){return !row.playerId||row.role==='unknown'?'needs-review':''}
+function rowClass({row}){return !row.playerId||row.role==='unknown'||row.reviewNotes?.some(note=>/核对|候选|不晚于/.test(note))?'needs-review':''}
 function selectPlayer(row){const p=rosters.value[side.value].find(p=>p.playerId===row.playerId);if(p){row.name=p.name;row.number=p.number}}
 function addPlayer(){draft.value.teams[side.value].push({playerId:'',name:'',number:'',role:'unknown',on:'',off:'',goals:'',yellow:'',red:'',captain:false,goalkeeper:false})}
 async function readFile(event){
@@ -91,7 +91,15 @@ async function recognize(){
       row.originalName=row.name
       const candidates=rosters.value[team].filter(p=>String(p.number)===String(row.number))
       row.playerId=candidates.length===1?candidates[0].playerId:''
-      if(candidates.length===1){row.name=candidates[0].name;if(row.originalName.replace(/\s/g,'')!==row.name.replace(/\s/g,''))row.role='unknown'}
+      if(candidates.length===1){
+        row.name=candidates[0].name
+        const a=String(row.originalName||'').replace(/\s/g,''),b=String(row.name||'').replace(/\s/g,'')
+        if(a!==b){
+          row.reviewNotes ||= [];row.reviewNotes.push('号码对应的姓名已取正式名单，请核对原图')
+          const near=a.length===b.length&&[...a].filter((c,i)=>c!==b[i]).length<=1
+          if(!a||!near)row.playerId=''
+        }
+      }
     }
     pairSubstitutions()
   }catch(e){if(current===generation)error.value=e.message||'识别失败，请重试'}finally{if(current===generation)busy.value=false}
