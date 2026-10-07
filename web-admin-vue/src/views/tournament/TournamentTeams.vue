@@ -274,9 +274,10 @@
     </div>
     <el-dialog v-model="targetedRegistrationLinkVisible" title="邀请球队" width="min(620px, calc(100vw - 32px))" destroy-on-close>
       <div class="public-invite-content" v-loading="creatingTargetedRegistrationLink">
+        <img v-if="isDemoModeActive" :src="demoInvitationImageUrl" alt="球队邀请示例，展示赛事、组别、日期、地点和报名资料" style="display:block;width:100%;max-width:400px;margin:auto" />
         <el-alert v-if="targetedRegistrationError" :title="targetedRegistrationError" type="error" :closable="false" show-icon />
         <el-form v-else-if="targetedRegistrationResult?.urlLink" label-position="top"><el-form-item label="公开邀约链接"><el-input :model-value="targetedRegistrationResult.urlLink" readonly aria-label="公开邀约链接" /></el-form-item></el-form>
-        <span v-else class="invite-pending" role="status">正在生成邀约链接…</span>
+        <span v-else-if="!isDemoModeActive" class="invite-pending" role="status">正在生成邀约链接…</span>
       </div>
       <template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationError" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重试</el-button><el-button v-if="targetedRegistrationResult?.urlLink" type="primary" @click="copyTargetedRegistrationLink">复制链接</el-button></template>
     </el-dialog>
@@ -695,6 +696,7 @@ const sendingInvites = ref(false)
 const targetedInviteResultVisible = ref(false)
 const targetedInviteResults = ref([])
 const targetedRegistrationLinkVisible = ref(false)
+const demoInvitationImageUrl=`${import.meta.env.BASE_URL}assets/demo-team-invitation.svg`
 const claimCodeVisible = ref(false)
 const claimCodeLoading = ref(false)
 const claimCodeResult = ref(null)
@@ -2577,6 +2579,7 @@ async function openInviteDialog() {
 function openTargetedRegistrationLinkDialog() {
   targetedRegistrationResult.value = null
   targetedRegistrationLinkVisible.value = true
+  if(isDemoModeActive){targetedRegistrationError.value='';return}
   void createTargetedRegistrationLink()
 }
 async function createTargetedRegistrationLink() {

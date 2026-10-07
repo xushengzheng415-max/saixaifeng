@@ -89,6 +89,18 @@ export function createDemoWorkspace() {
   }
   function registration(params) {
     const { action, tournamentId, divisionId = 'default' } = params
+    if(action==='importTeamRegistrationBatch'){
+      get('tournaments',tournamentId)
+      const imported=[]
+      for(const source of params.teams || []){
+        const team=add('teams',{...source,name:source.name,logo:source.logoFileId,playerCount:(source.players||[]).length})
+        const players=(source.players||[]).map(person=>add('players',{...person,teamId:team._id}))
+        for(const person of source.staff||[])add('coaches',{...person,teamId:team._id})
+        const relation=add('tournament_teams',{tournamentId,divisionId,teamId:team._id,name:team.name,teamName:team.name,status:'approved',claimStatus:'claimed',participationStatus:'confirmed',players,playerIds:players.map(player=>player._id),playerCount:players.length})
+        imported.push({teamId:team._id,teamName:team.name,tournamentTeamId:relation._id})
+      }
+      return success({teams:imported})
+    }
     if (action === 'addSyntheticTeams') {
       get('tournaments', tournamentId)
       const additions = (params.teamIds || []).filter(teamId => !rows('tournament_teams').some(row => row.tournamentId === tournamentId && row.divisionId === divisionId && row.teamId === teamId))

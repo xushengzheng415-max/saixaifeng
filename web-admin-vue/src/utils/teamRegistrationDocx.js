@@ -84,6 +84,8 @@ function cellAt(row, column) {
 const NAME_CELL_PATTERN = /姓名/
 const IDENTITY_CELL_PATTERN = /身份证号|身份证/
 const JERSEY_CELL_PATTERN = /球服号码|球衣号码|球员号码|号码/
+const BIRTH_CELL_PATTERN = /出生日期|出生年月|生日/
+const POSITION_CELL_PATTERN = /位置/
 
 function cellsMatching(row, pattern) {
   return (row?.cells || []).filter(cell => pattern.test(cell.text || ''))
@@ -124,9 +126,15 @@ export function findRegistrationPersonBlocks(rows) {
 
     let identityIndex = -1
     let numberIndex = -1
+    let birthIndex = -1
+    let positionIndex = -1
+    let endIndex = nextNameIndex
     for (let index = nameIndex + 1; index < nextNameIndex; index += 1) {
+      if ((sourceRows[index]?.cells || []).some(cell => roleType(cell.text))) { endIndex=index; break }
       if (identityIndex < 0 && cellsMatching(sourceRows[index], IDENTITY_CELL_PATTERN).length) identityIndex = index
       if (numberIndex < 0 && cellsMatching(sourceRows[index], JERSEY_CELL_PATTERN).length) numberIndex = index
+      if (birthIndex < 0 && cellsMatching(sourceRows[index], BIRTH_CELL_PATTERN).length) birthIndex = index
+      if (positionIndex < 0 && cellsMatching(sourceRows[index], POSITION_CELL_PATTERN).length) positionIndex = index
     }
 
     return {
@@ -134,7 +142,9 @@ export function findRegistrationPersonBlocks(rows) {
       nameRow: sourceRows[nameIndex],
       identityRow: identityIndex >= 0 ? sourceRows[identityIndex] : null,
       numberRow: numberIndex >= 0 ? sourceRows[numberIndex] : null,
-      personRows: sourceRows.slice(roleIndex, nextNameIndex)
+      birthRow: birthIndex >= 0 ? sourceRows[birthIndex] : null,
+      positionRow: positionIndex >= 0 ? sourceRows[positionIndex] : null,
+      personRows: sourceRows.slice(roleIndex, endIndex)
     }
   }).filter(Boolean)
 }
@@ -290,6 +300,12 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
   if (!tables.length) throw new Error('未找到人员名单表格，请使用报名表模板')
 
   const relationships = relationshipMap(relationshipsXml)
+  const placeholderIds=new Set()
+  for(const [id,target] of relationships){
+    const entry=zip.file(normalizeWordTarget(target))
+    if(entry&&/\.png$/i.test(target)&&new TextDecoder('latin1').decode(await entry.async('uint8array')).includes('SXF_UPLOAD_PLACEHOLDER_v1'))placeholderIds.add(id)
+  }
+  tables.forEach(table=>table.rows.forEach(row=>row.cells.forEach(cell=>{cell.imageIds=cell.imageIds.filter(id=>!placeholderIds.has(id))})))
   const documentText = normalizeText(descendants(body, 'p').map(paragraph => descendants(paragraph, 't').map(node => node.textContent || '').join('')).filter(Boolean).join('\n'))
   const headerTable = tables.find(table => table.rows.some(row => row.cells.some(cell => /球队名称|队名/.test(cell.text)))) || null
   const headerRow = headerTable ? (headerTable.rows.find(row => row.cells.some(cell => /球队名称|队名/.test(cell.text))) || headerTable.rows[0]) : { cells:[] }
@@ -308,7 +324,7 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
   // Word/WPS 可能在分页处把一张视觉名单拆成连续多个 <w:tbl>。续表有时只有号码行，
   // 因而不能要求每个片段同时含“角色 + 姓名/身份证”；从首个完整名单表开始，把连续且
   // 含角色或名单字段的片段合并，既保留 main 的续表识别，也覆盖号码行单独跨页的情况。
-  const rosterFieldPattern = /姓名|身份证|球服号码|球衣号码|球员号码/
+  const rosterFieldPattern = /姓名|身份证|球服号码|球衣号码|球员号码|出生日期|位置/
   const rosterStartIndex = tables.findIndex(table => (
     table.rows.some(row => row.cells.some(cell => roleType(cell.text)))
     && table.rows.some(row => row.cells.some(cell => rosterFieldPattern.test(cell.text)))
@@ -341,12 +357,14 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
   const warnings = [...kitResult.warnings]
   const errors = []
   for (const personBlock of findRegistrationPersonBlocks(rosterRows)) {
-    const { roleRow, nameRow, identityRow, numberRow, personRows } = personBlock
+    const { roleRow, nameRow, identityRow, numberRow, birthRow, positionRow, personRows } = personBlock
     const roleCells = roleRow.cells.filter(cell => roleType(cell.text))
     if (!roleCells.length) continue
     const nameCells = registrationCellsForPeople(nameRow, roleCells, NAME_CELL_PATTERN)
     const identityCells = registrationCellsForPeople(identityRow, roleCells, IDENTITY_CELL_PATTERN)
     const numberCells = registrationCellsForPeople(numberRow, roleCells, JERSEY_CELL_PATTERN)
+    const birthCells = registrationCellsForPeople(birthRow, roleCells, BIRTH_CELL_PATTERN)
+    const positionCells = registrationCellsForPeople(positionRow, roleCells, POSITION_CELL_PATTERN)
 
     for (let personIndex = 0; personIndex < roleCells.length; personIndex += 1) {
       const roleCell = roleCells[personIndex]
@@ -369,6 +387,10 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
         ? await imageFileFromRelationship(zip, relationships, photoRelationshipId, `person-${people.length + 1}-${Date.now()}`)
         : null
       const identity = parseIdentity(identityNumber)
+      const birthText=cleanValue(birthCells[personIndex]?.text||'', ['出生日期','出生年月','生日']).replace(/[年月/.]/g,'-').replace(/日/g,'')
+      const birthMatch=birthText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+      const explicitBirth=birthMatch?`${birthMatch[1]}-${birthMatch[2].padStart(2,'0')}-${birthMatch[3].padStart(2,'0')}`:''
+      const position=cleanValue(positionCells[personIndex]?.text||'', ['场上位置','位置']).replace(/^请选择$/,'').slice(0,30)
       const person = {
         roleType: type,
         roleLabel: ROLE_LABEL_MAP[type],
@@ -377,7 +399,8 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
         identityNumber,
         jerseyNumber,
         jerseyName: jerseyNumber ? generateJerseyName(name) : '',
-        birthDate: identity.birthDate,
+        birthDate: identity.birthDate || explicitBirth,
+        position,
         gender: identity.gender,
         nativePlace: identity.nativePlace,
         photoFile,
