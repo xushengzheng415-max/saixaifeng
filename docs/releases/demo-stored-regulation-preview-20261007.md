@@ -5,3 +5,16 @@
 按范本回填官员名额、身份证明和保险要求、4 号球、最低上场 5 人、两套球衣、护腿板和禁用钢钉；直接点球及淘汰赛前清零。规程全场 50 分钟在按单段编辑的规则页填为上下半场各 25 分钟。报名费、保证金、退还时限等未写明字段不制造金额。演示可保存格式有效的历史报名时间，真实模式仍保持原时间校验。
 
 test-demo-regulation-template.mjs 扩展验证点选/上传已保存范本识别一致，25 分钟、直接点球、清零与官员名额映射正确，未声明费用保持未知，未知云文件来源被拒绝；本地通过。仅发布 preview/admin 静态前端；浏览器当前账号点击仍待验收。
+
+## 发布证据
+
+功能提交 0c0fe42、预览合并 cf69801b、最终构建 f22fdb39（同步修复创建草稿按半场 25 分钟映射）。276 个静态文件成功上传，正式函数未发布。
+
+| 文件 | HTTP | SHA-256 |
+| --- | --- | --- |
+| index.html | 200 | 79614E67F571B828CDDCF79080F03F4DBE955DEDC5B5CAB34858BD8291249072 |
+| demoRegulations-BL5gnV5r.js | 200 | 765907C6D9C2F3F243861D3598343CD06898B3EE96E8C7C9AB0D35745A57136D |
+| DivisionRulesWizard-CxGXBt_s.js | 200 | E2DBC8D3786E453CE1CEE92A839C9A4C506D7765AFD2701F5E354E8ACA0D1BDC |
+| TournamentCreateBasic-C7y0I5T3.js | 200 | 707B4D1CEF6ABF4631E5B27742EBA7DFB753CD06406320D24A7D1757A0319170 |
+
+上述资源哈希与构建一致。正式入口发布前后 SHA-256 保持 604820920BCBF12BF141FADA29AC3E107787F627FFFACFDA1F17C0135ACA80B1。
