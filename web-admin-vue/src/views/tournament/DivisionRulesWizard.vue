@@ -238,6 +238,8 @@ import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import DivisionRegulationFields from './DivisionRegulationFields.vue'
 import { findRecognizedDivision, recognizedDivisionRulePayload } from '../../utils/regulationRecognition'
+import { isDemoMode } from '../../utils/demoMode'
+import { recognizeStoredDemoRegulation } from '../../utils/demoRegulations'
 
 const route = useRoute()
 const router = useRouter()
@@ -472,7 +474,7 @@ function validateRegistrationDeadline() {
     ElMessage.warning('请选择有效的报名截止时间')
     return false
   }
-  if (deadline.getTime() + 60000 <= Date.now()) {
+  if (!isDemoMode(tournamentId) && deadline.getTime() + 60000 <= Date.now()) {
     const prior=parseLocalMinute(division.value.activeRulesSnapshot?.registrationDeadline)
     if(division.value.rulesRevisionPending && prior && deadline.getTime()===prior.getTime())return true
     ElMessage.warning('报名截止时间不能早于当前时间')
@@ -635,7 +637,9 @@ async function recognizeUploadedRegulations() {
     }
     const fileName = String(tournament.value.regulationsFileName || '竞赛规程')
     const extension = fileName.split('.').pop().toLowerCase()
-    const result = await callFunction('parseTournamentRegulations', {
+    const result = isDemoMode(tournamentId)
+      ? { success:true, data:await recognizeStoredDemoRegulation(tournament.value) }
+      : await callFunction('parseTournamentRegulations', {
       action: 'parseStoredFile',
       tournamentId,
       fileID,
