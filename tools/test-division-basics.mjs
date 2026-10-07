@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,virtualTeamMatchesDivision,youthBirthRange} from '../web-admin-vue/src/utils/divisionBasics.js'
+import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,virtualTeamMatchesDivision,youthBirthRange,adultBirthRange} from '../web-admin-vue/src/utils/divisionBasics.js'
 import {createDemoWorkspace} from '../web-admin-vue/src/utils/demoWorkspace.mjs'
 const workspace=createDemoWorkspace()
 const event=workspace.request('dbQuery',{collection:'tournaments',operation:'add',data:{name:'组别设置演示'}}).data
@@ -26,4 +26,7 @@ assert.equal(youthBirthRange('U8',{startDate:'2027-01-01'}).birthDateStart,'2019
 assert.equal(youthBirthRange('U8',{startDate:'2026-01-01',competitionYear:2025}).birthDateStart,'2017-01-01')
 assert.equal(youthBirthRange('open',{startDate:'2026-01-01'}),null)
 assert.equal(youthBirthRange('U8',{}),null)
+assert.deepEqual(adultBirthRange({startDate:'2026-10-08'}),{birthDateStart:'',birthDateEnd:'2010-12-31',competitionYear:2026})
+assert.equal(adultBirthRange({startDate:'2027-01-01'}).birthDateEnd,'2011-12-31')
+assert.equal(adultBirthRange({}),null)
 console.log('PASS: edit age, birth bounds, match format and capacity; preserve roster limit; distinguish participant type from legacy edition; prevent undersized capacity and invalid dates; age-specific virtual pools remain available')
