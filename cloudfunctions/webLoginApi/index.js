@@ -4539,7 +4539,7 @@ async function handlePaperRefereeReport(event, confirming) {
     const uploadFolder=`match-reports/${match._id}`
     if(event.prepareUpload===true)return {success:true,data:{uploadFolder}}
     const fileId=String(event.fileId || '')
-    const filePath=fileId.replace(/^cloud:\/\/[^/]+\//,'')
+    const referenceSlash=fileId.indexOf('/',8); const filePath=referenceSlash>=0?fileId.slice(referenceSlash+1):''
     if(!fileId.startsWith('cloud://') || !filePath.startsWith(uploadFolder+'/') || filePath.includes('..') || fileId.includes('?'))return {success:false,error:'照片不属于本场比赛，请重新上传'}
     const downloaded=await cloud.downloadFile({fileID:fileId})
     const image=downloaded.fileContent
