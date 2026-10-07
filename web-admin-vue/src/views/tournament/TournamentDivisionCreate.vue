@@ -7,8 +7,8 @@
       <section class="form-panel" aria-label="组别基础信息"><div class="panel-heading"><h2>基础信息</h2></div>
         <el-form label-position="top" class="division-form" :disabled="locked || !canManage">
           <el-form-item label="参赛模式" required><el-radio-group v-model="form.participantType" @change="changeParticipantType"><el-radio-button label="youth">青少年模式</el-radio-button><el-radio-button label="adult">成人模式</el-radio-button></el-radio-group></el-form-item>
-          <div class="two-columns"><el-form-item label="年龄段" required><el-select v-model="form.ageGroup" filterable allow-create default-first-option style="width:100%"><el-option v-for="option in ageOptions" :key="option.value" :label="option.label" :value="option.value"/></el-select></el-form-item><el-form-item label="参赛性别" required><el-radio-group v-model="form.gender"><el-radio-button label="男子组"/><el-radio-button label="女子组"/><el-radio-button label="混合组"/></el-radio-group></el-form-item></div>
-          <div class="two-columns"><el-form-item label="最早出生日期"><el-date-picker v-model="form.birthDateStart" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item><el-form-item label="最晚出生日期"><el-date-picker v-model="form.birthDateEnd" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></div>
+          <div class="two-columns"><el-form-item label="年龄段" required><el-select v-model="form.ageGroup" @change="syncBirthRange" filterable allow-create default-first-option style="width:100%"><el-option v-for="option in ageOptions" :key="option.value" :label="option.label" :value="option.value"/></el-select></el-form-item><el-form-item label="参赛性别" required><el-radio-group v-model="form.gender"><el-radio-button label="男子组"/><el-radio-button label="女子组"/><el-radio-button label="混合组"/></el-radio-group></el-form-item></div>
+          <el-form-item v-if="form.participantType==='youth' && suggestedBirthRange" label="日期计算"><el-radio-group v-model="form.birthRangeMethod" @change="syncBirthRange"><el-radio-button label="under">按年龄段</el-radio-button><el-radio-button label="manual">手动设置</el-radio-button></el-radio-group><span v-if="form.birthRangeMethod!=='manual'" style="margin-left:12px;color:#718078;font-size:12px">按 {{ suggestedBirthRange.competitionYear }} 年赛事计算</span></el-form-item><div class="two-columns"><el-form-item label="最早出生日期"><el-date-picker v-model="form.birthDateStart" @change="markManualBirthRange('start')" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item><el-form-item label="最晚出生日期"><el-date-picker placeholder="不限制最低年龄，可留空" v-model="form.birthDateEnd" @change="markManualBirthRange('end')" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></div>
           <div class="two-columns"><el-form-item label="比赛人数" required><el-select v-model="form.matchFormat" placeholder="请选择几人制" style="width:100%"><el-option v-for="number in [5,7,8,9,11]" :key="number" :label="`${number}人制`" :value="`${number}side`"/></el-select></el-form-item><el-form-item label="参赛队伍数量" required><el-input-number v-model="form.expectedTeams" :min="2" :max="128" controls-position="right"/></el-form-item></div>
           <div class="generated-division-name"><span>组别名称</span><el-radio-group v-model="form.nameSource" size="small"><el-radio-button label="generated">系统生成</el-radio-button><el-radio-button label="custom">自定义</el-radio-button></el-radio-group><strong v-if="form.nameSource==='generated'">{{ generatedName }}</strong><el-input v-else v-model.trim="form.customName" maxlength="30" show-word-limit/></div>
         </el-form>
@@ -26,10 +26,17 @@ import {ElMessage} from 'element-plus'
 import {addRecord,queryById,queryList,updateRecord} from '../../utils/cloud'
 import {permissions} from '../../utils/permissions'
 import {isDemoMode} from '../../utils/demoMode'
-import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked} from '../../utils/divisionBasics'
+import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,youthBirthRange} from '../../utils/divisionBasics'
 const route=useRoute(),router=useRouter(),id=String(route.params.id||''),divisionId=String(route.query.divisionId||'')
 const isEditing=Boolean(divisionId),loading=ref(false),saving=ref(false),loadError=ref(''),tournament=ref({}),division=ref({}),existingDivisions=ref([]),registrationCount=ref(0)
-const form=reactive({participantType:'youth',ageGroup:'U16',gender:'男子组',birthDateStart:'',birthDateEnd:'',matchFormat:'',expectedTeams:16,nameSource:'generated',customName:''})
+const form=reactive({participantType:'youth',ageGroup:'U16',gender:'男子组',birthDateStart:'',birthDateEnd:'',birthRangeMethod:'under',matchFormat:'',expectedTeams:16,nameSource:'generated',customName:''})
+const suggestedBirthRange=computed(()=>form.participantType==='youth'?youthBirthRange(form.ageGroup,tournament.value,'under'):null)
+function syncBirthRange(changed){
+  if(form.birthRangeMethod==='manual')return
+  const suggested=suggestedBirthRange.value
+  if(suggested){form.birthDateStart=suggested.birthDateStart;if(changed==='under'||(form.birthDateEnd&&form.birthDateEnd<form.birthDateStart))form.birthDateEnd=''}
+}
+function markManualBirthRange(field){if(field==='end'&&form.birthRangeMethod==='under')return;form.birthRangeMethod='manual'}
 const ageOptions=computed(()=>form.participantType==='adult'?[{value:'成人组',label:'成人组'},{value:'青年组',label:'青年组'},{value:'中年组',label:'中年组'},{value:'老年组',label:'老年组'}]:[{value:'open',label:'不限年龄'},...Array.from({length:13},(_,i)=>({value:`U${i+6}`,label:`U${i+6}`}))])
 const ageLabel=computed(()=>ageOptions.value.find(option=>option.value===form.ageGroup)?.label||form.ageGroup)
 const generatedName=computed(()=>`${form.ageGroup==='open'?(form.participantType==='adult'?'成人':'青少年'):String(form.ageGroup).replace(/组$/,'')}${form.gender}`)
@@ -37,7 +44,7 @@ const finalName=computed(()=>form.nameSource==='custom'?form.customName:generate
 const canManage=computed(()=>permissions.tournament.manage(tournament.value))
 const locked=computed(()=>isEditing&&!isDemoMode(id)&&divisionBasicsLocked(division.value,tournament.value))
 const tournamentLogo=computed(()=>tournament.value.logoTransparentUrl||tournament.value.logoUrl||tournament.value.logo||'')
-function changeParticipantType(value){form.ageGroup=value==='adult'?'成人组':'U16'}
+function changeParticipantType(value){form.ageGroup=value==='adult'?'成人组':'U16';if(value==='youth'){form.birthRangeMethod='under';syncBirthRange()}else{if(form.birthRangeMethod!=='manual'){form.birthDateStart='';form.birthDateEnd=''}form.birthRangeMethod='manual'}}
 function goBack(){router.push(`/tournaments/${id}/competition`)}
 async function load(){
   loading.value=true
@@ -49,8 +56,10 @@ async function load(){
       if(String(current.tournamentId)!==id)throw new Error('组别不属于当前赛事')
       division.value=current
       Object.assign(form,{ageGroup:current.ageGroup||'open',gender:current.gender||'混合组',birthDateStart:current.birthDateStart||'',birthDateEnd:current.birthDateEnd||'',matchFormat:current.matchFormat||`${current.playersOnField||8}side`,expectedTeams:Number(current.expectedTeams||current.maxTeams||8),nameSource:'custom',customName:current.name||current.divisionName||''})
+      form.birthRangeMethod=current.birthRangeMethod||((current.birthDateStart||current.birthDateEnd)?'manual':'under')
       registrationCount.value=(registrations||[]).filter(row=>!['cancelled','rejected','deleted'].includes(row.status)).length
     }else if(form.participantType==='adult')form.ageGroup='成人组'
+    syncBirthRange()
   }catch(error){loadError.value=error.message||'组别读取失败，请刷新重试';ElMessage.error(loadError.value)}finally{loading.value=false}
 }
 async function saveDivision(){

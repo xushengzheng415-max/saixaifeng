@@ -6,6 +6,15 @@ export function divisionParticipantType(division={},tournament={}) {
   if(/成人|成年|中年|老年/.test(age))return 'adult'
   return tournament.category==='adult'?'adult':'youth'
 }
+export function youthBirthRange(ageGroup,tournament={},method='under') {
+  const match=String(ageGroup||'').trim().match(/^U(\d{1,2})$/i)
+  const explicitYear=Number(tournament.competitionYear || tournament.seasonYear || 0)
+  const dateYear=Number(String(tournament.startDate||'').match(/^(\d{4})-\d{2}-\d{2}/)?.[1]||0)
+  const year=explicitYear||dateYear
+  if(!match||Number(match[1])<1||!Number.isInteger(year)||year<1900||year>2200||!['cohort','under'].includes(method))return null
+  const born=year-Number(match[1])
+  return {birthDateStart:`${born}-01-01`,birthDateEnd:method==='cohort'?`${born}-12-31`:'',competitionYear:year}
+}
 export function divisionBasicsLocked(division={},tournament={}) {
   return division.rulesLocked===true||division.ruleFinalized===true||['finalized','locked','published'].includes(String(division.ruleStatus||''))||tournament.matchManagementReady===true||['ongoing','in_progress','completed','finished'].includes(String(tournament.status||''))
 }
@@ -24,7 +33,7 @@ export function buildDivisionBasics(form,{tournamentId,existing={},registeredTea
     if(!/^\d{4}-\d{2}-\d{2}$/.test(form[field])||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==form[field])throw new Error('出生日期范围无效，请重新选择')
   }
   if(form.birthDateStart&&form.birthDateEnd&&form.birthDateStart>form.birthDateEnd)throw new Error('最早出生日期不能晚于最晚出生日期')
-  return {tournamentId,name,customName:name,nameSource:'custom',participantType:form.participantType,ageGroup:String(form.ageGroup).trim(),gender:form.gender,matchFormat:form.matchFormat,playersOnField:players,expectedTeams:count,maxTeams:count,maxPlayersPerTeam:existing.maxPlayersPerTeam||existing.rosterLimit||({5:12,7:16,8:18,9:20,11:23}[players]),birthDateStart:form.birthDateStart||'',birthDateEnd:form.birthDateEnd||'',mode:'simple',isProfessional:false,ruleStatus:'draft',ruleProgress:0}
+  return {tournamentId,name,customName:name,nameSource:'custom',participantType:form.participantType,ageGroup:String(form.ageGroup).trim(),gender:form.gender,matchFormat:form.matchFormat,playersOnField:players,expectedTeams:count,maxTeams:count,maxPlayersPerTeam:existing.maxPlayersPerTeam||existing.rosterLimit||({5:12,7:16,8:18,9:20,11:23}[players]),birthDateStart:form.birthDateStart||'',birthDateEnd:form.birthDateEnd||'',birthRangeMethod:form.birthRangeMethod||'manual',mode:'simple',isProfessional:false,ruleStatus:'draft',ruleProgress:0}
 }
 export function virtualTeamMatchesDivision(team,division={},tournament={}) {
   const age=String(division.ageGroup||'').trim().toUpperCase()
