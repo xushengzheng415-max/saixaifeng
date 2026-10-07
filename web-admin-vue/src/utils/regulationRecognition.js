@@ -98,6 +98,11 @@ export function recognizedDivisionRulePayload(source = {}, sharedDetails = {}) {
       result.regulationDetails.substitutionReentryForbidden === true) {
     result.substitutionMode = 'limited'
   }
+  else if (source.substitutionMode === 'free') {
+    result.substitutionMode = 'free'
+    result.substitutionLimit = 0
+    result.substitutionWindows = 0
+  }
   if (result.formatType && !['cup', 'tournament', 'league', 'hybrid'].includes(result.formatType)) delete result.formatType
   if (result.groupCycle && !['single', 'double'].includes(result.groupCycle)) delete result.groupCycle
   if (result.periodMode === 'quarters') result.periodMode = 'single'
