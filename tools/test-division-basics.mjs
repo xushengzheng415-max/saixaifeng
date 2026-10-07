@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,virtualTeamMatchesDivision} from '../web-admin-vue/src/utils/divisionBasics.js'
+import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,virtualTeamMatchesDivision,youthBirthRange} from '../web-admin-vue/src/utils/divisionBasics.js'
 import {createDemoWorkspace} from '../web-admin-vue/src/utils/demoWorkspace.mjs'
 const workspace=createDemoWorkspace()
 const event=workspace.request('dbQuery',{collection:'tournaments',operation:'add',data:{name:'组别设置演示'}}).data
@@ -21,4 +21,9 @@ assert.equal(divisionBasicsLocked({ruleStatus:'draft'}),false)
 const pool=workspace.request('dbQuery',{collection:'teams',operation:'list',where:{synthetic:true}}).data
 assert.equal(pool.filter(team=>virtualTeamMatchesDivision(team,saved)).length,8)
 assert.equal(pool.filter(team=>virtualTeamMatchesDivision(team,{participantType:'adult',ageGroup:'成人组'})).length,8)
+assert.deepEqual(youthBirthRange('U8',{startDate:'2026-10-08'}),{birthDateStart:'2018-01-01',birthDateEnd:'',competitionYear:2026})
+assert.equal(youthBirthRange('U8',{startDate:'2027-01-01'}).birthDateStart,'2019-01-01')
+assert.equal(youthBirthRange('U8',{startDate:'2026-01-01',competitionYear:2025}).birthDateStart,'2017-01-01')
+assert.equal(youthBirthRange('open',{startDate:'2026-01-01'}),null)
+assert.equal(youthBirthRange('U8',{}),null)
 console.log('PASS: edit age, birth bounds, match format and capacity; preserve roster limit; distinguish participant type from legacy edition; prevent undersized capacity and invalid dates; age-specific virtual pools remain available')
