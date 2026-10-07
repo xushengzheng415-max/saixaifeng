@@ -14,4 +14,20 @@
 
 `test-demo-regulation-template.mjs`、`test-demo-workspace.mjs`、`test-demo-transport.mjs` 通过，验证范本原件及重新保存后的文件、未知文档拒绝、换人和名单映射、缺失字段、一组别与八虚拟球队、主调用封装零真实请求和账号隔离。未声称完成当前账号逐页浏览器验收。
 
-仅发布预览静态前端，不部署正式函数；数据中心治理收尾中原有副本漂移/事件截断未在本次改动处理。发布资源回读后追加证据。
+仅发布预览静态前端，不部署正式函数；数据中心治理收尾中原有副本漂移/事件截断未在本次改动处理。
+
+## 发布回读
+
+功能提交 `29cffa7`，预览合并 `15bcd5bb`，最终构建 `f37baa3e` 同时保留新“添加球队”菜单中的演示虚拟球队入口。275 个静态文件全部上传成功。
+
+| 资源 | HTTP | SHA-256 |
+| --- | --- | --- |
+| index.html | 200 | 2FFF9E4B8A5ABAF43D4C0AC7038B5F67D3046AE0DC7EE71D71562C557B5DEE99 |
+| youth-football-regulations.docx | 200 | 71A507914E6B0D1FC59F84075849D951EA252752CAB54EAA8CB4D0B15215DC2F |
+| TournamentCreateBasic-CMiPIPoE.js | 200 | B1E9C812EFD01DA8C0B751D7EFA3BC79402354941E9F12EFE6C6ABB1C4709C2E |
+| demoMode-nbGxZ1Il.js | 200 | 3288DBE63AEE44CAD7F6FA5A5EBC2AE54600278866A761D6784D6E3FD1050DD5 |
+| TournamentTeams-C6ipDDNS.js | 200 | 38F260277A2A03ACAB00BB9E6DEC56CCF0F1A505A7DC68D758A8A13B5D5E791E |
+
+线上文件与本次构建完全一致，Word 范本与用户原文件一致，创建页资源包含“使用范本”。正式入口 SHA-256 发布前后保持 `604820920BCBF12BF141FADA29AC3E107787F627FFFACFDA1F17C0135ACA80B1`。
+
+共用工作区原球队管理草稿保留在 `184af5be677634a4315ced5c6a0fc07a262e1ed9` 暂存快照中，未用旧草稿覆盖随后合入 preview 的 `2feb5226` 修正。
