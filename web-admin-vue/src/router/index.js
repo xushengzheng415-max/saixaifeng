@@ -10,6 +10,7 @@ import {
   isPlatformSession
 } from '../utils/platformSession'
 import { invitationLandingPath, sidebarRightForRoute, visibleSidebarKeys } from '../utils/tournamentStaffRights'
+import { leaveDemoForRealTournament } from '../utils/demoMode'
 
 // 深链截图会在首个路由组件加载前访问数据，开发模式需先于路由守卫同步激活隔离样例。
 if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href.includes('visualQa=1')) {
@@ -624,6 +625,7 @@ function clearInvalidSession() {
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
+  if (to.path.startsWith('/tournaments/')) leaveDemoForRealTournament(to.params.id)
   migrateLegacyPlatformSession()
   // 标签页选择自己的身份通道；同域名下另一标签页登录不覆盖当前后台。
   if (to.path === '/platform-login') activatePlatformContext()

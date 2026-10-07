@@ -12,7 +12,7 @@
         <span class="context-label">当前赛事</span>
         <strong>{{ tournament.name || '赛事' }}</strong>
         <span class="context-divider"></span>
-        <span>{{ activeDivisionDisplayName }}</span>
+        <span v-if="!pageLoadError">{{ activeDivisionDisplayName }}</span>
         <el-tag :type="isProfessional ? 'warning' : 'success'" effect="plain" round>
           {{ isProfessional ? '专业版' : '基础版 · 免费' }}
         </el-tag>
@@ -34,6 +34,8 @@
         <div v-else-if="activeTab === 'all'" class="heading-actions"><el-button plain @click="openClaimCodeDialog"><el-icon><Key /></el-icon>球队认领码</el-button></div>
       </div>
 
+      <el-alert v-if="pageLoadError" :title="pageLoadError" class="team-load-error" type="error" show-icon :closable="false"><el-button link type="primary" @click="reloadTeamWorkspace">重新加载</el-button></el-alert>
+      <template v-else>
       <section class="division-toolbar">
         <div class="division-tab-section"><span class="division-tab-title">竞赛组别</span><div class="division-tabs" role="tablist" aria-label="竞赛组别"><button v-for="division in divisionOptions" :key="division.id" type="button" role="tab" class="division-tab-button" :class="{ active: division.id === activeDivisionId }" :aria-selected="division.id === activeDivisionId" @click="selectDivision(division.id)"><strong>{{ division?.name || '未命名组别' }}</strong><small>{{ divisionPlayerFormatLabel(division) || '赛制待定' }}</small><em v-if="division.id !== 'default'" :class="division.mode === 'professional' || division.isProfessional ? 'professional' : 'simple'">{{ division.mode === 'professional' || division.isProfessional ? '专业' : '简易' }}</em></button></div></div>
         <div v-if="!teamCardMode" class="division-rule-summary">
@@ -232,6 +234,7 @@
         <div class="teams-data-table" role="table"><div class="teams-table-row pending-claim-row teams-table-head" role="row"><span>球队（队徽 + 名称）</span><span>所属组别</span><span>专属小程序认领链接</span><span>发送时间</span><span>操作</span></div><div v-for="row in pendingClaimRows" :key="row.recordId" class="teams-table-row pending-claim-row" role="row"><div class="team-identity"><img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" /><span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span><div><strong>{{ row.name || row.teamName }}</strong></div></div><span>{{ activeDivision.name }}</span><span><el-tag type="warning" effect="plain" size="small">未认领</el-tag></span><span>{{ applicationTime(row) }}</span><div class="team-row-actions"><el-button link type="primary" @click="openClaimReminder(row)">复制认领链接</el-button><el-button link type="success" @click="openClaimReminder(row)">发送提醒</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></div></div></div>
       </section>
       <div v-if="isProfessionalApplicationView" class="professional-application-boundary"><el-icon><InfoFilled /></el-icon><span>申请通过后，球队先完成小程序认领与参赛确认，再进入赛事参赛名单提交；审核不会自动生成名单或授予球队所有权。</span></div>
+      </template>
     </main>
 
     <!-- Local visual-QA uses a native overlay because the CDP compositor does not paint Element Plus teleported dialogs. -->
@@ -643,6 +646,8 @@ const qaProfessionalApplications = qaSnapshot && qaRequestedDivisionId === 'qa-d
 ] : []
 
 const loading = ref(false)
+const pageLoadError = ref('')
+let entryActionHandled = false
 const tournament = ref(qaSnapshot ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions.map(item => ({
   ...item,
   id: item._id,
@@ -2161,14 +2166,17 @@ async function loadTournament() {
       activeDivisionId.value = typeof route.query.divisionId === 'string' ? route.query.divisionId : 'qa-division-u8'
       return
     }
-    const [currentTournament, divisions] = await Promise.all([queryById('tournaments', tournamentId), queryList('divisions', { where:{ tournamentId }, orderBy:{ createTime:'asc' }, silent:true })])
-    tournament.value = currentTournament
+    const [currentTournament, divisions] = await Promise.all([queryById('tournaments', tournamentId), queryList('divisions', { where:{ tournamentId }, orderBy:{ createTime:'asc' }, silent:true, throwOnError:true })])
+    const record = Array.isArray(currentTournament) ? currentTournament[0] : currentTournament
+    if (!record || !(record._id || record.id)) throw new Error('赛事资料未能读取，请重新加载')
+    tournament.value = record
     divisionRecords.value = divisions || []
     const routeDivisionId = typeof route.query.divisionId === 'string' ? route.query.divisionId : ''
     const preferred = routeDivisionId || tournament.value.defaultDivisionId || divisionOptions.value.find(item => item.id !== 'default')?.id || divisionOptions.value[0].id
     activeDivisionId.value = divisionOptions.value.some(item => item.id === preferred) ? preferred : divisionOptions.value[0].id
   } catch (err) {
     console.error('加载赛事失败:', err)
+    throw err
   }
 }
 
@@ -2182,13 +2190,14 @@ async function loadTournamentTeams() {
     }
     const list = await queryList('tournament_teams', {
       where: { tournamentId },
-      orderBy: { createTime: 'desc' }
+      orderBy: { createTime: 'desc' },
+      throwOnError: true
     })
 
     // 获取球队详情
     const teamIds = list.map(t => t.teamId).filter(Boolean)
     if (teamIds.length > 0) {
-      const teamsData = await queryList('teams', { where: { _id: { $in: teamIds } } })
+      const teamsData = await queryList('teams', { where: { _id: { $in: teamIds } }, throwOnError:true })
 
       const teamMap = {}
       teamsData.forEach(t => {
@@ -2259,7 +2268,8 @@ async function loadTournamentTeams() {
     }
   } catch (err) {
     console.error('加载球队列表失败:', err)
-    ElMessage.error('加载失败')
+    pageLoadError.value = err.message || '球队数据未能读取，请重新加载'
+    throw err
   } finally {
     loading.value = false
   }
@@ -2271,7 +2281,8 @@ async function loadAllTeams() {
     if (qaSnapshot) { allTeams.value = [...qaSnapshot.teams, ...qaInviteCandidates]; return }
     loading.value = true
     const list = await queryList('teams', {
-      orderBy: { createTime: 'desc' }
+      orderBy: { createTime: 'desc' },
+      throwOnError: true
     })
     const rows = Array.isArray(list) ? list : []
     const cloudLogoIds = [...new Set(rows
@@ -3071,11 +3082,14 @@ async function rejectCancel(team) {
 
 useReadCacheRefresh({
   tags: ['players', 'teams'],
-  refresh: () => Promise.all([loadTournamentTeams(), loadAllTeams()]),
-  clear: () => { tournamentTeams.value = []; allTeams.value = [] },
+  refresh: reloadTeamWorkspace,
+  clear: () => { tournamentTeams.value = []; allTeams.value = []; pageLoadError.value = '登录或权限已变化，请重新加载' },
   onError: () => ElMessage.warning('数据更新失败，请重试。')
 })
-onMounted(async () => {
+async function reloadTeamWorkspace() {
+  loading.value = true
+  pageLoadError.value = ''
+  try {
   await loadTournament()
   await Promise.all([loadTournamentTeams(), loadAllTeams()])
   if (route.query.divisionId !== activeDivisionId.value) await router.replace({ query:{ ...route.query, divisionId:activeDivisionId.value } })
@@ -3086,6 +3100,8 @@ onMounted(async () => {
   activeTab.value = teamTabs.has(requestedTab) && workspaceTabs.has(requestedTab) ? requestedTab : 'all'
   if (rawRequestedTab !== requestedTab) await router.replace({ query:{ ...route.query, tab:requestedTab, divisionId:activeDivisionId.value } })
 
+  if (!entryActionHandled) {
+  entryActionHandled = true
   const requestedAction = typeof route.query.action === 'string' ? route.query.action : ''
   if (requestedAction === 'invite') {
     if (isRegistrationWorkspace.value) openTargetedRegistrationLinkDialog()
@@ -3102,7 +3118,12 @@ onMounted(async () => {
     await nextTick()
     await ensureClaimInvite()
   }
-})
+  }
+  } catch (error) {
+    pageLoadError.value = error.message || '球队数据未能读取，请重新加载'
+  } finally { loading.value = false }
+}
+onMounted(reloadTeamWorkspace)
 </script>
 
 <style scoped>

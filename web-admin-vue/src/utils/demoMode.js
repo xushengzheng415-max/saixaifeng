@@ -32,7 +32,16 @@ export function isDemoModeAvailable() {
 
 export function isDemoMode(tournamentId = '') {
   if (!isDemoModeAvailable() || sessionStorage.getItem(MODE_KEY) !== '1') return false
-  return !tournamentId || String(tournamentId).startsWith('demo-')
+  const routeId = typeof window !== 'undefined' ? String(window.location?.hash || '').match(/^#?\/tournaments\/([^/?#]+)/)?.[1] || '' : ''
+  const targetId = String(tournamentId || (routeId === 'create' ? '' : routeId))
+  return !targetId || targetId.startsWith('demo-')
+}
+
+export function leaveDemoForRealTournament(tournamentId) {
+  const targetId = String(tournamentId || '')
+  if (!isDemoModeAvailable() || !targetId || targetId === 'create' || targetId.startsWith('demo-') || sessionStorage.getItem(MODE_KEY) !== '1') return false
+  setDemoMode(false)
+  return true
 }
 
 export function setDemoMode(enabled, tournamentId = '') {

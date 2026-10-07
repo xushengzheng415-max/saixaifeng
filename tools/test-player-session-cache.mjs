@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import vm from 'node:vm'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { createSessionReadCache, stableReadKey } from '../web-admin-vue/src/utils/sessionReadCache.js'
 import { playerReadCacheTags, isReadOnlyRequest } from '../web-admin-vue/src/utils/playerReadCachePolicy.js'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const fixtureRequire = createRequire(import.meta.url)
 let passed = 0
 const scenarios = []
 const tick = () => new Promise(resolve => setImmediate(resolve))
@@ -147,6 +149,16 @@ async function harness(handler) {
   const modules = new Map()
   async function module(filename) {
     if (modules.has(filename)) return modules.get(filename)
+    if (['.cjs', '.json'].includes(path.extname(filename))) {
+      const value = fixtureRequire(filename)
+      const keys = Object.keys(value).filter(key => key !== 'default')
+      const instance = new vm.SyntheticModule(['default', ...keys], function () {
+        this.setExport('default', value)
+        for (const key of keys) this.setExport(key, value[key])
+      }, { context })
+      modules.set(filename, instance)
+      return instance
+    }
     const instance = new vm.SourceTextModule(await fs.readFile(filename, 'utf8'), { context, identifier: filename, initializeImportMeta: meta => { meta.env = { DEV: false, BASE_URL: '/admin/' } } })
     modules.set(filename, instance)
     await instance.link(async (specifier, importer) => {
