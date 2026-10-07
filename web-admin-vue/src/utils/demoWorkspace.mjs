@@ -158,7 +158,33 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     }
     return fail('这项赛程操作尚未接入模拟，不会调用真实接口')
   }
+  function rosterReview(params) {
+    const { tournamentId, teamId, divisionId, playerId, rosterAction } = params
+    get('tournaments', tournamentId)
+    const relations = rows('tournament_teams').filter(row => row.tournamentId === tournamentId && row.teamId === teamId && ['pending', 'invited', 'approved', 'confirmed', 'active'].includes(row.status))
+    const relation = divisionId ? relations.find(row => String(row.divisionId || 'default') === String(divisionId)) : (relations.length === 1 ? relations[0] : null)
+    if (!relation) return fail('球队不属于当前赛事组别或报名已取消')
+    const scoped = row => row.tournamentId === tournamentId && row.teamId === teamId && String(row.divisionId || 'default') === String(relation.divisionId || 'default')
+    const snapshots = rows('roster_snapshots').filter(scoped)
+    const latest = snapshots.at(-1)
+    // A registration draft contains candidate profiles, not individual organizer approvals.
+    const approvedIds = [...new Set(latest?.playerIds || [])]
+    const teamPlayers = rows('players').filter(row => (row.teamId === teamId || row.teamCode === teamId) && !['archived', 'deleted'].includes(row.status))
+    if (rosterAction === 'approvePlayer') {
+      const player = teamPlayers.find(row => row._id === playerId)
+      if (!player) return fail('球员不存在或不属于当前球队')
+      if (!approvedIds.includes(playerId)) approvedIds.push(playerId)
+      const now = new Date().toISOString()
+      update('players', playerId, { organizerReviewStatus:'approved', organizerReviewedAt:now, organizerReviewedBy:'模拟主办方' })
+      const snapshot = add('roster_snapshots', { tournamentId, teamId, divisionId:relation.divisionId || 'default', playerIds:approvedIds, version:Number(latest?.version || 0)+1, status:'approved', previousSnapshotId:latest?._id || '', approvedAt:now })
+      update('tournament_teams', relation._id, { rosterStatus:'approved', rosterPlayerCount:approvedIds.length, playerReviewStatus:approvedIds.length === teamPlayers.length ? 'completed' : 'pending', lastRosterApprovalAt:now })
+      return { success:true, playerId, snapshotId:snapshot._id, playerIds:approvedIds, snapshotStatus:'approved' }
+    }
+    if (rosterAction === 'listRoster') return { success:true, snapshot:latest ? { id:latest._id, status:latest.status, version:latest.version || 1, playerIds:approvedIds } : null, rows:teamPlayers.filter(row => approvedIds.includes(row._id)).map(row => ({ id:row._id, name:row.name, identityStatus:row.identityStatus || 'not_verified', mediaStats:{} })) }
+    return fail('这项名单操作尚未接入模拟')
+  }
   function request(action, params = {}) {
+    if (action === 'rosterExceptionBoard') return rosterReview(params)
     if (action === 'dbQuery') return query(params)
     if (action === 'callFunction') return request(params.functionName, params.functionParams)
     if (action === 'webBatchUpdate' || action === 'deleteRecord') return query({ ...params, operation: params.action })
