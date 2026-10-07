@@ -230,13 +230,43 @@ await test('platform capacity remains live instead of using the player session c
   assert.equal(h.calls.length, 2)
 })
 await test('real batched card reader uses at most 50 IDs, preserves unknown status and refreshes on retry', async () => {
-  const h = await harness(p => ({ success: true, cards: p.playerIds.map(playerId => ({ playerId, status: 'pending', tier: null, points: null })) }))
+  const h = await harness(p => ({ success: true, cards: p.playerIds.map(playerId => ({ playerId, status: 'ready', cardUrl: 'https://fixture.invalid/card.png', tier: null, points: null })) }))
   const cards = await h.module(path.join(root, 'web-admin-vue/src/utils/playerCard.js')); await cards.evaluate()
   const ids = Array.from({ length: 62 }, (_, i) => `fixture-p${i}`)
   const first = await Promise.all(ids.map(id => cards.namespace.readPlayerCard(id)))
   assert.equal(h.calls.length, 2); assert(h.calls.every(c => c.playerIds.length <= 50)); assert(first.every(c => c.tier === null && c.points === null))
   await Promise.all(ids.map(id => cards.namespace.readPlayerCard(id))); assert.equal(h.calls.length, 2)
   await cards.namespace.readPlayerCard(ids[0], { cache: 'reload' }); assert.equal(h.calls.length, 3)
+})
+
+await test('lineup card cache survives different subsets and clears on scope or data changes', async () => {
+  const h = await harness(p => ({ success: true, cards: (p.playerIds || []).map(playerId => ({ playerId, status: 'ready', cardUrl: 'https://fixture.invalid/' + playerId })) }))
+  const cards = await h.module(path.join(root, 'web-admin-vue/src/utils/playerCard.js')); await cards.evaluate()
+  await Promise.all(['a','b','c'].map(id => cards.namespace.readPlayerCard(id)))
+  assert.equal(h.calls.length, 1)
+  await Promise.all(['c','a'].map(id => cards.namespace.readPlayerCard(id)))
+  assert.equal(h.calls.length, 1)
+  assert.equal(cards.namespace.getCachedPlayerCard('a').cardUrl, 'https://fixture.invalid/a')
+  await Promise.all(['a','d','d'].map(id => cards.namespace.readPlayerCard(id)))
+  assert.equal(h.calls.length, 2); assert.deepEqual(h.calls.at(-1).playerIds, ['d'])
+  h.localStorage.setItem('authToken', 'synthetic-other-user')
+  assert.equal(cards.namespace.getCachedPlayerCard('a'), undefined)
+  await cards.namespace.readPlayerCard('a'); assert.equal(h.calls.length, 3)
+  await h.api.updateRecord('players','a',{})
+  assert.equal(cards.namespace.getCachedPlayerCard('a'), undefined)
+  await cards.namespace.readPlayerCard('a'); assert.equal(h.calls.length, 5)
+  h.clock.value += 60001
+  assert.equal(cards.namespace.getCachedPlayerCard('a'), undefined)
+})
+await test('pending lineup cards retry without retaining a pending cached batch', async () => {
+  let ready = false
+  const h = await harness(p => ({ success: true, cards: p.playerIds.map(playerId => ({ playerId, status: ready ? 'ready' : 'pending', cardUrl: ready ? 'https://fixture.invalid/card' : '' })) }))
+  const cards = await h.module(path.join(root, 'web-admin-vue/src/utils/playerCard.js')); await cards.evaluate()
+  assert.equal((await cards.namespace.readPlayerCard('p')).status,'pending')
+  assert.equal(cards.namespace.getCachedPlayerCard('p'),undefined)
+  ready = true
+  assert.equal((await cards.namespace.readPlayerCard('p')).status,'ready')
+  assert.equal(h.calls.length,2)
 })
 
 const report = { passed, failed: 0, scenarios, networkAccess: false, productionDatabaseActions: false, syntheticFixtureSize: 1250, warmFullReadHttpCalls: 0, coldFullReadHttpCalls: 2, cacheStorage: 'tab-local memory, not persisted', freshMs: 15000, maximumStaleMs: 60000, maxEntries: 80, maxBytes: 4 * 1024 * 1024 }
