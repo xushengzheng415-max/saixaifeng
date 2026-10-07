@@ -85,6 +85,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction, getFileUrl, uploadLargeFileViaCloud, uploadImageViaWebApi } from '@/utils/cloud'
+import { isDemoMode } from '@/utils/demoMode'
 import { createMatchNewsCover, createDailyNewsCover, createStandingsNewsSnapshot } from '@/utils/newsCover'
 import NewsDailyContent from './NewsDailyContent.vue'
 
@@ -245,6 +246,7 @@ function removePhoto(index) {
   form.photoFiles.splice(index, 1); form.photoFileIds.splice(index, 1)
 }
 async function generate() {
+  if (isDemoMode()) return ElMessage.info('演示模式暂不调用新闻生成服务')
   if (!(form.kind === 'daily' ? form.date : form.matchId)) return
   const token = localStorage.getItem('authToken') || ''
   if (!token) return ElMessage.warning('请先登录主办方 PC 后台')

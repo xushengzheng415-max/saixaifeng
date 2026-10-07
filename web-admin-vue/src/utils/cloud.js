@@ -3,6 +3,7 @@
 //   登录 → fetch() → webLoginApi HTTP API
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
+import { isDemoMode, demoRequest } from './demoMode'
 import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
 import { createInflightReads } from './inflightReads'
@@ -109,6 +110,7 @@ export function invalidatePlayerReadCache() { playerReadCache.clear('mutation') 
 export function getPlayerReadIdentity() { return readIdentityKey() }
 
 export function callFunctionHTTP(action, data = {}, timeout = 60000, requestOptions = {}) {
+  if (isDemoMode()) return Promise.resolve().then(() => demoRequest(action, data))
   const readable = (action === 'dbQuery' && ['list', 'get', 'count'].includes(data.operation)) || action === 'platformCapacityOverview'
   const tags = playerReadCacheTags(action, data)
   if (!isReadOnlyRequest(action, data)) {
@@ -239,6 +241,7 @@ export async function logout(platform = isPlatformContext()) {
   playerReadCache.clear('session')
   sessionStorage.removeItem('sxfTournamentDemoMode')
   sessionStorage.removeItem('sxfTournamentDemoId')
+  sessionStorage.removeItem('sxfDemoWorkspaceV2')
   window.dispatchEvent(new Event('sxf-tournament-demo-mode-change'))
   if (platform) {
     clearPlatformSession()
@@ -599,6 +602,7 @@ export async function uploadFile(cloudPath, filePath) {
 
 export async function getFileUrl(fileId) {
   if (!fileId) return ''
+  if (isDemoMode()) return /^(data:|blob:|https?:\/\/|\/)/.test(fileId) ? fileId : ''
   // 如果已经是 HTTP URL，直接返回
   if (fileId.startsWith('http://') || fileId.startsWith('https://')) {
     return fileId
@@ -699,6 +703,7 @@ export async function uploadImageViaWebApi(folder, file) {
   throw new Error(result?.message || result?.error || '图片上传失败')
 }
 export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
+  if (isDemoMode()) return uploadFileViaCloud(cloudPath, file)
   const initialChunkSize = Number(options.chunkSize) > 0 ? Number(options.chunkSize) : (48 * 1024)
   const fallbackChunkSize = Number(options.fallbackChunkSize) > 0 ? Number(options.fallbackChunkSize) : 0
   const { folder, fileName } = resolveChunkUploadTarget(cloudPath, file?.name)
@@ -789,6 +794,7 @@ export function _arrayBufferToBase64(buffer) {
  * @param {object} data 请求数据
  */
 export async function callFunction(name, data = {}, timeout = 60000) {
+  if (isDemoMode()) return demoRequest(name, data)
   // ★ 路由判断：登录相关函数走 HTTP API
   if (name in LOGIN_FUNCTION_MAP) {
     const mappedAction = LOGIN_FUNCTION_MAP[name]

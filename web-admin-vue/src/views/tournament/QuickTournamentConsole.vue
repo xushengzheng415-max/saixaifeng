@@ -106,6 +106,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, Calendar, Check, CircleCheckFilled, Delete, Grid, Location, Lock, Monitor, Refresh, Search, Setting, SwitchButton, Trophy, WarningFilled } from '@element-plus/icons-vue'
 import { addRecord, deleteRecord, getFileUrl, queryById, queryList } from '../../utils/cloud'
+import { isDemoMode } from '../../utils/demoMode'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
 
 const props = defineProps({ tournamentId: { type: String, required: true } })
@@ -170,6 +171,7 @@ function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getIte
 function saveScreenConfig() { try { localStorage.setItem(screenConfigKey(), JSON.stringify(screenConfig.value)) } catch {}; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
 async function copyScreenLink() { try { await navigator.clipboard.writeText(screenAddress.value); ElMessage.success('大屏链接已复制') } catch { ElMessage.warning(`请手动复制：${screenAddress.value}`) } }
 async function publishScreenState() {
+  if (isDemoMode()) return
   const state = { title: screenConfig.value.title || tournament.value.name || '赛事抽签', tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', divisionName: divisionName.value, status: groups.value.flatMap(group => group.slots).filter(Boolean).length ? '抽签进行中' : '等待抽签开始', groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name, logo: team.logo || team.logoUrl || team.logoTransparentUrl || '' } : null) })), updatedAt: Date.now() }
   screenGroups.value = state.groups
   try { localStorage.setItem(drawChannelKey(), JSON.stringify(state)); drawChannel?.postMessage(state) } catch {}

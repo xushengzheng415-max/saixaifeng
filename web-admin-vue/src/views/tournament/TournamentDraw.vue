@@ -1937,7 +1937,7 @@ async function saveGroups() {
 
   saving.value = true
   try {
-    const delegatedStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
+    const delegatedStaff = !tournamentId.startsWith('demo-') && sessionStorage.getItem('sxfTournamentStaff') === '1'
     let scheduleResult = null
     if (delegatedStaff) {
       const reset = await callFunction('generateSchedule', { action:'resetPairings', tournamentId, divisionId:activeDivisionId.value, tournamentType:tournamentType.value })

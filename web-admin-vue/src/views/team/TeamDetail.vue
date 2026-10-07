@@ -1274,8 +1274,9 @@ import RosterPosterModal from '../../components/team/RosterPosterModal.vue'
 import { buildTournamentPlayerStats, mergeTournamentRosterPlayer } from '../../utils/tournamentPlayerStats.js'
 import JSZip from 'jszip'
 import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
+import { isDemoMode } from '../../utils/demoMode'
 
-const isTournamentStaff = sessionStorage.getItem('sxfTournamentStaff') === '1'
+const isTournamentStaff = !isDemoMode() && sessionStorage.getItem('sxfTournamentStaff') === '1'
 const route = useRoute()
 const router = useRouter()
 const teamId = String(route.params.teamId || route.params.id || '')
