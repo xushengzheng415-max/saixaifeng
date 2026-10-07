@@ -29,7 +29,7 @@
         </div>
         <div v-if="isRegistrationWorkspace" class="heading-actions">
           <el-button plain :disabled="creatingTargetedRegistrationLink" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>邀请球队</el-button>
-          <el-dropdown trigger="click" @command="openAddTeamEntry"><el-button type="primary"><el-icon><Plus /></el-icon>添加球队<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="upload"><el-icon><Upload /></el-icon>上传资料、名单</el-dropdown-item><el-dropdown-item command="manual"><el-icon><Plus /></el-icon>快速添加</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+          <el-dropdown trigger="click" @command="openAddTeamEntry"><el-button type="primary"><el-icon><Plus /></el-icon>添加球队<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="isDemoModeActive" command="virtual"><el-icon><Plus /></el-icon>虚拟球队</el-dropdown-item><el-dropdown-item command="upload"><el-icon><Upload /></el-icon>上传资料、名单</el-dropdown-item><el-dropdown-item command="manual"><el-icon><Plus /></el-icon>快速添加</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
         <div v-else class="heading-actions"><el-button type="primary" @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button></div>
       </div>
@@ -1529,6 +1529,7 @@ function resetCreateTeamForm() {
 }
 
 function openAddTeamEntry(entry) {
+  if (entry === 'virtual' && isDemoModeActive) { openSyntheticTeamDialog(); return }
   openCreateTeamDialog()
   if (showCreateTeamDialog.value) createTeamEntryMode.value = entry === 'upload' ? 'upload' : 'manual'
 }
