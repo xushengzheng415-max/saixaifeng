@@ -27,7 +27,7 @@
           <h1>{{ isRegistrationWorkspace ? '报名管理' : '球队管理' }}</h1>
 
         </div>
-        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button type="success" plain @click="openSyntheticTeamDialog"><el-icon><Plus /></el-icon>添加虚拟球队</el-button><el-button @click="openQrDialog"><el-icon><Picture /></el-icon>生成报名海报</el-button><el-button type="primary" plain @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button><el-button type="primary" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>生成公开邀约</el-button><el-button type="warning" plain @click="openClaimCodeDialog"><el-icon><Key /></el-icon>赛事认领码</el-button><el-button plain type="success" @click="openBulkTeamDialog"><el-icon><Grid /></el-icon>批量添加资料</el-button><el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button></div>
+        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button v-if="isDemoModeActive" type="success" plain @click="openSyntheticTeamDialog"><el-icon><Plus /></el-icon>添加虚拟球队</el-button><el-button @click="openQrDialog"><el-icon><Picture /></el-icon>生成报名海报</el-button><el-button type="primary" plain @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button><el-button type="primary" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>生成公开邀约</el-button><el-button type="warning" plain @click="openClaimCodeDialog"><el-icon><Key /></el-icon>赛事认领码</el-button><el-button plain type="success" @click="openBulkTeamDialog"><el-icon><Grid /></el-icon>批量添加资料</el-button><el-button type="success" @click="openCreateTeamDialog"><el-icon><Plus /></el-icon>快速添加球队</el-button></div>
         <div v-else class="heading-actions"><el-button type="primary" @click="openInviteDialog"><el-icon><UserFilled /></el-icon>从球队资料邀约</el-button></div>
       </div>
 
@@ -665,6 +665,7 @@ import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFuncti
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import TeamRegistrationWordImporter from '../../components/tournament/TeamRegistrationWordImporter.vue'
+import { isDemoMode } from '../../utils/demoMode'
 
 const route = useRoute()
 const router = useRouter()
@@ -679,6 +680,7 @@ const claimInviteLinkPlaceholder = computed(() => (miniProgramQrEnvVersion === '
 const isRegistrationWorkspace = computed(() => /\/registration$/.test(route.path))
 const publicBase = import.meta.env.BASE_URL
 const tournamentId = route.params.id
+const isDemoModeActive = isDemoMode(tournamentId)
 const qaSnapshot = typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
   ? (window.__sxfVisualQaSnapshot || getVisualQaSnapshot())
   : null

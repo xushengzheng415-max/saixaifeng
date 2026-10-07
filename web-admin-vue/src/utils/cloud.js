@@ -237,6 +237,9 @@ export async function rosterExceptionBoard(data = {}) {
 
 export async function logout(platform = isPlatformContext()) {
   playerReadCache.clear('session')
+  sessionStorage.removeItem('sxfTournamentDemoMode')
+  sessionStorage.removeItem('sxfTournamentDemoId')
+  window.dispatchEvent(new Event('sxf-tournament-demo-mode-change'))
   if (platform) {
     clearPlatformSession()
     return

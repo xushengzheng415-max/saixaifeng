@@ -561,6 +561,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick, Calendar, Grid, List, MapLocation, ArrowLeft, ArrowRight, Plus, Download, Picture, Delete, UserFilled, User, Football, Clock, Document, Lock, CircleCheck, Trophy, Check, Setting, Warning, WarningFilled, InfoFilled, Refresh, Close, Connection, Printer } from '@element-plus/icons-vue'
 import { queryById, queryList, callFunction, deleteRecord, addRecord, getFileUrl } from '../../utils/cloud'
+import { isDemoMode } from '../../utils/demoMode'
 import { buildPublicationSettings, buildPublicationSettingsText, normalizePublicationVenues, summarizePublicationVenues, summarizeSchedulePlacement } from '../../utils/publicationSettings'
 import TournamentDraw from './TournamentDraw.vue'
 
@@ -1936,9 +1937,13 @@ function restoreOriginalMatchArrangement() {
 
 async function loadReferees() {
   try {
-    referees.value = await queryList('users', {
+    const users = await queryList('users', {
       where: { role: 'referee', tournamentId }
     })
+    const virtualReferees = isDemoMode(tournamentId)
+      ? await queryList('referees', { where: { tournamentId, synthetic: true } })
+      : []
+    referees.value = [...users, ...virtualReferees]
   } catch {
     try {
       referees.value = await queryList('referees', { where: { tournamentId } })
