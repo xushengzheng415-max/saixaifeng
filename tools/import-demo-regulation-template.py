@@ -26,6 +26,7 @@ manifest = {
       'periodMode':'halves','matchMinutes':50,'breakMinutes':10,'rosterLimit':12,
       'substitutionMode':'free','substitutionLimit':0,'substitutionWindows':0,'substitutionReentryAllowed':True,
       'yellowCardSuspension':2,'redCardSuspension':1,'winPoints':3,'drawPoints':1,'lossPoints':0,
+      'knockoutTieBreak':'penalties','knockoutYellowReset':True,'secondYellowRed':True,'thirdPlaceEnabled':True,
       'identityDocumentRequired':True,'insuranceRequired':True,
       'eligibilityNotes':'范本未指定具体年龄区间；报名须提交身份证明、健康证明和保险凭证。',
       'regulationDetails':{'teamLeaderLimit':1,'coachLimit':1,'matchBallSize':4,'minimumPlayersToContinue':5,'twoKitsRequired':True,'shinGuardsRequired':True,'metalStudsForbidden':True,'substitutionReentryForbidden':False,'cardsCarryToNextStage':False}

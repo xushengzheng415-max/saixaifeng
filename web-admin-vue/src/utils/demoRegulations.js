@@ -3,6 +3,18 @@ import template from '../data/demoRegulationTemplate.json'
 export const demoRegulationName = template.sourceFileName
 export const demoRegulationUrl = `${import.meta.env.BASE_URL}assets/demo-regulations/youth-football-regulations.docx`
 export function demoRegulationData() { return JSON.parse(JSON.stringify(template.data)) }
+export async function recognizeStoredDemoRegulation(tournament) {
+  const source = String(tournament.regulationsFileId || '')
+  let data
+  if (source === demoRegulationUrl) data = demoRegulationData()
+  else if (/^data:[^,]*;base64,/.test(source)) {
+    const bytes = Uint8Array.from(atob(source.slice(source.indexOf(',') + 1)), char => char.charCodeAt(0))
+    data = await recognizeDemoRegulation(new File([bytes], tournament.regulationsFileName || '竞赛规程.docx'))
+  } else throw new Error('请返回赛事设置，选择或上传青少年演示范本')
+  // The rule wizard edits duration per period; the source gives 50 minutes total.
+  data.divisions.forEach(division => { if (division.periodMode === 'halves') division.matchMinutes /= 2 })
+  return data
+}
 export function matchesDemoRegulationText(text) {
   const normalize = value => String(value || '').normalize('NFKC').replace(/\s+/g, '')
   return normalize(text) === normalize(template.sourceText)
