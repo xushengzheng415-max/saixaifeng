@@ -17,4 +17,18 @@
 - 全数据治理收尾：原有 webLoginApi、playerCardPublishWorker 部署副本不同步，成绩中心事件截断与旧 PC 球员卡副本一致性检查未通过；本次没有发布这些正式后端。此状态不能解释为全平台验收通过。
 - 浏览器真实点击链路尚未验收；未用当前用户真实机构数据进行保存测试。
 
-发布目标：`/preview/admin/`；发布后补充 HTTP 与关键资源哈希证据。正式 `/admin/` 不覆盖。
+## 发布回读
+
+发布提交 `8d310236`，功能提交 `34e5bbc`。仅向 `preview/admin` 上传 269 个静态文件，全部成功；未部署正式云函数。
+
+普通预览入口及下列资源 HTTP 200，并与本次构建 SHA-256 一致：
+
+| 文件 | SHA-256 |
+| --- | --- |
+| index.html | D0B76EB3681A67DE1D83DB36A6BB86B01DDC552F393D36A980E0DE93D23DF506 |
+| index-aEi3e6P1.js | F5C49FDB171B4660123AAF56CCCE1E3DCE0CD7D430B0A61092D274829A7FB510 |
+| demoMode-stvczbNy.js | 76DE4479A3EBF6AC4B782203C8B44D1643D0D3BABCCBB70B13424356504635D2 |
+| LayoutView-3OXvvkrs.js | 04CB7603E6D8AC6AF8E6C3FC36A5F5852A2A9D1C8D984213EB7EFCAA80848D69 |
+| TournamentSpace-CgJudBV9.js | CD9F9897209982F85832B4AF8CD4D7EDD8BA67E7560AC01BD11BF46714ACAB9F |
+
+正式 `/admin/` 发布前后 HTTP 200，入口 SHA-256 保持 `604820920BCBF12BF141FADA29AC3E107787F627FFFACFDA1F17C0135ACA80B1`。
