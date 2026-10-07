@@ -183,3 +183,9 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 抽签模块加载中的球员读取现在需要同时拥有 `event.draw` 和 `event.teams`；只获得抽签权限的账号仍不能读取球员资料。“全部权限”包含这两项，因此该账号完整授权可通过。行级校验仍限制在本赛事登记球队关联的球员。
 
 源码提交 `8f1fb0d` 已合入并推送 Gitee `main`（合并提交 `56d8becc`）。生产 `webLoginApi` 代码更新命令返回成功；函数详情为 Active/Available、Nodejs18.15、`index.main`，ModTime `2026-10-06 19:39:12`。部署后 `fn code download` 两次返回 CLI `Invalid URL`，因此尚未完成文件级摘要回读；未写入赛事数据、未使用真实账号操作，也未运行独立测试套件。
+
+## 2026-10-06 裁判管理共享账号空集合读取修复
+
+生产只读检查确认 `tournament_referees` 尚不存在。共享账号的 `webLoginApi.staffEventScope` 原先把它当必需表读取，因此裁判模块构建授权范围失败，并连带使 `tournaments`、`referees` 的读取失败。现 `referees` 与 `tournament_referees` 仅在集合不存在时按空列表处理；已有集合的索引错误或其他数据库错误继续返回失败，不作静默吞错。
+
+功能提交 `6413b86` 已合入并推送 Gitee `main`（合并提交 `69a9abfa`）。生产 `webLoginApi` 代码更新后，回下载的 `index.js` 与部署包 SHA-256 `8D1ACA6630D132C327F3D0BEA27754DBC5F9F5992C6E91C72CE5F92CA0FEFDD5` 一致，`staffEventScope.cjs` 与部署包 SHA-256 `AD9C9D5517D1573FB598E8D746122CDE9997AE3838E4373B405E75061E32A819` 一致；函数状态 Active/Available、Nodejs18.15、`index.main`。未使用真实账号复测，也未运行独立测试套件。
