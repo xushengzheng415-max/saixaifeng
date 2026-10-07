@@ -99,36 +99,38 @@
         <section class="synthetic-player-panel staff-roster-panel">
           <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table">
-            <el-table-column label="头像" width="72" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
-            <el-table-column prop="name" label="姓名" min-width="130" />
-            <el-table-column label="球衣名" min-width="125"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
-            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼球员</el-tag></template></el-table-column>
-            <el-table-column label="出生日期" width="130"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
-            <el-table-column label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column label="头像" width="56" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
+            <el-table-column prop="name" label="姓名" min-width="96" />
+            <el-table-column label="球衣名" min-width="96"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column label="职务" min-width="96"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼球员</el-tag></template></el-table-column>
+            <el-table-column label="出生日期" width="104"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
           </el-table>
         </section>
         <section class="synthetic-player-panel">
           <div class="synthetic-player-heading">
             <div><h2>{{ isTeamDataWorkspace ? '球员参赛数据' : (isSyntheticTeam ? '虚拟球员资料' : '球员') }}</h2><p v-if="isTeamDataWorkspace">本届累计 · {{ tournamentPlayerRows.length }} 人 · 已确认赛果</p><p v-else>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
+            <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="success" :loading="batchReviewing" :disabled="!selectedReviewPlayers.length || !!playerReviewingId" @click="reviewSelectedPlayers">批量审核{{ selectedReviewPlayers.length ? `（${selectedReviewPlayers.length}）` : '' }}</el-button>
             <el-button v-if="!isTeamDataWorkspace" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
           </div>
           <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
-          <el-table :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="!isTeamDataWorkspace" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort">
-            <el-table-column label="头像" :width="isTeamDataWorkspace ? 56 : 72" align="center">
+          <el-table :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="!isTeamDataWorkspace" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort" @selection-change="selectedReviewPlayers = $event">
+            <el-table-column v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="selection" width="36" :selectable="canSelectReviewPlayer" />
+            <el-table-column label="头像" :width="56" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
-            <el-table-column prop="name" label="姓名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 100 : undefined" min-width="110" show-overflow-tooltip />
-            <el-table-column prop="jerseyName" label="球衣名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 125 : undefined" min-width="125" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
-            <el-table-column prop="identityLabel" label="身份" :sortable="isTeamDataWorkspace ? 'custom' : false" width="120" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column v-if="isSyntheticTeam" prop="playerId" label="球员编号" min-width="150" />
-            <el-table-column prop="jerseyNumber" label="球衣号码" :sortable="isTeamDataWorkspace ? 'custom' : false" width="90" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
-            <el-table-column prop="position" label="位置" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 68 : 100" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" min-width="150"><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="出生年月日" width="130" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
-            <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 80" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
+            <el-table-column prop="name" label="姓名" :sortable="isTeamDataWorkspace ? 'custom' : false" :min-width="isTeamDataWorkspace ? 100 : 96" show-overflow-tooltip />
+            <el-table-column prop="jerseyName" label="球衣名" :sortable="isTeamDataWorkspace ? 'custom' : false" :min-width="isTeamDataWorkspace ? 125 : 96" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column prop="identityLabel" label="身份" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 120 : 90" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
+            <el-table-column v-if="isSyntheticTeam && players.some(player => player.playerId)" prop="playerId" label="球员编号" min-width="76" />
+            <el-table-column prop="jerseyNumber" label="球衣号码" :sortable="isTeamDataWorkspace ? 'custom' : false" width="72" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
+            <el-table-column prop="position" label="位置" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 68 : 80" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="出生日期" width="104" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 54" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="资料状态" width="110" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="120" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" :width="isTeamDataWorkspace ? 120 : 90" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
             <template v-if="isTeamDataWorkspace">
               <el-table-column prop="appearances" label="出场场次" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="90" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
               <el-table-column prop="minutes" label="出场时间" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="105" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
@@ -137,7 +139,7 @@
               <el-table-column prop="redCards" label="红牌" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
               <el-table-column label="操作" width="65" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
             </template>
-            <el-table-column v-else label="操作" width="145" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
+            <el-table-column v-else label="操作" width="104" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
           </el-table>
         </section>
         <section v-if="isReadOnlyTournament" class="tournament-history-panel">
@@ -1948,6 +1950,9 @@ const avatarReadyCount = computed(() => avatarImportRows.value.filter(row => !ro
 // 编辑球队相关
 const showEditTeam = ref(false)
 const playerReviewingId = ref('')
+const selectedReviewPlayers = ref([])
+const batchReviewing = ref(false)
+function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && playerOrganizerReviewStatus(player) !== 'approved' }
 const teamEditForm = ref({
   name: '',
   teamCode: '',
@@ -4435,34 +4440,43 @@ function playerOrganizerReviewStatus(player) {
   return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
 }
 
+async function approvePlayerRecord(player) {
+  if (sourceTournamentId.value) {
+    if (!tournamentRelation.value?._id) throw new Error('当前赛事参赛关系不存在')
+    const result = await rosterExceptionBoard({ rosterAction:'approvePlayer', tournamentId:sourceTournamentId.value, teamId, divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default', playerId:String(player._id) })
+    if (!result?.success) throw new Error(result?.error || result?.message || '球员审核失败')
+  } else {
+    await updateRecord('players', player._id, { organizerReviewStatus:'approved', organizerReviewedAt:new Date().toISOString(), organizerReviewedBy:'赛事主办方' })
+  }
+}
 async function reviewPlayer(player) {
-  if (isTeamDataWorkspace.value) return
-  if (!player?._id || playerOrganizerReviewStatus(player) === 'approved') return
+  if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value || !player?._id || playerOrganizerReviewStatus(player) === 'approved') return
   playerReviewingId.value = String(player._id)
   try {
-    if (sourceTournamentId.value) {
-      if (!tournamentRelation.value?._id) throw new Error('当前赛事参赛关系不存在，无法加入正式名单')
-      const result = await rosterExceptionBoard({
-        rosterAction:'approvePlayer',
-        tournamentId:sourceTournamentId.value,
-        teamId,
-        divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
-        playerId:String(player._id)
-      })
-      if (!result?.success) throw new Error(result?.message || '球员审核失败')
-      tournamentRosterPlayerIds.value = new Set([...tournamentRosterPlayerIds.value, String(player._id)])
-      player.organizerReviewStatus = 'approved'
-      ElMessage.success(`${player.name || '球员'}已审核并加入本届正式名单`)
-    } else {
-      await updateRecord('players', player._id, { organizerReviewStatus: 'approved', organizerReviewedAt: new Date().toISOString(), organizerReviewedBy: '赛事主办方' })
-      player.organizerReviewStatus = 'approved'
-      ElMessage.success(`${player.name || '球员'}已审核`)
+    await approvePlayerRecord(player)
+    await loadPlayers()
+    ElMessage.success('已审核')
+  } catch (error) { ElMessage.error(error.message || '审核失败，请重试') }
+  finally { playerReviewingId.value = '' }
+}
+async function reviewSelectedPlayers() {
+  if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value) return
+  const selected = selectedReviewPlayers.value.filter(player => playerOrganizerReviewStatus(player) !== 'approved')
+  if (!selected.length) return
+  batchReviewing.value = true
+  let approved = 0
+  const failures = []
+  try {
+    for (const player of selected) {
+      playerReviewingId.value = String(player._id)
+      try { await approvePlayerRecord(player); approved++ }
+      catch (error) { failures.push(`${player.name || '球员'}：${error.message || '审核失败'}`) }
     }
-  } catch (error) {
-    ElMessage.error(error.message || '球员审核失败')
-  } finally {
-    playerReviewingId.value = ''
-  }
+    await loadPlayers()
+    selectedReviewPlayers.value = []
+    if (failures.length) ElMessage.error({ message:`已审核 ${approved} 人，失败 ${failures.length} 人；${failures.join('；')}`, duration:8000 })
+    else ElMessage.success(`已审核 ${approved} 人`)
+  } finally { batchReviewing.value = false; playerReviewingId.value = '' }
 }
 
 function playerIdentityLabel(player) {
