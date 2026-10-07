@@ -138,7 +138,7 @@ async function harness(handler) {
   window.location = { hostname: 'localhost', origin: 'https://fixture.invalid', href: '' }
   const clock = { value: 1000 }
   class ClockDate extends Date { static now() { return clock.value } }
-  const context = vm.createContext({ localStorage, sessionStorage, window, CustomEvent: DetailEvent, Date: ClockDate, AbortController, setTimeout, clearTimeout, console: { log() {}, warn() {}, error() {} }, fetch: async (url, options) => {
+  const context = vm.createContext({ localStorage, sessionStorage, window, Event, CustomEvent: DetailEvent, Date: ClockDate, AbortController, setTimeout, clearTimeout, console: { log() {}, warn() {}, error() {} }, fetch: async (url, options) => {
     assert.equal(url, 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi')
     const payload = JSON.parse(options.body); calls.push(payload)
     const result = await handler(payload, calls)
