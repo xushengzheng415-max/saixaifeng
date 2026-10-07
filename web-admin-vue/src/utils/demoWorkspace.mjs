@@ -200,17 +200,27 @@ export function createDemoWorkspace() {
     if (action === 'deleteTeam') { remove('teams', params.teamId); tables.players = rows('players').filter(row => row.teamId !== params.teamId); return success({}) }
     return fail('这项操作尚未接入模拟，不会调用真实接口')
   }
+  function ensureVirtualTeams() {
   for (const ageGroup of ['成人', 'U8', 'U10', 'U12', 'U14', 'U16', 'U18', 'open']) {
-    for (let index = 1; index <= (ageGroup === 'open' ? 8 : 4); index++) {
+    for (let index = 1; index <= 8; index++) {
       const label = ageGroup === 'open' ? '青少年' : ageGroup
+      if(rows('teams').some(team=>team.ageGroup===ageGroup&&team.name===`模拟${label}球队${index}`&&team.source==='browser_demo'))continue
       const team = add('teams', { name: `模拟${label}球队${index}`, teamName: `模拟${label}球队${index}`, ageGroup, status: 'active', playerCount: ageGroup === 'open' ? 12 : 18 })
       for (let number = 1; number <= team.playerCount; number++) add('players', { teamId: team._id, name: `虚拟球员${index}-${number}`, realName: `虚拟球员${index}-${number}`, jerseyNumber: number, number, ageGroup, gender: '男', birthDate: ageGroup === '成人' ? '1996-01-01' : ageGroup === 'open' ? '2014-01-01' : `${2026 - Number(ageGroup.slice(1))}-01-01`, status: 'active', position: number === 1 ? '门将' : '前锋' })
     }
   }
+  }
+  ensureVirtualTeams()
   for (let index = 1; index <= 8; index++) add('referees', { name: `虚拟裁判${index}`, status: 'approved', auditStatus: 'approved', canOperate: true, availabilityStatus: 'available', level: '一级' })
   return {
     request,
     snapshot: () => clone({ sequence, tables }),
-    restore(value) { sequence = value.sequence; for (const name of Object.keys(tables)) delete tables[name]; Object.assign(tables, clone(value.tables)) }
+    restore(value) {
+      sequence = Number(value.sequence) || 0
+      for (const name of Object.keys(tables)) delete tables[name]
+      Object.assign(tables, clone(value.tables))
+      for(const collection of Object.values(tables))for(const row of collection)sequence=Math.max(sequence,Number(String(row._id||'').match(/-(\d+)$/)?.[1])||0)
+      ensureVirtualTeams()
+    }
   }
 }
