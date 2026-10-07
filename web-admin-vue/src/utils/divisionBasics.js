@@ -15,6 +15,11 @@ export function youthBirthRange(ageGroup,tournament={},method='under') {
   const born=year-Number(match[1])
   return {birthDateStart:`${born}-01-01`,birthDateEnd:method==='cohort'?`${born}-12-31`:'',competitionYear:year}
 }
+export function adultBirthRange(tournament={},minimumAge=16) {
+  const reference=youthBirthRange(`U${minimumAge}`,tournament)
+  if(!reference)return null
+  return {birthDateStart:'',birthDateEnd:reference.birthDateStart.slice(0,4)+'-12-31',competitionYear:reference.competitionYear}
+}
 export function divisionBasicsLocked(division={},tournament={}) {
   return division.rulesLocked===true||division.ruleFinalized===true||['finalized','locked','published'].includes(String(division.ruleStatus||''))||tournament.matchManagementReady===true||['ongoing','in_progress','completed','finished'].includes(String(tournament.status||''))
 }
