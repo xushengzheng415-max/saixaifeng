@@ -37,6 +37,8 @@ for team in teams:
     if len({person['number'] for person in roster})!=len(roster):raise ValueError('Fixture jersey numbers must be unique')
     catalog.append({'key':team['syntheticKey'],'name':team.get('name') or team.get('teamName'),'ageGroup':team['ageGroup'],'logoPath':asset(team.get('logo') or team.get('logoUrl')),'players':roster})
 assert len(catalog)==48
+for crest in (ROOT/'assets/synthetic-fixtures/team-crests').glob('team-*.svg'):
+    asset('team-crests/'+crest.name)
 target=ROOT/'web-admin-vue/src/data/syntheticTeamCatalog.mjs'
 target.write_text('// Read-only mirror of explicitly synthetic source records; production IDs and private fields omitted.\nexport default '+json.dumps({'datasetId':DATASET,'teams':catalog},ensure_ascii=False,separators=(',',':'))+'\n',encoding='utf-8')
 print(f'Mirrored {len(catalog)} existing virtual teams and {sum(len(team["players"]) for team in catalog)} virtual players')
