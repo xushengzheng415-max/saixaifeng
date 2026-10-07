@@ -18,6 +18,10 @@ export function isReadOnlyRequest(action, data = {}) {
   if (action === 'callFunction') {
     const name = data.functionName || ''
     const operation = data.functionParams?.action || ''
+    // The router reads tournament staff scope while navigating protected pages.
+    // Treat these lookup-only actions as reads so they do not flush player/team
+    // data caches before and after every page transition.
+    if (name === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations', 'managed'].includes(operation)) return true
     if (name === 'dataCenter' && ['query', 'playerCard', 'playerDetail', 'catalog'].includes(operation)) return true
     // Temporary file/image processing does not modify player/team facts.
     if (['uploadFile', 'baiduRemoveBg', 'removeImageBg', 'removeLogoBg', 'generateAIImage'].includes(name)) return true

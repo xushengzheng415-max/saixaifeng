@@ -191,6 +191,22 @@ await test('real cloud CRUD invalidates reads before and after the write', async
     assert.equal(h.calls.length, previous + 2)
   }
 })
+await test('navigation staff lookups preserve cached profiles and grant mutations invalidate them', async () => {
+  const h = await harness(() => ({ success: true, data: [{ _id: 'fixture-p' }] }))
+  await h.api.queryList('players')
+  for (const action of ['scope', 'mine', 'invitations', 'managed']) {
+    const before = h.calls.length
+    await h.api.callFunction('tournamentStaffAccess', { action })
+    await h.api.queryList('players')
+    assert.equal(h.calls.length, before + 1)
+  }
+  for (const action of ['invite', 'accept', 'activate', 'activateOrganizerWorkspace', 'update', 'disable']) {
+    const before = h.calls.length
+    await h.api.callFunction('tournamentStaffAccess', { action })
+    await h.api.queryList('players')
+    assert.equal(h.calls.length, before + 2)
+  }
+})
 await test('real cloud auth, org, role and platform boundaries invalidate hits', async () => {
   const h = await harness(() => ({ success: true, data: [{ _id: 'fixture-p' }] }))
   await h.api.queryList('players')
