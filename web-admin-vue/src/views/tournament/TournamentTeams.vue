@@ -1001,14 +1001,14 @@ const syntheticEmptyText = computed(() => syntheticAgeFilterEnabled.value
 function syntheticOptionMeta(team) {
   const age = String(team.ageGroup || '').trim()
   const count = Number(team.playerCount || 0) || 15
-  return [age, `${count}名球员`, '可添加'].filter(Boolean).join(' · ')
+  return [age, `${count}名球员`, team.demoPoolType==='original'?'原虚拟库':'演示补充'].filter(Boolean).join(' · ')
 }
 async function openSyntheticTeamDialog() {
   syntheticTeamDialogVisible.value = true
   syntheticTeamLoading.value = true
   selectedSyntheticTeamIds.value = []
   try {
-    const teams = await queryList('teams', { where:{ synthetic:true }, orderBy:{ name:'asc' }, limit:100, silent:true })
+    const teams = await queryList('teams', { where:{ synthetic:true,...(isDemoMode(tournamentId)?{demoTemporary:{$ne:true}}:{}) }, orderBy:{ name:'asc' }, limit:1000, silent:true })
     const ageGroup = syntheticAgeFilterEnabled.value ? String(activeDivision.value.ageGroup || '').toUpperCase() : ''
     const existingIds = new Set(divisionTournamentTeams.value.map(item => String(item.teamId || '')))
     syntheticTeamCandidates.value = (teams || []).filter(team => isDemoMode(tournamentId) ? virtualTeamMatchesDivision(team,activeDivision.value,tournament.value) : (!ageGroup || String(team.ageGroup || '').toUpperCase() === ageGroup)).map(team => ({ ...team, alreadyAdded:existingIds.has(String(team._id)) }))
