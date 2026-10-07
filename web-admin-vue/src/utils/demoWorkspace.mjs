@@ -1,12 +1,14 @@
 // Browser-only repository. No transport or production credentials belong here.
 import { calculateMatchEventScore } from '../../../cloudfunctions/dataCenter/shared/match-events.mjs'
 import standings from '../../../cloudfunctions/dataCenter/shared/standings.cjs'
+import fixtureCatalog from '../data/syntheticTeamCatalog.mjs'
 export const DEMO_ORG_ID = 'demo-organization'
-export function createDemoWorkspace() {
+export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
   let sequence = 0
   const tables = {}
   const clone = value => JSON.parse(JSON.stringify(value))
   const rows = name => tables[name] ||= []
+  const assetUrl=path=>path?`${assetBase}${path}`:''
   const fail = message => { throw new Error(message) }
   const success = data => ({ success: true, data: clone(data) })
   function add(collection, data) {
@@ -107,12 +109,17 @@ export function createDemoWorkspace() {
       for (const teamId of additions) {
         const team = get('teams', teamId)
         const players = rows('players').filter(player => player.teamId === teamId)
-        const registration = add('tournament_teams', { tournamentId, divisionId, teamId, teamName: team.name, name: team.name, status: 'approved', participationStatus: 'confirmed', claimStatus: 'claimed', claimed: true, players: clone(players), playerIds: players.map(player => player._id), playerCount: players.length })
-        add('roster_snapshots', { tournamentId, divisionId, teamId, registrationId: registration._id, status: 'approved', players: clone(players) })
+        const registration = add('tournament_teams', { tournamentId, divisionId, teamId, teamName: team.name, name: team.name, teamLogo:team.logo||'', status: 'pending', participationStatus: 'pending_review', claimStatus: 'claimed', claimed: true, players: clone(players), playerIds: players.map(player => player._id), playerCount: players.length })
+        add('roster_snapshots', { tournamentId, divisionId, teamId, registrationId: registration._id, status: 'draft', players: clone(players) })
       }
       return { success: true, addedCount: additions.length, message: '虚拟球队已添加' }
     }
-    if (action === 'reviewRegistration') return success(update('tournament_teams', params.registrationId, { status: params.decision, participationStatus: params.decision === 'approved' ? 'confirmed' : params.decision }))
+    if (action === 'reviewRegistration') {
+      const approved=params.decision==='approved'
+      const row=update('tournament_teams',params.registrationId,{status:params.decision,participationStatus:approved?'confirmed':params.decision,rosterStatus:approved?'approved':'draft'})
+      rows('roster_snapshots').filter(snapshot=>snapshot.registrationId===params.registrationId).forEach(snapshot=>{snapshot.status=approved?'approved':'draft'})
+      return success(row)
+    }
     if (action === 'setDivisionRegistration') return success(update('divisions', divisionId, { registrationEnabled: params.enabled }))
     if (action === 'createTemporaryRefereeClaim') {
       const row = add('referees', { tournamentId, name: params.name, status: 'approved', canOperate: true, level: '虚拟裁判' })
@@ -201,11 +208,27 @@ export function createDemoWorkspace() {
     return fail('这项操作尚未接入模拟，不会调用真实接口')
   }
   function ensureVirtualTeams() {
-  for (const ageGroup of ['成人', 'U8', 'U10', 'U12', 'U14', 'U16', 'U18', 'open']) {
+  for(const source of fixtureCatalog.teams){
+    let team=rows('teams').find(row=>row.syntheticKey===source.key)
+    if(!team)team=add('teams',{name:source.name,teamName:source.name,ageGroup:source.ageGroup,playerCount:source.players.length,syntheticKey:source.key,syntheticDatasetId:fixtureCatalog.datasetId,demoPoolType:'original',logo:assetUrl(source.logoPath),logoUrl:assetUrl(source.logoPath),status:'active'})
+    else Object.assign(team,{logo:team.logo||assetUrl(source.logoPath),logoUrl:team.logoUrl||assetUrl(source.logoPath),demoPoolType:'original'})
+    for(const person of source.players){
+      let player=rows('players').find(row=>row.teamId===team._id&&row.syntheticKey===person.key)
+      const photo=assetUrl(person.avatarPath)
+      if(!player)player=add('players',{teamId:team._id,name:person.name,realName:person.name,birthDate:person.birthDate,gender:person.gender,jerseyNumber:person.number,number:person.number,position:person.position,syntheticKey:person.key,syntheticDatasetId:fixtureCatalog.datasetId,ageGroup:source.ageGroup,avatarUrl:photo,photoUrl:photo,photoFileID:photo,status:'active'})
+      else Object.assign(player,{avatarUrl:player.avatarUrl||photo,photoUrl:player.photoUrl||photo,photoFileID:player.photoFileID||photo})
+    }
+  }
+  for(const team of rows('teams'))if(['U8','U10','U12'].includes(team.ageGroup)&&team.source==='browser_demo'&&/^模拟U\d+球队\d+$/.test(team.name||''))team.demoTemporary=true
+  const ages=['成人',...Array.from({length:13},(_,index)=>`U${index+6}`),'open']
+  for (const ageGroup of ages) {
+    if(['U8','U10','U12'].includes(ageGroup))continue
     for (let index = 1; index <= 8; index++) {
       const label = ageGroup === 'open' ? '青少年' : ageGroup
-      if(rows('teams').some(team=>team.ageGroup===ageGroup&&team.name===`模拟${label}球队${index}`&&team.source==='browser_demo'))continue
-      const team = add('teams', { name: `模拟${label}球队${index}`, teamName: `模拟${label}球队${index}`, ageGroup, status: 'active', playerCount: ageGroup === 'open' ? 12 : 18 })
+      const logo=assetUrl(`assets/synthetic-fixtures/team-crests/team-${String((ages.indexOf(ageGroup)*8+index-1)%48+1).padStart(2,'0')}.svg`)
+      const existing=rows('teams').find(team=>team.ageGroup===ageGroup&&team.name===`模拟${label}球队${index}`&&team.source==='browser_demo')
+      if(existing){Object.assign(existing,{logo,logoUrl:logo,demoPoolType:'supplement'});continue}
+      const team = add('teams', { name: `模拟${label}球队${index}`, teamName: `模拟${label}球队${index}`, ageGroup, status: 'active', playerCount: ageGroup === 'open' ? 12 : 18,logo,logoUrl:logo,demoPoolType:'supplement' })
       for (let number = 1; number <= team.playerCount; number++) add('players', { teamId: team._id, name: `虚拟球员${index}-${number}`, realName: `虚拟球员${index}-${number}`, jerseyNumber: number, number, ageGroup, gender: '男', birthDate: ageGroup === '成人' ? '1996-01-01' : ageGroup === 'open' ? '2014-01-01' : `${2026 - Number(ageGroup.slice(1))}-01-01`, status: 'active', position: number === 1 ? '门将' : '前锋' })
     }
   }
