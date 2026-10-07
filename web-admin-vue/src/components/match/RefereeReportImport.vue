@@ -49,11 +49,11 @@
 <script setup>
 import { ref, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { callFunctionHTTP } from '../../utils/cloud'
+import { callFunctionHTTP, uploadLargeFileViaCloud } from '../../utils/cloud'
 const props=defineProps({matchId:String,homeName:String,awayName:String,disabled:Boolean,loadRoster:Function})
 const emit=defineEmits(['saved'])
 const visible=ref(false),busy=ref(false),saving=ref(false),stage=ref('正在识别'),error=ref(''),preview=ref(''),draft=ref(null),fileInput=ref(null),side=ref('home'),rosters=ref({home:[],away:[]}),substitutions=ref([])
-let imageBase64=''; let generation=0
+let selectedFile=null; let uploadedFileId=''; let generation=0
 const roles=[{label:'待确认',value:'unknown'},{label:'首发',value:'starter'},{label:'替补',value:'substitute'},{label:'不出场',value:'absent'}]
 const fields=[{key:'on',label:'换上'},{key:'off',label:'换下'},{key:'goals',label:'进球'},{key:'yellow',label:'黄牌'},{key:'red',label:'红牌'}]
 function chooseFile(){if(!busy.value&&!props.disabled)fileInput.value?.click()}
@@ -67,13 +67,23 @@ async function readFile(event){
   const file=event.target.files?.[0];event.target.value='';if(!file)return
   if(!['image/jpeg','image/png'].includes(file.type)||file.size>3*1024*1024)return ElMessage.warning('请选择不超过3MB的JPG或PNG照片')
   revoke();preview.value=URL.createObjectURL(file);visible.value=true;draft.value=null;error.value=''
-  try{imageBase64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('照片读取失败，请重新选择'));reader.readAsDataURL(file)});await recognize()}catch(e){error.value=e.message}
+  selectedFile=file;uploadedFileId='';await recognize()
 }
 async function recognize(){
-  if(!imageBase64||busy.value)return
+  if(!selectedFile||busy.value)return
   const current=++generation;busy.value=true;error.value='';stage.value='正在识别裁判表'
   try{
-    const [response,home,away]=await Promise.all([callFunctionHTTP('recognizeRefereeReport',{matchId:props.matchId,imageBase64},120000),props.loadRoster('home'),props.loadRoster('away')])
+    if(!uploadedFileId){
+      stage.value='准备上传照片'
+      const preparation=await callFunctionHTTP('recognizeRefereeReport',{matchId:props.matchId,prepareUpload:true})
+      if(!preparation?.success||!preparation.data?.uploadFolder)throw new Error(preparation?.error||'无法准备照片上传')
+      const extension=selectedFile.type==='image/png'?'png':'jpg'
+      const upload=await uploadLargeFileViaCloud(`${preparation.data.uploadFolder}/paper-${Date.now()}.${extension}`,selectedFile,{chunkSize:48*1024,fallbackChunkSize:24*1024,onProgress:(done,total)=>{stage.value=`上传照片 ${done}/${total}`}})
+      if(!upload?.success||!upload.fileId)throw new Error('照片上传未完成，请重试')
+      uploadedFileId=upload.fileId
+    }
+    stage.value='正在识别裁判表'
+    const [response,home,away]=await Promise.all([callFunctionHTTP('recognizeRefereeReport',{matchId:props.matchId,fileId:uploadedFileId},120000),props.loadRoster('home'),props.loadRoster('away')])
     if(current!==generation)return
     if(!response?.success)throw new Error(response?.error||'识别未完成，请重试')
     rosters.value={home:home.players,away:away.players};draft.value=response.data
