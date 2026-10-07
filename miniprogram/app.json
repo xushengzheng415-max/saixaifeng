@@ -129,6 +129,7 @@
         "create/create",
         "detail/detail",
         "shared/shared",
+        "shared/manage",
         "pre-match/pre-match",
         "monitor/monitor",
         "review/review",

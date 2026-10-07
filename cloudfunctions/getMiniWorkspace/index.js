@@ -3941,6 +3941,7 @@ exports.main = async function(event) {
   event = event || {}
   try {
     const identity = await findCurrentUser()
+    if (event.action === 'sharedEventOperation') return await require('./sharedOperations.cjs').run(db, cloud, identity, event)
     if (event.action === 'sharedTournaments') return { success: true, tournaments: await sharedEvents.list(db, identity.user._id) }
     if (event.action === 'sharedTournamentDetail') {
       const rows = await sharedEvents.list(db, identity.user._id)

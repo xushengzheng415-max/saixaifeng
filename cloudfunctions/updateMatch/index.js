@@ -176,7 +176,7 @@ async function authenticateActor(event) {
   const organizationResult = await db.collection('organizations').doc(orgId).get()
   const organization = Array.isArray(organizationResult.data) ? organizationResult.data[0] : organizationResult.data
   if (!organization) throw new Error('当前机构不存在或已失效，请重新完成机构引导')
-  return { user: { ...user, orgId }, orgId }
+  return { user: { ...user, orgId }, orgId, miniScope:sessions[0].source==='mini_shared_operation' && sessions[0].allowedFunction==='updateMatch' ? {operation:String(sessions[0].miniOperation || ''),tournamentId:String(sessions[0].tournamentId || ''),grantId:String(sessions[0].grantId || ''),recordRevision:String(sessions[0].recordRevision || '')} : null }
 }
 
 async function undoLastScheduleAdjustment(event) {
@@ -230,6 +230,8 @@ async function normalizeRefereeCrew(refereeCrew, format, actor, tournamentId, op
     if (ids.includes(refereeId)) throw new Error('同一名裁判不能重复担任多个岗位')
     const result = await db.collection('referees').doc(refereeId).get()
     const referee = Array.isArray(result.data) ? result.data[0] : result.data
+    const unavailable=(await db.collection('tournament_referees').where({tournamentId:String(tournamentId || ''),refereeId,availabilityStatus:'unavailable'}).limit(1).get()).data || []
+    if(unavailable.length) throw new Error(role.label+'在本赛事被设为不可用，请选择其他裁判')
     const approvedTemporaryReferee = referee && referee.temporaryReferee === true && referee.status === 'approved' && referee.canOperate !== false && referee.eventScoped === true && referee.organizerTemporaryApproval === true && referee.temporaryClaimStatus === 'approved' && referee.wechatBound === true && recordBelongsToActor(referee, actor) && String(referee.tournamentId || '') === String(tournamentId || '')
     const approvedRealReferee = referee && referee.temporaryReferee !== true && referee.status === 'approved' && recordBelongsToActor(referee, actor)
     const scopedSyntheticReferee = config.allowSynthetic !== false && referee && referee.synthetic === true && String(referee.tournamentId || '') === String(tournamentId || '')
@@ -450,6 +452,8 @@ exports.main = async (event, context) => {
     const match = Array.isArray(matchResult.data) ? matchResult.data[0] : matchResult.data
     if (!match) return { success: false, message: '比赛不存在' }
 
+    require('./miniSharedRecording.cjs').assert(actor,event,match)
+
     let tournament = null
     if (match.tournamentId) {
       const tournamentResult = await db.collection('tournaments').doc(match.tournamentId).get()
@@ -491,11 +495,13 @@ exports.main = async (event, context) => {
       }
       division = division || (tournament?.divisions || []).find(row=>String(row._id || row.id || '')===String(match.divisionId || '')) || {}
       const { substitutionRules, assertSubstitutionChange, normalizeSubstitutionRecords } = await import('./data-center/substitution.mjs')
-      eventValidation = assertSubstitutionChange(match,substitutionRules(match,division,tournament || {}),safeData.events)
-      safeData.events = normalizeMatchEvents(normalizeSubstitutionRecords(match,safeData.events), match)
+      const eventMatch = actor.miniScope?.operation==='import' ? {...match,lineups:safeData.lineups} : match
+      eventValidation = assertSubstitutionChange(eventMatch,substitutionRules(match,division,tournament || {}),safeData.events)
+      safeData.events = normalizeMatchEvents(normalizeSubstitutionRecords(eventMatch,safeData.events), eventMatch)
       safeData.matchEventRevision = Number(match.matchEventRevision || 0) + 1
       const { calculateMatchEventScore } = await import('./data-center/statistics.mjs')
       const eventScore = calculateMatchEventScore({ ...match, events:safeData.events })
+      if(actor.miniScope?.operation==='import' && (Number(data.homeScore)!==eventScore.home || Number(data.awayScore)!==eventScore.away)) return {success:false,code:'REPORT_SCORE_EVENTS_MISMATCH',message:'裁判表比分与核对后的进球事件不一致，请补充或修正事件后确认'}
       safeData.homeScore = eventScore.home
       safeData.awayScore = eventScore.away
       safeData.scoreHome = eventScore.home
@@ -516,15 +522,18 @@ exports.main = async (event, context) => {
     if (finishing && !ORGANIZER_FINISHABLE_STATUSES.has(currentStatus)) return { success:false, code:'MATCH_NOT_IN_PROGRESS', message:'只有进行中的比赛可以结束' }
     if (finishing && !organizerCanFinish) return { success:false, code:'MATCH_RECORD_LOCKED', message:'裁判已接管或裁判报告已提交/锁定，请通过裁判记录流程结束比赛' }
     const organizerRecordAllowed = !refereeHasTakenOverOrLocked(match) && !['ongoing','live','in_progress','playing','archived','cancelled'].includes(currentStatus)
-    const canSupplement = (organizerRecordAllowed && Array.isArray(safeData.events)) || (finishing && organizerCanFinish)
+    const miniImport = actor.miniScope?.operation==='import' && !refereeHasTakenOverOrLocked(match)
+    const miniLive = actor.miniScope?.operation==='events' && !refereeHasTakenOverOrLocked(match) && ['ongoing','live','in_progress','playing'].includes(currentStatus)
+    const miniSetup = ['lineup','start'].includes(actor.miniScope?.operation) && !refereeHasTakenOverOrLocked(match) && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(currentStatus)
+    const canSupplement = ((organizerRecordAllowed || miniImport || miniLive) && Array.isArray(safeData.events)) || (finishing && organizerCanFinish)
 
-    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status'] : [])].includes(field)))) {
+    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(miniImport && ['lineups','status','organizerSupplementFiles'].includes(field)) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status'] : [])].includes(field)))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
     const preMatchSetupEditable = !match.refereeRecordLocked && !match.refereeReportSubmittedAt && match.executionState !== 'recording' && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
     if (planState.locked) {
-      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['status'] : [])])
-      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'kitSelection' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
+      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['status'] : []),...(miniImport ? ['lineups','status','organizerSupplementFiles'] : [])])
+      const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'kitSelection' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已锁定，当前只能安排裁判或修改未开赛比赛的球服颜色与场序', code: 'COMPETITION_PLAN_LOCKED' }
       }
@@ -620,8 +629,9 @@ exports.main = async (event, context) => {
         updateTime: db.serverDate()
       }
     })
-    if (eventValidation || finishing || safeData.durationRulesSnapshot) {
+    if (eventValidation || finishing || miniSetup || actor.miniScope || safeData.durationRulesSnapshot) {
       await db.runTransaction(async transaction => {
+        await require('./miniSharedRecording.cjs').validateGrant(transaction,actor)
         const freshResult = await transaction.collection('matches').doc(matchId).get()
         const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
         if (fresh?.durationRulesSnapshot) delete safeData.durationRulesSnapshot

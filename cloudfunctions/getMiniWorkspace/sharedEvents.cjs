@@ -36,8 +36,8 @@ async function list(db, userId) {
       permissions, permissionText: permissions.map(right => RIGHTS[right]).join('、'),
       status, statusText: ({draft:'待开始',upcoming:'待开始',registering:'报名中',ongoing:'进行中',completed:'已结束',finished:'已结束'})[status] || '赛事',
       dateText: [text(event.startDate).slice(0,10),text(event.endDate).slice(0,10)].filter(Boolean).join(' — '),
-      location: text(event.location || event.city), modeText: '共享授权',
-      teamCountText: '按赛事授权', matchCountText: '', cardClass: 'event-card-simple'
+      location: text(event.location || event.city), modeText: '',
+      teamCountText: '', matchCountText: '', cardClass: 'event-card-simple'
     })
   }
   return [...new Map(result.map(item => [item.id, item])).values()]

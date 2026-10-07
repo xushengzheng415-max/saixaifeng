@@ -10,6 +10,7 @@
 
 | 入口 | 权限与范围 | 统一实现 | 状态 |
 |---|---|---|---|
+| 手机共享赛事五模块与两条录入链路 | 手机号主账号、active grant、模块、精确赛事/目标记录；球队只读；注册资料只限参赛关系；裁判资格不作全平台修改 | getMiniWorkspace.sharedEventOperation → sharedOperations/sharedRecording；PC updateMatch 及统一事件/比分/换人模块；serviceMatchWorkflow.organizerReportOcr；PC 报名、球员资料与裁判邀请服务 | 2026-10-07 三函数按线上包差量部署，27 文件源码回下载一致；1.1.01 开发包已上传，真实手机与纸质表验收待完成 |
 | 小程序共享赛事列表与基础详情 | 手机号主账号对应的 active 赛事授权；逐次核验赛事所属机构，不继承机构管理权 | getMiniWorkspace.sharedTournaments / sharedTournamentDetail + sharedEvents.cjs | 2026-10-07 接入只读展示；部署和微信版本状态见 MINI_SHARED_EVENTS_2026-10-07.md |
 | PC 数据中心 | 机构所属球队/主办赛事；平台所有者全平台 | dataCenter → shared/service + statistics | 已实现、本地验证 |
 | 小程序数据中心调用 | 工作空间授权球队/主办赛事 | getMiniWorkspace.dataCenter → shared/service | 已实现、本地验证 |

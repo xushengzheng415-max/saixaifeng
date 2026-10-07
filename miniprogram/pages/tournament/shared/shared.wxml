@@ -2,13 +2,12 @@
   <view wx:if="{{loading}}" class="state">加载中…</view>
   <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="loadSharedEvent">重新加载</button></view>
   <view wx:else>
-    <text class="badge">共享赛事</text>
     <view class="name">{{name}}</view>
     <view class="meta">{{statusText}}</view>
     <view wx:if="{{dateText}}" class="meta">{{dateText}}</view>
     <view wx:if="{{location}}" class="meta">{{location}}</view>
-    <view class="rights"><text class="label">PC 已授权模块</text><text>{{permissionText}}</text></view>
-    <view class="note">手机操作入口陆续接入，当前可查看共享赛事及授权范围。</view>
+    <view class="modules"><view class="module" wx:for="{{modules}}" wx:key="id" data-id="{{item.id}}" bindtap="onModule"><text>{{item.title}}</text><text>›</text></view></view>
+    <view wx:if="{{!hasModules}}" class="note">当前未授权手机模块，请联系主办方。</view>
   </view>
   <button class="back" bindtap="onBack">返回赛事列表</button>
 </view>
