@@ -2,7 +2,7 @@
   <section class="pairing-page" v-loading="loading">
     <header class="schedule-center-header">
       <div class="center-heading"><el-button text @click="emit('navigate','map')">返回比赛地图</el-button><h1>赛程中心</h1><div class="center-context"><strong>{{ tournament.name || '当前赛事' }}</strong><el-tag effect="plain">{{ divisionName }}</el-tag><span>已编排 {{ scheduledCount }} / {{ matches.length }} 场</span></div></div>
-      <div class="center-actions"><el-button type="danger" plain :loading="resetting" :disabled="!resetCandidates.length || loading" @click="resetSchedule">重置赛事时间</el-button><el-button plain @click="goSchedule('settings')">自主编排</el-button><el-button plain @click="goSchedule('imports')">上传赛程</el-button><el-button type="success" :loading="exporting" :disabled="!filteredMatches.length || resetting" @click="downloadTemplate">下载赛程表</el-button></div>
+      <div class="center-actions"><el-button type="danger" plain :loading="resetting" :disabled="!resetCandidates.length || loading" @click="resetSchedule">重置赛事时间</el-button><el-button plain @click="goSchedule('settings')">赛程设置</el-button><el-button plain @click="goSchedule('imports')">上传赛程</el-button><el-button type="success" :loading="exporting" :disabled="!filteredMatches.length || resetting" @click="downloadTemplate">下载赛程表</el-button></div>
     </header>
     <div class="pairing-toolbar">
       <el-select v-model="divisionId" aria-label="筛选组别" @change="value => {clearFilters();emit('scope',value)}"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="String(division.id)" /></el-select>
