@@ -36,7 +36,7 @@
       </template>
       <template v-else>
         <p class="note">排除测试比赛 {{ result.coverage.excludedTestMatches }} 场 · 含测试球员 {{ result.coverage.testPlayerMatches }} 场 · 待审核 {{ result.coverage.pendingReviewCount }} 场</p>
-        <el-table :data="pageRows(result.issues || [])" stripe empty-text="当前范围没有质量问题"><el-table-column label="问题" min-width="210"><template #default="{row}">{{ issueNames[row.code] || row.code }}</template></el-table-column><el-table-column prop="matchId" label="比赛编号" min-width="200" /><el-table-column prop="eventId" label="事件编号" min-width="180" /><el-table-column prop="playerId" label="球员编号" min-width="180" /></el-table><ListPager :total="result.issues.length" />
+        <el-table :data="pageRows(result.issues || [])" stripe empty-text="当前范围没有质量问题"><el-table-column label="问题" min-width="210"><template #default="{row}">{{ issueNames[row.code] || row.code }}</template></el-table-column><el-table-column prop="matchId" label="比赛编号" min-width="200" /><el-table-column prop="eventId" label="事件编号" min-width="180" /><el-table-column prop="playerId" label="球员编号" min-width="180" /><el-table-column label="操作" width="110"><template #default="{row}"><DurationVerification :issue="row" :allowed="catalog.accessScope==='platform'" @saved="query" /></template></el-table-column></el-table><ListPager :total="result.issues.length" />
       </template>
       <details class="version"><summary>数据版本</summary><p>{{ result.schemaVersion }} · {{ result.metricVersion }} · {{ result.dataVersion }}</p></details>
     </template>
@@ -46,6 +46,7 @@
 <script setup>
 import { computed,defineComponent,h,onBeforeUnmount,onMounted,reactive,ref,watch } from 'vue'
 import { ElPagination } from 'element-plus'
+import DurationVerification from './DurationVerification.vue'
 import { callFunction } from '@/utils/cloud'
 const loading=ref(false),error=ref(''),lastLoadedAt=ref(null),result=ref(null),catalog=reactive({teams:[],players:[],tournaments:[],divisions:[],rosters:[]})
 const scope=reactive({tournamentId:'',divisionId:'',mode:'official'}),tab=ref('standings'),keyword=ref(''),groupKey=ref(''),directoryGroup=ref(''),teamFilter=ref(''),eventFilter=ref(''),page=ref(1),rankingKind=ref('players'),rankingMetric=ref('goals')

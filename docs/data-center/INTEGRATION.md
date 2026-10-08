@@ -205,3 +205,13 @@ PC 经 webLoginApi.callFunction 转发 dataCenter.catalog/query；小程序经 g
 resultCenter 读取共享完整分页事件与共享 standings；getMiniWorkspace.tournamentData 的榜单消费共享 rankings。平台页面是统一服务的管理界面，其他端调用服务接口，不依赖打开该页面。原始裁判事件与审核快照仍保留原存储及修改权限，数据中心输出有效事实版本，不迁移原始记录，不自动执行纪律停赛。
 
 本次正式发布 dataCenter、webLoginApi、getMiniWorkspace、resultCenter 和 /admin/。以新下载生产包为基底保留现有授权与依赖；代码包摘要及网页入口、主包、平台页面资源均读回匹配。未发布新的小程序包或 H5 静态页面，未执行历史数据迁移。其他历史页面接入范围仍按 RELEASE.md 的各项登记，不表示所有旧读取入口已删除。
+
+## 历史时长直接核实（2026-10-08）
+
+平台负责人可在数据质量异常行使用 inspectDuration/verifyDuration，无需跳转赛事。仅平台负责人获准；服务端核对比赛存在、当前时长是否已核定及 expectedRevision，并以事务保存 matches.durationVerification 的时长单位、分钟、节数、核实依据、操作者、时间、独立修订版本和原依据摘要。保留赛前规则快照、事件、阵容及裁判报告；普通 dbQuery 与 updateMatch 不能伪造或改写核实字段。
+
+共享 playing-time 优先读取有效的人工核实补充，重查询生成新数据版本与分钟统计。该入口只处理时长异常，不修改身份、比分、判罚和纪律结果，也不替缺少依据的比赛猜时长。已核实记录禁止重复覆盖。
+
+独立平台实际目标 https://pingtai.sxffootball.cn，Nginx root /var/www/pingtai/releases/20261005。现存独立包无完整源文件，本轮保留原资源，在入口加入共享 DurationVerification 兼容模块，仅匹配时长异常行的稳定比赛 ID；主站源码两个数据中心视图同时接入共享组件。入口改动前保存 index/platform-ops 回滚副本。独立模块 HTTP200 且 SHA-256 匹配；浏览器连接超时，尚未完成真实登录弹窗验收。
+
+发布 dataCenter、webLoginApi、getMiniWorkspace、resultCenter、updateMatch，从最新线上包差量更新并逐文件下载回读。构建、共享同步、数据中心及球员卡回归、核实权限/冲突/幂等/原报告保留/普通写入保护验证通过。本轮没有替用户修改任何实际比赛时长。服务号、小程序静态页面未重新发布。

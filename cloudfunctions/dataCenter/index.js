@@ -10,6 +10,8 @@ exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(cloud,db,event)
     const service = createDataService(db)
+    if (event.action === 'inspectDuration') return await require('./durationVerification.cjs').inspectDuration(db,actor,event)
+    if (event.action === 'verifyDuration') return await require('./durationVerification.cjs').verifyDuration(db,actor,event)
     if (actor.staff) {
       const tournamentId = String(actor.tournamentIds[0] || '')
       const requested = String(event.scope && event.scope.tournamentId || event.tournamentId || '')

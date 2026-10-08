@@ -22,7 +22,7 @@
         <div class="result-meta"><span>{{ result.scope.mode === 'official' ? '正式结果' : '含现场暂定' }} · {{ result.accessScope === 'platform' ? '平台范围' : '当前授权范围' }}</span><span>记录覆盖 {{ result.coverage.coveredMatches }}/{{ result.coverage.expectedMatches }} 场</span><el-tag :type="result.coverage.status === 'complete' ? 'success' : 'warning'">{{ result.coverage.status === 'complete' ? '记录完整' : '部分记录不完整' }}</el-tag><el-button @click="download">导出结果</el-button></div>
         <template v-if="activeTab === 'quality'">
           <p class="quality-summary">未关联事件 {{ result.coverage.unlinkedEventCount }} 条 · 待审核比赛 {{ result.coverage.pendingReviewCount }} 场</p>
-          <el-table :data="issuePage" stripe><el-table-column label="问题"><template #default="{ row }">{{ issueLabel(row.code) }}</template></el-table-column><el-table-column prop="matchId" label="比赛编号" show-overflow-tooltip /><el-table-column prop="eventId" label="事件编号" show-overflow-tooltip /><el-table-column prop="teamId" label="球队编号" show-overflow-tooltip /></el-table>
+          <el-table :data="issuePage" stripe><el-table-column label="问题"><template #default="{ row }">{{ issueLabel(row.code) }}</template></el-table-column><el-table-column prop="matchId" label="比赛编号" show-overflow-tooltip /><el-table-column prop="eventId" label="事件编号" show-overflow-tooltip /><el-table-column prop="teamId" label="球队编号" show-overflow-tooltip /><el-table-column label="操作" width="110"><template #default="{row}"><DurationVerification :issue="row" :allowed="platformOwner" @saved="query" /></template></el-table-column></el-table>
           <el-pagination v-if="result.issues.length > 20" v-model:current-page="issuePageIndex" :page-size="20" :total="result.issues.length" layout="prev, pager, next, total" />
         </template>
         <template v-else>
@@ -53,6 +53,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import DurationVerification from './DurationVerification.vue'
 import { callFunction } from '../../utils/cloud'
 const catalog = reactive({ teams:[], tournaments:[], players:[] })
 const catalogLoading = ref(false), loading = ref(false), errorText = ref(''), result = ref(null), subject = ref('team'), activeTab = ref('statistics')
