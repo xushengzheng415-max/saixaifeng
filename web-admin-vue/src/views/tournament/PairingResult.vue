@@ -20,6 +20,7 @@ import {computed,onMounted,onBeforeUnmount,ref} from 'vue'
 import {useRoute,useRouter} from 'vue-router'
 import {ElMessage} from 'element-plus'
 import {queryList,queryById} from '../../utils/cloud'
+import {createScheduleTemplateWorkbook} from '../../utils/scheduleTemplateWorkbook.mjs'
 const route=useRoute(),router=useRouter(),tournamentId=String(route.params.id || ''),divisionId=String(route.query.divisionId || 'default')
 const divisionName=String(route.query.divisionName || '当前组别'),loading=ref(false),matches=ref([]),tournament=ref({}),stageFilter=ref(''),keyword=ref(''),exporting=ref(false),download=ref(null)
 function stageLabel(row){return row.phase==='group' || row.stage==='group' ? '小组赛' : row.roundName || row.scheduleStageName || row.stageName || '联赛'}
@@ -31,13 +32,10 @@ function goSchedule(view){router.push({path:`/tournaments/${tournamentId}/matche
 async function downloadTemplate(){
   exporting.value=true
   try{
-    const module=await import('xlsx'),XLSX=module.default || module
-    const headers=['比赛ID','组别ID','场序','比赛日期','星期','时间','组别','阶段','比赛对阵','场地']
-    const rows=matches.value.map(row=>[row._id,divisionId,row.matchNo || row.matchIndex || '',row.matchDate || '',row.matchDate ? ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][new Date(`${row.matchDate}T00:00:00`).getDay()] : '',row.matchTime || '',row.divisionName || divisionName,stageLabel(row),`${teamName(row,'home')} VS ${teamName(row,'away')}`,row.venue || ''])
-    const sheet=XLSX.utils.aoa_to_sheet([[`${tournament.value.name || '赛事'}赛程表`],headers,...rows]);sheet['!merges']=[{s:{r:0,c:0},e:{r:0,c:9}}];sheet['!cols']=[{hidden:true},{hidden:true},{wch:8},{wch:14},{wch:10},{wch:10},{wch:16},{wch:22},{wch:46},{wch:16}]
-    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,'赛程填写')
+    const {buffer:bytes,filename:name}=await createScheduleTemplateWorkbook({tournament:tournament.value,matches:matches.value,divisionName,stageLabel,teamName})
     if(download.value)URL.revokeObjectURL(download.value.url)
-    const bytes=XLSX.write(book,{bookType:'xlsx',type:'array'}),url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})),name=`${tournament.value.name || '赛事'}-${divisionName}-赛程填写表.xlsx`
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))
+
     download.value={url,name};const link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();ElMessage.success('赛程表已生成')
   }catch(error){ElMessage.error(error.message || '生成失败，请重试')}finally{exporting.value=false}
 }

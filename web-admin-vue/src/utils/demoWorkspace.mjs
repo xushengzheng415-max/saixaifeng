@@ -183,8 +183,8 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       }
       const planned=rows('matches').filter(row=>row.tournamentId===tournamentId && row.status!=='cancelled').map(row=>({...row,...(changes.find(change=>change.matchId===row._id)?.after || {})}))
       for(const change of changes) {
-        const current=planned.find(row=>row._id===change.matchId),start=new Date(`${current.matchDate}T${current.matchTime}`).getTime(),end=start+Number(current.durationMinutes || 50)*60000
-        if(planned.some(other=>{if(other._id===current._id || !other.matchDate || !other.matchTime)return false;const from=new Date(`${other.matchDate}T${other.matchTime}`).getTime(),to=from+Number(other.durationMinutes || 50)*60000;return start<to && from<end && (other.venue===current.venue || [other.homeTeamId,other.awayTeamId].filter(Boolean).some(id=>[current.homeTeamId,current.awayTeamId].filter(Boolean).includes(id)))})) errors.push({matchId:change.matchId,message:'场地或球队比赛时段冲突'})
+        const current=planned.find(row=>row._id===change.matchId),start=new Date(`${current.matchDate}T${current.matchTime}`).getTime(),end=start+Number(current.durationMinutes || tournament.scheduleDraft?.matchDurations?.[current.divisionId] || 50)*60000
+        if(planned.some(other=>{if(other._id===current._id || !other.matchDate || !other.matchTime)return false;const from=new Date(`${other.matchDate}T${other.matchTime}`).getTime(),to=from+Number(other.durationMinutes || tournament.scheduleDraft?.matchDurations?.[other.divisionId] || 50)*60000;return start<to && from<end && (other.venue===current.venue || [other.homeTeamId,other.awayTeamId].filter(Boolean).some(id=>[current.homeTeamId,current.awayTeamId].filter(Boolean).includes(id)))})) errors.push({matchId:change.matchId,message:'场地或球队比赛时段冲突'})
       }
       if(errors.length) return {success:false,message:'排期预检未通过',errors,errorCount:errors.length,validCount:0,changes:[]}
       if(params.dryRun!==false) return {success:true,dryRun:true,validCount:changes.length,errorCount:0,changes}
@@ -235,7 +235,10 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
             const date=`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`
             for(const session of sessions) {
               if(chosen)break
-              for(let minute=clock(session.start);minute+Number(row.durationMinutes || 50)<=clock(session.end) && !chosen;minute+=Math.max(5,Number(config.timeStepMinutes || 5)))for(const venue of venues) {
+              const duration=Number(row.durationMinutes || config.matchDurations?.[row.divisionId] || 50)
+              const starts=Array.isArray(config.kickoffTimes)?config.kickoffTimes.map(clock).filter(minute=>minute>=clock(session.start) && minute+duration<=clock(session.end)):Array.from({length:Math.max(0,Math.floor((clock(session.end)-clock(session.start)-duration)/Math.max(5,Number(config.timeStepMinutes || 5)))+1)},(_,i)=>clock(session.start)+i*Math.max(5,Number(config.timeStepMinutes || 5)))
+              for(const minute of starts)for(const venue of venues) {
+                if(chosen)break
                 const entry={matchId:row._id,matchDate:date,matchTime:format(minute),venue}
                 const preview=schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:true,adjustmentType:'auto'})
                 if(preview.success){schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:false,adjustmentType:'auto'});chosen=entry;planned.push(entry);break}
