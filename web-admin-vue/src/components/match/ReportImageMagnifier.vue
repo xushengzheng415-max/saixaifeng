@@ -47,6 +47,6 @@ onBeforeUnmount(()=>window.removeEventListener('resize',hideLens))
 <style scoped>
 .image-viewport{max-height:calc(70vh - 48px);overflow:auto;background:#f4f7f5}.image-viewport img{display:block;width:100%;height:auto;cursor:crosshair;user-select:none}
 .magnifier-controls{display:flex;align-items:center;gap:12px;padding:12px 10px;background:#fff;border-top:1px solid #e3e9e5;font-size:13px;color:#42564c}.magnifier-controls label{white-space:nowrap}.magnifier-controls input{min-width:60px;flex:1;margin:0;accent-color:var(--el-color-primary,#078747)}.magnifier-controls output{min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
-.report-magnifier-lens{position:fixed;z-index:6000;pointer-events:none;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #1c4538,0 5px 18px #0004;background-color:#f4f7f5;background-repeat:no-repeat;box-sizing:border-box}
+.report-magnifier-lens{position:fixed;z-index:6000;pointer-events:none;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #1c4538,0 5px 18px #0004;background-color:#f4f7f5;background-repeat:no-repeat;background-origin:border-box;box-sizing:border-box}
 @media(max-width:900px){.image-viewport{max-height:260px}.image-viewport img{width:100%;max-height:none}}
 </style>
