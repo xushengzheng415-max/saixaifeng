@@ -93,7 +93,7 @@
   <el-dialog v-model="screenConfigVisible" title="大屏配置" width="520px" :close-on-click-modal="false">
     <el-form label-position="left" label-width="110px">
       <el-form-item label="大屏标题"><el-input v-model="screenConfigDraft.title" placeholder="默认使用赛事名称" /></el-form-item>
-      <el-form-item label="主题"><el-radio-group v-model="screenConfigDraft.theme"><el-radio-button value="dark">深色</el-radio-button><el-radio-button value="light">浅色</el-radio-button></el-radio-group></el-form-item>
+      <el-form-item label="主题"><el-radio-group v-model="screenConfigDraft.theme" @change="onScreenThemeChange"><el-radio-button value="dark">深色</el-radio-button><el-radio-button value="light">浅色</el-radio-button></el-radio-group></el-form-item>
       <el-form-item v-if="isDemoMode()" label="背景">
         <div class="screen-background-picker">
           <button v-for="preset in screenBackgrounds" :key="preset.id" type="button" :class="{ selected:screenConfigDraft.background === preset.id }" :style="{ background:preset.css }" @click="chooseScreenBackground(preset)">{{ preset.name }}</button>
@@ -180,6 +180,7 @@ const screenBackgroundStyle = computed(() => {
 })
 function openScreenConfig() { loadScreenConfig(); screenConfigDraft.value = { ...screenConfig.value }; screenConfigVisible.value = true }
 function chooseScreenBackground(preset) { screenConfigDraft.value.background = preset.id; screenConfigDraft.value.theme = preset.theme }
+function onScreenThemeChange(theme) { if(screenConfigDraft.value.background === 'custom') return; if(theme === 'light') screenConfigDraft.value.background = 'light'; else if(screenConfigDraft.value.background === 'light') screenConfigDraft.value.background = 'emerald' }
 function removeScreenBackground() { screenConfigDraft.value.backgroundImage = ''; if (screenConfigDraft.value.background === 'custom') chooseScreenBackground(screenBackgrounds[0]) }
 async function readScreenBackground(event) {
   const file = event.target.files?.[0]
@@ -220,7 +221,7 @@ const screenAddress = computed(() => {
   if (screenConfig.value.title) params.set('title', screenConfig.value.title)
   return `https://screen.sxffootball.cn/draw/${encodeURIComponent(props.tournamentId)}?${params.toString()}`
 })
-function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved } } catch {} }
+function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved, background:saved.background || (saved.theme === 'light' ? 'light' : 'emerald') } } catch {} }
 function saveScreenConfig() { if(backgroundReading.value) return; const next = { ...screenConfigDraft.value }; try { localStorage.setItem(screenConfigKey(), JSON.stringify(next)); localStorage.setItem(drawChannelKey(), JSON.stringify({ ...JSON.parse(localStorage.getItem(drawChannelKey()) || '{}'), screen:next })) } catch { ElMessage.error('背景保存失败，请压缩图片或移除后重试'); return }; screenConfig.value = next; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
 async function copyScreenLink() { try { await navigator.clipboard.writeText(screenAddress.value); ElMessage.success('大屏链接已复制') } catch { ElMessage.warning(`请手动复制：${screenAddress.value}`) } }
 async function publishScreenState() {
@@ -364,7 +365,7 @@ function applyScreenState(state) {
   screenGroups.value = state.groups
   projectedDivisionName.value = state.divisionName || ''
   tournament.value = { ...tournament.value, name:state.title || '', logo:state.tournamentLogo || '' }
-  if (state.screen) screenConfig.value = { ...screenConfig.value, ...state.screen }
+  if (state.screen) screenConfig.value = { ...screenConfig.value, ...state.screen, background:state.screen.background || (state.screen.theme === 'light' ? 'light' : 'emerald') }
 }
 function readScreenState() {
   try { applyScreenState(JSON.parse(localStorage.getItem(drawChannelKey()) || 'null')) } catch {}
