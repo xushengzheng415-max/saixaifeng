@@ -105,7 +105,7 @@
             <div class="lineup-header">
               <div class="lineup-title">{{ homeName }} vs {{ awayName }}</div>
               <div class="lineup-actions">
-                <RefereeReportImport :match-id="matchId" :home-name="homeName" :away-name="awayName" :disabled="isRefereeEvidenceLocked" :load-roster="loadApprovedMatchRoster" @saved="loadMatch" />
+                <RefereeReportImport :match-id="matchId" :home-name="homeName" :away-name="awayName" :disabled="isRefereeEvidenceLocked" :load-roster="loadApprovedMatchRoster" :rules="effectiveSubstitutionRules" :existing-events="match.events || []" @saved="loadMatch" />
                 <el-button v-if="!isRefereeEvidenceLocked" type="primary" size="small" @click="openDualVisualEditor">
                   <el-icon><Edit /></el-icon> 编辑阵容
                 </el-button>
