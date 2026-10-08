@@ -111,13 +111,15 @@
           <div class="synthetic-player-heading">
             <div><h2>{{ isTeamDataWorkspace ? '球员参赛数据' : (isSyntheticTeam ? '虚拟球员资料' : '球员') }}</h2><p v-if="isTeamDataWorkspace">本届累计 · {{ tournamentPlayerRows.length }} 人 · 已确认赛果</p><p v-else>本届共 {{ players.length }} 名球员；未完成人证核验不能进入比赛阵容。</p></div>
             <div class="roster-heading-actions">
-            <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="success" :loading="batchReviewing" :disabled="!selectedReviewPlayers.length || !!playerReviewingId" @click="reviewSelectedPlayers">批量审核{{ selectedReviewPlayers.length ? `（${selectedReviewPlayers.length}）` : '' }}</el-button>
+              <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament && pendingReviewPlayers.length" link type="primary" :disabled="batchReviewing || !!playerReviewingId" @click="togglePendingReviewSelection">{{ selectedReviewPlayers.length === pendingReviewPlayers.length ? '取消全选' : '全选待审' }}</el-button>
+              <span v-if="!isTeamDataWorkspace && selectedReviewPlayers.length" class="review-selection-count">已选 {{ selectedReviewPlayers.length }} 人</span>
+            <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="success" :loading="batchReviewing" :disabled="!selectedReviewPlayers.length || !!playerReviewingId || loading" @click="reviewSelectedPlayers">批量审核</el-button>
             <el-button v-if="!isTeamDataWorkspace" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
             </div>
           </div>
           <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
-          <el-table :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="false" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'compact-roster-table': !isTeamDataWorkspace, 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort" @selection-change="selectedReviewPlayers = $event">
+          <el-table ref="reviewPlayerTable" row-key="_id" :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="false" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'compact-roster-table': !isTeamDataWorkspace, 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort" @selection-change="onReviewSelectionChange">
             <el-table-column v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="selection" width="36" :selectable="canSelectReviewPlayer" />
             <el-table-column label="头像" :width="48" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
@@ -1257,7 +1259,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled, Picture } from '@element-plus/icons-vue'
@@ -1952,7 +1954,16 @@ const avatarReadyCount = computed(() => avatarImportRows.value.filter(row => !ro
 // 编辑球队相关
 const showEditTeam = ref(false)
 const playerReviewingId = ref('')
+const reviewPlayerTable = ref(null)
 const selectedReviewPlayers = ref([])
+const pendingReviewPlayers = computed(() => players.value.filter(player => playerOrganizerReviewStatus(player) !== 'approved'))
+function onReviewSelectionChange(selection) { selectedReviewPlayers.value = selection.filter(player => playerOrganizerReviewStatus(player) !== 'approved') }
+function togglePendingReviewSelection() {
+  if (batchReviewing.value || playerReviewingId.value || loading.value) return
+  const selectAll = selectedReviewPlayers.value.length !== pendingReviewPlayers.value.length
+  reviewPlayerTable.value?.clearSelection()
+  if (selectAll) pendingReviewPlayers.value.forEach(player => reviewPlayerTable.value?.toggleRowSelection(player, true))
+}
 const batchReviewing = ref(false)
 function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && playerOrganizerReviewStatus(player) !== 'approved' }
 const teamEditForm = ref({
@@ -4463,19 +4474,25 @@ async function reviewPlayer(player) {
 }
 async function reviewSelectedPlayers() {
   if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value) return
-  const selected = selectedReviewPlayers.value.filter(player => playerOrganizerReviewStatus(player) !== 'approved')
+  const selectedIds = new Set(selectedReviewPlayers.value.map(player => String(player._id)))
+  const selected = pendingReviewPlayers.value.filter(player => selectedIds.has(String(player._id)))
   if (!selected.length) return
   batchReviewing.value = true
   let approved = 0
   const failures = []
+  const failedIds = new Set()
   try {
     for (const player of selected) {
       playerReviewingId.value = String(player._id)
       try { await approvePlayerRecord(player); approved++ }
-      catch (error) { failures.push(`${player.name || '球员'}：${error.message || '审核失败'}`) }
+      catch (error) { failedIds.add(String(player._id)); failures.push(`${player.name || '球员'}：${error.message || '审核失败'}`) }
     }
     await loadPlayers()
-    selectedReviewPlayers.value = []
+    playerReviewingId.value = ''
+    batchReviewing.value = false
+    await nextTick()
+    reviewPlayerTable.value?.clearSelection()
+    pendingReviewPlayers.value.filter(player => failedIds.has(String(player._id))).forEach(player => reviewPlayerTable.value?.toggleRowSelection(player, true))
     if (failures.length) ElMessage.error({ message:`已审核 ${approved} 人，失败 ${failures.length} 人；${failures.join('；')}`, duration:8000 })
     else ElMessage.success(`已审核 ${approved} 人`)
   } finally { batchReviewing.value = false; playerReviewingId.value = '' }
@@ -4927,7 +4944,7 @@ function compressBase64(dataUrl, maxSize = 300) {
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
-.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.compact-roster-table{max-width:882px}.staff-compact-table{max-width:512px}.roster-heading-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}.roster-heading-actions :deep(.el-button + .el-button){margin-left:0}.compact-roster-table :deep(.cell){padding-left:4px;padding-right:4px;font-size:12px}.compact-roster-table :deep(th .cell){white-space:nowrap}.synthetic-player-heading{gap:12px;flex-wrap:wrap}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
+.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.compact-roster-table{max-width:882px}.staff-compact-table{max-width:512px}.review-selection-count{font-size:12px;color:#606266;white-space:nowrap}.roster-heading-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}.roster-heading-actions :deep(.el-button + .el-button){margin-left:0}.compact-roster-table :deep(.cell){padding-left:4px;padding-right:4px;font-size:12px}.compact-roster-table :deep(th .cell){white-space:nowrap}.synthetic-player-heading{gap:12px;flex-wrap:wrap}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .cell){display:flex;align-items:center;justify-content:center;gap:2px;padding:0 4px;white-space:nowrap}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .caret-wrapper){width:12px;flex:0 0 12px}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .sort-caret){left:1px}
