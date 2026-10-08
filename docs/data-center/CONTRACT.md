@@ -120,3 +120,7 @@ PC 新入口 dataCenter.playerDetail 返回授权范围的 statistics 与独立�
 正式分钟来自该快照限定下的首发／换上／换下／罚下区间，自由换回累加实际区间。历史规则证据缺失、冲突或无单位时分钟为 null，返回 MATCH_DURATION_* 原因；当前规程、旧计时器、90分钟和0都不能补成历史权威值。已完赛正式统计不采用旧钟；现场暂定可在已证实时长内显示当前钟。读取不生成历史快照，不执行自动回填。没有可靠证据的旧场次将保持待核定。
 
 通用浏览器 matches 写入不得伪造 durationRulesSnapshot／rulesSnapshot；服务端保存钩子只处理未开赛场次，并用事务防止并发重复开赛覆盖快照。此代码尚未发布。
+
+### 纸质裁判表的无序换人组
+
+同队同分钟的换上/换下名单分别授权与核定，不推断逐人替换关系。confirmRefereeReport接收side、minute、inIds、outIds；兼容存储槽位带substitutionPairing=unordered_batch、substitutionBatchId与批次人数。读取时以批次集合展示，不把槽位映射当作谁替谁的事实；历史明确配对记录保持原语义。每名球员自己的进入/退出分钟定义出场区间；同批窗口一次、人数按实际换上数计。人数、名单身份、当前在场、罚下、换回与规则限制不放宽。
