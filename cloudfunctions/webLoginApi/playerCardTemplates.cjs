@@ -206,8 +206,9 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
       teamLogoStatus:!teamLogo?'missing':teamLogoTransparent?'transparent':'transparent_png_required'
     }}
   }
-  async function stagedBuffer(value,layer) {
+  async function stagedBuffer(value,layer,record) {
     const id=String(value || '')
+    if(id && [record?.draft?.[layer+'FileId'],record?.published?.[layer+'FileId']].includes(id))return await suite.asset(cloud,id,MAX_IMAGE_BYTES)
     if(!/^cloud:\/\/[^/]+\/player-card-template-uploads\/[a-zA-Z0-9_-]+\/(background|mask)\/[^/]+\.png$/.test(id) || !id.includes('/'+layer+'/')) throw Object.assign(new Error('素材引用无效，请重新上传'),{code:'CARD_TEMPLATE_ASSET_INVALID'})
     const bytes=await suite.asset(cloud,id,MAX_IMAGE_BYTES)
     return pngBuffer('data:image/png;base64,'+bytes.toString('base64'),layer)
@@ -227,8 +228,8 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
   async function preview(event) {
     const record = event.templateId ? await read(String(event.templateId)) : null
     const draft = record?.draft || {}
-    const backgroundBuffer = event.backgroundFileId ? await stagedBuffer(event.backgroundFileId,'background') : event.backgroundData ? pngBuffer(event.backgroundData, 'background') : await suite.asset(cloud, draft.backgroundFileId, MAX_IMAGE_BYTES)
-    const maskBuffer = event.maskFileId ? await stagedBuffer(event.maskFileId,'mask') : event.maskData ? pngBuffer(event.maskData, 'mask') : await suite.asset(cloud, draft.maskFileId, MAX_IMAGE_BYTES)
+    const backgroundBuffer = event.backgroundFileId ? await stagedBuffer(event.backgroundFileId,'background',record) : event.backgroundData ? pngBuffer(event.backgroundData, 'background') : await suite.asset(cloud, draft.backgroundFileId, MAX_IMAGE_BYTES)
+    const maskBuffer = event.maskFileId ? await stagedBuffer(event.maskFileId,'mask',record) : event.maskData ? pngBuffer(event.maskData, 'mask') : await suite.asset(cloud, draft.maskFileId, MAX_IMAGE_BYTES)
     const scope=preload.normalizePreload(event.preload||draft.preload)
     const positionOverride=normalizePositionOverride(event.positionOverride??draft.positionOverride,scope)
     const template = { layout:normalizeLayout(event.layout || draft.layout), photo:normalizePhoto(event.photo || draft.photo), badges:normalizeBadges(event.badges || draft.badges),preload:scope,positionOverride }
@@ -271,8 +272,8 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     if (record?.publishedVersion && preload.stateId(tier, scope) !== preload.stateId(tier, record.published?.preload)) return { success:false, code:'CARD_PRELOAD_LOCKED', error:'已发布模板不能改绑，请新建模板' }
     const photo = normalizePhoto(event.photo || record?.draft?.photo)
     const badges = normalizeBadges(event.badges || record?.draft?.badges)
-    const background = event.backgroundFileId ? await stagedBuffer(event.backgroundFileId,'background') : event.backgroundData ? pngBuffer(event.backgroundData, 'background') : null
-    const mask = event.maskFileId ? await stagedBuffer(event.maskFileId,'mask') : event.maskData ? pngBuffer(event.maskData, 'mask') : null
+    const background = event.backgroundFileId && event.backgroundFileId !== record?.draft?.backgroundFileId ? await stagedBuffer(event.backgroundFileId,'background',record) : event.backgroundData ? pngBuffer(event.backgroundData, 'background') : null
+    const mask = event.maskFileId && event.maskFileId !== record?.draft?.maskFileId ? await stagedBuffer(event.maskFileId,'mask',record) : event.maskData ? pngBuffer(event.maskData, 'mask') : null
     if ((!background && !record?.draft?.backgroundFileId) || (!mask && !record?.draft?.maskFileId)) return { success: false, code: 'CARD_TEMPLATE_INCOMPLETE', error: '请上传背景图和黑白遮罩' }
     const revision = Number(event.revision || 0)
     if (record && revision !== Number(record.revision || 0)) return { success: false, code: 'CARD_TEMPLATE_CONFLICT', error: '模板已更新，请重新加载' }

@@ -33,8 +33,8 @@ async function tournamentPlayerIds(db, tournamentId) {
   ids.evidenceByPlayer = new Map()
   for (const row of await readAll(db, 'roster_snapshots', { tournamentId })) {
     if (!row.teamId || !['approved','locked'].includes(row.status)) continue
-    const old = latest.get(row.teamId)
-    if (!old || Number(row.version || 0) > Number(old.version || 0)) latest.set(row.teamId,row)
+    const key=JSON.stringify([row.teamId,row.divisionId||row.division||'default']);const old = latest.get(key)
+    if (!old || Number(row.version || 0) > Number(old.version || 0)) latest.set(key,row)
   }
   for (const row of latest.values()) if (['approved','locked'].includes(row.status)) {
     const players = new Set((row.playerIds || []).filter(id=>typeof id === 'string'))
@@ -48,24 +48,27 @@ async function tournamentPlayerIds(db, tournamentId) {
   }
   return ids
 }
+async function readOptionalPlayer(db,id) {
+  try { const reply=await db.collection('players').doc(id).get();return Array.isArray(reply.data)?reply.data[0]:reply.data }
+  catch(error){if(/document.*(not exist|does not exist)|DOCUMENT_NOT_EXIST/i.test(String(error.message||error.errMsg||error.code||'')))return null;throw error}
+}
 async function playersForScope(db, value) {
   const scope=normalizePreload(value)
-  let rows=[]
+  let rows=[],missingPlayers=[]
   if(scope.type==='player') {
-    const result=await db.collection('players').doc(scope.targetId).get()
-    const player=Array.isArray(result.data)?result.data[0]:result.data
+    const player=await readOptionalPlayer(db,scope.targetId)
     if(player)rows.push(player)
   } else if(scope.type==='team') rows=await readAll(db,'players',{teamId:scope.targetId})
   else if(scope.type==='platform') rows=await readAll(db,'players',{})
   else {
     const ids=await tournamentPlayerIds(db,scope.targetId)
     for(const id of ids) {
-      const result=await db.collection('players').doc(id).get()
-      const player=Array.isArray(result.data)?result.data[0]:result.data
-      if(player)rows.push(player)
+      const player=await readOptionalPlayer(db,id)
+      if(player&&player.deleted!==true&&player.isDeleted!==true&&player.status!=='deleted')rows.push(player)
+      else missingPlayers.push({playerId:id,reason:'赛事名单关联的球员档案不存在或已删除，未制卡',rosterSnapshotIds:(ids.evidenceByPlayer.get(id)||[]).map(row=>row.snapshotId)})
     }
     const unique=[...new Map(rows.filter(row=>row.deleted!==true&&row.isDeleted!==true&&row.status!=='deleted').map(row=>[String(row._id),row])).values()]
-    return {scope,players:unique,evidenceByPlayer:ids.evidenceByPlayer}
+    return {scope,players:unique,evidenceByPlayer:ids.evidenceByPlayer,missingPlayers}
   }
   rows=rows.filter(row=>row.deleted!==true&&row.isDeleted!==true&&row.status!=='deleted')
   return {scope,players:[...new Map(rows.map(row=>[String(row._id),row])).values()],evidenceByPlayer:new Map()}
