@@ -215,3 +215,7 @@ resultCenter 读取共享完整分页事件与共享 standings；getMiniWorkspac
 独立平台实际目标 https://pingtai.sxffootball.cn，Nginx root /var/www/pingtai/releases/20261005。现存独立包无完整源文件，本轮保留原资源，在入口加入共享 DurationVerification 兼容模块，仅匹配时长异常行的稳定比赛 ID；主站源码两个数据中心视图同时接入共享组件。入口改动前保存 index/platform-ops 回滚副本。独立模块 HTTP200 且 SHA-256 匹配；浏览器连接超时，尚未完成真实登录弹窗验收。
 
 发布 dataCenter、webLoginApi、getMiniWorkspace、resultCenter、updateMatch，从最新线上包差量更新并逐文件下载回读。构建、共享同步、数据中心及球员卡回归、核实权限/冲突/幂等/原报告保留/普通写入保护验证通过。本轮没有替用户修改任何实际比赛时长。服务号、小程序静态页面未重新发布。
+
+## 完整对阵预览与填写回传（2026-10-08）
+
+用户更正：未排时间场地是单元格留空，不是删除列。分组确认后“导出对阵”进入原 PairingResult 对阵预览，显示场序、阶段、组别、小组、双方来源、日期、时间、场地；下载赛程填写表保留这些业务列及隐藏稳定比赛/组别ID，填写后从上传赛程识别、核对、保存。当前2组各4队演示复用正式 pairingTemplates：12场小组赛、2场半决赛、2场5–8名交叉赛、决赛/三四/五六/七八各1场，共20场；名次、胜负来源保持占位，不虚构实际球队。按双方来源复用已有比赛，保留排期，旧不匹配演示对阵标记legacy并保留原记录。20场全部填表后识别ready、预检、应用、刷新回读通过，重复预览无重复比赛；浏览器实际下载验收未完成，不能声称已拿到下载文件。预览入口与PairingResult及TournamentDraw JS/CSS线上摘要匹配；未发布正式/admin或生产云函数。
