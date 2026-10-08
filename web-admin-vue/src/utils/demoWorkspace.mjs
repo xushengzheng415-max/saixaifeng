@@ -1,6 +1,7 @@
 // Browser-only repository. No transport or production credentials belong here.
 import { calculateMatchEventScore } from '../../../cloudfunctions/dataCenter/shared/match-events.mjs'
 import standings from '../../../cloudfunctions/dataCenter/shared/standings.cjs'
+import pairingTemplates from '../../../cloudfunctions/generateSchedule/pairingTemplates.js'
 import fixtureCatalog from '../data/syntheticTeamCatalog.mjs'
 export const DEMO_ORG_ID = 'demo-organization'
 export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
@@ -132,6 +133,28 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     const { action, tournamentId, divisionId } = params
     const tournament = get('tournaments', tournamentId)
     const selected = row => row.tournamentId === tournamentId && (!divisionId || row.divisionId === divisionId)
+    if (action === 'prepareDrawPreview') {
+      const confirmed = rows('tournament_groups').filter(row=>selected(row) && row.type==='tournament' && row.status==='confirmed').sort((a,b)=>String(a.groupCode).localeCompare(String(b.groupCode)))
+      if(confirmed.length!==2 || confirmed.some(group=>(group.teams || []).length!==4)) return {success:true,message:'当前组别按已有已确认对阵预览'}
+      const template = pairingTemplates.standardRoundRobinTemplate({groupSizes:[4,4],source:'当前已确认小组'})
+      const rank=(groupName,rank)=>({type:'group_rank',groupName,rank})
+      template.stages.push({name:'半决赛',phase:'knockout',stageOrder:2,matches:[{code:'SF1',home:rank('A组',1),away:rank('B组',2)},{code:'SF2',home:rank('B组',1),away:rank('A组',2)}]})
+      template.stages.push({name:'5–8名排位赛',phase:'placement',stageOrder:3,matches:[{code:'P1',home:rank('A组',3),away:rank('B组',4)},{code:'P2',home:rank('B组',3),away:rank('A组',4)}]})
+      template.stages.push({name:'决赛',phase:'knockout',stageOrder:4,matches:[{code:'F',home:'SF1胜',away:'SF2胜'}]})
+      template.stages.push({name:'三四名赛',phase:'placement',stageOrder:5,matches:[{code:'P34',home:'SF1负',away:'SF2负'}]})
+      template.stages.push({name:'五六名赛',phase:'placement',stageOrder:6,matches:[{code:'P56',home:'P1胜',away:'P2胜'}]})
+      template.stages.push({name:'七八名赛',phase:'placement',stageOrder:7,matches:[{code:'P78',home:'P1负',away:'P2负'}]})
+      const generated=pairingTemplates.buildPairingsFromTemplate(tournamentId,divisionId,params.divisionName || '',confirmed,template).matches
+      const existing=rows('matches').filter(row=>selected(row) && row.status!=='cancelled'),used=new Set()
+      for(const item of generated) {
+        const found=existing.find(row=>!used.has(row._id) && (item.phase==='group' ? row.homeTeamId===item.homeTeamId && row.awayTeamId===item.awayTeamId || row.homeTeamId===item.awayTeamId && row.awayTeamId===item.homeTeamId : row.pairingCode===item.pairingCode))
+        const data={...item,homeScore:null,awayScore:null,matchEventRevision:0,events:[]}
+        if(found){used.add(found._id);update('matches',found._id,{phase:item.phase,groupName:item.group,group:item.group,roundName:item.roundName,scheduleStageName:item.scheduleStageName,scheduleStageOrder:item.scheduleStageOrder,matchNo:item.matchNo,matchIndex:item.matchNo,pairingCode:item.pairingCode,homeSource:item.homeSource,awaySource:item.awaySource,homeSourceLabel:item.homeSourceLabel,awaySourceLabel:item.awaySourceLabel,dependencyMatchNos:item.dependencyMatchNos,demoLegacyPairing:false})}
+        else {const row=add('matches',data);used.add(row._id)}
+      }
+      existing.filter(row=>!used.has(row._id)).forEach(row=>{row.demoLegacyPairing=true})
+      return {success:true,matchCount:generated.length}
+    }
     if (action === 'repairLegacyGroupPairings') {
       const scopes = [...new Set(rows('tournament_groups').filter(row => selected(row) && row.type === 'tournament' && row.status === 'confirmed').map(row=>row.divisionId || 'default'))]
       let repaired = 0

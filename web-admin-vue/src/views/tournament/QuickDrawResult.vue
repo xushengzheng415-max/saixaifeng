@@ -13,7 +13,7 @@
 
 
     <section v-if="hasSavedResult" class="summary">
-      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">{{ statusLabel }}</el-tag><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">查看对阵</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button>
+      <span>参赛球队 <b>{{ teamCount }}</b></span><i /><span>已分组 <b>{{ assignedCount }}</b></span><i /><span>{{ resultUnitCount }} {{ unitLabel }}</span><i /><span>{{ sizeLabel }}</span><i /><em><el-icon><CircleCheckFilled /></el-icon>分组校验通过</em><el-tag :type="isConfirmed ? 'success' : 'warning'" effect="light">{{ statusLabel }}</el-tag><el-button v-if="!isConfirmed && !isArchived" type="success" :loading="confirming" @click="confirm"><el-icon><Check /></el-icon>确认分组</el-button><el-button v-if="isConfirmed && !isArchived" type="primary" :loading="pairingGenerating" @click="generatePairingsAndViewPairings">导出对阵</el-button><el-button plain @click="backOverview"><el-icon><Back /></el-icon>返回抽签与分组</el-button>
     </section>
 
     <section v-if="hasSavedResult" class="toolbar">
@@ -68,6 +68,7 @@
 <script setup>
 import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { isDemoMode } from '../../utils/demoMode'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, Check, CircleCheckFilled, DocumentAdd, Download, Grid, List, Lock, Picture, Rank, Refresh, Search, SwitchButton, Trophy, WarningFilled } from '@element-plus/icons-vue'
 import { callFunction, getFileUrl, queryById, queryList, updateRecord } from '../../utils/cloud'
@@ -325,12 +326,18 @@ async function generatePairingsAndViewPairings() {
   if (!isConfirmed.value || pairingGenerating.value) return
   pairingGenerating.value = true
   try {
-    const existing = await queryList('matches',{ where:{tournamentId,divisionId:divisionId.value},limit:1000 })
-    if (!(existing || []).some(match => !['cancelled','canceled'].includes(match.status))) {
-    const result = await callFunction('generateSchedule', { action: 'generatePairings', tournamentId, divisionId: divisionId.value, divisionName: divisionName.value })
-    if (!result?.success) throw new Error(result?.message || result?.error || '生成对阵失败')
+    if(isDemoMode(tournamentId)) {
+      const result=await callFunction('generateSchedule',{action:'prepareDrawPreview',tournamentId,divisionId:divisionId.value,divisionName:divisionName.value})
+      if(!result?.success)throw new Error(result?.message || '预览生成失败')
+    } else {
+      const existing=await queryList('matches',{where:{tournamentId,divisionId:divisionId.value},limit:1000})
+      if(!(existing || []).some(match=>match.status!=='cancelled')) {
+        const result=await callFunction('generateSchedule',{action:'generatePairings',tournamentId,divisionId:divisionId.value,divisionName:divisionName.value})
+        if(!result?.success)throw new Error(result?.message || '预览生成失败')
+      }
     }
-    router.push({ path: `/tournaments/${tournamentId}/matches`, query: { divisionId: divisionId.value, view:'workbench' } })
+    router.push({path:`/tournaments/${tournamentId}/pairings`,query:{divisionId:divisionId.value,divisionName:divisionName.value}})
+
   } catch (error) { ElMessage.error(error.message || '生成对阵失败') } finally { pairingGenerating.value = false }
 }
 
