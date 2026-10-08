@@ -53,6 +53,6 @@ function signEvidence(evidence) {
 }
 function signImport(matchId, revision, data) {
   if (!process.env.SXF_PAPER_REPORT_SECRET) throw new Error('裁判表保存服务尚未配置')
-  return crypto.createHmac('sha256',process.env.SXF_PAPER_REPORT_SECRET).update(JSON.stringify([String(matchId),Number(revision),data])).digest('hex')
+  return require('./paperReportProof.cjs').signImport(process.env.SXF_PAPER_REPORT_SECRET,matchId,revision,data)
 }
 module.exports={recognize,parseTables,resolveTiming,signEvidence,signImport}

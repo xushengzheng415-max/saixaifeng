@@ -1,6 +1,6 @@
 const fs=require('fs'),path=require('path')
 const root=path.resolve(process.argv[2] || 'cloudfunctions/webLoginApi')
-const required=['index.js','refereeReportOcr.cjs','refereeReportAnalysis.cjs','refereeSubstitutionBatch.cjs','data-center/match-events.mjs']
+const required=['index.js','refereeReportOcr.cjs','refereeReportAnalysis.cjs','refereeSubstitutionBatch.cjs','paperReportProof.cjs','data-center/match-events.mjs']
 const missing=required.filter(file=>!fs.existsSync(path.join(root,file)))
 const code=missing.includes('index.js')?'':fs.readFileSync(path.join(root,'index.js'),'utf8')
 for(const marker of ['recognizeRefereeReport','confirmRefereeReport','refereeSubstitutionBatch.cjs','buildEntries'])if(!code.includes(marker))missing.push(`接口标记:${marker}`)
