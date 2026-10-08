@@ -180,7 +180,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       const planned=rows('matches').filter(row=>row.tournamentId===tournamentId && row.status!=='cancelled').map(row=>({...row,...(changes.find(change=>change.matchId===row._id)?.after || {})}))
       for(const change of changes) {
         const current=planned.find(row=>row._id===change.matchId),start=new Date(`${current.matchDate}T${current.matchTime}`).getTime(),end=start+Number(current.durationMinutes || 50)*60000
-        if(planned.some(other=>{if(other._id===current._id || !other.matchDate || !other.matchTime)return false;const from=new Date(`${other.matchDate}T${other.matchTime}`).getTime(),to=from+Number(other.durationMinutes || 50)*60000;return start<to && from<end && (other.venue===current.venue || [other.homeTeamId,other.awayTeamId].some(id=>[current.homeTeamId,current.awayTeamId].includes(id)))})) errors.push({matchId:change.matchId,message:'场地或球队比赛时段冲突'})
+        if(planned.some(other=>{if(other._id===current._id || !other.matchDate || !other.matchTime)return false;const from=new Date(`${other.matchDate}T${other.matchTime}`).getTime(),to=from+Number(other.durationMinutes || 50)*60000;return start<to && from<end && (other.venue===current.venue || [other.homeTeamId,other.awayTeamId].filter(Boolean).some(id=>[current.homeTeamId,current.awayTeamId].filter(Boolean).includes(id)))})) errors.push({matchId:change.matchId,message:'场地或球队比赛时段冲突'})
       }
       if(errors.length) return {success:false,message:'排期预检未通过',errors,errorCount:errors.length,validCount:0,changes:[]}
       if(params.dryRun!==false) return {success:true,dryRun:true,validCount:changes.length,errorCount:0,changes}
