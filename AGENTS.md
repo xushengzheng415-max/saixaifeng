@@ -35,7 +35,7 @@
 | GitHub | `https://github.com/xushengzheng415-max/saixaifeng.git`（只读镜像，禁止推送） |
 | 正式域名 | `www.sxffootball.cn` |
 | CloudBase 环境 | `cloud1-7g8ckb3c7815a011` |
-| 权威主分支 | `main`（唯一权威；`master` 为历史遗留，不再使用） |
+| 权威主分支 | `main`（共享后端、主办方及其他端）；平台运营后台独立维护于 `codex/platform-ops`；`master` 为历史遗留 |
 | Web HTTP 入口 | `https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi` |
 
 `E:\OneDrive\Desktop\足球赛事系统` 仅是旧资料，Codex 临时 worktree 也不是部署源。所有修改、构建、提交和部署必须以正式仓库为准。
@@ -43,6 +43,7 @@
 主要代码端：
 
 - `web-admin-vue/`：Vue 3 + Vite + Element Plus 的 PC 管理后台。
+- `platform-admin-vue/`：平台运营后台独立工程，长期分支 `codex/platform-ops`，正式域名 `pingtai.sxffootball.cn`。
 - `miniprogram/`：原生微信小程序。
 - `service-account-h5/`：服务号承接的个人与临时任务入口。
 - `index.html`：根域名着陆和登录页。
@@ -180,7 +181,7 @@
 
 PC 后台的预览、验收、合并和正式发布必须遵循 [`docs/PREVIEW_RELEASE_WORKFLOW.md`](docs/PREVIEW_RELEASE_WORKFLOW.md)。个人功能分支禁止直接部署 `/admin/`；必须先合并并部署 `preview` 到 `/preview/admin/`，产品负责人验收后再合并 `main`，且只有获得当前任务明确授权后才能部署正式 `/admin/`。
 
-功能分支在确认完整进入 `main` 且无 worktree 或其他会话占用后，应删除本地与 Gitee 远端引用；`main`、`preview` 和历史 `master` 固定保留。删除前必须按预览发布流程执行祖先、独有提交和 worktree 检查，禁止直接强删未核验分支。
+功能分支在确认完整进入 `main` 且无 worktree 或其他会话占用后，应删除本地与 Gitee 远端引用；`main`、`preview`、平台长期分支 `codex/platform-ops` 和历史 `master` 固定保留。删除前必须按预览发布流程执行祖先、独有提交和 worktree 检查，禁止直接强删未核验分支。
 
 两个网页部署目标：
 
@@ -253,7 +254,11 @@ API Key 位于仓库外的 `%LOCALAPPDATA%\SxfCloud\credentials\`，由 Windows 
 
 ## 平台后台正式发布授权（2026-10-01）
 
-用户已明确要求：平台运营中心及平台后台后续界面设计与部署直接发布正式 `/admin/`，无需预览验收或测试阶段。实施后执行必要的生产构建、语法检查、权限边界核对及线上 HTTP/资源摘要回读；保留同期代码与用户改动。此授权适用于平台后台界面发布，数据库迁移、模板激活及跨端功能按各自请求范围执行。其他端口继续遵循原发布流程。
+用户已明确要求：平台运营中心及平台后台后续界面设计与部署直接发布正式平台，无需预览验收阶段。2026-10-09 起正式目标为独立域名 `https://pingtai.sxffootball.cn/`，源码 `platform-admin-vue/`，长期分支 `codex/platform-ops`；旧 `/admin/` 平台部署约定由此替代。实施后执行必要的生产构建、语法检查、权限边界核对及线上 HTTP/资源摘要回读；保留同期代码与用户改动。此授权适用于平台后台界面发布，数据库迁移、模板激活及跨端功能按各自请求范围执行。其他端口继续遵循原发布流程。
+
+## 平台运营后台独立维护（2026-10-09）
+
+用户已确认平台运营后台独立分支、独立工程、独立构建与发布。平台任务进入 `codex/platform-ops`；主办方任务使用其原有分支流程，不把平台长期分支整体合入 `main`/`preview`，也不整分支覆盖平台。需要的公共修复按明确提交与文件单独核验引入。构建 `cd platform-admin-vue; npm ci; npm run build`，发布 `npm run deploy`，目标仅 `pingtai.sxffootball.cn`。平台工程禁止引用 `web-admin-vue`；旧PC目录中的平台页面只作历史兼容，不再作为平台正式发布源。共享数据中心、权限和球员卡协议保持统一，不因此复制数据库、改变租户边界或另建统计算法。公共后端仍走独立授权及差量发布流程。详见 `docs/PLATFORM_OPS_RELEASE.md`。
 
 ## 裁判表接口发布防回退（2026-10-08）
 
