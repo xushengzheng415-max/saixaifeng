@@ -254,3 +254,8 @@ API Key 位于仓库外的 `%LOCALAPPDATA%\SxfCloud\credentials\`，由 Windows 
 ## 平台后台正式发布授权（2026-10-01）
 
 用户已明确要求：平台运营中心及平台后台后续界面设计与部署直接发布正式 `/admin/`，无需预览验收或测试阶段。实施后执行必要的生产构建、语法检查、权限边界核对及线上 HTTP/资源摘要回读；保留同期代码与用户改动。此授权适用于平台后台界面发布，数据库迁移、模板激活及跨端功能按各自请求范围执行。其他端口继续遵循原发布流程。
+
+## 裁判表接口发布防回退（2026-10-08）
+
+webLoginApi 的 recognizeRefereeReport / confirmRefereeReport、分组换人及 updateMatch.importPaperReport 已获授权并在线。不得用缓存旧包或未拉取的源码覆盖这些接口。发布前必须对实际拟上传的 webLoginApi 目录运行 `node tools/check-referee-backend-package.cjs <实际包目录>`；不通过先合并最新 main 或从刚下载线上包差量更新，不以“上传成功”代替接口完整性。保留当前云端环境配置；代码发布与配置变更分开。updateMatch 发布须保留纸质报告签名、赛事与模块权限、事件版本及电子记录锁定校验。PC preview 的新功能代码不能成为另一个会话覆盖正式后端的旧基线。部署后回下载比对这些模块和入口，再报告上线。
+
