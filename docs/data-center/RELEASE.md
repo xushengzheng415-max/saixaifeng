@@ -189,3 +189,9 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 生产只读检查确认 `tournament_referees` 尚不存在。共享账号的 `webLoginApi.staffEventScope` 原先把它当必需表读取，因此裁判模块构建授权范围失败，并连带使 `tournaments`、`referees` 的读取失败。现 `referees` 与 `tournament_referees` 仅在集合不存在时按空列表处理；已有集合的索引错误或其他数据库错误继续返回失败，不作静默吞错。
 
 功能提交 `6413b86` 已合入并推送 Gitee `main`（合并提交 `69a9abfa`）。生产 `webLoginApi` 代码更新后，回下载的 `index.js` 与部署包 SHA-256 `8D1ACA6630D132C327F3D0BEA27754DBC5F9F5992C6E91C72CE5F92CA0FEFDD5` 一致，`staffEventScope.cjs` 与部署包 SHA-256 `AD9C9D5517D1573FB598E8D746122CDE9997AE3838E4373B405E75061E32A819` 一致；函数状态 Active/Available、Nodejs18.15、`index.main`。未使用真实账号复测，也未运行独立测试套件。
+
+## 2026-10-08 分组接口旧包覆盖故障恢复与正式源同步
+
+用户五组换人完整仍收到旧文案“请完整核对换人双方和分钟”。生产18:02:30的webLoginApi回下载入口为0E8F1135A8A46FB477410A84BDD654B8E492557865395B44E5F4ECE771A2D691，使用row.inId/outId旧逐人校验，缺refereeSubstitutionBatch.cjs。确认这是后续旧包覆盖，不是用户缺项。已从这份新下载的线上包只替换分组保存段并补模块，保留包内其他功能；拉取当前配置后代码更新。回下载与恢复包入口和模块摘要逐一匹配，函数Active/Available、ModTime 18:33:51。updateMatch也Active/Available，纸质报告签名配置与webLoginApi匹配，只输出布尔核对，无密钥输出。未操作用户浏览器、未写比赛数据；原弹窗可直接重试，不需刷新。
+
+此前已上线裁判表后端仅在preview功能源，origin/main缺相应接口。现后端8文件独立同步到正式main，3d407b3；保留main现有小程序共享校验、原后端业务与权限边界，没有合入PC预览界面、没有部署正式前端。新增实际包完整性检查tools/check-referee-backend-package.cjs并在AGENTS.md登记发布前必跑，避免标准发布流程使用无分组模块的旧包。未运行测试套件；进行语法、源码差异、拟发布包检查和线上代码回读。工具检查不代替真实用户保存验收，也不能拦截绕过规范的直接云端发布。
