@@ -246,7 +246,7 @@
               <div v-if="sortedEvents.length === 0" class="events-empty">
                 暂无比赛事件<el-button v-if="!isRefereeEvidenceLocked" link type="primary" @click="openAddEventDialog">，+ 添加事件</el-button>
               </div>
-              <div v-for="(evt, i) in sortedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
+              <div v-for="(evt, i) in displayedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
                 <div class="event-icon">
                   <img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" />
@@ -1097,6 +1097,7 @@ import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
 import { createRefereeLineupPrintHtml, createRefereeLineupSheet, createRefereePrintLoadingHtml, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 import RefereeReportImport from '../../components/match/RefereeReportImport.vue'
+import {groupedTimeline} from '../../utils/refereeGroupedSubstitutions.js'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
 const route = useRoute()
@@ -1396,6 +1397,7 @@ const sortedEvents = computed(() => {
   const events = match.value.events || []
   return [...events].sort((a, b) => (a.minute || 0) - (b.minute || 0))
 })
+const displayedEvents = computed(() => groupedTimeline(sortedEvents.value))
 
 function calculateEventScore(events) {
   const score = { home: 0, away: 0 }
@@ -2178,10 +2180,10 @@ async function removeEvent(targetEvent) {
     const events = [...(match.value.events || [])]
     const index = eventIndexInSource(targetEvent)
     if (index < 0) return ElMessage.warning('事件已更新，请刷新后再试')
-    const eventDescription = [eventTimeText(targetEvent), eventLabel(targetEvent), targetEvent?.playerName || ''].filter(Boolean).join(' ')
+    const eventDescription = [eventTimeText(targetEvent), eventLabel(targetEvent), targetEvent.batchEventIds?.length ? '整组换人' : targetEvent?.playerName || ''].filter(Boolean).join(' ')
     await ElMessageBox.confirm(`${eventDescription || '该比赛事件'}将被删除，删除后无法恢复。`, '确认删除比赛事件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
     saving.value = true
-    events.splice(index, 1)
+    if(targetEvent.batchEventIds?.length){const ids=new Set(targetEvent.batchEventIds);events.splice(0,events.length,...events.filter(row=>!ids.has(row.eventId)))}else events.splice(index, 1)
     assertSubstitutionChange(match.value,effectiveSubstitutionRules.value,events)
     const result = await callFunction('updateMatch', {
       matchId,

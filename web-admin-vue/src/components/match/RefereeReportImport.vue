@@ -30,13 +30,13 @@
             <el-table-column width="58"><template #default="{ $index }"><el-button link type="danger" @click="deletePlayer($index)">删除</el-button></template></el-table-column>
           </el-table>
           <el-button link @click="addPlayer">添加球员</el-button>
-          <div class="sub-heading"><strong>换人记录</strong><el-button link @click="pairSubstitutions">按分钟配对</el-button><el-button link @click="addPair">添加换人</el-button></div>
-          <p class="field-note">修改换人后，上方分钟同步更新。</p>
-          <div class="sub-row field-note"><span>球队</span><span>分钟</span><span>换下</span><span>换上</span><span></span></div><div v-for="(row,i) in substitutions" :key="i" class="sub-row" :class="{ 'sub-row-error':pairErrorIndex===i }">
+          <div class="sub-heading"><strong>换人记录</strong><el-button link @click="pairSubstitutions">合并同分钟</el-button><el-button link @click="addPair">添加换人组</el-button></div>
+          <p class="field-note">同队同分钟合并一组，不需指定谁换谁。</p>
+          <div class="sub-row field-note"><span>球队</span><span>分钟</span><span>换下球员（多选）</span><span>换上球员（多选）</span><span></span></div><div v-for="(row,i) in substitutions" :key="i" class="sub-row" :class="{ 'sub-row-error':pairErrorIndex===i }">
             <el-select v-model="row.side" aria-label="换人球队" @change="onPairSideChange(row)"><el-option :label="homeName" value="home" /><el-option :label="awayName" value="away" /></el-select>
             <el-input-number v-model="row.minute" :min="0" :max="150" :precision="0" placeholder="分钟" :controls="false" @change="syncPairEdits" />
-            <el-select v-model="row.outId" filterable placeholder="换下" @change="syncPairEdits"><el-option v-for="p in activePlayers(row.side)" :key="p.playerId" :label="`${p.number}号 ${p.name}`" :value="p.playerId" /></el-select>
-            <el-select v-model="row.inId" filterable placeholder="换上" @change="syncPairEdits"><el-option v-for="p in activePlayers(row.side)" :key="p.playerId" :label="`${p.number}号 ${p.name}`" :value="p.playerId" /></el-select>
+            <el-select v-model="row.outIds" multiple filterable placeholder="选择换下球员" @change="syncPairEdits"><el-option v-for="p in groupPlayers(row.side)" :key="p.playerId" :label="`${p.number}号 ${p.name}`" :value="p.playerId" /></el-select>
+            <el-select v-model="row.inIds" multiple filterable placeholder="选择换上球员" @change="syncPairEdits"><el-option v-for="p in groupPlayers(row.side)" :key="p.playerId" :label="`${p.number}号 ${p.name}`" :value="p.playerId" /></el-select>
             <el-button link type="danger" @click="removePair(i)">删除</el-button>
           </div>
         </template>
@@ -50,7 +50,7 @@
 import { ref, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { callFunctionHTTP, uploadLargeFileViaCloud } from '../../utils/cloud'
-import {readMinutes as minutes,rebuildPairs,syncPairMarks,missingMarks,copyPairs} from '../../utils/refereeSubstitutionDraft.js'
+import {readMinutes as minutes,rebuildPairs,syncPairMarks,missingMarks,copyPairs,mergeGroups,draftBatchEvents} from '../../utils/refereeGroupedSubstitutions.js'
 import {substitutionState} from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 const props=defineProps({matchId:String,homeName:String,awayName:String,disabled:Boolean,loadRoster:Function,rules:Object,existingEvents:Array})
 const emit=defineEmits(['saved'])
@@ -63,6 +63,7 @@ function chooseFile(){if(!busy.value&&!props.disabled)fileInput.value?.click()}
 function beforeClose(done){if(!busy.value)done()}
 function revoke(){if(preview.value)URL.revokeObjectURL(preview.value);preview.value=''}
 function activePlayers(team){return (draft.value?.teams[team]||[]).filter(row=>['starter','substitute'].includes(row.role)&&row.playerId)}
+function groupPlayers(team){return (draft.value?.teams[team]||[]).filter(row=>row.playerId&&row.role!=='absent')}
 function rowClass({row}){return row.playerId===pairErrorPlayerId.value||!row.playerId||row.role==='unknown'||row.reviewNotes?.some(note=>/核对|候选|不晚于/.test(note))?'needs-review':''}
 function selectPlayer(row){const p=rosters.value[side.value].find(p=>p.playerId===row.playerId);if(p){row.name=p.name;row.number=p.number}pairSubstitutions()}
 function addPlayer(){draft.value.teams[side.value].push({playerId:'',name:'',number:'',role:'unknown',on:'',off:'',goals:'',yellow:'',red:'',captain:false,goalkeeper:false})}
@@ -115,28 +116,29 @@ function pairSubstitutions(){
 }
 function onMinuteChange(row,key){if(['on','off'].includes(key))pairSubstitutions()}
 function deletePlayer(index){draft.value.teams[side.value].splice(index,1);pairSubstitutions()}
-function addPair(){substitutions.value.push({side:side.value,minute:null,inId:'',outId:''});pairSnapshot=copyPairs(substitutions.value);clearPairError()}
-function syncPairEdits(){if(!draft.value)return;syncPairMarks(draft.value.teams,pairSnapshot,substitutions.value);pairSnapshot=copyPairs(substitutions.value);clearPairError()}
-function onPairSideChange(row){row.inId='';row.outId='';syncPairEdits()}
+function addPair(){substitutions.value.push({side:side.value,minute:null,inIds:[],outIds:[]});pairSnapshot=copyPairs(substitutions.value);clearPairError()}
+function syncPairEdits(){if(!draft.value)return;syncPairMarks(draft.value.teams,pairSnapshot,substitutions.value);substitutions.value=mergeGroups(substitutions.value);pairSnapshot=copyPairs(substitutions.value);clearPairError()}
+function onPairSideChange(row){row.inIds=[];row.outIds=[];syncPairEdits()}
 function removePair(index){substitutions.value.splice(index,1);syncPairEdits()}
 function pairProblem(message,index=-1,playerId='',team=''){error.value=message;pairErrorIndex.value=index;pairErrorPlayerId.value=playerId;if(team)side.value=team;return false}
 function validatePairs(){
   for(const [i,row] of substitutions.value.entries()){
-    if(row.minute==null||!Number.isInteger(row.minute)||row.minute<0||row.minute>150)return pairProblem(`第${i+1}条换人：请填写0至150的分钟`,i)
-    if(!row.outId||!row.inId)return pairProblem(`第${i+1}条换人（${row.minute}′）：请选择${!row.outId?'换下':'换上'}球员`,i)
-    if(row.outId===row.inId)return pairProblem(`第${i+1}条换人：换上与换下不能是同一人`,i)
+    if(row.minute==null||!Number.isInteger(row.minute)||row.minute<0||row.minute>150)return pairProblem(`第${i+1}组换人：请填写0至150的分钟`,i)
+    const ins=row.inIds || [],outs=row.outIds || []
+    if(!ins.length||ins.length!==outs.length)return pairProblem(`${row.minute}′换下${outs.length}人、换上${ins.length}人，请补齐本组球员`,i)
+    if(new Set(ins).size!==ins.length||new Set(outs).size!==outs.length||ins.some(id=>outs.includes(id)))return pairProblem(`${row.minute}′本组存在重复球员或同人同时换上换下`,i)
   }
   const missing=missingMarks(draft.value.teams,substitutions.value)[0]
-  if(missing){const team=missing.side==='home'?props.homeName:props.awayName;return pairProblem(`${team} ${missing.number}号${missing.name} ${missing.minute}′${missing.field==='on'?'换上':'换下'}：缺少对应换人记录`,-1,missing.playerId,missing.side)}
+  if(missing){const team=missing.side==='home'?props.homeName:props.awayName;return pairProblem(`${team} ${missing.number}号${missing.name} ${missing.minute}′${missing.field==='on'?'换上':'换下'}：尚未加入该组`,-1,missing.playerId,missing.side)}
   if(!substitutions.value.length)return true
   if(!props.rules?.ruleKnown)return pairProblem('本场换人规则尚未载入，请关闭弹窗刷新比赛详情')
   const lineups=Object.fromEntries(['home','away'].map(team=>[team,{players:activePlayers(team).filter(row=>row.role==='starter'),substitutes:activePlayers(team).filter(row=>row.role==='substitute')}]))
   const existing=props.existingEvents || []
-  const added=substitutions.value.map((row,i)=>({eventId:`draft-pair-${i}`,type:'substitution',minute:row.minute,teamSide:row.side,playerId:row.inId,assistPlayerId:row.outId,outPlayerId:row.outId}))
-    .filter(row=>!existing.some(old=>old.type==='substitution'&&old.playerId===row.playerId&&String(old.outPlayerId || old.assistPlayerId || '')===row.outPlayerId&&old.teamSide===row.teamSide&&Number(old.minute)===row.minute))
+  let added
+  try{added=draftBatchEvents(substitutions.value,existing,draft.value.timing?.halfMinutes)}catch(e){return pairProblem(e.message)}
   const state=substitutionState({lineups,events:[...existing,...added]},props.rules,[...existing,...added])
-  const issue=state.issues.find(row=>String(row.eventId).startsWith('draft-pair-'))
-  if(issue){const i=Number(String(issue.eventId).replace('draft-pair-',''));const team=issue.side==='home'?props.homeName:props.awayName;return pairProblem(`${team} ${issue.minute}′：${issue.message}`,i)}
+  const issue=state.issues.find(row=>String(row.eventId).startsWith('draft-group-'))
+  if(issue){const i=Number(String(issue.eventId).split('-')[2]);const team=issue.side==='home'?props.homeName:props.awayName;return pairProblem(`${team} ${issue.minute}′：${issue.message}`,i)}
   return true
 }
 async function confirm(){
