@@ -53,6 +53,10 @@ export function setDemoMode(enabled, tournamentId = '') {
     sessionStorage.removeItem(MODE_KEY)
     sessionStorage.removeItem('sxfTournamentDemoId')
     sessionStorage.removeItem(DATA_KEY)
+    for (let index = localStorage.length - 1; index >= 0; index--) {
+      const key = localStorage.key(index)
+      if (key?.startsWith('sxf-draw-screen:demo-')) localStorage.removeItem(key)
+    }
     workspace = undefined
     owner = undefined
   }
