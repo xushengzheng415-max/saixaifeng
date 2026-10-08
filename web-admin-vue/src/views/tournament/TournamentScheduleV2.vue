@@ -8,6 +8,7 @@
       <div class="event-context">
         <strong>{{ tournament.name || '当前赛事' }}</strong>
         <el-tag type="success" effect="plain">{{ divisions.length }}个组别</el-tag>
+        <el-button type="success" plain @click="goScheduleCenter">赛程中心</el-button>
         <el-button plain @click="router.push('/tournament-space')">返回赛事空间</el-button>
       </div>
     </header>
@@ -220,6 +221,11 @@ const extraKickoffTimes=computed(()=>selectedKickoffTimes.value.filter(time=>!ha
 const kickoffInput=computed(()=>parseKickoffTimes(selectedKickoffTimes.value.filter(time=>kickoffPeriodEnabled.value[kickoffPeriod(time)])))
 watch(kickoffInput,value=>{if(!value.errors.length){config.kickoffTimes=[...value.times];const duration=Math.max(30,...divisions.value.map(matchMinutes))+Number(config.defaultTurnaroundMinutes || 0);config.sessionWindows=kickoffWindows(value.times,duration)}},{deep:true})
 const viewTitle = computed(() => ({ settings:'赛程设置',imports:'赛程导入导出',map:'赛事地图',workbench:'赛程工作台' })[view.value] || '赛事地图')
+function goScheduleCenter() {
+  const id=divisionFilter.value !== 'all' ? divisionFilter.value : divisions.value.length===1 ? divisions.value[0].id : ''
+  if(!id)return ElMessage.warning('请先选择赛事组别')
+  router.push({path:`/tournaments/${tournamentId}/pairings`,query:{divisionId:String(id),divisionName:divisionName(id)}})
+}
 function setView(next) { view.value = next; const query={ ...route.query }; if(next === 'map')delete query.view;else query.view=next;return router.replace({ path:route.path,query }) }
 async function viewSchedule() { workbenchDivision.value='all';workbenchStatus.value='all';workbenchSearch.value='';await setView('workbench');await focusNextWorkbenchMatch() }
 function sequenceLabel(match) { return match.matchSequence ?? match.matchNo ?? match.matchIndex ?? '—' }
