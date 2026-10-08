@@ -151,7 +151,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
         if(!row || seen.has(entry.matchId)) {errors.push({row:index+1,message:'比赛不存在或重复'});continue}
         seen.add(entry.matchId)
         if(row.status!=='scheduled' || (row.events || []).length) {errors.push({row:index+1,message:'比赛已开始，不能调整'});continue}
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(entry.matchDate || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.matchTime || '') || !String(entry.venue || '').trim()) {errors.push({row:index+1,message:'请填写有效日期、时间和场地'});continue}
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(entry.matchDate || '') || !Number.isFinite(Date.parse(`${entry.matchDate}T00:00:00Z`)) || new Date(`${entry.matchDate}T00:00:00Z`).toISOString().slice(0,10)!==entry.matchDate || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.matchTime || '') || !String(entry.venue || '').trim()) {errors.push({row:index+1,message:'请填写有效日期、时间和场地'});continue}
         changes.push({matchId:row._id,matchNo:row.matchNo || row.sequence,before:{matchDate:row.matchDate || '',matchTime:row.matchTime || '',venue:row.venue || ''},after:{matchDate:entry.matchDate,matchTime:entry.matchTime,venue:String(entry.venue).trim()}})
       }
       const planned=rows('matches').filter(row=>row.tournamentId===tournamentId && row.status!=='cancelled').map(row=>({...row,...(changes.find(change=>change.matchId===row._id)?.after || {})}))
@@ -165,7 +165,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       if(params.adjustmentType==='import' && changes.length) update('tournaments',tournamentId,{scheduleDraft:{...(tournament.scheduleDraft || {}),startDate:changes.map(c=>c.after.matchDate).sort()[0],endDate:changes.map(c=>c.after.matchDate).sort().at(-1),venueResources:[...new Set(changes.map(c=>c.after.venue))].map(name=>({name}))}})
       return {success:true,appliedCount:changes.length}
     }
-    if (action === 'saveDraft') return success(update('tournaments', tournamentId, { scheduleConfig: params.scheduleConfig }))
+    if (action === 'saveDraft') return success(update('tournaments', tournamentId, { scheduleConfig: params.scheduleConfig, scheduleDraft:params.scheduleConfig }))
     if (action === 'resetPairings') { tables.matches = rows('matches').filter(row => !selected(row)); return success({}) }
     if (['publishSchedule', 'publishRegulations'].includes(action)) {
       if (action === 'publishSchedule') rows('matches').filter(selected).forEach(row => { row.schedulePublished = true })
