@@ -188,6 +188,9 @@ async function resolveTeamLogoSource(candidates) {
     } catch { /* 保留原始 HTTPS 地址作为兼容回退 */ }
     return { logo:source.split('?')[0].split('#')[0],logoSource:source,logoSourceInvalid:false }
   }
+  // Preview fixture crests and locally uploaded demo logos are valid image sources.
+  if (/^\/(?!\/)/.test(source)) return { logo:new URL(source,window.location.origin).href,logoSource:source,logoSourceInvalid:false }
+  if (/^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml);/i.test(source)) return { logo:source,logoSource:source,logoSourceInvalid:false }
   return /^https?:\/\//.test(source) ? { logo:source,logoSource:source,logoSourceInvalid:false } : { logo:'',logoSource:source,logoSourceInvalid:true }
 }
 
@@ -276,6 +279,12 @@ async function downloadPoster() {
   exportingPoster.value = true
   try {
     await nextTick()
+    await Promise.all(Array.from(posterRef.value.querySelectorAll('img')).map(async image => {
+      if (image.complete && image.naturalWidth > 0) return
+      let timer
+      try { await Promise.race([image.decode(),new Promise((_,reject) => { timer = setTimeout(() => reject(new Error('队徽尚未加载，请稍后重试')),8000) })]); if(!image.naturalWidth) throw new Error('队徽加载失败，请刷新后重试') }
+      finally { clearTimeout(timer) }
+    }))
     const module = await import('html2canvas')
     const html2canvas = module.default || module
     const canvas = await html2canvas(posterRef.value,{ scale:2,useCORS:true,allowTaint:false,backgroundColor:null,logging:false })
