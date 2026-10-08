@@ -45,25 +45,27 @@ function createPlayerCardLibrary({ cloud }) {
       const render = await suite.document(db,suite.RENDERS,suite.renderId(player._id,template._id,snapshot.version))
       const ready = render?.status === 'ready' && Number(render.cardDataVersion) === Number(player.playerCardVersion || 0) && Number(render.libraryRevision || 0) === Number(grant.revision || 0)
       const reason = tierPermission(score,template.tier,scope.type)
-      result.push({id:libraryId(player._id,template._id),cardId:ready?String(render.cardId||render._id||suite.renderId(player._id,template._id,snapshot.version)):'',templateId:template._id,title:snapshot.title,tier:template.tier,
+      const dynamic=!reason?await require('./playerCardDynamic.cjs').descriptor(cloud,db,player,snapshot,grant):null
+      result.push({id:libraryId(player._id,template._id),cardId:dynamic?.cardId || (ready?String(render.cardId||render._id||suite.renderId(player._id,template._id,snapshot.version)):''),templateId:template._id,title:snapshot.title,tier:template.tier,
         preload:scope,templateVersion:snapshot.version,revision:Number(grant.revision || 0),
-        status:reason ? 'locked' : ready ? 'ready' : grant.fileId ? 'pending' : 'unmade',reason,renderVersion:render?.renderVersion || suite.RENDER_VERSION,
+        cardScene:dynamic?.cardScene||null,displayMode:'dynamic',status:reason ? 'locked' : dynamic?.status || (ready ? 'ready' : grant.fileId ? 'pending' : 'unmade'),reason,renderVersion:render?.renderVersion || suite.RENDER_VERSION,
         fileId:!reason && ready ? render.fileId : '',backgroundFileId:snapshot.backgroundFileId,
         snapshot,grant})
     }
     return result
   }
-  async function list(player, score) {
+  async function list(player, score, options={}) {
     const rows = await sync(player,score)
     const ids = [...new Set(rows.flatMap(row=>[row.fileId,row.backgroundFileId]).filter(Boolean))], urls = new Map()
     for (let i=0;i<ids.length;i+=50) {
       const files = (await cloud.getTempFileURL({fileList:ids.slice(i,i+50)})).fileList || []
       for (const file of files) if (file.tempFileURL) urls.set(file.fileID,file.tempFileURL)
     }
-    return rows.map(({snapshot,grant,backgroundFileId,...row})=>{
+    return Promise.all(rows.map(async ({snapshot,grant,backgroundFileId,...row})=>{
+      if(options.dynamic===false&&row.cardScene){const image=await require('./playerCardDynamic.cjs').exportCard(cloud,db,player,row);return {...row,cardScene:null,cardUrl:image.cardUrl,backgroundUrl:urls.get(backgroundFileId)||'',displayMode:'static-export'}}
       const cardUrl=urls.get(row.fileId)||''
-      return {...row,...(row.status === 'ready' && !cardUrl ? {status:'load_failed',reason:'成卡读取失败，请重新加载'} : {}),cardUrl,backgroundUrl:urls.get(backgroundFileId)||''}
-    })
+      return {...row,...(row.status === 'ready' && !cardUrl && !row.cardScene ? {status:'load_failed',reason:'成卡读取失败，请重新加载'} : {}),cardUrl,backgroundUrl:urls.get(backgroundFileId)||''}
+    }))
   }
   async function resolve(player, score, templateId) {
     const row = (await sync(player,score)).find(item=>item.templateId === String(templateId || ''))
@@ -79,33 +81,22 @@ function createPlayerCardLibrary({ cloud }) {
     const rendered = await suite.renderPlayer(cloud,db,player,row.snapshot,score,{crop,portraitFileId})
     return {row,crop,portraitFileId,png:rendered.png}
   }
-  async function save(player, score, event, portrait, normalizeCrop, isStillOwned) {
-    const revision = Number(event.expectedRevision)
-    if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('球员卡版本无效，请重新打开')
-    const generated = await render(player,score,event,portrait,normalizeCrop), row = generated.row
-    if (row.revision !== revision) throw Object.assign(new Error('此卡已更新，请重新打开'),{code:'PLAYER_CARD_LIBRARY_CONFLICT'})
-    const file = await cloud.uploadFile({cloudPath:`restricted/player-cards/library/${row.id}/${crypto.randomBytes(12).toString('hex')}.png`,fileContent:generated.png})
-    const renderId=suite.renderId(player._id,row.templateId,row.templateVersion),digest=crypto.createHash('sha256').update(generated.png).digest('hex'),cardId=require('./playerCardHistory.cjs').cardId(renderId,digest)
-    try {
-      await db.runTransaction(async tx => {
-        const current = await suite.document(tx,'players',player._id), grant = await suite.document(tx,LIBRARY,row.id)
-        const key = preload.stateId(row.tier,row.preload,row.templateId), state = await suite.document(tx,suite.STATES,key)
-        if (!current || !isStillOwned(current)) throw Object.assign(new Error('球员绑定已变化，请重新进入'),{code:'PLAYER_CARD_FORBIDDEN'})
-        if (!grant || Number(grant.revision || 0) !== revision || Number(current.playerCardVersion || 0) !== Number(player.playerCardVersion || 0)) throw Object.assign(new Error('此卡或资料已更新，请重新打开'),{code:'PLAYER_CARD_LIBRARY_CONFLICT'})
-        if (state?.active?.templateId !== row.templateId || Number(state.active.version) !== row.templateVersion) throw Object.assign(new Error('卡面已更新，请重新打开'),{code:'PLAYER_CARD_TEMPLATE_CHANGED'})
-        const previousRender=await suite.document(tx,suite.RENDERS,renderId)
-        await require('./playerCardHistory.cjs').archiveCurrentRender(tx,db,renderId,previousRender)
-        await tx.collection(LIBRARY).doc(row.id).update({data:{fileId:file.fileID,crop:generated.crop,portraitFileId:generated.portraitFileId,
-          revision:revision+1,templateVersion:row.templateVersion,updatedAt:db.serverDate()}})
-        await tx.collection(suite.RENDERS).doc(renderId).set({data:{playerId:String(player._id),
-          templateId:row.templateId,publishedVersion:row.templateVersion,cardTypeId:row.tier,fileId:file.fileID,status:'ready',
-          cardDataVersion:Number(player.playerCardVersion || 0),libraryRevision:revision+1,renderVersion:suite.RENDER_VERSION,
-          cardId,editRevision:Number(previousRender?.editRevision||0)+1,digest,generatedAt:db.serverDate()}})
-        await tx.collection(suite.STATES).doc(key).update({data:{mutation:Number(state.mutation || 0)+1}})
-      })
-      return {success:true,revision:revision+1,templateId:row.templateId,cardId}
-    } catch (error) { await cloud.deleteFile({fileList:[file.fileID]}).catch(()=>{});throw error }
+  async function save(player,score,event,portrait,normalizeCrop,isStillOwned){
+    const revision=Number(event.expectedRevision)
+    if(!Number.isSafeInteger(revision)||revision<0)throw new Error('球员卡版本无效，请重新打开')
+    const row=await resolve(player,score,event.templateId)
+    if(Number(event.templateVersion)!==row.templateVersion)throw new Error('模板已更新，请重新打开')
+    const crop=normalizeCrop(event.crop),portraitFileId=row.grant.portraitFileId&&!score.canReplacePhoto?row.grant.portraitFileId:portrait.transparentFileId
+    await db.runTransaction(async tx=>{
+      const current=await suite.document(tx,'players',player._id),grant=await suite.document(tx,LIBRARY,row.id),state=await suite.document(tx,suite.STATES,preload.stateId(row.tier,row.preload,row.templateId))
+      if(!current||!isStillOwned(current)||!grant||grant.status==='revoked')throw Object.assign(new Error('球员卡访问权限已变化'),{code:'PLAYER_CARD_FORBIDDEN'})
+      if(Number(grant.revision||0)!==revision||Number(current.playerCardVersion||0)!==Number(player.playerCardVersion||0))throw Object.assign(new Error('球员卡或资料已更新，请重新打开'),{code:'PLAYER_CARD_LIBRARY_CONFLICT'})
+      if(state?.active?.templateId!==row.templateId||Number(state.active.version)!==row.templateVersion)throw new Error('模板已更新，请重新打开')
+      await tx.collection(LIBRARY).doc(row.id).update({data:{crop:db.command.set(crop),portraitFileId,revision:revision+1,templateVersion:row.templateVersion,displayMode:'dynamic',updatedAt:db.serverDate()}})
+    })
+    return {success:true,displayMode:'dynamic',revision:revision+1,templateId:row.templateId}
   }
+
   async function select(player, score, templateId, isStillOwned) {
     const row = templateId ? await resolve(player,score,templateId) : null
     if (row && row.status !== 'ready') throw new Error('请先制作此卡，再设为展示')
@@ -116,8 +107,8 @@ function createPlayerCardLibrary({ cloud }) {
         const state = await suite.document(tx,suite.STATES,preload.stateId(row.tier,row.preload,row.templateId))
         const render = await suite.document(tx,suite.RENDERS,suite.renderId(player._id,row.templateId,row.templateVersion))
         const grant = await suite.document(tx,LIBRARY,row.id)
-        if (state?.active?.templateId !== row.templateId || Number(state.active.version) !== row.templateVersion || render?.status !== 'ready' || Number(render.libraryRevision) !== Number(grant?.revision) || Number(render.cardDataVersion) !== Number(current.playerCardVersion || 0)) throw new Error('此卡已更新，请重新打开后选择')
-      } else if (!current.playerCardFileId) throw new Error('请先制作基础卡')
+        if (state?.active?.templateId !== row.templateId || Number(state.active.version) !== row.templateVersion || !grant || grant.status==='revoked' || (row.cardScene ? Number(grant.revision||0)!==row.revision : render?.status !== 'ready' || Number(render.libraryRevision) !== Number(grant?.revision) || Number(render.cardDataVersion) !== Number(current.playerCardVersion || 0))) throw new Error('此卡已更新，请重新打开后选择')
+      } else if (!current.playerCardFileId && !current.playerCardDynamic) throw new Error('请先制作基础卡')
       await tx.collection('players').doc(String(player._id)).update({data:{playerCardDisplayTemplateId:row?.templateId || '',playerCardDisplayUpdatedAt:db.serverDate()}})
     })
     return {success:true,displayTemplateId:row?.templateId || ''}

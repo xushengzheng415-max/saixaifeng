@@ -1325,6 +1325,21 @@ async function applyEventQualifications(tournamentId, divisionId, players, requi
   })
 }
 
+async function readWorkspaceCards(event,identity){
+  const scoped=await findWorkspaceForAction(identity.user,identity.openId,event.workspaceId),rights=new Set(scoped.workspace.permissions||[])
+  if(!rights.has('team.view')&&!rights.has('team.manage'))throw new Error('当前身份无权读取球队球员卡')
+  const teams=await loadTeams(scoped.workspace,identity.user,identity.openId),team=teams.find(row=>String(row._id)===String(event.teamId||''))
+  if(!team)throw new Error('球队不属于当前工作空间')
+  const ids=[...new Set((event.action==='playerCardBatchRead'?event.playerIds||[]:[event.playerId]).map(String))]
+  if(!ids.length||ids.length>50||ids.some(id=>!id||id.length>128))throw new Error('球员编号无效或数量过多')
+  const rows=await require('./data-center/reader.cjs').readByIds(db,'players','_id',ids)
+  const allowed=rows.filter(player=>String(player.teamId||player.teamCode||'')===String(team._id)&&!['archived','deleted'].includes(String(player.status||'')))
+  const cards=await require('./playerCardReader.cjs').readCards(cloud,db,allowed,{dynamic:event.action==='playerCardExport'||event.dynamicCardProtocol==='player-card-dynamic/1'})
+  if(event.action==='playerCardExport'){const player=allowed.find(row=>String(row._id)===ids[0]),card=cards.find(row=>row.playerId===ids[0]);if(!player||!card?.cardScene)throw new Error('无权导出或球员卡暂不可用');return require('./playerCardDynamic.cjs').exportCard(cloud,db,player,card)}
+  const byId=new Map(cards.map(card=>[card.playerId,card])),result=ids.map(id=>byId.get(id)||{playerId:id,status:'forbidden',cardUrl:''})
+  return event.action==='playerCardBatchRead'?{success:true,cards:result}:{success:true,...result[0]}
+}
+
 async function loadTeamPlayersForWorkspace(event, identity) {
   const result = await findWorkspaceForAction(identity.user, identity.openId, event.workspaceId)
   const workspace = result.workspace
@@ -1338,7 +1353,8 @@ async function loadTeamPlayersForWorkspace(event, identity) {
   const rows = (await safeGetTeamPlayers(teamId, 500)).filter(item => ['archived', 'deleted'].indexOf(String(item.status || '').toLowerCase()) < 0)
   const importedDrafts = permissions.has('team.manage') ? await safeGet('registration_player_drafts', { teamId: String(team._id) }, 500) : []
   const pendingImportCount = importedDrafts.filter(item => ['pending', 'conflict'].indexOf(String(item.reviewStatus || 'pending')) >= 0).length
-  const players = rows.map(formatTeamPlayer)
+  const cards=await require('./playerCardReader.cjs').readCards(cloud,db,rows,{dynamic:event.dynamicCardProtocol==='player-card-dynamic/1'}),cardById=new Map(cards.map(c=>[c.playerId,c]))
+  const players = rows.map(player=>{const card=cardById.get(String(player._id));return {...formatTeamPlayer(player),cardScene:card?.cardScene||null,cardUrl:card?.cardUrl||'',cardState:card?.status||'unavailable',portraitUrl:card?.portraitUrl||'',cardTier:card?.tier||null}})
   const counts = { complete: 0, pending: 0, exception: 0 }
   players.forEach(item => { counts[item.profileStatus] += 1 })
   return {
@@ -3186,6 +3202,7 @@ exports.main = async function(event) {
   event = event || {}
   try {
     const identity = await findCurrentUser()
+    if(['playerCardRead','playerCardBatchRead','playerCardExport'].includes(event.action))return await readWorkspaceCards(event,identity)
     if (event.action === 'sharedEventOperation') return await require('./sharedOperations.cjs').run(db, cloud, identity, event, formatTeamPlayer)
     if (event.action === 'sharedTournaments') return { success: true, tournaments: await sharedEvents.list(db, identity.user._id) }
     if (event.action === 'sharedTournamentOverview') return await require('./sharedOverview.cjs').overview(db,cloud,identity,event)

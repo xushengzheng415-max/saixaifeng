@@ -58,6 +58,7 @@ function createPlayerCardCatalogAdmin({ cloud, authenticateWebSession, scoreForP
     }
     const renderedFileKeys=new Set(), items=[]
     for(const render of renders){
+      if(render.exportOnly||render.metadataOnly||render.projectionOnly)continue
       const playerId=String(render.playerId||''),templateId=String(render.templateId||''),player=playerById.get(playerId)
       if(!player)continue
       if(render.fileId)renderedFileKeys.add(`${playerId}\u001f${render.fileId}`)
@@ -165,13 +166,21 @@ function createPlayerCardCatalogAdmin({ cloud, authenticateWebSession, scoreForP
     if(event.action==='listPlayerCardCatalogTargets')return {success:true,targets:filtered.filter(row=>row.status==='missing'&&row.selectable).map(row=>({playerId:row.playerId,teamId:row.teamId,tournamentIds:row.tournamentIds||[]})),total:filtered.filter(row=>row.status==='missing'&&row.selectable).length,filters}
     const offset=Math.max(0,Math.min(100000,Number(event.offset)||0)),limit=Math.max(1,Math.min(PAGE_SIZE,Number(event.limit)||PAGE_SIZE))
     const page=filtered.slice(offset,offset+limit),urls=await signedUrls(page)
-    return {success:true,cards:page.map(row=>({...row,cardUrl:urls.get(row.fileId)||'',portraitUrl:urls.get(row.portraitFileId)||''})),total:filtered.length,offset,limit,nextOffset:offset+page.length<filtered.length?offset+page.length:null,filters,coverage:{players:players.length,cardedPlayers,missingPlayers,excludedPlayers,noPhotoPlayers}}
+    const pageScores=page.length?await createDataService(db).playerCardsForAuthorizedPlayers([...new Set(page.map(row=>row.playerId))]):new Map()
+    const cards=await Promise.all(page.map(async row=>{
+      if(row.isHistory||row.status==='excluded')return {...row,cardUrl:urls.get(row.fileId)||'',portraitUrl:urls.get(row.portraitFileId)||''}
+      const player=playerById.get(row.playerId)
+      const current=player?await require('./playerCardDynamic.cjs').read(cloud,db,player,{score:pageScores.get(row.playerId)}):null
+      return current?.cardScene?{...row,...current,playerName:row.playerName,title:row.title,isCurrent:true,canEdit:true,portraitUrl:current.portraitUrl,source:'dynamic'}:{...row,cardUrl:urls.get(row.fileId)||'',portraitUrl:urls.get(row.portraitFileId)||''}
+    }))
+    return {success:true,cards,total:filtered.length,offset,limit,nextOffset:offset+page.length<filtered.length?offset+page.length:null,filters,coverage:{players:players.length,cardedPlayers,missingPlayers,excludedPlayers,noPhotoPlayers}}
   }
   async function get(event) {
     const auth=await owner(event)
     if(!auth.success)return auth
     const cardId=String(event.cardId||'')
     if(!cardId||cardId.length>256)return {success:false,code:'PLAYER_CARD_ID_INVALID',error:'成卡编号无效'}
+    if(cardId.startsWith('dynamic:')){const id=cardId.split(':')[1],player=await suite.document(db,'players',id);if(!player)return {success:false,error:'球员资料不存在'};const card=await require('./playerCardDynamic.cjs').read(cloud,db,player);return {success:true,card:{...card,playerName:player.name||'球员',isCurrent:true,source:'dynamic'}}}
     if(cardId.startsWith('base:')) {
       const match=cardId.match(/^base:([a-zA-Z0-9_-]{1,128}):(\d+)$/)
       if(!match)return {success:false,code:'PLAYER_CARD_ID_INVALID',error:'成卡编号无效'}

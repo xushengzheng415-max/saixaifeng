@@ -1,3 +1,4 @@
+import '../../../shared/player-card/draw.js'
 // 云开发 SDK 2.x 初始化和封装
 // ★ 零 SDK 模式：浏览器端完全不依赖 @cloudbase/js-sdk 的网络功能
 //   登录 → fetch() → webLoginApi HTTP API
@@ -148,6 +149,7 @@ async function performFunctionHTTP(action, data = {}, timeout = 60000) {
   const payload = {
     ...data,
     action,
+    dynamicCardProtocol:'player-card-dynamic/1',
     authToken: requestToken,
     assistanceGrantId: !bypassAssistance && assistance ? assistance.requestId : '',
     ...(staff ? { staffTournamentId: sessionStorage.getItem('sxfStaffTournamentId') || '', staffModule: sidebarRightForRoute(staffPath) } : {})
@@ -197,7 +199,7 @@ async function performFunctionHTTP(action, data = {}, timeout = 60000) {
         : 'https://www.sxffootball.cn/'
       throw new Error(result.error || (platformSessionExpired ? '平台登录已失效，请重新登录' : '登录会话已失效，请重新微信扫码登录'))
     }
-    return result
+    return await globalThis.SxfDynamicCard.hydrate(result)
   } catch (err) {
     if (err?.name === 'AbortError') {
       throw new Error('请求处理时间较长，请稍后重试')

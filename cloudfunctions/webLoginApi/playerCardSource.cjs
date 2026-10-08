@@ -36,7 +36,7 @@ async function resolveSource(db,player) {
     if(fileId)return {fileId,type:player.playerCardSourceType||'standard_portrait',field:'playerCardSourceFileId'}
   }
   if(player.recentPortraitId){
-    const portrait=await require('./playerCardSuite.cjs').document(db,'parent_portraits',player.recentPortraitId)
+    const portrait=await require('./playerCardReader.cjs').document(db,'parent_portraits',player.recentPortraitId)
     const fileId=permanentFile(portrait?.transparentFileId)
     if(portrait?.status==='confirmed'&&fileId)return {fileId,type:'standard_portrait',field:'recentPortraitId'}
   }

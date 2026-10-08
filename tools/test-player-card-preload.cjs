@@ -26,7 +26,7 @@ const db = {
   }, async runTransaction(fn) { return fn(db) }
 }
 const cloud = { database:()=>db,
-  async uploadFile({fileContent}) { const fileID=`cloud://test-${files.size}`;files.set(fileID,fileContent);return {fileID} },
+  async uploadFile({fileContent}) { const fileID=`cloud://cloud1-7g8ckb3c7815a011.636c-cloud1-7g8ckb3c7815a011-1419431905/fixture-${files.size}.png`;files.set(fileID,fileContent);return {fileID} },
   async deleteFile(){}, async downloadFile({fileID}) { return {fileContent:files.get(fileID)} },
   async getTempFileURL({fileList}) { return {fileList:fileList.map(fileID=>({fileID,tempFileURL:`https://test.local/${fileID}`}))} }
 }
@@ -52,7 +52,7 @@ async function main() {
   for(const scope of [{type:'platform'},{type:'team',targetId:'team1'},{type:'tournament',targetId:'event1'},{type:'player',targetId:'p1'}]) {
     const result=await call('savePlayerCardTemplate',{...base,preload:{...scope,targetName:'伪造名称'}})
     assert.equal(result.success,true,result.error); saved.push(result)
-    const published=await call('publishPlayerCardTemplate',{templateId:result.templateId,revision:1})
+    const published=await call('publishDynamicPlayerCardTemplate',{templateId:result.templateId,revision:1})
     assert.equal(published.status,'active',published.error)
     const active=await call('getActivePlayerCardTemplate',{tier:'gold',preload:scope,templateId:result.templateId})
     assert.equal(active.template.id,result.templateId)

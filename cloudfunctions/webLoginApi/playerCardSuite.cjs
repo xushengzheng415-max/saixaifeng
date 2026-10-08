@@ -125,8 +125,8 @@ async function publicationPlayers(db,tier) {
   }
 }
 
-async function signedCard(cloud, db, player, type) {
-  const [card] = await require('./playerCardReader.cjs').readCards(cloud,db,[{...player,playerCardBackgroundId:type}],{baseOnly:true})
+async function signedCard(cloud, db, player, type, options={}) {
+  const [card] = await require('./playerCardReader.cjs').readCards(cloud,db,[{...player,playerCardBackgroundId:type}],{baseOnly:true,...options})
   return {...card,url:card.cardUrl,templateVersion:card.publishedVersion}
 }
 
