@@ -1,11 +1,12 @@
 <template>
-  <section v-if="isScreen" class="draw-screen" :class="`theme-${screenConfig.theme}`">
+  <section v-if="isScreen" class="draw-screen" :class="`theme-${screenConfig.theme}`" :style="screenBackgroundStyle">
     <header><strong>{{ screenConfig.title || tournament.name || '赛事抽签大屏' }}</strong><span>{{ divisionName }} · 抽签分组</span></header>
     <main>
       <h1>抽签分组</h1>
+      <p v-if="!screenGroups.length" class="screen-progress">等待主控同步</p>
       <p v-if="screenConfig.showProgress" class="screen-progress">已分配 {{ screenGroups.flatMap(group => group.slots).filter(Boolean).length }} / {{ screenGroups.flatMap(group => group.slots).length }} 个签位</p>
       <div class="screen-groups">
-        <article v-for="group in screenGroups" :key="group.code"><h2>{{ group.name }} <small v-if="screenConfig.showProgress">{{ group.slots.filter(Boolean).length }}/{{ group.slots.length }}</small></h2><ol><li v-for="(team,index) in group.slots" :key="index"><b v-if="screenConfig.showSlotNumber">{{ group.code }}{{ index + 1 }}</b><span v-if="team">{{ team.name }}</span><em v-else>待抽取</em></li></ol></article>
+        <article v-for="group in screenGroups" :key="group.code"><h2>{{ group.name }} <small v-if="screenConfig.showProgress">{{ group.slots.filter(Boolean).length }}/{{ group.slots.length }}</small></h2><ol><li v-for="(team,index) in group.slots" :key="index"><b v-if="screenConfig.showSlotNumber">{{ group.code }}{{ index + 1 }}</b><span v-if="team"><img v-if="team.logo" :src="team.logo" alt="" class="screen-team-logo" />{{ team.name }}</span><em v-else>待抽取</em></li></ol></article>
       </div>
     </main>
   </section>
@@ -58,7 +59,7 @@
             <div><h2>分组情况</h2><p>{{ assigned }}/{{ teams.length }} 已分配 · {{ groupSizes.join(' + ') }} 签位</p></div>
             <div class="console-actions">
               <el-select v-model="visibleGroupFilter"><el-option label="全部小组" value="all" /><el-option v-for="group in groups" :key="group.code" :label="group.name" :value="group.code" /></el-select>
-              <el-button plain @click="screenConfigVisible = true"><el-icon><Setting /></el-icon>大屏配置</el-button>
+              <el-button plain @click="openScreenConfig"><el-icon><Setting /></el-icon>大屏配置</el-button>
               <el-button plain @click="projectScreen"><el-icon><Monitor /></el-icon>投大屏</el-button>
               <el-button plain @click="copyScreenLink">复制大屏链接</el-button>
               <el-button plain><el-icon><Setting /></el-icon>签位编号设置</el-button>
@@ -91,17 +92,27 @@
   </section>
   <el-dialog v-model="screenConfigVisible" title="大屏配置" width="520px" :close-on-click-modal="false">
     <el-form label-position="left" label-width="110px">
-      <el-form-item label="大屏标题"><el-input v-model="screenConfig.title" placeholder="默认使用赛事名称" /></el-form-item>
-      <el-form-item label="主题"><el-radio-group v-model="screenConfig.theme"><el-radio-button value="dark">深色</el-radio-button><el-radio-button value="light">浅色</el-radio-button></el-radio-group></el-form-item>
-      <el-form-item label="显示进度"><el-switch v-model="screenConfig.showProgress" /></el-form-item>
-      <el-form-item label="显示签位编号"><el-switch v-model="screenConfig.showSlotNumber" /></el-form-item>
+      <el-form-item label="大屏标题"><el-input v-model="screenConfigDraft.title" placeholder="默认使用赛事名称" /></el-form-item>
+      <el-form-item label="主题"><el-radio-group v-model="screenConfigDraft.theme" @change="onScreenThemeChange"><el-radio-button value="dark">深色</el-radio-button><el-radio-button value="light">浅色</el-radio-button></el-radio-group></el-form-item>
+      <el-form-item v-if="isDemoMode()" label="背景">
+        <div class="screen-background-picker">
+          <button v-for="preset in screenBackgrounds" :key="preset.id" type="button" :class="{ selected:screenConfigDraft.background === preset.id }" :style="{ background:preset.css }" @click="chooseScreenBackground(preset)">{{ preset.name }}</button>
+          <button v-if="screenConfigDraft.backgroundImage" type="button" :class="{ selected:screenConfigDraft.background === 'custom' }" :style="{ backgroundImage:`linear-gradient(#0006,#0006),url(${screenConfigDraft.backgroundImage})`, backgroundSize:'cover' }" @click="screenConfigDraft.background = 'custom'">自定义图片</button>
+        </div>
+      </el-form-item>
+      <el-form-item v-if="isDemoMode()" label="自定义背景">
+        <div class="custom-background-actions"><el-button :loading="backgroundReading" @click="screenBackgroundInput?.click()">上传图片</el-button><el-button v-if="screenConfigDraft.backgroundImage" link type="danger" @click="removeScreenBackground">移除</el-button><span>JPG/PNG，建议 1920×1080</span></div>
+        <input ref="screenBackgroundInput" type="file" accept="image/jpeg,image/png" hidden @change="readScreenBackground" />
+      </el-form-item>
+      <el-form-item label="显示进度"><el-switch v-model="screenConfigDraft.showProgress" /></el-form-item>
+      <el-form-item label="显示签位编号"><el-switch v-model="screenConfigDraft.showSlotNumber" /></el-form-item>
     </el-form>
     <template #footer><el-button @click="screenConfigVisible = false">取消</el-button><el-button type="success" @click="saveScreenConfig">保存配置</el-button></template>
   </el-dialog>
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
+import { computed, getCurrentInstance, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, Calendar, Check, CircleCheckFilled, Delete, Grid, Location, Lock, Monitor, Refresh, Search, Setting, SwitchButton, Trophy, WarningFilled } from '@element-plus/icons-vue'
@@ -114,7 +125,8 @@ const route = useRoute()
 const router = useRouter()
 const componentInstance = getCurrentInstance()
 const divisionId = ref(String(route.query.divisionId || 'default'))
-const isScreen = computed(() => route.query.display === 'screen')
+const isScreen = computed(() => route.query.display === 'screen' || route.name === 'QuickDemoDrawScreen')
+const projectedDivisionName = ref('')
 const savedGroupCount = ref(0)
 const savedTeamsPerGroup = ref(0)
 const configuredGroupSizes = ref([])
@@ -137,7 +149,7 @@ const groupSizes = computed(() => {
   const remainder = total % groupCount.value
   return Array.from({ length: groupCount.value }, (_, index) => base + (index < remainder ? 1 : 0))
 })
-const divisionName = computed(() => divisionOptions.value.find(item => item.id === divisionId.value)?.name || tournament.value.divisions?.find(item => String(item.id || item._id) === divisionId.value)?.name || (visualQa ? 'U10组' : '当前组别'))
+const divisionName = computed(() => projectedDivisionName.value || divisionOptions.value.find(item => item.id === divisionId.value)?.name || tournament.value.divisions?.find(item => String(item.id || item._id) === divisionId.value)?.name || (visualQa ? 'U10组' : '当前组别'))
 const dateRange = computed(() => {
   const start = String(tournament.value.startDate || '').replaceAll('-', '.')
   const end = String(tournament.value.endDate || '').replaceAll('-', '.')
@@ -148,7 +160,48 @@ const keyword = ref('')
 const groups = ref(makeGroups())
 const screenGroups = ref([])
 const screenConfigVisible = ref(false)
-const screenConfig = ref({ title: '', theme: 'dark', showProgress: true, showSlotNumber: true })
+const screenConfig = ref({ title:'', theme:'dark', showProgress:true, showSlotNumber:true, background:'emerald', backgroundImage:'' })
+const screenConfigDraft = ref({ ...screenConfig.value })
+const screenBackgroundInput = ref(null)
+const backgroundReading = ref(false)
+const screenBackgrounds = [
+  { id:'emerald', name:'翡翠球场', theme:'dark', css:'radial-gradient(ellipse at 80% 0%,#16774c,transparent 65%),repeating-linear-gradient(90deg,#092c20 0 120px,#0c3326 120px 240px)' },
+  { id:'stadium', name:'深蓝球场', theme:'dark', css:'radial-gradient(ellipse at 50% 0%,#205e85,transparent 65%),linear-gradient(135deg,#061829,#102e47)' },
+  { id:'ceremony', name:'黑金舞台', theme:'dark', css:'radial-gradient(ellipse at 50% 0%,#5a4726,transparent 65%),linear-gradient(135deg,#111510,#252219)' },
+  { id:'light', name:'简洁浅色', theme:'light', css:'linear-gradient(135deg,#f7fbf8,#dceee3)' }
+]
+const screenBackgroundStyle = computed(() => {
+  if (screenConfig.value.background === 'custom' && screenConfig.value.backgroundImage) {
+    const veil = screenConfig.value.theme === 'light' ? '#ffffffd9' : '#00130bdd'
+    return { backgroundImage:`linear-gradient(${veil},${veil}),url(${screenConfig.value.backgroundImage})`, backgroundSize:'cover', backgroundPosition:'center' }
+  }
+  const preset = screenBackgrounds.find(item => item.id === screenConfig.value.background)
+  return preset ? { background:preset.css } : {}
+})
+function openScreenConfig() { loadScreenConfig(); screenConfigDraft.value = { ...screenConfig.value }; screenConfigVisible.value = true }
+function chooseScreenBackground(preset) { screenConfigDraft.value.background = preset.id; screenConfigDraft.value.theme = preset.theme }
+function onScreenThemeChange(theme) { if(screenConfigDraft.value.background === 'custom') return; if(theme === 'light') screenConfigDraft.value.background = 'light'; else if(screenConfigDraft.value.background === 'light') screenConfigDraft.value.background = 'emerald' }
+function removeScreenBackground() { screenConfigDraft.value.backgroundImage = ''; if (screenConfigDraft.value.background === 'custom') chooseScreenBackground(screenBackgrounds[0]) }
+async function readScreenBackground(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  if (!['image/jpeg','image/png'].includes(file.type)) { ElMessage.warning('请选择 JPG 或 PNG 图片'); return }
+  if (file.size > 10 * 1024 * 1024) { ElMessage.warning('图片超过 10MB，请压缩后重试'); return }
+  backgroundReading.value = true
+  try {
+    const data = await new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('读取失败，请重新选择图片')); reader.readAsDataURL(file) })
+    const image = await new Promise((resolve,reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('图片无法识别，请重新选择')); img.src = data })
+    const ratio = Math.min(1,1920/image.width,1080/image.height)
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1,Math.round(image.width*ratio)); canvas.height = Math.max(1,Math.round(image.height*ratio))
+    canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height)
+    const resized = canvas.toDataURL('image/jpeg',0.82)
+    if (resized.length > 1400000) throw new Error('图片内容过大，请压缩后重试')
+    screenConfigDraft.value.backgroundImage = resized
+    screenConfigDraft.value.background = 'custom'
+  } catch(error) { ElMessage.error(error.message || '图片读取失败，请重试') }
+  finally { backgroundReading.value = false }
+}
 const avoidSameRegion = ref(route.query.avoidSameRegion !== '0')
 const visibleGroupFilter = ref('all')
 const poolExpanded = ref(false)
@@ -163,22 +216,25 @@ let drawChannel = null
 function drawChannelKey() { return `sxf-draw-screen:${props.tournamentId}:${divisionId.value}` }
 function screenConfigKey() { return `${drawChannelKey()}:config` }
 const screenAddress = computed(() => {
+  if (isDemoMode()) return `${window.location.origin}${import.meta.env.BASE_URL}#/quick-demo-draw-screen/${encodeURIComponent(props.tournamentId)}?divisionId=${encodeURIComponent(divisionId.value)}`
   const params = new URLSearchParams({ divisionId: divisionId.value, divisionName: divisionName.value, tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', mode: 'quick', format: 'group', theme: screenConfig.value.theme, showProgress: screenConfig.value.showProgress ? '1' : '0', showSlotNumber: screenConfig.value.showSlotNumber ? '1' : '0' })
   if (screenConfig.value.title) params.set('title', screenConfig.value.title)
   return `https://screen.sxffootball.cn/draw/${encodeURIComponent(props.tournamentId)}?${params.toString()}`
 })
-function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved } } catch {} }
-function saveScreenConfig() { try { localStorage.setItem(screenConfigKey(), JSON.stringify(screenConfig.value)) } catch {}; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
+function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved, background:saved.background || (saved.theme === 'light' ? 'light' : 'emerald') } } catch {} }
+function saveScreenConfig() { if(backgroundReading.value) return; const next = { ...screenConfigDraft.value }; try { localStorage.setItem(screenConfigKey(), JSON.stringify(next)); localStorage.setItem(drawChannelKey(), JSON.stringify({ ...JSON.parse(localStorage.getItem(drawChannelKey()) || '{}'), screen:next })) } catch { ElMessage.error('背景保存失败，请压缩图片或移除后重试'); return }; screenConfig.value = next; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
 async function copyScreenLink() { try { await navigator.clipboard.writeText(screenAddress.value); ElMessage.success('大屏链接已复制') } catch { ElMessage.warning(`请手动复制：${screenAddress.value}`) } }
 async function publishScreenState() {
-  if (isDemoMode()) return
-  const state = { title: screenConfig.value.title || tournament.value.name || '赛事抽签', tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', divisionName: divisionName.value, status: groups.value.flatMap(group => group.slots).filter(Boolean).length ? '抽签进行中' : '等待抽签开始', groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name, logo: team.logo || team.logoUrl || team.logoTransparentUrl || '' } : null) })), updatedAt: Date.now() }
+  if (isScreen.value) return
+  const state = { tournamentId:props.tournamentId, divisionId:divisionId.value, screen:{...screenConfig.value}, title: screenConfig.value.title || tournament.value.name || '赛事抽签', tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', divisionName: divisionName.value, status: groups.value.flatMap(group => group.slots).filter(Boolean).length ? '抽签进行中' : '等待抽签开始', groups: groups.value.map(group => ({ name: group.name, code: group.code, slots: group.slots.map(team => team ? { id: team.id, name: team.name, logo: team.logo || team.logoUrl || team.logoTransparentUrl || '' } : null) })), updatedAt: Date.now() }
   screenGroups.value = state.groups
   try { localStorage.setItem(drawChannelKey(), JSON.stringify(state)); drawChannel?.postMessage(state) } catch {}
+  if (isDemoMode()) return
   try { const authToken = localStorage.getItem('authToken') || ''; if (authToken) await fetch('https://screen.sxffootball.cn/screen-api/state', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` }, body: JSON.stringify(state), keepalive: true }) } catch {}
 }
 function projectScreen() {
   loadScreenConfig()
+  publishScreenState()
   const opened = window.open(screenAddress.value, '_blank', 'noopener,noreferrer')
   if (!opened) ElMessage.warning('浏览器阻止了大屏窗口，请允许弹窗后重试')
   publishScreenState()
@@ -248,7 +304,7 @@ function randomize(){
   commitGroups()
   if(visualQa) window.__sxfQuickDrawInteraction = { action:'randomize-draft',tournamentId:props.tournamentId,divisionId:divisionId.value,assigned:assigned.value,published:false,cloudWrite:false }
 }
-function undo(){ const previous = undoStack.value.pop(); if(previous) restore(previous) }
+function undo(){ const previous = undoStack.value.pop(); if(previous) { restore(previous); commitGroups() } }
 function back(){ router.push({ path:route.path, query:{ divisionId:divisionId.value, mode:'quick', view:'config' } }) }
 function result(){ router.push({ path:route.path, query:{ divisionId:divisionId.value, mode:'quick', view:'result', format:'tournament' } }) }
 async function load(){
@@ -271,7 +327,7 @@ async function load(){
     const current = saved.filter(row => String(row.divisionId || 'default') === divisionId.value && row.type === 'tournament' && row.status !== 'archived')
     if(current.length){ savedGroupCount.value=current.length; configuredGroupSizes.value=current.map(row => Number(row.maxTeams || row.teams?.length || 0)).filter(Boolean); savedTeamsPerGroup.value=Math.max(...configuredGroupSizes.value,4) }
     const byId = new Map(teams.value.map(team => [team.id,team]))
-    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const capacity = Number(source?.maxTeams || group.slots.length || teamsPerGroup.value); const slots=Array.isArray(source?.teams) ? source.teams.map(item => item.teamId?.startsWith('bye-') ? { id:item.teamId, name:'轮空', teamName:'轮空', isBye:true } : byId.get(String(item.teamId)) || null).slice(0,capacity) : []; return { ...group,slots:[...slots,...Array(Math.max(0,capacity-slots.length)).fill(null)] } })
+    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const capacity = Number(source?.maxTeams || group.slots.length || teamsPerGroup.value); const slots=Array(capacity).fill(null); (source?.teams || []).forEach((item,index) => { const position=Number(item.seedOrder || index+1)-1; if(position>=0 && position<capacity) slots[position]=item.teamId?.startsWith('bye-') ? { id:item.teamId, name:'轮空', teamName:'轮空', isBye:true } : byId.get(String(item.teamId)) || null }); return { ...group,slots:[...slots,...Array(Math.max(0,capacity-slots.length)).fill(null)] } })
     publishScreenState()
   }catch(error){ teams.value=[]; groups.value=makeGroups(); ElMessage.error(error.message || '加载赛会制分组数据失败') }
 }
@@ -282,7 +338,7 @@ async function persistGroups(status){
   for(const row of replaceable) await deleteRecord('tournament_groups',row._id)
   const editKey = `sxf-draw-edit:${props.tournamentId}:${divisionId.value}`
   const modificationReason = sessionStorage.getItem(editKey) || ''
-  for(const group of groups.value) await addRecord('tournament_groups',{ tournamentId:props.tournamentId,divisionId:divisionId.value,groupName:group.name,groupCode:group.code,maxTeams:teamsPerGroup.value,type:'tournament',status,teams:group.slots.filter(Boolean).map((team,index) => ({ teamId:team.id,teamName:team.name,seedOrder:index+1 })),modifiedFromConfirmed:Boolean(modificationReason),modificationReason,modificationSavedAt:modificationReason ? new Date() : null })
+  for(const group of groups.value) await addRecord('tournament_groups',{ tournamentId:props.tournamentId,divisionId:divisionId.value,groupName:group.name,groupCode:group.code,maxTeams:group.slots.length,type:'tournament',status,teams:group.slots.map((team,index) => team ? ({ teamId:team.id,teamName:team.name,seedOrder:index+1 }) : null).filter(Boolean),modifiedFromConfirmed:Boolean(modificationReason),modificationReason,modificationSavedAt:modificationReason ? new Date() : null })
   if (modificationReason) sessionStorage.removeItem(editKey)
 }
 async function saveDraft(){
@@ -302,17 +358,38 @@ async function proceedToResult(){
   }catch(error){ if(error !== 'cancel') ElMessage.error(error.message || '保存抽签结果失败') }finally{ confirming.value=false }
 }
 if(visualQa) seedVisualQaGroups()
+function applyScreenState(state) {
+  if (!isScreen.value || !state || !Array.isArray(state.groups)) return
+  if (state.tournamentId && String(state.tournamentId) !== props.tournamentId) return
+  if (state.divisionId && String(state.divisionId) !== divisionId.value) return
+  screenGroups.value = state.groups
+  projectedDivisionName.value = state.divisionName || ''
+  tournament.value = { ...tournament.value, name:state.title || '', logo:state.tournamentLogo || '' }
+  if (state.screen) screenConfig.value = { ...screenConfig.value, ...state.screen, background:state.screen.background || (state.screen.theme === 'light' ? 'light' : 'emerald') }
+}
+function readScreenState() {
+  try { applyScreenState(JSON.parse(localStorage.getItem(drawChannelKey()) || 'null')) } catch {}
+}
+function onScreenStorage(event) {
+  if (event.key !== drawChannelKey()) return
+  if (!event.newValue) { screenGroups.value = []; projectedDivisionName.value = ''; tournament.value = {}; return }
+  try { applyScreenState(JSON.parse(event.newValue)) } catch {}
+}
 onMounted(() => {
   loadScreenConfig()
-  if (typeof BroadcastChannel !== 'undefined') { drawChannel = new BroadcastChannel(drawChannelKey()); drawChannel.onmessage = event => { if (isScreen.value && event.data?.groups) screenGroups.value = event.data.groups } }
-  window.addEventListener('storage', event => { if (isScreen.value && event.key === drawChannelKey()) { try { const state = JSON.parse(event.newValue || 'null'); if (state?.groups) screenGroups.value = state.groups } catch {} } })
-  try { const saved = JSON.parse(localStorage.getItem(drawChannelKey()) || 'null'); if (saved?.groups) screenGroups.value = saved.groups } catch {}
-  load().then(() => { if (!isScreen.value) publishScreenState() })
+  if (typeof BroadcastChannel !== 'undefined') { drawChannel = new BroadcastChannel(drawChannelKey()); drawChannel.onmessage = event => applyScreenState(event.data) }
+  window.addEventListener('storage', onScreenStorage)
+  if (isScreen.value) { readScreenState(); return }
+  load().then(() => publishScreenState())
 })
+onBeforeUnmount(() => { drawChannel?.close(); window.removeEventListener('storage', onScreenStorage) })
+
 </script>
 
 <style scoped>
-.draw-screen{min-height:100vh;color:#eef8f1;background:radial-gradient(circle at top,#145c3a,#061d13 68%)}.draw-screen.theme-light{color:#17392a;background:linear-gradient(145deg,#f7fbf8,#dceee3)}.draw-screen>header{display:flex;align-items:center;justify-content:space-between;padding:28px 54px;border-bottom:1px solid rgba(255,255,255,.15)}.draw-screen.theme-light>header{border-bottom-color:#c3ddd0}.draw-screen>header strong{font-size:28px}.draw-screen>header span{color:#b8d8c5}.draw-screen.theme-light>header span{color:#4e7561}.draw-screen>main{width:min(1400px,calc(100% - 80px));margin:0 auto;padding:46px 0}.draw-screen h1{margin:0 0 8px;font-size:42px}.screen-progress{margin:0 0 28px;color:#b8d8c5}.theme-light .screen-progress{color:#4e7561}.screen-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.screen-groups article{padding:20px;border:1px solid rgba(255,255,255,.18);border-radius:14px;background:rgba(255,255,255,.08)}.theme-light .screen-groups article{border-color:#b9d8c8;background:rgba(255,255,255,.58)}.screen-groups h2{display:flex;justify-content:space-between;margin:0 0 14px;color:#9df0bb}.theme-light .screen-groups h2{color:#08783c}.screen-groups h2 small{color:#d2e7d9;font-size:14px;font-weight:500}.theme-light .screen-groups h2 small{color:#4e7561}.screen-groups ol{margin:0;padding:0;list-style:none}.screen-groups li{display:flex;align-items:center;gap:12px;min-height:48px;border-top:1px solid rgba(255,255,255,.1)}.theme-light .screen-groups li{border-top-color:#d2e7dc}.screen-groups li b{width:36px;color:#9fcab0}.theme-light .screen-groups li b{color:#3d8960}.screen-groups li span{font-size:17px}.screen-groups li em{color:#88a494;font-style:normal}
+.screen-background-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}.screen-background-picker button{height:64px;padding:8px;border:2px solid transparent;border-radius:6px;color:#fff;text-shadow:0 1px 3px #000;font-size:13px;cursor:pointer}.screen-background-picker button.selected{border-color:#00a862;box-shadow:0 0 0 1px #00a862}.custom-background-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.custom-background-actions span{font-size:12px;color:#606266}
+
+.draw-screen{min-height:100vh;color:#eef8f1;background:radial-gradient(circle at top,#145c3a,#061d13 68%)}.draw-screen.theme-light{color:#17392a;background:linear-gradient(145deg,#f7fbf8,#dceee3)}.draw-screen>header{display:flex;align-items:center;justify-content:space-between;padding:28px 54px;border-bottom:1px solid rgba(255,255,255,.15)}.draw-screen.theme-light>header{border-bottom-color:#c3ddd0}.draw-screen>header strong{font-size:28px}.draw-screen>header span{color:#b8d8c5}.draw-screen.theme-light>header span{color:#4e7561}.draw-screen>main{width:min(1400px,calc(100% - 80px));margin:0 auto;padding:46px 0}.draw-screen h1{margin:0 0 8px;font-size:42px}.screen-progress{margin:0 0 28px;color:#b8d8c5}.theme-light .screen-progress{color:#4e7561}.screen-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.screen-groups article{padding:20px;border:1px solid rgba(255,255,255,.18);border-radius:14px;background:rgba(255,255,255,.08)}.theme-light .screen-groups article{border-color:#b9d8c8;background:rgba(255,255,255,.58)}.screen-groups h2{display:flex;justify-content:space-between;margin:0 0 14px;color:#9df0bb}.theme-light .screen-groups h2{color:#08783c}.screen-groups h2 small{color:#d2e7d9;font-size:14px;font-weight:500}.theme-light .screen-groups h2 small{color:#4e7561}.screen-groups ol{margin:0;padding:0;list-style:none}.screen-groups li{display:flex;align-items:center;gap:12px;min-height:48px;border-top:1px solid rgba(255,255,255,.1)}.theme-light .screen-groups li{border-top-color:#d2e7dc}.screen-groups li b{width:36px;color:#9fcab0}.theme-light .screen-groups li b{color:#3d8960}.screen-groups li span{display:flex;align-items:center;gap:12px;font-size:17px}.screen-team-logo{width:40px;height:40px;object-fit:contain}.screen-groups li em{color:#88a494;font-style:normal}
 .quick-tournament{min-height:100%;color:#18211b;background:#fafcfb}.event-context{display:flex;min-height:76px;align-items:center;justify-content:space-between;padding:0 30px;border-bottom:1px solid #e1e6e2;background:#fff}.event-context-main{display:flex;min-width:0;align-items:center;gap:13px}.event-context-main>strong{max-width:355px;overflow:hidden;font-size:21px;text-overflow:ellipsis;white-space:nowrap}.event-crest{display:grid;width:43px;height:50px;place-items:center;border:2px solid #183f2d;border-radius:13px 13px 18px 18px;color:#183f2d;background:#f3f8f4;font-size:22px}.event-meta{display:flex;align-items:center;gap:8px;padding-left:18px;border-left:1px solid #e1e6e2;color:#48534b;white-space:nowrap}.console-body{width:min(1340px,calc(100% - 48px));margin:0 auto;padding:20px 0 18px}.page-heading{display:flex;min-height:62px;align-items:center;justify-content:space-between}.page-heading>div{display:flex;align-items:baseline;gap:28px}.page-heading h1{margin:0;font-size:29px}.page-heading p{margin:0;color:#555f58;font-size:15px}.page-heading label{display:flex;align-items:center;gap:13px;font-size:15px;font-weight:650}.division-lock{display:flex;width:170px;min-height:38px;align-items:center;justify-content:space-between;box-sizing:border-box;padding:0 14px;border:1px solid #dce3de;border-radius:6px;background:#f7f9f7;color:#26352c;font-weight:600}.division-lock .el-icon{color:#748078}.flow-tabs{display:flex;height:52px;align-items:flex-end;gap:35px;border-bottom:1px solid #dce3de}.flow-tabs button,.flow-tabs strong{display:flex;height:52px;align-items:center;padding:0 24px;border:0;border-bottom:3px solid transparent;background:transparent;font-size:17px;cursor:pointer}.flow-tabs strong{border-bottom-color:#08783c;color:#08783c}.summary{display:flex;min-height:46px;align-items:center;gap:18px;margin-top:13px;padding:0 16px;border:1px solid #dfe5e1;border-radius:7px;background:#fff;font-size:14px}.summary span{white-space:nowrap}.summary i{height:18px;border-left:1px solid #dfe5e1}.summary em{color:#e56f16;font-style:normal}.summary .on{color:#08783c}.summary .el-button{margin-left:auto}.quick-tournament main{display:grid;grid-template-columns:270px 1fr;gap:12px;margin-top:12px}.team-pool,.groups-panel{height:516px;border:1px solid #dde4df;border-radius:8px;background:#fff}.team-pool{padding:14px}.team-pool h2,.groups-panel h2{margin:0;color:#08783c;font-size:22px}.team-pool h2 em{color:#08783c;font-style:normal}.team-pool>p{margin:4px 0 10px;color:#68736b;font-size:14px}.team-pool>small{display:block;margin:10px 0 6px;color:#68736b;font-size:13px}.team-pool ol,.groups-panel ol{margin:0;padding:0;list-style:none}.team-pool li{display:grid;grid-template-columns:32px 1fr 42px 18px;min-height:44px;align-items:center;gap:8px;border-bottom:1px solid #edf1ee;cursor:grab}.team-pool li b{overflow:hidden;font-size:14px;text-overflow:ellipsis;white-space:nowrap}.team-pool li small{overflow:hidden;color:#727c75;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.team-crest{display:grid;width:30px;height:30px;overflow:hidden;place-items:center;border:1px solid #dce7df;border-radius:50%;color:#08783c;background:#eaf4ec;font-size:12px}.team-crest img{display:block;width:100%;height:100%;object-fit:contain;background:#fff}.team-crest em{font-style:normal}.team-pool>button{display:flex;width:100%;align-items:center;justify-content:center;gap:5px;margin-top:7px;border:0;color:#606b63;background:transparent;font-size:13px;cursor:pointer}.groups-panel{position:relative;padding:15px}.groups-panel>header{display:flex;align-items:flex-start;justify-content:space-between}.groups-panel>header p{margin:7px 0 0;color:#667169;font-size:14px}.console-actions{display:flex;gap:8px}.console-actions .el-select{width:120px}.avoidance{display:flex;height:36px;align-items:center;justify-content:flex-end;gap:9px;color:#414c44;font-size:14px}.avoidance b{color:#08783c}.groups-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.groups-grid.filtered{grid-template-columns:minmax(280px,380px)}.groups-grid article{padding:10px 11px 6px;border:1px solid #dde4df;border-radius:7px}.groups-grid article>header{display:flex;align-items:center;justify-content:space-between}.groups-grid h3{margin:0;color:#08783c;font-size:17px}.groups-grid article>header>b{font-size:15px}.groups-grid li{display:flex;min-height:42px;align-items:center;gap:8px;border-bottom:1px solid #edf1ee;cursor:pointer}.groups-grid li>b{width:28px;font-size:14px}.groups-grid li strong{flex:1;overflow:hidden;font-size:14px;text-overflow:ellipsis;white-space:nowrap}.groups-grid li.empty{color:#98a29b}.groups-grid li.empty em{font-size:14px;font-style:normal}.validation-footer{display:flex;min-height:68px;align-items:center;justify-content:space-between;margin-top:12px;padding:0 16px;border:1px solid #dfe5e1;border-radius:8px;background:#fff;font-size:14px}.validation-footer>div{display:flex;align-items:center;gap:22px}.validation-footer span,.validation-footer em{display:flex;align-items:center;gap:7px;color:#08783c;font-style:normal}.validation-footer em{color:#e56f16}.validation-footer>div:last-child{position:relative}.validation-footer small{position:absolute;right:0;top:41px;width:230px;color:#747e77;text-align:center}
 .summary{gap:12px;overflow:hidden}.groups-panel>header{flex-wrap:wrap;gap:10px}.groups-panel>header>div:first-child{min-width:180px}.groups-panel>header>div:first-child p{white-space:nowrap}.console-actions{flex:1;flex-wrap:wrap;justify-content:flex-end}.console-actions .el-button{white-space:nowrap}.console-actions .el-select{width:112px}@media(max-width:1200px){.console-actions{justify-content:flex-start}.summary{flex-wrap:wrap;padding-block:8px}.summary .el-button{margin-left:auto}}
 .team-pool{overflow:hidden}.team-pool ol{max-height:350px;overflow-y:auto;padding-right:4px}.groups-grid li{min-height:58px;font-size:17px}.groups-grid li .team-crest{width:42px;height:42px}.groups-grid li strong{font-size:16px}.groups-grid li .team-crest img{width:100%;height:100%;object-fit:contain}@media(min-width:1400px){.groups-grid li{min-height:64px}.groups-grid li .team-crest{width:48px;height:48px}.groups-grid li strong{font-size:18px}}
