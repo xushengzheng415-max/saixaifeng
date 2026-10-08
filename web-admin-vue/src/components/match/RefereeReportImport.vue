@@ -21,7 +21,12 @@
               <template #default="{row}">
                 <el-select v-model="row.playerId" filterable placeholder="选择正式名单球员" @change="selectPlayer(row)">
                   <el-option v-for="p in rosters[side]" :key="p.playerId" :value="p.playerId" :label="`${p.number}号 ${p.name}`" />
-                </el-select><small v-if="row.originalName">原表：{{ row.number }}号 {{ row.originalName }}</small><small v-if="row.reviewNotes?.length" class="analysis-note">{{ row.reviewNotes.join("；") }}</small>
+                </el-select><small v-if="row.originalName">原表：{{ row.number }}号 {{ row.originalName }}</small><small v-if="row.reviewNotes?.length && !isRowReviewed(row)" class="analysis-note">{{ row.reviewNotes.join("；") }}</small>
+                <div v-if="needsRowReview(row) || isRowReviewed(row)" class="row-review-actions">
+                  <el-tag v-if="isRowReviewed(row)" type="success" size="small">已核对</el-tag>
+                  <el-button v-else type="success" plain size="small" :disabled="busy" @click="confirmRowReview(row)">确认核对</el-button>
+                  <small v-if="row.reviewError && row.reviewErrorFingerprint===rowReviewFingerprint(row)" class="row-review-error">{{ row.reviewError }}</small>
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="阵容" width="108"><template #default="{row}"><el-select v-model="row.role" @change="pairSubstitutions"><el-option v-for="r in roles" :key="r.value" :label="r.label" :value="r.value" /></el-select></template></el-table-column>
@@ -64,7 +69,20 @@ function beforeClose(done){if(!busy.value)done()}
 function revoke(){if(preview.value)URL.revokeObjectURL(preview.value);preview.value=''}
 function activePlayers(team){return (draft.value?.teams[team]||[]).filter(row=>['starter','substitute'].includes(row.role)&&row.playerId)}
 function groupPlayers(team){return (draft.value?.teams[team]||[]).filter(row=>row.playerId&&row.role!=='absent')}
-function rowClass({row}){return row.playerId===pairErrorPlayerId.value||!row.playerId||row.role==='unknown'||row.reviewNotes?.some(note=>/核对|候选|不晚于/.test(note))?'needs-review':''}
+function rowReviewFingerprint(row){return JSON.stringify([row.playerId || '',row.role || '',...fields.map(field=>String(row[field.key] ?? '').trim()),Boolean(row.captain),Boolean(row.goalkeeper)])}
+function isRowReviewed(row){return Boolean(row.reviewConfirmedFingerprint && row.reviewConfirmedFingerprint===rowReviewFingerprint(row))}
+function needsRowReview(row){return !isRowReviewed(row)&&Boolean(!row.playerId || !['starter','substitute','absent'].includes(row.role) || row.reviewConfirmedFingerprint || row.reviewNotes?.some(note=>/核对|候选|不晚于/.test(note)))}
+function rowClass({row}){return (row.playerId && row.playerId===pairErrorPlayerId.value)||needsRowReview(row)?'needs-review':''}
+function confirmRowReview(row){
+  const reject=message=>{row.reviewError=message;row.reviewErrorFingerprint=rowReviewFingerprint(row)}
+  const team=(draft.value?.teams.home || []).includes(row)?'home':'away'
+  if(!row.playerId || !rosters.value[team].some(player=>player.playerId===row.playerId))return reject('请先选择正式名单中的球员')
+  if(!['starter','substitute','absent'].includes(row.role))return reject('请选择首发、替补或不出场')
+  for(const field of fields){const value=String(row[field.key] || '').trim();if(value&&(!minutes(value).length||minutes(value).some(minute=>minute>150)))return reject(`${field.label}分钟尚未确定，请修正或清除误识别内容`)}
+  row.reviewError='';row.reviewConfirmedFingerprint=rowReviewFingerprint(row)
+  if(pairErrorPlayerId.value===row.playerId)pairErrorPlayerId.value=''
+  error.value=''
+}
 function selectPlayer(row){const p=rosters.value[side.value].find(p=>p.playerId===row.playerId);if(p){row.name=p.name;row.number=p.number}pairSubstitutions()}
 function addPlayer(){draft.value.teams[side.value].push({playerId:'',name:'',number:'',role:'unknown',on:'',off:'',goals:'',yellow:'',red:'',captain:false,goalkeeper:false})}
 async function readFile(event){
@@ -144,7 +162,13 @@ function validatePairs(){
 async function confirm(){
   if(!draft.value||busy.value||saving.value)return
   const rows=[...draft.value.teams.home,...draft.value.teams.away]
-  if(rows.some(row=>row.role==='unknown'||(!row.playerId&&row.role!=='absent')))return ElMessage.warning('请核对标出的球员及首发替补')
+  const pending=rows.find(row=>needsRowReview(row))
+  if(pending){
+    side.value=draft.value.teams.home.includes(pending)?'home':'away'
+    pairErrorPlayerId.value=pending.playerId || ''
+    error.value=`${pending.number || '该'}号${pending.name || '球员'}尚未确认，请在黄色行内点击“确认核对”`
+    return
+  }
   for(const row of rows)for(const field of fields){const text=String(row[field.key]||'').trim();if(text&&!minutes(text).length)return ElMessage.warning('请核对事件分钟；无法确认的记录不要填0')}
   if(!validatePairs())return
   saving.value=true;busy.value=true;stage.value='正在保存';error.value=''
@@ -154,5 +178,5 @@ onBeforeUnmount(()=>{generation++;revoke()})
 </script>
 
 <style scoped>
-.report-grid{display:grid;grid-template-columns:minmax(220px,30%) minmax(0,1fr);gap:20px;min-height:250px}.original{max-height:70vh;overflow:auto;background:#f4f7f5}.original img{display:block;width:100%;height:auto}.review{min-width:0}.score-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}.review .el-alert{margin-bottom:12px}small{display:block;color:#7c8580;font-size:12px;margin-top:4px}.sub-heading{display:flex;gap:16px;align-items:center;margin-top:18px}.sub-row{display:grid;grid-template-columns:1fr 75px 1fr 1fr 40px;gap:8px;margin-bottom:8px}.sub-row .el-input-number{width:75px}.sub-row-error{outline:1px solid #f56c6c;outline-offset:3px;background:#fef0f0}.field-note{font-size:12px;color:#67766e;margin:8px 0}.review :deep(.needs-review){--el-table-tr-bg-color:#fff8e8}@media(max-width:900px){.report-grid{grid-template-columns:1fr}.original{max-height:220px}.original img{width:auto;max-width:100%;max-height:600px}.sub-row{grid-template-columns:1fr 65px 1fr 1fr 40px}}
+.report-grid{display:grid;grid-template-columns:minmax(220px,30%) minmax(0,1fr);gap:20px;min-height:250px}.original{max-height:70vh;overflow:auto;background:#f4f7f5}.original img{display:block;width:100%;height:auto}.review{min-width:0}.score-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}.review .el-alert{margin-bottom:12px}small{display:block;color:#7c8580;font-size:12px;margin-top:4px}.sub-heading{display:flex;gap:16px;align-items:center;margin-top:18px}.sub-row{display:grid;grid-template-columns:1fr 75px 1fr 1fr 40px;gap:8px;margin-bottom:8px}.sub-row .el-input-number{width:75px}.sub-row-error{outline:1px solid #f56c6c;outline-offset:3px;background:#fef0f0}.field-note{font-size:12px;color:#67766e;margin:8px 0}.row-review-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:7px}.row-review-error{width:100%;color:#c45656}.review :deep(.needs-review){--el-table-tr-bg-color:#fff8e8}@media(max-width:900px){.report-grid{grid-template-columns:1fr}.original{max-height:220px}.original img{width:auto;max-width:100%;max-height:600px}.sub-row{grid-template-columns:1fr 65px 1fr 1fr 40px}}
 </style>
