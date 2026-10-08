@@ -2,7 +2,7 @@
   <section class="card-library">
     <div class="library-head">
       <div><h2>{{ activePanel === 'catalog' ? '球员卡库' : '球员卡模板' }}</h2><span>{{ activePanel === 'catalog' ? '全部球员、成卡状态与版本' : '背景与黑白遮罩使用同一张 300 × 430 画布' }}</span></div>
-      <el-button type="primary" @click="startCreate">新建卡片</el-button>
+      <el-button type="primary" :disabled="publishing || confirmingPublish" @click="startCreate">新建卡片</el-button>
     </div>
     <nav class="card-system-tabs" aria-label="球员卡系统">
       <button type="button" :class="{active:activePanel==='templates'}" @click="activePanel='templates'">模板编辑</button>
@@ -14,7 +14,7 @@
     <div v-show="activePanel==='templates'" class="library-body" v-loading="loading">
       <aside class="template-list" aria-label="模板列表">
         <label class="preload-filter">预装分类<el-select v-model="category"><el-option label="全部" value="all" /><el-option v-for="scope in PRELOAD_TYPES" :key="scope.value" :label="scope.label" :value="scope.value" /></el-select></label>
-        <button v-for="item in visibleTemplates" :key="item.id" type="button" :class="{ selected: form.id === item.id || (!form.id && form.tier === item.tier) }" @click="select(item)">
+        <button v-for="item in visibleTemplates" :key="item.id" type="button" :disabled="publishing || confirmingPublish" :class="{ selected: form.id === item.id || (!form.id && form.tier === item.tier) }" @click="select(item)">
           <img v-if="item.backgroundUrl" :src="item.backgroundUrl" alt="">
           <span><strong>{{ item.title }}</strong><small>{{ tierName(item.tier) }} · {{ statusName(item) }} · {{ preloadName(item.preload) }}{{ item.preload?.targetName ? ' · ' + item.preload.targetName : '' }}</small></span>
         </button>
@@ -112,9 +112,10 @@
           <p class="version" v-if="form.id">草稿 {{ form.draftVersion }} · 已发布 {{ form.publishedVersion || '—' }}</p>
           <div class="editor-actions">
             <el-button type="primary" :loading="saving" :disabled="!backendReady || !scopeReady || !dirty || !form.title || !form.backgroundUrl || !form.maskUrl || previewState !== 'ready'" @click="save">保存草稿</el-button>
-            <el-button :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="publish">生成成卡</el-button>
+            <el-button :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="preparePublishPreview">生成预览卡</el-button>
             <el-button v-if="publishJob?.status === 'review'" :disabled="!publishServiceReady" @click="openGeneratedReview(true)">预览成卡</el-button>
             <el-button v-if="publishJob?.jobId && ['pending','blocked','preloading'].includes(publishJob.status)" :disabled="!publishServiceReady" :loading="publishing" @click="resumePublish">{{ publishJob.status === 'blocked' ? '重试制卡' : publishJob.status === 'preloading' ? '继续预装' : '继续制卡' }}</el-button>
+            <el-button v-if="publishing || publishJob?.jobId" @click="progressOpen=true">查看进度</el-button>
           </div>
           <div v-if="publishJob?.status === 'blocked'" class="field-error" role="alert">
             <span>{{ publishJob.failed }} 张成卡待修复</span>
@@ -129,10 +130,10 @@
             <small>已生成 {{ publishJob.generated || 0 }} 张 · 失败 {{ publishJob.failed || 0 }} 张 · 跳过 {{ publishJob.skipped || 0 }} 人</small>
           </div>
           <p v-if="publishProgress" class="release-note" role="status">{{ publishProgress }}</p>
-          <p v-else class="release-note">先生成并预览全部成卡，再手动确认预装上线。</p>
+          <p v-else class="release-note">先预览样式，再批量制卡，最后确认上线。</p>
         </div>
         <div class="preview-pane">
-          <div class="preview-title"><strong>{{ form.preload.type === 'player' && preloadPlayer ? preloadPlayer.name + ' · 单人卡预览' : '排版预览' }}</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="showFinalPreview">查看大图</el-button></div>
+          <div class="preview-title"><strong>{{ form.preload.type === 'player' && preloadPlayer ? preloadPlayer.name + ' · 单人卡预览' : '排版预览' }}</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="preflightPreview=false;showFinalPreview()">查看大图</el-button></div>
           <div ref="previewRef" class="card-preview" role="img" aria-label="球员卡模板预览">
             <img v-if="form.backgroundUrl" class="back" :src="form.backgroundUrl" alt="">
             <div v-if="previewState === 'ready'" class="portrait-mask" :style="portraitMaskStyle"><img class="portrait" :src="activePreviewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag"></div>
@@ -149,9 +150,12 @@
         </div>
       </div>
     </div>
-    <el-dialog v-model="previewOpen" title="服务端成卡预览" width="min(650px, 96vw)" append-to-body>
-      <img v-if="finalPreviewImage" :src="finalPreviewImage" alt="服务端生成的完整球员卡" style="display:block;width:min(100%,450px);height:auto;margin:auto">
+    <el-dialog v-model="previewOpen"  :title="preflightPreview ? '发布前预览' : '成卡大图'" width="min(650px, 96vw)" append-to-body>
+      <div v-if="finalPreviewLoading" class="generated-review-state" role="status">正在生成预览卡…</div>
+      <img v-if="finalPreviewImage && !finalPreviewLoading" @load="sampleImageReady=true" @error="sampleImageReady=false" :src="finalPreviewImage" alt="服务端生成的完整球员卡" style="display:block;width:min(100%,450px);height:auto;margin:auto">
+      <template v-if="preflightPreview" #footer><el-button @click="previewOpen=false">返回修改</el-button><el-button type="primary" :disabled="finalPreviewLoading || !sampleImageReady || !canPublish || preflightRevision !== form.id+':'+form.revision" @click="publish(true)">确认并开始制卡</el-button></template>
     </el-dialog>
+    <CardPublishProgress v-model:open="progressOpen" :title="form.title" :scope="preloadName(form.preload)+(form.preload.targetName?' · '+form.preload.targetName:'')" :job="publishJob" :running="publishing || confirmingPublish" :preparing="publishPreparing" :error="publishError" @review="openGeneratedReview(true)" @resume="publishJob?.jobId ? resumePublish() : preparePublishPreview()" />
     <el-dialog v-model="reviewDialog" title="成卡预览" width="min(1120px, 96vw)" append-to-body :close-on-click-modal="false">
       <div class="generated-review-meta">已生成 {{ reviewTotal }} 张 · 已载入 {{ reviewCards.length }} 张</div>
       <div v-if="!reviewLoading && reviewTotal===0" class="generated-review-state" role="status">没有生成可预览的成卡，请退回修改。</div>
@@ -176,6 +180,7 @@
 </template>
 
 <script setup>
+import CardPublishProgress from './CardPublishProgress.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -220,6 +225,7 @@ const activePanel=ref(initialCardPanel())
 watch(activePanel,value=>{try{sessionStorage.setItem(CARD_PANEL_KEY,value)}catch{};if(String(route.query.panel||'')!==value)router.replace({path:route.path,query:{...route.query,panel:value}})})
 const templates = ref([]), nextCursor = ref(''), loading = ref(false), loadingMore = ref(false)
 const saving = ref(false), publishing = ref(false), error = ref(''), uploadError = ref(''), dirty = ref(false)
+const progressOpen=ref(false),publishPreparing=ref(false),publishError=ref(''),preflightPreview=ref(false),preflightRevision=ref(''),sampleImageReady=ref(false)
 const publishProgress = ref('')
 const publishJob = ref(null)
 const publishPercentage = computed(() => {
@@ -567,16 +573,19 @@ async function recoverDraft(){
   await composePreview()
   ElMessage.success('草稿已恢复，请保存')
 }
-async function publish() {
-  if (!publishServiceReady.value) return
-  try { await ElMessageBox.confirm(`为${preloadName(form.preload)}${form.preload.targetName ? '：' + form.preload.targetName : ''}生成正式球员卡。全部生成后先进入预览，不会自动预装或切换展示。`, '生成成卡', { confirmButtonText: '开始制卡' }) } catch { return }
+async function preparePublishPreview(){if(!canPublish.value||publishing.value)return;preflightPreview.value=true;preflightRevision.value=form.id+':'+form.revision;sampleImageReady.value=false;finalPreviewImage.value='';previewOpen.value=true;await showFinalPreview()}
+async function publish(sampleApproved=false) {
+  if (!publishServiceReady.value || publishing.value) return
+  if(!sampleApproved || !sampleImageReady.value || preflightRevision.value!==form.id+':'+form.revision || !canPublish.value)return
+  previewOpen.value=false;progressOpen.value=true;publishPreparing.value=true;publishError.value=''
   publishing.value = true
   publishProgress.value = '正在准备制卡…'
   try {
     let result = await request('publishPlayerCardTemplate', { templateId: form.id, revision: form.revision })
+    publishPreparing.value=false
     await finishPublish(result)
   }
-  catch (cause) { publishProgress.value = '发布未完成，可重试'; ElMessage.error(cause.message) } finally { publishing.value = false }
+  catch (cause) { publishError.value=cause.message||'制卡未完成，请重试';publishProgress.value = '发布未完成，可重试'; ElMessage.error(cause.message) } finally { publishing.value = false;publishPreparing.value=false }
 }
 async function finishPublish(initial) {
   let result = initial
@@ -596,7 +605,7 @@ async function finishPublish(initial) {
     publishJob.value=result
     publishProgress.value=`已生成 ${result.generated||0} 张，等待你预览确认`
     ElMessage.success('成卡已生成，请逐张预览')
-    await openGeneratedReview(true)
+    progressOpen.value=true
     return
   }
   await refreshSelected(form.id)
@@ -609,7 +618,7 @@ async function finishPublish(initial) {
 }
 async function openGeneratedReview(reset=false) {
   if(!publishJob.value?.jobId)return
-  reviewDialog.value=true;reviewError.value=''
+  progressOpen.value=false;reviewDialog.value=true;reviewError.value=''
   if(reset){reviewCards.value=[];reviewTotal.value=0;reviewNext.value=0}
   if(reviewNext.value===null)return
   await loadReviewPage()
@@ -629,12 +638,12 @@ async function confirmPreload() {
   if(!publishJob.value?.jobId||reviewCards.value.length!==reviewTotal.value||confirmingPublish.value)return
   try {await ElMessageBox.confirm(`确认将 ${reviewTotal.value} 张已预览成卡预装到${preloadName(form.preload)}${form.preload.targetName?'：'+form.preload.targetName:''}，并上线展示？${form.preload.type==='player'?'该球员的默认展示卡会切换为此版本。':''}`,'确认预装上线',{confirmButtonText:'确认上线',cancelButtonText:'再检查'})}
   catch{return}
-  confirmingPublish.value=true
+  confirmingPublish.value=true;reviewDialog.value=false;progressOpen.value=true;publishError.value=''
   try {
     const result=await request('confirmPlayerCardTemplatePublish',{jobId:publishJob.value.jobId})
     await finishPublish(result)
     if(publishJob.value?.status==='active')reviewDialog.value=false
-  } catch(cause) {ElMessage.error(cause.message||'预装上线失败')}
+  } catch(cause) {publishError.value=cause.message||'预装上线失败';ElMessage.error(publishError.value)}
   finally {confirmingPublish.value=false}
 }
 async function rejectPreview() {
@@ -654,13 +663,13 @@ async function resumePublish() {
   if (!publishServiceReady.value) return
   if (!publishJob.value?.jobId) return
   if(publishJob.value.status==='review'){await openGeneratedReview(true);return}
-  publishing.value = true
+  progressOpen.value=true;publishError.value='';publishing.value = true
   try {
     const start = publishJob.value.status === 'blocked'
       ? await request('retryPlayerCardTemplatePublish', { jobId:publishJob.value.jobId })
       : publishJob.value
     await finishPublish(start)
-  } catch (cause) { publishProgress.value = '发布未完成，可重试'; ElMessage.error(cause.message) } finally { publishing.value = false }
+  } catch (cause) { publishError.value=cause.message||'制卡未完成，请重试';publishProgress.value = '发布未完成，可重试'; ElMessage.error(cause.message) } finally { publishing.value = false;publishPreparing.value=false }
 }
 function clearTextEffects() { Object.assign(currentStyle.value,freshTextStyle()); dirty.value = true }
 function applyTextPreset(type) {
