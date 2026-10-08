@@ -174,17 +174,18 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     if (action === 'importScheduleAssignments') {
       const requested = params.rows || [], changes=[], errors=[], seen=new Set()
       for(const [index,entry] of requested.entries()) {
-        const row=rows('matches').find(row=>row._id===entry.matchId && row.tournamentId===tournamentId && row.status!=='cancelled')
+        const row=rows('matches').find(row=>row._id===entry.matchId && row.tournamentId===tournamentId && row.status!=='cancelled' && !row.demoLegacyPairing)
         if(!row || seen.has(entry.matchId)) {errors.push({row:index+1,message:'比赛不存在或重复'});continue}
         seen.add(entry.matchId)
         if(row.status!=='scheduled' || (row.events || []).length) {errors.push({row:index+1,message:'比赛已开始，不能调整'});continue}
         if(!/^\d{4}-\d{2}-\d{2}$/.test(entry.matchDate || '') || !Number.isFinite(Date.parse(`${entry.matchDate}T00:00:00Z`)) || new Date(`${entry.matchDate}T00:00:00Z`).toISOString().slice(0,10)!==entry.matchDate || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.matchTime || '') || !String(entry.venue || '').trim()) {errors.push({row:index+1,message:'请填写有效日期、时间和场地'});continue}
         changes.push({matchId:row._id,matchNo:row.matchNo || row.sequence,before:{matchDate:row.matchDate || '',matchTime:row.matchTime || '',venue:row.venue || ''},after:{matchDate:entry.matchDate,matchTime:entry.matchTime,venue:String(entry.venue).trim()}})
       }
-      const planned=rows('matches').filter(row=>row.tournamentId===tournamentId && row.status!=='cancelled').map(row=>({...row,...(changes.find(change=>change.matchId===row._id)?.after || {})}))
+      const planned=rows('matches').filter(row=>row.tournamentId===tournamentId && row.status!=='cancelled' && !row.demoLegacyPairing).map(row=>({...row,...(changes.find(change=>change.matchId===row._id)?.after || {})}))
       for(const change of changes) {
         const current=planned.find(row=>row._id===change.matchId),start=new Date(`${current.matchDate}T${current.matchTime}`).getTime(),end=start+Number(current.durationMinutes || tournament.scheduleDraft?.matchDurations?.[current.divisionId] || 50)*60000
-        if(planned.some(other=>{if(other._id===current._id || !other.matchDate || !other.matchTime)return false;const from=new Date(`${other.matchDate}T${other.matchTime}`).getTime(),to=from+Number(other.durationMinutes || tournament.scheduleDraft?.matchDurations?.[other.divisionId] || 50)*60000;return start<to && from<end && (other.venue===current.venue || [other.homeTeamId,other.awayTeamId].filter(Boolean).some(id=>[current.homeTeamId,current.awayTeamId].filter(Boolean).includes(id)))})) errors.push({matchId:change.matchId,message:'场地或球队比赛时段冲突'})
+        const conflict=planned.find(other=>{if(other._id===current._id || !other.matchDate || !other.matchTime)return false;const from=new Date(`${other.matchDate}T${other.matchTime}`).getTime(),to=from+Number(other.durationMinutes || tournament.scheduleDraft?.matchDurations?.[other.divisionId] || 50)*60000;return start<to && from<end && (other.venue===current.venue || [other.homeTeamId,other.awayTeamId].filter(Boolean).some(id=>[current.homeTeamId,current.awayTeamId].filter(Boolean).includes(id)))})
+        if(conflict){const shared=[conflict.homeTeamId,conflict.awayTeamId].filter(Boolean).find(id=>[current.homeTeamId,current.awayTeamId].includes(id)),team=rows('teams').find(row=>row._id===shared)?.name || '同一球队',reason=conflict.venue===current.venue ? `${current.venue}该时段已有比赛` : `${team}该时段已有比赛`;errors.push({matchId:change.matchId,conflictMatchId:conflict._id,message:`${reason}：第${conflict.matchNo || conflict.sequence || '—'}场 ${conflict.homeTeamName}—${conflict.awayTeamName}（${conflict.matchDate} ${conflict.matchTime}）`})}
       }
       if(errors.length) return {success:false,message:'排期预检未通过',errors,errorCount:errors.length,validCount:0,changes:[]}
       if(params.dryRun!==false) return {success:true,dryRun:true,validCount:changes.length,errorCount:0,changes}
