@@ -143,8 +143,21 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       if (rows('matches').some(selected)) return fail('已有模拟对阵，请先重置对阵')
       const teams = rows('tournament_teams').filter(selected)
       if (teams.length < 2) return fail('请先添加至少两支虚拟球队')
-      // Simple round-robin rehearsal only; professional draw stays in its existing page logic.
-      for (let a = 0; a < teams.length; a++) for (let b = a + 1; b < teams.length; b++) add('matches', { tournamentId, divisionId: divisionId || 'default', divisionName: params.divisionName || '', groupName:'', homeTeamId: teams[a].teamId, awayTeamId: teams[b].teamId, homeTeamName: teams[a].teamName, awayTeamName: teams[b].teamName, status: 'scheduled', stage: 'league', round: a + 1, homeScore: null, awayScore: null, matchEventRevision: 0, events: [] })
+      const savedGroups = rows('tournament_groups').filter(row => selected(row) && row.type === 'tournament' && ['confirmed','published'].includes(row.status))
+      const pools = savedGroups.length ? savedGroups.map(group => ({ name:group.groupName || group.groupCode, teams:(group.teams || []).filter(team => !String(team.teamId || '').startsWith('bye-')).map(team => ({teamId:team.teamId,teamName:team.teamName})) })) : [{ name:'',teams }]
+      let sequenceNumber = 0
+      for (const pool of pools) {
+        const ring = [...pool.teams]
+        if(ring.length % 2) ring.push(null)
+        for(let round=1;round<ring.length;round++) {
+          for(let index=0;index<ring.length/2;index++) {
+            const home=ring[index],away=ring[ring.length-1-index]
+            if(!home || !away) continue
+            add('matches',{ tournamentId,divisionId:divisionId || 'default',divisionName:params.divisionName || '',groupName:pool.name,homeTeamId:home.teamId,awayTeamId:away.teamId,homeTeamName:home.teamName,awayTeamName:away.teamName,status:'scheduled',stage:pool.name ? 'group' : 'league',round,sequence:++sequenceNumber,homeScore:null,awayScore:null,matchEventRevision:0,events:[] })
+          }
+          ring.splice(1,0,ring.pop())
+        }
+      }
       return { success: true, matchCount: rows('matches').filter(selected).length }
     }
     if (action === 'scheduleExistingPairings') {
