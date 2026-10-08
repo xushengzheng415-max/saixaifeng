@@ -463,7 +463,7 @@ exports.main = async (event, context) => {
       return { success: false, message: '无权修改其他账号的比赛' }
     }
     if (await staffPolicy.isStaff(db, actor.user._id, actor.orgId) && !await staffPolicy.owner(db, actor.user._id, actor.orgId)) {
-      const required = event.action === 'finishOrganizerMatch' ? ['event.results'] : writeRights('matches', 'update', data)
+      const required = event.action === 'importPaperReport' ? ['event.matches','event.teams','event.results'] : event.action === 'finishOrganizerMatch' ? ['event.results'] : writeRights('matches', 'update', data)
       if (!required.length || !(await Promise.all(required.map(right => staffPolicy.hasRight(db, actor.user._id, actor.orgId, match.tournamentId, right)))).every(Boolean)) return { success:false,message:'当前赛事没有对应比赛操作权限' }
     }
 
@@ -473,6 +473,15 @@ exports.main = async (event, context) => {
     }
 
     const safeData = { ...data }
+    const paperImport = event.action === 'importPaperReport'
+    if (paperImport) {
+      const key=process.env.SXF_PAPER_REPORT_SECRET
+      if (!key) return {success:false,message:'裁判表保存服务尚未配置'}
+      const expected=crypto.createHmac('sha256',key).update(JSON.stringify([String(matchId),Number(event.expectedEventRevision),data])).digest('hex')
+      if (!/^[a-f0-9]{64}$/.test(event.paperReportProof || '') || !crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(event.paperReportProof))) return {success:false,message:'裁判表保存凭证无效，请重新识别'}
+    }
+    if (paperImport && (refereeHasTakenOverOrLocked(match) || ['ongoing','live','in_progress','playing','archived','cancelled','postponed'].includes(String(match.status || '').toLowerCase()))) return {success:false,code:'MATCH_RECORD_LOCKED',message:'当前比赛不能录入纸质裁判表'}
+    if (paperImport && (event.expectedEventRevision == null || Object.keys(data).some(key=>!['lineups','events','paperReportImports'].includes(key)) || !data.lineups?.home || !data.lineups?.away || !Array.isArray(data.events) || !Array.isArray(data.paperReportImports))) return {success:false,message:'裁判表确认数据不完整'}
     ;['orgId', 'creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy'].forEach(field => { delete safeData[field] })
     delete safeData.tournamentId
     delete safeData.updateTime
@@ -495,7 +504,7 @@ exports.main = async (event, context) => {
       }
       division = division || (tournament?.divisions || []).find(row=>String(row._id || row.id || '')===String(match.divisionId || '')) || {}
       const { substitutionRules, assertSubstitutionChange, normalizeSubstitutionRecords } = await import('./data-center/substitution.mjs')
-      const eventMatch = actor.miniScope?.operation==='import' ? {...match,lineups:safeData.lineups} : match
+      const eventMatch = paperImport ? {...match,lineups:safeData.lineups,homeLineup:null,awayLineup:null,refereeRosters:null} : actor.miniScope?.operation==='import' ? {...match,lineups:safeData.lineups} : match
       eventValidation = assertSubstitutionChange(eventMatch,substitutionRules(match,division,tournament || {}),safeData.events)
       safeData.events = normalizeMatchEvents(normalizeSubstitutionRecords(eventMatch,safeData.events), eventMatch)
       safeData.matchEventRevision = Number(match.matchEventRevision || 0) + 1
@@ -532,7 +541,7 @@ exports.main = async (event, context) => {
     }
     const preMatchSetupEditable = !match.refereeRecordLocked && !match.refereeReportSubmittedAt && match.executionState !== 'recording' && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
     if (planState.locked) {
-      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['status'] : []),...(miniImport ? ['lineups','status','organizerSupplementFiles'] : [])])
+      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['status'] : []),...(miniImport ? ['lineups','status','organizerSupplementFiles'] : []),...(paperImport ? ['lineups','paperReportImports'] : [])])
       const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'kitSelection' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已锁定，当前只能安排裁判或修改未开赛比赛的球服颜色与场序', code: 'COMPETITION_PLAN_LOCKED' }

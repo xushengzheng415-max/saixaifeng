@@ -2,7 +2,7 @@
 // event ownership and the actual record's relation to that event.
 const RIGHTS = Object.freeze({
   tournaments: ['event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results', 'event.news', 'event.referees', 'event.settings'],
-  divisions: ['event.dashboard', 'event.competition', 'event.registration', 'event.draw', 'event.matches', 'event.results', 'event.settings'],
+  divisions: ['event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results', 'event.settings'],
   tournament_teams: ['event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results'],
   teams: ['event.registration', 'event.teams', 'event.draw', 'event.matches', 'event.results', 'event.news'],
   players: ['event.registration', 'event.teams', 'event.matches', 'event.results'],
