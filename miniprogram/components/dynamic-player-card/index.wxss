@@ -1,0 +1,1 @@
+.frame{position:relative;width:100%;padding-top:143.333333%;overflow:hidden}.card{position:absolute;left:0;top:0;width:100%;height:100%}.state{position:absolute;left:0;top:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f2f6f3;color:#68776e;font-size:24rpx}.state button{font-size:24rpx;margin-top:16rpx}

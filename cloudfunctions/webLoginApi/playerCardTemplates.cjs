@@ -343,6 +343,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
       if (action === 'getPlayerCardTemplate') return await get(event)
       if (action === 'previewPlayerCardTemplate') return await preview(event)
       if (action === 'savePlayerCardTemplate') return await save(event, auth)
+      if(action==='publishDynamicPlayerCardTemplate'){const row=await read(String(event.templateId||''));if(!row)throw new Error('模板不存在');return await require('./playerCardDynamic.cjs').publish(cloud,db,row,Number(event.revision),auth.userId)}
       if (action === 'publishPlayerCardTemplate') {
         const row = await read(String(event.templateId || ''))
         if (!row) return { success:false, code:'CARD_TEMPLATE_NOT_FOUND', error:'模板不存在' }

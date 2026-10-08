@@ -4,6 +4,7 @@
   function html(v){return String(v||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function clamp(v,a,b){return Math.max(a,Math.min(b,Number(v)||0))}
   function open(options){
+    if(options.scene && window.SxfDynamicCardEditor)return window.SxfDynamicCardEditor.open(options)
     options=options||{};var player=options.player||{},templates=options.templates||{},draft=options.draft||{},tier=player.cardTier||'',backgroundId=draft.backgroundId||player.backgroundId||tier
     var crop=Object.assign({zoom:1,x:0,y:0},draft.crop||options.initialCrop||{}),baseCrop=Object.assign({},crop),busy=false,closed=false,requestId=0,previewId=0,preview=null,timer=null,drag=null
     var overflow=document.body.style.overflow,previousFocus=document.activeElement

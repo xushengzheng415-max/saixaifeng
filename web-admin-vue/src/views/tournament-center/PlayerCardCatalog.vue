@@ -12,11 +12,11 @@
       <el-select v-model="scopeType" aria-label="卡片范围"><el-option label="全部范围" value="all" /><el-option label="基础卡" value="base" /><el-option label="全平台" value="platform" /><el-option label="球队" value="team" /><el-option label="赛事" value="tournament" /><el-option label="球员" value="player" /><el-option label="未分配" value="unassigned" /></el-select>
       <el-select v-model="versionFilter" aria-label="版本状态"><el-option label="全部版本" value="all" /><el-option label="当前版本" value="current" /><el-option label="历史版本" value="history" /></el-select>
       <el-button @click="search" :loading="loading">刷新</el-button>
-      <span class="catalog-coverage">全库 {{ coverage.cardedPlayers }} 人已成卡 · {{ coverage.missingPlayers }} 人待制卡 · {{ coverage.noPhotoPlayers }} 人缺头像 · {{ coverage.excludedPlayers }} 名测试数据</span>
+      <span class="catalog-coverage">静态存档 {{ coverage.cardedPlayers }} 人 · 动态展示按需读取 · {{ coverage.noPhotoPlayers }} 人缺头像 · {{ coverage.excludedPlayers }} 名测试数据</span>
       <span class="catalog-total">当前 {{ total }} 条</span>
     </div>
 
-    <div v-if="coverage.missingPlayers || selectedPlayerIds.size || batchJob" class="batch-toolbar">
+    <div v-if="batchJob" class="batch-toolbar">
       <el-checkbox :model-value="allVisibleSelected" :disabled="!visibleMissing.length" @change="toggleVisiblePlayers">全选本页待制卡</el-checkbox>
       <el-button size="small" :loading="selectingAll" @click="selectAllFiltered">全选筛选结果</el-button>
       <span>已选 {{ selectedPlayerIds.size }} 人</span>
@@ -27,7 +27,7 @@
         <template #empty><span class="template-empty">{{ templatesLoading ? '正在读取模板…' : '暂无已发布模板' }}</span></template>
       </el-select>
       <span v-if="selectedTemplate" class="batch-scope">{{ selectedTemplateScope }}</span>
-      <el-button type="primary" :disabled="!compatiblePlayerIds.length || !selectedTemplateId || batchRunning" :loading="batchRunning" @click="startBatch">制作 {{ compatiblePlayerIds.length }} 人</el-button>
+      <el-button type="primary" :disabled="!compatiblePlayerIds.length || !selectedTemplateId || batchRunning" :loading="batchRunning" @click="startBatch" v-if="false">制作 {{ compatiblePlayerIds.length }} 人</el-button>
       <span v-if="incompatibleCount" class="batch-warning">另有 {{ incompatibleCount }} 人不符合模板范围</span>
     </div>
     <div v-if="batchJob" class="batch-progress" role="status" aria-live="polite">

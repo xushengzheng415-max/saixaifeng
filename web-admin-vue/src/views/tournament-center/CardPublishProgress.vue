@@ -5,7 +5,7 @@
     <div class="phase" role="status" aria-live="polite"><strong>{{ phase }}</strong><span>{{ preparing ? '正在核对模板素材和制卡范围' : processed }}</span></div>
     <el-progress v-if="hasTotal && !preparing" :percentage="percentage" :stroke-width="10" :status="error || job?.status==='blocked' ? 'exception' : job?.status==='active' ? 'success' : undefined" />
     <div v-else-if="running" class="preparing"><el-icon class="is-loading"><Loading /></el-icon>正在处理，请稍候</div>
-    <dl v-if="job" class="counts"><div v-for="item in counts" :key="item.label"><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div></dl>
+    <dl v-if="job && !dynamic" class="counts"><div v-for="item in counts" :key="item.label"><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div></dl>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <section v-if="job?.failures?.length" class="exceptions"><h3>制卡失败</h3><p v-for="row in job.failures" :key="row.playerId"><span>{{ row.playerName || row.playerId }}</span>{{ row.reason }}</p></section>
     <details v-if="job?.skippedPlayers?.length" class="exceptions"><summary>未制卡 {{ job.skipped }} 人</summary><p v-for="row in job.skippedPlayers" :key="row.playerId"><span>{{ row.playerName || row.playerId }}</span>{{ row.reason }}</p></details>
@@ -19,13 +19,14 @@ import {computed} from 'vue'
 import {Loading} from '@element-plus/icons-vue'
 const props=defineProps({open:Boolean,title:String,scope:String,job:Object,running:Boolean,preparing:Boolean,error:String})
 const emit=defineEmits(['update:open','review','resume'])
-const stages=['准备制卡','生成成卡','预览确认','预装上线']
-const stage=computed(()=>props.preparing?0:['preloading','active'].includes(props.job?.status)?3:props.job?.status==='review'?2:props.job?1:0)
-const phase=computed(()=>props.error?'处理未完成':props.job?.status==='blocked'?'部分成卡需修复':props.job?.status==='active'?'已上线':stages[stage.value])
+const dynamic=computed(()=>props.job?.displayMode==='dynamic')
+const stages=computed(()=>dynamic.value?['校验模板','发布配置','已生效']:['准备制卡','生成成卡','预览确认','预装上线'])
+const stage=computed(()=>dynamic.value?(props.job?.status==='active'?2:props.preparing?0:1):props.preparing?0:['preloading','active'].includes(props.job?.status)?3:props.job?.status==='review'?2:props.job?1:0)
+const phase=computed(()=>props.error?'处理未完成':props.job?.status==='blocked'?'部分成卡需修复':props.job?.status==='active'?(dynamic.value?'配置已生效':'已上线'):stages.value[stage.value])
 const hasTotal=computed(()=>Number.isFinite(Number(props.job?.total))&&Number(props.job?.total)>0)
 const count=computed(()=>stage.value===3?Number(props.job?.preloadCompleted??(props.job?.status==='active'?props.job?.total:0)):Number(props.job?.completed||0))
 const percentage=computed(()=>hasTotal.value?Math.min(100,Math.max(0,Math.round(count.value/props.job.total*100))):0)
-const processed=computed(()=>hasTotal.value?`${stage.value===3?'已预装':'已处理'} ${count.value} / ${props.job.total}`:'等待服务返回数量')
+const processed=computed(()=>dynamic.value?'页面重新读取后使用新版本':hasTotal.value?`${stage.value===3?'已预装':'已处理'} ${count.value} / ${props.job.total}`:'等待服务返回数量')
 const counts=computed(()=>[{label:'已生成',value:props.job?.generated??'—'},{label:'失败',value:props.job?.failed??'—'},{label:'跳过',value:props.job?.skipped??'—'}])
 </script>
 <style scoped>

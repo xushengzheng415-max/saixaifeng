@@ -6006,6 +6006,7 @@ exports.main = async (event, context) => {
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
       case 'getPlayerCardsForViewer':
+      case 'exportPlayerCardForViewer':
       case 'getPlayerCardForViewer':
       case 'getPlayerCardById':
         result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,buildStaffEventScope,recordBelongsToStaffEvent})(params); break
@@ -6032,6 +6033,7 @@ exports.main = async (event, context) => {
       case 'getPlayerCardTemplate':
       case 'savePlayerCardTemplate':
       case 'previewPlayerCardTemplate':
+      case 'publishDynamicPlayerCardTemplate':
       case 'publishPlayerCardTemplate':
       case 'continuePlayerCardTemplatePublish':
       case 'getPlayerCardTemplatePublishStatus':

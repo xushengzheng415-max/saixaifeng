@@ -16,8 +16,8 @@ function createPublicTournamentPlayerCard({cloud,handleFanRankings,readCardsForP
     const player=Array.isArray(response.data)?response.data[0]:response.data
     if(!player||player.synthetic===true||player.isTest===true||player.syntheticDatasetId||player.syntheticKey||String(player.source||'').toLowerCase()==='synthetic')
       return {success:false,code:'PUBLIC_CARD_NOT_FOUND',error:'公开球员卡不存在'}
-    const [card]=await readCardsForPlayer(cloud,db,[player])
-    return {success:true,card:{playerId,status:card?.status||'unavailable',cardUrl:card?.status==='ready'?card.cardUrl||'':'',
+    const [card]=await readCardsForPlayer(cloud,db,[player],{legacyOnly:player.playerCardPublic!==true&&!player.playerCardFileId&&!player.playerCardDynamic,restrictedAssets:true,baseOnly:player.playerCardPublic!==true,dynamic:event.dynamicCardProtocol==='player-card-dynamic/1'})
+    return {success:true,card:{playerId,status:card?.status||'unavailable',cardScene:card?.cardScene||null,cardUrl:card?.status==='ready'?card.cardUrl||'':'',
       cardId:card?.status==='ready'?card.cardId||'':'',templateId:card?.templateId||'',
       publishedVersion:Number(card?.publishedVersion||0),visualOnly:Boolean(card?.visualOnly),
       gradeStatus:card?.visualOnly?'unverified':''}}

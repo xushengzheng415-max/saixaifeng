@@ -1,0 +1,1 @@
+<view class="frame"><canvas type="2d" id="cardCanvas" class="card" bindtap="preview"/><view wx:if="{{loading}}" class="state">正在加载…</view><view wx:elif="{{error}}" class="state"><text>{{error}}</text><button bindtap="render">重试</button></view></view>

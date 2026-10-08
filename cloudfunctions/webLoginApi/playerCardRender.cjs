@@ -27,6 +27,17 @@ function makeForegroundMask(buffer) {
   return PNG.sync.write(mask)
 }
 
+function makePortraitMask(buffer) {
+  const mask = PNG.sync.read(buffer)
+  if (mask.width !== WIDTH || mask.height !== HEIGHT) throw new Error('遮罩须为 300 × 430 PNG')
+  for (let i=0;i<mask.data.length;i+=4) {
+    const luma=mask.data[i]*.2126+mask.data[i+1]*.7152+mask.data[i+2]*.0722
+    mask.data[i]=mask.data[i+1]=mask.data[i+2]=255
+    mask.data[i+3]=Math.round(mask.data[i+3]*luma/255)
+  }
+  return PNG.sync.write(mask)
+}
+
 function makeForegroundLayer(backgroundBuffer, maskBuffer) {
   const background = PNG.sync.read(backgroundBuffer)
   const mask = PNG.sync.read(maskBuffer)
@@ -122,20 +133,20 @@ function adjusted(field, delta) {
   return { ...field, x: field.x + Number(delta.x||0)/3, y: field.y + Number(delta.y||0)/3, size: field.size*Number(delta.scale||1) }
 }
 
-function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer, template, player = {}, crop, personalLayout, size = 3 }) {
+function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuffer, template, player = {}, crop, personalLayout, photoOnly=false, size = 3 }) {
   const bg = PNG.sync.read(backgroundBuffer)
   if (bg.width !== WIDTH || bg.height !== HEIGHT) throw new Error('背景须为 300 × 430 PNG')
-  const mask = makeForegroundMask(maskBuffer)
+  const mask = makePortraitMask(maskBuffer)
   const photo = template.photo || { x:150,y:35,scale:108 }
   const c = crop || { zoom:1,x:0,y:0 }, zoom = Math.max(1,Math.min(4,Number(c.zoom)||1))
   const w = 270*Number(photo.scale||100)/100*zoom, h = 300*Number(photo.scale||100)/100*zoom
-  const x = Number(photo.x||150)-w/2+Number(c.x||0)*264, y = Number(photo.y||0)+300-h+Number(c.y||0)*300
+  const x = Number(photo.x??150)-w/2+Number(c.x||0)*264, y = Number(photo.y??0)+300-h+Number(c.y||0)*300
   const fields = template.layout || {}, personal = {}, badges = template.badges || {}
   const position = { GK:'守门员', DF:'后卫', MF:'中场', FW:'前锋' }[player.position] || String(player.position||'').trim() || '—'
   const logo = badges.team && teamLogoBuffer ? image(teamLogoBuffer,
     `x="${badges.team.x-badges.team.size/2}" y="${badges.team.y-badges.team.size/2}" width="${badges.team.size}" height="${badges.team.size}" preserveAspectRatio="xMidYMid meet"`) : ''
   const definitions = []
-  const textLayers = [
+  const textLayers = photoOnly ? '' : [
     label(player.jerseyNumber,adjusted(fields.number,personal.number),85,'number',definitions),
     label(position,{...fields.position,hidden:false},105,'position',definitions),
     label(player.name,adjusted(fields.name,personal.name),245,'name',definitions),
@@ -146,12 +157,11 @@ function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuff
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <defs>${definitions.join('')}<mask id="front" maskUnits="userSpaceOnUse" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" style="mask-type:luminance">${image(mask, `width="${WIDTH}" height="${HEIGHT}"`)}</mask></defs>
     ${image(backgroundBuffer, `width="${WIDTH}" height="${HEIGHT}"`)}
-    ${portraitBuffer ? image(portraitBuffer, `x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMax meet"`) : ''}
-    ${image(backgroundBuffer, `width="${WIDTH}" height="${HEIGHT}" mask="url(#front)"`)}
+    ${portraitBuffer ? '<g mask="url(#front)">'+image(portraitBuffer, `x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMax meet"`)+'</g>' : ''}
     ${textLayers}
     ${nationality(player,badges.nationality)}${logo}
   </svg>`
   return new Resvg(svg,{ fitTo:{mode:'zoom',value:size}, font:{fontFiles:FONT_FILES,loadSystemFonts:false} }).render().asPng()
 }
 
-module.exports = { ensureFonts:fontCache.ensureFonts, renderCard, makeForegroundMask, makeForegroundLayer, WIDTH, HEIGHT, chineseFlagMarkup, isTransparentPng }
+module.exports = { ensureFonts:fontCache.ensureFonts, renderCard, makeForegroundMask, makePortraitMask, makeForegroundLayer, WIDTH, HEIGHT, chineseFlagMarkup, isTransparentPng }

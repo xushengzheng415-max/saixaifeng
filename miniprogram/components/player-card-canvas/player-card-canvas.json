@@ -1,4 +1,6 @@
 {
   "component": true,
-  "usingComponents": {}
+  "usingComponents": {
+    "dynamic-player-card": "/components/dynamic-player-card/index"
+  }
 }

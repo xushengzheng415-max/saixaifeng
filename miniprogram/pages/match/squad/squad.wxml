@@ -23,11 +23,11 @@
         </view>
         <view wx:for="{{slots}}" wx:key="id" class="slot {{item.slotClass}}" style="{{item.slotStyle}}" data-id="{{item.id}}" bindtap="chooseSlot" bindlongpress="removeSlotPlayer">
           <view wx:if="{{item.empty}}" class="player-card"><text class="card-add">+</text></view>
-          <lineup-player-card wx:else size="pitch" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.avatar}}" number="{{item.jerseyText}}" name="{{item.playerName}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
+          <lineup-player-card wx:else size="pitch" card-scene="{{item.cardScene}}" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.avatar}}" number="{{item.jerseyText}}" name="{{item.playerName}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
           <text wx:if="{{item.empty}}" class="slot-name">{{item.title}}</text>
         </view>
       </view>
-    <view class="bench-card"><view class="bench-head"><text>替补 {{substituteCount}}/{{benchLimit}}</text></view><scroll-view scroll-x="true" class="bench-scroll"><view class="bench"><view wx:for="{{substitutes}}" wx:key="id" class="bench-player" data-id="{{item.id}}" bindtap="removeSubstitute"><lineup-player-card size="bench" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/></view><view wx:if="{{showBenchAdd}}" class="bench-add-tile {{benchAddClass}}" bindtap="openSubstitutePicker"><text>+</text><text>添加替补</text></view></view></scroll-view></view>
+    <view class="bench-card"><view class="bench-head"><text>替补 {{substituteCount}}/{{benchLimit}}</text></view><scroll-view scroll-x="true" class="bench-scroll"><view class="bench"><view wx:for="{{substitutes}}" wx:key="id" class="bench-player" data-id="{{item.id}}" bindtap="removeSubstitute"><lineup-player-card size="bench" card-scene="{{item.cardScene}}" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/></view><view wx:if="{{showBenchAdd}}" class="bench-add-tile {{benchAddClass}}" bindtap="openSubstitutePicker"><text>+</text><text>添加替补</text></view></view></scroll-view></view>
     </view>
     <view wx:if="{{emptyPlayers}}" class="empty">没有可用的已审核正式名单球员</view>
     <view wx:if="{{showSubmit}}" class="bottom"><button bindtap="submit" disabled="{{submitDisabled || saving}}" class="submit">{{submitButtonText}}</button></view>
@@ -39,7 +39,7 @@
         <scroll-view scroll-y="true" class="picker-list">
           <view class="picker-grid">
             <view wx:for="{{pickerPlayers}}" wx:key="id" class="picker-option" data-id="{{item.id}}" bindtap="choosePlayer">
-              <lineup-player-card size="selection" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
+              <lineup-player-card size="selection" card-scene="{{item.cardScene}}" card-url="{{item.cardUrl}}" card-state="{{item.cardState}}" card-tier="{{item.cardTier}}" photo-url="{{item.photoUrl}}" number="{{item.jerseyNumber}}" name="{{item.name}}" position="{{item.position}}" jersey-name="{{item.jerseyName}}" height="{{item.height}}" weight="{{item.weight}}" nationality="{{item.nationality}}" team-logo="{{item.teamLogo}}"/>
               <text wx:if="{{item.pickerStatusText}}" class="picker-status">{{item.pickerStatusText}}</text>
             </view>
           </view>

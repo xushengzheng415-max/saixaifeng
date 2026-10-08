@@ -14,7 +14,9 @@
     function controls() { $('zoom').value = String(Math.round(crop.zoom * 100)); $('percent').textContent = $('zoom').value + '%'; $('x').value = crop.x; $('y').value = crop.y }
     function preview() {
       clearTimeout(timer); var id = ++requestId; ready = false; $('save').disabled = true; $('retry').hidden = true; status('正在生成预览…')
-      return options.api('previewMyPreloadedPlayerCard', payload()).then(function (result) {
+      var dynamic=detail.cardScene?Object.assign({},detail.cardScene,{crop:Object.assign({},crop)}):null
+      var request=dynamic?window.SxfDynamicCard.web(dynamic).then(function(canvas){return {imageData:canvas.toDataURL('image/png')}}):options.api('previewMyPreloadedPlayerCard',payload())
+      return request.then(function (result) {
         if (closed || id !== requestId) return
         var image = new Image()
         image.onload = function () { if (!closed && id === requestId) { $('preview').src = result.imageData; ready = true; $('save').disabled = saving; status(''); } }

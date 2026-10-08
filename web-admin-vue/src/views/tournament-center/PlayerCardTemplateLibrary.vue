@@ -130,7 +130,7 @@
             <small>已生成 {{ publishJob.generated || 0 }} 张 · 失败 {{ publishJob.failed || 0 }} 张 · 跳过 {{ publishJob.skipped || 0 }} 人</small>
           </div>
           <p v-if="publishProgress" class="release-note" role="status">{{ publishProgress }}</p>
-          <p v-else class="release-note">先预览样式，再批量制卡，最后确认上线。</p>
+          <p v-else class="release-note">保存草稿、预览后发布，展示时读取最新模板。</p>
         </div>
         <div class="preview-pane">
           <div class="preview-title"><strong>{{ form.preload.type === 'player' && preloadPlayer ? preloadPlayer.name + ' · 单人卡预览' : '排版预览' }}</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="preflightPreview=false;showFinalPreview()">查看大图</el-button></div>
@@ -153,7 +153,7 @@
     <el-dialog v-model="previewOpen"  :title="preflightPreview ? '发布前预览' : '成卡大图'" width="min(650px, 96vw)" append-to-body>
       <div v-if="finalPreviewLoading" class="generated-review-state" role="status">正在生成预览卡…</div>
       <img v-if="finalPreviewImage && !finalPreviewLoading" @load="sampleImageReady=true" @error="sampleImageReady=false" :src="finalPreviewImage" alt="服务端生成的完整球员卡" style="display:block;width:min(100%,450px);height:auto;margin:auto">
-      <template v-if="preflightPreview" #footer><el-button @click="previewOpen=false">返回修改</el-button><el-button type="primary" :disabled="finalPreviewLoading || !sampleImageReady || !canPublish || preflightRevision !== form.id+':'+form.revision" @click="publish(true)">确认并开始制卡</el-button></template>
+      <template v-if="preflightPreview" #footer><el-button @click="previewOpen=false">返回修改</el-button><el-button type="primary" :disabled="finalPreviewLoading || !sampleImageReady || !canPublish || preflightRevision !== form.id+':'+form.revision" @click="publish(true)">确认发布动态卡</el-button></template>
     </el-dialog>
     <CardPublishProgress v-model:open="progressOpen" :title="form.title" :scope="preloadName(form.preload)+(form.preload.targetName?' · '+form.preload.targetName:'')" :job="publishJob" :running="publishing || confirmingPublish" :preparing="publishPreparing" :error="publishError" @review="openGeneratedReview(true)" @resume="publishJob?.jobId ? resumePublish() : preparePublishPreview()" />
     <el-dialog v-model="reviewDialog" title="成卡预览" width="min(1120px, 96vw)" append-to-body :close-on-click-modal="false">
@@ -577,11 +577,11 @@ async function preparePublishPreview(){if(!canPublish.value||publishing.value)re
 async function publish(sampleApproved=false) {
   if (!publishServiceReady.value || publishing.value) return
   if(!sampleApproved || !sampleImageReady.value || preflightRevision.value!==form.id+':'+form.revision || !canPublish.value)return
-  previewOpen.value=false;progressOpen.value=true;publishPreparing.value=true;publishError.value=''
+  previewOpen.value=false;progressOpen.value=true;publishPreparing.value=true;publishError.value='';publishJob.value={displayMode:'dynamic',status:'pending',templateId:form.id}
   publishing.value = true
-  publishProgress.value = '正在准备制卡…'
+  publishProgress.value = '正在发布动态配置…'
   try {
-    let result = await request('publishPlayerCardTemplate', { templateId: form.id, revision: form.revision })
+    let result = await request('publishDynamicPlayerCardTemplate', { templateId: form.id, revision: form.revision })
     publishPreparing.value=false
     await finishPublish(result)
   }
@@ -589,6 +589,7 @@ async function publish(sampleApproved=false) {
 }
 async function finishPublish(initial) {
   let result = initial
+  if(result.displayMode==='dynamic'){const id=form.id;await refreshSelected(id);const active=await request('getActivePlayerCardTemplate',{tier:form.tier,preload:form.preload,templateId:id});if(active.status!=='ready'||Number(active.template.version)!==Number(result.publishedVersion))throw new Error('活动模板版本回读不一致，请刷新核对');publishJob.value={...result,status:'active'};publishProgress.value='动态模板已发布';progressOpen.value=true;localStorage.setItem('sxfPlayerCardTemplateUpdate',JSON.stringify({templateId:id,version:result.publishedVersion,at:Date.now()}));ElMessage.success('动态模板已发布');return}
   while (['pending','preloading'].includes(result.status)) {
     publishJob.value = result
     publishProgress.value = result.status==='preloading' ? `你已确认，正在预装 ${result.preloadCompleted ?? result.completed ?? 0}/${result.total || 0}` : `正在生成成卡 ${result.completed || 0}/${result.total || 0}`
