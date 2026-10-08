@@ -195,3 +195,13 @@ QuickTournamentConsole 演示投屏复用原大屏视图，通过同源 localSto
 ## 赛程工作台与演示排程（2026-10-08）
 
 工作台增加导出对阵表、自主编排、上传赛程。对阵表仅含比赛ID、场序、组别、小组、轮次和双方，不含日期时间场地；填写模板与当前赛程仍在导入页。Excel 生成使用 Blob 下载并保留显式链接及加载反馈，上传先识别、预检，再应用已有比赛。演示排期接口只更新当前虚拟赛事既有比赛，预检不写入，冲突或真实ID拒绝；真实环境排程写入保留原发布门禁。空日历根据配置比赛日和开放时段生成，不依赖已有排期；拖拽传递比赛ID。仅修复尚未安排、未开始且无事件的旧全循环演示草稿，旧记录标为cancelled并保留，再按已确认组内单循环生成12场。隔离测试验证28条旧记录保留、12场有效对阵、预检/应用/冲突/重复修复。实际预览已生成待排对阵.xlsx下载链接；自动下载与最终拖拽页面验收因浏览器连接超时未完成，不能声称已拿到导出文件或已实际拖拽。预览入口和赛程JS/CSS回读摘要匹配，正式/admin摘要未变。
+
+## 平台数据中心正式接入（2026-10-08）
+
+正式入口：/admin/#/tournament-center-admin?section=dataCenter。原独立 /data-center 保留；本次恢复平台运营中心侧边栏入口，提供分组排名、各类榜单、球队、球员、判罚与事件、数据质量六类视图及查询、分页、导出。
+
+PC 经 webLoginApi.callFunction 转发 dataCenter.catalog/query；小程序经 getMiniWorkspace.dataCenter，使用 dataAction 或兼容 operation 指定 catalog/query/quality/tournamentStatistics/teamHistory/playerCareer。工作空间与球队／赛事权限由服务端注入。H5 公开读取经 webLoginApi.publicDataCenter，仅查询已发布赛事和比赛；publicMatchRankings 使用同一内核的单场排名。
+
+resultCenter 读取共享完整分页事件与共享 standings；getMiniWorkspace.tournamentData 的榜单消费共享 rankings。平台页面是统一服务的管理界面，其他端调用服务接口，不依赖打开该页面。原始裁判事件与审核快照仍保留原存储及修改权限，数据中心输出有效事实版本，不迁移原始记录，不自动执行纪律停赛。
+
+本次正式发布 dataCenter、webLoginApi、getMiniWorkspace、resultCenter 和 /admin/。以新下载生产包为基底保留现有授权与依赖；代码包摘要及网页入口、主包、平台页面资源均读回匹配。未发布新的小程序包或 H5 静态页面，未执行历史数据迁移。其他历史页面接入范围仍按 RELEASE.md 的各项登记，不表示所有旧读取入口已删除。
