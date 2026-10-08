@@ -53,7 +53,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
     if (await suite.document(db, suite.VERSIONS, snapshot._id)) throw new Error('此草稿已创建发布版本，请继续原发布任务')
     const rosterEvidenceByPlayer=scope.type==='tournament' ? Object.fromEntries(targetIds.map(id=>[id,scoped.evidenceByPlayer?.get(id)||[]])) : {}
     const job = { _id: jobId, tier, stateId:key, preload:scope, additive:Boolean(row.draft?.preload), templateId: row._id, version, templateRevision: revision,
-      targetIds, cursor: 0, generated:0, generatedPlayerIds:[], failures: [], skipped:[], rosterEvidenceByPlayer, status: 'pending',
+      targetIds, cursor: 0, generated:0, generatedPlayerIds:[], failures: [], skipped:scoped.missingPlayers||[], rosterEvidenceByPlayer, status: 'pending',
       createdBy: userId, createdAt: db.serverDate(), updatedAt: db.serverDate(),
       stateRevision: Number(state.revision || 0) }
     const snapshotData = { ...snapshot }; delete snapshotData._id
@@ -68,7 +68,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
       await tx.collection(suite.STATES).doc(key).update({ data: { candidate: db.command.set({ jobId, templateId: row._id, version }),
         revision: job.stateRevision + 1, updatedAt: db.serverDate() } })
     })
-    return { success:true, status:'pending', jobId, total:targetIds.length, completed:0, generated:0, failed:0, skipped:0 }
+    return { success:true, status:'pending', jobId, total:targetIds.length, completed:0, generated:0, failed:0, skipped:job.skipped.length,skippedPlayers:job.skipped }
   }
 
   async function confirm(jobId,userId) {
@@ -120,7 +120,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
       if(job.preload?.type==='player'&&!skippedIds.has(String(job.preload.targetId||'')))await tx.collection('players').doc(String(job.preload.targetId)).update({data:{playerCardDisplayTemplateId:job.templateId,playerCardDisplayUpdatedAt:db.serverDate()}})
       await tx.collection(suite.JOBS).doc(jobId).update({data:{status:'active',completedAt:db.serverDate(),updatedAt:db.serverDate()}})
     })
-    return {success:true,status:'active',jobId,templateId:job.templateId,publishedVersion:job.version,total:job.targetIds.length,completed:job.cursor,affected:job.generated||0,generated:job.generated||0,skipped:job.skipped?.length||0,skippedPlayers:(job.skipped||[]).slice(0,10),failed:0}
+    return {success:true,status:'active',jobId,templateId:job.templateId,publishedVersion:job.version,total:job.targetIds.length,completed:job.cursor,affected:job.generated||0,generated:job.generated||0,skipped:job.skipped?.length||0,skippedPlayers:(job.skipped||[]),failed:0}
   }
 
   async function advancePreload(jobId) {
@@ -150,7 +150,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
     const job = await suite.document(db, suite.JOBS, jobId)
     if (!job || job.status !== 'pending') throw new Error('发布任务已失效')
     if (job.failures?.length) return { success:false, status:'blocked', jobId,
-      total:job.targetIds.length, completed:job.cursor, generated:job.generated||0, failed:job.failures.length, skipped:job.skipped?.length||0, failures:job.failures.slice(0, 10), skippedPlayers:(job.skipped||[]).slice(0,10) }
+      total:job.targetIds.length, completed:job.cursor, generated:job.generated||0, failed:job.failures.length, skipped:job.skipped?.length||0, failures:job.failures.slice(0, 10), skippedPlayers:(job.skipped||[]) }
     if (job.cursor < job.targetIds.length) return { success:true, status:'pending', jobId,
       total:job.targetIds.length, completed:job.cursor, generated:job.generated||0, failed:0, skipped:job.skipped?.length||0 }
     const missing = [], skippedIds=new Set((job.skipped||[]).map(item=>String(item.playerId)))
@@ -173,7 +173,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
     return { success:true, status:'review', jobId, templateId:job.templateId,
       publishedVersion:job.version, total:job.targetIds.length, completed:job.cursor,
       generated:job.generated||0, skipped:job.skipped?.length||0,
-      skippedPlayers:(job.skipped||[]).slice(0,10), failed:0 }
+      skippedPlayers:(job.skipped||[]), failed:0 }
   }
 
   async function previews(jobId,offset=0,limit=24) {
@@ -250,7 +250,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
     return job ? { success:true, status:job.failures?.length ? 'blocked' : job.status,
       jobId, total:job.targetIds?.length || 0, completed:job.cursor || 0,
       generated:job.generated||0, preloadCompleted:job.preloadCursor||0, skipped:job.skipped?.length||0,
-      skippedPlayers:(job.skipped||[]).slice(0,10), failed:job.failures?.length || 0, failures:(job.failures||[]).slice(0,10) } :
+      skippedPlayers:(job.skipped||[]), failed:job.failures?.length || 0, failures:(job.failures||[]).slice(0,10) } :
       { success:false, status:'error', error:'发布任务记录缺失，请联系平台处理' }
   }
 
@@ -262,7 +262,7 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
     if (state?.candidate?.jobId !== jobId) throw new Error('发布任务已失效')
     const targetIds = [...(job.targetIds||[]), ...job.failures.map(item => item.playerId)]
     await db.collection(suite.JOBS).doc(jobId).update({ data: { targetIds, failures:[], updatedAt:db.serverDate() } })
-    return { success:true, status:'pending', jobId, total:targetIds.length, completed:job.cursor, generated:job.generated||0, skipped:job.skipped?.length||0, skippedPlayers:(job.skipped||[]).slice(0,10), failed:0 }
+    return { success:true, status:'pending', jobId, total:targetIds.length, completed:job.cursor, generated:job.generated||0, skipped:job.skipped?.length||0, skippedPlayers:(job.skipped||[]), failed:0 }
   }
 
   return { begin, advance, status, retry, confirm, reject, previews, synchronizeActive:basePublisher.synchronizeActive }

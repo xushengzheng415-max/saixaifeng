@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import vm from 'node:vm'
+import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { createSessionReadCache, stableReadKey } from '../web-admin-vue/src/utils/sessionReadCache.js'
 import { playerReadCacheTags, isReadOnlyRequest } from '../web-admin-vue/src/utils/playerReadCachePolicy.js'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const fixtureRequire = createRequire(import.meta.url)
 let passed = 0
 const scenarios = []
 const tick = () => new Promise(resolve => setImmediate(resolve))
@@ -138,7 +140,7 @@ async function harness(handler) {
   window.location = { hostname: 'localhost', origin: 'https://fixture.invalid', href: '' }
   const clock = { value: 1000 }
   class ClockDate extends Date { static now() { return clock.value } }
-  const context = vm.createContext({ localStorage, sessionStorage, window, CustomEvent: DetailEvent, Date: ClockDate, AbortController, setTimeout, clearTimeout, console: { log() {}, warn() {}, error() {} }, fetch: async (url, options) => {
+  const context = vm.createContext({ localStorage, sessionStorage, window, Event, CustomEvent: DetailEvent, Date: ClockDate, AbortController, setTimeout, clearTimeout, console: { log() {}, warn() {}, error() {} }, fetch: async (url, options) => {
     assert.equal(url, 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi')
     const payload = JSON.parse(options.body); calls.push(payload)
     const result = await handler(payload, calls)
@@ -147,6 +149,16 @@ async function harness(handler) {
   const modules = new Map()
   async function module(filename) {
     if (modules.has(filename)) return modules.get(filename)
+    if (['.cjs', '.json'].includes(path.extname(filename))) {
+      const value = fixtureRequire(filename)
+      const keys = Object.keys(value).filter(key => key !== 'default')
+      const instance = new vm.SyntheticModule(['default', ...keys], function () {
+        this.setExport('default', value)
+        for (const key of keys) this.setExport(key, value[key])
+      }, { context })
+      modules.set(filename, instance)
+      return instance
+    }
     const instance = new vm.SourceTextModule(await fs.readFile(filename, 'utf8'), { context, identifier: filename, initializeImportMeta: meta => { meta.env = { DEV: false, BASE_URL: '/admin/' } } })
     modules.set(filename, instance)
     await instance.link(async (specifier, importer) => {
@@ -191,6 +203,22 @@ await test('real cloud CRUD invalidates reads before and after the write', async
     assert.equal(h.calls.length, previous + 2)
   }
 })
+await test('navigation staff lookups preserve cached profiles and grant mutations invalidate them', async () => {
+  const h = await harness(() => ({ success: true, data: [{ _id: 'fixture-p' }] }))
+  await h.api.queryList('players')
+  for (const action of ['scope', 'mine', 'invitations', 'managed']) {
+    const before = h.calls.length
+    await h.api.callFunction('tournamentStaffAccess', { action })
+    await h.api.queryList('players')
+    assert.equal(h.calls.length, before + 1)
+  }
+  for (const action of ['invite', 'accept', 'activate', 'activateOrganizerWorkspace', 'update', 'disable']) {
+    const before = h.calls.length
+    await h.api.callFunction('tournamentStaffAccess', { action })
+    await h.api.queryList('players')
+    assert.equal(h.calls.length, before + 2)
+  }
+})
 await test('real cloud auth, org, role and platform boundaries invalidate hits', async () => {
   const h = await harness(() => ({ success: true, data: [{ _id: 'fixture-p' }] }))
   await h.api.queryList('players')
@@ -214,13 +242,43 @@ await test('platform capacity remains live instead of using the player session c
   assert.equal(h.calls.length, 2)
 })
 await test('real batched card reader uses at most 50 IDs, preserves unknown status and refreshes on retry', async () => {
-  const h = await harness(p => ({ success: true, cards: p.playerIds.map(playerId => ({ playerId, status: 'pending', tier: null, points: null })) }))
+  const h = await harness(p => ({ success: true, cards: p.playerIds.map(playerId => ({ playerId, status: 'ready', cardUrl: 'https://fixture.invalid/card.png', tier: null, points: null })) }))
   const cards = await h.module(path.join(root, 'web-admin-vue/src/utils/playerCard.js')); await cards.evaluate()
   const ids = Array.from({ length: 62 }, (_, i) => `fixture-p${i}`)
   const first = await Promise.all(ids.map(id => cards.namespace.readPlayerCard(id)))
   assert.equal(h.calls.length, 2); assert(h.calls.every(c => c.playerIds.length <= 50)); assert(first.every(c => c.tier === null && c.points === null))
   await Promise.all(ids.map(id => cards.namespace.readPlayerCard(id))); assert.equal(h.calls.length, 2)
   await cards.namespace.readPlayerCard(ids[0], { cache: 'reload' }); assert.equal(h.calls.length, 3)
+})
+
+await test('lineup card cache survives different subsets and clears on scope or data changes', async () => {
+  const h = await harness(p => ({ success: true, cards: (p.playerIds || []).map(playerId => ({ playerId, status: 'ready', cardUrl: 'https://fixture.invalid/' + playerId })) }))
+  const cards = await h.module(path.join(root, 'web-admin-vue/src/utils/playerCard.js')); await cards.evaluate()
+  await Promise.all(['a','b','c'].map(id => cards.namespace.readPlayerCard(id)))
+  assert.equal(h.calls.length, 1)
+  await Promise.all(['c','a'].map(id => cards.namespace.readPlayerCard(id)))
+  assert.equal(h.calls.length, 1)
+  assert.equal(cards.namespace.getCachedPlayerCard('a').cardUrl, 'https://fixture.invalid/a')
+  await Promise.all(['a','d','d'].map(id => cards.namespace.readPlayerCard(id)))
+  assert.equal(h.calls.length, 2); assert.deepEqual(h.calls.at(-1).playerIds, ['d'])
+  h.localStorage.setItem('authToken', 'synthetic-other-user')
+  assert.equal(cards.namespace.getCachedPlayerCard('a'), undefined)
+  await cards.namespace.readPlayerCard('a'); assert.equal(h.calls.length, 3)
+  await h.api.updateRecord('players','a',{})
+  assert.equal(cards.namespace.getCachedPlayerCard('a'), undefined)
+  await cards.namespace.readPlayerCard('a'); assert.equal(h.calls.length, 5)
+  h.clock.value += 60001
+  assert.equal(cards.namespace.getCachedPlayerCard('a'), undefined)
+})
+await test('pending lineup cards retry without retaining a pending cached batch', async () => {
+  let ready = false
+  const h = await harness(p => ({ success: true, cards: p.playerIds.map(playerId => ({ playerId, status: ready ? 'ready' : 'pending', cardUrl: ready ? 'https://fixture.invalid/card' : '' })) }))
+  const cards = await h.module(path.join(root, 'web-admin-vue/src/utils/playerCard.js')); await cards.evaluate()
+  assert.equal((await cards.namespace.readPlayerCard('p')).status,'pending')
+  assert.equal(cards.namespace.getCachedPlayerCard('p'),undefined)
+  ready = true
+  assert.equal((await cards.namespace.readPlayerCard('p')).status,'ready')
+  assert.equal(h.calls.length,2)
 })
 
 const report = { passed, failed: 0, scenarios, networkAccess: false, productionDatabaseActions: false, syntheticFixtureSize: 1250, warmFullReadHttpCalls: 0, coldFullReadHttpCalls: 2, cacheStorage: 'tab-local memory, not persisted', freshMs: 15000, maximumStaleMs: 60000, maxEntries: 80, maxBytes: 4 * 1024 * 1024 }

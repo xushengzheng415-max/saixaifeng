@@ -10,6 +10,7 @@ import {
   isPlatformSession
 } from '../utils/platformSession'
 import { invitationLandingPath, sidebarRightForRoute, visibleSidebarKeys } from '../utils/tournamentStaffRights'
+import { leaveDemoForRealTournament } from '../utils/demoMode'
 
 // 深链截图会在首个路由组件加载前访问数据，开发模式需先于路由守卫同步激活隔离样例。
 if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href.includes('visualQa=1')) {
@@ -37,6 +38,14 @@ if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href
 
 const routes = [
   { path:'/data-center', component:() => import('../views/layout/LayoutView.vue'), meta:{requiresAuth:true,title:'数据中心'}, children:[{path:'',component:() => import('../views/data/DataCenter.vue')}] },
+  {
+    path: '/quick-demo-draw-screen/:id',
+    name: 'QuickDemoDrawScreen',
+    beforeEnter: to => String(import.meta.env.BASE_URL).startsWith('/preview/admin/') && String(to.params.id).startsWith('demo-') ? true : '/tournament-space',
+    component: () => import('../views/tournament/QuickTournamentConsole.vue'),
+    props: route => ({ tournamentId:String(route.params.id) }),
+    meta: { requiresAuth:false, title:'演示抽签大屏' }
+  },
   {
     path: '/draw-screen',
     name: 'DrawScreenProjection',
@@ -367,10 +376,7 @@ const routes = [
   },
   {
     path: '/tournaments/:id/pairings',
-    name: 'PairingResult',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '对阵结果', embeddedPageHeader: true },
-    children: [{ path: '', component: () => import('../views/tournament/PairingResult.vue') }]
+    redirect: to => ({path:`/tournaments/${to.params.id}/matches`,query:{...to.query,view:'workbench'}}),
   },
   {
     path: '/tournaments/:id/matches',
@@ -624,6 +630,7 @@ function clearInvalidSession() {
 
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
+  if (to.path.startsWith('/tournaments/')) leaveDemoForRealTournament(to.params.id)
   migrateLegacyPlatformSession()
   // 标签页选择自己的身份通道；同域名下另一标签页登录不覆盖当前后台。
   if (to.path === '/platform-login') activatePlatformContext()
@@ -698,6 +705,13 @@ router.beforeEach(async (to, from, next) => {
   // 检查是否已登录（localStorage 快速检查）
   const isLoggedIn = localStorage.getItem('isLoggedIn')
   const loginType = localStorage.getItem('loginType') || ''
+  const { isDemoMode } = await import('../utils/demoMode')
+  if (isDemoMode() && isLoggedIn === 'true' && hasOrganizerSession()) {
+    const demoRoutes = /^\/(tournament-space|tournaments|teams|players|referees|head-referee|admin\/teams)(\/|$)/
+    if (!demoRoutes.test(to.path)) { next('/tournament-space'); return }
+    if (to.params.id && !String(to.params.id).startsWith('demo-')) { next('/tournament-space'); return }
+    next(); return
+  }
   if (isLoggedIn === 'true') {
     if (!hasOrganizerSession()) {
       clearInvalidSession()

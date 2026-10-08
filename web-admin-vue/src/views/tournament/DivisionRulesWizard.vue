@@ -238,6 +238,9 @@ import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import DivisionRegulationFields from './DivisionRegulationFields.vue'
 import { findRecognizedDivision, recognizedDivisionRulePayload } from '../../utils/regulationRecognition'
+import { isDemoMode } from '../../utils/demoMode'
+import { recognizeStoredDemoRegulation } from '../../utils/demoRegulations'
+import { divisionParticipantType } from '../../utils/divisionBasics'
 
 const route = useRoute()
 const router = useRouter()
@@ -472,7 +475,7 @@ function validateRegistrationDeadline() {
     ElMessage.warning('请选择有效的报名截止时间')
     return false
   }
-  if (deadline.getTime() + 60000 <= Date.now()) {
+  if (!isDemoMode(tournamentId) && deadline.getTime() + 60000 <= Date.now()) {
     const prior=parseLocalMinute(division.value.activeRulesSnapshot?.registrationDeadline)
     if(division.value.rulesRevisionPending && prior && deadline.getTime()===prior.getTime())return true
     ElMessage.warning('报名截止时间不能早于当前时间')
@@ -530,7 +533,7 @@ watch(() => form.drawResolution, mode => {
   }
 })
 const knockoutTieBreakLabel = computed(() => form.knockoutTieBreak === 'penalties' ? '直接点球决胜' : '加时赛 + 点球决胜')
-const modeStateText = computed(() => effective.value ? `${isProfessional.value ? '专业模式' : '基础模式'} · 已锁定` : `${isProfessional.value ? '专业模式' : '基础模式'} · ${activeKey.value === 'finalize' ? '待定版' : '当前配置'}`)
+const modeStateText = computed(() => `${divisionParticipantType(division.value,tournament.value)==='adult'?'成人模式':'青少年模式'} · ${effective.value?'已锁定':activeKey.value==='finalize'?'待定版':'当前配置'}`)
 const pageSubtitle = computed(() => {
   if (effective.value) return `查看${division.value.name || '当前组别'}已定版的竞赛规则。`
   if (!isProfessional.value) return '配置球队级赛制与基础比赛规则'
@@ -635,7 +638,9 @@ async function recognizeUploadedRegulations() {
     }
     const fileName = String(tournament.value.regulationsFileName || '竞赛规程')
     const extension = fileName.split('.').pop().toLowerCase()
-    const result = await callFunction('parseTournamentRegulations', {
+    const result = isDemoMode(tournamentId)
+      ? { success:true, data:await recognizeStoredDemoRegulation(tournament.value) }
+      : await callFunction('parseTournamentRegulations', {
       action: 'parseStoredFile',
       tournamentId,
       fileID,

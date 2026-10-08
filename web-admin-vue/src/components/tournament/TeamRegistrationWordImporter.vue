@@ -6,7 +6,7 @@
         <span>可同时选择多份 Word；一份文件创建一支球队。</span>
       </div>
       <div class="import-toolbar-actions">
-        <el-button @click="downloadTemplate"><el-icon><Download /></el-icon>下载报名表模板</el-button>
+        <el-button @click="templateDialogVisible=true"><el-icon><Download /></el-icon>下载报名表模板</el-button>
         <el-upload accept=".docx" multiple :auto-upload="false" :show-file-list="false" :on-change="handleDocxChange">
           <el-button type="success" plain :loading="parsingCount > 0">
             <el-icon><UploadFilled /></el-icon>{{ parsingCount > 0 ? `解析中 ${parsingCount}` : '选择报名表' }}
@@ -15,6 +15,11 @@
       </div>
     </header>
 
+    <el-dialog v-model="templateDialogVisible" title="选择报名字段" width="480px" append-to-body>
+      <el-radio-group v-model="templatePreset" @change="applyTemplatePreset"><el-radio-button label="youth">青少年</el-radio-button><el-radio-button label="adult">成人</el-radio-button></el-radio-group>
+      <p>姓名为必填字段</p><el-checkbox-group v-model="templateFields"><el-checkbox v-for="field in REGISTRATION_FIELDS" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group>
+      <template #footer><el-button @click="templateDialogVisible=false">取消</el-button><el-button type="primary" :loading="downloadingTemplate" @click="downloadTemplate">下载模板</el-button></template>
+    </el-dialog>
     <el-alert
       type="success"
       :closable="false"
@@ -108,7 +113,7 @@
             <header><strong>球员资料</strong><span>出生日期、年龄、籍贯和球衣简称已自动生成。</span></header>
             <div class="player-table-wrap">
               <table>
-                <thead><tr><th>照片</th><th>姓名</th><th>出生日期</th><th>年龄</th><th>籍贯</th><th>球衣英文</th><th>身份证</th><th>号码</th><th>照片状态</th></tr></thead>
+                <thead><tr><th>照片</th><th>姓名</th><th>出生日期</th><th>年龄</th><th>籍贯</th><th>球衣英文</th><th>身份证</th><th>号码</th><th>位置</th><th>照片状态</th></tr></thead>
                 <tbody>
                   <tr v-for="(player, playerIndex) in team.players" :key="`${team.clientKey}-player-${playerIndex}`" :class="{ invalid: player.error }">
                     <td><PersonPhotoUpload :person="player" @change="file => replacePersonPhoto(file, player)" /></td>
@@ -118,7 +123,7 @@
                     <td><span class="native-place" :title="player.nativePlace">{{ player.nativePlace || '地区码待核验' }}</span></td>
                     <td><el-input v-model="player.jerseyName" maxlength="32" /></td>
                     <td><span class="identity-mask">{{ maskRegistrationIdentity(player.identityNumber) }}</span></td>
-                    <td><el-input v-model="player.jerseyNumber" maxlength="3" inputmode="numeric" /></td>
+                    <td><el-input v-model="player.jerseyNumber" maxlength="3" inputmode="numeric" /></td><td><el-select v-model="player.position" clearable><el-option v-for="position in ['门将','后卫','中场','前锋','其他']" :key="position" :label="position" :value="position" /></el-select></td>
                     <td>
                       <el-tag v-if="player.error" type="danger" size="small">{{ player.error }}</el-tag>
                       <el-tag v-else-if="player.photoProcessingStatus === 'processing'" type="warning" size="small">{{ player.photoProgressText || '处理中' }}</el-tag>
@@ -161,6 +166,9 @@ import { callFunction, uploadLargeFileViaCloud } from '../../utils/cloud'
 import { removeWhiteBackground } from '../../utils/whiteBgRemover'
 import { findVisiblePixelBounds } from '../../utils/imageBounds'
 import { maskRegistrationIdentity, parseTeamRegistrationDocx } from '../../utils/teamRegistrationDocx'
+import { REGISTRATION_FIELDS, REGISTRATION_PRESETS, createRegistrationTemplate } from '../../utils/registrationTemplate'
+import { isDemoMode } from '../../utils/demoMode'
+import { divisionParticipantType } from '../../utils/divisionBasics'
 
 const props = defineProps({
   tournamentId: { type: String, required: true },
@@ -171,6 +179,11 @@ const props = defineProps({
 const emit = defineEmits(['cancel', 'success'])
 
 const teams = ref([])
+const templateDialogVisible=ref(false)
+const templatePreset=ref(divisionParticipantType(props.division))
+const templateFields=ref([...REGISTRATION_PRESETS[templatePreset.value]])
+const downloadingTemplate=ref(false)
+function applyTemplatePreset(value){templateFields.value=[...REGISTRATION_PRESETS[value]]}
 const parsingKeys = ref(new Set())
 const importing = ref(false)
 const currentProgress = ref('正在创建')
@@ -224,13 +237,22 @@ function ageFromBirth(value) {
   return age >= 0 ? `${age}岁` : '待核验'
 }
 
-function downloadTemplate() {
+async function downloadTemplate() {
+  downloadingTemplate.value=true
+  try {
+  const response=await fetch(`${import.meta.env.BASE_URL}templates/team-registration-form-template.docx?v=generic-fields-20261007`)
+  if(!response.ok)throw new Error('模板下载失败，请重试')
+  const blob=await createRegistrationTemplate(await response.arrayBuffer(),templateFields.value)
+  const url=URL.createObjectURL(blob)
   const anchor = document.createElement('a')
-  anchor.href = `${import.meta.env.BASE_URL}templates/team-registration-form-template.docx`
+  anchor.href = url
   anchor.download = '球队报名表模板.docx'
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
+  setTimeout(()=>URL.revokeObjectURL(url),30000)
+  templateDialogVisible.value=false
+  }catch(error){ElMessage.error(error.message||'模板下载失败，请重试')}finally{downloadingTemplate.value=false}
 }
 
 function currentTeamErrors(team) {
@@ -435,6 +457,7 @@ async function prepareLogo(file) {
 }
 
 async function preparePortrait(file) {
+  if(isDemoMode())return fitImage(file,300,388,0.04)
   const auditFile = await fitImage(file, 250, 250, 0, '#fff', 'image/jpeg')
   const result = await callFunction('baiduRemoveBg', { action: 'removeBackground', imageBase64: await blobToRawBase64(auditFile) })
   if (!result?.success || !result.data) throw new Error(result?.message || '人像分割失败')
@@ -571,6 +594,7 @@ function payloadForTeam(team) {
       name: String(person.name || '').trim(),
       phone: normalizePhone(person.phone),
       identityNumber: person.identityNumber,
+      position:person.position || '',
       jerseyNumber: String(person.jerseyNumber || '').replace(/\D/g, '').slice(0, 3),
       jerseyName: String(person.jerseyName || '').trim().toUpperCase().slice(0, 32),
       birthDate: person.birthDate,
@@ -582,6 +606,7 @@ function payloadForTeam(team) {
     players: team.players.map(player => ({
       name: String(player.name || '').trim(),
       identityNumber: player.identityNumber,
+      position:player.position || '',
       jerseyNumber: String(player.jerseyNumber || '').replace(/\D/g, '').slice(0, 3),
       jerseyName: String(player.jerseyName || '').trim().toUpperCase().slice(0, 32),
       birthDate: player.birthDate,
@@ -626,6 +651,7 @@ async function confirmImport() {
     if (!result?.success) throw new Error(result?.message || '批量创建失败')
 
     const imported = result.data?.teams || []
+    if(isDemoMode()){ElMessage.success(`已创建 ${imported.length} 支虚拟球队`);emit('success',{teams:imported,demo:true});return}
     const inviteResults = []
     for (let index = 0; index < imported.length; index += 1) {
       const item = imported[index]

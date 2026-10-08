@@ -10,6 +10,23 @@ export default defineConfig({
   // 正式环境默认 /admin/；预览构建通过 VITE_APP_BASE 指向独立目录。
   base: process.env.VITE_APP_BASE || '/admin/',
   plugins: [
+    {
+      name:'shared-standings-browser',
+      enforce:'pre',
+      transform(source, id) {
+        if (!id.replaceAll('\\', '/').endsWith('/cloudfunctions/dataCenter/shared/standings.cjs')) return null
+        // Keep the single server implementation usable by Vite dev and browser builds.
+        return source.replace('module.exports = { pointsRule, buildStandings, rankTeams }', 'export default { pointsRule, buildStandings, rankTeams }')
+      }
+    },
+    {
+      name:'shared-pairing-templates-browser',
+      enforce:'pre',
+      transform(source,id) {
+        if (!id.replaceAll('\\','/').endsWith('/cloudfunctions/generateSchedule/pairingTemplates.js')) return null
+        return source.replace('module.exports = {','export default {')
+      }
+    },
     vue(),
     AutoImport({
       resolvers: [ElementPlusResolver()]

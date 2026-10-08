@@ -105,10 +105,8 @@
             <div class="lineup-header">
               <div class="lineup-title">{{ homeName }} vs {{ awayName }}</div>
               <div class="lineup-actions">
-                <el-button v-if="!isRefereeEvidenceLocked" size="small" @click="openDualVisualEditor">
-                  <el-icon><Picture /></el-icon> 可视化布置
-                </el-button>
-                <el-button v-if="!isRefereeEvidenceLocked" type="primary" size="small" @click="openLineupDialog">
+                <RefereeReportImport :match-id="matchId" :home-name="homeName" :away-name="awayName" :disabled="isRefereeEvidenceLocked" :load-roster="loadApprovedMatchRoster" :rules="effectiveSubstitutionRules" :existing-events="match.events || []" @saved="loadMatch" />
+                <el-button v-if="!isRefereeEvidenceLocked" type="primary" size="small" @click="openDualVisualEditor">
                   <el-icon><Edit /></el-icon> 编辑阵容
                 </el-button>
                 <el-button v-if="hasLineups" type="success" size="small" @click="openPreviewDialog">
@@ -248,7 +246,7 @@
               <div v-if="sortedEvents.length === 0" class="events-empty">
                 暂无比赛事件<el-button v-if="!isRefereeEvidenceLocked" link type="primary" @click="openAddEventDialog">，+ 添加事件</el-button>
               </div>
-              <div v-for="(evt, i) in sortedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
+              <div v-for="(evt, i) in displayedEvents" :key="eventRowKey(evt, i)" class="event-row" :class="'event-' + evt.type">
                 <div class="event-time">{{ eventTimeText(evt) }}</div>
                 <div class="event-icon">
                   <img v-if="isSecondYellowRed(evt)" :src="yellowRedCardIcon" alt="2黄变1红" />
@@ -541,208 +539,10 @@
       </template>
     </el-dialog>
 
-    <!-- 首发阵容编辑弹窗 -->
-    <el-dialog
-      v-model="lineupDialogVisible"
-      title="编辑出场阵容"
-      width="1200px"
-      :close-on-click-modal="false"
-    >
-      <div class="lineup-edit-container">
-        <!-- 主队 -->
-        <div class="lineup-edit-side">
-            <div class="lineup-edit-header">
-              <span class="let-team-name">{{ homeName || '主队' }}</span>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <el-select v-model="lineupForm.home.formation" placeholder="阵型" style="width: 100px;" size="small" clearable>
-                  <el-option label="4-4-2" value="4-4-2" />
-                  <el-option label="4-3-3" value="4-3-3" />
-                  <el-option label="4-2-3-1" value="4-2-3-1" />
-                  <el-option label="3-5-2" value="3-5-2" />
-                  <el-option label="5-3-2" value="5-3-2" />
-                  <el-option label="4-1-4-1" value="4-1-4-1" />
-                  <el-option label="4-5-1" value="4-5-1" />
-                  <el-option label="3-4-3" value="3-4-3" />
-                </el-select>
-              </div>
-            </div>
-          <div class="lineup-edit-coach">
-            主教练 <el-input v-model="lineupForm.home.coach" placeholder="教练姓名" size="small" style="width: 120px; margin-left: 6px;" />
-          </div>
-          <div class="lineup-edit-table-head">
-            <span class="le-col-num">号码</span>
-            <span class="le-col-pos">位置</span>
-            <span class="le-col-name">姓名</span>
-            <span class="le-col-jersey">球衣名</span>
-            <span class="le-col-flags">标记</span>
-            <span class="le-col-act"></span>
-          </div>
-          <div class="lineup-edit-subtitle">首发（11人）</div>
-          <div
-            v-for="(p, i) in lineupForm.home.players"
-            :key="'h-'+i"
-            class="lineup-edit-row"
-          >
-            <el-select v-model="p.number" placeholder="#" size="small" class="le-input-num" filterable clearable allow-create>
-              <el-option v-for="n in 99" :key="n" :label="n" :value="n" />
-            </el-select>
-            <el-select v-model="p.position" size="small" class="le-input-pos">
-              <el-option v-for="pos in positionOptions" :key="pos.value" :label="pos.label" :value="pos.value" />
-            </el-select>
-            <el-select v-model="p.name" placeholder="选择球员" size="small" class="le-input-name" filterable allow-create @change="onPlayerSelect('home', 'starting', i, $event)">
-              <el-option v-for="pl in homePlayers" :key="pl._id" :label="pl.name" :value="pl.name" />
-            </el-select>
-            <el-input v-model="p.jerseyName" placeholder="球衣名" size="small" class="le-input-jersey" />
-            <div class="le-flags">
-              <el-checkbox v-model="p.isCaptain" label="C" size="small" title="队长" />
-              <el-checkbox v-model="p.isForeign" label="F" size="small" title="外援" />
-              <el-checkbox v-model="p.isYoung" label="☆" size="small" title="低龄球员" />
-              <el-checkbox v-model="p.isOverage" label="◇" size="small" title="超龄球员" />
-            </div>
-            <el-button size="small" text type="danger" @click="removePlayer('home', 'starting', i)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
-          </div>
-          <div class="lineup-edit-add">
-            <el-button size="small" text type="primary" @click="addPlayer('home', 'starting')" :disabled="lineupForm.home.players.length >= 11">
-              + 添加首发
-            </el-button>
-          </div>
-          <div class="lineup-edit-subtitle" style="margin-top:12px;">替补</div>
-          <div
-            v-for="(p, i) in lineupForm.home.substitutes"
-            :key="'hs-'+i"
-            class="lineup-edit-row"
-          >
-            <el-select v-model="p.number" placeholder="#" size="small" class="le-input-num" filterable clearable allow-create>
-              <el-option v-for="n in 99" :key="n" :label="n" :value="n" />
-            </el-select>
-            <el-select v-model="p.position" size="small" class="le-input-pos">
-              <el-option v-for="pos in positionOptions" :key="pos.value" :label="pos.label" :value="pos.value" />
-            </el-select>
-            <el-select v-model="p.name" placeholder="选择球员" size="small" class="le-input-name" filterable allow-create @change="onPlayerSelect('home', 'sub', i, $event)">
-              <el-option v-for="pl in homePlayers" :key="pl._id" :label="pl.name" :value="pl.name" />
-            </el-select>
-            <el-input v-model="p.jerseyName" placeholder="球衣名" size="small" class="le-input-jersey" />
-            <div class="le-flags">
-              <el-checkbox v-model="p.isCaptain" label="C" size="small" title="队长" />
-              <el-checkbox v-model="p.isForeign" label="F" size="small" title="外援" />
-              <el-checkbox v-model="p.isYoung" label="☆" size="small" title="低龄球员" />
-              <el-checkbox v-model="p.isOverage" label="◇" size="small" title="超龄球员" />
-            </div>
-            <el-button size="small" text type="danger" @click="removePlayer('home', 'sub', i)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
-          </div>
-          <div class="lineup-edit-add">
-            <el-button size="small" text type="primary" @click="addPlayer('home', 'sub')">
-              + 添加替补
-            </el-button>
-          </div>
-        </div>
-
-        <!-- 客队 -->
-        <div class="lineup-edit-side">
-            <div class="lineup-edit-header">
-              <span class="let-team-name">{{ awayName || '客队' }}</span>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <el-select v-model="lineupForm.away.formation" placeholder="阵型" style="width: 100px;" size="small" clearable>
-                  <el-option label="4-4-2" value="4-4-2" />
-                  <el-option label="4-3-3" value="4-3-3" />
-                  <el-option label="4-2-3-1" value="4-2-3-1" />
-                  <el-option label="3-5-2" value="3-5-2" />
-                  <el-option label="5-3-2" value="5-3-2" />
-                  <el-option label="4-1-4-1" value="4-1-4-1" />
-                  <el-option label="4-5-1" value="4-5-1" />
-                  <el-option label="3-4-3" value="3-4-3" />
-                </el-select>
-              </div>
-            </div>
-          <div class="lineup-edit-coach">
-            主教练 <el-input v-model="lineupForm.away.coach" placeholder="教练姓名" size="small" style="width: 120px; margin-left: 6px;" />
-          </div>
-          <div class="lineup-edit-table-head">
-            <span class="le-col-num">号码</span>
-            <span class="le-col-pos">位置</span>
-            <span class="le-col-name">姓名</span>
-            <span class="le-col-jersey">球衣名</span>
-            <span class="le-col-flags">标记</span>
-            <span class="le-col-act"></span>
-          </div>
-          <div class="lineup-edit-subtitle">首发（11人）</div>
-          <div
-            v-for="(p, i) in lineupForm.away.players"
-            :key="'a-'+i"
-            class="lineup-edit-row"
-          >
-            <el-select v-model="p.number" placeholder="#" size="small" class="le-input-num" filterable clearable allow-create>
-              <el-option v-for="n in 99" :key="n" :label="n" :value="n" />
-            </el-select>
-            <el-select v-model="p.position" size="small" class="le-input-pos">
-              <el-option v-for="pos in positionOptions" :key="pos.value" :label="pos.label" :value="pos.value" />
-            </el-select>
-            <el-select v-model="p.name" placeholder="选择球员" size="small" class="le-input-name" filterable allow-create @change="onPlayerSelect('away', 'starting', i, $event)">
-              <el-option v-for="pl in awayPlayers" :key="pl._id" :label="pl.name" :value="pl.name" />
-            </el-select>
-            <el-input v-model="p.jerseyName" placeholder="球衣名" size="small" class="le-input-jersey" />
-            <div class="le-flags">
-              <el-checkbox v-model="p.isCaptain" label="C" size="small" title="队长" />
-              <el-checkbox v-model="p.isForeign" label="F" size="small" title="外援" />
-              <el-checkbox v-model="p.isYoung" label="☆" size="small" title="低龄球员" />
-              <el-checkbox v-model="p.isOverage" label="◇" size="small" title="超龄球员" />
-            </div>
-            <el-button size="small" text type="danger" @click="removePlayer('away', 'starting', i)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
-          </div>
-          <div class="lineup-edit-add">
-            <el-button size="small" text type="primary" @click="addPlayer('away', 'starting')" :disabled="lineupForm.away.players.length >= 11">
-              + 添加首发
-            </el-button>
-          </div>
-          <div class="lineup-edit-subtitle" style="margin-top:12px;">替补</div>
-          <div
-            v-for="(p, i) in lineupForm.away.substitutes"
-            :key="'as-'+i"
-            class="lineup-edit-row"
-          >
-            <el-select v-model="p.number" placeholder="#" size="small" class="le-input-num" filterable clearable allow-create>
-              <el-option v-for="n in 99" :key="n" :label="n" :value="n" />
-            </el-select>
-            <el-select v-model="p.position" size="small" class="le-input-pos">
-              <el-option v-for="pos in positionOptions" :key="pos.value" :label="pos.label" :value="pos.value" />
-            </el-select>
-            <el-select v-model="p.name" placeholder="选择球员" size="small" class="le-input-name" filterable allow-create @change="onPlayerSelect('away', 'sub', i, $event)">
-              <el-option v-for="pl in awayPlayers" :key="pl._id" :label="pl.name" :value="pl.name" />
-            </el-select>
-            <el-input v-model="p.jerseyName" placeholder="球衣名" size="small" class="le-input-jersey" />
-            <div class="le-flags">
-              <el-checkbox v-model="p.isCaptain" label="C" size="small" title="队长" />
-              <el-checkbox v-model="p.isForeign" label="F" size="small" title="外援" />
-              <el-checkbox v-model="p.isYoung" label="☆" size="small" title="低龄球员" />
-              <el-checkbox v-model="p.isOverage" label="◇" size="small" title="超龄球员" />
-            </div>
-            <el-button size="small" text type="danger" @click="removePlayer('away', 'sub', i)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
-          </div>
-          <div class="lineup-edit-add">
-            <el-button size="small" text type="primary" @click="addPlayer('away', 'sub')">
-              + 添加替补
-            </el-button>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="lineupDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveLineup" :loading="saving">保存阵容</el-button>
-      </template>
-    </el-dialog>
-
     <!-- 可视化阵容编辑弹窗（双队模式） -->
     <el-dialog
       v-model="visualEditorVisible"
-      title="编辑双方首发阵容（可视化）"
+      title="编辑阵容"
       width="95%"
       :close-on-click-modal="false"
       top="2vh"
@@ -1290,11 +1090,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
 import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard } from '../../utils/cloud'
+import { isDemoMode } from '../../utils/demoMode'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
 import { createRefereeLineupPrintHtml, createRefereeLineupSheet, createRefereePrintLoadingHtml, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import VisualLineupEditor from './VisualLineupEditor.vue'
+import RefereeReportImport from '../../components/match/RefereeReportImport.vue'
+import {groupedTimeline} from '../../utils/refereeGroupedSubstitutions.js'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
 const route = useRoute()
@@ -1510,28 +1313,10 @@ let signaturePollTimer = null
 const signatureSigned = ref(false)
 const signatureImageUrl = ref('')
 const previewContent = ref(null)
-const lineupDialogVisible = ref(false)
-const lineupForm = ref({
-  home: {
-    formation: '',
-    players: [],
-    substitutes: [],
-    coach: ''
-  },
-  away: {
-    formation: '',
-    players: [],
-    substitutes: [],
-    coach: ''
-  }
-})
 
-const positionOptions = [
-  { label: '守门员', value: 'GK' },
-  { label: '后卫', value: 'DF' },
-  { label: '前卫', value: 'MF' },
-  { label: '前锋', value: 'FW' }
-]
+
+
+
 
 // 球服颜色选项（固定颜色名，不用色轮）
 const kitColorOptions = ['红', '黄', '蓝', '白', '绿', '黑', '橙', '紫', '粉', '灰', '深绿', '浅蓝', '藏青', '棕']
@@ -1612,6 +1397,7 @@ const sortedEvents = computed(() => {
   const events = match.value.events || []
   return [...events].sort((a, b) => (a.minute || 0) - (b.minute || 0))
 })
+const displayedEvents = computed(() => groupedTimeline(sortedEvents.value))
 
 function calculateEventScore(events) {
   const score = { home: 0, away: 0 }
@@ -2229,10 +2015,14 @@ async function loadAllTeams() {
 
 async function loadReferees() {
   try {
-    referees.value = await queryList('referees', {
+    const approved = await queryList('referees', {
       where: { status: 'approved' },
       orderBy: { createTime: 'desc' }
     })
+    const synthetic = isDemoMode(match.value.tournamentId) && match.value.tournamentId
+      ? await queryList('referees', { where: { tournamentId: match.value.tournamentId, synthetic: true } })
+      : []
+    referees.value = [...approved, ...synthetic]
   } catch (e) {
     console.warn('加载已通过裁判失败', e)
     referees.value = []
@@ -2390,10 +2180,10 @@ async function removeEvent(targetEvent) {
     const events = [...(match.value.events || [])]
     const index = eventIndexInSource(targetEvent)
     if (index < 0) return ElMessage.warning('事件已更新，请刷新后再试')
-    const eventDescription = [eventTimeText(targetEvent), eventLabel(targetEvent), targetEvent?.playerName || ''].filter(Boolean).join(' ')
+    const eventDescription = [eventTimeText(targetEvent), eventLabel(targetEvent), targetEvent.batchEventIds?.length ? '整组换人' : targetEvent?.playerName || ''].filter(Boolean).join(' ')
     await ElMessageBox.confirm(`${eventDescription || '该比赛事件'}将被删除，删除后无法恢复。`, '确认删除比赛事件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
     saving.value = true
-    events.splice(index, 1)
+    if(targetEvent.batchEventIds?.length){const ids=new Set(targetEvent.batchEventIds);events.splice(0,events.length,...events.filter(row=>!ids.has(row.eventId)))}else events.splice(index, 1)
     assertSubstitutionChange(match.value,effectiveSubstitutionRules.value,events)
     const result = await callFunction('updateMatch', {
       matchId,
@@ -2833,32 +2623,7 @@ async function printRefereeLineupSheet() {
 }
 
 // 阵容编辑
-async function openLineupDialog() {
-  if (!ensureEvidenceEditable()) return
-  const l = match.value.lineups || {}
-  lineupForm.value = {
-    home: {
-      formation: l.home?.formation || '',
-      coach: l.home?.coach || '',
-      players: (l.home?.players || []).map(p => ({ ...p })),
-      substitutes: (l.home?.substitutes || []).map(p => ({ ...p }))
-    },
-    away: {
-      formation: l.away?.formation || '',
-      coach: l.away?.coach || '',
-      players: (l.away?.players || []).map(p => ({ ...p })),
-      substitutes: (l.away?.substitutes || []).map(p => ({ ...p }))
-    }
-  }
-  // 加载两队报名球员
-  const [home, away] = await Promise.all([
-    loadTeamPlayers(match.value.homeTeamId),
-    loadTeamPlayers(match.value.awayTeamId)
-  ])
-  homePlayers.value = home
-  awayPlayers.value = away
-  lineupDialogVisible.value = true
-}
+
 
 // 可视化阵容编辑（双队模式）
 async function openDualVisualEditor() {
@@ -3187,161 +2952,9 @@ async function exportLineupPDF() {
   openPreviewDialog()
 }
 
-function onPlayerSelect(side, type, index, playerName) {
-  const list = side === 'home' ? homePlayers.value : awayPlayers.value
-  const player = list.find(p => p.name === playerName)
-  if (!player) {
-    console.warn(`[onPlayerSelect] 未找到球员: ${playerName}, 列表有 ${list.length} 人`, list.map(p => p.name))
-    ElMessage.warning('未找到球员数据：' + playerName)
-    return
-  }
-  const arr = type === 'starting' ? lineupForm.value[side].players : lineupForm.value[side].substitutes
-  const p = arr[index]
-  if (!p) return
 
 
-  // 号码 — 兼容数字和字符串
-  if (player.jerseyNumber != null && String(player.jerseyNumber).trim() !== '') {
-    const num = Number(player.jerseyNumber)
-    if (!isNaN(num) && num >= 1 && num <= 99) {
-      p.number = num
-    }
-  } else {
-    ElMessage.info(`球员「${player.name}」未设置球衣号码，请手动填写`)
-  }
-  // 球衣名 — 优先用数据库字段，其次自动计算
-  if (player.jerseyName && String(player.jerseyName).trim()) {
-    p.jerseyName = String(player.jerseyName).trim()
-  } else {
-    p.jerseyName = computeJerseyName(player.name)
-  }
-  // 年龄
-  if (player.age) {
-    p.age = player.age
-  } else if (player.birthDate) {
-    const birth = new Date(player.birthDate)
-    if (!isNaN(birth.getTime())) {
-      const now = new Date()
-      let age = now.getFullYear() - birth.getFullYear()
-      if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--
-      p.age = age
-    }
-  }
-  // 自动映射位置
-  const posMap = {
-    GK: 'GK', 守门员: 'GK', 门将: 'GK',
-    DF: 'DF', 后卫: 'DF', CB: 'DF', LB: 'DF', RB: 'DF', LWB: 'DF', RWB: 'DF',
-    MF: 'MF', 前卫: 'MF', 中场: 'MF', CM: 'MF', CDM: 'MF', CAM: 'MF', LM: 'MF', RM: 'MF',
-    FW: 'FW', 前锋: 'FW', ST: 'FW', CF: 'FW', LW: 'FW', RW: 'FW'
-  }
-  if (player.position && posMap[player.position]) {
-    p.position = posMap[player.position]
-  }
-}
 
-function computeJerseyName(name) {
-  if (!name || name.length < 2) return ''
-  // 常见姓氏拼音映射（姓 → 大写拼音）
-  const surnameMap = {
-    '赵':'ZHAO','钱':'QIAN','孙':'SUN','李':'LI','周':'ZHOU','吴':'WU','郑':'ZHENG','王':'WANG',
-    '冯':'FENG','陈':'CHEN','褚':'CHU','卫':'WEI','蒋':'JIANG','沈':'SHEN','韩':'HAN','杨':'YANG',
-    '朱':'ZHU','秦':'QIN','尤':'YOU','许':'XU','何':'HE','吕':'LV','施':'SHI','张':'ZHANG',
-    '孔':'KONG','曹':'CAO','严':'YAN','华':'HUA','金':'JIN','魏':'WEI','陶':'TAO','姜':'JIANG',
-    '戚':'QI','谢':'XIE','邹':'ZOU','喻':'YU','柏':'BO','水':'SHUI','窦':'DOU','章':'ZHANG',
-    '云':'YUN','苏':'SU','潘':'PAN','葛':'GE','奚':'XI','范':'FAN','彭':'PENG','郎':'LANG',
-    '鲁':'LU','韦':'WEI','昌':'CHANG','马':'MA','苗':'MIAO','凤':'FENG','花':'HUA','方':'FANG',
-    '俞':'YU','任':'REN','袁':'YUAN','柳':'LIU','酆':'FENG','鲍':'BAO','史':'SHI','唐':'TANG',
-    '费':'FEI','廉':'LIAN','岑':'CEN','薛':'XUE','雷':'LEI','贺':'HE','倪':'NI','汤':'TANG',
-    '滕':'TENG','殷':'YIN','罗':'LUO','毕':'BI','郝':'HAO','邬':'WU','安':'AN','常':'CHANG',
-    '乐':'YUE','于':'YU','时':'SHI','傅':'FU','皮':'PI','卞':'BIAN','齐':'QI','康':'KANG',
-    '伍':'WU','余':'YU','元':'YUAN','卜':'BU','顾':'GU','孟':'MENG','平':'PING','黄':'HUANG',
-    '和':'HE','穆':'MU','萧':'XIAO','尹':'YIN','姚':'YAO','邵':'SHAO','湛':'ZHAN','汪':'WANG',
-    '祁':'QI','毛':'MAO','禹':'YU','狄':'DI','米':'MI','贝':'BEI','明':'MING','臧':'ZANG',
-    '计':'JI','伏':'FU','成':'CHENG','戴':'DAI','谈':'TAN','宋':'SONG','茅':'MAO','庞':'PANG',
-    '熊':'XIONG','纪':'JI','舒':'SHU','屈':'QU','项':'XIANG','祝':'ZHU','董':'DONG','梁':'LIANG',
-    '杜':'DU','阮':'RUAN','蓝':'LAN','闵':'MIN','席':'XI','季':'JI','麻':'MA','强':'QIANG',
-    '贾':'JIA','路':'LU','娄':'LOU','危':'WEI','江':'JIANG','童':'TONG','颜':'YAN','郭':'GUO',
-    '梅':'MEI','盛':'SHENG','林':'LIN','刁':'DIAO','钟':'ZHONG','徐':'XU','邱':'QIU','骆':'LUO',
-    '高':'GAO','夏':'XIA','蔡':'CAI','田':'TIAN','樊':'FAN','胡':'HU','凌':'LING','霍':'HUO',
-    '虞':'YU','万':'WAN','支':'ZHI','柯':'KE','昝':'ZAN','管':'GUAN','卢':'LU','莫':'MO',
-    '经':'JING','房':'FANG','裘':'QIU','缪':'MIAO','干':'GAN','解':'XIE','应':'YING','宗':'ZONG',
-    '丁':'DING','宣':'XUAN','贲':'BEN','邓':'DENG','郁':'YU','单':'SHAN','杭':'HANG','洪':'HONG',
-    '包':'BAO','诸':'ZHU','左':'ZUO','石':'SHI','崔':'CUI','吉':'JI','钮':'NIU','龚':'GONG',
-    '程':'CHENG','嵇':'JI','邢':'XING','滑':'HUA','裴':'PEI','陆':'LU','荣':'RONG','翁':'WENG',
-    '荀':'XUN','羊':'YANG','於':'YU','惠':'HUI','甄':'ZHEN','曲':'QU','家':'JIA','封':'FENG',
-    '芮':'RUI','羿':'YI','储':'CHU','靳':'JIN','汲':'JI','邴':'BING','糜':'MI','松':'SONG',
-    '井':'JING','段':'DUAN','富':'FU','巫':'WU','乌':'WU','焦':'JIAO','巴':'BA','弓':'GONG',
-    '牧':'MU','隗':'KUI','山':'SHAN','谷':'GU','车':'CHE','侯':'HOU','宓':'MI','蓬':'PENG',
-    '全':'QUAN','郗':'XI','班':'BAN','仰':'YANG','秋':'QIU','仲':'ZHONG','伊':'YI','宫':'GONG',
-    '宁':'NING','仇':'QIU','栾':'LUAN','暴':'BAO','甘':'GAN','钭':'TOU','厉':'LI','戎':'RONG',
-    '祖':'ZU','武':'WU','符':'FU','刘':'LIU','景':'JING','詹':'ZHAN','束':'SHU','龙':'LONG',
-    '叶':'YE','幸':'XING','司':'SI','韶':'SHAO','郜':'GAO','黎':'LI','蓟':'JI','薄':'BO',
-    '印':'YIN','宿':'SU','白':'BAI','怀':'HUAI','蒲':'PU','邰':'TAI','从':'CONG','鄂':'E',
-    '索':'SUO','咸':'XIAN','籍':'JI','赖':'LAI','卓':'ZHUO','蔺':'LIN','屠':'TU','蒙':'MENG',
-    '池':'CHI','乔':'QIAO','阴':'YIN','郁':'YU','胥':'XU','能':'NAI','苍':'CANG','双':'SHUANG',
-    '闻':'WEN','莘':'SHEN','党':'DANG','翟':'ZHAI','谭':'TAN','贡':'GONG','劳':'LAO','逄':'PANG',
-    '姬':'JI','申':'SHEN','扶':'FU','堵':'DU','冉':'RAN','宰':'ZAI','郦':'LI','雍':'YONG',
-    '却':'QUE','璩':'QU','桑':'SANG','桂':'GUI','濮':'PU','牛':'NIU','寿':'SHOU','通':'TONG',
-    '边':'BIAN','扈':'HU','燕':'YAN','冀':'JI','郏':'JIA','浦':'PU','尚':'SHANG','农':'NONG',
-    '温':'WEN','别':'BIE','庄':'ZHUANG','晏':'YAN','柴':'CHAI','瞿':'QU','阎':'YAN','充':'CHONG',
-    '慕':'MU','连':'LIAN','茹':'RU','习':'XI','宦':'HUAN','艾':'AI','鱼':'YU','容':'RONG',
-    '向':'XIANG','古':'GU','易':'YI','慎':'SHEN','戈':'GE','廖':'LIAO','庾':'YU','终':'ZHONG',
-    '暨':'JI','居':'JU','衡':'HENG','步':'BU','都':'DU','耿':'GENG','满':'MAN','弘':'HONG',
-    '匡':'KUANG','国':'GUO','文':'WEN','寇':'KOU','广':'GUANG','禄':'LU','阙':'QUE','东':'DONG',
-    '欧':'OU','殳':'SHU','沃':'WO','利':'LI','蔚':'WEI','越':'YUE','夔':'KUI','隆':'LONG',
-    '师':'SHI','巩':'GONG','厍':'SHE','聂':'NIE','晁':'CHAO','勾':'GOU','敖':'AO','融':'RONG',
-    '冷':'LENG','訾':'ZI','辛':'XIN','阚':'KAN','那':'NUO','简':'JIAN','饶':'RAO','空':'KONG',
-    '曾':'ZENG','毋':'WU','沙':'SHA','乜':'NIE','养':'YANG','鞠':'JU','须':'XU','丰':'FENG',
-    '巢':'CHAO','关':'GUAN','蒯':'KUAI','相':'XIANG','查':'ZHA','后':'HOU','荆':'JING','红':'HONG',
-    '游':'YOU','竺':'ZHU','权':'QUAN','逯':'LU','盖':'GE','益':'YI','桓':'HUAN','公':'GONG',
-    '仉':'ZHANG','督':'DU','晋':'JIN','林':'LIN','闽':'MIN','闫':'YAN','江':'JIANG'
-  }
-  // 复姓映射
-  const compoundMap = {
-    '诸葛':'ZHUGE','司马':'SIMA','上官':'SHANGGUAN','欧阳':'OUYANG','夏侯':'XIAHOU',
-    '闻人':'WENREN','东方':'DONGFANG','赫连':'HELIAN','皇甫':'HUANGFU','尉迟':'YUCHI',
-    '公羊':'GONGYANG','澹台':'TANTAI','公冶':'GONGYE','宗政':'ZONGZHENG','濮阳':'PUYANG',
-    '淳于':'CHUNYU','单于':'CHANYU','太叔':'TAISHU','申屠':'SHENTU','公孙':'GONGSUN',
-    '仲孙':'ZHONGSUN','轩辕':'XUANYUAN','令狐':'LINGHU','钟离':'ZHONGLI','宇文':'YUWEN',
-    '长孙':'ZHANGSUN','慕容':'MURONG','鲜于':'XIANYU','闾丘':'LVQIU','司徒':'SITU',
-    '司空':'SIKONG','亓官':'QIGUAN','司寇':'SIKOU','子车':'ZIJU',
-    '颛孙':'ZHUANSUN','端木':'DUANMU','巫马':'WUMA','公西':'GONGXI','漆雕':'QIDIAO',
-    '乐正':'YUEZHENG','壤驷':'RANGSI','公良':'GONGLIANG','拓跋':'TUOBA','夹谷':'JIAGU',
-    '宰父':'ZAIFU','谷梁':'GULIANG'
-  }
-
-  // 尝试匹配复姓
-  for (const [surname, py] of Object.entries(compoundMap)) {
-    if (name.startsWith(surname)) {
-      const given = name.slice(surname.length)
-      if (!given) return py
-      const initials = given.split('').map(c => {
-        // 简单首字母映射（仅作回退）
-        const code = c.charCodeAt(0)
-        if (code >= 0x4E00 && code <= 0x9FFF) {
-          // 中文，使用预定义的首字母表（简化版）
-          return c.toUpperCase() + '.'
-        }
-        return c.toUpperCase() + '.'
-      }).join('')
-      return py + ' ' + initials
-    }
-  }
-
-  // 尝试匹配单姓
-  for (const [surname, py] of Object.entries(surnameMap)) {
-    if (name.startsWith(surname)) {
-      const given = name.slice(surname.length)
-      if (!given) return py
-      const initials = given.split('').map(c => c.toUpperCase() + '.').join('')
-      return py + ' ' + initials
-    }
-  }
-
-  // 无法识别的姓氏：使用名字首字母作为回退
-  console.warn(`[computeJerseyName] 未识别姓氏: ${name}`)
-  return name.split('').map(c => c.toUpperCase() + '.').join('').slice(0, 10)
-}
 
 const surnamePinyinMap = {
   '赵':'ZHAO','钱':'QIAN','孙':'SUN','李':'LI','周':'ZHOU','吴':'WU','郑':'ZHENG','王':'WANG',
@@ -3407,35 +3020,11 @@ const surnamePinyinMap = {
   '宰父':'ZAIFU','谷梁':'GULIANG'
 }
 
-function addPlayer(side, type) {
-  if (!ensureEvidenceEditable()) return
-  const arr = type === 'starting' ? lineupForm.value[side].players : lineupForm.value[side].substitutes
-  arr.push({ number: null, position: 'DF', name: '', jerseyName: '', isCaptain: false, isForeign: false, isYoung: false, isOverage: false })
-}
 
-function removePlayer(side, type, index) {
-  if (!ensureEvidenceEditable()) return
-  const arr = type === 'starting' ? lineupForm.value[side].players : lineupForm.value[side].substitutes
-  arr.splice(index, 1)
-}
 
-async function saveLineup() {
-  if (!ensureEvidenceEditable()) return
-  saving.value = true
-  try {
-    await callFunction('updateMatch', {
-      matchId,
-      data: { lineups: lineupForm.value, updateTime: new Date() }
-    })
-    match.value.lineups = lineupForm.value
-    lineupDialogVisible.value = false
-    ElMessage.success('阵容已保存')
-  } catch (err) {
-    ElMessage.error('保存失败: ' + err.message)
-  } finally {
-    saving.value = false
-  }
-}
+
+
+
 
 onMounted(() => {
   loadMatch().then(() => {
@@ -3802,41 +3391,6 @@ onMounted(() => {
 .kit-preview-row b { margin-right: 8px; color: #304238; font-weight: 600; }
 .kit-color-label { width: 50px; font-size: 13px; color: #606266; flex-shrink: 0; }
 .kit-color-hex { font-size: 12px; color: #909399; min-width: 70px; }
-
-/* 阵容编辑弹窗 */
-.lineup-edit-container { display: flex; gap: 20px; }
-@medi (max-width: 900px) { .lineup-edit-container { flex-direction: column; } }
-.lineup-edit-side { flex: 1; min-width: 0; }
-.lineup-edit-header {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 8px; font-size: 14px; font-weight: 600;
-}
-.le-team-name { color: #303133; }
-.lineup-edit-coach { font-size: 12px; color: #606266; margin-bottom: 8px; display: flex; align-items: center; }
-.lineup-edit-table-head {
-  display: flex; align-items: center; padding: 6px 4px;
-  font-size: 12px; color: #909399; background: #f5f7fa; border-radius: 4px; margin-bottom: 4px;
-}
-.le-col-num { width: 60px; text-align: center; flex-shrink: 0; font-weight: 600; }
-.le-col-pos { width: 80px; flex-shrink: 0; }
-.le-col-name { width: 120px; flex-shrink: 0; }
-.le-col-jersey { flex: 1; min-width: 80px; }
-.le-col-flags { width: 110px; flex-shrink: 0; display: flex; gap: 4px; justify-content: center; }
-.le-col-act { width: 32px; flex-shrink: 0; }
-.lineup-edit-row {
-  display: flex; align-items: center; gap: 4px; padding: 4px 0;
-}
-.le-input-num { width: 60px !important; }
-.le-input-num :deep(.el-input__inner) { text-align: center; }
-.le-input-pos { width: 80px !important; }
-.le-input-name { width: 120px !important; }
-.le-input-jersey { flex: 1; min-width: 80px; width: 100% !important; }
-.le-flags { display: flex; gap: 2px; align-items: center; }
-.lineup-edit-subtitle {
-  font-size: 12px; font-weight: 600; color: #909399;
-  margin: 8px 0 4px 0; padding-top: 8px; border-top: 1px dashed #ebeef5;
-}
-.lineup-edit-add { margin-top: 4px; }
 
 /* ========== 中超版首发名单导出样式 ========== */
 .csl-export-wrap {

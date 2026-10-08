@@ -28,11 +28,11 @@ const TOP_LEVEL_NUMBER_FIELDS = [
 ]
 const TOP_LEVEL_BOOLEAN_FIELDS = [
   'substitutionReentryAllowed', 'identityDocumentRequired', 'insuranceRequired',
-  'waiverRequired', 'singleDivisionOnly'
+  'waiverRequired', 'singleDivisionOnly', 'knockoutYellowReset', 'secondYellowRed', 'thirdPlaceEnabled'
 ]
 const TOP_LEVEL_TEXT_FIELDS = [
   'birthDateStart', 'birthDateEnd', 'eligibilityNotes', 'matchFormat', 'formatType',
-  'groupCycle', 'periodMode', 'drawResolution'
+  'groupCycle', 'periodMode', 'drawResolution', 'knockoutTieBreak'
 ]
 
 function cleanName(value) {
@@ -98,10 +98,16 @@ export function recognizedDivisionRulePayload(source = {}, sharedDetails = {}) {
       result.regulationDetails.substitutionReentryForbidden === true) {
     result.substitutionMode = 'limited'
   }
+  else if (source.substitutionMode === 'free') {
+    result.substitutionMode = 'free'
+    result.substitutionLimit = 0
+    result.substitutionWindows = 0
+  }
   if (result.formatType && !['cup', 'tournament', 'league', 'hybrid'].includes(result.formatType)) delete result.formatType
   if (result.groupCycle && !['single', 'double'].includes(result.groupCycle)) delete result.groupCycle
   if (result.periodMode === 'quarters') result.periodMode = 'single'
   if (result.periodMode && !['halves', 'single'].includes(result.periodMode)) delete result.periodMode
+  if (result.knockoutTieBreak && !['penalties', 'extra-penalties'].includes(result.knockoutTieBreak)) delete result.knockoutTieBreak
   return result
 }
 

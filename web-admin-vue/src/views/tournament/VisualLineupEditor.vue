@@ -66,6 +66,7 @@
               @click="handlePlayerSlotClick(pos)"
             >
               <PlayerCard
+                appearance="pitch"
                 :player="assignedPlayers[pos.role] || null"
                 :mini="true"
                 :slot-label="pos.label"
@@ -245,7 +246,7 @@
               <!-- 已分配球员：PlayerCard 缩小版 -->
               <template v-if="homeAssignedPlayers[pos.role]">
                 <div class="slot-card-wrapper">
-                  <PlayerCard :player="toCardPlayer(homeAssignedPlayers[pos.role])" :teamLogo="props.homeTeamLogo" />
+                  <PlayerCard appearance="pitch" :player="toCardPlayer(homeAssignedPlayers[pos.role])" :teamLogo="props.homeTeamLogo" />
                 </div>
               </template>
               <!-- 空位 -->
@@ -272,7 +273,7 @@
               <!-- 已分配球员：PlayerCard 缩小版 -->
               <template v-if="awayAssignedPlayers[pos.role]">
                 <div class="slot-card-wrapper">
-                  <PlayerCard :player="toCardPlayer(awayAssignedPlayers[pos.role])" :teamLogo="props.awayTeamLogo" />
+                  <PlayerCard appearance="pitch" :player="toCardPlayer(awayAssignedPlayers[pos.role])" :teamLogo="props.awayTeamLogo" />
                 </div>
               </template>
               <!-- 空位 -->

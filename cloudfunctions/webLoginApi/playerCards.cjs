@@ -31,7 +31,7 @@ function cardChangePermission(level, player, portrait, event) {
   if (event.sourceData || event.mode !== 'portrait') return { code:'PLAYER_CARD_SOURCE_LOCKED', error:'球员卡只能使用登记时的标准形象照' }
   const existingPhoto = String(player.playerCardSourceFileId || '')
   const firstStandard = player.playerCardSourceType === 'legacy_roster' && portrait.sourceType !== 'legacy_roster'
-  if (player.playerCardFileId && (!existingPhoto || existingPhoto !== String(portrait.transparentFileId)) && !firstStandard && !level.playerCard.canReplacePhoto) return { code:'PLAYER_CARD_PHOTO_LOCKED', error:'满 100 分后可更换球员卡照片' }
+  if ((player.playerCardFileId || player.playerCardDynamic) && (!existingPhoto || existingPhoto !== String(portrait.transparentFileId)) && !firstStandard && !level.playerCard.canReplacePhoto) return { code:'PLAYER_CARD_PHOTO_LOCKED', error:'满 100 分后可更换球员卡照片' }
   const backgroundId = String(event.backgroundId || level.cardTier)
   if (!['bronze','silver','gold'].includes(backgroundId)) return { code:'PLAYER_CARD_BACKGROUND_INVALID', error:'卡片背景不可用' }
   if (backgroundId !== level.cardTier && !level.playerCard.canChangeBackground) return { code:'PLAYER_CARD_BACKGROUND_LOCKED', error:'满 100 分后可更换卡片背景' }
@@ -136,16 +136,17 @@ function createPlayerCards(deps) {
       const players = await Promise.all(entries.map(async entry => {
         const item = await summary(entry)
         const type = String(item.backgroundId || item.cardTier || '')
-        const active = await (deps.readBaseCard ? deps.readBaseCard(entry.player,type) : suite.signedCard(cloud, db, entry.player, type))
+        const active = await (deps.readBaseCard ? deps.readBaseCard(entry.player,type) : suite.signedCard(cloud, db, entry.player, type,{dynamic:event.dynamicCardProtocol==='player-card-dynamic/1'}))
         item.cardStatus = active.status
         item.templateId = active.templateId || ''
         item.cardId = active.cardId || ''
         item.publishedVersion = active.templateVersion || 0
         item.cardDataVersion = active.cardDataVersion || 0
         item.renderVersion = active.renderVersion || ''
+        item.cardScene=active.cardScene||null
         item.cardUrl = active.url || ''
         item.cardFileId = active.fileId || ''
-        item.preloadedCards=await library.list(entry.player,item.playerCard)
+        item.preloadedCards=await library.list(entry.player,item.playerCard,{dynamic:event.dynamicCardProtocol==='player-card-dynamic/1'})
         item.cardVersions=await cardVersionsForPlayer(cloud,db,entry.player)
         const currentCardIds=new Set([item.cardId,...item.preloadedCards.filter(card=>card.status==='ready').map(card=>card.cardId)].filter(Boolean))
         item.cardVersions.forEach(card=>{card.isCurrent=currentCardIds.has(card.cardId)})
@@ -163,10 +164,8 @@ function createPlayerCards(deps) {
       if (event.action === 'selectMyPlayerCard') return library.select(entry.player,level.playerCard,String(event.templateId || ''),isStillOwned)
       const row = await library.resolve(entry.player,level.playerCard,event.templateId)
       const portrait = await standardPortrait(auth,entry,db)
-      if (event.action === 'getMyPreloadedPlayerCard') return {success:true,player:level,card:{cardId:row.cardId,templateId:row.templateId,title:row.title,tier:row.tier,preload:row.preload,templateVersion:row.templateVersion,revision:row.revision},crop:row.grant.crop || {zoom:1,x:0,y:0}}
-      if (event.action === 'previewMyPreloadedPlayerCard') {
-        const generated = await library.render(entry.player,level.playerCard,event,portrait,normalizeCrop)
-        return {success:true,imageData:'data:image/png;base64,'+generated.png.toString('base64'),cardId:generated.row.cardId,templateVersion:generated.row.templateVersion}
+      if (event.action === 'getMyPreloadedPlayerCard') return {success:true,player:level,card:{cardId:row.cardId,templateId:row.templateId,title:row.title,tier:row.tier,preload:row.preload,templateVersion:row.templateVersion,revision:row.revision},cardScene:row.cardScene||null,crop:row.grant.crop || {zoom:1,x:0,y:0}}
+      if (event.action === 'previewMyPreloadedPlayerCard') {const card=await require('./playerCardDynamic.cjs').descriptor(cloud,db,entry.player,row.snapshot,{...row.grant,crop:normalizeCrop(event.crop)});if(event.dynamicCardProtocol!=='player-card-dynamic/1'){const rendered=await library.render(entry.player,level.playerCard,event,portrait,normalizeCrop);return {success:true,imageData:'data:image/png;base64,'+rendered.png.toString('base64'),templateVersion:row.templateVersion}}return {success:true,...card,templateVersion:row.templateVersion}
       }
       return library.save(entry.player,level.playerCard,event,portrait,normalizeCrop,isStillOwned)
     }
@@ -187,7 +186,7 @@ function createPlayerCards(deps) {
       }
       return { success: true, player: await summary(entry), templates:await activeTemplates(db),
         portraitId: String(portrait._id), portraitAvailable:true,
-        teamLogoData, draft: p.playerCardFileId ? { crop: p.playerCardCrop || { zoom: 1, x: 0, y: 0 }, layout: p.playerCardLayout || null } : null }
+        teamLogoData, cardScene:(await require('./playerCardDynamic.cjs').read(cloud,db,p,{baseOnly:true}))?.cardScene||null, standardPortraitData:'data:image/png;base64,'+source.fileContent.toString('base64'),draft: (p.playerCardFileId || p.playerCardDynamic) ? { crop: p.playerCardCrop || { zoom: 1, x: 0, y: 0 }, layout: p.playerCardLayout || null } : null }
     }
     if (!['previewMyPlayerCard','saveMyPlayerCard'].includes(event.action)) return { success: false, error: '未知球员卡操作' }
     const level = await summary(entry)
@@ -201,47 +200,21 @@ function createPlayerCards(deps) {
     if (!active) return { success:false, code:'PLAYER_CARD_TEMPLATE_UNAVAILABLE', error:'该卡种尚未发布，请稍后重试' }
     if (event.expectedTemplateId && (String(event.expectedTemplateId)!==String(active.templateId) || Number(event.expectedTemplateVersion)!==Number(active.version))) return {success:false,code:'PLAYER_CARD_TEMPLATE_CHANGED',error:'球员卡模板已更新，请重新打开编辑器'}
     if (event.action === 'previewMyPlayerCard') {
-      const rendered = await suite.renderPlayer(cloud, db, entry.player, active, level.playerCard,
-        { portraitFileId:portrait.transparentFileId, crop, layout })
-      return { success:true, imageData:'data:image/png;base64,' + rendered.png.toString('base64'),
-        templateId:active.templateId, publishedVersion:active.version }
+      const dynamic=await require('./playerCardDynamic.cjs').descriptor(cloud,db,{...entry.player,playerCardSourceFileId:portrait.transparentFileId,playerCardCrop:crop},active);if(event.dynamicCardProtocol!=='player-card-dynamic/1'){const rendered=await suite.renderPlayer(cloud,db,entry.player,active,level.playerCard,{portraitFileId:portrait.transparentFileId,crop});return {success:true,imageData:'data:image/png;base64,'+rendered.png.toString('base64'),templateId:active.templateId,publishedVersion:active.version}}return {success:true,...dynamic,templateId:active.templateId,publishedVersion:active.version}
+
     }
     const expectedVersion = Number(event.expectedVersion)
     if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) throw new Error('球员卡版本无效，请重新加载')
     if (expectedVersion !== Number(entry.player.playerCardVersion || 0)) return { success: false, code: 'PLAYER_CARD_CONFLICT', error: '球员卡已更新，请重新加载后编辑' }
-    const uploaded = []
-    try {
-      const generated = await suite.generate(cloud, db, entry.player, active, level.playerCard,
-        { portraitFileId:portrait.transparentFileId, crop, layout })
-      uploaded.push(generated.fileId)
-      const renderId=suite.renderId(entry.player._id,active.templateId,active.version),cardId=require('./playerCardHistory.cjs').cardId(renderId,generated.digest)
-      await db.runTransaction(async transaction => {
-        const currentResult = await transaction.collection('players').doc(String(entry.player._id)).get()
-        const current = Array.isArray(currentResult.data) ? currentResult.data[0] : currentResult.data
-        if (!current || (entry.relation && !owns(current, entry.relation)) || (auth.parentInvite && ['teamId', 'guardianUserId', 'linkedUserId', 'playerUserId'].some(field => String(current[field] || '') !== String(entry.player[field] || '')))) throw Object.assign(new Error('球员关联已变化，请重新加载'), { code: 'PLAYER_CARD_FORBIDDEN' })
-        if (Number(current.playerCardVersion || 0) !== expectedVersion) throw Object.assign(new Error('球员卡已更新，请重新加载后编辑'), { code: 'PLAYER_CARD_CONFLICT' })
-        const state = await suite.document(transaction, suite.STATES, backgroundId)
-        if (!state?.active || state.active.templateId !== active.templateId || Number(state.active.version) !== active.version) {
-          throw Object.assign(new Error('球员卡模板已更新，请重新打开编辑器'), { code:'PLAYER_CARD_TEMPLATE_CHANGED' })
-        }
-        const previousRender=await suite.document(transaction,suite.RENDERS,renderId)
-        await require('./playerCardHistory.cjs').archiveCurrentRender(transaction,db,renderId,previousRender)
-        await transaction.collection(suite.RENDERS).doc(renderId).set({ data: {
-          playerId:String(entry.player._id), cardTypeId:backgroundId, templateId:active.templateId,
-          publishedVersion:active.version, cardDataVersion:expectedVersion+1, renderVersion:suite.RENDER_VERSION,
-          cardId,editRevision:Number(previousRender?.editRevision||0)+1,fileId:generated.fileId, digest:generated.digest, status:'ready', generatedAt:db.serverDate()
-        } })
-        await transaction.collection(suite.STATES).doc(backgroundId).update({ data: {
-          mutation:Number(state.mutation||0)+1, updatedAt:db.serverDate()
-        } })
-        await transaction.collection('players').doc(String(entry.player._id)).update({ data: { playerCardSourceFileId: portrait.transparentFileId, playerCardSourceType: portrait.sourceType || 'standard_portrait', playerCardFileId: generated.fileId, playerCardCrop: db.command.set(crop), playerCardLayout: db.command.set(layout), playerCardMode: mode, playerCardTier: level.cardTier, playerCardBackgroundId:backgroundId, playerCardPoints:level.playerCard.points, playerCardScoreVersion:level.playerCard.scoreVersion, playerCardAppearances: level.appearances, playerCardVersion: expectedVersion + 1, playerCardSchemaVersion: 'player-card/3', playerCardTemplateId:active.templateId, playerCardTemplateVersion:active.version, playerCardUpdatedBy: auth.openId, playerCardUpdatedAt: db.serverDate() } })
-      })
-      return { success: true, version: expectedVersion + 1, cardFileId: generated.fileId,cardId,
-        templateId:active.templateId, publishedVersion:active.version, renderVersion:suite.RENDER_VERSION }
-    } catch (error) {
-      if (uploaded.length) await cloud.deleteFile({ fileList: uploaded }).catch(() => {})
-      throw error
-    }
+    await db.runTransaction(async tx=>{
+      const current=await suite.document(tx,'players',entry.player._id),state=await suite.document(tx,suite.STATES,backgroundId)
+      if(!current || !isStillOwned(current))throw Object.assign(new Error('球员关联已变化，请重新进入'),{code:'PLAYER_CARD_FORBIDDEN'})
+      if(Number(current.playerCardVersion||0)!==expectedVersion)throw Object.assign(new Error('球员卡已更新，请重新打开'),{code:'PLAYER_CARD_CONFLICT'})
+      if(state?.active?.templateId!==active.templateId||Number(state.active.version)!==active.version)throw new Error('模板已更新，请重新预览')
+      await tx.collection('players').doc(entry.player._id).update({data:{playerCardDynamic:true,playerCardSourceFileId:portrait.transparentFileId,playerCardSourceType:portrait.sourceType||'standard_portrait',playerCardCrop:db.command.set(crop),playerCardBackgroundId:backgroundId,playerCardBackgroundSelected:backgroundId!==level.cardTier,playerCardTier:level.cardTier,playerCardVersion:expectedVersion+1,playerCardSchemaVersion:'player-card/5',playerCardUpdatedBy:auth.openId,playerCardUpdatedAt:db.serverDate()}})
+    })
+    return {success:true,displayMode:'dynamic',version:expectedVersion+1,templateId:active.templateId,publishedVersion:active.version}
+
   }
   return async event => {
     try { return await handler(event) } catch (error) { return { success: false, error: error.message || '球员卡保存失败，请重试', code: error.code || 'PLAYER_CARD_ERROR' } }

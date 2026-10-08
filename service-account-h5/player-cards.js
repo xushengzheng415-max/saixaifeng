@@ -15,6 +15,11 @@
   }
   function error(message, retry) { target.className = 'state'; target.innerHTML = '<p>' + html(message) + '</p><button id="cardRetry" type="button">重新加载</button>'; document.getElementById('cardRetry').onclick = retry }
   function login() {
+    if (!/MicroMessenger/i.test(navigator.userAgent)) {
+      target.className = 'state'
+      target.innerHTML = '<p>请在微信中打开此链接，登录后查看球员卡。</p>'
+      return
+    }
     target.textContent = '正在连接微信…'
     api('fanOAuthUrl', { returnUrl: location.origin + location.pathname }).then(function (r) { location.replace(r.authorizeUrl) }).catch(function (e) { error(e.message, login) })
   }
@@ -70,7 +75,7 @@
           var pending = demo ? Promise.resolve({ player: r.players.find(function (p) { return p.id === playerId }), standardPortraitData:demoMode === 'adult' ? './assets/player-card-demo-adult-v1.png' : './assets/player-card-demo-portrait-v1.png', draft: demoDrafts[playerId] || null }) : api('getMyPlayerCard', { playerId: playerId })
           pending.then(function (detail) {
             var position = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }; detail.player.positionLabel = position[detail.player.position] || detail.player.position
-            window.SxfPlayerCardEditor.open({ player: detail.player, templates:detail.templates, draft: detail.draft, onPreview:function(draft){return api('previewMyPlayerCard',Object.assign({playerId:playerId,portraitId:detail.portraitId,expectedVersion:detail.player.version},draft))}, onClose:load, portraitSrc: detail.standardPortraitData, teamLogoData: detail.teamLogoData, initialCrop: demo ? (demoMode === 'adult' ? {zoom:1,x:0,y:0} : { zoom:1.5, x:0, y:.25 }) : null, onSave: function (draft) {
+            window.SxfPlayerCardEditor.open({ scene:detail.cardScene, player: detail.player, templates:detail.templates, draft: detail.draft, onPreview:function(draft){return api('previewMyPlayerCard',Object.assign({playerId:playerId,portraitId:detail.portraitId,expectedVersion:detail.player.version},draft))}, onClose:load, portraitSrc: detail.standardPortraitData, teamLogoData: detail.teamLogoData, initialCrop: demo ? (demoMode === 'adult' ? {zoom:1,x:0,y:0} : { zoom:1.5, x:0, y:.25 }) : null, onSave: function (draft) {
               return (demo ? Promise.resolve().then(function () { demoDrafts[playerId] = draft; demoVersions[playerId] = (demoVersions[playerId] || 0) + 1 }) : api('saveMyPlayerCard', Object.assign({ playerId: playerId,portraitId:detail.portraitId, expectedVersion: detail.player.version }, draft))).then(function () { load() })
             } })
           }).catch(function (e) { error(e.message, load) }).finally(function () { button.disabled = false })

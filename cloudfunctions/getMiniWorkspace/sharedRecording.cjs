@@ -47,8 +47,8 @@ async function makeLineups(context,selections,bench=context.event.bench || {}) {
   return {lineups,players}
 }
 async function run(context) {
+  if(['reportTicket','recognizeReport','confirmReport'].includes(String(context.event && context.event.operation || ''))) throw new Error('裁判表识别等待接入 PC 百度智能云服务，请先使用手动录入')
   const {db,cloud,identity,event,grant,match,relay,rows,doc,authorized}=context,operation=str(event.operation)
-  if(['reportTicket','recognizeReport','confirmReport'].includes(operation)) throw new Error('裁判表识别等待接入 PC 百度智能云服务，请先使用手动录入')
   const locked=match.refereeRecordLocked || match.refereeSubmittedAt || match.refereeReportSubmittedAt || match.executionState==='recording'
   if(locked) throw new Error('裁判已接管或电子记录已锁定，请通过赛果核查处理')
   if(['lineup','start'].includes(operation) && str(event.recordRevision)!==revision(match)) throw new Error('首发或比赛状态已更新，请重新打开比赛')

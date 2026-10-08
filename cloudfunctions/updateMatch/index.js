@@ -491,9 +491,10 @@ exports.main = async (event, context) => {
     delete safeData.executionSnapshot
     delete safeData.executionSnapshotAt
     // A browser cannot overwrite the server's frozen duration provenance.
+    delete safeData.durationVerification
     delete safeData.durationRulesSnapshot
     delete safeData.rulesSnapshot
-    for (const field of Object.keys(safeData)) if (/^(durationRulesSnapshot|rulesSnapshot)\./.test(field)) delete safeData[field]
+    for (const field of Object.keys(safeData)) if (/^(durationRulesSnapshot|rulesSnapshot|durationVerification)\./.test(field)) delete safeData[field]
     let eventValidation = null
     delete safeData.matchEventRevision
     if (Array.isArray(safeData.events)) {

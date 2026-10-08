@@ -67,14 +67,14 @@ function matchView(item,teams) {
 }
 function reviewRevision(match) { return crypto.createHash('sha256').update(JSON.stringify([match.refereeReviewStatus,match.refereeRecordLocked,match.refereeRecord,match.matchEventRevision,match.events,match.homeScore,match.awayScore])).digest('hex') }
 async function media(cloud,items) {
-  const ids=[...new Set(items.flatMap(item=>[item.logo,item.homeLogo,item.awayLogo]).filter(value=>str(value).startsWith('cloud://')))]
+  const ids=[...new Set(items.flatMap(item=>[item.logo,item.homeLogo,item.awayLogo,item.photoUrl]).filter(value=>str(value).startsWith('cloud://')))]
   if(!ids.length) return items
   const urls=new Map()
   for(let i=0;i<ids.length;i+=50) {
     const response=await cloud.getTempFileURL({fileList:ids.slice(i,i+50)})
     ;(response.fileList || []).forEach(item=>{if(item.tempFileURL) urls.set(item.fileID,item.tempFileURL)})
   }
-  return items.map(item=>{const value={...item}; for(const key of ['logo','homeLogo','awayLogo']) if(str(value[key]).startsWith('cloud://')) value[key]=urls.get(value[key]) || ''; return value})
+  return items.map(item=>{const value={...item}; for(const key of ['logo','homeLogo','awayLogo','photoUrl']) if(str(value[key]).startsWith('cloud://')) value[key]=urls.get(value[key]) || ''; return value})
 }
 async function teamMap(db,registrations) {
   const map=new Map()
@@ -97,7 +97,7 @@ async function relay(db,cloud,identity,grant,name,params) {
     return result
   } finally { await db.collection('auth_sessions').doc(session._id).remove().catch(()=>{}) }
 }
-async function run(db,cloud,identity,event) {
+async function run(db,cloud,identity,event,formatPlayer) {
   const mode=str(event.mode), operation=str(event.operation || 'list'), right=MODULES[mode]
   if(!right) throw new Error('手机未开放此模块')
   const grant=await authorized(db,identity,event,right), tournamentId=grant.id
@@ -117,11 +117,31 @@ async function run(db,cloud,identity,event) {
     const missingTeams=[...new Set(registrations.map(item=>str(item.teamId)).filter(id=>id && !teams.has(id)))]
     return {success:true,items:await media(cloud,items),warning:mode==='registration' && missingTeams.length ? '部分球队资料已删除，请主办方在 PC 补齐关联；其他报名可继续查看。' : ''}
   }
-  if(mode==='teams' && operation==='detail') {
-    const registrations=await rows(db,'tournament_teams',{tournamentId,teamId:str(event.id)})
+  if(mode==='teams' && ['detail','players','playerDetail'].includes(operation)) {
+    const registrations=(await rows(db,'tournament_teams',{tournamentId,teamId:str(event.teamId || event.id)})).filter(row=>!['removed','deleted','replaced','invite_cancelled'].includes(str(row.status)))
     if(!registrations.length) throw new Error('球队不属于当前赛事')
-    const team=await doc(db,'teams',event.id)
+    const team=await doc(db,'teams',event.teamId || event.id)
     if(!team) throw new Error('球队资料不存在')
+    if(operation!=='detail') {
+      const snapshots=await rows(db,'roster_snapshots',{tournamentId,teamId:str(team._id)},true)
+      const eligible=new Set(registrations.flatMap(row=>[...participantIds(row,snapshots)]))
+      const archived=new Map()
+      snapshots.forEach(row=>(row.players || []).forEach(player=>{const id=str(player.playerId || player._id || player.id);if(id)archived.set(id,player)}))
+      registrations.forEach(row=>(row.players || []).forEach(player=>{if(typeof player==='object'){const id=str(player.playerId || player._id || player.id);if(id && !archived.has(id))archived.set(id,player)}}))
+      const source=new Map()
+      ;(await rows(db,'players',{teamId:str(team._id)})).filter(player=>eligible.has(str(player._id)) || [player.tournamentId,player.registrationTournamentId,player.sourceTournamentId].some(id=>str(id)===tournamentId)).forEach(player=>source.set(str(player._id),player))
+      archived.forEach((player,id)=>source.set(id,{...(source.get(id) || {}),...player,_id:id}))
+      let players=[...source.values()].map(player=>({id:str(player._id),name:str(player.name || player.playerName),birthDate:str(player.birthDate || player.birthday),photoUrl:str(player.photoUrl || player.photo || player.photoFileID || player.photoFileId),jerseyNumber:str(player.jerseyNumber),jerseyName:str(player.jerseyName),position:str(player.position),height:player.height ?? null,weight:player.weight ?? null,gender:str(player.gender),strongFoot:str(player.strongFoot),nationality:str(player.nationality),identityStatus:str(player.identityVerificationStatus || player.identityStatus),portraitStatus:str(player.photoProcessingStatus)}))
+      players=players.map(player=>{const formatted=formatPlayer ? formatPlayer({...player,_id:player.id}) : {};return {...player,profileStatus:formatted.profileStatus || 'pending',statusText:formatted.statusText || '待核对',profileStatusText:formatted.statusText || '待核对'}})
+      players=await media(cloud,players)
+      const teamView=(await media(cloud,[{id:str(team._id),name:str(team.name || team.teamName),logo:str(team.logoTransparent || team.logoUrl || team.logo),code:str(team.teamCode || team.code)}]))[0]
+      if(operation==='playerDetail') {
+        const player=players.find(player=>player.id===str(event.playerId))
+        if(!player) throw new Error('球员不属于本赛事参赛名单')
+        return {success:true,player,team:teamView,canManage:false}
+      }
+      return {success:true,players,team:teamView,canManage:false,counts:{}}
+    }
     return {success:true,item:{id:str(team._id),name:str(team.name),shortName:str(team.shortName),teamCode:str(team.teamCode || team.code),city:str(team.cityName || team.city),description:str(team.description),contactName:str(team.contactName),phoneMasked:str(team.contactPhone).replace(/^(\d{3})\d+(\d{4})$/,'$1****$2')}}
   }
   if(mode==='registration' && operation==='detail') {

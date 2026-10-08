@@ -2,44 +2,18 @@
 const { createDataService } = require('./data-center/service.cjs')
 const { readPlayerSupportTotals, EMPTY_SUPPORT_VERSION } = require('./data-center/support.cjs')
 
-async function applyPlayerCardScores(players, career, supportTotals) {
-  const { sumPlayerRows, calculatePlayerCardPoints } = await import('./data-center/statistics.mjs')
-  const grouped = new Map()
-  for (const row of career.players || []) {
-    const playerId = String(row.playerId || '')
-    if (!playerId) continue
-    if (!grouped.has(playerId)) grouped.set(playerId, [])
-    grouped.get(playerId).push(row)
-  }
-  for (const player of players) {
-    player.cardTier = null
-    player.cardPoints = null
-    player.cardScoreVersion = null
-    player.careerMetrics = null
-    player.careerPoints = null
-    player.supportDrops = null
-    player.supportPoints = null
-    const rows = grouped.get(String(player.playerId || ''))
-    if (!rows?.length) continue
-    const total = sumPlayerRows(rows)
-    if (!career.coverage?.cardScoreScopeComplete) continue
-    player.careerMetrics = Object.fromEntries(['appearances','starts','minutesPlayed','goals','assists'].map(field => [field, total.metrics[field] ?? null]))
-    const support = supportTotals instanceof Map ? supportTotals.get(String(player.playerId || '')) || { drops:0, status:'complete', dataVersion:EMPTY_SUPPORT_VERSION } : null
-    const score = calculatePlayerCardPoints(total, {
-      metricVersion:career.metricVersion,
-      dataVersion:career.dataVersion,
-      coverageStatus:career.coverage?.cardScoreScopeComplete ? 'complete' : 'partial',
-      supportDrops:support?.drops,
-      supportCoverageStatus:support?.status,
-      supportDataVersion:support?.dataVersion
-    })
-    if (score.status !== 'ready') continue
-    player.careerPoints = score.careerPoints
-    player.supportDrops = score.supportDrops
-    player.supportPoints = score.supportPoints
-    player.cardTier = score.tier
-    player.cardPoints = score.points
-    player.cardScoreVersion = score.scoreVersion
+async function applyPlayerCardScores(players,career,supportTotals){
+  const {createPlayerCardSnapshot}=await import('./data-center/statistics.mjs')
+  for(const player of players){
+    const playerId=String(player.playerId||''),rows=(career.players||[]).filter(row=>row.playerId===playerId)
+    const support=supportTotals instanceof Map?(supportTotals.get(playerId)||{drops:0,status:'complete',dataVersion:EMPTY_SUPPORT_VERSION}):{drops:null,status:'unverified',dataVersion:null}
+    const complete=career.coverage?.playerCardComplete?.[playerId]??career.coverage?.cardScoreScopeComplete
+    const {card,total}=createPlayerCardSnapshot(rows,{playerId,fullCareer:true,identityVerified:rows.length>0,testIdentity:false,matchCount:career.summary?.matchCount||0,metricVersion:career.metricVersion,dataVersion:career.dataVersion,mode:'official',coverageStatus:complete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues:career.issues||[]})
+    player.playerCard=card
+    const ready=card.status==='ready'
+    player.cardTier=ready?card.tier:null;player.cardPoints=ready?card.points:null;player.cardScoreVersion=card.scoreVersion
+    player.careerMetrics=ready?Object.fromEntries(['appearances','starts','minutesPlayed','goals','assists'].map(field=>[field,total.metrics[field]??null])):null
+    player.careerPoints=ready?card.careerPoints:null;player.supportDrops=ready?card.supportDrops:null;player.supportPoints=ready?card.supportPoints:null
   }
   return players
 }

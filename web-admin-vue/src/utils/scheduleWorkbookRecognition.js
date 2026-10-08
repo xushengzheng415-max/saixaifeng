@@ -9,6 +9,7 @@ const HEADER_ALIASES = {
   pairing: ['比赛对阵', '比赛队', '对阵'],
   home: ['主队', '主场'],
   away: ['客队', '客场'],
+  stage: ['阶段','比赛阶段','赛段'],
   venue: ['比赛场地', '场地']
 }
 

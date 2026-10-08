@@ -3,8 +3,10 @@
  * 定义不同角色的操作权限
  */
 import { sidebarRightForRoute } from './tournamentStaffRights'
+import { isDemoMode } from './demoMode'
 
 function staffCanManageCurrentModule(tournament) {
+  if (isDemoMode()) return isDemoMode(tournament?._id || tournament?.id || '')
   if (sessionStorage.getItem('sxfTournamentStaff') !== '1') return null
   const eventId = String(tournament?._id || tournament?.id || '')
   if (!eventId || eventId !== sessionStorage.getItem('sxfStaffTournamentId')) return false
@@ -43,6 +45,7 @@ export const ROLE_ICONS = {
  * @returns {string} 当前角色
  */
 export function getCurrentRole() {
+  if (isDemoMode()) return ROLES.ORGANIZER
   return localStorage.getItem('role') || ROLES.ORGANIZER
 }
 
@@ -197,6 +200,7 @@ export const permissions = {
     create: () => hasRole([ROLES.ORGANIZER, ROLES.ADMIN]),
     // 编辑赛事
     edit: (tournament) => {
+      if (isDemoMode()) return isDemoMode(tournament?._id || tournament?.id || '')
       if (isVisualQaSession()) return true
       if (isPlatformOwner() || hasActiveAssistance()) return true
       if (hasRole([ROLES.ADMIN])) return true
@@ -208,6 +212,7 @@ export const permissions = {
     },
     // 删除赛事
     delete: (tournament) => {
+      if (isDemoMode()) return isDemoMode(tournament?._id || tournament?.id || '')
       if (isVisualQaSession()) return true
       if (isPlatformOwner()) return true
       if (hasRole([ROLES.ADMIN])) return true

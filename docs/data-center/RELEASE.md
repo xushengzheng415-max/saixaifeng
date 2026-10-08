@@ -195,3 +195,8 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 用户五组换人完整仍收到旧文案“请完整核对换人双方和分钟”。生产18:02:30的webLoginApi回下载入口为0E8F1135A8A46FB477410A84BDD654B8E492557865395B44E5F4ECE771A2D691，使用row.inId/outId旧逐人校验，缺refereeSubstitutionBatch.cjs。确认这是后续旧包覆盖，不是用户缺项。已从这份新下载的线上包只替换分组保存段并补模块，保留包内其他功能；拉取当前配置后代码更新。回下载与恢复包入口和模块摘要逐一匹配，函数Active/Available、ModTime 18:33:51。updateMatch也Active/Available，纸质报告签名配置与webLoginApi匹配，只输出布尔核对，无密钥输出。未操作用户浏览器、未写比赛数据；原弹窗可直接重试，不需刷新。
 
 此前已上线裁判表后端仅在preview功能源，origin/main缺相应接口。现后端8文件独立同步到正式main，3d407b3；保留main现有小程序共享校验、原后端业务与权限边界，没有合入PC预览界面、没有部署正式前端。新增实际包完整性检查tools/check-referee-backend-package.cjs并在AGENTS.md登记发布前必跑，避免标准发布流程使用无分组模块的旧包。未运行测试套件；进行语法、源码差异、拟发布包检查和线上代码回读。工具检查不代替真实用户保存验收，也不能拦截绕过规范的直接云端发布。
+## 2026-10-07 球队管理共享账号读取组别修复
+
+用户明确授权“发布”后，生产 webLoginApi 从当天重新下载的线上代码包进行单文件、单行差量更新。staffDbRights.cjs 的 divisions 读取映射补入 event.teams；认证、有效赛事授权、赛事归属及行级范围校验继续生效。未修改共享授权记录、账号或业务数据，未发布 PC 静态资源。
+
+源码 e5ca091b 已推送并进入 preview。线上函数 Active、Nodejs18.15、index.main，ModTime 2026-10-07 21:39:28。回下载 staffDbRights.cjs SHA-256 A37EE3D1DE81E5DC3C02EECA8BBE39086EBEF1418C82F410F23CCB95D8D1CA47 与发布包一致；index.js 保持 8D1ACA6630D132C327F3D0BEA27754DBC5F9F5992C6E91C72CE5F92CA0FEFDD5。staffPolicy.cjs、staffEventScope.cjs 回下载也与发布包一致。CLI 3.8.5 经启动器的代码更新交互未执行发布，改用已登录 CLI 3.8.0 完成 Update with current config；未读取或更改运行配置。尚未在用户登录会话中确认球队页面恢复；未运行测试套件。

@@ -12,7 +12,8 @@ function fanOAuthReturnUrl(value) {
   try {
     const parsed = new URL(url)
     if (parsed.hostname !== 'www.sxffootball.cn') return ''
-    if (!['/service-account-h5/me.html', '/service-account-h5/fan-center.html', '/service-account-h5/player-cards.html'].includes(parsed.pathname)) return ''
+    if (parsed.protocol !== 'https:' || parsed.port || parsed.username || parsed.password) return ''
+    if (!['/service-account-h5/me.html', '/service-account-h5/fan-center.html', '/service-account-h5/player-cards.html', '/preview/dynamic-card/h5/player-cards.html'].includes(parsed.pathname)) return ''
     return parsed.origin + parsed.pathname
   } catch (error) { return '' }
 }
@@ -227,7 +228,7 @@ async function handleFanRankings(event) {
     supportRows.forEach(function (row) { if (row.sourceMatchId && !verified.matchIds.has(String(row.sourceMatchId))) return; const target = row.targetType === 'player' ? players.get(String(row.targetId || '')) : teams.get(String(row.targetId || '')); if (target) target.supportCount += 1 })
   } catch (error) { console.warn('[webApi] fan ranking support lookup skipped:', error.message || error) }
   await applyPlayerCardScores(Array.from(players.values()),verified.career,verified.supportTotals)
-    await require('./playerCardAccess.cjs').attachPublicPlayerCards(cloud,db,Array.from(players.values()))
+    await require('./playerCardAccess.cjs').attachPublicPlayerCards(cloud,db,Array.from(players.values()),{dynamic:event.dynamicCardProtocol==='player-card-dynamic/1'})
   return { success:true, data:{ period, teams:Array.from(teams.values()).sort((a,b) => b.supportCount - a.supportCount || a.name.localeCompare(b.name, 'zh-CN')), players:Array.from(players.values()).sort((a,b) => b.supportCount - a.supportCount || a.name.localeCompare(b.name, 'zh-CN')) } }
 }
 

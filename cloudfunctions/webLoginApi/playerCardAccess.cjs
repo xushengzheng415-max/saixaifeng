@@ -9,7 +9,8 @@ function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerS
         if(!cardId||cardId.length>256)return {success:false,code:'PLAYER_CARD_ID_INVALID',error:'成卡编号无效'}
         const db=cloud.database(),legacy=cardId.match(/^base:([a-zA-Z0-9_-]{1,128}):(\d+)$/),libraryMatch=cardId.match(/^library:([a-f0-9]{64}):(\d+)$/)
         let render=null,playerId=''
-        if(legacy)playerId=legacy[1]
+        if(cardId.startsWith('dynamic:'))playerId=cardId.split(':')[1]
+        else if(legacy)playerId=legacy[1]
         else if(libraryMatch){
           const grant=await document(db,'player_card_library',libraryMatch[1])
           if(grant&&Number(grant.revision||0)===Number(libraryMatch[2])&&grant.fileId){playerId=String(grant.playerId||'');render={_id:cardId,cardId,playerId,fileId:grant.fileId,status:'ready',templateId:String(grant.templateId||''),publishedVersion:Number(grant.templateVersion||0)}}
@@ -30,6 +31,7 @@ function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerS
         if(!owner&&!related){const scope=staffScope||await buildOrganizerScope(db,auth.user);const allowed=staffScope
           ? recordBelongsToStaffEvent('players',player,staffScope)
           : organizerRecordAllowed('players',player,scope);if(!allowed)return {success:false,code:'PLAYER_CARD_FORBIDDEN',error:'无权查看此成卡'}}
+        if(cardId.startsWith('dynamic:')){const card=await require('./playerCardDynamic.cjs').read(cloud,db,player);return {success:true,card}}
         if(legacy){if(Number(player.playerCardVersion||0)!==Number(legacy[2])||!player.playerCardFileId)return {success:false,code:'PLAYER_CARD_NOT_FOUND',error:'成卡已更新或不存在'};render={_id:cardId,playerId,fileId:player.playerCardFileId,status:'ready',cardDataVersion:Number(player.playerCardVersion||0),publishedVersion:Number(player.playerCardTemplateVersion||0),templateId:String(player.playerCardTemplateId||'')}}
         if(!render||render.status!=='ready'||!render.fileId)return {success:false,code:'PLAYER_CARD_NOT_READY',error:'成卡正在更新或暂不可用'}
         const files=await cloud.getTempFileURL({fileList:[render.fileId]}),url=(files.fileList||[]).find(file=>file.fileID===render.fileId)?.tempFileURL||''
@@ -55,21 +57,22 @@ function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerS
           : organizerRecordAllowed('players',player,scope);if(!permitted){denied.set(id,{playerId:id,status:'forbidden',cardUrl:''});continue}}
         allowed.push(player)
       }
-      const cards=await readCards(cloud,db,allowed),byId=new Map(cards.map(card=>[card.playerId,card]))
+      const cards=await readCards(cloud,db,allowed,{restrictedAssets:Boolean(staffScope),dynamic:event.action==='exportPlayerCardForViewer'||event.dynamicCardProtocol==='player-card-dynamic/1'}),byId=new Map(cards.map(card=>[card.playerId,card]))
+      if(event.action==='exportPlayerCardForViewer'){const card=byId.get(ids[0]),player=allowed.find(p=>String(p._id)===ids[0]);if(!player||!card?.cardScene)return {success:false,code:'PLAYER_CARD_FORBIDDEN',error:'此球员卡无权导出或暂不可用'};return require('./playerCardDynamic.cjs').exportCard(cloud,db,player,card)}
       const result=ids.map(id=>byId.get(id)||denied.get(id))
       return event.action==='getPlayerCardsForViewer'?{success:true,cards:result}:{success:true,...result[0]}
 
     } catch (error) { return {success:false,code:'PLAYER_CARD_READ_FAILED',error:'球员卡读取失败，请重试'} }
   }
 }
-async function attachPublicPlayerCards(cloud,db,rows) {
+async function attachPublicPlayerCards(cloud,db,rows,options={}) {
   const ids=[...new Set(rows.map(row=>String(row.playerId||'')).filter(Boolean))]
   const sources=new Map()
   for(let start=0;start<ids.length;start+=50){const result=await db.collection('players').where({_id:db.command.in(ids.slice(start,start+50))}).limit(100).get();for(const player of result.data||[])sources.set(String(player._id),player)}
   const allowed=rows.filter(row=>sources.get(String(row.playerId))?.playerCardPublic===true)
-  const cards=await readCards(cloud,db,allowed.map(row=>sources.get(String(row.playerId))))
+  const cards=await readCards(cloud,db,allowed.map(row=>sources.get(String(row.playerId))),{...options,restrictedAssets:true})
   const byId=new Map(cards.map(card=>[card.playerId,card]))
-  for(const row of rows){const card=byId.get(String(row.playerId));row.cardStatus=card?.status||'unavailable';row.cardUrl=card?.cardUrl||'';row.cardId=card?.cardId||'';row.templateId=card?.templateId||'';row.publishedVersion=card?.publishedVersion||0}
+  for(const row of rows){const card=byId.get(String(row.playerId));row.cardScene=card?.cardScene||null;row.cardStatus=card?.status||'unavailable';row.cardUrl=card?.cardUrl||'';row.cardId=card?.cardId||'';row.templateId=card?.templateId||'';row.publishedVersion=card?.publishedVersion||0}
   return rows
 }
 module.exports = { createPlayerCardAccess, attachPublicPlayerCards }

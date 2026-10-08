@@ -1,205 +1,81 @@
 <template>
   <section v-loading="loading" class="division-create" aria-labelledby="division-create-title">
-    <header class="context-bar">
-      <div class="tournament-context-copy">
-        <img v-if="tournamentLogo" class="tournament-context-logo" :src="tournamentLogo" :alt="`${tournament.name} Logo`" />
-        <span v-else class="tournament-context-logo context-mark"><el-icon><Trophy /></el-icon></span>
-        <h1>{{ tournament.name || '赛事竞赛管理' }}</h1>
-        <span class="header-chip">{{ displayedDivisionCount }} 个组别</span>
-        <span class="status-chip">{{ tournamentStatus }}</span>
-        <span class="header-meta"><el-icon><Calendar /></el-icon>{{ dateRange }}</span>
-        <span class="header-meta"><el-icon><Location /></el-icon>{{ tournament.region || tournament.location || '地区待定' }}</span>
-      </div>
-      <el-button plain :icon="Back" @click="router.push('/tournament-space')">返回赛事空间</el-button>
-    </header>
-
-    <div class="page-heading">
-      <div><h2 id="division-create-title">竞赛管理 / 添加组别</h2></div>
-      <el-button plain :icon="Back" @click="goBack">返回组别管理</el-button>
-    </div>
-
+    <header class="context-bar"><div class="tournament-context-copy"><img v-if="tournamentLogo" class="tournament-context-logo" :src="tournamentLogo" :alt="`${tournament.name} Logo`"/><span v-else class="tournament-context-logo context-mark"><el-icon><Trophy/></el-icon></span><h1>{{ tournament.name || '赛事竞赛管理' }}</h1><span class="header-chip">{{ existingDivisions.length }} 个组别</span></div><el-button plain :icon="Back" @click="router.push('/tournament-space')">返回赛事空间</el-button></header>
+    <div class="page-heading"><h2 id="division-create-title">竞赛管理 / {{ isEditing ? '组别设置' : '添加组别' }}</h2><el-button plain :icon="Back" @click="goBack">返回组别管理</el-button></div>
+    <el-alert v-if="loadError" type="error" :title="loadError" :closable="false"/><el-alert v-if="locked" type="warning" title="组别已定版或赛事已开始，基础信息已锁定" :closable="false"/>
     <main class="create-grid">
-      <section class="form-panel" aria-label="组别基础信息">
-        <div class="panel-heading"><div><h2>基础信息</h2></div><span class="step-badge">步骤 1 / 2</span></div>
-        <el-form label-position="top" class="division-form">
-          <div class="two-columns">
-            <el-form-item label="年龄组" required><el-select v-model="form.ageGroup" style="width:100%"><el-option v-for="item in ageOptions" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-            <el-form-item label="参赛性别" required><el-radio-group v-model="form.gender"><el-radio-button label="男子组" /><el-radio-button label="女子组" /><el-radio-button label="混合组" /></el-radio-group></el-form-item>
-          </div>
-          <div class="two-columns">
-            <el-form-item class="compact-control" label="比赛人数" required><el-select v-model="form.matchFormat" placeholder="请选择几人制"><el-option v-for="item in matchFormatOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
-            <el-form-item class="compact-control" label="预计参赛球队"><el-input-number v-model="form.expectedTeams" :min="2" :max="128" controls-position="right" /></el-form-item>
-          </div>
-          <div class="generated-division-name"><span>组别名称</span><el-radio-group v-model="form.nameSource" size="small"><el-radio-button label="generated">系统生成</el-radio-button><el-radio-button label="custom">自定义</el-radio-button></el-radio-group><strong v-if="form.nameSource === 'generated'">{{ generatedDivisionName }}</strong><el-input v-else v-model.trim="form.customName" maxlength="30" show-word-limit placeholder="如：青年组、中年组、企业组" /><small>{{ form.nameSource === 'generated' ? '根据年龄组和参赛性别生成。' : '显示名称可随时重命名，年龄和性别资格单独保存。' }}</small></div>
+      <section class="form-panel" aria-label="组别基础信息"><div class="panel-heading"><h2>基础信息</h2></div>
+        <el-form label-position="top" class="division-form" :disabled="locked || !canManage">
+          <el-form-item label="参赛模式" required><el-radio-group v-model="form.participantType" @change="changeParticipantType"><el-radio-button label="youth">青少年模式</el-radio-button><el-radio-button label="adult">成人模式</el-radio-button></el-radio-group></el-form-item>
+          <div class="two-columns"><el-form-item label="年龄段" required><el-select v-model="form.ageGroup" @change="syncBirthRange" filterable allow-create default-first-option style="width:100%"><el-option v-for="option in ageOptions" :key="option.value" :label="option.label" :value="option.value"/></el-select></el-form-item><el-form-item label="参赛性别" required><el-radio-group v-model="form.gender"><el-radio-button label="男子组"/><el-radio-button label="女子组"/><el-radio-button label="混合组"/></el-radio-group></el-form-item></div>
+          <el-form-item v-if="suggestedBirthRange" label="日期计算"><el-radio-group v-model="form.birthRangeMethod" @change="syncBirthRange"><el-radio-button label="under">{{ form.participantType === 'adult' ? '16岁及以上' : '按年龄段' }}</el-radio-button><el-radio-button label="manual">手动设置</el-radio-button></el-radio-group><span v-if="form.birthRangeMethod!=='manual'" style="margin-left:12px;color:#718078;font-size:12px">按 {{ suggestedBirthRange.competitionYear }} 年赛事计算</span></el-form-item><div class="two-columns"><el-form-item label="最早出生日期"><el-date-picker :placeholder="form.participantType === 'adult' ? '不限制最高年龄，可留空' : ''" v-model="form.birthDateStart" @change="markManualBirthRange('start')" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item><el-form-item label="最晚出生日期"><el-date-picker :placeholder="form.participantType === 'adult' ? '' : '不限制最低年龄，可留空'" v-model="form.birthDateEnd" @change="markManualBirthRange('end')" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></div>
+          <div class="two-columns"><el-form-item label="比赛人数" required><el-select v-model="form.matchFormat" placeholder="请选择几人制" style="width:100%"><el-option v-for="number in [5,7,8,9,11]" :key="number" :label="`${number}人制`" :value="`${number}side`"/></el-select></el-form-item><el-form-item label="参赛队伍数量" required><el-input-number v-model="form.expectedTeams" :min="2" :max="128" controls-position="right"/></el-form-item></div>
+          <div class="generated-division-name"><span>组别名称</span><el-radio-group v-model="form.nameSource" size="small"><el-radio-button label="generated">系统生成</el-radio-button><el-radio-button label="custom">自定义</el-radio-button></el-radio-group><strong v-if="form.nameSource==='generated'">{{ generatedName }}</strong><el-input v-else v-model.trim="form.customName" maxlength="30" show-word-limit/></div>
         </el-form>
-
-        <div class="mode-section"><div class="mode-title"><div><h2>选择运行模式</h2></div><el-button type="primary" @click="openModeComparison">查看模式区别</el-button></div>
-          <div class="mode-cards">
-            <button class="mode-card" :class="{ selected: form.mode === 'simple' }" type="button" @click="form.mode = 'simple'"><span class="mode-icon green"><el-icon><Lightning /></el-icon></span><span><strong>基础模式</strong><small>适合快速建赛与基础赛制配置</small></span><el-icon class="choice"><CircleCheckFilled v-if="form.mode === 'simple'" /><CircleCheck v-else /></el-icon></button>
-            <button class="mode-card" :class="{ selected: form.mode === 'professional' }" type="button" @click="form.mode = 'professional'"><span class="mode-icon orange"><el-icon><Medal /></el-icon></span><span><strong>专业模式</strong><small>覆盖资格、执行、积分与晋级规则</small></span><el-icon class="choice"><CircleCheckFilled v-if="form.mode === 'professional'" /><CircleCheck v-else /></el-icon></button>
-          </div>
-        </div>
       </section>
-
-      <aside class="preview-column" aria-label="组别创建预览"><section class="preview-card"><p class="preview-label">创建预览</p><div class="preview-name"><span><el-icon><UserFilled /></el-icon></span><div><h2>{{ previewName }}</h2><p>{{ form.ageGroup }} · {{ form.gender }}</p></div></div><dl><div><dt>比赛人数</dt><dd>{{ matchFormatLabel }}</dd></div><div><dt>预计球队</dt><dd>{{ form.expectedTeams }} 支</dd></div><div><dt>运行模式</dt><dd :class="form.mode">{{ form.mode === 'professional' ? '专业模式' : '基础模式' }}</dd></div><div><dt>当前状态</dt><dd class="draft">待配置规则</dd></div></dl></section><section class="hint-card"><el-icon><InfoFilled /></el-icon><p>创建后不会自动发布或覆盖已有组别；需在下一步完成赛制与规则定版。</p></section></aside>
+      <aside class="preview-column"><section class="preview-card"><p class="preview-label">{{ isEditing?'设置预览':'创建预览' }}</p><div class="preview-name"><span><el-icon><UserFilled/></el-icon></span><h2>{{ finalName }}</h2></div><dl><div><dt>参赛模式</dt><dd>{{ form.participantType==='adult'?'成人模式':'青少年模式' }}</dd></div><div><dt>年龄段</dt><dd>{{ ageLabel }}</dd></div><div><dt>比赛人数</dt><dd>{{ form.matchFormat ? form.matchFormat.replace('side','人制') : '待选择' }}</dd></div><div><dt>参赛队伍</dt><dd>{{ form.expectedTeams }} 支</dd></div></dl></section></aside>
     </main>
-
-    <footer class="action-bar"><span>当前赛事已有 {{ existingCount }} 个组别</span><div><el-button @click="goBack">取消</el-button><el-button type="primary" :loading="saving" :disabled="!canManage || (isUpgradeFlow && form.mode !== 'professional')" @click="createDivision">{{ isUpgradeFlow ? '确认升级并进入正式名单' : '创建并进入赛制设置' }} <el-icon><ArrowRight /></el-icon></el-button></div></footer>
-    <el-alert v-if="!canManage" class="permission-alert" type="warning" show-icon :closable="false" title="你只有查看该赛事的权限，不能创建竞赛组别。" />
-    <div v-if="comparisonVisible || forceModeComparison" class="mode-comparison-overlay" role="dialog" aria-modal="true" aria-labelledby="mode-comparison-title">
-      <section class="mode-comparison-dialog"><button type="button" class="comparison-close" aria-label="关闭模式对比" @click="closeModeComparison">×</button><div class="comparison-heading"><h2 id="mode-comparison-title">组别运行模式对比</h2><p>按组别选择，运行模式将在赛制与赛程确认后锁定</p></div>
-      <div class="comparison-grid">
-        <article class="comparison-card simple">
-          <h3>基础模式 <span>当前免费</span></h3><h4>球队级赛事管理</h4>
-          <ul><li><el-icon><UserFilled /></el-icon>参赛球队管理</li><li><el-icon><Calendar /></el-icon>抽签与赛程</li><li><el-icon><CircleCheck /></el-icon>录入最终比分</li><li><el-icon><Trophy /></el-icon>赛果与球队排名</li><li><el-icon><InfoFilled /></el-icon>球员基础资料与名单查看</li></ul>
-          <el-button plain @click="selectModeFromComparison('simple')">使用基础模式</el-button>
-        </article>
-        <article class="comparison-card professional">
-          <h3><span class="pro-mark">PRO</span> 专业模式 <span class="free-mark">当前免费</span></h3><h4>球员级赛事管理</h4>
-          <ul><li><el-icon><UserFilled /></el-icon>球员名单与资格核验</li><li><el-icon><Calendar /></el-icon>首发替补与阵容</li><li><el-icon><Medal /></el-icon>进球红黄牌换人事件</li><li><el-icon><Trophy /></el-icon>球员出场与个人统计</li><li><el-icon><CircleCheck /></el-icon>官方电子比赛记录</li><li><el-icon><Lightning /></el-icon>自动积分晋级与赛事档案</li></ul>
-          <el-button type="warning" @click="selectModeFromComparison('professional')">为{{ comparisonDivisionLabel }}使用专业模式</el-button>
-        </article>
-      </div>
-      <p class="comparison-lock-note">两种模式当前均免费；运行模式按竞赛组别确定，赛制与赛程确认后不可更改。</p>
-      </section>
-    </div>
+    <footer class="action-bar"><span>{{ isEditing?'保存后需重新核对规则':'当前赛事已有 '+existingDivisions.length+' 个组别' }}</span><div><el-button plain :disabled="saving" @click="goBack">取消</el-button><el-button type="primary" :loading="saving" :disabled="locked || !canManage || !!loadError" @click="saveDivision">{{ isEditing?'保存设置':'创建并配置规则' }}</el-button></div></footer>
   </section>
 </template>
-
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ArrowRight, Back, Calendar, CircleCheck, CircleCheckFilled, InfoFilled, Lightning, Location, Medal, Trophy, UserFilled } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { addRecord, queryById, queryList, upgradeDivisionToProfessional } from '../../utils/cloud'
-import { permissions } from '../../utils/permissions'
-import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
-
-const route = useRoute()
-const router = useRouter()
-const id = String(route.params.id || '')
-const qaSnapshot = import.meta.env.DEV && visualQaActive() ? getVisualQaSnapshot() : null
-const forceModeComparison = import.meta.env.DEV && window.location.href.includes('view=mode-compare')
-const loading = ref(false)
-const saving = ref(false)
-const comparisonVisible = ref(route.query.view === 'mode-compare' || (import.meta.env.DEV && window.location.href.includes('view=mode-compare')))
-const tournament = ref(qaSnapshot?.tournament || {})
-const existingCount = ref(qaSnapshot ? 4 : 0)
-const existingDivisions = ref(qaSnapshot?.divisions || [])
-const automaticDisplayOrder = ref(qaSnapshot ? 5 : 1)
-const requestedDivisionId = String(route.query.divisionId || new URLSearchParams(String(window.location.hash || '').split('?')[1] || '').get('divisionId') || '')
-const isUpgradeFlow = computed(() => Boolean(requestedDivisionId))
-const form = reactive(qaSnapshot
-  ? { ageGroup: 'U16', gender: '混合组', nameSource: 'generated', customName: '', matchFormat: '11side', expectedTeams: 16, mode: 'simple' }
-  : { ageGroup: 'U16', gender: '男子组', nameSource: 'generated', customName: '', matchFormat: '', expectedTeams: 16, mode: 'simple' })
-const ageOptions = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', '成人组']
-const matchFormatOptions = [{ value: '5side', label: '5 人制', maxPlayers: 12 }, { value: '7side', label: '7 人制', maxPlayers: 16 }, { value: '8side', label: '8 人制', maxPlayers: 18 }, { value: '9side', label: '9 人制', maxPlayers: 20 }, { value: '11side', label: '11 人制', maxPlayers: 23 }]
-const canManage = computed(() => permissions.tournament.manage(tournament.value))
-const generatedDivisionName = computed(() => `${String(form.ageGroup || '').trim()}${String(form.gender || '').trim()}`)
-const finalDivisionName = computed(() => form.nameSource === 'custom' ? String(form.customName || '').trim() : generatedDivisionName.value)
-const previewName = computed(() => finalDivisionName.value || '组别名称待填写')
-const displayedDivisionCount = computed(() => existingCount.value + (isUpgradeFlow.value ? 0 : 1))
-const matchFormatLabel = computed(() => matchFormatOptions.find(item => item.value === form.matchFormat)?.label || '待选择')
-const comparisonDivisionLabel = computed(() => {
-  if (requestedDivisionId && qaSnapshot) {
-    const current = (qaSnapshot.divisions || []).find(item => String(item._id || item.id) === requestedDivisionId)
-    if (current) return String(current.name || current.ageGroup || finalDivisionName.value)
+import {computed,onMounted,reactive,ref} from 'vue'
+import {useRoute,useRouter} from 'vue-router'
+import {Back,Trophy,UserFilled} from '@element-plus/icons-vue'
+import {ElMessage} from 'element-plus'
+import {addRecord,queryById,queryList,updateRecord} from '../../utils/cloud'
+import {permissions} from '../../utils/permissions'
+import {isDemoMode} from '../../utils/demoMode'
+import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,youthBirthRange,adultBirthRange} from '../../utils/divisionBasics'
+const route=useRoute(),router=useRouter(),id=String(route.params.id||''),divisionId=String(route.query.divisionId||'')
+const isEditing=Boolean(divisionId),loading=ref(false),saving=ref(false),loadError=ref(''),tournament=ref({}),division=ref({}),existingDivisions=ref([]),registrationCount=ref(0)
+const form=reactive({participantType:'youth',ageGroup:'U16',gender:'男子组',birthDateStart:'',birthDateEnd:'',birthRangeMethod:'under',matchFormat:'',expectedTeams:16,nameSource:'generated',customName:''})
+const suggestedBirthRange=computed(()=>form.participantType==='youth'?youthBirthRange(form.ageGroup,tournament.value):adultBirthRange(tournament.value))
+function syncBirthRange(changed){
+  if(form.birthRangeMethod==='manual'||locked.value)return
+  const suggested=suggestedBirthRange.value
+  if(suggested){
+    if(form.participantType==='adult'){form.birthDateEnd=suggested.birthDateEnd;if(changed==='under'||(form.birthDateStart&&form.birthDateStart>form.birthDateEnd))form.birthDateStart=''}
+    else{form.birthDateStart=suggested.birthDateStart;if(changed==='under'||(form.birthDateEnd&&form.birthDateEnd<form.birthDateStart))form.birthDateEnd=''}
   }
-  return finalDivisionName.value
-})
-const tournamentLogo = computed(() => tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
-const tournamentStatus = computed(() => ({ draft: '筹备中', registering: '报名中', upcoming: '即将开始', ongoing: '进行中', completed: '已结束', finished: '已结束' })[tournament.value.status] || '筹备中')
-const dateRange = computed(() => tournament.value.startDate && tournament.value.endDate ? `${formatDate(tournament.value.startDate)}—${formatDate(tournament.value.endDate)}` : '日期待定')
-
-function goBack() { router.push(`/tournaments/${id}/competition`) }
-function openModeComparison() { comparisonVisible.value = true; router.replace({ query: { ...route.query, view: 'mode-compare' } }) }
-function closeModeComparison() { comparisonVisible.value = false; const query = { ...route.query }; delete query.view; router.replace({ query }) }
-function selectModeFromComparison(mode) { form.mode = mode; closeModeComparison() }
-function formatDate(value) { const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? '日期待定' : `${parsed.getFullYear()}.${String(parsed.getMonth() + 1).padStart(2, '0')}.${String(parsed.getDate()).padStart(2, '0')}` }
-function applyDivisionDraft(division) {
-  if (!division) return
-  form.ageGroup = String(division.ageGroup || form.ageGroup)
-  form.gender = String(division.gender || form.gender)
-  form.nameSource = division.nameSource === 'custom' ? 'custom' : 'generated'
-  form.customName = form.nameSource === 'custom' ? String(division.name || division.divisionName || '') : ''
-  form.matchFormat = String(division.matchFormat || form.matchFormat)
-  form.expectedTeams = Number(division.expectedTeams || division.requiredTeams || division.teamRequirement || division.participantTeams || division.maxTeams || division.teamLimit || form.expectedTeams)
-  automaticDisplayOrder.value = Number(division.displayOrder || automaticDisplayOrder.value)
-  form.mode = division.mode === 'professional' || division.isProfessional === true ? 'professional' : 'simple'
 }
-
-watch(() => route.query.view, (view) => { comparisonVisible.value = view === 'mode-compare' })
-
-async function loadPage() {
-  if (qaSnapshot) return
-  loading.value = true
-  try {
-    const [currentTournament, divisions, requestedDivision] = await Promise.all([
-      queryById('tournaments', id),
-      queryList('divisions', { where: { tournamentId: id }, orderBy: { createTime: 'asc' }, silent: true }),
-      requestedDivisionId ? queryById('divisions', requestedDivisionId) : Promise.resolve(null)
-    ])
-    tournament.value = Array.isArray(currentTournament) ? currentTournament[0] || {} : currentTournament || {}
-    existingDivisions.value = Array.isArray(divisions) ? divisions : []
-    existingCount.value = existingDivisions.value.length
-    automaticDisplayOrder.value = existingCount.value + 1
-    applyDivisionDraft(Array.isArray(requestedDivision) ? requestedDivision[0] : requestedDivision)
-  } finally { loading.value = false }
+function markManualBirthRange(field){const autoField=form.participantType==='adult'?'end':'start';if(field!==autoField&&form.birthRangeMethod==='under')return;form.birthRangeMethod='manual'}
+const ageOptions=computed(()=>form.participantType==='adult'?[{value:'成人组',label:'成人组'},{value:'青年组',label:'青年组'},{value:'中年组',label:'中年组'},{value:'老年组',label:'老年组'}]:[{value:'open',label:'不限年龄'},...Array.from({length:13},(_,i)=>({value:`U${i+6}`,label:`U${i+6}`}))])
+const ageLabel=computed(()=>ageOptions.value.find(option=>option.value===form.ageGroup)?.label||form.ageGroup)
+const generatedName=computed(()=>`${form.ageGroup==='open'?(form.participantType==='adult'?'成人':'青少年'):String(form.ageGroup).replace(/组$/,'')}${form.gender}`)
+const finalName=computed(()=>form.nameSource==='custom'?form.customName:generatedName.value)
+const canManage=computed(()=>permissions.tournament.manage(tournament.value))
+const locked=computed(()=>isEditing&&!isDemoMode(id)&&divisionBasicsLocked(division.value,tournament.value))
+const tournamentLogo=computed(()=>tournament.value.logoTransparentUrl||tournament.value.logoUrl||tournament.value.logo||'')
+function changeParticipantType(value){form.ageGroup=value==='adult'?'成人组':'U16';form.birthDateStart='';form.birthDateEnd='';form.birthRangeMethod='under';syncBirthRange()}
+function goBack(){router.push(`/tournaments/${id}/competition`)}
+async function load(){
+  loading.value=true
+  try{
+    const [event,divisions,current,registrations]=await Promise.all([queryById('tournaments',id),queryList('divisions',{where:{tournamentId:id},throwOnError:true}),isEditing?queryById('divisions',divisionId):null,isEditing?queryList('tournament_teams',{where:{tournamentId:id,divisionId},throwOnError:true}):[]])
+    tournament.value=event;existingDivisions.value=divisions||[]
+    form.participantType=divisionParticipantType(current||{},event)
+    if(current){
+      if(String(current.tournamentId)!==id)throw new Error('组别不属于当前赛事')
+      division.value=current
+      Object.assign(form,{ageGroup:current.ageGroup||'open',gender:current.gender||'混合组',birthDateStart:current.birthDateStart||'',birthDateEnd:current.birthDateEnd||'',matchFormat:current.matchFormat||`${current.playersOnField||8}side`,expectedTeams:Number(current.expectedTeams||current.maxTeams||8),nameSource:'custom',customName:current.name||current.divisionName||''})
+      form.birthRangeMethod=current.birthRangeMethod||((current.birthDateStart||current.birthDateEnd)?'manual':'under')
+      registrationCount.value=(registrations||[]).filter(row=>!['cancelled','rejected','deleted'].includes(row.status)).length
+    }else if(form.participantType==='adult')form.ageGroup='成人组'
+    syncBirthRange()
+  }catch(error){loadError.value=error.message||'组别读取失败，请刷新重试';ElMessage.error(loadError.value)}finally{loading.value=false}
 }
-
-async function createDivision() {
-  if (!canManage.value || saving.value) return
-  if (!form.matchFormat) { ElMessage.warning('请选择比赛人数'); return }
-  if (form.nameSource === 'custom' && finalDivisionName.value.length < 2) { ElMessage.warning('请填写至少 2 个字符的自定义组别名称'); return }
-  if (isUpgradeFlow.value) {
-    if (form.mode !== 'professional') { ElMessage.warning('请先选择专业模式'); return }
-    saving.value = true
-    try {
-      const result = await upgradeDivisionToProfessional(requestedDivisionId, { tournamentId: id })
-      if (!result?.success) throw new Error(result?.error || '升级专业版失败')
-      const pendingCount = Array.isArray(result.pendingRosterTeamIds) ? result.pendingRosterTeamIds.length : 0
-      ElMessage.success(`已免费启用专业模式，${pendingCount} 支球队进入正式名单待办`)
-      router.push({ path: `/tournaments/${id}/teams`, query: { divisionId: requestedDivisionId, mode: 'professional', tab: 'roster' } })
-    } catch (error) { ElMessage.error(error.message || '升级专业版失败，请稍后重试') } finally { saving.value = false }
-    return
-  }
-  const duplicate = existingDivisions.value.some(division => {
-    return String(division.name || division.divisionName || '').trim().toLowerCase() === finalDivisionName.value.toLowerCase()
-  })
-  if (duplicate) { ElMessage.warning(`${finalDivisionName.value} 已存在，请直接进入该组别配置`); return }
-  saving.value = true
-  try {
-    const result = await addRecord('divisions', {
-      tournamentId: id,
-      name: finalDivisionName.value,
-      customName: form.nameSource === 'custom' ? finalDivisionName.value : '',
-      nameSource: form.nameSource,
-      ageGroup: form.ageGroup,
-      gender: form.gender,
-      matchFormat: form.matchFormat,
-      playersOnField: Number(String(form.matchFormat).replace('side', '')),
-      maxPlayersPerTeam: matchFormatOptions.find(item => item.value === form.matchFormat)?.maxPlayers || 20,
-      expectedTeams: Number(form.expectedTeams),
-      displayOrder: Number(automaticDisplayOrder.value),
-      mode: form.mode,
-      isProfessional: form.mode === 'professional',
-      ruleStatus: 'draft',
-      ruleProgress: 0,
-      rulesVersion: '暂未定版',
-      createTime: new Date(),
-      updateTime: new Date()
-    })
-    const divisionId = String(result._id || '')
-    ElMessage.success('组别已创建，请继续设置赛制')
-    router.push({ path: `/tournaments/${id}/competition/rules`, query: { divisionId, step: 'format' } })
-  } catch (error) { ElMessage.error(error.message || '创建组别失败，请稍后重试') } finally { saving.value = false }
+async function saveDivision(){
+  if(saving.value||locked.value||!canManage.value)return
+  try{
+    const payload=buildDivisionBasics({...form,name:finalName.value},{tournamentId:id,existing:division.value,registeredTeams:registrationCount.value})
+    if(existingDivisions.value.some(row=>String(row._id||row.id)!==divisionId&&String(row.name||'').trim().toLowerCase()===payload.name.toLowerCase()))throw new Error('组别名称已存在，请修改名称')
+    saving.value=true
+    if(isEditing){await updateRecord('divisions',divisionId,{...payload,...(isDemoMode(id)?{rulesLocked:false,ruleFinalized:false}:{}),updateTime:new Date()});ElMessage.success('组别设置已保存');goBack()}
+    else{const result=await addRecord('divisions',{...payload,displayOrder:existingDivisions.value.length+1,rulesVersion:'暂未定版',createTime:new Date(),updateTime:new Date()});ElMessage.success('组别已创建');router.push({path:`/tournaments/${id}/competition/rules`,query:{divisionId:result._id||result.id,step:'format'}})}
+  }catch(error){ElMessage.error(error.message||'保存失败，请重试')}finally{saving.value=false}
 }
-
-onMounted(() => {
-  if (requestedDivisionId && qaSnapshot) applyDivisionDraft((qaSnapshot.divisions || []).find(item => String(item._id || item.id) === requestedDivisionId))
-  if (route.query.view === 'mode-compare' || (import.meta.env.DEV && window.location.href.includes('view=mode-compare'))) comparisonVisible.value = true
-  loadPage()
-})
+onMounted(load)
 </script>
 
 <style scoped>

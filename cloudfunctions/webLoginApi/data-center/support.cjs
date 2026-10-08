@@ -1,8 +1,8 @@
 'use strict'
-const crypto = require('node:crypto')
 const { readAll, readByIds } = require('./reader.cjs')
+const { digest } = require('./player-card-snapshot.cjs')
 const id = value => String(value || '').trim()
-const EMPTY_SUPPORT_VERSION = crypto.createHash('sha256').update('[]').digest('hex').slice(0,24)
+const EMPTY_SUPPORT_VERSION = digest({ status:'complete', drops:0, supportIds:[], records:[] })
 
 // Only a confirmed player support paired with its actual honey debit can
 // contribute to a card. Legacy name-based targets stay outside this tally.
@@ -38,8 +38,9 @@ async function readPlayerSupportTotals(db, playerIds = null) {
   }
   const wanted = ids || [...totals.keys()]
   for (const playerId of wanted) if (!totals.has(playerId)) totals.set(playerId,{drops:0,status:'complete',supportIds:[]})
-  for (const total of totals.values()) {
-    total.dataVersion = crypto.createHash('sha256').update(JSON.stringify(total.supportIds.sort())).digest('hex').slice(0,24)
+  for (const [playerId,total] of totals) {
+    total.dataVersion = digest({ status:total.status, drops:total.drops, supportIds:total.supportIds.sort(),
+      records:supportRows.filter(row => id(row.playerId) === playerId).map(row => ({id:id(row._id),supportId:id(row.supportId),targetType:row.targetType,status:row.status,cost:row.cost})).sort((a,b) => a.id.localeCompare(b.id)) })
     delete total.supportIds
   }
   return totals
