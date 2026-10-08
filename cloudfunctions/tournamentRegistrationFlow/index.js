@@ -15,7 +15,7 @@ const _ = db.command
 const SPORT = 'football'
 const REGISTER_PAGE = 'pages/tournament/signup/signup'
 const CLAIM_CODE_PAGE = 'pages/team/claim-code/claim-code'
-const FLOW_COLLECTIONS = ['tournament_invites', 'team_invitations', 'tournament_tasks', 'service_follow_gates', 'service_account_bindings', 'notification_outbox', 'registration_audit_logs', 'messages', 'registration_import_batches', 'registration_player_drafts', 'roster_snapshots']
+const FLOW_COLLECTIONS = ['tournament_invites', 'team_invitations', 'tournament_tasks', 'service_follow_gates', 'service_entry_scans', 'service_account_bindings', 'notification_outbox', 'registration_audit_logs', 'messages', 'registration_import_batches', 'registration_player_drafts', 'roster_snapshots']
 let collectionsReady = false
 let serviceAccessTokenCache = null
 let miniAccessTokenCache = null
@@ -196,6 +196,42 @@ async function serviceFollowCode(scene) {
   return { ticket: data.ticket, expireSeconds: Number(data.expire_seconds || 2592000), url: `https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket=${encodeURIComponent(data.ticket)}` }
 }
 
+async function ensureServiceEntryGate(purpose, entryKey, scope, expiresAt) {
+  const rows = (await db.collection('service_follow_gates').where({ sport: SPORT, purpose, entryKey }).limit(2).get()).data || []
+  if (rows.length > 1) throw new Error('服务号入口存在重复记录，请联系管理员')
+  const existing = rows[0]
+  const scene = text(existing && existing.scene) || 'se_' + randomKey(10)
+  const stillValid = existing && text(existing.qrFileId) && dateValue(existing.qrExpireAt) > Date.now() + 60000
+  let qrFileId = stillValid ? text(existing.qrFileId) : ''
+  let ticket = stillValid ? text(existing.qrTicket) : ''
+  let qrExpireAt = stillValid ? existing.qrExpireAt : null
+  if (!stillValid) {
+    const code = await serviceFollowCode(scene)
+    const image = await fetch(text(code.url))
+    const buffer = Buffer.from(await image.arrayBuffer())
+    if (!image.ok || !String(image.headers.get('content-type') || '').startsWith('image/') || !buffer.length || buffer.length > 3*1024*1024) throw new Error('服务号二维码图片未生成，请稍后重试')
+    const uploaded = await cloud.uploadFile({ cloudPath:'football/service-entry-qr/'+scene+'-'+Date.now()+'.png', fileContent:buffer })
+    qrFileId = text(uploaded.fileID)
+    ticket = text(code.ticket)
+    qrExpireAt = new Date(Date.now() + code.expireSeconds * 1000)
+  }
+  const urls = await cloud.getTempFileURL({ fileList:[qrFileId] })
+  const followUrl = urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || ''
+  if (!followUrl) throw new Error('服务号二维码暂不可用，请稍后重试')
+  const data = {
+    sport: SPORT, purpose, entryKey, scene, status: 'active', multiUse: true,
+    tournamentId: text(scope && scope.tournamentId),
+    teamId: text(scope && scope.teamId),
+    inviteId: text(scope && scope.inviteId),
+    targetedInviteId: text(scope && scope.targetedInviteId),
+    expiresAt: new Date(expiresAt),
+    followUrl, qrFileId, qrTicket:ticket, qrExpireAt,
+    updateTime: db.serverDate()
+  }
+  if (existing) await db.collection('service_follow_gates').doc(existing._id).update({ data })
+  else await db.collection('service_follow_gates').add({ data: { ...data, createTime: db.serverDate() } })
+  return followUrl
+}
 async function ensureCollections() {
   if (collectionsReady) return
   for (const name of FLOW_COLLECTIONS) {
@@ -257,7 +293,7 @@ async function webActor(event) {
   const sessions = (await db.collection('auth_sessions').where({ tokenHash, active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || []
   if (sessions.length !== 1 || text(sessions[0].userId) !== userId) return null
   const session = sessions[0]
-  if (text(user.orgId || user.organizationId) !== orgId && text(session && session.activeOrgId) !== orgId) return null
+  if (text(user.orgId || user.organizationId) !== orgId && text(session.activeOrgId) !== orgId) return null
   if (await staffPolicy.isStaff(db, userId, orgId) && !await staffPolicy.owner(db, userId, orgId)) {
     const tournamentId = text(event.__staffTournamentId || event.tournamentId)
     const rule = relayRights('tournamentRegistrationFlow', event)
@@ -980,7 +1016,7 @@ function claimCodeResult(record, tournament, expiresAt) {
 // 赛事级球队认领码：一个赛事一个码，供主办方群发或张贴。
 // 码本身不承载授权——球队归属判定仍由 getMiniWorkspace 按 allowedClaimPhones 逐条校验，
 // 因此码即使被转发给无关人员，也不会泄露或转移任何球队。
-async function createTournamentClaimCode(event) {
+async function legacyCreateTournamentClaimCode(event) {
   const actor = await webActor(event)
   if (!actor) return { success:false, code:'AUTH_REQUIRED', message:'登录会话或机构信息已失效，请重新登录' }
   const tournamentId = text(event.tournamentId)
@@ -1032,6 +1068,83 @@ async function createTournamentClaimCode(event) {
   return { success:true, message:testOnly ? '球队认领码体验版已生成' : '球队认领码正式版已生成', data:Object.assign(claimCodeResult({ _id:inviteId, inviteKey, qrCodeUrl, urlLink }, tournament, expiresAt), { envVersion:actualVersion, testOnly }) }
 }
 
+async function createTournamentClaimCode(event) {
+  if (event.serviceFirst !== true) return legacyCreateTournamentClaimCode(event)
+  const actor = await webActor(event)
+  if (!actor) return { success:false, code:'AUTH_REQUIRED', message:'登录会话或机构信息已失效，请重新登录' }
+  const tournamentId = text(event.tournamentId)
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament || recordOrgId(tournament) !== actor.orgId) return { success:false, code:'TOURNAMENT_SCOPE_DENIED', message:'赛事不存在或无权生成球队认领码' }
+  if (competitionPlanLocked(tournament)) return { success:false, code:'COMPETITION_PLAN_LOCKED', message:'竞赛方案已确认，不能生成球队认领码' }
+  const codeExpiresAt = claimCodeExpireAt(tournament)
+  const expiresAt = Math.min(codeExpiresAt, Date.now() + 29 * 24 * 60 * 60 * 1000)
+  const actualVersion = envVersion(event.envVersion)
+  const testOnly = actualVersion !== 'release'
+  // 同一赛事只保留一个可用认领码：已存在未过期、同机构的直接复用，
+  // 避免反复点击让多条有效码并存，也保证已群发或已张贴的码继续可用。
+  const reusable = await findReusableClaimCode(tournamentId, actor.orgId)
+  const inviteKey = reusable ? text(reusable.inviteKey) : randomKey(16)
+  let inviteId = text(reusable && reusable._id)
+  const payload = {
+    sport:SPORT, inviteType:'tournament_claim_code', tournamentId, tournamentName:text(tournament.name),
+    organizerOrgId:actor.orgId, createBy:actor.userId, inviteKey, status:'active',
+    page:CLAIM_CODE_PAGE, longTerm:true, expireAt:new Date(codeExpiresAt), updateTime:db.serverDate()
+  }
+  if (inviteId) await db.collection('tournament_invites').doc(inviteId).update({ data:payload })
+  else {
+    const created = await db.collection('tournament_invites').add({ data:Object.assign({},payload,{ createTime:db.serverDate() }) })
+    inviteId = text(created._id)
+  }
+  const followUrl = await ensureServiceEntryGate('team_claim_entry', inviteKey, { tournamentId, inviteId }, expiresAt)
+  await db.collection('tournament_invites').doc(inviteId).update({ data:{ serviceQrCodeUrl:followUrl, serviceEntry:true, updateTime:db.serverDate() } })
+  await addAudit('tournament_claim_code_created', { tournamentId, inviteId, actorUserId:actor.userId, actorOrgId:actor.orgId, detail:{ envVersion:actualVersion, reused:Boolean(reusable), expiresAt:new Date(expiresAt).toISOString() } })
+  return { success:true, message:'服务号球队认领码已生成', data:Object.assign(claimCodeResult({ _id:inviteId, inviteKey, qrCodeUrl:followUrl, urlLink:'' }, tournament, expiresAt), { envVersion:'service', testOnly:false, serviceEntry:true, path:'' }) }
+}
+
+async function createTargetedClaimServiceCode(event) {
+  const actor = await webActor(event)
+  if (!actor) return { success:false, code:'AUTH_REQUIRED', message:'登录会话或机构信息已失效，请重新登录' }
+  const invite = await getDocument('team_invitations', text(event.inviteId))
+  if (!invite || text(invite.type) !== 'prebuilt_tournament_team' ||
+      text(invite.organizerOrgId) !== actor.orgId ||
+      !['pending','review_approved'].includes(text(invite.status)) ||
+      dateValue(invite.inviteExpireAt || invite.expiresAt) <= Date.now()) {
+    return { success:false, code:'TEAM_CLAIM_INVITE_INVALID', message:'球队认领邀请已失效，请重新生成' }
+  }
+  const entryKey = text(invite._id)
+  const followUrl = await ensureServiceEntryGate('team_claim_entry', entryKey, {
+    tournamentId:text(invite.tournamentId), teamId:text(invite.teamId),
+    inviteId:entryKey, targetedInviteId:entryKey
+  }, dateValue(invite.inviteExpireAt || invite.expiresAt))
+  await db.collection('team_invitations').doc(entryKey).update({ data:{
+    serviceQrCodeUrl:followUrl, serviceEntry:true, updateTime:db.serverDate()
+  } })
+  return { success:true, qrCodeUrl:followUrl, inviteId:entryKey, serviceEntry:true }
+}
+async function generateServicePlayerInviteByToken(event) {
+  const token = text(event.token)
+  if (!/^tp_[a-z0-9]{10,80}$/i.test(token)) return { success:false, code:'PLAYER_INVITE_INVALID', message:'球员邀请已失效，请联系球队负责人' }
+  const rows = (await db.collection('team_invitations').where({ token, type:'team_player' }).limit(2).get()).data || []
+  const invite = rows[0]
+  if (rows.length !== 1 || !['active','pending'].includes(text(invite.status)) ||
+      dateValue(invite.expiresAt) <= Date.now()) {
+    return { success:false, code:'PLAYER_INVITE_EXPIRED', message:'球员邀请已过期，请联系球队负责人重新生成' }
+  }
+  const team = await getDocument('teams', text(invite.teamId))
+  if (!team || text(invite.orgId) && recordOrgId(team) && text(invite.orgId) !== recordOrgId(team)) {
+    return { success:false, code:'TEAM_INVITE_SCOPE_DENIED', message:'邀请所属球队已变化，请联系负责人' }
+  }
+  const followUrl = await ensureServiceEntryGate('player_invite_entry', token, {
+    tournamentId:text(invite.tournamentId), teamId:text(team._id), inviteId:text(invite._id)
+  }, dateValue(invite.expiresAt))
+  await db.collection('team_invitations').doc(invite._id).update({ data:{
+    serviceQrCodeUrl:followUrl, serviceEntry:true, updateTime:db.serverDate()
+  } })
+  return { success:true, data:{
+    inviteId:text(invite._id), teamName:text(team.name||team.teamName||'球队'),
+    qrCodeUrl:followUrl, expiresAt:invite.expiresAt, channel:'service_account'
+  } }
+}
 async function getInvitation(event) {
   const invite = await invitationByKey(event.inviteKey)
   // 认领码与报名邀请共用 tournament_invites 集合，但语义不同：认领码只用于小程序认领页，
@@ -1366,7 +1479,7 @@ async function generateTeamMemberInviteAssets(event) {
   } }
 }
 
-async function generateTeamPlayerInviteAssets(event) {
+async function legacyGenerateTeamPlayerInviteAssets(event) {
   const actor = await miniDraftActor()
   if (!actor.ok) return actor.result
   const invite = await teamMemberInvitationByKey(event.inviteId || event.token)
@@ -1444,6 +1557,43 @@ async function generateTeamPlayerInviteAssets(event) {
   } }
 }
 
+async function generateTeamPlayerInviteAssets(event) {
+  if (event.serviceFirst !== true) return legacyGenerateTeamPlayerInviteAssets(event)
+  const actor = await miniDraftActor()
+  if (!actor.ok) return actor.result
+  const invite = await teamMemberInvitationByKey(event.inviteId || event.token)
+  if (!invite || text(invite.type) !== 'team_player') {
+    return { success: false, code: 'TEAM_PLAYER_INVITE_NOT_FOUND', message: '球员入队邀请不存在或已失效' }
+  }
+  if (!['active', 'pending'].includes(text(invite.status || 'active'))) {
+    return { success: false, code: 'TEAM_PLAYER_INVITE_DISABLED', message: '该球员邀请已停用，请重新生成' }
+  }
+  if (dateValue(invite.expiresAt) > 0 && dateValue(invite.expiresAt) <= Date.now()) {
+    return { success: false, code: 'TEAM_PLAYER_INVITE_EXPIRED', message: '球员邀请已过期，请重新生成' }
+  }
+  const team = await getDocument('teams', text(invite.teamId))
+  if (!team) return { success: false, code: 'TEAM_NOT_FOUND', message: '球队不存在或已停用' }
+  if (text(invite.orgId) && recordOrgId(team) && text(invite.orgId) !== recordOrgId(team)) {
+    return { success: false, code: 'TEAM_PLAYER_INVITE_SCOPE_DENIED', message: '邀请所属机构校验失败' }
+  }
+  if (!(await miniActorCanManageTeam(actor, team))) {
+    return { success: false, code: 'TEAM_ACCESS_DENIED', message: '当前账号没有生成该球队球员邀请的权限' }
+  }
+
+  const scene = text(invite.token || invite._id)
+  if (!scene) return { success:false, code:'TEAM_PLAYER_INVITE_INVALID', message:'球员邀请标识无效，请重新生成' }
+  const followUrl = await ensureServiceEntryGate('player_invite_entry', scene, { tournamentId:text(invite.tournamentId), teamId:text(team._id), inviteId:text(invite._id) }, dateValue(invite.expiresAt))
+  await db.collection('team_invitations').doc(text(invite._id)).update({ data:{
+    serviceQrCodeUrl:followUrl, serviceEntry:true, lastSharedAt:db.serverDate(), updateTime:db.serverDate()
+  } })
+  return { success:true, data:{
+    inviteId:text(invite._id), token:scene, path:'', urlLink:'',
+    urlLinkAvailable:false, urlLinkStatusText:'请将二维码发给球员扫码关注服务号',
+    qrCodeUrl:followUrl, qrCodeFileId:'', envVersion:'service', testOnly:false,
+    expiresAtText:teamMemberInviteExpiryText(invite.expiresAt),
+    team:{ id:text(team._id), name:text(team.name || team.teamName || '球队'), logo:text(team.logoTransparent || team.logo || team.logoUrl) }
+  } }
+}
 async function saveRegistrationDraft(event) {
   const actor = await miniDraftActor()
   if (!actor.ok) return actor.result
@@ -2092,6 +2242,8 @@ exports.main = async (event) => {
     if (action === 'ensureInvite') return await ensureInvite(event)
     if (action === 'createTargetedRegistrationLink') return await createTargetedRegistrationLink(event)
     if (action === 'createTournamentClaimCode') return await createTournamentClaimCode(event)
+    if (action === 'createTargetedClaimServiceCode') return await createTargetedClaimServiceCode(event)
+    if (action === 'generateServicePlayerInviteByToken') return await generateServicePlayerInviteByToken(event)
     if (action === 'getInvitation') return await getInvitation(event)
     if (action === 'createFollowGate') return await createFollowGate(event)
     if (action === 'createOrganizerServiceGate') return await createOrganizerServiceGate(event)

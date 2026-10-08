@@ -3,11 +3,29 @@ const playerId = row => text(row?.playerId || row?.id || row?._id)
 const typeOf = row => ({ second_yellow:'second_yellow_red', yellow_red:'second_yellow_red', red:'red_card', redcard:'red_card' })[text(row?.type || row?.eventType).toLowerCase()] || text(row?.type || row?.eventType).toLowerCase()
 const liveEvent = row => row && !row.deleted && !['deleted','revoked','cancelled'].includes(text(row.status))
 const integer = value => value !== '' && value != null && Number.isInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null
+const hasSubstitutionRule = row => row && ['substitutionMode','substitutionReentryAllowed','allowSubBack','substitutionLimit','maxSubstitutions'].some(key => row[key] != null)
+const timeValue = value => { const parsed = value instanceof Date ? value.getTime() : new Date(value || '').getTime(); return Number.isFinite(parsed) ? parsed : 0 }
 
 export function substitutionRules(match = {}, division = {}, tournament = {}) {
-  const sources = [match.rulesSnapshot, match.publishedRegulationsSnapshot, division.activeRulesSnapshot,
-    division.rulesSnapshot, division.publishedRegulationsSnapshot, division, tournament.rulesSnapshot, tournament.rules?.substitutions, tournament]
-  const source = sources.find(row => row && ['substitutionMode','substitutionReentryAllowed','allowSubBack','substitutionLimit','maxSubstitutions'].some(key => row[key] != null)) || {}
+  const matchStatus = text(match.status).toLowerCase()
+  const matchStarted = ['ongoing','in_progress','live','started','halftime','completed','finished'].includes(matchStatus) ||
+    Boolean(match.refereeClockStartedAt || match.actualKickoffAt || match.refereeRecordLocked)
+  const divisionRules = division.activeRulesSnapshot || division.rulesSnapshot || division.publishedRegulationsSnapshot || division
+  let historicalRules = null
+  if (matchStarted) {
+    const startedAt = timeValue(match.refereeStartedAt || match.refereeClockStartedAt || match.actualKickoffAt || match.startedAt)
+    if (startedAt) {
+      historicalRules = (Array.isArray(division.rulesHistory) ? division.rulesHistory : [])
+        .filter(row => hasSubstitutionRule(row && row.snapshot) && timeValue(row.revisedAt) >= startedAt)
+        .sort((a,b) => timeValue(a.revisedAt) - timeValue(b.revisedAt))[0]?.snapshot || null
+    }
+  }
+  const sources = matchStarted
+    ? [match.substitutionRulesSnapshot, match.rulesSnapshot, match.publishedRegulationsSnapshot, historicalRules, division.activeRulesSnapshot,
+      division.rulesSnapshot, division.publishedRegulationsSnapshot, division, tournament.rulesSnapshot, tournament.rules?.substitutions, tournament]
+    : [divisionRules, match.substitutionRulesSnapshot, match.rulesSnapshot, match.publishedRegulationsSnapshot, division.activeRulesSnapshot,
+      division.rulesSnapshot, division.publishedRegulationsSnapshot, division, tournament.rulesSnapshot, tournament.rules?.substitutions, tournament]
+  const source = sources.find(hasSubstitutionRule) || {}
   const mode = text(source.substitutionMode) || 'limited'
   const explicit = source.substitutionReentryAllowed ?? source.allowSubBack
   const allowReentry = explicit == null ? mode === 'free' : explicit === true
@@ -21,13 +39,8 @@ export function matchLineup(match, side) {
   const direct = match[side + 'Lineup']
   const raw = direct && (direct.submitted || direct.starters?.length || direct.players?.length) ? direct : match.refereeRosters?.[side] || match.lineups?.[side] || direct
   if (!raw) return { known:false, starters:[], substitutes:[] }
-  const starterRows = raw.starters || raw.players || []
-  const substituteRows = raw.substitutes || raw.bench || []
-  // Old imported lineups can contain null/empty slots. They are not players
-  // and must not reach name/number resolution or the substitution pickers.
-  const starters = Array.isArray(starterRows) ? starterRows.filter(row => row && typeof row === 'object' && !Array.isArray(row)) : []
-  const substitutes = Array.isArray(substituteRows) ? substituteRows.filter(row => row && typeof row === 'object' && !Array.isArray(row)) : []
-  return { known:starters.length > 0, starters, substitutes }
+  const starters = raw.starters || raw.players || [], substitutes = raw.substitutes || raw.bench || []
+  return { known:Array.isArray(starters) && starters.length > 0, starters:Array.isArray(starters) ? starters : [], substitutes:Array.isArray(substitutes) ? substitutes : [] }
 }
 
 export function eventIdentity(event) {
@@ -38,9 +51,8 @@ export function eventIdentity(event) {
 const eventContent = event => JSON.stringify([typeOf(event),event.minute,event.teamSide,event.teamId,event.inPlayerId || event.playerId,event.playerName,event.playerNumber,event.outPlayerId || event.assistPlayerId,event.assistName,event.assistNumber].map(text))
 
 function findPlayer(pool, id, name, number) {
-  const players = Array.isArray(pool) ? pool.filter(row => row && typeof row === 'object' && !Array.isArray(row)) : []
-  if (text(id)) return players.find(row => playerId(row) === text(id)) || null
-  const rows = players.filter(row => text(row.name || row.playerName) === text(name) &&
+  if (text(id)) return pool.find(row => playerId(row) === text(id)) || null
+  const rows = pool.filter(row => text(row.name || row.playerName) === text(name) &&
     (number == null || number === '' || text(row.number ?? row.jerseyNumber) === text(number)))
   // Compatibility resolves only an unambiguous player in this exact match roster.
   return rows.length === 1 && playerId(rows[0]) ? rows[0] : null
