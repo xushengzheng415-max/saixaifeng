@@ -1,0 +1,8 @@
+const assert=require('node:assert/strict'),{validateSessionActor:check}=require('../cloudfunctions/uploadFile/sessionActor.cjs')
+assert.equal(check({principalType:'platform_owner',channel:'platform_password',userId:''},{__actorUserId:'platform-owner'}).platformOwner,true)
+assert.equal(check({principalType:'platform_owner',channel:'platform_password'},{__actorUserId:'attacker'}).success,false)
+assert.equal(check({principalType:'platform_owner',channel:'other'},{__actorUserId:'platform-owner'}).success,false)
+assert.equal(check({principalType:'platform_owner',channel:'platform_password'},{__actorOrgId:'org'}).success,false)
+assert.equal(check({userId:'u1'},{__actorUserId:'u1'}).platformOwner,false)
+assert.equal(check({userId:'u1'},{__actorUserId:'u2'}).success,false)
+console.log('PASS: platform system identity, channel restriction, actor/org spoofing rejection, ordinary account checks')

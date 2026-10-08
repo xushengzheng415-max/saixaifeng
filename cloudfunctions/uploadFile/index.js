@@ -70,8 +70,9 @@ async function authorizeUploadRequest(event) {
   const sessions = (await db.collection('auth_sessions').where({ tokenHash, active:true, expiresAt:_.gt(new Date()) }).limit(2).get()).data || []
   if (sessions.length !== 1) return { success:false, code:'AUTH_REQUIRED', message:'登录已失效，请重新登录' }
   const session = sessions[0]
-  if (event.__actorUserId && String(event.__actorUserId) !== String(session.userId)) return { success:false, code:'AUTH_REQUIRED', message:'账号身份不一致' }
-  if (session.principalType === 'platform_owner') return { success:true }
+  const actorCheck = require('./sessionActor.cjs').validateSessionActor(session,event)
+  if (!actorCheck.success) return actorCheck
+  if (actorCheck.platformOwner) return {success:true}
   const result = await db.collection('users').doc(session.userId).get()
   const user = Array.isArray(result.data) ? result.data[0] : result.data
   if (!user) return { success:false, code:'AUTH_REQUIRED', message:'账号不存在' }
