@@ -30,7 +30,7 @@
             <el-table-column width="58"><template #default="{ $index }"><el-button link type="danger" @click="deletePlayer($index)">删除</el-button></template></el-table-column>
           </el-table>
           <el-button link @click="addPlayer">添加球员</el-button>
-          <div class="sub-heading"><strong>换人记录</strong><el-button link @click="pairSubstitutions">按分钟配对</el-button><el-button link ''',outId:''})">添加换人</el-button></div>
+          <div class="sub-heading"><strong>换人记录</strong><el-button link @click="pairSubstitutions">按分钟配对</el-button><el-button link @click="addPair">添加换人</el-button></div>
           <p class="field-note">修改换人后，上方分钟同步更新。</p>
           <div class="sub-row field-note"><span>球队</span><span>分钟</span><span>换下</span><span>换上</span><span></span></div><div v-for="(row,i) in substitutions" :key="i" class="sub-row" :class="{ 'sub-row-error':pairErrorIndex===i }">
             <el-select v-model="row.side" aria-label="换人球队" @change="onPairSideChange(row)"><el-option :label="homeName" value="home" /><el-option :label="awayName" value="away" /></el-select>
