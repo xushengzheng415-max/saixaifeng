@@ -374,7 +374,7 @@ function timeText(value) { return `${String(Math.floor(value/60)).padStart(2,'0'
 function timesByStep(step) { const rows=[]; for (const session of enabledSessions.value) for (let value=minutes(session.start);value<minutes(session.end);value+=step) rows.push(timeText(value)); return [...new Set(rows)].sort() }
 const preciseTimes = computed(() => kickoffInput.value.times)
 const mapTimes = computed(() => [...new Set([...preciseTimes.value,...selectedDayMatches.value.map(match => match.matchTime).filter(Boolean)])].sort())
-function sessionLabel(time) { const value=minutes(time); return enabledSessions.value.find(item => value>=minutes(item.start) && value<minutes(item.end))?.label || '' }
+function sessionLabel(time) { return kickoffPeriods.find(period=>period.key===kickoffPeriod(time))?.label || '' }
 function compatibleVenues(match) { const division=divisions.value.find(item => String(item.id) === String(match?.divisionId)); const format=String(match?.matchFormat || matchFormat(division)); return config.venueResources.filter(item => !format || item.fieldFormat === format) }
 function matchesForCell(venue,time) { return selectedDayMatches.value.filter(match => match.venue === venue && match.matchTime === time) }
 
