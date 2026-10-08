@@ -474,7 +474,10 @@ exports.main = async (event, context) => {
       const key=process.env.SXF_PAPER_REPORT_SECRET
       if (!key) return {success:false,message:'裁判表保存服务尚未配置'}
       const expected=require('./paperReportProof.cjs').signImport(key,matchId,event.expectedEventRevision,data)
-      if (!/^[a-f0-9]{64}$/.test(event.paperReportProof || '') || !crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(event.paperReportProof))) return {success:false,message:'保存凭证校验失败，请重试'}
+      // Accept the earlier HMAC format during rolling deployments. Both formats still bind all import data to the shared server secret.
+      const legacyExpected=crypto.createHmac('sha256',key).update(JSON.stringify([String(matchId),Number(event.expectedEventRevision),data])).digest('hex')
+      const supplied=String(event.paperReportProof || '')
+      if (!/^[a-f0-9]{64}$/.test(supplied) || !(crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(supplied)) || crypto.timingSafeEqual(Buffer.from(legacyExpected),Buffer.from(supplied)))) return {success:false,message:'保存凭证校验失败，请重试'}
     }
     if (paperImport && (refereeHasTakenOverOrLocked(match) || ['ongoing','live','in_progress','playing','archived','cancelled','postponed'].includes(String(match.status || '').toLowerCase()))) return {success:false,code:'MATCH_RECORD_LOCKED',message:'当前比赛不能录入纸质裁判表'}
     if (paperImport && (event.expectedEventRevision == null || Object.keys(data).some(key=>!['lineups','events','paperReportImports'].includes(key)) || !data.lineups?.home || !data.lineups?.away || !Array.isArray(data.events) || !Array.isArray(data.paperReportImports))) return {success:false,message:'裁判表确认数据不完整'}
