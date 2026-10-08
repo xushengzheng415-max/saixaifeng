@@ -73,9 +73,16 @@ function visit(dir) {
 visit(dist)
 for (const file of files) {
   const name = path.relative(dist, file).replaceAll('\\', '/')
-  const response = await fetch(`https://pingtai.sxffootball.cn/${name}?release=${release}`)
-  if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`)
   const digest = value => crypto.createHash('sha256').update(value).digest('hex')
-  if (digest(fs.readFileSync(file)) !== digest(Buffer.from(await response.arrayBuffer()))) throw new Error(`${name}: 发布内容不一致`)
+  const expected = digest(fs.readFileSync(file))
+  let verified = false
+  // Nginx reload is graceful; allow old workers to drain before final readback.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const response = await fetch(`https://pingtai.sxffootball.cn/${name}?release=${release}`, { headers: { Connection: 'close' } })
+    const actual = digest(Buffer.from(await response.arrayBuffer()))
+    if (response.ok && expected === actual) { verified = true; break }
+    if (attempt < 4) await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  if (!verified) throw new Error(`${name}: 发布内容不一致，请检查站点后重新回读`)
 }
 console.log(`平台正式发布已回读：${release}，${files.length} 个文件摘要一致`)

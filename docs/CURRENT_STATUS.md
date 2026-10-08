@@ -1161,3 +1161,5 @@
 # 2026-10-03 赛程工作台正式上线：全赛事赛程列表默认定位当前比赛日首场未开赛比赛，支持原地调整时间/场序、裁判组与双方球服颜色。`main fb9ee8c0`、PC `/admin/` 完整包、`updateMatch` 和 `generateSchedule` 已部署；正式入口与关键分包、两函数源码均按 SHA-256 回读一致，函数为 Active，预览仍可访问。未写真实比赛；真实主办方账号的保存与刷新验收待现场进行，详细证据见 `docs/data-center/RELEASE.md`。
 
 2026-10-08 动态球员卡1.1.01：按用户明确要求替代发布前全量静态制卡。webLoginApi/getMiniWorkspace/playerCardPublishWorker及独立平台已正式更新并回读匹配；PC/H5动态预览已部署，待其他端预览验收；实际小程序编译、原生画布和导出验证通过，微信开发者平台上传被自动审批拒绝，等待明确目的地授权。无正式模板激活/历史图片迁移/旧任务自动取消。完整范围见docs/releases/dynamic-player-card-1.1.01-20261008.md。
+
+2026-10-09 平台运营后台独立完成：长期Gitee分支codex/platform-ops，独立工程platform-admin-vue，依赖/路由/素材/构建/部署均独立于web-admin-vue。平台正式站pingtai.sxffootball.cn已切至版本20261008164251-37708e13，25个发布文件HTTP和SHA-256回读一致；独立构建、双会话回归及浏览器登录路由验证通过，无页面或资源错误。旧PC平台构建入口已停用，原PC页面保留历史兼容；没有发布PC、H5、小程序、云函数或修改业务数据。发布规则见docs/PLATFORM_OPS_RELEASE.md；脚本使用sites-enabled中实际启用的站点配置，并在Nginx平滑重载后有限重试读回。
