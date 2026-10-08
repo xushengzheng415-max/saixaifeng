@@ -42,8 +42,8 @@ test ! -e "$target"
 sudo mkdir -p "$target"
 sudo tar -xzf "$archive" -C "$target"
 sudo chmod -R a+rX "$target"
-config=/etc/nginx/sites-available/pingtai.sxffootball.cn
-backup="$config.before-$release"
+config=/etc/nginx/sites-enabled/pingtai.sxffootball.cn
+backup="/etc/nginx/sites-available/pingtai.sxffootball.cn.before-$release"
 sudo cp "$config" "$backup"
 sudo python3 - "$config" "$target" <<'PY'
 import re, sys
