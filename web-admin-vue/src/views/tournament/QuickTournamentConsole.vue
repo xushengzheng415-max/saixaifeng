@@ -253,7 +253,7 @@ function randomize(){
   commitGroups()
   if(visualQa) window.__sxfQuickDrawInteraction = { action:'randomize-draft',tournamentId:props.tournamentId,divisionId:divisionId.value,assigned:assigned.value,published:false,cloudWrite:false }
 }
-function undo(){ const previous = undoStack.value.pop(); if(previous) restore(previous) }
+function undo(){ const previous = undoStack.value.pop(); if(previous) { restore(previous); commitGroups() } }
 function back(){ router.push({ path:route.path, query:{ divisionId:divisionId.value, mode:'quick', view:'config' } }) }
 function result(){ router.push({ path:route.path, query:{ divisionId:divisionId.value, mode:'quick', view:'result', format:'tournament' } }) }
 async function load(){
@@ -276,7 +276,7 @@ async function load(){
     const current = saved.filter(row => String(row.divisionId || 'default') === divisionId.value && row.type === 'tournament' && row.status !== 'archived')
     if(current.length){ savedGroupCount.value=current.length; configuredGroupSizes.value=current.map(row => Number(row.maxTeams || row.teams?.length || 0)).filter(Boolean); savedTeamsPerGroup.value=Math.max(...configuredGroupSizes.value,4) }
     const byId = new Map(teams.value.map(team => [team.id,team]))
-    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const capacity = Number(source?.maxTeams || group.slots.length || teamsPerGroup.value); const slots=Array.isArray(source?.teams) ? source.teams.map(item => item.teamId?.startsWith('bye-') ? { id:item.teamId, name:'轮空', teamName:'轮空', isBye:true } : byId.get(String(item.teamId)) || null).slice(0,capacity) : []; return { ...group,slots:[...slots,...Array(Math.max(0,capacity-slots.length)).fill(null)] } })
+    groups.value = makeGroups().map(group => { const source=current.find(row => String(row.groupCode || '') === group.code); const capacity = Number(source?.maxTeams || group.slots.length || teamsPerGroup.value); const slots=Array(capacity).fill(null); (source?.teams || []).forEach((item,index) => { const position=Number(item.seedOrder || index+1)-1; if(position>=0 && position<capacity) slots[position]=item.teamId?.startsWith('bye-') ? { id:item.teamId, name:'轮空', teamName:'轮空', isBye:true } : byId.get(String(item.teamId)) || null }); return { ...group,slots:[...slots,...Array(Math.max(0,capacity-slots.length)).fill(null)] } })
     publishScreenState()
   }catch(error){ teams.value=[]; groups.value=makeGroups(); ElMessage.error(error.message || '加载赛会制分组数据失败') }
 }
@@ -287,7 +287,7 @@ async function persistGroups(status){
   for(const row of replaceable) await deleteRecord('tournament_groups',row._id)
   const editKey = `sxf-draw-edit:${props.tournamentId}:${divisionId.value}`
   const modificationReason = sessionStorage.getItem(editKey) || ''
-  for(const group of groups.value) await addRecord('tournament_groups',{ tournamentId:props.tournamentId,divisionId:divisionId.value,groupName:group.name,groupCode:group.code,maxTeams:teamsPerGroup.value,type:'tournament',status,teams:group.slots.filter(Boolean).map((team,index) => ({ teamId:team.id,teamName:team.name,seedOrder:index+1 })),modifiedFromConfirmed:Boolean(modificationReason),modificationReason,modificationSavedAt:modificationReason ? new Date() : null })
+  for(const group of groups.value) await addRecord('tournament_groups',{ tournamentId:props.tournamentId,divisionId:divisionId.value,groupName:group.name,groupCode:group.code,maxTeams:group.slots.length,type:'tournament',status,teams:group.slots.map((team,index) => team ? ({ teamId:team.id,teamName:team.name,seedOrder:index+1 }) : null).filter(Boolean),modifiedFromConfirmed:Boolean(modificationReason),modificationReason,modificationSavedAt:modificationReason ? new Date() : null })
   if (modificationReason) sessionStorage.removeItem(editKey)
 }
 async function saveDraft(){
