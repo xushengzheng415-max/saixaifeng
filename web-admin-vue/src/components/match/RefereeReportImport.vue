@@ -3,7 +3,7 @@
   <input ref="fileInput" type="file" accept="image/jpeg,image/png" hidden @change="readFile" />
   <el-dialog v-model="visible" title="核对裁判表" width="min(1450px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :before-close="beforeClose" destroy-on-close>
     <div v-loading="busy" :element-loading-text="stage" class="report-grid">
-      <div class="original"><img v-if="preview" :src="preview" alt="裁判表原图" /></div>
+      <div class="original"><ReportImageMagnifier v-if="preview" :src="preview" /></div>
       <section class="review">
         <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
         <div v-if="draft" class="score-row">
@@ -54,6 +54,7 @@
 <script setup>
 import { ref, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import ReportImageMagnifier from './ReportImageMagnifier.vue'
 import { callFunctionHTTP, uploadLargeFileViaCloud } from '../../utils/cloud'
 import {readMinutes as minutes,rebuildPairs,syncPairMarks,missingMarks,copyPairs,mergeGroups,draftBatchEvents} from '../../utils/refereeGroupedSubstitutions.js'
 import {substitutionState} from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
