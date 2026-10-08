@@ -1,6 +1,6 @@
 <template>
   <section class="pairing-page" v-loading="loading">
-    <header class="pairing-header"><h1>对阵预览</h1><div><el-button text @click="backDraw">返回分组</el-button><el-button plain @click="goSchedule('settings')">自主编排</el-button><el-button plain @click="goSchedule('imports')">上传赛程</el-button><el-button type="success" :loading="exporting" :disabled="!matches.length" @click="downloadTemplate">下载赛程表</el-button></div></header>
+    <header class="pairing-header"><h1>赛程中心</h1><div><el-button text @click="backDraw">返回分组</el-button><el-button plain @click="goSchedule('settings')">自主编排</el-button><el-button plain @click="goSchedule('imports')">上传赛程</el-button><el-button type="success" :loading="exporting" :disabled="!matches.length" @click="downloadTemplate">下载赛程表</el-button></div></header>
     <div class="pairing-toolbar"><el-select v-model="stageFilter" clearable placeholder="全部阶段"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select><el-input v-model="keyword" clearable placeholder="搜索球队或来源" /><span>{{ filteredMatches.length }} / {{ matches.length }} 场</span></div>
     <a v-if="download" class="download-link" :href="download.url" :download="download.name">下载 {{ download.name }}</a>
     <el-table :data="filteredMatches" empty-text="暂无已确认对阵">

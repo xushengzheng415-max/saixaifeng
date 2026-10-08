@@ -378,7 +378,7 @@ const routes = [
     path: '/tournaments/:id/pairings',
     name: 'PairingResult',
     component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '对阵结果', embeddedPageHeader: true },
+    meta: { requiresAuth: true, title: '赛程中心', embeddedPageHeader: true },
     children: [{ path: '', component: () => import('../views/tournament/PairingResult.vue') }]
   },
   {
