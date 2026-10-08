@@ -133,6 +133,10 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     const { action, tournamentId, divisionId } = params
     const tournament = get('tournaments', tournamentId)
     const selected = row => row.tournamentId === tournamentId && (!divisionId || row.divisionId === divisionId)
+    if (['prepareDrawPreview','repairLegacyGroupPairings'].includes(action) && tournament.scheduleGenerated) {
+      const legacy=rows('matches').filter(row=>selected(row) && !row.demoLegacyPairing && row.synthetic && row.isTest && row.status==='scheduled' && row.matchDate && row.matchTime && row.venue && !row.scheduleGenerated && !row.scheduleAssignmentSource && !(row.events || []).length)
+      for(const row of legacy) update('matches',row._id,{demoLegacyScheduleBackup:{matchDate:row.matchDate,matchTime:row.matchTime,venue:row.venue,reason:'legacy-demo-auto-fill'},matchDate:'',matchTime:'',venue:'',scheduleStatus:'unassigned',scheduleGenerated:false})
+    }
     if (action === 'prepareDrawPreview') {
       const confirmed = rows('tournament_groups').filter(row=>selected(row) && row.type==='tournament' && row.status==='confirmed').sort((a,b)=>String(a.groupCode).localeCompare(String(b.groupCode)))
       if(confirmed.length!==2 || confirmed.some(group=>(group.teams || []).length!==4)) return {success:true,message:'当前组别按已有已确认对阵预览'}
@@ -184,7 +188,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       }
       if(errors.length) return {success:false,message:'排期预检未通过',errors,errorCount:errors.length,validCount:0,changes:[]}
       if(params.dryRun!==false) return {success:true,dryRun:true,validCount:changes.length,errorCount:0,changes}
-      changes.forEach(change=>update('matches',change.matchId,{...change.after,scheduleStatus:'scheduled',scheduleGenerated:true}))
+      changes.forEach(change=>update('matches',change.matchId,{...change.after,scheduleStatus:'scheduled',scheduleGenerated:true,scheduleAssignmentSource:params.adjustmentType || 'manual',scheduleAssignedAt:new Date().toISOString()}))
       if(params.adjustmentType==='import' && changes.length) update('tournaments',tournamentId,{scheduleDraft:{...(tournament.scheduleDraft || {}),startDate:changes.map(c=>c.after.matchDate).sort()[0],endDate:changes.map(c=>c.after.matchDate).sort().at(-1),venueResources:[...new Set(changes.map(c=>c.after.venue))].map(name=>({name}))}})
       return {success:true,appliedCount:changes.length}
     }
@@ -217,13 +221,32 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       return { success: true, matchCount: rows('matches').filter(selected).length }
     }
     if (action === 'scheduleExistingPairings') {
-      const list = rows('matches').filter(row => selected(row) && (!params.divisionIds || params.divisionIds.includes(row.divisionId)))
-      if (!list.length) return fail('请先在抽签分组中生成对阵')
-      const config = params.scheduleConfig || {}
-      const date = config.startDate || tournament.startDate || new Date().toISOString().slice(0, 10)
-      list.forEach((row, index) => Object.assign(row, { matchDate: date, matchTime: `${String(9 + Math.floor(index / Math.max(1, (config.venues || []).length))).padStart(2, '0')}:00`, venue: (config.venues || [])[index % Math.max(1, (config.venues || []).length)] || '模拟球场' }))
-      update('tournaments', tournamentId, { scheduleGenerated: true, scheduleConfig: config })
-      return { success: true, matchCount: list.length, scheduleEngineVersion: 'browser-demo' }
+      const list = rows('matches').filter(row=>selected(row) && row.status==='scheduled' && !row.demoLegacyPairing && (!params.divisionIds || params.divisionIds.includes(row.divisionId)) && (!row.matchDate || !row.matchTime || !row.venue))
+      if(!list.length)return {success:true,matchCount:0,message:'没有待排比赛'}
+      const config=params.scheduleConfig || {},sessions=(config.sessionWindows || []).filter(s=>s.enabled),venues=(config.venueResources || []).map(v=>v.name).filter(Boolean)
+      if(!config.startDate || !config.endDate || !sessions.length || !venues.length) return fail('请先设置比赛日期、开放时段和场地')
+      const clock=t=>{const [h,m]=String(t || '').split(':').map(Number);return h*60+m},format=t=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`,weekday=['周日','周一','周二','周三','周四','周五','周六'],planned=[]
+      const before=clone(tables)
+      try {
+        for(const row of list.sort((a,b)=>Number(a.matchNo || 0)-Number(b.matchNo || 0))) {
+          let chosen
+          for(let day=new Date(`${config.startDate}T00:00:00`);day<=new Date(`${config.endDate}T00:00:00`) && !chosen;day.setDate(day.getDate()+1)) {
+            if(!(config.matchDays || []).includes(weekday[day.getDay()]))continue
+            const date=`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`
+            for(const session of sessions) {
+              if(chosen)break
+              for(let minute=clock(session.start);minute+Number(row.durationMinutes || 50)<=clock(session.end) && !chosen;minute+=Math.max(5,Number(config.timeStepMinutes || 5)))for(const venue of venues) {
+                const entry={matchId:row._id,matchDate:date,matchTime:format(minute),venue}
+                const preview=schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:true,adjustmentType:'auto'})
+                if(preview.success){schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:false,adjustmentType:'auto'});chosen=entry;planned.push(entry);break}
+              }
+            }
+          }
+          if(!chosen)throw new Error('可用日期、场地或时段不足，请调整设置')
+        }
+      }catch(error){for(const key of Object.keys(tables))delete tables[key];Object.assign(tables,before);throw error}
+      update('tournaments',tournamentId,{scheduleGenerated:true,scheduleConfig:config,scheduleDraft:config})
+      return {success:true,matchCount:planned.length,message:`已编排 ${planned.length} 场比赛`}
     }
     return fail('这项赛程操作尚未接入模拟，不会调用真实接口')
   }
