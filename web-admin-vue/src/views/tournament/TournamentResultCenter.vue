@@ -19,7 +19,7 @@
       <section class="result-filters">
         <label><span>竞赛组别</span><el-select v-model="divisionFilter" clearable placeholder="全部组别"><el-option v-for="item in dashboard.divisions || []" :key="item.id" :label="item.name" :value="item.id" /></el-select></label>
         <label><span>比赛日期</span><el-select v-model="dateFilter" clearable placeholder="全部日期"><el-option v-for="date in dateOptions" :key="date" :label="date" :value="date" /></el-select></label>
-        <label><span>赛果状态</span><el-select v-model="statusFilter" clearable placeholder="全部状态"><el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+        <label v-if="!['goals','playerCards','teamCards'].includes(activeTab)"><span>赛果状态</span><el-select v-model="statusFilter" clearable placeholder="全部状态"><el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
         <el-input v-model="keyword" clearable placeholder="搜索球队或场序" :prefix-icon="Search" />
       </section>
 
@@ -33,9 +33,14 @@
       <el-tabs v-model="activeTab" class="result-tabs">
         <el-tab-pane label="赛果与复核" name="review" />
         <el-tab-pane label="积分排名" name="standings" />
+        <el-tab-pane label="进球榜" name="goals" />
+        <el-tab-pane label="球员红黄牌" name="playerCards" />
+        <el-tab-pane label="球队红黄牌" name="teamCards" />
         <el-tab-pane label="淘汰晋级" name="bracket" />
         <el-tab-pane label="赛事战报" name="report" />
       </el-tabs>
+
+      <TournamentEventRankings v-if="['goals','playerCards','teamCards'].includes(activeTab)" :key="activeTab + rankingRefresh" :tournament-id="tournamentId" :division-id="divisionFilter" :date="dateFilter" :kind="activeTab" :keyword="keyword" />
 
       <section v-if="activeTab==='review'" class="review-layout">
         <article class="review-list panel">
@@ -106,6 +111,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheckFilled, Clock, DataAnalysis, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
 import { callFunction } from '../../utils/cloud'
+import TournamentEventRankings from '../../components/tournament/TournamentEventRankings.vue'
 import { isGoalEvent, isOwnGoal, isPenaltyMissed, isPenaltyScored, scorerDisplayName } from '../../utils/matchEvent'
 import footballEventIcon from '../../assets/report/events/football.svg'
 import ownGoalEventIcon from '../../assets/report/events/own-goal.svg'
@@ -115,6 +121,7 @@ import penaltyMissedEventIcon from '../../assets/report/events/penalty-missed.sv
 const route = useRoute()
 const router = useRouter()
 const tournamentId = String(route.params.id || '')
+const rankingRefresh = ref(0)
 const loading = ref(false)
 const publishing = ref(false)
 const dashboard = ref({ tournament:{}, divisions:[], matches:[], standings:[], knockout:[], publications:[], summary:{} })
@@ -198,7 +205,7 @@ function formatDate(value){ if(!value)return'—';const date=new Date(value);ret
 function formatReportDate(value){ const text=String(value || '').slice(0,10); return text ? text.replaceAll('-','.') : '比赛日期待定' }
 function openMatchResult(row){ const suffix=row.resultStatus==='approved'?'/archive':row.scoreReady?'/review':'';router.push({path:`/tournaments/${tournamentId}/match/${row.id}${suffix}`,query:row.divisionId?{divisionId:row.divisionId}:{}}) }
 
-async function loadDashboard(){ loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=[...result.matches].sort(compareReviewRows)[0]?.id||'';if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
+async function loadDashboard(){ rankingRefresh.value++; loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=[...result.matches].sort(compareReviewRows)[0]?.id||'';if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
 const correctionVisible = ref(false)
 const correctionSaving = ref(false)
 const correctionForm = ref({ matchId:'', homeScore:0, awayScore:0, reason:'' })
