@@ -154,18 +154,7 @@ async function listByDocumentIds(collection, ids) {
 }
 
 async function listMatchEvents(matchIds) {
-  const uniqueIds = [...new Set((matchIds || []).map(text).filter(Boolean))]
-  const rows = []
-  for (let index = 0; index < uniqueIds.length; index += 50) {
-    const chunk = uniqueIds.slice(index, index + 50)
-    try {
-      const page = (await db.collection('match_events').where({ matchId: db.command.in(chunk) }).limit(200).get()).data || []
-      rows.push(...page)
-    } catch (error) {
-      console.warn('比赛事件读取失败:', error && error.message)
-    }
-  }
-  return rows
+  return require('./data-center/reader.cjs').readByIds(db,'match_events','matchId',matchIds)
 }
 
 function eventIdentity(event) {
@@ -581,39 +570,7 @@ function rankTeams(teams, officialMatches, rule) {
     .map((team, index) => ({ ...team, rank: index + 1 }))
 }
 
-function buildStandings(matches, divisionsById) {
-  const buckets = {}
-  matches.filter(match => match.standingsEligible).forEach(match => {
-    const key = `${match.divisionId}:${match.groupName}`
-    const bucket = buckets[key] ||= { divisionId: match.divisionId, divisionName: match.divisionName, groupName: match.groupName, teams: {}, official: [], all: [] }
-    addScheduledTeam(bucket.teams, match.homeTeamId, match.homeTeamName, match.homeTeamLogo)
-    addScheduledTeam(bucket.teams, match.awayTeamId, match.awayTeamName, match.awayTeamLogo)
-    if (!match.scoreReady || ['returned', 'warning'].includes(match.resultStatus)) return
-    bucket.all.push(match)
-    if (match.resultStatus === 'approved') bucket.official.push(match)
-  })
-  return Object.values(buckets).map(bucket => {
-    const rule = pointsRule(divisionsById[bucket.divisionId] || {})
-    const officialTable = {}; const previewTable = {}
-    Object.values(bucket.teams).forEach(team => {
-      addTeam(officialTable, team.teamId, team.teamName, team.logo)
-      addTeam(previewTable, team.teamId, team.teamName, team.logo)
-    })
-    bucket.official.forEach(match => applyResult(officialTable, match, rule, false))
-    bucket.all.forEach(match => applyResult(previewTable, match, rule, match.resultStatus !== 'approved'))
-    return {
-      divisionId: bucket.divisionId,
-      divisionName: bucket.divisionName,
-      groupName: bucket.groupName,
-      pointsRule: rule,
-      tieBreakers: ['积分', '相互比赛积分', '相互比赛净胜球', '相互比赛进球数', '总净胜球', '总进球', '红牌数少者', '黄牌数少者', '抽签决定'],
-      officialTeams: rankTeams(Object.values(officialTable), bucket.official, rule),
-      previewTeams: rankTeams(Object.values(previewTable), bucket.all, rule),
-      officialMatchCount: bucket.official.length,
-      provisionalMatchCount: bucket.all.length - bucket.official.length
-    }
-  }).sort((a, b) => a.divisionName.localeCompare(b.divisionName, 'zh-CN', { numeric: true }) || a.groupName.localeCompare(b.groupName, 'zh-CN', { numeric: true }))
-}
+const buildStandings = require('./data-center/standings.cjs').buildStandings
 
 function normalizedGroupName(value) {
   return text(value).replace(/[\s　]/g,'').toUpperCase()
@@ -774,7 +731,7 @@ async function buildDashboard(event, actor) {
   const divisionsById = Object.fromEntries(divisions.map(item => [text(item._id || item.id), item]))
   const teamDirectory = await buildTeamDirectory(matchRows, registrationRows)
   const eventRows = await listMatchEvents(matchRows.map(item => item._id || item.id))
-  const { matchOrigin, matchParticipantIds } = await import('./data-center/statistics.mjs')
+  const { matchOrigin, matchParticipantIds, effectiveEvents } = await import('./data-center/statistics.mjs')
   const preliminaryOrigin = { teamsById:teamDirectory, tournamentsById:{ [tournamentId]:tournament }, requireOriginEvidence:true }
   const participantMatches = matchRows.filter(match => resultStatus(match) !== 'not_submitted' && matchOrigin(match,preliminaryOrigin) === 'real')
   const participantIds = [...new Set(participantMatches.flatMap(match => [...matchParticipantIds(match,eventRows)]))]
@@ -789,7 +746,7 @@ async function buildDashboard(event, actor) {
     return map
   }, {})
   const normalizeWithEvents = item => {
-    const sourceEvents = (eventsByMatchId[String(item._id || item.id)] || []).length ? eventsByMatchId[String(item._id || item.id)] : (Array.isArray(item.events) ? item.events : [])
+    const sourceEvents = effectiveEvents(item,eventRows)
     const normalized = normalizedMatch(sourceEvents.length ? { ...item, events: sourceEvents } : item, divisionsById, teamDirectory)
     const origin = matchOrigin(item,originContext)
     return applyMatchOrigin(normalized,sourceEvents,origin)

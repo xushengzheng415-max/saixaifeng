@@ -74,7 +74,10 @@ export function resultState(match, context = {}) {
   return state !== 'excluded' && matchOrigin(match,context) === 'real' ? state : 'excluded'
 }
 
+export function matchGroupName(match) { return text(match.groupName||match.drawGroup||match.pool||match.group||match.groupCode)||'联赛' }
+
 export function inScope(match, scope = {}) {
+  if(scope.groupName&&matchGroupName(match)!==text(scope.groupName))return false
   if (scope.matchId && text(match._id || match.id) !== text(scope.matchId)) return false
   if (scope.tournamentId && text(match.tournamentId) !== text(scope.tournamentId)) return false
   const division = text(match.divisionId || match.division || 'default')

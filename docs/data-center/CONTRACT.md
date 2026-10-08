@@ -111,7 +111,7 @@ PC 比赛详情的弃赛操作按 `updateMatch.forfeitMatch` 写入，要求当�
 
 snapshotRevision 包含事实版本、完整度、核验原因、规则和应援版本，不包含响应生成时间或签名图片 URL。dataVersion 也包含被排除／来源未知的候选记录、事件撤销修订和覆盖状态。playerId 是返回行筛选；同一事实范围的单人和批量查询采用相同生涯版本及快照。coverage.playerCardComplete 按稳定 ID 核验：无关场次只有在完整的稳定 ID 阵容和事件能证明未参与时才不阻塞目标球员；缺名单或身份／事件歧义仍待核定，不以当前队籍推断历史。
 
-PC 新入口 dataCenter.playerDetail 返回授权范围的 statistics 与独立完整生涯 playerCard。服务端先执行范围鉴权；本届／球队数据不能冒充生涯总分。原 playerCard 入口保持兼容。小程序实际球员详情入口为 getMiniWorkspace.teamPlayerDetail，使用同一服务；当前 main 未登记通用 getMiniWorkspace.dataCenter dispatcher。H5 私有卡库使用 listMyPlayerCards 批量快照，公开应援摘要使用同一构造器；不扩大公开档案权限。
+PC 新入口 dataCenter.playerDetail 返回授权范围的 statistics 与独立完整生涯 playerCard。服务端先执行范围鉴权；本届／球队数据不能冒充生涯总分。原 playerCard 入口保持兼容。小程序实际球员详情入口为 getMiniWorkspace.teamPlayerDetail，使用同一服务；2026-10-08 已核对生产并登记通用 getMiniWorkspace.dataCenter dispatcher。H5 私有卡库使用 listMyPlayerCards 批量快照，公开应援摘要使用同一构造器；不扩大公开档案权限。
 
 ### 单场时长证据
 
@@ -124,3 +124,9 @@ PC 新入口 dataCenter.playerDetail 返回授权范围的 statistics 与独立�
 ### 纸质裁判表的无序换人组
 
 同队同分钟的换上/换下名单分别授权与核定，不推断逐人替换关系。confirmRefereeReport接收side、minute、inIds、outIds；兼容存储槽位带substitutionPairing=unordered_batch、substitutionBatchId与批次人数。读取时以批次集合展示，不把槽位映射当作谁替谁的事实；历史明确配对记录保持原语义。每名球员自己的进入/退出分钟定义出场区间；同批窗口一次、人数按实际换上数计。人数、名单身份、当前在场、罚下、换回与规则限制不放宽。
+
+## 平台数据中心（2026-10-08）
+
+统一查询新增 rankings（球员／球队指标榜）、records（有效判罚与比赛事件），并支持 groupName 范围。分组排名按赛事、竞赛组别、抽签小组隔离；正式结果与现场暂定分别返回。未知指标不记零、不列入指标排名；测试来源不进入正式统计。撤销或修订事件经 effectiveEvents 统一筛选。
+
+catalog 返回授权范围内的球队、球员、赛事、组别及已审核最新名单的安全字段。球员与球队使用稳定 ID，当前队籍与历史统计归属分开；个人联系方式和证件不进入公开榜单。平台展示全平台授权范围，机构／赛事子账号仍限定所属或被授权范围。

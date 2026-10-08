@@ -8,7 +8,7 @@ function validateScope(input = {}) {
   const scope = { sportType:'football', mode:input.mode || 'official' }
   if (!['official','provisional'].includes(scope.mode)) throw error('DATA_MODE_INVALID', '请选择正式或现场统计')
   if (input.sportType && input.sportType !== 'football') throw error('DATA_SPORT_INVALID', '当前接口仅支持足球统计')
-  for (const field of ['teamId','playerId','tournamentId','divisionId','matchId']) {
+  for (const field of ['teamId','playerId','tournamentId','divisionId','matchId','groupName']) {
     if (input[field] != null && (typeof input[field] !== 'string' || input[field].length > 100)) throw error('DATA_SCOPE_INVALID', '统计范围格式错误')
     if (id(input[field])) scope[field] = id(input[field])
   }
@@ -70,18 +70,29 @@ function createDataService(db) {
     return result.playerCard
   }
   async function catalog(actor) {
+    if(actor.public)throw error('DATA_FORBIDDEN','公开目录须通过赛事公开接口读取')
     const { synthetic } = await import('./statistics.mjs')
     const teams = actor.platformOwner ? await readAll(db, 'teams') : await readByIds(db, 'teams', '_id', actor.teamIds)
     const syntheticTeamIds = new Set(teams.filter(synthetic).map(row => id(row._id)))
     const tournaments = actor.platformOwner ? await readAll(db, 'tournaments') : await readByIds(db, 'tournaments', '_id', actor.tournamentIds)
     const players = actor.platformOwner ? await readAll(db, 'players') : [...await readByIds(db,'players','teamId',actor.teamIds), ...await readByIds(db,'players','teamCode',actor.teamIds)]
+    const tournamentIds=tournaments.filter(row=>!synthetic(row)).map(row=>id(row._id))
+    const [divisions,registrations,rosterRows]=await Promise.all([readByIds(db,'divisions','tournamentId',tournamentIds),readByIds(db,'tournament_teams','tournamentId',tournamentIds),readByIds(db,'roster_snapshots','tournamentId',tournamentIds)])
+    const links=registrations.filter(row=>!synthetic(row)&&!['deleted','rejected','cancelled','withdrawn'].includes(id(row.status))).map(row=>({tournamentId:id(row.tournamentId),divisionId:id(row.divisionId||row.division||'default'),teamId:id(row.teamId||row.teamCode),groupName:id(row.groupName||row.drawGroup||row.group||row.groupCode)}))
+    const rosterMap=new Map()
+    for(const row of rosterRows.filter(row=>row.status==='approved'&&!synthetic(row))){const key=[row.tournamentId,row.divisionId||row.division||'default',row.teamId].join(':');const old=rosterMap.get(key);if(!old||Number(row.version||0)>Number(old.version||0)||(Number(row.version||0)===Number(old.version||0)&&new Date(row.updateTime||row.createTime||0)>new Date(old.updateTime||old.createTime||0)))rosterMap.set(key,row)}
+    const live=row=>!synthetic(row)&&row.isDeleted!==true&&id(row.status)!=='deleted'
     return {
       success:true, accessScope:actor.platformOwner ? 'platform' : 'authorized',
-      teams:teams.filter(row => !synthetic(row)).map(row => ({ id:id(row._id), name:id(row.name || row.teamName), orgId:id(row.orgId || row.organizationId) })),
-      tournaments:tournaments.filter(row => !synthetic(row)).map(row => ({ id:id(row._id), name:id(row.name), orgId:id(row.orgId || row.organizationId) })),
-      players:[...new Map(players.filter(row => !synthetic(row) && !syntheticTeamIds.has(id(row.teamId || row.teamCode))).map(row => [id(row._id), { id:id(row._id), name:id(row.name), teamId:id(row.teamId || row.teamCode), status:id(row.status) }])).values()]
+      teams:teams.filter(live).map(row=>({id:id(row._id),name:id(row.name||row.teamName),orgId:id(row.orgId||row.organizationId),city:id(row.cityName||row.city),teamType:id(row.teamType),status:id(row.status),tournamentLinks:links.filter(link=>link.teamId===id(row._id))})),
+      tournaments:tournaments.filter(live).map(row=>({id:id(row._id),name:id(row.name),orgId:id(row.orgId||row.organizationId)})),
+      divisions:divisions.filter(live).map(row=>({id:id(row._id),tournamentId:id(row.tournamentId),name:id(row.name)})),
+      players:[...new Map(players.filter(row=>live(row)&&!syntheticTeamIds.has(id(row.teamId||row.teamCode))).map(row=>[id(row._id),{id:id(row._id),name:id(row.name),teamId:id(row.teamId||row.teamCode),status:id(row.status),jerseyNumber:row.jerseyNumber??row.number??null,position:id(row.position),playerCode:id(row.playerId||row.playerCode)}])).values()],
+      rosters:[...rosterMap.values()].map(row=>({tournamentId:id(row.tournamentId),divisionId:id(row.divisionId||row.division||'default'),teamId:id(row.teamId),playerIds:Array.isArray(row.playerIds)?row.playerIds.map(id).filter(Boolean):[]})),
+      generatedAt:new Date().toISOString()
     }
   }
+
   async function query(actor, input = {}) {
     const scope = validateScope(input)
     const teamIds = new Set((actor.teamIds || []).map(String)), tournamentIds = new Set((actor.tournamentIds || []).map(String))
@@ -92,7 +103,7 @@ function createDataService(db) {
     else if (scope.teamId) matches = [...await readAll(db,'matches',{ homeTeamId:scope.teamId }), ...await readAll(db,'matches',{ awayTeamId:scope.teamId })]
     else if (actor.platformOwner) matches = await readAll(db,'matches')
     else matches = [...await readByIds(db,'matches','tournamentId',[...tournamentIds]), ...await readByIds(db,'matches','homeTeamId',[...teamIds]), ...await readByIds(db,'matches','awayTeamId',[...teamIds])]
-    const { inScope, aggregateStatistics, resultState, effectiveEvents, eventType, matchParticipantIds, synthetic } = await import('./statistics.mjs')
+    const { inScope, aggregateStatistics, resultState, effectiveEvents, eventType, matchParticipantIds, synthetic, matchGroupName } = await import('./statistics.mjs')
     matches = [...new Map(matches.filter(row => inScope(row,scope)).map(row => [id(row._id),row])).values()]
     if (actor.matchIds) { const allowed = new Set(actor.matchIds); matches = matches.filter(row => allowed.has(id(row._id))) }
     if (scope.playerId && !actor.platformOwner) {
@@ -152,20 +163,23 @@ function createDataService(db) {
       const state = resultState(match,{ teamsById,tournamentsById,playersById,events,requireOriginEvidence:true,requirePlayerOriginEvidence:true })
       const hasScore = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
       const divisionId = id(match.divisionId || match.division || 'default')
-      return { ...match, divisionId, divisionName:id(divisionsById[divisionId]?.name || match.divisionName || '默认组别'), groupName:id(match.groupName || match.drawGroup || '联赛'),
+      return { ...match, divisionId, divisionName:id(divisionsById[divisionId]?.name || match.divisionName || '默认组别'), groupName:matchGroupName(match),
         homeTeamName:id(teamById.get(id(match.homeTeamId))?.name || match.homeTeamName || '主队'), awayTeamName:id(teamById.get(id(match.awayTeamId))?.name || match.awayTeamName || '客队'),
         homeScore:Number(match.homeScore ?? match.scoreHome),awayScore:Number(match.awayScore ?? match.scoreAway),scoreReady:hasScore(match.homeScore ?? match.scoreHome) && hasScore(match.awayScore ?? match.scoreAway),
         resultStatus:state === 'official' ? 'approved' : state === 'provisional' ? 'pending_review' : 'not_submitted',
         standingsEligible:state === 'official' && match.standingsEligible !== false && match.isBye !== true && !['knockout','cup','placement','final','semifinal'].includes(phase) && (match.standingsEligible === true || ['group','league','round_robin'].includes(phase)),
         yellowHome:cardCount('home',['yellow_card','second_yellow']),yellowAway:cardCount('away',['yellow_card','second_yellow']),redHome:cardCount('home',['red_card','second_yellow']),redAway:cardCount('away',['red_card','second_yellow']) }
     }),divisionsById)
+    const presentation=require('./presentation.cjs')
+    result.rankings=await presentation.rankings(result)
+    result.records=await presentation.journal({matches,events,actor,scope,context:{teamsById,tournamentsById,playersById,events,requireOriginEvidence:true,requirePlayerOriginEvidence:true}})
     const memberships = scope.playerId && !actor.public ? await readAll(db,'player_team_memberships',{ playerId:scope.playerId }) : []
     result.memberships = memberships.filter(row => actor.platformOwner || teamIds.has(id(row.teamId))).map(row => ({ id:id(row._id), playerId:id(row.playerId), teamId:id(row.teamId), status:id(row.status), validFrom:row.validFrom || null, validTo:row.validTo || null, startTimeUnknown:row.startTimeUnknown === true }))
     result.accessScope = actor.public ? 'published' : actor.platformOwner ? 'platform' : 'authorized'
     result.coverage.accessScope = result.accessScope
     result.summary.playerCount = new Set(result.players.map(row => row.playerId)).size
     if (scope.playerId) {
-      const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','matchId','from','to'].some(field => scope[field])
+      const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','groupName','matchId','from','to'].some(field => scope[field])
       const built=await buildPlayerCard(result,scope.playerId,{fullCareer})
       result.playerTotal=built.total
       result.playerCard=built.card

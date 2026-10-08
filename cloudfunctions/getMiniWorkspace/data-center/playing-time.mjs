@@ -49,6 +49,12 @@ function evidence(snapshot, origin) {
 
 export function resolveMatchDurationEvidence(match = {}, context = {}) {
   const unknown = reason => ({ status:'unknown', reason, totalMinutes:null, ruleVersion:DURATION_RULE_VERSION, source:null })
+  const verified = match.durationVerification
+  if (verified?.schemaVersion === 'football-duration-verification/1' && text(verified.matchId) === text(match._id || match.id) && text(verified.verifiedBy) && timestamp(verified.verifiedAt) != null && text(verified.reason).length >= 4 && text(verified.revision)) {
+    const minutes = positive(verified.minutes), count = Number(verified.periodCount)
+    const total = verified.minutesBasis === 'total' ? minutes : verified.minutesBasis === 'period' && Number.isInteger(count) && count > 0 && count <= 10 && minutes != null ? minutes * count : null
+    if (minutes != null && minutes <= 300 && total != null && total <= 600 && total === Number(verified.totalMinutes)) return {status:'ready',reason:null,totalMinutes:total,ruleVersion:DURATION_RULE_VERSION,source:{kind:'historical_verification',id:text(verified.matchId),verifiedAt:verified.verifiedAt,minutesBasis:verified.minutesBasis},revision:verified.revision}
+  }
   // A malformed authoritative field must not silently fall through to another source.
   if (match.durationRulesSnapshot != null) {
     const snapshot = validateSnapshot(match.durationRulesSnapshot, match)

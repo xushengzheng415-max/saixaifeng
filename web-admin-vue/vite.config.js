@@ -19,6 +19,14 @@ export default defineConfig({
         return source.replace('module.exports = { pointsRule, buildStandings, rankTeams }', 'export default { pointsRule, buildStandings, rankTeams }')
       }
     },
+    {
+      name:'shared-pairing-templates-browser',
+      enforce:'pre',
+      transform(source,id) {
+        if (!id.replaceAll('\\','/').endsWith('/cloudfunctions/generateSchedule/pairingTemplates.js')) return null
+        return source.replace('module.exports = {','export default {')
+      }
+    },
     vue(),
     AutoImport({
       resolvers: [ElementPlusResolver()]

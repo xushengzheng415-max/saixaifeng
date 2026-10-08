@@ -191,3 +191,35 @@ PC 球队／球员原始档案采用当前标签页内存缓存：账号、平�
 ## 演示抽签投屏同步（2026-10-08）
 
 QuickTournamentConsole 演示投屏复用原大屏视图，通过同源 localStorage 与 BroadcastChannel 按赛事、组别传递实际签位数组、队伍、队徽与显示配置，不向正式 screen-api 写虚拟状态。独立演示投屏路由仅预览 demo-* 赛事可用，投屏端不读取业务接口；退出演示清理虚拟投屏缓存。撤销同步实时发布；草稿保存保留 seedOrder 签位及各组实际 maxTeams。实际预览初始2/8（A1彩虹飞鱼、A2蓝湾逐风），临时分配晨曦猎豹立即3/8，撤销立即恢复2/8；入口及抽签JS/CSS线上摘要匹配，正式/admin入口摘要不变。
+
+## 赛程工作台与演示排程（2026-10-08）
+
+工作台增加导出对阵表、自主编排、上传赛程。对阵表仅含比赛ID、场序、组别、小组、轮次和双方，不含日期时间场地；填写模板与当前赛程仍在导入页。Excel 生成使用 Blob 下载并保留显式链接及加载反馈，上传先识别、预检，再应用已有比赛。演示排期接口只更新当前虚拟赛事既有比赛，预检不写入，冲突或真实ID拒绝；真实环境排程写入保留原发布门禁。空日历根据配置比赛日和开放时段生成，不依赖已有排期；拖拽传递比赛ID。仅修复尚未安排、未开始且无事件的旧全循环演示草稿，旧记录标为cancelled并保留，再按已确认组内单循环生成12场。隔离测试验证28条旧记录保留、12场有效对阵、预检/应用/冲突/重复修复。实际预览已生成待排对阵.xlsx下载链接；自动下载与最终拖拽页面验收因浏览器连接超时未完成，不能声称已拿到导出文件或已实际拖拽。预览入口和赛程JS/CSS回读摘要匹配，正式/admin摘要未变。
+
+## 平台数据中心正式接入（2026-10-08）
+
+正式入口：/admin/#/tournament-center-admin?section=dataCenter。原独立 /data-center 保留；本次恢复平台运营中心侧边栏入口，提供分组排名、各类榜单、球队、球员、判罚与事件、数据质量六类视图及查询、分页、导出。
+
+PC 经 webLoginApi.callFunction 转发 dataCenter.catalog/query；小程序经 getMiniWorkspace.dataCenter，使用 dataAction 或兼容 operation 指定 catalog/query/quality/tournamentStatistics/teamHistory/playerCareer。工作空间与球队／赛事权限由服务端注入。H5 公开读取经 webLoginApi.publicDataCenter，仅查询已发布赛事和比赛；publicMatchRankings 使用同一内核的单场排名。
+
+resultCenter 读取共享完整分页事件与共享 standings；getMiniWorkspace.tournamentData 的榜单消费共享 rankings。平台页面是统一服务的管理界面，其他端调用服务接口，不依赖打开该页面。原始裁判事件与审核快照仍保留原存储及修改权限，数据中心输出有效事实版本，不迁移原始记录，不自动执行纪律停赛。
+
+本次正式发布 dataCenter、webLoginApi、getMiniWorkspace、resultCenter 和 /admin/。以新下载生产包为基底保留现有授权与依赖；代码包摘要及网页入口、主包、平台页面资源均读回匹配。未发布新的小程序包或 H5 静态页面，未执行历史数据迁移。其他历史页面接入范围仍按 RELEASE.md 的各项登记，不表示所有旧读取入口已删除。
+
+## 历史时长直接核实（2026-10-08）
+
+平台负责人可在数据质量异常行使用 inspectDuration/verifyDuration，无需跳转赛事。仅平台负责人获准；服务端核对比赛存在、当前时长是否已核定及 expectedRevision，并以事务保存 matches.durationVerification 的时长单位、分钟、节数、核实依据、操作者、时间、独立修订版本和原依据摘要。保留赛前规则快照、事件、阵容及裁判报告；普通 dbQuery 与 updateMatch 不能伪造或改写核实字段。
+
+共享 playing-time 优先读取有效的人工核实补充，重查询生成新数据版本与分钟统计。该入口只处理时长异常，不修改身份、比分、判罚和纪律结果，也不替缺少依据的比赛猜时长。已核实记录禁止重复覆盖。
+
+独立平台实际目标 https://pingtai.sxffootball.cn，Nginx root /var/www/pingtai/releases/20261005。现存独立包无完整源文件，本轮保留原资源，在入口加入共享 DurationVerification 兼容模块，仅匹配时长异常行的稳定比赛 ID；主站源码两个数据中心视图同时接入共享组件。入口改动前保存 index/platform-ops 回滚副本。独立模块 HTTP200 且 SHA-256 匹配；浏览器连接超时，尚未完成真实登录弹窗验收。
+
+发布 dataCenter、webLoginApi、getMiniWorkspace、resultCenter、updateMatch，从最新线上包差量更新并逐文件下载回读。构建、共享同步、数据中心及球员卡回归、核实权限/冲突/幂等/原报告保留/普通写入保护验证通过。本轮没有替用户修改任何实际比赛时长。服务号、小程序静态页面未重新发布。
+
+## 完整对阵预览与填写回传（2026-10-08）
+
+用户更正：未排时间场地是单元格留空，不是删除列。分组确认后“导出对阵”进入原 PairingResult 对阵预览，显示场序、阶段、组别、小组、双方来源、日期、时间、场地；下载赛程填写表保留这些业务列及隐藏稳定比赛/组别ID，填写后从上传赛程识别、核对、保存。当前2组各4队演示复用正式 pairingTemplates：12场小组赛、2场半决赛、2场5–8名交叉赛、决赛/三四/五六/七八各1场，共20场；名次、胜负来源保持占位，不虚构实际球队。按双方来源复用已有比赛，保留排期，旧不匹配演示对阵标记legacy并保留原记录。20场全部填表后识别ready、预检、应用、刷新回读通过，重复预览无重复比赛；浏览器实际下载验收未完成，不能声称已拿到下载文件。预览入口与PairingResult及TournamentDraw JS/CSS线上摘要匹配；未发布正式/admin或生产云函数。
+
+## 对阵与排期状态分离（2026-10-08）
+
+用户反馈尚未编排却出现时间场地，来源是旧浏览器演示自动填充并在对阵升级时保留。prepareDrawPreview/repairLegacyGroupPairings 仅对赛事标记过旧自动生成、球员/比赛仍 synthetic/isTest、未开赛无事件、没有逐场明确编排标记的演示记录备份原日期时间场地并清空；手动/导入已有标记记录保持排期。新的手动、拖拽、导入、自动编排均记录 scheduleAssignmentSource 和 scheduleAssignedAt。保存日历设置不写比赛排期；只有明确 scheduleExistingPairings 才安排待排比赛，按设置日期、星期、时段和场地，不从09:00猜排，不覆盖已排比赛，容量不足原子回滚。隔离测试验证旧值备份清空、手工保护、保存设置仍待排、配置14:00时明确自动编排从14:00开始及回读保持。只发布预览静态前端，不更新正式后端。

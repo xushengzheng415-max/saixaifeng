@@ -2,16 +2,19 @@
 const crypto = require('node:crypto')
 const { readAll } = require('./shared/reader.cjs')
 const { error } = require('./shared/service.cjs')
+const staffPolicy = require('./staffPolicy.cjs')
 const id = value => String(value || '').trim()
 const first = result => Array.isArray(result.data) ? result.data[0] : result.data
 
 async function authenticate(cloud, db, event) {
   let user
+  let authSession = null
   if (event.__authToken) {
     const tokenHash = crypto.createHash('sha256').update(String(event.__authToken)).digest('hex')
     const sessions = (await db.collection('auth_sessions').where({ tokenHash, active:true, expiresAt:db.command.gt(new Date()) }).limit(2).get()).data || []
     if (sessions.length !== 1) throw error('AUTH_REQUIRED','登录已失效，请重新登录')
     const session = sessions[0]
+    authSession = session
     if (session.principalType === 'platform_owner' && session.channel === 'platform_password') user = { _id:'platform-owner', isPlatformOwner:true }
     else user = first(await db.collection('users').doc(session.userId).get())
   } else {
@@ -22,15 +25,25 @@ async function authenticate(cloud, db, event) {
     user = rows[0]
   }
   if (!user || (event.__actorUserId && id(event.__actorUserId) !== id(user._id))) throw error('AUTH_REQUIRED','账号身份校验失败')
-  const orgId = id(user.orgId || user.organizationId)
+  const orgId = id(authSession && authSession.activeOrgId || user.orgId || user.organizationId)
   const configuredOwner = id(process.env.PLATFORM_OWNER_USER_ID)
   let platformOwner = user.isPlatformOwner === true || (configuredOwner && configuredOwner === id(user._id))
   if (!platformOwner) {
     const settings = await readAll(db,'platform_settings',{ _id:'platform-owner' })
     platformOwner = settings.some(row => id(row.ownerUserId) === id(user._id))
   }
-  if (!platformOwner && (!orgId || user.organizationConflict)) throw error('ORG_REQUIRED','请先确认所属机构')
+  if (!platformOwner && (!orgId || user.organizationConflict && !id(authSession && authSession.activeOrgId))) throw error('ORG_REQUIRED','请先确认所属机构')
   if (event.__actorOrgId && id(event.__actorOrgId) !== orgId) throw error('DATA_FORBIDDEN','机构身份校验失败')
+  if (authSession && !platformOwner && await staffPolicy.isStaff(db, user._id, orgId) && !await staffPolicy.owner(db, user._id, orgId)) {
+    const tournamentId = id(event.scope && event.scope.tournamentId || event.tournamentId || event.__staffTournamentId)
+    const rights = ['event.dashboard', 'event.teams', 'event.results']
+    const allowed = authSession && tournamentId && (await Promise.all(rights.map(right => staffPolicy.hasRight(db, user._id, orgId, tournamentId, right)))).some(Boolean)
+    if (!allowed) throw error('DATA_FORBIDDEN','当前赛事没有数据读取权限')
+    const relations = await readAll(db, 'tournament_teams', { tournamentId }, { maxRows:20000 })
+    const teamIds = [...new Set(relations.map(row => id(row.teamId)).filter(Boolean))]
+    const manageTeams = await staffPolicy.hasRight(db, user._id, orgId, tournamentId, 'event.teams')
+    return { userId:id(user._id), orgId, platformOwner:false, staff:true, teamIds, manageTeamIds:manageTeams ? teamIds : [], tournamentIds:[tournamentId] }
+  }
   const owned = async collection => {
     const rows = [...await readAll(db,collection,{ orgId }), ...await readAll(db,collection,{ organizationId:orgId })]
     return [...new Map(rows.filter(row => {

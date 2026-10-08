@@ -1,36 +1,47 @@
 <template>
   <section class="pairing-page" v-loading="loading">
-    <header class="pairing-header"><div><span>赛事空间 / 抽签与分组 / 对阵结果</span><h1>{{ divisionName }} 对阵结果</h1><p>只显示轮次、场序和对阵来源；日期、时间、场地在赛历中手动安排。</p></div><div><el-button plain @click="backDraw">返回抽签结果</el-button><el-button type="primary" @click="goSchedule">进入赛历安排时间</el-button></div></header>
-    <section class="pairing-summary"><span>对阵总数 <b>{{ matches.length }}</b></span><i></i><span>待排时间 <b>{{ matches.length }}</b></span><el-tag type="warning">不进入日历</el-tag></section>
-    <div class="pairing-toolbar"><el-select v-model="stageFilter" clearable placeholder="全部阶段"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select><el-select v-model="roundFilter" clearable placeholder="全部轮次"><el-option v-for="round in rounds" :key="round" :label="round" :value="round" /></el-select><el-input v-model="keyword" clearable placeholder="搜索球队或来源" /></div>
-    <section v-if="pairingSections.length" class="pairing-stages"><article v-for="stage in pairingSections" :key="stage.name" class="stage-block"><header class="stage-header"><div><span>阶段 {{ stage.order }}</span><h2>{{ stage.name }}</h2></div><b>{{ stage.count }} 场</b></header><section v-for="round in stage.rounds" :key="round.name" class="round-block"><header><h3>{{ round.name }}</h3><span>{{ round.matches.length }} 场</span></header><div class="pairing-list"><article v-for="match in round.matches" :key="match._id"><header><span>{{ match.group || match.pool || '对阵' }}</span><b>第{{ match.matchNo || match.matchIndex || '-' }}场</b></header><div class="pairing-versus"><strong>{{ match.homeTeamName || match.homeSourceLabel || '待产生' }}</strong><em>VS</em><strong>{{ match.awayTeamName || match.awaySourceLabel || '待产生' }}</strong></div><footer><el-tag size="small" type="warning">时间待排</el-tag></footer></article></div></section></article></section>
-    <el-empty v-else description="暂无已确认对阵，请先完成抽签结果确认" />
+    <header class="pairing-header"><h1>对阵预览</h1><div><el-button text @click="backDraw">返回分组</el-button><el-button plain @click="goSchedule('settings')">自主编排</el-button><el-button plain @click="goSchedule('imports')">上传赛程</el-button><el-button type="success" :loading="exporting" :disabled="!matches.length" @click="downloadTemplate">下载赛程表</el-button></div></header>
+    <div class="pairing-toolbar"><el-select v-model="stageFilter" clearable placeholder="全部阶段"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select><el-input v-model="keyword" clearable placeholder="搜索球队或来源" /><span>{{ filteredMatches.length }} / {{ matches.length }} 场</span></div>
+    <a v-if="download" class="download-link" :href="download.url" :download="download.name">下载 {{ download.name }}</a>
+    <el-table :data="filteredMatches" empty-text="暂无已确认对阵">
+      <el-table-column label="场序" width="70"><template #default="{row}">{{ row.matchNo || row.matchIndex || '—' }}</template></el-table-column>
+      <el-table-column label="阶段" width="160"><template #default="{row}">{{ stageLabel(row) }}</template></el-table-column>
+      <el-table-column label="组别" width="110"><template #default="{row}">{{ row.divisionName || divisionName }}</template></el-table-column>
+      <el-table-column label="小组" width="80"><template #default="{row}">{{ row.groupName || row.group || row.pool || '—' }}</template></el-table-column>
+      <el-table-column label="比赛对阵" min-width="280"><template #default="{row}">{{ teamName(row,'home') }}　VS　{{ teamName(row,'away') }}</template></el-table-column>
+      <el-table-column label="日期" width="110"><template #default="{row}">{{ row.matchDate || '待填写' }}</template></el-table-column>
+      <el-table-column label="时间" width="85"><template #default="{row}">{{ row.matchTime || '待填写' }}</template></el-table-column>
+      <el-table-column label="场地" width="110"><template #default="{row}">{{ row.venue || '待填写' }}</template></el-table-column>
+    </el-table>
   </section>
 </template>
-
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { queryList } from '../../utils/cloud'
+import {computed,onMounted,onBeforeUnmount,ref} from 'vue'
+import {useRoute,useRouter} from 'vue-router'
+import {ElMessage} from 'element-plus'
+import {queryList,queryById} from '../../utils/cloud'
+import {createScheduleTemplateWorkbook} from '../../utils/scheduleTemplateWorkbook.mjs'
+const route=useRoute(),router=useRouter(),tournamentId=String(route.params.id || ''),divisionId=String(route.query.divisionId || 'default')
+const divisionName=String(route.query.divisionName || '当前组别'),loading=ref(false),matches=ref([]),tournament=ref({}),stageFilter=ref(''),keyword=ref(''),exporting=ref(false),download=ref(null)
+function stageLabel(row){return row.phase==='group' || row.stage==='group' ? '小组赛' : row.roundName || row.scheduleStageName || row.stageName || '联赛'}
+function teamName(row,side){return row[`${side}TeamName`] || row[`${side}SourceLabel`] || '待产生'}
+const stages=computed(()=>[...new Set(matches.value.map(stageLabel))])
+const filteredMatches=computed(()=>matches.value.filter(row=>(!stageFilter.value || stageLabel(row)===stageFilter.value) && (!keyword.value || `${teamName(row,'home')} ${teamName(row,'away')}`.includes(keyword.value))))
+function backDraw(){router.push({path:`/tournaments/${tournamentId}/draw`,query:{divisionId,mode:'quick',view:'result',format:'tournament'}})}
+function goSchedule(view){router.push({path:`/tournaments/${tournamentId}/matches`,query:{divisionId,view}})}
+async function downloadTemplate(){
+  exporting.value=true
+  try{
+    const {buffer:bytes,filename:name}=await createScheduleTemplateWorkbook({tournament:tournament.value,matches:matches.value,divisionName,stageLabel,teamName})
+    if(download.value)URL.revokeObjectURL(download.value.url)
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))
 
-const route = useRoute(); const router = useRouter(); const tournamentId = String(route.params.id || ''); const divisionId = String(route.query.divisionId || 'default')
-const loading = ref(false); const matches = ref([]); const keyword = ref(''); const stageFilter = ref(''); const roundFilter = ref(''); const divisionName = ref(String(route.query.divisionName || '当前组别'))
-const phaseLabels = { group: '小组赛', league: '联赛阶段', knockout: '淘汰赛阶段', placement: '排位赛阶段', cup: '淘汰赛阶段' }
-function stageInfo(match) {
-  const raw = String(match.scheduleStageName || match.stageName || phaseLabels[match.phase] || '').trim()
-  const isGroup = String(match.phase || '').toLowerCase() === 'group' || /小组|分组|group/i.test(raw)
-  return isGroup ? { name: '小组赛', order: 1, isGroup: true } : { name: raw || '对阵阶段', order: Number(match.scheduleStageOrder || match.stageOrder || 99), isGroup: false }
+    download.value={url,name};const link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();ElMessage.success('赛程表已生成')
+  }catch(error){ElMessage.error(error.message || '生成失败，请重试')}finally{exporting.value=false}
 }
-const rounds = computed(() => [...new Set(matches.value.map(item => String(item.roundName || item.phase || '比赛')))])
-const stages = computed(() => [...new Set(matches.value.map(item => stageInfo(item).name))])
-const filteredMatches = computed(() => matches.value.filter(item => { const text = `${item.matchNo || ''} ${item.roundName || ''} ${item.homeTeamName || item.homeSourceLabel || ''} ${item.awayTeamName || item.awaySourceLabel || ''}`; const stage = stageInfo(item).name; return (!stageFilter.value || stage === stageFilter.value) && (!roundFilter.value || String(item.roundName || item.phase || '比赛') === roundFilter.value) && (!keyword.value.trim() || text.includes(keyword.value.trim())) }))
-const pairingSections = computed(() => { const stageMap = new Map(); filteredMatches.value.forEach(match => { const info = stageInfo(match); const stageName = info.name; const stage = stageMap.get(stageName) || { name: stageName, order: info.order, isGroup: info.isGroup, count: 0, roundMap: new Map() }; const roundName = info.isGroup ? '小组赛' : String(match.roundName || (match.round ? `第${match.round}轮` : '对阵')); const round = stage.roundMap.get(roundName) || { name: roundName, order: info.isGroup ? 1 : Number(match.scheduleRound || match.round || 99), matches: [] }; round.matches.push(match); round.matches.sort((a,b) => Number(a.matchNo || a.matchIndex || 0) - Number(b.matchNo || b.matchIndex || 0)); stage.roundMap.set(roundName, round); stage.count += 1; stageMap.set(stageName, stage) }); return [...stageMap.values()].sort((a,b) => a.order - b.order || a.name.localeCompare(b.name,'zh-CN')).map((stage,index) => ({ ...stage, order:index + 1, rounds:[...stage.roundMap.values()].sort((a,b) => a.order - b.order || a.name.localeCompare(b.name,'zh-CN')) })) })
-async function load() { loading.value = true; try { const rows = await queryList('matches', { where: { tournamentId, divisionId }, limit: 1000 }); matches.value = rows.filter(item => item.pairingStatus === 'confirmed' && item.scheduleStatus !== 'scheduled' && !item.schedulePublished).sort((a,b) => Number(a.matchNo || a.matchIndex || 0) - Number(b.matchNo || b.matchIndex || 0)); if (matches.value[0]?.divisionName) divisionName.value = matches.value[0].divisionName } finally { loading.value = false } }
-function backDraw() { router.push({ path: `/tournaments/${tournamentId}/draw`, query: { divisionId } }) }
-function goSchedule() { router.push({ path: `/tournaments/${tournamentId}/matches`, query: { divisionId } }) }
-onMounted(load)
+onMounted(async()=>{loading.value=true;try{const [event,rows]=await Promise.all([queryById('tournaments',tournamentId),queryList('matches',{where:{tournamentId,divisionId},limit:1000})]);tournament.value=event || {};matches.value=(rows || []).filter(row=>row.status!=='cancelled' && !row.demoLegacyPairing).sort((a,b)=>Number(a.matchNo || a.matchIndex || 0)-Number(b.matchNo || b.matchIndex || 0))}catch(error){ElMessage.error(error.message || '对阵加载失败')}finally{loading.value=false}})
+onBeforeUnmount(()=>{if(download.value)URL.revokeObjectURL(download.value.url)})
 </script>
-
 <style scoped>
-.pairing-page{min-height:100%;padding:28px 32px 80px;background:#f7faf8;color:#233b2d}.pairing-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-bottom:20px;border-bottom:1px solid #dfe8e2}.pairing-header>div:first-child>span,.pairing-header p{color:#708077;font-size:13px}.pairing-header h1{margin:8px 0 5px;font-size:30px}.pairing-header p{margin:0}.pairing-summary{display:flex;align-items:center;gap:22px;margin:18px 0;padding:15px 18px;border:1px solid #dfe8e2;border-radius:8px;background:#fff}.pairing-summary span{font-size:13px}.pairing-summary b{margin-left:5px;font-size:22px}.pairing-summary i{height:22px;border-left:1px solid #dfe8e2}.pairing-toolbar{display:flex;gap:10px;margin-bottom:14px}.pairing-toolbar .el-select{width:180px}.pairing-toolbar .el-input{width:320px}.stage-block{margin-top:16px;padding:18px;border:1px solid #dbe8df;border-radius:12px;background:#fdfefe}.stage-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid #e4eee7}.stage-header span{color:#0a8750;font-size:12px;font-weight:700;letter-spacing:.08em}.stage-header h2{margin:4px 0 0;font-size:22px}.stage-header>b{color:#087943;font-size:20px}.round-block{margin-top:15px;padding:14px;border:1px solid #e4ece6;border-radius:9px;background:#f7faf8}.round-block>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}.round-block h3{margin:0;font-size:16px}.round-block>header span{color:#748278;font-size:12px}.pairing-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.pairing-list article{padding:13px;border:1px solid #dfe8e2;border-radius:8px;background:#fff}.pairing-list article>header,.pairing-list footer{display:flex;align-items:center;justify-content:space-between}.pairing-list article>header{color:#69786e;font-size:12px}.pairing-list article>header b{color:#087943}.pairing-versus{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;min-height:72px}.pairing-versus strong{font-size:16px;line-height:1.4;word-break:break-word}.pairing-versus strong:last-child{text-align:right}.pairing-versus em{color:#8d9b92;font-size:12px;font-style:normal;font-weight:800}.pairing-list footer{justify-content:flex-end;padding-top:9px;border-top:1px solid #edf2ee;color:#7a887f;font-size:12px}@media(max-width:1000px){.pairing-header{align-items:flex-start;flex-direction:column}.pairing-list{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:680px){.pairing-page{padding:20px 16px 70px}.pairing-list{grid-template-columns:1fr}.pairing-toolbar{flex-direction:column}.pairing-toolbar .el-select,.pairing-toolbar .el-input{width:100%}}
+.pairing-page{padding:24px;color:#26352c;background:#f7f9f8;min-height:100%}.pairing-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.pairing-header h1{margin:0;font-size:26px}.pairing-header>div{display:flex;gap:8px;flex-wrap:wrap}.pairing-header :deep(.el-button + .el-button){margin-left:0}.pairing-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}.pairing-toolbar .el-select{width:180px}.pairing-toolbar .el-input{width:260px}.pairing-toolbar>span{margin-left:auto;font-size:13px;color:#66746b}.download-link{display:block;margin-bottom:12px;color:#087b43;font-size:13px}@media(max-width:900px){.pairing-header{align-items:flex-start;flex-direction:column}.pairing-toolbar{flex-wrap:wrap}}
 </style>
