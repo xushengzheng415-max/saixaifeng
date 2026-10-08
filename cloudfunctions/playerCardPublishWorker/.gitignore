@@ -4,3 +4,6 @@
 /fonts/
 /data-center/
 /node_modules/
+
+/player-card-font-manifest.json
+/player-card-text-styles.json
