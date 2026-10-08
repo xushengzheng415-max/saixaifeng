@@ -1,12 +1,17 @@
 <template>
   <section class="card-library">
     <div class="library-head">
-      <div><h2>球员卡模板</h2><span>背景与黑白遮罩使用同一张 300 × 430 画布</span></div>
+      <div><h2>{{ activePanel === 'catalog' ? '球员卡库' : '球员卡模板' }}</h2><span>{{ activePanel === 'catalog' ? '全部球员、成卡状态与版本' : '背景与黑白遮罩使用同一张 300 × 430 画布' }}</span></div>
       <el-button type="primary" @click="startCreate">新建卡片</el-button>
     </div>
+    <nav class="card-system-tabs" aria-label="球员卡系统">
+      <button type="button" :class="{active:activePanel==='templates'}" @click="activePanel='templates'">模板编辑</button>
+      <button type="button" :class="{active:activePanel==='catalog'}" @click="activePanel='catalog'">成卡库</button>
+    </nav>
+    <PlayerCardCatalog v-if="activePanel==='catalog'" @edit-template="editTemplateFromCatalog" @create-for-player="createTemplateForPlayer" />
     <el-alert v-if="!backendReady && !loading" title="模板保存和发布服务尚未开放，当前调整仅在本页保留" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false"><template #default><el-button link @click="load">重试</el-button></template></el-alert>
-    <div class="library-body" v-loading="loading">
+    <div v-show="activePanel==='templates'" class="library-body" v-loading="loading">
       <aside class="template-list" aria-label="模板列表">
         <label class="preload-filter">预装分类<el-select v-model="category"><el-option label="全部" value="all" /><el-option v-for="scope in PRELOAD_TYPES" :key="scope.value" :label="scope.label" :value="scope.value" /></el-select></label>
         <button v-for="item in visibleTemplates" :key="item.id" type="button" :class="{ selected: form.id === item.id || (!form.id && form.tier === item.tier) }" @click="select(item)">
@@ -29,11 +34,23 @@
               <template #footer><el-button v-if="targetCursor" link :loading="targetsLoading" @click="loadTargetPage(true)">加载更多</el-button></template>
             </el-select>
           </label>
+          <div v-if="form.preload.type === 'player'" class="player-source" aria-live="polite">
+            <span v-if="playerSourceLoading" role="status">正在读取球员资料和头像…</span>
+            <p v-else-if="playerSourceError" class="field-error" role="alert">{{ playerSourceError }} <el-button link @click="loadPlayerSource(form.preload.targetId)">重试</el-button></p>
+            <template v-else-if="preloadPlayer">
+              <img v-if="preloadPlayer.portraitUrl" :src="preloadPlayer.portraitUrl" :alt="preloadPlayer.name + '头像'">
+              <span v-else class="player-source-missing">缺少可用头像</span>
+              <div><strong>{{ preloadPlayer.name || '球员' }} · {{ preloadPlayer.jerseyNumber || '无号码' }}</strong><small>{{ preloadPlayer.teamName || '未关联球队' }} · {{ preloadPlayer.position || '—' }} · {{ preloadPlayer.tier ? tierName(preloadPlayer.tier) : '等级待核定' }}</small><small v-if="preloadPlayer.teamLogoStatus === 'transparent_png_required'" class="team-logo-warning">队徽文件没有透明底，卡面暂不叠加</small><small v-else-if="preloadPlayer.teamLogoStatus === 'missing'" class="team-logo-warning">球队未上传队徽</small></div>
+            </template>
+            <span v-else>选择球员后，编辑器会载入他的资料和头像。</span>
+          </div>
+          <label v-if="form.preload.type === 'player' && preloadPlayer && !preloadPlayer.position" class="position-override">卡面位置补充<el-input v-model.trim="form.positionOverride" maxlength="16" placeholder="如：前锋" @input="dirty = true" /></label>
           <p v-if="targetsError" class="field-error" role="alert">{{ targetsError }} <el-button link @click="searchTargets(targetKeyword)">重试</el-button></p>
           <div class="file-fields">
             <label class="file-picker"><strong>背景 PNG</strong><span class="file-target">{{ form.backgroundUrl ? '更换背景' : '上传背景' }}</span><input type="file" accept=".png,image/png" aria-label="选择背景 PNG" @change="chooseFile($event, 'background')"><small v-if="selectedFiles.background">{{ selectedFiles.background }} · 待保存</small></label>
             <label class="file-picker"><strong>黑白遮罩 PNG</strong><span class="file-target">{{ form.maskUrl ? '更换遮罩' : '上传遮罩' }}</span><input type="file" accept=".png,image/png" aria-label="选择黑白遮罩 PNG" @change="chooseFile($event, 'mask')"><small v-if="selectedFiles.mask">{{ selectedFiles.mask }} · 待保存</small></label>
           </div>
+          <p v-if="assetProgress" class="file-feedback" role="status">{{ assetProgress }}</p>
           <p v-if="uploadError" class="field-error" role="alert">{{ uploadError }}</p>
           <p v-else-if="selectedFiles.background || selectedFiles.mask" class="file-feedback" role="status">素材已选入；保存草稿后生效。</p>
           <div class="layout-presets">
@@ -46,7 +63,7 @@
             <p v-if="layoutsError" class="field-error" role="alert">{{ layoutsError }} <el-button link @click="loadLayoutPresets(false)">重试</el-button></p>
           </div>
           <div class="photo-editor">
-            <div class="photo-editor-head"><strong>示例照片</strong><el-button link @click="resetPhoto">恢复默认</el-button></div>
+            <div class="photo-editor-head"><strong>{{ form.preload.type === 'player' && preloadPlayer ? '球员头像构图' : '示例照片' }}</strong><el-button link @click="resetPhoto">恢复默认</el-button></div>
             <label>大小 <span>{{ form.photo.scale }}%</span><el-slider v-model="form.photo.scale" :min="50" :max="200" :step="5" @change="dirty = true" /></label>
             <div class="photo-position"><label>横向 X<el-input-number v-model="form.photo.x" :min="0" :max="300" @change="dirty = true" /></label><label>纵向 Y<el-input-number v-model="form.photo.y" :min="0" :max="250" @change="dirty = true" /></label></div>
           </div>
@@ -58,6 +75,7 @@
           <div class="text-editor">
             <strong>文字字段</strong>
             <el-select v-model="selectedField" aria-label="选择文字字段"><el-option v-for="field in TEXT_FIELDS" :key="field.key" :label="field.label" :value="field.key" /></el-select>
+            <label v-if="currentStyle && ['height','weight'].includes(selectedField)" class="field-visibility">隐藏卡面{{ selectedField === 'height' ? '身高' : '体重' }}<el-switch v-model="currentStyle.hidden" @change="dirty = true" /></label>
             <div v-if="currentStyle" class="text-controls">
               <label>字体<el-select v-model="currentStyle.font" @change="dirty = true"><el-option v-for="font in TEXT_STYLE_CONTRACT.fonts" :key="font.id" :value="font.id" :label="font.label" /></el-select></label>
               <label>填色<el-select v-model="currentStyle.fillMode" @change="dirty = true"><el-option label="纯色" value="solid" /><el-option label="渐变" value="gradient" /></el-select></label>
@@ -94,47 +112,76 @@
           <p class="version" v-if="form.id">草稿 {{ form.draftVersion }} · 已发布 {{ form.publishedVersion || '—' }}</p>
           <div class="editor-actions">
             <el-button type="primary" :loading="saving" :disabled="!backendReady || !scopeReady || !dirty || !form.title || !form.backgroundUrl || !form.maskUrl || previewState !== 'ready'" @click="save">保存草稿</el-button>
-            <el-button :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="publish">发布</el-button>
-            <el-button v-if="publishJob?.jobId" :disabled="!publishServiceReady" :loading="publishing" @click="resumePublish">{{ publishJob.status === 'blocked' ? '重试发布' : '继续发布' }}</el-button>
+            <el-button :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="publish">生成成卡</el-button>
+            <el-button v-if="publishJob?.status === 'review'" :disabled="!publishServiceReady" @click="openGeneratedReview(true)">预览成卡</el-button>
+            <el-button v-if="publishJob?.jobId && ['pending','blocked','preloading'].includes(publishJob.status)" :disabled="!publishServiceReady" :loading="publishing" @click="resumePublish">{{ publishJob.status === 'blocked' ? '重试制卡' : publishJob.status === 'preloading' ? '继续预装' : '继续制卡' }}</el-button>
           </div>
           <div v-if="publishJob?.status === 'blocked'" class="field-error" role="alert">
             <span>{{ publishJob.failed }} 张成卡待修复</span>
             <p v-for="item in publishJob.failures" :key="item.playerId">{{ item.playerId }}：{{ item.reason }}</p>
           </div>
+          <div v-if="publishJob?.skippedPlayers?.length" class="publish-skips" role="status">
+            <strong>未预装球员</strong><p v-for="item in publishJob.skippedPlayers" :key="item.playerId">{{ item.playerId }}：{{ item.reason }}</p>
+          </div>
+          <div v-if="publishJob?.jobId" class="publish-progress" role="status" aria-live="polite">
+            <div class="publish-progress-head"><strong>{{ publishJob.status === 'blocked' ? '制卡受阻' : publishJob.status === 'review' ? '成卡待预览' : publishJob.status === 'active' ? '已预装上线' : '正在生成成卡' }}</strong><span>{{ publishJob.completed || 0 }}/{{ publishJob.total || 0 }}</span></div>
+            <el-progress :percentage="publishPercentage" :status="publishJob.status === 'blocked' ? 'exception' : undefined" :stroke-width="9" />
+            <small>已生成 {{ publishJob.generated || 0 }} 张 · 失败 {{ publishJob.failed || 0 }} 张 · 跳过 {{ publishJob.skipped || 0 }} 人</small>
+          </div>
           <p v-if="publishProgress" class="release-note" role="status">{{ publishProgress }}</p>
-          <p v-else class="release-note">发布后添加到符合范围的球员 H5 卡库。</p>
+          <p v-else class="release-note">先生成并预览全部成卡，再手动确认预装上线。</p>
         </div>
-        <div ref="previewSlot" class="preview-slot"><div id="player-card-editor-preview" v-show="previewVisible" class="preview-pane preview-docked" :style="dockStyle">
-          <div class="preview-title"><strong>排版预览</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="showFinalPreview">查看大图</el-button></div>
-          <div class="preview-size" :style="previewSizeStyle"><div ref="previewRef" class="card-preview" :style="previewScaleStyle" role="img" aria-label="球员卡模板预览">
+        <div class="preview-pane">
+          <div class="preview-title"><strong>{{ form.preload.type === 'player' && preloadPlayer ? preloadPlayer.name + ' · 单人卡预览' : '排版预览' }}</strong><el-button link :loading="finalPreviewLoading" :disabled="!backendReady || previewState !== 'ready'" @click="showFinalPreview">查看大图</el-button></div>
+          <div ref="previewRef" class="card-preview" role="img" aria-label="球员卡模板预览">
             <img v-if="form.backgroundUrl" class="back" :src="form.backgroundUrl" alt="">
-            <div v-if="previewState === 'ready'" class="portrait-mask" :style="portraitMaskStyle"><img class="portrait" :src="previewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag"></div>
-
-            <span v-if="previewState === 'ready'" class="card-badge nationality" :style="badgeStyle('nationality')" title="国籍旗帜示例" @pointerdown="beginBadgeDrag($event, 'nationality')"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#d92d24"/><polygon points="6,2 7,5 10,5 8,7 9,10 6,8 3,10 4,7 2,5 5,5" fill="#ffdf45"/></svg></span>
-            <span v-if="previewState === 'ready'" class="card-badge team" :style="badgeStyle('team')" title="球队队徽示例" @pointerdown="beginBadgeDrag($event, 'team')">队</span>
-            <span v-for="field in previewState === 'ready' ? TEXT_FIELDS : []" :key="field.key" class="card-text" :class="{ active: selectedField === field.key }"
+            <div v-if="previewState === 'ready'" class="portrait-mask" :style="portraitMaskStyle"><img class="portrait" :src="activePreviewPortrait" :style="photoStyle" alt="" @pointerdown="beginPhotoDrag"></div>
+            <span v-if="previewState === 'ready'" class="card-badge nationality" :class="{'nationality-label':!previewIsChinese}" :style="badgeStyle('nationality')" title="国籍" @pointerdown="beginBadgeDrag($event, 'nationality')"><svg v-if="previewIsChinese" viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#de2910"/><polygon v-for="(points,index) in CHINA_FLAG_STARS" :key="index" :points="points" fill="#ffde00"/></svg><span v-else>{{ previewNationality || '—' }}</span></span>
+            <span v-if="previewState === 'ready' && preloadPlayer?.teamLogoUrl" class="card-badge team team-image" :style="badgeStyle('team')" title="球队队徽" @pointerdown="beginBadgeDrag($event, 'team')"><img :src="preloadPlayer.teamLogoUrl" alt=""></span>
+            <span v-else-if="previewState === 'ready' && form.preload.type !== 'player'" class="card-badge team" :style="badgeStyle('team')" title="球队队徽示例" @pointerdown="beginBadgeDrag($event, 'team')">队</span>
+            <span v-for="field in previewState === 'ready' ? previewTextFields : []" :key="field.key" class="card-text" :class="{ active: selectedField === field.key }"
               :style="fieldStyle(field.key)" @pointerdown="beginTextDrag($event, field.key)">{{ field.sample }}</span>
-          </div></div>
+          </div>
           <span v-if="!form.backgroundUrl || !form.maskUrl" class="preview-state">上传背景和遮罩后可预览</span>
           <span v-else-if="previewState === 'loading'" class="preview-state" role="status">正在合成预览…</span>
           <div v-else-if="previewState === 'error'" class="preview-error" role="alert"><span>{{ previewError }}</span><el-button link @click="composePreview">重试预览</el-button></div>
           <span v-else class="preview-state">{{ selectedFiles.background || selectedFiles.mask ? '新素材预览已更新 · 待保存' : '拖动预览文字可调整位置' }}</span>
-        </div></div>
+        </div>
       </div>
     </div>
-    <el-button class="preview-toggle" type="primary" :aria-expanded="previewVisible" aria-controls="player-card-editor-preview" @click="previewVisible = !previewVisible">{{ previewVisible ? '隐藏预览' : '显示预览' }}</el-button>
     <el-dialog v-model="previewOpen" title="服务端成卡预览" width="min(650px, 96vw)" append-to-body>
       <img v-if="finalPreviewImage" :src="finalPreviewImage" alt="服务端生成的完整球员卡" style="display:block;width:min(100%,450px);height:auto;margin:auto">
+    </el-dialog>
+    <el-dialog v-model="reviewDialog" title="成卡预览" width="min(1120px, 96vw)" append-to-body :close-on-click-modal="false">
+      <div class="generated-review-meta">已生成 {{ reviewTotal }} 张 · 已载入 {{ reviewCards.length }} 张</div>
+      <div v-if="!reviewLoading && reviewTotal===0" class="generated-review-state" role="status">没有生成可预览的成卡，请退回修改。</div>
+      <div class="generated-review-grid">
+        <article v-for="card in reviewCards" :key="card.playerId + card.cardId">
+          <img :src="card.imageUrl" :alt="card.name + '成卡预览'">
+          <strong>{{ card.name }} · {{ card.jerseyNumber || '无号码' }}号</strong>
+          <small>{{ card.cardId }}</small>
+        </article>
+      </div>
+      <div v-if="reviewLoading" class="generated-review-state" role="status">正在读取成卡…</div>
+      <div v-else-if="reviewError" class="generated-review-state field-error" role="alert">{{ reviewError }} <el-button link @click="loadReviewPage">重试</el-button></div>
+      <template #footer>
+        <el-button @click="reviewDialog=false">稍后确认</el-button>
+        <el-button :disabled="confirmingPublish || reviewLoading" @click="rejectPreview">退回修改</el-button>
+        <el-button v-if="reviewNext !== null" :loading="reviewLoading" @click="loadReviewPage">加载下一页</el-button>
+        <el-button v-else type="primary" :loading="confirmingPublish" :disabled="reviewTotal===0 || reviewCards.length !== reviewTotal" @click="confirmPreload">确认并预装上线</el-button>
+      </template>
     </el-dialog>
 
   </section>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { playerCardTemplateRequest } from '@/utils/cloud'
+import { getFileUrl, playerCardTemplateRequest, uploadLargeFileViaCloud } from '@/utils/cloud'
 import { renderMaskedCardLayers } from '@/utils/playerCardMask'
+import PlayerCardCatalog from './PlayerCardCatalog.vue'
 import TEXT_STYLE_CONTRACT from '../../../../cloudfunctions/webLoginApi/player-card-text-styles.json'
 
 
@@ -146,6 +193,8 @@ const TEXT_FIELDS = [
   { key: 'height', label: '身高', sample: '身高 178cm' },
   { key: 'weight', label: '体重', sample: '体重 72kg' }
 ]
+function flagStarPoints(cx,cy,radius,rotation=0){return Array.from({length:10},(_,i)=>{const angle=(-90+rotation+i*36)*Math.PI/180,r=i%2?radius*.4:radius;return `${cx+Math.cos(angle)*r},${cy+Math.sin(angle)*r}`}).join(' ')}
+const CHINA_FLAG_STARS=[flagStarPoints(5,5,3),flagStarPoints(10,2,1,239),flagStarPoints(12,4,1,262),flagStarPoints(12,7,1,286),flagStarPoints(10,9,1,309)]
 const DEFAULT_LAYOUT = {
   number: { x: 44, y: 70, size: 52, color: '#1c241d', weight: 900 },
   position: { x: 44, y: 130, size: 24, color: '#1c241d', weight: 700 },
@@ -155,34 +204,59 @@ const DEFAULT_LAYOUT = {
   weight: { x: 202, y: 367, size: 14, color: '#30312b', weight: 600 }
 }
 const freshTextStyle = () => JSON.parse(JSON.stringify(TEXT_STYLE_CONTRACT.defaults))
-function styleLayout(value) { return Object.fromEntries(Object.entries(DEFAULT_LAYOUT).map(([key,base]) => { const raw = value?.[key] || base, defaults=freshTextStyle(); return [key,{...base,...defaults,...raw,gradient:{...defaults.gradient,...raw.gradient},stroke:{...defaults.stroke,...raw.stroke},shadow:{...defaults.shadow,...raw.shadow}}] })) }
+function styleLayout(value) { return Object.fromEntries(Object.entries(DEFAULT_LAYOUT).map(([key,base]) => { const raw = value?.[key] || base, defaults=freshTextStyle(); return [key,{...base,...defaults,...raw,hidden:key==='position'?false:raw.hidden===true,gradient:{...defaults.gradient,...raw.gradient},stroke:{...defaults.stroke,...raw.stroke},shadow:{...defaults.shadow,...raw.shadow}}] })) }
 function freshLayout() { return styleLayout(DEFAULT_LAYOUT) }
 const DEFAULT_PHOTO = { x: 150, y: 35, scale: 108 }
 function freshPhoto() { return { ...DEFAULT_PHOTO } }
 const DEFAULT_BADGES = { nationality: { x: 125, y: 394, size: 28 }, team: { x: 175, y: 388, size: 32 } }
-function freshBadges(value = {}) { return Object.fromEntries(Object.entries(DEFAULT_BADGES).map(([key, defaults]) => [key, { ...defaults, ...(value?.[key] || {}) }])) }
+function freshBadges() { return JSON.parse(JSON.stringify(DEFAULT_BADGES)) }
 
 const backendReady = ref(false), publishServiceReady = ref(false)
+const route=useRoute(),router=useRouter(),CARD_PANEL_KEY='playerCardLibrary.activePanel'
+const DRAFT_RECOVERY_KEY='playerCardTemplateDraftRecovery.v1'
+let recoveryChecked=false
+function initialCardPanel(){const requested=String(route.query.panel||'');if(['templates','catalog'].includes(requested))return requested;try{return sessionStorage.getItem(CARD_PANEL_KEY)==='catalog'?'catalog':'templates'}catch{return 'templates'}}
+const activePanel=ref(initialCardPanel())
+watch(activePanel,value=>{try{sessionStorage.setItem(CARD_PANEL_KEY,value)}catch{};if(String(route.query.panel||'')!==value)router.replace({path:route.path,query:{...route.query,panel:value}})})
 const templates = ref([]), nextCursor = ref(''), loading = ref(false), loadingMore = ref(false)
 const saving = ref(false), publishing = ref(false), error = ref(''), uploadError = ref(''), dirty = ref(false)
 const publishProgress = ref('')
 const publishJob = ref(null)
+const publishPercentage = computed(() => {
+  const total=Number(publishJob.value?.total||0),completed=publishJob.value?.status==='preloading'?Number(publishJob.value?.preloadCompleted||0):Number(publishJob.value?.completed||0)
+  return total?Math.min(100,Math.max(0,Math.round(completed/total*100))):0
+})
 const selectedFiles = reactive({ background: '', mask: '' })
-const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null), previewSlot = ref(null)
+const stagedAssets={background:null,mask:null}
+const assetProgress=ref('')
+const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null)
 const finalPreviewLoading = ref(false), finalPreviewImage = ref('')
 const previewState = ref('idle'), previewError = ref(''), previewOpen = ref(false)
+const reviewDialog=ref(false),reviewCards=ref([]),reviewTotal=ref(0),reviewNext=ref(null),reviewLoading=ref(false),reviewError=ref(''),confirmingPublish=ref(false)
+const portraitMaskUrl = ref('')
 const PRELOAD_TYPES = [{ value:'platform', label:'全平台' }, { value:'team', label:'球队' }, { value:'tournament', label:'赛事' }, { value:'player', label:'球员' }]
 const freshPreload = () => ({ type:'platform', targetId:'', targetName:'' })
 const category = ref('all'), targets = ref([]), targetsLoading = ref(false), targetsError = ref(''), targetCursor = ref(''), targetKeyword = ref('')
+const preloadPlayer=ref(null),playerSourceLoading=ref(false),playerSourceError=ref('')
 let targetRequest = 0, formEpoch = 0
 const layoutPresets=ref([]),selectedLayoutPreset=ref(''),layoutsLoading=ref(false),layoutsError=ref(''),layoutCursor=ref(''),layoutKeyword=ref(''),layoutSaving=ref(false),layoutApplying=ref(false)
 let layoutRequest=0
 const visibleTemplates = computed(() => templates.value.filter(item => category.value === 'all' || (item.preload?.type || 'platform') === category.value))
 const targetOptions = computed(() => form.preload.targetId && !targets.value.some(item => item.id === form.preload.targetId) ? [{id:form.preload.targetId,name:form.preload.targetName || form.preload.targetId}, ...targets.value] : targets.value)
-const scopeReady = computed(() => form.preload.type === 'platform' || Boolean(form.preload.targetId))
+const scopeReady = computed(() => form.preload.type === 'platform' || Boolean(form.preload.targetId && (form.preload.type !== 'player' || (preloadPlayer.value?.id === form.preload.targetId && preloadPlayer.value?.portraitUrl))))
 const form = reactive({ preload:freshPreload(), id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
-  backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
+  backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', backgroundFileId:'', maskFileId:'', positionOverride:'',layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
 const previewPortrait = `${import.meta.env.BASE_URL}images/player-card-layers/preview-portrait.png`
+const activePreviewPortrait=computed(()=>form.preload.type==='player'&&preloadPlayer.value?.portraitUrl?preloadPlayer.value.portraitUrl:previewPortrait)
+const previewNationality=computed(()=>form.preload.type==='player'&&preloadPlayer.value?String(preloadPlayer.value.nationality||''):'中国')
+const previewIsChinese=computed(()=>['中国','中国籍','中华人民共和国'].includes(previewNationality.value.trim())||['CN','CHN','CHINA'].includes(previewNationality.value.trim().toUpperCase()))
+const previewTextFields=computed(()=>TEXT_FIELDS.map(field=>{
+  const player=preloadPlayer.value
+  if(form.preload.type!=='player'||!player)return field
+  const values={number:player.jerseyNumber,position:({GK:'守门员',DF:'后卫',MF:'中场',FW:'前锋'})[player.position]||player.position||form.positionOverride||'—',name:player.name,jerseyName:player.jerseyName,
+    height:player.height==null?'':`身高 ${player.height}cm`,weight:player.weight==null?'':`体重 ${player.weight}kg`}
+  return {...field,sample:values[field.key]||''}
+}).filter(field=>field.sample && (field.key==='position' || form.layout[field.key]?.hidden !== true)))
 const currentStyle = computed(() => form.layout[selectedField.value])
 const currentBadge = computed(() => form.badges[selectedBadge.value])
 const photoStyle = computed(() => {
@@ -190,36 +264,24 @@ const photoStyle = computed(() => {
   return { left: `${form.photo.x}px`, top: `${form.photo.y + 300 - height}px`,
     width: `${width}px`, height: `${height}px`, transform: 'translateX(-50%)' }
 })
-const canPublish = computed(() => Boolean(scopeReady.value && form.id && !dirty.value && form.backgroundUrl && form.maskUrl && previewState.value === 'ready' &&
+const portraitMaskStyle = computed(() => ({ maskImage:`url("${portraitMaskUrl.value}")`, WebkitMaskImage:`url("${portraitMaskUrl.value}")`, maskSize:'300px 430px', WebkitMaskSize:'300px 430px', maskRepeat:'no-repeat', WebkitMaskRepeat:'no-repeat' }))
+const canPublish = computed(() => Boolean(scopeReady.value && form.id && !dirty.value && !['pending','blocked','review','preloading'].includes(publishJob.value?.status) && form.backgroundUrl && form.maskUrl && previewState.value === 'ready' &&
   (form.status !== 'published' || form.draftVersion > form.publishedVersion)))
-const previewVisible=ref(true),portraitMaskUrl=ref(''),dockBounds=reactive({left:0,width:340,height:800})
-const dockStyle=computed(()=>({left:`${dockBounds.left}px`,width:`${dockBounds.width}px`}))
-const previewScale=computed(()=>Math.max(.25,Math.min(1,(dockBounds.width-28)/300,(dockBounds.height-112)/430)))
-const previewSizeStyle=computed(()=>({width:`${300*previewScale.value}px`,height:`${430*previewScale.value}px`}))
-const previewScaleStyle=computed(()=>({transform:`scale(${previewScale.value})`,transformOrigin:'top left'}))
-const portraitMaskStyle=computed(()=>({maskImage:`url("${portraitMaskUrl.value}")`,WebkitMaskImage:`url("${portraitMaskUrl.value}")`,maskSize:'300px 430px',WebkitMaskSize:'300px 430px',maskRepeat:'no-repeat',WebkitMaskRepeat:'no-repeat'}))
-let dockObserver=null,dockFrame=0,activeDragEnd=null,previewRequest=0,pendingMaskReview=false
-function updateDock(){
-  if(dockFrame)return
-  dockFrame=requestAnimationFrame(()=>{dockFrame=0;const rect=previewSlot.value?.getBoundingClientRect();if(!rect)return;const width=Math.min(window.innerWidth<900?250:340,rect.width,window.innerWidth-24);dockBounds.width=width;dockBounds.height=window.innerHeight;dockBounds.left=window.innerWidth<1100?Math.max(12,window.innerWidth-width-16):Math.max(12,Math.min(rect.left,window.innerWidth-width-12))})
+let previewRequest = 0, pendingMaskReview = false
+async function composePreview() {
+  const requestId = ++previewRequest, background = form.backgroundUrl, mask = form.maskUrl
+  previewState.value = background && mask ? 'loading' : 'idle'; previewError.value = ''; portraitMaskUrl.value = ''
+  if (!background || !mask) return
+  try {
+    const layers = await renderMaskedCardLayers(background, mask)
+    if (requestId !== previewRequest) return
+    portraitMaskUrl.value = layers.portraitMaskUrl
+    previewState.value = 'ready'
+  } catch (cause) {
+    if (requestId === previewRequest) { previewState.value = 'error'; previewError.value = cause.message || '遮罩预览失败' }
+  }
 }
-async function composePreview(){
-  const requestId=++previewRequest,background=form.backgroundUrl,mask=form.maskUrl
-  previewState.value=background&&mask?'loading':'idle';previewError.value='';portraitMaskUrl.value=''
-  if(!background||!mask)return
-  try{const layers=await renderMaskedCardLayers(background,mask);if(requestId!==previewRequest)return;portraitMaskUrl.value=layers.portraitMaskUrl;previewState.value='ready'}
-  catch(cause){if(requestId===previewRequest){previewState.value='error';previewError.value=cause.message||'遮罩预览失败'}}
-}
-watch([()=>form.backgroundUrl,()=>form.maskUrl],composePreview)
-onMounted(async()=>{await nextTick();dockObserver=new ResizeObserver(updateDock);if(previewSlot.value)dockObserver.observe(previewSlot.value);window.addEventListener('resize',updateDock);updateDock()})
-onBeforeUnmount(()=>{previewRequest++;dockObserver?.disconnect();window.removeEventListener('resize',updateDock);cancelAnimationFrame(dockFrame);activeDragEnd?.()})
-function trackDrag(event,apply){
-  activeDragEnd?.();let pending=null,frame=0
-  const flush=()=>{frame=0;if(pending){apply(pending);pending=null;dirty.value=true}}
-  const move=pointer=>{if(pointer.pointerId!==event.pointerId)return;pending=pointer;if(!frame)frame=requestAnimationFrame(flush)}
-  const end=()=>{if(frame)cancelAnimationFrame(frame);flush();window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);activeDragEnd=null}
-  activeDragEnd=end;window.addEventListener('pointermove',move);window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end)
-}
+watch([() => form.backgroundUrl, () => form.maskUrl], composePreview)
 watch(previewState, state => {
   if (state === 'ready' && pendingMaskReview) pendingMaskReview = false
   if (state === 'error') pendingMaskReview = false
@@ -252,17 +314,37 @@ async function applyLayoutPreset() {
   try {
     const result=await request('getPlayerCardLayoutPreset',{presetId:selectedLayoutPreset.value})
     if(epoch!==formEpoch) return
-    form.layout=styleLayout(result.preset.layout);form.photo={...result.preset.photo};form.badges=freshBadges(result.preset.badges)
+    form.layout=styleLayout(result.preset.layout);form.photo={...result.preset.photo};form.badges=JSON.parse(JSON.stringify(result.preset.badges))
     dirty.value=true;ElMessage.success('模板已导入，待保存草稿')
   } catch(cause) { ElMessage.error(cause.message) } finally { layoutApplying.value=false }
 }
 function preloadName(value) { return PRELOAD_TYPES.find(item => item.value === (value?.type || 'platform'))?.label || '全平台' }
 function changePreload() {
-  form.preload.targetId = ''; form.preload.targetName = ''; dirty.value = true
+  form.preload.targetId = ''; form.preload.targetName = ''; form.positionOverride='';dirty.value = true
+  preloadPlayer.value=null;playerSourceError.value='';playerSourceLoading.value=false
+  stagedAssets.background=null;stagedAssets.mask=null
   targetRequest++; targetsLoading.value = false; targets.value = []; targetsError.value = ''; targetCursor.value = ''; targetKeyword.value = ''
   publishJob.value = null; publishProgress.value = ''
 }
-function chooseTarget(id) { form.preload.targetName = targets.value.find(item => item.id === id)?.name || ''; dirty.value = true }
+async function chooseTarget(id) {
+  if(form.preload.type==='player')form.positionOverride=''
+  form.preload.targetName = targets.value.find(item => item.id === id)?.name || ''; dirty.value = true
+  preloadPlayer.value=null;playerSourceError.value=''
+  if(form.preload.type==='player'&&id) await loadPlayerSource(id)
+}
+async function loadPlayerSource(playerId) {
+  if(!playerId||form.preload.type!=='player')return
+  const id=++targetRequest;playerSourceLoading.value=true;playerSourceError.value='';preloadPlayer.value=null
+  try {
+    const result=await request('getPlayerCardPreloadPlayer',{playerId})
+    if(id!==targetRequest||String(form.preload.targetId)!==String(playerId))return
+    preloadPlayer.value=result.player
+    form.preload.targetName=targets.value.find(item=>item.id===playerId)?.name||result.player.name
+    if(!form.id&&result.player.tier)form.tier=result.player.tier
+    if(!result.player.portraitUrl)playerSourceError.value='球员暂无可用头像，暂不能制卡'
+  } catch(cause) { if(id===targetRequest)playerSourceError.value=cause.message||'球员资料读取失败' }
+  finally { if(id===targetRequest)playerSourceLoading.value=false }
+}
 function openTargets(open) { if (open && !targets.value.length) searchTargets('') }
 function searchTargets(keyword) { targetKeyword.value = keyword; return loadTargetPage(false) }
 async function loadTargetPage(more) {
@@ -290,12 +372,15 @@ async function request(action, data = {}) {
 }
 function assign(item) {
   formEpoch++;selectedLayoutPreset.value=''
+  preloadPlayer.value=null;playerSourceError.value='';playerSourceLoading.value=false
+  stagedAssets.background=null;stagedAssets.mask=null
   targetRequest++; targetsLoading.value = false; targets.value = []; targetsError.value = ''; targetCursor.value = ''
-  Object.assign(form, { preload:{...freshPreload(), ...item.preload}, id: item.id, title: item.title, tier: item.tier, status: item.status, revision: item.revision,
+  Object.assign(form, { preload:{...freshPreload(), ...item.preload}, id: item.id, title: item.title, tier: item.tier, status: item.status, revision: item.revision,positionOverride:String(item.positionOverride||''),
     draftVersion: item.draftVersion, publishedVersion: item.publishedVersion,
     backgroundUrl: item.backgroundData || item.backgroundUrl || '', maskUrl: item.maskData || item.maskUrl || '',
+    backgroundFileId:item.backgroundFileId||'',maskFileId:item.maskFileId||'',
     backgroundData: '', maskData: '', layout: styleLayout(item.layout),
-    photo: { ...(item.photo || DEFAULT_PHOTO) }, badges: freshBadges(item.badges) })
+    photo: { ...(item.photo || DEFAULT_PHOTO) }, badges: JSON.parse(JSON.stringify(item.badges || DEFAULT_BADGES)) })
   dirty.value = false; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
 }
 async function select(item) {
@@ -304,17 +389,38 @@ async function select(item) {
   try {
     const result = await request('getPlayerCardTemplate', { templateId: item.id })
     assign(result.template)
+    if(result.template.preload?.type==='player'&&result.template.preload?.targetId)await loadPlayerSource(result.template.preload.targetId)
     const status = await request('getPlayerCardTemplatePublishStatus', { tier:item.tier, preload:item.preload || freshPreload(), templateId:item.id })
     publishServiceReady.value = true
     publishJob.value = status.jobId ? status : null
   }
   catch (cause) { ElMessage.error(cause.message || '模板读取失败') }
 }
+async function editTemplateFromCatalog(templateId) {
+  activePanel.value='templates'
+  publishServiceReady.value=false
+  try {
+    const result=await request('getPlayerCardTemplate',{templateId})
+    assign(result.template)
+    const status=await request('getPlayerCardTemplatePublishStatus',{tier:result.template.tier,preload:result.template.preload||freshPreload(),templateId})
+    publishJob.value=status.jobId?status:null
+    publishServiceReady.value=true
+  } catch(cause) { ElMessage.error(cause.message||'模板读取失败') }
+}
+async function createTemplateForPlayer(playerId) {
+  startCreate()
+  form.preload.type='player'
+  form.preload.targetId=String(playerId||'')
+  await loadPlayerSource(form.preload.targetId)
+}
 function startCreate() {
+  activePanel.value='templates'
   formEpoch++;selectedLayoutPreset.value=''
+  preloadPlayer.value=null;playerSourceError.value='';playerSourceLoading.value=false
+  stagedAssets.background=null;stagedAssets.mask=null
   targetRequest++; targetsLoading.value = false; targets.value = []; targetsError.value = ''; targetCursor.value = ''
-  Object.assign(form, { preload:freshPreload(), id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,
-    backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
+  Object.assign(form, { preload:freshPreload(), id: '', title: '', tier: 'bronze', status: 'draft', revision: 0, draftVersion: 0, publishedVersion: 0,positionOverride:'',
+    backgroundUrl: '', maskUrl: '', backgroundData: '', maskData: '', backgroundFileId:'',maskFileId:'',layout: freshLayout(), photo: freshPhoto(), badges: freshBadges() })
   dirty.value = true; uploadError.value = ''; selectedFiles.background = ''; selectedFiles.mask = ''; pendingMaskReview = false; previewOpen.value = false
   publishJob.value = null
 }
@@ -326,6 +432,7 @@ async function load() {
     templates.value = result.templates || []; nextCursor.value = result.nextCursor || ''
     if (form.id) { const current = templates.value.find(item => item.id === form.id); if (current) await select(current) }
     else if (templates.value.length && !dirty.value) await select(templates.value[0])
+    await recoverDraft()
   } catch (cause) {
     backendReady.value = false; publishServiceReady.value = false
     const unavailable = /未知|不支持|unknown|unsupported|not found/i.test(cause.message || '')
@@ -370,6 +477,8 @@ async function chooseFile(event, layer) {
     }
     const previous = form[`${layer}Url`]
     if (layer === 'mask') pendingMaskReview = true
+    stagedAssets[layer]=null
+    form[layer+'FileId']=''
     form[`${layer}Url`] = url; form[`${layer}Data`] = url; dirty.value = true
     selectedFiles[layer] = file.name
     if (previous === url) await composePreview()
@@ -385,31 +494,84 @@ async function refreshSelected(id) {
   publishServiceReady.value = true
   publishJob.value = status.jobId ? status : null
 }
+async function materialReferences() {
+  const epoch=formEpoch, references={}
+  for(const layer of ['background','mask']) {
+    const data=form[layer+'Data']
+    if(!data) { if(form[layer+'FileId'])references[layer+'FileId']=form[layer+'FileId']; continue }
+    let staged=stagedAssets[layer]
+    if(!staged || staged.data!==data) {
+      const binary=atob(data.split(',')[1]),bytes=Uint8Array.from(binary,char=>char.charCodeAt(0)),file=new File([bytes],layer+'.png',{type:'image/png'})
+      const token=globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)
+      const result=await uploadLargeFileViaCloud('player-card-template-uploads/'+token+'/'+layer+'/asset.png',file,{chunkSize:16*1024,fallbackChunkSize:8*1024,onRetry:size=>{assetProgress.value=(layer==='background'?'背景':'遮罩')+'改用小分片上传'},onProgress:(done,total)=>{assetProgress.value=(layer==='background'?'背景':'遮罩')+'上传 '+done+'/'+total}})
+      if(epoch!==formEpoch || form[layer+'Data']!==data) throw new Error('素材已变更，请重新保存')
+      staged={data,fileId:result.fileId};stagedAssets[layer]=staged;form[layer+'FileId']=result.fileId
+    }
+    references[layer+'FileId']=staged.fileId
+  }
+  assetProgress.value='';return references
+}
 async function showFinalPreview() {
   if (!backendReady.value || finalPreviewLoading.value) return false
   finalPreviewLoading.value = true
   try {
-    const result = await request('previewPlayerCardTemplate', { templateId:form.id, backgroundData:form.backgroundData, maskData:form.maskData, layout:form.layout, photo:form.photo, badges:form.badges })
-    finalPreviewImage.value = result.imageData
+    const materials=await materialReferences()
+    const result = await request('previewPlayerCardTemplate', { templateId:form.id, ...(form.preload.type==='player'?{playerId:form.preload.targetId,preload:form.preload,positionOverride:form.positionOverride}:{}), ...materials, layout:form.layout, photo:form.photo, badges:form.badges })
+    finalPreviewImage.value = result.imageUrl || result.imageData
     previewOpen.value = true
     return true
   } catch (cause) { ElMessage.error(cause.message || '成卡预览失败，请重试'); return false }
-  finally { finalPreviewLoading.value = false }
+  finally { finalPreviewLoading.value = false;assetProgress.value='' }
 }
 async function save() {
   if (!backendReady.value) return
   saving.value = true
+  let recovery = null
   try {
+    const materials=await materialReferences()
+    recovery={templateId:form.id,revision:form.revision,title:form.title,tier:form.tier,preload:{...form.preload},positionOverride:form.positionOverride,
+      backgroundFileId:materials.backgroundFileId||form.backgroundFileId||'',maskFileId:materials.maskFileId||form.maskFileId||'',
+      layout:form.layout,photo:form.photo,badges:form.badges,selectedField:selectedField.value,selectedBadge:selectedBadge.value,savedAt:Date.now()}
+    localStorage.setItem(DRAFT_RECOVERY_KEY,JSON.stringify(recovery))
     const result = await request('savePlayerCardTemplate', { templateId: form.id, revision: form.revision, title: form.title,
-      tier: form.tier, preload:form.preload, backgroundData: form.backgroundData, maskData: form.maskData, layout: form.layout, photo: form.photo, badges: form.badges })
+      tier: form.tier, preload:form.preload, positionOverride:form.positionOverride, ...materials, layout: form.layout, photo: form.photo, badges: form.badges })
+    localStorage.removeItem(DRAFT_RECOVERY_KEY)
     await refreshSelected(result.templateId); ElMessage.success('草稿已保存')
-  } catch (cause) { ElMessage.error(cause.message) } finally { saving.value = false }
+  } catch (cause) {
+    if(recovery){try{localStorage.setItem(DRAFT_RECOVERY_KEY,JSON.stringify(recovery))}catch{};ElMessage.error(`${cause.message}；本机已保留草稿，刷新后可恢复`)}
+    else ElMessage.error(cause.message)
+  } finally { saving.value = false;assetProgress.value='' }
+}
+async function recoverDraft(){
+  if(recoveryChecked)return
+  recoveryChecked=true
+  let recovery
+  try{recovery=JSON.parse(localStorage.getItem(DRAFT_RECOVERY_KEY)||'null')}catch{return}
+  if(!recovery)return
+  if(Date.now()-Number(recovery.savedAt||0)>7*24*60*60*1000){localStorage.removeItem(DRAFT_RECOVERY_KEY);return}
+  try{await ElMessageBox.confirm(`发现未保存的「${recovery.title||'球员卡'}」草稿，是否恢复排版和已上传素材？`,'恢复草稿',{confirmButtonText:'恢复草稿',cancelButtonText:'忽略',type:'info'})}
+  catch{localStorage.removeItem(DRAFT_RECOVERY_KEY);return}
+  if(recovery.templateId){const item=templates.value.find(row=>row.id===recovery.templateId);if(item)await select(item)}
+  else startCreate()
+  const [backgroundUrl,maskUrl]=await Promise.all([
+    recovery.backgroundFileId?getFileUrl(recovery.backgroundFileId).catch(()=> ''):'',
+    recovery.maskFileId?getFileUrl(recovery.maskFileId).catch(()=> ''):''
+  ])
+  Object.assign(form,{id:recovery.templateId||'',revision:Number(recovery.revision||0),title:String(recovery.title||''),tier:recovery.tier||'bronze',
+    preload:{...freshPreload(),...(recovery.preload||{})},positionOverride:String(recovery.positionOverride||''),backgroundFileId:recovery.backgroundFileId||'',maskFileId:recovery.maskFileId||'',
+    backgroundData:'',maskData:'',backgroundUrl:backgroundUrl||form.backgroundUrl,maskUrl:maskUrl||form.maskUrl,
+    layout:styleLayout(recovery.layout),photo:{...DEFAULT_PHOTO,...recovery.photo},badges:{...DEFAULT_BADGES,...recovery.badges}})
+  stagedAssets.background=recovery.backgroundFileId?{data:'',fileId:recovery.backgroundFileId}:null
+  stagedAssets.mask=recovery.maskFileId?{data:'',fileId:recovery.maskFileId}:null
+  selectedField.value=recovery.selectedField||'name';selectedBadge.value=recovery.selectedBadge||'nationality';dirty.value=true
+  await composePreview()
+  ElMessage.success('草稿已恢复，请保存')
 }
 async function publish() {
   if (!publishServiceReady.value) return
-  try { await ElMessageBox.confirm(`将添加到${preloadName(form.preload)}${form.preload.targetName ? '：' + form.preload.targetName : ''}球员的 H5 卡库，保留已有卡。该模板已制作的成卡全部更新成功后生效。`, '发布模板', { confirmButtonText: '发布' }) } catch { return }
+  try { await ElMessageBox.confirm(`为${preloadName(form.preload)}${form.preload.targetName ? '：' + form.preload.targetName : ''}生成正式球员卡。全部生成后先进入预览，不会自动预装或切换展示。`, '生成成卡', { confirmButtonText: '开始制卡' }) } catch { return }
   publishing.value = true
-  publishProgress.value = '正在准备发布…'
+  publishProgress.value = '正在准备制卡…'
   try {
     let result = await request('publishPlayerCardTemplate', { templateId: form.id, revision: form.revision })
     await finishPublish(result)
@@ -418,9 +580,9 @@ async function publish() {
 }
 async function finishPublish(initial) {
   let result = initial
-  while (result.status === 'pending') {
+  while (['pending','preloading'].includes(result.status)) {
     publishJob.value = result
-    publishProgress.value = `正在更新成卡 ${result.completed || 0}/${result.total || 0}`
+    publishProgress.value = result.status==='preloading' ? `你已确认，正在预装 ${result.preloadCompleted ?? result.completed ?? 0}/${result.total || 0}` : `正在生成成卡 ${result.completed || 0}/${result.total || 0}`
     if(result.busy)await new Promise(resolve=>setTimeout(resolve,1500))
     result = await playerCardTemplateRequest('continuePlayerCardTemplatePublish', { jobId: result.jobId })
     if (!result.success && result.status !== 'blocked') throw new Error(result.error || '发布失败')
@@ -430,17 +592,68 @@ async function finishPublish(initial) {
     publishProgress.value = `${result.failed} 张成卡待修复；当前版本仍在使用`
     throw new Error('部分成卡生成失败，请查看质量队列')
   }
+  if(result.status==='review') {
+    publishJob.value=result
+    publishProgress.value=`已生成 ${result.generated||0} 张，等待你预览确认`
+    ElMessage.success('成卡已生成，请逐张预览')
+    await openGeneratedReview(true)
+    return
+  }
   await refreshSelected(form.id)
   const active = await request('getActivePlayerCardTemplate', {tier:form.tier, preload:form.preload, templateId:form.id})
   if (active.status !== 'ready' || active.template?.id !== form.id || Number(active.template?.version) !== Number(result.publishedVersion)) throw new Error('活动版本回读不一致，请刷新核对')
-  publishJob.value = null
-  publishProgress.value = result.affected ? `预装已发布 · 更新 ${result.affected} 张专属卡` : '预装已发布'
+  publishJob.value = { ...result, status:'active', completed:result.completed ?? result.total ?? result.affected ?? 0, total:result.total ?? result.affected ?? 0 }
+  publishProgress.value = `模板版本已激活 · 已生成 ${result.generated ?? result.affected ?? 0} 张 · 跳过 ${result.skipped || 0} 人`
   ElMessage.success('预装已发布')
   localStorage.setItem('sxfPlayerCardTemplateUpdate',JSON.stringify({tier:form.tier,templateId:form.id,version:result.publishedVersion,at:Date.now()}))
+}
+async function openGeneratedReview(reset=false) {
+  if(!publishJob.value?.jobId)return
+  reviewDialog.value=true;reviewError.value=''
+  if(reset){reviewCards.value=[];reviewTotal.value=0;reviewNext.value=0}
+  if(reviewNext.value===null)return
+  await loadReviewPage()
+}
+async function loadReviewPage() {
+  if(reviewLoading.value||!publishJob.value?.jobId||reviewNext.value===null)return
+  reviewLoading.value=true;reviewError.value=''
+  try {
+    const result=await request('listPlayerCardTemplatePublishPreviews',{jobId:publishJob.value.jobId,offset:reviewNext.value,limit:24})
+    reviewTotal.value=Number(result.total||0)
+    reviewCards.value.push(...(result.cards||[]))
+    reviewNext.value=result.nextOffset===undefined?null:result.nextOffset
+  } catch(cause) {reviewError.value=cause.message||'成卡预览读取失败'}
+  finally {reviewLoading.value=false}
+}
+async function confirmPreload() {
+  if(!publishJob.value?.jobId||reviewCards.value.length!==reviewTotal.value||confirmingPublish.value)return
+  try {await ElMessageBox.confirm(`确认将 ${reviewTotal.value} 张已预览成卡预装到${preloadName(form.preload)}${form.preload.targetName?'：'+form.preload.targetName:''}，并上线展示？${form.preload.type==='player'?'该球员的默认展示卡会切换为此版本。':''}`,'确认预装上线',{confirmButtonText:'确认上线',cancelButtonText:'再检查'})}
+  catch{return}
+  confirmingPublish.value=true
+  try {
+    const result=await request('confirmPlayerCardTemplatePublish',{jobId:publishJob.value.jobId})
+    await finishPublish(result)
+    if(publishJob.value?.status==='active')reviewDialog.value=false
+  } catch(cause) {ElMessage.error(cause.message||'预装上线失败')}
+  finally {confirmingPublish.value=false}
+}
+async function rejectPreview() {
+  if(!publishJob.value?.jobId)return
+  try{await ElMessageBox.confirm('本次候选成卡将被清理，当前线上版本保持不变。退回后可修改模板并重新制卡。','退回修改',{confirmButtonText:'退回修改',cancelButtonText:'继续检查',type:'warning'})}catch{return}
+  confirmingPublish.value=true
+  try{
+    await request('rejectPlayerCardTemplatePublish',{jobId:publishJob.value.jobId})
+    reviewDialog.value=false;reviewCards.value=[];reviewTotal.value=0;reviewNext.value=null
+    publishJob.value=null;publishProgress.value='已退回编辑，线上卡片未变化'
+    await refreshSelected(form.id)
+    ElMessage.success('已退回修改')
+  }catch(cause){ElMessage.error(cause.message||'退回失败')}
+  finally{confirmingPublish.value=false}
 }
 async function resumePublish() {
   if (!publishServiceReady.value) return
   if (!publishJob.value?.jobId) return
+  if(publishJob.value.status==='review'){await openGeneratedReview(true);return}
   publishing.value = true
   try {
     const start = publishJob.value.status === 'blocked'
@@ -477,30 +690,39 @@ function beginBadgeDrag(event, key) {
   const rect = event.currentTarget.closest('.card-preview')?.getBoundingClientRect(), badge = form.badges[key]
   if (!rect || !badge) return
   const startX = event.clientX, startY = event.clientY, x = badge.x, y = badge.y
-  trackDrag(event, pointer => {
+  const move = pointer => {
     badge.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
     badge.y = Math.max(0, Math.min(430, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
-  })
+    dirty.value = true
+  }
+  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
 }
 function beginPhotoDrag(event) {
   event.preventDefault()
   const rect = event.currentTarget.closest('.card-preview')?.getBoundingClientRect()
   if (!rect) return
   const startX = event.clientX, startY = event.clientY, x = form.photo.x, y = form.photo.y
-  trackDrag(event, pointer => {
+  const move = pointer => {
     form.photo.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
     form.photo.y = Math.max(0, Math.min(250, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
-  })
+    dirty.value = true
+  }
+  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
 }
 function beginTextDrag(event, key) {
   event.preventDefault(); selectedField.value = key
   const element = previewRef.value, style = form.layout[key], rect = element?.getBoundingClientRect()
   if (!rect || !style) return
   const startX = event.clientX, startY = event.clientY, x = style.x, y = style.y
-  trackDrag(event, pointer => {
+  const move = pointer => {
     style.x = Math.max(0, Math.min(300, Math.round(x + (pointer.clientX - startX) * 300 / rect.width)))
     style.y = Math.max(0, Math.min(430, Math.round(y + (pointer.clientY - startY) * 430 / rect.height)))
-  })
+    dirty.value = true
+  }
+  const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end) }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end)
 }
 onMounted(() => {
   if(!document.getElementById('player-card-fonts')) {
@@ -513,10 +735,15 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.generated-review-meta{margin:-4px 0 14px;color:#65736a;font-size:13px}.generated-review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;max-height:min(64vh,720px);overflow:auto;padding:2px}.generated-review-grid article{display:flex;min-width:0;flex-direction:column;gap:6px;padding:9px;border:1px solid #dfe7e1;background:#fff}.generated-review-grid img{display:block;width:100%;aspect-ratio:300/430;object-fit:contain;background:#eef2ef}.generated-review-grid strong{overflow:hidden;color:#24352a;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.generated-review-grid small{overflow:hidden;color:#7c8880;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.generated-review-state{padding:24px;color:#68766d;text-align:center}
 .card-library{padding:20px;color:#172a20;box-sizing:border-box}.platform-console .card-library{padding:20px 0 0}.library-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.library-head h2{margin:0 0 4px;font-size:20px}.library-head span{color:#6f7d73;font-size:12px}.library-body{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:620px;border:1px solid #dde7e0;background:#fff}.template-list{border-right:1px solid #e5ede8;padding:8px;overflow-y:auto}.template-list>button:not(.el-button){display:flex;align-items:center;gap:11px;width:100%;padding:9px;border:0;border-radius:6px;background:#fff;text-align:left;cursor:pointer}.template-list>button.selected{background:#eaf5ed}.template-list img{width:38px;height:55px;object-fit:contain}.template-list span{min-width:0;display:grid;gap:5px}.template-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.template-list small,.list-empty{color:#758078;font-size:11px}.list-empty{padding:20px 10px}.template-workspace{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;padding:24px}.editor-fields{max-width:470px;display:grid;align-content:start;gap:19px}.form-head{display:flex;align-items:center;gap:10px;font-size:17px}.editor-fields>label{display:grid;gap:7px;font-size:13px;font-weight:600}.file-fields{display:flex;gap:12px}.file-fields label{width:50%;display:grid;gap:7px;font-size:13px;font-weight:600}.file-fields input{position:absolute;width:1px;height:1px;opacity:0}.file-fields span{display:grid;place-items:center;height:72px;border:1px dashed #91b99f;border-radius:6px;color:#167445;font-weight:500;cursor:pointer}.field-error{margin:0;color:#b5372b;font-size:12px}.version{margin:0;color:#748078;font-size:12px}.editor-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}.preview-pane{display:grid;justify-items:center;align-content:start;gap:12px;padding:14px;background:#f1f5f2}.preview-pane>strong{font-size:13px}.card-preview{position:relative;width:300px;height:430px;overflow:hidden;background:#e4ebe5}.card-preview img{position:absolute;display:block}.card-preview .back,.card-preview .front{inset:0;width:100%;height:100%}.card-preview .back{z-index:1}.card-preview .portrait{z-index:2;top:18px;left:33px;width:234px;height:280px;object-fit:contain;object-position:center bottom}.card-preview .front{z-index:3}.card-preview b,.card-preview span,.card-preview strong{position:absolute;z-index:4;color:#1c241d}.card-preview .number{top:70px;left:25px;font-size:52px;line-height:1}.card-preview .position{top:125px;left:28px;font-size:22px;font-weight:700}.card-preview .name{right:20px;bottom:82px;left:20px;text-align:center;font-size:28px}.card-preview .jersey{right:20px;bottom:65px;left:20px;text-align:center;font-size:13px;font-weight:600}.card-preview .physical{right:20px;bottom:44px;left:20px;text-align:center;font-size:11px;font-weight:600}.preview-state{color:#758078;font-size:12px}@media(max-width:1100px){.template-workspace{grid-template-columns:minmax(0,1fr)}.preview-pane{justify-items:start}.library-body{grid-template-columns:210px minmax(0,1fr)}}@media(max-width:680px){.library-body{display:block}.template-list{display:flex;gap:4px;overflow-x:auto;border-right:0;border-bottom:1px solid #e5ede8}.template-list>button:not(.el-button){min-width:150px}.template-workspace{padding:16px}.library-head h2{font-size:18px}.card-preview{transform:scale(.85);transform-origin:top left;margin-bottom:-64px}}
+.card-system-tabs{display:flex;gap:4px;margin:0 0 14px;border-bottom:1px solid #dce7df}.card-system-tabs button{padding:9px 14px;border:0;border-bottom:2px solid transparent;background:transparent;color:#607168;font:inherit;font-size:13px;cursor:pointer}.card-system-tabs button.active{border-bottom-color:#16804d;color:#176b43;font-weight:700}
 .release-note{margin:0;color:#697a6d;font-size:12px;line-height:1.5}
+.publish-progress{display:grid;gap:6px;padding:10px 12px;border:1px solid #dce8df;background:#f5f8f5}.publish-progress-head{display:flex;align-items:center;justify-content:space-between;font-size:13px}.publish-progress small{color:#65766b;font-size:12px}
+.publish-skips{padding:8px 10px;background:#fbf8ef;color:#705c27;font-size:12px}.publish-skips p{margin:4px 0}
+.player-source{display:flex;align-items:center;gap:10px;min-height:54px;padding:8px 10px;border:1px solid #dce8df;background:#f5f8f5}.player-source>img{width:42px;height:54px;object-fit:contain;background:#e8eee9}.player-source>div{display:grid;gap:4px}.player-source small{color:#65766b;font-size:12px}.player-source-missing{display:grid;place-items:center;width:42px;height:54px;color:#9b3e32;background:#f5e9e7;font-size:11px;text-align:center}.card-preview .team-image img{position:static;width:100%;height:100%;object-fit:contain}
 .text-editor{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.text-editor>strong{font-size:14px}.text-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.text-controls label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.text-controls input[type=color]{width:100%;height:34px;padding:3px;border:1px solid #d5dfd8;border-radius:5px;background:#fff}.text-controls .el-input-number,.text-controls .el-select{width:100%}.card-preview .card-text{position:absolute;z-index:4;line-height:1;white-space:nowrap;cursor:grab;touch-action:none;user-select:none}.card-preview .card-text.active{outline:1px dashed #157d49;outline-offset:4px}
-.card-preview canvas.front{position:absolute;display:block;inset:0;width:100%;height:100%;z-index:3;pointer-events:none}
+.card-preview .portrait-mask{position:absolute;inset:0;width:300px;height:430px;z-index:2;pointer-events:none}.card-preview .portrait-mask .portrait{pointer-events:auto}
 .preview-title{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;font-size:13px}.preview-error{display:flex;align-items:center;gap:8px;color:#b5392f;font-size:12px}.preview-pane.expanded{position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:auto;padding:24px;background:#eaf0ec;box-sizing:border-box}.preview-pane.expanded .preview-title{max-width:460px}.preview-pane.expanded .card-preview{flex:none;margin:14px auto;transform:none}@media(min-width:700px){.preview-pane.expanded .card-preview{transform:scale(1.25);transform-origin:top center;margin:14px auto 122px}}
 .file-fields .file-picker{position:relative;min-width:0;cursor:pointer}.file-picker strong{font-size:13px}.file-picker .file-target{position:relative;display:grid;place-items:center;height:72px;border:1px dashed #91b99f;border-radius:6px;color:#167445;font-weight:500;box-sizing:border-box}.file-fields .file-picker input[type=file]{position:absolute;top:23px;left:0;width:100%;height:72px;opacity:0;z-index:2;cursor:pointer}.file-picker:focus-within .file-target{outline:2px solid #168149;outline-offset:2px}.file-picker small{overflow:hidden;color:#1b7245;font-size:11px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}.file-feedback{margin:0;color:#1b7245;font-size:12px}
 .mask-review-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;justify-items:center}.review-column{display:grid;justify-items:center;align-content:start;gap:10px;min-width:0}.review-column>strong{font-size:14px;color:#233d2e}.mask-source{display:block;width:300px;height:430px;max-width:100%;object-fit:fill;border:1px solid #dce6df;background:#fff;box-sizing:border-box}.review-note{margin:15px 0 0;color:#697a6d;font-size:12px;text-align:center}@media(max-width:680px){.mask-review-grid{grid-template-columns:1fr}.review-column+.review-column{margin-top:16px}}
@@ -526,6 +753,8 @@ onMounted(() => {
 .preload-filter{display:grid;gap:6px;font-size:13px;margin-bottom:8px}.editor-fields,.template-workspace,.preview-pane{min-width:0}.template-list small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:680px){.preload-filter{flex:0 0 140px}.preview-pane{overflow:hidden}}
 .text-effects{display:grid;gap:12px}.gradient-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.gradient-controls label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.gradient-controls input[type=color]{width:100%;height:30px;padding:2px;border:1px solid #cbd9d0;border-radius:4px}.effect-presets{display:flex;flex-wrap:wrap;gap:6px}.effect-presets .el-button+.el-button{margin-left:0}
 .layout-presets{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.layout-presets>strong{font-size:14px}.layout-actions{display:flex;gap:8px}.layout-actions .el-button+.el-button{margin-left:0}
-
-.preview-slot{min-width:0}.preview-pane.preview-docked{position:fixed;top:50%;transform:translateY(-50%);z-index:30;box-sizing:border-box;max-height:calc(100dvh - 32px);overflow:auto;align-content:start;justify-items:center;box-shadow:0 4px 18px #163a2218;contain:layout paint}.preview-size{position:relative;flex:none}.preview-docked .card-preview{margin:0}.portrait-mask{position:absolute;inset:0;width:300px;height:430px;z-index:2;pointer-events:none}.portrait-mask .portrait{pointer-events:auto}.preview-toggle{position:fixed;right:22px;bottom:20px;z-index:40;margin:0!important}.preview-docked .preview-state{line-height:1.5;text-align:center}.preview-docked .preview-title{gap:8px}.preview-docked .preview-error{flex-wrap:wrap}@media(max-width:1100px){.preview-slot{min-height:1px}.preview-docked{justify-items:center}}@media(max-width:680px){.preview-docked .card-preview{margin:0;transform-origin:top left}.preview-toggle{right:16px;bottom:16px}}
+.field-visibility{display:flex;align-items:center;justify-content:space-between;color:#5d6f63;font-size:12px}
+.card-preview .card-badge.team-image{border:0;background:transparent;clip-path:none;padding:0}.card-preview .team-image img{border:0;border-radius:0;object-fit:contain}.card-preview .card-badge.nationality-label{display:grid;place-items:center;color:#1c241d;font-size:8px;font-weight:700}.team-logo-warning{color:#b56a16!important}.position-override{display:grid;gap:7px;font-size:13px;font-weight:600}
+@media(min-width:1101px){.template-workspace>.preview-pane:not(.expanded){position:sticky;top:16px;align-self:start;height:max-content;max-height:calc(100vh - 32px);overflow-y:auto}}
+@media(max-width:1100px){.template-workspace>.preview-pane{position:static;max-height:none;overflow:visible}}
 </style>
