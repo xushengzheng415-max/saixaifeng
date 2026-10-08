@@ -28,7 +28,7 @@ const db = {
 const cloud = { database:()=>db,
   async uploadFile({fileContent}) { const fileID=`cloud://cloud1-7g8ckb3c7815a011.636c-cloud1-7g8ckb3c7815a011-1419431905/fixture-${files.size}.png`;files.set(fileID,fileContent);return {fileID} },
   async deleteFile(){}, async downloadFile({fileID}) { return {fileContent:files.get(fileID)} },
-  async getTempFileURL({fileList}) { return {fileList:fileList.map(fileID=>({fileID,tempFileURL:`https://test.local/${fileID}`}))} }
+  async getTempFileURL({fileList}) { return {fileList:fileList.map(fileID=>({fileID,tempFileURL:`https://636c-cloud1-7g8ckb3c7815a011-1419431905.tcb.qcloud.la/${fileID.replace('cloud://cloud1-7g8ckb3c7815a011.636c-cloud1-7g8ckb3c7815a011-1419431905/','')}`}))} }
 }
 const handle=createPlayerCardTemplates({cloud,authenticateWebSession:async event=>({success:true,principalType:event.authToken==='owner'?'platform_owner':'organizer',user:{isPlatformOwner:event.authToken==='owner'},userId:'owner'})})
 const call=(action,data={})=>handle({action,authToken:'owner',...data})

@@ -48,7 +48,7 @@ function createPlayerCardLibrary({ cloud }) {
       const dynamic=!reason?await require('./playerCardDynamic.cjs').descriptor(cloud,db,player,snapshot,grant):null
       result.push({id:libraryId(player._id,template._id),cardId:dynamic?.cardId || (ready?String(render.cardId||render._id||suite.renderId(player._id,template._id,snapshot.version)):''),templateId:template._id,title:snapshot.title,tier:template.tier,
         preload:scope,templateVersion:snapshot.version,revision:Number(grant.revision || 0),
-        cardScene:dynamic?.cardScene||null,displayMode:'dynamic',status:reason ? 'locked' : dynamic?.status || (ready ? 'ready' : grant.fileId ? 'pending' : 'unmade'),reason,renderVersion:render?.renderVersion || suite.RENDER_VERSION,
+        dataVersion:dynamic?.dataVersion||'',cardDataVersion:Number(player.playerCardVersion||0),publishedVersion:Number(snapshot.version),cardScene:dynamic?.cardScene||null,displayMode:'dynamic',status:reason ? 'locked' : dynamic?.status || (ready ? 'ready' : grant.fileId ? 'pending' : 'unmade'),reason,renderVersion:render?.renderVersion || suite.RENDER_VERSION,
         fileId:!reason && ready ? render.fileId : '',backgroundFileId:snapshot.backgroundFileId,
         snapshot,grant})
     }

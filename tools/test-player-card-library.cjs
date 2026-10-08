@@ -32,6 +32,7 @@ async function main() {
   assert.equal(listed.players.length,1)
   assert.equal(listed.players[0].cardUrl,'https://test.local/cloud://base')
   assert.equal(listed.players[0].preloadedCards.length,6)
+  const legacyList=await h5({action:'listMyPlayerCards',fanSessionToken:'session1'});assert.equal(legacyList.success,true,legacyList.error);assert(legacyList.players[0].preloadedCards.find(card=>card.status==='ready').cardUrl,'old H5 gets a lazy export URL')
   assert(!listed.players[0].preloadedCards.some(card=>card.templateId===ids[5]),'other team template cannot be granted')
   assert.equal(listed.players[0].preloadedCards.find(card=>card.templateId===ids[6]).status,'locked')
   assert.deepEqual(table('players').get('p1'),baseBefore,'adding cards must not modify player base card, points or display')
