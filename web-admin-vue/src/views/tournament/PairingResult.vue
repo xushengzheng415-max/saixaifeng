@@ -2,7 +2,7 @@
   <section class="pairing-page" v-loading="loading">
     <header class="schedule-center-header">
       <div class="center-heading"><el-button text @click="backDraw">返回分组</el-button><h1>赛程中心</h1><div class="center-context"><strong>{{ tournament.name || '当前赛事' }}</strong><el-tag effect="plain">{{ divisionName }}</el-tag><span>已编排 {{ scheduledCount }} / {{ matches.length }} 场</span></div></div>
-      <div class="center-actions"><el-button type="danger" plain :loading="resetting" :disabled="!resetCandidates.length || loading" @click="resetSchedule">重置赛事时间</el-button><el-button plain @click="goSchedule('settings')">自主编排</el-button><el-button plain @click="goSchedule('imports')">上传赛程</el-button><el-button type="success" :loading="exporting" :disabled="!matches.length || resetting" @click="downloadTemplate">下载赛程表</el-button></div>
+      <div class="center-actions"><el-button type="danger" plain :loading="resetting" :disabled="!resetCandidates.length || loading" @click="resetSchedule">重置赛事时间</el-button><el-button plain @click="goSchedule('settings')">自主编排</el-button><el-button plain @click="goSchedule('imports')">上传赛程</el-button><el-button type="success" :loading="exporting" :disabled="!filteredMatches.length || resetting" @click="downloadTemplate">下载赛程表</el-button></div>
     </header>
     <div class="pairing-toolbar">
       <el-select v-model="stageFilter" clearable placeholder="全部阶段" aria-label="筛选比赛阶段"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select>
@@ -71,7 +71,7 @@ async function resetSchedule(){
       if(!result?.success)throw new Error(result?.message || '重置失败')
       resetCount=result.resetCount
     } else {
-      for(const match of candidates)try{const result=await callFunction('updateMatch',{matchId:match._id,data:{matchDate:'',matchTime:'',venue:'',scheduleStatus:'unassigned'},adjustmentType:'unassign'});if(!result?.success)throw new Error(result?.message || result?.error || '重置失败');resetCount++}catch(error){failures.push(`第${match.matchNo || match.matchIndex || '—'}场：${error.message}`)}
+      for(const match of candidates)try{const result=await callFunction('updateMatch',{matchId:match._id,data:{matchDate:'',matchTime:'',venue:'',date:'',startTime:'',timeSlot:'',scheduleStatus:'unassigned'},adjustmentType:'unassign'});if(!result?.success)throw new Error(result?.message || result?.error || '重置失败');resetCount++}catch(error){failures.push(`第${match.matchNo || match.matchIndex || '—'}场：${error.message}`)}
     }
     if(download.value){URL.revokeObjectURL(download.value.url);download.value=null}
     clearFilters();await loadCenter()
@@ -85,7 +85,7 @@ function goSchedule(view){router.push({path:`/tournaments/${tournamentId}/matche
 async function downloadTemplate(){
   exporting.value=true
   try{
-    const {buffer:bytes,filename:name}=await createScheduleTemplateWorkbook({tournament:tournament.value,matches:matches.value,divisionName,stageLabel,teamName})
+    const {buffer:bytes,filename:name}=await createScheduleTemplateWorkbook({tournament:tournament.value,matches:filteredMatches.value,divisionName,stageLabel,teamName})
     if(download.value)URL.revokeObjectURL(download.value.url)
     const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))
 
@@ -96,5 +96,5 @@ onMounted(loadCenter)
 onBeforeUnmount(()=>{if(download.value)URL.revokeObjectURL(download.value.url)})
 </script>
 <style scoped>
-.pairing-page{padding:24px;color:#26352c;background:#f7f9f8;min-height:100%;max-width:1400px;margin:0 auto}.schedule-center-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 0 20px;margin-bottom:18px;border-bottom:1px solid #dce5df}.center-heading h1{margin:8px 0 10px;font-size:26px}.center-heading>.el-button{padding:0;height:auto;color:#617469}.center-context{display:flex;align-items:center;flex-wrap:wrap;gap:10px}.center-context strong{font-size:14px;font-weight:500}.center-context>span{font-size:12px;color:#66746b}.center-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.center-actions :deep(.el-button + .el-button){margin-left:0}.pairing-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;padding:12px 0}.pairing-toolbar .el-select{width:140px}.pairing-toolbar .el-input{width:220px}.pairing-toolbar>span{margin-left:auto;font-size:13px;color:#66746b;white-space:nowrap}.download-link{display:block;margin-bottom:12px;color:#087b43;font-size:13px}.center-match-table :deep(th.el-table__cell){background:#edf4ef;color:#355342;font-weight:600}.center-match-table :deep(.el-table__cell){padding:10px 0}.center-match-table :deep(.cell){font-size:13px}.center-match-table{border:1px solid #dfe7e2;border-radius:6px}@media(max-width:1000px){.schedule-center-header{align-items:flex-start;flex-direction:column}.center-actions{justify-content:flex-start}.pairing-toolbar .el-select{width:130px}.pairing-toolbar .el-input{flex:1;min-width:200px}}
+.pairing-page{padding:24px;color:#26352c;background:#f7f9f8;min-height:100%;max-width:1400px;margin:0 auto}.schedule-center-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 0 20px;margin-bottom:18px;border-bottom:1px solid #dce5df}.center-heading h1{margin:8px 0 10px;font-size:26px}.center-heading>.el-button{padding:0;height:auto;color:#617469}.center-context{display:flex;align-items:center;flex-wrap:wrap;gap:10px}.center-context strong{font-size:14px;font-weight:500}.center-context>span{font-size:12px;color:#66746b}.center-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.center-actions :deep(.el-button + .el-button){margin-left:0}.pairing-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;padding:12px 0}.pairing-toolbar .el-select{width:140px}.pairing-toolbar .el-select:first-child{width:160px}.pairing-toolbar .el-input{width:220px}.pairing-toolbar>span{margin-left:auto;font-size:13px;color:#66746b;white-space:nowrap}.download-link{display:block;margin-bottom:12px;color:#087b43;font-size:13px}.center-match-table :deep(th.el-table__cell){background:#edf4ef;color:#355342;font-weight:600}.center-match-table :deep(.el-table__cell){padding:10px 0}.center-match-table :deep(.cell){font-size:13px}.center-match-table{border:1px solid #dfe7e2;border-radius:6px}@media(max-width:1000px){.schedule-center-header{align-items:flex-start;flex-direction:column}.center-actions{justify-content:flex-start}.pairing-toolbar .el-select{width:130px}.pairing-toolbar .el-input{flex:1;min-width:200px}}
 </style>
