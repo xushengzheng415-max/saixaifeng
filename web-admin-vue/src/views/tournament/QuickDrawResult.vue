@@ -336,7 +336,7 @@ async function generatePairingsAndViewPairings() {
         if(!result?.success)throw new Error(result?.message || '预览生成失败')
       }
     }
-    router.push({path:`/tournaments/${tournamentId}/pairings`,query:{divisionId:divisionId.value,divisionName:divisionName.value}})
+    router.push({path:`/tournaments/${tournamentId}/matches`,query:{divisionId:divisionId.value,divisionName:divisionName.value,view:'workbench'}})
 
   } catch (error) { ElMessage.error(error.message || '生成对阵失败') } finally { pairingGenerating.value = false }
 }

@@ -376,10 +376,7 @@ const routes = [
   },
   {
     path: '/tournaments/:id/pairings',
-    name: 'PairingResult',
-    component: () => import('../views/layout/LayoutView.vue'),
-    meta: { requiresAuth: true, title: '赛程中心', embeddedPageHeader: true },
-    children: [{ path: '', component: () => import('../views/tournament/PairingResult.vue') }]
+    redirect: to => ({path:`/tournaments/${to.params.id}/matches`,query:{...to.query,view:'workbench'}}),
   },
   {
     path: '/tournaments/:id/matches',

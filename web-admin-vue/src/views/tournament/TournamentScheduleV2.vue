@@ -1,6 +1,6 @@
 <template>
   <main class="schedule-v2" v-loading="loading">
-    <header class="page-header">
+    <header v-if="view !== 'workbench'" class="page-header">
       <div>
         <span>赛事空间　/　比赛管理</span>
         <h1>{{ view === 'map' ? '比赛管理' : viewTitle }}</h1>
@@ -8,31 +8,18 @@
       <div class="event-context">
         <strong>{{ tournament.name || '当前赛事' }}</strong>
         <el-tag type="success" effect="plain">{{ divisions.length }}个组别</el-tag>
-        <el-button type="success" plain @click="goScheduleCenter">赛程中心</el-button>
+        <el-button v-if="view !== 'map'" type="success" plain @click="goScheduleCenter">赛程中心</el-button>
         <el-button plain @click="router.push('/tournament-space')">返回赛事空间</el-button>
       </div>
     </header>
 
-    <section v-if="view !== 'map'" class="subview-bar">
+    <section v-if="view !== 'map' && view !== 'workbench'" class="subview-bar">
       <el-button text @click="setView('map')"><el-icon><ArrowLeft /></el-icon>返回比赛地图</el-button>
       <span>{{ viewTitle }}</span>
     </section>
 
-    <section v-if="view === 'workbench'" ref="workbenchRoot" class="schedule-workbench">
-      <div class="workbench-entry-actions"><el-button plain :disabled="!workbenchMatches.length || Boolean(exportingSchedule)" :loading="exportingSchedule === 'pairings-only'" @click="exportTemplate('pairings-only')"><el-icon><Download /></el-icon>导出对阵表</el-button><el-button type="success" plain @click="setView('settings')">自主编排</el-button><el-button type="success" @click="setView('imports')"><el-icon><Upload /></el-icon>上传赛程</el-button></div>
-      <a v-if="scheduleDownload" class="schedule-download-link" :href="scheduleDownload.url" :download="scheduleDownload.filename">下载 {{ scheduleDownload.filename }}</a>
-      <div class="workbench-controls">
-        <el-select v-model="workbenchDivision" aria-label="筛选组别"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select>
-        <el-select v-model="workbenchStatus" aria-label="筛选状态"><el-option label="全部状态" value="all" /><el-option label="待排" value="pending" /><el-option label="待开始" value="scheduled" /><el-option label="进行中" value="live" /><el-option label="已完赛" value="completed" /></el-select>
-        <el-input v-model="workbenchSearch" clearable placeholder="搜索球队或场序" aria-label="搜索球队或场序" />
-        <span>{{ workbenchMatches.length }} / {{ matches.length }} 场</span>
-      </div>
-      <div class="workbench-table-wrap">
-        <table class="workbench-table"><thead><tr><th>场序</th><th>组别</th><th>比赛日期</th><th>时间</th><th>场地</th><th>对阵</th><th>状态</th><th>裁判</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="match in workbenchMatches" :key="match._id" :data-match-id="match._id" :class="{ 'next-match-row':String(match._id) === nextMatchId }"><td>{{ sequenceLabel(match) }}</td><td>{{ divisionName(match.divisionId) }}</td><td>{{ match.matchDate || '待定' }}</td><td>{{ match.matchTime || '待定' }}</td><td>{{ match.venue || '待定' }}</td><td class="workbench-teams">{{ teamLabel(match,'home') }}　vs　{{ teamLabel(match,'away') }}</td><td>{{ match.matchDate ? managementState(match).label : '待排' }}</td><td>{{ match.refereeCrew?.mainReferee?.name || '未指派' }}</td><td class="workbench-actions"><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openEdit(match)">调时间</el-button><el-button link type="success" :disabled="!canAdjustSchedule(match)" @click="openSequenceEdit(match)">改场序</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'referee')">安排裁判</el-button><el-button link type="success" :disabled="!canAssignReferee(match)" @click="openRefereeAssignment(match,'kit')">球衣颜色</el-button><el-button link @click="openMatchWorkspace(match)">详情</el-button></td></tr>
-        </tbody></table>
-        <el-empty v-if="!loading && !workbenchMatches.length" description="当前筛选下没有比赛" />
-      </div>
+    <section v-if="view === 'workbench'" ref="workbenchRoot">
+      <PairingResult :rows="matches" :event="tournament" :divisions="divisions" :can-adjust="canAdjustSchedule" :can-assign="canAssignReferee" :state-label="match => managementState(match).label" :focus-id="nextMatchId" @edit="openEdit" @sequence="openSequenceEdit" @referee="match => openRefereeAssignment(match,'referee')" @kit="match => openRefereeAssignment(match,'kit')" @detail="openMatchWorkspace" @reset="load" @navigate="setView" @scope="value => {divisionFilter=value;workbenchDivision=value}" />
     </section>
 
     <template v-if="view === 'settings'">
@@ -108,7 +95,7 @@
       <template v-else>
         <section class="map-summary"><span><b>{{ matches.length }}</b>场比赛</span><span class="played"><b>{{ playedMatches }}</b>场已进行</span><span class="remaining"><b>{{ remainingMatches }}</b>场剩余</span><i /><el-button plain @click="setView('settings')"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="setView('imports')"><el-icon><Upload /></el-icon>导入导出</el-button><el-button type="success" :loading="autoScheduling" :disabled="!pendingMatches.length" @click="autoSchedule"><el-icon><MagicStick /></el-icon>自动排程</el-button></section>
 
-        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select><div class="date-tabs"><button v-for="day in calendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }} · {{ day.count }}场</small></button></div><el-button plain :type="pendingDrawerOpen ? 'success' : ''" :aria-expanded="pendingDrawerOpen" @click="pendingDrawerOpen = !pendingDrawerOpen">待排比赛（{{ filteredPendingMatches.length }}）</el-button><el-button plain @click="openRefereePreMatchDocs">裁判赛前文档</el-button><el-button plain @click="viewSchedule">赛程工作台</el-button></section>
+        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select><div class="date-tabs"><button v-for="day in calendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }} · {{ day.count }}场</small></button></div><el-button plain :type="pendingDrawerOpen ? 'success' : ''" :aria-expanded="pendingDrawerOpen" @click="pendingDrawerOpen = !pendingDrawerOpen">待排比赛（{{ filteredPendingMatches.length }}）</el-button><el-button plain @click="openRefereePreMatchDocs">裁判赛前文档</el-button><el-button plain @click="viewSchedule">赛程中心</el-button></section>
 
         <section class="calendar-workspace" :class="{ 'without-pending': !pendingDrawerOpen, 'pending-open':pendingDrawerOpen, 'is-dragging':Boolean(draggedMatchId) }">
           <aside v-show="pendingDrawerOpen" class="pending-pool pending-drawer" @dragover.prevent @drop.stop.prevent="dropBackToPending">
@@ -176,6 +163,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Calendar, Download, MagicStick, Setting, Upload } from '@element-plus/icons-vue'
 import JSZip from 'jszip'
+import PairingResult from './PairingResult.vue'
 import { callFunction, getFileUrl, queryById, queryList, rosterExceptionBoard } from '../../utils/cloud'
 import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recognizeScheduleRows } from '../../utils/scheduleWorkbookRecognition'
 import { firstUnfinishedMatchDate } from '../../utils/matchCalendarSelection'
@@ -221,12 +209,9 @@ const kickoffPeriods=[{key:'morning',label:'上午'},{key:'afternoon',label:'下
 const extraKickoffTimes=computed(()=>selectedKickoffTimes.value.filter(time=>!halfHourKickoffOptions().includes(time)))
 const kickoffInput=computed(()=>parseKickoffTimes(selectedKickoffTimes.value.filter(time=>kickoffPeriodEnabled.value[kickoffPeriod(time)])))
 watch(kickoffInput,value=>{if(!value.errors.length){config.kickoffTimes=[...value.times];const duration=Math.max(30,...divisions.value.map(matchMinutes))+Number(config.defaultTurnaroundMinutes || 0);config.sessionWindows=kickoffWindows(value.times,duration)}},{deep:true})
-const viewTitle = computed(() => ({ settings:'赛程设置',imports:'赛程导入导出',map:'赛事地图',workbench:'赛程工作台' })[view.value] || '赛事地图')
-function goScheduleCenter() {
-  const id=divisionFilter.value !== 'all' ? divisionFilter.value : divisions.value.length===1 ? divisions.value[0].id : ''
-  if(!id)return ElMessage.warning('请先选择赛事组别')
-  router.push({path:`/tournaments/${tournamentId}/pairings`,query:{divisionId:String(id),divisionName:divisionName(id)}})
-}
+const viewTitle = computed(() => ({ settings:'赛程设置',imports:'赛程导入导出',map:'赛事地图',workbench:'赛程中心' })[view.value] || '赛事地图')
+function goScheduleCenter() { return setView('workbench') }
+watch(()=>route.query.view,value=>{view.value=['settings','imports','map','workbench'].includes(String(value || ''))?String(value):'map'})
 function setView(next) { view.value = next; const query={ ...route.query }; if(next === 'map')delete query.view;else query.view=next;return router.replace({ path:route.path,query }) }
 async function viewSchedule() { workbenchDivision.value='all';workbenchStatus.value='all';workbenchSearch.value='';await setView('workbench');await focusNextWorkbenchMatch() }
 function sequenceLabel(match) { return match.matchSequence ?? match.matchNo ?? match.matchIndex ?? '—' }
@@ -245,7 +230,7 @@ async function focusNextWorkbenchMatch() {
   nextMatchId.value=target ? String(target._id) : ''
   if (!target) return
   await nextTick()
-  const row=Array.from(workbenchRoot.value?.querySelectorAll('tr[data-match-id]') || []).find(item => item.dataset.matchId === nextMatchId.value)
+  const row=Array.from(workbenchRoot.value?.querySelectorAll('tr.next-match-row') || []).find(item => item.classList.contains('next-match-row'))
   row?.scrollIntoView({ block:'center',behavior:'auto' })
 }
 function openSequenceEdit(match) { sequenceMatch.value=match;sequenceNumber.value=Number(sequenceLabel(match)) || 1;sequenceVisible.value=true }
