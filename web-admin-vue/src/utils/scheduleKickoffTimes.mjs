@@ -14,3 +14,6 @@ export function kickoffWindows(times,duration=60) {
     return {key:group.key,label:group.label,enabled:true,start:values[0],end:`${String(Math.floor(end/60)).padStart(2,'0')}:${String(end%60).padStart(2,'0')}`}
   })
 }
+
+export function kickoffPeriod(time) { const hour=Number(String(time).slice(0,2));return hour<12?'morning':hour<18?'afternoon':'evening' }
+export function halfHourKickoffOptions() { return Array.from({length:26},(_,index)=>{const value=540+index*30;return `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}`}) }
