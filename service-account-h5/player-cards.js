@@ -15,6 +15,11 @@
   }
   function error(message, retry) { target.className = 'state'; target.innerHTML = '<p>' + html(message) + '</p><button id="cardRetry" type="button">重新加载</button>'; document.getElementById('cardRetry').onclick = retry }
   function login() {
+    if (!/MicroMessenger/i.test(navigator.userAgent)) {
+      target.className = 'state'
+      target.innerHTML = '<p>请在微信中打开此链接，登录后查看球员卡。</p>'
+      return
+    }
     target.textContent = '正在连接微信…'
     api('fanOAuthUrl', { returnUrl: location.origin + location.pathname }).then(function (r) { location.replace(r.authorizeUrl) }).catch(function (e) { error(e.message, login) })
   }

@@ -12,7 +12,8 @@ function fanOAuthReturnUrl(value) {
   try {
     const parsed = new URL(url)
     if (parsed.hostname !== 'www.sxffootball.cn') return ''
-    if (!['/service-account-h5/me.html', '/service-account-h5/fan-center.html', '/service-account-h5/player-cards.html'].includes(parsed.pathname)) return ''
+    if (parsed.protocol !== 'https:' || parsed.port || parsed.username || parsed.password) return ''
+    if (!['/service-account-h5/me.html', '/service-account-h5/fan-center.html', '/service-account-h5/player-cards.html', '/preview/dynamic-card/h5/player-cards.html'].includes(parsed.pathname)) return ''
     return parsed.origin + parsed.pathname
   } catch (error) { return '' }
 }
