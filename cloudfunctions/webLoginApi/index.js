@@ -4593,13 +4593,8 @@ async function handlePaperRefereeReport(event, confirming) {
     lineups[side]={players,substitutes,source:'organizer_paper_report'}
   }
   const substitutions=Array.isArray(event.substitutions)?event.substitutions:[]
-  if (substitutions.length>100) return {success:false,error:'换人记录过多'}
-  for (const [i,row] of substitutions.entries()) {
-    const side=row.side, available=allowedPlayers[side]
-    const incoming=available?.get(String(row.inId)), outgoing=available?.get(String(row.outId))
-    if (!incoming || !outgoing || incoming.playerId===outgoing.playerId || !Number.isInteger(row.minute) || row.minute<0 || row.minute>150) return {success:false,error:'请完整核对换人双方和分钟'}
-    entries.push({eventId:'paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|sub|${i}`).digest('hex').slice(0,24),type:'substitution',minute:row.minute,teamSide:side,teamId:match[side+'TeamId'],playerId:incoming.playerId,playerName:incoming.name,outPlayerId:outgoing.playerId,assistPlayerId:outgoing.playerId,assistName:outgoing.name,source:'organizer_paper_report',evidenceFileId:evidence.fileId})
-  }
+  try { entries.push(...require('./refereeSubstitutionBatch.cjs').buildEntries(substitutions,allowedPlayers,match,evidence)) }
+  catch(error) { return {success:false,error:error.message || '换人组核对失败'} }
   const existing=Array.isArray(match.events)?match.events:[]
   // Existing frozen lineup evidence can only be reused, never silently replaced.
   if (match.lineupsLocked || ['finished','completed'].includes(String(match.status || '').toLowerCase())) {
