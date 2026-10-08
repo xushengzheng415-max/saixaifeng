@@ -137,6 +137,18 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       const legacy=rows('matches').filter(row=>selected(row) && !row.demoLegacyPairing && row.synthetic && row.isTest && row.status==='scheduled' && row.matchDate && row.matchTime && row.venue && !row.scheduleGenerated && !row.scheduleAssignmentSource && !(row.events || []).length)
       for(const row of legacy) update('matches',row._id,{demoLegacyScheduleBackup:{matchDate:row.matchDate,matchTime:row.matchTime,venue:row.venue,reason:'legacy-demo-auto-fill'},matchDate:'',matchTime:'',venue:'',scheduleStatus:'unassigned',scheduleGenerated:false})
     }
+    if(action==='resetDivisionSchedule') {
+      if(!divisionId) return fail('请指定要重置的组别')
+      const division=get('divisions',divisionId)
+      if(division.tournamentId!==tournamentId)return fail('组别不属于当前赛事')
+      const ids=new Set(params.matchIds || []),requested=rows('matches').filter(row=>selected(row) && ids.has(row._id) && !row.demoLegacyPairing)
+      if(requested.length!==ids.size)return fail('部分比赛不属于当前赛事组别，请刷新')
+      const protectedRows=requested.filter(row=>!['scheduled','pending','not_started','upcoming',''].includes(String(row.status || '').toLowerCase()) || row.executionSnapshot || row.refereeRecordLocked || row.schedulePublished || row.published || (row.events || []).length)
+      if(protectedRows.length)return fail('部分比赛已开赛、发布或锁定，请刷新后重试')
+      const resetAt=new Date().toISOString()
+      requested.forEach(row=>update('matches',row._id,{scheduleResetBackup:{matchDate:row.matchDate || '',matchTime:row.matchTime || '',venue:row.venue || '',resetAt},matchDate:'',matchTime:'',venue:'',date:'',startTime:'',timeSlot:'',scheduleStatus:'unassigned',scheduleGenerated:false,scheduleAssignmentSource:'reset',scheduleResetAt:resetAt}))
+      return {success:true,resetCount:requested.length}
+    }
     if (action === 'prepareDrawPreview') {
       const confirmed = rows('tournament_groups').filter(row=>selected(row) && row.type==='tournament' && row.status==='confirmed').sort((a,b)=>String(a.groupCode).localeCompare(String(b.groupCode)))
       if(confirmed.length!==2 || confirmed.some(group=>(group.teams || []).length!==4)) return {success:true,message:'当前组别按已有已确认对阵预览'}
