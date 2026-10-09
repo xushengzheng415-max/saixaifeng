@@ -3097,7 +3097,8 @@ async function reloadTeamWorkspace() {
   pageLoadError.value = ''
   try {
   await loadTournament()
-  await Promise.all([loadTournamentTeams(), loadAllTeams()])
+  await loadTournamentTeams()
+  if (isRegistrationWorkspace.value) await loadAllTeams()
   if (route.query.divisionId !== activeDivisionId.value) await router.replace({ query:{ ...route.query, divisionId:activeDivisionId.value } })
 
   const rawRequestedTab = typeof route.query.tab === 'string' ? route.query.tab : 'all'

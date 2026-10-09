@@ -22,6 +22,7 @@ export function createSessionReadCache({ identity, now = Date.now, freshMs = 150
   const pending = new Map()
   let context = ''
   let epoch = 0
+  let lastClearReason = ''
   let bytes = 0
   const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value))
   const notify = detail => { try { onChange(detail) } catch { /* A view listener cannot break a request. */ } }
@@ -31,6 +32,7 @@ export function createSessionReadCache({ identity, now = Date.now, freshMs = 150
     entries.delete(key)
   }
   function clear(reason = 'mutation', publish = true) {
+    lastClearReason = reason
     epoch++
     entries.clear()
     pending.clear()
@@ -52,13 +54,19 @@ export function createSessionReadCache({ identity, now = Date.now, freshMs = 150
     entries.set(key, { value: JSON.parse(serialized), serialized, at: now(), tags: [...tags], bytes: size })
     bytes += size
   }
-  function load(key, loader, tags, background) {
+  function load(key, loader, tags, background, retry = 0) {
     if (pending.has(key)) return pending.get(key)
     const requestContext = synchronize()
     const requestEpoch = epoch
     const old = entries.get(key)
     const promise = Promise.resolve().then(loader).then(result => {
-      if (requestContext !== (identity() || '') || requestEpoch !== epoch) throw invalidated()
+      if (requestContext !== (identity() || '')) throw invalidated()
+      if (requestEpoch !== epoch) {
+        // Discard the old response. Re-read once only after a same-identity data mutation.
+        // Access/session changes must never recover through a stale authenticated request.
+        if (lastClearReason === 'mutation' && retry === 0) return load(key, loader, tags, background, 1)
+        throw invalidated()
+      }
       if (result?.success === true && requestContext) {
         store(key, result, tags)
         if (background && old?.serialized !== JSON.stringify(result)) notify({ reason: 'refresh', tags: [...tags] })
