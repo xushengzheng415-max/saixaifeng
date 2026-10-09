@@ -585,20 +585,20 @@ async function needsOrganizerOnboarding(to) {
   // needsOrganizerOnboarding 只服务主办方。平台管理员没有 orgId 也不该有机构，
   // 历史实现让它走到这里，于是平台负责人被当成“尚未开户的主办方”推进了机构引导。
   if (isPlatformSession()) return false
-  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/service-account-binding' || to.path === '/assistance' || to.path === '/tournament-staff') return false
+  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/assistance' || to.path === '/tournament-staff') return false
   if (to.meta.requiresAuth !== true) return false
   try {
     const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
     if (user.isPlatformOwner === true && ['/tournament-center-admin', '/system'].includes(to.path)) return false
   } catch { /* 交给后续机构引导处理 */ }
-  if(to.path==='/tournament-space'){
+  if(['/tournament-space','/service-account-binding'].includes(to.path)){
     try{const {callFunction}=await import('../utils/cloud');const state=await callFunction('onboardingWorkspace',{action:'state'});return !state?.success || state.registrationComplete!==true}catch{return true}
   }
   return !hasLocalOrganization()
 }
 
 async function needsOrganizerServiceBinding(to) {
-  if (to.path === '/service-account-binding' || to.path === '/tournament-staff') return false
+  if (['/service-account-binding','/tournament-staff','/organization-onboarding'].includes(to.path)) return false
   if (!hasLocalOrganization()) return false
   const loginType = localStorage.getItem('loginType') || ''
   if (loginType !== 'wechat') return false
@@ -811,6 +811,7 @@ router.beforeEach(async (to, from, next) => {
       next('/organization-onboarding')
       return
     }
+    if(await needsOrganizerServiceBinding(to)){next('/service-account-binding');return}
     next()
   } else {
     // 尝试恢复云开发登录态（刷新页面场景）
@@ -833,6 +834,7 @@ router.beforeEach(async (to, from, next) => {
         next('/organization-onboarding')
         return
       }
+      if(await needsOrganizerServiceBinding(to)){next('/service-account-binding');return}
       next()
     } else {
       if (to.path !== '/login' && to.fullPath.startsWith('/')) {

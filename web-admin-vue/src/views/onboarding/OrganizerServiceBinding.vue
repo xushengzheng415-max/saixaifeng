@@ -1,13 +1,13 @@
 <template>
   <main class="binding-page">
     <section class="binding-shell">
-      <div class="brand"><img :src="logoUrl" alt="赛小蜂足球" /><div><strong>赛小蜂足球</strong><span>主办方账号安全绑定</span></div></div>
+      <div class="brand"><img :src="logoUrl" alt="赛小蜂足球" /><div><strong>赛小蜂足球</strong><span>赛事通知服务</span></div></div>
       <div class="content">
         <section class="guide">
-          <span class="required-badge">首次进入后台必须完成</span>
-          <h1>绑定赛小蜂足球助手</h1>
+          <span class="required-badge">资料已保存</span>
+          <h1>关注赛小蜂足球助手</h1>
 
-          <div class="steps"><div><b>1</b><span><strong>微信扫码</strong><small>使用常用微信扫描右侧二维码</small></span></div><div><b>2</b><span><strong>关注并完成绑定</strong><small>已关注用户扫码后会直接完成账号绑定</small></span></div><div><b>3</b><span><strong>自动进入后台</strong><small>页面检测成功后继续原来的操作</small></span></div></div>
+          <div class="steps"><div><b>1</b><span><strong>微信扫码</strong><small>使用常用微信扫描右侧二维码</small></span></div><div><b>2</b><span><strong>关注并完成绑定</strong><small>已关注用户扫码后会直接完成账号绑定</small></span></div><div><b>3</b><span><strong>进入赛事空间</strong><small>关注确认后进入赛事空间</small></span></div></div>
           <div class="security">同一服务号微信不能静默绑定到多个手机号账号；发现冲突时必须由平台人工核验。</div>
         </section>
         <section class="qr-card">
@@ -52,9 +52,9 @@ async function requestBinding(action, payload = {}) {
 }
 function continueToBackend() {
   sessionStorage.setItem('sxfServiceBoundCheck', JSON.stringify({ subscribed: true, checkedAt: Date.now() }))
-  const target = sessionStorage.getItem('sxfAfterServiceBinding') || '/organization-onboarding'
+  const target = sessionStorage.getItem('sxfAfterServiceBinding') || '/tournament-space'
   sessionStorage.removeItem('sxfAfterServiceBinding')
-  router.replace(target === '/service-account-binding' ? '/organization-onboarding' : target)
+  router.replace(/^\/(?!\/)/.test(target) && !['/service-account-binding','/organization-onboarding'].includes(target) ? target : '/tournament-space')
 }
 async function checkStatus() {
   try {
@@ -99,7 +99,7 @@ async function createGate() {
   }
 }
 onMounted(() => {
-  document.title = '绑定赛小蜂足球助手'
+  document.title = '关注赛小蜂足球助手'
   createGate()
 })
 onUnmounted(() => { if (timer) clearInterval(timer) })
