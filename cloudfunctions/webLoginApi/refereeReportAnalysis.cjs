@@ -67,7 +67,8 @@ function parseTables(tableResult,textResult,timing={},handwriting=null){
     for(const [hi,header] of headers.entries()){
       const side=headers.length===1?(singleSide++%2?'away':'home'):hi?'away':'home',start=header.c-1
       const combinedMark=cells.some(c=>c.r===header.r&&c.c===start+3&&/说明/.test(clean(c.text))) || cells.some(c=>c.r===header.r&&c.c>=start+7&&c.c<=start+9&&/进球[123一二三]/.test(clean(c.text)))
-      const columns=combinedMark?{identity:4,on:5,off:6,goals:[7,8,9],yellow:10,red:11}:{identity:5,on:6,off:7,goals:[8],yellow:9,red:10}
+      const splitGoals=cells.some(c=>c.r===header.r&&c.c>=start+7&&c.c<=start+11&&(/进球[123一二三]/.test(clean(c.text))||c.c===start+11&&/红牌/.test(clean(c.text))))
+      const columns=combinedMark?(splitGoals?{identity:4,on:5,off:6,goals:[7,8,9],yellow:10,red:11}:{identity:4,on:5,off:6,goals:[7],yellow:8,red:9}):{identity:5,on:6,off:7,goals:[8],yellow:9,red:10}
       const minuteStart=columns.on
       const upper=Math.min(...(header.cell_location || []).map(p=>p.y))+10
       const inBody=t=>t.p.top>=upper&&t.p.top<lower-8
