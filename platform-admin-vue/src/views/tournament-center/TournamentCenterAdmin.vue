@@ -74,8 +74,8 @@
               <el-table-column label="主办方" min-width="230"><template #default="{ row }"><div class="name-cell"><span class="avatar small">{{ avatarText(row.name) }}</span><div><strong>{{ row.name }}</strong><small>{{ row.orgId ? '已关联机构' : '个人主办方账号' }}</small></div></div></template></el-table-column>
               <el-table-column label="联系人" min-width="150"><template #default="{ row }"><strong>{{ row.contact }}</strong><small class="block">{{ row.email || '未填写邮箱' }}</small></template></el-table-column>
               <el-table-column label="手机号" width="175"><template #default="{ row }"><button v-if="row.phone" class="phone" @click.stop="copyText(row.phone)">{{ row.phone }} <el-icon><CopyDocument /></el-icon></button><el-tag v-else type="danger" effect="plain">待补充</el-tag></template></el-table-column>
-              <el-table-column label="站内信" width="100"><template #default="{ row }"><el-tag v-if="row.latestNotice" :type="row.latestNotice.readAt ? 'success' : 'warning'">{{ row.latestNotice.readAt ? '已读' : '未读' }}</el-tag><small v-else>未发送</small></template></el-table-column>
-              <el-table-column prop="tournamentCount" label="创建赛事" width="105" align="center" /><el-table-column prop="teamCount" label="创建球队" width="105" align="center" />
+              <el-table-column label="注册来源" min-width="150"><template #default="{ row }"><span>{{ [...new Set((row.accountProfiles || []).map(x => x.registrationSource))].join('、') || '来源未记录' }}</span><small v-if="row.accountProfiles?.length > 1" class="block">{{ row.accountProfiles.length }} 个关联账号</small></template></el-table-column><el-table-column label="站内信" width="100"><template #default="{ row }"><el-tag v-if="row.latestNotice" :type="row.latestNotice.readAt ? 'success' : 'warning'">{{ row.latestNotice.readAt ? '已读' : '未读' }}</el-tag><small v-else>未发送</small></template></el-table-column>
+              <el-table-column prop="tournamentCount" label="关联赛事" width="95" align="center" /><el-table-column label="关联球队" min-width="190"><template #default="{ row }"><span>{{ organizerTeamNames(row).slice(0, 2).join('、') || '暂无球队' }}</span><small v-if="row.teamCount" class="block">共 {{ row.teamCount }} 支 · 档案内查看全部</small></template></el-table-column>
               <el-table-column label="协助状态" width="120"><template #default="{ row }"><el-tag v-if="row.activeSupportCount" type="warning">处理中 {{ row.activeSupportCount }}</el-tag><small v-else>暂无</small></template></el-table-column>
               <el-table-column label="最近赛事" min-width="210"><template #default="{ row }">{{ row.latestTournament?.name || '尚未创建赛事' }}<small class="block">{{ formatDate(row.latestTournament?.createTime || row.createTime) }}</small></template></el-table-column>
               <el-table-column label="操作" width="290" fixed="right"><template #default="{ row }"><el-button link type="primary" @click.stop="openOrganizer(row)">查看档案</el-button><el-button link @click.stop="startSupport">协助处理</el-button><el-button link type="success" :disabled="!row.userId" :title="row.userId ? '' : '没有可接收站内信的账号'" @click.stop="openOrganizerNotice(row)">发站内信</el-button></template></el-table-column>
@@ -84,7 +84,7 @@
           </section>
 
           <section v-else-if="activeTab === 'accounts'" class="panel table-panel">
-            <div class="account-tip"><strong>账号删除保护</strong><span>只允许删除没有机构、赛事、球队、球员或成员关系的空主办方账号。业务数据不会随账号删除。</span></div>
+            <div class="account-tip"><strong>注销范围</strong><span>当前“注销PC”仅关闭PC登录，小程序和业务资料保留。</span></div>
             <div class="toolbar">
               <el-input v-model="accountKeyword" clearable placeholder="搜索账号姓名、手机号、邮箱"><template #prefix><el-icon><Search /></el-icon></template></el-input>
               <span>共 {{ filteredAccounts.length }} 个主办方账号</span>
@@ -98,7 +98,7 @@
               <el-table-column prop="teamCount" label="创建球队" width="95" align="center" />
               <el-table-column label="账号状态" width="100"><template #default="{ row }"><el-tag :type="row.isActive ? 'success' : 'info'">{{ row.isActive ? '正常' : '已停用' }}</el-tag></template></el-table-column>
               <el-table-column label="最近登录" width="165"><template #default="{ row }">{{ formatTime(row.lastLoginTime) }}</template></el-table-column>
-              <el-table-column label="操作" width="110" fixed="right"><template #default="{ row }"><el-button link type="danger" :loading="accountDeletingId === row._id" @click="inspectAndDeleteAccount(row)">注销PC</el-button></template></el-table-column>
+              <el-table-column label="操作" width="190" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openOrganizer({...row, userId: row._id})">查看档案</el-button><el-button link type="danger" :loading="accountDeletingId === row._id" @click="inspectAndDeleteAccount(row)">注销PC</el-button></template></el-table-column>
               <template #empty><el-empty description="没有符合条件的主办方账号" /></template>
             </el-table>
           </section>
@@ -178,9 +178,7 @@
         <template #footer><el-button @click="noticeDialogVisible=false">取消</el-button><el-button type="primary" :loading="noticeSending" @click="sendOrganizerNotice">发送站内信</el-button></template>
       </el-dialog>
 
-      <el-drawer v-model="organizerDrawerVisible" title="主办方运营档案" size="min(680px, 92vw)">
-        <template v-if="selectedOrganizer"><div class="profile-head"><span class="avatar large">{{ avatarText(selectedOrganizer.name) }}</span><div><h2>{{ selectedOrganizer.name }}</h2><p>{{ selectedOrganizer.contact }} · {{ selectedOrganizer.orgId ? '机构主办方' : '个人主办方账号' }}</p></div></div><div class="contact-card"><div><small>手机号</small><strong>{{ selectedOrganizer.phone || '尚未填写' }}</strong></div><div><small>邮箱</small><strong>{{ selectedOrganizer.email || '尚未填写' }}</strong></div><div class="contact-actions"><el-button :disabled="!selectedOrganizer.phone" @click="copyText(selectedOrganizer.phone)"><el-icon><CopyDocument /></el-icon>复制手机号</el-button><el-button type="primary" @click="startSupport"><el-icon><Headset /></el-icon>协助处理问题</el-button></div></div><el-descriptions :column="2" border class="description"><el-descriptions-item label="创建赛事">{{ selectedOrganizer.tournamentCount }}</el-descriptions-item><el-descriptions-item label="创建球队">{{ selectedOrganizer.teamCount }}</el-descriptions-item><el-descriptions-item label="账号状态">{{ selectedOrganizer.isActive ? '正常' : '已停用' }}</el-descriptions-item><el-descriptions-item label="最近登录">{{ formatTime(selectedOrganizer.lastLoginTime) }}</el-descriptions-item></el-descriptions><h3>他创建的赛事</h3><div v-if="selectedOrganizerTournaments.length" class="drawer-list"><button v-for="item in selectedOrganizerTournaments" :key="item._id" @click="openTournament(item)"><span><strong>{{ item.name }}</strong><small>{{ statusText(item.status) }} · {{ item.teamCount }} 支球队</small></span><el-icon><ArrowRight /></el-icon></button></div><el-empty v-else description="尚未创建赛事" :image-size="70" /><h3>他创建的球队</h3><div v-if="selectedOrganizerTeams.length" class="drawer-list"><button v-for="item in selectedOrganizerTeams" :key="item._id" @click="openTeam(item)"><span><strong>{{ item.name }}</strong><small>{{ item.city || '地区待补充' }} · 参加 {{ item.tournamentCount }} 场赛事</small></span><el-icon><ArrowRight /></el-icon></button></div><el-empty v-else description="尚未创建球队" :image-size="70" /></template>
-      </el-drawer>
+      <CustomerProfileDrawer v-model="organizerDrawerVisible" :customer="selectedOrganizer" />
 
       <el-drawer v-model="detailDrawerVisible" :title="selectedTournament ? '赛事平台档案' : '球队平台档案'" size="min(620px, 92vw)">
         <template v-if="selectedTournament"><div class="profile-head"><span class="entity-icon large"><el-icon><Trophy /></el-icon></span><div><h2>{{ selectedTournament.name }}</h2><p>{{ selectedTournament.organizerName || '主办方待补充' }}</p></div></div><el-descriptions :column="1" border><el-descriptions-item label="赛事状态"><el-tag :type="statusType(selectedTournament.status)">{{ statusText(selectedTournament.status) }}</el-tag></el-descriptions-item><el-descriptions-item label="实际创建人">{{ selectedTournament.creatorName || '待核验' }}</el-descriptions-item><el-descriptions-item label="创建人手机"><button v-if="selectedTournament.creatorPhone" class="phone" @click="copyText(selectedTournament.creatorPhone)">{{ selectedTournament.creatorPhone }} <el-icon><CopyDocument /></el-icon></button><span v-else>待补充</span></el-descriptions-item><el-descriptions-item label="创建人邮箱">{{ selectedTournament.creatorEmail || '待补充' }}</el-descriptions-item><el-descriptions-item label="赛事类别">{{ categoryText(selectedTournament.category) }}</el-descriptions-item><el-descriptions-item label="赛制">{{ formatText(selectedTournament.formatType) }}</el-descriptions-item><el-descriptions-item label="举办地">{{ selectedTournament.city || '待补充' }}</el-descriptions-item><el-descriptions-item label="参赛球队">{{ selectedTournament.teamCount }} 支</el-descriptions-item><el-descriptions-item label="创建时间">{{ formatTime(selectedTournament.createTime) }}</el-descriptions-item><el-descriptions-item label="平台标识">{{ selectedTournament._id }}</el-descriptions-item></el-descriptions></template>
@@ -206,6 +204,7 @@ import ImageCropper from '@/components/common/ImageCropper.vue'
 import SystemAdmin from '@/views/system/SystemAdmin.vue'
 import PlayerCardTemplateLibrary from './PlayerCardTemplateLibrary.vue'
 import DataCenter from '@/views/data/DataCenter.vue'
+import CustomerProfileDrawer from './CustomerProfileDrawer.vue'
 
 function openOrganizerSite(){window.location.assign('https://www.sxffootball.cn/admin/#/tournament-space')}
 const dataCenterRef=ref(null)
@@ -279,6 +278,7 @@ const categoryMap={youth:'青少年赛事',amateur:'业余赛事',local:'地协�
 const categoryText=v=>categoryMap[v]||v||'未分类',formatText=v=>formatMap[v]||v||'未设置',statusText=v=>statusMap[v]||v||'未知',statusType=v=>({draft:'info',registering:'primary',published:'success',ongoing:'warning',cancelled:'danger'}[v]||'info')
 const supportStatusText=v=>({pending:'等待确认',active:'协助中',rejected:'已拒绝',revoked:'已撤销',expired:'已过期'}[v]||'未知'),supportStatusType=v=>({pending:'warning',active:'success',rejected:'danger'}[v]||'info')
 const avatarText=v=>String(v||'主').slice(0,1)
+const organizerTeamNames = row => teams.value.filter(team => (row.teamIds || []).includes(String(team._id))).map(team => team.name)
 function dateOf(value){if(!value)return null;const d=new Date(value?.$date||value);return Number.isNaN(d.getTime())?null:d}
 const formatDate=v=>dateOf(v)?.toLocaleDateString('zh-CN')||'时间待补充',formatTime=(v,only=false)=>{const d=dateOf(v);return d?(only?d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):d.toLocaleString('zh-CN',{hour12:false})):'—'}
 async function copyText(v){if(!v)return;try{await navigator.clipboard.writeText(String(v));ElMessage.success('手机号已复制')}catch{ElMessage.warning('复制失败，请手动复制')}}

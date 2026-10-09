@@ -1,5 +1,6 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const customerProfiles = require('./customerProfile.cjs')
 
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 
@@ -209,6 +210,7 @@ function safeOrganizer(user) {
 function safeOrganizerAccount(user, tournamentRows, teamRows) {
   const userId = String(user._id || '')
   return {
+    ...customerProfiles.accountSummary(user),
     _id: userId,
     name: user.contactName || user.nickname || user.userName || user.name || maskPhone(user.phone || user.phoneNumber) || '未命名账号',
     phone: normalizePhone(user.phone || user.phoneNumber),
@@ -333,6 +335,7 @@ async function getOverview(db) {
     const organizerTournaments = tournaments.filter(tournament => item.tournamentIds.includes(String(tournament._id)))
     return {
       ...item,
+      accountProfiles: userRows.filter(user => String(user._id) === item.userId || (item.orgId && recordOrgId(user) === item.orgId)).map(customerProfiles.accountSummary),
       tournamentCount: item.tournamentIds.length,
       teamCount: item.teamIds.length,
       latestTournament: organizerTournaments[0] || null,
@@ -838,6 +841,7 @@ exports.main = async event => {
 
     const action = params.action || 'overview'
     if (action === 'overview') return await getOverview(db)
+    if (action === 'getCustomerProfile') return await customerProfiles.getCustomerProfile(db, params)
     if (action === 'refreshTournamentStatuses') return await getStartedTournamentIds(db, params)
     if (action === 'sendOrganizerNotice') return await sendOrganizerNotice(db, params, user)
     if (action === 'saveBanner') return await saveBanner(db, params, user)
