@@ -355,6 +355,7 @@ async function loadOnboardingState(identity) {
     canCreateOrganizationFromTeams,
     hasTournamentWithoutOrganization,
     // 多机构账号已有真实业务关系，不能被当成“无机构账号”再次引导创建机构。
+    registrationComplete:organizerRegistrationComplete(organization),
     requiresOnboarding: !organizationConflict && !hasTeamRelation && (!organization || !hasWorkspaceCapability),
     onboarding: user.onboarding || {},
     training: trainingProvision,
@@ -363,6 +364,8 @@ async function loadOnboardingState(identity) {
     organizationIds: validOrganizationRows.map(function(row) { return row._id })
   }
 }
+
+function organizerRegistrationComplete(org){const profile=org && org.customerProfile;return Boolean(profile && profile.version==='organizer-onboarding-v2' && ['school','enterprise','association','event_company'].includes(profile.identity) && ['under_10','10_30','30_50','over_50'].includes(profile.annualEventVolume) && ['youth','adult'].includes(profile.primaryAudience) && org.name && org.contactName && org.contactPhone && org.provinceCode && org.city)}
 
 async function createOrganization(identity, event) {
   const name = cleanText(event.name, 80)
@@ -380,6 +383,13 @@ async function createOrganization(identity, event) {
   if (state.organization) {
     const access = await organizationAccess(identity, state.organization)
     if (!access.isMember) throw new Error('当前账号没有此机构的访问权限')
+    if(eventOnly && !organizerRegistrationComplete(state.organization)){
+      if(!access.canManageWorkspace)throw new Error('只有机构负责人可完成主办方登记')
+      const orgId=String(state.organization._id || state.organization.id),customerProfile={identity:organizationType,annualEventVolume,primaryAudience,version:'organizer-onboarding-v2',collectedAt:db.serverDate()}
+      await db.collection('organizations').doc(orgId).update({data:{name,organizationName:name,organizationType,organizationTypeName:ORGANIZATION_TYPES[organizationType],province,provinceCode,city,contactName,contactPhone,customerProfile,updateTime:db.serverDate()}})
+      const organization=await provisionEventWorkspace(identity,'event')
+      return {success:true,organization:{...organization,id:orgId,name,organizationType,province,provinceCode,city,contactName,contactPhone,customerProfile}}
+    }
     return {
       success: true,
       duplicate: true,
