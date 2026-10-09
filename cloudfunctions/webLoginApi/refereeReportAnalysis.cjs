@@ -66,6 +66,9 @@ function parseTables(tableResult,textResult,timing={},handwriting=null){
     }
     for(const [hi,header] of headers.entries()){
       const side=headers.length===1?(singleSide++%2?'away':'home'):hi?'away':'home',start=header.c-1
+      const combinedMark=cells.some(c=>c.r===header.r&&c.c===start+3&&/说明/.test(clean(c.text))) || cells.some(c=>c.r===header.r&&c.c>=start+7&&c.c<=start+9&&/进球[123一二三]/.test(clean(c.text)))
+      const columns=combinedMark?{identity:4,on:5,off:6,goals:[7,8,9],yellow:10,red:11}:{identity:5,on:6,off:7,goals:[8],yellow:9,red:10}
+      const minuteStart=columns.on
       const upper=Math.min(...(header.cell_location || []).map(p=>p.y))+10
       const inBody=t=>t.p.top>=upper&&t.p.top<lower-8
       const numberTokens=accurate.filter(t=>inBody(t)&&colAt(t)===start+2&&/^\d{1,3}$/.test(clean(t.text)))
@@ -82,29 +85,29 @@ function parseTables(tableResult,textResult,timing={},handwriting=null){
           const cell=cells.find(c=>c.r===numberCells[i].r&&c.c===start+offset&&c.ce-c.c===1)
           const tableText=cell?.text.trim() || ''
           const candidates=[...accurate,...handwritten].filter(t=>cell?.cell_location&&inside(t.x,t.p.top+t.p.height/2,cell.cell_location)&&!(/首发|替补|身份|换上|换下|进球|黄牌|红牌|签名|球衣/.test(t.text)))
-          if(offset===3||offset===4){if(tableText)return tableText;return candidates.find(t=>exactMark(t.text,offset===3?'starter':'substitute'))?.text || ''}
-          if(offset===5&&/^(GK|C|S)$/i.test(clean(tableText)))return tableText
-          if(offset>=6&&tableText&&!/球衣|签名/.test(tableText)){
+          if(offset===3||(!combinedMark&&offset===4)){if(tableText)return tableText;return candidates.find(t=>combinedMark?(exactMark(t.text,'starter')||exactMark(t.text,'substitute')):exactMark(t.text,offset===3?'starter':'substitute'))?.text || ''}
+          if(offset===columns.identity&&/^(GK|C|S)$/i.test(clean(tableText)))return tableText
+          if(offset>=minuteStart&&tableText&&!/球衣|签名/.test(tableText)){
             if(/[中场半]/.test(tableText)){const mid=candidates.find(t=>/中场|半场/.test(t.text));if(mid)return mid.text}
-            if(offset>=8&&/^\d+$/.test(clean(tableText))&&!candidates.some(t=>clean(t.text).replace(/[′'’]/g,'')===clean(tableText)))uncorroborated.push(offset)
+            if(offset>=columns.goals[0]&&/^\d+$/.test(clean(tableText))&&!candidates.some(t=>clean(t.text).replace(/[′'’]/g,'')===clean(tableText)))uncorroborated.push(offset)
             return tableText
           }
-          if(offset>=6)return candidates.filter(t=>t.source==='handwriting'&&!cells.some(other=>other.c===start+offset&&Math.abs(other.r-numberCells[i].r)<=1&&other.r!==numberCells[i].r&&clean(other.text)===clean(t.text))).map(t=>t.text).join(',')
+          if(offset>=minuteStart)return candidates.filter(t=>t.source==='handwriting'&&!cells.some(other=>other.c===start+offset&&Math.abs(other.r-numberCells[i].r)<=1&&other.r!==numberCells[i].r&&clean(other.text)===clean(t.text))).map(t=>t.text).join(',')
           if(!candidates.length)return ''
           const best=candidates.slice().sort((a,b)=>{
-            const recognized=t=>offset===3?exactMark(t.text,'starter'):offset===4?exactMark(t.text,'substitute'):offset===5?/^(GK|C|S)$/i.test(clean(t.text)):/\d|中场|半场/.test(clean(t.text))
+            const recognized=t=>offset===3?exactMark(t.text,'starter'):offset===4?exactMark(t.text,'substitute'):offset===columns.identity?/^(GK|C|S)$/i.test(clean(t.text)):/\d|中场|半场/.test(clean(t.text))
             return Number(recognized(b))-Number(recognized(a)) || Number(b.source==='handwriting')-Number(a.source==='handwriting')
           })[0]
           return best.text
         }
-        const starter=get(3),substitute=get(4),identity=get(5)
+        const starter=get(3),substitute=combinedMark?starter:get(4),identity=get(columns.identity)
         const isStarter=exactMark(starter,'starter'),isSubstitute=exactMark(substitute,'substitute')
         const role=isStarter&&!isSubstitute?'starter':isSubstitute&&!isStarter?'substitute':/^[×✕xX]$/.test(clean(starter+substitute))?'absent':'unknown'
-        const raw={starter,substitute,identity,on:get(6),off:get(7),goals:get(8),yellow:get(9),red:get(10)},reviewNotes=[]
+        const raw={starter,substitute,identity,on:get(columns.on),off:get(columns.off),goals:columns.goals.map(get).filter(Boolean).join(','),yellow:get(columns.yellow),red:get(columns.red)},reviewNotes=[]
         const entry={name:alignedNames[i]?.text || '',number:anchors[i].number,role,captain:/^C$/i.test(clean(identity)),goalkeeper:/^GK$/i.test(clean(identity)),rawFields:raw,reviewNotes}
         for(const field of ['on','off','goals','yellow','red']){const normalized=normalizeMinute(raw[field],timing,field);entry[field]=normalized.value;reviewNotes.push(...normalized.notes)}
-        for(const offset of uncorroborated){const field={8:'goals',9:'yellow',10:'red'}[offset];reviewNotes.push(`原文候选“${raw[field]}”缺少位置复核，请确认`);entry[field]='?'}
-        if(role==='substitute'&&starter)reviewNotes.push('首发栏有涂改，按替补标记解析，请核对')
+        for(const offset of uncorroborated){const field=columns.goals.includes(offset)?'goals':offset===columns.yellow?'yellow':offset===columns.red?'red':null;if(!field)continue;reviewNotes.push(`原文候选“${raw[field]}”缺少位置复核，请确认`);entry[field]='?'}
+        if(!combinedMark&&role==='substitute'&&starter)reviewNotes.push('首发栏有涂改，按替补标记解析，请核对')
         if(entry.on&&entry.off&&/^\d+$/.test(entry.on)&&/^\d+$/.test(entry.off)&&Number(entry.off)<=Number(entry.on))reviewNotes.push('换下时间不晚于换上时间，请核对')
         if(role==='unknown')reviewNotes.push('首发、替补标记不清，请核对')
         if(names.length!==anchors.length)reviewNotes.push('姓名与号码需核对')
