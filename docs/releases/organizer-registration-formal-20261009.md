@@ -25,3 +25,6 @@
 ## 资料保存后服务号关注
 
 按用户最新确认接回服务号步骤：基础资料保存成功后导航到service-account-binding，默认完成目标为tournament-space。路由先检查registrationComplete，再检查服务号subscribed；专属二维码及轮询沿用tournamentRegistrationFlow既有接口。已关注且绑定的用户不重复扫码；不完整资料不能直接从服务号路径跳过登记。
+
+
+服务号阶段修复643a3daf已合入最新main，保留同期裁判导出单宽列更新。正式入口、路由、资料及服务号页共6文件HTTP/SHA-256回读一致。资料先于关注、未关注需绑定、已关注已绑定继续、两类登记页面不产生循环的检查通过；实际微信关注由用户验收。
