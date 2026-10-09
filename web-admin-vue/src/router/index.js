@@ -808,10 +808,6 @@ router.beforeEach(async (to, from, next) => {
       next('/organization-onboarding')
       return
     }
-    if (await needsOrganizerServiceBinding(to)) {
-      next('/service-account-binding')
-      return
-    }
     next()
   } else {
     // 尝试恢复云开发登录态（刷新页面场景）
@@ -832,10 +828,6 @@ router.beforeEach(async (to, from, next) => {
       }
       if (needsOrganizerOnboarding(to)) {
         next('/organization-onboarding')
-        return
-      }
-      if (await needsOrganizerServiceBinding(to)) {
-        next('/service-account-binding')
         return
       }
       next()
