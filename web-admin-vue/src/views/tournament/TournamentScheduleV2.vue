@@ -506,11 +506,11 @@ function kitLine(colors) {
 }
 
 function printSheetHtml(input) {
-  const widths=[280,1240,280,360,360,360,360,360,360,360,360]
+  const widths=[280,1240,280,360,360,360,360,288,288,288,288,288]
   const allWidths=[...widths,...widths]
   const maxRows=Math.max(Number(input.rowCount)||0,input.homePlayers.length,input.awayPlayers.length,1)
   const colgroup=`<colgroup>${allWidths.map(value=>`<col style="width:${(value/9360*100).toFixed(3)}%">`).join('')}</colgroup>`
-  const heading=['序号','队员姓名','号码','首发','替补','身份','换上','换下','进球','黄牌','红牌','序号','队员姓名','号码','首发','替补','身份','换上','换下','进球','黄牌','红牌']
+  const heading=['序号','队员姓名','号码','说明','身份','换上','换下','进球1','进球2','进球3','黄牌','红牌','序号','队员姓名','号码','说明','身份','换上','换下','进球1','进球2','进球3','黄牌','红牌']
   const header=`<tr>${heading.map(label=>`<th>${label}</th>`).join('')}</tr>`
   const match=input.match||{}
   const day=String(match.matchDate||'').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/,'$1年$2月$3日')
@@ -523,13 +523,13 @@ function printSheetHtml(input) {
     const count=rowsPerPage+(page<extraRows?1:0)
     const rows=Array.from({length:count},(_,row)=>{
       const index=offset+row,home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
-      const cells=[String(index+1),home.name||'',home.number||'','','',home.note||'','','','','','',String(index+1),away.name||'',away.number||'','','',away.note||'','','','','','']
-      return `<tr>${cells.map((value,cell)=>`<td${cell%11===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
+      const cells=[String(index+1),home.name||'',home.number||'','',home.note||'','','','','','','','',String(index+1),away.name||'',away.number||'','',away.note||'','','','','','','','']
+      return `<tr>${cells.map((value,cell)=>`<td${cell%12===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
     }).join('')
     offset+=count
     const firstPage=page===0,lastPage=page===pageCount-1
-    const title=firstPage?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${safeHtml(`${input.tournamentName||'足球比赛'}（${String(input.matchFormat||'').replace('side','人制')}）`)}</b></div><div><span>比赛时间：</span><b>${safeHtml(`${day} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${safeHtml(`${input.location||''}　${match.venue||''}　场序：第${match.matchSequence||match.matchNo||match.sequence||'待定'}场　组别：${input.divisionName||''}`)}</b></div></div>`:''
-    const signatures=lastPage?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><p class="legend">${REFEREE_SHEET_LEGEND.map(line => '<span>'+safeHtml(line)+'</span>').join('')}</p><p class="result">比赛结果：______:______　加时赛（点球决胜）结果：______:______　获胜队：____________________</p><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
+    const title=firstPage?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${safeHtml(`${input.tournamentName||'足球比赛'}（${String(input.matchFormat||'').replace('side','人制')}）`)}</b></div><div><span>比赛时间：</span><b>${safeHtml(`${day} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${safeHtml(`${input.location||''}　${match.venue||''}　场序：第${match.matchSequence||match.matchNo||match.sequence||'待定'}场　组别：${input.divisionName||''}`)}</b></div></div><p class="result">比赛结果：______：______    加时赛（点球决胜）结果：______：______    获胜队：________________________</p><p class="legend">${REFEREE_SHEET_LEGEND.map(line => '<span>'+safeHtml(line)+'</span>').join('')}</p>`:''
+    const signatures=lastPage?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
     pages.push(`<section class="sheet">${title}<table class="teams"><tbody><tr><td>主队：${safeHtml(input.homeName)}</td><td>客队：${safeHtml(input.awayName)}</td></tr><tr><td>${safeHtml(kitLine(input.kitColors?.home))}</td><td>${safeHtml(kitLine(input.kitColors?.away))}</td></tr><tr><td>领队/主教练：________________</td><td>领队/主教练：________________</td></tr><tr><td>工作人员/队医：____________</td><td>工作人员/队医：____________</td></tr></tbody></table><table class="roster">${colgroup}<thead>${header}</thead><tbody>${rows}</tbody></table>${signatures}</section>`)
   }
   return pages.join('')
