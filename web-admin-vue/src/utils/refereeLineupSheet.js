@@ -7,8 +7,8 @@ const WORD_CELL = /<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g
 const TEMPLATE_BASE = import.meta.env?.BASE_URL || '/admin/'
 const TEMPLATE_PATH = `${TEMPLATE_BASE}templates/referee-match-sheet-template.docx`
 const LOGO_PATH = `${TEMPLATE_BASE}logo-saixiaofeng.png`
-const ROSTER_WIDTHS = [280, 1240, 280, 360, 360, 360, 360, 360, 360, 360, 360]
-const ROSTER_LABELS = ['序号', '队员姓名', '号码', '首发', '替补', '身份', '换上', '换下', '进球', '黄牌', '红牌']
+const ROSTER_WIDTHS = [280, 1240, 280, 360, 360, 360, 360, 288, 288, 288, 288, 288]
+const ROSTER_LABELS = ['序号', '队员姓名', '号码', '说明', '身份', '换上', '换下', '进球1', '进球2', '进球3', '黄牌', '红牌']
 export const REFEREE_SHEET_LEGEND = [
   '说明：首发打√，替补打○，不上场标×；',
   '身份：队长标C，守门员标GK，停赛标S。',
@@ -93,8 +93,8 @@ function setTableGrid(tableXml, widths) {
     return `${open}${centered}${close}`
   })
   result = result.replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
-  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}11${suffix}`)
-  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}9${suffix}`)
+  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}12${suffix}`)
+  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}10${suffix}`)
   return result
 }
 
@@ -119,8 +119,8 @@ function setExplicitTableGrid(tableXml, widths) {
 function alignTeamTableRow(rowXml) {
   return rowXml
     .replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
-    .replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}11${suffix}`)
-    .replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}9${suffix}`)
+    .replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}12${suffix}`)
+    .replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}10${suffix}`)
 }
 
 function setCellFontSize(cellXml, size) {
@@ -131,7 +131,7 @@ function expandRosterRow(rowXml) {
   const cells = [...rowXml.matchAll(WORD_CELL)].map(item => item[0])
   if (cells.length < 16) throw new Error('裁判名单表队员栏列数不完整')
   const expanded = []
-  for (const offset of [0, 8]) expanded.push(...cells.slice(offset, offset + 5), cells[offset + 5], cells[offset + 6], cells[offset + 6], cells[offset + 7], cells[offset + 7], cells[offset + 7])
+  for (const offset of [0, 8]) expanded.push(...cells.slice(offset, offset + 4), cells[offset + 5], cells[offset + 6], cells[offset + 6], cells[offset + 7], cells[offset + 7], cells[offset + 7], cells[offset + 7], cells[offset + 7])
   const firstCell = rowXml.search(/<w:tc\b/)
   const lastCell = rowXml.lastIndexOf('</w:tc>')
   if (firstCell < 0 || lastCell < firstCell) throw new Error('裁判名单表队员栏结构不完整')
@@ -300,13 +300,14 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
   const sequence = match.matchSequence || match.matchNo || match.sequence || match.matchIndex || '待定'
   const divisionName = input.divisionName || '未设置'
 
-  let xml = replaceTableAt(templateXml, 0, tableXml => {
+  let xml = removeParagraphMatching(templateXml, value => value.includes('说明：') || value.includes('比赛结果：'))
+  xml = replaceTableAt(xml, 0, tableXml => {
     const rows = [...tableXml.matchAll(WORD_ROW)].map(item => item[0])
     if (rows.length < 2) throw new Error('裁判名单表模板的比赛信息栏不完整')
     const titleRow = setRowCells(rows[0], ['比赛名称：', matchName])
     const dateRow = setRowCells(rows[1], ['比赛时间：', dateTime])
     const placeRow = setRowCells(rows[1], ['比赛地点：', `${place}　场序：第${sequence}场　组别：${divisionName}`])
-    return withRows(tableXml, [titleRow, dateRow, placeRow])
+    return withRows(tableXml, [titleRow, dateRow, placeRow]) + '<w:p><w:pPr><w:spacing w:after="80"/></w:pPr><w:r><w:rPr><w:rFonts w:eastAsia="宋体"/><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve">比赛结果：______：______    加时赛（点球决胜）结果：______：______    获胜队：________________________</w:t></w:r></w:p>' + REFEREE_SHEET_LEGEND.map(line => '<w:p><w:pPr><w:spacing w:after="80"/></w:pPr><w:r><w:rPr><w:rFonts w:eastAsia="宋体"/><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve">PLACEHOLDER</w:t></w:r></w:p>'.replace('PLACEHOLDER', escapeXml(line))).join('')
   })
 
   xml = replaceTableAt(xml, 2, tableXml => {
@@ -348,8 +349,8 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
       const home = input.homePlayers[index] || {}
       const away = input.awayPlayers[index] || {}
       return formatRosterRow(setRowCells(expandRosterRow(rosterTemplate), [
-        String(index + 1), home.name || '', home.number || '', '', '', home.note || '', '', '', '', '', '',
-        String(index + 1), away.name || '', away.number || '', '', '', away.note || '', '', '', '', '', ''
+        String(index + 1), home.name || '', home.number || '', '', home.note || '', '', '', '', '', '', '', '',
+        String(index + 1), away.name || '', away.number || '', '', away.note || '', '', '', '', '', '', '', ''
       ]))
     })
     const pageCount = rowCount > 20 ? Math.ceil(rowCount / 20) : 1
@@ -367,7 +368,6 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
   })
 
   xml = updateTextNode(xml, value => value.includes('参赛队首发、替补队员名单及比赛记录表'), '裁判首发阵容信息表')
-  xml = updateParagraphLines(xml, value => value.includes('说明：') && value.includes('停赛'), REFEREE_SHEET_LEGEND)
   xml = removeParagraphMatching(xml, value => value.replace(/\s/g, '') === '赛小蜂足球赛事')
   xml = replaceAttributionWithLogo(xml, logoRelationshipId)
   return xml
@@ -399,13 +399,13 @@ export function createRefereeLineupPrintHtml(input) {
     const count=rowsPerPage+(page<extraRows?1:0)
     const rowHtml=Array.from({length:count},(_,row)=>{
       const index=offset+row,home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
-      const cells=[String(index+1),home.name||'',home.number||'','','',home.note||'','','','','','',String(index+1),away.name||'',away.number||'','','',away.note||'','','','','','']
+      const cells=[String(index+1),home.name||'',home.number||'','',home.note||'','','','','','','','',String(index+1),away.name||'',away.number||'','',away.note||'','','','','','','','']
       return `<tr>${cells.map((value,cell)=>`<td${cell%ROSTER_WIDTHS.length===1?' class="player-name"':''}>${escapeHtml(value)}</td>`).join('')}</tr>`
     }).join('')
     offset+=count
     const first=page===0,last=page===pageCount-1
-    const title=first?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${escapeHtml(`${input.tournamentName||'足球比赛'}（${format}）`)}</b></div><div><span>比赛时间：</span><b>${escapeHtml(`${date} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${escapeHtml(`${location}　场序：第${sequence}场　组别：${input.divisionName||''}`)}</b></div></div>`:''
-    const bottom=last?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><p class="legend">${REFEREE_SHEET_LEGEND.map(line => '<span>'+escapeHtml(line)+'</span>').join('')}</p><p class="result">比赛结果：______:______　加时赛（点球决胜）结果：______:______　获胜队：____________________</p><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
+    const title=first?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${escapeHtml(`${input.tournamentName||'足球比赛'}（${format}）`)}</b></div><div><span>比赛时间：</span><b>${escapeHtml(`${date} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${escapeHtml(`${location}　场序：第${sequence}场　组别：${input.divisionName||''}`)}</b></div></div><p class="result">比赛结果：______：______    加时赛（点球决胜）结果：______：______    获胜队：________________________</p><p class="legend">${REFEREE_SHEET_LEGEND.map(line => '<span>'+escapeHtml(line)+'</span>').join('')}</p>`:''
+    const bottom=last?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
     pages.push(`<section class="sheet">${title}<table class="teams"><tbody><tr><td>主队：${escapeHtml(input.homeName)}</td><td>客队：${escapeHtml(input.awayName)}</td></tr><tr><td>${escapeHtml(kitLine(input.kitColors?.home))}</td><td>${escapeHtml(kitLine(input.kitColors?.away))}</td></tr><tr><td>领队/主教练：________________</td><td>领队/主教练：________________</td></tr><tr><td>工作人员/队医：____________</td><td>工作人员/队医：____________</td></tr></tbody></table><table class="roster">${grid}<thead>${header}</thead><tbody>${rowHtml}</tbody></table>${bottom}</section>`)
   }
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>裁判工作单</title><style>@page{size:A4 portrait;margin:11mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:"SimSun","Songti SC",serif}.sheet{width:100%;page-break-after:always;break-after:page;display:flex;flex-direction:column}.sheet:last-child{page-break-after:auto;break-after:auto}h1{margin:0 0 4mm;text-align:center;font-size:18pt}.meta{margin:0 5mm 4mm;font-size:10pt}.meta div{display:grid;grid-template-columns:27mm 1fr;margin:2mm 0}.teams{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10pt}.teams td{height:7.5mm;padding:1mm;border:.5pt solid #777}.roster{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8pt}.roster th,.roster td{height:6mm;padding:1mm .4mm;border:.5pt solid #777;text-align:center;overflow-wrap:anywhere}.roster th{height:11mm;font-weight:400}.roster td.player-name{font-size:9pt;font-weight:bold}.team-sign{display:grid;grid-template-columns:2fr 1fr 2fr 1fr;gap:1mm;padding:2mm 0;border:.5pt solid #777;font-size:8pt}.team-sign span{text-align:center}.legend,.result{margin:2mm 0;font-size:8pt}.legend span{display:block;white-space:nowrap;line-height:1.25}.officials{display:grid;grid-template-columns:1fr 1fr;gap:3mm 14mm;margin:3mm 14mm 0;font-size:10pt}.officials span{min-height:7mm}footer{display:flex;align-items:center;gap:4mm;margin:auto 0 0;padding-top:4mm;font-size:8pt}footer img{width:34mm;height:auto}footer strong{font-weight:bold}@media screen{body{background:#e9ecef}.sheet{width:186mm;min-height:273mm;margin:8mm auto;padding:0;background:#fff;box-shadow:0 2mm 8mm #0002}}</style></head><body>${pages}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(image=>image.decode?.().catch(()=>{})));setTimeout(()=>window.print(),300)})<\/script></body></html>`
