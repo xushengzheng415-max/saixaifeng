@@ -299,3 +299,7 @@ webLoginApi/getMiniWorkspace/playerCardPublishWorker代码已正式部署并下�
 
 PC 进球榜、球员红黄牌榜、球队红黄牌榜使用 dataCenter.query 的 official rankings；按赛事、组别和比赛日期限定范围。球员关联使用稳定 ID，球队牌数使用统一团队汇总；未知统计不填零，未核实记录提示数量并不参与排名。仅增加读取入口，不新增统计写入。
 上传页统一为上传赛程，移除下载入口及重复四步说明；下载只在赛程中心。文件识别、冲突核对、正式写入开关和确认导入保持原流程。
+
+## 2026-10-09 共享账号球队参赛统计
+
+赛事球队页改为使用 dataCenter.query 的 official 数据，不再从浏览器逐场读取 matches/match_events；保持既有赛事、球队、组别授权，不扩大原始集合权限。名单加载完成后立即关闭名单遮罩；统计请求设30秒上限，失败显示实际错误和手动重试。resultCenter.dashboard/staffMatches 与 rosterExceptionBoard.listRoster 按只读分类，不触发写入失效刷新。统计缺失显示破折号，不填零。
