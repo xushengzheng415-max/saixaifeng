@@ -41,7 +41,7 @@ let storedAccount={};try{storedAccount=JSON.parse(localStorage.getItem('userInfo
 const router = useRouter(),loading = ref(true),state = ref(null),scene = ref('event'),consulted = ref(false),trainingReady = ref(false),submitting = ref(false),organizationDialogVisible = ref(false),organizationSubmitting = ref(false),profileDialogVisible=ref(false),organizationEditDialogVisible=ref(false),profileSubmitting=ref(false),accountDeleting=ref(false),organizationEditSubmitting=ref(false),selectedTeamIds=ref([])
 const accountInfo=reactive({userName:storedAccount.userName||storedAccount.nickname||'\u5fae\u4fe1\u7528\u6237',avatarUrl:storedAccount.avatarUrl||storedAccount.headimgurl||''})
 const provinceOptions = provincesData
-const organizationTypeOptions = [{value:'event_company',label:'\u8d5b\u4e8b\u516c\u53f8'},{value:'club',label:'\u8db3\u7403\u4ff1\u4e50\u90e8'},{value:'school',label:'\u5b66\u6821'},{value:'association',label:'\u8db3\u534f/\u4f53\u80b2\u7ec4\u7ec7'},{value:'other',label:'\u5176\u4ed6\u673a\u6784'}]
+const organizationTypeOptions = [{value:'enterprise',label:'企业'},{value:'event_company',label:'\u8d5b\u4e8b\u516c\u53f8'},{value:'club',label:'\u8db3\u7403\u4ff1\u4e50\u90e8'},{value:'school',label:'\u5b66\u6821'},{value:'association',label:'\u8db3\u534f/\u4f53\u80b2\u7ec4\u7ec7'},{value:'other',label:'\u5176\u4ed6\u673a\u6784'}]
 const organizationForm = reactive({name:'',organizationType:'',provinceCode:'',city:'',contactName:'',contactPhone:storedAccount.phone || storedAccount.phoneNumber || '',annualEventVolume:'',primaryAudience:''})
 const registrationStep=ref(1)
 const registrationTitles=['你是什么身份？','每年大概办多少场赛事？','主要举办什么赛事？','填写主办方资料']
