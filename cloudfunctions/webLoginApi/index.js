@@ -201,6 +201,9 @@ const ORGANIZER_REQUIRED_RELAY_FUNCTIONS = new Set([
   'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter', 'newsCenter'
 ])
 const PERSONAL_SERVICE_BINDING_ACTIONS = new Set(['createOrganizerServiceGate', 'getOrganizerServiceBindingStatus'])
+// Personal onboarding authenticates the user again and excludes tournament staff memberships.
+// Each organization mutation is checked against that user's own organization in onboardingWorkspace.
+const PERSONAL_WORKSPACE_ACTIONS = new Set(['state','updateProfile','updateOrganization','createOrganization','saveScene','createTrainingWorkspace','createTrainingConsultation'])
 
 // 赛事中心遗留的球队/球员/赛事入口统一收敛到本函数的租户校验，
 // 不再把未鉴权的旧云函数直接暴露给网页 relay。
@@ -4114,6 +4117,7 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
     let delegatedStaff = false
     let delegatedTournamentId = ''
     const personalServiceBinding = functionName === 'tournamentRegistrationFlow' && PERSONAL_SERVICE_BINDING_ACTIONS.has(String(functionParams?.action || ''))
+    const personalWorkspace = functionName === 'onboardingWorkspace' && PERSONAL_WORKSPACE_ACTIONS.has(String(functionParams?.action || ''))
     const requiresSession = functionName === 'uploadFile' ||
       functionName === 'platformOwner' ||
       functionName === 'manageTournamentCenterContent' ||
@@ -4124,7 +4128,7 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
       authenticated = await authenticateWebSession(event)
       if (!authenticated.success) return authenticated
     }
-    if (authenticated && authenticated.orgId && !personalServiceBinding) {
+    if (authenticated && authenticated.orgId && !personalServiceBinding && !personalWorkspace) {
       const db = cloud.database()
       const staff = await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
       if (staff) {
