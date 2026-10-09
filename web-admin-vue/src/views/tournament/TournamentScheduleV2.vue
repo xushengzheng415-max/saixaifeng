@@ -142,7 +142,7 @@
         <article v-for="match in refereePreMatchList" :key="match._id"><time>{{ match.matchTime || '待定' }}</time><div><small>{{ divisionName(match.divisionId) }} · 场序{{ match.matchSequence || match.matchNo || match.sequence || '—' }}</small><strong>{{ teamLabel(match,'home') }} <em>VS</em> {{ teamLabel(match,'away') }}</strong></div><span>{{ match.venue || '场地待定' }}</span></article>
       </div>
       <el-empty v-else :image-size="64" :description="refereeDocsDate ? '当天没有待开始比赛' : '当前赛事尚无已排比赛日'" />
-      <template #footer><el-button @click="refereeDocsVisible=false">取消</el-button><el-button :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && refereePrintMode" @click="printRefereePreMatchDocs">批量打印</el-button><el-button type="success" :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && !refereePrintMode" @click="downloadRefereePreMatchDocs">批量下载</el-button></template>
+      <template #footer><el-button @click="refereeDocsVisible=false">取消</el-button><el-button :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && refereePrintMode" @click="printRefereePreMatchDocs">批量打印</el-button><el-dropdown trigger="click" :disabled="!refereePreMatchList.length || refereeDocsLoading" @command="downloadRefereePreMatchDocs"><el-button type="success" :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && !refereePrintMode">批量下载</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="pdf">PDF 工作单（推荐）</el-dropdown-item><el-dropdown-item command="word">Word 工作单</el-dropdown-item></el-dropdown-menu></template></el-dropdown></template>
     </el-dialog>
   </main>
 </template>
@@ -158,6 +158,7 @@ import { callFunction, getFileUrl, queryById, queryList, rosterExceptionBoard } 
 import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recognizeScheduleRows } from '../../utils/scheduleWorkbookRecognition'
 import { firstUnfinishedMatchDate } from '../../utils/matchCalendarSelection'
 import { findWorkbenchFocusMatch } from '../../utils/matchScheduleFocus'
+import { createRefereeLineupPdf } from '../../utils/refereeLineupPdf'
 import { createRefereeLineupSheet, refereeLineupSheetFileName, REFEREE_SHEET_LEGEND } from '../../utils/refereeLineupSheet'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
 import {parseKickoffTimes,configuredKickoffTimes,kickoffWindows,kickoffPeriod,halfHourKickoffOptions} from '../../utils/scheduleKickoffTimes.mjs'
@@ -585,7 +586,7 @@ function refereePrintErrorHtml(message) {
 </style></head><body><main><strong>裁判工作单生成失败</strong><p>${safeHtml(message)}</p><p>请返回赛事页面重试。</p></main></body></html>`
 }
 
-async function downloadRefereePreMatchDocs() {
+async function downloadRefereePreMatchDocs(format = 'pdf') {
   if(refereeDocsLoading.value)return
   refereeDocsLoading.value=true;refereePrintMode.value=false
   updateRefereeDocsProgress(0,'准备读取比赛名单')
@@ -596,14 +597,14 @@ async function downloadRefereePreMatchDocs() {
     })
     const archive=new JSZip()
     for(let index=0;index<entries.length;index+=1){
-      updateRefereeDocsProgress(42+(index/entries.length)*40,`生成 Word 工作单 ${index+1}/${entries.length}`)
+      updateRefereeDocsProgress(42+(index/entries.length)*40,`生成 ${format === 'pdf' ? 'PDF' : 'Word'} 工作单 ${index+1}/${entries.length}`)
       const {input}=entries[index]
-      const document=await createRefereeLineupSheet(input,templateBytes,logoBytes)
-      archive.file(refereeLineupSheetFileName(input.match,input.homeName,input.awayName),document)
+      const document=format === 'pdf' ? await createRefereeLineupPdf(input) : await createRefereeLineupSheet(input,templateBytes,logoBytes)
+      archive.file(refereeLineupSheetFileName(input.match,input.homeName,input.awayName).replace(/\.docx$/i,format === 'pdf' ? '.pdf' : '.docx'),document)
     }
     updateRefereeDocsProgress(84,'正在打包工作单')
     const blob=await archive.generateAsync({type:'blob',mimeType:'application/zip'},metadata=>updateRefereeDocsProgress(84+(metadata.percent||0)*.16,`正在打包工作单 ${Math.round(metadata.percent||0)}%`))
-    downloadBlob(blob,`${refereeDocsDate.value}-裁判赛前工作单.zip`)
+    downloadBlob(blob,`${refereeDocsDate.value}-裁判赛前工作单-${format === 'pdf' ? 'PDF' : 'Word'}.zip`)
     updateRefereeDocsProgress(100,'工作单已下载')
     if(warnings.length)ElMessage.warning(`已打包${entries.length}场；${warnings[0]}`)
     else ElMessage.success(`已打包${entries.length}份裁判工作单`)

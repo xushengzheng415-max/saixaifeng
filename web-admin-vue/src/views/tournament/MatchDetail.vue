@@ -118,6 +118,7 @@
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
+                      <el-dropdown-item command="pdf">下载 PDF 工作单（推荐）</el-dropdown-item>
                       <el-dropdown-item command="download">下载 Word 工作单</el-dropdown-item>
                       <el-dropdown-item command="print">打印工作单</el-dropdown-item>
                     </el-dropdown-menu>
@@ -1094,6 +1095,7 @@ import { isDemoMode } from '../../utils/demoMode'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
+import { createRefereeLineupPdf } from '../../utils/refereeLineupPdf'
 import { createRefereeLineupPrintHtml, createRefereeLineupSheet, createRefereePrintLoadingHtml, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 import RefereeReportImport from '../../components/match/RefereeReportImport.vue'
@@ -2573,19 +2575,19 @@ function notifyRefereeSheetIssues(homeRoster, awayRoster, suspension, actionLabe
 
 function handleRefereeSheetCommand(command) {
   if (command === 'print') printRefereeLineupSheet()
-  else downloadRefereeLineupSheet()
+  else downloadRefereeLineupSheet(command === 'pdf' ? 'pdf' : 'word')
 }
 
-async function downloadRefereeLineupSheet() {
+async function downloadRefereeLineupSheet(format = 'word') {
   if (!canDownloadRefereeSheet.value || refereeSheetLoading.value) return
   refereeSheetLoading.value = true
   try {
     const { input,homeRoster,awayRoster,suspension } = await prepareRefereeLineupSheetInput()
-    const file = await createRefereeLineupSheet(input)
+    const file = format === 'pdf' ? await createRefereeLineupPdf(input) : await createRefereeLineupSheet(input)
     const url = URL.createObjectURL(file)
     const link = document.createElement('a')
     link.href = url
-    link.download = refereeLineupSheetFileName(input.match, input.homeName, input.awayName)
+    link.download = refereeLineupSheetFileName(input.match, input.homeName, input.awayName).replace(/\.docx$/i, format === 'pdf' ? '.pdf' : '.docx')
     document.body.appendChild(link)
     link.click()
     link.remove()
