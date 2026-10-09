@@ -1383,7 +1383,7 @@ const tournamentMediaStats = ref({})
 const dataCenterStatistics = ref(null)
 function knownMetric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 function requestUnifiedStatistics() {
-  return callFunction('dataCenter', {action:'query',scope:{teamId:String(teamId),...(sourceTournamentId.value ? {tournamentId:sourceTournamentId.value,...(sourceDivisionId.value ? {divisionId:sourceDivisionId.value} : {})} : {})}})
+  return callFunction('dataCenter', {action:'query',scope:{mode:'official',teamId:String(teamId),...(sourceTournamentId.value ? {tournamentId:sourceTournamentId.value,...(sourceDivisionId.value ? {divisionId:sourceDivisionId.value} : {})} : {})}},30000)
 }
 async function loadUnifiedStatistics(responsePromise) {
   dataCenterStatistics.value = null
@@ -1434,10 +1434,18 @@ const competitionDivision = ref({})
 const playerAvatarErrors = ref(new Set())
 function markPlayerAvatarFailed(row) { playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id]) }
 function displayJerseyName(row) { return row.jerseyName || row.shirtName || generateJerseyName(row.name || '') || '—' }
-const tournamentPlayerRows = computed(() => buildTournamentPlayerStats(withLinkedStaffPhotos(competitionRoster.value ?? exportPlayers.value, staffMembers.value), competitionMatches.value, [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' }))
+const tournamentPlayerRows = computed(() => {
+  const base = buildTournamentPlayerStats(withLinkedStaffPhotos(competitionRoster.value ?? exportPlayers.value, staffMembers.value), qaSnapshot ? competitionMatches.value : [], [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' })
+  if (qaSnapshot) return base
+  return base.map(row => {
+    const stats = tournamentMediaStats.value[String(row._id || row.playerId || row.id)]
+    const value = key => stats && Number.isFinite(stats[key]) ? stats[key] : null
+    return { ...row, appearances:value('appearances'), minutes:value('minutes'), goals:value('goals'), yellowCards:value('yellowCards'), redCards:value('redCards'), appearanceIncomplete:value('appearances') === null, minutesIncomplete:value('minutes') === null, goalsIncomplete:value('goals') === null, cardsIncomplete:value('yellowCards') === null || value('redCards') === null }
+  })
+})
 function statValue(row, key) {
   if (playerStatsError.value || playerStatsLoading.value || (key === 'minutes' && row.minutesIncomplete) || (key === 'appearances' && row.appearanceIncomplete) || (key === 'goals' && row.goalsIncomplete) || (['yellowCards', 'redCards'].includes(key) && row.cardsIncomplete)) return '—'
-  return row[key] ?? 0
+  return row[key] ?? '—'
 }
 const tournamentPlayerSort = ref({ prop: '', order: '' })
 function tournamentPlayerSortValue(row, prop) {
@@ -1476,14 +1484,15 @@ async function loadPlayerCompetitionData() {
       return
     }
     const divisionId = sourceDivisionId.value || tournamentRelation.value.divisionId || 'default'
-    const [dashboard, roster, division] = await Promise.all([
-      callFunction('resultCenter', { action: 'dashboard', tournamentId: sourceTournamentId.value }),
+    const [statistics, roster, division] = await Promise.all([
+      dataCenterStatistics.value ? Promise.resolve(dataCenterStatistics.value) : requestUnifiedStatistics(),
       rosterExceptionBoard({ tournamentId: sourceTournamentId.value, teamId, divisionId, rosterAction: 'listRoster' }),
       divisionId === 'default' ? Promise.resolve({}) : queryById('divisions', divisionId)
     ])
     competitionDivision.value = Array.isArray(division) ? division[0] || {} : division || {}
-    if (!dashboard?.success) throw new Error(dashboard?.message || '赛果加载失败')
+    if (!statistics?.success) throw new Error(statistics?.error || statistics?.message || '参赛统计读取失败，请重试')
     if (!roster?.success) throw new Error(roster?.error || '本届名单加载失败')
+    await loadUnifiedStatistics(Promise.resolve(statistics))
     // 已有本届名单快照时只显示快照成员；旧报名表仍保留在本届展示中。
     if (roster.snapshot) {
       const sourceById = new Map(exportPlayers.value.map(player => [String(player._id), player]))
@@ -1494,21 +1503,8 @@ async function loadPlayerCompetitionData() {
       }))
       playerAvatarErrors.value = new Set()
     }
-    const ids = new Set([String(teamId), String(tournamentRelation.value._id || '')])
-    const official = (dashboard.matches || []).filter(match => match.resultStatus === 'approved' && String(match.divisionId || 'default') === String(divisionId) && (ids.has(String(match.homeTeamId)) || ids.has(String(match.awayTeamId))))
-    const loaded = []
-    for (let start = 0; start < official.length; start += 4) {
-      const batch = await Promise.all(official.slice(start, start + 4).map(async summary => {
-        const [match, events] = await Promise.all([queryById('matches', summary.id), readAllRows('match_events', { matchId: summary.id })])
-        const raw = Array.isArray(match) ? match[0] : match
-        if (!raw) throw new Error('比赛记录缺失')
-        return { ...raw, statsEvents: events.length ? events : (raw.events || raw.refereeRecordPayload?.events || []) }
-      }))
-      loaded.push(...batch)
-    }
-    competitionMatches.value = loaded
   } catch (error) {
-    playerStatsError.value = '参赛数据加载失败，请重新加载'
+    playerStatsError.value = error.message || '参赛数据加载失败，请重新加载'
     console.error('加载本届球员参赛数据失败:', error)
   } finally {
     playerStatsLoading.value = false
@@ -4413,8 +4409,8 @@ async function loadPlayers() {
   } catch (err) {
     console.error('加载球员列表失败:', err)
   } finally {
-    try { await loadUnifiedStatistics(statisticsRequest) } catch (error) { console.warn('统一统计加载失败:',error.message) }
     loading.value = false
+    try { await loadUnifiedStatistics(statisticsRequest) } catch (error) { if (isTeamDataWorkspace.value) playerStatsError.value = error.message || '参赛数据加载失败，请重新加载'; console.warn('统一统计加载失败:',error.message) }
   }
 }
 
