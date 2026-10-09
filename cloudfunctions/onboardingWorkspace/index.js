@@ -7,6 +7,7 @@ const db = cloud.database()
 const _ = db.command
 const ORGANIZATION_TYPES = {
   event_company: '赛事公司',
+  enterprise: '企业',
   club: '足球俱乐部',
   school: '学校',
   association: '足协/体育组织',
@@ -371,7 +372,10 @@ async function createOrganization(identity, event) {
   const city = cleanText(event.city, 40)
   if (name.length < 2) throw new Error('机构名称需为 2–80 个字')
   if (!ORGANIZATION_TYPES[organizationType]) throw new Error('请选择机构类型')
-  if (!province || !provinceCode || !city) throw new Error('请选择机构所在省份和城市')
+  const eventOnly=event.registrationVersion==='organizer-onboarding-v2'
+  const contactName=cleanText(event.contactName,40),contactPhone=cleanText(event.contactPhone,24)
+  const annualEventVolume=cleanText(event.annualEventVolume,20),primaryAudience=cleanText(event.primaryAudience,20)
+  if(eventOnly){if(!province || !provinceCode || !city)throw new Error('请选择省份和城市');if(!['school','enterprise','association','event_company'].includes(organizationType))throw new Error('请选择主办方身份');if(!['under_10','10_30','30_50','over_50'].includes(annualEventVolume) || !['youth','adult'].includes(primaryAudience))throw new Error('请完成三步问答');if(!contactName || !/^[+\d][\d\s-]{5,23}$/.test(contactPhone))throw new Error('请填写联系人及有效联系电话')}else if(!province || !provinceCode || !city)throw new Error('请选择机构所在省份和城市')
   const state = await loadOnboardingState(identity)
   if (state.organization) {
     const access = await organizationAccess(identity, state.organization)
@@ -409,7 +413,7 @@ async function createOrganization(identity, event) {
       if (!team) throw new Error('选中球队不存在')
       if (String(team.orgId || team.organizationId || '')) throw new Error('选中球队已归属其他机构')
     }
-    const organizationCapabilities = requestedTeamIds.length ? ['team'] : []
+    const organizationCapabilities = eventOnly ? ['event'] : requestedTeamIds.length ? ['team'] : []
     const organizationResult = await transaction.collection('organizations').add({
       data: {
         name,
@@ -419,6 +423,7 @@ async function createOrganization(identity, event) {
         province,
         provinceCode,
         city,
+        ...(eventOnly?{contactName,contactPhone,customerProfile:{identity:organizationType,annualEventVolume,primaryAudience,version:'organizer-onboarding-v2',collectedAt:now}}:{}),
         capabilities: organizationCapabilities,
         creatorId: identity.user._id,
         ownerId: identity.user._id,
@@ -434,7 +439,7 @@ async function createOrganization(identity, event) {
         userId: identity.user._id,
         status: 'active',
         positions: ['机构负责人'],
-        permissions: requestedTeamIds.length
+        permissions: eventOnly ? ['workspace.manage','event.view','event.manage'] : requestedTeamIds.length
           ? ['workspace.manage', 'team.view', 'team.manage']
           : ['workspace.manage'],
         capabilities: organizationCapabilities,
@@ -455,8 +460,8 @@ async function createOrganization(identity, event) {
       }
     }
     const onboarding = Object.assign({}, identity.user.onboarding || {}, {
-      scene: 'organization',
-      step: 'organization_created',
+      scene: eventOnly?'event':'organization',
+      step: eventOnly?'event_workspace_ready':'organization_created',
       orgId,
       updatedAt: now
     })
@@ -480,7 +485,8 @@ async function createOrganization(identity, event) {
       province,
       provinceCode,
       city,
-      capabilities: result.attachedTeamIds.length ? ['team'] : []
+      capabilities: eventOnly ? ['event'] : result.attachedTeamIds.length ? ['team'] : [],
+      ...(eventOnly?{contactName,contactPhone,customerProfile:{identity:organizationType,annualEventVolume,primaryAudience,version:'organizer-onboarding-v2'}}:{})
     },
     attachedTeams: (state.manageableTeams || []).filter(function(team) {
       return result.attachedTeamIds.indexOf(String(team.id)) >= 0
