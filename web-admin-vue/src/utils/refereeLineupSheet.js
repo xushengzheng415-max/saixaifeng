@@ -7,8 +7,8 @@ const WORD_CELL = /<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g
 const TEMPLATE_BASE = import.meta.env?.BASE_URL || '/admin/'
 const TEMPLATE_PATH = `${TEMPLATE_BASE}templates/referee-match-sheet-template.docx`
 const LOGO_PATH = `${TEMPLATE_BASE}logo-saixiaofeng.png`
-const ROSTER_WIDTHS = [280, 1240, 280, 360, 360, 360, 360, 288, 288, 288, 288, 288]
-const ROSTER_LABELS = ['序号', '队员姓名', '号码', '说明', '身份', '换上', '换下', '进球1', '进球2', '进球3', '黄牌', '红牌']
+const ROSTER_WIDTHS = [280, 1240, 280, 360, 360, 360, 360, 864, 288, 288]
+const ROSTER_LABELS = ['序号', '队员姓名', '号码', '说明', '身份', '换上', '换下', '进球', '黄牌', '红牌']
 export const REFEREE_SHEET_LEGEND = [
   '说明：首发打√，替补打○，不上场标×；',
   '身份：队长标C，守门员标GK，停赛标S。',
@@ -93,8 +93,8 @@ function setTableGrid(tableXml, widths) {
     return `${open}${centered}${close}`
   })
   result = result.replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
-  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}12${suffix}`)
-  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}10${suffix}`)
+  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}10${suffix}`)
+  result = result.replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}8${suffix}`)
   return result
 }
 
@@ -119,8 +119,8 @@ function setExplicitTableGrid(tableXml, widths) {
 function alignTeamTableRow(rowXml) {
   return rowXml
     .replace(/(<w:tcW\b[^>]*\bw:w=")5200("[^>]*\/>)/g, (_, prefix, suffix) => `${prefix}4680${suffix}`)
-    .replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}12${suffix}`)
-    .replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}10${suffix}`)
+    .replace(/(<w:gridSpan\b[^>]*\bw:val=")8("\s*\/>)/g, (_, prefix, suffix) => `${prefix}10${suffix}`)
+    .replace(/(<w:gridSpan\b[^>]*\bw:val=")6("\s*\/>)/g, (_, prefix, suffix) => `${prefix}8${suffix}`)
 }
 
 function setCellFontSize(cellXml, size) {
@@ -131,7 +131,7 @@ function expandRosterRow(rowXml) {
   const cells = [...rowXml.matchAll(WORD_CELL)].map(item => item[0])
   if (cells.length < 16) throw new Error('裁判名单表队员栏列数不完整')
   const expanded = []
-  for (const offset of [0, 8]) expanded.push(...cells.slice(offset, offset + 4), cells[offset + 5], cells[offset + 6], cells[offset + 6], cells[offset + 7], cells[offset + 7], cells[offset + 7], cells[offset + 7], cells[offset + 7])
+  for (const offset of [0, 8]) expanded.push(...cells.slice(offset, offset + 4), cells[offset + 5], cells[offset + 6], cells[offset + 6], cells[offset + 7], cells[offset + 7], cells[offset + 7])
   const firstCell = rowXml.search(/<w:tc\b/)
   const lastCell = rowXml.lastIndexOf('</w:tc>')
   if (firstCell < 0 || lastCell < firstCell) throw new Error('裁判名单表队员栏结构不完整')
@@ -349,8 +349,8 @@ function buildDocumentXml(templateXml, input, logoRelationshipId) {
       const home = input.homePlayers[index] || {}
       const away = input.awayPlayers[index] || {}
       return formatRosterRow(setRowCells(expandRosterRow(rosterTemplate), [
-        String(index + 1), home.name || '', home.number || '', '', home.note || '', '', '', '', '', '', '', '',
-        String(index + 1), away.name || '', away.number || '', '', away.note || '', '', '', '', '', '', '', ''
+        String(index + 1), home.name || '', home.number || '', '', home.note || '', '', '', '', '', '',
+        String(index + 1), away.name || '', away.number || '', '', away.note || '', '', '', '', '', ''
       ]))
     })
     const pageCount = rowCount > 20 ? Math.ceil(rowCount / 20) : 1
@@ -399,7 +399,7 @@ export function createRefereeLineupPrintHtml(input) {
     const count=rowsPerPage+(page<extraRows?1:0)
     const rowHtml=Array.from({length:count},(_,row)=>{
       const index=offset+row,home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
-      const cells=[String(index+1),home.name||'',home.number||'','',home.note||'','','','','','','','',String(index+1),away.name||'',away.number||'','',away.note||'','','','','','','','']
+      const cells=[String(index+1),home.name||'',home.number||'','',home.note||'','','','','','',String(index+1),away.name||'',away.number||'','',away.note||'','','','','','']
       return `<tr>${cells.map((value,cell)=>`<td${cell%ROSTER_WIDTHS.length===1?' class="player-name"':''}>${escapeHtml(value)}</td>`).join('')}</tr>`
     }).join('')
     offset+=count

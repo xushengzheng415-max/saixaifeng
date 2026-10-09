@@ -507,11 +507,11 @@ function kitLine(colors) {
 }
 
 function printSheetHtml(input) {
-  const widths=[280,1240,280,360,360,360,360,288,288,288,288,288]
+  const widths=[280,1240,280,360,360,360,360,864,288,288]
   const allWidths=[...widths,...widths]
   const maxRows=Math.max(Number(input.rowCount)||0,input.homePlayers.length,input.awayPlayers.length,1)
   const colgroup=`<colgroup>${allWidths.map(value=>`<col style="width:${(value/9360*100).toFixed(3)}%">`).join('')}</colgroup>`
-  const heading=['序号','队员姓名','号码','说明','身份','换上','换下','进球1','进球2','进球3','黄牌','红牌','序号','队员姓名','号码','说明','身份','换上','换下','进球1','进球2','进球3','黄牌','红牌']
+  const heading=['序号','队员姓名','号码','说明','身份','换上','换下','进球','黄牌','红牌','序号','队员姓名','号码','说明','身份','换上','换下','进球','黄牌','红牌']
   const header=`<tr>${heading.map(label=>`<th>${label}</th>`).join('')}</tr>`
   const match=input.match||{}
   const day=String(match.matchDate||'').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/,'$1年$2月$3日')
@@ -524,8 +524,8 @@ function printSheetHtml(input) {
     const count=rowsPerPage+(page<extraRows?1:0)
     const rows=Array.from({length:count},(_,row)=>{
       const index=offset+row,home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
-      const cells=[String(index+1),home.name||'',home.number||'','',home.note||'','','','','','','','',String(index+1),away.name||'',away.number||'','',away.note||'','','','','','','','']
-      return `<tr>${cells.map((value,cell)=>`<td${cell%12===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
+      const cells=[String(index+1),home.name||'',home.number||'','',home.note||'','','','','','',String(index+1),away.name||'',away.number||'','',away.note||'','','','','','']
+      return `<tr>${cells.map((value,cell)=>`<td${cell%10===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
     }).join('')
     offset+=count
     const firstPage=page===0,lastPage=page===pageCount-1
