@@ -2,6 +2,8 @@
 
 ## 平台客户档案（2026-10-09）
 
+归档写入口 `manageTournamentCenterContent.setCustomerAssetArchive` 在平台负责人鉴权后按客户档案稳定ID集合核对所选teams/tournaments，事务仅改platformArchived/platformArchiveRevision及操作者、时间字段，保留所有业务状态和历史；显式版本冲突、重复请求幂等，批量至多30条。platform_content_audit_logs记录归档/恢复。该标记不参与统计、积分、名单或跨端业务权限。测试：`node tools/test-platform-archive.cjs`。
+
 `manageTournamentCenterContent.getCustomerProfile` 在既有平台负责人鉴权之后只读查询客户账号、机构及成员关系、球队、赛事和球员。仅按稳定ID及明确归属字段关联，创建人和机构关联分开显示，不按姓名或手机号合并资产。所有查询分页完成，超限或权限失败报错，明确不存在的可选集合才视为空。账号注册来源仅采用明确来源字段，后续openId/wechatOpenId/密码配置只能表示登录绑定，不能反推注册渠道。返回字段白名单不含微信标识、密码、球员电话或证件信息。入口为独立平台“主办方联系人/账号管理→查看档案”，隐藏列表条目不隐藏客户档案资料。测试：`node tools/test-platform-customer-profile.cjs`。
 
 ## 复用原虚拟球队库（2026-10-07）

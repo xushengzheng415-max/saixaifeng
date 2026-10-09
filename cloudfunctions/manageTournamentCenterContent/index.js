@@ -1,6 +1,7 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const customerProfiles = require('./customerProfile.cjs')
+const platformArchive = require('./platformArchive.cjs')
 
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 
@@ -144,7 +145,7 @@ function safeTournament(tournament, context = {}) {
   const creator = context.usersById && context.usersById.get(creatorId)
   const relationCount = context.tournamentTeamCounts && context.tournamentTeamCounts.get(String(tournament._id))
   return {
-    _id: tournament._id,
+    _id: tournament._id, ...platformArchive.archiveFields(tournament),
     name: tournament.name || '未命名赛事',
     coverImage: tournament.coverImage || tournament.cover || tournament.poster || '',
     organizerName: tournament.organizerName || tournament.organizer || tournament.organizationName ||
@@ -366,7 +367,7 @@ async function getOverview(db) {
       .map(relation => String(relation.tournamentId || ''))
       .filter(Boolean)).size
     return {
-      _id: team._id,
+      _id: team._id, ...platformArchive.archiveFields(team),
       name: team.name || team.teamName || '未命名球队',
       logo: logoFileId ? (logoUrls.get(logoFileId) || '') : fallbackLogo,
       logoUnavailable: Boolean(logoFileId && !logoUrls.has(logoFileId)),
@@ -842,6 +843,7 @@ exports.main = async event => {
     const action = params.action || 'overview'
     if (action === 'overview') return await getOverview(db)
     if (action === 'getCustomerProfile') return await customerProfiles.getCustomerProfile(db, params)
+    if (action === 'setCustomerAssetArchive') return await platformArchive.setCustomerAssetArchive(db, params, user)
     if (action === 'refreshTournamentStatuses') return await getStartedTournamentIds(db, params)
     if (action === 'sendOrganizerNotice') return await sendOrganizerNotice(db, params, user)
     if (action === 'saveBanner') return await saveBanner(db, params, user)

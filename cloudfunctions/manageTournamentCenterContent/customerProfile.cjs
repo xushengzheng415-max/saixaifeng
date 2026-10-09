@@ -84,8 +84,8 @@ async function getCustomerProfile(db, event) {
       createdTournaments: tournaments.filter(item => creatorId(item) === row._id).map(item => text(item.name || item.tournamentName) || '未命名赛事')
     })),
     organizations: organizations.filter(row => orgIds.has(row._id)).map(row => ({ id: row._id, name: text(row.name || row.organizationName) || '未命名机构' })),
-    teams: teams.map(row => ({ id: row._id, name: teamNames.get(row._id), relation: relation(row), creatorName: creatorName(row), createTime: row.createTime || row.createdAt || null, playerCount: players.filter(p => p.teamId === row._id).length })),
-    tournaments: tournaments.map(row => ({ id: row._id, name: text(row.name || row.tournamentName) || '未命名赛事', relation: relation(row), creatorName: creatorName(row), createTime: row.createTime || row.createdAt || null, status: text(row.status) })),
+    teams: teams.map(row => ({ platformArchived: row.platformArchived === true, platformArchiveRevision: row.platformArchiveRevision || 0, id: row._id, name: teamNames.get(row._id), relation: relation(row), creatorName: creatorName(row), createTime: row.createTime || row.createdAt || null, playerCount: players.filter(p => p.teamId === row._id).length })),
+    tournaments: tournaments.map(row => ({ platformArchived: row.platformArchived === true, platformArchiveRevision: row.platformArchiveRevision || 0, id: row._id, name: text(row.name || row.tournamentName) || '未命名赛事', relation: relation(row), creatorName: creatorName(row), createTime: row.createTime || row.createdAt || null, status: text(row.status) })),
     players: players.map(row => ({ id: row._id, name: text(row.name || row.playerName) || '未命名球员', teamName: teamNames.get(row.teamId) || '球队关联待核查', relation: relation(row) })),
     generatedAt: new Date().toISOString()
   } }

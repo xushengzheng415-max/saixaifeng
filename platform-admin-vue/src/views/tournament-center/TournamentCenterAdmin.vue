@@ -104,7 +104,7 @@
           </section>
 
           <section v-else-if="activeTab === 'tournaments'" class="panel table-panel">
-            <div class="toolbar"><el-input v-model="tournamentKeyword" clearable placeholder="搜索赛事、主办方、城市"><template #prefix><el-icon><Search /></el-icon></template></el-input><el-select v-model="tournamentStatusFilter"><el-option label="全部状态" value="all" /><el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" /></el-select><span>显示 {{ filteredTournaments.length }} / {{ tournaments.length }} 场</span></div>
+            <div class="toolbar"><el-input v-model="tournamentKeyword" clearable placeholder="搜索赛事、主办方、城市"><template #prefix><el-icon><Search /></el-icon></template></el-input><el-select v-model="tournamentStatusFilter"><el-option label="全部状态" value="all" /><el-option v-for="(label, key) in statusMap" :key="key" :label="label" :value="key" /></el-select><el-select v-model="tournamentArchiveView"><el-option label="常用" value="active" /><el-option label="已归档" value="archived" /></el-select><span>显示 {{ filteredTournaments.length }} / {{ tournaments.length }} 场</span></div>
             <el-table :data="filteredTournaments" row-key="_id" @row-click="openTournament">
               <el-table-column label="赛事名称" min-width="260"><template #default="{ row }"><div class="name-cell"><span class="entity-icon"><el-icon><Trophy /></el-icon></span><div><strong>{{ row.name }}</strong><small>{{ categoryText(row.category) }} · {{ formatText(row.formatType) }}</small></div></div></template></el-table-column>
               <el-table-column label="主办方/创建人" min-width="210"><template #default="{ row }"><strong>{{ row.organizerName || '主办方待补充' }}</strong><small class="block">{{ row.creatorName || '创建人待核验' }}{{ row.creatorPhone ? ` · ${row.creatorPhone}` : '' }}</small></template></el-table-column><el-table-column label="举办地" min-width="130"><template #default="{ row }">{{ row.city || '待补充' }}</template></el-table-column>
@@ -121,7 +121,7 @@
           </section>
 
           <section v-else-if="activeTab === 'teams'" class="panel table-panel">
-            <div class="toolbar"><el-input v-model="teamKeyword" clearable placeholder="搜索球队、联系人、手机号、创建方"><template #prefix><el-icon><Search /></el-icon></template></el-input><span>显示 {{ filteredTeams.length }} / {{ teams.length }} 支</span></div>
+            <div class="toolbar"><el-input v-model="teamKeyword" clearable placeholder="搜索球队、联系人、手机号、创建方"><template #prefix><el-icon><Search /></el-icon></template></el-input><el-select v-model="teamArchiveView"><el-option label="常用" value="active" /><el-option label="已归档" value="archived" /></el-select><span>显示 {{ filteredTeams.length }} / {{ teams.length }} 支</span></div>
             <el-table :data="filteredTeams" row-key="_id" @row-click="openTeam">
               <el-table-column label="球队" min-width="230"><template #default="{ row }"><div class="name-cell"><span class="team-logo" :title="row.logoUnavailable ? '队徽暂不可用，请在球队资料中重新上传' : ''"><img v-if="row.logo && !row.logoUnavailable" :src="row.logo" alt="" @error="handleTeamLogoError(row)" /><el-icon v-else><Flag /></el-icon></span><div><strong>{{ row.name }}</strong><small>{{ row.city || '地区待补充' }}</small></div></div></template></el-table-column>
               <el-table-column label="创建方/所属机构" min-width="200"><template #default="{ row }">{{ row.organizerName || '归属待核验' }}</template></el-table-column><el-table-column label="球队联系人" min-width="180"><template #default="{ row }"><strong>{{ row.contact || '待补充' }}</strong><small class="block">{{ row.phone || '未填写手机号' }}</small></template></el-table-column>
@@ -178,7 +178,7 @@
         <template #footer><el-button @click="noticeDialogVisible=false">取消</el-button><el-button type="primary" :loading="noticeSending" @click="sendOrganizerNotice">发送站内信</el-button></template>
       </el-dialog>
 
-      <CustomerProfileDrawer v-model="organizerDrawerVisible" :customer="selectedOrganizer" />
+      <CustomerProfileDrawer v-model="organizerDrawerVisible" :customer="selectedOrganizer" @changed="loadOverview" />
 
       <el-drawer v-model="detailDrawerVisible" :title="selectedTournament ? '赛事平台档案' : '球队平台档案'" size="min(620px, 92vw)">
         <template v-if="selectedTournament"><div class="profile-head"><span class="entity-icon large"><el-icon><Trophy /></el-icon></span><div><h2>{{ selectedTournament.name }}</h2><p>{{ selectedTournament.organizerName || '主办方待补充' }}</p></div></div><el-descriptions :column="1" border><el-descriptions-item label="赛事状态"><el-tag :type="statusType(selectedTournament.status)">{{ statusText(selectedTournament.status) }}</el-tag></el-descriptions-item><el-descriptions-item label="实际创建人">{{ selectedTournament.creatorName || '待核验' }}</el-descriptions-item><el-descriptions-item label="创建人手机"><button v-if="selectedTournament.creatorPhone" class="phone" @click="copyText(selectedTournament.creatorPhone)">{{ selectedTournament.creatorPhone }} <el-icon><CopyDocument /></el-icon></button><span v-else>待补充</span></el-descriptions-item><el-descriptions-item label="创建人邮箱">{{ selectedTournament.creatorEmail || '待补充' }}</el-descriptions-item><el-descriptions-item label="赛事类别">{{ categoryText(selectedTournament.category) }}</el-descriptions-item><el-descriptions-item label="赛制">{{ formatText(selectedTournament.formatType) }}</el-descriptions-item><el-descriptions-item label="举办地">{{ selectedTournament.city || '待补充' }}</el-descriptions-item><el-descriptions-item label="参赛球队">{{ selectedTournament.teamCount }} 支</el-descriptions-item><el-descriptions-item label="创建时间">{{ formatTime(selectedTournament.createTime) }}</el-descriptions-item><el-descriptions-item label="平台标识">{{ selectedTournament._id }}</el-descriptions-item></el-descriptions></template>
@@ -215,6 +215,7 @@ const activeTab = ref(['overview','organizers','accounts','tournaments','teams',
 const banners = ref([]), tournaments = ref([]), organizers = ref([]), accounts = ref([]), teams = ref([]), supportRequests = ref([])
 const organizerKeyword = ref(''), organizerContactFilter = ref('all'), accountKeyword = ref(''), tournamentKeyword = ref(''), tournamentStatusFilter = ref('all'), teamKeyword = ref(''), featuredKeyword = ref('')
 const accountDeletingId = ref('')
+const tournamentArchiveView = ref('active'), teamArchiveView = ref('active')
 const noticeDialogVisible = ref(false), noticeSending = ref(false), noticeTarget = ref(null)
 const noticeForm = reactive({ title: '', body: '' })
 const organizerDrawerVisible = ref(false), detailDrawerVisible = ref(false), bannerDialogVisible = ref(false), featuredDialogVisible = ref(false), bannerCropperRef = ref(null)
@@ -263,17 +264,17 @@ const currentUserName = computed(() => getPlatformSession()?.userName || '平台
 let tournamentStatusTimer = null
 let tournamentStatusRefreshRunning = false
 let lastTournamentStatusWarningAt = 0
-const recentTournaments = computed(() => tournaments.value.filter(row => !hiddenTournamentIds.value.includes(String(row._id))).slice(0, 6)), featuredTournaments = computed(() => tournaments.value.filter(x => x.isFeatured).sort((a,b) => a.featuredSort-b.featuredSort))
-const hiddenTournaments = computed(() => tournaments.value.filter(row => hiddenTournamentIds.value.includes(String(row._id))))
-const hiddenTeams = computed(() => teams.value.filter(row => hiddenTeamIds.value.includes(String(row._id))))
+const recentTournaments = computed(() => tournaments.value.filter(row => !row.platformArchived && !hiddenTournamentIds.value.includes(String(row._id))).slice(0, 6)), featuredTournaments = computed(() => tournaments.value.filter(x => x.isFeatured).sort((a,b) => a.featuredSort-b.featuredSort))
+const hiddenTournaments = computed(() => tournaments.value.filter(row => !row.platformArchived && hiddenTournamentIds.value.includes(String(row._id))))
+const hiddenTeams = computed(() => teams.value.filter(row => !row.platformArchived && hiddenTeamIds.value.includes(String(row._id))))
 const norm = value => String(value || '').trim().toLowerCase()
 const featuredCandidates = computed(() => tournaments.value.filter(x => !x.isFeatured && (!norm(featuredKeyword.value) || norm(x.name).includes(norm(featuredKeyword.value)))))
 const filteredOrganizers = computed(() => organizers.value.filter(x => { const match = !norm(organizerKeyword.value) || norm([x.name,x.contact,x.phone,x.email].join(' ')).includes(norm(organizerKeyword.value)); const f=organizerContactFilter.value; return match && (f==='all'||(f==='ready'&&x.hasContact)||(f==='missing'&&!x.hasContact)||(f==='support'&&x.activeSupportCount>0)) }))
 const filteredAccounts = computed(() => accounts.value.filter(x => !norm(accountKeyword.value) || norm([x.name,x.phone,x.email,x._id].join(' ')).includes(norm(accountKeyword.value))))
-const filteredTournaments = computed(() => tournaments.value.filter(x => !hiddenTournamentIds.value.includes(String(x._id)) && (!norm(tournamentKeyword.value)||norm([x.name,x.organizerName,x.city].join(' ')).includes(norm(tournamentKeyword.value)))&&(tournamentStatusFilter.value==='all'||x.status===tournamentStatusFilter.value)))
-const filteredTeams = computed(() => teams.value.filter(x => !hiddenTeamIds.value.includes(String(x._id)) && (!norm(teamKeyword.value)||norm([x.name,x.organizerName,x.contact,x.phone,x.city].join(' ')).includes(norm(teamKeyword.value)))))
-const selectedOrganizerTournaments = computed(() => selectedOrganizer.value ? tournaments.value.filter(x => !hiddenTournamentIds.value.includes(String(x._id)) && selectedOrganizer.value.tournamentIds.includes(String(x._id))) : [])
-const selectedOrganizerTeams = computed(() => selectedOrganizer.value ? teams.value.filter(x => !hiddenTeamIds.value.includes(String(x._id)) && selectedOrganizer.value.teamIds.includes(String(x._id))) : [])
+const filteredTournaments = computed(() => tournaments.value.filter(x => Boolean(x.platformArchived) === (tournamentArchiveView.value === 'archived') && !hiddenTournamentIds.value.includes(String(x._id)) && (!norm(tournamentKeyword.value)||norm([x.name,x.organizerName,x.city].join(' ')).includes(norm(tournamentKeyword.value)))&&(tournamentStatusFilter.value==='all'||x.status===tournamentStatusFilter.value)))
+const filteredTeams = computed(() => teams.value.filter(x => Boolean(x.platformArchived) === (teamArchiveView.value === 'archived') && !hiddenTeamIds.value.includes(String(x._id)) && (!norm(teamKeyword.value)||norm([x.name,x.organizerName,x.contact,x.phone,x.city].join(' ')).includes(norm(teamKeyword.value)))))
+const selectedOrganizerTournaments = computed(() => selectedOrganizer.value ? tournaments.value.filter(x => Boolean(x.platformArchived) === (tournamentArchiveView.value === 'archived') && !hiddenTournamentIds.value.includes(String(x._id)) && selectedOrganizer.value.tournamentIds.includes(String(x._id))) : [])
+const selectedOrganizerTeams = computed(() => selectedOrganizer.value ? teams.value.filter(x => Boolean(x.platformArchived) === (teamArchiveView.value === 'archived') && !hiddenTeamIds.value.includes(String(x._id)) && selectedOrganizer.value.teamIds.includes(String(x._id))) : [])
 const categoryMap={youth:'青少年赛事',amateur:'业余赛事',local:'地协赛',city:'城市联赛',professional:'职业联赛'},formatMap={tournament:'赛会制',cup:'杯赛制',league:'联赛制',combined:'混合制',hybrid:'混合制'},statusMap={draft:'草稿',registering:'报名中',published:'已发布',ongoing:'进行中',ended:'已结束',completed:'已结束',cancelled:'已取消'}
 const categoryText=v=>categoryMap[v]||v||'未分类',formatText=v=>formatMap[v]||v||'未设置',statusText=v=>statusMap[v]||v||'未知',statusType=v=>({draft:'info',registering:'primary',published:'success',ongoing:'warning',cancelled:'danger'}[v]||'info')
 const supportStatusText=v=>({pending:'等待确认',active:'协助中',rejected:'已拒绝',revoked:'已撤销',expired:'已过期'}[v]||'未知'),supportStatusType=v=>({pending:'warning',active:'success',rejected:'danger'}[v]||'info')
