@@ -27,7 +27,7 @@ export function demoRequest(action, data = {}) {
 }
 
 export function isDemoModeAvailable() {
-  return String(import.meta.env.BASE_URL || '').startsWith('/preview/admin/')
+  return ['/admin/', '/preview/admin/'].includes(String(import.meta.env.BASE_URL || ''))
 }
 
 export function isDemoMode(tournamentId = '') {
