@@ -159,6 +159,7 @@
     <el-dialog v-model="reviewDialog" title="成卡预览" width="min(1120px, 96vw)" append-to-body :close-on-click-modal="false">
       <div class="generated-review-meta">已生成 {{ reviewTotal }} 张 · 已载入 {{ reviewCards.length }} 张</div>
       <el-alert v-if="historicalReview" title="以下按遮罩重新绘制。历史批次请退回修改后，按动态模板流程发布。" type="warning" :closable="false" />
+      <el-button v-if="reviewCards.some(card => !card.cardUrl && card.cardError)" :loading="reviewLoading" @click="openGeneratedReview(true)">重试预览</el-button>
       <div v-if="!reviewLoading && reviewTotal===0" class="generated-review-state" role="status">没有生成可预览的成卡，请退回修改。</div>
       <div class="generated-review-grid">
         <article v-for="card in reviewCards" :key="card.playerId + card.cardId">

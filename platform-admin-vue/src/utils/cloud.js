@@ -4,6 +4,7 @@ import '../../../shared/player-card/draw.js'
 //   登录 → fetch() → webLoginApi HTTP API
 //   数据库 → fetch() → webLoginApi dbQuery action
 import { ElMessage } from 'element-plus'
+import { localizeCardFonts, translateCardErrors } from './playerCardFonts.js'
 import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
 import { createInflightReads } from './inflightReads'
@@ -197,7 +198,8 @@ async function performFunctionHTTP(action, data = {}, timeout = 60000) {
         : 'https://www.sxffootball.cn/'
       throw new Error(result.error || (platformSessionExpired ? '平台登录已失效，请重新登录' : '登录会话已失效，请重新微信扫码登录'))
     }
-    return await globalThis.SxfDynamicCard.hydrate(result)
+    localizeCardFonts(result, window.location.origin, import.meta.env.BASE_URL)
+    return translateCardErrors(await globalThis.SxfDynamicCard.hydrate(result))
   } catch (err) {
     if (err?.name === 'AbortError') {
       throw new Error('请求处理时间较长，请稍后重试')
