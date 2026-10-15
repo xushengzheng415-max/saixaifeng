@@ -16,6 +16,7 @@ async function readCards(cloud, db, players, options = {}) {
   const scores=options.legacyOnly?new Map():await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id)))
   const rows = await Promise.all(players.map(async player => {
     const playerId = String(player._id || player.id || '')
+    if(!options.baseOnly&&!options.legacyOnly)player=await require('./playerCardSeriesReader.cjs').resolveSeriesPlayer(db,player,scores.get(playerId),document)
     let live=options.legacyOnly?null:await dynamic.read(cloud,db,player,{...options,score:scores.get(playerId)})
     if(live?.cardScene&&options.restrictedAssets)live=await dynamic.restrictAssets(cloud,db,player,live)
     if(live?.status==='unavailable'&&player.playerCardFileId)return {playerId,status:'ready',legacyStatic:true,displayMode:'legacy-static',reason:'历史卡源图待补齐',fileId:player.playerCardFileId,cardTypeId:String(player.playerCardTier||''),templateId:String(player.playerCardTemplateId||''),publishedVersion:Number(player.playerCardTemplateVersion||0),cardDataVersion:Number(player.playerCardVersion||0)}

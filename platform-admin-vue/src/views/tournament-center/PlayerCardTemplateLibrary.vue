@@ -1,10 +1,10 @@
 <template>
-  <section class="card-library">
-    <div class="library-head">
+  <section class="card-library" :class="{ embedded: embedded }">
+    <div v-if="!embedded" class="library-head">
       <div><h2>{{ activePanel === 'catalog' ? '球员卡库' : '球员卡模板' }}</h2><span>{{ activePanel === 'catalog' ? '全部球员、成卡状态与版本' : '背景与黑白遮罩使用同一张 300 × 430 画布' }}</span></div>
       <el-button type="primary" :disabled="publishing || confirmingPublish" @click="startCreate">新建卡片</el-button>
     </div>
-    <nav class="card-system-tabs" aria-label="球员卡系统">
+    <nav v-if="!embedded" class="card-system-tabs" aria-label="球员卡系统">
       <button type="button" :class="{active:activePanel==='templates'}" @click="activePanel='templates'">模板编辑</button>
       <button type="button" :class="{active:activePanel==='catalog'}" @click="activePanel='catalog'">成卡库</button>
     </nav>
@@ -12,7 +12,7 @@
     <el-alert v-if="!backendReady && !loading" title="模板保存和发布服务尚未开放，当前调整仅在本页保留" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false"><template #default><el-button link @click="load">重试</el-button></template></el-alert>
     <div v-show="activePanel==='templates'" class="library-body" v-loading="loading">
-      <aside class="template-list" aria-label="模板列表">
+      <aside v-if="!embedded" class="template-list" aria-label="模板列表">
         <label class="preload-filter">预装分类<el-select v-model="category"><el-option label="全部" value="all" /><el-option v-for="scope in PRELOAD_TYPES" :key="scope.value" :label="scope.label" :value="scope.value" /></el-select></label>
         <button v-for="item in visibleTemplates" :key="item.id" type="button" :disabled="publishing || confirmingPublish" :class="{ selected: form.id === item.id || (!form.id && form.tier === item.tier) }" @click="select(item)">
           <img v-if="item.backgroundUrl" :src="item.backgroundUrl" alt="">
@@ -112,7 +112,7 @@
           <p class="version" v-if="form.id">草稿 {{ form.draftVersion }} · 已发布 {{ form.publishedVersion || '—' }}</p>
           <div class="editor-actions">
             <el-button type="primary" :loading="saving" :disabled="!backendReady || !scopeReady || !dirty || !form.title || !form.backgroundUrl || !form.maskUrl || previewState !== 'ready'" @click="save">保存草稿</el-button>
-            <el-button :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="preparePublishPreview">生成预览卡</el-button>
+            <el-button v-if="!embedded" :loading="publishing" :disabled="!publishServiceReady || !canPublish" @click="preparePublishPreview">生成预览卡</el-button>
             <el-button v-if="publishJob?.status === 'review'" :disabled="!publishServiceReady" @click="openGeneratedReview(true)">预览成卡</el-button>
             <el-button v-if="publishJob?.jobId && ['pending','blocked','preloading'].includes(publishJob.status)" :disabled="!publishServiceReady" :loading="publishing" @click="resumePublish">{{ publishJob.status === 'blocked' ? '重试制卡' : publishJob.status === 'preloading' ? '继续预装' : '继续制卡' }}</el-button>
             <el-button v-if="publishing || publishJob?.jobId" @click="progressOpen=true">查看进度</el-button>
@@ -185,6 +185,8 @@
 <script setup>
 import CardPublishProgress from './CardPublishProgress.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+const props = defineProps({ embedded: Boolean, templateId: String })
+const emit = defineEmits(['saved'])
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getFileUrl, playerCardTemplateRequest, uploadLargeFileViaCloud } from '@/utils/cloud'
@@ -223,9 +225,9 @@ const backendReady = ref(false), publishServiceReady = ref(false)
 const route=useRoute(),router=useRouter(),CARD_PANEL_KEY='playerCardLibrary.activePanel'
 const DRAFT_RECOVERY_KEY='playerCardTemplateDraftRecovery.v1'
 let recoveryChecked=false
-function initialCardPanel(){const requested=String(route.query.panel||'');if(['templates','catalog'].includes(requested))return requested;try{return sessionStorage.getItem(CARD_PANEL_KEY)==='catalog'?'catalog':'templates'}catch{return 'templates'}}
+function initialCardPanel(){if(props.embedded)return 'templates';const requested=String(route.query.panel||'');if(['templates','catalog'].includes(requested))return requested;try{return sessionStorage.getItem(CARD_PANEL_KEY)==='catalog'?'catalog':'templates'}catch{return 'templates'}}
 const activePanel=ref(initialCardPanel())
-watch(activePanel,value=>{try{sessionStorage.setItem(CARD_PANEL_KEY,value)}catch{};if(String(route.query.panel||'')!==value)router.replace({path:route.path,query:{...route.query,panel:value}})})
+watch(activePanel,value=>{if(props.embedded)return;try{sessionStorage.setItem(CARD_PANEL_KEY,value)}catch{};if(String(route.query.panel||'')!==value)router.replace({path:route.path,query:{...route.query,panel:value}})})
 const templates = ref([]), nextCursor = ref(''), loading = ref(false), loadingMore = ref(false)
 const saving = ref(false), publishing = ref(false), error = ref(''), uploadError = ref(''), dirty = ref(false)
 const progressOpen=ref(false),publishPreparing=ref(false),publishError=ref(''),preflightPreview=ref(false),preflightRevision=ref(''),sampleImageReady=ref(false)
@@ -499,6 +501,7 @@ async function refreshSelected(id) {
   if (index >= 0) templates.value.splice(index, 1, result.template)
   else templates.value.unshift(result.template)
   assign(result.template)
+  if(props.embedded){publishJob.value=null;return}
   const status = await request('getPlayerCardTemplatePublishStatus', { tier:result.template.tier, preload:result.template.preload || freshPreload(), templateId:result.template.id })
   publishServiceReady.value = true
   publishJob.value = status.jobId ? status : null
@@ -545,10 +548,11 @@ async function save() {
     const result = await request('savePlayerCardTemplate', { templateId: form.id, revision: form.revision, title: form.title,
       tier: form.tier, preload:form.preload, positionOverride:form.positionOverride, ...materials, layout: form.layout, photo: form.photo, badges: form.badges })
     localStorage.removeItem(DRAFT_RECOVERY_KEY)
-    await refreshSelected(result.templateId); ElMessage.success('草稿已保存')
+    await refreshSelected(result.templateId); ElMessage.success('草稿已保存'); emit('saved'); return true
   } catch (cause) {
     if(recovery){try{localStorage.setItem(DRAFT_RECOVERY_KEY,JSON.stringify(recovery))}catch{};ElMessage.error(`${cause.message}；本机已保留草稿，刷新后可恢复`)}
     else ElMessage.error(cause.message)
+    return false
   } finally { saving.value = false;assetProgress.value='' }
 }
 async function recoverDraft(){
@@ -744,11 +748,22 @@ onMounted(() => {
     sheet.textContent=TEXT_STYLE_CONTRACT.fonts.filter(font=>font.id!=='sans').map(font=>'@font-face{font-family:"'+font.family+'";src:url("'+import.meta.env.BASE_URL+'fonts/player-card/'+font.files[0]+'");font-weight:400;font-style:normal;font-display:swap}').join('')
     document.head.appendChild(sheet)
   }
-  load()
+  if(props.embedded) loadEmbedded(); else load()
 })
+async function loadEmbedded() {
+  if(!props.templateId)return
+  loading.value=true;error.value=''
+  try {const result=await request('getPlayerCardTemplate',{templateId:props.templateId});assign(result.template);backendReady.value=true;activePanel.value='templates';if(result.template.preload?.type==='player')await loadPlayerSource(result.template.preload.targetId)}
+  catch(cause){error.value=cause.message;backendReady.value=false}
+  finally{loading.value=false}
+}
+watch(()=>props.templateId,()=>{if(props.embedded)loadEmbedded()})
+defineExpose({saveChanges:save,isDirty:()=>dirty.value,formData:()=>JSON.parse(JSON.stringify(form))})
 </script>
 
 <style scoped>
+.embedded .library-body{display:block}.embedded .template-workspace{border:0}.embedded .editor-fields>label,.embedded .editor-fields>.editor-head,.embedded .layout-presets,.embedded .version,.embedded .release-note{display:none}.embedded .editor-actions{position:sticky;bottom:0;background:white;padding:12px 0;z-index:2}
+
 .generated-review-meta{margin:-4px 0 14px;color:#65736a;font-size:13px}.generated-review-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;max-height:min(64vh,720px);overflow:auto;padding:2px}.generated-review-grid article{display:flex;min-width:0;flex-direction:column;gap:6px;padding:9px;border:1px solid #dfe7e1;background:#fff}.generated-review-grid img{display:block;width:100%;aspect-ratio:300/430;object-fit:contain;background:#eef2ef}.generated-review-grid strong{overflow:hidden;color:#24352a;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.generated-review-grid small{overflow:hidden;color:#7c8880;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.generated-review-state{padding:24px;color:#68766d;text-align:center}
 .card-library{padding:20px;color:#172a20;box-sizing:border-box}.platform-console .card-library{padding:20px 0 0}.library-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.library-head h2{margin:0 0 4px;font-size:20px}.library-head span{color:#6f7d73;font-size:12px}.library-body{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:620px;border:1px solid #dde7e0;background:#fff}.template-list{border-right:1px solid #e5ede8;padding:8px;overflow-y:auto}.template-list>button:not(.el-button){display:flex;align-items:center;gap:11px;width:100%;padding:9px;border:0;border-radius:6px;background:#fff;text-align:left;cursor:pointer}.template-list>button.selected{background:#eaf5ed}.template-list img{width:38px;height:55px;object-fit:contain}.template-list span{min-width:0;display:grid;gap:5px}.template-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.template-list small,.list-empty{color:#758078;font-size:11px}.list-empty{padding:20px 10px}.template-workspace{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;padding:24px}.editor-fields{max-width:470px;display:grid;align-content:start;gap:19px}.form-head{display:flex;align-items:center;gap:10px;font-size:17px}.editor-fields>label{display:grid;gap:7px;font-size:13px;font-weight:600}.file-fields{display:flex;gap:12px}.file-fields label{width:50%;display:grid;gap:7px;font-size:13px;font-weight:600}.file-fields input{position:absolute;width:1px;height:1px;opacity:0}.file-fields span{display:grid;place-items:center;height:72px;border:1px dashed #91b99f;border-radius:6px;color:#167445;font-weight:500;cursor:pointer}.field-error{margin:0;color:#b5372b;font-size:12px}.version{margin:0;color:#748078;font-size:12px}.editor-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}.preview-pane{display:grid;justify-items:center;align-content:start;gap:12px;padding:14px;background:#f1f5f2}.preview-pane>strong{font-size:13px}.card-preview{position:relative;width:300px;height:430px;overflow:hidden;background:#e4ebe5}.card-preview img{position:absolute;display:block}.card-preview .back,.card-preview .front{inset:0;width:100%;height:100%}.card-preview .back{z-index:1}.card-preview .portrait{z-index:2;top:18px;left:33px;width:234px;height:280px;object-fit:contain;object-position:center bottom}.card-preview .front{z-index:3}.card-preview b,.card-preview span,.card-preview strong{position:absolute;z-index:4;color:#1c241d}.card-preview .number{top:70px;left:25px;font-size:52px;line-height:1}.card-preview .position{top:125px;left:28px;font-size:22px;font-weight:700}.card-preview .name{right:20px;bottom:82px;left:20px;text-align:center;font-size:28px}.card-preview .jersey{right:20px;bottom:65px;left:20px;text-align:center;font-size:13px;font-weight:600}.card-preview .physical{right:20px;bottom:44px;left:20px;text-align:center;font-size:11px;font-weight:600}.preview-state{color:#758078;font-size:12px}@media(max-width:1100px){.template-workspace{grid-template-columns:minmax(0,1fr)}.preview-pane{justify-items:start}.library-body{grid-template-columns:210px minmax(0,1fr)}}@media(max-width:680px){.library-body{display:block}.template-list{display:flex;gap:4px;overflow-x:auto;border-right:0;border-bottom:1px solid #e5ede8}.template-list>button:not(.el-button){min-width:150px}.template-workspace{padding:16px}.library-head h2{font-size:18px}.card-preview{transform:scale(.85);transform-origin:top left;margin-bottom:-64px}}
 .card-system-tabs{display:flex;gap:4px;margin:0 0 14px;border-bottom:1px solid #dce7df}.card-system-tabs button{padding:9px 14px;border:0;border-bottom:2px solid transparent;background:transparent;color:#607168;font:inherit;font-size:13px;cursor:pointer}.card-system-tabs button.active{border-bottom-color:#16804d;color:#176b43;font-weight:700}

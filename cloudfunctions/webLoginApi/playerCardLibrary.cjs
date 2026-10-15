@@ -3,7 +3,9 @@ const suite = require('./playerCardSuite.cjs')
 const preload = require('./playerCardPreload.cjs')
 const LIBRARY = 'player_card_library'
 const libraryId = (playerId, templateId) => crypto.createHash('sha256').update(JSON.stringify([String(playerId),String(templateId)])).digest('hex')
-function tierPermission(score, tier, scopeType) {
+function tierPermission(score, tier, scopeType, cardKind) {
+  if(cardKind==='honor')return score?.status==='test_data_excluded'?'测试资料不能获得正式荣誉卡':''
+  if(cardKind==='progression')return score?.status!=='ready'||!score?.tier?'生涯等级待核定':tier!==score.tier?'该档位随球员等级解锁':''
   if(scopeType==='player')return score?.status==='test_data_excluded'?'测试资料不能生成正式卡':''
   if (score.status !== 'ready' || !score.tier) return '生涯积分待核定'
   if (tier !== score.tier && !score.canChangeBackground) return '当前等级暂不能使用此卡'
@@ -21,6 +23,7 @@ function createPlayerCardLibrary({ cloud }) {
       if (!template.published?.preload) continue
       const scope = preload.normalizePreload(template.published.preload)
       let grant = byTemplate.get(template._id)
+      if(grant?.status==='revoked' || (template.issuanceMode==='explicit' && !grant))continue
       let matches = scope.type === 'platform' || (scope.type === 'team' && String(player.teamId || '') === scope.targetId) ||
         (scope.type === 'player' && String(player._id) === scope.targetId)
       if (!matches && scope.type === 'tournament') {
@@ -44,10 +47,10 @@ function createPlayerCardLibrary({ cloud }) {
       }
       const render = await suite.document(db,suite.RENDERS,suite.renderId(player._id,template._id,snapshot.version))
       const ready = render?.status === 'ready' && Number(render.cardDataVersion) === Number(player.playerCardVersion || 0) && Number(render.libraryRevision || 0) === Number(grant.revision || 0)
-      const reason = tierPermission(score,template.tier,scope.type)
+      const reason = tierPermission(score,template.tier,scope.type,template.cardKind)
       const dynamic=!reason?await require('./playerCardDynamic.cjs').descriptor(cloud,db,player,snapshot,grant):null
       result.push({id:libraryId(player._id,template._id),cardId:dynamic?.cardId || (ready?String(render.cardId||render._id||suite.renderId(player._id,template._id,snapshot.version)):''),templateId:template._id,title:snapshot.title,tier:template.tier,
-        preload:scope,templateVersion:snapshot.version,revision:Number(grant.revision || 0),
+        preload:scope,cardKind:template.cardKind||'',setId:template.setId||'',templateVersion:snapshot.version,revision:Number(grant.revision || 0),
         dataVersion:dynamic?.dataVersion||'',cardDataVersion:Number(player.playerCardVersion||0),publishedVersion:Number(snapshot.version),cardScene:dynamic?.cardScene||null,displayMode:'dynamic',status:reason ? 'locked' : dynamic?.status || (ready ? 'ready' : grant.fileId ? 'pending' : 'unmade'),reason,renderVersion:render?.renderVersion || suite.RENDER_VERSION,
         fileId:!reason && ready ? render.fileId : '',backgroundFileId:snapshot.backgroundFileId,
         snapshot,grant})

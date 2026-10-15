@@ -604,7 +604,6 @@ export async function uploadFile(cloudPath, filePath) {
 
 export async function getFileUrl(fileId) {
   if (!fileId) return ''
-  if (isDemoMode()) return /^(data:|blob:|https?:\/\/|\/)/.test(fileId) ? fileId : ''
   // 如果已经是 HTTP URL，直接返回
   if (fileId.startsWith('http://') || fileId.startsWith('https://')) {
     return fileId
@@ -705,7 +704,6 @@ export async function uploadImageViaWebApi(folder, file) {
   throw new Error(result?.message || result?.error || '图片上传失败')
 }
 export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
-  if (isDemoMode()) return uploadFileViaCloud(cloudPath, file)
   const initialChunkSize = Number(options.chunkSize) > 0 ? Number(options.chunkSize) : (48 * 1024)
   const fallbackChunkSize = Number(options.fallbackChunkSize) > 0 ? Number(options.fallbackChunkSize) : 0
   const { folder, fileName } = resolveChunkUploadTarget(cloudPath, file?.name)

@@ -147,6 +147,8 @@ function createPlayerCards(deps) {
         item.cardUrl = active.url || ''
         item.cardFileId = active.fileId || ''
         item.preloadedCards=await library.list(entry.player,item.playerCard,{dynamic:event.dynamicCardProtocol==='player-card-dynamic/1'})
+        const displayPlayer=await require('./playerCardSeriesReader.cjs').resolveSeriesPlayer(db,entry.player,item.playerCard,suite.document)
+        item.displayTemplateId=displayPlayer.playerCardDisplayTemplateId||''
         item.cardVersions=await cardVersionsForPlayer(cloud,db,entry.player)
         const currentCardIds=new Set([item.cardId,...item.preloadedCards.filter(card=>card.status==='ready').map(card=>card.cardId)].filter(Boolean))
         item.cardVersions.forEach(card=>{card.isCurrent=currentCardIds.has(card.cardId)})

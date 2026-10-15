@@ -202,7 +202,7 @@ import { getPlatformSession, isPlatformSession } from '@/utils/platformSession'
 import { getTempFileURL, uploadBase64Image } from '@/utils/upload'
 import ImageCropper from '@/components/common/ImageCropper.vue'
 import SystemAdmin from '@/views/system/SystemAdmin.vue'
-import PlayerCardTemplateLibrary from './PlayerCardTemplateLibrary.vue'
+import PlayerCardTemplateLibrary from './PlayerCardStudio.vue'
 import DataCenter from '@/views/data/DataCenter.vue'
 import CustomerProfileDrawer from './CustomerProfileDrawer.vue'
 
