@@ -305,3 +305,8 @@ webLoginApi/getMiniWorkspace/playerCardPublishWorker代码已正式部署并下�
 
 PC 进球榜、球员红黄牌榜、球队红黄牌榜使用 dataCenter.query 的 official rankings；按赛事、组别和比赛日期限定范围。球员关联使用稳定 ID，球队牌数使用统一团队汇总；未知统计不填零，未核实记录提示数量并不参与排名。仅增加读取入口，不新增统计写入。
 上传页统一为上传赛程，移除下载入口及重复四步说明；下载只在赛程中心。文件识别、冲突核对、正式写入开关和确认导入保持原流程。
+
+
+## 平台球员卡发放分层选人（2026-10-15）
+
+PlayerCardStudio左右选人复用已部署dataCenter.catalog的赛事、球队、球员和正式名单投影；只展示并移动原candidates允许的稳定ID，不新增统计计算、不按姓名合并、目录不授予资格。赛事/当前球队/球员三种视图与全平台根节点受卡面原适用范围限制；筛选后勾选和跨赛事选择去重，原服务端预览与发放再次校验。待核定球员由行内核查打开DataCenter的playerAudit页，initialPlayerId只预选并发起原审计读取，不修改等级。关闭后刷新候选和有效选择。专项test-player-card-recipient-tree及test-player-card-recipient-transfer-ui使用隔离样本；正式发布以独立平台发布记录为准，其他端与云函数未由本次更新。

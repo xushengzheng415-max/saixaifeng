@@ -134,12 +134,12 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DurationVerification from './DurationVerification.vue'
 import { callFunction, playerCardTemplateRequest } from '../../utils/cloud'
-const props = defineProps({ embedded:Boolean })
+const props = defineProps({ embedded:Boolean, initialPlayerId:{type:String,default:''} })
 const router = useRouter()
 const catalog = reactive({ teams:[], tournaments:[], players:[] })
 const catalogLoading = ref(false), loading = ref(false), tournamentTeamsLoading=ref(false), errorText = ref(''), result = ref(null), subject = ref('team'), activeTab = ref('statistics'), tournamentTeamIds=ref([])
@@ -239,7 +239,7 @@ watch(() => [transfer.playerId,transfer.toTeamId],() => { transfer.requestKey = 
 onBeforeUnmount(()=>{querySequence++;auditSequence++})
 async function refresh(){await loadCatalog();if(activeTab.value==='playerAudit'){if(auditQueue.value)await loadAuditQueue();if(auditPlayerId.value)await auditSelectedPlayer()}else if(activeTab.value==='transfers')await loadTransfers();else if(result.value)await query()}
 defineExpose({refresh,loading})
-onMounted(loadCatalog)
+onMounted(async()=>{await loadCatalog();if(props.initialPlayerId&&platformOwner.value){activeTab.value='playerAudit';auditPlayerId.value=props.initialPlayerId;await nextTick();await auditSelectedPlayer()}})
 </script>
 
 <style scoped>
