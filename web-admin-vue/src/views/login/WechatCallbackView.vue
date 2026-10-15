@@ -57,6 +57,8 @@ const status = ref('processing')
 const errorMessage = ref('')
 const hint = ref('正在验证微信授权...')
 
+import { setDemoMode } from '../../utils/demoMode'
+
 const AUTH_STORAGE_KEYS = [
   'isLoggedIn',
   'userInfo',
@@ -90,6 +92,7 @@ function clearStoredAuthSession() {
 }
 
 function storeDirectLogin(result) {
+  setDemoMode(false)
   const user=result.user||{}
   clearStoredAuthSession()
   localStorage.setItem('userId',user._id||'')
@@ -150,7 +153,8 @@ onMounted(async () => {
 
     if (result.success && result.directLogin && result.authToken && result.user) {
       storeDirectLogin(result)
-      const target = consumePostLoginPath()
+      consumePostLoginPath()
+      const target = '/organization-onboarding'
       status.value='success'
       setTimeout(()=>router.replace(target),500)
     } else if (result.success && result.requiresPhoneAuthorization && result.loginChallenge) {

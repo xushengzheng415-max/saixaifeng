@@ -66,6 +66,7 @@ import { ElMessage } from 'element-plus'
 import { Phone, Message } from '@element-plus/icons-vue'
 // ★ 直接复用 cloud.js，和 LoginView 完全一致的调用方式
 import { callFunction } from '../../utils/cloud'
+import { setDemoMode } from '../../utils/demoMode'
 
 const router = useRouter()
 const formRef = ref(null)
@@ -159,6 +160,9 @@ async function handleBind() {
       ElMessage.error('主办方账号初始化失败，请重新登录')
       return
     }
+    setDemoMode(false)
+    ;['userInfo','currentUser','organizationInfo','currentOrganization','currentOrg','assistanceContext'].forEach(key=>localStorage.removeItem(key))
+    ;['sxfTournamentStaff','sxfStaffPermissions','sxfStaffTournamentId','sxfServiceBoundCheck'].forEach(key=>sessionStorage.removeItem(key))
     if (finalUser) {
       localStorage.setItem('userId', finalUser._id || '')
       localStorage.setItem('role', 'organizer')
@@ -187,7 +191,7 @@ async function handleBind() {
 
     ElMessage.success('手机号验证成功，正在进入系统...')
 
-    setTimeout(() => router.push('/tournament-space'), 800)
+    setTimeout(() => router.replace('/organization-onboarding'), 800)
   } catch (err) {
     console.error('[BindPhone] 绑定异常:', err)
     ElMessage.error('绑定失败：' + (err.message || '网络错误'))
