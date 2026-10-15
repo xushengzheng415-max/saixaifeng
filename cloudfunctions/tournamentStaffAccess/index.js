@@ -43,6 +43,22 @@ async function owner(userId, orgId) {
   return [org.ownerId, org.creatorId, org.createdBy].map(value).includes(userId)
 }
 
+async function ownerOrganization(identity) {
+  const uid=value(identity.user._id)
+  const candidates=[...new Set([identity.user.orgId,identity.user.organizationId,identity.user.organization_id,identity.orgId].map(value).filter(Boolean))]
+  const owned=[]
+  for(const id of candidates){const org=await doc('organizations',id);if(org && [org.ownerId,org.creatorId,org.createdBy].map(value).includes(uid))owned.push(org)}
+  if(!owned.length){
+    const rows=(await db.collection('organizations').where(_.or([{ownerId:uid},{creatorId:uid},{createdBy:uid}])).limit(101).get()).data || []
+    if(rows.length>100)throw new Error('本人机构较多，请先选择机构')
+    owned.push(...rows)
+  }
+  const canonical=value(identity.user.orgId || identity.user.organizationId || identity.user.organization_id)
+  const selected=owned.find(row=>value(row._id)===canonical) || (owned.length===1?owned[0]:null)
+  if(!selected && owned.length>1)throw new Error('当前账号关联多个本人机构，请先核对机构')
+  return selected?{id:value(selected._id),name:value(selected.name || selected.organizationName)}:null
+}
+
 async function tournament(orgId, tournamentId) {
   const item = await doc('tournaments', tournamentId)
   if (!item || value(item.orgId || item.organizationId) !== orgId) throw new Error('赛事不存在或不属于当前机构')
@@ -173,7 +189,8 @@ exports.main = async (event = {}) => {
       const pending = await invitations(identity)
       const isOwner = Boolean(identity.orgId && await owner(value(identity.user._id), identity.orgId))
       const isStaff = Boolean(own.grants.length || pending.invitations.length || identity.orgId && await policy.isStaff(db, identity.user._id, identity.orgId))
-      return { success: true, isOwner, isStaff, activeOrgId: identity.orgId, grants: own.grants, invitations: pending.invitations }
+      const ownOrganization=await ownerOrganization(identity)
+      return { success: true, userId:value(identity.user._id), ownOrganization, isOwner, isStaff, activeOrgId: identity.orgId, grants: own.grants, invitations: pending.invitations }
     }
     if (action === 'mine') return await listOwn(identity)
     if (action === 'invitations') return await invitations(identity)

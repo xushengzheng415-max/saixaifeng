@@ -16,7 +16,7 @@
     </div>
 
     <div v-loading="loading" class="tournament-grid">
-      <button class="create-card" type="button" @click="goToCreate">
+      <button class="create-card" type="button" :disabled="loading || Boolean(ownLoadError)" @click="goToCreate">
         <span class="create-border">
           <span class="create-icon" aria-hidden="true"><el-icon><Plus /></el-icon></span>
           <strong>{{ demoModeActive ? '创建虚拟赛事' : '创建我的赛事' }}</strong>
@@ -72,7 +72,8 @@
       </article>
     </div>
 
-    <div v-if="!loading && visibleTournaments.length === 0" class="empty-note">
+    <div v-if="ownLoadError" class="empty-note" role="alert"><span>{{ ownLoadError }}</span><button type="button" @click="loadTournaments">重新加载</button></div>
+    <div v-if="!loading && !ownLoadError && visibleTournaments.length === 0" class="empty-note">
       {{ hasOwnOrganization ? '当前机构还没有赛事。' : '当前没有赛事，可创建自己的赛事。' }}
     </div>
   </section>
@@ -90,6 +91,7 @@ import defaultCover from '../../assets/images/tournament-space-emerald-field-v1.
 
 const router = useRouter()
 const loading = ref(false)
+const ownLoadError = ref('')
 const tournaments = ref([])
 const hasOwnOrganization = ref(false)
 const deletingTournamentId = ref('')
@@ -118,17 +120,35 @@ function getCurrentOrgId() {
 }
 
 async function loadTournaments() {
-  const orgId = getCurrentOrgId()
-  hasOwnOrganization.value = Boolean(orgId)
+  let orgId = ''
+  ownLoadError.value = ''
   loading.value = true
   try {
     let ownTournaments = []
+    try {
+      if(isDemoMode())orgId=getCurrentOrgId()
+      else {
+        const scope=await callFunction('tournamentStaffAccess',{action:'scope'})
+        if(!scope?.success)throw new Error(scope?.error || scope?.message || '本人机构读取失败，请重试')
+        let user={};try{user=JSON.parse(localStorage.getItem('userInfo') || '{}')}catch{}
+        const cachedUserId=String(user._id || user.uid || user.id || localStorage.getItem('userId') || '')
+        if(scope.userId && cachedUserId && scope.userId!==cachedUserId)throw new Error('登录账号已变化，请重新扫码登录')
+        const organization=scope.ownOrganization || (scope.isOwner && scope.activeOrgId?{id:scope.activeOrgId}:null)
+        orgId=String(organization?.id || '')
+        if(orgId){
+          if(scope.activeOrgId!==orgId){const active=await callFunction('tournamentStaffAccess',{action:'activateOrganizerWorkspace',orgId});if(!active?.success)throw new Error(active?.error || '无法进入本人机构，请重试')}
+          localStorage.setItem('userInfo',JSON.stringify({...user,orgId,organizationId:orgId,...(organization.name?{organizationName:organization.name}:{})}))
+          if(organization.name)localStorage.setItem('currentOrganization',JSON.stringify(organization))
+        }
+      }
+      hasOwnOrganization.value=Boolean(orgId)
+    } catch(error){hasOwnOrganization.value=false;ownLoadError.value=error.message || '本人赛事加载失败，请重试'}
     if (orgId) {
       try {
         const ownRows = await queryList('tournaments', { where: { orgId }, orderBy: { createTime: 'desc' } })
         ownTournaments = await Promise.all((ownRows || []).map(resolveTournamentLogo))
       } catch (error) {
-        ElMessage.error(error.message || '本人赛事加载失败')
+        ownLoadError.value=error.message || '本人赛事加载失败，请重试'
       }
     }
     const ownIds = new Set(ownTournaments.map(item => String(item._id)))
