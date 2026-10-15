@@ -8,4 +8,4 @@
 
 验证：tools/test-player-card-legacy-preview.cjs覆盖来源、快照、零号码、无云上传、旧读取兼容及缺失照片不回退旧图；工具原有黑白灰遮罩检查通过。work/mask-check-20261015/test-user-mask.cjs使用实际遮罩，底部25500像素人物alpha全部为0。拟发布webLoginApi以最新线上包作差量基线，仅更新playerCardPublish.cjs/playerCardTemplates.cjs；check-referee-backend-package通过，其他并行改动保持。
 
-正式发布及回读结果待本次完成后补录。
+正式发布完成：平台版本20261015122655-ffa7a230，25项发布文件HTTP/SHA-256回读一致；webLoginApi正式包playerCardPublish.cjs/playerCardTemplates.cjs回下载与源码一致，裁判表防回退检查通过。隔离Edge在实际pingtai域名加载云端原遮罩、使用合成照片和统一动态绘制器验证，底部人物alpha全部为0；不访问真实球员照片、不写业务数据。工作区其他云函数、文档和旧入口待授权改动保持原样。
