@@ -126,11 +126,11 @@ E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run hosting deploy web-
 - 如果正式入口出现 NoSuchKey 404，立即停止其他操作，使用已验证的 `main` 完整构建重新上传 `/admin/`，恢复后再排查原因。
 - 不从脏工作区、未合并功能分支或临时 worktree 部署正式站。
 
-## 七 给其他 Codex 会话的开场指令
+## 八 给其他 Codex 会话的开场指令
 
 > 本项目 PC 改动必须遵循 `docs/PREVIEW_RELEASE_WORKFLOW.md`：功能分支只提交；先合并 `preview` 并部署 `/preview/admin/`；产品负责人验收后再合并 `main`；只有得到当前任务明确授权后才能部署正式 `/admin/`。发布前必须合并同期分支，发布后必须进行 HTTP 与 SHA-256 读回，禁止个人分支直接覆盖正式站。
 
-## 八 合并 main 后清理功能分支
+## 九 合并 main 后清理功能分支
 
 功能分支是短期分支。功能确认完整进入 `main` 后，应删除本地和 Gitee 远端分支，避免旧分支继续被误用或再次部署。
 
