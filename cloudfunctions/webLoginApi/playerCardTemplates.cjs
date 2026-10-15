@@ -350,7 +350,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
         return await publisher.begin(row, Number(event.revision), auth.userId)
       }
       if (action === 'continuePlayerCardTemplatePublish') return await publisher.advance(String(event.jobId || ''))
-      if (action === 'listPlayerCardTemplatePublishPreviews') return await publisher.previews(String(event.jobId || ''),event.offset,event.limit)
+      if (action === 'listPlayerCardTemplatePublishPreviews') return await publisher.previews(String(event.jobId || ''),event.offset,event.limit,{dynamicReview:event.dynamicReview === true})
       if (action === 'confirmPlayerCardTemplatePublish') return await publisher.confirm(String(event.jobId || ''),auth.userId)
       if (action === 'rejectPlayerCardTemplatePublish') return await publisher.reject(String(event.jobId || ''),auth.userId)
       if (action === 'getPlayerCardTemplatePublishStatus') return await publisher.status(tierOf(event.tier), event.preload, event.templateId)

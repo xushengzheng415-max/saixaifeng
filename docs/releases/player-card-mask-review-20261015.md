@@ -1,0 +1,11 @@
+# 立洋杯历史批次遮罩预览修复
+
+用户反馈120张历史成卡底部仍露出衣服。只读核查：立洋杯模板b33bbba0167febe0057db4244051decf、v2、待预览任务7e5e28a0233f00af3d4824b8bf13e65e。云端版本遮罩与用户所附遮罩2.png逐字节相同，SHA-256为4b05b8cbe6969a9397016be4a7694900751eb05156eb633f3d6a2c7cbd27ff8c。当前webLoginApi和worker的playerCardRender.cjs摘要相同，黑白灰裁切检查通过；旧批次预览此前直接返回已保存PNG链接，不重绘。
+
+修复：平台请求历史批次预览时显式dynamicReview=true，既有平台鉴权后，读取该批次不可变版本、原portraitFileId与crop，返回统一动态cardScene。平台绘制完成后展示cardUrl；失败显示错误，不回退到有问题的旧PNG。提示这是历史批次的当前遮罩重绘预览，需由用户退回修改再按动态模板流程发布；不把动态预览等同于旧PNG已经被替换，不显示旧批次确认上线按钮。旧客户端未携带该选项时维持历史读取行为。
+
+未修改模板素材、版本指针、任务状态、120张历史文件或真实球员资料。未自动取消、激活、重新批量制卡或发布模板。
+
+验证：tools/test-player-card-legacy-preview.cjs覆盖来源、快照、零号码、无云上传、旧读取兼容及缺失照片不回退旧图；工具原有黑白灰遮罩检查通过。work/mask-check-20261015/test-user-mask.cjs使用实际遮罩，底部25500像素人物alpha全部为0。拟发布webLoginApi以最新线上包作差量基线，仅更新playerCardPublish.cjs/playerCardTemplates.cjs；check-referee-backend-package通过，其他并行改动保持。
+
+正式发布及回读结果待本次完成后补录。

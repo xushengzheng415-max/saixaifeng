@@ -158,10 +158,12 @@
     <CardPublishProgress v-model:open="progressOpen" :title="form.title" :scope="preloadName(form.preload)+(form.preload.targetName?' · '+form.preload.targetName:'')" :job="publishJob" :running="publishing || confirmingPublish" :preparing="publishPreparing" :error="publishError" @review="openGeneratedReview(true)" @resume="publishJob?.jobId ? resumePublish() : preparePublishPreview()" />
     <el-dialog v-model="reviewDialog" title="成卡预览" width="min(1120px, 96vw)" append-to-body :close-on-click-modal="false">
       <div class="generated-review-meta">已生成 {{ reviewTotal }} 张 · 已载入 {{ reviewCards.length }} 张</div>
+      <el-alert v-if="historicalReview" title="以下按遮罩重新绘制。历史批次请退回修改后，按动态模板流程发布。" type="warning" :closable="false" />
       <div v-if="!reviewLoading && reviewTotal===0" class="generated-review-state" role="status">没有生成可预览的成卡，请退回修改。</div>
       <div class="generated-review-grid">
         <article v-for="card in reviewCards" :key="card.playerId + card.cardId">
-          <img :src="card.imageUrl" :alt="card.name + '成卡预览'">
+          <img v-if="card.cardUrl || (!historicalReview && card.imageUrl)" :src="card.cardUrl || card.imageUrl" :alt="card.name + '成卡预览'">
+          <span v-else class="field-error">{{ card.cardError || '预览未完成，请重试' }}</span>
           <strong>{{ card.name }} · {{ card.jerseyNumber || '无号码' }}号</strong>
           <small>{{ card.cardId }}</small>
         </article>
@@ -172,7 +174,7 @@
         <el-button @click="reviewDialog=false">稍后确认</el-button>
         <el-button :disabled="confirmingPublish || reviewLoading" @click="rejectPreview">退回修改</el-button>
         <el-button v-if="reviewNext !== null" :loading="reviewLoading" @click="loadReviewPage">加载下一页</el-button>
-        <el-button v-else type="primary" :loading="confirmingPublish" :disabled="reviewTotal===0 || reviewCards.length !== reviewTotal" @click="confirmPreload">确认并预装上线</el-button>
+        <el-button v-else-if="!historicalReview" type="primary" :loading="confirmingPublish" :disabled="reviewTotal===0 || reviewCards.length !== reviewTotal" @click="confirmPreload">确认并预装上线</el-button>
       </template>
     </el-dialog>
 
@@ -238,7 +240,7 @@ const assetProgress=ref('')
 const selectedField = ref('name'), selectedBadge = ref('nationality'), previewRef = ref(null)
 const finalPreviewLoading = ref(false), finalPreviewImage = ref('')
 const previewState = ref('idle'), previewError = ref(''), previewOpen = ref(false)
-const reviewDialog=ref(false),reviewCards=ref([]),reviewTotal=ref(0),reviewNext=ref(null),reviewLoading=ref(false),reviewError=ref(''),confirmingPublish=ref(false)
+const reviewDialog=ref(false),reviewCards=ref([]),reviewTotal=ref(0),reviewNext=ref(null),reviewLoading=ref(false),reviewError=ref(''),confirmingPublish=ref(false),historicalReview=ref(false)
 const portraitMaskUrl = ref('')
 const PRELOAD_TYPES = [{ value:'platform', label:'全平台' }, { value:'team', label:'球队' }, { value:'tournament', label:'赛事' }, { value:'player', label:'球员' }]
 const freshPreload = () => ({ type:'platform', targetId:'', targetName:'' })
@@ -620,7 +622,7 @@ async function finishPublish(initial) {
 async function openGeneratedReview(reset=false) {
   if(!publishJob.value?.jobId)return
   progressOpen.value=false;reviewDialog.value=true;reviewError.value=''
-  if(reset){reviewCards.value=[];reviewTotal.value=0;reviewNext.value=0}
+  if(reset){reviewCards.value=[];reviewTotal.value=0;reviewNext.value=0;historicalReview.value=false}
   if(reviewNext.value===null)return
   await loadReviewPage()
 }
@@ -628,7 +630,8 @@ async function loadReviewPage() {
   if(reviewLoading.value||!publishJob.value?.jobId||reviewNext.value===null)return
   reviewLoading.value=true;reviewError.value=''
   try {
-    const result=await request('listPlayerCardTemplatePublishPreviews',{jobId:publishJob.value.jobId,offset:reviewNext.value,limit:24})
+    const result=await request('listPlayerCardTemplatePublishPreviews',{jobId:publishJob.value.jobId,offset:reviewNext.value,limit:24,dynamicReview:true})
+    historicalReview.value=result.historicalBatch===true
     reviewTotal.value=Number(result.total||0)
     reviewCards.value.push(...(result.cards||[]))
     reviewNext.value=result.nextOffset===undefined?null:result.nextOffset

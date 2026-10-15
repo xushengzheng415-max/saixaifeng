@@ -176,12 +176,25 @@ function createPlayerCardPublish({ cloud, scoreForPlayer }) {
       skippedPlayers:(job.skipped||[]), failed:0 }
   }
 
-  async function previews(jobId,offset=0,limit=24) {
+  async function previews(jobId,offset=0,limit=24,options={}) {
     const job=await suite.document(db,suite.JOBS,jobId)
     if(!job || !['review','active'].includes(job.status))throw new Error('成卡尚未进入预览状态')
     const skipped=new Set((job.skipped||[]).map(item=>String(item.playerId)))
     const ids=[...new Set((job.generatedPlayerIds||[]).map(String))].filter(id=>!skipped.has(id))
     const start=Math.max(0,Number(offset)||0),size=Math.max(1,Math.min(24,Number(limit)||24)),page=ids.slice(start,start+size)
+    if(options.dynamicReview === true) {
+      const snapshot=await suite.document(db,suite.VERSIONS,suite.versionId(job.templateId,job.version))
+      if(!snapshot)throw new Error('历史批次模板缺失，请退回修改后重新预览')
+      const cards=await Promise.all(page.map(async playerId=>{
+        const [player,render]=await Promise.all([suite.document(db,'players',playerId),suite.document(db,suite.RENDERS,suite.renderId(playerId,job.templateId,job.version))])
+        if(!player||!render) return {playerId,status:'failed',cardError:'历史球员或制卡记录缺失'}
+        const portraitFileId=render.portraitFileId||render.portraitId
+        if(!portraitFileId)return {playerId,name:String(player.name||''),status:'failed',cardError:'历史照片来源缺失，请退回修改'}
+        const card=await require('./playerCardDynamic.cjs').descriptor(cloud,db,player,snapshot,{portraitFileId,crop:render.crop||{zoom:1,x:0,y:0}})
+        return {...card,playerId,name:String(player.name||''),jerseyNumber:String(player.jerseyNumber??''),imageUrl:'',cardError:card.reason||''}
+      }))
+      return {success:true,status:job.status,jobId,total:ids.length,offset:start,nextOffset:start+page.length<ids.length?start+page.length:null,cards,historicalBatch:true,previewMode:'dynamic-mask'}
+    }
     const rows=await Promise.all(page.map(async playerId=>{
       const [player,render]=await Promise.all([suite.document(db,'players',playerId),suite.document(db,suite.RENDERS,suite.renderId(playerId,job.templateId,job.version))])
       return player&&render?.status==='ready'&&render.fileId?{playerId,name:String(player.name||''),teamId:String(player.teamId||''),jerseyNumber:String(player.jerseyNumber||''),cardId:String(render.cardId||''),fileId:String(render.fileId)}:null
