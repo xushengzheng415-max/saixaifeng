@@ -310,3 +310,8 @@ PC 进球榜、球员红黄牌榜、球队红黄牌榜使用 dataCenter.query �
 ## 平台球员卡发放分层选人（2026-10-15）
 
 PlayerCardStudio左右选人复用已部署dataCenter.catalog的赛事、球队、球员和正式名单投影；只展示并移动原candidates允许的稳定ID，不新增统计计算、不按姓名合并、目录不授予资格。赛事/当前球队/球员三种视图与全平台根节点受卡面原适用范围限制；筛选后勾选和跨赛事选择去重，原服务端预览与发放再次校验。待核定球员由行内核查打开DataCenter的playerAudit页，initialPlayerId只预选并发起原审计读取，不修改等级。关闭后刷新候选和有效选择。专项test-player-card-recipient-tree及test-player-card-recipient-transfer-ui使用隔离样本；正式发布以独立平台发布记录为准，其他端与云函数未由本次更新。
+
+
+## 2026-10-16 平台球员等级核查链路补齐
+
+原auditPlayerCardCatalogPlayer/listPlayerCardCatalogAuditQueue未在正式后端实现，已换为savePlayerCardTemplate内的平台负责人只读workflowAction:auditPlayer/auditQueue。直接复用发放同源的data-center/service.cjs，不另算积分、不改等级；单人指标/覆盖/来源问题及分页扫描由真实处理器验证。生产webLoginApi当日在线包两文件差量发布并回下载核对，其余运行源码及裁判表模块保持；Active/Available，匿名探针AUTH_REQUIRED。独立平台27个文件HTTP与摘要一致。详见 ../releases/platform-player-card-audit-20261016.md；未代用户修改真实资料或发放。
