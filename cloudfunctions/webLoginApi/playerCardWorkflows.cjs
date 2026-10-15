@@ -205,6 +205,7 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
   return async function(event,auth){
     auth={...auth,userId:auth.userId||auth.user?._id||'platform-owner'}
     const action=String(event.workflowAction||'')
+    if(action==='auditPlayer'||action==='auditQueue'){const actor={platformOwner:auth.principalType==='platform_owner'&&auth.user?.isPlatformOwner===true};return require('./playerCardAudit.cjs')[action](db,actor,event,scores())}
     if(action==='list')return list()
     if(action==='create')return create(event,auth)
     if(action==='get')return {success:true,set:await view(await getSet(event.setId))}

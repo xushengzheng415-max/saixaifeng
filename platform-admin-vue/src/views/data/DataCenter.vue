@@ -180,19 +180,19 @@ const issueLabels = { EVENT_COVERAGE_PARTIAL:'比赛事件记录不足', EVENT_P
 const issueLabel = code => issueLabels[code] || '待核验的数据项'
 const issueHint = code => ({MATCH_DURATION_EVIDENCE_MISSING:'直接核实该场比赛的时长及依据。',MATCH_DURATION_MISSING:'到赛事比赛记录中填写比赛时长。',LINEUP_COVERAGE_MISSING:'补齐比赛双方已审核的阵容记录。',MATCH_ORIGIN_UNVERIFIED:'核对比赛来源并完成审核。',EVENT_PLAYER_UNLINKED:'在球员卡核验中关联正确球员。',EVENT_TEAM_UNLINKED:'在球员卡核验中关联正确球队。',EVENT_PLAYER_TEAM_CONFLICT:'核对事件球员与球队归属。',SCORE_MISSING:'补录正式比分并完成比赛审核。',TEAM_ID_MISSING:'补齐比赛的参赛球队。',MATCH_ID_MISSING:'为记录补齐比赛关联。',TEST_PLAYER_IN_MATCH:'检查测试来源标记；测试数据不计入正式统计。',EVENT_COVERAGE_PARTIAL:'补齐比赛事件记录后重新查询。'})[code] || '查看对应比赛记录并补齐缺失信息。'
 async function copyIdentifier(value){try{await navigator.clipboard.writeText(String(value));ElMessage.success('编号已复制')}catch{ElMessage.error('复制失败，请手动选择编号')}}
-async function api(data) { const reply = await callFunction('dataCenter',data); if (!reply.success) throw new Error(reply.error || reply.message || '数据操作失败，请重试'); return reply }
+async function api(data) { const {action,...params}=data;const reply = ['auditPlayer','auditQueue'].includes(action) ? await playerCardTemplateRequest('savePlayerCardTemplate',{...params,workflowAction:action}) : await callFunction('dataCenter',data); if (!reply.success) throw new Error(reply.error || reply.message || '数据操作失败，请重试'); return reply }
 async function loadCatalog() { catalogLoading.value = true; errorText.value = ''; try { const reply = await api({ action:'catalog' }); Object.assign(catalog,reply); platformOwner.value = reply.accessScope === 'platform' } catch (error) { errorText.value = error.message } finally { catalogLoading.value = false } }
 async function auditSelectedPlayer() {
   if(!auditPlayerId.value){ElMessage.warning('请选择球员');return}
   const sequence=++auditSequence
   auditLoading.value=true;playerAudit.value=null;errorText.value=''
-  try{const reply=await playerCardTemplateRequest('auditPlayerCardCatalogPlayer',{playerId:auditPlayerId.value});if(!reply?.success)throw new Error(reply?.error||'球员核验失败');if(sequence!==auditSequence)return;playerAudit.value={...reply,issues:reply.issues||[],careerRows:reply.careerRows||[]}}
+  try{const reply=await api({action:'auditPlayer',playerId:auditPlayerId.value});if(sequence!==auditSequence)return;playerAudit.value={...reply,issues:reply.issues||[],careerRows:reply.careerRows||[]}}
   catch(error){if(sequence===auditSequence)errorText.value=error.message||'球员核验失败，请重试'}finally{if(sequence===auditSequence)auditLoading.value=false}
 }
 async function loadAuditQueue(){
   if(auditQueueLoading.value)return
   auditQueueLoading.value=true;auditQueueError.value=''
-  try{const reply=await playerCardTemplateRequest('listPlayerCardCatalogAuditQueue');if(!reply?.success)throw new Error(reply?.error||'异常球员扫描失败');auditQueue.value={...reply,issues:reply.issues||[]};if(auditPlayerId.value&&playerAudit.value&&!auditQueue.value.issues.some(row=>row.playerId===auditPlayerId.value))await auditSelectedPlayer()}
+  try{let cursor='',issues=[],verifiedCount=0,totalPlayers=0;const seen=new Set();do{const reply=await api({action:'auditQueue',cursor});issues.push(...(reply.issues||[]));verifiedCount+=reply.verifiedCount;totalPlayers=reply.totalPlayers;cursor=reply.nextCursor;if(cursor){if(seen.has(cursor))throw new Error('扫描分页异常，请重试');seen.add(cursor)}}while(cursor);auditQueue.value={issues,verifiedCount,totalPlayers,issueCount:issues.length,generatedAt:new Date().toISOString()};if(auditPlayerId.value&&playerAudit.value&&!issues.some(row=>row.playerId===auditPlayerId.value))await auditSelectedPlayer()}
   catch(error){auditQueueError.value=error.message||'异常球员扫描失败，请重试'}finally{auditQueueLoading.value=false}
 }
 function selectAuditIssue(row){auditPlayerId.value=row.playerId;auditSelectedPlayer()}
