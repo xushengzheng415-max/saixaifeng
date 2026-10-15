@@ -145,8 +145,14 @@ async function loadTournaments() {
     } catch(error){hasOwnOrganization.value=false;ownLoadError.value=error.message || '本人赛事加载失败，请重试'}
     if (orgId) {
       try {
-        const ownRows = await queryList('tournaments', { where: { orgId }, orderBy: { createTime: 'desc' } })
-        ownTournaments = await Promise.all((ownRows || []).map(resolveTournamentLogo))
+        const ownRows=[]
+        for(let skip=0;;){
+          const page=await queryList('tournaments',{where:{orgId},orderBy:{createTime:'desc'},limit:100,skip,throwOnError:true,cache:false})
+          if(!page.length)break
+          ownRows.push(...page);skip+=page.length
+          if(ownRows.length>5000)throw new Error('本人赛事较多，请联系平台分批查看')
+        }
+        ownTournaments = await Promise.all(ownRows.map(resolveTournamentLogo))
       } catch (error) {
         ownLoadError.value=error.message || '本人赛事加载失败，请重试'
       }
