@@ -23,7 +23,7 @@ function prepare(existing,incoming,evidence,approved=false){
  const replaced=new Set(conflicts.flatMap(row=>row.oldEventIds)),now=new Date().toISOString()
  const retained=existing.map(row=>replaced.has(eventId(row))?{...row,status:'superseded',revision:Number(row.revision || 0)+1,supersededAt:now,supersededByPaperReport:evidence.fileId}:row)
  const conflictKeys=new Set(conflicts.map(row=>row.side+'|'+row.playerId))
- const correctedIncoming=incoming.map(row=>conflictKeys.has(key(row))&&oldGroups.get(key(row))?.length===1?{...oldGroups.get(key(row))[0],...row}:row)
+ const correctedIncoming=incoming.map(row=>plainGoal(row)&&conflictKeys.has(key(row))&&oldGroups.get(key(row))?.length===1?{...oldGroups.get(key(row))[0],...row}:row)
  const available=retained.map((row,index)=>({row,index})).filter(({row})=>live(row)),consumed=new Set(),added=[]
  const same=(a,b)=>kind(a)===kind(b)&&text(a.playerId)===text(b.playerId)&&text(a.teamSide)===text(b.teamSide)&&Number(a.minute)===Number(b.minute)&&((plainGoal(a)&&plainGoal(b))||text(a.outPlayerId || a.assistPlayerId)===text(b.outPlayerId || b.assistPlayerId))
  for(const row of correctedIncoming){const found=available.find(({row:old,index})=>!consumed.has(index)&&(eventId(old)===eventId(row)||same(old,row)));if(found)consumed.add(found.index);else added.push(row)}
