@@ -1,6 +1,7 @@
 'use strict'
 const { readAll, readByIds } = require('./reader.cjs')
 const { readPlayerSupportTotals } = require('./support.cjs')
+const scoreRuleStore=require('./score-rule-store.cjs')
 const id = value => value == null ? '' : String(value).trim()
 
 function error(code, message) { const value = new Error(message); value.code = code; return value }
@@ -38,7 +39,8 @@ function createDataService(db) {
       try{support=(await readPlayerSupportTotals(db,[playerId])).get(playerId)||support}
       catch(failure){issues.push({code:'SUPPORT_READ_FAILED',playerId})}
     }
-    const built=createPlayerCardSnapshot(rows,{playerId,fullCareer,identityVerified:Boolean(profile),testIdentity,
+    const ruleContext=options.ruleContext||await scoreRuleStore.context(db,[playerId])
+    const built=createPlayerCardSnapshot(rows,{playerId,fullCareer,rules:ruleContext.rules,retainedTier:ruleContext.floorById.get(playerId),identityVerified:Boolean(profile),testIdentity,
       matchCount:result.summary.matchCount,metricVersion:result.metricVersion,dataVersion:result.dataVersion,mode:result.scope.mode,
       coverageStatus:coverageComplete?'complete':'partial',supportDrops:support.drops,
       supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues})
@@ -55,9 +57,10 @@ function createDataService(db) {
     const profileById=new Map(profiles.map(p=>[id(p._id),p]))
     let supportTotals=new Map(), supportFailure=false
     try{supportTotals=await readPlayerSupportTotals(db,playerIds)}catch(failure){supportFailure=true}
+    const ruleContext=await scoreRuleStore.context(db,playerIds)
     return new Map(await Promise.all(playerIds.map(async playerId=>{
       const profile=profileById.get(playerId)
-      const built=await buildPlayerCard(result,playerId,{fullCareer:true,profile,team:teamById.get(id(profile?.teamId||profile?.teamCode)),support:supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null},supportFailure})
+      const built=await buildPlayerCard(result,playerId,{fullCareer:true,profile,ruleContext,team:teamById.get(id(profile?.teamId||profile?.teamCode)),support:supportTotals.get(playerId)||{drops:null,status:'unverified',dataVersion:null},supportFailure})
       return [playerId,built.card]
     })))
   }

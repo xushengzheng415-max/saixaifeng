@@ -1,14 +1,15 @@
 'use strict'
 const { createDataService } = require('./data-center/service.cjs')
+const scoreRuleStore=require('./data-center/score-rule-store.cjs')
 const { readPlayerSupportTotals, EMPTY_SUPPORT_VERSION } = require('./data-center/support.cjs')
 
-async function applyPlayerCardScores(players,career,supportTotals){
+async function applyPlayerCardScores(players,career,supportTotals,ruleContext=null){
   const {createPlayerCardSnapshot}=await import('./data-center/statistics.mjs')
   for(const player of players){
     const playerId=String(player.playerId||''),rows=(career.players||[]).filter(row=>row.playerId===playerId)
     const support=supportTotals instanceof Map?(supportTotals.get(playerId)||{drops:0,status:'complete',dataVersion:EMPTY_SUPPORT_VERSION}):{drops:null,status:'unverified',dataVersion:null}
     const complete=career.coverage?.playerCardComplete?.[playerId]??career.coverage?.cardScoreScopeComplete
-    const {card,total}=createPlayerCardSnapshot(rows,{playerId,fullCareer:true,identityVerified:rows.length>0,testIdentity:false,matchCount:career.summary?.matchCount||0,metricVersion:career.metricVersion,dataVersion:career.dataVersion,mode:'official',coverageStatus:complete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues:career.issues||[]})
+    const {card,total}=createPlayerCardSnapshot(rows,{playerId,rules:ruleContext?.rules,retainedTier:ruleContext?.floorById.get(playerId),fullCareer:true,identityVerified:rows.length>0,testIdentity:false,matchCount:career.summary?.matchCount||0,metricVersion:career.metricVersion,dataVersion:career.dataVersion,mode:'official',coverageStatus:complete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues:career.issues||[]})
     player.playerCard=card
     const ready=card.status==='ready'
     player.cardTier=ready?card.tier:null;player.cardPoints=ready?card.points:null;player.cardScoreVersion=card.scoreVersion
@@ -26,7 +27,7 @@ async function enrichFanPlayerCards(db, players) {
       createDataService(db).query({ platformOwner:true, teamIds:[], tournamentIds:[] }, { mode:'official' }),
       readPlayerSupportTotals(db)
     ])
-    return applyPlayerCardScores(players, career, supportTotals)
+    return applyPlayerCardScores(players, career, supportTotals,await scoreRuleStore.context(db,players.map(row=>String(row.playerId||''))))
   } catch (error) {
     console.warn('[fanPlayerCardScores]', error.code || 'DATA_READ_FAILED')
     return players
@@ -42,7 +43,7 @@ async function loadOfficialFanScope(db) {
     createDataService(db).query({ platformOwner:true, teamIds:[], tournamentIds:[] }, { mode:'official' }),
     readPlayerSupportTotals(db)
   ])
-  return { career, supportTotals, matchIds:officialMatchIds(career) }
+  return { career, supportTotals, ruleContext:await scoreRuleStore.context(db,[...new Set((career.players||[]).map(row=>row.playerId))]),matchIds:officialMatchIds(career) }
 }
 
 module.exports = { enrichFanPlayerCards, applyPlayerCardScores, officialMatchIds, loadOfficialFanScope }

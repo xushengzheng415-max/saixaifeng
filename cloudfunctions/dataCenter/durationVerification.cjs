@@ -1,5 +1,6 @@
 'use strict'
 const crypto = require('node:crypto')
+const {readByIds}=require('./shared/reader.cjs')
 const { error } = require('./shared/service.cjs')
 const first = reply => Array.isArray(reply.data) ? reply.data[0] : reply.data
 const text = value => String(value == null ? '' : value).trim()
@@ -11,7 +12,12 @@ async function inspectDuration(db, actor, event) {
   if (!match) throw error('MATCH_NOT_FOUND','比赛不存在，请刷新')
   const { resolveMatchDurationEvidence } = await import('./shared/playing-time.mjs')
   const evidence = resolveMatchDurationEvidence(match)
-  return { success:true, matchId:match._id, matchName:[match.homeTeamName || '主队',match.awayTeamName || '客队'].join(' vs '), tournamentId:match.tournamentId, revision:revision(match), editable:evidence.status !== 'ready', totalMinutes:evidence.totalMinutes, verification:match.durationVerification || null }
+  const divisionId=text(match.divisionId||match.division),division=divisionId&&divisionId!=='default'?(await readByIds(db,'divisions','_id',[divisionId]))[0]:null
+  const owner=division||(await readByIds(db,'tournaments','_id',[text(match.tournamentId)]))[0]
+  const rules=owner?.activeRulesSnapshot||owner?.rulesSnapshot||owner||{},version=text(owner?.activeRulesVersion||owner?.rulesVersion)
+  let suggestion=null
+  if(owner&&(owner.rulesLocked===true||owner.ruleFinalized===true||owner.activeRulesVersion)&&version){const basis=rules.matchMinutesBasis==='total'?'total':['halves','single'].includes(rules.periodMode)?'period':'';const minutes=Number(rules.matchMinutes),periodCount=rules.periodMode==='halves'?2:Number(rules.singlePeriodCount),total=basis==='total'?minutes:basis==='period'?minutes*periodCount:0;if(minutes>0&&minutes<=300&&total>0&&total<=600&&(basis==='total'||Number.isInteger(periodCount)&&periodCount>0&&periodCount<=10))suggestion={minutes,minutesBasis:basis,periodCount:basis==='period'?periodCount:1,totalMinutes:total,sourceName:text(owner.name||owner.divisionName||'竞赛规程'),sourceVersion:version,reason:`按已锁定竞赛规程${version}，${basis==='period'?`每半场／节${minutes}分钟，共${periodCount}段`:`整场${minutes}分钟`}；人工核实该场适用。`}}
+  return { success:true, matchId:match._id, matchName:[match.homeTeamName || '主队',match.awayTeamName || '客队'].join(' vs '), tournamentId:match.tournamentId, revision:revision(match), suggestion, editable:evidence.status !== 'ready', totalMinutes:evidence.totalMinutes, verification:match.durationVerification || null }
 }
 async function verifyDuration(db, actor, event) {
   authorize(actor)

@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),path=require('node:path'),{fixture}=require('./test-player-card-audit-endpoint.cjs')
+async function run(root=path.resolve('cloudfunctions/webLoginApi')){const f=fixture(root,{writable:true}),call=(workflowAction,data={})=>f.handler({action:'savePlayerCardTemplate',workflowAction,...data}),{createMatchDurationSnapshot}=await import('../cloudfunctions/dataCenter/shared/playing-time.mjs')
+  const base=f.data.matches[0];f.data.matches=Array.from({length:10},(_,n)=>{const id='game-'+n;return {...structuredClone(base),_id:id,durationRulesSnapshot:createMatchDurationSnapshot({matchId:id,minutes:90,minutesBasis:'total',source:{kind:'match',id,version:'fixture'},frozenAt:'2026-10-01T00:00:00Z',kickoffAt:'2026-10-01T01:00:00Z'})}})
+  const service=require(path.join(root,'data-center/service.cjs')).createDataService(f.db),old=(await service.playerCardsForAuthorizedPlayers(['p1'])).get('p1');assert.equal(old.tier,'silver');assert.equal(old.points,50)
+  const baseline=JSON.stringify({players:f.data.players,matches:f.data.matches}),initial=await call('scoreRulesRead');assert.equal(initial.active.version,'football-player-card-points/2');assert.equal((f.data.platform_settings||[]).length,0,'read does not initialize configuration')
+  let bad=await call('scoreRulesSave',{revision:0,parameters:{...initial.active.parameters,goldAt:1},reason:'非法规则验收'});assert.equal(bad.success,false)
+  const parameters={...initial.active.parameters,appearancePoints:1,startPoints:0,minutesPerPoint:300,goalPoints:1,goalCapPercent:10,supportDropsPerPoint:20,silverAt:500,goldAt:1000}
+  let saved=await call('scoreRulesSave',{revision:0,parameters,reason:'验收积分规则草稿'});assert.equal(saved.success,true);assert.equal(saved.active.version,initial.active.version)
+  assert.equal((await call('scoreRulesBegin',{revision:saved.revision,proof:'forged'})).success,false)
+  let trial=await call('scoreRulesPreview',{revision:saved.revision});assert.equal(trial.success,true);assert.ok(trial.summary.retained>=1);assert.equal(trial.changes.find(x=>x.playerId==='p1').afterTier,'silver');assert.equal((await service.playerCardsForAuthorizedPlayers(['p1'])).get('p1').points,50,'trial does not activate new values')
+  let begin=await call('scoreRulesBegin',{revision:saved.revision,proof:trial.proof});assert.equal(begin.success,true);assert.equal((await call('scoreRulesBegin',{revision:saved.revision,proof:trial.proof})).job.id,begin.job.id,'begin retry idempotent')
+  const original=structuredClone(f.data.matches[0]);f.data.matches[0].homeScore=1;assert.equal((await call('scoreRulesContinue',{jobId:begin.job.id})).success,false,'changed source data blocks activation');assert.equal((await call('scoreRulesRead')).active.version,initial.active.version);f.data.matches[0]=original
+  let job=begin.job;while(job.status!=='complete'){const r=await call('scoreRulesContinue',{jobId:job.id});assert.equal(r.success,true,r.error);job=r.job}
+  const active=await call('scoreRulesRead');assert.equal(active.history.length,1);assert.equal(active.draft,null)
+  const now=(await service.playerCardsForAuthorizedPlayers(['p1'])).get('p1');assert.equal(now.points,13);assert.equal(now.tier,'silver');assert.equal(now.calculatedTier,'bronze');assert.equal(now.retainedTier,'silver');assert.equal(now.canChangeBackground,false,'retained card does not bypass 100 actual points');assert.notEqual(now.dataVersion,old.dataVersion)
+  assert.equal((await call('scoreRulesSave',{revision:0,parameters,reason:'旧版本写入验收'})).success,false)
+  f.setAuth({success:true,principalType:'user',user:{_id:'user'}});for(const action of ['scoreRulesRead','scoreRulesSave','scoreRulesPreview','scoreRulesBegin','scoreRulesContinue'])assert.equal((await call(action)).success,false)
+  assert.equal(JSON.stringify({players:f.data.players,matches:f.data.matches}),baseline,'rule publication never rewrites players or matches')
+  console.log('PASS: defaults unchanged; validated owner-only drafts; proof-bound canonical impact trial; stale-data blocking; idempotent staged activation; floor preserves silver; actual-points entitlement; no player/match writes')
+}
+run(process.argv[2]?path.resolve(process.argv[2]):undefined).catch(error=>{console.error(error);process.exitCode=1})

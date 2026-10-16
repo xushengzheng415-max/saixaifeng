@@ -19,7 +19,7 @@ function playerCardSnapshot(score, context = {}) {
   const coverage = context.playerTotal?.coverage || {}
   const metrics = context.playerTotal?.metrics || score.metrics || {}
   const ready = score.status === 'ready'
-  const levelStart = ready ? score.tier === 'gold' ? 100 : score.tier === 'silver' ? 45 : 0 : null
+  const levelStart = ready ? (score.levelStart ?? (score.tier === 'gold' ? 100 : score.tier === 'silver' ? 45 : 0)) : null
   const nextAt = ready ? score.nextAt : null
   const progress = ready ? { levelStart, nextAt, pointsToNext:score.pointsToNext,
     percent:nextAt == null ? 100 : Math.max(0,Math.min(100,Math.round((score.points-levelStart)*100/(nextAt-levelStart)))) } : null

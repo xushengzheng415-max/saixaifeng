@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const source = path.join(root,'cloudfunctions/dataCenter/shared')
 const consumers = ['getMiniWorkspace','webLoginApi','resultCenter','updateMatch','serviceMatchWorkflow','playerCardPublishWorker']
-const allFiles = ['reader.cjs','statistics.mjs','match-events.mjs','service.cjs','presentation.cjs','support.cjs','player-card-snapshot.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs']
+const allFiles = ['reader.cjs','statistics.mjs','match-events.mjs','service.cjs','presentation.cjs','support.cjs','player-card-snapshot.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs','score-rules.cjs','score-rule-store.cjs']
 const requestedFiles = process.argv.filter(arg => arg.startsWith('--file=')).map(arg => arg.slice(7))
 if (requestedFiles.some(file => !allFiles.includes(file))) throw new Error('Unknown shared file')
 const files = requestedFiles.length ? requestedFiles : allFiles
@@ -13,7 +13,7 @@ let mismatch = false
 for (const consumer of consumers) {
   const destination = path.join(root,'cloudfunctions',consumer,'data-center')
   if (!check) await fs.mkdir(destination,{ recursive:true })
-  const required = ['updateMatch','serviceMatchWorkflow'].includes(consumer) ? files.filter(file => ['playing-time.mjs','substitution.mjs','statistics.mjs','match-events.mjs','player-card-snapshot.cjs'].includes(file)) : files
+  const required = ['updateMatch','serviceMatchWorkflow'].includes(consumer) ? files.filter(file => ['playing-time.mjs','substitution.mjs','statistics.mjs','match-events.mjs','player-card-snapshot.cjs','score-rules.cjs'].includes(file)) : files
   for (const file of required) {
     const original = await fs.readFile(path.join(source,file))
     if (check) {

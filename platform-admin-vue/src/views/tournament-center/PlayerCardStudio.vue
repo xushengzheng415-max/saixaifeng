@@ -13,14 +13,14 @@
             <div class="tile-actions"><el-button type="primary" @click="openProject(set._id)">{{ set.status==='published'&&!set.hasDraft?'编辑新版':'继续制作' }}</el-button><el-button v-if="canIssue(set)" @click="openIssue(set)">发放</el-button></div>
           </article>
         </div>
-        <section v-if="legacyTiles.length" class="existing-materials" :class="{'after-projects':sets.length}">
-          <h2>已有卡面</h2>
+        <details v-if="legacyTiles.length" class="existing-materials legacy-import" :open="!sets.length">
+          <summary>旧版素材（{{ legacy.length }}）</summary>
           <div class="project-gallery"><article v-for="tile in legacyTiles" :key="tile.id" class="project-tile">
             <div class="project-pictures"><figure v-for="style in tile.styles" :key="style.key"><el-image v-if="style.backgroundUrl" :src="style.backgroundUrl" fit="contain" :alt="tile.title+' '+tierLabel(style.key)"><template #error><span class="picture-missing">加载失败</span></template></el-image><span v-else class="picture-missing">待上传</span><figcaption>{{ tierLabel(style.key) }}</figcaption></figure></div>
             <div class="tile-heading"><h3>{{ tile.title }}</h3></div><p class="tile-scope">{{ kindLabel(tile) }} · {{ scopeLabel(tile.preload) }}</p>
-            <p class="tile-next">{{ nextMaterialStep(tile.styles) }}</p><div class="tile-actions"><el-button type="primary" @click="newProject(tile)">继续制作</el-button></div>
+            <p class="tile-next">{{ nextMaterialStep(tile.styles) }}</p><div class="tile-actions"><el-button type="primary" @click="newProject(tile)">沿用新建</el-button></div>
           </article></div>
-        </section>
+        </details>
         <el-empty v-if="!loading&&!sets.length&&!legacyTiles.length" description="还没有卡面，请新建制卡" :image-size="70" />
       </template>
       <template v-else-if="pane==='library'">
@@ -51,10 +51,10 @@
       </template>
       <template v-else-if="step===4"><el-alert title="样式已发布" type="success" :closable="false" /><div class="studio-actions"><el-button @click="project=null;changePane('library')">查看样式库</el-button><el-button v-if="canIssue(project)" type="primary" @click="openIssue(project)">选择名单发放</el-button></div></template>
     </div>
-    <el-dialog v-model="createOpen" :title="usingExisting?'继续制作':'新建制卡'" width="min(620px, 94vw)" :close-on-click-modal="false">
-      <p v-if="usingExisting" class="continue-note">已带入原有素材与排版，确认后继续编辑。</p>
+    <el-dialog v-model="createOpen" :title="usingExisting?'沿用素材新建':'新建制卡'" width="min(620px, 94vw)" :close-on-click-modal="false">
+      <p v-if="usingExisting" class="continue-note">复制旧素材与排版，新建制卡项目。</p>
       <el-form label-position="top"><el-form-item label="卡片类型"><el-radio-group v-model="creation.kind" @change="changeKind"><el-radio-button value="progression">金银铜升级套系</el-radio-button><el-radio-button value="honor">荣誉／特殊单卡</el-radio-button></el-radio-group></el-form-item><el-form-item label="名称"><el-input v-model.trim="creation.title" maxlength="24" /></el-form-item><el-form-item label="适用范围"><el-select v-model="creation.preload.type" @change="resetTargets"><el-option label="全平台" value="platform" /><el-option label="赛事／赛季" value="tournament" /><el-option v-if="creation.kind==='honor'" label="球队" value="team" /><el-option v-if="creation.kind==='honor'" label="个人" value="player" /></el-select></el-form-item><el-form-item v-if="creation.preload.type!=='platform'" label="选择对象"><el-select v-model="creation.preload.targetId" filterable remote :remote-method="searchTargets" :loading="targetsLoading" @visible-change="open=>open&&searchTargets('')"><el-option v-for="target in targets" :key="target.id" :value="target.id" :label="target.name" /><template #footer><el-button v-if="targetCursor" link @click="moreTargets">加载更多</el-button></template></el-select></el-form-item><el-form-item label="沿用旧素材"><el-select v-model="creation.importTemplateIds" multiple clearable><el-option v-for="item in legacy" :key="item.id" :value="item.id" :label="item.title" /></el-select></el-form-item></el-form>
-      <template #footer><el-button @click="createOpen=false">取消</el-button><el-button type="primary" :loading="busy" @click="create">{{ usingExisting?'开始编辑':'创建项目' }}</el-button></template>
+      <template #footer><el-button @click="createOpen=false">取消</el-button><el-button type="primary" :loading="busy" @click="create">{{ usingExisting?'创建草稿':'创建项目' }}</el-button></template>
     </el-dialog>
     <el-dialog class="recipient-dialog" v-model="issueOpen" :title="issueProject?.title || '发放球员卡'" width="min(1180px, 96vw)" :close-on-click-modal="false" :show-close="!issuing">
       <template v-if="!issueJob && !issueReview">

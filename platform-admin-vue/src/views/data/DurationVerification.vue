@@ -2,7 +2,7 @@
   <el-button v-if="eligible && allowed" link type="primary" @click="open">核实时长</el-button>
   <el-dialog v-model="visible" title="核实时长" width="min(460px, 92vw)" append-to-body :close-on-click-modal="false" :before-close="close">
     <div v-loading="loading">
-      <p>{{ info.matchName }}</p>
+      <p>{{ info.matchName }}</p><p v-if="info.suggestion" class="regulation-source">{{ info.suggestion.sourceName }}：整场 {{ info.suggestion.totalMinutes }} 分钟；请确认该场适用。</p>
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <el-form label-position="top">
         <el-form-item label="时长单位"><el-radio-group v-model="form.minutesBasis"><el-radio value="period">每节／半场</el-radio><el-radio value="total">整场</el-radio></el-radio-group></el-form-item>
@@ -27,6 +27,6 @@ const form=reactive({minutesBasis:'period',minutes:null,periodCount:2,reason:''}
 const total=computed(()=>form.minutes ? form.minutes*(form.minutesBasis==='period'?form.periodCount:1):null)
 function close(done){if(!saving.value)done()}
 async function api(data){const reply=await callFunction('dataCenter',data);if(!reply.success)throw new Error(reply.error||'核实失败，请重试');return reply}
-async function open(){visible.value=true;loading.value=true;error.value='';info.value={};Object.assign(form,{minutesBasis:'period',minutes:null,periodCount:2,reason:''});try{info.value=await api({action:'inspectDuration',matchId:props.issue.matchId});if(!info.value.editable)error.value='此比赛已核实，请刷新列表'}catch(e){error.value=e.message}finally{loading.value=false}}
+async function open(){visible.value=true;loading.value=true;error.value='';info.value={};Object.assign(form,{minutesBasis:'period',minutes:null,periodCount:2,reason:''});try{info.value=await api({action:'inspectDuration',matchId:props.issue.matchId});if(info.value.suggestion){const suggested=info.value.suggestion;Object.assign(form,{minutesBasis:suggested.minutesBasis,minutes:suggested.minutes,periodCount:suggested.periodCount,reason:suggested.reason})}if(!info.value.editable)error.value='此比赛已核实，请刷新列表'}catch(e){error.value=e.message}finally{loading.value=false}}
 async function save(){if(saving.value)return;saving.value=true;error.value='';try{await api({action:'verifyDuration',matchId:props.issue.matchId,expectedRevision:info.value.revision,...form});visible.value=false;ElMessage.success('时长已核实');emit('saved')}catch(e){error.value=e.message}finally{saving.value=false}}
 </script>

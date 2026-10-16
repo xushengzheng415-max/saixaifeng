@@ -1,3 +1,4 @@
+import scoreRuleTools from './score-rules.cjs'
 import { eventType, effectiveEvents, calculateMatchEventScore, eventId, revision, cancelled } from './match-events.mjs'
 export { eventType, effectiveEvents, calculateMatchEventScore } from './match-events.mjs'
 import crypto from 'node:crypto'
@@ -346,6 +347,7 @@ export const PLAYER_CARD_SCORE_VERSION = 'football-player-card-points/2'
 export const PLAYER_CARD_ENTITLEMENT_VERSION = 'football-player-card-entitlements/2'
 
 export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
+  const rule=metadata.rules||scoreRuleTools.defaults(),ruleParameters=scoreRuleTools.parameters(rule.parameters)
   const fields = ['appearances','starts','minutesPlayed','goals']
   const metrics = playerTotal?.metrics || {}
   const coverage = playerTotal?.coverage || {}
@@ -353,24 +355,27 @@ export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
   const supportDrops = metadata.supportDrops
   const supportDataVersion = metadata.supportDataVersion || null
   const dataVersion = supportDataVersion && metadata.dataVersion
-    ? crypto.createHash('sha256').update(JSON.stringify([metadata.dataVersion,supportDataVersion])).digest('hex').slice(0,24)
+    ? crypto.createHash('sha256').update(JSON.stringify(rule.version===PLAYER_CARD_SCORE_VERSION?[metadata.dataVersion,supportDataVersion]:[metadata.dataVersion,supportDataVersion,rule.version])).digest('hex').slice(0,24)
     : null
-  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion, careerDataVersion:metadata.dataVersion || null, supportDataVersion, scope:'career', mode:'official' }
+  const base = { scoreVersion:rule.version, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion, careerDataVersion:metadata.dataVersion || null, supportDataVersion, scope:'career', mode:'official' }
   if (metadata.coverageStatus && metadata.coverageStatus !== 'complete') return { ...base, status:'unverified', missing:['dataCoverage'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   if (metadata.supportCoverageStatus !== 'complete' || !Number.isSafeInteger(supportDrops) || supportDrops < 0 || !supportDataVersion) return { ...base, status:'unverified', missing:['supportDrops'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   if (missing.length || metrics.starts > metrics.appearances) {
     return { ...base, status:'unverified', missing:metrics.starts > metrics.appearances ? [...new Set([...missing,'starts'])] : missing, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
   }
   const appearances = metrics.appearances, starts = metrics.starts, minutesPlayed = metrics.minutesPlayed, goals = metrics.goals
-  const foundation = 2 * appearances + starts + Math.floor(minutesPlayed / 45)
-  const goalBonus = Math.min(2 * goals, Math.floor(foundation / 5))
+  const foundation = ruleParameters.appearancePoints * appearances + ruleParameters.startPoints * starts + Math.floor(minutesPlayed / ruleParameters.minutesPerPoint)
+  const goalBonus = Math.min(ruleParameters.goalPoints * goals, Math.floor(foundation * ruleParameters.goalCapPercent / 100))
   const careerPoints = foundation + goalBonus
-  const supportPoints = Math.floor(supportDrops / 10)
+  const supportPoints = Math.floor(supportDrops / ruleParameters.supportDropsPerPoint)
   const points = careerPoints + supportPoints
   if (!Number.isSafeInteger(points)) return { ...base, status:'unverified', missing:fields, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
-  const tier = points >= 100 ? 'gold' : points >= 45 ? 'silver' : 'bronze'
-  const nextAt = tier === 'gold' ? null : tier === 'silver' ? 100 : 45
-  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, careerPoints, supportDrops, supportPoints, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
+  const calculatedTier = points >= ruleParameters.goldAt ? 'gold' : points >= ruleParameters.silverAt ? 'silver' : 'bronze'
+  const ranks=['bronze','silver','gold'],retainedTier=ranks.includes(metadata.retainedTier)?metadata.retainedTier:'bronze'
+  const tier=ranks[Math.max(ranks.indexOf(calculatedTier),ranks.indexOf(retainedTier))]
+  const nextAt = tier === 'gold' ? null : tier === 'silver' ? ruleParameters.goldAt : ruleParameters.silverAt
+  const levelStart=tier==='gold'?ruleParameters.goldAt:tier==='silver'?ruleParameters.silverAt:0
+  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, careerPoints, supportDrops, supportPoints, points, tier, calculatedTier,retainedTier:tier!==calculatedTier?retainedTier:null,levelStart,nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
 }
 
 // Every API uses this same constructor, including single-player, batch and fan
@@ -380,7 +385,7 @@ export function createPlayerCardSnapshot(rows, metadata = {}) {
   if (!rows.length && metadata.matchCount > 0) for (const field of Object.keys(total.metrics)) {
     total.metrics[field] = null; total.coverage[field] = 'not_collected'
   }
-  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION,
+  const base = { scoreVersion:metadata.rules?.version||PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION,
     metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion:metadata.dataVersion || null,
     mode:metadata.mode || 'official', points:null,tier:null,canReplacePhoto:false,canChangeBackground:false }
   let score = metadata.fullCareer === true ? calculatePlayerCardPoints(total,metadata)
