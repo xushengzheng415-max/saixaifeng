@@ -4091,7 +4091,7 @@ async function handleLegacyOrganizerFunction(functionName, functionParams, event
   const collection = functionName.endsWith('Team') ? 'teams' : 'players'
   const id = params.id || params._id
   if (operation === 'delete') return handleDbQuery({ ...base, collection, operation, id })
-  const teamFields = ['name', 'shortName', 'province', 'provinceCode', 'city', 'cityCode', 'cityName', 'teamType', 'teamCode', 'ownerPhone', 'creatorPhone', 'contactPhone', 'phoneNumber', 'phone', 'mobile', 'establishedDate', 'logo', 'logoUrl', 'description', 'home', 'claimStatus', 'source', 'playerCount']
+  const teamFields = ['name', 'shortName', 'province', 'provinceCode', 'city', 'cityCode', 'cityName', 'teamType', 'teamCode', 'ownerPhone', 'creatorPhone', 'contactPhone', 'phoneNumber', 'phone', 'mobile', 'establishedDate', 'logo', 'logoUrl', 'logoFileID', 'logoFileId', 'description', 'home', 'claimStatus', 'source', 'playerCount']
   const playerFields = ['name', 'jerseyNumber', 'position', 'teamId', 'teamName', 'photo', 'photoUrl', 'height', 'weight', 'birthday', 'birthDate', 'contactName', 'contactPhone']
   const data = pickLegacyFields(params, collection === 'teams' ? teamFields : playerFields)
   return handleDbQuery({ ...base, collection, operation, id, data })
@@ -4959,6 +4959,11 @@ async function handleDbQuery(event) {
           if (delegatedStaff && !await staffWriteReferencesAllowed(db, collection, after, organizerScope)) {
             return { success:false, code:'TOURNAMENT_STAFF_SCOPE_DENIED', error:'资料关联了未授权的赛事或球队' }
           }
+        }
+        if (collection === 'teams') {
+          before = before || await readDocumentOrNull(db, collection, id)
+          nextUpdateData = require('./teamLogoPatch.cjs').normalizeTeamLogoPatch(before || {}, nextUpdateData)
+          if (nextUpdateData.logoVersion !== undefined && nextUpdateData.logoVersion !== before?.logoVersion) nextUpdateData.updateTime = db.serverDate()
         }
         if (!await competitionPlanMutationAllowed(db, collection, { ...(before || {}), ...(nextUpdateData || {}) })) {
           return { success: false, error: '竞赛方案已经锁定，不能直接修改已确认赛程', code: 'COMPETITION_PLAN_LOCKED' }
