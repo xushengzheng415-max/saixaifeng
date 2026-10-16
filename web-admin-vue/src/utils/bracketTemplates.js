@@ -1,7 +1,7 @@
 // Shared presentation templates. Tournament facts always come from source links;
 // these templates never create pairings, infer winners, or assign match numbers.
-const geometry=Object.freeze({cardWidth:320,cardHeight:216,columnGap:112,rowGap:52,padding:18,headerSpace:60,homeAnchor:78,awayAnchor:126})
-export const BRACKET_TEMPLATE_VERSION='football-bracket-template/1'
+const geometry=Object.freeze({cardWidth:230,cardHeight:104,columnGap:64,rowGap:42,padding:24,headerSpace:40,homeAnchor:27,awayAnchor:77})
+export const BRACKET_TEMPLATE_VERSION='football-bracket-template/2'
 export const BRACKET_TEMPLATES=Object.freeze({
   group_knockout:Object.freeze({id:'group_knockout',name:'小组出线淘汰',firstColumn:'小组出线对阵',middleColumn:'晋级对阵',lastColumn:'决赛',geometry}),
   single_elimination:Object.freeze({id:'single_elimination',name:'直接淘汰',firstColumn:'首轮对阵',middleColumn:'晋级对阵',lastColumn:'决赛',geometry}),
