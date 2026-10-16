@@ -4583,9 +4583,11 @@ async function handlePaperRefereeReport(event, confirming) {
         const raw=String(row[key] || '').trim().replace(/[′'’]/g,'')
         if (!raw) continue
         if (!/^\d{1,3}(?:\s*[,，;；、]\s*\d{1,3})*$/.test(raw)) return {success:false,error:'事件分钟请填数字，多次用逗号分隔'}
-        for (const value of raw.split(/[,，;；、]/)) {
+        const minuteOccurrences=new Map()
+      for (const value of raw.split(/[,，;；、]/)) {
           const minute=Number(value.trim()); if (minute>150) return {success:false,error:'事件分钟须在0至150之间'}
-          const eventId='paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|${side}|${entry.playerId}|${type}|${minute}`).digest('hex').slice(0,24)
+          const occurrence=minuteOccurrences.get(minute) || 0;minuteOccurrences.set(minute,occurrence+1)
+          const eventId='paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|${side}|${entry.playerId}|${type}|${minute}${occurrence ? '|occurrence:'+occurrence : ''}`).digest('hex').slice(0,24)
           entries.push({eventId,type,minute,teamId:sourceTeamId,teamSide:side,playerId:entry.playerId,playerName:entry.name,playerNumber:entry.number,source:'organizer_paper_report',evidenceFileId:evidence.fileId})
         }
       }
