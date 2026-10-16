@@ -1,4 +1,5 @@
 var workspace = require('../../../utils/workspace')
+var pointsUI = require('../../../utils/player-points')
 
 function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 
@@ -8,7 +9,9 @@ function display(value, fallback) {
 }
 
 Page({
+  ...pointsUI.methods,
   data: {
+    ...pointsUI.data,
     loading: true,
     errorText: '',
     playerId: '',

@@ -9,6 +9,8 @@
       <view class="info-section"><text class="player-name">{{player.name}}</text><view wx:if="{{player.hasJerseyName}}" class="jersey-name">{{player.jerseyName}}</view><view wx:if="{{player.hasPosition}}" class="position-tag"><text class="tag-text">{{player.positionLabel}}</text></view><view class="profile-state-tag">{{player.profileStatusText}}</view><view class="card-score-line"><text>{{cardScore.level}}</text><text>{{cardScore.points}} 分</text><text>{{cardScore.progress}}</text></view><view wx:if="{{cardScore.hasProgress}}" class="card-grade-progress"><view style="width: {{cardScore.progressWidth}};"></view></view></view>
     </view>
 
+    <view class="points-entry"><button bindtap="openPoints">积分明细</button></view>
+
     <view class="core-stats-card">
       <view class="stats-grid-four"><view class="stat-box"><text class="stat-number">{{player.heightText}}</text><text class="stat-unit">{{player.heightUnit}}</text><text class="stat-name">身高</text></view><view class="stat-box"><text class="stat-number">{{player.weightText}}</text><text class="stat-unit">{{player.weightUnit}}</text><text class="stat-name">体重</text></view><view class="stat-box"><text class="stat-number">{{player.ageText}}</text><text class="stat-unit">岁</text><text class="stat-name">年龄</text></view><view class="stat-box"><text class="stat-number">{{stats.appearances}}</text><text class="stat-unit">场</text><text class="stat-name">参赛</text></view></view>
     </view>
@@ -32,4 +34,27 @@
 
     <view wx:if="{{canManage}}" class="action-bar"><button class="action-btn edit-btn" bindtap="onEdit"><text class="btn-text">补充资料</text></button><button class="action-btn delete-btn" bindtap="onDelete"><text class="btn-text">移出球队</text></button></view>
   </block>
+  <view wx:if="{{pointsVisible}}" class="points-overlay" catchtouchmove="stopPointsScroll">
+    <view class="points-panel"><view class="points-header"><text>积分明细</text><button bindtap="closePoints" disabled="{{pointsSaving}}">关闭</button></view>
+      <scroll-view scroll-y class="points-scroll">
+        <view wx:if="{{pointsLoading}}" class="points-state">正在读取…</view>
+        <view wx:elif="{{pointsError}}" class="points-state"><text>{{pointsError}}</text><button bindtap="loadPoints">重新加载</button></view>
+        <block wx:elif="{{pointsFormOpen}}">
+          <view class="points-form"><text>{{pointsAppealMatchName}}</text><view class="points-field"><text>积分项目</text><picker range="{{pointsMetricLabels}}" value="{{pointsMetricIndex}}" bindchange="onPointsMetric"><view>{{pointsMetricLabel}}</view></picker></view>
+            <view wx:if="{{pointsMissingMatch}}" class="points-field"><text>比赛名称或日期</text><input data-field="pointsMatchDescription" value="{{pointsMatchDescription}}" bindinput="onPointsInput" maxlength="120" /></view>
+            <view class="points-field"><text>认为正确的记录</text><input data-field="pointsExpected" value="{{pointsExpected}}" bindinput="onPointsInput" maxlength="120" placeholder="例如：上场30分钟" /></view>
+            <view class="points-field"><text>申诉说明</text><textarea data-field="pointsReason" value="{{pointsReason}}" bindinput="onPointsInput" maxlength="1000" /></view>
+            <text class="points-error">{{pointsSubmitError}}</text><view class="points-buttons"><button bindtap="backPoints" disabled="{{pointsSaving}}">返回明细</button><button bindtap="submitPointsAppeal" loading="{{pointsSaving}}" disabled="{{pointsSaving}}">提交申诉</button></view>
+          </view>
+        </block>
+        <block wx:else>
+          <view class="points-summary"><text>{{pointsTotalText}}</text><text>{{pointsPartsText}}</text></view><view class="points-note">按已记录依据计分，未记录项目计0分。</view><view class="points-rules">{{pointsRulesText}}</view>
+          <view wx:if="{{pointsCanAppeal}}" class="points-buttons"><button bindtap="openPointsAppeal">积分申诉</button></view>
+          <view wx:if="{{pointsEmpty}}" class="points-state">暂无比赛计分记录</view>
+          <view class="points-match" wx:for="{{pointsRows}}" wx:key="matchId"><view class="points-match-head"><text>{{item.matchName}}</text><text>{{item.totalText}}</text></view><view class="points-note">{{item.dateText}} · {{item.role}}</view><view class="points-grid"><text>{{item.appearanceText}}</text><text>{{item.starterText}}</text><text>{{item.minuteText}}</text><text>{{item.goalText}}</text></view><view wx:if="{{item.minuteNote}}" class="points-note">{{item.minuteNote}}</view><view wx:if="{{item.goalNote}}" class="points-note">{{item.goalNote}}</view><button wx:if="{{pointsCanAppeal}}" data-match-id="{{item.matchId}}" bindtap="openPointsAppeal">对本场有异议</button></view>
+          <view class="points-match"><text>应援积分</text><view>{{pointsSupportText}}</view></view><block wx:if="{{pointsCanAppeal}}"><view class="points-history-title">我的申诉</view><view wx:if="{{pointsAppealsEmpty}}" class="points-note">暂无申诉记录</view><view class="points-match" wx:for="{{pointsAppeals}}" wx:key="id"><view class="points-match-head"><text>{{item.matchName}}</text><text>{{item.statusText}}</text></view><view>{{item.reason}}</view><view wx:if="{{item.reply}}" class="points-note">平台回复：{{item.reply}}</view></view><button wx:if="{{pointsAppealsMore}}" bindtap="morePointsAppeals">加载更多</button></block>
+        </block>
+      </scroll-view>
+    </view>
+  </view>
 </view>
