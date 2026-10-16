@@ -19,7 +19,7 @@
       <section class="result-filters">
         <label><span>竞赛组别</span><el-select v-model="divisionFilter" clearable placeholder="全部组别"><el-option v-for="item in dashboard.divisions || []" :key="item.id" :label="item.name" :value="item.id" /></el-select></label>
         <label><span>比赛日期</span><el-select v-model="dateFilter" clearable placeholder="全部日期"><el-option v-for="date in dateOptions" :key="date" :label="date" :value="date" /></el-select></label>
-        <label v-if="!['goals','playerCards','teamCards'].includes(activeTab)"><span>赛果状态</span><el-select v-model="statusFilter" clearable placeholder="全部状态"><el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+        <label v-if="!['goals','playerCards','teamCards','bracket'].includes(activeTab)"><span>赛果状态</span><el-select v-model="statusFilter" clearable placeholder="全部状态"><el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
         <el-input v-model="keyword" clearable placeholder="搜索球队或场序" :prefix-icon="Search" />
       </section>
 
@@ -33,10 +33,10 @@
       <el-tabs v-model="activeTab" class="result-tabs">
         <el-tab-pane label="赛果与复核" name="review" />
         <el-tab-pane label="积分排名" name="standings" />
+        <el-tab-pane label="淘汰晋级" name="bracket" />
         <el-tab-pane label="进球榜" name="goals" />
         <el-tab-pane label="球员红黄牌" name="playerCards" />
         <el-tab-pane label="球队红黄牌" name="teamCards" />
-        <el-tab-pane label="淘汰晋级" name="bracket" />
         <el-tab-pane label="赛事战报" name="report" />
       </el-tabs>
 
@@ -82,9 +82,8 @@
       </section>
 
       <section v-else-if="activeTab==='bracket'" class="bracket-section">
-        <header class="section-heading"><div><h2>淘汰赛与排位晋级</h2><p>淘汰赛平局必须记录加时或点球结果，并明确 winnerTeamId 后才能推进下游。</p></div></header>
-        <div class="bracket-grid"><article v-for="row in visibleKnockout" :key="row.id" class="knockout-card" :class="{ ready:row.progressionReady, warning:row.resultStatus==='warning' }"><header><span>{{ row.divisionName }}</span><b>{{ row.roundName || row.phaseLabel }}</b><el-tag :type="row.progressionReady?'success':'warning'" size="small">{{ row.progressionLabel }}</el-tag></header><div><span>{{ row.homeTeamName }}</span><strong>{{ scoreText(row) }}</strong><span>{{ row.awayTeamName }}</span></div><footer><small>{{ row.matchDate || '日期待定' }} · {{ row.venue }}</small><el-button link type="primary" @click="openMatchResult(row)">查看赛果</el-button></footer></article></div>
-        <el-empty v-if="!visibleKnockout.length" description="当前范围暂无淘汰赛或排位赛" />
+        <header class="section-heading"><h2>淘汰赛签表</h2></header>
+        <TournamentBracket :matches="divisionKnockout" :date="dateFilter" :keyword="keyword" @open="openMatchResult" />
       </section>
 
       <section v-else-if="activeTab==='report'" class="report-section">
@@ -111,6 +110,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheckFilled, Clock, DataAnalysis, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
 import { callFunction } from '../../utils/cloud'
+import TournamentBracket from '../../components/tournament/TournamentBracket.vue'
 import TournamentEventRankings from '../../components/tournament/TournamentEventRankings.vue'
 import { isGoalEvent, isOwnGoal, isPenaltyMissed, isPenaltyScored, scorerDisplayName } from '../../utils/matchEvent'
 import footballEventIcon from '../../assets/report/events/football.svg'
@@ -175,6 +175,7 @@ const dateOptions = computed(() => [...new Set((dashboard.value.matches || []).m
 const approvedDateOptions = computed(() => [...new Set((dashboard.value.matches || []).filter(row => row.resultStatus==='approved').map(row => row.matchDate).filter(Boolean))].sort())
 const filteredSummary = computed(() => visibleMatches.value.reduce((sum,row)=>{ if(row.resultStatus==='not_submitted')sum.notSubmitted++; else if(row.resultStatus==='pending_review')sum.pendingReview++; else if(row.resultStatus==='approved')sum.approved++; else sum.warning++; return sum },{notSubmitted:0,pendingReview:0,warning:0,approved:0}))
 const visibleStandings = computed(() => (dashboard.value.standings || []).filter(item => !divisionFilter.value || item.divisionId===divisionFilter.value).sort((a,b)=>String(a.divisionName||'').localeCompare(String(b.divisionName||''),'zh-CN',{numeric:true})||String(a.groupName||'').localeCompare(String(b.groupName||''),'zh-CN',{numeric:true})))
+const divisionKnockout = computed(() => (dashboard.value.knockout || []).filter(item => !divisionFilter.value || item.divisionId===divisionFilter.value))
 const visibleKnockout = computed(() => (dashboard.value.knockout || []).filter(item => (!divisionFilter.value || item.divisionId===divisionFilter.value) && (!dateFilter.value || item.matchDate===dateFilter.value)))
 const reportEvents = computed(() => Array.isArray(dashboard.value.events) ? dashboard.value.events : [])
 const reportMatches = computed(() => (dashboard.value.matches || []).filter(row => row.resultStatus==='approved' && (!divisionFilter.value || row.divisionId===divisionFilter.value) && (!reportDate.value || row.matchDate===reportDate.value)).map(row => ({ ...row, events: Array.isArray(row.events) ? row.events : reportEvents.value.filter(event => String(event.matchId || event.match_id || '') === String(row.id)) })))
