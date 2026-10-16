@@ -1,0 +1,87 @@
+{
+  "time": "2026-10-16T15:19:13.987Z",
+  "targets": [
+    {
+      "name": "formal",
+      "base": "/admin/",
+      "dist": "E:/Documents/sxf-football/.codex-artifacts/pc-alignment-formal-20261016/web-admin-vue/dist",
+      "files": 376,
+      "passed": 376,
+      "failed": []
+    },
+    {
+      "name": "preview",
+      "base": "/preview/admin/",
+      "dist": "E:/Documents/sxf-football/.codex-artifacts/pc-alignment-preview-20261016/web-admin-vue/dist",
+      "files": 376,
+      "passed": 376,
+      "failed": []
+    }
+  ],
+  "parity": {
+    "sourceCommit": "7eb399fd",
+    "sourceIdentical": true,
+    "expectedDifferences": [
+      "deployment base path",
+      "chunk hashes and minified names",
+      "preview-only demo gate"
+    ],
+    "verification": "Both deployments checked byte-for-byte against separate builds from the same source commit."
+  },
+  "entries": [
+    {
+      "url": "https://www.sxffootball.cn/",
+      "status": 200,
+      "platformLinks": [
+        "https://pingtai.sxffootball.cn/platform-login"
+      ],
+      "redirect": false,
+      "scripts": []
+    },
+    {
+      "url": "https://pingtai.sxffootball.cn/",
+      "status": 200,
+      "platformLinks": [],
+      "redirect": false,
+      "scripts": [
+        "/assets/index-BhVtqQs8.js"
+      ]
+    }
+  ],
+  "platform": {
+    "release": {
+      "app": "sxf-platform-ops",
+      "branch": "codex/platform-ops",
+      "commit": "1b27648754a16f3335b207d46e951b8eccfcbc16",
+      "release": "20261016152111-1b276487",
+      "source": "platform-admin-vue"
+    },
+    "releaseMatchesLocal": true,
+    "total": 27,
+    "passed": 27,
+    "failed": [],
+    "sourceDeltaSinceRelease": []
+  },
+  "logoRepair": {
+    "teamId": "22dda3756aabff7900db8fac3f150428",
+    "modifiedRecords": 1,
+    "stableMatchLinkVerified": true,
+    "displayAndCardReferencesMatch": true,
+    "visibleUpdatedCards": 7
+  },
+  "backend": {
+    "function": "webLoginApi",
+    "state": "Active",
+    "codeOnly": true,
+    "readbackFilesMatched": 92,
+    "anonymousDenied": true
+  },
+  "sharedRendererAligned": true,
+  "verifiedAt": "2026-10-16T15:25:59.306544+00:00",
+  "runtimeFileChecks": 779,
+  "scopeLimitations": [
+    "No miniprogram edits, upload or release",
+    "No roster, match result, points or template mutations",
+    "Not a full write workflow or all-role regression"
+  ]
+}
