@@ -140,3 +140,8 @@ catalog 返回授权范围内的球队、球员、赛事、组别及已审核最
 ## 2026-10-16 异常原始事实补录边界
 
 平台负责人经savePlayerCardTemplate的auditRepairInspect/Save工作流处理已结束且未由裁判接管锁定的旧比赛。仅补缺失阵容或有来源依据的事件；稳定正式名单ID、提交版本、事件修订、完整事件与正式比分均须服务端校验。事务保存match_fact_repair_audit，不提供任意写积分或卡级接口。时长规则仍由统一证据解析，立洋杯专项修复只补历史durationVerification，不伪造赛前快照。
+
+
+## 2026-10-16 个人记录参与范围
+
+coverage.participationPolicy=recorded-participants/1；playerCardMatchIds按稳定球员ID保存其正式名单/实际事件关联，playerCardComplete仅在其实际关联范围校验来源，完整读取下无登记者由unlistedPlayerCardComplete确认0比赛指标。个人service与公开摘要调用同一playerCardScope；个人issues按影响范围过滤，整体数据质量issues不清除。非平台访问将playerCardComplete及playerCardMatchIds均裁剪到授权可见球员，不能用新增覆盖字段扩大身份或赛事信息访问。

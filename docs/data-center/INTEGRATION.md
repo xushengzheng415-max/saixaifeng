@@ -325,3 +325,8 @@ PlayerCardScoreRules经既有HTTP模板入口调用平台鉴权scoreRules工作�
 ## 2026-10-16 数据中心异常处理与发卡前检查
 
 PlayerCardIssueRepair/PlayerCardMatchRepair为平台数据中心正式处理组件，制卡检查窗口直接复用。只由统一服务给出资格；findings按稳定比赛ID组织球队名称/日期，不从页面计算分数。补录经平台负责人鉴权、来源确认、事务版本和裁判锁守卫写原始事实及审计，保存后重查同一canonical结果。立洋杯37场时长已有60分钟依据，11场补齐实录见operations/2026-10-16-liyang-duration-evidence.md。详见../releases/platform-card-data-repair-20261016.md。
+
+
+## 2026-10-16 未登记球员的个人异常隔离
+
+统一statistics记录参与范围，snapshot.playerCardScope供service和fanPlayerCardScores复用；无登记、无实际关联事件者为0比赛指标，整体阵容缺失仍是比赛问题。球员卡核查与发放同源，不再从全平台issues生成个人任务。同步脚本检查通过；五个实际卡分读取函数线上包回读一致；updateMatch纯比分重导出未变，serviceMatchWorkflow不读卡分，未重发旧包。详见../releases/player-recorded-participation-20261016.md。

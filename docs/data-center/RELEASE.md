@@ -215,3 +215,8 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 ## 2026-10-16 数据中心异常处理与立洋杯时长依据
 
 webLoginApi `87ffcdacbbdb030b70c19613883b8c1e30b34f0b5b871f3786191011afe43af3` Active/Available：三文件最小运行差量，裁判包检查及匿名AUTH_REQUIRED通过，线上包回读其他运行文件不变。平台 `20261016074758-b5a74e47` 27文件HTTP/SHA一致。11场真实旧比赛补durationVerification，37场整场60分钟；其他真实事实未补造、未发放。正式/隔离证据与边界见../releases/platform-card-data-repair-20261016.md。
+
+
+## 2026-10-16 recorded-participants/1
+
+未登记首发/替补且无实际关联事件者按0比赛指标，比赛质量问题不再全局阻塞个人。webLoginApi/dataCenter/getMiniWorkspace/resultCenter/playerCardPublishWorker五函数Active/Available并回下载源码摘要一致；函数SHA、边界及13组回归见../releases/player-recorded-participation-20261016.md。平台20261016081343-504f0303；无真实资料迁移、无发卡。
