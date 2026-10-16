@@ -14,7 +14,7 @@ async function readCards(cloud, db, players, options = {}) {
   const states = new Map()
   const dynamic=require('./playerCardDynamic.cjs')
   const scores=options.legacyOnly?new Map():await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id)))
-  const rows = await Promise.all(players.map(async player => {
+  const rows = await require('./playerCardPreviewAssets.cjs').mapLimit(players,options.dynamic===false?2:4,async player => {
     const playerId = String(player._id || player.id || '')
     if(!options.baseOnly&&!options.legacyOnly)player=await require('./playerCardSeriesReader.cjs').resolveSeriesPlayer(db,player,scores.get(playerId),document)
     let live=options.legacyOnly?null:await dynamic.read(cloud,db,player,{...options,score:scores.get(playerId)})
@@ -60,7 +60,7 @@ async function readCards(cloud, db, players, options = {}) {
     if (!render || render.renderVersion!==RENDER_VERSION || Number(render.cardDataVersion) !== base.cardDataVersion) return await visualCard() || {...base,status:'pending'}
     if (render.status !== 'ready' || !render.fileId) return await visualCard() || {...base,status:render.status === 'failed' ? 'failed' : 'pending'}
     return {...base,status:'ready',cardId:String(render.cardId||render._id||`${playerId}_${base.templateId}_${base.publishedVersion}`),fileId:render.fileId,renderVersion:render.renderVersion || ''}
-  }))
+  })
   // Legacy clients receive an on-demand export with an already resolved URL.
   // That result has no fileId and may be an awarded event card, not a base card.
   const staticExport = row => row.displayMode==='static-export' && typeof row.cardUrl==='string' && /^https:\/\//.test(row.cardUrl)

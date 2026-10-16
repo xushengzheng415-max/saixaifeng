@@ -1,0 +1,12 @@
+/* A published card is one fixed-ratio image, never a portrait crop. */
+.fan-player-detail .fan-pc-card-host > img.published-player-card {
+  display: block;
+  flex: 0 0 auto;
+  width: min(300px, 100%);
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 300 / 430;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 0;
+}
