@@ -18,4 +18,10 @@ test-score-rule-evidence-preview.cjs用真实统一计算器构造原始出场/�
 
 原score-rules回归保留银金卡级、100实际分权益、幂等与来源变化阻断；积分明细、13组统一积分、同步与治理检查通过。实际上传包只替换该模块并运行语法、裁判表防回退及下载包内证据试算测试。
 
-正式回读待发布后登记。
+## 正式回读
+
+webLoginApi Active/Available、无CodeError；CodeSha256=b883d9ad55310c83fdd86e632bc8a88081d438aef6e86221afcff91c3eca17d0。回下载模块与源码字节一致，其他ZIP成员CRC与长度一致，仅模块与npm隐藏锁元数据变化。未改函数运行配置，裁判表及此前卡显示修复保留。
+
+生产platform_settings配置在发布前后只读对比完全一致：revision=1、活动仍V2、已有草稿保留、无待发布任务。没有代执行生产试算或确认发布；匿名试算仍AUTH_REQUIRED。真实操作者刷新后重新试算，确认新影响后再发布。
+
+源码e8b453f5，下载包测试修正65313cde（隔离规则试算禁止绘图，以便在Windows加载线上Linux包）。证据work/score-rule-evidence-20261016/{backend-delta,web-final,web-readback-verification}.json。
