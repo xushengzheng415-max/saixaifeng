@@ -7,7 +7,7 @@
       <p v-if="profile.organizations.length" class="org-names">关联机构：{{ profile.organizations.map(x => x.name).join('、') }}</p>
       <el-tabs v-model="tab">
         <el-tab-pane :label="`账号 ${profile.accounts.length}`" name="accounts">
-          <p class="source-note">注册来源与后续绑定不同；历史未记录的来源无法确定。</p>
+          <p class="source-note">登录绑定不代表注册来源或最近登录端。</p>
           <section v-for="account in profile.accounts" :key="account.id" class="account-row">
             <div class="account-title"><strong>{{ account.name }}</strong><span>{{ account.relation }}</span><el-tag :type="account.status === '正常' ? 'success' : 'info'">{{ account.status }}</el-tag></div>
             <el-descriptions :column="2" border>
@@ -16,7 +16,7 @@
               <el-descriptions-item label="注册来源">{{ account.registrationSource }}</el-descriptions-item>
               <el-descriptions-item label="注册时间">{{ time(account.createTime) }}</el-descriptions-item>
               <el-descriptions-item label="最近登录">{{ time(account.lastLoginTime) }}</el-descriptions-item>
-              <el-descriptions-item label="已配置登录">{{ account.loginMethods.join('、') || '未记录' }}</el-descriptions-item>
+              <el-descriptions-item label="登录绑定">{{ account.loginMethods.join('、') || '未记录' }}</el-descriptions-item>
               <el-descriptions-item label="PC账号">{{ account.pcStatus }}</el-descriptions-item>
               <el-descriptions-item label="创建球队" :span="2">{{ account.createdTeams.join('、') || '未发现直接创建记录' }}</el-descriptions-item>
               <el-descriptions-item label="创建赛事" :span="2">{{ account.createdTournaments.join('、') || '未发现直接创建记录' }}</el-descriptions-item>
