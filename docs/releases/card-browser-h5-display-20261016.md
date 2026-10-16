@@ -28,3 +28,15 @@ H5预览仅三文件，复用正式现有其他资产：/preview/card-display/se
 - 同一公开范围实调孔祥子不携动态协议，返回ready、同赛事v6、完整PNG URL。使用正式PC当前部署的PlayerCard-JXIlG03v组件、原cloud模块和Vue运行时，将该真实受控返回通过隔离HTTP映射给组件，实际请求仍带旧dynamic/1且没有新renderer版本；组件显示900×1290原图、300px宽完整卡面。此验证未使用用户会话、未保存阵容；不能冒称已经替用户点击实际排阵页。
 - 预览3文件HTTP200及SHA匹配。H5正式HTML/CSS/绘制文件尚未替换，已向用户说明AGENTS.md验收要求并请求正式H5授权；正式后端当前赛事已授展示读取修复已生效。PC原前端不变，只需重新读取卡片。
 - 证据work/card-display-paths-20261016/{web-final,web-readback-verification,h5-preview-readback,h5-live-card-render,production-pc-component-result}.json及h5-real-card-preview.png、production-pc-component-complete.png。授权接口返回与素材地址仅保存在忽略诊断目录，不提交仓库。
+
+## H5正式发布（用户已授权）
+
+用户看到正式页已替换卡面但仍放大，核对确认正式HTML没有加载fit补丁。用户明确答复“立即更新正式H5”后，先备份正式入口/绘制文件，再发布fit CSS、共享renderer，最后入口新版本。正式入口新增tournament-center-card-fit.css?v=20261016-1、renderer使用20261016-card-display1。
+
+实际详情测试另发现旧脚本只认可HTTPS卡图URL，预期动态绘制的PNG data URL会被误判暂无。保存生产现有tournament-center-player-list-20260930.js为仓库正式源，只将此处判断扩为HTTPS或data:image/png;base64，未重写其他业务；入口脚本版本更新为20261016-card-fit2。该补充属于同一显示修复，不改公开权限或接口。当前正式dynamic-card.js匹配条件不接受带https前缀的API URL，因此本页仍请求旧客户端完整PNG；本次未扩大修改共享fetch适配器，而是按实际请求协议验证完整图路径。
+
+四个正式文件HTTP200且源码摘要一致。使用正式HTML、CSS、脚本，从球员榜点击打开详情（隔离榜单条目、真实白波公开卡接口返回）走完实际DOM事件；卡片模板v6，手机390px中宽300/高430、left45/right345、contain。截图h5-formal-full-flow.png确认完整卡框、姓名及底部可见，下方资料不被卡图撑走。真实未携动态协议的白波公开读取也已实调ready，避免用不符合实际请求协议的动态scene夹具误判前端失败。
+
+原正式入口及脚本备份：work/card-display-paths-20261016/h5-formal-before/；四文件回读h5-formal-readback.json；正式浏览器h5-formal-browser.json。本次没有发布积分规则或替用户调整积分。
+
+用户随后询问积分规则如何生效，核对现有流程为填写至少4字原因→保存草稿→试算影响→确认发布→等待“规则已生效”；已获卡级保留。H5历史页面只接受硬编码V2，会把配置版积分误标待核定，现识别服务端V2或合法config-代次-时间戳版本，不计算/改写分数与等级；未知版本仍不当作已核定。正式脚本缓存版本最终为20261016-card-fit3。隔离完整详情流程使用config-3测试积分摘要识别铜卡，并继续使用真实白波卡URL验证整卡尺寸；没有在生产保存或发布积分草稿。
