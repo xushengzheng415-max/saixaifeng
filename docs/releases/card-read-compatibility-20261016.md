@@ -19,4 +19,8 @@
 - 原动态发布/遮罩/授权、批量发放、卡库、预装、数据中心及治理/部署副本检查通过。
 - 用刚下载的webLoginApi生产包只替换reader，实际包语法与裁判表防回退检查通过，保留全部其他在线模块和运行配置。
 
-正式状态待上线回读。
+## 正式回读
+
+webLoginApi Active/Available、CodeError为空，CodeSha256为0df60f66986223d4c0a1234bf065f9aa3537700269fffed538bfe9f5f0eddf7f。回下载reader与提交源码字节一致；ZIP成员列表一致，其他运行文件CRC与长度一致，仅reader和npm隐藏锁元数据变化。没有修改运行配置或覆盖同期裁判表代码。未登录的网页卡读取仍返回AUTH_REQUIRED。
+
+源码36b72736；证据work/card-reading-20261016/{backend-delta,web-final,web-readback-verification}.json。正式PC前端保持原入口；实际用户会话下的重新排阵显示待用户刷新确认，不将隔离权限/绘图验证冒充已操作用户比赛。
