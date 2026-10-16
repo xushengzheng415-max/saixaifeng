@@ -225,3 +225,8 @@ webLoginApi `87ffcdacbbdb030b70c19613883b8c1e30b34f0b5b871f3786191011afe43af3` A
 ## 2026-10-16 evidence-points/1与个人申诉
 
 五卡分读取函数及申诉服务正式Active/Available，回下载核对统一模块；最新web包保留同期paperGoalReconcile与裁判入口，仅补统计缓存版本。平台20261016093602-2943369e正式27文件一致。H5 /preview/dynamic-card/h5/player-cards.html 四文件200/SHA一致，正式待验收；小程序源码测试通过未上传。没有迁移真实比赛/球员、制造生产申诉或代发卡。SHA与验证见../releases/player-points-ledger-appeals-20261016.md。
+
+
+## 2026-10-16 球员积分明细H5正式发布（用户验收授权）
+
+用户回复“验收通过，更新正式H5”。仅发布验收通过的player-cards.html、player-cards.js、player-points.js、player-points.css至正式service-account-h5，四文件HTTP200/SHA一致；手机尺寸浏览器200、私人积分模块加载、无页面及资源错误。正式入口 https://www.sxffootball.cn/service-account-h5/player-cards.html 。两份原正式文件已备份，两新增文件原404已登记；无后端/数据库变更，不含小程序上传。详见../releases/player-points-ledger-appeals-20261016.md的H5正式验收段。

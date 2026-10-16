@@ -1188,3 +1188,8 @@
 ## 2026-10-16 积分账单与自愿申诉
 
 用户最终决定已落实：有记录依据计分，缺依据项目不领分，原指标未知不改0；私人逐场账单→申诉→后台回复/补依据重算的隔离链路通过。五共享函数Active/Available并回下载比对，平台20261016093602-2943369e正式27文件一致。H5四文件预览200/SHA一致，真实浏览器无脚本错误；正式H5待验收授权，小程序源码已接入未上传。详见releases/player-points-ledger-appeals-20261016.md。
+
+
+## 2026-10-16 球员积分H5验收通过并正式发布
+
+用户明确“验收通过，更新正式H5”。已将已验收的player-cards.html/js及player-points.js/css四文件发布至正式/service-account-h5/。正式入口 https://www.sxffootball.cn/service-account-h5/player-cards.html ，四文件HTTP200/SHA-256与预览验收源一致；390px真实浏览器返回200、私人积分模块加载、无资源失败或脚本错误。积分明细→申诉→回复沿用已上线接口和权限；小程序未上传状态不变。证据work/player-points-ledger-20261016/h5-formal-{readback,browser}.json。

@@ -335,3 +335,8 @@ PlayerCardIssueRepair/PlayerCardMatchRepair为平台数据中心正式处理组�
 ## 2026-10-16 按依据计分、个人明细与自愿申诉
 
 统一points-ledger/points-appeals经同步脚本生成各端副本。H5 getMyPlayerPointsLedger/submitMyPlayerPointsAppeal/listMyPlayerPointsAppeals用现有微信/亲子绑定；小程序teamPlayerPointsLedger/Appeal/Appeals要求workspace+球队+本人/监护绑定，不能凭team.manage扩权。平台pointsAppealList/Ledger/Resolve仅负责人，默认申诉队列不主动全员扫描，前端不另算。已计项继续、缺依据项不领分，原统计保留未知。发布与预览边界见../releases/player-points-ledger-appeals-20261016.md。
+
+
+## 2026-10-16 私人积分明细H5正式入口
+
+负责人在微信预览验收后明确授权更新正式H5。四个已验收文件已发布至/service-account-h5/，入口 https://www.sxffootball.cn/service-account-h5/player-cards.html 。全部HTTP200、SHA与验收版本一致；390px实际浏览器无脚本/资源错误并加载SxfPlayerPoints。没有扩大私人接口权限、没有再部署后端或修改生产数据；小程序上传仍独立。

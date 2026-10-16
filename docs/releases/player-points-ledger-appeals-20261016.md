@@ -30,7 +30,7 @@
 |---|---|
 | 平台运营后台 | 正式20261016093602-2943369e，27文件HTTP成功、SHA-256一致 |
 | 共享计分与申诉 | 五函数Active/Available；函数SHA见下表，回下载统一模块一致 |
-| 球员H5 | /preview/dynamic-card/h5/player-cards.html，四文件200/SHA一致，真实浏览器200、脚本已加载、无页面错误；正式H5待验收授权 |
+| 球员H5 | 用户2026-10-16确认验收并授权；正式 /service-account-h5/player-cards.html 已发布，四文件HTTP200/SHA与已验收版本一致，390px真实浏览器200且无脚本/资源错误 |
 | 小程序入口 | 源码已接入、隔离测试通过；未上传微信开发/体验/正式包，未将源码测试当作上线 |
 | 主办方PC | 没有部署前端包；已有授权接口消费同一积分规则 |
 
@@ -47,3 +47,19 @@
 | getMiniWorkspace | `b14ef4a1c3984d48e57750d26895c5c7c2ce2a2e149331d96663c08fd306faf6` |
 | resultCenter | `e6333b464a1f71969e9ec2bf65cac3130538632c15350c5f7a131887e985cbc7` |
 | playerCardPublishWorker | `c4e6c4ad11c954164a23648719e8fdea23b57c25537e7c6de426e5074eb983c4` |
+
+
+## H5正式验收与发布（2026-10-16）
+
+负责人回复“验收通过，更新正式H5”，当前授权仅用于已验收H5版本。
+
+正式地址：https://www.sxffootball.cn/service-account-h5/player-cards.html 。仅更新4文件，逐字节核对预览验收源未漂移。旧正式player-cards.html/js已保存于work/player-points-ledger-20261016/h5-formal-before/，另两文件原404已登记。发布前备份摘要、正式HTTP/SHA回读及390px真实浏览器检查记录分别为h5-formal-before.json、h5-formal-readback.json、h5-formal-browser.json；截图h5-formal-mobile.png。所有文件HTTP200且SHA-256相同，积分模块已加载，未登录提示微信打开符合既有会话流程。
+
+| 正式文件 | SHA-256 |
+|---|---|
+| player-cards.html | `3ea980bbda7341b21eed532946572e730998aa2764cd4466546a1d060bb39f3f` |
+| player-cards.js | `2052bab953e648118136c346c0f287e1331fe23e64eba7e5b0c8769ebfd41223` |
+| player-points.js | `4cf8622cc107b7707f72e75aa931fb40cd20ddfcd638432d39b1feb8bc633e3c` |
+| player-points.css | `0ff55f22561fe5661e83dc0788671d1cc8603c263a4bd5b9a5d93d991b4cf6a0` |
+
+本次没有新建真实申诉、改动业务资料、重发后端或上传小程序；已上线后台继续在数据中心→积分申诉处理收到的申诉。
