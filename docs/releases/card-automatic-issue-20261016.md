@@ -19,4 +19,9 @@ webLoginApi仅差量更新playerCardWorkflows.cjs。原平台负责人鉴权、�
 - 原工作流、模板原生绘制、队徽缓存、素材恢复及项目分组回归通过；统一数据中心副本与治理检查通过。独立平台生产构建及边界检查通过。
 - 实际拟上传包语法及裁判表防回退检查通过，与刚下载的线上包仅工作流模块不同，保留同期OCR及函数配置。
 
-正式状态待上线后回读记录。
+## 正式发布
+
+- 平台正式版本20261016122409-b9fcbf20，27个文件HTTP成功且SHA-256一致，独立工程边界检查通过。
+- webLoginApi Active/Available、无CodeError，CodeSha256为6e1e0672269383837fff28f627479f488fc2bffbf039a6946addf9348aa312ae。回下载工作流与提交源码一致；相对旧包仅工作流与npm锁元数据变化，其他运行文件保留。未改函数配置。
+- 无会话调用issueStatus/retryIssue均返回AUTH_REQUIRED，未触发业务读写。实际授权业务流程使用隔离数据库和实际鉴权处理器验证；没有代发立洋杯或基础卡，没有启用银金草稿。
+- 本次未部署H5、小程序或其他云函数；证据work/card-direct-issue-20261016/{backend-delta,web-final,web-readback-verification}.json及ui-partial.png。源码提交b9fcbf203d7044b6f14aca44d4cb79e90c68f6cc。
