@@ -38,41 +38,83 @@ export function bracketGroups(input=[],templateId='auto'){
 }
 function layout(rows,edges,templateId){
  const template=resolveBracketTemplate(rows,templateId),geometry=template.geometry
- const {cardWidth:width,cardHeight:height,columnGap:gap,rowGap:rowGap}=geometry
- const byId=new Map(rows.map(row=>[row.id,row])),parents=id=>edges.filter(edge=>edge.to===id&&edge.type==='match_winner').sort((a,b)=>a.side==='home'?-1:1)
+ const {cardWidth:width,cardHeight:height,columnGap:gap,rowGap}=geometry
+ const byId=new Map(rows.map(row=>[row.id,row]))
+ const incoming=(id,side)=>edges.find(edge=>edge.to===id&&edge.side===side&&edge.type==='match_winner')
+ const parents=id=>edges.filter(edge=>edge.to===id&&edge.type==='match_winner')
  let cycle=false
- function treeSize(id,seen=new Set()) {if(seen.has(id)){cycle=true;return 0}const next=new Set(seen);next.add(id);return 1+parents(id).reduce((sum,edge)=>sum+treeSize(edge.from,next),0)}
- const terminal=rows.filter(row=>parents(row.id).length&&!edges.some(edge=>edge.from===row.id&&edge.type==='match_winner'))
- terminal.sort((a,b)=>Number(/^(?:总)?决赛$/.test(String(b.roundName)))-Number(/^(?:总)?决赛$/.test(String(a.roundName)))||treeSize(b.id)-treeSize(a.id)||number(a)-number(b))
- const primary=terminal[0] || rows.slice().sort((a,b)=>number(a)-number(b))[0]
- function levels(id,seen=new Set()){if(seen.has(id)){cycle=true;return 0}const next=new Set(seen);next.add(id);return parents(id).length?1+Math.max(...parents(id).map(edge=>levels(edge.from,next))):0}
- function leafCount(id,seen=new Set()){if(seen.has(id))return 1;const next=new Set(seen);next.add(id);const list=parents(id);return list.length?list.reduce((sum,edge)=>sum+leafCount(edge.from,next),0):1}
- const depth=Math.max(0,levels(primary.id)),centerX=geometry.padding+depth*(width+gap),mainParents=parents(primary.id)
- const sideLeaves=Math.max(1,...mainParents.map(edge=>leafCount(edge.from))),step=height+rowGap
- const treeHeight=Math.max(step,sideLeaves*step),nodes=[],positions=new Map()
- function add(row,x,y,half=''){if(positions.has(row.id))return;const node={row,x,y,width,height,half};nodes.push(node);positions.set(row.id,node)}
- function place(id,side,distance,top,span,seen=new Set()){
-  if(seen.has(id)){cycle=true;return}const row=byId.get(id);if(!row)return
-  const next=new Set(seen);next.add(id)
-  const x=centerX+(side==='left'?-1:1)*distance*(width+gap)
-  add(row,x,geometry.headerSpace+top+span/2-height/2,side==='left'?'上半区':'下半区')
-  const list=parents(id),total=list.reduce((sum,edge)=>sum+leafCount(edge.from),0);let offset=top
-  for(const edge of list){const size=span*leafCount(edge.from)/Math.max(1,total);place(edge.from,side,distance+1,offset,size,next);offset+=size}
+ function levels(id,seen=new Set()){
+  if(seen.has(id)){cycle=true;return 0}const next=new Set(seen);next.add(id)
+  return 1+Math.max(0,...parents(id).map(edge=>levels(edge.from,next)))
  }
- add(primary,centerX,geometry.headerSpace+treeHeight/2-height/2)
- mainParents.forEach((edge,index)=>place(edge.from,index===0?'left':'right',1,0,treeHeight))
- // Consolation matches remain in the same source component, below the title match.
- let nextY=geometry.headerSpace+treeHeight+34
- for(const row of rows.filter(row=>!positions.has(row.id)).sort((a,b)=>number(a)-number(b))){add(row,centerX,nextY);nextY+=height+rowGap}
- const paths=edges.flatMap(edge=>{
-  const from=positions.get(edge.from),to=positions.get(edge.to);if(!from||!to)return []
-  let x1,x2,y1,y2,d
-  if(from.x!==to.x){const right=from.x<to.x;x1=from.x+(right?width:0);x2=to.x+(right?0:width);y1=from.y+height/2;y2=to.y+(edge.side==='home'?geometry.homeAnchor:geometry.awayAnchor);const middle=(x1+x2)/2;d=`M${x1},${y1} H${middle} V${y2} H${x2}`}
-  else{x1=from.x+width/2;x2=to.x+(edge.side==='home'?width*.28:width*.72);y1=from.y+height;y2=to.y;d=`M${x1},${y1} V${(y1+y2)/2} H${x2} V${y2}`}
-  return [{...edge,d}]
- })
- const championship=rows.some(row=>/^(?:总)?决赛$/.test(String(row.roundName))&&row.reviewStage==='knockout')
+ const terminal=rows.filter(row=>!edges.some(edge=>edge.from===row.id&&edge.type==='match_winner'))
+ terminal.sort((a,b)=>Number(/^(?:总)?决赛$/.test(text(b.roundName)))-Number(/^(?:总)?决赛$/.test(text(a.roundName)))||levels(b.id)-levels(a.id)||number(a)-number(b))
+ const primary=terminal[0] || rows.slice().sort((a,b)=>number(a)-number(b))[0]
+ const depth=levels(primary.id),centerX=geometry.padding+depth*(width+gap)
+ const nodes=[],paths=[],positions=new Map(),used=new Set()
+ const add=(row,side,kind,x,y,half='',label='')=>{
+  const node={id:row.id+'|'+kind+'|'+side,row,side,kind,x,y,width,height,half,label}
+  nodes.push(node);if(kind==='winner')positions.set(row.id,node)
+  return node
+ }
+ function join(from,to,direction,type='match_winner'){
+  const right=direction==='left',x1=from.x+(right?width:0),x2=to.x+(right?0:width)
+  const y1=from.y+height/2,y2=to.y+height/2,middle=x1+(right?gap/2:-gap/2)
+  paths.push({type,d:`M${x1},${y1} H${middle} V${y2} H${x2}`})
+ }
+ // Each input team is its own strip. A match produces one winner strip.
+ // Independent left/right cursors keep leaf rows evenly spaced at any depth.
+ const cursors={left:geometry.headerSpace,right:geometry.headerSpace}
+ function input(row,side,direction,distance,seen=new Set()){
+  const edge=incoming(row.id,side),predecessor=edge&&byId.get(edge.from)
+  const x=centerX+(direction==='left'?-1:1)*distance*(width+gap)
+  const half=direction==='left'?'上半区':'下半区'
+  if(predecessor&&!seen.has(predecessor.id))return branch(predecessor,direction,distance,seen)
+  if(predecessor)cycle=true
+  const y=cursors[direction];cursors[direction]+=height+rowGap
+  return add(row,side,'team',x,y,half)
+ }
+ function branch(row,direction,distance,seen=new Set()){
+  const next=new Set(seen);next.add(row.id);used.add(row.id)
+  const home=input(row,'home',direction,distance+1,next),away=input(row,'away',direction,distance+1,next)
+  const x=centerX+(direction==='left'?-1:1)*distance*(width+gap)
+  const node=add(row,'','winner',x,(home.y+away.y)/2,direction==='left'?'上半区':'下半区')
+  join(home,node,direction);join(away,node,direction)
+  cursors[direction]+=rowGap
+  return node
+ }
+ used.add(primary.id)
+ const left=input(primary,'home','left',1,new Set([primary.id]))
+ const right=input(primary,'away','right',1,new Set([primary.id]))
+ // Align the two halves by their own centre, including asymmetrical/byes trees.
+ const midpoint=Math.max(left.y,right.y)
+ for(const half of ['上半区','下半区']){
+  const root=half==='上半区'?left:right,delta=midpoint-root.y
+  if(delta){for(const node of nodes)if(node.half===half)node.y+=delta}
+ }
+ // Rebuild paths after alignment so they always meet strip centres.
+ paths.length=0
+ for(const node of nodes.filter(node=>node.kind==='winner')){
+  for(const side of ['home','away']){
+   const edge=incoming(node.row.id,side)
+   const child=edge?positions.get(edge.from):nodes.find(item=>item.row.id===node.row.id&&item.kind==='team'&&item.side===side)
+   if(child)join(child,node,node.half==='上半区'?'left':'right')
+  }
+ }
+ const championship=/^(?:总)?决赛$/.test(text(primary.roundName))
+ const final=add(primary,'','winner',centerX,midpoint,'',championship?'冠军':text(primary.roundName || primary.phaseLabel || '晋级'))
+ join(left,final,'left');join(right,final,'right')
+ const bottom=Math.max(...nodes.map(node=>node.y+height))
+ let nextY=bottom+100
+ const extraRows=rows.filter(row=>!used.has(row.id)).sort((a,b)=>number(a)-number(b))
+ for(const row of extraRows){
+  const home=add(row,'home','team',centerX-width-gap,nextY,'')
+  const away=add(row,'away','team',centerX+width+gap,nextY,'')
+  const result=add(row,'','winner',centerX,nextY,'',text(row.roundName || row.phaseLabel || '排位赛'))
+  join(home,result,'left','match_loser');join(away,result,'right','match_loser')
+  nextY+=height+70
+ }
  const first=rows.filter(row=>!edges.some(edge=>edge.to===row.id)).sort((a,b)=>number(a)-number(b))[0]
- const title=championship?'争冠晋级图':String(first?.roundName || primary.roundName || '淘汰赛').replace(/交叉.*$/,'')+'晋级图'
- return {id:primary.id,templateId:template.id,templateVersion:BRACKET_TEMPLATE_VERSION,championship,title,nodes,paths,columns:[],width:(depth*2+1)*(width+gap)-gap+geometry.padding*2,height:Math.max(...nodes.map(node=>node.y+height))+geometry.padding+22,cycle}
+ const title=championship?'争冠晋级图':text(first?.roundName || primary.roundName || '淘汰赛').replace(/交叉.*$/,'')+'晋级图'
+ return {id:primary.id,templateId:template.id,templateVersion:BRACKET_TEMPLATE_VERSION,championship,title,nodes,paths,columns:[],width:(depth*2+1)*(width+gap)-gap+geometry.padding*2,height:Math.max(...nodes.map(node=>node.y+height))+geometry.padding,cycle}
 }
