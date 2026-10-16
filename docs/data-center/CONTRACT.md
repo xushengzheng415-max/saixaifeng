@@ -135,3 +135,8 @@ catalog 返回授权范围内的球队、球员、赛事、组别及已审核最
 ## 积分参数与历史时长建议（2026-10-16）
 
 平台模板鉴权后scoreRulesRead/Save/Preview/Begin/Continue管理配置。platform_settings内player-card-score-rules为活动/草稿指针；recordType为player_card_score_rule_version/publish/floor的记录分别保存历史、可恢复准备任务与稳定playerId的保留卡级。未配置默认V2，查询失败不伪造默认规则；后续版本按统一参数与保留记录计算。试算绑定修订、参数、操作者、数据摘要及15分钟证明，按25条准备完成后事务激活，不写球员或赛果。inspectDuration.suggestion来自锁定规程，仅作人工核实建议，不自动覆盖历史。详见PLAYER_CARD_POINTS.md及../releases/platform-score-rules-20261016.md。
+
+
+## 2026-10-16 异常原始事实补录边界
+
+平台负责人经savePlayerCardTemplate的auditRepairInspect/Save工作流处理已结束且未由裁判接管锁定的旧比赛。仅补缺失阵容或有来源依据的事件；稳定正式名单ID、提交版本、事件修订、完整事件与正式比分均须服务端校验。事务保存match_fact_repair_audit，不提供任意写积分或卡级接口。时长规则仍由统一证据解析，立洋杯专项修复只补历史durationVerification，不伪造赛前快照。

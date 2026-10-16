@@ -320,3 +320,8 @@ PlayerCardStudio左右选人复用已部署dataCenter.catalog的赛事、球队�
 ## 平台积分配置入口（2026-10-16）
 
 PlayerCardScoreRules经既有HTTP模板入口调用平台鉴权scoreRules工作流，统一共享score-rules/score-rule-store与statistics/service/player-card-snapshot；webLoginApi、getMiniWorkspace、dataCenter、resultCenter及playerCardPublishWorker读回一致。公开球员榜也传递同一规则及保留上下文。未改规则配置覆盖时仍为V2；本次只更新代码。测试/未知、100分权益与卡级独立，保留既获卡级而不采信手填积分。DurationVerification仅带入锁定规程建议，原核实接口保存后重查。已完成finish-data-change和实际包/浏览器隔离验证；正式哈希见../releases/platform-score-rules-20261016.md。
+
+
+## 2026-10-16 数据中心异常处理与发卡前检查
+
+PlayerCardIssueRepair/PlayerCardMatchRepair为平台数据中心正式处理组件，制卡检查窗口直接复用。只由统一服务给出资格；findings按稳定比赛ID组织球队名称/日期，不从页面计算分数。补录经平台负责人鉴权、来源确认、事务版本和裁判锁守卫写原始事实及审计，保存后重查同一canonical结果。立洋杯37场时长已有60分钟依据，11场补齐实录见operations/2026-10-16-liyang-duration-evidence.md。详见../releases/platform-card-data-repair-20261016.md。
