@@ -19,4 +19,6 @@
 - test-player-card-preview-resilience、test-player-card-recipient-transfer-ui、test-dynamic-player-card、test-player-card-workflow-render均通过。隔离发放测试没有写生产数据。
 - 三份draw源码字节一致。全量sync-dynamic-player-card --check提示同期其他任务正在修改的getMiniWorkspace/playerCardReader差异，未覆盖该改动。
 
-正式平台发布版本及HTTP/摘要回读由独立发布脚本核实后记录。
+## 正式发布
+
+平台版本20261016105458-4dab1a10，源码提交4dab1a10911db997cdd56d329cca31e4fa82bd64。独立边界检查与生产构建通过，27个线上文件HTTP成功且SHA-256与本地产物一致。仅更新pingtai.sxffootball.cn；H5和小程序本次只同步源码，后端与存储配置未变。
