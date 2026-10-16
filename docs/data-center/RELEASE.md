@@ -220,3 +220,8 @@ webLoginApi `87ffcdacbbdb030b70c19613883b8c1e30b34f0b5b871f3786191011afe43af3` A
 ## 2026-10-16 recorded-participants/1
 
 未登记首发/替补且无实际关联事件者按0比赛指标，比赛质量问题不再全局阻塞个人。webLoginApi/dataCenter/getMiniWorkspace/resultCenter/playerCardPublishWorker五函数Active/Available并回下载源码摘要一致；函数SHA、边界及13组回归见../releases/player-recorded-participation-20261016.md。平台20261016081343-504f0303；无真实资料迁移、无发卡。
+
+
+## 2026-10-16 evidence-points/1与个人申诉
+
+五卡分读取函数及申诉服务正式Active/Available，回下载核对统一模块；最新web包保留同期paperGoalReconcile与裁判入口，仅补统计缓存版本。平台20261016093602-2943369e正式27文件一致。H5 /preview/dynamic-card/h5/player-cards.html 四文件200/SHA一致，正式待验收；小程序源码测试通过未上传。没有迁移真实比赛/球员、制造生产申诉或代发卡。SHA与验证见../releases/player-points-ledger-appeals-20261016.md。

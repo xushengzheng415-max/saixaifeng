@@ -145,3 +145,10 @@ catalog 返回授权范围内的球队、球员、赛事、组别及已审核最
 ## 2026-10-16 个人记录参与范围
 
 coverage.participationPolicy=recorded-participants/1；playerCardMatchIds按稳定球员ID保存其正式名单/实际事件关联，playerCardComplete仅在其实际关联范围校验来源，完整读取下无登记者由unlistedPlayerCardComplete确认0比赛指标。个人service与公开摘要调用同一playerCardScope；个人issues按影响范围过滤，整体数据质量issues不清除。非平台访问将playerCardComplete及playerCardMatchIds均裁剪到授权可见球员，不能用新增覆盖字段扩大身份或赛事信息访问。
+
+
+## 2026-10-16 个人积分账单与申诉
+
+accountingPolicy=evidence-points/1、creditedMetrics、uncreditedFields、breakdown与原metrics/coverage分离；原事实缺失不写0，奖励无依据不计。points-ledger/1账单按比赛说明各项得分，服务器严格对账；原始playerContributions不通过常规query输出。
+
+申诉使用platform_settings/recordType=player_points_appeal与active指针；请求幂等、同人/场/项待处理去重、revision CAS。本人/监护绑定可提交及读取，负责人可处理；普通球队管理权不开放私人生涯。状态“依据已补录”需服务端确认账单版本变化，补原始事实仍遵守裁判锁。所有姓名、球队、积分来自受控记录，不采信客户端计分。

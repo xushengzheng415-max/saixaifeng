@@ -330,3 +330,8 @@ PlayerCardIssueRepair/PlayerCardMatchRepair为平台数据中心正式处理组�
 ## 2026-10-16 未登记球员的个人异常隔离
 
 统一statistics记录参与范围，snapshot.playerCardScope供service和fanPlayerCardScores复用；无登记、无实际关联事件者为0比赛指标，整体阵容缺失仍是比赛问题。球员卡核查与发放同源，不再从全平台issues生成个人任务。同步脚本检查通过；五个实际卡分读取函数线上包回读一致；updateMatch纯比分重导出未变，serviceMatchWorkflow不读卡分，未重发旧包。详见../releases/player-recorded-participation-20261016.md。
+
+
+## 2026-10-16 按依据计分、个人明细与自愿申诉
+
+统一points-ledger/points-appeals经同步脚本生成各端副本。H5 getMyPlayerPointsLedger/submitMyPlayerPointsAppeal/listMyPlayerPointsAppeals用现有微信/亲子绑定；小程序teamPlayerPointsLedger/Appeal/Appeals要求workspace+球队+本人/监护绑定，不能凭team.manage扩权。平台pointsAppealList/Ledger/Resolve仅负责人，默认申诉队列不主动全员扫描，前端不另算。已计项继续、缺依据项不领分，原统计保留未知。发布与预览边界见../releases/player-points-ledger-appeals-20261016.md。
