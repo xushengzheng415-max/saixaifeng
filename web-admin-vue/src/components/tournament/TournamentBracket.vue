@@ -1,5 +1,5 @@
 <template>
-  <div class="tournament-bracket">
+  <div class="tournament-bracket" :data-template-version="BRACKET_TEMPLATE_VERSION">
     <section v-for="division in groups" :key="division.id" class="division-bracket">
       <header class="division-title"><h3>{{ division.name }}</h3><span><i class="legend-win"></i>胜者晋级 <i class="legend-loss"></i>负者转入排位</span></header>
       <p v-for="issue in division.issues" :key="issue" class="bracket-warning">{{ issue }}</p>
@@ -46,12 +46,13 @@
 
 <script setup>
 import {computed,ref,watch,nextTick} from 'vue'
+import {BRACKET_TEMPLATE_VERSION} from '../../utils/bracketTemplates'
 import {bracketGroups,officialWinner,activeBracketMatch} from '../../utils/tournamentBracket'
-const props=defineProps({matches:{type:Array,default:()=>[]},date:String,keyword:String})
+const props=defineProps({matches:{type:Array,default:()=>[]},date:String,keyword:String,templateId:{type:String,default:'auto'}})
 defineEmits(['open'])
 const sides=['home','away'],selectedId=ref(''),detailElement=ref(null)
 const rows=computed(()=>props.matches.filter(activeBracketMatch))
-const groups=computed(()=>bracketGroups(rows.value))
+const groups=computed(()=>bracketGroups(rows.value,props.templateId))
 const detailRows=computed(()=>rows.value.filter(row=>(selectedId.value?row.id===selectedId.value:(!props.date||row.matchDate===props.date)&&(!props.keyword||[row.homeTeamName,row.awayTeamName,row.matchNo,row.roundName].join(' ').includes(props.keyword.trim())))).sort((a,b)=>String(a.divisionId).localeCompare(String(b.divisionId))||Number(a.matchNo)-Number(b.matchNo)))
 watch(()=>props.matches,()=>{if(!rows.value.some(row=>row.id===selectedId.value))selectedId.value=''})
 function sourceLabel(source){if(source?.type==='group_rank')return source.groupName+'第'+source.rank+'名';if(['match_winner','match_loser'].includes(source?.type))return '场序'+(source.matchNo || '待定')+(source.type==='match_winner'?'胜者':'负者');return ''}

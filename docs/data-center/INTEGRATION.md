@@ -1,5 +1,9 @@
 # 数据入口登记
 
+## 通用签表模板（2026-10-16）
+
+所有赛事共用TournamentBracket，bracketTemplates注册小组出线淘汰、直接淘汰、带排位三类模板；默认从实际阶段和胜负来源自动选择。布局尺寸/列标题集中维护，队数与轮次按来源图自适应，无赛事专属分支，不生成或改写比赛。新增赛事直接传入同契约resultCenter.knockout；详见docs/BRACKET_TEMPLATES.md。
+
 ## 赛果中心淘汰签表（2026-10-16）
 
 淘汰晋级置于积分排名后。resultCenter增加最小homeSource/awaySource晋级来源和matchStatus投影，淘汰投影排除cancelled/canceled/deleted/removed/replaced/superseded记录；不修改原赛程或晋级写入。签表按division+唯一matchId/matchNo和胜者/负者关系建立图，只使用approved赛果判胜；来源缺失、重复或循环明确提示，不以排列、日期或比分猜关联。组别下分连通签表，争冠与排位分别展示；胜者实线、负者虚线，上/下半区来自决赛前置来源，点击节点定位下方对阵详情。青年组只读查到旧方案已cancelled，新方案场序17—24共8场有效比赛，旧方案不混入签表。完整图不因日期/搜索截断，日期/搜索只筛下方详情；选节点时精确显示所点比赛。
