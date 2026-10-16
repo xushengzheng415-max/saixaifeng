@@ -129,7 +129,7 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
       const team=teams.get(player.teamId),source=await require('./playerCardSource.cjs').resolveSource(db,player)
       const grade=gradeById.get(String(player._id))
       const reason=synthetic(player)||synthetic(team)||grade?.status==='test_data_excluded'?'测试资料不发放':!source?.fileId?'缺少可用照片':set.kind==='progression'&&(grade?.status!=='ready'||!TIERS.includes(grade?.tier))?'竞技等级待核定':''
-      rows.push({id:player._id,name:String(player.name||'未填写姓名'),teamName:String(team?.name||team?.teamName||''),reason,eligible:!reason,rosterEvidence:found.evidenceByPlayer?.get(String(player._id))||[]})
+      rows.push({id:player._id,name:String(player.name||'未填写姓名'),teamName:String(team?.name||team?.teamName||''),reason,eligible:!reason,missing:grade?.missing||[],rosterEvidence:found.evidenceByPlayer?.get(String(player._id))||[]})
     }
     return {success:true,players:rows,missingCount:found.missingPlayers?.length||0}
   }
@@ -205,6 +205,7 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
   return async function(event,auth){
     auth={...auth,userId:auth.userId||auth.user?._id||'platform-owner'}
     const action=String(event.workflowAction||'')
+    if(action.startsWith('auditRepair'))return require('./playerCardMatchRepair.cjs').createMatchRepair({cloud})(event,auth)
     if(action.startsWith('scoreRules'))return require('./playerCardScoreRules.cjs').createScoreRulesManager({cloud,service:scores})(event,auth)
     if(action==='auditPlayer'||action==='auditQueue'){const actor={platformOwner:auth.principalType==='platform_owner'&&auth.user?.isPlatformOwner===true};return require('./playerCardAudit.cjs')[action](db,actor,event,scores())}
     if(action==='list')return list()

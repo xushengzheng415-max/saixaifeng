@@ -20,6 +20,17 @@ async function auditPlayer(db, actor, event, service) {
     readByIds(db, 'divisions', '_id', (result.players || []).map(row => row.divisionId), {fields:{name:true}})
   ])
   const divisionById = new Map(divisions.map(row => [id(row._id), row]))
+  const matches = await readByIds(db, 'matches', '_id', (result.issues || []).map(row=>row.matchId).filter(Boolean))
+  const matchTeams = await readByIds(db, 'teams', '_id', matches.flatMap(row=>[row.homeTeamId,row.awayTeamId]), {fields:{name:true,teamName:true}})
+  const teamNames = new Map(matchTeams.map(row=>[id(row._id),id(row.name||row.teamName)]))
+  const ownMatches = new Set((result.players || []).filter(row=>row.playerId===playerId).flatMap(row=>row.matchIds||[]).map(id))
+  const matchMap = new Map(matches.map(row=>[id(row._id),row]))
+  const grouped = new Map()
+  for(const issue of result.issues || []) {
+    const key=id(issue.matchId)||'other',match=matchMap.get(key)
+    if(!grouped.has(key)) grouped.set(key,{matchId:id(issue.matchId),matchName:match?`${teamNames.get(id(match.homeTeamId))||'主队待关联'} vs ${teamNames.get(id(match.awayTeamId))||'客队待关联'}`:'其他资料',date:id(match?.matchDate||match?.date),related:ownMatches.has(key),issues:[]})
+    grouped.get(key).issues.push(issue)
+  }
   return {
     success:true,
     player:{id:playerId,name:id(profile.name),teamId,teamName:id(teams[0]?.name || teams[0]?.teamName)},
@@ -27,7 +38,7 @@ async function auditPlayer(db, actor, event, service) {
     coverage:{...result.coverage,generatedAt:result.generatedAt},
     careerRows:(result.players || []).filter(row => row.playerId === playerId).map(row => ({...row,divisionName:id(divisionById.get(id(row.divisionId))?.name)})),
     // Keep source issue codes and IDs; do not invent missing event data or silently make it zero.
-    issues:result.issues || [], schemaVersion:result.schemaVersion, metricVersion:result.metricVersion, dataVersion:result.dataVersion
+    issues:result.issues || [], findings:[...grouped.values()].sort((a,b)=>Number(b.related)-Number(a.related)||a.date.localeCompare(b.date)||a.matchId.localeCompare(b.matchId)), schemaVersion:result.schemaVersion, metricVersion:result.metricVersion, dataVersion:result.dataVersion
   }
 }
 async function auditQueue(db, actor, event, service) {

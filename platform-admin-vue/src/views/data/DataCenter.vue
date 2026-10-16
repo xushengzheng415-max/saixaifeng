@@ -5,13 +5,12 @@
     <el-tabs v-model="activeTab">
       <el-tab-pane label="统一统计" name="statistics" />
       <el-tab-pane label="数据质量" name="quality" />
-      <el-tab-pane v-if="platformOwner" label="球员卡核验" name="playerAudit" />
+      <el-tab-pane v-if="platformOwner" label="异常处理" name="playerAudit" />
       <el-tab-pane label="转会记录" name="transfers" />
     </el-tabs>
     <template v-if="activeTab === 'playerAudit'">
       <div class="audit-queue-head"><div><strong>{{ auditQueue ? '待核验 ' + auditQueue.issueCount + ' 人' : '尚未扫描' }}</strong><span v-if="auditQueue">已核定 {{ auditQueue.verifiedCount }} / {{ auditQueue.totalPlayers }}</span><small v-if="auditQueue?.generatedAt">上次扫描 {{ dateText(auditQueue.generatedAt) }}</small></div><el-button :loading="auditQueueLoading" @click="loadAuditQueue">{{ auditQueue ? '重新扫描' : '扫描异常' }}</el-button></div>
       <el-alert v-if="auditQueueError" :title="auditQueueError" type="error" :closable="false" show-icon />
-      <el-alert v-if="auditMutationNotice" :title="auditMutationNotice" type="success" :closable="false" />
       <el-form class="filters player-audit-filters" label-position="top" @submit.prevent="auditSelectedPlayer">
         <el-form-item label="球员"><el-select v-model="auditPlayerId" filterable clearable :loading="catalogLoading" placeholder="搜索球员姓名或球队"><el-option v-for="player in catalog.players" :key="player.id" :label="player.name + ' · ' + teamName(player.teamId)" :value="player.id" /></el-select></el-form-item>
         <el-button type="primary" native-type="submit" :loading="auditLoading" :disabled="!auditPlayerId">核验数据</el-button>
@@ -29,60 +28,8 @@
       <div v-else-if="auditQueueLoading && !auditQueue" class="state" role="status">正在扫描球员数据…</div>
 
       <div v-if="auditLoading" class="state" role="status">正在核对正式生涯数据…</div>
-      <template v-else-if="playerAudit">
-        <div class="result-meta"><span>{{ playerAudit.player.name }} · {{ playerAudit.player.teamName || '球队待补充' }}</span><el-tag :type="auditStatusType">{{ auditStatusText }}</el-tag><el-tag v-if="playerAudit.score?.tier" type="success">{{ tierText(playerAudit.score.tier) }} · {{ playerAudit.score.points }} 分</el-tag></div>
-        <el-alert :title="auditSummary" :type="playerAudit.score?.status === 'ready' ? 'success' : playerAudit.score?.status === 'test_data_excluded' ? 'warning' : 'error'" :closable="false" show-icon />
-        <div v-if="playerAudit.score?.missing?.length" class="audit-missing"><strong>未通过项</strong><el-tag v-for="item in playerAudit.score.missing" :key="item" type="danger" effect="plain">{{ missingLabel(item) }}</el-tag></div>
-        <h2>生涯指标</h2>
-        <el-table :data="auditMetricRows" stripe>
-          <el-table-column prop="label" label="指标" width="130" />
-          <el-table-column label="已采集"><template #default="{ row }">{{ number(row.observed) }}</template></el-table-column>
-          <el-table-column label="核定值"><template #default="{ row }">{{ row.complete ? number(row.value) : '—' }}</template></el-table-column>
-          <el-table-column label="覆盖状态"><template #default="{ row }"><el-tag :type="row.complete ? 'success' : 'warning'">{{ coverageText(row.coverage) }}</el-tag></template></el-table-column>
-        </el-table>
-        <div class="audit-coverage">
-          <span>比赛读取 {{ playerAudit.coverage.coveredMatches }}/{{ playerAudit.coverage.expectedMatches }} 场</span>
-          <span>阵容缺失 {{ playerAudit.coverage.missingLineupSides || 0 }} 侧</span>
-          <span>来源待核 {{ playerAudit.coverage.originUnverifiedMatches || 0 }} 场</span>
-          <span>未关联事件 {{ playerAudit.coverage.unlinkedEventCount || 0 }} 条</span>
-          <span v-if="playerAudit.score?.supportDrops != null">已核定应援 {{ playerAudit.score.supportDrops }} 次</span>
-          <span>规则 {{ playerAudit.score?.scoreVersion || '—' }}</span>
-        </div>
-        <h2>球队与赛事记录</h2>
-        <el-table :data="playerAudit.careerRows" stripe>
-          <el-table-column label="赛事" min-width="140"><template #default="{ row }">{{ tournamentName(row.tournamentId) }}</template></el-table-column>
-          <el-table-column label="当时球队" min-width="140"><template #default="{ row }">{{ teamName(row.teamId) }}</template></el-table-column>
-          <el-table-column label="组别" min-width="100" show-overflow-tooltip><template #default="{row}">{{ row.divisionName || (row.divisionId === 'default' ? '默认组别' : '组别名称待核对') }}</template></el-table-column>
-          <el-table-column label="比赛" width="90"><template #default="{ row }">{{ row.matchIds.length }} 场</template></el-table-column>
-          <el-table-column v-for="field in auditMetricFields" :key="field.id" :label="field.label" width="100"><template #default="{ row }">{{ row.coverage[field.id] === 'complete' ? number(row.metrics[field.id]) : '—' }} · {{ coverageText(row.coverage[field.id]) }}</template></el-table-column>
-          <el-table-column label="比赛编号" min-width="160"><template #default="{ row }"><el-button v-if="row.matchIds.length" link @click="copyMatchIds(row.matchIds)">复制 {{ row.matchIds.length }} 个编号</el-button><span v-else>—</span></template></el-table-column>
-          <el-table-column label="处理" width="90"><template #default="{ row }"><el-button v-if="row.tournamentId" link type="primary" @click="openTournamentMatches(row.tournamentId)">查询赛事</el-button><span v-else>—</span></template></el-table-column>
-        </el-table>
-        <el-table v-if="playerAudit.issues.length" :data="playerAudit.issues" stripe class="audit-issues">
-          <el-table-column label="数据问题" min-width="180"><template #default="{ row }">{{ issueLabel(row.code) }}</template></el-table-column>
-          <el-table-column prop="matchId" label="比赛编号" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="eventId" label="事件编号" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="teamId" label="球队编号" min-width="160" show-overflow-tooltip />
-          <el-table-column label="事件内容" min-width="180"><template #default="{ row }">{{ row.event ? `${eventTypeText(row.event.type)} · ${row.event.playerName || row.event.playerId || '球员未关联'} · ${row.event.teamSide || row.event.teamId || '球队未关联'}` : '源事件不可用' }}</template></el-table-column>
-          <el-table-column label="纠正" width="180"><template #default="{ row }"><el-button v-if="canCorrectAuditEvent(row)" link type="primary" @click="openEventCorrection(row)">修正关联</el-button><el-button v-if="row.event" link type="danger" @click="deleteInvalidAuditEvent(row)">删除无效</el-button><DurationVerification :issue="row" :allowed="platformOwner" @saved="onDurationVerified" /><span v-if="!row.event && !String(row.code).startsWith('MATCH_DURATION')">—</span></template></el-table-column>
-        </el-table>
-        <p class="metric-note">修正或删除比赛原始事件后，手动重新扫描核验。</p>
-        <details class="version"><summary>数据版本</summary><dl><dt>积分规则</dt><dd>{{ playerAudit.score?.scoreVersion }}</dd><dt>比赛数据</dt><dd>{{ playerAudit.score?.careerDataVersion || playerAudit.score?.dataVersion || '—' }}</dd><dt>应援数据</dt><dd>{{ playerAudit.score?.supportDataVersion || '—' }}</dd><dt>生成时间</dt><dd>{{ dateText(playerAudit.coverage.generatedAt) }}</dd></dl></details>
-      </template>
-      <div v-else-if="!auditLoading" class="state">选择球员后查看积分核验明细。</div>
-      <el-dialog v-model="eventCorrectionOpen" title="修正比赛事件" width="min(500px, 94vw)">
-        <template v-if="eventCorrectionIssue">
-          <p class="metric-note">{{ eventTypeText(eventCorrectionIssue.event?.type) }} · {{ eventCorrectionIssue.matchId }} · {{ eventCorrectionIssue.eventId }}</p>
-          <el-form label-position="top">
-            <el-form-item label="正确球员"><el-select v-model="eventCorrection.playerId" filterable><el-option v-for="player in catalog.players" :key="player.id" :label="player.name + ' · ' + teamName(player.teamId)" :value="player.id" /></el-select></el-form-item>
-            <el-form-item label="正确球队"><el-select v-model="eventCorrection.teamId"><el-option v-for="team in correctionTeams" :key="team.id" :label="team.name" :value="team.id" /></el-select></el-form-item>
-            <el-form-item label="事件类型"><el-select v-model="eventCorrection.type"><el-option v-for="item in correctionEventTypes" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
-            <el-form-item label="事件分钟"><el-input-number v-model="eventCorrection.minute" :min="0" :max="300" :step="1" /></el-form-item>
-            <el-form-item label="纠正原因"><el-input v-model="eventCorrection.reason" type="textarea" :rows="3" maxlength="200" show-word-limit /></el-form-item>
-          </el-form>
-        </template>
-        <template #footer><el-button @click="eventCorrectionOpen=false">取消</el-button><el-button type="primary" :loading="eventMutationLoading" @click="saveAuditEventCorrection">保存纠正</el-button></template>
-      </el-dialog>
+      <PlayerCardIssueRepair v-else-if="playerAudit" :player-id="auditPlayerId" :initial-audit="playerAudit" @changed="updateAuditQueue" />
+      <div v-else-if="!auditLoading" class="state">选择球员后查看待处理资料。</div>
     </template>
     <template v-else-if="activeTab !== 'transfers'">
       <el-form class="filters" label-position="top" @submit.prevent="query">
@@ -138,6 +85,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DurationVerification from './DurationVerification.vue'
+import PlayerCardIssueRepair from './PlayerCardIssueRepair.vue'
 import { callFunction, playerCardTemplateRequest } from '../../utils/cloud'
 const props = defineProps({ embedded:Boolean, initialPlayerId:{type:String,default:''} })
 const router = useRouter()
@@ -145,37 +93,25 @@ const catalog = reactive({ teams:[], tournaments:[], players:[] })
 const catalogLoading = ref(false), loading = ref(false), tournamentTeamsLoading=ref(false), errorText = ref(''), result = ref(null), subject = ref('team'), activeTab = ref('statistics'), tournamentTeamIds=ref([])
 const platformOwner = ref(false), scope = reactive({ teamId:'', playerId:'', tournamentId:'', mode:'official' }), dateRange = ref([])
 const auditPlayerId = ref(''), auditLoading = ref(false), playerAudit = ref(null)
-const auditQueue = ref(null), auditQueueLoading = ref(false), auditQueueError = ref(''), auditKeyword = ref(''), manualAuditOpen=ref(false)
-const auditMutationNotice=ref(''),eventCorrectionOpen=ref(false),eventMutationLoading=ref(false),eventCorrectionIssue=ref(null),eventCorrection=reactive({playerId:'',teamId:'',type:'goal',minute:0,reason:''})
+const auditQueue = ref(null), auditQueueLoading = ref(false), auditQueueError = ref(''), auditKeyword = ref('')
 const transfers = ref([]), transferLoading = ref(false), transferDialog = ref(false), submittingTransfer = ref(false), accepting = ref(''), initializing = ref(false)
 let querySequence=0,auditSequence=0
 const transfer = reactive({ playerId:'', toTeamId:'', reason:'', requestKey:'' }), issuePageIndex = ref(1)
 const metricFields = [{ id:'appearances',label:'出场' },{ id:'goals',label:'进球' },{ id:'assists',label:'助攻' },{ id:'yellowCards',label:'黄牌' },{ id:'redCards',label:'红牌' },{ id:'minutesPlayed',label:'分钟' }]
-const auditMetricFields = [{id:'appearances',label:'出场'},{id:'starts',label:'首发'},{id:'minutesPlayed',label:'分钟'},{id:'goals',label:'进球'}]
-const correctionEventTypes=[{value:'goal',label:'进球'},{value:'penalty_goal',label:'点球'},{value:'own_goal',label:'乌龙球'},{value:'assist',label:'助攻'},{value:'yellow_card',label:'黄牌'},{value:'red_card',label:'红牌'},{value:'second_yellow',label:'两黄变红'},{value:'substitution',label:'换人'}]
 const teamFields = [{ id:'wins',label:'胜' },{ id:'draws',label:'平' },{ id:'losses',label:'负' },{ id:'goalsFor',label:'进球' },{ id:'goalsAgainst',label:'失球' }]
 const selectedTransferPlayer = computed(() => catalog.players.find(row => row.id === transfer.playerId))
 const issuePage = computed(() => (result.value?.issues || []).slice((issuePageIndex.value - 1) * 20,issuePageIndex.value * 20))
 const scopedTeams = computed(()=>{const ids=new Set(tournamentTeamIds.value.map(String));return catalog.teams.filter(team=>ids.has(String(team.id)))})
 const scopedPlayers = computed(()=>catalog.players.filter(player=>String(player.teamId)===String(scope.teamId)))
 const filteredAuditIssues = computed(()=>{const key=auditKeyword.value.trim().toLocaleLowerCase();return (auditQueue.value?.issues||[]).filter(row=>!key||[row.playerName,row.teamName,row.playerId,...(row.missing||[]).map(missingLabel)].some(value=>String(value||'').toLocaleLowerCase().includes(key)))})
-const auditMetricRows = computed(() => auditMetricFields.map(field=>({ ...field,value:playerAudit.value?.playerTotal?.metrics?.[field.id],observed:playerAudit.value?.playerTotal?.observed?.[field.id],coverage:playerAudit.value?.playerTotal?.coverage?.[field.id]||'not_collected',complete:playerAudit.value?.playerTotal?.coverage?.[field.id]==='complete' })))
-const correctionTeams=computed(()=>{const ids=[eventCorrectionIssue.value?.match?.homeTeamId,eventCorrectionIssue.value?.match?.awayTeamId].filter(Boolean).map(String);return ids.map(id=>({id,name:catalog.teams.find(team=>String(team.id)===id)?.name||id}))})
-const auditStatusText = computed(() => ({ready:'已核定',unverified:'待核验',test_data_excluded:'测试来源已排除',scope_limited:'统计范围不足'}[playerAudit.value?.score?.status]||'未核定'))
-const auditStatusType = computed(() => playerAudit.value?.score?.status==='ready'?'success':playerAudit.value?.score?.status==='test_data_excluded'?'warning':'danger')
-const auditSummary = computed(() => {const score=playerAudit.value?.score;if(score?.status==='ready')return `正式生涯积分 ${score.points} 分，核定为${tierText(score.tier)}。`;if(score?.status==='test_data_excluded')return '球员或球队标记为测试来源，不进入正式制卡。';const missing=(score?.missing||[]).map(missingLabel);return missing.length?`制卡暂停：${missing.join('、')}。修复来源数据后可重新核验。`:'未取得完整的正式生涯积分，暂不能制卡。'})
 const number = value => typeof value === 'number' && Number.isFinite(value) ? value : '—'
 const teamName = id => catalog.teams.find(row => row.id === id)?.name || id
 const playerName = id => catalog.players.find(row => row.id === id)?.name || id
 const tournamentName = id => catalog.tournaments.find(row => row.id === id)?.name || id
 const divisionLabel = (id,name='') => name || result.value?.standings?.find(row=>String(row.divisionId)===String(id))?.divisionName || (String(id||'')==='default'?'默认组别':'组别名称待核对')
 const dateText = value => new Date(value?.$date || value).toLocaleString('zh-CN')
-const tierText = value => ({bronze:'铜卡',silver:'银卡',gold:'金卡'})[value]||'等级待核定'
-const coverageText = value => ({complete:'完整',partial:'部分',not_collected:'未采集',test_data:'测试数据',identity_unverified:'身份待核',undefined:'未知'})[value]||'未知'
 const missingLabel = value => ({dataCoverage:'正式比赛来源或整体覆盖不完整',supportDrops:'应援记录与蜂蜜扣账未完整核对',appearances:'出场记录不完整',starts:'首发记录不完整',minutesPlayed:'出场分钟不完整',goals:'有效进球记录不完整'})[value]||value
 const auditStatusTextFor = value => ({unverified:'生涯数据待核验',scope_limited:'统计范围不足',test_data_excluded:'测试来源已排除'})[value]||'积分待核验'
-const eventTypeText = value => ({goal:'进球',penalty_goal:'点球',penalty_scored:'点球',own_goal:'乌龙球',assist:'助攻',yellow_card:'黄牌',red_card:'红牌',substitution:'换人',second_yellow:'两黄变红'})[String(value||'').toLowerCase()]||String(value||'比赛事件')
-const canCorrectAuditEvent = row => Boolean(row.event&&['EVENT_PLAYER_UNLINKED','EVENT_TEAM_UNLINKED','EVENT_PLAYER_TEAM_CONFLICT'].includes(row.code))
 const issueLabels = { EVENT_COVERAGE_PARTIAL:'比赛事件记录不足', EVENT_PLAYER_UNLINKED:'球员身份未关联', EVENT_TEAM_UNLINKED:'事件球队未关联', EVENT_PLAYER_TEAM_CONFLICT:'球员与球队冲突', SCORE_MISSING:'比分缺失', TEAM_ID_MISSING:'参赛球队缺失', MATCH_ID_MISSING:'比赛编号缺失',LINEUP_COVERAGE_MISSING:'阵容覆盖缺失',MATCH_ORIGIN_UNVERIFIED:'比赛来源待核验',TEST_PLAYER_IN_MATCH:'涉及测试球员',MATCH_DURATION_EVIDENCE_MISSING:'比赛时长未核实', MATCH_DURATION_MISSING:'比赛时长缺失', MATCH_TEAM_MISSING:'参赛球队缺失', TOURNAMENT_MISSING:'赛事未关联', EVENT_COVERAGE_MISSING:'比赛事件未完整记录' }
 const issueLabel = code => issueLabels[code] || '待核验的数据项'
 const issueHint = code => ({MATCH_DURATION_EVIDENCE_MISSING:'直接核实该场比赛的时长及依据。',MATCH_DURATION_MISSING:'到赛事比赛记录中填写比赛时长。',LINEUP_COVERAGE_MISSING:'补齐比赛双方已审核的阵容记录。',MATCH_ORIGIN_UNVERIFIED:'核对比赛来源并完成审核。',EVENT_PLAYER_UNLINKED:'在球员卡核验中关联正确球员。',EVENT_TEAM_UNLINKED:'在球员卡核验中关联正确球队。',EVENT_PLAYER_TEAM_CONFLICT:'核对事件球员与球队归属。',SCORE_MISSING:'补录正式比分并完成比赛审核。',TEAM_ID_MISSING:'补齐比赛的参赛球队。',MATCH_ID_MISSING:'为记录补齐比赛关联。',TEST_PLAYER_IN_MATCH:'检查测试来源标记；测试数据不计入正式统计。',EVENT_COVERAGE_PARTIAL:'补齐比赛事件记录后重新查询。'})[code] || '查看对应比赛记录并补齐缺失信息。'
@@ -195,13 +131,8 @@ async function loadAuditQueue(){
   try{let cursor='',issues=[],verifiedCount=0,totalPlayers=0;const seen=new Set();do{const reply=await api({action:'auditQueue',cursor});issues.push(...(reply.issues||[]));verifiedCount+=reply.verifiedCount;totalPlayers=reply.totalPlayers;cursor=reply.nextCursor;if(cursor){if(seen.has(cursor))throw new Error('扫描分页异常，请重试');seen.add(cursor)}}while(cursor);auditQueue.value={issues,verifiedCount,totalPlayers,issueCount:issues.length,generatedAt:new Date().toISOString()};if(auditPlayerId.value&&playerAudit.value&&!issues.some(row=>row.playerId===auditPlayerId.value))await auditSelectedPlayer()}
   catch(error){auditQueueError.value=error.message||'异常球员扫描失败，请重试'}finally{auditQueueLoading.value=false}
 }
-async function onDurationVerified(){await auditSelectedPlayer();if(auditQueue.value)await loadAuditQueue()}
+function updateAuditQueue(audit){if(!auditQueue.value)return;const rows=auditQueue.value.issues,index=rows.findIndex(row=>row.playerId===audit.player.id);if(index<0)return;if(audit.score.status==='ready'){rows.splice(index,1);auditQueue.value.issueCount--;auditQueue.value.verifiedCount++}else rows[index]={...rows[index],status:audit.score.status,missing:audit.score.missing||[]}}
 function selectAuditIssue(row){auditPlayerId.value=row.playerId;auditSelectedPlayer()}
-function openEventCorrection(row){eventCorrectionIssue.value=row;eventCorrection.playerId=auditPlayerId.value||row.event?.playerId||'';eventCorrection.teamId=row.event?.teamId||row.teamId||row.match?.homeTeamId||'';eventCorrection.type=correctionEventTypes.some(item=>item.value===row.event?.type)?row.event.type:'goal';eventCorrection.minute=Number(row.event?.minute||0);eventCorrection.reason='';eventCorrectionOpen.value=true}
-async function saveAuditEventCorrection(){const issue=eventCorrectionIssue.value;if(!issue)return;if(!eventCorrection.playerId||!eventCorrection.teamId||eventCorrection.reason.trim().length<4){ElMessage.warning('请填写球员、球队和至少 4 字的纠正原因');return}eventMutationLoading.value=true;try{const reply=await playerCardTemplateRequest('correctPlayerCardAuditEvent',{playerId:auditPlayerId.value,matchId:issue.matchId,eventId:issue.eventId,targetPlayerId:eventCorrection.playerId,targetTeamId:eventCorrection.teamId,targetType:eventCorrection.type,targetMinute:eventCorrection.minute,reason:eventCorrection.reason,expectedRevision:issue.event.revision,expectedOverrideRevision:issue.event.overrideRevision});if(!reply?.success)throw new Error(reply?.error||'事件纠正失败');eventCorrectionOpen.value=false;playerAudit.value=null;auditQueue.value=null;auditMutationNotice.value='事件已纠正；点击“扫描异常”重新核验。';ElMessage.success('事件已纠正，请重新扫描')}catch(error){ElMessage.error(error.message||'事件纠正失败，请重试')}finally{eventMutationLoading.value=false}}
-async function deleteInvalidAuditEvent(row){let reason='';try{const result=await ElMessageBox.prompt('删除后该事件将从统计中排除，并保留操作审计记录。请填写原因。','删除无效事件',{confirmButtonText:'删除无效数据',cancelButtonText:'取消',inputType:'textarea',inputPlaceholder:'例如：事件球员与比赛名单不符',inputValidator:value=>String(value||'').trim().length>=4||'请填写至少 4 字的删除原因'});reason=String(result.value||'').trim()}catch{return}eventMutationLoading.value=true;try{const reply=await playerCardTemplateRequest('deletePlayerCardAuditEvent',{playerId:auditPlayerId.value,matchId:row.matchId,eventId:row.eventId,reason,expectedRevision:row.event.revision,expectedOverrideRevision:row.event.overrideRevision});if(!reply?.success)throw new Error(reply?.error||'删除无效事件失败');playerAudit.value=null;auditQueue.value=null;auditMutationNotice.value='无效事件已从统计中排除并记录审计；点击“扫描异常”更新队列。';ElMessage.success('无效事件已删除')}catch(error){ElMessage.error(error.message||'删除无效事件失败，请重试')}finally{eventMutationLoading.value=false}}
-async function copyMatchIds(ids){try{await navigator.clipboard.writeText(ids.join('\n'));ElMessage.success(`已复制 ${ids.length} 个比赛编号`)}catch{ElMessage.error('复制失败，请手动选择比赛编号')}}
-async function openTournamentMatches(tournamentId){if(!tournamentId)return;subject.value='tournament';Object.assign(scope,{tournamentId,teamId:'',playerId:''});activeTab.value='statistics';await query()}
 function resetScope() { querySequence++;loading.value=false; Object.assign(scope,{ teamId:'', playerId:'', tournamentId:'' }); tournamentTeamIds.value=[];result.value = null }
 async function changeTournament(){querySequence++;loading.value=false;const selectedTournament=scope.tournamentId;scope.teamId='';scope.playerId='';result.value=null;tournamentTeamIds.value=[];if(!scope.tournamentId)return;tournamentTeamsLoading.value=true;try{const data=await api({action:'query',scope:{tournamentId:scope.tournamentId,mode:scope.mode}});if(selectedTournament!==scope.tournamentId)return;const ids=[...new Set((data.teams||[]).map(row=>String(row.teamId||'')).filter(Boolean))];tournamentTeamIds.value=ids;if(!ids.length)ElMessage.info('该赛事暂无可统计的球队记录')}catch(error){errorText.value=error.message||'赛事球队读取失败'}finally{tournamentTeamsLoading.value=false}}
 function changeScopeTeam(){querySequence++;loading.value=false;scope.playerId='';result.value=null}
