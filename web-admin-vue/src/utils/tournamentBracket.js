@@ -14,7 +14,7 @@ export function officialWinner(row){
  if(row.homeScore==null||row.awayScore==null||row.homeScore===row.awayScore)return ''
  return row.homeScore>row.awayScore?row.homeTeamId:row.awayTeamId
 }
-export function bracketGroups(input=[],templateId='auto'){
+export function bracketGroups(input=[],templateId='auto',availableWidth=1400){
  const rows=input.filter(activeBracketMatch),divisions=new Map()
  for(const row of rows){const id=text(row.divisionId);if(!divisions.has(id))divisions.set(id,{id,name:row.divisionName || '未分组别',rows:[]});divisions.get(id).rows.push(row)}
  return [...divisions.values()].map(division=>{
@@ -30,15 +30,15 @@ export function bracketGroups(input=[],templateId='auto'){
   while(pending.size){
    const ids=new Set(),queue=[pending.values().next().value]
    while(queue.length){const id=queue.shift();if(ids.has(id))continue;ids.add(id);pending.delete(id);for(const edge of edges)if(edge.from===id||edge.to===id)queue.push(edge.from===id?edge.to:edge.from)}
-   components.push(layout(division.rows.filter(row=>ids.has(row.id)),edges.filter(edge=>ids.has(edge.from)&&ids.has(edge.to)),templateId))
+   components.push(layout(division.rows.filter(row=>ids.has(row.id)),edges.filter(edge=>ids.has(edge.from)&&ids.has(edge.to)),templateId,availableWidth))
   }
   components.sort((a,b)=>Number(b.championship)-Number(a.championship)||number(a.nodes[0].row)-number(b.nodes[0].row))
   return {...division,components,issues:[...new Set(issues)]}
  })
 }
-function layout(rows,edges,templateId){
+function layout(rows,edges,templateId,availableWidth){
  const template=resolveBracketTemplate(rows,templateId),geometry=template.geometry
- const {cardWidth:width,cardHeight:height,columnGap:gap,rowGap}=geometry
+ const {cardHeight:height,rowGap}=geometry
  const byId=new Map(rows.map(row=>[row.id,row]))
  const incoming=(id,side)=>edges.find(edge=>edge.to===id&&edge.side===side&&edge.type==='match_winner')
  const parents=id=>edges.filter(edge=>edge.to===id&&edge.type==='match_winner')
@@ -50,7 +50,10 @@ function layout(rows,edges,templateId){
  const terminal=rows.filter(row=>!edges.some(edge=>edge.from===row.id&&edge.type==='match_winner'))
  terminal.sort((a,b)=>Number(/^(?:总)?决赛$/.test(text(b.roundName)))-Number(/^(?:总)?决赛$/.test(text(a.roundName)))||levels(b.id)-levels(a.id)||number(a)-number(b))
  const primary=terminal[0] || rows.slice().sort((a,b)=>number(a)-number(b))[0]
- const depth=levels(primary.id),centerX=geometry.padding+depth*(width+gap)
+ const depth=levels(primary.id),columns=depth*2+1
+ const gap=availableWidth<1200?24:geometry.columnGap
+ const width=Math.max(144,Math.min(geometry.cardWidth,Math.floor((availableWidth-geometry.padding*2-gap*(columns-1))/columns)))
+ const centerX=geometry.padding+depth*(width+gap)
  const nodes=[],paths=[],positions=new Map(),used=new Set()
  const add=(row,side,kind,x,y,half='',label='')=>{
   const node={id:row.id+'|'+kind+'|'+side,row,side,kind,x,y,width,height,half,label}
