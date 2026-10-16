@@ -4612,15 +4612,16 @@ async function handlePaperRefereeReport(event, confirming) {
       lineups[side]=old
     }
   }
-  const sameEvent=(a,b)=>a.type===b.type && a.playerId===b.playerId && a.teamSide===b.teamSide && Number(a.minute)===Number(b.minute) && String(a.outPlayerId || a.assistPlayerId || '')===String(b.outPlayerId || b.assistPlayerId || '')
-  const events=[...existing,...entries.filter(row=>!existing.some(old=>old.eventId===row.eventId || sameEvent(old,row)))]
+  const reconciliation=require('./paperGoalReconcile.cjs').prepare(existing,entries,evidence,event.replaceGoalConflicts===true)
+  if(reconciliation.conflicts.length&&event.replaceGoalConflicts!==true)return {success:false,code:'PAPER_GOAL_CORRECTION_REQUIRED',error:'已有进球分钟与本表不同，请逐项核对并确认更正',goalCorrections:reconciliation.conflicts}
+  const events=reconciliation.events
   const score=event.score || {}
   if (![score.home,score.away].every(value=>Number.isInteger(value)&&value>=0&&value<=99)) return {success:false,error:'请填写0至99的双方比分'}
   const {calculateMatchEventScore}=await import('./data-center/match-events.mjs')
   const derived=calculateMatchEventScore({...match,events})
-  if (derived.home!==score.home || derived.away!==score.away) return {success:false,error:'比分与进球记录不一致，请补齐或修正进球记录'}
+  if (derived.home!==score.home || derived.away!==score.away) return {success:false,error:'后台合计进球'+derived.home+':'+derived.away+'，本表比分'+score.home+':'+score.away+'；请核对本场已有进球'}
   if (event.expectedEventRevision == null || Number(event.expectedEventRevision)!==Number(match.matchEventRevision || 0)) return {success:false,error:'比赛记录已更新，请重新上传核对'}
-  const data={lineups,events,paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
+  const data={lineups,events,paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,goalCorrections:reconciliation.conflicts,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
   return handleCallFunction({...event,functionName:'updateMatch',functionParams:{action:'importPaperReport',matchId:match._id,expectedEventRevision:event.expectedEventRevision,paperReportProof:ocr.signImport(match._id,event.expectedEventRevision,data),data}},true)
 }
 
