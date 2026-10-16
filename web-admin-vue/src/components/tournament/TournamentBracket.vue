@@ -20,7 +20,7 @@
                 <b class="team-score">{{ node.row.scoreReady ? node.row[teamSide+'Score'] : '—' }}</b>
                 <small v-if="sourceLabel(node.row[teamSide+'Source'])" class="source-label">{{ sourceLabel(node.row[teamSide+'Source']) }}</small>
               </div>
-              <div v-if="node.row.resultStatus==='approved' && ['penalties','penalty_shootout'].includes(node.row.resolution)" class="penalties">点球 {{ node.row.homePenaltyScore }} : {{ node.row.awayPenaltyScore }}</div>
+              <div v-if="node.row.resultStatus==='approved' && ['penalties','penalty_shootout'].includes(node.row.resolution)" class="penalties">点球决胜</div>
               <footer><span>{{ node.row.matchDate || '日期待定' }} {{ node.row.matchTime || '' }}</span><button type="button" @click="select(node.row)">查看对阵</button></footer>
             </article>
           </div>
@@ -52,7 +52,7 @@ defineEmits(['open'])
 const sides=['home','away'],selectedId=ref(''),detailElement=ref(null)
 const rows=computed(()=>props.matches.filter(activeBracketMatch))
 const groups=computed(()=>bracketGroups(rows.value))
-const detailRows=computed(()=>rows.value.filter(row=>(!selectedId.value||row.id===selectedId.value)&&(!props.date||row.matchDate===props.date)&&(!props.keyword||[row.homeTeamName,row.awayTeamName,row.matchNo,row.roundName].join(' ').includes(props.keyword.trim()))).sort((a,b)=>String(a.divisionId).localeCompare(String(b.divisionId))||Number(a.matchNo)-Number(b.matchNo)))
+const detailRows=computed(()=>rows.value.filter(row=>(selectedId.value?row.id===selectedId.value:(!props.date||row.matchDate===props.date)&&(!props.keyword||[row.homeTeamName,row.awayTeamName,row.matchNo,row.roundName].join(' ').includes(props.keyword.trim())))).sort((a,b)=>String(a.divisionId).localeCompare(String(b.divisionId))||Number(a.matchNo)-Number(b.matchNo)))
 watch(()=>props.matches,()=>{if(!rows.value.some(row=>row.id===selectedId.value))selectedId.value=''})
 function sourceLabel(source){if(source?.type==='group_rank')return source.groupName+'第'+source.rank+'名';if(['match_winner','match_loser'].includes(source?.type))return '场序'+(source.matchNo || '待定')+(source.type==='match_winner'?'胜者':'负者');return ''}
 function teamName(row,side){return row[side+'TeamName'] || sourceLabel(row[side+'Source']) || '待定球队'}
