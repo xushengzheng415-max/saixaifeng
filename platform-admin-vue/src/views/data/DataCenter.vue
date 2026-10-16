@@ -5,10 +5,11 @@
     <el-tabs v-model="activeTab">
       <el-tab-pane label="统一统计" name="statistics" />
       <el-tab-pane label="数据质量" name="quality" />
-      <el-tab-pane v-if="platformOwner" label="异常处理" name="playerAudit" />
+      <el-tab-pane v-if="platformOwner" label="积分申诉" name="appeals" />
       <el-tab-pane label="转会记录" name="transfers" />
     </el-tabs>
-    <template v-if="activeTab === 'playerAudit'">
+    <PlayerPointsAppeals v-if="activeTab==='appeals'" ref="appealsRef" />
+    <template v-else-if="activeTab === 'playerAudit'">
       <div class="audit-queue-head"><div><strong>{{ auditQueue ? '待核验 ' + auditQueue.issueCount + ' 人' : '尚未扫描' }}</strong><span v-if="auditQueue">已核定 {{ auditQueue.verifiedCount }} / {{ auditQueue.totalPlayers }}</span><small v-if="auditQueue?.generatedAt">上次扫描 {{ dateText(auditQueue.generatedAt) }}</small></div><el-button :loading="auditQueueLoading" @click="loadAuditQueue">{{ auditQueue ? '重新扫描' : '扫描异常' }}</el-button></div>
       <el-alert v-if="auditQueueError" :title="auditQueueError" type="error" :closable="false" show-icon />
       <el-form class="filters player-audit-filters" label-position="top" @submit.prevent="auditSelectedPlayer">
@@ -86,9 +87,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DurationVerification from './DurationVerification.vue'
 import PlayerCardIssueRepair from './PlayerCardIssueRepair.vue'
+import PlayerPointsAppeals from './PlayerPointsAppeals.vue'
 import { callFunction, playerCardTemplateRequest } from '../../utils/cloud'
 const props = defineProps({ embedded:Boolean, initialPlayerId:{type:String,default:''} })
-const router = useRouter()
+const router = useRouter(),appealsRef=ref(null)
 const catalog = reactive({ teams:[], tournaments:[], players:[] })
 const catalogLoading = ref(false), loading = ref(false), tournamentTeamsLoading=ref(false), errorText = ref(''), result = ref(null), subject = ref('team'), activeTab = ref('statistics'), tournamentTeamIds=ref([])
 const platformOwner = ref(false), scope = reactive({ teamId:'', playerId:'', tournamentId:'', mode:'official' }), dateRange = ref([])
@@ -169,9 +171,9 @@ watch(activeTab,value => { if (value === 'transfers') loadTransfers(); if(value=
 watch(auditPlayerId,()=>{auditSequence++;auditLoading.value=false;playerAudit.value=null})
 watch(() => [transfer.playerId,transfer.toTeamId],() => { transfer.requestKey = '' })
 onBeforeUnmount(()=>{querySequence++;auditSequence++})
-async function refresh(){await loadCatalog();if(activeTab.value==='playerAudit'){if(auditQueue.value)await loadAuditQueue();if(auditPlayerId.value)await auditSelectedPlayer()}else if(activeTab.value==='transfers')await loadTransfers();else if(result.value)await query()}
+async function refresh(){if(activeTab.value==='appeals')return appealsRef.value?.refresh();await loadCatalog();if(activeTab.value==='playerAudit'){if(auditQueue.value)await loadAuditQueue();if(auditPlayerId.value)await auditSelectedPlayer()}else if(activeTab.value==='transfers')await loadTransfers();else if(result.value)await query()}
 defineExpose({refresh,loading})
-onMounted(async()=>{await loadCatalog();if(props.initialPlayerId&&platformOwner.value){activeTab.value='playerAudit';auditPlayerId.value=props.initialPlayerId;await nextTick();await auditSelectedPlayer()}})
+onMounted(async()=>{await loadCatalog();if(platformOwner.value&&!props.initialPlayerId)activeTab.value='appeals';if(props.initialPlayerId&&platformOwner.value){activeTab.value='playerAudit';auditPlayerId.value=props.initialPlayerId;await nextTick();await auditSelectedPlayer()}})
 </script>
 
 <style scoped>

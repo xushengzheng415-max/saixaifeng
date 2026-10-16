@@ -24,9 +24,9 @@ function mockDb(matches=[match()]) {
     divisions:[],match_events:[],match_lineup_snapshots:[],player_team_memberships:[],fan_supports:[],fan_points_ledger:[]}
   const command={in:values=>({op:'in',values}),gt:value=>({op:'gt',value}),and:clauses=>({op:'and',clauses})}
   const matchesWhere=(row,where)=>where.op==='and'?where.clauses.every(w=>matchesWhere(row,w)):Object.entries(where).every(([k,v])=>v?.op==='in'?v.values.includes(row[k]):v?.op==='gt'?row[k]>v.value:row[k]===v)
-  const db={command,store,fail:'',reads:[],collection(name){let where={},limit=100;const q={where(w){where=w;return q},orderBy(){return q},limit(n){limit=n;return q},async get(){
+  const db={command,store,fail:'',reads:[],collection(name){let where={},limit=100,projection=null;const q={field(value){projection=value;return q},where(w){where=w;return q},orderBy(){return q},limit(n){limit=n;return q},async get(){
     db.reads.push(name);if(db.fail===name)throw Error('fixture read failed')
-    return {data:(store[name] || []).filter(row=>matchesWhere(row,where)).sort((a,b)=>a._id.localeCompare(b._id)).slice(0,limit)}
+    return {data:(store[name] || []).filter(row=>matchesWhere(row,where)).sort((a,b)=>a._id.localeCompare(b._id)).slice(0,limit).map(row=>projection?Object.fromEntries(Object.entries(row).filter(([key])=>projection[key])):row)}
   }};return q}}
   return db
 }
@@ -110,8 +110,7 @@ await check('已确认0、未采集、时长未知、请求失败和范围受限
   assert.equal(zero.status,'ready');assert.equal(zero.points,0);assert.equal(zero.progress.percent,0)
   db.store.matches[0].durationRulesSnapshot=undefined
   const unknown=await service.playerCardForAuthorizedPlayer('starter')
-  assert.equal(unknown.status,'unverified');assert.equal(unknown.points,null);assert.equal(unknown.progress,null)
-  assert(unknown.reasonCodes.includes('MATCH_DURATION_EVIDENCE_MISSING'))
+  assert.equal(unknown.status,'ready');assert.equal(unknown.points,3);assert.equal(unknown.creditedMetrics.minutesPlayed,0);assert.ok(unknown.uncreditedFields.includes('minutesPlayed'));assert.equal((await service.query({platformOwner:true},{playerId:'starter'})).playerTotal.metrics.minutesPlayed,null)
   assert.notEqual(unknown.snapshotRevision,zero.snapshotRevision)
   const limited=await service.query({platformOwner:false,teamIds:['home'],tournamentIds:[]},{playerId:'starter',teamId:'home'})
   assert.equal(limited.playerCard.status,'scope_limited')
@@ -139,9 +138,9 @@ await check('未登记球员零比赛积分，缺阵容留在比赛质量而非�
   const audit=await service.query({platformOwner:true},{playerId:absent._id});assert.deepEqual(audit.issues,[])
   const dataset=await service.query({platformOwner:true},{mode:'official'});assert.ok(dataset.issues.some(x=>x.code==='LINEUP_COVERAGE_MISSING'));assert.ok(dataset.issues.some(x=>x.code==='EVENT_COVERAGE_PARTIAL'))
   db.store.matches[1].events=[{eventId:'unknown',type:'goal',teamId:'away',minute:10}];assert.equal((await service.playerCardForAuthorizedPlayer('starter')).status,'ready');assert.deepEqual((await service.query({platformOwner:true},{playerId:absent._id})).issues,[])
-  // A real linked appearance contradicts unlisted absence and must remain unknown.
+  // A linked goal is evidence of appearance; missing minutes earn no time points.
   db.store.matches[1].events=[{eventId:'linked',type:'goal',teamId:'home',playerId:absent._id,minute:12}];db.store.matches[1].eventRecordingStatus='complete'
-  assert.equal((await service.playerCardForAuthorizedPlayer(absent._id)).status,'unverified')
+  const linked=await service.playerCardForAuthorizedPlayer(absent._id);assert.equal(linked.status,'ready');assert.equal(linked.points,2);assert.equal(linked.creditedMetrics.minutesPlayed,0)
   db.fail='matches';await assert.rejects(service.playerCardForAuthorizedPlayer(absent._id),e=>e.code==='DATA_READ_FAILED')
 })
 await check('应援账本失败单人／批量一致，失去核验也更新版本',async()=>{

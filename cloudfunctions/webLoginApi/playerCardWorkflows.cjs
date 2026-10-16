@@ -205,6 +205,14 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
   return async function(event,auth){
     auth={...auth,userId:auth.userId||auth.user?._id||'platform-owner'}
     const action=String(event.workflowAction||'')
+    if(action.startsWith('pointsAppeal')){
+      if(auth.principalType!=='platform_owner'||auth.user?.isPlatformOwner!==true)throw new Error('仅平台负责人可处理积分申诉')
+      const api=require('./data-center/points-appeals.cjs'),actor={platformOwner:true,actorId:'owner:'+auth.userId}
+      if(action==='pointsAppealList')return api.list(db,actor,event)
+      if(action==='pointsAppealResolve')return api.resolve(db,actor,event,playerId=>scores().playerPointsLedgerForAuthorizedPlayer(playerId))
+      if(action==='pointsAppealLedger')return {success:true,ledger:await scores().playerPointsLedgerForAuthorizedPlayer(String(event.playerId||''))}
+      throw new Error('积分申诉操作不存在')
+    }
     if(action.startsWith('auditRepair'))return require('./playerCardMatchRepair.cjs').createMatchRepair({cloud})(event,auth)
     if(action.startsWith('scoreRules'))return require('./playerCardScoreRules.cjs').createScoreRulesManager({cloud,service:scores})(event,auth)
     if(action==='auditPlayer'||action==='auditQueue'){const actor={platformOwner:auth.principalType==='platform_owner'&&auth.user?.isPlatformOwner===true};return require('./playerCardAudit.cjs')[action](db,actor,event,scores())}

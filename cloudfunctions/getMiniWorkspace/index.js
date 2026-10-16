@@ -1535,6 +1535,15 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
   const rows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   const player = rows[0]
   if (!player || ['archived', 'deleted'].indexOf(String(player.status || '').toLowerCase()) >= 0) throw new Error('球员不存在或已移出球队')
+  if(['teamPlayerPointsLedger','teamPlayerPointsAppeal','teamPlayerPointsAppeals'].includes(event.action)){
+    const actor={actorId:'user:'+String(identity.user._id),playerId,channel:'mini'},appeals=require('./data-center/points-appeals.cjs')
+    const related=[player.linkedUserId,player.playerUserId,player.guardianUserId].some(id=>id&&String(id)===String(identity.user._id))
+    if(event.action==='teamPlayerPointsAppeals'){if(!related&&!permissions.has('team.manage'))throw new Error('无权查看该球员的积分申诉');return appeals.list(db,actor,event)}
+    const ledger=await createDataService(db).playerPointsLedgerForAuthorizedPlayer(playerId)
+    if(event.action==='teamPlayerPointsLedger')return {success:true,ledger,canAppeal:related||permissions.has('team.manage')}
+    if(!related&&!permissions.has('team.manage'))throw new Error('只能为本人、已绑定孩子或有权管理的球员提交申诉')
+    return appeals.submit(db,actor,event,ledger,{...player,teamName:String(team.name||team.teamName||'')})
+  }
   const cardService = createDataService(db)
   const dataCenter = await cardService.query({ teamIds:[teamId], tournamentIds:[], platformOwner:false }, { teamId, playerId })
   const { metrics:cardMetrics, ...playerCard } = await cardService.playerCardForAuthorizedPlayer(playerId)
@@ -3262,7 +3271,7 @@ exports.main = async function(event) {
     if (event.action === 'teamPlayers') return await loadTeamPlayersForWorkspace(event, identity)
     if (event.action === 'importedPlayerDrafts') return await importedPlayerDraftsForWorkspace(event, identity)
     if (event.action === 'reviewImportedPlayerDrafts') return await reviewImportedPlayerDraftsForWorkspace(event, identity)
-    if (event.action === 'teamPlayerDetail') return await loadTeamPlayerDetailForWorkspace(event, identity)
+    if (['teamPlayerDetail','teamPlayerPointsLedger','teamPlayerPointsAppeal','teamPlayerPointsAppeals'].includes(event.action)) return await loadTeamPlayerDetailForWorkspace(event, identity)
     if (event.action === 'teamPlayerEdit') return await loadTeamPlayerForEditForWorkspace(event, identity)
     if (event.action === 'saveTeamPlayer') return await saveTeamPlayerForWorkspace(event, identity)
     if (event.action === 'archiveTeamPlayer') return await archiveTeamPlayerForWorkspace(event, identity)

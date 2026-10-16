@@ -8,7 +8,7 @@ for (const file of ['docs/data-center/README.md','docs/data-center/CONTRACT.md',
 for (const directory of ['cloudfunctions','miniprogram','web-admin-vue/src','service-account-h5']) assert(read(directory + '/AGENTS.md').includes('data-center/README.md'),`${directory} 未登记数据规范`)
 assert(read('cloudfunctions/webLoginApi/index.js').includes("'dataCenter'"),'PC 中转未登记')
 const miniService = read('cloudfunctions/getMiniWorkspace/index.js')
-assert(miniService.includes("event.action === 'teamPlayerDetail'") && miniService.includes('cardService.playerCardForAuthorizedPlayer'),'小程序球员详情未使用统一服务')
+assert(miniService.includes("['teamPlayerDetail','teamPlayerPointsLedger','teamPlayerPointsAppeal','teamPlayerPointsAppeals'].includes(event.action)") && miniService.includes('cardService.playerCardForAuthorizedPlayer'),'小程序球员详情未使用统一服务')
 assert(read('cloudfunctions/webLoginApi/index.js').includes("case 'publicDataCenter'"),'公开入口未登记')
 assert(!read('cloudfunctions/resultCenter/index.js').includes(".where({ matchId: db.command.in(chunk) }).limit(200)"),'成绩中心仍截断事件')
 assert(read('AGENTS.md').includes('docs/data-center/README.md'),'根开发规则未引用数据规范')

@@ -1,0 +1,32 @@
+const assert=require('node:assert/strict'),path=require('node:path'),{fixture}=require('./test-player-card-audit-endpoint.cjs')
+async function run(root=path.resolve('cloudfunctions/webLoginApi')){
+ const f=fixture(root,{writable:true}),{createMatchDurationSnapshot}=await import('../cloudfunctions/dataCenter/shared/playing-time.mjs'),service=require(path.join(root,'data-center/service.cjs')).createDataService(f.db),appeals=require(path.join(root,'data-center/points-appeals.cjs'))
+ const game=(id,date)=>({...structuredClone(f.data.matches[0]),_id:id,matchDate:date,eventRecordingStatus:'complete',durationRulesSnapshot:createMatchDurationSnapshot({matchId:id,minutes:60,minutesBasis:'total',source:{kind:'match',id,version:'fixture'},frozenAt:'2026-09-01T00:00:00Z',kickoffAt:'2026-09-01T01:00:00Z'}),homeLineup:{players:[{playerId:'p1'}],substitutes:[{playerId:'p2'}]},awayLineup:{players:[],substitutes:[]}})
+ const a=game('a','2026-10-01'),b=game('b','2026-10-02');a.events=[{eventId:'g1',type:'goal',teamId:'A',playerId:'p1',minute:10}];b.events=[{eventId:'sub',type:'substitution',teamId:'A',playerId:'p2',inPlayerId:'p2',outPlayerId:'p1',assistPlayerId:'p1',minute:null},{eventId:'g2',type:'goal',teamId:'A',playerId:'p1',minute:12}];f.data.matches=[a,b]
+ let ledger=await service.playerPointsLedgerForAuthorizedPlayer('p1');assert.equal(ledger.status,'ready');assert.equal(ledger.creditedMetrics.minutesPlayed,60);assert.equal(ledger.points,8);assert.equal(ledger.rows.length,2);assert.equal(ledger.rows[1].parts.minutes,0);assert.ok(ledger.rows[1].minuteNote.includes('计0分'));assert.equal(ledger.rows.reduce((n,row)=>n+row.points,0)+ledger.supportPoints,ledger.points)
+ const {calculatePlayingMinutes}=await import('../cloudfunctions/dataCenter/shared/playing-time.mjs');assert.ok(calculatePlayingMinutes(['p1'],[{type:'substitution',id:'p2',out:'',outName:'只有姓名没有身份',minute:30}],60).unknown.has('p1'))
+ const single=await service.playerCardForAuthorizedPlayer('p1'),batch=(await service.playerCardsForAuthorizedPlayers(['p1'])).get('p1');assert.deepEqual(single,batch);assert.equal(single.points,ledger.points)
+ const bench=await service.playerPointsLedgerForAuthorizedPlayer('p2');assert.equal(bench.rows[0].role,'替补未上场');assert.equal(bench.rows[0].points,0);assert.equal(bench.rows[1].parts.appearance,2)
+ const career=await service.query({platformOwner:true},{playerId:'p1'});assert.equal(career.playerTotal.metrics.minutesPlayed,null,'raw missing minutes stay unknown');assert.ok(!Object.hasOwn(career,'playerContributions'),'raw per-player evidence is not returned to arbitrary queries')
+ const actor={actorId:'h5:wx-one',playerId:'p1',channel:'h5'},owner={actorId:'owner:owner',platformOwner:true},payload={requestId:'request_1234567890',matchId:'b',metric:'minutesPlayed',reason:'纸质报告记载上场30分钟',expected:'30分钟',ledgerRevision:ledger.revision}
+ const submit=()=>appeals.submit(f.db,actor,payload,ledger,{_id:'p1',name:'球员甲',teamName:'验收队'})
+ let r=await submit();assert.equal(r.success,true);const id=r.appeal.id;assert.equal((await submit()).appeal.id,id);assert.equal((await appeals.submit(f.db,actor,{...payload,requestId:'request_abcdefghij'},ledger,{_id:'p1'})).duplicate,true)
+ assert.equal((f.data.platform_settings||[]).filter(x=>x.recordType==='player_points_appeal').length,1)
+ await assert.rejects(appeals.submit(f.db,{...actor,playerId:'p2'},payload,ledger,{_id:'p1'}),e=>e.code==='POINTS_APPEAL_FORBIDDEN')
+ await assert.rejects(appeals.submit(f.db,actor,{...payload,matchId:'other-private-match'},ledger,{_id:'p1'}),e=>e.code==='POINTS_APPEAL_MATCH_FORBIDDEN')
+ await assert.rejects(appeals.resolve(f.db,actor,{appealId:id,revision:1,reply:'不能由球员处理',resolution:'confirmed'}),e=>e.code==='POINTS_APPEAL_FORBIDDEN')
+ await assert.rejects(appeals.resolve(f.db,owner,{appealId:id,revision:1,reply:'已经补充记录',resolution:'corrected'},p=>service.playerPointsLedgerForAuthorizedPlayer(p)),e=>e.code==='POINTS_APPEAL_BASIS_REQUIRED')
+ f.data.matches[1].events[0].minute=30;ledger=await service.playerPointsLedgerForAuthorizedPlayer('p1');assert.equal(ledger.creditedMetrics.minutesPlayed,90);assert.equal(ledger.points,9)
+ await appeals.resolve(f.db,owner,{appealId:id,revision:1,reply:'已根据原始裁判报告补录换人分钟',resolution:'corrected'},p=>service.playerPointsLedgerForAuthorizedPlayer(p));r=await appeals.list(f.db,actor,{});assert.equal(r.appeals[0].status,'resolved');assert.ok(r.appeals[0].reply.includes('原始裁判报告'));assert.ok(!JSON.stringify(r).includes('wx-one'))
+ await assert.rejects(appeals.resolve(f.db,owner,{appealId:id,revision:1,reply:'重复处理请求',resolution:'confirmed'}),e=>e.code==='POINTS_APPEAL_CONFLICT')
+ f.db.fail='matches';await assert.rejects(service.playerPointsLedgerForAuthorizedPlayer('p1'),e=>e.code==='DATA_READ_FAILED');f.db.fail=''
+ Object.assign(f.data.players[0],{playerCardSchemaVersion:'player-card/5',playerCardVersion:2,playerCardTier:'gold'});const retained=await service.playerCardForAuthorizedPlayer('p1');assert.equal(retained.tier,'gold');assert.equal(retained.points,9);assert.equal(retained.canChangeBackground,false)
+ // Exercise actual H5 ownership, not just trusted internal helpers.
+ f.data.players[0].linkedUserId='account1';f.data.fan_h5_sessions=[{_id:'s1',tokenHash:'h5token',active:true,serviceAccountOpenId:'wx-private',expiresAt:'2100-01-01'}];f.data.parent_profile_submissions=[{_id:'ps1',playerId:'p1',teamId:'A',registrantType:'self',registrantUserId:'account1',serviceAccountOpenId:'wx-private',status:'submitted'}]
+ const h5=require(path.join(root,'playerCards.cjs')).createPlayerCards({cloud:{database:()=>f.db},hashSessionToken:t=>t,dateValue:v=>new Date(v).getTime()})
+ r=await h5({action:'getMyPlayerPointsLedger',playerId:'p1',fanSessionToken:'h5token'});assert.equal(r.success,true,r.error);assert.equal(r.ledger.points,9)
+ assert.equal((await h5({action:'getMyPlayerPointsLedger',playerId:'p2',fanSessionToken:'h5token'})).code,'PLAYER_CARD_FORBIDDEN')
+ assert.equal((await h5({action:'listMyPlayerPointsAppeals',playerId:'p1',fanSessionToken:'bad'})).code,'PLAYER_CARD_AUTH_REQUIRED')
+ console.log('PASS: evidence-only points, match ledger totals/carry/cap, missing-minute 0 award with raw unknown preserved, unused/used substitutes, single/batch parity; idempotent private appeals, owner CAS replies, correction evidence, H5 self ownership and read-failure guard')
+}
+run(process.argv[2]?path.resolve(process.argv[2]):undefined).catch(e=>{console.error(e);process.exitCode=1})

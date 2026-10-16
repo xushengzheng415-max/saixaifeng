@@ -5999,6 +5999,9 @@ exports.main = async (event, context) => {
       case 'previewMyPreloadedPlayerCard':
       case 'saveMyPreloadedPlayerCard':
       case 'selectMyPlayerCard':
+      case 'getMyPlayerPointsLedger':
+      case 'submitMyPlayerPointsAppeal':
+      case 'listMyPlayerPointsAppeals':
       case 'listMyPlayerCards':
       case 'getMyPlayerCard':
       case 'previewMyPlayerCard':

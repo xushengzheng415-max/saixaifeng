@@ -24,7 +24,7 @@ function playerCardSnapshot(score, context = {}) {
   const progress = ready ? { levelStart, nextAt, pointsToNext:score.pointsToNext,
     percent:nextAt == null ? 100 : Math.max(0,Math.min(100,Math.round((score.points-levelStart)*100/(nextAt-levelStart)))) } : null
   const revisionState = { schemaVersion:SCHEMA_VERSION, playerId:String(context.playerId || ''),
-    scope:score.scope, mode:score.mode, status:score.status, missing, reasonCodes,
+    scope:score.scope, mode:score.mode, status:score.status, missing, reasonCodes,accountingPolicy:score.accountingPolicy,creditedMetrics:score.creditedMetrics,uncreditedFields:score.uncreditedFields,breakdown:score.breakdown,
     scoreVersion:score.scoreVersion, metricVersion:score.metricVersion, entitlementVersion:score.entitlementVersion,
     metrics, coverage, coverageStatus:context.coverageStatus, careerDataVersion:context.careerDataVersion,
     coverageIssues:(context.issues || []).map(issue => ({ code:issue.code,matchId:issue.matchId,teamId:issue.teamId,playerId:issue.playerId })).sort((a,b) => JSON.stringify(canonical(a)).localeCompare(JSON.stringify(canonical(b)))),

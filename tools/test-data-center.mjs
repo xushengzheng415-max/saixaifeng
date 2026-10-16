@@ -22,8 +22,8 @@ function mockDatabase(initial, cap = 100) {
     return Object.entries(where).every(([key,value]) => value?.operator === 'in' ? value.values.includes(row[key]) : value?.operator === 'gt' ? row[key] > value.value : row[key] === value)
   }
   const db = { command, data:() => store, fail:'', createCollection:async name => { if (store[name]) throw new Error('already exists'); store[name] = [] }, collection(name) {
-    let where = {}, limit = cap
-    const query = { where(value) { where = value; return query }, orderBy() { return query }, limit(value) { limit = Math.min(value,cap); return query }, async get() { if (db.fail === name) throw new Error('database unavailable'); return { data:(store[name] || []).filter(row => matches(row,where)).sort((a,b) => a._id < b._id ? -1 : 1).slice(0,limit) } }, doc(documentId) {
+    let where = {}, limit = cap, projection=null
+    const query = { field(value){projection=value;return query}, where(value) { where = value; return query }, orderBy() { return query }, limit(value) { limit = Math.min(value,cap); return query }, async get() { if (db.fail === name) throw new Error('database unavailable'); return { data:(store[name] || []).filter(row => matches(row,where)).sort((a,b) => a._id < b._id ? -1 : 1).slice(0,limit).map(row=>projection?Object.fromEntries(Object.entries(row).filter(([key])=>projection[key])):row) } }, doc(documentId) {
       return { async get() { const row = (store[name] || []).find(row => row._id === documentId); if (!row) throw new Error('document not exist'); return { data:structuredClone(row) } }, async set({data}) { store[name] ||= []; const index = store[name].findIndex(row => row._id === documentId); const row = { ...structuredClone(data), _id:documentId }; if (index < 0) store[name].push(row); else store[name][index] = row }, async update({data}) { const row = (store[name] || []).find(row => row._id === documentId); if (!row) throw new Error('document not exist'); Object.assign(row,structuredClone(data)) } }
     } }
     return query
@@ -48,9 +48,9 @@ assert.equal(calculatePlayerCardPoints(complete({ appearances:20,starts:20,minut
 assert.equal(calculatePlayerCardPoints(complete({ appearances:20,starts:20,minutesPlayed:1800,goals:0 })).canReplacePhoto,true)
 const capped = calculatePlayerCardPoints(complete({ appearances:10,starts:10,minutesPlayed:900,goals:20 }))
 assert.equal(capped.foundation,50); assert.equal(capped.goalBonus,10); assert.equal(capped.points,60)
-assert.equal(calculatePlayerCardPoints({ metrics:{ appearances:20,starts:20,minutesPlayed:null,goals:0 }, coverage:{ appearances:'complete',starts:'complete',minutesPlayed:'partial',goals:'complete' } }).status,'unverified')
+assert.equal(calculatePlayerCardPoints({ metrics:{ appearances:20,starts:20,minutesPlayed:null,goals:0 }, coverage:{ appearances:'complete',starts:'complete',minutesPlayed:'partial',goals:'complete' } }).points,60)
 assert.equal(calculatePlayerCardPoints(complete({ appearances:1,starts:2,minutesPlayed:90,goals:0 })).status,'unverified')
-assert.equal(calculatePlayerCardPoints(complete({ appearances:20,starts:20,minutesPlayed:1800,goals:0 }),{coverageStatus:'partial'}).canChangeBackground,false)
+assert.equal(calculatePlayerCardPoints(complete({ appearances:20,starts:20,minutesPlayed:1800,goals:0 }),{coverageStatus:'partial'}).canChangeBackground,true)
 assert.equal(sumPlayerRows([life.players[0],life.players[0]]).metrics.starts,1)
 assert.equal(life.summary.matchCount,2)
 assert.equal(life.players.find(row => row.teamId === 'A').metrics.goals,5)

@@ -128,7 +128,7 @@ export function calculatePlayingMinutes(starterIds, timeline, duration) {
     if (event.type === 'substitution') {
       if (event.out && active.has(event.out)) close(event.out, minute)
       else if (event.out) unknown.add(event.out)
-      else if (!event.outName) active.forEach((_,id) => unknown.add(id))
+      else active.forEach((_,id) => unknown.add(id))
       if (event.id && active.has(event.id)) unknown.add(event.id)
       else if (event.id) active.set(event.id, minute)
     } else if (event.id && active.has(event.id)) close(event.id, minute)

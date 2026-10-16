@@ -43,7 +43,7 @@ function createDataService(db) {
       matchCount:result.summary.matchCount,metricVersion:result.metricVersion,dataVersion:result.dataVersion,mode:result.scope.mode,
       coverageStatus:coverageComplete?'complete':'partial',supportDrops:support.drops,
       supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues})
-    return {...built,issues}
+    return {...built,issues,...(options.includeLedger?{ledger:require('./points-ledger.cjs').buildPointsLedger(playerId,result.playerContributions||[],built.card,ruleContext.rules.parameters)}:{})}
   }
   // One canonical career dataset per batch; identical scope and scoring rules to
   // playerCardForAuthorizedPlayer, without re-reading every match per player.
@@ -95,7 +95,7 @@ function createDataService(db) {
     }
   }
 
-  async function query(actor, input = {}) {
+  async function query(actor, input = {}, options = {}) {
     const scope = validateScope(input)
     const teamIds = new Set((actor.teamIds || []).map(String)), tournamentIds = new Set((actor.tournamentIds || []).map(String))
     if (scope.teamId && !actor.platformOwner && !teamIds.has(scope.teamId)) throw error('DATA_FORBIDDEN', '无权查看该球队的数据')
@@ -182,17 +182,20 @@ function createDataService(db) {
     result.summary.playerCount = new Set(result.players.map(row => row.playerId)).size
     if (scope.playerId) {
       const fullCareer = actor.platformOwner === true && scope.mode === 'official' && !['teamId','tournamentId','divisionId','groupName','matchId','from','to'].some(field => scope[field])
-      const built=await buildPlayerCard(result,scope.playerId,{fullCareer})
+      const built=await buildPlayerCard(result,scope.playerId,{fullCareer,includeLedger:options.includeLedger===true})
       result.playerTotal=built.total
       result.playerCard=built.card
+      if(options.includeLedger)result.pointsLedger=built.ledger
       result.issues=built.issues
     }
     if (!actor.platformOwner) {
       const visible = new Set(result.players.map(row => row.playerId))
       for(const field of ['playerCardComplete','playerCardMatchIds']) result.coverage[field] = Object.fromEntries(Object.entries(result.coverage[field] || {}).filter(([playerId]) => visible.has(playerId)))
     }
+    delete result.playerContributions
     return { success:true, ...result }
   }
-  return { query, catalog, playerCardForAuthorizedPlayer, playerCardsForAuthorizedPlayers }
+  async function playerPointsLedgerForAuthorizedPlayer(playerId){const result=await query({platformOwner:true},{playerId:id(playerId),mode:'official'},{includeLedger:true});return result.pointsLedger}
+  return { query, catalog, playerCardForAuthorizedPlayer, playerCardsForAuthorizedPlayers,playerPointsLedgerForAuthorizedPlayer }
 }
 module.exports = { createDataService, validateScope, error }

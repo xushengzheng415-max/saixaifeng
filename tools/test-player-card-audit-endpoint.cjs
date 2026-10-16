@@ -13,14 +13,14 @@ function fixture(root=path.resolve('cloudfunctions/webLoginApi'),options={}){
   return {data,db,handler,root,setAuth:value=>auth=value}
 }
 async function tests(root){const f=fixture(root),before=JSON.stringify(f.data),call=(workflowAction,params={})=>f.handler({action:'savePlayerCardTemplate',workflowAction,...params})
-  let r=await call('auditPlayer',{playerId:'p1'});assert.equal(r.success,true);assert.equal(r.score.status,'unverified');assert.ok(r.score.missing.includes('minutesPlayed'));assert.ok(r.issues.some(x=>x.code.includes('DURATION')));assert.equal(r.careerRows[0].divisionName,'成人组');assert.ok(!JSON.stringify(r).includes('PRIVATE_'))
+  let r=await call('auditPlayer',{playerId:'p1'});assert.equal(r.success,true);assert.equal(r.score.status,'ready');assert.equal(r.score.points,3);assert.ok(r.score.uncreditedFields.includes('minutesPlayed'));assert.ok(r.issues.some(x=>x.code.includes('DURATION')));assert.equal(r.careerRows[0].divisionName,'成人组');assert.ok(!JSON.stringify(r).includes('PRIVATE_'))
   const service=require(path.join(f.root,'data-center/service.cjs')).createDataService(f.db);assert.deepEqual(r.score,(await service.playerCardsForAuthorizedPlayers(['p1'])).get('p1'),'audit and issuance use identical canonical grades')
   const issueCodes=r.issues.map(x=>x.code);assert.ok(issueCodes.includes('MATCH_DURATION_MISSING')||issueCodes.includes('MATCH_DURATION_EVIDENCE_MISSING'))
   assert.equal((await call('auditPlayer',{playerId:'p3'})).score.status,'test_data_excluded')
   assert.equal((await call('auditPlayer',{playerId:'not-found'})).code,'DATA_PLAYER_NOT_FOUND')
   assert.equal((await call('auditPlayer',{playerId:'../bad'})).code,'DATA_SCOPE_INVALID')
   let cursor='',seen=[],verified=0;do{r=await call('auditQueue',{cursor,limit:1});assert.equal(r.success,true);assert.equal(r.totalPlayers,3);seen.push(...r.issues.map(x=>x.playerId));verified+=r.verifiedCount;cursor=r.nextCursor}while(cursor)
-  assert.ok(seen.includes('p1'));assert.ok(seen.includes('p3'));assert.equal(new Set(seen).size,seen.length)
+  assert.ok(!seen.includes('p1'),'missing minute evidence no longer blocks points or triggers mandatory player audit');assert.ok(seen.includes('p3'));assert.equal(new Set(seen).size,seen.length)
   f.db.fail='matches';r=await call('auditPlayer',{playerId:'p1'});assert.equal(r.success,false);assert.equal(r.code,'DATA_READ_FAILED');f.db.fail=''
   for(const role of [{success:false,code:'AUTH_REQUIRED'}, {success:true,principalType:'user',user:{_id:'organizer'}}]){f.setAuth(role);assert.equal((await call('auditPlayer',{playerId:'p1'})).success,false);assert.equal((await call('auditQueue')).success,false)}
   assert.equal(JSON.stringify(f.data),before,'all audits are read-only')

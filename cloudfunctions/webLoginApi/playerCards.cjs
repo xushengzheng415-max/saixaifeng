@@ -160,6 +160,14 @@ function createPlayerCards(deps) {
     }
     const entry = entries.find(item => String(item.player._id) === String(event.playerId || auth.playerId || ''))
     if (!entry) return { success: false, code: 'PLAYER_CARD_FORBIDDEN', error: '只能编辑本人或已绑定孩子的球员卡' }
+    if(['getMyPlayerPointsLedger','submitMyPlayerPointsAppeal','listMyPlayerPointsAppeals'].includes(event.action)){
+      if(!auth.openId&&!auth.parentInvite)throw Object.assign(new Error('微信会话身份无效，请重新进入'),{code:'PLAYER_CARD_AUTH_REQUIRED'})
+      const actor={actorId:'h5:'+(auth.openId||'invite:'+auth.parentInvite),playerId:String(entry.player._id),channel:'h5'},appeals=require('./data-center/points-appeals.cjs')
+      if(event.action==='listMyPlayerPointsAppeals')return appeals.list(db,actor,event)
+      const ledger=await createDataService(db).playerPointsLedgerForAuthorizedPlayer(actor.playerId)
+      if(event.action==='getMyPlayerPointsLedger')return {success:true,player:{id:actor.playerId,name:String(entry.player.name||'')},ledger}
+      return appeals.submit(db,actor,event,ledger,{...entry.player,teamName:entry.teamName})
+    }
     const isStillOwned = current => entry.relation ? owns(current,entry.relation) : ['teamId','guardianUserId','linkedUserId','playerUserId'].every(field=>String(current[field]||'') === String(entry.player[field]||''))
     if (['getMyPreloadedPlayerCard','previewMyPreloadedPlayerCard','saveMyPreloadedPlayerCard','selectMyPlayerCard'].includes(event.action)) {
       const level = await summary(entry)
