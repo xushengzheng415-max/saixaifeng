@@ -33,7 +33,6 @@
       <el-tabs v-model="activeTab" class="result-tabs">
         <el-tab-pane label="赛果与复核" name="review" />
         <el-tab-pane label="积分排名" name="standings" />
-        <el-tab-pane label="淘汰晋级" name="bracket" />
         <el-tab-pane label="进球榜" name="goals" />
         <el-tab-pane label="球员红黄牌" name="playerCards" />
         <el-tab-pane label="球队红黄牌" name="teamCards" />
@@ -72,18 +71,16 @@
       <section v-else-if="activeTab==='standings'" class="standings-section">
         <header class="section-heading"><div><h2>小组积分排名</h2><p>按竞赛组别和抽签小组分别列榜，正式排名只计入已归档赛果。</p></div><div><el-radio-group v-model="standingsMode"><el-radio-button label="official">正式积分</el-radio-button><el-radio-button label="preview">后台试算</el-radio-button></el-radio-group><el-button type="success" :loading="publishing" @click="publishStandings"><el-icon><Upload /></el-icon>发布积分榜</el-button></div></header>
         <el-alert class="football-rule-alert" type="success" :closable="false" show-icon title="足球排名依次比较：积分 → 相互比赛积分/净胜球/进球数 → 总净胜球 → 总进球 → 红牌少 → 黄牌少 → 抽签；淘汰赛不进入小组积分。" />
-        <article v-for="group in visibleStandings" :key="`${group.divisionId}-${group.groupName}`" class="standings-card panel">
+        <template v-for="division in standingDivisions" :key="division.id">
+        <article v-for="group in division.standings" :key="`${group.divisionId}-${group.groupName}`" class="standings-card panel">
           <header><div><h3>{{ group.divisionName }} · {{ group.groupName }}</h3><p v-if="group.pointsRule.drawResolution === 'penalties'">常规胜 {{ group.pointsRule.win }} / 负 {{ group.pointsRule.loss }}；战平点球胜 {{ group.pointsRule.penaltyWin }} / 负 {{ group.pointsRule.penaltyLoss }}（无平局）· {{ group.pointsRule.source }}</p><p v-else>胜 {{ group.pointsRule.win }} 分 / 平 {{ group.pointsRule.draw }} 分 / 负 {{ group.pointsRule.loss }} 分 · {{ group.pointsRule.source }}</p></div><span>{{ group.officialMatchCount }} 场正式赛果<template v-if="standingsMode==='preview' && group.provisionalMatchCount"> · {{ group.provisionalMatchCount }} 场试算</template></span></header>
           <div class="standing-table-wrap"><table><thead><tr><th>排名</th><th>球队</th><th>赛</th><th>胜</th><th v-if="group.pointsRule.drawResolution !== 'penalties'">平</th><th>负</th><th>进球</th><th>失球</th><th>净胜球</th><th>红/黄牌</th><th>积分</th></tr></thead><tbody><tr v-for="team in standingTeams(group)" :key="team.teamId || team.teamName"><td><b class="rank-number">{{ team.rank }}</b></td><td class="team-cell"><img v-if="teamLogoVisible(team)" :src="team.logo" :alt="`${team.teamName}队徽`" @error="markTeamLogoFailed(team)" /><span v-else>{{ teamInitial(team.teamName) }}</span><b>{{ team.teamName }}</b></td><td>{{ team.played }}</td><td>{{ team.win }}</td><td v-if="group.pointsRule.drawResolution !== 'penalties'">{{ team.draw }}</td><td>{{ team.loss }}</td><td>{{ team.goalsFor }}</td><td>{{ team.goalsAgainst }}</td><td :class="{ positive:team.goalDifference>0 }">{{ signed(team.goalDifference) }}</td><td>{{ team.redCards }}/{{ team.yellowCards }}</td><td><strong>{{ team.points }}</strong><small v-if="team.provisionalMatches" class="provisional-tag">试算</small></td></tr></tbody></table></div>
           <el-empty v-if="!standingTeams(group).length" :description="standingsMode==='official' ? '本组暂无已归档赛果' : '本组暂无可试算赛果'" :image-size="70" />
         </article>
-        <el-empty v-if="!visibleStandings.length" description="当前范围尚未生成小组赛赛程" />
+        <TournamentBracket v-if="division.knockout.length" :matches="division.knockout" :show-details="false" title-suffix="晋级图" @open="openBracketResult" />
+        </template>
+        <el-empty v-if="!standingDivisions.length" description="当前范围暂无积分榜或晋级赛程" />
         <footer class="snapshot-note"><el-icon><Lock /></el-icon><span>发布会生成不可变积分快照；后续赛果变化需重新发布新版本，旧版本保留追溯。</span><b>{{ latestStandingPublication }}</b></footer>
-      </section>
-
-      <section v-else-if="activeTab==='bracket'" class="bracket-section">
-        <header class="section-heading"><h2>淘汰赛签表</h2></header>
-        <TournamentBracket :matches="divisionKnockout" :date="dateFilter" :keyword="keyword" @open="openMatchResult" />
       </section>
 
       <section v-else-if="activeTab==='report'" class="report-section">
@@ -125,7 +122,7 @@ const rankingRefresh = ref(0)
 const loading = ref(false)
 const publishing = ref(false)
 const dashboard = ref({ tournament:{}, divisions:[], matches:[], standings:[], knockout:[], publications:[], summary:{} })
-const activeTab = ref(String(route.query.tab || 'review'))
+const activeTab = ref(route.query.tab==='bracket'?'standings':String(route.query.tab || 'review'))
 const divisionFilter = ref(String(route.query.divisionId || ''))
 const dateFilter = ref('')
 const statusFilter = ref('')
@@ -175,6 +172,20 @@ const dateOptions = computed(() => [...new Set((dashboard.value.matches || []).m
 const approvedDateOptions = computed(() => [...new Set((dashboard.value.matches || []).filter(row => row.resultStatus==='approved').map(row => row.matchDate).filter(Boolean))].sort())
 const filteredSummary = computed(() => visibleMatches.value.reduce((sum,row)=>{ if(row.resultStatus==='not_submitted')sum.notSubmitted++; else if(row.resultStatus==='pending_review')sum.pendingReview++; else if(row.resultStatus==='approved')sum.approved++; else sum.warning++; return sum },{notSubmitted:0,pendingReview:0,warning:0,approved:0}))
 const visibleStandings = computed(() => (dashboard.value.standings || []).filter(item => !divisionFilter.value || item.divisionId===divisionFilter.value).sort((a,b)=>String(a.divisionName||'').localeCompare(String(b.divisionName||''),'zh-CN',{numeric:true})||String(a.groupName||'').localeCompare(String(b.groupName||''),'zh-CN',{numeric:true})))
+const standingDivisions = computed(() => {
+  const grouped = new Map()
+  for (const group of visibleStandings.value) {
+    const id=String(group.divisionId || '')
+    if(!grouped.has(id))grouped.set(id,{id,name:group.divisionName,standings:[],knockout:[]})
+    grouped.get(id).standings.push(group)
+  }
+  for (const row of divisionKnockout.value) {
+    const id=String(row.divisionId || '')
+    if(!grouped.has(id))grouped.set(id,{id,name:row.divisionName,standings:[],knockout:[]})
+    grouped.get(id).knockout.push(row)
+  }
+  return [...grouped.values()].sort((a,b)=>String(a.name || '').localeCompare(String(b.name || ''),'zh-CN',{numeric:true}))
+})
 const divisionKnockout = computed(() => (dashboard.value.knockout || []).filter(item => !divisionFilter.value || item.divisionId===divisionFilter.value))
 const visibleKnockout = computed(() => (dashboard.value.knockout || []).filter(item => (!divisionFilter.value || item.divisionId===divisionFilter.value) && (!dateFilter.value || item.matchDate===dateFilter.value)))
 const reportEvents = computed(() => Array.isArray(dashboard.value.events) ? dashboard.value.events : [])
@@ -204,6 +215,7 @@ function cardEventClass(event){ return cardEventKind(event)||'yellow' }
 function resolutionLabel(row){ return ({regular_time:'常规时间',extra_time:'加时赛',penalties:'点球大战',penalty_shootout:'点球大战',walkover:'弃权判定'}[row.resolution] || (row.scoreReady?'正式比分待复核':'尚未录入')) }
 function formatDate(value){ if(!value)return'—';const date=new Date(value);return Number.isNaN(date.getTime())?String(value):date.toLocaleString('zh-CN',{hour12:false}).replaceAll('/','-') }
 function formatReportDate(value){ const text=String(value || '').slice(0,10); return text ? text.replaceAll('-','.') : '比赛日期待定' }
+async function openBracketResult(row){divisionFilter.value=row.divisionId || '';dateFilter.value='';statusFilter.value='';keyword.value='';selectedMatchId.value=row.id;activeTab.value='review';await nextTick();document.querySelector('.review-layout')?.scrollIntoView({behavior:'smooth',block:'start'})}
 function openMatchResult(row){ const suffix=row.resultStatus==='approved'?'/archive':row.scoreReady?'/review':'';router.push({path:`/tournaments/${tournamentId}/match/${row.id}${suffix}`,query:row.divisionId?{divisionId:row.divisionId}:{}}) }
 
 async function loadDashboard(){ rankingRefresh.value++; loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=[...result.matches].sort(compareReviewRows)[0]?.id||'';if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
@@ -260,7 +272,7 @@ async function exportReportPng(){
 watch(activeTab,value=>router.replace({query:{...route.query,tab:value}}))
 watch(divisionFilter,value=>router.replace({query:{...route.query,divisionId:value||undefined}}))
 watch(visibleMatches,rows=>{if(rows.length&&!rows.some(row=>row.id===selectedMatchId.value))selectedMatchId.value=rows[0].id})
-onMounted(loadDashboard)
+onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.query,tab:'standings'}});loadDashboard()})
 </script>
 
 <style scoped>

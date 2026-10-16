@@ -1,7 +1,7 @@
 <template>
   <div class="tournament-bracket" :data-template-version="BRACKET_TEMPLATE_VERSION">
     <section v-for="division in groups" :key="division.id" class="division-bracket">
-      <header class="division-title"><h3>{{ division.name }}</h3><span><i class="legend-win"></i>胜者晋级 <i class="legend-loss"></i>负者转入排位</span></header>
+      <header class="division-title"><h3>{{ division.name }}{{ titleSuffix ? ' · '+titleSuffix : '' }}</h3><span><i class="legend-win"></i>胜者晋级 <i class="legend-loss"></i>负者转入排位</span></header>
       <p v-for="issue in division.issues" :key="issue" class="bracket-warning">{{ issue }}</p>
       <section v-for="board in division.components" :key="board.id" class="bracket-board">
         <h4>{{ board.title }}</h4>
@@ -21,14 +21,14 @@
                 <small v-if="sourceLabel(node.row[teamSide+'Source'])" class="source-label">{{ sourceLabel(node.row[teamSide+'Source']) }}</small>
               </div>
               <div v-if="node.row.resultStatus==='approved' && ['penalties','penalty_shootout'].includes(node.row.resolution)" class="penalties">点球决胜</div>
-              <footer><span>{{ node.row.matchDate || '日期待定' }} {{ node.row.matchTime || '' }}</span><button type="button" @click="select(node.row)">查看对阵</button></footer>
+              <footer><span>{{ node.row.matchDate || '日期待定' }} {{ node.row.matchTime || '' }}</span><button type="button" @click="select(node.row)">{{ showDetails ? '查看对阵' : '查看赛果' }}</button></footer>
             </article>
           </div>
         </div>
       </section>
     </section>
     <el-empty v-if="!groups.length" description="当前组别暂无淘汰赛或排位赛" />
-    <section v-if="rows.length" ref="detailElement" class="bracket-details">
+    <section v-if="showDetails && rows.length" ref="detailElement" class="bracket-details">
       <header><h3>对阵详情</h3><el-button v-if="selectedId" link @click="selectedId=''">显示全部</el-button></header>
       <el-table :data="detailRows" row-key="id" empty-text="当前筛选无匹配对阵" style="width:100%">
         <el-table-column label="场序" width="76"><template #default="{row}">{{ row.matchNo || '—' }}</template></el-table-column>
@@ -48,8 +48,8 @@
 import {computed,ref,watch,nextTick} from 'vue'
 import {BRACKET_TEMPLATE_VERSION} from '../../utils/bracketTemplates'
 import {bracketGroups,officialWinner,activeBracketMatch} from '../../utils/tournamentBracket'
-const props=defineProps({matches:{type:Array,default:()=>[]},date:String,keyword:String,templateId:{type:String,default:'auto'}})
-defineEmits(['open'])
+const props=defineProps({matches:{type:Array,default:()=>[]},date:String,keyword:String,templateId:{type:String,default:'auto'},showDetails:{type:Boolean,default:true},titleSuffix:{type:String,default:''}})
+const emit=defineEmits(['open'])
 const sides=['home','away'],selectedId=ref(''),detailElement=ref(null)
 const rows=computed(()=>props.matches.filter(activeBracketMatch))
 const groups=computed(()=>bracketGroups(rows.value,props.templateId))
@@ -60,7 +60,7 @@ function teamName(row,side){return row[side+'TeamName'] || sourceLabel(row[side+
 function logo(row,side){const value=String(row[side+'TeamLogo'] || '');return /^(https?:\/\/|\/)/.test(value)?value:''}
 function teamState(row,side){const winner=officialWinner(row);return winner&&row[side+'TeamId']?(winner===row[side+'TeamId']?'team-winner':'team-loser'):''}
 function routes(row){return rows.value.filter(target=>target.divisionId===row.divisionId).flatMap(target=>sides.flatMap(side=>{const source=target[side+'Source'];if(!['match_winner','match_loser'].includes(source?.type))return [];const same=source.matchId?source.matchId===row.id:String(source.matchNo)===String(row.matchNo);if(!same)return [];const winner=officialWinner(row),participant=source.type==='match_winner'?winner:winner===row.homeTeamId?row.awayTeamId:winner?row.homeTeamId:'';const name=participant===row.homeTeamId?row.homeTeamName:participant===row.awayTeamId?row.awayTeamName:'';return [(name?name+' · ':'')+(source.type==='match_winner'?'胜者':'负者')+' → 场序'+target.matchNo+' '+(target.roundName || '')]}))}
-async function select(row){selectedId.value=row.id;await nextTick();detailElement.value?.scrollIntoView({behavior:'smooth',block:'start'})}
+async function select(row){if(!props.showDetails){emit('open',row);return}selectedId.value=row.id;await nextTick();detailElement.value?.scrollIntoView({behavior:'smooth',block:'start'})}
 </script>
 
 <style scoped>
