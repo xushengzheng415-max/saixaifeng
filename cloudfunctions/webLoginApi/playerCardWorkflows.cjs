@@ -190,16 +190,17 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
     if(ids.some(key=>!byId.has(key)))throw new Error('名单已变化，请重新选择')
     const offset=Math.max(0,Math.floor(Number(event.offset)||0)),page=ids.slice(offset,offset+24)
     const grades=await scores().playerCardsForAuthorizedPlayers(page)
-    const cards=await Promise.all(page.map(async playerId=>{
+    const {createAssetResolver,mapLimit}=require('./playerCardPreviewAssets.cjs'),resolveUrls=createAssetResolver(cloud)
+    const cards=await mapLimit(page,4,async playerId=>{
       const player=byId.get(playerId),score=grades.get(playerId)||{status:'unverified'}
       if(score.status==='test_data_excluded')return {playerId,name:String(player.name||''),status:'failed',cardError:'测试资料不发放'}
       const key=set.kind==='progression'?score.tier:'single',member=set.published.members[key]
       if(!member||(set.kind==='progression'&&score.status!=='ready'))return {playerId,name:String(player.name||''),status:'failed',cardError:'竞技等级待核定'}
       const snapshot=await suite.document(db,suite.VERSIONS,suite.versionId(member.templateId,member.version)),grant=await suite.document(db,'player_card_library',grantId(playerId,member.templateId))
       if(!snapshot||grant?.status==='revoked')return {playerId,name:String(player.name||''),status:'failed',cardError:'样式或发放状态需要核查'}
-      const card=await require('./playerCardDynamic.cjs').descriptor(cloud,db,player,snapshot,grant)
+      const card=await require('./playerCardDynamic.cjs').descriptor(cloud,db,player,snapshot,grant,{resolveUrls})
       return {...card,name:String(player.name||''),previewOnly:true,cardError:card.reason||''}
-    }))
+    })
     return {success:true,cards,revision:set.revision,total:ids.length,nextOffset:offset+page.length<ids.length?offset+page.length:null}
   }
   return async function(event,auth){
