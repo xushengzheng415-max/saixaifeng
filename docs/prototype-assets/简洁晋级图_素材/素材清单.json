@@ -2,7 +2,7 @@
   "schema_version": 2,
   "asset_dir": ".",
   "prototype": "原型原图/codex-clipboard-c7f4c036-4a1a-4eb2-b873-1e2535ce16e7.png",
-  "status": "ready",
+  "status": "implemented",
   "generated_at": "2026-10-16T20:13:24.112587+08:00",
   "screen": {
     "width": 1141,
@@ -58,5 +58,24 @@
       }
     }
   ],
-  "ready_at": "2026-10-16T12:13:57.293885+00:00"
+  "ready_at": "2026-10-16T12:13:57.293885+00:00",
+  "validation": {
+    "screenshots": [
+      {
+        "path": "验收/实际页面.png",
+        "viewport": {
+          "width": 1280,
+          "height": 720
+        }
+      }
+    ],
+    "comparison": "验收/对照报告.md",
+    "differences": [
+      {
+        "severity": "minor",
+        "description": "按后台现有浅色绿色视觉呈现；不复制海报背景、奖杯或水印。"
+      }
+    ],
+    "interaction_checks": []
+  }
 }
