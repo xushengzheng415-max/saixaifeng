@@ -8,8 +8,8 @@ async function applyPlayerCardScores(players,career,supportTotals,ruleContext=nu
   for(const player of players){
     const playerId=String(player.playerId||''),rows=(career.players||[]).filter(row=>row.playerId===playerId)
     const support=supportTotals instanceof Map?(supportTotals.get(playerId)||{drops:0,status:'complete',dataVersion:EMPTY_SUPPORT_VERSION}):{drops:null,status:'unverified',dataVersion:null}
-    const complete=career.coverage?.playerCardComplete?.[playerId]??career.coverage?.cardScoreScopeComplete
-    const {card,total}=createPlayerCardSnapshot(rows,{playerId,rules:ruleContext?.rules,retainedTier:ruleContext?.floorById.get(playerId),fullCareer:true,identityVerified:rows.length>0,testIdentity:false,matchCount:career.summary?.matchCount||0,metricVersion:career.metricVersion,dataVersion:career.dataVersion,mode:'official',coverageStatus:complete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues:career.issues||[]})
+    const {complete,issues}=require('./data-center/player-card-snapshot.cjs').playerCardScope(career,playerId)
+    const {card,total}=createPlayerCardSnapshot(rows,{playerId,rules:ruleContext?.rules,retainedTier:ruleContext?.floorById.get(playerId),fullCareer:true,identityVerified:rows.length>0,testIdentity:false,matchCount:career.summary?.matchCount||0,metricVersion:career.metricVersion,dataVersion:career.dataVersion,mode:'official',coverageStatus:complete?'complete':'partial',supportDrops:support.drops,supportCoverageStatus:support.status,supportDataVersion:support.dataVersion,issues})
     player.playerCard=card
     const ready=card.status==='ready'
     player.cardTier=ready?card.tier:null;player.cardPoints=ready?card.points:null;player.cardScoreVersion=card.scoreVersion

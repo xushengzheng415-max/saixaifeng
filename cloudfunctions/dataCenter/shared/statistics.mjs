@@ -137,23 +137,18 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   })]))
   const officialCandidates = selected.filter(match => recordedResultState(match) === 'official' && matchOrigin(match,originContext) !== 'test')
   const candidateIds = [...new Set(selected.flatMap(match => [...matchParticipantIds(match,events)]))].sort()
-  function hasAbsenceEvidence(match) {
-    const rosters = ['home','away'].map(side => lineupOf(match,side))
-    if (!rosters.every(lineup => lineup.known && [...lineup.starters,...lineup.substitutes].every(row => idOf(row)))) return false
-    const knownEvents = match.eventRecordingStatus === 'complete' || match.statisticsCoverage?.events === 'complete' || (Array.isArray(match.events) && match.eventRecordingStatus !== 'partial')
-    if (!knownEvents) return false
-    const contributionTypes = ['goal','penalty_scored','own_goal','assist','yellow_card','red_card','second_yellow','substitution']
-    if (effectiveEvents(match,events).some(event => contributionTypes.includes(eventType(event)) && !text(event.inPlayerId || event.playerId || event.playerID || event.athleteId || event.player?.id || event.player?._id))) return false
-    return true
+  // 2026-10-16 owner-confirmed participation policy: only recorded lineup/event
+  // identities enter player scoring. An unlisted player is not an unknown player.
+  // Match-wide quality gaps remain in the dataset, not every player's eligibility.
+  const participation = new Map(candidateIds.map(playerId=>[playerId,[]]))
+  for(const match of officialCandidates) for(const playerId of matchParticipantIds(match,events)) {
+    if(participation.has(playerId)) participation.get(playerId).push(text(match._id||match.id))
   }
-  // An unrelated incomplete record cannot block an identified player's grade
-  // when complete stable-ID lineups and events prove they did not participate.
-  // Missing/ambiguous lineups still fail closed; current team is never a proxy.
-  const uncertainCandidates = officialCandidates.filter(match => matchOrigin(match,originContext) !== 'real' ||
-    !['home','away'].every(side => teamOf(match,side) && lineupOf(match,side).known))
-    .map(match => ({hasAbsenceEvidence:hasAbsenceEvidence(match),participants:matchParticipantIds(match,events)}))
-  const playerCardComplete = Object.fromEntries(candidateIds.map(playerId => [playerId,Boolean(readComplete &&
-    uncertainCandidates.every(item => item.hasAbsenceEvidence && !item.participants.has(playerId)))]))
+  const uncertainCandidates = officialCandidates.filter(match=>matchOrigin(match,originContext)!=='real')
+    .map(match=>matchParticipantIds(match,events))
+  const playerCardComplete = Object.fromEntries(candidateIds.map(playerId=>[playerId,Boolean(readComplete &&
+    uncertainCandidates.every(participants=>!participants.has(playerId)))]))
+  const playerCardMatchIds = Object.fromEntries([...participation].map(([playerId,ids])=>[playerId,[...new Set(ids)].sort()]))
   const players = new Map(), teams = new Map(), issues = []
   testMatches.forEach(match => issues.push({ code:'TEST_MATCH_EXCLUDED', matchId:text(match._id || match.id) }))
   testPlayerMatches.forEach(match => issues.push({ code:'TEST_PLAYER_IN_MATCH', matchId:text(match._id || match.id) }))
@@ -315,7 +310,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   const result = {
     schemaVersion:SCHEMA_VERSION, metricVersion:METRIC_VERSION,
     generatedAt:new Date().toISOString(), scope:{ sportType:'football', mode:'official', ...scope },
-    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length || testPlayerMatches.length ? 'partial' : 'complete', cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && !testPlayerMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), playerCardComplete, expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, testPlayerMatches:testPlayerMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
+    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length || testPlayerMatches.length ? 'partial' : 'complete', participationPolicy:'recorded-participants/1',unlistedPlayerCardComplete:readComplete===true,playerCardMatchIds,cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && !testPlayerMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), playerCardComplete, expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, testPlayerMatches:testPlayerMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
     summary:{ matchCount:eligible.length, playerCount:new Set(playerRows.map(row => row.playerId)).size, teamCount:new Set(teamRows.map(row => row.teamId)).size },
     players:playerRows, teams:teamRows, issues
   }
@@ -382,7 +377,7 @@ export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
 // summaries. An empty set is confirmed zero only with a verified empty fact scope.
 export function createPlayerCardSnapshot(rows, metadata = {}) {
   const total = sumPlayerRows(rows)
-  if (!rows.length && metadata.matchCount > 0) for (const field of Object.keys(total.metrics)) {
+  if (!rows.length && metadata.matchCount > 0 && metadata.coverageStatus !== 'complete') for (const field of Object.keys(total.metrics)) {
     total.metrics[field] = null; total.coverage[field] = 'not_collected'
   }
   const base = { scoreVersion:metadata.rules?.version||PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION,

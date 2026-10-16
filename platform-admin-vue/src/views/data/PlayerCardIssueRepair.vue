@@ -6,7 +6,7 @@
       <header><div><h3>{{ audit.player.name }}</h3><span>{{ audit.player.teamName || '球队待关联' }}</span></div><el-button :loading="loading" @click="load">重新检查</el-button></header>
       <el-alert :title="ready ? '竞技数据已通过，可返回选择发卡' : audit.score?.status==='test_data_excluded'?'测试资料不进入正式发卡':'先补齐下列资料，再重新检查'" :type="ready?'success':'warning'" :closable="false" />
       <p v-if="!ready && audit.score?.missing?.length" class="audit-missing">{{ audit.score.missing.map(missingText).join('、') }}</p>
-      <p v-if="findings.some(row=>!row.related)" class="secondary">还需补齐同统计范围内的其他比赛，才能确认完整生涯记录。</p>
+      <p v-if="ready&&audit.playerTotal?.metrics?.appearances===0" class="secondary">未出场，不计比赛积分。</p>
       <article v-for="row in findings" :key="row.matchId || 'other'" class="finding">
         <div class="finding-head"><div><strong>{{ row.matchName }}</strong><small>{{ row.date }}{{ row.related?' · 该球员参赛记录':'' }}</small></div><el-button v-if="row.matchId && row.issues.some(x=>!/DURATION/.test(x.code))" @click="openMatch(row)">处理资料</el-button></div>
         <ul><li v-for="code in [...new Set(row.issues.map(x=>x.code))]" :key="code">{{ issueText(code) }}<DurationVerification v-if="/DURATION/.test(code)" :issue="{matchId:row.matchId,code}" allowed @saved="repaired" /></li></ul>

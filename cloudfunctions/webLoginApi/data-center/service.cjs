@@ -31,8 +31,7 @@ function createDataService(db) {
     const teamId=id(profile?.teamId || profile?.teamCode)
     const team=options.team === undefined && teamId ? (await readByIds(db,'teams','_id',[teamId]))[0] : options.team
     const testIdentity=synthetic(profile)||synthetic(team), fullCareer=options.fullCareer===true
-    const coverageComplete=result.coverage.playerCardComplete?.[playerId] ?? result.coverage.cardScoreScopeComplete
-    const issues=[...result.issues]
+    const {complete:coverageComplete,issues}=require('./player-card-snapshot.cjs').playerCardScope(result,playerId)
     let support=options.support || {drops:null,status:'unverified',dataVersion:null}
     if(options.supportFailure)issues.push({code:'SUPPORT_READ_FAILED',playerId})
     if(fullCareer && options.support===undefined && !options.supportFailure){
@@ -190,7 +189,7 @@ function createDataService(db) {
     }
     if (!actor.platformOwner) {
       const visible = new Set(result.players.map(row => row.playerId))
-      result.coverage.playerCardComplete = Object.fromEntries(Object.entries(result.coverage.playerCardComplete || {}).filter(([playerId]) => visible.has(playerId)))
+      for(const field of ['playerCardComplete','playerCardMatchIds']) result.coverage[field] = Object.fromEntries(Object.entries(result.coverage[field] || {}).filter(([playerId]) => visible.has(playerId)))
     }
     return { success:true, ...result }
   }

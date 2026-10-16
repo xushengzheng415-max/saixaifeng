@@ -121,7 +121,7 @@ await check('已确认0、未采集、时长未知、请求失败和范围受限
   assert.equal(oneMatch.playerCard.status,'scope_limited')
   db.fail='matches';await assert.rejects(service.playerCardForAuthorizedPlayer('starter'),e=>e.code==='DATA_READ_FAILED')
 })
-await check('无关比赛可证明未出场时不阻塞等级，名单缺失仍保留未知',async()=>{
+await check('未登记球员不计本场，无关比赛缺名单不阻塞已登记球员',async()=>{
   const unrelated={...match('other'),tournamentId:'unknown-cup',homeLineup:{starters:[{playerId:'other-home'}],substitutes:[]},awayLineup:{starters:[{playerId:'other-away'}],substitutes:[]}}
   const db=mockDb([match(),unrelated]),service=createDataService(db)
   const career=await service.query({platformOwner:true},{mode:'official'})
@@ -129,7 +129,20 @@ await check('无关比赛可证明未出场时不阻塞等级，名单缺失仍�
   assert.equal((await service.playerCardForAuthorizedPlayer('starter')).status,'ready')
   db.store.matches[1].homeLineup=undefined
   const unknown=await service.playerCardForAuthorizedPlayer('starter')
-  assert.equal(unknown.status,'unverified');assert(unknown.missing.includes('dataCoverage'))
+  assert.equal(unknown.status,'ready');assert.equal(unknown.points,4);assert.ok(!unknown.reasonCodes.includes('MATCH_ORIGIN_UNVERIFIED'))
+})
+await check('未登记球员零比赛积分，缺阵容留在比赛质量而非球员异常',async()=>{
+  const absent={_id:'not-listed',teamId:'home'},other={...match('other'),homeLineup:undefined,awayLineup:undefined,eventRecordingStatus:'partial',events:undefined}
+  const db=mockDb([match(),other]);db.store.players.push(absent);const service=createDataService(db)
+  const single=await service.playerCardForAuthorizedPlayer(absent._id),batch=(await service.playerCardsForAuthorizedPlayers([absent._id,'starter'])).get(absent._id)
+  assert.equal(single.status,'ready');assert.equal(single.points,0);assert.equal(single.metrics.appearances,0);assert.equal(single.metrics.starts,0);assert.equal(single.metrics.minutesPlayed,0);assert.deepEqual(batch,single);assert.deepEqual(single.reasonCodes,[])
+  const audit=await service.query({platformOwner:true},{playerId:absent._id});assert.deepEqual(audit.issues,[])
+  const dataset=await service.query({platformOwner:true},{mode:'official'});assert.ok(dataset.issues.some(x=>x.code==='LINEUP_COVERAGE_MISSING'));assert.ok(dataset.issues.some(x=>x.code==='EVENT_COVERAGE_PARTIAL'))
+  db.store.matches[1].events=[{eventId:'unknown',type:'goal',teamId:'away',minute:10}];assert.equal((await service.playerCardForAuthorizedPlayer('starter')).status,'ready');assert.deepEqual((await service.query({platformOwner:true},{playerId:absent._id})).issues,[])
+  // A real linked appearance contradicts unlisted absence and must remain unknown.
+  db.store.matches[1].events=[{eventId:'linked',type:'goal',teamId:'home',playerId:absent._id,minute:12}];db.store.matches[1].eventRecordingStatus='complete'
+  assert.equal((await service.playerCardForAuthorizedPlayer(absent._id)).status,'unverified')
+  db.fail='matches';await assert.rejects(service.playerCardForAuthorizedPlayer(absent._id),e=>e.code==='DATA_READ_FAILED')
 })
 await check('应援账本失败单人／批量一致，失去核验也更新版本',async()=>{
   const db=mockDb(),service=createDataService(db)

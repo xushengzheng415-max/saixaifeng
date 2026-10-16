@@ -36,4 +36,15 @@ function playerCardSnapshot(score, context = {}) {
   return { ...score, snapshotSchemaVersion:SCHEMA_VERSION, playerId:String(context.playerId || ''),
     missing, reasonCodes, coverage, progress, snapshotRevision:digest(revisionState) }
 }
-module.exports = { SCHEMA_VERSION, canonical, digest, playerCardSnapshot }
+// Shared by private career cards and public summaries; display never grants eligibility.
+function playerCardScope(result,playerId) {
+  const coverage=result.coverage||{},related=coverage.playerCardMatchIds?.[playerId]
+  const complete=coverage.playerCardComplete?.[playerId]??coverage.unlistedPlayerCardComplete??coverage.cardScoreScopeComplete
+  const ids=new Set(related||[])
+  const rows=(result.players||[]).filter(row=>row.playerId===playerId),hasMetricGap=rows.some(row=>['appearances','starts','minutesPlayed','goals'].some(field=>row.coverage?.[field]!=='complete'))
+  const issues=coverage.participationPolicy==='recorded-participants/1'
+    ? (result.issues||[]).filter(row=>(!row.playerId||String(row.playerId)===playerId)&&(!row.matchId||((!complete||hasMetricGap)&&ids.has(String(row.matchId)))))
+    : [...(result.issues||[])]
+  return {complete,issues}
+}
+module.exports = { SCHEMA_VERSION, canonical, digest, playerCardSnapshot, playerCardScope }
