@@ -33,7 +33,7 @@
             </el-table-column>
             <el-table-column label="阵容" width="108"><template #default="{row}"><el-select v-model="row.role" @change="pairSubstitutions"><el-option v-for="r in roles" :key="r.value" :label="r.label" :value="r.value" /></el-select></template></el-table-column>
             <el-table-column v-for="field in fields" :key="field.key" :label="field.label" :width="field.key==='goals'?190:72"><template #default="{row}">
-              <template v-if="field.key==='goals'"><div class="goal-grid"><div v-for="(value,index) in row.goalMinutes" :key="index" class="goal-minute"><el-input v-model="row.goalMinutes[index]" size="small" inputmode="numeric" :class="{ 'invalid-input':goalCellInvalid(value) }" :aria-label="row.name+'第'+(index+1)+'个进球分钟'" @input="updateGoals(row)" /><el-button v-if="row.goalMinutes.length>1" link type="danger" :aria-label="'删除第'+(index+1)+'个进球'" @click="removeGoal(row,index)">×</el-button></div><el-button link type="primary" size="small" @click="addGoal(row)">加一球</el-button></div><small v-if="row.goalMinutes.some(goalCellInvalid)" class="invalid">标红格须填0—150的分钟</small></template>
+              <template v-if="field.key==='goals'"><div class="goal-grid"><div v-for="(value,index) in row.goalMinutes" :key="index" class="goal-minute"><el-input v-model="row.goalMinutes[index]" size="small" inputmode="numeric" :class="{ 'invalid-input':goalCellInvalid(value) }" :aria-label="row.name+'第'+(index+1)+'个进球分钟'" @input="updateGoals(row)" /><el-button v-if="row.goalMinutes.length>1" link type="danger" :aria-label="'删除第'+(index+1)+'个进球'" @click="removeGoal(row,index)">×</el-button></div><el-button link type="primary" size="small" @click="addGoal(row)">加一球</el-button></div><small v-if="row.goalMinutes.some(goalCellInvalid)" class="invalid">标红格须填0—150的分钟</small><small v-if="goalCorrectionFor(row)" class="invalid">已存 {{ goalCorrectionFor(row).oldMinutes.join('、') }}′ → 本表 {{ goalCorrectionFor(row).newMinutes.join('、') }}′，请确认更正</small></template>
               <template v-else><el-input v-model="row[field.key]" :aria-label="field.label+'分钟'" :class="{ 'invalid-input':fieldIssue(row,field.key) }" @input="error=''" @change="onMinuteChange(row,field.key)" /><small v-if="fieldIssue(row,field.key)" class="invalid">分钟待修正</small></template>
             </template></el-table-column>
             <el-table-column label="身份" width="90"><template #default="{row}"><el-checkbox v-model="row.captain">队长</el-checkbox><el-checkbox v-model="row.goalkeeper">门将</el-checkbox></template></el-table-column>
@@ -52,13 +52,13 @@
         </template>
       </section>
     </div>
-    <template #footer><span v-if="draftStorageError" class="invalid">{{ draftStorageError }}</span><span v-else-if="localSavedAt" class="field-note">本机草稿 {{ new Date(localSavedAt).toLocaleTimeString() }}</span><el-button :disabled="!draft || busy || draftSaving" :loading="draftSaving" @click="saveDraft(true)">保存草稿</el-button><el-button :disabled="busy" @click="closeReview">关闭</el-button><el-button :disabled="busy" @click="chooseFile">重新上传</el-button><el-button v-if="error && !draft" :disabled="busy" @click="recognize">重试</el-button><el-button type="primary" :disabled="!draft || busy" :loading="saving" @click="confirm">确认录入</el-button></template>
+    <template #footer><span v-if="draftStorageError" class="invalid">{{ draftStorageError }}</span><span v-else-if="localSavedAt" class="field-note">本机草稿 {{ new Date(localSavedAt).toLocaleTimeString() }}</span><el-button :disabled="!draft || busy || draftSaving" :loading="draftSaving" @click="saveDraft(true)">保存草稿</el-button><el-button :disabled="busy" @click="closeReview">关闭</el-button><el-button :disabled="busy" @click="chooseFile">重新上传</el-button><el-button v-if="error && !draft" :disabled="busy" @click="recognize">重试</el-button><el-button :type="hasGoalCorrections?'warning':'primary'" :disabled="!draft || busy" :loading="saving" @click="confirm(hasGoalCorrections)">{{ hasGoalCorrections ? '更正并录入' : '确认录入' }}</el-button></template>
   </el-dialog>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import ReportImageMagnifier from './ReportImageMagnifier.vue'
 import { loadReportDraft, saveReportDraft, deleteReportDraft } from '../../utils/refereeReportDraftStore'
 import { callFunctionHTTP, uploadLargeFileViaCloud, getPlayerReadIdentity } from '../../utils/cloud'
@@ -97,6 +97,10 @@ async function restoreDraft(){
  catch(cause){ElMessage.error(cause.message)}finally{busy.value=false}
 }
 
+const goalCorrections=ref([]),goalCorrectionFingerprint=ref('')
+function goalDraftFingerprint(){return JSON.stringify(['home','away'].map(team=>(draft.value?.teams[team] || []).map(row=>[row.playerId,row.role,row.goals])))}
+const hasGoalCorrections=computed(()=>goalCorrections.value.length>0&&goalCorrectionFingerprint.value===goalDraftFingerprint())
+function goalCorrectionFor(row){if(!hasGoalCorrections.value)return null;const team=draft.value.teams.home.includes(row)?'home':'away';return goalCorrections.value.find(item=>item.side===team&&item.playerId===row.playerId)}
 const roles=[{label:'待确认',value:'unknown'},{label:'首发',value:'starter'},{label:'替补',value:'substitute'},{label:'不出场',value:'absent'}]
 const fields=[{key:'on',label:'换上'},{key:'off',label:'换下'},{key:'goals',label:'进球'},{key:'yellow',label:'黄牌'},{key:'red',label:'红牌'}]
 function chooseFile(){if(!busy.value&&!props.disabled)fileInput.value?.click()}
@@ -108,7 +112,7 @@ function groupPlayers(team){return (draft.value?.teams[team]||[]).filter(row=>ro
 function rowReviewFingerprint(row){return JSON.stringify([row.playerId || '',row.role || '',...fields.map(field=>String(row[field.key] ?? '').trim()),Boolean(row.captain),Boolean(row.goalkeeper)])}
 function isRowReviewed(row){return Boolean(row.reviewConfirmedFingerprint && row.reviewConfirmedFingerprint===rowReviewFingerprint(row))}
 function needsRowReview(row){return !isRowReviewed(row)&&Boolean(!row.playerId || !['starter','substitute','absent'].includes(row.role) || row.reviewConfirmedFingerprint || (row.role==='absent'&&fields.some(field=>String(row[field.key] || '').trim())) || rowNotes(row).some(note=>/核对|候选|不晚于/.test(note)))}
-function rowClass({row}){return (row.playerId && row.playerId===pairErrorPlayerId.value)||needsRowReview(row)?'needs-review':''}
+function rowClass({row}){return goalCorrectionFor(row)||(row.playerId && row.playerId===pairErrorPlayerId.value)||needsRowReview(row)?'needs-review':''}
 function confirmRowReview(row){
   const reject=message=>{row.reviewError=message;row.reviewErrorFingerprint=rowReviewFingerprint(row)}
   const team=(draft.value?.teams.home || []).includes(row)?'home':'away'
@@ -196,7 +200,7 @@ function validatePairs(){
   if(issue){const i=Number(String(issue.eventId).split('-')[2]);const team=issue.side==='home'?props.homeName:props.awayName;return pairProblem(`${team} ${issue.minute}′：${issue.message}`,i)}
   return true
 }
-async function confirm(){
+async function confirm(replaceGoals=false){
   if(!draft.value||busy.value||saving.value)return
   const rows=[...draft.value.teams.home,...draft.value.teams.away]
   const pending=rows.find(row=>needsRowReview(row))
@@ -210,8 +214,13 @@ async function confirm(){
   const scoreSide=['home','away'].find(team=>scoreIssue(team))
   if(scoreSide){side.value=scoreSide;return}
   if(!validatePairs())return
+  if(replaceGoals===true&&hasGoalCorrections.value){
+    saving.value=true
+    try{await ElMessageBox.confirm(goalCorrections.value.map(row=>(row.side==='home'?props.homeName:props.awayName)+' '+row.number+'号 '+row.playerName+'：'+row.oldMinutes.join('、')+'′ → '+row.newMinutes.join('、')+'′').join('；')+'。按本表更正，旧记录留档。','确认进球更正',{type:'warning',confirmButtonText:'按本表更正',cancelButtonText:'返回核对'})}catch{saving.value=false;return}
+    saving.value=false
+  }else replaceGoals=false
   saving.value=true;busy.value=true;stage.value='正在保存';error.value=''
-  try{const result=await callFunctionHTTP('confirmRefereeReport',{matchId:props.matchId,...draft.value,substitutions:substitutions.value},120000);if(!result?.success)throw new Error(result?.message||result?.error||'记录未保存');ElMessage.success(result.alreadyImported?'这张裁判表已录入':'裁判表已录入');draft.value=null;clearTimeout(draftTimer);await deleteReportDraft(props.matchId).catch(()=>{});hasLocalDraft.value=false;localSavedAt.value=0;visible.value=false;emit('saved')}catch(e){error.value=e.message}finally{saving.value=false;busy.value=false}
+  try{const result=await callFunctionHTTP('confirmRefereeReport',{matchId:props.matchId,...draft.value,substitutions:substitutions.value,replaceGoalConflicts:replaceGoals===true},120000);if(result?.code==='PAPER_GOAL_CORRECTION_REQUIRED'){goalCorrections.value=result.goalCorrections || [];goalCorrectionFingerprint.value=goalDraftFingerprint();side.value=goalCorrections.value[0]?.side || side.value;return}if(!result?.success)throw new Error(result?.message||result?.error||'记录未保存');ElMessage.success(result.alreadyImported?'这张裁判表已录入':'裁判表已录入');draft.value=null;clearTimeout(draftTimer);await deleteReportDraft(props.matchId).catch(()=>{});hasLocalDraft.value=false;localSavedAt.value=0;visible.value=false;emit('saved')}catch(e){error.value=e.message}finally{saving.value=false;busy.value=false}
 }
 onMounted(async()=>{try{const saved=await loadReportDraft(props.matchId);hasLocalDraft.value=Boolean(saved);localSavedAt.value=saved?.savedAt || 0}catch{}})
 watch([draft,substitutions],()=>{clearTimeout(draftTimer);if(draft.value&&!busy.value)draftTimer=setTimeout(()=>saveDraft(false),900)},{deep:true})
