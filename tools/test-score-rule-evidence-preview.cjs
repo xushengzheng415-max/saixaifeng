@@ -4,7 +4,9 @@ async function run(root=path.resolve('cloudfunctions/webLoginApi')){
  const {calculatePlayerCardPoints}=await import('../cloudfunctions/dataCenter/shared/statistics.mjs')
  const {playerCardSnapshot}=require(path.join(root,'data-center/player-card-snapshot.cjs'))
  const rules=require(path.join(root,'data-center/score-rules.cjs'))
- const create=require(path.join(root,'playerCardScoreRules.cjs')).createScoreRulesManager
+ const Module=require('node:module'),load=Module._load
+ let create
+ try{Module._load=function(name,...args){if(name==='@resvg/resvg-js')return {Resvg:class{constructor(){throw Error('Score trial must not render cards')}}};return load.call(this,name,...args)};create=require(path.join(root,'playerCardScoreRules.cjs')).createScoreRulesManager}finally{Module._load=load}
  const f=fixture(root,{writable:true}),actor={principalType:'platform_owner',userId:'owner',user:{isPlatformOwner:true}}
  const metrics={appearances:null,starts:1,minutesPlayed:null,goals:null}
  const observed={appearances:2,starts:1,minutesPlayed:60,goals:1}
