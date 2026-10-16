@@ -4,7 +4,7 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false"><el-button link @click="load">重试</el-button></el-alert>
     <template v-if="audit">
       <header><div><h3>{{ audit.player.name }}</h3><span>{{ audit.player.teamName || '球队待关联' }}</span></div><el-button :loading="loading" @click="load">重新检查</el-button></header>
-      <el-alert :title="ready ? '竞技数据已通过，可返回选择发卡' : '先补齐下列资料，再重新检查'" :type="ready?'success':'warning'" :closable="false" />
+      <el-alert :title="ready ? '竞技数据已通过，可返回选择发卡' : audit.score?.status==='test_data_excluded'?'测试资料不进入正式发卡':'先补齐下列资料，再重新检查'" :type="ready?'success':'warning'" :closable="false" />
       <p v-if="!ready && audit.score?.missing?.length" class="audit-missing">{{ audit.score.missing.map(missingText).join('、') }}</p>
       <p v-if="findings.some(row=>!row.related)" class="secondary">还需补齐同统计范围内的其他比赛，才能确认完整生涯记录。</p>
       <article v-for="row in findings" :key="row.matchId || 'other'" class="finding">
