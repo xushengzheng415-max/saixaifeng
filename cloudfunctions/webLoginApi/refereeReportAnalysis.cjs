@@ -8,7 +8,7 @@ function exactMark(value,kind){const s=clean(value);return kind==='starter'?/^[�
 function normalizeMinute(value,timing,kind){
   const original=String(value || '').trim(),s=clean(original).replace(/[′'’`]/g,'');const notes=[]
   if(!s)return {value:'',notes}
-  if(['中场','半场','中场休息','半场休息','中畅','中扬','场'].includes(s)){
+  if(['中场','半场','中场休息','半场休息','中畅','中扬','场'].includes(s)||(['on','off'].includes(kind)&&(['半','中'].includes(s)||/^[√✓✔Vv↑↓]+$/.test(s)))){
     if(['on','off'].includes(kind)&&Number.isFinite(timing.halfMinutes)&&timing.halfMinutes>0){notes.push(`“${original}”按中场解析为${timing.halfMinutes}′`);return {value:String(timing.halfMinutes),notes}}
     return {value:original,notes:['中场分钟缺少可靠设置，请填写']}
   }
