@@ -11,7 +11,7 @@
           <span>比分</span><div class="score-field"><el-input-number v-model="draft.score.home" :min="0" :max="99" :precision="0" aria-label="主队比分" /><small :class="{invalid:scoreIssue('home')}">{{ scoreSummary('home') }}</small></div>
           <span>:</span><div class="score-field"><el-input-number v-model="draft.score.away" :min="0" :max="99" :precision="0" aria-label="客队比分" /><small :class="{invalid:scoreIssue('away')}">{{ scoreSummary('away') }}</small></div><span v-if="draft.timing?.halfMinutes" class="field-note">中场：{{ draft.timing.halfMinutes }}′</span><small v-if="error &amp;&amp; /比分.*进球|进球.*比分/.test(error) &amp;&amp; !scoreIssue('home') &amp;&amp; !scoreIssue('away')" class="invalid">{{ error }}；请检查本场已有进球记录。</small>
         </div>
-        
+
         <template v-if="draft">
           <el-tabs v-model="side">
             <el-tab-pane :label="homeName" name="home" />
