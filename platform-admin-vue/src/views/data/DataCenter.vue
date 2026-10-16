@@ -132,7 +132,7 @@ async function loadAuditQueue(){
   catch(error){auditQueueError.value=error.message||'异常球员扫描失败，请重试'}finally{auditQueueLoading.value=false}
 }
 function updateAuditQueue(audit){if(!auditQueue.value)return;const rows=auditQueue.value.issues,index=rows.findIndex(row=>row.playerId===audit.player.id);if(index<0)return;if(audit.score.status==='ready'){rows.splice(index,1);auditQueue.value.issueCount--;auditQueue.value.verifiedCount++}else rows[index]={...rows[index],status:audit.score.status,missing:audit.score.missing||[]}}
-function selectAuditIssue(row){auditPlayerId.value=row.playerId;auditSelectedPlayer()}
+async function selectAuditIssue(row){auditPlayerId.value=row.playerId;await nextTick();await auditSelectedPlayer()}
 function resetScope() { querySequence++;loading.value=false; Object.assign(scope,{ teamId:'', playerId:'', tournamentId:'' }); tournamentTeamIds.value=[];result.value = null }
 async function changeTournament(){querySequence++;loading.value=false;const selectedTournament=scope.tournamentId;scope.teamId='';scope.playerId='';result.value=null;tournamentTeamIds.value=[];if(!scope.tournamentId)return;tournamentTeamsLoading.value=true;try{const data=await api({action:'query',scope:{tournamentId:scope.tournamentId,mode:scope.mode}});if(selectedTournament!==scope.tournamentId)return;const ids=[...new Set((data.teams||[]).map(row=>String(row.teamId||'')).filter(Boolean))];tournamentTeamIds.value=ids;if(!ids.length)ElMessage.info('该赛事暂无可统计的球队记录')}catch(error){errorText.value=error.message||'赛事球队读取失败'}finally{tournamentTeamsLoading.value=false}}
 function changeScopeTeam(){querySequence++;loading.value=false;scope.playerId='';result.value=null}
