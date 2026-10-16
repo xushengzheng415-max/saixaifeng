@@ -315,3 +315,8 @@ PlayerCardStudio左右选人复用已部署dataCenter.catalog的赛事、球队�
 ## 2026-10-16 平台球员等级核查链路补齐
 
 原auditPlayerCardCatalogPlayer/listPlayerCardCatalogAuditQueue未在正式后端实现，已换为savePlayerCardTemplate内的平台负责人只读workflowAction:auditPlayer/auditQueue。直接复用发放同源的data-center/service.cjs，不另算积分、不改等级；单人指标/覆盖/来源问题及分页扫描由真实处理器验证。生产webLoginApi当日在线包两文件差量发布并回下载核对，其余运行源码及裁判表模块保持；Active/Available，匿名探针AUTH_REQUIRED。独立平台27个文件HTTP与摘要一致。详见 ../releases/platform-player-card-audit-20261016.md；未代用户修改真实资料或发放。
+
+
+## 平台积分配置入口（2026-10-16）
+
+PlayerCardScoreRules经既有HTTP模板入口调用平台鉴权scoreRules工作流，统一共享score-rules/score-rule-store与statistics/service/player-card-snapshot；webLoginApi、getMiniWorkspace、dataCenter、resultCenter及playerCardPublishWorker读回一致。公开球员榜也传递同一规则及保留上下文。未改规则配置覆盖时仍为V2；本次只更新代码。测试/未知、100分权益与卡级独立，保留既获卡级而不采信手填积分。DurationVerification仅带入锁定规程建议，原核实接口保存后重查。已完成finish-data-change和实际包/浏览器隔离验证；正式哈希见../releases/platform-score-rules-20261016.md。

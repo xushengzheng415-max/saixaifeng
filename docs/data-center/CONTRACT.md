@@ -130,3 +130,8 @@ PC 新入口 dataCenter.playerDetail 返回授权范围的 statistics 与独立�
 统一查询新增 rankings（球员／球队指标榜）、records（有效判罚与比赛事件），并支持 groupName 范围。分组排名按赛事、竞赛组别、抽签小组隔离；正式结果与现场暂定分别返回。未知指标不记零、不列入指标排名；测试来源不进入正式统计。撤销或修订事件经 effectiveEvents 统一筛选。
 
 catalog 返回授权范围内的球队、球员、赛事、组别及已审核最新名单的安全字段。球员与球队使用稳定 ID，当前队籍与历史统计归属分开；个人联系方式和证件不进入公开榜单。平台展示全平台授权范围，机构／赛事子账号仍限定所属或被授权范围。
+
+
+## 积分参数与历史时长建议（2026-10-16）
+
+平台模板鉴权后scoreRulesRead/Save/Preview/Begin/Continue管理配置。platform_settings内player-card-score-rules为活动/草稿指针；recordType为player_card_score_rule_version/publish/floor的记录分别保存历史、可恢复准备任务与稳定playerId的保留卡级。未配置默认V2，查询失败不伪造默认规则；后续版本按统一参数与保留记录计算。试算绑定修订、参数、操作者、数据摘要及15分钟证明，按25条准备完成后事务激活，不写球员或赛果。inspectDuration.suggestion来自锁定规程，仅作人工核实建议，不自动覆盖历史。详见PLAYER_CARD_POINTS.md及../releases/platform-score-rules-20261016.md。

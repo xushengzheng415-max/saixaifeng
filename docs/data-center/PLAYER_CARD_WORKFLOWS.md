@@ -37,3 +37,13 @@
 上段 `auditPlayerCardCatalogPlayer` 是原页面引用的未实现操作，已由本节替代。单人核查和扫描现经 `savePlayerCardTemplate` 的 `workflowAction:auditPlayer/auditQueue`，复用平台负责人鉴权以及发放同源的 `data-center/service.cjs`。单人返回规范生涯快照、指标覆盖、历史球队/赛事行和原始问题编号；扫描每页最多100人，前端按游标读完，失败不伪装为零异常。
 
 只读实现位于 `webLoginApi/playerCardAudit.cjs`。不读回手机号、证件或原图，不写球员、等级、赛事或发放记录；未知时长、来源待核、应援异常及测试来源仍按原数据中心规则显示。需要核实时长时复用已有 `dataCenter.inspectDuration/verifyDuration`，不新增比赛修改接口。此前仅验证打开抽屉的模拟错误不足以证明接口可用，现测试穿过真实模板鉴权处理器和实际数据中心模块，并核对审计与发放快照一致。
+
+## 积分规则与旧素材（2026-10-16）
+
+独立平台侧栏“积分规则”使用平台模板鉴权后的scoreRulesRead、scoreRulesSave、scoreRulesPreview、scoreRulesBegin、scoreRulesContinue。编辑参数先保存草稿，规范数据试算绑定15分钟证明与草稿修订；显式确认后分批准备卡级保留记录，最后事务切换规则。可恢复未完成准备任务；数据、草稿或活动规则变化时拒绝旧证明，不部分启用。
+
+规则、发布任务、历史版本、稳定球员ID的卡级保留记录使用platform_settings的独立recordType及ID空间。保留来源是规范旧卡级、上一版保留记录或受写保护且有制卡版本的已获卡级，排除测试来源。权限仍按实际积分100分核定。配置、计算、保留和发布分别在playerCardScoreRules.cjs、shared/score-rules.cjs、shared/score-rule-store.cjs及规范服务中实现；不改球员或比赛事实。
+
+已有制卡项目时，旧版素材默认折叠，避免将旧铜卡入口误认作另一个当前套系。“沿用新建”明确创建项目副本；现有项目通过继续制作或编辑新版维护，旧素材不自动删除或按名称合并。
+
+历史时长核实只把锁定竞赛规程作为建议值，显示来源并由平台负责人确认该场适用后保存durationVerification；不以当前规程自动回写旧比赛，也不替代阵容或事件补全。

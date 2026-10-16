@@ -205,3 +205,8 @@ Gitee `main` 已合并本次改动（代码提交 `c9e50f9`，合并提交 `bd71
 ## 2026-10-16 平台球员等级核查链路补齐
 
 原auditPlayerCardCatalogPlayer/listPlayerCardCatalogAuditQueue未在正式后端实现，已换为savePlayerCardTemplate内的平台负责人只读workflowAction:auditPlayer/auditQueue。直接复用发放同源的data-center/service.cjs，不另算积分、不改等级；单人指标/覆盖/来源问题及分页扫描由真实处理器验证。生产webLoginApi当日在线包两文件差量发布并回下载核对，其余运行源码及裁判表模块保持；Active/Available，匿名探针AUTH_REQUIRED。独立平台27个文件HTTP与摘要一致。详见 ../releases/platform-player-card-audit-20261016.md；未代用户修改真实资料或发放。
+
+
+## 2026-10-16 积分参数化与规程时长建议上线
+
+平台新增积分规则侧栏，用户确认全部参数纳入、旧卡级保留只升级。五个统一读取服务从当日生产包差量更新并Active/Available，回下载改动文件及原入口/运行源码逐一核对；平台20261016070609-8fc5c5e6的27个文件摘要一致。正式库配置覆盖记录仍为0，继续默认V2，没有替用户激活新参数、发放卡片或改历史比赛。立洋杯核查37场已结束中26场有60分钟快照、11场缺证据；弹窗从锁定30×2规程带入建议，确认保存仍由原接口和本人完成。详见../releases/platform-score-rules-20261016.md。
