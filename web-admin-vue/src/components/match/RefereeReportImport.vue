@@ -206,7 +206,7 @@ async function confirm(){
     pending.reviewError='请核对本行后点击确认核对';pending.reviewErrorFingerprint=rowReviewFingerprint(pending)
     return
   }
-  for(const row of rows)for(const field of fields){const text=String(row[field.key]||'').trim();if(text&&!minutes(text).length)return ElMessage.warning('请核对事件分钟；无法确认的记录不要填0')}
+  for(const row of rows)for(const field of fields){const text=String(row[field.key]||'').trim();if(text&&(!minutes(text).length||minutes(text).some(value=>value>150))){side.value=draft.value.teams.home.includes(row)?'home':'away';row.reviewError=field.label+'分钟未确定，请修正标红格';row.reviewErrorFingerprint=rowReviewFingerprint(row);return}}
   const scoreSide=['home','away'].find(team=>scoreIssue(team))
   if(scoreSide){side.value=scoreSide;return}
   if(!validatePairs())return
