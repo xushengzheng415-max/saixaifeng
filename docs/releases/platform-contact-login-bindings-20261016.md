@@ -7,3 +7,5 @@
 后端既有loginMethods对小程序微信/PC微信/账号密码进行安全投影；该信息表示已配置绑定，不证明最初注册端、最近登录端或当前可登录权限。此次不推断或回填历史渠道，不改变账号停用/注销、手机号唯一性或业务归属。
 
 既有test-platform-customer-profile通过。实际平台隔离浏览器覆盖小程序、PC、双端、未知四类；一个机构包含另一PC账号时当前小程序联系人不继承对方绑定；来源未记录不被推断改写，账号管理列同样可见，无写请求。证据work/contact-login-bindings-20261016.png及work/test-contact-login-bindings.cjs。独立平台构建/边界检查与生产摘要回读后登记正式状态。
+
+正式平台已发布20261016151340-1eae3875，27文件HTTP成功及SHA-256一致，独立边界与生产构建通过。只读回下载manageTournamentCenterContent，确认线上overview已经包含安全accountProfiles/loginMethods；无需部署后端。此次只更新独立平台前端，未写账号、注册来源、登录会话或业务数据。源码1eae3875b02f550a9971d93ddefccc20d7fff86a。
