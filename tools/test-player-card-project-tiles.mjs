@@ -15,4 +15,8 @@ assert.equal(legacyProjectTiles([...classic, { ...classic[0], id: 'duplicate' }]
 assert.equal(legacyProjectTiles(classic.map((x, i) => ({ ...x, preload: { type: 'tournament', targetId: String(i) } }))).length, 3, 'never join different scopes')
 assert.equal(legacyProjectTiles([{ ...tournament, preload: { type: 'team', targetId: 'team' } }])[0].styles[0].key, 'single')
 assert.equal(legacyProjectTiles(classic.map(x => ({ ...x, preload: { type: 'team', targetId: 'team' } }))).length, 3, 'honor singles stay independent')
+const publication=legacyProjectTiles(classic.map((x,i)=>({...x,publishedVersion:i===0?3:0,publishedBackgroundUrl:i===0?'active-bronze':''})))[0]
+assert.deepEqual(publication.styles.map(x=>x.publishedVersion),[3,0,0])
+assert.equal(publication.styles[0].publishedBackgroundUrl,'active-bronze')
+assert.equal(publication.styles[0].backgroundUrl,'image-bronze','keep draft and published backgrounds distinct')
 console.log('PASS: visual suite grouping preserves originals, scope boundaries and ambiguous alternatives; missing tiers have an explicit next step')

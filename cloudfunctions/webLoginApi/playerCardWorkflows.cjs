@@ -8,6 +8,8 @@ const id = () => crypto.randomBytes(16).toString('hex')
 const titleOf = value => { const text=String(value||'').trim(); if(text.length<2||text.length>24)throw new Error('名称须为2–24个字');return text }
 const keysOf = set => set.kind==='progression'?TIERS:['single']
 const grantId = (playerId, templateId) => crypto.createHash('sha256').update(JSON.stringify([String(playerId),String(templateId)])).digest('hex')
+const issueFailure=(code,message)=>Object.assign(new Error(message),{recipientFailure:true,code})
+function issueSummary(job){const failures=job.failures||[];return {success:true,jobId:job._id,setId:job.setId,title:job.title,revision:job.setRevision,setDisplay:job.setDisplay,total:job.playerIds.length,completed:job.cursor,succeeded:job.cursor-failures.length,status:job.status,failures}}
 function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,normalizeLayout,normalizePhoto,normalizeBadges,scoreService}) {
   const db=cloud.database()
   const scores=()=>scoreService||require('./data-center/service.cjs').createDataService(db)
@@ -143,42 +145,71 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
     const available=await candidates({setId:set._id}),allowed=new Set(available.players.filter(x=>x.eligible).map(x=>x.id))
     if(ids.some(x=>!allowed.has(x)))throw new Error('名单含无权限、测试或缺少照片的球员，请刷新')
     if(!/^[a-zA-Z0-9_-]{16,80}$/.test(String(event.requestId||'')))throw new Error('缺少发放请求编号，请重新打开')
-    const jobId='issue_'+crypto.createHash('sha256').update(auth.userId+':'+set._id+':'+event.requestId).digest('hex').slice(0,32)
-    const oldJob=await suite.document(db,SETS,jobId)
-    if(oldJob)return {success:true,jobId,total:oldJob.playerIds.length,completed:oldJob.cursor,status:oldJob.status}
     const evidence=Object.fromEntries(available.players.filter(x=>ids.includes(x.id)).map(x=>[x.id,x.rosterEvidence]))
-    const current=await db.runTransaction(async tx=>{const old=await suite.document(tx,SETS,jobId);if(old)return old;const created={recordType:'issue',setId:set._id,setRevision:set.revision,title:set.title,playerIds:ids,evidence,cursor:0,status:'pending',setDisplay:event.setDisplay===true,createdBy:auth.userId,createdAt:db.serverDate(),failures:[]};await tx.collection(SETS).doc(jobId).set({data:created});return created})
-    return {success:true,jobId,total:current.playerIds.length,completed:current.cursor,status:current.status}
+    return createIssue(set,ids,evidence,event,auth)
+  }
+  async function createIssue(set,ids,evidence,event,auth) {
+    if(!/^[a-zA-Z0-9_-]{16,80}$/.test(String(event.requestId||'')))throw new Error('缺少发放请求编号，请重新打开')
+    const jobId='issue_'+crypto.createHash('sha256').update(auth.userId+':'+set._id+':'+event.requestId).digest('hex').slice(0,32)
+    const current=await db.runTransaction(async tx=>{const old=await suite.document(tx,SETS,jobId);if(old){if(old.setId!==set._id||JSON.stringify(old.playerIds)!==JSON.stringify(ids)||old.setDisplay!==(event.setDisplay===true)||String(old.retryOf||'')!==String(event.retryOf||''))throw new Error('发放请求已用于其他名单，请重新打开');return old}const currentSet=await suite.document(tx,SETS,set._id);if(currentSet?.status!=='published'||Number(currentSet.revision)!==Number(set.revision))throw new Error('样式已更新，请重新预览');const created={_id:jobId,recordType:'issue',setId:set._id,setRevision:set.revision,title:set.title,playerIds:ids,evidence,cursor:0,status:'pending',setDisplay:event.setDisplay===true,createdBy:auth.userId,createdAt:db.serverDate(),failures:[],...(event.retryOf?{retryOf:event.retryOf}:{})};const {_id,...data}=created;await tx.collection(SETS).doc(jobId).set({data});return created})
+    return issueSummary(current)
+  }
+  async function retryIssue(event,auth) {
+    const job=await suite.document(db,SETS,String(event.jobId||''))
+    if(!job||job.recordType!=='issue'||job.status!=='complete'||!job.failures?.length)throw new Error('没有可重试的失败名单')
+    const set=await getSet(job.setId)
+    if(set.status!=='published'||Number(set.revision)!==Number(job.setRevision))throw new Error('样式已更新，请重新预览并选择名单')
+    await preload.validatePreload(db,set.preload,suite.document)
+    return createIssue(set,[...new Set(job.failures.map(row=>row.playerId))],job.evidence||{},{requestId:event.requestId,setDisplay:job.setDisplay,retryOf:job._id},auth)
   }
   async function continueIssue(event,auth) {
     const job=await suite.document(db,SETS,String(event.jobId||''))
     if(!job||job.recordType!=='issue')throw new Error('发放记录不存在')
-    if(job.status==='complete')return {success:true,jobId:job._id,status:'complete',total:job.playerIds.length,completed:job.cursor,failures:job.failures||[]}
+    if(job.status==='complete')return issueSummary(job)
     const set=await getSet(job.setId)
     await preload.validatePreload(db,set.preload,suite.document)
     if(Number(set.revision)!==Number(job.setRevision))throw new Error('样式已更新，请重新确认发放名单')
+    const {synthetic}=await import('./data-center/statistics.mjs')
+    if(set.preload.type!=='platform'&&synthetic(await suite.document(db,preload.COLLECTIONS[set.preload.type],set.preload.targetId)))throw new Error('测试范围不能发放正式卡')
+    const scopeIds=set.preload.type==='tournament'?await preload.tournamentPlayerIds(db,set.preload.targetId):null
     const service=scores(),end=Math.min(job.cursor+10,job.playerIds.length)
     const pageScores=await service.playerCardsForAuthorizedPlayers(job.playerIds.slice(job.cursor,end))
     for(let index=job.cursor;index<end;index++){
       const playerId=job.playerIds[index],player=await suite.document(db,'players',playerId)
-      if(!player)throw new Error('发放名单中的球员已不存在，请核查')
       const score=pageScores.get(playerId)||{status:'unverified'}
-      if(score.status==='test_data_excluded')throw new Error('发放名单包含测试资料，已停止')
-      if(set.kind==='progression'&&(!TIERS.includes(score.tier)||score.status!=='ready'))throw new Error('球员等级尚未核定，请先核对数据：'+String(player.name||playerId))
+      try {
+      if(!player||player.deleted||player.isDeleted||player.status==='deleted')throw issueFailure('PLAYER_UNAVAILABLE','球员档案不存在或已删除')
+      const team=player.teamId?await suite.document(db,'teams',player.teamId):null
+      if(synthetic(player)||synthetic(team)||score.status==='test_data_excluded')throw issueFailure('TEST_DATA','测试资料不发放')
+      if(scopeIds&&!scopeIds.has(playerId)||set.preload.type==='team'&&String(player.teamId)!==set.preload.targetId||set.preload.type==='player'&&playerId!==set.preload.targetId)throw issueFailure('SCOPE_CHANGED','球员已不在当前发放范围')
+      if(set.kind==='progression'&&(!TIERS.includes(score.tier)||score.status!=='ready'))throw issueFailure('GRADE_UNREADY','竞技等级尚未核定')
+      if(!(await require('./playerCardSource.cjs').resolveSource(db,player))?.fileId)throw issueFailure('PHOTO_MISSING','缺少可用照片')
       await db.runTransaction(async tx=>{
         const currentJob=await suite.document(tx,SETS,job._id),currentSet=await suite.document(tx,SETS,set._id),currentPlayer=await suite.document(tx,'players',playerId)
         if(Number(currentJob.cursor)!==index)throw new Error('发放进度已更新，请刷新后继续')
-        if(!currentPlayer||currentPlayer.deleted||currentPlayer.isDeleted||currentPlayer.status==='deleted'||Number(currentSet.revision)!==Number(job.setRevision))throw new Error('球员或样式已变化，请重新检查')
+        if(!currentSet||currentSet.status!=='published'||Number(currentSet.revision)!==Number(job.setRevision))throw new Error('样式已变化，请重新检查')
+        if(!currentPlayer||currentPlayer.deleted||currentPlayer.isDeleted||currentPlayer.status==='deleted')throw issueFailure('PLAYER_UNAVAILABLE','球员档案不存在或已删除')
+        if(String(currentPlayer.teamId||'')!==String(player.teamId||''))throw new Error('球员资料已变化，请继续发放以重新检查')
+        const grants=[]
         for(const key of keysOf(set)){
           const templateId=set.members[key],gid=grantId(playerId,templateId),old=await suite.document(tx,'player_card_library',gid)
-          if(old?.status==='revoked')throw new Error('该球员已有撤销记录，需先人工核查')
+          if(old?.status==='revoked')throw issueFailure('GRANT_REVOKED','已有撤销记录，需人工核查')
+          grants.push({templateId,gid,old})
+        }
+        for(const {templateId,gid,old} of grants){
           if(!old)await tx.collection('player_card_library').doc(gid).set({data:{playerId,templateId,setId:set._id,cardKind:set.kind,preload:set.preload,revision:0,grantSource:'platform_confirmed_award',grantRuleVersion:'player-card-workflow/1',grantRosterEvidence:job.evidence?.[playerId]||[],grantTeamId:String(currentPlayer.teamId||''),grantedAt:db.serverDate(),grantedBy:auth.userId,issueJobId:job._id}})
         }
         if(job.setDisplay)await tx.collection('players').doc(playerId).update({data:{playerCardDisplayTemplateId:set.members[set.kind==='progression'?score.tier:'single'],playerCardDisplayUpdatedAt:db.serverDate()}})
         await tx.collection(SETS).doc(job._id).update({data:{cursor:index+1,status:index+1===job.playerIds.length?'complete':'pending',updatedAt:db.serverDate()}})
       })
+      } catch(error) {
+        // Only confirmed per-player business failures are skipped. Read/network,
+        // transaction and version failures pause without advancing the cursor.
+        if(!error.recipientFailure)throw error
+        await db.runTransaction(async tx=>{const current=await suite.document(tx,SETS,job._id),currentSet=await suite.document(tx,SETS,set._id);if(Number(current.cursor)!==index)throw new Error('发放进度已更新，请继续');if(Number(currentSet?.revision)!==Number(job.setRevision))throw new Error('样式已更新，请重新确认');await tx.collection(SETS).doc(job._id).update({data:{cursor:index+1,status:index+1===job.playerIds.length?'complete':'pending',failures:db.command.set([...(current.failures||[]),{playerId,name:String(player?.name||playerId),reason:error.message,code:error.code}]),updatedAt:db.serverDate()}})})
+      }
     }
-    return {success:true,jobId:job._id,status:end===job.playerIds.length?'complete':'pending',total:job.playerIds.length,completed:end}
+    return issueSummary(await suite.document(db,SETS,job._id))
   }
   async function issuePreviews(event) {
     const set=await getSet(event.setId)
@@ -228,6 +259,8 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
     if(action==='issuePreviews')return issuePreviews(event)
     if(action==='beginIssue')return beginIssue(event,auth)
     if(action==='continueIssue')return continueIssue(event,auth)
+    if(action==='retryIssue')return retryIssue(event,auth)
+    if(action==='issueStatus'){const job=await suite.document(db,SETS,String(event.jobId||''));if(!job||job.recordType!=='issue')throw new Error('发放记录不存在');return issueSummary(job)}
     if(action==='issues'){let rows=[];try{rows=await preload.readAll(db,SETS,{recordType:'issue',...(event.setId?{setId:String(event.setId)}:{})})}catch(error){if(!/collection.*(not exist|not found)|DATABASE_COLLECTION_NOT_EXIST/i.test(String(error.message)))throw error}return {success:true,issues:rows.map(({playerIds,evidence,...row})=>({...row,total:playerIds.length})).sort((a,b)=>String(b._id).localeCompare(String(a._id)))}}
     throw new Error('未知制卡流程操作')
   }

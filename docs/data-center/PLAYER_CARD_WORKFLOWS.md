@@ -4,7 +4,7 @@
 
 ## 入口与权限
 
-平台 `PlayerCardStudio.vue` 调用既有 `savePlayerCardTemplate` HTTP action，附加 `workflowAction`。`playerCardTemplates.cjs` 在既有平台负责人会话校验之后分派至 `playerCardWorkflows.cjs`；不新增裸HTTP函数或客户端SDK。操作为 list/create/get/materials/copyLayout/review/publish/candidates/issuePreviews/beginIssue/continueIssue/issues。
+平台 `PlayerCardStudio.vue` 调用既有 `savePlayerCardTemplate` HTTP action，附加 `workflowAction`。`playerCardTemplates.cjs` 在既有平台负责人会话校验之后分派至 `playerCardWorkflows.cjs`；不新增裸HTTP函数或客户端SDK。操作为 list/create/get/materials/copyLayout/review/publish/candidates/issuePreviews/beginIssue/continueIssue/issueStatus/retryIssue/issues。
 
 集合 `player_card_sets` 保存 recordType=set 的制卡项目、recordType=issue 的发放进度；首次由平台明确创建项目时建立集合。模板、不可变版本、活动指针与球员卡库继续使用已有集合，不迁移旧资料。新项目成员记录 setId/cardKind/issuanceMode；荣誉单卡内部沿用bronze兼容渲染键，该内部键不表示获得铜卡等级，界面只显示单卡。
 
@@ -12,7 +12,7 @@
 
 升级套系含bronze/silver/gold三个模板，缺少任一背景或遮罩则拒绝预览；保存和排版同步不激活版本。统一预览返回有期限、绑定操作者及成员修订号的证明；发布事务重新核对三档修订、素材及历史任务，再统一写入版本和活动指针。草稿变动使旧预览失效，部分失败不切换任何档位。全平台套系更新三个基础指针；赛事套系保留独立活动键。荣誉样式不更新基础档位。
 
-新赛事套系和荣誉单卡仅显式确认名单后建立授权，不能仅因同队或同赛事自动领卡。候选按稳定ID和现有官方名单规则读取，测试来源、缺少照片、升级套系等级未核定等情况明确禁选。发放前支持分页动态预览，姓名与照片从服务端读取；客户端不上传自绘成卡。发放按10人一批、逐人事务保存，记录操作者、范围、名单证据与进度，请求编号去重；可继续未完成记录。可选设为展示，保留旧卡、照片、积分和等级。
+新赛事套系和荣誉单卡仅显式确认名单后建立授权，不能仅因同队或同赛事自动领卡。候选按稳定ID和现有官方名单规则读取，测试来源、缺少照片、升级套系等级未核定等情况明确禁选。发放前默认预览首批24名样卡，即可确认全部所选名单；更多预览为可选操作，不要求完整加载名单或生成全部PNG。姓名与照片从服务端读取；客户端不上传自绘成卡。发放按10人一批、逐人事务保存，记录操作者、范围、名单证据与进度，请求编号去重；可继续未完成记录。可选设为展示，保留旧卡、照片、积分和等级。
 
 `playerCardSeriesReader.cjs` 在统一readCards内部按权威等级选择已授权的对应档位，核验原始及目标授权，不能跨卡库授权切换。webLoginApi和getMiniWorkspace同步此轻量模块。H5卡库返回当前套系档位作为展示标识；旧模板和既有100分权益仍有兼容路径。新升级套系按真实等级选档，荣誉授权不代表升级。
 
@@ -47,3 +47,9 @@
 已有制卡项目时，旧版素材默认折叠，避免将旧铜卡入口误认作另一个当前套系。“沿用新建”明确创建项目副本；现有项目通过继续制作或编辑新版维护，旧素材不自动删除或按名称合并。
 
 历史时长核实只把锁定竞赛规程作为建议值，显示来源并由平台负责人确认该场适用后保存durationVerification；不以当前规程自动回写旧比赛，也不替代阵容或事件补全。
+
+## 自动分批发放与基础样式（2026-10-16，用户确认）
+
+确认所选名单后自动循环原10人批次，显示已处理、成功、失败人数。确定的个人业务问题（档案删除、范围变化、测试资料、缺照片、卡级待定、已有撤销记录）按逐人事务记失败并继续；数据库、网络、事务或样式版本异常停止且不推进未知项。失败记录持久保存；issueStatus回读进度，retryIssue只从已完成任务的失败ID建立幂等子任务，重查现有范围与资格，保留原历史结果。关闭浏览器不承诺后台独立运行，恢复从发放记录继续。未改变照片、积分或模板活动版本。
+
+已发布旧基础样式从折叠区移至样式库，分别显示铜银金实际publishedVersion及对应已发布背景；草稿预览不冒充已发布版本。只读回查本次基础铜卡为v3且bronze活动指针存在，银/金为草稿且无活动指针；没有替用户发布银金模板。正式状态见../releases/card-automatic-issue-20261016.md。

@@ -22,7 +22,7 @@ export function legacyProjectTiles(templates) {
         title: complete ? `${first.title.replace(/铜卡|银卡|金卡/gi, '').trim()}金银铜套系` : first.title,
         preload: first.preload,
         importTemplateIds: members.map(x => x.id),
-        styles: keys.map(key => ({ key, backgroundUrl: members.find(x => kind === 'honor' || x.tier === key)?.backgroundUrl || '' })),
+        styles: keys.map(key => {const item=members.find(x => kind === 'honor' || x.tier === key);return {key,publishedVersion:Number(item?.publishedVersion||0),backgroundUrl:item?.backgroundUrl||'',publishedBackgroundUrl:item?.publishedBackgroundUrl||''}}),
       }
     })
   })

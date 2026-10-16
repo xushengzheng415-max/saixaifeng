@@ -26,6 +26,7 @@ const file='cloud://cloud1-7g8ckb3c7815a011.636c-cloud1-7g8ckb3c7815a011-1419431
 async function runTests(){
   const boundary=createPlayerCardTemplates({cloud,authenticateWebSession:async()=>({success:true,principalType:'user',user:{isPlatformOwner:false}})})
   assert.equal((await boundary({action:'savePlayerCardTemplate',workflowAction:'create',kind:'progression'})).code,'CARD_TEMPLATE_FORBIDDEN')
+  for(const workflowAction of ['continueIssue','retryIssue','issueStatus'])assert.equal((await boundary({action:'savePlayerCardTemplate',workflowAction,jobId:'foreign'})).code,'CARD_TEMPLATE_FORBIDDEN')
   let global=(await call('create',{kind:'progression',title:'经典套系',preload:{type:'platform'}})).set
   assert.equal(Object.keys(global.members).length,3)
   await assert.rejects(call('review',{setId:global._id}),/缺少/)
