@@ -59,3 +59,5 @@
 无dynamicCardProtocol的现网PC继续走readCards的按需整图兼容。dynamic.exportCard已核验授权/数据/模板版本并解析cardUrl；reader识别有效static-export后直接保留结果，不以不存在的fileId再转换地址，也不拿赛事卡比对基础卡指针。动态场景不进入旧静态指针检查；旧静态记录仍走原路径。此修复不重新发卡、不修改展示选择或球员等级，详见../releases/card-read-compatibility-20261016.md。
 
 后续实际请求核实：现网PC懒加载cloud模块已经发送dynamic/1，不能只凭入口JS判断旧协议。网页viewer另以playerCardRendererVersion=player-card-web/2协商可靠动态绘制；未声明者按需取得完整授权卡图，限制2人并发，不强制下载全员静态图。H5公开赛事详情仅对公开名单内、当前选中本赛事已发布套系且具有明确平台发放授权的球员显示本赛事卡；跨赛事/个人荣誉等不因该规则公开。原始人物持续使用可见像素投影。见../releases/card-browser-h5-display-20261016.md。
+
+积分配置试算同样遵循evidence-points/1：将规范当前快照的creditedMetrics作为统一计算器observed输入，保留原始null指标及覆盖状态；不能仅传原始metrics而丢失已有记分依据。试算保存证明不切换规则，发布仍由用户确认并保留已获等级。见../releases/score-rule-evidence-preview-20261016.md。
