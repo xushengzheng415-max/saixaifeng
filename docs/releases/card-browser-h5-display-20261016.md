@@ -20,3 +20,11 @@ H5用户提供正式tournament-center.html#rankings。实际JS创建published-pl
 test-player-card-legacy-read穿过真实处理器和原生绘图，覆盖旧页面带dynamic/1仍获得整图、新能力继续动态、跨机构拒绝、升级及版本失效。test-public-event-card-display覆盖有效本赛事已授卡、未列公开、撤销、跨赛事、荣誉、缺授权和读取失败。test-tournament-card-fit用生产实际CSS与DOM类名复现900px溢出，并验证320/390/768屏下全卡比例和边界。其他原发放、素材、遮罩、数据治理回归通过。
 
 H5预览仅三文件，复用正式现有其他资产：/preview/card-display/service-account-h5/tournament-center.html#rankings；三个文件HTTP/SHA-256回读一致后供产品负责人验收。H5正式发布仍需当前验收授权。PC不部署前端，后端从当前线上包差量三个读取模块，保留OCR及运行配置。实际结果待发布回读记录。
+
+## 实际回读与可见验证
+
+- 源码d73fc3e8。webLoginApi Active/Available、无CodeError，CodeSha256=b08aeb21c9f2eafb1b2845440aa3592ad7944125696410fb95146805d4f7acde；回下载三模块与源码字节一致，其他成员CRC/长度一致，仅npm隐藏锁元数据附带变化。未改运行配置。
+- 正常公开赛事接口实调白波：ready、立洋杯templateId=63edbfcdf7152093e874d7f8988dfb84、v6、动态scene；在已发布预览页390px浏览器绘制后，完整图片300×430，left=45/right=345、contain，截图确认卡框与文字完整。没有把某张旧基础卡图片替换成演示图。
+- 同一公开范围实调孔祥子不携动态协议，返回ready、同赛事v6、完整PNG URL。使用正式PC当前部署的PlayerCard-JXIlG03v组件、原cloud模块和Vue运行时，将该真实受控返回通过隔离HTTP映射给组件，实际请求仍带旧dynamic/1且没有新renderer版本；组件显示900×1290原图、300px宽完整卡面。此验证未使用用户会话、未保存阵容；不能冒称已经替用户点击实际排阵页。
+- 预览3文件HTTP200及SHA匹配。H5正式HTML/CSS/绘制文件尚未替换，已向用户说明AGENTS.md验收要求并请求正式H5授权；正式后端当前赛事已授展示读取修复已生效。PC原前端不变，只需重新读取卡片。
+- 证据work/card-display-paths-20261016/{web-final,web-readback-verification,h5-preview-readback,h5-live-card-render,production-pc-component-result}.json及h5-real-card-preview.png、production-pc-component-complete.png。授权接口返回与素材地址仅保存在忽略诊断目录，不提交仓库。
