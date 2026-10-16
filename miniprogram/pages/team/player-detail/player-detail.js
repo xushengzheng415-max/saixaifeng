@@ -61,6 +61,7 @@ Page({
     }).then(function(response) {
       var result = response.result || {}
       if (!result.success) throw new Error(result.message || '球员详情加载失败')
+      that.setData({pointsEntryAllowed:result.canViewPointsLedger===true})
       that.hydrate(result.player || {}, result.team || {}, result.stats || {}, result.canManage === true, result.dataCenter, result.playerCard)
     }).catch(function(error) {
       that.setData({ loading: false, errorText: error.message || '球员详情加载失败' })

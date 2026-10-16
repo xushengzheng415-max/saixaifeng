@@ -1535,13 +1535,13 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
   const rows = await safeGetTeamPlayers(teamId, 1, { _id: playerId })
   const player = rows[0]
   if (!player || ['archived', 'deleted'].indexOf(String(player.status || '').toLowerCase()) >= 0) throw new Error('球员不存在或已移出球队')
+  const canViewPointsLedger=[player.linkedUserId,player.playerUserId,player.guardianUserId].some(id=>id&&String(id)===String(identity.user._id))
   if(['teamPlayerPointsLedger','teamPlayerPointsAppeal','teamPlayerPointsAppeals'].includes(event.action)){
+    if(!canViewPointsLedger)throw new Error('只能查看本人或已绑定孩子的私人积分记录')
     const actor={actorId:'user:'+String(identity.user._id),playerId,channel:'mini'},appeals=require('./data-center/points-appeals.cjs')
-    const related=[player.linkedUserId,player.playerUserId,player.guardianUserId].some(id=>id&&String(id)===String(identity.user._id))
-    if(event.action==='teamPlayerPointsAppeals'){if(!related&&!permissions.has('team.manage'))throw new Error('无权查看该球员的积分申诉');return appeals.list(db,actor,event)}
+    if(event.action==='teamPlayerPointsAppeals')return appeals.list(db,actor,event)
     const ledger=await createDataService(db).playerPointsLedgerForAuthorizedPlayer(playerId)
-    if(event.action==='teamPlayerPointsLedger')return {success:true,ledger,canAppeal:related||permissions.has('team.manage')}
-    if(!related&&!permissions.has('team.manage'))throw new Error('只能为本人、已绑定孩子或有权管理的球员提交申诉')
+    if(event.action==='teamPlayerPointsLedger')return {success:true,ledger,canAppeal:true}
     return appeals.submit(db,actor,event,ledger,{...player,teamName:String(team.name||team.teamName||'')})
   }
   const cardService = createDataService(db)
@@ -1552,6 +1552,7 @@ async function loadTeamPlayerDetailForWorkspace(event, identity) {
   return {
     success: true,
     canManage: permissions.has('team.manage'),
+    canViewPointsLedger,
     team: { id: teamId, name: String(firstValue(team.name, team.teamName, '未命名球队')), logo: String(firstValue(team.logo, team.logoUrl, team.teamLogo) || ''), code: String(firstValue(team.teamCode, team.code) || '') },
     player: {
       id: playerId,

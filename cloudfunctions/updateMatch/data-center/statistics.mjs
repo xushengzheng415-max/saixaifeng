@@ -362,7 +362,7 @@ export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
   const supportDrops = metadata.supportDrops
   const supportDataVersion = metadata.supportDataVersion || null
   const dataVersion = supportDataVersion && metadata.dataVersion
-    ? crypto.createHash('sha256').update(JSON.stringify(rule.version===PLAYER_CARD_SCORE_VERSION?[metadata.dataVersion,supportDataVersion]:[metadata.dataVersion,supportDataVersion,rule.version])).digest('hex').slice(0,24)
+    ? crypto.createHash('sha256').update(JSON.stringify([metadata.dataVersion,supportDataVersion,rule.version,'evidence-points/1'])).digest('hex').slice(0,24)
     : null
   const base = { scoreVersion:rule.version, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion, careerDataVersion:metadata.dataVersion || null, supportDataVersion, scope:'career', mode:'official' }
   base.accountingPolicy='evidence-points/1'

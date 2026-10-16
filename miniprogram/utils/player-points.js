@@ -4,7 +4,7 @@ var metricLabels=['出场','首发','上场分钟','进球','应援积分','遗�
 function call(page,action,data){var context=workspace.readContext()||{};return wx.cloud.callFunction({name:'getMiniWorkspace',data:Object.assign({action:action,workspaceId:context.currentWorkspace&&context.currentWorkspace.id,teamId:page.data.teamId,playerId:page.data.playerId},data||{})}).then(function(r){var result=r.result||{};if(!result.success)throw Error(result.message||result.error||'读取失败，请重试');return result})}
 function displayAppeals(rows){return rows.map(function(row){return Object.assign({},row,{statusText:({pending:'处理中',resolved:'已回复',rejected:'未采纳'})[row.status]||row.status})})}
 module.exports={
-  data:{pointsVisible:false,pointsLoading:false,pointsError:'',pointsSaving:false,pointsFormOpen:false,pointsRows:[],pointsEmpty:true,pointsAppeals:[],pointsAppealsEmpty:true,pointsAppealsMore:false,pointsMetricLabels:metricLabels,pointsMetricIndex:5,pointsMetricLabel:'遗漏比赛',pointsCanAppeal:false,pointsMissingMatch:true,pointsReason:'',pointsExpected:'',pointsMatchDescription:'',pointsSubmitError:''},
+  data:{pointsEntryAllowed:false,pointsVisible:false,pointsLoading:false,pointsError:'',pointsSaving:false,pointsFormOpen:false,pointsRows:[],pointsEmpty:true,pointsAppeals:[],pointsAppealsEmpty:true,pointsAppealsMore:false,pointsMetricLabels:metricLabels,pointsMetricIndex:5,pointsMetricLabel:'遗漏比赛',pointsCanAppeal:false,pointsMissingMatch:true,pointsReason:'',pointsExpected:'',pointsMatchDescription:'',pointsSubmitError:''},
   methods:{
     stopPointsScroll:function(){},
     openPoints:function(){this.setData({pointsVisible:true,pointsFormOpen:false});this.loadPoints()},
