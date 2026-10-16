@@ -1193,3 +1193,8 @@
 ## 2026-10-16 球员积分H5验收通过并正式发布
 
 用户明确“验收通过，更新正式H5”。已将已验收的player-cards.html/js及player-points.js/css四文件发布至正式/service-account-h5/。正式入口 https://www.sxffootball.cn/service-account-h5/player-cards.html ，四文件HTTP200/SHA-256与预览验收源一致；390px真实浏览器返回200、私人积分模块加载、无资源失败或脚本错误。积分明细→申诉→回复沿用已上线接口和权限；小程序未上传状态不变。证据work/player-points-ledger-20261016/h5-formal-{readback,browser}.json。
+
+
+## 2026-10-16 球员卡发放预览读取恢复
+
+已修复批量预览重复读取/并行突发、失败提示无区分及重试清空成功卡片：单请求素材地址合并复用、服务端4张/浏览器2张并发、有限重试、按素材报错、仅重试失败球员。实际14名受影响球员现有素材浏览器重绘14/14通过，未改生产资料或代发卡。平台20261016103343-05237bf4的27文件摘要一致，webLoginApi Active/Available且3模块差量回读匹配。详见releases/card-preview-materials-20261016.md。

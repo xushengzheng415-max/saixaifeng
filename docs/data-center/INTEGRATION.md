@@ -340,3 +340,8 @@ PlayerCardIssueRepair/PlayerCardMatchRepair为平台数据中心正式处理组�
 ## 2026-10-16 私人积分明细H5正式入口
 
 负责人在微信预览验收后明确授权更新正式H5。四个已验收文件已发布至/service-account-h5/，入口 https://www.sxffootball.cn/service-account-h5/player-cards.html 。全部HTTP200、SHA与验收版本一致；390px实际浏览器无脚本/资源错误并加载SxfPlayerPoints。没有扩大私人接口权限、没有再部署后端或修改生产数据；小程序上传仍独立。
+
+
+## 2026-10-16 发放预览素材读取与恢复
+
+issuePreviews复用原名单/等级/模板权限，单次授权请求内合并素材地址，4张并发；共享draw在同批复用图片、2张绘制并发、有限重试，输出明确素材错误。平台只替换失败预览，保留成功项，样式版本变化阻止混合，全部预览成功才确认。没有新增统计算法或绕过发放资格。真实14张现有素材重绘通过；3人隔离发放含失败/重试/成功保留链路通过。正式平台及web函数回读见../releases/card-preview-materials-20261016.md。

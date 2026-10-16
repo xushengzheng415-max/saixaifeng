@@ -230,3 +230,8 @@ webLoginApi `87ffcdacbbdb030b70c19613883b8c1e30b34f0b5b871f3786191011afe43af3` A
 ## 2026-10-16 球员积分明细H5正式发布（用户验收授权）
 
 用户回复“验收通过，更新正式H5”。仅发布验收通过的player-cards.html、player-cards.js、player-points.js、player-points.css至正式service-account-h5，四文件HTTP200/SHA一致；手机尺寸浏览器200、私人积分模块加载、无页面及资源错误。正式入口 https://www.sxffootball.cn/service-account-h5/player-cards.html 。两份原正式文件已备份，两新增文件原404已登记；无后端/数据库变更，不含小程序上传。详见../releases/player-points-ledger-appeals-20261016.md的H5正式验收段。
+
+
+## 2026-10-16 发放预览读取修复
+
+平台20261016103343-05237bf4正式27文件HTTP/SHA一致；webLoginApi Active/Available，SHA 362a94cd7160f58bcf5ee302c8b3b9bdb89cb5a5268857418d9d8bde6f843c21。3模块最小差量回下载匹配，保留其他运行文件与配置。14名受影响球员原素材只读浏览器14/14成功，照片无需因本次读取报错重传。H5/小程序只同步源码未发布前端，无数据库修复或代发卡。详见../releases/card-preview-materials-20261016.md。
