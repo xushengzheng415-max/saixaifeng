@@ -332,6 +332,8 @@ async function createSuggestedDivisionDrafts(currentTournament, existingDivision
   const suggestions = Array.isArray(currentTournament?.regulationDivisionSuggestions)
     ? currentTournament.regulationDivisionSuggestions
     : []
+  // Applied suggestions are initial drafts, not a live list to restore after deletion.
+  if (currentTournament?.regulationRecognitionStatus === 'suggestions_applied') return 0
   if (!suggestions.length || !permissions.tournament.manage(currentTournament)) return 0
   const existingNames = new Set((existingDivisions || []).map(item => String(item.name || item.divisionName || '').trim().toLowerCase()))
   const maxPlayers = { '5side': 12, '7side': 16, '8side': 18, '9side': 20, '11side': 23 }
