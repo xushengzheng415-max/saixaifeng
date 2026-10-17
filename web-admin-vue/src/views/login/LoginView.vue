@@ -11,6 +11,7 @@
       </section>
 
       <button v-if="!isLocalPreview" class="retry" type="button" @click="refreshQr">刷新二维码</button>
+      <RouterLink to="/tutorials" style="position:absolute;left:24px;bottom:23px;color:#d0e4d9;font-size:13px">操作教程</RouterLink>
     </section>
   </main>
 </template>
