@@ -216,6 +216,7 @@
           </button>
           <div class="workspace-shell-actions">
             <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" plain @click="returnToTournamentSpace">返回赛事空间</el-button>
+            <button class="header-action" type="button" @click="openTutorials"><el-icon><Reading /></el-icon><span>操作教程</span></button>
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
             <button class="notification-action" type="button" :aria-label="pendingStaffInvitationCount ? '查看共享赛事邀请' : '查看站内信'" :title="pendingStaffInvitationCount ? '有共享赛事邀请待接受' : '站内信'" @click="showNotifications"><el-icon><Bell /></el-icon><span>{{ pendingStaffInvitationCount ? '赛事邀请' : '站内信' }}</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
             <el-dropdown trigger="click" @command="handleUserCommand">
@@ -291,9 +292,8 @@
         <!-- 主内容区 -->
         <main class="content-area" :class="{ 'workspace-shell-content': usesWorkspaceShell, 'embedded-header-content': usesEmbeddedPageHeader }">
           <div class="admin-content-frame">
-            <div class="operation-tutorial-entry" style="display:flex;justify-content:flex-end;gap:16px;padding:0 0 12px;font-size:14px">
-              <RouterLink v-if="currentTutorial" :to="{ path: '/tutorials', query: { lesson: currentTutorial } }" target="_blank" rel="noopener noreferrer" style="color:#087a48">看本页教程</RouterLink>
-              <RouterLink to="/tutorials" target="_blank" rel="noopener noreferrer" style="color:#087a48">操作教程</RouterLink>
+            <div v-if="currentTutorial" class="operation-tutorial-entry" style="display:flex;justify-content:flex-end;gap:16px;padding:0 0 12px;font-size:14px">
+              <RouterLink :to="{ path: '/tutorials', query: { lesson: currentTutorial } }" target="_blank" rel="noopener noreferrer" style="color:#087a48">看本页教程</RouterLink>
             </div>
             <router-view />
           </div>
@@ -311,7 +311,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
-  Postcard, Place, QuestionFilled, Bell
+  Postcard, Place, QuestionFilled, Bell, Reading
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
@@ -337,6 +337,11 @@ const pendingStaffInvitationCount = ref(0)
 const accountManagementLabel = computed(() => pendingStaffInvitationCount.value
   ? `账号管理（待接受 ${pendingStaffInvitationCount.value}）`
   : '账号管理')
+
+// 操作教程与帮助中心并列；新标签打开，避免离开未保存的业务表单
+function openTutorials() {
+  window.open(router.resolve('/tutorials').href, '_blank', 'noopener,noreferrer')
+}
 
 function openHelpCenter() {
   router.push(userInfo.value.isPlatformOwner === true ? '/system' : '/assistance')
