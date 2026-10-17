@@ -386,11 +386,11 @@ async function createSuggestedDivisionDrafts(currentTournament, existingDivision
       console.warn('[competition] 规程组别建议生成失败:', name, error.message)
     }
   }
-  if (created > 0) {
-    await updateRecord('tournaments', id, {
-      regulationRecognitionStatus: 'suggestions_applied',
-      regulationSuggestionsAppliedAt: new Date()
-    })
+  const suggestedNames = suggestions.map(source => String(source?.name || '').trim().toLowerCase()).filter(Boolean)
+  if (suggestedNames.length && suggestedNames.every(name => existingNames.has(name))) {
+    const applied = { regulationRecognitionStatus: 'suggestions_applied', regulationSuggestionsAppliedAt: new Date() }
+    await updateRecord('tournaments', id, applied)
+    Object.assign(currentTournament, applied)
   }
   return created
 }
