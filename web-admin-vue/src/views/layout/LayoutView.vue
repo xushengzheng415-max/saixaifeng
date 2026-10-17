@@ -291,6 +291,10 @@
         <!-- 主内容区 -->
         <main class="content-area" :class="{ 'workspace-shell-content': usesWorkspaceShell, 'embedded-header-content': usesEmbeddedPageHeader }">
           <div class="admin-content-frame">
+            <div class="operation-tutorial-entry" style="display:flex;justify-content:flex-end;gap:16px;padding:0 0 12px;font-size:14px">
+              <RouterLink v-if="currentTutorial" :to="{ path: '/tutorials', query: { lesson: currentTutorial } }" target="_blank" rel="noopener noreferrer" style="color:#087a48">看本页教程</RouterLink>
+              <RouterLink to="/tutorials" target="_blank" rel="noopener noreferrer" style="color:#087a48">操作教程</RouterLink>
+            </div>
             <router-view />
           </div>
         </main>
@@ -302,6 +306,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { tutorialForPath } from '../../utils/operationTutorials'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
@@ -324,6 +329,7 @@ const LAYOUT_BOOTSTRAP_CACHE_TTL = 5 * 60 * 1000
 
 const router = useRouter()
 const route = useRoute()
+const currentTutorial = computed(() => tutorialForPath(route.path))
 const usesWorkspaceShell = computed(() => route.meta.workspaceShell === true)
 const usesEmbeddedPageHeader = computed(() => route.meta.embeddedPageHeader === true)
 const unreadNotificationCount = ref(0)
