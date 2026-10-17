@@ -60,7 +60,7 @@
             <div class="console-actions">
               <el-select v-model="visibleGroupFilter"><el-option label="全部小组" value="all" /><el-option v-for="group in groups" :key="group.code" :label="group.name" :value="group.code" /></el-select>
               <el-button plain @click="openScreenConfig"><el-icon><Setting /></el-icon>大屏配置</el-button>
-              <el-button plain @click="projectScreen"><el-icon><Monitor /></el-icon>投大屏</el-button>
+              <el-button tag="a" plain :href="screenAddress" target="_blank" rel="noopener noreferrer" @click="projectScreen"><el-icon><Monitor /></el-icon>投大屏</el-button>
               <el-button plain @click="copyScreenLink">复制大屏链接</el-button>
               <el-button plain><el-icon><Setting /></el-icon>签位编号设置</el-button>
               <el-button plain :disabled="!undoStack.length" @click="undo"><el-icon><Back /></el-icon>撤销一步</el-button>
@@ -234,9 +234,6 @@ async function publishScreenState() {
 }
 function projectScreen() {
   loadScreenConfig()
-  publishScreenState()
-  const opened = window.open(screenAddress.value, '_blank', 'noopener,noreferrer')
-  if (!opened) ElMessage.warning('浏览器阻止了大屏窗口，请允许弹窗后重试')
   publishScreenState()
 }
 

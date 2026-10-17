@@ -41,7 +41,7 @@ const routes = [
   {
     path: '/quick-demo-draw-screen/:id',
     name: 'QuickDemoDrawScreen',
-    beforeEnter: to => String(import.meta.env.BASE_URL).startsWith('/preview/admin/') && String(to.params.id).startsWith('demo-') ? true : '/tournament-space',
+    beforeEnter: to => ['/admin/', '/preview/admin/'].includes(String(import.meta.env.BASE_URL)) && String(to.params.id).startsWith('demo-') ? true : '/tournament-space',
     component: () => import('../views/tournament/QuickTournamentConsole.vue'),
     props: route => ({ tournamentId:String(route.params.id) }),
     meta: { requiresAuth:false, title:'演示抽签大屏' }
