@@ -20,7 +20,7 @@
       <button @click="goResult"><i>3</i><span>抽签结果</span></button>
     </nav>
 
-    <div class="format-tabs locked-format"><strong>当前赛制</strong><span>{{ productFormatLabel }}</span><em>{{ workflowDescription }}</em><el-icon><Lock /></el-icon><el-button class="projection-entry" size="small" type="success" plain @click="openProjection">打开抽签投屏</el-button></div>
+    <div class="format-tabs locked-format"><strong>当前赛制</strong><span>{{ productFormatLabel }}</span><em>{{ workflowDescription }}</em><el-icon><Lock /></el-icon><el-button tag="a" :href="projectionAddress" target="_blank" rel="noopener noreferrer" class="projection-entry" size="small" type="success" plain @click="openProjection">打开抽签投屏</el-button></div>
 
     <main v-if="isLeague" :key="renderVersion" class="league-board">
       <section class="panel pool">
@@ -412,13 +412,11 @@ function projectionPayload() {
   const ordered = isCup.value ? cupSlots.value.filter(Boolean) : orderedTeams.value
   return { stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
 }
+const projectionAddress = computed(() => `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId.value)}`)
 function openProjection() {
   const payload = projectionPayload()
   try { localStorage.setItem(projectionChannelName.value, JSON.stringify(payload)) } catch {}
   if (typeof BroadcastChannel !== 'undefined') { projectionChannel?.close(); projectionChannel = new BroadcastChannel(projectionChannelName.value); projectionChannel.postMessage(payload) }
-  const url = `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId.value)}`
-  const opened = window.open(url, '_blank', 'noopener,noreferrer')
-  if (!opened) ElMessage.warning('浏览器阻止了投屏窗口，请允许弹窗后重试')
 }
 function clearOrder() {
   orderedTeams.value = []
