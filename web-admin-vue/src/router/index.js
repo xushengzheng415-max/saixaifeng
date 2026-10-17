@@ -37,6 +37,12 @@ if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href
 }
 
 const routes = [
+  {
+    path: '/tutorials',
+    name: 'OperationTutorials',
+    component: () => import('../views/tutorials/OperationTutorials.vue'),
+    meta: { requiresAuth: false, skipAuthCheck: true, title: '操作教程' }
+  },
   { path:'/data-center', component:() => import('../views/layout/LayoutView.vue'), meta:{requiresAuth:true,title:'数据中心'}, children:[{path:'',component:() => import('../views/data/DataCenter.vue')}] },
   {
     path: '/quick-demo-draw-screen/:id',
