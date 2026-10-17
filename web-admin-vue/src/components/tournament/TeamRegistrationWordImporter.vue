@@ -172,6 +172,7 @@ import { divisionParticipantType } from '../../utils/divisionBasics'
 
 const props = defineProps({
   tournamentId: { type: String, required: true },
+  tournamentName: { type: String, required: true },
   division: { type: Object, required: true },
   availableSlots: { type: Number, default: 0 },
   existingTeamNames: { type: Array, default: () => [] }
@@ -242,11 +243,11 @@ async function downloadTemplate() {
   try {
   const response=await fetch(`${import.meta.env.BASE_URL}templates/team-registration-form-template.docx?v=generic-fields-20261007`)
   if(!response.ok)throw new Error('模板下载失败，请重试')
-  const blob=await createRegistrationTemplate(await response.arrayBuffer(),templateFields.value)
+  const blob=await createRegistrationTemplate(await response.arrayBuffer(),templateFields.value,{tournamentName:props.tournamentName,divisionName:props.division.name || props.division.divisionName})
   const url=URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = '球队报名表模板.docx'
+  anchor.download = `${props.tournamentName}-${props.division.name || props.division.divisionName || '球队'}-报名表.docx`.replace(/[\\/:*?"<>|]/g,'_')
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
