@@ -1,0 +1,19 @@
+{
+  "sourceCommit": "e19000c03c21570e5d82136f9c55148a7f834089",
+  "formal": {
+    "target": "/admin/",
+    "total": 377,
+    "matched": 377,
+    "failed": [],
+    "verifiedAt": "2026-10-17T09:10:39.112Z"
+  },
+  "preview": {
+    "target": "/preview/admin/",
+    "total": 377,
+    "matched": 377,
+    "failed": [],
+    "verifiedAt": "2026-10-17T09:10:38.798Z"
+  },
+  "miniprogramChanged": false,
+  "functionsDeployed": false
+}
