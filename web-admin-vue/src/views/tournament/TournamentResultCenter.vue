@@ -70,10 +70,10 @@
 
       <section v-else-if="activeTab==='standings'" class="standings-section">
         <header class="section-heading"><div><h2>小组积分排名</h2><p>按竞赛组别和抽签小组分别列榜，正式排名只计入已归档赛果。</p></div><div><el-radio-group v-model="standingsMode"><el-radio-button label="official">正式积分</el-radio-button><el-radio-button label="preview">后台试算</el-radio-button></el-radio-group><el-button type="success" :loading="publishing" @click="publishStandings"><el-icon><Upload /></el-icon>发布积分榜</el-button></div></header>
-        <el-alert class="football-rule-alert" type="success" :closable="false" show-icon title="足球排名依次比较：积分 → 相互比赛积分/净胜球/进球数 → 总净胜球 → 总进球 → 红牌少 → 黄牌少 → 抽签；淘汰赛不进入小组积分。" />
+        <el-alert class="football-rule-alert" type="success" :closable="false" show-icon title="各组按已定版的同分顺序排名；淘汰赛不计入小组积分。" />
         <template v-for="division in standingDivisions" :key="division.id">
         <article v-for="group in division.standings" :key="`${group.divisionId}-${group.groupName}`" class="standings-card panel">
-          <header><div><h3>{{ group.divisionName }} · {{ group.groupName }}</h3><p v-if="group.pointsRule.drawResolution === 'penalties'">常规胜 {{ group.pointsRule.win }} / 负 {{ group.pointsRule.loss }}；战平点球胜 {{ group.pointsRule.penaltyWin }} / 负 {{ group.pointsRule.penaltyLoss }}（无平局）· {{ group.pointsRule.source }}</p><p v-else>胜 {{ group.pointsRule.win }} 分 / 平 {{ group.pointsRule.draw }} 分 / 负 {{ group.pointsRule.loss }} 分 · {{ group.pointsRule.source }}</p></div><span>{{ group.officialMatchCount }} 场正式赛果<template v-if="standingsMode==='preview' && group.provisionalMatchCount"> · {{ group.provisionalMatchCount }} 场试算</template></span></header>
+          <header><div><h3>{{ group.divisionName }} · {{ group.groupName }}</h3><p v-if="group.pointsRule.drawResolution === 'penalties'">常规胜 {{ group.pointsRule.win }} / 负 {{ group.pointsRule.loss }}；战平点球胜 {{ group.pointsRule.penaltyWin }} / 负 {{ group.pointsRule.penaltyLoss }}（无平局）· {{ group.pointsRule.source }}</p><p v-else>胜 {{ group.pointsRule.win }} 分 / 平 {{ group.pointsRule.draw }} 分 / 负 {{ group.pointsRule.loss }} 分 · {{ group.pointsRule.source }}</p><p>{{ rankingOrderLabel(group.pointsRule.tieBreakers) }}</p></div><span>{{ group.officialMatchCount }} 场正式赛果<template v-if="standingsMode==='preview' && group.provisionalMatchCount"> · {{ group.provisionalMatchCount }} 场试算</template></span></header>
           <div class="standing-table-wrap"><table><thead><tr><th>排名</th><th>球队</th><th>赛</th><th>胜</th><th v-if="group.pointsRule.drawResolution !== 'penalties'">平</th><th>负</th><th>进球</th><th>失球</th><th>净胜球</th><th>红/黄牌</th><th>积分</th></tr></thead><tbody><tr v-for="team in standingTeams(group)" :key="team.teamId || team.teamName"><td><b class="rank-number">{{ team.rank }}</b></td><td class="team-cell"><img v-if="teamLogoVisible(team)" :src="team.logo" :alt="`${team.teamName}队徽`" @error="markTeamLogoFailed(team)" /><span v-else>{{ teamInitial(team.teamName) }}</span><b>{{ team.teamName }}</b></td><td>{{ team.played }}</td><td>{{ team.win }}</td><td v-if="group.pointsRule.drawResolution !== 'penalties'">{{ team.draw }}</td><td>{{ team.loss }}</td><td>{{ team.goalsFor }}</td><td>{{ team.goalsAgainst }}</td><td :class="{ positive:team.goalDifference>0 }">{{ signed(team.goalDifference) }}</td><td>{{ team.redCards }}/{{ team.yellowCards }}</td><td><strong>{{ team.points }}</strong><small v-if="team.provisionalMatches" class="provisional-tag">试算</small></td></tr></tbody></table></div>
           <el-empty v-if="!standingTeams(group).length" :description="standingsMode==='official' ? '本组暂无已归档赛果' : '本组暂无可试算赛果'" :image-size="70" />
         </article>
@@ -102,6 +102,8 @@
 </template>
 
 <script setup>
+import {rankingOrderLabel} from '../../utils/divisionOutcomeRules'
+
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

@@ -414,39 +414,15 @@
 
     <el-dialog v-model="targetedInviteResultVisible" title="球队正式版注册邀请已生成" width="820px" destroy-on-close><el-alert type="success" :closable="false" title="当前为正式版球队注册邀请，可将链接或二维码发送给球队负责人；对方仍需登录、确认球队并提交报名审核。"/><div class="targeted-invite-results"><article v-for="item in targetedInviteResults" :key="item.teamId"><img v-if="item.qrCodeUrl" :src="item.qrCodeUrl" alt="球队注册正式版小程序码"/><div v-else class="targeted-code-placeholder">待生成</div><div><strong>{{ item.teamName }}</strong><span>{{ activeDivision.name }}</span><el-tag v-if="item.success" type="success" size="small">正式版邀请</el-tag><el-tag v-else type="danger" size="small">生成失败</el-tag><input :value="item.urlLink || item.error" readonly/></div><footer><el-button link :disabled="!item.urlLink" @click="copyTargetedInvite(item)">复制邀请链接</el-button><el-button link type="success" :disabled="!item.qrCodeUrl" @click="downloadTargetedInviteCode(item)">下载正式版小程序码</el-button></footer></article></div><template #footer><el-button type="primary" @click="targetedInviteResultVisible=false">完成</el-button></template></el-dialog>
 
-    <!-- 添加球队弹窗：字段与球队身份创建球队保持一致 -->
-    <el-dialog
-      v-model="showCreateTeamDialog"
-      :title="createTeamEntryMode === 'upload' ? '上传资料、名单' : '快速添加球队'"
-      :width="createTeamEntryMode === 'upload' ? 'min(1180px, calc(100vw - 48px))' : '620px'"
-      :close-on-click-modal="false"
-      destroy-on-close
-      :teleported="!qaSnapshot"
-    >
-      <div class="create-entry-switch">
-        <button type="button" :class="{ active: createTeamEntryMode === 'manual' }" @click="createTeamEntryMode = 'manual'">快速添加</button>
-        <button type="button" :class="{ active: createTeamEntryMode === 'upload' }" @click="createTeamEntryMode = 'upload'"><el-icon><Upload /></el-icon>上传资料、名单</button>
-      </div>
-
-      <TeamRegistrationWordImporter
-        v-if="createTeamEntryMode === 'upload'"
-        :tournament-id="tournamentId"
-        :division="activeDivision"
-        :available-slots="availableSlots"
-        :existing-team-names="divisionTournamentTeams.map(team => team.name || team.teamName || '')"
-        @cancel="showCreateTeamDialog = false"
-        @success="onRegistrationWordBatchImported"
-      />
-
-      <el-form v-else :model="createTeamForm" label-position="top" class="quick-team-form">
+    <el-dialog v-model="showCreateTeamDialog" title="快速添加球队" width="620px" :close-on-click-modal="false" destroy-on-close :teleported="!qaSnapshot">
+      <el-form :model="createTeamForm" label-position="top" class="quick-team-form">
         <el-form-item label="球队名称" required><el-input v-model="createTeamForm.name" placeholder="输入球队名称" maxlength="50" /></el-form-item>
         <el-form-item label="队徽"><div class="create-logo-row"><el-upload :show-file-list="false" :before-upload="beforeCreateLogoUpload" :http-request="handleCreateLogoUpload" accept="image/*"><el-button plain :loading="uploadingCreateLogo">上传队徽</el-button></el-upload><img v-if="createTeamForm.logoUrl" :src="createTeamForm.logoUrl" class="create-logo-preview" alt="队徽预览" /></div></el-form-item>
       </el-form>
-
-      <template v-if="createTeamEntryMode === 'manual'" #footer>
-        <el-button @click="showCreateTeamDialog = false">取消</el-button>
-        <el-button type="primary" :loading="creatingTeam" @click="submitCreateTeam">添加球队</el-button>
-      </template>
+      <template #footer><el-button @click="showCreateTeamDialog = false">取消</el-button><el-button type="primary" :loading="creatingTeam" @click="submitCreateTeam">添加球队</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="showTeamImportDialog" title="上传资料、名单" width="min(1180px, calc(100vw - 48px))" :close-on-click-modal="false" destroy-on-close :teleported="!qaSnapshot">
+      <TeamRegistrationWordImporter :tournament-id="tournamentId" :division="activeDivision" :available-slots="availableSlots" :existing-team-names="divisionTournamentTeams.map(team => team.name || team.teamName || '')" @cancel="showTeamImportDialog = false" @success="onRegistrationWordBatchImported" />
     </el-dialog>
 
     <el-dialog
@@ -764,7 +740,7 @@ watch(
 const showCreateTeamDialog = ref(Boolean(qaSnapshot && route.query.action === 'quick-add' && qaRequestedDivisionId === 'qa-division-u16'))
 const creatingTeam = ref(false)
 const createTeamMode = ref('simple')
-const createTeamEntryMode = ref('manual')
+const showTeamImportDialog = ref(false)
 const uploadingCreateLogo = ref(false)
 const parsingCreateWord = ref(false)
 const createWordImportFileName = ref('')
@@ -1539,22 +1515,27 @@ function resetCreateTeamForm() {
 
 function openAddTeamEntry(entry) {
   if (entry === 'virtual' && isDemoModeActive) { openSyntheticTeamDialog(); return }
+  if (entry === 'upload') {
+    if (availableSlots.value <= 0) return ElMessage.warning('参赛名额已满，无法继续添加球队')
+    showCreateTeamDialog.value = false
+    showTeamImportDialog.value = true
+    return
+  }
   openCreateTeamDialog()
-  if (showCreateTeamDialog.value) createTeamEntryMode.value = entry === 'upload' ? 'upload' : 'manual'
 }
 
 function openCreateTeamDialog() {
+  showTeamImportDialog.value = false
   if (availableSlots.value <= 0) {
     ElMessage.warning('参赛名额已满，无法继续添加球队')
     return
   }
   resetCreateTeamForm()
-  createTeamEntryMode.value = 'manual'
   showCreateTeamDialog.value = true
 }
 
 async function onRegistrationWordBatchImported(payload) {
-  showCreateTeamDialog.value = false
+  showTeamImportDialog.value = false
   await Promise.all([loadTournamentTeams(), loadAllTeams()])
   const invitations = Array.isArray(payload?.invitations) ? payload.invitations : []
   if (invitations.length) {
@@ -4033,5 +4014,4 @@ onMounted(reloadTeamWorkspace)
   background: #f5f8f5;
   font-size: 11px;
 }
-.create-entry-switch{display:inline-flex;gap:4px;margin-bottom:16px;padding:4px;border:1px solid #dfe7e1;background:#f5f8f6}.create-entry-switch button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 15px;border:0;background:transparent;color:#536159;cursor:pointer}.create-entry-switch button.active{background:#fff;color:#087d41;box-shadow:0 0 0 1px #b9d6c3 inset}.create-entry-switch .el-icon{font-size:15px}
 </style>
