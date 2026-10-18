@@ -83,7 +83,7 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="isTournamentStaff"> · 账号权限由主账号分配</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffMembers" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-compact-table">
             <el-table-column label="头像" width="48" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" width="78" />
