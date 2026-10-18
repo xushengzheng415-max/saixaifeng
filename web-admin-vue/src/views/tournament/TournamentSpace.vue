@@ -143,6 +143,9 @@ async function loadTournaments() {
       }
       hasOwnOrganization.value=Boolean(orgId)
     } catch(error){hasOwnOrganization.value=false;ownLoadError.value=error.message || '本人赛事加载失败，请重试'}
+    // 完成机构识别后并行读取共享赛事，避免等待本人赛事及队徽全部返回。
+    const sharedRequest = callFunction('tournamentStaffAccess', { action: 'mine' })
+      .then(result => ({ result }), error => ({ error }))
     if (orgId) {
       try {
         const ownRows=[]
@@ -160,7 +163,9 @@ async function loadTournaments() {
     const ownIds = new Set(ownTournaments.map(item => String(item._id)))
     let sharedTournaments = []
     try {
-      const result = await callFunction('tournamentStaffAccess', { action: 'mine' })
+      const sharedResponse = await sharedRequest
+      if (sharedResponse.error) throw sharedResponse.error
+      const result = sharedResponse.result
       if (!result?.success) throw new Error(result?.error || '共享赛事加载失败')
       sharedTournaments = (result.grants || []).map(grant => ({
         _id: String(grant.tournamentId || ''),
