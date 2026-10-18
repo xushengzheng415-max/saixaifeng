@@ -342,16 +342,8 @@ async function generatePairingsAndViewPairings() {
   if (!isConfirmed.value || pairingGenerating.value) return
   pairingGenerating.value = true
   try {
-    if(isDemoMode(tournamentId)) {
-      const result=await callFunction('generateSchedule',{action:'prepareDrawPreview',tournamentId,divisionId:divisionId.value,divisionName:divisionName.value})
-      if(!result?.success)throw new Error(result?.message || '预览生成失败')
-    } else {
-      const existing=await queryList('matches',{where:{tournamentId,divisionId:divisionId.value},limit:1000})
-      if(!(existing || []).some(match=>match.status!=='cancelled')) {
-        const result=await callFunction('generateSchedule',{action:'generatePairings',tournamentId,divisionId:divisionId.value,divisionName:divisionName.value})
-        if(!result?.success)throw new Error(result?.message || '预览生成失败')
-      }
-    }
+    const result=await callFunction('generateSchedule',{action:'generatePairings',ensureOnly:true,tournamentId,divisionId:divisionId.value},120000)
+    if(!result?.success)throw new Error(result?.message || '对阵生成失败')
     router.push({path:`/tournaments/${tournamentId}/matches`,query:{divisionId:divisionId.value,divisionName:divisionName.value,view:'workbench'}})
 
   } catch (error) { ElMessage.error(error.message || '生成对阵失败') } finally { pairingGenerating.value = false }

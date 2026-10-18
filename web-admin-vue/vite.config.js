@@ -23,8 +23,10 @@ export default defineConfig({
       name:'shared-pairing-templates-browser',
       enforce:'pre',
       transform(source,id) {
-        if (!id.replaceAll('\\','/').endsWith('/cloudfunctions/generateSchedule/pairingTemplates.js')) return null
-        return source.replace('module.exports = {','export default {')
+        if (!/\/cloudfunctions\/generateSchedule\/(pairingTemplates|topology|confirmedPairings)\.js$/.test(id.replaceAll('\\','/'))) return null
+        return source.replace("const templates = require('./pairingTemplates')", "import templates from './pairingTemplates.js'")
+          .replace("const topology = require('./topology')", "import topology from './topology.js'")
+          .replace('module.exports = {','export default {')
       }
     },
     vue(),

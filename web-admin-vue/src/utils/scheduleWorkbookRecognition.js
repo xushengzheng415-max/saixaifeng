@@ -186,8 +186,8 @@ export function extractScheduleRows(XLSX, sheet) {
     record.divisionId = text(record.divisionId)
     record.matchNo = Number(record.matchNo || 0) || ''
     record.division = text(record.division)
-    record.matchDate = normalizeScheduleDate(displayRecord.date) || normalizeScheduleDate(record.date) || carriedDate
-    record.weekday = text(record.weekday) || carriedWeekday
+    record.matchDate = normalizeScheduleDate(displayRecord.date) || normalizeScheduleDate(record.date) || (record.matchId ? '' : carriedDate)
+    record.weekday = text(record.weekday) || (record.matchId ? '' : carriedWeekday)
     record.matchTime = normalizeScheduleTime(displayRecord.time) || normalizeScheduleTime(record.time)
     record.venueRaw = text(record.venue)
     if (record.matchDate) carriedDate = record.matchDate
@@ -203,18 +203,23 @@ export function recognizeScheduleRows(rows, matches, venueResources = []) {
   const availableMatches = matches || []
   let recognizedByIndex = sourceRows.map(row => recognizeRow(row, availableMatches))
   for (let pass = 0; pass < 2; pass += 1) {
-    const externalMatchMap = new Map()
+    const externalMaps = new Map()
     sourceRows.forEach((row,index) => {
       const matched = recognizedByIndex[index]?.match
       const targetNo = Number(matched && (matched.matchNo || matched.matchIndex) || 0)
-      if (row.matchNo && targetNo) externalMatchMap.set(Number(row.matchNo), targetNo)
+      const scope=row.divisionId || normalizeDivision(row.division)
+      if (scope && row.matchNo && targetNo) {
+        if(!externalMaps.has(scope))externalMaps.set(scope,new Map())
+        externalMaps.get(scope).set(Number(row.matchNo),targetNo)
+      }
     })
     recognizedByIndex = sourceRows.map((row,index) => {
       if (recognizedByIndex[index]?.match) return recognizedByIndex[index]
+      const externalMatchMap=externalMaps.get(row.divisionId || normalizeDivision(row.division)) || new Map()
       return recognizeRow({ ...row,home:remapExternalReference(row.home,externalMatchMap),away:remapExternalReference(row.away,externalMatchMap) },availableMatches)
     })
   }
-  return sourceRows.map((row,index) => {
+  const recognizedRows = sourceRows.map((row,index) => {
     const recognized = recognizedByIndex[index]
     const venue = mapVenue(row.venueRaw, venueResources)
     const hasAnyPlacement = Boolean(row.matchDate || row.matchTime || venue)
@@ -238,6 +243,18 @@ export function recognizeScheduleRows(rows, matches, venueResources = []) {
       message
     }
   })
+  const unique=new Map(),unmatched=[]
+  for(const row of recognizedRows) {
+    if(!row.matchedMatch){unmatched.push(row);continue}
+    const key=String(row.matchedMatch._id),previous=unique.get(key)
+    if(!previous){unique.set(key,row);continue}
+    if(previous.duplicateConflict)continue
+    const placement=value=>[value.matchDate || '',value.matchTime || '',value.venue || '']
+    const before=placement(previous),after=placement(row),hasBefore=before.some(Boolean),hasAfter=after.some(Boolean)
+    if(!hasBefore && hasAfter)unique.set(key,row)
+    else if(hasBefore && hasAfter && JSON.stringify(before)!==JSON.stringify(after))unique.set(key,{...previous,status:'incomplete',duplicateConflict:true,message:'同一比赛在多个工作表的排期不一致，请只保留一份排期'})
+  }
+  return [...unique.values(),...unmatched]
 }
 
 export function recognitionSummary(rows) {

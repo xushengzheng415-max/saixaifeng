@@ -96,6 +96,7 @@
       <el-alert class="overview-footer" title="基础模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
       <div v-if="allDivisionDrawsConfirmed" class="overview-schedule-actions">
         <el-button type="success" size="large" @click="openScheduleSettings">赛程设置</el-button>
+        <el-button size="large" :loading="preparingEventPairings" @click="prepareEventPairings">生成对阵</el-button>
       </div>
     </main>
   </section>
@@ -695,6 +696,22 @@ const filteredDivisionOptions = computed(() => activeOverviewFilter.value === 'a
 const allDivisionDrawsConfirmed = computed(() => drawPrerequisitesReady.value &&
   !overviewRefreshing.value && !overviewError.value && divisionOptions.value.length > 0 &&
   divisionOptions.value.every(division => divisionDrawState(division).state === 'done'))
+const preparingEventPairings = ref(false)
+async function prepareEventPairings() {
+  if (!allDivisionDrawsConfirmed.value || preparingEventPairings.value) return
+  preparingEventPairings.value = true
+  let added = 0
+  try {
+    for (const division of divisionOptions.value) {
+      const result = await callFunction('generateSchedule', { action:'generatePairings', ensureOnly:true, tournamentId, divisionId:String(division.id || division._id) },120000)
+      if (!result?.success) throw new Error(`${division.name}：${result?.message || '生成失败'}`)
+      added += Number(result.addedCount || 0)
+    }
+    ElMessage.success(added ? `已生成 ${added} 场待排对阵` : '对阵已生成')
+    router.push({path:`/tournaments/${tournamentId}/matches`,query:{view:'workbench'}})
+  } catch (error) { ElMessage.error(`${added ? `已生成 ${added} 场；` : ''}${error.message || '请重试生成对阵'}`) }
+  finally { preparingEventPairings.value = false }
+}
 function openScheduleSettings() {
   if (!allDivisionDrawsConfirmed.value) return
   router.push({ path: `/tournaments/${tournamentId}/matches`, query: { view: 'settings' } })

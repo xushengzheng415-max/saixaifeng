@@ -172,7 +172,7 @@ const scheduleImportWriteEnabled = isDemoMode(tournamentId) || import.meta.env.V
 const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(false), savingAssignment = ref(false), applyingImport = ref(false), preparingKnockout = ref(false), knockoutPrepareError = ref('')
 const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), hiddenTeamLogoKeys = ref(new Set()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(typeof route.query.date === 'string' ? route.query.date : ''), draggedMatchId = ref('')
 const view = ref(['settings','imports','map','workbench'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
-const pendingDrawerOpen=ref(false),hoveredDropSlot=ref(''),dropSaving=ref(false)
+const pendingDrawerOpen=ref(true),hoveredDropSlot=ref(''),dropSaving=ref(false)
 const workbenchDivision = ref(String(route.query.divisionId || 'all')), workbenchStatus = ref('all'), workbenchSearch = ref('')
 const workbenchRoot = ref(null), nextMatchId = ref('')
 const sequenceVisible = ref(false), sequenceMatch = ref(null), sequenceNumber = ref(1), savingSequence = ref(false)
@@ -347,7 +347,7 @@ const calendarDays = computed(() => {
     const date = String(match.matchDate || '').slice(0,10)
     counts.set(date, (counts.get(date) || 0) + 1)
   }
-  if(pendingDrawerOpen.value && calendarConfigured.value) {
+  if(calendarConfigured.value) {
     const configured=new Set(allCalendarDays.value.map(day=>day.date))
     const extra=[...counts].filter(([date])=>!configured.has(date)).map(([date,count])=>{const day=new Date(`${date}T00:00:00`);return {date,count,weekday:['周日','周一','周二','周三','周四','周五','周六'][day.getDay()],short:`${day.getMonth()+1}.${day.getDate()}`}})
     return [...allCalendarDays.value.map(day=>({...day,count:counts.get(day.date) || 0})),...extra].sort((a,b)=>a.date.localeCompare(b.date))
@@ -375,7 +375,7 @@ function minutes(value) { const [hour,minute] = String(value || '00:00').split('
 function timeText(value) { return `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}` }
 function timesByStep(step) { const rows=[]; for (const session of enabledSessions.value) for (let value=minutes(session.start);value<minutes(session.end);value+=step) rows.push(timeText(value)); return [...new Set(rows)].sort() }
 const preciseTimes = computed(() => kickoffInput.value.times)
-const mapTimes = computed(() => [...new Set([...(pendingDrawerOpen.value ? preciseTimes.value : []),...selectedDayMatches.value.map(match => match.matchTime).filter(Boolean)])].sort())
+const mapTimes = computed(() => [...new Set([...(calendarConfigured.value ? preciseTimes.value : []),...selectedDayMatches.value.map(match => match.matchTime).filter(Boolean)])].sort())
 function sessionLabel(time) { return kickoffPeriods.find(period=>period.key===kickoffPeriod(time))?.label || '' }
 function compatibleVenues(match) { const division=divisions.value.find(item => String(item.id) === String(match?.divisionId)); const format=String(match?.matchFormat || matchFormat(division)); return config.venueResources.filter(item => !format || item.fieldFormat === format) }
 function cardStageLabel(match) {
@@ -669,7 +669,7 @@ async function loadTeamLogos() { const ids=[...new Set(matches.value.flatMap(mat
 function applySavedConfig(saved) { const source=saved && typeof saved==='object'?saved:{}; config.schemaVersion=2; config.startDate=source.startDate || tournament.value.startDate || ''; config.endDate=source.endDate || tournament.value.endDate || config.startDate; config.matchDays=Array.isArray(source.matchDays)&&source.matchDays.length?[...source.matchDays]:[...weekDays]; config.sessionWindows=Array.isArray(source.sessionWindows)&&source.sessionWindows.length?source.sessionWindows.map(item=>({ ...item })):defaultSessions(); const resources=Array.isArray(source.venueResources)?source.venueResources:[]; config.venueResources=resources.map(item=>({ name:String(item.name || item.venue || ''),fieldFormat:String(item.fieldFormat || ''),sessionWindows:config.sessionWindows.map(session=>({ ...session })) })).filter(item=>item.name); config.defaultTurnaroundMinutes=Number(source.defaultTurnaroundMinutes ?? source.matchInterval ?? 10); config.timeStepMinutes=Number(source.timeStepMinutes || 5); selectedKickoffTimes.value=configuredKickoffTimes({...source,sessionWindows:config.sessionWindows});kickoffPeriodEnabled.value=source.kickoffPeriods || Object.fromEntries(kickoffPeriods.map(period=>[period.key,config.sessionWindows.find(session=>session.key===period.key)?.enabled ?? period.key!=='evening']));config.kickoffTimes=[...selectedKickoffTimes.value];config.frequencyPreset=source.frequencyPreset || 'adaptive'; config.divisionPolicies=JSON.parse(JSON.stringify(source.divisionPolicies || {})) }
 function payloadConfig() { return { ...config,kickoffPeriods:{...kickoffPeriodEnabled.value},matchDurations:Object.fromEntries(divisions.value.map(division=>[division.id,matchMinutes(division)])),sessionWindows:config.sessionWindows.map(item=>({ ...item })),venueResources:config.venueResources.map(item=>({ name:item.name.trim(),fieldFormat:item.fieldFormat,sessionWindows:config.sessionWindows.map(session=>({ ...session })) })),venues:config.venueResources.map(item=>item.name.trim()).filter(Boolean),generationMode:'joint' } }
 function validateSettings() { if(kickoffInput.value.errors.length)return '请修正开赛时间格式';if(!kickoffInput.value.times.length)return '请填写至少一个开赛时间';if(!config.startDate||!config.endDate||config.startDate>config.endDate)return '请设置有效的比赛周期';if(!config.matchDays.length)return '请至少选择一个比赛日';if(!enabledSessions.value.length)return '请至少开放一个时段';if(!config.venueResources.length)return '请至少添加一块场地';if(config.venueResources.some(item=>!item.name.trim()||!item.fieldFormat))return '请填写完整的场地名称和制式';if(new Set(config.venueResources.map(item=>item.name.trim())).size!==config.venueResources.length)return '场地名称不能重复';return '' }
-async function saveSettings() { const error=validateSettings();if(error)return ElMessage.warning(error);savingSettings.value=true;try{const result=await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});if(!result?.success)throw new Error(result?.message || '保存失败');tournament.value={...tournament.value,scheduleDraft:payloadConfig()};selectedDate.value=calendarDays.value[0]?.date || selectedDate.value;ElMessage.success('赛事日历已创建');setView('map')}catch(error){ElMessage.error(error.message || '赛程设置保存失败')}finally{savingSettings.value=false} }
+async function saveSettings() { const error=validateSettings();if(error)return ElMessage.warning(error);savingSettings.value=true;try{const result=await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});if(!result?.success)throw new Error(result?.message || '保存失败');tournament.value={...tournament.value,scheduleDraft:payloadConfig()};selectedDate.value=calendarDays.value[0]?.date || selectedDate.value;pendingDrawerOpen.value=true;ElMessage.success('赛事日历已创建');setView('map')}catch(error){ElMessage.error(error.message || '赛程设置保存失败')}finally{savingSettings.value=false} }
 async function autoSchedule() { const error=validateSettings();if(error)return ElMessage.warning(error);autoScheduling.value=true;try{await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});const ids=[...new Set(pendingMatches.value.map(match=>String(match.divisionId || 'default')))];const result=await callFunction('generateSchedule',{action:'scheduleExistingPairings',tournamentId,divisionIds:ids,scheduleConfig:payloadConfig(),fullReflow:false},120000);if(!result?.success)throw new Error(result?.message || '自动排程失败');ElMessage.success(result.message);await load()}catch(error){ElMessage.error(error.message || '自动排程失败')}finally{autoScheduling.value=false} }
 
 function startDrag(match,event) {
@@ -728,10 +728,14 @@ async function readImportFile(event) {
   try {
     const module=await import('xlsx'),XLSX=module.default||module
     const book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true})
-    const sheet=book.Sheets['赛程填写'] || book.Sheets['排期填写'] || book.Sheets[book.SheetNames[0]]
-    const extracted=extractScheduleRows(XLSX,sheet)
-    if(extracted.error)throw new Error(extracted.error)
-    recognitionSourceRows.value=extracted.rows
+    const sourceRows=[]
+    for(const name of book.SheetNames) {
+      if(name.startsWith('_') || book.Workbook?.Sheets?.find(sheet=>sheet.name===name)?.Hidden)continue
+      const extracted=extractScheduleRows(XLSX,book.Sheets[name])
+      if(!extracted.error)sourceRows.push(...extracted.rows.map(row=>({...row,sourceSheet:name})))
+    }
+    if(!sourceRows.length)throw new Error('文件中没有可识别的赛程工作表')
+    recognitionSourceRows.value=sourceRows
     recognitionRows.value=recognizeScheduleRows(recognitionSourceRows.value,matches.value,config.venueResources)
     recognitionFilter.value='all';importFileName.value=file.name;importPreview.value={};importRows.value=[]
     if(!recognitionRows.value.length)throw new Error('文件中没有可识别的比赛行')
