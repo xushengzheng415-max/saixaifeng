@@ -1444,6 +1444,11 @@ async function resolveUserOrganization(db, user) {
   const explicitIds = [user.orgId, user.organizationId, user.organization_id]
 
   const identityValues = normalizedUserIdentityValues(user)
+  // 本人机构以机构负责人关系为依据，共享赛事成员关系仅用于赛事授权。
+  const ownedOrganizations = await safeOrganizationRows(db, 'organizations', _.or([
+    { ownerId: user._id }, { creatorId: user._id }, { createdBy: user._id }
+  ]), 100)
+  ownedOrganizations.forEach(item => addOrganizationCandidate(candidates, item._id, user))
   const membershipConditions = []
   identityValues.forEach(value => {
     membershipConditions.push({ userId: value }, { memberUserId: value }, { openId: value }, { wechatOpenId: value })
@@ -1473,7 +1478,7 @@ async function resolveUserOrganization(db, user) {
   tournaments.forEach(item => {
     addOrganizationCandidate(candidates, item.orgId || item.organizationId || item.organization_id, user)
   })
-  if (!candidates.size) explicitIds.forEach(item => addOrganizationCandidate(candidates, item, user))
+  explicitIds.forEach(item => addOrganizationCandidate(candidates, item, user))
 
   const candidateIds = Array.from(candidates)
   if (!candidateIds.length) {
@@ -1487,6 +1492,7 @@ async function resolveUserOrganization(db, user) {
     validIds,
     explicitIds,
     memberships: eventMemberships,
+    ownedOrganizationIds: ownedOrganizations.map(item => item._id),
     tournamentOrgIds: tournaments.map(item => item.orgId || item.organizationId || item.organization_id)
   }), organizationIds: validIds }
 }
@@ -4147,7 +4153,8 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
         if (!allowed) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
       }
     }
-    if (authenticated && !assistanceGrantId && ORGANIZER_REQUIRED_RELAY_FUNCTIONS.has(functionName) && !personalServiceBinding) {
+    const personalWorkspaceLookup = functionName === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations'].includes(String(functionParams?.action || ''))
+    if (authenticated && !assistanceGrantId && ORGANIZER_REQUIRED_RELAY_FUNCTIONS.has(functionName) && !personalServiceBinding && !personalWorkspaceLookup) {
       if (authenticated.user.organizationConflict) {
         return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
       }
