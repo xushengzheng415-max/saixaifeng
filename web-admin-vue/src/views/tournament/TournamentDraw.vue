@@ -60,7 +60,7 @@
       <footer class="quick-setup-footer"><p><el-icon><InfoFilled /></el-icon>保存后进入分组操作台，将左侧球队拖入右侧各组签位。</p><div><el-button @click="resetQuickConfig">恢复默认设置</el-button><el-button type="success" :disabled="!quickCapacityValid" @click="enterQuickConsole">保存并进入分组操作台</el-button></div></footer>
     </main>
   </section>
-  <section v-else-if="modeOverview" v-loading="loading" class="draw-overview">
+  <section v-else-if="modeOverview" v-loading="loading || overviewRefreshing" class="draw-overview">
     <header class="overview-context">
       <div class="overview-event">
         <span class="overview-event-crest"><el-icon><Trophy /></el-icon></span>
@@ -581,7 +581,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, RefreshLeft, Check, FullScreen, Box, Rank, Setting, Picture, Monitor, Delete, Trophy, Lock, Medal, Warning, CircleCheck, CircleClose, Calendar, Location, SwitchButton, User, Grid, UserFilled, InfoFilled, Loading } from '@element-plus/icons-vue'
@@ -637,6 +637,8 @@ const activeDivisionId = ref(props.divisionId || (typeof route.query.divisionId 
 const approvedTeams = ref([])
 const allApprovedRelations = ref([])
 const drawOverviewByDivision = ref({})
+const overviewRefreshing = ref(false), overviewError = ref('')
+let overviewRefreshPromise = null, overviewReadVersion = 0
 const groups = ref([])
 const groupCount = ref(4)
 const teamsPerGroup = ref(4)
@@ -756,10 +758,11 @@ function divisionDrawState(division) {
   const persistedState = drawOverviewByDivision.value[id]
   const professionalConfig = tournament.value.professionalDrawConfigs?.[id]
   const simpleState = tournament.value.drawStatusByDivision?.[id]
-  if (!divisionDrawReady(division)) return { state: 'pending', label: '抽签条件未满足', hint: `参赛球队 ${divisionTeamCount(division)} / ${divisionRequiredTeams(division)} 支`, action: '条件未满足', icon: Lock }
+  if (overviewError.value) return {state:'unknown',label:'状态读取失败',hint:'请重新读取已保存的分组结果',action:'重新读取',icon:Warning}
   if (persistedState?.state === 'done') return { state: 'done', label: '抽签已完成', hint: persistedState.confirmedAt ? `确认于 ${formatOverviewTime(persistedState.confirmedAt)}` : '分组结果已正式确认', action: '修改分组', icon: CircleCheck }
   if (persistedState?.state === 'active') return { state: 'active', label: '抽签结果待确认', hint: '已完成分组，等待最终确认', action: '继续确认', icon: Warning }
   if (professionalConfig?.drawStatus === 'confirmed' || simpleState === 'confirmed') return { state: 'done', label: '抽签已完成', hint: '可查看抽签结果', action: '查看结果', icon: CircleCheck }
+  if (!divisionDrawReady(division)) return { state:'pending',label:'抽签条件未满足',hint:`参赛球队 ${divisionTeamCount(division)} / ${divisionRequiredTeams(division)} 支`,action:'条件未满足',icon:Lock }
   if (professionalConfig?.poolValidated) return { state: 'active', label: '球队池已完成 / 待抽签', hint: '等待开始公开抽签', action: '进入专业抽签', icon: Warning }
   if (simpleState === 'configured') return { state: 'active', label: '分组设置已完成', hint: '等待确认分组结果', action: '继续分组', icon: CircleCheck }
   if (simpleState === 'schedule-pending') return { state: 'active', label: '赛程顺序待确认', hint: '赛程顺序待确认', action: '进入分组', icon: Warning }
@@ -771,6 +774,7 @@ function formatOverviewTime(value) {
   return date.toLocaleString('zh-CN', { hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit' })
 }
 function enterDivisionDraw(division) {
+  if (overviewError.value) return refreshOverviewState()
   if (!divisionDrawReady(division)) return ElMessage.warning(`当前组别需满足 ${divisionRequiredTeams(division)} 支参赛球队后才能抽签与分组`)
   const id = String(division.id || division._id || 'default')
   const state = divisionDrawState(division)
@@ -1149,29 +1153,60 @@ async function loadTournament() {
 
 async function loadOverviewDrawStates() {
   if (qaSnapshot || visualQa) return
+  const version=++overviewReadVersion
+  overviewRefreshing.value=true
   try {
     const [savedGroups,savedBrackets,savedLeagues] = await Promise.all([
-      queryList('tournament_groups',{ where:{ tournamentId },limit:1000,silent:true }),
-      queryList('tournament_bracket',{ where:{ tournamentId },limit:1000,silent:true }),
-      queryList('tournament_league_tables',{ where:{ tournamentId },limit:1000,silent:true })
+      queryList('tournament_groups',{where:{tournamentId},limit:1000,cache:'reload',throwOnError:true}),
+      queryList('tournament_bracket',{where:{tournamentId},limit:1000,cache:'reload',throwOnError:true}),
+      queryList('tournament_league_tables',{where:{tournamentId},limit:1000,cache:'reload',throwOnError:true})
     ])
-    const buckets = {}
-    const append = (record,format) => {
-      if (record.status === 'archived') return
-      const id = String(record.divisionId || 'default')
-      if (!buckets[id]) buckets[id] = []
-      buckets[id].push({ ...record,format })
+    const buckets={}
+    const append=(record,format)=>{
+      if (['archived','cancelled','deleted'].includes(record.status)) return
+      const id=String(record.divisionId || 'default')
+      ;(buckets[id] ||= []).push({...record,format})
     }
-    ;(savedGroups || []).forEach(record => append(record,'tournament'))
-    ;(savedBrackets || []).forEach(record => append(record,'cup'))
-    ;(savedLeagues || []).forEach(record => append(record,record.type || 'league'))
-    drawOverviewByDivision.value = Object.fromEntries(Object.entries(buckets).map(([id,records]) => {
-      const explicitlyConfirmed = records.length > 0 && records.every(record => record.status === 'published' || (record.status === 'confirmed' && Boolean(record.confirmedAt)))
-      const latestConfirmed = records.map(record => record.confirmedAt).filter(Boolean).sort((a,b) => new Date(b?.$date || b) - new Date(a?.$date || a))[0]
-      return [id,{ state:explicitlyConfirmed ? 'done' : 'active',confirmedAt:latestConfirmed || '',format:records[0]?.format || 'tournament' }]
+    ;(savedGroups || []).forEach(record=>append(record,'tournament'))
+    ;(savedBrackets || []).forEach(record=>append(record,'cup'))
+    ;(savedLeagues || []).forEach(record=>append(record,record.type || 'league'))
+    const next=Object.fromEntries(Object.entries(buckets).map(([id,rows])=>{
+      const division=divisionOptions.value.find(row=>String(row.id || row._id || 'default')===id)
+      const expected=division ? drawWorkflowFormat(division) : ''
+      const ordered=[...rows].sort((a,b)=>getRecordTimestamp(b)-getRecordTimestamp(a))
+      const format=ordered.some(row=>row.format===expected) ? expected : ordered[0].format
+      const latest=new Map()
+      for(const row of ordered.filter(row=>row.format===format)){
+        const key=String(row.groupCode || row.groupName || row.tableCode || row.tableName || row.round || 'snapshot')
+        if(!latest.has(key))latest.set(key,row)
+      }
+      const records=[...latest.values()]
+      const confirmed=records.length>0 && records.every(row=>row.status==='published' || row.status==='confirmed' && Boolean(row.confirmedAt))
+      const confirmedAt=records.map(row=>row.confirmedAt).filter(Boolean).sort((a,b)=>new Date(b?.$date || b)-new Date(a?.$date || a))[0]
+      return [id,{state:confirmed?'done':'active',confirmedAt:confirmedAt || '',format}]
     }))
-  } catch (error) { console.warn('加载各组别抽签状态失败:', error) }
+    if(version!==overviewReadVersion)return
+    drawOverviewByDivision.value=next
+    overviewError.value=''
+  } catch(error) {
+    if(version===overviewReadVersion)overviewError.value=error.message || '分组状态读取失败'
+    console.warn('加载各组别抽签状态失败:',error)
+  } finally { if(version===overviewReadVersion)overviewRefreshing.value=false }
 }
+
+function refreshOverviewState() {
+  if(overviewRefreshPromise)return overviewRefreshPromise
+  overviewRefreshing.value=true
+  overviewRefreshPromise=(async()=>{
+    await loadTournament()
+    await Promise.all([loadApprovedTeams(),loadOverviewDrawStates()])
+  })().finally(()=>{overviewRefreshing.value=false;overviewRefreshPromise=null})
+  return overviewRefreshPromise
+}
+function refreshVisibleOverview(){if(modeOverview.value && document.visibilityState!=='hidden')void refreshOverviewState()}
+watch(modeOverview,(visible,previous)=>{if(visible && !previous)void refreshOverviewState()})
+onActivated(()=>{if(drawPrerequisitesReady.value)refreshVisibleOverview()})
+onUnmounted(()=>{window.removeEventListener('focus',refreshVisibleOverview);document.removeEventListener('visibilitychange',refreshVisibleOverview)})
 
 // 加载已参赛球队
 async function loadApprovedTeams() {
@@ -2332,6 +2367,8 @@ watch(() => props.divisionId, async value => {
 
 // 组件挂载
 onMounted(async () => {
+  window.addEventListener('focus',refreshVisibleOverview)
+  document.addEventListener('visibilitychange',refreshVisibleOverview)
   await loadTournament()
   await loadApprovedTeams()
   await loadOverviewDrawStates()

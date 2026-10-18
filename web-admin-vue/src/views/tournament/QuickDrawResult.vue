@@ -31,9 +31,9 @@
     </main>
 
     <main v-else-if="hasSavedResult && format === 'cup'" class="knockout-result-layout">
-      <section class="knockout-zone left-zone"><header><div><h3>左半区</h3><p>签01—签08 · 首轮4场</p></div><el-tag type="success" effect="plain">{{ leftKnockoutSlots.filter(item => item.teamId).length }}/8</el-tag></header><table><thead><tr><th>签位</th><th>参赛球队</th><th>首轮</th></tr></thead><tbody><tr v-for="(slot,index) in leftKnockoutSlots" :key="slot.slotCode || index"><td>{{ slotLabel(slot,index) }}</td><td><span class="crest"><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></span><strong>{{ slot.name || '待抽签' }}</strong></td><td>第{{ Math.floor(index / 2) + 1 }}场</td></tr></tbody></table></section>
-      <section class="knockout-center"><el-icon><Trophy /></el-icon><h3>单淘汰赛</h3><strong>16个签位</strong><span>8场首轮对阵</span><i></i><p>左右半区胜者会师决赛</p></section>
-      <section class="knockout-zone right-zone"><header><div><h3>右半区</h3><p>签09—签16 · 首轮4场</p></div><el-tag type="success" effect="plain">{{ rightKnockoutSlots.filter(item => item.teamId).length }}/8</el-tag></header><table><thead><tr><th>首轮</th><th>参赛球队</th><th>签位</th></tr></thead><tbody><tr v-for="(slot,index) in rightKnockoutSlots" :key="slot.slotCode || index"><td>第{{ Math.floor(index / 2) + 5 }}场</td><td><span class="crest"><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></span><strong>{{ slot.name || '待抽签' }}</strong></td><td>{{ slotLabel(slot,index + 8) }}</td></tr></tbody></table></section>
+      <section class="knockout-zone left-zone"><header><div><h3>左半区</h3><p>{{ leftKnockoutRange }}</p></div><el-tag type="success" effect="plain">{{ leftKnockoutSlots.filter(item => item.teamId).length }}/{{ knockoutHalf }}</el-tag></header><table><thead><tr><th>签位</th><th>参赛球队</th><th>首轮</th></tr></thead><tbody><tr v-for="(slot,index) in leftKnockoutSlots" :key="slot.slotCode || index"><td>{{ slotLabel(slot,index) }}</td><td><span class="crest"><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></span><strong>{{ slot.name || '待抽签' }}</strong></td><td>第{{ Math.floor(index / 2) + 1 }}场</td></tr></tbody></table></section>
+      <section class="knockout-center"><el-icon><Trophy /></el-icon><h3>单淘汰赛</h3><strong>{{ bracketCapacity }}个签位</strong><span>{{ bracketCapacity / 2 }}场首轮对阵</span><i></i><p>左右半区胜者会师决赛</p></section>
+      <section class="knockout-zone right-zone"><header><div><h3>右半区</h3><p>{{ rightKnockoutRange }}</p></div><el-tag type="success" effect="plain">{{ rightKnockoutSlots.filter(item => item.teamId).length }}/{{ knockoutHalf }}</el-tag></header><table><thead><tr><th>首轮</th><th>参赛球队</th><th>签位</th></tr></thead><tbody><tr v-for="(slot,index) in rightKnockoutSlots" :key="slot.slotCode || index"><td>第{{ Math.floor(index / 2) + Math.floor(knockoutHalf / 2) + 1 }}场</td><td><span class="crest"><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></span><strong>{{ slot.name || '待抽签' }}</strong></td><td>{{ slotLabel(slot,index + knockoutHalf) }}</td></tr></tbody></table></section>
     </main>
 
     <main v-else-if="hasSavedResult" class="format-result">
@@ -54,7 +54,7 @@
             <header><div class="poster-brand"><img :src="saixiaofengLogo" alt="赛小蜂足球" /></div><small>GROUP DRAW · 分组抽签结果</small></header>
             <div class="poster-title"><p>{{ divisionName }}</p><h2>{{ tournament.name || '足球赛事' }}</h2><strong>{{ format === 'cup' ? '淘汰赛签位正式公布' : format === 'league' ? '联赛轮转排序正式公布' : '分组结果正式公布' }}</strong><span>{{ eventMeta }}</span></div>
             <div v-if="format === 'tournament'" class="poster-group-grid"><article v-for="group in groups" :key="group.name"><header><h3>{{ group.name }}</h3><b>{{ group.teams.length }} 支球队</b></header><ol><li v-for="(team,index) in group.teams" :key="team.id"><span>{{ group.code }}{{ index + 1 }}</span><i><img v-if="team.logo || team.logoUrl" :src="team.logo || team.logoUrl" alt="" crossorigin="anonymous" @error="clearTeamLogo(team)" /><em v-else>{{ team.name.slice(0,1) }}</em></i><strong>{{ team.name }}</strong></li></ol></article></div>
-            <div v-else-if="format === 'cup'" class="poster-knockout-grid"><section><header><h3>左半区</h3><b>签01—签08</b></header><ol><li v-for="(slot,index) in leftKnockoutSlots" :key="index"><span>{{ slotLabel(slot,index) }}</span><i><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" crossorigin="anonymous" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></i><strong>{{ slot.name || '待抽签' }}</strong></li></ol></section><div><el-icon><Trophy /></el-icon><b>单淘汰赛</b><span>左右半区</span><small>胜者会师决赛</small></div><section><header><h3>右半区</h3><b>签09—签16</b></header><ol><li v-for="(slot,index) in rightKnockoutSlots" :key="index"><span>{{ slotLabel(slot,index+8) }}</span><i><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" crossorigin="anonymous" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></i><strong>{{ slot.name || '待抽签' }}</strong></li></ol></section></div>
+            <div v-else-if="format === 'cup'" class="poster-knockout-grid"><section><header><h3>左半区</h3><b>{{ leftKnockoutRange }}</b></header><ol><li v-for="(slot,index) in leftKnockoutSlots" :key="index"><span>{{ slotLabel(slot,index) }}</span><i><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" crossorigin="anonymous" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></i><strong>{{ slot.name || '待抽签' }}</strong></li></ol></section><div><el-icon><Trophy /></el-icon><b>单淘汰赛</b><span>左右半区</span><small>胜者会师决赛</small></div><section><header><h3>右半区</h3><b>{{ rightKnockoutRange }}</b></header><ol><li v-for="(slot,index) in rightKnockoutSlots" :key="index"><span>{{ slotLabel(slot,index+knockoutHalf) }}</span><i><img v-if="slot.logo || slot.logoUrl" :src="slot.logo || slot.logoUrl" alt="" crossorigin="anonymous" @error="clearTeamLogo(slot)" /><em v-else>{{ (slot.name || '待')[0] }}</em></i><strong>{{ slot.name || '待抽签' }}</strong></li></ol></section></div>
             <section v-else class="poster-league-list"><header><div><h3>联赛队伍轮转顺序</h3><span>顺序用于生成单循环赛程</span></div><b>{{ teams.length }} 支球队 · {{ leagueRoundCount }} 轮</b></header><ol><li v-for="(team,index) in teams" :key="team.id"><span>{{ index + 1 }}</span><i><img v-if="team.logo || team.logoUrl" :src="team.logo || team.logoUrl" alt="" crossorigin="anonymous" @error="clearTeamLogo(team)" /><em v-else>{{ team.name.slice(0,1) }}</em></i><strong>{{ team.name }}</strong><small>第 {{ index + 1 }} 顺位</small></li></ol></section>
             <footer><span>公平竞赛 · 尊重对手 · 享受足球</span><small>生成时间 {{ posterGeneratedAt }}</small></footer>
           </section>
@@ -129,8 +129,11 @@ const formatDescription = computed(() => ({ league: '按当前队伍顺序生成
 const visibleGroups = computed(() => groups.value.filter(group => groupFilter.value === 'all' || group.name === groupFilter.value).map(group => ({ ...group, teams: group.teams.filter(team => !keyword.value || team.name.includes(keyword.value)) })))
 const filteredRankedTeams = computed(() => teams.value.filter(team => !keyword.value || team.name.includes(keyword.value)))
 const invalidLogoTeams = computed(() => [...new Set(teams.value.filter(team => team.logoSourceInvalid).map(team => team.name).filter(Boolean))])
-const leftKnockoutSlots = computed(() => knockoutSlots.value.slice(0,8))
-const rightKnockoutSlots = computed(() => knockoutSlots.value.slice(8,16))
+const knockoutHalf = computed(()=>Math.max(1,Math.floor(bracketCapacity.value / 2)))
+const leftKnockoutRange = computed(()=>`签01—签${String(knockoutHalf.value).padStart(2,'0')}`)
+const rightKnockoutRange = computed(()=>`签${String(knockoutHalf.value+1).padStart(2,'0')}—签${String(bracketCapacity.value).padStart(2,'0')}`)
+const leftKnockoutSlots = computed(() => knockoutSlots.value.slice(0,knockoutHalf.value))
+const rightKnockoutSlots = computed(() => knockoutSlots.value.slice(knockoutHalf.value))
 
 function qaTeamNames(count, suffix) {
   const cities = ['郑州青训','洛阳龙门','开封少年','南阳竞技','安阳星火','许昌未来','新乡联队','焦作山阳','周口先锋','商丘雄鹰','信阳绿茵','驻马店精英','郑州未来','洛阳少年','开封雄狮','南阳先锋','焦作未来','周口绿茵','平顶山少年','漯河飞翼','濮阳竞技','三门峡之星','安阳竞技','许昌青训','新乡星火','焦作先锋','周口少年','商丘未来','信阳雄鹰','驻马店竞技','平顶山竞速','漯河青训']
@@ -155,7 +158,7 @@ function seedQaResult() {
   } else {
     teams.value = qaTeamNames(format.value === 'cup' || format.value === 'league' ? 8 : 12, suffix)
     advanceCount.value = 8
-    bracketCapacity.value = format.value === 'cup' ? 16 : 8
+    bracketCapacity.value = 8
     leagueRoundCount.value = format.value === 'league' ? 11 : 0
     records.value = [{ _id: `qa-${format.value}-result`, status: resultStatus.value }]
   }
@@ -245,14 +248,14 @@ async function load() {
       const primary = records.value[0]
       teams.value = (primary?.teams || []).map((team, index) => ({ id: String(team.teamId || index), name: String(team.teamName || '未命名球队') }))
       if (format.value === 'cup' && primary) {
-        const rawSlots = Array.from({ length:16 },(_,index) => { const slot=(primary.slots || [])[index] || {}; return { id:String(slot.teamId || ''),teamId:String(slot.teamId || ''),name:String(slot.teamName || ''),slotCode:slot.slotCode || `签${String(index + 1).padStart(2,'0')}` } })
+        const rawSlots = Array.from({ length:Number(primary.capacity || primary.slots?.length || 2) },(_,index) => { const slot=(primary.slots || [])[index] || {}; return { id:String(slot.teamId || ''),teamId:String(slot.teamId || ''),name:String(slot.teamName || ''),slotCode:slot.slotCode || `签${String(index + 1).padStart(2,'0')}` } })
         const enriched = await enrichTeamRecords(rawSlots.filter(slot => slot.teamId),tournamentTeamRows)
         const lookup = new Map(enriched.map(team => [team.id,team]))
         knockoutSlots.value = rawSlots.map(slot => slot.teamId ? { ...slot,...(lookup.get(slot.teamId) || {}) } : slot)
         teams.value = knockoutSlots.value.filter(slot => slot.teamId)
       } else teams.value = await enrichTeamRecords(teams.value,tournamentTeamRows)
       advanceCount.value = Number(primary?.advanceCount || 8)
-      bracketCapacity.value = Number(primary?.capacity || primary?.advanceCount || 0)
+      bracketCapacity.value = Number(primary?.capacity || primary?.slots?.length || primary?.advanceCount || 0)
       leagueRoundCount.value = teams.value.length > 1 ? teams.value.length - 1 : 0
     }
     const statuses = records.value.map(row => row.status)
@@ -298,6 +301,15 @@ function exportResult() {
   const csv = [['阶段/小组', '签位/排名', '球队'], ...rows].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n')
   const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })); link.download = `${divisionName.value}-${formatTitle.value}.csv`; link.click(); URL.revokeObjectURL(link.href)
 }
+function publishConfirmedCupProjection() {
+  if(format.value!=='cup')return
+  const name=`sxf-draw-screen-${tournamentId}-${divisionId.value}`
+  const slots=knockoutSlots.value.map(slot=>slot.teamId ? {id:slot.teamId,name:slot.name,logo:slot.logo || slot.logoUrl || ''} : null)
+  const payload={format:'cup',stage:'result',confirmed:true,capacity:bracketCapacity.value,slots,teams:slots.filter(Boolean),assignedCount:slots.filter(Boolean).length,tournamentName:tournament.value.name,divisionName:divisionName.value,updatedAt:new Date().toISOString()}
+  try{const previous=JSON.parse(localStorage.getItem(name) || '{}');localStorage.setItem(name,JSON.stringify({...previous,...payload}))}catch(error){console.warn('保存抽签投屏状态失败',error)}
+  if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel(name);channel.postMessage(payload);setTimeout(()=>channel.close(),0)}
+}
+
 async function confirm() {
   if (!hasSavedResult.value) return ElMessage.error('没有可确认的抽签结果')
   if (isArchived.value) return ElMessage.warning('归档结果不能重复确认')
@@ -315,6 +327,7 @@ async function confirm() {
       if (!pendingRecords.length) throw new Error('未找到可确认的签位草稿，请刷新后重试')
       for (const record of pendingRecords) await updateRecord(collection, record._id, { status: 'confirmed', confirmedAt: new Date(), updateTime: new Date() })
       resultStatus.value = 'confirmed'
+      publishConfirmedCupProjection()
     }
     ElMessage.success('当前组别抽签已完成')
     router.push({ path: `/tournaments/${tournamentId}/draw`, query: visualQa ? { visualQa: '1' } : {} })
