@@ -139,6 +139,8 @@
 
           <section v-else-if="activeTab === 'playerCards'"><PlayerCardTemplateLibrary /></section>
 
+          <section v-else-if="activeTab === 'feedback'"><ServiceFeedbackPanel /></section>
+
           <section v-else-if="activeTab === 'cardRules'"><PlayerCardScoreRules ref="cardRulesRef" /></section>
           <section v-else-if="activeTab === 'dataCenter'"><DataCenter embedded ref="dataCenterRef" /></section>
 
@@ -198,7 +200,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowRight, Back, CircleCheckFilled, Connection, CopyDocument, DataAnalysis, Flag, Headset, Loading, Picture, Plus, Refresh, Search, Service, Tickets, Trophy, UserFilled, Warning } from '@element-plus/icons-vue'
+import { ArrowRight, Back, ChatDotRound, CircleCheckFilled, Connection, CopyDocument, DataAnalysis, Flag, Headset, Loading, Picture, Plus, Refresh, Search, Service, Tickets, Trophy, UserFilled, Warning } from '@element-plus/icons-vue'
 import { callFunction, logout } from '@/utils/cloud'
 import { getPlatformSession, isPlatformSession } from '@/utils/platformSession'
 import { getTempFileURL, uploadBase64Image } from '@/utils/upload'
@@ -207,6 +209,7 @@ import SystemAdmin from '@/views/system/SystemAdmin.vue'
 import PlayerCardTemplateLibrary from './PlayerCardStudio.vue'
 import DataCenter from '@/views/data/DataCenter.vue'
 import PlayerCardScoreRules from './PlayerCardScoreRules.vue'
+import ServiceFeedbackPanel from './ServiceFeedbackPanel.vue'
 import CustomerProfileDrawer from './CustomerProfileDrawer.vue'
 
 function openOrganizerSite(){window.location.assign('https://www.sxffootball.cn/admin/#/tournament-space')}
@@ -214,7 +217,7 @@ const dataCenterRef=ref(null),cardRulesRef=ref(null)
 function refreshSection(){return activeTab.value==='dataCenter'?dataCenterRef.value?.refresh():activeTab.value==='cardRules'?cardRulesRef.value?.refresh():loadOverview()}
 const router = useRouter(), route = useRoute(), logoUrl = `${import.meta.env.BASE_URL}logo.png`
 const requestedSection = String(route.query.section || '')
-const activeTab = ref(['overview','organizers','accounts','tournaments','teams','dataCenter','support','content','playerCards','cardRules'].includes(requestedSection) ? requestedSection : 'overview'), contentTab = ref('banners'), checkingPermission = ref(true), loading = ref(false), savingBanner = ref(false), lastLoadedAt = ref(null)
+const activeTab = ref(['overview','organizers','accounts','tournaments','teams','dataCenter','support','content','playerCards','cardRules','feedback'].includes(requestedSection) ? requestedSection : 'overview'), contentTab = ref('banners'), checkingPermission = ref(true), loading = ref(false), savingBanner = ref(false), lastLoadedAt = ref(null)
 const banners = ref([]), tournaments = ref([]), organizers = ref([]), accounts = ref([]), teams = ref([]), supportRequests = ref([])
 const organizerKeyword = ref(''), organizerContactFilter = ref('all'), accountKeyword = ref(''), tournamentKeyword = ref(''), tournamentStatusFilter = ref('all'), teamKeyword = ref(''), featuredKeyword = ref('')
 const accountDeletingId = ref('')
@@ -259,9 +262,9 @@ const hideTeam = row => changeHiddenRow('teams', row, true)
 const restoreTeam = row => changeHiddenRow('teams', row, false)
 const stats = reactive({ totalTournaments: 0, totalOrganizers: 0, totalTeams: 0, activeSupportCount: 0, missingContactCount: 0 })
 const bannerForm = reactive({ bannerId: '', title: '', imageUrl: '', displayImageUrl: '', link: '', sort: 0, isActive: true, storageType: 'cloud' })
-const sections = { overview: ['运营总览','掌握平台赛事、主办方和问题协助的最新情况'], organizers: ['主办方联系人','找到赛事创建者，查看联系方式及其赛事和球队'], accounts: ['账号管理','管理主办方登录账号，并安全处理无业务关联的空账号'], tournaments: ['全平台赛事','查看平台内全部赛事的创建方、状态和参赛规模'], teams: ['全平台球队','查看长期球队资产、创建方和历史参赛情况'], dataCenter: ['数据中心',''], support: ['问题与协助','通过用户确认授权的方式安全处理实际使用问题'], content: ['内容运营','管理公开赛事中心的轮播和推荐赛事'], playerCards: ['球员卡系统',''],cardRules:['积分规则',''] }
+const sections = { overview: ['运营总览','掌握平台赛事、主办方和问题协助的最新情况'], organizers: ['主办方联系人','找到赛事创建者，查看联系方式及其赛事和球队'], accounts: ['账号管理','管理主办方登录账号，并安全处理无业务关联的空账号'], tournaments: ['全平台赛事','查看平台内全部赛事的创建方、状态和参赛规模'], teams: ['全平台球队','查看长期球队资产、创建方和历史参赛情况'], dataCenter: ['数据中心',''], support: ['问题与协助','通过用户确认授权的方式安全处理实际使用问题'], content: ['内容运营','管理公开赛事中心的轮播和推荐赛事'], playerCards: ['球员卡系统',''],cardRules:['积分规则',''], feedback: ['反馈管理','查看服务号「我的」页提交的用户反馈并跟进处理'] }
 const section = computed(() => ({ title: sections[activeTab.value][0], description: sections[activeTab.value][1] }))
-const navigation = computed(() => [{key:'overview',label:'运营总览',icon:Picture},{key:'organizers',label:'主办方联系人',icon:UserFilled},{key:'accounts',label:'账号管理',icon:UserFilled},{key:'tournaments',label:'全平台赛事',icon:Trophy},{key:'teams',label:'全平台球队',icon:Flag},{key:'dataCenter',label:'数据中心',icon:DataAnalysis},{key:'playerCards',label:'球员卡系统',icon:Picture},{key:'cardRules',label:'积分规则',icon:DataAnalysis},{key:'support',label:'问题与协助',icon:Headset,badge:stats.activeSupportCount||''},{key:'content',label:'内容运营',icon:Tickets}])
+const navigation = computed(() => [{key:'overview',label:'运营总览',icon:Picture},{key:'organizers',label:'主办方联系人',icon:UserFilled},{key:'accounts',label:'账号管理',icon:UserFilled},{key:'tournaments',label:'全平台赛事',icon:Trophy},{key:'teams',label:'全平台球队',icon:Flag},{key:'dataCenter',label:'数据中心',icon:DataAnalysis},{key:'playerCards',label:'球员卡系统',icon:Picture},{key:'feedback',label:'反馈管理',icon:ChatDotRound},{key:'cardRules',label:'积分规则',icon:DataAnalysis},{key:'support',label:'问题与协助',icon:Headset,badge:stats.activeSupportCount||''},{key:'content',label:'内容运营',icon:Tickets}])
 const statCards = computed(() => [{key:'o',label:'主办方',value:stats.totalOrganizers,hint:'平台联系人档案',icon:UserFilled,color:'blue',target:'organizers'},{key:'t',label:'全部赛事',value:stats.totalTournaments,hint:'含草稿与历史赛事',icon:Trophy,color:'green',target:'tournaments'},{key:'m',label:'长期球队',value:stats.totalTeams,hint:'不等同于参赛快照',icon:Flag,color:'orange',target:'teams'},{key:'s',label:'协助处理中',value:stats.activeSupportCount,hint:'等待确认或授权中',icon:Service,color:'purple',target:'support'}])
 const currentUserName = computed(() => getPlatformSession()?.userName || '平台负责人')
 let tournamentStatusTimer = null
