@@ -94,6 +94,9 @@
         </article>
       </div>
       <el-alert class="overview-footer" title="基础模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
+      <div v-if="allDivisionDrawsConfirmed" class="overview-schedule-actions">
+        <el-button type="success" size="large" @click="openScheduleSettings">赛程设置</el-button>
+      </div>
     </main>
   </section>
   <div v-else class="tournament-draw" :class="{ fullscreen: isFullscreen, embedded: props.embedded }">
@@ -689,6 +692,13 @@ const divisionStateCounts = computed(() => divisionOptions.value.reduce((counts,
 const filteredDivisionOptions = computed(() => activeOverviewFilter.value === 'all'
   ? divisionOptions.value
   : divisionOptions.value.filter(division => divisionDrawState(division).state === activeOverviewFilter.value))
+const allDivisionDrawsConfirmed = computed(() => drawPrerequisitesReady.value &&
+  !overviewRefreshing.value && !overviewError.value && divisionOptions.value.length > 0 &&
+  divisionOptions.value.every(division => divisionDrawState(division).state === 'done'))
+function openScheduleSettings() {
+  if (!allDivisionDrawsConfirmed.value) return
+  router.push({ path: `/tournaments/${tournamentId}/matches`, query: { view: 'settings' } })
+}
 const overviewDateRange = computed(() => {
   const start = String(tournament.value.startDate || '').replaceAll('-', '.')
   const end = String(tournament.value.endDate || '').replaceAll('-', '.')
@@ -3447,6 +3457,7 @@ onMounted(async () => {
 .draw-overview h1 { margin: 0; font-size: 30px; line-height: 1.25; }
 .overview-lead { margin: 7px 0 21px; color: #5e6962; font-size: 15px; }
 .overview-filters { display: flex; gap: 14px; margin: 24px 0 20px; }
+.overview-schedule-actions { display: flex; justify-content: center; margin-top: 24px; }
 .overview-filters .el-button { min-width: 104px; }
 .division-draw-list { display: flex; flex-direction: column; gap: 10px; }
 .division-draw-list article { display: grid; grid-template-columns: 70px 170px 1fr 1.45fr 1.4fr 230px; align-items: center; min-height: 94px; padding: 0 26px 0 18px; border: 1px solid #dde4df; border-radius: 10px; background: #fff; }
