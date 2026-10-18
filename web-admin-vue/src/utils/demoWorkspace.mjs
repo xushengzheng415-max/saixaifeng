@@ -322,6 +322,38 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     return fail('这项名单操作尚未接入模拟')
   }
   function request(action, params = {}) {
+    if (action === 'organizerClaimInvite' && ['listTeamAccess','saveTeamAccess','removeTeamAccess','addPlayerAsStaff'].includes(params.action)) {
+      const relation = get('tournament_teams', params.tournamentTeamId)
+      if (relation.tournamentId !== params.tournamentId || (relation.divisionId || 'default') !== (params.divisionId || 'default')) return fail('参赛球队关系不匹配')
+      const teamId = relation.teamId
+      const record = rows('team_staff_access').find(row => row.teamId === teamId && row.tournamentId === params.tournamentId)
+      if (params.action === 'addPlayerAsStaff') {
+        const player = get('players', params.playerId)
+        if (![player.teamId, player.teamCode].filter(Boolean).every(id => id === teamId)) return fail('球员不属于当前球队')
+        const existing = rows('coaches').find(row => row.teamId === teamId && row.linkedPlayerId === player._id)
+        const staff = existing || add('coaches', {teamId, teamCode:teamId, linkedPlayerId:player._id, isAlsoPlayer:true, name:player.name, jerseyNumber:player.jerseyNumber, photoUrl:player.photoUrl || '', birthDate:player.birthDate || '', nativePlace:player.nativePlace || '', phone:params.phone || '', type:params.type || 'other', role:({team_leader:'领队',head_coach:'主教练',doctor:'队医'})[params.type] || '工作人员'})
+        return {success:true, staffId:staff._id, existing:Boolean(existing)}
+      }
+      if (params.action === 'saveTeamAccess') {
+        const source = Array.isArray(params.personnel) ? params.personnel : []
+        if (!source.length || source.length > 50 || !source.some(row => row.role === params.primaryRole)) return fail('请选择一位工作人员作为主账号')
+        if (new Set(source.map(row => row.phone)).size !== source.length) return fail('同一手机号不能重复分配账号')
+        const personnel = source.map(row => {
+          const staffId = String(row.role || '').startsWith('staff:') ? row.role.slice(6) : ''
+          const staff = staffId ? get('coaches', staffId) : null
+          if (staff && staff.teamId !== teamId) return fail('工作人员不属于当前球队')
+          if (!/^1[3-9]\d{9}$/.test(row.phone)) return fail('请填写有效手机号')
+          return {role:row.role,staffId,name:staff?.name || row.name,phone:row.phone,roleLabel:staff?.role || row.roleLabel || '工作人员',accountType:row.role === params.primaryRole ? 'owner' : 'member',permissions:row.role === params.primaryRole || row.permissions?.includes('team.manage') ? ['team.view','team.manage'] : ['team.view'],status:'演示账号'}
+        })
+        if (record) record.personnel = personnel
+        else add('team_staff_access', {teamId,tournamentId:params.tournamentId,personnel})
+      }
+      if (params.action === 'removeTeamAccess' && record) {
+        if (record.personnel.some(row => row.role === params.role && row.accountType === 'owner')) return fail('请先移交主账号')
+        record.personnel = record.personnel.filter(row => row.role !== params.role)
+      }
+      return {success:true,personnel:clone(rows('team_staff_access').find(row => row.teamId === teamId && row.tournamentId === params.tournamentId)?.personnel || []),ownerTransferPending:false}
+    }
     if (action === 'rosterExceptionBoard') return rosterReview(params)
     if (action === 'dbQuery') return query(params)
     if (action === 'callFunction') return request(params.functionName, params.functionParams)

@@ -63,20 +63,6 @@
             </template>
           </section>
         </div>
-        <section v-if="!isTournamentStaff" class="team-access-panel">
-          <header>
-            <div><h2>球队管理权限</h2><p>主账号负责球队管理，其他账号按分配权限协作。</p></div>
-            <el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openTeamAccess"><el-icon><Plus /></el-icon>分配账号</el-button>
-          </header>
-          <el-table :data="teamAccessRows" v-loading="teamAccessLoading" empty-text="暂未分配球队管理账号" class="team-access-table">
-            <el-table-column prop="roleLabel" label="身份" width="120" />
-            <el-table-column prop="name" label="姓名" min-width="140" />
-            <el-table-column label="手机号" min-width="160"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column>
-            <el-table-column label="账号关系" width="150"><template #default="{ row }"><el-tag :type="row.accountType === 'owner' ? 'success' : (row.accountType === 'pending_owner' ? 'warning' : 'info')" size="small">{{ row.accountType === 'owner' ? '主账号' : (row.accountType === 'pending_owner' ? '待接收主账号' : '协作账号') }}</el-tag></template></el-table-column>
-            <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="row.status === '主账号' || row.status === '已加入' ? 'success' : 'warning'" effect="plain" size="small">{{ row.status || '待授权' }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isReadOnlyTournament" label="操作" width="110" align="center"><template #default="{ row }"><el-button link type="danger" :loading="teamAccessDeletingRole === row.role" :disabled="row.accountType === 'owner'" @click="deleteTeamAccess(row)">删除权限</el-button></template></el-table-column>
-          </el-table>
-        </section>
         <section class="team-kit-panel">
           <header><div><h2>比赛服颜色</h2><p>设置球队常用主、备用比赛服；单场比赛可根据撞色情况另行调整，历史比赛快照不会被覆盖。</p></div><el-button v-if="!isReadOnlyTournament" type="success" :loading="kitSaving" @click="saveTeamKitColors">保存颜色设置</el-button></header>
           <div class="kit-set-grid">
@@ -97,14 +83,18 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人；兼项人员同时保留工作人员和球员资料。</p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
-          <el-table :data="staffMembers" v-loading="loading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-compact-table" :fit="false">
-            <el-table-column label="头像" width="48" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
-            <el-table-column prop="name" label="姓名" width="78" />
-            <el-table-column label="球衣名" width="78"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
-            <el-table-column label="职务" width="160"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼球员</el-tag></template></el-table-column>
-            <el-table-column label="出生日期" width="94"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
-            <el-table-column label="籍贯" width="50" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="!canManageTeamAccess"> · 账号权限由主账号分配</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
+          <el-table :data="staffMembers" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-roster-table">
+            <el-table-column label="头像" width="44" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
+            <el-table-column prop="name" label="姓名" min-width="76" />
+            <el-table-column label="球衣名" min-width="84"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag></template></el-table-column>
+            <el-table-column label="出生日期" min-width="98"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="手机号" min-width="108"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.phone || '未分配') : '—' }}<small v-if="canManageTeamAccess && staffAccount(row)" class="staff-account-phone">{{ staffAccountLabel(row) }}</small></template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="操作权限" min-width="86"><template #default="{ row }">{{ canManageTeamAccess ? staffPermissionLabel(row) : '—' }}</template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="状态" min-width="82"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.status || '未授权') : '主账号设置' }}</template></el-table-column>
+            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="90"><template #default="{ row }"><span :title="canManageTeamAccess ? '' : '账号权限需由赛事所属机构主账号分配'"><el-button link type="primary" :disabled="!canManageTeamAccess || !tournamentRelation?._id" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
           </el-table>
         </section>
         <section class="synthetic-player-panel">
@@ -1226,26 +1216,27 @@
 
     <el-dialog v-model="showAddStaff" title="添加工作人员" width="500px" :close-on-click-modal="false">
       <el-form :model="staffForm" label-width="90px">
-        <el-form-item label="姓名" required><el-input v-model="staffForm.name" maxlength="30" /></el-form-item>
+        <el-form-item v-if="sourceTournamentId && canManageTeamAccess" label="添加方式"><el-radio-group v-model="staffSource"><el-radio-button value="manual">填写资料</el-radio-button><el-radio-button value="player">队内球员</el-radio-button></el-radio-group></el-form-item>
+        <el-form-item v-if="staffSource === 'player'" label="球员" required><el-select v-model="staffPlayerId" filterable placeholder="选择队内球员" style="width:100%" @change="selectStaffPlayer"><el-option v-for="player in staffPlayerOptions" :key="player._id" :value="String(player._id)" :label="`${player.jerseyNumber || '—'}号 ${player.name}`" /></el-select></el-form-item>
+        <el-form-item label="姓名" required><el-input v-model="staffForm.name" :disabled="staffSource === 'player'" maxlength="30" /></el-form-item>
         <el-form-item label="职务" required><el-select v-model="staffForm.type" style="width:100%"><el-option label="领队" value="team_leader" /><el-option label="主教练" value="head_coach" /><el-option label="队医" value="doctor" /><el-option label="工作人员" value="other" /></el-select></el-form-item>
         <el-form-item label="手机号"><el-input v-model="staffForm.phone" maxlength="20" placeholder="可留空" /></el-form-item>
-        <el-form-item label="身份证"><el-input v-model="staffForm.idCard" maxlength="18" placeholder="可留空" /></el-form-item>
-        <el-form-item label="球衣号码"><el-input-number v-model="staffForm.jerseyNumber" :min="1" :max="99" placeholder="可留空" style="width:100%" /></el-form-item>
+        <el-form-item v-if="staffSource === 'manual'" label="身份证"><el-input v-model="staffForm.idCard" maxlength="18" placeholder="可留空" /></el-form-item>
+        <el-form-item label="球衣号码"><el-input-number v-model="staffForm.jerseyNumber" :disabled="staffSource === 'player'" :min="1" :max="99" placeholder="可留空" style="width:100%" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="showAddStaff=false">取消</el-button><el-button type="primary" :loading="staffSubmitting" @click="submitStaff">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="showTeamAccess" title="球队管理权限" width="720px" :close-on-click-modal="false">
-      <el-alert type="info" :closable="false" title="主账号可管理球队；协作账号由主账号分配权限。这里的账号不会进入工作人员名单。" />
-      <div class="team-access-form">
-        <div v-for="item in teamAccessForm" :key="item.role" class="team-access-form-row">
-          <strong>{{ item.roleLabel }}</strong>
-          <el-input v-model="item.name" placeholder="姓名" maxlength="30" />
-          <el-input v-model="item.phone" placeholder="手机号" maxlength="11" />
-          <el-radio v-model="teamAccessPrimaryRole" :value="item.role" :disabled="!item.name || !item.phone">主账号</el-radio>
-          <el-button link type="danger" :disabled="teamAccessPrimaryRole === item.role" @click="clearTeamAccessFormRow(item)">删除</el-button>
-        </div>
-      </div>
+    <el-dialog v-model="showTeamAccess" title="工作人员权限" width="500px" :close-on-click-modal="false">
+      <el-form label-width="90px">
+        <el-form-item label="工作人员">{{ selectedStaffAccount?.name }}</el-form-item>
+        <el-form-item label="登录手机号"><el-input v-model="staffAccessForm.phone" maxlength="11" placeholder="本人微信绑定的手机号" /></el-form-item>
+        <el-form-item v-if="staffAccessForm.accountType !== 'none'" label=""><span class="staff-permission-note">使用该手机号登录小程序后生效</span></el-form-item>
+        <el-form-item label="账号类型"><el-select v-model="staffAccessForm.accountType" style="width:100%"><el-option label="不分配账号" value="none" /><el-option label="子账号" value="member" /><el-option label="主账号" value="owner" /></el-select></el-form-item>
+        <el-form-item v-if="staffAccessForm.accountType === 'member'" label="操作权限"><el-radio-group v-model="staffAccessForm.canManage"><el-radio :value="false">仅查看</el-radio><el-radio :value="true">管理球队</el-radio></el-radio-group></el-form-item>
+        <el-form-item v-if="staffAccessForm.accountType === 'owner' || staffAccessForm.canManage" label=""><span class="staff-permission-note">球员维护、邀请球员、赛事报名、提交阵容</span></el-form-item>
+      </el-form>
+      <el-alert v-if="staffAccessForm.accountType === 'owner'" type="warning" :closable="false" title="更换主账号需新负责人接收后生效" />
       <template #footer><el-button @click="showTeamAccess=false">取消</el-button><el-button type="primary" :loading="teamAccessSaving" @click="saveTeamAccess">保存权限</el-button></template>
     </el-dialog>
 
@@ -1263,7 +1254,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled, Picture } from '@element-plus/icons-vue'
-import { queryById, queryList, queryAll, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
+import { queryById, queryList, queryAll, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, getCurrentUser, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
@@ -1413,6 +1404,29 @@ const kitColorOptions = KIT_COLOR_OPTIONS
 const kitForm = ref({primary:{jersey:'#138A4B',shorts:'#FFFFFF',socks:'#138A4B'},secondary:{jersey:'#FFFFFF',shorts:'#138A4B',socks:'#FFFFFF'}})
 const kitColorLabels = ref({ primary:{}, secondary:{} })
 const tournamentContext = ref(qaSnapshot && sourceTournamentId.value ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions } : {})
+const sessionScope = ref(null)
+// 与服务端 organizerClaimInvite.userOwnsTournament 保持一致：账号/权限操作按“赛事归属”判定。
+// 判定优先使用服务端会话身份（tournamentStaffAccess scope 的 activeOrgId），
+// 因为工作人员工作区会清空本地 userInfo.orgId，本地缓存不可信。
+const canManageTeamAccess = computed(() => {
+  if (!sourceTournamentId.value) return false
+  if (isDemoMode()) return true
+  const tournament = tournamentContext.value || {}
+  const scope = sessionScope.value
+  if (tournament.orgId) {
+    const scopeOrg = String(scope?.activeOrgId || '')
+    const localUser = getCurrentUser() || {}
+    const localOrg = String(localUser.orgId || localUser.organizationId || localUser.organization_id || '')
+    const sessionOrg = scopeOrg || localOrg
+    if (!sessionOrg || sessionOrg !== String(tournament.orgId)) return false
+    // 工作人员子账号同样属于该机构，但服务端仅允许主账号分配球队账号，保持一致。
+    if (scope?.isStaff && !scope?.isOwner) return false
+    return true
+  }
+  const user = getCurrentUser() || {}
+  const ownerIds = [tournament.creatorId, tournament.organizerId, tournament.ownerId, tournament.userId].filter(Boolean).map(String)
+  return Boolean(user._id) && ownerIds.includes(String(user._id))
+})
 const tournamentRelation = ref(qaSnapshot && sourceTournamentId.value ? { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' } : {})
 const isSyntheticTeam = computed(() => team.value.synthetic === true || Boolean(team.value.syntheticDatasetId))
 const tournamentParticipationCode = computed(() => tournamentRelation.value.registrationNo || tournamentRelation.value.tournamentTeamCode || tournamentRelation.value.participationCode || tournamentRelation.value.registrationCode || team.value.teamCode || (tournamentRelation.value._id ? `T-${String(tournamentRelation.value._id).slice(-6).toUpperCase()}` : '待分配'))
@@ -1548,18 +1562,17 @@ const showAddPlayer = ref(false)
 const showAddStaff = ref(false)
 const staffSubmitting = ref(false)
 const staffForm = ref({ name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null })
-const teamAccessRoleOptions = [
-  { role:'team_leader', roleLabel:'领队' },
-  { role:'head_coach', roleLabel:'主教练' },
-  { role:'liaison', roleLabel:'联络员' }
-]
+const staffSource = ref('manual')
+const staffPlayerId = ref('')
+const staffPlayerOptions = computed(() => players.value.filter(player => player._id && !staffMembers.value.some(staff => String(staff.linkedPlayerId || '') === String(player._id))))
+const selectedStaffAccount = ref(null)
+const staffAccessForm = ref({ phone:'', accountType:'none', canManage:false })
 const teamAccessRows = ref([])
+const primaryTeamAccount = computed(() => teamAccessRows.value.find(item => item.accountType === 'owner') || teamAccessRows.value.find(item => item.accountType === 'pending_owner'))
 const teamAccessLoading = ref(false)
 const teamAccessSaving = ref(false)
 const teamAccessDeletingRole = ref('')
 const showTeamAccess = ref(false)
-const teamAccessPrimaryRole = ref('team_leader')
-const teamAccessForm = ref(teamAccessRoleOptions.map(item => ({ ...item, name:'', phone:'' })))
 const exportDialogVisible = ref(false)
 const rosterPosterVisible = ref(false)
 const exporting = ref(false)
@@ -2545,15 +2558,38 @@ function openAddPlayer() {
 }
 
 function openAddStaff() {
+  staffSource.value = 'manual'
+  staffPlayerId.value = ''
   staffForm.value = { name:'', type:'team_leader', phone:'', idCard:'', jerseyNumber:null }
   showAddStaff.value = true
+}
+
+function selectStaffPlayer(id) {
+  const player = players.value.find(item => String(item._id) === String(id))
+  staffForm.value = { ...staffForm.value, name:player?.name || '', jerseyNumber:player?.jerseyNumber || null, type:'other' }
+}
+
+function staffAccount(row) {
+  const direct = teamAccessRows.value.find(item => String(item.staffId || '') === String(row._id))
+  if (direct) return direct
+  const phone = String(row.phone || row.phoneNumber || '').replace(/\D/g, '')
+  if (!phone || staffMembers.value.filter(item => String(item.phone || item.phoneNumber || '').replace(/\D/g, '') === phone).length !== 1) return null
+  return teamAccessRows.value.find(item => item.phone === phone) || null
+}
+function staffAccountLabel(row) {
+  const account = staffAccount(row)
+  return !account ? '未分配' : account.accountType === 'owner' ? '主账号' : account.accountType === 'pending_owner' ? '待接收主账号' : '子账号'
+}
+function staffPermissionLabel(row) {
+  const account = staffAccount(row)
+  return !account ? '—' : account.accountType === 'owner' || account.permissions?.includes('team.manage') ? '管理球队' : '仅查看'
 }
 
 async function loadTeamAccess() {
   if (!sourceTournamentId.value || !tournamentRelation.value?._id) return
   if (qaSnapshot) {
     teamAccessRows.value = [{ role:'team_leader', roleLabel:'领队', name:tournamentContactName.value, phone:maskedPhone.value === '—' ? '' : maskedPhone.value, accountType:'owner', status:'主账号' }]
-    return
+    return true
   }
   teamAccessLoading.value = true
   try {
@@ -2565,32 +2601,25 @@ async function loadTeamAccess() {
     })
     if (!result?.success) throw new Error(result?.message || '球队管理权限加载失败')
     teamAccessRows.value = Array.isArray(result.personnel) ? result.personnel : []
-    teamAccessPrimaryRole.value = result.primaryRole || teamAccessRows.value.find(item => item.accountType === 'owner')?.role || 'team_leader'
+    return true
   } catch (error) {
     console.error('加载球队管理权限失败:', error)
-    teamAccessRows.value = []
+    ElMessage.error(error.message || '账号权限读取失败，请重试')
+    return false
   } finally {
     teamAccessLoading.value = false
   }
 }
 
-async function openTeamAccess() {
+async function openTeamAccess(row) {
+  if (!row?._id) return
+  if (!canManageTeamAccess.value) return ElMessage.warning('球队账号权限需由赛事所属机构主账号分配')
   if (!tournamentRelation.value?._id) return ElMessage.error('当前球队参赛关系不存在，无法分配账号')
-  if (!teamAccessRows.value.length) await loadTeamAccess()
-  const existing = new Map(teamAccessRows.value.map(item => [item.role, item]))
-  teamAccessForm.value = teamAccessRoleOptions.map(option => ({
-    ...option,
-    name:String(existing.get(option.role)?.name || ''),
-    phone:String(existing.get(option.role)?.phone || '')
-  }))
-  teamAccessPrimaryRole.value = teamAccessRows.value.find(item => item.accountType === 'owner')?.role || teamAccessForm.value.find(item => item.name && item.phone)?.role || 'team_leader'
+  if (await loadTeamAccess() === false) return
+  selectedStaffAccount.value = row
+  const existing = staffAccount(row)
+  staffAccessForm.value = { phone:existing?.phone || row.phone || '', accountType:!existing ? 'none' : ['owner','pending_owner'].includes(existing.accountType) ? 'owner' : 'member', canManage:Boolean(existing?.permissions?.includes('team.manage')) }
   showTeamAccess.value = true
-}
-
-function clearTeamAccessFormRow(item) {
-  if (teamAccessPrimaryRole.value === item.role) return ElMessage.warning('主账号不能直接删除，请先选择其他主账号')
-  item.name = ''
-  item.phone = ''
 }
 
 async function deleteTeamAccess(row) {
@@ -2616,16 +2645,27 @@ async function deleteTeamAccess(row) {
 }
 
 async function saveTeamAccess() {
-  const personnel = teamAccessForm.value
-    .map(item => ({ role:item.role, name:String(item.name || '').trim(), phone:String(item.phone || '').replace(/\D/g, '') }))
-    .filter(item => item.name || item.phone)
-  if (!personnel.length) return ElMessage.warning('请至少设置一名球队管理人员')
-  for (const item of personnel) {
-    if (!item.name || !/^1[3-9]\d{9}$/.test(item.phone)) return ElMessage.warning('请填写完整且有效的姓名和手机号')
+  const staff = selectedStaffAccount.value
+  if (!staff?._id) return
+  let existing = staffAccount(staff)
+  const form = staffAccessForm.value
+  if (form.accountType === 'none') {
+    if (existing && ['owner','pending_owner'].includes(existing.accountType)) return ElMessage.warning('请先移交主账号，再取消权限')
+    if (existing) await deleteTeamAccess(existing)
+    showTeamAccess.value = false
+    return
   }
-  const phones = personnel.map(item => item.phone)
-  if (new Set(phones).size !== phones.length) return ElMessage.warning('同一手机号不能重复分配多个球队管理身份')
-  if (!personnel.some(item => item.role === teamAccessPrimaryRole.value)) return ElMessage.warning('请选择一名主账号')
+  const phone = String(form.phone || '').replace(/\D/g, '')
+  if (!/^1[3-9]\d{9}$/.test(phone)) return ElMessage.warning('请填写本人有效的登录手机号')
+  if (!existing) existing = teamAccessRows.value.find(item => !item.staffId && item.phone === phone) || null
+  if (teamAccessRows.value.some(item => item.role !== existing?.role && item.phone === phone)) return ElMessage.warning('该手机号已分配账号，请核对工作人员')
+  const key = `staff:${staff._id}`
+  const owner = teamAccessRows.value.find(item => item.accountType === 'pending_owner') || primaryTeamAccount.value
+  if (existing && ['owner','pending_owner'].includes(existing.accountType) && form.accountType !== 'owner') return ElMessage.warning('请先为其他工作人员移交主账号')
+  const personnel = teamAccessRows.value.filter(item => item.role !== existing?.role).map(item => ({ role:item.role, name:item.name, phone:item.phone, permissions:item.permissions || ['team.view'] }))
+  personnel.push({ role:key, name:staff.name, phone, permissions:form.accountType === 'owner' || form.canManage ? ['team.view','team.manage'] : ['team.view'] })
+  const primaryRole = form.accountType === 'owner' ? key : owner?.role
+  if (!primaryRole) return ElMessage.warning('请先选择一位工作人员作为主账号')
   teamAccessSaving.value = true
   try {
     const result = await callFunction('organizerClaimInvite', {
@@ -2633,7 +2673,8 @@ async function saveTeamAccess() {
       tournamentId:sourceTournamentId.value,
       divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
       tournamentTeamId:String(tournamentRelation.value._id),
-      primaryRole:teamAccessPrimaryRole.value,
+      primaryRole,
+      changedRole:key,
       personnel
     })
     if (!result?.success) throw new Error(result?.message || '球队管理权限保存失败')
@@ -2653,6 +2694,15 @@ async function submitStaff() {
   const roleLabels = { team_leader:'领队', head_coach:'主教练', doctor:'队医', other:'工作人员' }
   staffSubmitting.value = true
   try {
+    if (staffSource.value === 'player') {
+      if (!staffPlayerId.value) throw new Error('请选择队内球员')
+      const result = await callFunction('organizerClaimInvite', { action:'addPlayerAsStaff', tournamentId:sourceTournamentId.value, divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default', tournamentTeamId:String(tournamentRelation.value._id || ''), playerId:staffPlayerId.value, type:staffForm.value.type, phone:staffForm.value.phone })
+      if (!result?.success) throw new Error(result?.message || result?.error || '添加工作人员失败')
+      ElMessage.success(result.existing ? '该球员已在工作人员中' : '已添加为工作人员，球员身份保留')
+      showAddStaff.value = false
+      await loadPlayers()
+      return
+    }
     await addRecord('coaches', {
       teamId,
       teamCode: teamId,
@@ -4556,6 +4606,18 @@ async function loadTournamentTeamContext() {
   }
 }
 
+// 读取服务端会话身份（当前生效机构与主账号标志），用于球队账号权限判定。
+// scope 的 activeOrgId 与 webLoginApi 中转注入的 __actorOrgId 同源，服务端会做最终校验。
+async function loadAccessScope() {
+  if (qaSnapshot) return
+  try {
+    const result = await callFunction('tournamentStaffAccess', { action: 'scope' })
+    if (result?.success) sessionScope.value = { activeOrgId: String(result.activeOrgId || ''), isOwner: Boolean(result.isOwner), isStaff: Boolean(result.isStaff) }
+  } catch (error) {
+    console.warn('读取会话机构身份失败:', error?.message || error)
+  }
+}
+
 function openTournamentMatches() {
   if (!canViewTournamentMatches.value) return
   router.push({ path: `/tournaments/${sourceTournamentId.value}/matches`, query: sourceDivisionId.value ? { divisionId: sourceDivisionId.value } : {} })
@@ -4571,8 +4633,8 @@ onMounted(async () => {
   await loadTeam()
   if (route.query.edit === '1') editTeam()
   if (sourceTournamentId.value) {
-    await loadTournamentTeamContext()
-    await Promise.all([loadPlayers(), ...(isTournamentStaff ? [] : [loadTeamAccess()])])
+    await Promise.all([loadTournamentTeamContext(), loadAccessScope()])
+    await Promise.all([loadPlayers(), ...(canManageTeamAccess.value ? [loadTeamAccess()] : [])])
     await loadPlayerCompetitionData()
   }
   else await loadPlayers()
@@ -4944,13 +5006,14 @@ function compressBase64(dataUrl, maxSize = 300) {
 .collaboration-status dt { margin-bottom: 14px; }
 .match-summary { padding-bottom: 12px; }
 .professional-roster-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}.professional-roster-stats article{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:end;min-height:88px;padding:14px;border:1px solid #e6ebe7;border-radius:7px;background:#fbfdfb}.professional-roster-stats span{grid-column:1/-1;color:#667269;font-size:12px}.professional-roster-stats strong{color:#167f42;font-size:26px}.professional-roster-stats small{margin-bottom:4px;color:#536158}.professional-roster-stats article.pending strong{color:#d98b15}.professional-team-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}.professional-team-actions .el-button{height:41px;margin:0}
-.team-access-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-access-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-access-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-access-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.team-access-form{display:grid;gap:12px;margin-top:18px}.team-access-form-row{display:grid;grid-template-columns:90px minmax(150px,1fr) minmax(180px,1fr) 100px 56px;gap:12px;align-items:center}.team-access-form-row>strong{color:#344139;font-size:14px}.team-access-form-row :deep(.el-radio){margin-right:0}.export-dialog-section{margin-top:18px}.export-dialog-section>strong{display:block;margin-bottom:10px;color:#344139}.export-field-checks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px}.export-field-checks :deep(.el-checkbox){margin-right:0}
+.staff-account-phone{display:block;margin-top:4px;color:#68766d;font-size:12px}.staff-permission-note{color:#68766d;font-size:13px}
+.export-dialog-section{margin-top:18px}.export-dialog-section>strong{display:block;margin-bottom:10px;color:#344139}.export-field-checks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px}.export-field-checks :deep(.el-checkbox){margin-right:0}
 .tournament-history-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.tournament-history-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}.tournament-history-heading h2{margin:0;color:#1d2b21;font-size:19px}.tournament-history-heading p{margin:7px 0 0;color:#69766d;font-size:13px}.tournament-history-grid{display:grid;grid-template-columns:1fr 1.35fr;gap:18px}.history-card{min-width:0}.history-card h3{margin:0 0 10px;color:#344139;font-size:15px}.history-card :deep(.el-table){border:1px solid #edf1ee;border-radius:6px}.history-card :deep(.el-table th.el-table__cell){background:#f8faf8}.history-card :deep(.el-table td.el-table__cell),.history-card :deep(.el-table th.el-table__cell){padding:7px 0}@media(max-width:900px){.tournament-history-grid{grid-template-columns:1fr}}
 .red-card-value{color:#d83a3a;font-weight:700}.yellow-card-value{color:#d88b03;font-weight:700}
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
-.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.compact-roster-table{max-width:882px}.staff-compact-table{max-width:512px}.review-selection-count{font-size:12px;color:#606266;white-space:nowrap}.roster-heading-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}.roster-heading-actions :deep(.el-button + .el-button){margin-left:0}.compact-roster-table :deep(.cell){padding-left:4px;padding-right:4px;font-size:12px}.compact-roster-table :deep(th .cell){white-space:nowrap}.synthetic-player-heading{gap:12px;flex-wrap:wrap}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
+.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.compact-roster-table{max-width:882px}.staff-roster-table{max-width:none}.review-selection-count{font-size:12px;color:#606266;white-space:nowrap}.roster-heading-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}.roster-heading-actions :deep(.el-button + .el-button){margin-left:0}.compact-roster-table :deep(.cell){padding-left:4px;padding-right:4px;font-size:12px}.compact-roster-table :deep(th .cell){white-space:nowrap}.synthetic-player-heading{gap:12px;flex-wrap:wrap}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .cell){display:flex;align-items:center;justify-content:center;gap:2px;padding:0 4px;white-space:nowrap}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .caret-wrapper){width:12px;flex:0 0 12px}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .sort-caret){left:1px}
@@ -4967,7 +5030,6 @@ function compressBase64(dataUrl, maxSize = 300) {
   .summary-identity { grid-column: 1 / -1; }
   .team-detail-grid { grid-template-columns: 1fr; }
   .kit-set-grid { grid-template-columns: 1fr; }
-  .team-access-form-row { grid-template-columns: 80px 1fr; }
   .export-field-checks { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 </style>

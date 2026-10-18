@@ -390,15 +390,49 @@ async function loadAccountOwnedOrManagedTeams(user, openId) {
     200
   )
   const managedIds = unique(membershipRows.filter(item => {
-    return ['active', 'accepted', 'claimed'].indexOf(String(item.status || 'active').toLowerCase()) >= 0
+    if (!['active', 'accepted', 'claimed'].includes(String(item.status || 'active').toLowerCase())) return false
+    if (Array.isArray(item.permissions) && item.permissions.length) return item.permissions.includes('team.manage')
+    return (Array.isArray(item.roles) ? item.roles : [item.role]).some(role => ['owner','team_manager','manager','coach','admin'].includes(role))
   }).map(item => String(item.teamId || '')).filter(Boolean))
   const managed = managedIds.length ? await safeGet('teams', { _id: _.in(managedIds) }, 200) : []
   const map = {}
   owned.concat(managed).forEach(team => { map[String(team._id)] = team })
-  return Object.keys(map).map(id => map[id])
+  return Object.keys(map).map(id => ({ ...map[id], _delegatedStaffAccount:!owned.some(team => String(team._id) === id) && membershipRows.some(row => String(row.teamId) === id && row.staffId && row.source === 'organizer_team_access' && ['active','accepted','claimed'].includes(String(row.status || '').toLowerCase())) }))
+}
+
+async function activateAssignedStaffAccounts(user, openId) {
+  const phone = String(user.phone || user.phoneNumber || '').replace(/\D/g, '')
+  if (!/^1[3-9]\d{9}$/.test(phone)) return
+  const rows = await safeGet('team_invitations', { inviteePhone:phone }, 101)
+  if (rows.length > 100) throw new Error('待授权球队较多，请联系管理员核对')
+  const pending = rows.filter(row => row.source === 'organizer_team_access' && row.staffId && row.type === 'team_member' && row.status === 'active' && (!row.expiresAt || toTime(row.expiresAt) > Date.now()))
+  if (!pending.length) return
+  const users = await safeGet('users', _.or([{phone}, {phoneNumber:phone}]), 3)
+  if (users.length !== 1 || String(users[0]._id) !== String(user._id)) throw new Error('登录手机号账号存在冲突，请先核对')
+  for (const invite of pending) {
+    const team = (await safeGet('teams', {_id:String(invite.teamId || '')}, 1))[0]
+    if (!team || (invite.orgId && team.orgId && String(invite.orgId) !== String(team.orgId))) continue
+    const staff = (await safeGet('coaches', {_id:String(invite.staffId)}, 1))[0]
+    const staffTeamIds = [staff?.teamId, staff?.teamCode].filter(Boolean).map(String)
+    if (!staff || !staffTeamIds.length || staffTeamIds.some(id => id !== String(team._id))) continue
+    const members = await safeGet('team_memberships', {teamId:team._id}, 200)
+    // 已有关系（含撤权记录）不在登录时恢复或覆盖。
+    if (members.some(row => String(row.userId || row.memberUserId || '') === String(user._id))) continue
+    const membershipId = crypto.createHash('sha256').update(`assigned-staff:${team._id}:${user._id}`).digest('hex').slice(0, 32)
+    await db.runTransaction(async transaction => {
+      const freshResult = await transaction.collection('team_invitations').doc(String(invite._id)).get()
+      const fresh = Array.isArray(freshResult.data) ? freshResult.data[0] : freshResult.data
+      if (!fresh || fresh.status !== 'active' || String(fresh.inviteePhone) !== phone || String(fresh.teamId) !== String(team._id) || !fresh.staffId || fresh.source !== 'organizer_team_access' || (fresh.expiresAt && toTime(fresh.expiresAt) <= Date.now())) return
+      const memberRole = fresh.memberRole === 'coach' ? 'coach' : 'member'
+      const permissions = ['team.view'].concat(Array.isArray(fresh.permissions) && fresh.permissions.includes('team.manage') ? ['team.manage'] : [])
+      await transaction.collection('team_memberships').doc(membershipId).set({data:{teamId:team._id, orgId:String(fresh.orgId || ''), userId:user._id, openId:openId || '', role:memberRole, roles:[memberRole], permissions, staffId:String(fresh.staffId), status:'accepted', source:'organizer_team_access', inviteId:String(invite._id), createTime:db.serverDate(), updateTime:db.serverDate()}})
+      await transaction.collection('team_invitations').doc(String(invite._id)).update({data:{status:'accepted', acceptedUserId:user._id, acceptedOpenId:openId || '', updateTime:db.serverDate()}})
+    })
+  }
 }
 
 async function loadWorkspaceCatalog(user, openId) {
+  await activateAssignedStaffAccounts(user, openId)
   const membershipRows = await safeGet(
     'organization_memberships',
     _.or([{ userId: user._id }, { memberUserId: user._id }, { phone: user.phone || user.phoneNumber }, { phoneNumber: user.phone || user.phoneNumber }]),
@@ -448,7 +482,7 @@ async function loadWorkspaceCatalog(user, openId) {
   // 于是账号认领球队后小程序球队页仍返回空 teams、显示「当前还没有球队」。
   // 这里只对「确实拥有或管理球队」的账号补 team.view/team.manage，不按机构整体放开。
   const accountOwnedTeams = await loadAccountOwnedOrManagedTeams(user, openId)
-  const accountOwnedTeamOrgIds = unique(accountOwnedTeams.map(item => String(item.orgId || item.organizationId || '')))
+  const accountOwnedTeamOrgIds = unique(accountOwnedTeams.filter(item => !item._delegatedStaffAccount).map(item => String(item.orgId || item.organizationId || '')))
   orgIds.forEach(orgId => {
     const membership = memberships.find(item => {
       return String(item.orgId || item.organizationId || '') === orgId
@@ -535,13 +569,15 @@ async function loadWorkspaceCatalog(user, openId) {
   const accessibleOrgIds = new Set(workspaces.filter(item => item.type === 'organization').map(item => String(item.orgId || '')))
   accessibleTeams.forEach(team => {
     const teamOrgId = String(team.orgId || '')
+    const teamMembership = acceptedTeamMemberships.find(item => String(item.teamId || '') === String(team._id))
+    const orgWorkspace = workspaces.find(item => item.type === 'organization' && String(item.orgId) === teamOrgId)
+    const staffTeamSpace = Boolean(teamMembership?.staffId && teamMembership.source === 'organizer_team_access' && !orgWorkspace?.permissions.includes('team.manage'))
     const claimStatus = String(team.claimStatus || '').toLowerCase()
     const needsTemporarySpace = !teamOrgId ||
       !accessibleOrgIds.has(teamOrgId) ||
       claimStatus === 'unclaimed' ||
-      claimStatus === 'pending'
+      claimStatus === 'pending' || staffTeamSpace
     if (!needsTemporarySpace) return
-    const teamMembership = acceptedTeamMemberships.find(item => String(item.teamId || '') === String(team._id))
     let teamPermissions = normalizePermissions(teamMembership, false)
     if (!teamPermissions.length) teamPermissions = ['event.view', 'team.view', 'team.manage']
     workspaces.push({
@@ -589,8 +625,9 @@ async function workspaceIdForManagedTeam(teamId, identity) {
   const catalog = await loadWorkspaceCatalog(identity.user, identity.openId)
   const teamOrgId = String(team.orgId || team.organizationId || team.organization_id || '')
   const organizationWorkspace = catalog.find(item => item.type === 'organization' && String(item.orgId || '') === teamOrgId)
-  if (organizationWorkspace) return organizationWorkspace.id
   const teamWorkspace = catalog.find(item => item.type === 'team' && String(item.teamId || '') === String(teamId || ''))
+  if (teamWorkspace) return teamWorkspace.id
+  if (organizationWorkspace) return organizationWorkspace.id
   return teamWorkspace ? teamWorkspace.id : ''
 }
 
@@ -2476,12 +2513,13 @@ async function acceptTeamOwnerTransferForWorkspace(event, identity) {
   const memberships = await safeGet('team_memberships', { teamId }, 200)
   const now = db.serverDate()
   const oldMembership = memberships.find(item => String(item.userId || item.memberUserId || '') === oldOwnerId)
-  const oldMemberData = { role:'member', roles:['member'], permissions:['team.view'], status:'accepted', retainedAfterOwnerTransfer:true, ownerTransferId:transferId, updateTime:now }
+  const retainedPlayerRoles = row => (Array.isArray(row?.roles) ? row.roles : [row?.role]).filter(role => ['player','guardian','parent'].includes(role))
+  const oldMemberData = { role:'member', roles:[...new Set([...retainedPlayerRoles(oldMembership),'member'])], permissions:['team.view'], status:'accepted', retainedAfterOwnerTransfer:true, ownerTransferId:transferId, updateTime:now }
   if (oldMembership && oldMembership._id) await db.collection('team_memberships').doc(String(oldMembership._id)).update({ data:oldMemberData })
   else await db.collection('team_memberships').add({ data:{ ...oldMemberData, teamId, orgId:String(team.orgId || ''), userId:oldOwnerId, source:'owner_transfer_retained_member', createTime:now } })
   const newOwnerId = String(identity.user._id || '')
   const newMembership = memberships.find(item => String(item.userId || item.memberUserId || '') === newOwnerId)
-  const newOwnerData = { teamId, orgId:String(team.orgId || ''), userId:newOwnerId, phone, role:'owner', roles:['owner'], permissions:['team.view','team.manage'], status:'accepted', source:'team_owner_transfer', ownerTransferId:transferId, updateTime:now }
+  const newOwnerData = { teamId, orgId:String(team.orgId || ''), userId:newOwnerId, phone, role:'owner', roles:[...new Set([...retainedPlayerRoles(newMembership),'owner'])], permissions:['team.view','team.manage'], status:'accepted', source:'team_owner_transfer', ownerTransferId:transferId, updateTime:now }
   if (newMembership && newMembership._id) await db.collection('team_memberships').doc(String(newMembership._id)).update({ data:newOwnerData })
   else await db.collection('team_memberships').add({ data:{ ...newOwnerData, createTime:now } })
   await db.collection('teams').doc(teamId).update({ data:{ ownerId:newOwnerId, ownerUserId:newOwnerId, claimedByUserId:newOwnerId, ownerPhone:phone, ownerName:String(transfer.targetName || ''), claimStatus:'claimed', updateTime:now } })
@@ -2682,6 +2720,7 @@ async function teamMemberInviteForWorkspace(event, identity) {
   const lookup = key.indexOf('tm_') === 0 ? { token: key } : { _id: key }
   const invite = (await safeGet('team_invitations', lookup, 1))[0]
   if (!invite || String(invite.type || '') !== 'team_member') throw new Error('邀请不存在或已失效')
+  if (invite.inviteePhone && String(invite.inviteePhone).replace(/\D/g, '') !== String(identity.user.phone || identity.user.phoneNumber || '').replace(/\D/g, '')) throw new Error('此邀请仅限指定手机号本人接收')
   if (['active', 'pending'].indexOf(String(invite.status || 'pending')) < 0) throw new Error('邀请不存在或已停用')
   if (invite.expiresAt && toTime(invite.expiresAt) > 0 && toTime(invite.expiresAt) <= Date.now()) throw new Error('邀请已过期，请让球队管理员重新邀请')
   const teamId = String(invite.teamId || '')
@@ -2716,16 +2755,20 @@ async function acceptTeamMemberInviteForWorkspace(event, identity) {
   const memberships = await safeGet('team_memberships', { teamId: preview.team.id }, 200)
   const existing = memberships.find(item => String(item.userId || item.memberUserId || '') === String(identity.user._id))
   const now = db.serverDate()
+  const invitePermissions = ['team.view'].concat(Array.isArray(invite.permissions) && invite.permissions.includes('team.manage') ? ['team.manage'] : [])
+  const inviteMemberRole = invite.memberRole === 'coach' ? 'coach' : 'member'
   if (existing) {
-    await db.collection('team_memberships').doc(String(existing._id)).update({ data: { status: 'accepted', updateTime: now } })
+    await db.collection('team_memberships').doc(String(existing._id)).update({ data: { status: 'accepted', role:inviteMemberRole, roles:[inviteMemberRole], permissions:invitePermissions, staffId:String(invite.staffId || ''), updateTime: now } })
   } else {
     await db.collection('team_memberships').add({ data: {
       teamId: preview.team.id,
       orgId: String(invite.orgId || ''),
       userId: identity.user._id,
       openId: identity.openId || '',
-      role: String(invite.memberRole || 'member'),
-      roles: [String(invite.memberRole || 'member')],
+      role: inviteMemberRole,
+      roles: [inviteMemberRole],
+      permissions: invitePermissions,
+      staffId: String(invite.staffId || ''),
       status: 'accepted',
       source: 'team_member_invite',
       inviteId: preview.invitation.id,

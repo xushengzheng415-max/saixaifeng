@@ -74,6 +74,7 @@ async function canManageMiniTeam(team, actor) {
     if (!['active', 'accepted', 'claimed'].includes(status)) return false
     const memberValues = [item.userId, item.memberUserId, item.ownerId, item.openId].filter(Boolean).map(String)
     if (!identities.some(value => memberValues.includes(value))) return false
+    if (Array.isArray(item.permissions) && item.permissions.length) return item.permissions.includes('team.manage')
     const roles = (item.roles || (item.role ? [item.role] : [])).map(value => String(value).toLowerCase())
     return roles.length === 0 || roles.some(role => ['owner', 'team_manager', 'manager', 'coach', 'admin', '负责人', '管理员', '教练'].includes(role))
   })
