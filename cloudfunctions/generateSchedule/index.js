@@ -275,7 +275,8 @@ async function ensureConfirmedDivisionPairings(event,tournament,actor) {
   // Existing legacy or published fixtures are authoritative. This entry never resets them.
   if(existing.some(match=>match.pairingGenerationSource!=='confirmed-draw-v1'))return {success:true,existing:true,addedCount:0,matchCount:existing.length,divisionId:divisionId}
   var plan=await competitionPlanState(tournament,divisionId)
-  if(plan.readError || plan.locked)return {success:false,message:'竞赛方案已锁定或状态读取失败，不能新增对阵'}
+  if(plan.readError)return {success:false,message:'竞赛方案状态读取失败，请刷新重试'}
+  if(plan.locked)return existing.length ? {success:true,existing:true,addedCount:0,matchCount:existing.length,divisionId:divisionId} : {success:false,message:'竞赛方案已锁定，不能新增对阵'}
   var records=await Promise.all(['tournament_groups','tournament_bracket','tournament_league_tables'].map(name=>readConfirmedPairingCollection(name,tournamentId,divisionId)))
   var built
   try { built=confirmedPairings.buildConfirmedPairings({tournamentId:tournamentId,division:state.division,groupRecords:records[0],bracketRecords:records[1],leagueRecords:records[2],template:configuredPairingTemplate(state.division,tournament)}) }

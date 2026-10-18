@@ -10,7 +10,7 @@ function formatOf(division) {
   return ({cup:'groups',tournament:'knockout',knockout:'knockout',league:'league',hybrid:'hybrid'})[value] || ''
 }
 function confirmed(record) { return record && (record.status === 'published' || record.status === 'confirmed' && Boolean(record.confirmedAt)) }
-function latest(records) { return [...records].sort((a,b) => String(b.confirmedAt || b.updateTime || b.createTime || '').localeCompare(String(a.confirmedAt || a.updateTime || a.createTime || '')))[0] }
+function latest(records) { const stamp=row=>new Date(row.confirmedAt || row.updateTime || row.createTime || 0).getTime() || 0;return [...records].sort((a,b)=>stamp(b)-stamp(a))[0] }
 function team(value) { return value && {teamId:String(value.teamId || value.id || ''),teamName:String(value.teamName || value.name || '')} }
 function isTeam(value) { return value && value.teamId && !value.bye && !String(value.teamId).startsWith('bye-') }
 function rankingMode(division) {
@@ -49,6 +49,7 @@ function buildConfirmedPairings({tournamentId,division,groupRecords=[],bracketRe
     const summary=latest(records.filter(row=>Array.isArray(row.groups) && row.groups.length))
     groups=summary ? summary.groups : records.filter(row=>row.groupName || row.groupCode).map(row=>({groupName:row.groupName || `${row.groupCode}组`,groupCode:row.groupCode,teams:row.teams || []}))
     groups=groups.map(group=>({...group,teams:(group.teams || []).filter(isTeam).map(team)})).sort((a,b)=>String(a.groupName || a.name).localeCompare(String(b.groupName || b.name)))
+    if(groups.some(group=>group.teams.length<2))throw new Error('部分小组不足两支球队，请先核对分组')
     participants=groups.flatMap(group=>group.teams)
     if(template) {
       const built=templates.buildPairingsFromTemplate(tournamentId,divisionId,divisionName,groups,template)
