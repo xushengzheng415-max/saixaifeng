@@ -75,14 +75,26 @@
             </el-radio-group>
           </el-form-item>
           <el-form-item label="处理备注（仅内部可见，不发给用户）">
-            <el-input v-model.trim="form.note" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="例如：已核对比赛记录并补录助攻，已电话联系反馈人" />
+            <el-input v-model.trim="form.note" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：已核对比赛记录并补录助攻，已电话联系反馈人" />
           </el-form-item>
         </el-form>
-        <p class="fb-hint">状态变更会记入平台内容审计日志，便于回溯处理过程。</p>
+
+        <div v-if="current.reply" class="fb-reply-block">
+          <div class="fb-reply-head"><strong>已回复用户</strong><small>{{ formatTime(current.replyAt) }}</small></div>
+          <p class="fb-reply-text">{{ current.reply }}</p>
+        </div>
+
+        <el-form label-position="top" class="fb-form">
+          <el-form-item :label="'回复用户（通过服务号模板消息推送给反馈人，最长500字）'">
+            <el-input v-model.trim="replyText" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="输入回复内容，提交后将通过服务号通知反馈人查看" />
+          </el-form-item>
+        </el-form>
+        <p class="fb-hint">状态变更与回复均记入平台内容审计日志；回复会通过服务号模板消息推送给反馈人。</p>
       </template>
       <template #footer>
         <el-button @click="drawerVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submitHandle">保存处理结果</el-button>
+        <el-button type="success" :loading="replying" @click="submitReply">回复并通知用户</el-button>
       </template>
     </el-drawer>
   </section>
@@ -108,6 +120,7 @@ const handleStatus = [
 
 const loading = ref(false)
 const saving = ref(false)
+const replying = ref(false)
 const rows = ref([])
 const total = ref(0)
 const page = ref(1)
@@ -118,6 +131,7 @@ const contactKeyword = ref('')
 const drawerVisible = ref(false)
 const current = ref(null)
 const form = reactive({ status: 'processing', note: '' })
+const replyText = ref('')
 
 const statusTabs = computed(() => [
   { key: '', label: '全部', value: counts.all },
@@ -181,6 +195,7 @@ function openHandle(row) {
   current.value = row
   form.status = row.status === 'done' ? 'done' : row.status === 'processing' ? 'processing' : 'processing'
   form.note = row.note || ''
+  replyText.value = ''
   drawerVisible.value = true
 }
 
@@ -200,6 +215,36 @@ async function submitHandle() {
     ElMessage.error(error.message || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+async function submitReply() {
+  if (!current.value || replying.value) return
+  const reply = replyText.value.trim()
+  if (!reply) {
+    ElMessage.warning('请输入回复内容')
+    return
+  }
+  replying.value = true
+  try {
+    const result = await call('serviceFeedbackReply', {
+      feedbackId: current.value.feedbackId,
+      reply
+    })
+    const notify = result.notify || {}
+    if (notify.success === true) {
+      ElMessage.success('回复已发送，用户将收到服务号通知')
+    } else if (notify.skipped) {
+      ElMessage.success('回复已保存' + (notify.reason ? `（${notify.reason}）` : ''))
+    } else {
+      ElMessage.warning('回复已保存，但服务号通知推送失败：' + (notify.errmsg || notify.error || '未知原因'))
+    }
+    drawerVisible.value = false
+    await load()
+  } catch (error) {
+    ElMessage.error(error.message || '回复失败')
+  } finally {
+    replying.value = false
   }
 }
 
@@ -241,6 +286,11 @@ onMounted(load)
 .fb-detail-block p{margin:8px 0 0;color:#25322b;font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
 .fb-detail-meta{margin-top:16px}
 .fb-form{margin-top:20px}
+.fb-reply-block{margin-top:16px;padding:14px 16px;border:1px solid #d4e8dc;border-radius:12px;background:#f0f9f3}
+.fb-reply-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.fb-reply-head strong{color:#176d43;font-size:13px}
+.fb-reply-head small{color:#8b978f;font-size:12px}
+.fb-reply-text{margin:0;color:#25322b;font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
 .fb-hint{margin:0;color:#8b978f;font-size:12px}
 @media(max-width:760px){.fb-stats{grid-template-columns:repeat(2,1fr)}.fb-contact{width:100%}.fb-total{margin-left:0}}
 </style>
