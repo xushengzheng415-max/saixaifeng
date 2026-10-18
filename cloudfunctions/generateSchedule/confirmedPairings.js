@@ -115,7 +115,7 @@ function buildConfirmedPairings({tournamentId,division,groupRecords=[],bracketRe
     const number=Number(match.matchNo || match.matchIndex || index+1)
     if(numbers.has(number) || number!==index+1)throw new Error('对阵模板场序不连续，请核对模板')
     numbers.add(number)
-    Object.assign(match,{tournamentId,divisionId,divisionName,matchNo:number,matchIndex:number,groupName:match.group || match.pool || '',matchDate:'',matchTime:'',venue:'',date:'',startTime:'',timeSlot:'',scheduleStatus:'unassigned',scheduleGenerated:false,schedulePublished:false,pairingStatus:'confirmed',pairingGenerationSource:VERSION,matchFormat:division.matchFormat || '',homeScore:null,awayScore:null})
+    Object.assign(match,{tournamentId,divisionId,divisionName,scheduleType:({groups:'tournament',knockout:'cup',league:'league',hybrid:'combined'})[format],matchNo:number,matchIndex:number,groupName:match.group || match.pool || '',matchDate:'',matchTime:'',venue:'',date:'',startTime:'',timeSlot:'',scheduleStatus:'unassigned',scheduleGenerated:false,schedulePublished:false,pairingStatus:'confirmed',pairingGenerationSource:VERSION,matchFormat:division.matchFormat || '',homeScore:null,awayScore:null})
     for(const side of ['home','away']) {
       const source=match[`${side}Source`]
       if(source?.type==='group_rank') {
