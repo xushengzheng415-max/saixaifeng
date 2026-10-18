@@ -91,10 +91,10 @@
             <el-table-column label="职务" min-width="150"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag></template></el-table-column>
             <el-table-column label="出生日期" width="94"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="籍贯" width="50" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
-            <el-table-column v-if="!isTournamentStaff && sourceTournamentId" label="账号" min-width="135"><template #default="{ row }">{{ staffAccountLabel(row) }}<small v-if="staffAccount(row)?.phone" class="staff-account-phone">{{ staffAccount(row).phone }}</small></template></el-table-column>
-            <el-table-column v-if="!isTournamentStaff && sourceTournamentId" label="操作权限" min-width="125"><template #default="{ row }">{{ staffPermissionLabel(row) }}</template></el-table-column>
-            <el-table-column v-if="!isTournamentStaff && sourceTournamentId" label="状态" width="120"><template #default="{ row }">{{ staffAccount(row)?.status || '未授权' }}</template></el-table-column>
-            <el-table-column v-if="!isTournamentStaff && !isReadOnlyTournament && sourceTournamentId" label="操作" width="100"><template #default="{ row }"><el-button link type="primary" :disabled="!tournamentRelation?._id" @click="openTeamAccess(row)">分配权限</el-button></template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="账号" min-width="135"><template #default="{ row }">{{ isTournamentStaff ? '—' : staffAccountLabel(row) }}<small v-if="!isTournamentStaff && staffAccount(row)?.phone" class="staff-account-phone">{{ staffAccount(row).phone }}</small></template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="操作权限" min-width="125"><template #default="{ row }">{{ isTournamentStaff ? '—' : staffPermissionLabel(row) }}</template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="状态" width="120"><template #default="{ row }">{{ isTournamentStaff ? '主账号设置' : (staffAccount(row)?.status || '未授权') }}</template></el-table-column>
+            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="100"><template #default="{ row }"><span :title="isTournamentStaff ? '需由赛事所属机构主账号设置' : ''"><el-button link type="primary" :disabled="isTournamentStaff || !tournamentRelation?._id" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
           </el-table>
         </section>
         <section class="synthetic-player-panel">
