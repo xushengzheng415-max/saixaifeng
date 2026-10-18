@@ -68,6 +68,7 @@
 <script setup>
 import { computed, getCurrentInstance, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { knockoutSeedOrder } from '../../utils/knockoutDraw.mjs'
 import { isDemoMode } from '../../utils/demoMode'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, Check, CircleCheckFilled, DocumentAdd, Download, Grid, List, Lock, Picture, Rank, Refresh, Search, SwitchButton, Trophy, WarningFilled } from '@element-plus/icons-vue'
@@ -301,11 +302,13 @@ function exportResult() {
   const csv = [['阶段/小组', '签位/排名', '球队'], ...rows].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n')
   const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })); link.download = `${divisionName.value}-${formatTitle.value}.csv`; link.click(); URL.revokeObjectURL(link.href)
 }
-function publishConfirmedCupProjection() {
-  if(format.value!=='cup')return
+function publishConfirmedProjection() {
+  if(!['cup','league','hybrid'].includes(format.value))return
   const name=`sxf-draw-screen-${tournamentId}-${divisionId.value}`
-  const slots=knockoutSlots.value.map(slot=>slot.teamId ? {id:slot.teamId,name:slot.name,logo:slot.logo || slot.logoUrl || ''} : null)
-  const payload={format:'cup',stage:'result',confirmed:true,capacity:bracketCapacity.value,slots,teams:slots.filter(Boolean),assignedCount:slots.filter(Boolean).length,tournamentName:tournament.value.name,divisionName:divisionName.value,updatedAt:new Date().toISOString()}
+  const slots=format.value==='cup' ? knockoutSlots.value.map(slot=>slot.teamId ? {id:slot.teamId,name:slot.name,logo:slot.logo || slot.logoUrl || ''} : null) : []
+  const ordered=format.value==='cup' ? slots.filter(Boolean) : teams.value.map(team=>({id:team.id,name:team.name,logo:team.logo || team.logoUrl || ''}))
+  const assignments=(format.value==='cup'?slots:ordered).flatMap((team,index)=>team?[{teamId:team.id,teamName:team.name,groupIndex:0,position:index+1}]:[])
+  const payload={format:format.value,stage:'result',confirmed:true,capacity:bracketCapacity.value,advanceCount:format.value==='hybrid'?advanceCount.value:0,seedOrder:format.value==='hybrid'?knockoutSeedOrder(advanceCount.value):[],slots,teams:ordered,assignments,assignedCount:ordered.length,tournamentName:tournament.value.name,divisionName:divisionName.value,updatedAt:new Date().toISOString()}
   try{const previous=JSON.parse(localStorage.getItem(name) || '{}');localStorage.setItem(name,JSON.stringify({...previous,...payload}))}catch(error){console.warn('保存抽签投屏状态失败',error)}
   if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel(name);channel.postMessage(payload);setTimeout(()=>channel.close(),0)}
 }
@@ -327,7 +330,7 @@ async function confirm() {
       if (!pendingRecords.length) throw new Error('未找到可确认的签位草稿，请刷新后重试')
       for (const record of pendingRecords) await updateRecord(collection, record._id, { status: 'confirmed', confirmedAt: new Date(), updateTime: new Date() })
       resultStatus.value = 'confirmed'
-      publishConfirmedCupProjection()
+      publishConfirmedProjection()
     }
     ElMessage.success('当前组别抽签已完成')
     router.push({ path: `/tournaments/${tournamentId}/draw`, query: visualQa ? { visualQa: '1' } : {} })
@@ -339,16 +342,8 @@ async function generatePairingsAndViewPairings() {
   if (!isConfirmed.value || pairingGenerating.value) return
   pairingGenerating.value = true
   try {
-    if(isDemoMode(tournamentId)) {
-      const result=await callFunction('generateSchedule',{action:'prepareDrawPreview',tournamentId,divisionId:divisionId.value,divisionName:divisionName.value})
-      if(!result?.success)throw new Error(result?.message || '预览生成失败')
-    } else {
-      const existing=await queryList('matches',{where:{tournamentId,divisionId:divisionId.value},limit:1000})
-      if(!(existing || []).some(match=>match.status!=='cancelled')) {
-        const result=await callFunction('generateSchedule',{action:'generatePairings',tournamentId,divisionId:divisionId.value,divisionName:divisionName.value})
-        if(!result?.success)throw new Error(result?.message || '预览生成失败')
-      }
-    }
+    const result=await callFunction('generateSchedule',{action:'generatePairings',ensureOnly:true,tournamentId,divisionId:divisionId.value},120000)
+    if(!result?.success)throw new Error(result?.message || '对阵生成失败')
     router.push({path:`/tournaments/${tournamentId}/matches`,query:{divisionId:divisionId.value,divisionName:divisionName.value,view:'workbench'}})
 
   } catch (error) { ElMessage.error(error.message || '生成对阵失败') } finally { pairingGenerating.value = false }

@@ -2,6 +2,7 @@
 import { calculateMatchEventScore } from '../../../cloudfunctions/dataCenter/shared/match-events.mjs'
 import standings from '../../../cloudfunctions/dataCenter/shared/standings.cjs'
 import pairingTemplates from '../../../cloudfunctions/generateSchedule/pairingTemplates.js'
+import confirmedPairings from '../../../cloudfunctions/generateSchedule/confirmedPairings.js'
 import fixtureCatalog from '../data/syntheticTeamCatalog.mjs'
 export const DEMO_ORG_ID = 'demo-organization'
 export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
@@ -146,6 +147,22 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     const { action, tournamentId, divisionId } = params
     const tournament = get('tournaments', tournamentId)
     const selected = row => row.tournamentId === tournamentId && (!divisionId || row.divisionId === divisionId)
+    if(action==='generatePairings' && params.ensureOnly===true) {
+      const division=get('divisions',divisionId)
+      if(division.tournamentId!==tournamentId) return fail('组别不属于当前赛事')
+      const existing=rows('matches').filter(row=>selected(row) && row.status!=='cancelled' && !row.demoLegacyPairing)
+      if(existing.some(row=>row.pairingGenerationSource!=='confirmed-draw-v1'))return {success:true,existing:true,addedCount:0,matchCount:existing.length}
+      const built=confirmedPairings.buildConfirmedPairings({tournamentId,division,groupRecords:rows('tournament_groups').filter(selected),bracketRecords:rows('tournament_bracket').filter(selected),leagueRecords:rows('tournament_league_tables').filter(selected),template:division.pairingTemplate || division.pairingTemplateSnapshot || division.rulesSnapshot?.pairingTemplate || null})
+      const approved=rows('tournament_teams').filter(row=>selected(row) && row.status==='approved').map(row=>row.teamId)
+      if(approved.length!==built.participants.length || built.participants.some(team=>!approved.includes(team.teamId)))return fail('抽签球队与已通过球队不一致，请重新核对')
+      if(existing.length)return {success:true,existing:true,addedCount:0,matchCount:existing.length}
+      const minutes=Number(division.matchMinutes || division.rulesSnapshot?.matchMinutes || 0)
+      if(!minutes)return fail('当前组别缺少已定版比赛时长，请先完善竞赛规则')
+      built.matches.forEach(row=>add('matches',{...row,durationMinutes:minutes,events:[],matchEventRevision:0}))
+      update('divisions',divisionId,{pairingGenerated:true,pairingTemplateVersion:built.version})
+      update('tournaments',tournamentId,{pairingGenerated:true})
+      return {success:true,addedCount:built.matches.length,matchCount:built.matches.length,pairingOnly:true}
+    }
     if (['prepareDrawPreview','repairLegacyGroupPairings'].includes(action) && tournament.scheduleGenerated) {
       const legacy=rows('matches').filter(row=>selected(row) && !row.demoLegacyPairing && row.synthetic && row.isTest && row.status==='scheduled' && row.matchDate && row.matchTime && row.venue && !row.scheduleGenerated && !row.scheduleAssignmentSource && !(row.events || []).length)
       for(const row of legacy) update('matches',row._id,{demoLegacyScheduleBackup:{matchDate:row.matchDate,matchTime:row.matchTime,venue:row.venue,reason:'legacy-demo-auto-fill'},matchDate:'',matchTime:'',venue:'',scheduleStatus:'unassigned',scheduleGenerated:false})

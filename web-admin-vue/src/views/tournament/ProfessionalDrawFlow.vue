@@ -1141,6 +1141,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { knockoutCapacity, knockoutSeedOrder } from "../../utils/knockoutDraw.mjs";
 import {
   Back,
   DocumentChecked,
@@ -1697,7 +1698,13 @@ const screenAddressLabel = computed(() => screenAddress.value.replace(/^https:\/
 const projectionChannelName = computed(() => `sxf-draw-screen-${tournamentId}-${String(activeDivision.value.id || activeDivision.value._id || "default")}`);
 let projectionChannel = null;
 function projectionPayload(stage = "intro", extra = {}) {
-  return { stage, tournamentName: tournament.value.name || "足球赛事", divisionName: activeDivision.value.name || "抽签仪式", teams: teams.value, assignments: drawAssignments.value, screen: screenConfig.value, assignedCount: drawAssignments.value.length, updatedAt: new Date().toISOString(), ...extra };
+  const format=({group:'tournament',league:'league',knockout:'cup',hybrid:'hybrid'})[drawMode.value] || 'tournament';
+  const assignments=format==='tournament' ? drawAssignments.value : drawAssignments.value.map(item=>({...item,groupIndex:0,position:Number(item.groupIndex || 0)*groupCapacity.value+Number(item.position)}));
+  const capacity=format==='cup' ? knockoutCapacity(slotTeams.value.length) : 0;
+  const slots=format==='cup' ? Array(capacity).fill(null) : [];
+  if(format==='cup')for(const item of assignments){const team=teams.value.find(row=>String(row.id)===String(item.teamId));if(team && item.position>=1 && item.position<=capacity)slots[item.position-1]={id:team.id,name:team.name,logo:team.logo || ''};}
+  const advanceCount=Number(config.value.advanceCount || activeDivision.value.advanceCount || 0);
+  return {format,capacity,slots,advanceCount,seedOrder:advanceCount>=2?knockoutSeedOrder(advanceCount):[],confirmed:['confirmed','published'].includes(config.value.drawStatus),stage,tournamentName:tournament.value.name || '足球赛事',divisionName:activeDivision.value.name || '抽签仪式',teams:slotTeams.value,assignments,screen:screenConfig.value,assignedCount:drawAssignments.value.length,updatedAt:new Date().toISOString(),...extra};
 }
 function broadcastProjection(stage = "intro", extra = {}) {
   const payload = projectionPayload(stage, extra);
