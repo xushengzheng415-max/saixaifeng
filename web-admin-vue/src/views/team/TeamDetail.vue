@@ -166,7 +166,7 @@
           </el-table>
         </section>
         <section v-if="isProfessionalTournamentTeam" class="collaboration-timeline"><h2>协作流程进度</h2><ol><li v-for="step in professionalTimeline" :key="step.title"><span><el-icon><CircleCheckFilled /></el-icon></span><div><strong>{{ step.title }}</strong><time>{{ step.time }}</time><small>{{ step.description }}</small></div></li></ol></section>
-        <el-button v-else class="view-results" type="success" plain @click="openTournamentMatches"><el-icon><SwitchButton /></el-icon>查看赛程赛果</el-button>
+        <el-button v-else-if="canViewTournamentMatches" class="view-results" type="success" plain @click="openTournamentMatches"><el-icon><SwitchButton /></el-icon>查看赛程赛果</el-button>
         <el-alert v-if="!isTeamDataWorkspace" title="报名表上传成功后直接形成本届正式名单；球员仍须完成人证核验后才能进入比赛阵容。" type="success" :closable="false" show-icon />
       </main>
     </template>
@@ -1295,6 +1295,13 @@ async function uploadScopedTeamFile(cloudPath, file, options = {}) {
   return { ...uploaded, fileID: uploaded.fileId }
 }
 const fromRegistration = computed(() => route.query.from === 'registration')
+const canViewTournamentMatches = computed(() => {
+  if (!isTournamentStaff) return true
+  try {
+    const permissions = JSON.parse(sessionStorage.getItem('sxfStaffPermissions') || '[]')
+    return Array.isArray(permissions) && permissions.includes('event.matches')
+  } catch { return false }
+})
 const isReadOnlyTournament = computed(() => Boolean(sourceTournamentId.value) && !fromRegistration.value)
 const isTeamDataWorkspace = computed(() => Boolean(sourceTournamentId.value) && !fromRegistration.value)
 const isProfessionalTournamentTeam = computed(() => route.query.mode === 'professional' || sourceDivisionId.value === 'qa-division-u16')
@@ -4526,7 +4533,9 @@ async function loadTournamentTeamContext() {
     const [event, relations, matches] = await Promise.all([
       queryById('tournaments', sourceTournamentId.value),
       queryList('tournament_teams', { where: { tournamentId: sourceTournamentId.value, teamId } }),
-      queryList('matches', { where: { tournamentId: sourceTournamentId.value }, limit: 500 })
+      !fromRegistration.value && canViewTournamentMatches.value
+        ? queryList('matches', { where: { tournamentId: sourceTournamentId.value }, limit: 500 })
+        : Promise.resolve([])
     ])
     tournamentContext.value = Array.isArray(event) ? event[0] || {} : event || {}
     await resolveTournamentLogo()
@@ -4548,6 +4557,7 @@ async function loadTournamentTeamContext() {
 }
 
 function openTournamentMatches() {
+  if (!canViewTournamentMatches.value) return
   router.push({ path: `/tournaments/${sourceTournamentId.value}/matches`, query: sourceDivisionId.value ? { divisionId: sourceDivisionId.value } : {} })
 }
 
