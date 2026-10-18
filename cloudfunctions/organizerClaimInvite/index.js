@@ -158,6 +158,7 @@ function staffAccountId(role) { return String(role || '').startsWith('staff:') ?
 function standardTeamAccessRole(role) { return Object.prototype.hasOwnProperty.call(TEAM_ACCESS_ROLE_LABELS, role) }
 function teamAccountPermissions(value) { return Array.isArray(value) && value.includes('team.manage') ? ['team.view', 'team.manage'] : ['team.view'] }
 function playerMemberRoles(row) { return (Array.isArray(row && row.roles) ? row.roles : [row && row.role]).filter(role => ['player','guardian','parent'].includes(role)) }
+function otherMemberPermissions(row) { return (Array.isArray(row && row.permissions) ? row.permissions : []).filter(permission => typeof permission === 'string' && !permission.startsWith('team.')) }
 function staffBelongsToTeam(staff, teamId) {
   const ids = [staff && staff.teamId, staff && staff.teamCode].filter(Boolean).map(String)
   return ids.length > 0 && ids.every(id => id === String(teamId))
@@ -361,7 +362,8 @@ async function revokeTeamAccessPhone(context, phone, protectedOwnerId) {
     const samePhone = normalizeClaimPhone(membership.phone) === normalizedPhone
     if ((!sameUser && !samePhone) || (protectedOwnerId && memberUserId === String(protectedOwnerId))) continue
     const remainingRoles = playerMemberRoles(membership)
-    await db.collection('team_memberships').doc(String(membership._id)).update({ data:{ status:remainingRoles.length ? 'accepted' : 'revoked', role:remainingRoles[0] || 'member', roles:remainingRoles, permissions:remainingRoles.length ? ['team.view'] : [], revokedAt:db.serverDate(), updateTime:db.serverDate() } })
+    const remainingPermissions = [...otherMemberPermissions(membership), ...(remainingRoles.length ? ['team.view'] : [])]
+    await db.collection('team_memberships').doc(String(membership._id)).update({ data:{ status:remainingRoles.length || remainingPermissions.length ? 'accepted' : 'revoked', role:remainingRoles[0] || 'member', roles:remainingRoles, permissions:remainingPermissions, revokedAt:db.serverDate(), updateTime:db.serverDate() } })
   }
   const pendingInvites = await safeGet('team_invitations', { teamId:context.teamId, type:'team_member', inviteePhone:normalizedPhone, status:'active' }, 50)
   for (const pending of pendingInvites) {
@@ -399,6 +401,8 @@ async function saveTeamAccess(event, identity) {
   const requestedPrimaryRole = String(event.primaryRole || '').trim()
   const primary = personnel.find(item => item.role === requestedPrimaryRole)
   if (!primary) throw new Error('请选择一位工作人员作为主账号')
+  const changedRole = String(event.changedRole || '')
+  if (changedRole && !personnel.some(person => person.role === changedRole)) throw new Error('本次工作人员账号不存在')
   const candidates = personnel.map(item => ({ ...item, accountType:item.role === primary.role ? 'owner' : 'member' }))
   const resolved = []
   for (const person of candidates) resolved.push({ person, user:await userByPhone(person.phone) })
@@ -455,10 +459,11 @@ async function saveTeamAccess(event, identity) {
     const user = item.user
     const isPrimary = person.role === primary.role
     if (isPrimary && (!currentOwnerId || transferPending)) continue
+    if (changedRole && person.role !== changedRole && !isPrimary) continue
     if (user) {
       const existing = memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id))
       const memberRole = isPrimary ? 'owner' : (person.role === 'head_coach' ? 'coach' : 'member')
-      const permissions = isPrimary ? ['team.view','team.manage'] : teamAccountPermissions(person.permissions)
+      const permissions = [...new Set([...otherMemberPermissions(existing), ...(isPrimary ? ['team.view','team.manage'] : teamAccountPermissions(person.permissions))])]
       const data = { teamId:context.teamId, orgId:context.actorOrgId, userId:user._id, role:memberRole, roles:[...new Set([...playerMemberRoles(existing), memberRole])], permissions, staffId:person.staffId || '', status:'accepted', phone:person.phone, source:'organizer_team_access', updateTime:now }
       if (existing && existing._id) await db.collection('team_memberships').doc(String(existing._id)).update({ data })
       else await db.collection('team_memberships').add({ data:{ ...data, createTime:now } })

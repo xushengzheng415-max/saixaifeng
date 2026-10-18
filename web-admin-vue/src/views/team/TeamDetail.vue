@@ -2650,6 +2650,7 @@ async function saveTeamAccess() {
       divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',
       tournamentTeamId:String(tournamentRelation.value._id),
       primaryRole,
+      changedRole:key,
       personnel
     })
     if (!result?.success) throw new Error(result?.message || '球队管理权限保存失败')
