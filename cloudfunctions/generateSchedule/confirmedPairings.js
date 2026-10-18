@@ -117,6 +117,12 @@ function buildConfirmedPairings({tournamentId,division,groupRecords=[],bracketRe
     Object.assign(match,{tournamentId,divisionId,divisionName,matchNo:number,matchIndex:number,groupName:match.group || match.pool || '',matchDate:'',matchTime:'',venue:'',date:'',startTime:'',timeSlot:'',scheduleStatus:'unassigned',scheduleGenerated:false,schedulePublished:false,pairingStatus:'confirmed',pairingGenerationSource:VERSION,matchFormat:division.matchFormat || '',homeScore:null,awayScore:null})
     for(const side of ['home','away']) {
       const source=match[`${side}Source`]
+      if(source?.type==='group_rank') {
+        const group=groups.find(group=>String(group.groupName || group.name)===String(source.groupName))
+        source.possibleTeamIds=(group?.teams || participants).map(team=>team.teamId)
+        const preceding=matches.filter(candidate=>Number(candidate.matchNo || candidate.matchIndex)<number && (source.groupName==='联赛' ? candidate.phase==='league' : candidate.phase==='group' && String(candidate.group || candidate.pool || '')===String(source.groupName)))
+        match.dependencyMatchNos=[...new Set([...(match.dependencyMatchNos || []),...preceding.map(candidate=>Number(candidate.matchNo || candidate.matchIndex))])]
+      }
       if(['match_winner','match_loser'].includes(source?.type) && (!source.matchNo || source.matchNo>=number))throw new Error('晋级来源场序无效，请核对模板')
       if(source && ['match_winner','match_loser'].includes(source.type))match.dependencyMatchNos=[...new Set([...(match.dependencyMatchNos || []),source.matchNo])]
     }

@@ -156,7 +156,9 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       const approved=rows('tournament_teams').filter(row=>selected(row) && row.status==='approved').map(row=>row.teamId)
       if(approved.length!==built.participants.length || built.participants.some(team=>!approved.includes(team.teamId)))return fail('抽签球队与已通过球队不一致，请重新核对')
       if(existing.length)return {success:true,existing:true,addedCount:0,matchCount:existing.length}
-      built.matches.forEach(row=>add('matches',{...row,durationMinutes:Number(division.matchMinutes || division.rulesSnapshot?.matchMinutes || 50),events:[],matchEventRevision:0}))
+      const minutes=Number(division.matchMinutes || division.rulesSnapshot?.matchMinutes || 0)
+      if(!minutes)return fail('当前组别缺少已定版比赛时长，请先完善竞赛规则')
+      built.matches.forEach(row=>add('matches',{...row,durationMinutes:minutes,events:[],matchEventRevision:0}))
       update('divisions',divisionId,{pairingGenerated:true,pairingTemplateVersion:built.version})
       update('tournaments',tournamentId,{pairingGenerated:true})
       return {success:true,addedCount:built.matches.length,matchCount:built.matches.length,pairingOnly:true}

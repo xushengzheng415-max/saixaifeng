@@ -168,7 +168,8 @@ import { isDemoMode } from '../../utils/demoMode'
 import { calculatePreMatchSuspensions } from '../../utils/refereeSuspension'
 
 const route = useRoute(), router = useRouter(), tournamentId = String(route.params.id || '')
-const scheduleImportWriteEnabled = isDemoMode(tournamentId) || import.meta.env.VITE_ENABLE_SCHEDULE_IMPORT_WRITE === 'true'
+// The deployed import action validates the actor, scope and conflicts server-side.
+const scheduleImportWriteEnabled = true
 const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(false), savingAssignment = ref(false), applyingImport = ref(false), preparingKnockout = ref(false), knockoutPrepareError = ref('')
 const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), hiddenTeamLogoKeys = ref(new Set()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(typeof route.query.date === 'string' ? route.query.date : ''), draggedMatchId = ref('')
 const view = ref(['settings','imports','map','workbench'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
