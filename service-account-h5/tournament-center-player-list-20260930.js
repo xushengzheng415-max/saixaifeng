@@ -92,6 +92,17 @@
     document.getElementById('newsBack').onclick = function () { render() }
     bind()
   }
+  function renderNewsPage() {
+    var rows = state.news.map(function (item) {
+      var coverId = item.coverFileId || (item.photoFileIds && item.photoFileIds[0]) || ''
+      var cover = newsImage(coverId)
+      var background = cover ? ' style="background-image:url(\'' + escapeHtml(cover) + '\')"' : ''
+      return '<button class="news-row" data-news-id="' + escapeHtml(item.id) + '"><div class="news-image"' + background + '><span>' + (cover ? '' : mark(item.title)) + '</span></div><div><h2>' + escapeHtml(item.title || '') + '</h2><p>' + escapeHtml((item.kind === 'daily' ? '每日新闻' : '单场新闻') + ' · ' + formatNewsDate(item.publishedAt || item.date)) + '</p></div><i>›</i></button>'
+    }).join('')
+    app.innerHTML = '<section class="sub-page"><header class="sub-page-head"><button id="newsListBack">‹</button><div><span>赛小蜂足球</span><h1>赛事动态</h1></div></header><div class="news-list news-page-list">' + (rows || '<section class="portal-state"><strong>暂无赛事动态</strong></section>') + '</div></section>' + bottomTabs('home')
+    document.getElementById('newsListBack').onclick = function () { location.hash = ''; render() }
+    bind()
+  }
   function categoryOf(item) {
     var text = String((item && item.category) || '') + ' ' + String((item && item.name) || '')
     if (/青少|少年|youth|u\d+/i.test(text)) return 'youth'
@@ -143,10 +154,8 @@
     return image ? ' style="background-image:url(\'' + escapeHtml(image) + '\')"' : ''
   }
   function isKnockoutMatch(match) {
-    var round = String(match && match.round || '')
     var home = String(match && match.homeName || '')
     var away = String(match && match.awayName || '')
-    if (/淘汰|交叉|排位|半决|决赛|八强|四强/.test(round)) return true
     return /^(?:[A-ZＡ-Ｚ]组第\d+|场序\d+(?:胜者|负者))$/.test(home) || /^(?:[A-ZＡ-Ｚ]组第\d+|场序\d+(?:胜者|负者))$/.test(away)
   }
   function eventMatches(item) {
@@ -718,8 +727,8 @@
   function renderMatchesPage() {
     var filter = 'all'
     function paint() {
-      var list = state.matches.filter(function (item) { return !isKnockoutMatch(item) && (filter === 'all' || item.status === filter) })
-      var cards = list.map(function (item) { return '<button class="all-match-row" data-match="' + escapeHtml(item.id) + '"><header><span>' + escapeHtml(item.tournamentName || '公开赛事') + '</span><b>' + escapeHtml(matchStatus(item.status)) + '</b></header><div><span>' + teamLogo(item.homeLogo, item.homeName) + '<strong>' + escapeHtml(item.homeName) + '</strong></span><i>' + escapeHtml(score(item)) + '</i><span>' + teamLogo(item.awayLogo, item.awayName) + '<strong>' + escapeHtml(item.awayName) + '</strong></span></div>' + matchEventSummary(item) + '<footer>' + escapeHtml([item.matchDate, item.matchTime, item.venue, item.divisionName].filter(Boolean).join(' · ') || '比赛信息待公布') + '</footer></button>' }).join('')
+      var list = state.matches.filter(function (item) { return !isKnockoutMatch(item) && (filter === 'all' || item.status === filter) }).sort(function (a, b) { return ((b.matchDate || '') + ' ' + (b.matchTime || '')).localeCompare((a.matchDate || '') + ' ' + (a.matchTime || '')) })
+      var cards = list.map(function (item) { return '<button class="all-match-row" data-match="' + escapeHtml(item.id) + '"><header><span>' + escapeHtml(item.tournamentName || '公开赛事') + '</span><b>' + escapeHtml(matchStatus(item.status)) + '</b></header><div><span>' + teamLogo(item.homeLogo, item.homeName) + '<strong>' + escapeHtml(item.homeName) + '</strong></span><i>' + escapeHtml(score(item)) + '</i><span>' + teamLogo(item.awayLogo, item.awayName) + '<strong>' + escapeHtml(item.awayName) + '</strong></span></div><footer>' + escapeHtml([item.matchDate, item.matchTime, item.venue, item.divisionName].filter(Boolean).join(' · ') || '比赛信息待公布') + '</footer></button>' }).join('')
       app.innerHTML = '<section class="sub-page"><header class="sub-page-head"><button id="matchesBack">‹</button><div><span>公开比赛</span><h1>比赛</h1></div></header><div class="sub-tabs match-filter"><button class="' + (filter === 'all' ? 'is-active' : '') + '" data-filter="all">全部</button><button class="' + (filter === 'upcoming' ? 'is-active' : '') + '" data-filter="upcoming">待开始</button><button class="' + (filter === 'ongoing' ? 'is-active' : '') + '" data-filter="ongoing">进行中</button><button class="' + (filter === 'finished' ? 'is-active' : '') + '" data-filter="finished">已结束</button></div><div class="all-match-list">' + (cards || '<section class="portal-state"><strong>暂无符合条件的公开比赛</strong></section>') + '</div></section>' + bottomTabs('matches')
       document.getElementById('matchesBack').onclick = function () { location.hash = ''; render() }
       Array.prototype.forEach.call(app.querySelectorAll('[data-filter]'), function (button) { button.onclick = function () { filter = this.getAttribute('data-filter'); paint() } })
@@ -842,10 +851,13 @@
     var list = filteredTournaments()
     var featured = selectedTournament()
     if (!featured) return renderEmpty()
-    var matches = eventMatches(featured).slice(0, 2)
+    var allFeaturedMatches = eventMatches(featured)
+    var featuredUpcoming = allFeaturedMatches.filter(function (item) { return item.status !== 'finished' })
+    var featuredFinished = allFeaturedMatches.filter(function (item) { return item.status === 'finished' }).reverse()
+    var matches = featuredFinished.slice(0, 12).reverse().concat(featuredUpcoming)
     var tabs = categories.map(function (item) { return '<button class="' + (item.key === activeCategory ? 'is-active' : '') + '" data-category="' + item.key + '">' + item.label + '</button>' }).join('')
     var matchHtml = matches.length ? matches.map(function (item) {
-      return '<button class="match-card" data-match="' + escapeHtml(item.id) + '"><strong>' + escapeHtml(matchTime(item)) + '</strong><small>' + escapeHtml(item.divisionName || item.round || '公开比赛') + '</small><div><span>' + teamLogo(item.homeLogo, item.homeName) + '<b>' + escapeHtml(item.homeName) + '</b></span><i>' + escapeHtml(score(item)) + '</i><span>' + teamLogo(item.awayLogo, item.awayName) + '<b>' + escapeHtml(item.awayName) + '</b></span></div>' + matchEventSummary(item) + '<em class="' + escapeHtml(item.status) + '">' + escapeHtml(matchStatus(item.status)) + '</em></button>'
+      return '<button class="match-card" data-match="' + escapeHtml(item.id) + '"><strong>' + escapeHtml(matchTime(item)) + '</strong><small>' + escapeHtml(item.divisionName || item.round || '公开比赛') + '</small><div><span>' + teamLogo(item.homeLogo, item.homeName) + '<b>' + escapeHtml(item.homeName) + '</b></span><i>' + escapeHtml(score(item)) + '</i><span>' + teamLogo(item.awayLogo, item.awayName) + '<b>' + escapeHtml(item.awayName) + '</b></span></div><em class="' + escapeHtml(item.status) + '">' + escapeHtml(matchStatus(item.status)) + '</em></button>'
     }).join('') : '<p class="strip-empty">暂无已发布赛程</p>'
     var updateList = scheduleTournamentId ? list.filter(function (item) { return String(item.id) === scheduleTournamentId }) : list
     var updateIds = new Set(updateList.map(function (item) { return String(item.id) }))
@@ -863,17 +875,73 @@
     app.innerHTML = '<nav class="category-tabs">' + tabs + '</nav>' +
       '<section class="event-hero"' + coverStyle(featured) + '><div class="hero-shade"></div><div class="hero-copy"><span>' + escapeHtml(eventStatus(publicEventStatus(featured))) + '</span><h1>' + escapeHtml(featured.name) + '</h1><p>' + escapeHtml(dateRange(featured) + (featured.city || featured.venue ? ' · ' + (featured.city || featured.venue) : '')) + '</p></div><button class="hero-detail" data-event="' + escapeHtml(featured.id) + '">赛事详情</button><div class="pager">' + list.slice(0, 4).map(function (item) { return '<button data-event="' + escapeHtml(item.id) + '" class="' + (item.id === featured.id ? 'is-active' : '') + '" aria-label="切换赛事"></button>' }).join('') + '</div></section>' +
       '<section class="portal-section match-schedule-section"><header><h2>近期赛程' + (scheduleTournamentId ? ' · 开封立洋杯' : '') + '</h2><button data-anchor="matches">全部比赛 ›</button></header><div class="match-strip">' + matchHtml + '</div></section>' +
-      '<section class="portal-section news-section"><header><h2>赛事动态</h2><a href="./news.html">全部 ›</a></header><div class="news-list">' + updates + '</div></section>' +
+      '<section class="portal-section news-section"><header><h2>赛事动态</h2><button data-anchor="news">全部 ›</button></header><div class="news-list">' + updates + '</div></section>' +
       bottomTabs('home')
     bind()
+  }
+  function bindStripDrag() {
+    var strip = app.querySelector('.match-strip')
+    if (!strip || strip.dataset.dragBound === '1') return
+    strip.dataset.dragBound = '1'
+    var dragging = false, moved = false, locked = null
+    var startX = 0, startY = 0, startLeft = 0, lastX = 0, lastT = 0, velocity = 0, momentumId = 0
+    function onTouchStart(e) {
+      if (e.touches.length !== 1) return
+      cancelAnimationFrame(momentumId)
+      dragging = true; moved = false; locked = null
+      startX = lastX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+      startLeft = strip.scrollLeft
+      lastT = Date.now(); velocity = 0
+    }
+    function onTouchMove(e) {
+      if (!dragging) return
+      var dx = e.touches[0].clientX - startX
+      var dy = e.touches[0].clientY - startY
+      if (!locked) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return
+        locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
+      }
+      if (locked !== 'x') return
+      if (e.cancelable) e.preventDefault()
+      moved = true
+      var now = Date.now()
+      velocity = (e.touches[0].clientX - lastX) / (now - lastT || 16)
+      lastX = e.touches[0].clientX; lastT = now
+      strip.scrollLeft = startLeft - dx
+    }
+    function onTouchEnd() {
+      if (!dragging) return
+      dragging = false
+      if (locked !== 'x' || Math.abs(velocity) < 0.25) return
+      var start = strip.scrollLeft
+      var target = start - velocity * 160
+      target = Math.max(0, Math.min(strip.scrollWidth - strip.clientWidth, target))
+      var t0 = Date.now()
+      var step = function () {
+        var p = Math.min(1, (Date.now() - t0) / 300)
+        strip.scrollLeft = start + (target - start) * (1 - Math.pow(1 - p, 3))
+        if (p < 1) momentumId = requestAnimationFrame(step)
+      }
+      momentumId = requestAnimationFrame(step)
+    }
+    strip.addEventListener('touchstart', onTouchStart, { passive: true })
+    strip.addEventListener('touchmove', onTouchMove, { passive: false })
+    strip.addEventListener('touchend', onTouchEnd)
+    strip.addEventListener('touchcancel', onTouchEnd)
+    strip.addEventListener('click', function (e) { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false } }, true)
   }
   function bind() {
     Array.prototype.forEach.call(app.querySelectorAll('[data-category]'), function (button) { button.onclick = function () { activeCategory = this.getAttribute('data-category'); activeEventId = ''; render() } })
     Array.prototype.forEach.call(app.querySelectorAll('[data-news-id]'), function (button) { button.onclick = function () { renderNewsDetail(state.news.filter(function (item) { return String(item.id) === String(button.getAttribute('data-news-id')) })[0]) } })
     Array.prototype.forEach.call(app.querySelectorAll('[data-event]'), function (button) { button.onclick = function () { activeEventId = this.getAttribute('data-event'); if (button.classList.contains('hero-detail') || button.classList.contains('news-row')) { location.hash = 'event-' + activeEventId; renderEventDetail(findTournament(activeEventId)) } else { window.scrollTo({ top: 0, behavior: 'smooth' }); render() } } })
     Array.prototype.forEach.call(app.querySelectorAll('[data-match]'), function (button) { button.onclick = function () { location.hash = 'match-' + this.getAttribute('data-match'); renderMatchPage(findMatch(this.getAttribute('data-match'))) } })
-    Array.prototype.forEach.call(app.querySelectorAll('[data-anchor]'), function (button) { button.onclick = function () { var anchor = this.getAttribute('data-anchor'); if (anchor === 'events') { location.hash = 'events'; renderEventsPage(); return } if (anchor === 'rankings') { location.hash = 'rankings'; renderRankingsPage(); return } if (anchor === 'matches') { location.hash = 'matches'; renderMatchesPage(); return } var target = app.querySelector('.news-section'); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }) } })
+    Array.prototype.forEach.call(app.querySelectorAll('[data-anchor]'), function (button) { button.onclick = function () { var anchor = this.getAttribute('data-anchor'); if (anchor === 'events') { location.hash = 'events'; renderEventsPage(); return } if (anchor === 'rankings') { location.hash = 'rankings'; renderRankingsPage(); return } if (anchor === 'matches') { location.hash = 'matches'; renderMatchesPage(); return } if (anchor === 'news') { location.hash = 'news'; renderNewsPage(); return } var target = app.querySelector('.news-section'); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }) } })
     Array.prototype.forEach.call(app.querySelectorAll('[data-bottom]'), function (button) { button.onclick = function () { var target = this.getAttribute('data-bottom'); location.hash = target === 'events' ? 'events' : target === 'rankings' ? 'rankings' : target === 'matches' ? 'matches' : ''; target === 'events' ? renderEventsPage() : target === 'rankings' ? renderRankingsPage() : target === 'matches' ? renderMatchesPage() : render() } })
+    bindStripDrag()
+    var strip = app.querySelector('.match-strip')
+    var upcomingEm = strip && strip.querySelector('em.upcoming')
+    if (upcomingEm) { var upcomingCard = upcomingEm.closest('.match-card'); strip.scrollLeft = Math.max(0, upcomingCard.getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft) }
   }
   function load() {
     renderLoading()
@@ -890,6 +958,7 @@
       else if (location.hash.indexOf('#event-') === 0) renderEventDetail(findTournament(location.hash.replace(/^#event-/, '')))
       else if (location.hash === '#rankings') renderRankingsPage()
       else if (location.hash === '#matches') renderMatchesPage()
+      else if (location.hash === '#news') renderNewsPage()
       else render()
     }).catch(function (error) { renderError(error.message) })
   }
@@ -903,6 +972,7 @@
     else if (location.hash.indexOf('#event-') === 0) renderEventDetail(findTournament(location.hash.replace(/^#event-/, '')))
     else if (location.hash === '#rankings') renderRankingsPage()
     else if (location.hash === '#matches') renderMatchesPage()
+    else if (location.hash === '#news') renderNewsPage()
     else render()
   } else load()
   window.addEventListener('hashchange', function () {
@@ -912,6 +982,7 @@
     else if (location.hash.indexOf('#event-') === 0) renderEventDetail(findTournament(location.hash.replace(/^#event-/, '')))
     else if (location.hash === '#rankings') renderRankingsPage()
     else if (location.hash === '#matches') renderMatchesPage()
+    else if (location.hash === '#news') renderNewsPage()
     else render()
   })
 })()

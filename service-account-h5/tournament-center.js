@@ -594,7 +594,10 @@
     var list = filteredTournaments()
     var featured = selectedTournament()
     if (!featured) return renderEmpty()
-    var matches = eventMatches(featured).slice(0, 2)
+    var allFeaturedMatches = eventMatches(featured)
+    var featuredUpcoming = allFeaturedMatches.filter(function (item) { return item.status !== 'finished' })
+    var featuredFinished = allFeaturedMatches.filter(function (item) { return item.status === 'finished' }).reverse()
+    var matches = featuredUpcoming.concat(featuredFinished.slice(0, 12))
     var tabs = categories.map(function (item) { return '<button class="' + (item.key === activeCategory ? 'is-active' : '') + '" data-category="' + item.key + '">' + item.label + '</button>' }).join('')
     var matchHtml = matches.length ? matches.map(function (item) {
       return '<button class="match-card" data-match="' + escapeHtml(item.id) + '"><strong>' + escapeHtml(matchTime(item)) + '</strong><small>' + escapeHtml(item.divisionName || item.round || '公开比赛') + '</small><div><span>' + teamLogo(item.homeLogo, item.homeName) + '<b>' + escapeHtml(item.homeName) + '</b></span><i>' + escapeHtml(score(item)) + '</i><span>' + teamLogo(item.awayLogo, item.awayName) + '<b>' + escapeHtml(item.awayName) + '</b></span></div>' + matchEventSummary(item) + '<em class="' + escapeHtml(item.status) + '">' + escapeHtml(matchStatus(item.status)) + '</em></button>'
