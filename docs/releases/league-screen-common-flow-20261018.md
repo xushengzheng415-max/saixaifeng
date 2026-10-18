@@ -6,4 +6,4 @@
 
 抽签总览在所有组别均确认后显示“赛程设置”，直接进入整届赛事的日期、开赛时间和场地配置。以完整组别列表判断，不受当前筛选影响；状态读取失败、读取中或无组别时不显示，不自动编排比赛。演示和真实赛事共用入口。
 
-本次增量构建和线上资源回读待完成；未增加或运行业务测试。
+代码提交 a80ea34e 已同步 main 与 preview。正式 /admin/ 与测试 /preview/admin/ 构建均通过，各发布 392 个静态文件。两端各 11 个关键资源（入口 HTML、入口包、抽签总览、投屏与淘汰树 JS/CSS）均 HTTP 200，SHA-256 与本地发布包一致；核对域名为 https://www.sxffootball.cn。读回清单保存在 .codex-artifacts/league-screen-readback-20261018/current-formal 与 current-preview。未增加或运行业务测试，实际账号点击链路仍待现场确认。
