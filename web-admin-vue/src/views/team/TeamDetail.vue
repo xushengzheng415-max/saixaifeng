@@ -83,7 +83,7 @@
           <footer><el-icon><InfoFilled /></el-icon>颜色用于球队默认资料和赛前辨色；正式比赛仍以该场主客队实际穿着及裁判确认结果为准。</footer>
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
-          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="isTournamentStaff"> · 账号权限由主账号分配</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
+          <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="!canManageTeamAccess"> · 账号权限由主账号分配</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffMembers" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table">
             <el-table-column label="头像" width="48" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="76" />
@@ -91,10 +91,10 @@
             <el-table-column label="职务" min-width="134"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag></template></el-table-column>
             <el-table-column label="出生日期" width="94"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="籍贯" width="50" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
-            <el-table-column v-if="sourceTournamentId" label="账号" min-width="112"><template #default="{ row }">{{ isTournamentStaff ? '—' : staffAccountLabel(row) }}<small v-if="!isTournamentStaff && staffAccount(row)?.phone" class="staff-account-phone">{{ staffAccount(row).phone }}</small></template></el-table-column>
-            <el-table-column v-if="sourceTournamentId" label="操作权限" min-width="92"><template #default="{ row }">{{ isTournamentStaff ? '—' : staffPermissionLabel(row) }}</template></el-table-column>
-            <el-table-column v-if="sourceTournamentId" label="状态" min-width="92"><template #default="{ row }">{{ isTournamentStaff ? '主账号设置' : (staffAccount(row)?.status || '未授权') }}</template></el-table-column>
-            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="92"><template #default="{ row }"><span :title="isTournamentStaff ? '需由赛事所属机构主账号设置' : ''"><el-button link type="primary" :disabled="isTournamentStaff || !tournamentRelation?._id" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="账号" min-width="112"><template #default="{ row }">{{ canManageTeamAccess ? staffAccountLabel(row) : '—' }}<small v-if="canManageTeamAccess && staffAccount(row)?.phone" class="staff-account-phone">{{ staffAccount(row).phone }}</small></template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="操作权限" min-width="92"><template #default="{ row }">{{ canManageTeamAccess ? staffPermissionLabel(row) : '—' }}</template></el-table-column>
+            <el-table-column v-if="sourceTournamentId" label="状态" min-width="92"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.status || '未授权') : '主账号设置' }}</template></el-table-column>
+            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="92"><template #default="{ row }"><span :title="canManageTeamAccess ? '' : '账号权限需由赛事所属机构主账号分配'"><el-button link type="primary" :disabled="!canManageTeamAccess || !tournamentRelation?._id" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
           </el-table>
         </section>
         <section class="synthetic-player-panel">
@@ -1216,7 +1216,7 @@
 
     <el-dialog v-model="showAddStaff" title="添加工作人员" width="500px" :close-on-click-modal="false">
       <el-form :model="staffForm" label-width="90px">
-        <el-form-item v-if="sourceTournamentId && !isTournamentStaff" label="添加方式"><el-radio-group v-model="staffSource"><el-radio-button value="manual">填写资料</el-radio-button><el-radio-button value="player">队内球员</el-radio-button></el-radio-group></el-form-item>
+        <el-form-item v-if="sourceTournamentId && canManageTeamAccess" label="添加方式"><el-radio-group v-model="staffSource"><el-radio-button value="manual">填写资料</el-radio-button><el-radio-button value="player">队内球员</el-radio-button></el-radio-group></el-form-item>
         <el-form-item v-if="staffSource === 'player'" label="球员" required><el-select v-model="staffPlayerId" filterable placeholder="选择队内球员" style="width:100%" @change="selectStaffPlayer"><el-option v-for="player in staffPlayerOptions" :key="player._id" :value="String(player._id)" :label="`${player.jerseyNumber || '—'}号 ${player.name}`" /></el-select></el-form-item>
         <el-form-item label="姓名" required><el-input v-model="staffForm.name" :disabled="staffSource === 'player'" maxlength="30" /></el-form-item>
         <el-form-item label="职务" required><el-select v-model="staffForm.type" style="width:100%"><el-option label="领队" value="team_leader" /><el-option label="主教练" value="head_coach" /><el-option label="队医" value="doctor" /><el-option label="工作人员" value="other" /></el-select></el-form-item>
@@ -1254,7 +1254,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, InfoFilled, Search, Refresh, Download, UploadFilled, Delete, SwitchButton, Back, Tickets, UserFilled, Histogram, Bell, CircleCheckFilled, Picture } from '@element-plus/icons-vue'
-import { queryById, queryList, queryAll, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, rosterExceptionBoard } from '../../utils/cloud'
+import { queryById, queryList, queryAll, addRecord, updateRecord, deleteRecord, uploadFile, uploadFileViaCloud, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, callFunction, getCurrentOwner, getCurrentUser, rosterExceptionBoard } from '../../utils/cloud'
 import AIImageGenerator from '../../components/common/AIImageGenerator.vue'
 import AvatarCropper from '../../components/common/AvatarCropper.vue'
 import { getVisualQaSnapshot } from '../../utils/visualQaFixtures'
@@ -1404,6 +1404,18 @@ const kitColorOptions = KIT_COLOR_OPTIONS
 const kitForm = ref({primary:{jersey:'#138A4B',shorts:'#FFFFFF',socks:'#138A4B'},secondary:{jersey:'#FFFFFF',shorts:'#138A4B',socks:'#FFFFFF'}})
 const kitColorLabels = ref({ primary:{}, secondary:{} })
 const tournamentContext = ref(qaSnapshot && sourceTournamentId.value ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions } : {})
+// 与服务端 organizerClaimInvite.userOwnsTournament 保持一致：账号/权限操作按“赛事归属”判定，
+// 不能再用粗粒度的赛事工作人员视角标志把主办方主账号一并禁掉。
+const canManageTeamAccess = computed(() => {
+  if (!sourceTournamentId.value) return false
+  if (isDemoMode()) return true
+  const tournament = tournamentContext.value || {}
+  const user = getCurrentUser() || {}
+  const orgId = String(user.orgId || user.organizationId || user.organization_id || '')
+  if (tournament.orgId) return Boolean(orgId) && String(tournament.orgId) === orgId
+  const ownerIds = [tournament.creatorId, tournament.organizerId, tournament.ownerId, tournament.userId].filter(Boolean).map(String)
+  return Boolean(user._id) && ownerIds.includes(String(user._id))
+})
 const tournamentRelation = ref(qaSnapshot && sourceTournamentId.value ? { tournamentId: sourceTournamentId.value, teamId, divisionId: sourceDivisionId.value, divisionName: isProfessionalTournamentTeam.value ? 'U16组' : 'U8组', registrationNo: isProfessionalTournamentTeam.value ? 'HNYC-U16-021' : 'HNYC-U8-001', joinSource: isProfessionalTournamentTeam.value ? 'invite' : '主办方邀请', status: 'approved', claimedAt: isProfessionalTournamentTeam.value ? '2026-07-21T10:32:00' : '2026-07-18T10:24:00', rosterStatus: isProfessionalTournamentTeam.value ? 'submitted' : '' } : {})
 const isSyntheticTeam = computed(() => team.value.synthetic === true || Boolean(team.value.syntheticDatasetId))
 const tournamentParticipationCode = computed(() => tournamentRelation.value.registrationNo || tournamentRelation.value.tournamentTeamCode || tournamentRelation.value.participationCode || tournamentRelation.value.registrationCode || team.value.teamCode || (tournamentRelation.value._id ? `T-${String(tournamentRelation.value._id).slice(-6).toUpperCase()}` : '待分配'))
@@ -2590,6 +2602,7 @@ async function loadTeamAccess() {
 
 async function openTeamAccess(row) {
   if (!row?._id) return
+  if (!canManageTeamAccess.value) return ElMessage.warning('球队账号权限需由赛事所属机构主账号分配')
   if (!tournamentRelation.value?._id) return ElMessage.error('当前球队参赛关系不存在，无法分配账号')
   if (await loadTeamAccess() === false) return
   selectedStaffAccount.value = row
@@ -4598,7 +4611,7 @@ onMounted(async () => {
   if (route.query.edit === '1') editTeam()
   if (sourceTournamentId.value) {
     await loadTournamentTeamContext()
-    await Promise.all([loadPlayers(), ...(isTournamentStaff ? [] : [loadTeamAccess()])])
+    await Promise.all([loadPlayers(), ...(canManageTeamAccess.value ? [loadTeamAccess()] : [])])
     await loadPlayerCompetitionData()
   }
   else await loadPlayers()
