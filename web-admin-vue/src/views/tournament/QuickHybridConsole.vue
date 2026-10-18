@@ -92,30 +92,7 @@
 
       <section class="panel cup-stage">
         <header><div><h2>单淘汰签位</h2><p>左右半区 · {{ cupSlots.length }} 个首轮签位 · {{ cupSlots.length / 2 }} 场首轮对阵 · 胜者逐轮晋级</p></div><div class="cup-stage-actions"><el-tag type="success" effect="light">{{ cupAssignedCount }} 支已入位</el-tag><el-button plain :disabled="cupAssignedCount === 0" @click="clearOrder">清空签位</el-button><el-button type="success" :disabled="teams.length === 0" @click="randomize">自动随机排位</el-button></div></header>
-        <div class="bracket-shell">
-          <div class="bracket-round-headings"><span>首轮签位</span><span>八强席位</span><span>四强席位</span><span>决赛</span><span>四强席位</span><span>八强席位</span><span>首轮签位</span></div>
-          <div class="bracket-side left">
-            <div v-for="pair in 4" :key="`left-${pair}`" class="seed-pair">
-              <button v-for="offset in 2" :key="offset" class="seed-slot" :class="{ filled: cupSlots[(pair - 1) * 2 + offset - 1] }" @dragover.prevent @drop="dropCupTeam((pair - 1) * 2 + offset - 1)" @click="clearCupSlot((pair - 1) * 2 + offset - 1)">
-                <b>签{{ String((pair - 1) * 2 + offset).padStart(2,'0') }}</b>
-                <span><template v-if="cupSlots[(pair - 1) * 2 + offset - 1]"><i class="crest"><img v-if="cupSlots[(pair - 1) * 2 + offset - 1].logo" :src="cupSlots[(pair - 1) * 2 + offset - 1].logo" alt="" /><template v-else>{{ cupSlots[(pair - 1) * 2 + offset - 1].name.slice(0, 1) }}</template></i>{{ cupSlots[(pair - 1) * 2 + offset - 1].name }}</template><em v-else>待抽签</em></span>
-              </button>
-            </div>
-          </div>
-          <div class="advance-column left-advance"><div v-for="pair in 2" :key="pair" class="advance-pair"><span>晋级待定</span><span>晋级待定</span></div></div>
-          <div class="semifinal-column left-semi"><div class="semifinal-pair"><span>晋级待定</span><span>晋级待定</span></div></div>
-          <div class="final-center"><el-icon><Trophy /></el-icon><strong>决赛</strong><small>冠军待定</small></div>
-          <div class="semifinal-column right-semi"><div class="semifinal-pair"><span>晋级待定</span><span>晋级待定</span></div></div>
-          <div class="advance-column right-advance"><div v-for="pair in 2" :key="pair" class="advance-pair"><span>晋级待定</span><span>晋级待定</span></div></div>
-          <div class="bracket-side right">
-            <div v-for="pair in 4" :key="`right-${pair}`" class="seed-pair">
-              <button v-for="offset in 2" :key="offset" class="seed-slot" :class="{ filled: cupSlots[8 + (pair - 1) * 2 + offset - 1] }" @dragover.prevent @drop="dropCupTeam(8 + (pair - 1) * 2 + offset - 1)" @click="clearCupSlot(8 + (pair - 1) * 2 + offset - 1)">
-                <span><template v-if="cupSlots[8 + (pair - 1) * 2 + offset - 1]"><i class="crest"><img v-if="cupSlots[8 + (pair - 1) * 2 + offset - 1].logo" :src="cupSlots[8 + (pair - 1) * 2 + offset - 1].logo" alt="" /><template v-else>{{ cupSlots[8 + (pair - 1) * 2 + offset - 1].name.slice(0, 1) }}</template></i>{{ cupSlots[8 + (pair - 1) * 2 + offset - 1].name }}</template><em v-else>待抽签</em></span>
-                <b>签{{ String(8 + (pair - 1) * 2 + offset).padStart(2,'0') }}</b>
-              </button>
-            </div>
-          </div>
-        </div>
+        <KnockoutDrawTree :slots="cupSlots" :byes-resolved="cupAssignedCount > 0 && cupAssignedCount === teams.length" editable @drop="dropCupTeam" @remove="clearCupSlot" />
         <div class="cup-note"><span>i</span>确认后只生成当前组别的淘汰赛对阵草稿；空签位按轮空处理，后续轮次由赛果推进。</div>
       </section>
     </main>
@@ -171,8 +148,10 @@
 </template>
 
 <script setup>
-import { computed, getCurrentInstance, onMounted, ref } from 'vue'
+import { computed, getCurrentInstance, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import KnockoutDrawTree from '../../components/tournament/KnockoutDrawTree.vue'
+import { knockoutCapacity, fillKnockoutSlots } from '../../utils/knockoutDraw.mjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Lock, Rank, Trophy } from '@element-plus/icons-vue'
 import { addRecord, deleteRecord, getFileUrl, queryById, queryList } from '../../utils/cloud'
@@ -202,7 +181,8 @@ const dragIndex = ref(-1)
 const renderVersion = ref(0)
 const advanceCount = ref(8)
 const hybridDraggingTeam = ref(null)
-const cupSlots = ref(Array(16).fill(null))
+const cupSlots = ref(Array(2).fill(null))
+const cupSnapshotConfirmed = ref(false)
 const cupDraggingTeam = ref(null)
 let projectionChannel = null
 
@@ -223,7 +203,7 @@ const orderValid = computed(() => orderedTeams.value.length === teams.value.leng
 const cupAssignedTeams = computed(() => cupSlots.value.filter(Boolean))
 const cupAssignedIds = computed(() => new Set(cupAssignedTeams.value.map(team => team.id)))
 const cupAssignedCount = computed(() => cupAssignedTeams.value.length)
-const cupValid = computed(() => teams.value.length >= 2 && teams.value.length <= 16 && cupAssignedCount.value === teams.value.length && cupAssignedIds.value.size === cupAssignedCount.value)
+const cupValid = computed(() => teams.value.length >= 2 && teams.value.length <= 16 && cupSlots.value.length >= teams.value.length && cupAssignedCount.value === teams.value.length && cupAssignedIds.value.size === cupAssignedCount.value)
 const hybridValid = computed(() => [2, 4, 8].includes(Number(advanceCount.value)) && Number(advanceCount.value) <= orderedTeams.value.length && orderValid.value)
 const currentValid = computed(() => isCup.value ? cupValid.value : isHybrid.value ? hybridValid.value : orderValid.value)
 const hybridSeedOrder = computed(() => {
@@ -256,12 +236,7 @@ const activeMatches = computed(() => previewRounds.value[activeRound.value] || [
 const leagueMatchCount = computed(() => leagueRounds.value.reduce((total, round) => total + round.length, 0))
 
 function qaTeamRows() { const count = isCup.value ? 8 : 12; return qaNames.slice(0, count).map((name, index) => ({ id: `qa-${workflowType.value}-${index + 1}`, name: `${name}${suffix.value}`, logo: '' })) }
-function buildCupSlots(rows) {
-  const slots = Array(16).fill(null)
-  const preferred = rows.length <= 8 ? [0, 2, 4, 6, 8, 10, 12, 14] : Array.from({ length: 16 }, (_, index) => index)
-  rows.slice(0, 16).forEach((team, index) => { slots[preferred[index]] = team })
-  return slots
-}
+function buildCupSlots(rows) { return fillKnockoutSlots(rows, knockoutCapacity(teams.value.length)) }
 function teamRow(registration, detail) {
   const candidates = [detail?.logoFileId, detail?.logoCloudFileId, detail?.logo, detail?.logoTransparentUrl, detail?.logoUrl, registration.teamLogo].map(value => String(value || '')).filter(Boolean)
   const cloudLogo = candidates.find(value => value.startsWith('cloud://'))
@@ -290,7 +265,7 @@ async function load() {
       teams.value = qaTeamRows()
       orderedTeams.value = [...teams.value]
       advanceCount.value = 8
-      cupSlots.value = Array(16).fill(null)
+      cupSlots.value = Array(knockoutCapacity(teams.value.length)).fill(null)
       return
     }
     const [event, registrations, divisionRows] = await Promise.all([queryById('tournaments', tournamentId), queryList('tournament_teams', { where: { tournamentId, status: 'approved' }, limit: 1000 }), queryList('divisions',{ where:{ tournamentId },orderBy:{ createTime:'asc' },limit:100 })])
@@ -303,14 +278,17 @@ async function load() {
     teams.value = await Promise.all(scoped.map(async item => { const team=teamRow(item, lookup.get(String(item.teamId))); return { ...team,logo:await resolveTeamLogo(team.logo) } }))
     const collection = isCup.value ? 'tournament_bracket' : 'tournament_league_tables'
     const existing = await queryList(collection, { where: { tournamentId }, limit: 1000 })
-    const saved = existing.find(item => String(item.divisionId || 'default') === divisionId.value && item.type === workflowType.value && item.status !== 'archived')
+    const saved = [...existing].sort((a,b)=>new Date(b.updateTime?.$date || b.updateTime || b.createTime || 0)-new Date(a.updateTime?.$date || a.updateTime || a.createTime || 0)).find(item => String(item.divisionId || 'default') === divisionId.value && item.type === workflowType.value && item.status !== 'archived')
     const order = Array.isArray(saved?.teams) ? saved.teams.map(item => String(item.teamId)).filter(Boolean) : []
     const map = new Map(teams.value.map(item => [item.id, item]))
     orderedTeams.value = [...order.map(id => map.get(id)).filter(Boolean), ...teams.value.filter(item => !order.includes(item.id))]
     if (isHybrid.value) advanceCount.value = Number(saved?.advanceCount || Math.min(8, teams.value.length >= 8 ? 8 : teams.value.length >= 4 ? 4 : 2))
     if (isCup.value) {
       const savedSlots = Array.isArray(saved?.slots) ? saved.slots : []
-      cupSlots.value = savedSlots.length === 16 ? savedSlots.map(slot => map.get(String(slot?.teamId || '')) || null) : Array(16).fill(null)
+      cupSnapshotConfirmed.value = ['confirmed','published','archived'].includes(String(saved?.status))
+      const capacity = cupSnapshotConfirmed.value && savedSlots.length ? savedSlots.length : knockoutCapacity(teams.value.length)
+      const savedTeams = savedSlots.map(slot => map.get(String(slot?.teamId || '')) || null)
+      cupSlots.value = savedSlots.length === capacity ? savedTeams : savedTeams.some(Boolean) ? fillKnockoutSlots(savedTeams.filter(Boolean),capacity) : Array(capacity).fill(null)
     }
   } catch (error) {
     teams.value = []
@@ -320,6 +298,7 @@ async function load() {
     loading.value = false
     renderVersion.value += 1
     componentInstance?.update?.()
+    publishProjection()
   }
 }
 
@@ -410,23 +389,26 @@ function projectionAssignments() {
 }
 function projectionPayload() {
   const ordered = isCup.value ? cupSlots.value.filter(Boolean) : orderedTeams.value
-  return { stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
+  return { format:workflowType.value, capacity:isCup.value ? cupSlots.value.length : 0, confirmed:isCup.value && cupSnapshotConfirmed.value, slots:isCup.value ? cupSlots.value.map(team => team ? {id:team.id,name:team.name,logo:team.logo} : null) : [], stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
 }
-const projectionAddress = computed(() => `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId.value)}`)
-function openProjection() {
+const projectionAddress = computed(() => `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId.value)}&format=${workflowType.value}&capacity=${cupSlots.value.length}`)
+function publishProjection() {
   const payload = projectionPayload()
   try { localStorage.setItem(projectionChannelName.value, JSON.stringify(payload)) } catch {}
   if (typeof BroadcastChannel !== 'undefined') { projectionChannel?.close(); projectionChannel = new BroadcastChannel(projectionChannelName.value); projectionChannel.postMessage(payload) }
 }
+function openProjection() { publishProjection() }
 function clearOrder() {
   orderedTeams.value = []
-  if (isCup.value) cupSlots.value = Array(16).fill(null)
+  if (isCup.value) cupSlots.value = Array(knockoutCapacity(teams.value.length)).fill(null)
   activeRound.value = 0
   renderVersion.value += 1
   recordDraftAction('clear')
 }
 function recordDraftAction(action) {
   componentInstance?.update?.()
+  cupSnapshotConfirmed.value = false
+  publishProjection()
   if (!visualQa) return
   const scope = { action, tournamentId, divisionId: divisionId.value, type: workflowType.value, teamCount: isCup.value ? cupAssignedCount.value : orderedTeams.value.length, cloudWrite: false, draftOnly: true }
   window.__sxfQuickLeagueInteraction = scope
@@ -471,7 +453,7 @@ async function confirm() {
     await Promise.all(replaceableMatches.map(item => deleteRecord('matches', item._id)))
     const ranked = orderedTeams.value.map((team, index) => ({ teamId: team.id, teamName: team.name, position: index + 1, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }))
     if (!isCup.value) await addRecord('tournament_league_tables', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, tableName: isLeague.value ? '快速联赛排序' : '混合制联赛阶段', tableCode: isLeague.value ? 'LEAGUE' : 'HYBRID', teams: ranked, teamCount: ranked.length, advanceCount: isHybrid.value ? Number(advanceCount.value) : undefined, type, loopType: 'single', status: 'draft', source: `quick-${type}-draft`, createTime: now, updateTime: now })
-    if (isCup.value) await addRecord('tournament_bracket', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, type: 'cup', name: '快速淘汰赛签位', round: 1, capacity: 16, teamCount: cupAssignedCount.value, slots: cupSlots.value.map((team, index) => ({ slotCode: `${index < 8 ? 'A' : 'B'}${index < 8 ? index + 1 : index - 7}`, teamId: team?.id || '', teamName: team?.name || '', bye: !team })), matches: Array.from({ length: 8 }, (_, index) => ({ matchId: `cup-r1-${index + 1}`, round: 1, slot1: cupSlots.value[index * 2] ? { teamId: cupSlots.value[index * 2].id, teamName: cupSlots.value[index * 2].name } : null, slot2: cupSlots.value[index * 2 + 1] ? { teamId: cupSlots.value[index * 2 + 1].id, teamName: cupSlots.value[index * 2 + 1].name } : null, winner: null })), status: 'draft', confirmed: false, source: 'quick-cup-draft', createTime: now, updateTime: now })
+    if (isCup.value) await addRecord('tournament_bracket', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, type: 'cup', name: '快速淘汰赛签位', round: 1, capacity: cupSlots.value.length, teamCount: cupAssignedCount.value, slots: cupSlots.value.map((team, index) => ({ slotCode: `${index < cupSlots.value.length / 2 ? 'A' : 'B'}${index % (cupSlots.value.length / 2) + 1}`, teamId: team?.id || '', teamName: team?.name || '', bye: !team })), matches: Array.from({ length: cupSlots.value.length / 2 }, (_, index) => ({ matchId: `cup-r1-${index + 1}`, round: 1, slot1: cupSlots.value[index * 2] ? { teamId: cupSlots.value[index * 2].id, teamName: cupSlots.value[index * 2].name } : null, slot2: cupSlots.value[index * 2 + 1] ? { teamId: cupSlots.value[index * 2 + 1].id, teamName: cupSlots.value[index * 2 + 1].name } : null, winner: null })), status: 'draft', confirmed: false, source: 'quick-cup-draft', createTime: now, updateTime: now })
     if (isHybrid.value) {
       const brackets = await queryList('tournament_bracket', { where: { tournamentId }, limit: 1000 })
       const replaceableBrackets = brackets.filter(row => String(row.divisionId || 'default') === divisionId.value && row.type === 'hybrid' && row.source === 'quick-hybrid-draft' && !['published', 'archived'].includes(row.status))
@@ -489,6 +471,7 @@ async function confirm() {
 }
 
 onMounted(load)
+onBeforeUnmount(()=>projectionChannel?.close())
 </script>
 
 <style scoped>
@@ -505,4 +488,5 @@ onMounted(load)
 @media(max-width:1200px){.bracket-shell,.bracket-round-headings{grid-template-columns:185px 104px 98px 82px 98px 104px 185px;gap:10px}}
 .cup-stage-actions{display:flex;align-items:center;gap:8px}.cup-stage-actions .el-button{margin:0}.cup-stage-actions .el-tag{margin-right:4px}
 .pool li>img,.ranking li>img,.hybrid-ranking li>img{display:block;flex:0 0 auto;width:28px;height:28px;object-fit:contain}.mini-crest{overflow:hidden}.mini-crest img{display:block;width:100%;height:100%;object-fit:contain;background:#fff}.match-team.home .mini-crest{order:2}.match-team.home{flex-direction:row}.ranking li>strong,.pool li>b{min-width:0}
+.cup-board{grid-template-columns:240px minmax(0,1fr)}.cup-stage{height:auto;min-height:556px;overflow:hidden}.cup-stage :deep(.knockout-tree){padding:4px 0 12px}
 </style>
