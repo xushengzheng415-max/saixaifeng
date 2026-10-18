@@ -1404,15 +1404,26 @@ const kitColorOptions = KIT_COLOR_OPTIONS
 const kitForm = ref({primary:{jersey:'#138A4B',shorts:'#FFFFFF',socks:'#138A4B'},secondary:{jersey:'#FFFFFF',shorts:'#138A4B',socks:'#FFFFFF'}})
 const kitColorLabels = ref({ primary:{}, secondary:{} })
 const tournamentContext = ref(qaSnapshot && sourceTournamentId.value ? { ...qaSnapshot.tournament, divisions: qaSnapshot.divisions } : {})
-// 与服务端 organizerClaimInvite.userOwnsTournament 保持一致：账号/权限操作按“赛事归属”判定，
-// 不能再用粗粒度的赛事工作人员视角标志把主办方主账号一并禁掉。
+const sessionScope = ref(null)
+// 与服务端 organizerClaimInvite.userOwnsTournament 保持一致：账号/权限操作按“赛事归属”判定。
+// 判定优先使用服务端会话身份（tournamentStaffAccess scope 的 activeOrgId），
+// 因为工作人员工作区会清空本地 userInfo.orgId，本地缓存不可信。
 const canManageTeamAccess = computed(() => {
   if (!sourceTournamentId.value) return false
   if (isDemoMode()) return true
   const tournament = tournamentContext.value || {}
+  const scope = sessionScope.value
+  if (tournament.orgId) {
+    const scopeOrg = String(scope?.activeOrgId || '')
+    const localUser = getCurrentUser() || {}
+    const localOrg = String(localUser.orgId || localUser.organizationId || localUser.organization_id || '')
+    const sessionOrg = scopeOrg || localOrg
+    if (!sessionOrg || sessionOrg !== String(tournament.orgId)) return false
+    // 工作人员子账号同样属于该机构，但服务端仅允许主账号分配球队账号，保持一致。
+    if (scope?.isStaff && !scope?.isOwner) return false
+    return true
+  }
   const user = getCurrentUser() || {}
-  const orgId = String(user.orgId || user.organizationId || user.organization_id || '')
-  if (tournament.orgId) return Boolean(orgId) && String(tournament.orgId) === orgId
   const ownerIds = [tournament.creatorId, tournament.organizerId, tournament.ownerId, tournament.userId].filter(Boolean).map(String)
   return Boolean(user._id) && ownerIds.includes(String(user._id))
 })
@@ -4595,6 +4606,18 @@ async function loadTournamentTeamContext() {
   }
 }
 
+// 读取服务端会话身份（当前生效机构与主账号标志），用于球队账号权限判定。
+// scope 的 activeOrgId 与 webLoginApi 中转注入的 __actorOrgId 同源，服务端会做最终校验。
+async function loadAccessScope() {
+  if (qaSnapshot) return
+  try {
+    const result = await callFunction('tournamentStaffAccess', { action: 'scope' })
+    if (result?.success) sessionScope.value = { activeOrgId: String(result.activeOrgId || ''), isOwner: Boolean(result.isOwner), isStaff: Boolean(result.isStaff) }
+  } catch (error) {
+    console.warn('读取会话机构身份失败:', error?.message || error)
+  }
+}
+
 function openTournamentMatches() {
   if (!canViewTournamentMatches.value) return
   router.push({ path: `/tournaments/${sourceTournamentId.value}/matches`, query: sourceDivisionId.value ? { divisionId: sourceDivisionId.value } : {} })
@@ -4610,7 +4633,7 @@ onMounted(async () => {
   await loadTeam()
   if (route.query.edit === '1') editTeam()
   if (sourceTournamentId.value) {
-    await loadTournamentTeamContext()
+    await Promise.all([loadTournamentTeamContext(), loadAccessScope()])
     await Promise.all([loadPlayers(), ...(canManageTeamAccess.value ? [loadTeamAccess()] : [])])
     await loadPlayerCompetitionData()
   }
