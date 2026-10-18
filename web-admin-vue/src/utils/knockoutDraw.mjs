@@ -7,7 +7,9 @@ export function fillKnockoutSlots(teams, capacity = knockoutCapacity(teams.lengt
   const slots = Array(capacity).fill(null)
   const pairs = capacity / 2
   teams.slice(0, capacity).forEach((team, index) => {
-    slots[index < pairs ? index * 2 : (index - pairs) * 2 + 1] = team
+    const extra = index - pairs
+    const pair = extra % 2 === 0 ? extra / 2 : Math.floor(pairs / 2) + Math.floor(extra / 2)
+    slots[index < pairs ? index * 2 : pair * 2 + 1] = team
   })
   return slots
 }
