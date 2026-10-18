@@ -367,3 +367,7 @@ PC赛事空间先通过tournamentStaffAccess.scope确认会话账号及真实拥
 QuickHybridConsole单淘按实际参赛队数取不小于队数的2幂容量；新8队为8签/4场首轮。加载旧未确认16签稀疏草稿时仅在编辑器内按当前人数恢复已入位球队；已确认/已发布快照按原容量读取，未自动改写历史记录。保存、结果页左右半区和海报均消费实际capacity/slots。球员、赛果和比赛历史不变。
 
 KnockoutDrawTree由操作台及DrawScreenProjection共用。投屏协议增加format/capacity/完整slots/confirmed；load、手动排位、拖动、清空与随机后同源localStorage和BroadcastChannel持续同步，确认结果后同步confirmed。大屏按淘汰树呈现，不当作小组排序；排满但未确认和已确认分开。没有新增云函数或业务迁移。
+
+## 2026-10-18 赛制对应的共用投屏
+
+DrawScreenProjection依据显式format分流：league为联赛签位顺序，不显示A/B组，也不冒充积分排名；hybrid为联赛签位与基于名次来源的晋级淘汰树，不提前填入未产生的球队；cup为淘汰签位树；tournament/group才显示分组。未收到赛制时不猜A组。QuickHybridConsole、通用及专业投屏均声明赛制，排满顺序与最终确认分开，QuickDrawResult确认后同步相同协议。该逻辑用于演示、真实及正式/预览环境，无新增数据权限。

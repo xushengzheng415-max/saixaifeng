@@ -151,7 +151,7 @@
 import { computed, getCurrentInstance, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import KnockoutDrawTree from '../../components/tournament/KnockoutDrawTree.vue'
-import { knockoutCapacity, fillKnockoutSlots } from '../../utils/knockoutDraw.mjs'
+import { knockoutCapacity, fillKnockoutSlots, knockoutSeedOrder } from '../../utils/knockoutDraw.mjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Lock, Rank, Trophy } from '@element-plus/icons-vue'
 import { addRecord, deleteRecord, getFileUrl, queryById, queryList } from '../../utils/cloud'
@@ -183,6 +183,7 @@ const advanceCount = ref(8)
 const hybridDraggingTeam = ref(null)
 const cupSlots = ref(Array(2).fill(null))
 const cupSnapshotConfirmed = ref(false)
+const savedDrawConfirmed = ref(false)
 const cupDraggingTeam = ref(null)
 let projectionChannel = null
 
@@ -206,12 +207,7 @@ const cupAssignedCount = computed(() => cupAssignedTeams.value.length)
 const cupValid = computed(() => teams.value.length >= 2 && teams.value.length <= 16 && cupSlots.value.length >= teams.value.length && cupAssignedCount.value === teams.value.length && cupAssignedIds.value.size === cupAssignedCount.value)
 const hybridValid = computed(() => [2, 4, 8].includes(Number(advanceCount.value)) && Number(advanceCount.value) <= orderedTeams.value.length && orderValid.value)
 const currentValid = computed(() => isCup.value ? cupValid.value : isHybrid.value ? hybridValid.value : orderValid.value)
-const hybridSeedOrder = computed(() => {
-  const count = Number(advanceCount.value)
-  if (count === 2) return [1, 2]
-  if (count === 4) return [1, 4, 2, 3]
-  return [1, 8, 4, 5, 2, 7, 3, 6]
-})
+const hybridSeedOrder = computed(() => knockoutSeedOrder(Number(advanceCount.value)))
 const hybridSemiCount = computed(() => Number(advanceCount.value) === 8 ? 4 : Number(advanceCount.value) === 4 ? 2 : 1)
 
 const leagueRounds = computed(() => {
@@ -279,6 +275,7 @@ async function load() {
     const collection = isCup.value ? 'tournament_bracket' : 'tournament_league_tables'
     const existing = await queryList(collection, { where: { tournamentId }, limit: 1000 })
     const saved = [...existing].sort((a,b)=>new Date(b.updateTime?.$date || b.updateTime || b.createTime || 0)-new Date(a.updateTime?.$date || a.updateTime || a.createTime || 0)).find(item => String(item.divisionId || 'default') === divisionId.value && item.type === workflowType.value && item.status !== 'archived')
+    savedDrawConfirmed.value = Boolean(saved && (['published','archived'].includes(saved.status) || saved.status === 'confirmed' && saved.confirmedAt))
     const order = Array.isArray(saved?.teams) ? saved.teams.map(item => String(item.teamId)).filter(Boolean) : []
     const map = new Map(teams.value.map(item => [item.id, item]))
     orderedTeams.value = [...order.map(id => map.get(id)).filter(Boolean), ...teams.value.filter(item => !order.includes(item.id))]
@@ -389,7 +386,7 @@ function projectionAssignments() {
 }
 function projectionPayload() {
   const ordered = isCup.value ? cupSlots.value.filter(Boolean) : orderedTeams.value
-  return { format:workflowType.value, capacity:isCup.value ? cupSlots.value.length : 0, confirmed:isCup.value && cupSnapshotConfirmed.value, slots:isCup.value ? cupSlots.value.map(team => team ? {id:team.id,name:team.name,logo:team.logo} : null) : [], stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
+  return { format:workflowType.value, capacity:isCup.value ? cupSlots.value.length : 0, confirmed:savedDrawConfirmed.value, advanceCount:isHybrid.value ? Number(advanceCount.value) : 0, seedOrder:isHybrid.value ? hybridSeedOrder.value : [], slots:isCup.value ? cupSlots.value.map(team => team ? {id:team.id,name:team.name,logo:team.logo} : null) : [], stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
 }
 const projectionAddress = computed(() => `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId.value)}&format=${workflowType.value}&capacity=${cupSlots.value.length}`)
 function publishProjection() {
@@ -408,6 +405,7 @@ function clearOrder() {
 function recordDraftAction(action) {
   componentInstance?.update?.()
   cupSnapshotConfirmed.value = false
+  savedDrawConfirmed.value = false
   publishProjection()
   if (!visualQa) return
   const scope = { action, tournamentId, divisionId: divisionId.value, type: workflowType.value, teamCount: isCup.value ? cupAssignedCount.value : orderedTeams.value.length, cloudWrite: false, draftOnly: true }

@@ -2323,7 +2323,7 @@ function genericProjectionAssignments() {
 }
 function genericProjectionPayload() {
   const teams = approvedTeams.value.map(team => ({ id: String(team.teamId || team.id || team._id), name: team.name || team.teamName || '未命名球队', logo: team.logo || team.logoUrl || team.teamLogo || '' }))
-  return { stage: genericProjectionStage(), tournamentName: tournament.value.name || '足球赛事', divisionName: activeDivision.value?.name || '抽签分组', teams, assignments: genericProjectionAssignments(), screen: { theme: 'emerald', showTournament: true, showCrest: true, showProgress: true, fontSize: 'standard' }, assignedCount: genericProjectionAssignments().length, updatedAt: new Date().toISOString() }
+  return { format:tournamentType.value, confirmed:drawOverviewByDivision.value[String(activeDivisionId.value || 'default')]?.state === 'done' || bracketConfirmed.value, stage: genericProjectionStage(), tournamentName: tournament.value.name || '足球赛事', divisionName: activeDivision.value?.name || '抽签分组', teams, assignments: genericProjectionAssignments(), screen: { theme: 'emerald', showTournament: true, showCrest: true, showProgress: true, fontSize: 'standard' }, assignedCount: genericProjectionAssignments().length, updatedAt: new Date().toISOString() }
 }
 function projectGenericStage() {
   const payload = genericProjectionPayload()

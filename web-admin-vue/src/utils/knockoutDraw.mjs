@@ -28,3 +28,10 @@ export function knockoutColumns(capacity) {
     { key:'right-seeds', title:'右半区签位', positions:Array.from({length:half},(_,i)=>half+i), count:half }
   ]
 }
+
+export function knockoutSeedOrder(size) {
+  const capacity = knockoutCapacity(size)
+  let order = [1,2]
+  for(let count=4;count<=capacity;count*=2)order=order.flatMap(seed=>[seed,count+1-seed])
+  return order
+}
