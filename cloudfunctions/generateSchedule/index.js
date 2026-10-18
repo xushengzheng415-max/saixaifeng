@@ -258,10 +258,10 @@ async function generatePairingsOnly(event, tournament, actor) {
 async function readConfirmedPairingCollection(collection, tournamentId, divisionId) {
   var all=[],offset=0
   while(true) {
-    var result=await db.collection(collection).where({tournamentId:tournamentId,divisionId:divisionId}).skip(offset).limit(100).get()
+    var result=await db.collection(collection).where({tournamentId:tournamentId}).skip(offset).limit(100).get()
     var page=result.data || []
     all=all.concat(page)
-    if(page.length<100)return all
+    if(page.length<100)return all.filter(row=>belongsToDivision(row,divisionId))
     offset+=page.length
   }
 }
