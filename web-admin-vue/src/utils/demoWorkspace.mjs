@@ -115,6 +115,19 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       }
       return { success: true, addedCount: additions.length, message: '虚拟球队已添加' }
     }
+    if (action === 'approveAllDemoRegistrations') {
+      if (!String(tournamentId || '').startsWith('demo-') || !String(divisionId).startsWith('demo-')) return fail('仅支持演示赛事及演示组别')
+      const tournament = get('tournaments', tournamentId)
+      const division = get('divisions', divisionId)
+      if (tournament.orgId !== DEMO_ORG_ID || tournament.synthetic !== true || division.tournamentId !== tournamentId) return fail('演示组别范围不匹配')
+      const pending = rows('tournament_teams').filter(row => row.tournamentId === tournamentId && String(row.divisionId || 'default') === divisionId && row.status === 'pending')
+      for (const row of pending) {
+        const team = get('teams', row.teamId)
+        if (!String(row._id).startsWith('demo-') || row.orgId !== DEMO_ORG_ID || row.synthetic !== true || team.synthetic !== true || team.orgId !== DEMO_ORG_ID) return fail('仅支持虚拟球队审核')
+      }
+      for (const row of pending) registration({ action:'reviewRegistration', registrationId:row._id, decision:'approved' })
+      return { success:true, approvedCount:pending.length, tournamentId, divisionId }
+    }
     if (action === 'reviewRegistration') {
       const approved=params.decision==='approved'
       const row=update('tournament_teams',params.registrationId,{status:params.decision,participationStatus:approved?'confirmed':params.decision,rosterStatus:approved?'approved':'draft'})

@@ -114,6 +114,14 @@
 
         </div>
         <div class="registration-review-selection">
+          <el-button
+            v-if="isDemoModeActive"
+            type="success"
+            :loading="demoApproving"
+            :disabled="!pendingTeams.length || batchApproving"
+            title="通过当前组别全部待审核虚拟球队"
+            @click="approveDemoTeams"
+          >一键审核通过</el-button>
           <el-checkbox
             :model-value="allVisibleApprovalsSelected"
             :indeterminate="someVisibleApprovalsSelected"
@@ -124,7 +132,8 @@
           <el-button
             type="success"
             :loading="batchApproving"
-            :disabled="selectedApprovalIds.length === 0"
+            :disabled="selectedApprovalIds.length === 0 || demoApproving"
+            :plain="isDemoModeActive"
             @click="approveAllVisibleApplications"
           >
             <el-icon><CircleCheckFilled /></el-icon>批量确认参赛
@@ -132,7 +141,7 @@
         </div>
       </section>
 
-      <section v-if="teamCardMode" class="team-card-toolbar"><strong>参赛球队 <span>{{ filteredTeams.length }}</span></strong><el-input v-model="searchKeyword" aria-label="搜索球队" placeholder="搜索球队" clearable :prefix-icon="Search" /></section>
+      <section v-if="teamCardMode" class="team-card-toolbar"><strong>参赛球队 <span>{{ filteredTeams.length }}</span></strong><el-button v-if="isDemoModeActive" type="success" :loading="demoApproving" :disabled="!pendingTeams.length || batchApproving" title="通过当前组别全部待审核虚拟球队" @click="approveDemoTeams">一键审核通过</el-button><el-input v-model="searchKeyword" aria-label="搜索球队" placeholder="搜索球队" clearable :prefix-icon="Search" /></section>
 
       <section v-if="isApplicationReviewView" class="simple-application-filters" :class="{ 'professional-application-filters': isProfessionalApplicationView }">
         <el-input v-model="searchKeyword" placeholder="搜索球队名称" clearable :prefix-icon="Search" />
@@ -564,7 +573,7 @@ import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFuncti
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import TeamRegistrationWordImporter from '../../components/tournament/TeamRegistrationWordImporter.vue'
-import { isDemoMode } from '../../utils/demoMode'
+import { isDemoMode, demoRequest } from '../../utils/demoMode'
 
 const route = useRoute()
 const router = useRouter()
@@ -662,6 +671,7 @@ const applicationSource = ref('')
 const applicationStatus = ref('')
 const applicationDate = ref('')
 const batchApproving = ref(false)
+const demoApproving = ref(false)
 const selectedApprovalIds = ref([])
 const changeTypeFilter = ref('')
 const changeStatusFilter = ref('')
@@ -1396,6 +1406,28 @@ async function retryRegistrationNotification(team) {
     if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '通知重试失败')
   } finally {
     retryingNotificationId.value = ''
+  }
+}
+
+async function approveDemoTeams() {
+  if (demoApproving.value || batchApproving.value) return
+  if (!isDemoMode(tournamentId) || !String(tournamentId).startsWith('demo-')) return
+  const divisionId = String(activeDivisionId.value || '')
+  if (!divisionId.startsWith('demo-')) return ElMessage.warning('请先选择演示组别')
+  demoApproving.value = true
+  try {
+    // Direct local dispatch: this shortcut never falls back to a production request.
+    const result = demoRequest('tournamentRegistrationFlow', {
+      action:'approveAllDemoRegistrations', tournamentId, divisionId
+    })
+    if (!result?.success) throw new Error(result?.message || '演示审核失败')
+    selectedApprovalIds.value = []
+    await loadTournamentTeams()
+    ElMessage.success(result.approvedCount ? `已通过 ${result.approvedCount} 支演示球队` : '当前组别没有待审核球队')
+  } catch (error) {
+    ElMessage.error(error.message || '演示审核失败，请重试')
+  } finally {
+    demoApproving.value = false
   }
 }
 

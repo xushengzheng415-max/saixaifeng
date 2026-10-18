@@ -355,3 +355,7 @@ PC 进球榜、球员红黄牌榜、球队红黄牌榜使用 dataCenter.query �
 ## 2026-10-15 主账号本人赛事读取
 
 PC赛事空间先通过tournamentStaffAccess.scope确认会话账号及真实拥有机构，再用既有机构边界读取tournaments；不依赖本机机构缓存，不将共享成员关系视作拥有权。必要时沿用activateOrganizerWorkspace切回本人机构。赛事、机构、授权记录不迁移；加载失败显示重试，不能当作无赛事。
+
+## 2026-10-18 演示球队一键审核
+
+报名管理及球队管理共用TournamentTeams，仅演示模式显示一键审核通过；不勾选即可处理当前赛事/组别全部pending虚拟参赛关系。点击时再次核验演示模式及demo-赛事/组别ID，直接调用浏览器demoRequest，不经cloud真实请求。demoWorkspace先核验组别归属及所有目标球队/关系的演示机构和synthetic标记，再复用本地reviewRegistration；快照沿原演示审核同步。其他组别、非pending关系与球员身份认证均不由该快捷操作修改。沿现有浏览器事务回滚及账号session存储，重复点击/无待审时禁用。正式业务模式不提供此入口，未新增服务端接口或变更真实审核权限。
