@@ -1,0 +1,164 @@
+{
+  "format": "prototype-design",
+  "version": 1,
+  "project": "赛小蜂足球服务号个人中心",
+  "plan": "页面方案.json",
+  "plan_revision": 2,
+  "scope": [
+    "P01",
+    "P02"
+  ],
+  "deferred": [],
+  "pages": [
+    {
+      "id": "P01",
+      "name": "球员身份",
+      "portal": "h5",
+      "state": "normal",
+      "source": "设计源/P01-球员身份.html",
+      "output": "H5/P01-球员身份.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full_page": true,
+      "status": "rendered",
+      "template_decision": {
+        "selected_pattern": "existing-h5-personal-structure",
+        "mode": "adapt-structure",
+        "reason": "复用项目身份与数据结构，补蜂蜜账户层，采用WeUI/Vant列表与浮层结构",
+        "source_urls": [
+          "https://weui.io/",
+          "https://vant-ui.github.io/vant/#/zh-CN/cell"
+        ],
+        "keep": [
+          "品牌绿",
+          "身份切换",
+          "本人数据"
+        ],
+        "remove": [
+          "重复身份卡",
+          "无关后台入口"
+        ],
+        "adapt": [
+          "蜂蜜余额与充值",
+          "账号服务分组"
+        ]
+      },
+      "sha256": "8efe638cfcaa91cbe9e053002941363039a2cda257adf0b88d90d89431a471db",
+      "review": {
+        "status": "passed",
+        "checks": [
+          "文字精简",
+          "布局",
+          "素材",
+          "滚动与固定栏"
+        ],
+        "notes": "逐张查看390px精修长图：品牌球场头部与金色蜂蜜卡层次完整，中文与余额清晰，身份选择及数据保持一致，未遮挡或裁切。320px和充值浮层、两角色切换通过。"
+      }
+    },
+    {
+      "id": "P02",
+      "name": "裁判身份",
+      "portal": "h5",
+      "state": "normal",
+      "source": "设计源/P02-裁判身份.html",
+      "output": "H5/P02-裁判身份.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full_page": true,
+      "status": "rendered",
+      "template_decision": {
+        "selected_pattern": "existing-h5-personal-structure",
+        "mode": "adapt-structure",
+        "reason": "复用项目身份与数据结构，补蜂蜜账户层，采用WeUI/Vant列表与浮层结构",
+        "source_urls": [
+          "https://weui.io/",
+          "https://vant-ui.github.io/vant/#/zh-CN/cell"
+        ],
+        "keep": [
+          "品牌绿",
+          "身份切换",
+          "本人数据"
+        ],
+        "remove": [
+          "重复身份卡",
+          "无关后台入口"
+        ],
+        "adapt": [
+          "蜂蜜余额与充值",
+          "账号服务分组"
+        ]
+      },
+      "sha256": "cd4b292d8df4180227ea1264c95f00859289936e29f68dacba182333cb91df5a",
+      "review": {
+        "status": "passed",
+        "checks": [
+          "文字精简",
+          "布局",
+          "素材",
+          "滚动与固定栏"
+        ],
+        "notes": "逐张查看390px精修长图：品牌球场头部与金色蜂蜜卡层次完整，中文与余额清晰，身份选择及数据保持一致，未遮挡或裁切。320px和充值浮层、两角色切换通过。"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "path": "设计源/素材/bell.svg",
+      "source": "项目miniprogram/images/icons共享SVG",
+      "license": "项目既有授权范围，仅本项目原型使用"
+    },
+    {
+      "path": "设计源/素材/chart.svg",
+      "source": "项目miniprogram/images/icons共享SVG",
+      "license": "项目既有授权范围，仅本项目原型使用"
+    },
+    {
+      "path": "设计源/素材/event.svg",
+      "source": "项目miniprogram/images/icons共享SVG",
+      "license": "项目既有授权范围，仅本项目原型使用"
+    },
+    {
+      "path": "设计源/素材/list.svg",
+      "source": "项目miniprogram/images/icons共享SVG",
+      "license": "项目既有授权范围，仅本项目原型使用"
+    },
+    {
+      "path": "设计源/素材/lock.svg",
+      "source": "项目miniprogram/images/icons共享SVG",
+      "license": "项目既有授权范围，仅本项目原型使用"
+    },
+    {
+      "path": "设计源/素材/logo.png",
+      "source": "项目service-account-h5/assets品牌素材",
+      "license": "项目既有授权范围，仅本项目原型使用"
+    },
+    {
+      "path": "设计源/素材/shield.svg",
+      "source": "项目miniprogram/images/icons共享SVG",
+      "license": "项目既有授权范围，仅本项目原型使用"
+    },
+    {
+      "path": "设计源/素材/stadium.jpg",
+      "source": "项目miniprogram/images/runtime/team-data-emerald-stadium-v1.jpg",
+      "license": "项目既有品牌场景素材，仅本项目原型使用"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "P01",
+      "to": "P02",
+      "trigger": "点击裁判身份",
+      "kind": "role-switch"
+    },
+    {
+      "from": "P02",
+      "to": "P01",
+      "trigger": "点击球员身份",
+      "kind": "role-switch"
+    }
+  ]
+}

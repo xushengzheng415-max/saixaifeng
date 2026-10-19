@@ -1,5 +1,6 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
+const https = require('https')
 const customerProfiles = require('./customerProfile.cjs')
 const platformArchive = require('./platformArchive.cjs')
 
@@ -833,6 +834,225 @@ async function revokeTournamentCenter(db, event, user) {
   return { success: true, revokedSnapshots: rows.length }
 }
 
+// ---------- 服务号「我的」页反馈管理（列表 + 状态流转，仅平台负责人） ----------
+const FEEDBACK_STATUSES = ['pending', 'processing', 'done']
+const FEEDBACK_TYPE_LABELS = { data_error: '数据问题', binding: '绑定问题', feature: '功能建议', other: '其他' }
+
+function feedbackStatusOf(value) {
+  const status = cleanText(value, 20)
+  return FEEDBACK_STATUSES.includes(status) ? status : ''
+}
+
+function feedbackRow(row) {
+  const type = FEEDBACK_TYPE_LABELS[String(row.type || '')] ? String(row.type) : 'other'
+  return {
+    feedbackId: String(row._id || ''),
+    type,
+    typeLabel: FEEDBACK_TYPE_LABELS[type],
+    content: String(row.content || ''),
+    contact: String(row.contact || ''),
+    phoneMasked: String(row.phoneMasked || ''),
+    userId: String(row.userId || ''),
+    source: String(row.source || ''),
+    status: feedbackStatusOf(row.status) || 'pending',
+    note: String(row.note || ''),
+    handledBy: String(row.handledBy || ''),
+    serviceAccountOpenId: String(row.serviceAccountOpenId || ''),
+    reply: String(row.reply || ''),
+    replyAt: row.replyAt || null,
+    replyBy: String(row.replyBy || ''),
+    createTime: row.createTime || null,
+    firstHandledAt: row.firstHandledAt || null,
+    handledAt: row.handledAt || null
+  }
+}
+
+async function listServiceFeedback(db, params) {
+  const collection = db.collection('service_feedback')
+  const where = {}
+  const status = feedbackStatusOf(params.status)
+  if (status) where.status = status
+  const type = cleanText(params.type, 20)
+  if (FEEDBACK_TYPE_LABELS[type]) where.type = type
+  const contact = normalizePhone(params.contact)
+  if (contact) where.contact = contact
+  const page = Math.max(1, Number(params.page) || 1)
+  const pageSize = Math.min(50, Math.max(10, Number(params.pageSize) || 20))
+  const base = Object.keys(where).length ? collection.where(where) : collection
+  const counted = await base.count()
+  const total = counted.total || 0
+  const listed = await base.orderBy('createTime', 'desc').skip((page - 1) * pageSize).limit(pageSize).get()
+  const counts = { pending: 0, processing: 0, done: 0 }
+  await Promise.all(FEEDBACK_STATUSES.map(async item => {
+    const result = await collection.where({ status: item }).count()
+    counts[item] = result.total || 0
+  }))
+  counts.all = FEEDBACK_STATUSES.reduce((sum, item) => sum + counts[item], 0)
+  return { success: true, rows: (listed.data || []).map(feedbackRow), total, page, pageSize, counts }
+}
+
+async function updateServiceFeedback(db, params, user) {
+  const feedbackId = cleanText(params.feedbackId, 64)
+  const status = feedbackStatusOf(params.status)
+  if (!feedbackId) return { success: false, error: '请选择要处理的反馈' }
+  if (!status) return { success: false, error: '处理状态不正确' }
+  let existing = null
+  try { existing = firstRecord((await db.collection('service_feedback').doc(feedbackId).get()).data) } catch (error) { existing = null }
+  if (!existing) return { success: false, error: '反馈不存在或已删除' }
+  const note = cleanText(params.note, 500)
+  const patch = { status, note, handledBy: cleanText(user._id, 64), handledAt: db.serverDate(), updateTime: db.serverDate() }
+  if (!existing.firstHandledAt && status !== 'pending') patch.firstHandledAt = db.serverDate()
+  await db.collection('service_feedback').doc(feedbackId).update({ data: patch })
+  await db.collection('platform_content_audit_logs').add({
+    data: { action: 'service_feedback_status', actorId: user._id, feedbackId, fromStatus: String(existing.status || 'pending'), toStatus: status, createTime: db.serverDate() }
+  })
+  return { success: true, feedbackId, status }
+}
+
+// ---------- 服务号模板消息：反馈回复通知 ----------
+const SERVICE_ACCOUNT_CONFIG = {
+  appId: process.env.SERVICE_ACCOUNT_APP_ID || '',
+  appSecret: process.env.SERVICE_ACCOUNT_APP_SECRET || '',
+  replyTemplateId: process.env.SERVICE_FEEDBACK_REPLY_TEMPLATE_ID || '',
+  bridgeUrl: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_URL || '',
+  bridgeSecret: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_SECRET || ''
+}
+
+function saHttpsGet(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, response => {
+      let body = ''
+      response.on('data', chunk => { body += chunk })
+      response.on('end', () => { try { resolve(JSON.parse(body)) } catch { resolve(null) } })
+    })
+    req.on('error', reject)
+    req.setTimeout(10000, () => req.destroy(new Error('微信接口超时')))
+  })
+}
+
+function saHttpsPost(url, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload)
+    const target = new URL(url)
+    const req = https.request({
+      hostname: target.hostname, port: 443, path: target.pathname + target.search, method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) }
+    }, response => {
+      let result = ''
+      response.on('data', chunk => { result += chunk })
+      response.on('end', () => { try { resolve(JSON.parse(result)) } catch { resolve(null) } })
+    })
+    req.on('error', reject)
+    req.setTimeout(10000, () => req.destroy(new Error('微信接口超时')))
+    req.write(body); req.end()
+  })
+}
+
+async function saBridgePost(action, payload) {
+  const baseUrl = String(SERVICE_ACCOUNT_CONFIG.bridgeUrl || '').replace(/\/+$/, '')
+  if (!baseUrl || !SERVICE_ACCOUNT_CONFIG.bridgeSecret) throw new Error('服务号固定出口中转尚未配置')
+  const body = JSON.stringify(payload || {})
+  const timestamp = Date.now()
+  const nonce = crypto.randomBytes(16).toString('hex')
+  const signature = crypto.createHmac('sha256', SERVICE_ACCOUNT_CONFIG.bridgeSecret).update(`${timestamp}\n${nonce}\n${body}`).digest('hex')
+  const target = new URL(baseUrl + '/' + action)
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: target.hostname, port: 443, path: target.pathname + target.search, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'X-Sxf-Timestamp': String(timestamp), 'X-Sxf-Nonce': nonce, 'X-Sxf-Signature': signature }
+    }, response => {
+      let result = ''
+      response.on('data', chunk => { result += chunk })
+      response.on('end', () => {
+        try {
+          const parsed = JSON.parse(result)
+          if (response.statusCode < 200 || response.statusCode >= 300 || parsed.success !== true) return reject(new Error(parsed.message || '服务号固定出口中转请求失败'))
+          resolve(parsed)
+        } catch (error) { reject(error) }
+      })
+    })
+    req.on('error', reject)
+    req.setTimeout(10000, () => req.destroy(new Error('服务号固定出口中转超时')))
+    req.write(body); req.end()
+  })
+}
+
+async function getServiceAccountAccessToken(db) {
+  const cached = await db.collection('service_account_tokens').where({
+    appId: SERVICE_ACCOUNT_CONFIG.appId,
+    expiresAt: db.command.gt(new Date(Date.now() + 2 * 60 * 1000))
+  }).limit(1).get()
+  if (cached.data && cached.data[0]) return cached.data[0].accessToken
+  const url = 'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=' +
+    encodeURIComponent(SERVICE_ACCOUNT_CONFIG.appId) + '&secret=' + encodeURIComponent(SERVICE_ACCOUNT_CONFIG.appSecret)
+  let result
+  if (SERVICE_ACCOUNT_CONFIG.bridgeUrl && SERVICE_ACCOUNT_CONFIG.bridgeSecret) {
+    result = (await saBridgePost('token', { grant_type: 'client_credential', appid: SERVICE_ACCOUNT_CONFIG.appId, secret: SERVICE_ACCOUNT_CONFIG.appSecret })).data
+  } else {
+    result = await saHttpsGet(url)
+  }
+  if (!result || !result.access_token) throw new Error('获取服务号 access_token 失败')
+  const old = await db.collection('service_account_tokens').where({ appId: SERVICE_ACCOUNT_CONFIG.appId }).limit(10).get()
+  for (const item of old.data || []) await db.collection('service_account_tokens').doc(item._id).remove()
+  await db.collection('service_account_tokens').add({
+    data: { appId: SERVICE_ACCOUNT_CONFIG.appId, accessToken: result.access_token, expiresAt: new Date(Date.now() + Number(result.expires_in || 7200) * 1000), createTime: db.serverDate() }
+  })
+  return result.access_token
+}
+
+async function sendFeedbackReplyTemplate(cloud, openId, feedback) {
+  if (!openId) return { skipped: true, reason: '用户未绑定服务号' }
+  try {
+    const result = await cloud.callFunction({
+      name: 'sendRefereeTemplateMessages',
+      data: {
+        action: 'feedbackReply',
+        openId,
+        type: String(feedback.type || 'other'),
+        reply: String(feedback.reply || '')
+      }
+    })
+    const r = result.result || {}
+    if (r.success) return { success: true, msgid: r.msgid }
+    return { success: false, errcode: r.errcode, errmsg: r.errmsg || r.error || '推送失败' }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+async function serviceFeedbackReply(db, params, user) {
+  const feedbackId = cleanText(params.feedbackId, 64)
+  const reply = cleanText(params.reply, 500)
+  if (!feedbackId) return { success: false, error: '请选择要回复的反馈' }
+  if (!reply) return { success: false, error: '回复内容不能为空' }
+  let existing = null
+  try { existing = firstRecord((await db.collection('service_feedback').doc(feedbackId).get()).data) } catch { existing = null }
+  if (!existing) return { success: false, error: '反馈不存在或已删除' }
+  const patch = {
+    reply,
+    replyAt: db.serverDate(),
+    replyBy: cleanText(user._id, 64),
+    status: 'done',
+    updateTime: db.serverDate()
+  }
+  if (!existing.firstHandledAt) patch.firstHandledAt = db.serverDate()
+  await db.collection('service_feedback').doc(feedbackId).update({ data: patch })
+  await db.collection('platform_content_audit_logs').add({
+    data: { action: 'service_feedback_reply', actorId: user._id, feedbackId, createTime: db.serverDate() }
+  })
+  let notify = { skipped: true, reason: '未尝试推送' }
+  const openId = String(existing.serviceAccountOpenId || '')
+  if (openId) {
+    try {
+      notify = await sendFeedbackReplyTemplate(cloud, openId, { ...existing, reply })
+    } catch (error) {
+      notify = { success: false, error: error.message }
+      console.warn('[manageTournamentCenterContent] feedback reply notify failed:', error.message)
+    }
+  }
+  return { success: true, feedbackId, reply, replyAt: new Date(), notify }
+}
+
 exports.main = async event => {
   const db = cloud.database()
   try {
@@ -853,6 +1073,9 @@ exports.main = async event => {
     if (action === 'revokeTournamentCenter') return await revokeTournamentCenter(db, params, user)
     if (action === 'inspectOrganizerAccountDeletion') return await inspectOrganizerAccountDeletion(db, params)
     if (action === 'deleteOrganizerAccount') return await deleteOrganizerAccount(db, params, user)
+    if (action === 'serviceFeedbackList') return await listServiceFeedback(db, params)
+    if (action === 'serviceFeedbackUpdate') return await updateServiceFeedback(db, params, user)
+    if (action === 'serviceFeedbackReply') return await serviceFeedbackReply(db, params, user)
     return { success: false, error: `不支持的操作: ${action}` }
   } catch (error) {
     console.error('[manageTournamentCenterContent] error:', error)

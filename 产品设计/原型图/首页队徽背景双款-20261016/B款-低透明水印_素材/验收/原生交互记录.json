@@ -1,0 +1,66 @@
+{
+  "isolatedCloud": true,
+  "home": [
+    {
+      "offset": {
+        "left": 19,
+        "top": 141
+      },
+      "size": {
+        "width": 352,
+        "height": 146
+      }
+    },
+    {
+      "offset": {
+        "left": 19,
+        "top": 297.46875
+      },
+      "size": {
+        "width": 352,
+        "height": 125
+      }
+    },
+    {
+      "offset": {
+        "left": 19,
+        "top": 432.46875
+      },
+      "size": {
+        "width": 352,
+        "height": 125
+      }
+    }
+  ],
+  "teamsVisibleFromSharedWorkspace": 2,
+  "organizerSharedRoute": "/pages/tournament/shared/shared?id=22dda3756aa93fd70002a29257a61fe6",
+  "profile": {
+    "fixedIcon": {
+      "width": 45,
+      "height": 45
+    },
+    "authorizationCards": 0
+  },
+  "identityConfirmBounds": {
+    "top": 710,
+    "height": 45,
+    "cancelBottom": 800,
+    "viewportHeight": 844,
+    "tabBarVisible": false
+  },
+  "identityChoices": 2,
+  "cancelAndSwitchRestoreTabs": true,
+  "teamRoute": "/pages/tournament/detail/detail?id=22dda3756aa93fd70002a29257a61fe6&view=team&workspaceId=team%3A6d00d0e56aabf9ff003e51dc0d315ce5&teamId=6d00d0e56aabf9ff003e51dc0d315ce5&divisionId=adult",
+  "portalRolePreserved": true,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "finalProfile": {
+    "version": "1.1.23",
+    "authorizationCards": 0,
+    "overlayHidden": true,
+    "cancelRestored": true,
+    "sourceAfterBackgroundRefreshFix": true
+  }
+}

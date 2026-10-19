@@ -1,6 +1,8 @@
 'use strict'
 const crypto = require('crypto')
 const shared = require('./sharedEvents.cjs')
+const matchViews = require('./sharedMatchView.cjs')
+const { readAll, readByIds } = require('./data-center/reader.cjs')
 const str = value => String(value == null ? '' : value).trim()
 const MODULES = { registration:'event.registration', teams:'event.teams', matches:'event.matches', results:'event.results', referees:'event.referees' }
 const missing = error => /collection(?: does)? not exist|ns does not exist|namespace_not_found|collection_not_exist/i.test(str(error.message) + ' ' + str(error.code))
@@ -52,18 +54,8 @@ function refereeIds(match) {
 function statusLabel(value) {
   return ({approved:'已通过',pending:'待审核',submitted:'待审核',rejected:'已驳回',returned:'已退回',confirmed:'已确认',invited:'待认领',pending_claim:'待认领',active:'有效',completed:'已结束',finished:'已结束',ongoing:'进行中',live:'进行中',in_progress:'进行中',playing:'进行中',cancelled:'已取消',withdrawn:'已退出',under_review:'待核查',archived:'已归档'})[str(value)] || str(value) || '待确认'
 }
-function matchView(item,teams) {
-  const home=teams.get(str(item.homeTeamId)) || {}, away=teams.get(str(item.awayTeamId)) || {}
-  const started=!['pending','upcoming','scheduled',''].includes(str(item.status))
-  const recordLocked=Boolean(item.refereeRecordLocked || item.refereeRecord || item.refereeReport || item.refereeReportSubmittedAt || item.executionState==='recording' || ['draft','submitted','approved','archived'].includes(str(item.refereeReportStatus)) || ['under_review','returned','archived'].includes(str(item.refereeReviewStatus)))
-  return {id:str(item._id),name:(home.name || item.homeTeamName || '主队')+' VS '+(away.name || item.awayTeamName || '客队'),
-    homeTeamId:str(item.homeTeamId),awayTeamId:str(item.awayTeamId),homeName:home.name || item.homeTeamName || '主队',awayName:away.name || item.awayTeamName || '客队',
-    homeLogo:str(home.logoTransparent || home.logoUrl || home.logo),awayLogo:str(away.logoTransparent || away.logoUrl || away.logo),
-    date:str(item.matchDate || item.date).slice(0,10),time:str(item.matchTime || item.time || item.startTime).slice(0,5),venue:str(item.venue || item.location),
-    recordLocked,status:['scheduled','pending','upcoming','checked_in','not_started',''].includes(str(item.status)) ? '待开始' : statusLabel(item.status),score:started && item.homeScore!=null && item.awayScore!=null ? item.homeScore+' : '+item.awayScore : '— : —',
-    reviewStatus:statusLabel(item.refereeReviewStatus),canReview:item.refereeReviewStatus==='under_review' && Boolean(item.refereeRecordLocked && item.refereeRecord),
-    canEdit:!recordLocked && !['completed','finished','archived'].includes(str(item.status)),canSupplement:!recordLocked && ['completed','finished'].includes(str(item.status)),
-    revision:Number(item.matchEventRevision || 0),recordRevision:require('./sharedRecording.cjs').revision(item)}
+function matchView(item,teams,divisions) {
+  return {...matchViews.view(item,teams,divisions),revision:Number(item.matchEventRevision || 0),recordRevision:require('./sharedRecording.cjs').revision(item)}
 }
 function reviewRevision(match) { return crypto.createHash('sha256').update(JSON.stringify([match.refereeReviewStatus,match.refereeRecordLocked,match.refereeRecord,match.matchEventRevision,match.events,match.homeScore,match.awayScore])).digest('hex') }
 async function media(cloud,items) {
@@ -84,13 +76,15 @@ async function teamMap(db,registrations) {
   }
   return map
 }
-// The channel token remains server-side, lasts at most 90 seconds and is removed
+// Channel tokens remain server-side (OCR 180s; other operations 90s) and are removed
 // after the existing PC service completes. It never grants new module rights.
 async function relay(db,cloud,identity,grant,name,params) {
   const token=crypto.randomBytes(32).toString('hex')
-  const session=await db.collection('auth_sessions').add({data:{userId:identity.user._id,activeOrgId:grant.orgId,active:true,tokenHash:crypto.createHash('sha256').update(token).digest('hex'),expiresAt:new Date(Date.now()+90000),source:'mini_shared_operation',tournamentId:grant.id,grantId:grant.grantId,allowedFunction:name,miniOperation:str(params.miniOperation),recordRevision:str(params.miniRecordRevision),createTime:db.serverDate()}})
+  const paper=name==='webLoginApi' && ['recognizeRefereeReport','confirmRefereeReport'].includes(params.action)
+  if(name==='webLoginApi' && !paper) throw new Error('手机识别中转入口未授权')
+  const session=await db.collection('auth_sessions').add({data:{userId:identity.user._id,activeOrgId:grant.orgId,active:true,tokenHash:crypto.createHash('sha256').update(token).digest('hex'),expiresAt:new Date(Date.now()+(paper?180000:90000)),source:'mini_shared_operation',tournamentId:grant.id,grantId:grant.grantId,allowedFunction:name,...(paper?{allowedAction:params.action,targetMatchId:str(params.matchId)}:{}),miniOperation:str(params.miniOperation),recordRevision:str(params.miniRecordRevision),createTime:db.serverDate()}})
   try {
-    const response=await cloud.callFunction({name,data:{...params,tournamentId:grant.id,__staffTournamentId:grant.id,__actorUserId:identity.user._id,__actorOrgId:grant.orgId,__authToken:token}})
+    const response=await cloud.callFunction({name,data:{...params,tournamentId:grant.id,__staffTournamentId:grant.id,__actorUserId:identity.user._id,__actorOrgId:grant.orgId,__authToken:token,...(paper?{authToken:token,staffTournamentId:grant.id}:{})},...(paper?{timeout:150000}:{})})
     const result=response.result || {}
     if(!result.success) throw new Error(result.message || result.error || '操作失败，请刷新后重试')
     delete result.__notificationRelay
@@ -102,11 +96,18 @@ async function run(db,cloud,identity,event,formatPlayer) {
   if(!right) throw new Error('手机未开放此模块')
   const grant=await authorized(db,identity,event,right), tournamentId=grant.id
   if(operation==='list') {
-    const registrations=(await rows(db,'tournament_teams',{tournamentId})).filter(row=>!['removed','deleted','replaced','invite_cancelled'].includes(str(row.status))), teams=await teamMap(db,registrations)
+    const registrations=(mode==='matches' || mode==='results') ? [] : (await rows(db,'tournament_teams',{tournamentId})).filter(row=>!['removed','deleted','replaced','invite_cancelled'].includes(str(row.status))), teams=await teamMap(db,registrations)
     let items=[]
     if(mode==='teams') items=[...teams.values()].map(item=>({id:str(item._id),name:str(item.name || item.teamName),logo:str(item.logoTransparent || item.logoUrl || item.logo),status:'查看资料',detail:str(item.cityName || item.city),description:str(item.description),shortName:str(item.shortName),teamCode:str(item.teamCode || item.code)}))
     if(mode==='registration') items=registrations.map(item=>({id:str(item._id),name:str((teams.get(str(item.teamId)) || {}).name || item.teamName) || '球队资料待补齐',status:statusLabel(item.status),detail:str(item.divisionName),missingTeam:!teams.has(str(item.teamId)),canReview:teams.has(str(item.teamId)) && str(item.status)==='pending'}))
-    if(mode==='matches' || mode==='results') items=(await rows(db,'matches',{tournamentId})).filter(row=>row.deleted!==true && row.isDeleted!==true && !['removed','deleted'].includes(str(row.status))).map(item=>matchView(item,teams)).sort((a,b)=>(a.date+' '+a.time).localeCompare(b.date+' '+b.time))
+    let divisions=[]
+    if(mode==='matches' || mode==='results') {
+      divisions=(await readAll(db,'divisions',{tournamentId})).filter(row=>!row.deleted && !row.isDeleted).map(row=>({id:str(row._id),name:str(row.name || row.divisionName)}))
+      const matches=(await readAll(db,'matches',{tournamentId})).filter(row=>matchViews.currentMatch(row) && (mode!=='results' || matchViews.resultState(row)))
+      const matchTeams=await readByIds(db,'teams','_id',matches.flatMap(row=>[row.homeTeamId,row.awayTeamId]))
+      const byTeam=new Map(matchTeams.map(row=>[str(row._id),row])),byDivision=new Map(divisions.map(row=>[row.id,row.name]))
+      items=matches.map(item=>matchView(item,byTeam,byDivision)).sort((a,b)=>(a.date || '9999').localeCompare(b.date || '9999') || a.time.localeCompare(b.time) || a.id.localeCompare(b.id))
+    }
     if(mode==='referees') {
       const direct=await rows(db,'referees',{tournamentId},true), relations=await rows(db,'tournament_referees',{tournamentId},true)
       const records=new Map(direct.map(item=>[str(item._id),{item,relation:null,assigned:false}]))
@@ -115,7 +116,7 @@ async function run(db,cloud,identity,event,formatPlayer) {
       items=[...records.values()].map(({item,relation,assigned})=>({id:str(item._id),name:str(item.name || item.realName),status:statusLabel(item.status),detail:item.temporaryReferee ? '赛事临时裁判' : '持证裁判',availability:str((relation || item).availabilityStatus),canConfirm:item.temporaryReferee===true && item.temporaryClaimStatus==='claimed_pending_review' && item.wechatBound===true,canManage:Boolean(relation || item.eventScoped===true || assigned || str(item.tournamentId)===tournamentId),relationId:str(relation && relation._id)}))
     }
     const missingTeams=[...new Set(registrations.map(item=>str(item.teamId)).filter(id=>id && !teams.has(id)))]
-    return {success:true,items:await media(cloud,items),warning:mode==='registration' && missingTeams.length ? '部分球队资料已删除，请主办方在 PC 补齐关联；其他报名可继续查看。' : ''}
+    return {success:true,items:await media(cloud,items),divisions:[{id:'',name:'全部组别'},...divisions],warning:mode==='registration' && missingTeams.length ? '部分球队资料已删除，请主办方在 PC 补齐关联；其他报名可继续查看。' : ''}
   }
   if(mode==='teams' && ['detail','players','playerDetail'].includes(operation)) {
     const registrations=(await rows(db,'tournament_teams',{tournamentId,teamId:str(event.teamId || event.id)})).filter(row=>!['removed','deleted','replaced','invite_cancelled'].includes(str(row.status)))
@@ -200,21 +201,16 @@ async function run(db,cloud,identity,event,formatPlayer) {
   }
   if(mode==='matches' || mode==='results') {
     const match=await related(db,'matches',event.id,tournamentId)
+    if(!matchViews.currentMatch(match)) throw new Error('比赛已取消或已替换，请返回列表')
+    if(mode==='results' && !matchViews.resultState(match)) throw new Error('比赛尚无可查看的赛果，请在比赛管理录入')
+    if(mode==='matches' && ['lineupCards','lineupCardImage'].includes(operation)) return require('./sharedLineupCards.cjs').read({db,cloud,identity,event,grant,match,rows,doc,authorized})
     if(mode==='matches' && ['lineup','start','finish','reportTicket','recognizeReport','confirmReport'].includes(operation)) return require('./sharedRecording.cjs').run({db,cloud,identity,event,grant,match,relay,rows,doc,authorized})
     if(operation==='detail') {
-      const registrations=await rows(db,'tournament_teams',{tournamentId}), teams=await teamMap(db,registrations)
+      const recording=require('./sharedRecording.cjs')
+      const [registrations,players,rulesResult]=await Promise.all([rows(db,'tournament_teams',{tournamentId}),mode==='matches'?recording.pool(db,match,rows,doc):[],mode==='matches'?recording.lineupRules({db,match,doc}).then(rules=>({rules})).catch(error=>({warning:error.message})):{}])
+      const teamIds=new Set([str(match.homeTeamId),str(match.awayTeamId)]),teams=await teamMap(db,registrations.filter(row=>teamIds.has(str(row._id))||teamIds.has(str(row.teamId))))
       const view=matchView(match,teams)
-      const sources=[]
-      const lineup=match.lineup || match.lineups || {}
-      for(const side of ['home','away']) { const body=lineup[side] || {}; for(const player of [].concat(body.starters || [],body.substitutes || [])) sources.push({...player,teamSide:side,teamId:side==='home' ? match.homeTeamId : match.awayTeamId}) }
-      const snapshots=await rows(db,'match_lineup_snapshots',{matchId:str(match._id)},true)
-      for(const snapshot of snapshots) {
-        if(str(snapshot.tournamentId)!==tournamentId || ![str(match.homeTeamId),str(match.awayTeamId)].includes(str(snapshot.teamId))) continue
-        const side=str(snapshot.teamId)===str(match.homeTeamId) ? 'home' : 'away'
-        for(const player of [].concat(snapshot.starters || [],snapshot.substitutes || [],snapshot.players || [])) sources.push({...player,teamSide:side,teamId:snapshot.teamId})
-      }
-      const players=mode==='matches' ? await require('./sharedRecording.cjs').pool(db,match,rows,doc) : []
-      return {success:true,item:{...view,players,rawStatus:str(match.status),lineups:match.lineups || {},reviewRevision:reviewRevision(match),report:str(match.refereeRecord && (match.refereeRecord.reportText || match.refereeRecord.report) || match.refereeReport),events:(match.events || []).map(row=>({id:str(row.eventId || row._id),type:str(row.type),minute:row.minute,playerName:str(row.playerName),teamName:str(row.teamName),outPlayerName:str(row.outPlayerName || row.assistName)}))}}
+      return {success:true,item:{...view,players,lineupRules:rulesResult.rules||null,lineupWarning:rulesResult.warning||'',rawStatus:str(match.status),lineups:match.lineups || {},reviewRevision:reviewRevision(match),report:str(match.refereeRecord && (match.refereeRecord.reportText || match.refereeRecord.report) || match.refereeReport),events:(match.events || []).map(row=>({id:str(row.eventId || row._id),type:str(row.type),minute:row.minute,playerName:str(row.playerName),teamName:str(row.teamName),outPlayerName:str(row.outPlayerName || row.assistName)}))}}
     }
     if(mode==='matches' && operation==='save') {
       const data={matchDate:str(event.date),matchTime:str(event.time),venue:str(event.venue).slice(0,100)}

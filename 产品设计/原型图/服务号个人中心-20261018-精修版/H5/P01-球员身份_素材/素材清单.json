@@ -1,0 +1,373 @@
+{
+  "schema_version": 2,
+  "asset_dir": ".",
+  "prototype": "原型原图/P01-球员身份.png",
+  "status": "implemented",
+  "generated_at": "2026-10-18T05:42:33.484954+00:00",
+  "screen": {
+    "width": 390,
+    "height": 1060
+  },
+  "summary": "服务号个人中心精修稿正式落地：身份/蜂蜜/数据/账号服务",
+  "inventory_notes": {
+    "missing_assets": "无阻塞素材缺口。未提供充值价格、支付接口、私有卡面入口时保持明确不可用状态，不带入演示值。"
+  },
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "原型原图/P01-球员身份.png",
+      "sha256": "8efe638cfcaa91cbe9e053002941363039a2cda257adf0b88d90d89431a471db",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 1060
+      },
+      "notes": "原型原图仅作参考"
+    },
+    {
+      "id": "hero",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 326
+      },
+      "no_crop_reason": "可编辑HTML已提供，区域全部按代码实现，不需裁片",
+      "notes": "场景头图、真实身份姓名和切换控件"
+    },
+    {
+      "id": "wallet",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 18,
+        "y": 279,
+        "width": 354,
+        "height": 166
+      },
+      "no_crop_reason": "可编辑HTML已提供，区域全部按代码实现，不需裁片",
+      "notes": "蜂蜜账户只读余额，失败未知显示破折号"
+    },
+    {
+      "id": "statistics",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 18,
+        "y": 463,
+        "width": 354,
+        "height": 200
+      },
+      "no_crop_reason": "可编辑HTML已提供，区域全部按代码实现，不需裁片",
+      "notes": "复用正式个人数据接口，不重新计算统计"
+    },
+    {
+      "id": "account",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 18,
+        "y": 712,
+        "width": 354,
+        "height": 286
+      },
+      "no_crop_reason": "可编辑HTML已提供，区域全部按代码实现，不需裁片",
+      "notes": "保留既有账号、绑定、客服入口，扩只读蜂蜜与个人通知"
+    },
+    {
+      "id": "labels",
+      "category": "text",
+      "implementation": "text-code",
+      "source_bbox": {
+        "x": 18,
+        "y": 0,
+        "width": 354,
+        "height": 998
+      },
+      "text": "我的；球员身份；裁判身份；我的蜂蜜；滴；充值；收支明细；我的比赛数据；我的执裁数据；账号与安全；绑定管理；消息通知；充值订单；客服中心",
+      "notes": "姓名、余额、指标均取真实接口，禁止示意数字进入正式页面"
+    },
+    {
+      "id": "role",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 18,
+        "y": 180,
+        "width": 354,
+        "height": 50
+      },
+      "action": "切换当前身份",
+      "target": "当前可用球员/裁判数据",
+      "states": [
+        "loading",
+        "ready",
+        "empty",
+        "failed",
+        "disabled"
+      ],
+      "notes": "服务端重新鉴权；不能用前端身份开关授予权限"
+    },
+    {
+      "id": "recharge",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 272,
+        "y": 338,
+        "width": 78,
+        "height": 41
+      },
+      "action": "打开充值状态",
+      "target": "充值尚未开放提示",
+      "states": [
+        "loading",
+        "ready",
+        "empty",
+        "failed",
+        "disabled"
+      ],
+      "notes": "服务端重新鉴权；不能用前端身份开关授予权限"
+    },
+    {
+      "id": "ledger",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 280,
+        "y": 300,
+        "width": 70,
+        "height": 24
+      },
+      "action": "打开收支记录",
+      "target": "本人官方微信对应蜂蜜账本",
+      "states": [
+        "loading",
+        "ready",
+        "empty",
+        "failed",
+        "disabled"
+      ],
+      "notes": "服务端重新鉴权；不能用前端身份开关授予权限"
+    },
+    {
+      "id": "data",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 18,
+        "y": 463,
+        "width": 354,
+        "height": 200
+      },
+      "action": "查看正式个人数据",
+      "target": "既有playerData/refereeData详情",
+      "states": [
+        "loading",
+        "ready",
+        "empty",
+        "failed",
+        "disabled"
+      ],
+      "notes": "服务端重新鉴权；不能用前端身份开关授予权限"
+    },
+    {
+      "id": "account-actions",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 18,
+        "y": 712,
+        "width": 354,
+        "height": 286
+      },
+      "action": "打开账号/绑定/消息/充值状态/客服",
+      "target": "本人账号各入口",
+      "states": [
+        "loading",
+        "ready",
+        "empty",
+        "failed",
+        "disabled"
+      ],
+      "notes": "服务端重新鉴权；不能用前端身份开关授予权限"
+    },
+    {
+      "id": "stadium",
+      "category": "background",
+      "implementation": "background",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 326
+      },
+      "canonicalSource": "..\\..\\..\\..\\..\\miniprogram\\images\\runtime\\team-data-emerald-stadium-v1.jpg",
+      "production_reason": "用户确认精修稿的足球场景头部背景",
+      "notes": "只用真实背景资产，不用整页截图"
+    },
+    {
+      "id": "icon-lock",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 38,
+        "y": 735,
+        "width": 20,
+        "height": 20
+      },
+      "semanticKey": "lock",
+      "sourceType": "project-shared-svg",
+      "sourceUrl": "project://miniprogram/images/icons/lock.svg",
+      "license": "项目已有SVG授权范围",
+      "canonicalSvg": "..\\..\\..\\..\\..\\miniprogram\\images\\icons\\lock.svg",
+      "targetPages": [
+        "service-account-h5/me.html"
+      ],
+      "variants": {},
+      "notes": "复用共享SVG，经H5公共素材目录发布，不创建页面专属图标体系"
+    },
+    {
+      "id": "icon-list",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 38,
+        "y": 790,
+        "width": 20,
+        "height": 20
+      },
+      "semanticKey": "list",
+      "sourceType": "project-shared-svg",
+      "sourceUrl": "project://miniprogram/images/icons/list.svg",
+      "license": "项目已有SVG授权范围",
+      "canonicalSvg": "..\\..\\..\\..\\..\\miniprogram\\images\\icons\\list.svg",
+      "targetPages": [
+        "service-account-h5/me.html"
+      ],
+      "variants": {},
+      "notes": "复用共享SVG，经H5公共素材目录发布，不创建页面专属图标体系"
+    },
+    {
+      "id": "icon-bell",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 38,
+        "y": 847,
+        "width": 20,
+        "height": 20
+      },
+      "semanticKey": "bell",
+      "sourceType": "project-shared-svg",
+      "sourceUrl": "project://miniprogram/images/icons/bell.svg",
+      "license": "项目已有SVG授权范围",
+      "canonicalSvg": "..\\..\\..\\..\\..\\miniprogram\\images\\icons\\bell.svg",
+      "targetPages": [
+        "service-account-h5/me.html"
+      ],
+      "variants": {},
+      "notes": "复用共享SVG，经H5公共素材目录发布，不创建页面专属图标体系"
+    },
+    {
+      "id": "icon-event",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 38,
+        "y": 903,
+        "width": 20,
+        "height": 20
+      },
+      "semanticKey": "event",
+      "sourceType": "project-shared-svg",
+      "sourceUrl": "project://miniprogram/images/icons/event.svg",
+      "license": "项目已有SVG授权范围",
+      "canonicalSvg": "..\\..\\..\\..\\..\\miniprogram\\images\\icons\\event.svg",
+      "targetPages": [
+        "service-account-h5/me.html"
+      ],
+      "variants": {},
+      "notes": "复用共享SVG，经H5公共素材目录发布，不创建页面专属图标体系"
+    },
+    {
+      "id": "icon-shield",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 38,
+        "y": 959,
+        "width": 20,
+        "height": 20
+      },
+      "semanticKey": "shield",
+      "sourceType": "project-shared-svg",
+      "sourceUrl": "project://miniprogram/images/icons/shield.svg",
+      "license": "项目已有SVG授权范围",
+      "canonicalSvg": "..\\..\\..\\..\\..\\miniprogram\\images\\icons\\shield.svg",
+      "targetPages": [
+        "service-account-h5/me.html"
+      ],
+      "variants": {},
+      "notes": "复用共享SVG，经H5公共素材目录发布，不创建页面专属图标体系"
+    }
+  ],
+  "ready_at": "2026-10-18T05:43:40.437062+00:00",
+  "validation": {
+    "screenshots": [
+      {
+        "path": "..\\..\\..\\..\\..\\.codex-artifacts\\h5-personal-polish-20261018\\formal-player.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "..\\..\\..\\..\\..\\.codex-artifacts\\h5-personal-polish-20261018\\formal-referee.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      }
+    ],
+    "comparison": "正式对照报告.md",
+    "differences": [
+      {
+        "severity": "minor",
+        "description": "真实姓名、监护关系、余额、指标及无等级占位取代示意值；充值关闭状态明确，账号底部保留既有业务入口。"
+      }
+    ],
+    "interaction_checks": [
+      {
+        "id": "role",
+        "status": "passed",
+        "evidence": "..\\..\\..\\..\\..\\.codex-artifacts\\h5-personal-polish-20261018\\browser-results.json"
+      },
+      {
+        "id": "recharge",
+        "status": "passed",
+        "evidence": "..\\..\\..\\..\\..\\.codex-artifacts\\h5-personal-polish-20261018\\browser-results.json"
+      },
+      {
+        "id": "ledger",
+        "status": "passed",
+        "evidence": "..\\..\\..\\..\\..\\.codex-artifacts\\h5-personal-polish-20261018\\browser-results.json"
+      },
+      {
+        "id": "data",
+        "status": "passed",
+        "evidence": "..\\..\\..\\..\\..\\.codex-artifacts\\h5-personal-polish-20261018\\browser-results.json"
+      },
+      {
+        "id": "account-actions",
+        "status": "passed",
+        "evidence": "..\\..\\..\\..\\..\\.codex-artifacts\\h5-personal-polish-20261018\\browser-results.json"
+      }
+    ]
+  }
+}

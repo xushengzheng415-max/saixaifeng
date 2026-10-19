@@ -85,17 +85,17 @@
       <template v-else>
         <section class="map-summary"><span><b>{{ matches.length }}</b>场比赛</span><span class="played"><b>{{ playedMatches }}</b>场已进行</span><span class="remaining"><b>{{ remainingMatches }}</b>场剩余</span><i /><el-button plain @click="setView('settings')"><el-icon><Setting /></el-icon>赛程设置</el-button><el-button plain @click="setView('imports')"><el-icon><Upload /></el-icon>上传赛程</el-button><el-button type="success" :loading="autoScheduling" :disabled="!pendingMatches.length" @click="autoSchedule"><el-icon><MagicStick /></el-icon>自动排程</el-button></section>
 
-        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="division.name" :value="division.id" /></el-select><div class="date-tabs"><button v-for="day in calendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }} · {{ day.count }}场</small></button></div><el-button plain :type="pendingDrawerOpen ? 'success' : ''" :aria-expanded="pendingDrawerOpen" @click="pendingDrawerOpen = !pendingDrawerOpen">待排比赛（{{ filteredPendingMatches.length }}）</el-button><el-button plain @click="openRefereePreMatchDocs">裁判赛前文档</el-button><el-button plain @click="viewSchedule">赛程中心</el-button></section>
+        <section class="map-toolbar"><el-select v-model="divisionFilter"><el-option label="全部组别" value="all" /><el-option v-for="division in divisions" :key="division.id" :label="divisionOptionLabel(division)" :value="division.id" /></el-select><div class="date-tabs"><button v-for="day in calendarDays" :key="day.date" type="button" :class="{ active:selectedDate === day.date }" @click="selectedDate = day.date"><strong>{{ day.short }}</strong><small>{{ day.weekday }} · {{ day.count }}场</small></button></div><el-button plain :type="pendingDrawerOpen ? 'success' : ''" :aria-expanded="pendingDrawerOpen" @click="pendingDrawerOpen = !pendingDrawerOpen">待排比赛（{{ filteredPendingMatches.length }}）</el-button><el-button plain @click="openRefereePreMatchDocs">裁判赛前文档</el-button><el-button plain @click="viewSchedule">赛程中心</el-button></section>
 
         <section class="calendar-workspace" :class="{ 'without-pending': !pendingDrawerOpen, 'pending-open':pendingDrawerOpen, 'is-dragging':Boolean(draggedMatchId) }">
           <aside v-show="pendingDrawerOpen" class="pending-pool pending-drawer" @dragover.prevent @drop.stop.prevent="dropBackToPending">
             <header><h2>待排比赛 <el-tag type="warning">{{ filteredPendingMatches.length }}</el-tag></h2><el-button text size="small" @click="pendingDrawerOpen=false">收起</el-button></header>
             <p v-if="filteredPendingMatches.length">拖到右侧场地时间格</p>
-            <div class="pending-list"><article v-for="match in filteredPendingMatches" :key="match._id" @click="openEdit(match)"><small>{{ divisionName(match.divisionId) }} · {{ match.roundName || '比赛' }}</small><strong>{{ teamLabel(match,'home') }}<em>VS</em>{{ teamLabel(match,'away') }}</strong><div class="pending-card-footer"><span>第{{ sequenceLabel(match) }}场</span><button type="button" class="pending-drag-handle" draggable="true" :aria-label="`拖动第${sequenceLabel(match)}场`" @dragstart.stop="startDrag(match,$event)" @dragend="finishDrag" @click.stop>拖动</button></div></article><el-empty v-if="!filteredPendingMatches.length" :image-size="54" description="当前范围没有待排比赛" /></div>
+            <div class="pending-list"><article v-for="match in filteredPendingMatches" :key="match._id" draggable="true" @dragstart="startDrag(match,$event)" @dragend="finishDrag" @click="openEdit(match)"><small>{{ divisionName(match.divisionId) }}<em v-if="divisionFormatLabel(match.divisionId)" class="card-format">{{ divisionFormatLabel(match.divisionId) }}</em> · {{ cardStageLabel(match) }}</small><strong>{{ teamLabel(match,'home') }}<em>VS</em>{{ teamLabel(match,'away') }}</strong><div class="pending-card-footer"><span>第{{ sequenceLabel(match) }}场</span><button type="button" class="pending-drag-handle" :class="{ active: placingMatchId === String(match._id) }" @click.stop="togglePlace(match)">{{ placingMatchId === String(match._id) ? '取消放置' : '点选放置' }}</button><button type="button" class="pending-drag-handle" draggable="true" :aria-label="`拖动第${sequenceLabel(match)}场`" @dragstart.stop="startDrag(match,$event)" @dragend="finishDrag" @click.stop>拖动</button></div></article><el-empty v-if="!filteredPendingMatches.length" :image-size="54" description="当前范围没有待排比赛" /></div>
           </aside>
 
           <el-empty v-if="!calendarDays.length" :description="pendingDrawerOpen ? '请先设置日期、开赛时间和场地' : '暂无已编排比赛'"><el-button v-if="!pendingDrawerOpen" type="success" plain @click="pendingDrawerOpen=true">打开待排比赛</el-button><el-button v-else plain @click="setView('settings')">赛程设置</el-button></el-empty>
-          <div v-else class="calendar-board"><header><div><strong>{{ selectedDateLabel }}</strong><span>{{ selectedDayMatches.length }}场</span></div><small>点击比赛进入处理；拖动手柄调整赛程</small></header><div class="calendar-scroll"><table :style="{ minWidth: `${96 + config.venueResources.length * 560}px` }"><colgroup><col style="width:96px" /><col v-for="venue in config.venueResources" :key="venue.name" /></colgroup><thead><tr><th>时间</th><th v-for="venue in config.venueResources" :key="venue.name"><strong>{{ venue.name }}</strong><small>{{ fieldFormatLabel(venue.fieldFormat) }}</small></th></tr></thead><tbody><tr v-for="time in mapTimes" :key="time"><th><strong>{{ time }}</strong><small>{{ sessionLabel(time) }}</small></th><td v-for="venue in config.venueResources" :key="`${time}-${venue.name}`" :class="{ 'drop-ready':Boolean(draggedMatchId), 'drop-hover':hoveredDropSlot === `${venue.name}|${time}` }" @dragover.stop.prevent="hoverDropSlot(venue.name,time,$event)" @dragleave="leaveDropSlot(venue.name,time,$event)" @drop.stop.prevent="dropToSlot(venue.name,time,$event)"><article v-for="match in matchesForCell(venue.name,time)" :key="match._id" class="calendar-match" :class="`state-${managementState(match).key}`" @click="openMatchWorkspace(match)"><header><span>{{ divisionName(match.divisionId) }}</span><b>#{{ sequenceLabel(match) }}</b></header><div class="match-sides"><span class="match-team home"><i class="team-crest"><img v-if="teamLogo(match,'home')" :src="teamLogo(match,'home')" alt="" @error="hideTeamLogo(match,'home')" /><b v-else>{{ teamInitial(teamLabel(match,'home')) }}</b></i><strong :title="teamLabel(match,'home')">{{ teamLabel(match,'home') }}</strong></span><em class="calendar-score" :class="scoreStateClass(match)">{{ scoreText(match) }}</em><span class="match-team away"><strong :title="teamLabel(match,'away')">{{ teamLabel(match,'away') }}</strong><i class="team-crest"><img v-if="teamLogo(match,'away')" :src="teamLogo(match,'away')" alt="" @error="hideTeamLogo(match,'away')" /><b v-else>{{ teamInitial(teamLabel(match,'away')) }}</b></i></span></div><footer><span class="match-state" :class="managementState(match).key"><i></i>{{ managementState(match).label }}</span><span class="card-actions"><button type="button" class="schedule-edit" @click.stop="openEdit(match)">调赛程</button><button type="button" class="drag-handle" draggable="true" title="拖动调整赛程" @dragstart.stop="startDrag(match,$event)" @dragend="finishDrag" @click.stop>拖动</button></span></footer></article><div v-if="!matchesForCell(venue.name,time).length" class="drop-hint"><b>{{ venue.name }} · {{ time }}</b><span>{{ hoveredDropSlot === `${venue.name}|${time}` ? '松开安排比赛' : '拖入比赛' }}</span></div></td></tr></tbody></table></div></div>
+          <div v-else class="calendar-board"><header><div><strong>{{ selectedDateLabel }}</strong><span>{{ selectedDayMatches.length }}场</span><em v-if="activeDivisionFormat" class="venue-filter-hint">{{ fieldFormatLabel(activeDivisionFormat) }}场地<span v-if="hiddenVenueCount"> · 已隐藏{{ hiddenVenueCount }}块不兼容场地</span></em></div><small>点击比赛进入处理；拖动手柄调整赛程</small></header><div class="calendar-scroll" @dragover.prevent @drop.prevent="notifyDropMiss"><table :style="{ minWidth: `${96 + visibleVenues.length * 560}px` }"><colgroup><col style="width:96px" /><col v-for="venue in visibleVenues" :key="venue.name" /></colgroup><thead><tr><th @dragover.prevent>时间</th><th v-for="venue in visibleVenues" :key="venue.name" @dragover.prevent><strong>{{ venue.name }}</strong><small class="venue-format">{{ fieldFormatLabel(venue.fieldFormat) }}</small></th></tr></thead><tbody><tr v-for="time in mapTimes" :key="time"><th @dragover.prevent><strong>{{ time }}</strong><small>{{ sessionLabel(time) }}</small></th><td v-for="venue in visibleVenues" :key="`${time}-${venue.name}`" :class="{ 'drop-ready':Boolean(draggedMatchId), 'drop-hover':hoveredDropSlot === `${venue.name}|${time}`, 'place-ready':Boolean(placingMatchId) }" @click="placeToSlot(venue.name,time)" @dragover.stop.prevent="hoverDropSlot(venue.name,time,$event)" @dragleave="leaveDropSlot(venue.name,time,$event)" @drop.stop.prevent="dropToSlot(venue.name,time,$event)"><article v-for="match in matchesForCell(venue.name,time)" :key="match._id" class="calendar-match" :class="`state-${managementState(match).key}`" draggable="true" @dragstart="startDrag(match,$event)" @dragend="finishDrag" @click.stop="placingMatchId ? placeToSlot(venue.name,time) : openMatchWorkspace(match)"><header><span>{{ divisionName(match.divisionId) }} · {{ cardStageLabel(match) }}</span><b>#{{ sequenceLabel(match) }}</b></header><div class="match-sides"><span class="match-team home"><i class="team-crest"><img v-if="teamLogo(match,'home')" :src="teamLogo(match,'home')" alt="" @error="hideTeamLogo(match,'home')" /><b v-else>{{ teamInitial(teamLabel(match,'home')) }}</b></i><strong :title="teamLabel(match,'home')">{{ teamLabel(match,'home') }}</strong></span><em class="calendar-score" :class="scoreStateClass(match)">{{ scoreText(match) }}</em><span class="match-team away"><strong :title="teamLabel(match,'away')">{{ teamLabel(match,'away') }}</strong><i class="team-crest"><img v-if="teamLogo(match,'away')" :src="teamLogo(match,'away')" alt="" @error="hideTeamLogo(match,'away')" /><b v-else>{{ teamInitial(teamLabel(match,'away')) }}</b></i></span></div><footer><span class="match-state" :class="managementState(match).key"><i></i>{{ managementState(match).label }}</span><span class="card-actions"><button type="button" class="schedule-edit" @click.stop="openEdit(match)">调赛程</button><button type="button" class="drag-handle" draggable="true" title="拖动调整赛程" @dragstart.stop="startDrag(match,$event)" @dragend="finishDrag" @click.stop>拖动</button></span></footer></article><div v-if="!matchesForCell(venue.name,time).length" class="drop-hint"><b>{{ venue.name }} · {{ time }}</b><span>{{ hoveredDropSlot === `${venue.name}|${time}` ? '松开安排比赛' : '拖入比赛' }}</span></div></td></tr></tbody></table></div></div>
         </section>
       </template>
     </template>
@@ -142,12 +142,13 @@
         <article v-for="match in refereePreMatchList" :key="match._id"><time>{{ match.matchTime || '待定' }}</time><div><small>{{ divisionName(match.divisionId) }} · 场序{{ match.matchSequence || match.matchNo || match.sequence || '—' }}</small><strong>{{ teamLabel(match,'home') }} <em>VS</em> {{ teamLabel(match,'away') }}</strong></div><span>{{ match.venue || '场地待定' }}</span></article>
       </div>
       <el-empty v-else :image-size="64" :description="refereeDocsDate ? '当天没有待开始比赛' : '当前赛事尚无已排比赛日'" />
-      <template #footer><el-button @click="refereeDocsVisible=false">取消</el-button><el-button :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && refereePrintMode" @click="printRefereePreMatchDocs">批量打印</el-button><el-button type="success" :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && !refereePrintMode" @click="downloadRefereePreMatchDocs">批量下载</el-button></template>
+      <template #footer><el-button @click="refereeDocsVisible=false">取消</el-button><el-button :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && refereePrintMode" @click="printRefereePreMatchDocs">批量打印</el-button><el-dropdown trigger="click" :disabled="!refereePreMatchList.length || refereeDocsLoading" @command="downloadRefereePreMatchDocs"><el-button type="success" :disabled="!refereePreMatchList.length || refereeDocsLoading" :loading="refereeDocsLoading && !refereePrintMode">批量下载</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="pdf">PDF 工作单（推荐）</el-dropdown-item><el-dropdown-item command="word">Word 工作单</el-dropdown-item></el-dropdown-menu></template></el-dropdown></template>
     </el-dialog>
   </main>
 </template>
 
 <script setup>
+import { formatMatchRound } from '../../utils/matchLabels'
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -158,6 +159,7 @@ import { callFunction, getFileUrl, queryById, queryList, rosterExceptionBoard } 
 import { extractScheduleRows, parseDivisionAndPool, recognitionSummary, recognizeScheduleRows } from '../../utils/scheduleWorkbookRecognition'
 import { firstUnfinishedMatchDate } from '../../utils/matchCalendarSelection'
 import { findWorkbenchFocusMatch } from '../../utils/matchScheduleFocus'
+import { createRefereeLineupPdf } from '../../utils/refereeLineupPdf'
 import { createRefereeLineupSheet, refereeLineupSheetFileName, REFEREE_SHEET_LEGEND } from '../../utils/refereeLineupSheet'
 import { MATCH_FORMAT_DEFAULTS } from '../../utils/rosterHelper'
 import {parseKickoffTimes,configuredKickoffTimes,kickoffWindows,kickoffPeriod,halfHourKickoffOptions} from '../../utils/scheduleKickoffTimes.mjs'
@@ -166,11 +168,12 @@ import { isDemoMode } from '../../utils/demoMode'
 import { calculatePreMatchSuspensions } from '../../utils/refereeSuspension'
 
 const route = useRoute(), router = useRouter(), tournamentId = String(route.params.id || '')
-const scheduleImportWriteEnabled = isDemoMode(tournamentId) || import.meta.env.VITE_ENABLE_SCHEDULE_IMPORT_WRITE === 'true'
+// The deployed import action validates the actor, scope and conflicts server-side.
+const scheduleImportWriteEnabled = true
 const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(false), savingAssignment = ref(false), applyingImport = ref(false), preparingKnockout = ref(false), knockoutPrepareError = ref('')
 const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), hiddenTeamLogoKeys = ref(new Set()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(typeof route.query.date === 'string' ? route.query.date : ''), draggedMatchId = ref('')
 const view = ref(['settings','imports','map','workbench'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
-const pendingDrawerOpen=ref(false),hoveredDropSlot=ref(''),dropSaving=ref(false)
+const pendingDrawerOpen=ref(true),hoveredDropSlot=ref(''),dropSaving=ref(false)
 const workbenchDivision = ref(String(route.query.divisionId || 'all')), workbenchStatus = ref('all'), workbenchSearch = ref('')
 const workbenchRoot = ref(null), nextMatchId = ref('')
 const sequenceVisible = ref(false), sequenceMatch = ref(null), sequenceNumber = ref(1), savingSequence = ref(false)
@@ -345,7 +348,7 @@ const calendarDays = computed(() => {
     const date = String(match.matchDate || '').slice(0,10)
     counts.set(date, (counts.get(date) || 0) + 1)
   }
-  if(pendingDrawerOpen.value && calendarConfigured.value) {
+  if(calendarConfigured.value) {
     const configured=new Set(allCalendarDays.value.map(day=>day.date))
     const extra=[...counts].filter(([date])=>!configured.has(date)).map(([date,count])=>{const day=new Date(`${date}T00:00:00`);return {date,count,weekday:['周日','周一','周二','周三','周四','周五','周六'][day.getDay()],short:`${day.getMonth()+1}.${day.getDate()}`}})
     return [...allCalendarDays.value.map(day=>({...day,count:counts.get(day.date) || 0})),...extra].sort((a,b)=>a.date.localeCompare(b.date))
@@ -365,6 +368,31 @@ watch(calendarDays, days => {
 watch([selectedDate, divisionFilter], ([date, division]) => { if (!date) return; const query = { ...route.query, date }; if (division === 'all') delete query.divisionId; else query.divisionId = division; router.replace({ path:route.path, query }) })
 const selectedDateLabel = computed(() => { const day=calendarDays.value.find(item => item.date === selectedDate.value); return day ? `${day.date} ${day.weekday}` : '请选择比赛日' })
 const selectedDayMatches = computed(() => arrangedMatches.value.filter(match => match.matchDate === selectedDate.value && (divisionFilter.value === 'all' || String(match.divisionId || 'default') === divisionFilter.value)))
+const activeDivisionFormat = computed(() => {
+  if (divisionFilter.value === 'all') return ''
+  const division = divisions.value.find(item => String(item.id) === String(divisionFilter.value))
+  return division ? String(matchFormat(division) || '') : ''
+})
+// 选定组别后，日历只展示与该组别制式一致的场地；当天已被该组别占用的场地始终保留，避免历史数据里的比赛“消失”
+const visibleVenues = computed(() => {
+  const all = Array.isArray(config.venueResources) ? config.venueResources : []
+  const format = activeDivisionFormat.value
+  if (!format) return all
+  const matched = all.filter(venue => String(venue.fieldFormat || '') === format)
+  if (!matched.length) return all
+  const usedToday = new Set(selectedDayMatches.value.map(match => match.venue).filter(Boolean))
+  return [...matched, ...all.filter(venue => !matched.includes(venue) && usedToday.has(venue.name))]
+})
+const hiddenVenueCount = computed(() => Math.max(0, (config.venueResources || []).length - visibleVenues.value.length))
+function divisionFormatLabel(divisionId) {
+  const division = divisions.value.find(item => String(item.id) === String(divisionId))
+  const format = matchFormat(division)
+  return format ? fieldFormatLabel(format) : ''
+}
+function divisionOptionLabel(division) {
+  const format = matchFormat(division)
+  return format ? `${division.name}（${fieldFormatLabel(format)}）` : division.name
+}
 const refereePreMatchList = computed(() => arrangedMatches.value
   .filter(match => match.matchDate === refereeDocsDate.value && managementState(match).key === 'scheduled')
   .slice()
@@ -373,9 +401,16 @@ function minutes(value) { const [hour,minute] = String(value || '00:00').split('
 function timeText(value) { return `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}` }
 function timesByStep(step) { const rows=[]; for (const session of enabledSessions.value) for (let value=minutes(session.start);value<minutes(session.end);value+=step) rows.push(timeText(value)); return [...new Set(rows)].sort() }
 const preciseTimes = computed(() => kickoffInput.value.times)
-const mapTimes = computed(() => [...new Set([...(pendingDrawerOpen.value ? preciseTimes.value : []),...selectedDayMatches.value.map(match => match.matchTime).filter(Boolean)])].sort())
+const mapTimes = computed(() => [...new Set([...(calendarConfigured.value ? preciseTimes.value : []),...selectedDayMatches.value.map(match => match.matchTime).filter(Boolean)])].sort())
 function sessionLabel(time) { return kickoffPeriods.find(period=>period.key===kickoffPeriod(time))?.label || '' }
 function compatibleVenues(match) { const division=divisions.value.find(item => String(item.id) === String(match?.divisionId)); const format=String(match?.matchFormat || matchFormat(division)); return config.venueResources.filter(item => !format || item.fieldFormat === format) }
+function cardStageLabel(match) {
+  const normalized = { ...match, phase:match.phase || match.stage || match.scheduleType, roundName:match.roundName || match.stageName || match.scheduleStageName }
+  const round = formatMatchRound(normalized)
+  if (round && round !== '-') return round
+  const phase = String(normalized.phase || '').toLowerCase()
+  return ({ group:'小组赛', league:'联赛', knockout:'淘汰赛', cup:'淘汰赛', semifinal:'半决赛', semi_final:'半决赛', final:'决赛', placement:'排位赛', ranking:'排位赛' })[phase] || '阶段待定'
+}
 function matchesForCell(venue,time) { return selectedDayMatches.value.filter(match => match.venue === venue && match.matchTime === time) }
 
 function openRefereePreMatchDocs() {
@@ -506,11 +541,11 @@ function kitLine(colors) {
 }
 
 function printSheetHtml(input) {
-  const widths=[280,1240,280,360,360,360,360,360,360,360,360]
+  const widths=[280,1240,280,360,360,360,360,864,288,288]
   const allWidths=[...widths,...widths]
   const maxRows=Math.max(Number(input.rowCount)||0,input.homePlayers.length,input.awayPlayers.length,1)
   const colgroup=`<colgroup>${allWidths.map(value=>`<col style="width:${(value/9360*100).toFixed(3)}%">`).join('')}</colgroup>`
-  const heading=['序号','队员姓名','号码','首发','替补','身份','换上','换下','进球','黄牌','红牌','序号','队员姓名','号码','首发','替补','身份','换上','换下','进球','黄牌','红牌']
+  const heading=['序号','队员姓名','号码','说明','身份','换上','换下','进球','黄牌','红牌','序号','队员姓名','号码','说明','身份','换上','换下','进球','黄牌','红牌']
   const header=`<tr>${heading.map(label=>`<th>${label}</th>`).join('')}</tr>`
   const match=input.match||{}
   const day=String(match.matchDate||'').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/,'$1年$2月$3日')
@@ -523,13 +558,13 @@ function printSheetHtml(input) {
     const count=rowsPerPage+(page<extraRows?1:0)
     const rows=Array.from({length:count},(_,row)=>{
       const index=offset+row,home=input.homePlayers[index]||{},away=input.awayPlayers[index]||{}
-      const cells=[String(index+1),home.name||'',home.number||'','','',home.note||'','','','','','',String(index+1),away.name||'',away.number||'','','',away.note||'','','','','','']
-      return `<tr>${cells.map((value,cell)=>`<td${cell%11===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
+      const cells=[String(index+1),home.name||'',home.number||'','',home.note||'','','','','','',String(index+1),away.name||'',away.number||'','',away.note||'','','','','','']
+      return `<tr>${cells.map((value,cell)=>`<td${cell%10===1?' class="player-name"':''}>${safeHtml(value)}</td>`).join('')}</tr>`
     }).join('')
     offset+=count
     const firstPage=page===0,lastPage=page===pageCount-1
-    const title=firstPage?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${safeHtml(`${input.tournamentName||'足球比赛'}（${String(input.matchFormat||'').replace('side','人制')}）`)}</b></div><div><span>比赛时间：</span><b>${safeHtml(`${day} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${safeHtml(`${input.location||''}　${match.venue||''}　场序：第${match.matchSequence||match.matchNo||match.sequence||'待定'}场　组别：${input.divisionName||''}`)}</b></div></div>`:''
-    const signatures=lastPage?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><p class="legend">${REFEREE_SHEET_LEGEND.map(line => '<span>'+safeHtml(line)+'</span>').join('')}</p><p class="result">比赛结果：______:______　加时赛（点球决胜）结果：______:______　获胜队：____________________</p><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
+    const title=firstPage?`<h1>裁判首发阵容信息表</h1><div class="meta"><div><span>比赛名称：</span><b>${safeHtml(`${input.tournamentName||'足球比赛'}（${String(input.matchFormat||'').replace('side','人制')}）`)}</b></div><div><span>比赛时间：</span><b>${safeHtml(`${day} ${match.matchTime||''}`)}</b></div><div><span>比赛地点：</span><b>${safeHtml(`${input.location||''}　${match.venue||''}　场序：第${match.matchSequence||match.matchNo||match.sequence||'待定'}场　组别：${input.divisionName||''}`)}</b></div></div><p class="result">比赛结果：______：______    加时赛（点球决胜）结果：______：______    获胜队：________________________</p><p class="legend">${REFEREE_SHEET_LEGEND.map(line => '<span>'+safeHtml(line)+'</span>').join('')}</p>`:''
+    const signatures=lastPage?`<div class="team-sign"><span>主教练签名：________________</span><span>球衣　上 / 下</span><span>主教练签名：________________</span><span>球衣　上 / 下</span></div><div class="officials"><span>主裁判：____________</span><span>第一助理裁判：____________</span><span>第二助理裁判：____________</span><span>第四官员：____________</span><span>裁判监督：____________</span><span>比赛监督：____________</span></div><footer><img src="${logo}" alt="赛小蜂足球"><strong>本名单由赛小蜂足球后台自动生成，最终解释权归赛事组委会所有！</strong></footer>`:''
     pages.push(`<section class="sheet">${title}<table class="teams"><tbody><tr><td>主队：${safeHtml(input.homeName)}</td><td>客队：${safeHtml(input.awayName)}</td></tr><tr><td>${safeHtml(kitLine(input.kitColors?.home))}</td><td>${safeHtml(kitLine(input.kitColors?.away))}</td></tr><tr><td>领队/主教练：________________</td><td>领队/主教练：________________</td></tr><tr><td>工作人员/队医：____________</td><td>工作人员/队医：____________</td></tr></tbody></table><table class="roster">${colgroup}<thead>${header}</thead><tbody>${rows}</tbody></table>${signatures}</section>`)
   }
   return pages.join('')
@@ -539,6 +574,7 @@ function refereePrintDocumentHtml(entries) {
   const pages=entries.map(({input})=>printSheetHtml(input)).join('')
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>裁判赛前工作单</title><style>@page{size:A4 portrait;margin:11mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:"SimSun","Songti SC",serif}.sheet{width:100%;page-break-after:always;break-after:page;display:flex;flex-direction:column}.sheet:last-child{page-break-after:auto;break-after:auto}h1{margin:0 0 4mm;text-align:center;font-size:18pt}.meta{margin:0 5mm 4mm;font-size:10pt}.meta div{display:grid;grid-template-columns:27mm 1fr;margin:2mm 0}.teams{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10pt}.teams td{height:7.5mm;padding:1mm;border:0.5pt solid #777}.roster{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8pt}.roster th,.roster td{height:6mm;padding:1mm .4mm;border:.5pt solid #777;text-align:center;overflow-wrap:anywhere}.roster th{height:11mm;font-weight:400}.roster td.player-name{font-size:9pt;font-weight:bold}.team-sign{display:grid;grid-template-columns:2fr 1fr 2fr 1fr;gap:1mm;padding:2mm 0;border:0.5pt solid #777;font-size:8pt}.team-sign span{text-align:center}.legend,.result{margin:2mm 0;font-size:8pt}.legend span{display:block;white-space:nowrap;line-height:1.25}.officials{display:grid;grid-template-columns:1fr 1fr;gap:3mm 14mm;margin:3mm 14mm 0;font-size:10pt}.officials span{min-height:7mm}footer{display:flex;align-items:center;gap:4mm;margin:auto 0 0;padding-top:4mm;font-size:8pt}footer img{width:34mm;height:auto}footer strong{font-weight:bold}@media screen{body{background:#e9ecef}.sheet{width:186mm;min-height:273mm;margin:8mm auto;padding:0;background:#fff;box-shadow:0 2mm 8mm #0002}}
 .upload-replace{display:flex;justify-content:flex-end;margin-top:16px}.import-empty small{color:#718078;font-size:13px}
+.calendar-match header{font-size:12px;gap:12px}.calendar-match header>span{min-width:0;overflow-wrap:anywhere}.calendar-match header>b{flex-shrink:0}
 </style></head><body>${pages}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(img=>img.decode?.().catch(()=>{})));setTimeout(()=>window.print(),300)})<\/script></body></html>`
 }
 
@@ -577,15 +613,17 @@ function updateRefereeDocsProgress(percent,label,printWindow=null) {
 function refereePrintLoadingHtml(total) {
   const logo=`${window.location.origin}${import.meta.env.BASE_URL}logo-saixiaofeng.png`
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>正在生成裁判工作单</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f7f5;color:#183a27;font-family:"Microsoft YaHei",sans-serif}.box{width:min(420px,calc(100vw - 48px));padding:32px;background:#fff;border:1px solid #dce5df;border-radius:10px;text-align:center;box-shadow:0 8px 32px #183a2712}.box img{width:150px;height:auto}.spin{width:28px;height:28px;margin:20px auto 12px;border:3px solid #d7e8dc;border-top-color:#078747;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.track{height:8px;margin-top:12px;overflow:hidden;border-radius:8px;background:#edf2ee}.track i{display:block;width:0;height:100%;background:#078747;transition:width .2s}.progress{display:flex;justify-content:space-between;margin-top:8px;color:#6c7b71;font-size:12px}.upload-replace{display:flex;justify-content:flex-end;margin-top:16px}.import-empty small{color:#718078;font-size:13px}
+.calendar-match header{font-size:12px;gap:12px}.calendar-match header>span{min-width:0;overflow-wrap:anywhere}.calendar-match header>b{flex-shrink:0}
 </style></head><body><main class="box"><img src="${logo}" alt="赛小蜂"><div class="spin"></div><strong>正在生成裁判工作单</strong><div class="track"><i id="referee-progress-fill"></i></div><div class="progress"><span id="referee-progress-label">准备${total}场比赛</span><span id="referee-progress-percent">0%</span></div></main></body></html>`
 }
 
 function refereePrintErrorHtml(message) {
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>工作单生成失败</title><style>body{font-family:"Microsoft YaHei",sans-serif;background:#f6f8f6;color:#183a27;padding:48px}main{max-width:520px;margin:auto;padding:28px;background:#fff;border:1px solid #e5e9e6;border-radius:8px}strong{color:#b42318}.upload-replace{display:flex;justify-content:flex-end;margin-top:16px}.import-empty small{color:#718078;font-size:13px}
+.calendar-match header{font-size:12px;gap:12px}.calendar-match header>span{min-width:0;overflow-wrap:anywhere}.calendar-match header>b{flex-shrink:0}
 </style></head><body><main><strong>裁判工作单生成失败</strong><p>${safeHtml(message)}</p><p>请返回赛事页面重试。</p></main></body></html>`
 }
 
-async function downloadRefereePreMatchDocs() {
+async function downloadRefereePreMatchDocs(format = 'pdf') {
   if(refereeDocsLoading.value)return
   refereeDocsLoading.value=true;refereePrintMode.value=false
   updateRefereeDocsProgress(0,'准备读取比赛名单')
@@ -596,14 +634,14 @@ async function downloadRefereePreMatchDocs() {
     })
     const archive=new JSZip()
     for(let index=0;index<entries.length;index+=1){
-      updateRefereeDocsProgress(42+(index/entries.length)*40,`生成 Word 工作单 ${index+1}/${entries.length}`)
+      updateRefereeDocsProgress(42+(index/entries.length)*40,`生成 ${format === 'pdf' ? 'PDF' : 'Word'} 工作单 ${index+1}/${entries.length}`)
       const {input}=entries[index]
-      const document=await createRefereeLineupSheet(input,templateBytes,logoBytes)
-      archive.file(refereeLineupSheetFileName(input.match,input.homeName,input.awayName),document)
+      const document=format === 'pdf' ? await createRefereeLineupPdf(input) : await createRefereeLineupSheet(input,templateBytes,logoBytes)
+      archive.file(refereeLineupSheetFileName(input.match,input.homeName,input.awayName).replace(/\.docx$/i,format === 'pdf' ? '.pdf' : '.docx'),document)
     }
     updateRefereeDocsProgress(84,'正在打包工作单')
     const blob=await archive.generateAsync({type:'blob',mimeType:'application/zip'},metadata=>updateRefereeDocsProgress(84+(metadata.percent||0)*.16,`正在打包工作单 ${Math.round(metadata.percent||0)}%`))
-    downloadBlob(blob,`${refereeDocsDate.value}-裁判赛前工作单.zip`)
+    downloadBlob(blob,`${refereeDocsDate.value}-裁判赛前工作单-${format === 'pdf' ? 'PDF' : 'Word'}.zip`)
     updateRefereeDocsProgress(100,'工作单已下载')
     if(warnings.length)ElMessage.warning(`已打包${entries.length}场；${warnings[0]}`)
     else ElMessage.success(`已打包${entries.length}份裁判工作单`)
@@ -657,22 +695,42 @@ async function loadTeamLogos() { const ids=[...new Set(matches.value.flatMap(mat
 function applySavedConfig(saved) { const source=saved && typeof saved==='object'?saved:{}; config.schemaVersion=2; config.startDate=source.startDate || tournament.value.startDate || ''; config.endDate=source.endDate || tournament.value.endDate || config.startDate; config.matchDays=Array.isArray(source.matchDays)&&source.matchDays.length?[...source.matchDays]:[...weekDays]; config.sessionWindows=Array.isArray(source.sessionWindows)&&source.sessionWindows.length?source.sessionWindows.map(item=>({ ...item })):defaultSessions(); const resources=Array.isArray(source.venueResources)?source.venueResources:[]; config.venueResources=resources.map(item=>({ name:String(item.name || item.venue || ''),fieldFormat:String(item.fieldFormat || ''),sessionWindows:config.sessionWindows.map(session=>({ ...session })) })).filter(item=>item.name); config.defaultTurnaroundMinutes=Number(source.defaultTurnaroundMinutes ?? source.matchInterval ?? 10); config.timeStepMinutes=Number(source.timeStepMinutes || 5); selectedKickoffTimes.value=configuredKickoffTimes({...source,sessionWindows:config.sessionWindows});kickoffPeriodEnabled.value=source.kickoffPeriods || Object.fromEntries(kickoffPeriods.map(period=>[period.key,config.sessionWindows.find(session=>session.key===period.key)?.enabled ?? period.key!=='evening']));config.kickoffTimes=[...selectedKickoffTimes.value];config.frequencyPreset=source.frequencyPreset || 'adaptive'; config.divisionPolicies=JSON.parse(JSON.stringify(source.divisionPolicies || {})) }
 function payloadConfig() { return { ...config,kickoffPeriods:{...kickoffPeriodEnabled.value},matchDurations:Object.fromEntries(divisions.value.map(division=>[division.id,matchMinutes(division)])),sessionWindows:config.sessionWindows.map(item=>({ ...item })),venueResources:config.venueResources.map(item=>({ name:item.name.trim(),fieldFormat:item.fieldFormat,sessionWindows:config.sessionWindows.map(session=>({ ...session })) })),venues:config.venueResources.map(item=>item.name.trim()).filter(Boolean),generationMode:'joint' } }
 function validateSettings() { if(kickoffInput.value.errors.length)return '请修正开赛时间格式';if(!kickoffInput.value.times.length)return '请填写至少一个开赛时间';if(!config.startDate||!config.endDate||config.startDate>config.endDate)return '请设置有效的比赛周期';if(!config.matchDays.length)return '请至少选择一个比赛日';if(!enabledSessions.value.length)return '请至少开放一个时段';if(!config.venueResources.length)return '请至少添加一块场地';if(config.venueResources.some(item=>!item.name.trim()||!item.fieldFormat))return '请填写完整的场地名称和制式';if(new Set(config.venueResources.map(item=>item.name.trim())).size!==config.venueResources.length)return '场地名称不能重复';return '' }
-async function saveSettings() { const error=validateSettings();if(error)return ElMessage.warning(error);savingSettings.value=true;try{const result=await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});if(!result?.success)throw new Error(result?.message || '保存失败');tournament.value={...tournament.value,scheduleDraft:payloadConfig()};selectedDate.value=calendarDays.value[0]?.date || selectedDate.value;ElMessage.success('赛事日历已创建');setView('map')}catch(error){ElMessage.error(error.message || '赛程设置保存失败')}finally{savingSettings.value=false} }
+async function saveSettings() { const error=validateSettings();if(error)return ElMessage.warning(error);savingSettings.value=true;try{const result=await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});if(!result?.success)throw new Error(result?.message || '保存失败');tournament.value={...tournament.value,scheduleDraft:payloadConfig()};selectedDate.value=calendarDays.value[0]?.date || selectedDate.value;pendingDrawerOpen.value=true;ElMessage.success('赛事日历已创建');setView('map')}catch(error){ElMessage.error(error.message || '赛程设置保存失败')}finally{savingSettings.value=false} }
 async function autoSchedule() { const error=validateSettings();if(error)return ElMessage.warning(error);autoScheduling.value=true;try{await callFunction('generateSchedule',{action:'saveDraft',tournamentId,scheduleConfig:payloadConfig()});const ids=[...new Set(pendingMatches.value.map(match=>String(match.divisionId || 'default')))];const result=await callFunction('generateSchedule',{action:'scheduleExistingPairings',tournamentId,divisionIds:ids,scheduleConfig:payloadConfig(),fullReflow:false},120000);if(!result?.success)throw new Error(result?.message || '自动排程失败');ElMessage.success(result.message);await load()}catch(error){ElMessage.error(error.message || '自动排程失败')}finally{autoScheduling.value=false} }
 
+const placingMatchId=ref('')
 function startDrag(match,event) {
-  if(dropSaving.value){event?.preventDefault();return}
   draggedMatchId.value=String(match._id);hoveredDropSlot.value=''
   window.getSelection()?.removeAllRanges()
   if(event?.dataTransfer){event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('application/x-sxf-match-id',String(match._id));event.dataTransfer.setData('text/plain',String(match._id));const card=event.target?.closest('article');if(card)event.dataTransfer.setDragImage(card,20,20)}
 }
 function finishDrag(){draggedMatchId.value='';hoveredDropSlot.value=''}
-function hoverDropSlot(venue,time,event){if(!draggedMatchId.value || dropSaving.value)return;hoveredDropSlot.value=`${venue}|${time}`;if(event.dataTransfer)event.dataTransfer.dropEffect='move'}
+function hoverDropSlot(venue,time,event){if(!draggedMatchId.value)return;hoveredDropSlot.value=`${venue}|${time}`;if(event.dataTransfer)event.dataTransfer.dropEffect='move'}
+function notifyDropMiss(){if(draggedMatchId.value)ElMessage.warning('请松手到场地时间格内')}
+function togglePlace(match){placingMatchId.value=placingMatchId.value===String(match._id)?'':String(match._id)}
+async function placeToSlot(venue,time){
+  if(!placingMatchId.value || dropSaving.value)return
+  const match=matches.value.find(item=>String(item._id)===String(placingMatchId.value))
+  if(!match){placingMatchId.value='';return}
+  if(!selectedDate.value){ElMessage.warning('请先选择比赛日');return}
+  dropSaving.value=true
+  const row={matchId:match._id,matchDate:selectedDate.value,matchTime:time,venue}
+  try{
+    const preview=await assignRows([row],false,'manual')
+    if(!preview?.success)throw new Error(preview?.errors?.[0]?.message || preview?.message || '排期校验失败')
+    const result=await assignRows([row],true,'manual')
+    if(!result?.success)throw new Error(result?.errors?.[0]?.message || result?.message || '保存失败')
+    ElMessage.success(`第${sequenceLabel(match)}场已安排到${venue} ${time}`)
+    placingMatchId.value=''
+    await load()
+  }catch(error){ElMessage.error({message:error.message || '无法放入该时段',duration:6500})}
+  finally{dropSaving.value=false}
+}
 function leaveDropSlot(venue,time,event){if(event.currentTarget?.contains(event.relatedTarget))return;if(hoveredDropSlot.value===`${venue}|${time}`)hoveredDropSlot.value=''}
 function draggedMatch() { return matches.value.find(item=>String(item._id)===draggedMatchId.value) }
 async function assignRows(rows,apply=false,adjustmentType='manual') { return callFunction('generateSchedule',{action:'importScheduleAssignments',tournamentId,rows,dryRun:!apply,adjustmentType}) }
 async function dropToSlot(venue,time,event) {
-  if(dropSaving.value)return
+  if(dropSaving.value){ElMessage.warning('正在保存上一场，请稍候');return}
   const droppedId=event?.dataTransfer?.getData('application/x-sxf-match-id') || event?.dataTransfer?.getData('text/plain') || draggedMatchId.value
   const match=matches.value.find(item=>String(item._id)===String(droppedId))
   if(!match)return
@@ -716,10 +774,14 @@ async function readImportFile(event) {
   try {
     const module=await import('xlsx'),XLSX=module.default||module
     const book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true})
-    const sheet=book.Sheets['赛程填写'] || book.Sheets['排期填写'] || book.Sheets[book.SheetNames[0]]
-    const extracted=extractScheduleRows(XLSX,sheet)
-    if(extracted.error)throw new Error(extracted.error)
-    recognitionSourceRows.value=extracted.rows
+    const sourceRows=[]
+    for(const name of book.SheetNames) {
+      if(name.startsWith('_') || book.Workbook?.Sheets?.find(sheet=>sheet.name===name)?.Hidden)continue
+      const extracted=extractScheduleRows(XLSX,book.Sheets[name])
+      if(!extracted.error)sourceRows.push(...extracted.rows.map(row=>({...row,sourceSheet:name})))
+    }
+    if(!sourceRows.length)throw new Error('文件中没有可识别的赛程工作表')
+    recognitionSourceRows.value=sourceRows
     recognitionRows.value=recognizeScheduleRows(recognitionSourceRows.value,matches.value,config.venueResources)
     recognitionFilter.value='all';importFileName.value=file.name;importPreview.value={};importRows.value=[]
     if(!recognitionRows.value.length)throw new Error('文件中没有可识别的比赛行')
@@ -772,6 +834,7 @@ onMounted(async () => { await load();if(view.value==='workbench')await focusNext
 .assignment-summary{display:flex;flex-direction:column;gap:4px;padding:0 0 12px;border-bottom:1px solid #e3e9e5}.assignment-summary strong{font-size:15px}.assignment-summary span{color:#68776e;font-size:12px}.assignment-tabs{margin-top:10px}.assignment-form{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.assignment-save{display:flex;justify-content:flex-end;margin-top:8px}.kit-assignment section{padding:12px 0;border-bottom:1px solid #e7ece8}.kit-assignment h3{margin:0 0 12px;font-size:14px}.kit-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.kit-fields label>span{display:block;margin-bottom:6px;color:#627168;font-size:12px}.kit-fields .el-select{width:100%}.kit-color-swatch{display:inline-block;width:14px;height:14px;margin-right:8px;border:1px solid #bfc9c2;border-radius:2px;vertical-align:-2px}@media(max-width:600px){.assignment-form,.kit-fields{grid-template-columns:1fr}}
 .workbench-table tr.next-match-row{background:#edf7f0}.workbench-table tr.next-match-row td:first-child{box-shadow:inset 3px 0 #087b43}
 .upload-replace{display:flex;justify-content:flex-end;margin-top:16px}.import-empty small{color:#718078;font-size:13px}
+.calendar-match header{font-size:12px;gap:12px}.calendar-match header>span{min-width:0;overflow-wrap:anywhere}.calendar-match header>b{flex-shrink:0}
 </style>
 
 <style scoped>
@@ -797,6 +860,9 @@ onMounted(async () => { await load();if(view.value==='workbench')await focusNext
 .calendar-scroll th,.calendar-scroll td{box-sizing:border-box;padding:8px}
 .calendar-scroll th:first-child{width:96px;min-width:96px}
 .calendar-scroll thead th{height:76px;vertical-align:middle}
+.calendar-scroll thead th .venue-format{display:inline-block;margin-top:6px;padding:1px 9px;border-radius:999px;background:#e8f6ee;color:#087b43;font-size:12px;font-weight:600;line-height:18px;white-space:nowrap}
+.calendar-board .venue-filter-hint{margin-left:8px;padding:2px 10px;border-radius:999px;background:#fff6e6;color:#a8650a;font-size:12px;font-style:normal;font-weight:600;white-space:nowrap}
+.pending-list article small .card-format{margin-left:6px;padding:0 6px;border-radius:999px;background:#e8f6ee;color:#087b43;font-size:11px;font-style:normal;font-weight:600}
 .calendar-scroll tbody th,.calendar-scroll tbody td{height:128px}
 .calendar-match{box-sizing:border-box;width:100%;min-width:0;min-height:112px;padding:10px 12px}
 .calendar-board .drop-hint{box-sizing:border-box;min-height:112px;width:100%}
@@ -808,4 +874,5 @@ onMounted(async () => { await load();if(view.value==='workbench')await focusNext
 .calendar-match footer{margin-top:8px}
 @media(max-width:900px){.calendar-workspace.pending-open{grid-template-columns:230px minmax(0,1fr)}}
 .upload-replace{display:flex;justify-content:flex-end;margin-top:16px}.import-empty small{color:#718078;font-size:13px}
+.calendar-match header{font-size:12px;gap:12px}.calendar-match header>span{min-width:0;overflow-wrap:anywhere}.calendar-match header>b{flex-shrink:0}
 </style>

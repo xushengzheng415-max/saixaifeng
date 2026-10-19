@@ -430,6 +430,9 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
     divisionName: text(match.divisionName || (divisionsById[divisionId] && divisionsById[divisionId].name)) || '未分组别',
     groupName,
     phase: phaseOf(match),
+    matchStatus: text(match.status).toLowerCase(),
+    homeSource: bracketSource(match,'home'),
+    awaySource: bracketSource(match,'away'),
     phaseLabel,
     reviewStage,
     reviewStageLabel: reviewStage === 'group' ? groupName : phaseLabel,
@@ -592,6 +595,14 @@ function sourceForSide(match, side) {
   return null
 }
 
+function bracketSource(match,side) {
+  const source=sourceForSide(match,side)
+  if(!source)return null
+  if(['match_winner','match_loser'].includes(source.type))return {type:source.type,matchId:text(source.matchId || source.sourceMatchId),matchNo:number(source.matchNo,0)}
+  if(source.type==='group_rank')return {type:'group_rank',groupName:text(source.groupName),rank:number(source.rank,0)}
+  return null
+}
+
 function teamFromMatch(match, side) {
   return {
     teamId: teamIdOf(match, side),
@@ -682,7 +693,7 @@ async function resolvePairingSources(tournamentId,matches,standings,actor) {
 }
 
 function buildKnockout(matches) {
-  return matches.filter(match => ['knockout', 'placement'].includes(match.reviewStage)).map(match => ({
+  return matches.filter(match => ['knockout', 'placement'].includes(match.reviewStage) && !['cancelled','canceled','deleted','removed','replaced','superseded'].includes(text(match.matchStatus).toLowerCase())).map(match => ({
     ...match,
     progressionReady: match.resultStatus === 'approved' && (match.homeScore !== match.awayScore || Boolean(match.winnerTeamId)),
     progressionLabel: match.resultStatus !== 'approved' ? '待正式赛果' : match.homeScore === match.awayScore && !match.winnerTeamId ? '待确认点球/晋级者' : '晋级关系可用'

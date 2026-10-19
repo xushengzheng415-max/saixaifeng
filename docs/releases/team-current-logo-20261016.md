@@ -1,0 +1,7 @@
+# 小程序首页球队当前队徽读取修复
+
+2026-10-16：只读核对开封立洋足球队（6d00d0e56aacf5ad0050b9e929fbec86），PC已将logo/logoUrl更新为team-logos/1792124712639_ndumpi.png，历史logoFileID仍指向2026年9月导入图片。getMiniWorkspace/homeEntries.cjs原先优先历史file字段，导致首页显示旧队徽。
+
+球队入口现优先当前logoUrl/logo/teamLogo，当前字段为空时才回退历史透明图和文件别名。赛事入口的透明图优先顺序、访问权限、来源过滤、球员库存统计均保留。未写球队数据库、赛事名单或历史赛果；不需上传小程序包。首页下拉刷新会重新请求workspace。
+
+从刚下载的getMiniWorkspace包仅更新homeEntries.cjs，保留线上配置。对应源模块已在主工作区做相同最小修改；工作区同期其他会话改动未提交、未重置。

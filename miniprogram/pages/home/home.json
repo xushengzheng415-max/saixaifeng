@@ -2,5 +2,8 @@
   "navigationStyle": "custom",
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "light",
-  "usingComponents": {}
+  "usingComponents": {
+    "workspace-entry-card": "/components/workspace-entry-card/index",
+    "quick-create-sheet": "/components/quick-create-sheet/index"
+  }
 }

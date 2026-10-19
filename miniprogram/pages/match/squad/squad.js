@@ -1,37 +1,9 @@
 var workspace = require('../../../utils/workspace')
 var cardService = require('../../../utils/player-card')
 
-var FORMATIONS = {
-  5: [{ id: '2-1-1', label: '2-1-1', slots: ['GK', 'DF', 'DF', 'MF', 'FW'] }],
-  7: [{ id: '2-3-1', label: '2-3-1', slots: ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'] }],
-  8: [{ id: '2-3-2', label: '2-3-2', slots: ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'] }, { id: '3-3-1', label: '3-3-1', slots: ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW'] }, { id: '2-4-1', label: '2-4-1', slots: ['GK', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW'] }],
-  9: [{ id: '3-3-2', label: '3-3-2', slots: ['GK', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW'] }],
-  11: [{ id: '4-3-3', label: '4-3-3', slots: ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'FW', 'FW', 'FW'] }, { id: '4-4-2', label: '4-4-2', slots: ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW', 'FW'] }]
-}
-
-function slotsFor(minPlayers, formation) {
-  var rows = FORMATIONS[minPlayers] || FORMATIONS[11]
-  var current = rows.filter(function (item) { return item.id === formation })[0] || rows[0]
-  var layout = { GK: 87, DF: 66, MF: 45, FW: 21 }
-  var grouped = { GK: [], DF: [], MF: [], FW: [] }
-  current.slots.forEach(function (position, index) { grouped[position].push(index) })
-  return current.slots.map(function (position, index) {
-    var siblings = grouped[position]
-    var siblingIndex = siblings.indexOf(index)
-    var left = (100 / (siblings.length + 1)) * (siblingIndex + 1)
-    return {
-      id: 'slot-' + index,
-      position: position,
-      title: position === 'GK' ? '守门员' : position === 'DF' ? '后卫' : position === 'MF' ? '中场' : '前锋',
-      empty: true,
-      playerName: '选择球员',
-      jerseyText: '+',
-      avatar: '',
-      playerId: '',
-      slotStyle: 'left:' + left.toFixed(2) + '%;top:' + layout[position] + '%;'
-    }
-  })
-}
+var lineupLayout = require('../../../utils/lineup-layout')
+var FORMATIONS = lineupLayout.FORMATIONS
+var slotsFor = lineupLayout.slotsFor
 
 function selectedIds(slots, substitutes) {
   return slots.map(function (item) { return item.playerId }).filter(Boolean).concat(substitutes.map(function (item) { return item.id }))

@@ -1,0 +1,98 @@
+{
+  "prototype": "C:\\Users\\15043\\AppData\\Local\\Temp\\codex-clipboard-a0dddcc0-c1c0-434d-84b2-956483669001.png",
+  "asset_dir": "E:\\Documents\\sxf-football\\service-account-h5\\prototypes\\event-detail-navigation_assets",
+  "generated_at": "2026-09-27",
+  "approved_at": "2026-09-27",
+  "tool": "yuanxing prototype decomposition",
+  "status": "approved",
+  "screen": {
+    "width": 1204,
+    "height": 1576
+  },
+  "summary": "开封立洋杯公开赛事详情的赛程、分组、榜单、赛事信息四页签结构。当前用户明确指定该信息架构。",
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "00-source/codex-clipboard-a0dddcc0-c1c0-434d-84b2-956483669001.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1204,
+        "height": 1576
+      },
+      "sha256": "5ad089fc4f556a38c7f3ab321fb847b9e4269eb3ad25c76cbf1b4d5f0047da85",
+      "notes": "用户提供的当前赛事详情页面结构参考，仅用于布局与信息层级对照。"
+    },
+    {
+      "id": "event-detail-header",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 57,
+        "y": 68,
+        "width": 1040,
+        "height": 153
+      },
+      "notes": "保留赛事状态、返回、赛事名和横幅区域，不复制截图文字裁片。"
+    },
+    {
+      "id": "event-detail-hero",
+      "category": "layout",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/event-detail-hero.png",
+      "source_bbox": {
+        "x": 57,
+        "y": 227,
+        "width": 1040,
+        "height": 300
+      },
+      "notes": "赛事横幅的高度、日期/地点信息层级参考；正式页面复用既有赛事背景图而非截图。"
+    },
+    {
+      "id": "event-detail-tabs",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 57,
+        "y": 528,
+        "width": 1040,
+        "height": 87
+      },
+      "notes": "四个一级页签：赛程、分组、榜单、赛事信息。"
+    },
+    {
+      "id": "schedule-row-reference",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/schedule-row.png",
+      "source_bbox": {
+        "x": 85,
+        "y": 637,
+        "width": 982,
+        "height": 333
+      },
+      "notes": "比赛卡的组别、状态、队徽、对阵和时间场地信息密度参考。"
+    },
+    {
+      "id": "ranking-content",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 85,
+        "y": 637,
+        "width": 982,
+        "height": 860
+      },
+      "notes": "榜单页使用独立的积分榜、射手榜、红黄牌切换与代码表格，不从截图裁片复用数据。"
+    },
+    {
+      "id": "annotated-layout-overlay",
+      "category": "overlay",
+      "implementation": "overlay",
+      "output": "06-overlays/annotated-layout.png",
+      "notes": "Generated bounding-box overlay for comparison only."
+    }
+  ]
+}

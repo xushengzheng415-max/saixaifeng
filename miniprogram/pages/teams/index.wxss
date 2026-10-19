@@ -39,3 +39,6 @@
 .team-name{font-size:38rpx}
 .todo-title{font-size:41rpx}
 .task-card text{font-size:31rpx}
+
+.team-list{margin-top:24rpx}.teams-hero-title{font-size:40rpx}.teams-create-button{padding:12rpx 20rpx;font-size:26rpx}.todo-section{margin-top:30rpx}.empty-team-panel{margin-top:34rpx;padding:42rpx 32rpx}.empty-copy{display:none}.empty-mark{height:110rpx}.empty-heading{font-size:34rpx}.invite-note{display:none}
+.list-create-entry{display:block;margin:30rpx 0 20rpx;border:1rpx dashed rgba(159,210,177,.7);border-radius:17rpx;background:rgba(4,57,34,.65);color:#e3f3e8;font-size:29rpx;line-height:94rpx;font-weight:500}.list-create-entry:after{border:0}

@@ -1,0 +1,173 @@
+{
+  "scope": "Supplemental actual WXML/WXSS source rendering with isolated fixture data; not native runtime acceptance",
+  "checks": [
+    {
+      "name": "01-组织者空首页",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "01-组织者空首页",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "01-组织者空首页",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "02-组织者已有赛事",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "02-组织者已有赛事",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "02-组织者已有赛事",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "07-球队管理者空首页",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "07-球队管理者空首页",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "07-球队管理者空首页",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "08-球队管理者工作首页",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "08-球队管理者工作首页",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "08-球队管理者工作首页",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "03-首次身份选择",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "03-首次身份选择",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "03-首次身份选择",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": false
+    },
+    {
+      "name": "04-赛事底部创建弹窗",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "04-赛事底部创建弹窗",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "04-赛事底部创建弹窗",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "05-主办机构弹窗",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "05-主办机构弹窗",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "05-主办机构弹窗",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "06-球队底部创建弹窗",
+      "width": 320,
+      "scrollWidth": 320,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "06-球队底部创建弹窗",
+      "width": 390,
+      "scrollWidth": 390,
+      "brokenImages": 0,
+      "sheet": true
+    },
+    {
+      "name": "06-球队底部创建弹窗",
+      "width": 430,
+      "scrollWidth": 430,
+      "brokenImages": 0,
+      "sheet": true
+    }
+  ]
+}

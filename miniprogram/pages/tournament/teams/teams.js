@@ -352,13 +352,13 @@ Page({
       wx.hideLoading()
       wx.showModal({
         title: '创建成功',
-        content: '球队已加入赛事，是否现在添加球员？',
-        confirmText: '添加球员',
-        cancelText: '稍后添加',
+        content: '球队已加入赛事，是否现在发起球员认领？',
+        confirmText: '球员认领',
+        cancelText: '稍后',
         success: modal => {
           if (modal.confirm) {
             wx.navigateTo({
-              url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(createdTeamId) + '&teamCode=' + encodeURIComponent(teamCode) + '&teamName=' + encodeURIComponent(teamData.name)
+              url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(createdTeamId)
             })
           }
         }
@@ -377,10 +377,8 @@ Page({
 
   onAddPlayer(e) {
     var teamId = e.currentTarget.dataset.id || ''
-    var teamCode = e.currentTarget.dataset.code || teamId
-    var teamName = e.currentTarget.dataset.name || ''
     wx.navigateTo({
-      url: '/pages/team/player-add/player-add?teamId=' + encodeURIComponent(teamId) + '&teamCode=' + encodeURIComponent(teamCode) + '&teamName=' + encodeURIComponent(teamName)
+      url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(teamId)
     })
   },
 

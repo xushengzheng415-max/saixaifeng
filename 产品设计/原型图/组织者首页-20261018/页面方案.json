@@ -1,0 +1,89 @@
+{
+  "format": "product-blueprint",
+  "project": "赛小蜂足球组织者首页",
+  "revision": 1,
+  "portals": [
+    {
+      "id": "mini",
+      "name": "微信小程序",
+      "platform": "mini",
+      "stack": "native-mini"
+    }
+  ],
+  "pages": [
+    {
+      "id": "P01",
+      "name": "首次办赛",
+      "portal": "mini",
+      "states": [
+        "normal"
+      ],
+      "purpose": "赛事组织者首页。仅调整首页入口与信息优先级，既有赛事和球队页面不改。",
+      "template_features": [
+        "nav.bottom",
+        "list.cells",
+        "state.empty"
+      ],
+      "layout": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "blocks": [
+          "创建赛事主操作",
+          "PC继续办赛入口",
+          "按业务关系显示待办与资源卡片"
+        ]
+      },
+      "primary_action": {
+        "label": "创建赛事",
+        "effect": "进入创建赛事流程"
+      }
+    },
+    {
+      "id": "P02",
+      "name": "已有赛事",
+      "portal": "mini",
+      "states": [
+        "normal"
+      ],
+      "purpose": "赛事组织者首页。仅调整首页入口与信息优先级，既有赛事和球队页面不改。",
+      "template_features": [
+        "nav.bottom",
+        "list.cells",
+        "state.empty"
+      ],
+      "layout": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "blocks": [
+          "创建赛事主操作",
+          "PC继续办赛入口",
+          "按业务关系显示待办与资源卡片"
+        ]
+      },
+      "primary_action": {
+        "label": "创建赛事",
+        "effect": "进入创建赛事流程"
+      }
+    }
+  ],
+  "existing_components": [
+    {
+      "id": "workspace-entry-card-b",
+      "name": "B款赛事球队卡片",
+      "source": "../../../miniprogram/components/workspace-entry-card/index.wxss",
+      "platforms": [
+        "mini"
+      ],
+      "code_stacks": [
+        "native-mini"
+      ],
+      "features": [
+        "list.cells"
+      ]
+    }
+  ]
+}

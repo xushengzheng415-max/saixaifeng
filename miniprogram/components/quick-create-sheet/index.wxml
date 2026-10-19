@@ -1,0 +1,35 @@
+<view class="quick-mask" wx:if="{{visible}}" catchtap="close" catchtouchmove="noop">
+  <view class="quick-sheet" catchtap="noop">
+    <view class="sheet-handle"></view>
+    <view class="sheet-header"><text>{{title}}</text><button class="sheet-skip" size="mini" style="margin:0;min-width:0;" bindtap="close" disabled="{{busy}}">{{closeText}}</button></view>
+    <scroll-view class="sheet-scroll" scroll-y>
+      <view class="sheet-body">
+        <view class="sheet-loading" wx:if="{{loadingState}}">正在读取主办信息…</view>
+        <block wx:if="{{organizationStep}}">
+          <view class="sheet-note">主办机构用于保存赛事资产</view>
+          <view class="field"><text>机构名称</text><input value="{{organizationName}}" maxlength="80" placeholder="填写实际主办机构" data-field="organizationName" bindinput="input" disabled="{{busy}}"/></view>
+          <view class="field"><text>机构类型</text><picker mode="selector" range="{{organizationTypes}}" range-key="name" bindchange="onOrganizationType" disabled="{{busy}}"><view class="picker-value">{{organizationTypeText}}<text>›</text></view></picker></view>
+        </block>
+        <block wx:if="{{businessStep}}">
+          <view class="organization-summary" wx:if="{{organizationSummary}}">主办机构 · {{organizationSummary}}</view>
+          <view class="logo-row" wx:if="{{!isEvent}}" bindtap="chooseLogo"><image wx:if="{{logo}}" src="{{logo}}" mode="aspectFit"/><image wx:if="{{!logo}}" src="/images/icons/shield.svg" mode="aspectFit"/><view><text>上传队徽</text><text wx:if="{{!uploading}}">可稍后补充</text><text wx:if="{{uploading}}">正在上传…</text></view></view>
+          <view class="field"><text wx:if="{{isEvent}}">赛事名称</text><text wx:if="{{!isEvent}}">球队名称</text><input value="{{name}}" maxlength="50" placeholder="填写名称" data-field="name" bindinput="input" disabled="{{busy}}"/></view>
+          <block wx:if="{{isEvent}}">
+            <view class="field"><text>开始日期</text><picker mode="date" value="{{startDate}}" data-field="startDate" bindchange="onDate" disabled="{{busy}}"><view class="picker-value">{{startDate || '请选择'}}<text>›</text></view></picker></view>
+            <view class="field"><text>结束日期</text><picker mode="date" value="{{endDate}}" start="{{startDate}}" data-field="endDate" bindchange="onDate" disabled="{{busy}}"><view class="picker-value">{{endDate || '请选择'}}<text>›</text></view></picker></view>
+          </block>
+        </block>
+        <view class="field" wx:if="{{organizationStep}}"><text>所在省市</text><picker mode="region" value="{{region}}" bindchange="onRegion" disabled="{{busy}}"><view class="picker-value">{{regionText}}<text>›</text></view></picker></view>
+        <view class="field" wx:if="{{businessStep}}"><text wx:if="{{isEvent}}">举办省市</text><text wx:if="{{!isEvent}}">所在省市</text><picker mode="region" value="{{region}}" bindchange="onRegion" disabled="{{busy}}"><view class="picker-value">{{regionText}}<text>›</text></view></picker></view>
+        <view class="sheet-note" wx:if="{{businessStep}}"><text wx:if="{{isEvent}}">创建后到电脑端继续管理</text><text wx:if="{{!isEvent}}">球队负责人为当前登录账号</text></view>
+        <view class="sheet-error" wx:if="{{errorText}}"><text>{{errorText}}</text><button wx:if="{{!businessStep}}" size="mini" bindtap="retryState">重试</button></view>
+        <view class="success-content" wx:if="{{successStep}}"><image src="/images/icons/check.svg" mode="aspectFit"/><text class="success-name">{{successName}}</text><text class="success-description">{{successText}}</text><view class="pc-address" wx:if="{{isEvent}}"><text>www.sxffootball.cn</text><button size="mini" bindtap="copyPc">复制网址</button></view></view>
+      </view>
+    </scroll-view>
+    <view class="sheet-footer">
+      <button class="sheet-primary" style="width:100%;max-width:none;margin:0;" wx:if="{{organizationStep}}" bindtap="submit" loading="{{busy}}" disabled="{{busy}}">{{submitText}}</button>
+      <button class="sheet-primary" style="width:100%;max-width:none;margin:0;" wx:if="{{businessStep}}" bindtap="submit" loading="{{busy}}" disabled="{{busy}}">{{submitText}}</button>
+      <button class="sheet-primary" style="width:100%;max-width:none;margin:0;" wx:if="{{successStep}}" bindtap="finish">{{successButton}}</button>
+    </view>
+  </view>
+</view>

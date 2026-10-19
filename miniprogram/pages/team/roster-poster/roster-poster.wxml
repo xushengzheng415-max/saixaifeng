@@ -1,0 +1,32 @@
+<view class="rp-page">
+ <view wx:if="{{loading}}" class="rp-state">正在读取本届名单…</view>
+ <view wx:elif="{{errorText}}" class="rp-state"><text>{{errorText}}</text><button bindtap="load">重新加载</button></view>
+ <block wx:else>
+  <view class="rp-toolbar"><text>{{progressText}}</text><button wx:if="{{hasRetry}}" bindtap="retryCards" disabled="{{busy}}">重试卡片</button></view>
+  <view wx:if="{{hasMissing}}" class="rp-notice">暂无球员卡的成员以照片和姓名展示</view>
+  <view wx:if="{{staffError}}" class="rp-notice"><text>教练团队读取失败</text><button bindtap="loadStaff">重试</button></view>
+  <view class="rp-poster">
+   <view class="rp-stadium-window"><image class="rp-stadium" src="{{heroSource}}" mode="widthFix"/><view class="rp-stadium-shade"></view><image wx:if="{{team.logo}}" class="rp-watermark" src="{{team.logo}}" mode="aspectFit"/></view>
+   <view class="rp-beam rp-beam-a"></view><view class="rp-beam rp-beam-b"></view>
+   <view class="rp-heading">
+    <view class="rp-event"><image wx:if="{{tournament.logo}}" src="{{tournament.logo}}" mode="aspectFit"/><text>{{tournament.name}}</text></view>
+    <view class="rp-team"><image wx:if="{{team.logo}}" src="{{team.logo}}" mode="aspectFit"/><view><text class="rp-team-name">{{team.name}}</text><text class="rp-division">{{tournament.divisionName}}</text></view></view>
+    <view class="rp-headline"><text class="rp-title">球队大名单</text></view>
+    <view class="rp-headmeta"><text wx:if="{{showRosterStatus}}" class="rp-roster-status">{{rosterStatusText}}</text><view class="rp-count"><text>{{totalCount}} 名球员</text></view></view>
+    <view class="rp-accent"><view></view><text>{{pageText}}</text></view>
+   </view>
+   <view wx:if="{{hasStaff}}" class="rp-staff-section"><view class="rp-section-label"><view></view><text>教练与工作人员</text></view><view class="rp-staff"><view class="rp-staff-person" wx:for="{{visibleStaff}}" wx:key="id"><view class="rp-staff-card"><image wx:if="{{item.ready}}" class="rp-whole-card" src="{{item.cardUrl}}" mode="aspectFit" data-id="{{item.playerId}}" binderror="cardFailed"/><view wx:else class="rp-staff-unlinked"><image wx:if="{{item.hasPortrait}}" class="rp-staff-portrait" src="{{item.photoUrl}}" mode="aspectFit" data-id="{{item.id}}" binderror="staffPhotoFailed"/><view wx:else class="rp-staff-photo-empty">头像待补充</view><text>{{item.name}}</text></view></view><text class="rp-staff-role">{{item.role}}</text></view></view></view>
+   <view class="rp-section-label rp-player-section-label"><view></view><text>参赛球员</text></view>
+   <view class="rp-grid"><view class="{{item.posterClass}}" wx:for="{{visiblePlayers}}" wx:key="id">
+    <image wx:if="{{item.ready}}" class="rp-whole-card" src="{{item.cardUrl}}" mode="aspectFit" data-id="{{item.id}}" binderror="cardFailed"/>
+    <view wx:else class="rp-fallback"><image wx:if="{{item.showPortrait}}" src="{{item.photoUrl}}" mode="aspectFit" data-id="{{item.id}}" binderror="photoFailed"/><view wx:elif="{{item.isCardLoading}}" class="rp-card-skeleton"><view></view><view></view><view></view></view><text class="rp-fallback-name">{{item.number}}号 {{item.name}}</text><text class="rp-fallback-state">{{item.stateText}}</text></view>
+   </view></view>
+
+   <view class="rp-credit"><text>赛小蜂足球</text><view></view><text>{{team.name}}</text></view>
+  </view>
+  <view wx:if="{{hasPages}}" class="rp-pager"><button bindtap="previous" disabled="{{!hasPrevious}}">上一张</button><text>{{pageText}}</text><button bindtap="next" disabled="{{!hasNext}}">下一张</button></view>
+  <view class="rp-actions"><button bindtap="previewPoster" disabled="{{exportDisabled}}" loading="{{busy}}">预览海报</button><button class="rp-primary" bindtap="savePoster" disabled="{{exportDisabled}}" loading="{{busy}}">保存海报</button></view>
+  <view wx:if="{{exportError}}" class="rp-notice">{{exportError}}</view>
+ </block>
+ <canvas type="2d" id="posterCanvas" class="rp-canvas" style="width:{{canvasWidth}}px;height:{{canvasHeight}}px"/>
+</view>

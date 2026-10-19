@@ -93,64 +93,13 @@ page {
   overflow: hidden;
 }
 
-.jersey-badge {
-  position: absolute;
-  top: 20rpx;
-  right: 20rpx;
-  width: 90rpx;
-  height: 90rpx;
-  background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 20rpx rgba(255, 107, 53, 0.4);
-  z-index: 10;
-}
-
-.jersey-num {
-  font-size: 44rpx;
-  font-weight: bold;
-  color: #fff;
-  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
-}
-
-/* 头像区域 */
-.avatar-section {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  margin-bottom: 30rpx;
-}
-
-.avatar-frame {
-  width: 220rpx;
-  height: 220rpx;
-  border-radius: 24rpx;
-  overflow: hidden;
-  box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.15);
-  border: 6rpx solid #fff;
-  position: relative;
-  z-index: 2;
-}
-
-.player-avatar {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-glow {
-  position: absolute;
-  width: 280rpx;
-  height: 280rpx;
-  background: linear-gradient(135deg, rgba(76, 175, 80, 0.25) 0%, rgba(129, 199, 132, 0.2) 100%);
-  border-radius: 32rpx;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1;
-}
+/* 完整球员卡仅等比缩放，卡内排版由统一组件负责。 */
+.detail-player-card { width:300rpx; height:430rpx; margin:0 auto 26rpx; }
+.detail-card-image { display:block; width:100%; height:100%; }
+.detail-card-fallback { display:flex; height:100%; flex-direction:column; align-items:center; justify-content:center; gap:14rpx; }
+.detail-card-portrait { display:block; width:100%; height:330rpx; }
+.detail-card-state { color:#64746b; font-size:24rpx; line-height:1.5; text-align:center; }
+.detail-card-fallback button { padding:0 26rpx; line-height:2; font-size:26rpx; color:#087b3d; background:#edf6f0; }
 
 /* 信息区域 */
 .info-section {
@@ -190,6 +139,19 @@ page {
   font-size: 30rpx;
   font-weight: bold;
   color: #2E7D32;
+  letter-spacing: 2rpx;
+}
+
+.profile-claim-tag {
+  display: inline-block;
+  margin: 0 8rpx 16rpx;
+  padding: 6rpx 24rpx;
+  border-radius: 24rpx;
+  background: #FFF8E1;
+  border: 2rpx solid rgba(230, 179, 60, 0.55);
+  font-size: 24rpx;
+  font-weight: bold;
+  color: #8A6D1F;
   letter-spacing: 2rpx;
 }
 
@@ -489,3 +451,7 @@ page {
 .card-grade-progress{height:10rpx;margin-top:14rpx;border-radius:6rpx;background:#e2e9e4;overflow:hidden}.card-grade-progress>view{height:100%;background:#198453}
 
 .points-entry{padding:0 24rpx;margin:16rpx 0}.points-entry button{background:#fff;color:#087744;border:1rpx solid #dce5df;font-size:28rpx}.points-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:flex-end}.points-panel{width:100%;height:90vh;background:#fff;border-radius:16rpx 16rpx 0 0;color:#25332c}.points-header{display:flex;justify-content:space-between;align-items:center;padding:24rpx 28rpx;border-bottom:1rpx solid #e2e8e4;font-weight:600}.points-header button{font-size:26rpx;margin:0;padding:0 20rpx;background:#fff}.points-scroll{height:calc(90vh - 110rpx)}.points-summary{padding:28rpx;display:flex;flex-direction:column;gap:10rpx}.points-summary text:first-child{font-size:42rpx;font-weight:700}.points-summary text:last-child,.points-note,.points-rules{font-size:24rpx;color:#68776e;line-height:1.6}.points-note,.points-rules{padding:8rpx 28rpx}.points-state{padding:30rpx;text-align:center}.points-match{margin:0 28rpx;padding:24rpx 0;border-bottom:1rpx solid #e2e8e4;font-size:26rpx}.points-match .points-note{padding:8rpx 0}.points-match-head{display:flex;justify-content:space-between;gap:16rpx}.points-match-head text:last-child{white-space:nowrap;color:#087744}.points-match button{margin:12rpx 0 0 auto;width:max-content;background:#fff;color:#087744;font-size:24rpx;padding:0 16rpx}.points-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx;margin-top:14rpx}.points-buttons{display:flex;justify-content:flex-end;gap:16rpx;padding:20rpx 28rpx}.points-buttons button{font-size:26rpx;margin:0;background:#087744;color:white;padding:0 22rpx}.points-history-title{padding:24rpx 28rpx 8rpx;font-weight:600}.points-form{padding:28rpx}.points-field{margin:24rpx 0}.points-field>text{font-size:26rpx;display:block;margin-bottom:12rpx}.points-field input,.points-field textarea,.points-field picker{box-sizing:border-box;width:100%;padding:16rpx;border:1rpx solid #ccd8cf;border-radius:6rpx;font-size:28rpx}.points-field textarea{height:170rpx}.points-error{font-size:24rpx;color:#b3352d}
+
+.remove-player{display:flex;align-items:center;justify-content:center;background:transparent;border:0;color:#d8e5df;font-size:26rpx;line-height:normal;height:72rpx;margin:12rpx auto}.remove-player::after{border:0}
+
+.profile-secondary{background:#fff;border:2rpx solid #087a48}.profile-secondary .btn-text{color:#087a48}.action-bar .action-btn{display:flex;align-items:center;justify-content:center;line-height:normal}

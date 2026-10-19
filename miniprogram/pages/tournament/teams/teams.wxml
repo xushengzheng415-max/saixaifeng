@@ -52,7 +52,7 @@
             data-id="{{item.teamId}}"
             data-code="{{item.teamCode}}"
             data-name="{{item.teamName}}"
-          >添加球员</button>
+          >球员认领</button>
         </view>
       </view>
     </view>

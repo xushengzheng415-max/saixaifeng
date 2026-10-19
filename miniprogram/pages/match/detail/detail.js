@@ -13,6 +13,8 @@ function getEventTypeIcon(type) {
   return map[type] || '📌'
 }
 
+function scoreText(value) { return (typeof value==='number' || typeof value==='string' && value.trim()!=='') && Number.isInteger(Number(value)) && Number(value)>=0 ? String(Number(value)) : '—' }
+
 Page({
   data: {
     matchId: '',
@@ -30,14 +32,13 @@ Page({
   },
 
   onLoad: function(options) {
+    options = options || {}
     var matchId = (options.matchId || options.id || '')
-    console.log('[matchDetail] onLoad, matchId:', matchId)
     if (!matchId) {
       this.setData({ loading: false, errorMsg: '缺少比赛ID参数' })
       return
     }
-    this.setData({ matchId: matchId })
-    this.loadMatchDetail()
+    this.setData({ matchId: matchId, currentTeamId:String(options.teamId || '') })
   },
 
   onShow: function() {
@@ -48,32 +49,37 @@ Page({
 
   loadMatchDetail: function() {
     var that = this
-    that.setData({ loading: true, errorMsg: '' })
-
-    var db = wx.cloud.database()
-
-    db.collection('matches').doc(that.data.matchId).get({
-      success: function(res) {
-        if (!res.data) {
-          that.setData({
-            loading: false,
-            errorMsg: '比赛不存在或已被删除',
-            match: null,
-            displayMatch: null
-          })
-          return
-        }
-
+    if (that._request) return that._request
+    that.setData({ loading: true, errorMsg: '', match:null, displayMatch:null })
+    var epoch = (that._epoch || 0) + 1
+    that._epoch = epoch
+    var context = workspace.readContext() || {}, userId = String((wx.getStorageSync('userInfo') || {})._id || '')
+    var timer
+    var timeout = new Promise(function(resolve,reject) { timer=setTimeout(function(){reject(new Error('加载超时，请重试'))},12000) })
+    var request = Promise.resolve().then(function() {
+      if (that.data.currentTeamId) return wx.cloud.callFunction({name:'getMiniWorkspace',data:{action:'teamMatchDetail',workspaceId:(context.currentWorkspace || {}).id || '',teamId:that.data.currentTeamId,matchId:that.data.matchId}}).then(function(response) {
+        var result=response.result || {}
+        if (!result.success) throw new Error(result.message || '比赛读取失败，请重试')
+        return {data:result.match}
+      })
+      return wx.cloud.database().collection('matches').doc(that.data.matchId).get()
+    })
+    that._request = Promise.race([request,timeout]).then(function(res) {
+        if (epoch!==that._epoch || String((wx.getStorageSync('userInfo') || {})._id || '')!==userId) return
+        if (!res.data) throw new Error('比赛不存在或已被删除')
         var raw = res.data
-        console.log('[matchDetail] 原始数据:', JSON.stringify(raw).substring(0, 500))
-
         // 球队操作权来自当前工作空间，不再依赖永久角色。
         var accessibleTeamIds = workspace.getAccessibleTeamIds()
+        if (that.data.currentTeamId && [String(raw.homeTeamId || ''),String(raw.awayTeamId || '')].indexOf(String(that.data.currentTeamId)) < 0) {
+          that.setData({loading:false,errorMsg:'该比赛不属于当前球队',match:null,displayMatch:null});return
+        }
         var isHomeCoach = accessibleTeamIds.indexOf(raw.homeTeamId || raw.homeTeam) >= 0
         var isAwayCoach = accessibleTeamIds.indexOf(raw.awayTeamId || raw.awayTeam) >= 0
+        var currentTeamId = accessibleTeamIds.indexOf(that.data.currentTeamId) >= 0 ? that.data.currentTeamId : (isHomeCoach ? raw.homeTeamId || raw.homeTeam : isAwayCoach ? raw.awayTeamId || raw.awayTeam : '')
 
         // 格式化日期（兼容 Date 对象、时间戳、ISO 字符串）
-        var matchTimeStr = that.formatMatchTime(raw.matchTime || raw.date || raw.startTime || raw.matchDate)
+        var dateText = raw.matchDate || raw.date || '', timeText = raw.matchTime || raw.time || ''
+        var matchTimeStr = typeof dateText==='string' && /^\d{4}-\d{2}-\d{2}/.test(dateText) && /^\d{1,2}:\d{2}$/.test(String(timeText)) ? dateText.slice(0,10)+' '+timeText : that.formatMatchTime(raw.startTime || raw.kickoffAt || raw.matchTime || dateText)
 
         // 构建展示用的数据对象（统一字段名）
         var displayMatch = {
@@ -85,7 +91,7 @@ Page({
           homeScore: raw.homeScore !== undefined ? raw.homeScore : (raw.scoreHome !== undefined ? raw.scoreHome : ''),
           awayScore: raw.awayScore !== undefined ? raw.awayScore : (raw.scoreAway !== undefined ? raw.scoreAway : ''),
           venue: raw.venue || raw.location || raw.stadium || '待定',
-          matchTime: matchTimeStr,
+          matchTime: raw.matchTimeText || matchTimeStr,
           round: raw.round || raw.stage || '',
           status: raw.status || 'unknown',
           // 状态文字映射
@@ -116,8 +122,8 @@ Page({
           }) : [],
           hasEvents: Array.isArray(raw.events) && raw.events.length > 0,
           // 预计算比分文本
-          homeScoreText: (raw.homeScore !== undefined && raw.homeScore !== null) ? String(raw.homeScore) : '0',
-          awayScoreText: (raw.awayScore !== undefined && raw.awayScore !== null) ? String(raw.awayScore) : '0'
+          homeScoreText: scoreText(raw.homeScore == null ? raw.scoreHome : raw.homeScore),
+          awayScoreText: scoreText(raw.awayScore == null ? raw.scoreAway : raw.awayScore)
         }
 
         // 检查首发阵容状态
@@ -130,11 +136,11 @@ Page({
           loading: false,
           errorMsg: '',
           currentTeamId: currentTeamId,
-          isHomeCoach: isHomeCoach,
-          isAwayCoach: isAwayCoach,
+          isHomeCoach: isHomeCoach && ['upcoming','scheduled','not_started','pending'].indexOf(String(raw.status))>=0,
+          isAwayCoach: isAwayCoach && ['upcoming','scheduled','not_started','pending'].indexOf(String(raw.status))>=0,
           homeLineupSubmitted: !!(homeLineup && homeLineup.submitted),
           awayLineupSubmitted: !!(awayLineup && awayLineup.submitted),
-          showLineupTip: !isHomeCoach && !isAwayCoach,
+          showLineupTip: false,
           events: displayMatch.events,
           hasEvents: displayMatch.hasEvents,
           homeKitJersey: displayMatch.homeKitJersey,
@@ -146,19 +152,17 @@ Page({
           hasKitColors: displayMatch.hasKitColors
         })
 
-        console.log('[matchDetail] 展示数据:', displayMatch)
-      },
-      fail: function(err) {
-        console.error('[matchDetail] 加载失败:', err)
-        that.setData({
-          loading: false,
-          errorMsg: '加载失败：' + (err.errMsg || '网络异常'),
-          match: null,
-          displayMatch: null
-        })
-      }
+    }).catch(function(error) {
+      if (epoch!==that._epoch) return
+      that.setData({loading:false,errorMsg:error.message || error.errMsg || '加载失败，请重试',match:null,displayMatch:null})
+    }).finally(function() {
+      clearTimeout(timer)
+      if (epoch===that._epoch) {that._request=null;that.setData({loading:false});wx.stopPullDownRefresh()}
     })
+    return that._request
   },
+
+  onUnload: function() { this._epoch=(this._epoch || 0)+1;this._request=null },
 
   // 格式化比赛时间（兼容多种格式）
   formatMatchTime: function(timeVal) {
@@ -166,19 +170,19 @@ Page({
     var d = timeVal
     // 如果是 Date 对象（云数据库返回的可能是这个）
     if (typeof d === 'object' && d instanceof Date) {
-      return that.formatDateObj(d)
+      return this.formatDateObj(d)
     }
     // 如果是数字（秒级或毫秒级时间戳）
     if (typeof d === 'number') {
       d = new Date(d > 1e12 ? d : d * 1000)
-      return that.formatDateObj(d)
+      return this.formatDateObj(d)
     }
     // 如果是字符串
     if (typeof d === 'string') {
       // ISO 格式
       var parsed = new Date(d)
       if (!isNaN(parsed.getTime())) {
-        return that.formatDateObj(parsed)
+        return this.formatDateObj(parsed)
       }
       return d // 直接返回原始字符串
     }

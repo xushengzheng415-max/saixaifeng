@@ -474,6 +474,7 @@ exports.main = async (event, context) => {
 
     const safeData = { ...data }
     const paperImport = event.action === 'importPaperReport'
+    const miniPaperImport = paperImport && actor.miniScope?.operation === 'paperImport'
     if (paperImport) {
       const key=process.env.SXF_PAPER_REPORT_SECRET
       if (!key) return {success:false,message:'裁判表保存服务尚未配置'}
@@ -484,7 +485,7 @@ exports.main = async (event, context) => {
       if (!/^[a-f0-9]{64}$/.test(supplied) || !(crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(supplied)) || crypto.timingSafeEqual(Buffer.from(legacyExpected),Buffer.from(supplied)))) return {success:false,message:'保存凭证校验失败，请重试'}
     }
     if (paperImport && (refereeHasTakenOverOrLocked(match) || ['ongoing','live','in_progress','playing','archived','cancelled','postponed'].includes(String(match.status || '').toLowerCase()))) return {success:false,code:'MATCH_RECORD_LOCKED',message:'当前比赛不能录入纸质裁判表'}
-    if (paperImport && (event.expectedEventRevision == null || Object.keys(data).some(key=>!['lineups','events','paperReportImports'].includes(key)) || !data.lineups?.home || !data.lineups?.away || !Array.isArray(data.events) || !Array.isArray(data.paperReportImports))) return {success:false,message:'裁判表确认数据不完整'}
+    if (paperImport && (event.expectedEventRevision == null || Object.keys(data).some(key=>!['lineups','events','paperReportImports',...(miniPaperImport?['status']:[])].includes(key)) || !data.lineups?.home || !data.lineups?.away || !Array.isArray(data.events) || !Array.isArray(data.paperReportImports))) return {success:false,message:'裁判表确认数据不完整'}
     ;['orgId', 'creatorId', 'organizerId', 'ownerId', 'userId', 'createdBy'].forEach(field => { delete safeData[field] })
     delete safeData.tournamentId
     delete safeData.updateTime
@@ -540,12 +541,12 @@ exports.main = async (event, context) => {
     const miniSetup = ['lineup','start'].includes(actor.miniScope?.operation) && !refereeHasTakenOverOrLocked(match) && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(currentStatus)
     const canSupplement = ((organizerRecordAllowed || miniImport || miniLive) && Array.isArray(safeData.events)) || (finishing && organizerCanFinish)
 
-    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(miniImport && ['lineups','status','organizerSupplementFiles'].includes(field)) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status'] : [])].includes(field)))) {
+    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(miniPaperImport && ['lineups','status'].includes(field)) && !(miniImport && ['lineups','status','organizerSupplementFiles'].includes(field)) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status'] : [])].includes(field)))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
     const preMatchSetupEditable = !match.refereeRecordLocked && !match.refereeReportSubmittedAt && match.executionState !== 'recording' && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
     if (planState.locked) {
-      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['status'] : []),...(miniImport ? ['lineups','status','organizerSupplementFiles'] : []),...(paperImport ? ['lineups','paperReportImports'] : [])])
+      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing || miniPaperImport ? ['status'] : []),...(miniImport ? ['lineups','status','organizerSupplementFiles'] : []),...(paperImport ? ['lineups','paperReportImports'] : [])])
       const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'kitSelection' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已锁定，当前只能安排裁判或修改未开赛比赛的球服颜色与场序', code: 'COMPETITION_PLAN_LOCKED' }

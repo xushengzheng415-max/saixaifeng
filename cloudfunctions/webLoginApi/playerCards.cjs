@@ -25,6 +25,16 @@ function owns(player, relation) {
   const owner = String(relation.registrantUserId || '')
   return Boolean(owner && (relation.registrantType === 'self' ? [player.linkedUserId, player.playerUserId].map(String).includes(owner) : String(player.guardianUserId || '') === owner))
 }
+function portraitMatchesRegistration(portrait, entry, auth) {
+  if (!portrait || portrait.status !== 'confirmed') return false
+  if (String(portrait.parentInvite || '') === String(entry.relation?.parentInvite || '') && portrait.parentInvite) return true
+  // A registration upgrade creates a new confirmed portrait version. An older
+  // submission may still be the first relation returned for the same player.
+  return portrait.sourceChannel === 'service_account_h5' &&
+    String(portrait.playerId || '') === String(entry.player._id || '') &&
+    String(portrait.serviceAccountOpenId || '') === String(auth.openId || '') &&
+    Boolean(auth.openId) && owns(entry.player, entry.relation || {})
+}
 function cardChangePermission(level, player, portrait, event) {
   if (!level.cardTier) return { code:'PLAYER_CARD_TIER_UNVERIFIED', error:'生涯积分待核定，请稍后重试' }
   if (String(event.tier || '') !== level.cardTier) return { code:'PLAYER_CARD_TIER_CHANGED', error:'球员卡等级已更新，请重新打开编辑器' }
@@ -110,7 +120,7 @@ function createPlayerCards(deps) {
     } else if (entry.player.recentPortraitId) {
       const result = await db.collection('parent_portraits').doc(String(entry.player.recentPortraitId)).get()
       const row = Array.isArray(result.data) ? result.data[0] : result.data
-      if (row && row.status === 'confirmed' && String(row.parentInvite || '') === String(entry.relation && entry.relation.parentInvite || '')) portrait = row
+      if (portraitMatchesRegistration(row, entry, auth)) portrait = row
     }
     if (!portrait || !portrait.transparentFileId) {
       const source=await require('./playerCardSource.cjs').resolveSource(db,entry.player)
@@ -230,4 +240,4 @@ function createPlayerCards(deps) {
     try { return await handler(event) } catch (error) { return { success: false, error: error.message || '球员卡保存失败，请重试', code: error.code || 'PLAYER_CARD_ERROR' } }
   }
 }
-module.exports = { createPlayerCards, imageBuffer, normalizeCrop, normalizeLayout, owns, cardChangePermission, cardVersionsForPlayer }
+module.exports = { createPlayerCards, imageBuffer, normalizeCrop, normalizeLayout, owns, portraitMatchesRegistration, cardChangePermission, cardVersionsForPlayer }

@@ -1,0 +1,187 @@
+{
+  "format": "prototype-template-match",
+  "version": 1,
+  "project": "赛小蜂足球",
+  "plan_revision": 1,
+  "catalog_revision": "2026-10-15.1",
+  "mode": "prototype",
+  "scope_note": "特征召回与兼容性过滤；不是语义理解、用户批准或代码运行证明",
+  "pages": [
+    {
+      "page_id": "P01A",
+      "page_name": "A款-放大模糊",
+      "platform": "mini",
+      "stack": "html",
+      "features": {
+        "nav.bottom": 5,
+        "detail.summary": 2
+      },
+      "recommended": "project:home-entry-card",
+      "candidates": [
+        {
+          "id": "project:home-entry-card",
+          "name": "项目现有首页卡片与导航",
+          "origin": "project",
+          "score": 107,
+          "matched_features": [
+            "detail.summary",
+            "nav.bottom"
+          ],
+          "reuse_mode": "project-component",
+          "source": "../../../miniprogram/pages/home/home.wxml",
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-tabbar",
+          "name": "原生小程序底部导航",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 5,
+          "matched_features": [
+            "nav.bottom"
+          ],
+          "reuse_mode": "adapt-structure",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/tab-bar/_example/base/index.wxml",
+              "sha256": "953930e2cb5f86f37a07038157b50e4bcce3b6d9cf40c62cfab5b9762d3903a6",
+              "bytes": 268,
+              "lines": 6,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/tab-bar/_example/base/index.wxml"
+            }
+          ],
+          "adaptations": [
+            "按项目原生或自定义 tabbar 规范选择；示例 fixed=false 不能当作已处理安全区"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram tab-bar/tab-bar-item",
+            "导航配置"
+          ],
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-cell",
+          "name": "原生小程序条目列表",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 2,
+          "matched_features": [
+            "detail.summary"
+          ],
+          "reuse_mode": "adapt-structure",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/cell/cell.wxml",
+              "sha256": "23e74d3364439bd8c38683ddc67128e790f4eb10227af0f82f5e267c634b15e5",
+              "bytes": 2110,
+              "lines": 64,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/cell/cell.wxml"
+            }
+          ],
+          "adaptations": [
+            "省略重复说明；只展示必要字段；若项目限制 WXML 表达式，页面派生值在 JS 中计算"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram cell/image/icon"
+          ],
+          "requires_source_check": true
+        }
+      ],
+      "status": "candidate-review",
+      "reason": null,
+      "decision": null
+    },
+    {
+      "page_id": "P01B",
+      "page_name": "B款-低透明水印",
+      "platform": "mini",
+      "stack": "html",
+      "features": {
+        "nav.bottom": 5,
+        "detail.summary": 2
+      },
+      "recommended": "project:home-entry-card",
+      "candidates": [
+        {
+          "id": "project:home-entry-card",
+          "name": "项目现有首页卡片与导航",
+          "origin": "project",
+          "score": 107,
+          "matched_features": [
+            "detail.summary",
+            "nav.bottom"
+          ],
+          "reuse_mode": "project-component",
+          "source": "../../../miniprogram/pages/home/home.wxml",
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-tabbar",
+          "name": "原生小程序底部导航",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 5,
+          "matched_features": [
+            "nav.bottom"
+          ],
+          "reuse_mode": "adapt-structure",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/tab-bar/_example/base/index.wxml",
+              "sha256": "953930e2cb5f86f37a07038157b50e4bcce3b6d9cf40c62cfab5b9762d3903a6",
+              "bytes": 268,
+              "lines": 6,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/tab-bar/_example/base/index.wxml"
+            }
+          ],
+          "adaptations": [
+            "按项目原生或自定义 tabbar 规范选择；示例 fixed=false 不能当作已处理安全区"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram tab-bar/tab-bar-item",
+            "导航配置"
+          ],
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-cell",
+          "name": "原生小程序条目列表",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 2,
+          "matched_features": [
+            "detail.summary"
+          ],
+          "reuse_mode": "adapt-structure",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/cell/cell.wxml",
+              "sha256": "23e74d3364439bd8c38683ddc67128e790f4eb10227af0f82f5e267c634b15e5",
+              "bytes": 2110,
+              "lines": 64,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/cell/cell.wxml"
+            }
+          ],
+          "adaptations": [
+            "省略重复说明；只展示必要字段；若项目限制 WXML 表达式，页面派生值在 JS 中计算"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram cell/image/icon"
+          ],
+          "requires_source_check": true
+        }
+      ],
+      "status": "candidate-review",
+      "reason": null,
+      "decision": null
+    }
+  ]
+}

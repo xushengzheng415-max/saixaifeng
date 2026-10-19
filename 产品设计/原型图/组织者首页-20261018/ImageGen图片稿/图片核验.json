@@ -1,0 +1,24 @@
+{
+  "generator": "built-in image_gen.imagegen",
+  "review": "visual inspection passed for selected images",
+  "artifacts": [
+    {
+      "file": "01-首页双状态.png",
+      "size": [
+        1142,
+        1377
+      ],
+      "bytes": 1733337,
+      "sha256": "d01e59e6f69cbad186f34e11849c8a9fc295da064864da05926ca7b12dd83298"
+    },
+    {
+      "file": "02-首次登录与身份引导-精修.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "bytes": 1676924,
+      "sha256": "a23036049d5654b5eef3ec337cb75fd90e8a4d39172552adf7ffc98f7a2604bf"
+    }
+  ]
+}

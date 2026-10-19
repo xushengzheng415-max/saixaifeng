@@ -1,0 +1,242 @@
+{
+  "schema_version": 2,
+  "asset_dir": ".",
+  "prototype": "原型原图/B款-低透明水印.png",
+  "status": "implemented",
+  "generated_at": "2026-10-16T05:26:33.174197+00:00",
+  "screen": {
+    "width": 390,
+    "height": 860
+  },
+  "summary": "选定B款巨型低透明队徽水印，三页共用并按用户要求收紧高度；我的仅显示双身份，权限说明回到资源。",
+  "inventory_notes": {
+    "text": "保留队名、赛事日期地点、球员库人数和入口；不添加文案。",
+    "interactions": "整卡复用onHomeEntryTap及原工作空间/权限回读。",
+    "icons": "不新增图标，消息/底栏继续引用项目共享素材。",
+    "production_assets": "原型PNG和裁片仅比对；前景与水印都使用接口当前logo，同URL复用，不另造页面图片。",
+    "missing_assets": "没有阻塞素材缺口。"
+  },
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "原型原图/B款-低透明水印.png",
+      "sha256": "ddebdca619c6ecefa9b16f67e0cbd58fa1111db8b1937e9e34931090baa89ba8",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 860
+      },
+      "notes": "原型原图仅作参考"
+    },
+    {
+      "id": "header",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 145
+      },
+      "no_crop_reason": "系统安全区及标题保持现有原生页面，不重写。",
+      "notes": "左侧标题与微信胶囊保持安全间隔。"
+    },
+    {
+      "id": "team-card-layout",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 17,
+        "y": 364,
+        "width": 356,
+        "height": 184
+      },
+      "reference": "局部参考/球队卡片.png",
+      "notes": "右侧小队徽、巨型半透明队徽背景、底部分隔行；上下按用户指示压缩。"
+    },
+    {
+      "id": "team-card-reference",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "source_bbox": {
+        "x": 17,
+        "y": 364,
+        "width": 356,
+        "height": 184
+      },
+      "output": "局部参考/球队卡片.png",
+      "notes": "仅视觉对比，不打包到小程序。"
+    },
+    {
+      "id": "card-copy",
+      "category": "text",
+      "implementation": "text-code",
+      "source_bbox": {
+        "x": 35,
+        "y": 390,
+        "width": 290,
+        "height": 125
+      },
+      "text": "球队；陆零後足球队；球员库 19 人；进入球队",
+      "notes": "正式页面来自homeEntries，不使用原型示例数据。"
+    },
+    {
+      "id": "card-image",
+      "category": "image",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 17,
+        "y": 364,
+        "width": 356,
+        "height": 184
+      },
+      "notes": "WXML image动态读取item.logo作水印及前景，mode=aspectFit，前景完整展示，背景在容器内裁切。"
+    },
+    {
+      "id": "card-entry",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 17,
+        "y": 364,
+        "width": 356,
+        "height": 184
+      },
+      "action": "点击赛事或球队整卡",
+      "target": "workspace-entry-cards.open；首页、赛事、球队卡片按身份和资源关系校验后进入正式路由",
+      "states": [
+        "加载",
+        "可进入",
+        "权限变更",
+        "进入失败可重试"
+      ],
+      "notes": "保留data-key、工作空间切换、权限回读、重复点击及账号迟到隔离。"
+    }
+  ],
+  "user_confirmation": {
+    "scope": "B款水印及紧凑高度；赛事/球队复用；仅我的切两身份；我的移除账号/共享授权摘要",
+    "confirmed_at": "2026-10-16",
+    "basis": "用户当前明确选择B款并要求卡片上下再压缩"
+  },
+  "ready_at": "2026-10-16T05:26:33.789710+00:00",
+  "validation": {
+    "screenshots": [
+      {
+        "path": "验收/原生-首页.png",
+        "viewport": {
+          "width": 149,
+          "height": 321
+        },
+        "logicalViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "首页",
+        "note": "微信原生实际页面；DevTools预览缩放产生的PNG物理像素，未放大或重绘；云响应为隔离夹具。"
+      },
+      {
+        "path": "验收/原生-球队.png",
+        "viewport": {
+          "width": 149,
+          "height": 321
+        },
+        "logicalViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "球队",
+        "note": "微信原生实际页面；DevTools预览缩放产生的PNG物理像素，未放大或重绘；云响应为隔离夹具。"
+      },
+      {
+        "path": "验收/原生-赛事组织者.png",
+        "viewport": {
+          "width": 149,
+          "height": 321
+        },
+        "logicalViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "赛事组织者",
+        "note": "微信原生实际页面；DevTools预览缩放产生的PNG物理像素，未放大或重绘；云响应为隔离夹具。"
+      },
+      {
+        "path": "验收/原生-球队参赛.png",
+        "viewport": {
+          "width": 149,
+          "height": 321
+        },
+        "logicalViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "球队参赛",
+        "note": "微信原生实际页面；DevTools预览缩放产生的PNG物理像素，未放大或重绘；云响应为隔离夹具。"
+      },
+      {
+        "path": "验收/原生-我的.png",
+        "viewport": {
+          "width": 277,
+          "height": 600
+        },
+        "logicalViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "我的",
+        "note": "微信原生实际页面；DevTools预览缩放产生的PNG物理像素，未放大或重绘；云响应为隔离夹具。"
+      },
+      {
+        "path": "验收/原生-身份切换.png",
+        "viewport": {
+          "width": 277,
+          "height": 600
+        },
+        "logicalViewport": {
+          "width": 390,
+          "height": 844
+        },
+        "route": "身份切换",
+        "note": "微信原生实际页面；DevTools预览缩放产生的PNG物理像素，未放大或重绘；云响应为隔离夹具。"
+      }
+    ],
+    "comparison": "验收/对照报告.md",
+    "differences": [
+      {
+        "severity": "moderate",
+        "region": "普通球队卡",
+        "detail": "参考原型球队卡184px，本次原生125px；按用户明确要求压缩上下留白。"
+      },
+      {
+        "severity": "minor",
+        "region": "截图视口",
+        "detail": "原型390×860全页导出；原生逻辑390×844，PNG为DevTools缩放物理像素；不作为全分辨率真机截图。"
+      }
+    ],
+    "interaction_checks": [
+      {
+        "id": "card-entry",
+        "status": "passed",
+        "evidence": "验收/原生交互记录.json",
+        "detail": "真实组件点击验证主办/共享/球队三类路径；组别与球队稳定ID，失败不回落主办。"
+      },
+      {
+        "id": "identity-switch",
+        "status": "passed",
+        "evidence": "验收/原生交互记录.json",
+        "detail": "我的仅两项身份，打开隐藏底栏、实际取消/确认后恢复，身份偏好保持。"
+      }
+    ],
+    "environment": "正式原生页面及组件代码，微信DevTools隔离云响应；不写正式业务数据。"
+  },
+  "implemented_at": "2026-10-16T06:22:51.363Z",
+  "formal_routes": [
+    "/pages/home/home",
+    "/pages/event/index",
+    "/pages/teams/index",
+    "/pages/profile/profile"
+  ]
+}

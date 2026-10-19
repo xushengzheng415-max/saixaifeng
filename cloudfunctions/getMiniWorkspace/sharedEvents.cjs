@@ -9,6 +9,7 @@ const { decorateTournament } = require('./data-center/lifecycle.cjs')
 const text = value => String(value == null ? '' : value).trim()
 
 async function list(db, userId) {
+  const { synthetic } = await import('./data-center/statistics.mjs')
   const grants = []
   for (let skip = 0; ; skip += 100) {
     let rows
@@ -34,6 +35,9 @@ async function list(db, userId) {
     result.push({
       id: text(event._id), grantId: text(grant._id), orgId: text(grant.orgId),
       name: text(event.name || event.tournamentName) || '赛事',
+      logo: text(event.logoTransparentFileId || event.logoTransparentUrl || event.logoFileId || event.logoUrl || event.logo),
+      coverUrl: text(event.coverUrl || event.coverImage),
+      synthetic: synthetic(event),
       isShared: true, isHosted: false, isParticipating: false, relation: 'shared', relationText: '共享赛事',
       permissions, permissionText: permissions.map(right => RIGHTS[right]).join('、'),
       status, statusText: event.statusText,

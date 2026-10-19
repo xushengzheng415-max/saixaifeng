@@ -2,6 +2,8 @@
   "pages": [
     "pages/login/login",
     "pages/home/home",
+    "pages/discover/discover",
+    "pages/discover/record/record",
     "pages/login/agreement/agreement",
     "pages/event/index",
     "pages/teams/index",
@@ -12,12 +14,14 @@
     "pages/data/index",
     "pages/data-center/index",
     "pages/onboarding/onboarding",
+    "pages/onboarding/first-use",
     "pages/guide/team-info/team-info",
     "pages/guide/referee-info/referee-info",
     "pages/player/detail/detail",
     "pages/player/electronic-pass/electronic-pass",
     "pages/card-preview/card-preview",
     "pages/tournament-center/tournament-center",
+    "pages/public-tournament-center/index",
     "pages/roster-change/roster-change",
     "pages/referee/index",
     "pages/referee/match/match",
@@ -61,8 +65,8 @@
         "text": "球队"
       },
       {
-        "pagePath": "pages/training/index",
-        "text": "青训"
+        "pagePath": "pages/discover/discover",
+        "text": "发现"
       },
       {
         "pagePath": "pages/profile/profile",
@@ -89,6 +93,7 @@
         "profile-progress/profile-progress",
         "profile-exception/profile-exception",
         "official-roster/official-roster",
+        "roster-poster/roster-poster",
         "data-package/data-package",
         "data-package-events/data-package-events",
         "prebuilt-invite/prebuilt-invite",

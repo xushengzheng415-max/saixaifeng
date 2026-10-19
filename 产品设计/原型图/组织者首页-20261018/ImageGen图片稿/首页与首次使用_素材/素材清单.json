@@ -1,0 +1,809 @@
+{
+  "schema_version": 2,
+  "asset_dir": ".",
+  "prototype": "原型原图/01-首页双状态.png",
+  "status": "implemented",
+  "screen": {
+    "width": 1142,
+    "height": 1377
+  },
+  "summary": "正式首页已按赛事组织者/球队管理者区分；动态身份、品牌Logo、独立球场、紧凑创建按钮；首次创建可跳过；本地验收，未发布。",
+  "inventory_notes": {
+    "missing_assets": "没有阻塞素材缺口；新增独立生成球场摄影，复用透明Logo和共享图标。"
+  },
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "原型原图/01-首页双状态.png",
+      "sha256": "d01e59e6f69cbad186f34e11849c8a9fc295da064864da05926ca7b12dd83298",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1142,
+        "height": 1377
+      },
+      "notes": "ImageGen用户确认的首页参考；不作为产品背景"
+    },
+    {
+      "id": "home-layout",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "no_crop_reason": "参考图为双屏展示，区域结构和比例已明确，复用已有组件，不裁切控件。",
+      "notes": "Logo与动态身份、独立球场、两工作视角及空/有资源状态、紧凑创建、唯一底部导航"
+    },
+    {
+      "id": "copy",
+      "category": "text",
+      "implementation": "text-code",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "text": "动态工作身份、组织一场比赛/组建一支球队、创建赛事/球队、我的球队、我的参赛、待处理、复制网址、赛事中心",
+      "notes": "文字与动态数字均由正式模板/数据提供"
+    },
+    {
+      "id": "create",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "action": "创建赛事/球队",
+      "target": "quick-create-sheet",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "disabled"
+      ],
+      "notes": "复用真实路由/云函数；防重复提交；跳过不调用创建接口"
+    },
+    {
+      "id": "skip",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "action": "跳过创建",
+      "target": "关闭弹窗并进入首页",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "disabled"
+      ],
+      "notes": "复用真实路由/云函数；防重复提交；跳过不调用创建接口"
+    },
+    {
+      "id": "role",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "action": "首次选择身份",
+      "target": "仅记忆工作视角，不授予业务权限",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "disabled"
+      ],
+      "notes": "复用真实路由/云函数；防重复提交；跳过不调用创建接口"
+    },
+    {
+      "id": "copy-pc",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "action": "复制电脑网址",
+      "target": "wx.setClipboardData",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "disabled"
+      ],
+      "notes": "复用真实路由/云函数；防重复提交；跳过不调用创建接口"
+    },
+    {
+      "id": "resource",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "action": "打开授权赛事或球队",
+      "target": "workspace-entry-cards.open",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "disabled"
+      ],
+      "notes": "复用真实路由/云函数；防重复提交；跳过不调用创建接口"
+    },
+    {
+      "id": "todo",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "action": "打开待办",
+      "target": "已有todo及报名/名单页面",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "disabled"
+      ],
+      "notes": "复用真实路由/云函数；防重复提交；跳过不调用创建接口"
+    },
+    {
+      "id": "stadium",
+      "category": "background",
+      "implementation": "background",
+      "source_bbox": {
+        "x": 40,
+        "y": 140,
+        "width": 480,
+        "height": 310
+      },
+      "canonicalSource": "../../../../../miniprogram/images/runtime/organizer-home-stadium-v2.jpg",
+      "production_reason": "已有项目获准球场照片，非原型裁片",
+      "notes": "独立ImageGen球场生产照片，压缩为运行时JPEG，非原型裁片。"
+    },
+    {
+      "id": "icon-event",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "semanticKey": "event",
+      "sourceType": "existing-project-vector",
+      "sourceUrl": "project:miniprogram/images/icons/manifest.json",
+      "license": "项目已有共享图标",
+      "canonicalSvg": "../../../../../miniprogram/images/icons/event.svg",
+      "targetPages": [
+        "home",
+        "first-use",
+        "quick-create-sheet"
+      ],
+      "variants": {},
+      "notes": "复用共享库，不新增临时图标"
+    },
+    {
+      "id": "icon-team",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "semanticKey": "team",
+      "sourceType": "existing-project-vector",
+      "sourceUrl": "project:miniprogram/images/icons/manifest.json",
+      "license": "项目已有共享图标",
+      "canonicalSvg": "../../../../../miniprogram/images/icons/team.svg",
+      "targetPages": [
+        "home",
+        "first-use",
+        "quick-create-sheet"
+      ],
+      "variants": {},
+      "notes": "复用共享库，不新增临时图标"
+    },
+    {
+      "id": "icon-bell",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "semanticKey": "bell",
+      "sourceType": "existing-project-vector",
+      "sourceUrl": "project:miniprogram/images/icons/manifest.json",
+      "license": "项目已有共享图标",
+      "canonicalSvg": "../../../../../miniprogram/images/icons/bell.svg",
+      "targetPages": [
+        "home",
+        "first-use",
+        "quick-create-sheet"
+      ],
+      "variants": {},
+      "notes": "复用共享库，不新增临时图标"
+    },
+    {
+      "id": "icon-players",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "semanticKey": "players",
+      "sourceType": "existing-project-vector",
+      "sourceUrl": "project:miniprogram/images/icons/manifest.json",
+      "license": "项目已有共享图标",
+      "canonicalSvg": "../../../../../miniprogram/images/icons/players.svg",
+      "targetPages": [
+        "home",
+        "first-use",
+        "quick-create-sheet"
+      ],
+      "variants": {},
+      "notes": "复用共享库，不新增临时图标"
+    },
+    {
+      "id": "icon-list",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "semanticKey": "list",
+      "sourceType": "existing-project-vector",
+      "sourceUrl": "project:miniprogram/images/icons/manifest.json",
+      "license": "项目已有共享图标",
+      "canonicalSvg": "../../../../../miniprogram/images/icons/list.svg",
+      "targetPages": [
+        "home",
+        "first-use",
+        "quick-create-sheet"
+      ],
+      "variants": {},
+      "notes": "复用共享库，不新增临时图标"
+    },
+    {
+      "id": "icon-shield",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 1035,
+        "height": 1130
+      },
+      "semanticKey": "shield",
+      "sourceType": "existing-project-vector",
+      "sourceUrl": "project:miniprogram/images/icons/manifest.json",
+      "license": "项目已有共享图标",
+      "canonicalSvg": "../../../../../miniprogram/images/icons/shield.svg",
+      "targetPages": [
+        "home",
+        "first-use",
+        "quick-create-sheet"
+      ],
+      "variants": {},
+      "notes": "复用共享库，不新增临时图标"
+    },
+    {
+      "id": "brand-logo",
+      "category": "image",
+      "implementation": "image",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 480,
+        "height": 310
+      },
+      "canonicalSource": "../../../../../miniprogram/images/brand/logo-saixiaofeng-football.png",
+      "production_reason": "用户要求左上角首页文字改为既有赛小蜂横版Logo",
+      "notes": "复用H5已授权透明品牌文件，保留完整比例"
+    },
+    {
+      "id": "icon-monitor",
+      "category": "icon",
+      "implementation": "icon",
+      "source_bbox": {
+        "x": 50,
+        "y": 140,
+        "width": 480,
+        "height": 310
+      },
+      "semanticKey": "desktop-management",
+      "sourceType": "lucide-feather",
+      "sourceUrl": "https://github.com/lucide-icons/lucide/blob/main/icons/monitor.svg",
+      "license": "ISC and MIT; miniprogram/images/icons/LICENSE-lucide.txt",
+      "canonicalSvg": "../../../../../miniprogram/images/icons/monitor.svg",
+      "targetPages": [
+        "home"
+      ],
+      "variants": {},
+      "notes": "实际下载正式SVG，按共享库颜色和描边适配，无临时手绘"
+    },
+    {
+      "id": "public-center",
+      "category": "control",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 50,
+        "y": 1050,
+        "width": 1035,
+        "height": 120
+      },
+      "action": "打开公开赛事中心",
+      "target": "pages/public-tournament-center/index → 现有正式公开H5",
+      "states": [
+        "loading",
+        "default",
+        "error",
+        "retry"
+      ],
+      "notes": "固定本站URL；不传私人登录参数。原生路由和独立真实H5已验证，手机内嵌画面待确认。"
+    }
+  ],
+  "ready_at": "2026-10-18T08:02:05.387632+00:00",
+  "user_confirmation": {
+    "scope": "双身份真实首页、Logo/背景/间距、紧凑创建按钮、公开赛事中心、可跳过底部创建及两列表入口",
+    "confirmed_at": "2026-10-18",
+    "basis": "用户逐项明确指令；不等于生产发布授权"
+  },
+  "validation": {
+    "screenshots": [
+      {
+        "path": "验收证据/原生模拟器/00-实际当前首页.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/01-组织者空首页.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/02-主办机构底部弹窗.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/03-跳过后首页.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/04-首次身份选择.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/05-首次选择后的弹窗.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/06-首次跳过回首页.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/07-赛事列表创建入口.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/08-赛事列表打开弹窗.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/09-球队列表创建入口.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/10-球队创建弹窗.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/11-赛事基础资料弹窗.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/12-球队管理者空首页.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/13-球队管理者工作首页.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/14-组织者已有赛事.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/15-首页进入待办.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/16-首页进入赛事中心.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      },
+      {
+        "path": "验收证据/原生模拟器/17-球队管理者参赛事项.png",
+        "viewport": {
+          "width": 355,
+          "height": 769
+        },
+        "logical_viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "note": "原生模拟器缩放后的截图，未上采样"
+      }
+    ],
+    "source_screenshots": [
+      {
+        "path": "验收证据/源码视口/01-组织者空首页-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/01-组织者空首页.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/02-组织者已有赛事-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/02-组织者已有赛事.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/03-首次身份选择-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/03-首次身份选择.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/04-赛事底部创建弹窗-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/04-赛事底部创建弹窗.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/05-主办机构弹窗-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/05-主办机构弹窗.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/06-球队底部创建弹窗-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/06-球队底部创建弹窗.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/07-球队管理者空首页-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/07-球队管理者空首页.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/08-球队管理者工作首页-320.png",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        }
+      },
+      {
+        "path": "验收证据/源码视口/08-球队管理者工作首页.png",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      }
+    ],
+    "comparison": "验收证据/对照报告.md",
+    "differences": [
+      {
+        "severity": "moderate",
+        "region": "顶部及创建按钮",
+        "reason": "按用户最新指令换Logo、移除铃铛、身份变量化、创建按钮缩窄；不同于先前静态原型"
+      },
+      {
+        "severity": "moderate",
+        "region": "球队首页",
+        "reason": "用户追加独立球队首页，复用已授权球队/参赛关系及B款卡片"
+      },
+      {
+        "severity": "moderate",
+        "region": "图标及球场",
+        "reason": "球场为独立生成生产素材；图标沿用已确认共享资源，不裁切原型控件"
+      }
+    ],
+    "native_runtime": {
+      "status": "passed for homepages and setup; partial for embedded H5",
+      "logical_viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "capture_dimensions": {
+        "width": 355,
+        "height": 769
+      },
+      "project": "Exact registered projectPath; reused existing window",
+      "production_writes": false
+    },
+    "remaining": [
+      {
+        "region": "公开赛事中心内嵌H5",
+        "status": "phone acceptance pending",
+        "evidence": "原生路由通过，真实H5浏览器通过；MCP未采集到内嵌H5画面或load回调"
+      }
+    ],
+    "interaction_checks": [
+      {
+        "id": "create",
+        "status": "passed",
+        "evidence": "原生点首页/两列表入口打开实际底部组件；test-mini-quick-setup覆盖服务端逻辑和异常；没有真实创建请求"
+      },
+      {
+        "id": "skip",
+        "status": "passed",
+        "evidence": "隔离组件测试验证跳过无写入；原生组件close方法验证弹层关闭及底栏恢复，MCP未直接定位到组件内按钮"
+      },
+      {
+        "id": "role",
+        "status": "passed",
+        "evidence": "原生选择身份及进入弹窗；test-mini-role-persistence/home-roles核对账号独立偏好和动态首页"
+      },
+      {
+        "id": "copy-pc",
+        "status": "passed",
+        "evidence": "原生点复制按钮得到https://www.sxffootball.cn；系统剪贴板为临时内存mock"
+      },
+      {
+        "id": "resource",
+        "status": "passed",
+        "evidence": "test-mini-home-entries/role-cards/home-roles：二次授权回读、撤权隔离、两队同赛/一队多赛与指定球队路由"
+      },
+      {
+        "id": "todo",
+        "status": "passed",
+        "evidence": "原生点击待办进入pages/todo/index；使用隔离授权目录"
+      },
+      {
+        "id": "public-center",
+        "status": "passed",
+        "evidence": "原生点击进入固定包装路由和本站URL；HTTP200、实际浏览器渲染现有赛事；手机web-view内嵌画面待确认"
+      }
+    ]
+  },
+  "deployment": {
+    "version": "1.1.40",
+    "mini_uploaded": true,
+    "functions_deployed": [
+      "getMiniWorkspace",
+      "onboardingWorkspace"
+    ],
+    "trial_user_confirmed": true,
+    "trial_browser_verified": false,
+    "evidence": "E:\\Documents\\sxf-football\\.codex-artifacts\\mini-home-release-20261018\\release-result.json"
+  }
+}

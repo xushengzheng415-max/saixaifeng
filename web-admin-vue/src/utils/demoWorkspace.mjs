@@ -2,6 +2,7 @@
 import { calculateMatchEventScore } from '../../../cloudfunctions/dataCenter/shared/match-events.mjs'
 import standings from '../../../cloudfunctions/dataCenter/shared/standings.cjs'
 import pairingTemplates from '../../../cloudfunctions/generateSchedule/pairingTemplates.js'
+import confirmedPairings from '../../../cloudfunctions/generateSchedule/confirmedPairings.js'
 import fixtureCatalog from '../data/syntheticTeamCatalog.mjs'
 export const DEMO_ORG_ID = 'demo-organization'
 export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
@@ -115,6 +116,19 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       }
       return { success: true, addedCount: additions.length, message: '虚拟球队已添加' }
     }
+    if (action === 'approveAllDemoRegistrations') {
+      if (!String(tournamentId || '').startsWith('demo-') || !String(divisionId).startsWith('demo-')) return fail('仅支持演示赛事及演示组别')
+      const tournament = get('tournaments', tournamentId)
+      const division = get('divisions', divisionId)
+      if (tournament.orgId !== DEMO_ORG_ID || tournament.synthetic !== true || division.tournamentId !== tournamentId) return fail('演示组别范围不匹配')
+      const pending = rows('tournament_teams').filter(row => row.tournamentId === tournamentId && String(row.divisionId || 'default') === divisionId && row.status === 'pending')
+      for (const row of pending) {
+        const team = get('teams', row.teamId)
+        if (!String(row._id).startsWith('demo-') || row.orgId !== DEMO_ORG_ID || row.synthetic !== true || team.synthetic !== true || team.orgId !== DEMO_ORG_ID) return fail('仅支持虚拟球队审核')
+      }
+      for (const row of pending) registration({ action:'reviewRegistration', registrationId:row._id, decision:'approved' })
+      return { success:true, approvedCount:pending.length, tournamentId, divisionId }
+    }
     if (action === 'reviewRegistration') {
       const approved=params.decision==='approved'
       const row=update('tournament_teams',params.registrationId,{status:params.decision,participationStatus:approved?'confirmed':params.decision,rosterStatus:approved?'approved':'draft'})
@@ -133,6 +147,22 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     const { action, tournamentId, divisionId } = params
     const tournament = get('tournaments', tournamentId)
     const selected = row => row.tournamentId === tournamentId && (!divisionId || row.divisionId === divisionId)
+    if(action==='generatePairings' && params.ensureOnly===true) {
+      const division=get('divisions',divisionId)
+      if(division.tournamentId!==tournamentId) return fail('组别不属于当前赛事')
+      const existing=rows('matches').filter(row=>selected(row) && row.status!=='cancelled' && !row.demoLegacyPairing)
+      if(existing.some(row=>row.pairingGenerationSource!=='confirmed-draw-v1'))return {success:true,existing:true,addedCount:0,matchCount:existing.length}
+      const built=confirmedPairings.buildConfirmedPairings({tournamentId,division,groupRecords:rows('tournament_groups').filter(selected),bracketRecords:rows('tournament_bracket').filter(selected),leagueRecords:rows('tournament_league_tables').filter(selected),template:division.pairingTemplate || division.pairingTemplateSnapshot || division.rulesSnapshot?.pairingTemplate || null})
+      const approved=rows('tournament_teams').filter(row=>selected(row) && row.status==='approved').map(row=>row.teamId)
+      if(approved.length!==built.participants.length || built.participants.some(team=>!approved.includes(team.teamId)))return fail('抽签球队与已通过球队不一致，请重新核对')
+      if(existing.length)return {success:true,existing:true,addedCount:0,matchCount:existing.length}
+      const minutes=Number(division.matchMinutes || division.rulesSnapshot?.matchMinutes || 0)
+      if(!minutes)return fail('当前组别缺少已定版比赛时长，请先完善竞赛规则')
+      built.matches.forEach(row=>add('matches',{...row,durationMinutes:minutes,events:[],matchEventRevision:0}))
+      update('divisions',divisionId,{pairingGenerated:true,pairingTemplateVersion:built.version})
+      update('tournaments',tournamentId,{pairingGenerated:true})
+      return {success:true,addedCount:built.matches.length,matchCount:built.matches.length,pairingOnly:true}
+    }
     if (['prepareDrawPreview','repairLegacyGroupPairings'].includes(action) && tournament.scheduleGenerated) {
       const legacy=rows('matches').filter(row=>selected(row) && !row.demoLegacyPairing && row.synthetic && row.isTest && row.status==='scheduled' && row.matchDate && row.matchTime && row.venue && !row.scheduleGenerated && !row.scheduleAssignmentSource && !(row.events || []).length)
       for(const row of legacy) update('matches',row._id,{demoLegacyScheduleBackup:{matchDate:row.matchDate,matchTime:row.matchTime,venue:row.venue,reason:'legacy-demo-auto-fill'},matchDate:'',matchTime:'',venue:'',scheduleStatus:'unassigned',scheduleGenerated:false})
@@ -292,6 +322,38 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     return fail('这项名单操作尚未接入模拟')
   }
   function request(action, params = {}) {
+    if (action === 'organizerClaimInvite' && ['listTeamAccess','saveTeamAccess','removeTeamAccess','addPlayerAsStaff'].includes(params.action)) {
+      const relation = get('tournament_teams', params.tournamentTeamId)
+      if (relation.tournamentId !== params.tournamentId || (relation.divisionId || 'default') !== (params.divisionId || 'default')) return fail('参赛球队关系不匹配')
+      const teamId = relation.teamId
+      const record = rows('team_staff_access').find(row => row.teamId === teamId && row.tournamentId === params.tournamentId)
+      if (params.action === 'addPlayerAsStaff') {
+        const player = get('players', params.playerId)
+        if (![player.teamId, player.teamCode].filter(Boolean).every(id => id === teamId)) return fail('球员不属于当前球队')
+        const existing = rows('coaches').find(row => row.teamId === teamId && row.linkedPlayerId === player._id)
+        const staff = existing || add('coaches', {teamId, teamCode:teamId, linkedPlayerId:player._id, isAlsoPlayer:true, name:player.name, jerseyNumber:player.jerseyNumber, photoUrl:player.photoUrl || '', birthDate:player.birthDate || '', nativePlace:player.nativePlace || '', phone:params.phone || '', type:params.type || 'other', role:({team_leader:'领队',head_coach:'主教练',doctor:'队医'})[params.type] || '工作人员'})
+        return {success:true, staffId:staff._id, existing:Boolean(existing)}
+      }
+      if (params.action === 'saveTeamAccess') {
+        const source = Array.isArray(params.personnel) ? params.personnel : []
+        if (!source.length || source.length > 50 || !source.some(row => row.role === params.primaryRole)) return fail('请选择一位工作人员作为主账号')
+        if (new Set(source.map(row => row.phone)).size !== source.length) return fail('同一手机号不能重复分配账号')
+        const personnel = source.map(row => {
+          const staffId = String(row.role || '').startsWith('staff:') ? row.role.slice(6) : ''
+          const staff = staffId ? get('coaches', staffId) : null
+          if (staff && staff.teamId !== teamId) return fail('工作人员不属于当前球队')
+          if (!/^1[3-9]\d{9}$/.test(row.phone)) return fail('请填写有效手机号')
+          return {role:row.role,staffId,name:staff?.name || row.name,phone:row.phone,roleLabel:staff?.role || row.roleLabel || '工作人员',accountType:row.role === params.primaryRole ? 'owner' : 'member',permissions:row.role === params.primaryRole || row.permissions?.includes('team.manage') ? ['team.view','team.manage'] : ['team.view'],status:'演示账号'}
+        })
+        if (record) record.personnel = personnel
+        else add('team_staff_access', {teamId,tournamentId:params.tournamentId,personnel})
+      }
+      if (params.action === 'removeTeamAccess' && record) {
+        if (record.personnel.some(row => row.role === params.role && row.accountType === 'owner')) return fail('请先移交主账号')
+        record.personnel = record.personnel.filter(row => row.role !== params.role)
+      }
+      return {success:true,personnel:clone(rows('team_staff_access').find(row => row.teamId === teamId && row.tournamentId === params.tournamentId)?.personnel || []),ownerTransferPending:false}
+    }
     if (action === 'rosterExceptionBoard') return rosterReview(params)
     if (action === 'dbQuery') return query(params)
     if (action === 'callFunction') return request(params.functionName, params.functionParams)

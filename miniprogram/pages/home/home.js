@@ -1,5 +1,7 @@
 var workspace = require('../../utils/workspace')
+var entryCards = require('../../utils/workspace-entry-cards')
 var signupDraft = require('../../utils/signup-draft')
+var quickSetup = require('../../utils/quick-setup')
 
 function countPending(items) {
   return (items || []).filter(function (item) { return item.status === 'pending' || item.status === 'reviewing' }).length
@@ -42,6 +44,10 @@ function formatTeam(item, index) {
     eventText: String(item.tournamentCount || item.eventCount || 0) + ' 项赛事',
     completionText: completionText
   }
+}
+
+function homeEntries(context) {
+  return entryCards.fromHome(context)
 }
 
 function formatMatch(item, index) {
@@ -139,8 +145,11 @@ function previewTrainingContext() {
 
 Page({
   data: {
-    loading: true, isLoggedIn: false, errorText: '', roleTitle: '球队教练',
-    isOrganizer: false, isTeamCoach: true, isTrainingCoach: false,
+    loading: true, isLoggedIn: false, errorText: '', roleTitle: '球队教练', homeRoleLabel: '',
+    useEntryHome: true, homeEntries: [], hasHomeEntries: false, showHomeEntryEmpty: false, openingEntryKey: '',
+    isOrganizer: false, isTeamCoach: true, isTrainingCoach: false, showWorkHome: false, showTeamHome: false,
+    teamHomeTeams: [], hasTeamHomeTeams: false, teamHomeEvents: [], hasTeamHomeEvents: false,
+    teamHomeTasks: [], hasTeamHomeTasks: false, teamParticipationUnavailable: false, createKind: 'event',
     unreadMessageCount: 0, hasUnreadMessages: false,
     overviewTitle: '球队协作概览', overviewName: '暂无可管理球队', hasOverviewName: true,
     overviewStatus: '', hasOverviewStatus: false, overviewLogo: '', hasOverviewLogo: false,
@@ -158,6 +167,8 @@ Page({
     ],
     showOtherRoleContent: false, otherSectionTitle: '', otherSectionEmptyText: '', matchSectionTitle: '最近比赛', overviewClass: '', topbarClass: '',
     localVisualQa: false
+    ,showOrganizerHome:false,homePageClass:'',homeContentStyle:'',hasOrganizerEvents:false,organizerTasks:[],hasOrganizerTasks:false,createVisible:false,
+    homeBackgroundImage:'/images/runtime/home-roles-emerald-stadium-v1.jpg',homeBackgroundMode:'aspectFill'
   },
 
   onLoad: function (options) {
@@ -192,25 +203,36 @@ Page({
   onPullDownRefresh: function () { this.loadData(true).finally(function () { wx.stopPullDownRefresh() }) },
 
   loadData: function (silent) {
+    var epoch = this._loadEpoch = (this._loadEpoch || 0) + 1
     var userInfo = wx.getStorageSync('userInfo') || null
-    if (!userInfo || !userInfo._id) { this.setData({ loading: false, isLoggedIn: false }); return Promise.resolve() }
+    if (!userInfo || !userInfo._id) { this.setData({ loading: false, isLoggedIn: false, homeEntries: [], hasHomeEntries: false, showWorkHome:false,showTeamHome:false,showOrganizerHome:false,homeRoleLabel:'',teamHomeTeams:[],teamHomeEvents:[],teamHomeTasks:[],hasTeamHomeTeams:false,hasTeamHomeEvents:false,hasTeamHomeTasks:false,homePageClass:'',homeContentStyle:'',homeBackgroundImage:'/images/runtime/home-roles-emerald-stadium-v1.jpg',homeBackgroundMode:'aspectFill',createVisible:false,errorText: '' }); return Promise.resolve() }
+    if (this._homeAccountId && this._homeAccountId !== userInfo._id) {
+      this.setData({ homeEntries:[], hasHomeEntries:false, showHomeEntryEmpty:false, teams:[], matches:[], homeTaskCards:[], hasTaskCards:false, hasTeams:false, hasMatches:false, metrics:[], errorText:'',organizerTasks:[],hasOrganizerTasks:false,hasOrganizerEvents:false,showOrganizerHome:false,showWorkHome:false,showTeamHome:false,homeRoleLabel:'',teamHomeTeams:[],teamHomeEvents:[],teamHomeTasks:[],hasTeamHomeTeams:false,hasTeamHomeEvents:false,hasTeamHomeTasks:false,homePageClass:'',homeContentStyle:'',createVisible:false })
+    }
+    this._homeAccountId = userInfo._id
     var that = this
     if (!silent) this.setData({ loading: true, errorText: '', isLoggedIn: true })
     var cached = workspace.readContext()
     if (cached) this.applyContext(cached)
-    return workspace.loadContext().then(function (context) { that.applyContext(context) }).catch(function (error) {
+    function currentRequest() { return that._loadEpoch === epoch && (wx.getStorageSync('userInfo') || {})._id === userInfo._id }
+    return workspace.loadContext().then(function (context) { if (currentRequest()) that.applyContext(context) }).catch(function (error) {
+      if (!currentRequest()) return
+      if (that.data.hasHomeEntries) { that.setData({ loading:false, errorText:'刷新失败，请重试' }); return }
       that.setData({ loading: false, errorText: error.message || '首页加载失败，请重试', homeTaskCards: [], hasTaskCards: false, sharedTournaments: [], matches: [], hasMatches: false, metrics: [], overviewName: '', hasOverviewName: false, hasOverviewStatus: false })
     })
   },
 
   applyContext: function (context) {
     if (!context || !context.currentWorkspace) return
+    if (context.user) this._homeAccountId = context.user.id || context.user._id || this._homeAccountId
     var identity = context.currentIdentity || {}
-    var role = identity.id || 'team_coach'
+    var role = entryCards.role(context,workspace)
     var isOrganizer = role === 'organizer'
+    var isTeamManager = role === 'team_coach'
     var isTrainingCoach = role === 'training_coach'
-    var isShared = role === 'event_staff'
+    var isShared = (context.currentWorkspace || {}).type === 'tournament_shared'
     var isTeamCoach = !isOrganizer && !isTrainingCoach && !isShared
+    var entries = homeEntries(context).filter(function(item) { return !isOrganizer || item.type === 'tournament' })
     var rawTeams = (context.teams || []).slice(0, 2)
     var teams = rawTeams.map(formatTeam)
     var matches = (context.eventSchedule || context.schedule || []).slice(0, isOrganizer ? 2 : 1).map(formatMatch)
@@ -229,6 +251,9 @@ Page({
     var data = {
       loading: false, isLoggedIn: true, errorText: '', roleTitle: identity.label || (isOrganizer ? '赛事负责人' : (isTrainingCoach ? '青训教练' : '球队教练')),
       isOrganizer: isOrganizer, isTeamCoach: isTeamCoach, isTrainingCoach: isTrainingCoach, isShared: isShared,
+      showWorkHome: isOrganizer || isTeamManager, showTeamHome: isTeamManager,
+      homeRoleLabel: isOrganizer ? '赛事组织者' : (isTrainingCoach ? '青训教练' : '球队管理者'),
+      useEntryHome: !isTrainingCoach, homeEntries: entries, hasHomeEntries: entries.length > 0, showHomeEntryEmpty: entries.length === 0 && context.homeEntriesVersion === 'home-entries/2',
       sharedTournaments: (context.tournaments || []).filter(function(item) { return item.isShared }),
       unreadMessageCount: Number(context.unreadMessageCount || 0), hasUnreadMessages: Number(context.unreadMessageCount || 0) > 0,
       teams: teams, hasTeams: teams.length > 0, matches: matches, hasMatches: matches.length > 0, trainingCourses: trainingCourses, hasTrainingCourses: trainingCourses.length > 0,
@@ -255,15 +280,48 @@ Page({
       data.overviewLogo = firstTeam.logo || ''; data.hasOverviewLogo = Boolean(firstTeam.logo)
       data.metrics = [{ label: '我的球队', value: String(stats.teamCount || teams.length), icon: '/images/icons/players.svg' }, { label: '球员总数', value: String(stats.playerCount || 0), icon: '/images/icons/players.svg' }, { label: '赛事待办', value: String(countPending(eventTasks)), icon: '/images/icons/list.svg' }]
     }
+    if (data.useEntryHome) { data.roleTitle = '首页'; data.topbarClass = 'shared-topbar' }
+    var rect = typeof wx.getMenuButtonBoundingClientRect === 'function' ? wx.getMenuButtonBoundingClientRect() : null
+    var info = typeof wx.getSystemInfoSync === 'function' ? wx.getSystemInfoSync() : {}
+    data.showOrganizerHome = isOrganizer
+    data.homePageClass = isOrganizer ? 'organizer-home' + (entries.some(function(item){return item.type === 'tournament'}) ? ' organizer-has-events' : '') : (isTeamManager ? 'team-home' : (data.useEntryHome ? 'resource-home' : ''))
+    data.homeBackgroundImage = data.useEntryHome ? '/images/runtime/organizer-home-stadium-v2.jpg' : '/images/runtime/home-roles-emerald-stadium-v1.jpg'
+    data.homeBackgroundMode = data.showWorkHome ? 'widthFix' : 'aspectFill'
+    data.homeContentStyle = data.showWorkHome ? 'padding-top:' + (rect ? rect.top : (info.statusBarHeight || 24) + 6) + 'px;' : ''
+    data.hasOrganizerEvents = entries.some(function(item) { return item.type === 'tournament' })
+    data.organizerTasks = isOrganizer ? eventTasks.filter(function(item) { return item.audience !== 'team' && ['completed','dismissed','cancelled'].indexOf(item.status) < 0 }).map(function(item,index) {
+      var count = Number(item.count)
+      return { id:item.id || item._id || String(item.type || 'task') + ':' + String(item.tournamentId || '') + ':' + index, title:item.title || '待处理事项', subtitle:item.tournamentName || item.subtitle || '', icon:item.type === 'registration_review' ? '/images/icons/players.svg' : '/images/icons/list.svg', countText:Number.isFinite(count) && count > 0 ? String(count) : '', hasCount:Number.isFinite(count) && count > 0, hasSubtitle:Boolean(item.tournamentName || item.subtitle) }
+    }) : []
+    data.hasOrganizerTasks = data.organizerTasks.length > 0
+    data.teamHomeTeams = isTeamManager ? entries.filter(function(item) { return item.type === 'team' }) : []
+    data.hasTeamHomeTeams = data.teamHomeTeams.length > 0
+    data.teamHomeEvents = isTeamManager ? entryCards.teamEvents(context) : []
+    data.hasTeamHomeEvents = data.teamHomeEvents.length > 0
+    data.teamParticipationUnavailable = isTeamManager && (context.participatingEntriesVersion !== 'team-participation/1' || context.participatingEntriesState !== 'ready')
+    data.teamHomeTasks = isTeamManager ? eventTasks.filter(function(item) {
+      return (item.audience === 'team' || (!item.audience && context.currentWorkspace.type === 'team')) && ['completed','dismissed','cancelled'].indexOf(item.status) < 0
+    }).map(function(item,index) {
+      var count = Number(item.count)
+      return {id:item.id || item._id || 'team-task:' + index,title:item.title || '待处理事项',subtitle:item.tournamentName || item.subtitle || '',hasSubtitle:Boolean(item.tournamentName || item.subtitle),icon:'/images/icons/list.svg',countText:Number.isFinite(count) && count > 0 ? String(count) : '',hasCount:Number.isFinite(count) && count > 0}
+    }) : []
+    data.hasTeamHomeTasks = data.teamHomeTasks.length > 0
     this.setData(data)
   },
+
+  createTournament: function() { if(this.data.localVisualQa)return wx.showToast({title:'演示状态不创建数据',icon:'none'});if (!workspace.hasAuthenticatedUser()) return this.goToLogin();this.setData({createVisible:true,createKind:'event'}) },
+  createHomeTeam: function() { if(this.data.localVisualQa)return wx.showToast({title:'演示状态不创建数据',icon:'none'});if (!workspace.hasAuthenticatedUser()) return this.goToLogin();this.setData({createVisible:true,createKind:'team'}) },
+  closeCreateSheet: function() { this.setData({createVisible:false}) },
+  onQuickCreated: function() { return this.loadData(true) },
+  onQuickComplete: function() { this.setData({createVisible:false}) },
+  copyPcAddress: function() { wx.setClipboardData({data:quickSetup.site,success:function(){wx.showToast({title:'网址已复制',icon:'success'})},fail:function(){wx.showModal({title:'电脑办赛网址',content:quickSetup.site,showCancel:false})}}) },
 
   goToMessages: function () { wx.navigateTo({ url: '/pages/messages/index' }) },
   goToSharedEvents: function () { wx.switchTab({url:'/pages/event/index'}) },
   goToTodo: function () { wx.navigateTo({ url: '/pages/todo/index' }) },
   goToSchedule: function () { wx.navigateTo({ url: '/pages/schedule/index' }) },
   goToTeams: function () { wx.switchTab({ url: '/pages/teams/index' }) },
-  goToOtherSection: function () { if (this.data.isOrganizer) wx.switchTab({ url: '/pages/event/index' }); else wx.switchTab({ url: '/pages/training/index' }) },
+  goToOtherSection: function () { if (this.data.isOrganizer) wx.switchTab({ url: '/pages/event/index' }); else wx.navigateTo({ url: '/pages/training/index' }) },
   goToLogin: function () { wx.navigateTo({ url: '/pages/login/login' }) },
   openGuestDemoAction: function () {
     var that = this
@@ -277,6 +335,24 @@ Page({
     })
   },
   goToPublicTournaments: function () { wx.navigateTo({ url: '/pages/tournament/list/list' }) },
+  goToPublicCenter: function () { wx.navigateTo({ url: '/pages/public-tournament-center/index' }) },
+  onHomeEntryTap: function (event) {
+    if (this.data.openingEntryKey) return
+    var key = (event.detail || {}).key || event.currentTarget.dataset.key
+    var entry = this.data.homeEntries.concat(this.data.teamHomeEvents || []).filter(function (item) { return item.key === key })[0]
+    if (!entry) return
+    return entryCards.open(this,entry,workspace,wx)
+  },
+  onEntryLogoError: function (event) { this.replaceEntryImage(event.currentTarget.dataset.key, 'logo', 'fallbackLogo') },
+  onEntryCoverError: function (event) { this.replaceEntryImage(event.currentTarget.dataset.key, 'coverUrl', 'fallbackCover') },
+  replaceEntryImage: function (key, field, fallback) {
+    var entries = this.data.homeEntries.map(function (item) {
+      if (item.key !== key || item[field] === item[fallback]) return item
+      var update = {}; update[field] = item[fallback]
+      return Object.assign({}, item, update)
+    })
+    this.setData({ homeEntries:entries })
+  },
   onTournamentTap: function (event) { var id = event.currentTarget.dataset.id; var context = workspace.readContext() || {}; var shared = (context.tournaments || []).some(function(item) { return item.id === id && item.isShared }); if (id) wx.navigateTo({ url: '/pages/tournament/' + (shared ? 'shared/shared' : 'detail/detail') + '?id=' + encodeURIComponent(id) }) },
   onTeamTap: function (event) {
     var id = event.currentTarget.dataset.id
@@ -284,5 +360,22 @@ Page({
     if (!team) return
     wx.setStorageSync('teamInfo', { _id: team.id, teamId: team.id, teamName: team.name, teamLogo: team.logo })
     wx.navigateTo({ url: '/pages/team/team' })
+  },
+
+  // 转发给朋友：tabBar 页面必须显式声明，否则右上角菜单转发项为灰不可点
+  onShareAppMessage: function () {
+    return {
+      title: '赛小蜂足球 · 青少年足球赛事管理',
+      path: '/pages/home/home',
+      imageUrl: '/images/brand/logo-saixiaofeng-football.png'
+    }
+  },
+
+  // 分享到朋友圈：需基础库 2.11.3 及以上；未声明时菜单项为灰
+  onShareTimeline: function () {
+    return {
+      title: '赛小蜂足球 · 青少年足球赛事管理',
+      imageUrl: '/images/brand/logo-saixiaofeng-football.png'
+    }
   }
 })

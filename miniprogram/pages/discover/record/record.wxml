@@ -1,0 +1,120 @@
+<view class="page">
+  <image class="stadium-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="shade"></view>
+
+  <view class="content">
+
+    <!-- 准备：极简建赛，对手与时间都可跳过 -->
+    <view class="stage" wx:if="{{isPrepare}}">
+      <view class="prepare-card">
+        <text class="prepare-title">记一场</text>
+        <text class="prepare-copy">本队已固定，对手和时间都可以跳过</text>
+
+        <view class="prepare-team">
+          <image class="prepare-logo" src="{{teamLogo}}" mode="aspectFit"></image>
+          <view class="prepare-team-main">
+            <text class="prepare-team-label">本场主队</text>
+            <text class="prepare-team-name">{{teamName}}</text>
+          </view>
+        </view>
+
+        <input class="opponent-input" value="{{opponentName}}" placeholder="{{opponentPlaceholder}}" placeholder-class="opponent-placeholder" bindinput="onOpponentInput" maxlength="20" />
+
+        <view class="start-btn" bindtap="onStartRecord">
+          <text class="start-btn-text">开始记分</text>
+        </view>
+        <text class="prepare-note">时间默认现在 · 进球者可以跳过</text>
+      </view>
+    </view>
+
+    <!-- 记分：两队大按钮，长按减分 -->
+    <view class="stage" wx:if="{{isRecording}}">
+      <view class="record-head">
+        <text class="record-clock">{{elapsedText}}</text>
+        <text class="record-mode">友谊赛 · 不计排名</text>
+      </view>
+
+      <view class="score-board">
+        <view class="score-side">
+          <text class="score-team">{{teamName}}</text>
+          <text class="score-num">{{homeScoreText}}</text>
+          <view class="score-plus" data-side="home" bindtap="onAddScore" bindlongpress="onMinusScore">
+            <text class="score-plus-text">+1</text>
+          </view>
+          <text class="score-tip">长按减 1</text>
+        </view>
+
+        <view class="score-divider"></view>
+
+        <view class="score-side">
+          <text class="score-team">{{opponentDisplay}}</text>
+          <text class="score-num">{{awayScoreText}}</text>
+          <view class="score-plus" data-side="away" bindtap="onAddScore" bindlongpress="onMinusScore">
+            <text class="score-plus-text">+1</text>
+          </view>
+          <text class="score-tip">长按减 1</text>
+        </view>
+      </view>
+
+      <view class="finish-btn" bindtap="onFinish">
+        <text class="finish-btn-text">结束比赛</text>
+      </view>
+
+      <view class="scorer-summary" wx:if="{{hasScorers}}">
+        <text class="scorer-summary-title">已记录进球者</text>
+        <view class="scorer-row" wx:for="{{scorerList}}" wx:key="key">
+          <text class="scorer-row-name">{{item.name}}</text>
+          <text class="scorer-row-minute">{{item.minuteText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 战报 -->
+    <view class="stage" wx:if="{{isReport}}">
+      <view class="report-card">
+        <text class="report-tag">战报 · 友谊赛</text>
+        <view class="report-teams">
+          <text class="report-team">{{teamName}}</text>
+          <text class="report-score">{{reportScoreText}}</text>
+          <text class="report-team">{{opponentDisplay}}</text>
+        </view>
+        <text class="report-result {{reportResultClass}}">{{reportResultText}}</text>
+        <text class="report-meta">{{reportDateText}} · {{reportDurationText}}</text>
+
+        <view class="report-scorers" wx:if="{{hasScorers}}">
+          <text class="report-scorers-title">进球</text>
+          <view class="report-scorer" wx:for="{{scorerList}}" wx:key="key">
+            <text class="report-scorer-name">{{item.name}}</text>
+            <text class="report-scorer-minute">{{item.minuteText}}</text>
+          </view>
+        </view>
+        <text class="report-empty" wx:if="{{!hasScorers}}">{{scorerEmptyText}}</text>
+
+        <text class="report-state">{{saveStateText}}</text>
+        <view class="report-retry" wx:if="{{saveFailed}}" bindtap="onRetrySave">重试归档</view>
+      </view>
+
+      <button class="share-btn" open-type="share">转发战报</button>
+      <view class="report-actions">
+        <view class="ghost-btn" bindtap="onAgain">再来一场</view>
+        <view class="ghost-btn" bindtap="onBackDiscover">返回发现</view>
+      </view>
+    </view>
+
+  </view>
+
+  <!-- 进球者可选：点头像确认，或整体跳过 -->
+  <view class="scorer-mask" wx:if="{{scorerSheetVisible}}" bindtap="onSkipScorer"></view>
+  <view class="scorer-sheet" wx:if="{{scorerSheetVisible}}">
+    <view class="scorer-sheet-head">
+      <text class="scorer-sheet-title">{{pendingSideName}}进球</text>
+      <text class="scorer-skip" bindtap="onSkipScorer">跳过</text>
+    </view>
+    <scroll-view scroll-x class="scorer-scroll">
+      <view class="scorer-item" wx:for="{{players}}" wx:key="id" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="onPickScorer">
+        <image class="scorer-avatar" src="{{item.avatar}}" mode="aspectFill"></image>
+        <text class="scorer-name">{{item.name}}</text>
+      </view>
+    </scroll-view>
+  </view>
+</view>

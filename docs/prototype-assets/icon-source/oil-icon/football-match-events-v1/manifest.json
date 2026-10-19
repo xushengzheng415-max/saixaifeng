@@ -1,0 +1,23 @@
+{
+  "family": "football-match-events-v1",
+  "generator": "oil-icon",
+  "generated_at": "2026-09-27",
+  "status": "accepted",
+  "style": "football-brand-v1",
+  "source_sheet": "raw/football-match-events-v1-sheet.png",
+  "background": "#808080",
+  "grid": "4x4",
+  "cutout": {
+    "mode": "floodfill",
+    "threshold": 30,
+    "count": 4,
+    "size": 256
+  },
+  "icons": [
+    { "cell": 1, "semantic": "match-goal", "runtime": "service-account-h5/assets/match-events/goal.png" },
+    { "cell": 2, "semantic": "match-substitution", "runtime": "service-account-h5/assets/match-events/substitution.png" },
+    { "cell": 3, "semantic": "match-yellow-card", "runtime": "service-account-h5/assets/match-events/yellow-card.png" },
+    { "cell": 4, "semantic": "match-red-card", "runtime": "service-account-h5/assets/match-events/red-card.png" }
+  ],
+  "qa_composite": "docs/prototype-assets/brand-spot/football-match-events-v1/qa-magenta.png"
+}

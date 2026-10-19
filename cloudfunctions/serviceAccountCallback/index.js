@@ -25,6 +25,23 @@ function cdata(value) { return text(value).replace(/]]>/g, ']]]]><![CDATA[>') }
 function textReply(toUser, fromUser, content) {
   return `<xml><ToUserName><![CDATA[${cdata(toUser)}]]></ToUserName><FromUserName><![CDATA[${cdata(fromUser)}]]></FromUserName><CreateTime>${Math.floor(Date.now() / 1000)}</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[${cdata(content)}]]></Content></xml>`
 }
+function linkReply(toUser, fromUser, title, description, url) {
+  return '<xml><ToUserName><![CDATA[' + cdata(toUser) + ']]></ToUserName>' +
+    '<FromUserName><![CDATA[' + cdata(fromUser) + ']]></FromUserName>' +
+    '<CreateTime>' + Math.floor(Date.now() / 1000) + '</CreateTime>' +
+    '<MsgType><![CDATA[news]]></MsgType><ArticleCount>1</ArticleCount><Articles><item>' +
+    '<Title><![CDATA[' + cdata(title) + ']]></Title>' +
+    '<Description><![CDATA[' + cdata(description) + ']]></Description>' +
+    '<PicUrl><![CDATA[]]></PicUrl><Url><![CDATA[' + cdata(url) + ']]></Url>' +
+    '</item></Articles></xml>'
+}
+function linkReplyDetails(result) {
+  if (result.purpose === 'player_invite_entry') return { title: '登记球员', description: '点击继续填写球员资料' }
+  if (result.purpose === 'team_claim_entry') return { title: '认领球队', description: '点击核对并认领球队' }
+  if (result.purpose === 'referee_invite' && result.claimMode === 'temporary_no_certificate') return { title: '认领临时裁判', description: '验证手机号并上传头像，提交后等待确认' }
+  if (result.purpose === 'referee_invite') return { title: '提交裁判资料', description: '上传裁判证和头像，提交资格审核' }
+  return null
+}
 function followReplyContent(result) {
   if (result.purpose === 'organizer_pc_bind') {
     if (result.bound) return [
@@ -35,13 +52,8 @@ function followReplyContent(result) {
     ].filter(Boolean).join('\n')
     return '本次主办方账号绑定未完成。\n\n请返回电脑后台刷新二维码后重试；如仍失败，请联系赛小蜂客服核验账号。'
   }
-  if (result.purpose === 'referee_invite' && result.registerUrl) {
-    const heading = result.eventType === 'subscribe' ? '感谢您关注赛小蜂足球助手！' : '裁判登记入口已发送！'
-    if (result.claimMode === 'temporary_no_certificate') {
-      return `${heading}\n\n组委会已将您添加为本赛事临时裁判。请点击以下链接验证登记手机号并上传本人头像：\n${result.registerUrl}\n\n认领后仍需组委会确认，确认通过后仅可参与本届赛事排班。`
-    }
-    return `${heading}\n\n您已完成裁判服务号关注绑定。请点击以下链接提交裁判证、头像和执裁资料：\n${result.registerUrl}\n\n审核通过后，比赛指派、时间调整、临场变更和退回修正等事项将通过本服务号通知。`
-  }
+  if (result.purpose === 'team_claim_entry') return '球队认领邀请已失效，请联系赛事主办方。'
+  if (result.purpose === 'player_invite_entry') return '球员邀请已失效，请联系球队负责人。'
   if (result.bound) {
     const heading = result.eventType === 'subscribe' ? '感谢您关注赛小蜂足球助手！' : '赛小蜂足球账号绑定成功！'
     return `${heading}\n\n已成功绑定您的赛小蜂足球账号。请返回赛小蜂足球小程序，点击“我已关注，刷新状态”，继续完成赛事报名。`
@@ -114,6 +126,36 @@ async function bindOrganizerPcAccount(gate, officialOpenId, eventType) {
   return { eventType, officialOpenId, bound: true, shouldReply: true, purpose: 'organizer_pc_bind', ...context }
 }
 
+async function recordServiceEntryScan(gate, officialOpenId, eventType) {
+  const purpose = text(gate.purpose)
+  const path = purpose === 'team_claim_entry' ? 'claim-team.html' : 'join-player.html'
+  const expiresAt = gate.expiresAt && new Date(gate.expiresAt.$date || gate.expiresAt._date || gate.expiresAt).getTime()
+  if (!['team_claim_entry', 'player_invite_entry'].includes(purpose) ||
+      gate.status === 'disabled' || (expiresAt && expiresAt <= Date.now())) {
+    return { eventType, officialOpenId, bound: false, shouldReply: true, purpose, registerUrl: '' }
+  }
+  const proof = crypto.randomBytes(24).toString('hex')
+  const id = crypto.createHash('sha256').update(`${text(gate._id)}:${officialOpenId}`).digest('hex')
+  const data = {
+    sport: SPORT, gateId: text(gate._id), purpose, officialOpenId,
+    proofHash: crypto.createHash('sha256').update(proof).digest('hex'),
+    subscribed: true, status: 'scanned', scannedAt: db.serverDate(),
+    expiresAt: new Date(Math.min(Date.now() + 30 * 60 * 1000, expiresAt || Infinity)),
+    updateTime: db.serverDate()
+  }
+  let row = null
+  try {
+    const old = await db.collection('service_entry_scans').doc(id).get()
+    row = Array.isArray(old.data) ? old.data[0] : old.data
+  } catch (error) {
+    if (!/document.*(not exist|getfail)|not found/i.test(text(error.message))) throw error
+  }
+  if (row) await db.collection('service_entry_scans').doc(id).update({ data })
+  else await db.collection('service_entry_scans').doc(id).set({ data: { ...data, createTime: db.serverDate() } })
+  const registerUrl = `https://www.sxffootball.cn/service-account-h5/${path}?v=20261003-3&entry=${encodeURIComponent(text(gate.entryKey))}&proof=${encodeURIComponent(proof)}`
+  return { eventType, officialOpenId, bound: true, shouldReply: true, purpose, registerUrl }
+}
+
 async function handleFollowEvent(xml) {
   const eventType = xmlValue(xml, 'Event').toLowerCase()
   const officialOpenId = xmlValue(xml, 'FromUserName')
@@ -123,6 +165,8 @@ async function handleFollowEvent(xml) {
     await Promise.all(bindings.map(item => db.collection('service_account_bindings').doc(item._id).update({ data: { subscribed: false, status: 'unsubscribed', updateTime: db.serverDate() } })))
     const gates = (await db.collection('service_follow_gates').where({ sport: SPORT, officialOpenId }).limit(100).get()).data || []
     await Promise.all(gates.map(item => db.collection('service_follow_gates').doc(item._id).update({ data: { subscribed: false, status: 'unsubscribed', updateTime: db.serverDate() } })))
+    const scans = (await db.collection('service_entry_scans').where({ sport: SPORT, officialOpenId }).limit(100).get()).data || []
+    await Promise.all(scans.map(item => db.collection('service_entry_scans').doc(item._id).update({ data: { subscribed: false, status: 'unsubscribed', updateTime: db.serverDate() } })))
     const refereeInvites = (await db.collection('referee_invitations').where({ officialOpenId, status: 'active' }).limit(100).get()).data || []
     await Promise.all(refereeInvites.map(item => db.collection('referee_invitations').doc(item._id).update({ data: { followStatus: 'unsubscribed', updateTime: db.serverDate() } })))
     return { eventType, officialOpenId, bound: false, shouldReply: false }
@@ -132,6 +176,17 @@ async function handleFollowEvent(xml) {
   const gates = (await db.collection('service_follow_gates').where({ sport: SPORT, scene }).limit(2).get()).data || []
   const gate = gates[0]
   if (!gate) return { eventType, officialOpenId, bound: false, shouldReply: true }
+  if (['team_claim_entry','player_invite_entry'].includes(text(gate.purpose))) {
+    try { await require('./invitePosterShare.cjs').refreshSubscription(db,officialOpenId) }
+    catch(error) { console.warn('[serviceAccountCallback] subscription state refresh failed') }
+  }
+  if (require('./invitePosterShare.cjs').shouldSuppress(gate,officialOpenId,eventType,xmlValue(xml,'CreateTime'))) {
+    console.info('[serviceAccountCallback] ignored invite share detection',text(gate._id))
+    return {eventType,officialOpenId,bound:false,shouldReply:false}
+  }
+  if (['team_claim_entry', 'player_invite_entry'].includes(text(gate.purpose))) {
+    return recordServiceEntryScan(gate, officialOpenId, eventType)
+  }
   if (gate.purpose === 'organizer_pc_bind' && gate.userId) {
     return bindOrganizerPcAccount(gate, officialOpenId, eventType)
   }
@@ -166,7 +221,11 @@ exports.main = async event => {
     if (result && result.shouldReply) {
       const toUser = xmlValue(body, 'FromUserName')
       const fromUser = xmlValue(body, 'ToUserName')
-      return response(200, textReply(toUser, fromUser, followReplyContent(result)), 'application/xml; charset=utf-8')
+      const link = result.registerUrl && linkReplyDetails(result)
+      const reply = link
+        ? linkReply(toUser, fromUser, link.title, link.description, result.registerUrl)
+        : textReply(toUser, fromUser, followReplyContent(result))
+      return response(200, reply, 'application/xml; charset=utf-8')
     }
     return response(200, 'success')
   } catch (error) {

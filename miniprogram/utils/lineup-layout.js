@@ -1,0 +1,6 @@
+var rules=require('./formation-rules')
+function category(role){return role==='GK'?'GK':/^(CB|LB|RB|DF|WB)/.test(role)?'DF':/^(ST|CF|FW|LW|RW)/.test(role)?'FW':'MF'}
+function formationsFor(count){var rows=rules.formationsFor(count);if(rows.length)return rows;if(!Number.isInteger(Number(count))||count<3||count>11)return [];var n=count-1;return [{id:'layout-'+count,label:count+'人',positions:[{role:'GK',label:'守门员',x:8,y:50}].concat(Array.from({length:n},function(_,i){return {role:'P'+i,label:'球员',x:45+25*Math.floor(i/4),y:100*(i%4+1)/(Math.min(4,n)+1)}}))}]}
+function slotsFor(count,formation){var rows=formationsFor(count),current=rows.filter(function(row){return row.id===rules.normalizeId(count,formation)})[0] || rows[0];if(!current)return [];return current.positions.map(function(p){return {id:'slot-'+p.role,role:p.role,position:category(p.role),title:p.label,empty:true,playerName:'选择球员',jerseyText:'+',avatar:'',playerId:'',slotStyle:'left:'+(10+p.y*.8).toFixed(2)+'%;top:'+(10+(100-p.x)*.8).toFixed(2)+'%;'}})}
+var FORMATIONS={};[3,4,5,6,7,8,9,10,11].forEach(function(count){FORMATIONS[count]=formationsFor(count)})
+module.exports={FORMATIONS:FORMATIONS,formationsFor:formationsFor,slotsFor:slotsFor,normalizeId:rules.normalizeId,formationFor:rules.formationFor}

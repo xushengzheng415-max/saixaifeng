@@ -4,9 +4,16 @@
   <block wx:else>
     <view class="hero-bg"><view class="bg-circle circle-1"></view><view class="bg-circle circle-2"></view><view class="bg-pattern"></view></view>
     <view class="player-card-fifa">
-      <view wx:if="{{player.hasJerseyNumber}}" class="jersey-badge"><text class="jersey-num">{{player.jerseyNumber}}</text></view>
-      <view class="avatar-section"><view class="avatar-frame"><image class="player-avatar" src="{{player.displayPhoto}}" mode="aspectFill" bindtap="previewImage"></image></view><view class="avatar-glow"></view></view>
-      <view class="info-section"><text class="player-name">{{player.name}}</text><view wx:if="{{player.hasJerseyName}}" class="jersey-name">{{player.jerseyName}}</view><view wx:if="{{player.hasPosition}}" class="position-tag"><text class="tag-text">{{player.positionLabel}}</text></view><view class="profile-state-tag">{{player.profileStatusText}}</view><view class="card-score-line"><text>{{cardScore.level}}</text><text>{{cardScore.points}} 分</text><text>{{cardScore.progress}}</text></view><view wx:if="{{cardScore.hasProgress}}" class="card-grade-progress"><view style="width: {{cardScore.progressWidth}};"></view></view></view>
+      <view class="detail-player-card">
+        <dynamic-player-card wx:if="{{hasDynamicCard}}" scene="{{cardScene}}" https-native-fonts="{{httpsNativeFonts}}" binderror="dynamicCardFailed" />
+        <image wx:elif="{{hasStaticCard}}" class="detail-card-image" src="{{cardUrl}}" mode="aspectFit" bindtap="previewCard" binderror="cardImageFailed" />
+        <view wx:else class="detail-card-fallback">
+          <image wx:if="{{hasFallbackPhoto}}" class="detail-card-portrait" src="{{player.photoUrl}}" mode="aspectFit" bindtap="previewImage" binderror="portraitFailed" />
+          <text class="detail-card-state">{{cardStateText}}</text>
+          <button wx:if="{{cardCanRetry}}" bindtap="loadPlayerCard">重试</button>
+        </view>
+      </view>
+      <view class="info-section"><text class="player-name">{{player.name}}</text><view wx:if="{{player.hasJerseyName}}" class="jersey-name">{{player.jerseyName}}</view><view wx:if="{{player.hasPosition}}" class="position-tag"><text class="tag-text">{{player.positionLabel}}</text></view><view class="profile-state-tag">{{player.profileStatusText}}</view><view wx:if="{{player.isUnclaimed}}" class="profile-claim-tag">未认领</view><view class="card-score-line"><text>{{cardScore.level}}</text><text>{{cardScore.points}} 分</text><text>{{cardScore.progress}}</text></view><view wx:if="{{cardScore.hasProgress}}" class="card-grade-progress"><view style="width: {{cardScore.progressWidth}};"></view></view></view>
     </view>
 
     <view wx:if="{{pointsEntryAllowed}}" class="points-entry"><button bindtap="openPoints">积分明细</button></view>
@@ -32,7 +39,7 @@
 
     <view wx:if="{{player.remark}}" class="remark-card"><view class="card-title-bar"><view class="title-accent orange"></view><text class="card-title">备注</text></view><text class="remark-content">{{player.remark}}</text></view>
 
-    <view wx:if="{{canManage}}" class="action-bar"><button class="action-btn edit-btn" bindtap="onEdit"><text class="btn-text">补充资料</text></button><button class="action-btn delete-btn" bindtap="onDelete"><text class="btn-text">移出球队</text></button></view>
+    <view wx:if="{{canManage}}" class="action-bar"><button class="action-btn edit-btn" bindtap="onInviteProfile"><text class="btn-text">邀请补资料</text></button><button class="action-btn profile-secondary" bindtap="onEdit"><text class="btn-text">编辑资料</text></button></view><button wx:if="{{canManage}}" class="remove-player" bindtap="onDelete">移出球队</button>
   </block>
   <view wx:if="{{pointsVisible}}" class="points-overlay" catchtouchmove="stopPointsScroll">
     <view class="points-panel"><view class="points-header"><text>积分明细</text><button bindtap="closePoints" disabled="{{pointsSaving}}">关闭</button></view>

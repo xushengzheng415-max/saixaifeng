@@ -1,0 +1,187 @@
+{
+  "format": "prototype-template-match",
+  "version": 1,
+  "project": "赛小蜂足球组织者首页",
+  "plan_revision": 1,
+  "catalog_revision": "2026-10-15.1",
+  "mode": "prototype",
+  "scope_note": "特征召回与兼容性过滤；不是语义理解、用户批准或代码运行证明",
+  "pages": [
+    {
+      "page_id": "P01",
+      "page_name": "首次办赛",
+      "platform": "mini",
+      "stack": "native-mini",
+      "features": {
+        "nav.bottom": 5,
+        "list.cells": 3,
+        "state.empty": 4
+      },
+      "recommended": "project:workspace-entry-card-b",
+      "candidates": [
+        {
+          "id": "project:workspace-entry-card-b",
+          "name": "B款赛事球队卡片",
+          "origin": "project",
+          "score": 103,
+          "matched_features": [
+            "list.cells"
+          ],
+          "reuse_mode": "project-component",
+          "source": "../../../miniprogram/components/workspace-entry-card/index.wxss",
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-tabbar",
+          "name": "原生小程序底部导航",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 8,
+          "matched_features": [
+            "nav.bottom"
+          ],
+          "reuse_mode": "native-reference",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/tab-bar/_example/base/index.wxml",
+              "sha256": "953930e2cb5f86f37a07038157b50e4bcce3b6d9cf40c62cfab5b9762d3903a6",
+              "bytes": 268,
+              "lines": 6,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/tab-bar/_example/base/index.wxml"
+            }
+          ],
+          "adaptations": [
+            "按项目原生或自定义 tabbar 规范选择；示例 fixed=false 不能当作已处理安全区"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram tab-bar/tab-bar-item",
+            "导航配置"
+          ],
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-empty",
+          "name": "原生小程序空状态",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 7,
+          "matched_features": [
+            "state.empty"
+          ],
+          "reuse_mode": "native-reference",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/empty/empty.wxml",
+              "sha256": "01062d3fb435f7a62803b5cd94749fd839e3863dbccd3e3e18357a46370d4e99",
+              "bytes": 797,
+              "lines": 18,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/empty/empty.wxml"
+            }
+          ],
+          "adaptations": [
+            "只写当前原因和下一步；无必要时不用图形"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram empty"
+          ],
+          "requires_source_check": true
+        }
+      ],
+      "status": "candidate-review",
+      "reason": null,
+      "decision": null
+    },
+    {
+      "page_id": "P02",
+      "page_name": "已有赛事",
+      "platform": "mini",
+      "stack": "native-mini",
+      "features": {
+        "nav.bottom": 5,
+        "list.cells": 3,
+        "state.empty": 4
+      },
+      "recommended": "project:workspace-entry-card-b",
+      "candidates": [
+        {
+          "id": "project:workspace-entry-card-b",
+          "name": "B款赛事球队卡片",
+          "origin": "project",
+          "score": 103,
+          "matched_features": [
+            "list.cells"
+          ],
+          "reuse_mode": "project-component",
+          "source": "../../../miniprogram/components/workspace-entry-card/index.wxss",
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-tabbar",
+          "name": "原生小程序底部导航",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 8,
+          "matched_features": [
+            "nav.bottom"
+          ],
+          "reuse_mode": "native-reference",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/tab-bar/_example/base/index.wxml",
+              "sha256": "953930e2cb5f86f37a07038157b50e4bcce3b6d9cf40c62cfab5b9762d3903a6",
+              "bytes": 268,
+              "lines": 6,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/tab-bar/_example/base/index.wxml"
+            }
+          ],
+          "adaptations": [
+            "按项目原生或自定义 tabbar 规范选择；示例 fixed=false 不能当作已处理安全区"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram tab-bar/tab-bar-item",
+            "导航配置"
+          ],
+          "requires_source_check": true
+        },
+        {
+          "id": "tdesign-empty",
+          "name": "原生小程序空状态",
+          "origin": "catalog",
+          "repo": "Tencent/tdesign-miniprogram",
+          "score": 7,
+          "matched_features": [
+            "state.empty"
+          ],
+          "reuse_mode": "native-reference",
+          "evidence": [
+            {
+              "repo": "Tencent/tdesign-miniprogram",
+              "commit": "c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49",
+              "path": "packages/components/empty/empty.wxml",
+              "sha256": "01062d3fb435f7a62803b5cd94749fd839e3863dbccd3e3e18357a46370d4e99",
+              "bytes": 797,
+              "lines": 18,
+              "source_url": "https://github.com/Tencent/tdesign-miniprogram/blob/c58511a0bc51d0ceb1d1f3d8565df5e2f7e75f49/packages/components/empty/empty.wxml"
+            }
+          ],
+          "adaptations": [
+            "只写当前原因和下一步；无必要时不用图形"
+          ],
+          "dependencies_to_check": [
+            "tdesign-miniprogram empty"
+          ],
+          "requires_source_check": true
+        }
+      ],
+      "status": "candidate-review",
+      "reason": null,
+      "decision": null
+    }
+  ]
+}

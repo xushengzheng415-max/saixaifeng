@@ -138,7 +138,16 @@ async function run() {
     assert.strictEqual(result.requiresPhoneAuthorization, true)
   }
 
-  console.log('小程序手机号主账号登录测试通过：6/6')
+  {
+    const fixture=loadLoginFunction([
+      {_id:'real-user',openId:'trusted-context',phone:'13800138000'},
+      {_id:'other-user',openId:'forged-client-id',phone:'13900139000'}
+    ],{OPENID:'trusted-context'},'13800138000')
+    const result=await fixture.main({openId:'forged-client-id'})
+    assert.strictEqual(result.user._id,'real-user')
+    assert.strictEqual(fixture.writes.length,0)
+  }
+  console.log('小程序手机号主账号登录测试通过：7/7，客户端OpenID不能替代微信可信上下文')
 }
 
 run().catch(error => {

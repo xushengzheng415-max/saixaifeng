@@ -1,0 +1,158 @@
+{
+  "prototype": "C:\\Users\\15043\\AppData\\Local\\Temp\\codex-clipboard-7f160807-72fe-4075-9278-05102771e1b0.png",
+  "asset_dir": "E:\\Documents\\sxf-football\\service-account-h5\\prototypes\\match-detail-states_assets",
+  "generated_at": "2026-09-27",
+  "approved_at": "2026-09-27",
+  "tool": "yuanxing prototype decomposition",
+  "status": "approved",
+  "screen": {
+    "width": 856,
+    "height": 1370
+  },
+  "summary": "公开比赛详情的未开始空状态、事件时间轴、足球场首发与替补名单参考。当前用户已明确要求按这四张图调整该 H5 页面。",
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "00-source/codex-clipboard-7f160807-72fe-4075-9278-05102771e1b0.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 856,
+        "height": 1370
+      },
+      "sha256": "79acf4d87ac2e6074388f6d5a9932b510b22325f824128536d2a27a15fe95cd8",
+      "notes": "事件时间轴的主参考图，仅用于还原结构、密度和层级。"
+    },
+    {
+      "id": "event-stats-band",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 126,
+        "y": 114,
+        "width": 563,
+        "height": 204
+      },
+      "notes": "参考图含角球、越位、犯规、黄牌；当前公开接口只可靠提供事件流水，正式页面不伪造统计。"
+    },
+    {
+      "id": "event-timeline",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 126,
+        "y": 329,
+        "width": 563,
+        "height": 841
+      },
+      "notes": "双侧事件卡围绕绿色中轴按分钟排序；进球、换人和牌类使用真实事件类型的代码样式。"
+    },
+    {
+      "id": "event-timeline-closeup",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/event-timeline-closeup.png",
+      "source_bbox": {
+        "x": 126,
+        "y": 329,
+        "width": 563,
+        "height": 841
+      },
+      "notes": "时间轴节点、左右事件卡和半场分隔的细节对照。"
+    },
+    {
+      "id": "prestart-empty-reference",
+      "category": "reference",
+      "implementation": "panel-structure",
+      "reference_path": "08-reference-crops/prestart-empty-state.png",
+      "notes": "未开始比赛的首发/赛况空状态参考；正式页面继续只展示真实已发布数据。"
+    },
+    {
+      "id": "formation-field-reference",
+      "category": "reference",
+      "implementation": "panel-structure",
+      "reference_path": "08-reference-crops/formation-field-state.png",
+      "notes": "首发使用绿色球场、半场线和队员圆形号码牌的结构参考，所有站位由阵型与真实首发顺序计算。"
+    },
+    {
+      "id": "substitute-list-reference",
+      "category": "reference",
+      "implementation": "panel-structure",
+      "reference_path": "08-reference-crops/substitutes-list-state.png",
+      "notes": "替补区采用两队并列列表；正式页面仅显示真实替补姓名、号码和已记录的换人分钟。"
+    },
+    {
+      "id": "match-score-header",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 126,
+        "y": 116,
+        "width": 563,
+        "height": 178
+      },
+      "notes": "沿用当前正式 H5 的赛事头、队徽、比分和状态，不复制参考图中的斗战足球导航。"
+    },
+    {
+      "id": "goal-event-oil-icon",
+      "category": "icon",
+      "implementation": "icon",
+      "semanticKey": "match-goal",
+      "sourceType": "oil-icon-football-match-events-v1",
+      "sourceUrl": "repository://docs/prototype-assets/icon-source/oil-icon/football-match-events-v1/raw/football-match-events-v1-sheet.png",
+      "license": "project-owned generated icon family",
+      "canonicalSvg": "E:\\Documents\\sxf-football\\service-account-h5\\assets\\match-events\\goal.png",
+      "variants": ["transparent-png-256"],
+      "targetPages": ["service-account-h5/tournament-center.html"],
+      "notes": "油画图标工作流生成的进球标识，透明切图来自 4×4 图表第 1 格。"
+    },
+    {
+      "id": "substitution-event-oil-icon",
+      "category": "icon",
+      "implementation": "icon",
+      "semanticKey": "match-substitution",
+      "sourceType": "oil-icon-football-match-events-v1",
+      "sourceUrl": "repository://docs/prototype-assets/icon-source/oil-icon/football-match-events-v1/raw/football-match-events-v1-sheet.png",
+      "license": "project-owned generated icon family",
+      "canonicalSvg": "E:\\Documents\\sxf-football\\service-account-h5\\assets\\match-events\\substitution.png",
+      "variants": ["transparent-png-256"],
+      "targetPages": ["service-account-h5/tournament-center.html"],
+      "notes": "油画图标工作流生成的换人标识，绿进红出箭头来自 4×4 图表第 2 格。"
+    },
+    {
+      "id": "yellow-card-event-oil-icon",
+      "category": "icon",
+      "implementation": "icon",
+      "semanticKey": "match-yellow-card",
+      "sourceType": "oil-icon-football-match-events-v1",
+      "sourceUrl": "repository://docs/prototype-assets/icon-source/oil-icon/football-match-events-v1/raw/football-match-events-v1-sheet.png",
+      "license": "project-owned generated icon family",
+      "canonicalSvg": "E:\\Documents\\sxf-football\\service-account-h5\\assets\\match-events\\yellow-card.png",
+      "variants": ["transparent-png-256"],
+      "targetPages": ["service-account-h5/tournament-center.html"],
+      "notes": "油画图标工作流生成的黄牌标识，来自 4×4 图表第 3 格。"
+    },
+    {
+      "id": "red-card-event-oil-icon",
+      "category": "icon",
+      "implementation": "icon",
+      "semanticKey": "match-red-card",
+      "sourceType": "oil-icon-football-match-events-v1",
+      "sourceUrl": "repository://docs/prototype-assets/icon-source/oil-icon/football-match-events-v1/raw/football-match-events-v1-sheet.png",
+      "license": "project-owned generated icon family",
+      "canonicalSvg": "E:\\Documents\\sxf-football\\service-account-h5\\assets\\match-events\\red-card.png",
+      "variants": ["transparent-png-256"],
+      "targetPages": ["service-account-h5/tournament-center.html"],
+      "notes": "油画图标工作流生成的红牌标识，来自 4×4 图表第 4 格。"
+    },
+    {
+      "id": "annotated-layout-overlay",
+      "category": "overlay",
+      "implementation": "overlay",
+      "output": "06-overlays/annotated-layout.png",
+      "notes": "Generated bounding-box overlay for comparison only."
+    }
+  ]
+}

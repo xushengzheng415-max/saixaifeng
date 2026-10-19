@@ -698,6 +698,8 @@ async function createTeam(identity, event) {
 }
 
 async function createEventSpace(identity, event) {
+  const quickEvent = require('./quickEvent.cjs')
+  const eventDates = quickEvent.dates(event)
   const name = cleanText(event.name, 50)
   const province = cleanText(event.province, 40)
   const provinceCode = cleanText(event.provinceCode, 12)
@@ -710,22 +712,29 @@ async function createEventSpace(identity, event) {
     throw new Error('赛事标识文件无效，请重新上传')
   }
   const state = await loadOnboardingState(identity)
-  if (state.organization) {
-    const access = await organizationAccess(identity, state.organization)
+  const requestedOrgId = String(event.orgId || '')
+  let organization = state.organization
+  if (requestedOrgId) {
+    const selected = await db.collection('organizations').doc(requestedOrgId).get()
+    organization = selected.data
+    if (!organization) throw new Error('主办机构已失效，请重新选择')
+  }
+  if (organization) {
+    const access = await organizationAccess(identity, organization)
     if (!access.canEvent) throw new Error('当前账号没有在此机构创建赛事的权限，请联系机构负责人授权')
-    const orgId = String(state.organization._id || state.organization.id)
+    const orgId = String(organization._id || organization.id)
     const now = db.serverDate()
-    const capabilities = Array.from(new Set((Array.isArray(state.organization.capabilities) ? state.organization.capabilities : []).concat('event')))
+    const capabilities = Array.from(new Set((Array.isArray(organization.capabilities) ? organization.capabilities : []).concat('event')))
     await db.collection('organizations').doc(orgId).update({
       data: { capabilities, updateTime: now }
     })
     await grantMembershipPermissions(identity, orgId, ['event.view', 'event.manage'], ['event'])
-    const tournamentResult = await db.collection('tournaments').add({
-      data: {
+    const tournamentResult = await quickEvent.create(db, identity, event, {
         name,
         province,
         provinceCode,
         city,
+        ...eventDates,
         venueProvince: province,
         venueCity: city,
         orgId,
@@ -736,12 +745,11 @@ async function createEventSpace(identity, event) {
         logoTransparent: transparentLogo,
         logoOriginal: originalLogo,
         status: 'draft',
-        source: 'pc_onboarding_existing_organization',
+        source: event.entryPoint === 'mini_quick_create' ? 'mini_onboarding' : 'pc_onboarding_existing_organization',
         createTime: now,
         updateTime: now
-      }
     })
-    const tournamentId = tournamentResult._id
+    const tournamentId = tournamentResult.id
     const onboarding = Object.assign({}, identity.user.onboarding || {}, {
       scene: 'event',
       step: 'event_created',
@@ -756,8 +764,9 @@ async function createEventSpace(identity, event) {
       success: true,
       organizationId: orgId,
       reusedOrganization: true,
-      organization: { id: orgId, name: state.organization.name || state.organization.organizationName || '', logo: state.organization.logo || '' },
-      tournament: { id: tournamentId, name, province, city, logo: transparentLogo || originalLogo }
+      duplicate: tournamentResult.duplicate,
+      organization: { id: orgId, name: organization.name || organization.organizationName || '', logo: organization.logo || '' },
+      tournament: { id: tournamentId, name, province, city, ...eventDates, logo: transparentLogo || originalLogo }
     }
   }
   throw new Error('请先创建机构信息，再创建赛事空间')

@@ -375,13 +375,17 @@ async function saveTeamAccess(event, identity) {
     managerName:primary.name, managerPhone:primary.phone, updateTime:now
   } })
 
+  const forceOwnerClaim = Boolean(event.forceOwnerClaim)
   const memberships = await safeGet('team_memberships', { teamId:context.teamId }, 200)
   const currentOwnerId = String(context.team.ownerId || context.team.ownerUserId || context.team.claimedByUserId || '')
   const resolved = []
   for (const person of candidates) resolved.push({ person, user:await userByPhone(person.phone) })
   const primaryResolved = resolved.find(item => item.person.role === primary.role)
   const targetOwnerId = String(primaryResolved && primaryResolved.user && primaryResolved.user._id || '')
-  const transferPending = Boolean(currentOwnerId && targetOwnerId !== currentOwnerId)
+  if (forceOwnerClaim && !targetOwnerId) {
+    throw new Error(`手机号 ${maskPhone(primary.phone)} 未注册赛小蜂账号，无法代认领，请先让该用户注册`)
+  }
+  const transferPending = Boolean(currentOwnerId && targetOwnerId !== currentOwnerId) && !forceOwnerClaim
   const activeTransfers = await safeGet('team_invitations', { teamId:context.teamId, type:'team_owner_transfer', status:'active' }, 20)
   let matchingTransfer = null
   for (const transfer of activeTransfers) {
@@ -406,12 +410,16 @@ async function saveTeamAccess(event, identity) {
     else await db.collection('team_invitations').add({ data:{ ...transferData, createTime:now } })
     await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'team_owner_transfer_requested', tournamentId:context.tournamentId, teamId:context.teamId, actorUserId:identity.user._id, actorOrgId:context.actorOrgId, result:'pending_acceptance', detail:{ fromOwnerId:currentOwnerId, targetPhoneMasked:maskPhone(primary.phone), keepPreviousOwnerAsMember:true }, createTime:now } })
   }
-  const effectiveOwnerId = currentOwnerId
+  const effectiveOwnerId = forceOwnerClaim ? targetOwnerId : currentOwnerId
+  if (forceOwnerClaim && targetOwnerId && targetOwnerId !== currentOwnerId) {
+    await db.collection('teams').doc(context.teamId).update({ data:{ ownerId:targetOwnerId, claimedByUserId:targetOwnerId, claimedAt:now, updateTime:now } })
+    await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'team_owner_forced_claim', tournamentId:context.tournamentId, teamId:context.teamId, actorUserId:identity.user._id, actorOrgId:context.actorOrgId, result:'success', detail:{ targetOwnerId, targetPhoneMasked:maskPhone(primary.phone), fromOwnerId:currentOwnerId }, createTime:now } })
+  }
   for (const item of resolved) {
     const person = item.person
     const user = item.user
     const isPrimary = person.role === primary.role
-    if (isPrimary && (!currentOwnerId || transferPending)) continue
+    if (isPrimary && (!currentOwnerId || transferPending) && !forceOwnerClaim) continue
     if (user) {
       const existing = memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id))
       const memberRole = isPrimary ? 'owner' : (person.role === 'head_coach' ? 'coach' : 'member')

@@ -392,7 +392,7 @@ Page({
     var that = this
     this.setData({ isSubmitting: true, primaryText: '正在进入…' })
     workspace.switchWorkspace(training.workspaceId).then(function() {
-      wx.switchTab({ url: '/pages/training/index' })
+      wx.navigateTo({ url: '/pages/training/index' })
     }).catch(function() {
       that.showError('机构已创建，但工作空间加载失败，请在“我的”中重试')
     }).finally(function() {

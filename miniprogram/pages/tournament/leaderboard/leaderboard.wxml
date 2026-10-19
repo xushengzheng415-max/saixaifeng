@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="nav"><text bindtap="back">返回</text><text>赛事榜单</text><text></text></view>
+  <view wx:if="{{loading}}" class="state">正在读取赛事数据…</view>
+  <view wx:if="{{errorText}}" class="state error">{{errorText}}</view>
+  <block wx:else>
+    <view class="section">
+      <view class="section-title"><text>积分榜</text><text>正式赛果</text></view>
+      <view wx:if="{{hasStandings}}" class="table">
+        <view class="table-head"><text>排名</text><text>球队</text><text>场次</text><text>积分</text></view>
+        <view wx:for="{{standings}}" wx:key="rank" class="table-row"><text>{{item.rank}}</text><text>{{item.teamName}}</text><text>{{item.played}}</text><text>{{item.points}}</text></view>
+      </view>
+      <view wx:else class="empty">暂无已确认赛果</view>
+    </view>
+    <view class="section">
+      <view class="section-title"><text>球员榜</text><text>进球 · 助攻</text></view>
+      <view wx:if="{{hasPlayers}}" class="list"><view wx:for="{{players}}" wx:key="rank" class="list-row"><text>{{item.rank}}</text><text>{{item.name}}</text><text>{{item.goals}} 球 · {{item.assists}} 助</text></view></view>
+      <view wx:else class="empty">暂无球员数据</view>
+    </view>
+    <view class="section">
+      <view class="section-title"><text>红黄牌</text><text>纪律记录</text></view>
+      <view wx:if="{{hasDiscipline}}" class="list"><view wx:for="{{discipline}}" wx:key="rank" class="list-row"><text>{{item.rank}}</text><text>{{item.name}}</text><text>{{item.yellowCards}} 黄 · {{item.redCards}} 红</text></view></view>
+      <view wx:else class="empty">暂无红黄牌记录</view>
+    </view>
+  </block>
+</view>

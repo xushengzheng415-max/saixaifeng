@@ -1,0 +1,25 @@
+<view class="data-page">
+  <image class="data-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="data-shade"></view>
+  <view class="data-nav"><text class="data-back" bindtap="back">‹</text><text>赛事数据</text></view>
+  <view class="data-content">
+    <view class="data-hero"><text class="data-hero-label">{{tournament.name}}</text><text class="data-hero-title">积分、进球与纪律数据</text></view>
+    <view wx:if="{{loading}}" class="data-state">正在加载赛事数据…</view>
+    <view wx:elif="{{errorText}}" class="data-state data-error"><text>{{errorText}}</text><text bindtap="loadData">点击重试</text></view>
+    <block wx:else>
+      <view class="data-tabs"><text wx:for="{{tabs}}" wx:key="id" class="{{item.className}}" data-id="{{item.id}}" bindtap="selectTab">{{item.label}} {{item.count}}</text></view>
+      <view class="data-panel" wx:if="{{hasVisibleRows}}">
+        <view wx:if="{{showStandingsHead}}" class="standings-head"><text>排名</text><text>球队</text><text>赛</text><text>胜平负</text><text>积分</text></view>
+        <view wx:for="{{visibleRows}}" wx:key="playerName" class="data-row">
+          <text class="rank">{{item.displayRank}}</text>
+          <view class="data-subject"><image wx:if="{{item.teamLogo}}" src="{{item.teamLogo}}" mode="aspectFit"></image><image wx:else src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"></image><view><text>{{item.displayName}}</text><text wx:if="{{item.secondaryText}}">{{item.secondaryText}}</text></view></view>
+          <text wx:if="{{item.showPlayed}}" class="data-num">{{item.played}}</text>
+          <text wx:if="{{item.showRecord}}" class="data-record">{{item.wins}}/{{item.draws}}/{{item.losses}}</text>
+          <text wx:if="{{item.showPoints}}" class="data-points">{{item.pointsText}}</text>
+          <text wx:if="{{item.showCount}}" class="data-count">{{item.countText}}</text>
+        </view>
+      </view>
+      <view wx:else class="data-empty">{{emptyText}}</view>
+    </block>
+  </view>
+</view>

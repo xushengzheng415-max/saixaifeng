@@ -1,0 +1,46 @@
+<view wx:if="{{canLineup || canResult}}" class="report-import">
+  <view wx:if="{{!open}}"><view wx:if="{{!hiddenEntry}}" class="report-entry"><button bindtap="uploadReport">上传裁判表</button></view></view>
+  <view wx:if="{{open}}" class="report-review">
+    <view class="review-heading"><text>核对裁判表</text><view class="review-tools"><text bindtap="preview">查看原图</text><text wx:if="{{!busy}}" bindtap="cancel">取消</text></view></view>
+    <view class="rule-toggle" bindtap="toggleRules"><text>识别设置</text></view>
+    <view wx:if="{{showRules}}" class="rule-settings"><view class="annotation-check"><text>未打钩按替补</text><switch checked="{{blankRoleAsBench}}" bindchange="onConvention" disabled="{{busy}}" color="#087b3d"/></view><view class="annotation-check"><text>圈号后为进球分钟</text><switch checked="{{circledGoals}}" bindchange="onCircleConvention" disabled="{{busy}}" color="#087b3d"/></view><button wx:if="{{rulesDirty}}" bindtap="recognize" disabled="{{busy}}">重新识别</button></view>
+    <text wx:if="{{busy}}" class="stage">{{stage}}</text>
+    <view wx:if="{{imageHint}}" class="image-hint"><text>{{imageHint}}</text><text bindtap="uploadReport">重新选图</text></view>
+    <view wx:if="{{errorText}}" class="error"><text>{{errorText}}</text><button wx:if="{{saveRetry}}" disabled="{{busy}}" bindtap="retrySave">重试保存</button><view wx:if="{{!hasDraft}}"><button wx:if="{{hasLocalPhoto}}" disabled="{{busy}}" bindtap="recognize">重新识别</button><button wx:else disabled="{{busy}}" bindtap="uploadReport">重新选择</button></view></view>
+    <view wx:if="{{hasDraft}}">
+      <view class="score-line"><view><text>主队比分</text><input type="number" value="{{scoreHome}}" data-side="home" bindinput="onScore" disabled="{{busy}}"/></view><text>:</text><view><text>客队比分</text><input type="number" value="{{scoreAway}}" data-side="away" bindinput="onScore" disabled="{{busy}}"/></view></view>
+      <text wx:for="{{warnings}}" wx:key="*this" class="warning">{{item}}</text>
+      <view class="review-summary"><text>{{reviewSummary}}</text><text bindtap="toggleRows">{{filterLabel}}</text></view><text wx:if="{{hasAnnotations}}" class="evidence-toggle" bindtap="toggleEvidence">查看识别原文</text><view wx:if="{{showEvidence}}" class="annotations"><text wx:for="{{annotations}}" wx:key="key" class="annotation">{{item.text}}</text></view>
+      <view class="side-tabs"><view wx:for="{{tabs}}" wx:for-item="tab" wx:key="id" class="side-tab {{tab.itemClass}}" data-id="{{tab.id}}" bindtap="onSide"><text>{{tab.name}}</text><text class="pending-count">{{tab.pendingLabel}}</text></view></view>
+      <text wx:if="{{countWarning}}" class="warning">{{countWarning}}</text><view wx:for="{{rows}}" wx:for-item="row" wx:key="key" class="player-review">
+        <view wx:if="{{!row.expanded}}" class="recognized-row"><text>{{row.playerLabel}}</text><text>{{row.roleLabel}}</text><text>{{row.goalLabel}}</text><text data-index="{{row.index}}" bindtap="viewSlice">查看切片</text><text data-index="{{row.index}}" bindtap="editRow">修改</text></view><view wx:if="{{row.expanded}}"><view class="player-select"><picker range="{{row.choices}}" range-key="label" value="{{row.playerIndex}}" data-index="{{row.index}}" data-field="playerId" bindchange="onRowChange" disabled="{{busy}}"><view>{{row.playerLabel}}</view></picker><picker range="{{roles}}" range-key="name" value="{{row.roleIndex}}" data-index="{{row.index}}" data-field="role" bindchange="onRowChange" disabled="{{busy}}"><view class="role">{{row.roleLabel}} ▾</view></picker></view>
+        <view class="original-line"><text class="original">原表：{{row.originalNumber || '—'}}号 {{row.originalName}}</text><button size="mini" data-index="{{row.index}}" bindtap="viewSlice" disabled="{{busy}}">查看切片</button></view>
+        <view wx:if="{{row.showAdvanced}}" class="identity-marks"><view><text>队长</text><switch checked="{{row.captain}}" data-index="{{row.index}}" data-field="captain" bindchange="onRowChange" disabled="{{busy}}" color="#087b3d"/></view><view><text>门将</text><switch checked="{{row.goalkeeper}}" data-index="{{row.index}}" data-field="goalkeeper" bindchange="onRowChange" disabled="{{busy}}" color="#087b3d"/></view></view>
+        <view class="event-fields"><view wx:for="{{row.fields}}" wx:for-item="field" wx:key="key"><text>{{field.label}}</text><input value="{{field.value}}" data-index="{{row.index}}" data-field="{{field.key}}" bindinput="onRowChange" placeholder="分钟" disabled="{{busy}}"/></view></view>
+        <text class="evidence-toggle" data-index="{{row.index}}" bindtap="toggleAdvanced">更多事件</text><text wx:if="{{row.showNotes}}" class="warning">{{row.notes}}</text>
+        <view class="row-actions"><text wx:if="{{row.reviewed}}" class="reviewed">已核对</text><text wx:elif="{{row.lineupReviewed}}" class="reviewed">阵容已核对</text><button wx:if="{{row.needsReview}}" size="mini" data-index="{{row.index}}" bindtap="confirmRow" disabled="{{busy}}">确认此行</button><button size="mini" class="remove" data-index="{{row.index}}" bindtap="removeRow" disabled="{{busy}}">移除</button></view></view>
+      </view>
+      <text wx:if="{{noPendingRows}}" class="recognized-state">本队无需逐人核对</text><button bindtap="addRow" disabled="{{busy}}">添加球员</button>
+      <view class="substitutions"><view wx:for="{{groups}}" wx:for-item="group" wx:key="key"><text class="label">{{group.minute}}′ 换人</text><text>换下：{{group.outText}}</text><text>换上：{{group.inText}}</text><text wx:if="{{group.warning}}" class="warning">换上、换下人数不一致</text></view></view>
+      <text wx:if="{{canResult}}" class="save-consequence">保存赛果后，本场比赛结束</text><view class="review-save-actions"><button wx:if="{{canLineup}}" bindtap="saveLineup" disabled="{{busy}}">仅保存阵容</button><button wx:if="{{canResult}}" class="confirm" bindtap="confirm" disabled="{{busy}}" loading="{{busy}}">保存赛果</button></view>
+    </view>
+  </view>
+  <canvas wx:if="{{open}}" type="2d" id="reportSliceCanvas" class="slice-canvas"/>
+  <view wx:if="{{sliceOpen}}" class="slice-mask" catchtap="closeSlice" catchtouchmove="noop">
+    <view class="slice-panel" catchtap="noop">
+      <view class="slice-heading"><text>原表切片</text><view><text bindtap="preview">查看整表</text><text bindtap="closeSlice">关闭</text></view></view>
+      <scroll-view scroll-y class="slice-body">
+        <view wx:if="{{sliceLoading}}" class="slice-state">正在读取切片</view>
+        <view wx:elif="{{sliceError}}" class="slice-state slice-failure"><text>{{sliceError}}</text><button size="mini" bindtap="retrySlice">重试</button></view>
+        <view wx:elif="{{sliceImage}}" class="slice-picture"><scroll-view scroll-x scroll-left="{{sliceScrollLeft}}" class="slice-image-scroll"><image class="slice-image" src="{{sliceImage}}" mode="widthFix" bindtap="previewSlice" binderror="sliceImageError"/></scroll-view><text class="slice-hint">左右滑动 · 点图放大</text></view>
+        <view wx:if="{{sliceRow}}" class="slice-editor">
+          <view class="player-select"><picker range="{{sliceRow.choices}}" range-key="label" value="{{sliceRow.playerIndex}}" data-index="{{sliceRow.index}}" data-field="playerId" bindchange="onRowChange" disabled="{{busy}}"><view>{{sliceRow.playerLabel}}</view></picker><picker range="{{roles}}" range-key="name" value="{{sliceRow.roleIndex}}" data-index="{{sliceRow.index}}" data-field="role" bindchange="onRowChange" disabled="{{busy}}"><view class="role">{{sliceRow.roleLabel}} ▾</view></picker></view>
+          <view wx:if="{{sliceRow.showAdvanced}}" class="identity-marks"><view><text>队长</text><switch checked="{{sliceRow.captain}}" data-index="{{sliceRow.index}}" data-field="captain" bindchange="onRowChange" disabled="{{busy}}" color="#087b3d"/></view><view><text>门将</text><switch checked="{{sliceRow.goalkeeper}}" data-index="{{sliceRow.index}}" data-field="goalkeeper" bindchange="onRowChange" disabled="{{busy}}" color="#087b3d"/></view></view>
+          <view class="event-fields"><view wx:for="{{sliceRow.fields}}" wx:for-item="field" wx:key="key"><text>{{field.label}}</text><input value="{{field.value}}" data-index="{{sliceRow.index}}" data-field="{{field.key}}" bindinput="onRowChange" placeholder="分钟" disabled="{{busy}}"/></view></view>
+          <text class="evidence-toggle" data-index="{{sliceRow.index}}" bindtap="toggleAdvanced">更多事件</text><text wx:if="{{sliceRow.showNotes}}" class="warning">{{sliceRow.notes}}</text><text wx:if="{{errorText}}" class="error">{{errorText}}</text>
+        </view>
+      </scroll-view>
+      <view class="slice-footer"><button class="confirm" bindtap="confirmSlice" disabled="{{sliceLoading || busy}}">确认此行</button></view>
+    </view>
+  </view>
+</view>

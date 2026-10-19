@@ -1,0 +1,47 @@
+{
+  "format": "product-blueprint",
+  "project": "赛小蜂足球服务号个人中心",
+  "revision": 2,
+  "pages": [
+    {
+      "id": "P01",
+      "name": "球员身份",
+      "portal": "h5",
+      "states": [
+        "normal"
+      ],
+      "layout": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      "template_features": [
+        "profile",
+        "wallet",
+        "role-switch",
+        "cell-list"
+      ]
+    },
+    {
+      "id": "P02",
+      "name": "裁判身份",
+      "portal": "h5",
+      "states": [
+        "normal"
+      ],
+      "layout": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      "template_features": [
+        "profile",
+        "wallet",
+        "role-switch",
+        "cell-list"
+      ]
+    }
+  ]
+}

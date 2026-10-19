@@ -1,0 +1,79 @@
+<view class="page">
+  <image class="stadium-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+  <view class="shade"></view>
+
+  <view class="content">
+    <view class="page-title">发现</view>
+
+    <!-- 唯一主操作：记一场 -->
+    <view class="record-hero">
+      <view class="record-hero-head">
+        <text class="record-hero-title">记一场</text>
+        <text class="record-hero-tag">友谊赛 · 不计排名</text>
+      </view>
+      <text class="record-hero-copy">两队大按钮记分，进球者可以跳过，结束后自动生成战报。</text>
+
+      <view class="record-team" wx:if="{{hasTeam}}">
+        <image class="record-team-logo" src="{{teamLogo}}" mode="aspectFit"></image>
+        <view class="record-team-main">
+          <text class="record-team-label">本场主队</text>
+          <text class="record-team-name">{{teamName}}</text>
+        </view>
+      </view>
+
+      <view class="record-btn {{recordBtnClass}}" bindtap="onStartRecord">
+        <text class="record-btn-text">开始记分</text>
+      </view>
+      <view class="guest-tip" wx:if="{{isGuest}}" bindtap="onGoLogin">
+        <text>当前未登录 · 去登录后记一场 ›</text>
+      </view>
+      <text class="record-hint">{{recordHint}}</text>
+    </view>
+
+    <!-- 同城赛事预告 -->
+    <view class="section">
+      <view class="section-head">
+        <text class="section-title">同城赛事预告</text>
+        <text class="section-sub">报名中的真实赛事</text>
+      </view>
+
+      <view class="event-list" wx:if="{{hasEvents}}">
+        <view class="event-card" wx:for="{{events}}" wx:key="key" data-id="{{item.id}}" bindtap="onOpenEvent">
+          <image class="event-logo" src="{{item.logo}}" mode="aspectFit"></image>
+          <view class="event-main">
+            <text class="event-name">{{item.name}}</text>
+            <text class="event-meta">{{item.dateText}} · {{item.locationText}}</text>
+          </view>
+          <text class="event-status">{{item.statusText}}</text>
+        </view>
+      </view>
+      <view class="empty-card" wx:if="{{!hasEvents}}">{{eventsEmptyText}}</view>
+    </view>
+
+    <!-- 球队动态 -->
+    <view class="section">
+      <view class="section-head">
+        <text class="section-title">球队动态</text>
+        <text class="section-sub">最近记的场次</text>
+      </view>
+
+      <view class="recent-list" wx:if="{{hasRecent}}">
+        <view class="recent-card" wx:for="{{recent}}" wx:key="key" data-id="{{item.id}}" bindtap="onOpenFriendly">
+          <view class="recent-score">
+            <text class="recent-score-text">{{item.scoreText}}</text>
+            <text class="recent-result {{item.resultClass}}">{{item.resultText}}</text>
+          </view>
+          <view class="recent-main">
+            <text class="recent-title">{{item.teamName}} vs {{item.opponentName}}</text>
+            <text class="recent-meta">{{item.dateText}}</text>
+            <text class="recent-scorer" wx:if="{{item.hasScorer}}">{{item.scorerText}}</text>
+          </view>
+          <text class="recent-arrow">›</text>
+        </view>
+      </view>
+      <view class="empty-card" wx:if="{{!hasRecent}}">{{recentEmptyText}}</view>
+    </view>
+
+    <view class="error-card" wx:if="{{errorText}}">{{errorText}}</view>
+  </view>
+</view>

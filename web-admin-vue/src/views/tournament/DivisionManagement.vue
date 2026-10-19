@@ -332,6 +332,8 @@ async function createSuggestedDivisionDrafts(currentTournament, existingDivision
   const suggestions = Array.isArray(currentTournament?.regulationDivisionSuggestions)
     ? currentTournament.regulationDivisionSuggestions
     : []
+  // Applied suggestions are initial drafts, not a live list to restore after deletion.
+  if (currentTournament?.regulationRecognitionStatus === 'suggestions_applied') return 0
   if (!suggestions.length || !permissions.tournament.manage(currentTournament)) return 0
   const existingNames = new Set((existingDivisions || []).map(item => String(item.name || item.divisionName || '').trim().toLowerCase()))
   const maxPlayers = { '5side': 12, '7side': 16, '8side': 18, '9side': 20, '11side': 23 }
@@ -384,11 +386,11 @@ async function createSuggestedDivisionDrafts(currentTournament, existingDivision
       console.warn('[competition] 规程组别建议生成失败:', name, error.message)
     }
   }
-  if (created > 0) {
-    await updateRecord('tournaments', id, {
-      regulationRecognitionStatus: 'suggestions_applied',
-      regulationSuggestionsAppliedAt: new Date()
-    })
+  const suggestedNames = suggestions.map(source => String(source?.name || '').trim().toLowerCase()).filter(Boolean)
+  if (suggestedNames.length && suggestedNames.every(name => existingNames.has(name))) {
+    const applied = { regulationRecognitionStatus: 'suggestions_applied', regulationSuggestionsAppliedAt: new Date() }
+    await updateRecord('tournaments', id, applied)
+    Object.assign(currentTournament, applied)
   }
   return created
 }

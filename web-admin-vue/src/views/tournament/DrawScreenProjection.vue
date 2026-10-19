@@ -18,16 +18,36 @@
       <div class="team-grid"><article v-for="team in state.teams" :key="team.id"><img v-if="state.screen?.showCrest !== false && team.logo" :src="team.logo" :alt="team.name"><b v-else>{{ (team.name || '队')[0] }}</b><strong>{{ team.name }}</strong></article></div>
     </section>
 
+    <section v-else-if="isLeagueProjection" class="league-screen-state">
+      <div class="section-heading"><p class="eyebrow">{{ isHybridProjection ? 'LEAGUE AND KNOCKOUT' : 'LEAGUE DRAW' }}</p><h1>{{ isHybridProjection ? '联赛＋淘汰抽签' : state.confirmed ? '联赛抽签结果' : '联赛抽签顺序' }}</h1><span>{{ state.teams.length }} 支球队 · {{ state.assignedCount }} 支已入位</span></div>
+      <div class="league-screen-layout" :class="{ 'with-knockout':isHybridProjection }">
+        <section class="league-order-table" aria-label="联赛抽签顺序">
+          <h2 v-if="isHybridProjection">联赛阶段</h2>
+          <header><b>签位</b><strong>参赛球队</strong></header>
+          <ol><li v-for="(team,index) in leagueSlots" :key="index"><b>{{ String(index+1).padStart(2,'0') }}</b><img v-if="state.screen?.showCrest !== false && team?.logo" :src="team.logo" alt="" /><strong v-if="team">{{ team.name }}</strong><span v-else>待抽签</span></li></ol>
+        </section>
+        <section v-if="isHybridProjection" class="hybrid-screen-tree"><h2>晋级淘汰赛</h2><p>联赛名次待定</p><KnockoutDrawTree v-if="hybridProjectionSlots.length" :slots="hybridProjectionSlots" :screen="state.screen?.theme !== 'light'" :show-crest="false" /><p v-else>晋级名额待设置</p></section>
+      </div>
+    </section>
+
+    <section v-else-if="isCupProjection" class="knockout-screen-state">
+      <div class="section-heading"><p class="eyebrow">KNOCKOUT DRAW</p><h1>单淘汰抽签</h1><span>{{ projectionSlots.length }} 个签位 · {{ projectionSlots.length / 2 }} 场首轮对阵 · 已入位 {{ state.assignedCount }}/{{ state.teams.length }}</span></div>
+      <KnockoutDrawTree :slots="projectionSlots" :screen="state.screen?.theme !== 'light'" :show-crest="state.screen?.showCrest !== false" :byes-resolved="state.assignedCount > 0 && state.assignedCount === state.teams.length" />
+      <div v-if="state.screen?.showProgress !== false" class="progress-track"><i :style="{ width: `${progress}%` }"></i></div>
+    </section>
+
     <section v-else-if="state.stage === 'drawing'" class="drawing-state">
       <div class="section-heading"><p class="eyebrow">DRAWING</p><h1>正在抽签</h1><span>{{ state.assignedCount }}/{{ state.teams.length }} 支球队已分配</span></div>
       <div class="drawing-focus"><div class="draw-orb">{{ state.currentTeam?.code || '抽签' }}</div><p>当前球队</p><strong>{{ state.currentTeam?.name || '等待抽取' }}</strong><em v-if="state.currentGroup">进入 {{ state.currentGroup }}</em></div>
       <div v-if="state.screen?.showProgress !== false" class="progress-track"><i :style="{ width: `${progress}%` }"></i></div>
     </section>
 
-    <section v-else class="result-state">
-      <div class="section-heading"><p class="eyebrow">DRAW RESULT</p><h1>抽签结果</h1><span>场序已确认 · 比赛时间待后续编排</span></div>
+    <section v-else-if="isGroupProjection" class="result-state">
+      <div class="section-heading"><p class="eyebrow">DRAW RESULT</p><h1>抽签结果</h1><span>{{ state.teams.length }} 支球队</span></div>
       <div class="group-grid"><article v-for="group in groups" :key="group.name"><header><strong>{{ group.name }}</strong><span>{{ group.teams.length }} 支</span></header><ol><li v-for="(team,index) in group.teams" :key="team.id || `${group.name}-${index}`"><b>{{ index + 1 }}</b><span>{{ team.name }}</span></li></ol></article></div>
     </section>
+
+    <section v-else class="hero-state"><h1>等待同步</h1><p>请在操作台同步抽签画面</p></section>
 
     <footer><span>抽签结果以主办方确认版本为准</span><span v-if="state.screen?.showOperationLog">实时同步 · {{ lastUpdated }}</span><span v-else>{{ lastUpdated }}</span></footer>
   </main>
@@ -36,12 +56,51 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import KnockoutDrawTree from '../../components/tournament/KnockoutDrawTree.vue'
+import { knockoutCapacity, knockoutSeedOrder } from '../../utils/knockoutDraw.mjs'
 
 const route = useRoute()
 const channelName = `sxf-draw-screen-${String(route.query.tournamentId || route.params.id || '')}-${String(route.query.divisionId || 'default')}`
-const state = ref({ stage: 'intro', teams: [], assignments: [], screen: {}, tournamentName: '', divisionName: '', assignedCount: 0, updatedAt: '' })
+const state = ref({ format: String(route.query.format || ''), capacity:Number(route.query.capacity || 0), slots:[], confirmed:false, stage: route.query.format === 'cup' ? 'drawing' : 'intro', teams: [], assignments: [], screen: {}, tournamentName: '', divisionName: '', assignedCount: 0, updatedAt: '' })
 const lastUpdated = computed(() => state.value.updatedAt ? new Date(state.value.updatedAt).toLocaleTimeString('zh-CN', { hour12: false }) : '等待主控同步')
-const stageLabel = computed(() => ({ intro: '准备中', teams: '球队展示', drawing: '抽签进行中', result: '结果已确认' }[state.value.stage] || '等待同步'))
+const isCupProjection = computed(()=>state.value.format === 'cup')
+const isHybridProjection = computed(()=>state.value.format === 'hybrid')
+const isLeagueProjection = computed(()=>['league','hybrid'].includes(state.value.format))
+const isGroupProjection = computed(()=>['tournament','group'].includes(state.value.format))
+const leagueSlots = computed(()=>{
+  const slots=Array(state.value.teams.length).fill(null)
+  const byId=new Map(state.value.teams.map(team=>[String(team.id || team.teamId),team]))
+  const ordered=[...(state.value.assignments || [])].sort((a,b)=>Number(a.groupIndex || 0)-Number(b.groupIndex || 0) || Number(a.position)-Number(b.position))
+  const distinctPositions=ordered.every(row=>Number.isInteger(Number(row.position)) && Number(row.position)>0) && new Set(ordered.map(row=>Number(row.position))).size===ordered.length
+  for(let index=0;index<ordered.length;index++){
+    const row=ordered[index],position=distinctPositions?Number(row.position)-1:index
+    if(position>=0 && position<slots.length)slots[position]=byId.get(String(row.teamId)) || {id:row.teamId,name:row.teamName || '待定'}
+  }
+  return slots
+})
+const hybridProjectionSlots = computed(()=>{
+  const count=Number(state.value.advanceCount || 0)
+  if(!Number.isInteger(count) || count<2 || count>128)return []
+  const seeds=Array.isArray(state.value.seedOrder) && state.value.seedOrder.length===count ? state.value.seedOrder : knockoutSeedOrder(count)
+  return seeds.map(rank=>({id:`rank-${rank}`,name:`联赛第${rank}名`}))
+})
+
+const projectionSlots = computed(()=>{
+  const count=knockoutCapacity(state.value.capacity || state.value.slots?.length || state.value.teams.length)
+  const byId=new Map(state.value.teams.map(team=>[String(team.id || team.teamId),team]))
+  if(state.value.slots?.length)return Array.from({length:count},(_,index)=>{
+    const slot=state.value.slots[index]
+    if(!slot?.id && !slot?.teamId)return null
+    return {...(byId.get(String(slot.id || slot.teamId)) || {}),...slot,name:slot.name || slot.teamName || '待定'}
+  })
+  const slots=Array(count).fill(null)
+  for(const item of state.value.assignments || []){const index=Number(item.position)-1;if(index>=0 && index<count)slots[index]=byId.get(String(item.teamId)) || {id:item.teamId,name:item.teamName || '待定'}}
+  return slots
+})
+const stageLabel = computed(() => isCupProjection.value
+  ? state.value.confirmed ? '抽签已确认' : state.value.assignedCount > 0 && state.value.assignedCount === state.value.teams.length ? '签位已排满 · 待确认' : '淘汰赛抽签中'
+  : isLeagueProjection.value ? state.value.confirmed ? '抽签结果已确认' : state.value.assignedCount > 0 && state.value.assignedCount === state.value.teams.length ? '顺序已排满 · 待确认' : '联赛抽签中'
+  : ({ intro: '准备中', teams: '球队展示', drawing: '抽签进行中', result: state.value.confirmed === true ? '结果已确认' : '结果待确认' }[state.value.stage] || '等待同步'))
 const progress = computed(() => state.value.teams.length ? Math.min(100, Math.round(Number(state.value.assignedCount || 0) / state.value.teams.length * 100)) : 0)
 const groups = computed(() => {
   const map = new Map()
@@ -64,4 +123,7 @@ onBeforeUnmount(() => { channel?.close(); window.removeEventListener('storage', 
 <style scoped>
 :global(html),:global(body),:global(#app){margin:0;width:100%;height:100%;overflow:hidden;background:#031b14}
 .draw-screen{position:relative;box-sizing:border-box;width:100vw;height:100vh;overflow:hidden;padding:clamp(26px,4vw,72px) clamp(32px,6vw,120px) 28px;color:#f6fff8;background:radial-gradient(circle at 50% -15%,rgba(75,221,140,.34),transparent 34%),linear-gradient(145deg,#021c14,#07593d 54%,#021810);font-family:"Microsoft YaHei",Arial,sans-serif}.draw-screen.theme-stadium{background:radial-gradient(circle at 75% 8%,rgba(22,135,218,.35),transparent 30%),linear-gradient(145deg,#041326,#0b3761 55%,#020d1a)}.draw-screen.theme-light{color:#173328;background:linear-gradient(145deg,#f6fbf7,#dcefe3)}.screen-noise{position:absolute;inset:0;pointer-events:none;opacity:.16;background-image:linear-gradient(115deg,transparent 45%,rgba(255,255,255,.08) 46%,transparent 47%)}header,footer,.hero-state,.teams-state,.drawing-state,.result-state{position:relative;z-index:1}.draw-screen>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.22);padding-bottom:18px}.theme-light>header{border-color:rgba(23,51,40,.16)}.brand-mark{display:flex;align-items:center;gap:12px;font-size:clamp(14px,1.4vw,24px)}.brand-mark span{display:grid;place-items:center;width:clamp(32px,3vw,52px);height:clamp(32px,3vw,52px);border-radius:12px;color:#0b5f3c;background:#e9fff0;font-weight:900}.event-title{font-size:clamp(15px,1.4vw,25px);font-weight:700;letter-spacing:.05em}.live-state{display:flex;align-items:center;gap:8px;color:#bdf5ce;font-size:clamp(12px,1vw,18px)}.live-state i{width:9px;height:9px;border-radius:50%;background:#64f38d;box-shadow:0 0 16px #64f38d}.theme-light .live-state{color:#087943}.hero-state,.drawing-state{display:grid;place-items:center;align-content:center;min-height:calc(100vh - 190px);text-align:center}.eyebrow{margin:0 0 14px;color:#9deab4;font-size:clamp(11px,1vw,17px);letter-spacing:.3em}.theme-light .eyebrow{color:#17804a}.hero-state h1,.drawing-state h1,.section-heading h1{margin:0;font-size:clamp(48px,7vw,126px);line-height:1.05;letter-spacing:.08em}.hero-subtitle{margin:24px 0 46px;font-size:clamp(16px,1.6vw,28px);opacity:.82}.intro-rule-grid{display:flex;gap:clamp(16px,4vw,80px);padding:20px 38px;border:1px solid rgba(255,255,255,.22);border-radius:16px;background:rgba(0,20,13,.22)}.intro-rule-grid span{display:flex;flex-direction:column;gap:8px;min-width:140px;color:#b9d9c2}.intro-rule-grid strong{color:inherit;font-size:clamp(20px,1.8vw,32px)}.teams-state,.result-state{min-height:calc(100vh - 190px);padding-top:5vh}.section-heading{text-align:center}.section-heading span{display:block;margin-top:16px;opacity:.76;font-size:clamp(14px,1.2vw,21px)}.team-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin:5vh auto 0;max-width:1500px}.team-grid article{display:flex;align-items:center;gap:12px;min-height:70px;padding:12px 14px;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(0,25,16,.3)}.team-grid img,.team-grid b{display:grid;place-items:center;flex:none;width:42px;height:42px;border-radius:50%;object-fit:contain;background:#fff;color:#087943}.team-grid strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.drawing-focus{display:grid;place-items:center;margin-top:4vh;text-align:center}.draw-orb{display:grid;place-items:center;width:clamp(150px,18vw,300px);height:clamp(150px,18vw,300px);border:2px solid rgba(202,255,214,.65);border-radius:50%;box-shadow:0 0 50px rgba(103,255,155,.35),inset 0 0 40px rgba(103,255,155,.18);font-size:clamp(28px,4vw,70px);font-weight:900}.drawing-focus p{margin:18px 0 7px;opacity:.7}.drawing-focus strong{font-size:clamp(24px,2.8vw,50px)}.drawing-focus em{margin-top:12px;color:#d5ff92;font-style:normal;font-size:clamp(15px,1.5vw,26px)}.progress-track{width:min(760px,70vw);height:8px;margin:34px auto 0;border-radius:99px;background:rgba(255,255,255,.2)}.progress-track i{display:block;height:100%;border-radius:inherit;background:#8ef2a9;transition:width .4s ease}.group-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1500px;margin:5vh auto 0}.group-grid article{overflow:hidden;border:1px solid rgba(255,255,255,.22);border-radius:12px;background:rgba(0,25,16,.32)}.group-grid header{display:flex;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.15);font-size:18px}.group-grid header span{opacity:.7;font-size:13px}.group-grid ol{margin:0;padding:8px 16px 12px;list-style:none}.group-grid li{display:grid;grid-template-columns:28px 1fr;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.12)}.group-grid li:last-child{border:0}.group-grid li b{color:#aaf4bc}.draw-screen>footer{display:flex;justify-content:space-between;padding-top:16px;border-top:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.62);font-size:12px}.theme-light>footer{border-color:rgba(23,51,40,.16);color:#60796d}@media(max-width:1000px){.team-grid{grid-template-columns:repeat(3,1fr)}.group-grid{grid-template-columns:repeat(2,1fr)}}
+.knockout-screen-state{padding:3vh 0}.knockout-screen-state .section-heading h1{font-size:clamp(32px,3.4vw,62px)}.knockout-screen-state :deep(.knockout-tree){margin:4vh 0 0}.knockout-screen-state .progress-track{margin-top:20px}
+
+.league-screen-state{padding:3vh 0}.league-screen-state .section-heading h1{font-size:clamp(32px,3.4vw,62px)}.league-screen-layout{width:min(100%,980px);margin:4vh auto 0}.league-screen-layout.with-knockout{display:grid;width:100%;grid-template-columns:minmax(300px,.8fr) minmax(650px,1.7fr);align-items:start;gap:36px}.league-order-table{overflow:hidden;border:1px solid rgba(175,240,196,.3);border-radius:8px;background:rgba(0,30,18,.28)}.league-order-table>header{display:flex;align-items:center;gap:24px;padding:14px 24px;border-bottom:1px solid rgba(175,240,196,.3);background:rgba(175,240,196,.08);font-size:17px}.league-order-table>header b{width:64px}.league-order-table ol{margin:0;padding:0 24px;list-style:none}.league-order-table li{display:flex;align-items:center;gap:24px;min-height:58px;border-bottom:1px solid rgba(175,240,196,.2)}.league-order-table li:last-child{border:0}.league-order-table li>b{width:64px;color:#a5eebc;font-size:20px}.league-order-table li>strong{font-size:clamp(18px,1.4vw,27px)}.league-order-table li>span{color:#a5bdaf}.league-order-table img{width:36px;height:36px;object-fit:contain}.league-screen-layout h2{margin:0;padding:12px 24px;font-size:19px}.hybrid-screen-tree>p{margin:0 0 16px;color:#b6cdbd;font-size:14px}.hybrid-screen-tree :deep(.knockout-tree){min-height:440px}.theme-light .league-order-table{border-color:#cbded0;background:#fff}.theme-light .league-order-table>header,.theme-light .league-order-table li{border-color:#d4e3d8}.theme-light .league-order-table li>b{color:#087943}@media(max-width:1200px){.league-screen-layout.with-knockout{grid-template-columns:1fr}.league-order-table li{min-height:48px}}
 </style>

@@ -13,7 +13,9 @@ Page({
     tournamentId: '',
     requestedTeamId: '',
     requestedDivisionId: '',
+    entryView:'', requestedWorkspaceId:'',
     showTeamTournamentDetail: false,
+    entryPending: true,
     teamPageClass: '',
     teamEventTag: '我参与的',
     teamEventMode: '',
@@ -27,6 +29,9 @@ Page({
     teamEventRankTotal: '—',
     teamEventPlayed: 0,
     teamEventPoints: 0,
+    teamEventRankLabel: '小组排名',
+    teamStandingsGroups: [], showTeamStandings:false, showTeamStandingsError:false, showTeamStandingsEmpty:false,
+    teamSchedule: [], hasTeamSchedule:false,teamScheduleCountText:'',
     teamEventRosterText: '尚未提交正式名单',
     teamEventLineupText: '暂无待进行比赛',
     showNextMatch: false,
@@ -437,14 +442,18 @@ Page({
 
   onLoad(options) {
     if (workspace.isVisualQaEnabled(options)) {
+      this.setData({entryPending:false})
       this.loadVisualFixture()
       return
     }
-    if (options && options.id) {
-      this.setData({ tournamentId: options.id, requestedTeamId: options.teamId || '', requestedDivisionId: options.divisionId || '' })
+    if (options && (options.id || options.tournamentId)) {
+      var requestedWorkspaceId = options.workspaceId || ''
+      try { requestedWorkspaceId = decodeURIComponent(requestedWorkspaceId) } catch (error) {}
+      var teamView = options.view === 'team' || (workspace.getPortalRole && workspace.getPortalRole(workspace.readContext() || {}) === 'team_coach')
+      this.setData({ tournamentId: options.id || options.tournamentId, requestedTeamId: options.teamId || '', requestedDivisionId: options.divisionId || '', requestedWorkspaceId:requestedWorkspaceId, entryView:teamView ? 'team' : options.view || '',entryPending:teamView })
       this.loadTournament()
     } else {
-      this.setData({ loading: false })
+      this.setData({ loading: false,entryPending:true,errorMsg:'缺少赛事信息，请从赛事卡片重新进入' })
     }
   },
 
@@ -464,7 +473,7 @@ Page({
   loadVisualFixture: function () {
     this.setData({
       visualQa: true, loading: false, tournamentId: 'visual-team-event', showTeamTournamentDetail: true, teamPageClass: 'team-event-mode',
-      teamEventMode: 'PRO · U12', teamEventName: '2026 河南青少年足球冠军联赛', teamEventDateVenue: '7月20日 — 8月18日 · 河南省体育中心',
+      teamEventMode: 'U12', teamEventName: '2026 河南青少年足球冠军联赛', teamEventDateVenue: '7月20日 — 8月18日 · 河南省体育中心',
       teamEventTeamId: 'visual-team', teamEventTeamName: '赛小蜂U12竞技队', teamEventTeamLogo: '/images/logo.png', teamEventStatusText: '已确认',
       teamEventRank: '3', teamEventRankTotal: '8', teamEventPlayed: 4, teamEventPoints: 6, teamEventRosterText: '18/20 已通过审核', teamEventLineupText: '下一场待提交',
       showNextMatch: true, showNextMatchEmpty: false, nextMatchId: 'visual-match', nextMatchDateTime: '8月2日 周六 10:30', nextMatchVenue: '1号场',
@@ -494,7 +503,7 @@ Page({
     var that = this
     var context = workspace.readContext() || {}
     var teamId = that.data.requestedTeamId || wx.getStorageSync('currentTeamId') || ''
-    var workspaceId = teamId ? 'team:' + teamId : ((context.currentWorkspace || {}).id || '')
+    var workspaceId = that.data.requestedWorkspaceId || (context.currentWorkspace || {}).id || ''
     return wx.cloud.callFunction({
       name: 'getMiniWorkspace',
       data: { action: 'teamTournamentDetail', workspaceId: workspaceId, tournamentId: that.data.tournamentId, teamId: teamId, divisionId: that.data.requestedDivisionId }
@@ -516,20 +525,25 @@ Page({
       var nextDateTime = next ? that.formatNextMatchDateTime(next.startTime, next.dateText, next.timeText) : ''
       var rosterText = roster.exists ? (roster.playerCount + '/' + roster.maxPlayers + (roster.approved ? ' 已通过审核' : ' 正式名单待处理')) : '尚未提交正式名单'
       var lineupText = next ? (result.canSubmitLineup ? '下一场待提交' : (roster.approved ? '阵容暂不可提交' : '请先完成正式名单')) : '暂无待进行比赛'
+      var schedule = (result.matches || []).map(function(match) { return Object.assign({},match,{dateTimeText:[match.dateText,match.timeText].filter(Boolean).join(' '),homeName:(match.home || {}).name || '主队待定',awayName:(match.away || {}).name || '客队待定',scoreText:match.status === 'finished' ? (match.homeScore + ' : ' + match.awayScore) : 'VS',statusClass:match.status === 'finished' ? 'is-finished' : ''}) })
+      var groups = (result.standingsGroups || []).map(function(group) {return Object.assign({},group,{rows:(group.rows || []).map(function(row){return Object.assign({},row,{rank:row.rank == null ? '—' : row.rank,played:row.played == null ? '—' : row.played,goalDifference:row.goalDifference == null ? '—' : row.goalDifference,points:row.points == null ? '—' : row.points,rowClass:row.isCurrent ? 'is-current' : '',recordText:row.win == null ? '—' : row.win+'/'+row.draw+'/'+row.loss})})})})
+      var lineupButtonText = result.canSubmitLineup ? '提交本场阵容' : (!roster.approved ? '请先完成正式名单' : (next && next.status === 'ongoing' ? '比赛进行中' : '阵容暂不可提交'))
       that.setData({
         showTeamTournamentDetail: true, teamPageClass: 'team-event-mode', isCoach: true, myTeamId: team.id || '', myTeamName: team.name || '', requestedDivisionId: division.id || that.data.requestedDivisionId || '',
-        teamEventMode: division.modeText || division.name || '', teamEventName: tournament.name || '', teamEventDateVenue: dateVenue,
+        teamEventMode: division.name || String(division.modeText || '').replace(/^(简易|PRO|专业版|专业)\s*·\s*/, ''), teamEventName: tournament.name || '', teamEventDateVenue: dateVenue,
         teamEventTeamId: team.id || '', teamEventTeamName: team.name || '', teamEventTeamLogo: team.logo || '/images/runtime/icons/brand-v1-tab-team.png', teamEventStatusText: registration.statusText || '已确认',
-        teamEventRank: summary.rank ? String(summary.rank) : '—', teamEventRankTotal: summary.rankTotal ? String(summary.rankTotal) : '—', teamEventPlayed: Number(summary.played || 0), teamEventPoints: Number(summary.points || 0),
-        teamEventRosterText: rosterText, teamEventLineupText: lineupText, showNextMatch: Boolean(next), showNextMatchEmpty: !next,
+        teamEventRank: summary.rank ? String(summary.rank) : '—', teamEventRankTotal: summary.rankTotal ? String(summary.rankTotal) : '—', teamEventPlayed: summary.played == null ? '—' : summary.played, teamEventPoints: summary.points == null ? '—' : summary.points,
+        teamEventRankLabel:result.rankLabel || '小组排名',teamStandingsGroups:groups,showTeamStandings:groups.length>0,showTeamStandingsError:result.standingsState==='failed',showTeamStandingsEmpty:groups.length===0&&result.standingsState!=='failed',
+        teamSchedule:schedule,hasTeamSchedule:schedule.length>0,teamScheduleCountText:schedule.length+'场'+(result.scheduleState==='completed'?' · 已全部结束':''),
+        teamEventRosterText: rosterText, teamEventLineupText: lineupText, showNextMatch: Boolean(next), showNextMatchEmpty: !next && schedule.length===0,
         nextMatchId: next ? next.id || '' : '', nextMatchDateTime: nextDateTime, nextMatchVenue: next ? next.venue || '' : '',
         nextHomeName: next && next.home ? next.home.name || '' : '', nextHomeLogo: next && next.home ? next.home.logo || '/images/runtime/icons/brand-v1-tab-team.png' : '',
         nextAwayName: next && next.away ? next.away.name || '' : '', nextAwayLogo: next && next.away ? next.away.logo || '/images/runtime/icons/brand-v1-tab-team.png' : '',
-        canSubmitNextLineup: result.canSubmitLineup === true, nextLineupButtonText: result.canSubmitLineup ? '提交本场阵容' : (next ? '请先完成正式名单' : '赛程尚未公布'), nextLineupButtonClass: result.canSubmitLineup ? '' : 'disabled'
+        canSubmitNextLineup: result.canSubmitLineup === true, nextLineupButtonText:lineupButtonText, nextLineupButtonClass: result.canSubmitLineup ? '' : 'disabled'
       })
       return true
     }).catch(function (error) {
-      console.warn('[detail] 球队赛事视角加载失败，回退公共视角:', error)
+      console.warn('[detail] 球队赛事视角加载失败:', error)
       return false
     })
   },
@@ -544,11 +558,12 @@ Page({
     if (!this.data.canSubmitNextLineup) return wx.showToast({ title: '请先完成并通过正式名单', icon: 'none' })
     wx.navigateTo({ url: '/pages/match/squad/squad?matchId=' + encodeURIComponent(this.data.nextMatchId) + '&teamId=' + encodeURIComponent(this.data.teamEventTeamId) })
   },
-  onTeamEventSchedule: function () { wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + encodeURIComponent(this.data.tournamentId) }) },
+  onTeamEventSchedule: function () { wx.navigateTo({ url: '/pages/tournament/schedule/schedule?id=' + encodeURIComponent(this.data.tournamentId) + '&view=team&teamId=' + encodeURIComponent(this.data.teamEventTeamId) + '&divisionId=' + encodeURIComponent(this.data.requestedDivisionId || '') + '&workspaceId=' + encodeURIComponent(this.data.requestedWorkspaceId || ((workspace.readContext() || {}).currentWorkspace || {}).id || '') }) },
+  onTeamScheduleMatch: function(event) { var id=event.currentTarget.dataset.id;if(id)wx.navigateTo({url:'/pages/match/detail/detail?matchId='+encodeURIComponent(id)}) },
   onTeamEventTabHome: function () { wx.switchTab({ url: '/pages/home/home' }) },
   onTeamEventTabEvent: function () { wx.switchTab({ url: '/pages/event/index' }) },
   onTeamEventTabTeam: function () { wx.switchTab({ url: '/pages/teams/index' }) },
-  onTeamEventTabTraining: function () { wx.switchTab({ url: '/pages/training/index' }) },
+  onTeamEventTabTraining: function () { wx.navigateTo({ url: '/pages/training/index' }) },
   onTeamEventTabProfile: function () { wx.switchTab({ url: '/pages/profile/profile' }) },
 
   onVisualRoute: function (event) {
@@ -755,6 +770,15 @@ Page({
   loadTournament: function () {
     var that = this
     that.setData({ loading: true })
+    if (that.data.entryView === 'team') {
+      if (that._teamDetailRequest) return that._teamDetailRequest
+      that.setData({isOrganizer:false,isCoach:true})
+      that._teamDetailRequest = that.loadTeamTournamentDetail().then(function(shown) {
+        that.setData({loading:false,entryPending:!shown,showTeamTournamentDetail:shown,teamPageClass:shown ? 'team-event-mode' : '',errorMsg:shown ? '' : '参赛信息暂不可用，请重试'})
+        return shown
+      }).finally(function() {that._teamDetailRequest=null})
+      return that._teamDetailRequest
+    }
 
     try { wx.cloud.init({ env: 'cloud1-7g8ckb3c7815a011', traceUser: false }) } catch(e) {}
 
@@ -865,6 +889,11 @@ Page({
 
         // 关闭加载状态
         that.setData({ loading: false, errorMsg: '' })
+        if (that.data.entryView === 'organizer') {
+          that.loadTeams()
+          that.checkPermissionAndLoadData(t)
+          return
+        }
         that.loadTeamTournamentDetail().then(function (shown) {
           if (shown) return
           that.loadTeams()
@@ -1269,7 +1298,7 @@ Page({
     var cl = that.data.coachList
 
     if ((!pl || pl.length === 0) && (!cl || cl.length === 0)) {
-      wx.showToast({ title: '请先添加球员或教练', icon: 'none' })
+      wx.showToast({ title: '请先认领球员或添加教练', icon: 'none' })
       return
     }
 
@@ -1352,7 +1381,7 @@ Page({
     }
 
     if ((!pl || pl.length === 0) && (!cl || cl.length === 0)) {
-      wx.showToast({ title: '请先添加球员或教练', icon: 'none' })
+      wx.showToast({ title: '请先认领球员或添加教练', icon: 'none' })
       return
     }
 

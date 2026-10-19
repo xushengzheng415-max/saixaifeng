@@ -25,7 +25,7 @@ function mockDatabase(initial, cap = 100) {
     let where = {}, limit = cap, projection=null
     const query = { field(value){projection=value;return query}, where(value) { where = value; return query }, orderBy() { return query }, limit(value) { limit = Math.min(value,cap); return query }, async get() { if (db.fail === name) throw new Error('database unavailable'); return { data:(store[name] || []).filter(row => matches(row,where)).sort((a,b) => a._id < b._id ? -1 : 1).slice(0,limit).map(row=>projection?Object.fromEntries(Object.entries(row).filter(([key])=>projection[key])):row) } }, doc(documentId) {
       return { async get() { const row = (store[name] || []).find(row => row._id === documentId); if (!row) throw new Error('document not exist'); return { data:structuredClone(row) } }, async set({data}) { store[name] ||= []; const index = store[name].findIndex(row => row._id === documentId); const row = { ...structuredClone(data), _id:documentId }; if (index < 0) store[name].push(row); else store[name][index] = row }, async update({data}) { const row = (store[name] || []).find(row => row._id === documentId); if (!row) throw new Error('document not exist'); Object.assign(row,structuredClone(data)) } }
-    } }
+    }, async add({data}) { store[name] ||= []; const row = { ...structuredClone(data), _id:`${name}_${store[name].length + 1}` }; store[name].push(row); return { id:row._id } } }
     return query
   }, async runTransaction(action) { const snapshot = structuredClone(store); try { return await action(db) } catch (error) { store = snapshot; throw error } } }
   return db
@@ -171,9 +171,28 @@ assert.throws(() => assertPlayerFactWrite({goals:100}),error => error.code === '
 assert.doesNotThrow(() => assertPlayerFactWrite({name:'小明',height:160}))
 await assert.rejects(requestTransfer(database,{...actor,manageTeamIds:[]},{playerId:'p1',fromTeamId:'B',toTeamId:'A',requestKey:'readonly-user-1234'}),error => error.code === 'DATA_FORBIDDEN')
 await archiveMembership(database,actor,'p1','B')
-assert.equal(database.data().players[0].status,'archived')
+// 新模型（2026-10-18）：移出=解除关系，档案个人持有，不置归档
+assert.equal(database.data().players[0].teamId,'')
+assert.equal(database.data().players[0].teamCode,'')
+assert.notEqual(database.data().players[0].status,'archived')
 assert.equal(database.data().player_team_memberships.filter(row => row.status === 'active').length,0)
-assert.equal((await archiveMembership(database,actor,'p1','B')).idempotent,true)
+assert.equal(database.data().player_team_history.length,1)
+assert.equal(database.data().player_team_history[0].leftSource,'team_remove')
+assert.ok(database.data().player_team_history[0].leftAt)
+// 已离队的档案二次移出属于归属冲突，不再幂等
+await assert.rejects(archiveMembership(database,actor,'p1','B'),error => error.code === 'PLAYER_TEAM_CONFLICT')
 assert.equal(JSON.stringify(database.data().matches),initialHistory)
 assert.equal((await service.query(actor,{playerId:'p1'})).playerTotal.metrics.goals,8)
 console.log('PASS: 生涯/球队/赛事归属、转会幂等与权限、隐私隔离、正式/暂定、修订撤销、缺失指标、分页1250条、公开范围和版本变化')
+const registrationDb=mockDatabase({players:[],teams:[{_id:'registration-team',source:'manual'}]})
+const registrationService=createDataService(registrationDb)
+const registrationProfile={_id:'registration-draft',teamId:'registration-team',name:'隔离登记草稿',source:'team_player_invite'}
+const registrationScore=await registrationService.playerCardForAuthorizedRegistrationDraft(registrationProfile)
+assert.equal(registrationScore.status,'ready')
+assert.equal(registrationScore.tier,'bronze')
+assert.equal(registrationScore.registrationPreview,true)
+assert.equal(registrationDb.data().players.length,0,'preview must not create or claim a player')
+registrationDb.data().players.push({...registrationProfile})
+await assert.rejects(registrationService.playerCardForAuthorizedRegistrationDraft(registrationProfile),e=>e.code==='DATA_SCOPE_INVALID')
+await assert.rejects(registrationService.playerCardForAuthorizedRegistrationDraft({...registrationProfile,_id:'other',source:'untrusted'}),e=>e.code==='DATA_SCOPE_INVALID')
+console.log('PASS: 登记草稿复用统一积分规则且不落球员/卡片，不覆盖既有ID')

@@ -61,7 +61,7 @@
           </view>
         </view>
       </view>
-      <view class="member-note"><text class="member-note-icon">ⓘ</text>球队成员负责管理球队，不等于赛事正式名单中的球员。</view>
+      <view class="member-note"><text class="member-note-icon">ⓘ</text>工作人员资料不代表已获管理账号权限。</view>
       <view wx:if="{{canManage}}" class="member-invite-panel">
         <button class="member-channel" bindtap="invite"><image class="member-channel-icon" src="/images/runtime/icons/brand-v2-06.png" mode="aspectFit" /><view><text>邀请教练/管理员</text><text>通过微信发送球队管理协作邀请</text></view></button>
         <button class="member-channel member-channel-border" bindtap="invite"><image class="member-channel-icon" src="/images/runtime/icons/brand-v2-07.png" mode="aspectFit" /><view><text>管理成员二维码</text><text>仅用于教练、领队或管理员</text></view></button>

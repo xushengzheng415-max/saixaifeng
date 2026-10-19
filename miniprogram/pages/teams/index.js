@@ -1,4 +1,5 @@
 var workspace = require('../../utils/workspace')
+var entryCards = require('../../utils/workspace-entry-cards')
 
 function isDevtools() { try { return wx.getSystemInfoSync().platform === 'devtools' } catch (error) { return false } }
 
@@ -17,7 +18,8 @@ Page({
     hasTasks: false,
     statistics: {},
     localVisualQa: false,
-    guestMode: false
+    guestMode: false,
+    createVisible:false
   },
 
   onLoad: function(options) {
@@ -44,6 +46,7 @@ Page({
         hasTasks: true,
         errorText: ''
       })
+      this.formatDemoCards()
       return
     }
     if (workspace.isGuestReviewEnabled(options) || !workspace.hasAuthenticatedUser()) {
@@ -58,7 +61,8 @@ Page({
       this.getTabBar().syncFromPage(2)
     }
     if (this.data.localVisualQa) return
-    if (this.data.guestMode) return
+    if (this.data.guestMode && !workspace.hasAuthenticatedUser()) return
+    if (this.data.guestMode) this.setData({ guestMode: false })
     if (!workspace.hasAuthenticatedUser()) {
       this.loadGuestDemo()
       return
@@ -77,6 +81,10 @@ Page({
     return workspace.loadContext().then(function(context) {
       that.applyContext(context)
     }).catch(function(error) {
+      if (String(error.message || '').indexOf('尚未建立可用工作空间') >= 0) {
+        that.setData({loading:false,errorText:'',teams:[],hasTeams:false,showTeamEmpty:true,canManage:true,teamTasks:[],hasTasks:false,workspaceName:'我的球队'})
+        return
+      }
       that.setData({ loading: false, errorText: error.message || '球队中心加载失败' })
     })
   },
@@ -84,14 +92,14 @@ Page({
   applyContext: function(context) {
     if (!context || !context.currentWorkspace) return
     var current = context.currentWorkspace
-    var teams = context.teams || []
+    var teams = entryCards.fromHome(context,'team')
     var teamTasks = (context.eventTasks || []).filter(function(item) {
       return item.audience === 'team'
     }).map(function(item) {
       return Object.assign({}, item, { swipeStyle:'transform:translateX(0px)', swipeOpen:false })
     })
     this.setData({
-      loading: false,
+      loading: context.homeEntriesVersion !== 'home-entries/2',
       errorText: '',
       workspaceName: current.name,
       workspaceTypeText: current.isTemporary ? '临时球队协作空间' : '当前机构球队资产',
@@ -99,7 +107,7 @@ Page({
       canManage: workspace.hasPermission('team.manage', context) || !teams.length,
       teams: teams,
       hasTeams: teams.length > 0,
-      showTeamEmpty: !teams.length,
+      showTeamEmpty: context.homeEntriesVersion === 'home-entries/2' && !teams.length,
       teamTasks: teamTasks,
       hasTasks: teamTasks.length > 0,
       statistics: context.statistics || {}
@@ -108,31 +116,25 @@ Page({
 
   onSwitchWorkspace: function() {
     if (this.data.guestMode) return workspace.promptLogin('登录后可查看和切换已授权的机构球队空间。')
-    wx.navigateTo({ url: '/pages/workspace/select/select' })
+    wx.switchTab({ url: '/pages/profile/profile' })
   },
 
   onCreateTeam: function() {
+    if (this.data.localVisualQa) return wx.showToast({title:'演示状态不创建数据',icon:'none'})
     if (this.data.guestMode) return workspace.promptLogin('当前是球队功能演示，登录后可创建球队并保存资料。')
-    if (!this.data.canManage) {
-      wx.showToast({ title: '当前机构未授予球队管理权限', icon: 'none' })
-      return
-    }
-    wx.navigateTo({ url: '/pages/guide/team-info/team-info' })
+    if (!workspace.hasAuthenticatedUser()) return workspace.promptLogin('登录后可创建自己的球队。')
+    this.setData({createVisible:true})
   },
+  closeCreateSheet:function(){this.setData({createVisible:false})},
+  onQuickCreated:function(){return this.loadData(true)},
+  onQuickComplete:function(){this.setData({createVisible:false});return this.loadData(true)},
 
   onTeamTap: function(event) {
     if (this.data.guestMode) return workspace.promptLogin('当前展示示例球队。登录后可进入真实球队并管理球员资料。')
-    var id = event.currentTarget.dataset.id
+    var id = (event.detail || {}).id || event.currentTarget.dataset.id
     var team = (this.data.teams || []).find(function(item) { return item.id === id })
     if (!team) return
-    wx.setStorageSync('teamInfo', {
-      _id: team.id,
-      teamId: team.id,
-      teamName: team.name,
-      teamLogo: team.logo,
-      teamCode: team.teamCode
-    })
-    wx.navigateTo({ url: '/pages/team/team' })
+    return entryCards.open(this,team,workspace,wx)
   },
 
   onTaskTap: function(event) {
@@ -222,6 +224,8 @@ Page({
     })
   },
 
+  formatDemoCards: function() { this.setData({teams:this.data.teams.map(function(item) { return entryCards.format(Object.assign({},item,{type:'team',playerCountState:'ready',badgeText:'',actionText:'查看示例'})) })}) },
+
   loadGuestDemo: function() {
     this.setData({
       localVisualQa: false, guestMode: true, loading: false, errorText: '',
@@ -238,5 +242,6 @@ Page({
       hasTasks: true,
       statistics: { teamCount: 2, playerCount: 34 }
     })
+    this.formatDemoCards()
   }
 })

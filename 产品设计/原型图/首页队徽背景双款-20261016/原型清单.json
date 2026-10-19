@@ -1,0 +1,173 @@
+{
+  "format": "prototype-design",
+  "version": 1,
+  "project": "赛小蜂足球",
+  "plan": "页面方案.json",
+  "plan_revision": 1,
+  "scope": [
+    "P01A",
+    "P01B"
+  ],
+  "deferred": [],
+  "pages": [
+    {
+      "id": "P01A",
+      "name": "A款-放大模糊",
+      "portal": "mini",
+      "state": "normal",
+      "source": "设计源/A款-放大模糊.html",
+      "output": "小程序/首页/A款-放大模糊.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full_page": true,
+      "status": "rendered",
+      "template_decision": {
+        "selected_pattern": "project:home-entry-card",
+        "mode": "adapt-structure",
+        "reason": "沿用现有首页数据层级，仅探索队徽背景样式",
+        "source_urls": [
+          "miniprogram/pages/home/home.wxml",
+          "miniprogram/pages/home/home.wxss",
+          "docs/ICON_SYSTEM.md"
+        ],
+        "keep": [
+          "现有赛事球队信息",
+          "共享标签",
+          "球员库人数",
+          "固定底栏与胶囊安全区"
+        ],
+        "remove": [
+          "原卡片独立球场底图"
+        ],
+        "adapt": [
+          "A队徽放大模糊铺满",
+          "B低透明队徽水印",
+          "保持文字对比与清晰前景队徽"
+        ]
+      },
+      "capture_adjustments": [
+        "data-export-bottom: nav"
+      ],
+      "sha256": "9dc20701a5dcabf93ea21ebee57d003d7d0f935185feb3add61772af886c83e0",
+      "rendered_at": "2026-10-16T05:04:53.627Z",
+      "review": {
+        "status": "passed",
+        "checks": [
+          "文字精简",
+          "布局",
+          "素材",
+          "滚动与固定栏"
+        ],
+        "notes": "逐张查看两款390宽PNG；375/390/414宽检查图片、文字不溢出，胶囊与标题留距，首屏固定底栏不盖卡片。原型无业务点击。"
+      }
+    },
+    {
+      "id": "P01B",
+      "name": "B款-低透明水印",
+      "portal": "mini",
+      "state": "normal",
+      "source": "设计源/B款-低透明水印.html",
+      "output": "小程序/首页/B款-低透明水印.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full_page": true,
+      "status": "rendered",
+      "template_decision": {
+        "selected_pattern": "project:home-entry-card",
+        "mode": "adapt-structure",
+        "reason": "沿用现有首页数据层级，仅探索队徽背景样式",
+        "source_urls": [
+          "miniprogram/pages/home/home.wxml",
+          "miniprogram/pages/home/home.wxss",
+          "docs/ICON_SYSTEM.md"
+        ],
+        "keep": [
+          "现有赛事球队信息",
+          "共享标签",
+          "球员库人数",
+          "固定底栏与胶囊安全区"
+        ],
+        "remove": [
+          "原卡片独立球场底图"
+        ],
+        "adapt": [
+          "A队徽放大模糊铺满",
+          "B低透明队徽水印",
+          "保持文字对比与清晰前景队徽"
+        ]
+      },
+      "capture_adjustments": [
+        "data-export-bottom: nav"
+      ],
+      "sha256": "ddebdca619c6ecefa9b16f67e0cbd58fa1111db8b1937e9e34931090baa89ba8",
+      "rendered_at": "2026-10-16T05:04:54.434Z",
+      "review": {
+        "status": "passed",
+        "checks": [
+          "文字精简",
+          "布局",
+          "素材",
+          "滚动与固定栏"
+        ],
+        "notes": "逐张查看两款390宽PNG；375/390/414宽检查图片、文字不溢出，胶囊与标题留距，首屏固定底栏不盖卡片。原型无业务点击。"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "path": "设计源/共享素材/赛事标志.png",
+      "source": ".codex-artifacts/home-card-details-20261016/native-project/assets/logo-0.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/陆零後队徽.png",
+      "source": ".codex-artifacts/home-card-details-20261016/native-project/assets/logo-1.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/立洋队徽.png",
+      "source": ".codex-artifacts/home-card-details-20261016/native-project/assets/logo-2.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/球场背景.jpg",
+      "source": "miniprogram/images/runtime/home-roles-emerald-stadium-v1.jpg",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/消息.svg",
+      "source": "miniprogram/images/icons/bell-white.svg",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/导航-0.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-home.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/导航-1.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-event.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/导航-2.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-team.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/导航-3.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-training.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    },
+    {
+      "path": "设计源/共享素材/导航-4.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-profile.png",
+      "license": "项目既有素材，用户授权本次设计预览"
+    }
+  ],
+  "transitions": []
+}

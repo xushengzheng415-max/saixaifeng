@@ -89,10 +89,10 @@ Page({
     }
   },
 
-  // 添加球员
+  // 球员认领（转发家长匹配认领）
   onAddPlayer() {
     wx.navigateTo({
-      url: '/pages/team/player-add/player-add'
+      url: '/pages/team/player-invite/player-invite?teamId=' + encodeURIComponent(this.data.teamId || '')
     })
   },
 

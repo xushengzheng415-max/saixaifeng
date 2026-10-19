@@ -1,0 +1,43 @@
+{
+  "success": true,
+  "result": {
+    "result": {
+      "route": "pages/home/home",
+      "role": "赛事组织者",
+      "window": 390,
+      "rows": [
+        {
+          "id": "",
+          "dataset": {},
+          "left": 17,
+          "right": 373,
+          "top": 218.5,
+          "bottom": 395.09375,
+          "width": 356,
+          "height": 176.59375
+        },
+        {
+          "id": "",
+          "dataset": {},
+          "left": 35,
+          "right": 196,
+          "top": 333.09375,
+          "bottom": 376.09375,
+          "width": 161,
+          "height": 43
+        },
+        [],
+        {
+          "id": "",
+          "dataset": {},
+          "left": 17,
+          "right": 373,
+          "top": 591.078125,
+          "bottom": 649.078125,
+          "width": 356,
+          "height": 58
+        }
+      ]
+    }
+  }
+}

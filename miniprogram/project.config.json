@@ -28,7 +28,11 @@
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [],
-    "include": []
+    "include": [
+      { "type": "folder", "value": "pages/team/roster-poster" },
+      { "type": "file", "value": "utils/roster-card-poster.js" },
+      { "type": "file", "value": "utils/roster-poster-paint.js" }
+    ]
   },
   "appid": "wx57164cca8676f411",
   "editorSetting": {},

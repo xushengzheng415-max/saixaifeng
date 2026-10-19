@@ -14,8 +14,25 @@ const appId = () => text(process.env.SERVICE_ACCOUNT_APP_ID)
 const appSecret = () => text(process.env.SERVICE_ACCOUNT_APP_SECRET)
 const sessions = db.collection('service_entry_sessions')
 
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+// CloudBase 行锁冲突（TransactionBusy / -501001）是瞬时并发保护。登记入口的读类与
+// 幂等写类操作统一做有限退避重试，避免偶发行锁把用户挡在登记页外。
+const BUSY_PATTERN = /transactionbusy|transaction is busy|-501001/i
+const isBusyText = value => BUSY_PATTERN.test(text(value))
+const asBusyText = failure => text(failure && failure.code) + ' ' + text(failure && (failure.message || failure.error))
+async function retryBusy(run, attempts, label) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await run() }
+    catch (error) {
+      if (attempt >= attempts - 1 || !isBusyText(asBusyText(error))) throw error
+      console.warn('[service-entry] busy retry', label, attempt + 1)
+      await sleep(200 * (attempt + 1))
+    }
+  }
+}
+
 async function document(collection,id) {
-  try { return one(await db.collection(collection).doc(id).get()) }
+  try { return one(await retryBusy(() => db.collection(collection).doc(id).get(), 4, 'doc:' + collection)) }
   catch(error) { if (/getfail|not exist|not found/i.test(text(error.message))) return null; throw error }
 }
 async function getJson(url) {
@@ -86,6 +103,12 @@ async function completeOAuth(event) {
     if (user && user.phoneVerified === true && /^1[3-9]\d{9}$/.test(phone) && user.pcServiceRebindRequired !== true) {
       verifiedUser = { id:text(user._id), phone }
     }
+  }
+  if(verifiedUser&&gate.purpose==='player_invite_entry'){
+    const canonical=(await db.collection('users').where(_.or([{phone:verifiedUser.phone},{phoneNumber:verifiedUser.phone}])).limit(3).get()).data||[]
+    if(new Set(canonical.map(u=>text(u._id))).size!==1||text(canonical[0]?._id)!==verifiedUser.id||canonical[0]?.phone&&canonical[0]?.phoneNumber&&text(canonical[0].phone)!==text(canonical[0].phoneNumber))return fail('ACCOUNT_CONFLICT','手机号账号存在冲突，请联系管理员')
+    const recovered=await require('./serviceRegistrationRecovery.cjs').afterOAuth(db,{userId:verifiedUser.id,openId:text(oauth.openid),phone:verifiedUser.phone},gate._id)
+    if(recovered)return {...recovered,purpose:gate.purpose,phoneVerified:true,resumed:true}
   }
   const token = crypto.randomBytes(32).toString('hex')
   await sessions.add({ data:{ tokenHash:hash(token), gateId:text(gate._id), entryKey:text(gate.entryKey), purpose:text(gate.purpose), officialOpenId:text(oauth.openid), unionId:text(oauth.unionid), active:true, phoneVerified:Boolean(verifiedUser), userId:verifiedUser?verifiedUser.id:'', phone:verifiedUser?verifiedUser.phone:'', expiresAt:new Date(Date.now()+12*60*60*1000), createTime:db.serverDate(), updateTime:db.serverDate() } })
@@ -175,7 +198,15 @@ async function context(event) {
   if (!invite || text(invite.type)!=='team_player' || !['active','pending'].includes(text(invite.status)) || time(invite.expiresAt)<=Date.now() || text(invite.token)!==text(gate.entryKey)) throw new Error('球员入队邀请已失效，请联系球队')
   const team = await document('teams',invite.teamId)
   if (!team || text(team._id)!==text(gate.teamId)) throw new Error('球队已变化，请重新扫码')
-  return { success:true, purpose:gate.purpose, teamName:text(team.name||team.teamName), participantMode:text(invite.participantMode), phoneVerified:session.phoneVerified===true, phoneMasked:session.phoneVerified ? text(session.phone).slice(0,3)+'****'+text(session.phone).slice(7) : '' }
+  // 赛事/卡套模板目录只是「参赛赛事」下拉的附加数据，属于后台发布事务的高频写入对象；
+  // 其文档被占用时不能阻断整个登记页，取不到就退化为空列表。
+  let cardContexts=[]
+  if(session.phoneVerified){
+    try{cardContexts=(await retryBusy(() => require('./registrationCardContext.cjs').contexts(db,gate), 3, 'card-contexts')).map(({tournamentId,name})=>({tournamentId,name}))}
+    catch(error){console.warn('[service-entry] card contexts skipped:',text(error.message))}
+  }
+  const registrationResume=await require('./serviceRegistrationResume.cjs').restore(cloud,loaded)
+  return { success:true, purpose:gate.purpose, teamName:text(team.name||team.teamName), participantMode:text(invite.participantMode), targetedPlayer:Boolean(invite.playerId), registeredPlayerId:text(session.registeredPlayerId), cardContexts, registrationResume, registrationVersion:'player-registration/3', phoneVerified:session.phoneVerified===true, phoneMasked:session.phoneVerified ? text(session.phone).slice(0,3)+'****'+text(session.phone).slice(7) : '' }
 }
 async function claimTeam(event) {
   const current=await context(event)
@@ -191,19 +222,29 @@ async function claimTeam(event) {
   const result=invoked&&invoked.result||{}
   return result.success?result:fail(text(result.code)||'CLAIM_FAILED',text(result.message)||'球队认领失败，请重试')
 }
-async function joinPlayer(event) {
+async function playerRegistration(event,operation) {
   const current=await context(event)
-  if (!current.phoneVerified || current.purpose!=='player_invite_entry') return fail('PLAYER_AUTH_REQUIRED','请先验证手机号')
-  const invoked=await cloud.callFunction({ name:'getMiniWorkspace', data:{
-    action:'acceptServiceTeamPlayer', serviceEntrySession:text(event.serviceEntrySession),
-    name:text(event.name), birthDate:text(event.birthDate),
-    guardianRelation:text(event.guardianRelation),
-    authorizationAgreed:event.authorizationAgreed===true
-  } })
+  if(!current.phoneVerified||current.purpose!=='player_invite_entry') return fail('PLAYER_AUTH_REQUIRED','请先验证手机号')
+  const invoked=await cloud.callFunction({name:'getMiniWorkspace',data:{...event,action:'servicePlayerRegistration',operation}})
   const result=invoked&&invoked.result||{}
-  if (!result.success) return fail(text(result.code)||'PLAYER_JOIN_FAILED',text(result.message)||'球员登记失败，请重试')
-  if (!result.parentProfileUrl) return fail('PLAYER_PROFILE_PENDING','球员已关联，但资料入口暂不可用，请联系球队负责人')
-  return result
+  return result.success?result:fail(result.code||'PLAYER_REGISTRATION_FAILED',result.message||'球员资料处理失败，请重试')
+}
+async function joinPlayer(event) { return playerRegistration(event,'submit') }
+async function uploadPhoto(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceRegistrationMedia.cjs').upload(cloud,db,await sessionFor(event),event) }
+async function playerCard(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceRegistrationMedia.cjs').card(cloud,db,await sessionFor(event),event) }
+// submit/confirm_restore 内部另有事务级重试与回执幂等，此处为外层兜底。
+async function withBusyRetry(action, handler, event) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const result = await handler(event)
+      if (attempt >= 4 || !(result && result.success === false) || !isBusyText(asBusyText(result))) return result
+      console.warn('[service-entry] busy response, retrying', action, attempt + 1)
+    } catch (error) {
+      if (attempt >= 4 || !isBusyText(asBusyText(error))) throw error
+      console.warn('[service-entry] busy error, retrying', action, attempt + 1)
+    }
+    await sleep(300 * (attempt + 1))
+  }
 }
 module.exports = async function handleServiceEntry(action,event) {
   try {
@@ -211,9 +252,20 @@ module.exports = async function handleServiceEntry(action,event) {
     if (action==='completeServiceEntryOAuth') return await completeOAuth(event)
     if (action==='serviceEntrySendSms') return await sendSms(event)
     if (action==='serviceEntryVerifySms') return await verifySms(event)
-    if (action==='serviceEntryContext') return await context(event)
     if (action==='serviceEntryClaimTeam') return await claimTeam(event)
-    if (action==='serviceEntryJoinPlayer') return await joinPlayer(event)
+    if (action==='serviceEntryUploadPhoto') return await uploadPhoto(event)
+    if (action==='serviceEntryPlayerCard') return await playerCard(event)
+    if (action==='serviceEntryContext') return await withBusyRetry(action, context, event)
+    if (action==='serviceEntryJoinPlayer') return await withBusyRetry(action, joinPlayer, event)
+    if (action==='serviceEntrySearchPlayers') return await withBusyRetry(action, e => playerRegistration(e,'search'), event)
+    if (action==='serviceEntrySelectPlayer') return await withBusyRetry(action, e => playerRegistration(e,'select'), event)
+    if (action==='serviceEntryCheckPlayerNumber') return await withBusyRetry(action, e => playerRegistration(e,'check_number'), event)
+    if (action==='serviceEntryConfirmRestore') return await withBusyRetry(action, e => playerRegistration(e,'confirm_restore'), event)
+    if (action==='serviceEntrySavePlayerDraft') return await withBusyRetry(action, async e => require('./serviceRegistrationResume.cjs').save(db, await sessionFor(e), e), event)
     return fail('ENTRY_ACTION_INVALID','不支持的登记操作')
-  } catch(error) { return fail(text(error.code)||'SERVICE_ENTRY_FAILED',text(error.message)||'登记暂不可用，请稍后重试') }
+  } catch(error) {
+    // 行锁冲突重试耗尽后给出可重试的友好提示，绝不把数据库原始报错抛给用户
+    if (isBusyText(asBusyText(error))) return fail('SERVICE_BUSY','系统繁忙，请稍后重试')
+    return fail(text(error.code)||'SERVICE_ENTRY_FAILED',text(error.message)||'登记暂不可用，请稍后重试')
+  }
 }

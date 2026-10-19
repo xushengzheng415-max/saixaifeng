@@ -37,11 +37,17 @@ if (import.meta.env.DEV && typeof window !== 'undefined' && window.location.href
 }
 
 const routes = [
+  {
+    path: '/tutorials',
+    name: 'OperationTutorials',
+    component: () => import('../views/tutorials/OperationTutorials.vue'),
+    meta: { requiresAuth: false, skipAuthCheck: true, title: '操作教程' }
+  },
   { path:'/data-center', component:() => import('../views/layout/LayoutView.vue'), meta:{requiresAuth:true,title:'数据中心'}, children:[{path:'',component:() => import('../views/data/DataCenter.vue')}] },
   {
     path: '/quick-demo-draw-screen/:id',
     name: 'QuickDemoDrawScreen',
-    beforeEnter: to => String(import.meta.env.BASE_URL).startsWith('/preview/admin/') && String(to.params.id).startsWith('demo-') ? true : '/tournament-space',
+    beforeEnter: to => ['/admin/', '/preview/admin/'].includes(String(import.meta.env.BASE_URL)) && String(to.params.id).startsWith('demo-') ? true : '/tournament-space',
     component: () => import('../views/tournament/QuickTournamentConsole.vue'),
     props: route => ({ tournamentId:String(route.params.id) }),
     meta: { requiresAuth:false, title:'演示抽签大屏' }
@@ -580,22 +586,25 @@ function hasLocalOrganization() {
   }
 }
 
-function needsOrganizerOnboarding(to) {
+async function needsOrganizerOnboarding(to) {
   const role = String(localStorage.getItem('currentRole') || localStorage.getItem('role') || '').toLowerCase()
   // needsOrganizerOnboarding 只服务主办方。平台管理员没有 orgId 也不该有机构，
   // 历史实现让它走到这里，于是平台负责人被当成“尚未开户的主办方”推进了机构引导。
   if (isPlatformSession()) return false
-  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/service-account-binding' || to.path === '/assistance' || to.path === '/tournament-staff') return false
+  if (role !== 'organizer' || to.path === '/organization-onboarding' || to.path === '/assistance' || to.path === '/tournament-staff') return false
   if (to.meta.requiresAuth !== true) return false
   try {
     const user = JSON.parse(localStorage.getItem('userInfo') || '{}')
     if (user.isPlatformOwner === true && ['/tournament-center-admin', '/system'].includes(to.path)) return false
   } catch { /* 交给后续机构引导处理 */ }
+  if(['/tournament-space','/service-account-binding'].includes(to.path)){
+    try{const {callFunction}=await import('../utils/cloud');const state=await callFunction('onboardingWorkspace',{action:'state'});return !state?.success || state.registrationComplete!==true}catch{return true}
+  }
   return !hasLocalOrganization()
 }
 
 async function needsOrganizerServiceBinding(to) {
-  if (to.path === '/service-account-binding' || to.path === '/tournament-staff') return false
+  if (['/service-account-binding','/tournament-staff','/organization-onboarding'].includes(to.path)) return false
   if (!hasLocalOrganization()) return false
   const loginType = localStorage.getItem('loginType') || ''
   if (loginType !== 'wechat') return false
@@ -804,14 +813,11 @@ router.beforeEach(async (to, from, next) => {
       next(getDefaultPathByRole())
       return
     }
-    if (needsOrganizerOnboarding(to)) {
+    if (await needsOrganizerOnboarding(to)) {
       next('/organization-onboarding')
       return
     }
-    if (await needsOrganizerServiceBinding(to)) {
-      next('/service-account-binding')
-      return
-    }
+    if(await needsOrganizerServiceBinding(to)){next('/service-account-binding');return}
     next()
   } else {
     // 尝试恢复云开发登录态（刷新页面场景）
@@ -830,14 +836,11 @@ router.beforeEach(async (to, from, next) => {
         next(getDefaultPathByRole())
         return
       }
-      if (needsOrganizerOnboarding(to)) {
+      if (await needsOrganizerOnboarding(to)) {
         next('/organization-onboarding')
         return
       }
-      if (await needsOrganizerServiceBinding(to)) {
-        next('/service-account-binding')
-        return
-      }
+      if(await needsOrganizerServiceBinding(to)){next('/service-account-binding');return}
       next()
     } else {
       if (to.path !== '/login' && to.fullPath.startsWith('/')) {

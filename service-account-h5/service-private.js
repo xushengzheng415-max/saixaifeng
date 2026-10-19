@@ -33,7 +33,7 @@
 
   function beginOAuth() {
     loading('正在连接微信服务号…')
-    api({ action: 'servicePrivateOAuthUrl' }).then(function (result) {
+    api({ action: 'servicePrivateOAuthUrl', returnUrl: location.origin + location.pathname }).then(function (result) {
       if (!result.success || !result.authorizeUrl) throw new Error(result.error || '服务号授权入口暂不可用')
       location.replace(result.authorizeUrl)
     }).catch(function (error) { showError(error.message, beginOAuth) })
@@ -53,7 +53,7 @@
   }
 
   function roleLabel(value) {
-    return ({ guardian: '家长', referee: '裁判', team: '球队', organizer: '主办方' })[value] || value
+    return ({ guardian: '家长', player: '球员', referee: '裁判', team: '球队', organizer: '主办方' })[value] || value
   }
 
   function statusLabel(value) {
@@ -82,8 +82,8 @@
     var extra = type === 'child'
       ? (item.teamName || '球队待关联') + (item.jerseyNumber ? ' · ' + item.jerseyNumber + '号' : '')
       : type === 'team'
-        ? String(item.playerCount || 0) + ' 名球员'
-        : statusLabel(item.status) + ' · ' + String(item.matchCount || 0) + ' 场比赛'
+        ? (item.playerCount == null ? '' : String(item.playerCount) + ' 名球员')
+        : statusLabel(item.status)
     return '<article class="entity-card">' + imageOrMark(item.avatar || item.logo, name, 'entity-logo') + '<div><strong>' + escapeHtml(name) + '</strong><span>' + escapeHtml(extra) + '</span></div></article>'
   }
 
@@ -103,11 +103,12 @@
     var childHtml = (data.children || []).map(function (item) { return entityCard(item, 'child') }).join('')
     var teamHtml = (data.teams || []).map(function (item) { return entityCard(item, 'team') }).join('')
     var tournamentHtml = (data.tournaments || []).map(function (item) { return entityCard(item, 'tournament') }).join('')
-    var refereeHtml = data.referee ? '<article class="referee-summary"><span>' + mark(data.referee.name, '裁') + '</span><div><strong>' + escapeHtml(data.referee.name) + '</strong><small>' + escapeHtml(data.referee.level || '裁判等级待完善') + ' · ' + Number(data.referee.matchCount || 0) + ' 场执裁</small></div><a href="./?entry=workbench">进入任务</a></article>' : ''
+    var refereeHtml = data.referee ? '<article class="referee-summary"><span>' + mark(data.referee.name, '裁') + '</span><div><strong>' + escapeHtml(data.referee.name) + '</strong><small>' + escapeHtml(data.referee.level || '裁判等级待完善') + '</small></div><a href="./?entry=workbench">进入任务</a></article>' : ''
     var matchesHtml = (data.matches || []).map(matchCard).join('')
     app.innerHTML = '<section class="private-hero"><span>赛小蜂足球 · 私有数据</span><h1>我的数据</h1><p>' + escapeHtml(data.phoneMasked || '') + '</p><div>' + (roles.length ? roles.map(function (role) { return '<b>' + escapeHtml(role) + '</b>' }).join('') : '<b>暂无业务关系</b>') + '</div></section>' +
       (refereeHtml ? '<section class="private-section"><header><h2>我的执裁</h2><span>工作入口</span></header>' + refereeHtml + '</section>' : '') +
       section('我的孩子', (data.children || []).length, childHtml) +
+      section('我的球员档案', (data.players || []).length, (data.players || []).map(function (item) { return entityCard(item, 'child') }).join('')) +
       section('我的球队', (data.teams || []).length, teamHtml) +
       section('我的赛事', (data.tournaments || []).length, tournamentHtml) +
       section('相关比赛', (data.matches || []).length, matchesHtml) +

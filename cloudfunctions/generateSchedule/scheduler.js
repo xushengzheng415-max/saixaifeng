@@ -91,7 +91,8 @@ function slotKey(matchDate, matchTime, venue) {
   return `${matchDate}|${matchTime}|${venue}`
 }
 
-function dayAllowed(date, matchDays) {
+function dayAllowed(date, matchDays, matchDates) {
+  if (Array.isArray(matchDates) && matchDates.length) return matchDates.indexOf(dateText(date)) >= 0
   if (!Array.isArray(matchDays) || matchDays.length === 0) return true
   const names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
   return matchDays.indexOf(names[date.getDay()]) >= 0
@@ -277,7 +278,7 @@ function assign(matches, config, occupiedInput) {
     for (let dayOffset = 0; dayOffset < maximumDays && !placed; dayOffset += 1) {
       const day = new Date(startDate)
       day.setDate(day.getDate() + dayOffset)
-      if (!dayAllowed(day, config.matchDays)) continue
+      if (!dayAllowed(day, config.matchDays, config.matchDates)) continue
       checkedDays += 1
       const currentDate = dateText(day)
       if (policy.allowedDates.length && policy.allowedDates.indexOf(currentDate) < 0) continue

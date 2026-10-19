@@ -205,6 +205,7 @@
         </nav>
 
         <div v-if="route.path.includes('/draw')" class="sidebar-pro-badge">♛　PRO 专业版 · 已开通</div>
+        <RouterLink v-if="currentTutorial" class="sidebar-tutorial-button" :to="{ path: '/tutorials', query: { lesson: currentTutorial } }" target="_blank" rel="noopener noreferrer">看本页教程</RouterLink>
 
       </aside>
 
@@ -216,6 +217,7 @@
           </button>
           <div class="workspace-shell-actions">
             <el-button v-if="isTournamentStaff && route.path !== '/tournament-space'" plain @click="returnToTournamentSpace">返回赛事空间</el-button>
+            <button class="header-action" type="button" @click="openTutorials"><el-icon><Reading /></el-icon><span>操作教程</span></button>
             <button class="header-action" type="button" @click="openHelpCenter"><el-icon><QuestionFilled /></el-icon><span>帮助中心</span></button>
             <button class="notification-action" type="button" :aria-label="pendingStaffInvitationCount ? '查看共享赛事邀请' : '查看站内信'" :title="pendingStaffInvitationCount ? '有共享赛事邀请待接受' : '站内信'" @click="showNotifications"><el-icon><Bell /></el-icon><span>{{ pendingStaffInvitationCount ? '赛事邀请' : '站内信' }}</span><b v-if="unreadNotificationCount" class="notification-count">{{ unreadNotificationCount > 99 ? '99+' : unreadNotificationCount }}</b></button>
             <el-dropdown trigger="click" @command="handleUserCommand">
@@ -291,6 +293,7 @@
         <!-- 主内容区 -->
         <main class="content-area" :class="{ 'workspace-shell-content': usesWorkspaceShell, 'embedded-header-content': usesEmbeddedPageHeader }">
           <div class="admin-content-frame">
+            <RouterLink v-if="currentTutorial && usesWorkspaceShell" class="sidebar-tutorial-button workspace-tutorial-button" :to="{ path: '/tutorials', query: { lesson: currentTutorial } }" target="_blank" rel="noopener noreferrer">看本页教程</RouterLink>
             <router-view />
           </div>
         </main>
@@ -302,11 +305,12 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { tutorialForPath } from '../../utils/operationTutorials'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
-  Postcard, Place, QuestionFilled, Bell
+  Postcard, Place, QuestionFilled, Bell, Reading
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
@@ -324,6 +328,7 @@ const LAYOUT_BOOTSTRAP_CACHE_TTL = 5 * 60 * 1000
 
 const router = useRouter()
 const route = useRoute()
+const currentTutorial = computed(() => tutorialForPath(route.path))
 const usesWorkspaceShell = computed(() => route.meta.workspaceShell === true)
 const usesEmbeddedPageHeader = computed(() => route.meta.embeddedPageHeader === true)
 const unreadNotificationCount = ref(0)
@@ -331,6 +336,11 @@ const pendingStaffInvitationCount = ref(0)
 const accountManagementLabel = computed(() => pendingStaffInvitationCount.value
   ? `账号管理（待接受 ${pendingStaffInvitationCount.value}）`
   : '账号管理')
+
+// 操作教程与帮助中心并列；新标签打开，避免离开未保存的业务表单
+function openTutorials() {
+  window.open(router.resolve('/tutorials').href, '_blank', 'noopener,noreferrer')
+}
 
 function openHelpCenter() {
   router.push(userInfo.value.isPlatformOwner === true ? '/system' : '/assistance')
@@ -1250,6 +1260,11 @@ onUnmounted(() => {
   text-align: center;
   box-shadow: 0 0 16px rgba(244, 198, 61, 0.08) inset;
 }
+
+.sidebar-tutorial-button{display:flex;align-items:center;justify-content:center;flex-shrink:0;min-height:42px;margin:0 14px 18px;padding:10px 14px;border:1px solid rgba(255,255,255,.45);border-radius:6px;background:rgba(0,92,57,.7);color:#fff;font-size:14px;text-decoration:none;box-sizing:border-box}
+.sidebar-tutorial-button:hover{background:#087a48;border-color:#fff}
+.sidebar-tutorial-button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.workspace-tutorial-button{position:fixed;left:18px;bottom:18px;z-index:20;margin:0}
 
 .sidebar-support {
   flex-shrink: 0;

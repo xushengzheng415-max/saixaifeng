@@ -1,17 +1,22 @@
-<view class="page">
-  <image class="stadium-bg" src="/images/runtime/home-roles-emerald-stadium-v1.jpg" mode="aspectFill"></image>
+<view class="page {{homePageClass}}">
+  <image class="stadium-bg" src="{{homeBackgroundImage}}" mode="{{homeBackgroundMode}}"></image>
   <view class="page-shade"></view>
 
-  <view class="content">
+  <view class="content" style="{{homeContentStyle}}">
+    <view class="organizer-nav" wx:if="{{showWorkHome}}"><image class="home-brand-logo" src="/images/brand/logo-saixiaofeng-football.png" mode="aspectFit" aria-label="赛小蜂足球"/></view>
+    <view class="organizer-identity" wx:if="{{showWorkHome}}"><text>{{homeRoleLabel}}</text></view>
+    <block wx:if="{{!showWorkHome}}">
     <view class="topbar {{topbarClass}}" wx:if="{{isLoggedIn}}">
       <view class="topbar-left">
-        <view class="message-button" bindtap="goToMessages">
+        <view class="message-button" wx:if="{{!useEntryHome}}" bindtap="goToMessages">
           <image src="/images/icons/bell-white.svg" mode="aspectFit"></image>
           <text class="message-badge" wx:if="{{hasUnreadMessages}}">{{unreadMessageCount}}</text>
         </view>
-        <text class="role-title">{{roleTitle}}</text>
+        <view class="resource-brand" wx:if="{{useEntryHome}}"><image class="home-brand-logo" src="/images/brand/logo-saixiaofeng-football.png" mode="aspectFit" aria-label="赛小蜂足球"/><text class="home-role-label">{{homeRoleLabel}}</text></view>
+        <text class="role-title" wx:if="{{!useEntryHome}}">{{roleTitle}}</text>
       </view>
     </view>
+    </block>
 
     <block wx:if="{{!isLoggedIn}}">
       <view class="guest-login-guide" bindtap="goToLogin">
@@ -81,14 +86,33 @@
     <view class="loading" wx:if="{{loading}}">正在准备首页…</view>
     <view class="error-card" wx:if="{{errorText}}"><text>{{errorText}}</text><text bindtap="loadData">重新加载</text></view>
 
+    <block wx:if="{{showOrganizerHome}}">
+      <view class="organizer-launch" wx:if="{{!hasOrganizerEvents}}"><image class="launch-photo" src="/images/runtime/organizer-home-stadium-v2.jpg" mode="aspectFill"/><view class="launch-photo-shade"></view><image class="launch-calendar" src="/images/runtime/icons/brand-v2-01.png" mode="aspectFit"/><text class="launch-heading">组织一场比赛</text><text class="launch-description">手机快速发起，电脑接续编排。</text><button class="launch-primary" size="default" style="display:flex;align-items:center;justify-content:center;width:310rpx;max-width:100%;margin-left:0;margin-right:0;" bindtap="createTournament"><text class="launch-plus">＋</text><text>创建赛事</text></button></view>
+      <view class="organizer-start" wx:if="{{hasOrganizerEvents}}"><view><text>发起新赛事</text><text>手机创建 · 电脑接续</text></view><button size="mini" bindtap="createTournament">＋ 创建赛事</button></view>
+      <view class="organizer-flow" wx:if="{{!hasOrganizerEvents}}"><text>① 创建赛事</text><text>—</text><text>② 邀请球队</text><text>—</text><text>③ 安排赛程</text></view>
+      <view class="organizer-todos" wx:if="{{hasOrganizerTasks}}"><view class="organizer-heading"><text>待处理</text><text bindtap="goToTodo">全部待办 ›</text></view><view class="organizer-todo-list"><view class="organizer-todo-row" wx:for="{{organizerTasks}}" wx:key="id" bindtap="goToTodo"><image src="{{item.icon}}" mode="aspectFit"/><view><text>{{item.title}}</text><text wx:if="{{item.hasSubtitle}}">{{item.subtitle}}</text></view><text class="organizer-task-count" wx:if="{{item.hasCount}}">{{item.countText}}</text><text class="organizer-task-arrow">›</text></view></view></view>
+      <view class="organizer-resources" wx:if="{{hasHomeEntries}}"><view class="organizer-heading"><text>我的赛事</text><text bindtap="goToSharedEvents">全部赛事 ›</text></view><workspace-entry-card wx:for="{{homeEntries}}" wx:key="key" entry="{{item}}" data-key="{{item.key}}" bindopen="onHomeEntryTap"/></view>
+      <view class="organizer-pc"><view><image src="/images/icons/monitor.svg" mode="aspectFit"/><text>在电脑上完整办赛</text></view><text>复杂赛制、批量导入和抽签编排</text><view class="organizer-pc-address"><text>www.sxffootball.cn</text><button size="mini" bindtap="copyPcAddress">复制网址</button></view></view>
+      <view class="organizer-public" bindtap="goToPublicCenter"><text>先看看公开赛事</text><text>赛事中心　›</text></view>
+    </block>
+
+    <block wx:if="{{showTeamHome}}">
+      <view class="organizer-launch team-launch" wx:if="{{!hasTeamHomeTeams}}"><image class="launch-photo" src="/images/runtime/organizer-home-stadium-v2.jpg" mode="aspectFill"/><view class="launch-photo-shade"></view><image class="launch-calendar team-launch-icon" src="/images/runtime/icons/brand-v1-tab-team.png" mode="aspectFit"/><text class="launch-heading">组建一支球队</text><text class="launch-description">维护球员资料，管理报名与参赛。</text><button class="launch-primary" size="default" style="display:flex;align-items:center;justify-content:center;width:310rpx;max-width:100%;margin-left:0;margin-right:0;" bindtap="createHomeTeam"><text class="launch-plus">＋</text><text>创建球队</text></button></view>
+      <view class="team-home-heading" wx:if="{{hasTeamHomeTeams}}"><text>我的球队</text><button size="mini" bindtap="createHomeTeam">＋ 创建球队</button></view>
+      <view class="team-home-clubs" wx:if="{{hasTeamHomeTeams}}"><workspace-entry-card wx:for="{{teamHomeTeams}}" wx:key="key" entry="{{item}}" data-key="{{item.key}}" bindopen="onHomeEntryTap"/></view>
+      <view class="organizer-todos" wx:if="{{hasTeamHomeTasks}}"><view class="organizer-heading"><text>待处理</text><text bindtap="goToTodo">全部待办 ›</text></view><view class="organizer-todo-list"><view class="organizer-todo-row" wx:for="{{teamHomeTasks}}" wx:key="id" bindtap="goToTodo"><image src="{{item.icon}}" mode="aspectFit"/><view><text>{{item.title}}</text><text wx:if="{{item.hasSubtitle}}">{{item.subtitle}}</text></view><text class="organizer-task-count" wx:if="{{item.hasCount}}">{{item.countText}}</text><text class="organizer-task-arrow">›</text></view></view></view>
+      <view class="team-home-participation" wx:if="{{hasTeamHomeTeams}}"><view class="organizer-heading"><text>我的参赛</text><text bindtap="goToSharedEvents">全部参赛 ›</text></view><workspace-entry-card wx:for="{{teamHomeEvents}}" wx:key="key" entry="{{item}}" data-key="{{item.key}}" bindopen="onHomeEntryTap"/><view class="team-participation-empty" wx:if="{{!hasTeamHomeEvents}}"><block wx:if="{{teamParticipationUnavailable}}"><text>参赛记录暂未就绪</text><text bindtap="loadData">重新加载</text></block><block wx:else><text>暂无参赛记录</text><text bindtap="goToPublicCenter">浏览赛事 ›</text></block></view></view>
+      <view class="organizer-public" bindtap="goToPublicCenter"><text>先看看公开赛事</text><text>赛事中心　›</text></view>
+    </block>
+
+    <block wx:if="{{!showWorkHome}}">
     <block wx:if="{{isLoggedIn}}">
-      <view wx:if="{{isShared}}" class="section">
-        <view class="section-heading"><text>共享赛事</text><text bindtap="goToSharedEvents">全部赛事 ›</text></view>
-        <view class="overview-card shared-overview" wx:for="{{sharedTournaments}}" wx:key="id" data-id="{{item.id}}" bindtap="onTournamentTap">
-          <text class="overview-name">{{item.name}}</text><view class="shared-card-footer"><text class="overview-status">{{item.statusText}}</text><text>进入赛事 ›</text></view>
-        </view>
+      <view wx:if="{{useEntryHome}}" class="entry-section">
+        <view class="section-heading"><text>赛事与球队</text></view>
+        <workspace-entry-card wx:for="{{homeEntries}}" wx:key="key" entry="{{item}}" data-key="{{item.key}}" bindopen="onHomeEntryTap"></workspace-entry-card>
+        <view class="empty-card light-empty" wx:if="{{showHomeEntryEmpty}}"><text>暂无可进入的赛事或球队</text><text class="entry-refresh" bindtap="loadData">刷新</text></view>
       </view>
-      <view wx:if="{{!isShared}}" class="overview-card {{overviewClass}}">
+      <view wx:if="{{!useEntryHome}}" class="overview-card {{overviewClass}}">
 
         <text class="overview-name" wx:if="{{hasOverviewName}}">{{overviewName}}</text>
         <text class="overview-status" wx:if="{{hasOverviewStatus}}">{{overviewStatus}}</text>
@@ -103,7 +127,7 @@
         </view>
       </view>
 
-      <view wx:if="{{!isShared}}" class="task-card">
+      <view wx:if="{{hasTaskCards}}" class="task-card">
         <view class="card-heading"><text>需要我处理</text><text bindtap="goToTodo">全部任务 ›</text></view>
         <view class="task-grid" wx:if="{{hasTaskCards}}">
           <view class="task-item" wx:for="{{homeTaskCards}}" wx:key="id" bindtap="goToTodo">
@@ -118,7 +142,7 @@
         <view class="empty-card" wx:if="{{!hasTaskCards}}">当前没有需要处理的事项</view>
       </view>
 
-      <view class="section" wx:if="{{isTeamCoach}}">
+      <view class="section" wx:if="{{!useEntryHome}}" hidden="{{!isTeamCoach}}">
         <view class="section-heading"><text>我的球队</text><text bindtap="goToTeams">全部球队 ›</text></view>
         <view class="team-card" wx:for="{{teams}}" wx:key="id" data-id="{{item.id}}" bindtap="onTeamTap">
           <image class="team-logo" src="{{item.logo}}" mode="aspectFit"></image>
@@ -130,18 +154,6 @@
           <text class="row-arrow">›</text>
         </view>
         <view class="empty-card light-empty" wx:if="{{!hasTeams}}">当前没有可管理球队</view>
-      </view>
-
-      <view class="section match-section" wx:if="{{isTeamCoach || isOrganizer}}">
-        <view class="section-heading"><text>{{matchSectionTitle}}</text><text bindtap="goToSchedule">全部赛程 ›</text></view>
-        <view class="match-card" wx:for="{{matches}}" wx:key="id" data-id="{{item.tournamentId}}" bindtap="onTournamentTap">
-          <view class="match-date"><text>{{item.dateText}}</text><text>{{item.timeText}}</text><text>{{item.divisionText}}</text><text class="live-dot">{{item.statusText}}</text></view>
-          <view class="match-main">
-            <view class="match-meta"><text>{{item.roundText}}</text><text>{{item.venueText}}</text></view>
-            <view class="versus-row"><view class="match-team"><image src="{{item.homeLogo}}" mode="aspectFit"></image><text>{{item.homeName}}</text></view><text class="versus">VS</text><view class="match-team"><image src="{{item.awayLogo}}" mode="aspectFit"></image><text>{{item.awayName}}</text></view></view>
-          </view>
-        </view>
-        <view class="empty-card light-empty" wx:if="{{!hasMatches}}">当前没有可见比赛</view>
       </view>
 
       <view class="section other-role" wx:if="{{showOtherRoleContent}}">
@@ -159,5 +171,7 @@
         <view class="training-permission-note"><image src="/images/icons/check.svg" mode="aspectFit"></image><text>青训经营数据仅对有权限的机构成员开放</text></view>
       </view>
     </block>
+    </block>
   </view>
+  <quick-create-sheet id="quick-create" visible="{{createVisible}}" kind="{{createKind}}" bindclose="closeCreateSheet" bindcreated="onQuickCreated" bindcomplete="onQuickComplete"/>
 </view>

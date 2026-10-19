@@ -1,0 +1,422 @@
+[
+  {
+    "variant": "A款-放大模糊",
+    "width": 375,
+    "viewportHeight": 844,
+    "documentWidth": 375,
+    "title": {
+      "x": 55,
+      "y": 43,
+      "width": 40,
+      "height": 28,
+      "right": 95,
+      "bottom": 71
+    },
+    "capsule": {
+      "x": 272,
+      "y": 39,
+      "width": 88,
+      "height": 32,
+      "right": 360,
+      "bottom": 71
+    },
+    "section": {
+      "x": 14,
+      "y": 109,
+      "width": 347,
+      "height": 24,
+      "right": 361,
+      "bottom": 133
+    },
+    "cards": [
+      {
+        "x": 14,
+        "y": 149,
+        "width": 347,
+        "height": 198.375,
+        "right": 361,
+        "bottom": 347.375
+      },
+      {
+        "x": 14,
+        "y": 361.375,
+        "width": 347,
+        "height": 184,
+        "right": 361,
+        "bottom": 545.375
+      },
+      {
+        "x": 14,
+        "y": 559.375,
+        "width": 347,
+        "height": 184,
+        "right": 361,
+        "bottom": 743.375
+      }
+    ],
+    "tab": {
+      "x": 0,
+      "y": 762,
+      "width": 375,
+      "height": 82,
+      "right": 375,
+      "bottom": 844
+    },
+    "brokenImages": 0,
+    "counts": [
+      "19",
+      "15"
+    ],
+    "nameOverflow": false
+  },
+  {
+    "variant": "A款-放大模糊",
+    "width": 390,
+    "viewportHeight": 844,
+    "documentWidth": 390,
+    "title": {
+      "x": 55,
+      "y": 43,
+      "width": 40,
+      "height": 28,
+      "right": 95,
+      "bottom": 71
+    },
+    "capsule": {
+      "x": 287,
+      "y": 39,
+      "width": 88,
+      "height": 32,
+      "right": 375,
+      "bottom": 71
+    },
+    "section": {
+      "x": 17,
+      "y": 109,
+      "width": 356,
+      "height": 24,
+      "right": 373,
+      "bottom": 133
+    },
+    "cards": [
+      {
+        "x": 17,
+        "y": 149,
+        "width": 356,
+        "height": 201.28125,
+        "right": 373,
+        "bottom": 350.28125
+      },
+      {
+        "x": 17,
+        "y": 364.28125,
+        "width": 356,
+        "height": 184,
+        "right": 373,
+        "bottom": 548.28125
+      },
+      {
+        "x": 17,
+        "y": 562.28125,
+        "width": 356,
+        "height": 184,
+        "right": 373,
+        "bottom": 746.28125
+      }
+    ],
+    "tab": {
+      "x": 0,
+      "y": 762,
+      "width": 390,
+      "height": 82,
+      "right": 390,
+      "bottom": 844
+    },
+    "brokenImages": 0,
+    "counts": [
+      "19",
+      "15"
+    ],
+    "nameOverflow": false
+  },
+  {
+    "variant": "A款-放大模糊",
+    "width": 414,
+    "viewportHeight": 844,
+    "documentWidth": 414,
+    "title": {
+      "x": 55,
+      "y": 43,
+      "width": 40,
+      "height": 28,
+      "right": 95,
+      "bottom": 71
+    },
+    "capsule": {
+      "x": 311,
+      "y": 39,
+      "width": 88,
+      "height": 32,
+      "right": 399,
+      "bottom": 71
+    },
+    "section": {
+      "x": 17,
+      "y": 109,
+      "width": 380,
+      "height": 24,
+      "right": 397,
+      "bottom": 133
+    },
+    "cards": [
+      {
+        "x": 17,
+        "y": 149,
+        "width": 380,
+        "height": 201.28125,
+        "right": 397,
+        "bottom": 350.28125
+      },
+      {
+        "x": 17,
+        "y": 364.28125,
+        "width": 380,
+        "height": 184,
+        "right": 397,
+        "bottom": 548.28125
+      },
+      {
+        "x": 17,
+        "y": 562.28125,
+        "width": 380,
+        "height": 184,
+        "right": 397,
+        "bottom": 746.28125
+      }
+    ],
+    "tab": {
+      "x": 0,
+      "y": 762,
+      "width": 414,
+      "height": 82,
+      "right": 414,
+      "bottom": 844
+    },
+    "brokenImages": 0,
+    "counts": [
+      "19",
+      "15"
+    ],
+    "nameOverflow": false
+  },
+  {
+    "variant": "B款-低透明水印",
+    "width": 375,
+    "viewportHeight": 844,
+    "documentWidth": 375,
+    "title": {
+      "x": 55,
+      "y": 43,
+      "width": 40,
+      "height": 28,
+      "right": 95,
+      "bottom": 71
+    },
+    "capsule": {
+      "x": 272,
+      "y": 39,
+      "width": 88,
+      "height": 32,
+      "right": 360,
+      "bottom": 71
+    },
+    "section": {
+      "x": 14,
+      "y": 109,
+      "width": 347,
+      "height": 24,
+      "right": 361,
+      "bottom": 133
+    },
+    "cards": [
+      {
+        "x": 14,
+        "y": 149,
+        "width": 347,
+        "height": 201.28125,
+        "right": 361,
+        "bottom": 350.28125
+      },
+      {
+        "x": 14,
+        "y": 364.28125,
+        "width": 347,
+        "height": 184,
+        "right": 361,
+        "bottom": 548.28125
+      },
+      {
+        "x": 14,
+        "y": 562.28125,
+        "width": 347,
+        "height": 184,
+        "right": 361,
+        "bottom": 746.28125
+      }
+    ],
+    "tab": {
+      "x": 0,
+      "y": 762,
+      "width": 375,
+      "height": 82,
+      "right": 375,
+      "bottom": 844
+    },
+    "brokenImages": 0,
+    "counts": [
+      "19",
+      "15"
+    ],
+    "nameOverflow": false
+  },
+  {
+    "variant": "B款-低透明水印",
+    "width": 390,
+    "viewportHeight": 844,
+    "documentWidth": 390,
+    "title": {
+      "x": 55,
+      "y": 43,
+      "width": 40,
+      "height": 28,
+      "right": 95,
+      "bottom": 71
+    },
+    "capsule": {
+      "x": 287,
+      "y": 39,
+      "width": 88,
+      "height": 32,
+      "right": 375,
+      "bottom": 71
+    },
+    "section": {
+      "x": 17,
+      "y": 109,
+      "width": 356,
+      "height": 24,
+      "right": 373,
+      "bottom": 133
+    },
+    "cards": [
+      {
+        "x": 17,
+        "y": 149,
+        "width": 356,
+        "height": 201.28125,
+        "right": 373,
+        "bottom": 350.28125
+      },
+      {
+        "x": 17,
+        "y": 364.28125,
+        "width": 356,
+        "height": 184,
+        "right": 373,
+        "bottom": 548.28125
+      },
+      {
+        "x": 17,
+        "y": 562.28125,
+        "width": 356,
+        "height": 184,
+        "right": 373,
+        "bottom": 746.28125
+      }
+    ],
+    "tab": {
+      "x": 0,
+      "y": 762,
+      "width": 390,
+      "height": 82,
+      "right": 390,
+      "bottom": 844
+    },
+    "brokenImages": 0,
+    "counts": [
+      "19",
+      "15"
+    ],
+    "nameOverflow": false
+  },
+  {
+    "variant": "B款-低透明水印",
+    "width": 414,
+    "viewportHeight": 844,
+    "documentWidth": 414,
+    "title": {
+      "x": 55,
+      "y": 43,
+      "width": 40,
+      "height": 28,
+      "right": 95,
+      "bottom": 71
+    },
+    "capsule": {
+      "x": 311,
+      "y": 39,
+      "width": 88,
+      "height": 32,
+      "right": 399,
+      "bottom": 71
+    },
+    "section": {
+      "x": 17,
+      "y": 109,
+      "width": 380,
+      "height": 24,
+      "right": 397,
+      "bottom": 133
+    },
+    "cards": [
+      {
+        "x": 17,
+        "y": 149,
+        "width": 380,
+        "height": 201.28125,
+        "right": 397,
+        "bottom": 350.28125
+      },
+      {
+        "x": 17,
+        "y": 364.28125,
+        "width": 380,
+        "height": 184,
+        "right": 397,
+        "bottom": 548.28125
+      },
+      {
+        "x": 17,
+        "y": 562.28125,
+        "width": 380,
+        "height": 184,
+        "right": 397,
+        "bottom": 746.28125
+      }
+    ],
+    "tab": {
+      "x": 0,
+      "y": 762,
+      "width": 414,
+      "height": 82,
+      "right": 414,
+      "bottom": 844
+    },
+    "brokenImages": 0,
+    "counts": [
+      "19",
+      "15"
+    ],
+    "nameOverflow": false
+  }
+]

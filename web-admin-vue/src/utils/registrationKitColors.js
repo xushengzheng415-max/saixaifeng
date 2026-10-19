@@ -31,6 +31,9 @@ const COLOR_TOKEN_PATTERN = /荧光黄|海军蓝|藏青|深灰|酒红|深绿|天
 
 export function registrationColorToHex(value) {
   const normalized = String(value || '').trim().toLowerCase()
+  if (/^#[0-9a-f]{6}$/i.test(normalized)) return KIT_COLOR_OPTIONS.find(item=>item.value.toLowerCase()===normalized)?.value || ''
+  const exact=KIT_COLOR_OPTIONS.find(item=>item.label===normalized)
+  if(exact)return exact.value
   const token = normalized.match(COLOR_TOKEN_PATTERN)?.[0] || ''
   return REGISTRATION_COLOR_MAP[token] || ''
 }
@@ -69,7 +72,7 @@ export function parseRegistrationKitColors(table) {
     Object.entries(columns).forEach(([key, column]) => {
       if (column == null) return
       const raw = String(cellAt(row, column)?.text || '').trim()
-      if (!raw) return
+      if (!raw || /^(选择颜色|请选择)$/.test(raw)) return
       labels[key] = raw
       const color = registrationColorToHex(raw)
       if (color) colors[key] = color

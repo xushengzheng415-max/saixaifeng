@@ -60,7 +60,7 @@
             <div class="console-actions">
               <el-select v-model="visibleGroupFilter"><el-option label="全部小组" value="all" /><el-option v-for="group in groups" :key="group.code" :label="group.name" :value="group.code" /></el-select>
               <el-button plain @click="openScreenConfig"><el-icon><Setting /></el-icon>大屏配置</el-button>
-              <el-button plain @click="projectScreen"><el-icon><Monitor /></el-icon>投大屏</el-button>
+              <el-button tag="a" plain :href="screenAddress" target="_blank" rel="noopener noreferrer" @click="projectScreen"><el-icon><Monitor /></el-icon>投大屏</el-button>
               <el-button plain @click="copyScreenLink">复制大屏链接</el-button>
               <el-button plain><el-icon><Setting /></el-icon>签位编号设置</el-button>
               <el-button plain :disabled="!undoStack.length" @click="undo"><el-icon><Back /></el-icon>撤销一步</el-button>
@@ -178,7 +178,7 @@ const screenBackgroundStyle = computed(() => {
   const preset = screenBackgrounds.find(item => item.id === screenConfig.value.background)
   return preset ? { background:preset.css } : {}
 })
-function openScreenConfig() { loadScreenConfig(); screenConfigDraft.value = { ...screenConfig.value }; screenConfigVisible.value = true }
+function openScreenConfig() { loadScreenConfig(); screenConfigDraft.value = { ...screenConfig.value, title:screenConfig.value.title || tournament.value.name || '' }; screenConfigVisible.value = true }
 function chooseScreenBackground(preset) { screenConfigDraft.value.background = preset.id; screenConfigDraft.value.theme = preset.theme }
 function onScreenThemeChange(theme) { if(screenConfigDraft.value.background === 'custom') return; if(theme === 'light') screenConfigDraft.value.background = 'light'; else if(screenConfigDraft.value.background === 'light') screenConfigDraft.value.background = 'emerald' }
 function removeScreenBackground() { screenConfigDraft.value.backgroundImage = ''; if (screenConfigDraft.value.background === 'custom') chooseScreenBackground(screenBackgrounds[0]) }
@@ -218,11 +218,11 @@ function screenConfigKey() { return `${drawChannelKey()}:config` }
 const screenAddress = computed(() => {
   if (isDemoMode()) return `${window.location.origin}${import.meta.env.BASE_URL}#/quick-demo-draw-screen/${encodeURIComponent(props.tournamentId)}?divisionId=${encodeURIComponent(divisionId.value)}`
   const params = new URLSearchParams({ divisionId: divisionId.value, divisionName: divisionName.value, tournamentLogo: tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '', mode: 'quick', format: 'group', theme: screenConfig.value.theme, showProgress: screenConfig.value.showProgress ? '1' : '0', showSlotNumber: screenConfig.value.showSlotNumber ? '1' : '0' })
-  if (screenConfig.value.title) params.set('title', screenConfig.value.title)
+  if (screenConfig.value.title || tournament.value.name) params.set('title', screenConfig.value.title || tournament.value.name)
   return `https://screen.sxffootball.cn/draw/${encodeURIComponent(props.tournamentId)}?${params.toString()}`
 })
-function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved, background:saved.background || (saved.theme === 'light' ? 'light' : 'emerald') } } catch {} }
-function saveScreenConfig() { if(backgroundReading.value) return; const next = { ...screenConfigDraft.value }; try { localStorage.setItem(screenConfigKey(), JSON.stringify(next)); localStorage.setItem(drawChannelKey(), JSON.stringify({ ...JSON.parse(localStorage.getItem(drawChannelKey()) || '{}'), screen:next })) } catch { ElMessage.error('背景保存失败，请压缩图片或移除后重试'); return }; screenConfig.value = next; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
+function loadScreenConfig() { try { const saved = JSON.parse(localStorage.getItem(screenConfigKey()) || 'null'); if (saved) screenConfig.value = { ...screenConfig.value, ...saved, title:['比赛抽签','赛事抽签','赛事抽签大屏'].includes(String(saved.title || '').trim()) ? '' : String(saved.title || '').trim(), background:saved.background || (saved.theme === 'light' ? 'light' : 'emerald') } } catch {} }
+function saveScreenConfig() { if(backgroundReading.value) return; const title = String(screenConfigDraft.value.title || '').trim(); const next = { ...screenConfigDraft.value, title:title === String(tournament.value.name || '').trim() ? '' : title }; try { localStorage.setItem(screenConfigKey(), JSON.stringify(next)); localStorage.setItem(drawChannelKey(), JSON.stringify({ ...JSON.parse(localStorage.getItem(drawChannelKey()) || '{}'), screen:next })) } catch { ElMessage.error('背景保存失败，请压缩图片或移除后重试'); return }; screenConfig.value = next; screenConfigVisible.value = false; publishScreenState(); ElMessage.success('大屏配置已保存') }
 async function copyScreenLink() { try { await navigator.clipboard.writeText(screenAddress.value); ElMessage.success('大屏链接已复制') } catch { ElMessage.warning(`请手动复制：${screenAddress.value}`) } }
 async function publishScreenState() {
   if (isScreen.value) return
@@ -234,9 +234,6 @@ async function publishScreenState() {
 }
 function projectScreen() {
   loadScreenConfig()
-  publishScreenState()
-  const opened = window.open(screenAddress.value, '_blank', 'noopener,noreferrer')
-  if (!opened) ElMessage.warning('浏览器阻止了大屏窗口，请允许弹窗后重试')
   publishScreenState()
 }
 

@@ -1,10 +1,108 @@
 <view class="shared-page">
-  <view class="return-link" bindtap="onBack">‹ 赛事列表</view>
   <view wx:if="{{loading}}" class="state">加载中…</view>
-  <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="loadSharedEvent">重新加载</button></view>
-  <view wx:else>
-    <view class="summary"><view class="name">{{name}}</view><text class="status">{{statusText}}</text><view class="meta"><text>{{dateText}}</text><text>{{location}}</text></view></view>
-    <view class="modules"><view class="module" wx:for="{{modules}}" wx:key="id" data-id="{{item.id}}" bindtap="onModule"><text>{{item.title}}</text><view class="module-end"><text wx:if="{{item.tag}}" class="tag">{{item.tag}}</text><text>›</text></view></view></view>
-    <view wx:if="{{!hasModules}}" class="note">当前未授权手机模块，请联系主办方。</view>
-  </view>
+  <view wx:elif="{{errorText}}" class="state"><text>{{errorText}}</text><button bindtap="loadSharedEvent">重新加载</button><text bindtap="onBack">返回赛事列表</text></view>
+  <block wx:else>
+    <view class="hero">
+      <view class="hero-top"><text class="badge">共享赛事</text></view>
+      <text class="event-name">{{name}}</text><text class="event-meta">{{dateText}} · {{location}}</text>
+      <view class="hero-bottom"><text>{{statusText}}</text><text bindtap="onBack">赛事列表 ›</text></view>
+    </view>
+    <view class="summary"><view><text>赛程场次</text><text>{{matchCount}}</text></view><view><text>已结束</text><text>{{completed}}</text></view><view><text>未完成</text><text>{{remaining}}</text></view></view>
+    <view wx:if="{{rankAllowed}}" class="standings">
+      <view class="standings-heading"><text class="section-title">赛事榜单</text></view>
+      <text wx:if="{{rankError}}" class="empty">{{rankError}}</text>
+      <block wx:else>
+        <view class="group-tabs"><view wx:for="{{rankModeTabs}}" wx:for-item="tab" wx:key="id" class="group-tab {{tab.itemClass}}" data-id="{{tab.id}}" bindtap="onRankMode">{{tab.name}}</view></view>
+        <view class="group-tabs"><view wx:for="{{rankDivisions}}" wx:for-item="tab" wx:key="id" class="group-tab {{tab.itemClass}}" data-id="{{tab.id}}" bindtap="onRankDivision">{{tab.name}}</view></view>
+        <view wx:if="{{hasGroupTabs}}" class="group-tabs"><view wx:for="{{rankGroups}}" wx:for-item="tab" wx:key="id" class="group-tab {{tab.itemClass}}" data-id="{{tab.id}}" bindtap="onRankGroup">{{tab.name}}</view></view>
+        <block wx:if="{{rankModeStandings}}">
+          <view wx:if="{{showKnockoutList}}" class="bracket">
+            <view wx:if="{{showBracketTabs}}" class="bracket-tabs"><view wx:for="{{bracketTabs}}" wx:for-item="tab" wx:key="id" class="bracket-tab {{tab.itemClass}}" data-id="{{tab.id}}" bindtap="onBracketTab">{{tab.name}}</view></view>
+            <block wx:for="{{bracketNodes}}" wx:for-item="node" wx:key="id">
+              <view wx:if="{{node.isRound}}" class="bracket-round">
+                <text class="bracket-title">{{node.name}}</text>
+                <view class="bracket-grid">
+                  <view class="bracket-card" wx:for="{{node.rows}}" wx:for-item="row" wx:key="id">
+                    <text class="bracket-meta">{{row.meta}} · {{row.status}}</text>
+                    <view class="bracket-side"><image wx:if="{{row.homeLogo}}" class="bracket-logo" src="{{row.homeLogo}}"/><text class="bracket-name">{{row.home}}</text></view>
+                    <text class="bracket-mid">{{row.score}}</text>
+                    <view class="bracket-side"><image wx:if="{{row.awayLogo}}" class="bracket-logo" src="{{row.awayLogo}}"/><text class="bracket-name">{{row.away}}</text></view>
+                  </view>
+                </view>
+              </view>
+              <view wx:else class="bracket-link">
+                <view class="bracket-unit {{node.unitClass}}" wx:for="{{node.units}}" wx:for-item="unit" wx:key="*this">
+                  <view wx:if="{{node.merge}}" class="bl-v bl-left"></view>
+                  <view wx:if="{{node.merge}}" class="bl-v bl-right"></view>
+                  <view wx:if="{{node.merge}}" class="bl-h"></view>
+                  <view class="bl-mid"></view>
+                </view>
+              </view>
+            </block>
+          </view>
+          <block wx:elif="{{showStandingsTable}}">
+            <view class="table-head"><text>排名</text><text>球队</text><text>场次</text><text>积分</text></view>
+            <view class="table-row" wx:for="{{standingsRows}}" wx:for-item="team" wx:key="id"><text>{{team.rank}}</text><view class="standing-team"><text>{{team.name}}</text></view><text>{{team.played}}</text><text>{{team.points}}</text></view>
+            <button wx:if="{{showStandingsMore}}" class="rank-more" bindtap="onRankMore">{{standingsMoreText}}</button>
+          </block>
+          <text wx:if="{{showStandingsEmpty}}" class="empty">暂无已核定积分</text>
+        </block>
+        <block wx:if="{{rankModeScorers}}">
+          <view wx:if="{{showScorersTable}}" class="table-head"><text>排名</text><text>球员</text><text>球队</text><text>进球</text></view>
+          <view class="table-row" wx:for="{{scorerRows}}" wx:for-item="row" wx:key="id"><text>{{row.rank}}</text><view class="standing-team"><text>{{row.name}}</text></view><view class="scorer-team"><text>{{row.teamName}}</text></view><text>{{row.goals}}</text></view>
+          <button wx:if="{{showScorersMore}}" class="rank-more" bindtap="onRankMore">{{scorersMoreText}}</button>
+          <text wx:if="{{showScorersEmpty}}" class="empty">暂无进球记录</text>
+        </block>
+        <block wx:if="{{rankModeDiscipline}}">
+          <view wx:if="{{showDisciplinePlayers}}" class="table-head"><text>排名</text><text>球员</text><text>球队</text><text>红</text><text>黄</text></view>
+          <view class="table-row" wx:for="{{disciplinePlayerRows}}" wx:for-item="row" wx:key="id"><text>{{row.rank}}</text><view class="standing-team"><text>{{row.name}}</text></view><view class="scorer-team"><text>{{row.teamName}}</text></view><text>{{row.redCards}}</text><text>{{row.yellowCards}}</text></view>
+          <button wx:if="{{showDisciplinePlayersMore}}" class="rank-more" bindtap="onRankMore">{{disciplinePlayersMoreText}}</button>
+          <view wx:if="{{showDisciplineTeams}}" class="table-head"><text>排名</text><text>球队</text><text>红</text><text>黄</text></view>
+          <view class="table-row" wx:for="{{disciplineTeamRows}}" wx:for-item="row" wx:key="id"><text>{{row.rank}}</text><view class="standing-team"><text>{{row.name}}</text></view><text>{{row.redCards}}</text><text>{{row.yellowCards}}</text></view>
+          <button wx:if="{{showDisciplineTeamsMore}}" class="rank-more" bindtap="onRankMore">{{disciplineTeamsMoreText}}</button>
+          <text wx:if="{{showDisciplineEmpty}}" class="empty">暂无红黄牌记录</text>
+        </block>
+      </block>
+    </view>
+    <view class="modules"><view class="module" wx:for="{{modules}}" wx:key="id" data-id="{{item.id}}" bindtap="onModule"><image src="{{item.icon}}" mode="aspectFit"/><text>{{item.title}}</text><text class="arrow">›</text></view></view>
+    <view id="shared-schedule" class="schedule">
+      <text class="section-title">赛程赛果</text>
+      <text wx:if="{{!hasMatches}}" class="empty">当前赛事暂无可查看比赛</text>
+      <view wx:for="{{days}}" wx:for-item="day" wx:for-index="dayIndex" wx:key="id" class="schedule-day">
+        <view class="day-heading"><text class="day-title">{{day.date}}</text><text wx:if="{{day.hasMultiple}}" class="day-position">{{day.position}} / {{day.count}} · 左右滑动</text></view>
+        <swiper class="day-matches" current="{{day.current}}" data-index="{{dayIndex}}" bindanimationfinish="onDayChange" duration="220" disable-touch="{{!day.hasMultiple}}">
+          <swiper-item wx:for="{{day.matches}}" wx:for-item="match" wx:key="id">
+            <view class="match" data-id="{{match.id}}" data-mode="{{match.mode}}" data-open="{{match.canOpen}}" bindtap="onMatch">
+              <view class="match-meta"><text>{{match.matchMeta}}</text><text>{{match.venue}}</text></view>
+              <view class="opponents"><view><image wx:if="{{match.hasHomeLogo}}" src="{{match.homeLogo}}" mode="aspectFit"/><text>{{match.homeName}}</text></view><text class="score">{{match.score}}</text><view><image wx:if="{{match.hasAwayLogo}}" src="{{match.awayLogo}}" mode="aspectFit"/><text>{{match.awayName}}</text></view></view>
+              <view class="match-bottom"><text>{{match.status}}</text><text>{{match.actionText}} ›</text></view>
+            </view>
+          </swiper-item>
+        </swiper>
+      </view>
+    </view>
+    <view wx:if="{{rankSheet}}" class="sheet-mask" catchtouchmove="onSheetStop" bindtap="onRankSheetClose">
+      <view class="sheet" catchtap="onSheetStop">
+        <view class="sheet-head"><text class="sheet-title">{{rankSheetTitle}}</text><text class="sheet-close" catchtap="onRankSheetClose">收起</text></view>
+        <scroll-view class="sheet-body" scroll-y>
+          <block wx:if="{{sheetShowStandings}}">
+            <view class="table-head"><text>排名</text><text>球队</text><text>场次</text><text>积分</text></view>
+            <view class="table-row" wx:for="{{sheetRows}}" wx:for-item="team" wx:key="id"><text>{{team.rank}}</text><view class="standing-team"><text>{{team.name}}</text></view><text>{{team.played}}</text><text>{{team.points}}</text></view>
+          </block>
+          <block wx:if="{{sheetShowScorers}}">
+            <view class="table-head"><text>排名</text><text>球员</text><text>球队</text><text>进球</text></view>
+            <view class="table-row" wx:for="{{sheetRows}}" wx:for-item="row" wx:key="id"><text>{{row.rank}}</text><view class="standing-team"><text>{{row.name}}</text></view><view class="scorer-team"><text>{{row.teamName}}</text></view><text>{{row.goals}}</text></view>
+          </block>
+          <block wx:if="{{sheetShowPlayers}}">
+            <view class="table-head"><text>排名</text><text>球员</text><text>球队</text><text>红</text><text>黄</text></view>
+            <view class="table-row" wx:for="{{sheetRows}}" wx:for-item="row" wx:key="id"><text>{{row.rank}}</text><view class="standing-team"><text>{{row.name}}</text></view><view class="scorer-team"><text>{{row.teamName}}</text></view><text>{{row.redCards}}</text><text>{{row.yellowCards}}</text></view>
+          </block>
+          <block wx:if="{{sheetShowTeams}}">
+            <view class="table-head"><text>排名</text><text>球队</text><text>红</text><text>黄</text></view>
+            <view class="table-row" wx:for="{{sheetRows}}" wx:for-item="row" wx:key="id"><text>{{row.rank}}</text><view class="standing-team"><text>{{row.name}}</text></view><text>{{row.redCards}}</text><text>{{row.yellowCards}}</text></view>
+          </block>
+        </scroll-view>
+      </view>
+    </view>
+  </block>
 </view>

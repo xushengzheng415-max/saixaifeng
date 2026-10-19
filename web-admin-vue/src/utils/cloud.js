@@ -90,9 +90,13 @@ const CLOUD_FUNCTION_MAP = {
  */
 const shareRead = createInflightReads()
 function readIdentityKey() {
+  // 身份信号只保留授权相关项：token、平台上下文、staff 标志、assistance、会话版本。
+  // userInfo/currentOrganization 等属于展示缓存，布局引导期会被正常重写（补机构名、
+  // 手机号等）；纳入比对会把成功的在途响应误判成账号切换而静默丢弃，导致整页列表为空。
+  // 真实的账号切换必然轮换 token，仍会被这里捕获。
   const platform = isPlatformContext()
   const token = platform ? getPlatformAuthToken() : (localStorage.getItem(AUTH_TOKEN_KEY) || '')
-  return JSON.stringify([platform, token, platform ? getPlatformSession() : null, localStorage.getItem('currentUser'), localStorage.getItem('userInfo'), localStorage.getItem('currentOrganization'), localStorage.getItem('currentOrg'), localStorage.getItem('role'), localStorage.getItem('currentRole'), localStorage.getItem('authSessionVersion'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY), sessionStorage.getItem('sxfTournamentStaff'), sessionStorage.getItem('sxfStaffTournamentId'), sessionStorage.getItem('sxfStaffPermissions')])
+  return JSON.stringify([platform, token, platform ? getPlatformSession() : null, localStorage.getItem('authSessionVersion'), localStorage.getItem(ASSISTANCE_CONTEXT_KEY), sessionStorage.getItem('sxfTournamentStaff'), sessionStorage.getItem('sxfStaffTournamentId'), sessionStorage.getItem('sxfStaffPermissions')])
 }
 const playerReadCache = createSessionReadCache({
   identity: () => (isPlatformContext() ? getPlatformAuthToken() : localStorage.getItem(AUTH_TOKEN_KEY)) ? readIdentityKey() : '',
@@ -388,7 +392,14 @@ export async function queryList(collection, options = {}) {
     return result.data || []
   } catch (err) {
     if (options.throwOnError) throw err
-    if (err?.code === 'READ_CACHE_INVALIDATED' || err?.code === 'SESSION_ACCOUNT_MISMATCH') return []
+    if (err?.code === 'READ_CACHE_INVALIDATED' || err?.code === 'SESSION_ACCOUNT_MISMATCH') {
+      // 请求在途期间本地展示缓存被布局层重写时，成功响应会被当作身份切换丢弃。
+      // 授权信号未变（token 等仍一致）时重试一次自愈，避免整页列表凭空为空。
+      if (!options.__identityRetry) {
+        return queryList(collection, { ...options, __identityRetry: true })
+      }
+      return []
+    }
     console.error(`[queryList] ${collection} 异常:`, err)
     if (!options.silent) ElMessage.error(`查询 ${collection} 异常: ${err.message}`)
     return []

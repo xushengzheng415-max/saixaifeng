@@ -1,4 +1,5 @@
 var workspace = require('../../utils/workspace')
+var entryCards = require('../../utils/workspace-entry-cards')
 
 Page({
   data: {
@@ -31,7 +32,8 @@ Page({
     pendingCount: 0,
     featuredTask: null,
     hasFeaturedTask: false,
-    guestMode: false
+    guestMode: false,
+    createVisible:false
   },
 
   onLoad: function(options) {
@@ -50,7 +52,8 @@ Page({
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().syncFromPage(1)
     }
-    if (this.data.guestMode) return
+    if (this.data.guestMode && !workspace.hasAuthenticatedUser()) return
+    if (this.data.guestMode) this.setData({ guestMode: false })
     if (!this.data.visualQa) {
       if (!workspace.hasAuthenticatedUser()) {
         this.loadGuestDemo()
@@ -78,11 +81,20 @@ Page({
   applyContext: function(context) {
     if (!context || !context.currentWorkspace) return
     var current = context.currentWorkspace
-    var tournaments = context.tournaments || []
+    var selectedRole = entryCards.role(context,workspace)
+    var participationReady = context.participatingEntriesVersion === 'team-participation/1' && context.participatingEntriesState === 'ready'
+    var participationFailed = context.participatingEntriesState === 'failed'
+    var participationWaiting = selectedRole === 'team_coach' && !participationReady && !participationFailed && !this.data.guestMode && !this.data.visualQa
+    var tournaments = selectedRole === 'team_coach' ? entryCards.teamEvents(context) : entryCards.fromHome(context,'tournament').map(function(item) {
+      return Object.assign({},item,{isHosted:!item.isShared,isParticipating:false})
+    })
+    if (participationWaiting || (selectedRole === 'team_coach' && participationFailed)) tournaments = []
     var hosted = tournaments.filter(function(item) { return item.isHosted })
     var participating = tournaments.filter(function(item) { return item.isParticipating })
     var shared = tournaments.filter(function(item) { return item.isShared })
     var activeRelation = this.data.activeRelation
+    if (selectedRole === 'team_coach') activeRelation = 'participating'
+    else if (activeRelation === 'participating') activeRelation = 'hosted'
     if (activeRelation === 'shared' && !shared.length) activeRelation = 'hosted'
     if (activeRelation === 'hosted' && !hosted.length && participating.length) activeRelation = 'participating'
     if (!hosted.length && !participating.length && shared.length) activeRelation = 'shared'
@@ -104,9 +116,11 @@ Page({
       })
     }
     if (shared.length) tabs.push({ id: 'shared', text: '共享赛事', count: shared.length, itemClass: activeRelation === 'shared' ? 'active' : '' })
+    if (!tabs.length) tabs.push({id:activeRelation,text:selectedRole === 'team_coach' ? '我参与的' : '我主办的',count:0,itemClass:'active'})
     this.setData({
-      loading: false,
-      errorText: '',
+      loading: participationWaiting,
+      portalRoleTitle:selectedRole === 'team_coach' ? '球队管理者' : '赛事组织者',
+      errorText: selectedRole === 'team_coach' && participationFailed ? (context.participatingEntriesError || '参赛记录读取失败，请重试') : '',
       workspaceName: current.name,
       workspaceTypeText: current.type === 'tournament_shared' ? '共享赛事空间' : (current.isTemporary ? '临时球队赛事协作' : '当前机构赛事中心'),
       canSwitchWorkspace: (context.workspaces || []).length > 1,
@@ -132,6 +146,14 @@ Page({
     var visible = relation === 'shared' ? this.data.sharedTournaments : relation === 'participating'
       ? this.data.participatingTournaments
       : this.data.hostedTournaments
+    var activeStatus = this.data.activeStatus
+    visible = visible.filter(function(item) {
+      if (activeStatus === 'all') return true
+      var status = String(item.status || '').toLowerCase(), label = item.statusText || ''
+      if (activeStatus === 'ongoing') return ['ongoing','live','in_progress'].indexOf(status) >= 0 || label === '进行中'
+      if (activeStatus === 'ended') return ['completed','finished','ended','archived'].indexOf(status) >= 0 || label === '已结束'
+      return ['draft','registering','scheduled','upcoming','pending','not_started'].indexOf(status) >= 0 || ['待开始','未开始','报名中','筹备中'].indexOf(label) >= 0
+    }).map(function(item) { return item.type ? item : entryCards.format(Object.assign({},item,{type:'tournament',badgeText:item.isShared ? '共享' : '',metaLines:[item.dateText].filter(Boolean)})) })
     var tabs = (this.data.relationTabs || []).map(function(item) {
       item.itemClass = item.id === relation ? 'active' : ''
       return item
@@ -139,7 +161,8 @@ Page({
     this.setData({
       relationTabs: tabs,
       visibleTournaments: visible,
-      hasTournaments: visible.length > 0
+      hasTournaments: visible.length > 0,
+      showEventEmpty: visible.length === 0 && !this.data.loading && !this.data.errorText
     })
   },
 
@@ -148,38 +171,37 @@ Page({
     this.applyRelation()
   },
 
+  retryLoad: function() { return this.loadData() },
+
   onStatusTap: function(event) {
     var activeStatus = event.currentTarget.dataset.id || 'all'
     var statusFilters = this.data.statusFilters.map(function(item) {
       return Object.assign({}, item, { itemClass: item.id === activeStatus ? 'event-filter-active' : '' })
     })
     this.setData({ activeStatus: activeStatus, statusFilters: statusFilters })
+    this.applyRelation()
   },
 
   onSwitchWorkspace: function() {
     if (this.data.guestMode) return workspace.promptLogin('登录后可查看和切换已授权的机构赛事空间。')
-    var that = this
-    workspace.chooseWorkspace(workspace.readContext()).then(function(context) {
-      that.applyContext(context)
-    }).catch(function(error) {
-      wx.showToast({ title: error.message || '切换失败', icon: 'none' })
-    })
+    wx.switchTab({url:'/pages/profile/profile'})
   },
 
   onCreateTournament: function() {
+    if (this.data.visualQa) return wx.showToast({title:'演示状态不创建数据',icon:'none'})
     if (this.data.guestMode) return workspace.promptLogin('登录后可创建赛事并保存赛事配置。')
-    if (!this.data.canManage) {
-      wx.showToast({ title: '当前机构未授予赛事管理权限', icon: 'none' })
-      return
-    }
-    wx.navigateTo({ url: '/pages/tournament/create/create' })
+    if (!workspace.hasAuthenticatedUser()) return workspace.promptLogin('登录后可创建自己的赛事。')
+    this.setData({createVisible:true})
   },
+  closeCreateSheet:function(){this.setData({createVisible:false})},
+  onQuickCreated:function(){return this.loadData(true)},
+  onQuickComplete:function(){this.setData({createVisible:false})},
 
   onTournamentTap: function(event) {
     if (this.data.guestMode) return workspace.promptLogin('当前是赛事功能演示。登录后可进入赛事管理；公开赛事可从首页免登录浏览。')
-    var id = event.currentTarget.dataset.id
-    var shared = (this.data.sharedTournaments || []).some(function(item) { return item.id === id })
-    if (id) wx.navigateTo({ url: '/pages/tournament/' + (shared ? 'shared/shared' : 'detail/detail') + '?id=' + encodeURIComponent(id) })
+    var key = (event.detail || {}).key || event.currentTarget.dataset.key
+    var entry = (this.data.visibleTournaments || []).filter(function(item) { return item.key === key })[0]
+    return entryCards.open(this,entry,workspace,wx)
   },
 
   onMatchTap: function(event) {
@@ -215,6 +237,7 @@ Page({
       eventTasks: [{ id: 'task-1', title: '赛事审批待处理', subtitle: '报名 6 · 名单 3 · 赛果 1', tournamentId: 'visual-pro', audience: 'organizer' }], featuredTask: { id: 'task-1', title: '赛事审批待处理', subtitle: '报名 6 · 名单 3 · 赛果 1', tournamentId: 'visual-pro', audience: 'organizer' }, hasFeaturedTask: true, hasTasks: true, pendingCount: 10,
       eventSchedule: [], hasSchedule: false
     })
+    this.applyRelation()
   },
 
   loadGuestDemo: function() {

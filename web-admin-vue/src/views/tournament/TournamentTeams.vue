@@ -114,6 +114,14 @@
 
         </div>
         <div class="registration-review-selection">
+          <el-button
+            v-if="isDemoModeActive"
+            type="success"
+            :loading="demoApproving"
+            :disabled="!pendingTeams.length || batchApproving"
+            title="通过当前组别全部待审核虚拟球队"
+            @click="approveDemoTeams"
+          >一键审核通过</el-button>
           <el-checkbox
             :model-value="allVisibleApprovalsSelected"
             :indeterminate="someVisibleApprovalsSelected"
@@ -124,7 +132,8 @@
           <el-button
             type="success"
             :loading="batchApproving"
-            :disabled="selectedApprovalIds.length === 0"
+            :disabled="selectedApprovalIds.length === 0 || demoApproving"
+            :plain="isDemoModeActive"
             @click="approveAllVisibleApplications"
           >
             <el-icon><CircleCheckFilled /></el-icon>批量确认参赛
@@ -132,7 +141,7 @@
         </div>
       </section>
 
-      <section v-if="teamCardMode" class="team-card-toolbar"><strong>参赛球队 <span>{{ filteredTeams.length }}</span></strong><el-input v-model="searchKeyword" aria-label="搜索球队" placeholder="搜索球队" clearable :prefix-icon="Search" /></section>
+      <section v-if="teamCardMode" class="team-card-toolbar"><strong>参赛球队 <span>{{ filteredTeams.length }}</span></strong><el-button v-if="isDemoModeActive" type="success" :loading="demoApproving" :disabled="!pendingTeams.length || batchApproving" title="通过当前组别全部待审核虚拟球队" @click="approveDemoTeams">一键审核通过</el-button><el-input v-model="searchKeyword" aria-label="搜索球队" placeholder="搜索球队" clearable :prefix-icon="Search" /></section>
 
       <section v-if="isApplicationReviewView" class="simple-application-filters" :class="{ 'professional-application-filters': isProfessionalApplicationView }">
         <el-input v-model="searchKeyword" placeholder="搜索球队名称" clearable :prefix-icon="Search" />
@@ -414,39 +423,15 @@
 
     <el-dialog v-model="targetedInviteResultVisible" title="球队正式版注册邀请已生成" width="820px" destroy-on-close><el-alert type="success" :closable="false" title="当前为正式版球队注册邀请，可将链接或二维码发送给球队负责人；对方仍需登录、确认球队并提交报名审核。"/><div class="targeted-invite-results"><article v-for="item in targetedInviteResults" :key="item.teamId"><img v-if="item.qrCodeUrl" :src="item.qrCodeUrl" alt="球队注册正式版小程序码"/><div v-else class="targeted-code-placeholder">待生成</div><div><strong>{{ item.teamName }}</strong><span>{{ activeDivision.name }}</span><el-tag v-if="item.success" type="success" size="small">正式版邀请</el-tag><el-tag v-else type="danger" size="small">生成失败</el-tag><input :value="item.urlLink || item.error" readonly/></div><footer><el-button link :disabled="!item.urlLink" @click="copyTargetedInvite(item)">复制邀请链接</el-button><el-button link type="success" :disabled="!item.qrCodeUrl" @click="downloadTargetedInviteCode(item)">下载正式版小程序码</el-button></footer></article></div><template #footer><el-button type="primary" @click="targetedInviteResultVisible=false">完成</el-button></template></el-dialog>
 
-    <!-- 添加球队弹窗：字段与球队身份创建球队保持一致 -->
-    <el-dialog
-      v-model="showCreateTeamDialog"
-      :title="createTeamEntryMode === 'upload' ? '上传资料、名单' : '快速添加球队'"
-      :width="createTeamEntryMode === 'upload' ? 'min(1180px, calc(100vw - 48px))' : '620px'"
-      :close-on-click-modal="false"
-      destroy-on-close
-      :teleported="!qaSnapshot"
-    >
-      <div class="create-entry-switch">
-        <button type="button" :class="{ active: createTeamEntryMode === 'manual' }" @click="createTeamEntryMode = 'manual'">快速添加</button>
-        <button type="button" :class="{ active: createTeamEntryMode === 'upload' }" @click="createTeamEntryMode = 'upload'"><el-icon><Upload /></el-icon>上传资料、名单</button>
-      </div>
-
-      <TeamRegistrationWordImporter
-        v-if="createTeamEntryMode === 'upload'"
-        :tournament-id="tournamentId"
-        :division="activeDivision"
-        :available-slots="availableSlots"
-        :existing-team-names="divisionTournamentTeams.map(team => team.name || team.teamName || '')"
-        @cancel="showCreateTeamDialog = false"
-        @success="onRegistrationWordBatchImported"
-      />
-
-      <el-form v-else :model="createTeamForm" label-position="top" class="quick-team-form">
+    <el-dialog v-model="showCreateTeamDialog" title="快速添加球队" width="620px" :close-on-click-modal="false" destroy-on-close :teleported="!qaSnapshot">
+      <el-form :model="createTeamForm" label-position="top" class="quick-team-form">
         <el-form-item label="球队名称" required><el-input v-model="createTeamForm.name" placeholder="输入球队名称" maxlength="50" /></el-form-item>
         <el-form-item label="队徽"><div class="create-logo-row"><el-upload :show-file-list="false" :before-upload="beforeCreateLogoUpload" :http-request="handleCreateLogoUpload" accept="image/*"><el-button plain :loading="uploadingCreateLogo">上传队徽</el-button></el-upload><img v-if="createTeamForm.logoUrl" :src="createTeamForm.logoUrl" class="create-logo-preview" alt="队徽预览" /></div></el-form-item>
       </el-form>
-
-      <template v-if="createTeamEntryMode === 'manual'" #footer>
-        <el-button @click="showCreateTeamDialog = false">取消</el-button>
-        <el-button type="primary" :loading="creatingTeam" @click="submitCreateTeam">添加球队</el-button>
-      </template>
+      <template #footer><el-button @click="showCreateTeamDialog = false">取消</el-button><el-button type="primary" :loading="creatingTeam" @click="submitCreateTeam">添加球队</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="showTeamImportDialog" title="上传资料、名单" width="min(1180px, calc(100vw - 48px))" :close-on-click-modal="false" destroy-on-close :teleported="!qaSnapshot">
+      <TeamRegistrationWordImporter :tournament-id="tournamentId" :tournament-name="tournament.name || tournament.tournamentName || ''" :division="activeDivision" :available-slots="availableSlots" :existing-team-names="divisionTournamentTeams.map(team => team.name || team.teamName || '')" @cancel="showTeamImportDialog = false" @success="onRegistrationWordBatchImported" />
     </el-dialog>
 
     <el-dialog
@@ -588,7 +573,7 @@ import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFuncti
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import TeamRegistrationWordImporter from '../../components/tournament/TeamRegistrationWordImporter.vue'
-import { isDemoMode } from '../../utils/demoMode'
+import { isDemoMode, demoRequest } from '../../utils/demoMode'
 
 const route = useRoute()
 const router = useRouter()
@@ -686,6 +671,7 @@ const applicationSource = ref('')
 const applicationStatus = ref('')
 const applicationDate = ref('')
 const batchApproving = ref(false)
+const demoApproving = ref(false)
 const selectedApprovalIds = ref([])
 const changeTypeFilter = ref('')
 const changeStatusFilter = ref('')
@@ -764,7 +750,7 @@ watch(
 const showCreateTeamDialog = ref(Boolean(qaSnapshot && route.query.action === 'quick-add' && qaRequestedDivisionId === 'qa-division-u16'))
 const creatingTeam = ref(false)
 const createTeamMode = ref('simple')
-const createTeamEntryMode = ref('manual')
+const showTeamImportDialog = ref(false)
 const uploadingCreateLogo = ref(false)
 const parsingCreateWord = ref(false)
 const createWordImportFileName = ref('')
@@ -1423,6 +1409,28 @@ async function retryRegistrationNotification(team) {
   }
 }
 
+async function approveDemoTeams() {
+  if (demoApproving.value || batchApproving.value) return
+  if (!isDemoMode(tournamentId) || !String(tournamentId).startsWith('demo-')) return
+  const divisionId = String(activeDivisionId.value || '')
+  if (!divisionId.startsWith('demo-')) return ElMessage.warning('请先选择演示组别')
+  demoApproving.value = true
+  try {
+    // Direct local dispatch: this shortcut never falls back to a production request.
+    const result = demoRequest('tournamentRegistrationFlow', {
+      action:'approveAllDemoRegistrations', tournamentId, divisionId
+    })
+    if (!result?.success) throw new Error(result?.message || '演示审核失败')
+    selectedApprovalIds.value = []
+    await loadTournamentTeams()
+    ElMessage.success(result.approvedCount ? `已通过 ${result.approvedCount} 支演示球队` : '当前组别没有待审核球队')
+  } catch (error) {
+    ElMessage.error(error.message || '演示审核失败，请重试')
+  } finally {
+    demoApproving.value = false
+  }
+}
+
 async function approveAllVisibleApplications() {
   const selectedIds = new Set(selectedApprovalIds.value)
   const safeRows = divisionTournamentTeams.value.filter(team => selectedIds.has(getRecordId(team)) && isApprovalSelectable(team))
@@ -1539,22 +1547,27 @@ function resetCreateTeamForm() {
 
 function openAddTeamEntry(entry) {
   if (entry === 'virtual' && isDemoModeActive) { openSyntheticTeamDialog(); return }
+  if (entry === 'upload') {
+    if (availableSlots.value <= 0) return ElMessage.warning('参赛名额已满，无法继续添加球队')
+    showCreateTeamDialog.value = false
+    showTeamImportDialog.value = true
+    return
+  }
   openCreateTeamDialog()
-  if (showCreateTeamDialog.value) createTeamEntryMode.value = entry === 'upload' ? 'upload' : 'manual'
 }
 
 function openCreateTeamDialog() {
+  showTeamImportDialog.value = false
   if (availableSlots.value <= 0) {
     ElMessage.warning('参赛名额已满，无法继续添加球队')
     return
   }
   resetCreateTeamForm()
-  createTeamEntryMode.value = 'manual'
   showCreateTeamDialog.value = true
 }
 
 async function onRegistrationWordBatchImported(payload) {
-  showCreateTeamDialog.value = false
+  showTeamImportDialog.value = false
   await Promise.all([loadTournamentTeams(), loadAllTeams()])
   const invitations = Array.isArray(payload?.invitations) ? payload.invitations : []
   if (invitations.length) {
@@ -3097,7 +3110,8 @@ async function reloadTeamWorkspace() {
   pageLoadError.value = ''
   try {
   await loadTournament()
-  await Promise.all([loadTournamentTeams(), loadAllTeams()])
+  await loadTournamentTeams()
+  if (isRegistrationWorkspace.value) await loadAllTeams()
   if (route.query.divisionId !== activeDivisionId.value) await router.replace({ query:{ ...route.query, divisionId:activeDivisionId.value } })
 
   const rawRequestedTab = typeof route.query.tab === 'string' ? route.query.tab : 'all'
@@ -4032,5 +4046,4 @@ onMounted(reloadTeamWorkspace)
   background: #f5f8f5;
   font-size: 11px;
 }
-.create-entry-switch{display:inline-flex;gap:4px;margin-bottom:16px;padding:4px;border:1px solid #dfe7e1;background:#f5f8f6}.create-entry-switch button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 15px;border:0;background:transparent;color:#536159;cursor:pointer}.create-entry-switch button.active{background:#fff;color:#087d41;box-shadow:0 0 0 1px #b9d6c3 inset}.create-entry-switch .el-icon{font-size:15px}
 </style>

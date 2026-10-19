@@ -1,5 +1,15 @@
 var workspace = require('../../../utils/workspace')
 var pointsUI = require('../../../utils/player-points')
+var playerCards = require('../../../utils/player-card')
+
+function scopeKey() {
+  var user = wx.getStorageSync('userInfo') || {}, context = workspace.readContext() || {}
+  return JSON.stringify([String(user._id || user.id || ''), (context.currentWorkspace || {}).id || ''])
+}
+function withTimeout(request, timeout) {
+  var timer
+  return Promise.race([request, new Promise(function(resolve, reject) { timer = setTimeout(function() { reject(new Error('读取超时，请重试')) }, timeout || 12000) })]).finally(function() { clearTimeout(timer) })
+}
 
 function metric(value) { return typeof value === 'number' && Number.isFinite(value) ? value : '—' }
 
@@ -18,6 +28,8 @@ Page({
     teamId: '',
     player: {},
     teamInfo: {},
+    cardScene: null, cardUrl: '', hasDynamicCard: false, hasStaticCard: false,
+    cardLoading: false, cardStateText: '', cardCanRetry: false, hasFallbackPhoto: false, httpsNativeFonts: true,
     stats: { appearances: '—', goals: '—', yellowCards: '—', redCards: '—' },
     cardScore: { level:'待核定', points:'—', progress:'生涯积分待核定', canCustomize:false },
     statisticsNote: '',
@@ -46,11 +58,29 @@ Page({
     if (this.data.playerId && this.data.teamId && !this.data.visualQa && !this.data.loading) this.loadPlayerData(true)
   },
 
+  onHide: function() { this.invalidateRequests() },
+  onUnload: function() { this.invalidateRequests() },
+  invalidateRequests: function() {
+    this._detailEpoch = (this._detailEpoch || 0) + 1
+    this._cardEpoch = (this._cardEpoch || 0) + 1
+    this._detailRequest = null
+    this._cardRequest = null
+    this._imageRequest = null
+    this.setData({ loading: false, cardScene: null, cardUrl: '', hasDynamicCard: false, hasStaticCard: false, hasFallbackPhoto: false })
+  },
+
   loadPlayerData: function(silent) {
+    if (this._detailRequest) return this._detailRequest
     var that = this
-    if (!silent) this.setData({ loading: true, errorText: '' })
+    var epoch = this._detailEpoch = (this._detailEpoch || 0) + 1, scope = scopeKey()
+    function current() { return epoch === that._detailEpoch && scope === scopeKey() }
+    this._cardEpoch = (this._cardEpoch || 0) + 1
+    this._cardRequest = null
+    this._imageRequest = null
+    this.setData({ errorText: '', cardScene: null, cardUrl: '', hasDynamicCard: false, hasStaticCard: false, hasFallbackPhoto: false, cardCanRetry: false, cardStateText: '' })
+    if (silent !== true) this.setData({ loading: true })
     var context = workspace.readContext() || {}
-    return wx.cloud.callFunction({
+    this._detailRequest = withTimeout(wx.cloud.callFunction({
       name: 'getMiniWorkspace',
       data: {
         action: 'teamPlayerDetail',
@@ -58,15 +88,54 @@ Page({
         teamId: this.data.teamId,
         playerId: this.data.playerId
       }
-    }).then(function(response) {
+    })).then(function(response) {
+      if (!current()) return
       var result = response.result || {}
       if (!result.success) throw new Error(result.message || '球员详情加载失败')
       that.setData({pointsEntryAllowed:result.canViewPointsLedger===true})
       that.hydrate(result.player || {}, result.team || {}, result.stats || {}, result.canManage === true, result.dataCenter, result.playerCard)
+      that.loadPlayerCard()
     }).catch(function(error) {
+      if (!current()) return
       that.setData({ loading: false, errorText: error.message || '球员详情加载失败' })
-    })
+    }).finally(function() { if (epoch === that._detailEpoch) that._detailRequest = null })
+    return this._detailRequest
   },
+
+  loadPlayerCard: function() {
+    if (this._imageRequest) return this._imageRequest
+    if (this._cardRequest || !this.data.playerId || !this.data.teamId || this.data.visualQa) return this._cardRequest
+    var that = this, epoch = this._cardEpoch = (this._cardEpoch || 0) + 1, scope = scopeKey()
+    function current() { return epoch === that._cardEpoch && scope === scopeKey() }
+    this.setData({ cardLoading: true, cardCanRetry: false, cardStateText: '球员卡加载中', cardScene: null, cardUrl: '', hasDynamicCard: false, hasStaticCard: false })
+    this._cardRequest = withTimeout(playerCards.read(this.data.playerId, this.data.teamId)).then(function(card) {
+      if (!current()) return
+      var forbidden = card.status === 'forbidden', ready = card.status === 'ready'
+      var dynamic = ready && !!card.cardScene, image = ready && !dynamic && typeof card.cardUrl === 'string' && /^https:\/\//.test(card.cardUrl)
+      var state = forbidden ? '无权查看球员卡' : card.status === 'pending' ? '成卡更新中' : card.status === 'unavailable' ? '暂无球员卡' : '球员卡未加载'
+      that.setData({ cardLoading: false, cardScene: dynamic ? card.cardScene : null, cardUrl: image ? card.cardUrl : '', hasDynamicCard: dynamic, hasStaticCard: image, hasFallbackPhoto: !forbidden && !!that.data.player.photoUrl, cardStateText: dynamic || image ? '' : state, cardCanRetry: !forbidden && !dynamic && !image && card.status !== 'unavailable' })
+    }).catch(function() {
+      if (current()) that.setData({ cardLoading: false, cardStateText: '球员卡未加载，请重试', cardCanRetry: true, hasFallbackPhoto: !!that.data.player.photoUrl })
+    }).finally(function() { if (epoch === that._cardEpoch) that._cardRequest = null })
+    return this._cardRequest
+  },
+  dynamicCardFailed: function() {
+    if (this._imageRequest) return this._imageRequest
+    if (!this.data.hasDynamicCard || this.data.visualQa) return
+    var that=this, epoch=this._cardEpoch=(this._cardEpoch||0)+1, scope=scopeKey()
+    function current(){return epoch===that._cardEpoch&&scope===scopeKey()}
+    this._cardRequest=null
+    this.setData({hasDynamicCard:false,cardScene:null,hasStaticCard:false,cardUrl:'',cardLoading:true,cardCanRetry:false,cardStateText:'正在加载完整球员卡',hasFallbackPhoto:!!this.data.player.photoUrl})
+    this._imageRequest=withTimeout(playerCards.readImage(this.data.playerId,this.data.teamId),25000).then(function(card){
+      if(!current())return
+      var ready=card.status==='ready'&&typeof card.cardUrl==='string'&&/^https:\/\//.test(card.cardUrl),forbidden=card.status==='forbidden',unavailable=card.status==='unavailable'
+      that.setData({cardLoading:false,hasStaticCard:ready,cardUrl:ready?card.cardUrl:'',hasFallbackPhoto:!forbidden&&!!that.data.player.photoUrl,cardStateText:ready?'':forbidden?'无权查看球员卡':unavailable?'暂无球员卡':'球员卡未加载，请重试',cardCanRetry:!ready&&!forbidden&&!unavailable})
+    }).catch(function(){if(current())that.setData({cardLoading:false,cardStateText:'球员卡未加载，请重试',cardCanRetry:true,hasFallbackPhoto:!!that.data.player.photoUrl})}).finally(function(){if(epoch===that._cardEpoch)that._imageRequest=null})
+    return this._imageRequest
+  },
+  cardImageFailed: function() { this.setData({ hasStaticCard: false, cardUrl: '', cardStateText: '球员卡图片未加载', cardCanRetry: true, hasFallbackPhoto: !!this.data.player.photoUrl }) },
+  portraitFailed: function() { this.setData({ hasFallbackPhoto: false }) },
+  previewCard: function() { if (this.data.hasStaticCard) wx.previewImage({ current: this.data.cardUrl, urls: [this.data.cardUrl] }) },
 
   hydrate: function(raw, team, stats, canManage, dataCenter, playerCard) {
     var positionMap = { GK: '守门员', DF: '后卫', MF: '中场', FW: '前锋' }
@@ -93,6 +162,8 @@ Page({
       genderLabel: genderMap[raw.gender] || display(raw.gender),
       strongFootLabel: footMap[raw.strongFoot] || display(raw.strongFoot),
       profileStatusText: display(raw.profileStatusText, '待完善'),
+      claimStatusText: display(raw.claimStatusText, '未认领'),
+      isUnclaimed: raw.isUnclaimed === true,
       identityStatusText: identityMap[String(raw.identityStatus || '').toLowerCase()] || '待人证核验',
       portraitStatusText: portraitMap[String(raw.portraitStatus || '').toLowerCase()] || (raw.photoUrl ? '形象照已上传' : '待形象照'),
       guardianRelationText: relationMap[raw.guardianRelation] || display(raw.guardianRelation),
@@ -113,6 +184,7 @@ Page({
       { id: 'relation', label: '监护关系', value: player.guardianRelationText },
       { id: 'phone', label: '监护手机', value: display(raw.guardianPhoneMasked) },
       { id: 'profile', label: '资料状态', value: player.profileStatusText },
+      { id: 'claim', label: '认领状态', value: player.claimStatusText },
       { id: 'identity', label: '人证核验', value: player.identityStatusText },
       { id: 'portrait', label: '标准形象照', value: player.portraitStatusText }
     ]
@@ -122,7 +194,7 @@ Page({
     if (playerCard && (playerCard.reasonCodes || []).some(function(code){return code.indexOf('MATCH_DURATION_') === 0})) progressText = '比赛时长来源待核对，升级进度待核定'
     if (ready && progress) progressText = progress.nextAt == null ? '已达金卡' : '距下一级 ' + progress.pointsToNext + ' 分'
     var cardScore = { level:ready ? ({bronze:'铜卡', silver:'银卡', gold:'金卡'}[playerCard.tier] || '待核定') : '待核定', points:ready ? String(playerCard.points) : '—', progress:progressText, hasProgress:ready && progress && typeof progress.percent === 'number', progressWidth:ready && progress ? progress.percent + '%' : '', canCustomize:ready && playerCard.canChangeBackground === true }
-    this.setData({ loading: false, errorText: '', player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, cardScore:cardScore, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
+    this.setData({ loading: false, errorText: '', hasFallbackPhoto: !!player.photoUrl, player: player, teamInfo: team, stats: { appearances: metric(stats.appearances), goals: metric(stats.goals), yellowCards: metric(stats.yellowCards), redCards: metric(stats.redCards) }, cardScore:cardScore, statisticsNote: dataCenter && dataCenter.coverage.status !== 'complete' ? '部分比赛记录不完整' : '', detailItems: detailItems, canManage: canManage })
     wx.setNavigationBarTitle({ title: player.name || '球员详情' })
   },
 
@@ -140,6 +212,11 @@ Page({
   previewImage: function() {
     if (!this.data.player.photoUrl) return
     wx.previewImage({ current: this.data.player.photoUrl, urls: [this.data.player.photoUrl] })
+  },
+
+  onInviteProfile: function() {
+    if(!this.data.canManage)return
+    wx.navigateTo({url:'/pages/team/player-invite/player-invite?teamId='+encodeURIComponent(this.data.teamId)+'&targetPlayerId='+encodeURIComponent(this.data.playerId)})
   },
 
   onEdit: function() {
@@ -167,6 +244,6 @@ Page({
 
   loadVisualFixture: function() {
     this.setData({ visualQa: true, playerId: 'visual-player', teamId: 'visual-team' })
-    this.hydrate({ id:'visual-player',name:'张子墨',jerseyName:'ZIMO',jerseyNumber:'10',photoUrl:'',birthDate:'2014-03-18',gender:'male',nationality:'中国',hometown:'河南郑州',position:'MF',strongFoot:'right',height:148,weight:39,guardianName:'张先生',guardianRelation:'father',guardianPhoneMasked:'138****6721',profileStatusText:'资料完整',identityStatus:'verified',portraitStatus:'complete',remark:'球队长期球员档案' }, { id:'visual-team',name:'赛小蜂 U12 竞技队',logo:'/images/logo.png',code:'SXF-U12' }, { appearances:12,goals:6,yellowCards:1,redCards:0 }, true)
+    this.hydrate({ id:'visual-player',name:'张子墨',jerseyName:'ZIMO',jerseyNumber:'10',photoUrl:'',birthDate:'2014-03-18',gender:'male',nationality:'中国',hometown:'河南郑州',position:'MF',strongFoot:'right',height:148,weight:39,guardianName:'张先生',guardianRelation:'father',guardianPhoneMasked:'138****6721',profileStatusText:'资料完整',claimStatusText:'未认领',isUnclaimed:true,identityStatus:'verified',portraitStatus:'complete',remark:'球队长期球员档案' }, { id:'visual-team',name:'赛小蜂 U12 竞技队',logo:'/images/logo.png',code:'SXF-U12' }, { appearances:12,goals:6,yellowCards:1,redCards:0 }, true)
   }
 })

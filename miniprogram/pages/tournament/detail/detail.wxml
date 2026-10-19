@@ -1,6 +1,7 @@
 <!-- pages/tournament/detail/detail.wxml - 赛事详情页（无WXS、无===/!==/&&/三元） -->
 <view class="page {{teamPageClass}}">
-  <block wx:if="{{showTeamTournamentDetail}}">
+  <view wx:if="{{entryPending}}" class="team-entry-state"><text wx:if="{{loading}}">正在加载本队赛事…</text><view wx:else><text>{{errorMsg}}</text><button bindtap="loadTournament">重新加载</button></view></view>
+  <block wx:elif="{{showTeamTournamentDetail}}">
     <image class="team-event-bg" src="/images/runtime/team-data-emerald-stadium-v1.jpg" mode="aspectFill"></image>
     <view class="team-event-shade"></view>
     <view class="team-event-nav">
@@ -19,10 +20,18 @@
       </view>
 
       <view class="team-event-summary">
-        <view><text class="team-event-summary-label">小组排名</text><text class="team-event-summary-value">{{teamEventRank}}</text><text class="team-event-summary-unit">/ {{teamEventRankTotal}}</text></view>
+        <view><text class="team-event-summary-label">{{teamEventRankLabel}}</text><text class="team-event-summary-value">{{teamEventRank}}</text><text class="team-event-summary-unit">/ {{teamEventRankTotal}}</text></view>
         <view><text class="team-event-summary-label">比赛场次</text><text class="team-event-summary-value">{{teamEventPlayed}}</text><text class="team-event-summary-unit">场</text></view>
         <view><text class="team-event-summary-label">积分</text><text class="team-event-summary-value">{{teamEventPoints}}</text><text class="team-event-summary-unit">分</text></view>
       </view>
+
+      <view class="team-standing-panel" wx:for="{{teamStandingsGroups}}" wx:for-item="group" wx:key="name">
+        <text class="team-standing-title">{{group.name}}</text>
+        <view class="team-standing-row table-head"><text>名次</text><text>球队</text><text>赛</text><text>胜/平/负</text><text>净胜</text><text>分</text></view>
+        <view class="team-standing-row {{row.rowClass}}" wx:for="{{group.rows}}" wx:for-item="row" wx:key="teamId"><text>{{row.rank}}</text><text class="standing-team-name">{{row.teamName}}</text><text>{{row.played}}</text><text>{{row.recordText}}</text><text>{{row.goalDifference}}</text><text class="standing-points">{{row.points}}</text></view>
+      </view>
+      <view class="team-standing-state" wx:if="{{showTeamStandingsError}}"><text>积分榜读取失败</text><text bindtap="loadTournament">重试</text></view>
+      <view class="team-standing-state" wx:if="{{showTeamStandingsEmpty}}">暂未生成积分榜</view>
 
       <view class="team-event-actions">
         <view class="team-event-action" bindtap="onTeamEventNotice"><view><image src="/images/icons/bell.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛事通知</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
@@ -31,14 +40,16 @@
         <view class="team-event-action" bindtap="onTeamEventSchedule"><view><image src="/images/icons/event.svg" mode="aspectFit"></image></view><view class="team-event-action-copy"><text class="team-event-action-title">赛程赛果</text></view><view class="team-event-chevron" style="width:16rpx;height:16rpx;margin:0 4rpx 0 18rpx;border-top:3rpx solid #aeb6b1;border-right:3rpx solid #aeb6b1;border-radius:0;background:transparent;transform:rotate(45deg)"></view></view>
       </view>
 
-      <view class="team-event-section-title"><view></view><text>下一场比赛</text></view>
+      <view class="team-event-section-title" wx:if="{{showNextMatch}}"><view></view><text>下一场比赛</text></view>
       <view class="team-event-next" wx:if="{{showNextMatch}}">
         <view class="team-event-next-meta"><text>{{nextMatchDateTime}}</text><text>{{nextMatchVenue}}</text></view>
         <view class="team-event-versus"><view><image src="{{nextHomeLogo}}" mode="aspectFit"></image><text>{{nextHomeName}}</text></view><text class="team-event-vs">VS</text><view><image src="{{nextAwayLogo}}" mode="aspectFit"></image><text>{{nextAwayName}}</text></view></view>
         <button class="team-event-lineup-button {{nextLineupButtonClass}}" disabled="{{!canSubmitNextLineup}}" bindtap="onTeamEventLineup">{{nextLineupButtonText}}</button>
         <view class="team-event-lineup-note"><image src="/images/icons/shield.svg" mode="aspectFit"></image><text>阵容只能从审核通过的正式参赛名单中选择，开赛后锁定为比赛快照。</text></view>
       </view>
-      <view class="team-event-next team-event-next-empty" wx:if="{{showNextMatchEmpty}}" bindtap="onTeamEventSchedule"><image src="/images/icons/event.svg" mode="aspectFit"></image><text>赛程尚未公布</text><text class="team-event-empty-desc">点击查看赛事赛程与最新安排</text></view>
+      <view class="team-event-next team-event-next-empty" wx:if="{{showNextMatchEmpty}}" bindtap="onTeamEventSchedule"><image src="/images/icons/event.svg" mode="aspectFit"></image><text>暂无本队比赛安排</text><text class="team-event-empty-desc">查看赛事赛程 ›</text></view>
+      <view class="team-event-section-title" wx:if="{{hasTeamSchedule}}"><view></view><text>本队赛程</text><text class="team-schedule-count">{{teamScheduleCountText}}</text></view>
+      <view class="team-schedule-card" wx:for="{{teamSchedule}}" wx:key="id" data-id="{{item.id}}" bindtap="onTeamScheduleMatch"><view class="team-schedule-meta"><text>{{item.dateTimeText}}</text><text>{{item.venue}}</text></view><view class="team-schedule-versus"><text>{{item.homeName}}</text><text class="schedule-score">{{item.scoreText}}</text><text>{{item.awayName}}</text></view><view class="team-schedule-status {{item.statusClass}}"><text>{{item.statusText}}</text><text>查看比赛 ›</text></view></view>
     </view>
 
     <view class="team-event-tabbar">

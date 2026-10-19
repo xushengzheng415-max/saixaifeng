@@ -8,6 +8,13 @@
 
   <view class="content-overlay">
     <view class="login-card">
+      <text wx:if="{{restoringSession}}" class="restore-status">正在恢复登录…</text>
+      <view wx:elif="{{restoreError}}" class="restore-error">
+        <text>{{restoreError}}</text>
+        <button class="phone-btn" bindtap="validateExistingSession">重试登录</button>
+        <text wx:if="{{!restoreBlocked}}" class="restore-phone" bindtap="usePhoneLogin">手机号登录</text>
+      </view>
+      <block wx:if="{{showPhoneLogin}}">
       <view class="login-action">
         <button class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="loginWithPhone" disabled="{{loginDisabled}}">{{loginButtonText}}</button>
       </view>
@@ -23,6 +30,7 @@
         <text class="agreement-link" catchtap="showPrivacyPolicy">《隐私政策》</text>
       </view>
 
+      </block>
     </view>
   </view>
 </view>

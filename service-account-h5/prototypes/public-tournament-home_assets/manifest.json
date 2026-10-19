@@ -1,0 +1,231 @@
+{
+  "prototype": "E:\\Documents\\sxf-football\\service-account-h5\\prototypes\\public-tournament-home.png",
+  "asset_dir": "E:\\Documents\\sxf-football\\service-account-h5\\prototypes\\public-tournament-home_assets",
+  "generated_at": "2026-09-25",
+  "tool": "yuanxing prototype decomposition",
+  "status": "approved",
+  "approved_at": "2026-09-25T22:24:00+08:00",
+  "screen": {
+    "width": 393,
+    "height": 853
+  },
+  "summary": "服务号 H5 公共赛事中心首页，按用户提供斗战足球墨刀首页的手机画布逐段还原；保留分类、焦点赛事、双场次摘要、资讯流与五栏导航，移除直播、竞猜、打赏和聊天室。",
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "00-source/public-tournament-home.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 393,
+        "height": 853
+      },
+      "sha256": "f49f66631367621d45b080736dfccf7647a7641c1d12fab78ed40fb83d29f053",
+      "notes": "用户提供的墨刀首页，服务号 H5 首页的唯一视觉参考。"
+    },
+    {
+      "id": "layout-service-header",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 393,
+        "height": 65
+      },
+      "notes": "原型设备状态栏与微信胶囊不复刻；服务号 H5 保留同等高度的赛小蜂品牌栏。"
+    },
+    {
+      "id": "layout-category-tabs",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 65,
+        "width": 393,
+        "height": 29
+      },
+      "notes": "头条、业余赛事、青少年赛事、地市赛事、其他赛事改为公开赛事分类。"
+    },
+    {
+      "id": "layout-featured-event",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 94,
+        "width": 393,
+        "height": 185
+      },
+      "notes": "焦点赛事大图、底部遮罩标题与右下分页点均由代码重建。"
+    },
+    {
+      "id": "layout-two-match-cards",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 279,
+        "width": 393,
+        "height": 118
+      },
+      "notes": "首页并列两场比赛，展示时间、赛事组别、对阵、队徽和比赛状态；没有直播预约。"
+    },
+    {
+      "id": "layout-news-feed",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 397,
+        "width": 393,
+        "height": 389
+      },
+      "notes": "左图右文赛事动态列表，由公开赛事与赛程状态派生，不展示原型中的虚构评论数。"
+    },
+    {
+      "id": "layout-bottom-tabs",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 0,
+        "y": 786,
+        "width": 393,
+        "height": 67
+      },
+      "notes": "五栏底部导航：首页、比赛、赛事、榜单、我的；后续按墨刀逐页接入。"
+    },
+    {
+      "id": "crop-featured-event",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/featured-event.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 65,
+        "width": 393,
+        "height": 214
+      },
+      "notes": "分类栏与焦点赛事比例、叠字、遮罩与圆点对比用。"
+    },
+    {
+      "id": "crop-match-cards",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/match-cards.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 279,
+        "width": 393,
+        "height": 118
+      },
+      "notes": "双场次卡片的分栏、队徽、VS 与状态区对比用。"
+    },
+    {
+      "id": "crop-news-feed",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/news-feed.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 397,
+        "width": 393,
+        "height": 389
+      },
+      "notes": "代表性赛事动态条目与列表节奏对比用。"
+    },
+    {
+      "id": "crop-bottom-tabs",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/bottom-tabs.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 786,
+        "width": 393,
+        "height": 67
+      },
+      "notes": "五栏底部导航的固定高度与标签层级对比用。"
+    },
+    {
+      "id": "legacy-hero-photo",
+      "category": "production-asset",
+      "implementation": "background",
+      "output": "01-backgrounds/tournament-center-hero.jpg",
+      "source_bbox": {
+        "x": 0,
+        "y": 94,
+        "width": 393,
+        "height": 185
+      },
+      "notes": "用户提供的墨刀演示原始进球瞬间照片，服务号首页仅作无赛事封面时的默认焦点背景。"
+    },
+    {
+      "id": "text-public-data",
+      "category": "text",
+      "implementation": "text-code",
+      "text": "赛事分类、赛事公开名称、公开赛程、公开比分、公开队徽、已发布赛事动态",
+      "source_bbox": {
+        "x": 0,
+        "y": 65,
+        "width": 393,
+        "height": 721
+      },
+      "notes": "用户文本均从白名单公开快照读取；不展示手机号、实名球员、内部审核或未发布字段。"
+    },
+    {
+      "id": "control-category-filter",
+      "category": "interaction",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 0,
+        "y": 65,
+        "width": 393,
+        "height": 29
+      },
+      "action": "按公开分类筛选",
+      "target": "焦点赛事、双场次与赛事动态",
+      "states": [
+        "default",
+        "active",
+        "loading",
+        "empty",
+        "error"
+      ],
+      "notes": "仅筛选页面，无登录和写入。"
+    },
+    {
+      "id": "control-event-open",
+      "category": "interaction",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 0,
+        "y": 94,
+        "width": 393,
+        "height": 185
+      },
+      "action": "打开赛事详情",
+      "target": "服务号 H5 后续赛事详情页",
+      "states": [
+        "default",
+        "image-fallback"
+      ],
+      "notes": "本轮只完成首页，详情页将在墨刀对应页面还原时接入。"
+    },
+    {
+      "id": "boundary-no-live",
+      "category": "product-boundary",
+      "implementation": "code",
+      "notes": "明确不实现直播、全场回放、直播预约、聊天室、竞猜、打赏、助力投票、双币和带货。"
+    },
+    {
+      "id": "annotated-layout-overlay",
+      "category": "overlay",
+      "implementation": "overlay",
+      "output": "06-overlays/annotated-layout.png",
+      "notes": "Generated bounding-box overlay for comparison only."
+    }
+  ]
+}

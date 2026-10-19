@@ -71,6 +71,17 @@ function createDataService(db) {
     const result = await query({ platformOwner:true, teamIds:[], tournamentIds:[] }, { playerId:id(playerId), mode:'official' })
     return result.playerCard
   }
+  // Internal preview only: the registration service has validated the complete
+  // form and assigned the exact future player ID. No profile/card grant is
+  // persisted, and existing IDs must use the normal authorized career reader.
+  async function playerCardForAuthorizedRegistrationDraft(profile) {
+    const playerId=id(profile?._id)
+    if(!playerId||!id(profile?.teamId)||profile?.source!=='team_player_invite')throw error('DATA_SCOPE_INVALID','登记草稿无效')
+    if((await readByIds(db,'players','_id',[playerId])).length)throw error('DATA_SCOPE_INVALID','球员档案已存在，请重新进入认领')
+    const result=await query({platformOwner:true,teamIds:[],tournamentIds:[]},{playerId,mode:'official'})
+    const built=await buildPlayerCard(result,playerId,{profile,fullCareer:true})
+    return {...built.card,registrationPreview:true}
+  }
   async function catalog(actor) {
     if(actor.public)throw error('DATA_FORBIDDEN','公开目录须通过赛事公开接口读取')
     const { synthetic } = await import('./statistics.mjs')
@@ -196,6 +207,6 @@ function createDataService(db) {
     return { success:true, ...result }
   }
   async function playerPointsLedgerForAuthorizedPlayer(playerId){const result=await query({platformOwner:true},{playerId:id(playerId),mode:'official'},{includeLedger:true});return result.pointsLedger}
-  return { query, catalog, playerCardForAuthorizedPlayer, playerCardsForAuthorizedPlayers,playerPointsLedgerForAuthorizedPlayer }
+  return { query, catalog, playerCardForAuthorizedPlayer, playerCardForAuthorizedRegistrationDraft, playerCardsForAuthorizedPlayers,playerPointsLedgerForAuthorizedPlayer }
 }
 module.exports = { createDataService, validateScope, error }

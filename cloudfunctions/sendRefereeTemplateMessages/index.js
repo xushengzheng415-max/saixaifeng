@@ -10,11 +10,19 @@ const CONFIG = {
   appId: process.env.SERVICE_ACCOUNT_APP_ID || '',
   appSecret: process.env.SERVICE_ACCOUNT_APP_SECRET || '',
   templateId: process.env.SERVICE_ACCOUNT_REFEREE_TEMPLATE_ID || '',
+  replyTemplateId: process.env.SERVICE_FEEDBACK_REPLY_TEMPLATE_ID || 's8sdkaPN76LcAoNy2lwK6NV125-Eog7RQPiZt3ymAPc',
   h5Url: process.env.SERVICE_ACCOUNT_H5_URL || 'https://www.sxffootball.cn/service-account-h5/',
   tournamentKey: process.env.SERVICE_TEMPLATE_TOURNAMENT_KEY || 'thing1',
   matchKey: process.env.SERVICE_TEMPLATE_MATCH_KEY || 'thing2',
   timeKey: process.env.SERVICE_TEMPLATE_TIME_KEY || 'time3',
   roleKey: process.env.SERVICE_TEMPLATE_ROLE_KEY || 'thing4',
+  replyTypeKey: process.env.SERVICE_FEEDBACK_REPLY_TYPE_KEY || 'const1',
+  replyStatusKey: process.env.SERVICE_FEEDBACK_REPLY_STATUS_KEY || 'const2',
+  replyDeptKey: process.env.SERVICE_FEEDBACK_REPLY_DEPT_KEY || 'thing3',
+  replyPhoneKey: process.env.SERVICE_FEEDBACK_REPLY_PHONE_KEY || 'phone_number4',
+  replyStatusValue: process.env.SERVICE_FEEDBACK_REPLY_STATUS_VALUE || '已处理',
+  replyDeptValue: process.env.SERVICE_FEEDBACK_REPLY_DEPT_VALUE || '赛小蜂科技开发部',
+  replyPhoneValue: process.env.SERVICE_FEEDBACK_REPLY_PHONE_VALUE || '17319716663',
   bridgeUrl: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_URL || '',
   bridgeSecret: process.env.SXF_FOOTBALL_WECHAT_BRIDGE_SECRET || ''
 }
@@ -219,6 +227,35 @@ exports.main = async event => {
   const configuration = getConfigurationStatus()
   if (event && event.action === 'configurationStatus') {
     return { success: true, configured: configuration.configured, missingConfig: configuration.missing, results: [] }
+  }
+  // 反馈回复通知：由 manageTournamentCenterContent 内部调用，不走 relay proof
+  if (event && event.action === 'feedbackReply') {
+    const openId = String(event.openId || '').trim()
+    const reply = String(event.reply || '').trim()
+    const type = String(event.type || 'other')
+    const typeLabels = { data_error: '数据问题', binding: '绑定问题', feature: '功能建议', other: '其他' }
+    if (!openId || !reply) return { success: false, error: '缺少 openId 或回复内容' }
+    if (!CONFIG.replyTemplateId) return { success: false, error: '反馈回复模板未配置（SERVICE_FEEDBACK_REPLY_TEMPLATE_ID）' }
+    const data = {}
+    data[CONFIG.replyTypeKey] = { value: typeLabels[type] || '其他' }
+    data[CONFIG.replyStatusKey] = { value: String(CONFIG.replyStatusValue || '已处理') }
+    data[CONFIG.replyDeptKey] = { value: String(CONFIG.replyDeptValue || '') }
+    data[CONFIG.replyPhoneKey] = { value: String(CONFIG.replyPhoneValue || '') }
+    const message = { touser: openId, template_id: CONFIG.replyTemplateId, data, url: 'https://www.sxffootball.cn/service-account-h5/me.html' }
+    let result
+    try {
+      if (CONFIG.bridgeUrl && CONFIG.bridgeSecret) result = await bridgePost('template/send', { message })
+      else {
+        const token = await getAccessToken()
+        result = await httpsPost('https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=' + encodeURIComponent(token), message)
+      }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+    if (!result || Number(result.errcode || 0) !== 0) {
+      return { success: false, errcode: result ? result.errcode : 'NO_RESPONSE', errmsg: result ? result.errmsg : '无响应' }
+    }
+    return { success: true, msgid: result.msgid }
   }
   if (!hasValidRelayProof(event)) {
     return { success: false, configured: configuration.configured, missingConfig: configuration.missing, results: [], error: '通知发送仅允许服务端中转调用', code: 'INTERNAL_RELAY_REQUIRED' }

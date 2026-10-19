@@ -143,3 +143,6 @@ page {
 .agreement-text { color: #7a847e; font-size: 20rpx; }
 .agreement-link { margin: 0 2rpx; color: #078443; font-size: 20rpx; }
 .guest-review-note { display: block; margin-top: 24rpx; color: #b1b8b3; font-size: 19rpx; }
+.restore-status{display:block;padding:16rpx 0;font-size:29rpx;color:#42634e;line-height:1.5}
+.restore-error>text{display:block;font-size:26rpx;color:#7b5145;line-height:1.6;margin-bottom:22rpx}
+.restore-error .restore-phone{margin:22rpx 0 0;font-size:25rpx;color:#087b3d}

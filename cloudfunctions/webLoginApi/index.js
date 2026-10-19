@@ -27,7 +27,7 @@ const { chooseOrganizerOrganization, grantsEventAccess } = require('./organizati
 const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
-const { createPlayerCards } = require('./playerCards.cjs')
+// 球员卡渲染依赖原生模块 @resvg/resvg-js，改为动态加载，避免云函数启动时因平台二进制缺失导致整体不可用
 function fanCenterHandlers() {
   return require('./fanCenter.cjs')({ cloud, crypto, SERVICE_ACCOUNT_CONFIG, normalizeServiceH5Url, hashSessionToken, dateValue, httpsGet, getPublicTournamentCenter })
 }
@@ -201,6 +201,9 @@ const ORGANIZER_REQUIRED_RELAY_FUNCTIONS = new Set([
   'setHeadReferee', 'tournamentRegistrationFlow', 'resultCenter', 'newsCenter'
 ])
 const PERSONAL_SERVICE_BINDING_ACTIONS = new Set(['createOrganizerServiceGate', 'getOrganizerServiceBindingStatus'])
+// Personal onboarding authenticates the user again and excludes tournament staff memberships.
+// Each organization mutation is checked against that user's own organization in onboardingWorkspace.
+const PERSONAL_WORKSPACE_ACTIONS = new Set(['state','updateProfile','updateOrganization','createOrganization','saveScene','createTrainingWorkspace','createTrainingConsultation'])
 
 // 赛事中心遗留的球队/球员/赛事入口统一收敛到本函数的租户校验，
 // 不再把未鉴权的旧云函数直接暴露给网页 relay。
@@ -1392,6 +1395,7 @@ async function authenticateWebSession(event) {
   const userResult = await db.collection('users').doc(session.userId).get()
   const rawUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!rawUser) return { success: false, error: '登录账号不存在，请重新登录', code: 'AUTH_REQUIRED' }
+  if (session.source === 'mini_shared_operation') return require('./miniPaperReportSession.cjs').authenticate(db,event,session,rawUser)
   const user = await ensureUserOrgId(db, rawUser)
   const activeOrgId = String(session.activeOrgId || '')
   if (activeOrgId && (user.organizationIds || []).includes(activeOrgId)) {
@@ -2927,9 +2931,9 @@ function httpsPost(hostname, port, path, headers, payload) {
   })
 }
 
-function httpsGet(url) {
+function httpsGet(url, headers) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
+    const req = https.get(url, headers ? { headers } : undefined, (res) => {
       let data = ''
       res.on('data', c => data += c)
       res.on('end', () => {
@@ -4114,6 +4118,7 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
     let delegatedStaff = false
     let delegatedTournamentId = ''
     const personalServiceBinding = functionName === 'tournamentRegistrationFlow' && PERSONAL_SERVICE_BINDING_ACTIONS.has(String(functionParams?.action || ''))
+    const personalWorkspace = functionName === 'onboardingWorkspace' && PERSONAL_WORKSPACE_ACTIONS.has(String(functionParams?.action || ''))
     const requiresSession = functionName === 'uploadFile' ||
       functionName === 'platformOwner' ||
       functionName === 'manageTournamentCenterContent' ||
@@ -4124,7 +4129,7 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
       authenticated = await authenticateWebSession(event)
       if (!authenticated.success) return authenticated
     }
-    if (authenticated && authenticated.orgId && !personalServiceBinding) {
+    if (authenticated && authenticated.orgId && !personalServiceBinding && !personalWorkspace) {
       const db = cloud.database()
       const staff = await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
       if (staff) {
@@ -4181,6 +4186,10 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
         } : {})
       } : {}),
       ...(assistanceGrant ? { assistanceGrantId: assistanceGrant._id } : {})
+    }
+    if (authenticated?.miniPaper) {
+      if (!verifiedPaperReport || functionName !== 'updateMatch' || functionParams?.action !== 'importPaperReport') return {success:false,error:'手机识别授权不能用于其他操作'}
+      return require('./miniPaperReportSession.cjs').relayImport(cloud.database(),cloud,authenticated,functionParams)
     }
     console.log('[webApi] 调用云函数:', functionName, '参数 keys:', Object.keys(functionParams || {}))
     const result = await cloud.callFunction({
@@ -4548,12 +4557,12 @@ async function handlePaperRefereeReport(event, confirming) {
     const [division,tournament]=await Promise.all([match.divisionId&&match.divisionId!=='default'?readDocumentOrNull(db,'divisions',String(match.divisionId)):Promise.resolve(null),readDocumentOrNull(db,'tournaments',String(match.tournamentId))])
     if(division?.tournamentId&&String(division.tournamentId)!==String(match.tournamentId))return {success:false,error:'比赛组别范围不一致，请检查赛事配置'}
     const timing=ocr.resolveTiming(match,division || {},tournament || {})
-    const recognized=await ocr.recognize(image.toString('base64'),timing)
-    const evidence={matchId:String(match._id),fileId,imageHash:recognized.imageHash,analysisVersion:recognized.analysisVersion,timing}
-    return {success:true,data:{teams:recognized.teams,score:recognized.score,timing,warnings:recognized.warnings,evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
+    const recognized=await ocr.recognize(image.toString('base64'),timing,{blankRoleAsBench:identity.miniPaper ? event.blankRoleAsBench===true : true,circledGoals:identity.miniPaper ? event.circledGoals===true : true})
+    const evidence={matchId:String(match._id),fileId,imageHash:recognized.imageHash,analysisVersion:recognized.analysisVersion,timing,...(recognized.roleConvention?{roleConvention:recognized.roleConvention}:{})}
+    return {success:true,data:{teams:recognized.teams,score:recognized.score,imageQuality:recognized.imageQuality || null,timing,warnings:recognized.warnings,annotations:recognized.annotations || [],rawLines:recognized.rawLines || [],evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
   }
   const evidence=event.evidence
-  if (!evidence || evidence.matchId!==String(match._id) || !/^[a-f0-9]{64}$/.test(evidence.imageHash || '') || ocr.signEvidence(evidence)!==event.proof) return {success:false,error:'识别凭证无效，请重新上传'}
+  if (!evidence || evidence.matchId!==String(match._id) || !/^[a-f0-9]{64}$/.test(evidence.imageHash || '') || !ocr.verifyEvidence(evidence,event.proof)) return {success:false,code:'REPORT_EVIDENCE_INVALID',error:'识别凭证未通过校验，请重新识别'}
   if ((match.paperReportImports || []).some(row=>row.imageHash===evidence.imageHash)) return {success:true,alreadyImported:true,message:'这张裁判表已录入'}
   const lineups={}, entries=[], allowedPlayers={}
   for (const side of ['home','away']) {
@@ -4579,9 +4588,11 @@ async function handlePaperRefereeReport(event, confirming) {
         const raw=String(row[key] || '').trim().replace(/[′'’]/g,'')
         if (!raw) continue
         if (!/^\d{1,3}(?:\s*[,，;；、]\s*\d{1,3})*$/.test(raw)) return {success:false,error:'事件分钟请填数字，多次用逗号分隔'}
-        for (const value of raw.split(/[,，;；、]/)) {
+        const minuteOccurrences=new Map()
+      for (const value of raw.split(/[,，;；、]/)) {
           const minute=Number(value.trim()); if (minute>150) return {success:false,error:'事件分钟须在0至150之间'}
-          const eventId='paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|${side}|${entry.playerId}|${type}|${minute}`).digest('hex').slice(0,24)
+          const occurrence=minuteOccurrences.get(minute) || 0;minuteOccurrences.set(minute,occurrence+1)
+          const eventId='paper-'+crypto.createHash('sha256').update(`${evidence.imageHash}|${side}|${entry.playerId}|${type}|${minute}${occurrence ? '|occurrence:'+occurrence : ''}`).digest('hex').slice(0,24)
           entries.push({eventId,type,minute,teamId:sourceTeamId,teamSide:side,playerId:entry.playerId,playerName:entry.name,playerNumber:entry.number,source:'organizer_paper_report',evidenceFileId:evidence.fileId})
         }
       }
@@ -4606,15 +4617,16 @@ async function handlePaperRefereeReport(event, confirming) {
       lineups[side]=old
     }
   }
-  const sameEvent=(a,b)=>a.type===b.type && a.playerId===b.playerId && a.teamSide===b.teamSide && Number(a.minute)===Number(b.minute) && String(a.outPlayerId || a.assistPlayerId || '')===String(b.outPlayerId || b.assistPlayerId || '')
-  const events=[...existing,...entries.filter(row=>!existing.some(old=>old.eventId===row.eventId || sameEvent(old,row)))]
+  const reconciliation=require('./paperGoalReconcile.cjs').prepare(existing,entries,evidence,event.replaceGoalConflicts===true)
+  if(reconciliation.conflicts.length&&event.replaceGoalConflicts!==true)return {success:false,code:'PAPER_GOAL_CORRECTION_REQUIRED',error:'已有进球分钟与本表不同，请逐项核对并确认更正',goalCorrections:reconciliation.conflicts}
+  const events=reconciliation.events
   const score=event.score || {}
   if (![score.home,score.away].every(value=>Number.isInteger(value)&&value>=0&&value<=99)) return {success:false,error:'请填写0至99的双方比分'}
   const {calculateMatchEventScore}=await import('./data-center/match-events.mjs')
   const derived=calculateMatchEventScore({...match,events})
-  if (derived.home!==score.home || derived.away!==score.away) return {success:false,error:'比分与进球记录不一致，请补齐或修正进球记录'}
+  if (derived.home!==score.home || derived.away!==score.away) return {success:false,error:'后台合计进球'+derived.home+':'+derived.away+'，本表比分'+score.home+':'+score.away+'；请核对本场已有进球'}
   if (event.expectedEventRevision == null || Number(event.expectedEventRevision)!==Number(match.matchEventRevision || 0)) return {success:false,error:'比赛记录已更新，请重新上传核对'}
-  const data={lineups,events,paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
+  const data={lineups,events,...(identity.miniPaper?{status:'finished'}:{}),paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,goalCorrections:reconciliation.conflicts,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
   return handleCallFunction({...event,functionName:'updateMatch',functionParams:{action:'importPaperReport',matchId:match._id,expectedEventRevision:event.expectedEventRevision,paperReportProof:ocr.signImport(match._id,event.expectedEventRevision,data),data}},true)
 }
 
@@ -6011,6 +6023,7 @@ exports.main = async (event, context) => {
       case 'getMyPlayerCard':
       case 'previewMyPlayerCard':
       case 'saveMyPlayerCard':
+        const { createPlayerCards } = require('./playerCards.cjs')
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
       case 'getPlayerCardsForViewer':
@@ -6073,6 +6086,17 @@ exports.main = async (event, context) => {
           : await center.handleFanSupport(params)
         break
       }
+      case 'servicePrivateOAuthUrl':
+      case 'servicePrivateOAuth':
+      case 'servicePrivateOverview':
+      case 'servicePrivatePlayerData':
+      case 'servicePrivateRefereeData':
+      case 'servicePrivateAccountData':
+      case 'servicePrivateRegistrationList':
+      case 'servicePrivateResumeRegistration':
+      case 'serviceFeedbackSubmit':
+      case 'servicePrivateFeedbackList':
+        result = await require('./servicePrivate.cjs')({ cloud, config:SERVICE_ACCOUNT_CONFIG, hashSessionToken, dateValue, httpsGet, createSession:createRefereeH5Session })(action, params); break
       case 'serviceRefereeOAuthUrl':
         result = await createRefereeOAuthUrl(params && params.returnUrl); break
       case 'serviceRefereeOAuth':
@@ -6086,6 +6110,12 @@ exports.main = async (event, context) => {
       case 'serviceEntryContext':
       case 'serviceEntryClaimTeam':
       case 'serviceEntryJoinPlayer':
+      case 'serviceEntryUploadPhoto':
+      case 'serviceEntrySearchPlayers':
+      case 'serviceEntrySelectPlayer':
+      case 'serviceEntryCheckPlayerNumber':
+      case 'serviceEntryPlayerCard':
+      case 'serviceEntrySavePlayerDraft':
         result = await require('./service-entry')(action, params); break
       case 'previewParentProfileInvite':
         result = await previewParentProfileInvite(params); break

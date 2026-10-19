@@ -1,8 +1,18 @@
 import template from '../data/demoRegulationTemplate.json'
+import { defaultRegistrationDeadline, shiftDateString } from './tournamentDateDefaults'
 
 export const demoRegulationName = template.sourceFileName
 export const demoRegulationUrl = `${import.meta.env.BASE_URL}assets/demo-regulations/youth-football-regulations.docx`
-export function demoRegulationData() { return JSON.parse(JSON.stringify(template.data)) }
+export function demoRegulationData() {
+  const data = JSON.parse(JSON.stringify(template.data))
+  // 演示范本不写死过去时间：报名截止=今天+3天，赛期=截止+1起连续3天，与创建表单默认值保持一致
+  const basic = data.basicInfo || {}
+  const deadline = defaultRegistrationDeadline()
+  basic.deadline = deadline
+  basic.startDate = shiftDateString(deadline, 1)
+  basic.endDate = shiftDateString(deadline, 3)
+  return data
+}
 export function demoDivisionForRules(division) {
   return { ...division, matchMinutes:division.periodMode === 'halves' ? Number(division.matchMinutes) / 2 : division.matchMinutes }
 }

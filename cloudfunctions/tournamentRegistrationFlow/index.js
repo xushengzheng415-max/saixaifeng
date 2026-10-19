@@ -1690,13 +1690,15 @@ function notificationConfigurationStatus() {
   const miniTemplateConfigured = Boolean(miniReviewTemplateId())
   const serviceReviewConfigured = Boolean(serviceReviewTemplateId())
   const serviceSuccessConfigured = Boolean(serviceRegistrationSuccessTemplateId())
+  const serviceJoinConfigured = Boolean(teamJoinTemplateId())
   const serviceTemplateConfigured = serviceReviewConfigured && serviceSuccessConfigured
   const missing = []
   if (!miniTemplateConfigured) missing.push('SXF_FOOTBALL_MINI_TEMPLATE_TOURNAMENT_REVIEW')
   if (!serviceReviewConfigured) missing.push('SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_REVIEW')
   if (!serviceSuccessConfigured) missing.push('SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_SUCCESS')
+  if (!serviceJoinConfigured) missing.push('SXF_FOOTBALL_SERVICE_TEMPLATE_TEAM_JOIN')
   if (!serviceBridgeConfigured()) missing.push('SXF_FOOTBALL_WECHAT_BRIDGE_URL', 'SXF_FOOTBALL_WECHAT_BRIDGE_SECRET')
-  return { success:true, data:{ miniTemplateConfigured, serviceTemplateConfigured, serviceReviewConfigured, serviceSuccessConfigured, serviceBridgeConfigured:serviceBridgeConfigured(), missing:[...new Set(missing)] } }
+  return { success:true, data:{ miniTemplateConfigured, serviceTemplateConfigured, serviceReviewConfigured, serviceSuccessConfigured, serviceJoinConfigured, serviceBridgeConfigured:serviceBridgeConfigured(), missing:[...new Set(missing)] } }
 }
 
 function templateText(value, max) {
@@ -1780,6 +1782,65 @@ async function sendServiceReviewNotification(registration, tournament, decision,
     return result && result.success ? { status:'delivered', code:'', message:'服务号模板消息已发送' } : { status:'failed', code:'SERVICE_SEND_FAILED', message:'服务号模板消息发送失败' }
   } catch (error) {
     return { status:'failed', code:text(error.code || error.wechatCode || 'SERVICE_SEND_FAILED'), message:text(error.message || '服务号模板消息发送失败') }
+  }
+}
+
+function teamJoinTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_TEAM_JOIN) }
+
+// 球员入队申请服务号通知（2026-10-18 用户最终确认口径）：
+// 球员经服务号H5提交成功后，球队收到且只收到一条服务号模板消息。
+// 只接受持内部桥密钥的函数间调用；送达状态如实写入 notification_outbox，不伪造 delivered。
+async function notifyTeamPlayerJoin(event) {
+  const expected = text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)
+  if (!expected || text(event.bridgeKey) !== expected) return { success: false, code: 'BRIDGE_AUTH_FAILED', message: '服务号桥接校验失败' }
+  const teamId = text(event.teamId), playerId = text(event.playerId)
+  const playerName = text(event.playerName).slice(0, 20), teamName = text(event.teamName).slice(0, 20)
+  if (!teamId || !playerId || !playerName) return { success: false, code: 'NOTIFY_PAYLOAD_REQUIRED', message: '缺少入队通知要素' }
+  // 幂等键含事件唯一标识：同一球员离隊后再次入队是新事件，必须再次通知，不被旧 outbox 吞掉。
+  const businessEventId = `team_player_join_submitted:${playerId}${text(event.eventId) ? ':' + text(event.eventId) : ''}`
+  // 待球队确认的入队申请由调用方指定小程序落点（本队待确认入队列表）；只接受站内页面路径。
+  const requestedPage = text(event.pagePath)
+  const targetPage = requestedPage && /^pages\/[A-Za-z0-9/_-]+(\?[A-Za-z0-9=&%_.-]*)?$/.test(requestedPage) ? requestedPage.slice(0, 128) : text(process.env.SXF_FOOTBALL_SERVICE_JOIN_PAGE || 'pages/teams/index')
+  const record = (status, extra) => upsertByKey('notification_outbox', `${businessEventId}:service_account`, Object.assign({
+    sport: SPORT, businessEventId, teamId, playerId, channel: 'service_account', status, attemptedAt: db.serverDate(), targetPage,
+    pendingTeamConfirm: event.pendingTeamConfirm === true
+  }, extra || {}))
+  const existing = (await db.collection('notification_outbox').where({ sport: SPORT, businessEventId, channel: 'service_account' }).limit(5).get()).data || []
+  if (existing.some(item => text(item.status) === 'delivered')) return { success: true, data: { status: 'delivered', code: 'ALREADY_DELIVERED', message: '入队申请通知此前已送达，未重复发送' } }
+  const templateId = teamJoinTemplateId()
+  if (!templateId) { await record('configuration_required', { errorCode: 'SERVICE_TEMPLATE_REQUIRED', errorMessage: '入队审核通知模板未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_TEMPLATE_REQUIRED' } } }
+  if (!serviceBridgeConfigured()) { await record('configuration_required', { errorCode: 'SERVICE_BRIDGE_REQUIRED', errorMessage: '服务号固定出口中转未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_BRIDGE_REQUIRED' } } }
+  const team = await getDocument('teams', teamId)
+  const invite = text(event.inviteId) ? await getDocument('team_invitations', text(event.inviteId)) : null
+  // 接收人顺序：发起入队邀请的负责人优先，其次球队归属账号；只发给第一个已完成服务号关注绑定的负责人，保证一条通知。
+  const candidateIds = [...new Set([invite && invite.inviterUserId, team && team.ownerId, team && team.ownerUserId, team && team.claimedByUserId, team && team.creatorId].map(text).filter(Boolean))]
+  let recipient = null, binding = null
+  for (const userId of candidateIds) {
+    const user = await getDocument('users', userId)
+    const miniOpenId = text(user && (user.openId || user.openid || user._openid))
+    if (!miniOpenId) continue
+    const bound = (await db.collection('service_account_bindings').where({ sport: SPORT, miniOpenId, subscribed: true }).limit(2).get()).data || []
+    if (bound[0] && text(bound[0].officialOpenId)) { recipient = { userId, miniOpenId }; binding = bound[0]; break }
+  }
+  if (!recipient) { await record('waiting_follow_bind', { recipientUserId: candidateIds[0] || '', errorCode: 'SERVICE_BINDING_REQUIRED', errorMessage: '球队负责人尚未完成服务号关注绑定' }); return { success: true, data: { status: 'waiting_follow_bind', code: 'SERVICE_BINDING_REQUIRED' } } }
+  const data = {}
+  data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_PLAYER_KEY || 'thing1')] = { value: templateText(playerName, 20) }
+  data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_TEAM_KEY || 'thing2')] = { value: templateText(teamName || text(event.teamName) || (team && (team.name || team.teamName)) || '球队', 20) }
+  data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_TIME_KEY || 'time3')] = { value: new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ') }
+  try {
+    const result = await serviceBridgeJson('template/send', { message: {
+      touser: text(binding.officialOpenId),
+      template_id: templateId,
+      url: 'https://www.sxffootball.cn/',
+      miniprogram: { appid: text(process.env.SXF_FOOTBALL_MINIPROGRAM_APPID || 'wx57164cca8676f411'), pagepath: targetPage },
+      data
+    } })
+    const delivered = Boolean(result && result.success === true)
+    await record(delivered ? 'delivered' : 'failed', { recipientUserId: recipient.userId, recipientMiniOpenId: recipient.miniOpenId, recipientOfficialOpenId: text(binding.officialOpenId), errorCode: delivered ? '' : 'SERVICE_SEND_FAILED', errorMessage: delivered ? '' : '服务号模板消息发送失败' })
+    return { success: true, data: { status: delivered ? 'delivered' : 'failed', code: delivered ? '' : 'SERVICE_SEND_FAILED' } }
+  } catch (error) {
+    await record('failed', { recipientUserId: recipient.userId, recipientMiniOpenId: recipient.miniOpenId, recipientOfficialOpenId: text(binding.officialOpenId), errorCode: text(error.code || error.wechatCode || 'SERVICE_SEND_FAILED'), errorMessage: text(error.message || '服务号模板消息发送失败') })
+    return { success: true, data: { status: 'failed', code: text(error.code || 'SERVICE_SEND_FAILED') } }
   }
 }
 
@@ -2258,6 +2319,7 @@ exports.main = async (event) => {
     if (action === 'completeRegistrationDraft') return await completeRegistrationDraft(event)
     if (action === 'probeServiceAccount') return await probeServiceAccount(event)
     if (action === 'bindServiceAccount') return await bindServiceAccount(event)
+    if (action === 'notifyTeamPlayerJoin') return await notifyTeamPlayerJoin(event)
     if (action === 'reviewRegistration') return await reviewRegistration(event)
     if (action === 'cancelTournamentInvitation') return await cancelTournamentInvitation(event)
     if (action === 'deleteUnclaimedTournamentTeam') return await deleteUnclaimedTournamentTeam(event)

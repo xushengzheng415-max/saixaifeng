@@ -1,0 +1,190 @@
+{
+  "format": "prototype-design",
+  "version": 1,
+  "project": "赛小蜂足球组织者首页",
+  "plan": "页面方案.json",
+  "plan_revision": 1,
+  "scope": [
+    "P01",
+    "P02"
+  ],
+  "deferred": [],
+  "pages": [
+    {
+      "id": "P01",
+      "name": "首次办赛",
+      "portal": "mini",
+      "state": "normal",
+      "source": "设计源/P01-首次办赛.html",
+      "output": "小程序/首页/P01-首次办赛.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full_page": true,
+      "status": "draft",
+      "template_decision": {
+        "selected_pattern": "workspace-entry-card-b + existing-home-shell",
+        "mode": "adapt-structure",
+        "reason": "现有已确认B款卡片及底部导航符合本次范围，首页创建与待办区定制",
+        "source_urls": [
+          "miniprogram/pages/home/home.wxml",
+          "miniprogram/components/workspace-entry-card/index.wxss",
+          "miniprogram/custom-tab-bar/index.wxml"
+        ],
+        "keep": [
+          "队徽水印",
+          "赛事和球队卡片",
+          "底部五项导航"
+        ],
+        "remove": [
+          "空的今日比赛模块",
+          "重复说明",
+          "无任务的统计数字"
+        ],
+        "adapt": [
+          "组织者首屏创建入口",
+          "首次办赛状态",
+          "手机与PC接续入口"
+        ]
+      }
+    },
+    {
+      "id": "P02",
+      "name": "已有赛事",
+      "portal": "mini",
+      "state": "normal",
+      "source": "设计源/P02-已有赛事.html",
+      "output": "小程序/首页/P02-已有赛事.png",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full_page": true,
+      "status": "draft",
+      "template_decision": {
+        "selected_pattern": "workspace-entry-card-b + existing-home-shell",
+        "mode": "adapt-structure",
+        "reason": "现有已确认B款卡片及底部导航符合本次范围，首页创建与待办区定制",
+        "source_urls": [
+          "miniprogram/pages/home/home.wxml",
+          "miniprogram/components/workspace-entry-card/index.wxss",
+          "miniprogram/custom-tab-bar/index.wxml"
+        ],
+        "keep": [
+          "队徽水印",
+          "赛事和球队卡片",
+          "底部五项导航"
+        ],
+        "remove": [
+          "空的今日比赛模块",
+          "重复说明",
+          "无任务的统计数字"
+        ],
+        "adapt": [
+          "组织者首屏创建入口",
+          "首次办赛状态",
+          "手机与PC接续入口"
+        ]
+      }
+    }
+  ],
+  "assets": [
+    {
+      "path": "设计源/共享素材/赛事标志.png",
+      "source": "产品设计/原型图/首页队徽背景双款-20261016/设计源/共享素材/赛事标志.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/陆零後队徽.png",
+      "source": "产品设计/原型图/首页队徽背景双款-20261016/设计源/共享素材/陆零後队徽.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/立洋队徽.png",
+      "source": "产品设计/原型图/首页队徽背景双款-20261016/设计源/共享素材/立洋队徽.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/球场背景.jpg",
+      "source": "产品设计/原型图/首页队徽背景双款-20261016/设计源/共享素材/球场背景.jpg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/bell.svg",
+      "source": "miniprogram/images/icons/bell.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/event.svg",
+      "source": "miniprogram/images/icons/event.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/list.svg",
+      "source": "miniprogram/images/icons/list.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/players.svg",
+      "source": "miniprogram/images/icons/players.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/check.svg",
+      "source": "miniprogram/images/icons/check.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/warning.svg",
+      "source": "miniprogram/images/icons/warning.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/team.svg",
+      "source": "miniprogram/images/icons/team.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/qr.svg",
+      "source": "miniprogram/images/icons/qr.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/chart.svg",
+      "source": "miniprogram/images/icons/chart.svg",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/导航-0.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-home.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/导航-1.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-event.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/导航-2.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-team.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/导航-3.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-training.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/导航-4.png",
+      "source": "miniprogram/images/runtime/icons/brand-v1-tab-profile.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    },
+    {
+      "path": "设计源/共享素材/赛事日历.png",
+      "source": "miniprogram/images/runtime/icons/brand-v2-01.png",
+      "license": "项目已有品牌素材；限赛小蜂足球项目使用"
+    }
+  ],
+  "transitions": []
+}

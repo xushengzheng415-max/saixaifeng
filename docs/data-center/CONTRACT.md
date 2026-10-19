@@ -1,5 +1,75 @@
 # 数据契约 v1
 
+## 名单海报人员关联与展示排序（2026-10-17，1.1.35）
+
+teamMembers原有范围校验不变。teamMemberView.withStaff仅投影有效coaches明确登记的linkedPlayerId，返回去重linkedPlayerIds、唯一linkedPlayerId及playerLinkState=linked/missing/conflict。同一已关联成员遇到两个不同球员ID时不选第一条，不按姓名或号码匹配；此投影不合并账号/球员、不授予读权限。头像兼容photoFileID/photoFileId/photo等既有字段。前端海报仅将其与本次已授权名单卡图按稳定ID关联，未取得卡图仍保留原登记头像/姓名/职务，不虚构卡级或参与人数。
+
+海报cardTypeId来自统一卡读取服务的当前展示种类，按gold/silver/bronze作界面排序；兼容明确tier，未知后置，同种稳定。竞技tier及积分字段不因显示卡种排序而改变。工作人员位于球员区之前，只作职务视图，仍按原snapshot.playerIds统计名单。officialRoster新增tournament.logo，仅投影已授权赛事对象的字符串logo/logoUrl，无新增外部机构查询。失败/无权不装成缺卡，完整卡仅等比缩放或整体轻微转动，头像aspectFit且不增加底板。
+
+## 正式名单资料卡（2026-10-16，1.1.29）
+
+不变更officialRoster接口或统计算法。手机official-roster默认view消费snapshot.playerIds，只按稳定ID投影players中已授权资料及tournamentStats；去重成员ID，缺失档案保留待核对卡，不以姓名补配、不用整队players替代名单。未采集指标显示破折号，明确0保留，状态沿snapshot，不把资料完整冒充正式审核通过。
+
+默认查看无勾选/提交操作；mode=select才进入原选人流程，snapshot草稿/退回及canManage允许后进入，提交仍经原服务端名单/组别/资格/截止时间校验。已提交审核中或已审/锁定不再当可编辑草稿。相同路由恢复可见重读；请求带精确team/tournament/division并沿当前授权空间，换账号或离页迟到响应不渲染。卡片为球队资料展示，不新建或改绘统一竞技球员卡。
+
+## 球队赛事详情榜单与场次（2026-10-16，1.1.28）
+
+teamTournamentDetail在原工作空间team.view/team.manage和精确team/division校验后，完整读取该队有效报名；排除removed/replaced等历史关系，优先当前已审核记录。返回schemaVersion=team-event-overview/1。summary.rank/rankTotal/points可为null，played来自完整本队完赛状态计数；客户端未知显示破折号，合法0保留。
+
+teamEventOverview.cjs只在上述校验后建立本次只读统计能力：限定当前tournament/division及本队实际所在组的matchIds，调用既有data-center/service.cjs，不扩大通用用户权限，不把完整dataCenter、球员或私有档案返回客户端。standingsGroups只含组内球队ID/名称、名次、赛胜平负、净胜及积分；复用统一积分规则和排序，未取得正式名次的待赛队显示未排名，来源不明或读取失败不造分。赛事、球队、球员及比赛测试来源仍按统一规则排除。
+
+matches为稳定球队ID对应、精确组别的完整已排场次，复用现有日期/时刻解析，取消/删除/替换不当待赛，只有单一明确组别才兼容历史缺组别场次。nextMatch取实际进行中/待赛/延期记录，scheduleState区分empty/scheduled/completed；没有新排场次不能造比赛，已有比赛全结束不能当“未公布”。roster继续按本队/组别查历史快照，不覆盖球员库或真实赛果。
+
+## 全账号球队参赛摘要（2026-10-16，1.1.27）
+
+getMiniWorkspace默认上下文新增participatingEntriesVersion=team-participation/1、participatingEntriesState=ready/failed、participatingEntriesError及participatingEntries。摘要跨当前空间，查询范围只来自homeEntries已核验且排除测试来源的team条目；按授权teamId使用统一reader完整读取tournament_teams、对应赛事与组别最小字段，不查询其他机构经营、球员或私人数据。当前空间teams/tournaments/registrations维持原范围，不能拿它们为空证明全账号无参赛。
+
+每条包含稳定key/id、teamId/teamName、divisionId/divisionName、所属已验证workspaceId、赛事名称/LOGO/日期/统一生命周期状态及registrationStatus。key为赛事＋球队＋组别；排除撤销、替换、删除及synthetic来源，重复有效项优先已审。仅摘要投影，不写报名、资格、名单、比赛或统计。未知组别不凭队名合并；读失败返回failed而非已确认空，旧缓存缺版本继续加载。
+
+手机字段格式器只预计算展示，不另行聚合成绩。赛事卡片明确参赛球队/组别，进入前重新回读全账号摘要，再按对应workspace/team/division走现有teamTournamentDetail授权。明确解码工作空间URL参数，球队关系失败不能进入主办控制台。
+
+## 卡片共用与工作身份（2026-10-16，1.1.22）
+
+workspace-entry-card是首页/赛事/球队共用的纯展示与点击组件；workspace-entry-cards工具统一格式化、稳定key和入口校验，不在组件计算竞技指标。球队页以已过滤来源的全账号homeEntries球队摘要显示，当前共享工作空间的teams=[]不能证明账号没有球队。赛事组织者使用已验证主办/共享卡片，球队管理者用当前已授权球队的registrations生成具体teamId/tournamentId/divisionId参赛卡，重复稳定元组去重，不按姓名合并。上下文缓存开始保留原服务已返回的registrations，服务端补divisionName，赛事投影补真实LOGO临时地址；未扩机构/球员数据范围。旧缓存缺参赛关系时等待刷新，不显示已证实空状态。
+
+1.1.26起，miniPortalRolePreferences/version=1以稳定自然人账号ID分别记录team_coach（球队管理者）或organizer（赛事组织者）；旧miniPortalRole只作兼容迁移。退出清理认证/业务数据时仅保留此非敏感界面偏好，不保留手机号、令牌、名单或权限。未取得可信账号上下文时的临时默认值不能成为记忆。我的切换前重新取得空间目录，普通空间沿用setHomeIdentity，shared空间保持event_staff授权语义；选项仍只有两种，未授权选项不可选。身份只在成功切换后更新，资源切换、普通更新和退出重登不覆盖；跨账号独立，phone-canonical-v1协议不变。偏好不是后台鉴权依据，也不改users.role或teams权属。
+
+首次无指定空间的loadContext先读取服务端已验证目录；如默认空间不能承载记忆的工作身份，再从该目录选择合适空间进行一次受限回读。明确资源/工作空间选择不被恢复覆盖。失权不伪造访问，失败不替换偏好；同一请求仍有超时，退出会使在途代次失效，超时/换账号后的迟到响应不保存上下文。
+
+入口进入前切目标空间并回读资源/参赛关系。球队赛事明确view=team及workspaceId/teamId/divisionId，详情直接调用原teamTournamentDetail，失败显示可重试错误，不再回落主办或公共推断路径；组织者view=organizer不先加载球队参赛页，共享继续shared路由和模块权限。角色切换不改变teams.ownerId/claimedByUserId或自然人users.role，不新增授权。
+
+## 小程序首页资源入口（2026-10-16）
+
+1.1.20：homeEntries增加metaLines（已维护的地区、年龄组/成立年份，或赛事日期/地点），缺失不补占位。球队摘要增加playerCount和playerCountState，指本队球员库有效真实档案人数，不表示赛事正式资格。通过统一reader最小字段完整分页读取teamId及历史teamCode，稳定playerId去重；明确teamId不属于本队时不能凭teamCode借入，码映射歧义为未知。沿用statistics.synthetic排除测试球员，排除archived/deleted。完整空结果才为ready/0，任一读取失败或预算超限为failed/null，前端显示破折号。只有homeEntries已验证的球队可读此最小投影，仅共享赛事授权不会触发球员读取。图片地址解析与库存读取并行，不读手机号、姓名、证件、头像私有素材或竞技事实。
+
+1.1.19：homeEntriesVersion=home-entries/2表示已按统一statistics.synthetic剔除已知虚拟/测试来源；球队、机构赛事及共享赛事同规则，sharedEvents透传synthetic布尔投影。旧缓存缺该版本时不渲染，也不当作已证实空账号。虚拟数据保留原数据库，不为整理首页而删除。
+
+新增teamDeletionInfo/deleteEmptyTeam。前者返回isOwner/canDelete/reason/revision；后者须传teamId、workspaceId、完整资料摘要revision和confirmName，服务器核对本人权属及空队条件。teamOwnership供首页与删除共用，显式owner字段优先且须一致指向当前自然人，无权属字段才接受本人有效owner关系；creatorId、机构赛事权限或管理员角色不能授权删除。关联存在检查覆盖players及旧teamCode、player_team_memberships、player_transfers、tournament_teams、roster_snapshots、match_lineup_snapshots、matches稳定ID别名、match_events及registration_player_drafts；limit(1)只断言存在，非零球员/比赛摘要也拒绝。查询失败阻断，明确集合不存在才可跳过。确认后重查，再以doc事务CAS球队摘要、写team_deletion_audits并删球队文档，不级联删球员、账号或历史。关联范围检查在事务外，不宣称它是跨集合范围锁；未接入PC旧force删除链路。
+
+getMiniWorkspace默认上下文新增homeEntries，只投影本人所有权或有效球队成员关系、已验证机构赛事管理权限和active赛事共享授权对应的摘要。每项key由type与稳定业务ID组成，含id/type/workspaceId/name/logo/coverUrl/badgeText/isShared/statusText/actionText；不同ID同名资源不合并。同一赛事已有机构管理入口时优先该入口，不再显示重复共享卡。球队主账号依据当前权属字段优先、无权属字段才取本人有效owner成员关系；其他可访问球队关系标管理员，不把创建预建队的creatorId当长期所有权。logo及coverUrl的云文件批量解析为临时地址，失败仅降级图片，不改变资源权限或隐藏入口。无封面由前端复用球场素材。
+
+homeEntries跨已验证空间汇总最小摘要，teams/tournaments及球员、赛果仍维持当前空间原范围。除球员库人数所需的最小归属/来源字段外，不查球员私有档案、课程、财务或竞技统计；前端保存上下文时保留homeEntries，点击后switchWorkspace，再以新响应核验卡片与目标空间。不存在、撤权或账号变化不得沿旧卡跳转。所有权与成员摘要使用统一reader完整分页，达到预算或读取失败不能冒充完整空结果。不写比赛、名单或统计事实。
+
+## 手机与PC战术阵容（2026-10-16）
+
+详情的lineupRules为原赛事/组别人数与替补上限，独立于卡图状态。lineupLayout.home/away含formation及positions[{playerId,role}]，服务端在同一阵型目录下核对人数、合法位置、位置唯一、稳定球员ID唯一及本队正式名单，保存PC原lineups结构；role是该场战术位置，不改球员长期position或统计事实。旧保存入口保留已有有效战术；纸表只有首发集合完全相同才保留旧阵型与位置，不按号码顺序猜位置。缺战术者以待排位展示，不能因为卡图/战术信息未加载把实际人数记0。权限、版本和裁判锁定继续由原服务强制校验。见 `../releases/1.1.16.md`。
+
+## 手机纸质报告识别草稿（2026-10-15，已并入体验版1.1.11）
+
+1.1.17增量：本类双栏纸表左主右客分别定位，姓名表头错漏不能把一队范围扩为整表；标题和独立序号/姓名列构成边界证据。行候选evidenceSide明确来源侧，reviewPolygon/reviewHeaderPolygon为原上传图的实际斜行/表头四角，前端与reviewRegion共同裁切，不混入另一队或相邻行。局部复识别只在本侧处理，新增teamTransforms记录来源；缺失/冲突仍为候选，不由比分补造事件。analysis/7、完整性检查与回读见 `../releases/1.1.17.md`。
+
+1.1.15增量：识别证据HMAC对JSON值递归规范化，字段顺序变化不改变签名，数组顺序保留。旧格式按已知生产字段顺序严格还原后验签，不重签未知数据或绕过凭证；修改比赛、文件、图摘要、规则或识别版本仍拒绝。只读验证通过不等于比赛已保存。手机保存失败保留已核对候选及确认状态，重试沿用原草稿；授权、签报锁定和事件版本约束保持。线上热修复已回读，见 `../releases/1.1.15.md`。
+
+1.1.14增量：行候选的reviewRegion/reviewHeaderRegion为上传图像素坐标，imageQuality.regionCoordinateSpace须为uploaded_image；增强坐标在服务端逆变换后才返回。切片仅作识别核对证据，使用真实表头及该队该行，不改变身份、角色、事件或确认状态。缺少定位不能猜相邻行，查看/放大不自动确认。保存仍走原签名和稳定球员ID流程；旧草稿需重识别。发布与边界见 `../releases/1.1.14.md`。
+
+1.1.13增量：保留号码未识别的有效名单行，不用0表示缺失；号码/姓名/勾号仅在同一表格行单元格内组合。正式身份必须由同队该行的号码候选与姓名候选共同唯一匹配稳定ID，不能靠最近姓名或名单序号补齐。小图增强不改原始证据摘要，识别质量元数据不是竞技事实；已清楚分钟不被部分结果回退，冲突和缺失保持待核对。后端已回读上线，小程序开发包已上传，体验版标记未代查，详见 `../releases/1.1.13.md`。
+
+1.1.11：圈号只作原文分隔，不保存进球顺序字段，跨栏手写先绑定本队本行号码，再提取圈外分钟。只有身份、角色、分钟或人数冲突才要求人工核对；清楚候选无需逐行确认。局部复识别只增强不清楚行，不回退已清楚记录，不用比分或圈号补造分钟。8人制是本次用户确认的比赛规程，不作为其他比赛默认人数；超员保留冲突，不自动删人。单独箭头或缺分钟不生成换人事件，也不能据此声称上场区间完整。
+
+沿用 PC `teams.home/away` 行结构：稳定 `playerId`、号码、姓名、首发/替补/不出场、换上/换下/进球/黄牌/红牌分钟、队长与门将。`roleConvention:tick_starter_blank_bench` 仅在本次识别明确启用“未打钩按替补”时出现；默认替补行带 `roleSource:blank_as_substitute`，未知标记保留核对反馈。圈号先按记录序号处理为候选，不与后续分钟拼成129等数值；冲突比分与分钟为未知，不能取第一项或零值。`annotations/rawLines/rawFields/reviewNotes` 保留核对依据；这些是识别候选，不进入竞技统计。
+
+手机草稿绑定本人、机构、赛事、matchId、上传路径、24小时有效期及比赛/阵容版本，依据保存的识别证据签名确认。正式球员关联与赛果一致性由 PC 同一服务复核；相同图片幂等，签报锁定及已核定阵容不能被重识别覆盖。“确认赛果”仅在用户明确确认后将本场标为已结束，正式归档/统计沿用既有独立规则。
+
 ## 比赛事件换人规则
 
 单场换人规则从锁定快照读取，次选组别已生效版本。首发仅初始化在场状态，不计换人次数。换下球员必须当前在场；换入球员须在场外，并能唯一关联本场稳定球员 ID。普通组别遵守换人次数、窗口和换回规程；free 组别不设人数和窗口上限，可否再次上场由 `substitutionReentryAllowed` 决定。罚下球员不能再次上场。未知规程、号码/姓名歧义、名单缺失、分钟缺失和过期整场事件数组均不能转成有效换人；历史异常显示原因，修正后才接受后续录入。
@@ -152,3 +222,14 @@ coverage.participationPolicy=recorded-participants/1；playerCardMatchIds按稳�
 accountingPolicy=evidence-points/1、creditedMetrics、uncreditedFields、breakdown与原metrics/coverage分离；原事实缺失不写0，奖励无依据不计。points-ledger/1账单按比赛说明各项得分，服务器严格对账；原始playerContributions不通过常规query输出。
 
 申诉使用platform_settings/recordType=player_points_appeal与active指针；请求幂等、同人/场/项待处理去重、revision CAS。本人/监护绑定可提交及读取，负责人可处理；普通球队管理权不开放私人生涯。状态“依据已补录”需服务端确认账单版本变化，补原始事实仍遵守裁判锁。所有姓名、球队、积分来自受控记录，不采信客户端计分。
+# 小程序个人空容器与基础创建（2026-10-18，本地待部署）
+
+`getMiniWorkspace`仅在可信登录身份的授权目录读取成功且确无工作空间时，返回`currentWorkspace.type=personal`、保留的`personal:<userId>`显示ID、空permissions/capabilities及空业务数组，`workspaces=[]`。此显示ID不加入授权目录，所有既有业务action仍调用原归属/权限校验，不把它当机构或球队ID。网络失败、目录未读齐、身份冲突仍返回错误，不能转换为空容器。
+
+`onboardingWorkspace.createEventSpace`沿用已存在的手机号账号及明确主办机构授权；可传orgId时再次核验该机构。手机基础创建传`entryPoint=mini_quick_create`、requestId、startDate/endDate，日期成对校验并保存为PC同字段。重试ID按服务端账号和requestId确定，已存在且内容指纹相同返回同一赛事；内容冲突或他人机构拒绝，不按名称合并。该创建只保存草稿，不生成参赛关系、名单、赛程、统计或收费。具体实现/发布状态见INTEGRATION和实施记录。
+
+## 球员登记临时制卡（2026-10-18）
+
+servicePlayerRegistration.preview在既有服务号/手机号/本队邀请/显式选择鉴权后验证资料和照片，仅返回制卡必要事实与指纹，不返回身份证、联系手机号或虚假授权状态；不写players或正式卡库。既有球员仍用playerCardForAuthorizedPlayer；新档案的精确未来稳定ID由服务端按会话和选择nonce生成，只读内部方法playerCardForAuthorizedRegistrationDraft复用同一完整数据读取与buildPlayerCard。该ID已存在则拒绝草稿路径，已知完整零记录可按现行规则计算初始预览，读取失败/未知/测试来源不默认铜卡。结果registrationPreview=true不可作为正式积分或授予凭证。
+
+serviceEntryPlayerCard(draft=true)生成预览并将事实指纹、照片ID、构图、模板版本、私有预览令牌与15分钟期限写入service_entry_sessions；confirm=true只确认此临时构图。renderRequest防止迟到响应覆盖新预览，确认和正式提交均验证。最终serviceEntryJoinPlayer携带cardPreviewRequired及cardPreviewToken，资料/照片变化、未确认、过期、模板变化均拒绝；正确构图随正式登记事务写入。号码check_number只返回是否可用与中文提示，不返回其他球员姓名；提交仍以完整有效库及球队revision防并发占号。

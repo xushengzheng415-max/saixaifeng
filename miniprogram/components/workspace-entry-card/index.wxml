@@ -1,0 +1,8 @@
+<view class="home-entry" bindtap="openCard">
+  <image class="entry-watermark" src="{{displayLogo}}" mode="aspectFit" binderror="imageError"></image><view class="entry-shade"></view>
+  <view class="entry-content">
+    <view class="entry-top"><view class="entry-category"><text class="entry-badge" wx:if="{{entry.hasBadge}}">{{entry.badgeText}}</text><text class="entry-kind">{{entry.kindText}}</text></view><text class="entry-status" wx:if="{{entry.hasStatus}}">{{entry.statusText}}</text></view>
+    <view class="entry-main"><image class="entry-logo" src="{{displayLogo}}" mode="aspectFit" binderror="imageError"></image><view class="entry-title"><text class="entry-name">{{entry.name}}</text><view class="entry-participant" wx:if="{{entry.hasParticipant}}"><text class="participant-label">参赛球队</text><text>{{entry.participantText}}</text></view><view class="entry-meta" wx:if="{{entry.hasMeta}}"><text wx:for="{{entry.metaLines}}" wx:for-item="line" wx:key="*this">{{line}}</text></view></view></view>
+    <view class="entry-footer"><view class="entry-roster" wx:if="{{entry.showPlayerCount}}"><text>{{entry.playerCountLabel}}</text><text class="entry-count">{{entry.playerCountText}}</text><text>{{entry.playerCountUnit}}</text></view><text class="entry-action">{{entry.actionText}} ›</text></view>
+  </view>
+</view>

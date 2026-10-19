@@ -1,0 +1,118 @@
+{
+  "format": "product-blueprint",
+  "project": "赛小蜂足球",
+  "revision": 1,
+  "scope": "首页卡片双款视觉探索，不接生产数据，不改变归属或权限",
+  "pages": [
+    {
+      "id": "P01A",
+      "name": "A款-放大模糊",
+      "portal": "mini",
+      "states": [
+        "normal"
+      ],
+      "layout": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      "template_features": [
+        "nav.bottom",
+        "detail.summary"
+      ],
+      "template_decision": {
+        "selected_pattern": "project:home-entry-card",
+        "mode": "adapt-structure",
+        "reason": "沿用现有首页数据层级，仅探索队徽背景样式",
+        "source_urls": [
+          "miniprogram/pages/home/home.wxml",
+          "miniprogram/pages/home/home.wxss",
+          "docs/ICON_SYSTEM.md"
+        ],
+        "keep": [
+          "现有赛事球队信息",
+          "共享标签",
+          "球员库人数",
+          "固定底栏与胶囊安全区"
+        ],
+        "remove": [
+          "原卡片独立球场底图"
+        ],
+        "adapt": [
+          "A队徽放大模糊铺满",
+          "B低透明队徽水印",
+          "保持文字对比与清晰前景队徽"
+        ]
+      }
+    },
+    {
+      "id": "P01B",
+      "name": "B款-低透明水印",
+      "portal": "mini",
+      "states": [
+        "normal"
+      ],
+      "layout": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      "template_features": [
+        "nav.bottom",
+        "detail.summary"
+      ],
+      "template_decision": {
+        "selected_pattern": "project:home-entry-card",
+        "mode": "adapt-structure",
+        "reason": "沿用现有首页数据层级，仅探索队徽背景样式",
+        "source_urls": [
+          "miniprogram/pages/home/home.wxml",
+          "miniprogram/pages/home/home.wxss",
+          "docs/ICON_SYSTEM.md"
+        ],
+        "keep": [
+          "现有赛事球队信息",
+          "共享标签",
+          "球员库人数",
+          "固定底栏与胶囊安全区"
+        ],
+        "remove": [
+          "原卡片独立球场底图"
+        ],
+        "adapt": [
+          "A队徽放大模糊铺满",
+          "B低透明队徽水印",
+          "保持文字对比与清晰前景队徽"
+        ]
+      }
+    }
+  ],
+  "portals": [
+    {
+      "id": "mini",
+      "name": "小程序",
+      "platform": "mini",
+      "stack": "html"
+    }
+  ],
+  "existing_components": [
+    {
+      "id": "home-entry-card",
+      "name": "项目现有首页卡片与导航",
+      "source": "../../../miniprogram/pages/home/home.wxml",
+      "platforms": [
+        "mini"
+      ],
+      "code_stacks": [
+        "native-mini"
+      ],
+      "features": [
+        "nav.bottom",
+        "detail.summary",
+        "list.records"
+      ]
+    }
+  ]
+}

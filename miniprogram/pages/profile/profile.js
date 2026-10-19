@@ -1,13 +1,7 @@
 var workspace = require('../../utils/workspace')
-var sharedUi = require('../../utils/sharedEventUi')
 var release = require('../../config/release')
 
-var identityMeta = {
-  event_staff: { title: '赛事协作者', icon: '/images/icons/event.svg' },
-  team_coach: { title: '球队教练', icon: '/images/icons/team.svg' },
-  organizer: { title: '赛事负责人', icon: '/images/icons/event.svg' },
-  training_coach: { title: '青训教练', icon: '/images/icons/training.svg' }
-}
+var identityMeta = { team_coach:{title:'球队管理者',icon:'/images/icons/team.svg'}, organizer:{title:'赛事组织者',icon:'/images/icons/event.svg'} }
 
 function isDevtools() {
   try { return wx.getSystemInfoSync().platform === 'devtools' } catch (error) { return false }
@@ -16,24 +10,10 @@ function isDevtools() {
 function previewContext() {
   return {
     currentWorkspace: { id: 'preview-workspace', name: '赛小蜂足球俱乐部', logo: '' },
-    currentIdentity: { id: 'team_coach', available: ['team_coach', 'organizer', 'training_coach'] },
+    currentIdentity: { id: 'team_coach', available: ['team_coach', 'organizer'] },
     unreadMessageCount: 3,
     user: { nickName: '许老师', avatarUrl: '', phoneMasked: '138****1663', phoneVerified: true }
   }
-}
-
-function permissionText(permissions) {
-  var labels = {
-    'workspace.manage': '工作空间管理',
-    'event.view': '赛事查看',
-    'event.manage': '赛事管理',
-    'team.view': '球队查看',
-    'team.manage': '球队管理',
-    'education.view': '青训查看',
-    'education.manage': '青训管理',
-    'education.execute': '青训执行'
-  }
-  return (permissions || []).map(function(item) { return labels[item] || item }).join('、')
 }
 
 Page({
@@ -47,12 +27,8 @@ Page({
     phoneMasked: '',
     phoneVerifiedText: '未验证',
     phoneStateClass: 'is-unverified',
-    positionsText: '暂无授权岗位',
-    permissionsText: '暂无业务权限',
-    workspaceName: '当前机构',
-    workspaceLogo: '',
-    hasWorkspaceLogo: false,
-    currentIdentityName: '球队教练',
+    currentIdentityName: '球队管理者',
+    currentIdentityId: 'team_coach',
     currentIdentityIcon: '/images/icons/team.svg',
     hasUnread: false,
     unreadText: '',
@@ -82,7 +58,7 @@ Page({
     if (isDevtools() && options && options.visualQa === '1') {
       this.setData({ localVisualQa: true })
       this.applyContext(previewContext())
-      if (options.state === 'identity-sheet') this.setData({ isIdentitySheet: true })
+      if (options.state === 'identity-sheet') this.openIdentitySheet()
       return
     }
     if (workspace.isGuestReviewEnabled(options) || !workspace.hasAuthenticatedUser()) {
@@ -93,14 +69,18 @@ Page({
   },
   onShow: function() {
     if (typeof this.getTabBar === 'function' && this.getTabBar()) this.getTabBar().syncFromPage(4)
+    this.setIdentityTabHidden(this.data.isIdentitySheet)
     if (this.data.localVisualQa) return
-    if (this.data.guestMode) return
+    if (this.data.guestMode && !workspace.hasAuthenticatedUser()) return
+    if (this.data.guestMode) this.setData({ guestMode: false })
     if (!workspace.hasAuthenticatedUser()) {
       this.loadGuestDemo()
       return
     }
     this.loadData(true)
   },
+  onHide: function() { this.dismissIdentitySheet() },
+  onUnload: function() { this.dismissIdentitySheet() },
 
   loadData: function(silent) {
     var that = this
@@ -114,55 +94,43 @@ Page({
 
   applyContext: function(context) {
     if (!context || !context.currentWorkspace) return
-    var current = context.currentWorkspace
-    var identity = context.currentIdentity || {}
-    var currentId = identity.id || 'team_coach'
-    var isShared=current.type==='tournament_shared'
-    var sharedModules=sharedUi.modules(current.sharedPermissions || [])
-    var available = identity.available || [currentId]
-    var options = available.map(function(id) {
-      var meta = identityMeta[id] || identityMeta.team_coach
-      return { id: id, title: meta.title, icon: meta.icon, selectedClass: id === currentId ? 'is-current' : '', selectedText: id === currentId ? '当前使用' : '', selectable: id !== currentId }
+    var currentId = workspace.getPortalRole(context)
+    var options = workspace.portalRoleOptions(context)
+    var selected = this.data.isIdentitySheet ? this.data.selectedIdentity : ''
+    var canConfirm = options.some(function(item) { return item.id === selected && item.selectable })
+    if (canConfirm) options = options.map(function(item) {
+      return item.id === selected ? Object.assign({}, item, { selectedClass: 'is-selected', selectedText: '已选择' }) : item
     })
     var currentMeta = identityMeta[currentId] || identityMeta.team_coach
     var user = context.user || {}
-    var positions = current.positions || []
-    var permissions = current.permissions || []
     var unread = Number(context.unreadMessageCount || 0)
     var primaryMenus = this.data.primaryMenus.map(function(item) {
       return Object.assign({}, item, { badgeText: item.action === 'messages' && unread > 0 ? String(unread) : '' })
     })
     this.setData({
       loading: false,
-      isShared:isShared,
-      canSwitchWorkspace:(context.workspaces || []).length>1,
-      sharedPermissionText:sharedModules.map(function(module){return module.title}).join('、') || '暂无手机模块授权',
       userName: user.nickName || '微信用户',
       userAvatar: user.avatarUrl || '',
       hasUserAvatar: Boolean(user.avatarUrl),
       phoneMasked: user.phoneMasked || '',
       phoneVerifiedText: user.phoneVerified ? '手机号已验证' : '手机号未验证',
       phoneStateClass: user.phoneVerified ? 'is-verified' : 'is-unverified',
-      positionsText: positions.length ? positions.join('、') : '暂无授权岗位',
-      permissionsText: permissions.length ? permissionText(permissions) : '暂无业务权限',
-      workspaceName: current.name || '当前机构',
-      workspaceLogo: current.logo || '',
-      hasWorkspaceLogo: Boolean(current.logo),
-      currentIdentityName: identity.label || currentMeta.title,
+      currentIdentityName: currentMeta.title,
+      currentIdentityId: currentId,
       currentIdentityIcon: currentMeta.icon,
       identityOptions: options,
       primaryMenus: primaryMenus,
       hasUnread: unread > 0,
       unreadText: unread > 99 ? '99+' : (unread > 0 ? String(unread) : ''),
-      hasIdentityOptions: options.length > 1,
-      confirmDisabled: true,
+      hasIdentityOptions: true,
+      selectedIdentity: canConfirm ? selected : '',
+      confirmDisabled: !canConfirm,
       confirmText: '确认切换',
-      errorText: ''
+      errorText: this.data.isIdentitySheet ? this.data.errorText : ''
     })
   },
 
   goToInfo: function() { if (this.data.guestMode) return workspace.promptLogin('登录后可维护头像、昵称和账号安全信息。'); wx.navigateTo({ url: '/pages/profile/info/info' }) },
-  onSwitchWorkspace:function(){var that=this;workspace.chooseWorkspace(workspace.readContext()).then(function(context){that.applyContext(context)}).catch(function(error){wx.showToast({title:sharedUi.message(error),icon:'none'})})},
   goToMessages: function() { if (this.data.guestMode) return workspace.promptLogin('登录后可接收并查看与你相关的赛事和球队消息。'); wx.navigateTo({ url: '/pages/messages/index' }) },
 
   onMenuTap: function(event) {
@@ -179,24 +147,37 @@ Page({
   },
 
   openIdentitySheet: function() {
-    if (this.data.guestMode) return workspace.promptLogin('登录后可查看并切换当前机构内已授权的身份。')
+    if (this.data.guestMode) return workspace.promptLogin('登录后可切换球队管理者或赛事组织者。')
     if (!this.data.hasIdentityOptions) {
       wx.showToast({ title: '当前机构暂无其他已授权身份', icon: 'none' })
       return
     }
-    this.setData({ isIdentitySheet: true, errorText: '' })
+    if (this.data.submitting) return
+    var context = this.data.localVisualQa ? previewContext() : (workspace.readContext() || {})
+    this.setData({ isIdentitySheet: true, identityOptions: workspace.portalRoleOptions(context), selectedIdentity: '', confirmDisabled: true, confirmText: '确认切换', errorText: '' })
+    this.setIdentityTabHidden(true)
   },
 
-  closeIdentitySheet: function() { this.setData({ isIdentitySheet: false, confirmDisabled: true, confirmText: '确认切换', errorText: '' }) },
+  setIdentityTabHidden: function(hidden) {
+    var bar = typeof this.getTabBar === 'function' && this.getTabBar()
+    if (bar && typeof bar.setOverlayHidden === 'function') bar.setOverlayHidden(hidden)
+  },
+  dismissIdentitySheet: function() {
+    this.setData({ isIdentitySheet: false, selectedIdentity: '', confirmDisabled: true, confirmText: '确认切换', errorText: '' })
+    this.setIdentityTabHidden(false)
+  },
+  closeIdentitySheet: function() { if (!this.data.submitting) this.dismissIdentitySheet() },
 
   selectIdentity: function(event) {
+    if (this.data.submitting) return
     var id = event.currentTarget.dataset.id || ''
     var selected = this.data.identityOptions.some(function(item) { return item.id === id && item.selectable })
     if (!selected) return
     var options = this.data.identityOptions.map(function(item) {
       var isSelected = item.id === id
-      return Object.assign({}, item, { selectedClass: isSelected ? 'is-selected' : (item.selectedText ? 'is-current' : ''), selectedText: isSelected ? '待切换' : (item.selectable ? '' : '当前使用') })
-    })
+      var isCurrent = item.id === this.data.currentIdentityId
+      return Object.assign({}, item, { selectedClass: isSelected ? 'is-selected' : (isCurrent ? 'is-current' : (!item.selectable ? 'is-disabled' : '')), selectedText: isSelected ? '已选择' : (isCurrent ? '当前使用' : (!item.selectable ? '暂无授权' : '')) })
+    }, this)
     this.setData({ identityOptions: options, selectedIdentity: id, confirmDisabled: false })
   },
 
@@ -204,21 +185,12 @@ Page({
     var that = this
     var selected = this.data.selectedIdentity || ''
     if (!selected || this.data.confirmDisabled || this.data.submitting) return
-    var context = workspace.readContext() || {}
-    this.setData({ submitting: true, confirmText: '正在验证…', errorText: '' })
-    wx.cloud.callFunction({
-      name: 'getMiniWorkspace',
-      data: { action: 'setHomeIdentity', workspaceId: (context.currentWorkspace || {}).id || '', identity: selected },
-      success: function(response) {
-        var result = response.result || {}
-        if (!result.success) { that.setData({ errorText: result.message || '身份切换失败，请刷新后重试' }); return }
-        workspace.loadContext({ workspaceId: result.workspaceId || '' }).then(function() {
-          wx.switchTab({ url: '/pages/home/home' })
-        }).catch(function() { that.setData({ errorText: '身份已保存，但首页加载失败，请重试' }) })
-      },
-      fail: function() { that.setData({ errorText: '网络异常，身份未切换' }) },
-      complete: function() { that.setData({ submitting: false, confirmText: '确认切换' }) }
-    })
+    this.setData({submitting:true,confirmText:'正在切换…',errorText:''})
+    return workspace.switchPortalRole(selected).then(function(context) {
+      that.applyContext(context)
+      that.dismissIdentitySheet()
+      wx.switchTab({url:'/pages/home/home'})
+    }).catch(function(error) { that.setData({errorText:error.message || '身份切换失败，请重试'}) }).finally(function() { that.setData({submitting:false,confirmText:'确认切换'}) })
   },
 
   onLogout: function() {
@@ -236,8 +208,6 @@ Page({
       localVisualQa: false, guestMode: true, loading: false, submitting: false, errorText: '',
       userName: '当前未登录', userAvatar: '', hasUserAvatar: false, phoneMasked: '登录后显示账号信息',
       phoneVerifiedText: '功能演示', phoneStateClass: 'is-unverified',
-      positionsText: '示例 · 球队教练、赛事负责人', permissionsText: '登录后按机构授权显示',
-      workspaceName: '我的功能演示', workspaceLogo: '', hasWorkspaceLogo: false,
       currentIdentityName: '示例身份', currentIdentityIcon: '/images/icons/team.svg',
       hasUnread: false, unreadText: '', identityOptions: [], hasIdentityOptions: false, isIdentitySheet: false
     })

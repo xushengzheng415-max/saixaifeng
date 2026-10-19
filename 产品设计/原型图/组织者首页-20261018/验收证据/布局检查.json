@@ -1,0 +1,74 @@
+[
+  {
+    "id": "P01",
+    "width": 320,
+    "documentWidth": 320,
+    "height": 769,
+    "navTop": 672,
+    "navBottom": 760,
+    "capsuleOverlap": false,
+    "brokenImages": 0,
+    "primaryVisible": true
+  },
+  {
+    "id": "P01",
+    "width": 390,
+    "documentWidth": 390,
+    "height": 844,
+    "navTop": 756,
+    "navBottom": 844,
+    "capsuleOverlap": false,
+    "brokenImages": 0,
+    "primaryVisible": true
+  },
+  {
+    "id": "P01",
+    "width": 430,
+    "documentWidth": 430,
+    "height": 932,
+    "navTop": 844,
+    "navBottom": 932,
+    "capsuleOverlap": false,
+    "brokenImages": 0,
+    "primaryVisible": true
+  },
+  {
+    "id": "P02",
+    "width": 320,
+    "documentWidth": 320,
+    "height": 1100,
+    "navTop": 672,
+    "navBottom": 760,
+    "capsuleOverlap": false,
+    "brokenImages": 0,
+    "primaryVisible": true
+  },
+  {
+    "id": "P02",
+    "width": 390,
+    "documentWidth": 390,
+    "height": 1111,
+    "navTop": 756,
+    "navBottom": 844,
+    "capsuleOverlap": false,
+    "brokenImages": 0,
+    "primaryVisible": true
+  },
+  {
+    "id": "P02",
+    "width": 430,
+    "documentWidth": 430,
+    "height": 1095,
+    "navTop": 844,
+    "navBottom": 932,
+    "capsuleOverlap": false,
+    "brokenImages": 0,
+    "primaryVisible": true
+  },
+  {
+    "interactiveDestinations": 9,
+    "pcModal": true,
+    "retry": true,
+    "scope": "Local prototype only; no requests or production writes"
+  }
+]

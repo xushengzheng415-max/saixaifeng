@@ -170,7 +170,7 @@ App({
     this.globalData.currentCard = null
     this.globalData.cards = []
     this.globalData.workspaceContext = null
-    wx.clearStorageSync()
+    require('./utils/workspace').clearSessionStorage()
     wx.setStorageSync('authSessionVersion', AUTH_SESSION_VERSION)
     wx.setStorageSync('userLoggedOut', 'true')
   }
