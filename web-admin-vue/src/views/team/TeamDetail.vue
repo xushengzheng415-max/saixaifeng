@@ -1235,9 +1235,9 @@
         <el-form-item label="账号类型"><el-select v-model="staffAccessForm.accountType" style="width:100%"><el-option label="不分配账号" value="none" /><el-option label="子账号" value="member" /><el-option label="主账号" value="owner" /></el-select></el-form-item>
         <el-form-item v-if="staffAccessForm.accountType === 'member'" label="操作权限"><el-radio-group v-model="staffAccessForm.canManage"><el-radio :value="false">仅查看</el-radio><el-radio :value="true">管理球队</el-radio></el-radio-group></el-form-item>
         <el-form-item v-if="staffAccessForm.accountType === 'owner' || staffAccessForm.canManage" label=""><span class="staff-permission-note">球员维护、邀请球员、赛事报名、提交阵容</span></el-form-item>
-        <el-form-item v-if="staffAccessForm.accountType === 'owner'" class="team-access-force-claim-item" label=""><el-checkbox v-model="teamAccessForceClaim" class="team-access-force-claim">主办方代认领：直接将主账号设为球队负责人，无需本人确认（该手机号须已注册赛小蜂账号）</el-checkbox></el-form-item>
+        <el-form-item v-if="staffAccessForm.accountType === 'owner'" class="team-access-force-claim-item" label=""><el-checkbox v-model="teamAccessForceClaim" class="team-access-force-claim">主办方代认领：直接把该手机号设为球队负责人。该手机号已注册账号则立即生效；未注册则生成认领码，对方扫码后完成认领。</el-checkbox></el-form-item>
       </el-form>
-      <el-alert v-if="staffAccessForm.accountType === 'owner'" type="warning" :closable="false" title="更换主账号需新负责人接收后生效" />
+      <el-alert v-if="staffAccessForm.accountType === 'owner' && !teamAccessForceClaim" type="warning" :closable="false" title="更换主账号需新负责人接收后生效" />
       <template #footer><el-button @click="showTeamAccess=false">取消</el-button><el-button type="primary" :loading="teamAccessSaving" @click="saveTeamAccess">保存权限</el-button></template>
     </el-dialog>
 
@@ -2684,9 +2684,13 @@ async function saveTeamAccess() {
     if (!result?.success) throw new Error(result?.message || '球队管理权限保存失败')
     teamAccessRows.value = Array.isArray(result.personnel) ? result.personnel : []
     showTeamAccess.value = false
-    const claimed = teamAccessForceClaim.value
     teamAccessForceClaim.value = false
-    ElMessage.success(claimed ? '已代认领，主账号已直接生效' : (result.ownerTransferPending ? '主账号转移已发起，请让新负责人用该手机号登录并扫描赛事认领码' : '球队管理权限已保存'))
+    ElMessage.success(
+      result.forcedClaimApplied ? '已代认领，主账号已直接生效'
+      : result.forcedClaimPending ? '该手机号尚未注册，已生成认领码；对方扫码后即可完成认领'
+      : result.ownerTransferPending ? '主账号转移已发起，请让新负责人用该手机号登录并扫描赛事认领码'
+      : '球队管理权限已保存'
+    )
   } catch (error) {
     ElMessage.error(error.message || '球队管理权限保存失败')
   } finally {

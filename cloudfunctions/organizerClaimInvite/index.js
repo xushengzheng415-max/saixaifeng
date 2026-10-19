@@ -150,7 +150,40 @@ function userOwnsTournament(tournament, identity, actorOrgId) {
 const TEAM_ACCESS_ROLE_LABELS = {
   team_leader: '领队',
   head_coach: '主教练',
+  doctor: '队医',
   liaison: '联络员'
+}
+
+function staffAccountId(role) { return String(role || '').startsWith('staff:') ? String(role).slice(6) : '' }
+function standardTeamAccessRole(role) { return Object.prototype.hasOwnProperty.call(TEAM_ACCESS_ROLE_LABELS, role) }
+function teamAccountPermissions(value) { return Array.isArray(value) && value.includes('team.manage') ? ['team.view', 'team.manage'] : ['team.view'] }
+function playerMemberRoles(row) { return (Array.isArray(row && row.roles) ? row.roles : [row && row.role]).filter(role => ['player','guardian','parent'].includes(role)) }
+function otherMemberPermissions(row) { return (Array.isArray(row && row.permissions) ? row.permissions : []).filter(permission => typeof permission === 'string' && !permission.startsWith('team.')) }
+function staffBelongsToTeam(staff, teamId) {
+  const ids = [staff && staff.teamId, staff && staff.teamCode].filter(Boolean).map(String)
+  return ids.length > 0 && ids.every(id => id === String(teamId))
+}
+
+async function addPlayerAsStaff(event, identity) {
+  const context = await teamAccessContext(event, identity)
+  const playerId = text(event.playerId, 80)
+  if (!playerId) throw new Error('请选择队内球员')
+  const player = asObject((await db.collection('players').doc(playerId).get()).data)
+  if (!player || !staffBelongsToTeam(player, context.teamId)) throw new Error('球员不属于当前球队')
+  const existing = (await safeGet('coaches', { linkedPlayerId:playerId }, 100)).find(row => staffBelongsToTeam(row, context.teamId))
+  if (existing) return { success:true, staffId:String(existing._id), existing:true }
+  const type = ['team_leader','head_coach','doctor','other'].includes(event.type) ? event.type : 'other'
+  const role = TEAM_ACCESS_ROLE_LABELS[type] || '工作人员'
+  const added = await db.collection('coaches').add({ data:{
+    teamId:context.teamId, teamCode:context.teamId, orgId:String(context.team.orgId || context.team.organizationId || context.actorOrgId || ''),
+    teamName:context.team.name || '', name:text(player.name, 40), type, role,
+    linkedPlayerId:playerId, isAlsoPlayer:true, jerseyNumber:player.jerseyNumber || null,
+    birthDate:player.birthDate || '', nativePlace:player.nativePlace || '', jerseyName:player.jerseyName || '',
+    photoFileId:player.photoFileId || player.photoFileID || '', photoUrl:player.photoUrl || player.photo || '',
+    phone:normalizeClaimPhone(event.phone), source:'organizer_player_staff',
+    createTime:db.serverDate(), updateTime:db.serverDate()
+  } })
+  return { success:true, staffId:String(added._id) }
 }
 
 function normalizeClaimPhone(value) {
@@ -300,7 +333,7 @@ async function listTeamAccess(event, identity) {
   const rows = []
   for (const item of personnel) {
     const role = String(item.role || '')
-    if (!TEAM_ACCESS_ROLE_LABELS[role]) continue
+    if (!standardTeamAccessRole(role) && !staffAccountId(role)) continue
     const phone = normalizeClaimPhone(item.phone)
     const user = await userByPhone(phone)
     const membership = user ? memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id)) : null
@@ -312,7 +345,8 @@ async function listTeamAccess(event, identity) {
     else if (user && ownerId && String(user._id) === ownerId) status = '主账号'
     else if (membership && String(membership.status || 'accepted') === 'accepted') status = '已加入'
     else if (pending) status = '待登录'
-    rows.push({ role, roleLabel:TEAM_ACCESS_ROLE_LABELS[role], name:text(item.name, 40), phone, accountType:transferPending ? 'pending_owner' : (isPrimary ? 'owner' : 'member'), status })
+    const actualOwner = Boolean(user && ownerId && String(user._id) === ownerId)
+    rows.push({ role, staffId:staffAccountId(role), roleLabel:TEAM_ACCESS_ROLE_LABELS[role] || text(item.roleLabel, 40) || '工作人员', name:text(item.name, 40), phone, accountType:transferPending ? 'pending_owner' : (actualOwner || (!ownerId && isPrimary) ? 'owner' : 'member'), permissions:actualOwner || isPrimary ? ['team.view','team.manage'] : teamAccountPermissions(membership && ['active','accepted','claimed'].includes(String(membership.status || '').toLowerCase()) ? membership.permissions : pending ? pending.permissions : item.permissions), status })
   }
   return { success:true, teamId:context.teamId, primaryRole:primary ? String(primary.role || '') : '', personnel:rows, ownerTransferPending:Boolean(ownerTransfer) }
 }
@@ -327,7 +361,9 @@ async function revokeTeamAccessPhone(context, phone, protectedOwnerId) {
     const sameUser = user && memberUserId === String(user._id)
     const samePhone = normalizeClaimPhone(membership.phone) === normalizedPhone
     if ((!sameUser && !samePhone) || (protectedOwnerId && memberUserId === String(protectedOwnerId))) continue
-    await db.collection('team_memberships').doc(String(membership._id)).update({ data:{ status:'revoked', role:'member', roles:[], permissions:[], revokedAt:db.serverDate(), updateTime:db.serverDate() } })
+    const remainingRoles = playerMemberRoles(membership)
+    const remainingPermissions = [...otherMemberPermissions(membership), ...(remainingRoles.length ? ['team.view'] : [])]
+    await db.collection('team_memberships').doc(String(membership._id)).update({ data:{ status:remainingRoles.length || remainingPermissions.length ? 'accepted' : 'revoked', role:remainingRoles[0] || 'member', roles:remainingRoles, permissions:remainingPermissions, revokedAt:db.serverDate(), updateTime:db.serverDate() } })
   }
   const pendingInvites = await safeGet('team_invitations', { teamId:context.teamId, type:'team_member', inviteePhone:normalizedPhone, status:'active' }, 50)
   for (const pending of pendingInvites) {
@@ -341,22 +377,35 @@ async function saveTeamAccess(event, identity) {
   const personnel = []
   const seenRoles = new Set()
   const seenPhones = new Set()
-  for (const raw of rawPersonnel.slice(0, 3)) {
+  if (rawPersonnel.length > 50) throw new Error('球队管理账号最多设置50人')
+  for (const raw of rawPersonnel) {
     const role = String(raw && raw.role || '').trim()
-    if (!TEAM_ACCESS_ROLE_LABELS[role] || seenRoles.has(role)) continue
-    const name = text(raw && raw.name, 40)
+    const staffId = staffAccountId(role)
+    if ((!standardTeamAccessRole(role) && !staffId) || seenRoles.has(role)) throw new Error('工作人员身份重复或无效')
+    let staff = null
+    if (staffId) {
+      if (staffId.length > 80 || /[\\/]/.test(staffId)) throw new Error('工作人员标识无效')
+      staff = asObject((await db.collection('coaches').doc(staffId).get()).data)
+      if (!staff || !staffBelongsToTeam(staff, context.teamId)) throw new Error('工作人员不属于当前球队')
+    }
+    const name = text(staff ? staff.name : raw && raw.name, 40)
     const phone = normalizeClaimPhone(raw && raw.phone)
     if (!name && !phone) continue
     if (!name || !phone) throw new Error(`${TEAM_ACCESS_ROLE_LABELS[role]}姓名和有效手机号均不能为空`)
     if (seenPhones.has(phone)) throw new Error('同一手机号不能重复分配多个球队管理身份')
     seenRoles.add(role)
     seenPhones.add(phone)
-    personnel.push({ role, roleLabel:TEAM_ACCESS_ROLE_LABELS[role], name, phone })
+    personnel.push({ role, staffId, roleLabel:staff ? text(staff.role || TEAM_ACCESS_ROLE_LABELS[staff.type] || '工作人员', 40) : TEAM_ACCESS_ROLE_LABELS[role], name, phone, permissions:teamAccountPermissions(raw.permissions) })
   }
   if (!personnel.length) throw new Error('请至少设置一名球队管理人员')
   const requestedPrimaryRole = String(event.primaryRole || '').trim()
-  const primary = personnel.find(item => item.role === requestedPrimaryRole) || personnel[0]
+  const primary = personnel.find(item => item.role === requestedPrimaryRole)
+  if (!primary) throw new Error('请选择一位工作人员作为主账号')
+  const changedRole = String(event.changedRole || '')
+  if (changedRole && !personnel.some(person => person.role === changedRole)) throw new Error('本次工作人员账号不存在')
   const candidates = personnel.map(item => ({ ...item, accountType:item.role === primary.role ? 'owner' : 'member' }))
+  const resolved = []
+  for (const person of candidates) resolved.push({ person, user:await userByPhone(person.phone) })
   const now = db.serverDate()
   let invite = await latestTeamAccessInvite(context)
   const previousCandidates = Array.isArray(invite && invite.claimantCandidates) ? invite.claimantCandidates : []
@@ -375,17 +424,16 @@ async function saveTeamAccess(event, identity) {
     managerName:primary.name, managerPhone:primary.phone, updateTime:now
   } })
 
-  const forceOwnerClaim = Boolean(event.forceOwnerClaim)
   const memberships = await safeGet('team_memberships', { teamId:context.teamId }, 200)
   const currentOwnerId = String(context.team.ownerId || context.team.ownerUserId || context.team.claimedByUserId || '')
-  const resolved = []
-  for (const person of candidates) resolved.push({ person, user:await userByPhone(person.phone) })
   const primaryResolved = resolved.find(item => item.person.role === primary.role)
   const targetOwnerId = String(primaryResolved && primaryResolved.user && primaryResolved.user._id || '')
-  if (forceOwnerClaim && !targetOwnerId) {
-    throw new Error(`手机号 ${maskPhone(primary.phone)} 未注册赛小蜂账号，无法代认领，请先让该用户注册`)
-  }
-  const transferPending = Boolean(currentOwnerId && targetOwnerId !== currentOwnerId) && !forceOwnerClaim
+  // 主办方代认领：目标手机号已注册账号时跳过接收确认直接生效；
+  // 未注册时不阻断保存，仍走认领码流程（allowedClaimPhones），等对方扫码认领。
+  const forceOwnerClaim = Boolean(event.forceOwnerClaim)
+  const forcedClaimApplied = forceOwnerClaim && Boolean(targetOwnerId) && targetOwnerId !== currentOwnerId
+  const forcedClaimPending = forceOwnerClaim && !targetOwnerId
+  const transferPending = Boolean(currentOwnerId && targetOwnerId !== currentOwnerId) && !forcedClaimApplied
   const activeTransfers = await safeGet('team_invitations', { teamId:context.teamId, type:'team_owner_transfer', status:'active' }, 20)
   let matchingTransfer = null
   for (const transfer of activeTransfers) {
@@ -410,26 +458,27 @@ async function saveTeamAccess(event, identity) {
     else await db.collection('team_invitations').add({ data:{ ...transferData, createTime:now } })
     await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'team_owner_transfer_requested', tournamentId:context.tournamentId, teamId:context.teamId, actorUserId:identity.user._id, actorOrgId:context.actorOrgId, result:'pending_acceptance', detail:{ fromOwnerId:currentOwnerId, targetPhoneMasked:maskPhone(primary.phone), keepPreviousOwnerAsMember:true }, createTime:now } })
   }
-  const effectiveOwnerId = forceOwnerClaim ? targetOwnerId : currentOwnerId
-  if (forceOwnerClaim && targetOwnerId && targetOwnerId !== currentOwnerId) {
+  if (forcedClaimApplied) {
     await db.collection('teams').doc(context.teamId).update({ data:{ ownerId:targetOwnerId, claimedByUserId:targetOwnerId, claimedAt:now, updateTime:now } })
     await db.collection('registration_audit_logs').add({ data:{ sport:'football', action:'team_owner_forced_claim', tournamentId:context.tournamentId, teamId:context.teamId, actorUserId:identity.user._id, actorOrgId:context.actorOrgId, result:'success', detail:{ targetOwnerId, targetPhoneMasked:maskPhone(primary.phone), fromOwnerId:currentOwnerId }, createTime:now } })
   }
+  const effectiveOwnerId = forcedClaimApplied ? targetOwnerId : currentOwnerId
   for (const item of resolved) {
     const person = item.person
     const user = item.user
     const isPrimary = person.role === primary.role
-    if (isPrimary && (!currentOwnerId || transferPending) && !forceOwnerClaim) continue
+    if (isPrimary && (!currentOwnerId || transferPending) && !forcedClaimApplied) continue
+    if (changedRole && person.role !== changedRole && !isPrimary) continue
     if (user) {
       const existing = memberships.find(row => String(row.userId || row.memberUserId || '') === String(user._id))
       const memberRole = isPrimary ? 'owner' : (person.role === 'head_coach' ? 'coach' : 'member')
-      const permissions = isPrimary ? ['team.view','team.manage'] : ['team.view']
-      const data = { teamId:context.teamId, orgId:context.actorOrgId, userId:user._id, role:memberRole, roles:[memberRole], permissions, status:'accepted', phone:person.phone, source:'organizer_team_access', updateTime:now }
+      const permissions = [...new Set([...otherMemberPermissions(existing), ...(isPrimary ? ['team.view','team.manage'] : teamAccountPermissions(person.permissions))])]
+      const data = { teamId:context.teamId, orgId:context.actorOrgId, userId:user._id, role:memberRole, roles:[...new Set([...playerMemberRoles(existing), memberRole])], permissions, staffId:person.staffId || '', status:'accepted', phone:person.phone, source:'organizer_team_access', updateTime:now }
       if (existing && existing._id) await db.collection('team_memberships').doc(String(existing._id)).update({ data })
       else await db.collection('team_memberships').add({ data:{ ...data, createTime:now } })
     } else if (!isPrimary) {
       const pending = (await safeGet('team_invitations', { teamId:context.teamId, type:'team_member', inviteePhone:person.phone, status:'active' }, 10))[0]
-      const data = { teamId:context.teamId, orgId:context.actorOrgId, type:'team_member', status:'active', usageMode:'single', inviterUserId:identity.user._id, inviteePhone:person.phone, inviteeName:person.name, memberRole:person.role === 'head_coach' ? 'coach' : 'member', permissions:['team.view'], roleText:person.roleLabel, source:'organizer_team_access', updateTime:now }
+      const data = { teamId:context.teamId, orgId:context.actorOrgId, type:'team_member', status:'active', usageMode:'single', inviterUserId:identity.user._id, inviteePhone:person.phone, inviteeName:person.name, memberRole:person.role === 'head_coach' ? 'coach' : 'member', permissions:teamAccountPermissions(person.permissions), staffId:person.staffId || '', roleText:person.roleLabel, source:'organizer_team_access', updateTime:now }
       if (pending && pending._id) await db.collection('team_invitations').doc(String(pending._id)).update({ data })
       else await db.collection('team_invitations').add({ data:{ ...data, expiresAt:new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), createTime:now } })
     }
@@ -437,18 +486,22 @@ async function saveTeamAccess(event, identity) {
   const remainingPhones = new Set(candidates.map(item => item.phone))
   const removedPhones = Array.from(new Set(previousCandidates.map(item => normalizeClaimPhone(item.phone)).filter(phone => phone && !remainingPhones.has(phone))))
   for (const phone of removedPhones) await revokeTeamAccessPhone(context, phone, effectiveOwnerId)
-  return await listTeamAccess(event, identity)
+  await db.collection('registration_audit_logs').add({data:{sport:'football', action:'team_staff_access_saved', tournamentId:context.tournamentId, teamId:context.teamId, actorUserId:identity.user._id, actorOrgId:context.actorOrgId, result:'success', detail:{primaryRole:primary.role, accounts:candidates.map(person => ({staffId:person.staffId || '', role:person.role, permissions:person.role === primary.role ? ['team.view','team.manage'] : teamAccountPermissions(person.permissions)}))}, createTime:now}})
+  const result = await listTeamAccess(event, identity)
+  return { ...result, forcedClaimApplied, forcedClaimPending }
 }
 
 async function removeTeamAccess(event, identity) {
   const context = await teamAccessContext(event, identity)
   const role = String(event.role || '').trim()
-  if (!TEAM_ACCESS_ROLE_LABELS[role]) throw new Error('要删除的账号身份无效')
+  if (!standardTeamAccessRole(role) && !staffAccountId(role)) throw new Error('要删除的账号身份无效')
   const invite = await latestTeamAccessInvite(context)
   if (!invite) throw new Error('当前球队尚未分配管理账号')
   const candidates = Array.isArray(invite.claimantCandidates) ? invite.claimantCandidates : []
   const target = candidates.find(item => String(item.role || '') === role)
   if (!target) throw new Error('该账号权限已删除')
+  const targetUser = await userByPhone(normalizeClaimPhone(target.phone))
+  if (targetUser && String(targetUser._id) === String(context.team.ownerId || context.team.ownerUserId || context.team.claimedByUserId || '')) throw new Error('当前主账号不能直接取消，请先完成移交')
   const primary = candidates.find(item => item.accountType === 'owner') || candidates[0]
   if (primary && String(primary.role || '') === role) throw new Error('主账号不能直接删除，请先把其他账号设为主账号')
   const remaining = candidates.filter(item => String(item.role || '') !== role)
@@ -892,6 +945,7 @@ exports.main = async function(event) {
     if (event && event.action === 'listTeamExportRoster') return await listTeamExportRoster(event, identity)
     if (event && event.action === 'removeTeamAccess') return await removeTeamAccess(event, identity)
     if (event && event.action === 'listTeamAccess') return await listTeamAccess(event, identity)
+    if (event && event.action === 'addPlayerAsStaff') return await addPlayerAsStaff(event, identity)
     if (event && event.action === 'saveTeamAccess') return await saveTeamAccess(event, identity)
     if (event && event.action === 'listClaimReviewRequests') return await listClaimReviewRequests(event, identity)
     if (event && event.action === 'getClaimReviewProofUrls') return await getClaimReviewProofUrls(event, identity)

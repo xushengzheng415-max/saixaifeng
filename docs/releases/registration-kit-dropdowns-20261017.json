@@ -1,0 +1,17 @@
+{
+  "nativeKitDropdowns": 12,
+  "optionsPerDropdown": 17,
+  "contextTitlePresent": true,
+  "fullLabelMatches": true,
+  "outfieldImportMatches": true,
+  "sourceImagesPreserved": true,
+  "release": {
+    "target": "/preview/admin/",
+    "total": 377,
+    "matched": 377,
+    "failed": [],
+    "verifiedAt": "2026-10-17T09:23:18.925Z"
+  },
+  "sourceCommit": "8dbb6412",
+  "renderedPagesInspected": 3
+}

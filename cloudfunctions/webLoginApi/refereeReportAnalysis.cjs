@@ -126,13 +126,13 @@ function parseTables(tableResult,textResult,timing={},handwriting=null,options={
           if(offset===5&&/^(GK|C|S)$/i.test(clean(tableText)))return tableText
           if(offset>=6&&tableText&&!/球衣|签名/.test(tableText)){
             if(/[中场半]/.test(tableText)){const mid=candidates.find(t=>/中场|半场/.test(t.text));if(mid)return mid.text}
-            if(offset>=8&&/^\d+$/.test(clean(tableText))&&!candidates.some(t=>clean(t.text).replace(/[′'’]/g,'')===clean(tableText)))uncorroborated.push(offset)
+            if(offset>=columns.goals[0]&&/^\d+$/.test(clean(tableText))&&!candidates.some(t=>clean(t.text).replace(/[′'’]/g,'')===clean(tableText)))uncorroborated.push(offset)
             return tableText
           }
           if(offset>=6)return candidates.filter(t=>t.source==='handwriting'&&!cells.some(other=>other.c===targetColumn&&Math.abs(other.r-numberCells[i].r)<=1&&other.r!==numberCells[i].r&&clean(other.text)===clean(t.text))).map(t=>t.text).join(',')
           if(!candidates.length)return ''
           const best=candidates.slice().sort((a,b)=>{
-            const recognized=t=>offset===3?exactMark(t.text,'starter'):offset===4?exactMark(t.text,'substitute'):offset===5?/^(GK|C|S)$/i.test(clean(t.text)):/\d|中场|半场/.test(clean(t.text))
+            const recognized=t=>offset===3?exactMark(t.text,'starter'):offset===4?exactMark(t.text,'substitute'):offset===columns.identity?/^(GK|C|S)$/i.test(clean(t.text)):/\d|中场|半场/.test(clean(t.text))
             return Number(recognized(b))-Number(recognized(a)) || Number(b.source==='handwriting')-Number(a.source==='handwriting')
           })[0]
           return best.text
@@ -161,8 +161,8 @@ function parseTables(tableResult,textResult,timing={},handwriting=null,options={
         if(markCell?.cell_location?.length){const xs=markCell.cell_location.map(p=>p.x),ys=markCell.cell_location.map(p=>p.y);entry.markRegion={left:Math.floor(Math.min(...xs)),top:Math.floor(Math.min(...ys)),width:Math.ceil(Math.max(...xs)-Math.min(...xs)),height:Math.ceil(Math.max(...ys)-Math.min(...ys))}}
         if(blankAsBench && mark)reviewNotes.push('按未打钩默认替补，旁注仍需核对')
         for(const field of ['on','off','goals','yellow','red']){const normalized=normalizeMinute(raw[field],timing,field);entry[field]=normalized.value;reviewNotes.push(...normalized.notes)}
-        for(const offset of uncorroborated){const field={8:'goals',9:'yellow',10:'red'}[offset];reviewNotes.push(`原文候选“${raw[field]}”缺少位置复核，请确认`);entry[field]='?'}
-        if(role==='substitute'&&starter)reviewNotes.push('首发栏有涂改，按替补标记解析，请核对')
+        for(const offset of uncorroborated){const field=columns.goals.includes(offset)?'goals':offset===columns.yellow?'yellow':offset===columns.red?'red':null;if(!field)continue;reviewNotes.push(`原文候选“${raw[field]}”缺少位置复核，请确认`);entry[field]='?'}
+        if(!combinedMark&&role==='substitute'&&starter)reviewNotes.push('首发栏有涂改，按替补标记解析，请核对')
         if(entry.on&&entry.off&&/^\d+$/.test(entry.on)&&/^\d+$/.test(entry.off)&&Number(entry.off)<=Number(entry.on))reviewNotes.push('换下时间不晚于换上时间，请核对')
         if(role==='unknown')reviewNotes.push('首发、替补标记不清，请核对')
         if(!entry.name)reviewNotes.push('姓名与号码需核对')

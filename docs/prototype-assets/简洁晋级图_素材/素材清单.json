@@ -1,0 +1,81 @@
+{
+  "schema_version": 2,
+  "asset_dir": ".",
+  "prototype": "原型原图/codex-clipboard-c7f4c036-4a1a-4eb2-b873-1e2535ce16e7.png",
+  "status": "implemented",
+  "generated_at": "2026-10-16T20:13:24.112587+08:00",
+  "screen": {
+    "width": 1141,
+    "height": 773
+  },
+  "summary": "只采用用户参考图的左右向中心晋级结构；节点仅队名、队徽、原小组名次，不复制背景、文字、奖杯或水印。",
+  "inventory_notes": {
+    "missing_assets": "无阻塞素材缺口；缺队徽时文字回退，未知来源不猜球队。",
+    "icons": "不新增图标、奖杯或装饰；节点使用球队实际队徽。",
+    "text": "阶段标题与队名由真实赛程提供，原组别名次来自group_rank。",
+    "production_assets": "队徽从既有接口实时读取，不提取参考海报中的国旗或图片。",
+    "interactions": "用户明确不需查看赛果；图内没有按钮或跳转。"
+  },
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "原型原图/codex-clipboard-c7f4c036-4a1a-4eb2-b873-1e2535ce16e7.png",
+      "sha256": "659444c4fa8b3a18de8cc7dcacf70f5bc8e8aa1184f004af4115cad10064b4d9",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1141,
+        "height": 773
+      },
+      "notes": "原型原图仅作参考"
+    },
+    {
+      "no_crop_reason": "全区域用Vue与SVG绘制，只需要几何关系，不把海报裁片用作素材。",
+      "notes": "左右两路汇合中心决赛；排位线路单独显示。",
+      "id": "mirror-layout",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "y": 199,
+        "width": 911,
+        "x": 160,
+        "height": 492
+      }
+    },
+    {
+      "text": "队名、原小组名次",
+      "notes": "用户要求保留队名队徽与原名次；没有时间、场序、比分、状态或赛果按钮。",
+      "id": "team-label",
+      "category": "text",
+      "implementation": "text-code",
+      "source_bbox": {
+        "y": 218,
+        "width": 100,
+        "x": 174,
+        "height": 40
+      }
+    }
+  ],
+  "ready_at": "2026-10-16T12:13:57.293885+00:00",
+  "validation": {
+    "screenshots": [
+      {
+        "path": "验收/实际页面.png",
+        "viewport": {
+          "width": 1280,
+          "height": 720
+        }
+      }
+    ],
+    "comparison": "验收/对照报告.md",
+    "differences": [
+      {
+        "severity": "minor",
+        "description": "按后台现有浅色绿色视觉呈现；不复制海报背景、奖杯或水印。"
+      }
+    ],
+    "interaction_checks": []
+  }
+}
