@@ -245,6 +245,73 @@
             </div>
           </div>
         </el-card>
+
+        <!-- 微信授权撤回复规（2026-10-20）：每日邮件名单批量处理与审计 -->
+        <el-card v-if="!activeRequestId" class="admin-card">
+          <template #header>
+            <div class="card-header">
+              <div class="header-title">
+                <h3>微信授权撤回处理</h3>
+                <el-tag type="danger">合规</el-tag>
+              </div>
+              <el-button :loading="revocationHistoryLoading" @click="loadRevocationHistory">刷新处理记录</el-button>
+            </div>
+          </template>
+          <el-alert
+            title="微信平台要求：用户撤回授权或注销微信后，开发者应主动删除其授权信息。实时撤回事件由回调自动处理；此处粘贴每日邮件附件名单进行兜底处理。"
+            type="info"
+            :closable="false"
+            show-icon
+          />
+          <el-form label-position="top" class="revocation-form">
+            <el-form-item label="撤回名单（每行一条：应用类型,openid[,unionid][,撤回码]，应用类型取 miniprogram / service / website）">
+              <el-input
+                v-model="revocationText"
+                type="textarea"
+                :rows="6"
+                placeholder="miniprogram,oXXXXXXXXXXXXXXXX
+service,oYYYYYYYYYYYYYYYY,,205
+website,oZZZZZZZZZZZZZZZZ"
+              />
+            </el-form-item>
+            <el-button type="danger" :loading="revocationLoading" :disabled="!revocationText.trim()" @click="processRevocationList">
+              执行删除（幂等，可重复执行）
+            </el-button>
+          </el-form>
+          <div v-if="revocationSummary" class="scan-result">
+            <el-alert
+              :title="`处理完成：共 ${revocationSummary.total} 条，已删除 ${revocationSummary.processed} 条，未匹配 ${revocationSummary.noMatch} 条，无需删除 ${revocationSummary.noRelevantScope} 条，无效 ${revocationSummary.invalid} 条`"
+              type="success"
+              :closable="false"
+              show-icon
+            />
+            <el-alert
+              v-if="revocationInvalidLines.length"
+              :title="`${revocationInvalidLines.length} 行格式无法识别，请手工核对`"
+              type="warning"
+              :closable="false"
+              show-icon
+            />
+          </div>
+          <el-table v-if="revocationLogs.length" :data="revocationLogs" style="width: 100%; margin-top: 16px;" max-height="360" size="small">
+            <el-table-column label="时间" width="170">
+              <template #default="{ row }"><span>{{ formatTime(row.createTime) }}</span></template>
+            </el-table-column>
+            <el-table-column prop="appType" label="来源端" width="110" />
+            <el-table-column prop="source" label="通道" min-width="170" />
+            <el-table-column label="范围" width="130">
+              <template #default="{ row }"><span>{{ revocationScopeLabel(row) }}</span></template>
+            </el-table-column>
+            <el-table-column label="结果" width="110">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'processed' ? 'success' : (row.status === 'no_match' ? 'info' : 'warning')" size="small">
+                  {{ row.status === 'processed' ? '已删除' : (row.status === 'no_match' ? '未匹配' : row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="openid" label="openid" min-width="200" show-overflow-tooltip />
+          </el-table>
+        </el-card>
       </template>
     </div>
   </div>
@@ -286,6 +353,12 @@ const scanning = ref(false)
 const deleting = ref(false)
 const scanned = ref(false)
 const orphanPlayers = ref([])
+const revocationText = ref('')
+const revocationLoading = ref(false)
+const revocationHistoryLoading = ref(false)
+const revocationSummary = ref(null)
+const revocationInvalidLines = ref([])
+const revocationLogs = ref([])
 let pollTimer = null
 
 const customerServiceMessage = computed(() => {
@@ -300,6 +373,48 @@ async function requestPlatformOwner(action, payload = {}) {
   const result = await callFunction('platformOwner', { action, ...payload })
   if (!result || !result.success) throw new Error(result?.error || '隐藏协助服务调用失败')
   return result
+}
+
+const REVOCATION_SCOPE_LABELS = {
+  all: '全部授权信息',
+  nickname_avatar: '昵称头像',
+  phone: '授权手机号',
+  address: '地址', invoice: '发票', card: '卡券', microphone: '麦克风',
+  location: '位置', media: '图片视频', plate: '车牌', bluetooth: '蓝牙',
+  camera: '摄像头', steps: '步数', file: '文件', email: '邮箱'
+}
+
+function revocationScopeLabel(row) {
+  const scopes = Array.isArray(row.scopes) ? row.scopes : []
+  if (!scopes.length) return row.revokeInfo || '-'
+  return scopes.map(scope => REVOCATION_SCOPE_LABELS[scope] || scope).join('、')
+}
+
+async function processRevocationList() {
+  revocationLoading.value = true
+  try {
+    const reply = await requestPlatformOwner('authorizationRevocationProcess', { rawText: revocationText.value })
+    revocationSummary.value = reply.summary || null
+    revocationInvalidLines.value = reply.invalidLines || []
+    ElMessage.success('撤回名单处理完成，请核对处理记录')
+    await loadRevocationHistory()
+  } catch (error) {
+    ElMessage.error(error.message || '处理失败，请重试')
+  } finally {
+    revocationLoading.value = false
+  }
+}
+
+async function loadRevocationHistory() {
+  revocationHistoryLoading.value = true
+  try {
+    const reply = await requestPlatformOwner('authorizationRevocationHistory', { limit: 50 })
+    revocationLogs.value = reply.logs || []
+  } catch (error) {
+    ElMessage.error(error.message || '处理记录查询失败')
+  } finally {
+    revocationHistoryLoading.value = false
+  }
 }
 
 function persistOwnerFlag() {
