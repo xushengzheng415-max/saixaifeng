@@ -5,7 +5,7 @@
     { "id": "divisions", "title": "竞赛组别设置", "cover": "03.jpg", "video": "BV1mEJe6oEcd", "part": 1 },
     { "id": "registration", "title": "报名审核与球队管理", "cover": "04.jpg", "video": "BV1t7Je6tEv6", "part": 1 },
     { "id": "draw", "title": "抽签分组", "cover": "05.jpg", "video": "BV1pDJv69Ep8", "part": 1 },
-    { "id": "matches", "title": "比赛管理", "cover": "06.jpg", "video": "", "part": 1 },
+    { "id": "matches", "title": "比赛管理", "cover": "06.jpg", "video": "BV1M7n661EGB", "part": 1 },
     { "id": "results", "title": "赛果管理", "cover": "07.jpg", "video": "", "part": 1 },
     { "id": "news", "title": "新闻中心", "cover": "08.jpg", "video": "", "part": 1 },
     { "id": "referees", "title": "裁判管理", "cover": "09.jpg", "video": "", "part": 1 }
