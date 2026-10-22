@@ -27,6 +27,15 @@ function hashSessionToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex')
 }
 
+// 联赛轮次名：第一轮、第二轮……（双循环时连续编号）
+function chineseRoundName(roundNumber) {
+  var n = Math.max(1, Number(roundNumber) || 1)
+  var digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+  if (n <= 10) return '第' + digits[n] + '轮'
+  if (n < 20) return '第十' + digits[n - 10] + '轮'
+  return '第' + digits[Math.floor(n / 10)] + '十' + digits[n % 10] + '轮'
+}
+
 function recordBelongsToActor(record, actor) {
   if (!record || !actor) return false
   var orgIds = ['orgId', 'organizationId', 'organization_id']
@@ -573,7 +582,7 @@ function normalizeScheduleTiming(scheduleConfig, division) {
   if (resources.length === 0) return { error: '请至少填写一块真实比赛场地', code: 'VENUE_RESOURCES_REQUIRED' }
   var invalidResource = resources.find(function(resource) { return scheduleEngine.buildTimeSlots(Object.assign({},config,{ sessionWindows:resource.sessionWindows })).length === 0 })
   if (invalidResource) return { error: invalidResource.venue + '没有有效的上午、下午或晚上时间段', code: 'VENUE_SESSION_WINDOWS_REQUIRED' }
-  config.venueResources = resources.map(function(resource) { return { name:resource.venue,fieldFormat:resource.fieldFormat,sessionWindows:resource.sessionWindows } })
+  config.venueResources = resources.map(function(resource) { return { name:resource.venue,fieldFormat:resource.fieldFormat,sessionWindows:resource.sessionWindows,kickoffTimes:resource.kickoffTimes || [] } })
   config.venues = resources.map(function(resource) { return resource.venue })
   var venueSlots = scheduleEngine.buildVenueSlots(config)
   var slots = Array.from(new Set(venueSlots.map(function(slot) { return slot.time }))).sort()
@@ -1030,7 +1039,7 @@ function generateLeagueSchedule(tournamentId, ranking, leagueConfig, scheduleCon
           scheduleType: 'league',
           phase: 'league',
           round: roundNumber,
-          roundName: '联赛',
+          roundName: chineseRoundName(roundNumber),
           matchIndex: matchIdx,
           homeTeamId: home.teamId,
           homeTeamName: home.teamName || home.name || '',
@@ -1410,7 +1419,8 @@ function sanitizeScheduleDraft(input) {
     var fieldFormat=String(resource && resource.fieldFormat || '').toLowerCase()
     if (!validFormats.has(fieldFormat)) fieldFormat=''
     var windows=sanitizeWindows(Array.isArray(resource && resource.sessionWindows) && resource.sessionWindows.length?resource.sessionWindows:sharedWindows)
-    return { name:String(resource && (resource.name || resource.venue) || '').trim().slice(0,80),fieldFormat:fieldFormat,sessionWindows:windows }
+    var kickoffTimes=Array.from(new Set((Array.isArray(resource && resource.kickoffTimes)?resource.kickoffTimes:[]).map(function(value){return safeTime(value,'')}).filter(Boolean))).sort().slice(0,40)
+    return { name:String(resource && (resource.name || resource.venue) || '').trim().slice(0,80),fieldFormat:fieldFormat,sessionWindows:windows,kickoffTimes:kickoffTimes }
   }).filter(function(resource){return resource.name && resource.fieldFormat})
   var divisionPolicies={}
   var rawPolicies=source.divisionPolicies && typeof source.divisionPolicies==='object' ? source.divisionPolicies : {}
@@ -1426,7 +1436,7 @@ function sanitizeScheduleDraft(input) {
       allowedVenues:Array.from(new Set((Array.isArray(policy.allowedVenues)?policy.allowedVenues:[]).map(function(value){return String(value || '').trim().slice(0,80)}).filter(Boolean))).slice(0,50)
     }
   })
-  return { schemaVersion:2,generationMode:'joint',calendarSource:String(source.calendarSource || '')==='import'?'import':'settings',startDate:String(source.startDate || '').slice(0,10),endDate:String(source.endDate || '').slice(0,10),matchDays:draftDays,matchDates:matchDates,venues:venueResources.map(function(resource){return resource.name}),venueResources:venueResources,sessionWindows:sharedWindows,calendarExtraTimeSlots:Array.from(new Set((Array.isArray(source.calendarExtraTimeSlots)?source.calendarExtraTimeSlots:[]).map(function(time){return safeTime(time,'')}).filter(Boolean))).slice(0,30),timeStepMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),slotMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),defaultTurnaroundMinutes:Math.max(0,Math.min(180,Number(source.defaultTurnaroundMinutes == null ? 10 : source.defaultTurnaroundMinutes))),frequencyPreset:['adaptive','daily_one','am_pm','custom'].indexOf(String(source.frequencyPreset || 'adaptive'))>=0?String(source.frequencyPreset || 'adaptive'):'adaptive',divisionPolicies:divisionPolicies,maxDailyOne:false,maxPerSession:1,dailyMatchLimit:0,restMinutes:Math.max(0,Math.min(4320,Number(source.restMinutes == null ? 120 : source.restMinutes))) }
+  return { schemaVersion:2,generationMode:'joint',calendarSource:String(source.calendarSource || '')==='import'?'import':'settings',startDate:String(source.startDate || '').slice(0,10),endDate:String(source.endDate || '').slice(0,10),matchDays:draftDays,matchDates:matchDates,venues:venueResources.map(function(resource){return resource.name}),venueResources:venueResources,sessionWindows:sharedWindows,calendarExtraTimeSlots:Array.from(new Set((Array.isArray(source.calendarExtraTimeSlots)?source.calendarExtraTimeSlots:[]).map(function(time){return safeTime(time,'')}).filter(Boolean))).slice(0,30),timeStepMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),slotMinutes:Math.max(5,Math.min(30,Number(source.timeStepMinutes || 5))),defaultTurnaroundMinutes:Math.max(0,Math.min(180,Number(source.defaultTurnaroundMinutes == null ? 10 : source.defaultTurnaroundMinutes))),frequencyPreset:['adaptive','daily_one','am_pm','custom'].indexOf(String(source.frequencyPreset || 'adaptive'))>=0?String(source.frequencyPreset || 'adaptive'):'adaptive',finalStageExclusive:source.finalStageExclusive===true,divisionPolicies:divisionPolicies,maxDailyOne:false,maxPerSession:1,dailyMatchLimit:0,restMinutes:Math.max(0,Math.min(4320,Number(source.restMinutes == null ? 120 : source.restMinutes))) }
 }
 
 async function savePairingTemplate(event,tournament,actor) {

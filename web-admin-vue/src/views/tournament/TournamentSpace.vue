@@ -10,8 +10,9 @@
         class="demo-mode-button"
         type="button"
         :aria-pressed="demoModeActive"
+        :disabled="demoEntering"
         @click="toggleDemoMode"
-      >{{ demoModeActive ? '退出演示模式' : '演示模式' }}</button>
+      >{{ demoEntering ? '准备演示数据…' : (demoModeActive ? '退出演示模式' : '演示模式') }}</button>
       <div class="space-heading"><i></i><h2>赛事</h2></div>
     </div>
 
@@ -85,7 +86,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Calendar, Football, MoreFilled, Plus, Trophy, UserFilled } from '@element-plus/icons-vue'
 import { callFunction, deleteTournamentWorkspace, getFileUrl, queryList } from '../../utils/cloud'
-import { isDemoMode, isDemoModeAvailable, setDemoMode, demoModeChangeEvent } from '../../utils/demoMode'
+import { isDemoMode, isDemoModeAvailable, setDemoMode, fetchPlatformDemoPool, demoModeChangeEvent } from '../../utils/demoMode'
 import { TOURNAMENT_SIDEBAR_RIGHTS, visibleSidebarKeys } from '../../utils/tournamentStaffRights'
 import defaultCover from '../../assets/images/tournament-space-emerald-field-v1.png'
 
@@ -208,10 +209,16 @@ function openTournament(tournament) {
   if (!tournament?._id) return
   router.push(`/tournaments/${tournament._id}`)
 }
-function toggleDemoMode() {
+const demoEntering = ref(false)
+async function toggleDemoMode() {
   const next = !demoModeActive.value
-  setDemoMode(next)
   demoModeActive.value = next
+  if (next) {
+    // 进入演示模式前拉取平台公用虚拟数据池；失败时仍可进入，由本地镜像兜底。
+    demoEntering.value = true
+    try { await fetchPlatformDemoPool() } finally { demoEntering.value = false }
+  }
+  setDemoMode(next)
   window.location.reload()
 }
 function syncDemoMode() { demoModeActive.value = isDemoMode() }

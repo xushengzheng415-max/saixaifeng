@@ -97,7 +97,7 @@
               </div>
 
               <div class="info-card">
-                <h4 class="section-title">{{ route.params.playerId ? '本届表现' : '球员历史' }}</h4><p v-if="statisticsMessage">{{ statisticsMessage }}</p>
+                <h4 class="section-title">{{ isCareerView ? '生涯表现' : '本届表现' }}</h4><p v-if="statisticsMessage">{{ statisticsMessage }}</p>
                 <div class="stats-grid">
                   <div class="stat-item">
                     <div class="stat-value">{{ metric(statistics.appearances) }}</div>
@@ -138,10 +138,43 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 转会评估身价 -->
+              <div class="info-card valuation-card">
+                <h4 class="section-title">转会评估身价 <span class="valuation-mode">FM 模式</span></h4>
+                <div v-if="!valuation" class="valuation-empty">身价评估暂不可用</div>
+                <div v-else-if="valuation.coverage === 'pending'" class="valuation-empty">待评估：生涯数据不完整，不按 0 计入</div>
+                <template v-else>
+                  <div class="valuation-main">
+                    <div class="valuation-money">
+                      <span v-if="valuation.moneyText" class="valuation-value">{{ valuation.moneyText }}</span>
+                      <span v-else class="valuation-value muted">不展示</span>
+                      <span v-if="valuation.moneyText" class="valuation-trend" :class="`trend-${valuation.trendTone}`">{{ valuation.trendArrow }}</span>
+                    </div>
+                    <div v-if="valuation.tier" class="valuation-tier">
+                      <span class="valuation-tier-name">{{ valuation.tier }}</span>
+                      <span class="valuation-tier-value">{{ valuation.tierValue }}</span>
+                    </div>
+                    <div v-else class="valuation-tier">
+                      <span class="valuation-tier-value">无段位 · {{ valuation.tierValue }}</span>
+                    </div>
+                  </div>
+                  <div class="valuation-stars">
+                    <span class="valuation-stars-glyph">
+                      <span class="on">{{ '★'.repeat(valuation.starsFull) }}</span>
+                      <span v-if="valuation.starHalf" class="half">★</span>
+                      <span class="off">{{ '☆'.repeat(starEmpty) }}</span>
+                    </span>
+                    <span class="valuation-stars-num">{{ valuation.stars == null ? '—' : valuation.stars.toFixed(1) }} / 5</span>
+                  </div>
+                  <div class="valuation-note">
+                    <span v-if="valuation.minor">青少年球员仅展示评级，不展示金额。</span>
+                    <span v-else>业余球员 100 元起，按指数分段计价 · 评估参考值，不是成交价。</span>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
-
-          <!-- 底部操作按钮 -->
           <div class="action-buttons">
             <el-button type="primary" size="large" @click="editPlayer">
               <el-icon><Edit /></el-icon>补充资料
@@ -251,6 +284,13 @@ const playerData = ref({})
 const teamData = ref({})
 const statistics = ref({})
 const playerCard = ref({ status:'unverified', points:null, tier:null })
+const valuation = ref(null)
+const starEmpty = computed(() => {
+  const row = valuation.value
+  if (!row || row.stars == null) return 0
+  return Math.max(0, 5 - row.starsFull - (row.starHalf ? 1 : 0))
+})
+const isCareerView = computed(() => route.query.from === 'registration')
 const statisticsMessage = ref('')
 const statisticsLoading = ref(false)
 let statisticsRequest = 0
@@ -436,17 +476,23 @@ async function refreshStatistics() {
   const identity = getPlayerReadIdentity()
   statisticsLoading.value = true
   try {
-    const scope = route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {}
-    const result = await callFunction('dataCenter',{action:'playerDetail',playerId,scope})
+    const fromRegistration = route.query.from === 'registration'
+    // 球队管理：只算本届赛事；报名管理：按授权范围内全部赛事累计生涯数据。
+    const scope = fromRegistration ? {} : (route.params.playerId ? {tournamentId:String(route.params.id),...(route.query.teamId ? {teamId:String(route.query.teamId)} : {}),...(route.query.divisionId ? {divisionId:String(route.query.divisionId)} : {})} : {})
+    const result = await callFunction('dataCenter',{action:'playerDetail',playerId,scope,...(fromRegistration ? {career:true} : {})})
     if (!result.success || !result.statistics || !result.playerCard) throw Object.assign(new Error(result.error || '统计加载失败'),{code:result.code})
     if (request !== statisticsRequest || identity !== getPlayerReadIdentity()) return
     statistics.value = result.statistics.playerTotal?.metrics || {}
     playerCard.value = result.playerCard
-    statisticsMessage.value = result.statistics.coverage?.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。'
+    valuation.value = result.valuation || null
+    statisticsMessage.value = isCareerView.value
+      ? (result.statistics.coverage?.status === 'complete' ? '按授权范围内全部赛事累计。' : '按授权范围内全部赛事累计；部分比赛记录不完整，“—”表示未知。')
+      : (result.statistics.coverage?.status === 'complete' ? '' : '部分比赛记录不完整，“—”表示未知。')
   } catch (error) {
     if (request !== statisticsRequest || identity !== getPlayerReadIdentity()) return
     statistics.value = {}
     playerCard.value = {status:error.code === 'DATA_ACTION_INVALID' ? 'not_connected' : 'request_failed',points:null,tier:null,progress:null}
+    valuation.value = null
     statisticsMessage.value = '统计暂不可用，请刷新重试。'
   } finally { if (request === statisticsRequest) statisticsLoading.value = false }
 }
@@ -523,6 +569,7 @@ useReadCacheRefresh({
     playerAvatarUrl.value = ''
     statistics.value = {}
     playerCard.value = { status: 'unverified', points: null, tier: null }
+    valuation.value = null
     statisticsMessage.value = '数据暂不可用，请重新加载。'
   },
   onError: () => { statisticsMessage.value = '数据更新失败，请重试。' }
@@ -535,7 +582,7 @@ onMounted(() => {
 watch(() => route.fullPath,() => {
   ++profileRequest
   ++statisticsRequest; statisticsLoading.value = false
-  statistics.value = {}; playerCard.value = {status:'loading',points:null,tier:null}
+  statistics.value = {}; playerCard.value = {status:'loading',points:null,tier:null}; valuation.value = null
   loadPlayerData()
 })
 onUnmounted(() => {
@@ -824,6 +871,101 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* 转会评估身价 */
+.valuation-mode {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #909399;
+}
+
+.valuation-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.valuation-money {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.valuation-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1f2329;
+  font-variant-numeric: tabular-nums;
+}
+
+.valuation-value.muted {
+  font-size: 16px;
+  font-weight: 500;
+  color: #909399;
+}
+
+.valuation-trend {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.valuation-trend.trend-up { color: #1a9c5b; }
+.valuation-trend.trend-down { color: #d64545; }
+.valuation-trend.trend-flat { color: #909399; }
+
+.valuation-tier {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #e9f9f0;
+}
+
+.valuation-tier-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0b6b3a;
+}
+
+.valuation-tier-value {
+  font-size: 12px;
+  color: #0b6b3a;
+}
+
+.valuation-stars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.valuation-stars-glyph {
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+.valuation-stars-glyph .on { color: #1f2329; }
+.valuation-stars-glyph .half { color: #1f2329; opacity: 0.45; }
+.valuation-stars-glyph .off { color: #c3c8d0; }
+
+.valuation-stars-num {
+  font-size: 12px;
+  color: #909399;
+}
+
+.valuation-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.valuation-empty {
+  font-size: 13px;
+  color: #909399;
 }
 
 /* 响应式 */

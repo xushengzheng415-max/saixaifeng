@@ -29,7 +29,7 @@
         "ageGroup": "open",
         "matchFormat": "8side",
         "expectedTeams": 8,
-        "formatType": "hybrid",
+        "formatType": "cup",
         "groupCount": 2,
         "teamsPerGroup": 4,
         "groupCycle": "single",
