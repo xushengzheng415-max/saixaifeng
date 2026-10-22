@@ -17,3 +17,37 @@ export function kickoffWindows(times,duration=60) {
 
 export function kickoffPeriod(time) { const hour=Number(String(time).slice(0,2));return hour<12?'morning':hour<18?'afternoon':'evening' }
 export function halfHourKickoffOptions() { return Array.from({length:26},(_,index)=>{const value=540+index*30;return `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}`}) }
+
+/**
+ * 按「比赛时长 + 转场时间」逐点推算开赛时间。
+ * 这样算出的相邻开赛点天然不会时间重叠，不会再出现「界面显示空格但后端判为占用」的情况。
+ * 传入的 sessions 视为全部开放；不在任何 session 内的时间点会跳到下一个 session 起点。
+ */
+export function generateKickoffTimes(options = {}) {
+  const toMinutes = value => {
+    const [hour, minute] = String(value || '00:00').split(':').map(Number)
+    return (Number.isFinite(hour) ? hour : 0) * 60 + (Number.isFinite(minute) ? minute : 0)
+  }
+  const toText = value => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
+  const step = Math.max(5, Math.round(Number(options.step) || 60))
+  const open = (Array.isArray(options.sessions) ? options.sessions : [])
+    .map(item => ({ start: toMinutes(item && item.start), end: toMinutes(item && item.end) }))
+    .filter(item => item.end > item.start)
+  const from = toMinutes(options.start)
+  const until = toMinutes(options.end)
+  if (!open.length) return []
+  const times = []
+  let cursor = from
+  let guard = 0
+  while (cursor <= until && guard++ < 400) {
+    if (open.some(item => cursor >= item.start && cursor < item.end)) {
+      times.push(toText(cursor))
+      cursor += step
+      continue
+    }
+    const next = open.map(item => item.start).filter(value => value > cursor).sort((a, b) => a - b)[0]
+    if (next == null) break
+    cursor = next
+  }
+  return times
+}

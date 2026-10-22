@@ -1,0 +1,332 @@
+{
+  "prototype": "E:\\Documents\\sxf-football\\web-admin-vue\\prototypes\\tournament-match-report.png",
+  "asset_dir": "E:\\Documents\\sxf-football\\web-admin-vue\\prototypes\\tournament-match-report_assets",
+  "generated_at": "2026-09-27",
+  "tool": "yuanxing prototype decomposition",
+  "status": "implemented",
+  "approved_at": "2026-09-27T14:02:00+08:00",
+  "screen": {
+    "width": 1960,
+    "height": 1110
+  },
+  "summary": "三款定板赛事战报模板：绿、蓝、白三种扁平高留白主题，顶部预留赛事名称，使用比赛日期/比赛日标题，卡片顶部展示时间与竞赛组别。",
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "00-source/tournament-match-report.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1960,
+        "height": 1110
+      },
+      "sha256": "91a4d6212516725101b90244980d45939ccbaa3309a83de7ddc0f75e9c0b6daf",
+      "notes": "Canonical approved prototype copied for traceability."
+    },
+    {
+      "id": "reference-white-scoreboard",
+      "category": "reference-style",
+      "implementation": "image",
+      "output": "00-source/reference-white.jpg",
+      "notes": "用户提供的白底正式赛果参考，仅用于版式、队徽、分数条和合作方留白的视觉研究，不作为生产页面截图。"
+    },
+    {
+      "id": "reference-navy-broadcast",
+      "category": "reference-style",
+      "implementation": "image",
+      "output": "00-source/reference-navy.png",
+      "notes": "用户提供的深蓝赛事播报参考，仅用于深色高对比主题的视觉研究，不直接作为页面背景。"
+    },
+    {
+      "id": "reference-scorer-report",
+      "category": "reference-style",
+      "implementation": "image",
+      "output": "00-source/reference-scorers.png",
+      "notes": "用户提供的比分加进球球员参考，用于定义进球球员与分钟字段的紧凑排版。"
+    },
+    {
+      "id": "sidebar-shell",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 300,
+        "height": 1110
+      },
+      "notes": "既有 PC 左侧导航壳层；战报重设计不改变导航、权限和赛事上下文。"
+    },
+    {
+      "id": "top-result-tabs",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 357,
+        "y": 0,
+        "width": 1539,
+        "height": 40
+      },
+      "notes": "赛果与复核、积分排名、淘汰晋级、赛事战报四项业务页签，保留当前路由切换。"
+    },
+    {
+      "id": "report-toolbar",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 357,
+        "y": 40,
+        "width": 1539,
+        "height": 86
+      },
+      "notes": "赛事战报标题、比赛日、主题切换和打印动作区域；只允许已批准赛果进入生成结果。"
+    },
+    {
+      "id": "report-poster",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 357,
+        "y": 126,
+        "width": 1112,
+        "height": 984
+      },
+      "notes": "PC 端正式战报海报预览主画布。最终导出海报为竖版 2:3；顶部预留赛事名称，标题采用比赛日期/比赛日；背景由主题资产提供，比分、队徽、时间、组别和进球球员均由代码动态渲染。"
+    },
+    {
+      "id": "report-guardrail",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 1486,
+        "y": 126,
+        "width": 410,
+        "height": 259
+      },
+      "notes": "发布边界提示区，明确待复核、退回和异常比分不进入正式战报。"
+    },
+    {
+      "id": "report-title-block",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 392,
+        "y": 157,
+        "width": 1040,
+        "height": 128
+      },
+      "notes": "顶部保留赛事名称空位；日期标题采用比赛日，不写固定轮次；正式赛果数量为辅助信息。"
+    },
+    {
+      "id": "score-row",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 392,
+        "y": 284,
+        "width": 1040,
+        "height": 98
+      },
+      "notes": "纯比分模式的代表性对阵行：队徽、主队、比分、客队；卡片顶部另行显示开赛时间和竞赛组别。队徽使用球队真实 logo，缺失时显示代码生成的首字。"
+    },
+    {
+      "id": "scorer-row-extension",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 392,
+        "y": 284,
+        "width": 1040,
+        "height": 98
+      },
+      "notes": "比分加进球球员模式复用同一对阵行，在比分下方展开主客队进球球员与分钟；卡片顶部保留时间和竞赛组别；无事件或非进球事件不伪造球员信息。"
+    },
+    {
+      "id": "report-footer",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 392,
+        "y": 1060,
+        "width": 1040,
+        "height": 50
+      },
+      "notes": "数据版本和发布边界说明，保持“战报不反向修改比分或积分”的只读语义。"
+    },
+    {
+      "id": "theme-selector",
+      "category": "control",
+      "implementation": "code",
+      "action": "切换战报视觉主题",
+      "target": "report-poster",
+      "states": [
+        "emerald",
+        "navy",
+        "paper"
+      ],
+      "notes": "三种主题均使用同一结构化数据，不改变正式赛果。"
+    },
+    {
+      "id": "content-mode-selector",
+      "category": "control",
+      "implementation": "code",
+      "action": "切换战报内容密度",
+      "target": "report-poster",
+      "states": [
+        "score-only",
+        "score-and-scorers"
+      ],
+      "notes": "纯比分适合整轮汇总；比分加进球球员仅展示正式批准赛果中明确记录的 goal 事件。"
+    },
+    {
+      "id": "export-report-png",
+      "category": "control",
+      "implementation": "code",
+      "action": "导出当前战报 PNG",
+      "target": "report-poster",
+      "states": [
+        "enabled-when-approved-matches-exist",
+        "disabled-when-empty"
+      ],
+      "notes": "PNG 导出按当前画布实际高度生成，只读取当前筛选与主题，不写入比赛、积分或发布快照。"
+    },
+    {
+      "id": "discipline-card-toggle",
+      "category": "control",
+      "implementation": "code",
+      "action": "选择是否展示红黄牌球员事件",
+      "target": "report-poster",
+      "states": ["hidden", "visible"],
+      "notes": "默认不展示；开启后按球队显示红牌或黄牌小卡片、球员姓名和分钟，数据只来自正式比赛事件。"
+    },
+    {
+      "id": "portrait-artboard-spec",
+      "category": "format",
+      "implementation": "code",
+      "notes": "战报画布不限制固定高度，由实际比赛场次和进球事件内容自然撑开；进球球员模式压缩内部行距，页脚始终位于最后一场之后。"
+    },
+    {
+      "id": "emerald-background",
+      "category": "production-asset",
+      "implementation": "background",
+      "output": "01-backgrounds/emerald-stadium-v1.png",
+      "notes": "ImageGen（image2.5）生成的竖版高规格翡翠绿球场背景；无文字、无 logo、无固定比分，可用于 2:3 代码叠加。"
+    },
+    {
+      "id": "navy-background",
+      "category": "production-asset",
+      "implementation": "background",
+      "output": "01-backgrounds/navy-broadcast-v1.png",
+      "notes": "ImageGen（image2.5）生成的竖版深蓝高对比播报背景；无文字、无 logo、无固定比分，可用于 2:3 代码叠加。"
+    },
+    {
+      "id": "paper-background",
+      "category": "production-asset",
+      "implementation": "background",
+      "output": "01-backgrounds/paper-cobalt-v1.png",
+      "notes": "ImageGen（image2.5）生成的竖版白底蓝色官方简报背景；无文字、无 logo、无固定比分，可用于打印和 2:3 代码叠加。"
+    },
+    {
+      "id": "flat-blue-background",
+      "category": "production-asset",
+      "implementation": "background",
+      "output": "01-backgrounds/flat-blue-v1.png",
+      "notes": "三款定板中的蓝色扁平背景：ImageGen（image2.5）生成，无文字、无 logo、无赛事专属内容，供代码叠加日期、时间、组别、球队和比分。"
+    },
+    {
+      "id": "flat-green-background",
+      "category": "production-asset",
+      "implementation": "background",
+      "output": "01-backgrounds/flat-green-v1.png",
+      "notes": "三款定板中的绿色扁平背景：ImageGen（image2.5）生成，无文字、无 logo、无赛事专属内容，供代码叠加动态赛果。"
+    },
+    {
+      "id": "flat-white-background",
+      "category": "production-asset",
+      "implementation": "background",
+      "output": "01-backgrounds/flat-white-v1.png",
+      "notes": "三款定板中的白色扁平纸张背景：ImageGen（image2.5）生成，无文字、无 logo、无赛事专属内容，供代码叠加动态赛果。"
+    },
+    {
+      "id": "final-blue-board",
+      "category": "approved-board-reference",
+      "implementation": "image",
+      "output": "00-source/final-blue-board.png",
+      "notes": "用户确认的蓝色定板效果图，仅用于 1:1 排版和比例对照；队徽、文字和比分不得作为生产图片直接发布。"
+    },
+    {
+      "id": "final-green-board",
+      "category": "approved-board-reference",
+      "implementation": "image",
+      "output": "00-source/final-green-board.png",
+      "notes": "用户确认的绿色定板效果图，仅用于 1:1 排版和比例对照；生产页面动态渲染真实数据。"
+    },
+    {
+      "id": "final-white-board",
+      "category": "approved-board-reference",
+      "implementation": "image",
+      "output": "00-source/final-white-board.png",
+      "notes": "用户确认的白色定板效果图，仅用于 1:1 排版和比例对照；生产页面动态渲染真实数据。"
+    },
+    {
+      "id": "team-crest-assets",
+      "category": "data-asset",
+      "implementation": "code",
+      "notes": "队徽不是原型裁片或生成图片；正式页面继续读取比赛双方真实队徽 URL，缺失时使用可访问的文字首字占位。"
+    },
+    {
+      "id": "scorer-data-boundary",
+      "category": "data-rule",
+      "implementation": "text-code",
+      "text": "进球球员与分钟仅来自已批准赛果中的正式 goal 事件",
+      "notes": "不从截图、不从待复核记录、不从黄牌或换人事件推断进球。"
+    },
+    {
+      "id": "source-crop-title",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/report-title-block.png",
+      "source_bbox": {
+        "x": 392,
+        "y": 157,
+        "width": 1040,
+        "height": 128
+      },
+      "notes": "现有战报标题和比赛日信息区域，用于对比信息层级。"
+    },
+    {
+      "id": "source-crop-score-row",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/report-score-row.png",
+      "source_bbox": {
+        "x": 392,
+        "y": 284,
+        "width": 1040,
+        "height": 98
+      },
+      "notes": "现有纯比分行，用于对比新的比分条和进球球员扩展。"
+    },
+    {
+      "id": "source-crop-guardrail",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/report-guardrail.png",
+      "source_bbox": {
+        "x": 1486,
+        "y": 126,
+        "width": 410,
+        "height": 259
+      },
+      "notes": "现有战报发布边界提示区域，用于确保只读发布规则不被视觉改版删除。"
+    },
+    {
+      "id": "annotated-layout-overlay",
+      "category": "overlay",
+      "implementation": "overlay",
+      "output": "06-overlays/annotated-layout.png",
+      "notes": "Generated bounding-box overlay for comparison only."
+    }
+  ]
+}

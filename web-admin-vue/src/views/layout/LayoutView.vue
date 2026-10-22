@@ -204,7 +204,6 @@
           </template>
         </nav>
 
-        <div v-if="route.path.includes('/draw')" class="sidebar-pro-badge">♛　PRO 专业版 · 已开通</div>
         <RouterLink v-if="currentTutorial" class="sidebar-tutorial-button" :to="{ path: '/tutorials', query: { lesson: currentTutorial } }" target="_blank" rel="noopener noreferrer">看本页教程</RouterLink>
 
       </aside>
@@ -286,7 +285,7 @@
         </header>
 
         <div v-if="demoModeActive" class="demo-mode-strip">
-          <span><strong>演示模式</strong> 仅使用虚拟数据，退出后清空</span>
+          <span><strong>演示模式</strong> 仅使用虚拟数据，退出后清空<i class="build-stamp">构建 {{ buildStamp }}</i></span>
           <button type="button" @click="exitDemoMode">退出演示</button>
         </div>
 
@@ -391,6 +390,7 @@ const userInfo = ref({
 const loginType = ref('')
 const currentRole = ref('')
 const demoModeActive = ref(isDemoMode(String(route.params.id || '')))
+const buildStamp = __SXF_BUILD__
 const isTournamentStaff = computed(() => !demoModeActive.value && sessionStorage.getItem('sxfTournamentStaff') === '1')
 const isHeadReferee = ref(false)
 function syncDemoMode() { demoModeActive.value = isDemoMode(String(route.params.id || '')) }
@@ -1172,6 +1172,7 @@ onUnmounted(() => {
 }
 .demo-mode-strip strong { margin-right: 7px; }
 .demo-mode-strip button { border: 0; color: #327a50; background: transparent; font: inherit; cursor: pointer; }
+.demo-mode-strip .build-stamp { margin-left: 10px; padding: 1px 8px; border-radius: 999px; background: #efe6c9; color: #8a7642; font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
 
 /* 主容器 */
 .main-container {
@@ -1246,19 +1247,6 @@ onUnmounted(() => {
   padding: 24px 14px 16px;
   overflow-x: hidden;
   overflow-y: auto;
-}
-
-.sidebar-pro-badge {
-  flex-shrink: 0;
-  margin: 0 14px 18px;
-  padding: 13px 10px;
-  border: 1px solid #f4c63d;
-  border-radius: 7px;
-  color: #ffd95e;
-  font-size: 14px;
-  font-weight: 700;
-  text-align: center;
-  box-shadow: 0 0 16px rgba(244, 198, 61, 0.08) inset;
 }
 
 .sidebar-tutorial-button{display:flex;align-items:center;justify-content:center;flex-shrink:0;min-height:42px;margin:0 14px 18px;padding:10px 14px;border:1px solid rgba(255,255,255,.45);border-radius:6px;background:rgba(0,92,57,.7);color:#fff;font-size:14px;text-decoration:none;box-sizing:border-box}

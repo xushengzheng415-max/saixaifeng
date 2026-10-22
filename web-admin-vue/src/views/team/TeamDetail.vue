@@ -84,17 +84,17 @@
         </section>
         <section class="synthetic-player-panel staff-roster-panel">
           <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="!canManageTeamAccess"> · 账号权限由主账号分配</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
-          <el-table :data="staffMembers" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-roster-table">
+          <el-table :data="staffDisplayRows" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-roster-table">
             <el-table-column label="头像" width="44" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="76" />
-            <el-table-column label="球衣名" min-width="84"><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
-            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag></template></el-table-column>
+            <el-table-column label="球衣名" min-width="84"><template #default="{ row }">{{ row._accountHolderRow ? '—' : displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag><el-tag v-if="row._accountHolderRow" size="small" type="info" class="dual-role-tag">非编制工作人员</el-tag></template></el-table-column>
             <el-table-column label="出生日期" min-width="98"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="手机号" min-width="108"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.phone || '未分配') : '—' }}<small v-if="canManageTeamAccess && staffAccount(row)" class="staff-account-phone">{{ staffAccountLabel(row) }}</small></template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="操作权限" min-width="86"><template #default="{ row }">{{ canManageTeamAccess ? staffPermissionLabel(row) : '—' }}</template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="状态" min-width="82"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.status || '未授权') : '主账号设置' }}</template></el-table-column>
-            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="90"><template #default="{ row }"><span :title="canManageTeamAccess ? '' : '账号权限需由赛事所属机构主账号分配'"><el-button link type="primary" :disabled="!canManageTeamAccess || !tournamentRelation?._id" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
+            <el-table-column v-if="!isReadOnlyTournament && sourceTournamentId" label="操作" width="90"><template #default="{ row }"><span :title="row._accountHolderRow ? '账号持有人行仅用于展示归属，请在具体工作人员行上移交主账号' : (canManageTeamAccess ? '' : '账号权限需由赛事所属机构主账号分配')"><el-button link type="primary" :disabled="!canManageTeamAccess || !tournamentRelation?._id || row._accountHolderRow" @click="openTeamAccess(row)">分配权限</el-button></span></template></el-table-column>
           </el-table>
         </section>
         <section class="synthetic-player-panel">
@@ -109,31 +109,31 @@
             </div>
           </div>
           <el-alert v-if="isTeamDataWorkspace && playerStatsError" :title="playerStatsError" type="error" :closable="false"><el-button link type="primary" @click="loadPlayerCompetitionData">重新加载</el-button></el-alert>
-          <el-table ref="reviewPlayerTable" row-key="_id" :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" :fit="false" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'compact-roster-table': !isTeamDataWorkspace, 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort" @selection-change="onReviewSelectionChange">
+          <el-table ref="reviewPlayerTable" row-key="_id" :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'compact-roster-table': !isTeamDataWorkspace, 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort" @selection-change="onReviewSelectionChange">
             <el-table-column v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="selection" width="36" :selectable="canSelectReviewPlayer" />
             <el-table-column label="头像" :width="48" align="center">
               <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
             </el-table-column>
-            <el-table-column prop="name" label="姓名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 100 : 78" show-overflow-tooltip />
-            <el-table-column prop="jerseyName" label="球衣名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 125 : 82" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
+            <el-table-column prop="name" label="姓名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 100 : 84" show-overflow-tooltip />
+            <el-table-column prop="jerseyName" label="球衣名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 125 : 84" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
             <el-table-column prop="identityLabel" label="身份" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 120 : 62" align="center"><template #default="{ row }"><el-tag size="small" :type="playerIdentityLabel(row) === '球员' ? 'info' : 'warning'">{{ playerIdentityLabel(row) }}</el-tag></template></el-table-column>
             <el-table-column v-if="isSyntheticTeam && players.some(player => player.playerId)" prop="playerId" label="球员编号" width="50" />
             <el-table-column prop="jerseyNumber" label="号码" :sortable="isTeamDataWorkspace ? 'custom' : false" width="56" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
             <el-table-column prop="position" label="位置" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 68 : 66" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" width="50" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="出生日期" width="94" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
-            <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 40" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="资料状态" width="100" align="center"><template #default="{ row }"><el-tag :type="playerProfileTagType(row)" size="small">{{ playerProfileLabel(row) }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="80" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" width="104" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="出生日期" width="88" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
+            <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 44" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="认领状态" width="78" align="center"><template #default="{ row }"><el-tag :type="playerClaimed(row) ? 'success' : 'info'" size="small">{{ playerClaimed(row) ? '已认领' : '未认领' }}</el-tag></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="76" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
             <template v-if="isTeamDataWorkspace">
               <el-table-column prop="appearances" label="出场场次" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="90" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
               <el-table-column prop="minutes" label="出场时间" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="105" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
               <el-table-column prop="goals" label="进球" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'goals') }}</template></el-table-column>
               <el-table-column prop="yellowCards" label="黄牌" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'yellowCards') }}</template></el-table-column>
               <el-table-column prop="redCards" label="红牌" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
-              <el-table-column label="操作" width="65" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
+              <el-table-column label="操作" width="70" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
             </template>
-            <el-table-column v-else label="操作" width="90" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></template></el-table-column>
+            <el-table-column v-else label="操作" min-width="132" align="right"><template #default="{ row }"><div class="player-row-ops"><el-button link type="primary" @click.stop="viewPlayerCard(row)">详情</el-button><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></div></template></el-table-column>
           </el-table>
         </section>
         <section v-if="isReadOnlyTournament" class="tournament-history-panel">
@@ -1235,8 +1235,9 @@
         <el-form-item label="账号类型"><el-select v-model="staffAccessForm.accountType" style="width:100%"><el-option label="不分配账号" value="none" /><el-option label="子账号" value="member" /><el-option label="主账号" value="owner" /></el-select></el-form-item>
         <el-form-item v-if="staffAccessForm.accountType === 'member'" label="操作权限"><el-radio-group v-model="staffAccessForm.canManage"><el-radio :value="false">仅查看</el-radio><el-radio :value="true">管理球队</el-radio></el-radio-group></el-form-item>
         <el-form-item v-if="staffAccessForm.accountType === 'owner' || staffAccessForm.canManage" label=""><span class="staff-permission-note">球员维护、邀请球员、赛事报名、提交阵容</span></el-form-item>
+        <el-form-item v-if="staffAccessForm.accountType === 'owner'" class="team-access-force-claim-item" label=""><el-checkbox v-model="teamAccessForceClaim" class="team-access-force-claim">主办方代认领：直接把该手机号设为球队负责人。该手机号已注册账号则立即生效；未注册则生成认领码，对方扫码后完成认领。</el-checkbox></el-form-item>
       </el-form>
-      <el-alert v-if="staffAccessForm.accountType === 'owner'" type="warning" :closable="false" title="更换主账号需新负责人接收后生效" />
+      <el-alert v-if="staffAccessForm.accountType === 'owner' && !teamAccessForceClaim" type="warning" :closable="false" title="更换主账号需新负责人接收后生效" />
       <template #footer><el-button @click="showTeamAccess=false">取消</el-button><el-button type="primary" :loading="teamAccessSaving" @click="saveTeamAccess">保存权限</el-button></template>
     </el-dialog>
 
@@ -1569,10 +1570,30 @@ const selectedStaffAccount = ref(null)
 const staffAccessForm = ref({ phone:'', accountType:'none', canManage:false })
 const teamAccessRows = ref([])
 const primaryTeamAccount = computed(() => teamAccessRows.value.find(item => item.accountType === 'owner') || teamAccessRows.value.find(item => item.accountType === 'pending_owner'))
+// 账号持有人（主账号）在工作人员表顶部单独占一行。认领链路只写账号归属、不建 coaches 档案，
+// 会出现"头部写着主账号是谁、名单里却看不到他"。该行仅用于展示，不参与导出、海报和名单统计。
+const staffDisplayRows = computed(() => {
+  const owner = primaryTeamAccount.value
+  const rows = staffMembers.value
+  if (!owner) return rows
+  const ownerPhone = String(owner.phone || '').replace(/\D/g, '')
+  const duplicated = Boolean(ownerPhone) && rows.some(row => String(row.phone || row.phoneNumber || '').replace(/\D/g, '') === ownerPhone)
+  if (duplicated) return rows
+  return [{
+    _id:'team-account-holder',
+    _accountHolderRow:true,
+    name:owner.name || '未命名',
+    phone:owner.phone || '',
+    role:'账号持有人',
+    roleLabel:owner.roleLabel || '',
+    accountType:owner.accountType
+  }, ...rows]
+})
 const teamAccessLoading = ref(false)
 const teamAccessSaving = ref(false)
 const teamAccessDeletingRole = ref('')
 const showTeamAccess = ref(false)
+const teamAccessForceClaim = ref(false)
 const exportDialogVisible = ref(false)
 const rosterPosterVisible = ref(false)
 const exporting = ref(false)
@@ -2307,12 +2328,9 @@ async function handleIdCardUpload(options, side) {
 }
 
 function viewPlayerCard(row) {
-  if (isTeamDataWorkspace.value) {
-    ElMessageBox.alert(`出场场次：${statValue(row, 'appearances')}　出场时间：${statValue(row, 'minutes')} 分钟\n进球：${statValue(row, 'goals')}　黄牌：${statValue(row, 'yellowCards')}　红牌：${statValue(row, 'redCards')}`, row.name || '球员参赛数据')
-    return
-  }
   if (!sourceTournamentId.value) return router.push('/tournament-space')
-  router.push({ path: `/tournaments/${sourceTournamentId.value}/players/${row._id}`, query: { teamId, divisionId: sourceDivisionId.value } })
+  // 球队管理：本届赛事口径；报名管理：球员生涯口径。
+  router.push({ path: `/tournaments/${sourceTournamentId.value}/players/${row._id}`, query: { teamId, divisionId: sourceDivisionId.value, ...(isTeamDataWorkspace.value ? {} : { from: 'registration' }) } })
 }
 
 function editPlayer(row) {
@@ -2570,6 +2588,7 @@ function selectStaffPlayer(id) {
 }
 
 function staffAccount(row) {
+  if (row._accountHolderRow) return primaryTeamAccount.value || null
   const direct = teamAccessRows.value.find(item => String(item.staffId || '') === String(row._id))
   if (direct) return direct
   const phone = String(row.phone || row.phoneNumber || '').replace(/\D/g, '')
@@ -2619,6 +2638,7 @@ async function openTeamAccess(row) {
   selectedStaffAccount.value = row
   const existing = staffAccount(row)
   staffAccessForm.value = { phone:existing?.phone || row.phone || '', accountType:!existing ? 'none' : ['owner','pending_owner'].includes(existing.accountType) ? 'owner' : 'member', canManage:Boolean(existing?.permissions?.includes('team.manage')) }
+  teamAccessForceClaim.value = false
   showTeamAccess.value = true
 }
 
@@ -2675,12 +2695,19 @@ async function saveTeamAccess() {
       tournamentTeamId:String(tournamentRelation.value._id),
       primaryRole,
       changedRole:key,
-      personnel
+      personnel,
+      forceOwnerClaim: teamAccessForceClaim.value
     })
     if (!result?.success) throw new Error(result?.message || '球队管理权限保存失败')
     teamAccessRows.value = Array.isArray(result.personnel) ? result.personnel : []
     showTeamAccess.value = false
-    ElMessage.success(result.ownerTransferPending ? '主账号转移已发起，请让新负责人用该手机号登录并扫描赛事认领码' : '球队管理权限已保存')
+    teamAccessForceClaim.value = false
+    ElMessage.success(
+      result.forcedClaimApplied ? '已代认领，主账号已直接生效'
+      : result.forcedClaimPending ? '该手机号尚未注册，已生成认领码；对方扫码后即可完成认领'
+      : result.ownerTransferPending ? '主账号转移已发起，请让新负责人用该手机号登录并扫描赛事认领码'
+      : '球队管理权限已保存'
+    )
   } catch (error) {
     ElMessage.error(error.message || '球队管理权限保存失败')
   } finally {
@@ -4484,14 +4511,9 @@ async function deletePlayer(player) {
   }
 }
 
-function playerProfileLabel(player) {
-  const identityStatus = String(player?.identityStatus || '').toLowerCase()
-  if (!['verified', 'approved', 'complete'].includes(identityStatus)) return '待人证核验'
-  const status = String(player?.profileStatus || '').toLowerCase()
-  if (status === 'complete') return '资料完整'
-  if (status === 'imported_pending_claim') return '待认领核对'
-  if (status === 'pending_review') return '待审核'
-  return isSyntheticTeam.value ? '测试资料' : '待完善'
+// 球员认领状态：档案已绑定本人/监护人账号（linkedUserId/playerUserId/guardianUserId 任一存在）即视为已认领
+function playerClaimed(player) {
+  return [player?.linkedUserId, player?.playerUserId, player?.guardianUserId].some(value => Boolean(String(value || '').trim()))
 }
 
 function playerOrganizerReviewStatus(player) {
@@ -4557,10 +4579,6 @@ function playerIdentityLabel(player) {
   const role = String(player?.dualRoleType || '').trim()
   const roleLabels = { head_coach_player: '主教练兼球员', team_leader_player: '领队兼球员', doctor_player: '队医兼球员' }
   return roleLabels[role] || '球员'
-}
-
-function playerProfileTagType(player) {
-  return playerProfileLabel(player) === '资料完整' ? 'success' : 'warning'
 }
 
 function formatTournamentTime(value) {
@@ -4854,6 +4872,8 @@ function compressBase64(dataUrl, maxSize = 300) {
 }
 
 /* 球员头像 - 透明背景，无框 */
+.player-row-ops { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
+.player-row-ops :deep(.el-button) { margin-left: 0; }
 .player-avatar-img {
   width: 36px;
   height: 48px;
@@ -5007,13 +5027,16 @@ function compressBase64(dataUrl, maxSize = 300) {
 .match-summary { padding-bottom: 12px; }
 .professional-roster-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}.professional-roster-stats article{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;align-items:end;min-height:88px;padding:14px;border:1px solid #e6ebe7;border-radius:7px;background:#fbfdfb}.professional-roster-stats span{grid-column:1/-1;color:#667269;font-size:12px}.professional-roster-stats strong{color:#167f42;font-size:26px}.professional-roster-stats small{margin-bottom:4px;color:#536158}.professional-roster-stats article.pending strong{color:#d98b15}.professional-team-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:17px}.professional-team-actions .el-button{height:41px;margin:0}
 .staff-account-phone{display:block;margin-top:4px;color:#68766d;font-size:12px}.staff-permission-note{color:#68766d;font-size:13px}
+.team-access-force-claim{display:flex;align-items:flex-start;height:auto;max-width:100%;white-space:normal}
+.team-access-force-claim :deep(.el-checkbox__input){margin-top:2px}
+.team-access-force-claim :deep(.el-checkbox__label){white-space:normal;word-break:break-word;line-height:1.5}
 .export-dialog-section{margin-top:18px}.export-dialog-section>strong{display:block;margin-bottom:10px;color:#344139}.export-field-checks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px}.export-field-checks :deep(.el-checkbox){margin-right:0}
 .tournament-history-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.tournament-history-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}.tournament-history-heading h2{margin:0;color:#1d2b21;font-size:19px}.tournament-history-heading p{margin:7px 0 0;color:#69766d;font-size:13px}.tournament-history-grid{display:grid;grid-template-columns:1fr 1.35fr;gap:18px}.history-card{min-width:0}.history-card h3{margin:0 0 10px;color:#344139;font-size:15px}.history-card :deep(.el-table){border:1px solid #edf1ee;border-radius:6px}.history-card :deep(.el-table th.el-table__cell){background:#f8faf8}.history-card :deep(.el-table td.el-table__cell),.history-card :deep(.el-table th.el-table__cell){padding:7px 0}@media(max-width:900px){.tournament-history-grid{grid-template-columns:1fr}}
 .red-card-value{color:#d83a3a;font-weight:700}.yellow-card-value{color:#d88b03;font-weight:700}
 .team-kit-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.team-kit-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}.team-kit-panel h2{margin:0;color:#1d2b21;font-size:19px}.team-kit-panel header p{margin:7px 0 0;color:#69766d;font-size:13px}.kit-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.kit-set-card{padding:17px;border:1px solid #e2e8e4;border-radius:9px;background:#fafcfb}.kit-set-title{display:flex;align-items:center;gap:11px;margin-bottom:15px}.kit-set-title>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;color:#fff;background:#087d40;font-weight:800}.kit-set-title div{display:grid;gap:3px}.kit-set-title small{color:#78847c;font-size:11px}.kit-equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.kit-equipment-item{display:grid;justify-items:center;gap:8px;min-width:0;padding:12px 10px;border:1px solid #e7ece8;border-radius:8px;background:#fff}.kit-image-stage{display:grid;width:82px;height:82px;place-items:center;border-radius:10px;background:linear-gradient(145deg,#f5f8f6,#e8efeb)}.kit-silhouette{display:block;width:66px;height:66px;mask-position:center;mask-repeat:no-repeat;mask-size:contain;-webkit-mask-position:center;-webkit-mask-repeat:no-repeat;-webkit-mask-size:contain;filter:drop-shadow(0 4px 4px rgba(0,0,0,.12))}.kit-silhouette.shorts{width:62px;height:62px}.kit-silhouette.socks{width:58px;height:64px}.kit-equipment-item>strong{font-size:13px}.kit-equipment-item :deep(.el-select){width:100%}.kit-color-option{display:flex;align-items:center;gap:8px}.kit-color-option i{width:16px;height:16px;border:1px solid #cfd7d2;border-radius:4px}.team-kit-panel>footer{display:flex;align-items:center;gap:8px;margin-top:16px;padding:10px 12px;border-radius:6px;color:#56665c;background:#f0f8f3;font-size:12px}.team-kit-panel>footer .el-icon{color:#087d40;font-size:17px}
 .kit-source-label{color:#718078;font-size:10px;line-height:1.2}
 .collaboration-timeline{margin:-6px 0 12px;padding:14px 18px;border:1px solid #e1e7e2;border-radius:9px;background:#fff}.collaboration-timeline h2{margin:0 0 12px;font-size:15px}.collaboration-timeline ol{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin:0;padding:0;list-style:none}.collaboration-timeline li{position:relative;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center}.collaboration-timeline li:not(:last-child)::after{position:absolute;top:22px;right:-17px;width:22px;height:1px;background:#9eaaa1;content:''}.collaboration-timeline li>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #27a059;border-radius:50%;color:#138544;font-size:23px}.collaboration-timeline li div{display:grid;gap:2px}.collaboration-timeline time,.collaboration-timeline small{color:#768179;font-size:10px}.collaboration-timeline strong{font-size:13px}
-.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.compact-roster-table{max-width:882px}.staff-roster-table{max-width:none}.review-selection-count{font-size:12px;color:#606266;white-space:nowrap}.roster-heading-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}.roster-heading-actions :deep(.el-button + .el-button){margin-left:0}.compact-roster-table :deep(.cell){padding-left:4px;padding-right:4px;font-size:12px}.compact-roster-table :deep(th .cell){white-space:nowrap}.synthetic-player-heading{gap:12px;flex-wrap:wrap}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
+.synthetic-player-panel{margin:0 0 24px;padding:22px 24px;border:1px solid #dfe7e1;border-radius:10px;background:#fff}.synthetic-player-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}.synthetic-player-heading h2{margin:0;color:#1d2b21;font-size:19px}.synthetic-player-heading p{margin:7px 0 0;color:#6d7870;font-size:13px}.synthetic-player-table{cursor:pointer}.compact-roster-table{max-width:none}.staff-roster-table{max-width:none}.review-selection-count{font-size:12px;color:#606266;white-space:nowrap}.roster-heading-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}.roster-heading-actions :deep(.el-button + .el-button){margin-left:0}.compact-roster-table :deep(.cell){padding-left:4px;padding-right:4px;font-size:12px}.compact-roster-table :deep(th .cell){white-space:nowrap}.synthetic-player-heading{gap:12px;flex-wrap:wrap}.synthetic-player-table .player-avatar-img{width:38px;height:48px;border-radius:0;object-fit:contain;background:transparent}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .cell){display:flex;align-items:center;justify-content:center;gap:2px;padding:0 4px;white-space:nowrap}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .caret-wrapper){width:12px;flex:0 0 12px}
 .tournament-player-data-table :deep(.el-table__header-wrapper th.is-sortable .sort-caret){left:1px}

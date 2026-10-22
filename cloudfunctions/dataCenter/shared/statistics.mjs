@@ -1,3 +1,4 @@
+import scoreRuleTools from './score-rules.cjs'
 import { eventType, effectiveEvents, calculateMatchEventScore, eventId, revision, cancelled } from './match-events.mjs'
 export { eventType, effectiveEvents, calculateMatchEventScore } from './match-events.mjs'
 import crypto from 'node:crypto'
@@ -136,24 +137,20 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   })]))
   const officialCandidates = selected.filter(match => recordedResultState(match) === 'official' && matchOrigin(match,originContext) !== 'test')
   const candidateIds = [...new Set(selected.flatMap(match => [...matchParticipantIds(match,events)]))].sort()
-  function hasAbsenceEvidence(match) {
-    const rosters = ['home','away'].map(side => lineupOf(match,side))
-    if (!rosters.every(lineup => lineup.known && [...lineup.starters,...lineup.substitutes].every(row => idOf(row)))) return false
-    const knownEvents = match.eventRecordingStatus === 'complete' || match.statisticsCoverage?.events === 'complete' || (Array.isArray(match.events) && match.eventRecordingStatus !== 'partial')
-    if (!knownEvents) return false
-    const contributionTypes = ['goal','penalty_scored','own_goal','assist','yellow_card','red_card','second_yellow','substitution']
-    if (effectiveEvents(match,events).some(event => contributionTypes.includes(eventType(event)) && !text(event.inPlayerId || event.playerId || event.playerID || event.athleteId || event.player?.id || event.player?._id))) return false
-    return true
+  // 2026-10-16 owner-confirmed participation policy: only recorded lineup/event
+  // identities enter player scoring. An unlisted player is not an unknown player.
+  // Match-wide quality gaps remain in the dataset, not every player's eligibility.
+  const participation = new Map(candidateIds.map(playerId=>[playerId,[]]))
+  for(const match of officialCandidates) for(const playerId of matchParticipantIds(match,events)) {
+    if(participation.has(playerId)) participation.get(playerId).push(text(match._id||match.id))
   }
-  // An unrelated incomplete record cannot block an identified player's grade
-  // when complete stable-ID lineups and events prove they did not participate.
-  // Missing/ambiguous lineups still fail closed; current team is never a proxy.
-  const uncertainCandidates = officialCandidates.filter(match => matchOrigin(match,originContext) !== 'real' ||
-    !['home','away'].every(side => teamOf(match,side) && lineupOf(match,side).known))
-    .map(match => ({hasAbsenceEvidence:hasAbsenceEvidence(match),participants:matchParticipantIds(match,events)}))
-  const playerCardComplete = Object.fromEntries(candidateIds.map(playerId => [playerId,Boolean(readComplete &&
-    uncertainCandidates.every(item => item.hasAbsenceEvidence && !item.participants.has(playerId)))]))
-  const players = new Map(), teams = new Map(), issues = []
+  const uncertainCandidates = officialCandidates.filter(match=>matchOrigin(match,originContext)!=='real')
+    .map(match=>matchParticipantIds(match,events))
+  const playerCardComplete = Object.fromEntries(candidateIds.map(playerId=>[playerId,Boolean(readComplete &&
+    uncertainCandidates.every(participants=>!participants.has(playerId)))]))
+  const playerCardMatchIds = Object.fromEntries([...participation].map(([playerId,ids])=>[playerId,[...new Set(ids)].sort()]))
+  const players = new Map(), teams = new Map(), issues = [], playerContributions=[]
+  let matchBefore=null
   testMatches.forEach(match => issues.push({ code:'TEST_MATCH_EXCLUDED', matchId:text(match._id || match.id) }))
   testPlayerMatches.forEach(match => issues.push({ code:'TEST_PLAYER_IN_MATCH', matchId:text(match._id || match.id) }))
   originUnverifiedMatches.forEach(match => issues.push({ code:'MATCH_ORIGIN_UNVERIFIED', matchId:text(match._id || match.id) }))
@@ -162,10 +159,12 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   function playerRow(playerId, teamId, match, profile = {}) {
     const key = [playerId,teamId,text(match.tournamentId),text(match.divisionId || match.division || 'default')].join('|')
     if (!players.has(key)) players.set(key, { playerId, teamId, tournamentId:text(match.tournamentId), divisionId:text(match.divisionId || match.division || 'default'), playerName:text(profile.name || profile.playerName), observed:blank(), matchIds:new Set(), startMatches:new Set(), factsVersions:new Set(), minuteUnknown:false, metricUnknown:new Set(), appearanceUnknown:false })
+    if(matchBefore&&!matchBefore.has(players.get(key)))matchBefore.set(players.get(key),{...players.get(key).observed})
     players.get(key).factsVersions.add(factVersions.get(text(match._id || match.id)))
     return players.get(key)
   }
   for (const match of eligible) {
+    matchBefore=new Map()
     const matchId = text(match._id || match.id)
     if (!matchId) { issues.push({ code:'MATCH_ID_MISSING' }); continue }
     const durationEvidence = resolveMatchDurationEvidence(match)
@@ -200,7 +199,7 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
       }
       return { ...event, playerId:text(event.playerId || event.playerID || event.athleteId) || resolve(event.playerName,event.playerNumber), assistPlayerId:text(event.assistPlayerId || event.assistId) || resolve(event.assistName,event.assistNumber) }
     })
-    const appeared = new Map(), assistKeys = new Set(), teamsWithUnlinked = new Map()
+    const appeared = new Map(), assistKeys = new Set(), teamsWithUnlinked = new Map(), minuteUncertainIds=new Set(),knownMinutesIds=new Set()
     function markUnlinked(teamId,type,event) {
       // 未关联换入者只影响可能的替补，不抹掉已核实首发和换出者的数据。
       if (type === 'substitution' && event) {
@@ -211,10 +210,10 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
           for (const profile of lineup.substitutes) {
             if (!incoming && !matchEvents.some(item => eventType(item) === 'substitution' && text(item.inPlayerId || item.playerId) === idOf(profile))) {
               const row = playerRow(idOf(profile),teamId,match,profile)
-              row.metricUnknown.add('appearances'); row.metricUnknown.add('minutesPlayed')
+              row.metricUnknown.add('appearances'); row.metricUnknown.add('minutesPlayed');minuteUncertainIds.add(row.playerId)
             }
           }
-          if (!outgoing) for (const profile of lineup.starters) playerRow(idOf(profile),teamId,match,profile).metricUnknown.add('minutesPlayed')
+          if (!outgoing) for (const profile of lineup.starters){playerRow(idOf(profile),teamId,match,profile).metricUnknown.add('minutesPlayed');minuteUncertainIds.add(idOf(profile))}
           return
         }
       }
@@ -287,10 +286,19 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
         if (!lineup.known) row.appearanceUnknown = true
         if (appeared.get(teamId).has(row.playerId)) {
           row.matchIds.add(matchId)
-          if (!valid || intervals.unknown.has(row.playerId) || !minutes.has(row.playerId)) row.minuteUnknown = true
-          else row.observed.minutesPlayed += minutes.get(row.playerId)
+          if (!valid || unknown.has('minutesPlayed') || minuteUncertainIds.has(row.playerId) || intervals.unknown.has(row.playerId) || !minutes.has(row.playerId)) row.minuteUnknown = true
+          else {row.observed.minutesPlayed += minutes.get(row.playerId);knownMinutesIds.add(row.playerId)}
         }
       }
+    }
+    for(const [row,prior] of matchBefore){
+      const minutes=Math.max(0,row.observed.minutesPlayed-prior.minutesPlayed),hasAppearance=row.matchIds.has(matchId),starter=row.startMatches.has(matchId)
+      playerContributions.push({playerId:row.playerId,teamId:row.teamId,matchId,tournamentId:text(match.tournamentId),divisionId:text(match.divisionId||match.division||'default'),
+        matchName:`${text(teamsById[teamOf(match,'home')]?.name||match.homeTeamName)||'主队'} vs ${text(teamsById[teamOf(match,'away')]?.name||match.awayTeamName)||'客队'}`,
+        tournamentName:text(tournamentsById[text(match.tournamentId)]?.name),teamName:text(teamsById[row.teamId]?.name),date:text(match.matchDate||match.startTime||match.matchTime),
+        appearances:hasAppearance?1:0,starts:starter?1:0,goals:row.observed.goals-prior.goals,minutesPlayed:minutes,
+        role:starter?'starter':hasAppearance?'substitute':'unused_substitute',
+        minuteBasis:knownMinutesIds.has(row.playerId)?'recorded_intervals':!hasAppearance?'not_played':durationEvidence.status!=='ready'?'duration_unrecorded':!eventsKnown?'events_incomplete':'substitution_unverified'})
     }
   }
   let playerRows = [...players.values()].map(row => {
@@ -314,9 +322,9 @@ export function aggregateStatistics({ matches = [], events = [], scope = {}, rea
   const result = {
     schemaVersion:SCHEMA_VERSION, metricVersion:METRIC_VERSION,
     generatedAt:new Date().toISOString(), scope:{ sportType:'football', mode:'official', ...scope },
-    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length || testPlayerMatches.length ? 'partial' : 'complete', cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && !testPlayerMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), playerCardComplete, expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, testPlayerMatches:testPlayerMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
+    coverage:{ status:!readComplete || coveredMatches < eligible.length || unlinkedEventCount || missingLineupSides || originUnverifiedMatches.length || testPlayerMatches.length ? 'partial' : 'complete', participationPolicy:'recorded-participants/1',unlistedPlayerCardComplete:readComplete===true,playerCardMatchIds,cardScoreScopeComplete:Boolean(readComplete && !missingLineupSides && !originUnverifiedMatches.length && !testPlayerMatches.length && eligible.every(match => teamOf(match,'home') && teamOf(match,'away'))), playerCardComplete, expectedMatches:eligible.length, coveredMatches, unlinkedEventCount, missingLineupSides, excludedTestMatches:testMatches.length, testPlayerMatches:testPlayerMatches.length, originUnverifiedMatches:originUnverifiedMatches.length, pendingReviewCount:selected.filter(match => resultState(match,originContext) === 'provisional').length, readComplete },
     summary:{ matchCount:eligible.length, playerCount:new Set(playerRows.map(row => row.playerId)).size, teamCount:new Set(teamRows.map(row => row.teamId)).size },
-    players:playerRows, teams:teamRows, issues
+    players:playerRows, teams:teamRows, issues,playerContributions
   }
   // playerId selects returned rows, not the underlying career fact scope. Single
   // and batch calls therefore share the same career version and card revision.
@@ -346,41 +354,46 @@ export const PLAYER_CARD_SCORE_VERSION = 'football-player-card-points/2'
 export const PLAYER_CARD_ENTITLEMENT_VERSION = 'football-player-card-entitlements/2'
 
 export function calculatePlayerCardPoints(playerTotal, metadata = {}) {
+  const rule=metadata.rules||scoreRuleTools.defaults(),ruleParameters=scoreRuleTools.parameters(rule.parameters)
   const fields = ['appearances','starts','minutesPlayed','goals']
   const metrics = playerTotal?.metrics || {}
   const coverage = playerTotal?.coverage || {}
-  const missing = fields.filter(field => coverage[field] !== 'complete' || !Number.isSafeInteger(metrics[field]) || metrics[field] < 0)
+  const uncreditedFields = fields.filter(field => coverage[field] !== 'complete' || !Number.isSafeInteger(metrics[field]) || metrics[field] < 0)
   const supportDrops = metadata.supportDrops
   const supportDataVersion = metadata.supportDataVersion || null
   const dataVersion = supportDataVersion && metadata.dataVersion
-    ? crypto.createHash('sha256').update(JSON.stringify([metadata.dataVersion,supportDataVersion])).digest('hex').slice(0,24)
+    ? crypto.createHash('sha256').update(JSON.stringify([metadata.dataVersion,supportDataVersion,rule.version,'evidence-points/1'])).digest('hex').slice(0,24)
     : null
-  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion, careerDataVersion:metadata.dataVersion || null, supportDataVersion, scope:'career', mode:'official' }
-  if (metadata.coverageStatus && metadata.coverageStatus !== 'complete') return { ...base, status:'unverified', missing:['dataCoverage'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
-  if (metadata.supportCoverageStatus !== 'complete' || !Number.isSafeInteger(supportDrops) || supportDrops < 0 || !supportDataVersion) return { ...base, status:'unverified', missing:['supportDrops'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
-  if (missing.length || metrics.starts > metrics.appearances) {
-    return { ...base, status:'unverified', missing:metrics.starts > metrics.appearances ? [...new Set([...missing,'starts'])] : missing, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
-  }
-  const appearances = metrics.appearances, starts = metrics.starts, minutesPlayed = metrics.minutesPlayed, goals = metrics.goals
-  const foundation = 2 * appearances + starts + Math.floor(minutesPlayed / 45)
-  const goalBonus = Math.min(2 * goals, Math.floor(foundation / 5))
+  const base = { scoreVersion:rule.version, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION, metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion, careerDataVersion:metadata.dataVersion || null, supportDataVersion, scope:'career', mode:'official' }
+  base.accountingPolicy='evidence-points/1'
+  if(metadata.coverageStatus&&metadata.coverageStatus!=='complete')uncreditedFields.push('dataCoverage')
+  if (!['complete','partial'].includes(metadata.supportCoverageStatus) || !Number.isSafeInteger(supportDrops) || supportDrops < 0 || !supportDataVersion) return { ...base, status:'unverified', missing:['supportDrops'], points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
+  const creditedMetrics=Object.fromEntries(fields.map(field=>{const value=playerTotal?.observed?.[field]??metrics[field];return [field,Number.isSafeInteger(value)&&value>=0?value:0]}))
+  if(creditedMetrics.starts>creditedMetrics.appearances)return {...base,status:'unverified',missing:['starts'],points:null,tier:null,canReplacePhoto:false,canChangeBackground:false}
+  if(metadata.supportCoverageStatus!=='complete')uncreditedFields.push('supportDrops')
+  const {appearances,starts,minutesPlayed,goals}=creditedMetrics
+  const foundation = ruleParameters.appearancePoints * appearances + ruleParameters.startPoints * starts + Math.floor(minutesPlayed / ruleParameters.minutesPerPoint)
+  const goalBonus = Math.min(ruleParameters.goalPoints * goals, Math.floor(foundation * ruleParameters.goalCapPercent / 100))
   const careerPoints = foundation + goalBonus
-  const supportPoints = Math.floor(supportDrops / 10)
+  const supportPoints = Math.floor(supportDrops / ruleParameters.supportDropsPerPoint)
   const points = careerPoints + supportPoints
   if (!Number.isSafeInteger(points)) return { ...base, status:'unverified', missing:fields, points:null, tier:null, canReplacePhoto:false, canChangeBackground:false }
-  const tier = points >= 100 ? 'gold' : points >= 45 ? 'silver' : 'bronze'
-  const nextAt = tier === 'gold' ? null : tier === 'silver' ? 100 : 45
-  return { ...base, status:'ready', missing:[], metrics:{ appearances, starts, minutesPlayed, goals }, foundation, goalBonus, careerPoints, supportDrops, supportPoints, points, tier, nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
+  const calculatedTier = points >= ruleParameters.goldAt ? 'gold' : points >= ruleParameters.silverAt ? 'silver' : 'bronze'
+  const ranks=['bronze','silver','gold'],retainedTier=ranks.includes(metadata.retainedTier)?metadata.retainedTier:'bronze'
+  const tier=ranks[Math.max(ranks.indexOf(calculatedTier),ranks.indexOf(retainedTier))]
+  const nextAt = tier === 'gold' ? null : tier === 'silver' ? ruleParameters.goldAt : ruleParameters.silverAt
+  const levelStart=tier==='gold'?ruleParameters.goldAt:tier==='silver'?ruleParameters.silverAt:0
+  return { ...base, status:'ready', missing:[],uncreditedFields:[...new Set(uncreditedFields)],creditedMetrics,breakdown:{appearance:ruleParameters.appearancePoints*appearances,starter:ruleParameters.startPoints*starts,minutes:Math.floor(minutesPlayed/ruleParameters.minutesPerPoint),goals:goalBonus,support:supportPoints}, metrics:{...metrics}, foundation, goalBonus, careerPoints, supportDrops, supportPoints, points, tier, calculatedTier,retainedTier:tier!==calculatedTier?retainedTier:null,levelStart,nextAt, pointsToNext:nextAt == null ? 0 : nextAt - points, canReplacePhoto:points >= 100, canChangeBackground:points >= 100 }
 }
 
 // Every API uses this same constructor, including single-player, batch and fan
 // summaries. An empty set is confirmed zero only with a verified empty fact scope.
 export function createPlayerCardSnapshot(rows, metadata = {}) {
   const total = sumPlayerRows(rows)
-  if (!rows.length && metadata.matchCount > 0) for (const field of Object.keys(total.metrics)) {
+  if (!rows.length && metadata.matchCount > 0 && metadata.coverageStatus !== 'complete') for (const field of Object.keys(total.metrics)) {
     total.metrics[field] = null; total.coverage[field] = 'not_collected'
   }
-  const base = { scoreVersion:PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION,
+  const base = { scoreVersion:metadata.rules?.version||PLAYER_CARD_SCORE_VERSION, entitlementVersion:PLAYER_CARD_ENTITLEMENT_VERSION,
     metricVersion:metadata.metricVersion || METRIC_VERSION, dataVersion:metadata.dataVersion || null,
     mode:metadata.mode || 'official', points:null,tier:null,canReplacePhoto:false,canChangeBackground:false }
   let score = metadata.fullCareer === true ? calculatePlayerCardPoints(total,metadata)

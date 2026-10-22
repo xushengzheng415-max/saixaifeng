@@ -1,0 +1,163 @@
+{
+  "prototype": "E:\\Documents\\sxf-football\\web-admin-vue\\prototypes\\player-detail-card.png",
+  "asset_dir": "E:\\Documents\\sxf-football\\web-admin-vue\\prototypes\\player-detail-card_assets",
+  "generated_at": "2026-09-26",
+  "tool": "yuanxing prototype decomposition",
+  "screen": {
+    "width": 1531,
+    "height": 943
+  },
+  "summary": "球员详情页与阵容缩略球员卡：头像放大 20%、姓名和主要文字放大，并让头像底部与卡面腰线对齐。",
+  "status": "approved",
+  "approved_at": "2026-09-26T00:00:00+08:00",
+  "entries": [
+    {
+      "id": "source-prototype",
+      "category": "source",
+      "implementation": "crop-reference",
+      "output": "00-source/codex-clipboard-1c31da45-f735-455b-bca1-e712c4b9bcee.png",
+      "source_bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1531,
+        "height": 943
+      },
+      "sha256": "b1465e7475ec82d0d680a127f82b01eef7c4878b989e0c6054d98367e6408aa4",
+      "notes": "Canonical approved prototype copied for traceability."
+    },
+    {
+      "id": "player-card-panel",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 47,
+        "y": 87,
+        "width": 321,
+        "height": 712
+      },
+      "notes": "左侧球员卡及等级指示器的整体容器。"
+    },
+    {
+      "id": "player-card-face",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 58,
+        "y": 111,
+        "width": 301,
+        "height": 430
+      },
+      "notes": "球员卡固定比例主体，背景使用新的透明卡面素材。"
+    },
+    {
+      "id": "player-card-photo",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 98,
+        "y": 102,
+        "width": 208,
+        "height": 260
+      },
+      "notes": "球员图片区域；按用户最新预览反馈适度放大，同时保持底部与卡片横切面对齐。"
+    },
+    {
+      "id": "player-card-level-indicator",
+      "category": "layout",
+      "implementation": "code",
+      "source_bbox": {
+        "x": 89,
+        "y": 557,
+        "width": 237,
+        "height": 77
+      },
+      "notes": "卡片等级与参赛场次指示器。"
+    },
+    {
+      "id": "detail-information-panel",
+      "category": "layout",
+      "implementation": "panel-structure",
+      "source_bbox": {
+        "x": 400,
+        "y": 87,
+        "width": 1131,
+        "height": 712
+      },
+      "notes": "右侧详情区域，仅用于保持球员卡在真实详情页中的上下文位置。"
+    },
+    {
+      "id": "player-card-panel-crop",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/player-card-panel.png",
+      "source_bbox": {
+        "x": 47,
+        "y": 87,
+        "width": 321,
+        "height": 712
+      },
+      "notes": "左侧完整球员卡区域对比裁剪。"
+    },
+    {
+      "id": "player-card-photo-crop",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/player-card-photo.png",
+      "source_bbox": {
+        "x": 98,
+        "y": 102,
+        "width": 208,
+        "height": 260
+      },
+      "notes": "球员图片区域对比裁剪。"
+    },
+    {
+      "id": "player-card-level-crop",
+      "category": "reference",
+      "implementation": "crop-reference",
+      "output": "08-reference-crops/player-card-level.png",
+      "source_bbox": {
+        "x": 89,
+        "y": 557,
+        "width": 237,
+        "height": 77
+      },
+      "notes": "等级指示器对比裁剪。"
+    },
+    {
+      "id": "player-name-text",
+      "category": "text",
+      "implementation": "text-code",
+      "text": "王栋炜 / WANG L.W.",
+      "notes": "姓名和球衣名仍由真实球员数据渲染。"
+    },
+    {
+      "id": "bronze-card-background",
+      "category": "production-asset",
+      "implementation": "image",
+      "output": "02-cards/bronze.png",
+      "notes": "用户提供的铜卡2026.png，原始尺寸 300 × 430 px、透明背景；正式页面同步到 public/images/铜卡.png。"
+    },
+    {
+      "id": "silver-card-background",
+      "category": "production-asset",
+      "implementation": "image",
+      "output": "02-cards/silver.png",
+      "notes": "用户提供的银卡2026.png，原始尺寸 300 × 430 px、透明背景；正式页面同步到 public/images/银卡.png。"
+    },
+    {
+      "id": "gold-card-background",
+      "category": "production-asset",
+      "implementation": "image",
+      "output": "02-cards/gold.png",
+      "notes": "用户提供的金卡2026.png，原始尺寸 300 × 430 px、透明背景；正式页面同步到 public/images/金卡.png。"
+    },
+    {
+      "id": "annotated-layout-overlay",
+      "category": "overlay",
+      "implementation": "overlay",
+      "output": "06-overlays/annotated-layout.png",
+      "notes": "Generated bounding-box overlay for comparison only."
+    }
+  ]
+}
