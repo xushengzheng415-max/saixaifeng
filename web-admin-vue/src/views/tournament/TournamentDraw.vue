@@ -84,19 +84,18 @@
       <div class="division-draw-list">
         <article v-for="(division,index) in filteredDivisionOptions" :key="division.id || division._id">
           <span class="division-crest" :class="[`crest-${index % 5}`, { pro: divisionIsProfessional(division) }]">
-            <el-icon><Trophy /></el-icon><small>{{ divisionIsProfessional(division) ? 'PRO' : division.name?.replace('组', '') }}</small>
+            <el-icon><Trophy /></el-icon><small>{{ division.name?.replace('组', '') }}</small>
           </span>
           <strong>{{ divisionDisplayName(division) }}</strong>
           <dl class="format"><dt><el-icon><Trophy /></el-icon>{{ divisionFormatLabel(division) }}</dt><dd>{{ divisionTeamCount(division) }} 支</dd></dl>
-          <span class="mode-badge" :class="{ pro: divisionIsProfessional(division) }"><el-icon><Medal v-if="divisionIsProfessional(division)" /><Lock v-else /></el-icon>{{ divisionIsProfessional(division) ? 'PRO 专业版 · 已开通' : '基础模式 · 已锁定' }}</span>
+          <span class="mode-badge" :class="{ pro: divisionIsProfessional(division) }"><el-icon><Medal v-if="divisionIsProfessional(division)" /><Lock v-else /></el-icon>{{ divisionIsProfessional(division) ? '专业模式' : '基础模式 · 已锁定' }}</span>
           <dl class="state" :class="divisionDrawState(division).state"><dt><el-icon><component :is="divisionDrawState(division).icon" /></el-icon>{{ divisionDrawState(division).label }}</dt><dd>{{ divisionDrawState(division).hint }}</dd></dl>
           <div class="overview-row-actions"><template v-if="divisionDrawState(division).state === 'done'"><el-button plain @click="viewDivisionResult(division)">查看结果</el-button><el-button type="danger" plain @click="modifyDivisionDraw(division)">修改分组</el-button></template><el-button v-else :type="divisionIsProfessional(division) ? 'success' : ''" plain :disabled="!divisionDrawReady(division)" @click="enterDivisionDraw(division)">{{ divisionDrawState(division).action }}</el-button></div>
         </article>
       </div>
       <el-alert class="overview-footer" title="基础模式组别采用简化分组流程；专业模式组别开放球队池、大屏展示、现场抽签和高级约束。" type="success" :closable="false" show-icon />
       <div v-if="allDivisionDrawsConfirmed" class="overview-schedule-actions">
-        <el-button type="success" size="large" @click="openScheduleSettings">赛程设置</el-button>
-        <el-button size="large" :loading="preparingEventPairings" @click="prepareEventPairings">生成对阵</el-button>
+        <el-button type="success" size="large" :loading="preparingEventPairings" @click="prepareEventPairings">生成对阵</el-button>
       </div>
     </main>
   </section>
@@ -708,13 +707,10 @@ async function prepareEventPairings() {
       added += Number(result.addedCount || 0)
     }
     ElMessage.success(added ? `已生成 ${added} 场待排对阵` : '对阵已生成')
-    router.push({path:`/tournaments/${tournamentId}/matches`,query:{view:'workbench'}})
+    // 生成对阵后进入赛程设置（设日历/场地），保存后自动进赛历
+    router.push({path:`/tournaments/${tournamentId}/matches`,query:{view:'settings'}})
   } catch (error) { ElMessage.error(`${added ? `已生成 ${added} 场；` : ''}${error.message || '请重试生成对阵'}`) }
   finally { preparingEventPairings.value = false }
-}
-function openScheduleSettings() {
-  if (!allDivisionDrawsConfirmed.value) return
-  router.push({ path: `/tournaments/${tournamentId}/matches`, query: { view: 'settings' } })
 }
 const overviewDateRange = computed(() => {
   const start = String(tournament.value.startDate || '').replaceAll('-', '.')

@@ -1,5 +1,7 @@
 'use strict'
 
+const stageOrder = require('./stageOrder.cjs')
+
 function dateText(date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -50,16 +52,25 @@ function buildTimeSlots(config) {
   return [...new Set(slots)].sort()
 }
 
+function normalizeExplicitTimes(input) {
+  return Array.from(new Set((Array.isArray(input) ? input : []).map(value => {
+    const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/)
+    if (!match) return ''
+    return `${match[1].padStart(2,'0')}:${match[2]}`
+  }).filter(Boolean))).sort()
+}
+
 function normalizeVenueResources(config) {
   config = config || {}
   const configured = Array.isArray(config.venueResources) ? config.venueResources : []
   const resources = configured.map(resource => ({
     venue: String(resource && (resource.name || resource.venue) || '').trim(),
     fieldFormat: String(resource && (resource.fieldFormat || resource.matchFormat) || '').trim().toLowerCase(),
-    sessionWindows: Array.isArray(resource && resource.sessionWindows) ? resource.sessionWindows : config.sessionWindows
+    sessionWindows: Array.isArray(resource && resource.sessionWindows) ? resource.sessionWindows : config.sessionWindows,
+    kickoffTimes: normalizeExplicitTimes(resource && resource.kickoffTimes)
   })).filter(resource => resource.venue && resource.fieldFormat)
   if (resources.length > 0) return resources
-  return (config.venues || []).map(venue => ({ venue:typeof venue === 'string' ? venue : String(venue && (venue.name || venue.venueName) || '').trim(),fieldFormat:String(typeof venue==='object' && (venue.fieldFormat || venue.matchFormat) || config.fieldFormat || '').toLowerCase(),sessionWindows:config.sessionWindows })).filter(resource => resource.venue && resource.fieldFormat)
+  return (config.venues || []).map(venue => ({ venue:typeof venue === 'string' ? venue : String(venue && (venue.name || venue.venueName) || '').trim(),fieldFormat:String(typeof venue==='object' && (venue.fieldFormat || venue.matchFormat) || config.fieldFormat || '').toLowerCase(),sessionWindows:config.sessionWindows,kickoffTimes:normalizeExplicitTimes(typeof venue==='object' && venue.kickoffTimes) })).filter(resource => resource.venue && resource.fieldFormat)
 }
 
 function buildVenueSlots(config) {
@@ -67,7 +78,9 @@ function buildVenueSlots(config) {
   const slots = []
   resources.forEach(resource => {
     const windows = normalizeSessionWindows(resource.sessionWindows)
-    const times = buildTimeSlots({ ...config,sessionWindows:resource.sessionWindows })
+    // 场地自带开赛点时以它为准（赛程设置按「首场/末场 + 本制式比赛时长 + 转场」逐点推算），
+    // 否则退回按开放时段与步进推算，保持旧配置兼容。
+    const times = resource.kickoffTimes.length ? resource.kickoffTimes : buildTimeSlots({ ...config,sessionWindows:resource.sessionWindows })
     times.forEach(time => {
       const session = sessionName(time,resource.sessionWindows)
       const window = windows.find(item => item.key === session)
@@ -91,7 +104,8 @@ function slotKey(matchDate, matchTime, venue) {
   return `${matchDate}|${matchTime}|${venue}`
 }
 
-function dayAllowed(date, matchDays) {
+function dayAllowed(date, matchDays, matchDates) {
+  if (Array.isArray(matchDates) && matchDates.length) return matchDates.indexOf(dateText(date)) >= 0
   if (!Array.isArray(matchDays) || matchDays.length === 0) return true
   const names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
   return matchDays.indexOf(names[date.getDay()]) >= 0
@@ -160,32 +174,14 @@ function overlaps(leftStart, leftEnd, rightStart, rightEnd) {
 }
 
 function schedulingPriority(match) {
-  const roundName=String(match && match.roundName || '')
-  const phase=String(match && (match.phase || match.scheduleType) || '').toLowerCase()
-  if(roundName==='决赛' || /冠亚军决赛/.test(roundName)) return 60
-  if(/三、四名决赛|三四名决赛|^3[–—-]4名/.test(roundName)) return 60
-  if(/半决赛/.test(roundName)) return 60
-  if(phase==='placement' || /排位赛/.test(roundName)) {
-    const range=String(match && match.rankRange || roundName)
-    const low=Number((range.match(/(\d+)\s*[–—-]/) || [])[1] || match && match.finalRankHigh || 0)
-    if(low>=17) return 10
-    if(low>=9) return 30
-    if(low>=5) return 50
-    if(low>=3) return 70
-    return 50
-  }
-  if(/1\/16决赛/.test(roundName)) return 0
-  if(/1\/8决赛/.test(roundName)) return 20
-  if(/1\/4决赛/.test(roundName)) return 40
-  if(match && match.isCritical===true) return 60
-  return 0
+  return stageOrder.stageRankOf(match)
 }
 
 function finalStageOrder(match) {
   const name=String(match && match.roundName || '')
   if(/半决赛/.test(name)) return 0
-  if(/三、四名决赛|三四名决赛|^3[–—-]4名/.test(name)) return 1
-  if(name==='决赛' || /冠亚军决赛/.test(name)) return 2
+  if(stageOrder.isThirdPlaceName(name)) return 1
+  if(stageOrder.isFinalName(name)) return 2
   return 0
 }
 
@@ -213,24 +209,31 @@ function assign(matches, config, occupiedInput) {
   const idCache = new Map()
   const depthCache = new Map()
   const ordered = (matches || []).slice().sort((a, b) => {
-    const priorityDiff=schedulingPriority(a)-schedulingPriority(b)
-    if(priorityDiff) return priorityDiff
-    const depthDiff = dependencyDepth(a, matchMap, depthCache, new Set()) - dependencyDepth(b, matchMap, depthCache, new Set())
-    const finalOrderDiff=schedulingPriority(a)===60 ? finalStageOrder(a)-finalStageOrder(b) : 0
-    return depthDiff || finalOrderDiff || Number(a.matchNo || a.matchIndex || 0) - Number(b.matchNo || b.matchIndex || 0)
+    // 阶段次序：小组赛/联赛 → 前期淘汰轮 → 低段排位赛 → 半决赛 → 三四名 → 决赛；
+    // 同阶段按轮次、依赖深度、场序排序。口径与演示端 shared/stageOrder.js 完全一致。
+    const stageDiff = stageOrder.compareStage(a, b)
+    if (stageDiff) return stageDiff
+    return dependencyDepth(a, matchMap, depthCache, new Set()) - dependencyDepth(b, matchMap, depthCache, new Set()) || Number(a.matchNo || a.matchIndex || 0) - Number(b.matchNo || b.matchIndex || 0)
   })
   const scopeStages=new Map()
-  ordered.forEach(match=>{const scope=matchScope(match);if(!scopeStages.has(scope))scopeStages.set(scope,[]);const priority=schedulingPriority(match);if(!scopeStages.get(scope).includes(priority))scopeStages.get(scope).push(priority)})
+  ordered.forEach(match=>{const scope=matchScope(match);if(!scopeStages.has(scope))scopeStages.set(scope,[]);const priority=stageOrder.coarseRankOf(match);if(!scopeStages.get(scope).includes(priority))scopeStages.get(scope).push(priority)})
   scopeStages.forEach(stages=>stages.sort((a,b)=>a-b))
-  ordered.forEach(match=>{if(Number(match.scheduleStageOrder)>0 && match.scheduleStageName)return;const stages=scopeStages.get(matchScope(match)) || [schedulingPriority(match)];const index=stages.indexOf(schedulingPriority(match))+1;match.scheduleStageOrder=index;match.scheduleStageName=stageName(index)})
+  ordered.forEach(match=>{if(Number(match.scheduleStageOrder)>0 && match.scheduleStageName)return;const stages=scopeStages.get(matchScope(match)) || [stageOrder.coarseRankOf(match)];const index=stages.indexOf(stageOrder.coarseRankOf(match))+1;match.scheduleStageOrder=index;match.scheduleStageName=stageName(index)})
   const teamHistory = new Map()
   const sessionCounts = new Map()
   const teamDailyCounts = new Map()
   const dailyCounts = new Map()
   const keyTimeUse = new Set()
   const venueIntervals = new Map()
+  const finalsExclusive = config.finalStageExclusive === true
+  const keyStageMatch = match => stageOrder.isFinalStage(match)
+  const globalKeyTimeUse = new Set()
+  const globalFinalsTimeUse = new Set()
   ;(Array.isArray(config.occupiedMatches) ? config.occupiedMatches : []).forEach(item => {
     if (!item || !item.matchDate || !item.matchTime || !item.venue) return
+    const occupiedTimeKey = `${item.matchDate}|${item.matchTime}`
+    globalKeyTimeUse.add(occupiedTimeKey)
+    if (finalsExclusive && keyStageMatch(item)) globalFinalsTimeUse.add(occupiedTimeKey)
     const startMs = timestamp(item.matchDate,item.matchTime)
     const duration = Math.max(1,Number(item.durationMinutes || item.matchDuration || defaultDurationMinutes))
     const buffer = Math.max(0,Number(item.bufferMinutes == null ? defaultBufferMinutes : item.bufferMinutes))
@@ -277,7 +280,7 @@ function assign(matches, config, occupiedInput) {
     for (let dayOffset = 0; dayOffset < maximumDays && !placed; dayOffset += 1) {
       const day = new Date(startDate)
       day.setDate(day.getDate() + dayOffset)
-      if (!dayAllowed(day, config.matchDays)) continue
+      if (!dayAllowed(day, config.matchDays, config.matchDates)) continue
       checkedDays += 1
       const currentDate = dateText(day)
       if (policy.allowedDates.length && policy.allowedDates.indexOf(currentDate) < 0) continue
@@ -317,9 +320,14 @@ function assign(matches, config, occupiedInput) {
           return (sessionCounts.get(sessionKey) || 0) >= Math.min(maxPerSession,policy.maxPerSession)
         })
         if (teamBlocked) continue
-        const critical = /决赛|半决赛/.test(String(match.roundName || ''))
+        const critical = stageOrder.isFinalStage(match)
         const criticalKey=`${matchScope(match)}|${currentDate}|${currentTime}`
         if (critical && keyTimeUse.has(criticalKey)) continue
+        if (finalsExclusive) {
+          const globalTimeKey=`${currentDate}|${currentTime}`
+          if (globalFinalsTimeUse.has(globalTimeKey)) continue
+          if (keyStageMatch(match) && globalKeyTimeUse.has(globalTimeKey)) continue
+        }
 
         const key = slotKey(currentDate, currentTime, venue)
         if (occupied.has(key)) continue
@@ -339,6 +347,11 @@ function assign(matches, config, occupiedInput) {
         match.bufferMinutes = bufferMinutes
         dailyCounts.set(currentDate, (dailyCounts.get(currentDate) || 0) + 1)
         if (critical) keyTimeUse.add(criticalKey)
+        if (finalsExclusive) {
+          const placedTimeKey=`${currentDate}|${currentTime}`
+          globalKeyTimeUse.add(placedTimeKey)
+          if (keyStageMatch(match)) globalFinalsTimeUse.add(placedTimeKey)
+        }
         participantKeys.forEach(teamId => {
           const history = teamHistory.get(teamId) || []
           history.push({ startMs, endMs: startMs + durationMinutes * 60000 })

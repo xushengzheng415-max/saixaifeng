@@ -27,7 +27,7 @@ import {addRecord,queryById,queryList,updateRecord} from '../../utils/cloud'
 import {permissions} from '../../utils/permissions'
 import {isDemoMode} from '../../utils/demoMode'
 import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,youthBirthRange,adultBirthRange} from '../../utils/divisionBasics'
-const route=useRoute(),router=useRouter(),id=String(route.params.id||''),divisionId=String(route.query.divisionId||'')
+const route=useRoute(),router=useRouter(),id=String(route.params.id||''),divisionId=String(route.query.divisionId||''),nextTarget=String(route.query.next||'')
 const isEditing=Boolean(divisionId),loading=ref(false),saving=ref(false),loadError=ref(''),tournament=ref({}),division=ref({}),existingDivisions=ref([]),registrationCount=ref(0)
 const form=reactive({participantType:'youth',ageGroup:'U16',gender:'男子组',birthDateStart:'',birthDateEnd:'',birthRangeMethod:'under',matchFormat:'',expectedTeams:16,nameSource:'generated',customName:''})
 const suggestedBirthRange=computed(()=>form.participantType==='youth'?youthBirthRange(form.ageGroup,tournament.value):adultBirthRange(tournament.value))
@@ -71,7 +71,7 @@ async function saveDivision(){
     const payload=buildDivisionBasics({...form,name:finalName.value},{tournamentId:id,existing:division.value,registeredTeams:registrationCount.value})
     if(existingDivisions.value.some(row=>String(row._id||row.id)!==divisionId&&String(row.name||'').trim().toLowerCase()===payload.name.toLowerCase()))throw new Error('组别名称已存在，请修改名称')
     saving.value=true
-    if(isEditing){await updateRecord('divisions',divisionId,{...payload,...(isDemoMode(id)?{rulesLocked:false,ruleFinalized:false}:{}),updateTime:new Date()});ElMessage.success('组别设置已保存');goBack()}
+    if(isEditing){await updateRecord('divisions',divisionId,{...payload,...(isDemoMode(id)?{rulesLocked:false,ruleFinalized:false}:{}),updateTime:new Date()});ElMessage.success('组别设置已保存');if(nextTarget==='rules'){router.push({path:`/tournaments/${id}/competition/rules`,query:{divisionId,step:'format'}})}else{goBack()}}
     else{const result=await addRecord('divisions',{...payload,displayOrder:existingDivisions.value.length+1,rulesVersion:'暂未定版',createTime:new Date(),updateTime:new Date()});ElMessage.success('组别已创建');router.push({path:`/tournaments/${id}/competition/rules`,query:{divisionId:result._id||result.id,step:'format'}})}
   }catch(error){ElMessage.error(error.message||'保存失败，请重试')}finally{saving.value=false}
 }

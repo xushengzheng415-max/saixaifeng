@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>阵型设计器 - 麦部足球</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Microsoft YaHei', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* 顶部工具栏 */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    background: #16213e;
+    border-bottom: 1px solid #0f3460;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .toolbar label { font-size: 13px; color: #a0a0a0; }
+  .toolbar select, .toolbar input {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a5276;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+  }
+  .toolbar button {
+    background: #1a5276;
+    color: #e0e0e0;
+    border: 1px solid #1a5276;
+    border-radius: 4px;
+    padding: 5px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+  }
+  .toolbar button:hover { background: #21618c; }
+  .toolbar button.primary { background: #1B5E20; border-color: #2E7D32; }
+  .toolbar button.primary:hover { background: #2E7D32; }
+
+  .sep { width: 1px; height: 24px; background: #0f3460; }
+
+  /* 主体区域 */
+  .main-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .canvas-wrap {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0d1117;
+    position: relative;
+  }
+
+  .canvas-container {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+  }
+
+  /* 球场边界 — 与实际页面 VisualLineupEditor.vue 的 field-boundary 完全一致 */
+  .field-boundary {
+    position: absolute;
+    left: 7%;
+    top: 5%;
+    width: 86%;
+    height: 90%;
+    pointer-events: none;
+  }
+  .field-boundary .player-dot,
+  .field-boundary .mirror-dot {
+    pointer-events: auto;
+  }
+
+  .bg-image {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+  }
+
+  /* 球员点 */
+  .player-dot {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    cursor: grab;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    box-shadow: 0 0 0 3px #fff, 0 0 12px rgba(0,0,0,0.7), 0 4px 10px rgba(0,0,0,0.5);
+    transition: box-shadow 0.15s, transform 0.1s;
+    user-select: none;
+    -webkit-user-select: none;
+    line-height: 1;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  }
+  .player-dot:hover { box-shadow: 0 0 0 4px rgba(255,255,255,0.6), 0 0 16px rgba(255,255,255,0.2); }
+  .player-dot.dragging { cursor: grabbing; box-shadow: 0 0 0 5px rgba(255,200,0,0.8), 0 0 20px rgba(255,200,0,0.4); z-index: 100; }
+  .player-dot.gk { background: #FF9800; border: 2px solid #F57C00; }
+  .player-dot.def { background: #FFEB3B; border: 2px solid #FBC02D; color: #000; }
+  .player-dot.mid { background: #00E5FF; border: 2px solid #00B8D4; color: #000; }
+  .player-dot.fw { background: #FF4081; border: 2px solid #F50057; }
+  .player-dot.other { background: #E040FB; border: 2px solid #D500F9; }
+
+  /* 客队镜像点 */
+  .mirror-dot {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.6), 0 4px 10px rgba(0,0,0,0.3);
+    user-select: none;
+    -webkit-user-select: none;
+    line-height: 1;
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: not-allowed;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  }
+  .mirror-dot.gk { background: #FF9800; }
+  .mirror-dot.def { background: #FFEB3B; color: #000; }
+  .mirror-dot.mid { background: #00E5FF; color: #000; }
+  .mirror-dot.fw { background: #FF4081; }
+  .mirror-dot.other { background: #E040FB; }
+
+  /* 镜像开关 */
+  .mirror-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #e0e0e0;
+    cursor: pointer;
+  }
+  .mirror-toggle input { cursor: pointer; }
+
+  /* 右侧面板 */
+  .side-panel {
+    width: 300px;
+    background: #16213e;
+    border-left: 1px solid #0f3460;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .panel-title {
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #43A047;
+    border-bottom: 1px solid #0f3460;
+    flex-shrink: 0;
+  }
+  .coord-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  .coord-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(15,52,96,0.4);
+  }
+  .coord-item .dot-preview {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .coord-item .info { flex: 1; line-height: 1.5; }
+  .coord-item .info .name { color: #e0e0e0; font-size: 12px; }
+  .coord-item .info .xy { color: #888; font-size: 11px; font-family: monospace; }
+  .coord-item input {
+    width: 50px;
+    background: #0d1117;
+    border: 1px solid #0f3460;
+    border-radius: 3px;
+    color: #e0e0e0;
+    padding: 3px 4px;
+    font-size: 11px;
+    font-family: monospace;
+    text-align: center;
+  }
+  .coord-item input:focus { outline: none; border-color: #43A047; }
+
+  /* 导出弹窗 */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal h3 { color: #43A047; margin-bottom: 14px; }
+  .modal pre {
+    background: #0d1117;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: #a0e0a0;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    justify-content: flex-end;
+  }
+  .modal-actions button {
+    padding: 6px 18px;
+    border-radius: 4px;
+    border: 1px solid #0f3460;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .modal-actions .copy-btn { background: #1B5E20; color: #fff; border-color: #2E7D32; }
+  .modal-actions .close-btn { background: #0f3460; color: #e0e0e0; }
+
+  /* 提示 */
+  .toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1B5E20;
+    color: #fff;
+    padding: 8px 24px;
+    border-radius: 6px;
+    font-size: 13px;
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  .hint-bar {
+    padding: 6px 14px;
+    background: #0f3460;
+    font-size: 12px;
+    color: #a0c0e0;
+    border-bottom: 1px solid #0f3460;
+    flex-shrink: 0;
+  }
+
+  .zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #a0a0a0;
+  }
+  .zoom-controls button {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+
+<!-- 工具栏 -->
+<div class="toolbar">
+  <label>人数制：</label>
+  <select id="formatSelect">
+    <option value="5">5人制</option>
+    <option value="7">7人制</option>
+    <option value="8">8人制</option>
+    <option value="9">9人制</option>
+    <option value="11">11人制</option>
+  </select>
+
+  <div class="sep"></div>
+
+  <label>阵型：</label>
+  <select id="formationSelect"></select>
+
+  <div class="sep"></div>
+
+  <button id="btnLoad" class="primary">加载阵型</button>
+  <button id="btnReset">重置位置</button>
+
+  <div class="sep"></div>
+
+  <label>背景图：</label>
+  <input type="file" id="bgImageInput" accept="image/*" style="color:#a0a0a0;font-size:12px;max-width:180px;">
+
+  <div class="sep"></div>
+
+  <div class="zoom-controls">
+    <button id="btnZoomOut">−</button>
+    <span id="zoomLabel">100%</span>
+    <button id="btnZoomIn">+</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <label class="mirror-toggle">
+    <input type="checkbox" id="mirrorCheck">
+    显示客队镜像
+  </label>
+
+  <div style="flex:1"></div>
+
+  <button id="btnExport" class="primary">导出坐标</button>
+</div>
+
+<div class="hint-bar">
+  💡 操作说明：上传标线背景图 → 选择阵型 → 拖拽球员点到标线交叉点 → 右侧可精确微调 → 导出坐标
+</div>
+
+<!-- 主体 -->
+<div class="main-area">
+  <div class="canvas-wrap" id="canvasWrap">
+    <div class="canvas-container" id="canvasContainer">
+      <img class="bg-image" id="bgImage" src="" alt="标线背景">
+      <!-- 球场边界 — 与实际页面 field-boundary 完全一致 -->
+      <div class="field-boundary" id="fieldBoundary"></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel-title">坐标列表（拖拽或手动输入）</div>
+    <div class="coord-list" id="coordList"></div>
+  </div>
+</div>
+
+<!-- 导出弹窗 -->
+<div class="modal-overlay hidden" id="exportModal">
+  <div class="modal">
+    <h3>导出坐标</h3>
+    <p style="font-size:12px;color:#a0a0a0;margin-bottom:12px;">
+      复制以下内容，发给助理或直接粘贴到 formation-data.json 对应位置。
+    </p>
+    <pre id="exportContent"></pre>
+    <div class="modal-actions">
+      <button class="copy-btn" id="btnCopy">复制全部</button>
+      <button class="close-btn" id="btnCloseModal">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ 阵型数据库 ============
+const FORMATION_DB = {
+  "5": {
+    "2-2": {
+      name: "2-2 (平衡型)",
+      positions: [
+        { role: "GK", label: "守门员", x: 10, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 40, y: 32, cls: "def" },
+        { role: "CB2", label: "右后卫", x: 40, y: 68, cls: "def" },
+        { role: "FW1", label: "左前锋", x: 85, y: 32, cls: "fw" },
+        { role: "FW2", label: "右前锋", x: 85, y: 68, cls: "fw" },
+      ]
+    },
+    "3-1": {
+      name: "3-1 (防守反击)",
+      positions: [
+        { role: "GK", label: "守门员", x: 10, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 40, y: 16, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 40, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 40, y: 84, cls: "def" },
+        { role: "FW", label: "前锋", x: 85, y: 50, cls: "fw" },
+      ]
+    },
+    "1-2-1": {
+      name: "1-2-1 (菱形前卫)",
+      positions: [
+        { role: "GK", label: "守门员", x: 10, y: 50, cls: "gk" },
+        { role: "SW", label: "清道夫", x: 25, y: 50, cls: "other" },
+        { role: "CM1", label: "左前卫", x: 65, y: 32, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 65, y: 68, cls: "mid" },
+        { role: "FW", label: "前锋", x: 85, y: 50, cls: "fw" },
+      ]
+    },
+    "2-1-1": {
+      name: "2-1-1 (强化中路)",
+      positions: [
+        { role: "GK", label: "守门员", x: 10, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 40, y: 32, cls: "def" },
+        { role: "CB2", label: "右后卫", x: 40, y: 68, cls: "def" },
+        { role: "CM", label: "中前卫", x: 65, y: 50, cls: "mid" },
+        { role: "FW", label: "前锋", x: 85, y: 50, cls: "fw" },
+      ]
+    },
+  },
+  "7": {
+    "3-2-1": {
+      name: "3-2-1 (防守反击)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 18, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 22, y: 82, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 40, y: 35, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 40, y: 65, cls: "mid" },
+        { role: "FW", label: "前锋", x: 55, y: 50, cls: "fw" },
+      ]
+    },
+    "2-3-1": {
+      name: "2-3-1 (攻守平衡)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 28, cls: "def" },
+        { role: "CB2", label: "右后卫", x: 22, y: 72, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 40, y: 18, cls: "mid" },
+        { role: "CM2", label: "中前卫", x: 40, y: 50, cls: "mid" },
+        { role: "CM3", label: "右前卫", x: 40, y: 82, cls: "mid" },
+        { role: "FW", label: "前锋", x: 55, y: 50, cls: "fw" },
+      ]
+    },
+    "2-1-2-1": {
+      name: "2-1-2-1 (稳定防守)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 28, cls: "def" },
+        { role: "CB2", label: "右后卫", x: 22, y: 72, cls: "def" },
+        { role: "DM", label: "后腰", x: 32, y: 50, cls: "mid" },
+        { role: "CM1", label: "左前卫", x: 44, y: 30, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 44, y: 70, cls: "mid" },
+        { role: "FW", label: "前锋", x: 58, y: 50, cls: "fw" },
+      ]
+    },
+    "1-4-1": {
+      name: "1-4-1 (菱形前卫)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "SW", label: "清道夫", x: 16, y: 50, cls: "other" },
+        { role: "DM", label: "后腰", x: 28, y: 50, cls: "mid" },
+        { role: "CM1", label: "左前卫", x: 40, y: 22, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 40, y: 78, cls: "mid" },
+        { role: "AM", label: "前腰", x: 50, y: 50, cls: "mid" },
+        { role: "FW", label: "前锋", x: 60, y: 50, cls: "fw" },
+      ]
+    },
+  },
+  "8": {
+    "3-3-1": {
+      name: "3-3-1 (前卫控制)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 18, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 22, y: 82, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 42, y: 22, cls: "mid" },
+        { role: "CM2", label: "中前卫", x: 42, y: 50, cls: "mid" },
+        { role: "CM3", label: "右前卫", x: 42, y: 78, cls: "mid" },
+        { role: "FW", label: "前锋", x: 58, y: 50, cls: "fw" },
+      ]
+    },
+    "3-2-2": {
+      name: "3-2-2 (攻守平衡)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 18, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 22, y: 82, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 42, y: 30, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 42, y: 70, cls: "mid" },
+        { role: "FW1", label: "左前锋", x: 58, y: 18, cls: "fw" },
+        { role: "FW2", label: "右前锋", x: 58, y: 82, cls: "fw" },
+      ]
+    },
+    "2-2-3": {
+      name: "2-2-3 (攻击性强)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 22, cls: "def" },
+        { role: "CB2", label: "右后卫", x: 22, y: 78, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 40, y: 32, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 40, y: 68, cls: "mid" },
+        { role: "FW1", label: "左边锋", x: 56, y: 20, cls: "fw" },
+        { role: "FW2", label: "中锋", x: 56, y: 50, cls: "fw" },
+        { role: "FW3", label: "右边锋", x: 56, y: 80, cls: "fw" },
+      ]
+    },
+    "4-2-1": {
+      name: "4-2-1 (防守反击)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "LB", label: "左后卫", x: 22, y: 12, cls: "def" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 32, cls: "def" },
+        { role: "CB2", label: "右中后卫", x: 22, y: 68, cls: "def" },
+        { role: "RB", label: "右后卫", x: 22, y: 88, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 42, y: 30, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 42, y: 70, cls: "mid" },
+        { role: "FW", label: "前锋", x: 58, y: 50, cls: "fw" },
+      ]
+    },
+    "1-3-2-1": {
+      name: "1-3-2-1 (梯次配置)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "SW", label: "清道夫", x: 15, y: 50, cls: "other" },
+        { role: "CB1", label: "左后卫", x: 22, y: 18, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 22, y: 82, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 40, y: 32, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 40, y: 68, cls: "mid" },
+        { role: "FW", label: "前锋", x: 58, y: 50, cls: "fw" },
+      ]
+    },
+  },
+  "9": {
+    "3-3-2": {
+      name: "3-3-2 (基础阵型)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 20, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 22, y: 80, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 44, y: 22, cls: "mid" },
+        { role: "CM2", label: "中前卫", x: 44, y: 50, cls: "mid" },
+        { role: "CM3", label: "右前卫", x: 44, y: 78, cls: "mid" },
+        { role: "FW1", label: "左前锋", x: 62, y: 35, cls: "fw" },
+        { role: "FW2", label: "右前锋", x: 62, y: 65, cls: "fw" },
+      ]
+    },
+    "3-4-1": {
+      name: "3-4-1 (进攻主导)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 20, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 22, y: 80, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 42, y: 15, cls: "mid" },
+        { role: "CM2", label: "左中前卫", x: 42, y: 40, cls: "mid" },
+        { role: "CM3", label: "右中前卫", x: 42, y: 60, cls: "mid" },
+        { role: "CM4", label: "右前卫", x: 42, y: 85, cls: "mid" },
+        { role: "FW", label: "前锋", x: 60, y: 50, cls: "fw" },
+      ]
+    },
+    "3-2-3": {
+      name: "3-2-3 (注重边路)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左后卫", x: 22, y: 20, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右后卫", x: 22, y: 80, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 42, y: 35, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 42, y: 65, cls: "mid" },
+        { role: "FW1", label: "左边锋", x: 58, y: 18, cls: "fw" },
+        { role: "FW2", label: "中锋", x: 58, y: 50, cls: "fw" },
+        { role: "FW3", label: "右边锋", x: 58, y: 82, cls: "fw" },
+      ]
+    },
+  },
+  "11": {
+    "4-4-2": {
+      name: "4-4-2 (经典平衡)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "LB", label: "左后卫", x: 22, y: 12, cls: "def" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 35, cls: "def" },
+        { role: "CB2", label: "右中后卫", x: 22, y: 65, cls: "def" },
+        { role: "RB", label: "右后卫", x: 22, y: 88, cls: "def" },
+        { role: "LM", label: "左前卫", x: 46, y: 12, cls: "mid" },
+        { role: "CM1", label: "左中前卫", x: 46, y: 38, cls: "mid" },
+        { role: "CM2", label: "右中前卫", x: 46, y: 62, cls: "mid" },
+        { role: "RM", label: "右前卫", x: 46, y: 88, cls: "mid" },
+        { role: "FW1", label: "左前锋", x: 64, y: 38, cls: "fw" },
+        { role: "FW2", label: "右前锋", x: 64, y: 62, cls: "fw" },
+      ]
+    },
+    "4-3-3": {
+      name: "4-3-3 (进攻狂潮)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "LB", label: "左后卫", x: 22, y: 12, cls: "def" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 35, cls: "def" },
+        { role: "CB2", label: "右中后卫", x: 22, y: 65, cls: "def" },
+        { role: "RB", label: "右后卫", x: 22, y: 88, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 44, y: 25, cls: "mid" },
+        { role: "CM2", label: "中前卫", x: 44, y: 50, cls: "mid" },
+        { role: "CM3", label: "右前卫", x: 44, y: 75, cls: "mid" },
+        { role: "LW", label: "左边锋", x: 62, y: 18, cls: "fw" },
+        { role: "ST", label: "中锋", x: 62, y: 50, cls: "fw" },
+        { role: "RW", label: "右边锋", x: 62, y: 82, cls: "fw" },
+      ]
+    },
+    "4-2-3-1": {
+      name: "4-2-3-1 (攻防一体)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "LB", label: "左后卫", x: 22, y: 12, cls: "def" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 35, cls: "def" },
+        { role: "CB2", label: "右中后卫", x: 22, y: 65, cls: "def" },
+        { role: "RB", label: "右后卫", x: 22, y: 88, cls: "def" },
+        { role: "DM1", label: "左后腰", x: 38, y: 38, cls: "mid" },
+        { role: "DM2", label: "右后腰", x: 38, y: 62, cls: "mid" },
+        { role: "LW", label: "左边前卫", x: 52, y: 20, cls: "mid" },
+        { role: "AM", label: "前腰", x: 52, y: 50, cls: "mid" },
+        { role: "RW", label: "右边前卫", x: 52, y: 80, cls: "mid" },
+        { role: "ST", label: "中锋", x: 66, y: 50, cls: "fw" },
+      ]
+    },
+    "3-5-2": {
+      name: "3-5-2 (前卫控制)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 25, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右中后卫", x: 22, y: 75, cls: "def" },
+        { role: "LWB", label: "左翼卫", x: 44, y: 10, cls: "mid" },
+        { role: "CM1", label: "左前卫", x: 44, y: 32, cls: "mid" },
+        { role: "CM2", label: "中前卫", x: 44, y: 50, cls: "mid" },
+        { role: "CM3", label: "右前卫", x: 44, y: 68, cls: "mid" },
+        { role: "RWB", label: "右翼卫", x: 44, y: 90, cls: "mid" },
+        { role: "FW1", label: "左前锋", x: 64, y: 38, cls: "fw" },
+        { role: "FW2", label: "右前锋", x: 64, y: 62, cls: "fw" },
+      ]
+    },
+    "3-4-3": {
+      name: "3-4-3 (高压进攻)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 25, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右中后卫", x: 22, y: 75, cls: "def" },
+        { role: "LWB", label: "左翼卫", x: 44, y: 10, cls: "mid" },
+        { role: "CM1", label: "左前卫", x: 44, y: 40, cls: "mid" },
+        { role: "CM2", label: "右前卫", x: 44, y: 60, cls: "mid" },
+        { role: "RWB", label: "右翼卫", x: 44, y: 90, cls: "mid" },
+        { role: "LW", label: "左边锋", x: 64, y: 18, cls: "fw" },
+        { role: "ST", label: "中锋", x: 64, y: 50, cls: "fw" },
+        { role: "RW", label: "右边锋", x: 64, y: 82, cls: "fw" },
+      ]
+    },
+    "5-3-2": {
+      name: "5-3-2 (防守反击)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "LWB", label: "左翼卫", x: 22, y: 10, cls: "def" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 28, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右中后卫", x: 22, y: 72, cls: "def" },
+        { role: "RWB", label: "右翼卫", x: 22, y: 90, cls: "def" },
+        { role: "CM1", label: "左前卫", x: 46, y: 30, cls: "mid" },
+        { role: "CM2", label: "中前卫", x: 46, y: 50, cls: "mid" },
+        { role: "CM3", label: "右前卫", x: 46, y: 70, cls: "mid" },
+        { role: "FW1", label: "左前锋", x: 64, y: 38, cls: "fw" },
+        { role: "FW2", label: "右前锋", x: 64, y: 62, cls: "fw" },
+      ]
+    },
+    "5-4-1": {
+      name: "5-4-1 (极致防守)",
+      positions: [
+        { role: "GK", label: "守门员", x: 8, y: 50, cls: "gk" },
+        { role: "LWB", label: "左翼卫", x: 22, y: 10, cls: "def" },
+        { role: "CB1", label: "左中后卫", x: 22, y: 28, cls: "def" },
+        { role: "CB2", label: "中后卫", x: 22, y: 50, cls: "def" },
+        { role: "CB3", label: "右中后卫", x: 22, y: 72, cls: "def" },
+        { role: "RWB", label: "右翼卫", x: 22, y: 90, cls: "def" },
+        { role: "LM", label: "左前卫", x: 46, y: 18, cls: "mid" },
+        { role: "CM1", label: "左中前卫", x: 46, y: 38, cls: "mid" },
+        { role: "CM2", label: "右中前卫", x: 46, y: 62, cls: "mid" },
+        { role: "RM", label: "右前卫", x: 46, y: 82, cls: "mid" },
+        { role: "ST", label: "前锋", x: 66, y: 50, cls: "fw" },
+      ]
+    },
+  }
+};
+
+// ============ 全局状态 ============
+let currentFormat = "5";
+let currentFormationKey = "2-2";
+let players = [];       // 主队球员 {role, label, x, y, cls, el}
+let mirrorPlayers = [];  // 客队镜像 {role, label, x, y, cls, el}
+let mirrorEnabled = false; // 镜像开关状态
+let zoom = 1.0;
+let dragging = null;
+let bgImageSrc = "";
+
+// ============ DOM ============
+const formatSelect    = document.getElementById("formatSelect");
+const formationSelect = document.getElementById("formationSelect");
+const bgImageInput    = document.getElementById("bgImageInput");
+const bgImage         = document.getElementById("bgImage");
+const canvasContainer = document.getElementById("canvasContainer");
+const fieldBoundary  = document.getElementById("fieldBoundary");
+const coordList       = document.getElementById("coordList");
+const exportModal     = document.getElementById("exportModal");
+const exportContent   = document.getElementById("exportContent");
+const toastEl         = document.getElementById("toast");
+const zoomLabel       = document.getElementById("zoomLabel");
+
+// ============ 工具函数 ============
+
+// 像素位置 → 百分比坐标（基于 field-boundary 尺寸，与实际页面一致）
+function pixelToCoord(px, py, isHome = true) {
+  const fbRect = fieldBoundary.getBoundingClientRect();
+  const cw = fbRect.width;
+  const ch = fbRect.height;
+  if (!cw || !ch) return { x: 0, y: 0 };
+  const xOffset = isHome ? 0 : 50;
+  const x = Math.round(((px / cw * 100 - xOffset) * 2) * 100) / 100;
+  const y = Math.round((py / ch * 100) * 100) / 100;
+  return {
+    x: Math.max(0, Math.min(100, x)),
+    y: Math.max(0, Math.min(100, y)),
+  };
+}
+
+// 镜像：左右翻转（x 镜像），label 互换左/右，y 不变
+function mirrorOnePosition(pos) {
+  const mx = 100 - pos.x;
+  const label = pos.label
+    .replace(/左/g, '__TMP__')
+    .replace(/右/g, '左')
+    .replace(/__TMP__/g, '右');
+  return { ...pos, x: mx, y: pos.y, label };
+}
+
+// ============ 初始化 ============
+function init() {
+  formatSelect.addEventListener("change", onFormatChange);
+  document.getElementById("btnLoad").addEventListener("click", loadFormation);
+  document.getElementById("btnReset").addEventListener("click", resetPositions);
+  document.getElementById("btnExport").addEventListener("click", exportCoords);
+  document.getElementById("btnCopy").addEventListener("click", copyExport);
+  document.getElementById("btnCloseModal").addEventListener("click", () => exportModal.classList.add("hidden"));
+  bgImageInput.addEventListener("change", onBgImageSelected);
+  document.getElementById("btnZoomIn").addEventListener("click", () => setZoom(zoom + 0.1));
+  document.getElementById("btnZoomOut").addEventListener("click", () => setZoom(zoom - 0.1));
+  document.getElementById("mirrorCheck").addEventListener("change", onMirrorCheckChange);
+
+  bgImage.addEventListener("load", () => {
+    applyZoom();
+    updateAllPositions();
+  });
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+
+  loadDefaultBg();
+  populateFormations();
+  loadFormation();
+}
+
+function onMirrorCheckChange(e) {
+  mirrorEnabled = e.target.checked;
+  if (mirrorEnabled) {
+    createMirrorDots();
+  } else {
+    clearMirrorDots();
+  }
+  updateAllPositions();
+}
+
+function loadDefaultBg() {
+  const saved = localStorage.getItem("formation_bg_image");
+  if (saved) {
+    bgImage.src = saved;
+    bgImageSrc = saved;
+  } else {
+    generateDefaultBg();
+  }
+}
+
+function generateDefaultBg() {
+  const c = document.createElement("canvas");
+  c.width = 1000;
+  c.height = 600;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#1a6b1a";
+  ctx.fillRect(0, 0, 1000, 600);
+  for (let i = 0; i < 1000; i += 80) {
+    ctx.fillStyle = i % 160 === 0 ? "rgba(30,120,30,0.25)" : "rgba(50,140,50,0.15)";
+    ctx.fillRect(i, 0, 80, 600);
+  }
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(40, 40, 920, 520);
+  ctx.beginPath(); ctx.moveTo(500, 40); ctx.lineTo(500, 560); ctx.stroke();
+  ctx.beginPath(); ctx.arc(500, 300, 60, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeRect(40, 180, 140, 240);
+  ctx.strokeRect(820, 180, 140, 240);
+  ctx.strokeRect(40, 230, 60, 140);
+  ctx.strokeRect(900, 230, 60, 140);
+  ctx.strokeRect(40, 260, 16, 80);
+  ctx.strokeRect(944, 260, 16, 80);
+  const dataUrl = c.toDataURL("image/png");
+  bgImage.src = dataUrl;
+  bgImageSrc = dataUrl;
+}
+
+function onBgImageSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    bgImage.src = ev.target.result;
+    bgImageSrc = ev.target.result;
+    localStorage.setItem("formation_bg_image", ev.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function setZoom(z) {
+  zoom = Math.max(0.3, Math.min(2.5, Math.round(z * 10) / 10));
+  zoomLabel.textContent = Math.round(zoom * 100) + "%";
+  applyZoom();
+  updateAllPositions();
+}
+
+function applyZoom() {
+  if (!bgImage.naturalWidth) return;
+  if (zoom === 1.0) {
+    // 默认不强制设置尺寸，让 CSS 自然适应容器
+    bgImage.style.width = "";
+    bgImage.style.height = "";
+  } else {
+    bgImage.style.width  = (bgImage.naturalWidth  * zoom) + "px";
+    bgImage.style.height = (bgImage.naturalHeight * zoom) + "px";
+  }
+}
+
+// ============ 阵型选择 ============
+function onFormatChange() {
+  currentFormat = formatSelect.value;
+  populateFormations();
+  loadFormation();
+}
+
+function populateFormations() {
+  const db = FORMATION_DB[currentFormat];
+  formationSelect.innerHTML = "";
+  if (!db) return;
+  Object.entries(db).forEach(([key, val]) => {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = val.name;
+    formationSelect.appendChild(opt);
+  });
+  const keys = Object.keys(db);
+  if (keys.length > 0) currentFormationKey = keys[0];
+  formationSelect.value = currentFormationKey;
+}
+
+// ============ 加载阵型 ============
+function loadFormation() {
+  currentFormationKey = formationSelect.value;
+  const db = FORMATION_DB[currentFormat];
+  if (!db || !db[currentFormationKey]) return;
+
+  // 清除旧的主队点
+  players.forEach(p => p.el && p.el.remove());
+  players = [];
+
+  // 清除镜像点
+  clearMirrorDots();
+
+  // 创建主队点
+  const positions = db[currentFormationKey].positions;
+  positions.forEach((pos, i) => {
+    const dot = document.createElement("div");
+    dot.className = `player-dot ${pos.cls}`;
+    dot.textContent = pos.label.length <= 3 ? pos.label : pos.label.slice(0, 2);
+    dot.title = `${pos.label} (${pos.role}) — 拖拽移动`;
+    dot.dataset.index = i;
+    dot.addEventListener("mousedown", (e) => onDotMouseDown(e, i));
+    fieldBoundary.appendChild(dot);
+    players.push({ ...pos, el: dot });
+  });
+
+  // 镜像点必须在主队点创建后再生成
+  if (mirrorEnabled) createMirrorDots();
+
+  // 延迟一帧更新位置，确保容器尺寸已稳定
+  requestAnimationFrame(() => {
+    updateAllPositions();
+    updateCoordList();
+    showToast(`已加载 ${players.length} 个球员点位`);
+  });
+}
+
+// ============ 镜像点管理 ============
+function clearMirrorDots() {
+  mirrorPlayers.forEach(p => p.el && p.el.remove());
+  mirrorPlayers = [];
+}
+
+function createMirrorDots() {
+  clearMirrorDots();
+  const mirrored = players.map(p => mirrorOnePosition(p));
+  mirrored.forEach((pos, i) => {
+    const dot = document.createElement("div");
+    dot.className = `mirror-dot ${pos.cls}`;
+    dot.textContent = pos.label.length <= 3 ? pos.label : pos.label.slice(0, 2);
+    dot.title = `客队 ${pos.label}（镜像预览，不可拖拽）`;
+    fieldBoundary.appendChild(dot);
+    mirrorPlayers.push({ ...pos, el: dot });
+  });
+}
+
+// ============ 统一更新所有点的位置（百分比定位，和实际页面完全一致） ============
+function updateAllPositions() {
+  // 主队：x:0-100 → left:0%-50%，y:0-100 → top:0%-100%
+  players.forEach((p) => {
+    p.el.style.left = (p.x / 2) + "%";
+    p.el.style.top  = p.y + "%";
+    p.el.title = `${p.label} (${p.role})\nx: ${p.x}  y: ${p.y}\n拖拽移动`;
+  });
+
+  // 镜像客队：x:0-100 → left:50%-100%，y 不变
+  if (mirrorEnabled && mirrorPlayers.length > 0) {
+    mirrorPlayers.forEach((mp) => {
+      if (!mp || !mp.el) return;
+      mp.el.style.left = (50 + mp.x / 2) + "%";
+      mp.el.style.top  = mp.y + "%";
+    });
+  }
+}
+
+// ============ 重置位置 ============
+function resetPositions() {
+  const db = FORMATION_DB[currentFormat];
+  if (!db || !db[currentFormationKey]) return;
+  const positions = db[currentFormationKey].positions;
+  players.forEach((p, i) => {
+    p.x = positions[i].x;
+    p.y = positions[i].y;
+  });
+  updateAllPositions();
+  updateCoordList();
+  showToast("已重置为默认位置");
+}
+
+// ============ 拖拽 ============
+function onDotMouseDown(e, index) {
+  e.preventDefault();
+  e.stopPropagation();
+  dragging = {
+    index,
+    startX: e.clientX,
+    startY: e.clientY,
+  };
+  players[index].el.classList.add("dragging");
+}
+
+function onMouseMove(e) {
+  if (!dragging) return;
+
+  const fbRect = fieldBoundary.getBoundingClientRect();
+  const px = e.clientX - fbRect.left;
+  const py = e.clientY - fbRect.top;
+  const coord = pixelToCoord(px, py, true);
+
+  const p = players[dragging.index];
+  p.x = coord.x;
+  p.y = coord.y;
+
+  // 同步更新镜像数据（左右镜像 + label 互换，y 不变）
+  if (mirrorEnabled && mirrorPlayers[dragging.index]) {
+    const mp = mirrorPlayers[dragging.index];
+    mp.x = 100 - p.x;
+    mp.y = p.y;
+    mp.label = mirrorOnePosition(p).label;
+  }
+
+  updateAllPositions();
+  updateCoordList();
+}
+
+function onMouseUp() {
+  if (!dragging) return;
+  players[dragging.index].el.classList.remove("dragging");
+  dragging = null;
+}
+
+// ============ 右侧坐标列表 ============
+function updateCoordList() {
+  coordList.innerHTML = "";
+  players.forEach((p, i) => {
+    const item = document.createElement("div");
+    item.className = "coord-item";
+
+    const preview = document.createElement("div");
+    preview.className = `dot-preview ${p.cls}`;
+
+    const info = document.createElement("div");
+    info.className = "info";
+
+    const nameSpan = document.createElement("div");
+    nameSpan.className = "name";
+    nameSpan.textContent = p.label;
+
+    const xySpan = document.createElement("div");
+    xySpan.className = "xy";
+    xySpan.textContent = `x: ${p.x}  y: ${p.y}`;
+
+    info.appendChild(nameSpan);
+    info.appendChild(xySpan);
+
+    const xInput = document.createElement("input");
+    xInput.type = "number";
+    xInput.min = 0; xInput.max = 100; xInput.step = 0.1;
+    xInput.value = p.x;
+    xInput.title = "x 坐标";
+    xInput.addEventListener("change", () => {
+      const v = parseFloat(xInput.value);
+      if (!isNaN(v)) {
+        p.x = Math.max(0, Math.min(100, Math.round(v * 100) / 100));
+        if (mirrorEnabled && mirrorPlayers[i]) {
+          mirrorPlayers[i].x = 100 - p.x;
+          mirrorPlayers[i].y = p.y;
+          mirrorPlayers[i].label = mirrorOnePosition(p).label;
+        }
+        updateAllPositions();
+        updateCoordList();
+      }
+    });
+
+    const yInput = document.createElement("input");
+    yInput.type = "number";
+    yInput.min = 0; yInput.max = 100; yInput.step = 0.1;
+    yInput.value = p.y;
+    yInput.title = "y 坐标";
+    yInput.addEventListener("change", () => {
+      const v = parseFloat(yInput.value);
+      if (!isNaN(v)) {
+        p.y = Math.max(0, Math.min(100, Math.round(v * 100) / 100));
+        if (mirrorEnabled && mirrorPlayers[i]) {
+          mirrorPlayers[i].x = 100 - p.x;
+          mirrorPlayers[i].y = p.y;
+          mirrorPlayers[i].label = mirrorOnePosition(p).label;
+        }
+        updateAllPositions();
+        updateCoordList();
+      }
+    });
+
+    item.appendChild(preview);
+    item.appendChild(info);
+    item.appendChild(xInput);
+    item.appendChild(yInput);
+
+    // 镜像坐标（只读显示）
+    if (mirrorEnabled && mirrorPlayers[i]) {
+      const mp = mirrorPlayers[i];
+      const mirrorInfo = document.createElement("div");
+      mirrorInfo.className = "info";
+      mirrorInfo.style.opacity = "0.6";
+      mirrorInfo.style.fontSize = "11px";
+
+      const mirrorName = document.createElement("div");
+      mirrorName.className = "name";
+      mirrorName.textContent = `客队 ${mp.label}`;
+      mirrorName.style.color = "#90caf9";
+
+      const mirrorXY = document.createElement("div");
+      mirrorXY.className = "xy";
+      mirrorXY.textContent = `x: ${mp.x.toFixed(2)}  y: ${mp.y.toFixed(2)}`;
+
+      mirrorInfo.appendChild(mirrorName);
+      mirrorInfo.appendChild(mirrorXY);
+      item.appendChild(mirrorInfo);
+    }
+
+    coordList.appendChild(item);
+  });
+}
+
+// ============ 导出 ============
+function exportCoords() {
+  const db = FORMATION_DB[currentFormat];
+  const formation = db && db[currentFormationKey];
+  if (!formation) return;
+
+  const positions = players.map(p => ({
+    role: p.role,
+    label: p.label,
+    x: p.x,
+    y: p.y,
+  }));
+
+  let text = `【${currentFormat}人制 - ${formation.name}】\n\n`;
+  text += `阵型键: "${currentFormationKey}"\n\n`;
+  text += `主队 positions 数组（替换 formation-data.json 中对应位置）:\n\n`;
+  text += JSON.stringify(positions, null, 2);
+
+  if (mirrorEnabled && mirrorPlayers.length > 0) {
+    const mirrorPositions = mirrorPlayers.map(p => ({
+      role: p.role,
+      label: p.label,
+      x: p.x,
+      y: p.y,
+    }));
+    text += `\n\n客队镜像 positions 数组（左右翻转，y 不变）:\n\n`;
+    text += JSON.stringify(mirrorPositions, null, 2);
+  }
+
+  exportContent.textContent = text;
+  exportModal.classList.remove("hidden");
+}
+
+async function copyExport() {
+  try {
+    await navigator.clipboard.writeText(exportContent.textContent);
+    showToast("已复制到剪贴板！");
+  } catch {
+    showToast("复制失败，请手动选择复制");
+  }
+}
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  setTimeout(() => toastEl.classList.remove("show"), 2000);
+}
+
+// ============ 启动 ============
+init();
+</script>
+</body>
+</html>

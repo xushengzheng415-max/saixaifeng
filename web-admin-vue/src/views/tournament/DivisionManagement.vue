@@ -174,7 +174,16 @@ function openDivisionEditor(division) {
     router.push(`/tournaments/${id}/competition/create`)
     return
   }
-  router.push({ path: `/tournaments/${id}/competition/rules`, query: { divisionId: division.id, step: division.finalized ? 'effective' : 'format' } })
+  if (division.finalized) {
+    router.push({ path: `/tournaments/${id}/competition/rules`, query: { divisionId: division.id, step: 'effective' } })
+    return
+  }
+  // 未配置组别（含自动识别的组别）：第一页先过基础信息，保存后再进赛制设置
+  if (!division.progress) {
+    router.push({ path: `/tournaments/${id}/competition/create`, query: { divisionId: division.id, next: 'rules' } })
+    return
+  }
+  router.push({ path: `/tournaments/${id}/competition/rules`, query: { divisionId: division.id, step: 'format' } })
 }
 
 async function startRuleRevision(division) {

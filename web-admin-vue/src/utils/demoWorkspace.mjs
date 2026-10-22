@@ -2,10 +2,11 @@
 import { calculateMatchEventScore } from '../../../cloudfunctions/dataCenter/shared/match-events.mjs'
 import standings from '../../../cloudfunctions/dataCenter/shared/standings.cjs'
 import pairingTemplates from '../../../cloudfunctions/generateSchedule/pairingTemplates.js'
+import stageOrder from '../../../cloudfunctions/generateSchedule/stageOrder.cjs'
 import confirmedPairings from '../../../cloudfunctions/generateSchedule/confirmedPairings.js'
 import fixtureCatalog from '../data/syntheticTeamCatalog.mjs'
 export const DEMO_ORG_ID = 'demo-organization'
-export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
+export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=null}={}) {
   let sequence = 0
   const tables = {}
   const clone = value => JSON.parse(JSON.stringify(value))
@@ -64,6 +65,25 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
   function remove(collection, id) {
     get(collection, id)
     tables[collection] = rows(collection).filter(row => row._id !== id)
+  }
+  // 历史演示会话可能存过纯字符串 ID 形式的 refereeCrew（与正式 updateMatch 的 normalizeRefereeCrew 行为不一致），
+  // 恢复会话时统一补全为 {_id,name,phone,synthetic}，保证各端裁判姓名展示正常。
+  function normalizeStoredRefereeCrews() {
+    for (const match of rows('matches')) {
+      const crew = match.refereeCrew
+      if (!crew || typeof crew !== 'object' || Array.isArray(crew)) continue
+      const normalized = {}
+      let changed = false
+      for (const [key, value] of Object.entries(crew)) {
+        const id = typeof value === 'string' ? value : String(value?._id || value?.refereeId || '')
+        if (!id) { changed = true; continue }
+        const referee = rows('referees').find(row => String(row._id) === id)
+        const personName = (value && typeof value === 'object' && value.name) || referee?.name || referee?.realName || ''
+        if (typeof value !== 'object' || value.name !== personName || value.phone !== (referee?.phone || referee?.phoneNumber || '')) changed = true
+        normalized[key] = { _id: id, name: personName, phone: (value && typeof value === 'object' && value.phone) || referee?.phone || referee?.phoneNumber || '', synthetic: referee?.synthetic === true }
+      }
+      if (changed) match.refereeCrew = normalized
+    }
   }
   function query(params) {
     const { collection, operation, id, data = {} } = params
@@ -147,6 +167,13 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     const { action, tournamentId, divisionId } = params
     const tournament = get('tournaments', tournamentId)
     const selected = row => row.tournamentId === tournamentId && (!divisionId || row.divisionId === divisionId)
+    const divisionFormatOf = id => { const d = rows('divisions').find(row => String(row._id) === String(id)) || {}; const fmt = String(d.matchFormat || '').trim().toLowerCase(); if (fmt) return fmt; const players = Number(d.playersOnField || 0); return players > 0 ? `${players}side` : '' }
+    const venueFormatOf = name => { const resources = tournament.scheduleDraft?.venueResources || tournament.scheduleConfig?.venueResources || []; const found = resources.find(item => item && item.name === name); return String(found?.fieldFormat || '').trim().toLowerCase() }
+    // 阶段次序与正式排程引擎 scheduler.js 共用 cloudfunctions/generateSchedule/stageOrder.js：
+    // 小组赛/联赛 → 前期淘汰轮 → 低段排位赛(5–8名段) → 半决赛 → 三四名决赛 → 决赛。
+    // 低阶段未踢完前，同组别的高阶段不允许开赛（与正式引擎的硬阶段屏障同口径）。
+    const finalStageRow = row => stageOrder.isFinalStage(row)
+    const demoStageSort = (a, b) => stageOrder.compareStage(a, b)
     if(action==='generatePairings' && params.ensureOnly===true) {
       const division=get('divisions',divisionId)
       if(division.tournamentId!==tournamentId) return fail('组别不属于当前赛事')
@@ -220,8 +247,11 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
         if(!row || seen.has(entry.matchId)) {errors.push({row:index+1,message:'比赛不存在或重复'});continue}
         seen.add(entry.matchId)
         if(row.status!=='scheduled' || (row.events || []).length) {errors.push({row:index+1,message:'比赛已开始，不能调整'});continue}
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(entry.matchDate || '') || !Number.isFinite(Date.parse(`${entry.matchDate}T00:00:00Z`)) || new Date(`${entry.matchDate}T00:00:00Z`).toISOString().slice(0,10)!==entry.matchDate || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.matchTime || '') || !String(entry.venue || '').trim()) {errors.push({row:index+1,message:'请填写有效日期、时间和场地'});continue}
-        changes.push({matchId:row._id,matchNo:row.matchNo || row.sequence,before:{matchDate:row.matchDate || '',matchTime:row.matchTime || '',venue:row.venue || ''},after:{matchDate:entry.matchDate,matchTime:entry.matchTime,venue:String(entry.venue).trim()}})
+        const venueName=String(entry.venue && typeof entry.venue==='object' ? entry.venue.name || entry.venue.venue || '' : entry.venue || '').trim()
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(entry.matchDate || '') || !Number.isFinite(Date.parse(`${entry.matchDate}T00:00:00Z`)) || new Date(`${entry.matchDate}T00:00:00Z`).toISOString().slice(0,10)!==entry.matchDate || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.matchTime || '') || !venueName) {errors.push({row:index+1,message:'请填写有效日期、时间和场地'});continue}
+        const requiredFormat=divisionFormatOf(row.divisionId),venueFormat=venueFormatOf(venueName)
+        if(requiredFormat && venueFormat && venueFormat!==requiredFormat) {errors.push({row:index+1,message:`${venueName}不兼容${requiredFormat.replace('side','人制')}比赛`});continue}
+        changes.push({matchId:row._id,matchNo:row.matchNo || row.sequence,before:{matchDate:row.matchDate || '',matchTime:row.matchTime || '',venue:row.venue || ''},after:{matchDate:entry.matchDate,matchTime:entry.matchTime,venue:venueName}})
       }
       const planned=rows('matches').filter(row=>row.tournamentId===tournamentId && row.status!=='cancelled' && !row.demoLegacyPairing).map(row=>({...row,...(changes.find(change=>change.matchId===row._id)?.after || {})}))
       for(const change of changes) {
@@ -232,7 +262,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       if(errors.length) return {success:false,message:'排期预检未通过',errors,errorCount:errors.length,validCount:0,changes:[]}
       if(params.dryRun!==false) return {success:true,dryRun:true,validCount:changes.length,errorCount:0,changes}
       changes.forEach(change=>update('matches',change.matchId,{...change.after,scheduleStatus:'scheduled',scheduleGenerated:true,scheduleAssignmentSource:params.adjustmentType || 'manual',scheduleAssignedAt:new Date().toISOString()}))
-      if(params.adjustmentType==='import' && changes.length) update('tournaments',tournamentId,{scheduleDraft:{...(tournament.scheduleDraft || {}),startDate:changes.map(c=>c.after.matchDate).sort()[0],endDate:changes.map(c=>c.after.matchDate).sort().at(-1),venueResources:[...new Set(changes.map(c=>c.after.venue))].map(name=>({name}))}})
+      if(params.adjustmentType==='import' && changes.length) update('tournaments',tournamentId,{scheduleDraft:{...(tournament.scheduleDraft || {}),startDate:changes.map(c=>c.after.matchDate).sort()[0],endDate:changes.map(c=>c.after.matchDate).sort().at(-1),venueResources:[...new Set(changes.map(c=>c.after.venue).filter(Boolean))].map(name=>{const previous=(tournament.scheduleDraft?.venueResources || []).find(item=>item.name===name);return previous ? {...previous,name} : {name}})}})
       return {success:true,appliedCount:changes.length}
     }
     if (action === 'saveDraft') return success(update('tournaments', tournamentId, { scheduleConfig: params.scheduleConfig, scheduleDraft:params.scheduleConfig }))
@@ -264,31 +294,72 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       return { success: true, matchCount: rows('matches').filter(selected).length }
     }
     if (action === 'scheduleExistingPairings') {
-      const list = rows('matches').filter(row=>selected(row) && row.status==='scheduled' && !row.demoLegacyPairing && (!params.divisionIds || params.divisionIds.includes(row.divisionId)) && (!row.matchDate || !row.matchTime || !row.venue))
+      // fullReflow：对所选范围内的全部场次重排（先清空旧时间），避免上一轮的错误次序成为
+      // 「已排」场次被永久保留——这是「怎么排顺序都错」的真正原因。
+      const fullReflow = params.fullReflow === true
+      const scoped = rows('matches').filter(row=>selected(row) && row.status==='scheduled' && !row.demoLegacyPairing && (!params.divisionIds || params.divisionIds.includes(row.divisionId)))
+      const hasStarted = scoped.some(row => (row.events || []).length || ['ongoing','live','finished','completed'].includes(String(row.status || '').toLowerCase()))
+      if (fullReflow && hasStarted) return fail('所选组别已有已开赛或已完赛场次，不能整组重排；请缩小组别范围或先清除赛程')
+      // 重排范围：整组重排取全部场次；否则只补未排的场次
+      const refillAll = fullReflow && !hasStarted
+      const list = refillAll ? scoped.slice() : scoped.filter(row=>!row.matchDate || !row.matchTime || !row.venue)
       if(!list.length)return {success:true,matchCount:0,message:'没有待排比赛'}
+      if (refillAll) list.forEach(row=>{row.matchDate='';row.matchTime='';row.venue=''})
       const config=params.scheduleConfig || {},sessions=(config.sessionWindows || []).filter(s=>s.enabled),venues=(config.venueResources || []).map(v=>v.name).filter(Boolean)
       if(!config.startDate || !config.endDate || !sessions.length || !venues.length) return fail('请先设置比赛日期、开放时段和场地')
       const clock=t=>{const [h,m]=String(t || '').split(':').map(Number);return h*60+m},format=t=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`,weekday=['周日','周一','周二','周三','周四','周五','周六'],planned=[]
+      // 赛程设置按「场地首场/末场 + 本制式比赛时长 + 转场时间」为每块场地各算一套开赛点；
+      // 自动排程必须按本场地自己的开赛点取时间，不能拿所有场地的开赛点并集乱塞。
+      const venueTimeLists=new Map()
+      for(const venue of config.venueResources || []) {
+        const name=String(venue && venue.name || '').trim()
+        if(!name)continue
+        const explicit=(Array.isArray(venue.kickoffTimes)?venue.kickoffTimes:[]).map(value=>{const match=String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);return match ? `${match[1].padStart(2,'0')}:${match[2]}` : ''}).filter(Boolean)
+        venueTimeLists.set(name,[...new Set(explicit)].sort())
+      }
+      const finalsExclusive=config.finalStageExclusive===true,anyTimeUse=new Set(),finalsTimeUse=new Set(),pendingIds=new Set(list.map(row=>row._id))
+      for(const row of rows('matches')) {
+        if(pendingIds.has(row._id) || !row.matchDate || !row.matchTime || !row.venue || row.status==='cancelled' || row.demoLegacyPairing)continue
+        anyTimeUse.add(`${row.matchDate}|${row.matchTime}`)
+        if(finalStageRow(row))finalsTimeUse.add(`${row.matchDate}|${row.matchTime}`)
+      }
       const before=clone(tables)
       try {
-        for(const row of list.sort((a,b)=>Number(a.matchNo || 0)-Number(b.matchNo || 0))) {
+        for(const row of list.sort(demoStageSort)) {
           let chosen
+          const requiredFormat=divisionFormatOf(row.divisionId),venueRows=(config.venueResources || []).filter(v=>String(v.name || '').trim() && (!requiredFormat || !String(v.fieldFormat || '').trim() || String(v.fieldFormat).trim().toLowerCase()===requiredFormat)).map(v=>String(v.name).trim())
+          const allowedDates=Array.isArray(config.matchDates)&&config.matchDates.length?new Set(config.matchDates.map(value=>String(value).slice(0,10))):null
           for(let day=new Date(`${config.startDate}T00:00:00`);day<=new Date(`${config.endDate}T00:00:00`) && !chosen;day.setDate(day.getDate()+1)) {
-            if(!(config.matchDays || []).includes(weekday[day.getDay()]))continue
             const date=`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`
+            if(allowedDates?!allowedDates.has(date):!(config.matchDays || []).includes(weekday[day.getDay()]))continue
+            const duration=Number(row.durationMinutes || config.matchDurations?.[row.divisionId] || 50)
+            const fallbackStarts=[]
             for(const session of sessions) {
-              if(chosen)break
-              const duration=Number(row.durationMinutes || config.matchDurations?.[row.divisionId] || 50)
-              const starts=Array.isArray(config.kickoffTimes)?config.kickoffTimes.map(clock).filter(minute=>minute>=clock(session.start) && minute+duration<=clock(session.end)):Array.from({length:Math.max(0,Math.floor((clock(session.end)-clock(session.start)-duration)/Math.max(5,Number(config.timeStepMinutes || 5)))+1)},(_,i)=>clock(session.start)+i*Math.max(5,Number(config.timeStepMinutes || 5)))
-              for(const minute of starts)for(const venue of venues) {
-                if(chosen)break
-                const entry={matchId:row._id,matchDate:date,matchTime:format(minute),venue}
-                const preview=schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:true,adjustmentType:'auto'})
-                if(preview.success){schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:false,adjustmentType:'auto'});chosen=entry;planned.push(entry);break}
+              if(Array.isArray(config.kickoffTimes) && config.kickoffTimes.length)fallbackStarts.push(...config.kickoffTimes.map(clock).filter(minute=>minute>=clock(session.start) && minute+duration<=clock(session.end)))
+              else fallbackStarts.push(...Array.from({length:Math.max(0,Math.floor((clock(session.end)-clock(session.start)-duration)/Math.max(5,Number(config.timeStepMinutes || 5)))+1)},(_,i)=>clock(session.start)+i*Math.max(5,Number(config.timeStepMinutes || 5))))
+            }
+            const candidates=[],seenSlots=new Set()
+            for(const venue of venueRows) {
+              const own=venueTimeLists.get(venue)
+              for(const minute of (own && own.length ? own.map(clock) : fallbackStarts)) {
+                const slot=`${minute}|${venue}`
+                if(seenSlots.has(slot))continue
+                seenSlots.add(slot)
+                candidates.push({minute,venue})
               }
             }
+            candidates.sort((left,right)=>left.minute-right.minute || left.venue.localeCompare(right.venue,'zh-CN',{numeric:true}))
+            for(const candidate of candidates) {
+              if(chosen)break
+              const minute=candidate.minute,venue=candidate.venue,timeKey=`${date}|${format(minute)}`
+              if(finalsTimeUse.has(timeKey))continue
+              if(finalsExclusive && finalStageRow(row) && anyTimeUse.has(timeKey))continue
+              const entry={matchId:row._id,matchDate:date,matchTime:format(minute),venue}
+              const preview=schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:true,adjustmentType:'auto'})
+              if(preview.success){schedule({action:'importScheduleAssignments',tournamentId,rows:[entry],dryRun:false,adjustmentType:'auto'});chosen=entry;planned.push(entry);anyTimeUse.add(timeKey);if(finalStageRow(row))finalsTimeUse.add(timeKey);break}
+            }
           }
-          if(!chosen)throw new Error('可用日期、场地或时段不足，请调整设置')
+          if(!chosen)throw new Error(requiredFormat && !venueRows.length ? `没有兼容${requiredFormat.replace('side','人制')}的场地，请检查赛程设置的场地制式` : '可用日期、场地或时段不足，请调整设置')
         }
       }catch(error){for(const key of Object.keys(tables))delete tables[key];Object.assign(tables,before);throw error}
       update('tournaments',tournamentId,{scheduleGenerated:true,scheduleConfig:config,scheduleDraft:config})
@@ -365,6 +436,23 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       if (params.expectedEventRevision !== undefined && params.expectedEventRevision !== (row.matchEventRevision || 0)) return fail('模拟比赛已更新，请刷新后重试')
       if (params.action && !['finishOrganizerMatch', 'forfeitMatch'].includes(params.action)) return fail('这项比赛操作尚未接入模拟')
       const data = { ...(params.data || {}) }
+      // 与正式 updateMatch 的 normalizeRefereeCrew 对齐：把裁判 ID 转成 {_id,name,phone} 结构再入库，
+      // 否则演示仓库读回的是纯字符串，各处 refereeCrew.name 都取不到名字。
+      if (data.refereeCrew && typeof data.refereeCrew === 'object' && !Array.isArray(data.refereeCrew)) {
+        const crew = {}
+        for (const [key, value] of Object.entries(data.refereeCrew)) {
+          const id = typeof value === 'string' ? value : String(value?._id || value?.refereeId || '')
+          if (!id) continue
+          const referee = rows('referees').find(row => String(row._id) === id)
+          crew[key] = {
+            _id: id,
+            name: (value && typeof value === 'object' && value.name) || referee?.name || referee?.realName || '',
+            phone: referee?.phone || referee?.phoneNumber || '',
+            synthetic: referee?.synthetic === true
+          }
+        }
+        data.refereeCrew = crew
+      }
       if (Array.isArray(data.events)) {
         const score = calculateMatchEventScore({ ...row, events: data.events })
         Object.assign(data, { homeScore: score.home, awayScore: score.away, matchEventRevision: (row.matchEventRevision || 0) + 1 })
@@ -403,7 +491,9 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
     if (action === 'deleteTeam') { remove('teams', params.teamId); tables.players = rows('players').filter(row => row.teamId !== params.teamId); return success({}) }
     return fail('这项操作尚未接入模拟，不会调用真实接口')
   }
-  function ensureVirtualTeams() {
+  // 原虚拟库球队优先取自平台公用演示数据池（运行时只读接口），
+  // 拉取失败时回退到随前端发布的同名镜像目录，保证演示始终可用。
+  function buildCatalogTeams() {
   for(const source of fixtureCatalog.teams){
     let team=rows('teams').find(row=>row.syntheticKey===source.key)
     if(!team)team=add('teams',{name:source.name,teamName:source.name,ageGroup:source.ageGroup,playerCount:source.players.length,syntheticKey:source.key,syntheticDatasetId:fixtureCatalog.datasetId,demoPoolType:'original',logo:assetUrl(source.logoPath),logoUrl:assetUrl(source.logoPath),status:'active'})
@@ -415,6 +505,38 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       else Object.assign(player,{avatarUrl:player.avatarUrl||photo,photoUrl:player.photoUrl||photo,photoFileID:player.photoFileID||photo})
     }
   }
+  }
+  function buildPoolTeams() {
+  const roster=new Map()
+  for(const person of poolDataset.players||[]){
+    const key=String(person.teamId||'')
+    if(!roster.has(key))roster.set(key,[])
+    roster.get(key).push(person)
+  }
+  for(const source of poolDataset.teams){
+    const key=String(source.syntheticKey||'')
+    if(!key)continue
+    const logo=String(source.logo||'')
+    const people=roster.get(String(source.id))||[]
+    const datasetId=source.datasetId||poolDataset.datasetId||fixtureCatalog.datasetId
+    const base={name:source.name,teamName:source.name,ageGroup:source.ageGroup||'',playerCount:Number(source.playerCount)||people.length,syntheticKey:key,syntheticDatasetId:datasetId,demoPoolType:'original',platformId:String(source.id||''),status:'active'}
+    let team=rows('teams').find(row=>row.syntheticKey===key)
+    if(!team)team=add('teams',{...base,logo,logoUrl:logo})
+    else Object.assign(team,base,{logo:logo||team.logo||'',logoUrl:logo||team.logoUrl||''})
+    for(const person of people){
+      const number=Number(person.number)||0
+      const personKey=`${key}:player:${number}`
+      const photo=String(person.photo||'')
+      const patch={teamId:team._id,name:person.name,realName:person.name,birthDate:person.birthDate||'',gender:person.gender||'',jerseyNumber:number,number,position:person.position||'',syntheticKey:personKey,syntheticDatasetId:datasetId,ageGroup:source.ageGroup||'',platformId:String(person.id||''),status:'active'}
+      let player=rows('players').find(row=>row.teamId===team._id&&row.syntheticKey===personKey)
+      if(!player)add('players',{...patch,avatarUrl:photo,photoUrl:photo,photoFileID:photo})
+      else Object.assign(player,patch,{avatarUrl:photo||player.avatarUrl||'',photoUrl:photo||player.photoUrl||'',photoFileID:photo||player.photoFileID||''})
+    }
+  }
+  }
+  function ensureVirtualTeams() {
+  if(poolDataset&&Array.isArray(poolDataset.teams)&&poolDataset.teams.length)buildPoolTeams()
+  else buildCatalogTeams()
   for(const team of rows('teams'))if(['U8','U10','U12'].includes(team.ageGroup)&&team.source==='browser_demo'&&/^模拟U\d+球队\d+$/.test(team.name||''))team.demoTemporary=true
   const ages=['成人',...Array.from({length:13},(_,index)=>`U${index+6}`),'open']
   for (const ageGroup of ages) {
@@ -440,6 +562,7 @@ export function createDemoWorkspace({assetBase='/preview/admin/'}={}) {
       Object.assign(tables, clone(value.tables))
       for(const collection of Object.values(tables))for(const row of collection)sequence=Math.max(sequence,Number(String(row._id||'').match(/-(\d+)$/)?.[1])||0)
       ensureVirtualTeams()
+      normalizeStoredRefereeCrews()
     }
   }
 }

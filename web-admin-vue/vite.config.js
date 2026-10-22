@@ -9,6 +9,14 @@ import path from 'path'
 export default defineConfig({
   // 正式环境默认 /admin/；预览构建通过 VITE_APP_BASE 指向独立目录。
   base: process.env.VITE_APP_BASE || '/admin/',
+  define: {
+    // 构建时间戳（本机时区）：用于在页面上直观确认当前跑的是哪一次构建
+    __SXF_BUILD__: JSON.stringify((() => {
+      const d = new Date()
+      const p = n => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+    })())
+  },
   plugins: [
     {
       name:'shared-standings-browser',

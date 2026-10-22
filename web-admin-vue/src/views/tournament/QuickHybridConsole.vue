@@ -24,36 +24,36 @@
 
     <main v-if="isLeague" :key="renderVersion" class="league-board">
       <section class="panel pool">
-        <header><div><h2>参赛队伍</h2><p>已审核通过 {{ teams.length }} 支</p></div><span>{{ teams.length }}</span></header>
+        <header><div><h2>待排球队</h2><p>当前组别已审核 {{ teams.length }} 支</p></div><span>{{ leagueAssignedCount }}/{{ teams.length }}</span></header>
         <el-input v-model="keyword" placeholder="搜索球队名称" clearable>
           <template #prefix>⌕</template>
         </el-input>
         <ol>
-          <li v-for="team in filteredTeams" :key="team.id" :class="{ added: orderedTeamIds.has(team.id) }" @click="appendTeam(team)">
+          <li v-for="team in filteredTeams" :key="team.id" :class="{ added: leagueAssignedIds.has(team.id) }" draggable="true" @dragstart="leagueDraggingTeam = team; leagueDraggingFrom = -1" @click="placeLeagueTeam(team)">
             <img v-if="team.logo" :src="team.logo" alt="" @error="clearTeamLogo(team)" />
             <span v-else class="crest">{{ team.name.slice(0, 1) }}</span>
             <b>{{ team.name }}</b>
-            <small>{{ orderedTeamIds.has(team.id) ? '已排序' : '+ 加入' }}</small>
+            <small>{{ leagueAssignedIds.has(team.id) ? '已入签位' : '点击入位' }}</small>
           </li>
+          <li v-if="!filteredTeams.length" class="empty-order"><span>{{ keyword ? '没有匹配的球队' : '全部球队已入签位' }}</span><small v-if="!keyword">可拖动签位中的球队互换位置</small></li>
         </ol>
+        <p class="pool-help">拖拽或点击球队放入空签位；「一键抽签」可随机排满全部签位。</p>
       </section>
 
       <section class="panel ranking">
-        <header><div><h2>联赛抽签位</h2><p>球队抽取 1—{{ teams.length }} 号签位，签位顺序用于生成单循环对阵</p></div><div class="league-header-actions"><el-tag type="success" effect="light">联赛组 1</el-tag><el-button size="small" type="success" plain :disabled="!teams.length" @click="randomize">一键抽签</el-button></div></header>
-        <div class="ranking-tip"><span>i</span> 抽签位确认后生成轮次对阵；比赛日期、时间和场地在赛历中另行安排。</div>
+        <header><div><h2>联赛抽签位</h2><p>逐个抽取 1—{{ teams.length }} 号签位，签位顺序用于生成单循环对阵</p></div><div class="league-header-actions"><el-tag type="success" effect="light">{{ leagueAssignedCount }} 支已入位</el-tag><el-button size="small" type="success" plain :disabled="!teams.length" @click="randomize">一键抽签</el-button></div></header>
+        <div class="ranking-tip"><span>i</span> 签位全部排定后生成轮次对阵；比赛日期、时间和场地在赛历中另行安排。</div>
         <ol>
-          <li v-for="(team, index) in orderedTeams" :key="team.id" draggable="true" @dragstart="dragIndex = index" @dragover.prevent @drop="dropAt(index)">
+          <li v-for="(team, index) in leagueSlots" :key="`slot-${index}`" :class="{ filled: team }" draggable="true" @dragstart="onLeagueSlotDragStart(index)" @dragover.prevent @drop="dropLeagueSlot(index)">
             <b class="draw-slot-number">签{{ String(index + 1).padStart(2, '0') }}</b>
-            <img v-if="team.logo" :src="team.logo" alt="" @error="clearTeamLogo(team)" />
-            <span v-else class="crest">{{ team.name.slice(0, 1) }}</span>
-            <strong>{{ team.name }}</strong>
-            <div class="row-actions">
-              <button aria-label="上移" :disabled="index === 0" @click="move(team.id, -1)">↑</button>
-              <button aria-label="下移" :disabled="index === orderedTeams.length - 1" @click="move(team.id, 1)">↓</button>
-              <span aria-hidden="true">⠿</span>
-            </div>
+            <template v-if="team">
+              <img v-if="team.logo" :src="team.logo" alt="" @error="clearTeamLogo(team)" />
+              <span v-else class="crest">{{ team.name.slice(0, 1) }}</span>
+              <strong>{{ team.name }}</strong>
+              <button class="slot-remove" aria-label="移出签位" @click.stop="removeLeagueSlot(index)">×</button>
+            </template>
+            <span v-else class="slot-placeholder">空签位 · 点击左侧球队或拖入</span>
           </li>
-          <li v-if="!orderedTeams.length" class="empty-order"><span>尚未安排球队</span><small>从左侧点击球队加入排序</small></li>
         </ol>
       </section>
 
@@ -69,7 +69,7 @@
             <span class="match-team"><i class="mini-crest"><img v-if="match.away.logo" :src="match.away.logo" alt="" @error="clearTeamLogo(match.away)" /><template v-else>{{ match.away.name.slice(0, 1) }}</template></i>{{ match.away.name }}</span>
           </article>
           <p v-if="activeMatches.length > 5" class="more-match">本轮另有 {{ activeMatches.length - 5 }} 场对阵，将一并写入赛程草稿</p>
-          <div v-if="!activeMatches.length" class="empty-preview">完成左侧队伍排序后生成轮次预览</div>
+          <div v-if="!activeMatches.length" class="empty-preview">{{ leaguePendingText }}</div>
         </div>
       </section>
     </main>
@@ -185,6 +185,9 @@ const cupSlots = ref(Array(2).fill(null))
 const cupSnapshotConfirmed = ref(false)
 const savedDrawConfirmed = ref(false)
 const cupDraggingTeam = ref(null)
+const leagueSlots = ref([])
+const leagueDraggingTeam = ref(null)
+const leagueDraggingFrom = ref(-1)
 let projectionChannel = null
 
 const isLeague = computed(() => route.query.format === 'league')
@@ -199,20 +202,25 @@ const workflowDescription = computed(() => isCup.value ? '单淘汰签位' : isL
 const eventMeta = computed(() => `${tournament.value.startDate || '2026-08-18'} 至 ${tournament.value.endDate || '2026-08-24'} · ${tournament.value.location || '郑州足球公园'}`)
 const filteredTeams = computed(() => teams.value.filter(team => !keyword.value || team.name.toLowerCase().includes(keyword.value.toLowerCase())))
 const orderedTeamIds = computed(() => new Set(orderedTeams.value.map(team => team.id)))
-const uniqueValid = computed(() => orderedTeamIds.value.size === orderedTeams.value.length)
+const uniqueValid = computed(() => isLeague.value ? leagueAssignedIds.value.size === leagueAssignedCount.value : orderedTeamIds.value.size === orderedTeams.value.length)
 const orderValid = computed(() => orderedTeams.value.length === teams.value.length && orderedTeams.value.length >= 2 && uniqueValid.value)
 const cupAssignedTeams = computed(() => cupSlots.value.filter(Boolean))
 const cupAssignedIds = computed(() => new Set(cupAssignedTeams.value.map(team => team.id)))
 const cupAssignedCount = computed(() => cupAssignedTeams.value.length)
 const cupValid = computed(() => teams.value.length >= 2 && teams.value.length <= 16 && cupSlots.value.length >= teams.value.length && cupAssignedCount.value === teams.value.length && cupAssignedIds.value.size === cupAssignedCount.value)
 const hybridValid = computed(() => [2, 4, 8].includes(Number(advanceCount.value)) && Number(advanceCount.value) <= orderedTeams.value.length && orderValid.value)
-const currentValid = computed(() => isCup.value ? cupValid.value : isHybrid.value ? hybridValid.value : orderValid.value)
+const currentValid = computed(() => isCup.value ? cupValid.value : isHybrid.value ? hybridValid.value : leagueComplete.value)
+const leagueAssignedTeams = computed(() => leagueSlots.value.filter(Boolean))
+const leagueAssignedIds = computed(() => new Set(leagueAssignedTeams.value.map(team => team.id)))
+const leagueAssignedCount = computed(() => leagueAssignedTeams.value.length)
+const leagueComplete = computed(() => teams.value.length >= 2 && leagueSlots.value.length === teams.value.length && leagueAssignedCount.value === teams.value.length)
+const leaguePendingText = computed(() => `签位全部排定后生成轮次预览（待排 ${Math.max(0, teams.value.length - leagueAssignedCount.value)} 支）`)
 const hybridSeedOrder = computed(() => knockoutSeedOrder(Number(advanceCount.value)))
 const hybridSemiCount = computed(() => Number(advanceCount.value) === 8 ? 4 : Number(advanceCount.value) === 4 ? 2 : 1)
 
 const leagueRounds = computed(() => {
-  if (orderedTeams.value.length < 2) return []
-  const rotating = [...orderedTeams.value]
+  if (!leagueComplete.value) return []
+  const rotating = [...leagueSlots.value]
   if (rotating.length % 2) rotating.push({ id: '__bye__', name: '轮空' })
   const rounds = []
   for (let round = 0; round < rotating.length - 1; round += 1) {
@@ -260,6 +268,7 @@ async function load() {
       tournament.value = { ...qaSnapshot.tournament, name: '2026 赛小蜂青少年足球邀请赛', startDate: '2026-08-18', endDate: '2026-08-24', location: '郑州足球公园', divisions: [{ id: divisionId.value, name: `${suffix.value}组` }] }
       teams.value = qaTeamRows()
       orderedTeams.value = [...teams.value]
+      leagueSlots.value = Array(teams.value.length).fill(null)
       advanceCount.value = 8
       cupSlots.value = Array(knockoutCapacity(teams.value.length)).fill(null)
       return
@@ -278,7 +287,14 @@ async function load() {
     savedDrawConfirmed.value = Boolean(saved && (['published','archived'].includes(saved.status) || saved.status === 'confirmed' && saved.confirmedAt))
     const order = Array.isArray(saved?.teams) ? saved.teams.map(item => String(item.teamId)).filter(Boolean) : []
     const map = new Map(teams.value.map(item => [item.id, item]))
-    orderedTeams.value = [...order.map(id => map.get(id)).filter(Boolean), ...teams.value.filter(item => !order.includes(item.id))]
+    if (isLeague.value) {
+      const capacity = Math.max(teams.value.length, order.length)
+      const slots = Array(capacity).fill(null)
+      order.forEach((id, index) => { const team = map.get(id); if (team && index < capacity) slots[index] = team })
+      leagueSlots.value = slots
+    } else {
+      orderedTeams.value = [...order.map(id => map.get(id)).filter(Boolean), ...teams.value.filter(item => !order.includes(item.id))]
+    }
     if (isHybrid.value) advanceCount.value = Number(saved?.advanceCount || Math.min(8, teams.value.length >= 8 ? 8 : teams.value.length >= 4 ? 4 : 2))
     if (isCup.value) {
       const savedSlots = Array.isArray(saved?.slots) ? saved.slots : []
@@ -366,13 +382,52 @@ function clearCupSlot(index) {
   renderVersion.value += 1
   recordDraftAction('remove')
 }
+function placeLeagueTeam(team) {
+  if (leagueAssignedIds.value.has(team.id)) return
+  const index = leagueSlots.value.findIndex(slot => !slot)
+  if (index < 0) return
+  const next = [...leagueSlots.value]
+  next[index] = team
+  leagueSlots.value = next
+  renderVersion.value += 1
+  recordDraftAction('place')
+}
+function onLeagueSlotDragStart(index) {
+  const team = leagueSlots.value[index]
+  if (!team) return
+  leagueDraggingTeam.value = team
+  leagueDraggingFrom.value = index
+}
+function dropLeagueSlot(index) {
+  const from = leagueDraggingFrom.value
+  const team = leagueDraggingTeam.value
+  leagueDraggingTeam.value = null
+  leagueDraggingFrom.value = -1
+  if (!team) return
+  let next = [...leagueSlots.value]
+  if (from >= 0) next[from] = next[index] || null
+  else next = next.map(slot => slot?.id === team.id ? null : slot)
+  next[index] = team
+  leagueSlots.value = next
+  renderVersion.value += 1
+  recordDraftAction(from >= 0 ? 'swap' : 'place')
+}
+function removeLeagueSlot(index) {
+  if (!leagueSlots.value[index]) return
+  const next = [...leagueSlots.value]
+  next[index] = null
+  leagueSlots.value = next
+  renderVersion.value += 1
+  recordDraftAction('remove')
+}
 function randomize() {
   const next = [...teams.value]
   for (let index = next.length - 1; index > 0; index -= 1) {
     const target = Math.floor(Math.random() * (index + 1))
     ;[next[index], next[target]] = [next[target], next[index]]
   }
-  orderedTeams.value = next
+  if (isLeague.value) leagueSlots.value = next
+  else orderedTeams.value = next
   if (isCup.value) cupSlots.value = buildCupSlots(next)
   activeRound.value = 0
   renderVersion.value += 1
@@ -381,11 +436,11 @@ function randomize() {
 
 const projectionChannelName = computed(() => `sxf-draw-screen-${tournamentId}-${String(divisionId.value || 'default')}`)
 function projectionAssignments() {
-  const list = isCup.value ? cupSlots.value : orderedTeams.value
+  const list = isCup.value ? cupSlots.value : isLeague.value ? leagueSlots.value : orderedTeams.value
   return (list || []).map((team, index) => team ? { teamId: team.id, teamName: team.name, groupIndex: 0, position: index + 1 } : null).filter(Boolean)
 }
 function projectionPayload() {
-  const ordered = isCup.value ? cupSlots.value.filter(Boolean) : orderedTeams.value
+  const ordered = isCup.value ? cupSlots.value.filter(Boolean) : isLeague.value ? leagueSlots.value.filter(Boolean) : orderedTeams.value
   return { format:workflowType.value, capacity:isCup.value ? cupSlots.value.length : 0, confirmed:savedDrawConfirmed.value, advanceCount:isHybrid.value ? Number(advanceCount.value) : 0, seedOrder:isHybrid.value ? hybridSeedOrder.value : [], slots:isCup.value ? cupSlots.value.map(team => team ? {id:team.id,name:team.name,logo:team.logo} : null) : [], stage: ordered.length && ordered.length === teams.value.length ? 'result' : 'drawing', tournamentName: tournament.value.name || '足球赛事', divisionName: divisionName.value, teams: teams.value, assignments: projectionAssignments(), screen: { theme:'emerald', showTournament:true, showCrest:true, showProgress:true }, assignedCount: ordered.length, updatedAt: new Date().toISOString() }
 }
 const projectionAddress = computed(() => `${window.location.origin}${import.meta.env.BASE_URL}#/draw-screen?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId.value)}&format=${workflowType.value}&capacity=${cupSlots.value.length}`)
@@ -397,6 +452,7 @@ function publishProjection() {
 function openProjection() { publishProjection() }
 function clearOrder() {
   orderedTeams.value = []
+  if (isLeague.value) leagueSlots.value = Array(teams.value.length).fill(null)
   if (isCup.value) cupSlots.value = Array(knockoutCapacity(teams.value.length)).fill(null)
   activeRound.value = 0
   renderVersion.value += 1
@@ -449,7 +505,8 @@ async function confirm() {
     const matches = await queryList('matches', { where: { tournamentId }, limit: 1000 })
     const replaceableMatches = matches.filter(row => String(row.divisionId || 'default') === divisionId.value && row.source === `quick-${type}-draft` && !['published', 'completed', 'in_progress'].includes(row.status))
     await Promise.all(replaceableMatches.map(item => deleteRecord('matches', item._id)))
-    const ranked = orderedTeams.value.map((team, index) => ({ teamId: team.id, teamName: team.name, position: index + 1, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }))
+    const rankedSource = isLeague.value ? leagueSlots.value.filter(Boolean) : orderedTeams.value
+    const ranked = rankedSource.map((team, index) => ({ teamId: team.id, teamName: team.name, position: index + 1, played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }))
     if (!isCup.value) await addRecord('tournament_league_tables', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, tableName: isLeague.value ? '快速联赛排序' : '混合制联赛阶段', tableCode: isLeague.value ? 'LEAGUE' : 'HYBRID', teams: ranked, teamCount: ranked.length, advanceCount: isHybrid.value ? Number(advanceCount.value) : undefined, type, loopType: 'single', status: 'draft', source: `quick-${type}-draft`, createTime: now, updateTime: now })
     if (isCup.value) await addRecord('tournament_bracket', { tournamentId, divisionId: divisionId.value, divisionName: divisionName.value, type: 'cup', name: '快速淘汰赛签位', round: 1, capacity: cupSlots.value.length, teamCount: cupAssignedCount.value, slots: cupSlots.value.map((team, index) => ({ slotCode: `${index < cupSlots.value.length / 2 ? 'A' : 'B'}${index % (cupSlots.value.length / 2) + 1}`, teamId: team?.id || '', teamName: team?.name || '', bye: !team })), matches: Array.from({ length: cupSlots.value.length / 2 }, (_, index) => ({ matchId: `cup-r1-${index + 1}`, round: 1, slot1: cupSlots.value[index * 2] ? { teamId: cupSlots.value[index * 2].id, teamName: cupSlots.value[index * 2].name } : null, slot2: cupSlots.value[index * 2 + 1] ? { teamId: cupSlots.value[index * 2 + 1].id, teamName: cupSlots.value[index * 2 + 1].name } : null, winner: null })), status: 'draft', confirmed: false, source: 'quick-cup-draft', createTime: now, updateTime: now })
     if (isHybrid.value) {
@@ -474,6 +531,7 @@ onBeforeUnmount(()=>projectionChannel?.close())
 
 <style scoped>
 .league-header-actions{display:flex;align-items:center;gap:8px}.draw-slot-number{display:grid!important;place-items:center;width:42px!important;height:23px;border-radius:4px;background:#eef6f0;color:#087f46;font-size:11px}
+.ranking li{cursor:grab}.ranking li:not(.filled){cursor:pointer}.ranking li .slot-placeholder{flex:1;overflow:hidden;color:#a3aea7;font-size:12px;white-space:nowrap;text-overflow:ellipsis}.ranking li .slot-remove{display:grid;flex:none;place-items:center;width:22px;height:22px;border:0;border-radius:50%;background:#f0f4f1;color:#7d8981;font-size:15px;line-height:1;cursor:pointer}.ranking li .slot-remove:hover{background:#fbe9e4;color:#c2492f}.pool .empty-order{display:flex;height:120px;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #d8e1db;border-radius:6px;color:#7c8880;text-align:center}.pool .empty-order span{font-size:13px}.pool .empty-order small{margin-top:6px;color:#9aa49d;font-size:11px}.pool-help{margin:8px 0 0;color:#8a958e;font-size:10px;line-height:1.5}
 .projection-entry{margin-left:auto}
 .quick-console{min-height:100%;padding:18px 28px 92px;background:#f7f9f8;color:#26352c}.event-header{display:flex;align-items:center;justify-content:space-between;margin:-18px -28px 0;padding:16px 28px 15px;border-bottom:1px solid #e1e7e3;background:#fff}.event-copy>.el-button{margin-left:-14px;color:#65736a}.event-line{display:flex;align-items:center;gap:13px;margin-top:5px}.event-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:9px;background:#078348;color:#fff;font-weight:800}.event-header h1{margin:0 0 5px;font-size:23px;line-height:1.2}.event-header p{margin:0;color:#78847c;font-size:13px}.division-picker{display:flex;align-items:center;gap:11px;color:#65736a;font-size:13px}.division-picker :deep(.el-select){width:154px}.steps{display:flex;align-items:center;justify-content:center;height:61px;margin:0 -28px;border-bottom:1px solid #e4e9e6;background:#fff}.steps button{position:relative;display:flex;align-items:center;gap:8px;height:61px;padding:0 50px;border:0;background:transparent;color:#879189;cursor:pointer}.steps button:after{position:absolute;right:-4px;content:'›';color:#bdc5bf;font-size:23px}.steps button:last-child:after{display:none}.steps i{display:grid;place-items:center;width:23px;height:23px;border-radius:50%;background:#e9eeeb;color:#6d7971;font-style:normal;font-size:12px}.steps .active{color:#087f46;font-weight:700}.steps .active:before{position:absolute;right:38px;bottom:0;left:38px;height:3px;background:#078348;content:''}.steps .active i{background:#078348;color:#fff}.format-tabs{display:flex;align-items:center;gap:9px;height:58px}.format-tabs strong{margin-right:6px;font-size:14px}.format-tabs button{min-width:82px;padding:8px 16px;border:1px solid #dce4df;border-radius:5px;background:#fff;color:#59665e;cursor:pointer}.format-tabs button.active{border-color:#078348;background:#078348;color:#fff}.league-board{display:grid;grid-template-columns:270px minmax(390px,.95fr) minmax(440px,1.1fr);gap:14px}.panel{height:556px;box-sizing:border-box;padding:15px;border:1px solid #dfe6e1;border-radius:8px;background:#fff;box-shadow:0 2px 6px rgba(28,65,43,.03)}.panel>header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}.panel h2{margin:0 0 4px;font-size:16px}.panel header p{margin:0;color:#8a958e;font-size:12px}.panel>header>span{display:grid;place-items:center;min-width:28px;height:24px;padding:0 7px;border-radius:12px;background:#edf6f0;color:#087f46;font-size:12px}.pool ol,.ranking ol,.legacy-stage ol{margin:10px -4px 0;padding:0;list-style:none}.pool ol{height:443px;overflow:auto}.pool li{display:flex;align-items:center;gap:8px;height:35px;padding:0 7px;border-bottom:1px solid #edf1ee;cursor:pointer}.pool li:hover{background:#f6faf7}.pool li.added small{color:#9aa49d}.pool li b{flex:1;overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.pool li small{color:#078348;font-size:11px}.crest,.mini-crest{display:grid;flex:none;place-items:center;width:23px;height:23px;border-radius:50%;background:linear-gradient(135deg,#12884d,#65b880);color:#fff;font-size:10px;font-weight:700}.ranking-tip{display:flex;align-items:center;gap:7px;margin-bottom:8px;padding:7px 9px;border-radius:5px;background:#f1f7f3;color:#597066;font-size:11px}.ranking-tip span{display:grid;place-items:center;width:16px;height:16px;border:1px solid #6aa082;border-radius:50%;color:#087f46;font-size:10px}.ranking ol{height:445px;overflow:auto}.ranking li{display:flex;align-items:center;gap:8px;height:34px;padding:0 6px;border-bottom:1px solid #edf1ee}.ranking li>b{display:grid;place-items:center;width:22px;height:22px;border-radius:4px;background:#eef5f0;color:#087f46;font-size:11px}.ranking li>strong{flex:1;overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.row-actions{display:flex;align-items:center;gap:1px}.row-actions button{width:20px;height:23px;padding:0;border:0;background:transparent;color:#77837b;cursor:pointer}.row-actions button:disabled{color:#ccd2ce;cursor:default}.row-actions span{margin-left:3px;color:#a5aea8;cursor:grab}.ranking .empty-order{display:flex;height:390px;flex-direction:column;justify-content:center;border:1px dashed #d8e1db;border-radius:6px;color:#7c8880}.ranking .empty-order span{font-size:14px}.ranking .empty-order small{margin-top:7px}.round-tabs{display:flex;gap:7px;border-bottom:1px solid #e7ece9}.round-tabs button{padding:7px 15px 9px;border:0;border-bottom:2px solid transparent;background:transparent;color:#7a867e;cursor:pointer}.round-tabs button.active{border-bottom-color:#078348;color:#078348;font-weight:700}.round-list{padding-top:11px}.round-list article{display:grid;grid-template-columns:1fr 48px 1fr;align-items:center;height:62px;margin-bottom:7px;border:1px solid #e1e7e3;border-radius:6px;background:#fcfdfc}.match-team{display:flex;align-items:center;gap:8px;padding:0 12px;font-size:12px}.match-team.home{justify-content:flex-end;text-align:right}.round-list article>b{display:flex;flex-direction:column;align-items:center;color:#238052;font-size:13px}.round-list article>b small{margin-bottom:2px;color:#a0aaa3;font-size:9px;font-weight:400}.mini-crest{width:25px;height:25px}.more-match{margin:6px 0 0;text-align:center;color:#7e8a82;font-size:11px}.empty-preview{display:grid;place-items:center;height:360px;border:1px dashed #d8e1db;border-radius:6px;color:#89938c;font-size:13px}.legacy-board{display:grid;grid-template-columns:280px 1fr;gap:14px}.legacy-stage ol{display:grid;grid-template-columns:1fr 1fr;gap:8px}.legacy-stage li{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 10px;border:1px solid #e2e8e4;border-radius:5px}.legacy-stage li strong{flex:1}.legacy-stage li button{border:0;background:transparent;color:#087f46}.action-bar{position:fixed;right:0;bottom:0;left:220px;z-index:5;display:flex;align-items:center;justify-content:space-between;min-height:72px;padding:0 30px;border-top:1px solid #dce4df;background:#fff;box-shadow:0 -4px 14px rgba(35,65,46,.06)}.checks{display:flex;gap:24px}.checks span{font-size:12px}.checks span:before{display:inline-block;width:17px;height:17px;margin-right:6px;border-radius:50%;content:'✓';text-align:center;line-height:17px}.checks .ok{color:#13864b}.checks .ok:before{background:#e5f4e9}.checks .bad{color:#d45d45}.checks .bad:before{background:#fbece8;content:'!'}.actions{display:flex;gap:8px}@media(max-width:1200px){.league-board{grid-template-columns:245px 1fr}.preview{grid-column:1/-1}.panel.preview{height:auto}.action-bar{left:0}}@media(max-width:760px){.event-header,.action-bar{align-items:stretch;flex-direction:column}.steps button{padding:0 12px}.league-board,.legacy-board{grid-template-columns:1fr}.panel{height:auto}.action-bar{position:static;margin:16px -28px -92px;padding:16px}.checks{flex-wrap:wrap}}
 .cup-board{display:grid;grid-template-columns:245px minmax(0,1fr);gap:14px}.cup-pool ol{height:395px;margin:10px -4px 0;padding:0;overflow:auto;list-style:none}.cup-pool li{display:flex;align-items:center;gap:8px;height:43px;padding:0 8px;border:1px solid #e5eae7;border-radius:5px;margin-bottom:6px;cursor:pointer}.cup-pool li.assigned{background:#f7faf8;color:#77837b}.cup-pool li b{flex:1;overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.cup-pool li small{font-size:10px;color:#87928b}.cup-pool li .el-icon{color:#9aa49e}.pool-help{margin:8px 0 0;color:#8a958e;font-size:10px;line-height:1.5}.cup-stage{overflow:hidden}.bracket-shell{position:relative;display:grid;grid-template-columns:184px 102px 102px 76px 102px 102px 184px;align-items:center;justify-content:center;gap:10px;height:420px;margin:2px -4px 8px;border:1px solid #edf1ee;border-radius:7px;background:linear-gradient(90deg,#fbfdfb,#fff 48%,#fbfdfb)}.bracket-side{display:grid;gap:11px;z-index:2}.seed-pair{position:relative;display:grid;gap:4px}.seed-pair:after{position:absolute;top:23px;right:-20px;width:20px;height:34px;border-top:1px solid #16874d;border-right:1px solid #16874d;border-bottom:1px solid #16874d;content:''}.bracket-side.right .seed-pair:after{right:auto;left:-20px;border-right:0;border-left:1px solid #16874d}.seed-slot{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;width:100%;height:34px;padding:0;border:1px solid #dfe6e1;border-radius:5px;background:#fff;color:#8b958f;cursor:pointer}.bracket-side.right .seed-slot{grid-template-columns:minmax(0,1fr) 34px}.seed-slot>b{display:grid;place-items:center;align-self:stretch;border-right:1px solid #dfe6e1;color:#334139;font-size:12px}.bracket-side.right .seed-slot>b{border-right:0;border-left:1px solid #dfe6e1}.seed-slot>span{display:flex;align-items:center;gap:6px;overflow:hidden;padding:0 7px;font-size:11px;white-space:nowrap}.seed-slot>span em{width:100%;color:#b0b8b3;font-style:normal;text-align:center}.seed-slot.filled>span{color:#26362c;font-weight:600}.seed-slot .crest{width:22px;height:22px}.advance-column,.semifinal-column{position:relative;display:grid;align-content:center;z-index:1}.advance-column{gap:54px}.semifinal-column{gap:148px}.advance-column span,.semifinal-column span{position:relative;display:grid;place-items:center;height:40px;border:1px solid #dfe6e1;border-radius:5px;background:#fff;color:#a0aaa4;font-size:11px}.advance-column span:before,.advance-column span:after,.semifinal-column span:before,.semifinal-column span:after{position:absolute;top:50%;width:12px;border-top:1px solid #16874d;content:''}.advance-column span:before,.semifinal-column span:before{left:-12px}.advance-column span:after,.semifinal-column span:after{right:-12px}.final-center{display:grid;place-items:center;gap:3px;color:#28362d}.final-center .el-icon{font-size:47px;color:#d59a16}.final-center strong{font-size:14px}.final-center small{font-size:10px;color:#909a94}.cup-note{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:5px;background:#f1f7f3;color:#61756a;font-size:11px}.cup-note>span{display:grid;place-items:center;width:16px;height:16px;border:1px solid #6aa082;border-radius:50%;color:#087f46}.hybrid-board{display:grid;grid-template-columns:255px minmax(390px,.95fr) minmax(455px,1.15fr);gap:14px}.hybrid-pool ol{height:443px}.hybrid-pool li .el-icon{margin-left:auto;color:#9ca69f}.hybrid-ranking ol{height:400px;margin:8px -4px 0;padding:0;overflow:auto;list-style:none}.hybrid-ranking li{display:flex;align-items:center;gap:8px;height:31px;padding:0 7px;border-bottom:1px solid #edf1ee}.hybrid-ranking li>b{width:22px;color:#24342a;font-size:12px;text-align:center}.hybrid-ranking li.advancing>b{color:#078348}.hybrid-ranking li strong{flex:1;overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.hybrid-ranking li em{padding:2px 5px;border-radius:8px;background:#e8f5ec;color:#078348;font-size:9px;font-style:normal}.hybrid-badges{display:flex;gap:5px}.hybrid-badges .el-icon{margin-right:3px}.advance-control{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:5px;background:#f3f7f4;font-size:11px}.advance-control :deep(.el-select){width:82px}.advance-control small{color:#8a958e}.hybrid-preview{overflow:hidden}.hybrid-tree{display:grid;grid-template-columns:155px 140px 110px;align-items:center;gap:28px;min-height:390px;padding:0 18px}.hybrid-seeds{display:grid;gap:8px}.hybrid-seeds article,.hybrid-lines span,.hybrid-champion{display:flex;align-items:center;gap:10px;min-height:41px;padding:0 10px;border:1px solid #dfe6e1;border-radius:5px;background:#fff;color:#536058;font-size:12px}.hybrid-seeds article{position:relative}.hybrid-seeds article:after{position:absolute;right:-29px;width:29px;border-top:1px solid #b8c2bc;content:''}.hybrid-tree i{display:grid;place-items:center;width:24px;height:24px;border:1px solid #ccd4cf;border-radius:50%;background:#f1f3f2;color:#727d76;font-style:normal}.hybrid-lines{display:grid;align-content:center;gap:48px}.hybrid-lines span{position:relative;min-height:51px}.hybrid-lines span:before,.hybrid-lines span:after{position:absolute;width:28px;border-top:1px solid #b8c2bc;content:''}.hybrid-lines span:before{left:-29px}.hybrid-lines span:after{right:-29px}.hybrid-lines b,.hybrid-champion b{font-weight:500;line-height:1.35}.hybrid-champion{position:relative;min-height:55px}.hybrid-champion:before{position:absolute;left:-29px;width:29px;border-top:1px solid #b8c2bc;content:''}.hybrid-tree.seeds-4 .hybrid-seeds{gap:40px}.hybrid-tree.seeds-4 .hybrid-lines{gap:86px}.hybrid-tree.seeds-2{grid-template-columns:170px 150px}.hybrid-tree.seeds-2 .hybrid-champion{display:none}.hybrid-note{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:5px;background:#f1f7f3;color:#61756a;font-size:11px}.hybrid-note>span{display:grid;place-items:center;width:16px;height:16px;border:1px solid #6aa082;border-radius:50%;color:#087f46}@media(max-width:1200px){.cup-board{grid-template-columns:220px minmax(900px,1fr);overflow:auto}.bracket-shell{grid-template-columns:170px 88px 88px 70px 88px 88px 170px}.hybrid-board{grid-template-columns:240px minmax(390px,1fr)}.hybrid-preview{grid-column:1/-1}}
