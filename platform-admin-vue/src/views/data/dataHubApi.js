@@ -1,4 +1,6 @@
 import {callFunction,getPlayerReadIdentity} from '../../utils/cloud'
+export async function numberingRequest(action,params={}){const identity=getPlayerReadIdentity(),r=await callFunction('dataCenter',{action,...params});if(identity!==getPlayerReadIdentity())throw new Error('账号已切换，请重新加载');if(!r?.success)throw new Error(r?.error||'编号处理失败，请重试');if(r.version!=='football-numbering/1')throw new Error('编号接口版本不一致，请刷新');return r}
+export const numberLabel=row=>row?.businessNumber||({region_required:row?.numbering?.kind==='players'?'籍贯待完善':'登记地区待完善',parent_required:'主体待核验',conflict:'编号待核验'}[row?.numbering?.status]||'待发号')
 export async function dataHub(action,params={}){const identity=getPlayerReadIdentity(),reply=await callFunction('dataCenter',{action,...params});if(identity!==getPlayerReadIdentity())throw new Error('账号或机构已切换，请重新加载');if(!reply?.success)throw new Error(reply?.error||reply?.message||'数据读取失败，请重试');if(reply.hubVersion!=='football-data-hub/1')throw new Error('数据总站接口尚未就绪，请稍后重试');return reply}
 export const metric=value=>typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('zh-CN'):'—'
 export function dateText(value){if(!value)return '—';const d=new Date(value?.$date||value);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Shanghai'}).format(d):'—'}

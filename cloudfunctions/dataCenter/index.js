@@ -9,6 +9,11 @@ const db = cloud.database()
 exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(cloud,db,event)
+    if (['numberingRules','assignBusinessNumber'].includes(event.action)) {
+      const numbering = require('./shared/numbering.cjs')
+      numbering.owner(actor)
+      return event.action === 'numberingRules' ? numbering.rules() : await numbering.assign(db, actor, event)
+    }
     const service = createDataService(db)
     if (['hubCatalog','hubPlayerProfile','hubTeamProfile'].includes(event.action)) {
       const hub = require('./shared/hub.cjs').createHubService(db,service)

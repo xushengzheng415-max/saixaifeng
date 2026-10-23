@@ -4,6 +4,8 @@ const {text}=require('./hub-contract.cjs')
 const failure=(code,message)=>Object.assign(new Error(message),{code})
 const MARKERS=['synthetic','isTest','syntheticDatasetId','syntheticKey','source','originType','dataKind','isDeleted','status']
 const FIELDS={teams:['_id','name','teamName','logo','logoUrl','city','cityName','platformJoinedAt','firstRegisteredAt','createTime','createdAt',...MARKERS],players:['_id','name','teamId','teamCode','playerId','playerCode','jerseyNumber','number','position','jerseyName','nationality','birthDate','birthday','height','weight','nativePlace','platformJoinedAt','firstRegisteredAt','createTime','createdAt',...MARKERS]}
+FIELDS.teams.push('businessNumber','numbering','parentTeamId','provinceCode','provinceName','province','cityCode','registrationRegion')
+FIELDS.players.push('businessNumber','numbering','nativePlaceProvinceCode','nativePlaceCityLetter','nativePlaceRegion')
 function unpack(cursor,kind,teamId,keyword=''){if(!cursor)return '';try{if(typeof cursor!=='string'||cursor.length>1000)throw Error();const row=JSON.parse(Buffer.from(cursor,'base64url').toString());if(row.kind!==kind||row.teamId!==teamId||(row.keyword||'')!==keyword||typeof row.after!=='string'||!row.after||row.after.length>128)throw Error();return row.after}catch{throw failure('DATA_CURSOR_INVALID','分页位置无效，请重新查询')}}
 async function directoryPage(db,event,views){
  const kind=event.kind||'players',teamId=text(event.teamId),keyword=text(event.keyword),size=event.pageSize??50
@@ -16,7 +18,7 @@ async function directoryPage(db,event,views){
  const items=[],excluded={test:0,deleted:0,unverifiedTeam:0,conflictingTeam:0},scanBudget=1000
  while(items.length<size&&scanned<scanBudget){
   let where=teamId?db.command.or([{teamId},{teamCode:teamId}]):{}
-  if(keyword){const regexp=db.RegExp({regexp:keyword.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),options:'i'}),fields=kind==='players'?['name','playerId','playerCode','_id']:['name','teamName','city','cityName','_id'];const search=db.command.or(fields.map(key=>({[key]:regexp})));where=teamId?db.command.and([where,search]):search}
+  if(keyword){const regexp=db.RegExp({regexp:keyword.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),options:'i'}),fields=kind==='players'?['name','businessNumber','playerId','playerCode','_id']:['name','teamName','businessNumber','city','cityName','_id'];const search=db.command.or(fields.map(key=>({[key]:regexp})));where=teamId?db.command.and([where,search]):search}
   const condition=after?db.command.and([where,{_id:db.command.gt(after)}]):where
   let raw
   try{raw=(await db.collection(kind).where(condition).field(Object.fromEntries(FIELDS[kind].map(k=>[k,true]))).orderBy('_id','asc').limit(Math.min(100,size-items.length,scanBudget-scanned)).get()).data||[]}

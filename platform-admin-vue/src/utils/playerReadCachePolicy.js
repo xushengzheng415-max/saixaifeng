@@ -22,7 +22,7 @@ export function isReadOnlyRequest(action, data = {}) {
     // Treat these lookup-only actions as reads so they do not flush player/team
     // data caches before and after every page transition.
     if (name === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations', 'managed'].includes(operation)) return true
-    if (name === 'dataCenter' && ['query', 'playerCard', 'playerDetail', 'catalog','hubCatalog','hubPlayerProfile','hubTeamProfile'].includes(operation)) return true
+    if (name === 'dataCenter' && ['query', 'playerCard', 'playerDetail', 'catalog','hubCatalog','hubPlayerProfile','hubTeamProfile','numberingRules'].includes(operation)) return true
     // Temporary file/image processing does not modify player/team facts.
     if (['uploadFile', 'baiduRemoveBg', 'removeImageBg', 'removeLogoBg', 'generateAIImage'].includes(name)) return true
     return /^(get|list)/.test(name) || /^(get|list|query|preview|check|probe)/.test(operation)
