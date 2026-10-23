@@ -27,6 +27,7 @@ const files = [
   ...['PLAYER_CARD_WORKFLOWS.md','PLAYER_CARD_UNIFY_HANDOFF.md'].map(name => ['docs/data-center/' + name, 'data-center/' + name]),
   ['AGENTS.md','项目规范/项目开发规则.md'],
   ['docs/releases/platform-data-hub-20261023.md','发布记录/platform-data-hub-20261023.md'],
+  ['docs/releases/numbering-standard-20261023.md','发布记录/numbering-standard-20261023.md'],
   ['cloudfunctions/dataCenter/shared/numbering-regions.json','data-center/NUMBERING_REGIONS.json'],
   ['docs/data-center/history/球队编号规则-旧草案.md','data-center/history/球队编号规则-旧草案.md'],
   ['docs/data-center/history/球员编号规则-旧草案.md','data-center/history/球员编号规则-旧草案.md']

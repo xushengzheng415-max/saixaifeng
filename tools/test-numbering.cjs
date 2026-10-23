@@ -17,6 +17,7 @@ const owner={platformOwner:true,userId:'owner'},region={provinceCode:'226',cityL
  assert.equal(n.inferRegion({nativePlace:'广西桂林'},'players'),null,'ambiguous historic city letters must not be guessed')
  assert.equal(n.inferRegion({teamId:'henan',cityName:'河南省郑州市',idCard:'not-used'},'players'),null)
  assert.equal(n.inferRegion({nativePlace:'开封'},'players'),null)
+ assert.equal(require('../cloudfunctions/dataCenter/shared/hub.cjs').playerView({_id:'p',nativePlace:'河南省',nativePlaceRegion:{provinceName:'河南',cityName:'开封'}}).nativePlace,'河南 开封')
  assert.throws(()=>n.guardWrite({'numbering.region':region}),e=>e.code==='NUMBERING_READ_ONLY')
  assert.throws(()=>n.guardWrite({nativePlaceRegion:{provinceCode:'226'}}),e=>e.code==='NUMBERING_REGION_REQUIRED')
  assert.equal(n.view({_id:'invalid-number',businessNumber:123},'players').status,'conflict')
