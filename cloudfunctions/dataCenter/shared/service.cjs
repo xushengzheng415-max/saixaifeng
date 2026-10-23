@@ -1,5 +1,5 @@
 'use strict'
-const { readAll, readByIds } = require('./reader.cjs')
+const { readAll, readByIds, readOptionalAll } = require('./reader.cjs')
 const { readPlayerSupportTotals } = require('./support.cjs')
 const scoreRuleStore=require('./score-rule-store.cjs')
 const valuation=require('./valuation.cjs')
@@ -69,19 +69,19 @@ function createDataService(db) {
       for (const row of list) {
         for (const matchId of row.matchIds || []) matchIds.add(id(matchId))
         for (const matchId of row.startMatchIds || []) startIds.add(id(matchId))
-        goals += Number(row.metrics?.goals ?? row.observed?.goals ?? 0)
-        minutesPlayed += Number(row.metrics?.minutesPlayed ?? row.observed?.minutesPlayed ?? 0)
+        goals = goals != null && Number.isFinite(row.metrics?.goals) ? goals + row.metrics.goals : null
+        minutesPlayed = minutesPlayed != null && Number.isFinite(row.metrics?.minutesPlayed) ? minutesPlayed + row.metrics.minutesPlayed : null
       }
       return { appearances: matchIds.size, starts: startIds.size, goals, minutesPlayed, totalMatches: matchIds.size }
     }
     const pointsOf = totals => {
-      if (!params) return null
+      if (!params || !Number.isFinite(totals.goals) || !Number.isFinite(totals.minutesPlayed)) return null
       const foundation = Number(params.appearancePoints || 0) * totals.appearances + Number(params.startPoints || 0) * totals.starts + Math.floor(totals.minutesPlayed / (Number(params.minutesPerPoint) || 1))
       const goalBonus = Math.min(Number(params.goalPoints || 0) * totals.goals, Math.floor(foundation * (Number(params.goalCapPercent) || 0) / 100))
       return foundation + goalBonus
     }
     const ageOf = pid => valuation.parseAge(profilesById[id(pid)]?.birthDate || profilesById[id(pid)]?.birthday)
-    const qualityOf = (totals, bucket) => bucket === 'GK' || !(totals.minutesPlayed > 0) ? null : totals.goals / (totals.minutesPlayed / 90)
+    const qualityOf = (totals, bucket) => bucket === 'GK' || !Number.isFinite(totals.goals) || !(totals.minutesPlayed > 0) ? null : totals.goals / (totals.minutesPlayed / 90)
     // 核心三项（出场稳定性、生涯积分、表现质量）任一指标未覆盖完整即待评估，不按 0 计。
     const FOUNDATION_METRICS = ['appearances', 'starts', 'minutesPlayed']
     const coreComplete = rows.length > 0 && rows.every(row => FOUNDATION_METRICS.every(metric => row.coverage?.[metric] === 'complete'))
@@ -96,7 +96,7 @@ function createDataService(db) {
       divisionKey = best
     }
     const rowsByPlayer = new Map()
-    for (const row of result.players || []) {
+    for (const row of options.peerRows || result.players || []) {
       if (keyOf(row) !== divisionKey) continue
       if (!rowsByPlayer.has(row.playerId)) rowsByPlayer.set(row.playerId, [])
       rowsByPlayer.get(row.playerId).push(row)
@@ -122,33 +122,38 @@ function createDataService(db) {
         achievements: []
       }
     }
-    const peerIds = [...rowsByPlayer.keys()].filter(pid => pid !== playerId)
+    const peerIds = [...rowsByPlayer.keys()].filter(pid => pid !== playerId && rowsByPlayer.get(pid).every(row => FOUNDATION_METRICS.every(metric => row.coverage?.[metric] === 'complete')))
     const peerPoints = [], peerAges = [], peerQuality = [], peerTotals = []
     for (const pid of peerIds) {
       const input = inputFor(pid)
       if (input.points != null) peerPoints.push(input.points)
-      if (input.qualityMetric != null) peerQuality.push(input.qualityMetric)
+      if (input.qualityMetric != null && input.positionBucket === positionBucket(profile.position)) peerQuality.push(input.qualityMetric)
       const age = ageOf(pid)
       if (age != null) peerAges.push(age)
       const computed = valuation.compute(input)
       if (computed.total != null) peerTotals.push(computed.total)
     }
-    const snapshots = await readAll(db, 'player_valuations', { playerId: id(playerId) }).catch(() => [])
+    const snapshotRead = await readOptionalAll(db, 'player_valuations', { playerId: id(playerId) })
+    const valueScopeKey = require('./hub-contract.cjs').scopeKey(result.scope)
+    const authorizationKey = options.authorizationKey || 'unknown'
+    const snapshots = snapshotRead.rows.filter(row => row.version === valuation.VERSION && row.scopeKey === valueScopeKey && row.authorizationKey === authorizationKey && row.coverage === 'complete' && id(row.dataVersion) && Number.isFinite(new Date(row.computedAt).getTime()) && new Date(row.computedAt).getTime() <= Date.now())
     let latest = null
     for (const row of snapshots) if (!latest || String(row.computedAt || '') > String(latest.computedAt || '')) latest = row
     const totals = aggregate(rowsByPlayer.get(playerId) || rows)
     const age = ageOf(playerId)
-    return valuation.compute({
+    const computed = valuation.compute({
       ...inputFor(playerId),
       coreCoverage: 'complete',
       peerPoints,
       peerAges,
       peerQuality,
-      previousPoints: latest && latest.index != null ? latest.index : null,
+      previousPoints: latest && latest.careerPoints != null ? latest.careerPoints : null,
       previousTotal: latest && latest.total != null ? latest.total : null,
       minor: age != null && age < 18,
       peerTotals
     })
+    if (latest?.careerPoints == null && !computed.estimated.includes('trend')) computed.estimated.push('trend')
+    return {...computed,scopeKey:valueScopeKey,authorizationKey,cohort:{divisionKey,peerCount:peerIds.length,qualityPeerCount:peerQuality.length},historyStatus:latest?'recorded':'not_recorded',achievementStatus:'unverified',snapshotStorageStatus:snapshotRead.status}
   }
   // One canonical career dataset per batch; identical scope and scoring rules to
   // playerCardForAuthorizedPlayer, without re-reading every match per player.
@@ -264,6 +269,11 @@ function createDataService(db) {
     const matchPlayerProfiles = await readByIds(db,'players','_id',participantIds)
     const playersById = Object.fromEntries(matchPlayerProfiles.map(row => [id(row._id),row]))
     const result = aggregateStatistics({ matches, events, scope, divisionsById, tournamentsById, teamsById, playersById, requireOriginEvidence:true, requirePlayerOriginEvidence:true })
+    // Build comparison cohorts from the same authorized facts, before restricting
+    // output to one player. Never publish peer profiles or widen actor access.
+    const cohortScope = {...scope}; delete cohortScope.playerId
+    let valuationPeerRows = scope.playerId ? aggregateStatistics({matches,events,scope:cohortScope,divisionsById,tournamentsById,teamsById,playersById,requireOriginEvidence:true,requirePlayerOriginEvidence:true}).players : []
+    if (!actor.platformOwner && !scope.tournamentId) valuationPeerRows=valuationPeerRows.filter(row=>teamIds.has(row.teamId)||tournamentIds.has(row.tournamentId))
     // Owning one team does not grant access to the opponent's personal archive.
     if (!actor.platformOwner && !scope.tournamentId) {
       result.players = result.players.filter(row => teamIds.has(row.teamId) || tournamentIds.has(row.tournamentId))
@@ -306,6 +316,7 @@ function createDataService(db) {
     result.records=await presentation.journal({matches,events,actor,scope,context:{teamsById,tournamentsById,playersById,events,requireOriginEvidence:true,requirePlayerOriginEvidence:true}})
     const memberships = scope.playerId && !actor.public ? await readAll(db,'player_team_memberships',{ playerId:scope.playerId }) : []
     result.memberships = memberships.filter(row => actor.platformOwner || teamIds.has(id(row.teamId))).map(row => ({ id:id(row._id), playerId:id(row.playerId), teamId:id(row.teamId), status:id(row.status), validFrom:row.validFrom || null, validTo:row.validTo || null, startTimeUnknown:row.startTimeUnknown === true }))
+    if (options.includeAnnual && scope.teamId) result.annual = await require('./team-history.cjs').officialYears({matches,events,scope,context:{divisionsById,tournamentsById,teamsById,playersById,requireOriginEvidence:true,requirePlayerOriginEvidence:true}})
     result.accessScope = actor.public ? 'published' : actor.platformOwner ? 'platform' : 'authorized'
     result.coverage.accessScope = result.accessScope
     result.summary.playerCount = new Set(result.players.map(row => row.playerId)).size
@@ -321,6 +332,8 @@ function createDataService(db) {
         divisionsById,
         ruleContext:built.ruleContext,
         supportDrops:built.card?.supportDrops,
+        peerRows:valuationPeerRows,
+        authorizationKey:actor.platformOwner?'platform':require('./hub-contract.cjs').fingerprint({orgId:actor.orgId||'',teamIds:[...(actor.teamIds||[])].sort(),tournamentIds:[...(actor.tournamentIds||[])].sort()}),
         divisionId:scope.divisionId
       })
       if(options.includeLedger)result.pointsLedger=built.ledger

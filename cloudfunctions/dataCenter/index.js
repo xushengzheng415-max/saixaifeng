@@ -10,13 +10,21 @@ exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(cloud,db,event)
     const service = createDataService(db)
+    if (['hubCatalog','hubPlayerProfile','hubTeamProfile'].includes(event.action)) {
+      const hub = require('./shared/hub.cjs').createHubService(db,service)
+      if (event.action === 'hubCatalog') return await hub.catalog(actor,event)
+      if (event.action === 'hubPlayerProfile') return await hub.playerProfile(actor,event)
+      return await hub.teamProfile(actor,event)
+    }
     if (event.action === 'inspectDuration') return await require('./durationVerification.cjs').inspectDuration(db,actor,event)
     if (event.action === 'verifyDuration') return await require('./durationVerification.cjs').verifyDuration(db,actor,event)
     if (actor.staff) {
       const tournamentId = String(actor.tournamentIds[0] || '')
       const requested = String(event.scope && event.scope.tournamentId || event.tournamentId || '')
-      if (event.action !== 'catalog' && requested !== tournamentId) throw error('DATA_FORBIDDEN','只能查看获授权赛事的数据')
-      if (!['catalog','query','quality','tournamentStatistics'].includes(event.action)) throw error('DATA_FORBIDDEN','当前操作未授权')
+      // 生涯口径：授权赛事范围由查询层统一收窄，不再限定单一赛事。
+      const careerView = event.action === 'playerDetail' && event.career === true
+      if (event.action !== 'catalog' && !careerView && requested !== tournamentId) throw error('DATA_FORBIDDEN','只能查看获授权赛事的数据')
+      if (!['catalog','query','quality','tournamentStatistics','playerDetail'].includes(event.action)) throw error('DATA_FORBIDDEN','当前操作未授权')
     }
     if (event.action === 'initializeCollections') {
       if (!actor.platformOwner) throw error('DATA_FORBIDDEN','仅平台负责人可初始化数据中心')
@@ -37,10 +45,10 @@ exports.main = async (event = {}) => {
     if (event.action === 'playerDetail') {
       const playerId = String(event.playerId || '')
       if (!playerId) throw error('DATA_SCOPE_INVALID','缺少球员信息')
-      const statistics = await service.query(actor,{...(event.scope || {}),playerId,mode:'official'})
-      const card = statistics.playerCard?.scope === 'career' ? statistics.playerCard : await service.playerCardForAuthorizedPlayer(playerId)
-      const {metrics,...playerCard} = card
-      return {success:true,statistics,playerCard}
+      const statistics = await service.query(actor,{...(event.scope || {}),playerId,mode:'official'},{careerView:event.career === true})
+      const card = actor.staff || statistics.playerCard?.scope === 'career' ? statistics.playerCard : await service.playerCardForAuthorizedPlayer(playerId)
+      const {metrics,...playerCard} = card || {}
+      return {success:true,statistics,playerCard,valuation:statistics.valuation || null}
     }
     if (event.action === 'playerCard') {
       const playerId = String(event.playerId || '')
