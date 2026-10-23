@@ -1,0 +1,19 @@
+{
+  "status": "read-only-plan-not-applied",
+  "environment": "cloud1-7g8ckb3c7815a011",
+  "date": "2026-10-23",
+  "existingVerified": [
+    {"collection": "players", "name": "teamId__id", "keys": ["teamId", "_id"]},
+    {"collection": "players", "name": "teamCode__id", "keys": ["teamCode", "_id"]},
+    {"collection": "player_team_memberships", "name": "playerId__id", "keys": ["playerId", "_id"]}
+  ],
+  "candidatesToCheckBeforeApplying": [
+    {"collection": "player_team_history", "name": "playerId__id", "keys": [{"field": "playerId", "direction": 1}, {"field": "_id", "direction": 1}], "unique": false},
+    {"collection": "friendly_matches", "name": "teamId__id", "keys": [{"field": "teamId", "direction": 1}, {"field": "_id", "direction": 1}], "unique": false},
+    {"collection": "friendly_invites", "name": "teamId__id", "keys": [{"field": "teamId", "direction": 1}, {"field": "_id", "direction": 1}], "unique": false},
+    {"collection": "player_transfers", "name": "playerId__id", "keys": [{"field": "playerId", "direction": 1}, {"field": "_id", "direction": 1}], "unique": false}
+  ],
+  "noCollectionCreation": true,
+  "noBusinessDataWrites": true,
+  "note": "Plan only. Re-read live indexes before an independently recorded application. No index removal, unique identity migration, snapshots backfill, or new aggregate table is included."
+}

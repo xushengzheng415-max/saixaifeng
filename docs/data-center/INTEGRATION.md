@@ -1,5 +1,11 @@
 # 数据入口登记
 
+## 2026-10-23 平台数据总站基础接口
+
+`dataCenter` 的 `hubCatalog/hubTeamProfile/hubPlayerProfile` → `shared/hub.cjs`，合同/历史适配在 `shared/hub-contract.cjs`，复用既有service/statistics、稳定ID、正式来源与逐指标完整度。仅平台负责人，拒绝公开及赛事子账号；不直接扩大其他端权限。目录和历史排除测试球队/球员/记录，档案接口固定正式生涯口径，不返回联系方式、证件或登录资料。日期、双来源关系冲突、历史快照和五维缺失显式标记，不迁移生产数据。详细字段、只读核对与未完成项见 [DATA_HUB_FOUNDATION.md](DATA_HUB_FOUNDATION.md)。用户在地基验证后已授权继续前端，平台页面及这三个接口已发布；真实账号验收及数据缺口见RELEASE。
+
+球队年度汇总：service.query的includeAnnual内部选项→shared/team-history.cjs，复用同批正式比赛事实，按Asia/Shanghai实际比赛年与undated桶对账。约球与友谊赛：hubTeamProfile及friendlyMatchCenter.teamFriendlyStats候选共同使用readFriendlyTeamHistory；保留原约球成员鉴权，完整分页、测试来源排除、未知比分/身份不补零，isOfficial仍仅为球队自报标记，不计赛事官方排名。未发布friendlyMatchCenter新包，不宣称旧线上入口已经修复。
+
 ## 2026-10-18 服务号继续登记
 
 `servicePrivateRegistrationList/ResumeRegistration`先复用servicePrivate的官方OpenID、唯一手机号自然人鉴权，再由serviceRegistrationRecovery读取本人同一官方微信下的登记会话；只返回最小摘要，重新核对有效邀请/球队/本人扫码记录和用户状态后事务轮换会话令牌。恢复不创建或合并账号/球员、不改变资格或指标。原登记OAuth优先恢复同一自然人/官方微信/入口的未完成内容；已确认卡重新走现有私有事实/模板核验后显示最终图。客户端不以本地图片宣告确认，授权不自动恢复。详见 `../releases/registration-return-20261018.md`。

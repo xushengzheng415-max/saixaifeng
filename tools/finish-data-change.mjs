@@ -6,6 +6,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 for (const command of [
   ['tools/sync-data-center.mjs','--check'],
   ['tools/test-data-center.mjs'],
+  ['tools/test-data-hub.mjs'],
+  ['tools/test-team-history.mjs'],
   ['tools/test-player-card-unified.mjs'],
   ['tools/check-data-governance.mjs']
 ]) {

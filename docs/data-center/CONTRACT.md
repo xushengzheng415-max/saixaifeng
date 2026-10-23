@@ -1,5 +1,9 @@
 # 数据契约 v1
 
+## 平台数据总站增量合同（2026-10-23）
+
+新增 `football-data-hub/1` 读取合同，详见 [DATA_HUB_FOUNDATION.md](DATA_HUB_FOUNDATION.md)。平台运营中心是统一运营入口，不建立第二份统计真值。首次入驻日期与档案创建、入队时间分开；双球队关系来源保留证据并报告冲突；测试来源排除；估值快照与生涯积分版本匹配；五维缺失不补中性值。旧端调用范围与免费边界不因此扩大。代码部署、迁移和页面接入分别登记。
+
 ## 名单海报人员关联与展示排序（2026-10-17，1.1.35）
 
 teamMembers原有范围校验不变。teamMemberView.withStaff仅投影有效coaches明确登记的linkedPlayerId，返回去重linkedPlayerIds、唯一linkedPlayerId及playerLinkState=linked/missing/conflict。同一已关联成员遇到两个不同球员ID时不选第一条，不按姓名或号码匹配；此投影不合并账号/球员、不授予读权限。头像兼容photoFileID/photoFileId/photo等既有字段。前端海报仅将其与本次已授权名单卡图按稳定ID关联，未取得卡图仍保留原登记头像/姓名/职务，不虚构卡级或参与人数。
