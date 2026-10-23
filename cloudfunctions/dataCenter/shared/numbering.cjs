@@ -53,7 +53,7 @@ function view(row, kind) {
   const number = text(row.businessNumber), meta = row.numbering
   const region = validateRegion(meta?.region)
   const verified = validNumber(number, kind) && meta?.version === VERSION && meta.kind === kind && region && number.startsWith((kind === 'players' ? 'P' : '') + region.provinceCode + region.cityLetter)
-  if (number) return { kind, number: verified ? number : '', status: verified ? 'issued' : 'conflict', region: verified ? region : null, revision: revision(row, kind) }
+  if (row.businessNumber != null && row.businessNumber !== '') return { kind, number: verified ? number : '', status: verified ? 'issued' : 'conflict', region: verified ? region : null, revision: revision(row, kind) }
   const inferred = inferRegion(row, kind)
   return { kind, number: '', status: kind === 'teams' && row.parentTeamId ? 'parent_required' : inferred ? 'ready' : 'region_required', region: inferred, revision: revision(row, kind) }
 }
@@ -71,6 +71,7 @@ async function target(db, kind, id) {
   if (!['teams', 'players'].includes(kind) || !text(id) || id.length > 128) fail('NUMBERING_TARGET_INVALID', '请选择有效球队或球员')
   const row = await doc(db, kind, id)
   if (!active(row)) fail('NUMBERING_SOURCE_EXCLUDED', '档案不存在、已删除或属于测试来源')
+  for (const field of kind === 'players' ? ['teamId','teamCode','pendingJoinTeamId'] : ['parentTeamId']) if (row[field] != null && (typeof row[field] !== 'string' || row[field].length > 128)) fail('NUMBERING_REFERENCE_INVALID', '球队关联字段异常，请先核验，不能自动发号')
   if (kind === 'players') {
     if (row.teamId && row.teamCode && row.teamId !== row.teamCode) fail('NUMBERING_TEAM_CONFLICT', '球队归属存在冲突，请先核验')
     const teamId = text(row.teamId || row.teamCode || row.pendingJoinTeamId)

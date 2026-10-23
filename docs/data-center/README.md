@@ -8,6 +8,8 @@
 
 ## 权威基准
 
+全平台球队/分队/球员永久编码：[NUMBERING_RULES.md](NUMBERING_RULES.md)。
+
 1. 当前用户指令与 `../PRODUCT_RULES.md` 的有效产品边界。
 2. [统一方案](../DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md)：身份、关系、归属、统计及质量基准。
 3. [数据契约](CONTRACT.md)：当前实现的接口与集合约束。

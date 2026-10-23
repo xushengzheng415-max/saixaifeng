@@ -4655,6 +4655,7 @@ async function handleDbQuery(event) {
   const db = cloud.database()
   const authenticated = await authenticateWebSession(event)
   if (!authenticated.success) return authenticated
+  if (['teams','players'].includes(collection) && ['add','update'].includes(operation)) require('./data-center/numbering.cjs').guardWrite(data)
   const delegatedStaff = Boolean(authenticated.orgId) && await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
   if (delegatedStaff && assistanceGrantId) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '赛事子账号不能叠加远程协助授权' }
 
@@ -4925,9 +4926,11 @@ async function handleDbQuery(event) {
             } })
             return { _id:addedTeam._id, tournamentTeamId:addedRelation._id }
           })
+          await require('./data-center/numbering.cjs').afterWrite(db,'teams',result._id)
           return { success:true, ...result, message:'球队已加入赛事' }
         }
         const addRes = await db.collection(collection).add({ data: nextData })
+        if (['teams','players'].includes(collection)) await require('./data-center/numbering.cjs').afterWrite(db,collection,addRes._id)
         if (assistanceScope) {
           await writeAssistanceAudit(
             db, assistanceScope, authenticated.userId, 'add', collection, addRes._id, null, { ...nextData, _id: addRes._id }
@@ -4987,7 +4990,9 @@ async function handleDbQuery(event) {
         if (!await competitionPlanMutationAllowed(db, collection, { ...(before || {}), ...(nextUpdateData || {}) })) {
           return { success: false, error: '竞赛方案已经锁定，不能直接修改已确认赛程', code: 'COMPETITION_PLAN_LOCKED' }
         }
+        if (collection === 'teams' && before?.businessNumber && Object.prototype.hasOwnProperty.call(nextUpdateData,'parentTeamId') && String(before.parentTeamId||'') !== String(nextUpdateData.parentTeamId||'')) return {success:false,code:'NUMBERING_IMMUTABLE',error:'已发号球队不能直接更换主体关系'}
         await db.collection(collection).doc(id).update({ data: nextUpdateData })
+        if (['teams','players'].includes(collection)) await require('./data-center/numbering.cjs').afterWrite(db,collection,id)
         const teamSync = collection === 'teams' && !assistanceScope
           ? await syncTeamProfileReferences(db, id, before, { ...(before || {}), ...(nextUpdateData || {}) })
           : null

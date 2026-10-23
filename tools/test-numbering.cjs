@@ -18,6 +18,8 @@ const owner={platformOwner:true,userId:'owner'},region={provinceCode:'226',cityL
  assert.equal(n.inferRegion({teamId:'henan',cityName:'河南省郑州市',idCard:'not-used'},'players'),null)
  assert.equal(n.inferRegion({nativePlace:'开封'},'players'),null)
  assert.throws(()=>n.guardWrite({'numbering.region':region}),e=>e.code==='NUMBERING_READ_ONLY')
+ assert.throws(()=>n.guardWrite({nativePlaceRegion:{provinceCode:'226'}}),e=>e.code==='NUMBERING_REGION_REQUIRED')
+ assert.equal(n.view({_id:'invalid-number',businessNumber:123},'players').status,'conflict')
  const f=fixture();f.state.teams.t={_id:'t',orgId:'o',provinceCode:'226',cityCode:'A'}
  for(let i=0;i<100;i++)f.state.players['p'+i]={_id:'p'+i,teamId:'t',nativePlace:i%2?'河南省洛阳市':'河南省郑州市'}
  const results=await Promise.all(Array.from({length:100},(_,i)=>n.assign(f.db,owner,{kind:'players',id:'p'+i})))
@@ -36,6 +38,8 @@ const owner={platformOwner:true,userId:'owner'},region={provinceCode:'226',cityL
  await assert.rejects(n.assign(f.db,owner,{kind:'players',id:'missing'}),e=>e.code==='NUMBERING_REGION_REQUIRED')
  f.state.players.test={_id:'test',teamId:'t',synthetic:true,nativePlace:'河南省郑州市'}
  await assert.rejects(n.assign(f.db,owner,{kind:'players',id:'test'}),e=>e.code==='NUMBERING_SOURCE_EXCLUDED')
+ f.state.players.badReference={_id:'badReference',teamId:{unknown:true},nativePlace:'河南省郑州市'}
+ await assert.rejects(n.assign(f.db,owner,{kind:'players',id:'badReference'}),e=>e.code==='NUMBERING_REFERENCE_INVALID')
  f.state.teams.test={_id:'test',synthetic:true};f.state.players.testParent={_id:'testParent',teamId:'test',nativePlace:'河南省郑州市'}
  await assert.rejects(n.assign(f.db,owner,{kind:'players',id:'testParent'}),e=>e.code==='NUMBERING_SOURCE_EXCLUDED')
  await assert.rejects(n.assign(f.db,owner,{kind:'players',id:'missing',region,expectedRevision:'stale'}),e=>e.code==='NUMBERING_STALE')

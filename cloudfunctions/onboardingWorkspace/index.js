@@ -705,6 +705,7 @@ async function createTeam(identity, event) {
   await db.collection('users').doc(identity.user._id).update({
     data: { onboarding, updateTime: now }
   })
+  await require('./data-center/numbering.cjs').afterWrite(db,'teams',String(teamId))
   return {
     success: true,
     team: { id: teamId, name, logo: transparentLogo || originalLogo, originalLogo, transparentLogo },

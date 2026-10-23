@@ -1,5 +1,9 @@
 # 数据入口登记
 
+## 2026-10-23 永久编码
+
+`dataCenter.numberingRules/assignBusinessNumber`复用shared/numbering.cjs，仅平台负责人可读规则与执行正式补发；省市必填，球队人工补发必选主体或分队，分队验证同机构与已发号主体。PC授权dbQuery、小程序建队/球员草稿与登记、报名表导入在原鉴权和原业务提交后调用同步副本afterWrite；缺地区或临时失败保留待补齐，不把建档成功误报为失败。规则见NUMBERING_RULES.md，禁止直接覆写businessNumber/numbering。结构化当前地区与首次发号快照分别保存，旧身份与历史引用不变。数据中心的目录、关键词、球队和球员档案展示新号，不回退显示内部ID。五个函数的实际发布、依赖锁定及数据补发另见RELEASE。
+
 ## 2026-10-23 平台数据总站基础接口
 
 `dataCenter` 的 `hubCatalog/hubTeamProfile/hubPlayerProfile` → `shared/hub.cjs`，合同/历史适配在 `shared/hub-contract.cjs`，复用既有service/statistics、稳定ID、正式来源与逐指标完整度。仅平台负责人，拒绝公开及赛事子账号；不直接扩大其他端权限。目录和历史排除测试球队/球员/记录，档案接口固定正式生涯口径，不返回联系方式、证件或登录资料。日期、双来源关系冲突、历史快照和五维缺失显式标记，不迁移生产数据。详细字段、只读核对与未完成项见 [DATA_HUB_FOUNDATION.md](DATA_HUB_FOUNDATION.md)。用户在地基验证后已授权继续前端，平台页面及这三个接口已发布；真实账号验收及数据缺口见RELEASE。

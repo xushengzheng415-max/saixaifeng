@@ -7,6 +7,7 @@ for (const command of [
   ['tools/sync-data-center.mjs','--check'],
   ['tools/test-data-center.mjs'],
   ['tools/test-data-hub.mjs'],
+  ['tools/test-numbering.cjs'],
   ['tools/test-team-history.mjs'],
   ['tools/test-player-card-unified.mjs'],
   ['tools/check-data-governance.mjs']
@@ -17,6 +18,6 @@ for (const command of [
 if (!process.exitCode) {
   const result = await synchronize({check:true})
   if (result.status === 'conflict') { console.error('Obsidian 镜像存在手工编辑冲突，请处理后再同步。'); process.exitCode = 1 }
-  else if (result.status === 'pending') console.log('规范已更新，等待每日 09:10 定时同步。')
+  else if (result.status === 'pending') console.log('规范已更新，交付前执行白名单知识库同步并回读。')
   else console.log('Obsidian 镜像已是最新；本次不额外同步。')
 }

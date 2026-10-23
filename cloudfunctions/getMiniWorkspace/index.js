@@ -1558,6 +1558,7 @@ async function reviewImportedPlayerDraftsForWorkspace(event, identity) {
       } })
       playerId = String(created._id)
     }
+    await require('./data-center/numbering.cjs').afterWrite(db,'players',playerId)
     if (draft.linkedCoachId) await db.collection('coaches').doc(String(draft.linkedCoachId)).update({ data:{ linkedPlayerId:playerId, dualRoleType:String(draft.dualRoleType || 'staff_player'), isAlsoPlayer:true, updateTime:now } })
     await db.collection('registration_player_drafts').doc(draft._id).update({ data:{ reviewStatus:'confirmed', confirmedPlayerId:playerId, reviewedByUserId:String(identity.user._id), reviewedAt:now, updateTime:now } })
   }
@@ -1716,6 +1717,7 @@ async function saveTeamPlayerForWorkspace(event, identity) {
   if (registrantType === 'self') player.playerPhone = contactPhone
   else player.guardianPhone = contactPhone
   const added = await db.collection('players').add({ data: player })
+  await require('./data-center/numbering.cjs').afterWrite(db,'players',String(added._id))
   let parentInvite = null
   if (event.createParentLink) {
     const token = 'pp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)
@@ -3088,6 +3090,7 @@ async function acceptTeamPlayerInviteForWorkspace(event, identity) {
     playerData.guardianOpenId = identity.openId || ''
   }
   const created = await db.collection('players').add({ data: playerData })
+  await require('./data-center/numbering.cjs').afterWrite(db,'players',String(created._id))
   const createdPlayer = Object.assign({ _id: created._id }, playerData)
   await recordTeamJoinHistoryBestEffort(createdPlayer, teamRecord, String(invite.orgId || ''), 'team_player_invite', identity.user._id)
   const parentInvite = await ensureParentProfileInviteForPlayer(teamRecord, createdPlayer, String(invite.orgId || ''), identity.user._id)

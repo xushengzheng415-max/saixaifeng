@@ -319,6 +319,7 @@ async function run(deps,event) {
           await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'notifyTeamPlayerJoin',bridgeKey:text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY),teamId:text(team._id),teamName:text(team.name||team.teamName),playerId,playerName:values.name,inviteId:text(invite._id),eventId:choice.nonce,pendingTeamConfirm:!target,pagePath:target?'':'pages/team/player-library/player-library?teamId='+text(team._id)}})
         } catch(notifyError) { console.warn('[playerRegistration] 入队申请通知发送失败',text(notifyError&&notifyError.message)) }
       }
+      await require('./data-center/numbering.cjs').afterWrite(db,'players',playerId)
       return {success:true,...receipt}
     } catch(e) { if((e.code!=='PLAYER_POOL_CHANGED'&&!busy(e))||attempt===2)throw e }
   }
@@ -354,6 +355,7 @@ async function saveDraft(deps,event,identity) {
     }
     else if(text(current.teamId)!==text(team._id)||text(current.name)!==name||text(current.contactPhone)!==phone||text(current.birthDate)!==birthDate)fail('PLAYER_DRAFT_REQUEST_CHANGED','此保存请求已完成，请重新打开添加页面')
   })
+  await require('./data-center/numbering.cjs').afterWrite(db,'players',playerId)
   return {success:true,playerId,updated:Boolean(existing)}
 }
 async function targetedInvite(deps,event,identity,scope,team) {

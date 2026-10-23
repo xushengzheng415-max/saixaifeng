@@ -730,6 +730,7 @@ async function importTeamRegistrationBatch(event) {
         playerCount:team.players.length, pendingPlayerDraftCount:0, playerReviewStatus:'completed', staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
       } })
       const teamId = text(teamAdded._id)
+      await require('./data-center/numbering.cjs').afterWrite(db,'teams',teamId)
       artifacts.push({ collection:'teams', id:teamId })
 
       let sequence = 1
@@ -775,6 +776,7 @@ async function importTeamRegistrationBatch(event) {
           creatorId:actor.userId, registerTime:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate()
         } })
         const formalPlayerId = text(playerAdded._id)
+        await require('./data-center/numbering.cjs').afterWrite(db,'players',formalPlayerId)
         artifacts.push({ collection:'players', id:formalPlayerId })
         if(!person.identityIncomplete)formalPlayerIds.push(formalPlayerId)
         await db.collection('registration_player_drafts').doc(draftId).update({ data:{ confirmedPlayerId:formalPlayerId, updateTime:db.serverDate() } })

@@ -7,7 +7,7 @@ const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
   ['docs/DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md','DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md'],
-  ...['README.md','CONTRACT.md','INTEGRATION.md','RELEASE.md','AUTO_SYNC.md','PLAYER_CARD_POINTS.md','DATA_HUB_FOUNDATION.md','DATA_HUB_INDEX_PLAN.json'].map(name => ['docs/data-center/' + name,'data-center/' + name]),
+  ...['README.md','CONTRACT.md','INTEGRATION.md','RELEASE.md','AUTO_SYNC.md','PLAYER_CARD_POINTS.md','DATA_HUB_FOUNDATION.md','DATA_HUB_INDEX_PLAN.json','NUMBERING_RULES.md'].map(name => ['docs/data-center/' + name,'data-center/' + name]),
   ['docs/PLATFORM_OPS_RELEASE.md','平台运营中心独立发布.md'],
   ['docs/PRODUCT_RULES.md','完整产品规则.md'],
   ['docs/ADR.md','产品与技术决策.md'],
@@ -26,7 +26,10 @@ const files = [
   ].map(name => ['docs/' + name, '项目规范/' + name]),
   ...['PLAYER_CARD_WORKFLOWS.md','PLAYER_CARD_UNIFY_HANDOFF.md'].map(name => ['docs/data-center/' + name, 'data-center/' + name]),
   ['AGENTS.md','项目规范/项目开发规则.md'],
-  ['docs/releases/platform-data-hub-20261023.md','发布记录/platform-data-hub-20261023.md']
+  ['docs/releases/platform-data-hub-20261023.md','发布记录/platform-data-hub-20261023.md'],
+  ['cloudfunctions/dataCenter/shared/numbering-regions.json','data-center/NUMBERING_REGIONS.json'],
+  ['docs/data-center/history/球队编号规则-旧草案.md','data-center/history/球队编号规则-旧草案.md'],
+  ['docs/data-center/history/球员编号规则-旧草案.md','data-center/history/球员编号规则-旧草案.md']
 ]
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 async function optionalRead(file) { try { return await fs.readFile(file) } catch (error) { if (error.code === 'ENOENT') return null; throw error } }
