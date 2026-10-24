@@ -221,11 +221,16 @@ async function submitCreate() {
 }
 
 const KIND_LABELS = { forfeit: '弃赛', discipline: '纪律处罚' }
-const TYPE_LABELS = { forfeit: '弃赛', abuse_referee: '辱骂裁判', fight: '现场打架', serious_misconduct: '严重违纪' }
+const TYPE_LABELS = { forfeit: '弃赛', abuse_referee: '辱骂裁判', fight: '现场打架', serious_misconduct: '严重违纪', suspension: '停赛', fine: '罚款', warning: '警告/通报', disqualification: '取消资格' }
 
 function kindLabel(row) {
-  const extra = (row.types || []).filter(type => type !== 'forfeit').map(type => TYPE_LABELS[type] || type)
-  return KIND_LABELS[row.kind] || row.kind + (extra.length ? ' · ' + extra.join('、') : '')
+  const extra = (row.types || [])
+    .filter(type => type !== 'forfeit')
+    .map(type => type === 'suspension'
+      ? (row.suspensionMatches ? `停赛${row.suspensionMatches}场` : TYPE_LABELS.suspension)
+      : type === 'fine' ? `罚款¥${row.fineAmount || 0}` : TYPE_LABELS[type] || type)
+  const base = KIND_LABELS[row.kind] || row.kind
+  return base + (extra.length ? ' · ' + extra.join('、') : '')
 }
 function subjectText(row) {
   if (row.subjectType === 'player') return [row.playerName, row.teamName].filter(Boolean).join(' · ')
@@ -235,7 +240,7 @@ function subjectText(row) {
 function statusText(row) {
   if (row.status === 'revoked') return '已撤销'
   if (row.status === 'expired') return '已到期解除'
-  if (row.platformReview === 'pending') return '待平台审核'
+  if (row.platformReview === 'pending') return row.source === 'resultCenter' ? '待审核 · 赛果录入' : '待平台审核'
   if (row.platformReview === 'rejected') return '已驳回黑名单'
   if (row.scope === 'platform') return row.permanent ? '黑名单 · 永久' : '黑名单 · 至 ' + dateText(row.banUntil)
   return '本赛事生效'
@@ -271,7 +276,7 @@ function openReview(row) {
 async function submitReview(decision) {
   submitting.value = true
   try {
-    await api({ action: 'reviewPenalty', penaltyId: reviewRow.value.id, decision, banDuration: reviewForm.banDuration, reviewNote: reviewForm.reviewNote })
+    await api({ action: 'reviewPenalty', collection: reviewRow.value.collection, penaltyId: reviewRow.value.id, decision, banDuration: reviewForm.banDuration, reviewNote: reviewForm.reviewNote })
     ElMessage.success(decision === 'approve' ? '已列入黑名单' : '已驳回黑名单申请')
     reviewVisible.value = false
     await load()
@@ -281,7 +286,7 @@ async function submitReview(decision) {
 async function revoke(row) {
   try {
     const { value } = await ElMessageBox.prompt('撤销后处罚立即失效，须保留真实原因。', '撤销处罚', { inputPlaceholder: '撤销原因（2-300 字）', inputValidator: value => String(value || '').trim().length >= 2 || '请填写撤销原因' })
-    await api({ action: 'revokePenalty', penaltyId: row.id, reason: value })
+    await api({ action: 'revokePenalty', collection: row.collection, penaltyId: row.id, reason: value })
     ElMessage.success('处罚已撤销')
     await load()
   } catch (error) { if (error !== 'cancel') ElMessage.error(error.message || '撤销失败') }
