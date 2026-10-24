@@ -414,7 +414,8 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
   const rawAwayName = text(match.awayTeamName || (match.awayTeam && (match.awayTeam.name || match.awayTeam.teamName)))
   const homeProfile = teamDirectory[homeTeamId] || teamDirectory[`name:${rawHomeName}`] || {}
   const awayProfile = teamDirectory[awayTeamId] || teamDirectory[`name:${rawAwayName}`] || {}
-  const eventScore = Array.isArray(match.events) && !match.resultCorrection && match.resultType !== 'forfeit' ? scoreFromEvents(match.events, match) : null
+  // 空事件数组不代表「按事件重算为 0:0」，必须要求至少一条事件，否则会覆盖已录入的比分
+  const eventScore = Array.isArray(match.events) && match.events.length > 0 && !match.resultCorrection && match.resultType !== 'forfeit' ? scoreFromEvents(match.events, match) : null
   const scoreMatch = eventScore ? { ...match, homeScore: eventScore.home, awayScore: eventScore.away } : match
   const homeScore = scoreReady(scoreMatch) ? number(scoreMatch.homeScore) : null
   const awayScore = scoreReady(scoreMatch) ? number(scoreMatch.awayScore) : null
@@ -732,12 +733,17 @@ async function buildDashboard(event, actor) {
   if (!tournamentId) throw new Error('缺少赛事信息')
   const tournament = await getDocument('tournaments', tournamentId)
   if (!tournament || !belongsToActor(tournament, actor)) throw new Error('无权查看其他机构的赛事赛果')
-  const [divisionRows, matchRows, publications, registrationRows] = await Promise.all([
+  const [divisionRows, allMatchRows, publications, registrationRows] = await Promise.all([
     listAll('divisions', { tournamentId }, 300),
     listAll('matches', { tournamentId }, 1000),
     latestPublications(tournamentId),
     listAll('tournament_teams', { tournamentId }, 1000)
   ])
+  // Use the same active-fixture scope as the competition calendar. Old draw
+  // previews and cancelled pairings remain stored for audit, but must not
+  // become matches awaiting a result or appear in awards and rankings.
+  const matchRows = allMatchRows.filter(match => !match.isBye &&
+    String(match.status || '').toLowerCase() !== 'cancelled' && !match.demoLegacyPairing)
   const divisions = divisionRows.length ? divisionRows : Array.isArray(tournament.divisions) ? tournament.divisions : []
   const divisionsById = Object.fromEntries(divisions.map(item => [text(item._id || item.id), item]))
   const teamDirectory = await buildTeamDirectory(matchRows, registrationRows)
@@ -769,6 +775,24 @@ async function buildDashboard(event, actor) {
     matches = matchRows.map(normalizeWithEvents).sort(compareReviewMatches)
     standings = buildStandings(matches, divisionsById)
   }
+  const effectiveEventsByMatchId = matchRows.reduce((map, item) => {
+    const id = text(item._id || item.id)
+    if (id) map[id] = effectiveEvents(item, eventRows)
+    return map
+  }, {})
+  const lineupsById = matchRows.reduce((map, item) => {
+    const id = text(item._id || item.id)
+    if (id) map[id] = item.lineups || null
+    return map
+  }, {})
+  const awardOverrides = await listAll('award_overrides', { tournamentId }, 300).catch(() => [])
+  const awards = require('./data-center/awards.cjs').compute({
+    matches: matches.map(item => ({ ...item, lineups: lineupsById[item.id] || null })),
+    eventsByMatchId: effectiveEventsByMatchId,
+    standings,
+    divisions: divisions.map(item => ({ id: text(item._id || item.id), name: text(item.name) })),
+    overrides: awardOverrides
+  })
   return {
     success: true,
     tournament: { id: tournamentId, name: text(tournament.name) || '当前赛事', startDate: rawDate(tournament.startDate), endDate: rawDate(tournament.endDate), location: text(tournament.location || tournament.province), logo: text(tournament.logo || tournament.logoUrl) },
@@ -777,11 +801,46 @@ async function buildDashboard(event, actor) {
     events: eventRows,
     summary: summary(matches),
     standings,
+    awards,
+    awardOverrides,
     knockout: buildKnockout(matches),
     publications,
     pairingResolution,
     generatedAt: new Date().toISOString()
   }
+}
+
+const AWARD_KEYS = ['mvp', 'topScorer', 'goalkeeper', 'bestXI:门将', 'bestXI:后卫', 'bestXI:中场', 'bestXI:前锋']
+
+async function saveAwardOverride(event, actor) {
+  const tournamentId = text(event.tournamentId)
+  const divisionId = text(event.divisionId)
+  const awardKey = text(event.awardKey)
+  const playerId = text(event.playerId)
+  const playerName = text(event.playerName)
+  if (!tournamentId || !divisionId || !awardKey || (!playerId && !playerName)) return { success: false, code: 'AWARD_PARAM_MISSING', message: '缺少奖项调整所需信息' }
+  if (!AWARD_KEYS.includes(awardKey)) return { success: false, code: 'AWARD_KEY_INVALID', message: '奖项类型无效' }
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament || !belongsToActor(tournament, actor)) return { success: false, code: 'ORG_FORBIDDEN', message: '无权调整其他机构赛事的奖项' }
+  const payload = { tournamentId, divisionId, awardKey, playerId, playerName, note: text(event.note).slice(0, 120), updatedByUserId: text(actor.user && actor.user._id), updatedAt: new Date() }
+  const existing = await db.collection('award_overrides').where({ tournamentId, divisionId, awardKey }).limit(1).get().catch(() => ({ data: [] }))
+  const current = (existing.data || [])[0]
+  if (current) await db.collection('award_overrides').doc(current._id).update({ data: payload })
+  else await db.collection('award_overrides').add({ data: { ...payload, createdAt: new Date() } })
+  return { success: true, message: '奖项已调整为手动指定，请在成绩册中复核' }
+}
+
+async function clearAwardOverride(event, actor) {
+  const tournamentId = text(event.tournamentId)
+  const divisionId = text(event.divisionId)
+  const awardKey = text(event.awardKey)
+  if (!tournamentId || !divisionId || !awardKey) return { success: false, code: 'AWARD_PARAM_MISSING', message: '缺少奖项调整所需信息' }
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament || !belongsToActor(tournament, actor)) return { success: false, code: 'ORG_FORBIDDEN', message: '无权调整其他机构赛事的奖项' }
+  const existing = await db.collection('award_overrides').where({ tournamentId, divisionId, awardKey }).limit(1).get().catch(() => ({ data: [] }))
+  const current = (existing.data || [])[0]
+  if (current) await db.collection('award_overrides').doc(current._id).remove()
+  return { success: true, message: '已恢复为系统自动评定' }
 }
 
 async function publishStandings(event, actor) {
@@ -907,6 +966,8 @@ exports.main = async (event = {}) => {
     if (action === 'resolvePairingSources') return await buildDashboard(event, actor)
     if (action === 'publishStandings') return await publishStandings(event, actor)
     if (action === 'correctArchivedScore') return await correctArchivedScore(event, actor)
+    if (action === 'saveAwardOverride') return await saveAwardOverride(event, actor)
+    if (action === 'clearAwardOverride') return await clearAwardOverride(event, actor)
     return { success: false, code: 'UNSUPPORTED_ACTION', message: '不支持的赛果中心操作' }
   } catch (error) {
     console.error('resultCenter failed:', error)

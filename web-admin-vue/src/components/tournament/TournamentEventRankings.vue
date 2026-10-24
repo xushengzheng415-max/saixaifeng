@@ -110,6 +110,9 @@
     </template>
 
     <template v-else>
+      <el-tabs v-model="divisionTab" class="division-tabs" @tab-change="onCardDivisionChange">
+        <el-tab-pane v-for="tab in divisionTabs" :key="tab.id" :label="tab.name" :name="tab.id" />
+      </el-tabs>
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <el-button v-if="error" link type="primary" @click="load">重新加载</el-button>
       <template v-else>
@@ -134,7 +137,8 @@
 import { computed, ref, watch } from 'vue'
 import { callFunction } from '../../utils/cloud'
 
-const props = defineProps({ tournamentId:String, divisionId:String, date:String, kind:String, keyword:String, teamRows:{ type:Array, default:() => [] } })
+const props = defineProps({ tournamentId:String, divisionId:String, date:String, kind:String, keyword:String, divisions:{ type:Array, default:() => [] }, teamRows:{ type:Array, default:() => [] } })
+const emit = defineEmits(['division-change'])
 const loading = ref(false), error = ref(''), statistics = ref(null), cardMetric = ref('yellowCards')
 const goalMode = ref('players'), teamMetric = ref('goals'), divisionTab = ref('all')
 let requestVersion = 0
@@ -157,6 +161,10 @@ const divisionByTeam = computed(() => {
 })
 const divisionTabs = computed(() => {
   const seen = new Map()
+  for (const division of props.divisions) {
+    const id=String(division.id || division._id || '')
+    if(id)seen.set(id,String(division.name || '').trim() || '未命名组别')
+  }
   for (const team of props.teamRows) {
     const key = String(team.divisionId || '')
     if (seen.has(key)) continue
@@ -166,6 +174,8 @@ const divisionTabs = computed(() => {
   return [{ id:'all', name:'总榜' }, ...list]
 })
 watch(divisionTabs, tabs => { if (!tabs.some(tab => tab.id === divisionTab.value)) divisionTab.value = 'all' })
+watch(() => props.divisionId, value => { if(props.kind !== 'goals')divisionTab.value = value || 'all' }, { immediate:true })
+function onCardDivisionChange(id) { emit('division-change', id === 'all' ? '' : id) }
 const isAllDivisions = computed(() => divisionTab.value === 'all')
 const divisionTabLabel = computed(() => divisionTabs.value.find(tab => tab.id === divisionTab.value)?.name || '总榜')
 

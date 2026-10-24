@@ -40,7 +40,7 @@
         <el-tab-pane label="成绩册" name="awards" />
       </el-tabs>
 
-      <TournamentEventRankings v-if="['goals','playerCards','teamCards'].includes(activeTab)" :key="activeTab + rankingRefresh" :tournament-id="tournamentId" :division-id="divisionFilter" :date="dateFilter" :kind="activeTab" :keyword="keyword" :team-rows="rankingTeamRows" />
+      <TournamentEventRankings v-if="['goals','playerCards','teamCards'].includes(activeTab)" :key="activeTab + rankingRefresh" :tournament-id="tournamentId" :division-id="divisionFilter" :divisions="dashboard.divisions || []" :date="dateFilter" :kind="activeTab" :keyword="keyword" :team-rows="rankingTeamRows" @division-change="divisionFilter = $event" />
 
       <section v-if="activeTab==='review'" class="review-layout">
         <article class="review-list panel">
