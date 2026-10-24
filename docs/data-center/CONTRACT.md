@@ -98,6 +98,8 @@ H5 getMyPreloadedPlayerCard、previewMyPreloadedPlayerCard、saveMyPreloadedPlay
 
 `updateMatch.finishOrganizerMatch` 校验原赛事机构权限、比赛记录锁及 `expectedEventRevision`，在事务中核对事件版本和状态后保存 `finished` 与两套比分字段。完整嵌入事件数组由共享 `calculateMatchEventScore` 结算有效进球、已进点球和反向乌龙球；撤销、重复 ID 与点球大战不计常规比分。缺少事件数组保留手录兼容；明确空数组为 0:0；有效进球缺少球队时拒绝结算。不得改写正在裁判记录或已提交/锁定的记录。该动作不等于裁判报告审核、正式赛果发布或生产历史数据修复。
 
+淘汰或排位比赛常规比分打平时，`finishOrganizerMatch` 与 `resultCenter.supplementResult` 接收 `penaltyRounds`，每轮记录主、客队 `scored`/`missed`，提前决胜的最后一轮可只含先踢方。共享 `evaluatePenaltyShootout` 在服务端按轮次顺序复算、校验提前决胜及第五轮后的追加轮次；仅在已分出胜负时保存 `penaltyRounds`、双方点球总数、`resolution=penalties` 与稳定球队 ID 对应的胜者。非平局及非淘汰/排位赛不接受点球轮次。点球大战不增加常规比分、进球事件或射手榜数据。已有正式赛果与裁判锁定记录沿既有复核/纠错流程处理。
+
 ### 比赛弃赛
 
 PC 比赛详情的弃赛操作按 `updateMatch.forfeitMatch` 写入，要求当前赛事的比赛管理权限、赛事/球队归属、`expectedEventRevision`、弃赛方为本场主客队之一，并且裁判未接管、无锁定记录、没有比赛事件。服务端固定生成弃赛方 0、对方 3 的完赛比分、胜方与 `resultType=forfeit`，写入前后值审计并更新既有小组/联赛积分；不创建进球事件。比分读取以弃赛结果为准，不从空事件数组覆盖为 0:0。已有比赛事件或裁判记录时拒绝直接弃赛，须走赛果复核流程。

@@ -26,6 +26,7 @@
             <span class="score-num">{{ displayAwayScore }}</span>
           </div>
           <div class="hero-match-time">{{ match.matchDate }} {{ match.matchTime }}</div>
+          <div v-if="match.resolution === 'penalties' && match.homePenaltyScore != null && match.awayPenaltyScore != null" class="hero-penalty-score">点球 {{ match.homePenaltyScore }} : {{ match.awayPenaltyScore }}</div>
           <div class="hero-venue">{{ match.venue || '场地待定' }}</div>
         </template>
         <template v-else>
@@ -451,6 +452,10 @@
           <strong>{{ awayName || '客队' }}</strong>
           <el-input-number v-model="finishForm.awayScore" :min="0" :max="99" controls-position="right" size="large" :disabled="hasStructuredEvents" />
         </article>
+      </div>
+      <div v-if="finishNeedsPenalty" class="finish-penalty-section">
+        <el-button v-if="!finishForm.penaltyEnabled" type="primary" plain @click="finishForm.penaltyEnabled = true">录入点球比分</el-button>
+        <PenaltyShootoutEditor v-else v-model="finishForm.penaltyRounds" :home-name="homeName" :away-name="awayName" />
       </div>
       <template #footer>
         <el-button @click="finishDialogVisible = false">取消</el-button>
@@ -1099,6 +1104,8 @@ import { createRefereeLineupPdf } from '../../utils/refereeLineupPdf'
 import { createRefereeLineupPrintHtml, createRefereeLineupSheet, createRefereePrintLoadingHtml, refereeLineupSheetFileName } from '../../utils/refereeLineupSheet'
 import VisualLineupEditor from './VisualLineupEditor.vue'
 import RefereeReportImport from '../../components/match/RefereeReportImport.vue'
+import PenaltyShootoutEditor from '../../components/match/PenaltyShootoutEditor.vue'
+import { evaluatePenaltyShootout } from '../../../../cloudfunctions/dataCenter/shared/penalty-shootout.mjs'
 import {groupedTimeline} from '../../utils/refereeGroupedSubstitutions.js'
 import { substitutionRules, substitutionState, assertSubstitutionChange } from '../../../../cloudfunctions/dataCenter/shared/substitution.mjs'
 
@@ -1198,7 +1205,10 @@ const venueOptions = ref([])
 
 // 结束比赛弹窗
 const finishDialogVisible = ref(false)
-const finishForm = ref({ homeScore: 0, awayScore: 0 })
+const finishForm = ref({ homeScore: 0, awayScore: 0, penaltyEnabled:false, penaltyRounds:[] })
+const isEliminationMatch = computed(() => /knockout|elimination|cup|placement|final|semifinal|淘汰|排位|决赛|半决赛/i.test(String(match.value.phase || match.value.stage || match.value.scheduleType || '') + ' ' + String(match.value.roundName || '')))
+const finishNeedsPenalty = computed(() => isEliminationMatch.value && Number(finishForm.value.homeScore) === Number(finishForm.value.awayScore))
+const finishPenaltyResult = computed(() => evaluatePenaltyShootout(finishForm.value.penaltyRounds))
 const forfeitDialogVisible = ref(false)
 const forfeitTeamId = ref('')
 
@@ -1886,7 +1896,9 @@ function openFinishDialog() {
   if (!ensureEvidenceEditable()) return
   finishForm.value = {
     homeScore: displayHomeScore.value,
-    awayScore: displayAwayScore.value
+    awayScore: displayAwayScore.value,
+    penaltyEnabled:false,
+    penaltyRounds:Array.from({ length:5 }, (_, index) => ({ round:index+1, home:'', away:'' }))
   }
   finishDialogVisible.value = true
 }
@@ -1938,8 +1950,10 @@ async function confirmForfeit() {
 
 async function finishMatch() {
   if (!ensureEvidenceEditable()) return
+  if (finishNeedsPenalty.value && !finishPenaltyResult.value.complete) return ElMessage.warning(finishPenaltyResult.value.reason || '请录入点球轮次并分出胜负')
   saving.value = true
   try {
+    const penaltyData = finishNeedsPenalty.value ? { penaltyRounds:finishPenaltyResult.value.rounds } : {}
     const result = await callFunction('updateMatch', {
       matchId,
       action: 'finishOrganizerMatch',
@@ -1948,7 +1962,7 @@ async function finishMatch() {
         homeScore: finishForm.value.homeScore,
         awayScore: finishForm.value.awayScore,
         status: 'finished',
-        updateTime: new Date()
+        ...penaltyData
       }
     })
     if (!result?.success) throw new Error(result?.message || result?.error || '比赛记录未保存，请重试')
@@ -3234,6 +3248,7 @@ onMounted(() => {
 .finish-score-team :deep(.el-input-number) { width: 150px; max-width: 100%; }
 .finish-score-team :deep(.el-input__inner) { padding-right: 42px; color: #17251d; font-size: 24px; font-weight: 800; text-align: center; }
 .finish-sep { align-self: end; padding-bottom: 9px; color: #596860; font-size: 30px; font-weight: 700; text-align: center; }
+.finish-penalty-section{margin-top:18px;padding-top:16px;border-top:1px solid #e3eae5;text-align:center}.finish-penalty-section>strong{display:block;color:#173d27}.finish-penalty-section>small{display:block;margin-top:8px;color:#63746a}.hero-penalty-score{margin-top:4px;color:#f6d992;font-size:14px;font-weight:700}
 @media (max-width: 560px) {
   .finish-score-input { grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr); gap: 8px; }
   .finish-score-team :deep(.el-input-number) { width: 120px; }
