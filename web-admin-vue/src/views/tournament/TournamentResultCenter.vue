@@ -74,7 +74,10 @@
             <ul v-else><li v-for="item in disciplinaryActions" :key="item.id">
               <div><b>{{ disciplineSubjectLabel(item) }}</b><span>{{ disciplineTypesLabel(item) }}</span></div>
               <p>{{ item.reason }}</p>
-              <small>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}<el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></small>
+              <div v-if="item.attachments?.length" class="discipline-files">
+                <button v-for="file in item.attachments" :key="file.fileId" type="button" class="discipline-file" @click="openDisciplinaryFile(file)"><el-icon><Document /></el-icon>{{ file.name }}</button>
+              </div>
+              <small>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}<em class="discipline-actions"><el-button link :loading="disciplineSupplementingId===item.id" @click="chooseDisciplinaryFiles(item)">{{ item.attachments?.length ? '继续补传文书' : '补传处罚文书' }}</el-button><el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></em></small>
             </li></ul>
           </section>
           <footer><el-button plain type="danger" @click="openDisciplinary(selectedMatch)">追加处罚</el-button><el-button v-if="selectedMatch.resultStatus!=='approved'" type="success" :disabled="!selectedMatch.scoreReady" @click="openMatchResult(selectedMatch)">进入赛果复核</el-button><template v-else><el-button type="warning" plain @click="openScoreCorrection(selectedMatch)">异常纠错</el-button><el-button plain @click="openMatchResult(selectedMatch)">查看正式归档</el-button></template></footer>
@@ -151,9 +154,14 @@
         <el-form-item v-if="disciplinaryForm.types.includes('suspension')" label="停赛场次"><el-input-number v-model="disciplinaryForm.suspensionMatches" :min="1" :max="99" :step="1" controls-position="right" /></el-form-item>
         <el-form-item v-if="disciplinaryForm.types.includes('fine')" label="罚款金额（元）"><el-input-number v-model="disciplinaryForm.fineAmount" :min="0.01" :max="999999" :precision="2" :step="100" controls-position="right" /></el-form-item>
         <el-form-item label="处罚原因（必填，2-300字）"><el-input v-model="disciplinaryForm.reason" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="例如：赛后冲突中推搡对方球员。" /></el-form-item>
+        <el-form-item label="处罚文书（选填：PDF 或 Word，单个≤10MB，最多5个）">
+          <div class="discipline-upload"><el-button plain :disabled="disciplinaryUploading || disciplinaryFiles.length>=5" :loading="disciplinaryUploading" @click="chooseDisciplinaryFiles()"><el-icon><Upload /></el-icon>选择文书</el-button><span v-if="disciplinaryUploadStage" class="discipline-upload-stage">{{ disciplinaryUploadStage }}</span></div>
+          <ul v-if="disciplinaryFiles.length" class="discipline-file-list"><li v-for="(file,index) in disciplinaryFiles" :key="file.fileId"><b>{{ file.name }}</b><small>{{ disciplineFileSize(file.size) }}</small><el-button link type="danger" @click="removeDisciplinaryFile(index)">移除</el-button></li></ul>
+        </el-form-item>
       </el-form>
-      <template #footer><el-button @click="disciplinaryVisible=false">取消</el-button><el-button type="danger" :loading="disciplinarySaving" @click="submitDisciplinary">确认追加</el-button></template>
+      <template #footer><el-button @click="disciplinaryVisible=false">取消</el-button><el-button type="danger" :loading="disciplinarySaving" :disabled="disciplinaryUploading" @click="submitDisciplinary">确认追加</el-button></template>
     </el-dialog>
+    <input ref="disciplinaryFileInput" class="discipline-file-input" type="file" accept=".pdf,.doc,.docx" multiple @change="onDisciplinaryFileChange" />
   </main>
 </template>
 
@@ -166,8 +174,8 @@ import {rankingOrderLabel} from '../../utils/divisionOutcomeRules'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleCheckFilled, Clock, DataAnalysis, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
-import { callFunction, queryById, rosterExceptionBoard } from '../../utils/cloud'
+import { CircleCheckFilled, Clock, DataAnalysis, Document, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
+import { callFunction, queryById, rosterExceptionBoard, uploadLargeFileViaCloud } from '../../utils/cloud'
 import TournamentBracket from '../../components/tournament/TournamentBracket.vue'
 import TournamentScorebook from '../../components/tournament/TournamentScorebook.vue'
 import TournamentEventRankings from '../../components/tournament/TournamentEventRankings.vue'
@@ -333,6 +341,102 @@ const disciplinaryForm = ref({ subjectType:'player', teamId:'', playerName:'', p
 const disciplinaryRoster = ref([])
 const disciplinaryRosterLoading = ref(false)
 const disciplinaryRosterError = ref('')
+// 处罚文书留存：PDF/Word 单文件≤10MB，每条处罚最多 5 个，仅主办方与授权工作人员可见。
+const DISCIPLINARY_FILE_TYPES = ['pdf','doc','docx']
+const DISCIPLINARY_FILE_LIMIT = 5
+const DISCIPLINARY_FILE_MAX_BYTES = 10*1024*1024
+const disciplinaryFiles = ref([])
+const disciplinaryUploading = ref(false)
+const disciplinaryUploadStage = ref('')
+const disciplineSupplementingId = ref('')
+const disciplineSupplementTarget = ref(null)
+const disciplinaryFileInput = ref(null)
+function disciplineFileExtension(file){
+  const name = String(file?.name || '')
+  return (name.includes('.') ? name.split('.').pop() : '').toLowerCase() || 'pdf'
+}
+function disciplineFileSize(size){
+  const bytes = Number(size || 0)
+  return bytes >= 1024*1024 ? `${(bytes/1024/1024).toFixed(1)}MB` : `${Math.max(1,Math.round(bytes/1024))}KB`
+}
+function pickDisciplinaryFiles(files, allowance){
+  const accepted = []
+  for(const file of files){
+    if(!DISCIPLINARY_FILE_TYPES.includes(disciplineFileExtension(file))){ ElMessage.warning(`${file.name} 格式不支持，仅接收 PDF、Word 文书`); continue }
+    if(Number(file.size||0) > DISCIPLINARY_FILE_MAX_BYTES){ ElMessage.warning(`${file.name} 超过 10MB，请压缩后重试`); continue }
+    if(accepted.length>=allowance){ ElMessage.warning(`每条处罚最多留存 ${DISCIPLINARY_FILE_LIMIT} 个文书`); break }
+    accepted.push(file)
+  }
+  return accepted
+}
+async function uploadDisciplinaryFile(file){
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+  const result = await uploadLargeFileViaCloud(`disciplinary/${tournamentId}/${stamp}/${file.name}`, file, {
+    chunkSize:48*1024,
+    fallbackChunkSize:24*1024,
+    onProgress:(done,total)=>{ disciplinaryUploadStage.value = `上传 ${file.name} ${done}/${total}` }
+  })
+  if(!result?.success || !result.fileId) throw new Error(`${file.name} 上传未完成，请重试`)
+  return { fileId:result.fileId, name:file.name, size:Number(file.size||0), type:disciplineFileExtension(file) }
+}
+function chooseDisciplinaryFiles(item){
+  if(disciplinaryUploading.value) return ElMessage.warning('文书上传中，请稍候')
+  disciplineSupplementTarget.value = item || null
+  if(!disciplinaryFileInput.value) return
+  disciplinaryFileInput.value.value = ''
+  disciplinaryFileInput.value.click()
+}
+async function onDisciplinaryFileChange(event){
+  const input = event.target
+  const files = Array.from(input.files || [])
+  input.value = ''
+  const target = disciplineSupplementTarget.value
+  disciplineSupplementTarget.value = null
+  if(!files.length) return
+  if(target) await supplementDisciplinaryFiles(target, files)
+  else await addDisciplinaryDraftFiles(files)
+}
+async function addDisciplinaryDraftFiles(files){
+  const accepted = pickDisciplinaryFiles(files, DISCIPLINARY_FILE_LIMIT - disciplinaryFiles.value.length)
+  if(!accepted.length) return
+  disciplinaryUploading.value = true
+  try{
+    for(const file of accepted){
+      disciplinaryUploadStage.value = `上传 ${file.name}`
+      const uploaded = await uploadDisciplinaryFile(file)
+      if(disciplinaryVisible.value) disciplinaryFiles.value = [...disciplinaryFiles.value, uploaded]
+    }
+    ElMessage.success('处罚文书已上传，确认追加后随处罚留存')
+  }catch(error){ ElMessage.error(error.message||'处罚文书上传失败') }
+  finally{ disciplinaryUploading.value=false; disciplinaryUploadStage.value='' }
+}
+function removeDisciplinaryFile(index){
+  disciplinaryFiles.value = disciplinaryFiles.value.filter((file,position)=>position!==index)
+}
+async function supplementDisciplinaryFiles(item, files){
+  const existing = Array.isArray(item.attachments) ? item.attachments.length : 0
+  const accepted = pickDisciplinaryFiles(files, DISCIPLINARY_FILE_LIMIT - existing)
+  if(!accepted.length) return
+  disciplineSupplementingId.value = item.id
+  disciplinaryUploading.value = true
+  try{
+    const additions = []
+    for(const file of accepted){
+      disciplinaryUploadStage.value = `上传 ${file.name}`
+      additions.push(await uploadDisciplinaryFile(file))
+    }
+    const result = await callFunction('resultCenter',{ action:'addDisciplinaryAttachments', tournamentId, id:item.id, attachments:additions })
+    if(!result?.success) throw new Error(result?.message||result?.error||'处罚文书留存失败')
+    ElMessage.success(result.message||'处罚文书已留存')
+    await loadDisciplinaryActions()
+  }catch(error){ ElMessage.error(error.message||'处罚文书留存失败') }
+  finally{ disciplinaryUploading.value=false; disciplinaryUploadStage.value=''; disciplineSupplementingId.value='' }
+}
+function openDisciplinaryFile(file){
+  const url = String(file?.url || '')
+  if(!url) return ElMessage.warning('文书下载地址已失效，请刷新处罚记录后重试')
+  window.open(url,'_blank','noopener')
+}
 const disciplineTeamOptions = computed(() => {
   const row = disciplinaryMatch.value
   if (!row) return []
@@ -365,6 +469,7 @@ function openDisciplinary(row){
   const firstTeam = disciplineTeamOptions.value[0]?.teamId || ''
   disciplinaryForm.value = { subjectType:'player', teamId:firstTeam, playerName:'', playerId:'', personName:'', types:['warning'], suspensionMatches:1, fineAmount:100, reason:'' }
   disciplinaryRoster.value = []; disciplinaryRosterError.value = ''
+  disciplinaryFiles.value = []; disciplinaryUploadStage.value = ''
   disciplinaryVisible.value = true
   loadDisciplinaryRoster()
 }
@@ -414,9 +519,12 @@ async function submitDisciplinary(){
   if(form.types.includes('fine') && (!Number.isFinite(fineAmount) || fineAmount<0.01 || fineAmount>999999)) return ElMessage.warning('罚款金额须在0.01至999999之间')
   const reason = String(form.reason||'').trim()
   if(reason.length<2 || reason.length>300) return ElMessage.warning('处罚原因须为2至300个字符')
+  if(disciplinaryUploading.value) return ElMessage.warning('处罚文书上传中，请稍候')
+  const attachments = disciplinaryFiles.value.map(file => ({ fileId:file.fileId, name:file.name, size:file.size, type:file.type }))
+  if(attachments.length > DISCIPLINARY_FILE_LIMIT) return ElMessage.warning(`每条处罚最多留存 ${DISCIPLINARY_FILE_LIMIT} 个文书`)
   disciplinarySaving.value = true
   try{
-    const result = await callFunction('resultCenter',{ action:'createDisciplinaryAction', tournamentId, matchId:disciplinaryMatch.value?.id, subjectType:form.subjectType, teamId:form.teamId, playerName:String(form.playerName||'').trim(), playerId:String(form.playerId||'').trim(), personName:String(form.personName||'').trim(), types:[...form.types], suspensionMatches, fineAmount, reason })
+    const result = await callFunction('resultCenter',{ action:'createDisciplinaryAction', tournamentId, matchId:disciplinaryMatch.value?.id, subjectType:form.subjectType, teamId:form.teamId, playerName:String(form.playerName||'').trim(), playerId:String(form.playerId||'').trim(), personName:String(form.personName||'').trim(), types:[...form.types], suspensionMatches, fineAmount, reason, attachments })
     if(!result?.success) throw new Error(result?.message||result?.error||'处罚保存失败')
     disciplinaryVisible.value = false
     ElMessage.success(result.unverified?.length ? '处罚已生效；球员编号未在服务端核验' : '处罚已生效')
@@ -542,6 +650,17 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 .portrait-poster.paper .poster-header{padding:12px 10px;background:rgba(255,255,255,.82);border-radius:12px}
 .penalty-rounds{padding:8px 16px 14px;border-bottom:1px solid #e5ebe7;font-size:12px}.penalty-rounds>strong{display:block;margin-bottom:6px}.penalty-rounds>div{display:grid;grid-template-columns:72px 1fr 1fr;gap:8px;padding:3px 0}.penalty-rounds>div span:not(:first-child){text-align:center}
 .disciplinary-panel{margin:14px 18px 0;padding:12px 14px;border-top:1px solid #edf0ee;border-radius:8px;background:#fbfcfb}.disciplinary-panel>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.disciplinary-panel h3{margin:0;font-size:14px}.disciplinary-panel header>span{color:#bd4b36;font-size:11px}.disciplinary-empty{margin:0;color:#7b877f;font-size:12px}.disciplinary-panel ul{display:grid;gap:9px;margin:0;padding:0;list-style:none}.disciplinary-panel li{padding:8px 10px;border:1px solid #f1e2dc;border-radius:7px;background:#fff}.disciplinary-panel li>div{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px}.disciplinary-panel li b{color:#25332a}.disciplinary-panel li span{flex:none;padding:2px 7px;border-radius:99px;color:#b6422b;background:#fdeee9;font-size:11px}.disciplinary-panel li p{margin:5px 0 4px;color:#4f5d54;font-size:12px;line-height:1.5}.disciplinary-panel li small{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#8a958d;font-size:11px}.disciplinary-form{margin-top:16px}
+.discipline-file-input{display:none}
+.discipline-files{display:flex!important;flex-wrap:wrap;justify-content:flex-start!important;gap:6px;margin:0 0 4px}
+.discipline-file{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:3px 8px;border:1px solid #d9e2dc;border-radius:6px;background:#f6f9f7;color:#2c5a3f;font-size:11px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-file:hover{border-color:#9dc0ab;background:#eef5f0}
+.discipline-actions{display:inline-flex;align-items:center;gap:2px;font-style:normal}
+.discipline-upload{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.discipline-upload-stage{color:#7b877f;font-size:12px}
+.discipline-file-list{display:grid;gap:6px;width:100%;margin:6px 0 0;padding:0;list-style:none}
+.discipline-file-list li{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid #e5ebe7;border-radius:6px;background:#fbfcfb;font-size:12px}
+.discipline-file-list li b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#25332a}
+.discipline-file-list li small{color:#8a958d;font-size:11px}
 </style>
 <style scoped>
 .board-poster{width:min(100%,620px);min-height:930px;aspect-ratio:2/3;margin:0 auto;padding:28px 28px 20px;border-radius:14px;color:#fff;background:#0b326b url('/admin/images/report/flat-blue-v1.png') center/cover no-repeat;box-shadow:0 18px 42px rgba(6,37,79,.18);overflow:hidden}.board-poster.emerald{background-color:#0d4b2d;background-image:url('/admin/images/report/flat-green-v1.png')}.board-poster.paper{color:#14284d;background-color:#f7f5ee;background-image:url('/admin/images/report/flat-white-v2.png');border:1px solid #dbe2e8;box-shadow:0 18px 42px rgba(34,51,72,.12)}.board-header{min-height:124px;text-align:center}.board-tournament-slot{min-height:76px;display:grid;place-items:center;padding:4px 10px}.board-tournament-slot h2{margin:0;font-size:25px;line-height:1.25;font-weight:750;letter-spacing:.04em}.board-date{margin:8px 0 0;font-size:13px;letter-spacing:.12em;opacity:.82}.board-matches{margin-top:10px}.board-match{padding:0 0 16px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.28)}.board-poster.paper .board-match{border-color:#bfcfe0}.board-match-meta{display:flex;justify-content:center;align-items:center;gap:7px;min-height:22px;margin-bottom:4px;font-size:11px;letter-spacing:.08em;font-weight:700}.board-match-meta i{font-style:normal;opacity:.64}.board-match-main{display:grid;grid-template-columns:1fr 108px 1fr;align-items:center;gap:8px;min-height:70px}.board-team{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 9px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.92);color:#0d3368;clip-path:polygon(0 0,96% 0,100% 50%,96% 100%,0 100%);font-size:14px;font-weight:800}.board-team.away{justify-content:flex-end;text-align:right;clip-path:polygon(4% 0,100% 0,100% 100%,4% 100%,0 50%)}.board-poster.emerald .board-team{border-color:#d8bc70;background:rgba(13,65,40,.52);color:#fff4d5;clip-path:none}.board-poster.emerald .board-team.away{clip-path:none}.board-poster.paper .board-team{border-color:#1853a3;background:rgba(255,255,255,.74);color:#133c78}.board-crest{display:grid;width:40px;height:40px;flex:none;place-items:center;border:2px solid #fff;border-radius:50%;background:#f9fbff;overflow:hidden}.board-poster.emerald .board-crest{border-color:#d8bc70;background:#0b4a2d}.board-poster.paper .board-crest{border-color:#1853a3}.board-crest img{width:33px;height:33px;object-fit:contain}.board-crest b{font-size:17px}.board-score{display:grid;grid-template-columns:1fr 13px 1fr;align-items:center;min-height:70px;padding:8px 8px;text-align:center;background:#075acb;color:#fff;clip-path:polygon(10% 0,90% 0,100% 50%,90% 100%,10% 100%,0 50%)}.board-poster.emerald .board-score{background:#123f2b;border:1px solid #d8bc70;color:#fff4d5}.board-poster.paper .board-score{background:#1853a3;color:#fff}.board-score b{font-size:27px;line-height:1}.board-score em{font-style:normal;font-size:18px;opacity:.8}.board-score small{grid-column:1/-1;margin-top:3px;font-size:9px;opacity:.82}.board-scorers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 4px 0;padding:7px 9px;border-top:1px solid rgba(255,255,255,.3);font-size:10px}.board-poster.paper .board-scorers{border-color:#bfcfe0}.board-scorers>div{display:grid;gap:3px}.board-scorers>div:last-child{text-align:right}.board-scorers small{font-size:9px;opacity:.75}.board-scorers span{font-weight:650}.board-scorers i{font-style:normal;margin-left:3px;opacity:.8}.board-scorers .muted{opacity:.58}.board-footer{display:flex;justify-content:space-between;gap:10px;margin-top:15px;padding-top:10px;border-top:1px solid rgba(255,255,255,.32);font-size:9px;opacity:.72}.board-poster.paper .board-footer{border-color:#bfcfe0}.board-poster.score-only .board-match{padding-bottom:13px;margin-bottom:10px}.board-poster.score-only .board-match-main{min-height:64px}.board-poster.score-only .board-score{min-height:64px}@media(max-width:760px){.board-poster{width:100%;min-height:0;padding:23px 18px 16px}.board-header{min-height:110px}.board-tournament-slot{min-height:65px}.board-tournament-slot h2{font-size:21px}.board-date{font-size:11px}.board-match-main{grid-template-columns:1fr 92px 1fr}.board-team{font-size:12px;padding:6px}.board-crest{width:34px;height:34px}.board-crest img{width:28px;height:28px}.board-score{min-height:62px}.board-score b{font-size:23px}}
