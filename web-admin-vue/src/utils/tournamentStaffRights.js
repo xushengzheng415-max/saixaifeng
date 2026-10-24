@@ -38,6 +38,7 @@ export function sidebarRightForRoute(path) {
   if (/^\/(?:draw|pairings)(?:\/|$)/.test(remainder)) return 'event.draw'
   if (/^\/(?:matches|schedule)(?:\/|$)/.test(remainder)) return 'event.matches'
   if (/^\/results(?:\/|$)/.test(remainder)) return 'event.results'
+  if (/^\/discipline(?:\/|$)/.test(remainder)) return 'event.results'
   if (/^\/news(?:\/|$)/.test(remainder)) return 'event.news'
   if (/^\/referees(?:\/|$)/.test(remainder)) return 'event.referees'
   if (/^\/edit(?:\/|$)/.test(remainder)) return 'event.settings'

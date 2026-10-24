@@ -885,6 +885,13 @@ const organizerNavItems = computed(() => [
     activeWhen: () => /\/tournaments\/[^/]+\/results(?:\/match\/[^/]+\/archive)?$/.test(route.path)
   },
   {
+    path: tournamentWorkspacePath('/discipline'),
+    label: '纪律处罚',
+    icon: 'WarningFilled',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/discipline$/.test(route.path)
+  },
+  {
     path: tournamentWorkspacePath('/news'),
     label: '新闻中心',
     icon: 'Document',
