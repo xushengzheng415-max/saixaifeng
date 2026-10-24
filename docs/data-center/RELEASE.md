@@ -1,5 +1,11 @@
 # 数据中心上线与验收
 
+## 2026-10-24 淘汰赛逐轮点球记录
+
+提交 `680d6cbd` 已推送 Gitee `main`。PC 比赛详情的结束比赛及主办方补录成绩新增逐轮主客队“进／未进”录入，点球总分由轮次计算；赛果中心显示点球总分和轮次。常规比分、进球事件和射手榜不计点球大战。`updateMatch`、`resultCenter` 在服务端复算轮次、提前决胜、追加轮次及稳定球队胜者，仅接受符合条件的淘汰/排位赛平局。已使用线上函数下载包做差量更新，保留 `updateMatch` 现有小程序纸质报告导入逻辑；两函数正式回下载的入口与点球共享模块 SHA-256 均与发布源一致，状态均为 Active，运行时及资源配置保持原值。
+
+PC 预览 `/preview/admin/` 与正式 `/admin/` 均完整上传并通过发布工具校验；预览入口 HTTP 200 且与预览构建摘要一致，正式入口及 `MatchDetail`、`PenaltyShootoutEditor`、`TournamentResultCenter`、`TournamentStaffResults` 分包 HTTP 200 且与正式构建摘要一致。正式入口 SHA-256 `509D3266C4B0C0EA4E221CB3512DD9961B67256259DCF7A4F0DFA81310E3B0D4`。本次未修改真实比赛或赛果；真实主办方逐轮录入仍待现场验收。服务号裁判执裁既有点球总分输入未改动。
+
 ## 2026-10-05 PC 子账号正式发布
 
 用户明确要求发布正式 PC。`preview` 中的子账号、站内信、共享赛事卡片、返回赛事空间和补录队徽更新已合入 `main`。正式构建 266 个文件已上传 `/admin/`；官网正式入口、入口 JS、TournamentSpace、TournamentConsole、TournamentStaffResults、MatchDetail 等 26 个相关 JS/CSS 资源均 HTTP 200，SHA-256 与本地构建一致；`/preview/admin/` 仍 HTTP 200 并引用预览资源。发布前补充 CloudBase 索引 `tournament_teams(tournamentId,teamId)`；此前已建 `tournament_teams(tournamentId,createTime desc)`、`divisions(tournamentId,createTime asc)`、`matches(tournamentId,matchDate asc)`、`roster_snapshots(tournamentId)`，索引列表回读一致。`resultCenter` 返回主客队名称和临时队徽地址；`webLoginApi` 子账号投影包含队徽字段并按 `teamId`/`teamCode` 关系验证球员；`resultCenter`、`webLoginApi`、`updateMatch` 均回读 Active，入口 `index.js` 哈希匹配且配置保留。没有上传小程序、服务号 H5 或球员卡 UI。真实受邀账号刷新后补录比赛、球员列表和队徽显示仍待现场确认。
