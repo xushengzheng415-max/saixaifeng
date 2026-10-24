@@ -208,6 +208,11 @@ async function performFunctionHTTP(action, data = {}, timeout = 60000) {
     if (err?.name === 'AbortError') {
       throw new Error('请求处理时间较长，请稍后重试')
     }
+    // 网关超时、连接被重置或响应缺少跨域头时，浏览器只抛出 TypeError: Failed to fetch。
+    // 这里统一换成可操作的中文提示，页面不再直接展示原始英文错误。
+    if (err instanceof TypeError && /fetch|network|load failed/i.test(String(err.message || ''))) {
+      throw new Error('网络请求未完成，请检查网络后重新加载')
+    }
     console.error('[callFunctionHTTP] ❌', err.message)
     throw err
   } finally {
