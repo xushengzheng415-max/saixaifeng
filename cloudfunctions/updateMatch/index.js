@@ -118,7 +118,7 @@ const EXECUTION_SNAPSHOT_BLOCKED_FIELDS = new Set([
   'homeTeamId', 'awayTeamId', 'homeTeam', 'awayTeam', 'homeTeamName', 'awayTeamName',
   'venue', 'venueId', 'field', 'matchDate', 'matchTime', 'startTime', 'scheduledAt',
   'duration', 'matchFormat', 'divisionId', 'division', 'status', 'homeScore', 'awayScore',
-  'scoreHome', 'scoreAway', 'homePenaltyScore', 'awayPenaltyScore', 'penaltyRounds', 'resolution', 'winnerTeamId'
+  'scoreHome', 'scoreAway', 'homePenaltyScore', 'awayPenaltyScore', 'penaltyRounds', 'penaltyFirstSide', 'resolution', 'winnerTeamId'
 ])
 
 const ORGANIZER_FINISHABLE_STATUSES = new Set(['ongoing', 'live', 'in_progress', 'playing'])
@@ -523,7 +523,7 @@ exports.main = async (event, context) => {
     }
     const finishing = event.action === 'finishOrganizerMatch'
     if (finishing) {
-      if (safeData.status !== 'finished' || Object.keys(safeData).some(key => !['status','homeScore','awayScore','penaltyRounds'].includes(key))) return { success:false, code:'FINISH_FIELDS_INVALID', message:'结束比赛只能提交比分与点球轮次' }
+      if (safeData.status !== 'finished' || Object.keys(safeData).some(key => !['status','homeScore','awayScore','penaltyRounds','penaltyFirstSide'].includes(key))) return { success:false, code:'FINISH_FIELDS_INVALID', message:'结束比赛只能提交比分与点球轮次' }
       if (event.expectedEventRevision == null || Number(event.expectedEventRevision) !== Number(match.matchEventRevision || 0)) return { success:false, code:'MATCH_EVENTS_CHANGED', message:'比赛事件已更新，请刷新后结束比赛' }
       const { calculateMatchEventScore } = await import('./data-center/statistics.mjs')
       const score = calculateMatchEventScore(match)
@@ -531,14 +531,15 @@ exports.main = async (event, context) => {
       if (![home,away].every(value => Number.isInteger(value) && value >= 0 && value <= 99)) return { success:false, code:'SCORE_INVALID', message:'请录入0至99之间的整数比分' }
       Object.assign(safeData, { homeScore:home, awayScore:away, scoreHome:home, scoreAway:away })
       const elimination=/knockout|elimination|cup|placement|final|semifinal|淘汰|排位|决赛|半决赛/i.test(String(match.phase || match.stage || match.scheduleType || '')+' '+String(match.roundName || ''))
-      const hasPenaltyInput=safeData.penaltyRounds!==undefined
+      const hasPenaltyInput=safeData.penaltyRounds!==undefined || safeData.penaltyFirstSide!==undefined
       if (elimination && home===away) {
         const { evaluatePenaltyShootout } = await import('./data-center/penalty-shootout.mjs')
-        const shootout=evaluatePenaltyShootout(safeData.penaltyRounds)
+        const firstSide=safeData.penaltyFirstSide ?? 'home'
+        const shootout=evaluatePenaltyShootout(safeData.penaltyRounds,firstSide)
         if (!shootout.complete) return {success:false,code:'PENALTY_ROUNDS_REQUIRED',message:shootout.reason || '请录入点球轮次并分出胜负'}
         const homeId=String(match.homeTeamId || ''),awayId=String(match.awayTeamId || '')
         if(!homeId || !awayId || homeId===awayId)return {success:false,code:'MATCH_TEAMS_INVALID',message:'本场球队信息不完整，请核对后重试'}
-        Object.assign(safeData,{penaltyRounds:shootout.rounds,homePenaltyScore:shootout.home,awayPenaltyScore:shootout.away,resolution:'penalties',winnerTeamId:shootout.winnerSide==='home'?homeId:awayId})
+        Object.assign(safeData,{penaltyRounds:shootout.rounds,penaltyFirstSide:firstSide,homePenaltyScore:shootout.home,awayPenaltyScore:shootout.away,resolution:'penalties',winnerTeamId:shootout.winnerSide==='home'?homeId:awayId})
       } else {
         if(hasPenaltyInput)return {success:false,code:'PENALTY_SCORE_NOT_ALLOWED',message:'仅淘汰或排位赛打平后需要录入点球比分'}
         if(elimination){
@@ -558,12 +559,12 @@ exports.main = async (event, context) => {
     const miniSetup = ['lineup','start'].includes(actor.miniScope?.operation) && !refereeHasTakenOverOrLocked(match) && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(currentStatus)
     const canSupplement = ((organizerRecordAllowed || miniImport || miniLive) && Array.isArray(safeData.events)) || (finishing && organizerCanFinish)
 
-    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(miniPaperImport && ['lineups','status'].includes(field)) && !(miniImport && ['lineups','status','organizerSupplementFiles'].includes(field)) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status','homePenaltyScore','awayPenaltyScore','penaltyRounds','resolution','winnerTeamId'] : [])].includes(field)))) {
+    if (match.executionSnapshot && Object.keys(safeData).some(field => EXECUTION_SNAPSHOT_BLOCKED_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(miniPaperImport && ['lineups','status'].includes(field)) && !(miniImport && ['lineups','status','organizerSupplementFiles'].includes(field)) && !(canSupplement && ['homeScore','awayScore','scoreHome','scoreAway',...(finishing ? ['status','homePenaltyScore','awayPenaltyScore','penaltyRounds','penaltyFirstSide','resolution','winnerTeamId'] : [])].includes(field)))) {
       return { success: false, message: '比赛执行快照已经固化，不能直接修改对阵、场地、时间或比分', code: 'MATCH_EXECUTION_SNAPSHOT_LOCKED' }
     }
     const preMatchSetupEditable = !match.refereeRecordLocked && !match.refereeReportSubmittedAt && match.executionState !== 'recording' && ['scheduled','pending','checked_in','not_started','upcoming',''].includes(String(match.status || '').toLowerCase())
     if (planState.locked) {
-      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['homePenaltyScore','awayPenaltyScore','penaltyRounds','resolution','winnerTeamId'] : []),...(finishing || miniPaperImport ? ['status'] : []),...(miniImport ? ['lineups','status','organizerSupplementFiles'] : []),...(paperImport ? ['lineups','paperReportImports'] : [])])
+      const supplementFields = new Set(['events','homeScore','awayScore','scoreHome','scoreAway','matchEventRevision',...(finishing ? ['homePenaltyScore','awayPenaltyScore','penaltyRounds','penaltyFirstSide','resolution','winnerTeamId'] : []),...(finishing || miniPaperImport ? ['status'] : []),...(miniImport ? ['lineups','status','organizerSupplementFiles'] : []),...(paperImport ? ['lineups','paperReportImports'] : [])])
       const blockedFields = Object.keys(safeData).filter(field => !POST_PLAN_REFEREE_FIELDS.has(field) && !(miniSetup && ['lineups','status'].includes(field)) && !(preMatchSetupEditable && (field === 'kitColors' || field === 'kitSelection' || field === 'matchSequence' && !match.executionSnapshot)) && !(canSupplement && supplementFields.has(field)))
       if (blockedFields.length > 0 || !Object.keys(safeData).length) {
         return { success: false, message: '竞赛方案已锁定，当前只能安排裁判或修改未开赛比赛的球服颜色与场序', code: 'COMPETITION_PLAN_LOCKED' }

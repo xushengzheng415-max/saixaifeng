@@ -1,36 +1,39 @@
-// Penalty shootout kicks are a match decision, separate from in-play goals.
-const result = (home,away,rounds,complete,winnerSide='',reason='') => ({home,away,rounds,complete,winnerSide,reason})
-export function evaluatePenaltyShootout(input) {
-  if(!Array.isArray(input) || input.length>20)return result(0,0,[],false,'','点球轮次最多20轮')
-  const active=input.map((row,index)=>({round:index+1,home:row?.home ?? '',away:row?.away ?? '',givenRound:row?.round}))
-  while(active.length && !active.at(-1).home && !active.at(-1).away)active.pop()
-  if(!active.length)return result(0,0,[],false,'','请记录点球轮次')
-  let home=0,away=0,homeKicks=0,awayKicks=0
-  const rounds=[]
-  for(const [index,row] of active.entries()){
-    if(row.givenRound != null && Number(row.givenRound)!==row.round)return result(home,away,rounds,false,'','点球轮次顺序不正确')
-    if(!['','scored','missed'].includes(row.home) || !['','scored','missed'].includes(row.away))return result(home,away,rounds,false,'','点球结果只能标记为进或未进')
-    if(!row.home)return result(home,away,rounds,false,'',`第${row.round}轮主队结果未填写`)
-    homeKicks++
-    if(row.home==='scored')home++
-    const earlyHome=homeKicks<=5 && home>away+Math.max(0,5-awayKicks)
-    const earlyAway=awayKicks<=5 && away>home+Math.max(0,5-homeKicks)
-    if(earlyHome || earlyAway){
-      if(row.away || index!==active.length-1)return result(home,away,rounds,false,'','已分出胜负，后续点球不应继续记录')
-      rounds.push({round:row.round,home:row.home,away:''})
-      return result(home,away,rounds,true,earlyHome?'home':'away')
-    }
-    if(!row.away)return result(home,away,rounds,false,'',`第${row.round}轮客队结果未填写`)
-    awayKicks++
-    if(row.away==='scored')away++
-    rounds.push({round:row.round,home:row.home,away:row.away})
-    const homeWon=homeKicks<=5 && home>away+Math.max(0,5-awayKicks)
-    const awayWon=awayKicks<=5 && away>home+Math.max(0,5-homeKicks)
-    const suddenDeath=homeKicks>=5 && awayKicks>=5 && home!==away
-    if(homeWon || awayWon || suddenDeath){
-      if(index!==active.length-1)return result(home,away,rounds,false,'','已分出胜负，后续点球不应继续记录')
-      return result(home,away,rounds,true,home>away?'home':'away')
+// Penalty shootout kicks decide the winner; they never count as in-play goals.
+export function evaluatePenaltyShootout(input, firstSide = 'home') {
+  if (!Array.isArray(input) || input.length > 20) return { home: 0, away: 0, rounds: [], complete: false, winnerSide: '', canAddRound: false, reason: '点球轮次最多20轮' }
+  const rounds = input.map((row, index) => ({ round: index + 1, home: row?.home ?? '', away: row?.away ?? '' }))
+  while (rounds.length && !rounds.at(-1).home && !rounds.at(-1).away) rounds.pop()
+  // Display every entered kick, even when the sequence still needs correction.
+  const home = rounds.filter(row => row.home === 'scored').length
+  const away = rounds.filter(row => row.away === 'scored').length
+  const result = (complete, reason = '', winnerSide = '', canAddRound = false) => ({ home, away, rounds, complete, reason, winnerSide, canAddRound })
+  for (const row of rounds) {
+    if (input[row.round - 1]?.round != null && Number(input[row.round - 1].round) !== row.round) return result(false, '点球轮次顺序不正确')
+    if (![row.home, row.away].every(value => ['', 'scored', 'missed'].includes(value))) return result(false, '点球结果只能标记为进或未进')
+  }
+  if (!rounds.length) return result(false, '请记录点球轮次')
+  if (!['home', 'away'].includes(firstSide)) return result(false, '请选择先罚球队')
+  const order = firstSide === 'home' ? ['home', 'away'] : ['away', 'home']
+  const score = { home: 0, away: 0 }, kicks = { home: 0, away: 0 }
+  let winnerSide = ''
+  for (const row of rounds) {
+    for (const side of order) {
+      const value = row[side]
+      if (winnerSide) {
+        if (value) return result(false, '已分出胜负，请核对先罚球队及后续轮次')
+        continue
+      }
+      if (!value) return result(false, `第${row.round}轮${side === 'home' ? '主队' : '客队'}结果未填写`)
+      kicks[side]++
+      if (value === 'scored') score[side]++
+      if (kicks.home <= 5 && kicks.away <= 5) {
+        if (score.home > score.away + 5 - kicks.away) winnerSide = 'home'
+        else if (score.away > score.home + 5 - kicks.home) winnerSide = 'away'
+      }
+      if (kicks.home >= 5 && kicks.home === kicks.away && score.home !== score.away) winnerSide = score.home > score.away ? 'home' : 'away'
     }
   }
-  return result(home,away,rounds,false,'',rounds.length>=5?'前五轮打平，请增加一轮点球':'请继续记录点球轮次')
+  if (winnerSide) return result(true, '', winnerSide)
+  const canAddRound = rounds.length >= 5 && rounds.length < 20 && rounds.every(row => row.home && row.away) && score.home === score.away
+  return result(false, canAddRound ? '双方打平，请增加一轮点球' : '请继续记录点球轮次', '', canAddRound)
 }

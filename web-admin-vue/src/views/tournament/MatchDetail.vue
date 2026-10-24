@@ -455,7 +455,7 @@
       </div>
       <div v-if="finishNeedsPenalty" class="finish-penalty-section">
         <el-button v-if="!finishForm.penaltyEnabled" type="primary" plain @click="finishForm.penaltyEnabled = true">录入点球比分</el-button>
-        <PenaltyShootoutEditor v-else v-model="finishForm.penaltyRounds" :home-name="homeName" :away-name="awayName" />
+        <PenaltyShootoutEditor v-else v-model="finishForm.penaltyRounds" v-model:first-side="finishForm.penaltyFirstSide" :home-name="homeName" :away-name="awayName" />
       </div>
       <template #footer>
         <el-button @click="finishDialogVisible = false">取消</el-button>
@@ -1205,10 +1205,10 @@ const venueOptions = ref([])
 
 // 结束比赛弹窗
 const finishDialogVisible = ref(false)
-const finishForm = ref({ homeScore: 0, awayScore: 0, penaltyEnabled:false, penaltyRounds:[] })
+const finishForm = ref({ homeScore: 0, awayScore: 0, penaltyEnabled:false, penaltyRounds:[], penaltyFirstSide:'' })
 const isEliminationMatch = computed(() => /knockout|elimination|cup|placement|final|semifinal|淘汰|排位|决赛|半决赛/i.test(String(match.value.phase || match.value.stage || match.value.scheduleType || '') + ' ' + String(match.value.roundName || '')))
 const finishNeedsPenalty = computed(() => isEliminationMatch.value && Number(finishForm.value.homeScore) === Number(finishForm.value.awayScore))
-const finishPenaltyResult = computed(() => evaluatePenaltyShootout(finishForm.value.penaltyRounds))
+const finishPenaltyResult = computed(() => evaluatePenaltyShootout(finishForm.value.penaltyRounds, finishForm.value.penaltyFirstSide))
 const forfeitDialogVisible = ref(false)
 const forfeitTeamId = ref('')
 
@@ -1898,6 +1898,7 @@ function openFinishDialog() {
     homeScore: displayHomeScore.value,
     awayScore: displayAwayScore.value,
     penaltyEnabled:false,
+    penaltyFirstSide:'',
     penaltyRounds:Array.from({ length:5 }, (_, index) => ({ round:index+1, home:'', away:'' }))
   }
   finishDialogVisible.value = true
@@ -1953,7 +1954,7 @@ async function finishMatch() {
   if (finishNeedsPenalty.value && !finishPenaltyResult.value.complete) return ElMessage.warning(finishPenaltyResult.value.reason || '请录入点球轮次并分出胜负')
   saving.value = true
   try {
-    const penaltyData = finishNeedsPenalty.value ? { penaltyRounds:finishPenaltyResult.value.rounds } : {}
+    const penaltyData = finishNeedsPenalty.value ? { penaltyRounds:finishPenaltyResult.value.rounds, penaltyFirstSide:finishForm.value.penaltyFirstSide } : {}
     const result = await callFunction('updateMatch', {
       matchId,
       action: 'finishOrganizerMatch',

@@ -107,11 +107,11 @@ async function supplementResult(event, actor) {
     const homeId = text(match.homeTeamId), awayId = text(match.awayTeamId)
     if (!homeId || !awayId || homeId === awayId) throw new Error('本场球队身份不完整，请先核对对阵')
     const tied=scores[0]===scores[1]
-    const hasPenaltyInput=event.penaltyRounds!==undefined
+    const hasPenaltyInput=event.penaltyRounds!==undefined || event.penaltyFirstSide!==undefined
     let penaltyScores=null
     if(knockout && tied){
       const { evaluatePenaltyShootout }=await import('./data-center/penalty-shootout.mjs')
-      penaltyScores=evaluatePenaltyShootout(event.penaltyRounds)
+      penaltyScores=evaluatePenaltyShootout(event.penaltyRounds,event.penaltyFirstSide ?? 'home')
       if(!penaltyScores.complete)throw new Error(penaltyScores.reason || '请录入点球轮次并分出胜负')
     }else if(hasPenaltyInput)throw new Error('当前比赛不需要点球比分')
     const winnerTeamId = knockout ? penaltyScores ? penaltyScores.winnerSide==='home'?homeId:awayId : tied?'':scores[0]>scores[1]?homeId:awayId : tied ? text(event.winnerTeamId) : scores[0]>scores[1]?homeId:awayId
@@ -124,7 +124,7 @@ async function supplementResult(event, actor) {
     if (winnerTeamId) data.winnerTeamId = winnerTeamId
     if (penaltyScores) data.resolution = 'penalties'
     else if (event.resolution) data.resolution = text(event.resolution)
-    if (penaltyScores) { data.homePenaltyScore=penaltyScores.home;data.awayPenaltyScore=penaltyScores.away;data.penaltyRounds=penaltyScores.rounds }
+    if (penaltyScores) { data.homePenaltyScore=penaltyScores.home;data.awayPenaltyScore=penaltyScores.away;data.penaltyRounds=penaltyScores.rounds;data.penaltyFirstSide=event.penaltyFirstSide ?? 'home' }
     await transaction.collection('matches').doc(matchId).update({ data })
     await transaction.collection('registration_audit_logs').add({ data: { sport: 'football', action: 'organizer_result_supplement_archived', tournamentId, matchId, actorUserId: text(actor.user._id), actorOrgId: actor.orgId, detail: { versionId, homeScore: scores[0], awayScore: scores[1], homePenaltyScore:penaltyScores?.home ?? null, awayPenaltyScore:penaltyScores?.away ?? null, evidenceFileIds: files }, createTime: db.serverDate() } })
   })
@@ -481,6 +481,7 @@ function normalizedMatch(match, divisionsById, teamDirectory = {}) {
     } : null,
     winnerTeamId,
     penaltyRounds: Array.isArray(match.penaltyRounds) ? match.penaltyRounds : [],
+    penaltyFirstSide: ['home','away'].includes(match.penaltyFirstSide) ? match.penaltyFirstSide : '',
     homePenaltyScore: match.homePenaltyScore == null && match.penaltyHomeScore == null && match.penaltiesHome == null ? null : number(match.homePenaltyScore ?? match.penaltyHomeScore ?? match.penaltiesHome, 0),
     awayPenaltyScore: match.awayPenaltyScore == null && match.penaltyAwayScore == null && match.penaltiesAway == null ? null : number(match.awayPenaltyScore ?? match.penaltyAwayScore ?? match.penaltiesAway, 0),
     resolution: text(match.resolution || match.decisionMethod || (homeScore !== null && awayScore !== null && homeScore !== awayScore ? 'regular_time' : winnerTeamId ? 'penalties' : '')),

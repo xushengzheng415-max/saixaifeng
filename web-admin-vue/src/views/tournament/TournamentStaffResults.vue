@@ -5,7 +5,7 @@
     <div v-if="loading" class="state">加载中…</div>
     <template v-else><div v-if="!matches.length" class="state">暂无比赛</div><div v-for="match in matches" :key="match.id" class="row"><span><strong class="match-teams"><span class="match-team"><img v-if="match.homeLogo" :src="match.homeLogo" :alt="match.homeName" /><i v-else>{{ teamInitial(match.homeName) }}</i>{{ match.homeName }}</span><em>{{ score(match) }}</em><span class="match-team"><img v-if="match.awayLogo" :src="match.awayLogo" :alt="match.awayName" /><i v-else>{{ teamInitial(match.awayName) }}</i>{{ match.awayName }}</span></strong><small>{{ match.date }} {{ match.time }} · {{ match.divisionName }} · {{ status(match) }}</small></span><el-button v-if="canSupplement(match)" type="primary" plain @click="open(match)">补录</el-button></div></template>
     <el-dialog v-model="dialog" title="补录成绩" width="520px" :close-on-click-modal="false">
-      <div v-if="selected" class="form"><strong>{{ selected.homeName }} 对 {{ selected.awayName }}</strong><div class="scores"><el-input v-model="homeScore" type="number" min="0" max="99" :placeholder="selected.homeName" /><span>:</span><el-input v-model="awayScore" type="number" min="0" max="99" :placeholder="selected.awayName" /></div><PenaltyShootoutEditor v-if="knockout && homeScore !== '' && awayScore !== '' && Number(homeScore) === Number(awayScore)" v-model="penaltyRounds" :home-name="selected.homeName" :away-name="selected.awayName" /><label>纸质比赛记录（1–2 张）<input type="file" accept="image/*" multiple @change="chooseEvidence" /></label><div v-for="(file, index) in evidence" :key="file.fileId" class="file">{{ file.name }}<el-button link @click="evidence.splice(index, 1)">移除</el-button></div><el-input v-model="note" type="textarea" maxlength="300" placeholder="备注（选填）" /></div>
+      <div v-if="selected" class="form"><strong>{{ selected.homeName }} 对 {{ selected.awayName }}</strong><div class="scores"><el-input v-model="homeScore" type="number" min="0" max="99" :placeholder="selected.homeName" /><span>:</span><el-input v-model="awayScore" type="number" min="0" max="99" :placeholder="selected.awayName" /></div><PenaltyShootoutEditor v-if="knockout && homeScore !== '' && awayScore !== '' && Number(homeScore) === Number(awayScore)" v-model="penaltyRounds" v-model:first-side="penaltyFirstSide" :home-name="selected.homeName" :away-name="selected.awayName" /><label>纸质比赛记录（1–2 张）<input type="file" accept="image/*" multiple @change="chooseEvidence" /></label><div v-for="(file, index) in evidence" :key="file.fileId" class="file">{{ file.name }}<el-button link @click="evidence.splice(index, 1)">移除</el-button></div><el-input v-model="note" type="textarea" maxlength="300" placeholder="备注（选填）" /></div>
       <template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="submit">确认并归档</el-button></template>
     </el-dialog>
   </main>
@@ -21,7 +21,7 @@ import { evaluatePenaltyShootout } from '../../../../cloudfunctions/dataCenter/s
 
 const tournamentId = String(useRoute().params.id || '')
 const tournamentName = ref(''), orgId = ref(''), matches = ref([]), loading = ref(true), saving = ref(false), error = ref(''), dialog = ref(false), selected = ref(null)
-const homeScore = ref(''), awayScore = ref(''), penaltyRounds=ref([]), note = ref(''), evidence = ref([])
+const homeScore = ref(''), awayScore = ref(''), penaltyRounds=ref([]), penaltyFirstSide=ref(''), note = ref(''), evidence = ref([])
 const knockout = computed(() => /knockout|elimination|cup|placement|final|semifinal|淘汰|排位|决赛|半决赛/i.test(selected.value?.phase || ''))
 const canSupplement = match => ['finished', 'completed', 'ended', 'pending_result', 'pending_review'].includes(String(match.status).toLowerCase()) && !match.hasRefereeRecord && !match.hasResult
 const status = match => match.hasResult ? '已有赛果' : match.hasRefereeRecord ? '待复核' : canSupplement(match) ? '待补录' : '待比赛'
@@ -33,7 +33,7 @@ async function load() {
   catch (cause) { error.value = cause.message || '加载失败' }
   finally { loading.value = false }
 }
-function open(match) { selected.value = match; homeScore.value = ''; awayScore.value = ''; penaltyRounds.value=Array.from({length:5},(_,index)=>({round:index+1,home:'',away:''})); note.value = ''; evidence.value = []; dialog.value = true }
+function open(match) { selected.value = match; homeScore.value = ''; awayScore.value = ''; penaltyFirstSide.value=''; penaltyRounds.value=Array.from({length:5},(_,index)=>({round:index+1,home:'',away:''})); note.value = ''; evidence.value = []; dialog.value = true }
 async function chooseEvidence(event) {
   const files = Array.from(event.target.files || []).slice(0, 2 - evidence.value.length)
   event.target.value = ''
@@ -49,12 +49,12 @@ async function submit() {
   if ([homeScore.value, awayScore.value].some(value => value === '') || scores.some(value => !Number.isInteger(value) || value < 0 || value > 99)) return ElMessage.error('请输入 0 至 99 的整数比分')
   if (evidence.value.length < 1 || evidence.value.length > 2) return ElMessage.error('请上传 1 至 2 张纸质比赛记录')
   const tiedKnockout=knockout.value && scores[0] === scores[1]
-  const shootout=evaluatePenaltyShootout(penaltyRounds.value)
+  const shootout=evaluatePenaltyShootout(penaltyRounds.value,penaltyFirstSide.value)
   if (tiedKnockout && !shootout.complete) return ElMessage.error(shootout.reason || '请录入点球轮次并分出胜负')
   try {
     await ElMessageBox.confirm(`${selected.value.homeName} ${scores[0]} : ${scores[1]} ${selected.value.awayName}。确认后成为正式赛果。`, '确认归档', { type: 'warning' })
     saving.value = true
-    const result = await callFunction('resultCenter', { action: 'supplementResult', tournamentId, matchId: selected.value.id, homeScore: scores[0], awayScore: scores[1], evidenceFileIds: evidence.value.map(file => file.fileId), note: note.value, ...(tiedKnockout?{penaltyRounds:shootout.rounds}:{}) })
+    const result = await callFunction('resultCenter', { action: 'supplementResult', tournamentId, matchId: selected.value.id, homeScore: scores[0], awayScore: scores[1], evidenceFileIds: evidence.value.map(file => file.fileId), note: note.value, ...(tiedKnockout?{penaltyRounds:shootout.rounds,penaltyFirstSide:penaltyFirstSide.value}:{}) })
     if (!result?.success) throw new Error(result?.message || '归档失败')
     dialog.value = false; ElMessage.success('赛果已归档'); await load()
   } catch (cause) { if (cause !== 'cancel' && cause !== 'close') ElMessage.error(cause.message || '归档失败') }

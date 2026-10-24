@@ -100,6 +100,8 @@ H5 getMyPreloadedPlayerCard、previewMyPreloadedPlayerCard、saveMyPreloadedPlay
 
 淘汰或排位比赛常规比分打平时，`finishOrganizerMatch` 与 `resultCenter.supplementResult` 接收 `penaltyRounds`，每轮记录主、客队 `scored`/`missed`，提前决胜的最后一轮可只含先踢方。共享 `evaluatePenaltyShootout` 在服务端按轮次顺序复算、校验提前决胜及第五轮后的追加轮次；仅在已分出胜负时保存 `penaltyRounds`、双方点球总数、`resolution=penalties` 与稳定球队 ID 对应的胜者。非平局及非淘汰/排位赛不接受点球轮次。点球大战不增加常规比分、进球事件或射手榜数据。已有正式赛果与裁判锁定记录沿既有复核/纠错流程处理。
 
+`penaltyFirstSide` 表示先罚球队，值为 home/away；新录入页面必须由用户选择。未携带该字段的旧客户端沿其原有主队先罚契约兼容；空值或非法值不允许完赛。共享模块的 home/away 总数始终覆盖所有已录入的有效命中，即使顺序未填全或提前决胜后的记录需要修正，也不能返回截断总分；完整性和胜负由 complete/reason 单独表达。
+
 ### 比赛弃赛
 
 PC 比赛详情的弃赛操作按 `updateMatch.forfeitMatch` 写入，要求当前赛事的比赛管理权限、赛事/球队归属、`expectedEventRevision`、弃赛方为本场主客队之一，并且裁判未接管、无锁定记录、没有比赛事件。服务端固定生成弃赛方 0、对方 3 的完赛比分、胜方与 `resultType=forfeit`，写入前后值审计并更新既有小组/联赛积分；不创建进球事件。比分读取以弃赛结果为准，不从空事件数组覆盖为 0:0。已有比赛事件或裁判记录时拒绝直接弃赛，须走赛果复核流程。
