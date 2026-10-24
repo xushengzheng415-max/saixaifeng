@@ -68,12 +68,12 @@
           <el-alert v-if="selectedMatch.warnings?.length" :title="selectedMatch.warnings.join('；')" type="warning" :closable="false" show-icon />
           <section class="discipline-board">
             <header class="discipline-board-head">
-              <div><h3>纪律处罚</h3><p>本场生效处罚与跨赛事转入处罚，文书在线留存</p></div>
-              <span v-if="disciplinaryActions.length + disciplinaryInherited.length" class="discipline-count">{{ disciplinaryActions.length + disciplinaryInherited.length }} 条生效</span>
+              <div><h3>纪律处罚</h3><p>本场生效处罚，处罚文书在线留存</p></div>
+              <span v-if="disciplinaryActions.length" class="discipline-count">{{ disciplinaryActions.length }} 条生效</span>
             </header>
             <el-alert v-if="disciplinaryError" :title="disciplinaryError" type="error" :closable="false" show-icon />
             <p v-else-if="disciplinaryLoading" class="discipline-hint">处罚记录加载中…</p>
-            <div v-else-if="!disciplinaryActions.length && !disciplinaryInherited.length" class="discipline-empty-card"><el-icon><CircleCheckFilled /></el-icon><b>本场暂无生效处罚</b><small>如出现违规，点击下方「追加处罚」登记并留存处罚文书。</small></div>
+            <div v-else-if="!disciplinaryActions.length" class="discipline-empty-card"><el-icon><CircleCheckFilled /></el-icon><b>本场暂无生效处罚</b><small>如出现违规，点击下方「追加处罚」登记并留存处罚文书。</small></div>
             <ul v-else-if="disciplinaryActions.length" class="discipline-cards"><li v-for="item in disciplinaryActions" :key="item.id" class="discipline-card" :class="item.subjectType">
               <header>
                 <span class="discipline-mark">{{ disciplineSubjectInitial(item) }}</span>
@@ -87,13 +87,6 @@
               </div>
               <footer><span>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}</span><em class="discipline-actions"><el-button link :loading="disciplineSupplementingId===item.id" @click="chooseDisciplinaryFiles(item)">{{ item.attachments?.length ? '继续补传' : '补传文书' }}</el-button><el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></em></footer>
             </li></ul>
-            <div v-if="disciplinaryInherited.length" class="discipline-cross">
-              <b>其他赛事转入 · {{ disciplinaryInherited.length }} 条</b>
-              <div v-for="item in disciplinaryInherited" :key="item.id" class="discipline-cross-row">
-                <span>{{ disciplineSubjectName(item) }}</span>
-                <small>{{ item.sourceTournamentName || '其他赛事' }} · {{ disciplineTags(item).map(tag => tag.label).join(' / ') }}</small>
-              </div>
-            </div>
           </section>
           <footer><el-button plain type="danger" @click="openDisciplinary(selectedMatch)">追加处罚</el-button><el-button plain @click="router.push(`/tournaments/${tournamentId}/discipline`)">全赛事处罚</el-button><el-button v-if="selectedMatch.resultStatus!=='approved'" type="success" :disabled="!selectedMatch.scoreReady" @click="openMatchResult(selectedMatch)">进入赛果复核</el-button><template v-else><el-button type="warning" plain @click="openScoreCorrection(selectedMatch)">异常纠错</el-button><el-button plain @click="openMatchResult(selectedMatch)">查看正式归档</el-button></template></footer>
         </aside>
@@ -346,8 +339,6 @@ async function submitScoreCorrection(){
   }catch(error){if(error!=='cancel'&&error!=='close')ElMessage.error(error.message||'比分更正失败')}finally{correctionSaving.value=false}
 }
 const disciplinaryActions = ref([])
-// 其他赛事签发、按稳定身份跨赛事生效并转入本场的处罚，只读引用。
-const disciplinaryInherited = ref([])
 const disciplinaryLoading = ref(false)
 const disciplinaryError = ref('')
 const disciplinaryVisible = ref(false)
@@ -484,17 +475,16 @@ function disciplineSubjectInitial(item){
 }
 async function loadDisciplinaryActions(){
   const matchId = selectedMatch.value?.id || ''
-  if(!matchId){ disciplinaryActions.value=[]; disciplinaryInherited.value=[]; disciplinaryError.value=''; return }
+  if(!matchId){ disciplinaryActions.value=[]; disciplinaryError.value=''; return }
   disciplinaryLoading.value=true; disciplinaryError.value=''
   try{
     const result = await callFunction('resultCenter',{ action:'listDisciplinaryActions', tournamentId, matchId })
     if(!result?.success) throw new Error(result?.message||result?.error||'处罚记录加载失败')
     if(selectedMatch.value?.id===matchId){
       disciplinaryActions.value=result.actions||[]
-      disciplinaryInherited.value=result.inherited||[]
     }
   }catch(error){
-    if(selectedMatch.value?.id===matchId){ disciplinaryActions.value=[]; disciplinaryInherited.value=[]; disciplinaryError.value=error.message||'处罚记录加载失败' }
+    if(selectedMatch.value?.id===matchId){ disciplinaryActions.value=[]; disciplinaryError.value=error.message||'处罚记录加载失败' }
   }finally{ if(selectedMatch.value?.id===matchId) disciplinaryLoading.value=false }
 }
 function openDisciplinary(row){
@@ -623,7 +613,7 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 .standings-section .division-tabs :deep(.el-tabs__header){margin:10px 0 14px}
 .standings-section .division-tabs :deep(.el-tabs__item){height:42px;font-size:15px;font-weight:600}
 .review-list-filters{display:flex;gap:12px;padding:12px 15px;border-bottom:1px solid #e8ece9;background:#fbfcfb}.review-list-filters label{display:flex;align-items:center;gap:8px;color:#657269;font-size:12px}.review-list-filters .el-select{width:180px}.review-list-filters label:first-child .el-select{width:220px}
-.review-detail>.el-alert{margin:0 18px}.correction-alert{margin:0 18px 12px}.review-detail>footer{display:flex;justify-content:flex-end;gap:8px;padding:17px 18px;text-align:right}.correction-form{margin-top:18px}.correction-score-input{display:flex;align-items:center;gap:14px}.correction-score-input .el-input-number{width:150px}
+.review-detail>.el-alert{margin:0 18px}.correction-alert{margin:0 18px 12px}.review-detail>footer{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:17px 18px;text-align:right}.review-detail>footer .el-button{margin:0;flex:none}.correction-form{margin-top:18px}.correction-score-input{display:flex;align-items:center;gap:14px}.correction-score-input .el-input-number{width:150px}
 .report-heading{align-items:flex-start}.report-controls{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px}.report-controls :deep(.el-select){width:150px}.report-workspace{grid-template-columns:minmax(620px,1fr) 280px;align-items:start}.portrait-poster{width:min(100%,620px);min-height:930px;aspect-ratio:2/3;margin:0 auto;padding:42px 36px 25px;border-radius:18px;background:#064b2b url('/admin/images/report/emerald-stadium-v1.png') center/cover no-repeat;box-shadow:0 22px 50px rgba(10,55,31,.22)}.portrait-poster.navy{background-color:#071b4e;background-image:url('/admin/images/report/navy-broadcast-v1.png')}.portrait-poster.paper{color:#10213f;background-color:#fff;background-image:url('/admin/images/report/paper-cobalt-v1.png');border:1px solid #dbe5f2;box-shadow:0 22px 50px rgba(25,66,122,.14)}.poster-header{text-align:center}.poster-brand{display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;letter-spacing:.14em}.poster-brand-mark{display:grid;width:29px;height:29px;place-items:center;border:1px solid currentColor;border-radius:50%;font-size:10px;font-weight:800;letter-spacing:0}.poster-kicker{margin:21px 0 8px;font-size:10px;letter-spacing:.16em;opacity:.78}.poster-header h2{margin:0;font-size:25px;line-height:1.28}.poster-date{margin:10px 0 0;font-size:12px;opacity:.78}.poster-date i{font-style:normal;margin:0 5px}.poster-matches{margin-top:30px}.poster-match{padding:17px 0;border-top:1px solid rgba(255,255,255,.24)}.paper .poster-match{border-color:#cbd9eb}.poster-match-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:10px;opacity:.75}.poster-match-meta>span{font-size:12px;font-weight:800;letter-spacing:.08em}.poster-scoreline{display:grid;grid-template-columns:1fr 100px 1fr;align-items:center;gap:9px}.poster-team{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;font-weight:800}.poster-team.away{justify-content:flex-end;text-align:right}.poster-crest{display:grid;width:39px;height:39px;flex:none;place-items:center;border:1px solid rgba(255,255,255,.48);border-radius:11px;background:rgba(255,255,255,.13)}.paper .poster-crest{border-color:#c2d1e4;background:#f3f7fc}.poster-crest img{width:31px;height:31px;object-fit:contain}.poster-crest b{font-size:17px}.poster-score-block{display:grid;grid-template-columns:1fr 12px 1fr;align-items:center;text-align:center}.poster-score-block b{font-size:32px;line-height:1}.poster-score-block em{font-size:20px;font-style:normal;opacity:.75}.poster-score-block small{grid-column:1/-1;margin-top:5px;font-size:9px;opacity:.7}.poster-scorers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:11px 0 0;padding:9px 10px;border-radius:9px;background:rgba(0,0,0,.19);font-size:10px}.paper .poster-scorers{background:rgba(25,82,143,.08)}.poster-scorers>div{display:grid;gap:4px}.poster-scorers>div:last-child{text-align:right}.poster-scorers small{font-size:9px;opacity:.68}.poster-scorers span{font-weight:650}.poster-scorers i{margin-left:3px;font-style:normal;opacity:.78}.poster-scorers .muted{opacity:.58}.poster-footer{display:flex;justify-content:space-between;gap:10px;margin-top:24px;padding-top:11px;border-top:1px solid rgba(255,255,255,.25);font-size:9px;opacity:.72}.paper .poster-footer{border-color:#cbd9eb}.report-guardrail{align-self:start}.report-guardrail :deep(.el-alert){margin-top:18px}.report-section{min-width:0}@media(max-width:1180px){.report-workspace{grid-template-columns:1fr}.report-guardrail{max-width:620px;margin:0 auto}.report-controls{justify-content:flex-start}}@media(max-width:760px){.report-heading{gap:12px}.report-controls{align-items:flex-start;flex-direction:column}.report-controls :deep(.el-select),.report-controls :deep(.el-radio-group),.report-controls :deep(.el-button){width:100%}.report-controls :deep(.el-radio-group){display:flex}.report-controls :deep(.el-radio-button){flex:1}.report-controls :deep(.el-radio-button__inner){width:100%;padding:10px 6px}.portrait-poster{width:100%;min-height:0;padding:32px 22px 20px}.poster-header h2{font-size:22px}.poster-scoreline{grid-template-columns:1fr 88px 1fr}.poster-team{font-size:12px}.poster-crest{width:34px;height:34px}.poster-crest img{width:27px;height:27px}.poster-score-block b{font-size:28px}}
 </style>
 <style scoped>
@@ -722,11 +712,6 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 .discipline-file-list li{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid #e5ebe7;border-radius:6px;background:#fbfcfb;font-size:12px}
 .discipline-file-list li b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#25332a}
 .discipline-file-list li small{color:#8a958d;font-size:11px}
-.discipline-cross{margin-top:11px;padding:9px 10px;border:1px dashed #eadfc2;border-radius:10px;background:#fffdf7}
-.discipline-cross>b{display:block;margin-bottom:6px;color:#8a6b2f;font-size:11px}
-.discipline-cross-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:3px 0}
-.discipline-cross-row span{color:#3f3a2c;font-size:12px;font-weight:650}
-.discipline-cross-row small{color:#9a9384;font-size:11px;text-align:right}
 </style>
 <style scoped>
 .board-poster{width:min(100%,620px);min-height:930px;aspect-ratio:2/3;margin:0 auto;padding:28px 28px 20px;border-radius:14px;color:#fff;background:#0b326b url('/admin/images/report/flat-blue-v1.png') center/cover no-repeat;box-shadow:0 18px 42px rgba(6,37,79,.18);overflow:hidden}.board-poster.emerald{background-color:#0d4b2d;background-image:url('/admin/images/report/flat-green-v1.png')}.board-poster.paper{color:#14284d;background-color:#f7f5ee;background-image:url('/admin/images/report/flat-white-v2.png');border:1px solid #dbe2e8;box-shadow:0 18px 42px rgba(34,51,72,.12)}.board-header{min-height:124px;text-align:center}.board-tournament-slot{min-height:76px;display:grid;place-items:center;padding:4px 10px}.board-tournament-slot h2{margin:0;font-size:25px;line-height:1.25;font-weight:750;letter-spacing:.04em}.board-date{margin:8px 0 0;font-size:13px;letter-spacing:.12em;opacity:.82}.board-matches{margin-top:10px}.board-match{padding:0 0 16px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.28)}.board-poster.paper .board-match{border-color:#bfcfe0}.board-match-meta{display:flex;justify-content:center;align-items:center;gap:7px;min-height:22px;margin-bottom:4px;font-size:11px;letter-spacing:.08em;font-weight:700}.board-match-meta i{font-style:normal;opacity:.64}.board-match-main{display:grid;grid-template-columns:1fr 108px 1fr;align-items:center;gap:8px;min-height:70px}.board-team{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 9px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.92);color:#0d3368;clip-path:polygon(0 0,96% 0,100% 50%,96% 100%,0 100%);font-size:14px;font-weight:800}.board-team.away{justify-content:flex-end;text-align:right;clip-path:polygon(4% 0,100% 0,100% 100%,4% 100%,0 50%)}.board-poster.emerald .board-team{border-color:#d8bc70;background:rgba(13,65,40,.52);color:#fff4d5;clip-path:none}.board-poster.emerald .board-team.away{clip-path:none}.board-poster.paper .board-team{border-color:#1853a3;background:rgba(255,255,255,.74);color:#133c78}.board-crest{display:grid;width:40px;height:40px;flex:none;place-items:center;border:2px solid #fff;border-radius:50%;background:#f9fbff;overflow:hidden}.board-poster.emerald .board-crest{border-color:#d8bc70;background:#0b4a2d}.board-poster.paper .board-crest{border-color:#1853a3}.board-crest img{width:33px;height:33px;object-fit:contain}.board-crest b{font-size:17px}.board-score{display:grid;grid-template-columns:1fr 13px 1fr;align-items:center;min-height:70px;padding:8px 8px;text-align:center;background:#075acb;color:#fff;clip-path:polygon(10% 0,90% 0,100% 50%,90% 100%,10% 100%,0 50%)}.board-poster.emerald .board-score{background:#123f2b;border:1px solid #d8bc70;color:#fff4d5}.board-poster.paper .board-score{background:#1853a3;color:#fff}.board-score b{font-size:27px;line-height:1}.board-score em{font-style:normal;font-size:18px;opacity:.8}.board-score small{grid-column:1/-1;margin-top:3px;font-size:9px;opacity:.82}.board-scorers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 4px 0;padding:7px 9px;border-top:1px solid rgba(255,255,255,.3);font-size:10px}.board-poster.paper .board-scorers{border-color:#bfcfe0}.board-scorers>div{display:grid;gap:3px}.board-scorers>div:last-child{text-align:right}.board-scorers small{font-size:9px;opacity:.75}.board-scorers span{font-weight:650}.board-scorers i{font-style:normal;margin-left:3px;opacity:.8}.board-scorers .muted{opacity:.58}.board-footer{display:flex;justify-content:space-between;gap:10px;margin-top:15px;padding-top:10px;border-top:1px solid rgba(255,255,255,.32);font-size:9px;opacity:.72}.board-poster.paper .board-footer{border-color:#bfcfe0}.board-poster.score-only .board-match{padding-bottom:13px;margin-bottom:10px}.board-poster.score-only .board-match-main{min-height:64px}.board-poster.score-only .board-score{min-height:64px}@media(max-width:760px){.board-poster{width:100%;min-height:0;padding:23px 18px 16px}.board-header{min-height:110px}.board-tournament-slot{min-height:65px}.board-tournament-slot h2{font-size:21px}.board-date{font-size:11px}.board-match-main{grid-template-columns:1fr 92px 1fr}.board-team{font-size:12px;padding:6px}.board-crest{width:34px;height:34px}.board-crest img{width:28px;height:28px}.board-score{min-height:62px}.board-score b{font-size:23px}}

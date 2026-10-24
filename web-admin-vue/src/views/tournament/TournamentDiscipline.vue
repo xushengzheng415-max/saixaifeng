@@ -6,7 +6,7 @@
         <div class="hero-copy">
           <small>赛事运营 / 纪律处罚</small>
           <h1>{{ tournamentName || '赛事纪律处罚' }}</h1>
-          <p>赛事级与单场处罚统一登记，处罚决定书（PDF/Word）在线留存；跨赛事生效的处罚按球队、球员稳定身份在参赛赛事中继续生效。</p>
+          <p>登记本赛事签发的赛事级与单场处罚，处罚决定书（PDF/Word）在线留存。跨赛事与全平台禁赛由平台运营后台审核下发，主办方只能在本赛事范围内处罚。</p>
         </div>
       </div>
       <div class="hero-actions">
@@ -18,8 +18,7 @@
     <section class="discipline-summary">
       <article><small>生效处罚</small><strong>{{ stats.effective }}</strong><span>条</span></article>
       <article class="warn"><small>涉及追加停赛</small><strong>{{ stats.suspension }}</strong><span>条</span></article>
-      <article class="cross"><small>跨赛事生效</small><strong>{{ stats.crossEvent }}</strong><span>条</span></article>
-      <article class="muted"><small>其他赛事转入</small><strong>{{ inherited.length }}</strong><span>条</span></article>
+      <article class="muted"><small>已留存处罚文书</small><strong>{{ stats.withFiles }}</strong><span>条</span></article>
     </section>
 
     <section class="discipline-toolbar">
@@ -28,7 +27,7 @@
         <el-option label="球员" value="player" /><el-option label="球队" value="team" /><el-option label="工作人员" value="staff" />
       </el-select>
       <el-select v-model="scopeFilter" clearable placeholder="全部作用范围">
-        <el-option label="赛事级处罚" value="tournament" /><el-option label="单场处罚" value="match" /><el-option label="跨赛事生效" value="cross" />
+        <el-option label="赛事级处罚" value="tournament" /><el-option label="单场处罚" value="match" />
       </el-select>
       <span class="toolbar-count">{{ visibleActions.length }} 条 / 共 {{ actions.length }} 条</span>
     </section>
@@ -37,7 +36,7 @@
 
     <section class="discipline-section">
       <header class="section-head">
-        <div><h2>本赛事处罚记录</h2><p>可直接在此登记赛事级处罚，不受单场比赛限制；处罚文书可在生效期间持续补传。</p></div>
+        <div><h2>本赛事处罚记录</h2><p>可直接登记赛事级处罚，不受单场比赛限制；处罚文书可在生效期间持续补传。</p></div>
         <span class="section-count">{{ visibleActions.length }} 条生效</span>
       </header>
       <ul v-if="visibleActions.length" class="discipline-cards">
@@ -49,7 +48,6 @@
           </header>
           <div class="card-badges">
             <span class="badge scope">{{ item.scope === 'tournament' ? '赛事级' : `单场 · ${item.matchNo || '未编号'}` }}</span>
-            <span v-if="item.crossEvent" class="badge cross">跨赛事生效</span>
           </div>
           <div class="card-tags">
             <span v-for="tag in typeTags(item)" :key="tag.key" class="card-tag" :class="tag.tone">{{ tag.label }}</span>
@@ -76,37 +74,8 @@
       </div>
     </section>
 
-    <section v-if="inherited.length" class="discipline-section inherited-section">
-      <header class="section-head">
-        <div><h2>其他赛事转入的跨赛事处罚</h2><p>由其他赛事签发并对相同球队、球员继续生效；本赛事只读引用，撤销须回到签发赛事操作。</p></div>
-        <span class="section-count">{{ inherited.length }} 条</span>
-      </header>
-      <ul class="discipline-cards">
-        <li v-for="item in inherited" :key="item.id" class="discipline-card inherited" :class="item.subjectType">
-          <header>
-            <span class="card-mark">{{ subjectInitial(item) }}</span>
-            <div class="card-subject"><b>{{ subjectName(item) }}</b><small>{{ subjectMeta(item) }}</small></div>
-            <span class="card-status inherited">跨赛事生效</span>
-          </header>
-          <div class="card-badges">
-            <span class="badge source">来源赛事 · {{ item.sourceTournamentName || '其他赛事' }}</span>
-          </div>
-          <div class="card-tags">
-            <span v-for="tag in typeTags(item)" :key="tag.key" class="card-tag" :class="tag.tone">{{ tag.label }}</span>
-          </div>
-          <p class="card-reason">{{ item.reason }}</p>
-          <div v-if="item.attachments?.length" class="card-files">
-            <button v-for="file in item.attachments" :key="file.fileId" type="button" class="card-file" @click="openFile(file)">
-              <el-icon><Document /></el-icon><span>{{ file.name }}</span><small>{{ fileSize(file.size) }}</small>
-            </button>
-          </div>
-          <footer><span>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}</span><em class="card-actions readonly">只读引用</em></footer>
-        </li>
-      </ul>
-    </section>
-
-    <el-dialog v-model="createVisible" title="追加纪律处罚" width="600px">
-      <el-alert title="处罚确认后立即生效并写入审计日志；勾选「跨赛事生效」后，按球队或球员稳定身份在其他参赛赛事中继续生效。" type="warning" :closable="false" show-icon />
+    <el-dialog v-model="createVisible" title="追加纪律处罚" width="560px">
+      <el-alert title="处罚确认后立即生效并写入审计日志；跨赛事与全平台禁赛不在本页办理，须由平台运营后台审核下发。" type="warning" :closable="false" show-icon />
       <el-form label-position="top" class="discipline-form">
         <el-form-item label="处罚对象">
           <el-radio-group v-model="form.subjectType" @change="onSubjectTypeChange">
@@ -127,7 +96,7 @@
             </el-select>
             <el-input v-else v-model="form.playerName" maxlength="40" placeholder="填写受处罚球员姓名" />
           </el-form-item>
-          <el-form-item v-if="!roster.length" label="球员编号（追加停赛或跨赛事生效时必填）"><el-input v-model="form.playerId" maxlength="60" placeholder="球员在赛事名单中的稳定编号" /></el-form-item>
+          <el-form-item v-if="!roster.length" label="球员编号（追加停赛时必填）"><el-input v-model="form.playerId" maxlength="60" placeholder="球员在赛事名单中的编号" /></el-form-item>
           <el-alert v-if="rosterError" :title="`${rosterError}，可手工填写球员编号`" type="info" :closable="false" show-icon />
         </template>
         <el-form-item v-else-if="form.subjectType === 'staff'" label="工作人员姓名"><el-input v-model="form.personName" maxlength="40" placeholder="填写受处罚工作人员姓名" /></el-form-item>
@@ -142,12 +111,6 @@
         <el-form-item v-if="form.types.includes('suspension')" label="停赛场次"><el-input-number v-model="form.suspensionMatches" :min="1" :max="99" :step="1" controls-position="right" /></el-form-item>
         <el-form-item v-if="form.types.includes('fine')" label="罚款金额（元）"><el-input-number v-model="form.fineAmount" :min="0.01" :max="999999" :precision="2" :step="100" controls-position="right" /></el-form-item>
         <el-form-item label="处罚原因（必填，2-300字）"><el-input v-model="form.reason" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="例如：赛后冲突中推搡对方球员，造成不良影响。" /></el-form-item>
-        <el-form-item label="作用范围">
-          <div class="scope-switch">
-            <el-switch v-model="form.crossEvent" :disabled="!canCrossEvent" active-text="跨赛事生效" inactive-text="仅本赛事" />
-            <small>{{ crossEventHint }}</small>
-          </div>
-        </el-form-item>
         <el-form-item label="处罚文书（选填：PDF 或 Word，单个≤10MB，最多5个）">
           <div class="upload-row">
             <el-button plain :disabled="uploading || draftFiles.length >= 5" :loading="uploading" @click="chooseFiles()"><el-icon><Upload /></el-icon>选择文书</el-button>
@@ -181,7 +144,6 @@ const loading = ref(false)
 const loadError = ref('')
 const tournamentName = ref('')
 const actions = ref([])
-const inherited = ref([])
 const teams = ref([])
 const keyword = ref('')
 const subjectFilter = ref('')
@@ -207,34 +169,23 @@ const fileInput = ref(null)
 const supplementTarget = ref(null)
 const form = ref({
   subjectType: 'player', teamId: '', playerId: '', playerName: '', personName: '',
-  types: ['warning'], suspensionMatches: 1, fineAmount: 100, reason: '', crossEvent: false
+  types: ['warning'], suspensionMatches: 1, fineAmount: 100, reason: ''
 })
 
 const stats = computed(() => ({
   effective: actions.value.length,
   suspension: actions.value.filter(item => (item.types || []).includes('suspension')).length,
-  crossEvent: actions.value.filter(item => item.crossEvent).length
+  withFiles: actions.value.filter(item => (item.attachments || []).length).length
 }))
 
 const visibleActions = computed(() => {
   const text = keyword.value.trim().toLowerCase()
   return actions.value.filter(item => {
     if (subjectFilter.value && item.subjectType !== subjectFilter.value) return false
-    if (scopeFilter.value === 'tournament' && item.scope !== 'tournament') return false
-    if (scopeFilter.value === 'match' && item.scope !== 'match') return false
-    if (scopeFilter.value === 'cross' && !item.crossEvent) return false
+    if (scopeFilter.value && item.scope !== scopeFilter.value) return false
     if (!text) return true
     return [item.teamName, item.playerName, item.personName, item.reason, item.matchNo].map(value => String(value || '').toLowerCase()).join(' ').includes(text)
   })
-})
-
-const canCrossEvent = computed(() => form.value.subjectType === 'team'
-  ? Boolean(form.value.teamId)
-  : form.value.subjectType === 'player' ? Boolean(form.value.playerId) : false)
-const crossEventHint = computed(() => {
-  if (form.value.subjectType === 'staff') return '工作人员处罚只在本赛事生效。'
-  if (!canCrossEvent.value) return '选择已登记的球队或正式名单球员后，可开启跨赛事生效。'
-  return '开启后，该球队或球员参加的其他赛事会自动读取本条处罚。'
 })
 
 function fileExtension(file) {
@@ -281,15 +232,14 @@ function openFile(file) {
 }
 
 async function loadTeams() {
-  const relations = await queryAll('tournament_teams', { where: { tournamentId }, silent: true })
+  const relations = await queryAll('tournament_teams', { where: { tournamentId } })
   const directory = new Map()
   relations.forEach(row => {
     const teamId = String(row.teamId || '')
     if (!teamId) return
     const name = String(row.name || row.teamName || '')
     const current = directory.get(teamId)
-    const divisionName = String(row.divisionName || row.division || '')
-    if (!current) directory.set(teamId, { teamId, name, divisionId: String(row.divisionId || row.division || 'default'), divisionName })
+    if (!current) directory.set(teamId, { teamId, name, divisionId: String(row.divisionId || row.division || 'default'), divisionName: String(row.divisionName || row.division || '') })
     else if (!current.name && name) current.name = name
   })
   teams.value = [...directory.values()].map(team => ({
@@ -306,12 +256,10 @@ async function loadAll() {
     const result = await callFunction('resultCenter', { action: 'listDisciplinaryActions', tournamentId })
     if (!result?.success) throw new Error(result?.message || result?.error || '处罚记录加载失败')
     actions.value = result.actions || []
-    inherited.value = result.inherited || []
     if (result.tournamentName) tournamentName.value = result.tournamentName
   } catch (error) {
     loadError.value = error.message || '处罚记录加载失败'
     actions.value = []
-    inherited.value = []
   } finally {
     loading.value = false
   }
@@ -321,7 +269,7 @@ async function openCreate() {
   if (!teams.value.length) await loadTeams().catch(() => {})
   form.value = {
     subjectType: 'player', teamId: teams.value[0]?.teamId || '', playerId: '', playerName: '', personName: '',
-    types: ['warning'], suspensionMatches: 1, fineAmount: 100, reason: '', crossEvent: false
+    types: ['warning'], suspensionMatches: 1, fineAmount: 100, reason: ''
   }
   roster.value = []
   rosterError.value = ''
@@ -336,22 +284,21 @@ function onSubjectTypeChange() {
     form.value.teamId = ''
     form.value.playerId = ''
     form.value.playerName = ''
-    form.value.crossEvent = false
     roster.value = []
     rosterError.value = ''
-  } else {
-    form.value.personName = ''
-    if (!form.value.teamId) form.value.teamId = teams.value[0]?.teamId || ''
-    if (form.value.subjectType === 'team') { form.value.playerId = ''; form.value.playerName = '' }
-    loadRoster()
+    return
   }
+  form.value.personName = ''
+  if (!form.value.teamId) form.value.teamId = teams.value[0]?.teamId || ''
+  if (form.value.subjectType === 'team') { form.value.playerId = ''; form.value.playerName = '' }
+  loadRoster()
 }
 function onTeamChange() {
   form.value.playerId = ''
   form.value.playerName = ''
   if (form.value.subjectType !== 'team') loadRoster()
 }
-// 处罚球员优先从本队正式名单选择，保证停赛与跨赛事生效能定位稳定球员编号。
+// 处罚球员优先从本队正式名单选择，保证停赛处罚能定位到名单球员。
 async function loadRoster() {
   roster.value = []
   rosterError.value = ''
@@ -466,7 +413,6 @@ async function submit() {
   if (value.types.includes('fine') && (!Number.isFinite(fineAmount) || fineAmount < 0.01 || fineAmount > 999999)) return ElMessage.warning('罚款金额须在0.01至999999之间')
   const reason = String(value.reason || '').trim()
   if (reason.length < 2 || reason.length > 300) return ElMessage.warning('处罚原因须为2至300个字符')
-  if (value.crossEvent && !canCrossEvent.value) return ElMessage.warning('跨赛事生效须选择已登记球队或正式名单球员')
   if (uploading.value) return ElMessage.warning('处罚文书上传中，请稍候')
   saving.value = true
   try {
@@ -474,12 +420,12 @@ async function submit() {
       action: 'createDisciplinaryAction', tournamentId, subjectType: value.subjectType,
       teamId: value.teamId, playerName: String(value.playerName || '').trim(), playerId: String(value.playerId || '').trim(),
       personName: String(value.personName || '').trim(), types: [...value.types],
-      suspensionMatches, fineAmount, reason, crossEvent: value.crossEvent === true,
+      suspensionMatches, fineAmount, reason,
       attachments: draftFiles.value.map(file => ({ fileId: file.fileId, name: file.name, size: file.size, type: file.type }))
     })
     if (!result?.success) throw new Error(result?.message || result?.error || '处罚保存失败')
     createVisible.value = false
-    ElMessage.success(result.crossEvent ? '处罚已生效，并在其他参赛赛事中同步生效' : '处罚已生效')
+    ElMessage.success('处罚已生效')
     await loadAll()
   } catch (error) { ElMessage.error(error.message || '处罚保存失败') }
   finally { saving.value = false }
@@ -514,13 +460,12 @@ onMounted(async () => {
 .hero-copy h1{margin:4px 0 6px;color:#1d3226;font-size:22px;line-height:1.3}
 .hero-copy p{margin:0;max-width:720px;color:#6c7d72;font-size:12px;line-height:1.65}
 .hero-actions{display:flex;flex:none;gap:8px}
-.discipline-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.discipline-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .discipline-summary article{display:flex;align-items:baseline;gap:8px;padding:14px 16px;border:1px solid #e7eee9;border-radius:13px;background:#fff}
 .discipline-summary small{flex:1;color:#7f8d84;font-size:12px}
 .discipline-summary strong{color:#1f3a2a;font-size:22px;line-height:1}
 .discipline-summary span{color:#93a097;font-size:11px}
 .discipline-summary article.warn strong{color:#b6422b}
-.discipline-summary article.cross strong{color:#8a6b2f}
 .discipline-summary article.muted strong{color:#54675a}
 .discipline-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border:1px solid #e7eee9;border-radius:13px;background:#fff}
 .discipline-toolbar .el-input{max-width:280px}
@@ -536,21 +481,17 @@ onMounted(async () => {
 .discipline-card{position:relative;padding:14px 15px 11px;border:1px solid #e7ece8;border-left:3px solid #d9563f;border-radius:13px;background:#fff;box-shadow:0 2px 8px rgba(31,58,42,.05)}
 .discipline-card.team{border-left-color:#c05a2c}
 .discipline-card.staff{border-left-color:#8a6b2f}
-.discipline-card.inherited{border-left-color:#8a6b2f;background:linear-gradient(180deg,#fffdf8,#fff)}
 .discipline-card>header{display:flex;align-items:center;gap:9px}
 .card-mark{display:grid;width:32px;height:32px;flex:none;place-items:center;border-radius:9px;background:#fdeee9;color:#b6422b;font-size:13px;font-weight:800}
 .discipline-card.team .card-mark{background:#fdf1e9;color:#b2542a}
-.discipline-card.staff .card-mark,.discipline-card.inherited .card-mark{background:#f6f1e3;color:#8a6b2f}
+.discipline-card.staff .card-mark{background:#f6f1e3;color:#8a6b2f}
 .card-subject{flex:1;min-width:0}
 .card-subject b{display:block;color:#22352a;font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card-subject small{display:block;margin-top:2px;color:#8a958d;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card-status{flex:none;padding:2px 8px;border-radius:99px;border:1px solid #cfe3d7;background:#eef7f1;color:#2f7a52;font-size:10px;font-weight:700}
-.card-status.inherited{border-color:#eadfc2;background:#fdf7e7;color:#8a6b2f}
 .card-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 .badge{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:650}
 .badge.scope{background:#eef2ee;color:#54675a}
-.badge.cross{background:#fdf4e3;color:#a97516}
-.badge.source{background:#f6f1e3;color:#8a6b2f}
 .card-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .card-tag{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
 .card-tag.danger{background:#fdeceb;color:#c23b2b}
@@ -565,13 +506,10 @@ onMounted(async () => {
 .card-file:hover{border-color:#9dc0ab;background:#eef5f0}
 .discipline-card>footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px;padding-top:8px;border-top:1px dashed #edf1ee;color:#9aa59d;font-size:11px}
 .card-actions{display:inline-flex;align-items:center;gap:2px;font-style:normal}
-.card-actions.readonly{color:#8a6b2f;font-weight:700}
 .discipline-empty{display:grid;justify-items:center;gap:5px;padding:30px 16px;border:1px dashed #d7e2da;border-radius:13px;background:#fff;color:#8a988f;text-align:center}
 .discipline-empty .el-icon{font-size:22px;color:#5f9c78}
 .discipline-empty b{color:#38503f;font-size:13px}
 .discipline-empty small{padding:0 10px;font-size:11px;line-height:1.6}
-.scope-switch{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.scope-switch small{color:#8a988f;font-size:11px}
 .upload-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .upload-stage{color:#7b877f;font-size:12px}
 .upload-list{display:grid;gap:6px;width:100%;margin:6px 0 0;padding:0;list-style:none}

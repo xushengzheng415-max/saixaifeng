@@ -1008,11 +1008,6 @@ function disciplinaryActionView(row) {
     tournamentId: text(row.tournamentId),
     divisionId: text(row.divisionId),
     scope: text(row.scope) || (matchId ? 'match' : 'tournament'),
-    crossEvent: row.crossEvent === true,
-    subjectKey: text(row.subjectKey),
-    teamStableId: text(row.teamStableId),
-    sourceTournamentId: text(row.sourceTournamentId) || text(row.tournamentId),
-    sourceTournamentName: text(row.sourceTournamentName),
     matchId,
     matchNo: text(row.matchNo),
     subjectType: text(row.subjectType),
@@ -1055,58 +1050,8 @@ async function tournamentRelationsFor(tournamentId) {
   return { rows, byStableId, byRelationId }
 }
 
-// 跨赛事生效的处罚只按参赛球队与名单球员的稳定编号匹配，不扫描无关赛事数据。
-async function listInheritedDisciplinaryActions(tournamentId, matchId) {
-  const relations = await tournamentRelationsFor(tournamentId)
-  let teamIds = [...relations.byStableId.keys()]
-  if (teamIds.length > 50) teamIds = teamIds.slice(0, 50)
-  if (matchId) {
-    const match = await getDocument('matches', matchId)
-    if (match) {
-      teamIds = [...new Set([teamIdOf(match, 'home'), teamIdOf(match, 'away')]
-        .map(id => text((relations.byRelationId.get(id) || {}).teamId) || id).filter(Boolean))]
-    }
-  }
-  const subjectKeys = teamIds.map(id => `team:${id}`)
-  const playerIds = new Set()
-  if (matchId) {
-    // 单场视图只需本场两队球员；赛事视图改由名单快照汇总，避免逐队扫描。
-    for (const teamId of teamIds) {
-      const page = (await db.collection('players').where({ teamId }).limit(200).get().catch(() => ({ data: [] }))).data || []
-      page.forEach(row => { if (text(row._id)) playerIds.add(text(row._id)) })
-    }
-  } else {
-    const snapshots = await listAll('roster_snapshots', { tournamentId }, 2000).catch(() => [])
-    snapshots.forEach(row => (Array.isArray(row.playerIds) ? row.playerIds : []).forEach(id => {
-      if (text(id)) playerIds.add(text(id))
-    }))
-  }
-  playerIds.forEach(id => subjectKeys.push(`player:${id}`))
-  if (!subjectKeys.length) return []
-  const rows = []
-  // CloudBase in 查询按 50 个编号分批，避免超长条件整体失败。
-  for (let index = 0; index < subjectKeys.length; index += 50) {
-    const chunk = subjectKeys.slice(index, index + 50)
-    const page = (await db.collection('disciplinary_actions').where({
-      status: 'effective', crossEvent: true, subjectKey: db.command.in(chunk)
-    }).limit(500).get()).data || []
-    rows.push(...page)
-  }
-  const inherited = rows.filter(row => text(row.tournamentId) && text(row.tournamentId) !== tournamentId)
-  if (!inherited.length) return []
-  const sources = await listByDocumentIds('tournaments', [...new Set(inherited.map(row => text(row.tournamentId)))])
-  const nameById = Object.fromEntries(sources.map(row => [text(row._id || row.id), text(row.name || row.tournamentName)]))
-  return inherited
-    .map(row => disciplinaryActionView({
-      ...row,
-      sourceTournamentId: text(row.tournamentId),
-      sourceTournamentName: nameById[text(row.tournamentId)] || '其他赛事'
-    }))
-    .sort((a, b) => timeValue(b.createdAt) - timeValue(a.createdAt))
-}
-
-// 纪律处罚列表：actions 为本赛事记录（可不带 matchId 查看赛事级全部记录），
-// inherited 为其他赛事签发、按稳定身份跨赛事生效的处罚，只读引用。
+// 纪律处罚列表：actions 为本赛事记录，不带 matchId 即返回赛事级与单场处罚全部记录。
+// 全平台禁赛由平台运营后台审核下发，赛事主办方只能查看本赛事自身签发的处罚。
 async function listDisciplinaryActions(event, actor) {
   const tournamentId = text(event.tournamentId)
   if (!tournamentId) throw new Error('缺少赛事信息')
@@ -1123,13 +1068,11 @@ async function listDisciplinaryActions(event, actor) {
     if (!/not exist|collection_not_exist|resourcenotfound|-502005/i.test(String(error && (error.message || error.errMsg) || ''))) throw error
   }
   const actions = rows.map(disciplinaryActionView).sort((a, b) => timeValue(b.createdAt) - timeValue(a.createdAt))
-  const inherited = event.includeInherited === false ? [] : await listInheritedDisciplinaryActions(tournamentId, matchId)
   return {
     success: true,
     tournamentId,
     tournamentName: text(tournament.name || tournament.tournamentName),
-    actions: await withDisciplinaryAttachmentUrls(actions),
-    inherited: await withDisciplinaryAttachmentUrls(inherited)
+    actions: await withDisciplinaryAttachmentUrls(actions)
   }
 }
 
@@ -1190,12 +1133,8 @@ async function createDisciplinaryAction(event, actor) {
   }
   const personName = subjectType === 'staff' ? text(event.personName) : ''
   if (subjectType === 'staff' && !personName) throw new Error('请填写受处罚工作人员姓名')
-  // 跨赛事生效依赖稳定身份（球队 teams._id / 球员 players._id），工作人员不具备该身份。
-  const crossEvent = event.crossEvent === true
-  const subjectKey = subjectType === 'team' ? (stableTeamId ? `team:${stableTeamId}` : '')
-    : subjectType === 'player' ? (playerId ? `player:${playerId}` : '') : ''
-  if (crossEvent && subjectType === 'staff') throw new Error('工作人员处罚仅在本赛事生效，不能跨赛事')
-  if (crossEvent && !subjectKey) throw new Error(subjectType === 'player' ? '跨赛事生效须选择正式名单球员' : '跨赛事生效须选择已登记球队')
+  // 主办方只能在自办赛事内处罚，跨赛事/全平台禁赛须由平台运营后台审核下发。
+  if (event.crossEvent === true) throw new Error('全平台禁赛只能由平台运营后台审核下发，赛事主办方无权跨赛事处罚')
   let suspensionMatches = 0
   if (types.includes('suspension')) {
     suspensionMatches = Number(event.suspensionMatches)
@@ -1214,8 +1153,6 @@ async function createDisciplinaryAction(event, actor) {
     tournamentId,
     divisionId,
     scope,
-    crossEvent,
-    subjectKey,
     teamStableId: stableTeamId,
     matchId,
     matchNo: matchId ? text(match.matchNo || match.matchSequence || match.sequence || match.matchIndex) : '',
@@ -1227,7 +1164,7 @@ async function createDisciplinaryAction(event, actor) {
     createdAt: db.serverDate(),
     updateTime: db.serverDate()
   }
-  const detail = { matchId, scope, crossEvent, subjectKey, types, suspensionMatches, fineAmount, reason, subjectType, teamId, stableTeamId, playerId, playerName, personName }
+  const detail = { matchId, scope, types, suspensionMatches, fineAmount, reason, subjectType, teamId, stableTeamId, playerId, playerName, personName }
   const audit = await db.collection('registration_audit_logs').add({ data: {
     sport: 'football', action: 'disciplinary_action_created', tournamentId, divisionId, matchId,
     actorUserId: text(actor.user._id), actorOrgId: actor.orgId, result: 'pending',
@@ -1239,7 +1176,7 @@ async function createDisciplinaryAction(event, actor) {
   await db.collection('registration_audit_logs').doc(audit._id).update({ data: {
     result: 'success', actionId: text(created._id), completedAt: db.serverDate(), updateTime: db.serverDate()
   } }).catch(() => {})
-  return { success: true, id: text(created._id), scope, crossEvent, unverified }
+  return { success: true, id: text(created._id), scope, unverified }
 }
 
 async function revokeDisciplinaryAction(event, actor) {
