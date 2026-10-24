@@ -4,4 +4,4 @@
 
 PC核对弹窗把云平台内存和超时错误改为中文重试提示，上传后的原图仍可直接重试。未修改识别事实规则、赛事名单、比分、比赛事件或保存权限。
 
-函数代码和配置、PC构建、静态发布及线上回读待完成；未运行真实授权样图复测，也未写真实比赛数据。
+修复提交e3b3dcd1已同步main。webLoginApi以当前线上包为基线差量更新，回读Active、Nodejs18.15、index.main、120秒、512MB、Event；环境变量配置保留。线上refereeReportOcr.cjs与发布源码SHA-256一致，匿名识别探针返回AUTH_REQUIRED。正式PC构建通过，392个文件发布/admin/，入口及裁判表相关8个资源HTTP 200且SHA-256与本地构建一致。回读证据位于.codex-artifacts/referee-ocr-readback-20261024和webapi-ocr-final-readback-20261024。未运行真实授权样图复测，也未写真实比赛数据。
