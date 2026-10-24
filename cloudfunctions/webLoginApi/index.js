@@ -172,7 +172,8 @@ const ORGANIZER_PRIVATE_COLLECTIONS = new Set([
   'matches', 'match_events', 'match_referees', 'tournament_referees',
   'tournament_teams', 'tournament_groups', 'tournament_bracket',
   'tournament_league_tables', 'rosters', 'roster_change_requests',
-  'squads', 'standings', 'schedule_info', 'team_tasks', 'divisions'
+  'squads', 'standings', 'schedule_info', 'team_tasks', 'divisions',
+  'disciplinary_actions'
 ])
 
 const ORGANIZER_SCOPED_RELAY_FUNCTIONS = new Set([

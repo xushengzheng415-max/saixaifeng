@@ -226,6 +226,8 @@ const route = useRoute(), router = useRouter(), tournamentId = String(route.para
 // The deployed import action validates the actor, scope and conflicts server-side.
 const scheduleImportWriteEnabled = true
 const loading = ref(false), savingSettings = ref(false), autoScheduling = ref(false), savingAssignment = ref(false), applyingImport = ref(false), preparingKnockout = ref(false), knockoutPrepareError = ref('')
+// 追加纪律处罚（停赛）用于裁判表自动标 S；读取失败时向裁判表提示，不静默当成无处罚。
+const disciplinaryActions = ref([]), disciplinaryLoadFailed = ref(false)
 const tournament = ref({}), divisions = ref([]), matches = ref([]), teamLogoMap = ref(new Map()), divisionFilter = ref(String(route.query.divisionId || 'all')), selectedDate = ref(typeof route.query.date === 'string' ? route.query.date : ''), draggedMatchId = ref(''), matchDayOnly = ref(true)
 const view = ref(['settings','imports','map','workbench','referees'].includes(String(route.query.view || '')) ? String(route.query.view) : 'map')
 const pendingDrawerOpen=ref(true),hoveredDropSlot=ref(''),dropSaving=ref(false)
@@ -780,6 +782,7 @@ async function buildRefereePreMatchEntries(onProgress) {
   const rosterCache = new Map()
   const entries = []
   const warnings = new Set()
+  if (disciplinaryLoadFailed.value) warnings.add('追加处罚读取失败，本次裁判表未纳入追加停赛')
   let completed = 0
   for (let offset=0; offset<selected.length; offset+=3) {
     const batch = selected.slice(offset,offset+3)
@@ -790,7 +793,7 @@ async function buildRefereePreMatchEntries(onProgress) {
       ])
       const suspension = calculatePreMatchSuspensions({
         matches:matches.value,currentMatch:match,homeRoster:home,awayRoster:away,rules:suspensionRuleFor(match),
-        tournamentId,divisionId:String(match.divisionId || '')
+        tournamentId,divisionId:String(match.divisionId || ''),manualActions:disciplinaryActions.value
       })
       if (suspension.complete) {
         home.players.forEach(player => { if (suspension.ids.has(player.playerId)) player.note='S' })
@@ -1039,13 +1042,25 @@ function recognizedMapMatches(date,venue) { return recognitionMapRows.value.filt
 function recognitionStatusLabel(status) { return ({ ready:'可映射',planned_knockout:'淘汰赛占位待创建',pairing_only:'对阵已识别',incomplete:'排期不完整',unmatched:'未匹配' })[status] || '已识别' }
 function recognitionTagType(status) { return ({ ready:'success',planned_knockout:'warning',pairing_only:'warning',incomplete:'danger',unmatched:'danger' })[status] || 'info' }
 
-async function load() { loading.value=true; try { if(isDemoMode(tournamentId)) await callFunction('generateSchedule',{action:'repairLegacyGroupPairings',tournamentId,divisionId:String(route.query.divisionId || '')}); const [event,divisionRows,matchRows]=await Promise.all([queryById('tournaments',tournamentId),queryList('divisions',{where:{tournamentId},limit:1000,silent:true}),queryList('matches',{where:{tournamentId},limit:1000,silent:true})]); tournament.value=event || {}; divisions.value=(divisionRows?.length?divisionRows:(event?.divisions || [])).map(item=>({ ...item,id:String(item._id || item.id || 'default') })); const divisionMap=new Map(divisions.value.map(item=>[String(item.id),item.name]));matches.value=(matchRows || []).filter(item=>!item.isBye && item.status!=='cancelled' && !item.demoLegacyPairing).map(item=>({ ...item,divisionName:item.divisionName || divisionMap.get(String(item.divisionId || 'default')) || '' })); await loadTeamLogos(); applySavedConfig(event?.scheduleDraft || event?.scheduleConfig || {}); if (!Object.keys(config.divisionPolicies).length) resetPolicies() } catch(error){ElMessage.error(error.message || '赛程加载失败')} finally{loading.value=false} }
+async function load() { loading.value=true; try { if(isDemoMode(tournamentId)) await callFunction('generateSchedule',{action:'repairLegacyGroupPairings',tournamentId,divisionId:String(route.query.divisionId || '')}); const [event,divisionRows,matchRows]=await Promise.all([queryById('tournaments',tournamentId),queryList('divisions',{where:{tournamentId},limit:1000,silent:true}),queryList('matches',{where:{tournamentId},limit:1000,silent:true})]); tournament.value=event || {}; divisions.value=(divisionRows?.length?divisionRows:(event?.divisions || [])).map(item=>({ ...item,id:String(item._id || item.id || 'default') })); const divisionMap=new Map(divisions.value.map(item=>[String(item.id),item.name]));matches.value=(matchRows || []).filter(item=>!item.isBye && item.status!=='cancelled' && !item.demoLegacyPairing).map(item=>({ ...item,divisionName:item.divisionName || divisionMap.get(String(item.divisionId || 'default')) || '' })); await loadTeamLogos(); await loadDisciplinaryActions(); applySavedConfig(event?.scheduleDraft || event?.scheduleConfig || {}); if (!Object.keys(config.divisionPolicies).length) resetPolicies() } catch(error){ElMessage.error(error.message || '赛程加载失败')} finally{loading.value=false} }
 async function loadTeamLogos() {
   teamLogoMap.value=new Map()
   const ids=[...new Set(matches.value.flatMap(match=>[match.homeTeamId,match.awayTeamId].filter(Boolean).map(String)))]
   const results=await Promise.allSettled(ids.map(async id=>[id,crestSources(await queryById('teams',id))]))
   teamLogoMap.value=new Map(results.filter(result=>result.status==='fulfilled').map(result=>result.value))
   if(results.some(result=>result.status==='rejected'))console.warn('部分球队队徽资料暂未读取，保留比赛快照队徽')
+}
+async function loadDisciplinaryActions() {
+  try {
+    const rows = await queryList('disciplinary_actions',{where:{tournamentId,status:'effective'},limit:500,silent:true,throwOnError:true})
+    disciplinaryActions.value = (rows || []).filter(row => row && String(row.status || '')==='effective')
+    disciplinaryLoadFailed.value = false
+  } catch(error) {
+    disciplinaryActions.value = []
+    const message = String(error && (error.message || error.errMsg) || '')
+    disciplinaryLoadFailed.value = !/not exist|collection_not_exist|resourcenotfound|-502005/i.test(message)
+    if (disciplinaryLoadFailed.value) console.warn('追加处罚读取失败',error)
+  }
 }
 function applySavedConfig(saved) { const source=saved && typeof saved==='object'?saved:{}; config.schemaVersion=2; config.startDate=source.startDate || tournament.value.startDate || ''; config.endDate=source.endDate || tournament.value.endDate || config.startDate; config.matchDays=Array.isArray(source.matchDays)&&source.matchDays.length?[...source.matchDays]:[...weekDays]; config.matchDates=Array.isArray(source.matchDates)?source.matchDates.filter(value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value))):[]; config.sessionWindows=Array.isArray(source.sessionWindows)&&source.sessionWindows.length?source.sessionWindows.map(item=>({ ...item })):defaultSessions(); const resources=Array.isArray(source.venueResources)?source.venueResources:[]; config.venueResources=resources.map(item=>({ name:String(item.name || item.venue || ''),fieldFormat:String(item.fieldFormat || ''),startTime:String(item.startTime || ''),endTime:String(item.endTime || ''),sessionWindows:config.sessionWindows.map(session=>({ ...session })) })).filter(item=>item.name); config.defaultTurnaroundMinutes=Number(source.defaultTurnaroundMinutes ?? source.matchInterval ?? 10); config.timeStepMinutes=Number(source.timeStepMinutes || 5); selectedKickoffTimes.value=configuredKickoffTimes({...source,sessionWindows:config.sessionWindows});kickoffPeriodEnabled.value=source.kickoffPeriods || Object.fromEntries(kickoffPeriods.map(period=>[period.key,config.sessionWindows.find(session=>session.key===period.key)?.enabled ?? period.key!=='evening']));config.kickoffTimes=[...selectedKickoffTimes.value];config.frequencyPreset=source.frequencyPreset || 'adaptive'; config.finalStageExclusive=source.finalStageExclusive===true; config.divisionPolicies=JSON.parse(JSON.stringify(source.divisionPolicies || {})) }
 function payloadConfig() { const times=selectedKickoffTimes.value.length?selectedKickoffTimes.value:allKickoffTimes.value; return { ...config,kickoffTimes:times,kickoffPeriods:{...kickoffPeriodEnabled.value},matchDurations:Object.fromEntries(divisions.value.map(division=>[division.id,matchMinutes(division)])),sessionWindows:config.sessionWindows.map(item=>({ ...item })),venueResources:config.venueResources.map(item=>({ name:item.name.trim(),fieldFormat:item.fieldFormat,startTime:item.startTime || '',endTime:item.endTime || '',sessionWindows:config.sessionWindows.map(session=>({ ...session })),kickoffTimes:times })),venues:config.venueResources.map(item=>item.name.trim()).filter(Boolean),generationMode:'joint' } }

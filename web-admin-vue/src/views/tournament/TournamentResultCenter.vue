@@ -66,7 +66,18 @@
           <section class="review-gate"><h3>发布闸门</h3><div><span>比分结构</span><b :class="selectedMatch.scoreReady?'ok':'wait'">{{ selectedMatch.scoreReady ? '完整' : '待录入' }}</b></div><div><span>项目校验</span><b :class="selectedMatch.warnings?.length?'danger':'ok'">{{ selectedMatch.warnings?.length ? '需处理' : '通过' }}</b></div><div><span>主办方复核</span><b :class="selectedMatch.resultStatus==='approved'?'ok':'wait'">{{ selectedMatch.resultStatus==='approved' ? '已批准' : '未批准' }}</b></div></section>
           <el-alert v-if="selectedMatch.resultCorrection" class="correction-alert" :title="`已异常纠错：${selectedMatch.resultCorrection.reason}`" type="warning" :closable="false" show-icon />
           <el-alert v-if="selectedMatch.warnings?.length" :title="selectedMatch.warnings.join('；')" type="warning" :closable="false" show-icon />
-          <footer><el-button v-if="selectedMatch.resultStatus!=='approved'" type="success" :disabled="!selectedMatch.scoreReady" @click="openMatchResult(selectedMatch)">进入赛果复核</el-button><template v-else><el-button type="warning" plain @click="openScoreCorrection(selectedMatch)">异常纠错</el-button><el-button plain @click="openMatchResult(selectedMatch)">查看正式归档</el-button></template></footer>
+          <section class="disciplinary-panel">
+            <header><h3>纪律处罚</h3><span v-if="disciplinaryActions.length">{{ disciplinaryActions.length }} 条生效</span></header>
+            <el-alert v-if="disciplinaryError" :title="disciplinaryError" type="error" :closable="false" show-icon />
+            <p v-else-if="disciplinaryLoading" class="disciplinary-empty">处罚记录加载中…</p>
+            <p v-else-if="!disciplinaryActions.length" class="disciplinary-empty">本场暂无生效处罚</p>
+            <ul v-else><li v-for="item in disciplinaryActions" :key="item.id">
+              <div><b>{{ disciplineSubjectLabel(item) }}</b><span>{{ disciplineTypesLabel(item) }}</span></div>
+              <p>{{ item.reason }}</p>
+              <small>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}<el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></small>
+            </li></ul>
+          </section>
+          <footer><el-button plain type="danger" @click="openDisciplinary(selectedMatch)">追加处罚</el-button><el-button v-if="selectedMatch.resultStatus!=='approved'" type="success" :disabled="!selectedMatch.scoreReady" @click="openMatchResult(selectedMatch)">进入赛果复核</el-button><template v-else><el-button type="warning" plain @click="openScoreCorrection(selectedMatch)">异常纠错</el-button><el-button plain @click="openMatchResult(selectedMatch)">查看正式归档</el-button></template></footer>
         </aside>
       </section>
 
@@ -105,6 +116,44 @@
       </el-form>
       <template #footer><el-button @click="correctionVisible=false">取消</el-button><el-button type="warning" :loading="correctionSaving" @click="submitScoreCorrection">记录并更正</el-button></template>
     </el-dialog>
+    <el-dialog v-model="disciplinaryVisible" title="追加纪律处罚" width="560px">
+      <el-alert title="处罚确认后直接生效并写入审计日志；追加停赛会从处罚场次之后的该队比赛起自动顺延标记。" type="warning" :closable="false" show-icon />
+      <el-form label-position="top" class="disciplinary-form">
+        <el-form-item label="处罚对象">
+          <el-radio-group v-model="disciplinaryForm.subjectType" @change="onDisciplineSubjectChange">
+            <el-radio-button label="player">球员</el-radio-button>
+            <el-radio-button label="team">球队</el-radio-button>
+            <el-radio-button label="staff">工作人员</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="disciplinaryForm.subjectType!=='staff'" label="所属球队">
+          <el-select v-model="disciplinaryForm.teamId" placeholder="选择本场主客队" style="width:100%"><el-option v-for="team in disciplineTeamOptions" :key="team.teamId" :label="team.teamName" :value="team.teamId" /></el-select>
+        </el-form-item>
+        <template v-if="disciplinaryForm.subjectType==='player'">
+          <el-form-item label="处罚球员">
+            <el-select v-if="disciplinaryRoster.length" v-model="disciplinaryForm.playerId" filterable :loading="disciplinaryRosterLoading" placeholder="从本队名单选择球员" style="width:100%" @change="onDisciplinePlayerChange">
+              <el-option v-for="player in disciplinaryRoster" :key="player.playerId" :label="`${player.number ? player.number+'号 ' : ''}${player.name}`" :value="player.playerId" />
+            </el-select>
+            <el-input v-else v-model="disciplinaryForm.playerName" maxlength="40" placeholder="填写受处罚球员姓名" />
+          </el-form-item>
+          <el-form-item v-if="!disciplinaryRoster.length" label="球员编号（追加停赛时必填）"><el-input v-model="disciplinaryForm.playerId" maxlength="60" placeholder="球员在赛事名单中的稳定编号" /></el-form-item>
+          <el-alert v-if="disciplinaryRosterError" :title="`${disciplinaryRosterError}，可手工填写球员编号`" type="info" :closable="false" show-icon />
+        </template>
+        <el-form-item v-else-if="disciplinaryForm.subjectType==='staff'" label="工作人员姓名"><el-input v-model="disciplinaryForm.personName" maxlength="40" placeholder="填写受处罚工作人员姓名" /></el-form-item>
+        <el-form-item label="处罚类型（可多选）">
+          <el-checkbox-group v-model="disciplinaryForm.types">
+            <el-checkbox label="suspension">追加停赛</el-checkbox>
+            <el-checkbox label="fine">罚款</el-checkbox>
+            <el-checkbox label="warning">警告/通报</el-checkbox>
+            <el-checkbox label="disqualification">取消参赛资格</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item v-if="disciplinaryForm.types.includes('suspension')" label="停赛场次"><el-input-number v-model="disciplinaryForm.suspensionMatches" :min="1" :max="99" :step="1" controls-position="right" /></el-form-item>
+        <el-form-item v-if="disciplinaryForm.types.includes('fine')" label="罚款金额（元）"><el-input-number v-model="disciplinaryForm.fineAmount" :min="0.01" :max="999999" :precision="2" :step="100" controls-position="right" /></el-form-item>
+        <el-form-item label="处罚原因（必填，2-300字）"><el-input v-model="disciplinaryForm.reason" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="例如：赛后冲突中推搡对方球员。" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="disciplinaryVisible=false">取消</el-button><el-button type="danger" :loading="disciplinarySaving" @click="submitDisciplinary">确认追加</el-button></template>
+    </el-dialog>
   </main>
 </template>
 
@@ -118,7 +167,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheckFilled, Clock, DataAnalysis, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
-import { callFunction } from '../../utils/cloud'
+import { callFunction, queryById, rosterExceptionBoard } from '../../utils/cloud'
 import TournamentBracket from '../../components/tournament/TournamentBracket.vue'
 import TournamentScorebook from '../../components/tournament/TournamentScorebook.vue'
 import TournamentEventRankings from '../../components/tournament/TournamentEventRankings.vue'
@@ -273,6 +322,117 @@ async function submitScoreCorrection(){
     await loadDashboard()
   }catch(error){if(error!=='cancel'&&error!=='close')ElMessage.error(error.message||'比分更正失败')}finally{correctionSaving.value=false}
 }
+const disciplinaryActions = ref([])
+const disciplinaryLoading = ref(false)
+const disciplinaryError = ref('')
+const disciplinaryVisible = ref(false)
+const disciplinarySaving = ref(false)
+const disciplinaryMatch = ref(null)
+const disciplineTypeLabels = { suspension:'追加停赛', fine:'罚款', warning:'警告/通报', disqualification:'取消参赛资格' }
+const disciplinaryForm = ref({ subjectType:'player', teamId:'', playerName:'', playerId:'', personName:'', types:['warning'], suspensionMatches:1, fineAmount:100, reason:'' })
+const disciplinaryRoster = ref([])
+const disciplinaryRosterLoading = ref(false)
+const disciplinaryRosterError = ref('')
+const disciplineTeamOptions = computed(() => {
+  const row = disciplinaryMatch.value
+  if (!row) return []
+  return [[row.homeTeamId,row.homeTeamName],[row.awayTeamId,row.awayTeamName]].filter(([id])=>id).map(([teamId,teamName])=>({ teamId:String(teamId), teamName:String(teamName||'球队') }))
+})
+function disciplineTypesLabel(item){
+  const labels = (item.types || []).map(type => type==='suspension' ? `停赛${Number(item.suspensionMatches||0)}场` : type==='fine' ? `罚款¥${Number(item.fineAmount||0)}` : disciplineTypeLabels[type] || type)
+  return labels.join(' · ') || '纪律处罚'
+}
+function disciplineSubjectLabel(item){
+  if(item.subjectType==='player') return `${item.teamName?`${item.teamName} · `:''}${item.playerName||'球员未记录'}${item.playerId?`（${item.playerId}）`:''}`
+  if(item.subjectType==='staff') return `工作人员 ${item.personName||'未记录'}`
+  return item.teamName || '球队'
+}
+async function loadDisciplinaryActions(){
+  const matchId = selectedMatch.value?.id || ''
+  if(!matchId){ disciplinaryActions.value=[]; disciplinaryError.value=''; return }
+  disciplinaryLoading.value=true; disciplinaryError.value=''
+  try{
+    const result = await callFunction('resultCenter',{ action:'listDisciplinaryActions', tournamentId, matchId })
+    if(!result?.success) throw new Error(result?.message||result?.error||'处罚记录加载失败')
+    if(selectedMatch.value?.id===matchId) disciplinaryActions.value=result.actions||[]
+  }catch(error){
+    if(selectedMatch.value?.id===matchId){ disciplinaryActions.value=[]; disciplinaryError.value=error.message||'处罚记录加载失败' }
+  }finally{ if(selectedMatch.value?.id===matchId) disciplinaryLoading.value=false }
+}
+function openDisciplinary(row){
+  if(!row) return ElMessage.warning('请先选择比赛')
+  disciplinaryMatch.value = row
+  const firstTeam = disciplineTeamOptions.value[0]?.teamId || ''
+  disciplinaryForm.value = { subjectType:'player', teamId:firstTeam, playerName:'', playerId:'', personName:'', types:['warning'], suspensionMatches:1, fineAmount:100, reason:'' }
+  disciplinaryRoster.value = []; disciplinaryRosterError.value = ''
+  disciplinaryVisible.value = true
+  loadDisciplinaryRoster()
+}
+function onDisciplineSubjectChange(){
+  const form = disciplinaryForm.value
+  if(form.subjectType==='staff'){ form.teamId=''; form.playerName=''; form.playerId=''; disciplinaryRoster.value=[]; disciplinaryRosterError.value='' }
+  else { form.personName=''; if(!form.teamId) form.teamId = disciplineTeamOptions.value[0]?.teamId || ''; loadDisciplinaryRoster() }
+}
+// 处罚球员优先从本队已审核名单选择，保证追加停赛能定位到稳定球员编号；名单读取失败时退回手工填写。
+async function loadDisciplinaryRoster(){
+  const form = disciplinaryForm.value, row = disciplinaryMatch.value
+  disciplinaryRoster.value = []; disciplinaryRosterError.value = ''
+  if(form.subjectType!=='player' || !row || !form.teamId) return
+  disciplinaryRosterLoading.value = true
+  try{
+    const divisionId = String(row.divisionId || '')
+    let result = await rosterExceptionBoard({ tournamentId, teamId:form.teamId, divisionId, rosterAction:'listRoster' })
+    if(!result?.success){
+      // 比赛里保存的可能是参赛关系编号，按 tournament_teams 解析为球队编号后重试一次。
+      const direct = await queryById('tournament_teams', form.teamId).catch(() => null)
+      const relation = Array.isArray(direct) ? direct[0] || null : direct
+      const teamId = String(relation?.teamId || '')
+      if(teamId && teamId!==form.teamId) result = await rosterExceptionBoard({ tournamentId, teamId, divisionId, rosterAction:'listRoster' })
+    }
+    if(!result?.success) throw new Error(result?.error || '球队名单读取失败')
+    disciplinaryRoster.value = (result.rows || []).map(player => ({ playerId:String(player.id || player._id || ''), name:String(player.name || ''), number:String(player.jerseyNumber || '') })).filter(player => player.playerId && player.name)
+  }catch(error){ disciplinaryRosterError.value = error.message || '球队名单读取失败，请手工填写球员编号' }
+  finally{ disciplinaryRosterLoading.value = false }
+}
+function onDisciplinePlayerChange(playerId){
+  const player = disciplinaryRoster.value.find(item => item.playerId===String(playerId || ''))
+  if(player) disciplinaryForm.value.playerName = player.name
+}
+async function submitDisciplinary(){
+  const form = disciplinaryForm.value
+  if(!form.types.length) return ElMessage.warning('请选择处罚类型')
+  if(form.subjectType!=='staff' && !form.teamId) return ElMessage.warning('请选择处罚所属球队')
+  if(form.subjectType==='player'){
+    if(!String(form.playerName||'').trim()) return ElMessage.warning('请填写处罚球员姓名')
+    // 追加停赛必须能定位到具体球员，否则自动停赛无法标记
+    if(form.types.includes('suspension') && !String(form.playerId||'').trim()) return ElMessage.warning('追加停赛须填写球员编号，否则无法自动标记后续停赛')
+  }
+  if(form.subjectType==='staff' && !String(form.personName||'').trim()) return ElMessage.warning('请填写受处罚工作人员姓名')
+  const suspensionMatches = Number(form.suspensionMatches)
+  if(form.types.includes('suspension') && (!Number.isInteger(suspensionMatches) || suspensionMatches<1 || suspensionMatches>99)) return ElMessage.warning('停赛场次须为1至99的整数')
+  const fineAmount = Number(form.fineAmount)
+  if(form.types.includes('fine') && (!Number.isFinite(fineAmount) || fineAmount<0.01 || fineAmount>999999)) return ElMessage.warning('罚款金额须在0.01至999999之间')
+  const reason = String(form.reason||'').trim()
+  if(reason.length<2 || reason.length>300) return ElMessage.warning('处罚原因须为2至300个字符')
+  disciplinarySaving.value = true
+  try{
+    const result = await callFunction('resultCenter',{ action:'createDisciplinaryAction', tournamentId, matchId:disciplinaryMatch.value?.id, subjectType:form.subjectType, teamId:form.teamId, playerName:String(form.playerName||'').trim(), playerId:String(form.playerId||'').trim(), personName:String(form.personName||'').trim(), types:[...form.types], suspensionMatches, fineAmount, reason })
+    if(!result?.success) throw new Error(result?.message||result?.error||'处罚保存失败')
+    disciplinaryVisible.value = false
+    ElMessage.success(result.unverified?.length ? '处罚已生效；球员编号未在服务端核验' : '处罚已生效')
+    await loadDisciplinaryActions()
+  }catch(error){ ElMessage.error(error.message||'处罚保存失败') }
+  finally{ disciplinarySaving.value=false }
+}
+async function revokeDisciplinary(item){
+  try{
+    const response = await ElMessageBox.prompt('撤销后该处罚不再生效，记录和撤销原因会保留。','撤销处罚',{ confirmButtonText:'确认撤销', cancelButtonText:'取消', inputType:'textarea', inputPlaceholder:'填写撤销原因（2-300字）', inputValidator:value => (String(value||'').trim().length>=2 && String(value||'').trim().length<=300) || '撤销原因须为2至300个字符' })
+    const result = await callFunction('resultCenter',{ action:'revokeDisciplinaryAction', tournamentId, id:item.id, reason:String(response.value||'').trim() })
+    if(!result?.success) throw new Error(result?.message||result?.error||'撤销失败')
+    ElMessage.success(result.message||'处罚已撤销')
+    await loadDisciplinaryActions()
+  }catch(error){ if(error!=='cancel'&&error!=='close') ElMessage.error(error.message||'撤销失败') }
+}
 async function publishStandings(){try{await ElMessageBox.confirm('发布将生成不可变积分榜快照；待复核比分不会进入正式榜单。确认继续？','发布正式积分榜',{type:'warning',confirmButtonText:'生成发布快照',cancelButtonText:'取消'});publishing.value=true;const result=await callFunction('resultCenter',{action:'publishStandings',tournamentId,divisionId:divisionFilter.value});if(!result?.success)throw new Error(result?.message||'发布失败');ElMessage.success(result.message);await loadDashboard()}catch(error){if(error!=='cancel'&&error!=='close')ElMessage.error(error.message||'发布失败')}finally{publishing.value=false} }
 async function printReport(){await nextTick();if(!reportPoster.value)return;const popup=window.open('','_blank','width=760,height=1140');if(!popup)return ElMessage.warning('浏览器拦截了打印窗口，请允许弹窗后重试');popup.document.write(`<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>足球赛事战报</title><style>*{box-sizing:border-box}body{margin:0;padding:24px;background:#eef2ef;font-family:Arial,"Microsoft YaHei",sans-serif}.report-poster{width:1080px;min-height:1620px;margin:auto;padding:76px 70px 50px;border-radius:24px;color:#fff;background:#064b2b url('/admin/images/report/emerald-stadium-v1.png') center/cover no-repeat}.report-poster.navy{background-color:#071b4e;background-image:url('/admin/images/report/navy-broadcast-v1.png')}.report-poster.paper{color:#10213f;background-color:#fff;background-image:url('/admin/images/report/paper-cobalt-v1.png');border:1px solid #dbe5f2}.poster-header{text-align:center}.poster-brand{display:flex;align-items:center;justify-content:center;gap:10px;font-size:15px;letter-spacing:.16em}.poster-brand-mark{display:grid;width:36px;height:36px;place-items:center;border:1px solid currentColor;border-radius:50%;font-size:12px;font-weight:800;letter-spacing:0}.poster-kicker{margin:28px 0 12px;font-size:14px;letter-spacing:.18em;opacity:.75}.poster-header h2{margin:0;font-size:42px;line-height:1.25}.poster-date{margin:16px 0 0;font-size:16px;opacity:.78}.poster-date i{font-style:normal;margin:0 8px}.poster-matches{margin-top:48px}.poster-match{padding:24px 0;border-top:1px solid rgba(255,255,255,.23)}.paper .poster-match{border-color:#cbd9eb}.poster-match-meta{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;font-size:13px;opacity:.72}.poster-match-meta>span{font-size:18px;font-weight:800;letter-spacing:.08em}.poster-scoreline{display:grid;grid-template-columns:1fr 230px 1fr;align-items:center;gap:18px}.poster-team{display:flex;align-items:center;gap:16px;min-width:0;font-size:22px;font-weight:800}.poster-team.away{justify-content:flex-end;text-align:right}.poster-crest{display:grid;width:68px;height:68px;flex:none;place-items:center;border:1px solid rgba(255,255,255,.44);border-radius:18px;background:rgba(255,255,255,.12)}.paper .poster-crest{border-color:#c2d1e4;background:#f3f7fc}.poster-crest img{width:54px;height:54px;object-fit:contain}.poster-crest b{font-size:27px}.poster-score-block{display:grid;grid-template-columns:1fr 20px 1fr;align-items:center;text-align:center}.poster-score-block b{font-size:56px;line-height:1}.poster-score-block em{font-size:34px;font-style:normal;opacity:.75}.poster-score-block small{grid-column:1/-1;margin-top:10px;font-size:12px;opacity:.68}.poster-scorers{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0 0;padding:13px 16px;border-radius:12px;background:rgba(0,0,0,.18);font-size:13px}.paper .poster-scorers{background:rgba(25,82,143,.08)}.poster-scorers>div{display:grid;gap:5px}.poster-scorers>div:last-child{text-align:right}.poster-scorers small{font-size:11px;opacity:.68}.poster-scorers span{font-weight:650}.poster-scorers i{margin-left:4px;font-style:normal;opacity:.78}.poster-scorers .muted{opacity:.58}.poster-footer{display:flex;justify-content:space-between;gap:20px;margin-top:38px;padding-top:17px;border-top:1px solid rgba(255,255,255,.25);font-size:12px;opacity:.72}.paper .poster-footer{border-color:#cbd9eb}@page{size:1080px 1620px;margin:0}@media print{body{padding:0;background:#fff}.report-poster{width:1080px;min-height:1620px;border-radius:0}}</style></head><body>${reportPoster.value.outerHTML}<script>setTimeout(()=>window.print(),300)<\/script></body></html>`);popup.document.close()}
 
@@ -304,6 +464,12 @@ async function exportReportPng(){
 watch(activeTab,value=>router.replace({query:{...route.query,tab:value}}))
 watch(divisionFilter,value=>router.replace({query:{...route.query,divisionId:value||undefined}}))
 watch(visibleMatches,rows=>{if(rows.length&&!rows.some(row=>row.id===selectedMatchId.value))selectedMatchId.value=rows[0].id})
+watch(() => selectedMatch.value?.id, () => loadDisciplinaryActions(), { immediate:true })
+watch(() => disciplinaryForm.value.teamId, (value, previous) => {
+  if(!disciplinaryVisible.value || value===previous) return
+  disciplinaryForm.value.playerId = ''; disciplinaryForm.value.playerName = ''
+  if(!disciplinaryRosterLoading.value) loadDisciplinaryRoster()
+})
 onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.query,tab:'standings'}});loadDashboard()})
 </script>
 
@@ -375,6 +541,7 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 <style scoped>
 .portrait-poster.paper .poster-header{padding:12px 10px;background:rgba(255,255,255,.82);border-radius:12px}
 .penalty-rounds{padding:8px 16px 14px;border-bottom:1px solid #e5ebe7;font-size:12px}.penalty-rounds>strong{display:block;margin-bottom:6px}.penalty-rounds>div{display:grid;grid-template-columns:72px 1fr 1fr;gap:8px;padding:3px 0}.penalty-rounds>div span:not(:first-child){text-align:center}
+.disciplinary-panel{margin:14px 18px 0;padding:12px 14px;border-top:1px solid #edf0ee;border-radius:8px;background:#fbfcfb}.disciplinary-panel>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.disciplinary-panel h3{margin:0;font-size:14px}.disciplinary-panel header>span{color:#bd4b36;font-size:11px}.disciplinary-empty{margin:0;color:#7b877f;font-size:12px}.disciplinary-panel ul{display:grid;gap:9px;margin:0;padding:0;list-style:none}.disciplinary-panel li{padding:8px 10px;border:1px solid #f1e2dc;border-radius:7px;background:#fff}.disciplinary-panel li>div{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px}.disciplinary-panel li b{color:#25332a}.disciplinary-panel li span{flex:none;padding:2px 7px;border-radius:99px;color:#b6422b;background:#fdeee9;font-size:11px}.disciplinary-panel li p{margin:5px 0 4px;color:#4f5d54;font-size:12px;line-height:1.5}.disciplinary-panel li small{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#8a958d;font-size:11px}.disciplinary-form{margin-top:16px}
 </style>
 <style scoped>
 .board-poster{width:min(100%,620px);min-height:930px;aspect-ratio:2/3;margin:0 auto;padding:28px 28px 20px;border-radius:14px;color:#fff;background:#0b326b url('/admin/images/report/flat-blue-v1.png') center/cover no-repeat;box-shadow:0 18px 42px rgba(6,37,79,.18);overflow:hidden}.board-poster.emerald{background-color:#0d4b2d;background-image:url('/admin/images/report/flat-green-v1.png')}.board-poster.paper{color:#14284d;background-color:#f7f5ee;background-image:url('/admin/images/report/flat-white-v2.png');border:1px solid #dbe2e8;box-shadow:0 18px 42px rgba(34,51,72,.12)}.board-header{min-height:124px;text-align:center}.board-tournament-slot{min-height:76px;display:grid;place-items:center;padding:4px 10px}.board-tournament-slot h2{margin:0;font-size:25px;line-height:1.25;font-weight:750;letter-spacing:.04em}.board-date{margin:8px 0 0;font-size:13px;letter-spacing:.12em;opacity:.82}.board-matches{margin-top:10px}.board-match{padding:0 0 16px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.28)}.board-poster.paper .board-match{border-color:#bfcfe0}.board-match-meta{display:flex;justify-content:center;align-items:center;gap:7px;min-height:22px;margin-bottom:4px;font-size:11px;letter-spacing:.08em;font-weight:700}.board-match-meta i{font-style:normal;opacity:.64}.board-match-main{display:grid;grid-template-columns:1fr 108px 1fr;align-items:center;gap:8px;min-height:70px}.board-team{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 9px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.92);color:#0d3368;clip-path:polygon(0 0,96% 0,100% 50%,96% 100%,0 100%);font-size:14px;font-weight:800}.board-team.away{justify-content:flex-end;text-align:right;clip-path:polygon(4% 0,100% 0,100% 100%,4% 100%,0 50%)}.board-poster.emerald .board-team{border-color:#d8bc70;background:rgba(13,65,40,.52);color:#fff4d5;clip-path:none}.board-poster.emerald .board-team.away{clip-path:none}.board-poster.paper .board-team{border-color:#1853a3;background:rgba(255,255,255,.74);color:#133c78}.board-crest{display:grid;width:40px;height:40px;flex:none;place-items:center;border:2px solid #fff;border-radius:50%;background:#f9fbff;overflow:hidden}.board-poster.emerald .board-crest{border-color:#d8bc70;background:#0b4a2d}.board-poster.paper .board-crest{border-color:#1853a3}.board-crest img{width:33px;height:33px;object-fit:contain}.board-crest b{font-size:17px}.board-score{display:grid;grid-template-columns:1fr 13px 1fr;align-items:center;min-height:70px;padding:8px 8px;text-align:center;background:#075acb;color:#fff;clip-path:polygon(10% 0,90% 0,100% 50%,90% 100%,10% 100%,0 50%)}.board-poster.emerald .board-score{background:#123f2b;border:1px solid #d8bc70;color:#fff4d5}.board-poster.paper .board-score{background:#1853a3;color:#fff}.board-score b{font-size:27px;line-height:1}.board-score em{font-style:normal;font-size:18px;opacity:.8}.board-score small{grid-column:1/-1;margin-top:3px;font-size:9px;opacity:.82}.board-scorers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 4px 0;padding:7px 9px;border-top:1px solid rgba(255,255,255,.3);font-size:10px}.board-poster.paper .board-scorers{border-color:#bfcfe0}.board-scorers>div{display:grid;gap:3px}.board-scorers>div:last-child{text-align:right}.board-scorers small{font-size:9px;opacity:.75}.board-scorers span{font-weight:650}.board-scorers i{font-style:normal;margin-left:3px;opacity:.8}.board-scorers .muted{opacity:.58}.board-footer{display:flex;justify-content:space-between;gap:10px;margin-top:15px;padding-top:10px;border-top:1px solid rgba(255,255,255,.32);font-size:9px;opacity:.72}.board-poster.paper .board-footer{border-color:#bfcfe0}.board-poster.score-only .board-match{padding-bottom:13px;margin-bottom:10px}.board-poster.score-only .board-match-main{min-height:64px}.board-poster.score-only .board-score{min-height:64px}@media(max-width:760px){.board-poster{width:100%;min-height:0;padding:23px 18px 16px}.board-header{min-height:110px}.board-tournament-slot{min-height:65px}.board-tournament-slot h2{font-size:21px}.board-date{font-size:11px}.board-match-main{grid-template-columns:1fr 92px 1fr}.board-team{font-size:12px;padding:6px}.board-crest{width:34px;height:34px}.board-crest img{width:28px;height:28px}.board-score{min-height:62px}.board-score b{font-size:23px}}

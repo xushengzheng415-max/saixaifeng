@@ -29,7 +29,7 @@ function relayRights(name, params = {}) {
   }
   if (name === 'resultCenter') {
     if (action === 'dashboard') return { any: ['event.dashboard', 'event.results', 'event.news', 'news.edit', 'news.publish'] }
-    if (action === 'staffMatches' || action === 'supplementResult') return { any: ['event.results', 'result.supplement'] }
+    if (['staffMatches', 'supplementResult', 'listDisciplinaryActions', 'createDisciplinaryAction', 'revokeDisciplinaryAction'].includes(action)) return { any: ['event.results', 'result.supplement'] }
     return ['resolvePairingSources', 'publishStandings', 'correctArchivedScore'].includes(action) ? ['event.results'] : null
   }
   if (name === 'newsPreviewGenerate') return ['event.news']
