@@ -25,7 +25,7 @@ const props = defineProps({ modelValue: { type: Array, required: true }, firstSi
 const emit = defineEmits(['update:modelValue', 'update:firstSide'])
 const choices = [{ value: '', label: '—' }, { value: 'scored', label: '进' }, { value: 'missed', label: '未进' }]
 const outcome = computed(() => evaluatePenaltyShootout(props.modelValue, props.firstSide))
-const canAddRound = computed(() => outcome.value.canAddRound)
+const canAddRound = computed(() => outcome.value.canAddRound && props.modelValue.every(row => row.home && row.away))
 function setKick(index, side, value) { const rows = props.modelValue.map(row => ({ ...row })); rows[index][side] = value; emit('update:modelValue', rows) }
 function addRound() { emit('update:modelValue', [...props.modelValue, { round: props.modelValue.length + 1, home: '', away: '' }]) }
 </script>
