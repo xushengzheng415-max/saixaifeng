@@ -78,6 +78,12 @@ function goalCellInvalid(value){return String(value).trim()!==''&&(!/^\d{1,3}$/.
 function updateGoals(row){row.goals=row.goalMinutes.map(value=>String(value).trim()).filter(Boolean).join(',');row.goalsEdited=true;error.value=''}
 function addGoal(row){initGoals(row);row.goalMinutes.push('')}
 function removeGoal(row,index){row.goalMinutes.splice(index,1);if(!row.goalMinutes.length)row.goalMinutes.push('');updateGoals(row)}
+function recognitionErrorMessage(reason){
+  const message=String(reason?.message || reason || '')
+  if(/FUNCTIONS_MEMORY_LIMIT_EXCEEDED|Task memory exceeded/i.test(message))return '图片识别资源不足，原图已保留，请点击“重试”；若仍失败请重新上传'
+  if(/FUNCTIONS_TIME_LIMIT_EXCEEDED|task timeout|timed out/i.test(message))return '图片识别超时，原图已保留，请点击“重试”'
+  return message || '识别失败，请重试'
+}
 function fieldIssue(row,key){const value=String(row[key] ?? '').trim();return Boolean(value&&(!minutes(value).length||minutes(value).some(minute=>minute>150)))}
 function rowNotes(row){return (row.reviewNotes || []).filter(note=>!(row.goalsEdited&&!row.goalMinutes.some(goalCellInvalid)&&/进球|圈号/.test(note)))}
 function goalCount(team){return (draft.value?.teams[team] || []).filter(row=>!['absent','skip'].includes(row.role)).reduce((sum,row)=>sum+(row.goalMinutes || []).filter(value=>String(value).trim()!==''&&!goalCellInvalid(value)).length,0)}
@@ -165,7 +171,7 @@ async function recognize(){
       }
     }
     pairSubstitutions()
-  }catch(e){if(current===generation)error.value=e.message||'识别失败，请重试'}finally{if(current===generation){busy.value=false;if(draft.value)await saveDraft(false)}}
+  }catch(e){if(current===generation)error.value=recognitionErrorMessage(e)}finally{if(current===generation){busy.value=false;if(draft.value)await saveDraft(false)}}
 }
 function clearPairError(){error.value='';pairValidationMessage.value='';pairErrorIndex.value=-1;pairErrorPlayerId.value=''}
 function pairSubstitutions(){

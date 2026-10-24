@@ -1,5 +1,9 @@
 # 数据入口登记
 
+## 裁判表识别内存峰值与错误提示（2026-10-24）
+
+PC继续通过webLoginApi.recognizeRefereeReport读取本场授权照片，身份、赛事范围、正式名单和保存签名校验不变。refereeReportOcr基于线上analysis/7识别链路，将原图表格识别与文字识别分阶段执行，主客队局部图串行处理，避免多份Base64、原生图片处理器及OCR响应同时驻留；识别候选、局部复识别、圈号分钟和人工确认边界不变。识别返回不再携带未使用的原图Buffer。webLoginApi生产内存由256MB调整为512MB，运行时、入口、超时及环境变量保持线上配置。PC将平台内存/超时英文错误转换为可重试中文提示，不把错误文本当识别结果或比赛事实。
+
 ## 赛程地图队徽完整显示（2026-10-24）
 
 TournamentScheduleV2使用ScheduleTeamCrest等比完整显示队徽，移除圆形裁切、边框和白底。候选顺序保留比赛快照优先，再尝试现有球队资料；兼容透明队徽、logoFileID/logoFileId/logoCloudFileId及旧URL，通过现有getFileUrl链路解析cloud文件ID，单张失败继续下一地址，不因一支球队资料失败清空其他队徽。请求仍走webLoginApi、既有teams读取权限及uploadFile临时URL授权，不新增数据库写入，不修改参赛快照或比分。缺失/失败显示占位及悬停状态，不再以队名首字伪装队徽。
