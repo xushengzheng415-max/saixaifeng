@@ -10,7 +10,7 @@
       <el-tab-pane label="转会记录" name="transfers" />
     </el-tabs>
     <PlayerPointsAppeals v-if="activeTab==='appeals'" ref="appealsRef" />
-    <PenaltyBoard v-else-if="activeTab==='penalties'" />
+    <PenaltyBoard v-else-if="activeTab==='penalties'" :players="penaltyPlayers" />
     <template v-else-if="activeTab === 'playerAudit'">
       <div class="audit-queue-head"><div><strong>{{ auditQueue ? '待核验 ' + auditQueue.issueCount + ' 人' : '尚未扫描' }}</strong><span v-if="auditQueue">已核定 {{ auditQueue.verifiedCount }} / {{ auditQueue.totalPlayers }}</span><small v-if="auditQueue?.generatedAt">上次扫描 {{ dateText(auditQueue.generatedAt) }}</small></div><el-button :loading="auditQueueLoading" @click="loadAuditQueue">{{ auditQueue ? '重新扫描' : '扫描异常' }}</el-button></div>
       <el-alert v-if="auditQueueError" :title="auditQueueError" type="error" :closable="false" show-icon />
@@ -113,6 +113,7 @@ const scopedPlayers = computed(()=>catalog.players.filter(player=>String(player.
 const filteredAuditIssues = computed(()=>{const key=auditKeyword.value.trim().toLocaleLowerCase();return (auditQueue.value?.issues||[]).filter(row=>!key||[row.playerName,row.teamName,row.playerId,...(row.missing||[]).map(missingLabel)].some(value=>String(value||'').toLocaleLowerCase().includes(key)))})
 const number = value => typeof value === 'number' && Number.isFinite(value) ? value : '—'
 const teamName = id => catalog.teams.find(row => row.id === id)?.name || id
+const penaltyPlayers = computed(()=>catalog.players.map(player=>({id:player.id,name:player.name,teamId:player.teamId,teamName:teamName(player.teamId)})))
 const playerName = id => catalog.players.find(row => row.id === id)?.name || id
 const tournamentName = id => catalog.tournaments.find(row => row.id === id)?.name || id
 const divisionLabel = (id,name='') => name || result.value?.standings?.find(row=>String(row.divisionId)===String(id))?.divisionName || (String(id||'')==='default'?'默认组别':'组别名称待核对')

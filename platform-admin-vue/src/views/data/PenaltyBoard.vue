@@ -58,7 +58,12 @@
             <el-radio label="staff">工作人员</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="createForm.subjectType === 'player'" label="球员姓名">
+        <el-form-item v-if="createForm.subjectType === 'player'" label="球员">
+          <el-select v-model="createForm.playerId" filterable clearable :loading="catalogLoading" placeholder="从球员库选择，或留空手填姓名" style="width:100%" @change="pickPlayer">
+            <el-option v-for="item in playerOptions" :key="item.id" :label="item.label" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="createForm.subjectType === 'player' && !createForm.playerId" label="球员姓名">
           <el-input v-model="createForm.playerName" maxlength="40" />
         </el-form-item>
         <el-form-item v-if="createForm.subjectType === 'staff'" label="人员姓名">
@@ -131,9 +136,11 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction } from '../../utils/cloud'
+
+const props = defineProps({ players: { type: Array, default: () => [] } })
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -146,9 +153,21 @@ const reviewRow = ref(null)
 const reviewForm = reactive({ decision: 'approve', banDuration: 'months3', reviewNote: '' })
 const createVisible = ref(false)
 const createSubmitting = ref(false)
-const createForm = reactive({ tournamentId: '', subjectType: 'player', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
+const createForm = reactive({ tournamentId: '', subjectType: 'player', playerId: '', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
 const tournamentOptions = ref([])
 const tournamentLoading = ref(false)
+const catalogLoading = computed(() => !props.players.length)
+const playerOptions = computed(() => props.players
+  .map(item => ({ id: String(item.id || ''), label: [item.name, item.teamName].filter(Boolean).join(' · '), teamId: String(item.teamId || ''), teamName: String(item.teamName || ''), name: String(item.name || '') }))
+  .filter(item => item.id && item.name))
+
+function pickPlayer(playerId) {
+  const found = playerOptions.value.find(item => item.id === String(playerId || ''))
+  if (!found) return
+  createForm.playerName = found.name
+  if (found.teamId) createForm.teamId = found.teamId
+  if (found.teamName) createForm.teamName = found.teamName
+}
 
 async function loadTournaments() {
   if (tournamentOptions.value.length || tournamentLoading.value) return
@@ -165,7 +184,7 @@ async function loadTournaments() {
 }
 
 function openCreate() {
-  Object.assign(createForm, { tournamentId: '', subjectType: 'player', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
+  Object.assign(createForm, { tournamentId: '', subjectType: 'player', playerId: '', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
   createVisible.value = true
   loadTournaments()
 }
@@ -173,7 +192,7 @@ function openCreate() {
 async function submitCreate() {
   if (createSubmitting.value) return
   if (!String(createForm.tournamentId || '').trim()) return ElMessage.warning('请填写赛事编号')
-  if (createForm.subjectType === 'player' && !String(createForm.playerName || '').trim()) return ElMessage.warning('请填写球员姓名')
+  if (createForm.subjectType === 'player' && !String(createForm.playerName || '').trim()) return ElMessage.warning('请选择球员或填写球员姓名')
   if (createForm.subjectType === 'staff' && !String(createForm.personName || '').trim()) return ElMessage.warning('请填写人员姓名')
   if (!createForm.types.length) return ElMessage.warning('请选择违纪类型')
   if (String(createForm.reason || '').trim().length < 4) return ElMessage.warning('处罚决定不少于 4 个字')
@@ -183,6 +202,7 @@ async function submitCreate() {
       action: 'createPenalty',
       tournamentId: String(createForm.tournamentId || '').trim(),
       subjectType: createForm.subjectType,
+      playerId: String(createForm.playerId || '').trim(),
       playerName: createForm.playerName,
       personName: createForm.personName,
       teamName: createForm.teamName,
