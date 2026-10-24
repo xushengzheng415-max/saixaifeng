@@ -47,7 +47,9 @@
     <el-dialog v-model="createVisible" title="登记平台处罚" width="min(600px, 94vw)" :close-on-click-modal="false">
       <el-form label-width="100px">
         <el-form-item label="赛事编号">
-          <el-input v-model="createForm.tournamentId" placeholder="从赛事中心复制赛事 ID" />
+          <el-select v-model="createForm.tournamentId" filterable allow-create default-first-option :loading="tournamentLoading" placeholder="选择赛事，或直接粘贴赛事 ID" style="width:100%">
+            <el-option v-for="item in tournamentOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="处罚对象">
           <el-radio-group v-model="createForm.subjectType">
@@ -129,7 +131,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction } from '../../utils/cloud'
 
@@ -145,10 +147,27 @@ const reviewForm = reactive({ decision: 'approve', banDuration: 'months3', revie
 const createVisible = ref(false)
 const createSubmitting = ref(false)
 const createForm = reactive({ tournamentId: '', subjectType: 'player', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
+const tournamentOptions = ref([])
+const tournamentLoading = ref(false)
+
+async function loadTournaments() {
+  if (tournamentOptions.value.length || tournamentLoading.value) return
+  tournamentLoading.value = true
+  try {
+    const reply = await callFunction('manageTournamentCenterContent', { action: 'overview' })
+    if (!reply || !reply.success) return
+    tournamentOptions.value = ((reply.data || {}).tournaments || [])
+      .map(row => ({ id: String(row._id || row.id || ''), name: String(row.name || row.title || row._id || '') }))
+      .filter(item => item.id)
+  } catch (error) {
+    console.error('[penalty] 赛事列表加载失败', error)
+  } finally { tournamentLoading.value = false }
+}
 
 function openCreate() {
   Object.assign(createForm, { tournamentId: '', subjectType: 'player', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
   createVisible.value = true
+  loadTournaments()
 }
 
 async function submitCreate() {
