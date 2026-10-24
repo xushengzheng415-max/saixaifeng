@@ -6,9 +6,11 @@
       <el-tab-pane label="统一统计" name="statistics" />
       <el-tab-pane label="数据质量" name="quality" />
       <el-tab-pane v-if="platformOwner" label="积分申诉" name="appeals" />
+      <el-tab-pane v-if="platformOwner" label="处罚与黑名单" name="penalties" />
       <el-tab-pane label="转会记录" name="transfers" />
     </el-tabs>
     <PlayerPointsAppeals v-if="activeTab==='appeals'" ref="appealsRef" />
+    <PenaltyBoard v-else-if="activeTab==='penalties'" />
     <template v-else-if="activeTab === 'playerAudit'">
       <div class="audit-queue-head"><div><strong>{{ auditQueue ? '待核验 ' + auditQueue.issueCount + ' 人' : '尚未扫描' }}</strong><span v-if="auditQueue">已核定 {{ auditQueue.verifiedCount }} / {{ auditQueue.totalPlayers }}</span><small v-if="auditQueue?.generatedAt">上次扫描 {{ dateText(auditQueue.generatedAt) }}</small></div><el-button :loading="auditQueueLoading" @click="loadAuditQueue">{{ auditQueue ? '重新扫描' : '扫描异常' }}</el-button></div>
       <el-alert v-if="auditQueueError" :title="auditQueueError" type="error" :closable="false" show-icon />
@@ -90,6 +92,7 @@ import DurationVerification from './DurationVerification.vue'
 import PlayerCardMatchRepair from './PlayerCardMatchRepair.vue'
 import PlayerCardIssueRepair from './PlayerCardIssueRepair.vue'
 import PlayerPointsAppeals from './PlayerPointsAppeals.vue'
+import PenaltyBoard from './PenaltyBoard.vue'
 import { callFunction, playerCardTemplateRequest } from '../../utils/cloud'
 const props = defineProps({ embedded:Boolean, initialPlayerId:{type:String,default:''} })
 const router = useRouter(),appealsRef=ref(null)
