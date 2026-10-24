@@ -1,7 +1,7 @@
 <template>
   <section class="penalty-board">
     <div class="board-actions">
-      <el-radio-group v-model="view" size="small">
+      <el-radio-group v-model="view" size="small" @change="load">
         <el-radio-button label="pending">待审核 {{ counts.pendingReview }}</el-radio-button>
         <el-radio-button label="effective">生效处罚 {{ counts.effective }}</el-radio-button>
         <el-radio-button label="blacklist">跨赛事黑名单 {{ counts.platformScope }}</el-radio-button>
@@ -263,7 +263,7 @@ async function load() {
   try {
     const reply = await api({ action: 'listPenalties', platformReview: view.value === 'pending' ? 'pending' : '', status: view.value === 'pending' ? 'effective' : 'effective' })
     rows.value = view.value === 'blacklist' ? (await api({ action: 'blacklist' })).items : reply.items
-    Object.assign(counts, reply.summary || {})
+    Object.assign(counts, reply.totals || reply.summary || {})
   } catch (error) { errorText.value = error.message } finally { loading.value = false }
 }
 
@@ -279,6 +279,7 @@ async function submitReview(decision) {
     await api({ action: 'reviewPenalty', collection: reviewRow.value.collection, penaltyId: reviewRow.value.id, decision, banDuration: reviewForm.banDuration, reviewNote: reviewForm.reviewNote })
     ElMessage.success(decision === 'approve' ? '已列入黑名单' : '已驳回黑名单申请')
     reviewVisible.value = false
+    if (decision === 'approve') view.value = 'blacklist'
     await load()
   } catch (error) { ElMessage.error(error.message) } finally { submitting.value = false }
 }
