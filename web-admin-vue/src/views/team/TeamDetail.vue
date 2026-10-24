@@ -1251,6 +1251,7 @@
 </template>
 
 <script setup>
+import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1548,7 +1549,7 @@ const matchHistoryRows = computed(() => tournamentMatches.value.slice().sort((le
   const opponent = isHome ? (match.awayTeamName || match.awayName || '客队') : (match.homeTeamName || match.homeName || '主队')
   const directDate = String(match.matchDate || '').slice(0, 10)
   const directTime = /^\d{1,2}:\d{2}$/.test(String(match.matchTime || '').trim()) ? String(match.matchTime).trim() : ''
-  return { dateTime:directDate ? `${directDate}${directTime ? ` ${directTime}` : ''}` : formatTournamentTime(firstHistoryValue(match.startTime, match.kickoffAt, match.matchTime)), opponent, score:`${ownScore ?? '—'} : ${opponentScore ?? '—'}`, status:['completed','finished','archived'].includes(String(match.status || '').toLowerCase()) ? '已结束' : '待开始' }
+  return { dateTime:directDate ? `${directDate}${directTime ? ` ${directTime}` : ''}` : formatTournamentTime(firstHistoryValue(match.startTime, match.kickoffAt, match.matchTime)), opponent, score:`${ownScore ?? '—'} : ${opponentScore ?? '—'}${matchScore.decision(match).isShootout ? '（' + matchScore.decision(match).label + '）' : ''}`, status:['completed','finished','archived'].includes(String(match.status || '').toLowerCase()) ? '已结束' : '待开始' }
 }))
 const maskedPhone = computed(() => {
   const phone = String(

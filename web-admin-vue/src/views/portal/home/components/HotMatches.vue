@@ -68,7 +68,7 @@
                 <span class="score-separator">-</span>
                 <span class="score-num">{{ match.awayScore }}</span>
               </div>
-              <div class="match-status-text">已结束</div>
+              <MatchDecision :match="match" /><div class="match-status-text">已结束</div>
             </template>
           </div>
 
@@ -96,6 +96,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../../../components/match/MatchDecision.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowRight, Football } from '@element-plus/icons-vue'

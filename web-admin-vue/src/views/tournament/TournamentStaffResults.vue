@@ -3,7 +3,7 @@
     <header><h1>补录成绩</h1><span>{{ tournamentName }}</span></header>
     <el-alert v-if="error" type="error" :title="error" :closable="false"><el-button link @click="load">重试</el-button></el-alert>
     <div v-if="loading" class="state">加载中…</div>
-    <template v-else><div v-if="!matches.length" class="state">暂无比赛</div><div v-for="match in matches" :key="match.id" class="row"><span><strong class="match-teams"><span class="match-team"><img v-if="match.homeLogo" :src="match.homeLogo" :alt="match.homeName" /><i v-else>{{ teamInitial(match.homeName) }}</i>{{ match.homeName }}</span><em>{{ score(match) }}</em><span class="match-team"><img v-if="match.awayLogo" :src="match.awayLogo" :alt="match.awayName" /><i v-else>{{ teamInitial(match.awayName) }}</i>{{ match.awayName }}</span></strong><small>{{ match.date }} {{ match.time }} · {{ match.divisionName }} · {{ status(match) }}</small></span><el-button v-if="canSupplement(match)" type="primary" plain @click="open(match)">补录</el-button></div></template>
+    <template v-else><div v-if="!matches.length" class="state">暂无比赛</div><div v-for="match in matches" :key="match.id" class="row"><span><strong class="match-teams"><span class="match-team"><img v-if="match.homeLogo" :src="match.homeLogo" :alt="match.homeName" /><i v-else>{{ teamInitial(match.homeName) }}</i>{{ match.homeName }}</span><span><em>{{ score(match) }}</em><MatchDecision :match="match" /></span><span class="match-team"><img v-if="match.awayLogo" :src="match.awayLogo" :alt="match.awayName" /><i v-else>{{ teamInitial(match.awayName) }}</i>{{ match.awayName }}</span></strong><small>{{ match.date }} {{ match.time }} · {{ match.divisionName }} · {{ status(match) }}</small></span><el-button v-if="canSupplement(match)" type="primary" plain @click="open(match)">补录</el-button></div></template>
     <el-dialog v-model="dialog" title="补录成绩" width="520px" :close-on-click-modal="false">
       <div v-if="selected" class="form"><strong>{{ selected.homeName }} 对 {{ selected.awayName }}</strong><div class="scores"><el-input v-model="homeScore" type="number" min="0" max="99" :placeholder="selected.homeName" /><span>:</span><el-input v-model="awayScore" type="number" min="0" max="99" :placeholder="selected.awayName" /></div><PenaltyShootoutEditor v-if="knockout && homeScore !== '' && awayScore !== '' && Number(homeScore) === Number(awayScore)" v-model="penaltyRounds" v-model:first-side="penaltyFirstSide" :home-name="selected.homeName" :away-name="selected.awayName" /><label>纸质比赛记录（1–2 张）<input type="file" accept="image/*" multiple @change="chooseEvidence" /></label><div v-for="(file, index) in evidence" :key="file.fileId" class="file">{{ file.name }}<el-button link @click="evidence.splice(index, 1)">移除</el-button></div><el-input v-model="note" type="textarea" maxlength="300" placeholder="备注（选填）" /></div>
       <template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="submit">确认并归档</el-button></template>
@@ -12,6 +12,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../components/match/MatchDecision.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

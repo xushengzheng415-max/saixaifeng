@@ -191,7 +191,7 @@
                         <span class="team-score">{{ m.homeScore ?? '-' }}</span>
                       </template>
                     </div>
-                    <div class="match-vs">VS</div>
+                    <div class="match-vs">VS<MatchDecision :match="m" /></div>
                     <div class="match-team away">
                       <template v-if="m.status === 'finished'">
                         <span class="team-score">{{ m.awayScore ?? '-' }}</span>
@@ -266,7 +266,7 @@
                         <span class="cm-teams">{{ m.homeTeamName || '待定' }} vs {{ m.awayTeamName || '待定' }}</span>
                         <span v-if="m.homeScore != null" class="cm-score">{{ m.homeScore }}:{{ m.awayScore }}</span>
                       </div>
-                      <span class="cm-venue">{{ m.venue || '场地待定' }}</span>
+                      <MatchDecision :match="m" /><span class="cm-venue">{{ m.venue || '场地待定' }}</span>
                     </div>
                     <div v-if="day.matches.length === 0" class="calendar-empty">无比赛</div>
                   </div>
@@ -556,6 +556,9 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../components/match/MatchDecision.vue'
+import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
+const fullScore = matchScore.scoreText
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1580,7 +1583,7 @@ function exportMatchTeams(match) {
 function exportMatchScore(match) {
   if (match.isBye) return '—'
   if (match.homeScore == null || match.awayScore == null) return '—'
-  return `${match.homeScore}:${match.awayScore}`
+  return fullScore(match)
 }
 
 function exportMatchReferee(match) {

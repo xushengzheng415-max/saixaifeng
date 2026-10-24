@@ -1,3 +1,4 @@
+const matchScoreView = require('./data-center/match-score.cjs')
 const crypto = require('crypto')
 const https = require('https')
 const cloud = require('wx-server-sdk')
@@ -1121,6 +1122,7 @@ async function decorateMatch(match, identity) {
     penaltyLossPoints: Number(division && division.penaltyLossPoints || 0),
     homePenaltyScore: scoreNumber(match.homePenaltyScore) === null ? 0 : scoreNumber(match.homePenaltyScore),
     awayPenaltyScore: scoreNumber(match.awayPenaltyScore) === null ? 0 : scoreNumber(match.awayPenaltyScore),
+    ...matchScoreView.publicFields(match),
     winnerTeamId: String(match.winnerTeamId || ''),
     events,
     hasEvents: events.length > 0,

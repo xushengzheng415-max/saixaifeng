@@ -84,7 +84,7 @@
                 <div class="score-box">
                   <small>{{ statusText(match.status) }}</small>
                   <div v-if="match.status !== 'upcoming'" class="score"><b>{{ score(match.homeScore) }}</b><i>:</i><b>{{ score(match.awayScore) }}</b></div>
-                  <div v-else class="versus">VS</div>
+                  <div v-else class="versus">VS</div><MatchDecision :match="match" />
                   <time>{{ matchTimeText(match) }}</time>
                 </div>
                 <div class="team">
@@ -103,6 +103,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../../components/match/MatchDecision.vue'
 import { computed, onMounted, ref } from 'vue'
 import { getPublicTournamentCenter } from '../../../utils/cloud'
 

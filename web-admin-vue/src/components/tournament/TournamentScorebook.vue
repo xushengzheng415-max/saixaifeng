@@ -2,6 +2,8 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction } from '../../utils/cloud'
+import MatchDecision from '../match/MatchDecision.vue'
+import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
 
 const props = defineProps({
   awards: { type: Object, default: () => ({}) },
@@ -21,6 +23,25 @@ watch(divisions, items => {
   if (!items.some(item => String(item.divisionId) === activeDivisionId.value)) activeDivisionId.value = String(items[0]?.divisionId || '')
 }, { immediate: true })
 const selectedDivision = computed(() => divisions.value.find(item => String(item.divisionId) === activeDivisionId.value) || null)
+function divisionMatches(division) {
+  return props.matches.filter(match => String(match.divisionId || '') === String(division.divisionId || '')).slice().sort((a,b) => `${a.matchDate || '9999'} ${a.matchTime || ''}`.localeCompare(`${b.matchDate || '9999'} ${b.matchTime || ''}`) || Number(a.matchNo || a.matchSequence || 0) - Number(b.matchNo || b.matchSequence || 0))
+}
+function resultPages(division) {
+  const rows = divisionMatches(division), pages = []
+  for (let index=0; index<rows.length; index+=18) pages.push(rows.slice(index,index+18))
+  return pages
+}
+function stageText(match) {
+  const phase = match.phaseLabel || match.reviewStageLabel || '', round = match.roundName || ''
+  return phase && round && !phase.includes(round) && !round.includes(phase) ? `${phase} · ${round}` : round || phase || '—'
+}
+function winnerText(match) {
+  const decision = matchScore.decision(match)
+  if (decision.isShootout) return decision.winnerName || (decision.winnerSide === 'home' ? match.homeTeamName : decision.winnerSide === 'away' ? match.awayTeamName : '待核对')
+  if (match.homeScore == null || match.awayScore == null) return '待录入'
+  if (Number(match.homeScore) === Number(match.awayScore)) return '平局'
+  return Number(match.homeScore) > Number(match.awayScore) ? match.homeTeamName : match.awayTeamName
+}
 const printDivisions = computed(() => printScope.value === 'all' ? divisions.value : divisions.value.filter(item => String(item.divisionId) === printScope.value))
 function divisionProgress(division) {
   const rows = props.matches.filter(match => String(match.divisionId || '') === String(division.divisionId || ''))
@@ -92,16 +113,16 @@ async function printScorebook(division = null) {
   await nextTick()
   window.print()
 }
-async function exportDivisionPdf(division) {
-  const progress = divisionProgress(division)
-  if (!progress.ready) return ElMessage.warning(`本组还有 ${progress.remaining} 场未形成正式赛果`)
+async function exportDivisionPdf(division = null) {
+  if (division && !divisionProgress(division).ready) return ElMessage.warning(`本组还有 ${divisionProgress(division).remaining} 场未形成正式赛果`)
+  if (!division && !ready.value) return ElMessage.warning('全部比赛形成正式赛果后才能导出整届成绩册')
   if (exportingPdf.value) return
   exportingPdf.value = true
-  printScope.value = String(division.divisionId)
+  printScope.value = division ? String(division.divisionId) : 'all'
   try {
     await nextTick()
     const pages = [...(printRoot.value?.querySelectorAll('.print-page') || [])]
-    if (!pages.length) throw new Error('未找到本组成绩册内容')
+    if (!pages.length) throw new Error('未找到成绩册内容')
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
     const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
     for (const [index, page] of pages.entries()) {
@@ -118,9 +139,9 @@ async function exportDivisionPdf(division) {
       const width=canvas.width*ratio,height=canvas.height*ratio
       pdf.addImage(canvas.toDataURL('image/jpeg',0.88),'JPEG',(pageWidth-width)/2,0,width,height)
     }
-    const safeName = `${props.tournament.name || '赛事'}-${division.divisionName}-成绩册`.replace(/[\\/:*?"<>|]/g,'-')
+    const safeName = `${props.tournament.name || '赛事'}-${division?.divisionName || '整届'}-成绩册`.replace(/[\\/:*?"<>|]/g,'-')
     pdf.save(`${safeName}.pdf`)
-    ElMessage.success('本组成绩册已下载')
+    ElMessage.success('成绩册已下载')
   } catch (error) { ElMessage.error(error.message || 'PDF 导出失败，请重试') }
   finally { exportingPdf.value = false }
 }
@@ -145,7 +166,9 @@ function playerMeta(player) {
       </div>
       <div class="scorebook-actions">
         <el-tag :type="ready ? 'success' : 'warning'" effect="plain">{{ ready ? '全部赛果已完成' : `待完成 ${summary.matches - summary.submitted} 场` }}</el-tag>
-        <el-button plain :disabled="!ready" @click="printScorebook()">打印整届</el-button>
+        <el-button type="success" :disabled="!selectedDivision || !divisionProgress(selectedDivision).ready" :loading="exportingPdf" @click="exportDivisionPdf(selectedDivision)">导出本组</el-button>
+        <el-button plain :disabled="!ready" :loading="exportingPdf" @click="exportDivisionPdf()">导出整届</el-button>
+        <el-button plain :disabled="!ready || exportingPdf" @click="printScorebook()">打印整届</el-button>
       </div>
     </header>
 
@@ -161,8 +184,7 @@ function playerMeta(player) {
         <div><h3>{{ division.divisionName }}</h3><p>{{ divisionProgress(division).completed }} / {{ divisionProgress(division).total }} 场正式赛果 · {{ division.teamCount }} 支球队</p></div>
         <div class="division-actions">
           <span v-if="!divisionProgress(division).ready">还差 {{ divisionProgress(division).remaining }} 场</span>
-          <el-button size="small" :disabled="!divisionProgress(division).ready" @click="printScorebook(division)">打印本组</el-button>
-          <el-button size="small" type="success" :disabled="!divisionProgress(division).ready" :loading="exportingPdf" @click="exportDivisionPdf(division)">导出 PDF</el-button>
+          <el-button size="small" :disabled="!divisionProgress(division).ready || exportingPdf" @click="printScorebook(division)">打印本组</el-button>
         </div>
       </header>
 
@@ -211,6 +233,10 @@ function playerMeta(player) {
         <ul>
           <li v-for="award in division.teamAwards" :key="award.key"><span>{{ award.title }}</span><b>{{ award.teamName }}</b><small>{{ award.note }}</small></li>
         </ul>
+      </section>
+      <section class="scorebook-results">
+        <h4>全部赛果 · {{ divisionMatches(division).length }} 场</h4>
+        <table class="results-table"><thead><tr><th>场序</th><th>阶段</th><th>日期 / 场地</th><th>主队</th><th>比分</th><th>客队</th><th>胜方</th></tr></thead><tbody><tr v-for="row in divisionMatches(division)" :key="row.id || row._id"><td>{{ row.matchSequence || row.matchNo || '—' }}</td><td>{{ stageText(row) }}</td><td>{{ row.matchDate || '待定' }} {{ row.matchTime }}<small>{{ row.venue }}</small></td><td>{{ row.homeTeamName }}</td><td><b>{{ row.homeScore ?? '—' }} : {{ row.awayScore ?? '—' }}</b><MatchDecision :match="row" /></td><td>{{ row.awayTeamName }}</td><td>{{ winnerText(row) }}</td></tr></tbody></table>
       </section>
       </template>
     </article>
@@ -287,6 +313,12 @@ function playerMeta(player) {
         <ol class="print-rules"><li v-for="(rule, index) in awards.rules || []" :key="index">{{ rule }}</li></ol>
         <p class="print-foot">{{ tournament.name }} · {{ division.divisionName }} · 赛小蜂足球</p>
       </section>
+      <section v-for="(rows, pageIndex) in resultPages(division)" :key="`results-${division.divisionId}-${pageIndex}`" class="print-page results-page">
+        <h2 class="print-h2">{{ division.divisionName }} · 全部赛果</h2>
+        <p>共 {{ divisionMatches(division).length }} 场 · 第 {{ pageIndex + 1 }} / {{ resultPages(division).length }} 页</p>
+        <table class="print-table result-print-table"><thead><tr><th>场序</th><th>阶段</th><th>日期 / 场地</th><th>主队</th><th>比分</th><th>客队</th><th>胜方</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id || row._id"><td>{{ row.matchSequence || row.matchNo || '—' }}</td><td>{{ stageText(row) }}</td><td>{{ row.matchDate || '待定' }} {{ row.matchTime }}<small>{{ row.venue }}</small></td><td>{{ row.homeTeamName }}</td><td><b>{{ row.homeScore ?? '—' }} : {{ row.awayScore ?? '—' }}</b><MatchDecision :match="row" /></td><td>{{ row.awayTeamName }}</td><td>{{ winnerText(row) }}</td></tr></tbody></table>
+        <p class="print-foot">{{ tournament.name }} · {{ division.divisionName }} · 赛小蜂足球</p>
+      </section>
       </template>
     </div>
   </section>
@@ -294,7 +326,8 @@ function playerMeta(player) {
 
 <style scoped>
 .scorebook-section{display:flex;flex-direction:column;gap:16px}
-.scorebook-actions{display:flex;align-items:center;gap:10px}
+.scorebook-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.scorebook-results{margin-top:22px}.scorebook-results h4{margin:0 0 10px}.results-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}.results-table th,.results-table td{padding:10px 6px;border-bottom:1px solid #e3eae5;text-align:center;overflow-wrap:anywhere}.results-table th{background:#f1f6f2}.results-table td small,.result-print-table td small{display:block;margin-top:3px;font-size:10px}.results-table th:first-child{width:5%}.results-table th:nth-child(2){width:11%}.results-table th:nth-child(3){width:16%}.results-table th:nth-child(5){width:16%}.result-print-table{table-layout:fixed}.result-print-table td{overflow-wrap:anywhere;line-height:1.4}.result-print-table th:first-child{width:5%}.result-print-table th:nth-child(2){width:10%}.result-print-table th:nth-child(3){width:16%}.result-print-table th:nth-child(5){width:17%}
 .scorebook-card{padding:18px 20px;max-width:1400px}
 .division-tabs :deep(.el-tabs__header){margin:0}.division-tabs :deep(.el-tabs__item){font-weight:600}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid #eef1ee;padding-bottom:12px}

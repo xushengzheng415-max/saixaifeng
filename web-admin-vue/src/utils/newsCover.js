@@ -1,3 +1,4 @@
+import matchScore from '../../../cloudfunctions/dataCenter/shared/match-score.cjs'
 export function createMatchNewsCover(match, tournamentName) {
   if (!match || match.resultStatus !== 'approved' || match.homeScore == null || match.awayScore == null) return ''
   const canvas = document.createElement('canvas')
@@ -41,7 +42,7 @@ export function createMatchNewsCover(match, tournamentName) {
   ctx.fillText(`${match.homeScore} : ${match.awayScore}`, 480, 365)
   ctx.font = '21px sans-serif'
   ctx.fillStyle = '#d8bd7b'
-  ctx.fillText('全场比分', 480, 431)
+  ctx.fillText(matchScore.decision(match).label || '全场比分', 480, 431)
   ctx.font = '20px sans-serif'
   ctx.fillStyle = '#d4e5d8'
   ctx.fillText([match.matchTime, match.venue].filter(Boolean).join('  ·  '), 480, 482)

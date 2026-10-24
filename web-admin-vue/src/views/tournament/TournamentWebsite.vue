@@ -101,7 +101,7 @@
                     {{ formatDate(match.matchTime) }}
                   </div>
                   <div v-if="match.status === 'finished'" class="match-score">
-                    {{ match.homeScore }} : {{ match.awayScore }}
+                    {{ match.homeScore }} : {{ match.awayScore }}<MatchDecision :match="match" />
                   </div>
                 </div>
               </div>
@@ -123,7 +123,7 @@
               <div class="match-info">
                 <span class="team">{{ getTeamName(match.homeTeamId) }}</span>
                 <span v-if="match.status === 'finished'" class="score">
-                  {{ match.homeScore }} : {{ match.awayScore }}
+                  {{ match.homeScore }} : {{ match.awayScore }}<MatchDecision :match="match" />
                 </span>
                 <span v-else class="vs-text">VS</span>
                 <span class="team">{{ getTeamName(match.awayTeamId) }}</span>
@@ -195,6 +195,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../components/match/MatchDecision.vue'
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Calendar, Location, User, Document } from '@element-plus/icons-vue'

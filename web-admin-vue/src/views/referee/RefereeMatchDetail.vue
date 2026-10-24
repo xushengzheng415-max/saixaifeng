@@ -24,7 +24,7 @@
             <span class="score-sep">:</span>
             <span class="score-num">{{ match.awayScore }}</span>
           </div>
-          <div class="hero-match-time">{{ match.matchDate }} {{ match.matchTime }}</div>
+          <MatchDecision :match="match" style="color:inherit" /><div class="hero-match-time">{{ match.matchDate }} {{ match.matchTime }}</div>
         </template>
         <template v-else>
           <div class="hero-vs">VS</div>
@@ -81,6 +81,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../components/match/MatchDecision.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'

@@ -41,7 +41,7 @@
           <strong>{{ homeName }}</strong>
         </div>
         <div class="score-center">
-          <div><b>{{ displayHomeScore }}</b><em>:</em><b>{{ displayAwayScore }}</b></div>
+          <div><b>{{ displayHomeScore }}</b><em>:</em><b>{{ displayAwayScore }}</b></div><MatchDecision :match="match" />
           <el-tag type="success" effect="plain">赛果已由裁判提交</el-tag>
           <small>提交时间：{{ submittedAtText }}</small>
         </div>
@@ -117,6 +117,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../components/match/MatchDecision.vue'
 import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

@@ -15,7 +15,7 @@
       <section class="score-banner" :class="{ 'professional-score-banner': isProfessionalMonitor }">
         <div class="match-meta"><small>场序</small><strong>{{ displayMatch.matchSequence || '—' }}</strong><span><el-icon><Calendar /></el-icon>{{ shortDate(displayMatch.matchDate) }} {{ displayMatch.matchTime || '待定' }}</span><span>{{ displayMatch.venue || '场地待定' }}</span><em><i></i>进行中 {{ displayMatch.liveMinute || 0 }}′</em></div>
         <div class="score-team home"><span class="crest"><img v-if="homeLogo" :src="homeLogo" alt="" /><b v-else>{{ teamInitial(displayMatch.homeTeamName) }}</b></span><strong>{{ displayMatch.homeTeamName || '主队待定' }}</strong></div>
-        <strong class="score-value">{{ eventDrivenDisplayMatch.homeScore ?? 0 }} : {{ eventDrivenDisplayMatch.awayScore ?? 0 }}</strong>
+        <div><strong class="score-value">{{ eventDrivenDisplayMatch.homeScore ?? 0 }} : {{ eventDrivenDisplayMatch.awayScore ?? 0 }}</strong><MatchDecision :match="eventDrivenDisplayMatch" /></div>
         <div class="score-team away"><strong>{{ displayMatch.awayTeamName || '客队待定' }}</strong><span class="crest"><img v-if="awayLogo" :src="awayLogo" alt="" /><b v-else>{{ teamInitial(displayMatch.awayTeamName) }}</b></span></div>
         <div class="recorder"><span>记录员</span><b>{{ mainRefereeName }}</b><span>最后同步</span><b>{{ lastSync }}</b><span>手机在线</span><b class="online"><i></i>{{ stale ? '同步延迟' : '在线' }}</b></div>
       </section>
@@ -38,6 +38,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../components/match/MatchDecision.vue'
 import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

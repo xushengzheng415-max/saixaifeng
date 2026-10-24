@@ -81,6 +81,8 @@
 </template>
 
 <script setup>
+import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
+const fullScore = matchScore.scoreText
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -129,7 +131,7 @@ const previewBlocks = computed(() => {
 })
 const kindLabel = kind => ({ match: '单场新闻', daily: '每日新闻' })[kind] || '新闻'
 const statusLabel = status => ({ published: '已发布', draft: '草稿', update: '待更新', withdrawn: '已撤回' })[status] || '草稿'
-const matchLabel = match => [`场序${match.matchNo || '—'}`, `${match.matchDate || '日期待定'} ${match.matchTime || '时间待定'}`, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, `${match.homeScore}:${match.awayScore}`].filter(Boolean).join(' · ')
+const matchLabel = match => [`场序${match.matchNo || '—'}`, `${match.matchDate || '日期待定'} ${match.matchTime || '时间待定'}`, match.divisionName, `${match.homeTeamName} 对 ${match.awayTeamName}`, fullScore(match)].filter(Boolean).join(' · ')
 
 async function loadMatches() {
   loadingMatches.value = true; loadError.value = ''

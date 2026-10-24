@@ -51,7 +51,7 @@
         <article v-for="row in visibleMatches" :key="row._id" class="match-grid match-grid-row">
           <strong>{{ row.matchSequence || row.sequence || '—' }}</strong>
           <span class="time-cell">{{ displayDate(row.matchDate) }} {{ row.matchTime || '待定' }}<small>{{ row.venue || '场地待定' }}</small></span>
-          <span class="versus-cell"><b>{{ row.homeTeamName || '待定' }}</b><strong>{{ scoreText(row) }}</strong><b>{{ row.awayTeamName || '待定' }}</b></span>
+          <span class="versus-cell"><b>{{ row.homeTeamName || '待定' }}</b><span><strong>{{ scoreText(row) }}</strong><MatchDecision :match="row" /></span><b>{{ row.awayTeamName || '待定' }}</b></span>
           <span class="status-cell" :class="matchStatus(row).key"><i></i>{{ matchStatus(row).label }}</span>
           <span class="referee-cell" :class="selectedDivision.professional ? rosterInfo(row).tone : executionInfo(row).tone"><el-icon><component :is="selectedDivision.professional ? rosterInfo(row).icon : executionInfo(row).icon" /></el-icon>{{ selectedDivision.professional ? rosterInfo(row).label : executionInfo(row).label }}</span>
           <span class="post-cell" :class="selectedDivision.professional ? electronicRecordInfo(row).tone : postInfo(row).tone"><el-icon><component :is="selectedDivision.professional ? electronicRecordInfo(row).icon : postInfo(row).icon" /></el-icon>{{ selectedDivision.professional ? electronicRecordInfo(row).label : postInfo(row).label }}</span>
@@ -89,6 +89,8 @@
 </template>
 
 <script setup>
+import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
+import MatchDecision from '../../components/match/MatchDecision.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -291,7 +293,7 @@ function goToRefereeManagement(){assignmentVisible.value=false;router.push(`/tou
 function openMatch(row) { const status = matchStatus(row).key; const archived = row.refereeReviewStatus === 'archived' || String(row.status || '').toLowerCase() === 'archived'; const underReview = row.refereeReviewStatus === 'under_review' || row.status === 'pending_review'; const needsPostMatch = !archived && !underReview && status === 'done'; router.push(matchRoute(row, status === 'active' ? '/monitor' : archived ? '/archive' : underReview ? '/review' : needsPostMatch ? '/post-match' : '')) }
 function enterDivision(row) { router.push({ path:`/tournaments/${tournamentId}/matches`, query:{ divisionId:row.id } }) }
 function backToDivisions() { router.push(`/tournaments/${tournamentId}/matches`) }
-function exportMatches() { const header = ['场序', '比赛日期', '时间', '场地', '主队', '比分', '客队', '比赛状态', '赛后状态']; const data = filteredDivisionMatches.value.map(row => [row.matchSequence || row.sequence || '', row.matchDate || '', row.matchTime || '', row.venue || '', row.homeTeamName || '', `${row.homeScore ?? ''}:${row.awayScore ?? ''}`, row.awayTeamName || '', matchStatus(row).label, reviewStatus(row).label]); const csv = [header, ...data].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n'); const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type:'text/csv;charset=utf-8' })); link.download = `${selectedDivision.value?.name || '组别'}-比赛档案.csv`; link.click(); URL.revokeObjectURL(link.href) }
+function exportMatches() { const header = ['场序', '比赛日期', '时间', '场地', '主队', '比分', '客队', '比赛状态', '赛后状态']; const data = filteredDivisionMatches.value.map(row => [row.matchSequence || row.sequence || '', row.matchDate || '', row.matchTime || '', row.venue || '', row.homeTeamName || '', matchScore.scoreText(row), row.awayTeamName || '', matchStatus(row).label, reviewStatus(row).label]); const csv = [header, ...data].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n'); const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type:'text/csv;charset=utf-8' })); link.download = `${selectedDivision.value?.name || '组别'}-比赛档案.csv`; link.click(); URL.revokeObjectURL(link.href) }
 
 onMounted(async () => {
   if (visualQaSnapshot) return

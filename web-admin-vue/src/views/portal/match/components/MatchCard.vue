@@ -26,7 +26,7 @@
             <span class="score-sep">:</span>
             <span class="score-num">{{ awayScore }}</span>
           </div>
-          <div v-if="status === 'ongoing'" class="match-minute">{{ matchMinute }}</div>
+          <MatchDecision :match="props" /><div v-if="status === 'ongoing'" class="match-minute">{{ matchMinute }}</div>
           <div v-else class="match-status-text">已结束</div>
         </template>
         <template v-else>
@@ -71,6 +71,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../../../components/match/MatchDecision.vue'
 import { computed } from 'vue'
 import { Trophy, Location, VideoPlay } from '@element-plus/icons-vue'
 import StatusBadge from '../../components/StatusBadge.vue'
@@ -81,6 +82,14 @@ import TeamLogo from '../../components/TeamLogo.vue'
  * 展示：赛事名 + 主队 vs 客队 + 比分/时间 + 状态 + 直播/回放按钮
  */
 const props = defineProps({
+  resolution: { type: String, default: '' },
+  decisionMethod: { type: String, default: '' },
+  homePenaltyScore: { type: [Number, String], default: null },
+  awayPenaltyScore: { type: [Number, String], default: null },
+  winnerSide: { type: String, default: '' },
+  winnerTeamId: { type: String, default: '' },
+  homeTeamId: { type: String, default: '' },
+  awayTeamId: { type: String, default: '' },
   // 赛事信息
   tournamentName: { type: String, default: '' },
   round: { type: String, default: '' },

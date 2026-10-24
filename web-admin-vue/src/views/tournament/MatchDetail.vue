@@ -26,7 +26,7 @@
             <span class="score-num">{{ displayAwayScore }}</span>
           </div>
           <div class="hero-match-time">{{ match.matchDate }} {{ match.matchTime }}</div>
-          <div v-if="match.resolution === 'penalties' && match.homePenaltyScore != null && match.awayPenaltyScore != null" class="hero-penalty-score">点球 {{ match.homePenaltyScore }} : {{ match.awayPenaltyScore }}</div>
+          <MatchDecision :match="match" style="color:#f6d992" />
           <div class="hero-venue">{{ match.venue || '场地待定' }}</div>
         </template>
         <template v-else>
@@ -1090,6 +1090,7 @@
 </template>
 
 <script setup>
+import MatchDecision from '../../components/match/MatchDecision.vue'
 import { matchListQuery, matchSourceQuery } from '../../utils/matchListContext'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
