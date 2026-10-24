@@ -6,7 +6,7 @@
         <div class="hero-copy">
           <small>赛事运营 / 纪律处罚</small>
           <h1>{{ tournamentName || '赛事纪律处罚' }}</h1>
-          <p>登记本赛事签发的赛事级与单场处罚，处罚决定书（PDF/Word）在线留存。跨赛事与全平台禁赛由平台运营后台审核下发，主办方只能在本赛事范围内处罚。</p>
+          <p>登记本赛事签发的赛事级与单场处罚，处罚决定书（PDF/Word）在线留存。跨赛事与全平台禁赛由平台运营后台单独审核下发，主办方无权发起。</p>
         </div>
       </div>
       <div class="hero-actions">
@@ -75,7 +75,7 @@
     </section>
 
     <el-dialog v-model="createVisible" title="追加纪律处罚" width="560px">
-      <el-alert title="处罚确认后立即生效并写入审计日志；跨赛事与全平台禁赛不在本页办理，须由平台运营后台审核下发。" type="warning" :closable="false" show-icon />
+      <el-alert title="处罚确认后立即生效并写入审计日志；本页只办理本赛事范围内的处罚。全平台禁赛由平台运营后台审核下发，主办方无权限发起。" type="warning" :closable="false" show-icon />
       <el-form label-position="top" class="discipline-form">
         <el-form-item label="处罚对象">
           <el-radio-group v-model="form.subjectType" @change="onSubjectTypeChange">
