@@ -1,5 +1,9 @@
 # 数据入口登记
 
+## 赛程地图队徽完整显示（2026-10-24）
+
+TournamentScheduleV2使用ScheduleTeamCrest等比完整显示队徽，移除圆形裁切、边框和白底。候选顺序保留比赛快照优先，再尝试现有球队资料；兼容透明队徽、logoFileID/logoFileId/logoCloudFileId及旧URL，通过现有getFileUrl链路解析cloud文件ID，单张失败继续下一地址，不因一支球队资料失败清空其他队徽。请求仍走webLoginApi、既有teams读取权限及uploadFile临时URL授权，不新增数据库写入，不修改参赛快照或比分。缺失/失败显示占位及悬停状态，不再以队名首字伪装队徽。
+
 ## 确认抽签生成待排对阵与多表回填（2026-10-18）
 
 PC抽签总览与单组结果通过generateSchedule.generatePairings(ensureOnly:true)调用确认版生成入口；服务端校验赛事机构、event.draw权限、组别归属、确认快照和审核球队集合。confirmedPairings.js与演示仓库共用纯拓扑模块，按组别独立编号；不赋排期、不覆盖已有比赛，重试使用确定比赛ID避免重复新增。已有历史比赛沿用原版本；变更拓扑须显式核对，不能通过进入赛程中心隐式重建。实际时长沿用线上已定版组别规则。
