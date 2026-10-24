@@ -66,18 +66,26 @@
           <section class="review-gate"><h3>发布闸门</h3><div><span>比分结构</span><b :class="selectedMatch.scoreReady?'ok':'wait'">{{ selectedMatch.scoreReady ? '完整' : '待录入' }}</b></div><div><span>项目校验</span><b :class="selectedMatch.warnings?.length?'danger':'ok'">{{ selectedMatch.warnings?.length ? '需处理' : '通过' }}</b></div><div><span>主办方复核</span><b :class="selectedMatch.resultStatus==='approved'?'ok':'wait'">{{ selectedMatch.resultStatus==='approved' ? '已批准' : '未批准' }}</b></div></section>
           <el-alert v-if="selectedMatch.resultCorrection" class="correction-alert" :title="`已异常纠错：${selectedMatch.resultCorrection.reason}`" type="warning" :closable="false" show-icon />
           <el-alert v-if="selectedMatch.warnings?.length" :title="selectedMatch.warnings.join('；')" type="warning" :closable="false" show-icon />
-          <section class="disciplinary-panel">
-            <header><h3>纪律处罚</h3><span v-if="disciplinaryActions.length">{{ disciplinaryActions.length }} 条生效</span></header>
+          <section class="discipline-board">
+            <header class="discipline-board-head">
+              <div><h3>纪律处罚</h3><p>本场生效处罚，处罚文书在线留存</p></div>
+              <span v-if="disciplinaryActions.length" class="discipline-count">{{ disciplinaryActions.length }} 条生效</span>
+            </header>
             <el-alert v-if="disciplinaryError" :title="disciplinaryError" type="error" :closable="false" show-icon />
-            <p v-else-if="disciplinaryLoading" class="disciplinary-empty">处罚记录加载中…</p>
-            <p v-else-if="!disciplinaryActions.length" class="disciplinary-empty">本场暂无生效处罚</p>
-            <ul v-else><li v-for="item in disciplinaryActions" :key="item.id">
-              <div><b>{{ disciplineSubjectLabel(item) }}</b><span>{{ disciplineTypesLabel(item) }}</span></div>
-              <p>{{ item.reason }}</p>
+            <p v-else-if="disciplinaryLoading" class="discipline-hint">处罚记录加载中…</p>
+            <div v-else-if="!disciplinaryActions.length" class="discipline-empty-card"><el-icon><CircleCheckFilled /></el-icon><b>本场暂无生效处罚</b><small>如出现违规，点击下方「追加处罚」登记并留存处罚文书。</small></div>
+            <ul v-else class="discipline-cards"><li v-for="item in disciplinaryActions" :key="item.id" class="discipline-card" :class="item.subjectType">
+              <header>
+                <span class="discipline-mark">{{ disciplineSubjectInitial(item) }}</span>
+                <div class="discipline-subject"><b>{{ disciplineSubjectName(item) }}</b><small>{{ disciplineSubjectMeta(item) }}</small></div>
+                <span class="discipline-status">生效中</span>
+              </header>
+              <div class="discipline-tags"><span v-for="tag in disciplineTags(item)" :key="tag.key" class="discipline-tag" :class="tag.tone">{{ tag.label }}</span></div>
+              <p class="discipline-reason">{{ item.reason }}</p>
               <div v-if="item.attachments?.length" class="discipline-files">
-                <button v-for="file in item.attachments" :key="file.fileId" type="button" class="discipline-file" @click="openDisciplinaryFile(file)"><el-icon><Document /></el-icon>{{ file.name }}</button>
+                <button v-for="file in item.attachments" :key="file.fileId" type="button" class="discipline-file" @click="openDisciplinaryFile(file)"><el-icon><Document /></el-icon><span>{{ file.name }}</span><small>{{ disciplineFileSize(file.size) }}</small></button>
               </div>
-              <small>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}<em class="discipline-actions"><el-button link :loading="disciplineSupplementingId===item.id" @click="chooseDisciplinaryFiles(item)">{{ item.attachments?.length ? '继续补传文书' : '补传处罚文书' }}</el-button><el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></em></small>
+              <footer><span>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}</span><em class="discipline-actions"><el-button link :loading="disciplineSupplementingId===item.id" @click="chooseDisciplinaryFiles(item)">{{ item.attachments?.length ? '继续补传' : '补传文书' }}</el-button><el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></em></footer>
             </li></ul>
           </section>
           <footer><el-button plain type="danger" @click="openDisciplinary(selectedMatch)">追加处罚</el-button><el-button v-if="selectedMatch.resultStatus!=='approved'" type="success" :disabled="!selectedMatch.scoreReady" @click="openMatchResult(selectedMatch)">进入赛果复核</el-button><template v-else><el-button type="warning" plain @click="openScoreCorrection(selectedMatch)">异常纠错</el-button><el-button plain @click="openMatchResult(selectedMatch)">查看正式归档</el-button></template></footer>
@@ -337,6 +345,7 @@ const disciplinaryVisible = ref(false)
 const disciplinarySaving = ref(false)
 const disciplinaryMatch = ref(null)
 const disciplineTypeLabels = { suspension:'追加停赛', fine:'罚款', warning:'警告/通报', disqualification:'取消参赛资格' }
+const disciplineTypeTones = { suspension:'danger', fine:'warning', disqualification:'severe', warning:'muted' }
 const disciplinaryForm = ref({ subjectType:'player', teamId:'', playerName:'', playerId:'', personName:'', types:['warning'], suspensionMatches:1, fineAmount:100, reason:'' })
 const disciplinaryRoster = ref([])
 const disciplinaryRosterLoading = ref(false)
@@ -442,14 +451,27 @@ const disciplineTeamOptions = computed(() => {
   if (!row) return []
   return [[row.homeTeamId,row.homeTeamName],[row.awayTeamId,row.awayTeamName]].filter(([id])=>id).map(([teamId,teamName])=>({ teamId:String(teamId), teamName:String(teamName||'球队') }))
 })
-function disciplineTypesLabel(item){
-  const labels = (item.types || []).map(type => type==='suspension' ? `停赛${Number(item.suspensionMatches||0)}场` : type==='fine' ? `罚款¥${Number(item.fineAmount||0)}` : disciplineTypeLabels[type] || type)
-  return labels.join(' · ') || '纪律处罚'
+// 处罚卡片：类型按严重程度分色，编号等长字段放到副标题，避免挤在主信息里。
+function disciplineTags(item){
+  const tags = (item.types || []).map(type => ({
+    key: type,
+    tone: disciplineTypeTones[type] || 'muted',
+    label: type==='suspension' ? `停赛 ${Number(item.suspensionMatches||0)} 场` : type==='fine' ? `罚款 ¥${Number(item.fineAmount||0)}` : disciplineTypeLabels[type] || type
+  }))
+  return tags.length ? tags : [{ key:'default', tone:'muted', label:'纪律处罚' }]
 }
-function disciplineSubjectLabel(item){
-  if(item.subjectType==='player') return `${item.teamName?`${item.teamName} · `:''}${item.playerName||'球员未记录'}${item.playerId?`（${item.playerId}）`:''}`
-  if(item.subjectType==='staff') return `工作人员 ${item.personName||'未记录'}`
-  return item.teamName || '球队'
+function disciplineSubjectName(item){
+  if(item.subjectType==='player') return item.playerName || '球员未记录'
+  if(item.subjectType==='staff') return item.personName || '工作人员未记录'
+  return item.teamName || '球队未记录'
+}
+function disciplineSubjectMeta(item){
+  if(item.subjectType==='player') return [item.teamName || '', item.playerId ? `编号 ${item.playerId}` : ''].filter(Boolean).join(' · ') || '球员'
+  if(item.subjectType==='staff') return '赛事工作人员'
+  return '球队处罚'
+}
+function disciplineSubjectInitial(item){
+  return String(disciplineSubjectName(item)).slice(0, 1) || '罚'
 }
 async function loadDisciplinaryActions(){
   const matchId = selectedMatch.value?.id || ''
@@ -649,10 +671,37 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 <style scoped>
 .portrait-poster.paper .poster-header{padding:12px 10px;background:rgba(255,255,255,.82);border-radius:12px}
 .penalty-rounds{padding:8px 16px 14px;border-bottom:1px solid #e5ebe7;font-size:12px}.penalty-rounds>strong{display:block;margin-bottom:6px}.penalty-rounds>div{display:grid;grid-template-columns:72px 1fr 1fr;gap:8px;padding:3px 0}.penalty-rounds>div span:not(:first-child){text-align:center}
-.disciplinary-panel{margin:14px 18px 0;padding:12px 14px;border-top:1px solid #edf0ee;border-radius:8px;background:#fbfcfb}.disciplinary-panel>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.disciplinary-panel h3{margin:0;font-size:14px}.disciplinary-panel header>span{color:#bd4b36;font-size:11px}.disciplinary-empty{margin:0;color:#7b877f;font-size:12px}.disciplinary-panel ul{display:grid;gap:9px;margin:0;padding:0;list-style:none}.disciplinary-panel li{padding:8px 10px;border:1px solid #f1e2dc;border-radius:7px;background:#fff}.disciplinary-panel li>div{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px}.disciplinary-panel li b{color:#25332a}.disciplinary-panel li span{flex:none;padding:2px 7px;border-radius:99px;color:#b6422b;background:#fdeee9;font-size:11px}.disciplinary-panel li p{margin:5px 0 4px;color:#4f5d54;font-size:12px;line-height:1.5}.disciplinary-panel li small{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#8a958d;font-size:11px}.disciplinary-form{margin-top:16px}
+.discipline-board{margin:14px 18px 0;padding:14px;border:1px solid #e5ece7;border-radius:14px;background:linear-gradient(180deg,#fbfdfb,#f4f8f5)}
+.discipline-board-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.discipline-board-head h3{margin:0;font-size:14px;color:#1f3a2a}
+.discipline-board-head p{margin:4px 0 0;color:#7f8d84;font-size:11px}
+.discipline-count{flex:none;padding:3px 9px;border-radius:99px;background:#fdeee9;color:#b6422b;font-size:11px;font-weight:700}
+.discipline-hint{margin:0;color:#7f8d84;font-size:12px}
+.discipline-empty-card{display:grid;justify-items:center;gap:5px;padding:18px 12px;border:1px dashed #d7e2da;border-radius:12px;background:#fff;color:#8a988f;text-align:center}
+.discipline-empty-card .el-icon{font-size:20px;color:#5f9c78}
+.discipline-empty-card b{color:#38503f;font-size:12px}
+.discipline-empty-card small{padding:0 8px;font-size:11px;line-height:1.55}
+.discipline-cards{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.discipline-card{position:relative;padding:12px 13px 10px;border:1px solid #e7ece8;border-left:3px solid #d9563f;border-radius:12px;background:#fff;box-shadow:0 2px 8px rgba(31,58,42,.05)}
+.discipline-card.team{border-left-color:#c05a2c}.discipline-card.staff{border-left-color:#8a6b2f}
+.discipline-card>header{display:flex;align-items:center;gap:9px}
+.discipline-mark{display:grid;width:30px;height:30px;flex:none;place-items:center;border-radius:9px;background:#fdeee9;color:#b6422b;font-size:13px;font-weight:800}
+.discipline-card.team .discipline-mark{background:#fdf1e9;color:#b2542a}.discipline-card.staff .discipline-mark{background:#f6f1e3;color:#8a6b2f}
+.discipline-subject{flex:1;min-width:0}
+.discipline-subject b{display:block;color:#22352a;font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-subject small{display:block;margin-top:2px;color:#8a958d;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-status{flex:none;padding:2px 7px;border-radius:99px;border:1px solid #cfe3d7;background:#eef7f1;color:#2f7a52;font-size:10px;font-weight:700}
+.discipline-tags{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 0}
+.discipline-tag{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+.discipline-tag.danger{background:#fdeceb;color:#c23b2b}.discipline-tag.severe{background:#fbe3e0;color:#a32216}.discipline-tag.warning{background:#fdf4e3;color:#a97516}.discipline-tag.muted{background:#eef2ee;color:#54675a}
+.discipline-reason{margin:8px 0 0;color:#4d5d53;font-size:12px;line-height:1.6}
+.discipline-card>footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed #edf1ee;color:#9aa59d;font-size:11px}
+.disciplinary-form{margin-top:16px}
 .discipline-file-input{display:none}
-.discipline-files{display:flex!important;flex-wrap:wrap;justify-content:flex-start!important;gap:6px;margin:0 0 4px}
-.discipline-file{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:3px 8px;border:1px solid #d9e2dc;border-radius:6px;background:#f6f9f7;color:#2c5a3f;font-size:11px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-files{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 0}
+.discipline-file{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 8px;border:1px solid #dfe8e2;border-radius:7px;background:#f7faf8;color:#2f5a42;font-size:11px;cursor:pointer}
+.discipline-file span{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-file small{flex:none;color:#8a958d;font-size:10px}
 .discipline-file:hover{border-color:#9dc0ab;background:#eef5f0}
 .discipline-actions{display:inline-flex;align-items:center;gap:2px;font-style:normal}
 .discipline-upload{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
