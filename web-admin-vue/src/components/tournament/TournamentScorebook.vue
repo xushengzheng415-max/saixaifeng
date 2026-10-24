@@ -1,17 +1,32 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { callFunction } from '../../utils/cloud'
 
 const props = defineProps({
   awards: { type: Object, default: () => ({}) },
   tournament: { type: Object, default: () => ({}) },
+  matches: { type: Array, default: () => [] },
   tournamentId: { type: String, default: '' }
 })
 const emit = defineEmits(['refresh'])
 
 const divisions = computed(() => props.awards.divisions || [])
 const ready = computed(() => Boolean(props.awards.ready))
+const activeDivisionId = ref('')
+const printScope = ref('all')
+const printRoot = ref(null)
+const exportingPdf = ref(false)
+watch(divisions, items => {
+  if (!items.some(item => String(item.divisionId) === activeDivisionId.value)) activeDivisionId.value = String(items[0]?.divisionId || '')
+}, { immediate: true })
+const selectedDivision = computed(() => divisions.value.find(item => String(item.divisionId) === activeDivisionId.value) || null)
+const printDivisions = computed(() => printScope.value === 'all' ? divisions.value : divisions.value.filter(item => String(item.divisionId) === printScope.value))
+function divisionProgress(division) {
+  const rows = props.matches.filter(match => String(match.divisionId || '') === String(division.divisionId || ''))
+  const completed = rows.filter(match => match.resultStatus === 'approved').length
+  return { total: rows.length, completed, remaining: Math.max(0, rows.length - completed), ready: rows.length > 0 && completed === rows.length }
+}
 const summary = computed(() => {
   const totalGoals = divisions.value.reduce((sum, item) => sum + (item.standings || []).reduce((groupSum, group) => groupSum + (group.rows || []).reduce((rowSum, row) => rowSum + Number(row.goalsFor || 0), 0), 0), 0)
   const totalTeams = divisions.value.reduce((sum, item) => sum + Number(item.teamCount || 0), 0)
@@ -70,9 +85,44 @@ async function restoreAuto(division, awardKey) {
   }
 }
 
-function exportPdf() {
-  if (!ready.value) { ElMessage.warning('全部比赛录完并归档后才能导出成绩册'); return }
+async function printScorebook(division = null) {
+  if (division && !divisionProgress(division).ready) return ElMessage.warning(`本组还有 ${divisionProgress(division).remaining} 场未形成正式赛果`)
+  if (!division && !ready.value) return ElMessage.warning('全部比赛形成正式赛果后才能打印整届成绩册')
+  printScope.value = division ? String(division.divisionId) : 'all'
+  await nextTick()
   window.print()
+}
+async function exportDivisionPdf(division) {
+  const progress = divisionProgress(division)
+  if (!progress.ready) return ElMessage.warning(`本组还有 ${progress.remaining} 场未形成正式赛果`)
+  if (exportingPdf.value) return
+  exportingPdf.value = true
+  printScope.value = String(division.divisionId)
+  try {
+    await nextTick()
+    const pages = [...(printRoot.value?.querySelectorAll('.print-page') || [])]
+    if (!pages.length) throw new Error('未找到本组成绩册内容')
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
+    const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' })
+    for (const [index, page] of pages.entries()) {
+      const canvas = await html2canvas(page, {
+        scale:2, backgroundColor:'#fff', useCORS:true, logging:false,
+        onclone(doc) {
+          const root = doc.querySelector('[data-scorebook-print-root]')
+          if (root) { root.style.display = 'block'; root.style.position = 'static'; root.style.width = '210mm' }
+        }
+      })
+      if (index) pdf.addPage()
+      const pageWidth=pdf.internal.pageSize.getWidth(),pageHeight=pdf.internal.pageSize.getHeight()
+      const ratio=Math.min(pageWidth/canvas.width,pageHeight/canvas.height)
+      const width=canvas.width*ratio,height=canvas.height*ratio
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.88),'JPEG',(pageWidth-width)/2,0,width,height)
+    }
+    const safeName = `${props.tournament.name || '赛事'}-${division.divisionName}-成绩册`.replace(/[\\/:*?"<>|]/g,'-')
+    pdf.save(`${safeName}.pdf`)
+    ElMessage.success('本组成绩册已下载')
+  } catch (error) { ElMessage.error(error.message || 'PDF 导出失败，请重试') }
+  finally { exportingPdf.value = false }
 }
 
 function playerLine(player) {
@@ -92,24 +142,27 @@ function playerMeta(player) {
     <header class="section-heading">
       <div>
         <h2>成绩册</h2>
-        <p>全部比赛录入完成后生成正式成绩册，含各组奖项、总奖项与颁奖依据；可手动调整个别获奖人并留痕。</p>
       </div>
       <div class="scorebook-actions">
-        <el-tag :type="ready ? 'success' : 'warning'" effect="plain">{{ ready ? '可生成成绩册' : `待完成 ${summary.matches - summary.submitted} 场录入` }}</el-tag>
-        <el-button type="primary" :disabled="!ready" @click="exportPdf">导出 PDF / 打印</el-button>
+        <el-tag :type="ready ? 'success' : 'warning'" effect="plain">{{ ready ? '全部赛果已完成' : `待完成 ${summary.matches - summary.submitted} 场` }}</el-tag>
+        <el-button plain :disabled="!ready" @click="printScorebook()">打印整届</el-button>
       </div>
     </header>
 
-    <el-alert v-if="!ready" type="warning" :closable="false" show-icon :title="`还有 ${summary.matches - summary.submitted} 场比赛未录入赛果，成绩册需在全部比赛完成后生成。`" />
-
     <div v-if="!divisions.length" class="panel"><el-empty description="当前赛事暂无可用奖项数据" /></div>
 
-    <article v-for="division in divisions" :key="division.divisionId" class="panel scorebook-card">
+    <el-tabs v-if="divisions.length" v-model="activeDivisionId" class="division-tabs">
+      <el-tab-pane v-for="division in divisions" :key="division.divisionId" :name="String(division.divisionId)" :label="division.divisionName" />
+    </el-tabs>
+
+    <article v-if="selectedDivision" :key="selectedDivision.divisionId" class="panel scorebook-card">
+      <template v-for="division in [selectedDivision]" :key="division.divisionId">
       <header class="card-head">
-        <div><h3>{{ division.divisionName }}</h3><p>{{ division.matchCount }} 场正式赛果 · {{ division.teamCount }} 支球队</p></div>
-        <div class="award-tags">
-          <el-tag v-if="division.champion" type="success" effect="dark">冠军 {{ division.champion.teamName }}</el-tag>
-          <el-tag v-if="division.runnerUp" type="info" effect="plain">亚军 {{ division.runnerUp.teamName }}</el-tag>
+        <div><h3>{{ division.divisionName }}</h3><p>{{ divisionProgress(division).completed }} / {{ divisionProgress(division).total }} 场正式赛果 · {{ division.teamCount }} 支球队</p></div>
+        <div class="division-actions">
+          <span v-if="!divisionProgress(division).ready">还差 {{ divisionProgress(division).remaining }} 场</span>
+          <el-button size="small" :disabled="!divisionProgress(division).ready" @click="printScorebook(division)">打印本组</el-button>
+          <el-button size="small" type="success" :disabled="!divisionProgress(division).ready" :loading="exportingPdf" @click="exportDivisionPdf(division)">导出 PDF</el-button>
         </div>
       </header>
 
@@ -159,12 +212,10 @@ function playerMeta(player) {
           <li v-for="award in division.teamAwards" :key="award.key"><span>{{ award.title }}</span><b>{{ award.teamName }}</b><small>{{ award.note }}</small></li>
         </ul>
       </section>
+      </template>
     </article>
 
-    <article class="panel rules-card">
-      <header><h3>颁奖依据</h3></header>
-      <ol><li v-for="(rule, index) in awards.rules || []" :key="index">{{ rule }}</li></ol>
-    </article>
+    <el-collapse v-if="selectedDivision" class="rules-collapse"><el-collapse-item title="颁奖依据"><ol><li v-for="(rule, index) in awards.rules || []" :key="index">{{ rule }}</li></ol></el-collapse-item></el-collapse>
 
     <el-dialog v-model="dialogVisible" :title="`调整${dialogForm.awardTitle}`" width="460px">
       <el-form label-width="90px">
@@ -180,8 +231,8 @@ function playerMeta(player) {
     </el-dialog>
 
     <!-- A4 打印稿：仅打印时可见 -->
-    <div class="print-root">
-      <section class="print-page cover">
+    <div ref="printRoot" class="print-root" data-scorebook-print-root>
+      <section v-if="printScope === 'all'" class="print-page cover">
         <div class="cover-brand">赛小蜂足球</div>
         <h1>{{ tournament.name || '赛事成绩册' }}</h1>
         <p class="cover-sub">{{ (tournament.startDate || '').slice(0, 10) }}<template v-if="tournament.endDate"> — {{ tournament.endDate.slice(0, 10) }}</template><template v-if="tournament.location"> · {{ tournament.location }}</template></p>
@@ -193,7 +244,7 @@ function playerMeta(player) {
         <p class="cover-foot">成绩册由赛小蜂足球赛事系统依据正式赛果自动生成 · {{ printedAt }}</p>
       </section>
 
-      <section class="print-page">
+      <section v-if="printScope === 'all'" class="print-page">
         <h2 class="print-h2">全赛事奖项</h2>
         <div class="print-overall">
           <div><small>总 MVP</small><b>{{ playerLine(awards.overall && awards.overall.mvp) }}</b><span>{{ awards.overall && awards.overall.mvp ? `${awards.overall.mvp.teamName} · ${awards.overall.mvp.divisionName}` : '' }}</span></div>
@@ -207,7 +258,8 @@ function playerMeta(player) {
         <ol class="print-rules"><li v-for="(rule, index) in awards.rules || []" :key="index">{{ rule }}</li></ol>
       </section>
 
-      <section v-for="division in divisions" :key="`print-${division.divisionId}`" class="print-page">
+      <template v-for="division in printDivisions" :key="`print-${division.divisionId}`">
+      <section class="print-page">
         <h2 class="print-h2">{{ division.divisionName }}</h2>
         <div class="print-awards">
           <div><small>冠军</small><b>{{ division.champion ? division.champion.teamName : '—' }}</b></div>
@@ -218,6 +270,12 @@ function playerMeta(player) {
         </div>
         <h3 class="print-h3">最佳阵容（1-3-3-1）</h3>
         <div class="print-xi"><span v-for="(slot, index) in division.bestXI" :key="index">{{ slot.slot }}：{{ slot.name }}<i v-if="slot.filled">（补位）</i></span></div>
+        <h3 class="print-h3">球队奖项</h3>
+        <table class="print-table"><thead><tr><th>奖项</th><th>球队</th><th>依据</th></tr></thead><tbody><tr v-for="award in division.teamAwards" :key="award.key"><td>{{ award.title }}</td><td>{{ award.teamName }}</td><td>{{ award.note }}</td></tr></tbody></table>
+        <p class="print-foot">{{ tournament.name }} · {{ division.divisionName }} · 赛小蜂足球</p>
+      </section>
+      <section class="print-page">
+        <h2 class="print-h2">{{ division.divisionName }} · 积分与依据</h2>
         <template v-for="group in division.standings" :key="`print-standings-${group.groupName}`">
           <h3 class="print-h3">{{ group.groupName }} 积分榜</h3>
           <table class="print-table">
@@ -225,8 +283,11 @@ function playerMeta(player) {
             <tbody><tr v-for="row in group.rows" :key="`${group.groupName}-${row.rank}`"><td>{{ row.rank }}</td><td>{{ row.teamName }}</td><td>{{ row.played }}</td><td>{{ row.wins }}</td><td>{{ row.draws }}</td><td>{{ row.losses }}</td><td>{{ row.goalsFor }}</td><td>{{ row.goalsAgainst }}</td><td>{{ row.goalDifference > 0 ? '+' + row.goalDifference : row.goalDifference }}</td><td><b>{{ row.points }}</b></td></tr></tbody>
           </table>
         </template>
+        <h3 class="print-h3">颁奖依据</h3>
+        <ol class="print-rules"><li v-for="(rule, index) in awards.rules || []" :key="index">{{ rule }}</li></ol>
         <p class="print-foot">{{ tournament.name }} · {{ division.divisionName }} · 赛小蜂足球</p>
       </section>
+      </template>
     </div>
   </section>
 </template>
@@ -234,11 +295,12 @@ function playerMeta(player) {
 <style scoped>
 .scorebook-section{display:flex;flex-direction:column;gap:16px}
 .scorebook-actions{display:flex;align-items:center;gap:10px}
-.scorebook-card{padding:18px 20px}
+.scorebook-card{padding:18px 20px;max-width:1400px}
+.division-tabs :deep(.el-tabs__header){margin:0}.division-tabs :deep(.el-tabs__item){font-weight:600}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid #eef1ee;padding-bottom:12px}
 .card-head h3{margin:0;font-size:18px;color:#1B5E20}
 .card-head p{margin:4px 0 0;font-size:13px;color:#7a8a80}
-.award-tags{display:flex;gap:8px;flex-wrap:wrap}
+.division-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.division-actions>span{font-size:12px;color:#9a6a16}
 .award-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px}
 .award-box{background:#f7faf7;border:1px solid #e6eee7;border-radius:10px;padding:14px}
 .award-title{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#5c6b62;font-weight:600}
@@ -246,26 +308,28 @@ function playerMeta(player) {
 .award-meta{margin:0;font-size:13px;color:#6f8077}
 .award-stat{margin:6px 0 0;font-size:13px;color:#1B5E20}
 .best-xi{margin-top:16px}
-.xi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}
+.xi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px}
 .xi-slot{background:#fff;border:1px dashed #cfdad2;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .xi-slot small{font-size:12px;color:#8b9a91}
 .xi-slot b{font-size:16px;color:#17321f}
 .xi-slot span{font-size:12px;color:#6f8077}
 .xi-slot em{font-style:normal;font-size:11px;color:#b07b1e}
 .team-awards{margin-top:16px}
-.team-awards ul{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}
-.team-awards li{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #eef1ee;border-radius:8px;padding:8px 12px;font-size:13px}
+.team-awards ul{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}
+.team-awards li{display:grid;grid-template-columns:132px minmax(0,1fr);align-items:center;gap:3px 10px;border-bottom:1px solid #e5ebe7;padding:9px 2px;font-size:13px}
 .team-awards li b{color:#1B5E20;font-size:15px}
-.team-awards li small{color:#8b9a91}
-.rules-card ol{margin:10px 0 0;padding-left:20px;font-size:13px;line-height:1.8;color:#4d5b53}
+.team-awards li small{grid-column:2;color:#8b9a91}
+.rules-collapse{max-width:1400px}.rules-collapse ol{margin:10px 0 0;padding-left:20px;font-size:13px;line-height:1.8;color:#4d5b53}
+@media(max-width:900px){.xi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.team-awards ul{grid-template-columns:1fr}.card-head{flex-wrap:wrap}}
 .print-root{display:none}
 @media print{
   @page{size:A4;margin:0}
   :global(body *){visibility:hidden!important}
   .print-root,.print-root *{visibility:visible!important}
   .print-root{display:block!important;position:absolute;left:0;top:0;width:210mm}
-  .print-page{width:210mm;min-height:297mm;padding:18mm 16mm;box-sizing:border-box;page-break-after:always;color:#16301f;background:#fff}
-  .print-page:last-child{page-break-after:auto}
+}
+.print-page{width:210mm;min-height:297mm;padding:18mm 16mm;box-sizing:border-box;page-break-after:always;color:#16301f;background:#fff}
+.print-page:last-child{page-break-after:auto}
   .cover{display:flex;flex-direction:column;justify-content:center;align-items:center;background:#0f3d22;color:#fff;text-align:center}
   .cover-brand{letter-spacing:6px;font-size:13px;opacity:.8}
   .cover h1{font-size:34px;margin:18px 0 10px;line-height:1.35}
@@ -296,5 +360,4 @@ function playerMeta(player) {
   .print-xi span{border:1px dashed #b9c9be;border-radius:6px;padding:5px 9px}
   .print-xi i{font-style:normal;color:#b07b1e}
   .print-foot{margin-top:22px;font-size:10px;color:#8b9a91;text-align:center}
-}
 </style>
