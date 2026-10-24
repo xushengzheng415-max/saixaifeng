@@ -16,6 +16,7 @@
               <img v-if="slotTeam(node).logo" :src="slotTeam(node).logo" alt="" @error="hideLogo(slotTeam(node).logo)" />
               <span v-else-if="!slotTeam(node).pending" class="crest-fallback" aria-hidden="true">{{ slotTeam(node).name.slice(0,1) }}</span>
               <div class="team-label"><strong :title="slotTeam(node).name">{{ slotTeam(node).name }}</strong><small v-if="slotOrigin(node)" :title="slotOrigin(node)">{{ slotOrigin(node) }}</small></div>
+              <span v-if="node.kind==='winner' && slotScore(node)" class="match-score" :class="{'score-pending':node.row.resultStatus!=='approved'}" :title="scoreTitle(node)"><b>{{ slotScore(node).score }}</b><small v-if="slotScore(node).penalty">{{ slotScore(node).penalty }}</small></span>
             </section>
           </div>
         </div>
@@ -67,8 +68,23 @@ function slotOrigin(node){
  if(slotTeam(node).pending)return ''
  return node.kind==='team'?origin(node.row,node.side):origin(node.row,winningSide(node.row))
 }
+// 晋级图上的比分为已录入的正式赛果；未归档结果仍显示但标注为暂定，缺失比分不显示。
+function slotScore(node){
+ if(node.kind!=='winner')return null
+ const row=node.row,home=Number(row.homeScore),away=Number(row.awayScore)
+ if(row.homeScore==null||row.awayScore==null||!Number.isFinite(home)||!Number.isFinite(away))return null
+ const homePenalty=Number(row.homePenaltyScore)||0,awayPenalty=Number(row.awayPenaltyScore)||0
+ return {score:`${home} : ${away}`,penalty:homePenalty||awayPenalty?`点球 ${homePenalty}:${awayPenalty}`:''}
+}
+function scoreTitle(node){
+ const row=node.row,score=slotScore(node)
+ if(!score)return ''
+ const status=row.resultStatus==='approved'?'正式赛果':'赛果未归档，当前为暂定比分'
+ const label=[row.matchNo?`场序${row.matchNo}`:'',row.roundName||row.phaseLabel||''].filter(Boolean).join(' · ')
+ return `${status}${label?' · '+label:''} · ${row.homeTeamName||'主队'} ${score.score} ${row.awayTeamName||'客队'}`
+}
 </script>
 
 <style scoped>
-.division-bracket{margin:24px 0 30px}.division-bracket>h3{font-size:20px;margin:0 0 20px;color:#203d2c}.compact-board{margin:0 0 28px}.compact-board>h4{margin:0 0 8px;font-size:15px;font-weight:600;color:#456551}.bracket-scroll{overflow:auto;background:#f5f8f6;border:1px solid #e3ebe5;border-radius:6px;padding:12px 0}.bracket-canvas{position:relative;margin:0 auto}.bracket-lines{position:absolute;inset:0;pointer-events:none}.bracket-lines path{fill:none;stroke-width:1.5;stroke-linejoin:round}.winner-path{stroke:#8aab95}.loser-path{stroke:#b1c1b7;stroke-dasharray:4 4}.bracket-slot{position:absolute;box-sizing:border-box;display:flex;align-items:center;gap:7px;padding:8px;background:#fff;border:1px solid #dce6df;border-radius:4px}.bracket-slot img,.crest-fallback{height:28px;width:28px;flex:0 0 28px;object-fit:contain}.crest-fallback{display:grid;place-items:center;color:#527d61;font-size:17px}.team-label{min-width:0;flex:1}.team-label strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13px;line-height:1.4;font-weight:600;color:#264b35;overflow:hidden;overflow-wrap:anywhere}.team-label small{display:block;font-size:11px;line-height:1.5;color:#84958a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.progress-slot{border-color:#a9c8b4;background:#fcfefd}.pending-slot .team-label{text-align:center}.pending-slot .team-label strong{font-weight:400;color:#82958a}.title-slot{border-color:#43865c;background:#eaf4ed}.title-slot .team-label strong{color:#386d49;font-weight:600}.round-label{position:absolute;left:0;top:-29px;width:100%;text-align:center;font-size:13px;font-weight:600;color:#42664d;white-space:nowrap}.source-issue{margin:6px 0;color:#ac752d;font-size:12px}@media(max-width:700px){.division-bracket>h3{font-size:18px}.bracket-scroll{margin:0 -4px}}
+.division-bracket{margin:24px 0 30px}.division-bracket>h3{font-size:20px;margin:0 0 20px;color:#203d2c}.compact-board{margin:0 0 28px}.compact-board>h4{margin:0 0 8px;font-size:15px;font-weight:600;color:#456551}.bracket-scroll{overflow:auto;background:#f5f8f6;border:1px solid #e3ebe5;border-radius:6px;padding:12px 0}.bracket-canvas{position:relative;margin:0 auto}.bracket-lines{position:absolute;inset:0;pointer-events:none}.bracket-lines path{fill:none;stroke-width:1.5;stroke-linejoin:round}.winner-path{stroke:#8aab95}.loser-path{stroke:#b1c1b7;stroke-dasharray:4 4}.bracket-slot{position:absolute;box-sizing:border-box;display:flex;align-items:center;gap:7px;padding:8px;background:#fff;border:1px solid #dce6df;border-radius:4px}.bracket-slot img,.crest-fallback{height:28px;width:28px;flex:0 0 28px;object-fit:contain}.crest-fallback{display:grid;place-items:center;color:#527d61;font-size:17px}.team-label{min-width:0;flex:1}.team-label strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:13px;line-height:1.4;font-weight:600;color:#264b35;overflow:hidden;overflow-wrap:anywhere}.team-label small{display:block;font-size:11px;line-height:1.5;color:#84958a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.progress-slot{border-color:#a9c8b4;background:#fcfefd}.pending-slot .team-label{text-align:center}.pending-slot .team-label strong{font-weight:400;color:#82958a}.title-slot{border-color:#43865c;background:#eaf4ed}.title-slot .team-label strong{color:#386d49;font-weight:600}.round-label{position:absolute;left:0;top:-29px;width:100%;text-align:center;font-size:13px;font-weight:600;color:#42664d;white-space:nowrap}.source-issue{margin:6px 0;color:#ac752d;font-size:12px}.match-score{display:grid;flex:0 0 auto;gap:2px;justify-items:end;text-align:right}.match-score b{font-size:15px;font-weight:700;letter-spacing:.5px;color:#1f5c3b;font-variant-numeric:tabular-nums;white-space:nowrap}.match-score small{font-size:10px;line-height:1.2;color:#84958a;white-space:nowrap}.match-score.score-pending b{color:#a06a1f}@media(max-width:700px){.division-bracket>h3{font-size:18px}.bracket-scroll{margin:0 -4px}}
 </style>
