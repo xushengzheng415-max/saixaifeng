@@ -7,6 +7,7 @@
         <el-radio-button label="blacklist">跨赛事黑名单 {{ counts.platformScope }}</el-radio-button>
       </el-radio-group>
       <el-button :loading="loading" @click="load">刷新</el-button>
+      <el-button type="danger" @click="openCreate">登记处罚</el-button>
     </div>
     <el-alert v-if="errorText" :title="errorText" type="error" :closable="false" show-icon />
     <el-alert title="主办方只能在本赛事内录入处罚；跨赛事黑名单必须由平台审核通过后才生效，到期自动解除。" type="info" :closable="false" show-icon />
@@ -42,6 +43,61 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <el-dialog v-model="createVisible" title="登记平台处罚" width="min(600px, 94vw)" :close-on-click-modal="false">
+      <el-form label-width="100px">
+        <el-form-item label="赛事编号">
+          <el-input v-model="createForm.tournamentId" placeholder="从赛事中心复制赛事 ID" />
+        </el-form-item>
+        <el-form-item label="处罚对象">
+          <el-radio-group v-model="createForm.subjectType">
+            <el-radio label="player">球员</el-radio>
+            <el-radio label="team">球队</el-radio>
+            <el-radio label="staff">工作人员</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="createForm.subjectType === 'player'" label="球员姓名">
+          <el-input v-model="createForm.playerName" maxlength="40" />
+        </el-form-item>
+        <el-form-item v-if="createForm.subjectType === 'staff'" label="人员姓名">
+          <el-input v-model="createForm.personName" maxlength="40" />
+        </el-form-item>
+        <el-form-item v-if="createForm.subjectType !== 'staff'" label="所属球队">
+          <el-input v-model="createForm.teamName" maxlength="60" placeholder="球队名称" />
+        </el-form-item>
+        <el-form-item v-if="createForm.subjectType === 'team' || createForm.subjectType === 'player'" label="球队编号">
+          <el-input v-model="createForm.teamId" placeholder="球队 ID（扣联赛积分时必填）" />
+        </el-form-item>
+        <el-form-item label="违纪类型">
+          <el-checkbox-group v-model="createForm.types">
+            <el-checkbox label="abuse_referee">辱骂裁判</el-checkbox>
+            <el-checkbox label="fight">现场打架</el-checkbox>
+            <el-checkbox label="serious_misconduct">严重违纪</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="处罚决定">
+          <el-input v-model="createForm.reason" type="textarea" :rows="3" maxlength="300" placeholder="写明违纪事实、依据与追加处罚内容（不少于 4 字）" />
+        </el-form-item>
+        <el-form-item label="执行范围">
+          <el-select v-model="createForm.banDuration">
+            <el-option label="仅本赛事（按场次）" value="matches" />
+            <el-option label="3 个月" value="months3" />
+            <el-option label="1 年" value="year1" />
+            <el-option label="永久" value="permanent" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="停赛场次">
+          <el-input-number v-model="createForm.suspensionMatches" :min="0" :max="50" />
+        </el-form-item>
+        <el-form-item label="扣联赛积分">
+          <el-input-number v-model="createForm.pointsDeduction" :min="0" :max="15" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="danger" :loading="createSubmitting" @click="submitCreate">登记并生效</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="reviewVisible" title="跨赛事黑名单审核" width="min(520px, 92vw)" :close-on-click-modal="false">
       <dl class="review-detail">
@@ -86,6 +142,44 @@ const view = ref('pending')
 const reviewVisible = ref(false)
 const reviewRow = ref(null)
 const reviewForm = reactive({ decision: 'approve', banDuration: 'months3', reviewNote: '' })
+const createVisible = ref(false)
+const createSubmitting = ref(false)
+const createForm = reactive({ tournamentId: '', subjectType: 'player', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
+
+function openCreate() {
+  Object.assign(createForm, { tournamentId: '', subjectType: 'player', playerName: '', personName: '', teamName: '', teamId: '', types: [], reason: '', banDuration: 'matches', suspensionMatches: 0, pointsDeduction: 0 })
+  createVisible.value = true
+}
+
+async function submitCreate() {
+  if (createSubmitting.value) return
+  if (!String(createForm.tournamentId || '').trim()) return ElMessage.warning('请填写赛事编号')
+  if (createForm.subjectType === 'player' && !String(createForm.playerName || '').trim()) return ElMessage.warning('请填写球员姓名')
+  if (createForm.subjectType === 'staff' && !String(createForm.personName || '').trim()) return ElMessage.warning('请填写人员姓名')
+  if (!createForm.types.length) return ElMessage.warning('请选择违纪类型')
+  if (String(createForm.reason || '').trim().length < 4) return ElMessage.warning('处罚决定不少于 4 个字')
+  createSubmitting.value = true
+  try {
+    await api({
+      action: 'createPenalty',
+      tournamentId: String(createForm.tournamentId || '').trim(),
+      subjectType: createForm.subjectType,
+      playerName: createForm.playerName,
+      personName: createForm.personName,
+      teamName: createForm.teamName,
+      teamId: createForm.teamId,
+      types: createForm.types,
+      reason: createForm.reason,
+      banDuration: createForm.banDuration,
+      suspensionMatches: createForm.suspensionMatches,
+      pointsDeduction: createForm.pointsDeduction
+    })
+    ElMessage.success('处罚已登记并生效')
+    createVisible.value = false
+    view.value = createForm.banDuration === 'matches' ? 'effective' : 'blacklist'
+    await load()
+  } catch (error) { ElMessage.error(error.message) } finally { createSubmitting.value = false }
+}
 
 const KIND_LABELS = { forfeit: '弃赛', discipline: '纪律处罚' }
 const TYPE_LABELS = { forfeit: '弃赛', abuse_referee: '辱骂裁判', fight: '现场打架', serious_misconduct: '严重违纪' }
