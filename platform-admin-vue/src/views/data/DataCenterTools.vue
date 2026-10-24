@@ -181,7 +181,7 @@ watch(() => [transfer.playerId,transfer.toTeamId],() => { transfer.requestKey = 
 onBeforeUnmount(()=>{querySequence++;auditSequence++})
 async function refresh(){if(activeTab.value==='appeals')return appealsRef.value?.refresh();await loadCatalog();if(activeTab.value==='playerAudit'){if(auditQueue.value)await loadAuditQueue();if(auditPlayerId.value)await auditSelectedPlayer()}else if(activeTab.value==='transfers')await loadTransfers();else if(result.value)await query()}
 defineExpose({refresh,loading})
-onMounted(async()=>{await loadCatalog();if(platformOwner.value&&!props.initialPlayerId)activeTab.value='appeals';if(props.initialPlayerId&&platformOwner.value){activeTab.value='playerAudit';auditPlayerId.value=props.initialPlayerId;await nextTick();await auditSelectedPlayer()}})
+onMounted(async()=>{await loadCatalog();if(props.initialPlayerId&&platformOwner.value){activeTab.value='playerAudit';auditPlayerId.value=props.initialPlayerId;await nextTick();await auditSelectedPlayer()}})
 </script>
 
 <style scoped>
