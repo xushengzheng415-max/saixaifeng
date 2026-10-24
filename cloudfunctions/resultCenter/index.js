@@ -1065,6 +1065,8 @@ async function createDisciplinaryAction(event, actor) {
     actorUserId: text(actor.user._id), actorOrgId: actor.orgId, result: 'pending',
     detail, createTime: db.serverDate(), updateTime: db.serverDate()
   } })
+  // 首次写入前确保集合存在（云端新建环境可能尚无该集合）；已存在时忽略创建报错。
+  await db.createCollection('disciplinary_actions').catch(() => {})
   const created = await db.collection('disciplinary_actions').add({ data })
   await db.collection('registration_audit_logs').doc(audit._id).update({ data: {
     result: 'success', actionId: text(created._id), completedAt: db.serverDate(), updateTime: db.serverDate()
