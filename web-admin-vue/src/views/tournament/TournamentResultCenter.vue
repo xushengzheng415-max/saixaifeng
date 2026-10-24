@@ -697,7 +697,7 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 .discipline-tag{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
 .discipline-tag.danger{background:#fdeceb;color:#c23b2b}.discipline-tag.severe{background:#fbe3e0;color:#a32216}.discipline-tag.warning{background:#fdf4e3;color:#a97516}.discipline-tag.muted{background:#eef2ee;color:#54675a}
 .discipline-reason{margin:8px 0 0;color:#4d5d53;font-size:12px;line-height:1.6}
-.discipline-card>footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed #edf1ee;color:#9aa59d;font-size:11px}
+.discipline-card>footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed #edf1ee;color:#9aa59d;font-size:11px}
 .disciplinary-form{margin-top:16px}
 .discipline-file-input{display:none}
 .discipline-files{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 0}
