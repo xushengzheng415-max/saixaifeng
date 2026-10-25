@@ -228,6 +228,58 @@ function safeOrganizerAccount(user, tournamentRows, teamRows) {
   }
 }
 
+const ORG_IDENTITY_LABELS = { school: '学校', enterprise: '企业', association: '协会', event_company: '赛事公司' }
+const ORG_VOLUME_LABELS = { under_10: '年办赛 10 场以内', '10_30': '年办赛 10-30 场', '30_50': '年办赛 30-50 场', over_50: '年办赛 50 场以上' }
+const ORG_AUDIENCE_LABELS = { youth: '青少年赛事为主', adult: '成人赛事为主' }
+const ORG_IDENTITIES = Object.keys(ORG_IDENTITY_LABELS)
+const ORG_VOLUMES = Object.keys(ORG_VOLUME_LABELS)
+const ORG_AUDIENCES = Object.keys(ORG_AUDIENCE_LABELS)
+const TEST_ORGANIZER_NAME = /(测试|演示|demo|test|示例)/i
+
+// 登记资料来自主办方三步问答（organizations.customerProfile），只用于经营分析，不参与权限判断。
+function organizerProfile(organization) {
+  const profile = organization && organization.customerProfile
+  if (!profile || typeof profile !== 'object') return null
+  const identity = ORG_IDENTITIES.includes(profile.identity) ? profile.identity : ''
+  const annualEventVolume = ORG_VOLUMES.includes(profile.annualEventVolume) ? profile.annualEventVolume : ''
+  const primaryAudience = ORG_AUDIENCES.includes(profile.primaryAudience) ? profile.primaryAudience : ''
+  if (!identity && !annualEventVolume && !primaryAudience) return null
+  return {
+    identity,
+    identityLabel: ORG_IDENTITY_LABELS[identity] || '机构类型待补充',
+    annualEventVolume,
+    annualEventVolumeLabel: ORG_VOLUME_LABELS[annualEventVolume] || '办赛量待补充',
+    primaryAudienceLabel: ORG_AUDIENCE_LABELS[primaryAudience] || ''
+  }
+}
+
+// 意向分层只依据已产生的注册/办赛事实，不推断未采集的值。
+// A：已有赛事且有球队实际报名；B：已建赛事/球队或已填办赛需求；C：仅注册；D：测试或无法联系。
+function organizerIntent(target) {
+  const registeredTournamentCount = Number(target.registeredTournamentCount || 0)
+  const tournamentCount = Number(target.tournamentCount || 0)
+  const teamCount = Number(target.teamCount || 0)
+  if (TEST_ORGANIZER_NAME.test(String(target.name || ''))) {
+    return { level: 'D', label: '疑似无效', reason: '名称含测试/演示标记', rank: 0 }
+  }
+  if (registeredTournamentCount > 0) {
+    return { level: 'A', label: '正在办赛', reason: `${registeredTournamentCount} 场赛事已有报名球队`, rank: 300 + Math.min(registeredTournamentCount, 99) }
+  }
+  if (tournamentCount > 0) {
+    return { level: 'B', label: '有明确需求', reason: `已建 ${tournamentCount} 场赛事，尚无球队报名`, rank: 200 }
+  }
+  if (teamCount > 0) {
+    return { level: 'B', label: '有明确需求', reason: `已建 ${teamCount} 支球队，尚未创建赛事`, rank: 190 }
+  }
+  if (target.hasProfile) {
+    return { level: 'B', label: '有明确需求', reason: '已填写办赛需求，尚未创建赛事', rank: 180 }
+  }
+  if (!target.phone) {
+    return { level: 'D', label: '疑似无效', reason: '缺少可联系手机号', rank: 10 }
+  }
+  return { level: 'C', label: '仅注册了解', reason: '仅注册，无机构资料与业务动作', rank: 100 }
+}
+
 async function getOverview(db) {
   const [bannerRows, tournamentRows, userRows, organizationRows, teamRows, tournamentTeamRows, assistanceRows] = await Promise.all([
     loadAllOptional(db, 'banners', 1000),
@@ -335,11 +387,26 @@ async function getOverview(db) {
 
   const organizers = Array.from(organizerMap.values()).map(item => {
     const organizerTournaments = tournaments.filter(tournament => item.tournamentIds.includes(String(tournament._id)))
+    const profile = organizerProfile(organizationsById.get(item.orgId))
+    const registeredTournamentCount = organizerTournaments
+      .filter(tournament => (tournamentTeamCounts.get(String(tournament._id)) || 0) > 0).length
+    const tournamentCount = item.tournamentIds.length
+    const teamCount = item.teamIds.length
+    const intent = organizerIntent({
+      name: item.name, phone: item.phone, hasProfile: Boolean(profile),
+      tournamentCount, teamCount, registeredTournamentCount
+    })
     return {
       ...item,
       accountProfiles: userRows.filter(user => String(user._id) === item.userId || (item.orgId && recordOrgId(user) === item.orgId)).map(customerProfiles.accountSummary),
-      tournamentCount: item.tournamentIds.length,
-      teamCount: item.teamIds.length,
+      tournamentCount,
+      teamCount,
+      registeredTournamentCount,
+      orgProfile: profile,
+      intentLevel: intent.level,
+      intentLabel: intent.label,
+      intentReason: intent.reason,
+      intentRank: intent.rank,
       latestTournament: organizerTournaments[0] || null,
       hasContact: Boolean(item.phone || item.email)
     }
@@ -413,7 +480,8 @@ async function getOverview(db) {
         totalTeams: teamRows.length,
         bannerCount: bannerRows.length,
         activeSupportCount: supportRequests.filter(item => ['pending', 'active'].includes(item.status)).length,
-        missingContactCount: organizers.filter(item => !item.hasContact).length
+        missingContactCount: organizers.filter(item => !item.hasContact).length,
+        leadCount: organizers.filter(item => ['A', 'B'].includes(item.intentLevel)).length
       }
     }
   }
