@@ -525,7 +525,7 @@ function respond(raw) {
   }
 
   // 球员级数据：射手、助攻、红黄牌，只读数据中心统一口径结果
-  const playerIntent = has('射手', '金靴', '谁进的球', '谁进球', '进球榜', '助攻') || (has('球员', '队员') && has('数据', '统计', '表现', '进球')) || (mentionedTeams(text).length > 0 && has('进球最多'))
+  const playerIntent = has('射手', '金靴', '谁进的球', '谁进球', '进球榜', '助攻', '红牌', '黄牌', '拿牌', '两黄') || (has('球员', '队员') && has('数据', '统计', '表现', '进球')) || (mentionedTeams(text).length > 0 && has('进球最多'))
   if (playerIntent) {
     const board = playerBoard.value
     if (!board) {
@@ -556,7 +556,7 @@ function respond(raw) {
       text: `按数据中心统一口径，${scopeText}${metricLabel}前 ${Math.min(5, rows.length)} 名：${Number(table.unverifiedCount) > 0 ? `（另有 ${table.unverifiedCount} 名球员该项数据待核实）` : ''}`,
       list: rows.slice(0, 5).map(row => `${row.rank}. ${row.name}（${teamNameOf(row)}）${metricLabel} ${row.value}`),
       action: { label: '进入赛果与排名', target: `/tournaments/${id}/results` },
-      quickReplies: ['看下积分榜', '这届有多少支球队'],
+      quickReplies: ['射手榜', '红黄牌榜', '看下积分榜'],
       topic: 'playerBoard'
     }
   }
@@ -778,10 +778,16 @@ function respond(raw) {
     }
   }
 
-  // 兜底也给出真实数据和可继续的方向，不留空回答
+  // 兜底：先给最接近的方向，再列出能直接答的内容，不留“没对上就没了”
+  const guesses = []
+  if (has('牌', '犯规', '停赛')) guesses.push('红黄牌榜')
+  if (has('球', '进球', '得分')) guesses.push('射手榜')
+  if (has('队', '球队', '战绩')) guesses.push('这届有多少支球队')
+  if (has('赛', '场', '今天')) guesses.push('今天有几场比赛')
   return {
-    text: `我没完全对上你想问的部分。${overviewSentence()}你可以直接问比分、组别名次、某支球队的战绩、两队交锋、赛程、球队名单、赛期和场地；身价这类平台统一口径的数据请到数据中心查看。`,
-    quickReplies: ['这届还差什么没做', '看下积分榜', '今天有几场比赛', '这届什么时候开始'],
+    text: `这句我没完全对上。${overviewSentence()}可以直接问：组别名次、球队战绩、两队交锋、赛程与今日比赛、进球统计、球员进球/助攻/红黄牌、球队名单、赛期与场地；说「去XX」我还能直接带你到对应页面。`,
+    quickReplies: [...new Set([...guesses, '看下积分榜', '这届还差什么没做', '今天有几场比赛'])].slice(0, 4),
+    action: { label: '进入赛果与排名', target: `/tournaments/${id}/results` },
     topic: 'fallback'
   }
 }
@@ -823,7 +829,7 @@ async function ask(raw) {
   resizeComposer()
   scrollThread()
   let reply = null
-  const wantsPlayerBoard = /射手|金靴|谁进球|谁进的球|进球榜|助攻/.test(text) || (/球员|队员/.test(text) && /数据|统计|表现|进球/.test(text)) || (mentionedTeams(text).length > 0 && text.includes('进球最多'))
+  const wantsPlayerBoard = /射手|金靴|谁进球|谁进的球|进球榜|助攻|红牌|黄牌|拿牌|两黄/.test(text) || (/球员|队员/.test(text) && /数据|统计|表现|进球/.test(text)) || (mentionedTeams(text).length > 0 && text.includes('进球最多'))
   if (wantsPlayerBoard) {
     thinkingLabel.value = '正在读取数据中心球员榜单…'
     await ensurePlayerBoard()
