@@ -691,13 +691,13 @@ async function saveOrganizerFollowUp(db, event, actor) {
   return { success: true, organizerId, status, statusLabel: ORGANIZER_FOLLOW_UP_STATUSES[status] || '未跟进', note }
 }
 
-// 停用只控制平台名录展示和登录状态，账号与业务数据全部保留，可随时恢复。
+// 移出常用名录只影响平台名录展示，账号、权限和业务数据全部保留，可随时恢复。
 async function setOrganizerAccountArchived(db, event, actor) {
   const userId = cleanText(event.userId, 128)
-  if (!userId) throw new Error('该主办方没有可停用的登录账号')
+  if (!userId) throw new Error('该主办方没有可移出名录的登录账号')
   const user = firstRecord((await db.collection('users').doc(userId).get()).data)
   if (!user) throw new Error('账号不存在或已删除')
-  if (user.isPlatformOwner === true) throw new Error('平台负责人账号不能停用')
+  if (user.isPlatformOwner === true) throw new Error('平台负责人账号不能移出常用名录')
   const archived = event.archived === true
   await db.collection('users').doc(userId).update({ data: {
     organizerArchived: archived,
