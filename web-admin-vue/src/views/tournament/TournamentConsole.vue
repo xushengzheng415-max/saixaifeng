@@ -421,6 +421,28 @@ function detailReply(topic) {
   return null
 }
 
+// 球员级榜单只读数据中心统一口径结果，主控台不另算
+const playerBoard = ref(null)
+const playerBoardFailed = ref(false)
+
+async function ensurePlayerBoard() {
+  if (playerBoard.value || playerBoardFailed.value) return
+  try {
+    const reply = await callFunction('dataCenter', { action: 'query', scope: { tournamentId: id, mode: 'official' } }, 30000)
+    const payload = reply && reply.result ? reply.result : reply
+    if (!payload || payload.success === false) throw new Error((payload && payload.error) || '数据读取失败')
+    const goalsTable = payload.rankings && payload.rankings.players && payload.rankings.players.goals
+    const teamNamesById = {}
+    ;(payload.players || []).forEach(row => {
+      const key = String(row.teamId || '')
+      if (key && row.teamName && !teamNamesById[key]) teamNamesById[key] = row.teamName
+    })
+    playerBoard.value = { rankings: (payload.rankings && payload.rankings.players) || {}, teamNamesById, unverified: Number(goalsTable && goalsTable.unverifiedCount) || 0 }
+  } catch (error) {
+    playerBoardFailed.value = true
+  }
+}
+
 // 问题指向具体模块时，直接把人带到对应窗口（按具体度排序，先匹配先用）
 const PAGE_TARGETS = [
   { keys: ['报名审核', '审核报名', '报名申请', '待审核'], label: '报名审核', path: 'signups' },
@@ -502,12 +524,40 @@ function respond(raw) {
     }
   }
 
-  if (has('射手', '金靴', '谁进的球', '进球榜')) {
+  // 球员级数据：射手、助攻、红黄牌，只读数据中心统一口径结果
+  const playerIntent = has('射手', '金靴', '谁进的球', '谁进球', '进球榜', '助攻') || (has('球员', '队员') && has('数据', '统计', '表现', '进球')) || (mentionedTeams(text).length > 0 && has('进球最多'))
+  if (playerIntent) {
+    const board = playerBoard.value
+    if (!board) {
+      return {
+        text: '球员级数据在数据中心统一统计，这次没能读到（可能没有权限或网络异常）。可以到「赛果与排名」或数据中心查看。',
+        action: { label: '进入赛果与排名', target: `/tournaments/${id}/results` },
+        quickReplies: ['看下积分榜', '这届有多少支球队'],
+        topic: 'playerBoard'
+      }
+    }
+    const metric = has('助攻') ? 'assists' : has('黄牌') ? 'yellowCards' : has('红牌') ? 'redCards' : 'goals'
+    const metricLabel = { goals: '进球', assists: '助攻', yellowCards: '黄牌', redCards: '红牌' }[metric]
+    const table = board.rankings[metric] || { rows: [], unverifiedCount: 0 }
+    const teamNameOf = row => (row.teamIds || []).map(key => board.teamNamesById[key]).filter(Boolean).join('、') || '—'
+    const scopedTeams = mentionedTeams(text)
+    const wanted = new Set(scopedTeams)
+    const rows = scopedTeams.length ? (table.rows || []).filter(row => (row.teamIds || []).some(key => wanted.has(board.teamNamesById[key]))) : (table.rows || [])
+    if (!rows.length) {
+      return {
+        text: `${scopedTeams.length ? `${scopedTeams.join('、')}队内` : '这届'}还没有可统计的${metricLabel}数据。球员${metricLabel}需要比赛事件里录入球员后才能统计，可到「赛果与排名」核对。`,
+        action: { label: '进入赛果与排名', target: `/tournaments/${id}/results` },
+        quickReplies: ['看下积分榜', '今天有几场比赛'],
+        topic: 'playerBoard'
+      }
+    }
+    const scopeText = scopedTeams.length ? `${scopedTeams.join('、')}队内` : '这届'
     return {
-      text: `射手榜按数据中心统一口径统计，主控台不另算。这届已有 ${completedMatches.value.length} 场比分，我可以先给你组别名次；完整进球榜请到赛事榜单或数据中心查看。`,
+      text: `按数据中心统一口径，${scopeText}${metricLabel}前 ${Math.min(5, rows.length)} 名：${Number(table.unverifiedCount) > 0 ? `（另有 ${table.unverifiedCount} 名球员该项数据待核实）` : ''}`,
+      list: rows.slice(0, 5).map(row => `${row.rank}. ${row.name}（${teamNameOf(row)}）${metricLabel} ${row.value}`),
       action: { label: '进入赛果与排名', target: `/tournaments/${id}/results` },
       quickReplies: ['看下积分榜', '这届有多少支球队'],
-      topic: 'scorers'
+      topic: 'playerBoard'
     }
   }
 
@@ -773,6 +823,11 @@ async function ask(raw) {
   resizeComposer()
   scrollThread()
   let reply = null
+  const wantsPlayerBoard = /射手|金靴|谁进球|谁进的球|进球榜|助攻/.test(text) || (/球员|队员/.test(text) && /数据|统计|表现|进球/.test(text)) || (mentionedTeams(text).length > 0 && text.includes('进球最多'))
+  if (wantsPlayerBoard) {
+    thinkingLabel.value = '正在读取数据中心球员榜单…'
+    await ensurePlayerBoard()
+  }
   const modelAnswer = USE_MODEL ? await askModel(text) : ''
   if (modelAnswer) {
     reply = { text: modelAnswer, quickReplies: ['详细说明一下', '这届还差什么没做', '看下积分榜'], topic: 'model' }
@@ -820,6 +875,8 @@ function resizeComposer() {
 async function loadConsole() {
   if (qaSnapshot) return
   loading.value = true
+  playerBoard.value = null
+  playerBoardFailed.value = false
   try {
     const [currentTournament, currentRegistrations, currentMatches, currentDivisions] = await Promise.all([
       queryById('tournaments', id),
