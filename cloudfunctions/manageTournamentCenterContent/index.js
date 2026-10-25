@@ -235,6 +235,8 @@ const ORG_IDENTITIES = Object.keys(ORG_IDENTITY_LABELS)
 const ORG_VOLUMES = Object.keys(ORG_VOLUME_LABELS)
 const ORG_AUDIENCES = Object.keys(ORG_AUDIENCE_LABELS)
 const TEST_ORGANIZER_NAME = /(测试|演示|demo|test|示例)/i
+// 人工跟进结果，只用于平台运营的客户管理，不参与账号、权限或业务数据判断。
+const ORGANIZER_FOLLOW_UP_STATUSES = { not_contacted: '未联系', contacted: '已联系待回复', interested: '有意向待落地', started: '已开始办赛', not_needed: '明确不需要', invalid: '号码无效' }
 
 // 登记资料来自主办方三步问答（organizations.customerProfile），只用于经营分析，不参与权限判断。
 function organizerProfile(organization) {
@@ -281,14 +283,15 @@ function organizerIntent(target) {
 }
 
 async function getOverview(db) {
-  const [bannerRows, tournamentRows, userRows, organizationRows, teamRows, tournamentTeamRows, assistanceRows] = await Promise.all([
+  const [bannerRows, tournamentRows, userRows, organizationRows, teamRows, tournamentTeamRows, assistanceRows, followUpRows] = await Promise.all([
     loadAllOptional(db, 'banners', 1000),
     loadAll(db, 'tournaments'),
     loadAll(db, 'users'),
     loadAllOptional(db, 'organizations'),
     loadAllOptional(db, 'teams'),
     loadAllOptional(db, 'tournament_teams'),
-    loadAllOptional(db, 'assistance_requests', 1000)
+    loadAllOptional(db, 'assistance_requests', 1000),
+    loadAllOptional(db, 'organizer_follow_ups', 5000)
   ])
 
   // 旧版 Word 导入把限时 URL 写进 logo/logoUrl，同时保留了永久 cloud 文件 ID。
@@ -314,6 +317,13 @@ async function getOverview(db) {
 
   const usersById = new Map(userRows.map(item => [String(item._id), item]))
   const organizationsById = new Map(organizationRows.map(item => [String(item._id), item]))
+  const followUpByOrganizer = new Map(followUpRows.map(item => [String(item.organizerId || ''), item]))
+  const usersPerOrg = new Map()
+  userRows.forEach(item => {
+    const orgId = recordOrgId(item)
+    if (!orgId) return
+    usersPerOrg.set(orgId, (usersPerOrg.get(orgId) || 0) + 1)
+  })
   const tournamentTeamCounts = new Map()
   tournamentTeamRows.forEach(item => {
     const tournamentId = cleanText(item.tournamentId, 128)
@@ -396,6 +406,12 @@ async function getOverview(db) {
       name: item.name, phone: item.phone, hasProfile: Boolean(profile),
       tournamentCount, teamCount, registeredTournamentCount
     })
+    const targetUser = usersById.get(item.userId) || null
+    const followUp = followUpByOrganizer.get(item._id) || null
+    const archived = Boolean(targetUser && targetUser.organizerArchived === true)
+    const canManageAccount = Boolean(targetUser) && targetUser.isPlatformOwner !== true
+    const deletable = canManageAccount && tournamentCount === 0 && teamCount === 0 && item.supportCount === 0 &&
+      (!item.orgId || (usersPerOrg.get(item.orgId) || 0) <= 1)
     return {
       ...item,
       accountProfiles: userRows.filter(user => String(user._id) === item.userId || (item.orgId && recordOrgId(user) === item.orgId)).map(customerProfiles.accountSummary),
@@ -408,7 +424,13 @@ async function getOverview(db) {
       intentReason: intent.reason,
       intentRank: intent.rank,
       latestTournament: organizerTournaments[0] || null,
-      hasContact: Boolean(item.phone || item.email)
+      hasContact: Boolean(item.phone || item.email),
+      followUpStatus: followUp ? cleanText(followUp.status, 40) : '',
+      followUpStatusLabel: (followUp && ORGANIZER_FOLLOW_UP_STATUSES[cleanText(followUp.status, 40)]) || '未跟进',
+      followUpNote: followUp ? cleanText(followUp.note, 500) : '',
+      followUpUpdatedAt: followUp ? followUp.updateTime : null,
+      archived,
+      deletable
     }
   }).sort((a, b) => {
     const latestA = toTimestamp(a.latestTournament && a.latestTournament.createTime) || toTimestamp(a.createTime)
@@ -648,6 +670,128 @@ async function deleteOrganizerAccount(db, event, actor) {
     throw error
   }
 }
+async function saveOrganizerFollowUp(db, event, actor) {
+  const organizerId = cleanText(event.organizerId, 160)
+  if (!organizerId || !/^(org|user):/.test(organizerId)) throw new Error('主办方标识格式不正确')
+  const status = cleanText(event.status, 40)
+  if (status && !ORGANIZER_FOLLOW_UP_STATUSES[status]) throw new Error('请选择有效的跟进结果')
+  const note = cleanText(event.note, 500)
+  const data = {
+    organizerId,
+    status,
+    note,
+    updatedBy: actor._id,
+    updatedByName: cleanText(actor.nickname, 60),
+    updateTime: db.serverDate()
+  }
+  const existing = await db.collection('organizer_follow_ups').where({ organizerId }).limit(1).get()
+  const row = firstRecord(existing.data)
+  if (row) await db.collection('organizer_follow_ups').doc(row._id).update({ data })
+  else await db.collection('organizer_follow_ups').add({ data: { ...data, createTime: db.serverDate() } })
+  return { success: true, organizerId, status, statusLabel: ORGANIZER_FOLLOW_UP_STATUSES[status] || '未跟进', note }
+}
+
+// 停用只控制平台名录展示和登录状态，账号与业务数据全部保留，可随时恢复。
+async function setOrganizerAccountArchived(db, event, actor) {
+  const userId = cleanText(event.userId, 128)
+  if (!userId) throw new Error('该主办方没有可停用的登录账号')
+  const user = firstRecord((await db.collection('users').doc(userId).get()).data)
+  if (!user) throw new Error('账号不存在或已删除')
+  if (user.isPlatformOwner === true) throw new Error('平台负责人账号不能停用')
+  const archived = event.archived === true
+  await db.collection('users').doc(userId).update({ data: {
+    organizerArchived: archived,
+    organizerArchivedAt: archived ? db.serverDate() : null,
+    organizerArchivedBy: actor._id,
+    updateTime: db.serverDate()
+  } })
+  await db.collection('account_identity_audit_logs').add({ data: {
+    action: archived ? 'organizer_account_archived' : 'organizer_account_restored',
+    result: 'success',
+    actorType: 'platform_owner',
+    actorId: actor._id,
+    targetUserId: userId,
+    organizerId: cleanText(event.organizerId, 160),
+    createTime: db.serverDate()
+  } }).catch(() => {})
+  return { success: true, userId, archived }
+}
+
+// 彻底删除只允许无赛事、无球队、无协助记录的空账号；业务数据存在时一律拦截，避免产生无归属数据。
+async function purgeOrganizerAccount(db, event, actor) {
+  const _ = db.command
+  const userId = cleanText(event.userId, 128)
+  if (!userId) throw new Error('该主办方没有可删除的登录账号')
+  const user = firstRecord((await db.collection('users').doc(userId).get()).data)
+  if (!user) throw new Error('账号不存在或已删除')
+  if (user.isPlatformOwner === true) throw new Error('平台负责人账号不能删除')
+  if (String(user.role || '').toLowerCase() !== 'organizer' && !recordOrgId(user)) throw new Error('该账号不是主办方账号')
+  const phone = normalizePhone(user.phone || user.phoneNumber)
+  if (!phone) throw new Error('该账号缺少手机号，请先核实身份')
+  if (cleanText(event.confirmText, 40) !== phone) throw new Error('请输入该账号手机号完成二次确认')
+
+  const orgId = recordOrgId(user)
+  let organization = null
+  if (orgId) {
+    organization = firstRecord((await db.collection('organizations').doc(orgId).get()).data)
+    const ownerIds = ['creatorId', 'ownerId', 'createdBy'].map(key => String((organization && organization[key]) || '')).filter(Boolean)
+    if (organization && !ownerIds.includes(userId)) throw new Error('该机构不属于当前账号，不能删除')
+    const orgUsers = await db.collection('users').where(_.or([{ orgId }, { organizationId: orgId }])).limit(100).get()
+    if ((orgUsers.data || []).filter(row => String(row._id) !== userId).length) throw new Error('该机构下还有其他账号，请先在账号页处理')
+    const orgTournaments = await db.collection('tournaments').where(_.or([{ orgId }, { organizationId: orgId }])).limit(1).get()
+    if ((orgTournaments.data || []).length) throw new Error('该机构名下仍有赛事，不能彻底删除')
+    const orgTeams = await db.collection('teams').where(_.or([{ orgId }, { organizationId: orgId }])).limit(1).get()
+    if ((orgTeams.data || []).length) throw new Error('该机构名下仍有球队，不能彻底删除')
+  }
+
+  const inspection = await accountDeletionInspection(db, user)
+  const ownOrganization = Boolean(orgId && organization && ['creatorId', 'ownerId', 'createdBy'].some(key => String(organization[key] || '') === userId))
+  const blocking = [...inspection.dependencies, ...inspection.preservedData]
+    .filter(item => item.count > 0 && !(item.key === 'organizations' && ownOrganization))
+  if (blocking.length) {
+    throw new Error(`该账号仍有关联${blocking.map(item => ` ${item.label} ${item.count} 条`).join('、')}，不能彻底删除`)
+  }
+  const supports = await db.collection('assistance_requests').where({ targetUserId: userId }).limit(1).get()
+  if ((supports.data || []).length) throw new Error('该账号仍有协助记录，不能彻底删除')
+
+  const organizerId = cleanText(event.organizerId, 160)
+  const audit = await db.collection('account_identity_audit_logs').add({ data: {
+    action: 'organizer_account_purged',
+    result: 'pending',
+    actorType: 'platform_owner',
+    actorId: actor._id,
+    targetUserId: userId,
+    organizerId,
+    phoneHash: crypto.createHash('sha256').update(phone).digest('hex'),
+    snapshot: {
+      name: cleanText(user.name || user.nickname, 60),
+      phoneMasked: maskPhone(phone),
+      orgId,
+      createTime: user.createTime || user.createdAt || null
+    },
+    createTime: db.serverDate()
+  } })
+  try {
+    const [sessionResult, bindingResult, gateResult, followUpResult] = await Promise.all([
+      db.collection('auth_sessions').where({ userId }).limit(100).get(),
+      db.collection('service_account_bindings').where({ userId }).limit(100).get(),
+      db.collection('service_follow_gates').where({ userId }).limit(100).get(),
+      db.collection('organizer_follow_ups').where({ organizerId }).limit(10).get()
+    ])
+    for (const row of sessionResult.data || []) await db.collection('auth_sessions').doc(row._id).remove()
+    for (const row of bindingResult.data || []) await db.collection('service_account_bindings').doc(row._id).remove()
+    for (const row of gateResult.data || []) await db.collection('service_follow_gates').doc(row._id).remove()
+    for (const row of followUpResult.data || []) await db.collection('organizer_follow_ups').doc(row._id).remove()
+    await db.collection('users').doc(userId).remove()
+    if (orgId && organization) await db.collection('organizations').doc(orgId).remove()
+    await db.collection('account_identity_audit_logs').doc(audit._id).update({ data: { result: 'success', completedAt: db.serverDate() } })
+    return { success: true, userId, orgId, removedOrganization: Boolean(orgId && organization) }
+  } catch (error) {
+    await db.collection('account_identity_audit_logs').doc(audit._id).update({ data: { result: 'failed', completedAt: db.serverDate() } }).catch(() => {})
+    throw error
+  }
+}
+
 function validateBannerImage(imageUrl) {
   if (!imageUrl) throw new Error('请上传轮播图片')
   if (
@@ -1141,6 +1285,9 @@ exports.main = async event => {
     if (action === 'revokeTournamentCenter') return await revokeTournamentCenter(db, params, user)
     if (action === 'inspectOrganizerAccountDeletion') return await inspectOrganizerAccountDeletion(db, params)
     if (action === 'deleteOrganizerAccount') return await deleteOrganizerAccount(db, params, user)
+    if (action === 'saveOrganizerFollowUp') return await saveOrganizerFollowUp(db, params, user)
+    if (action === 'setOrganizerAccountArchived') return await setOrganizerAccountArchived(db, params, user)
+    if (action === 'purgeOrganizerAccount') return await purgeOrganizerAccount(db, params, user)
     if (action === 'serviceFeedbackList') return await listServiceFeedback(db, params)
     if (action === 'serviceFeedbackUpdate') return await updateServiceFeedback(db, params, user)
     if (action === 'serviceFeedbackReply') return await serviceFeedbackReply(db, params, user)
