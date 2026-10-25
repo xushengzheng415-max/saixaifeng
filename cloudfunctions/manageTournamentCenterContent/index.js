@@ -338,13 +338,25 @@ async function getOverview(db) {
     loadAllOptional(db, 'organizer_follow_ups', 5000)
   ])
 
+  // 平台演示/测试数据不进入运营名录、列表与统计；数据仍保留在库中，不删除。
+  const isTestDataName = value => TEST_ORGANIZER_NAME.test(cleanText(value, 200))
+  const testOrganizationIds = new Set(organizationRows
+    .filter(row => isTestDataName(row.name) || isTestDataName(row.organizationName))
+    .map(row => String(row._id)))
+  const testUserIds = new Set(userRows
+    .filter(row => isTestDataName(row.organizationName) || isTestDataName(row.organizerName) || isTestDataName(row.nickname) || isTestDataName(row.name) || testOrganizationIds.has(recordOrgId(row)))
+    .map(row => String(row._id)))
+  const isTestOwned = record => testOrganizationIds.has(recordOrgId(record)) || testUserIds.has(recordCreatorId(record))
+  const visibleTournamentRows = tournamentRows.filter(row => !isTestOwned(row))
+  const visibleTeamRows = teamRows.filter(row => !isTestOwned(row))
+
   // 旧版 Word 导入把限时 URL 写进 logo/logoUrl，同时保留了永久 cloud 文件 ID。
   // 每次读取时从永久 ID 换取新地址，避免 URL 到期后在长期球队列表显示破图。
   const logoFileIdOf = team => [
     team.logoFileID, team.logoFileId, team.logoCloudFileId,
     team.logoTransparentFileId, team.logo, team.logoUrl
   ].map(value => String(value || '').trim()).find(value => value.startsWith('cloud://')) || ''
-  const logoFileIds = [...new Set(teamRows.map(logoFileIdOf).filter(Boolean))]
+  const logoFileIds = [...new Set(visibleTeamRows.map(logoFileIdOf).filter(Boolean))]
   const logoUrls = new Map()
   for (let offset = 0; offset < logoFileIds.length; offset += 50) {
     try {
@@ -380,7 +392,7 @@ async function getOverview(db) {
   const banners = bannerRows
     .map(safeBanner)
     .sort((a, b) => a.sort - b.sort)
-  const tournaments = tournamentRows
+  const tournaments = visibleTournamentRows
     .map(item => safeTournament(item, { usersById, organizationsById, tournamentTeamCounts }))
     .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
@@ -431,20 +443,20 @@ async function getOverview(db) {
     return organizerMap.get(key)
   }
 
-  userRows.filter(user => user.role === 'organizer' || recordOrgId(user)).forEach(user => {
+  userRows.filter(user => !testUserIds.has(String(user._id)) && (user.role === 'organizer' || recordOrgId(user))).forEach(user => {
     ensureOrganizer(user, { user, userId: String(user._id) })
   })
-  tournamentRows.forEach(tournament => {
+  visibleTournamentRows.forEach(tournament => {
     const organizer = ensureOrganizer(tournament)
     if (organizer && !organizer.tournamentIds.includes(String(tournament._id))) organizer.tournamentIds.push(String(tournament._id))
   })
-  teamRows.forEach(team => {
+  visibleTeamRows.forEach(team => {
     const organizer = ensureOrganizer(team)
     if (organizer && !organizer.teamIds.includes(String(team._id))) organizer.teamIds.push(String(team._id))
   })
   assistanceRows.forEach(request => {
     const targetUserId = cleanText(request.targetUserId, 128)
-    if (!targetUserId) return
+    if (!targetUserId || testUserIds.has(targetUserId)) return
     const targetUser = usersById.get(targetUserId)
     const organizer = ensureOrganizer(targetUser || {}, { user: targetUser || {}, userId: targetUserId })
     if (!organizer) return
@@ -497,18 +509,18 @@ async function getOverview(db) {
       archived,
       deletable
     }
-  }).sort((a, b) => {
+  }).filter(item => !isTestDataName(item.name) && !testUserIds.has(String(item.userId)) && !testOrganizationIds.has(item.orgId)).sort((a, b) => {
     const latestA = toTimestamp(a.latestTournament && a.latestTournament.createTime) || toTimestamp(a.createTime)
     const latestB = toTimestamp(b.latestTournament && b.latestTournament.createTime) || toTimestamp(b.createTime)
     return latestB - latestA
   })
 
   const accounts = userRows
-    .filter(item => String(item.role || '').toLowerCase() === 'organizer' && String(item.pcAccountStatus || '').toLowerCase() !== 'cancelled')
-    .map(item => safeOrganizerAccount(item, tournamentRows, teamRows))
+    .filter(item => !testUserIds.has(String(item._id)) && String(item.role || '').toLowerCase() === 'organizer' && String(item.pcAccountStatus || '').toLowerCase() !== 'cancelled')
+    .map(item => safeOrganizerAccount(item, visibleTournamentRows, visibleTeamRows))
     .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
-  const teams = teamRows.map(team => {
+  const teams = visibleTeamRows.map(team => {
     const logoFileId = logoFileIdOf(team)
     const fallbackLogo = [team.logo, team.logoUrl, team.logoTransparentUrl]
       .map(value => String(value || '').trim())
@@ -540,7 +552,10 @@ async function getOverview(db) {
     }
   }).sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
-  const supportRequests = assistanceRows.filter(request => request.helperUserId || request.targetUserId).map(request => ({
+  const supportRequests = assistanceRows
+    .filter(request => (request.helperUserId || request.targetUserId) &&
+      !testUserIds.has(cleanText(request.targetUserId, 128)) && !testUserIds.has(cleanText(request.helperUserId, 128)))
+    .map(request => ({
     _id: request._id,
     status: request.status || 'pending',
     targetUserId: request.targetUserId || '',
@@ -561,10 +576,10 @@ async function getOverview(db) {
       teams,
       supportRequests,
       stats: {
-        totalTournaments: tournamentRows.length,
+        totalTournaments: visibleTournamentRows.length,
         featuredTournaments: tournaments.filter(item => item.isFeatured).length,
         totalOrganizers: organizers.length,
-        totalTeams: teamRows.length,
+        totalTeams: visibleTeamRows.length,
         bannerCount: bannerRows.length,
         activeSupportCount: supportRequests.filter(item => ['pending', 'active'].includes(item.status)).length,
         missingContactCount: organizers.filter(item => !item.hasContact).length,
