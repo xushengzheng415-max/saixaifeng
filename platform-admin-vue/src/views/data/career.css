@@ -3,3 +3,4 @@
 .career-trend-values{display:flex;justify-content:space-between;gap:10px;font-size:10px;color:#8f9d92;margin-top:6px}.career-trend-single{min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}.career-trend-single small{font-size:10px;letter-spacing:1px;color:#9a8b62}.career-trend-single strong{font:600 34px Arial,"Microsoft YaHei";color:#a1874c}.career-trend-single span{font-size:10px;color:#8b9d90}.career-trend-single p{font-size:10px;color:#93a195;margin:6px 0 0;line-height:1.8}
 .career-summary{margin:16px 0 0;max-width:470px;font-size:12px;line-height:1.9;color:#a8c2b1}
 .career-estimated{line-height:1.7}
+.career-estimated-need{display:block;margin-top:3px;color:#9fb3a2}
