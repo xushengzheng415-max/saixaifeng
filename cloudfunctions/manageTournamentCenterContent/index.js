@@ -237,6 +237,16 @@ const ORG_AUDIENCES = Object.keys(ORG_AUDIENCE_LABELS)
 const TEST_ORGANIZER_NAME = /(测试|演示|demo|test|示例)/i
 // 人工跟进结果，只用于平台运营的客户管理，不参与账号、权限或业务数据判断。
 const ORGANIZER_FOLLOW_UP_STATUSES = { not_contacted: '未联系', contacted: '已联系待回复', interested: '有意向待落地', started: '已开始办赛', not_needed: '明确不需要', invalid: '号码无效' }
+// 使用阶段只按赛事状态自动判定：有未结束赛事=正在办赛，仅有已结束赛事=已办赛，无赛事或仅草稿=未开始使用。
+const STAGE_ACTIVE_STATUSES = ['ongoing', 'live', 'registering', 'published']
+const STAGE_FINISHED_STATUSES = ['ended', 'completed', 'finished']
+
+function organizerUsageStage(tournamentStatuses) {
+  const statuses = (Array.isArray(tournamentStatuses) ? tournamentStatuses : []).map(value => String(value || '').toLowerCase())
+  if (statuses.some(status => STAGE_ACTIVE_STATUSES.includes(status))) return { stage: 'hosting', label: '正在办赛' }
+  if (statuses.some(status => STAGE_FINISHED_STATUSES.includes(status))) return { stage: 'hosted', label: '已办赛' }
+  return { stage: 'not_started', label: '未开始使用' }
+}
 
 // 登记资料来自主办方三步问答（organizations.customerProfile），只用于经营分析，不参与权限判断。
 function organizerProfile(organization) {
@@ -265,7 +275,7 @@ function organizerIntent(target) {
     return { level: 'D', label: '疑似无效', reason: '名称含测试/演示标记', rank: 0 }
   }
   if (registeredTournamentCount > 0) {
-    return { level: 'A', label: '正在办赛', reason: `${registeredTournamentCount} 场赛事已有报名球队`, rank: 300 + Math.min(registeredTournamentCount, 99) }
+    return { level: 'A', label: '已有报名球队', reason: `${registeredTournamentCount} 场赛事已有报名球队`, rank: 300 + Math.min(registeredTournamentCount, 99) }
   }
   if (tournamentCount > 0) {
     return { level: 'B', label: '有明确需求', reason: `已建 ${tournamentCount} 场赛事，尚无球队报名`, rank: 200 }
@@ -408,6 +418,7 @@ async function getOverview(db) {
     })
     const targetUser = usersById.get(item.userId) || null
     const followUp = followUpByOrganizer.get(item._id) || null
+    const usageStage = organizerUsageStage(organizerTournaments.map(tournament => tournament.status))
     const archived = Boolean(targetUser && targetUser.organizerArchived === true)
     const canManageAccount = Boolean(targetUser) && targetUser.isPlatformOwner !== true
     const deletable = canManageAccount && tournamentCount === 0 && teamCount === 0 && item.supportCount === 0 &&
@@ -429,6 +440,8 @@ async function getOverview(db) {
       followUpStatusLabel: (followUp && ORGANIZER_FOLLOW_UP_STATUSES[cleanText(followUp.status, 40)]) || '未跟进',
       followUpNote: followUp ? cleanText(followUp.note, 500) : '',
       followUpUpdatedAt: followUp ? followUp.updateTime : null,
+      usageStage: usageStage.stage,
+      usageStageLabel: usageStage.label,
       archived,
       deletable
     }
