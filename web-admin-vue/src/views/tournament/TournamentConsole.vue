@@ -170,7 +170,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, CircleCheck, DocumentChecked, Grid, Location, Promotion, Refresh, Tickets, Trophy, UserFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { confirmCompetitionPlan, getFileUrl, queryById, queryList } from '../../utils/cloud'
+import { callFunction, confirmCompetitionPlan, getFileUrl, queryById, queryList } from '../../utils/cloud'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 
 const route = useRoute()
@@ -567,25 +567,45 @@ function progressStages(text) {
   return stages
 }
 
+// 先请大模型基于本赛事数据作答；模型不可用时回落到本地规则引擎，保证一定有回答
+async function askModel(question) {
+  const history = messages.value.slice(0, -1).slice(-6).map(item => ({ role: item.role, content: item.text || '' })).filter(item => item.content)
+  try {
+    const raw = await callFunction('tournamentAssistant', { action: 'chat', tournamentId: id, question, history }, 30000)
+    const payload = raw && raw.result ? raw.result : raw
+    const content = payload && payload.success && payload.data && payload.data.content
+    return content ? String(content).trim() : ''
+  } catch (error) {
+    return ''
+  }
+}
+
 async function ask(raw) {
   const text = String(raw || '').trim()
   if (!text || thinking.value) return
   messages.value.push({ id: ++messageSeed, role: 'user', text })
   chatInput.value = ''
   thinking.value = true
+  thinkingLabel.value = progressStages(text)[0]
   resizeComposer()
   scrollThread()
-  let reply
-  try {
-    const stages = progressStages(text)
-    for (let index = 0; index < stages.length; index += 1) {
-      thinkingLabel.value = stages[index]
-      scrollThread()
-      await sleep(index === 0 ? 480 : 420)
+  let reply = null
+  const modelAnswer = await askModel(text)
+  if (modelAnswer) {
+    reply = { text: modelAnswer, quickReplies: ['详细说明一下', '这届还差什么没做', '看下积分榜'], topic: 'model' }
+  }
+  if (!reply) {
+    try {
+      const fallbackStages = ['正在核对本赛事数据…', '正在整理回答…']
+      for (let index = 0; index < fallbackStages.length; index += 1) {
+        thinkingLabel.value = fallbackStages[index]
+        scrollThread()
+        await sleep(380)
+      }
+      reply = respond(text) || { text: overviewSentence(), quickReplies: ['这届还差什么没做'], topic: 'fallback' }
+    } catch (error) {
+      reply = { text: '刚才读取本赛事数据时出错了。刷新页面后再问一次，或者直接去对应管理页处理。', quickReplies: ['这届还差什么没做', '今天有几场比赛'], topic: 'error' }
     }
-    reply = respond(text) || { text: overviewSentence(), quickReplies: ['这届还差什么没做'], topic: 'fallback' }
-  } catch (error) {
-    reply = { text: '刚才读取本赛事数据时出错了。刷新页面后再问一次，或者直接去对应管理页处理。', quickReplies: ['这届还差什么没做', '今天有几场比赛'], topic: 'error' }
   }
   thinking.value = false
   messages.value.push({ id: ++messageSeed, role: 'assistant', ...reply })
@@ -715,7 +735,7 @@ onMounted(loadConsole)
 .msg.assistant { gap:10px; }
 .avatar { display:grid; width:28px; height:28px; flex:0 0 28px; place-items:center; border-radius:50%; color:#078545; font-size:12px; font-weight:600; background:#eef7f1; }
 .msg-body { min-width:0; flex:1; max-width:600px; padding-top:2px; }
-.msg-body p { margin:0; color:#243a2d; font-size:14px; line-height:1.75; }
+.msg-body p { margin:0; color:#243a2d; font-size:14px; line-height:1.75; white-space:pre-line; }
 .msg-list { margin:8px 0 0; padding-left:18px; color:#2f4738; font-size:13px; line-height:1.9; }
 .msg-action { display:inline-flex; align-items:center; gap:3px; margin-top:8px; padding:5px 10px; border:1px solid #cde6d8; border-radius:8px; color:#078545; font-size:12px; background:#f7fcf9; cursor:pointer; }
 .msg-action:hover { border-color:#a9d8bd; background:#f0faf4; }

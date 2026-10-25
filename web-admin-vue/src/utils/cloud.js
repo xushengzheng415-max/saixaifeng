@@ -80,6 +80,7 @@ const CLOUD_FUNCTION_MAP = {
   resultCenter: 'relay',
   newsCenter: 'relay',
   tournamentStaffAccess: 'relay',
+  tournamentAssistant: 'relay', // AI 办赛助手：经 webLoginApi 携带会话身份中转
   dataCenter: 'relay',
 }
 
