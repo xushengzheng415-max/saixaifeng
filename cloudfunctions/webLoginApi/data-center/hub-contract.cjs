@@ -57,10 +57,13 @@ function performanceDimensions(statistics={}){
  const verified=k=>v.coverage==='complete'&&!estimated.has(k)&&Number.isFinite(v.factors?.[k])
  const ten=k=>verified(k)?round1(v.factors[k]*SCORE_CEILING):null
  const gk=v.positionBucket==='GK'
+// 出场稳定按百分比展示：直接给出核定因子折算的百分比，并附实际出场场次，避免只看到「场次」误判满分来源。
+ const appearanceRate=verified('appearance')?round1(v.factors.appearance*100):null
+ const appearanceGames=Number.isFinite(m.appearances)?`（${m.appearances} 场）`:''
  const axes=[
   {key:'core',label:'竞技积累',score:ten('core'),raw:Number.isFinite(card.points)?card.points:null,unit:'生涯积分',source:'playerCard.points'},
   {key:'quality',label:'表现质量',score:ten('quality'),raw:gk?null:Number.isFinite(m.goals)&&Number.isFinite(m.minutesPlayed)&&m.minutesPlayed>0?Math.round(m.goals*90/m.minutesPlayed*100)/100:null,unit:gk?'零封率待采集':'进球/90分钟',source:'official metrics'},
-  {key:'appearance',label:'出场稳定',score:ten('appearance'),raw:Number.isFinite(m.appearances)?m.appearances:null,unit:'出场场次',source:'valuation.factors.appearance'},
+  {key:'appearance',label:'出场稳定',score:ten('appearance'),raw:appearanceRate,unit:appearanceRate==null?'出场稳定度待核验':`% 出场稳定度${appearanceGames}`,source:'valuation.factors.appearance'},
   trendAxis(statistics),
   honorAxis(statistics.honors)
  ].map(a=>({...a,status:a.score===null?'unverified':'verified'}))
