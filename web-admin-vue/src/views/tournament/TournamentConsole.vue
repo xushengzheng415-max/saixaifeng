@@ -352,6 +352,52 @@ function standingsLines(rows) {
   return rows.slice(0, 5).map((row, index) => `${index + 1}. ${row.name}　${row.points} 分（${row.played} 场 ${row.won} 胜 ${row.drawn} 平 ${row.lost} 负，净胜 ${row.gf - row.ga}）`)
 }
 
+// 已录入的参赛球队名称，用于按队名回答战绩与交锋
+function teamNames() {
+  return [...new Set(registrations.value.map(item => String(item.teamName || item.name || '').trim()).filter(Boolean))]
+}
+
+function mentionedTeams(text) {
+  return teamNames().filter(name => text.includes(name))
+}
+
+// 单支球队在这届的战绩：只统计已出比分的比赛
+function teamRecord(name) {
+  const isFinished = status => ['completed', 'finished', 'archived'].includes(String(status || ''))
+  const record = { name, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 }
+  matches.value.forEach(match => {
+    if (!isFinished(match.status)) return
+    const homeScore = Number(match.homeScore)
+    const awayScore = Number(match.awayScore)
+    if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return
+    const isHome = String(match.homeTeamName || '') === name
+    const isAway = String(match.awayTeamName || '') === name
+    if (!isHome && !isAway) return
+    record.played += 1
+    record.gf += isHome ? homeScore : awayScore
+    record.ga += isHome ? awayScore : homeScore
+    const own = isHome ? homeScore : awayScore
+    const other = isHome ? awayScore : homeScore
+    if (own > other) record.won += 1
+    else if (own < other) record.lost += 1
+    else record.drawn += 1
+  })
+  return record
+}
+
+// 两队之间的已完赛交锋记录
+function headToHead(first, second) {
+  const isFinished = status => ['completed', 'finished', 'archived'].includes(String(status || ''))
+  return matches.value
+    .filter(match => isFinished(match.status) && Number.isFinite(Number(match.homeScore)) && Number.isFinite(Number(match.awayScore)))
+    .filter(match => {
+      const home = String(match.homeTeamName || '')
+      const away = String(match.awayTeamName || '')
+      return (home === first && away === second) || (home === second && away === first)
+    })
+    .map(match => `${matchDate(match)}　${teamName(match, 'home')} ${match.homeScore}:${match.awayScore} ${teamName(match, 'away')}`)
+}
+
 function detailReply(topic) {
   if (topic === 'todos' && todos.value.length) return { text: '这届的全部待办：', list: todos.value.map(item => item.text), action: { label: '去处理', target: todos.value[0].target }, quickReplies: ['这届什么时候开始', '看下积分榜'], topic: 'todos' }
   if (topic === 'schedule') return { text: todayMatches.value.length ? `今天安排 ${todayMatches.value.length} 场比赛：` : '今天没有安排比赛，下一场信息在右侧今日赛程里。', list: matchLines(), action: { label: '进入比赛管理', target: `/tournaments/${id}/matches` }, quickReplies: ['看下积分榜', '这届有多少支球队'], topic: 'schedule' }
@@ -395,6 +441,47 @@ function respond(raw) {
   if (has('待办', '进度', '还差', '缺什么', '没做', '下一步', '准备')) {
     if (!todos.value.length) return { text: `${overviewSentence()}目前没有需要你处理的事项。`, quickReplies: ['看下积分榜', '今天有几场比赛'], topic: 'todos' }
     return { text: `这届目前还差 ${todos.value.length} 项：`, list: todos.value.map(item => item.text), action: { label: '去处理', target: todos.value[0].target }, quickReplies: ['详细看一下', '这届什么时候开始'], topic: 'todos' }
+  }
+
+  // 身价、财务这类平台统一口径或本控制台未接入的数据：直说去哪里查，不拿别的话题糊过去
+  if (has('身价', '市值', '估值', '转会', '工资', '薪水', '赞助', '财务', '预算', '门票', '收入')) {
+    return {
+      text: '球员身价是平台统一口径的转会评估指数，由数据中心计算，主控台只读本赛事的比赛数据，不重算也不编造。具体球员身价请到球员数据中心或球员卡查看；这届我能直接答的是比分、名次、球队战绩和赛程。',
+      quickReplies: ['看下积分榜', '这届有多少支球队', '今天有几场比赛'],
+      topic: 'valuation'
+    }
+  }
+
+  if (has('射手', '金靴', '进球最多', '谁进的球', '进球榜')) {
+    return {
+      text: `射手榜按数据中心统一口径统计，主控台不另算。这届已有 ${completedMatches.value.length} 场比分，我可以先给你组别名次；完整进球榜请到赛事榜单或数据中心查看。`,
+      quickReplies: ['看下积分榜', '这届有多少支球队'],
+      topic: 'scorers'
+    }
+  }
+
+  // 问题里点了具体球队名：两队交锋优先，其次单队战绩
+  const mentioned = mentionedTeams(text)
+  if (mentioned.length >= 2) {
+    const lines = headToHead(mentioned[0], mentioned[1])
+    return {
+      text: lines.length ? `${mentioned[0]} 与 ${mentioned[1]} 的已完赛交锋：` : `${mentioned[0]} 与 ${mentioned[1]} 目前还没有已出比分的交锋记录。`,
+      list: lines,
+      action: { label: '进入比赛管理', target: `/tournaments/${id}/matches` },
+      quickReplies: ['看下积分榜', '这届有多少支球队'],
+      topic: 'headToHead'
+    }
+  }
+  if (mentioned.length === 1 && has('战绩', '成绩', '几胜', '胜率', '进几', '丢几', '怎么样', '如何', '打得', '表现', '实力')) {
+    const record = teamRecord(mentioned[0])
+    return {
+      text: record.played
+        ? `${record.name} 已完赛 ${record.played} 场：${record.won} 胜 ${record.drawn} 平 ${record.lost} 负，进 ${record.gf} 球、失 ${record.ga} 球。`
+        : `${record.name} 目前还没有已出比分的比赛，等比赛结束并复核后我就能给出战绩。`,
+      action: { label: '进入比赛管理', target: `/tournaments/${id}/matches` },
+      quickReplies: ['看下积分榜', '这届有多少支球队'],
+      topic: 'teamRecord'
+    }
   }
 
   if (has('积分', '排名', '名次', '榜', '第一', '冠军', '头名', '最强')) {
@@ -550,7 +637,7 @@ function respond(raw) {
 
   // 兜底也给出真实数据和可继续的方向，不留空回答
   return {
-    text: `我没完全对上你想问的部分。${overviewSentence()}你可以直接问筹备进度、赛程、积分榜、球队名单、赛期和场地，或者让我带你去某个管理页面。`,
+    text: `我没完全对上你想问的部分。${overviewSentence()}你可以直接问比分、组别名次、某支球队的战绩、两队交锋、赛程、球队名单、赛期和场地；身价这类平台统一口径的数据请到数据中心查看。`,
     quickReplies: ['这届还差什么没做', '看下积分榜', '今天有几场比赛', '这届什么时候开始'],
     topic: 'fallback'
   }
