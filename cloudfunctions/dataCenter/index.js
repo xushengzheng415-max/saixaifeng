@@ -34,7 +34,7 @@ exports.main = async (event = {}) => {
     if (event.action === 'initializeCollections') {
       if (!actor.platformOwner) throw error('DATA_FORBIDDEN','仅平台负责人可初始化数据中心')
       const items = []
-      for (const name of ['player_team_memberships','player_transfers']) {
+      for (const name of ['player_team_memberships','player_transfers','player_valuations']) {
         try { await db.createCollection(name); items.push({ name, status:'created' }) }
         catch (failure) {
           if (/already exist|已存在|DATABASE_COLLECTION_EXIST/i.test(String(failure.errMsg || failure.message || ''))) items.push({ name, status:'exists' })
@@ -68,6 +68,15 @@ exports.main = async (event = {}) => {
     if (event.action === 'requestTransfer') return await requestTransfer(db,actor,event)
     if (event.action === 'acceptTransfer') return await acceptTransfer(db,actor,event)
     if (event.action === 'listTransfers') return await listTransfers(db,actor)
+    if (['listPenalties','createPenalty','reviewPenalty','revokePenalty','blacklist'].includes(event.action)) {
+      const penalties = require('./penalties.cjs')
+      // 主办方账号只能看到本机构赛事，平台负责人可跨赛事审核与查看黑名单。
+      if (event.action === 'listPenalties') return await penalties.listPenalties(db,actor,event)
+      if (event.action === 'createPenalty') return await penalties.createPenalty(db,actor,event)
+      if (event.action === 'reviewPenalty') return await penalties.reviewPenalty(db,actor,event)
+      if (event.action === 'revokePenalty') return await penalties.revokePenalty(db,actor,event)
+      return await penalties.blacklist(db,actor)
+    }
     throw error('DATA_ACTION_INVALID','数据操作不存在')
   } catch (error) {
     console.error('[dataCenter]', error.code || 'DATA_ERROR', error.collection || '')

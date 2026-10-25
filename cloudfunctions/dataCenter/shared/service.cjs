@@ -55,14 +55,8 @@ function createDataService(db) {
     const profilesById = options.profilesById || {}
     const divisionNameOf = value => id(divisionsById[id(value)]?.name || divisionsById[id(value)]?.divisionName)
     const keyOf = row => divisionNameOf(row.divisionId) || id(row.divisionId || 'default')
-    const positionBucket = value => {
-      const text = id(value).toUpperCase()
-      if (/GK|GOALKEEPER|守门/.test(text)) return 'GK'
-      if (/DF|DEF|后卫/.test(text)) return 'DF'
-      if (/MF|MID|前卫|中场/.test(text)) return 'MF'
-      if (/FW|ST|CF|前锋/.test(text)) return 'FW'
-      return ''
-    }
+    // 中文位置名（前腰、边锋、中后卫等）与英文代码统一归类，认不出按缺失处理。
+    const positionBucket = value => valuation.positionBucketOf(value)
     const aggregate = list => {
       const matchIds = new Set(), startIds = new Set()
       let goals = 0, minutesPlayed = 0
@@ -72,7 +66,7 @@ function createDataService(db) {
         goals = goals != null && Number.isFinite(row.metrics?.goals) ? goals + row.metrics.goals : null
         minutesPlayed = minutesPlayed != null && Number.isFinite(row.metrics?.minutesPlayed) ? minutesPlayed + row.metrics.minutesPlayed : null
       }
-      return { appearances: matchIds.size, starts: startIds.size, goals, minutesPlayed, totalMatches: matchIds.size }
+      return { appearances: matchIds.size, starts: startIds.size, goals, minutesPlayed }
     }
     const pointsOf = totals => {
       if (!params || !Number.isFinite(totals.goals) || !Number.isFinite(totals.minutesPlayed)) return null
@@ -102,6 +96,22 @@ function createDataService(db) {
       rowsByPlayer.get(row.playerId).push(row)
     }
     const positionCounts = {}, teamIds = new Set()
+    // 出场率的分母必须是同组别内该球员球队的实际比赛数，不能用球员自己的出场场次当分母（否则恒为 100%）。
+    const teamMatchIds = new Map()
+    for (const row of options.peerRows || result.players || []) {
+      if (keyOf(row) !== divisionKey) continue
+      const teamId = id(row.teamId)
+      if (!teamId) continue
+      if (!teamMatchIds.has(teamId)) teamMatchIds.set(teamId, new Set())
+      for (const matchId of row.matchIds || []) teamMatchIds.get(teamId).add(id(matchId))
+    }
+    const teamMatchesOf = pid => {
+      const matches = new Set()
+      for (const row of rowsByPlayer.get(pid) || []) {
+        for (const matchId of teamMatchIds.get(id(row.teamId)) || []) matches.add(matchId)
+      }
+      return matches.size
+    }
     for (const [pid, list] of rowsByPlayer) {
       const bucket = positionBucket(profilesById[id(pid)]?.position)
       if (bucket) positionCounts[bucket] = (positionCounts[bucket] || 0) + 1
@@ -110,16 +120,18 @@ function createDataService(db) {
     const inputFor = pid => {
       const totals = aggregate(rowsByPlayer.get(pid) || [])
       const bucket = positionBucket(profilesById[id(pid)]?.position)
+      const self = pid === playerId
       return {
         playerId: pid,
         points: pointsOf(totals),
         birthDate: profilesById[id(pid)]?.birthDate || profilesById[id(pid)]?.birthday,
         qualityMetric: qualityOf(totals, bucket),
-        appearance: { appearances: totals.appearances, starts: totals.starts, minutesPlayed: totals.minutesPlayed, totalMatches: totals.totalMatches },
+        appearance: { appearances: totals.appearances, starts: totals.starts, minutesPlayed: totals.minutesPlayed, totalMatches: teamMatchesOf(pid) },
         positionBucket: bucket,
         scarcity: { positionCounts, teamCount: teamIds.size },
-        card: { supportDrops: pid === playerId ? options.supportDrops : undefined, limitedCardCount: 0 },
-        achievements: []
+        // 比较样本没有读到应援与限定卡明细时保持未知，按中性值计，不能当成 0 分压低同组别人群。
+        card: { supportDrops: self ? options.supportDrops : null, limitedCardCount: self ? (options.limitedCardCount ?? null) : null },
+        achievements: self ? (options.achievements || []) : []
       }
     }
     const peerIds = [...rowsByPlayer.keys()].filter(pid => pid !== playerId && rowsByPlayer.get(pid).every(row => FOUNDATION_METRICS.every(metric => row.coverage?.[metric] === 'complete')))
@@ -241,22 +253,28 @@ function createDataService(db) {
     const matchIds = matches.map(row => row._id)
     const events = await readByIds(db,'match_events','matchId',matchIds)
     const lineups = await readByIds(db,'match_lineup_snapshots','matchId',matchIds)
-    const lineupByMatchSide = new Map()
-    for (const lineup of lineups) {
-      const match = matches.find(row => id(row._id) === id(lineup.matchId))
-      if (!match || ['returned','rejected','draft'].includes(id(lineup.status))) continue
-      const side = id(lineup.teamId) === id(match.homeTeamId) ? 'home' : id(lineup.teamId) === id(match.awayTeamId) ? 'away' : ''
-      if (!side) continue
-      const key = id(match._id) + ':' + side, previous = lineupByMatchSide.get(key)
-      if (!previous || Number(lineup.version || 0) >= Number(previous.version || 0)) lineupByMatchSide.set(key,lineup)
+    // 阵容快照按比赛与主客方取最新版本；赛事荣誉的全量场次复用同一套装配逻辑。
+    const lineupSideMap = (matchList, snapshotList) => {
+      const map = new Map()
+      for (const lineup of snapshotList) {
+        const match = matchList.find(row => id(row._id) === id(lineup.matchId))
+        if (!match || ['returned','rejected','draft'].includes(id(lineup.status))) continue
+        const side = id(lineup.teamId) === id(match.homeTeamId) ? 'home' : id(lineup.teamId) === id(match.awayTeamId) ? 'away' : ''
+        if (!side) continue
+        const key = id(match._id) + ':' + side, previous = map.get(key)
+        if (!previous || Number(lineup.version || 0) >= Number(previous.version || 0)) map.set(key,lineup)
+      }
+      return map
     }
-    matches = matches.map(match => {
+    const attachLineups = (matchList, map) => matchList.map(match => {
       const row = { ...match }
       for (const side of ['home','away']) {
-        if (!row[side + 'Lineup'] && !row.lineups?.[side]) row[side + 'Lineup'] = lineupByMatchSide.get(id(row._id) + ':' + side)
+        row[side + 'TeamId'] = id(match[side + 'TeamId'] || match[side + 'Team']?._id || match[side + 'Team']?.id || match[side === 'home' ? 'teamAId' : 'teamBId'])
+        if (!row[side + 'Lineup'] && !row.lineups?.[side]) row[side + 'Lineup'] = map.get(id(row._id) + ':' + side)
       }
       return row
     })
+    matches = attachLineups(matches, lineupSideMap(matches, lineups))
     const [divisions, tournaments, matchTeamProfiles] = await Promise.all([
       readByIds(db,'divisions','tournamentId',matches.map(row => row.tournamentId)),
       readByIds(db,'tournaments','_id',matches.map(row => row.tournamentId)),
@@ -285,24 +303,36 @@ function createDataService(db) {
     const teamById = new Map(matchTeamProfiles.map(row => [id(row._id),row]))
     result.teams = result.teams.map(row => ({ ...row, teamName:id(teamById.get(row.teamId)?.name || teamById.get(row.teamId)?.teamName) || '历史球队' }))
     const { buildStandings } = require('./standings.cjs')
-    const normalizedMatches = matches.map(match => {
-      const matchEvents = effectiveEvents(match,events)
+    // 纪律扣分来自处罚记录；集合未建立时等同于暂无处罚。
+    const penaltyTournamentIds = [...new Set(matches.map(row => id(row.tournamentId)).filter(Boolean))]
+    let penaltyRows = []
+    if (penaltyTournamentIds.length) {
+      try { penaltyRows = await readByIds(db, 'tournament_penalties', 'tournamentId', penaltyTournamentIds, { maxRows: 5000 }) }
+      catch (failure) { if (!require('./reader.cjs').missingCollection(failure)) throw failure }
+    }
+    // 统一比赛口径：赛果状态、阵容与卡片统计集中生成，赛事荣誉的全场次复用同一结果。
+    const normalizeMatch = (match, context = {}) => {
+      const eventRows = context.eventRows || events
+      const teamProfiles = context.teamsById || teamsById
+      const playerProfiles = context.playersById || playersById
+      const matchEvents = effectiveEvents(match,eventRows)
       const cardCount = (side,types) => matchEvents.filter(event => types.includes(eventType(event)) && (event.teamSide === side || id(event.teamId) === id(match[side + 'TeamId']))).length
-      const phase = id(match.phase || match.stageType || match.matchType).toLowerCase()
-      const state = resultState(match,{ teamsById,tournamentsById,playersById,events,requireOriginEvidence:true,requirePlayerOriginEvidence:true })
+      const phase = id(match.phase || match.scheduleType || match.stage || match.stageType || match.matchType).toLowerCase()
+      const state = resultState(match,{ teamsById:teamProfiles,tournamentsById,playersById:playerProfiles,events:eventRows,requireOriginEvidence:true,requirePlayerOriginEvidence:true })
       const hasScore = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
       const divisionId = id(match.divisionId || match.division || 'default')
-      return { ...match, divisionId, divisionName:id(divisionsById[divisionId]?.name || match.divisionName || '默认组别'), groupName:matchGroupName(match),
-        homeTeamName:id(teamById.get(id(match.homeTeamId))?.name || match.homeTeamName || '主队'), awayTeamName:id(teamById.get(id(match.awayTeamId))?.name || match.awayTeamName || '客队'),
+      return { ...match, phase, divisionId, divisionName:id(divisionsById[divisionId]?.name || match.divisionName || '默认组别'), groupName:matchGroupName(match),
+        homeTeamName:id(teamProfiles[id(match.homeTeamId)]?.name || match.homeTeamName || '主队'), awayTeamName:id(teamProfiles[id(match.awayTeamId)]?.name || match.awayTeamName || '客队'),
         homeScore:Number(match.homeScore ?? match.scoreHome),awayScore:Number(match.awayScore ?? match.scoreAway),scoreReady:hasScore(match.homeScore ?? match.scoreHome) && hasScore(match.awayScore ?? match.scoreAway),
         resultStatus:state === 'official' ? 'approved' : state === 'provisional' ? 'pending_review' : 'not_submitted',
         standingsEligible:state === 'official' && match.standingsEligible !== false && match.isBye !== true && !['knockout','cup','placement','final','semifinal'].includes(phase) && (match.standingsEligible === true || ['group','league','round_robin'].includes(phase)),
         yellowHome:cardCount('home',['yellow_card','second_yellow']),yellowAway:cardCount('away',['yellow_card','second_yellow']),redHome:cardCount('home',['red_card','second_yellow']),redAway:cardCount('away',['red_card','second_yellow']) }
-    })
-    result.standings = buildStandings(normalizedMatches, divisionsById)
+    }
+    const normalizedMatches = matches.map(match => normalizeMatch(match))
+    result.standings = buildStandings(normalizedMatches, divisionsById, penaltyRows)
     if (scope.tournamentId) {
       const eventsByMatchId = Object.fromEntries(normalizedMatches.map(row => [id(row._id || row.id), effectiveEvents(row, events)]))
-      const awardOverrides = await readAll(db, 'award_overrides', { tournamentId: id(scope.tournamentId) }).catch(() => [])
+      const awardOverrides = (await readOptionalAll(db, 'award_overrides', { tournamentId: id(scope.tournamentId) })).rows
       result.awards = require('./awards.cjs').compute({
         matches: normalizedMatches,
         eventsByMatchId,
@@ -310,6 +340,51 @@ function createDataService(db) {
         divisions: divisions.map(row => ({ id: id(row._id || row.id), name: row.name })),
         overrides: awardOverrides
       })
+    }
+    // 生涯荣誉：按生涯涉及的各届赛事重读完整赛果再套用同一奖项算法。
+    // 球员参赛子集或球队授权子集不能替代全赛事数据，否则射手榜与 MVP 会被算成本队内部排名。
+    if (options.includeHonors && scope.playerId) {
+      const awardsTool = require('./awards.cjs')
+      const playerProfile = (await readByIds(db, 'players', '_id', [scope.playerId]))[0]
+      const aliasIds = [id(scope.playerId), id(playerProfile?.playerId || playerProfile?.playerCode)].filter(Boolean)
+      const honors = []
+      // 平台负责人已整库读取比赛，各届赛事子集本身就是完整赛果，无需重复读取。
+      const reuseLoadedMatches = actor.platformOwner && !actor.matchIds
+      for (const tournamentId of [...new Set(matches.map(row => id(row.tournamentId)).filter(Boolean))]) {
+        let normalized, eventRows
+        if (reuseLoadedMatches) {
+          normalized = normalizedMatches.filter(row => id(row.tournamentId) === tournamentId)
+          eventRows = events
+        } else {
+          const tournamentMatches = await readAll(db, 'matches', { tournamentId })
+          if (!tournamentMatches.length) continue
+          const tournamentMatchIds = tournamentMatches.map(row => id(row._id))
+          const [tournamentEvents, tournamentSnapshots, tournamentTeams] = await Promise.all([
+            readByIds(db, 'match_events', 'matchId', tournamentMatchIds),
+            readByIds(db, 'match_lineup_snapshots', 'matchId', tournamentMatchIds),
+            readByIds(db, 'teams', '_id', tournamentMatches.flatMap(row => [row.homeTeamId, row.awayTeamId].filter(Boolean)))
+          ])
+          const tournamentTeamsById = Object.fromEntries(tournamentTeams.map(row => [id(row._id), row]))
+          const rows = attachLineups(tournamentMatches, lineupSideMap(tournamentMatches, tournamentSnapshots))
+          const participantIds = [...new Set(rows.flatMap(match => [...matchParticipantIds(match, tournamentEvents)]))]
+          const missingIds = participantIds.filter(pid => !playersById[pid])
+          const extraProfiles = missingIds.length ? await readByIds(db, 'players', '_id', missingIds) : []
+          const tournamentPlayersById = { ...playersById, ...Object.fromEntries(extraProfiles.map(row => [id(row._id), row])) }
+          normalized = rows.map(match => normalizeMatch(match, { eventRows: tournamentEvents, teamsById: tournamentTeamsById, playersById: tournamentPlayersById }))
+          eventRows = tournamentEvents
+        }
+        if (!normalized.length) continue
+        const divisionIds = new Set(normalized.map(row => id(row.divisionId)))
+        const computed = awardsTool.compute({
+          matches: normalized,
+          eventsByMatchId: Object.fromEntries(normalized.map(row => [id(row._id || row.id), effectiveEvents(row, eventRows)])),
+          standings: buildStandings(normalized, divisionsById, penaltyRows.filter(row => id(row.tournamentId) === tournamentId)),
+          divisions: divisions.filter(row => divisionIds.has(id(row._id || row.id))).map(row => ({ id: id(row._id || row.id), name: row.name })),
+          overrides: (await readOptionalAll(db, 'award_overrides', { tournamentId })).rows
+        })
+        honors.push(...awardsTool.playerHonors(computed, { playerId: scope.playerId, aliasIds, tournamentId, tournamentName: id(tournamentsById[tournamentId]?.name) }))
+      }
+      result.honors = honors.sort((a, b) => a.tournamentName.localeCompare(b.tournamentName, 'zh-CN') || a.divisionName.localeCompare(b.divisionName, 'zh-CN') || b.points - a.points || a.id.localeCompare(b.id))
     }
     const presentation=require('./presentation.cjs')
     result.rankings=await presentation.rankings(result)
@@ -332,6 +407,7 @@ function createDataService(db) {
         divisionsById,
         ruleContext:built.ruleContext,
         supportDrops:built.card?.supportDrops,
+        achievements:valuation.achievementsFromHonors(result.honors),
         peerRows:valuationPeerRows,
         authorizationKey:actor.platformOwner?'platform':require('./hub-contract.cjs').fingerprint({orgId:actor.orgId||'',teamIds:[...(actor.teamIds||[])].sort(),tournamentIds:[...(actor.tournamentIds||[])].sort()}),
         divisionId:scope.divisionId

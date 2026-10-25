@@ -25,7 +25,7 @@ async function requestTransfer(db,actor,event) {
   if (!sourceTeam || !targetTeam || !belongs(sourceTeam,actor)) throw error('DATA_FORBIDDEN','无权管理转会球队')
   if (!orgOf(sourceTeam) || orgOf(sourceTeam) !== orgOf(targetTeam)) throw error('TRANSFER_CROSS_ORG_REQUIRES_REVIEW','跨机构转会需完成双方授权与隐私资料交接')
   if (!belongs(targetTeam,actor)) throw error('DATA_FORBIDDEN','无权管理目标球队')
-  const stats = await createDataService(db).query(actor,{playerId,mode:'official'},{careerView:true})
+  const stats = await createDataService(db).query(actor,{playerId,mode:'official'},{careerView:true,includeHonors:true})
   const value = stats.valuation || {}
   const valuationSnapshot = { version:value.version || null,computedAt:value.computedAt || new Date().toISOString(),scopeKey:'career',authorizationKey:value.authorizationKey||null,accessScope:stats.accessScope||null,dataVersion:stats.dataVersion || null,coverage:value.coverage || 'pending',total:value.minor?null:value.total??null,money:value.minor?null:value.money??null,tier:value.minor?'':value.tier||'',careerPoints:stats.playerCard?.points??null,estimated:value.estimated||[],frozenFor:'transfer_reference' }
   return db.runTransaction(async transaction => {

@@ -5,8 +5,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const source = path.join(root,'cloudfunctions/dataCenter/shared')
 const consumers = ['getMiniWorkspace','webLoginApi','resultCenter','updateMatch','serviceMatchWorkflow','playerCardPublishWorker','friendlyMatchCenter','onboardingWorkspace','tournamentRegistrationFlow']
 const allFiles = ['reader.cjs','statistics.mjs','match-events.mjs','service.cjs','presentation.cjs','support.cjs','player-card-snapshot.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs','score-rules.cjs','score-rule-store.cjs','points-ledger.cjs','points-appeals.cjs','awards.cjs','valuation.cjs']
-allFiles.push('hub.cjs','hub-contract.cjs','hub-directory.cjs','team-history.cjs')
+allFiles.push('hub.cjs','hub-contract.cjs','hub-directory.cjs','team-history.cjs','valuation-store.cjs')
 allFiles.push('numbering.cjs','numbering-regions.json')
+allFiles.push('tournament-boards.mjs','tournament-boards.cjs')
 const requestedFiles = process.argv.filter(arg => arg.startsWith('--file=')).map(arg => arg.slice(7))
 if (requestedFiles.some(file => !allFiles.includes(file))) throw new Error('Unknown shared file')
 const files = requestedFiles.length ? requestedFiles : allFiles

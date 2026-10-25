@@ -117,12 +117,22 @@ await assert.rejects(readAll(pagingDb,'match_events'),error => error.code === 'D
 const database = mockDatabase({
   teams:[{_id:'A',name:'原队',orgId:'org'},{_id:'B',name:'新队',orgId:'org'},{_id:'C',name:'外部队',orgId:'other'},{_id:'D',name:'虚拟队',orgId:'org',synthetic:true,syntheticDatasetId:'fixture'},{_id:'opponent',name:'对手',orgId:'other'}],
   players:[{_id:'p1',name:'小明',teamId:'A',orgId:'org',guardianPhone:'private-value'},{_id:'bench',name:'替补',teamId:'A',orgId:'org'},{_id:'fake',name:'测试球员',teamId:'A',orgId:'org',synthetic:true,syntheticDatasetId:'fixture',source:'ai_fixture'},{_id:'testTeamUnmarked',name:'未标记测试球员',teamId:'D',orgId:'org'}],
-  matches:[before,after,{...makeMatch('hidden','C','secret',10)},{...makeMatch('virtual','D','t3',40),schedulePublished:true}],match_events:[],match_lineup_snapshots:[],player_team_memberships:[],player_transfers:[],
+  matches:[before,after,{...makeMatch('m0','A','t1',0),homeLineup:{starters:[{playerId:'bench',name:'替补'}],substitutes:[]}},{...makeMatch('hidden','C','secret',10)},{...makeMatch('virtual','D','t3',40),schedulePublished:true}],match_events:[],match_lineup_snapshots:[],player_team_memberships:[],player_transfers:[],
   tournaments:[{_id:'t1',name:'甲赛事',orgId:'org'},{_id:'t2',name:'乙赛事',orgId:'org'},{_id:'secret',name:'外部赛事',orgId:'other'},{_id:'t3',name:'测试赛事',orgId:'org'}],platform_settings:[],auth_sessions:[],users:[],
   publication_snapshots:[{_id:'pub',tournamentId:'t1',sportCode:'football',type:'tournament_center',status:'published'}]
 })
 const actor = {userId:'u',orgId:'org',platformOwner:false,teamIds:['A','B'],tournamentIds:['t1','t2']}
 const service = createDataService(database)
+// The result center now shares this reader: legacy stable team IDs and phase
+// aliases must preserve the same standings/scorebook as current records.
+{
+  const seed={tournaments:[{_id:'parity'}],divisions:[{_id:'adult',tournamentId:'parity',name:'成人组'}],teams:[{_id:'home',name:'主队'},{_id:'away',name:'客队'}],matches:[{_id:'m',tournamentId:'parity',divisionId:'adult',homeTeamId:'home',awayTeamId:'away',homeScore:2,awayScore:0,status:'archived',phase:'league'}]}
+  const current=await createDataService(mockDatabase(seed)).query({tournamentIds:['parity']},{tournamentId:'parity',mode:'official'})
+  const legacy=structuredClone(seed),m=legacy.matches[0];m.homeTeam={id:m.homeTeamId};m.awayTeam={_id:m.awayTeamId};m.scheduleType=m.phase;delete m.homeTeamId;delete m.awayTeamId;delete m.phase
+  const restored=await createDataService(mockDatabase(legacy)).query({tournamentIds:['parity']},{tournamentId:'parity',mode:'official'})
+  assert.deepEqual(restored.standings,current.standings);assert.deepEqual(restored.awards,current.awards)
+  assert.equal(restored.awards.ready,true)
+}
 const career = await service.query(actor,{playerId:'p1'})
 assert.equal(career.playerTotal.metrics.goals,8); assert.equal(career.accessScope,'authorized')
 // Authorized career views aggregate the readable career; accessScope still
@@ -136,6 +146,17 @@ assert.equal(platformCareer.coverage.excludedTestMatches,1)
 assert(platformCareer.valuation.cohort.peerCount>0,'single-player query must retain an authorized comparison cohort internally')
 assert.equal(platformCareer.valuation.historyStatus,'not_recorded')
 assert(platformCareer.valuation.estimated.includes('trend'),'missing point snapshots must not look like a measured trend')
+// 出场率必须用同队同组别的实际比赛数当分母：本队踢了 2 场、本人只出场 1 场，不能算 100%。
+assert(platformCareer.valuation.factors.appearance != null && platformCareer.valuation.factors.appearance < 0.95,'appearance must be divided by team matches, not the player own appearances')
+assert(!platformCareer.valuation.estimated.includes('appearance'))
+const {record:recordValuation}=require('../cloudfunctions/dataCenter/shared/valuation-store.cjs')
+const firstSnapshot=await recordValuation(database,platformCareer,{playerId:'p1'})
+assert.equal(firstSnapshot.status,'recorded')
+assert.equal((await recordValuation(database,platformCareer,{playerId:'p1'})).status,'exists','same facts must not duplicate a valuation snapshot')
+assert.equal(database.data().player_valuations.length,1)
+assert.equal(database.data().player_valuations[0].scopeKey,'career')
+assert.equal(database.data().player_valuations[0].coverage,'complete')
+assert.equal((await recordValuation(database,{valuation:{coverage:'pending',total:null}},{playerId:'p1'})).status,'skipped')
 const fakeCareer = await service.query({ ...actor, platformOwner:true }, { playerId:'fake' })
 assert.equal(fakeCareer.playerCard.status,'test_data_excluded'); assert.equal(fakeCareer.playerTotal.metrics.appearances,null)
 assert.equal((await service.query({ ...actor,platformOwner:true }, { playerId:'testTeamUnmarked' })).playerCard.status,'test_data_excluded')

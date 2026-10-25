@@ -10,15 +10,15 @@ const VERSION = 'football-player-valuation/1'
 const TIER_STEP = 1000
 const LIMITED_CARD_CAP = 2
 
-// 质量分八项权重，合计 1。
+// 质量分八项权重，合计 1。年龄按 2026-10-25 确认口径提高到 0.25，拉开年龄间身价差距。
 const WEIGHTS = Object.freeze({
-  core: 0.30,       // 竞技基线：生涯积分在同组别内的分位
-  age: 0.15,        // 年龄潜力
-  quality: 0.14,    // 表现质量：非门将看每 90 分钟进球，门将看零封率
-  appearance: 0.12, // 出场稳定性
-  scarcity: 0.08,   // 位置稀缺
-  tier: 0.08,       // 赛事级别（暂无 tier 字段时取中性 0.5）
-  trend: 0.07,      // 成长趋势
+  core: 0.26,       // 竞技基线：生涯积分在同组别内的分位
+  age: 0.25,        // 年龄潜力
+  quality: 0.12,    // 表现质量：非门将看每 90 分钟进球，门将看零封率
+  appearance: 0.11, // 出场稳定性
+  scarcity: 0.07,   // 位置稀缺
+  tier: 0.07,       // 赛事级别（暂无 tier 字段时取中性 0.5）
+  trend: 0.06,      // 成长趋势
   card: 0.06        // 卡种与应援
 })
 
@@ -40,6 +40,20 @@ const num = value => {
 }
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 const clamp01 = value => clamp(value, 0, 1)
+
+/**
+ * 位置归类：兼容阵容里的英文代码与球员档案里的中文位置名。
+ * 只做归类，不改写原值；认不出返回空，由调用方按缺失处理，不猜。
+ */
+function positionBucketOf(value) {
+  const text = String(value == null ? '' : value).trim().toUpperCase()
+  if (!text) return ''
+  if (/GK|GOALKEEPER|门将|守门/.test(text)) return 'GK'
+  if (/DF|DEF|SWEEP|后卫|中卫|边卫|防守/.test(text)) return 'DF'
+  if (/MF|MID|中场|前腰|后腰|前卫|组织/.test(text)) return 'MF'
+  if (/FW|ST|CF|前锋|边锋|中锋|影锋|锋线/.test(text)) return 'FW'
+  return ''
+}
 
 function median(values) {
   const rows = (values || []).map(num).filter(value => value != null).sort((a, b) => a - b)
@@ -77,27 +91,44 @@ function parseAge(birthDate, now = new Date()) {
 }
 
 /**
+ * 成人年龄锚点（2026-10-25 确认）：26 岁 1.00 为峰值，30 岁 0.85、35 岁 0.60、
+ * 40 岁 0.38、45 岁 0.25、50 岁及以后 0.18；19 岁 0.90 线性升到 26 岁。
+ * 段内线性插值，使同龄段之间差距明显拉开。
+ */
+const AGE_ANCHORS = Object.freeze([
+  [19, 0.90],
+  [26, 1.00],
+  [30, 0.85],
+  [35, 0.60],
+  [40, 0.38],
+  [45, 0.25],
+  [50, 0.18]
+])
+
+function adultAgeFactor(years) {
+  const last = AGE_ANCHORS[AGE_ANCHORS.length - 1]
+  if (years >= last[0]) return last[1]
+  let index = 0
+  while (index < AGE_ANCHORS.length - 2 && years > AGE_ANCHORS[index + 1][0]) index++
+  const [fromAge, fromValue] = AGE_ANCHORS[index]
+  const [toAge, toValue] = AGE_ANCHORS[index + 1]
+  return fromValue + (toValue - fromValue) * (years - fromAge) / (toAge - fromAge)
+}
+
+/**
  * 年龄因子。
- * 成人：23–28 岁 1.00；19–22 岁 0.90–0.96；29–31 岁 0.90；32–34 岁 0.78；
- *      35–37 岁 0.65；38–40 岁 0.52；41 岁以上 0.40。
+ * 成人：按 AGE_ANCHORS 插值，26 岁 1.00 起逐段下降到 50 岁及以后 0.18。
  * 青少年：18 岁 0.90，每降 2 岁减 0.05，最低 0.75（不设越小越贵）。
  * 组内微调：相对中位年龄每岁 ±0.02，封顶 ±0.1。
  */
 function ageFactor(age, options = {}) {
   const years = num(age)
   if (years == null) return null
-  let base
-  if (years <= 18) base = Math.max(0.75, 0.9 - ((18 - years) / 2) * 0.05)
-  else if (years <= 22) base = 0.9 + (years - 19) * 0.02
-  else if (years <= 28) base = 1
-  else if (years <= 31) base = 0.9
-  else if (years <= 34) base = 0.78
-  else if (years <= 37) base = 0.65
-  else if (years <= 40) base = 0.52
-  else base = 0.4
+  const base = years <= 18
+    ? Math.max(0.75, 0.9 - ((18 - years) / 2) * 0.05)
+    : adultAgeFactor(years)
   const peerMedian = median(options.peerAges)
-  if (peerMedian != null) base += clamp((years - peerMedian) * 0.02, -0.1, 0.1)
-  return clamp01(base)
+  return clamp01(base + (peerMedian == null ? 0 : clamp((years - peerMedian) * 0.02, -0.1, 0.1)))
 }
 
 /** 出场稳定性：出场率 40% + 首发率 35% + 分钟占比 25%；无单场时长口径时按前两项 55%/45% 计。 */
@@ -150,12 +181,31 @@ function trendFactor(input = {}) {
   return clamp01(0.5 + (current - previous) / previous / 2)
 }
 
-/** 卡种与应援：应援滴数取对数封顶占 80%，限定卡每张 +0.1（最多 2 张）。 */
+/**
+ * 卡种与应援：应援滴数取对数封顶占 80%，限定卡每张 +0.1（最多 2 张）。
+ * 两项都读不到时返回 null，由调用方按中性值计并标记估计，不能把「没资料」当成 0 分。
+ */
 function cardFactor(input = {}) {
   const drops = num(input.supportDrops)
-  const limited = clamp(num(input.limitedCardCount) || 0, 0, LIMITED_CARD_CAP)
+  const limited = num(input.limitedCardCount)
+  if (drops == null && limited == null) return null
   const support = drops == null || drops <= 0 ? 0 : clamp01(Math.log10(1 + drops) / 4)
-  return clamp01(support * 0.8 + limited * 0.1)
+  return clamp01(support * 0.8 + clamp(limited || 0, 0, LIMITED_CARD_CAP) * 0.1)
+}
+
+/**
+ * 生涯荣誉折算成就分输入：只认已确认的 MVP、金靴、最佳阵容。
+ * 同一届同奖项多行按项累加；赛事冠军仍未从奖项结果单独产出，留待归档口径补齐。
+ */
+function achievementsFromHonors(honors) {
+  const typeOf = { mvp:'mvp', topScorer:'topScorer', bestXI:'bestXI' }
+  const counts = new Map()
+  for (const row of Array.isArray(honors) ? honors : []) {
+    const type = typeOf[row && row.key]
+    if (!type) continue
+    counts.set(type, (counts.get(type) || 0) + 1)
+  }
+  return [...counts].map(([type, count]) => ({ type, count }))
 }
 
 /** 成就分：跨届累加，不重置。 */
@@ -352,12 +402,14 @@ module.exports = {
   MONEY_FLOOR,
   moneyOf,
   parseAge,
+  positionBucketOf,
   ageFactor,
   appearanceFactor,
   qualityMetric,
   scarcityFactor,
   trendFactor,
   cardFactor,
+  achievementsFromHonors,
   achievementScore,
   tierOf,
   percentile,

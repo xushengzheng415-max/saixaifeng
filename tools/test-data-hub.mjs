@@ -4,6 +4,14 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 const require=createRequire(import.meta.url)
 const {registration,relationHistory,performanceDimensions,valuationSnapshots,scopeKey}=require('../cloudfunctions/dataCenter/shared/hub-contract.cjs')
+const valuation=require('../cloudfunctions/dataCenter/shared/valuation.cjs')
+// 中文位置名必须能归类，否则位置稀缺与同位置比较会整片失效。
+assert.equal(valuation.positionBucketOf('门将'),'GK');assert.equal(valuation.positionBucketOf('中后卫'),'DF');assert.equal(valuation.positionBucketOf('边后卫'),'DF')
+assert.equal(valuation.positionBucketOf('前腰'),'MF');assert.equal(valuation.positionBucketOf('后腰'),'MF');assert.equal(valuation.positionBucketOf('边前卫'),'MF')
+assert.equal(valuation.positionBucketOf('边锋'),'FW');assert.equal(valuation.positionBucketOf('中锋'),'FW');assert.equal(valuation.positionBucketOf('GK'),'GK');assert.equal(valuation.positionBucketOf(''),'')
+// 应援与限定卡都没有资料时应标记估计，不能按 0 分计入。
+assert.equal(valuation.cardFactor({}),null);assert.equal(valuation.cardFactor({supportDrops:0,limitedCardCount:null}),0)
+assert.equal(valuation.achievementScore(valuation.achievementsFromHonors([{key:'mvp'},{key:'bestXI'},{key:'goalkeeper'}])),90)
 const {createHubService}=require('../cloudfunctions/dataCenter/shared/hub.cjs')
 const {readAll,readOptionalAll}=require('../cloudfunctions/dataCenter/shared/reader.cjs')
 const {synthetic}=await import('../cloudfunctions/dataCenter/shared/statistics.mjs')

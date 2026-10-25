@@ -22,7 +22,7 @@ function createHubService(db,service){
   if(synthetic(profile)||synthetic(currentTeam))throw fail('DATA_TEST_EXCLUDED','测试球队及测试球员不进入正式数据总站')
   if(currentTeamId&&!currentTeam)throw fail('DATA_IDENTITY_UNVERIFIED','当前球队来源待核验，不输出正式生涯档案')
   if(profile.teamId&&profile.teamCode&&text(profile.teamId)!==text(profile.teamCode))throw fail('DATA_IDENTITY_CONFLICT','球员当前球队字段冲突，请先核验')
-  const statistics=await service.query(actor,{playerId,mode:'official'},{includeLedger:true})
+  const statistics=await service.query(actor,{playerId,mode:'official'},{includeLedger:true,includeHonors:true})
   const [transfers,legacy,snapshots,membershipRead]=await Promise.all([readOptionalAll(db,'player_transfers',{playerId}),readOptionalAll(db,'player_team_history',{playerId}),readOptionalAll(db,'player_valuations',{playerId}),readOptionalAll(db,'player_team_memberships',{playerId})])
   const memberships=membershipRead.rows,teamIds=[currentTeamId,...memberships.map(x=>x.teamId),...legacy.rows.map(x=>x.teamId),...transfers.rows.flatMap(x=>[x.fromTeamId,x.toTeamId])]
   const teams=(await readByIds(db,'teams','_id',teamIds)).filter(x=>!synthetic(x)).map(teamView),allowedTeams=new Set(teams.map(x=>x.id))
@@ -36,7 +36,11 @@ function createHubService(db,service){
   const matchRows=statistics.pointsLedger?.rows||[],matches=await readByIds(db,'matches','_id',matchRows.map(x=>x.matchId)),matchById=new Map(matches.map(x=>[text(x._id),x])),careerCoverage=statistics.playerTotal?.coverage||{}
   const recent=matchRows.map(x=>{const m=matchById.get(x.matchId)||{};const score=n=>n!==null&&n!==undefined&&n!==''&&Number.isFinite(Number(n))?Number(n):null;return {matchId:x.matchId,matchName:x.matchName,tournamentName:x.tournamentName,date:date(x.date),teamNames:x.teamNames,role:x.role,minutesPlayed:x.minuteNote?null:x.minutesPlayed,goals:careerCoverage.goals==='complete'?x.goals:null,homeScore:score(m.homeScore??m.scoreHome),awayScore:score(m.awayScore??m.scoreAway)}}).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))
   if(minor&&statistics.valuation)statistics.valuation={...statistics.valuation,index:null,total:null,money:null,moneyText:'',tier:'',tierValue:null,display:'仅展示星级',minor:true}
-  const result={profile:playerView(profile),currentTeam:currentTeam?teamView(currentTeam):null,teams,statistics,five:performanceDimensions({...statistics,valuation:{...statistics.valuation,positionBucket:/GK|守门/i.test(text(profile.position))?'GK':''}}),transfers:{status:transfers.status,items:history},memberships:relations,snapshots:{...snapshotView,storageStatus:snapshots.status},recentMatches:recent}
+  // 指数快照留痕按已确认规则写入；重复查看同一天同一数据版本只留一份，写入失败不影响档案读取。
+  const snapshotWrite=await require('./valuation-store.cjs').record(db,statistics,{playerId}).catch(()=>null)
+  const honorRows=Array.isArray(statistics.honors)?statistics.honors:[],statisticsView={...statistics}
+  delete statisticsView.honors
+  const result={profile:playerView(profile),currentTeam:currentTeam?teamView(currentTeam):null,teams,statistics:statisticsView,five:performanceDimensions({...statisticsView,honors:honorRows,valuation:{...statisticsView.valuation,positionBucket:require('./valuation.cjs').positionBucketOf(text(profile.position))}}),honors:honorRows,transfers:{status:transfers.status,items:history},memberships:relations,snapshots:{...snapshotView,storageStatus:snapshots.status},recentMatches:recent,valuationSnapshot:snapshotWrite?{status:snapshotWrite.status}:{status:'failed'}}
   const dataVersion=fingerprint({profile:result.profile,teams,statisticsVersion:statistics.dataVersion,scoreVersion:statistics.playerCard?.dataVersion,relations,transfers:history,snapshots:snapshotView,five:result.five})
   const portraitSource=[profile.playerCardSourceFileId,profile.photoFileID,profile.photoFileId,profile.photoUrl,profile.photo].find(value=>typeof value==='string'&&value.trim())||''
   return {success:true,hubVersion:'football-data-hub/1',accessScope:'platform',dataVersion,generatedAt:statistics.generatedAt,portraitSource,...result}
