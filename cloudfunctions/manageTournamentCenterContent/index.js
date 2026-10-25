@@ -349,6 +349,9 @@ async function getOverview(db) {
   const isTestOwned = record => testOrganizationIds.has(recordOrgId(record)) || testUserIds.has(recordCreatorId(record))
   const visibleTournamentRows = tournamentRows.filter(row => !isTestOwned(row))
   const visibleTeamRows = teamRows.filter(row => !isTestOwned(row))
+  // 主办方只认实际建过赛事的账号：仅在小程序建球队的球队用户不进入主办方名录与统计。
+  const tournamentOwnerUserIds = new Set(visibleTournamentRows.map(row => recordCreatorId(row)).filter(Boolean))
+  const tournamentOwnerOrgIds = new Set(visibleTournamentRows.map(row => recordOrgId(row)).filter(Boolean))
 
   // 旧版 Word 导入把限时 URL 写进 logo/logoUrl，同时保留了永久 cloud 文件 ID。
   // 每次读取时从永久 ID 换取新地址，避免 URL 到期后在长期球队列表显示破图。
@@ -509,14 +512,16 @@ async function getOverview(db) {
       archived,
       deletable
     }
-  }).filter(item => !isTestDataName(item.name) && !testUserIds.has(String(item.userId)) && !testOrganizationIds.has(item.orgId)).sort((a, b) => {
+  }).filter(item => item.tournamentIds.length > 0 && !isTestDataName(item.name) && !testUserIds.has(String(item.userId)) && !testOrganizationIds.has(item.orgId)).sort((a, b) => {
     const latestA = toTimestamp(a.latestTournament && a.latestTournament.createTime) || toTimestamp(a.createTime)
     const latestB = toTimestamp(b.latestTournament && b.latestTournament.createTime) || toTimestamp(b.createTime)
     return latestB - latestA
   })
 
   const accounts = userRows
-    .filter(item => !testUserIds.has(String(item._id)) && String(item.role || '').toLowerCase() === 'organizer' && String(item.pcAccountStatus || '').toLowerCase() !== 'cancelled')
+    .filter(item => !testUserIds.has(String(item._id)) &&
+      (tournamentOwnerUserIds.has(String(item._id)) || tournamentOwnerOrgIds.has(recordOrgId(item))) &&
+      String(item.role || '').toLowerCase() === 'organizer' && String(item.pcAccountStatus || '').toLowerCase() !== 'cancelled')
     .map(item => safeOrganizerAccount(item, visibleTournamentRows, visibleTeamRows))
     .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
