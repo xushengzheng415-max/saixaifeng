@@ -836,7 +836,7 @@ function tournamentWorkspacePath(suffix = '') {
 const organizerNavItems = computed(() => [
   {
     path: tournamentWorkspacePath(),
-    label: 'AI 办赛助手',
+    label: '赛事主控制台',
     icon: 'HomeFilled',
     requiresTournament: true,
     activeWhen: () => Boolean(currentTournamentId.value) && /^\/tournaments\/[^/]+$/.test(route.path)
@@ -883,6 +883,13 @@ const organizerNavItems = computed(() => [
     icon: 'DataAnalysis',
     requiresTournament: true,
     activeWhen: () => /\/tournaments\/[^/]+\/results(?:\/match\/[^/]+\/archive)?$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/discipline'),
+    label: '纪律处罚',
+    icon: 'WarningFilled',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/discipline$/.test(route.path)
   },
   {
     path: tournamentWorkspacePath('/news'),
