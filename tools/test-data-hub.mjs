@@ -17,8 +17,16 @@ h=relationHistory({playerId:'p',currentTeamId:'B',memberships:[{_id:'m',playerId
 h=relationHistory({playerId:'p',currentTeamId:'B',history:[{_id:'1',playerId:'p',teamId:'A',joinedAt:'2024-01-01'},{_id:'2',playerId:'p',teamId:'B',joinedAt:'2025-01-01'}]});assert.equal(h.status,'conflict');assert(h.issues.some(x=>x.code==='MULTIPLE_CURRENT_TEAMS'));assert(h.issues.some(x=>x.code==='RELATION_PERIOD_OVERLAP'))
 assert.equal(relationHistory({playerId:'p',currentTeamId:'B'}).status,'not_recorded')
 const stats={dataVersion:'dataset-1',generatedAt:'2026-10-23T00:00:00Z',coverage:{status:'partial'},playerTotal:{metrics:{goals:0,minutesPlayed:null},coverage:{goals:'complete'}},playerCard:{points:null},valuation:{version:'v1',coverage:'complete',factors:{core:.5,quality:.5,appearance:.8,trend:.5},estimated:['core','quality','trend'],historyStatus:'not_recorded'},memberships:[],pointsLedger:{rows:[]},teams:[],players:[]}
-let f=performanceDimensions(stats);assert.equal(f.axes[0].score,null);assert.equal(f.axes[1].value,null);assert.equal(f.axes[2].score,80);assert.equal(f.axes[3].score,null);assert.equal(f.axes[4].score,null);assert.equal(f.status,'partial')
-f=performanceDimensions({...stats,valuation:{...stats.valuation,positionBucket:'GK'}});assert.equal(f.axes[1].value,null)
+let f=performanceDimensions(stats);assert.equal(f.axes[0].score,null);assert.equal(f.axes[1].raw,null);assert.equal(f.axes[2].score,7.6);assert.equal(f.axes[3].score,null);assert.equal(f.axes[4].score,null);assert.equal(f.status,'partial')
+assert.equal(f.ceiling,9.5)
+const topStats={...stats,valuation:{...stats.valuation,coverage:'complete',estimated:[],factors:{core:1,quality:1,appearance:1,trend:1}}}
+f=performanceDimensions({...topStats,honors:[{points:200}]});assert.equal(f.axes[0].score,9.5,'组内第一封顶 9.5 分，不评满分');assert.equal(f.axes[2].score,9.5);assert.equal(f.axes[4].score,9.5)
+f=performanceDimensions({...stats,valuation:{...stats.valuation,positionBucket:'GK'}});assert.equal(f.axes[1].raw,null)
+const trendStats={...stats,valuation:{...stats.valuation,coverage:'complete',estimated:['core','quality'],factors:{core:.5,quality:.5,appearance:.8,trend:.6}},pointsLedger:{rows:[{date:'2026-01-01',points:2},{date:'2026-01-02',points:2},{date:'2026-01-03',points:2},{date:'2026-01-04',points:4},{date:'2026-01-05',points:4},{date:'2026-01-06',points:4}]}}
+f=performanceDimensions(trendStats);assert.equal(f.axes[3].score,5.7);assert.equal(f.axes[3].raw,null)
+f=performanceDimensions({...trendStats,valuation:{...trendStats.valuation,estimated:['core','quality','trend']}});assert.equal(f.axes[3].score,9.5);assert.equal(f.axes[3].raw,4)
+f=performanceDimensions({...trendStats,honors:[{points:50},{points:40}]});assert.equal(f.axes[4].score,9);assert.equal(f.axes[4].raw,2)
+assert.equal(performanceDimensions({...trendStats,valuation:{...trendStats.valuation,estimated:['core','quality','trend']},pointsLedger:{rows:[]}}).axes[3].score,null,'insufficient samples must not become zero')
 assert.equal(scopeKey({playerId:'p',mode:'official'}),'career');assert.notEqual(scopeKey({tournamentId:'t1'}),'career')
 const valid={_id:'s1',playerId:'p',version:'v1',scopeKey:'career',authorizationKey:'platform',coverage:'complete',computedAt:'2026-10-01',total:100,money:140,dataVersion:'d1'}
 assert.equal(valuationSnapshots([valid,{...valid,_id:'s2',scopeKey:'scope:other'},{...valid,_id:'s3',version:'v0'}],{playerId:'p',version:'v1'}).items.length,1)
