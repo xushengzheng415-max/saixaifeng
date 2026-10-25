@@ -6,6 +6,20 @@ const creatorId = row => text(row.creatorId || row.createdBy || row.creatorUserI
 const memberId = row => text(row.userId || row.memberUserId)
 const active = row => !['deleted','cancelled','removed','rejected','inactive','revoked'].includes(row.status) && row.isActive !== false
 const SOURCE_LABELS = { pc: 'PC注册', web: 'PC注册', pc_register: 'PC注册', web_register: 'PC注册', pc_wechat: 'PC微信注册', mini: '小程序注册', miniprogram: '小程序注册', mini_program: '小程序注册', mini_register: '小程序注册', admin: '后台创建', import: '导入创建' }
+// 主办方三步问答的答案，只用于平台了解客户，不参与权限或数据归属判断。
+const ORGANIZATION_TYPE_LABELS = { school: '学校', enterprise: '企业', association: '协会', event_company: '赛事公司' }
+const EVENT_VOLUME_LABELS = { under_10: '年办赛 10 场以内', '10_30': '年办赛 10-30 场', '30_50': '年办赛 30-50 场', over_50: '年办赛 50 场以上' }
+const PRIMARY_AUDIENCE_LABELS = { youth: '青少年赛事为主', adult: '成人赛事为主' }
+function organizationAnswers(row) {
+  const profile = row && row.customerProfile
+  const answers = []
+  if (profile && typeof profile === 'object') {
+    if (ORGANIZATION_TYPE_LABELS[profile.identity]) answers.push({ question: '你们是哪类机构？', answer: ORGANIZATION_TYPE_LABELS[profile.identity] })
+    if (EVENT_VOLUME_LABELS[profile.annualEventVolume]) answers.push({ question: '一年大概办多少场赛事？', answer: EVENT_VOLUME_LABELS[profile.annualEventVolume] })
+    if (PRIMARY_AUDIENCE_LABELS[profile.primaryAudience]) answers.push({ question: '主要办哪类赛事？', answer: PRIMARY_AUDIENCE_LABELS[profile.primaryAudience] })
+  }
+  return answers
+}
 function accountSummary(user) {
   // A later WeChat binding is not evidence of the original registration channel.
   const source = text(user.registrationChannel || user.registerChannel || user.registrationSource || user.registerSource || user.createdFrom)
@@ -83,7 +97,19 @@ async function getCustomerProfile(db, event) {
       createdTeams: teams.filter(team => creatorId(team) === row._id).map(team => text(team.name || team.teamName) || '未命名球队'),
       createdTournaments: tournaments.filter(item => creatorId(item) === row._id).map(item => text(item.name || item.tournamentName) || '未命名赛事')
     })),
-    organizations: organizations.filter(row => orgIds.has(row._id)).map(row => ({ id: row._id, name: text(row.name || row.organizationName) || '未命名机构' })),
+    organizations: organizations.filter(row => orgIds.has(row._id)).map(row => {
+      const answers = organizationAnswers(row)
+      return {
+        id: row._id,
+        name: text(row.name || row.organizationName) || '未命名机构',
+        region: [text(row.province), text(row.city)].filter(Boolean).join(' '),
+        contactName: text(row.contactName),
+        contactPhone: text(row.contactPhone),
+        collectedAt: (row.customerProfile && row.customerProfile.collectedAt) || row.updateTime || null,
+        answers,
+        answeredCount: answers.length
+      }
+    }),
     teams: teams.map(row => ({ platformArchived: row.platformArchived === true, platformArchiveRevision: row.platformArchiveRevision || 0, id: row._id, name: teamNames.get(row._id), relation: relation(row), creatorName: creatorName(row), createTime: row.createTime || row.createdAt || null, playerCount: players.filter(p => p.teamId === row._id).length })),
     tournaments: tournaments.map(row => ({ platformArchived: row.platformArchived === true, platformArchiveRevision: row.platformArchiveRevision || 0, id: row._id, name: text(row.name || row.tournamentName) || '未命名赛事', relation: relation(row), creatorName: creatorName(row), createTime: row.createTime || row.createdAt || null, status: text(row.status) })),
     players: players.map(row => ({ id: row._id, name: text(row.name || row.playerName) || '未命名球员', teamName: teamNames.get(row.teamId) || '球队关联待核查', relation: relation(row) })),

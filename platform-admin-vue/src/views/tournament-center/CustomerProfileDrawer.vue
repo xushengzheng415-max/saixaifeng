@@ -4,7 +4,23 @@
     <div v-if="loading" class="profile-state">正在读取账号与关联资料…</div>
     <el-alert v-else-if="error" :title="error" type="error" :closable="false" />
     <template v-else-if="profile">
-      <p v-if="profile.organizations.length" class="org-names">关联机构：{{ profile.organizations.map(x => x.name).join('、') }}</p>
+      <section v-if="profile.organizations.length" class="qa-block">
+        <div class="qa-title"><strong>办赛需求问答</strong><small>来自主办方首次进入时的三步问答，只用于了解客户</small></div>
+        <div v-for="org in profile.organizations" :key="org.id" class="qa-card">
+          <div class="qa-head">
+            <strong>{{ org.name }}</strong>
+            <span>{{ org.region || '地区未填' }}</span>
+            <span v-if="org.contactName">{{ org.contactName }}{{ org.contactPhone ? ` · ${org.contactPhone}` : '' }}</span>
+            <el-tag v-if="org.answeredCount" type="success" effect="plain">已回答 {{ org.answeredCount }}/3</el-tag>
+            <el-tag v-else type="info" effect="plain">未填写</el-tag>
+            <small v-if="org.collectedAt">提交于 {{ time(org.collectedAt) }}</small>
+          </div>
+          <el-descriptions v-if="org.answers.length" :column="1" border size="small">
+            <el-descriptions-item v-for="answer in org.answers" :key="answer.question" :label="answer.question">{{ answer.answer }}</el-descriptions-item>
+          </el-descriptions>
+          <p v-else class="source-note">该机构没有问答记录，可能是旧账号或未走完引导流程。</p>
+        </div>
+      </section>
       <el-tabs v-model="tab">
         <el-tab-pane :label="`账号 ${profile.accounts.length}`" name="accounts">
           <p class="source-note">登录绑定不代表注册来源或最近登录端。</p>
@@ -87,5 +103,9 @@ watch(() => [props.modelValue, props.customer?.userId, props.customer?.orgId], (
 onBeforeUnmount(() => { sequence++ })
 </script>
 <style scoped>
-.customer-head,.account-title,.profile-toolbar{display:flex;align-items:center;gap:12px}.customer-head{justify-content:space-between;margin-bottom:16px}.customer-head strong{font-size:18px}.account-title{margin-bottom:12px}.account-title>span,.org-names,.source-note{font-size:13px;color:#6d7d73}.account-row{padding:16px 0;border-bottom:1px solid #e2e8e4}.profile-toolbar{margin:12px 0}.profile-toolbar .el-input{max-width:360px}.profile-toolbar span{margin-left:auto;white-space:nowrap}.profile-state{padding:30px 0;color:#6d7d73}.el-pagination{margin-top:16px}.account-row :deep(.el-descriptions__content){overflow-wrap:anywhere}@media(max-width:600px){.account-title{flex-wrap:wrap}.account-row :deep(.el-descriptions__label){min-width:65px}}
+.customer-head,.account-title,.profile-toolbar{display:flex;align-items:center;gap:12px}.customer-head{justify-content:space-between;margin-bottom:16px}.customer-head strong{font-size:18px}.account-title{margin-bottom:12px}.account-title>span,.org-names,.source-note{font-size:13px;color:#6d7d73}
+.qa-block{margin:4px 0 18px}.qa-title{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}.qa-title small{color:#8b978f;font-size:12px}
+.qa-card{padding:14px 16px;margin-bottom:10px;border:1px solid #e2e8e4;border-radius:10px;background:#fbfdfb}
+.qa-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px;color:#6d7d73;font-size:13px}.qa-head strong{color:#25322b;font-size:15px}.qa-head small{margin-left:auto;color:#8b978f;font-size:12px}
+.qa-card :deep(.el-descriptions__label){width:190px}.account-row{padding:16px 0;border-bottom:1px solid #e2e8e4}.profile-toolbar{margin:12px 0}.profile-toolbar .el-input{max-width:360px}.profile-toolbar span{margin-left:auto;white-space:nowrap}.profile-state{padding:30px 0;color:#6d7d73}.el-pagination{margin-top:16px}.account-row :deep(.el-descriptions__content){overflow-wrap:anywhere}@media(max-width:600px){.account-title{flex-wrap:wrap}.account-row :deep(.el-descriptions__label){min-width:65px}}
 </style>
