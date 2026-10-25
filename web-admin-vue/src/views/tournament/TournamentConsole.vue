@@ -23,9 +23,9 @@
     </header>
 
     <div class="console-main">
-      <section class="chat-panel" aria-label="赛事助手">
+      <section class="chat-panel" aria-label="AI 办赛助手对话">
         <div class="chat-bar">
-          <span class="chat-status"><i aria-hidden="true"></i>赛事助手</span>
+          <span class="chat-status"><i aria-hidden="true"></i>AI 办赛助手</span>
           <button v-if="messages.length" type="button" class="text-button" @click="resetChat">清空对话</button>
         </div>
 
@@ -78,17 +78,39 @@
         </div>
       </section>
 
-      <aside class="rail" aria-label="赛事速览">
-        <section class="rail-card">
-          <header class="rail-head"><h2>今日待办</h2><button v-if="todos.length > 3" type="button" class="text-button" @click="showAllTodos = !showAllTodos">{{ showAllTodos ? '收起' : `全部 ${todos.length}` }}</button></header>
-          <p v-if="!todos.length" class="rail-empty">当前没有需要处理的事项</p>
-          <ul v-else class="todo-list">
-            <li v-for="todo in visibleTodos" :key="todo.key">
-              <span class="todo-dot" :class="todo.tone" aria-hidden="true"></span>
-              <span class="todo-text">{{ todo.text }}</span>
-              <button type="button" class="text-button" @click="go(todo.target)">去处理</button>
+      <aside class="rail" aria-label="AI 办赛助手">
+        <section class="rail-card assistant-card">
+          <header class="assistant-head">
+            <span class="assistant-avatar" aria-hidden="true">蜂</span>
+            <div class="assistant-id">
+              <h2>AI 办赛助手</h2>
+              <p><i aria-hidden="true"></i>只读本赛事数据</p>
+            </div>
+          </header>
+          <p class="assistant-insight">{{ aiInsight }}</p>
+          <ul v-if="aiSuggestions.length" class="assistant-actions">
+            <li v-for="item in aiSuggestions" :key="item.label">
+              <button type="button" @click="ask(item.question)">
+                <span>{{ item.label }}</span>
+                <el-icon><ArrowRight /></el-icon>
+              </button>
             </li>
           </ul>
+          <div class="assistant-todo">
+            <header class="rail-head">
+              <h2>建议处理</h2>
+              <button v-if="todos.length > 3" type="button" class="text-button" @click="showAllTodos = !showAllTodos">{{ showAllTodos ? '收起' : `全部 ${todos.length}` }}</button>
+            </header>
+            <p v-if="!todos.length" class="rail-empty">当前没有需要处理的事项</p>
+            <ul v-else class="todo-list">
+              <li v-for="todo in visibleTodos" :key="todo.key">
+                <span class="todo-dot" :class="todo.tone" aria-hidden="true"></span>
+                <span class="todo-text">{{ todo.text }}</span>
+                <button type="button" class="text-button" @click="go(todo.target)">去处理</button>
+              </li>
+            </ul>
+          </div>
+          <button type="button" class="assistant-cta" @click="ask('这届还差什么没做')">让助手盘点一遍</button>
         </section>
 
         <section class="rail-card">
@@ -217,6 +239,26 @@ const overviewNote = computed(() => {
   if (activeMatches.value.length) parts.push(`${activeMatches.value.length} 场进行中`)
   if (reviewMatches.value.length) parts.push(`${reviewMatches.value.length} 场赛果待复核`)
   return parts.length ? parts.join(' · ') : '当前没有异常项目'
+})
+// 右侧 AI 办赛助手：洞察基于本赛事已加载数据，建议点击后直接进入对话
+const aiInsight = computed(() => {
+  const name = tournament.value.name || '本赛事'
+  if (!divisions.value.length) return `${name}还没有竞赛组别。建议先确定年龄区间、赛制与名额，再邀请球队报名。`
+  if (pendingTeams.value.length) return `已有 ${divisions.value.length} 个组别、${approvedTeams.value.length} 支球队确认，还有 ${pendingTeams.value.length} 支待确认。建议先处理球队，再安排赛程。`
+  if (!matches.value.length) return `${divisions.value.length} 个组别、${approvedTeams.value.length} 支球队已就位，还没有编排比赛。下一步是抽签分组并发布赛程。`
+  if (reviewMatches.value.length) return `共 ${matches.value.length} 场比赛，今天 ${todayMatches.value.length} 场，${reviewMatches.value.length} 场赛果待复核。复核归档后积分榜才会更新。`
+  if (activeMatches.value.length) return `现在 ${activeMatches.value.length} 场比赛进行中，共 ${matches.value.length} 场已编排。赛果出来可以直接问我要积分榜。`
+  return `已排 ${matches.value.length} 场比赛，${completedMatches.value.length} 场已结束。待办、赛程、积分榜都可以直接问我。`
+})
+const aiSuggestions = computed(() => {
+  const list = []
+  if (!divisions.value.length) list.push({ label: '怎么建第一个组别', question: '帮我加一个组别' })
+  if (pendingTeams.value.length) list.push({ label: `处理 ${pendingTeams.value.length} 支待确认球队`, question: '球队情况怎么样' })
+  if (divisions.value.length && !matches.value.length) list.push({ label: '赛程该怎么排', question: '赛程怎么安排' })
+  if (reviewMatches.value.length) list.push({ label: `复核 ${reviewMatches.value.length} 场赛果`, question: '哪些赛果待复核' })
+  if (list.length < 2 && completedMatches.value.length) list.push({ label: '看下积分榜', question: '看下积分榜' })
+  if (list.length < 2) list.push({ label: '这届还差什么', question: '这届还差什么没做' })
+  return list.slice(0, 3)
 })
 const suggestionCards = computed(() => [
   { title: '筹备进度', desc: todos.value.length ? `还有 ${todos.value.length} 项待处理` : '当前没有待办', icon: DocumentChecked, question: '这届还差什么没做' },
@@ -606,6 +648,20 @@ onMounted(loadConsole)
 .rail-head h2 { margin:0; color:#1d3025; font-size:13px; font-weight:600; }
 .rail-count { color:#8b9791; font-size:11px; }
 .rail-empty { margin:0; color:#93a099; font-size:12px; line-height:1.6; }
+.assistant-card { border-color:#d5e9de; background:#fbfefc; }
+.assistant-head { display:flex; align-items:center; gap:9px; }
+.assistant-avatar { display:grid; width:30px; height:30px; flex:0 0 30px; place-items:center; border-radius:50%; color:#078545; font-size:12px; font-weight:600; background:#e7f6ed; }
+.assistant-id h2 { margin:0; color:#1d3025; font-size:13px; font-weight:650; }
+.assistant-id p { display:flex; align-items:center; gap:5px; margin:2px 0 0; color:#8b9791; font-size:11px; }
+.assistant-id p i { width:5px; height:5px; border-radius:50%; background:#12b76a; }
+.assistant-insight { margin:10px 0 0; color:#2f4738; font-size:12px; line-height:1.7; }
+.assistant-actions { margin:10px 0 0; padding:0; list-style:none; }
+.assistant-actions li + li { margin-top:6px; }
+.assistant-actions button { display:flex; width:100%; align-items:center; justify-content:space-between; gap:8px; padding:7px 10px; border:1px solid #e2ebe6; border-radius:9px; color:#33503f; font-size:12px; text-align:left; background:#fff; cursor:pointer; transition:border-color .15s ease,color .15s ease; }
+.assistant-actions button:hover { border-color:#a9d8bd; color:#078545; }
+.assistant-todo { margin-top:12px; padding-top:11px; border-top:1px solid #eaf2ed; }
+.assistant-cta { width:100%; margin-top:11px; padding:7px 0; border:1px solid #cde6d8; border-radius:9px; color:#078545; font-size:12px; background:#fff; cursor:pointer; transition:background .15s ease; }
+.assistant-cta:hover { background:#f0faf4; }
 .rail-note { margin:8px 0 0; color:#8b9791; font-size:11px; line-height:1.6; }
 .todo-list,.match-list,.stage-list,.division-list { margin:0; padding:0; list-style:none; }
 .todo-list li,.match-list li { display:flex; align-items:center; gap:7px; min-height:30px; }
