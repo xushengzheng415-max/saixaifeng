@@ -240,12 +240,46 @@ const ORGANIZER_FOLLOW_UP_STATUSES = { not_contacted: '未联系', contacted: '�
 // 使用阶段只按赛事状态自动判定：有未结束赛事=正在办赛，仅有已结束赛事=已办赛，无赛事或仅草稿=未开始使用。
 const STAGE_ACTIVE_STATUSES = ['ongoing', 'live', 'registering', 'published']
 const STAGE_FINISHED_STATUSES = ['ended', 'completed', 'finished']
+const MATCH_FINISHED_STATUSES = ['completed', 'finished', 'ended']
+const ORGANIZER_STAGE_STATUSES = { hosting: '正在办赛', hosted: '已办赛', not_started: '未开始使用' }
 
 function organizerUsageStage(tournamentStatuses) {
   const statuses = (Array.isArray(tournamentStatuses) ? tournamentStatuses : []).map(value => String(value || '').toLowerCase())
-  if (statuses.some(status => STAGE_ACTIVE_STATUSES.includes(status))) return { stage: 'hosting', label: '正在办赛' }
-  if (statuses.some(status => STAGE_FINISHED_STATUSES.includes(status))) return { stage: 'hosted', label: '已办赛' }
-  return { stage: 'not_started', label: '未开始使用' }
+  if (statuses.some(status => STAGE_ACTIVE_STATUSES.includes(status))) return { stage: 'hosting', label: ORGANIZER_STAGE_STATUSES.hosting }
+  if (statuses.some(status => STAGE_FINISHED_STATUSES.includes(status))) return { stage: 'hosted', label: ORGANIZER_STAGE_STATUSES.hosted }
+  return { stage: 'not_started', label: ORGANIZER_STAGE_STATUSES.not_started }
+}
+
+// 赛事状态常停在“进行中”，但比赛已经全部打完。这里补一层比赛记录校验，避免使用阶段长期误判为正在办赛。
+async function loadTournamentMatchProgress(db, tournamentIds) {
+  const progress = new Map()
+  const ids = Array.from(new Set((Array.isArray(tournamentIds) ? tournamentIds : []).map(value => cleanText(value, 128)).filter(Boolean)))
+  for (let offset = 0; offset < ids.length; offset += 40) {
+    const batch = ids.slice(offset, offset + 40)
+    try {
+      for (let skip = 0; skip < 2000; skip += 200) {
+        const result = await db.collection('matches')
+          .where({ tournamentId: db.command.in(batch) })
+          .field({ tournamentId: true, status: true })
+          .skip(skip)
+          .limit(200)
+          .get()
+        const rows = result.data || []
+        rows.forEach(row => {
+          const tournamentId = cleanText(row.tournamentId, 128)
+          if (!tournamentId) return
+          const item = progress.get(tournamentId) || { total: 0, finished: 0 }
+          item.total += 1
+          if (MATCH_FINISHED_STATUSES.includes(cleanText(row.status, 40).toLowerCase())) item.finished += 1
+          progress.set(tournamentId, item)
+        })
+        if (rows.length < 200) break
+      }
+    } catch (error) {
+      console.warn('[manageTournamentCenterContent] 比赛进度读取失败:', error && error.message)
+    }
+  }
+  return progress
 }
 
 // 登记资料来自主办方三步问答（organizations.customerProfile），只用于经营分析，不参与权限判断。
@@ -350,6 +384,19 @@ async function getOverview(db) {
     .map(item => safeTournament(item, { usersById, organizationsById, tournamentTeamCounts }))
     .sort((a, b) => toTimestamp(b.createTime) - toTimestamp(a.createTime))
 
+  const activeTournamentIds = tournaments
+    .filter(item => STAGE_ACTIVE_STATUSES.includes(String(item.status || '').toLowerCase()))
+    .map(item => String(item._id))
+  const matchProgress = await loadTournamentMatchProgress(db, activeTournamentIds)
+  const effectiveTournamentStatus = new Map()
+  tournaments.forEach(item => {
+    const id = String(item._id)
+    const status = String(item.status || '').toLowerCase()
+    const progress = matchProgress.get(id)
+    const allMatchesFinished = Boolean(progress && progress.total > 0 && progress.finished === progress.total)
+    effectiveTournamentStatus.set(id, allMatchesFinished && !STAGE_FINISHED_STATUSES.includes(status) ? 'ended' : status)
+  })
+
   const organizerMap = new Map()
   function ensureOrganizer(record = {}, fallback = {}) {
     const orgId = recordOrgId(record) || cleanText(fallback.orgId, 128)
@@ -418,7 +465,9 @@ async function getOverview(db) {
     })
     const targetUser = usersById.get(item.userId) || null
     const followUp = followUpByOrganizer.get(item._id) || null
-    const usageStage = organizerUsageStage(organizerTournaments.map(tournament => tournament.status))
+    const usageStage = organizerUsageStage(organizerTournaments.map(tournament => effectiveTournamentStatus.get(String(tournament._id)) || tournament.status))
+    const stageOverride = followUp ? cleanText(followUp.stageOverride, 40) : ''
+    const finalStage = ORGANIZER_STAGE_STATUSES[stageOverride] ? stageOverride : usageStage.stage
     const archived = Boolean(targetUser && targetUser.organizerArchived === true)
     const canManageAccount = Boolean(targetUser) && targetUser.isPlatformOwner !== true
     const deletable = canManageAccount && tournamentCount === 0 && teamCount === 0 && item.supportCount === 0 &&
@@ -440,8 +489,11 @@ async function getOverview(db) {
       followUpStatusLabel: (followUp && ORGANIZER_FOLLOW_UP_STATUSES[cleanText(followUp.status, 40)]) || '未跟进',
       followUpNote: followUp ? cleanText(followUp.note, 500) : '',
       followUpUpdatedAt: followUp ? followUp.updateTime : null,
-      usageStage: usageStage.stage,
-      usageStageLabel: usageStage.label,
+      usageStage: finalStage,
+      usageStageLabel: ORGANIZER_STAGE_STATUSES[finalStage] || usageStage.label,
+      usageStageAuto: usageStage.stage,
+      usageStageAutoLabel: usageStage.label,
+      usageStageIsManual: Boolean(ORGANIZER_STAGE_STATUSES[stageOverride]),
       archived,
       deletable
     }
@@ -702,6 +754,35 @@ async function saveOrganizerFollowUp(db, event, actor) {
   if (row) await db.collection('organizer_follow_ups').doc(row._id).update({ data })
   else await db.collection('organizer_follow_ups').add({ data: { ...data, createTime: db.serverDate() } })
   return { success: true, organizerId, status, statusLabel: ORGANIZER_FOLLOW_UP_STATUSES[status] || '未跟进', note }
+}
+
+// 使用阶段默认按赛事数据自动判定，这里只保存人工覆盖；传空值表示恢复自动判定。
+async function saveOrganizerStageOverride(db, event, actor) {
+  const organizerId = cleanText(event.organizerId, 160)
+  if (!organizerId || !/^(org|user):/.test(organizerId)) throw new Error('主办方标识格式不正确')
+  const stage = cleanText(event.stage, 40)
+  if (stage && !ORGANIZER_STAGE_STATUSES[stage]) throw new Error('请选择有效的使用阶段')
+  const existing = await db.collection('organizer_follow_ups').where({ organizerId }).limit(1).get()
+  const row = firstRecord(existing.data)
+  const data = {
+    stageOverride: stage,
+    stageOverrideUpdatedBy: actor._id,
+    stageOverrideUpdatedByName: cleanText(actor.nickname, 60),
+    stageOverrideUpdateTime: db.serverDate()
+  }
+  if (row) {
+    await db.collection('organizer_follow_ups').doc(row._id).update({ data })
+  } else {
+    await db.collection('organizer_follow_ups').add({ data: {
+      organizerId,
+      status: '',
+      note: '',
+      ...data,
+      updateTime: db.serverDate(),
+      createTime: db.serverDate()
+    } })
+  }
+  return { success: true, organizerId, stage, stageLabel: ORGANIZER_STAGE_STATUSES[stage] || '', manual: Boolean(stage) }
 }
 
 // 移出常用名录只影响平台名录展示，账号、权限和业务数据全部保留，可随时恢复。
@@ -1299,6 +1380,7 @@ exports.main = async event => {
     if (action === 'inspectOrganizerAccountDeletion') return await inspectOrganizerAccountDeletion(db, params)
     if (action === 'deleteOrganizerAccount') return await deleteOrganizerAccount(db, params, user)
     if (action === 'saveOrganizerFollowUp') return await saveOrganizerFollowUp(db, params, user)
+    if (action === 'saveOrganizerStageOverride') return await saveOrganizerStageOverride(db, params, user)
     if (action === 'setOrganizerAccountArchived') return await setOrganizerAccountArchived(db, params, user)
     if (action === 'purgeOrganizerAccount') return await purgeOrganizerAccount(db, params, user)
     if (action === 'serviceFeedbackList') return await listServiceFeedback(db, params)
