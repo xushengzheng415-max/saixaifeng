@@ -836,7 +836,7 @@ function tournamentWorkspacePath(suffix = '') {
 const organizerNavItems = computed(() => [
   {
     path: tournamentWorkspacePath(),
-    label: '赛事主控制台',
+    label: 'AI 办赛助手',
     icon: 'HomeFilled',
     requiresTournament: true,
     activeWhen: () => Boolean(currentTournamentId.value) && /^\/tournaments\/[^/]+$/.test(route.path)
