@@ -273,6 +273,7 @@ const chatInput = ref('')
 const threadEl = ref(null)
 const composerEl = ref(null)
 const thinking = ref(false)
+const thinkingLabel = ref('正在查询本赛事数据…')
 let messageSeed = 0
 let lastTopic = ''
 
@@ -286,7 +287,7 @@ function numberFromChinese(value) {
 function findDivision(text) {
   const direct = divisions.value.find(item => item.name && text.includes(String(item.name)))
   if (direct) return direct
-  const ordinal = text.match(/第\s*([一二三四五六七八九十\d])\s*(个|组)?/)
+  const ordinal = text.match(/第\s*([一二三四五六七八九十\d])\s*(个|组)/)
   return ordinal ? divisions.value[numberFromChinese(ordinal[1]) - 1] || null : null
 }
 
@@ -309,6 +310,46 @@ function matchLines() {
 function overviewSentence() {
   const pending = todos.value.length ? `，还有 ${todos.value.length} 项待办` : '，暂时没有待办'
   return `${tournament.value.name || '本赛事'}现在是「${tournamentStatus.value}」，共 ${divisions.value.length} 个组别、${approvedTeams.value.length} 支参赛球队、${matches.value.length} 场比赛${pending}。`
+}
+
+// 用本赛事已完赛的比分现算组别排名：胜 3 分、平 1 分，同分看净胜球
+function standingsForDivision(division) {
+  const targetId = divisionId(division)
+  const targetName = String(division.name || '')
+  const table = new Map()
+  const ensure = (key, label) => {
+    if (!table.has(key)) table.set(key, { name: label, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 })
+    return table.get(key)
+  }
+  const isFinished = status => ['completed', 'finished', 'archived'].includes(String(status || ''))
+  let counted = 0
+  matches.value.forEach(match => {
+    if (!isFinished(match.status) || match.homeScore === null || match.awayScore === null || match.homeScore === undefined || match.awayScore === undefined) return
+    const homeScore = Number(match.homeScore)
+    const awayScore = Number(match.awayScore)
+    if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return
+    const sameDivision = (targetId && String(match.divisionId || '') === targetId)
+      || (targetName && String(match.divisionName || '').includes(targetName))
+    if (!sameDivision) return
+    counted += 1
+    const home = ensure(String(match.homeTeamId || match.homeTeamName || 'home'), match.homeTeamName || '主队')
+    const away = ensure(String(match.awayTeamId || match.awayTeamName || 'away'), match.awayTeamName || '客队')
+    home.played += 1
+    away.played += 1
+    home.gf += homeScore
+    home.ga += awayScore
+    away.gf += awayScore
+    away.ga += homeScore
+    if (homeScore > awayScore) { home.won += 1; away.lost += 1; home.points += 3 }
+    else if (homeScore < awayScore) { away.won += 1; home.lost += 1; away.points += 3 }
+    else { home.drawn += 1; away.drawn += 1; home.points += 1; away.points += 1 }
+  })
+  const rows = [...table.values()].sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf)
+  return { rows, counted }
+}
+
+function standingsLines(rows) {
+  return rows.slice(0, 5).map((row, index) => `${index + 1}. ${row.name}　${row.points} 分（${row.played} 场 ${row.won} 胜 ${row.drawn} 平 ${row.lost} 负，净胜 ${row.gf - row.ga}）`)
 }
 
 function detailReply(topic) {
@@ -356,13 +397,46 @@ function respond(raw) {
     return { text: `这届目前还差 ${todos.value.length} 项：`, list: todos.value.map(item => item.text), action: { label: '去处理', target: todos.value[0].target }, quickReplies: ['详细看一下', '这届什么时候开始'], topic: 'todos' }
   }
 
-  if (has('积分', '排名', '榜', '名次')) {
+  if (has('积分', '排名', '名次', '榜', '第一', '冠军', '头名', '最强')) {
+    if (!divisions.value.length) {
+      return {
+        text: `${name}还没有竞赛组别，暂时没有排名可比。先建组别并确认赛制，之后有比分我就能算出名次。`,
+        action: { label: '去创建组别', target: `/tournaments/${id}/edit?section=divisions` },
+        quickReplies: ['帮我加一个组别', '这届还差什么没做'],
+        topic: 'standings'
+      }
+    }
+    const target = findDivision(text)
+    const results = (target ? [target] : divisions.value).map(item => ({ division: item, ...standingsForDivision(item) }))
+    const finishedCount = results.reduce((sum, item) => sum + item.counted, 0)
+    if (!finishedCount) {
+      return {
+        text: `这届已编排 ${matches.value.length} 场比赛，但还没有已完赛的比分，所以现在算不出名次。比赛结束并复核后我就能直接告诉你第一名是谁。`,
+        action: { label: '进入比赛管理', target: `/tournaments/${id}/matches` },
+        quickReplies: ['今天有几场比赛', '这届有多少支球队'],
+        topic: 'standings'
+      }
+    }
+    if (target) {
+      const result = results[0]
+      if (!result.rows.length) {
+        return { text: `${target.name || '未命名组别'}还没有已完赛的比分，暂时排不出名次。`, action: { label: '进入比赛管理', target: `/tournaments/${id}/matches` }, quickReplies: ['看看全部组别排名', '这届还差什么没做'], topic: 'standings' }
+      }
+      const champion = result.rows[0]
+      return {
+        text: `${target.name || '未命名组别'}目前第 1 名是 ${champion.name}，${champion.points} 分（${champion.played} 场 ${champion.won} 胜 ${champion.drawn} 平 ${champion.lost} 负，净胜 ${champion.gf - champion.ga}）。按已完赛的 ${result.counted} 场比分现算，前 ${Math.min(5, result.rows.length)} 名如下：`,
+        list: standingsLines(result.rows),
+        action: { label: '进入比赛管理', target: `/tournaments/${id}/matches` },
+        quickReplies: ['看看全部组别排名', '这届还差什么没做'],
+        topic: 'standings'
+      }
+    }
+    const ranked = results.filter(item => item.rows.length)
     return {
-      text: completedMatches.value.length
-        ? `积分榜按竞赛组别分别生成。这届已有 ${completedMatches.value.length} 场比赛结束，${divisions.value.length} 个组别的积分榜在比赛管理里查看，赛果复核后自动更新。`
-        : '这届还没有已确认的赛果。比赛结束并完成复核后，系统才会按组别生成积分榜；可以先看赛程安排。',
+      text: `各组别第 1 名（按已完赛比分现算）：`,
+      list: ranked.map(item => `${item.division.name || '未命名组别'}：${item.rows[0].name}，${item.rows[0].points} 分（${item.rows[0].played} 场 ${item.rows[0].won} 胜 ${item.rows[0].drawn} 平 ${item.rows[0].lost} 负）`),
       action: { label: '进入比赛管理', target: `/tournaments/${id}/matches` },
-      quickReplies: ['今天有几场比赛', '这届有多少支球队'],
+      quickReplies: [`${ranked[0] ? ranked[0].division.name || '第一组' : '第一组'}排名`, '今天有几场比赛'],
       topic: 'standings'
     }
   }
@@ -482,6 +556,17 @@ function respond(raw) {
   }
 }
 
+// 回答前的进度提示：按问题类型展示正在做的检索动作
+function progressStages(text) {
+  const stages = []
+  if (/积分|排名|名次|榜|第一|冠军|头名|最强/.test(text)) stages.push('正在查询比赛记录，计算组别排名…')
+  else if (/球队|参赛|报名|认领|名单|球员/.test(text)) stages.push('正在查询参赛球队与名单…')
+  else if (/赛程|比赛|对阵|场次|什么时候|场地/.test(text)) stages.push('正在检索赛程与比赛记录…')
+  else stages.push('正在查询本赛事数据…')
+  stages.push('正在整理回答…')
+  return stages
+}
+
 async function ask(raw) {
   const text = String(raw || '').trim()
   if (!text || thinking.value) return
@@ -490,8 +575,18 @@ async function ask(raw) {
   thinking.value = true
   resizeComposer()
   scrollThread()
-  await sleep(260)
-  const reply = respond(text)
+  let reply
+  try {
+    const stages = progressStages(text)
+    for (let index = 0; index < stages.length; index += 1) {
+      thinkingLabel.value = stages[index]
+      scrollThread()
+      await sleep(index === 0 ? 480 : 420)
+    }
+    reply = respond(text) || { text: overviewSentence(), quickReplies: ['这届还差什么没做'], topic: 'fallback' }
+  } catch (error) {
+    reply = { text: '刚才读取本赛事数据时出错了。刷新页面后再问一次，或者直接去对应管理页处理。', quickReplies: ['这届还差什么没做', '今天有几场比赛'], topic: 'error' }
+  }
   thinking.value = false
   messages.value.push({ id: ++messageSeed, role: 'assistant', ...reply })
   lastTopic = reply.topic || ''
@@ -628,6 +723,8 @@ onMounted(loadConsole)
 .quick-replies button { padding:4px 10px; border:1px solid #e2ebe6; border-radius:999px; color:#4c6a58; font-size:12px; background:#fff; cursor:pointer; transition:border-color .15s ease,color .15s ease; }
 .quick-replies button:hover { border-color:#a9d8bd; color:#078545; }
 .typing { display:flex; align-items:center; gap:4px; height:28px; }
+.thinking-row { display:flex; align-items:center; gap:9px; min-height:28px; }
+.thinking-text { color:#8b9791; font-size:12px; }
 .typing i { width:6px; height:6px; border-radius:50%; background:#b7c5bc; animation:typing-bounce 1.2s infinite ease-in-out; }
 .typing i:nth-child(2) { animation-delay:.15s; }
 .typing i:nth-child(3) { animation-delay:.3s; }
