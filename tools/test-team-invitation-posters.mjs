@@ -16,6 +16,8 @@ const options={invitation:invite,createCanvas,loadImage:async url=>url===invite.
 await renderTeamInvitationPosters({...options,tournament:{name:'隔离测试足球联赛',startDate:'2026-11-01',endDate:'2026-11-03',city:'郑州市'}})
 assert.equal(canvases.length,2)
 assert.ok(canvases[0].commands.some(row=>row.text==='扫码后选择开放组别'))
+assert.ok(canvases[0].commands.some(row=>row.text==='2026.11.01'))
+assert.ok(canvases[0].commands.some(row=>row.text==='至 2026.11.03'),'Date ranges must not split individual digits')
 assert.ok(canvases[1].commands.filter(row=>row.text).map(row=>row.text).join('').includes(TEAM_ENTRY_STEPS[0]))
 assert.equal(canvases.reduce((count,canvas)=>count+canvas.commands.filter(row=>row.qr).length,0),2)
 assert.equal(canvases.reduce((count,canvas)=>count+canvas.commands.filter(row=>row.background).length,0),2)
