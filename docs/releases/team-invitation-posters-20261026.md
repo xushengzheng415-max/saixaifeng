@@ -12,4 +12,13 @@
 
 本地隔离回归覆盖正式码约束、两个海报复用同一码、入驻步骤、通用组别选择、长文本、自适应高度与图片失败；两个组件及页面编译通过。Edge无界面浏览器已实际渲染PNG并查看画面，示例码明确不可扫码，不代表真实云端邀请/报名已验收。
 
-当前拟发布到PC预览，尚未覆盖正式PC。后续追加实际源码提交、构建及HTTP/资源SHA-256；不部署后端或上传小程序/H5。
+已发布到PC预览，尚未覆盖正式PC；未部署后端或上传小程序/H5。
+
+- 功能提交08fb1f4fa7b7d52863bf03957f1c7e6a4f5ad372；合入最新preview形成ab06e2c173cc7e153f985200bb8b86d4d8ac46c9并推送Gitee。候选不包含RegistrationMaterialsSettings组件、资料设置按钮或未接通的策略模块。
+- 正式仓库内按该提交导出确定源码，VITE_APP_BASE=/preview/admin/，完整构建2944模块/2分22秒，通过隔离回归；完整400文件上传/preview/admin/。
+- 入口及6项关键JS/CSS均HTTP200且SHA-256与构建一致。入口摘要9b55396cc43c0a4a2ea6e45a2bbe6959a90bb61447f76090f2be7cbb812513c4；报名管理分包b982b94242c475b4fbefaf9f80178960e2c2b5ee32c0f1c521e56aceaf4b13c4。
+- 正式/admin/ HTTP200，入口摘要仍为bb3071d723df841a1fb0a1eed8f5815f189b0b2a9232748a820d4f3122adb0d8，与此次预览发布前相同。
+- 预览地址：https://www.sxffootball.cn/preview/admin/#/tournament-space 。进入对应赛事报名管理后点击邀请球队。预览沿用正式小程序邀约码和共用后端，操作生成邀请时使用明确测试赛事；本次未自动创建真实邀约或提交报名。
+- Edge原生Canvas已渲染两张PNG并人工查看，示例输出分别约1.01MB/1.23MB；示例码不可扫码，未冒充真实扫码报名验收。真实邀请下载与微信扫码由产品负责人在预览验收。
+
+本机证据位于.codex-artifacts/team-invitation-posters-20261026；仅同步本记录及后续流程规范，不同步浏览器测试配置、函数包或个人材料。
