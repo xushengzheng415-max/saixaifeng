@@ -56,12 +56,19 @@
         :loading="saving"
       >开始比赛</el-button>
       <el-button
-        v-if="['scheduled', 'ongoing'].includes(String(match.status || '').toLowerCase())"
+        v-if="['scheduled', 'ongoing', 'finished', 'completed', 'ended'].includes(String(match.status || '').toLowerCase()) && match.resultType !== 'forfeit'"
         type="danger"
         size="small"
         @click="openForfeitDialog"
         :loading="saving"
       >弃赛</el-button>
+      <el-button
+        v-if="match && match._id"
+        size="small"
+        plain
+        type="danger"
+        @click="openPenaltyDialog"
+      >重点处罚</el-button>
       <el-button
         v-if="match.status === 'ongoing' && !isRefereeEvidenceLocked"
         type="warning"
@@ -471,11 +478,54 @@
             <el-radio :label="match.awayTeamId">{{ awayName }}</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="弃赛原因">
+          <el-input v-model="forfeitReason" type="textarea" :rows="2" maxlength="300" placeholder="赛后补登必填，不少于 4 个字" />
+        </el-form-item>
       </el-form>
-      <div class="forfeit-note">弃赛方按 0:3 判负，不记录进球事件。</div>
+      <div class="forfeit-note">按赛事规程判负（未配置时默认 0:3），不记录进球事件；弃赛会记入球队处罚记录，已配置规程扣分的同步扣联赛积分。</div>
       <template #footer>
         <el-button @click="forfeitDialogVisible = false">取消</el-button>
         <el-button type="danger" :loading="saving" :disabled="!forfeitTeamId" @click="confirmForfeit">确认弃赛</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="penaltyDialogVisible" title="登记重点纪律处罚" width="min(560px, 94vw)" :close-on-click-modal="false">
+      <el-form label-width="96px">
+        <el-form-item label="处罚对象">
+          <el-radio-group v-model="penaltyForm.subjectType">
+            <el-radio label="team">球队</el-radio>
+            <el-radio label="player">球员</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="所属球队">
+          <el-select v-model="penaltyForm.teamId" placeholder="选择本场球队">
+            <el-option :label="homeName" :value="match.homeTeamId" />
+            <el-option :label="awayName" :value="match.awayTeamId" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="penaltyForm.subjectType === 'player'" label="球员姓名">
+          <el-input v-model="penaltyForm.playerName" maxlength="40" placeholder="按比赛记录填写" />
+        </el-form-item>
+        <el-form-item label="违纪类型">
+          <el-checkbox-group v-model="penaltyForm.types">
+            <el-checkbox label="abuse_referee">辱骂裁判</el-checkbox>
+            <el-checkbox label="fight">现场打架</el-checkbox>
+            <el-checkbox label="serious_misconduct">严重违纪</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="处罚原因">
+          <el-input v-model="penaltyForm.reason" type="textarea" :rows="3" maxlength="300" placeholder="如实描述时间、经过与判罚依据（不少于 4 字）" />
+        </el-form-item>
+        <el-form-item label="证据">
+          <el-upload :file-list="penaltyForm.fileList" :auto-upload="false" :limit="3" accept="image/*" :on-change="handlePenaltyFileChange" :on-remove="handlePenaltyFileRemove">
+            <el-button size="small">选择图片</el-button>
+          </el-upload>
+          <div class="forfeit-note">至少 1 份现场或书面证据；平台审核通过后才列入跨赛事黑名单。</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="penaltyDialogVisible = false">取消</el-button>
+        <el-button type="danger" :loading="penaltySubmitting" @click="submitPenalty">提交处罚</el-button>
       </template>
     </el-dialog>
 
@@ -1096,7 +1146,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Edit, Delete, Plus, Right, Soccer, User, DataLine, Picture, Download, View, Document, Printer } from '@element-plus/icons-vue'
-import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard } from '../../utils/cloud'
+import { queryById, callFunction, updateRecord, queryList, reviewRefereeRecord, getFileUrl, rosterExceptionBoard, uploadImageViaWebApi } from '../../utils/cloud'
 import { isDemoMode } from '../../utils/demoMode'
 import { formatMatchPhase, formatMatchRound } from '../../utils/matchLabels'
 import { cardEventCounts, goalEventLabel, isGoalEvent, isPenaltyMissed, isPenaltyScored, isSecondYellowRed } from '../../utils/matchEvent'
@@ -1212,6 +1262,7 @@ const finishNeedsPenalty = computed(() => isEliminationMatch.value && Number(fin
 const finishPenaltyResult = computed(() => evaluatePenaltyShootout(finishForm.value.penaltyRounds, finishForm.value.penaltyFirstSide))
 const forfeitDialogVisible = ref(false)
 const forfeitTeamId = ref('')
+const forfeitReason = ref('')
 
 // 事件弹窗
 const eventDialogVisible = ref(false)
@@ -1908,6 +1959,7 @@ function openFinishDialog() {
 function openForfeitDialog() {
   if (!ensureEvidenceEditable()) return
   forfeitTeamId.value = ''
+  forfeitReason.value = ''
   forfeitDialogVisible.value = true
 }
 
@@ -1916,9 +1968,15 @@ async function confirmForfeit() {
   if (!losingTeamId || saving.value) return
   const homeForfeited = losingTeamId === String(match.value.homeTeamId || '')
   const forfeitingName = homeForfeited ? homeName.value : awayName.value
+  const postMatch = ['finished', 'completed', 'ended'].includes(String(match.value.status || '').toLowerCase())
+  const reason = String(forfeitReason.value || '').trim()
+  if (postMatch && reason.length < 4) {
+    ElMessage.warning('赛后补登弃赛须填写不少于 4 个字的原因')
+    return
+  }
   try {
     await ElMessageBox.confirm(
-      forfeitingName + '将按弃赛判负，比分记为 ' + (homeForfeited ? '0:3' : '3:0') + '。此操作不会记录进球事件。',
+      forfeitingName + '将按弃赛判负，比分按赛事规程（默认 0:3）记录。此操作会记入球队处罚记录' + (postMatch ? '，并覆盖本场原有赛果' : '') + '。',
       '确认弃赛',
       { type: 'warning', confirmButtonText: '确认弃赛', cancelButtonText: '取消' }
     )
@@ -1932,21 +1990,75 @@ async function confirmForfeit() {
       matchId,
       action: 'forfeitMatch',
       expectedEventRevision: Number(match.value.matchEventRevision || 0),
-      data: { forfeitTeamId: losingTeamId }
+      data: { forfeitTeamId: losingTeamId, reason, confirmOverwrite: postMatch === true }
     })
     if (!result?.success) throw new Error(result?.message || result?.error || '弃赛结果未保存，请重试')
     Object.assign(match.value, result.data || {})
-    match.value.homeScore = homeForfeited ? 0 : 3
-    match.value.awayScore = homeForfeited ? 3 : 0
     match.value.status = 'finished'
     match.value.resultType = 'forfeit'
     match.value.forfeitingTeamId = losingTeamId
     forfeitDialogVisible.value = false
-    ElMessage.success('已按 ' + match.value.homeScore + ':' + match.value.awayScore + ' 判负')
+    ElMessage.success(result.message || '弃赛结果已保存')
   } catch (err) {
     ElMessage.error('弃赛结果保存失败: ' + err.message)
   } finally {
     saving.value = false
+  }
+}
+
+const penaltyDialogVisible = ref(false)
+const penaltySubmitting = ref(false)
+const penaltyForm = ref({ subjectType: 'team', teamId: '', playerName: '', types: [], reason: '', fileList: [] })
+
+function openPenaltyDialog() {
+  if (!ensureEvidenceEditable()) return
+  penaltyForm.value = { subjectType: 'team', teamId: '', playerName: '', types: [], reason: '', fileList: [] }
+  penaltyDialogVisible.value = true
+}
+
+function handlePenaltyFileChange(file, fileList) {
+  penaltyForm.value.fileList = fileList
+}
+
+function handlePenaltyFileRemove(file, fileList) {
+  penaltyForm.value.fileList = fileList
+}
+
+async function submitPenalty() {
+  const form = penaltyForm.value
+  if (penaltySubmitting.value) return
+  if (!form.teamId) return ElMessage.warning('请选择受处罚球队')
+  if (form.subjectType === 'player' && !String(form.playerName || '').trim()) return ElMessage.warning('请填写受处罚球员姓名')
+  if (!form.types.length) return ElMessage.warning('请选择违纪类型')
+  if (String(form.reason || '').trim().length < 4) return ElMessage.warning('处罚原因不少于 4 个字')
+  if (!form.fileList.length) return ElMessage.warning('请上传至少 1 份证据')
+  penaltySubmitting.value = true
+  try {
+    const evidenceFileIds = []
+    for (const item of form.fileList) {
+      const uploaded = await uploadImageViaWebApi('tournament-penalty-evidence', item.raw)
+      if (uploaded && uploaded.fileId) evidenceFileIds.push(uploaded.fileId)
+    }
+    if (!evidenceFileIds.length) throw new Error('证据上传失败，请重试')
+    const result = await callFunction('dataCenter', {
+      action: 'createPenalty',
+      tournamentId: match.value.tournamentId,
+      matchId: match.value._id,
+      subjectType: form.subjectType,
+      teamId: form.teamId,
+      teamName: form.teamId === match.value.homeTeamId ? homeName.value : awayName.value,
+      playerName: String(form.playerName || '').trim(),
+      types: form.types,
+      reason: String(form.reason || '').trim(),
+      evidenceFileIds
+    })
+    if (!result?.success) throw new Error(result?.error || result?.message || '处罚登记失败')
+    penaltyDialogVisible.value = false
+    ElMessage.success(result.message || '处罚已登记')
+  } catch (err) {
+    ElMessage.error(err.message || '处罚登记失败')
+  } finally {
+    penaltySubmitting.value = false
   }
 }
 

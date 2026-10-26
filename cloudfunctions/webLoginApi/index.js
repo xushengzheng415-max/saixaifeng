@@ -4155,7 +4155,7 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
         if (!allowed) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
       }
     }
-    const personalWorkspaceLookup = functionName === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations'].includes(String(functionParams?.action || ''))
+    const personalWorkspaceLookup = functionName === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations', 'leave'].includes(String(functionParams?.action || ''))
     if (authenticated && !assistanceGrantId && ORGANIZER_REQUIRED_RELAY_FUNCTIONS.has(functionName) && !personalServiceBinding && !personalWorkspaceLookup) {
       if (authenticated.user.organizationConflict) {
         return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }

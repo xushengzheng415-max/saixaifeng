@@ -180,6 +180,26 @@ async function change(identity, event, disabled) {
   return { success: true }
 }
 
+async function leave(identity, event) {
+  const grantId = value(event.grantId)
+  if (!grantId) throw new Error('请选择要退出的共享赛事')
+  const userId = value(identity.user._id)
+  await db.runTransaction(async transaction => {
+    const response = await transaction.collection(GRANTS).doc(grantId).get()
+    const grant = Array.isArray(response.data) ? response.data[0] : response.data
+    if (!grant || value(grant.userId) !== userId) throw new Error('共享授权不存在或不属于当前账号')
+    if (grant.status === 'disabled' && value(grant.exitedBy) === userId) return
+    if (grant.status !== 'active') throw new Error('共享授权已变化，请刷新赛事列表')
+    const before = { status: grant.status, permissions: grant.permissions }
+    await transaction.collection(GRANTS).doc(grantId).update({ data: {
+      status: 'disabled', exitedBy: userId, exitedAt: db.serverDate(),
+      updatedBy: userId, updateTime: db.serverDate()
+    } })
+    await audit('leave', { ...grant, status: 'disabled' }, identity.user, before, transaction)
+  })
+  return { success: true, grantId }
+}
+
 exports.main = async (event = {}) => {
   try {
     const identity = await actor(event)
@@ -197,6 +217,7 @@ exports.main = async (event = {}) => {
     if (action === 'managed') return await listManaged(identity)
     if (action === 'invite') return await invite(identity, event)
     if (action === 'accept') return await accept(identity, event)
+    if (action === 'leave') return await leave(identity, event)
     if (action === 'activate') return await activate(identity, event)
     if (action === 'activateOrganizerWorkspace') return await activateOrganizerWorkspace(identity, event)
     if (action === 'update') return await change(identity, event, false)

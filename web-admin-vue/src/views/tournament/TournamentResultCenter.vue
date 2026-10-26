@@ -66,18 +66,29 @@
           <section class="review-gate"><h3>发布闸门</h3><div><span>比分结构</span><b :class="selectedMatch.scoreReady?'ok':'wait'">{{ selectedMatch.scoreReady ? '完整' : '待录入' }}</b></div><div><span>项目校验</span><b :class="selectedMatch.warnings?.length?'danger':'ok'">{{ selectedMatch.warnings?.length ? '需处理' : '通过' }}</b></div><div><span>主办方复核</span><b :class="selectedMatch.resultStatus==='approved'?'ok':'wait'">{{ selectedMatch.resultStatus==='approved' ? '已批准' : '未批准' }}</b></div></section>
           <el-alert v-if="selectedMatch.resultCorrection" class="correction-alert" :title="`已异常纠错：${selectedMatch.resultCorrection.reason}`" type="warning" :closable="false" show-icon />
           <el-alert v-if="selectedMatch.warnings?.length" :title="selectedMatch.warnings.join('；')" type="warning" :closable="false" show-icon />
-          <section class="disciplinary-panel">
-            <header><h3>纪律处罚</h3><span v-if="disciplinaryActions.length">{{ disciplinaryActions.length }} 条生效</span></header>
+          <section class="discipline-board">
+            <header class="discipline-board-head">
+              <div><h3>纪律处罚</h3><p>本场生效处罚，处罚文书在线留存</p></div>
+              <span v-if="disciplinaryActions.length" class="discipline-count">{{ disciplinaryActions.length }} 条生效</span>
+            </header>
             <el-alert v-if="disciplinaryError" :title="disciplinaryError" type="error" :closable="false" show-icon />
-            <p v-else-if="disciplinaryLoading" class="disciplinary-empty">处罚记录加载中…</p>
-            <p v-else-if="!disciplinaryActions.length" class="disciplinary-empty">本场暂无生效处罚</p>
-            <ul v-else><li v-for="item in disciplinaryActions" :key="item.id">
-              <div><b>{{ disciplineSubjectLabel(item) }}</b><span>{{ disciplineTypesLabel(item) }}</span></div>
-              <p>{{ item.reason }}</p>
-              <small>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}<el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></small>
+            <p v-else-if="disciplinaryLoading" class="discipline-hint">处罚记录加载中…</p>
+            <div v-else-if="!disciplinaryActions.length" class="discipline-empty-card"><el-icon><CircleCheckFilled /></el-icon><b>本场暂无生效处罚</b><small>如出现违规，点击下方「追加处罚」登记并留存处罚文书。</small></div>
+            <ul v-else-if="disciplinaryActions.length" class="discipline-cards"><li v-for="item in disciplinaryActions" :key="item.id" class="discipline-card" :class="item.subjectType">
+              <header>
+                <span class="discipline-mark">{{ disciplineSubjectInitial(item) }}</span>
+                <div class="discipline-subject"><b>{{ disciplineSubjectName(item) }}</b><small>{{ disciplineSubjectMeta(item) }}</small></div>
+                <span class="discipline-status">生效中</span>
+              </header>
+              <div class="discipline-tags"><span v-for="tag in disciplineTags(item)" :key="tag.key" class="discipline-tag" :class="tag.tone">{{ tag.label }}</span></div>
+              <p class="discipline-reason">{{ item.reason }}</p>
+              <div v-if="item.attachments?.length" class="discipline-files">
+                <button v-for="file in item.attachments" :key="file.fileId" type="button" class="discipline-file" @click="openDisciplinaryFile(file)"><el-icon><Document /></el-icon><span>{{ file.name }}</span><small>{{ disciplineFileSize(file.size) }}</small></button>
+              </div>
+              <footer><span>{{ item.createdByName || '主办方' }} · {{ formatDate(item.createdAt) }}</span><em class="discipline-actions"><el-button link :loading="disciplineSupplementingId===item.id" @click="chooseDisciplinaryFiles(item)">{{ item.attachments?.length ? '继续补传' : '补传文书' }}</el-button><el-button link type="danger" @click="revokeDisciplinary(item)">撤销</el-button></em></footer>
             </li></ul>
           </section>
-          <footer><el-button plain type="danger" @click="openDisciplinary(selectedMatch)">追加处罚</el-button><el-button v-if="selectedMatch.resultStatus!=='approved'" type="success" :disabled="!selectedMatch.scoreReady" @click="openMatchResult(selectedMatch)">进入赛果复核</el-button><template v-else><el-button type="warning" plain @click="openScoreCorrection(selectedMatch)">异常纠错</el-button><el-button plain @click="openMatchResult(selectedMatch)">查看正式归档</el-button></template></footer>
+          <footer><el-button plain type="danger" @click="openDisciplinary(selectedMatch)">追加处罚</el-button><el-button plain @click="router.push(`/tournaments/${tournamentId}/discipline`)">本赛事处罚</el-button><el-button v-if="selectedMatch.resultStatus!=='approved'" type="success" :disabled="!selectedMatch.scoreReady" @click="openMatchResult(selectedMatch)">进入赛果复核</el-button><template v-else><el-button type="warning" plain @click="openScoreCorrection(selectedMatch)">异常纠错</el-button><el-button plain @click="openMatchResult(selectedMatch)">查看正式归档</el-button></template></footer>
         </aside>
       </section>
 
@@ -151,9 +162,14 @@
         <el-form-item v-if="disciplinaryForm.types.includes('suspension')" label="停赛场次"><el-input-number v-model="disciplinaryForm.suspensionMatches" :min="1" :max="99" :step="1" controls-position="right" /></el-form-item>
         <el-form-item v-if="disciplinaryForm.types.includes('fine')" label="罚款金额（元）"><el-input-number v-model="disciplinaryForm.fineAmount" :min="0.01" :max="999999" :precision="2" :step="100" controls-position="right" /></el-form-item>
         <el-form-item label="处罚原因（必填，2-300字）"><el-input v-model="disciplinaryForm.reason" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="例如：赛后冲突中推搡对方球员。" /></el-form-item>
+        <el-form-item label="处罚文书（选填：PDF 或 Word，单个≤10MB，最多5个）">
+          <div class="discipline-upload"><el-button plain :disabled="disciplinaryUploading || disciplinaryFiles.length>=5" :loading="disciplinaryUploading" @click="chooseDisciplinaryFiles()"><el-icon><Upload /></el-icon>选择文书</el-button><span v-if="disciplinaryUploadStage" class="discipline-upload-stage">{{ disciplinaryUploadStage }}</span></div>
+          <ul v-if="disciplinaryFiles.length" class="discipline-file-list"><li v-for="(file,index) in disciplinaryFiles" :key="file.fileId"><b>{{ file.name }}</b><small>{{ disciplineFileSize(file.size) }}</small><el-button link type="danger" @click="removeDisciplinaryFile(index)">移除</el-button></li></ul>
+        </el-form-item>
       </el-form>
-      <template #footer><el-button @click="disciplinaryVisible=false">取消</el-button><el-button type="danger" :loading="disciplinarySaving" @click="submitDisciplinary">确认追加</el-button></template>
+      <template #footer><el-button @click="disciplinaryVisible=false">取消</el-button><el-button type="danger" :loading="disciplinarySaving" :disabled="disciplinaryUploading" @click="submitDisciplinary">确认追加</el-button></template>
     </el-dialog>
+    <input ref="disciplinaryFileInput" class="discipline-file-input" type="file" accept=".pdf,.doc,.docx" multiple @change="onDisciplinaryFileChange" />
   </main>
 </template>
 
@@ -166,8 +182,8 @@ import {rankingOrderLabel} from '../../utils/divisionOutcomeRules'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleCheckFilled, Clock, DataAnalysis, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
-import { callFunction, queryById, rosterExceptionBoard } from '../../utils/cloud'
+import { CircleCheckFilled, Clock, DataAnalysis, Document, Download, EditPen, LocationInformation, Lock, Refresh, Search, Upload, WarningFilled } from '@element-plus/icons-vue'
+import { callFunction, queryById, rosterExceptionBoard, uploadLargeFileViaCloud } from '../../utils/cloud'
 import TournamentBracket from '../../components/tournament/TournamentBracket.vue'
 import TournamentScorebook from '../../components/tournament/TournamentScorebook.vue'
 import TournamentEventRankings from '../../components/tournament/TournamentEventRankings.vue'
@@ -299,7 +315,7 @@ function formatDate(value){ if(!value)return'—';const date=new Date(value);ret
 function formatReportDate(value){ const text=String(value || '').slice(0,10); return text ? text.replaceAll('-','.') : '比赛日期待定' }
 function openMatchResult(row){ const suffix=row.resultStatus==='approved'?'/archive':row.scoreReady?'/review':'';router.push({path:`/tournaments/${tournamentId}/match/${row.id}${suffix}`,query:row.divisionId?{divisionId:row.divisionId}:{}}) }
 
-async function loadDashboard(){ rankingRefresh.value++; loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=[...result.matches].sort(compareReviewRows)[0]?.id||'';if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||''}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
+async function loadDashboard(){ const previousMatchId=selectedMatch.value?.id || ''; rankingRefresh.value++; loading.value=true;try{const result=await callFunction('resultCenter',{action:'dashboard',tournamentId});if(!result?.success)throw new Error(result?.message||result?.error||'赛果中心加载失败');dashboard.value=result;if(!selectedMatchId.value&&result.matches?.length)selectedMatchId.value=[...result.matches].sort(compareReviewRows)[0]?.id||'';if(!reportDate.value)reportDate.value=(result.matches||[]).filter(row=>row.resultStatus==='approved').map(row=>row.matchDate).filter(Boolean).sort().at(-1)||'';if(previousMatchId && selectedMatch.value?.id===previousMatchId)await loadDisciplinaryActions()}catch(error){ElMessage.error(error.message||'赛果中心加载失败')}finally{loading.value=false} }
 const correctionVisible = ref(false)
 const correctionSaving = ref(false)
 const correctionForm = ref({ matchId:'', homeScore:0, awayScore:0, reason:'' })
@@ -329,23 +345,133 @@ const disciplinaryVisible = ref(false)
 const disciplinarySaving = ref(false)
 const disciplinaryMatch = ref(null)
 const disciplineTypeLabels = { suspension:'追加停赛', fine:'罚款', warning:'警告/通报', disqualification:'取消参赛资格' }
+const disciplineTypeTones = { suspension:'danger', fine:'warning', disqualification:'severe', warning:'muted' }
 const disciplinaryForm = ref({ subjectType:'player', teamId:'', playerName:'', playerId:'', personName:'', types:['warning'], suspensionMatches:1, fineAmount:100, reason:'' })
 const disciplinaryRoster = ref([])
 const disciplinaryRosterLoading = ref(false)
 const disciplinaryRosterError = ref('')
+// 处罚文书留存：PDF/Word 单文件≤10MB，每条处罚最多 5 个，仅主办方与授权工作人员可见。
+const DISCIPLINARY_FILE_TYPES = ['pdf','doc','docx']
+const DISCIPLINARY_FILE_LIMIT = 5
+const DISCIPLINARY_FILE_MAX_BYTES = 10*1024*1024
+const disciplinaryFiles = ref([])
+const disciplinaryUploading = ref(false)
+const disciplinaryUploadStage = ref('')
+const disciplineSupplementingId = ref('')
+const disciplineSupplementTarget = ref(null)
+const disciplinaryFileInput = ref(null)
+function disciplineFileExtension(file){
+  const name = String(file?.name || '')
+  return (name.includes('.') ? name.split('.').pop() : '').toLowerCase() || 'pdf'
+}
+function disciplineFileSize(size){
+  const bytes = Number(size || 0)
+  return bytes >= 1024*1024 ? `${(bytes/1024/1024).toFixed(1)}MB` : `${Math.max(1,Math.round(bytes/1024))}KB`
+}
+function pickDisciplinaryFiles(files, allowance){
+  const accepted = []
+  for(const file of files){
+    if(!DISCIPLINARY_FILE_TYPES.includes(disciplineFileExtension(file))){ ElMessage.warning(`${file.name} 格式不支持，仅接收 PDF、Word 文书`); continue }
+    if(Number(file.size||0) > DISCIPLINARY_FILE_MAX_BYTES){ ElMessage.warning(`${file.name} 超过 10MB，请压缩后重试`); continue }
+    if(accepted.length>=allowance){ ElMessage.warning(`每条处罚最多留存 ${DISCIPLINARY_FILE_LIMIT} 个文书`); break }
+    accepted.push(file)
+  }
+  return accepted
+}
+async function uploadDisciplinaryFile(file){
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+  const result = await uploadLargeFileViaCloud(`disciplinary/${tournamentId}/${stamp}/${file.name}`, file, {
+    chunkSize:48*1024,
+    fallbackChunkSize:24*1024,
+    onProgress:(done,total)=>{ disciplinaryUploadStage.value = `上传 ${file.name} ${done}/${total}` }
+  })
+  if(!result?.success || !result.fileId) throw new Error(`${file.name} 上传未完成，请重试`)
+  return { fileId:result.fileId, name:file.name, size:Number(file.size||0), type:disciplineFileExtension(file) }
+}
+function chooseDisciplinaryFiles(item){
+  if(disciplinaryUploading.value) return ElMessage.warning('文书上传中，请稍候')
+  disciplineSupplementTarget.value = item || null
+  if(!disciplinaryFileInput.value) return
+  disciplinaryFileInput.value.value = ''
+  disciplinaryFileInput.value.click()
+}
+async function onDisciplinaryFileChange(event){
+  const input = event.target
+  const files = Array.from(input.files || [])
+  input.value = ''
+  const target = disciplineSupplementTarget.value
+  disciplineSupplementTarget.value = null
+  if(!files.length) return
+  if(target) await supplementDisciplinaryFiles(target, files)
+  else await addDisciplinaryDraftFiles(files)
+}
+async function addDisciplinaryDraftFiles(files){
+  const accepted = pickDisciplinaryFiles(files, DISCIPLINARY_FILE_LIMIT - disciplinaryFiles.value.length)
+  if(!accepted.length) return
+  disciplinaryUploading.value = true
+  try{
+    for(const file of accepted){
+      disciplinaryUploadStage.value = `上传 ${file.name}`
+      const uploaded = await uploadDisciplinaryFile(file)
+      if(disciplinaryVisible.value) disciplinaryFiles.value = [...disciplinaryFiles.value, uploaded]
+    }
+    ElMessage.success('处罚文书已上传，确认追加后随处罚留存')
+  }catch(error){ ElMessage.error(error.message||'处罚文书上传失败') }
+  finally{ disciplinaryUploading.value=false; disciplinaryUploadStage.value='' }
+}
+function removeDisciplinaryFile(index){
+  disciplinaryFiles.value = disciplinaryFiles.value.filter((file,position)=>position!==index)
+}
+async function supplementDisciplinaryFiles(item, files){
+  const existing = Array.isArray(item.attachments) ? item.attachments.length : 0
+  const accepted = pickDisciplinaryFiles(files, DISCIPLINARY_FILE_LIMIT - existing)
+  if(!accepted.length) return
+  disciplineSupplementingId.value = item.id
+  disciplinaryUploading.value = true
+  try{
+    const additions = []
+    for(const file of accepted){
+      disciplinaryUploadStage.value = `上传 ${file.name}`
+      additions.push(await uploadDisciplinaryFile(file))
+    }
+    const result = await callFunction('resultCenter',{ action:'addDisciplinaryAttachments', tournamentId, id:item.id, attachments:additions })
+    if(!result?.success) throw new Error(result?.message||result?.error||'处罚文书留存失败')
+    ElMessage.success(result.message||'处罚文书已留存')
+    await loadDisciplinaryActions()
+  }catch(error){ ElMessage.error(error.message||'处罚文书留存失败') }
+  finally{ disciplinaryUploading.value=false; disciplinaryUploadStage.value=''; disciplineSupplementingId.value='' }
+}
+function openDisciplinaryFile(file){
+  const url = String(file?.url || '')
+  if(!url) return ElMessage.warning('文书下载地址已失效，请刷新处罚记录后重试')
+  window.open(url,'_blank','noopener')
+}
 const disciplineTeamOptions = computed(() => {
   const row = disciplinaryMatch.value
   if (!row) return []
   return [[row.homeTeamId,row.homeTeamName],[row.awayTeamId,row.awayTeamName]].filter(([id])=>id).map(([teamId,teamName])=>({ teamId:String(teamId), teamName:String(teamName||'球队') }))
 })
-function disciplineTypesLabel(item){
-  const labels = (item.types || []).map(type => type==='suspension' ? `停赛${Number(item.suspensionMatches||0)}场` : type==='fine' ? `罚款¥${Number(item.fineAmount||0)}` : disciplineTypeLabels[type] || type)
-  return labels.join(' · ') || '纪律处罚'
+// 处罚卡片：类型按严重程度分色，编号等长字段放到副标题，避免挤在主信息里。
+function disciplineTags(item){
+  const tags = (item.types || []).map(type => ({
+    key: type,
+    tone: disciplineTypeTones[type] || 'muted',
+    label: type==='suspension' ? `停赛 ${Number(item.suspensionMatches||0)} 场` : type==='fine' ? `罚款 ¥${Number(item.fineAmount||0)}` : disciplineTypeLabels[type] || type
+  }))
+  return tags.length ? tags : [{ key:'default', tone:'muted', label:'纪律处罚' }]
 }
-function disciplineSubjectLabel(item){
-  if(item.subjectType==='player') return `${item.teamName?`${item.teamName} · `:''}${item.playerName||'球员未记录'}${item.playerId?`（${item.playerId}）`:''}`
-  if(item.subjectType==='staff') return `工作人员 ${item.personName||'未记录'}`
-  return item.teamName || '球队'
+function disciplineSubjectName(item){
+  if(item.subjectType==='player') return item.playerName || '球员未记录'
+  if(item.subjectType==='staff') return item.personName || '工作人员未记录'
+  return item.teamName || '球队未记录'
+}
+function disciplineSubjectMeta(item){
+  if(item.subjectType==='player') return [item.teamName || '', item.playerId ? `编号 ${item.playerId}` : ''].filter(Boolean).join(' · ') || '球员'
+  if(item.subjectType==='staff') return '赛事工作人员'
+  return '球队处罚'
+}
+function disciplineSubjectInitial(item){
+  return String(disciplineSubjectName(item)).slice(0, 1) || '罚'
 }
 async function loadDisciplinaryActions(){
   const matchId = selectedMatch.value?.id || ''
@@ -354,7 +480,9 @@ async function loadDisciplinaryActions(){
   try{
     const result = await callFunction('resultCenter',{ action:'listDisciplinaryActions', tournamentId, matchId })
     if(!result?.success) throw new Error(result?.message||result?.error||'处罚记录加载失败')
-    if(selectedMatch.value?.id===matchId) disciplinaryActions.value=result.actions||[]
+    if(selectedMatch.value?.id===matchId){
+      disciplinaryActions.value=result.actions||[]
+    }
   }catch(error){
     if(selectedMatch.value?.id===matchId){ disciplinaryActions.value=[]; disciplinaryError.value=error.message||'处罚记录加载失败' }
   }finally{ if(selectedMatch.value?.id===matchId) disciplinaryLoading.value=false }
@@ -365,6 +493,7 @@ function openDisciplinary(row){
   const firstTeam = disciplineTeamOptions.value[0]?.teamId || ''
   disciplinaryForm.value = { subjectType:'player', teamId:firstTeam, playerName:'', playerId:'', personName:'', types:['warning'], suspensionMatches:1, fineAmount:100, reason:'' }
   disciplinaryRoster.value = []; disciplinaryRosterError.value = ''
+  disciplinaryFiles.value = []; disciplinaryUploadStage.value = ''
   disciplinaryVisible.value = true
   loadDisciplinaryRoster()
 }
@@ -414,9 +543,12 @@ async function submitDisciplinary(){
   if(form.types.includes('fine') && (!Number.isFinite(fineAmount) || fineAmount<0.01 || fineAmount>999999)) return ElMessage.warning('罚款金额须在0.01至999999之间')
   const reason = String(form.reason||'').trim()
   if(reason.length<2 || reason.length>300) return ElMessage.warning('处罚原因须为2至300个字符')
+  if(disciplinaryUploading.value) return ElMessage.warning('处罚文书上传中，请稍候')
+  const attachments = disciplinaryFiles.value.map(file => ({ fileId:file.fileId, name:file.name, size:file.size, type:file.type }))
+  if(attachments.length > DISCIPLINARY_FILE_LIMIT) return ElMessage.warning(`每条处罚最多留存 ${DISCIPLINARY_FILE_LIMIT} 个文书`)
   disciplinarySaving.value = true
   try{
-    const result = await callFunction('resultCenter',{ action:'createDisciplinaryAction', tournamentId, matchId:disciplinaryMatch.value?.id, subjectType:form.subjectType, teamId:form.teamId, playerName:String(form.playerName||'').trim(), playerId:String(form.playerId||'').trim(), personName:String(form.personName||'').trim(), types:[...form.types], suspensionMatches, fineAmount, reason })
+    const result = await callFunction('resultCenter',{ action:'createDisciplinaryAction', tournamentId, matchId:disciplinaryMatch.value?.id, subjectType:form.subjectType, teamId:form.teamId, playerName:String(form.playerName||'').trim(), playerId:String(form.playerId||'').trim(), personName:String(form.personName||'').trim(), types:[...form.types], suspensionMatches, fineAmount, reason, attachments })
     if(!result?.success) throw new Error(result?.message||result?.error||'处罚保存失败')
     disciplinaryVisible.value = false
     ElMessage.success(result.unverified?.length ? '处罚已生效；球员编号未在服务端核验' : '处罚已生效')
@@ -474,14 +606,14 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 </script>
 
 <style scoped>
-.result-center{min-height:100%;padding:0 30px 38px;background:#f7f9f7;color:#18251d;--result-green:#087b3f;--result-dark:#06351f}.result-context{display:flex;align-items:center;justify-content:space-between;min-height:80px;margin:0 -30px;padding:0 30px;border-bottom:1px solid #e1e7e3;background:#fff}.result-context-main{display:flex;align-items:center;gap:16px}.result-context-main>div{display:flex;flex-direction:column;gap:3px}.result-context-main small{color:#7a867e}.result-context-main strong{font-size:21px}.result-context-main>span:last-child{display:flex;align-items:center;gap:6px;color:#657269}.result-mark{display:grid;width:43px;height:43px;place-items:center;border-radius:10px;background:#e7f6ec;color:#087c40;font-size:24px}.result-workspace{max-width:1560px;margin:0 auto}.result-title{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:25px 0 18px}.result-title>div>span{color:#118247;font-size:13px;font-weight:700}.result-title h1{margin:7px 0 6px;font-size:31px}.result-title p{margin:0;color:#68766d}.title-actions{display:flex;gap:10px}.result-filters{display:grid;grid-template-columns:220px 180px 180px minmax(240px,1fr);gap:12px;padding:14px 16px;border:1px solid #e0e7e2;border-radius:10px;background:#fff}.result-filters label{display:flex;align-items:center;gap:9px}.result-filters label>span{flex:none;color:#66736a;font-size:13px}.result-filters :deep(.el-select){flex:1}.result-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:16px 0}.result-summary article{display:flex;align-items:center;gap:16px;min-height:88px;padding:0 20px;border:1px solid #e0e6e2;border-radius:10px;background:#fff}.summary-icon{display:grid!important;width:48px;height:48px;place-items:center;border-radius:50%;font-size:24px}.summary-icon.neutral{color:#66736c;background:#eff2f0}.summary-icon.orange{color:#e68111;background:#fff2df}.summary-icon.red{color:#db443c;background:#ffefee}.summary-icon.green{color:#078142;background:#e5f6eb}.result-summary small{display:block;color:#66736b;font-size:13px}.result-summary strong{margin-right:4px;font-size:29px}.result-summary article div>span{color:#77837b;font-size:12px}.result-tabs{margin-top:6px}.result-tabs :deep(.el-tabs__header){margin:0}.result-tabs :deep(.el-tabs__nav-wrap){padding:0 14px;border:1px solid #e0e7e2;border-radius:10px 10px 0 0;background:#fff}.result-tabs :deep(.el-tabs__item){height:52px;padding:0 30px;font-weight:650}.result-tabs :deep(.el-tabs__item.is-active){color:#08763d}.result-tabs :deep(.el-tabs__active-bar){height:3px;background:#078443}.panel{border:1px solid #e0e6e2;border-radius:10px;background:#fff}.review-layout{display:grid;grid-template-columns:minmax(780px,1.7fr) minmax(310px,.68fr);gap:16px;margin-top:16px}.review-list{overflow:hidden}.review-list>header,.review-detail>header,.standings-card>header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 20px;border-bottom:1px solid #e8ece9}.review-list h2,.review-detail h2,.standings-card h3{margin:0;font-size:18px}.review-list p,.standings-card p{margin:4px 0 0;color:#7b877f;font-size:12px}.review-list>header>span{padding:5px 10px;border-radius:99px;color:#087d41;background:#e8f7ed;font-size:12px}.result-row{display:grid;grid-template-columns:112px minmax(250px,1.5fr) minmax(150px,.9fr) 118px 135px 86px;align-items:center;gap:12px;width:100%;padding:0 15px;text-align:left}.result-table-head{height:43px;color:#657269;background:#f7f9f7;font-size:12px}.result-data-row{min-height:70px;border:0;border-top:1px solid #edf0ee;background:#fff;color:#26342b;cursor:pointer}.result-data-row:hover,.result-data-row.selected{background:#f2faf5}.result-data-row.selected{box-shadow:inset 3px 0 #078443}.result-data-row span{min-width:0}.result-data-row b,.result-data-row small{display:block}.result-data-row small{margin-top:4px;color:#7b8780;font-size:11px}.versus{display:grid!important;grid-template-columns:1fr 64px 1fr;align-items:center;gap:7px}.versus>b:last-of-type{text-align:right}.versus strong{text-align:center;font-size:18px}.versus small{grid-column:1/-1;text-align:center;color:#bd7012}.warning-copy{color:#c35034!important;line-height:1.3}.row-action{text-align:right}.review-detail{align-self:start;position:sticky;top:15px;overflow:hidden}.review-detail>header small{color:#718078}.detail-score{display:grid;grid-template-columns:1fr 105px 1fr;align-items:center;gap:12px;padding:24px 18px;text-align:center}.detail-score>div{display:grid;justify-items:center;gap:8px}.team-avatar,.team-cell span{display:grid;width:42px;height:42px;place-items:center;border-radius:50%;color:#087840;background:#e4f5ea;font-weight:800}.detail-score>strong{display:grid;grid-template-columns:1fr 10px 1fr;align-items:center}.detail-score>strong b{font-size:30px}.detail-score>strong em{font-style:normal}.detail-score>strong small{grid-column:1/-1;margin-top:7px;color:#7c887f;font-size:10px;font-weight:400}.detail-grid{display:grid;grid-template-columns:1fr 1fr;margin:0;padding:0 18px}.detail-grid div{padding:12px 0;border-top:1px solid #edf0ee}.detail-grid dt{color:#7a867e;font-size:11px}.detail-grid dd{margin:5px 0 0;font-size:13px}.review-gate{margin:15px 18px;padding:14px;border-radius:8px;background:#f7faf8}.review-gate h3{margin:0 0 8px;font-size:14px}.review-gate div{display:flex;justify-content:space-between;padding:7px 0;color:#69766d;font-size:12px}.review-gate b.ok{color:#078142}.review-gate b.wait{color:#c67b15}.review-gate b.danger{color:#d6473e}.review-detail>.el-alert{margin:0 18px}.review-detail>footer{padding:17px 18px;text-align:right}.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin:18px 0 14px}.section-heading h2{margin:0 0 5px;font-size:23px}.section-heading p{margin:0;color:#6d7a72}.section-heading>div:last-child{display:flex;align-items:center;gap:10px}.football-rule-alert{margin-bottom:14px}.standings-card{overflow:hidden;margin-bottom:14px}.standings-card>header>span{color:#bc7216;font-size:12px}.standing-table-wrap{overflow:auto}.standings-card table{width:100%;min-width:900px;border-collapse:collapse}.standings-card th,.standings-card td{height:50px;padding:0 13px;border-bottom:1px solid #edf0ee;text-align:center}.standings-card th{height:42px;color:#607067;background:#f7f9f7;font-size:12px}.standings-card th:nth-child(2),.standings-card td:nth-child(2){text-align:left}.rank-number{display:inline-grid;width:25px;height:25px;place-items:center;border-radius:50%;background:#f0f3f1}.team-cell{display:flex;align-items:center;gap:9px}.team-cell span{display:inline-grid;width:30px;height:30px}.positive{color:#078443;font-weight:700}.standings-card td:last-child strong{font-size:19px}.provisional-tag{margin-left:6px;padding:2px 5px;border-radius:4px;color:#b96a0b;background:#fff1dc;font-size:9px}.snapshot-note{display:flex;align-items:center;gap:9px;padding:14px 16px;border:1px solid #dce8df;border-radius:8px;color:#5b6b60;background:#f4faf6;font-size:13px}.snapshot-note b{margin-left:auto;color:#087b40}.bracket-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.knockout-card{overflow:hidden;border:1px solid #dfe6e1;border-radius:10px;background:#fff}.knockout-card.ready{border-top:3px solid #078443}.knockout-card.warning{border-top:3px solid #d84e45}.knockout-card header{display:grid;grid-template-columns:1fr auto;gap:5px;padding:14px 16px;border-bottom:1px solid #ebefec}.knockout-card header>span{color:#7b877f;font-size:11px}.knockout-card header>b{grid-column:1;font-size:15px}.knockout-card header>.el-tag{grid-column:2;grid-row:1/3;align-self:center}.knockout-card>div{display:grid;grid-template-columns:1fr 80px 1fr;align-items:center;gap:8px;padding:25px 16px;text-align:center}.knockout-card>div strong{font-size:22px}.knockout-card footer{display:flex;align-items:center;justify-content:space-between;padding:10px 15px;border-top:1px solid #edf0ee;color:#77837b}.report-workspace{display:grid;grid-template-columns:minmax(620px,1.35fr) minmax(260px,.5fr);gap:18px}.report-poster{overflow:hidden;min-height:620px;padding:36px;border-radius:16px;color:#fff;background:radial-gradient(circle at 90% 10%,#2ba36355,transparent 26%),linear-gradient(145deg,#04351f,#087a42 62%,#034329);box-shadow:0 18px 45px rgba(9,56,33,.18)}.report-poster.paper{color:#17251b;background:#fff;border:1px solid #dfe7e1}.report-poster.night{color:#fff;background:radial-gradient(circle at 85% 15%,#1c694155,transparent 27%),linear-gradient(145deg,#111a17,#182c23)}.report-poster>header{text-align:center;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,.23)}.report-poster.paper>header{border-color:#e2e8e4}.report-poster>header small{letter-spacing:.15em}.report-poster h2{margin:13px 0 8px;font-size:30px}.report-poster>header p{margin:0;opacity:.75}.report-match{display:grid;grid-template-columns:34px 1fr 104px 1fr;align-items:center;gap:13px;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.17)}.report-poster.paper .report-match{border-color:#e9edea}.report-match>b{opacity:.55}.report-match>span:last-of-type{text-align:right}.report-match>strong{text-align:center;font-size:23px}.report-match em{font-style:normal;opacity:.55}.report-match small{grid-column:2/5;text-align:center;opacity:.62}.report-empty{padding:100px 0;text-align:center;opacity:.65}.report-poster>footer{display:flex;justify-content:space-between;padding-top:26px;font-size:12px;opacity:.72}.report-workspace>aside{align-self:start;padding:22px;border:1px solid #e0e7e2;border-radius:10px;background:#fff}.report-workspace>aside h3{margin:0 0 16px}.report-workspace>aside ul{display:grid;gap:13px;margin:0 0 20px;padding:0;list-style:none}.report-workspace>aside li{display:flex;align-items:center;gap:8px;color:#526158}.report-workspace>aside li .el-icon{color:#078443}.report-section .section-heading :deep(.el-select){width:150px}@media(max-width:1180px){.review-layout,.report-workspace{grid-template-columns:1fr}.review-detail{position:static}.bracket-grid{grid-template-columns:1fr 1fr}.result-filters{grid-template-columns:1fr 1fr}.result-row{grid-template-columns:90px 1.4fr 1fr 115px 85px}.result-row>:nth-child(4){display:none}}@media(max-width:760px){.result-center{padding:0 14px 28px}.result-context{margin:0 -14px;padding:12px 14px}.result-context-main>span:last-child,.result-context .el-button{display:none}.result-title{align-items:flex-start;flex-direction:column}.result-title h1{font-size:26px}.result-filters,.result-summary{grid-template-columns:1fr 1fr}.result-summary article{padding:0 12px}.result-tabs :deep(.el-tabs__item){padding:0 12px}.result-table-head{display:none}.result-row{grid-template-columns:70px 1fr 80px}.result-row>:nth-child(3),.result-row>:nth-child(4),.result-row>:nth-child(5){display:none}.bracket-grid{grid-template-columns:1fr}.section-heading,.section-heading>div:last-child{align-items:flex-start;flex-direction:column}.report-poster{padding:24px}.report-match{grid-template-columns:28px 1fr 78px 1fr}}
+.result-center{min-height:100%;padding:0 30px 38px;background:#f7f9f7;color:#18251d;--result-green:#087b3f;--result-dark:#06351f}.result-context{display:flex;align-items:center;justify-content:space-between;min-height:80px;margin:0 -30px;padding:0 30px;border-bottom:1px solid #e1e7e3;background:#fff}.result-context-main{display:flex;align-items:center;gap:16px}.result-context-main>div{display:flex;flex-direction:column;gap:3px}.result-context-main small{color:#7a867e}.result-context-main strong{font-size:21px}.result-context-main>span:last-child{display:flex;align-items:center;gap:6px;color:#657269}.result-mark{display:grid;width:43px;height:43px;place-items:center;border-radius:10px;background:#e7f6ec;color:#087c40;font-size:24px}.result-workspace{max-width:1560px;margin:0 auto}.result-title{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:25px 0 18px}.result-title>div>span{color:#118247;font-size:13px;font-weight:700}.result-title h1{margin:7px 0 6px;font-size:31px}.result-title p{margin:0;color:#68766d}.title-actions{display:flex;gap:10px}.result-filters{display:grid;grid-template-columns:220px 180px 180px minmax(240px,1fr);gap:12px;padding:14px 16px;border:1px solid #e0e7e2;border-radius:10px;background:#fff}.result-filters label{display:flex;align-items:center;gap:9px}.result-filters label>span{flex:none;color:#66736a;font-size:13px}.result-filters :deep(.el-select){flex:1}.result-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:16px 0}.result-summary article{display:flex;align-items:center;gap:16px;min-height:88px;padding:0 20px;border:1px solid #e0e6e2;border-radius:10px;background:#fff}.summary-icon{display:grid!important;width:48px;height:48px;place-items:center;border-radius:50%;font-size:24px}.summary-icon.neutral{color:#66736c;background:#eff2f0}.summary-icon.orange{color:#e68111;background:#fff2df}.summary-icon.red{color:#db443c;background:#ffefee}.summary-icon.green{color:#078142;background:#e5f6eb}.result-summary small{display:block;color:#66736b;font-size:13px}.result-summary strong{margin-right:4px;font-size:29px}.result-summary article div>span{color:#77837b;font-size:12px}.result-tabs{margin-top:6px}.result-tabs :deep(.el-tabs__header){margin:0}.result-tabs :deep(.el-tabs__nav-wrap){padding:0 14px;border:1px solid #e0e7e2;border-radius:10px 10px 0 0;background:#fff}.result-tabs :deep(.el-tabs__item){height:52px;padding:0 30px;font-weight:650}.result-tabs :deep(.el-tabs__item.is-active){color:#08763d}.result-tabs :deep(.el-tabs__active-bar){height:3px;background:#078443}.panel{border:1px solid #e0e6e2;border-radius:10px;background:#fff}.review-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,.68fr);gap:16px;margin-top:16px}.review-list{overflow:hidden;container-type:inline-size}.review-list>header,.review-detail>header,.standings-card>header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 20px;border-bottom:1px solid #e8ece9}.review-list h2,.review-detail h2,.standings-card h3{margin:0;font-size:18px}.review-list p,.standings-card p{margin:4px 0 0;color:#7b877f;font-size:12px}.review-list>header>span{padding:5px 10px;border-radius:99px;color:#087d41;background:#e8f7ed;font-size:12px}.result-row{display:grid;grid-template-columns:96px minmax(200px,1.5fr) 112px 80px 96px 82px;align-items:center;gap:8px;width:100%;padding:0 12px;text-align:left}.result-table-head{height:43px;color:#657269;background:#f7f9f7;font-size:12px}.result-data-row{min-height:70px;border:0;border-top:1px solid #edf0ee;background:#fff;color:#26342b;cursor:pointer}.result-data-row:hover,.result-data-row.selected{background:#f2faf5}.result-data-row.selected{box-shadow:inset 3px 0 #078443}.result-data-row span{min-width:0}.result-data-row b,.result-data-row small{display:block}.result-data-row small{margin-top:4px;color:#7b8780;font-size:11px}.versus{display:grid!important;grid-template-columns:minmax(0,1fr) 52px minmax(0,1fr);align-items:center;gap:6px}.versus>b:last-of-type{text-align:right}.versus strong{text-align:center;font-size:17px}.versus small{grid-column:1/-1;text-align:center;color:#bd7012}.warning-copy{color:#c35034!important;line-height:1.3}.row-action{text-align:right}@container (max-width:900px){.result-row{grid-template-columns:96px minmax(160px,1.5fr) 112px 96px 82px}.result-row>:nth-child(4){display:none}}@container (max-width:680px){.result-row{grid-template-columns:80px minmax(0,1fr) 90px 78px}.result-row>:nth-child(3),.result-row>:nth-child(4){display:none}}.review-detail{align-self:start;position:sticky;top:15px;max-height:calc(100vh - 30px);overflow:auto}.review-detail>header small{color:#718078}.detail-score{display:grid;grid-template-columns:1fr 105px 1fr;align-items:center;gap:12px;padding:24px 18px;text-align:center}.detail-score>div{display:grid;justify-items:center;gap:8px}.team-avatar,.team-cell span{display:grid;width:42px;height:42px;place-items:center;border-radius:50%;color:#087840;background:#e4f5ea;font-weight:800}.detail-score>strong{display:grid;grid-template-columns:1fr 10px 1fr;align-items:center}.detail-score>strong b{font-size:30px}.detail-score>strong em{font-style:normal}.detail-score>strong small{grid-column:1/-1;margin-top:7px;color:#7c887f;font-size:10px;font-weight:400}.detail-grid{display:grid;grid-template-columns:1fr 1fr;margin:0;padding:0 18px}.detail-grid div{padding:12px 0;border-top:1px solid #edf0ee}.detail-grid dt{color:#7a867e;font-size:11px}.detail-grid dd{margin:5px 0 0;font-size:13px}.review-gate{margin:15px 18px;padding:14px;border-radius:8px;background:#f7faf8}.review-gate h3{margin:0 0 8px;font-size:14px}.review-gate div{display:flex;justify-content:space-between;padding:7px 0;color:#69766d;font-size:12px}.review-gate b.ok{color:#078142}.review-gate b.wait{color:#c67b15}.review-gate b.danger{color:#d6473e}.review-detail>.el-alert{margin:0 18px}.review-detail>footer{padding:17px 18px;text-align:right}.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin:18px 0 14px}.section-heading h2{margin:0 0 5px;font-size:23px}.section-heading p{margin:0;color:#6d7a72}.section-heading>div:last-child{display:flex;align-items:center;gap:10px}.football-rule-alert{margin-bottom:14px}.standings-card{overflow:hidden;margin-bottom:14px}.standings-card>header>span{color:#bc7216;font-size:12px}.standing-table-wrap{overflow:auto}.standings-card table{width:100%;min-width:900px;border-collapse:collapse}.standings-card th,.standings-card td{height:50px;padding:0 13px;border-bottom:1px solid #edf0ee;text-align:center}.standings-card th{height:42px;color:#607067;background:#f7f9f7;font-size:12px}.standings-card th:nth-child(2),.standings-card td:nth-child(2){text-align:left}.rank-number{display:inline-grid;width:25px;height:25px;place-items:center;border-radius:50%;background:#f0f3f1}.team-cell{display:flex;align-items:center;gap:9px}.team-cell span{display:inline-grid;width:30px;height:30px}.positive{color:#078443;font-weight:700}.standings-card td:last-child strong{font-size:19px}.provisional-tag{margin-left:6px;padding:2px 5px;border-radius:4px;color:#b96a0b;background:#fff1dc;font-size:9px}.snapshot-note{display:flex;align-items:center;gap:9px;padding:14px 16px;border:1px solid #dce8df;border-radius:8px;color:#5b6b60;background:#f4faf6;font-size:13px}.snapshot-note b{margin-left:auto;color:#087b40}.bracket-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.knockout-card{overflow:hidden;border:1px solid #dfe6e1;border-radius:10px;background:#fff}.knockout-card.ready{border-top:3px solid #078443}.knockout-card.warning{border-top:3px solid #d84e45}.knockout-card header{display:grid;grid-template-columns:1fr auto;gap:5px;padding:14px 16px;border-bottom:1px solid #ebefec}.knockout-card header>span{color:#7b877f;font-size:11px}.knockout-card header>b{grid-column:1;font-size:15px}.knockout-card header>.el-tag{grid-column:2;grid-row:1/3;align-self:center}.knockout-card>div{display:grid;grid-template-columns:1fr 80px 1fr;align-items:center;gap:8px;padding:25px 16px;text-align:center}.knockout-card>div strong{font-size:22px}.knockout-card footer{display:flex;align-items:center;justify-content:space-between;padding:10px 15px;border-top:1px solid #edf0ee;color:#77837b}.report-workspace{display:grid;grid-template-columns:minmax(620px,1.35fr) minmax(260px,.5fr);gap:18px}.report-poster{overflow:hidden;min-height:620px;padding:36px;border-radius:16px;color:#fff;background:radial-gradient(circle at 90% 10%,#2ba36355,transparent 26%),linear-gradient(145deg,#04351f,#087a42 62%,#034329);box-shadow:0 18px 45px rgba(9,56,33,.18)}.report-poster.paper{color:#17251b;background:#fff;border:1px solid #dfe7e1}.report-poster.night{color:#fff;background:radial-gradient(circle at 85% 15%,#1c694155,transparent 27%),linear-gradient(145deg,#111a17,#182c23)}.report-poster>header{text-align:center;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,.23)}.report-poster.paper>header{border-color:#e2e8e4}.report-poster>header small{letter-spacing:.15em}.report-poster h2{margin:13px 0 8px;font-size:30px}.report-poster>header p{margin:0;opacity:.75}.report-match{display:grid;grid-template-columns:34px 1fr 104px 1fr;align-items:center;gap:13px;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.17)}.report-poster.paper .report-match{border-color:#e9edea}.report-match>b{opacity:.55}.report-match>span:last-of-type{text-align:right}.report-match>strong{text-align:center;font-size:23px}.report-match em{font-style:normal;opacity:.55}.report-match small{grid-column:2/5;text-align:center;opacity:.62}.report-empty{padding:100px 0;text-align:center;opacity:.65}.report-poster>footer{display:flex;justify-content:space-between;padding-top:26px;font-size:12px;opacity:.72}.report-workspace>aside{align-self:start;padding:22px;border:1px solid #e0e7e2;border-radius:10px;background:#fff}.report-workspace>aside h3{margin:0 0 16px}.report-workspace>aside ul{display:grid;gap:13px;margin:0 0 20px;padding:0;list-style:none}.report-workspace>aside li{display:flex;align-items:center;gap:8px;color:#526158}.report-workspace>aside li .el-icon{color:#078443}.report-section .section-heading :deep(.el-select){width:150px}@media(max-width:1180px){.review-layout,.report-workspace{grid-template-columns:1fr}.review-detail{position:static}.bracket-grid{grid-template-columns:1fr 1fr}.result-filters{grid-template-columns:1fr 1fr}.result-row{grid-template-columns:90px 1.4fr 1fr 115px 85px}.result-row>:nth-child(4){display:none}}@media(max-width:760px){.result-center{padding:0 14px 28px}.result-context{margin:0 -14px;padding:12px 14px}.result-context-main>span:last-child,.result-context .el-button{display:none}.result-title{align-items:flex-start;flex-direction:column}.result-title h1{font-size:26px}.result-filters,.result-summary{grid-template-columns:1fr 1fr}.result-summary article{padding:0 12px}.result-tabs :deep(.el-tabs__item){padding:0 12px}.result-table-head{display:none}.result-row{grid-template-columns:70px 1fr 80px}.result-row>:nth-child(3),.result-row>:nth-child(4),.result-row>:nth-child(5){display:none}.bracket-grid{grid-template-columns:1fr}.section-heading,.section-heading>div:last-child{align-items:flex-start;flex-direction:column}.report-poster{padding:24px}.report-match{grid-template-columns:28px 1fr 78px 1fr}}
 .standings-card th{font-size:14px}.standings-card td{font-size:16px}
 .team-cell img{width:38px;height:38px;object-fit:contain}.team-cell b{font-size:18px}.team-cell span{width:38px;height:38px;font-size:16px}.rank-number{font-size:16px}.standings-card td:last-child strong{font-size:22px}
 /* 与进球榜一致的组别标签层级。 */
 .standings-section .division-tabs :deep(.el-tabs__header){margin:10px 0 14px}
 .standings-section .division-tabs :deep(.el-tabs__item){height:42px;font-size:15px;font-weight:600}
 .review-list-filters{display:flex;gap:12px;padding:12px 15px;border-bottom:1px solid #e8ece9;background:#fbfcfb}.review-list-filters label{display:flex;align-items:center;gap:8px;color:#657269;font-size:12px}.review-list-filters .el-select{width:180px}.review-list-filters label:first-child .el-select{width:220px}
-.review-detail>.el-alert{margin:0 18px}.correction-alert{margin:0 18px 12px}.review-detail>footer{display:flex;justify-content:flex-end;gap:8px;padding:17px 18px;text-align:right}.correction-form{margin-top:18px}.correction-score-input{display:flex;align-items:center;gap:14px}.correction-score-input .el-input-number{width:150px}
+.review-detail>.el-alert{margin:0 18px}.correction-alert{margin:0 18px 12px}.review-detail>footer{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:16px 18px;text-align:right}.review-detail>footer .el-button{margin:0;width:100%}.review-detail>footer .el-button:nth-child(odd):last-child{grid-column:1/-1}.correction-form{margin-top:18px}.correction-score-input{display:flex;align-items:center;gap:14px}.correction-score-input .el-input-number{width:150px}
 .report-heading{align-items:flex-start}.report-controls{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px}.report-controls :deep(.el-select){width:150px}.report-workspace{grid-template-columns:minmax(620px,1fr) 280px;align-items:start}.portrait-poster{width:min(100%,620px);min-height:930px;aspect-ratio:2/3;margin:0 auto;padding:42px 36px 25px;border-radius:18px;background:#064b2b url('/admin/images/report/emerald-stadium-v1.png') center/cover no-repeat;box-shadow:0 22px 50px rgba(10,55,31,.22)}.portrait-poster.navy{background-color:#071b4e;background-image:url('/admin/images/report/navy-broadcast-v1.png')}.portrait-poster.paper{color:#10213f;background-color:#fff;background-image:url('/admin/images/report/paper-cobalt-v1.png');border:1px solid #dbe5f2;box-shadow:0 22px 50px rgba(25,66,122,.14)}.poster-header{text-align:center}.poster-brand{display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;letter-spacing:.14em}.poster-brand-mark{display:grid;width:29px;height:29px;place-items:center;border:1px solid currentColor;border-radius:50%;font-size:10px;font-weight:800;letter-spacing:0}.poster-kicker{margin:21px 0 8px;font-size:10px;letter-spacing:.16em;opacity:.78}.poster-header h2{margin:0;font-size:25px;line-height:1.28}.poster-date{margin:10px 0 0;font-size:12px;opacity:.78}.poster-date i{font-style:normal;margin:0 5px}.poster-matches{margin-top:30px}.poster-match{padding:17px 0;border-top:1px solid rgba(255,255,255,.24)}.paper .poster-match{border-color:#cbd9eb}.poster-match-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:10px;opacity:.75}.poster-match-meta>span{font-size:12px;font-weight:800;letter-spacing:.08em}.poster-scoreline{display:grid;grid-template-columns:1fr 100px 1fr;align-items:center;gap:9px}.poster-team{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;font-weight:800}.poster-team.away{justify-content:flex-end;text-align:right}.poster-crest{display:grid;width:39px;height:39px;flex:none;place-items:center;border:1px solid rgba(255,255,255,.48);border-radius:11px;background:rgba(255,255,255,.13)}.paper .poster-crest{border-color:#c2d1e4;background:#f3f7fc}.poster-crest img{width:31px;height:31px;object-fit:contain}.poster-crest b{font-size:17px}.poster-score-block{display:grid;grid-template-columns:1fr 12px 1fr;align-items:center;text-align:center}.poster-score-block b{font-size:32px;line-height:1}.poster-score-block em{font-size:20px;font-style:normal;opacity:.75}.poster-score-block small{grid-column:1/-1;margin-top:5px;font-size:9px;opacity:.7}.poster-scorers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:11px 0 0;padding:9px 10px;border-radius:9px;background:rgba(0,0,0,.19);font-size:10px}.paper .poster-scorers{background:rgba(25,82,143,.08)}.poster-scorers>div{display:grid;gap:4px}.poster-scorers>div:last-child{text-align:right}.poster-scorers small{font-size:9px;opacity:.68}.poster-scorers span{font-weight:650}.poster-scorers i{margin-left:3px;font-style:normal;opacity:.78}.poster-scorers .muted{opacity:.58}.poster-footer{display:flex;justify-content:space-between;gap:10px;margin-top:24px;padding-top:11px;border-top:1px solid rgba(255,255,255,.25);font-size:9px;opacity:.72}.paper .poster-footer{border-color:#cbd9eb}.report-guardrail{align-self:start}.report-guardrail :deep(.el-alert){margin-top:18px}.report-section{min-width:0}@media(max-width:1180px){.report-workspace{grid-template-columns:1fr}.report-guardrail{max-width:620px;margin:0 auto}.report-controls{justify-content:flex-start}}@media(max-width:760px){.report-heading{gap:12px}.report-controls{align-items:flex-start;flex-direction:column}.report-controls :deep(.el-select),.report-controls :deep(.el-radio-group),.report-controls :deep(.el-button){width:100%}.report-controls :deep(.el-radio-group){display:flex}.report-controls :deep(.el-radio-button){flex:1}.report-controls :deep(.el-radio-button__inner){width:100%;padding:10px 6px}.portrait-poster{width:100%;min-height:0;padding:32px 22px 20px}.poster-header h2{font-size:22px}.poster-scoreline{grid-template-columns:1fr 88px 1fr}.poster-team{font-size:12px}.poster-crest{width:34px;height:34px}.poster-crest img{width:27px;height:27px}.poster-score-block b{font-size:28px}}
 </style>
 <style scoped>
@@ -541,7 +673,45 @@ onMounted(()=>{if(route.query.tab==='bracket')router.replace({query:{...route.qu
 <style scoped>
 .portrait-poster.paper .poster-header{padding:12px 10px;background:rgba(255,255,255,.82);border-radius:12px}
 .penalty-rounds{padding:8px 16px 14px;border-bottom:1px solid #e5ebe7;font-size:12px}.penalty-rounds>strong{display:block;margin-bottom:6px}.penalty-rounds>div{display:grid;grid-template-columns:72px 1fr 1fr;gap:8px;padding:3px 0}.penalty-rounds>div span:not(:first-child){text-align:center}
-.disciplinary-panel{margin:14px 18px 0;padding:12px 14px;border-top:1px solid #edf0ee;border-radius:8px;background:#fbfcfb}.disciplinary-panel>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.disciplinary-panel h3{margin:0;font-size:14px}.disciplinary-panel header>span{color:#bd4b36;font-size:11px}.disciplinary-empty{margin:0;color:#7b877f;font-size:12px}.disciplinary-panel ul{display:grid;gap:9px;margin:0;padding:0;list-style:none}.disciplinary-panel li{padding:8px 10px;border:1px solid #f1e2dc;border-radius:7px;background:#fff}.disciplinary-panel li>div{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px}.disciplinary-panel li b{color:#25332a}.disciplinary-panel li span{flex:none;padding:2px 7px;border-radius:99px;color:#b6422b;background:#fdeee9;font-size:11px}.disciplinary-panel li p{margin:5px 0 4px;color:#4f5d54;font-size:12px;line-height:1.5}.disciplinary-panel li small{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#8a958d;font-size:11px}.disciplinary-form{margin-top:16px}
+.discipline-board{margin:14px 18px 0;padding:14px;border:1px solid #e5ece7;border-radius:14px;background:linear-gradient(180deg,#fbfdfb,#f4f8f5)}
+.discipline-board-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.discipline-board-head h3{margin:0;font-size:14px;color:#1f3a2a}
+.discipline-board-head p{margin:4px 0 0;color:#7f8d84;font-size:11px}
+.discipline-count{flex:none;padding:3px 9px;border-radius:99px;background:#fdeee9;color:#b6422b;font-size:11px;font-weight:700}
+.discipline-hint{margin:0;color:#7f8d84;font-size:12px}
+.discipline-empty-card{display:grid;justify-items:center;gap:5px;padding:18px 12px;border:1px dashed #d7e2da;border-radius:12px;background:#fff;color:#8a988f;text-align:center}
+.discipline-empty-card .el-icon{font-size:20px;color:#5f9c78}
+.discipline-empty-card b{color:#38503f;font-size:12px}
+.discipline-empty-card small{padding:0 8px;font-size:11px;line-height:1.55}
+.discipline-cards{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.discipline-card{position:relative;padding:12px 13px 10px;border:1px solid #e7ece8;border-left:3px solid #d9563f;border-radius:12px;background:#fff;box-shadow:0 2px 8px rgba(31,58,42,.05)}
+.discipline-card.team{border-left-color:#c05a2c}.discipline-card.staff{border-left-color:#8a6b2f}
+.discipline-card>header{display:flex;align-items:center;gap:9px}
+.discipline-mark{display:grid;width:30px;height:30px;flex:none;place-items:center;border-radius:9px;background:#fdeee9;color:#b6422b;font-size:13px;font-weight:800}
+.discipline-card.team .discipline-mark{background:#fdf1e9;color:#b2542a}.discipline-card.staff .discipline-mark{background:#f6f1e3;color:#8a6b2f}
+.discipline-subject{flex:1;min-width:0}
+.discipline-subject b{display:block;color:#22352a;font-size:13px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-subject small{display:block;margin-top:2px;color:#8a958d;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-status{flex:none;padding:2px 7px;border-radius:99px;border:1px solid #cfe3d7;background:#eef7f1;color:#2f7a52;font-size:10px;font-weight:700}
+.discipline-tags{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 0}
+.discipline-tag{padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+.discipline-tag.danger{background:#fdeceb;color:#c23b2b}.discipline-tag.severe{background:#fbe3e0;color:#a32216}.discipline-tag.warning{background:#fdf4e3;color:#a97516}.discipline-tag.muted{background:#eef2ee;color:#54675a}
+.discipline-reason{margin:8px 0 0;color:#4d5d53;font-size:12px;line-height:1.6}
+.discipline-card>footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 8px;margin-top:10px;padding-top:8px;border-top:1px dashed #edf1ee;color:#9aa59d;font-size:11px}
+.disciplinary-form{margin-top:16px}
+.discipline-file-input{display:none}
+.discipline-files{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 0}
+.discipline-file{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 8px;border:1px solid #dfe8e2;border-radius:7px;background:#f7faf8;color:#2f5a42;font-size:11px;cursor:pointer}
+.discipline-file span{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discipline-file small{flex:none;color:#8a958d;font-size:10px}
+.discipline-file:hover{border-color:#9dc0ab;background:#eef5f0}
+.discipline-actions{display:inline-flex;align-items:center;gap:2px;font-style:normal}
+.discipline-upload{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.discipline-upload-stage{color:#7b877f;font-size:12px}
+.discipline-file-list{display:grid;gap:6px;width:100%;margin:6px 0 0;padding:0;list-style:none}
+.discipline-file-list li{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid #e5ebe7;border-radius:6px;background:#fbfcfb;font-size:12px}
+.discipline-file-list li b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#25332a}
+.discipline-file-list li small{color:#8a958d;font-size:11px}
 </style>
 <style scoped>
 .board-poster{width:min(100%,620px);min-height:930px;aspect-ratio:2/3;margin:0 auto;padding:28px 28px 20px;border-radius:14px;color:#fff;background:#0b326b url('/admin/images/report/flat-blue-v1.png') center/cover no-repeat;box-shadow:0 18px 42px rgba(6,37,79,.18);overflow:hidden}.board-poster.emerald{background-color:#0d4b2d;background-image:url('/admin/images/report/flat-green-v1.png')}.board-poster.paper{color:#14284d;background-color:#f7f5ee;background-image:url('/admin/images/report/flat-white-v2.png');border:1px solid #dbe2e8;box-shadow:0 18px 42px rgba(34,51,72,.12)}.board-header{min-height:124px;text-align:center}.board-tournament-slot{min-height:76px;display:grid;place-items:center;padding:4px 10px}.board-tournament-slot h2{margin:0;font-size:25px;line-height:1.25;font-weight:750;letter-spacing:.04em}.board-date{margin:8px 0 0;font-size:13px;letter-spacing:.12em;opacity:.82}.board-matches{margin-top:10px}.board-match{padding:0 0 16px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.28)}.board-poster.paper .board-match{border-color:#bfcfe0}.board-match-meta{display:flex;justify-content:center;align-items:center;gap:7px;min-height:22px;margin-bottom:4px;font-size:11px;letter-spacing:.08em;font-weight:700}.board-match-meta i{font-style:normal;opacity:.64}.board-match-main{display:grid;grid-template-columns:1fr 108px 1fr;align-items:center;gap:8px;min-height:70px}.board-team{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 9px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.92);color:#0d3368;clip-path:polygon(0 0,96% 0,100% 50%,96% 100%,0 100%);font-size:14px;font-weight:800}.board-team.away{justify-content:flex-end;text-align:right;clip-path:polygon(4% 0,100% 0,100% 100%,4% 100%,0 50%)}.board-poster.emerald .board-team{border-color:#d8bc70;background:rgba(13,65,40,.52);color:#fff4d5;clip-path:none}.board-poster.emerald .board-team.away{clip-path:none}.board-poster.paper .board-team{border-color:#1853a3;background:rgba(255,255,255,.74);color:#133c78}.board-crest{display:grid;width:40px;height:40px;flex:none;place-items:center;border:2px solid #fff;border-radius:50%;background:#f9fbff;overflow:hidden}.board-poster.emerald .board-crest{border-color:#d8bc70;background:#0b4a2d}.board-poster.paper .board-crest{border-color:#1853a3}.board-crest img{width:33px;height:33px;object-fit:contain}.board-crest b{font-size:17px}.board-score{display:grid;grid-template-columns:1fr 13px 1fr;align-items:center;min-height:70px;padding:8px 8px;text-align:center;background:#075acb;color:#fff;clip-path:polygon(10% 0,90% 0,100% 50%,90% 100%,10% 100%,0 50%)}.board-poster.emerald .board-score{background:#123f2b;border:1px solid #d8bc70;color:#fff4d5}.board-poster.paper .board-score{background:#1853a3;color:#fff}.board-score b{font-size:27px;line-height:1}.board-score em{font-style:normal;font-size:18px;opacity:.8}.board-score small{grid-column:1/-1;margin-top:3px;font-size:9px;opacity:.82}.board-scorers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 4px 0;padding:7px 9px;border-top:1px solid rgba(255,255,255,.3);font-size:10px}.board-poster.paper .board-scorers{border-color:#bfcfe0}.board-scorers>div{display:grid;gap:3px}.board-scorers>div:last-child{text-align:right}.board-scorers small{font-size:9px;opacity:.75}.board-scorers span{font-weight:650}.board-scorers i{font-style:normal;margin-left:3px;opacity:.8}.board-scorers .muted{opacity:.58}.board-footer{display:flex;justify-content:space-between;gap:10px;margin-top:15px;padding-top:10px;border-top:1px solid rgba(255,255,255,.32);font-size:9px;opacity:.72}.board-poster.paper .board-footer{border-color:#bfcfe0}.board-poster.score-only .board-match{padding-bottom:13px;margin-bottom:10px}.board-poster.score-only .board-match-main{min-height:64px}.board-poster.score-only .board-score{min-height:64px}@media(max-width:760px){.board-poster{width:100%;min-height:0;padding:23px 18px 16px}.board-header{min-height:110px}.board-tournament-slot{min-height:65px}.board-tournament-slot h2{font-size:21px}.board-date{font-size:11px}.board-match-main{grid-template-columns:1fr 92px 1fr}.board-team{font-size:12px;padding:6px}.board-crest{width:34px;height:34px}.board-crest img{width:28px;height:28px}.board-score{min-height:62px}.board-score b{font-size:23px}}

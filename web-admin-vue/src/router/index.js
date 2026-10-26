@@ -399,6 +399,13 @@ const routes = [
     children: [{ path: '', component: () => import('../views/tournament/TournamentResultCenter.vue') }]
   },
   {
+    path: '/tournaments/:id/discipline',
+    name: 'TournamentDiscipline',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '纪律处罚', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentDiscipline.vue') }]
+  },
+  {
     path: '/tournaments/:id/news',
     name: 'TournamentNewsCenter',
     component: () => import('../views/layout/LayoutView.vue'),

@@ -959,13 +959,56 @@ async function correctArchivedScore(event, actor) {
 
 const DISCIPLINARY_TYPES = ['suspension', 'fine', 'warning', 'disqualification']
 const DISCIPLINARY_SUBJECT_TYPES = ['player', 'team', 'staff']
+const DISCIPLINARY_ATTACHMENT_TYPES = ['pdf', 'doc', 'docx']
+const DISCIPLINARY_ATTACHMENT_LIMIT = 5
+const DISCIPLINARY_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+
+// 处罚文书附件：仅保留云存储标识与本地上传时的文件名/大小，便于日后追查。
+function normalizeDisciplinaryAttachments(list) {
+  const rows = Array.isArray(list) ? list.slice(0, DISCIPLINARY_ATTACHMENT_LIMIT) : []
+  return rows.map(item => {
+    const fileId = text(item && (item.fileId || item.fileID))
+    const name = text(item && item.name).slice(0, 120)
+    const size = Number(item && item.size)
+    const extension = (text(item && item.type) || name.split('.').pop() || '').toLowerCase()
+    if (!fileId) throw new Error('处罚文书缺少文件标识')
+    if (!name) throw new Error('处罚文书缺少文件名')
+    if (!DISCIPLINARY_ATTACHMENT_TYPES.includes(extension)) throw new Error('处罚文书仅支持 PDF、Word（doc/docx）')
+    if (!Number.isFinite(size) || size <= 0 || size > DISCIPLINARY_ATTACHMENT_MAX_BYTES) throw new Error('单个处罚文书须小于 10MB')
+    return { fileId, name, size, type: extension, uploadedAt: new Date().toISOString() }
+  })
+}
+
+// 附件以云存储 fileId 保存，展示时再换临时下载地址（仅本赛事主办方与授权工作人员可见）。
+async function withDisciplinaryAttachmentUrls(actions) {
+  const fileIds = [...new Set(actions.flatMap(action => (action.attachments || []).map(item => text(item.fileId))).filter(Boolean))]
+  if (!fileIds.length) return actions
+  let urlById = {}
+  try {
+    // getTempFileURL 单次最多 50 个文件，按批换取避免一次处罚较多时整批失败。
+    for (let index = 0; index < fileIds.length; index += 50) {
+      const temp = await cloud.getTempFileURL({ fileList: fileIds.slice(index, index + 50) })
+      ;(temp.fileList || []).forEach(item => {
+        if (item && item.fileID) urlById[item.fileID] = text(item.tempFileURL)
+      })
+    }
+  } catch (error) {
+    console.warn(' disciplinary attachment temp url failed:', error && error.message)
+  }
+  return actions.map(action => ({
+    ...action,
+    attachments: (action.attachments || []).map(item => ({ ...item, url: urlById[text(item.fileId)] || '' }))
+  }))
+}
 
 function disciplinaryActionView(row) {
+  const matchId = text(row.matchId)
   return {
     id: text(row._id || row.id),
     tournamentId: text(row.tournamentId),
     divisionId: text(row.divisionId),
-    matchId: text(row.matchId),
+    scope: text(row.scope) || (matchId ? 'match' : 'tournament'),
+    matchId,
     matchNo: text(row.matchNo),
     subjectType: text(row.subjectType),
     teamId: text(row.teamId),
@@ -981,13 +1024,34 @@ function disciplinaryActionView(row) {
     createdBy: text(row.createdBy),
     createdByName: text(row.createdByName),
     createdAt: row.createdAt || null,
+    attachments: Array.isArray(row.attachments) ? row.attachments.map(item => ({
+      fileId: text(item && item.fileId),
+      name: text(item && item.name),
+      size: number(item && item.size),
+      type: text(item && item.type),
+      uploadedAt: (item && item.uploadedAt) || null
+    })).filter(item => item.fileId) : [],
     revokedBy: text(row.revokedBy),
     revokedAt: row.revokedAt || null,
     revokeReason: text(row.revokeReason)
   }
 }
 
-// 单场纪律处罚：仅返回当前赛事（或指定比赛）直接生效的记录，撤销后不再出现在列表。
+// 赛事级与单场处罚共用记录集合：scope=match 绑定单场，scope=tournament 只归属赛事。
+// 跨赛事生效的处罚按稳定身份（teams._id / players._id）保存 subjectKey，供其他赛事追加引用。
+async function tournamentRelationsFor(tournamentId) {
+  const rows = await listAll('tournament_teams', { tournamentId }, 20000)
+  const byStableId = new Map(), byRelationId = new Map()
+  rows.forEach(row => {
+    const relationId = text(row._id || row.id), stableId = text(row.teamId)
+    if (relationId) byRelationId.set(relationId, row)
+    if (stableId && !byStableId.has(stableId)) byStableId.set(stableId, row)
+  })
+  return { rows, byStableId, byRelationId }
+}
+
+// 纪律处罚列表：actions 为本赛事记录，不带 matchId 即返回赛事级与单场处罚全部记录。
+// 全平台禁赛由平台运营后台审核下发，赛事主办方只能查看本赛事自身签发的处罚。
 async function listDisciplinaryActions(event, actor) {
   const tournamentId = text(event.tournamentId)
   if (!tournamentId) throw new Error('缺少赛事信息')
@@ -1004,16 +1068,27 @@ async function listDisciplinaryActions(event, actor) {
     if (!/not exist|collection_not_exist|resourcenotfound|-502005/i.test(String(error && (error.message || error.errMsg) || ''))) throw error
   }
   const actions = rows.map(disciplinaryActionView).sort((a, b) => timeValue(b.createdAt) - timeValue(a.createdAt))
-  return { success: true, actions }
+  return {
+    success: true,
+    tournamentId,
+    tournamentName: text(tournament.name || tournament.tournamentName),
+    actions: await withDisciplinaryAttachmentUrls(actions)
+  }
 }
 
 async function createDisciplinaryAction(event, actor) {
   const tournamentId = text(event.tournamentId), matchId = text(event.matchId)
-  if (!tournamentId || !matchId) throw new Error('缺少赛事或比赛信息')
+  if (!tournamentId) throw new Error('缺少赛事信息')
   const tournament = await getDocument('tournaments', tournamentId)
   if (!tournament || !belongsToActor(tournament, actor)) throw new Error('赛事不存在或无权访问')
-  const match = await getDocument('matches', matchId)
-  if (!match || text(match.tournamentId) !== tournamentId || match.orgId && text(match.orgId) !== actor.orgId) throw new Error('比赛不属于当前赛事或无权访问')
+  // matchId 可选：不绑定单场即为赛事级处罚，作用范围覆盖整个赛事。
+  const scope = matchId ? 'match' : 'tournament'
+  let match = null
+  if (matchId) {
+    match = await getDocument('matches', matchId)
+    if (!match || text(match.tournamentId) !== tournamentId || match.orgId && text(match.orgId) !== actor.orgId) throw new Error('比赛不属于当前赛事或无权访问')
+  }
+  const relations = await tournamentRelationsFor(tournamentId)
   const types = [...new Set((Array.isArray(event.types) ? event.types : []).map(text).filter(Boolean))]
   if (!types.length) throw new Error('请选择处罚类型')
   if (types.some(type => !DISCIPLINARY_TYPES.includes(type))) throw new Error('处罚类型不支持')
@@ -1021,19 +1096,45 @@ async function createDisciplinaryAction(event, actor) {
   if (!DISCIPLINARY_SUBJECT_TYPES.includes(subjectType)) throw new Error('处罚对象类型不支持')
   const reason = text(event.reason)
   if (reason.length < 2 || reason.length > 300) throw new Error('处罚原因须为 2 至 300 个字符')
-  const homeTeamId = teamIdOf(match, 'home'), awayTeamId = teamIdOf(match, 'away')
-  const matchTeamIds = [homeTeamId, awayTeamId].filter(Boolean)
-  const teamId = text(event.teamId)
-  if (teamId && !matchTeamIds.includes(teamId)) throw new Error('处罚球队不属于本场比赛')
-  if (subjectType !== 'staff' && !teamId) throw new Error('请选择处罚所属球队')
-  const teamName = teamId === homeTeamId ? teamNameOf(match, 'home') : teamId === awayTeamId ? teamNameOf(match, 'away') : ''
+  const requestedTeamId = text(event.teamId)
+  let teamId = requestedTeamId, stableTeamId = '', teamName = ''
+  if (matchId) {
+    const homeTeamId = teamIdOf(match, 'home'), awayTeamId = teamIdOf(match, 'away')
+    const matchTeamIds = [homeTeamId, awayTeamId].filter(Boolean)
+    if (requestedTeamId && !matchTeamIds.includes(requestedTeamId)) throw new Error('处罚球队不属于本场比赛')
+    if (subjectType !== 'staff' && !requestedTeamId) throw new Error('请选择处罚所属球队')
+    if (requestedTeamId) {
+      stableTeamId = text((relations.byRelationId.get(requestedTeamId) || relations.byStableId.get(requestedTeamId) || {}).teamId) || requestedTeamId
+      teamName = requestedTeamId === homeTeamId ? teamNameOf(match, 'home') : requestedTeamId === awayTeamId ? teamNameOf(match, 'away') : ''
+    }
+  } else {
+    if (subjectType !== 'staff' && !requestedTeamId) throw new Error('请选择处罚所属球队')
+    if (requestedTeamId) {
+      // 赛事级处罚只能选本赛事已登记的参赛球队，球队编号取稳定 teams._id。
+      const relation = relations.byStableId.get(requestedTeamId) || relations.byRelationId.get(requestedTeamId) || null
+      if (!relation) throw new Error('处罚球队不属于当前赛事参赛球队')
+      teamId = text(relation.teamId) || requestedTeamId
+      stableTeamId = teamId
+      teamName = text(relation.teamName || relation.name)
+      if (!teamName) teamName = teamProfileName(await getDocument('teams', stableTeamId))
+    }
+  }
   const playerId = text(event.playerId), playerName = text(event.playerName)
+  const unverified = []
   if (subjectType === 'player') {
     if (!playerName) throw new Error('请填写处罚球员姓名')
     if (types.includes('suspension') && !playerId) throw new Error('追加停赛须提供球员编号，否则无法自动标记后续停赛')
+    if (playerId) {
+      const player = await getDocument('players', playerId)
+      const playerTeamId = text(player && player.teamId)
+      if (player && playerTeamId && stableTeamId && playerTeamId !== stableTeamId) throw new Error('处罚球员不属于所选球队')
+      if (!player) unverified.push('playerId')
+    }
   }
   const personName = subjectType === 'staff' ? text(event.personName) : ''
   if (subjectType === 'staff' && !personName) throw new Error('请填写受处罚工作人员姓名')
+  // 主办方只能在自办赛事内处罚，跨赛事/全平台禁赛须由平台运营后台审核下发。
+  if (event.crossEvent === true) throw new Error('全平台禁赛只能由平台运营后台审核下发，赛事主办方无权跨赛事处罚')
   let suspensionMatches = 0
   if (types.includes('suspension')) {
     suspensionMatches = Number(event.suspensionMatches)
@@ -1045,21 +1146,25 @@ async function createDisciplinaryAction(event, actor) {
     if (!Number.isFinite(parsed) || parsed < 0.01 || parsed > 999999) throw new Error('罚款金额须在 0.01 至 999999 之间')
     fineAmount = Math.round(parsed * 100) / 100
   }
-  const divisionId = divisionIdOf(match)
+  const divisionId = matchId ? divisionIdOf(match) : (text(event.divisionId) || 'default')
+  const attachments = normalizeDisciplinaryAttachments(event.attachments)
   const data = {
     orgId: actor.orgId,
     tournamentId,
     divisionId,
+    scope,
+    teamStableId: stableTeamId,
     matchId,
-    matchNo: text(match.matchNo || match.matchSequence || match.sequence || match.matchIndex),
+    matchNo: matchId ? text(match.matchNo || match.matchSequence || match.sequence || match.matchIndex) : '',
     subjectType, teamId, teamName, playerId, playerName, personName, types,
     suspensionMatches, fineAmount, reason, status: 'effective',
+    attachments,
     createdBy: text(actor.user._id),
     createdByName: text(actor.user.name || actor.user.realName || actor.user.nickName),
     createdAt: db.serverDate(),
     updateTime: db.serverDate()
   }
-  const detail = { matchId, types, suspensionMatches, fineAmount, reason, subjectType, teamId, playerId, playerName, personName }
+  const detail = { matchId, scope, types, suspensionMatches, fineAmount, reason, subjectType, teamId, stableTeamId, playerId, playerName, personName }
   const audit = await db.collection('registration_audit_logs').add({ data: {
     sport: 'football', action: 'disciplinary_action_created', tournamentId, divisionId, matchId,
     actorUserId: text(actor.user._id), actorOrgId: actor.orgId, result: 'pending',
@@ -1071,8 +1176,7 @@ async function createDisciplinaryAction(event, actor) {
   await db.collection('registration_audit_logs').doc(audit._id).update({ data: {
     result: 'success', actionId: text(created._id), completedAt: db.serverDate(), updateTime: db.serverDate()
   } }).catch(() => {})
-  // 球员是否属于该场名单未在服务端核验，按录入内容保存并明确告知。
-  return { success: true, id: text(created._id), unverified: subjectType === 'player' && playerId ? ['playerId'] : [] }
+  return { success: true, id: text(created._id), scope, unverified }
 }
 
 async function revokeDisciplinaryAction(event, actor) {
@@ -1106,6 +1210,32 @@ async function revokeDisciplinaryAction(event, actor) {
   return { success: true, message: '处罚已撤销并留痕' }
 }
 
+// 已生效处罚补传书面文书（处罚决定书、纪律通知等），保留原处罚内容不变。
+async function addDisciplinaryAttachments(event, actor) {
+  const id = text(event.id)
+  if (!id) throw new Error('缺少处罚记录编号')
+  const tournamentId = text(event.tournamentId)
+  if (!tournamentId) throw new Error('缺少赛事信息')
+  const action = await getDocument('disciplinary_actions', id)
+  if (!action || text(action.tournamentId) !== tournamentId || text(action.orgId) !== actor.orgId) throw new Error('处罚记录不存在或无权访问')
+  if (text(action.status) !== 'effective') throw new Error('仅生效中的处罚可补传处罚文书')
+  const additions = normalizeDisciplinaryAttachments(event.attachments)
+  if (!additions.length) throw new Error('请选择要上传的处罚文书')
+  const existing = Array.isArray(action.attachments) ? action.attachments : []
+  if (existing.length + additions.length > DISCIPLINARY_ATTACHMENT_LIMIT) throw new Error(`每条处罚最多保留 ${DISCIPLINARY_ATTACHMENT_LIMIT} 个处罚文书`)
+  const attachments = [...existing, ...additions]
+  await db.collection('disciplinary_actions').doc(id).update({ data: { attachments, updateTime: db.serverDate() } })
+  await db.collection('registration_audit_logs').add({ data: {
+    sport: 'football', action: 'disciplinary_attachment_added', tournamentId,
+    divisionId: text(action.divisionId), matchId: text(action.matchId),
+    actorUserId: text(actor.user._id), actorOrgId: actor.orgId, result: 'success',
+    detail: { actionId: id, files: additions.map(item => ({ name: item.name, size: item.size, type: item.type })) },
+    createTime: db.serverDate(), updateTime: db.serverDate()
+  } }).catch(error => console.warn('disciplinary attachment audit failed:', error && error.message))
+  const [view] = await withDisciplinaryAttachmentUrls([disciplinaryActionView({ ...action, attachments })])
+  return { success: true, message: '处罚文书已留存', attachments: view.attachments }
+}
+
 exports.main = async (event = {}) => {
   try {
     const actor = await authenticate(event)
@@ -1115,7 +1245,7 @@ exports.main = async (event = {}) => {
       const right = key => staffPolicy.hasRight(db, actor.user._id, actor.orgId, eventId, key)
       const allowed = action === 'dashboard'
         ? await right('event.dashboard') || await right('event.results') || await right('event.news') || await right('news.edit') || await right('news.publish')
-        : ['staffMatches', 'supplementResult', 'listDisciplinaryActions', 'createDisciplinaryAction', 'revokeDisciplinaryAction'].includes(action)
+        : ['staffMatches', 'supplementResult', 'listDisciplinaryActions', 'createDisciplinaryAction', 'revokeDisciplinaryAction', 'addDisciplinaryAttachments'].includes(action)
           ? await right('event.results') || await right('result.supplement')
           : ['resolvePairingSources', 'publishStandings', 'correctArchivedScore'].includes(action) && await right('event.results')
       if (!allowed) throw new Error('当前子账号无权执行该赛果操作')
@@ -1131,6 +1261,7 @@ exports.main = async (event = {}) => {
     if (action === 'listDisciplinaryActions') return await listDisciplinaryActions(event, actor)
     if (action === 'createDisciplinaryAction') return await createDisciplinaryAction(event, actor)
     if (action === 'revokeDisciplinaryAction') return await revokeDisciplinaryAction(event, actor)
+    if (action === 'addDisciplinaryAttachments') return await addDisciplinaryAttachments(event, actor)
     return { success: false, code: 'UNSUPPORTED_ACTION', message: '不支持的赛果中心操作' }
   } catch (error) {
     console.error('resultCenter failed:', error)
