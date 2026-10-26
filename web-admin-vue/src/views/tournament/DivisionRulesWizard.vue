@@ -26,7 +26,7 @@
           <el-option :label="`当前组别：${division.name || '竞赛组别'}`" :value="divisionId" />
         </el-select>
         <el-button v-if="(effective || division.activeRulesVersion) && canManage" type="primary" @click="openSubstitutionSettings">修改换人</el-button>
-        <el-button v-if="effective && canManage" plain :loading="saving" @click="startRuleRevision">调整规则</el-button>
+        <el-button v-if="effective && canManage && !midCompetition" plain :disabled="!ruleEditState?.canEdit" :loading="saving" @click="startRuleRevision">调整规则</el-button>
         <el-button v-if="effective" plain @click="backToDivisions">返回组别管理</el-button>
         <span v-else class="draft-version">草稿 {{ draftVersion }}</span>
       </div>
@@ -52,7 +52,9 @@
 
     <el-alert v-if="!effective && activeKey === 'format'" class="scope-alert" type="success" :closable="false" show-icon :title="scopeNotice" />
 
-    <main v-if="!effective" class="wizard-content">
+    <el-alert v-if="ruleEditError" type="error" :title="ruleEditError" :closable="false" />
+    <el-alert v-else-if="midCompetition && !effective" type="warning" :title="ruleEditState.reason" :closable="false" />
+    <main v-if="!effective" class="wizard-content" :inert="ruleEditState?.canEdit !== true">
       <template v-if="activeKey === 'format'">
         <div class="format-stage" :class="{ professional: isProfessional }">
           <section class="format-picker panel-card" :class="{ professional: isProfessional }">
@@ -236,7 +238,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Back, Calendar, Check, CircleCheck, CircleCheckFilled, Document, Grid, Location, MagicStick, Printer, Tickets, Trophy, View, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules } from '../../utils/cloud'
+import { callFunction, confirmDivisionRules, queryById, reviseDivisionRules, updateRecord, updateDivisionSubstitutionRules, readDivisionRuleEditState } from '../../utils/cloud'
 import { permissions } from '../../utils/permissions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
 import DivisionRegulationFields from './DivisionRegulationFields.vue'
@@ -253,6 +255,7 @@ const localVisualQa = typeof window !== 'undefined' && window.location.hostname 
 const localEffectiveQa = localVisualQa && window.location.href.includes('step=effective')
 const localProfessionalQa = localVisualQa && (divisionId === 'qa-division-u16' || window.location.href.includes('mode=professional'))
 const loading = ref(false)
+const ruleEditState=ref(localVisualQa?{canEdit:true,hasSchedule:false}:null),ruleEditError=ref('')
 const saving = ref(false)
 const substitutionSettingsVisible=ref(false),substitutionSettingsSaving=ref(false)
 const substitutionSettings=reactive({substitutionMode:'limited',substitutionLimit:5,substitutionWindows:3,substitutionReentryAllowed:false})
@@ -392,10 +395,7 @@ const isProfessional = computed(() => division.value.mode === 'professional' || 
 const steps = computed(() => isProfessional.value ? professionalSteps : simpleSteps)
 const activeKey = computed(() => steps.value[activeIndex.value]?.key || 'finalize')
 const effective = computed(() => division.value.rulesLocked === true || ['finalized', 'locked', 'published'].includes(String(division.value.ruleStatus || '').toLowerCase()))
-const midCompetition = computed(() => {
-  const states = [division.value.competitionPlanStatus, tournament.value.competitionPlanStatus, tournament.value.status]
-  return division.value.competitionPlanLocked === true || division.value.finalPlanLocked === true || tournament.value.competitionPlanLocked === true || tournament.value.finalPlanLocked === true || tournament.value.matchManagementReady === true || states.some(value => ['locked','match_management','in_progress','ongoing','live','completed','finished'].includes(String(value || '').toLowerCase()))
-})
+const midCompetition = computed(() => ruleEditState.value?.hasSchedule===true)
 const canManage = computed(() => permissions.tournament.manage(tournament.value))
 const tournamentLogo = computed(() => tournament.value.logoTransparentUrl || tournament.value.logoUrl || tournament.value.logo || '')
 const divisionCount = computed(() => Math.max(Number(tournament.value.divisionCount || 0), Array.isArray(tournament.value.divisions) ? tournament.value.divisions.length : 0, 1))
@@ -568,6 +568,7 @@ async function load() {
     ? (window.__sxfVisualQaSnapshot || getVisualQaSnapshot())
     : null
   if (visualSnapshot) {
+    ruleEditState.value={canEdit:true,hasSchedule:false}
     tournament.value = visualSnapshot.tournament?.name ? visualSnapshot.tournament : { name: '2026河南青少年足球冠军联赛', status: 'ongoing', divisionCount: 5, startDate: '2026-07-20', endDate: '2026-08-18', region: '河南省' }
     const source = visualSnapshot.divisions.find(item => String(item._id || item.id) === 'qa-division-u16') || {}
     const effectiveSnapshot = localEffectiveQa
@@ -580,13 +581,16 @@ async function load() {
   }
   if (!divisionId) { ElMessage.error('缺少竞赛组别参数'); backToDivisions(); return }
   loading.value = true
+  ruleEditState.value=null;ruleEditError.value=''
   try {
-    const [currentTournament, currentDivision] = await Promise.all([queryById('tournaments', tournamentId), queryById('divisions', divisionId)])
+    const [currentTournament, currentDivision, editState] = await Promise.all([queryById('tournaments', tournamentId), queryById('divisions', divisionId),isDemoMode(tournamentId)?{canEdit:true,hasSchedule:false}:readDivisionRuleEditState(divisionId)])
     tournament.value = Array.isArray(currentTournament) ? currentTournament[0] || {} : currentTournament || {}
     division.value = Array.isArray(currentDivision) ? currentDivision[0] || {} : currentDivision || {}
+    ruleEditState.value=editState
     hydrateForm(division.value)
     syncActiveStep()
   } catch (error) {
+    ruleEditError.value=error.message || '规则修改状态读取失败，请刷新重试'
     ElMessage.error(error.message || '读取组别规则失败')
   } finally {
     loading.value = false
@@ -629,6 +633,7 @@ function hydrateForm(source) {
 }
 
 async function recognizeUploadedRegulations() {
+  if(ruleEditState.value?.canEdit!==true)return ElMessage.warning(ruleEditState.value?.reason || '规则状态未确认，请刷新后重试')
   if (recognizingRegulation.value) return
   const fileID = String(tournament.value.regulationsFileId || '').trim()
   if (!fileID) return ElMessage.warning('当前赛事尚未上传竞赛规程')
@@ -727,7 +732,7 @@ function rulePayload(progress) {
 }
 
 async function save(progress) {
-  if (!canManage.value) return false
+  if (!canManage.value || ruleEditState.value?.canEdit!==true) return false
   synchronizeRegulationDetails()
   if (!validateRegistrationDeadline()) return false
   if (!validateCompetitionRuleInputs()) return false
@@ -748,6 +753,7 @@ async function save(progress) {
 
 async function startRuleRevision() {
   if (!canManage.value || saving.value) return
+  if(ruleEditState.value?.canEdit!==true)return ElMessage.warning(ruleEditState.value?.reason || '规则状态未确认，请刷新后重试')
   if (localVisualQa) {
     Object.assign(division.value, { rulesLocked: false, ruleFinalized: false, ruleStatus: 'draft', ruleProgress: 0, rulesVersionDraft: `${division.value.rulesVersion || 'V1.0'}-R1` })
     replaceStep('finalize')
@@ -781,7 +787,7 @@ function jumpToStep(key) { if (effective.value) return; const index = steps.valu
 function replaceStep(step) { router.replace({ query: { ...route.query, divisionId, step } }) }
 
 async function finalize() {
-  if (!canManage.value) return
+  if (!canManage.value || ruleEditState.value?.canEdit!==true) return
   synchronizeRegulationDetails()
   if (!validateRegistrationDeadline()) return
   if (!validateCompetitionRuleInputs()) return

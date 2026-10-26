@@ -486,6 +486,14 @@ export async function reviseDivisionRules(id) {
   })
 }
 
+export async function readDivisionRuleEditState(id) {
+  const identity=readIdentityKey()
+  const result = await callFunctionHTTP('dbQuery', { collection:'divisions', operation:'divisionRuleEditState', id })
+  if(identity!==readIdentityKey())throw new Error('账号或工作空间已切换，请重新加载')
+  if (!result?.success) throw new Error(result?.error || result?.message || '规则修改状态读取失败，请重试')
+  return result.data
+}
+
 export async function deleteDivision(id) {
   return callFunctionHTTP('dbQuery', {
     collection: 'divisions',

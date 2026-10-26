@@ -2,7 +2,7 @@
   <section v-loading="loading" class="division-create" aria-labelledby="division-create-title">
     <header class="context-bar"><div class="tournament-context-copy"><img v-if="tournamentLogo" class="tournament-context-logo" :src="tournamentLogo" :alt="`${tournament.name} Logo`"/><span v-else class="tournament-context-logo context-mark"><el-icon><Trophy/></el-icon></span><h1>{{ tournament.name || '赛事竞赛管理' }}</h1><span class="header-chip">{{ existingDivisions.length }} 个组别</span></div><el-button plain :icon="Back" @click="router.push('/tournament-space')">返回赛事空间</el-button></header>
     <div class="page-heading"><h2 id="division-create-title">竞赛管理 / {{ isEditing ? '组别设置' : '添加组别' }}</h2><el-button plain :icon="Back" @click="goBack">返回组别管理</el-button></div>
-    <el-alert v-if="loadError" type="error" :title="loadError" :closable="false"/><el-alert v-if="locked" type="warning" title="组别已定版或赛事已开始，基础信息已锁定" :closable="false"/>
+    <el-alert v-if="loadError" type="error" :title="loadError" :closable="false"/><el-alert v-else-if="locked && editState" type="warning" :title="editState.reason || '本组已生成赛程，基础信息已锁定'" :closable="false"/>
     <main class="create-grid">
       <section class="form-panel" aria-label="组别基础信息"><div class="panel-heading"><h2>基础信息</h2></div>
         <el-form label-position="top" class="division-form" :disabled="locked || !canManage">
@@ -23,12 +23,13 @@ import {computed,onMounted,reactive,ref} from 'vue'
 import {useRoute,useRouter} from 'vue-router'
 import {Back,Trophy,UserFilled} from '@element-plus/icons-vue'
 import {ElMessage} from 'element-plus'
-import {addRecord,queryById,queryList,updateRecord} from '../../utils/cloud'
+import {addRecord,queryById,queryList,updateRecord,readDivisionRuleEditState,reviseDivisionRules} from '../../utils/cloud'
 import {permissions} from '../../utils/permissions'
 import {isDemoMode} from '../../utils/demoMode'
 import {buildDivisionBasics,divisionParticipantType,divisionBasicsLocked,youthBirthRange,adultBirthRange} from '../../utils/divisionBasics'
 const route=useRoute(),router=useRouter(),id=String(route.params.id||''),divisionId=String(route.query.divisionId||''),nextTarget=String(route.query.next||'')
 const isEditing=Boolean(divisionId),loading=ref(false),saving=ref(false),loadError=ref(''),tournament=ref({}),division=ref({}),existingDivisions=ref([]),registrationCount=ref(0)
+const editState=ref(null)
 const form=reactive({participantType:'youth',ageGroup:'U16',gender:'男子组',birthDateStart:'',birthDateEnd:'',birthRangeMethod:'under',matchFormat:'',expectedTeams:16,nameSource:'generated',customName:''})
 const suggestedBirthRange=computed(()=>form.participantType==='youth'?youthBirthRange(form.ageGroup,tournament.value):adultBirthRange(tournament.value))
 function syncBirthRange(changed){
@@ -45,7 +46,7 @@ const ageLabel=computed(()=>ageOptions.value.find(option=>option.value===form.ag
 const generatedName=computed(()=>`${form.ageGroup==='open'?(form.participantType==='adult'?'成人':'青少年'):String(form.ageGroup).replace(/组$/,'')}${form.gender}`)
 const finalName=computed(()=>form.nameSource==='custom'?form.customName:generatedName.value)
 const canManage=computed(()=>permissions.tournament.manage(tournament.value))
-const locked=computed(()=>isEditing&&!isDemoMode(id)&&divisionBasicsLocked(division.value,tournament.value))
+const locked=computed(()=>isEditing&&!isDemoMode(id)&&divisionBasicsLocked(division.value,tournament.value,editState.value))
 const tournamentLogo=computed(()=>tournament.value.logoTransparentUrl||tournament.value.logoUrl||tournament.value.logo||'')
 function changeParticipantType(value){form.ageGroup=value==='adult'?'成人组':'U16';form.birthDateStart='';form.birthDateEnd='';form.birthRangeMethod='under';syncBirthRange()}
 function goBack(){router.push(`/tournaments/${id}/competition`)}
@@ -58,6 +59,7 @@ async function load(){
     if(current){
       if(String(current.tournamentId)!==id)throw new Error('组别不属于当前赛事')
       division.value=current
+      editState.value=isDemoMode(id)?{canEdit:true,hasSchedule:false}:await readDivisionRuleEditState(divisionId)
       Object.assign(form,{ageGroup:current.ageGroup||'open',gender:current.gender||'混合组',birthDateStart:current.birthDateStart||'',birthDateEnd:current.birthDateEnd||'',matchFormat:current.matchFormat||`${current.playersOnField||8}side`,expectedTeams:Number(current.expectedTeams||current.maxTeams||8),nameSource:'custom',customName:current.name||current.divisionName||''})
       form.birthRangeMethod=current.birthRangeMethod||((current.birthDateStart||current.birthDateEnd)?'manual':'under')
       registrationCount.value=(registrations||[]).filter(row=>!['cancelled','rejected','deleted'].includes(row.status)).length
@@ -71,6 +73,12 @@ async function saveDivision(){
     const payload=buildDivisionBasics({...form,name:finalName.value},{tournamentId:id,existing:division.value,registeredTeams:registrationCount.value})
     if(existingDivisions.value.some(row=>String(row._id||row.id)!==divisionId&&String(row.name||'').trim().toLowerCase()===payload.name.toLowerCase()))throw new Error('组别名称已存在，请修改名称')
     saving.value=true
+    if(isEditing && !isDemoMode(id) && (division.value.rulesLocked===true || division.value.ruleFinalized===true || ['finalized','locked','published'].includes(String(division.value.ruleStatus||'')))){
+      const revision=await reviseDivisionRules(divisionId)
+      if(!revision?.success)throw new Error(revision?.error || revision?.message || '规则修订失败，请重试')
+      Object.assign(division.value,revision.data || {})
+    }
+    if(isEditing){payload.mode=division.value.mode || payload.mode;payload.isProfessional=division.value.isProfessional===true || payload.mode==='professional'}
     if(isEditing){await updateRecord('divisions',divisionId,{...payload,...(isDemoMode(id)?{rulesLocked:false,ruleFinalized:false}:{}),updateTime:new Date()});ElMessage.success('组别设置已保存');if(nextTarget==='rules'){router.push({path:`/tournaments/${id}/competition/rules`,query:{divisionId,step:'format'}})}else{goBack()}}
     else{const result=await addRecord('divisions',{...payload,displayOrder:existingDivisions.value.length+1,rulesVersion:'暂未定版',createTime:new Date(),updateTime:new Date()});ElMessage.success('组别已创建');router.push({path:`/tournaments/${id}/competition/rules`,query:{divisionId:result._id||result.id,step:'format'}})}
   }catch(error){ElMessage.error(error.message||'保存失败，请重试')}finally{saving.value=false}
