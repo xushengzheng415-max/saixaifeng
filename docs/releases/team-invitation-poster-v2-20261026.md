@@ -32,3 +32,14 @@
 2026-10-26 邀请海报与入驻指引顶部文字已替换为现有透明平台LOGO（logo-saixiaofeng.png），三套模板保留比例完整显示；字体、背景及真实邀请码不变。代码10004654、预览源码a4cf33c8已推送Gitee；布局及LOGO回归、原生Canvas导出检查、预览构建通过，完整静态文件发布/preview/admin/，含LOGO共11项资源HTTP200且SHA-256一致，正式/admin/原摘要未变。见docs/releases/team-invitation-poster-v2-20261026.md。
 
 预览入口SHA-256：4a5f4668478d8d4adaa22647267a4901b4231389ca771712c5e84db656c3e98e。LOGO源文件保持透明背景与原始比例，无裁切；红金款居中，其余左对齐。本次仅更新PC预览，无后端或正式PC发布。
+
+
+## 用户验收后的正式发布与测试同步
+
+2026-10-26 用户确认后，三套邀请海报、入驻指引与平台LOGO已合入main并发布正式/admin/，main已同步回preview并重新按/preview/admin/构建发布。正式源码892023bf、测试源码6c56ca7f；两端各403文件上传成功，分别11项入口/关键分包/三张背景/LOGO资源HTTP200且SHA-256与对应本地构建一致。海报回归通过，未发布后端、小程序或H5，组别资料新流程仍待整体验收。详见docs/releases/team-invitation-poster-v2-20261026.md。
+
+- 正式源码：`892023bf70d931f396245ac8b02da14d588fe7fa`；预览源码：`6c56ca7f669e022d71b4d8411385749c2268cc88`。
+- 正式入口SHA-256：`b75b7ffc65cc10eb7cc35ea8999cf2d929706bc6a714d341c326c339bc124163`。
+- 预览入口SHA-256：`d8b6220db0adfd700691e4e2351b4cb857a8766e7c22c3bbb3e4d98ce9667dd9`。
+- 两端分别构建并核对base，未将正式dist直接复用于测试；海报与指引共用既有正式邀请码，不改邀请权限或后台资料流程。
+- 正式仓库按Git对象核对457项构建输入后从仓库内缓存构建；工作区同期其他未提交内容未进入发布。HTTP明细归档于`.codex-artifacts/team-invitation-v2-20261026/{formal,preview}-http.json`。
