@@ -6,6 +6,7 @@ export const TEAM_ENTRY_STEPS = [
   '进入球队管理，邀请球员入库并提交赛事名单'
 ]
 const base=import.meta.env?.BASE_URL || '/admin/'
+export const PLATFORM_LOGO_URL=`${base}logo-saixiaofeng.png`
 export const POSTER_TEMPLATES=[
   {id:'emerald',name:'绿茵赛场',accent:'#bce86b',ink:'#123d2b',background:`${base}images/team-invitation-v2/emerald.png`},
   {id:'crimson',name:'红金荣耀',accent:'#f5d48a',ink:'#6d1822',background:`${base}images/team-invitation-v2/crimson.png`},
@@ -50,6 +51,12 @@ function mask(context,height,opacity=.66){
   context.fillStyle=shade;context.fillRect(0,0,1080,height)
 }
 function label(context,value,x,y,color,size=24,weight=600){context.fillStyle=color;font(context,size,weight);context.fillText(value,x,y)}
+function brand(context,logo,x,centered=false){
+  const width=logo.naturalWidth || logo.width,height=logo.naturalHeight || logo.height
+  if(!width || !height)throw new Error('平台LOGO读取失败，请重试')
+  const scale=Math.min(240/width,64/height),w=width*scale,h=height*scale
+  context.drawImage(logo,centered?(1080-w)/2:x,28,w,h)
+}
 function qrCard(context,qr,x,y,size,ink){
   context.fillStyle='#ffffff';context.fillRect(x,y,size+48,size+122)
   context.drawImage(qr,x+24,y+24,size,size)
@@ -63,7 +70,7 @@ export async function renderTeamInvitationPosters({tournament={},invitation={},t
   const source={name:String(tournament.name || '足球赛事'),start:date(tournament.startDate),end:date(tournament.endDate),location:String(tournament.location || tournament.city || tournament.region || '待公布'),organizer:String(tournament.organizerName || '赛事组委会')}
   const groups=(Array.isArray(invitation.availableDivisions)?invitation.availableDivisions:[]).map(item=>String(item.name || '').trim()).filter(Boolean)
   const metadata=[['时间',source.start+(source.end!=='待公布' && source.end!==source.start?'—'+source.end:'')],['地点',source.location],['组别',groups.join('、') || '扫码后选择开放组别'],['截止','以所选组别为准']]
-  const [qr,background]=await Promise.all([loadImage(invitation.qrCodeUrl),loadImage(theme.background)])
+  const [qr,background,logo]=await Promise.all([loadImage(invitation.qrCodeUrl),loadImage(theme.background),loadImage(PLATFORM_LOGO_URL)])
   function create(height){const canvas=createCanvas();canvas.width=1080;canvas.height=height;const context=canvas.getContext('2d');if(!context)throw new Error('浏览器无法生成海报，请更换浏览器后重试');return {canvas,context}}
   function finish(canvas){try{return canvas.toDataURL('image/png')}catch{throw new Error('二维码图片暂无法导出，请重新生成邀请')}}
   function invite(){
@@ -83,7 +90,7 @@ export async function renderTeamInvitationPosters({tournament={},invitation={},t
     c.fillStyle=theme.ink;c.fillRect(0,0,1080,canvas.height)
     cover(c,background,1080,canvas.height,isRed?-95:isBlue?-100:-310);mask(c,Math.max(650,titleBottom+80),.58)
     c.textAlign=isRed?'center':'left'
-    label(c,'赛小蜂足球',isRed?540:72,76,'#d7e5df',24,500)
+    brand(c,logo,72,isRed)
     if(isBlue){
       label(c,'球队邀约',72,156,theme.accent,48,500)
       title.rows.forEach((row,index)=>label(c,row,72,titleY+index*title.lineHeight,'#ffffff',title.size,700))
@@ -114,7 +121,7 @@ export async function renderTeamInvitationPosters({tournament={},invitation={},t
     const stepHeights=rows.map(row=>Math.max(150,row.length*52+70))
     canvas.height=Math.max(1720,600+stepHeights.reduce((a,b)=>a+b,0)+160)
     c.fillStyle=theme.ink;c.fillRect(0,0,1080,canvas.height);cover(c,background,1080,1440,-480);mask(c,570,.4)
-    c.textAlign='left';label(c,'赛小蜂足球',64,76,'#d3eadf',25)
+    c.textAlign='left';brand(c,logo,64)
     label(c,'球队入驻指引',64,167,'#ffffff',72,700)
     title.rows.forEach((row,index)=>label(c,row,64,249+index*title.lineHeight,'#ffffff',title.size,600))
     qrCard(c,qr,692,122,280,theme.ink)
