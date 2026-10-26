@@ -1,3 +1,5 @@
+2026-10-26 邀请海报与入驻指引顶部文字已替换为现有透明平台LOGO（logo-saixiaofeng.png），三套模板保留比例完整显示；字体、背景及真实邀请码不变。代码10004654、预览源码a4cf33c8已推送Gitee；布局及LOGO回归、原生Canvas导出检查、预览构建通过，完整静态文件发布/preview/admin/，含LOGO共11项资源HTTP200且SHA-256一致，正式/admin/原摘要未变。见docs/releases/team-invitation-poster-v2-20261026.md。
+
 2026-10-26 邀请海报三套视觉与字体细化已发布PC预览：绿茵赛场/红金荣耀/蓝色竞技使用新无文字底图，文字和真实码仍由代码排版；赛事名为主标题，邀请语减重缩小，信息字号和行距增大，日期与括号不拆断。源码40f7f746已推送preview，2945模块/30.26秒构建通过，完整403文件上传，入口及9项关键资源HTTP/SHA256一致，正式/admin/保持原摘要未覆盖。三模板/长文本/码范围回归及Edge原生PNG查看通过。新资料流程仍待整体实现/验收，未修改后端、人证流程或小程序/H5。见docs/releases/team-invitation-poster-v2-20261026.md。
 
 2026-10-26 邀请海报和球队入驻指引已先交付PC预览：功能08fb1f4f，preview应用源码ab06e2c1，2944模块构建通过、完整400文件上传/preview/admin/，入口及6项关键资源HTTP/SHA256一致，正式/admin/入口保持原摘要。报名管理的邀请弹窗已接真实正式码海报、入驻步骤及两张PNG下载；代码回归、组件编译和Edge原生Canvas版面检查通过。用户选择本轮先交海报和指引，组别附加要求、大名单提交后保单补件/OCR及动态参赛证等后续整体验收，未混入本次发布，也未更改现有人证处理。见docs/releases/team-invitation-posters-20261026.md、docs/handoffs/TEAM_ROSTER_MATERIALS_FLOW_2026-10-26.md；正式发布等待本次预览验收。

@@ -25,3 +25,10 @@
 正式/admin/返回200，摘要仍为bb3071d723df841a1fb0a1eed8f5815f189b0b2a9232748a820d4f3122adb0d8，未覆盖。预览源码已推送Gitee，功能分支待本次验收并进入main后再清理。三套邀请与入驻指引实际原生Canvas导出已检查，示例码不可扫码，用户真实下载仍沿现有邀请码接口。
 
 代码与测试：web-admin-vue/src/utils/teamInvitationPoster.js、TeamInvitationDialog.vue、tools/test-team-invitation-posters.mjs；证据位于正式仓库.codex-artifacts/team-invitation-v2-20261026。素材和生成提示词已随上述素材说明归档，未把背景图或测试浏览器配置复制到知识库。
+
+
+## 平台LOGO替换
+
+2026-10-26 邀请海报与入驻指引顶部文字已替换为现有透明平台LOGO（logo-saixiaofeng.png），三套模板保留比例完整显示；字体、背景及真实邀请码不变。代码10004654、预览源码a4cf33c8已推送Gitee；布局及LOGO回归、原生Canvas导出检查、预览构建通过，完整静态文件发布/preview/admin/，含LOGO共11项资源HTTP200且SHA-256一致，正式/admin/原摘要未变。见docs/releases/team-invitation-poster-v2-20261026.md。
+
+预览入口SHA-256：4a5f4668478d8d4adaa22647267a4901b4231389ca771712c5e84db656c3e98e。LOGO源文件保持透明背景与原始比例，无裁切；红金款居中，其余左对齐。本次仅更新PC预览，无后端或正式PC发布。
