@@ -2336,6 +2336,7 @@ async function reviseDivisionRules(db, id, organizerScope) {
   if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
     return { success: false, error: '无权调整其他机构的竞赛组别', code: 'DIVISION_SCOPE_DENIED' }
   }
+  await require('./divisionRuleEditState.cjs').assertEditable(db, before)
   if (!divisionRulesLocked(before)) {
     return { success: false, error: '当前规则草稿尚未定版，请继续编辑草稿', code: 'DIVISION_DRAFT_EXISTS' }
   }
@@ -2359,6 +2360,9 @@ async function reviseDivisionRules(db, id, organizerScope) {
     rulesRevisionPending: true,
     rulesRevisionOf: currentVersion,
     rulesVersionDraft: draftVersion,
+    competitionPlanLocked: false,
+    finalPlanLocked: false,
+    competitionPlanStatus: 'draft',
     activeRulesVersion: currentVersion,
     activeRulesSnapshot: activeSnapshot,
     rulesHistory: history,
@@ -2379,6 +2383,7 @@ async function confirmDivisionRules(db, id, data, organizerScope) {
   if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
     return { success: false, error: '无权确认其他机构的竞赛组别', code: 'DIVISION_SCOPE_DENIED' }
   }
+  await require('./divisionRuleEditState.cjs').assertEditable(db, before)
   if (divisionRulesLocked(before)) {
     return { success: false, error: '竞赛规则已经定版，不能重复确认', code: 'DIVISION_RULES_LOCKED' }
   }
@@ -4673,7 +4678,7 @@ async function handleDbQuery(event) {
     if (delegatedStaff) {
       const tournamentId = String(event.staffTournamentId || '').trim()
       const requestedModule = String(event.staffModule || '').trim()
-      const needed = ['list', 'get', 'count'].includes(operation)
+      const needed = ['list', 'get', 'count', 'divisionRuleEditState'].includes(operation)
         ? staffDbRights.requiredReadRights(collection, requestedModule)
         : collection === 'teams' && operation === 'add' && requestedModule === 'event.registration'
           ? (staffDbRights.writeRights(collection, operation, data).length ? ['event.registration'] : [])
@@ -4698,6 +4703,12 @@ async function handleDbQuery(event) {
 
   try {
     switch (operation) {
+      case 'divisionRuleEditState': {
+        if (collection !== 'divisions' || assistanceScope || !organizerScope) return { success:false, code:'DIVISION_SCOPE_DENIED', error:'无权读取组别规则状态' }
+        const division = await readDocumentOrNull(db, 'divisions', String(id || ''))
+        if (!division || !organizerRecordAllowed('divisions', division, organizerScope)) return { success:false, code:'DIVISION_SCOPE_DENIED', error:'组别不存在或无权查看' }
+        return { success:true, data:await require('./divisionRuleEditState.cjs').readEditState(db, division) }
+      }
       case 'confirmDivisionRules': {
         if (collection !== 'divisions') {
           return { success: false, error: '只允许对竞赛组别执行正式定版', code: 'DIVISION_OPERATION_INVALID' }
@@ -4955,11 +4966,9 @@ async function handleDbQuery(event) {
           if (!organizerRecordAllowed(collection, before, organizerScope)) {
             return { success: false, error: '无权修改其他账号的资料' }
           }
+          if (collection === 'divisions') await require('./divisionRuleEditState.cjs').assertEditable(db, before)
           if (collection === 'divisions' && divisionRulesLocked(before)) {
             return { success: false, error: '竞赛规则已经定版，不能直接修改', code: 'DIVISION_RULES_LOCKED' }
-          }
-          if (collection === 'divisions' && competitionPlanLocked(before)) {
-            return { success: false, error: '竞赛方案已经锁定，不能直接修改', code: 'COMPETITION_PLAN_LOCKED' }
           }
           if (collection === 'tournaments' && Object.keys(data || {}).some(field => [
             'competitionPlanLocked', 'competitionPlanStatus', 'competitionPlanVersion',
