@@ -4716,7 +4716,7 @@ async function handleDbQuery(event) {
         if (assistanceScope) {
           return { success: false, error: '协助模式不能确认竞赛规则', code: 'ASSISTANCE_OPERATION_DENIED' }
         }
-        return confirmDivisionRules(db, id, data, organizerScope)
+        return await confirmDivisionRules(db, id, data, organizerScope)
       }
       case 'reviseDivisionRules': {
         if (collection !== 'divisions') {
@@ -4725,7 +4725,7 @@ async function handleDbQuery(event) {
         if (assistanceScope) {
           return { success: false, error: '协助模式不能调整竞赛规则', code: 'ASSISTANCE_OPERATION_DENIED' }
         }
-        return reviseDivisionRules(db, id, organizerScope)
+        return await reviseDivisionRules(db, id, organizerScope)
       }
       case 'deleteDivision': {
         if (collection !== 'divisions') {
