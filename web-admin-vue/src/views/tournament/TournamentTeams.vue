@@ -281,15 +281,7 @@
         <footer class="claim-dialog-footer"><button type="button" class="claim-cancel" @click="closeClaimInvite">取消</button><button type="button" class="claim-download" @click="downloadClaimCode"><el-icon><Download /></el-icon>下载小程序码</button><button type="button" class="claim-copy" @click="copyClaimInviteLink"><el-icon><CopyDocument /></el-icon>复制认领链接</button></footer>
       </section>
     </div>
-    <el-dialog v-model="targetedRegistrationLinkVisible" title="邀请球队" width="min(620px, calc(100vw - 32px))" destroy-on-close>
-      <div class="public-invite-content" v-loading="creatingTargetedRegistrationLink">
-        <img v-if="isDemoModeActive" :src="demoInvitationImageUrl" alt="球队邀请示例，展示赛事、组别、日期、地点和报名资料" style="display:block;width:100%;max-width:400px;margin:auto" />
-        <el-alert v-if="targetedRegistrationError" :title="targetedRegistrationError" type="error" :closable="false" show-icon />
-        <el-form v-else-if="targetedRegistrationResult?.urlLink" label-position="top"><el-form-item label="公开邀约链接"><el-input :model-value="targetedRegistrationResult.urlLink" readonly aria-label="公开邀约链接" /></el-form-item></el-form>
-        <span v-else-if="!isDemoModeActive" class="invite-pending" role="status">正在生成邀约链接…</span>
-      </div>
-      <template #footer><el-button @click="targetedRegistrationLinkVisible=false">关闭</el-button><el-button v-if="targetedRegistrationError" :loading="creatingTargetedRegistrationLink" @click="createTargetedRegistrationLink">重试</el-button><el-button v-if="targetedRegistrationResult?.urlLink" type="primary" @click="copyTargetedRegistrationLink">复制链接</el-button></template>
-    </el-dialog>
+    <TeamInvitationDialog v-model="targetedRegistrationLinkVisible" :tournament="tournament" :result="targetedRegistrationResult" :loading="creatingTargetedRegistrationLink" :error="targetedRegistrationError" :demo="isDemoModeActive" :demo-image="demoInvitationImageUrl" @retry="createTargetedRegistrationLink" @copy="copyTargetedRegistrationLink" />
     <el-dialog v-model="claimCodeVisible" title="球队认领码" width="620px" destroy-on-close><DemoTeamClaim v-if="isDemoModeActive" :tournament-name="tournament.name" :teams="divisionTournamentTeams"/><div v-else class="targeted-link-dialog" v-loading="claimCodeLoading"><el-alert type="info" :closable="false" :title="miniProgramQrEnvVersion === 'trial' ? '预览环境使用体验版认领码；请用已加入体验成员的微信扫码测试。' : '一个赛事一个认领码，可群发或张贴。球队负责人扫码后在小程序验证手机号，即可看到自己名下待认领的球队。'"/><section v-if="claimCodeResult" class="targeted-link-result"><img v-if="claimCodeResult.qrCodeUrl" :src="claimCodeResult.qrCodeUrl" alt="赛事球队认领码"/><div><strong>球队认领码已生成</strong><el-tag type="success" size="small">{{ miniProgramQrEnvVersion === 'trial' ? '体验版' : '正式版' }}</el-tag><span>有效期至 {{ claimCodeExpiryText }}</span><p>把二维码发给领队，球队负责人扫码后按报名表登记的领队或主教练手机号自助认领。</p></div></section><el-alert v-else-if="claimCodeError" type="error" :closable="false" show-icon title="赛事认领码生成失败" :description="claimCodeError"/><el-empty v-else description="正在生成球队认领码…"/></div><template #footer><el-button @click="claimCodeVisible=false">关闭</el-button><el-button v-if="claimCodeResult" type="success" @click="downloadClaimPoster">下载认领海报</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.urlLink" @click="copyClaimCodeLink">复制链接</el-button><el-button v-if="claimCodeResult" :disabled="!claimCodeResult.qrCodeUrl" @click="downloadTournamentClaimCode">下载二维码</el-button></template></el-dialog>
     <el-dialog v-model="teamActionDialogVisible" title="更多操作" width="360px" destroy-on-close><div v-if="teamActionTarget" class="team-action-dialog"><strong>{{ teamActionTarget.name || teamActionTarget.teamName || '当前球队' }}</strong><el-button @click="openTeamPlayersFromDialog">查看球队</el-button><el-button @click="openTeamEditFromDialog">编辑球队</el-button><el-button v-if="isProfessional && teamActionTarget.status === 'approved'" @click="openTeamRosterFromDialog">查看名单</el-button><el-button v-if="isRegistrationWorkspace && ['approved','rejected'].includes(teamActionTarget.status)" @click="retryRegistrationNotificationFromDialog">重发通知</el-button><el-button v-if="isRegistrationWorkspace && claimLabel(teamActionTarget) !== '已认领'" type="danger" plain @click="deleteTeamFromDialog">删除队伍</el-button><el-button v-else-if="isRegistrationWorkspace" type="warning" plain @click="removeTeamFromDialog">移出赛事</el-button></div></el-dialog>
 
@@ -565,6 +557,7 @@ import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useReadCacheRefresh } from '../../utils/useReadCacheRefresh.js'
 import QRCode from 'qrcode'
 import DemoTeamClaim from '../../components/tournament/DemoTeamClaim.vue'
+import TeamInvitationDialog from '../../components/tournament/TeamInvitationDialog.vue'
 import { divisionParticipantType, virtualTeamMatchesDivision } from '../../utils/divisionBasics'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -2598,6 +2591,7 @@ function openTargetedRegistrationLinkDialog() {
   void createTargetedRegistrationLink()
 }
 async function createTargetedRegistrationLink() {
+  if(creatingTargetedRegistrationLink.value)return
   creatingTargetedRegistrationLink.value = true
   targetedRegistrationError.value = ''
   try {
