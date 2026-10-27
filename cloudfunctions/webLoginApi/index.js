@@ -90,6 +90,12 @@ const WECHAT_CONFIG = {
   APP_SECRET: process.env.WECHAT_WEB_APPSECRET || '',
 }
 
+// 小程序登录配置（新球员端小程序 AppID，从环境变量读取）
+const MINI_PROGRAM_CONFIG = {
+  APP_ID: process.env.MINI_PROGRAM_APP_ID || '',
+  APP_SECRET: process.env.MINI_PROGRAM_APP_SECRET || '',
+}
+
 // 服务号裁判工作台使用独立 AppID/OpenID，不能与 PC 扫码登录或小程序 OpenID 混用。
 const SERVICE_ACCOUNT_CONFIG = {
   APP_ID: process.env.SERVICE_ACCOUNT_APP_ID || '',
@@ -171,7 +177,8 @@ const ORGANIZER_PRIVATE_COLLECTIONS = new Set([
   'matches', 'match_events', 'match_referees', 'tournament_referees',
   'tournament_teams', 'tournament_groups', 'tournament_bracket',
   'tournament_league_tables', 'rosters', 'roster_change_requests',
-  'squads', 'standings', 'schedule_info', 'team_tasks', 'divisions'
+  'squads', 'standings', 'schedule_info', 'team_tasks', 'divisions',
+  'disciplinary_actions'
 ])
 
 const ORGANIZER_SCOPED_RELAY_FUNCTIONS = new Set([
@@ -191,7 +198,7 @@ const SESSION_REQUIRED_RELAY_FUNCTIONS = new Set([
   'reviewRosterChange',
   'parseTournamentRegulations', 'saveSignature', 'getSignatureStatus',
   'updateMatchSignature', 'updateMatchLineup', 'applyTournament',
-  'tournamentReview', 'getMyTeams', 'bindPhone'
+  'tournamentReview', 'getMyTeams', 'bindPhone', 'tournamentAssistant'
 ])
 
 // 这些入口会直接创建或修改赛事业务数据。没有已确认的机构租户时，
@@ -635,7 +642,7 @@ async function officialAccountAccessToken() {
   if(serviceAccountAccessTokenCache&&serviceAccountAccessTokenCache.expiresAt>Date.now()+120000)return serviceAccountAccessTokenCache.value
   if(!SERVICE_ACCOUNT_CONFIG.APP_ID||!SERVICE_ACCOUNT_CONFIG.APP_SECRET)throw Object.assign(new Error('服务号凭据尚未配置'),{code:'SERVICE_ACCOUNT_NOT_CONFIGURED'})
   const result=await httpsGet('https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid='+encodeURIComponent(SERVICE_ACCOUNT_CONFIG.APP_ID)+'&secret='+encodeURIComponent(SERVICE_ACCOUNT_CONFIG.APP_SECRET))
-  if(!result||!result.access_token)throw Object.assign(new Error('获取服务号接口凭据失败'),{code:String(result&&result.errcode||'SERVICE_ACCESS_TOKEN_FAILED')})
+  if(!result||!result.access_token)throw Object.assign(new Error('获取服务号接口凭据失败'),{code:String(result&&result.errcode||'SERVICE_ACCESS_TOKEN_FAILED'),wxErrorText:String(result&&result.errmsg||'')})
   serviceAccountAccessTokenCache={value:result.access_token,expiresAt:Date.now()+Math.max(300,Number(result.expires_in||7200)-300)*1000}
   return serviceAccountAccessTokenCache.value
 }
@@ -2335,6 +2342,7 @@ async function reviseDivisionRules(db, id, organizerScope) {
   if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
     return { success: false, error: '无权调整其他机构的竞赛组别', code: 'DIVISION_SCOPE_DENIED' }
   }
+  await require('./divisionRuleEditState.cjs').assertEditable(db, before)
   if (!divisionRulesLocked(before)) {
     return { success: false, error: '当前规则草稿尚未定版，请继续编辑草稿', code: 'DIVISION_DRAFT_EXISTS' }
   }
@@ -2358,6 +2366,9 @@ async function reviseDivisionRules(db, id, organizerScope) {
     rulesRevisionPending: true,
     rulesRevisionOf: currentVersion,
     rulesVersionDraft: draftVersion,
+    competitionPlanLocked: false,
+    finalPlanLocked: false,
+    competitionPlanStatus: 'draft',
     activeRulesVersion: currentVersion,
     activeRulesSnapshot: activeSnapshot,
     rulesHistory: history,
@@ -2378,6 +2389,7 @@ async function confirmDivisionRules(db, id, data, organizerScope) {
   if (!before || !organizerRecordAllowed('divisions', before, organizerScope)) {
     return { success: false, error: '无权确认其他机构的竞赛组别', code: 'DIVISION_SCOPE_DENIED' }
   }
+  await require('./divisionRuleEditState.cjs').assertEditable(db, before)
   if (divisionRulesLocked(before)) {
     return { success: false, error: '竞赛规则已经定版，不能重复确认', code: 'DIVISION_RULES_LOCKED' }
   }
@@ -2919,37 +2931,27 @@ async function normalizeOrganizerUser(db, user) {
   return { ...user, role: ORGANIZER_ROLE }
 }
 
-function httpsPost(hostname, port, path, headers, payload) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(payload)
-    const req = https.request({ hostname, port, path, method: 'POST', headers }, (res) => {
-      let body = ''
-      res.on('data', c => body += c)
-      res.on('end', () => {
-        try { resolve(JSON.parse(body)) }
-        catch(e) { resolve(body) }
-      })
-    })
-    req.on('error', reject)
-    req.setTimeout(15000, () => { req.destroy(new Error('timeout')) })
-    req.write(data)
-    req.end()
+// Outbound calls use global fetch (undici). The legacy https.request/https.get
+// stack was observed hanging indefinitely against api.weixin.qq.com in
+// production (120s function kill, socket timeout never armed), while fetch on
+// the same host returns in ~1s. Signatures and return semantics are preserved:
+// resolve parsed JSON or the raw string; reject on network error/timeout.
+async function httpsPost(hostname, port, path, headers, payload) {
+  const target = 'https://' + hostname + (port && Number(port) !== 443 ? ':' + port : '') + path
+  const response = await fetch(target, {
+    method: 'POST',
+    headers: headers || undefined,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15000)
   })
+  const text = await response.text()
+  try { return JSON.parse(text) } catch (e) { return text }
 }
 
-function httpsGet(url, headers) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, headers ? { headers } : undefined, (res) => {
-      let data = ''
-      res.on('data', c => data += c)
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)) }
-        catch(e) { resolve(data) }
-      })
-    })
-    req.on('error', reject)
-    req.setTimeout(10000, () => { req.destroy(new Error('timeout')) })
-  })
+async function httpsGet(url, headers) {
+  const response = await fetch(url, { headers: headers || undefined, signal: AbortSignal.timeout(10000) })
+  const text = await response.text()
+  try { return JSON.parse(text) } catch (e) { return text }
 }
 
 // ========== TC3 签名（腾讯云 SMS）==========
@@ -3005,6 +3007,95 @@ async function callTencentSMS(phoneNumber, code) {
 }
 
 // ========== 操作实现 ==========
+
+// 小程序登录：code 换 openid/unionid → 查找用户 → 创建 session
+async function handleMiniProgramLogin(event) {
+  const { code } = event
+  if (!code || typeof code !== 'string' || code.length < 10) {
+    return { success: false, error: '缺少有效的登录凭证 code', code: 'MINI_PROGRAM_CODE_REQUIRED' }
+  }
+  if (!MINI_PROGRAM_CONFIG.APP_ID || !MINI_PROGRAM_CONFIG.APP_SECRET) {
+    console.error('[webApi] miniProgramLogin 配置缺失：MINI_PROGRAM_APP_ID / MINI_PROGRAM_APP_SECRET 未设置')
+    return { success: false, error: '小程序登录配置未完成，请联系管理员', code: 'MINI_PROGRAM_CONFIG_MISSING' }
+  }
+
+  // 1. code 换 openid + unionid
+  const sessionUrl = 'https://api.weixin.qq.com/sns/jscode2session?appid=' + MINI_PROGRAM_CONFIG.APP_ID +
+    '&secret=' + MINI_PROGRAM_CONFIG.APP_SECRET + '&js_code=' + encodeURIComponent(code) + '&grant_type=authorization_code'
+  let sessionData
+  try {
+    sessionData = await httpsGet(sessionUrl)
+  } catch (err) {
+    console.error('[webApi] miniProgramLogin jscode2session 网络异常:', err.message)
+    return { success: false, error: '微信服务连接失败，请稍后重试', code: 'MINI_PROGRAM_WX_NETWORK' }
+  }
+  if (!sessionData || sessionData.errcode) {
+    console.error('[webApi] miniProgramLogin jscode2session 失败:', sessionData && sessionData.errcode, sessionData && sessionData.errmsg)
+    return { success: false, error: '微信登录失败，请稍后重试', code: 'MINI_PROGRAM_WX_AUTH_FAILED' }
+  }
+  const openid = String(sessionData.openid || '')
+  const unionid = String(sessionData.unionid || '')
+  if (!openid) {
+    return { success: false, error: '微信登录结果异常，请重试', code: 'MINI_PROGRAM_OPENID_MISSING' }
+  }
+
+  // 2. 查找用户：优先 unionId（跨端一致），其次 openid（本端唯一）
+  const db = cloud.database()
+  let user = null
+  let userId = ''
+
+  if (unionid) {
+    const unionResult = await db.collection('users').where({ unionId: unionid }).limit(2).get()
+    const unionRows = unionResult.data || []
+    if (unionRows.length > 1) {
+      console.error('[webApi] miniProgramLogin unionId 冲突:', unionid, '命中', unionRows.length, '个账号')
+      return { success: false, error: '账号数据异常，请联系管理员处理', code: 'MINI_PROGRAM_UNIONID_CONFLICT' }
+    }
+    if (unionRows.length === 1) {
+      user = unionRows[0]
+      userId = user._id
+    }
+  }
+
+  if (!user) {
+    const openidResult = await db.collection('users').where({ wechatOpenId: openid }).limit(2).get()
+    const openidRows = openidResult.data || []
+    if (openidRows.length > 1) {
+      console.error('[webApi] miniProgramLogin openid 冲突:', openid, '命中', openidRows.length, '个账号')
+      return { success: false, error: '账号数据异常，请联系管理员处理', code: 'MINI_PROGRAM_OPENID_CONFLICT' }
+    }
+    if (openidRows.length === 1) {
+      user = openidRows[0]
+      userId = user._id
+    }
+  }
+
+  // 3. 用户存在 → 补写 unionId/openid → 创建 session
+  if (user) {
+    const updates = {}
+    if (unionid && user.unionId !== unionid) updates.unionId = unionid
+    if (openid && user.wechatOpenId !== openid) updates.wechatOpenId = openid
+    if (Object.keys(updates).length > 0) {
+      await db.collection('users').doc(userId).update({ data: updates })
+    }
+    const token = await createWebSession(userId, 'mini_program')
+    return {
+      success: true,
+      token,
+      user: { _id: userId, role: user.role || ORGANIZER_ROLE },
+      needBindPhone: !user.phone && !user.phoneNumber
+    }
+  }
+
+  // 4. 用户不存在 → 返回 openid/unionid，前端引导绑定手机号
+  return {
+    success: true,
+    needBindPhone: true,
+    miniProgramOpenId: openid,
+    unionId: unionid,
+    message: '该微信尚未绑定手机号，请先完成手机号验证'
+  }
+}
 
 // 1. 发送短信验证码
 async function handleSendSms(event) {
@@ -3907,6 +3998,7 @@ async function handleCheckLogin(event) {
 // 用于浏览器端调用非登录类云函数（如 uploadFile）
 // ★ 添加云函数白名单，防止调用危险云函数
 const ALLOWED_FUNCTIONS = [
+  'tournamentAssistant', // AI 办赛助手：只读本赛事数据，供 PC 主控台对话使用
   'tournamentStaffAccess',
   'dataCenter',
   'uploadFile',
@@ -4145,16 +4237,25 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
         const uploadRight = functionName === 'uploadFile' && tournamentId
           ? await staffUploadRight(db, { ...(functionParams || {}), staffModule: event.staffModule }, tournamentId, authenticated.orgId, authenticated.userId) : ''
         const rule = uploadRight ? [uploadRight] : relayRights(functionName, functionParams || {})
+        const scopeOk = functionName === 'uploadFile' ? true : await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId)
+        const candidateRights = Array.isArray(rule) ? rule : (Array.isArray(rule && rule.any) ? rule.any : [])
+        const rightMap = {}
+        if (candidateRights.length) {
+          const values = await Promise.all(candidateRights.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))
+          candidateRights.forEach((right, index) => { rightMap[right] = Boolean(values[index]) })
+        }
+        const rightsOk = Array.isArray(rule)
+          ? candidateRights.length > 0 && candidateRights.every(right => rightMap[right])
+          : candidateRights.some(right => rightMap[right])
         const allowed = Array.isArray(rule) && rule.length === 0 && functionName === 'tournamentStaffAccess' ||
-          Boolean(rule && tournamentId && (functionName === 'uploadFile' || await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId)) && (
-            Array.isArray(rule)
-              ? (await Promise.all(rule.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).every(Boolean)
-              : Array.isArray(rule.any) && (await Promise.all(rule.any.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).some(Boolean)
-          ))
-        if (!allowed) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
+          Boolean(rule && tournamentId && scopeOk && rightsOk)
+        if (!allowed) {
+          console.warn('[webApi] 子账号中转被拒:', JSON.stringify({ functionName, keys: Object.keys(functionParams || {}), action: String(functionParams && functionParams.action || ''), career: functionParams && functionParams.career === true, tournamentId, rule, scopeOk, rightsOk, rightMap }))
+          return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
+        }
       }
     }
-    const personalWorkspaceLookup = functionName === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations'].includes(String(functionParams?.action || ''))
+    const personalWorkspaceLookup = functionName === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations', 'leave'].includes(String(functionParams?.action || ''))
     if (authenticated && !assistanceGrantId && ORGANIZER_REQUIRED_RELAY_FUNCTIONS.has(functionName) && !personalServiceBinding && !personalWorkspaceLookup) {
       if (authenticated.user.organizationConflict) {
         return { success: false, error: '当前账号关联多个机构，请先完成机构核验', code: 'ORG_CONFLICT' }
@@ -4557,14 +4658,18 @@ async function handlePaperRefereeReport(event, confirming) {
     const fileId=String(event.fileId || '')
     const referenceSlash=fileId.indexOf('/',8); const filePath=referenceSlash>=0?fileId.slice(referenceSlash+1):''
     if(!fileId.startsWith('cloud://') || !filePath.startsWith(uploadFolder+'/') || filePath.includes('..') || fileId.includes('?'))return {success:false,error:'照片不属于本场比赛，请重新上传'}
+    const tDownload=Date.now()
     const downloaded=await cloud.downloadFile({fileID:fileId})
+    console.log('[refereeReport] step=download cost='+(Date.now()-tDownload)+'ms bytes='+((downloaded.fileContent&&downloaded.fileContent.length)||0))
     const image=downloaded.fileContent
     if(!Buffer.isBuffer(image) || !image.length || image.length>3*1024*1024)return {success:false,error:'请选择不超过3MB的JPG或PNG照片'}
     const db=cloud.database()
     const [division,tournament]=await Promise.all([match.divisionId&&match.divisionId!=='default'?readDocumentOrNull(db,'divisions',String(match.divisionId)):Promise.resolve(null),readDocumentOrNull(db,'tournaments',String(match.tournamentId))])
     if(division?.tournamentId&&String(division.tournamentId)!==String(match.tournamentId))return {success:false,error:'比赛组别范围不一致，请检查赛事配置'}
     const timing=ocr.resolveTiming(match,division || {},tournament || {})
-    const recognized=await ocr.recognize(image.toString('base64'),timing,{blankRoleAsBench:identity.miniPaper ? event.blankRoleAsBench===true : true,circledGoals:identity.miniPaper ? event.circledGoals===true : true})
+    const tRecognize=Date.now()
+    const recognized=await ocr.recognize(image.toString('base64'),timing,{budgetMs:identity.miniPaper?45000:0,blankRoleAsBench:identity.miniPaper ? event.blankRoleAsBench===true : true,circledGoals:identity.miniPaper ? event.circledGoals===true : true})
+    console.log('[refereeReport] step=recognize cost='+(Date.now()-tRecognize)+'ms home='+recognized.teams.home.length+' away='+recognized.teams.away.length+' warnings='+((recognized.warnings||[]).length))
     const evidence={matchId:String(match._id),fileId,imageHash:recognized.imageHash,analysisVersion:recognized.analysisVersion,timing,...(recognized.roleConvention?{roleConvention:recognized.roleConvention}:{})}
     return {success:true,data:{teams:recognized.teams,score:recognized.score,imageQuality:recognized.imageQuality || null,timing,warnings:recognized.warnings,annotations:recognized.annotations || [],rawLines:recognized.rawLines || [],evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
   }
@@ -4609,6 +4714,14 @@ async function handlePaperRefereeReport(event, confirming) {
     if (players.length>maxStarters) return {success:false,error:'首发人数超过本场比赛人数'}
     if ([...players,...substitutes].filter(row=>row.isCaptain).length>1 || [...players,...substitutes].filter(row=>row.isGoalkeeper).length>1) return {success:false,error:'请核对队长和守门员标记'}
     lineups[side]={players,substitutes,source:'organizer_paper_report'}
+    const layoutInput=event.formations && event.formations[side]
+    if (layoutInput) {
+      try {
+        const layout=require('./sharedFormation.cjs').validate(maxStarters,layoutInput,players.map(row=>row.playerId))
+        players.forEach(row=>{row.role=layout.roles[row.playerId]})
+        lineups[side].formation=layout.formation
+      } catch (error) { return {success:false,error:error.message || '首发位置与球员不一致，请重新排阵'} }
+    }
   }
   const substitutions=Array.isArray(event.substitutions)?event.substitutions:[]
   try { entries.push(...require('./refereeSubstitutionBatch.cjs').buildEntries(substitutions,allowedPlayers,match,evidence)) }
@@ -4635,6 +4748,78 @@ async function handlePaperRefereeReport(event, confirming) {
   if (event.expectedEventRevision == null || Number(event.expectedEventRevision)!==Number(match.matchEventRevision || 0)) return {success:false,error:'比赛记录已更新，请重新上传核对'}
   const data={lineups,events,...(identity.miniPaper?{status:'finished'}:{}),paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,goalCorrections:reconciliation.conflicts,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
   return handleCallFunction({...event,functionName:'updateMatch',functionParams:{action:'importPaperReport',matchId:match._id,expectedEventRevision:event.expectedEventRevision,paperReportProof:ocr.signImport(match._id,event.expectedEventRevision,data),data}},true)
+}
+
+// 平台公用演示数据池：只读返回平台机构下的合成球队与球员。
+// 这些记录不属于任何自然人账号或主办方机构，只在网页演示模式被调用。
+// 返回值按字段白名单裁剪，不包含 orgId、creatorId、手机号等私有字段。
+const DEMO_POOL_ORG_ID = process.env.DEMO_POOL_ORG_ID || '6ad5e27d0c3bba9a50b65592'
+const DEMO_POOL_DATASET_ID = process.env.DEMO_POOL_DATASET_ID || 'football-ai-fixtures-20260822-16teams-v1'
+const DEMO_POOL_MAX_ROWS = 5000
+
+function isSyntheticDemoRecord(record) {
+  return record.synthetic === true || record.isTest === true || Boolean(record.syntheticDatasetId) || Boolean(record.syntheticKey) || record.source === 'ai_fixture'
+}
+
+async function readDemoPoolRows(db, collection, orgId) {
+  const rows = []
+  for (let skip = 0; skip < DEMO_POOL_MAX_ROWS; skip += 1000) {
+    const result = await db.collection(collection).where({ orgId }).skip(skip).limit(1000).get()
+    const page = result.data || []
+    rows.push(...page)
+    if (page.length < 1000) break
+  }
+  return rows
+}
+
+function demoPoolBirthDate(value) {
+  if (!value) return ''
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value).slice(0, 10)
+}
+
+async function handleDemoPoolDataset(event) {
+  const authenticated = await authenticateWebSession(event)
+  if (!authenticated.success) return authenticated
+  try {
+    const db = cloud.database()
+    const teamRows = (await readDemoPoolRows(db, 'teams', DEMO_POOL_ORG_ID)).filter(isSyntheticDemoRecord)
+    const teamIds = new Set(teamRows.map(row => String(row._id)))
+    const playerRows = (await readDemoPoolRows(db, 'players', DEMO_POOL_ORG_ID))
+      .filter(row => isSyntheticDemoRecord(row) && teamIds.has(String(row.teamId)))
+    const datasetId = teamRows.map(row => row.syntheticDatasetId).find(Boolean) || DEMO_POOL_DATASET_ID
+    return {
+      success: true,
+      dataset: {
+        datasetId,
+        teams: teamRows.map(row => ({
+          id: String(row._id),
+          name: row.name || row.teamName || '',
+          ageGroup: row.ageGroup || '',
+          logo: row.logo || row.logoUrl || '',
+          syntheticKey: row.syntheticKey || '',
+          datasetId: row.syntheticDatasetId || datasetId,
+          playerCount: Number(row.playerCount) || 0
+        })),
+        players: playerRows.map(row => ({
+          id: String(row._id),
+          teamId: String(row.teamId),
+          name: row.name || row.realName || '',
+          birthDate: demoPoolBirthDate(row.birthDate),
+          gender: row.gender || '',
+          number: Number(row.jerseyNumber || row.number || 0) || 0,
+          position: row.position || '',
+          photo: row.photoUrl || row.avatarUrl || row.photoFileID || ''
+        })),
+        teamCount: teamRows.length,
+        playerCount: playerRows.length,
+        generatedAt: new Date().toISOString()
+      }
+    }
+  } catch (error) {
+    console.error('[webApi] demoPoolDataset 读取失败:', error)
+    return { success: false, error: error.message || '演示数据读取失败' }
+  }
 }
 
 async function handleDbQuery(event) {
@@ -4677,7 +4862,7 @@ async function handleDbQuery(event) {
     if (delegatedStaff) {
       const tournamentId = String(event.staffTournamentId || '').trim()
       const requestedModule = String(event.staffModule || '').trim()
-      const needed = ['list', 'get', 'count'].includes(operation)
+      const needed = ['list', 'get', 'count', 'divisionRuleEditState'].includes(operation)
         ? staffDbRights.requiredReadRights(collection, requestedModule)
         : collection === 'teams' && operation === 'add' && requestedModule === 'event.registration'
           ? (staffDbRights.writeRights(collection, operation, data).length ? ['event.registration'] : [])
@@ -4702,6 +4887,12 @@ async function handleDbQuery(event) {
 
   try {
     switch (operation) {
+      case 'divisionRuleEditState': {
+        if (collection !== 'divisions' || assistanceScope || !organizerScope) return { success:false, code:'DIVISION_SCOPE_DENIED', error:'无权读取组别规则状态' }
+        const division = await readDocumentOrNull(db, 'divisions', String(id || ''))
+        if (!division || !organizerRecordAllowed('divisions', division, organizerScope)) return { success:false, code:'DIVISION_SCOPE_DENIED', error:'组别不存在或无权查看' }
+        return { success:true, data:await require('./divisionRuleEditState.cjs').readEditState(db, division) }
+      }
       case 'confirmDivisionRules': {
         if (collection !== 'divisions') {
           return { success: false, error: '只允许对竞赛组别执行正式定版', code: 'DIVISION_OPERATION_INVALID' }
@@ -4709,7 +4900,7 @@ async function handleDbQuery(event) {
         if (assistanceScope) {
           return { success: false, error: '协助模式不能确认竞赛规则', code: 'ASSISTANCE_OPERATION_DENIED' }
         }
-        return confirmDivisionRules(db, id, data, organizerScope)
+        return await confirmDivisionRules(db, id, data, organizerScope)
       }
       case 'reviseDivisionRules': {
         if (collection !== 'divisions') {
@@ -4718,7 +4909,7 @@ async function handleDbQuery(event) {
         if (assistanceScope) {
           return { success: false, error: '协助模式不能调整竞赛规则', code: 'ASSISTANCE_OPERATION_DENIED' }
         }
-        return reviseDivisionRules(db, id, organizerScope)
+        return await reviseDivisionRules(db, id, organizerScope)
       }
       case 'deleteDivision': {
         if (collection !== 'divisions') {
@@ -4961,11 +5152,9 @@ async function handleDbQuery(event) {
           if (!organizerRecordAllowed(collection, before, organizerScope)) {
             return { success: false, error: '无权修改其他账号的资料' }
           }
+          if (collection === 'divisions') await require('./divisionRuleEditState.cjs').assertEditable(db, before)
           if (collection === 'divisions' && divisionRulesLocked(before)) {
             return { success: false, error: '竞赛规则已经定版，不能直接修改', code: 'DIVISION_RULES_LOCKED' }
-          }
-          if (collection === 'divisions' && competitionPlanLocked(before)) {
-            return { success: false, error: '竞赛方案已经锁定，不能直接修改', code: 'COMPETITION_PLAN_LOCKED' }
           }
           if (collection === 'tournaments' && Object.keys(data || {}).some(field => [
             'competitionPlanLocked', 'competitionPlanStatus', 'competitionPlanVersion',
@@ -5916,6 +6105,23 @@ exports.main = async (event, context) => {
     return response(200, '')
   }
 
+  // 微信支付回调：必须在通用参数解析之前，按原始报文 + 微信签名头验签后再决定是否入账。
+  // 微信支付 v3 的 notify_url 不允许携带查询串，正式回调走 <共用域名>/honeyPayNotify 纯路径；
+  // 同时保留 ?action=honeyPayNotify，供本地/调试与旧配置兼容。
+  // 返回值原样写回微信支付（成功必须 200 + {"code":"SUCCESS"}）。
+  const notifyAction = String((event.queryStringParameters && event.queryStringParameters.action) || (event.queryParameters && event.queryParameters.action) || '')
+  const notifyPath = String(event.path || (event.requestContext && event.requestContext.path) || '').toLowerCase()
+  const notifyByPath = /(^|\/)honeypaynotify\/?$/.test(notifyPath)
+  if (notifyAction === 'honeyPayNotify' || notifyByPath) {
+    const notified = await require('./honeyRecharge.cjs').handleNotify(event, cloud.database())
+    return {
+      statusCode: Number(notified && notified.statusCode) || 500,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify((notified && notified.body) || { code: 'FAIL', message: '处理失败' }),
+      isBase64Encoded: false
+    }
+  }
+
   // 从 HTTP 请求体或 SDK 调用中提取参数
   const params = parseHttpRequestParams(event)
   if(event.httpMethod==='POST'&&String(event.headers&&(event.headers['content-type']||event.headers['Content-Type'])||'').toLowerCase().includes('multipart/form-data')){
@@ -5985,6 +6191,9 @@ exports.main = async (event, context) => {
       case 'wechatWebLogin':
         result = await handleWechatOnlyLogin(params)
         break
+      case 'miniProgramLogin':
+        result = await handleMiniProgramLogin(params)
+        break
       case 'wechatPhoneChallenge':
         result = await handleWechatOnlyLogin(params)
         if (result && result.success && result.directLogin && result.user && result.user._id) {
@@ -6024,10 +6233,42 @@ exports.main = async (event, context) => {
       case 'publicDataCenter':
         result = await require('./publicDataCenter.cjs')(cloud.database(), params)
         break
+      case 'marketingSelfTestEvent':
+        result = await require('./marketingSelfTest.cjs').record(cloud.database(), params)
+        break
+      case 'marketingSelfTestSummary': {
+        const auth = await authenticateWebSession(params)
+        result = auth.success && auth.principalType === 'platform_owner'
+          ? await require('./marketingSelfTest.cjs').summary(cloud.database(), params)
+          : {success:false,code:'PLATFORM_OWNER_REQUIRED',error:'仅平台负责人可查看营销活动数据'}
+        break
+      }
+      case 'platformHoneyPaymentConfig': {
+        // 支付配置体检：只回「是否已配置 / 格式 / 脱敏指纹」，密钥明文永不返回浏览器。
+        const auth = await authenticateWebSession(params)
+        result = auth.success && auth.principalType === 'platform_owner'
+          ? await require('./honeyRecharge.cjs').paymentConfigStatus()
+          : {success:false,code:'PLATFORM_OWNER_REQUIRED',error:'仅平台负责人可查看支付配置'}
+        break
+      }
+      case 'marketingSelfTestWxConfig': {
+        const url = String(params.url || '').split('#')[0]
+        if (!/^https:\/\/www\.sxffootball\.cn\/service-account-h5\/(?:valuation-self-test|self-register)\.html(?:\?[^#]*)?$/.test(url)) {
+          result = {success:false,code:'SELFTEST_URL_INVALID',error:'页面地址无效'}
+          break
+        }
+        const reply = await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'marketingSelfTestWxSignature',url}})
+        const signed = reply&&reply.result||{}
+        result = signed.success===true&&signed.jsConfig
+          ? {success:true,jsConfig:signed.jsConfig}
+          : {success:false,code:signed.code||'SELFTEST_WECHAT_CONFIG_FAILED',error:signed.message||'微信跳转配置暂不可用'}
+        break
+      }
       case 'getMyPreloadedPlayerCard':
       case 'previewMyPreloadedPlayerCard':
       case 'saveMyPreloadedPlayerCard':
       case 'selectMyPlayerCard':
+      case 'deleteMyPlayerCard':
       case 'getMyPlayerPointsLedger':
       case 'submitMyPlayerPointsAppeal':
       case 'listMyPlayerPointsAppeals':
@@ -6043,6 +6284,31 @@ exports.main = async (event, context) => {
       case 'getPlayerCardForViewer':
       case 'getPlayerCardById':
         result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,buildStaffEventScope,recordBelongsToStaffEvent})(params); break
+      case 'getPlayerCardGameHome':
+      case 'getMyGameShares':
+      case 'listCollectiblePlayerCards':
+      case 'getMyCollectionCodex':
+      case 'listGameFormations':
+      case 'listMyGameLineups':
+      case 'getMyGameLineup':
+      case 'listGameOpponents':
+      case 'listMyGameMatches':
+      case 'getGameMatchDetail':
+      case 'publishPlayerCardShare':
+      case 'revokePlayerCardShare':
+      case 'collectPlayerCard':
+      case 'saveGameLineup':
+      case 'deleteGameLineup':
+      case 'challengeGameLineup':
+      case 'getCoachCard':
+      case 'feedCoachCard':
+      case 'listGameRunes':
+      case 'equipGameRune':
+      case 'unequipGameRune':
+      case 'decomposeGameRune':
+      case 'listGameSkills':
+      case 'useGameSkill':
+        result = await require('./playerCardGame.cjs').createPlayerCardGame({ cloud, hashSessionToken, dateValue })(params); break
       case 'getAdminPlayerCard':
       case 'saveAdminPlayerCard':
         result = await require('./playerCardsAdmin.cjs').createAdminPlayerCards({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
@@ -6079,6 +6345,9 @@ exports.main = async (event, context) => {
       case 'publicTournamentCenter':
         result = await getPublicTournamentCenter()
         break
+      case 'liveFeed':
+        result = await require('./liveFeed.cjs')(cloud, params)
+        break
       case 'fanOAuthUrl':
         result = await fanCenterHandlers().createFanOAuthUrl(params && params.returnUrl); break
       case 'fanOAuth':
@@ -6108,6 +6377,10 @@ exports.main = async (event, context) => {
       case 'servicePrivateResumeRegistration':
       case 'serviceFeedbackSubmit':
       case 'servicePrivateFeedbackList':
+      // 蜂蜜充值：下单、订单列表、支付结果查单；入账只由服务端支付回调完成
+      case 'servicePrivateHoneyRecharge':
+      case 'servicePrivateHoneyOrders':
+      case 'servicePrivateHoneyOrderStatus':
         result = await require('./servicePrivate.cjs')({ cloud, config:SERVICE_ACCOUNT_CONFIG, hashSessionToken, dateValue, httpsGet, createSession:createRefereeH5Session })(action, params); break
       case 'serviceRefereeOAuthUrl':
         result = await createRefereeOAuthUrl(params && params.returnUrl); break
@@ -6115,6 +6388,18 @@ exports.main = async (event, context) => {
         result = await handleRefereeOAuth(params); break
       case 'serviceRefereeWorkflow':
         result = await handleRefereeWorkflow(params); break
+      // 服务号 H5 自由球员自助登记：无需球队邀请入口，OAuth + 手机号验证后建档。
+      case 'selfRegisterOAuthUrl':
+      case 'selfRegisterSession':
+      case 'selfRegisterSendSms':
+      case 'selfRegisterVerifySms':
+      case 'selfRegisterContext':
+      case 'selfRegisterSubmit':
+      case 'selfRegisterClaim':
+      case 'selfRegisterTeams':
+      case 'selfRegisterSearchTeams':
+      case 'selfRegisterRequestTeamJoin':
+        result = await require('./selfRegister.cjs')(action, params, { cloud, config: SERVICE_ACCOUNT_CONFIG }); break
       case 'serviceEntryOAuthUrl':
       case 'completeServiceEntryOAuth':
       case 'serviceEntrySendSms':
@@ -6123,12 +6408,27 @@ exports.main = async (event, context) => {
       case 'serviceEntryClaimTeam':
       case 'serviceEntryJoinPlayer':
       case 'serviceEntryUploadPhoto':
+      case 'serviceEntryAiPortraitApply':
       case 'serviceEntrySearchPlayers':
       case 'serviceEntrySelectPlayer':
       case 'serviceEntryCheckPlayerNumber':
       case 'serviceEntryPlayerCard':
       case 'serviceEntrySavePlayerDraft':
         result = await require('./service-entry')(action, params); break
+      // 约球签到：服务号 H5 通过此入口转发到 friendlyMatchCenter 云函数
+      case 'friendlySignInWorkflow': {
+        const subAction = params.workflowAction || params.subAction || 'getInvite'
+        const friendlyPayload = Object.assign({}, params, { action: subAction })
+        try {
+          const fr = await cloud.callFunction({ name: 'friendlyMatchCenter', data: friendlyPayload })
+          const data = (fr && fr.result) || {}
+          result = data.ok ? { success: true, data: data.data, version: 'friendlyMatchCenter@v1' }
+                           : { success: false, code: data.code || 'UNKNOWN', message: data.message || '约球服务暂不可用' }
+        } catch (error) {
+          result = { success: false, code: 'FRIENDLY_UNAVAILABLE', message: error.message || '约球服务暂不可用' }
+        }
+        break
+      }
       case 'previewParentProfileInvite':
         result = await previewParentProfileInvite(params); break
       case 'parentProfileOAuthUrl':
@@ -6180,6 +6480,8 @@ exports.main = async (event, context) => {
         result = await handlePaperRefereeReport(params, false); break
       case 'confirmRefereeReport':
         result = await handlePaperRefereeReport(params, true); break
+      case 'demoPoolDataset':
+        result = await handleDemoPoolDataset(params); break
       case 'dbQuery':
         result = await handleDbQuery(params); break
       case 'callFunction':
