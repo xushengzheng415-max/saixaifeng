@@ -47,8 +47,10 @@ Remove-Item Env:VITE_APP_BASE
 
 ```powershell
 git push origin preview
-E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run hosting deploy web-admin-vue/dist preview/admin --concurrency 3 --retry-count 8 --retry-interval 3000
+E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run hosting deploy <预览 dist 绝对路径> preview/admin --concurrency 3 --retry-count 8 --retry-interval 3000
 ```
+
+`sxf-cloud.ps1` 会先 `Push-Location` 到仓库根 `E:\Documents\sxf-football`，**相对路径 `web-admin-vue/dist` 取的是主工作区构建**（正式 `/admin/` base），不是当前 worktree 或临时预览目录。如果在其他 worktree 中构建预览，必须传绝对路径，否则会把主工作区产物上传到 `preview/admin`，入口会改指向 `/admin/assets/`。上传前先确认待传目录的 `dist/index.html` 只引用 `/preview/admin/`。
 
 本项目当前 CloudBase CLI 使用 `--safe` 或 `--verify` 时出现过卡死、无输出和入口未写入的问题，因此 PC 托管发布不使用这两个参数，改为发布后手工读回验证。
 
