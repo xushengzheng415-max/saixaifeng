@@ -309,7 +309,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, SwitchButton, ArrowDown, Phone, Warning, Message,
   Trophy, UserFilled, User, SetUp, Picture, FirstAidKit, ShoppingBag,
-  Postcard, Place, QuestionFilled, Bell, Reading
+  Postcard, Place, QuestionFilled, Bell, Reading, Sort
 } from '@element-plus/icons-vue'
 import { logout, queryById, queryList, callFunction } from '../../utils/cloud'
 import { getPlatformSession, isPlatformContext, PLATFORM_LOGIN_TYPE } from '../../utils/platformSession'
@@ -904,6 +904,13 @@ const organizerNavItems = computed(() => [
     icon: 'SetUp',
     requiresTournament: true,
     activeWhen: () => /\/tournaments\/[^/]+\/referees$/.test(route.path)
+  },
+  {
+    path: tournamentWorkspacePath('/transfer'),
+    label: '转会中心',
+    icon: 'Sort',
+    requiresTournament: true,
+    activeWhen: () => /\/tournaments\/[^/]+\/transfer$/.test(route.path)
   },
   {
     path: tournamentWorkspacePath('/edit'),
