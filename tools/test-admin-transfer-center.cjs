@@ -75,6 +75,17 @@ function assertStatic(pageText) {
   const rightsText = read(RIGHTS_PATH)
   assert.ok(rightsText.includes("key: 'event.transfer'"), 'staff right key must exist')
   assert.ok(rightsText.includes("suffix: '/transfer'"), 'staff right must map to /transfer')
+
+  // 6. 共享子账号侧栏必须按已授予权限过滤：否则入口可见、点击后被守卫退回账号管理。
+  assert.ok(layoutText.includes('visibleStaffNavItems(organizerNavItems.value)'), 'sidebar must filter by granted staff rights')
+  assert.ok(layoutText.includes("sxfStaffPermissions"), 'sidebar filter must read granted rights from session')
+
+  // 7. 子账号授权校验与中转校验的权限清单必须认 event.transfer，否则机构主账号无法授予“转会中心”。
+  const staffPolicyText = read(path.join(ROOT, 'cloudfunctions/webLoginApi/staffPolicy.cjs'))
+  const staffAccessPolicyText = read(path.join(ROOT, 'cloudfunctions/tournamentStaffAccess/policy.cjs'))
+  for (const [name, text] of [['webLoginApi', staffPolicyText], ['tournamentStaffAccess', staffAccessPolicyText]]) {
+    assert.ok(text.includes("'event.transfer'"), `${name} SIDEBAR_RIGHTS must include event.transfer`)
+  }
 }
 
 async function main() {

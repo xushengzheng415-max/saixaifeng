@@ -1,7 +1,7 @@
 const string = value => String(value == null ? '' : value).trim()
 const SIDEBAR_RIGHTS = Object.freeze([
   'event.dashboard', 'event.competition', 'event.registration', 'event.teams', 'event.draw',
-  'event.matches', 'event.results', 'event.news', 'event.referees', 'event.settings'
+  'event.matches', 'event.results', 'event.news', 'event.referees', 'event.settings', 'event.transfer'
 ])
 const RIGHT_ALIASES = Object.freeze({
   'result.supplement': 'event.results',
