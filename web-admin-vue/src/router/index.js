@@ -420,6 +420,13 @@ const routes = [
     children: [{ path: '', component: () => import('../views/tournament/TournamentStaffAccess.vue') }]
   },
   {
+    path: '/tournaments/:id/transfer',
+    name: 'TournamentTransferCenter',
+    component: () => import('../views/layout/LayoutView.vue'),
+    meta: { requiresAuth: true, title: '转会中心', parent: 'tournaments', embeddedPageHeader: true },
+    children: [{ path: '', component: () => import('../views/tournament/TournamentTransferCenter.vue') }]
+  },
+  {
     path: '/tournaments/:id/staff-results',
     name: 'TournamentStaffResults',
     component: () => import('../views/layout/LayoutView.vue'),

@@ -10,6 +10,10 @@ export const TOURNAMENT_SIDEBAR_RIGHTS = Object.freeze([
   { key: 'event.results', label: '赛果管理', suffix: '/results' },
   { key: 'event.news', label: '新闻中心', suffix: '/news' },
   { key: 'event.referees', label: '裁判管理', suffix: '/referees' },
+  // 2026-10-26 用户确认开放赛事子账号转会审核：勾选后仅获得转会审核类动作，
+  // 球队侧转会仍只认本人管理的球队；页面入口为 /tournaments/:id/transfer，
+  // 路由守卫与中转层都按该权限校验，不能凭其他赛事权限顺带获得审核资格。
+  { key: 'event.transfer', label: '转会中心', suffix: '/transfer' },
   { key: 'event.settings', label: '赛事设置', suffix: '/edit' }
 ])
 
@@ -41,6 +45,7 @@ export function sidebarRightForRoute(path) {
   if (/^\/discipline(?:\/|$)/.test(remainder)) return 'event.results'
   if (/^\/news(?:\/|$)/.test(remainder)) return 'event.news'
   if (/^\/referees(?:\/|$)/.test(remainder)) return 'event.referees'
+  if (/^\/transfer(?:\/|$)/.test(remainder)) return 'event.transfer'
   if (/^\/edit(?:\/|$)/.test(remainder)) return 'event.settings'
   if (/^\/match\/[^/]+\/(?:post-match|review|archive)(?:\/|$)/.test(remainder)) return 'event.results'
   if (/^\/match\/[^/]+(?:\/|$)/.test(remainder)) return 'event.matches'

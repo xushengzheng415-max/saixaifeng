@@ -1191,3 +1191,16 @@
 ### 主办方登记预览发布回读（2026-10-09）
 
 功能分支提交897a430、预览合并a78b94d0；Gitee preview已推送并发布/preview/admin/。预览入口、OrganizationOnboarding JS/CSS共3文件HTTP200且SHA-256与构建一致；正式/admin/仍HTTP200，未发布正式后台。onboardingWorkspace以最新线上包差量更新，3个非依赖文件回下载一致，Active、Nodejs18.15。内存验证客户分类、仅赛事权限、省市必填通过；实际扫码及用户填写仍待预览验收。150****2130清理结果为1机构/1球队/2球员，15集合38条业务/会话记录，唯一登录账号及安全审计保留；已按精确ID逐项零剩余读回。备份与清理台账在仓库外.codex-temp，不提交用户数据或凭据。小程序开发包未新增上传，仍为1.1.07。
+## 2026-10-27 主办方PC转会中心 PC01—PC04 上线预览（/preview/admin/，正式 /admin/ 未动）
+
+用户要求“先补主办方PC”，随后授权“把 web-admin-vue 合并到 preview 并部署”。按[转会中心方案](TRANSFER_CENTER_PLAN_2026-10-26.md) 5.1—5.4，在 `web-admin-vue` 用单路由单页实现四个主办视图，不新增接口、不改已上线契约：
+
+- **PC01 列表**（`src/views/tournament/TournamentTransferCenter.vue`）：赛事抬头与窗口四态（未配置/未开始/开放中/已关闭）、待审核/已审核/全部标签与计数、球员编号精确/球队/方式/提交日期区间筛选、服务端分页、自由签约“无转会费”、集合未建立提示、空态与错误重试。
+- **PC02 审核抽屉**（720px）：球员与双方球队、最终条款、双方确认版本、参考身价与签约规则、审核决定（确认转会/拒绝带 2—200 字理由）、生效与交接、报价历史、操作日志；`agreedOfferVersion` 与 `expectedOfferVersion` 不一致或缺共同确认版本时禁用并写明原因。
+- **PC03 窗口配置**：赛季标识、起止（本地日期转 ISO 瞬时）、当前状态与版本、服务端 `notes`；保存带 `expectedVersion`，`TRANSFER_WINDOW_STALE` 重读；`transfer_windows` 仍为 0 条，需主办方在本页保存一次才有真实窗口状态。
+- **PC04 只读记录**：复用抽屉且 `canReview=false`，已处理单据只读最终条款、审核决定、实际交接与审计；自由签约记录同样只读、不进入审核。
+- **接线**：路由 `/tournaments/:id/transfer`、赛事侧栏“转会中心”、`src/utils/tournamentStaffRights.js` 新增 `event.transfer`（`suffix: '/transfer'`）；展示投影与请求组装在 `src/utils/transferCenterView.js`。
+- **接口与口径**：零 SDK `callFunction('dataCenter', {action})` → `webLoginApi` relay，只用已上线 `transferWindowGet/transferWindowSave/transferAdminRequests/transferAdminRecord/transferReview`；球队筛选复用既有 `dbQuery` 名称选项。金额按分换算（`amountFen/100`）；自由签约不出现 `¥ 0.00`；参考身价四态，不用 0 冒充；Q02/Q03/Q08 仍按待决文案显式提示。
+- **响应式**：表格按视口三档（>1360 完整；1101—1360 收起“轮次/提交时间”并把提交时间并入球员列；≤1100 再收起“方式”并入球队列），筛选栏网格一行对齐、≤1100 折两列；实测 1440/1280/1024 无横向溢出。
+- **验证**：`node tools/test-admin-transfer-center.cjs`（新增）、`test-transfer-center`、`test-mini-transfer-center-pages`、`check-data-governance.mjs` 通过；`VITE_APP_BASE=/preview/admin/ npm run build` 通过，`dist/index.html` 只引用 `/preview/admin/assets/`，dist 无 `@cloudbase/js-sdk`；本地网络桩视觉验收覆盖列表、抽屉、审批入参、窗口保存入参、已审核标签。
+- **范围**：本次只发布预览 `/preview/admin/`，正式 `/admin/` 未重新构建或上传；验收通过后才合并 `main`，正式发布仍需另行授权。详见[研发交接第十六节](handoffs/TRANSFER_CENTER_TRAE_HANDOFF_2026-10-26.md)。
