@@ -1,3 +1,9 @@
+2026-10-27 转会中心：窗口配置完成后隐藏「未配置转会窗口」引导卡（预览已发布，`fac23e0e`）：
+
+- 用户反馈配置完窗口后该卡片仍占版面。`transferCenterView.windowViewOf` 新增 `configured`（仅 `open`／`scheduled`／`closed` 为真），页面 `.window-card` 与 Q03 说明行改为 `!windowView.configured` 才渲染；`not_configured` 与状态待核对（`unknown`）仍显示提示，避免窗口读取异常时静默。
+- 赛季与窗口状态继续由页头副标题（`contextText`）给出，配置入口固定右上角「窗口管理」，同一信息不再重复两遍。
+- 验证：`node tools/test-admin-transfer-center.cjs` 通过（新增 2 条静态断言 + 5 条 `configured` 断言）；`VITE_APP_BASE=/preview/admin/ npm run build` 成功，入口只引用 `/preview/admin/assets/`，产物 405 文件；已部署 `preview/admin` 并读回 `https://www.sxffootball.cn/preview/admin/` 200，入口 `index-B6ZAHLev.js`，`index-B6ZAHLev.js`、`vue-vendor-b1JROl9D.js`、`index-2u7riYJu.css` 线上 SHA-256 与本地一致。正式 `/admin/` 未部署。
+
 2026-10-27 赛事共享子账号权限白名单补齐 `event.transfer`（**tournamentStaffAccess 已部署并读回；webLoginApi 线上已含，未重复上传**）：
 
 - 用户授权「部署这两个云函数」。部署前按防回退规则从线上回下载 `webLoginApi`、`tournamentStaffAccess` 作为基线，未用主工作区（`codex/platform-ops`，含其他任务未提交改动与未跟踪新文件）的目录直接上传。
