@@ -62,6 +62,10 @@ function assertStatic(pageText) {
   assert.ok(parsed.descriptor.scriptSetup, 'page must use script setup')
   assert.ok(parsed.descriptor.template, 'page must have a template')
 
+  // 5b. 窗口配置完成后引导卡必须消失：卡片与 Q03 说明行都只在未配置时渲染，不能无条件占版面。
+  assert.ok(pageText.includes('v-if="!windowView.configured" class="window-card"'), 'window card must hide once the window is configured')
+  assert.ok(pageText.includes('v-if="!windowView.configured && windowView.notes.length"'), 'window notes must hide once the window is configured')
+
   // 6. 路由、侧栏与赛事子账号权限三处必须同向。
   const routerText = read(ROUTER_PATH)
   assert.match(routerText, /path: '\/tournaments\/:id\/transfer'/, 'route path must be registered')
@@ -195,6 +199,13 @@ async function main() {
   assert.equal(unknownWindow.state, 'unknown')
   assert.equal(unknownWindow.stateText, '窗口状态待核对')
   assert.equal(unknownWindow.tone, 'unknown')
+
+  // 5c. configured 只认开放中／未开始／已关闭：未配置与状态待核对都要继续提示主办方处理。
+  assert.equal(openWindow.configured, true)
+  assert.equal(view.windowViewOf({ window: { state: 'scheduled', seasonKey: '2026赛季S1' } }).configured, true)
+  assert.equal(view.windowViewOf({ window: { state: 'closed', seasonKey: '2026赛季S1' } }).configured, true)
+  assert.equal(notConfigured.configured, false)
+  assert.equal(unknownWindow.configured, false)
 
   // 6. 窗口表单：季赛标识必填、结束时间晚于开始，保存带服务端版本防覆盖。
   const form = view.windowFormOf({

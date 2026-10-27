@@ -145,6 +145,9 @@ export function windowViewOf(reply = {}) {
     state,
     stateText: WINDOW_STATE_TEXT[state] || '窗口状态待核对',
     tone: ['open', 'scheduled', 'closed'].includes(state) ? state : 'unknown',
+    // 窗口已配置（开放中／未开始／已关闭）后，页面不再展示“未配置转会窗口”引导卡：
+    // 赛季与窗口状态由页头副标题给出，配置入口固定在右上角「窗口管理」，同一信息不重复占版面。
+    configured: ['open', 'scheduled', 'closed'].includes(state),
     seasonKey: String(window.seasonKey || ''),
     seasonText: String(window.seasonKey || '') || '未配置赛季',
     rangeText,

@@ -35,7 +35,7 @@
     </el-alert>
 
     <template v-else>
-      <section class="window-card" :class="`window-${windowView.tone}`">
+      <section v-if="!windowView.configured" class="window-card" :class="`window-${windowView.tone}`">
         <div class="window-state">
           <span class="window-dot"></span>
           <div>
@@ -58,7 +58,7 @@
       >
         <el-button link type="primary" @click="loadWindow">重新读取窗口</el-button>
       </el-alert>
-      <p v-if="windowView.notes.length" class="window-note">{{ windowView.notes.join('；') }}</p>
+      <p v-if="!windowView.configured && windowView.notes.length" class="window-note">{{ windowView.notes.join('；') }}</p>
 
       <section class="table-card">
         <el-tabs v-model="activeTab" class="transfer-tabs" @tab-change="handleTabChange">
