@@ -1536,9 +1536,10 @@ const selectedCrewOptions = computed(() => {
 })
 const operationRefereeName = computed(() => {
   const id = match.value.operationRefereeId
+  if (!id) return ''
   for (const role of refereeRoleOptions.value) {
     const referee = refereeCrew.value[role.key]
-    if (referee?._id === id) return referee.name
+    if (referee?._id === id) return referee.name || ''
   }
   return ''
 })
