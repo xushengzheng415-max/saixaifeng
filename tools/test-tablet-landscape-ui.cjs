@@ -5,7 +5,7 @@ const { chromium } = require(process.env.SXF_PLAYWRIGHT_MODULE || path.join(proc
 const root = path.resolve(__dirname, '..');
 const sourceRoot = process.env.SXF_TABLET_SOURCE_ROOT || root;
 const output = path.join(root, 'output/tablet-landscape-20261028');
-const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournament-2026'],['teams','/tournaments/qa-tournament-2026/teams?divisionId=qa-division-u16&mode=professional'],['matches','/tournaments/qa-tournament-2026/matches'],['settings','/tournaments/qa-tournament-2026/matches?view=settings'],['match','/tournaments/qa-tournament-2026/match/qa-match-u8-012']];
+const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournament-2026'],['teams','/tournaments/qa-tournament-2026/teams?divisionId=qa-division-u16&mode=professional'],['registration','/tournaments/qa-tournament-2026/registration?divisionId=qa-division-u16&mode=professional'],['matches','/tournaments/qa-tournament-2026/matches'],['settings','/tournaments/qa-tournament-2026/matches?view=settings'],['match','/tournaments/qa-tournament-2026/match/qa-match-u8-012']];
 (async()=>{
   fs.mkdirSync(output,{recursive:true});
   const vitePath=path.join(root,'web-admin-vue/node_modules/vite/dist/node/index.js');
@@ -23,7 +23,7 @@ const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournamen
   const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
   const results=[];let blockedCloudRequests=0;
   try{
-    for(const [width,height,scale] of [[1548,1032,2],[1280,800,1]]){
+    for(const [width,height,scale] of [[1548,1032,2],[1280,800,1],[1032,688,3],[1032,600,3]]){
       const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:scale,isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (Linux; Android 14; vivo Pad3 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'});
       await context.route('**/*',route=>{const host=new URL(route.request().url()).hostname;if(/tcloudbase(?:app)?\.com$/.test(host)){blockedCloudRequests++;return route.abort()}return route.continue()});
       const page=await context.newPage();
@@ -39,7 +39,7 @@ const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournamen
           console.log('Failed page: '+page.url());console.log((await page.locator('body').innerText()).slice(0,1200));
           await page.screenshot({path:path.join(output,'failure.png')});throw error;
         });
-        const expected={space:'.tournament-space',console:'.tournament-console',teams:'.tournament-teams',matches:'.schedule-v2',settings:'.schedule-v2 .settings-card',match:'.match-detail'}[name];
+        const expected={space:'.tournament-space',console:'.tournament-console',teams:'.tournament-teams',registration:'.tournament-teams.registration-workspace',matches:'.schedule-v2',settings:'.schedule-v2 .settings-card',match:'.match-detail'}[name];
         await page.locator(expected).first().waitFor({timeout:20000});
         await page.waitForTimeout(800);
         const state=await page.evaluate(()=>{
@@ -52,6 +52,30 @@ const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournamen
         });
         await page.screenshot({path:path.join(output,`${name}-${width}.png`)});
         results.push({name,width,height,scale,...state});console.log(JSON.stringify(results.at(-1)));
+        if(name==='registration'){
+          const scrollChecks=[];
+          for(const scrollTop of [0,120,300,600]){
+            await page.locator('.content-area').evaluate((el,top)=>{el.scrollTop=top},scrollTop);await page.waitForTimeout(150);
+            const check=await page.evaluate(()=>{
+              const area=document.querySelector('.content-area'),clip=area.getBoundingClientRect();
+              const covered=[...area.querySelectorAll('.heading-actions .el-button,.division-tab-button,.table-toolbar .el-button,.el-select__wrapper,.el-input__wrapper')].filter(el=>{
+                const r=el.getBoundingClientRect();if(!r.width||el.matches('[disabled],.is-disabled')||el.closest('.is-disabled'))return false;
+                const x=r.left+r.width/2,y=r.top+r.height/2;if(x<clip.left||x>clip.right||y<clip.top+4||y>clip.bottom-4)return false;
+                const hit=document.elementFromPoint(x,y);return !hit||!el.contains(hit);
+              }).map(el=>String(el.className).slice(0,80));
+              return {scrollTop:area.scrollTop,headerPosition:getComputedStyle(document.querySelector('.teams-context-header')).position,covered};
+            });
+            if(check.headerPosition!=='static'||check.covered.length)throw new Error('Registration scroll overlap: '+JSON.stringify(check));
+            scrollChecks.push(check);
+          }
+          results.at(-1).scrollChecks=scrollChecks;
+          const table=page.locator('.teams-table-panel').first();
+          const pan=await table.evaluate(el=>{el.scrollLeft=el.scrollWidth;return{scrollLeft:el.scrollLeft,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}});
+          if(pan.scrollWidth>pan.clientWidth+1&&pan.scrollLeft<=0)throw new Error('Registration table cannot pan to action columns');
+          results.at(-1).tablePan=pan;
+          await page.waitForTimeout(250);
+          await page.screenshot({path:path.join(output,`registration-scrolled-${width}.png`)});
+        }
         if(name==='settings'){
           const chip=page.locator('.kickoff-chip-list .el-tag').first();
           await chip.evaluate(el=>el.scrollIntoView({block:'center'}));await chip.tap();
@@ -86,6 +110,18 @@ const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournamen
         }
       }
       await context.close();
+      if(!process.env.SXF_TABLET_PAGE){
+        const loginContext=await browser.newContext({viewport:{width,height},deviceScaleFactor:scale,isMobile:true,hasTouch:true});
+        const login=await loginContext.newPage();await login.goto('http://127.0.0.1:5186/admin/#/login',{waitUntil:'domcontentloaded'});
+        await login.locator('.tablet-login-brand img:visible').waitFor();
+        const loginState=await login.evaluate(()=>{
+          const logo=document.querySelector('.tablet-login-brand img'),image=logo.getBoundingClientRect(),qr=document.querySelector('.qr-shell').getBoundingClientRect();
+          return {logoLoaded:logo.complete&&logo.naturalWidth>500,logoOnLeft:image.right<qr.left,allInViewport:image.left>=0&&qr.right<=innerWidth&&qr.bottom<=innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1};
+        });
+        if(!loginState.logoLoaded||!loginState.logoOnLeft||!loginState.allInViewport||loginState.overflow)throw new Error('Tablet login layout failed: '+JSON.stringify(loginState));
+        await login.screenshot({path:path.join(output,`login-pad-${width}.png`)});results.push({name:'login',width,height,scale,coarse:true,landscape:true,documentOverflow:false,contentOverflow:false,sidebarVisible:false,...loginState});
+        await loginContext.close();
+      }
     }
     const desktop=await browser.newContext({viewport:{width:1440,height:960},isMobile:false,hasTouch:false});
     const page=await desktop.newPage();await page.goto('http://127.0.0.1:5186/admin/#/tournaments/qa-tournament-2026/teams?visualQa=1',{waitUntil:'domcontentloaded'});await page.locator('.sidebar').waitFor();

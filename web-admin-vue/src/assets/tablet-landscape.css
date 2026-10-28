@@ -1,6 +1,15 @@
 /* Landscape Android tablet: share the existing pages, permissions and data. */
+#app .login-card[data-desktop-login] .tablet-login-brand { display: none !important; }
 @media (orientation: landscape) and (max-width: 1180px),
        (orientation: landscape) and (hover: none) and (pointer: coarse) and (min-width: 600px) {
+  #app .login-overlay { min-height: 100dvh; padding: 24px; background: #f4f7f5; background-image: none; backdrop-filter: none; }
+  #app .login-overlay .login-card { display: grid; grid-template-columns: minmax(260px,.9fr) minmax(340px,1.1fr); grid-template-rows: minmax(410px,1fr) 48px 48px; width: min(840px,calc(100vw - 48px)); height: auto; min-height: 520px; padding: 0; border: 1px solid #dce6df; border-radius: 12px; background: #fff; box-shadow: none; overflow: hidden; }
+  #app .login-overlay .tablet-login-brand { grid-column: 1; grid-row: 1/4; display: flex; align-items: center; justify-content: center; padding: 32px; border-right: 1px solid #e0e9e3; background: #eaf4ed; }
+  #app .login-overlay .tablet-login-brand img { display: block; width: min(236px,100%); height: auto; object-fit: contain; }
+  #app .login-overlay .qr-panel { grid-column: 2; grid-row: 1; height: auto; padding: 16px 24px 0; border-radius: 0; }
+  #app .login-overlay .retry { grid-column: 2; grid-row: 2; position: static; align-self: center; justify-self: center; width: 140px; height: 44px; border: 1px solid #c9dacf; border-radius: 6px; color: #087a48; background: #fff; }
+  #app .login-overlay .login-card > a { grid-column: 2; grid-row: 3; position: static !important; align-self: center; justify-self: center; padding: 10px 14px; color: #536d5e !important; }
+  #app .login-overlay .close { z-index: 2; width: 44px; height: 44px; color: #536d5e; border-color: #dce6df; background: #fff; }
   #app .layout { min-width: 0; width: 100%; height: 100dvh; }
   #app .layout > .main-container { min-width: 0; }
   #app .layout .sidebar { display: none; }
@@ -68,11 +77,26 @@
   #app .match-detail .header-match-name { overflow-wrap: anywhere; }
   #app .tournament-teams .teams-context-header,
   #app .tournament-teams .teams-page-heading { flex-wrap: wrap; gap: 12px; }
+  #app .tournament-teams .teams-context-header {
+    position: static; top: auto; min-height: 68px; padding: 12px 18px;
+    grid-template-columns: minmax(150px, 1fr) minmax(0, 1.5fr) auto;
+  }
+  #app .tournament-teams .teams-tournament-context { min-width: 0; flex-wrap: wrap; gap: 8px; }
+  #app .tournament-teams .teams-tournament-context strong { max-width: 100%; }
+  #app .tournament-teams .teams-page-heading { flex-direction: row; align-items: center; justify-content: space-between; }
+  #app .tournament-teams .heading-actions { min-width: 0; }
+  #app .tournament-teams .division-toolbar { position: static; width: 100%; min-width: 0; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+  #app .tournament-teams .division-tab-section { flex-basis: 100%; flex-wrap: wrap; }
+  #app .tournament-teams .division-rule-summary { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+  #app .tournament-teams.registration-workspace .team-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  #app .tournament-teams.registration-workspace .teams-table-panel { overflow-x: auto; overscroll-behavior-x: contain; }
+  #app .tournament-teams.registration-workspace .teams-table-head,
+  #app .tournament-teams.registration-workspace .simple-application-row { min-width: 960px; }
   #app .tournament-teams .teams-page-content { min-width: 0; padding: 20px; }
 }
 @media (orientation: landscape) and (max-width: 1100px) {
   #app .tournament-console .console-main { grid-template-columns: minmax(0, 1fr); }
   #app .tournament-teams .professional-application-filters,
   #app .tournament-teams .simple-application-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  #app .tournament-teams .professional-application-view .division-toolbar { position: static; min-width: 0; }
+  #app .tournament-teams.professional-application-view .division-toolbar { position: static; min-width: 0; }
 }
