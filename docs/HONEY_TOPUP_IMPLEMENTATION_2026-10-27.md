@@ -38,6 +38,11 @@
 | `cloudfunctions/webLoginApi/index.js` | 修改 | 注册 `platformHoneyPaymentConfig`（网页会话 + `principalType === 'platform_owner'` 才能读） |
 | `platform-admin-vue/src/views/payment-settings/PaymentSettingsAdmin.vue` | 新增 | 平台「支付设置」页：配置体检表、档位只读核对、APIv3 生成器、微信侧三步指引 |
 | `tools/test-platform-payment-settings.cjs` | 新增 | 支付设置体检离线自检（不返回明文、格式异常可定位、档位对比、action 鉴权闸门） |
+| `cloudfunctions/webLoginApi/honeyRecharge.cjs` | 修改 | B 方案：`platform_payment_secrets` 加密存储（AES-256-GCM + `PAYMENT_SECRET_KEK`）、`ensureSecrets` 60 秒缓存与强制刷新、`savePaymentSecrets`/`clearPaymentSecrets` + 审计、`paymentConfig()`/`rechargeState()`/`paymentConfigStatus()` 改为库内优先 |
+| `cloudfunctions/webLoginApi/index.js` | 修改 | 注册 `platformHoneyPaymentSecretSave` / `platformHoneyPaymentSecretClear`（仅 `platform_owner`，带操作人 IP） |
+| `cloudfunctions/webLoginApi/servicePersonalAccount.cjs` | 修改 | 取充值态前 `await honeyRecharge.ensureSecrets(db)`，否则 H5「我的」读不到库内档位 |
+| `platform-admin-vue/src/views/payment-settings/PaymentSettingsAdmin.vue` | 修改 | 新增「写入支付配置」表单、来源列与逐项清除、凭据存放卡片、KEK 缺失/指纹不匹配提示 |
+| `tools/test-platform-payment-secrets.cjs` | 新增 | B 方案离线自检（KEK 缺失、加密入库、明文不外泄、库内优先、换 KEK、逐项/全清、审计不记值） |
 
 未改动：`honeyWallet.cjs`、`serviceAiPortrait.cjs`、`aiPortraitDemo/**`、`service-entry.js`、`dataCenter/shared/**`。
 
@@ -73,6 +78,9 @@
 | `HONEY_TOPUP_PACKS` | 是 | 档位 JSON，2026-10-27 已确认上架 5 档：`[{"priceCents":100,"drops":10},{"priceCents":500,"drops":50},{"priceCents":1000,"drops":100},{"priceCents":5000,"drops":500},{"priceCents":10000,"drops":1000}]` |
 | `HONEY_TOPUP_REFUND_ENABLED` | 否 | 默认关闭；只有 `true` 才允许内部退款函数 |
 | `WXPAY_API_BASE` | 否 | 仅调试用，默认 `https://api.mch.weixin.qq.com` |
+| `PAYMENT_SECRET_KEK` | 是（B 方案） | 支付凭据加密主密钥，≥16 字符，只在云函数环境变量配一次；用于解密库内 `platform_payment_secrets`。缺失时后台保存返回 `PAYMENT_SECRET_KEK_MISSING`，读取回退环境变量 |
+
+> 2026-10-28 起，上表中除 `WXPAY_APP_ID` / `WXPAY_NOTIFY_URL` / `WXPAY_API_BASE` / `HONEY_TOPUP_REFUND_ENABLED` 外的 7 项，也可由平台负责人在「支付设置」页填写后**加密入库**（见九D）。库内值优先于同名环境变量，环境变量保留为回退。两种方式同时存在时以库内为准。
 
 **任一必填项缺失即 `rechargeAvailable=false`，前端不展示任何档位、不创建订单。**
 凭据只放 `%LOCALAPPDATA%\SxfCloud\credentials\`（DPAPI 加密），不得读取、打印、复制或提交。
@@ -224,6 +232,75 @@
 
 ---
 
+## 九D、支付凭据加密入库（B 方案，2026-10-28 用户批准）
+
+用户问「就不能在后台填写保存么？」，并明确「按 B 实施，因为这个后台是平台管理方的！所以不会泄露」。九C 的 A 方案（只体检、仍去控制台改环境变量）升级为 B：**平台负责人在「支付设置」页直接填写并保存**，凭据加密存数据库，主密钥只在云函数环境变量。
+
+### 存储与优先级
+
+| 项 | 值 |
+|---|---|
+| 密文集合 | `platform_payment_secrets`，单文档 `_id = 'wxpay'`，`keys.<变量名> = { v:1, iv, tag, data }` |
+| 算法 | AES-256-GCM，每项独立 12 字节 IV + 16 字节 AuthTag，Base64 存储 |
+| 主密钥 | 云函数环境变量 `PAYMENT_SECRET_KEK`（≥16 字符）；实际密钥 = `sha256(PAYMENT_SECRET_KEK)`，**永不入库、不进前端、不写日志** |
+| 密钥指纹 | `sha256('kek:' + keyHex).slice(0,8)`，只用于判断「库内密文是否由当前主密钥加密」，不可逆 |
+| 可写字段 | `WXPAY_MCH_ID`、`WXPAY_SERIAL_NO`、`WXPAY_APIV3_KEY`、`WXPAY_PRIVATE_KEY`、`WXPAY_PLATFORM_PUBLIC_KEY`、`WXPAY_PLATFORM_SERIAL`、`HONEY_TOPUP_PACKS`（7 项） |
+| 读取优先级 | 库内密文 → 同名环境变量；两者并存时**库内优先**，便于逐项迁移与回退 |
+| 缓存 | 每实例 60 秒；保存/清除后本实例 `force` 立即刷新；其他实例最迟 60 秒生效 |
+| 审计 | `platform_payment_secret_audit`，记录 `action / keys / operatorId / operatorName / ip / at`，**不记录任何值**；审计写入失败只告警，不阻断保存 |
+
+不加密入库、仍只走环境变量的 2 项：`WXPAY_APP_ID`（回退 `SERVICE_ACCOUNT_APP_ID`）、`WXPAY_NOTIFY_URL`（默认纯路径 `DEFAULT_NOTIFY_URL`）——它们是公开标识与公开地址，不是凭据。
+
+### 接口与鉴权
+
+| action | 入参 | 行为 |
+|---|---|---|
+| `platformHoneyPaymentConfig` | 无 | 体检表 + `secretStore`（`kekReady / kekFingerprint / savedCount / savedKeys / decryptableCount / error`）；每项带 `source: 'db' \| 'env' \| ''` |
+| `platformHoneyPaymentSecretSave` | `{ secrets: { 变量名: 值, ... } }` | 校验 → 合并旧档 → 加密写库 → 审计 → 返回新 `status`（只含脱敏信息） |
+| `platformHoneyPaymentSecretClear` | `{ keys: [..] }` 或 `{ all: true }` | 删指定项或整档删除文档 → 审计 → 返回新 `status` |
+
+三个 action 都先过 `authenticateWebSession(params)`，且 `principalType === 'platform_owner'`，否则 `PLATFORM_OWNER_REQUIRED`。操作人取会话 `userId` + 昵称 + `x-forwarded-for` 首段 IP。
+
+错误码（由 `honeyRecharge.cjs` 内 `failResult` 保住 code，`index.js` 通用 catch 丢 code 的问题已在模块侧解决）：
+
+- `PAYMENT_SECRET_KEK_MISSING`：未配 `PAYMENT_SECRET_KEK` 或长度不足 16；**保存前就拒绝，不写库**。
+- `PAYMENT_SECRET_INVALID`：格式不合格（商户号非纯数字、序列号非字母数字、APIv3 非 32 位字母数字、PEM 缺 `-----BEGIN ...-----`、档位不满足 1 元 = 10 滴 / 含赠滴 / 重复 / 超过 8 档）；错误信息只点名变量，**不回显用户填的值**。
+- `PAYMENT_SECRET_EMPTY`：提交里没有任何可写字段。
+- `PAYMENT_SECRET_SAVE_FAILED` / `PAYMENT_SECRET_CLEAR_FAILED`：写库异常。
+
+### 不变的红线
+
+- 页面**永不回读明文**：响应只有「有没有配 / 格式对不对 / 脱敏值 / 来源 / 指纹」，没有密钥正文，也没有长度以外的信息。
+- 支付链路仍只认服务端：`confirmOrder` / `handleNotify` / `refundOrder` / `createOrder` / `orderStatus` 与 `create().handle` 都先 `await ensureSecrets(db)`，读配置失败（集合不存在、KEK 缺失、密文被换过 KEK）一律按「没有」处理并由环境变量兜底，绝不让支付整体崩溃。
+- `servicePersonalAccount.cjs` 在拼 `rechargeState()` 前也 `await honeyRecharge.ensureSecrets(db)`，否则服务号 H5「我的」拿不到库内档位。
+- 集合权限必须在云端设为「仅管理端可读写」（客户端不得直连）。
+
+### 风险与恢复
+
+1. **`PAYMENT_SECRET_KEK` 只配一次**。丢失或更换后，库内旧密文全部无法解密（`decryptableCount → 0`，体检页会显示指纹不匹配告警），此时要么把旧 KEK 找回来，要么在页面重填 7 项。
+2. 审计集合 `platform_payment_secret_audit` 未创建时，保存仍成功，只是 `audited: false`；创建后建议保留默认仅管理端权限。
+3. 换主密钥属于凭据变更，必须单独确认并留记录。
+
+### 前端
+
+`platform-admin-vue/src/views/payment-settings/PaymentSettingsAdmin.vue` 新增：
+
+- 第 4 张结论卡「凭据存放」：`{{ secretStore.savedCount }} 项已加密入库` + KEK 指纹 + 可解密数。
+- KEK 缺失时的提示条（说明需先在控制台配一次 `PAYMENT_SECRET_KEK`）；密文与主密钥指纹不一致时的告警条。
+- 「写入支付配置」表单：7 个输入项（私钥/公钥/档位用 textarea），只提交非空项、提交前二次确认、成功后清空输入框并立即刷新体检。
+- 体检表新增「来源」列：`加密存储` / `环境变量` / `未配置`，每行可单独「清除」（仅 `db` 来源出现）。
+- 「填入本页生成的密钥」与「填入已确认 5 档」把生成器/档位结果送进表单，避免来回切换窗口复制。
+- 文案明确：AES-256-GCM、主密钥只在云函数环境变量、页面不回读明文。
+
+### 验证
+
+- `node tools/test-platform-payment-secrets.cjs`（新建）：KEK 缺失拒绝且零写库、7 项保存、响应无明文、库内仅密文且每项独立 IV/Tag、库内优先于同名环境变量、非法格式拒绝且不回显值、逐项保存不减项、换 KEK → `decryptableCount === 0`、逐项清除、全清删文档、审计不含值、审计写失败不阻断、纯环境变量路径仍可用。
+- `node tools/test-platform-payment-settings.cjs`（改造为 async）：三个 action 的 `platform_owner` 闸门与统一实现调用、`source === 'env'`、`secretStore.savedCount === 0`、`kekReady === false`。
+- `node tools/test-honey-recharge.cjs`：仍通过。
+- `platform-admin-vue npm run build`：通过，bundle 含 `platformHoneyPaymentSecretSave` / `platformHoneyPaymentSecretClear` / `PAYMENT_SECRET_KEK` / `AES-256-GCM`，`@cloudbase/js-sdk` 计数 0。
+
+---
+
 ## 十、上线步骤（需当前任务明确授权）
 
 1. 确认分支归属：这批改动属 `main` 侧，但依赖的 `servicePrivate.cjs` / `servicePersonalAccount.cjs` / `honeyWallet.cjs` 目前**不在 `main`**（只在 `codex/platform-ops` 的存档提交 `4dd180fe` 与当前工作区），需要先定这组服务号个人中心代码的归属再提交，禁止整分支互相覆盖。
@@ -263,6 +340,7 @@
 | 2026-10-28 | 按用户选择的 A 方案实现平台「支付设置」页：`honeyRecharge.paymentConfigStatus()` + `webLoginApi` 的 `platformHoneyPaymentConfig`（仅平台负责人）+ `PaymentSettingsAdmin.vue` + `tools/test-platform-payment-settings.cjs` | 本地自检与构建通过，进入部署 |
 | 2026-10-28 | 部署 `webLoginApi`：先跑 `check-referee-backend-package.cjs` 通过；因本地 `node_modules` 含 Windows 专用 `@resvg` 与 `.cmd` 垫片、缺线上 `@resvg/resvg-js-linux-x64-musl`，**没有整目录上传**，而是以刚下载的线上包为基线、只覆盖 `index.js` 与 `honeyRecharge.cjs` 后 `fn code update`（COS）。读回：`index.js` SHA-256 `D12A1665…B68E3`、`honeyRecharge.cjs` SHA-256 `5018F431…F1C0`，与上传包一致；线上独有的 `data-center/match-score.cjs`、`data-center/penalty-shootout.mjs` 与 `resvgjs.linux-x64-musl.node` 均保留；未带令牌探测返回 `PLATFORM_OWNER_REQUIRED` | 后端已上线并读回 |
 | 2026-10-28 | 平台前端发布：提交 `6d2dce60` → release `20261027160840-6d2dce60`，脚本回读 27 个文件摘要一致；HTTP 读回 `release.json` 提交一致、`TournamentCenterAdmin-BlzGeCYi.js` 200（413,909 字节）SHA-256 与本地一致且含「支付设置」「platformHoneyPaymentConfig」「APIv3 密钥生成器」「honeyPayNotify」 | 已上线；真实配置体检需平台负责人登录后点测 |
+| 2026-10-28 | 用户批准 B 方案（「按 B 实施，因为这个后台是平台管理方的！所以不会泄露」）：`honeyRecharge.cjs` 增加 `platform_payment_secrets` 加密存储（AES-256-GCM、`PAYMENT_SECRET_KEK`、60 秒缓存、库内优先/环境变量回退）、`savePaymentSecrets`/`clearPaymentSecrets` + `platform_payment_secret_audit` 审计（不记值）、7 处支付入口 `ensureSecrets`；`index.js` 注册 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`（仅 `platform_owner`）；`servicePersonalAccount.cjs` 取充值态前刷新；页面加剧密写入表单、来源列、逐项清除、凭据存放卡与 KEK 提示；新增 `tools/test-platform-payment-secrets.cjs`、改造 `tools/test-platform-payment-settings.cjs` | 本地自检（`test-platform-payment-secrets` / `test-platform-payment-settings` / `test-honey-recharge`）与 `npm run build` 全部通过，进入部署 |
 
 ---
 

@@ -1,4 +1,26 @@
-2026-10-27 发现页「转会」按用户四条口径升级为 `transfer-showcase/3`（本地已实现并验证，**未部署、未上传小程序**）：
+2026-10-28 运营平台按手机号查不到蜂蜜账户修复（用户授权「按方案 A 执行，补全 userId 字段」，**已写库并回读**）：
+
+- 现象：运营平台「手动加滴 → 查询账户」输入 `17319716663` 报「该手机号还没有绑定服务号微信，无法定位蜂蜜账户」；同一账号在服务号 H5「我的」正常显示本人与 4 滴余额。
+- 根因（两条解析链身份口径不同，非数据损坏）：`platformOwner.resolveHoneyAccount` 只有两条手机号兜底——① `service_identities{phone, phoneVerified:true}`，而该 openid 的记录 `phoneVerified:false` 且没有 `phone` 字段；② `users{phone|phoneNumber}` → `fan_profiles{userId}`，但全库 6 个 `fan_profiles` 都没有 `userId` 字段（grep 确认 `fan_profiles.userId` 只在 `platformOwner/index.js:1122` 被读取，没有任何代码写入该字段）。H5 走 `webLoginApi/servicePrivate.cjs` 的 `service_account_bindings{officialOpenId}` → `userId`，所以 H5 与运营台结论不一致。
+- 修复执行：`fan_profiles` `_id=92994ce06ab914f2020b896c78d111f1`（`serviceAccountOpenId=ogSm93I5man7JfateP-5izOCZ3CE`）`$set.userId=b9a701d46a884688005fc16b4218db2b`，`_id`+`serviceAccountOpenId` 双条件、`multi:false`，结果 `n=1 / nModified=1`；余额、账本与其余 5 个账户均未改动。
+- 写后回读：仅该条带 `userId`（其余 5 条仍无）；`users{17319716663}` 唯一命中 `b9a701d4…`；`fan_profiles{userId}` 命中 1 条 → `ogSm93I5…` → `loadHoneyAccount` 唯一命中镜像 4 滴；该 openid 账本只有 `+5`（签到）与 `−1`（应援）合计 4，行数远小于上限 1000，`complete/valid/consistent` 全部成立，运营平台应可正常显示并加滴。
+- 未做（待用户授权）：B 方案——在 `resolveHoneyAccount` 增加 `users → service_account_bindings{userId, sport:'football'} → officialOpenId → fan_profiles(serviceAccountOpenId)` 兜底，与 `servicePrivate.cjs` 口径统一；并考虑 H5 开户/绑定时同步写 `fan_profiles.userId`。否则每个新账户仍可能缺 `userId` 而重复报同一错误。B 需发布 `platformOwner` 云函数。
+
+2026-10-27 蜂蜜镜像余额历史数据核对修复（用户授权「A 修」，**已写库并回读**）：
+
+- 触发：运营平台「手动加滴」对账号 `ogSm93****KFGM`（昵称 Frank）报「账本合计与镜像余额不一致或账本过大，需先人工核对，暂不能加滴」；面板显示「余额 100 滴 / 镜像 —」。
+- 只读排查结论：`fan_points_ledger` 只读合计与 `fan_profiles.honeyBalance` 逐账户比对，6 个蜂蜜账户中 3 个**缺镜像字段**（不是镜像写错值）：Frank 账本 100／镜像缺失、武优秀 账本 99（+100 −1）／镜像缺失、LG 无流水（0）／镜像缺失；另外 3 个（麦步Frank 4/4、W. 100/100、神奈川 100/100）本就一致。成因是旧版本创建 `fan_profiles` 时没写 `honeyBalance`；`fanCenter.cjs` 现行代码已在同一事务内同时写镜像 100 与账本 +100，新账户不会再产生此类数据。
+- 影响面（不止加滴）：`honeyWallet.spendHoney` 事务内要求 `Number.isSafeInteger(current.honeyBalance)`，镜像缺失时 AI 定妆照点「用这张生成形象照」会被拦为 `HONEY_RECONCILING`（「蜂蜜余额待核对」）；`fanCenter` 签到同样要求镜像有效。修复前 Frank 即使加滴成功也扣不了费。
+- 修复执行（精确到 `_id` + `serviceAccountOpenId` 双条件，`multi:false`，只 `$set.honeyBalance`，不增删任何流水）：
+  - `f84116646abce6310083f54e4a0c27e2` / Frank → `honeyBalance:100`
+  - `d7580c016ab9229f04ba8f99168c03ce` / 武优秀 → `honeyBalance:99`
+  - `92994ce06ab91558020b9d154a7e8f7e` / LG → `honeyBalance:0`
+  - 三条均 `n=1 / nModified=1`。
+- 写后回读：6 个账户镜像与账本合计**全部相等**（4/4、0/0、99/99、100/100、100/100、100/100）；`fan_points_ledger` 记录数仍为 7，未新增或修改任何流水，另外 3 个账户未被触碰。
+- 未做（待用户另行授权）：把「核对并修复镜像」做成运营平台动作 `honeyGrantReconcile`（预检账本完整、合计非负、delta 合法，再校正镜像并写审计集合），避免以后再靠人工改库；本轮只做一次性数据修复。
+- 验收提示：运营平台重新「查询账户」应显示账本与镜像一致、可加滴；Frank 加滴后余额会增加，跑一次 AI 定妆照会真实扣 100 滴。
+
+2026-10-27 发现页「转会」按用户四条口径升级为 `transfer-showcase/3`（**后端已生产部署并读回，小程序已上传 v1.2.20 开发版**）：
 
 - 用户指令（原文）：「成交金额公开范围按照成人青少年分级公开，跨赛事转会允许！也可以租借！榜单按赛事就行！然后不按组别！按年龄段！暂不开放公开球员资料页！想看需要耗蜂蜜滴数！」取代同日上一条「Q09 未确认 → 金额不下发、Q01 未定 → 不拼造赛事A → 赛事B」的占位口径。
 - **成交金额分级**：成人已记录金额时下发格式化 `priceText` 并标金色；青少年（`minor===true` 或年龄 <18）只回「青少年金额不公开」；年龄无法判定回「成交价待核实」；金额为 0/缺失回「成交价未记录」；自由签约回「无转会费」。接口仍**不下发 `amountFen`**，桩件用递归扫描确认 payload 无该键，不做前端遮挡。
@@ -8,7 +30,15 @@
 - **前端**：`discover.js` 新增 `onTransferScopeTap`／`loadTransferEventOptions`／`openTransferScopeSheet`／`applyTransferScopeLoading`／`onTransferScopePick`／`onTransferScopeClose` 与私有缓存 `_transferTournamentId/_transferAgeGroupId/_transferAgeGroups/_transferEventOptions/_transferSheetScope`（`resetCaches` 一并复位）；`discover-model.js` 新增 `showcaseScopeChips`／`showcaseScopeOptions`／`showcaseAgeGroupOptions`／`showcasePriceTextClass`／`showcaseTradePriceClass` 及 `scope*`／`ageGroupOptions`／`rankScope*`／各空态文案；`discover.wxml` 新增范围弹层（`.scope-mask`／`.scope-sheet`／`.scope-option*`）与「跨赛事」徽标；`discover.wxss` 新增 `.scope-chip-active`、弹层样式、`.trade-price-muted/open`、`.trade-cross`、`.spotlight-cross`、`.spotlight-price-muted`。
 - **验证（全部本地）**：`node --check` 四个文件通过；WXML 291 条插值扫描仅 8 条简单取反、0 违规；样式类覆盖仅剩 3 个既有缺口（`.promote`／`.invite-response-btn-text`／`.public-city-btn-text`，非本轮改动范围）；后端假 db 桩件 19 项、模型＋Page 桩件 20 项全过；`node tools/check-data-governance.mjs`、`node tools/test-data-center.mjs` PASS；用真实 WXSS 按 rpx 换算在 390×844／360×800 无头渲染，4 张首屏（范围 chips、焦点卡金色成交金额、跨赛事徽标）与 2 张下滑态（最新转会三档金额文案＋跨赛事行）目视核对通过，修正了首轮「CSS 视口非 390 导致右侧裁切」的渲染问题。
 - **未接入**：时间范围筛选（点击提示未接入）、球队筛选（面板写明未接入）、转会搜索（输入框禁用）、焦点/成交列表分页排序参数（服务端固定上限）、赛事范围下拉仅列公开赛事目录首批 20 场、「我的赛事转会中心」不深链具体赛事。
-- 未部署云函数、未上传小程序、未推 Git。`node tools/sync-data-center.mjs --check` 报的 `statistics.mjs`／`service.cjs` 未同步是其他会话既有工作区漂移，与本轮文件无关，未执行 sync。
+- **部署（用户 2026-10-27 授权「好的，执行部署并上传小程序」）**：以线上回下载包为基线的差量发布，staging = 线上整包 + 新增 `transfer/showcase.cjs`（22,783 B）+ 改后 `index.js`；与基线逐文件比对（排除 `node_modules`，38 个文件）只有这 2 处差异，其他会话在 `dataCenter` 的未提交改动（`identity.cjs`、`staffPolicy.cjs`、`shared/awards.cjs`、`shared/service.cjs`、`shared/standings.cjs`、`shared/statistics.mjs`）一律未上传。`fn code update dataCenter --deployMode cos` 成功；读回 11 个关键文件 `MISSING=0 DIFF=0`；`fn detail` 为 部署完成／CodeSize 11,304,667／Nodejs18.15／512MB／150s／InstallDependency TRUE／ModTime 2026-10-27 23:57:01，函数配置与环境变量未被改动。
+- **线上探针**：`fn invoke dataCenter --params '{"action":"transferShowcase"}'` 返回 `success:true`、`schema:"transfer-showcase/3"`，全平台口径 1 名身价球员（`top`／`players` 各 1 条、`transferCount:0`、`rising:[]`、`payerTotal:1`）；`{"action":"transferShowcase","tournamentId":"probe"}` 返回 `scope.mode:"tournament"`、`rosterState:"none"`、榜单为空且不报错。生产当前无已完成转会，故转会列表为空，页面走空态。
+- **探针踩坑（重要）**：`tcb fn invoke -d '<json>'` 与 `-d @file` 都**不会**把 JSON 解析成对象传给 Event 函数，恒返回 `AUTH_REQUIRED`（连 `-d 'abc'` 也一样）；必须用 `--params '<json>'`。因此 2026-10-26 发布记录中「`transferWindowGet` 返回 `AUTH_REQUIRED` 证明路由在线」只是弱证据。
+- **小程序上传**：首轮被 `code 10, main package source size 2118KB exceed max limit 2048KB` 拦住。把 `pages/discover/record` 与其独占的 5 张底图（`poster-bg-classic`／`poster-bg-wuxia-1..3`／`record-adult-bg`，合计 319.6KB）迁入新分包 `packageDiscover`：`app.json` 新增 subpackage root 并从主包 pages 移除；`discover.js` 2 处 `navigateOnce`、`record.js` 5 处图片路径＋`onShareAppMessage` 路径、`record.wxml` 1 处背景图路径改为 `/packageDiscover/...`（`record.js` 顶部注释同步）。未改视觉素材、未改业务逻辑（`require('../../../utils/workspace')` 与 `@import "../../../styles/proto.wxss"` 层级不变）。
+- **上传结果**：`cli.bat upload -v 1.2.20` 成功——TOTAL 3.3MB(3,491,419 B)，**main 1.8MB(1,842,511 B)**、`/packageDiscover/` 362.4KB、`/pages/team/` 721.0KB、`/pages/tournament/` 410.0KB、`/pages/match/` 83.4KB、`/packageA/` 33.3KB。改后复核：`node --check` 两文件通过、`app.json` 结构校验（40 主包页、5 分包、无重复页、tab 全在主包）、分包页面文件齐全、`record.wxml` 73 条插值仅简单取反、图片与跳转引用全部可解析。
+- **体验版未设置**：上传成功只等于生成**开发版 v1.2.20**，不等于体验版生效；本轮无微信公众平台会话，未设体验版、未提交审核。另：工作区仍有其他会话 108 处小程序未提交改动，已一并进入本次上传包。
+- 未推 Git。`node tools/sync-data-center.mjs --check` 报的 `getMiniWorkspace|webLoginApi|resultCenter|updateMatch|serviceMatchWorkflow|playerCardPublishWorker|friendlyMatchCenter` 的 `statistics.mjs`／`service.cjs` 未同步，经逐文件比对为**纯 CRLF/LF 字节差**（内容全等），属其他会话既有工作区换行漂移，与本轮文件无关，未执行 sync。
+- `node tools/check-data-governance.mjs`、`node tools/test-data-center.mjs` 本轮重跑 PASS。
+- 发布记录见 `docs/releases/transfer-showcase-v3-20261027.md`。
 - 口径已写入 `docs/PRODUCT_RULES.md`（2026-10-27 条目，并把 2026-10-26「发现页只做身价展示」标为部分被替代）、`docs/ADR.md`、`docs/DISCOVER_DATA_MODEL_2026-10-26.md` 2.5。
 
 2026-10-27 蜂蜜流水口径对齐运营手动加滴 + 支付端口现状核查（**已发布并读回**）：
@@ -1764,7 +1794,7 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
 - 已发布：`tcb fn code update aiPortraitDemo`（COS）成功；读回生产 `GET https://www.sxffootball.cn/aiPortraitDemo` 目录含 `seedream45`（`ready:false`，`default:false`，默认仍为混元 3.5）。未鉴权探测 `POST https://vod.gz.baidubce.com/v1/images/generations` 返回 401，确认网关可达且强制鉴权。
 - 待办：云函数环境变量补 `BV_API_KEY`（百度云广州 VOD 的 API Key）后重跑一次真实出图；确认该 Key 的账号与计费归属；`service-account-h5/ai-portrait-demo.html` 的「技术边界」文案已同步（hosting 未发布）。注册 H5 目前仍固定默认模型（混元 3.5），是否切 Seedream 4.5 待用户定。
 
-## 2026-10-27 蜂蜜充值与微信支付（后端已上线并读回；平台页面已发布；支付凭据未配置）
+## 2026-10-27 蜂蜜充值与微信支付（后端已上线并读回；平台页面已发布；支付凭据可在后台加密填写，尚未配置）
 
 按 `docs/HONEY_TOPUP_HANDOFF_2026-10-27.md` 实现充值收款，未触碰 AI 定妆照相关代码与 `honeyWallet.cjs` 语义：
 
@@ -1780,5 +1810,15 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
 - **平台「支付设置」页（2026-10-28 上线，用户选定 A 方案）**：新增 `webLoginApi` action `platformHoneyPaymentConfig`（先 `authenticateWebSession`，且 `principalType === 'platform_owner'` 才执行），由 `honeyRecharge.paymentConfigStatus()` 只回「已配置/未配置/格式异常 + 脱敏当前值 + 缺哪一项」，**APIv3 密钥只回长度、商户私钥与平台公钥只回 PEM 类型 + SHA-256 前 12 位指纹**，明文永不出云函数；档位保持只读，与已确认 5 档逐项对比并点名缺档/多档。前端 `platform-admin-vue/src/views/payment-settings/PaymentSettingsAdmin.vue` 接入侧栏「营销活动 → 支付设置」，含配置体检表、档位 chips 与「复制已确认档位 JSON」、APIv3 生成器（本页内存生成 32 位、避开 `0/O/o/1/I/l`、显示一次、不落库）、微信侧三步指引（AppID 关联 / JSAPI 授权目录 / `/honeyPayNotify` 路径）。不在页面写环境变量，改配置仍在云开发控制台。离线自检 `tools/test-platform-payment-settings.cjs` 通过（不返回明文、指纹可复核、缺项与格式异常可定位、档位对比、action 鉴权闸门）。
 - **`webLoginApi` 重新部署（2026-10-28 00:05 北京时间）**：先跑 `node tools/check-referee-backend-package.cjs` 通过。**未整目录上传**——本地 `node_modules` 带 Windows 专用 `@resvg/resvg-js-win32-x64-msvc`、`.cmd` 垫片与 `typescript-win32-x64`，且缺线上 `@resvg/resvg-js-linux-x64-musl`，整包上传会破坏球员卡渲染；改为以刚下载的线上包为基线，只覆盖 `index.js`、`honeyRecharge.cjs` 后 `fn code update`（COS）。读回：`index.js` SHA-256 `D12A1665…B68E3`、`honeyRecharge.cjs` `5018F431…F1C0` 与上传包一致；线上独有的 `data-center/match-score.cjs`、`data-center/penalty-shootout.mjs` 与 `resvgjs.linux-x64-musl.node` 全部保留；未带令牌 POST `platformHoneyPaymentConfig` 返回 `{"success":false,"code":"PLATFORM_OWNER_REQUIRED","error":"仅平台负责人可查看支付配置"}`。
 - **平台前端第二次发布（2026-10-28 00:08 北京时间）**：提交 `6d2dce60` → release `20261027160840-6d2dce60`，脚本回读 27 个文件摘要一致；HTTP 读回 `release.json` 提交一致、`assets/TournamentCenterAdmin-BlzGeCYi.js` 200（413,909 字节）SHA-256 与本地 `dist` 完全一致，且含「支付设置」「platformHoneyPaymentConfig」「APIv3 密钥生成器」「honeyPayNotify」。
+- **支付凭据加密入库（B 方案，2026-10-28 用户批准「按 B 实施，因为这个后台是平台管理方的！所以不会泄露」）**：平台负责人在「支付设置」页直接填写并保存，不再需要去云开发控制台改环境变量。
+  - **存储**：密文集合 `platform_payment_secrets`（单文档 `_id='wxpay'`，`keys.<变量名>={v:1,iv,tag,data}`），AES-256-GCM、每项独立 12 字节 IV + AuthTag；主密钥 `PAYMENT_SECRET_KEK`（≥16 字符）只存云函数环境变量，实际密钥 = `sha256(PAYMENT_SECRET_KEK)`，**永不入库、不进前端、不写日志**；KEK 指纹 `sha256('kek:'+keyHex).slice(0,8)` 只用于判断库内密文是否由当前主密钥加密。
+  - **可写 7 项**：`WXPAY_MCH_ID` / `WXPAY_SERIAL_NO` / `WXPAY_APIV3_KEY` / `WXPAY_PRIVATE_KEY` / `WXPAY_PLATFORM_PUBLIC_KEY` / `WXPAY_PLATFORM_SERIAL` / `HONEY_TOPUP_PACKS`。`WXPAY_APP_ID`（回退 `SERVICE_ACCOUNT_APP_ID`）与 `WXPAY_NOTIFY_URL`（默认纯路径）是公开标识与公开地址，仍只走环境变量。
+  - **读取优先级**：库内密文 → 同名环境变量；两者并存时库内优先，便于逐项迁移与回退。每个实例缓存 60 秒，保存/清除后本实例 `force` 立即刷新。`paymentConfig()` / `rechargeState()` / `paymentConfigStatus()` 全部改走 `secretValue()`。
+  - **接口**：新增 `platformHoneyPaymentSecretSave`（`{secrets:{...}}`）与 `platformHoneyPaymentSecretClear`（`{keys:[..]}` 或 `{all:true}`），与 `platformHoneyPaymentConfig` 一样先过 `authenticateWebSession` 且 `principalType === 'platform_owner'`，否则 `PLATFORM_OWNER_REQUIRED`；操作人取会话 userId + 昵称 + `x-forwarded-for` 首段 IP。错误码 `PAYMENT_SECRET_KEK_MISSING` / `PAYMENT_SECRET_INVALID`（只点名变量，不回显填的值）/ `PAYMENT_SECRET_EMPTY` / `PAYMENT_SECRET_SAVE_FAILED` / `PAYMENT_SECRET_CLEAR_FAILED`。
+  - **审计**：`platform_payment_secret_audit` 记 `action/keys/operatorId/operatorName/ip/at`，**不记值**；审计写失败只告警（`audited:false`），不阻断保存。
+  - **支付链路刷新**：`confirmOrder` / `handleNotify` / `refundOrder` / `createOrder` / `orderStatus` 与 `create().handle` 都先 `await ensureSecrets(db)`；读失败（集合不存在、KEK 缺失、密文被换过 KEK）按「没有」处理并由环境变量兜底，不让支付整体崩溃。`servicePersonalAccount.cjs` 拼 `rechargeState()` 前同样先刷新，否则 H5「我的」读不到库内档位。
+  - **页面**：`PaymentSettingsAdmin.vue` 新增「写入支付配置」表单（7 项，私钥/公钥/档位用 textarea）、提交前二次确认、成功后清空输入并即时刷新体检；体检表新增「来源」列（加密存储／环境变量／未配置，仅 `db` 来源行出现「清除」）；第 4 张结论卡「凭据存放」（已加密入库项数 + KEK 指纹 + 可解密数）；KEK 缺失提示条与指纹不匹配告警条；生成器/档位结果可一键填入表单。
+  - **验证**：新增 `tools/test-platform-payment-secrets.cjs`（KEK 缺失拒绝且零写库、7 项保存、响应无明文、库内仅密文且每项独立 IV/Tag、库内优先于环境变量、非法格式拒绝且不回显、逐项保存不减项、换 KEK → `decryptableCount===0`、逐项清除、全清删文档、审计不含值、审计写失败不阻断、纯环境变量路径仍可用）；改造 `tools/test-platform-payment-settings.cjs`（三个 action 的 `platform_owner` 闸门 + `source==='env'` + `secretStore` 断言）；`test-honey-recharge.cjs` 仍通过；`platform-admin-vue npm run build` 通过，bundle 含 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`/`PAYMENT_SECRET_KEK`/`AES-256-GCM`，`@cloudbase/js-sdk` 计数 0。
+  - **上线前置**：需在云函数 `webLoginApi` 环境变量配一次 `PAYMENT_SECRET_KEK`（≥16 字符，**只配一次**，丢失或更换会导致库内旧密文全部无法解密）；`platform_payment_secrets` 与 `platform_payment_secret_audit` 两个集合需在云端创建并设为「仅管理端可读写」。
 - **未做/风险**：微信支付商户环境变量、JSAPI 授权目录、`/honeyPayNotify` 路径映射、`honey_orders` 索引仍未配置，线上仍是「支付未开通」——支付设置页现在会把缺项逐条列出来；真实下单/收银台/回调/退款未验证；服务号 H5 个人中心的充值面板是否已发布需单独核对。`platformOwner/index.js` 等后端改动仍只在 `codex/platform-ops`（本轮已提交 `webLoginApi/index.js`、`honeyRecharge.cjs`，但 `honeyWallet.cjs`、`servicePrivate.cjs`、`servicePersonalAccount.cjs` 等仍需按 `main` 侧归属整组提交）。退款规则、赠滴、家庭档开放条件待确认，详见 `docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md`。
 

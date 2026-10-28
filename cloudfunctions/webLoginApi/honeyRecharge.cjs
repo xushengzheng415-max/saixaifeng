@@ -33,6 +33,25 @@ const NOTIFY_TOLERANCE_SEC = 300
 const NOTIFY_CLEAN_PATH = '/honeyPayNotify' // 正式回调路径：v3 的 notify_url 不允许携带查询串
 const DEFAULT_NOTIFY_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com' + NOTIFY_CLEAN_PATH
 
+// 支付凭据存储：平台负责人在「支付设置」页填写的值用 AES-256-GCM 加密后落在该集合，
+// 主密钥 PAYMENT_SECRET_KEK 只存在云函数环境变量里 —— 只拿到数据库读权限解不开密文。
+// 页面永远不回读明文，只回长度/指纹；环境变量作为回退，便于迁移期两处并存时逐项切换。
+const SECRET_COLLECTION = 'platform_payment_secrets'
+const SECRET_AUDIT_COLLECTION = 'platform_payment_secret_audit'
+const SECRET_DOC_ID = 'wxpay'
+const SECRET_CACHE_MS = 60 * 1000 // 每个实例最多缓存 60 秒，保存后本实例立即刷新
+const SECRET_MAX_LENGTH = 20000
+const SECRET_FIELDS = ['WXPAY_MCH_ID', 'WXPAY_SERIAL_NO', 'WXPAY_APIV3_KEY', 'WXPAY_PRIVATE_KEY', 'WXPAY_PLATFORM_PUBLIC_KEY', 'WXPAY_PLATFORM_SERIAL', 'HONEY_TOPUP_PACKS']
+const SECRET_LABELS = {
+  WXPAY_MCH_ID: '商户号',
+  WXPAY_SERIAL_NO: 'API 证书序列号',
+  WXPAY_APIV3_KEY: 'APIv3 密钥',
+  WXPAY_PRIVATE_KEY: '商户 API 私钥',
+  WXPAY_PLATFORM_PUBLIC_KEY: '微信支付公钥',
+  WXPAY_PLATFORM_SERIAL: '平台公钥 ID / 证书序列号',
+  HONEY_TOPUP_PACKS: '充值档位'
+}
+
 const STATUS_LABELS = { pending: '待支付', paid: '已到账', closed: '已关闭', refunded: '已退款' }
 const RECHARGE_REASON_TEXTS = {
   PAYMENT_NOT_CONFIGURED: '微信支付待开通',
@@ -56,18 +75,103 @@ function normalizePem(value) {
   return raw.trim()
 }
 
-// 支付配置只从云函数环境变量读取；密钥、商户证书私钥不得进入仓库、日志或前端。
+// ============ 支付凭据的加密存储（数据库优先，环境变量回退） ============
+// 密文只在云函数里解密，明文既不出现在响应里，也不写日志。
+let secretCache = { at: 0, values: {}, keys: [], kekReady: false, kekFingerprint: '', error: '' }
+
+function secretMasterKey() {
+  const raw = text(process.env.PAYMENT_SECRET_KEK)
+  if (raw.length < 16) return null
+  return crypto.createHash('sha256').update(raw, 'utf8').digest()
+}
+
+// 主密钥指纹：只用于判断「库里的密文是不是用当前主密钥加密的」，不可逆。
+function secretKekFingerprint() {
+  const key = secretMasterKey()
+  if (!key) return ''
+  return crypto.createHash('sha256').update('kek:' + key.toString('hex')).digest('hex').slice(0, 8)
+}
+
+function encryptSecret(plain) {
+  const key = secretMasterKey()
+  if (!key) return null
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const sealed = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()])
+  return { v: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), data: sealed.toString('base64') }
+}
+
+function decryptSecret(sealed) {
+  const key = secretMasterKey()
+  if (!key || !sealed || !text(sealed.data) || !text(sealed.iv) || !text(sealed.tag)) return ''
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(text(sealed.iv), 'base64'))
+    decipher.setAuthTag(Buffer.from(text(sealed.tag), 'base64'))
+    return Buffer.concat([decipher.update(Buffer.from(text(sealed.data), 'base64')), decipher.final()]).toString('utf8')
+  } catch (error) { return '' }
+}
+
+// 读取并解密库内配置；读不到（集合/文档不存在、主密钥缺失、密文被换过主密钥）一律按「没有」处理，
+// 由环境变量回退兜底，绝不让支付链路因为读配置失败而整体崩溃。
+async function ensureSecrets(db, options) {
+  const force = Boolean(options && options.force)
+  const now = Date.now()
+  if (!force && now - secretCache.at < SECRET_CACHE_MS) return secretCache
+  let doc = null
+  let error = ''
+  if (db) {
+    try { doc = await docValue(db, SECRET_COLLECTION, SECRET_DOC_ID) } catch (readError) {
+      error = text(readError.code) || text(readError.message) || 'SECRET_READ_FAILED'
+      console.warn('[honeyRecharge] 支付配置读取失败', error)
+    }
+  }
+  const kekReady = Boolean(secretMasterKey())
+  const kekFingerprint = secretKekFingerprint()
+  const values = {}
+  const keys = []
+  const storedKeys = doc && doc.keys && typeof doc.keys === 'object' ? Object.keys(doc.keys) : []
+  storedKeys.forEach(name => {
+    if (SECRET_FIELDS.indexOf(name) < 0) return
+    keys.push(name)
+    const plain = decryptSecret(doc.keys[name])
+    if (plain) values[name] = plain
+  })
+  secretCache = { at: now, values, keys: keys.sort(), kekReady, kekFingerprint, error }
+  return secretCache
+}
+
+// 单取一个配置项：库里优先，其次环境变量。
+function secretSource(name) {
+  const fromDb = text(secretCache.values[name])
+  if (fromDb) return { value: fromDb, source: 'db' }
+  const fromEnv = text(process.env[name])
+  return { value: fromEnv, source: fromEnv ? 'env' : '' }
+}
+function secretValue(name) { return secretSource(name).value }
+
+function secretStoreView() {
+  return {
+    kekReady: secretCache.kekReady,
+    kekFingerprint: secretCache.kekFingerprint,
+    savedCount: secretCache.keys.length,
+    savedKeys: secretCache.keys.slice(),
+    decryptableCount: Object.keys(secretCache.values).length,
+    error: secretCache.error
+  }
+}
+
+// 支付配置：库内密文优先，环境变量回退；密钥、商户证书私钥不得进入仓库、日志或前端。
 function paymentConfig() {
-  const mchid = env('WXPAY_MCH_ID')
-  const serialNo = env('WXPAY_SERIAL_NO')
-  const apiV3Key = env('WXPAY_APIV3_KEY')
-  const privateKeyPem = normalizePem(process.env.WXPAY_PRIVATE_KEY)
-  const platformPublicKeyPem = normalizePem(process.env.WXPAY_PLATFORM_PUBLIC_KEY)
+  const mchid = secretValue('WXPAY_MCH_ID')
+  const serialNo = secretValue('WXPAY_SERIAL_NO')
+  const apiV3Key = secretValue('WXPAY_APIV3_KEY')
+  const privateKeyPem = normalizePem(secretValue('WXPAY_PRIVATE_KEY'))
+  const platformPublicKeyPem = normalizePem(secretValue('WXPAY_PLATFORM_PUBLIC_KEY'))
   // JSAPI 下单的 AppID 必须是「服务号」AppID：服务号 H5 拿到的 openid 属于服务号，
   // 不能回退网站应用 AppID（wx5a42aae0e5d0669c）或小程序 AppID，否则 appid 与 openid 不同主体，下单必失败。
-  const appId = env('WXPAY_APP_ID') || env('SERVICE_ACCOUNT_APP_ID')
-  const notifyUrl = env('WXPAY_NOTIFY_URL') || DEFAULT_NOTIFY_URL
-  const platformSerial = env('WXPAY_PLATFORM_SERIAL')
+  const appId = secretValue('WXPAY_APP_ID') || env('SERVICE_ACCOUNT_APP_ID')
+  const notifyUrl = secretValue('WXPAY_NOTIFY_URL') || DEFAULT_NOTIFY_URL
+  const platformSerial = secretValue('WXPAY_PLATFORM_SERIAL')
   const missing = []
   if (!/^\d{6,}$/.test(mchid)) missing.push('WXPAY_MCH_ID')
   if (!/^[0-9A-Za-z]{6,}$/.test(serialNo)) missing.push('WXPAY_SERIAL_NO')
@@ -111,7 +215,7 @@ function parsePacks(raw) {
 // 只返回展示用的档位与状态；未配置支付或档位时不给前端任何可购买档位。
 function rechargeState() {
   const config = paymentConfig()
-  const packState = parsePacks(process.env.HONEY_TOPUP_PACKS)
+  const packState = parsePacks(secretValue('HONEY_TOPUP_PACKS'))
   if (!config.ready) return { available: false, reason: 'PAYMENT_NOT_CONFIGURED', error: RECHARGE_REASON_TEXTS.PAYMENT_NOT_CONFIGURED, packs: [], rate: RATE_DROPS_PER_YUAN }
   if (!packState.packs.length) {
     const reason = packState.reason || 'PRICE_NOT_CONFIGURED'
@@ -160,19 +264,30 @@ function pemValid(value) {
   return Boolean(pem) && pem.indexOf('\n') >= 0
 }
 
-function paymentConfigStatus() {
-  const rawMchId = env('WXPAY_MCH_ID')
-  const rawSerial = env('WXPAY_SERIAL_NO')
-  const rawApiV3 = env('WXPAY_APIV3_KEY')
-  const rawPrivateKey = text(process.env.WXPAY_PRIVATE_KEY)
-  const rawPlatformKey = text(process.env.WXPAY_PLATFORM_PUBLIC_KEY)
-  const rawPlatformSerial = env('WXPAY_PLATFORM_SERIAL')
-  const rawAppId = env('WXPAY_APP_ID')
+// 支付配置体检：只回「是否已配置 / 来源 / 格式 / 脱敏指纹」，任何密钥正文都不出云函数。
+async function paymentConfigStatus(db) {
+  await ensureSecrets(db)
+  const mchid = secretSource('WXPAY_MCH_ID')
+  const serial = secretSource('WXPAY_SERIAL_NO')
+  const apiV3 = secretSource('WXPAY_APIV3_KEY')
+  const privateKey = secretSource('WXPAY_PRIVATE_KEY')
+  const platformKey = secretSource('WXPAY_PLATFORM_PUBLIC_KEY')
+  const platformSerialValue = secretSource('WXPAY_PLATFORM_SERIAL')
+  const appIdValue = secretSource('WXPAY_APP_ID')
+  const notifyValue = secretSource('WXPAY_NOTIFY_URL')
+  const packsValue = secretSource('HONEY_TOPUP_PACKS')
+  const rawMchId = mchid.value
+  const rawSerial = serial.value
+  const rawApiV3 = apiV3.value
+  const rawPrivateKey = privateKey.value
+  const rawPlatformKey = platformKey.value
+  const rawPlatformSerial = platformSerialValue.value
+  const rawAppId = appIdValue.value
   const fallbackAppId = env('SERVICE_ACCOUNT_APP_ID')
-  const rawNotify = env('WXPAY_NOTIFY_URL')
+  const rawNotify = notifyValue.value
   const config = paymentConfig()
   const state = rechargeState()
-  const packState = parsePacks(process.env.HONEY_TOPUP_PACKS)
+  const packState = parsePacks(packsValue.value)
   const packCents = packState.packs.map(item => item.priceCents)
   const missingPacks = CONFIRMED_PACK_CENTS.filter(cents => packCents.indexOf(cents) < 0)
   const extraPacks = packCents.filter(cents => CONFIRMED_PACK_CENTS.indexOf(cents) < 0)
@@ -182,6 +297,7 @@ function paymentConfigStatus() {
     {
       key: 'WXPAY_MCH_ID',
       label: '商户号',
+      source: mchid.source,
       status: !rawMchId ? 'missing' : (/^\d{6,}$/.test(rawMchId) ? 'ok' : 'invalid'),
       masked: maskMiddle(rawMchId, 2, 2),
       note: !rawMchId ? '未配置：商户平台首页顶部「商户号」' : (/^\d{6,}$/.test(rawMchId) ? '纯数字，格式正常' : '应为纯数字，检查是否粘入空格或其他字符')
@@ -189,6 +305,7 @@ function paymentConfigStatus() {
     {
       key: 'WXPAY_SERIAL_NO',
       label: 'API 证书序列号',
+      source: serial.source,
       status: !rawSerial ? 'missing' : (/^[0-9A-Za-z]{6,}$/.test(rawSerial) ? 'ok' : 'invalid'),
       masked: maskMiddle(rawSerial, 4, 4),
       note: !rawSerial ? '未配置：商户平台「API 安全 → API 证书」查看序列号' : (/^[0-9A-Za-z]{6,}$/.test(rawSerial) ? '与商户私钥必须成对' : '序列号含非法字符')
@@ -196,6 +313,7 @@ function paymentConfigStatus() {
     {
       key: 'WXPAY_APIV3_KEY',
       label: 'APIv3 密钥',
+      source: apiV3.source,
       status: !rawApiV3 ? 'missing' : (/^[0-9A-Za-z]{32}$/.test(rawApiV3) ? 'ok' : 'invalid'),
       masked: rawApiV3 ? '已配置（' + String(rawApiV3).length + ' 位）' : '',
       note: !rawApiV3 ? '未配置：商户平台「API 安全 → 设置 APIv3 密钥」（32 位字母数字，只显示一次）' : (/^[0-9A-Za-z]{32}$/.test(rawApiV3) ? '长度与字符集正确' : '必须是 32 位数字加大小写字母，不含符号')
@@ -203,20 +321,23 @@ function paymentConfigStatus() {
     {
       key: 'WXPAY_PRIVATE_KEY',
       label: '商户 API 私钥',
-      status: !text(rawPrivateKey) ? 'missing' : (pemValid(rawPrivateKey) ? 'ok' : 'invalid'),
+      source: privateKey.source,
+      status: !rawPrivateKey ? 'missing' : (pemValid(rawPrivateKey) ? 'ok' : 'invalid'),
       masked: maskPem(rawPrivateKey),
-      note: !text(rawPrivateKey) ? '未配置：商户平台下载的 apiclient_key.pem 全文' : (pemValid(rawPrivateKey) ? 'PEM 头完整且含换行；换行也可写成 \\n' : '缺少 -----BEGIN …----- 头，或换行被压成一行/未转义')
+      note: !rawPrivateKey ? '未配置：商户平台下载的 apiclient_key.pem 全文' : (pemValid(rawPrivateKey) ? 'PEM 头完整且含换行；换行也可写成 \\n' : '缺少 -----BEGIN …----- 头，或换行被压成一行/未转义')
     },
     {
       key: 'WXPAY_PLATFORM_PUBLIC_KEY',
       label: '微信支付公钥（或平台证书）',
-      status: !text(rawPlatformKey) ? 'missing' : (pemValid(rawPlatformKey) ? 'ok' : 'invalid'),
+      source: platformKey.source,
+      status: !rawPlatformKey ? 'missing' : (pemValid(rawPlatformKey) ? 'ok' : 'invalid'),
       masked: maskPem(rawPlatformKey),
-      note: !text(rawPlatformKey) ? '未配置：商户平台「API 安全 → 微信支付公钥」下载 pub_key.pem' : (pemValid(rawPlatformKey) ? '用于回调验签，与平台证书模式二选一' : 'PEM 头缺失或换行被压成一行/未转义')
+      note: !rawPlatformKey ? '未配置：商户平台「API 安全 → 微信支付公钥」下载 pub_key.pem' : (pemValid(rawPlatformKey) ? '用于回调验签，与平台证书模式二选一' : 'PEM 头缺失或换行被压成一行/未转义')
     },
     {
       key: 'WXPAY_PLATFORM_SERIAL',
       label: '平台公钥 ID / 证书序列号',
+      source: platformSerialValue.source,
       status: !rawPlatformSerial ? 'missing' : 'ok',
       masked: maskMiddle(rawPlatformSerial, 0, 4),
       note: !rawPlatformSerial ? '未配置：公钥模式填 PUB_KEY_ID_…，证书模式填平台证书序列号' : (rawPlatformSerial.indexOf('PUB_KEY_ID_') === 0 ? '公钥模式' : '平台证书模式')
@@ -224,6 +345,7 @@ function paymentConfigStatus() {
     {
       key: 'WXPAY_APP_ID',
       label: 'JSAPI 下单 AppID',
+      source: rawAppId ? appIdValue.source : (fallbackAppId ? 'env' : ''),
       status: (rawAppId || fallbackAppId) ? 'ok' : 'missing',
       masked: rawAppId || (fallbackAppId ? fallbackAppId + '（回退）' : ''),
       note: rawAppId
@@ -233,6 +355,7 @@ function paymentConfigStatus() {
     {
       key: 'WXPAY_NOTIFY_URL',
       label: '支付回调地址',
+      source: notifyValue.source,
       status: (rawNotify ? (notifyInvalid ? 'invalid' : 'ok') : 'ok'),
       masked: rawNotify || DEFAULT_NOTIFY_URL + '（默认）',
       note: rawNotify
@@ -242,6 +365,7 @@ function paymentConfigStatus() {
     {
       key: 'HONEY_TOPUP_PACKS',
       label: '充值档位',
+      source: packsValue.source,
       status: !packState.packs.length ? 'missing' : (missingPacks.length || extraPacks.length || packState.reason ? 'invalid' : 'ok'),
       masked: packState.packs.length ? packState.packs.map(item => item.priceYuan + ' 元 / ' + item.totalDrops + ' 滴').join('，') : '',
       note: !packState.packs.length
@@ -264,6 +388,7 @@ function paymentConfigStatus() {
     appId: rawAppId || fallbackAppId,
     notifyUrl: config.notifyUrl,
     items,
+    secretStore: secretStoreView(),
     packs: {
       list: packState.packs.map(item => ({ id: item.id, priceYuan: item.priceYuan, drops: item.totalDrops })),
       reason: packState.reason,
@@ -271,6 +396,134 @@ function paymentConfigStatus() {
       missingYuan: missingPacks.map(cents => cents / 100),
       extraYuan: extraPacks.map(cents => cents / 100)
     }
+  }
+}
+
+// ============ 平台「支付设置」写入（仅平台负责人，可调用） ============
+// 支持逐项保存、逐项清除；页面提交什么就只改什么，未提交的项保持原值。
+// 任何返回值都只包含状态、指纹与项名，明文只在云函数内部短暂存在。
+function normalizeSecretValue(name, raw) {
+  const provided = raw == null ? '' : String(raw)
+  if (!provided.trim()) return { ok: false, error: '内容为空' }
+  if (provided.length > SECRET_MAX_LENGTH) return { ok: false, error: '内容过长' }
+  const value = text(provided)
+  if (name === 'WXPAY_MCH_ID' && !/^\d{6,}$/.test(value)) return { ok: false, error: '必须是纯数字商户号' }
+  if (name === 'WXPAY_SERIAL_NO' && !/^[0-9A-Za-z]{6,}$/.test(value)) return { ok: false, error: '必须是字母数字组成的证书序列号' }
+  if (name === 'WXPAY_APIV3_KEY' && !/^[0-9A-Za-z]{32}$/.test(value)) return { ok: false, error: '必须是 32 位字母数字' }
+  if (name === 'WXPAY_PLATFORM_SERIAL' && !/^[0-9A-Za-z_]{4,}$/.test(value)) return { ok: false, error: '应为 PUB_KEY_ID_… 或平台证书序列号' }
+  if (name === 'WXPAY_PRIVATE_KEY' || name === 'WXPAY_PLATFORM_PUBLIC_KEY') {
+    const pem = normalizePem(provided)
+    if (!pem) return { ok: false, error: '缺少 -----BEGIN …----- 头' }
+    if (pem.indexOf('\n') < 0) return { ok: false, error: '换行被压成一行，请保留换行或写成 \\n 转义' }
+    return { ok: true, value: pem }
+  }
+  if (name === 'HONEY_TOPUP_PACKS') {
+    const state = parsePacks(value)
+    if (!state.packs.length) return { ok: false, error: RECHARGE_REASON_TEXTS[state.reason] || '档位格式异常' }
+    return { ok: true, value: JSON.stringify(state.packs.map(item => ({ priceCents: item.priceCents, drops: item.drops }))) }
+  }
+  return { ok: true, value }
+}
+
+async function writeSecretAudit(db, operator, action, keys) {
+  try {
+    await db.collection(SECRET_AUDIT_COLLECTION).add({
+      data: {
+        action,
+        keys: (keys || []).slice(),
+        operatorId: text(operator && operator.userId),
+        operatorName: text(operator && operator.name),
+        ip: text(operator && operator.ip),
+        at: new Date()
+      }
+    })
+    return true
+  } catch (error) {
+    // 审计集合缺失或写入失败只告警，不阻断配置写入（可在控制台补建集合）
+    console.warn('[honeyRecharge] 支付配置审计写入失败', text(error.code) || text(error.message))
+    return false
+  }
+}
+
+function secretDocPayload(keys, operator) {
+  return {
+    keys,
+    algorithm: 'aes-256-gcm',
+    version: 1,
+    kekFingerprint: secretKekFingerprint(),
+    updatedAt: new Date(),
+    updatedBy: text(operator && operator.userId),
+    updatedByName: text(operator && operator.name)
+  }
+}
+
+async function savePaymentSecretsCore(db, operator, params) {
+  if (!secretMasterKey()) fail('PAYMENT_SECRET_KEK_MISSING', '未配置加密主密钥 PAYMENT_SECRET_KEK：请先在云函数环境变量设置一个不少于 16 位的随机字符串，再回到本页保存')
+  const input = params && params.secrets && typeof params.secrets === 'object' ? params.secrets : {}
+  const names = Object.keys(input).filter(name => SECRET_FIELDS.indexOf(name) >= 0 && text(input[name]))
+  if (!names.length) fail('PAYMENT_SECRET_EMPTY', '请至少填写一项要保存的配置')
+  const normalized = {}
+  for (const name of names) {
+    const checked = normalizeSecretValue(name, input[name])
+    if (!checked.ok) fail('PAYMENT_SECRET_INVALID', SECRET_LABELS[name] + '：' + checked.error)
+    normalized[name] = checked.value
+  }
+  const existing = await docValue(db, SECRET_COLLECTION, SECRET_DOC_ID)
+  const keys = Object.assign({}, (existing && existing.keys) || {})
+  const saved = []
+  for (const name of names) {
+    const sealed = encryptSecret(normalized[name])
+    if (!sealed) fail('PAYMENT_SECRET_KEK_MISSING', '加密主密钥不可用，暂不能保存')
+    keys[name] = sealed
+    saved.push(name)
+  }
+  try {
+    await db.collection(SECRET_COLLECTION).doc(SECRET_DOC_ID).set({ data: secretDocPayload(keys, operator) })
+  } catch (error) {
+    console.warn('[honeyRecharge] 支付配置写入失败', text(error.code) || text(error.message))
+    fail('PAYMENT_SECRET_SAVE_FAILED', '支付配置保存失败，请稍后重试')
+  }
+  const audited = await writeSecretAudit(db, operator, 'save', saved)
+  await ensureSecrets(db, { force: true })
+  return { success: true, saved, audited, status: await paymentConfigStatus(db) }
+}
+
+async function clearPaymentSecretsCore(db, operator, params) {
+  const existing = await docValue(db, SECRET_COLLECTION, SECRET_DOC_ID)
+  const all = Boolean(params && params.all === true)
+  const requested = Array.isArray(params && params.keys) ? params.keys.map(text).filter(name => SECRET_FIELDS.indexOf(name) >= 0) : []
+  if (!existing || !existing.keys || !Object.keys(existing.keys).length) {
+    await ensureSecrets(db, { force: true })
+    return { success: true, cleared: [], audited: false, status: await paymentConfigStatus(db) }
+  }
+  if (!all && !requested.length) fail('PAYMENT_SECRET_EMPTY', '请选择要清除的配置项')
+  const keys = Object.assign({}, existing.keys)
+  const cleared = (all ? Object.keys(keys) : requested).filter(name => keys[name])
+  cleared.forEach(name => { delete keys[name] })
+  try {
+    if (!Object.keys(keys).length) await db.collection(SECRET_COLLECTION).doc(SECRET_DOC_ID).remove()
+    else await db.collection(SECRET_COLLECTION).doc(SECRET_DOC_ID).set({ data: secretDocPayload(keys, operator) })
+  } catch (error) {
+    console.warn('[honeyRecharge] 支付配置清除失败', text(error.code) || text(error.message))
+    fail('PAYMENT_SECRET_CLEAR_FAILED', '支付配置清除失败，请稍后重试')
+  }
+  const audited = await writeSecretAudit(db, operator, 'clear', cleared)
+  await ensureSecrets(db, { force: true })
+  return { success: true, cleared, audited, status: await paymentConfigStatus(db) }
+}
+
+// 对外入口：把异常统一转成 {success:false,code,error}，便于页面直接展示原因。
+async function savePaymentSecrets(db, operator, params) {
+  try { return await savePaymentSecretsCore(db, operator, params) } catch (error) {
+    const code = text(error.code) || 'PAYMENT_SECRET_SAVE_FAILED'
+    return failResult(code, text(error.message) || '支付配置保存失败，请稍后重试')
+  }
+}
+
+async function clearPaymentSecrets(db, operator, params) {
+  try { return await clearPaymentSecretsCore(db, operator, params) } catch (error) {
+    const code = text(error.code) || 'PAYMENT_SECRET_CLEAR_FAILED'
+    return failResult(code, text(error.message) || '支付配置清除失败，请稍后重试')
   }
 }
 
@@ -650,6 +903,7 @@ async function creditOrder(db, order, transactionId, source) {
 
 // 查单复核后再入账：回调与主动查单共用这一条路径
 async function confirmOrder(db, outTradeNo, source) {
+  await ensureSecrets(db)
   const config = paymentConfig()
   if (!config.ready) fail('PAYMENT_NOT_CONFIGURED', '微信支付尚未开通')
   const order = await getOrder(db, outTradeNo)
@@ -679,6 +933,7 @@ async function confirmOrder(db, outTradeNo, source) {
 // ============ 回调入口（唯一入账点） ============
 // 返回 {statusCode, body}，由 webLoginApi 原样写给微信支付；验签失败不入账、不写订单。
 async function handleNotify(event, db) {
+  await ensureSecrets(db)
   const config = paymentConfig()
   if (!config.ready) {
     console.warn('[honeyRecharge] 回调到达但支付未配置')
@@ -734,6 +989,7 @@ async function handleNotify(event, db) {
 // 必须显式设置 HONEY_TOPUP_REFUND_ENABLED=true，且不对外开放 HTTP action。
 async function refundOrder(db, params) {
   if (text(process.env.HONEY_TOPUP_REFUND_ENABLED).toLowerCase() !== 'true') fail('HONEY_REFUND_NOT_ENABLED', '退款功能尚未开放')
+  await ensureSecrets(db)
   const config = paymentConfig()
   if (!config.ready) fail('PAYMENT_NOT_CONFIGURED', '微信支付尚未开通')
   const outTradeNo = text(params && params.outTradeNo)
@@ -786,6 +1042,7 @@ async function refundOrder(db, params) {
 
 // ============ 个人中心入口 ============
 async function createOrder(db, actor, event) {
+  await ensureSecrets(db)
   const state = rechargeState()
   if (!state.available) return failResult(state.reason || 'PAYMENT_NOT_CONFIGURED', state.error || '充值暂不可用，请稍后重试')
   const platform = text(event && event.clientPlatform).toLowerCase()
@@ -843,6 +1100,7 @@ async function createOrder(db, actor, event) {
 }
 
 async function orderStatus(db, openId, event) {
+  await ensureSecrets(db)
   const outTradeNo = text(event && event.outTradeNo)
   if (!/^[0-9A-Za-z_-]{6,32}$/.test(outTradeNo)) return failResult('HONEY_ORDER_INVALID', '订单号无效')
   const order = await getOrder(db, outTradeNo)
@@ -875,6 +1133,8 @@ function create({ db, user, session }) {
   return async function handle(action, event) {
     try {
       if (!openId) return failResult('SERVICE_PRIVATE_AUTH_REQUIRED', '请重新连接微信')
+      // 充值态与档位可能来自数据库密文，先刷新一次配置缓存（失败时按环境变量回退）
+      await ensureSecrets(db)
       if (action === 'servicePrivateHoneyRecharge') return await createOrder(db, { openId, userId }, event || {})
       if (action === 'servicePrivateHoneyOrders') {
         const rows = await listOrders(db, openId, 30, true)
@@ -898,7 +1158,10 @@ module.exports = {
   rechargeState,
   publicRechargeState,
   paymentConfigStatus,
+  savePaymentSecrets,
+  clearPaymentSecrets,
+  ensureSecrets,
   listOrders,
   refundOrder,
-  __internals: { paymentConfig, parsePacks, verifyNotifySignature, decryptResource, verifyPaidTrade, authorization, creditOrder, confirmOrder, nextOutTradeNo, ledgerDocId, viewOf }
+  __internals: { paymentConfig, parsePacks, verifyNotifySignature, decryptResource, verifyPaidTrade, authorization, creditOrder, confirmOrder, nextOutTradeNo, ledgerDocId, viewOf, normalizeSecretValue, encryptSecret, decryptSecret, secretMasterKey, secretValue, secretSource }
 }

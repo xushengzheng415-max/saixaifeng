@@ -6244,11 +6244,32 @@ exports.main = async (event, context) => {
         break
       }
       case 'platformHoneyPaymentConfig': {
-        // 支付配置体检：只回「是否已配置 / 格式 / 脱敏指纹」，密钥明文永不返回浏览器。
+        // 支付配置体检：只回「是否已配置 / 来源 / 格式 / 脱敏指纹」，密钥明文永不返回浏览器。
         const auth = await authenticateWebSession(params)
         result = auth.success && auth.principalType === 'platform_owner'
-          ? await require('./honeyRecharge.cjs').paymentConfigStatus()
+          ? await require('./honeyRecharge.cjs').paymentConfigStatus(cloud.database())
           : {success:false,code:'PLATFORM_OWNER_REQUIRED',error:'仅平台负责人可查看支付配置'}
+        break
+      }
+      case 'platformHoneyPaymentSecretSave':
+      case 'platformHoneyPaymentSecretClear': {
+        // 平台「支付设置」逐项写入/清除：密文入库，主密钥只在云函数环境变量，页面永不回读明文。
+        const auth = await authenticateWebSession(params)
+        if (!auth.success || auth.principalType !== 'platform_owner') {
+          result = {success:false,code:'PLATFORM_OWNER_REQUIRED',error:'仅平台负责人可修改支付配置'}
+          break
+        }
+        const rawHeaders = event.headers || {}
+        const forwarded = String(rawHeaders['x-forwarded-for'] || rawHeaders['X-Forwarded-For'] || '').split(',')[0].trim()
+        const platformOperator = {
+          userId: String(auth.userId || ''),
+          name: String((auth.user && (auth.user.nickname || auth.user.name)) || ''),
+          ip: forwarded
+        }
+        const honeyRechargeModule = require('./honeyRecharge.cjs')
+        result = action === 'platformHoneyPaymentSecretSave'
+          ? await honeyRechargeModule.savePaymentSecrets(cloud.database(), platformOperator, params)
+          : await honeyRechargeModule.clearPaymentSecrets(cloud.database(), platformOperator, params)
         break
       }
       case 'marketingSelfTestWxConfig': {

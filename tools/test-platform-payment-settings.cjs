@@ -63,10 +63,11 @@ function assertNoPlaintext(status, label) {
   assert.equal(text.indexOf(platformSerial) < 0, true, label + '：平台公钥 ID 只能脱敏展示')
 }
 
-function run() {
+async function run() {
   // ---- 全部配置正确：就绪、可充值、档位与已确认 5 档一致 ----
   setEnv(fullEnv)
-  let status = recharge.paymentConfigStatus()
+  await recharge.ensureSecrets(null, { force: true })
+  let status = await recharge.paymentConfigStatus()
   assert.equal(status.success, true)
   assert.equal(status.ready, true, '全部变量正确时应判断为已就绪')
   assert.equal(status.rechargeAvailable, true, '支付与档位都正确时应开放充值')
@@ -88,10 +89,14 @@ function run() {
   const expectedFingerprint = crypto.createHash('sha256').update(merchantPem.trim()).digest('hex').slice(0, 12)
   assert.equal(privateItem.masked, 'PRIVATE KEY · 指纹 ' + expectedFingerprint, '私钥只允许回类型与指纹')
   assert.equal(itemOf(status, 'WXPAY_MCH_ID').masked, '19****01')
+  // 全部来自环境变量时，来源列必须标成 env，避免与库内密文混淆
+  assert.equal(itemOf(status, 'WXPAY_APIV3_KEY').source, 'env', '环境变量来源必须标为 env')
+  assert.equal(status.secretStore.savedCount, 0, '未写入数据库时库内配置数必须是 0')
+  assert.equal(status.secretStore.kekReady, false, '未设置 PAYMENT_SECRET_KEK 时主密钥应为未就绪')
 
   // ---- 完全没有配置：逐项报缺，且不开放充值 ----
   setEnv({})
-  status = recharge.paymentConfigStatus()
+  status = await recharge.paymentConfigStatus()
   assert.equal(status.ready, false)
   assert.equal(status.rechargeAvailable, false)
   assert.equal(status.rechargeReason, 'PAYMENT_NOT_CONFIGURED')
@@ -112,7 +117,7 @@ function run() {
     WXPAY_NOTIFY_URL: 'https://example.com/honeyPayNotify?sign=1',
     WXPAY_MCH_ID: '1900000001 '
   }))
-  status = recharge.paymentConfigStatus()
+  status = await recharge.paymentConfigStatus()
   assert.equal(itemOf(status, 'WXPAY_APIV3_KEY').status, 'invalid', '31 位密钥必须报格式异常')
   assert.equal(itemOf(status, 'WXPAY_SERIAL_NO').status, 'invalid', '含符号的证书序列号必须报格式异常')
   assert.equal(itemOf(status, 'WXPAY_NOTIFY_URL').status, 'invalid', 'v3 回调地址带查询串必须报格式异常')
@@ -122,24 +127,24 @@ function run() {
 
   // ---- 私钥换行未转义 / PEM 头缺失 ----
   setEnv(Object.assign({}, fullEnv, { WXPAY_PRIVATE_KEY: merchantPem.split('\n').join(' ') }))
-  status = recharge.paymentConfigStatus()
+  status = await recharge.paymentConfigStatus()
   assert.equal(itemOf(status, 'WXPAY_PRIVATE_KEY').status, 'invalid', '私钥压成一行后必须报格式异常')
 
   setEnv(Object.assign({}, fullEnv, { WXPAY_PRIVATE_KEY: merchantPem.replace(/-----BEGIN [A-Z ]+-----/g, '') }))
-  status = recharge.paymentConfigStatus()
+  status = await recharge.paymentConfigStatus()
   assert.equal(itemOf(status, 'WXPAY_PRIVATE_KEY').status, 'invalid', '缺少 PEM 头必须报格式异常')
 
   setEnv(Object.assign({}, fullEnv, { WXPAY_PLATFORM_PUBLIC_KEY: platformPem }))
-  const realNewlineMask = itemOf(recharge.paymentConfigStatus(), 'WXPAY_PLATFORM_PUBLIC_KEY').masked
+  const realNewlineMask = itemOf(await recharge.paymentConfigStatus(), 'WXPAY_PLATFORM_PUBLIC_KEY').masked
   setEnv(Object.assign({}, fullEnv, { WXPAY_PLATFORM_PUBLIC_KEY: platformPem.replace(/\n/g, '\\n') }))
-  status = recharge.paymentConfigStatus()
+  status = await recharge.paymentConfigStatus()
   assert.equal(itemOf(status, 'WXPAY_PLATFORM_PUBLIC_KEY').status, 'ok', '换行以 \\n 转义写入时仍应判为正常')
   assert.equal(itemOf(status, 'WXPAY_PLATFORM_PUBLIC_KEY').masked, realNewlineMask, '转义换行与真实换行必须得到同一指纹')
   assertNoPlaintext(status, '私钥格式异常')
 
   // ---- 档位对比：缺档、多档、比例不符 ----
   setEnv(Object.assign({}, fullEnv, { HONEY_TOPUP_PACKS: JSON.stringify([{ priceCents: 100, drops: 10 }, { priceCents: 2000, drops: 200 }]) }))
-  status = recharge.paymentConfigStatus()
+  status = await recharge.paymentConfigStatus()
   assert.equal(status.packs.confirmed, false)
   assert.deepEqual(status.packs.missingYuan, [5, 10, 50, 100], '缺少的档位必须逐一点名')
   assert.deepEqual(status.packs.extraYuan, [20], '多出的档位必须逐一点名')
@@ -148,7 +153,7 @@ function run() {
   assert.equal(status.rechargeAvailable, true, '档位本身合法时仍可充值，但档位口径与已确认不一致必须被发现')
 
   setEnv(Object.assign({}, fullEnv, { HONEY_TOPUP_PACKS: JSON.stringify([{ priceCents: 500, drops: 60 }]) }))
-  status = recharge.paymentConfigStatus()
+  status = await recharge.paymentConfigStatus()
   assert.equal(status.packs.list.length, 0, '旧五档（5 元 60 滴）必须整组拒绝')
   assert.equal(status.rechargeAvailable, false)
   assert.equal(status.rechargeReason, 'PRICE_RATE_MISMATCH')
@@ -156,22 +161,34 @@ function run() {
   assert.equal(sourceHasActionGate(), true)
 }
 
-// 静态闸门：新 action 必须走网页会话并把平台负责人当作唯一放行条件。
+// 静态闸门：三个 action 都必须走网页会话并把平台负责人当作唯一放行条件。
 function sourceHasActionGate() {
   const file = path.join(__dirname, '..', 'cloudfunctions', 'webLoginApi', 'index.js')
   const source = fs.readFileSync(file, 'utf8')
-  const start = source.indexOf("case 'platformHoneyPaymentConfig'")
-  assert.ok(start >= 0, 'index.js 必须注册 platformHoneyPaymentConfig action')
-  const block = source.slice(start, source.indexOf('break', start))
-  assert.ok(block.indexOf('authenticateWebSession(params)') >= 0, '支付配置体检必须先校验网页会话')
-  assert.ok(block.indexOf("principalType === 'platform_owner'") >= 0, '支付配置体检只允许平台负责人')
-  assert.ok(block.indexOf('paymentConfigStatus') >= 0, '支付配置体检必须调用统一实现')
+  const gates = [
+    ['platformHoneyPaymentConfig', 'paymentConfigStatus'],
+    ['platformHoneyPaymentSecretSave', 'savePaymentSecrets'],
+    ['platformHoneyPaymentSecretClear', 'clearPaymentSecrets']
+  ]
+  gates.forEach(([actionName, implementation]) => {
+    const start = source.indexOf("case '" + actionName + "'")
+    assert.ok(start >= 0, 'index.js 必须注册 ' + actionName + ' action')
+    const block = source.slice(start, start + 1600)
+    assert.ok(block.indexOf('authenticateWebSession(params)') >= 0, actionName + ' 必须先校验网页会话')
+    assert.ok(/principalType\s*[!=]==\s*'platform_owner'/.test(block), actionName + ' 只允许平台负责人')
+    assert.ok(block.indexOf(implementation) >= 0, actionName + ' 必须调用统一实现 ' + implementation)
+  })
   return true
 }
 
 try {
-  run()
-  console.log('平台支付设置体检检查通过：只回状态与脱敏指纹、缺项与格式异常可定位、档位与已确认 5 档对比正确')
-} finally {
+  run().then(() => {
+    console.log('平台支付设置体检检查通过：只回状态与脱敏指纹、来源可区分、缺项与格式异常可定位、档位与已确认 5 档对比正确')
+  }).catch(error => {
+    console.error(error && error.stack ? error.stack : error)
+    process.exitCode = 1
+  }).finally(() => { restore() })
+} catch (error) {
   restore()
+  throw error
 }
