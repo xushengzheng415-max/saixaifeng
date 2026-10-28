@@ -410,3 +410,8 @@ KnockoutDrawTree由操作台及DrawScreenProjection共用。投屏协议增加fo
 ## 2026-10-18 赛制对应的共用投屏
 
 DrawScreenProjection依据显式format分流：league为联赛签位顺序，不显示A/B组，也不冒充积分排名；hybrid为联赛签位与基于名次来源的晋级淘汰树，不提前填入未产生的球队；cup为淘汰签位树；tournament/group才显示分组。未收到赛制时不猜A组。QuickHybridConsole、通用及专业投屏均声明赛制，排满顺序与最终确认分开，QuickDrawResult确认后同步相同协议。该逻辑用于演示、真实及正式/预览环境，无新增数据权限。
+
+
+## 2026-10-28 Word报名表保护号码预览
+
+teamRegistrationDocx.js仅从受保护号码的连续可见前段读取生日/地区；不完整号不作为自然人唯一键、不去重、不补尾号或性别。上传沿既有tournamentRegistrationFlow的空identityNumber+显式birthDate草稿分流，保持pending/not_verified与正式参赛资格边界；前缀不持久化或做身份摘要。发布证据见../releases/registration-protected-identity-20261028.md。

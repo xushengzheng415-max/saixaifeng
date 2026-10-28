@@ -1,3 +1,5 @@
+2026-10-28 Word报名表已兼容身份证号保护：前14—17位数字或带遮蔽尾部的号码，只提取实际可见的生日和地区；缺失性别/尾号不推算，不将前缀当完整身份证、摘要或去重键。前缀只用于导入预览，提交沿用现有无完整身份证+出生日期的待补全流程；不自动取得参赛资格。功能ab7a937c、预览源码64b7fdf4，保护号码/错误日期/同前缀多人/工作人员兼球员/报名模板回归通过，PC构建2954模块/2m56s通过并发布测试路径，7项HTTP200且SHA-256一致；正式/admin/未改。线上tournamentRegistrationFlow只读回下载核对importPersonFields.cjs与本地SHA-256一致，draft/not_verified分流存在，无需后端部署。见docs/releases/registration-protected-identity-20261028.md。
+
 2026-10-28 用户授权后，报名表按组别报名人数上限生成球员栏位已正式发布并同步测试：仅选择报名表3文件进入main（正式源码c1929cff），未将preview的同期登录、平板或转会功能带入正式。main合回preview（测试源码86e77db5）并按测试base重新构建发布，保留其原功能。两端入口、Word源模板及关键分包分别8项HTTP200且SHA-256与对应构建一致；1/2/18/23/35/100人数、可选字段、原生控件唯一性及23人填表导回回归通过。未部署后端、小程序或H5。见docs/releases/registration-template-player-limit-20261028.md。
 
 2026-10-28 下载球队报名表已按用户确认，按当前组别球员报名人数上限动态生成球员栏位；工作人员单独保留。读取rosterLimit，兼容maxPlayersPerTeam/maxPlayers，未配置的历史组别沿用既有35人兜底。1/2/18/23/35/100人栏位、原生控件唯一性、可选字段及23人填表导回回归通过；23人Word渲染3页并逐页检查。功能112b4cbc，预览源码b77a95be已构建发布/preview/admin/，入口/分包/原始Word模板HTTP与SHA-256核对一致，正式/admin/未改。未部署云函数或其他端口。见docs/releases/registration-template-player-limit-20261028.md。

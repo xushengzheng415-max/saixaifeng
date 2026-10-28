@@ -1,0 +1,14 @@
+# Word报名表受保护身份证号识别
+
+2026-10-28 Word报名表已兼容身份证号保护：前14—17位数字或带遮蔽尾部的号码，只提取实际可见的生日和地区；缺失性别/尾号不推算，不将前缀当完整身份证、摘要或去重键。前缀只用于导入预览，提交沿用现有无完整身份证+出生日期的待补全流程；不自动取得参赛资格。功能ab7a937c、预览源码64b7fdf4，保护号码/错误日期/同前缀多人/工作人员兼球员/报名模板回归通过，PC构建2954模块/2m56s通过并发布测试路径，7项HTTP200且SHA-256一致；正式/admin/未改。线上tournamentRegistrationFlow只读回下载核对importPersonFields.cjs与本地SHA-256一致，draft/not_verified分流存在，无需后端部署。见docs/releases/registration-protected-identity-20261028.md。
+
+用户确认：部分报名表为保护身份证号，只保留前段，不应因非18位阻断导入。实现仅修改teamRegistrationDocx.js、TeamRegistrationWordImporter.vue及新回归test-registration-protected-identity.mjs。
+
+- 可见前6位用于地区推导；可见前14位包含完整日期时读取生日。遮蔽掉的出生日期不补造，显式生日与可见日期不一致仍报错。
+- 不完整号码只留在当前预览的identityNumberPrefix；identityNumber提交为空，传递已识别生日与地区，由已在线的supplementImportedIdentity保持identityIncomplete，存为draft/not_verified。前缀不进身份摘要或实名去重，也不存为完整证件。
+- 三名同前缀球员仍为三人，工作人员同前缀不自动关联为同人。完整号码的原有人员去重与兼任规则保留。
+- 无效日期和非法字符仍报错；号码不足且无法读出生日时显示待补充。
+
+验证：三套回归通过；构建实际含新解析代码。回下载线上导入字段模块SHA-256为ABD76713145E366FF3DFC689486C093CC7F0BD9D89205623DFE64DEADE1321E9，与本地一致，并核对入口使用该模块、pending分流。只读下载，不改函数配置、数据库或真实报名。未发布正式PC、小程序或H5；真实用户Word重新导入仍待验收。
+
+预览入口SHA-256：b662f96de8465d95947a5e827dc82305d0622fe6f0abc9db3c875f2b79ae41fd。正式入口保持：a7b61309e5539379381a8749d84ee7a57b2de05534592631976185fffb17fb89。证据在.codex-artifacts/registration-protected-identity-20261028。
