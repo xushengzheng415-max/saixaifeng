@@ -53,6 +53,11 @@
 
       <section class="pay-settings__block">
         <h2>写入支付配置 <small>加密保存 · 页面不留明文 · 留空表示不修改</small></h2>
+        <p class="pay-settings__hint">
+          证书和密钥都能直接<b>选择本机文件</b>：只在本页读成文本填进表单，
+          <b>不会上传文件到服务器</b>，保存时也只会把文本交给云函数加密入库。
+        </p>
+        <input ref="fileInput" class="pay-settings__file-input" type="file" :accept="fileAccept" @change="onFileChange" />
         <div class="pay-settings__form">
           <label v-for="field in secretFields" :key="field.key" class="pay-settings__form-row">
             <span class="pay-settings__form-label">
@@ -77,6 +82,7 @@
             />
             <span class="pay-settings__field-note">
               {{ field.note }}
+              <el-button v-if="field.file" link type="primary" @click.prevent="pickFile(field)">选择 {{ field.file }} 文件</el-button>
               <el-button v-if="field.key === 'WXPAY_APIV3_KEY' && generatedKey" link type="primary" @click="form.WXPAY_APIV3_KEY = generatedKey">填入本页生成的密钥</el-button>
               <el-button v-if="field.key === 'HONEY_TOPUP_PACKS'" link type="primary" @click="form.HONEY_TOPUP_PACKS = confirmedPacksPretty">填入已确认 5 档</el-button>
             </span>
@@ -241,7 +247,9 @@ const SECRET_FIELDS = [
     type: 'input',
     maxlength: 64,
     placeholder: 'API 证书序列号（40 位十六进制）',
-    note: '商户平台「账户中心 → API 安全 → API 证书」，必须与商户私钥是同一张证书。'
+    file: 'apiclient_cert.pem',
+    accept: '.pem,.crt,.cer,.txt',
+    note: '商户平台「账户中心 → API 安全 → API 证书」，必须与商户私钥是同一张证书。选 apiclient_cert.pem 会自动读出序列号。'
   },
   {
     key: 'WXPAY_APIV3_KEY',
@@ -256,6 +264,8 @@ const SECRET_FIELDS = [
     label: '商户 API 私钥',
     type: 'textarea',
     placeholder: '-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----',
+    file: 'apiclient_key.pem',
+    accept: '.pem,.txt,.key',
     note: '证书工具包里的 apiclient_key.pem 全文，包含首尾两行。'
   },
   {
@@ -263,6 +273,8 @@ const SECRET_FIELDS = [
     label: '微信支付公钥',
     type: 'textarea',
     placeholder: '-----BEGIN PUBLIC KEY-----\n…\n-----END PUBLIC KEY-----',
+    file: 'pub_key.pem',
+    accept: '.pem,.txt',
     note: '商户平台「API 安全 → 微信支付公钥」下载的 pub_key.pem。必须填公钥，不能填平台证书。'
   },
   {
@@ -278,6 +290,8 @@ const SECRET_FIELDS = [
     label: '充值档位',
     type: 'textarea',
     placeholder: '[{"priceCents":100,"drops":10}, …]',
+    file: '档位 JSON',
+    accept: '.json,.txt',
     note: '服务端校验：每档滴数必须等于金额 × 10 分，且不允许赠送滴数。'
   }
 ]
@@ -301,6 +315,8 @@ const status = reactive({
 })
 const generatedKey = ref('')
 const keyToCheck = ref('')
+const fileInput = ref(null)
+const pendingField = ref(null)
 const form = reactive(Object.fromEntries(SECRET_FIELDS.map(field => [field.key, ''])))
 
 const secretFields = SECRET_FIELDS
@@ -312,6 +328,7 @@ const missingText = computed(() => (status.missing && status.missing.length ? '�
 const modeText = computed(() => ({ public_key: '微信支付公钥', platform_cert: '平台证书', unconfigured: '未配置' }[status.mode] || '未配置'))
 const jsapiDir = 'https://www.sxffootball.cn/'
 const defaultNotifyUrl = DEFAULT_NOTIFY_URL
+const fileAccept = computed(() => (pendingField.value && pendingField.value.accept) || '.pem,.txt,.json')
 const confirmedPacksJson = JSON.stringify(CONFIRMED_PACK_CENTS.map(cents => ({ priceCents: cents, drops: cents / 10 })))
 const confirmedPacksPretty = JSON.stringify(CONFIRMED_PACK_CENTS.map(cents => ({ priceCents: cents, drops: cents / 10 })), null, 2)
 const packDiffText = computed(() => {
@@ -385,6 +402,86 @@ function generateKey() {
 
 function clearKey() {
   generatedKey.value = ''
+}
+
+// 只在本页把证书文件读成文本，不上传文件；apiclient_cert.pem 顺带读出证书序列号。
+function readTlv(bytes, offset) {
+  if (offset + 2 > bytes.length) throw new Error('证书内容不完整')
+  const tag = bytes[offset]
+  let length = bytes[offset + 1]
+  let cursor = offset + 2
+  if (length & 0x80) {
+    const count = length & 0x7f
+    if (!count || count > 4) throw new Error('证书长度字段异常')
+    length = 0
+    for (let index = 0; index < count; index += 1) length = (length << 8) | bytes[cursor + index]
+    cursor += count
+  }
+  const end = cursor + length
+  if (end > bytes.length) throw new Error('证书内容不完整')
+  return { tag, start: cursor, end }
+}
+
+function serialFromCertPem(text) {
+  const match = String(text || '').match(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/)
+  if (!match) return ''
+  const binary = window.atob(match[1].replace(/\s+/g, ''))
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  const certificate = readTlv(bytes, 0)
+  if (certificate.tag !== 0x30) throw new Error('这不是 x509 证书文件')
+  const tbs = readTlv(bytes, certificate.start)
+  if (tbs.tag !== 0x30) throw new Error('证书结构异常')
+  let cursor = tbs.start
+  const first = readTlv(bytes, cursor)
+  if (first.tag === 0xa0) cursor = first.end // 跳过 [0] version
+  const serial = readTlv(bytes, cursor)
+  if (serial.tag !== 0x02) throw new Error('证书里没有找到序列号')
+  let hex = ''
+  for (let index = serial.start; index < serial.end; index += 1) hex += bytes[index].toString(16).padStart(2, '0')
+  return hex.replace(/^00+/, '').toUpperCase()
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('读取本机文件失败'))
+    reader.readAsText(file)
+  })
+}
+
+function pickFile(field) {
+  pendingField.value = field
+  if (!fileInput.value) return
+  fileInput.value.value = ''
+  fileInput.value.click()
+}
+
+async function onFileChange(event) {
+  const input = event.target
+  const file = input && input.files && input.files[0]
+  const field = pendingField.value
+  pendingField.value = null
+  if (!file || !field) return
+  try {
+    const text = await readFileAsText(file)
+    if (!text.trim()) throw new Error('文件是空的，请确认选对了文件')
+    if (field.key === 'WXPAY_SERIAL_NO') {
+      const serial = serialFromCertPem(text)
+      if (!serial) throw new Error('没读到证书序列号，请确认选的是 apiclient_cert.pem')
+      form.WXPAY_SERIAL_NO = serial
+      ElMessage.success('已从 ' + file.name + ' 读出证书序列号（' + serial.length + ' 位），未上传该文件')
+      return
+    }
+    const value = text.trim()
+    form[field.key] = value
+    ElMessage.success('已读入 ' + file.name + '（' + value.length + ' 字符），仅填在本页表单，未上传')
+  } catch (err) {
+    ElMessage.error((err && err.message) || '读取本机文件失败')
+  } finally {
+    input.value = ''
+  }
 }
 
 function applyStatus(reply) {
@@ -506,6 +603,7 @@ onMounted(() => { loadStatus() })
 .pay-settings__block h2 small { font-weight: 400; color: #7a8a7f; font-size: 12px; }
 .pay-settings__head-tag { margin-left: auto; }
 .pay-settings__form { display: grid; gap: 14px; margin-bottom: 12px; }
+.pay-settings__file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .pay-settings__form-row { display: grid; gap: 6px; }
 .pay-settings__form-label { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 13px; font-weight: 600; color: #26392d; }
 .pay-settings__saved { font-style: normal; font-weight: 400; color: #1f6b45; font-size: 12px; }
