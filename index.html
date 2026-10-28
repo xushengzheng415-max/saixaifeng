@@ -402,6 +402,9 @@
         }
         }
     </style>
+<style id="client-download-menu-style">
+.client-download-menu{position:relative;flex-shrink:0;color:rgba(255,255,255,.85);font-weight:500}.client-download-menu summary{display:flex;align-items:center;min-height:44px;padding:8px 4px;cursor:pointer;list-style:none;white-space:nowrap}.client-download-menu summary::-webkit-details-marker{display:none}.client-download-menu summary:focus-visible,.client-download-options a:focus-visible{outline:2px solid #f5c542;outline-offset:3px}.client-download-options{position:absolute;right:0;top:calc(100% + 8px);width:280px;max-width:calc(100vw - 24px);padding:6px;border:1px solid #dce6df;border-radius:8px;background:#fff;box-shadow:0 8px 24px #00271926;color:#20392b;z-index:100}.client-download-options a{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px;padding:10px 12px;border-radius:4px;text-decoration:none}.client-download-options a:hover{background:#edf6ef}.client-download-options strong,.client-download-options small{display:block}.client-download-options strong{font-size:14px;font-weight:600}.client-download-options small{margin-top:4px;font-size:12px;font-weight:400;color:#6a7d70}.client-download-options b{font-size:12px;font-weight:500;color:#087a48}
+</style>
 </head>
 <body class="font-sans antialiased text-gray-100" style="background-color: #022c22;">
 
@@ -428,6 +431,17 @@
                     </a>
                 </div>
 
+                <details class="client-download-menu">
+                    <summary>客户端下载</summary>
+                    <div class="client-download-options" aria-label="选择客户端">
+                        <a href="https://www.sxffootball.cn/desktop/windows/SxfFootball-Setup-0.2.3-x64.exe" data-client-download download title="Windows 10/11 · 64位">
+                            <span><strong>Windows 版</strong><small>Windows 10/11 · 64位</small></span><b data-windows-version>0.2.3</b>
+                        </a>
+                        <a href="https://www.sxffootball.cn/desktop/android/SxfFootball-Pad-0.1.1-preview.apk" data-android-download download title="Android 10及以上 · 横屏测试版">
+                            <span><strong>安卓平板版</strong><small>Android 10及以上 · 横屏测试版</small></span><b data-android-version>0.1.1</b>
+                        </a>
+                    </div>
+                </details>
                 <button onclick="openLoginModal()" class="hidden sm:inline-flex items-center px-6 py-2.5 bg-bee-gold text-bee-deep font-bold rounded-full hover:bg-bee-gold-light transition-all duration-300 hover:shadow-lg hover:shadow-bee-gold/30 hover:-translate-y-0.5">
                     立即登录
                 </button>
@@ -1086,7 +1100,7 @@
                 <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-4 md:mt-0 text-white/30 text-sm">
                     <a href="#" class="hover:text-white transition-colors">隐私政策</a>
                     <a href="#" class="hover:text-white transition-colors">用户协议</a>
-                    <a href="/admin/#/platform-login" class="hover:text-bee-gold transition-colors">平台运营登录</a>
+                    <a href="https://pingtai.sxffootball.cn/#/platform-login" class="hover:text-bee-gold transition-colors">平台运营登录</a>
                     <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">豫ICP备2026019672号-6</a>
                     <a href="https://beian.mps.gov.cn/#/query/webSearch?code=41010202003914" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">豫公网安备41010202003914号</a>
                 </div>
@@ -1095,6 +1109,29 @@
     </footer>
 
     <script>
+        // 公开下载入口优先使用已发布的最新版本；离线时保留可用安装包链接。
+        (async function resolveDesktopDownload() {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 6000);
+            try {
+                const response = await fetch('/desktop/windows/latest.json', {
+                    cache: 'no-store', credentials: 'omit', redirect: 'error', signal: controller.signal
+                });
+                if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return;
+                const release = await response.json();
+                if (!/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(release.version)) return;
+                const expected = `https://www.sxffootball.cn/desktop/windows/SxfFootball-Setup-${release.version}-x64.exe`;
+                if (release.url !== expected) return;
+                document.querySelectorAll('[data-client-download]').forEach(link => {
+                    link.href = expected;
+                    link.dataset.clientVersion = release.version;
+                    document.querySelectorAll('[data-windows-version]').forEach(el => { el.textContent = release.version; });
+                    link.title = `Windows 10/11 · 64位 · v${release.version}`;
+                });
+            } catch { /* 默认链接继续可用，不阻断登录或其他导航。 */ }
+            finally { clearTimeout(timeout); }
+        })();
+
         // 导航栏滚动效果
         const navbar = document.getElementById('navbar');
         window.addEventListener('scroll', () => {
@@ -1953,5 +1990,21 @@
         }
 
     </script>
+<script id="android-download-resolver">
+(()=>{
+ const menu=document.querySelector('.client-download-menu');
+ document.addEventListener('click',e=>{if(menu&&!menu.contains(e.target))menu.open=false});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&menu?.open){menu.open=false;menu.querySelector('summary').focus()}});
+ menu?.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>{menu.open=false}));
+ (async()=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6000);try{
+   const response=await fetch('/desktop/android/latest.json',{cache:'no-store',credentials:'omit',redirect:'error',signal:controller.signal});
+   if(!response.ok||!response.headers.get('content-type')?.includes('application/json'))return;
+   const release=await response.json();if(release.platform!=='android'||release.packageId!=='cn.sxffootball.pad.preview'||!/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(release.version))return;
+   const expected='https://www.sxffootball.cn/desktop/android/SxfFootball-Pad-'+release.version+'-preview.apk';if(release.downloadUrl!==expected)return;
+   document.querySelectorAll('[data-android-download]').forEach(link=>{link.href=expected;link.title='Android 10及以上 · 横屏测试版 · '+release.version});
+   document.querySelectorAll('[data-android-version]').forEach(el=>{el.textContent=release.version});
+ }catch{}finally{clearTimeout(timer)}})();
+})();
+</script>
 </body>
 </html>
