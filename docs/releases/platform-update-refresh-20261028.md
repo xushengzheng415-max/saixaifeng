@@ -45,8 +45,11 @@
 - `node tools/test-platform-tablet-ui.cjs`：60 个文件页面巡检 0 失败（提示层不影响布局）。
 - `node tools/check-platform-live-pwa.cjs`：新增“更新可刷新”线上核查——`/release.json` 必须 HTTP 200
   且带 `release`，线上包必须包含 `sxf-platform-check-update`，发布清单分支必须是
-  `codex/platform-ops`。结果 `updateCheck = { status: 200, release: '20261028140847-1639c58a',
-  branch: 'codex/platform-ops', hasUpdateWatch: true }`，整体 `status: passed`，0 失败。
+  `codex/platform-ops`；并在真实线上页面拦截 `/release.json` 模拟一次新发布，验证“基线不弹窗 →
+  清单变化后弹出 `data-type=release` 提示（含‘不需要重新安装’）→ 点‘立即刷新’页面重新加载”。
+  结果 `updateCheck = { status: 200, release: '20261028140847-1639c58a', branch: 'codex/platform-ops',
+  hasUpdateWatch: true }`，`updateNotice = { before: 0, type: 'release', refreshed: true }`，整体
+  `status: passed`，0 失败，截图 `output/platform-pwa-live-20261028/live-update-notice.png`。
 
 ## 发布
 

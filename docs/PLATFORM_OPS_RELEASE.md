@@ -98,7 +98,9 @@ APK 60,276 字节，SHA-256 `f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011
 验证：`node tools/test-platform-pwa.cjs` 0 失败，含“发布清单变化→提示→点击刷新”用例与“探测请求不进
 缓存”断言；`node tools/test-platform-tablet-ui.cjs` 60 文件 0 失败；`node tools/check-platform-live-pwa.cjs`
 新增线上核查（`release.json` HTTP 200 且含 `release`、线上包含 `sxf-platform-check-update`、清单分支为
-`codex/platform-ops`），回读 `release 20261028140847-1639c58a`、`hasUpdateWatch true`，0 失败。
+`codex/platform-ops`；另在线上页面拦截 `/release.json` 模拟新发布，验证“基线不弹窗→提示→点立即刷新
+真的重载”），回读 `release 20261028140847-1639c58a`、`hasUpdateWatch true`、
+`updateNotice { before: 0, type: 'release', refreshed: true }`，0 失败。
 安卓壳 `test/config.test.cjs` 13 项、`bridge.test.cjs` 4 项通过；APK 1.0.1 见下节。
 
 当前状态：release `20261028140847-1639c58a`，45 个文件 SHA-256 回读一致。详细记录见

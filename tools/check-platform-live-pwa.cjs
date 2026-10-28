@@ -91,6 +91,34 @@ const site = 'https://pingtai.sxffootball.cn';
   report.pageErrors = pageErrors;
   await page.screenshot({ path: path.join(output, 'live-login.png') });
 
+  // 线上行为核查：拦截 /release.json 模拟一次“新发布”，确认提示出现且“立即刷新”真的重载页面。
+  const noticeContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const noticePage = await noticeContext.newPage();
+  let fakeRelease = 'qa-live-baseline-0001';
+  await noticePage.route('**/release.json*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ app: 'sxf-platform-ops', branch: 'codex/platform-ops', commit: 'qa', release: fakeRelease, source: 'qa' })
+  }));
+  await noticePage.goto(`${site}/#/platform-login`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await noticePage.locator('.platform-login .form-card').waitFor({ timeout: 60000 });
+  await noticePage.waitForTimeout(2500);
+  report.updateNotice = { before: await noticePage.locator('.platform-update-notice').count() };
+  fakeRelease = 'qa-live-changed-0002';
+  await noticePage.evaluate(() => window.dispatchEvent(new Event('sxf-platform-check-update')));
+  try {
+    await noticePage.locator('.platform-update-notice').waitFor({ state: 'visible', timeout: 20000 });
+    report.updateNotice.type = await noticePage.locator('.platform-update-notice').getAttribute('data-type');
+    report.updateNotice.text = (await noticePage.locator('.platform-update-notice').textContent()).replace(/\s+/g, ' ').trim();
+    await noticePage.screenshot({ path: path.join(output, 'live-update-notice.png') });
+    const reloaded = noticePage.waitForEvent('load', { timeout: 30000 }).then(() => true).catch(() => false);
+    await noticePage.locator('.platform-update-notice .el-button--primary').click();
+    report.updateNotice.refreshed = await reloaded;
+  } catch (error) {
+    report.updateNotice.error = error.message;
+  }
+  await noticeContext.close();
+
   // 安卓设备读到的是 APK 下载入口；用独立 UA 上下文核查，避免影响桌面判定。
   const androidContext = await browser.newContext({
     viewport: { width: 800, height: 1280 },
@@ -152,6 +180,12 @@ const site = 'https://pingtai.sxffootball.cn';
   if (report.updateCheck?.status !== 200 || !report.updateCheck?.release) failures.push('线上缺少 release.json 发布清单，更新检测无法判断新版本');
   if (!report.updateCheck?.hasUpdateWatch) failures.push('线上包未包含更新探测，旧版本不会提示刷新');
   if (report.updateCheck?.branch && report.updateCheck.branch !== 'codex/platform-ops') failures.push('线上发布清单分支不是 codex/platform-ops');
+  const updateNotice = report.updateNotice || {};
+  if (updateNotice.error) failures.push(`更新提示线上核查失败：${updateNotice.error}`);
+  if (updateNotice.before !== 0) failures.push('基线状态就弹出了更新提示');
+  if (updateNotice.type !== 'release') failures.push('发布清单变化后未提示“平台已发布新版本”');
+  if (!String(updateNotice.text).includes('不需要重新安装')) failures.push('更新提示未说明无需重新安装');
+  if (updateNotice.refreshed !== true) failures.push('点击“立即刷新”未重新加载页面');
   if (!String(report.head.installNote).includes('APK')) failures.push('登录页说明未提到安卓 APK 安装包');
   if (!String(report.android.entry).includes('安卓安装包')) failures.push('安卓设备登录页未显示 APK 下载入口');
   if (report.android.guideMode !== 'apk') failures.push('安卓安装引导未进入 APK 分支');
