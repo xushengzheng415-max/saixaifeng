@@ -161,10 +161,11 @@
 <script setup>
 import { computed, defineComponent, h, onBeforeUnmount, ref } from 'vue'
 import { ElButton, ElIcon, ElMessage, ElMessageBox, ElUpload } from 'element-plus'
-import { ArrowDown, ArrowRight, Delete, DocumentAdd, Download, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Delete, DocumentAdd, Download, UploadFilled, User } from '@element-plus/icons-vue'
 import { callFunction, uploadLargeFileViaCloud } from '../../utils/cloud'
 import { removeWhiteBackground } from '../../utils/whiteBgRemover'
 import { findVisiblePixelBounds } from '../../utils/imageBounds'
+import { photoResult } from '../../utils/registrationPhotoReuse.js'
 import { maskRegistrationIdentity, parseTeamRegistrationDocx } from '../../utils/teamRegistrationDocx'
 import { REGISTRATION_FIELDS, REGISTRATION_PRESETS, createRegistrationTemplate, registrationTemplatePlayerLimit } from '../../utils/registrationTemplate'
 import { isDemoMode } from '../../utils/demoMode'
@@ -209,9 +210,9 @@ const PersonPhotoUpload = defineComponent({
       showFileList: false,
       onChange: file => childEmit('change', file)
     }, {
-      default: () => h('button', { type: 'button', class: 'person-photo-button' }, componentProps.person.previewUrl
+      default: () => h('button', { type: 'button', class: ['person-photo-button', { 'is-empty':!componentProps.person.previewUrl }], title:'上传照片', 'aria-label':`${componentProps.person.name || '人员'}上传照片` }, componentProps.person.previewUrl
         ? h('img', { src: componentProps.person.previewUrl, alt: '' })
-        : h('span', null, '上传'))
+        : h(ElIcon, { class:'photo-placeholder', 'aria-hidden':true }, { default:()=>h(User) }))
     })
   }
 })
@@ -516,9 +517,12 @@ async function processTeamFiles(team, teamIndex) {
 
     const people = [...team.staff, ...team.players]
     const pendingPeople = people.filter(person => person.photoFile && !person.photoFileId)
+    const photoResults=new Map(people.filter(person=>person.photoFile&&person.photoFileId).map(person=>[person.photoFile,photoResult(person)]))
     let processedPeople = 0
     for (let index = 0; index < people.length; index += 1) {
       const person = people[index]
+      const reused=photoResults.get(person.photoFile)
+      if(!person.photoFileId&&reused)Object.assign(person,reused)
       if (person.roleType === 'player' && person.dualRoleType && !person.photoFileId) {
         const linkedStaff = team.staff.find(item => item.identityNumber && item.identityNumber === person.identityNumber)
         if (linkedStaff?.photoFileId) {
@@ -567,6 +571,7 @@ async function processTeamFiles(team, teamIndex) {
           throw fallbackError
         }
       }
+      if(person.photoFileId)photoResults.set(person.photoFile,photoResult(person))
     }
     updateProgress('资料已就绪')
   } catch (error) {
@@ -730,4 +735,5 @@ onBeforeUnmount(() => {
 .player-table-wrap th:nth-child(7),.player-table-wrap td:nth-child(7){width:170px}
 .player-table-wrap th:nth-child(8),.player-table-wrap td:nth-child(8){width:70px}
 .player-table-wrap th:nth-child(9),.player-table-wrap td:nth-child(9){width:120px}
+.person-photo-button.is-empty{border-style:solid;color:#96a69c;background:#f2f5f3}.photo-placeholder{font-size:24px}
 </style>
