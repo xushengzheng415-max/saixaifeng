@@ -1,3 +1,5 @@
+2026-10-28 平板手机号验证码登录：已获授权部署共用 webLoginApi 与 ADMINONLY 验证集合，宽屏竖版品牌登录页仅发布 /preview/admin/；格式、权限、资源及真实二维码回读通过，真实短信收取/登录待用户验收。见 [发布记录](releases/pad-phone-login-preview-20261028.md)。
+
 2026-10-27 转会中心：窗口配置完成后隐藏「未配置转会窗口」引导卡（预览已发布，`fac23e0e`）：
 
 - 用户反馈配置完窗口后该卡片仍占版面。`transferCenterView.windowViewOf` 新增 `configured`（仅 `open`／`scheduled`／`closed` 为真），页面 `.window-card` 与 Q03 说明行改为 `!windowView.configured` 才渲染；`not_configured` 与状态待核对（`unknown`）仍显示提示，避免窗口读取异常时静默。
