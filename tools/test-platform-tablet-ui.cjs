@@ -283,6 +283,7 @@ async function verifyTitlebarSimulation(page) {
     const sidebar = document.querySelector('.platform-console .sidebar');
     const name = document.querySelector('.platform-titlebar .titlebar-name');
     const nameStyle = name ? getComputedStyle(name) : null;
+    const form = document.querySelector('.platform-login .form-card');
     const result = {
       ruleCount: inner.length,
       visible: Boolean(bar && barStyle.display !== 'none' && barRect.height > 0),
@@ -293,6 +294,7 @@ async function verifyTitlebarSimulation(page) {
       pageTop: Math.round(appRect.top),
       topbarTop: topbar ? Math.round(topbar.getBoundingClientRect().top) : null,
       sidebarTop: sidebar ? Math.round(sidebar.getBoundingClientRect().top) : null,
+      formTop: form ? Math.round(form.getBoundingClientRect().top) : null,
       nameColor: nameStyle ? nameStyle.color : '',
       nameFontSize: nameStyle ? nameStyle.fontSize : '',
       dragRegion: name ? (getComputedStyle(name.parentElement).getPropertyValue('-webkit-app-region') || getComputedStyle(name.parentElement).getPropertyValue('app-region')) : '',
@@ -448,6 +450,15 @@ async function resetTitlebarSimulation(page) {
     if (loginPortrait.overflow) failures.push('登录页竖屏平板出现横向溢出');
     if (loginPortrait.introVisible) failures.push('登录页竖屏平板未收起品牌介绍');
     if (!loginPortrait.formVisible) failures.push('登录页竖屏平板表单不可见');
+
+    const loginTitlebar = await verifyTitlebarSimulation(loginPage);
+    await loginPage.screenshot({ path: path.join(output, 'login-titlebar-sim-768.png') });
+    Object.assign(loginTitlebar, await resetTitlebarSimulation(loginPage));
+    if (!loginTitlebar.visible) failures.push('登录页在应用窗口模式下未显示自绘标题条');
+    if (!(loginTitlebar.nameContrast >= 4.5)) failures.push(`登录页标题条文字对比度不足：${loginTitlebar.nameContrast}`);
+    if (loginTitlebar.formTop === null || loginTitlebar.formTop < loginTitlebar.height) failures.push(`标题条遮挡登录表单：formTop=${loginTitlebar.formTop}`);
+    if (loginTitlebar.overflow) failures.push('登录页标题条模式下出现横向溢出');
+    if (!loginTitlebar.hiddenAfterReset) failures.push('登录页普通标签页未隐藏自绘标题条');
     await loginContext.close();
 
     const report = {
@@ -455,6 +466,7 @@ async function resetTitlebarSimulation(page) {
       target: '平台运营中心：电脑 1440 与平板 1180/1024 横屏、820/768 竖屏',
       desktop: desktop && desktop.state,
       desktopTitlebar: desktop && desktop.titlebar,
+      loginTitlebar,
       drawerParity,
       results,
       notes,

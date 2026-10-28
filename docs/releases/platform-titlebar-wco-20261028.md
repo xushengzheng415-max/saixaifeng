@@ -43,7 +43,9 @@
   `nameContrast 20.41`、`dragRegion drag`、`overflow false`；移除仿真样式后
   `hiddenAfterReset true`、`paddingAfterReset 0px`。同一脚本 1440 桌面 + 1180/1024 横屏 +
   820/768 竖屏 × 15 个功能页共 60 项巡检 0 失败，截图含
-  `output/platform-tablet-20261028/desktop-titlebar-sim-1440.png`。
+  `output/platform-tablet-20261028/desktop-titlebar-sim-1440.png`。同一仿真在登录页（768×1024
+  竖屏）复跑：标题条可见、文字对比度 20.41、表单顶部 277px 未被遮挡、无横向溢出，重置后隐藏，
+  截图 `output/platform-tablet-20261028/login-titlebar-sim-768.png`。
 - `node tools/test-platform-pwa.cjs`：新增 `display_override[0] === 'window-controls-overlay'`
   与保留 `standalone` 回退的断言，0 失败。
 - `node tools/check-platform-live-pwa.cjs`：新增线上 manifest `display_override` 首位校验、

@@ -75,7 +75,7 @@ APK 60,276 字节，SHA-256 `f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011
 
 修复：manifest `display_override` 改为 `["window-controls-overlay","standalone","minimal-ui"]`，由新增的 `src/components/PlatformTitlebar.vue` 在 `@media (display-mode: window-controls-overlay)` 内自绘深绿底 `#0c3b27→#0a3222` + 白字标题条（对比度 20.41:1），用 `env(titlebar-area-x/width)` 避开系统窗口按钮并保留 `app-region: drag`；`src/assets/platform-tablet.css` 在同模式下把 `#app` 下移 `env(titlebar-area-height, 33px)`，侧栏与主区同步让位。普通浏览器标签页不匹配该媒体查询，标题条 `display: none` 且不占高度，页面与修复前一致。
 
-验证：`npm run build` 通过；`node tools/test-platform-tablet-ui.cjs` 新增 WCO 媒体规则仿真断言（无头浏览器无法真实进入 WCO 模式，改用注入同一份发布声明验证几何），读回标题条高 33px、贴顶、内容与侧栏均在 33px 之下、文字 12.5px 白色对比度 20.41、可拖动、无横向溢出、移除后隐藏且无占位，60 项页面巡检 0 失败，截图 `output/platform-tablet-20261028/desktop-titlebar-sim-1440.png`；`node tools/test-platform-pwa.cjs` 增加 `display_override` 断言，0 失败；线上 release `20261028120608-7ab33d8a`，`node tools/check-platform-live-pwa.cjs` 校验线上 manifest、`.platform-titlebar` 节点与线上样式中的 WCO 规则，0 失败。
+验证：`npm run build` 通过；`node tools/test-platform-tablet-ui.cjs` 新增 WCO 媒体规则仿真断言（无头浏览器无法真实进入 WCO 模式，改用注入同一份发布声明验证几何），读回标题条高 33px、贴顶、内容与侧栏均在 33px 之下、文字 12.5px 白色对比度 20.41、可拖动、无横向溢出、移除后隐藏且无占位，登录页同仿真下表单顶部 277px 未被遮挡，60 项页面巡检 0 失败，截图 `output/platform-tablet-20261028/desktop-titlebar-sim-1440.png`、`login-titlebar-sim-768.png`；`node tools/test-platform-pwa.cjs` 增加 `display_override` 断言，0 失败；线上 release `20261028120608-7ab33d8a`，`node tools/check-platform-live-pwa.cjs` 校验线上 manifest、`.platform-titlebar` 节点与线上样式中的 WCO 规则，0 失败。
 
 用户侧：已安装窗口需重新打开（必要时卸载后重新“安装”）才会读到新的 manifest 并切换为自绘标题条；浏览器标签页不受影响；安卓 APK 壳不使用浏览器窗口标题条，本轮不影响。详细记录见 `docs/releases/platform-titlebar-wco-20261028.md`。
 
