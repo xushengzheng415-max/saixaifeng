@@ -2,6 +2,15 @@ import {KIT_COLOR_OPTIONS} from './registrationKitColors.js'
 export const REGISTRATION_FIELDS = [{key:'birthDate',label:'出生日期'},{key:'identityNumber',label:'身份证号'},{key:'jerseyNumber',label:'球服号码'},{key:'position',label:'位置'},{key:'photo',label:'人员照片'},{key:'teamLogo',label:'队徽'}]
 export const REGISTRATION_PRESETS = { youth:['birthDate','jerseyNumber','position','photo','teamLogo'], adult:['identityNumber','jerseyNumber','position','photo','teamLogo'] }
 const NS='http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+export function registrationTemplatePlayerLimit(division = {}) {
+  for(const value of [division.rosterLimit,division.maxPlayersPerTeam,division.maxPlayers]){
+    if(value === undefined || value === null || value === '')continue
+    const count=Number(value)
+    if(!Number.isSafeInteger(count) || count<1)throw new Error('请先设置有效的球员报名人数上限')
+    return count
+  }
+  return 35 // Match the existing legacy registration limit when no limit is stored.
+}
 export async function createRegistrationTemplate(arrayBuffer, fields, context = {}) {
   const allowed=new Set(fields)
   const JSZip=(await import('jszip')).default
@@ -21,6 +30,47 @@ export async function createRegistrationTemplate(arrayBuffer, fields, context = 
     text.setAttributeNS('http://www.w3.org/XML/1998/namespace','xml:space','preserve');run.appendChild(text);header.appendChild(run)
   }
   const tables=Array.from(xml.getElementsByTagNameNS(NS,'tbl'))
+  if(context.maxPlayers !== undefined){
+    const count=Number(context.maxPlayers)
+    if(!Number.isSafeInteger(count)||count<1)throw new Error('请先设置有效的球员报名人数上限')
+    const roster=tables.find(node=>Array.from(node.childNodes).some(row=>row.localName==='tr'&&/领队/.test(textOf(row))&&/运动员|球员/.test(textOf(row))))
+    if(!roster)throw new Error('报名表缺少队员栏位，请刷新后重试')
+    const rows=Array.from(roster.childNodes).filter(node=>node.localName==='tr')
+    const cellsOf=row=>Array.from(row.childNodes).filter(node=>node.localName==='tc')
+    const isPlayer=cell=>/^(运动员|球员)$/.test(textOf(cell).trim())
+    const starts=rows.map((row,index)=>cellsOf(row).some(isPlayer)?index:-1).filter(index=>index>=0)
+    const blocks=starts.map((start,index)=>rows.slice(start,starts[index+1]??rows.length))
+    const mixed=blocks[0],prototype=blocks.find(block=>cellsOf(block[0]).every(isPlayer))
+    if(!mixed||!prototype)throw new Error('报名表队员栏位格式异常，请刷新后重试')
+    const source=prototype.map(row=>row.cloneNode(true))
+    for(const block of blocks.slice(1))for(const row of block)roster.removeChild(row)
+    let used=0
+    const fillBlock=block=>{
+      const roles=cellsOf(block[0])
+      roles.forEach((cell,column)=>{
+        if(!isPlayer(cell))return
+        used++
+        if(used<=count)return
+        for(const row of block){
+          const target=cellsOf(row)[column]
+          for(const child of Array.from(target.childNodes))if(child.localName!=='tcPr')target.removeChild(child)
+          target.appendChild(el('p'))
+        }
+      })
+    }
+    fillBlock(mixed)
+    while(used<count){const block=source.map(row=>row.cloneNode(true));fillBlock(block);for(const row of block)roster.appendChild(row)}
+    // Cloned native picture/position controls must have distinct Word IDs and tags.
+    let serial=100000
+    for(const sdt of Array.from(xml.getElementsByTagNameNS(NS,'sdt'))){
+      for(const id of Array.from(sdt.getElementsByTagNameNS(NS,'id')))attr(id,'val',serial++)
+      for(const tag of Array.from(sdt.getElementsByTagNameNS(NS,'tag'))){
+        const value=tag.getAttributeNS(NS,'val')||''
+        if(value.startsWith('sxf-photo-')||value.startsWith('sxf-position-'))attr(tag,'val',`${value.startsWith('sxf-photo-')?'sxf-photo':'sxf-position'}-${serial++}`)
+      }
+    }
+    for(const node of Array.from(xml.getElementsByTagName('*')))if(node.localName==='docPr'||node.localName==='cNvPr')node.setAttribute('id',String(serial++))
+  }
   const table=tables.find(node=>/运动员服装/.test(textOf(node))&&/守门员服装/.test(textOf(node)))
   if(table){
     const rows=Array.from(table.childNodes).filter(node=>node.localName==='tr')
@@ -54,7 +104,7 @@ export async function createRegistrationTemplate(arrayBuffer, fields, context = 
   }
   // Keep each person block together even when the last optional field is removed.
   const rows=Array.from(xml.getElementsByTagNameNS(NS,'tr'))
-  const roleRow=row=>{const cells=Array.from(row.childNodes).filter(node=>node.localName==='tc');return cells.length===5&&cells.every(cell=>/^(运动员|球员|主教练|队医|领队[（(]联络员[）)])$/.test(Array.from(cell.getElementsByTagNameNS(NS,'t')).map(node=>node.textContent).join('').replace(/\s/g,'')))}
+  const roleRow=row=>{const cells=Array.from(row.childNodes).filter(node=>node.localName==='tc'),texts=cells.map(cell=>textOf(cell).replace(/\s/g,''));return cells.length===5&&texts.some(Boolean)&&texts.every(text=>/^(运动员|球员|主教练|队医|领队[（(]联络员[）)])?$/.test(text))}
   const starts=rows.map((row,index)=>roleRow(row)?index:-1).filter(index=>index>=0)
   starts.forEach((start,index)=>{
     const end=index+1<starts.length?starts[index+1]:rows.length
