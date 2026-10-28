@@ -89,6 +89,11 @@ E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run hosting deploy 'and
 链接会阻止 WebView 自行处理，文件名与 base64 内容与原始字节一致；非 `blob:` 链接不被拦截；
 超过 32MB 只提示改用浏览器、不写文件；重复注入不会重复保存。
 
+重新构建可复现（2026-10-28 再次执行 `build-android.ps1`）：`assembleRelease` 39 秒完成，产物仍是
+60,276 字节、SHA-256 `f641bdb8…f947889d8`，`apksigner` 证书 SHA-256 `d08c6c23…d949150cc`
+与首版一致，线上回下载大小与摘要也一致，因此同版本无需重新上传。页面样式更新（如桌面窗口标题条
+修复）由 WebView 每次加载线上站点自动生效，不必重打包 APK。
+
 未验证：本机没有连接安卓设备，未做真机安装、登录、短信/扫码、上传、断网恢复与覆盖升级测试；
 导出桥接虽在浏览器中验证，写入系统“下载”目录（MediaStore）的真机结果仍未验证。安装后需在
 平板上验收这些流程。

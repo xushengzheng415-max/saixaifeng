@@ -69,6 +69,19 @@ HTTP 200、`application/vnd.android.package-archive`、60,276 字节、SHA-256 �
 不想装 APK 也可以继续用 Chrome“添加到主屏幕”（PWA）；iPad 仍用 Safari“添加到主屏幕”；
 电脑仍用 Edge/Chrome 地址栏“安装”。
 
+## 重新构建（2026-10-28 追加）
+
+用户再次要求“生成安卓 APK 安装包”，用同一命令重跑 `android-platform/scripts/build-android.ps1`：
+`node test/config.test.cjs` 9 项通过，`gradle :app:assembleRelease` 39 秒 `BUILD SUCCESSFUL`，产物仍是
+`android-platform/release/SxfPlatform-1.0.0.apk`，60,276 字节、SHA-256
+`f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011dc68f947889d8`，与已发布文件**逐字节一致**
+（同版本构建可复现）。`apksigner verify --print-certs` 证书 SHA-256 仍是
+`d08c6c23e40f32ce04767b6ecd488dc2c857fdffb56dfc5b13e9a47d949150cc`，可覆盖升级；
+`aapt2 dump badging` 读回包名、`versionCode 1`、`versionName 1.0.0`、`sdkVersion 24`、
+`targetSdkVersion 34`、应用名“赛小蜂平台运营”与启动 Activity。线上回下载 200、
+`application/vnd.android.package-archive`、60,276 字节、摘要与 `latest.json` 一致，因此本轮
+**无需重新上传**。页面更新（含桌面窗口标题条修复）由 WebView 每次加载线上站点自动生效。
+
 ## 已知限制
 
 - 本机未连接安卓设备，未做真机安装、登录、短信/扫码、上传、断网恢复与覆盖升级验证；导出桥接
