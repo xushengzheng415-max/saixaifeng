@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/platform-zero-event-repair-20261028.md','发布记录/平台0比0无事件资料保存修复-20261028.md'],
   ['docs/DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md','DATA_CENTER_STANDARD_PROPOSAL_2026-09-29.md'],
   ...['README.md','CONTRACT.md','INTEGRATION.md','RELEASE.md','AUTO_SYNC.md','PLAYER_CARD_POINTS.md','DATA_HUB_FOUNDATION.md','DATA_HUB_INDEX_PLAN.json','NUMBERING_RULES.md'].map(name => ['docs/data-center/' + name,'data-center/' + name]),
   ['docs/PLATFORM_OPS_RELEASE.md','平台运营中心独立发布.md'],

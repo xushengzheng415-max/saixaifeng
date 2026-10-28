@@ -10,4 +10,6 @@
 
 构建 `npm run build` 通过，平台工程边界通过。`test-data-center`、`check-data-governance` 通过；`sync-data-center --check` 报已有12项部署副本不同步，本轮未修改共享模块或同步这些同期改动，不能报告全量同步检查通过。
 
-发布状态：待正式发布与资源摘要回读。平台现有发布规范仅登记正式平台域名，没有登记独立平台测试入口；本次不修改主办方PC、H5、小程序或共享后端，不将主办方 `/preview/admin/` 当作平台测试版。
+发布状态：已正式发布。源码提交 `e74944ab`，Gitee `codex/platform-ops` 已推送；release `20261028110020-e74944ab`（北京时间2026-10-28 19:00:20），35个文件线上HTTP/摘要与本地一致。额外回读入口、release.json及 `assets/TournamentCenterAdmin-BCRs2wnZ.js` 均HTTP 200、SHA-256一致。
+
+平台现有发布规范仅登记正式平台域名，没有登记独立平台测试入口，故本轮没有可同步的已登记平台测试部署目标；本次不修改主办方PC、H5、小程序或共享后端，不将主办方 `/preview/admin/` 当作平台测试版。不宣称已部署独立平台测试版。

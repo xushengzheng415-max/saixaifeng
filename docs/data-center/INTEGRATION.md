@@ -1,5 +1,9 @@
 # 数据入口登记
 
+## 2026-10-28 平台0:0空事件补录交互修复
+
+`PlayerCardMatchRepair.vue` → 既有 `savePlayerCardTemplate.auditRepairInspect/auditRepairSave`；保持平台负责人、原始来源、阵容、比分、锁定和版本校验。0:0空事件列表允许操作人核对完整，来源缺失就地提示，不凭比分自动确认、不添加虚假事件。隔离UI及实际后端处理器零事件/首发60分钟回归通过，不修改统计模块或真实业务数据。发布状态见 [记录](../releases/platform-zero-event-repair-20261028.md)。
+
 ## 2026-10-23 永久编码
 
 `dataCenter.numberingRules/assignBusinessNumber`复用shared/numbering.cjs，仅平台负责人可读规则与执行正式补发；省市必填，球队人工补发必选主体或分队，分队验证同机构与已发号主体。PC授权dbQuery、小程序建队/球员草稿与登记、报名表导入在原鉴权和原业务提交后调用同步副本afterWrite；缺地区或临时失败保留待补齐，不把建档成功误报为失败。规则见NUMBERING_RULES.md，禁止直接覆写businessNumber/numbering。结构化当前地区与首次发号快照分别保存，旧身份与历史引用不变。数据中心的目录、关键词、球队和球员档案展示新号，不回退显示内部ID。五个函数的实际发布、依赖锁定及数据补发另见RELEASE。
