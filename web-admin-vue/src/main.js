@@ -7,6 +7,7 @@ import App from './App.vue'
 import router from './router'
 import './assets/global.css'
 import './assets/portal.css'
+import './assets/tablet-landscape.css'
 
 const app = createApp(App)
 
