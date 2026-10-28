@@ -14,6 +14,8 @@ const files = [
   ['docs/releases/android-pad-0.1.1-20261028.md','发布记录/安卓平板客户端0.1.1刷新修复-20261028.md'],
   ['docs/releases/android-platform-1.0.0-20261028.md','发布记录/平台运营中心安卓平板客户端-1.0.0-20261028.md'],
   ['docs/releases/platform-titlebar-wco-20261028.md','发布记录/平台桌面应用窗口标题条可读性修复-20261028.md'],
+  ['docs/releases/platform-update-refresh-20261028.md','发布记录/平台运营中心更新可刷新-20261028.md'],
+  ['docs/releases/android-platform-1.0.1-20261028.md','发布记录/平台运营中心安卓客户端1.0.1应用内更新-20261028.md'],
   ['docs/releases/ai-portrait-hd-chain-20261028.md','发布记录/AI形象照高清链路修复-20261028.md'],
   ['docs/releases/pad-compact-sidebar-preview-20261028.md','发布记录/平板收起侧栏与紧凑布局-20261028.md'],
   ['docs/handoffs/VALUATION_SNAPSHOT_TRIGGER_AUDIT_2026-10-28.md','研发交接/身价计算与快照缺失调查-20261028.md'],

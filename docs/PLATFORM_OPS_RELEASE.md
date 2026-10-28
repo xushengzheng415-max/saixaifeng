@@ -47,7 +47,7 @@ Service Worker 边界：只缓存本站 `/index.html`、构建产物 `/assets/` 
 
 验证脚本的 Playwright 统一由 `tools/lib/load-playwright.cjs` 加载，优先使用仓库内 `npm install --no-save playwright-core`，缓存运行时路径失效时不再整批失败。
 
-当前状态：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，最新线上 release `20261028120608-7ab33d8a`（34 个文件 SHA-256 回读一致）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及电脑/安卓/iPad 三种安装说明，manifest 三图标解析正常且 `display_override` 首选 `window-controls-overlay`，线上样式含自绘标题条规则，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
+状态（标题条修复时）：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，当次线上 release `20261028120608-7ab33d8a`（34 个文件 SHA-256 回读一致；更新可刷新版本见下文 `20261028140847-1639c58a`）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及电脑/安卓/iPad 三种安装说明，manifest 三图标解析正常且 `display_override` 首选 `window-controls-overlay`，线上样式含自绘标题条规则，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
 
 ## 2026-10-28 安卓平板安装包（APK）1.0.0
 
@@ -67,7 +67,7 @@ APK 60,276 字节，SHA-256 `f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011
 
 发布只新增 `www.sxffootball.cn/desktop/platform/android/` 三个文件（APK → 摘要 → 清单顺序），未触碰 `desktop/windows/`、主办方 `desktop/android/`、`/admin/`、云函数或环境配置。线上回读：三个文件均 HTTP 200，APK 类型 `application/vnd.android.package-archive`、大小与 SHA-256 与本地及清单一致；安卓 UA 登录页显示“下载安卓安装包”，弹窗进入 `apk` 分支并提供“下载安装包”按钮。详细记录见 `docs/releases/android-platform-1.0.0-20261028.md`，安装与升级步骤见 `android-platform/README.md`。
 
-限制：本机无安卓设备，真机安装、登录、上传、导出保存、断网恢复与覆盖升级未验证；客户端不内置自动更新，升级需重新下载覆盖安装。
+限制（1.0.0 当时）：本机无安卓设备，真机安装、登录、上传、导出保存、断网恢复与覆盖升级未验证；客户端不内置自动更新，升级需重新下载覆盖安装（已由下节 1.0.1 的应用内更新取代）。
 
 ## 2026-10-28 桌面应用窗口标题条可读性修复
 
@@ -78,4 +78,53 @@ APK 60,276 字节，SHA-256 `f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011
 验证：`npm run build` 通过；`node tools/test-platform-tablet-ui.cjs` 新增 WCO 媒体规则仿真断言（无头浏览器无法真实进入 WCO 模式，改用注入同一份发布声明验证几何），读回标题条高 33px、贴顶、内容与侧栏均在 33px 之下、文字 12.5px 白色对比度 20.41、可拖动、无横向溢出、移除后隐藏且无占位，登录页同仿真下表单顶部 277px 未被遮挡，60 项页面巡检 0 失败，截图 `output/platform-tablet-20261028/desktop-titlebar-sim-1440.png`、`login-titlebar-sim-768.png`；`node tools/test-platform-pwa.cjs` 增加 `display_override` 断言，0 失败；线上 release `20261028120608-7ab33d8a`，`node tools/check-platform-live-pwa.cjs` 校验线上 manifest、`.platform-titlebar` 节点与线上样式中的 WCO 规则，0 失败。
 
 用户侧：已安装窗口需重新打开（必要时卸载后重新“安装”）才会读到新的 manifest 并切换为自绘标题条；浏览器标签页不受影响；安卓 APK 壳不使用浏览器窗口标题条，本轮不影响。详细记录见 `docs/releases/platform-titlebar-wco-20261028.md`。
+
+## 2026-10-28 更新可刷新（不再反复重装）
+
+用户要求“平台运营后台也装上更新可刷新的功能，要不然平台更新老是反复安装也是不好的”。日常功能更新
+改为“检测新版本 → 一键刷新”，只有图标/窗口外观变化才需要重开或重装：
+
+| 判断来源 | 变化含义 | 提示与动作 | 实现 |
+|---|---|---|---|
+| `/release.json`（deploy 每次写入） | 有新的正式发布 | “平台已发布新版本”→“立即刷新”，保留登录态 | `src/utils/platformUpdate.js`、`src/components/PlatformUpdateNotice.vue`、`src/main.js` |
+| `/manifest.webmanifest` 文本指纹 | 图标、窗口模式等外观变化 | “应用外观已更新”→重开应用，必要时重装一次 | 同上 |
+| `latest.json`（www 静态托管） | 安卓安装包有新版本 | 客户端弹“发现新版本”→一键下载 + SHA-256 校验 + 系统安装器 | `android-platform/.../MainActivity.java`、`release/publish-1.0.1/` |
+
+实现边界：只读公开静态文件，不读登录态、不写业务数据、不调用云函数；只在正式构建启用
+（`import.meta.env.PROD`），开发态不触发。轮询 5 分钟一次，并在窗口获得焦点、恢复联网、页面重新可见
+时补查，同一次发布只提示一次。刷新前先 `serviceWorker.update()` 再 `reload()`，避免回到旧缓存。
+`public/sw.js` 改为带查询参数的请求一律不进缓存，更新探测（`?t=` 时间戳）只走网络。
+
+验证：`node tools/test-platform-pwa.cjs` 0 失败，含“发布清单变化→提示→点击刷新”用例与“探测请求不进
+缓存”断言；`node tools/test-platform-tablet-ui.cjs` 60 文件 0 失败；`node tools/check-platform-live-pwa.cjs`
+新增线上核查（`release.json` HTTP 200 且含 `release`、线上包含 `sxf-platform-check-update`、清单分支为
+`codex/platform-ops`），回读 `release 20261028140847-1639c58a`、`hasUpdateWatch true`，0 失败。
+安卓壳 `test/config.test.cjs` 13 项、`bridge.test.cjs` 4 项通过；APK 1.0.1 见下节。
+
+当前状态：release `20261028140847-1639c58a`，45 个文件 SHA-256 回读一致。详细记录见
+`docs/releases/platform-update-refresh-20261028.md`。
+
+## 2026-10-28 安卓安装包 1.0.1（应用内更新）
+
+| 项目 | 值 |
+|---|---|
+| 版本 | 1.0.1（versionCode 2，可覆盖升级） |
+| 下载 | `https://www.sxffootball.cn/desktop/platform/android/SxfPlatform-1.0.1.apk` |
+| 大小 / 摘要 | 64,896 字节 / `85d4a547a24e0089b60c780c0bc15645efca9b1a3172840fc03fcb509bd559ba` |
+| 签名 | 与 1.0.0 同一证书 `d08c6c23…d949150cc` |
+| 更新清单 | `desktop/platform/android/latest.json`（`versionCode 2`、`version 1.0.1`） |
+| 权限 | 新增 `REQUEST_INSTALL_PACKAGES`（首次更新需在系统设置允许“安装未知应用”） |
+
+客户端打开时（6 小时节流）读取 `latest.json`，有更高 `versionCode` 即弹窗，下载后用 SHA-256 校验，
+再交给系统安装器覆盖安装——不必再自己找下载地址。
+
+**发布踩坑（已修正）**：`tcb hosting deploy` 的第二个参数是云端目录而不是键名。把单个文件配
+`desktop/platform/android` 上传，会生成一个名为该路径的错误键（内容恰是 `latest.json`），真正的
+`SxfPlatform-1.0.1.apk` 反而 404。已删除该错误键，改用整目录上传
+`hosting deploy android-platform\release\publish-1.0.1 desktop/platform/android`，`hosting list` 复验为
+4 个文件且无额外目录键；线上回读 `SxfPlatform-1.0.1.apk` 与 `SxfPlatform-1.0.0.apk` 均 200、
+类型 `application/vnd.android.package-archive`、大小与 SHA-256 与清单一致。详细记录见
+`docs/releases/android-platform-1.0.1-20261028.md`，构建/发布步骤见 `android-platform/README.md`。
+
+限制：本机无安卓设备，真机“检查更新→下载→校验→系统安装→覆盖升级”链路未实测。
 

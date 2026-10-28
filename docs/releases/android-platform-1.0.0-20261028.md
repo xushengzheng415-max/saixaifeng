@@ -88,5 +88,6 @@ HTTP 200、`application/vnd.android.package-archive`、60,276 字节、SHA-256 �
   已在浏览器内验证拦截与内容传递，但写入系统“下载”目录（MediaStore）的真机结果仍未验证。
 - 平台登录页在安卓设备上优先给 APK 安装包，不再使用 Chrome 的 `beforeinstallprompt` 一键安装；
   后台顶栏仍保留原有“添加到主屏幕”引导。
-- 客户端不内置更新检查，升级需要重新下载 APK 覆盖安装；`latest.json` 供后续接入使用。
+- 客户端不内置更新检查，升级需要重新下载 APK 覆盖安装；`latest.json` 供后续接入使用（已由 1.0.1
+  的应用内更新取代，见 `docs/releases/android-platform-1.0.1-20261028.md`）。
 - 签名身份保存在仓库外，需与 APK 一起长期保留，否则无法覆盖升级。
