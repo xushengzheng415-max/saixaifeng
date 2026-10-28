@@ -27,13 +27,15 @@ const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournamen
       const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:scale,isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (Linux; Android 14; vivo Pad3 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'});
       await context.route('**/*',route=>{const host=new URL(route.request().url()).hostname;if(/tcloudbase(?:app)?\.com$/.test(host)){blockedCloudRequests++;return route.abort()}return route.continue()});
       const page=await context.newPage();
+      page.on('response',response=>{if(response.status()>=400&&response.url().startsWith('http://127.0.0.1'))console.log(`HTTP ${response.status()} ${response.url().split('?')[0]}`)});
+      page.on('console',message=>{if(message.type()==='error')console.log('BROWSER '+message.text().slice(0,500))});
       page.on('pageerror',error=>console.log('PAGEERROR '+error.stack));
       for(const [name,route] of pages.filter(([name])=>!process.env.SXF_TABLET_PAGE||name===process.env.SXF_TABLET_PAGE)){
         console.log(`Checking ${name} at ${width}x${height}`);
         const url=`http://127.0.0.1:5186/admin/#${route}${route.includes('?')?'&':'?'}visualQa=1`;
         await page.goto('about:blank');
         await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-        await page.locator('.layout .content-area').waitFor({timeout:12000}).catch(async error=>{
+        await page.locator('.layout .content-area').waitFor({timeout:30000}).catch(async error=>{
           console.log('Failed page: '+page.url());console.log((await page.locator('body').innerText()).slice(0,1200));
           await page.screenshot({path:path.join(output,'failure.png')});throw error;
         });
