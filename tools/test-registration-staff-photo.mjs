@@ -12,8 +12,16 @@ for(const roleType of ['team_leader','head_coach','doctor']){
   const player={name:'测试甲',roleType:'player',identityNumber:'',birthDate:'1990-01-01',jerseyNumber:'7',photoFile:image,photoProcessingStatus:'pending'}
   assert.equal(reuseStaffPhotos([staff],[player]).length,1)
   assert.equal(staff.photoFile,image);assert.equal(staff.photoProcessingStatus,'pending')
-  assert.equal(staff.roleType,roleType);assert.equal(staff.identityNumber,'');assert.equal(staff.birthDate,'');assert.equal(staff.jerseyNumber,undefined)
+  assert.equal(staff.roleType,roleType);assert.equal(staff.identityNumber,'');assert.equal(staff.birthDate,'1990-01-01');assert.equal(staff.jerseyNumber,undefined)
 }
+const originalPhoto=new File(['existing'],'existing.png')
+const existing={name:'测试甲',photoFile:originalPhoto,identityNumber:'',nativePlace:'待核验'}
+reuseStaffPhotos([existing],[{name:'测试甲',photoFile:image,birthDate:'1990-01-01',nativePlace:'北京市',identityNumberPrefix:'11010119900101'}])
+assert.equal(existing.photoFile,originalPhoto);assert.equal(existing.birthDate,'1990-01-01');assert.equal(existing.nativePlace,'北京市')
+assert.equal(existing.identityNumber,'');assert.equal(existing.identityNumberPrefix,'11010119900101');assert.equal(existing.identityIncomplete,true)
+const noPhoto={name:'测试甲',photoFile:null}
+reuseStaffPhotos([noPhoto],[{name:'测试甲',birthDate:'1990-01-01'}])
+assert.equal(noPhoto.birthDate,'1990-01-01');assert.equal(noPhoto.photoFile,null)
 const base={name:'测试甲',photoFile:null}
 for(const [person,candidates] of [
   [{...base,photoFile:image},[{name:'测试甲',photoFile:image}]],
@@ -57,4 +65,4 @@ assert.ok(player.photoFile);assert.equal(leader.photoFile,player.photoFile)
 assert.equal(leader.photoReuseSource,'same_form_player');assert.equal(leader.roleType,'team_leader');assert.equal(leader.dualRoleType,undefined)
 assert.ok(!parsed.staff.find(person=>person.roleType==='head_coach').photoFile,'unmatched coach stays an empty upload slot')
 assert.ok(!parsed.warnings.includes('「测试甲」未找到照片'))
-console.log('PASS: real Word staff/player photo reuse, all three roles, conflicts/duplicates blocked, metadata unchanged, absent photo remains empty')
+console.log('PASS: real Word staff/player photo reuse, all three roles, conflicts/duplicates blocked, missing birth/region filled, roles and full IDs unchanged, absent photo remains empty')

@@ -502,6 +502,7 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
     warnings.push(`「${player.name}」的工作人员栏填写了球衣号码，已加入球员序列并标记为${meta.staffLabel}`)
   })
   for(const person of reuseStaffPhotos(staff,players)){
+    if(!person.photoFile&&!person.photoFileId)continue
     const warning=`「${person.name}」未找到照片`
     let index=warnings.indexOf(warning)
     while(index>=0){warnings.splice(index,1);index=warnings.indexOf(warning)}
