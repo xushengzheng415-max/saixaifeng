@@ -272,3 +272,8 @@ webLoginApi 的 recognizeRefereeReport / confirmRefereeReport、分组换人及 
 ## uploadFile依赖发布保护（2026-10-28，用户已确认）
 
 上传函数uploadFile必须保持InstallDependency=FALSE，代码更新从最新线上下载包差量修改，原node_modules随包发布。CloudBase CLI未提供函数配置时会默认在线安装并升级间接依赖，因此代码发布必须显式提供安装关闭的受控配置，不以CLI默认值覆盖线上状态。此构建设置已由用户明确授权；运行环境、内存、超时、环境变量和权限边界继续保留。发布后回下载核对业务与依赖SHA-256并验证Active/Available。webLoginApi保持各自已登记的配置，不因此一并切换。详见docs/releases/registration-upload-scope-20261028.md。
+
+
+## 报名上传权限发布防回退（2026-10-28）
+
+webLoginApi曾被旧staffUploadRights.cjs覆盖，导致共享赛事Word上传再次被拒。今后对实际拟发布的webLoginApi目录运行强制check-referee-backend-package时，必须同时通过其内置的check-registration-upload-backend-package检查：本赛事football/team-registration-imports/{赛事ID}下.docx初始化对应event.registration，跨赛事和非法文件类型拒绝。禁止只检查主仓或旧缓存；以最新线上包差量发布，并回下载再次执行检查。uploadFile保留已确认的原依赖随包和InstallDependency=FALSE。本规则仅保护现有已授权目录，不扩大子账号权限。
