@@ -24,3 +24,26 @@ CloudBase CLI在缺少显式函数配置、从package.json推断配置时可能�
 本次五个函数的无敏感值代码更新配置为`tools/football-numbering-functions.config.json`。发布前仍应回读实际配置，防止复用过时安装策略；只写name/installDependency，不把环境变量、密钥、超时等运行配置混进代码更新。继续使用足球专用sxf-cloud包装器，显式指定此config-file、函数名及刚下载线上包加最小差量的实际目录。不能因为有此配置文件就从脏工作区整包覆盖后端，也不能把fn deploy上传成功当作代码已更新。
 
 实际状态、存量编码补发与回读证据见`docs/releases/numbering-standard-20261023.md`。
+
+## 2026-10-28 电脑/平板自适应与可安装客户端
+
+平台运营中心与平台后台继续共用同一套页面、权限和数据，不新建端、不改业务规则：
+
+| 能力 | 实现 | 验证入口 |
+|---|---|---|
+| 平板自适应（抽屉导航、44px 触控、窄屏堆叠） | `src/assets/platform-tablet.css`、`src/components/PlatformTabletNav.vue` | `node tools/test-platform-tablet-ui.cjs` |
+| 可安装客户端（PWA） | `public/manifest.webmanifest`、`public/sw.js`、`public/pwa-*.png`、`src/components/PlatformInstallGuide.vue`、`src/utils/serviceWorker.js` | `node tools/test-platform-pwa.cjs` |
+| 应用图标 | `scripts/make-pwa-icons.ps1` 由 `public/logo.png` 的蜂+足球徽标生成 | 截图见 `output/` |
+
+安装方式：Windows 用 Edge/Chrome 地址栏“安装”；iPad 用 Safari“添加到主屏幕”；Android 平板用 Chrome“添加到主屏幕”。安装后以独立窗口运行，账号、权限与数据仍经 `webLoginApi` 获取，与网页版完全一致。安装入口只在未安装时出现，已安装（standalone）自动隐藏。
+
+入口位置有两处，未登录也能看到：平台管理员登录页表单下方（“安装应用” / “添加到主屏幕”按钮 + 支持的浏览器说明），以及登录后控制台顶栏。点击后弹出分端安装步骤；浏览器直接支持安装时（`beforeinstallprompt`）改为直接触发系统安装。
+
+Service Worker 边界：只缓存本站 `/index.html`、构建产物 `/assets/` 与图标清单；跨域（`webLoginApi` 等）请求不拦截、不缓存，缓存中不保存任何登录态或业务数据。仅在正式构建注册（`import.meta.env.PROD`），开发态不注册，避免热更新被缓存干扰。HTTPS 是安装前提。
+
+验证结果（2026-10-28 本地）：`npm run build` 通过；`tools/test-platform-tablet-ui.cjs` 覆盖 1440 桌面 + 1180/1024 横屏平板 + 820/768 竖屏平板 × 15 个功能页，0 失败；`tools/test-platform-pwa.cjs` 校验清单、图标尺寸、Service Worker 接管、缓存边界、断网外壳、电脑/iPad/Android 安装入口、登录页入口（电脑“安装应用”、iPad“添加到主屏幕”）与已安装隐藏，0 失败。截图与结果见 `output/platform-tablet-20261028/`、`output/platform-pwa-20261028/`。
+
+验证脚本的 Playwright 统一由 `tools/lib/load-playwright.cjs` 加载，优先使用仓库内 `npm install --no-save playwright-core`，缓存运行时路径失效时不再整批失败。
+
+当前状态：源码在工作区，未提交 Git、未发布 `pingtai.sxffootball.cn`。`npm run deploy` 会拒绝脏工作区，正式发布需先提交平台源码。
+

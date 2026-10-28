@@ -16,10 +16,7 @@
             <el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span><em v-if="item.badge">{{ item.badge }}</em>
           </button>
           <div class="nav-group-label">营销活动</div>
-          <button :class="{ active: activeTab === 'marketingSelfTest' }" @click="activeTab = 'marketingSelfTest'"><el-icon><DataAnalysis /></el-icon><span>自测身价</span></button>
-          <button :class="{ active: activeTab === 'aiPortrait' }" @click="activeTab = 'aiPortrait'"><el-icon><Picture /></el-icon><span>AI 形象照</span></button>
-          <button :class="{ active: activeTab === 'honeyOrders' }" @click="activeTab = 'honeyOrders'"><el-icon><Tickets /></el-icon><span>蜂蜜充值</span></button>
-          <button :class="{ active: activeTab === 'paymentSettings' }" @click="activeTab = 'paymentSettings'"><el-icon><Wallet /></el-icon><span>支付设置</span></button>
+          <button v-for="item in marketingNavigation" :key="item.key" :class="{ active: activeTab === item.key }" @click="activeTab = item.key"><el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span></button>
         </nav>
         <div class="sidebar-bottom">
           <div class="owner"><small>当前平台负责人</small><strong>{{ currentUserName }}</strong></div>
@@ -29,8 +26,11 @@
 
       <main>
         <header class="topbar">
-          <div><h1>{{ section.title }}</h1></div>
-          <div class="top-actions"><span v-if="lastLoadedAt">更新于 {{ formatTime(lastLoadedAt, true) }}</span><el-button :loading="activeTab==='dataCenter'?dataCenterRef?.loading:activeTab==='cardRules'?cardRulesRef?.loading:loading" @click="refreshSection"><el-icon><Refresh /></el-icon>刷新数据</el-button></div>
+          <div class="topbar-leading">
+            <PlatformTabletNav :items="navigation" :marketing-items="marketingNavigation" :active-key="activeTab" :owner-name="currentUserName" @select="selectSection" @home="openOrganizerSite" />
+            <div><h1>{{ section.title }}</h1></div>
+          </div>
+          <div class="top-actions"><span v-if="lastLoadedAt">更新于 {{ formatTime(lastLoadedAt, true) }}</span><PlatformInstallGuide /><el-button :loading="activeTab==='dataCenter'?dataCenterRef?.loading:activeTab==='cardRules'?cardRulesRef?.loading:loading" @click="refreshSection"><el-icon><Refresh /></el-icon>刷新数据</el-button></div>
         </header>
 
         <div v-loading="loading" class="workspace">
@@ -252,6 +252,8 @@ import { callFunction, logout } from '@/utils/cloud'
 import { getPlatformSession, isPlatformSession } from '@/utils/platformSession'
 import { getTempFileURL, uploadBase64Image } from '@/utils/upload'
 import ImageCropper from '@/components/common/ImageCropper.vue'
+import PlatformTabletNav from '@/components/PlatformTabletNav.vue'
+import PlatformInstallGuide from '@/components/PlatformInstallGuide.vue'
 import SystemAdmin from '@/views/system/SystemAdmin.vue'
 import PlayerCardTemplateLibrary from './PlayerCardStudio.vue'
 import DataCenter from '@/views/data/DataCenter.vue'
@@ -325,6 +327,8 @@ const bannerForm = reactive({ bannerId: '', title: '', imageUrl: '', displayImag
 const sections = { overview: ['运营总览','掌握平台赛事、主办方和问题协助的最新情况'], organizers: ['主办方联系人','找到赛事创建者，查看联系方式及其赛事和球队'], accounts: ['账号管理','管理主办方登录账号，并安全处理无业务关联的空账号'], tournaments: ['全平台赛事','查看平台内全部赛事的创建方、状态和参赛规模'], teams: ['全平台球队','查看长期球队资产、创建方和历史参赛情况'], dataCenter: ['数据中心',''], support: ['问题与协助','通过用户确认授权的方式安全处理实际使用问题'], content: ['内容运营','管理公开赛事中心的轮播和推荐赛事'], playerCards: ['球员卡系统',''],cardRules:['积分规则',''], feedback: ['反馈管理','查看服务号「我的」页提交的用户反馈并跟进处理'],marketingSelfTest:['自测身价',''],aiPortrait:['AI 形象照','模型上下架、默认模型与后端使用数据（不含价格与扣费规则）'],honeyOrders:['蜂蜜充值','充值订单、收款汇总与账本一致性核对（订单只读；手动加滴只加不减）'],paymentSettings:['支付设置','微信支付配置体检、加密写入（AES-256-GCM，页面不回读明文）、逐项清除与 APIv3 密钥生成'] }
 const section = computed(() => ({ title: sections[activeTab.value][0], description: sections[activeTab.value][1] }))
 const navigation = computed(() => [{key:'overview',label:'运营总览',icon:Picture},{key:'organizers',label:'主办方联系人',icon:UserFilled},{key:'accounts',label:'账号管理',icon:UserFilled},{key:'tournaments',label:'全平台赛事',icon:Trophy},{key:'teams',label:'全平台球队',icon:Flag},{key:'dataCenter',label:'数据中心',icon:DataAnalysis},{key:'playerCards',label:'球员卡系统',icon:Picture},{key:'feedback',label:'反馈管理',icon:ChatDotRound},{key:'cardRules',label:'积分规则',icon:DataAnalysis},{key:'support',label:'问题与协助',icon:Headset,badge:stats.activeSupportCount||''},{key:'content',label:'内容运营',icon:Tickets}])
+const marketingNavigation = computed(() => [{key:'marketingSelfTest',label:'自测身价',icon:DataAnalysis},{key:'aiPortrait',label:'AI 形象照',icon:Picture},{key:'honeyOrders',label:'蜂蜜充值',icon:Tickets},{key:'paymentSettings',label:'支付设置',icon:Wallet}])
+const selectSection = key => { activeTab.value = key }
 const statCards = computed(() => [{key:'o',label:'主办方',value:stats.totalOrganizers,hint:stats.leadCount ? `${stats.leadCount} 个准客户待跟进` : '平台联系人档案',icon:UserFilled,color:'blue',target:'organizers'},{key:'t',label:'全部赛事',value:stats.totalTournaments,hint:'含草稿与历史赛事',icon:Trophy,color:'green',target:'tournaments'},{key:'m',label:'长期球队',value:stats.totalTeams,hint:'不等同于参赛快照',icon:Flag,color:'orange',target:'teams'},{key:'s',label:'协助处理中',value:stats.activeSupportCount,hint:'等待确认或授权中',icon:Service,color:'purple',target:'support'}])
 const currentUserName = computed(() => getPlatformSession()?.userName || '平台负责人')
 let tournamentStatusTimer = null

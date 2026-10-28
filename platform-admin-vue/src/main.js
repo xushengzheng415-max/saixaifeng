@@ -5,7 +5,9 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 import './assets/global.css'
 import './assets/portal.css'
+import './assets/platform-tablet.css'
 import {activatePlatformContext,getPlatformAuthToken} from './utils/platformSession'
+import {registerPlatformServiceWorker} from './utils/serviceWorker'
 const router=createRouter({history:createWebHashHistory(),routes:[
   {path:'/platform-login',component:()=>import('./views/login/PlatformLoginView.vue')},
   {path:'/tournament-center-admin',component:()=>import('./views/tournament-center/TournamentCenterAdmin.vue'),meta:{platform:true}},
@@ -15,3 +17,4 @@ const router=createRouter({history:createWebHashHistory(),routes:[
 ]})
 router.beforeEach(to=>{activatePlatformContext();return to.meta.platform&&!getPlatformAuthToken()?'/platform-login':true})
 createApp({render:()=>h(RouterView)}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app')
+registerPlatformServiceWorker()
