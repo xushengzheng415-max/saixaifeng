@@ -415,3 +415,8 @@ DrawScreenProjection依据显式format分流：league为联赛签位顺序，不
 ## 2026-10-28 Word报名表保护号码预览
 
 teamRegistrationDocx.js仅从受保护号码的连续可见前段读取生日/地区；不完整号不作为自然人唯一键、不去重、不补尾号或性别。上传沿既有tournamentRegistrationFlow的空identityNumber+显式birthDate草稿分流，保持pending/not_verified与正式参赛资格边界；前缀不持久化或做身份摘要。发布证据见../releases/registration-protected-identity-20261028.md。
+
+
+## 2026-10-28 Word工作人员缺失展示资料补齐
+
+registrationPhotoReuse.js在同一Word唯一同名且已知资料无冲突时，补缺失生日/性别/籍贯及保护展示前缀，照片单独按缺失状态复用。既有完整身份证、职务、号码、账号关系、审核/资格不复制或合并；后端仍接收空完整身份证+显式生日，保持待核验。不修改真实数据或历史快照。见../releases/registration-staff-details-20261028.md。
