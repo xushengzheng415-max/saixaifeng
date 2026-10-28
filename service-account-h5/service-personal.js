@@ -1,7 +1,7 @@
 (function(){
  'use strict'
  var API='https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi',KEY='sxf_referee_h5_session',app=document.getElementById('app')
- var PAGE_VERSION='v2.3'
+ var PAGE_VERSION='v2.4'
  var MOCK=false
  var state={overview:null,view:'player',playerId:'',detail:null,epoch:0},oauthPending=false
  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -15,7 +15,7 @@
  function api(p){if(MOCK)return mockResponse(p);p.serviceSessionToken=localStorage.getItem(KEY)||'';return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).then(function(r){return r.json()}).then(function(r){if(typeof r.body==='string')r=JSON.parse(r.body);if(!r.success){if(r.code==='SERVICE_PRIVATE_AUTH_REQUIRED'&&!oauthPending){localStorage.removeItem(KEY);oauth()}throw Error(r.error||'读取失败，请重试')}return r})}
  function loading(){return '<div class="personal-loading" role="status">正在读取数据…</div>'}
  function error(message,retry){app.innerHTML='<section class="personal-state"><h1>暂时无法读取</h1><p>'+esc(message)+'</p><button id="retryButton" class="personal-primary">重新加载</button></section>';document.getElementById('retryButton').onclick=retry}
- function oauth(){oauthPending=true;state.epoch++;app.innerHTML=loading();api({action:'servicePrivateOAuthUrl',returnUrl:location.origin+location.pathname}).then(function(r){location.replace(r.authorizeUrl)}).catch(function(e){oauthPending=false;error(e.message,oauth)})}
+ function oauth(){oauthPending=true;state.epoch++;app.innerHTML=loading();api({action:'servicePrivateOAuthUrl',returnUrl:location.origin+location.pathname+(deepFeedback?'?deep=myFeedback':'')}).then(function(r){location.replace(r.authorizeUrl)}).catch(function(e){oauthPending=false;error(e.message,oauth)})}
  function complete(code,oauthState){app.innerHTML=loading();api({action:'servicePrivateOAuth',code:code,state:oauthState}).then(function(r){localStorage.setItem(KEY,r.refereeSessionToken);history.replaceState({},document.title,location.pathname);overview()}).catch(function(e){error(e.message,oauth)})}
  function portrait(url,name){return url?'<span class="personal-portrait"><img src="'+esc(url)+'" alt="'+esc(name)+'" onerror="this.parentElement.hidden=true"></span>':''}
  function status(v){return({finished:'已结束',completed:'已结束',ended:'已结束',ongoing:'进行中',live:'进行中',playing:'进行中',upcoming:'待开始',scheduled:'待开始',not_started:'待开始',pending:'待开始',postponed:'延期'})[v]||'状态待确认'}
@@ -43,7 +43,8 @@
    '<section class="me-usercard me-home-profile" aria-label="当前资料">'+portrait(current&&current.avatar,name)+'<div><h1>'+esc(name)+'</h1><p>'+esc(d.phoneMasked||'')+'</p></div><button data-action="homeProfile">个人资料 ›</button></section>'+
    '<nav class="me-home-roles" aria-label="切换身份"><button data-home-role="player" aria-pressed="'+(state.view==='player')+'" '+(!players.length?'disabled':'')+'>球员身份</button><button data-home-role="referee" aria-pressed="'+(state.view==='referee')+'" '+(!d.hasReferee?'disabled':'')+'>裁判身份</button></nav>'+
    '<div class="me-home-context"><span>'+esc(relation.filter(Boolean).join(' · ')||'尚未绑定业务身份')+'</span>'+(state.view==='player'&&players.length>1?'<button data-action="homePlayers">切换球员 ›</button>':'')+'</div>'+
-   '<section class="me-home-wallet" aria-label="我的蜂蜜"><div class="wallet-head"><strong>我的蜂蜜</strong><button data-action="honeyLedger">收支明细 ›</button></div><div class="wallet-body"><div class="amount"><strong id="homeHoneyBalance">—</strong><span>滴</span></div><button class="recharge" data-action="honeyRecharge">充值</button></div><div id="homeHoneyStatus" class="wallet-foot">正在读取蜂蜜余额…</div></section>'+
+   '<section class="me-home-wallet" aria-label="我的蜂蜜"><div class="wallet-head"><strong>我的蜂蜜</strong><button data-action="honeyLedger">收支明细 ›</button></div><div class="wallet-body"><div class="amount"><strong id="homeHoneyBalance">—</strong><span>滴</span></div>'+homeRechargeEntry()+'</div><div id="homeHoneyStatus" class="wallet-foot">正在读取蜂蜜余额…</div></section>'+
+   '<section class="me-home-game" aria-label="球员卡玩法"><button class="me-home-game-entry" data-action="homeCardGame"><span class="game-entry-text"><strong>球员卡玩法</strong><small>送出卡片 · 收集图鉴 · 组建阵容 · 阵容对战</small></span><i aria-hidden="true">›</i></button></section>'+
    '<section class="me-home-data"><button class="me-home-data-head" data-action="goData"><strong>'+(state.view==='player'?'我的比赛数据':'我的执裁数据')+'</strong><span>全部记录 ›</span></button><div id="homeMetrics" class="me-home-metrics">'+homeMetrics(null)+'</div>'+homeMenu(state.view==='player'?'shield':'event',state.view==='player'?'我的球员卡':'裁判任务',state.view==='player'?'homePlayerCards':'homeRefereeTasks')+'</section>'+
    '<h2 class="me-home-label">账号与服务</h2><section class="me-home-menu">'+homeMenu('list','继续球员登记','homeRegistrationResume')+homeMenu('lock','账号与安全','homeSecurity')+homeMenu('list','绑定管理','showBindings')+homeMenu('bell','消息通知','homeMessages')+homeMenu('event','充值订单','honeyOrders')+homeMenu('shield','客服中心','support')+homeMenu('event','我的反馈','myFeedback')+'</section>'+
    '<div class="me-home-footer"><button data-action="openTournament">赛事中心</button><span>·</span><button data-action="about">关于赛小蜂</button><span>·</span><button data-action="logout">退出登录</button></div></main></div>'
@@ -71,11 +72,113 @@
   else html=entries.length?'<div class="me-account-entries">'+entries.map(function(row){return '<div class="me-account-entry"><div><strong>'+esc(kind==='ledger'?row.label:row.title)+'</strong><small>'+esc(homeTime(row.time))+'</small>'+(kind==='ledger'?'':'<p>'+esc(row.content)+'</p>')+'</div>'+(kind==='ledger'?'<b>'+esc((row.delta>0?'+':'')+row.delta)+' 滴</b>':'')+'</div>'}).join('')+'</div>':'<p class="me-modal-text">'+(kind==='ledger'?'暂无收支记录':'暂无发给本人账号的消息')+'</p>'
   modal(kind==='ledger'?'蜂蜜收支':'消息通知',html)
  })}
+ // 蜂蜜充值：单价与档位全部来自服务端（1 元 = 10 滴，档位未配置或支付未开通时不开放）。
+ // 页面只负责展示与拉起收银台；是否到账一律以服务端订单状态为准，前端「支付成功」提示不加余额。
+ state.honeyPack=0
+ state.honeyBusy=false
+ function isIosClient(){return /iPad|iPhone|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
+ function isWechatClient(){return /micromessenger/i.test(navigator.userAgent)}
+ function honeyWallet(){var w=homeAccount&&homeAccount.wallet;return w&&w.status==='ready'?w:null}
+ function honeyBalance(){var w=honeyWallet();return w?w.balance:null}
+ function honeyPacks(){var w=honeyWallet();return w&&Array.isArray(w.packs)?w.packs:[]}
+ function honeyRechargeState(){var w=honeyWallet(),reason=isIosClient()?'IOS_VIRTUAL_PAYMENT_RESTRICTED':(w&&w.rechargeReason||''),available=!!(w&&w.rechargeAvailable===true)&&!isIosClient();return{available:available,reason:reason,packs:available?honeyPacks():[]}}
+ function honeyReasonText(reason){return({PAYMENT_NOT_CONFIGURED:'微信支付待开通',PRICE_NOT_CONFIGURED:'充值档位待确认',PRICE_CONFIG_INVALID:'充值档位配置异常，暂不开放',PRICE_RATE_MISMATCH:'充值档位未按统一单价配置，暂不开放',PRICE_BONUS_UNCONFIRMED:'赠送滴数待确认，暂不开放',IOS_VIRTUAL_PAYMENT_RESTRICTED:'iOS 暂不支持购买蜂蜜滴',HONEY_ACCOUNT_NOT_OPEN:'请先完成服务号注册',HONEY_ACCOUNT_CONFLICT:'蜂蜜账户存在重复记录，请联系客服',HONEY_RECONCILING:'蜂蜜余额待核对，请稍后重试',HONEY_LEDGER_INVALID:'蜂蜜账本异常，请联系客服',NOT_WECHAT:'请在微信中打开后再支付',WECHAT_NOT_READY:'微信支付加载失败，请重新打开本页'})[reason]||'充值暂不可用，请稍后重试'}
+ function yuanText(cents){var n=Number(cents)/100;return Number.isFinite(n)?(n%1===0?String(n):n.toFixed(2)):'—'}
+ function homeRechargeEntry(){return isIosClient()?'<button class="recharge" disabled aria-label="iOS 暂不支持购买蜂蜜">iOS 暂不支持</button>':'<button class="recharge" data-action="honeyRecharge">充值</button>'}
+ function renderHoneyPanel(){
+  var recharge=honeyRechargeState(),packs=recharge.packs,balance=honeyBalance()
+  if(!packs.length)state.honeyPack=0;else if(state.honeyPack>=packs.length)state.honeyPack=packs.length-1;else if(state.honeyPack<0)state.honeyPack=0
+  var selected=packs[state.honeyPack]||null
+  var packHtml=packs.map(function(item,index){
+   return '<button class="me-honey-pack'+(index===state.honeyPack?' selected':'')+'" data-honey-pack="'+index+'" aria-pressed="'+(index===state.honeyPack)+'"><strong>'+item.totalDrops+'<span>滴</span></strong><small>'+yuanText(item.priceCents)+' 元</small>'+(item.bonusDrops?'<em>多送 '+item.bonusDrops+' 滴</em>':'')+'</button>'
+  }).join('')
+  var payable=!!(recharge.available&&selected&&!state.honeyBusy)
+  var payLabel=state.honeyBusy?'支付处理中…':(payable?'微信支付 '+yuanText(selected.priceCents)+' 元':'微信支付待开通')
+  var note=recharge.available?'支付结果以服务端确认到账为准，重复回调只入账一次；到账后可在这里的「收支明细」核对。':(honeyReasonText(recharge.reason)+'。当前不会创建订单，也不会扣款。')
+  modal('蜂蜜充值',
+   '<div class="me-honey-top"><span>当前余额</span><strong>'+(balance==null?'—':balance.toLocaleString('en-US'))+'<small> 滴</small></strong></div>'+
+   (packHtml?'<div class="me-honey-packs" role="radiogroup" aria-label="选择充值档位">'+packHtml+'</div>':'')+
+   (selected?'<div class="me-honey-summary"><span>支付 '+yuanText(selected.priceCents)+' 元</span><strong>到账 '+selected.totalDrops+' 滴</strong></div>':'')+
+   '<button class="me-honey-pay" data-action="honeyPay" '+(payable?'':'disabled')+'>'+esc(payLabel)+'</button>'+
+   '<p class="me-honey-note">'+esc(note)+'</p>')
+ }
+ function invokeWechatPay(pay){
+  return new Promise(function(resolve,reject){
+   if(!pay||!pay['package'])return reject(Error('支付参数异常，请重新打开本页'))
+   var done=false,finish=function(ok,error){if(done)return;done=true;if(ok)resolve(true);else reject(error)}
+   function run(){
+    try{
+     WeixinJSBridge.invoke('getBrandWCPayRequest',{appId:pay.appId,timeStamp:pay.timeStamp,nonceStr:pay.nonceStr,'package':pay['package'],signType:pay.signType,paySign:pay.paySign},function(res){
+      var msg=String(res&&res.err_msg||'')
+      if(msg==='getBrandWCPayRequest:ok')finish(true)
+      else if(msg.indexOf('cancel')>=0){done=true;resolve(false)}
+      else finish(false,Error('支付未完成，请重新发起'))
+     })
+    }catch(error){finish(false,Error('微信支付调用失败，请重新打开本页'))}
+   }
+   if(typeof WeixinJSBridge!=='undefined'&&WeixinJSBridge.invoke)return run()
+   if(document.addEventListener){document.addEventListener('WeixinJSBridgeReady',run,false);setTimeout(function(){if(typeof WeixinJSBridge==='undefined')finish(false,Error(honeyReasonText('WECHAT_NOT_READY')))},3000);return}
+   finish(false,Error(honeyReasonText('WECHAT_NOT_READY')))
+  })
+ }
+ // 支付成功后只轮询服务端订单状态；任何「支付成功」回调都不直接加余额
+ function pollHoneyOrder(outTradeNo,attempt){
+  attempt=attempt||0
+  return api({action:'servicePrivateHoneyOrderStatus',outTradeNo:outTradeNo}).then(function(r){
+   var order=r&&r.order
+   if(order&&order.status==='paid')return order
+   var wait=[1200,2000,3000,4000,6000][attempt]
+   if(!wait)return order||null
+   return new Promise(function(resolve){setTimeout(resolve,wait)}).then(function(){return pollHoneyOrder(outTradeNo,attempt+1)})
+  }).catch(function(){var wait=[1200,2000,3000,4000,6000][attempt];if(!wait)return null;return new Promise(function(resolve){setTimeout(resolve,wait)}).then(function(){return pollHoneyOrder(outTradeNo,attempt+1)})})
+ }
+ function honeyPay(){
+  if(state.honeyBusy)return
+  var recharge=honeyRechargeState(),pack=recharge.packs[state.honeyPack]
+  if(!recharge.available||!pack){toast(honeyReasonText(recharge.reason));return}
+  if(!isWechatClient()){toast(honeyReasonText('NOT_WECHAT'));return}
+  state.honeyBusy=true;renderHoneyPanel()
+  api({action:'servicePrivateHoneyRecharge',packId:pack.id,clientPlatform:isIosClient()?'ios':'wechat-h5'}).then(function(r){
+   return invokeWechatPay(r.payParams).then(function(paid){
+    state.honeyBusy=false
+    if(!paid){renderHoneyPanel();toast('已取消支付');return null}
+    toast('支付已提交，正在确认到账…')
+    return pollHoneyOrder(r.order.outTradeNo).then(function(order){
+     if(order&&order.status==='paid'){loadHomeAccount(true);modal('充值成功','<p class="me-modal-text">已到账 '+order.totalDrops+' 滴，可在「收支明细」核对。</p><p class="me-modal-text">订单号 '+esc(order.outTradeNo)+'</p>');return}
+     renderHoneyPanel();toast('支付结果待确认，请到「充值订单」查看')
+    })
+   })
+  }).catch(function(e){state.honeyBusy=false;renderHoneyPanel();toast(e.message||'支付发起失败，请稍后重试')})
+ }
+ function renderHoneyOrders(){
+  modal('充值订单','<p class="me-modal-text">正在读取…</p>')
+  api({action:'servicePrivateHoneyOrders'}).then(function(r){
+   if(!app.querySelector('.me-modal-mask'))return
+   var rows=(r&&r.rows)||[]
+   var html=rows.length?'<div class="me-account-entries">'+rows.map(function(order){
+    var check=order.status==='pending'?'<div class="me-modal-actions"><button class="me-modal-cancel" data-honey-order="'+esc(order.outTradeNo)+'">我已完成支付，刷新状态</button></div>':''
+    return '<div class="me-account-entry"><div><strong>'+esc(order.totalDrops)+' 滴 · '+yuanText(order.priceCents)+' 元</strong><small>'+esc(homeTime(order.createdAt))+' · '+esc(order.outTradeNo)+'</small>'+check+'</div><b>'+esc(order.statusLabel)+'</b></div>'
+   }).join('')+'</div>':'<p class="me-modal-text">暂无充值订单</p>'
+   modal('充值订单',html+(rows.length?'<p class="me-honey-note">未到账的订单不会增加余额；支付完成后由服务端主动查单确认，重复回调只入账一次。</p>':''))
+  }).catch(function(e){if(app.querySelector('.me-modal-mask'))modal('充值订单','<p class="me-modal-text">读取失败：'+esc(e.message||'请稍后重试')+'</p>')})
+ }
+ function checkHoneyOrder(outTradeNo){
+  toast('正在确认支付结果…')
+  api({action:'servicePrivateHoneyOrderStatus',outTradeNo:outTradeNo}).then(function(r){
+   var order=r&&r.order
+   if(order&&order.status==='paid'){toast('已到账 '+order.totalDrops+' 滴');loadHomeAccount(true)}
+   else toast('支付结果待确认，请稍后再试')
+   renderHoneyOrders()
+  }).catch(function(e){toast(e.message||'查询失败，请稍后重试')})
+ }
  function homeAction(action){
   if(action==='homeRegistrationResume'){location.href='./registration-resume.html';return true}
-  if(action==='honeyRecharge'||action==='honeyOrders'){modal(action==='honeyRecharge'?'蜂蜜充值':'充值订单','<p class="me-modal-text">充值暂未开放</p><p class="me-modal-text">当前不会创建订单或扣款。</p>');return true}
+  if(action==='honeyRecharge'){if(isIosClient()){toast(honeyReasonText('IOS_VIRTUAL_PAYMENT_RESTRICTED'));return true}state.honeyPack=0;renderHoneyPanel();loadHomeAccount(false).then(function(){if(app.querySelector('.me-modal'))renderHoneyPanel()});return true}
+  if(action==='honeyOrders'){renderHoneyOrders();return true}
+  if(action==='honeyPay'){honeyPay();return true}
   if(action==='honeyLedger'||action==='homeMessages'){showHomeAccount(action==='honeyLedger'?'ledger':'messages');return true}
   if(action==='homePlayerCards'){location.href='./player-cards.html';return true}
+  if(action==='homeCardGame'){location.href='./player-card-game.html';return true}
   if(action==='homeRefereeTasks'){location.href='./?entry=workbench';return true}
   if(action==='retryHomeStats'){loadHomeStats();return true}
   if(action==='homePlayers'){var rows=(state.overview.players||[]).map(function(p){return '<button class="me-home-player-option" data-home-player="'+esc(p.id)+'">'+esc(p.name)+'<small>'+esc(p.teamName)+'</small></button>'}).join('');modal('切换球员',rows);return true}
@@ -178,6 +281,8 @@
   var action=t.dataset.action
   if(homeAction(action))return
   if(t.dataset.homeRole){if(t.disabled)return;state.view=t.dataset.homeRole;renderHome()}
+  else if(t.dataset.honeyPack!=null){state.honeyPack=Number(t.dataset.honeyPack)||0;renderHoneyPanel()}
+  else if(t.dataset.honeyOrder){checkHoneyOrder(t.dataset.honeyOrder)}
   else if(t.dataset.homePlayer){state.playerId=t.dataset.homePlayer;renderHome()}
   else if(t.dataset.home)renderHome()
   else if(action==='goData'){var d=state.overview;if(!d.players.length&&!d.hasReferee)return showBindings();select(state.view,state.playerId)}
@@ -200,8 +305,9 @@
   else if(t.dataset.retry)select(state.view,state.playerId)
  })
  // ============ 入口 ============
- function overview(){homeAccountGeneration++;homeAccount=null;homeAccountAt=0;homeAccountPromise=null;state.epoch++;app.innerHTML=loading();api({action:'servicePrivateOverview'}).then(function(r){if(r.needsBinding){app.innerHTML='<section class="personal-state"><h1>尚未绑定球员或裁判</h1><p>球员从球队资料邀请完成绑定；裁判从本人任务验证手机号。</p><a class="personal-primary personal-task-link" href="./?entry=workbench">裁判任务</a></section>';return}state.overview=r.data;renderHome()}).catch(function(e){if(!oauthPending)error(e.message,overview)})}
+ function overview(){homeAccountGeneration++;homeAccount=null;homeAccountAt=0;homeAccountPromise=null;state.epoch++;app.innerHTML=loading();api({action:'servicePrivateOverview'}).then(function(r){if(r.needsBinding){app.innerHTML='<section class="personal-state"><h1>尚未绑定球员或裁判</h1><p>球员从球队资料邀请完成绑定；裁判从本人任务验证手机号。</p><a class="personal-primary personal-task-link" href="./?entry=workbench">裁判任务</a></section>';return}state.overview=r.data;renderHome();if(deepFeedback){deepFeedback=false;showMyFeedback()}}).catch(function(e){if(!oauthPending)error(e.message,overview)})}
  // 本地预览：me.html?mock=1 使用假数据渲染，不请求微信
  function mockOverview(){state.overview={schemaVersion:'service-personal/2',phoneMasked:'138****1663',hasReferee:true,referee:{name:'郑旭升',level:'国家二级裁判',avatar:''},players:[{id:'p1',name:'郑旭升',teamName:'郑州青少队',jerseyNumber:'7',relation:'self',avatar:''},{id:'p2',name:'郑晓峰',teamName:'郑州青少队',jerseyNumber:'10',relation:'guardian',avatar:''}]};renderHome()}
+ var deepFeedback=location.hash.indexOf('myFeedback')>=0||new URLSearchParams(location.search).get('deep')==='myFeedback'
  var q=new URLSearchParams(location.search);if(q.get('code')&&q.get('state'))complete(q.get('code'),q.get('state'));else if(MOCK){mockOverview();var mview=new URLSearchParams(location.search).get('view');if(mview==='data'){var dd=state.overview;select(dd.players.length?'player':'referee',dd.players[0]?dd.players[0].id:'')}else if(mview==='support')renderSupport()}else if(localStorage.getItem(KEY))overview();else oauth()
 })()
