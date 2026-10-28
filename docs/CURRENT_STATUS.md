@@ -1,3 +1,5 @@
+2026-10-28 用户授权后，报名表按组别报名人数上限生成球员栏位已正式发布并同步测试：仅选择报名表3文件进入main（正式源码c1929cff），未将preview的同期登录、平板或转会功能带入正式。main合回preview（测试源码86e77db5）并按测试base重新构建发布，保留其原功能。两端入口、Word源模板及关键分包分别8项HTTP200且SHA-256与对应构建一致；1/2/18/23/35/100人数、可选字段、原生控件唯一性及23人填表导回回归通过。未部署后端、小程序或H5。见docs/releases/registration-template-player-limit-20261028.md。
+
 2026-10-26 用户确认后，三套邀请海报、入驻指引与平台LOGO已合入main并发布正式/admin/，main已同步回preview并重新按/preview/admin/构建发布。正式源码892023bf、测试源码6c56ca7f；两端各403文件上传成功，分别11项入口/关键分包/三张背景/LOGO资源HTTP200且SHA-256与对应本地构建一致。海报回归通过，未发布后端、小程序或H5，组别资料新流程仍待整体验收。详见docs/releases/team-invitation-poster-v2-20261026.md。
 
 2026-10-26 邀请海报与入驻指引顶部文字已替换为现有透明平台LOGO（logo-saixiaofeng.png），三套模板保留比例完整显示；字体、背景及真实邀请码不变。代码10004654、预览源码a4cf33c8已推送Gitee；布局及LOGO回归、原生Canvas导出检查、预览构建通过，完整静态文件发布/preview/admin/，含LOGO共11项资源HTTP200且SHA-256一致，正式/admin/原摘要未变。见docs/releases/team-invitation-poster-v2-20261026.md。
