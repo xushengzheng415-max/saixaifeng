@@ -17,10 +17,15 @@ async function run(root){
  assert.equal((await call('auditRepairSave',{...base,revision,kind:'lineup',side:'away',starters:['q1'],bench:[]})).code,'CARD_REPAIR_CONFLICT')
  r=await inspect();assert.equal((await call('auditRepairSave',{...base,revision:r.revision,kind:'lineup',side:'away',starters:['q1'],bench:[]})).success,true)
  r=await inspect();revision=r.revision
+ assert.equal((await call('auditRepairSave',{...base,revision,kind:'events',events:[],eventsComplete:true,reason:''})).code,'CARD_REPAIR_SOURCE_REQUIRED')
+ assert.equal((await call('auditRepairSave',{...base,revision,kind:'events',events:[],eventsComplete:true})).success,true,'0:0 can be confirmed complete without inventing any event')
+ r=await inspect();assert.equal(r.eventsComplete,true);assert.deepEqual(r.events,[])
+ const zeroAudit=await call('auditPlayer',{playerId:'p1'});assert.equal(zeroAudit.score.status,'ready');assert.equal(zeroAudit.playerTotal.metrics.minutesPlayed,60);assert.ok(!zeroAudit.issues?.some(x=>x.code==='EVENT_COVERAGE_PARTIAL'))
+ revision=r.revision
  assert.equal((await call('auditRepairSave',{...base,revision,kind:'events',events:[{type:'goal',teamId:'A',playerId:'p1',minute:12}],eventsComplete:true})).code,'CARD_REPAIR_SCORE_MISMATCH')
  assert.equal((await call('auditRepairSave',{...base,revision,kind:'events',events:[{type:'substitution',teamId:'A',playerId:'p1',outPlayerId:'p2',minute:30}],eventsComplete:true})).code,'CARD_REPAIR_SUBSTITUTION_INVALID')
  assert.equal((await call('auditRepairSave',{...base,revision,kind:'events',events:[{type:'substitution',teamId:'A',playerId:'p2',outPlayerId:'p1',minute:30}],eventsComplete:true})).success,true)
- const audit=await call('auditPlayer',{playerId:'p1'});assert.equal(audit.success,true);assert.equal(audit.score.status,'ready');assert.equal(audit.playerTotal.metrics.minutesPlayed,30);assert.equal(f.data.platform_settings.filter(x=>x.recordType==='match_fact_repair_audit').length,3)
+ const audit=await call('auditPlayer',{playerId:'p1'});assert.equal(audit.success,true);assert.equal(audit.score.status,'ready');assert.equal(audit.playerTotal.metrics.minutesPlayed,30);assert.equal(f.data.platform_settings.filter(x=>x.recordType==='match_fact_repair_audit').length,4)
  f.data.match_events.push({_id:'legacy-event',match_id:'m1',type:'yellow_card',teamId:'A',playerId:'p1',minute:10,revision:1});r=await inspect();assert.ok(r.events.some(x=>x.eventId==='legacy-event'),'legacy match_id events are included');assert.equal((await call('auditRepairSave',{...base,revision:r.revision,kind:'events',events:r.events.filter(x=>x.eventId!=='legacy-event'),eventsComplete:true})).success,true);assert.ok(m.events.some(x=>x.eventId==='legacy-event'&&x.deleted),'removed external event remains tombstoned');r=await inspect();assert.ok(!r.events.some(x=>x.eventId==='legacy-event'));m.refereeRecordLocked=true;assert.equal((await call('auditRepairSave',{...base,revision:r.revision,kind:'events',events:[],eventsComplete:true})).code,'CARD_REPAIR_LOCKED');delete m.refereeRecordLocked
  r=await inspect();m.homeScore=1;assert.equal((await call('auditRepairSave',{...base,revision:r.revision,kind:'events',events:[],eventsComplete:true})).code,'CARD_REPAIR_CONFLICT')
  f.setAuth({success:true,principalType:'user',user:{_id:'organizer'}});assert.equal((await inspect()).success,false)
