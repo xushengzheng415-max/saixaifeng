@@ -340,7 +340,8 @@
 | 2026-10-28 | 按用户选择的 A 方案实现平台「支付设置」页：`honeyRecharge.paymentConfigStatus()` + `webLoginApi` 的 `platformHoneyPaymentConfig`（仅平台负责人）+ `PaymentSettingsAdmin.vue` + `tools/test-platform-payment-settings.cjs` | 本地自检与构建通过，进入部署 |
 | 2026-10-28 | 部署 `webLoginApi`：先跑 `check-referee-backend-package.cjs` 通过；因本地 `node_modules` 含 Windows 专用 `@resvg` 与 `.cmd` 垫片、缺线上 `@resvg/resvg-js-linux-x64-musl`，**没有整目录上传**，而是以刚下载的线上包为基线、只覆盖 `index.js` 与 `honeyRecharge.cjs` 后 `fn code update`（COS）。读回：`index.js` SHA-256 `D12A1665…B68E3`、`honeyRecharge.cjs` SHA-256 `5018F431…F1C0`，与上传包一致；线上独有的 `data-center/match-score.cjs`、`data-center/penalty-shootout.mjs` 与 `resvgjs.linux-x64-musl.node` 均保留；未带令牌探测返回 `PLATFORM_OWNER_REQUIRED` | 后端已上线并读回 |
 | 2026-10-28 | 平台前端发布：提交 `6d2dce60` → release `20261027160840-6d2dce60`，脚本回读 27 个文件摘要一致；HTTP 读回 `release.json` 提交一致、`TournamentCenterAdmin-BlzGeCYi.js` 200（413,909 字节）SHA-256 与本地一致且含「支付设置」「platformHoneyPaymentConfig」「APIv3 密钥生成器」「honeyPayNotify」 | 已上线；真实配置体检需平台负责人登录后点测 |
-| 2026-10-28 | 用户批准 B 方案（「按 B 实施，因为这个后台是平台管理方的！所以不会泄露」）：`honeyRecharge.cjs` 增加 `platform_payment_secrets` 加密存储（AES-256-GCM、`PAYMENT_SECRET_KEK`、60 秒缓存、库内优先/环境变量回退）、`savePaymentSecrets`/`clearPaymentSecrets` + `platform_payment_secret_audit` 审计（不记值）、7 处支付入口 `ensureSecrets`；`index.js` 注册 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`（仅 `platform_owner`）；`servicePersonalAccount.cjs` 取充值态前刷新；页面加剧密写入表单、来源列、逐项清除、凭据存放卡与 KEK 提示；新增 `tools/test-platform-payment-secrets.cjs`、改造 `tools/test-platform-payment-settings.cjs` | 本地自检（`test-platform-payment-secrets` / `test-platform-payment-settings` / `test-honey-recharge`）与 `npm run build` 全部通过，进入部署 |
+| 2026-10-28 | 用户批准 B 方案（「按 B 实施，因为这个后台是平台管理方的！所以不会泄露」）：`honeyRecharge.cjs` 增加 `platform_payment_secrets` 加密存储（AES-256-GCM、`PAYMENT_SECRET_KEK`、60 秒缓存、库内优先/环境变量回退）、`savePaymentSecrets`/`clearPaymentSecrets` + `platform_payment_secret_audit` 审计（不记值）、7 处支付入口 `ensureSecrets`；`index.js` 注册 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`（仅 `platform_owner`）；`servicePersonalAccount.cjs` 取充值态前刷新；页面加剧密写入表单、来源列、逐项清除、凭据存放卡与 KEK 提示；新增 `tools/test-platform-payment-secrets.cjs`、改造 `tools/test-platform-payment-settings.cjs` | 本地自检（`test-platform-payment-secrets` / `test-platform-payment-settings` / `test-honey-recharge`）与 `npm run build` 全部通过 |
+| 2026-10-28 | 部署 B 方案：提交 `ddf7ca9e`。`webLoginApi` 仍按差量流程——下载线上包为基线，只覆盖 `index.js`（SHA-256 `716BE56F…319CD`）、`honeyRecharge.cjs`（`9A939A0F…E4920`）、`servicePersonalAccount.cjs`（`4E2DC738…CE98A`），`check-referee-backend-package.cjs` 通过后 `fn code update`（COS）；回读三文件摘要与上传包完全一致，`@resvg/resvg-js-linux-x64-musl` 与线上独有 `data-center/match-score.cjs`、`data-center/penalty-shootout.mjs` 全部保留。未带令牌 POST 两个新 action 均返回 `PLATFORM_OWNER_REQUIRED`。平台前端 `npm run deploy` → release `20261028053119-ddf7ca9e`，27 个文件摘要一致；HTTP 回读 `release.json` 提交一致、`TournamentCenterAdmin-UdpkQtqa.js` 421,592 字节且含 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`/`PAYMENT_SECRET_KEK`/`AES-256-GCM`/「凭据存放」/「加密存储」/「清除全部库内配置」，`cloudbase/js-sdk` 计数 0 | 后端与平台前端均已上线并读回；真实保存需先配 `PAYMENT_SECRET_KEK` 并创建两个集合 |
 
 ---
 
@@ -390,11 +391,23 @@
 
 保存后无需改代码，函数读取环境变量即生效（必要时在控制台点一次「保存并重启」）。
 
+### 第 3 步（B 方案，2026-10-28 起推荐）：在平台后台直接填写
+
+1. 先在控制台给 `webLoginApi` 加**一个**环境变量：`PAYMENT_SECRET_KEK`（≥16 个字符，随机串，**只配这一次**，记到本机保险位置）。这是解密库内密文的主密钥；丢失或更换会导致已保存的密文全部读不出来，需要在页面重填。
+2. 登录 `https://pingtai.sxffootball.cn/` → 营销活动 → **支付设置**，第 4 张卡「凭据存放」应显示「主密钥已就绪」，否则会出现绿色提示条说明缺 KEK。
+3. 在「写入支付配置」区块填入 6 项凭据（商户号 / API 证书序列号 / APIv3 密钥 / 商户 API 私钥 / 微信支付公钥 / 平台公钥 ID）与档位，提交前会二次确认。私钥和公钥可以直接粘多行 PEM，不需要手工写 `\n`。
+4. 保存成功后表单清空、体检表即时刷新：对应项「来源」变为**加密存储**，顶部「正常项」计数上升。
+5. 档位可用「填入已确认 5 档」一键带入；APIv3 密钥可用本页生成器生成后「填入本页生成的密钥」，避免另开窗口。
+6. 与第 3 步环境变量的关系：**库内值优先**，环境变量保留为回退。逐项迁移时可先保存一项、确认体检为「加密存储」，再删掉对应环境变量；要回退可在体检表该行点「清除」，即回落到环境变量。
+7. 第 3 步的环境变量写法仍然有效，两处并存时以库内为准；两种方式选一种即可，不必重复填。
+
 ### 第 4 步：集合权限与索引
 
 1. `honey_orders`：权限设「仅管理端可读写」，不要让客户端直读。
 2. `honey_orders` 索引：`openId` 升序 + `createdAt` 降序。
 3. `fan_points_ledger`：若没有 `serviceAccountOpenId` 索引，补一条（充值与扣费都按它汇总账本）。
+4. `platform_payment_secrets`（B 方案）：新建集合，权限「仅管理端可读写」；代码会自动写入单文档 `_id='wxpay'`，不要手工改内容（改坏会导致解密失败）。
+5. `platform_payment_secret_audit`（B 方案）：新建集合，权限「仅管理端可读写」；只记操作人/时间/字段名，不含任何值。未创建时保存仍成功，只是返回 `audited:false`。
 
 ### 第 5 步：部署代码（需授权）
 

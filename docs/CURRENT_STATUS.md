@@ -1,3 +1,19 @@
+2026-10-28 球队主账号免确认移交（用户确认方案 B「走移交但是不需要对方确认！对方登录就能看到自己的球队信息」，**小程序已上传开发版 v1.2.21，云函数未部署**）：
+
+- 背景：账号 `17319716663`（`b9a701d4…db2b`）在首页「我的球队」看到 `陆零後足球队`（`6d00d0e5…15ce5`）与 `开封立洋足球队`（`6d00d0e5…bec86`），自认不是主账号。只读回读：两支球队均为主办方账号（`18637842065`）从报名表导入（`source=registration_docx_import`），`ownerId`／`claimedByUserId` 都指向该账号；`陆零後` 成员关系 `role=owner`／`accepted`（`organizer_team_access`），`开封立洋` 成员关系已 `revoked`（`organizer_claimant_bind`）但所有权字段未清，故仍显示为我的球队。报名联系人 `139****6658`（冉伟强）、`185****2019`（屈恒）目前**未注册账号**。两支球队各有球员与参赛记录（37 名球员、4 条 `tournament_teams`），不满足「主账号删除空球队」条件。
+- 原能力缺口：小程序只有「删除空球队」与需受让人确认的「待接收主账号」邀请，没有主账号自助移交，也没有成员自助退出。
+- 服务端新增：`cloudfunctions/getMiniWorkspace/teamOwnerTransfer.cjs`
+  - `transferDirect`：仅当前主账号可把球队交给指定手机号，**不需要受让人确认**。受让人已有账号→立即改绑 `ownerId`／`ownerUserId`／`claimedByUserId`／`ownerPhone`，为其建 `owner` 关系（`team.view`＋`team.manage`），原主账号的球队关系置 `revoked`／`owner_transfer_out`；受让人未注册→清空所有权、写 `pendingOwnerPhone`、`claimStatus=pending`。`phone` 与 `phoneNumber` 都查，命中多个账号直接 `TEAM_TRANSFER_ACCOUNT_CONFLICT` 阻断；禁止移交给自己；事务内复查所有权（`TEAM_CHANGED`）；每次移交写 `team_owner_transfers` 审计；移交后作废该队残留的「待接收主账号」邀请。
+  - `bindPending`：该手机号首次登录时自动认领（转 `claimed`、建 `owner` 关系、补审计 `owner_transfer_claim_on_login`）；已被他人持有或 `pendingOwnerPhone` 不匹配时不动，失败只告警不阻断登录。
+- `index.js`：新增动作 `transferTeamOwnerDirect`；`loadWorkspaceCatalog` 在读取自有球队之前先跑登录期认领，保证受让人登录即能看到球队。
+- 小程序：`pages/team/profile/` 主账号可见「移交主账号给新负责人」→ 输入手机号 → 二次确认 → 成功后 `workspace.clearContext()`＋清 `teamInfo` 并回到 `/pages/teams/index`；文案写明「对方无需确认，用该手机号登录小程序即可看到球队」。WXML 仅简单插值与 `{{isOwner}}` 门控。
+- 规则：`docs/PRODUCT_RULES.md` 第四章新增「主账号免确认移交」，并限定只适用于主账号主动移交已认领球队——首次认领、受邀接收参赛仍必须本人确认；`docs/ADR.md` 记录 2026-10-28 决策与边界。
+- 验证：`node --check`（`teamOwnerTransfer.cjs`／`index.js`／`profile.js`）通过；新增 `tools/test-mini-team-owner-transfer.cjs` 7 组用例通过（已有账号移交、未注册手机号待绑定、登录自动认领不抢他人、非主账号／越权／移交自己／重复账号／并发改动阻断、页面确认与取消入口）；`tools/test-mini-empty-team-deletion.cjs` 回归通过。
+- 小程序上传（用户 2026-10-28 授权「你可以上传体验版了」）：`cli.bat upload -v 1.2.21` 成功——TOTAL 3,452,895 B、main 1,801,429 B、`/pages/team/` 740,891 B、`/pages/tournament/` 419,884 B、`/packageDiscover/` 371,139 B、`/pages/match/` 85,452 B、`/packageA/` 34,100 B，AppID `wx57164cca8676f411`；元数据见 `work/upload-1.2.21-info.json`。**上传成功只等于生成开发版 v1.2.21，未设体验版、未提交审核**；工作区其他会话的未提交小程序改动同样进入本次包。
+- 未做（待授权）：`getMiniWorkspace` 云函数差量部署（线上未含 `transferTeamOwnerDirect`，体验版点击该按钮会返回「未知操作」）；两支球队的实际移交（目标手机号待用户确认）；未推 Git。
+
+
+
 2026-10-28 运营平台按手机号查不到蜂蜜账户修复（用户授权「按方案 A 执行，补全 userId 字段」，**已写库并回读**）：
 
 - 现象：运营平台「手动加滴 → 查询账户」输入 `17319716663` 报「该手机号还没有绑定服务号微信，无法定位蜂蜜账户」；同一账号在服务号 H5「我的」正常显示本人与 4 滴余额。
@@ -1820,5 +1836,6 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
   - **页面**：`PaymentSettingsAdmin.vue` 新增「写入支付配置」表单（7 项，私钥/公钥/档位用 textarea）、提交前二次确认、成功后清空输入并即时刷新体检；体检表新增「来源」列（加密存储／环境变量／未配置，仅 `db` 来源行出现「清除」）；第 4 张结论卡「凭据存放」（已加密入库项数 + KEK 指纹 + 可解密数）；KEK 缺失提示条与指纹不匹配告警条；生成器/档位结果可一键填入表单。
   - **验证**：新增 `tools/test-platform-payment-secrets.cjs`（KEK 缺失拒绝且零写库、7 项保存、响应无明文、库内仅密文且每项独立 IV/Tag、库内优先于环境变量、非法格式拒绝且不回显、逐项保存不减项、换 KEK → `decryptableCount===0`、逐项清除、全清删文档、审计不含值、审计写失败不阻断、纯环境变量路径仍可用）；改造 `tools/test-platform-payment-settings.cjs`（三个 action 的 `platform_owner` 闸门 + `source==='env'` + `secretStore` 断言）；`test-honey-recharge.cjs` 仍通过；`platform-admin-vue npm run build` 通过，bundle 含 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`/`PAYMENT_SECRET_KEK`/`AES-256-GCM`，`@cloudbase/js-sdk` 计数 0。
   - **上线前置**：需在云函数 `webLoginApi` 环境变量配一次 `PAYMENT_SECRET_KEK`（≥16 字符，**只配一次**，丢失或更换会导致库内旧密文全部无法解密）；`platform_payment_secrets` 与 `platform_payment_secret_audit` 两个集合需在云端创建并设为「仅管理端可读写」。
+  - **部署与读回（2026-10-28 13:31 北京时间）**：提交 `ddf7ca9e`。`webLoginApi` 仍走差量流程（下载线上包为基线，只覆盖 `index.js` / `honeyRecharge.cjs` / `servicePersonalAccount.cjs`，`check-referee-backend-package.cjs` 通过后 `fn code update` COS）；回读三文件 SHA-256 与上传包完全一致，`@resvg/resvg-js-linux-x64-musl` 与线上独有 `data-center/match-score.cjs`、`data-center/penalty-shootout.mjs` 全部保留；未带令牌 POST `platformHoneyPaymentSecretSave` 与 `platformHoneyPaymentSecretClear` 均返回 `{"success":false,"code":"PLATFORM_OWNER_REQUIRED","error":"仅平台负责人可修改支付配置"}`。平台前端 `npm run deploy` → release `20261028053119-ddf7ca9e`，27 个文件摘要一致；HTTP 回读 `release.json` 提交 `ddf7ca9e` 一致、`assets/TournamentCenterAdmin-UdpkQtqa.js` 200（421,592 字节）含 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`/`PAYMENT_SECRET_KEK`/`AES-256-GCM`/「凭据存放」/「加密存储」/「清除全部库内配置」，`cloudbase/js-sdk` 计数 0。平台工程无独立测试域名（发布目标仅 `pingtai.sxffootball.cn`）；本轮未改 `service-account-h5` 托管文件与小程序，故未重发。
 - **未做/风险**：微信支付商户环境变量、JSAPI 授权目录、`/honeyPayNotify` 路径映射、`honey_orders` 索引仍未配置，线上仍是「支付未开通」——支付设置页现在会把缺项逐条列出来；真实下单/收银台/回调/退款未验证；服务号 H5 个人中心的充值面板是否已发布需单独核对。`platformOwner/index.js` 等后端改动仍只在 `codex/platform-ops`（本轮已提交 `webLoginApi/index.js`、`honeyRecharge.cjs`，但 `honeyWallet.cjs`、`servicePrivate.cjs`、`servicePersonalAccount.cjs` 等仍需按 `main` 侧归属整组提交）。退款规则、赠滴、家庭档开放条件待确认，详见 `docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md`。
 
