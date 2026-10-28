@@ -15,6 +15,7 @@ const pages=[['space','/tournament-space'],['console','/tournaments/qa-tournamen
       name:'tablet-qa-stage-order-cjs',enforce:'pre',
       transform(source,id){
         if(id.includes('generateSchedule')&&id.includes('stageOrder.cjs')) return source.replace('module.exports = {','export default {')
+        if(id.includes('dataCenter/shared/match-score.cjs')) return source + '\nexport default globalThis.SxfMatchScore\n'
       }
     }],
     server:{host:'127.0.0.1',port:5186,strictPort:true,watch:{ignored:['**/dist*/**']}}});
