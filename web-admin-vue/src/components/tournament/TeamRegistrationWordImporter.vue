@@ -17,7 +17,7 @@
 
     <el-dialog v-model="templateDialogVisible" title="选择报名字段" width="480px" append-to-body>
       <el-radio-group v-model="templatePreset" @change="applyTemplatePreset"><el-radio-button label="youth">青少年</el-radio-button><el-radio-button label="adult">成人</el-radio-button></el-radio-group>
-      <p>姓名为必填字段</p><el-checkbox-group v-model="templateFields"><el-checkbox v-for="field in REGISTRATION_FIELDS" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group>
+      <p>姓名必填 · 球员栏位 {{ templatePlayerLimit }} 人</p><el-checkbox-group v-model="templateFields"><el-checkbox v-for="field in REGISTRATION_FIELDS" :key="field.key" :label="field.key">{{ field.label }}</el-checkbox></el-checkbox-group>
       <template #footer><el-button @click="templateDialogVisible=false">取消</el-button><el-button type="primary" :loading="downloadingTemplate" @click="downloadTemplate">下载模板</el-button></template>
     </el-dialog>
     <el-alert
@@ -166,7 +166,7 @@ import { callFunction, uploadLargeFileViaCloud } from '../../utils/cloud'
 import { removeWhiteBackground } from '../../utils/whiteBgRemover'
 import { findVisiblePixelBounds } from '../../utils/imageBounds'
 import { maskRegistrationIdentity, parseTeamRegistrationDocx } from '../../utils/teamRegistrationDocx'
-import { REGISTRATION_FIELDS, REGISTRATION_PRESETS, createRegistrationTemplate } from '../../utils/registrationTemplate'
+import { REGISTRATION_FIELDS, REGISTRATION_PRESETS, createRegistrationTemplate, registrationTemplatePlayerLimit } from '../../utils/registrationTemplate'
 import { isDemoMode } from '../../utils/demoMode'
 import { divisionParticipantType } from '../../utils/divisionBasics'
 
@@ -193,6 +193,7 @@ const kitPreviewSets = [{ key:'primary', label:'主比赛服 A' }, { key:'second
 const kitPreviewEquipment = [{ key:'jersey', label:'球衣' }, { key:'shorts', label:'球裤' }, { key:'socks', label:'球袜' }]
 const parsingCount = computed(() => parsingKeys.value.size)
 const maxPlayers = computed(() => Number(props.division?.maxPlayersPerTeam || props.division?.maxPlayers || 35))
+const templatePlayerLimit = computed(() => registrationTemplatePlayerLimit(props.division))
 const playerCount = computed(() => teams.value.reduce((sum, team) => sum + team.players.length, 0))
 const validTeamCount = computed(() => teams.value.filter(team => !teamHasErrors(team)).length)
 const canImport = computed(() => teams.value.length > 0 && teams.value.length <= props.availableSlots && teams.value.every(team => !teamHasErrors(team) && !team.processing) && !importing.value)
@@ -243,7 +244,7 @@ async function downloadTemplate() {
   try {
   const response=await fetch(`${import.meta.env.BASE_URL}templates/team-registration-form-template.docx?v=generic-fields-20261007`)
   if(!response.ok)throw new Error('模板下载失败，请重试')
-  const blob=await createRegistrationTemplate(await response.arrayBuffer(),templateFields.value,{tournamentName:props.tournamentName,divisionName:props.division.name || props.division.divisionName})
+  const blob=await createRegistrationTemplate(await response.arrayBuffer(),templateFields.value,{tournamentName:props.tournamentName,divisionName:props.division.name || props.division.divisionName,maxPlayers:templatePlayerLimit.value})
   const url=URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
