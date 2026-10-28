@@ -6,10 +6,13 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/mini-1.2.23-upload-20261028.md','发布记录/小程序1.2.23上传与空球队身份修复-20261028.md'],
+  ['docs/releases/home-client-two-download-options-20261028.md','发布记录/官网客户端下载双选项-20261028.md'],
   ['docs/releases/platform-zero-event-repair-20261028.md','发布记录/平台0比0无事件资料保存修复-20261028.md'],
   ['docs/releases/platform-ai-portrait-tool-20261028.md','发布记录/平台后台自主生成球衣照与模型联动-20261028.md'],
   ['docs/releases/android-pad-0.1.1-20261028.md','发布记录/安卓平板客户端0.1.1刷新修复-20261028.md'],
   ['docs/releases/android-platform-1.0.0-20261028.md','发布记录/平台运营中心安卓平板客户端-1.0.0-20261028.md'],
+  ['docs/releases/platform-titlebar-wco-20261028.md','发布记录/平台桌面应用窗口标题条可读性修复-20261028.md'],
   ['docs/releases/ai-portrait-hd-chain-20261028.md','发布记录/AI形象照高清链路修复-20261028.md'],
   ['docs/releases/pad-compact-sidebar-preview-20261028.md','发布记录/平板收起侧栏与紧凑布局-20261028.md'],
   ['docs/handoffs/VALUATION_SNAPSHOT_TRIGGER_AUDIT_2026-10-28.md','研发交接/身价计算与快照缺失调查-20261028.md'],
@@ -36,6 +39,7 @@ const files = [
   ['docs/design/tablet-landscape-vivo-pad3-pro-20261028.png','设计规范/vivo-Pad3-Pro横屏后台样例-20261028.png'],
   ['docs/handoffs/PUBLIC_TRANSFER_MARKET_DECOMPOSITION_2026-10-27.md','研发交接/发现公开转会市场单页拆解-20261027.md'],
   ['产品设计/发现公开转会市场单页拆解20261027.zip','原型资料/发现公开转会市场单页拆解20261027.zip'],
+  ['docs/HONEY_PAYMENT_ACCEPTANCE_HANDOFF_2026-10-28.md','研发交接/微信支付凭据验收与上线交接-20261028.md'],
   ['docs/HONEY_TOPUP_HANDOFF_2026-10-27.md','项目规范/蜂蜜积分与充值逻辑交接-2026-10-27.md'],
   ['docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md','项目规范/蜂蜜充值与微信支付实现说明-2026-10-27.md'],
   ['docs/MEMBERSHIP_HONEY_PRICING_2026-10-27.md','项目规范/个人蜂蜜与会员定价方案-2026-10-27.md'],

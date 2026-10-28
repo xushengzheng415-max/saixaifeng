@@ -33,6 +33,7 @@ CloudBase CLI在缺少显式函数配置、从package.json推断配置时可能�
 |---|---|---|
 | 平板自适应（抽屉导航、44px 触控、窄屏堆叠） | `src/assets/platform-tablet.css`、`src/components/PlatformTabletNav.vue` | `node tools/test-platform-tablet-ui.cjs` |
 | 可安装客户端（PWA） | `public/manifest.webmanifest`、`public/sw.js`、`public/pwa-*.png`、`src/components/PlatformInstallGuide.vue`、`src/utils/serviceWorker.js` | `node tools/test-platform-pwa.cjs` |
+| 桌面应用窗口标题条（WCO 自绘，深底白字） | `public/manifest.webmanifest` 的 `display_override`、`src/components/PlatformTitlebar.vue`、`src/main.js`、`src/assets/platform-tablet.css` | `node tools/test-platform-tablet-ui.cjs`（标题条仿真）、`node tools/check-platform-live-pwa.cjs` |
 | 应用图标 | `scripts/make-pwa-icons.ps1` 由 `public/logo.png` 的蜂+足球徽标生成 | 截图见 `output/` |
 | 线上安装能力核查 | 平台登录页入口、manifest、Service Worker 接管、浏览器安装判定 | `node tools/check-platform-live-pwa.cjs` |
 
@@ -46,7 +47,7 @@ Service Worker 边界：只缓存本站 `/index.html`、构建产物 `/assets/` 
 
 验证脚本的 Playwright 统一由 `tools/lib/load-playwright.cjs` 加载，优先使用仓库内 `npm install --no-save playwright-core`，缓存运行时路径失效时不再整批失败。
 
-当前状态：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，最新线上 release `20261028110735-92137d1e`（35 个文件 SHA-256 回读一致）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及电脑/安卓/iPad 三种安装说明，manifest 三图标解析正常，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
+当前状态：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，最新线上 release `20261028120608-7ab33d8a`（34 个文件 SHA-256 回读一致）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及电脑/安卓/iPad 三种安装说明，manifest 三图标解析正常且 `display_override` 首选 `window-controls-overlay`，线上样式含自绘标题条规则，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
 
 ## 2026-10-28 安卓平板安装包（APK）1.0.0
 
@@ -67,4 +68,14 @@ APK 60,276 字节，SHA-256 `f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011
 发布只新增 `www.sxffootball.cn/desktop/platform/android/` 三个文件（APK → 摘要 → 清单顺序），未触碰 `desktop/windows/`、主办方 `desktop/android/`、`/admin/`、云函数或环境配置。线上回读：三个文件均 HTTP 200，APK 类型 `application/vnd.android.package-archive`、大小与 SHA-256 与本地及清单一致；安卓 UA 登录页显示“下载安卓安装包”，弹窗进入 `apk` 分支并提供“下载安装包”按钮。详细记录见 `docs/releases/android-platform-1.0.0-20261028.md`，安装与升级步骤见 `android-platform/README.md`。
 
 限制：本机无安卓设备，真机安装、登录、上传、导出保存、断网恢复与覆盖升级未验证；客户端不内置自动更新，升级需重新下载覆盖安装。
+
+## 2026-10-28 桌面应用窗口标题条可读性修复
+
+用户反馈“电脑端的顶层条根本看不清！”。实测已安装应用窗口顶部约 33px 的标题条由浏览器绘制（非页面 DOM），浅灰底 `#ECECEC` + 纯白字，对比度约 1.1:1，页面样式无法覆盖。
+
+修复：manifest `display_override` 改为 `["window-controls-overlay","standalone","minimal-ui"]`，由新增的 `src/components/PlatformTitlebar.vue` 在 `@media (display-mode: window-controls-overlay)` 内自绘深绿底 `#0c3b27→#0a3222` + 白字标题条（对比度 20.41:1），用 `env(titlebar-area-x/width)` 避开系统窗口按钮并保留 `app-region: drag`；`src/assets/platform-tablet.css` 在同模式下把 `#app` 下移 `env(titlebar-area-height, 33px)`，侧栏与主区同步让位。普通浏览器标签页不匹配该媒体查询，标题条 `display: none` 且不占高度，页面与修复前一致。
+
+验证：`npm run build` 通过；`node tools/test-platform-tablet-ui.cjs` 新增 WCO 媒体规则仿真断言（无头浏览器无法真实进入 WCO 模式，改用注入同一份发布声明验证几何），读回标题条高 33px、贴顶、内容与侧栏均在 33px 之下、文字 12.5px 白色对比度 20.41、可拖动、无横向溢出、移除后隐藏且无占位，60 项页面巡检 0 失败，截图 `output/platform-tablet-20261028/desktop-titlebar-sim-1440.png`；`node tools/test-platform-pwa.cjs` 增加 `display_override` 断言，0 失败；线上 release `20261028120608-7ab33d8a`，`node tools/check-platform-live-pwa.cjs` 校验线上 manifest、`.platform-titlebar` 节点与线上样式中的 WCO 规则，0 失败。
+
+用户侧：已安装窗口需重新打开（必要时卸载后重新“安装”）才会读到新的 manifest 并切换为自绘标题条；浏览器标签页不受影响；安卓 APK 壳不使用浏览器窗口标题条，本轮不影响。详细记录见 `docs/releases/platform-titlebar-wco-20261028.md`。
 

@@ -42,7 +42,7 @@ const site = 'https://pingtai.sxffootball.cn';
     const response = await fetch(href, { cache: 'no-store' });
     let json = null;
     try { json = await response.json(); } catch { json = null; }
-    return { href, status: response.status, type: response.headers.get('content-type'), display: json?.display, start: json?.start_url, icons: json?.icons?.length || 0 };
+    return { href, status: response.status, type: response.headers.get('content-type'), display: json?.display, displayOverride: json?.display_override, start: json?.start_url, icons: json?.icons?.length || 0 };
   });
 
   report.serviceWorker = await page.evaluate(async () => {
@@ -52,6 +52,16 @@ const site = 'https://pingtai.sxffootball.cn';
       new Promise(resolve => setTimeout(() => resolve(null), 15000))
     ]);
     return { supported: true, registration, controlled: Boolean(navigator.serviceWorker.controller) };
+  });
+
+  report.titlebar = await page.evaluate(async () => {
+    const hrefs = Array.from(document.querySelectorAll('link[rel=stylesheet]')).map(link => link.getAttribute('href')).filter(Boolean);
+    const wcoChunks = [];
+    for (const href of hrefs) {
+      const text = await fetch(href, { cache: 'no-store' }).then(response => response.text()).catch(() => '');
+      if (text.includes('window-controls-overlay')) wcoChunks.push(href);
+    }
+    return { present: Boolean(document.querySelector('.platform-titlebar')), stylesheets: hrefs.length, wcoChunks };
   });
 
   const cdp = await context.newCDPSession(page);
@@ -117,6 +127,9 @@ const site = 'https://pingtai.sxffootball.cn';
   if (report.head.installEntry && !/安装|主屏幕/.test(report.head.installEntry)) failures.push('登录页安装入口文案异常');
   if (!report.head.installEntry) failures.push('登录页未显示安装入口');
   if (!report.manifest.status || report.manifest.display !== 'standalone') failures.push('manifest 未正确解析');
+  if (!Array.isArray(report.manifest.displayOverride) || report.manifest.displayOverride[0] !== 'window-controls-overlay') failures.push('线上 manifest 未首选 window-controls-overlay（桌面应用窗口标题条会回到浅底白字）');
+  if (!report.titlebar?.present) failures.push('线上页面缺少自绘标题条节点');
+  if (!report.titlebar?.wcoChunks?.length) failures.push('线上样式缺少 window-controls-overlay 标题条规则');
   if (!report.serviceWorker.registration) failures.push('Service Worker 未就绪');
   if (!report.serviceWorker.controlled) failures.push('页面未被 Service Worker 接管');
   if (!String(report.head.installNote).includes('APK')) failures.push('登录页说明未提到安卓 APK 安装包');
@@ -136,7 +149,7 @@ const site = 'https://pingtai.sxffootball.cn';
   report.status = failures.length ? 'failed' : 'passed';
   report.failures = failures;
   fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify({ status: report.status, failures, installEntry: report.head.installEntry, manifest: report.manifest, serviceWorker: report.serviceWorker, installability: report.installability, android: report.android, androidPackage: report.androidPackage }, null, 2));
+  console.log(JSON.stringify({ status: report.status, failures, installEntry: report.head.installEntry, manifest: report.manifest, titlebar: report.titlebar, serviceWorker: report.serviceWorker, installability: report.installability, android: report.android, androidPackage: report.androidPackage }, null, 2));
   if (failures.length) process.exitCode = 1;
   await browser.close();
 })();
