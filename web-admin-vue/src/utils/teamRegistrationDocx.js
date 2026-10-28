@@ -185,17 +185,22 @@ function firstPhone(value) {
 }
 
 function normalizeIdentity(value) {
-  return String(value || '').toUpperCase().replace(/[^0-9X]/g, '').slice(0, 18)
+  return String(value || '').toUpperCase().replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/\s/g,'')
 }
 
-function parseIdentity(identityNumber) {
-  if (!/^\d{17}[0-9X]$/.test(identityNumber)) return { birthDate: '', gender: '', nativePlace: '' }
-  const year = identityNumber.slice(6, 10)
-  const month = identityNumber.slice(10, 12)
-  const day = identityNumber.slice(12, 14)
+export function parseRegistrationIdentity(value) {
+  const identityNumber=normalizeIdentity(value)
+  const complete=/^\d{17}[0-9X]$/.test(identityNumber)
+  const protectedMatch=identityNumber.match(/^(\d{6,17})[*＊•●×#_X…]+[0-9*＊•●×#_X…]*$/)
+  const prefix=!complete?(/^\d{14,17}$/.test(identityNumber)?identityNumber:protectedMatch?.[1]||''):''
+  if(!complete&&!prefix)return {valid:false,isPartial:false,birthDate:'',gender:'',nativePlace:'',identityNumberPrefix:''}
+  const digits=complete?identityNumber:prefix
+  const year = digits.slice(6, 10)
+  const month = digits.slice(10, 12)
+  const day = digits.slice(12, 14)
   const date = new Date(`${year}-${month}-${day}T00:00:00`)
   const validDate = !Number.isNaN(date.getTime()) && date.getFullYear() === Number(year) && date.getMonth() + 1 === Number(month) && date.getDate() === Number(day)
-  const nativePlaceCode = identityNumber.slice(0, 6)
+  const nativePlaceCode = digits.slice(0, 6)
   const provinceCode = `${nativePlaceCode.slice(0, 2)}0000`
   const cityCode = `${nativePlaceCode.slice(0, 4)}00`
   const provinceName = provincesData.find(item => item.code === provinceCode)?.name || ''
@@ -204,8 +209,11 @@ function parseIdentity(identityNumber) {
   const nativePlaceBase = locationNames.filter((name, index) => index === 0 || name !== locationNames[index - 1]).join('')
   const nativePlace = nativePlaceBase || '待核验'
   return {
+    valid:digits.length<14||validDate,
+    isPartial:!complete,
+    identityNumberPrefix:prefix,
     birthDate: validDate ? `${year}-${month}-${day}` : '',
-    gender: Number(identityNumber.charAt(16)) % 2 === 1 ? 'male' : 'female',
+    gender: complete ? (Number(identityNumber.charAt(16)) % 2 === 1 ? 'male' : 'female') : '',
     nativePlace
   }
 }
@@ -373,7 +381,7 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
       const personColumn = Number(nameCell?.column ?? roleCell.column)
       const name = cleanValue(nameCell?.text || '', ['姓名']).slice(0, 30)
       if (!name) continue
-      const identityNumber = normalizeIdentity(cleanValue(identityCells[personIndex]?.text || '', ['身份证号', '身份证']))
+      const identityInput = normalizeIdentity(cleanValue(identityCells[personIndex]?.text || '', ['身份证号', '身份证']))
       const jerseyText = cleanValue(numberCells[personIndex]?.text || '', ['球服号码', '球衣号码', '球员号码', '号码'])
       // 球服号码这里同时应用两处改动：号码容错（jerseyNumberFromText，支持「8号」「第8号」
       // 「全角８」等写法）与「工作人员栏有效号码同样计入」。后者是工作人员兼球员判定所依赖
@@ -386,7 +394,8 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
       const photoFile = photoRelationshipId
         ? await imageFileFromRelationship(zip, relationships, photoRelationshipId, `person-${people.length + 1}-${Date.now()}`)
         : null
-      const identity = parseIdentity(identityNumber)
+      const identity = parseRegistrationIdentity(identityInput)
+      const identityNumber = identity.isPartial ? '' : identityInput
       const birthText=cleanValue(birthCells[personIndex]?.text||'', ['出生日期','出生年月','生日']).replace(/[年月/.]/g,'-').replace(/日/g,'')
       const birthMatch=birthText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
       const explicitBirth=birthMatch?`${birthMatch[1]}-${birthMatch[2].padStart(2,'0')}-${birthMatch[3].padStart(2,'0')}`:''
@@ -397,6 +406,8 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
         name,
         phone: type === 'team_leader' ? contactPhone : '',
         identityNumber,
+        identityNumberPrefix:identity.identityNumberPrefix,
+        identityIncomplete:!identityNumber,
         jerseyNumber,
         jerseyName: jerseyNumber ? generateJerseyName(name) : '',
         birthDate: identity.birthDate || explicitBirth,
@@ -409,8 +420,10 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
         photoProcessingStatus: photoFile ? 'pending' : 'missing',
         error: ''
       }
-      if (!identityNumber) warnings.push(`「${name}」未填写身份证号`)
-      else if (!/^\d{17}[0-9X]$/.test(identityNumber) || !identity.birthDate) person.error = '身份证号格式不正确'
+      if (!identityInput) warnings.push(`「${name}」未填写身份证号`)
+      else if (!identity.valid) person.error = '身份证号格式或出生日期不正确'
+      else if(identity.isPartial)warnings.push(`「${name}」身份证号已保护，按可见信息导入`)
+      if(identity.birthDate&&explicitBirth&&identity.birthDate!==explicitBirth)person.error='出生日期与身份证号不一致'
       // 填了但无法识别时给出具体内容，避免与「根本没填」混为一谈
       if (type === 'player' && !jerseyNumber) {
         warnings.push(jerseyText
@@ -530,5 +543,5 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
 
 export function maskRegistrationIdentity(value) {
   const text = String(value || '')
-  return text.length === 18 ? `${text.slice(0, 6)}********${text.slice(-4)}` : (text || '未填写')
+  return /^\d{17}[0-9X]$/.test(text) ? `${text.slice(0, 6)}********${text.slice(-4)}` : (/^\d{6,17}$/.test(text)?`${text.slice(0,6)}********（保护）`:(text || '未填写'))
 }
