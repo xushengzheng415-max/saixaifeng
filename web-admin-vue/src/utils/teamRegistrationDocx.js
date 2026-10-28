@@ -1,3 +1,4 @@
+import { reuseStaffPhotos } from './registrationPhotoReuse.js'
 import { provincesData, cityMapData } from '../views/team/areaData.js'
 import { generateJerseyName } from './jerseyName.js'
 import { parseRegistrationKitColors } from './registrationKitColors.js'
@@ -500,6 +501,11 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
     if (player.identityNumber) playersByIdentity.set(player.identityNumber, player)
     warnings.push(`「${player.name}」的工作人员栏填写了球衣号码，已加入球员序列并标记为${meta.staffLabel}`)
   })
+  for(const person of reuseStaffPhotos(staff,players)){
+    const warning=`「${person.name}」未找到照片`
+    let index=warnings.indexOf(warning)
+    while(index>=0){warnings.splice(index,1);index=warnings.indexOf(warning)}
+  }
   const leader = staff.find(person => person.roleType === 'team_leader')
   if (leader && contactPhone) leader.phone = contactPhone
   if (!teamName) errors.push('未识别到球队名称')
