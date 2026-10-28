@@ -1,3 +1,5 @@
+2026-10-28 共享赛事报名Word上传初始化被拒已修复并发布共享后端：CLS确认startChunk目录未登记导致rule=null；webLoginApi/uploadFile各差量staffUploadRights.cjs，当前赛事docx源文件目录复用event.registration，分片会话仍校验用户/机构/赛事，跨赛事与撤权拒绝。用户先授权两个后端发布，再明确授权uploadFile关闭云端自动安装并恢复原依赖。两个函数Active/Available，运行环境/内存/超时/环境变量保留；uploadFile6399文件与原包+权限补丁完全一致，webLoginApi6601文件只余隐藏锁license元数据差异，业务和运行依赖一致。回下载实际上传处理器的隔离初始化/分片/合并/清理/审计、越权拒绝及线上未登录拒绝通过。前端完整错误透传已发布PC预览，7项HTTP/SHA-256一致，正式PC未覆盖。见docs/releases/registration-upload-scope-20261028.md。
+
 2026-10-28 用户授权后，报名表按组别报名人数上限生成球员栏位已正式发布并同步测试：仅选择报名表3文件进入main（正式源码c1929cff），未将preview的同期登录、平板或转会功能带入正式。main合回preview（测试源码86e77db5）并按测试base重新构建发布，保留其原功能。两端入口、Word源模板及关键分包分别8项HTTP200且SHA-256与对应构建一致；1/2/18/23/35/100人数、可选字段、原生控件唯一性及23人填表导回回归通过。未部署后端、小程序或H5。见docs/releases/registration-template-player-limit-20261028.md。
 
 2026-10-26 用户确认后，三套邀请海报、入驻指引与平台LOGO已合入main并发布正式/admin/，main已同步回preview并重新按/preview/admin/构建发布。正式源码892023bf、测试源码6c56ca7f；两端各403文件上传成功，分别11项入口/关键分包/三张背景/LOGO资源HTTP200且SHA-256与对应本地构建一致。海报回归通过，未发布后端、小程序或H5，组别资料新流程仍待整体验收。详见docs/releases/team-invitation-poster-v2-20261026.md。

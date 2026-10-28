@@ -410,3 +410,8 @@ KnockoutDrawTree由操作台及DrawScreenProjection共用。投屏协议增加fo
 ## 2026-10-18 赛制对应的共用投屏
 
 DrawScreenProjection依据显式format分流：league为联赛签位顺序，不显示A/B组，也不冒充积分排名；hybrid为联赛签位与基于名次来源的晋级淘汰树，不提前填入未产生的球队；cup为淘汰签位树；tournament/group才显示分组。未收到赛制时不猜A组。QuickHybridConsole、通用及专业投屏均声明赛制，排满顺序与最终确认分开，QuickDrawResult确认后同步相同协议。该逻辑用于演示、真实及正式/预览环境，无新增数据权限。
+
+
+## 2026-10-28 共享赛事报名源Word上传
+
+webLoginApi/uploadFile的staffUploadRights对football/team-registration-imports/{当前赛事}限定.docx初始化及临时读取，复用event.registration；分片会话继续绑定账号/机构/赛事，撤权拒绝。共享后端已上线，uploadFile按用户追加授权关闭云端自动安装，原依赖随包发布。见../releases/registration-upload-scope-20261028.md。
