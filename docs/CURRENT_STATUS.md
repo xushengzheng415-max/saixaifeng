@@ -1,3 +1,5 @@
+2026-10-28 下载球队报名表已按用户确认，按当前组别球员报名人数上限动态生成球员栏位；工作人员单独保留。读取rosterLimit，兼容maxPlayersPerTeam/maxPlayers，未配置的历史组别沿用既有35人兜底。1/2/18/23/35/100人栏位、原生控件唯一性、可选字段及23人填表导回回归通过；23人Word渲染3页并逐页检查。功能112b4cbc，预览源码b77a95be已构建发布/preview/admin/，入口/分包/原始Word模板HTTP与SHA-256核对一致，正式/admin/未改。未部署云函数或其他端口。见docs/releases/registration-template-player-limit-20261028.md。
+
 2026-10-28 平板手机号验证码登录：已获授权部署共用 webLoginApi 与 ADMINONLY 验证集合，宽屏竖版品牌登录页仅发布 /preview/admin/；格式、权限、资源及真实二维码回读通过，真实短信收取/登录待用户验收。见 [发布记录](releases/pad-phone-login-preview-20261028.md)。
 
 2026-10-27 转会中心：窗口配置完成后隐藏「未配置转会窗口」引导卡（预览已发布，`fac23e0e`）：

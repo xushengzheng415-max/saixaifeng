@@ -33,6 +33,18 @@ for(const count of [1,2,18,23,35,100])for(const fields of [[],['birthDate','phot
   assert.equal(tags.length,new Set(tags).size,'native controls have distinct tags')
   const ids=Array.from(doc.getElementsByTagNameNS(NS,'id')).map(id=>id.getAttributeNS(NS,'val'))
   assert.equal(ids.length,new Set(ids).size,'native controls have distinct IDs')
+  if(count===23&&fields.length){
+    let serial=0
+    for(const cell of Array.from(doc.getElementsByTagNameNS(NS,'tc'))){
+      const texts=Array.from(cell.getElementsByTagNameNS(NS,'t'))
+      if(texts.map(t=>t.textContent).join('').trim()==='姓名：')texts.forEach((t,index)=>{t.textContent=index===0?`姓名：测试人员${++serial}`:''})
+    }
+    archive.file('word/document.xml',new XMLSerializer().serializeToString(doc))
+    const parsed=await parseTeamRegistrationDocx(new File([await archive.generateAsync({type:'uint8array'})],'动态23人报名表.docx'))
+    assert.equal(parsed.players.length,23,'all generated player slots survive Word import')
+    assert.equal(parsed.staff.length,3,'staff remain separate from players')
+    assert.ok(parsed.players.every(person=>!person.photoFile),'cloned placeholders remain empty photos')
+  }
   if(process.env.REGISTRATION_TEMPLATE_QA_DIR&&count===23&&fields.length){
     fs.mkdirSync(process.env.REGISTRATION_TEMPLATE_QA_DIR,{recursive:true})
     fs.writeFileSync(`${process.env.REGISTRATION_TEMPLATE_QA_DIR}/registration-23.docx`,Buffer.from(await blob.arrayBuffer()))
