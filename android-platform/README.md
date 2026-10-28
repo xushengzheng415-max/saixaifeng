@@ -27,6 +27,9 @@ powershell -ExecutionPolicy Bypass -File android-platform\scripts\build-android.
 把 `SxfPlatform-<version>.apk` 复制到 `android-platform\release\` 并打印大小与 SHA-256。
 `-SkipTests` 可跳过检查，仅用于排查构建问题。
 
+导出桥接另有浏览器级验证：`node android-platform\test\bridge.test.cjs`，依赖仓库内
+`npm install --no-save playwright-core`（`tools/lib/load-playwright.cjs` 会自动加载）。
+
 应用图标由 `scripts/make-icons.ps1` 从 `platform-admin-vue/public/pwa-512.png` 生成 5 档 mipmap，
 白底、`ic_launcher.png`。
 
@@ -82,5 +85,10 @@ E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run hosting deploy 'and
 `targetSdkVersion 34`、启动 Activity 与 5 档图标；APK 内含 `classes.dex`、清单与资源；
 9 项源码配置检查通过；线上 APK 回下载大小与 SHA-256 与本地一致。
 
-未验证：本机没有连接安卓设备，未做真机安装、登录、短信/扫码、上传、导出保存、断网恢复与
-覆盖升级测试；`blob` 导出桥接只在源码层检查。安装后需在平板上验收这些流程。
+`node test/bridge.test.cjs` 4 项通过：从源码抽出 `BRIDGE_JS` 注入真实浏览器后，点击 blob 下载
+链接会阻止 WebView 自行处理，文件名与 base64 内容与原始字节一致；非 `blob:` 链接不被拦截；
+超过 32MB 只提示改用浏览器、不写文件；重复注入不会重复保存。
+
+未验证：本机没有连接安卓设备，未做真机安装、登录、短信/扫码、上传、断网恢复与覆盖升级测试；
+导出桥接虽在浏览器中验证，写入系统“下载”目录（MediaStore）的真机结果仍未验证。安装后需在
+平板上验收这些流程。

@@ -28,6 +28,9 @@ targetSdk 34。安装后以独立应用运行，登录、权限与数据仍全�
   环境变量读取。
 - 签名口令已从明文 properties 迁移为 Windows DPAPI 加密文件 `platform-signing.dpapi`，
   `keytool -list` 读回证书指纹与上一版一致，构建脚本不再接触明文口令。
+- `node android-platform/test/bridge.test.cjs` 4 项通过：把源码中的 `BRIDGE_JS` 抽出来注入真实
+  浏览器后，点击 blob 下载链接会被拦截并由 `SxfApp.saveBase64` 接收文件名与 base64，解码字节与
+  原始内容一致；非 `blob:` 链接不被拦截；超过 32MB 只提示改用浏览器；重复注入不重复保存。
 
 ## 发布与回读
 
@@ -68,8 +71,8 @@ HTTP 200、`application/vnd.android.package-archive`、60,276 字节、SHA-256 �
 
 ## 已知限制
 
-- 本机未连接安卓设备，未做真机安装、登录、短信/扫码、上传、导出保存、断网恢复与覆盖升级验证；
-  `blob` 导出到系统“下载”目录的桥接只做了源码级检查。
+- 本机未连接安卓设备，未做真机安装、登录、短信/扫码、上传、断网恢复与覆盖升级验证；导出桥接
+  已在浏览器内验证拦截与内容传递，但写入系统“下载”目录（MediaStore）的真机结果仍未验证。
 - 平台登录页在安卓设备上优先给 APK 安装包，不再使用 Chrome 的 `beforeinstallprompt` 一键安装；
   后台顶栏仍保留原有“添加到主屏幕”引导。
 - 客户端不内置更新检查，升级需要重新下载 APK 覆盖安装；`latest.json` 供后续接入使用。
