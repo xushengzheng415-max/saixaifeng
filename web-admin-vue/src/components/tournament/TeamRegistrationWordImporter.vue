@@ -91,7 +91,7 @@
                     <td>{{ ageFromBirth(person.birthDate) }}</td>
                     <td><span class="native-place" :title="person.nativePlace">{{ person.nativePlace || '地区码待核验' }}</span></td>
                     <td><el-input v-if="person.jerseyNumber" v-model="person.jerseyName" maxlength="32" /><span v-else>—</span></td>
-                    <td><span class="identity-mask">{{ maskRegistrationIdentity(person.identityNumber) }}</span></td>
+                    <td><span class="identity-mask">{{ maskRegistrationIdentity(person.identityNumber || person.identityNumberPrefix) }}</span></td>
                     <td><el-input v-if="person.jerseyNumber" v-model="person.jerseyNumber" maxlength="3" inputmode="numeric" /><span v-else>—</span></td>
                     <td>{{ person.phone ? maskPhone(person.phone) : '—' }}</td>
                     <td>
@@ -122,7 +122,7 @@
                     <td>{{ ageFromBirth(player.birthDate) }}</td>
                     <td><span class="native-place" :title="player.nativePlace">{{ player.nativePlace || '地区码待核验' }}</span></td>
                     <td><el-input v-model="player.jerseyName" maxlength="32" /></td>
-                    <td><span class="identity-mask">{{ maskRegistrationIdentity(player.identityNumber) }}</span></td>
+                    <td><span class="identity-mask">{{ maskRegistrationIdentity(player.identityNumber || player.identityNumberPrefix) }}</span></td>
                     <td><el-input v-model="player.jerseyNumber" maxlength="3" inputmode="numeric" /></td><td><el-select v-model="player.position" clearable><el-option v-for="position in ['门将','后卫','中场','前锋','其他']" :key="position" :label="position" :value="position" /></el-select></td>
                     <td>
                       <el-tag v-if="player.error" type="danger" size="small">{{ player.error }}</el-tag>
