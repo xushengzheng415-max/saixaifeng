@@ -7,6 +7,7 @@ import { ElMessage } from 'element-plus'
 import { isDemoMode, demoRequest } from './demoMode'
 import { clearPlatformSession, getPlatformAuthToken, getPlatformSession, isPlatformContext, setPlatformAuthToken } from './platformSession'
 import { isPayloadTooLargeError, resolveChunkUploadTarget } from './chunkUploadPath'
+import { createChunkUploadError } from './chunkUploadError'
 import { createInflightReads } from './inflightReads'
 import { readAllPages } from './pagedReads'
 import { createSessionReadCache, stableReadKey } from './sessionReadCache.js'
@@ -755,7 +756,7 @@ export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
       totalChunks,
       folder
     })
-    if (!initResult.success) throw new Error(initResult.message || '初始化分片上传失败')
+    if (!initResult?.success || !initResult.uploadId) throw createChunkUploadError(initResult, '初始化分片上传失败，请重试')
 
     const uploadId = initResult.uploadId
     try {
@@ -769,12 +770,12 @@ export async function uploadLargeFileViaCloud(cloudPath, file, options = {}) {
           chunkIndex: i,
           data: chunkBase64
         })
-        if (!chunkResult.success) throw new Error(`分片 ${i + 1} 上传失败: ${chunkResult.message}`)
+        if (!chunkResult?.success) throw createChunkUploadError(chunkResult, `分片 ${i + 1} 上传失败，请重试`)
         if (options.onProgress) options.onProgress(i + 1, totalChunks, { chunkSize })
       }
 
       const finishResult = await callFunction('uploadFile', { action: 'finishChunk', uploadId })
-      if (!finishResult.success) throw new Error(finishResult.message || '合并上传失败')
+      if (!finishResult?.success) throw createChunkUploadError(finishResult, '合并上传失败，请重试')
       return { success: true, fileId: finishResult.fileID, tempUrl: finishResult.tempUrl || '' }
     } catch (error) {
       await abortUpload(uploadId)
