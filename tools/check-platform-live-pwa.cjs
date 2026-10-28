@@ -6,7 +6,8 @@
  * 2. manifest 可解析、start_url 与图标数量正确；
  * 3. Service Worker 已激活并接管页面；
  * 4. 浏览器安装判定结果（无痕/无头模式会返回 in-incognito，属预期）；
- * 5. 安卓设备的 APK 下载入口、弹窗分支，以及线上 APK 大小/摘要与更新清单一致。
+ * 5. 安卓设备的 APK 下载入口、弹窗分支，以及线上 APK 大小/摘要与更新清单一致；
+ * 6. release.json 发布清单可读，线上包包含更新探测（新版本可一键刷新，无需重装）。
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -62,6 +63,22 @@ const site = 'https://pingtai.sxffootball.cn';
       if (text.includes('window-controls-overlay')) wcoChunks.push(href);
     }
     return { present: Boolean(document.querySelector('.platform-titlebar')), stylesheets: hrefs.length, wcoChunks };
+  });
+
+  // 更新可刷新能力：发布清单可读，且线上包确实带更新探测事件。
+  report.updateCheck = await page.evaluate(async () => {
+    const releaseResponse = await fetch(`/release.json?t=${Date.now()}`, { cache: 'no-store' });
+    let release = null;
+    try { release = await releaseResponse.json(); } catch { release = null; }
+    const scripts = Array.from(document.scripts).map(script => script.src).filter(Boolean);
+    const texts = await Promise.all(scripts.map(src => fetch(src, { cache: 'no-store' }).then(response => response.text()).catch(() => '')));
+    return {
+      status: releaseResponse.status,
+      release: release?.release || '',
+      branch: release?.branch || '',
+      scripts: scripts.length,
+      hasUpdateWatch: texts.some(text => text.includes('sxf-platform-check-update'))
+    };
   });
 
   const cdp = await context.newCDPSession(page);
@@ -132,6 +149,9 @@ const site = 'https://pingtai.sxffootball.cn';
   if (!report.titlebar?.wcoChunks?.length) failures.push('线上样式缺少 window-controls-overlay 标题条规则');
   if (!report.serviceWorker.registration) failures.push('Service Worker 未就绪');
   if (!report.serviceWorker.controlled) failures.push('页面未被 Service Worker 接管');
+  if (report.updateCheck?.status !== 200 || !report.updateCheck?.release) failures.push('线上缺少 release.json 发布清单，更新检测无法判断新版本');
+  if (!report.updateCheck?.hasUpdateWatch) failures.push('线上包未包含更新探测，旧版本不会提示刷新');
+  if (report.updateCheck?.branch && report.updateCheck.branch !== 'codex/platform-ops') failures.push('线上发布清单分支不是 codex/platform-ops');
   if (!String(report.head.installNote).includes('APK')) failures.push('登录页说明未提到安卓 APK 安装包');
   if (!String(report.android.entry).includes('安卓安装包')) failures.push('安卓设备登录页未显示 APK 下载入口');
   if (report.android.guideMode !== 'apk') failures.push('安卓安装引导未进入 APK 分支');
@@ -149,7 +169,7 @@ const site = 'https://pingtai.sxffootball.cn';
   report.status = failures.length ? 'failed' : 'passed';
   report.failures = failures;
   fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify({ status: report.status, failures, installEntry: report.head.installEntry, manifest: report.manifest, titlebar: report.titlebar, serviceWorker: report.serviceWorker, installability: report.installability, android: report.android, androidPackage: report.androidPackage }, null, 2));
+  console.log(JSON.stringify({ status: report.status, failures, installEntry: report.head.installEntry, manifest: report.manifest, titlebar: report.titlebar, serviceWorker: report.serviceWorker, updateCheck: report.updateCheck, installability: report.installability, android: report.android, androidPackage: report.androidPackage }, null, 2));
   if (failures.length) process.exitCode = 1;
   await browser.close();
 })();

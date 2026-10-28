@@ -19,9 +19,10 @@
   >
     <ol class="guide-steps">
       <template v-if="mode === 'apk'">
-        <li>点下方“下载安装包”，或在平板浏览器打开 www.sxffootball.cn/desktop/platform/android/ 下载 SxfPlatform-1.0.0.apk。</li>
+        <li>点下方“下载安装包”，或在平板浏览器打开 www.sxffootball.cn/desktop/platform/android/ 下载 SxfPlatform-1.0.1.apk。</li>
         <li>下载完成后在通知栏或“文件”里点开该 APK；系统提示“禁止安装未知应用”时，允许当前浏览器或文件管理器安装。</li>
         <li>安装完成后桌面出现“赛小蜂平台运营”图标，打开后用平台管理员账号登录。</li>
+        <li>以后有新安装包时，应用打开会提示“发现新版本”，点“立即更新”即可，不用再自己找下载地址。</li>
         <li>不想安装 APK 也可以：用 Chrome 打开 pingtai.sxffootball.cn，菜单里选择“添加到主屏幕”。</li>
       </template>
       <template v-else-if="mode === 'ios'">
@@ -53,9 +54,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Download, Iphone } from '@element-plus/icons-vue'
 
-// 安卓平板安装包由 www.sxffootball.cn 托管，发布记录见 docs/releases/android-platform-1.0.0-20261028.md。
+// 安卓平板安装包由 www.sxffootball.cn 托管，发布记录见 docs/releases/android-platform-1.0.1-20261028.md。
 // 升级 APK 时必须同时更新此地址与 latest.json，避免页面指向已删除的旧版本。
-const ANDROID_APK_URL = 'https://www.sxffootball.cn/desktop/platform/android/SxfPlatform-1.0.0.apk'
+const ANDROID_APK_URL = 'https://www.sxffootball.cn/desktop/platform/android/SxfPlatform-1.0.1.apk'
 
 // variant: default 用于控制台顶栏；login 用于登录页，按钮显示为文字链接并优先提供安卓安装包。
 const props = defineProps({ variant: { type: String, default: 'default' } })

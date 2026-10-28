@@ -42,6 +42,9 @@ self.addEventListener('activate', event => {
 });
 
 function isCacheableAsset(url) {
+  // 带查询参数的请求来自更新检测（release.json / manifest 指纹），只走网络，不进缓存，
+  // 否则每轮探测都会在缓存里堆积一条带新时间戳的记录。
+  if (url.search) return false;
   return url.pathname.startsWith('/assets/') || STATIC_FILES.has(url.pathname);
 }
 

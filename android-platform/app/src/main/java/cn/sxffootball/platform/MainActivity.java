@@ -2,18 +2,21 @@ package cn.sxffootball.platform;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.Gravity;
@@ -34,9 +37,18 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -53,6 +65,10 @@ public class MainActivity extends Activity {
     private static final String START_URL = "https://pingtai.sxffootball.cn/#/platform-login";
     private static final int REQUEST_FILE_CHOOSER = 1001;
     private static final long MAX_BRIDGE_BYTES = 32L * 1024 * 1024;
+    /** 安装包更新清单（静态托管），只用于 HTTP 读取，不进入 WebView 站内导航。 */
+    private static final String UPDATE_MANIFEST = "https://www.sxffootball.cn/desktop/platform/android/latest.json";
+    private static final String UPDATE_CHECK_PREFS = "sxf-platform-update";
+    private static final long UPDATE_CHECK_INTERVAL = 6L * 60L * 60L * 1000L;
 
     /** 把页面里的 blob 导出（a[download]）交给原生保存，WebView 自身不处理 blob 链接。 */
     private static final String BRIDGE_JS = "(function(){"
@@ -76,6 +92,7 @@ public class MainActivity extends Activity {
     private ProgressBar progressBar;
     private TextView errorView;
     private ValueCallback<Uri[]> fileCallback;
+    private boolean updateCheckStarted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -275,6 +292,7 @@ public class MainActivity extends Activity {
         public void onPageFinished(WebView view, String url) {
             progressBar.setVisibility(View.GONE);
             view.evaluateJavascript(BRIDGE_JS, null);
+            checkForUpdate();
         }
 
         @Override
@@ -350,6 +368,192 @@ public class MainActivity extends Activity {
             } catch (Exception error) {
                 Toast.makeText(MainActivity.this, "下载失败，请用浏览器打开本页重试", Toast.LENGTH_LONG).show();
             }
+        }
+    }
+
+    /*
+     * 安装包自更新：应用只加载线上平台页面，网页内容更新本来就会在每次打开时生效；
+     * 这里只处理“壳”本身（WebView 壳的权限、桥接、图标等）需要换 APK 的情况。
+     * 检查节流 6 小时，下载后校验 SHA-256，再由系统安装器让用户确认安装。
+     */
+    private void checkForUpdate() {
+        if (updateCheckStarted) {
+            return;
+        }
+        updateCheckStarted = true;
+        SharedPreferences prefs = getSharedPreferences(UPDATE_CHECK_PREFS, MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        if (now - prefs.getLong("lastCheck", 0L) < UPDATE_CHECK_INTERVAL) {
+            return;
+        }
+        prefs.edit().putLong("lastCheck", now).apply();
+        final String currentVersion = currentVersionName();
+        new Thread(() -> {
+            try {
+                HttpURLConnection connection = (HttpURLConnection) new URL(UPDATE_MANIFEST).openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                connection.setRequestProperty("User-Agent", "SxfPlatformApp/" + currentVersion);
+                connection.setRequestProperty("Cache-Control", "no-cache");
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                try (InputStream input = connection.getInputStream()) {
+                    byte[] chunk = new byte[4096];
+                    int read;
+                    while ((read = input.read(chunk)) > 0) {
+                        buffer.write(chunk, 0, read);
+                    }
+                } finally {
+                    connection.disconnect();
+                }
+                JSONObject payload = new JSONObject(new String(buffer.toByteArray(), StandardCharsets.UTF_8));
+                int remoteCode = payload.optInt("versionCode", 0);
+                String remoteName = payload.optString("versionName", payload.optString("version", ""));
+                String apkUrl = payload.optString("downloadUrl", payload.optString("url", ""));
+                if (remoteCode <= currentVersionCode() || !apkUrl.startsWith("https://")) {
+                    return;
+                }
+                String notes = payload.optString("notes", "");
+                final String sha256 = payload.optString("sha256", "");
+                runOnUiThread(() -> showUpdateDialog(remoteName, remoteCode, notes, apkUrl, sha256));
+            } catch (Exception ignored) {
+                // 检查更新失败不影响正常使用，下次打开再试。
+            }
+        }).start();
+    }
+
+    private void showUpdateDialog(String remoteName, int remoteCode, String notes, String apkUrl, String sha256) {
+        if (isFinishing()) {
+            return;
+        }
+        StringBuilder message = new StringBuilder();
+        message.append("当前版本 ").append(currentVersionName())
+                .append("，新版本 ").append(remoteName.isEmpty() ? String.valueOf(remoteCode) : remoteName)
+                .append("。\n");
+        if (!notes.isEmpty()) {
+            message.append(notes).append('\n');
+        }
+        message.append("下载完成后按系统提示确认安装即可，不需要重新登录。");
+        new AlertDialog.Builder(this)
+                .setTitle("发现新版本")
+                .setMessage(message.toString())
+                .setPositiveButton("立即更新", (dialog, which) -> startUpdateDownload(apkUrl, remoteName, sha256))
+                .setNegativeButton("稍后", null)
+                .show();
+    }
+
+    private void startUpdateDownload(String apkUrl, String remoteName, String sha256) {
+        try {
+            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (manager == null) {
+                throw new IllegalStateException("DownloadManager unavailable");
+            }
+            String suffix = remoteName.isEmpty() ? String.valueOf(System.currentTimeMillis()) : remoteName;
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(apkUrl));
+            request.setMimeType("application/vnd.android.package-archive");
+            request.setTitle("赛小蜂平台运营 " + suffix);
+            request.setDescription("正在下载新版本");
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "SxfPlatform-" + suffix + ".apk");
+            long id = manager.enqueue(request);
+            Toast.makeText(this, "已开始下载新版本，完成后会提示安装", Toast.LENGTH_SHORT).show();
+            pollUpdateDownload(manager, id, sha256, 0);
+        } catch (Exception error) {
+            Toast.makeText(this, "下载失败，请用浏览器打开下载页更新", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void pollUpdateDownload(DownloadManager manager, long id, String sha256, int attempt) {
+        if (attempt > 240) {
+            Toast.makeText(this, "下载超时，请用浏览器打开下载页更新", Toast.LENGTH_LONG).show();
+            return;
+        }
+        new android.os.Handler(getMainLooper()).postDelayed(() -> {
+            DownloadManager.Query query = new DownloadManager.Query().setFilterById(id);
+            try (android.database.Cursor cursor = manager.query(query)) {
+                if (cursor == null || !cursor.moveToFirst()) {
+                    pollUpdateDownload(manager, id, sha256, attempt + 1);
+                    return;
+                }
+                int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    if (!verifyDownloadedApk(manager, id, sha256)) {
+                        manager.remove(id);
+                        Toast.makeText(this, "新版本校验失败，请用浏览器打开下载页更新", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    installDownloadedApk(manager, id);
+                    return;
+                }
+                if (status == DownloadManager.STATUS_FAILED) {
+                    Toast.makeText(this, "下载失败，请用浏览器打开下载页更新", Toast.LENGTH_LONG).show();
+                    return;
+                }
+            } catch (Exception ignored) {
+                // 查询失败按未完成处理，继续轮询。
+            }
+            pollUpdateDownload(manager, id, sha256, attempt + 1);
+        }, 1000);
+    }
+
+    private boolean verifyDownloadedApk(DownloadManager manager, long id, String expected) {
+        if (expected == null || expected.isEmpty()) {
+            return true;
+        }
+        try (ParcelFileDescriptor descriptor = manager.openDownloadedFile(id)) {
+            if (descriptor == null) {
+                return false;
+            }
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (InputStream input = new FileInputStream(descriptor.getFileDescriptor())) {
+                byte[] chunk = new byte[8192];
+                int read;
+                while ((read = input.read(chunk)) > 0) {
+                    digest.update(chunk, 0, read);
+                }
+            }
+            StringBuilder hex = new StringBuilder();
+            for (byte value : digest.digest()) {
+                hex.append(String.format(Locale.ROOT, "%02x", value));
+            }
+            return expected.equalsIgnoreCase(hex.toString());
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
+    private void installDownloadedApk(DownloadManager manager, long id) {
+        Uri uri = manager.getUriForDownloadedFile(id);
+        if (uri == null) {
+            Toast.makeText(this, "请在系统“下载”里打开安装包完成安装", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "application/vnd.android.package-archive");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+            Toast.makeText(this, "如提示禁止安装未知应用，请允许本应用安装后重试", Toast.LENGTH_LONG).show();
+        } catch (ActivityNotFoundException error) {
+            Toast.makeText(this, "请在系统“下载”里打开安装包完成安装", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private int currentVersionCode() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (Exception error) {
+            return 0;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private String currentVersionName() {
+        try {
+            String version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            return version == null ? "" : version;
+        } catch (Exception error) {
+            return "";
         }
     }
 

@@ -27,8 +27,22 @@ check('启动页为平台正式域名', () => {
 });
 check('站内白名单只有平台域名', () => {
   assert.match(activity, /PLATFORM_HOST = "pingtai\.sxffootball\.cn"/);
-  assert.equal((activity.match(/sxffootball\.cn/g) || []).length >= 2, true);
-  assert.doesNotMatch(activity, /"www\.sxffootball\.cn"/);
+  assert.doesNotMatch(activity, /PLATFORM_HOST = "[^"]*www\./);
+});
+check('更新清单来自 www 静态托管', () => {
+  assert.match(activity, /UPDATE_MANIFEST = "https:\/\/www\.sxffootball\.cn\/desktop\/platform\/android\/latest\.json"/);
+  assert.match(activity, /if \(remoteCode <= currentVersionCode\(\) \|\| !apkUrl\.startsWith\("https:\/\/"\)\)/);
+  assert.match(activity, /payload\.optString\("downloadUrl", payload\.optString\("url", ""\)\)/);
+  assert.match(activity, /payload\.optInt\("versionCode", 0\)/);
+});
+check('安装包更新需校验 SHA-256', () => {
+  assert.match(activity, /MessageDigest\.getInstance\("SHA-256"\)/);
+  assert.match(activity, /expected\.equalsIgnoreCase\(hex\.toString\(\)\)/);
+});
+check('清单声明安装未知应用权限', () => assert.match(manifest, /android\.permission\.REQUEST_INSTALL_PACKAGES/));
+check('版本号随壳更新递增', () => {
+  assert.match(appGradle, /versionCode 2/);
+  assert.match(appGradle, /versionName '1\.0\.1'/);
 });
 check('不允许明文或 http 启动', () => assert.doesNotMatch(activity, /START_URL = "http:/));
 check('保留导出下载桥接', () => {

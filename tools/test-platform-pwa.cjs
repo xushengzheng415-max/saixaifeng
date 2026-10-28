@@ -171,6 +171,7 @@ function check(condition, message) {
     check(cacheState.entries.some(url => url.endsWith('/index.html')), '离线缓存缺少应用外壳 index.html');
     check(cacheState.entries.some(url => url.includes('/assets/')), '离线缓存缺少构建静态资源');
     check(!cacheState.entries.some(url => /cloudbase|webLoginApi/.test(url)), '缓存中混入了云函数接口地址');
+    check(!cacheState.entries.some(url => url.includes('?')), '缓存中混入带查询参数的更新探测请求');
 
     await page.screenshot({ path: path.join(output, 'desktop-online.png') });
 
@@ -261,7 +262,7 @@ function check(condition, message) {
     const androidGuide = (await androidPage.locator('.platform-install-guide').textContent()) || '';
     report.androidGuide = { mode: androidGuideMode, text: androidGuide.slice(0, 200) };
     check(androidGuideMode === 'apk', '安卓安装引导未进入 APK 分支');
-    check(androidGuide.includes('SxfPlatform-1.0.0.apk'), '安卓安装引导缺少安装包文件名');
+    check(androidGuide.includes('SxfPlatform-1.0.1.apk'), '安卓安装引导缺少安装包文件名');
     const androidFooter = (await androidPage.locator('.platform-install-guide .el-dialog__footer .el-button--primary').textContent())?.trim() || '';
     check(androidFooter.includes('下载安装包'), '安卓安装引导缺少下载按钮');
     await androidPage.screenshot({ path: path.join(output, 'android-login-install.png') });
@@ -286,6 +287,38 @@ function check(condition, message) {
     check(report.standaloneEntryCount === 0, '已安装（独立窗口）仍显示安装入口');
     await standalonePage.screenshot({ path: path.join(output, 'standalone-1180.png') });
     await standaloneContext.close();
+
+    let mockRelease = 'qa-release-0001';
+    const updateContext = await createContext(browser, { viewport: { width: 1440, height: 900 } });
+    await updateContext.route('**/release.json*', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({ app: 'sxf-platform-ops', branch: 'qa', commit: 'qa', release: mockRelease, source: 'qa' })
+    }));
+    const updatePage = await updateContext.newPage();
+    await updatePage.goto(`${baseUrl}/#/tournament-center-admin`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await updatePage.locator('.platform-console .workspace').waitFor({ timeout: 30000 });
+    await updatePage.waitForTimeout(1200);
+    const noticeBefore = await updatePage.locator('.platform-update-notice').count();
+    report.updateNotice = { before: noticeBefore };
+    check(noticeBefore === 0, '首次加载就错误提示平台更新');
+    mockRelease = 'qa-release-0002';
+    await updatePage.evaluate(() => window.dispatchEvent(new Event('sxf-platform-check-update')));
+    await updatePage.locator('.platform-update-notice').waitFor({ timeout: 8000 });
+    const noticeType = await updatePage.locator('.platform-update-notice').getAttribute('data-type');
+    const noticeText = (await updatePage.locator('.platform-update-notice').textContent()) || '';
+    report.updateNotice.after = { type: noticeType, text: noticeText.trim().slice(0, 120) };
+    check(noticeType === 'release', '更新提示未标记为新版本发布');
+    check(noticeText.includes('立即刷新'), '更新提示缺少立即刷新按钮');
+    check(noticeText.includes('不需要重新安装'), '更新提示未说明无需重新安装');
+    await updatePage.screenshot({ path: path.join(output, 'desktop-update-notice.png') });
+    const refreshed = await Promise.all([
+      updatePage.waitForEvent('load', { timeout: 20000 }).then(() => true).catch(() => false),
+      updatePage.locator('.platform-update-notice .el-button').first().click()
+    ]);
+    report.updateNotice.refreshed = refreshed[0];
+    check(refreshed[0], '点击立即刷新后页面未重新加载');
+    await updateContext.close();
 
     if (pageErrors.length) failures.push(...pageErrors.map(message => `页面异常：${message}`));
   } catch (error) {
