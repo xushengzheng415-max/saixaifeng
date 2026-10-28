@@ -34,6 +34,7 @@ CloudBase CLI在缺少显式函数配置、从package.json推断配置时可能�
 | 平板自适应（抽屉导航、44px 触控、窄屏堆叠） | `src/assets/platform-tablet.css`、`src/components/PlatformTabletNav.vue` | `node tools/test-platform-tablet-ui.cjs` |
 | 可安装客户端（PWA） | `public/manifest.webmanifest`、`public/sw.js`、`public/pwa-*.png`、`src/components/PlatformInstallGuide.vue`、`src/utils/serviceWorker.js` | `node tools/test-platform-pwa.cjs` |
 | 应用图标 | `scripts/make-pwa-icons.ps1` 由 `public/logo.png` 的蜂+足球徽标生成 | 截图见 `output/` |
+| 线上安装能力核查 | 平台登录页入口、manifest、Service Worker 接管、浏览器安装判定 | `node tools/check-platform-live-pwa.cjs` |
 
 安装方式：Windows 用 Edge/Chrome 地址栏“安装”；iPad 用 Safari“添加到主屏幕”；Android 平板用 Chrome“添加到主屏幕”。安装后以独立窗口运行，账号、权限与数据仍经 `webLoginApi` 获取，与网页版完全一致。安装入口只在未安装时出现，已安装（standalone）自动隐藏。
 
@@ -45,5 +46,5 @@ Service Worker 边界：只缓存本站 `/index.html`、构建产物 `/assets/` 
 
 验证脚本的 Playwright 统一由 `tools/lib/load-playwright.cjs` 加载，优先使用仓库内 `npm install --no-save playwright-core`，缓存运行时路径失效时不再整批失败。
 
-当前状态：源码在工作区，未提交 Git、未发布 `pingtai.sxffootball.cn`。`npm run deploy` 会拒绝脏工作区，正式发布需先提交平台源码。
+当前状态：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，线上 release `20261028095251-ae49b684`（35 个文件 SHA-256 回读一致）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及“不用下载安装包”说明，manifest 三图标解析正常，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
 
