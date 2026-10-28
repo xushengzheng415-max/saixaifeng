@@ -15,10 +15,11 @@
 | 商户号 + 证书序列号 + 商户私钥在微信侧匹配（证书已生效） | ✅ 完成（微信只读查单返回 `ORDER_NOT_EXIST` 而非签名错误） |
 | 支付回调能进云函数 | ✅ 已通（2026-10-28 21:27 加路由 + 开路径透传，空报文探测返回 401/400 而非 404） |
 | `honey_orders` 集合权限与索引 | ✅ 完成（2026-10-28：权限 `READONLY` → `ADMINONLY`；索引 2 → 4 条，含 `openId_1_createdAt_-1` 与 `createdAt_-1`） |
+| 服务号 H5 充值面板已发布到线上 | ✅ 完成（2026-10-28 深夜：`me.html` / `service-personal.js` / `service-personal-polish.css` 三个文件已发布，回读 SHA-256 与本地逐一一致） |
 | 服务号 AppID 与商户号的 JSAPI 关联、JSAPI 支付授权目录 | ❓ **待人工在商户平台确认** |
 | 真实 1 元下单 → 收银台 → 回调入账 → 退款联调 | ❌ 未做 |
 
-**一句话**：钥匙配好了、锁也验证过能开，回调电话线接上了，数据库这扇门也已锁好；剩下只有「商户平台两处授权」这一件事，以及最后走一遍真实 1 元。
+**一句话**：钥匙配好了、锁也验证过能开，回调电话线接上了，数据库这扇门锁好了，H5 充值面板也发上去了；剩下只有「商户平台两处授权」这一件事，以及最后走一遍真实 1 元。
 
 ---
 
@@ -213,6 +214,8 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 6. **`WXPAY_APP_ID` 只认服务号**，代码不会回退到网站应用 AppID。
 7. **网页端零 SDK**：平台后台与 H5 都走 `webLoginApi`（`fetch`），不得引入 `@cloudbase/js-sdk`。
 8. **凭据文件禁止读取/打印/提交**：`%LOCALAPPDATA%\SxfCloud\credentials\`（CloudBase API Key）与 `payment-kek\`（KEK）都只在本机 DPAPI 内。
+9. **「点充值只弹『充值暂未开放』」＝ H5 没发布，不是支付没配好**（2026-10-28 实际踩到）：旧版 `service-personal.js` 里是纯静态弹窗 `modal('蜂蜜充值','<p>充值暂未开放</p><p>当前不会创建订单或扣款。</p>')`，**一次网络请求都不发**。判定方法：下载线上 `https://www.sxffootball.cn/service-account-h5/service-personal.js`，看是否含 `servicePrivateHoneyRecharge`，并比对 `me.html` 引用的版本号（正确应为 `service-personal.js?v=20261027-honey2`、`service-personal-polish.css?v=20261025-honey1`）。修复＝用 `hosting deploy` 上传 `me.html` + `service-personal.js` + `service-personal-polish.css` 三个文件，再回读 SHA-256 比对。
+10. **H5 静态发布走 CloudBase 静态托管**：`sxf-cloud.ps1 football run hosting deploy service-account-h5/<文件名> service-account-h5/<文件名>`；传完 CDN 有几秒到几分钟延迟，回读时加 `Cache-Control: no-cache` 与查询串，并以「线上字节 SHA-256 与本地一致」为验收判据。
 
 ---
 
@@ -239,9 +242,11 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 
 - [x] CloudBase HTTP 访问服务新增 `/honeyPayNotify` → `webLoginApi`（2026-10-28 21:27，含路径透传，已复测 400/401）
 - [x] `honey_orders` 权限改「仅管理端可读写」+ 补 `openId + createdAt` 索引（2026-10-28 晚，已回读 `ADMINONLY` 与 4 条索引；另补 `createdAt_-1` 供平台全局倒序）
+- [x] 服务号 H5 充值面板发布到线上（2026-10-28 深夜，`me.html` / `service-personal.js` / `service-personal-polish.css`，回读 SHA-256 三个文件全部一致；`me.html` 已引用 `?v=20261027-honey2` / `?v=20261025-honey1`）
 - [ ] 商户平台确认服务号 AppID 已关联、JSAPI 授权目录含 `https://www.sxffootball.cn/`（用户线上操作）
 - [ ] 真实 1 元下单 → 回调入账 → 重复回调幂等 → 退款冲销 四段联调
 - [ ] 联调通过后，再决定是否放开 iOS 之外的对外口径与运营公告
+
 
 ---
 
@@ -253,3 +258,4 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 | 2026-10-28 21:27 | 回调路径已打通：默认域名下新增 `/honeyPayNotify` → `webLoginApi` 路由，并开启**路径透传**（不开则 `event.path` 不匹配，表现为 200「未知操作：undefined」）；复测空报文 400、带报文无签名 401。同步写入 `docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md` 与 `CURRENT_STATUS.md` |
 | 2026-10-28 晚 | `honey_orders` 安全配置完成：`AclTag` `READONLY` → `ADMINONLY`，索引 2 → 4 条（新增 `openId_1_createdAt_-1`、`createdAt_-1`），均已回读确认；第五节第 2 项改为已完成，剩下只有商户平台两项人工确认与真实 1 元联调 |
 | 2026-10-28 深夜 | 发现权限被控制台旧页面写回 `READONLY`（控制台「数据权限」点选即生效、无保存按钮，未刷新的页面带旧值），已重新设为 `ADMINONLY` 并间隔 45 秒两次回读确认；索引 4 条未受影响。第五节第 2 项补入「控制台选项 ↔ `AclTag` 对照表」与刷新核对提醒 |
+| 2026-10-28 深夜（二） | 定位「点充值提示充值未开放」＝线上 `service-personal.js` 仍是 `?v=20261020-fb1` 旧版（`modal('…充值暂未开放…')` 纯静态弹窗，不发请求）。已完成线上/本地逐行比对（本地独有行全部为蜂蜜充值，线上独有 3 行均为被替换的旧代码，无功能回退风险），用 `hosting deploy` 发布三个文件并回读 SHA-256 全部一致。第八节新增第 9、10 条坑位 |
