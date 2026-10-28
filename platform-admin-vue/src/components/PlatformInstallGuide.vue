@@ -67,7 +67,7 @@ const mode = computed(() => {
 const entryLabel = computed(() => {
   if (mode.value === 'prompt') return '安装到设备'
   if (mode.value === 'ios' || mode.value === 'android') return '添加到主屏幕'
-  return '安装应用'
+  return '安装客户端'
 })
 
 const entryIcon = computed(() => (mode.value === 'ios' || mode.value === 'android' ? Iphone : Download))
@@ -139,13 +139,13 @@ onBeforeUnmount(() => {
 }
 
 .platform-install-entry.is-link {
-  height: 30px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 14px;
   color: #176f45;
   border-color: #cfe3d8;
   border-radius: 999px;
   background: #f3faf6;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 

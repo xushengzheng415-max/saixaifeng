@@ -27,7 +27,7 @@
           <div class="permission-tip"><strong>安全说明</strong><span>密码由浏览器管理，本站不保存明文密码。</span></div>
           <div class="install-row">
             <PlatformInstallGuide variant="login" />
-            <span class="install-note">支持 Edge / Chrome / Safari 安装到电脑桌面或平板主屏幕，打开即全屏运行。</span>
+            <span class="install-note">不用下载安装包：用 Edge / Chrome / Safari 点“安装”，装到电脑桌面或平板主屏幕，打开即全屏运行。</span>
           </div>
         </div>
       </section>
