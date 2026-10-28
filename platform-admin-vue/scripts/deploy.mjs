@@ -15,7 +15,7 @@ function run(command, args, options = {}) {
 }
 const branch = run(git, ['branch', '--show-current'])
 if (branch !== 'codex/platform-ops') throw new Error('正式平台发布只允许 codex/platform-ops 分支')
-const dirty = run(git, ['status', '--porcelain', '--', 'platform-admin-vue', 'shared/player-card/draw.js', 'cloudfunctions/webLoginApi/player-card-text-styles.json'], { cwd: repo })
+const dirty = run(git, ['status', '--porcelain', '--', 'platform-admin-vue', 'shared/player-card/draw.js', 'cloudfunctions/webLoginApi/player-card-text-styles.json', 'cloudfunctions/dataCenter/shared/match-events.mjs'], { cwd: repo })
 if (dirty) throw new Error('请先提交平台源码及其统一卡片依赖，再发布')
 run('npm', ['run', 'build'], { shell: process.platform === 'win32', stdio: 'inherit' })
 const commit = run(git, ['rev-parse', 'HEAD'])
