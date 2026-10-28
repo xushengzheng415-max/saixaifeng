@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 签名材料放在仓库外（默认 %LOCALAPPDATA%\SxfAndroid\keystore\signing.properties），
+// 通过环境变量传入，禁止把 keystore 或口令写进仓库。
+def signingKeyFile = System.getenv('SXF_ANDROID_KEYSTORE')
+def signingStorePassword = System.getenv('SXF_ANDROID_KEYSTORE_PASSWORD')
+def signingAliasName = System.getenv('SXF_ANDROID_KEY_ALIAS')
+def signingAliasPassword = System.getenv('SXF_ANDROID_KEY_PASSWORD')
+
+android {
+    namespace 'cn.sxffootball.platform'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'cn.sxffootball.platform'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+        resConfigs 'zh', 'en'
+    }
+
+    signingConfigs {
+        release {
+            if (signingKeyFile) {
+                storeFile file(signingKeyFile)
+                storePassword signingStorePassword
+                keyAlias signingAliasName
+                keyPassword signingAliasPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (signingKeyFile) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "SxfPlatform-${variant.versionName}.apk"
+        }
+    }
+}

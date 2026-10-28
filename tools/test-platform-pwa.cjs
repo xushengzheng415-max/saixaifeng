@@ -236,6 +236,41 @@ function check(condition, message) {
     await iosPage.screenshot({ path: path.join(output, 'ipad-login.png') });
     await iosContext.close();
 
+    const androidContext = await createContext(browser, {
+      viewport: { width: 800, height: 1280 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+    });
+    const androidPage = await androidContext.newPage();
+    await androidPage.goto(`${baseUrl}/#/platform-login`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await androidPage.locator('.platform-login .form-card').waitFor({ timeout: 30000 });
+    await androidPage.waitForTimeout(600);
+    const androidLoginEntry = (await androidPage.locator('.platform-login .platform-install-entry').first().textContent())?.trim() || '';
+    report.androidLoginEntry = androidLoginEntry;
+    check(androidLoginEntry.includes('安卓安装包'), '安卓登录页未显示 APK 下载入口');
+    const androidNote = (await androidPage.locator('.platform-login .install-note').textContent()) || '';
+    check(androidNote.includes('APK'), '安卓登录页说明未提到 APK');
+    await androidPage.locator('.platform-login .platform-install-entry').first().click();
+    await androidPage.locator('.platform-install-guide').waitFor({ state: 'visible', timeout: 8000 });
+    await androidPage.waitForTimeout(500);
+    const androidGuideMode = await androidPage.locator('.platform-install-guide').getAttribute('data-mode');
+    const androidGuide = (await androidPage.locator('.platform-install-guide').textContent()) || '';
+    report.androidGuide = { mode: androidGuideMode, text: androidGuide.slice(0, 200) };
+    check(androidGuideMode === 'apk', '安卓安装引导未进入 APK 分支');
+    check(androidGuide.includes('SxfPlatform-1.0.0.apk'), '安卓安装引导缺少安装包文件名');
+    const androidFooter = (await androidPage.locator('.platform-install-guide .el-dialog__footer .el-button--primary').textContent())?.trim() || '';
+    check(androidFooter.includes('下载安装包'), '安卓安装引导缺少下载按钮');
+    await androidPage.screenshot({ path: path.join(output, 'android-login-install.png') });
+    await androidPage.goto(`${baseUrl}/#/tournament-center-admin`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await androidPage.locator('.platform-console .workspace').waitFor({ timeout: 30000 });
+    await androidPage.waitForTimeout(700);
+    const androidConsoleEntry = (await androidPage.locator('.platform-install-entry').first().textContent())?.trim() || '';
+    report.androidConsoleEntry = androidConsoleEntry;
+    check(androidConsoleEntry.includes('主屏幕'), '安卓后台顶栏安装引导被替换');
+    await androidContext.close();
+
     const standaloneContext = await createContext(browser, { viewport: { width: 1180, height: 820 }, isMobile: false });
     await standaloneContext.addInitScript(() => {
       const original = window.matchMedia.bind(window);
