@@ -14,11 +14,11 @@
 | 7 项密文全部可解密、格式全部合法、档位符合「1 元 = 10 滴」 | ✅ 完成（本地用线上 KEK 逐项验证） |
 | 商户号 + 证书序列号 + 商户私钥在微信侧匹配（证书已生效） | ✅ 完成（微信只读查单返回 `ORDER_NOT_EXIST` 而非签名错误） |
 | 支付回调能进云函数 | ✅ 已通（2026-10-28 21:27 加路由 + 开路径透传，空报文探测返回 401/400 而非 404） |
-| `honey_orders` 集合权限与索引 | ❌ **未配**：权限 `READONLY`（所有人可读），缺 `openId + createdAt` 索引 |
+| `honey_orders` 集合权限与索引 | ✅ 完成（2026-10-28：权限 `READONLY` → `ADMINONLY`；索引 2 → 4 条，含 `openId_1_createdAt_-1` 与 `createdAt_-1`） |
 | 服务号 AppID 与商户号的 JSAPI 关联、JSAPI 支付授权目录 | ❓ **待人工在商户平台确认** |
 | 真实 1 元下单 → 收银台 → 回调入账 → 退款联调 | ❌ 未做 |
 
-**一句话**：钥匙配好了、锁也验证过能开，回调电话线也已经接上；剩下的是「微信能不能把短信发到这部手机上（商户平台两处授权）」和两处集合安全配置。
+**一句话**：钥匙配好了、锁也验证过能开，回调电话线接上了，数据库这扇门也已锁好；剩下只有「商户平台两处授权」这一件事，以及最后走一遍真实 1 元。
 
 ---
 
@@ -60,7 +60,7 @@ webLoginApi 云函数  ── AES-256-GCM(+AAD) ──►  platform_payment_secr
 | `WXPAY_PLATFORM_SERIAL` | 库内密文 | `PUB_KEY_ID_…`（微信支付公钥 ID）✅ |
 | `HONEY_TOPUP_PACKS` | 库内密文 | 5 档：1/5/10/50/100 元 → 10/50/100/500/1000 滴，`priceCents = drops × 10`、无赠滴 ✅ |
 | `WXPAY_APP_ID` | **未入库**，回退环境变量 `SERVICE_ACCOUNT_APP_ID` | `wx00918291b0bd8b9e`（服务号）✅ |
-| `WXPAY_NOTIFY_URL` | **未配置**，用默认纯路径 `/honeyPayNotify` | 见第五节第 1 项 ⚠️ |
+| `WXPAY_NOTIFY_URL` | **未配置**，用默认纯路径 `/honeyPayNotify` | 见第五节第 1 项 ✅（路由已映射，无需另配环境变量） |
 
 > 服务号 AppID 是 `wx00918291b0bd8b9e`。`wx5a42aae0e5d0669c` 是**网站应用**（PC 扫码登录用），`wx57164cca8676f411` / `wxa0ac7d45bcabd140` 是两支小程序——这三个都不能填进支付配置。`docs/HONEY_TOPUP_HANDOFF_2026-10-27.md` 第 128 行把服务号写成了 `wx5a42aae0e5d0669c`，属于笔误，以本文与 `CURRENT_STATUS.md` 为准。
 
@@ -77,10 +77,11 @@ webLoginApi 云函数  ── AES-256-GCM(+AAD) ──►  platform_payment_secr
    - 签名被接受 ⇒ 三者匹配、证书已在商户平台生效；
    - 若序列号/私钥不配套会返回 `401 SIGN_ERROR`。这是目前唯一不产生任何业务数据、又能证明凭据真实有效的验证方式。
 7. **回调路径**：POST `https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/honeyPayNotify` → 当时为 **404 空响应**（路径未映射）；同日晚已加路由并开启路径透传，复测转为 400/401，详见第五节第 1 项。
+8. **`honey_orders` 安全配置（2026-10-28 晚）**：改前 `DescribeSafeRule` = `AclTag:READONLY`、`listIndexes` 只有 `_id_` + `_openid_1`；改后回读 `AclTag:ADMINONLY`、索引 4 条（新增 `openId_1_createdAt_-1`、`createdAt_-1`），`numIndexesBefore 2 → numIndexesAfter 4`，详见第五节第 2 项。
 
 ---
 
-## 五、还差的 3 件事（第 1 件已完成）
+## 五、还差的 3 件事（第 1、2 件已完成）
 
 ### 1）把 `/honeyPayNotify` 映射到 `webLoginApi` —— ✅ 已完成（2026-10-28 21:27）
 
@@ -106,18 +107,40 @@ webLoginApi 云函数  ── AES-256-GCM(+AAD) ──►  platform_payment_secr
 > 注意：4xx 时网关不回传函数生成的 JSON 报文（响应体为空），只有 200 才回传；所以"看响应体"判断不了，**要看状态码**：401/400 才是通，200 + `未知操作` 才是没匹配上，404 才是没映射。
 
 
-### 2）`honey_orders` 集合权限与索引（写库结构变更，需授权）
+### 2）`honey_orders` 集合权限与索引 —— ✅ 已完成（2026-10-28 晚，用户授权执行）
 
-- 权限：实测 `READONLY`（所有人可读），里面含 `openId` / `userId` / `priceCents` / `drops`。应改为「仅管理端可读写」（`PRIVATE`/`ADMINONLY`）。
-- 索引：现有只有 `_id_` 与 `_openid_1`，缺 `openId`（升序）+ `createdAt`（降序）——订单列表与「待支付复用」都按这两列查。
-- 另建议：`fan_points_ledger` 若没有 `serviceAccountOpenId` 索引，补一条（充值/扣费都按它算合计）。
+改前实测：`AclTag=READONLY`（**所有人可读**，而文档里有 `openId` / `userId` / `priceCents` / `drops`），索引只有 `_id_` 与 `_openid_1`。
 
-### 3）商户平台侧两项人工确认（代码查不到）
+实际做法（管理员 CLI，只动这一个集合）：
+
+```powershell
+# 1) 权限：READONLY → ADMINONLY（仅管理端可读写）
+E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run api tcb ModifySafeRule --body '{"EnvId":"cloud1-7g8ckb3c7815a011","CollectionName":"honey_orders","AclTag":"ADMINONLY"}'
+# 2) 索引用 Mongo 原生 createIndexes（CloudBase 控制台「索引管理」可视化加也可）
+... db nosql execute --command '[{"TableName":"honey_orders","CommandType":"COMMAND","Command":"{\"createIndexes\":\"honey_orders\",\"indexes\":[{\"key\":{\"openId\":1,\"createdAt\":-1},\"name\":\"openId_1_createdAt_-1\"},{\"key\":{\"createdAt\":-1},\"name\":\"createdAt_-1\"}]}"}]'
+```
+
+改后回读：`AclTag=ADMINONLY`；索引 4 条 = `_id_`、`_openid_1`、`openId_1_createdAt_-1`、`createdAt_-1`（`numIndexesBefore 2 → numIndexesAfter 4`）。
+
+为什么是这两条索引（对应现有代码，不是拍脑袋）：
+
+- `openId_1_createdAt_-1`：`honeyRecharge.cjs#listOrders` / `#findReusableOrder` 都是「按 `openId` 过滤 + 按 `createdAt` 倒序」。
+- `createdAt_-1`：`platformOwner.cjs#readHoneyOrders` 是全局 `orderBy('createdAt','desc').limit(3000)`（平台总览/订单列表/筛选都在内存里做），没有这条会退化成全表扫描。
+
+**改权限后不影响功能的原因**（已核对代码）：`honey_orders` 只由云函数（管理端）读写；H5 订单面板走 `servicePrivateHoneyOrders`、平台页走 `platformOwner`，**没有任何客户端 SDK 直连**。因此 `ADMINONLY` 符合「网页端零 SDK」红线，也不会让任何页面读不到数据。
+
+**未做（按需再定，不属本次授权范围）**：`fan_points_ledger` 目前没有 `serviceAccountOpenId` 索引，充值/扣费都按该字段算合计，数据量上来后建议补一条（本次未动该集合）。
+
+### 3）商户平台侧两项人工确认（代码查不到，由用户线上操作）
 
 | 项 | 位置 | 正确状态 |
 |---|---|---|
-| 服务号 AppID 关联 | 产品中心 → **AppID 账号管理** | 列表里有 `wx00918291b0bd8b9e`，已关联且开通 JSAPI 支付 |
-| JSAPI 支付授权目录 | 产品中心 → **开发配置** → JSAPI 支付 | 含 `https://www.sxffootball.cn/`（末尾带 `/`） |
+| 服务号 AppID 关联 | pay.weixin.qq.com → 产品中心 → **AppID 账号管理** → 关联 AppID | 列表里有 `wx00918291b0bd8b9e`，且该行的「服务号」能力是**已授权/已绑定** |
+| JSAPI 支付授权目录 | pay.weixin.qq.com → 产品中心 → **开发配置** → JSAPI 支付 → 支付授权目录 | 至少一条 `https://www.sxffootball.cn/`（**协议 https、末尾带 `/`**） |
+
+操作顺序建议：先确认 AppID 关联（缺了必然 `APPID_MCHID_NOT_MATCH`），再核授权目录（缺了能下单但拉起收银台报「当前页面的 URL 未注册」）。
+
+两项都只影响「能否下单/拉起收银台」，**不影响已完成的凭据、路由、集合配置**；改完不需要重填「支付设置」页的任何一项，也不需要重新部署云函数（配置每 60 秒自动重读）。
 
 未关联时下单会直接报 `APPID_MCHID_NOT_MATCH`，可以先跑一次真实下单来证伪。
 
@@ -149,7 +172,7 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 
 ## 七、真实小额联调（1 元）建议顺序
 
-1. 先做第五节 1、2 两项，再用 C 确认档位能下发（此时 `rechargeAvailable=true`）。
+1. 第五节 1、2 两项已完成；先按第六节 C 确认档位能下发（此时 `rechargeAvailable=true`），再做商户平台两项确认。
 2. 微信内打开 `https://www.sxffootball.cn/service-account-h5/me.html`，点 1 元档 → 拉起收银台 → 支付。
 3. 观察三处：`honey_orders` 是否出现 1 条 `paid + credited`；`fan_points_ledger` 是否新增 1 条 `+10`；`fan_profiles.honeyBalance` 是否 +10。
 4. 故意刷新页面重复回调 → 订单仍 1 条、流水不重复（`deduped`），余额不再增加。
@@ -203,8 +226,8 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 ## 十、待办勾选
 
 - [x] CloudBase HTTP 访问服务新增 `/honeyPayNotify` → `webLoginApi`（2026-10-28 21:27，含路径透传，已复测 400/401）
-- [ ] `honey_orders` 权限改「仅管理端可读写」+ 补 `openId + createdAt` 索引（需授权）
-- [ ] 商户平台确认服务号 AppID 已关联、JSAPI 授权目录含 `https://www.sxffootball.cn/`
+- [x] `honey_orders` 权限改「仅管理端可读写」+ 补 `openId + createdAt` 索引（2026-10-28 晚，已回读 `ADMINONLY` 与 4 条索引；另补 `createdAt_-1` 供平台全局倒序）
+- [ ] 商户平台确认服务号 AppID 已关联、JSAPI 授权目录含 `https://www.sxffootball.cn/`（用户线上操作）
 - [ ] 真实 1 元下单 → 回调入账 → 重复回调幂等 → 退款冲销 四段联调
 - [ ] 联调通过后，再决定是否放开 iOS 之外的对外口径与运营公告
 
@@ -216,3 +239,4 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 |---|---|
 | 2026-10-28 | 新建。凭据 7 项加密入库并通过本地解密 + 微信只读查单双重验收；记录主密钥指纹更正（`8A9F8C34` → `f93e5c7c`）与仍缺的回调路径、集合权限/索引、商户平台关联三项 |
 | 2026-10-28 21:27 | 回调路径已打通：默认域名下新增 `/honeyPayNotify` → `webLoginApi` 路由，并开启**路径透传**（不开则 `event.path` 不匹配，表现为 200「未知操作：undefined」）；复测空报文 400、带报文无签名 401。同步写入 `docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md` 与 `CURRENT_STATUS.md` |
+| 2026-10-28 晚 | `honey_orders` 安全配置完成：`AclTag` `READONLY` → `ADMINONLY`，索引 2 → 4 条（新增 `openId_1_createdAt_-1`、`createdAt_-1`），均已回读确认；第五节第 2 项改为已完成，剩下只有商户平台两项人工确认与真实 1 元联调 |
