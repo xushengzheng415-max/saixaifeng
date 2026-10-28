@@ -396,6 +396,8 @@
 ### 第 3 步（B 方案，2026-10-28 起推荐）：在平台后台直接填写
 
 1. 先在控制台给 `webLoginApi` 加**一个**环境变量：`PAYMENT_SECRET_KEK`（≥16 个字符，随机串，**只配这一次**，记到本机保险位置）。这是解密库内密文的主密钥；丢失或更换会导致已保存的密文全部读不出来，需要在页面重填。
+   - **2026-10-28 已完成**：40 位随机串已写入 `webLoginApi` 环境变量（线上 26 个变量，原 25 项逐一比对无变化，`Timeout=120 / Memory=512 / Runtime=Nodejs18.15 / Handler=index.main / Type=Event` 均未变，`ModTime` 15:02:06）。主密钥指纹 `8A9F8C34`——**页面第 4 张卡显示这个指纹就证明云函数已加载新密钥**。
+   - 本地留存：DPAPI 加密副本在 `%LOCALAPPDATA%\SxfCloud\payment-kek\webLoginApi-payment-kek.dpapi.txt`（未写入仓库、未打印明文）；`cloudbaserc.json`（gitignored）也已同步这一项，并把 `memorySize` 从 256 校正为线上实际值 512，避免下次 `config update` 把内存降级。重新推送命令：`E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run config update fn webLoginApi -y`（`-y` 走覆盖模式，文件里 26 项与线上一致，所以等价于合并）。
 2. 登录 `https://pingtai.sxffootball.cn/` → 营销活动 → **支付设置**，第 4 张卡「凭据存放」应显示「主密钥已就绪」，否则会出现绿色提示条说明缺 KEK。
 3. 在「写入支付配置」区块填入 6 项凭据（商户号 / API 证书序列号 / APIv3 密钥 / 商户 API 私钥 / 微信支付公钥 / 平台公钥 ID）与档位，提交前会二次确认。私钥和公钥可以直接粘多行 PEM，不需要手工写 `\n`。
 4. 保存成功后表单清空、体检表即时刷新：对应项「来源」变为**加密存储**，顶部「正常项」计数上升。
