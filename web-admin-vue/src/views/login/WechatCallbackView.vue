@@ -129,7 +129,7 @@ onMounted(async () => {
 
   // 校验 state 防 CSRF
   const savedState = sessionStorage.getItem('wechat_login_state')
-  if (savedState && savedState !== state) {
+  if (!savedState || savedState !== state) {
     status.value = 'error'
     errorMessage.value = '安全校验失败，请重新扫码'
     sessionStorage.removeItem('wechat_login_state')

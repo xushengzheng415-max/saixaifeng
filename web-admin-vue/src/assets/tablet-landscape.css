@@ -1,15 +1,6 @@
 /* Landscape Android tablet: share the existing pages, permissions and data. */
-#app .login-card[data-desktop-login] .tablet-login-brand { display: none !important; }
 @media (orientation: landscape) and (max-width: 1180px),
        (orientation: landscape) and (hover: none) and (pointer: coarse) and (min-width: 600px) {
-  #app .login-overlay { min-height: 100dvh; padding: 24px; background: #f4f7f5; background-image: none; backdrop-filter: none; }
-  #app .login-overlay .login-card { display: grid; grid-template-columns: minmax(260px,.9fr) minmax(340px,1.1fr); grid-template-rows: minmax(410px,1fr) 48px 48px; width: min(840px,calc(100vw - 48px)); height: auto; min-height: 520px; padding: 0; border: 1px solid #dce6df; border-radius: 12px; background: #fff; box-shadow: none; overflow: hidden; }
-  #app .login-overlay .tablet-login-brand { grid-column: 1; grid-row: 1/4; display: flex; align-items: center; justify-content: center; padding: 32px; border-right: 1px solid #e0e9e3; background: #eaf4ed; }
-  #app .login-overlay .tablet-login-brand img { display: block; width: min(236px,100%); height: auto; object-fit: contain; }
-  #app .login-overlay .qr-panel { grid-column: 2; grid-row: 1; height: auto; padding: 16px 24px 0; border-radius: 0; }
-  #app .login-overlay .retry { grid-column: 2; grid-row: 2; position: static; align-self: center; justify-self: center; width: 140px; height: 44px; border: 1px solid #c9dacf; border-radius: 6px; color: #087a48; background: #fff; }
-  #app .login-overlay .login-card > a { grid-column: 2; grid-row: 3; position: static !important; align-self: center; justify-self: center; padding: 10px 14px; color: #536d5e !important; }
-  #app .login-overlay .close { z-index: 2; width: 44px; height: 44px; color: #536d5e; border-color: #dce6df; background: #fff; }
   #app .layout { min-width: 0; width: 100%; height: 100dvh; }
   #app .layout > .main-container { min-width: 0; }
   #app .layout .sidebar { display: none; }

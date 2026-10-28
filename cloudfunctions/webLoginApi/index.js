@@ -3012,6 +3012,30 @@ async function callTencentSMS(phoneNumber, code) {
 
 // ========== 操作实现 ==========
 
+function phoneCodeLoginClientKey(event, context) {
+  const request = event && event.requestContext || {}
+  const value = request.sourceIp || request.identity && request.identity.sourceIp || request.http && request.http.sourceIp || context && (context.clientIP || context.CLIENTIP)
+  return typeof value === 'string' && value.length <= 128 ? value : 'shared-unknown-client'
+}
+
+function phoneCodeLoginService() {
+  const module = require('./phoneCodeLogin.cjs')
+  return module.createPhoneCodeLogin({
+    store: module.createCloudStore(cloud.database(), {
+      dailyMax: process.env.WEB_PHONE_LOGIN_DAILY_LIMIT,
+      hourlyIpMax: process.env.WEB_PHONE_LOGIN_IP_HOURLY_LIMIT,
+      globalHourlyMax: process.env.WEB_PHONE_LOGIN_GLOBAL_HOURLY_LIMIT,
+      globalDailyMax: process.env.WEB_PHONE_LOGIN_GLOBAL_DAILY_LIMIT
+    }),
+    sendSms: data => handleSendSms(data),
+    issueSession: async (userId, phone) => {
+      const users = await module.createCloudStore(cloud.database()).findUsers(phone)
+      if (users.length !== 1 || users[0]._id !== userId || !module.accountAllowed(users[0],phone)) throw new Error('PHONE_ACCOUNT_CHANGED')
+      return { authToken: await createWebSession(userId, 'phone_code'), authExpiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS) }
+    }
+  })
+}
+
 // 1. 发送短信验证码
 async function handleSendSms(event) {
   const { phoneNumber, loginChallengeId } = event
@@ -4466,6 +4490,7 @@ async function handleUploadToCosDirect(event, params) {
 // 支持: list / get / count / add / update / delete
 // ★ 添加集合白名单，禁止直接操作系统集合
 const SYSTEM_COLLECTIONS = [
+  'web_phone_login',
   'users', 'sms_codes', 'email_verification', 'email_codes', 'invite_codes',
   'auth_sessions', 'assistance_requests', 'assistance_attempts', 'assistance_audit_logs', 'platform_settings'
 ]
@@ -5963,6 +5988,15 @@ exports.main = async (event, context) => {
     }
     let result
     switch (action) {
+      case 'phoneCodeLoginOptions':
+        result = await phoneCodeLoginService().options()
+        break
+      case 'sendPhoneCodeLoginSms':
+        result = await phoneCodeLoginService().send(params, phoneCodeLoginClientKey(event, context))
+        break
+      case 'completePhoneCodeLogin':
+        result = await phoneCodeLoginService().complete(params)
+        break
       case 'sendSms':
       case 'verifySmsCode':
       case 'passwordLogin':
