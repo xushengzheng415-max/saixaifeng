@@ -35,9 +35,17 @@
 - 功能提交 `f392d961`，字体配送源修正 `5e701f42`。平台正式版本 `20261028131644-5e701f42`，独立生产构建、45 个文件 HTTP/SHA-256 回读通过。
 - 新增字体按既有 `https://www.sxffootball.cn/admin/fonts/player-card/` 配送，平台通过本地化映射使用自身域名。11 个新旧字体全部 HTTP 200 且 SHA-256 与 manifest 相同；只新增字体资源，没有替换主办方 `/admin/` 应用代码。
 - 三个函数从本次刚下载的现网包制作差量，webLoginApi/getMiniWorkspace 各15个文件，worker14个文件；保留原节点依赖。裁判表防回退检查通过。最初 COS 更新因临时角色异常失败，随后通过直接代码包更新，不把失败上传当作上线。
-- 三函数 Active/Available、无 CodeError；Handler/Runtime/Timeout/MemorySize/Environment/InstallDependency/Role/VpcConfig/Layers/Type/PublicNetConfig 与发布前核对。
+- 三函数 Active/Available、无 CodeError；Handler/Runtime/Timeout/MemorySize/Environment/Role/VpcConfig/Layers/Type/PublicNetConfig 与发布前核对。worker 的 InstallDependency 单独设为 FALSE，随代码携带原依赖，防止自动 npm 安装升级间接依赖；不再恢复 TRUE 触发依赖重装。该项是部署依赖策略变化，环境变量、超时、内存、权限与触发器保持。
 - 新字体在统一 `read` 中为旧客户端按原授权和版本校验提供完整PNG，不返回原始人物地址；`exportPlayerCardForViewer` 和小程序 `playerCardExport` 显式保留动态场景，以保持高清导出。隔离动态/兼容/导出回归通过；因此本轮无需上传现有含其他任务改动的小程序开发包，源码中的新映射留待该端下一次正常发布。
 - 服务号只更新共享 `dynamic-card-renderer.js`，正式 `/service-account-h5/` 与已登记测试 `/preview/card-display/service-account-h5/` 均 HTTP 200/SHA-256 一致，共用此次正式后端；没有上传同期其他H5改动。平台按既定直接正式规则发布，没有自行新建云端测试目标。
 - `PLAYER_CARD_UI_ORIGIN=https://pingtai.sxffootball.cn` 的实际线上资源检查通过：字体二进制实际解码、字体选择、铜渐变和描边；所有业务请求拦截到隔离内存库，未在生产建立测试项目或发布模板。截图 `output/player-card-fonts-20261028/live-editor-bronze-stroke.png`。
 - 正式 HTTP 无会话探针：savePlayerCardTemplate、recognizeRefereeReport 均返回 AUTH_REQUIRED，没有公开写入或接口缺失。
 - 完整包回下载结果保存在 `work/card-font-release-20261028/readback-verification.json`；该忽略目录仅保留诊断包与摘要，不入库。
+
+最终回下载全部通过：webLoginApi保留7323个原包条目、getMiniWorkspace保留6556个条目、worker保留7178个条目。前两个函数仅npm隐藏锁元数据变化，worker依赖文件逐字节一致；没有缺失文件、错误差量或其他运行文件变化。worker关闭自动安装后才达到此结果，保持FALSE，不能在配置回填时再触发重装。
+
+| 函数 | 最终 CodeSha256 |
+| --- | --- |
+| webLoginApi | 82274dcfa534a9d72037792ce5ae67817dde80d3b677c626ae70b389ccee7021 |
+| getMiniWorkspace | 10974dcc98b1cac6168dd670bd80634e76ebc224f4946292313ed894e861cff1 |
+| playerCardPublishWorker | bae1a2f1f9c33141ff0ee730816b164b4c0408e012143bdf50d4720b8f823f3f |
