@@ -36,15 +36,35 @@ CloudBase CLI在缺少显式函数配置、从package.json推断配置时可能�
 | 应用图标 | `scripts/make-pwa-icons.ps1` 由 `public/logo.png` 的蜂+足球徽标生成 | 截图见 `output/` |
 | 线上安装能力核查 | 平台登录页入口、manifest、Service Worker 接管、浏览器安装判定 | `node tools/check-platform-live-pwa.cjs` |
 
-安装方式：Windows 用 Edge/Chrome 地址栏“安装”；iPad 用 Safari“添加到主屏幕”；Android 平板用 Chrome“添加到主屏幕”。安装后以独立窗口运行，账号、权限与数据仍经 `webLoginApi` 获取，与网页版完全一致。安装入口只在未安装时出现，已安装（standalone）自动隐藏。
+安装方式：Windows 用 Edge/Chrome 地址栏“安装”；iPad 用 Safari“添加到主屏幕”；安卓平板可下载 APK 安装包（见下节），也可用 Chrome“添加到主屏幕”。安装后以独立窗口或独立应用运行，账号、权限与数据仍经 `webLoginApi` 获取，与网页版完全一致。安装入口只在未安装时出现，已安装（standalone）或已在 APK 内运行时自动隐藏。
 
-入口位置有两处，未登录也能看到：平台管理员登录页表单下方（“安装客户端” / “添加到主屏幕”按钮 + “不用下载安装包”的说明），以及登录后控制台顶栏。点击后弹出分端安装步骤；浏览器直接支持安装时（`beforeinstallprompt`）改为直接触发系统安装。
+入口位置有两处，未登录也能看到：平台管理员登录页表单下方（电脑“安装客户端”、安卓“下载安卓安装包”、iPad“添加到主屏幕”按钮 + 分设备说明），以及登录后控制台顶栏。点击后弹出分端安装步骤；浏览器直接支持安装时（`beforeinstallprompt`）改为直接触发系统安装。安卓分支只在登录页优先给安装包，控制台顶栏仍保留“添加到主屏幕”引导。
 
 Service Worker 边界：只缓存本站 `/index.html`、构建产物 `/assets/` 与图标清单；跨域（`webLoginApi` 等）请求不拦截、不缓存，缓存中不保存任何登录态或业务数据。仅在正式构建注册（`import.meta.env.PROD`），开发态不注册，避免热更新被缓存干扰。HTTPS 是安装前提。
 
-验证结果（2026-10-28 本地）：`npm run build` 通过；`tools/test-platform-tablet-ui.cjs` 覆盖 1440 桌面 + 1180/1024 横屏平板 + 820/768 竖屏平板 × 15 个功能页，0 失败；`tools/test-platform-pwa.cjs` 校验清单、图标尺寸、Service Worker 接管、缓存边界、断网外壳、电脑/iPad/Android 安装入口、登录页入口（电脑“安装客户端”、iPad“添加到主屏幕”）与已安装隐藏，0 失败。截图与结果见 `output/platform-tablet-20261028/`、`output/platform-pwa-20261028/`。
+验证结果（2026-10-28 本地）：`npm run build` 通过；`tools/test-platform-tablet-ui.cjs` 覆盖 1440 桌面 + 1180/1024 横屏平板 + 820/768 竖屏平板 × 15 个功能页，0 失败；`tools/test-platform-pwa.cjs` 校验清单、图标尺寸、Service Worker 接管、缓存边界、断网外壳、电脑/iPad/Android 安装入口、登录页入口（电脑“安装客户端”、iPad“添加到主屏幕”、安卓“下载安卓安装包”）、安卓 APK 弹窗分支与已安装隐藏，0 失败。截图与结果见 `output/platform-tablet-20261028/`、`output/platform-pwa-20261028/`。
 
 验证脚本的 Playwright 统一由 `tools/lib/load-playwright.cjs` 加载，优先使用仓库内 `npm install --no-save playwright-core`，缓存运行时路径失效时不再整批失败。
 
-当前状态：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，线上 release `20261028095251-ae49b684`（35 个文件 SHA-256 回读一致）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及“不用下载安装包”说明，manifest 三图标解析正常，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
+当前状态：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，最新线上 release `20261028110735-92137d1e`（35 个文件 SHA-256 回读一致）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及电脑/安卓/iPad 三种安装说明，manifest 三图标解析正常，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
+
+## 2026-10-28 安卓平板安装包（APK）1.0.0
+
+用户要求“做一个 APK 的安装包，能在平板上用，安卓的”，据此新增原生 WebView 客户端，只作为平台站点的打开方式，不复制页面、不另建端：
+
+| 项目 | 值 |
+|---|---|
+| 源码 | `android-platform/`（Java WebView 壳 + Gradle 工程） |
+| 包名 / 版本 | `cn.sxffootball.platform` / 1.0.0（versionCode 1） |
+| 系统要求 | minSdk 24（Android 7.0），targetSdk 34 |
+| 启动页 | `https://pingtai.sxffootball.cn/#/platform-login` |
+| 下载 | `https://www.sxffootball.cn/desktop/platform/android/SxfPlatform-1.0.0.apk` |
+| 更新清单 / 摘要 | `desktop/platform/android/latest.json`、`SHA256SUMS.txt` |
+| 登录页入口 | `PlatformInstallGuide.vue` 的 `ANDROID_APK_URL` 与 `apk` 分支（仅安卓设备） |
+
+APK 60,276 字节，SHA-256 `f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011dc68f947889d8`；`apksigner` v2 验签通过，证书 SHA-256 `d08c6c23e40f32ce04767b6ecd488dc2c857fdffb56dfc5b13e9a47d949150cc`；`aapt2 dump badging` 读回包名、版本、SDK 版本、启动 Activity 与五档图标；`node android-platform/test/config.test.cjs` 9 项通过。签名口令由明文 properties 迁移为 Windows DPAPI 加密文件，构建脚本只在进程内解密，不打印、不入库。
+
+发布只新增 `www.sxffootball.cn/desktop/platform/android/` 三个文件（APK → 摘要 → 清单顺序），未触碰 `desktop/windows/`、主办方 `desktop/android/`、`/admin/`、云函数或环境配置。线上回读：三个文件均 HTTP 200，APK 类型 `application/vnd.android.package-archive`、大小与 SHA-256 与本地及清单一致；安卓 UA 登录页显示“下载安卓安装包”，弹窗进入 `apk` 分支并提供“下载安装包”按钮。详细记录见 `docs/releases/android-platform-1.0.0-20261028.md`，安装与升级步骤见 `android-platform/README.md`。
+
+限制：本机无安卓设备，真机安装、登录、上传、导出保存、断网恢复与覆盖升级未验证；客户端不内置自动更新，升级需重新下载覆盖安装。
 

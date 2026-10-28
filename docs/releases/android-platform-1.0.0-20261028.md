@@ -44,6 +44,21 @@ targetSdk 34。安装后以独立应用运行，登录、权限与数据仍全�
 | `SHA256SUMS.txt` | 200 | `text/plain` | 92 | 与本地一致 |
 | `latest.json` | 200 | `application/json` | 497 | 与本地一致 |
 
+## 登录页与线上核查
+
+`PlatformInstallGuide.vue` 新增 `apk` 分支：安卓设备登录页按钮为“下载安卓安装包”，弹窗列出四步安装说明
+（含未知来源授权与 PWA 备选），底部主按钮“下载安装包”；控制台顶栏维持原“添加到主屏幕”引导；
+在 APK 内运行时 UA 带 `SxfPlatformApp/1.0`，入口自动隐藏。
+
+平台站已发布 release `20261028110735-92137d1e`（35 个文件 SHA-256 回读一致）。`node tools/check-platform-live-pwa.cjs`
+新增安卓与安装包核查并跑通（0 失败）：桌面 UA 登录入口“安装客户端”，安卓 UA 入口“下载安卓安装包”、
+弹窗 `data-mode=apk`、按钮“下载安装包”；`latest.json` HTTP 200、`version 1.0.0`、`versionCode 1`，APK
+HTTP 200、`application/vnd.android.package-archive`、60,276 字节、SHA-256 与清单一致。证据见
+`output/platform-pwa-live-20261028/result.json`、`live-android-install.png`。
+
+本轮验证（本地）：`npm run build` 通过；`tools/test-platform-pwa.cjs` 与 `tools/test-platform-tablet-ui.cjs`
+0 失败，其中新增安卓登录页 APK 入口、弹窗分支与下载按钮断言。
+
 ## 安装方式
 
 平板浏览器打开下载链接，或在平台登录页点“下载安卓安装包”→ 弹窗底部“下载安装包”。下载完成后
