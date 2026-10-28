@@ -13,12 +13,12 @@
 | 7 项微信支付凭据已由平台负责人在「支付设置」页填写并加密入库 | ✅ 完成 |
 | 7 项密文全部可解密、格式全部合法、档位符合「1 元 = 10 滴」 | ✅ 完成（本地用线上 KEK 逐项验证） |
 | 商户号 + 证书序列号 + 商户私钥在微信侧匹配（证书已生效） | ✅ 完成（微信只读查单返回 `ORDER_NOT_EXIST` 而非签名错误） |
-| 支付回调能进云函数 | ❌ **未通**：`/honeyPayNotify` 返回 404 |
+| 支付回调能进云函数 | ✅ 已通（2026-10-28 21:27 加路由 + 开路径透传，空报文探测返回 401/400 而非 404） |
 | `honey_orders` 集合权限与索引 | ❌ **未配**：权限 `READONLY`（所有人可读），缺 `openId + createdAt` 索引 |
 | 服务号 AppID 与商户号的 JSAPI 关联、JSAPI 支付授权目录 | ❓ **待人工在商户平台确认** |
 | 真实 1 元下单 → 收银台 → 回调入账 → 退款联调 | ❌ 未做 |
 
-**一句话**：钥匙配好了、锁也验证过能开，但「微信的电话（回调）打不进我们的电话线（HTTP 路径）」，所以现在对外开放收款会出现「用户付了钱、余额不动」。
+**一句话**：钥匙配好了、锁也验证过能开，回调电话线也已经接上；剩下的是「微信能不能把短信发到这部手机上（商户平台两处授权）」和两处集合安全配置。
 
 ---
 
@@ -76,18 +76,35 @@ webLoginApi 云函数  ── AES-256-GCM(+AAD) ──►  platform_payment_secr
 6. **商户侧真实性（决定性）**：用库内商户号 + 序列号 + 私钥调微信支付**只读查单**（查一个不存在的商户单号）→ `HTTP 404 / code=ORDER_NOT_EXIST`。
    - 签名被接受 ⇒ 三者匹配、证书已在商户平台生效；
    - 若序列号/私钥不配套会返回 `401 SIGN_ERROR`。这是目前唯一不产生任何业务数据、又能证明凭据真实有效的验证方式。
-7. **回调路径**：POST `https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/honeyPayNotify` → **404 空响应**（路径未映射）。
+7. **回调路径**：POST `https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/honeyPayNotify` → 当时为 **404 空响应**（路径未映射）；同日晚已加路由并开启路径透传，复测转为 400/401，详见第五节第 1 项。
 
 ---
 
-## 五、还差 3 件事
+## 五、还差的 3 件事（第 1 件已完成）
 
-### 1）把 `/honeyPayNotify` 映射到 `webLoginApi`（最高优先级，属线上配置变更，需授权）
+### 1）把 `/honeyPayNotify` 映射到 `webLoginApi` —— ✅ 已完成（2026-10-28 21:27）
 
-- 位置：腾讯云 CloudBase 控制台 → 环境 `cloud1-7g8ckb3c7815a011` → **HTTP 访问服务** → 新增路径 `/honeyPayNotify` → 指向云函数 `webLoginApi`。
-- 为什么必须：微信支付 v3 的 `notify_url` 不允许带查询串，所以回调只能走「HTTP 访问服务」里单独加的路径；函数同时按**路径**与 `?action=honeyPayNotify` 识别回调。路径不通就等于付了钱不入账。
-- 通过判据：POST 该路径（空报文、无签名头）应返回 **400/401 的 JSON**（验签失败），不再是 404 空响应。
-- 替代方案：把 `WXPAY_NOTIFY_URL` 指向一个已能访问的 https 地址（同样不能带查询串）。注意该变量不在「支付设置」页的 7 项里，需要走环境变量/`cloudbaserc.json` 推送。
+实际做法（供以后复现/迁移）：
+
+- **位置**：CloudBase 控制台 → 环境 `cloud1-7g8ckb3c7815a011` → 左侧 **HTTP 访问** → 「域名及路由」。
+- **不能加在 `*`（通配域名）组**：控制台对该组禁用新增，提示「由于通配域名数量过大，当前仅可以在具体域名上添加路由」。
+- 加在**具体域名** `cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com` 下，路径 `/honeyPayNotify`、资源类型云函数、资源对象 `webLoginApi`、启用开、**身份认证关**、安全域名关、**路径透传开**。
+- CLI 等价命令（`-y` 用于跳过交互确认）：
+  - 新增：`routes add --data '{"domain":"cloud1-…app.tcloudbase.com","routes":[{"path":"/honeyPayNotify","upstreamResourceType":"SCF","upstreamResourceName":"webLoginApi","enable":true,"enableAuth":false,"enableSafeDomain":false}]}'`
+  - 改路径透传：`routes edit --data '{"domain":"cloud1-…app.tcloudbase.com","routes":[{"path":"/honeyPayNotify","enablePathTransmission":true}]}' -y`
+
+**踩到的坑（很重要）**：只加路由还不够。**路径透传必须开启**，否则 HTTP 访问服务传给云函数的 `event.path` 不是 `/honeyPayNotify`，`index.js` 里基于路径的回调识别匹配不上，请求会掉进通用 action 路由并返回 `{"success":false,"error":"未知操作：undefined"}`（HTTP 200，很容易误判成"通了"）。
+
+复测判据（本次实测）：
+
+| 请求 | 结果 | 含义 |
+|---|---|---|
+| POST 空报文 `/honeyPayNotify` | `400` | 已进回调处理器（报「请求体为空」） |
+| POST 带报文但无签名头 `/honeyPayNotify` | `401` | 已进回调处理器（验签失败） |
+| POST 带报文 `/honeyPayNotify?action=honeyPayNotify` | `401` | 查询串兜底同样可用 |
+
+> 注意：4xx 时网关不回传函数生成的 JSON 报文（响应体为空），只有 200 才回传；所以"看响应体"判断不了，**要看状态码**：401/400 才是通，200 + `未知操作` 才是没匹配上，404 才是没映射。
+
 
 ### 2）`honey_orders` 集合权限与索引（写库结构变更，需授权）
 
@@ -185,7 +202,7 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 
 ## 十、待办勾选
 
-- [ ] CloudBase HTTP 访问服务新增 `/honeyPayNotify` → `webLoginApi`（需授权）
+- [x] CloudBase HTTP 访问服务新增 `/honeyPayNotify` → `webLoginApi`（2026-10-28 21:27，含路径透传，已复测 400/401）
 - [ ] `honey_orders` 权限改「仅管理端可读写」+ 补 `openId + createdAt` 索引（需授权）
 - [ ] 商户平台确认服务号 AppID 已关联、JSAPI 授权目录含 `https://www.sxffootball.cn/`
 - [ ] 真实 1 元下单 → 回调入账 → 重复回调幂等 → 退款冲销 四段联调
@@ -198,3 +215,4 @@ H5「我的」的档位与「是否可充」全部来自 `servicePrivateAccountD
 | 日期 | 内容 |
 |---|---|
 | 2026-10-28 | 新建。凭据 7 项加密入库并通过本地解密 + 微信只读查单双重验收；记录主密钥指纹更正（`8A9F8C34` → `f93e5c7c`）与仍缺的回调路径、集合权限/索引、商户平台关联三项 |
+| 2026-10-28 21:27 | 回调路径已打通：默认域名下新增 `/honeyPayNotify` → `webLoginApi` 路由，并开启**路径透传**（不开则 `event.path` 不匹配，表现为 200「未知操作：undefined」）；复测空报文 400、带报文无签名 401。同步写入 `docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md` 与 `CURRENT_STATUS.md` |

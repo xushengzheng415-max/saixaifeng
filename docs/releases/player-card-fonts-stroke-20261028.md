@@ -1,6 +1,6 @@
 # 球员卡字体、描边与铜色渐变（2026-10-28）
 
-状态：本地实现与隔离验证完成；未发布，未激活模板，未发卡。
+状态：2026-10-28 已获本任务共用云函数发布授权。平台正式页面与三个函数已更新；发布读回记录见末节。未激活模板、未发卡。
 
 ## 最终行为
 
@@ -24,8 +24,20 @@
 
 ## 发布待办及授权边界
 
-平台界面已有正式发布授权；新增字体的保存、读取和导出需要共用云函数同步，依 AGENTS.md 共用后端单独授权规则，当前等待本任务云函数发布授权。不能只部署前端选项而让正式保存拒绝新字体 ID。
+平台界面已有正式发布授权；2026-10-28 用户进一步明确授权同步球员卡相关云函数再发布平台页面。
 
 获授权后：先下载最新 webLoginApi、getMiniWorkspace、playerCardPublishWorker，按上述文件及新增字体作最小差量；对实际包执行裁判表防回退检查与相对依赖检查，保留环境配置和实际依赖。先准备平台字体资源，再同步后端及相应客户端，依端口既有流程构建/发布/读回并记录提交、HTTP/文件摘要。小程序新字体映射需要对应开发/体验版本验证，不能将源码同步视作现网生效。旧客户端的具体 fallback 需在正式发布前核实，禁止静默以普通黑体冒充所选字体。
 
 源码目录当前存在其他任务修改；不得整包上传，不得将这些修改混入本次交付。同步工具全量 `--check` 在本次开始时未建立基线；getMiniWorkspace/playerCardReader.cjs 与 webLoginApi 的同期差异不属于字体改动，本次没有覆盖该差异。
+
+## 实际发布与回读
+
+- 功能提交 `f392d961`，字体配送源修正 `5e701f42`。平台正式版本 `20261028131644-5e701f42`，独立生产构建、45 个文件 HTTP/SHA-256 回读通过。
+- 新增字体按既有 `https://www.sxffootball.cn/admin/fonts/player-card/` 配送，平台通过本地化映射使用自身域名。11 个新旧字体全部 HTTP 200 且 SHA-256 与 manifest 相同；只新增字体资源，没有替换主办方 `/admin/` 应用代码。
+- 三个函数从本次刚下载的现网包制作差量，webLoginApi/getMiniWorkspace 各15个文件，worker14个文件；保留原节点依赖。裁判表防回退检查通过。最初 COS 更新因临时角色异常失败，随后通过直接代码包更新，不把失败上传当作上线。
+- 三函数 Active/Available、无 CodeError；Handler/Runtime/Timeout/MemorySize/Environment/InstallDependency/Role/VpcConfig/Layers/Type/PublicNetConfig 与发布前核对。
+- 新字体在统一 `read` 中为旧客户端按原授权和版本校验提供完整PNG，不返回原始人物地址；`exportPlayerCardForViewer` 和小程序 `playerCardExport` 显式保留动态场景，以保持高清导出。隔离动态/兼容/导出回归通过；因此本轮无需上传现有含其他任务改动的小程序开发包，源码中的新映射留待该端下一次正常发布。
+- 服务号只更新共享 `dynamic-card-renderer.js`，正式 `/service-account-h5/` 与已登记测试 `/preview/card-display/service-account-h5/` 均 HTTP 200/SHA-256 一致，共用此次正式后端；没有上传同期其他H5改动。平台按既定直接正式规则发布，没有自行新建云端测试目标。
+- `PLAYER_CARD_UI_ORIGIN=https://pingtai.sxffootball.cn` 的实际线上资源检查通过：字体二进制实际解码、字体选择、铜渐变和描边；所有业务请求拦截到隔离内存库，未在生产建立测试项目或发布模板。截图 `output/player-card-fonts-20261028/live-editor-bronze-stroke.png`。
+- 正式 HTTP 无会话探针：savePlayerCardTemplate、recognizeRefereeReport 均返回 AUTH_REQUIRED，没有公开写入或接口缺失。
+- 完整包回下载结果保存在 `work/card-font-release-20261028/readback-verification.json`；该忽略目录仅保留诊断包与摘要，不入库。

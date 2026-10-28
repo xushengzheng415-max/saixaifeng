@@ -27,7 +27,7 @@ await page.route('**/*tcloudbase.com/**',async route=>{try{const e=route.request
  }
  if(!r)throw Error('Unhandled '+JSON.stringify({action:e.action,name,sub:p.action}));await route.fulfill({json:r})
 }catch(error){apiErrors.push(error.message);await route.fulfill({json:{success:false,error:error.message}})}})
-await page.goto('http://127.0.0.1:5176/#/tournament-center-admin?section=playerCards');
+await page.goto((process.env.PLAYER_CARD_UI_ORIGIN||'http://127.0.0.1:5176')+'/#/tournament-center-admin?section=playerCards');
 await page.getByRole('button',{name:'新建制卡',exact:true}).click();const dialog=page.locator('.el-dialog:visible');await dialog.locator('.el-form-item').filter({has:page.getByText('名称',{exact:true})}).locator('input').fill('三档独立排版验收');await dialog.getByRole('button',{name:'创建项目',exact:true}).click();await page.locator('input[type=file][multiple]').setInputFiles(samples);await page.getByRole('button',{name:'下一步',exact:true}).click();
 await page.getByRole('button',{name:'保存当前卡',exact:true}).waitFor();
 const set=[...h.table('player_card_sets').values()].find(x=>x.recordType==='set'),row=key=>h.table('player_card_templates').get(set.members[key]);
@@ -76,6 +76,6 @@ assert.equal(row('bronze').draft.layout.name.font,'graduate');
 assert.deepEqual(apiErrors,[]);assert.deepEqual(pageErrors,[]);assert.deepEqual(fontErrors,[]);
 assert.equal(h.table('player_card_template_states').size,0);
 fs.mkdirSync('output/player-card-fonts-20261028',{recursive:true});
-await page.screenshot({path:'output/player-card-fonts-20261028/editor-bronze-stroke.png',fullPage:true});
+await page.screenshot({path:'output/player-card-fonts-20261028/'+(process.env.PLAYER_CARD_UI_ORIGIN?'live-editor-bronze-stroke.png':'editor-bronze-stroke.png'),fullPage:true});
 console.log('PASS: all font binaries decode in browser; Chinese and jersey selection; bronze gradient, stroke toggle/color/width survive save and tier reload; no activation or production data writes');
 }catch(e){console.error('API errors:',apiErrors,'Page errors:',pageErrors);throw e}finally{await browser.close()}})().catch(e=>{console.error(e);process.exitCode=1})

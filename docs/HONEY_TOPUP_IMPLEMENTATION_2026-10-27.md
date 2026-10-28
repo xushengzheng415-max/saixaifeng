@@ -415,10 +415,16 @@
 3. **解密与格式校验**（本地取 DPAPI 中的 KEK 注入子进程，只输出通过/失败与长度）：7/7 可解密、7/7 通过 `normalizeSecretValue`——商户号 10 位纯数字、证书序列号 40 位十六进制、APIv3 密钥 32 位、商户私钥 RSA 2048（能实际签名）、微信支付公钥 RSA 2048（`PUBLIC KEY` 9 行）、平台公钥 ID 为 `PUB_KEY_ID_…`。`parsePacks` 得 5 档 1/5/10/50/100 元 → 10/50/100/500/1000 滴，`priceCents = drops × 10` 与「无赠滴」均通过。
 4. **云函数视角状态**：以库内密文 + 线上环境变量本地模拟 `paymentConfigStatus()`，返回 `ready=true`、`rechargeAvailable=true`、`missing=[]`、`mode=public_key`，`secretStore.savedCount=7`、`decryptableCount=7`；`WXPAY_APP_ID` 走回退 `SERVICE_ACCOUNT_APP_ID=wx00918291b0bd8b9e`（服务号 AppID，与商户号同主体），`notifyUrl` 为默认纯路径 `/honeyPayNotify`。
 5. **商户凭据真实性（决定性）**：用库内商户号 + 证书序列号 + 私钥对微信支付发**只读**查单请求（查一个不存在的商户单号），返回 `HTTP 404 / code=ORDER_NOT_EXIST`——签名被微信接受，说明三者匹配、证书已在商户平台生效；签名错误会返回 `401 SIGN_ERROR`。
-6. **仍不通的两处（未改，需授权）**：
-   - `/honeyPayNotify` 在云开发 HTTP 访问服务里**仍未映射**（POST 该路径返回 `404` 空响应），因此支付成功也收不到回调、不会自动入账。上线前必须在 HTTP 访问服务加这条路径（映射到 `webLoginApi`），或用 `WXPAY_NOTIFY_URL` 指向已能访问的地址。
+6. **仍不通的一处（未改，需授权）**：
+   - （`/honeyPayNotify` 当时未映射，已于 2026-10-28 21:27 补齐，见本节第 8 条。）
    - `honey_orders` 集合权限实测为 `READONLY`（所有人可读），与「仅管理端可读写」不符，订单里有 openId / userId / 金额；现有索引只有 `_id_` 与 `_openid_1`，缺 `openId` 升序 + `createdAt` 降序。
 7. **商户平台侧待人工确认（代码查不到）**：服务号 AppID `wx00918291b0bd8b9e` 与商户号的 JSAPI 支付关联、JSAPI 支付授权目录需包含 `https://www.sxffootball.cn/`。
+8. **回调路径已于 2026-10-28 21:27 打通（重要实现约束）**：在默认 HTTP 访问域名 `cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com` 下新增路由 `/honeyPayNotify` → 云函数 `webLoginApi`，且**必须开启「路径透传」**。
+   - 仅加路由、不开路径透传时：HTTP 访问服务传给函数的 `event.path` 不是 `/honeyPayNotify`，`index.js` 的路径识别匹配不上，请求会掉进通用 action 路由并返回 HTTP 200 + `{"success":false,"error":"未知操作：undefined"}`——**看着像成功，实际是没进回调**。
+   - 身份认证必须关闭，否则微信服务器（无登录态）的 POST 会被拦。
+   - `*`（通配域名）分组在控制台禁止新增路由（提示「由于通配域名数量过大，当前仅可以在具体域名上添加路由」），所以只能加在具体域名上。
+   - 复测判据只看状态码：空报文 `400`（请求体为空）、有报文无签名 `401`（验签失败）即通；`404` = 未映射，`200 + 未知操作` = 路径透传未开。4xx 时网关不回传函数生成的 JSON 报文。
+
 
 ### 第 4 步：集合权限与索引
 
