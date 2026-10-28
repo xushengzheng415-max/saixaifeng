@@ -1,8 +1,14 @@
 <template>
   <section class="ai-portrait">
+    <el-tabs v-model="activePane">
+      <el-tab-pane label="模型与用量" name="settings" />
+      <el-tab-pane label="在线自主生成球衣照" name="generate" />
+    </el-tabs>
+    <AiPortraitTool v-if="activePane === 'generate'" />
+    <div v-show="activePane === 'settings'">
     <div class="filters">
       <el-button :loading="loading" @click="loadModels">刷新模型配置</el-button>
-      <span class="source">服务号 H5「我的」→ AI 形象照演示；模型上下架与客户自选在这里控制</span>
+      <span class="source">控制启用模型、默认模型和客户自选</span>
     </div>
     <div v-if="error" class="error" role="alert">{{ error }} <el-button link @click="loadModels">重试</el-button></div>
 
@@ -111,6 +117,7 @@
         </template>
       </section>
     </template>
+    </div>
   </section>
 </template>
 
@@ -118,6 +125,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { callFunction } from '@/utils/cloud'
+import AiPortraitTool from './AiPortraitTool.vue'
+const activePane = ref('settings')
 
 const models = ref([])
 const defaultModel = ref('')
