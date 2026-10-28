@@ -13,4 +13,4 @@ for (const font of payload.cards[0].cardScene.fonts) {
 }
 assert.equal(payload.cards[0].imageUrl, 'https://history/image.png')
 assert.equal(translateCardErrors({cards:[{cardError:'A network error occurred.'}]}).cards[0].cardError, '字体加载失败，请重试预览')
-console.log('PASS: nested card fonts use independent platform origin; all four asset digests match; failed font load has actionable message')
+console.log(`PASS: nested card fonts use independent platform origin; all ${fonts.length} asset digests match; failed font load has actionable message`)

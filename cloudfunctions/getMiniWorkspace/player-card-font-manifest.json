@@ -28,5 +28,40 @@
     "name": "player-card-preview-team.png",
     "sha256": "bd20cfc84520e3cf80015b2ef29ebdd423d82f939aafe87463da214842cd70fa",
     "url": "https://www.sxffootball.cn/admin/images/player-card-runtime-preview/player-card-preview-team.png"
+  },
+  {
+    "name": "AlimamaShuHeiTi-Bold.ttf",
+    "sha256": "a8adaed018f97a4b7ca8923f07b59873e36a570382c4640b886feb8c8a8f81d5",
+    "url": "https://pingtai.sxffootball.cn/fonts/player-card/AlimamaShuHeiTi-Bold.ttf"
+  },
+  {
+    "name": "SxfZongyi.ttf",
+    "sha256": "a51d23b7a54099d977e6cae8b85ee4033c306d1c77c09af02c7f31676158ce9e",
+    "url": "https://pingtai.sxffootball.cn/fonts/player-card/SxfZongyi.ttf"
+  },
+  {
+    "name": "SxfCuhei.ttf",
+    "sha256": "28d55f357ec4f1074fe37e4f7a58b72415c1a8324323410c16ff361ba0709b38",
+    "url": "https://pingtai.sxffootball.cn/fonts/player-card/SxfCuhei.ttf"
+  },
+  {
+    "name": "HYYakuHei.ttf",
+    "sha256": "b2f26f2be0fa5f97d7ab7d598f0d2c3d01eb631b70f9ba98390bb74024f38fdc",
+    "url": "https://pingtai.sxffootball.cn/fonts/player-card/HYYakuHei.ttf"
+  },
+  {
+    "name": "Graduate-Regular.ttf",
+    "sha256": "971222b309851d86f2513f89b510dc52d52ef7798b5f43af2c6f58d43df568e5",
+    "url": "https://pingtai.sxffootball.cn/fonts/player-card/Graduate-Regular.ttf"
+  },
+  {
+    "name": "Jersey25-Regular.ttf",
+    "sha256": "4d4acdd89a748e9548041a3046d95536c500e1a7be9197c6aeef7d980f79d370",
+    "url": "https://pingtai.sxffootball.cn/fonts/player-card/Jersey25-Regular.ttf"
+  },
+  {
+    "name": "BlackOpsOne-Regular.ttf",
+    "sha256": "282a825b5f294377387e3969f765408157dbea8da0f5d0aae68c6bc704b145b3",
+    "url": "https://pingtai.sxffootball.cn/fonts/player-card/BlackOpsOne-Regular.ttf"
   }
 ]

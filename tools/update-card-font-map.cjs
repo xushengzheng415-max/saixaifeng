@@ -1,0 +1,7 @@
+const fs=require('node:fs')
+const contract=require('../cloudfunctions/webLoginApi/player-card-text-styles.json')
+const file='shared/player-card/draw.js',source=fs.readFileSync(file,'utf8')
+const families=Object.fromEntries(contract.fonts.map(font=>[font.id,JSON.stringify(font.family)]))
+const next=source.replace(/\(\{sans:[^\n]*?\}\[f\.font\]/, '('+JSON.stringify(families)+'[f.font]')
+if(next===source&&!source.includes(JSON.stringify(families)))throw new Error('Shared font family map marker not found')
+fs.writeFileSync(file,next)

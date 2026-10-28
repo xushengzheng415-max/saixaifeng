@@ -1,0 +1,44 @@
+[
+  {
+    "file": "AlimamaShuHeiTi-Bold.ttf",
+    "source": "阿里妈妈数黑体.ttf",
+    "sourceSha256": "a8adaed018f97a4b7ca8923f07b59873e36a570382c4640b886feb8c8a8f81d5",
+    "adaptation": "unaltered"
+  },
+  {
+    "file": "SxfZongyi.ttf",
+    "source": "微软简综艺.TTF",
+    "sourceSha256": "a30b72f6f6af192040bee9fbcb9aa6be8a5b7d609d639e9374e2e0abd455f343",
+    "adaptation": "GBK cmap to Unicode; canonical name records; outlines and fsType preserved"
+  },
+  {
+    "file": "SxfCuhei.ttf",
+    "source": "微软简粗黑.TTF",
+    "sourceSha256": "0bae8a40226864b951b38f84fd4421871c78d55d2cbe9b8b4b56457c956ce03b",
+    "adaptation": "GBK cmap to Unicode; canonical name records; outlines and fsType preserved"
+  },
+  {
+    "file": "HYYakuHei.ttf",
+    "source": "汉仪雅库黑.ttf",
+    "sourceSha256": "b2f26f2be0fa5f97d7ab7d598f0d2c3d01eb631b70f9ba98390bb74024f38fdc",
+    "adaptation": "unaltered"
+  },
+  {
+    "file": "Graduate-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/graduate/Graduate-Regular.ttf",
+    "license": "SIL OFL 1.1",
+    "licenseFile": "Graduate-OFL.txt"
+  },
+  {
+    "file": "Jersey25-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/jersey25/Jersey25-Regular.ttf",
+    "license": "SIL OFL 1.1",
+    "licenseFile": "Jersey25-OFL.txt"
+  },
+  {
+    "file": "BlackOpsOne-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/blackopsone/BlackOpsOne-Regular.ttf",
+    "license": "SIL OFL 1.1",
+    "licenseFile": "BlackOpsOne-OFL.txt"
+  }
+]

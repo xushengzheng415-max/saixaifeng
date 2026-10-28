@@ -1,4 +1,5 @@
-const files = new Set(['NotoSansSC-Regular.otf', 'NotoSansSC-Bold.otf', 'MaShanZheng-Regular.ttf', 'Anton-Regular.ttf'])
+import contract from '../../../cloudfunctions/webLoginApi/player-card-text-styles.json' with { type: 'json' }
+const files = new Set(contract.fonts.flatMap(font => font.files))
 function walk(value, visit) {
   if (!value || typeof value !== 'object') return
   visit(value)

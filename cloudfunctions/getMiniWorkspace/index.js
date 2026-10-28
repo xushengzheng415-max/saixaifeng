@@ -1426,7 +1426,7 @@ async function readWorkspaceCards(event,identity){
   if(!ids.length||ids.length>50||ids.some(id=>!id||id.length>128))throw new Error('球员编号无效或数量过多')
   const rows=await require('./data-center/reader.cjs').readByIds(db,'players','_id',ids)
   const allowed=rows.filter(player=>String(player.teamId||player.teamCode||'')===String(team._id)&&!['archived','deleted'].includes(String(player.status||'')))
-  const cards=await require('./playerCardReader.cjs').readCards(cloud,db,allowed,{dynamic:event.action==='playerCardExport'||event.dynamicCardProtocol==='player-card-dynamic/1'})
+  const cards=await require('./playerCardReader.cjs').readCards(cloud,db,allowed,{preserveDynamic:event.action==='playerCardExport',dynamic:event.action==='playerCardExport'||event.dynamicCardProtocol==='player-card-dynamic/1'})
   if(event.action==='playerCardExport'){const player=allowed.find(row=>String(row._id)===ids[0]),card=cards.find(row=>row.playerId===ids[0]);if(!player||!card?.cardScene)throw new Error('无权导出或球员卡暂不可用');return require('./playerCardDynamic.cjs').exportCard(cloud,db,player,card)}
   const byId=new Map(cards.map(card=>[card.playerId,card])),result=ids.map(id=>byId.get(id)||{playerId:id,status:'forbidden',cardUrl:''})
   return event.action==='playerCardBatchRead'?{success:true,cards:result}:{success:true,...result[0]}

@@ -1,13 +1,120 @@
 {
   "fonts": [
-    { "id": "sans", "label": "标准黑体", "family": "Noto Sans SC", "files": ["NotoSansSC-Regular.otf", "NotoSansSC-Bold.otf"] },
-    { "id": "brush", "label": "毛笔楷体", "family": "Ma Shan Zheng", "files": ["MaShanZheng-Regular.ttf"] },
-    { "id": "sport", "label": "运动数字", "family": "Anton", "files": ["Anton-Regular.ttf"] }
+    {
+      "id": "sans",
+      "label": "标准黑体",
+      "family": "Noto Sans SC",
+      "files": [
+        "NotoSansSC-Regular.otf",
+        "NotoSansSC-Bold.otf"
+      ],
+      "category": "chinese"
+    },
+    {
+      "id": "brush",
+      "label": "毛笔楷体",
+      "family": "Ma Shan Zheng",
+      "files": [
+        "MaShanZheng-Regular.ttf"
+      ],
+      "category": "chinese"
+    },
+    {
+      "id": "sport",
+      "label": "运动数字",
+      "family": "Anton",
+      "files": [
+        "Anton-Regular.ttf"
+      ],
+      "category": "number"
+    },
+    {
+      "id": "alimama",
+      "label": "阿里妈妈数黑体",
+      "family": "Alimama ShuHeiTi",
+      "files": [
+        "AlimamaShuHeiTi-Bold.ttf"
+      ],
+      "category": "chinese"
+    },
+    {
+      "id": "zongyi",
+      "label": "微软简综艺",
+      "family": "Sxf Zongyi",
+      "files": [
+        "SxfZongyi.ttf"
+      ],
+      "category": "chinese"
+    },
+    {
+      "id": "cuhei",
+      "label": "微软简粗黑",
+      "family": "Sxf Cuhei",
+      "files": [
+        "SxfCuhei.ttf"
+      ],
+      "category": "chinese"
+    },
+    {
+      "id": "yaku",
+      "label": "汉仪雅库黑",
+      "family": "HYYakuHei",
+      "files": [
+        "HYYakuHei.ttf"
+      ],
+      "category": "chinese"
+    },
+    {
+      "id": "graduate",
+      "label": "学院球衣 · Graduate",
+      "family": "Graduate",
+      "files": [
+        "Graduate-Regular.ttf"
+      ],
+      "category": "number"
+    },
+    {
+      "id": "jersey25",
+      "label": "方角球衣 · Jersey 25",
+      "family": "Jersey 25",
+      "files": [
+        "Jersey25-Regular.ttf"
+      ],
+      "category": "number"
+    },
+    {
+      "id": "blackops",
+      "label": "镂空号码 · Black Ops One",
+      "family": "Black Ops One",
+      "files": [
+        "BlackOpsOne-Regular.ttf"
+      ],
+      "category": "number"
+    }
   ],
   "defaults": {
-    "font": "sans", "fontStyle": "normal", "letterSpacing": 0, "fillMode": "solid",
-    "gradient": { "start": "#fff3ba", "middle": "#e9c46b", "end": "#ad7623", "middleEnabled": true, "angle": 90 },
-    "stroke": { "width": 0, "color": "#755018" },
-    "shadow": { "enabled": false, "color": "#000000", "opacity": 0.4, "x": 1, "y": 2, "blur": 1 }
+    "font": "sans",
+    "fontStyle": "normal",
+    "letterSpacing": 0,
+    "fillMode": "solid",
+    "gradient": {
+      "start": "#fff3ba",
+      "middle": "#e9c46b",
+      "end": "#ad7623",
+      "middleEnabled": true,
+      "angle": 90
+    },
+    "stroke": {
+      "width": 0,
+      "color": "#755018"
+    },
+    "shadow": {
+      "enabled": false,
+      "color": "#000000",
+      "opacity": 0.4,
+      "x": 1,
+      "y": 2,
+      "blur": 1
+    }
   }
 }

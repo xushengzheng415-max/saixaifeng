@@ -77,7 +77,7 @@
             <el-select v-model="selectedField" aria-label="选择文字字段"><el-option v-for="field in TEXT_FIELDS" :key="field.key" :label="field.label" :value="field.key" /></el-select>
             <label v-if="currentStyle && ['height','weight'].includes(selectedField)" class="field-visibility">隐藏卡面{{ selectedField === 'height' ? '身高' : '体重' }}<el-switch v-model="currentStyle.hidden" @change="dirty = true" /></label>
             <div v-if="currentStyle" class="text-controls">
-              <label>字体<el-select v-model="currentStyle.font" @change="dirty = true"><el-option v-for="font in TEXT_STYLE_CONTRACT.fonts" :key="font.id" :value="font.id" :label="font.label" /></el-select></label>
+              <label>字体<el-select v-model="currentStyle.font" filterable aria-label="文字字体" @change="dirty = true"><el-option-group v-for="group in fontGroups" :key="group.label" :label="group.label"><el-option v-for="font in group.fonts" :key="font.id" :value="font.id" :label="font.label"><span :style="{fontFamily:font.family+', sans-serif'}">{{ font.label }}</span><small class="font-option-sample" :style="{fontFamily:font.family+', sans-serif'}">{{ group.label==='球衣号码'?'01289':'铁栋泽' }}</small></el-option></el-option-group></el-select></label>
               <label>填色<el-select v-model="currentStyle.fillMode" @change="dirty = true"><el-option label="纯色" value="solid" /><el-option label="渐变" value="gradient" /></el-select></label>
               <label v-if="currentStyle.fillMode === 'solid'">颜色<input v-model="currentStyle.color" type="color" @input="dirty = true"></label>
               <label>字号<el-input-number v-model="currentStyle.size" :min="8" :max="80" :step="1" @change="dirty = true" /></label>
@@ -86,7 +86,7 @@
               <label>字重<el-select v-model="currentStyle.weight" @change="dirty = true"><el-option label="常规" :value="400" /><el-option label="中等" :value="500" /><el-option label="半粗" :value="600" /><el-option label="粗体" :value="700" /><el-option label="加粗" :value="800" /><el-option label="极粗" :value="900" /></el-select></label>
             </div>
             <div v-if="currentStyle" class="text-effects">
-              <div class="effect-presets"><el-button size="small" @click="applyTextPreset('gold')">金色渐变</el-button><el-button size="small" @click="applyTextPreset('silver')">银色渐变</el-button><el-button link @click="clearTextEffects">清除效果</el-button></div>
+              <div class="effect-presets"><el-button size="small" @click="applyTextPreset('gold')">金色渐变</el-button><el-button size="small" @click="applyTextPreset('silver')">银色渐变</el-button><el-button size="small" @click="applyTextPreset('bronze')">铜色渐变</el-button><el-button link @click="clearTextEffects">清除效果</el-button></div>
               <div v-if="currentStyle.fillMode === 'gradient'" class="gradient-controls">
                 <label>起始色<input v-model="currentStyle.gradient.start" type="color" @input="dirty = true"></label>
                 <label>结束色<input v-model="currentStyle.gradient.end" type="color" @input="dirty = true"></label>
@@ -96,9 +96,15 @@
               <div class="text-controls">
                 <label>字距<el-input-number v-model="currentStyle.letterSpacing" :min="-2" :max="20" :step="0.5" @change="dirty = true" /></label>
                 <label>倾斜<el-select v-model="currentStyle.fontStyle" @change="dirty = true"><el-option label="常规" value="normal" /><el-option label="斜体" value="italic" /></el-select></label>
-                <label>描边宽度<el-input-number v-model="currentStyle.stroke.width" :min="0" :max="5" :step="0.2" @change="dirty = true" /></label>
-                <label v-if="currentStyle.stroke.width > 0">描边色<input v-model="currentStyle.stroke.color" type="color" @input="dirty = true"></label>
                 <label>阴影<el-switch v-model="currentStyle.shadow.enabled" @change="dirty = true" /></label>
+              </div>
+              <div class="stroke-controls">
+                <label class="stroke-toggle">文字描边<el-switch :model-value="currentStyle.stroke.width > 0" aria-label="文字描边" @change="toggleTextStroke" /></label>
+                <div v-if="currentStyle.stroke.width > 0" class="text-controls">
+                  <label>描边宽度<el-input-number v-model="currentStyle.stroke.width" aria-label="描边宽度" :min="0" :max="5" :step="0.2" @change="dirty = true" /></label>
+                  <label>描边颜色<input v-model="currentStyle.stroke.color" aria-label="描边颜色" type="color" @input="dirty = true"></label>
+                </div>
+                <div class="effect-presets"><el-button size="small" @click="applyStrokePreset('#000000')">黑色描边</el-button><el-button size="small" @click="applyStrokePreset('#ffffff')">白色描边</el-button><el-button size="small" @click="applyStrokePreset('#bd8c32')">金色描边</el-button></div>
               </div>
               <div v-if="currentStyle.shadow.enabled" class="text-controls">
                 <label>阴影色<input v-model="currentStyle.shadow.color" type="color" @input="dirty = true"></label>
@@ -214,6 +220,12 @@ const DEFAULT_LAYOUT = {
   weight: { x: 202, y: 367, size: 14, color: '#30312b', weight: 600 }
 }
 const freshTextStyle = () => JSON.parse(JSON.stringify(TEXT_STYLE_CONTRACT.defaults))
+const fontGroups = [
+  {label:'中文字体',fonts:TEXT_STYLE_CONTRACT.fonts.filter(font=>font.category!=='number')},
+  {label:'球衣号码',fonts:TEXT_STYLE_CONTRACT.fonts.filter(font=>font.category==='number')}
+]
+function toggleTextStroke(enabled) { currentStyle.value.stroke.width=enabled?1:0; dirty.value=true }
+function applyStrokePreset(color) { currentStyle.value.stroke={width:currentStyle.value.stroke.width||1,color}; dirty.value=true }
 function styleLayout(value) { return Object.fromEntries(Object.entries(DEFAULT_LAYOUT).map(([key,base]) => { const raw = value?.[key] || base, defaults=freshTextStyle(); return [key,{...base,...defaults,...raw,hidden:key==='position'?false:raw.hidden===true,gradient:{...defaults.gradient,...raw.gradient},stroke:{...defaults.stroke,...raw.stroke},shadow:{...defaults.shadow,...raw.shadow}}] })) }
 function freshLayout() { return styleLayout(DEFAULT_LAYOUT) }
 const DEFAULT_PHOTO = { x: 150, y: 35, scale: 108 }
@@ -683,8 +695,9 @@ async function resumePublish() {
 function clearTextEffects() { Object.assign(currentStyle.value,freshTextStyle()); dirty.value = true }
 function applyTextPreset(type) {
   const style=currentStyle.value
-  Object.assign(style,freshTextStyle(),{fillMode:'gradient',font:selectedField.value === 'number' ? 'sport' : selectedField.value === 'name' ? 'brush' : 'sans'})
+  style.fillMode='gradient';style.gradient={...TEXT_STYLE_CONTRACT.defaults.gradient}
   if (type === 'silver') { style.gradient={start:'#ffffff',middle:'#c6d2df',end:'#66768c',middleEnabled:true,angle:90};style.stroke={width:0.6,color:'#445061'} }
+  else if (type === 'bronze') { style.gradient={start:'#ffe0b5',middle:'#cd7f46',end:'#703718',middleEnabled:true,angle:90};style.stroke={width:0.6,color:'#542b17'} }
   else style.stroke={width:0.6,color:'#755018'}
   style.shadow.enabled=true;dirty.value=true
 }
@@ -745,7 +758,7 @@ function beginTextDrag(event, key) {
 onMounted(() => {
   if(!document.getElementById('player-card-fonts')) {
     const sheet=document.createElement('style');sheet.id='player-card-fonts'
-    sheet.textContent=TEXT_STYLE_CONTRACT.fonts.filter(font=>font.id!=='sans').map(font=>'@font-face{font-family:"'+font.family+'";src:url("'+import.meta.env.BASE_URL+'fonts/player-card/'+font.files[0]+'");font-weight:400;font-style:normal;font-display:swap}').join('')
+    sheet.textContent=TEXT_STYLE_CONTRACT.fonts.flatMap(font=>font.files.map(file=>'@font-face{font-family:"'+font.family+'";src:url("'+import.meta.env.BASE_URL+'fonts/player-card/'+file+'");font-weight:'+(font.id==='sans'?(file.includes('Bold')?'700 900':'400 600'):'100 900')+';font-style:normal;font-display:swap}')).join('')
     document.head.appendChild(sheet)
   }
   if(props.embedded) loadEmbedded(); else load()
@@ -781,6 +794,7 @@ defineExpose({saveChanges:save,isDirty:()=>dirty.value,formData:()=>JSON.parse(J
 .form-head .el-button{margin-left:auto}.pc-reference{position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;width:300px}
 .preload-filter{display:grid;gap:6px;font-size:13px;margin-bottom:8px}.editor-fields,.template-workspace,.preview-pane{min-width:0}.template-list small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:680px){.preload-filter{flex:0 0 140px}.preview-pane{overflow:hidden}}
 .text-effects{display:grid;gap:12px}.gradient-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.gradient-controls label{display:grid;gap:5px;font-size:12px;color:#5d6f63}.gradient-controls input[type=color]{width:100%;height:30px;padding:2px;border:1px solid #cbd9d0;border-radius:4px}.effect-presets{display:flex;flex-wrap:wrap;gap:6px}.effect-presets .el-button+.el-button{margin-left:0}
+.stroke-controls{display:grid;gap:10px;padding-top:12px;border-top:1px solid #e4ebe6}.stroke-toggle{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#5d6f63}.font-option-sample{float:right;margin-left:16px;color:#617267}
 .layout-presets{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.layout-presets>strong{font-size:14px}.layout-actions{display:flex;gap:8px}.layout-actions .el-button+.el-button{margin-left:0}
 .field-visibility{display:flex;align-items:center;justify-content:space-between;color:#5d6f63;font-size:12px}
 .card-preview .card-badge.team-image{border:0;background:transparent;clip-path:none;padding:0}.card-preview .team-image img{border:0;border-radius:0;object-fit:contain}.card-preview .card-badge.nationality-label{display:grid;place-items:center;color:#1c241d;font-size:8px;font-weight:700}.team-logo-warning{color:#b56a16!important}.position-override{display:grid;gap:7px;font-size:13px;font-weight:600}

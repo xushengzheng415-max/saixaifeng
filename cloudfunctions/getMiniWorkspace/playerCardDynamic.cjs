@@ -4,7 +4,8 @@ const {document}=require('./playerCardReader.cjs')
 const preload=require('./playerCardPreload.cjs')
 const sourceReader=require('./playerCardSource.cjs')
 const VERSION='player-card-dynamic/1'
-const fonts=require('./player-card-font-manifest.json').filter(f=>/\.(otf|ttf)$/.test(f.name)).map(f=>({...f,family:f.name.startsWith('Anton')?'Anton':f.name.startsWith('MaShan')?'Ma Shan Zheng':'Noto Sans SC',weight:f.name.includes('Bold')?700:400}))
+const fontContract=require('./player-card-text-styles.json')
+const fonts=require('./player-card-font-manifest.json').filter(f=>/\.(otf|ttf)$/.test(f.name)).map(f=>({...f,family:fontContract.fonts.find(font=>font.files.includes(f.name)).family,weight:f.name.includes('Bold')?700:400}))
 function values(player,snapshot){return {number:String(player.jerseyNumber??''),position:({GK:'守门员',DF:'后卫',MF:'中场',FW:'前锋'})[player.position]||String(player.position||snapshot.positionOverride||'—'),name:String(player.name||''),jerseyName:String(player.jerseyName||''),height:player.height==null||player.height===''?'':`身高 ${player.height}cm`,weight:player.weight==null||player.weight===''?'':`体重 ${player.weight}kg`,nationality:String(player.nationality||'')}}
 async function descriptor(cloud,db,player,snapshot,grant,options={}){
  const base={protocolVersion:VERSION,playerId:String(player._id),playerName:String(player.name||''),templateId:snapshot.templateId,publishedVersion:Number(snapshot.version),cardDataVersion:Number(player.playerCardVersion||0),cardUrl:''}
@@ -25,7 +26,16 @@ async function read(cloud,db,player,options={}){
  const selected=options.baseOnly?'':String(player.playerCardDisplayTemplateId||'')
  if(selected){const id=crypto.createHash('sha256').update(JSON.stringify([String(player._id),selected])).digest('hex');grant=await document(db,'player_card_library',id);const template=await document(db,'player_card_templates',selected);if(grant&&grant.status!=='revoked'&&template){const state=await document(db,'player_card_template_states',preload.stateId(template.tier,template.published?.preload,selected));if(state?.active)snapshot=await document(db,'player_card_template_versions',`${selected}_${state.active.version}`)}}
  if(!snapshot){grant=null;const chosen=player.playerCardBackgroundSelected===true || player.playerCardBackgroundId&&player.playerCardBackgroundId!==player.playerCardTier;const type=String(chosen?player.playerCardBackgroundId:score.tier||player.playerCardTier||player.playerCardBackgroundId||'');if(!['bronze','silver','gold'].includes(type))return null;const state=await document(db,'player_card_template_states',type);if(state?.active)snapshot=await document(db,'player_card_template_versions',`${state.active.templateId}_${state.active.version}`)}
- return snapshot?{...await descriptor(cloud,db,player,snapshot,grant),gradeStatus:score.status,tier:score.tier||null}:null
+ if(!snapshot)return null
+ const card={...await descriptor(cloud,db,player,snapshot,grant),gradeStatus:score.status,tier:score.tier||null}
+ // Older mini/web renderers only map the three original font IDs. Preserve the
+ // selected font with the authorized, version-checked full-image export.
+ if(!options.preserveDynamic&&card.cardScene&&Object.values(card.cardScene.layout||{}).some(field=>field?.font&&!['sans','brush','sport'].includes(field.font))){
+   const image=await exportCard(cloud,db,player,card,{size:1})
+   const {cardScene,portraitUrl,...safe}=card
+   return {...safe,...image,displayMode:'static-export'}
+ }
+ return card
 }
 async function publish(cloud,db,row,revision,userId){
  if(Number(row.revision)!==Number(revision))throw new Error('草稿已更新，请重新预览')
