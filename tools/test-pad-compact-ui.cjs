@@ -1,0 +1,25 @@
+'use strict'
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict')
+const {chromium}=require(process.env.SXF_PLAYWRIGHT_MODULE||path.resolve('output/phone-code-login-20261028/qa-runtime/node_modules/playwright-core'))
+const root=path.resolve(__dirname,'..'),sourceRoot=process.env.SXF_TABLET_SOURCE_ROOT||root,out=path.join(root,'output/pad-compact-20261028')
+;(async()=>{
+ const {createServer}=await import(require('node:url').pathToFileURL(path.join(root,'web-admin-vue/node_modules/vite/dist/node/index.js')))
+ const server=await createServer({root:path.join(sourceRoot,'web-admin-vue'),configFile:path.join(sourceRoot,'web-admin-vue/vite.config.js'),plugins:[{name:'compact-qa-cjs',enforce:'pre',transform(s,id){if(id.includes('generateSchedule')&&id.includes('stageOrder.cjs'))return s.replace('module.exports = {','export default {');if(id.includes('dataCenter/shared/match-score.cjs'))return s+'\nexport default globalThis.SxfMatchScore\n'}}],server:{host:'127.0.0.1',port:5196,strictPort:true,watch:{ignored:['**/dist*/**']}}})
+ await server.listen();const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});const results=[]
+ try{
+  for(const [width,height,touch,native] of [[1548,940,true,true],[1548,800,false,true],[2064,1200,false,true],[1032,600,true,true],[1032,568,true,true],[1440,900,false,false]]){
+   const context=await browser.newContext({viewport:{width,height},hasTouch:touch,isMobile:touch,userAgent:'Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36'+(native?' SxfFootballPad/0.1.0':'')})
+   await context.route('https://*.tcloudbase.com/**',route=>route.fulfill({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':'*'},body:JSON.stringify({success:true,data:[],grants:[],isOwner:true})}))
+   console.log('Checking',width,height,native);const page=await context.newPage();page.on('pageerror',e=>console.log('PAGEERROR',e.message));await page.goto('http://127.0.0.1:5196/admin/#/visual-qa?visualQa=1');await page.waitForFunction(()=>window.__sxfVisualQaSnapshot)
+   for(let attempt=0;attempt<3;attempt++){try{await page.waitForFunction(()=>window.__sxfVisualQaSnapshot);
+   await page.evaluate(async()=>{const rows=window.__sxfVisualQaSnapshot.divisions;rows.splice(3);rows[0].name='竞技组';rows[1].name='热爱组';rows[2].name='胜利十一人组';const{default:router}=await import('/admin/src/router/index.js');await router.push('/tournaments/qa-tournament-2026/competition?visualQa=1')})
+   break}catch(error){if(attempt===2||!error.message.includes('Execution context was destroyed'))throw error;await page.goto('http://127.0.0.1:5196/admin/#/visual-qa?visualQa=1')}}
+   await page.locator('.division-table tbody tr').nth(2).waitFor();await page.waitForTimeout(250)
+   const state=await page.evaluate(()=>{const area=document.querySelector('.content-area'),table=document.querySelector('.division-table'),last=table.querySelector('tbody tr:last-child').getBoundingClientRect();return{compact:document.documentElement.hasAttribute('data-tablet-landscape'),coarse:matchMedia('(pointer:coarse)').matches,sidebarVisible:getComputedStyle(document.querySelector('.sidebar')).display!=='none',menuVisible:document.querySelector('.tablet-menu-toggle').getBoundingClientRect().width>0,verticalScroll:area.scrollHeight-area.clientHeight,lastRowBottom:Math.round(last.bottom),viewportHeight:innerHeight,horizontalOverflow:document.documentElement.scrollWidth>innerWidth+1||area.scrollWidth>area.clientWidth+1,bodyFont:getComputedStyle(table.querySelector('td')).fontSize}})
+   assert.equal(state.compact,native);assert.equal(state.sidebarVisible,!native);assert.equal(state.menuVisible,native)
+   if(native){assert.equal(state.horizontalOverflow,false);assert(state.lastRowBottom<=height,JSON.stringify(state));assert(state.verticalScroll<=2,JSON.stringify(state));assert.equal(state.bodyFont,'16px');await page.getByRole('button',{name:'菜单',exact:true}).click();await page.locator('#tablet-navigation-drawer').waitFor();assert(await page.locator('#tablet-navigation-drawer button').count()>5);await page.locator('.tablet-navigation-drawer .el-drawer__close-btn').click();await page.locator('.tablet-navigation-drawer').waitFor({state:'hidden'});await page.getByRole('button',{name:'竞技组更多操作'}).click();await page.getByRole('menuitem',{name:'组别设置'}).waitFor();await page.locator('#division-page-title').click();await page.locator('.competition-row-menu').first().waitFor({state:'hidden'})}
+   await page.screenshot({path:path.join(out,`competition-${width}-${height}-${native?'pad':'desktop'}.png`)});results.push({width,height,touch,native,...state});console.log(JSON.stringify(results.at(-1)));await context.close()
+  }
+  fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({status:'passed',results,productionWrites:false},null,2))
+ }finally{await browser.close();await server.close()}
+})().catch(e=>{console.error(e.stack);process.exitCode=1})
