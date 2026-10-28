@@ -396,7 +396,8 @@
 ### 第 3 步（B 方案，2026-10-28 起推荐）：在平台后台直接填写
 
 1. 先在控制台给 `webLoginApi` 加**一个**环境变量：`PAYMENT_SECRET_KEK`（≥16 个字符，随机串，**只配这一次**，记到本机保险位置）。这是解密库内密文的主密钥；丢失或更换会导致已保存的密文全部读不出来，需要在页面重填。
-   - **2026-10-28 已完成**：40 位随机串已写入 `webLoginApi` 环境变量（线上 26 个变量，原 25 项逐一比对无变化，`Timeout=120 / Memory=512 / Runtime=Nodejs18.15 / Handler=index.main / Type=Event` 均未变，`ModTime` 15:02:06）。主密钥指纹 `8A9F8C34`——**页面第 4 张卡显示这个指纹就证明云函数已加载新密钥**。
+   - **2026-10-28 已完成**：40 位随机串已写入 `webLoginApi` 环境变量（线上 26 个变量，原 25 项逐一比对无变化，`Timeout=120 / Memory=512 / Runtime=Nodejs18.15 / Handler=index.main / Type=Event` 均未变，`ModTime` 15:02:06）。主密钥指纹 **`f93e5c7c`**（算法 `sha256('kek:' + hex(sha256(KEK))).slice(0,8)`，与代码 `secretKekFingerprint()` 完全一致，且与库内 `platform_payment_secrets.kekFingerprint` 相同）——**页面第 4 张卡显示这个指纹就证明云函数加载的密钥与库里密文是同一条**。
+   - 更正：本文早期版本记录过指纹 `8A9F8C34`，那是误用 `sha256(KEK)` 直接取前 8 位得出的，不是代码里的算法，已作废；以 `f93e5c7c` 为准。
    - 本地留存：DPAPI 加密副本在 `%LOCALAPPDATA%\SxfCloud\payment-kek\webLoginApi-payment-kek.dpapi.txt`（未写入仓库、未打印明文）；`cloudbaserc.json`（gitignored）也已同步这一项，并把 `memorySize` 从 256 校正为线上实际值 512，避免下次 `config update` 把内存降级。重新推送命令：`E:\Documents\sxf-basketball\tools\sxf-cloud.ps1 football run config update fn webLoginApi -y`（`-y` 走覆盖模式，文件里 26 项与线上一致，所以等价于合并）。
 2. 登录 `https://pingtai.sxffootball.cn/` → 营销活动 → **支付设置**，第 4 张卡「凭据存放」应显示「主密钥已就绪」，否则会出现绿色提示条说明缺 KEK。
 3. 在「写入支付配置」区块填入 6 项凭据（商户号 / API 证书序列号 / APIv3 密钥 / 商户 API 私钥 / 微信支付公钥 / 平台公钥 ID）与档位，提交前会二次确认。私钥和公钥可以直接粘多行 PEM，不需要手工写 `\n`。
@@ -404,6 +405,20 @@
 5. 档位可用「填入已确认 5 档」一键带入；APIv3 密钥可用本页生成器生成后「填入本页生成的密钥」，避免另开窗口。
 6. 与第 3 步环境变量的关系：**库内值优先**，环境变量保留为回退。逐项迁移时可先保存一项、确认体检为「加密存储」，再删掉对应环境变量；要回退可在体检表该行点「清除」，即回落到环境变量。
 7. 第 3 步的环境变量写法仍然有效，两处并存时以库内为准；两种方式选一种即可，不必重复填。
+
+#### 第 3 步完成后的线上验收（2026-10-28，只读）
+
+产品负责人报告「所有支付设置都已全部填写完毕」后，按「不依赖平台登录」的方式回读核验，全部只读、未打印任何密文或明文：
+
+1. **库内文档**：`platform_payment_secrets` 单文档 `_id='wxpay'` 存在，`algorithm='aes-256-gcm'`、`version=1`、`kekFingerprint=f93e5c7c`、`updatedBy=platform-owner`、`updatedAt=2026-10-28`，`keys` 恰好 7 项（`WXPAY_MCH_ID` / `WXPAY_SERIAL_NO` / `WXPAY_APIV3_KEY` / `WXPAY_PRIVATE_KEY` / `WXPAY_PLATFORM_PUBLIC_KEY` / `WXPAY_PLATFORM_SERIAL` / `HONEY_TOPUP_PACKS`）。集合权限 `PRIVATE`（客户端读不到）。
+2. **审计**：`platform_payment_secret_audit` 1 条 `action=save`，`keys` 为上述 7 项，`operatorId=platform-owner`、`ip` 已记录，**不含任何值**。
+3. **解密与格式校验**（本地取 DPAPI 中的 KEK 注入子进程，只输出通过/失败与长度）：7/7 可解密、7/7 通过 `normalizeSecretValue`——商户号 10 位纯数字、证书序列号 40 位十六进制、APIv3 密钥 32 位、商户私钥 RSA 2048（能实际签名）、微信支付公钥 RSA 2048（`PUBLIC KEY` 9 行）、平台公钥 ID 为 `PUB_KEY_ID_…`。`parsePacks` 得 5 档 1/5/10/50/100 元 → 10/50/100/500/1000 滴，`priceCents = drops × 10` 与「无赠滴」均通过。
+4. **云函数视角状态**：以库内密文 + 线上环境变量本地模拟 `paymentConfigStatus()`，返回 `ready=true`、`rechargeAvailable=true`、`missing=[]`、`mode=public_key`，`secretStore.savedCount=7`、`decryptableCount=7`；`WXPAY_APP_ID` 走回退 `SERVICE_ACCOUNT_APP_ID=wx00918291b0bd8b9e`（服务号 AppID，与商户号同主体），`notifyUrl` 为默认纯路径 `/honeyPayNotify`。
+5. **商户凭据真实性（决定性）**：用库内商户号 + 证书序列号 + 私钥对微信支付发**只读**查单请求（查一个不存在的商户单号），返回 `HTTP 404 / code=ORDER_NOT_EXIST`——签名被微信接受，说明三者匹配、证书已在商户平台生效；签名错误会返回 `401 SIGN_ERROR`。
+6. **仍不通的两处（未改，需授权）**：
+   - `/honeyPayNotify` 在云开发 HTTP 访问服务里**仍未映射**（POST 该路径返回 `404` 空响应），因此支付成功也收不到回调、不会自动入账。上线前必须在 HTTP 访问服务加这条路径（映射到 `webLoginApi`），或用 `WXPAY_NOTIFY_URL` 指向已能访问的地址。
+   - `honey_orders` 集合权限实测为 `READONLY`（所有人可读），与「仅管理端可读写」不符，订单里有 openId / userId / 金额；现有索引只有 `_id_` 与 `_openid_1`，缺 `openId` 升序 + `createdAt` 降序。
+7. **商户平台侧待人工确认（代码查不到）**：服务号 AppID `wx00918291b0bd8b9e` 与商户号的 JSAPI 支付关联、JSAPI 支付授权目录需包含 `https://www.sxffootball.cn/`。
 
 ### 第 4 步：集合权限与索引
 
