@@ -1,7 +1,7 @@
 <template>
   <div class="tablet-navigation">
     <button type="button" class="tablet-menu-toggle" :aria-expanded="open" aria-controls="tablet-navigation-drawer" @click="open = true">
-      <el-icon :size="22"><Menu /></el-icon><span>菜单</span>
+      <el-icon :size="22"><Menu /></el-icon><span class="tablet-menu-label">菜单</span>
     </button>
     <span class="tablet-current-page">{{ title }}</span>
     <el-drawer v-model="open" title="功能菜单" direction="ltr" size="320px" append-to-body class="tablet-navigation-drawer">
@@ -23,19 +23,18 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { Menu } from '@element-plus/icons-vue'
+import { TABLET_LAYOUT_EVENT } from '../utils/tabletLayout'
 const props = defineProps({ items: { type: Array, required: true }, title: { type: String, default: '' }, activePath: { type: String, default: '' }, activeResolver: Function })
 const emit = defineEmits(['navigate'])
 const open = ref(false)
 const isActive = item => props.activeResolver ? props.activeResolver(item) : props.activePath === item.path || props.activePath.startsWith(item.path + '/')
 function select(item) { open.value = false; emit('navigate', item) }
 watch(() => props.activePath, () => { open.value = false })
-let query
-function handleMediaChange() { if (!query.matches) open.value = false }
+function handleMediaChange() { if (!document.documentElement.hasAttribute('data-tablet-landscape')) open.value = false }
 onMounted(() => {
-  query = window.matchMedia('(orientation: landscape) and (max-width: 1180px), (orientation: landscape) and (hover: none) and (pointer: coarse) and (min-width: 600px)')
-  query.addEventListener('change', handleMediaChange)
+  window.addEventListener(TABLET_LAYOUT_EVENT, handleMediaChange)
 })
-onUnmounted(() => query?.removeEventListener('change', handleMediaChange))
+onUnmounted(() => window.removeEventListener(TABLET_LAYOUT_EVENT, handleMediaChange))
 </script>
 
 <style scoped>
@@ -47,5 +46,4 @@ onUnmounted(() => query?.removeEventListener('change', handleMediaChange))
 .tablet-menu-item,.tablet-menu-group button{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:12px;border:0;border-radius:6px;background:transparent;color:#263d2e;font:inherit;text-align:left;cursor:pointer}
 .tablet-menu-group button{padding-left:42px}.tablet-menu-item[aria-current=page],.tablet-menu-group button[aria-current=page]{background:#eaf5ed;color:#087a48;font-weight:600}
 .tablet-menu-toggle:focus-visible,.tablet-menu-item:focus-visible,.tablet-menu-group button:focus-visible{outline:2px solid #087a48;outline-offset:2px}
-@media (orientation:landscape) and (max-width:1180px),(orientation:landscape) and (hover:none) and (pointer:coarse) and (min-width:600px){.tablet-navigation{display:flex}}
 </style>

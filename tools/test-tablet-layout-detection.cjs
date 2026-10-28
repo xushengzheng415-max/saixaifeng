@@ -1,0 +1,9 @@
+const {test}=require('node:test'),assert=require('node:assert/strict')
+const ready=import(require('node:url').pathToFileURL(require('node:path').resolve('web-admin-vue/src/utils/tabletLayout.js')))
+function fixture(userAgent,matches){
+ const attrs=new Set(),events=[],listeners=new Set(),query={matches,addEventListener:(_,f)=>listeners.add(f),removeEventListener:(_,f)=>listeners.delete(f)}
+ return {attrs,events,listeners,query,root:{hasAttribute:k=>attrs.has(k),toggleAttribute:(k,v)=>v?attrs.add(k):attrs.delete(k)},win:{navigator:{userAgent},matchMedia:()=>query,CustomEvent:class {constructor(type,options){this.type=type;this.detail=options.detail}},dispatchEvent:e=>events.push(e)}}
+}
+test('native Pad client stays compact even when primary pointer/media report desktop',async()=>{const {installTabletLayout}=await ready;const f=fixture('Mozilla/5.0 Android wv SxfFootballPad/0.1.0',false);installTabletLayout(f.win,f.root);assert(f.attrs.has('data-tablet-landscape'));assert(f.attrs.has('data-sxf-pad-client'));f.query.matches=false;[...f.listeners][0]();assert(f.attrs.has('data-tablet-landscape'));assert.equal(f.events.length,1)})
+test('ordinary desktop remains desktop; browser resize updates and cleans up',async()=>{const {installTabletLayout}=await ready;const f=fixture('Mozilla/5.0 Windows',false),dispose=installTabletLayout(f.win,f.root);assert(!f.attrs.has('data-tablet-landscape'));f.query.matches=true;[...f.listeners][0]();assert(f.attrs.has('data-tablet-landscape'));f.query.matches=false;[...f.listeners][0]();assert(!f.attrs.has('data-tablet-landscape'));assert.equal(f.events.length,2);dispose();assert.equal(f.listeners.size,0)})
+test('native marker must be a complete versioned user-agent token',async()=>{const {isPadClient}=await ready;assert(isPadClient('SxfFootballPad/0.1.0'));assert(!isPadClient('OtherSxfFootballPad/0.1.0'));assert(!isPadClient('SxfFootballPad/unknown'))})

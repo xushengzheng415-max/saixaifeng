@@ -1,93 +1,120 @@
 /* Landscape Android tablet: share the existing pages, permissions and data. */
-@media (orientation: landscape) and (max-width: 1180px),
-       (orientation: landscape) and (hover: none) and (pointer: coarse) and (min-width: 600px) {
-  #app .layout { min-width: 0; width: 100%; height: 100dvh; }
-  #app .layout > .main-container { min-width: 0; }
-  #app .layout .sidebar { display: none; }
-  #app .layout .workspace { min-width: 0; width: 100%; }
-  #app .layout .content-area { min-width: 0; padding: 16px 18px 28px; overscroll-behavior: contain; }
-  #app .layout .workspace-shell-content { padding: 0 0 24px; }
-  #app .layout .workspace-shell-header,
-  #app .layout .top-header { min-height: 68px; height: auto; padding: 10px 18px; gap: 14px; flex-wrap: wrap; }
-  #app .layout .workspace-shell-actions,
-  #app .layout .header-right { min-width: 0; flex-wrap: wrap; gap: 12px; }
-  #app .layout .top-header .tablet-navigation { min-height: 44px; padding: 0; border: 0; }
-  #app .layout .top-header .page-title { display: none; }
-  #app .layout .product-brand { width: 150px; height: 48px; }
-  #app .layout .header-action,
-  #app .layout .notification-action { min-height: 44px; padding-inline: 8px; }
-  #app .layout .admin-content-frame { min-width: 0; max-width: 100%; }
-  #app .layout .page-header { flex-wrap: wrap; gap: 12px; }
-  #app .layout .page-header h2 { font-size: 22px; }
-  #app .layout .el-button:not(.is-text):not(.is-link),
-  #app .layout .el-input__wrapper,
-  #app .layout .el-select__wrapper,
-  #app .layout .el-input-number { min-height: 44px; }
-  #app .layout .el-button.is-link { min-height: 40px; padding: 6px 8px; }
-  #app .layout .el-table { width: 100%; max-width: 100%; }
-  #app .layout .el-table__body-wrapper { overscroll-behavior-x: contain; }
-  #app .layout .el-table th.el-table__cell { height: 48px; }
-  #app .layout .el-table td.el-table__cell { height: 52px; }
-  #app .layout .el-pagination { flex-wrap: wrap; gap: 8px; }
-  #app .layout .el-tabs__item { min-height: 46px; }
-  #app .layout .el-form--inline { display: flex; flex-wrap: wrap; gap: 10px; }
-  #app .layout .el-form--inline .el-form-item { min-width: 0; max-width: 100%; margin: 0; }
-  #app .layout .el-form-item__content { min-width: 0; }
-  .el-overlay .el-dialog { max-width: calc(100vw - 40px) !important; margin-top: max(20px, env(safe-area-inset-top)); max-height: calc(100dvh - 40px); overflow-y: auto; }
-  .el-overlay .el-dialog__body { min-width: 0; overflow-wrap: anywhere; }
-  .el-overlay .el-dialog__footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-  .el-overlay .el-dialog__footer .el-button { min-height: 44px; margin: 0; }
-  .el-overlay .el-message-box { max-width: calc(100vw - 40px); }
-  .el-select-dropdown__item { min-height: 42px; line-height: 42px; }
-  .el-dropdown-menu__item { min-height: 44px; }
-  .tablet-navigation-drawer .el-drawer__header { margin-bottom: 16px; }
-  .tablet-navigation-drawer { height: 100dvh !important; }
+  html[data-tablet-landscape] #app .layout { min-width: 0; width: 100%; height: 100dvh; }
+  html[data-tablet-landscape] #app .layout > .main-container { min-width: 0; }
+  html[data-tablet-landscape] #app .layout .sidebar { display: none; }
+  html[data-tablet-landscape] #app .layout .workspace { min-width: 0; width: 100%; }
+  html[data-tablet-landscape] #app .layout .content-area { min-width: 0; padding: 10px 14px 14px; overscroll-behavior: contain; }
+  html[data-tablet-landscape] #app .layout .workspace-shell-content { padding: 0 0 12px; }
+  html[data-tablet-landscape] #app .layout .workspace-shell-header,
+  html[data-tablet-landscape] #app .layout .top-header { min-height: 52px; height: auto; padding: 4px 14px; gap: 14px; flex-wrap: wrap; }
+  html[data-tablet-landscape] #app .layout .workspace-shell-actions,
+  html[data-tablet-landscape] #app .layout .header-right { min-width: 0; flex-wrap: wrap; gap: 12px; }
+  html[data-tablet-landscape] #app .layout .top-header .tablet-navigation { min-height: 44px; padding: 0; border: 0; }
+  html[data-tablet-landscape] #app .layout .top-header .page-title { display: none; }
+  html[data-tablet-landscape] #app .layout .product-brand { width: 150px; height: 48px; }
+  html[data-tablet-landscape] #app .layout .header-action,
+  html[data-tablet-landscape] #app .layout .notification-action { min-height: 44px; padding-inline: 8px; }
+  html[data-tablet-landscape] #app .layout .admin-content-frame { min-width: 0; max-width: 100%; }
+  html[data-tablet-landscape] #app .layout .page-header { flex-wrap: wrap; gap: 12px; }
+  html[data-tablet-landscape] #app .layout .page-header h2 { font-size: 22px; }
+  html[data-tablet-landscape] #app .layout .el-button:not(.is-text):not(.is-link),
+  html[data-tablet-landscape] #app .layout .el-input__wrapper,
+  html[data-tablet-landscape] #app .layout .el-select__wrapper,
+  html[data-tablet-landscape] #app .layout .el-input-number { min-height: 44px; }
+  html[data-tablet-landscape] #app .layout .el-button.is-link { min-height: 40px; padding: 6px 8px; }
+  html[data-tablet-landscape] #app .layout .el-table { width: 100%; max-width: 100%; }
+  html[data-tablet-landscape] #app .layout .el-table__body-wrapper { overscroll-behavior-x: contain; }
+  html[data-tablet-landscape] #app .layout .el-table th.el-table__cell { height: 48px; }
+  html[data-tablet-landscape] #app .layout .el-table td.el-table__cell { height: 52px; }
+  html[data-tablet-landscape] #app .layout .el-pagination { flex-wrap: wrap; gap: 8px; }
+  html[data-tablet-landscape] #app .layout .el-tabs__item { min-height: 46px; }
+  html[data-tablet-landscape] #app .layout .el-form--inline { display: flex; flex-wrap: wrap; gap: 10px; }
+  html[data-tablet-landscape] #app .layout .el-form--inline .el-form-item { min-width: 0; max-width: 100%; margin: 0; }
+  html[data-tablet-landscape] #app .layout .el-form-item__content { min-width: 0; }
+  html[data-tablet-landscape] .el-overlay .el-dialog { max-width: calc(100vw - 40px) !important; margin-top: max(20px, env(safe-area-inset-top)); max-height: calc(100dvh - 40px); overflow-y: auto; }
+  html[data-tablet-landscape] .el-overlay .el-dialog__body { min-width: 0; overflow-wrap: anywhere; }
+  html[data-tablet-landscape] .el-overlay .el-dialog__footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+  html[data-tablet-landscape] .el-overlay .el-dialog__footer .el-button { min-height: 44px; margin: 0; }
+  html[data-tablet-landscape] .el-overlay .el-message-box { max-width: calc(100vw - 40px); }
+  html[data-tablet-landscape] .el-select-dropdown__item { min-height: 42px; line-height: 42px; }
+  html[data-tablet-landscape] .el-dropdown-menu__item { min-height: 44px; }
+  html[data-tablet-landscape] .tablet-navigation-drawer .el-drawer__header { margin-bottom: 16px; }
+  html[data-tablet-landscape] .tablet-navigation-drawer { height: 100dvh !important; }
 
-  #app .tournament-space .space-hero { height: 252px; padding: 36px 32px; }
-  #app .tournament-space .hero-copy h1 { font-size: 34px; }
-  #app .tournament-space .hero-copy p { font-size: 17px; }
-  #app .tournament-space .space-heading { left: 32px; bottom: 44px; }
-  #app .tournament-space .tournament-grid { width: calc(100% - 48px); grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
-  #app .tournament-console .console-head { flex-wrap: wrap; gap: 14px; padding: 18px; }
-  #app .tournament-console .head-copy { min-width: 0; }
-  #app .tournament-console .head-copy h1 { overflow-wrap: anywhere; }
-  #app .tournament-console .head-meta { flex-wrap: wrap; }
-  #app .tournament-console .console-main { grid-template-columns: minmax(0, 1fr) 304px; gap: 16px; height: auto; min-height: 520px; }
-  #app .tournament-console .head-actions { flex-wrap: wrap; }
-  #app .tournament-console .suggest-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #app .schedule-v2 { min-width: 0; }
-  #app .schedule-v2 .event-context,
-  #app .schedule-v2 .toolbar,
-  #app .schedule-v2 .capacity-bar { flex-wrap: wrap; gap: 12px; }
-  #app .schedule-v2 .calendar-workspace { min-width: 0; }
-  #app .schedule-v2 .calendar-board { overflow-x: auto; overscroll-behavior-x: contain; }
-  #app .schedule-v2 .division-policy-table { max-width: 100%; overflow-x: auto; }
-  #app .match-detail .detail-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-  #app .match-detail .detail-actions .el-button { margin: 0; }
-  #app .match-detail .el-page-header__content { min-width: 0; flex-wrap: wrap; }
-  #app .match-detail .header-match-name { overflow-wrap: anywhere; }
-  #app .tournament-teams .teams-context-header,
-  #app .tournament-teams .teams-page-heading { flex-wrap: wrap; gap: 12px; }
-  #app .tournament-teams .teams-context-header {
-    position: static; top: auto; min-height: 68px; padding: 12px 18px;
+  html[data-tablet-landscape] #app .tournament-space .space-hero { height: 188px; padding: 24px 24px; }
+  html[data-tablet-landscape] #app .tournament-space .hero-copy h1 { font-size: 34px; }
+  html[data-tablet-landscape] #app .tournament-space .hero-copy p { font-size: 17px; }
+  html[data-tablet-landscape] #app .tournament-space .space-heading { left: 24px; bottom: 28px; }
+  html[data-tablet-landscape] #app .tournament-space .tournament-grid { width: calc(100% - 48px); grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  html[data-tablet-landscape] #app .tournament-console .console-head { flex-wrap: wrap; gap: 14px; padding: 18px; }
+  html[data-tablet-landscape] #app .tournament-console .head-copy { min-width: 0; }
+  html[data-tablet-landscape] #app .tournament-console .head-copy h1 { overflow-wrap: anywhere; }
+  html[data-tablet-landscape] #app .tournament-console .head-meta { flex-wrap: wrap; }
+  html[data-tablet-landscape] #app .tournament-console .console-main { grid-template-columns: minmax(0, 1fr) 304px; gap: 16px; height: auto; min-height: 0; }
+  html[data-tablet-landscape] #app .tournament-console .head-actions { flex-wrap: wrap; }
+  html[data-tablet-landscape] #app .tournament-console .suggest-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-tablet-landscape] #app .schedule-v2 { min-width: 0; }
+  html[data-tablet-landscape] #app .schedule-v2 .event-context,
+  html[data-tablet-landscape] #app .schedule-v2 .toolbar,
+  html[data-tablet-landscape] #app .schedule-v2 .capacity-bar { flex-wrap: wrap; gap: 12px; }
+  html[data-tablet-landscape] #app .schedule-v2 .calendar-workspace { min-width: 0; }
+  html[data-tablet-landscape] #app .schedule-v2 .calendar-board { overflow-x: auto; overscroll-behavior-x: contain; }
+  html[data-tablet-landscape] #app .schedule-v2 .division-policy-table { max-width: 100%; overflow-x: auto; }
+  html[data-tablet-landscape] #app .match-detail .detail-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  html[data-tablet-landscape] #app .match-detail .detail-actions .el-button { margin: 0; }
+  html[data-tablet-landscape] #app .match-detail .el-page-header__content { min-width: 0; flex-wrap: wrap; }
+  html[data-tablet-landscape] #app .match-detail .header-match-name { overflow-wrap: anywhere; }
+  html[data-tablet-landscape] #app .tournament-teams .teams-context-header,
+  html[data-tablet-landscape] #app .tournament-teams .teams-page-heading { flex-wrap: wrap; gap: 12px; }
+  html[data-tablet-landscape] #app .tournament-teams .teams-context-header {
+    position: static; top: auto; min-height: 56px; padding: 6px 14px;
     grid-template-columns: minmax(150px, 1fr) minmax(0, 1.5fr) auto;
   }
-  #app .tournament-teams .teams-tournament-context { min-width: 0; flex-wrap: wrap; gap: 8px; }
-  #app .tournament-teams .teams-tournament-context strong { max-width: 100%; }
-  #app .tournament-teams .teams-page-heading { flex-direction: row; align-items: center; justify-content: space-between; }
-  #app .tournament-teams .heading-actions { min-width: 0; }
-  #app .tournament-teams .division-toolbar { position: static; width: 100%; min-width: 0; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
-  #app .tournament-teams .division-tab-section { flex-basis: 100%; flex-wrap: wrap; }
-  #app .tournament-teams .division-rule-summary { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
-  #app .tournament-teams.registration-workspace .team-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  #app .tournament-teams.registration-workspace .teams-table-panel { overflow-x: auto; overscroll-behavior-x: contain; }
-  #app .tournament-teams.registration-workspace .teams-table-head,
-  #app .tournament-teams.registration-workspace .simple-application-row { min-width: 960px; }
-  #app .tournament-teams .teams-page-content { min-width: 0; padding: 20px; }
+  html[data-tablet-landscape] #app .tournament-teams .teams-tournament-context { min-width: 0; flex-wrap: wrap; gap: 8px; }
+  html[data-tablet-landscape] #app .tournament-teams .teams-tournament-context strong { max-width: 100%; }
+  html[data-tablet-landscape] #app .tournament-teams .teams-page-heading { flex-direction: row; align-items: center; justify-content: space-between; }
+  html[data-tablet-landscape] #app .tournament-teams .heading-actions { min-width: 0; }
+  html[data-tablet-landscape] #app .tournament-teams .division-toolbar { position: static; width: 100%; min-width: 0; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+  html[data-tablet-landscape] #app .tournament-teams .division-tab-section { flex-basis: 100%; flex-wrap: wrap; }
+  html[data-tablet-landscape] #app .tournament-teams .division-rule-summary { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+  html[data-tablet-landscape] #app .tournament-teams.registration-workspace .team-summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  html[data-tablet-landscape] #app .tournament-teams.registration-workspace .teams-table-panel { overflow-x: auto; overscroll-behavior-x: contain; }
+  html[data-tablet-landscape] #app .tournament-teams.registration-workspace .teams-table-head,
+  html[data-tablet-landscape] #app .tournament-teams.registration-workspace .simple-application-row { min-width: 960px; }
+  html[data-tablet-landscape] #app .tournament-teams .teams-page-content { min-width: 0; padding: 12px; }
+@media (max-width: 1100px) {
+  html[data-tablet-landscape] #app .tournament-console .console-main { grid-template-columns: minmax(0, 1fr); }
+  html[data-tablet-landscape] #app .tournament-teams .professional-application-filters,
+  html[data-tablet-landscape] #app .tournament-teams .simple-application-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  html[data-tablet-landscape] #app .tournament-teams.professional-application-view .division-toolbar { position: static; min-width: 0; }
 }
-@media (orientation: landscape) and (max-width: 1100px) {
-  #app .tournament-console .console-main { grid-template-columns: minmax(0, 1fr); }
-  #app .tournament-teams .professional-application-filters,
-  #app .tournament-teams .simple-application-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  #app .tournament-teams.professional-application-view .division-toolbar { position: static; min-width: 0; }
+
+/* Compact landscape workspace; long records retain their normal scroll. */
+html[data-tablet-landscape] #app .tablet-navigation { display:flex; min-height:48px; gap:10px; padding:2px 14px; }
+html[data-tablet-landscape] #app .tablet-menu-toggle { width:44px; height:44px; min-height:44px; padding:8px; }
+html[data-tablet-landscape] #app .tablet-menu-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+html[data-tablet-landscape] #app .layout { --admin-content-gutter-x:14px; }
+html[data-tablet-landscape] #app .division-management { max-width:none; padding-bottom:0; }
+html[data-tablet-landscape] #app .division-management .tournament-context { min-height:52px; padding:4px 14px; gap:10px; }
+html[data-tablet-landscape] #app .division-management .context-left { gap:8px; flex:1; }
+html[data-tablet-landscape] #app .division-management .context-left h1 { min-width:0; max-width:36vw; font-size:18px; }
+html[data-tablet-landscape] #app .division-management .header-meta { font-size:13px; }
+html[data-tablet-landscape] #app .division-management .page-heading { margin:10px 0; }
+html[data-tablet-landscape] #app .division-management .page-heading h2 { font-size:22px; }
+html[data-tablet-landscape] #app .division-management .summary-grid { padding:10px 0; }
+html[data-tablet-landscape] #app .division-management .summary-card { padding:0 16px; }
+html[data-tablet-landscape] #app .division-management .summary-card div { display:flex; align-items:baseline; }
+html[data-tablet-landscape] #app .division-management .summary-card strong { font-size:24px; }
+html[data-tablet-landscape] #app .division-management .division-table-wrap { margin-top:12px; }
+html[data-tablet-landscape] #app .division-management .division-table th { padding:8px 12px; }
+html[data-tablet-landscape] #app .division-management .division-table td { padding:10px 12px; }
+html[data-tablet-landscape] #app .division-management .division-name { font-size:18px; }
+html[data-tablet-landscape] #app .division-management .format-cell { gap:2px; }
+html[data-tablet-landscape] #app .division-management .operation-cell { gap:8px; }
+html[data-tablet-landscape] #app .division-management .operation-cell .el-button { min-width:44px; min-height:44px; }
+@media(max-width:1100px) {
+  html[data-tablet-landscape] #app .division-management .context-left { flex-wrap:wrap; gap:6px 8px; }
+  html[data-tablet-landscape] #app .division-management .header-meta { font-size:12px; }
+  html[data-tablet-landscape] #app .division-management .division-table td,html[data-tablet-landscape] #app .division-management .division-table th { padding-inline:8px; }
+  html[data-tablet-landscape] #app .division-management .operation-cell { flex-wrap:wrap; gap:0 6px; }
 }
