@@ -420,3 +420,8 @@ teamRegistrationDocx.js仅从受保护号码的连续可见前段读取生日/�
 ## 2026-10-28 Word工作人员缺失展示资料补齐
 
 registrationPhotoReuse.js在同一Word唯一同名且已知资料无冲突时，补缺失生日/性别/籍贯及保护展示前缀，照片单独按缺失状态复用。既有完整身份证、职务、号码、账号关系、审核/资格不复制或合并；后端仍接收空完整身份证+显式生日，保持待核验。不修改真实数据或历史快照。见../releases/registration-staff-details-20261028.md。
+
+
+## 2026-10-28 共享赛事报名源Word上传
+
+webLoginApi/uploadFile的staffUploadRights对football/team-registration-imports/{当前赛事}限定.docx初始化及临时读取，复用event.registration；分片会话继续绑定账号/机构/赛事，撤权拒绝。共享后端已上线，uploadFile按用户追加授权关闭云端自动安装，原依赖随包发布。见../releases/registration-upload-scope-20261028.md。
