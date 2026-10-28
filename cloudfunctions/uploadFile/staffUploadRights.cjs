@@ -26,6 +26,7 @@ async function read(db, name, id) {
 }
 async function folderRight(db, folder, tournamentId) {
   const path = text(folder).replace(/^\/+|\/+$/g, '')
+  if (/^football\/team-registration-imports\/[^/]+$/.test(path)) return path.split('/')[2] === tournamentId ? 'event.registration' : ''
   if (path === `tournament-news/${tournamentId}`) return 'event.news'
   if (path === `referee-avatars/${tournamentId}` || path === `referee-certificates/${tournamentId}`) return 'event.referees'
   if (/^(?:team-logos|player-photos)\/imports\/[^/]+$/.test(path)) return path.split('/')[2] === tournamentId ? 'event.registration' : ''
@@ -46,7 +47,12 @@ async function folderRight(db, folder, tournamentId) {
 }
 async function staffUploadRight(db, params, tournamentId, orgId, userId) {
   const action = text(params.action)
-  if (action === 'startChunk' || action === 'uploadBase64') return folderRight(db, params.folder, tournamentId)
+  if (action === 'startChunk' || action === 'uploadBase64') {
+    if (text(params.folder).startsWith('football/team-registration-imports/')) {
+      if(action !== 'startChunk' || !/^[a-zA-Z0-9._-]+\.docx$/i.test(text(params.fileName)))return ''
+    }
+    return folderRight(db, params.folder, tournamentId)
+  }
   if (['uploadChunk','finishChunk','abortChunk'].includes(action)) {
     const row = await read(db, 'chunk_sessions', text(params.uploadId))
     if (!row || text(row.staffTournamentId) !== tournamentId || text(row.staffOrgId) !== orgId || text(row.staffUserId) !== userId) return ''
@@ -57,6 +63,10 @@ async function staffUploadRight(db, params, tournamentId, orgId, userId) {
     const path = fileId.replace(/^cloud:\/\/[^/]+\//, '').split('?')[0]
     if (!fileId.startsWith('cloud://') || path === fileId) return ''
     if (/^idcard-photos\//.test(path)) return ''
+    if(path.startsWith('football/team-registration-imports/')){
+      const document=path.match(/^football\/team-registration-imports\/([^/]+)\/[^/]+\.docx$/i)
+      return document && document[1] === tournamentId ? 'event.registration' : ''
+    }
 
     // Staff uploads have a server-created audit link to exactly one event. Use
     // that link for root-level team/player images whose storage path has no ID.
