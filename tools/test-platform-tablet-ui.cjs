@@ -226,12 +226,96 @@ async function desktopLabels(browser) {
   const state = await inspect(page);
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('.platform-console .sidebar nav button span')).map(el => el.textContent.trim()).filter(Boolean).sort());
   await page.screenshot({ path: path.join(output, 'desktop-overview-1440.png') });
+  const titlebar = await verifyTitlebarSimulation(page);
+  await page.screenshot({ path: path.join(output, 'desktop-titlebar-sim-1440.png') });
+  Object.assign(titlebar, await resetTitlebarSimulation(page));
   await page.locator('.platform-console .sidebar nav button', { hasText: '主办方联系人' }).click();
   await page.locator('.platform-console .el-table').waitFor({ timeout: 20000 });
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(output, 'desktop-organizers-1440.png') });
   await context.close();
-  return { labels, state };
+  return { labels, state, titlebar };
+}
+
+/**
+ * 桌面应用窗口（Chrome/Edge 的 window-controls-overlay）无法在无头浏览器里真实打开，
+ * 这里把页面中带 display-mode: window-controls-overlay 的媒体规则取出、去掉外层条件后重新注入，
+ * 用同一份实际发布的声明验证：标题条出现、深色底白字、内容整体下移且不与标题条重叠。
+ */
+async function verifyTitlebarSimulation(page) {
+  return page.evaluate(() => {
+    const inner = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules = null;
+      try { rules = sheet.cssRules; } catch { continue; }
+      for (const rule of Array.from(rules || [])) {
+        const condition = rule.conditionText || (rule.media && rule.media.mediaText) || '';
+        if (rule.type === CSSRule.MEDIA_RULE && condition.includes('window-controls-overlay')) {
+          const text = rule.cssText || '';
+          inner.push(text.slice(text.indexOf('{') + 1, text.lastIndexOf('}')));
+        }
+      }
+    }
+    const style = document.createElement('style');
+    style.id = 'wco-simulation';
+    style.textContent = inner.join('\n');
+    document.head.appendChild(style);
+
+    const luminance = color => {
+      const channels = (color.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+      const [r, g, b] = channels.map(value => {
+        const c = value / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (front, back) => {
+      const a = luminance(front);
+      const b = luminance(back);
+      return Number((((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05))).toFixed(2));
+    };
+
+    const bar = document.querySelector('.platform-titlebar');
+    const barStyle = bar ? getComputedStyle(bar) : null;
+    const barRect = bar ? bar.getBoundingClientRect() : null;
+    const appRect = document.getElementById('app').getBoundingClientRect();
+    const topbar = document.querySelector('.platform-console .topbar');
+    const sidebar = document.querySelector('.platform-console .sidebar');
+    const name = document.querySelector('.platform-titlebar .titlebar-name');
+    const nameStyle = name ? getComputedStyle(name) : null;
+    const result = {
+      ruleCount: inner.length,
+      visible: Boolean(bar && barStyle.display !== 'none' && barRect.height > 0),
+      height: barRect ? Math.round(barRect.height) : 0,
+      top: barRect ? Math.round(barRect.top) : null,
+      background: barStyle ? (barStyle.backgroundColor === 'rgba(0, 0, 0, 0)' ? barStyle.backgroundImage : barStyle.backgroundColor) : '',
+      appPaddingTop: getComputedStyle(document.getElementById('app')).paddingTop,
+      pageTop: Math.round(appRect.top),
+      topbarTop: topbar ? Math.round(topbar.getBoundingClientRect().top) : null,
+      sidebarTop: sidebar ? Math.round(sidebar.getBoundingClientRect().top) : null,
+      nameColor: nameStyle ? nameStyle.color : '',
+      nameFontSize: nameStyle ? nameStyle.fontSize : '',
+      dragRegion: name ? (getComputedStyle(name.parentElement).getPropertyValue('-webkit-app-region') || getComputedStyle(name.parentElement).getPropertyValue('app-region')) : '',
+      overflow: document.documentElement.scrollWidth > innerWidth + 2,
+      docTitle: document.title
+    };
+    if (nameStyle) result.nameContrast = contrast(nameStyle.color, '#0c3b27');
+    return result;
+  });
+}
+
+/** 移除仿真样式，确认普通标签页不会残留自绘标题条。 */
+async function resetTitlebarSimulation(page) {
+  return page.evaluate(() => {
+    const style = document.getElementById('wco-simulation');
+    if (style) style.remove();
+    const bar = document.querySelector('.platform-titlebar');
+    const app = document.getElementById('app');
+    return {
+      hiddenAfterReset: !bar || getComputedStyle(bar).display === 'none',
+      paddingAfterReset: getComputedStyle(app).paddingTop
+    };
+  });
 }
 
 (async () => {
@@ -262,6 +346,20 @@ async function desktopLabels(browser) {
     if (desktop.state.menuVisible) failures.push('桌面 1440 出现了平板菜单按钮');
     if (desktop.state.statColumns !== 4) failures.push(`桌面 1440 统计卡不是 4 列：${desktop.state.statColumns}`);
     if (desktop.state.documentOverflow || desktop.state.contentOverflow) failures.push('桌面 1440 出现横向溢出');
+
+    const bar = desktop.titlebar || {};
+    if (!bar.ruleCount) failures.push('缺少桌面应用窗口标题条样式规则');
+    if (!bar.visible) failures.push('桌面应用窗口未显示自绘标题条');
+    if (!(bar.height >= 30 && bar.height <= 40)) failures.push(`自绘标题条高度异常：${bar.height}`);
+    if (!(bar.nameContrast >= 4.5)) failures.push(`标题条文字对比度不足：${bar.nameContrast}`);
+    if (bar.top !== 0) failures.push(`标题条未贴顶：top=${bar.top}`);
+    if (bar.topbarTop === null || bar.topbarTop < bar.height) failures.push(`标题条遮挡页面内容：topbarTop=${bar.topbarTop} height=${bar.height}`);
+    if (bar.sidebarTop === null || bar.sidebarTop < bar.height) failures.push(`标题条遮挡侧栏：sidebarTop=${bar.sidebarTop}`);
+    if (!bar.dragRegion || bar.dragRegion === 'none') failures.push('标题条未声明可拖动区域');
+    if (bar.overflow) failures.push('标题条模式下出现横向溢出');
+    if (!bar.hiddenAfterReset) failures.push('普通标签页未隐藏自绘标题条');
+    if (!/^0px$/.test(String(bar.paddingAfterReset || ''))) failures.push(`普通标签页残留标题条占位：${bar.paddingAfterReset}`);
+    if (bar.docTitle && bar.docTitle.split('赛小蜂足球 · 平台运营中心').length > 2) notes.push(`应用窗口标题重复：${bar.docTitle}`);
 
     for (const device of tabletDevices) {
       const context = await newTabletContext(browser, device);
@@ -356,6 +454,7 @@ async function desktopLabels(browser) {
       status: failures.length ? 'failed' : 'passed',
       target: '平台运营中心：电脑 1440 与平板 1180/1024 横屏、820/768 竖屏',
       desktop: desktop && desktop.state,
+      desktopTitlebar: desktop && desktop.titlebar,
       drawerParity,
       results,
       notes,

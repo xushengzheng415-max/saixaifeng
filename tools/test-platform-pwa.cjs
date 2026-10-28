@@ -97,9 +97,11 @@ function check(condition, message) {
       const response = await fetch('/manifest.webmanifest');
       return { ok: response.ok, type: response.headers.get('content-type') || '', json: await response.json() };
     });
-    report.manifest = { ok: manifest.ok, type: manifest.type, name: manifest.json.name, short: manifest.json.short_name, start: manifest.json.start_url, display: manifest.json.display, icons: manifest.json.icons?.map(icon => `${icon.sizes} ${icon.purpose || 'any'}`) };
+    report.manifest = { ok: manifest.ok, type: manifest.type, name: manifest.json.name, short: manifest.json.short_name, start: manifest.json.start_url, display: manifest.json.display, displayOverride: manifest.json.display_override, icons: manifest.json.icons?.map(icon => `${icon.sizes} ${icon.purpose || 'any'}`) };
     check(manifest.ok, 'manifest 无法访问');
     check(manifest.json.display === 'standalone', 'manifest display 不是 standalone');
+    check(Array.isArray(manifest.json.display_override) && manifest.json.display_override[0] === 'window-controls-overlay', 'manifest display_override 首位不是 window-controls-overlay');
+    check((manifest.json.display_override || []).includes('standalone'), 'manifest display_override 缺少 standalone 回退');
     check(String(manifest.json.start_url).includes('tournament-center-admin'), 'manifest 启动页不是平台运营中心');
     check((manifest.json.icons || []).length >= 3, 'manifest 图标数量不足');
 

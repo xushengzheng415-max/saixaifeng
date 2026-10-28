@@ -370,3 +370,28 @@
   border-radius: 0;
   color: #4f6357;
 }
+
+/*
+ * 安装成桌面应用后（Chrome/Edge 105+），浏览器把窗口标题条区域交给页面绘制
+ * （display-mode: window-controls-overlay）。由 PlatformTitlebar.vue 画深绿标题条，
+ * 这里把各页面主容器下移同一高度，避免内容被标题条遮住。
+ * 普通浏览器标签页不匹配该媒体查询，以下规则全部不生效。
+ */
+@media (display-mode: window-controls-overlay) {
+  /* 直接用 env() 并带 33px 兜底：环境不支持 titlebar-area-height 时也能保持同一高度，
+     不经过自定义属性，避免在缺少 env 支持时整条高度失效。 */
+  #app {
+    padding-top: env(titlebar-area-height, 33px);
+  }
+
+  #app .platform-console,
+  #app .platform-console > main,
+  #app .platform-login,
+  #app .permission-loading {
+    min-height: calc(100vh - env(titlebar-area-height, 33px));
+  }
+
+  #app .platform-console .sidebar {
+    top: env(titlebar-area-height, 33px);
+  }
+}

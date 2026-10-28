@@ -8,6 +8,7 @@ import './assets/portal.css'
 import './assets/platform-tablet.css'
 import {activatePlatformContext,getPlatformAuthToken} from './utils/platformSession'
 import {registerPlatformServiceWorker} from './utils/serviceWorker'
+import PlatformTitlebar from './components/PlatformTitlebar.vue'
 const router=createRouter({history:createWebHashHistory(),routes:[
   {path:'/platform-login',component:()=>import('./views/login/PlatformLoginView.vue')},
   {path:'/tournament-center-admin',component:()=>import('./views/tournament-center/TournamentCenterAdmin.vue'),meta:{platform:true}},
@@ -16,5 +17,5 @@ const router=createRouter({history:createWebHashHistory(),routes:[
   {path:'/:pathMatch(.*)*',redirect:'/tournament-center-admin'}
 ]})
 router.beforeEach(to=>{activatePlatformContext();return to.meta.platform&&!getPlatformAuthToken()?'/platform-login':true})
-createApp({render:()=>h(RouterView)}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app')
+createApp({render:()=>h('div',{class:'platform-app-frame'},[h(PlatformTitlebar),h(RouterView)])}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app')
 registerPlatformServiceWorker()
