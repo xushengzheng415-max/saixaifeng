@@ -42,11 +42,12 @@
       <template v-else-if="step===2">
         <div class="variant-tools"><el-radio-group :model-value="variant" @update:model-value="switchVariant"><el-radio-button v-for="key in variantKeys" :key="key" :value="key">{{ tierLabel(key) }}</el-radio-button></el-radio-group><el-button v-if="project.kind==='progression'" :disabled="busy" @click="copyCurrentLayout">同步排版</el-button></div>
         <PlayerCardTemplateLibrary ref="editor" embedded :template-id="project.members[variant].id" />
+        <p class="studio-note">左侧「排版预览」是同屏实时编辑效果（含尚未保存的改动）；下方「预览整套」和最终成卡按已保存草稿由服务端统一生成。改完排版请先「保存当前卡」，再点「预览整套」比对。</p>
         <div class="studio-actions"><el-button @click="backMaterials">上一步</el-button><el-button :loading="busy" @click="saveLayout">保存当前卡</el-button><el-button type="primary" :loading="busy" @click="prepareReview">预览{{ project.kind==='progression'?'整套':'卡片' }}</el-button></div>
       </template>
       <template v-else-if="step===3">
         <div class="review-styles"><figure v-for="card in previews" :key="card.key"><img :src="card.imageUrl" :alt="tierLabel(card.key)" @load="readyPreviews.add(card.key)" @error="readyPreviews.delete(card.key)"><figcaption>{{ tierLabel(card.key) }}</figcaption></figure></div>
-        <p>{{ project.kind==='progression'?'确认后，铜银金三档将统一发布。':'确认后，此样式可按选定名单发放。' }}</p>
+        <p>{{ project.kind==='progression'?'确认后，铜银金三档将统一发布。':'确认后，此样式可按选定名单发放。' }} 以上成卡按最近一次保存的排版生成；如果刚改过排版，请返回上一步重新点「预览整套」，否则看到的仍是旧版效果。</p>
         <div class="studio-actions"><el-button @click="step=2">返回修改</el-button><el-button type="primary" :loading="busy" :disabled="readyPreviews.size!==variantKeys.length || !project.hasDraft" @click="publish">确认发布</el-button></div>
       </template>
       <template v-else-if="step===4"><el-alert title="样式已发布" type="success" :closable="false" /><div class="studio-actions"><el-button @click="project=null;changePane('library')">查看样式库</el-button><el-button v-if="canIssue(project)" type="primary" @click="openIssue(project)">选择名单发放</el-button></div></template>
@@ -169,6 +170,7 @@ onBeforeUnmount(()=>{clearMaterialFiles();window.removeEventListener('beforeunlo
 :global(.recipient-dialog .el-dialog__body){max-height:68vh;overflow:auto}.recipient-pane .el-empty{padding:24px 0}
 .recipient-scope{margin:8px 0;color:#606266;font-size:13px}
 .base-card-tip{margin:6px 0 0;color:#909399;font-size:12px}
+.studio-note{margin:8px 0 0;color:#7c8880;font-size:12px}
 .recipient-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0}.recipient-transfer{display:grid;grid-template-columns:minmax(0,1fr) 100px minmax(0,1fr);gap:12px}.recipient-pane{border:1px solid #dce5df;padding:12px;min-width:0}.recipient-pane h3{display:flex;align-items:center;gap:8px;font-size:15px;margin:0 0 12px}.recipient-pane h3 small{font-weight:400;color:#617267}.recipient-pane h3 .el-button{margin-left:auto}.recipient-tree{height:356px;overflow:auto;margin-top:12px}.recipient-tree :deep(.el-tree-node__content){height:38px;min-width:max-content}.recipient-node{display:flex;align-items:center;gap:8px;padding-right:8px;font-size:13px}.recipient-node small{font-size:12px;color:#94621a}.recipient-node>span{max-width:235px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recipient-move{display:flex;flex-direction:column;justify-content:center;gap:12px}.recipient-move .el-button{margin-left:0}@media(max-width:760px){.recipient-transfer{grid-template-columns:1fr}.recipient-move{flex-direction:row}.recipient-toolbar{flex-wrap:wrap}.recipient-tree{height:300px}}
 
 .material-preview .el-image{width:100%;height:150px}.mask-thumbnail{display:inline-block;width:42px;height:60px;object-fit:contain;vertical-align:middle}.material-grid small.pending{color:#94621a}
