@@ -173,6 +173,15 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     const urls = await urlsFor(visible, publicOnly)
     return { success: true, templates: visible.map(row => itemOf(row, urls, publicOnly)), nextCursor: page.length === PAGE_SIZE ? String(page[page.length - 1]._id) : '' }
   }
+  async function assetData(fileId) {
+    if (!fileId) return ''
+    try {
+      const result = await cloud.downloadFile({ fileID: fileId })
+      const buffer = result && result.fileContent
+      if (!buffer || buffer.length > 2 * 1024 * 1024) return ''
+      return 'data:image/png;base64,' + Buffer.from(buffer).toString('base64')
+    } catch (error) { return '' }
+  }
   async function get(event) {
     const id = String(event.templateId || '')
     if (!/^[a-f0-9]{32}$/.test(id)) return { success: false, code: 'CARD_TEMPLATE_ID_INVALID', error: '模板编号无效' }
@@ -180,6 +189,12 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     if (!record) return { success: false, code: 'CARD_TEMPLATE_NOT_FOUND', error: '模板不存在' }
     const urls = await urlsFor([record], false)
     const template = itemOf(record, urls, false)
+    // 编辑器预览需要像素级合成；跨域临时链接在部分网络下无法被 fetch 读取，
+    // 这里按需把草稿素材转成 data URL，预览不再依赖存储域名 CORS。
+    if (event.withData === true) {
+      template.backgroundData = await assetData(template.backgroundFileId)
+      template.maskData = await assetData(template.maskFileId)
+    }
     return { success: true, template }
   }
   async function preloadPlayer(event) {
