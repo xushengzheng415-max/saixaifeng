@@ -84,3 +84,13 @@
 - 建议验收顺序：进弹层 → 选姿势（正面/半侧/低位抱膀）→ 看转圈与三段阶段文案 → 生成成功删除顶部示例、只留 9:16 竖版成片、两个按钮在图片下方 → 「使用这张形象照」提示"本次已扣 100 滴" → 故意断网/失败一次，确认红字里带"已退回 100 滴，当前余额…" → 再换一次姿势，确认弹出"已扣蜂蜜不会退回"并重新扣费生成。
 - 通过后再切正式链路：把 `aiV2` 默认打开（`join-player.html` 置 `window.SXF_AI_SHEET_V2=true` 或去掉开关）并 bump 版本号，同时更新 `docs/CURRENT_STATUS.md`。
 - 未做：出图比例仍为 3:4；未改价格、模型目录、扣费单价与蜂蜜规则；未改小程序与 PC 后台；工作区其他会话的改动未纳入本次发布。
+
+## 2026-10-29 正式链路切换（`join-player.html` 打开 aiV2）
+
+- 依据用户当次指令「切」：正式登记页 `join-player.html` 置 `window.SXF_AI_SHEET_V2=true`；此后正式登记与测试页使用同一套改版弹层（先扣费后生成、生成中转圈、生成后收起顶部示例、9:16 竖版成片、两个按钮在图片下方、三种抱膀姿势）。
+- 发布方式：`tcb hosting deploy <本地 join-player.html> service-account-h5/join-player.html`，只上传这 1 个文件，未重传 `service-entry.js` / `service-entry.css` / `registration-card-modal.js`。
+- 线上回读（`Cache-Control: no-cache`）：`join-player.html` 906 B / `AC241563…`，与本地逐字节一致，含 `window.SXF_AI_SHEET_V2=true`。
+- 线上依赖回读：`service-entry.js` 93,247 B / `F2E6A09A…`（含 `SXF_AI_SHEET_V2 === true` 门控、`ai-poses-row`、`ai-portrait-frame`）、`service-entry.css` 17,527 B / `DEEE74C9…`、`registration-card-modal.js` 13,486 B / `1E9CDD69…`、`dynamic-card-renderer.js` 9,818 B / `04E1EE7A…`，均 200 且与本地一致。
+- 缓存：正式页 js/css 引用 `?v=20261029-donepage1`（并行会话的完成页工作置入），该参数此前未在正式页出现过，无旧缓存命中；服务端按同一路径返回的即是上述已验证版本。
+- 测试端：`registration-ai-test.html` 仍为 `?v=20261029-ai-sheet7` 且 `SXF_AI_SHEET_V2=true`，与正式页共用同一套线上资源，本次无需再同步。
+- 未做：未改价格、扣费单价与蜂蜜规则；未改小程序与 PC 后台；并行会话本地未发布的 `service-entry.js`（完成页改造，93,173 B）与 `service-entry.css`（18,218 B）未进入本次发布。
