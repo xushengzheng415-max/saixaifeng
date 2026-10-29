@@ -80,6 +80,7 @@ function check(condition, message) {
     await page.waitForTimeout(800);
 
     const head = await page.evaluate(() => ({
+      title: document.title,
       manifest: document.querySelector('link[rel=manifest]')?.getAttribute('href') || '',
       themeColor: document.querySelector('meta[name=theme-color]')?.getAttribute('content') || '',
       colorScheme: document.querySelector('meta[name=color-scheme]')?.getAttribute('content') || '',
@@ -103,6 +104,23 @@ function check(condition, message) {
     check(head.appleCapable === 'yes', '未声明 iOS 可安装');
     check(head.appleIcon === '/apple-touch-icon.png', '缺少 apple-touch-icon');
     check(head.viewport.includes('viewport-fit=cover'), 'viewport 未适配刘海屏');
+
+    // 安装版窗口标题 = 应用名称 + ' - ' + 页面标题；页面标题里再写品牌就会出现
+    // “赛小蜂足球 · 平台运营中心 - 赛小蜂足球 - 平台运营中心”。这里锁定标题规则：
+    // 安装版只写页面名，浏览器标签页补品牌，且窗口标题里品牌只能出现一次。
+    const titleRule = await import(pathToFileURL(path.join(projectRoot, 'src/utils/appTitle.js')).href);
+    const titleRows = ['/platform-login', '/tournament-center-admin', '/system'].map(route => {
+      const page = titleRule.pageTitleFor(route);
+      return { route, page, appWindow: titleRule.composePageTitle(page, true), tab: titleRule.composePageTitle(page, false) };
+    });
+    report.titles = { appName: titleRule.APP_NAME, page: head.title, rows: titleRows };
+    check(head.title === titleRows[1].tab, `浏览器标签页标题应为“${titleRows[1].tab}”，当前 ${head.title}`);
+    check(!head.title.includes(titleRule.APP_NAME), `页面标题重复应用名，安装版窗口会重复显示：${head.title}`);
+    for (const row of titleRows) {
+      const windowTitle = `${titleRule.APP_NAME} - ${row.appWindow}`;
+      check(windowTitle.split(titleRule.BRAND_NAME).length - 1 === 1, `安装版窗口标题重复品牌：${windowTitle}`);
+      check(!row.appWindow.includes(titleRule.BRAND_NAME), `安装版页面标题不应再写品牌：${row.appWindow}`);
+    }
 
     const manifest = await page.evaluate(async () => {
       const response = await fetch('/manifest.webmanifest');

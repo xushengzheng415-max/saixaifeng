@@ -3,12 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>赛小蜂足球 · 平台运营中心</title>
+<title>运营控制台</title>
 <meta name="description" content="赛小蜂足球平台运营中心：主办方、账号、赛事、数据中心与内容运营统一入口。">
 <link rel="manifest" href="/manifest.webmanifest">
 <!-- 浅色主题色 + 固定浅色配色：浏览器按主题色计算窗口标题文字颜色，深色主题色会得到白字，
      而 Windows 11 / 部分浏览器把标题区画成浅色，导致“浅底白字”看不清。浅色主题色让浏览器
-     选深色标题文字；若应用以 window-controls-overlay 模式运行，标题区改由页面自绘深绿条。 -->
+     选深色标题文字；若应用以 window-controls-overlay 模式运行，标题区改由页面自绘浅绿条。
+     页面标题只写页面名（如“运营控制台”）：安装版窗口会拼成“应用名 - 页面标题”，
+     这里再写品牌就会重复；标题规则统一在 src/utils/appTitle.js。 -->
 <meta name="theme-color" content="#E9F1EC">
 <meta name="color-scheme" content="light">
 <meta name="mobile-web-app-capable" content="yes">

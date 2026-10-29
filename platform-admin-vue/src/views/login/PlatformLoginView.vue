@@ -94,7 +94,8 @@ async function submitLogin() {
   }
 }
 function goHome() { window.location.href = 'https://www.sxffootball.cn/' }
-onMounted(() => { document.title = '赛小蜂足球平台管理员登录'; sessionStorage.removeItem('sxfPostLoginRedirect') })
+// 窗口标题统一由 src/utils/appTitle.js + 路由守卫设置，这里不再单独写 document.title。
+onMounted(() => { sessionStorage.removeItem('sxfPostLoginRedirect') })
 </script>
 
 <style scoped>

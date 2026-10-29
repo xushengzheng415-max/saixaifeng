@@ -367,7 +367,7 @@ async function resetTitlebarSimulation(page) {
     if (bar.overflow) failures.push('标题条模式下出现横向溢出');
     if (!bar.hiddenAfterReset) failures.push('普通标签页未隐藏自绘标题条');
     if (!/^0px$/.test(String(bar.paddingAfterReset || ''))) failures.push(`普通标签页残留标题条占位：${bar.paddingAfterReset}`);
-    if (bar.docTitle && bar.docTitle.split('赛小蜂足球 · 平台运营中心').length > 2) notes.push(`应用窗口标题重复：${bar.docTitle}`);
+    if (bar.docTitle && bar.docTitle.includes('赛小蜂足球 · 平台运营中心')) failures.push(`页面标题重复应用名（安装版窗口会重复显示）：${bar.docTitle}`);
 
     for (const device of tabletDevices) {
       const context = await newTabletContext(browser, device);
@@ -465,6 +465,7 @@ async function resetTitlebarSimulation(page) {
     if (loginTitlebar.formTop === null || loginTitlebar.formTop < loginTitlebar.height) failures.push(`标题条遮挡登录表单：formTop=${loginTitlebar.formTop}`);
     if (loginTitlebar.overflow) failures.push('登录页标题条模式下出现横向溢出');
     if (!loginTitlebar.hiddenAfterReset) failures.push('登录页普通标签页未隐藏自绘标题条');
+    if (loginTitlebar.docTitle && loginTitlebar.docTitle.includes('赛小蜂足球 · 平台运营中心')) failures.push(`登录页标题重复应用名（安装版窗口会重复显示）：${loginTitlebar.docTitle}`);
     await loginContext.close();
 
     const report = {

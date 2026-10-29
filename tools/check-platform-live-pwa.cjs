@@ -83,6 +83,24 @@ const site = 'https://pingtai.sxffootball.cn';
   });
 
   const cdp = await context.newCDPSession(page);
+  // 浏览器是否真的解析了 manifest：MIME 不对（例如 application/octet-stream）时会直接忽略，
+  // display_override 也就永远不生效，桌面应用窗口只能退回浏览器自绘的浅底白字标题条。
+  try {
+    const appManifest = await cdp.send('Page.getAppManifest');
+    let parsed = null;
+    try { parsed = JSON.parse(appManifest.data || ''); } catch { parsed = null; }
+    report.appManifest = {
+      url: appManifest.url || '',
+      name: parsed?.name || '',
+      shortName: parsed?.short_name || '',
+      errors: (appManifest.errors || []).map(item => item.message || item.critical || String(item)),
+      manifestErrors: (appManifest.manifestErrors || []).map(item => item.message || String(item)),
+      displayOverride: parsed?.display_override || null,
+      themeColor: parsed?.theme_color || ''
+    };
+  } catch (error) {
+    report.appManifest = { error: error.message };
+  }
   try {
     report.installability = await cdp.send('Page.getInstallabilityErrors');
   } catch (error) {
@@ -176,6 +194,17 @@ const site = 'https://pingtai.sxffootball.cn';
   if (!Array.isArray(report.manifest.displayOverride) || report.manifest.displayOverride[0] !== 'window-controls-overlay') failures.push('线上 manifest 未首选 window-controls-overlay（桌面应用窗口标题条会回到浅底白字）');
   if (report.head.theme !== '#E9F1EC') failures.push(`线上主题色不是浅色 #E9F1EC（当前 ${report.head.theme}），浏览器会把窗口标题画成白字`);
   if (report.head.colorScheme !== 'light') failures.push('线上未固定 color-scheme: light，深色系统下窗口标题文字可能看不清');
+  const appManifest = report.appManifest || {};
+  if (appManifest.error) failures.push(`浏览器未取到 manifest：${appManifest.error}`);
+  if ((appManifest.errors || []).length) failures.push(`manifest 解析告警：${appManifest.errors.join('；')}`);
+  if (appManifest.manifestErrors?.length) failures.push(`manifest 字段错误：${appManifest.manifestErrors.join('；')}`);
+  if (!Array.isArray(appManifest.displayOverride) || appManifest.displayOverride[0] !== 'window-controls-overlay') failures.push('浏览器未把 manifest 解析成 display_override 首选 window-controls-overlay');
+  if (String(appManifest.themeColor).toUpperCase() !== '#E9F1EC') failures.push(`浏览器解析到的主题色不是 #E9F1EC（${appManifest.themeColor}）`);
+  // 安装版窗口标题 = 应用名称 + ' - ' + 页面标题；页面标题里再写品牌就会出现
+  // “赛小蜂足球 · 平台运营中心 - 赛小蜂足球 - 平台运营中心”。线上必须保持无重复。
+  const liveAppName = String(appManifest.name || '赛小蜂足球 · 平台运营中心');
+  if (String(report.head.title).includes(liveAppName)) failures.push(`线上页面标题重复应用名，安装版窗口会重复显示：${report.head.title}`);
+  if (!String(report.head.title).includes('赛小蜂足球')) failures.push(`线上页面标题缺少品牌：${report.head.title}`);
   if (!report.titlebar?.present) failures.push('线上页面缺少自绘标题条节点');
   if (!report.titlebar?.wcoChunks?.length) failures.push('线上样式缺少 window-controls-overlay 标题条规则');
   if (!report.serviceWorker.registration) failures.push('Service Worker 未就绪');
@@ -206,7 +235,7 @@ const site = 'https://pingtai.sxffootball.cn';
   report.status = failures.length ? 'failed' : 'passed';
   report.failures = failures;
   fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify({ status: report.status, failures, installEntry: report.head.installEntry, manifest: report.manifest, titlebar: report.titlebar, serviceWorker: report.serviceWorker, updateCheck: report.updateCheck, installability: report.installability, android: report.android, androidPackage: report.androidPackage }, null, 2));
+  console.log(JSON.stringify({ status: report.status, failures, installEntry: report.head.installEntry, manifest: report.manifest, appManifest: report.appManifest, titlebar: report.titlebar, serviceWorker: report.serviceWorker, updateCheck: report.updateCheck, updateNotice: report.updateNotice, installability: report.installability, android: report.android, androidPackage: report.androidPackage }, null, 2));
   if (failures.length) process.exitCode = 1;
   await browser.close();
 })();
