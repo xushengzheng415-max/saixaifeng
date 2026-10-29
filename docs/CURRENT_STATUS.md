@@ -1,4 +1,60 @@
+2026-10-28 服务号球员登记「扫码关注」误判已修复并差量发布共享后端：线上 getMiniWorkspace 的 loadServiceEntryRegistration 曾把 service_entry_scans.expiresAt（扫码链接 30 分钟新鲜度）当成会话有效期一起判，而登记会话是 12 小时、webLoginApi.sessionFor 与 serviceRegistrationRecovery.scope 都只校验 subscribed，导致扫码超过半小时后恢复草稿、提交或点「立即生成 100 滴」一律报红字「请先扫描邀请二维码并关注服务号，再继续登记」。以线上包差量只去掉该过期判断、保留关注校验，23:25:00 $LATEST Active/Available，回下载 index.js SHA-256 775B73FA 与发布包一致，Nodejs18.15/512MB/150s/InstallDependency=TRUE 未变；线上实际调用返回 ENTRY_SESSION_INVALID 且日志行号对应新版。新增两条回归（扫码超 30 分钟仍在关注不阻断／未关注仍阻断），旧代码复用同用例 FAIL、修复后 22/22 通过。webLoginApi、aiPortraitDemo 与 5 个 H5 文件线上与本地同哈希，无需再发；本地 getMiniWorkspace 仍含其他会话未发布改动（线上包缺 eventValuations.cjs），本次未整包上传。另新增独立链路测试页 service-account-h5/registration-ai-test.html（5,585B / A28CACBA，线上回读一致，正式 join-player.html 未改），可省略 entry 自动复用本机登记会话，页面底部记录动作名/状态码/耗时/费用但不打印令牌。真实微信生成与扣费待用户现场验收。见 docs/releases/registration-entry-subscription-gate-20261028.md。
+
+2026-10-28 共享报名上传再次被拒的现场已复核：22:56请求仍是uploadFile.startChunk、rule=null；重新下载线上webLoginApi发现staffUploadRights已回到旧E34D935D版本，Word目录规则消失，非桌面重启问题。以此次最新线上包仅补staffUploadRights.cjs，23:06:09上线Active/Available；全包读回6612文件业务与依赖实现一致（仅隐藏锁license元数据差异），权限模块恢复D32FAA63，实际回下载包通过报名Word范围检查及裁判表完整性检查。新增check-registration-upload-backend-package并接入强制check-referee-backend-package，实测旧包拒绝、新包通过；防回退代码d73f3baa已进main与preview。未重建桌面包、未刷新用户未提交窗口，用户可当前窗口直接重试创建。见docs/releases/registration-upload-rollback-20261028.md。
+
+2026-10-28 共享赛事报名Word上传初始化被拒已修复并发布共享后端：CLS确认startChunk目录未登记导致rule=null；webLoginApi/uploadFile各差量staffUploadRights.cjs，当前赛事docx源文件目录复用event.registration，分片会话仍校验用户/机构/赛事，跨赛事与撤权拒绝。用户先授权两个后端发布，再明确授权uploadFile关闭云端自动安装并恢复原依赖。两个函数Active/Available，运行环境/内存/超时/环境变量保留；uploadFile6399文件与原包+权限补丁完全一致，webLoginApi6601文件只余隐藏锁license元数据差异，业务和运行依赖一致。回下载实际上传处理器的隔离初始化/分片/合并/清理/审计、越权拒绝及线上未登录拒绝通过。前端完整错误透传已发布PC预览，7项HTTP/SHA-256一致，正式PC未覆盖。见docs/releases/registration-upload-scope-20261028.md。
+
+2026-10-28 登记 AI 面板双图上传与充值引导已发布：只留上传头像、上传球服及立即生成（服务端费用，当前100滴），删除颜色/款式/拍照生成和初始充值套餐；余额不足才弹资金提示，未开通不显示假余额0，会员购买未开放明确禁用。三张用户素材替换卡通动画，WebP合计72KB、完整透明人物。选图不生图，2048px优先参考板直传并绑定登记会话；服务端不足不签发、不上传、不调用模型。两个后端差量代码及9个静态文件已发布，11代码摘要与9静态HTTP/摘要一致，5个手机浏览器隔离场景和既有透明保存/票据回归通过。登记入口 registration-resume.html?v=20261028-ai-sheet3；预览不扣、确认使用扣费。记录见 docs/releases/registration-ai-sheet-20261028.md。
+
 2026-10-28 球员卡编辑器字体、描边与铜色渐变已正式发布：新增四款中文字体和三款号码字体，平台版本20261028131644-5e701f42的45文件HTTP/SHA-256通过；webLoginApi/getMiniWorkspace/playerCardPublishWorker差量更新并保持运行配置，新字体卡为旧客户端按需返回完整PNG，高清导出保留。H5共享绘制正式与登记测试路径均已同步；未激活模板、未发卡、未上传含其他任务改动的小程序包。见docs/releases/player-card-fonts-stroke-20261028.md。
+
+2026-10-28 工作人员资料复用缺口已修正并发布PC预览：同一Word中唯一同名且已知资料不冲突时，除照片外补齐缺失生日、性别、籍贯及受保护的证件展示前缀；已有照片/有效资料优先，完整身份证、号码、角色与审核资格不按姓名复制或合并。以用户当前原始报名表只读解析核对，30名球员与1名已填姓名领队，领队照片/生日/籍贯均已识别补齐，空白主教练继续占位。原文件未修改、未上传或创建业务数据。功能8299cbbe、预览源码ba3e48f4；照片/保护号码/兼任/报名模板回归通过，2955模块/32.64秒构建通过，7项线上HTTP/SHA-256一致，正式/admin/未覆盖。桌面运行窗口已核对为v0.2.3测试版；须退出重开并重选Word获取新解析结果，未操作用户未提交窗口。见docs/releases/registration-staff-details-20261028.md。
+
+2026-10-28 用户明确授权后，注册端透明 PNG 直入库已差量发布：aiPortraitDemo、webLoginApi 与 service-entry.js/join-player.html/claim-team.html 已更新；14 个代码/依赖声明文件、8 项关键依赖及 3 个 H5 文件回读一致。7 项无副作用线上探针通过；保存锁用实际 SDK 序列化器回归后改为原子 set，确认使用不再 JPEG 重编码或重复抠图。测试入口 registration-resume.html?v=20261028-transparent-reg1，微信打开，需可恢复的球队邀请记录；预览不扣蜂蜜，确认仍按原规则扣费。无对应独立注册测试目录（3 项 404），共用正式后端；不创建新环境。真实微信生成/制卡仍待用户验收，未代用户操作账号、业务数据或钱包。完整证据见 docs/releases/registration-transparent-portrait-20261028.md。
+
+以下保留同日发布前的候选记录。
+
+2026-10-28 Word报名表工作人员照片复用与缺图占位框已发布PC预览：同一表内工作人员无照片时，按唯一同名球员且无身份证/可见前缀/生日/性别冲突复用照片；保留已有工作人员照片，仅复制照片字段，不复制身份、角色、号码或参赛资格。缺图显示矩形人像占位框且仍可上传，不生成占位图片文件；同一File的分割/上传结果复用。功能1d5a6a26、预览源码74bd50f7；实际Word跨栏照片复用、3岗位、同名歧义/资料冲突、原照片保护、受保护号码与兼任回归通过；实际PersonPhotoUpload组件截图已查看。2955模块/1m26s构建通过，预览入口及关键资源7项HTTP/SHA-256一致，正式/admin/未改；无后端或其他端发布。见docs/releases/registration-staff-photo-20261028.md。
+
+2026-10-28 Word报名表已兼容身份证号保护：前14—17位数字或带遮蔽尾部的号码，只提取实际可见的生日和地区；缺失性别/尾号不推算，不将前缀当完整身份证、摘要或去重键。前缀只用于导入预览，提交沿用现有无完整身份证+出生日期的待补全流程；不自动取得参赛资格。功能ab7a937c、预览源码64b7fdf4，保护号码/错误日期/同前缀多人/工作人员兼球员/报名模板回归通过，PC构建2954模块/2m56s通过并发布测试路径，7项HTTP200且SHA-256一致；正式/admin/未改。线上tournamentRegistrationFlow只读回下载核对importPersonFields.cjs与本地SHA-256一致，draft/not_verified分流存在，无需后端部署。见docs/releases/registration-protected-identity-20261028.md。
+
+2026-10-28 球员登记透明 PNG 直入库本地候选已完成，尚未发布：新增登记范围生图凭证及受控成片编号，确认使用不再转 JPEG 或重复抠图；增加同请求回执复用及保存锁，隔离验证退款、重试和并发只扣一次。现有登记回归 20/20 通过，实际暂存 webLoginApi 包的裁判表保护检查通过。两份后端和 3 个 H5 文件的差量包及摘要已准备，等待共享正式后端发布授权；现有 registration-resume.html 仍是旧正式入口，不是新链路测试版。见 docs/releases/registration-transparent-portrait-20261028.md。
+
+2026-10-28 平台后台自主生成球衣照与模型配置联动已发布：AI 形象照页新增「在线自主生成球衣照」标签，横向输入/透明 PNG 预览，仅后台自用、不扣蜂蜜。平台提交 a8f076a6，release 20261028104114-a8f076a6，35 文件摘要一致；正式/测试 H5 辅助页同步。去掉其他模型的硬编码隐藏，按后台保存的启用/默认/自选配置分发，生成前重读；不代用户改默认配置。platformOwner 负责人鉴权后在 auth_sessions 写入独立 scope 的 15 分钟工具会话，aiPortraitDemo 逐次查验，普通工具请求 403、未登录平台入口 AUTH_REQUIRED；只更新代码，不改凭据或函数配置。隔离浏览器横版与模型联动测试通过；最终负责人登录后真实会话全流程仍待真实账号复测，接入阶段透明 PNG 真实生图已验证。详情见 docs/releases/platform-ai-portrait-tool-20261028.md。
+
+以下为同日较早阶段记录；公开测试入口和硬编码隐藏模型等状态以本条为准。
+
+2026-10-28 AI 形象照高清直传与透明 PNG 已发布：用户选择保留 Seedream 4.5，服务端复用百度分割，只返回透明 PNG。参考板优先 2048px、头肩图 1600px，以 3MB 直传和 10 分钟单对象凭证绕过 100KB 请求体限制；已修复无水印误裁，演示输出不再重复缩放人物 RGB 或 JPEG 编码。只缩小分割请求图，透明蒙版应用于原始 1728×2304，收边去除白色描边，白球衣保留。最终真实调用 49.1s，返回 1,836,729B PNG，透明/不透明/半透明通道均验证；两份 H5 正式与测试 HTTP 200、57,611B、SHA-256 `E5960262…` 与本地一致；共用后端 `pipelineVersion:20261028-transparent-png-v2` 代码回下载核验。未更换模型/提示词、未修改函数配置、未提交 Git。浏览器自动验收受调试连接及网址识别安全限制中止，接口与文件读回验收完成；尚不能据此判断真人原照的最终质感。详情见 [发布记录](releases/ai-portrait-hd-chain-20261028.md)。
+
+以下为同日较早发布记录，参考图压缩与“无水印不裁”结论以本轮追加修复为准。
+
+2026-10-28 AI 形象照「有阴影 + 脸糊」早期修复：参考板改纯白 + 参考分辨率上调 + 成片白底净化（当时云函数 aiPortraitDemo 与演示页均已发布并读回）：
+
+- 用户反馈：「但是为啥生成出来的照片还是有阴影,还比较糊？」（附成片 `赛小蜂AI形象照-20261028064048.jpg`）。
+- 实测定位（原片 1521×2085 / 303KB）：背景低饱和浅色像素里 **25.3% 未到纯白**（230–253 的灰雾），右侧与左下另有亮度约 220 的整块灰影（最暗背景 200）；清晰度（拉普拉斯能量）**脸 2.65 vs 球衣 4.77**；JPEG 块效应 0.18 —— 压缩不是主因。
+- 根因：① `drawRefSheet()` 用 `#f2f4f3` 灰底拼参考板，模型把灰底当成成片背景基调；② 人脸裁片把原照片的影棚背景/暗角/投影整块带进参考图，提示词里的「纯白」拉不回来；③ `commitCrop()` 只给 640px/q0.82，脸在参考板上实际只有 300–430px 宽；④ `normalizeComposition()` 只是整图重绘到白画布，不清背景的灰；⑤ 提示词只要「纯白背景」，没禁止沿用参考图灰底。
+- 修复（A 参考板 / B 提示词 / C 服务端白底净化）：
+  - 参考板（`service-account-h5/ai-portrait-demo.html`）：底色 `#f2f4f3` → **纯白**；人脸占比 54% → **62%**、球衣 44% → 34%；裁图档位 640/0.82 → **760/0.9**（退档 720/680/640/600），参考板档位 800/0.78 → **960/0.9**（退档至 700/0.6），体积仍压在 86,000 / 95,000 字符以内（HTTP 入口实测 88KB 通、195KB 413）。
+  - 白底净化（前后端同算法 `whitenBackground` / `whitenCanvasRegion`）：从画面四边做连通生长，把「与边框连通的低饱和浅色像素」（sat ≤ 18、亮度 ≥ 190、相邻步进 ≤ 26，纯白 238+ 允许跨硬边）压成 255；只吃连到边框的背景，被皮肤、头发、球衣包围的白领/白球衣高光不动。
+  - 云函数 `cloudfunctions/aiPortraitDemo/index.js`：`normalizeImageBuffer()` 改为**先净化再量人物外框**并返回 `clearedRatio`；`REFERENCE_FRAME` 增补「参考图里的背景、底色、影棚灰、灰渐变、暗角、地面投影和环境光一律不要沿用」，`PURE_WHITE_BG` 增补「人物轮廓外侧与画面四周不得出现任何灰色、雾状过渡或渐深底色」。
+- 验证：`node --check`（两文件）通过；净化回归 11 项全过（渐变底、贴边硬灰影 → 255；皮肤与「被包围的白球衣」保持不变；全白图不崩且不产生人物框）；真实成片离线复算 **非纯白 25.3% → 1.6%**，灰影消失且球衣/脸部未被啃边；浏览器 harness 实测参考板 **24,855 字符**（第一档即达标）、四角与头顶背景纯白、脸中心肤色保持，`whitenCanvasRegion` 直测「贴边灰块 206 → 255、肤色不变」。
+- 发布：`fn code update aiPortraitDemo --deployMode cos` 成功，`GET https://www.sxffootball.cn/aiPortraitDemo` 返回 200 且 `seedream45 ready:true`；演示页 56,265 B（SHA-256 `8509B8C2…`）同时发布到 `service-account-h5/ai-portrait-demo.html` 与 `preview/service-account-h5/ai-portrait-demo.html`，两处读回 HTTP 200 且 SHA-256 与本地一致。
+- 未做：D 方案（轻度锐化）未上；「脸被重绘所以比球衣软」属模型特性，需用户重跑一张实拍对比；未代用户跑真实出图（会消耗额度）；两个文件在 Git 中仍为未跟踪状态，未提交。
+- 交接文档：[`docs/handoffs/AI_PORTRAIT_DEMO_HANDOFF_2026-10-28.md`](handoffs/AI_PORTRAIT_DEMO_HANDOFF_2026-10-28.md)（v3.0，2026-10-28 19:40 回读）。现行状态以该文 §0 为准：公开演示模式已退役，页面非 `adminTool=1` 只显示「工具已迁至平台后台」；线上函数 `F0AA0080` 与本地逐文件一致，公开 `transparentOutput`/`referenceTicket`/`prepareReference` 一律 403；`GET` 当前只下发 Seedream 5.0 Flash 且为默认。上文 17:47 的 56,265 B 页面与 `seedream45 ready:true` 已被同日后续发布覆盖。
+
+2026-10-28 用户授权后，报名表按组别报名人数上限生成球员栏位已正式发布并同步测试：仅选择报名表3文件进入main（正式源码c1929cff），未将preview的同期登录、平板或转会功能带入正式。main合回preview（测试源码86e77db5）并按测试base重新构建发布，保留其原功能。两端入口、Word源模板及关键分包分别8项HTTP200且SHA-256与对应构建一致；1/2/18/23/35/100人数、可选字段、原生控件唯一性及23人填表导回回归通过。未部署后端、小程序或H5。见docs/releases/registration-template-player-limit-20261028.md。
+
+2026-10-28 下载球队报名表已按用户确认，按当前组别球员报名人数上限动态生成球员栏位；工作人员单独保留。读取rosterLimit，兼容maxPlayersPerTeam/maxPlayers，未配置的历史组别沿用既有35人兜底。1/2/18/23/35/100人栏位、原生控件唯一性、可选字段及23人填表导回回归通过；23人Word渲染3页并逐页检查。功能112b4cbc，预览源码b77a95be已构建发布/preview/admin/，入口/分包/原始Word模板HTTP与SHA-256核对一致，正式/admin/未改。未部署云函数或其他端口。见docs/releases/registration-template-player-limit-20261028.md。
+
+2026-10-28 平板手机号验证码登录：已获授权部署共用 webLoginApi 与 ADMINONLY 验证集合，宽屏竖版品牌登录页仅发布 /preview/admin/；格式、权限、资源及真实二维码回读通过，真实短信收取/登录待用户验收。见 [发布记录](releases/pad-phone-login-preview-20261028.md)。
+
+2026-10-28 报名页“默认组/全部已关闭”修复（**代码已改，云函数与小程序未部署**）：
+
+- 现象：后台竞赛管理两组显示“报名中”，小程序报名页只剩“默认组·已关闭 / 当前所有组别均已满或未开放报名”。
+- 只读回读：`tournaments/26e7c545adecdd30020191b6e6e2c3d` 为 `status=registering`、`registrationEnabled=true`；`divisions` 两条“竞技组/热爱组”均 `registrationEnabled=true`、`maxTeams=8`、`maxPlayersPerTeam=30`。`divisions` 集合 ACL 为 `ADMINONLY`，小程序端直连读取会被拒，旧代码 catch 后回退到硬编码“默认组”（容量取赛事级 `maxTeams`，故显示 0）。
+- 修复：`tournamentRegistrationFlow` 新增公开动作 `getPublicSignupDivisions`（服务端读组别 + 已报名统计），`getInvitation` 复用同一 `publicDivisionRows`；报名开放判定统一为“组别开关为准，仅排除 completed/finished/ended/cancelled/canceled/archived”，不再要求必须是 registering/upcoming。小程序报名页优先走该服务端动作，失败才按 20 条分页直连；不再伪造“默认组”，无组别时明确报“当前赛事尚未配置竞赛组别”。后台竞赛管理报名列同步按终态显示，PC 赛事中心/详情报名入口同步放开进行中。
+- 验证：`node --check`（云函数、小程序报名页）通过；`web-admin-vue npm run build` 通过。
+- 未做（待授权）：`tournamentRegistrationFlow` 部署、小程序上传、后台发布；部署后需用该赛事复测两组均显示“报名中”、容量 8/30。
 
 2026-10-28 服务号 H5 登记页形象照改造：AI 定妆照收进弹层 +「自行上传」二级按钮 + 会员/充值价格上屏（**H5 5 个文件已生产发布并读回；未推 Git，不在本页创建订单**）：
 
@@ -14,7 +70,7 @@
 - **测试端同步**：实测 `https://www.sxffootball.cn/preview/service-account-h5/join-player.html` 返回 404（该目录仅 `me.html` 为 200），H5 登记页无已登记测试端，沿用 2026-10-19 结论「无对应测试端可同步」。
 - **未做（待用户另行授权）**：Git 提交（工作区仍有其他会话改动）；支付通道真开通；微信内真机验收；动画资产替换——用户此前拟让 codex 按提示词产出 Lottie/WebM，当前为 CSS/SVG 占位演示。
 
-2026-10-28 球队主账号免确认移交（用户确认方案 B「走移交但是不需要对方确认！对方登录就能看到自己的球队信息」，**小程序已上传开发版 v1.2.21，云函数未部署**）：
+2026-10-28 球队主账号免确认移交（用户确认方案 B「走移交但是不需要对方确认！对方登录就能看到自己的球队信息」，**小程序已上传开发版 v1.2.21、`getMiniWorkspace` 已差量部署、两支球队数据已移交并回读**）：
 
 - 背景：账号 `17319716663`（`b9a701d4…db2b`）在首页「我的球队」看到 `陆零後足球队`（`6d00d0e5…15ce5`）与 `开封立洋足球队`（`6d00d0e5…bec86`），自认不是主账号。只读回读：两支球队均为主办方账号（`18637842065`）从报名表导入（`source=registration_docx_import`），`ownerId`／`claimedByUserId` 都指向该账号；`陆零後` 成员关系 `role=owner`／`accepted`（`organizer_team_access`），`开封立洋` 成员关系已 `revoked`（`organizer_claimant_bind`）但所有权字段未清，故仍显示为我的球队。报名联系人 `139****6658`（冉伟强）、`185****2019`（屈恒）目前**未注册账号**。两支球队各有球员与参赛记录（37 名球员、4 条 `tournament_teams`），不满足「主账号删除空球队」条件。
 - 原能力缺口：小程序只有「删除空球队」与需受让人确认的「待接收主账号」邀请，没有主账号自助移交，也没有成员自助退出。
@@ -26,9 +82,17 @@
 - 规则：`docs/PRODUCT_RULES.md` 第四章新增「主账号免确认移交」，并限定只适用于主账号主动移交已认领球队——首次认领、受邀接收参赛仍必须本人确认；`docs/ADR.md` 记录 2026-10-28 决策与边界。
 - 验证：`node --check`（`teamOwnerTransfer.cjs`／`index.js`／`profile.js`）通过；新增 `tools/test-mini-team-owner-transfer.cjs` 7 组用例通过（已有账号移交、未注册手机号待绑定、登录自动认领不抢他人、非主账号／越权／移交自己／重复账号／并发改动阻断、页面确认与取消入口）；`tools/test-mini-empty-team-deletion.cjs` 回归通过。
 - 小程序上传（用户 2026-10-28 授权「你可以上传体验版了」）：`cli.bat upload -v 1.2.21` 成功——TOTAL 3,452,895 B、main 1,801,429 B、`/pages/team/` 740,891 B、`/pages/tournament/` 419,884 B、`/packageDiscover/` 371,139 B、`/pages/match/` 85,452 B、`/packageA/` 34,100 B，AppID `wx57164cca8676f411`；元数据见 `work/upload-1.2.21-info.json`。**上传成功只等于生成开发版 v1.2.21，未设体验版、未提交审核**；工作区其他会话的未提交小程序改动同样进入本次包。
-- 未做（待授权）：`getMiniWorkspace` 云函数差量部署（线上未含 `transferTeamOwnerDirect`，体验版点击该按钮会返回「未知操作」）；两支球队的实际移交（目标手机号待用户确认）；未推 Git。
-
-
+- 云函数部署（用户 2026-10-28 授权「好的，执行吧」）：因本地 `cloudfunctions/getMiniWorkspace/` 混有其他会话未发布改动，**不整包覆盖**，改以线上回下载包 `work/online-getMiniWorkspace-20261028/` 为基线差量拼装 `work/deploy-getMiniWorkspace-20261028/`（仅 `CHANGED index.js`、`ADDED teamOwnerTransfer.cjs`），`fn code update … --deployMode cos` 成功；`fn detail` 前后比对配置与环境变量完全未变（Nodejs18.15／512MB／150s／InstallDependency TRUE），仅 `CodeSize 11,814,565 → 11,825,141`、`ModTime` 更新。部署后回下载 `work/verify-getMiniWorkspace-20261028/`：`index.js` SHA-256 `5831E157…8ADE3E`、`teamOwnerTransfer.cjs` `BBCA59FE…FB0FE5`，与 staging 完全一致。
+- 实际移交（同一次授权）：`陆零後足球队` → `139****6658`（冉伟强）、`开封立洋足球队` → `185****2019`（屈恒），两人当前均未注册账号，故按「待登录认领」写入。
+  - `teams` 两条 `update`（`_id`＋`ownerId=b9a701d4…` 双条件）`n=2/nModified=2`：清空 `ownerId`／`ownerUserId`／`claimedByUserId`，写 `ownerPhone`／`managerPhone`／`pendingOwnerPhone`＝目标手机号、`claimStatus=pending`、`previousOwnerId`／`previousOwnerPhone`、`ownerTransferAt`。
+  - `team_memberships` 两条 `n=2/nModified=2`：原账号关系置 `status=revoked`／`source=owner_transfer_out`／`revokedAt`（`陆零後` 原为 `accepted`／`role=owner`，是首页仍显示的关键）。
+  - `team_owner_transfers` 新增 2 条审计（`mode=owner_transfer_direct`、`hasAccount=false`、`fromUserId=b9a701d4…`）。
+  - `team_invitations` `22dda3756ab6479b…`（开封立洋「待接收主账号」邀请）置 `status=cancelled`／`cancelledByOwnerTransfer=true`（原邀请已过期，避免与新状态并存）。
+  - **关键补充**：两支球队的 `prebuilt_tournament_team` 认领邀请仍带 `acceptedUserId=b9a701d4…`，`loadWorkspaceCatalog` 会据此给旧账号生成含 `team.manage` 的临时球队空间（`claimStatus=pending` 触发），仅清所有权不足以让首页消失。故同时清 `acceptedUserId`／`acceptedOpenId`、保留 `previousAcceptedUserId/OpenId/Phone` 审计，`status` 仍为 `accepted`（避免重新进入可认领流程、也不改主办方「已认领」显示）；`陆零後` 的 `allowedClaimPhones` 由 `['173****6663']` 改为 `['139****6658']`，并保留 `previousAllowedClaimPhones`。
+  - 同一缺口已补进代码：`transferDirect` 在作废「待接收主账号」邀请之外，新增解除本队 `prebuilt_tournament_team` 邀请对原主账号的绑定（`status` 保持 `accepted`；`allowedClaimPhones` 只在与目标手机号不一致时改为目标手机号并留 `previousAllowedClaimPhones`）；`tools/test-mini-team-owner-transfer.cjs` 增加第 8 组用例（本账号解绑、他人邀请不动、残留邀请作废）后 8 组通过，随后二次差量部署：线上回下载 `index.js` 仍为 `5831E157…8ADE3E`（未变）、`teamOwnerTransfer.cjs` 变为 `A248C3AA…EDA11` 与本地一致；`fn invoke` 冷启动 632ms、只报预期的「无法识别当前微信账号」，无加载/语法错误。注意：`InstallDependency TRUE` 的部署会重装 `node_modules`，本次回下载仅 `node_modules`（`qs`、`follow-redirects`、`.package-lock.json`）版本漂移，源码文件无额外改动。
+  - 写后回读：两队 `ownerId/ownerUserId/claimedByUserId` 均为空、`pendingOwnerPhone` 为目标手机号、`claimStatus=pending`；旧账号在这两支队的 `team_memberships` 命中「无 active/accepted/claimed」；`team_invitations` 按 `acceptedUserId`／`acceptedOpenId`／`inviteeUserId` 反查旧账号结果为 `[]`；`teams` 按旧账号 `ownerId/ownerUserId/claimedByUserId` 反查为 `[]`。另一条可达路径（主办方机构 `935443556aa8…` 工作空间）对旧账号仅 `event.view`（`organization_memberships` 为 `tournament_staff`），不含 `team.view`／`team.manage`，不会列出这两支球队。
+- 生效方式：`139****6658`／`185****2019` 各自用该手机号登录小程序即自动认领（`bindPending` 转 `claimed`＋建 `owner` 关系＋补审计 `owner_transfer_claim_on_login`），无需他人确认；PC 端因 `ownerPhone` 已指向新手机号，登录后同样由 `recordBelongsToUser` 命中。
+- 未做（待授权）：未设体验版（需在微信公众平台手动设置，CLI 无此能力，「上传成功」≠「体验版生效」）；未提交审核、未推 Git。
 
 2026-10-28 运营平台按手机号查不到蜂蜜账户修复（用户授权「按方案 A 执行，补全 userId 字段」，**已写库并回读**）：
 
@@ -234,7 +298,6 @@
 2026-10-20 服务号关注自动回复升级为「菜单+关键词功能卡片」已上线（待微信端实测验收）：关注回复改为服务菜单（回复 1 组建球队 / 2 创建赛事 / 3 咨询客服），serviceAccountCallback 新增文本消息处理（handleTextMessage，支持数字与「组建球队/创建赛事/咨询」等说法），回复 1/2 经客服消息下发小程序卡片（pages/onboarding/onboarding?scene=team/event），回复 3 下发企业微信客服二维码图片；卡片/图片发送失败自动降级文字回复；PC 绑定、球队认领、球员邀请等全部事件回复末尾统一追加菜单行（2026-10-20 晚间用户确认：失效的球队认领/球员邀请回复不再追加菜单行，保持纯任务提示；有效认领/邀请/裁判进入本就是纯任务 news 卡片无菜单；该调整已部署，HTTP 验签门禁 403 正常），任何渠道进来的关注者都有入口。架构受服务号 IP 白名单约束（CloudBase 直连 cgi-bin/token 报 40164），access_token 仅能由固定出口桥获取：桥 server.js 新增 `custom/send` 与 `material/upload` 两个受控动作（HMAC 签名同模式，素材上传仅允许从 `www.sxffootball.cn` 拉图），已备份+scp+systemctl 重启部署、health 200；serviceAccountCallback 新增 serviceAccountApi.cjs 纯桥模式封装（函数侧不持有 AppSecret，桥地址/密钥与 sendRefereeTemplateMessages 同源同值）。素材链路：500×500 小程序卡片缩略图与客服二维码上传静态托管 `/assets/menu/`（正式域名 200）→ 桥 material/upload 上传为服务号永久素材 → media_id 写入 serviceAccountCallback 环境变量 SERVICE_ACCOUNT_MATERIAL_MINI_CARD_THUMB / SERVICE_ACCOUNT_MATERIAL_WECOM_SERVICE_QR；函数以 `--config-file` 差量部署（Nodejs18.15/超时10s/内存256MB 保持，HTTP 路径 /footballServiceCallback 不变），`fn env pull` 读回 5 个环境变量与源值逐项一致，HTTP 验签门禁 403 正常。工具教训：PowerShell `Set-Content -Encoding UTF8` 写 JSON 带 BOM 会被 CLI 拒绝解析，需 `[System.IO.File]::WriteAllText` + UTF8Encoding($false)。待验收：微信内关注服务号并回复 1/2/3 实测下发效果；小程序卡片依赖服务号已关联小程序，未关联时自动降级文字。未写生产业务数据、未提交 Git。
 
 2026-10-20 微信授权撤回/注销/资料变更合规处理全链路已部署上线（回调通道待微信后台配置）：按微信平台 2026 合规要求，用户撤回授权或注销后主动删除通过授权收集的个人信息。新增 `authorizationRevocation` 统一执行器云函数：按事件解析撤回范围（`user_info_modified` 清昵称头像；`user_authorization_revoke` 按 RevokeInfo 码处理——205 昵称头像、8 手机号匿名化为 `revoked-<sha256前16>`（幂等）、301 全撤微信身份；`user_authorization_cancellation` 注销删全部微信身份并清理渠道引用、unionid 下所有账号一并处理），只删微信授权收集的个人信息，不动业务数据与账号；全程写 `authorization_revocation_logs` 审计（集合缺失自动创建）。三个渠道回调：serviceAccountCallback 新增撤回事件分支（事件 OpenID 在 `<OpenID>` 标签而非 FromUserName）；新增 miniProgramCallback（小程序消息推送 URL 模式，验签回显/JSON+XML 事件，AppID wx57164cca8676f411）与 openPlatformCallback（网站应用，wx5a42aae0e5d0669c）。platformOwner 新增 `authorizationRevocationProcess`/`authorizationRevocationHistory`（ownerState 鉴权）支持平台后台粘贴微信每日邮件名单批量处理；platform-admin-vue SystemAdmin.vue 新增「微信授权撤回处理」卡片。部署读回：4 个新/改函数 Nodejs18.15 Active；HTTP 网关以 `deploy --only gateway` 声明式新增 `/miniProgramCallback`、`/openPlatformCallback` 两条路由（routes list 读回确认）；微信验签握手端到端实测正确签名回显 echostr 200、错误签名 403；serviceAccountCallback 旧路由验签门禁 403 正常、`/health` ok。过程故障与修复：serviceAccountCallback 首次部署误设 `installDependency:false` 导致线上 `Cannot find module 'wx-server-sdk'`，立即改 true 重部署恢复（约 3 分钟窗口）；工具层面发现 sxf-cloud.ps1 的 npx 层吞 `-d/--data` JSON 参数（routes add 三种转义均 MISSING_PARAM），改用仓库外直连 runner（node 直执行缓存 CLI）绕过。回调 Token 在对应函数环境变量（SXF_FOOTBALL_MINI_CALLBACK_TOKEN/SXF_FOOTBALL_OPEN_CALLBACK_TOKEN）与 %TEMP% 登记文件，不入仓库。用户已于 2026-10-20 下午完成小程序后台与开放平台网站应用两处「消息推送」配置（明文+JSON），云端日志确认微信服务器真实验签握手分别于 13:31:47（miniProgramCallback）与 13:33:24（openPlatformCallback）200 回显随机 echostr 通过，三端实时回调链路全部闭环；平台后台批量工具待用户验收。未写生产业务数据、未提交 Git。
-
 
 2026-10-19 「我的球员卡」改版为主卡+卡库布局已发布：原每球员全卡平铺（基础卡+每张预装卡各挂两个按钮）改为顶部球员切换条（多球员 chip，本地即时切换不重取数）+ 居中大主卡（当前展示卡，下方保留「编辑此卡/制作此卡」入口，基础卡与预装卡编辑流程不变）+ 积分区块（服务端等级/积分/升级进度/积分明细/刷新等级）+ 底部卡库缩略网格（点选切换展示卡走 `selectMyPlayerCard`，成功后本地更新 `displayTemplateId` 即时重渲染，不再整页 reload；「展示中」绿标跟随，locked/待制作/待更新/读取失败分态展示）。编辑功能按用户 2026-10-19 确认规划迁入球员卡游戏页，**金卡（100 分）后累计 200 分解锁编辑**（新权益档，随游戏端实施，见 PLAYER_CARD_POINTS.md）；游戏上线前「我的」保留现有编辑按钮。页面样式全部限定 `#cards.pc` 作用域避免污染编辑器弹层，`.library-adjust` 以 `.pc-editor` 作用域归还。本地 127.0.0.1 静态服务 + 生产真实会话（3 名球员）浏览器冒烟 7 项全过。仅上传 `player-cards.html`/`player-cards.js` 两文件到 hosting（版本标记 `20261019-maincard1`），正式域名无缓存回读字节与版本均在线；云函数/小程序/PC 本轮未改，未写生产数据、未提交 Git。
 
@@ -660,8 +723,6 @@
 2026-08-15 10:54:08 小程序首页视觉样例失败回退安全修正并上传开发者版：`miniprogram/pages/home/home.js` 在真实 `workspace.loadContext` 失败且没有显式 `visualQa=1` 时不再回退到 `previewContext()`，统一展示真实错误态；本地全量小程序 JS `node --check` 通过，静态门禁 162/162。微信开发者工具 CLI 上传 1.0.16 成功，AppID `wx57164cca8676f411`，TOTAL 1,545,919 bytes（主包 999,140；packageA 34,157；pages/match 72,178；pages/team 216,472；pages/tournament 223,972）。仅开发者上传，未预览、未提交审核、未发布，线上用户版本未切换。
 2026-08-15 10:50:54 PC 静态包回归复核：`web-admin-vue` `npm run build` 通过；当前 `dist` 的 `index-B9Is9pUN.js`、`vue-vendor-C9beSz07.js`、`element-plus-CMVyjDO1.js`、`index-DpOb8WhM.css` 与 `https://saixiaofeng.com/admin/assets/` 对应资源逐字节 SHA-256 一致，无需重复上传。仅只读验证，未预览、未提交、未推送。
 2026-08-15 10:45:15 线上状态复核：正式域名 `/`、`/admin/`、`/referee/`、`/service-account-h5/` 均返回 HTTP 200；CloudBase 足球环境函数列表中 `webLoginApi`、`getMiniWorkspace`、`onboardingWorkspace`、`organizerClaimInvite`、`applyTournament`、`serviceMatchWorkflow`、`updateMatch` 和 `sendRefereeTemplateMessages` 均为 `Deployment completed`。小程序当前仍为开发者版本 1.0.15，未提交审核、未发布；9 个视觉节点和通知模板生产变量仍待完成。未预览、未写入真实业务数据、未提交、未推送。
-
-
 
 2026-08-22 赛制基础配置联动修正并完成线上回读：`DivisionRulesWizard.vue` 的杯赛制、赛会制、联赛制、混合制现分别展示小组晋级、集中淘汰、循环积分、联赛加淘汰的专属字段；草稿保存和规则定版同步写入 `formatConfig` 及现有排程兼容字段，页脚、定版摘要、生效摘要和规程导出统一使用当前赛制结构。`npm run build`、`git diff --check` 通过；足球 CloudBase Hosting `/admin/` 上传 170 个文件，正式域名 `www.sxffootball.cn/admin/` HTTP 200，线上 `DivisionRulesWizard-B7eo6n0O.js` 与本地 SHA-256 逐字节一致，并回读包含四类配置标题及 `formatConfig`。未读取或写入真实赛事规则数据，未提交、未推送。
 
@@ -1537,31 +1598,25 @@
 
 2026-10-15 制卡工作台已正式重整：平台版本20261015134617-ffd58f04的27项资源HTTP/SHA-256一致；webLoginApi六个制卡模块和getMiniWorkspace两个读取模块回下载一致，裁判接口防回退检查通过。制作项目按类型范围、素材、排版、预览发布推进；升级套系三档统一发布，荣誉卡按明确名单动态预览后发放，可继续进度；已发布样式库只列项目样式。旧模板可明确沿用，不自动迁移、删除或发放。隔离浏览器跑通三背景+共用遮罩上传、整套发布、荣誉卡预览发放及两种样式入库；真实原生渲染、事务/权限与数据中心回归通过。完整范围见docs/releases/player-card-studio-20261015.md。
 
-
 ## 2026-10-16 平台积分规则及旧素材入口
 
 独立平台新增积分规则：保存草稿、规范试算、保留既获卡级、明确确认后版本激活；当前仍默认V2，代码上线未改业务规则或球员事实。旧素材默认折叠，沿用新建语义明确。立洋杯三个锁定组别30分钟×2，37场已结束中26场快照有效60分钟、11场待历史核实；核实弹窗带入规程建议并在保存后更新核查，未代用户写入11场。五函数Active和改动/原运行源码回读、平台27文件摘要、隔离链路及统一数据门禁通过。实现8c68925c/bb245a8e/8fc5c5e6，见docs/releases/platform-score-rules-20261016.md。
-
 
 ## 2026-10-16 数据中心异常处理已正式更新
 
 已统一发卡前检查与数据中心异常处理，支持按正式名单补缺失阵容、按原报告补事件，保存后重查资格并保留有效选择。立洋杯11场旧时长依据已精确补齐，37场均60分钟；未代补真实事件、阵容或发卡。webLoginApi Active/Available，独立平台20261016074758-b5a74e47的27文件摘要一致。详见[发布记录](releases/platform-card-data-repair-20261016.md)。
 
-
 ## 2026-10-16 未出场球员不再被全局质量问题阻塞
 
 用户已确认未登记首发/替补且无实际事件关联者不计本场积分、不算球员异常。统一服务、单人/批量、公开摘要与发放已同步；五函数Active/Available且回下载一致。13组回归、实际包核验及平台构建通过；正式平台20261016081343-504f0303。本次无生产资料写入、无代发卡。详见[发布记录](releases/player-recorded-participation-20261016.md)。
-
 
 ## 2026-10-16 积分账单与自愿申诉
 
 用户最终决定已落实：有记录依据计分，缺依据项目不领分，原指标未知不改0；私人逐场账单→申诉→后台回复/补依据重算的隔离链路通过。五共享函数Active/Available并回下载比对，平台20261016093602-2943369e正式27文件一致。H5四文件预览200/SHA一致，真实浏览器无脚本错误；正式H5待验收授权，小程序源码已接入未上传。详见releases/player-points-ledger-appeals-20261016.md。
 
-
 ## 2026-10-16 球员积分H5验收通过并正式发布
 
 用户明确“验收通过，更新正式H5”。已将已验收的player-cards.html/js及player-points.js/css四文件发布至正式/service-account-h5/。正式入口 https://www.sxffootball.cn/service-account-h5/player-cards.html ，四文件HTTP200/SHA-256与预览验收源一致；390px真实浏览器返回200、私人积分模块加载、无资源失败或脚本错误。积分明细→申诉→回复沿用已上线接口和权限；小程序未上传状态不变。证据work/player-points-ledger-20261016/h5-formal-{readback,browser}.json。
-
 
 ## 2026-10-16 球员卡发放预览读取恢复
 
@@ -1584,16 +1639,13 @@
 
 三步问答（身份、年度办赛量、赛事人群）后填写机构名称、联系人、联系电话、省市，直接进入赛事空间；取消业务模式选择及强制服务号消息绑定跳转，手机号验证保留。customerProfile按机构存储。新流程在独立 codex/organizer-registration-20261009 分支，PC预览/正式发布状态以本次交付回读为准。150****2130已按唯一账号及精确记录清空38条自有业务/会话记录，保留自然人账号、微信手机号登录绑定和安全审计；无其他主办方赛事历史关系被删除。
 
-
 ### 2026-10-09 主办方登记正式发布
 
 用户明确授权直接合入正式版。登记功能从已验收preview按最小提交进入最新main，保留同期裁判PDF下载等功能。/admin/376文件发布完成，入口与登记JS/CSS3文件HTTP/SHA-256一致，onboardingWorkspace Active。流程为扫码和手机号验证、三步客户问答、机构名称/联系人/电话/省市、赛事空间；小程序开发包仍未新增上传。正式main应用代码提交ab8c5854。
 
-
 ### 2026-10-09 服务号关注阶段确认
 
 用户确认完整流程为扫码/手机号验证、三步问答、基础资料含省市、关注服务号并确认账号绑定、赛事空间。资料保存后显示专属二维码，已关注并绑定的用户直接继续。643a3daf已进入正式main，6个关键页面资源HTTP/SHA-256一致；小程序仍暂停上传。原当日省略服务号步骤的描述被此规则替代。
-
 
 ### 主办方登记预览发布回读（2026-10-09）
 
@@ -1643,7 +1695,6 @@ PC 主办方后台演示模式不再依赖随前端发布的虚拟球队镜像�
 ## 2026-10-23 平台数据总站地基候选
 
 按用户要求暂停页面，平台数据页面恢复原入口。新增球队/球员长期读取合同、服务端目录游标分页、双历史关系核验、转会冻结与一致性、球队正式年度对账及日常约球独立汇总。10,000条球员及10,000场约球隔离夹具验证，均无生产写入；完整检查结果和真实数据缺口登记于docs/data-center/DATA_HUB_FOUNDATION.md、RELEASE.md。当前为本地候选，未发布页面/函数、未创建索引/集合或迁移数据；旧入口接入与缺失历史核验另行推进，不宣称已全平台完成。
-
 
 ## 2026-10-23 平台数据总站正式发布
 
@@ -1699,7 +1750,6 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
 已按方案 V1.1 建立转会中心服务端底层：`cloudfunctions/dataCenter/transfer/rules.cjs`（纯规则）、`transfer/service.cjs`（事务编排）、`transfer/index.cjs`（`transfer*` action 路由），在 `dataCenter/index.js` 接入路由与 9 个新集合的初始化登记，`identity.cjs`／`staffPolicy.cjs` 增加 `event.transfer` 赛事权限码。范围覆盖市场与球员资料、三轮询价上限、破裂后 24 小时冷却、主办审核与归属交接同事务、自由球员签约、合同／租借／续约、到期任务与 Q06 待核对分支。
 
 `node tools/test-transfer-center.cjs` 覆盖纯规则与流程（含幂等重放、版本冲突、越权、赛事子账号边界）；相关文件 `node --check`、`sync-data-center --check`、`test-data-center`、`check-data-governance` 均通过。跨函数接线已补齐：`webLoginApi/staffRelayRights.cjs` 的 `transfer*` action 要求 `event.transfer`（非转会 action 保持原权限），`tournamentStaffAccess/policy.cjs` 接受该权限码；PC 授权选项已在 `web-admin-vue/src/utils/tournamentStaffRights.js` 追加（`npm run build` 通过，未发布；平台工程同名拷贝未改动、当前无页面引用）。用户 2026-10-26 另确认三条规则并已落码：开放赛事子账号审核（须显式持 `event.transfer`）、禁止审核人与买卖任一方球队有管理关系（`TRANSFER_REVIEW_CONFLICT`）、自由签约只面向本次签约赛事的赛事外球员（`TRANSFER_FREE_AGENT_IN_EVENT`），测试新增自审拦截与名单内拦截、赛事外可签用例。未部署云函数、未创建生产集合、未迁移旧合同、未开发 PC／小程序／服务号页面；Q01—Q09 其余分支仍按 `*_PENDING` 显式拦截，未用默认值代替决定。契约与入口登记见[CONTRACT](data-center/CONTRACT.md)、[INTEGRATION](data-center/INTEGRATION.md)；9 个新集合、3 个函数差量部署、只读探针、回滚与禁止项见[后端部署技术文档](handoffs/TRANSFER_CENTER_BACKEND_DEPLOY_2026-10-26.md)。
-
 
 ## 2026-10-26 转会中心高保真原型与图标候选 R1
 
@@ -1854,10 +1904,13 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
   - **上线前置**：需在云函数 `webLoginApi` 环境变量配一次 `PAYMENT_SECRET_KEK`（≥16 字符，**只配一次**，丢失或更换会导致库内旧密文全部无法解密）。`platform_payment_secrets` 与 `platform_payment_secret_audit` 两个集合已由产品负责人创建（2026-10-28），权限需保持「仅管理端可读写」。
   - **部署与读回（2026-10-28 13:31 北京时间）**：提交 `ddf7ca9e`。`webLoginApi` 仍走差量流程（下载线上包为基线，只覆盖 `index.js` / `honeyRecharge.cjs` / `servicePersonalAccount.cjs`，`check-referee-backend-package.cjs` 通过后 `fn code update` COS）；回读三文件 SHA-256 与上传包完全一致，`@resvg/resvg-js-linux-x64-musl` 与线上独有 `data-center/match-score.cjs`、`data-center/penalty-shootout.mjs` 全部保留；未带令牌 POST `platformHoneyPaymentSecretSave` 与 `platformHoneyPaymentSecretClear` 均返回 `{"success":false,"code":"PLATFORM_OWNER_REQUIRED","error":"仅平台负责人可修改支付配置"}`。平台前端 `npm run deploy` → release `20261028053119-ddf7ca9e`，27 个文件摘要一致；HTTP 回读 `release.json` 提交 `ddf7ca9e` 一致、`assets/TournamentCenterAdmin-UdpkQtqa.js` 200（421,592 字节）含 `platformHoneyPaymentSecretSave`/`platformHoneyPaymentSecretClear`/`PAYMENT_SECRET_KEK`/`AES-256-GCM`/「凭据存放」/「加密存储」/「清除全部库内配置」，`cloudbase/js-sdk` 计数 0。平台工程无独立测试域名（发布目标仅 `pingtai.sxffootball.cn`）；本轮未改 `service-account-h5` 托管文件与小程序，故未重发。
   - **集合核对（2026-10-28）**：CLI 直连查询确认 `platform_payment_secrets` 与 `platform_payment_secret_audit` 均已创建且均为 0 条（产品负责人手工创建）。
-  - **`PAYMENT_SECRET_KEK` 已配置（2026-10-28 15:02 北京时间，产品负责人授权）**：生成的 40 位随机串写入 `webLoginApi` 环境变量，**直接调用 `config update fn` 会弹出交互式「覆盖/合并」选择且无命令行开关**，故先把 `cloudbaserc.json`（gitignored，原本 25 项与线上逐一比对**完全一致**）补上该项，再以 `config update fn webLoginApi -y` 走覆盖模式推送——因文件与线上 25 项同值，等价于合并。回读：线上 26 项、`PAYMENT_SECRET_KEK` 长度 40、原 25 项**零变化**，`Timeout=120 / Memory=512 / Runtime=Nodejs18.15 / Handler=index.main / Type=Event / Status=Active` 均未变，`ModTime=2026-10-28 15:02:06`。**主密钥指纹 `8A9F8C34`**——支付设置页第 4 张卡显示该指纹即证明云函数已加载新密钥。顺带把 `cloudbaserc.json` 的 `memorySize` 由 256 校正为线上实际值 512（否则下次推送会把内存降级）。本地以 DPAPI 加密留存在 `%LOCALAPPDATA%\SxfCloud\payment-kek\webLoginApi-payment-kek.dpapi.txt`（不在仓库内、未打印明文、已做解密回读校验）；过程中产生的临时明文文件已删除。踩坑记录：`fn config update` 交互分支里 `-y` 强制 `overwrite`，不传会挂在选择菜单；期间 `tcb` API Key 登录曾连续返回 exit 3（约 5 分钟后自行恢复），非凭据失效。
+  - **`PAYMENT_SECRET_KEK` 已配置（2026-10-28 15:02 北京时间，产品负责人授权）**：生成的 40 位随机串写入 `webLoginApi` 环境变量，**直接调用 `config update fn` 会弹出交互式「覆盖/合并」选择且无命令行开关**，故先把 `cloudbaserc.json`（gitignored，原本 25 项与线上逐一比对**完全一致**）补上该项，再以 `config update fn webLoginApi -y` 走覆盖模式推送——因文件与线上 25 项同值，等价于合并。回读：线上 26 项、`PAYMENT_SECRET_KEK` 长度 40、原 25 项**零变化**，`Timeout=120 / Memory=512 / Runtime=Nodejs18.15 / Handler=index.main / Type=Event / Status=Active` 均未变，`ModTime=2026-10-28 15:02:06`。**主密钥指纹 `f93e5c7c`**（代码算法 `sha256('kek:'+hex(sha256(KEK))).slice(0,8)`，与库内 `platform_payment_secrets.kekFingerprint` 相同）——支付设置页第 4 张卡显示该指纹即证明云函数加载的密钥与库内密文是同一条。更正：早期记录的 `8A9F8C34` 是误用 `sha256(KEK)` 直接取前 8 位，非代码算法，已作废。顺带把 `cloudbaserc.json` 的 `memorySize` 由 256 校正为线上实际值 512（否则下次推送会把内存降级）。本地以 DPAPI 加密留存在 `%LOCALAPPDATA%\SxfCloud\payment-kek\webLoginApi-payment-kek.dpapi.txt`（不在仓库内、未打印明文、已做解密回读校验）；过程中产生的临时明文文件已删除。踩坑记录：`fn config update` 交互分支里 `-y` 强制 `overwrite`，不传会挂在选择菜单；期间 `tcb` API Key 登录曾连续返回 exit 3（约 5 分钟后自行恢复），非凭据失效。
   - **证书文件本机读取（2026-10-28，提交 `d572dc9`）**：产品负责人问「有些证书不是需要上传文件么？」。结论：微信支付 v3 没有「上传证书」环节，请求签名与回调验签都是服务端拿 PEM 文本做 RSA 运算。因此页面加「选择文件」而不是文件上传——私钥、微信支付公钥、API 证书序列号、充值档位四项分别对应 `apiclient_key.pem`、`pub_key.pem`、`apiclient_cert.pem`、档位 JSON，浏览器 `FileReader` 只读成文本填进表单，**不上传文件、不落对象存储**；选 `apiclient_cert.pem` 用最小 ASN.1 解析从 x509 DER 读出证书序列号（已用 openssl 生成的自签证书与 Node `X509Certificate.serialNumber` 对照一致）。本地 `npm run build` 通过（`TournamentCenterAdmin-DTUFOSdV.js` 426,554 字节，含 `apiclient_key.pem`/`apiclient_cert.pem`/`pub_key.pem`/`readAsText`/「不会上传文件到服务器」，`cloudbase/js-sdk` 计数 0）。**平台前端已发布（2026-10-28 14:18 北京时间，release `20261028061856-7edf08e7`，提交 `7edf08e7`）**：因另一个会话的 vivo Pad3 Pro 横屏适配仍留在工作区（`src/main.js`、`TournamentCenterAdmin.vue`、`src/components/PlatformTabletNav.vue`、`src/assets/platform-tablet.css`），按产品负责人选定的 A 方案先做**带 SHA-256 备份的临时移出 → 发布 → 原样恢复**，四个文件恢复后摘要与移出前逐一相同，对方脏工作区保持原状，平板适配未被发布。发布脚本回读 27 个文件摘要一致；HTTP 回读 `release.json` 提交 `7edf08e7`，`assets/TournamentCenterAdmin-1o4fkRkX.js` 200（424,553 字节）SHA-256 `9303CB9F…12332` 与本地 `dist` 完全一致，含 `apiclient_cert.pem`/`apiclient_key.pem`/`pub_key.pem`/`readAsText`/「不会上传文件到服务器」/「证书里没有找到序列号」/`platformHoneyPaymentSecretSave`/`PAYMENT_SECRET_KEK`，`cloudbase/js-sdk` 计数 0。
-- **未做/风险**：微信支付商户环境变量、JSAPI 授权目录、`/honeyPayNotify` 路径映射、`honey_orders` 索引仍未配置，线上仍是「支付未开通」——支付设置页现在会把缺项逐条列出来；真实下单/收银台/回调/退款未验证；服务号 H5 个人中心的充值面板是否已发布需单独核对。`platformOwner/index.js` 等后端改动仍只在 `codex/platform-ops`（本轮已提交 `webLoginApi/index.js`、`honeyRecharge.cjs`，但 `honeyWallet.cjs`、`servicePrivate.cjs`、`servicePersonalAccount.cjs` 等仍需按 `main` 侧归属整组提交）。退款规则、赠滴、家庭档开放条件待确认，详见 `docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md`。
-
+  - **7 项凭据已填完的线上验收（2026-10-28，全部只读，未打印任何密文/明文）**：产品负责人报告「所有支付设置都已全部填写完毕」后逐项回读——① `platform_payment_secrets` 单文档 `_id='wxpay'` 存在，`aes-256-gcm` / `version=1` / `kekFingerprint=f93e5c7c` / `updatedBy=platform-owner`，`keys` 恰好 7 项，集合权限 `PRIVATE`；② `platform_payment_secret_audit` 1 条 `save` 记录（7 个字段名 + 操作人 + IP，不含值）；③ 用 DPAPI 中 KEK 本地解密：7/7 可解密、7/7 通过 `normalizeSecretValue`（商户号 10 位纯数字、证书序列号 40 位十六进制、APIv3 密钥 32 位、商户私钥 RSA 2048 且可实际签名、微信支付公钥 RSA 2048、平台公钥 ID `PUB_KEY_ID_…`），档位 `parsePacks` 得 5 档 1/5/10/50/100 元 → 10/50/100/500/1000 滴、`priceCents=drops×10`、无赠滴；④ 本地模拟云函数视角 `paymentConfigStatus()` → `ready=true`、`rechargeAvailable=true`、`missing=[]`、`mode=public_key`、`savedCount=7`、`decryptableCount=7`，`WXPAY_APP_ID` 回退 `SERVICE_ACCOUNT_APP_ID=wx00918291b0bd8b9e`；⑤ **决定性验证**：用库内商户号 + 证书序列号 + 私钥对微信支付发只读查单（查不存在的单号），返回 `HTTP 404 / ORDER_NOT_EXIST`，签名被接受 ⇒ 三者匹配、证书已在商户侧生效（签名错会是 `401 SIGN_ERROR`）。**当时仍待处理（回调路径已于同日 21:27 补齐，见下条）**：`/honeyPayNotify` 曾未映射（POST 返回 404）；`honey_orders` 集合权限实测 `READONLY`（所有人可读，含 openId/userId/金额），索引只有 `_id_` 与 `_openid_1`，缺 `openId + createdAt`；商户平台侧还需人工确认服务号 AppID 与商户号的 JSAPI 关联、JSAPI 授权目录包含 `https://www.sxffootball.cn/`。
+  - **回调路径已打通（2026-10-28 21:27，用户授权执行）**：`*`（通配域名）分组在控制台禁止新增路由，故加在具体域名 `cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com` 下：路径 `/honeyPayNotify`、资源类型云函数、资源对象 `webLoginApi`、身份认证关、安全域名关、**路径透传开**（`routes add` + `routes edit -y`，回读确认 `开启/SCF/webLoginApi/关闭/关闭/开启`，`ModTime 21:27:31`）。**关键坑**：只加路由不开路径透传时，HTTP 访问服务传给函数的 `event.path` 不是 `/honeyPayNotify`，会掉进通用 action 路由并返回 HTTP 200 + `{"success":false,"error":"未知操作：undefined"}`，极易误判为"已通"。复测：空报文 `400`（请求体为空）、带报文无签名 `401`（验签失败）、查询串形式 `401` —— 回调线路已通。4xx 时网关不回传函数 JSON 报文，判断只看状态码。
+  - **`honey_orders` 安全配置已完成（2026-10-28 晚，用户授权执行）**：改前 `DescribeSafeRule` = `AclTag:READONLY`（所有人可读，文档含 openId/userId/金额）、`listIndexes` 仅 `_id_` 与 `_openid_1`；执行 `ModifySafeRule`（`READONLY` → `ADMINONLY`）与 Mongo 原生 `createIndexes`（`openId_1_createdAt_-1` 供订单列表/待支付复用、`createdAt_-1` 供平台全局倒序），`numIndexesBefore 2 → numIndexesAfter 4`。回读确认：`AclTag=ADMINONLY`、索引 4 条齐全。不影响功能的原因：`honey_orders` 只由云函数读写（H5 走 `servicePrivateHoneyOrders`、平台走 `platformOwner`），无客户端 SDK 直连，符合零 SDK 红线。未改字段、未删数据、未动 `fan_points_ledger`（其 `serviceAccountOpenId` 索引仍待单独授权）。
+  - **服务号 H5 蜂蜜充值面板已发布（2026-10-28 深夜，用户授权执行）**：起因是线上 `service-personal.js` 仍为 `?v=20261020-fb1` 旧版，点「充值」只弹静态「充值暂未开放」、一次请求都不发。先做线上/本地逐行比对确认无功能回退（本地独有行全部是蜂蜜充值；线上独有 3 行均为被替换的旧代码），再用 `hosting deploy` 发布 `me.html`、`service-personal.js`、`service-personal-polish.css` 三个文件，回读 SHA-256 与本地逐一一致，`me.html` 已引用 `?v=20261027-honey2` 与 `?v=20261025-honey1`。
+  - 仍未做：商户平台需人工确认 JSAPI AppID 关联与授权目录；真实 1 元下单/收银台/回调入账/退款未验证；服务号 H5 充值面板已于 2026-10-28 深夜发布（见上一条）。`honeyWallet.cjs`、`servicePrivate.cjs`、`servicePersonalAccount.cjs` 等仍需按 `main` 侧归属整组提交；`platformOwner/index.js` 改动只在 `codex/platform-ops`。退款规则、赠滴、家庭档开放条件待确认，详见 `docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md`。
 
 ## 2026-10-28 vivo Pad3 Pro后台横屏适配（本地完成，未部署）
 
@@ -1881,3 +1934,20 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
 ## 2026-10-28 vivo Pad3 Pro横屏适配已发布测试端
 
 用户明确授权测试发布，已基于Gitee preview 241b48dd保留已有功能、引入六个产品文件的独立补丁，功能分支d2b843a3及预览集成95dc6e7b已推送Gitee。正式仓库内从该Git树导出的隔离源码重新构建并复验，12种横屏样例、菜单授权一致性、点按时间编辑、弹窗及1440px桌面对照通过。405个静态文件已发布/preview/admin/；入口HTTP200，SHA-256 e8d216bed3bc3533510b8fb2a541671fbcb7bba356512a886048e4e2ac684442，11个关键资源摘要全部一致。真实测试地址的横屏登录/微信二维码框检查通过，私有业务页未冒用登录验证。正式/admin/入口SHA-256发布前后保持b75b7ffc65cc10eb7cc35ea8999cf2d929706bc6a714d341c326c339bc124163，未发布正式端、函数或迁移数据。测试共用正式后端，仅用明确测试赛事做写操作。当前状态替代此前“本地完成未部署”，真机验收待用户。详见docs/releases/tablet-landscape-preview-20261028.md。
+
+## 2026-10-28 平板报名页遮挡与竖版登录页已更新测试端
+
+针对用户真机反馈，取消报名页内重复吸顶品牌栏、修正专业报名组别工具栏的覆盖选择器与绝对定位，整理标题/操作、组别和四项摘要，宽表仅在容器内部横向滚动。登录页横屏左侧完整竖版LOGO，右侧原微信扫码/刷新/教程，登录与手机号流程未改，Windows已有品牌面板避免重复。基于95dc6e7b整合，功能提交63b4da3b、Gitee preview集成8c5ec065；四个文件最小变更，从该Git树构建发布406静态文件。四种横屏视口含1032x600，共32组合及报名页四个滚动位置检查通过，桌面对照通过。线上入口HTTP200和10个关键资源SHA-256一致，入口f29942912748b1b5f8c1d0b45e31bdeb26dbc2d8e4c9272305f0bfee6cea73ba，真实二维码加载与刷新轮换通过，正式后台摘要未变。仍是平板网页版，不是安卓APK。验收地址https://www.sxffootball.cn/preview/admin/?layout=20261028b#/login，需刷新或重开旧页。详见docs/releases/tablet-scroll-login-preview-20261028.md。
+
+2026-10-28 用户授权后，小程序开发版 1.2.23 已通过 CLI 上传成功（球队端 wx57164cca8676f411）。包含当前小程序全部既有改动和空球队身份切换修复：无球队仍可切换球队管理者并创建，资源权限保持实时校验。656 个文件上传源摘要全部一致，回执 work/upload-1.2.23-info.json；总包 3,993,704 B，主包 2,045,363 B。仅打包排除无引用的两张旧发现背景，源图保留。未设体验版、未提交审核或正式发布；未部署云函数和其他端。后端首页目录另有既存回归失败，详见 docs/releases/mini-1.2.23-upload-20261028.md。
+
+## 2026-10-29 球员登记 AI 形象照弹层改版（先扣费后生成）已发布测试端
+
+用户提出 5 项要求：生成转圈提示、生成后收起顶部示例、先扣费后生成、成片 9:16、按钮移到底部。本轮按「先给单独链路页面测试、通过后再上正式链路」的既有约束，只发布链路测试页与共享后端 `webLoginApi`，正式页 `join-player.html` 一字节未改。
+
+- **先扣费后生成**：`webLoginApi/serviceAiPortrait.cjs` 的 `prepare` 新增可选 `chargeFirst` + `requestId`，先 `spendHoney` 再签发生图凭证；新增 `refund` 按同一 `refId` 幂等退回，已入库的成片拒绝退回。`apply` 复用同一 `refId` 天然去重，不再二次扣费。`service-entry.js` 新增 `refundAiPortrait`，`index.js` 新增 `case 'serviceEntryAiPortraitRefund'`。不传 `chargeFirst` 的旧时序不变，正式页仍走旧链路。
+- **前端（v2 门控）**：`window.SXF_AI_SHEET_V2 === true` 时渲染 `#aiProgress` 转圈 + 三段阶段文案、生成后隐藏 `#aiAnim` 顶部示例、9:16 竖版画框（宽高双兜底，老 WebView 无 `aspect-ratio` 也成立）、两个按钮从右侧竖排移到图片下方横排；换图前 `confirm` 告知已扣蜂蜜不退。
+- **9:16 取舍**：`aiPortraitDemo` 出图比例白名单只有 3:4/1:1/4:3，线上默认 `hunyuan35` 不接收比例，故 9:16 只做展示画框，成片仍为 3:4 居中留透明上下边；真 9:16 需裁切扩图或新增尺寸档位，待用户确认。
+- **验证**：`node --check` 四个文件通过；`tools/test-registration-transparent-portrait.cjs` PASS（新增先扣/去重/退回幂等/余额不足不签发用例）；线上探针 `serviceEntryAiPortraitRefund` 返回登记会话已失效、不存在的 action 返回「未知操作」，证明新路由在线。
+- **发布**：`webLoginApi` 按线上包差量（只覆盖 `service-entry.js`、新增 `serviceAiPortrait.cjs`、在线上 `index.js` 插入一行路由），`check-referee-backend-package` PASS 后 `fn code update`；`fn detail` 部署完成、Nodejs18.15 / 512MB / 120s / 自动安装依赖 TRUE、26 项环境变量未变；回下载 `index.js`/`service-entry.js`/`serviceAiPortrait.cjs` SHA-256 与发布包逐一一致。H5 `service-entry.js`/`service-entry.css`/`registration-ai-test.html` 发布后 HTTP 回读 SHA-256 全部一致，测试页资源版本 `?v=20261029-ai-sheet5`；`join-player.html` 线上本地同摘要、仍为 `?v=20261028-ai-sheet3`。
+- **待办**：用户在真机走一遍测试页验收；通过后打开 `aiV2` 开关并 bump 版本号切正式链路；9:16 是否改成真实出图比例待确认；本轮改动尚未 Git 提交。详见 `docs/releases/registration-ai-sheet-v2-charge-first-20261029.md`。

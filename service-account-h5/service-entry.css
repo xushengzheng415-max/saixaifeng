@@ -13,3 +13,76 @@ input[aria-invalid="true"]:focus{outline:2px solid #b33429;outline-offset:0;box-
 .card-stage canvas{display:block;width:100%;height:auto;aspect-ratio:300/430;object-fit:contain}.card-stage canvas[hidden]{display:none}
 .field-hint{display:block;margin-top:6px;font-size:12px;line-height:1.5}.field-hint[hidden]{display:none}
 .registration-final-card{display:flex;justify-content:center;margin:20px 0}.registration-final-card img{display:block;width:min(300px,100%);height:auto;aspect-ratio:300/430;object-fit:contain}.registration-final-card[hidden]{display:none}.entry-return-link{display:block;margin:18px 0 4px;color:#087d4b;font-size:14px;text-align:center;text-decoration:none}.resume-entry{padding:16px 0;border-bottom:1px solid #e0e7e3}.resume-entry h2{margin:0 0 6px;font-size:18px}.resume-entry p{margin:0 0 12px;color:#627369;font-size:14px}
+.ai-portrait{margin-top:14px;padding:12px;border:1px dashed #bfd8c9;border-radius:10px;background:#f7fbf8}
+.ai-portrait-head{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}.ai-portrait-head strong{font-size:15px}.ai-portrait-head small{font-size:12px;line-height:1.5}
+.ai-portrait-picks{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}.ai-portrait-picks label{font-size:13px;font-weight:400;margin:0}.ai-portrait-picks select{height:40px;font-size:14px;margin-top:6px}
+.ai-portrait>.photo-actions{margin-top:8px}.ai-portrait>.photo-actions button{font-size:14px}
+.ai-portrait>small{display:block;margin-top:8px;font-size:12px;line-height:1.6}
+.ai-portrait-result{display:flex;gap:12px;align-items:flex-start;margin-top:12px}.ai-portrait-result img{width:104px;height:139px;object-fit:contain;border-radius:8px;border:1px solid #cbd9d1;flex:none;background:repeating-conic-gradient(#edf1ee 0 25%,#fff 0 50%) 50%/16px 16px}
+.ai-portrait-result .photo-actions{flex:1;min-width:0;margin-top:0;flex-direction:column;align-items:stretch}.ai-portrait-result .photo-actions button{width:100%;min-width:0;white-space:normal;line-height:1.3}
+.ai-honey-link{display:inline-block;margin-top:6px;font-size:12.5px;color:#0c5c40;font-weight:600;text-decoration:underline}
+
+/* ---------- 形象照：自行上传 / 智能生成（2026-10-28 用户确认） ---------- */
+.photo-card{margin-top:2px;padding:12px;border:1px solid #e2e9e5;border-radius:10px;background:#fbfdfb}
+.photo-card .photo-guide{align-items:center;margin-bottom:10px}
+.photo-card .photo-example{width:62px;height:83px}
+.photo-guide-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+.photo-guide-text strong{font-size:14px;color:#0c5c40}
+.photo-guide-text small{font-size:12px;line-height:1.5}
+.photo-preview{display:block;width:96px;max-height:150px;height:auto;object-fit:contain;border-radius:8px;border:1px solid #cbd9d1;margin:0 0 10px;background:repeating-conic-gradient(#edf1ee 0 25%,#fff 0 50%) 50%/16px 16px}
+.photo-cta{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.photo-cta button{min-height:44px;font-size:15px;gap:5px;white-space:nowrap}
+.photo-source{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;padding-top:8px;border-top:1px dashed #e2e9e5}
+.photo-source button{min-height:42px;font-size:14px;white-space:nowrap}
+.photo-card>small{display:block;margin-top:8px;font-size:12.5px;line-height:1.5}
+.photo-card .text-action{margin-top:2px}
+
+/* ---------- 智能生成弹层 ---------- */
+.psheet-mask{position:fixed;inset:0;z-index:1200;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,20,13,.55)}
+.psheet{width:100%;max-width:520px;max-height:92vh;max-height:92dvh;overflow:auto;overscroll-behavior:contain;background:#fff;border-radius:16px 16px 0 0;padding:16px 18px 22px;animation:psheetUp .2s ease-out}
+@keyframes psheetUp{from{transform:translateY(16px);opacity:.6}to{transform:translateY(0);opacity:1}}
+.psheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.psheet-head h3{margin:0;font-size:17px}
+.psheet-close{width:32px;height:32px;min-height:0;border:0;background:transparent;color:#718078;font-size:24px;padding:0}
+.ai-anim{display:grid;grid-template-columns:1fr 14px 1fr 18px 1.18fr;align-items:center;gap:5px;height:174px;margin:12px 0 16px;border-bottom:1px solid #edf1ee}
+.ai-demo-item{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px;min-width:0;opacity:.52;transition:opacity .45s ease,transform .45s ease}
+.ai-demo-item img{display:block;width:100%;height:140px;object-fit:contain;background:transparent;border:0;border-radius:0}
+.ai-demo-item span{font-size:11px;color:#7c8a82;white-space:nowrap}
+.ai-demo-symbol{font-size:18px;color:#9aaba1;text-align:center;margin-top:-20px}
+.ai-anim.p1 .face,.ai-anim.p2 .jersey,.ai-anim.p3 .result{opacity:1;transform:translateY(-2px)}
+.ai-anim.p1 .face span,.ai-anim.p2 .jersey span,.ai-anim.p3 .result span{color:#087d4b;font-weight:600}
+.ai-upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ai-upload{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0;height:126px;padding:8px;border:1px dashed #b6c7bd;border-radius:8px;background:#fafcfb;color:#365446;font-size:14px;font-weight:500}
+.ai-upload img{width:100%;height:90px;min-height:0;object-fit:contain;border:0;border-radius:0;background:transparent}
+.ai-upload.selected{border-style:solid;border-color:#087d4b;background:#fff}
+.ai-upload:disabled{opacity:.6}
+.ai-generate{margin-top:16px;min-height:46px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:10px}
+.ai-generate span{font-size:13px;font-weight:400;opacity:.9}
+#aiPortraitState{display:block;line-height:1.5;margin:8px 0 0;font-size:12px;text-align:center}
+#aiPortraitState:empty{display:none}
+.ai-portrait-result{margin-top:14px}
+.ai-portrait-result img{display:block;width:100%;max-height:360px;object-fit:contain;border:0;border-radius:0;background:repeating-conic-gradient(#edf1ee 0 25%,#fff 0 50%) 50%/16px 16px}
+.ai-funding-mask{position:fixed;inset:0;z-index:1300;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,20,13,.48)}
+.ai-funding{width:100%;max-width:350px;background:#fff;border-radius:12px;padding:22px;text-align:center;box-shadow:0 12px 36px #0002}
+.ai-funding h3{margin:0 0 10px;font-size:18px}
+.ai-funding p{margin:0 0 20px;font-size:14px;color:#64766b;line-height:1.6}
+.ai-funding-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ai-funding-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:50px;padding:8px;font-size:14px;border-radius:7px}
+.ai-funding-actions small{display:block;font-size:11px;font-weight:400;line-height:1.3}
+.ai-funding-actions button:disabled{background:#f5f6f5;color:#98a29c;border-color:#e0e5e1}
+.ai-funding .text-action{display:block;margin:14px auto 0;min-height:32px;background:transparent;border:0;color:#77887e;font-size:13px}
+@media(max-height:700px){.ai-anim{height:150px;margin:8px 0 12px}.ai-demo-item img{height:118px}.ai-upload{height:110px}.ai-upload img{height:74px}}
+@media(prefers-reduced-motion:reduce){.psheet{animation:none}.ai-demo-item{opacity:1;transform:none!important;transition:none}}
+
+/* ---------- 智能生成弹层 v2（2026-10-29 用户确认：生成中转圈、成片 9:16、按钮移到底部） ---------- */
+/* 只在 .psheet.ai-v2 下生效，正式登记页未验收前保持原版式 */
+.ai-progress{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;border:1px solid #d8e8de;border-radius:10px;background:#f1f8f4;color:#0c5c40;font-size:13px;line-height:1.5;text-align:left}
+.ai-spinner{flex:none;width:20px;height:20px;border:3px solid #cfe3d7;border-top-color:#087d4b;border-radius:50%;animation:aiSpin .7s linear infinite}
+@keyframes aiSpin{to{transform:rotate(360deg)}}
+.psheet.ai-v2 .ai-portrait-result{display:block;margin-top:14px}
+/* 画框固定 9:16：先给宽高两个尺寸兜底，老版微信 WebView 不支持 aspect-ratio 时也是竖版 */
+.psheet.ai-v2 .ai-portrait-frame{display:flex;align-items:center;justify-content:center;height:min(52vh,400px);width:min(calc(52vh * 0.5625),225px);max-width:100%;aspect-ratio:9/16;margin:0 auto;border:1px solid #dbe6e1;border-radius:10px;overflow:hidden;background:repeating-conic-gradient(#edf1ee 0 25%,#fff 0 50%) 50%/16px 16px}
+.psheet.ai-v2 .ai-portrait-frame img{display:block;width:100%;height:100%;max-height:none;object-fit:contain;border:0;border-radius:0;background:transparent}
+.psheet.ai-v2 .ai-portrait-result .photo-actions{flex:initial;flex-direction:row;align-items:stretch;gap:10px;margin-top:12px}
+.psheet.ai-v2 .ai-portrait-result .photo-actions button{flex:1;width:auto;min-width:0;font-size:14px;line-height:1.3;white-space:normal}
+@media(prefers-reduced-motion:reduce){.ai-spinner{animation:none;border-top-color:#087d4b;border-right-color:#087d4b}}

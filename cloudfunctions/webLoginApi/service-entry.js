@@ -206,7 +206,10 @@ async function context(event) {
     catch(error){console.warn('[service-entry] card contexts skipped:',text(error.message))}
   }
   const registrationResume=await require('./serviceRegistrationResume.cjs').restore(cloud,loaded)
-  return { success:true, purpose:gate.purpose, teamName:text(team.name||team.teamName), participantMode:text(invite.participantMode), targetedPlayer:Boolean(invite.playerId), registeredPlayerId:text(session.registeredPlayerId), cardContexts, registrationResume, registrationVersion:'player-registration/3', phoneVerified:session.phoneVerified===true, phoneMasked:session.phoneVerified ? text(session.phone).slice(0,3)+'****'+text(session.phone).slice(7) : '' }
+  // AI 抱膀定妆照：价格与蜂蜜余额都由服务端给出（前端只展示），
+  // 钱包读取失败不阻断登记页，如实回 reason 让页面说明原因。
+  const aiPortrait=await require('./serviceAiPortrait.cjs').info(db,loaded)
+  return { success:true, purpose:gate.purpose, teamName:text(team.name||team.teamName), participantMode:text(invite.participantMode), targetedPlayer:Boolean(invite.playerId), registeredPlayerId:text(session.registeredPlayerId), cardContexts, registrationResume, registrationVersion:'player-registration/3', aiPortrait, phoneVerified:session.phoneVerified===true, phoneMasked:session.phoneVerified ? text(session.phone).slice(0,3)+'****'+text(session.phone).slice(7) : '' }
 }
 async function claimTeam(event) {
   const current=await context(event)
@@ -231,6 +234,11 @@ async function playerRegistration(event,operation) {
 }
 async function joinPlayer(event) { return playerRegistration(event,'submit') }
 async function uploadPhoto(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceRegistrationMedia.cjs').upload(cloud,db,await sessionFor(event),event) }
+// AI 抱膀定妆照入库：确认成片后按同一 requestId 入库（先扣费模式下此处只去重，不再扣第二次）
+async function uploadAiPortrait(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceAiPortrait.cjs').apply(cloud,db,await sessionFor(event),event) }
+async function prepareAiPortrait(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceAiPortrait.cjs').prepare(db,await sessionFor(event),event) }
+// 先扣费后生成的总退路：生成/上传失败时按同一 requestId 退回本次蜂蜜（幂等，已入库的成片不退）。
+async function refundAiPortrait(event) { return require('./serviceAiPortrait.cjs').refund(db,await sessionFor(event),event) }
 async function playerCard(event) { const auth=await playerRegistration(event,'authorize_media'); if(!auth.success)return auth; return require('./serviceRegistrationMedia.cjs').card(cloud,db,await sessionFor(event),event) }
 // submit/confirm_restore 内部另有事务级重试与回执幂等，此处为外层兜底。
 async function withBusyRetry(action, handler, event) {
@@ -254,6 +262,9 @@ module.exports = async function handleServiceEntry(action,event) {
     if (action==='serviceEntryVerifySms') return await verifySms(event)
     if (action==='serviceEntryClaimTeam') return await claimTeam(event)
     if (action==='serviceEntryUploadPhoto') return await uploadPhoto(event)
+    if (action==='serviceEntryAiPortraitApply') return await uploadAiPortrait(event)
+    if (action==='serviceEntryAiPortraitPrepare') return await prepareAiPortrait(event)
+    if (action==='serviceEntryAiPortraitRefund') return await refundAiPortrait(event)
     if (action==='serviceEntryPlayerCard') return await playerCard(event)
     if (action==='serviceEntryContext') return await withBusyRetry(action, context, event)
     if (action==='serviceEntryJoinPlayer') return await withBusyRetry(action, joinPlayer, event)
