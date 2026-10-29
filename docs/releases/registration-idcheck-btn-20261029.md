@@ -99,9 +99,49 @@
 - 回读（`Cache-Control: no-cache`）SHA-256 全部与上传副本一致：`registration-idcheck.js` 9,037 B `7ADA1E27…`、`registration-idcheck.css` 1,267 B `616BDE81…`、预览 `join-player.html` 1,008 B `769D2967…`、预览 `registration-ai-test.html` 6,626 B `26E28E10…`。
 - 云函数为共享正式后端，无独立测试副本，本次不另建测试后端。
 
-## 五、验收与后续
+## 五、补充：确认取卡后直接提交（同日第二轮反馈）
+
+用户反馈：填完资料、确认取卡后又回到表单，期待的是「提交成功 / 提交失败的结果页」。
+
+### 排查结论
+
+- 上传形象照后页面会**自动**打开球员卡弹层（`handlePhotoFile` 先 `editor.begin('正在处理照片…')`，上传成功后 `editor.generate()`），所以「确认取卡」大多发生在还没点提交的状态。原逻辑只有「先点提交 → 弹层确认」这条路会 `pendingSubmit` 自动提交；用户自己取卡确认后只回到表单，还要再往下滚找「确认新建」，很容易被当成「已经提交了」。
+- 顺带发现：线上 `service-account-h5/service-entry.js`（93,247 B）**不含** 19:02 那次发布的独立完成页 `showRegistrationDone`，提交成功后走的是「球员卡预览」页并被改写标题为「登记成功 / 已提交球队确认」。本次**不改**这条路径（属于另一会话的设计，仓库 93,173 B 与线上 93,247 B 已分叉），只在交付中登记，需要恢复独立完成页时另行确认。
+
+### 修复（仍在独立装饰脚本内，不动共用 `service-entry.js`）
+
+- 监听弹层确认按钮：确认后回到表单且 `#photoState` 为「球员卡已确认」时，自动点击**同一个表单的提交按钮**（与用户手点完全同一条链路；授权未勾选、字段不合法仍由页面自己拦下并提示）。
+- 用户自己取卡时把弹层按钮文案从「确认使用」改为「确认并提交登记」，避免以为只是再看一眼。
+- 恢复上下文走的是 `restore()`（没有确认点击），因此不会被自动提交。
+
+### 验证
+
+新增 `tools/test-registration-confirm-submit.cjs`（Playwright 隔离浏览器，全部网络拦截、不产生真实提交，真实加载 `service-entry.js` + `registration-card-modal.js` + `registration-idcheck.js`）：
+
+- 场景一（资料齐全 + 已勾选授权）：填表 → 上传形象照 → 弹层自动出卡 → 按钮文案为「确认并提交登记」→ 点击 → `serviceEntryJoinPlayer` **只调用 1 次** → 进入结果页（仓库分支「注册完成，等待审核」，线上分支「已提交球队确认」），表单消失。
+- 场景二（未勾选授权）：确认取卡后**不提交**，留在表单并提示「请确认本人或监护人资料授权」。
+- 对**线上 93,247 B 版本**和仓库 93,173 B 版本各跑一次，两版都 PASS。
+- 截图：`output/registration-confirm-submit-20261029/card-modal-375.png`、`done-page-375.png`、`agree-required-375.png`。
+- `tools/test-registration-idcheck.cjs` 复跑 PASS（身份证前置核验未受影响）。
+
+### 发布（`?v=20261029-idcheck2`，正式 + 测试目录）
+
+| 文件 | 大小 | SHA-256 |
+|---|---|---|
+| `service-account-h5/registration-idcheck.js` | 11,403 B | `FD432554E0181BFA52D9103BBD5156F3880FD4767FC32A83F7F92E23AAC120A4` |
+| `service-account-h5/join-player.html` | 1,052 B | `0B53F873764F5BED87AE46B1C61B270421F72CB2210ABFEDDF0C15AA7A5F6D23` |
+| `service-account-h5/registration-ai-test.html` | 6,626 B | `E95D459C81967121E0B3D15BAFEB4551F7B3486CB6D207813A678134C14152A8` |
+| `preview/service-account-h5/registration-idcheck.js` | 11,403 B | `FD432554…`（同正式） |
+| `preview/service-account-h5/join-player.html` | 1,008 B | `91A2C2C2C57BA17AD3200C993EF5B4BA56B153D5162D75AAA8DDDCEA359D2E15` |
+| `preview/service-account-h5/registration-ai-test.html` | 6,626 B | `A1EA1BBE1000DD7DE7EE3F4B40D28EEAC54A43E280D87E16DA5066EF10D45320` |
+
+回读均带 `Cache-Control: no-cache`，SHA-256 与本地/上传副本逐一一致；`registration-idcheck.css` 本次未变，未重传。
+
+## 六、验收与后续
 
 - 正式页：`https://www.sxffootball.cn/service-account-h5/join-player.html`
 - 测试页：`https://www.sxffootball.cn/service-account-h5/registration-ai-test.html`
 - 建议验收顺序：填一个**本队已存在**的身份证 → 松手后应立刻出现红字「本队已有该身份证档案，请返回查找并认领」＋「去查找并认领」→ 此时点「生成球员卡」或提交都点不动 → 点「去查找并认领」应跳查找页并自动带出身份证 → 改成未占用的身份证，提示消失、可正常生成与提交 → 形象照区的「生成球员卡」应为整行绿色主按钮、白字居中、清晰可读。
+- 取卡验收：填完资料 → 上传形象照 → 弹层自动出卡 → 按钮应显示「确认并提交登记」→ 点击后应直接进入结果页（「已提交球队确认 / 登记成功」＋刚确认的球员卡），不再回到表单；未勾选授权时会留在表单并提示授权。
+- 已知分叉：线上 `service-entry.js`（93,247 B）没有独立完成页 `showRegistrationDone`，仓库版本（93,173 B）有；两者对本次装饰脚本的契约一致（弹层类名、确认按钮、`#photoState` 文案、表单提交按钮），因此都能正常工作。若确认要恢复 19:02 的独立完成页，需要先合并这两份分叉，另行处理。
 - 未做：未改后端提交时的重复判定（前置核验只是提前同口径提示，最终仍以后端为准）；未改号码核验逻辑；未改小程序与 PC 后台；他人未发布的籍贯/编号与完成页改造未纳入本次发布。

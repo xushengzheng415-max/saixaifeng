@@ -225,3 +225,55 @@
   observer.observe(content, { childList: true, subtree: true })
   bind()
 })()
+
+// ---------- 确认取卡后直接提交（2026-10-29 用户反馈） ----------
+// 现状只有「先点提交 → 弹层里确认」会自动提交；用户自己点「生成球员卡 / 调整球员卡」进弹层时，
+// 确认完只回到表单，还要再往下找提交按钮，容易被当成「已经提交了」。
+// 这里补上：确认取卡后如果资料齐全，直接走同一个提交入口，成功后由页面自己变成结果页。
+;(function () {
+  var confirming = false
+  var submitted = false
+  function overlay() { return document.querySelector('.registration-card-overlay') }
+  function registrationForm() {
+    var form = document.getElementById('form')
+    if (!form) return null
+    // 只有登记/认领表单才有「生成球员卡」，其他表单的提交不被接管。
+    if (!document.getElementById('editRegistrationCard')) return null
+    return form
+  }
+  function submitButton() {
+    var form = registrationForm()
+    return form ? form.querySelector('button[type="submit"]') : null
+  }
+  document.addEventListener('click', function (event) {
+    var target = event.target
+    if (!target || !target.closest) return
+    var confirm = target.closest('.registration-card-overlay [data-card="confirm"]')
+    if (!confirm || confirm.disabled) return
+    confirming = true
+    submitted = false
+  }, true)
+  function tick() {
+    var dialog = overlay()
+    if (!confirming) {
+      // 用户自己取卡时把「确认使用」说清楚：点下去就是提交登记，不是再看一眼。
+      if (!dialog || !registrationForm()) return
+      var confirm = dialog.querySelector('[data-card="confirm"]')
+      if (confirm && !confirm.disabled && confirm.textContent.trim() === '确认使用') confirm.textContent = '确认并提交登记'
+      return
+    }
+    if (dialog) return
+    confirming = false
+    var state = document.getElementById('photoState')
+    if (!state || String(state.textContent || '').trim() !== '球员卡已确认') return
+    var button = submitButton()
+    if (!button || button.disabled || submitted) return
+    submitted = true
+    setTimeout(function () {
+      var current = submitButton()
+      if (!current || current.disabled) return
+      current.click()
+    }, 80)
+  }
+  new MutationObserver(tick).observe(document.body, { childList: true, subtree: true, characterData: true })
+})()
