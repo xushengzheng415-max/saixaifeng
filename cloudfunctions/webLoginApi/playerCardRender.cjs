@@ -74,7 +74,7 @@ function label(value, field, maxWidth = 280, id = 'label', definitions = []) {
     filter = ' filter="url(#' + key + ')"'
   }
   const skew = style.fontStyle === 'italic' ? ' transform="translate('+(Number(field.x)||0)+' '+(Number(field.y)||0)+') skewX(-12) translate('+(-(Number(field.x)||0))+' '+(-(Number(field.y)||0))+')"' : ''
-  const family = contract.fonts.find(font=>font.id===style.font).family + ', Noto Sans SC'
+  const family = contract.fonts.find(item=>item.id===style.font).family + ', Noto Sans SC'
   return '<text x="'+(Number(field.x)||0)+'" y="'+(Number(field.y)||0)+'" text-anchor="middle" dominant-baseline="hanging" font-family="'+family+'" font-size="'+size+'" font-weight="'+(Number(field.weight)||400)+'" font-style="normal" letter-spacing="'+style.letterSpacing+'" fill="'+fill+'" stroke="'+style.stroke.color+'" stroke-width="'+style.stroke.width+'" stroke-linejoin="round" paint-order="stroke fill"'+filter+skew+'>'+escapeXml(shown)+'</text>'
 
 }
@@ -95,7 +95,9 @@ function isChina(nationality) {
 
 function chineseFlagMarkup(badge) {
   if(!badge)return ''
-  const {x,y,size}=badge,h=size*2/3,left=x-size/2,top=y-h/2
+  // 编辑器把国籍/球队元素的 y 当作上边缘（top:y），成卡也必须同上边缘，
+  // 否则大图和排版预览会差半个元素高度。
+  const {x,y,size}=badge,h=size*2/3,left=x-size/2,top=y
   const stars=[
     star(left+size*5/30,top+h*5/20,size/10),
     star(left+size*10/30,top+h*2/20,size/30,239),
@@ -124,8 +126,9 @@ function isTransparentPng(buffer) {
 function nationality(player, badge) {
   if (!badge || !player.nationality) return ''
   if (isChina(player.nationality)) return chineseFlagMarkup(badge)
-  const { x, y, size } = badge
-  return label(player.nationality, { x,y,size:Math.min(size*.6,18),weight:600,color:'#1c241d' }, size*2)
+  const { x, y, size } = badge, height = size*2/3, textSize = Math.min(size*.6, 18)
+  // 编辑器把这段文字在 y 起始、size*2/3 高的框内垂直居中，这里按同一规则落位。
+  return label(player.nationality, { x, y:y+(height-textSize)/2, size:textSize, weight:700, color:'#1c241d' }, size*2)
 }
 
 function adjusted(field, delta) {
@@ -144,7 +147,7 @@ function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuff
   const fields = template.layout || {}, personal = {}, badges = template.badges || {}
   const position = { GK:'守门员', DF:'后卫', MF:'中场', FW:'前锋' }[player.position] || String(player.position||'').trim() || '—'
   const logo = badges.team && teamLogoBuffer ? image(teamLogoBuffer,
-    `x="${badges.team.x-badges.team.size/2}" y="${badges.team.y-badges.team.size/2}" width="${badges.team.size}" height="${badges.team.size}" preserveAspectRatio="xMidYMid meet"`) : ''
+    `x="${badges.team.x-badges.team.size/2}" y="${badges.team.y}" width="${badges.team.size}" height="${badges.team.size}" preserveAspectRatio="xMidYMid meet"`) : ''
   const definitions = []
   const textLayers = photoOnly ? '' : [
     label(player.jerseyNumber,adjusted(fields.number,personal.number),85,'number',definitions),

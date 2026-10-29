@@ -713,8 +713,10 @@ function resetPhoto() { Object.assign(form.photo, DEFAULT_PHOTO); dirty.value = 
 function resetBadge() { Object.assign(form.badges[selectedBadge.value], DEFAULT_BADGES[selectedBadge.value]); dirty.value = true }
 function badgeStyle(key) {
   const badge = form.badges[key] || DEFAULT_BADGES[key]
+  // 国籍徽标：字号与成卡渲染保持一致，文字框按 y 起始、size*2/3 高垂直居中。
   return { left: `${badge.x}px`, top: `${badge.y}px`, width: `${badge.size}px`,
-    height: `${key === 'nationality' ? Math.round(badge.size * 2 / 3) : badge.size}px`, transform: 'translateX(-50%)' }
+    height: `${key === 'nationality' ? Math.round(badge.size * 2 / 3) : badge.size}px`, transform: 'translateX(-50%)',
+    ...(key === 'nationality' ? { fontSize: `${Math.min(badge.size * 0.6, 18)}px` } : {}) }
 }
 function beginBadgeDrag(event, key) {
   event.preventDefault(); selectedBadge.value = key
@@ -758,7 +760,7 @@ function beginTextDrag(event, key) {
 onMounted(() => {
   if(!document.getElementById('player-card-fonts')) {
     const sheet=document.createElement('style');sheet.id='player-card-fonts'
-    sheet.textContent=TEXT_STYLE_CONTRACT.fonts.flatMap(font=>font.files.map(file=>'@font-face{font-family:"'+font.family+'";src:url("'+import.meta.env.BASE_URL+'fonts/player-card/'+file+'");font-weight:'+(font.id==='sans'?(file.includes('Bold')?'700 900':'400 600'):'100 900')+';font-style:normal;font-display:swap}')).join('')
+    sheet.textContent=TEXT_STYLE_CONTRACT.fonts.flatMap(font=>font.files.map(file=>'@font-face{font-family:"'+font.family+'";src:url("'+import.meta.env.BASE_URL+'fonts/player-card/'+file+'");font-weight:'+(font.id==='sans'?(file.includes('Bold')?'600 900':'400 500'):'100 900')+';font-style:normal;font-display:swap}')).join('')
     document.head.appendChild(sheet)
   }
   if(props.embedded) loadEmbedded(); else load()
@@ -797,7 +799,7 @@ defineExpose({saveChanges:save,isDirty:()=>dirty.value,formData:()=>JSON.parse(J
 .stroke-controls{display:grid;gap:10px;padding-top:12px;border-top:1px solid #e4ebe6}.stroke-toggle{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#5d6f63}.font-option-sample{float:right;margin-left:16px;color:#617267}
 .layout-presets{display:grid;gap:10px;padding-top:10px;border-top:1px solid #e4ebe6}.layout-presets>strong{font-size:14px}.layout-actions{display:flex;gap:8px}.layout-actions .el-button+.el-button{margin-left:0}
 .field-visibility{display:flex;align-items:center;justify-content:space-between;color:#5d6f63;font-size:12px}
-.card-preview .card-badge.team-image{border:0;background:transparent;clip-path:none;padding:0}.card-preview .team-image img{border:0;border-radius:0;object-fit:contain}.card-preview .card-badge.nationality-label{display:grid;place-items:center;color:#1c241d;font-size:8px;font-weight:700}.team-logo-warning{color:#b56a16!important}.position-override{display:grid;gap:7px;font-size:13px;font-weight:600}
+.card-preview .card-badge.team-image{border:0;background:transparent;clip-path:none;padding:0}.card-preview .team-image img{border:0;border-radius:0;object-fit:contain}.card-preview .card-badge.nationality-label{display:grid;place-items:center;color:#1c241d;font-weight:700}.team-logo-warning{color:#b56a16!important}.position-override{display:grid;gap:7px;font-size:13px;font-weight:600}
 @media(min-width:1101px){.template-workspace>.preview-pane:not(.expanded){position:sticky;top:16px;align-self:start;height:max-content;max-height:calc(100vh - 32px);overflow-y:auto}}
 @media(max-width:1100px){.template-workspace>.preview-pane{position:static;max-height:none;overflow:visible}}
 </style>
