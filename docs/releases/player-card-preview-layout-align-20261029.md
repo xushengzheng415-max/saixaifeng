@@ -50,8 +50,23 @@
 - `getMiniWorkspace` 的同名副本按 `tools/sync-dynamic-player-card.mjs` 已同步源码；该函数只调用 `read`/`descriptor`/`exportCard`，不进入 `publish`，本次未整包重发，待其下次发版自然带上。
 - 平台前端无需改动，线上仍是 `580b6125` 构建。
 
+## 追加：球员登记 H5 预览仍是旧排版（同日 18:5x）
+
+用户在微信内打开「球员登记」（`/service-account-h5/join-player.html`）时，球员卡预览的国旗/队徽偏低、非中国籍文字偏细，与平台后台已发布的排版不一致。
+
+- 根因：该页面的卡面是浏览器端 canvas 绘制（`service-entry.js` 调 `window.SxfDynamicCard.web`），脚本为 `/service-account-h5/dynamic-card-renderer.js`。线上仍是旧副本（9,553 B：国旗 `y=b.y-h/2`、队徽 `y=b.y-b.size/2`、国籍文字 `weight:600`），仓库副本 9,607 B 已是上边缘锚定 + `weight:700` + 垂直居中。上一轮只发布了后端与平台后台，H5 未发布。
+- 同一页面「确认使用」后保存的成卡图由服务端 `playerCardRender.cjs` 生成（已上线新版），因此会出现“交互预览旧排版、成卡新排版”。
+- 发布范围（以**线上文件**为基线，只替换 `dynamic-card-renderer.js?v=<旧值>` 为新值 `20261029-cardalign1`，不整文件覆盖他人未发布改动）：
+  - `dynamic-card-renderer.js`（新绘制代码）
+  - 6 个引用页的版本号：`join-player.html`、`index.html`、`me.html`、`player-cards.html`、`tournament-center.html`、`registration-ai-test.html`
+  - 正式 `/service-account-h5/` 与测试 `/preview/service-account-h5/` 各 7 个文件
+- 读回：两个目标 `dynamic-card-renderer.js?v=20261029-cardalign1` 均 HTTP 200，SHA（归一化换行）与仓库副本一致，且包含 `x=b.x-w/2,y=b.y;`、`weight:700`、`b.x-b.size/2,b.y,b.size,b.size`；6 个页面均 200 且带新版本号。
+- 说明：本地这 6 个 HTML 还带着其他会话未发布的 `service-entry.css|js`、`player-cards.js` 等改动（如 `?v=20261029-donepage1`、`SXF_AI_SHEET_V2`、新版卡库样式），因此只把渲染器版本号改到 `20261029-cardalign1`，未提交整文件，避免把他人在途改动一起提交或上线。
+- 该页面在小程序中是 web-view 加载的远程 H5，更新 H5 即时生效，无需重新发小程序；已打开旧页面的用户需重新进入（或在微信内清缓存）。
+
 ## 遗留
 
 - 已生成的导出图与已发布的静态成卡仍沿用旧锚点：`player_card_renders` 的缓存键只含 `dataVersion` 与渲染版本号，渲染版本未变，因此需要重新生成或重新发布才会呈现新排版。
-- 小程序展示端 `miniprogram/utils/dynamic-card-draw.js` 与 H5 `service-account-h5/dynamic-card-renderer.js` 只同步了源码，需随各自端口发版生效；小程序发版前，其 canvas 展示与服务端导出在徽标纵向仍有约 9–16px 差异。
+- H5 `service-account-h5/dynamic-card-renderer.js` 已于本次发布（正式 + 测试各回读通过）；但用户已缓存的旧页面需重新进入才换新。
+- 小程序展示端 `miniprogram/utils/dynamic-card-draw.js` 只同步了源码，需随小程序体验版/正式版发版生效；小程序发版前，其 canvas 展示与服务端导出在徽标纵向仍有约 9–16px 差异。
 - `getMiniWorkspace` 在 `cloudbaserc.json` 中没有函数条目，`fn code update` 按 CLI 默认配置执行，读回 `InstallDependency=TRUE` 并触发了一次在线依赖安装。后续该函数代码发布应显式提供安装关闭的受控配置，避免再次升级间接依赖。
