@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>球员登记 · 链路测试页</title><link rel="stylesheet" href="./service-entry.css?v=20261029-ai-sheet5"><style>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>球员登记 · 链路测试页</title><link rel="stylesheet" href="./service-entry.css?v=20261029-ai-sheet6"><style>
 .test-banner{margin:0 0 12px;padding:8px 10px;border-radius:10px;background:#fff7e6;color:#8a5a00;font-size:12px;line-height:1.6}
 .test-banner strong{display:block;margin-bottom:2px}
 #trace{margin-top:18px;font-size:12px;color:#5b6b60}
@@ -8,7 +8,7 @@
 #trace li{margin:2px 0;word-break:break-all}
 #trace li.bad{color:#b33429}
 </style></head>
-<body><main class="entry"><p class="test-banner" id="testBanner"><strong>链路测试页（正式登记页未改动）</strong>本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费。</p><header><h1>球员登记</h1></header><div id="status" role="status">正在确认微信身份…</div><section id="content" hidden></section><a class="entry-return-link" href="./registration-resume.html">继续登记入口</a><section id="trace" hidden><details open><summary>接口记录（仅本页显示，不含令牌）</summary><ol id="traceList"></ol></details></section></main>
+<body><main class="entry"><p class="test-banner" id="testBanner"><strong>链路测试页（正式登记页未改动）</strong>本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费；生成前可切换三种抱膀姿势。</p><header><h1>球员登记</h1></header><div id="status" role="status">正在确认微信身份…</div><section id="content" hidden></section><a class="entry-return-link" href="./registration-resume.html">继续登记入口</a><section id="trace" hidden><details open><summary>接口记录（仅本页显示，不含令牌）</summary><ol id="traceList"></ol></details></section></main>
 <script>
 (function () {
   var query = new URLSearchParams(location.search)
@@ -39,7 +39,7 @@
     if (!entry) {
       banner.innerHTML = '<strong>链路测试页（正式登记页未改动）</strong>未找到本机保存的登记会话：请先在微信里打开一次「继续登记」页（registration-resume.html）并点「继续填写」，再回到本页；也可以在本页地址后手动带上 ?entry=…'
     } else {
-      banner.innerHTML = '<strong>链路测试页（正式登记页未改动）</strong>已复用本机保存的登记会话。本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费。'
+      banner.innerHTML = '<strong>链路测试页（正式登记页未改动）</strong>已复用本机保存的登记会话。本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费；生成前可切换三种抱膀姿势。'
     }
   }
 
@@ -95,4 +95,4 @@
 <script src="./vendor/tiny-pinyin.js?v=20261018-regreturn1"></script>
 <script src="./dynamic-card-renderer.js?v=20261018-regreturn1"></script>
 <script src="./registration-card-modal.js?v=20261018-regreturn1"></script>
-<script src="./service-entry.js?v=20261029-ai-sheet5"></script></body></html>
+<script src="./service-entry.js?v=20261029-ai-sheet6"></script></body></html>

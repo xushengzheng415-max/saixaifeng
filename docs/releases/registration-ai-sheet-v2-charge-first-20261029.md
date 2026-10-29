@@ -12,6 +12,16 @@
 | 4 | 生成按钮对应图片布局为 9:16 | `.psheet.ai-v2 .ai-portrait-frame` 固定 9:16 画框（`height:min(52vh,400px)` + 同比例 `width` 兜底，老版微信 WebView 不支持 `aspect-ratio` 时仍是竖版），图片 `object-fit:contain` 居中，透明底用棋盘格 |
 | 5 | 旁边按钮移到底部而非侧面 | `.psheet.ai-v2 .ai-portrait-result` 由 `display:flex`（横向）改为 `display:block`，`.photo-actions` 由 `flex-direction:column`（右侧竖排）改为底部横排两个按钮 |
 
+## 补充要求：姿势选项（2026-10-29 追加）
+
+用户指出改版后「没姿势选项」。历史版本（2026-10-27 定妆照 03 步）本来有三套姿势，收进弹层时被删掉，弹层里一直写死 `pose: 'front'`。本轮补回，且只作用在 v2：
+
+- `aiPortraitDemo/index.js` 的 `POSES` 一直是三套：`front` 正面抱膀、`side` 半侧抱膀、`low` 低位抱膀；`generate` 用 `body.pose` 校验，未知 key 直接 400「不支持的姿势预设」，登记链路（`registrationGenerate` 重映射成 `generate`）同样吃这个参数。**本次不改后端**，只把前端写死的 `pose: 'front'` 换成用户所选。
+- 弹层在「上传头像/球服」与「立即生成」之间渲染 `#aiPoseGroup`（`role="radiogroup"`）：三张 3:4 实拍缩略图并排（`./assets/pose-presets/pose-front.jpg`、`pose-three-quarter.jpg`、`pose-low.jpg`），选中项描边加粗 + `aria-checked="true"`；按钮 key 与云函数 `POSES` 一一对应。
+- 姿势只在生成前切换；若已扣费或已有成片，切换前弹 `confirm`「换姿势需要重新生成，当前成片会被丢弃，本次已扣的蜂蜜不会退回」，确认后作废当前成片与 `requestId`（不退蜂蜜，防止退成免费重试），下一张按新编号重新扣。
+- 生成成功文案与预览 `alt` 带上姿势名（如「已生成「半侧抱膀」形象照」），方便用户核对。
+- 未置 `window.SXF_AI_SHEET_V2` 的正式页仍渲染原版式、仍固定 `front`，行为不变。
+
 ## 先扣费后生成（服务端）
 
 `cloudfunctions/webLoginApi/serviceAiPortrait.cjs`：
@@ -60,16 +70,17 @@
 
 | 文件 | 大小 | SHA-256 |
 |---|---|---|
-| `service-entry.js` | 90,415 B | `63C76604E9D7A4DA…3AC25FF1` |
-| `service-entry.css` | 16,382 B | `1BB9B829630DD4FC…483FAD24` |
-| `registration-ai-test.html` | 6,183 B | `33FB7A8FACDFB1A6…52AD9D75` |
+| `service-entry.js` | 93,942 B | `7BBC0895C768BDBDE952FD1FAEB28400913358E7F174B1B079BAB48457E2EBE5` |
+| `service-entry.css` | 17,527 B | `DEEE74C94EB505D15D34B671AD8D84B3E8BE4B5DEC3637BE597E7306AF5D5132` |
+| `registration-ai-test.html` | 6,261 B | `5A6E9968E9730B24EA2DD3E890F417E085ED15306608B86B8B107DDFE224888B` |
 
-- 测试页资源版本号升到 `?v=20261029-ai-sheet5`（`window.SXF_AI_SHEET_V2=true` 只在测试页置位）。
+- 测试页资源版本号升到 `?v=20261029-ai-sheet6`（`window.SXF_AI_SHEET_V2=true` 只在测试页置位）。
+- 姿势缩略图 `assets/pose-presets/pose-front.jpg` / `pose-three-quarter.jpg` / `pose-low.jpg` 线上与本地同哈希（`50686C0A…` / `E1918EBE…` / `4C5EAF5E…`），**本轮未重传**，仅随本次一起补进 Git 跟踪。
 - 正式页 `join-player.html` 线上与本地同摘要 `9DB6ACF72D1ABF89…`，仍引用 `?v=20261028-ai-sheet3`，**未发布、未改动**；新版 `service-entry.js` 对正式页行为无影响（v2 分支全部由开关门控，未置位的页面渲染与交互与改造前一致）。
 
 ## 验收与后续
 
 - 测试地址：`https://www.sxffootball.cn/service-account-h5/registration-ai-test.html`
-- 建议验收顺序：进弹层 → 看转圈与三段阶段文案 → 生成成功删除顶部示例、只留 9:16 竖版成片、两个按钮在图片下方 → 「使用这张形象照」提示"本次已扣 100 滴" → 故意断网/失败一次，确认红字里带"已退回 100 滴，当前余额…"。
+- 建议验收顺序：进弹层 → 选姿势（正面/半侧/低位抱膀）→ 看转圈与三段阶段文案 → 生成成功删除顶部示例、只留 9:16 竖版成片、两个按钮在图片下方 → 「使用这张形象照」提示"本次已扣 100 滴" → 故意断网/失败一次，确认红字里带"已退回 100 滴，当前余额…" → 再换一次姿势，确认弹出"已扣蜂蜜不会退回"并重新扣费生成。
 - 通过后再切正式链路：把 `aiV2` 默认打开（`join-player.html` 置 `window.SXF_AI_SHEET_V2=true` 或去掉开关）并 bump 版本号，同时更新 `docs/CURRENT_STATUS.md`。
 - 未做：出图比例仍为 3:4；未改价格、模型目录、扣费单价与蜂蜜规则；未改小程序与 PC 后台；工作区其他会话的改动未纳入本次发布。

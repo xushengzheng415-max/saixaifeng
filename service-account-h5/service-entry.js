@@ -363,6 +363,27 @@
     // 2026-10-29 用户确认的弹层改版：生成中转圈、生成后收起顶部示例、成片 9:16、按钮移到图片下方、
     // 先扣费后生成。用 window.SXF_AI_SHEET_V2 灰度：链路测试页置 true 先验，正式页验收后再打开。
     var aiV2 = window.SXF_AI_SHEET_V2 === true
+    // 姿势预设：key 必须与 aiPortraitDemo 的 POSES 一致（front/side/low），
+    // 缩略图用 2026-10-27 用户提供的实拍示例，和云函数里三套提示词一一对应。
+    var AI_POSES = [
+      { key: 'front', label: '正面抱膀', src: './assets/pose-presets/pose-front.jpg' },
+      { key: 'side', label: '半侧抱膀', src: './assets/pose-presets/pose-three-quarter.jpg' },
+      { key: 'low', label: '低位抱膀', src: './assets/pose-presets/pose-low.jpg' }
+    ]
+    var aiPose = 'front'
+    function aiPoseLabel(key) {
+      for (var index = 0; index < AI_POSES.length; index += 1) if (AI_POSES[index].key === (key || aiPose)) return AI_POSES[index].label
+      return AI_POSES[0].label
+    }
+    var aiPoseHtml = aiV2
+      ? ('<div class="ai-poses" id="aiPoseGroup" role="radiogroup" aria-label="选择姿势">' +
+        '<span class="ai-poses-title">选择姿势<small class="muted">（生成前可切换，换姿势需重新生成）</small></span>' +
+        '<div class="ai-poses-row">' + AI_POSES.map(function (item) {
+          var on = item.key === aiPose
+          return '<button type="button" class="ai-pose' + (on ? ' on' : '') + '" data-pose="' + item.key + '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '">' +
+            '<img src="' + item.src + '" alt="' + item.label + '示例"><span>' + item.label + '</span></button>'
+        }).join('') + '</div></div>')
+      : ''
     var aiStateText = aiV2 ? '生成前先扣 ' + aiCost + ' 滴蜂蜜，生成失败自动退回' : '确认使用时扣费'
     // 蜂蜜账户未开通或余额不足时给出可点的去处，不让用户卡在一句话上。
     // 重复账户/账本待核对属于平台处理，不给入口。
@@ -391,6 +412,7 @@
         '<input id="aiPortraitJersey" type="file" accept="image/*" hidden>' +
         '<div class="ai-upload-grid"><button id="aiPortraitPick" type="button" class="ai-upload"><img id="aiFaceThumb" alt="已选择头像" hidden><span id="aiFaceLabel">上传头像</span></button>' +
         '<button id="aiPortraitJerseyPick" type="button" class="ai-upload"><img id="aiJerseyThumb" alt="已选择球服" hidden><span id="aiJerseyLabel">上传球服</span></button></div>' +
+        aiPoseHtml +
         '<button id="aiPortraitGenerate" class="wide ai-generate" type="button">立即生成 <span id="aiGenerateCost">' + aiGenerateLabel + '</span></button>' +
         aiProgressHtml +
         '<small id="aiPortraitState" class="muted">' + esc(aiStateText) + '</small>' +
@@ -670,6 +692,27 @@
     // v2：本次 requestId 已在服务端扣费但成片还没入库（成功后入库去重，失败时退回）。
     // 只有它为 true 时才需要调用退回接口，避免没扣费也发一次退回请求。
     var aiChargeActive = false
+    // 姿势选项：只把 key 传给 aiPortraitDemo，页面不自行判断哪套姿势可用
+    var aiPoseGroup = document.getElementById('aiPoseGroup')
+    var aiPoseButtons = aiPoseGroup ? aiPoseGroup.querySelectorAll('button[data-pose]') : []
+    function aiPaintPose() {
+      Array.prototype.forEach.call(aiPoseButtons, function (button) {
+        var on = button.getAttribute('data-pose') === aiPose
+        button.className = on ? 'ai-pose on' : 'ai-pose'
+        button.setAttribute('aria-checked', on ? 'true' : 'false')
+        button.disabled = aiBusy
+      })
+    }
+    // 换照片或换姿势都作废当前成片：已扣的蜂蜜不退，下一张按新编号重新扣
+    function aiDropResult() {
+      aiGeneratedImage = ''
+      aiGeneratedPortraitId = ''
+      aiReference = ''
+      aiUsed = false
+      if (aiResult) aiResult.hidden = true
+      if (aiGenerateButton) aiGenerateButton.hidden = false
+      if (aiUseButton) aiUseButton.textContent = aiV2 ? '使用这张形象照' : '用这张生成形象照（' + aiCost + ' 滴）'
+    }
     var aiAnimTimer = null
     var AI_ANIM_STEPS = ['本人照片', '球服', '透明形象照']
     function aiSay(message, kind) {
@@ -696,8 +739,25 @@
       if (aiRetryButton) aiRetryButton.disabled = busy
       // v2 的成片已经在生成前扣过费，不能再拿「当前余额 ≥ 单价」拦住入库
       if (aiUseButton) aiUseButton.disabled = busy || (!aiV2 && !aiAvailable) || !aiGeneratedImage || aiUsed
+      aiPaintPose()
       if (!busy) aiShowProgress(null)
     }
+    // 姿势切换：换姿势就是换一张成片，已扣的蜂蜜不退，先确认再换
+    Array.prototype.forEach.call(aiPoseButtons, function (button) {
+      button.onclick = function () {
+        if (aiBusy) return
+        var nextPose = button.getAttribute('data-pose')
+        if (!nextPose || nextPose === aiPose) return
+        if ((aiGeneratedImage || aiChargeActive) && !window.confirm('换姿势需要重新生成，当前成片会被丢弃，本次已扣的蜂蜜不会退回。确定更换吗？')) return
+        aiPose = nextPose
+        aiPaintPose()
+        aiDropResult()
+        if (aiChargeActive) { aiChargeActive = false; aiRequestId = '' }
+        if (aiAnim) aiAnim.hidden = false
+        aiSay('当前姿势：' + aiPoseLabel() + '。' + aiIdleHint(), 'muted')
+      }
+    })
+    aiPaintPose()
     // 动画演示：上传头像 → 上传球衣 → 生成立体形象照，按阶段切 class 由 CSS 过渡完成，
     // 不依赖纯 keyframes 时间轴（弱网/低端机与截图环境下也能看到终帧）。
     if (aiAnimSteps) aiAnimSteps.innerHTML = AI_ANIM_STEPS.map(function (text, index) {
@@ -842,7 +902,7 @@
       var height = Number(document.getElementById('height').value)
       var weight = Number(document.getElementById('weight').value)
       var payload = {
-        pose: 'front',
+        pose: aiPose,
         jerseyRef: true,
         jerseyText: false,
         aspectRatio: '3:4'
@@ -930,13 +990,14 @@
         aiGeneratedPortraitId = generated.generatedPortraitId
         if (!aiRequestId) aiRequestId = aiRequestKey()
         aiPreview.src = generated.image
+        if (aiV2) aiPreview.alt = 'AI 形象照预览（' + aiPoseLabel() + '）'
         aiResult.hidden = false
         // 成片出来后收起顶部示例：只让用户看到这一次真正生成的那张图
         if (aiV2) {
           if (aiAnim) { aiAnim.hidden = true; aiStopAnim() }
           if (aiResult.scrollIntoView) { try { aiResult.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch (exception) {} }
         }
-        aiSay(aiV2 ? '形象照已生成，可以上下查看（重新生成会再扣 ' + aiCost + ' 滴）' : '透明形象照已生成', 'success')
+        aiSay(aiV2 ? '已生成「' + aiPoseLabel() + '」形象照，可以上下查看（重新生成会再扣 ' + aiCost + ' 滴）' : '透明形象照已生成', 'success')
       }).catch(function (error) {
         var body = (error && error.result) || {}
         if (body.aiPortrait) aiUpdateAccount(body.aiPortrait)
