@@ -9,7 +9,8 @@
 
 <script setup>
 // 安装成桌面应用后（Chrome/Edge 的 window-controls-overlay 模式），窗口标题条改由页面绘制：
-// 深绿底 + 白字，避免浏览器按主题色计算文字颜色时出现浅底白字看不清的问题。
+// 浅绿底 + 深色文字，与浏览器自己画的浅色标题区颜色一致；这样无论是否进入该模式、
+// 系统是深色还是浅色，标题文字都是深色压在浅底上，不会再出现“浅底白字看不清”。
 // 普通浏览器标签页不触发该模式，本组件完全不显示、也不占用高度。
 const logoUrl = import.meta.env.BASE_URL + 'logo-saixiaofeng.png'
 </script>
@@ -29,7 +30,8 @@ const logoUrl = import.meta.env.BASE_URL + 'logo-saixiaofeng.png'
     right: 0;
     z-index: 1200;
     height: env(titlebar-area-height, 33px);
-    background: linear-gradient(90deg, #0c3b27, #0a3222);
+    background: linear-gradient(90deg, #eef5f1, #e3efe9);
+    border-bottom: 1px solid rgba(22, 40, 29, 0.14);
     box-sizing: border-box;
   }
 
@@ -61,7 +63,7 @@ const logoUrl = import.meta.env.BASE_URL + 'logo-saixiaofeng.png'
   }
 
   .titlebar-name {
-    color: #ffffff;
+    color: #16281d;
     font-size: 12.5px;
     font-weight: 600;
     letter-spacing: 0.02em;

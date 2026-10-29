@@ -262,7 +262,11 @@ async function verifyTitlebarSimulation(page) {
     document.head.appendChild(style);
 
     const luminance = color => {
-      const channels = (color.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+      // 同时支持 #rrggbb 与 rgb()/rgba()，避免十六进制颜色被当成数字串误解析。
+      const hex = /^#([\da-f]{6})$/i.exec(String(color).trim());
+      const channels = hex
+        ? [0, 2, 4].map(index => parseInt(hex[1].slice(index, index + 2), 16))
+        : (String(color).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
       const [r, g, b] = channels.map(value => {
         const c = value / 255;
         return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -301,7 +305,9 @@ async function verifyTitlebarSimulation(page) {
       overflow: document.documentElement.scrollWidth > innerWidth + 2,
       docTitle: document.title
     };
-    if (nameStyle) result.nameContrast = contrast(nameStyle.color, '#0c3b27');
+    // 标题条是浅绿底（渐变 #eef5f1 → #e3efe9）配深色文字，按较深的一端计算对比度。
+    if (nameStyle) result.nameContrast = contrast(nameStyle.color, '#e3efe9');
+    if (nameStyle) result.nameColor = nameStyle.color;
     return result;
   });
 }

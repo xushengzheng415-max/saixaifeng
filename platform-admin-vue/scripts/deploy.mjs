@@ -52,6 +52,22 @@ s = open(p).read()
 assert 'server_name pingtai.sxffootball.cn;' in s
 s, count = re.subn(r'root /var/www/pingtai/releases/[a-zA-Z0-9_-]+;', 'root ' + target + ';', s)
 assert count == 1, 'Unexpected platform root; abort'
+# 浏览器只有在 manifest 的 MIME 是 application/manifest+json（或 json）时才会解析它。
+# 曾经默认按 application/octet-stream 返回，Chrome/Edge 直接忽略清单：display_override 不生效、
+# 桌面应用窗口退回浏览器自绘标题条（浅底白字），主题色也读不到。这里固定 MIME 并禁止缓存，
+# 保证安装后的窗口模式、图标与主题色能随发布更新。
+snippet = '''  location = /manifest.webmanifest {
+    default_type application/manifest+json;
+    add_header Cache-Control "no-cache";
+  }
+  location = /index.html {
+    add_header Cache-Control "no-cache";
+  }
+'''
+if 'location = /manifest.webmanifest' not in s:
+  marker = 'root ' + target + ';'
+  assert marker in s
+  s = s.replace(marker, marker + '\\n' + snippet, 1)
 open(p, 'w').write(s)
 PY
 if ! sudo nginx -t || ! sudo systemctl reload nginx; then

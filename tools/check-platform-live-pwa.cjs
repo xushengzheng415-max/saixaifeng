@@ -32,6 +32,7 @@ const site = 'https://pingtai.sxffootball.cn';
     title: document.title,
     manifest: document.querySelector('link[rel=manifest]')?.getAttribute('href') || '',
     theme: document.querySelector('meta[name=theme-color]')?.getAttribute('content') || '',
+    colorScheme: document.querySelector('meta[name=color-scheme]')?.getAttribute('content') || '',
     appleCapable: document.querySelector('meta[name=apple-mobile-web-app-capable]')?.getAttribute('content') || '',
     appleIcon: document.querySelector('link[rel=apple-touch-icon]')?.getAttribute('href') || '',
     installEntry: document.querySelector('.platform-login .platform-install-entry')?.textContent?.trim() || '',
@@ -173,6 +174,8 @@ const site = 'https://pingtai.sxffootball.cn';
   if (!report.head.installEntry) failures.push('登录页未显示安装入口');
   if (!report.manifest.status || report.manifest.display !== 'standalone') failures.push('manifest 未正确解析');
   if (!Array.isArray(report.manifest.displayOverride) || report.manifest.displayOverride[0] !== 'window-controls-overlay') failures.push('线上 manifest 未首选 window-controls-overlay（桌面应用窗口标题条会回到浅底白字）');
+  if (report.head.theme !== '#E9F1EC') failures.push(`线上主题色不是浅色 #E9F1EC（当前 ${report.head.theme}），浏览器会把窗口标题画成白字`);
+  if (report.head.colorScheme !== 'light') failures.push('线上未固定 color-scheme: light，深色系统下窗口标题文字可能看不清');
   if (!report.titlebar?.present) failures.push('线上页面缺少自绘标题条节点');
   if (!report.titlebar?.wcoChunks?.length) failures.push('线上样式缺少 window-controls-overlay 标题条规则');
   if (!report.serviceWorker.registration) failures.push('Service Worker 未就绪');

@@ -82,13 +82,24 @@ function check(condition, message) {
     const head = await page.evaluate(() => ({
       manifest: document.querySelector('link[rel=manifest]')?.getAttribute('href') || '',
       themeColor: document.querySelector('meta[name=theme-color]')?.getAttribute('content') || '',
+      colorScheme: document.querySelector('meta[name=color-scheme]')?.getAttribute('content') || '',
       appleCapable: document.querySelector('meta[name=apple-mobile-web-app-capable]')?.getAttribute('content') || '',
       appleIcon: document.querySelector('link[rel=apple-touch-icon]')?.getAttribute('href') || '',
       viewport: document.querySelector('meta[name=viewport]')?.getAttribute('content') || ''
     }));
     report.head = head;
     check(head.manifest === '/manifest.webmanifest', '缺少 manifest 链接');
-    check(head.themeColor === '#1B5E20', '主题色未设置');
+    // 浏览器按主题色计算窗口标题文字颜色：深色主题色会得到白字，遇到浅色标题区就“浅底白字”。
+    // 这里锁定浅色主题色与 color-scheme: light，避免再退回深色主题色。
+    const themeLuma = (() => {
+      const hex = head.themeColor.replace('#', '');
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map(v => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return Number((0.2126 * r + 0.7152 * g + 0.0722 * b).toFixed(3));
+    })();
+    check(head.themeColor === '#E9F1EC', `主题色应为浅色 #E9F1EC，当前 ${head.themeColor}`);
+    check(themeLuma > 0.7, `主题色亮度不足（${themeLuma}），浏览器会选白字`);
+    check(head.colorScheme === 'light', '未把 color-scheme 固定为 light，深色系统下标题文字可能看不清');
     check(head.appleCapable === 'yes', '未声明 iOS 可安装');
     check(head.appleIcon === '/apple-touch-icon.png', '缺少 apple-touch-icon');
     check(head.viewport.includes('viewport-fit=cover'), 'viewport 未适配刘海屏');
