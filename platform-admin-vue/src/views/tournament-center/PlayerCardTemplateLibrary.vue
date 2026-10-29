@@ -410,7 +410,7 @@ async function select(item) {
   publishServiceReady.value = false
   if (item.status === 'local') { assign({ ...item, id: '' }); return }
   try {
-    const result = await request('getPlayerCardTemplate', { templateId: item.id })
+    const result = await request('getPlayerCardTemplate', { templateId: item.id, withData: true })
     assign(result.template)
     if(result.template.preload?.type==='player'&&result.template.preload?.targetId)await loadPlayerSource(result.template.preload.targetId)
     const status = await request('getPlayerCardTemplatePublishStatus', { tier:item.tier, preload:item.preload || freshPreload(), templateId:item.id })
@@ -423,7 +423,7 @@ async function editTemplateFromCatalog(templateId) {
   activePanel.value='templates'
   publishServiceReady.value=false
   try {
-    const result=await request('getPlayerCardTemplate',{templateId})
+    const result=await request('getPlayerCardTemplate',{templateId,withData:true})
     assign(result.template)
     const status=await request('getPlayerCardTemplatePublishStatus',{tier:result.template.tier,preload:result.template.preload||freshPreload(),templateId})
     publishJob.value=status.jobId?status:null
@@ -508,7 +508,7 @@ async function chooseFile(event, layer) {
   } catch (cause) { pendingMaskReview = false; uploadError.value = cause.message || '图片读取失败' }
 }
 async function refreshSelected(id) {
-  const result = await request('getPlayerCardTemplate', { templateId: id })
+  const result = await request('getPlayerCardTemplate', { templateId: id, withData: true })
   const index = templates.value.findIndex(item => item.id === id)
   if (index >= 0) templates.value.splice(index, 1, result.template)
   else templates.value.unshift(result.template)
@@ -766,7 +766,7 @@ onMounted(() => {
 async function loadEmbedded() {
   if(!props.templateId)return
   loading.value=true;error.value=''
-  try {const result=await request('getPlayerCardTemplate',{templateId:props.templateId});assign(result.template);backendReady.value=true;activePanel.value='templates';if(result.template.preload?.type==='player')await loadPlayerSource(result.template.preload.targetId)}
+  try {const result=await request('getPlayerCardTemplate',{templateId:props.templateId,withData:true});assign(result.template);backendReady.value=true;activePanel.value='templates';if(result.template.preload?.type==='player')await loadPlayerSource(result.template.preload.targetId)}
   catch(cause){error.value=cause.message;backendReady.value=false}
   finally{loading.value=false}
 }
