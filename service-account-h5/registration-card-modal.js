@@ -6,7 +6,7 @@
     function active() { return !dead && (!options.isActive || options.isActive()) }
     function key() {
       var p = options.getPayload()
-      return JSON.stringify([p.choiceToken,p.portraitId,p.name,p.idCard,p.birthDate,p.jerseyName,p.jerseyNumber,p.position,p.height,p.weight,p.cardTournamentId])
+      return JSON.stringify([p.choiceToken,p.portraitId,p.name,p.idCard,p.birthDate,p.jerseyName,p.jerseyNumber,p.position,p.height,p.weight])
     }
     function node(id) { return dialog.querySelector('[data-card="' + id + '"]') }
     function close(reason) {

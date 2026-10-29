@@ -18,6 +18,13 @@ async function contexts(db,gate){
   if(explicit&&!choices.length)fail('PLAYER_CARD_EVENT_INVALID','赛事已失效，请联系球队')
   return choices
 }
+// 登记链路（新建/认领球员的初始卡）固定取平台基础等级卡：登记只进入球队长期
+// 球员库待确认，不自动进入赛事正式名单，因此不能套用赛事定向预装卡。
+// 赛事/球队预装卡属于球员卡库（listMyPlayerCards 等），与基础卡并存，另行读取。
+async function base(db,tier){
+  const template=await suite.activeTemplate(db,tier)
+  return {template,stateId:text(tier),tournamentId:'',tournamentName:'',registrationIds:[]}
+}
 async function resolve(db,gate,tier,event={}){
   const choices=await contexts(db,gate),explicit=text(gate.tournamentId),requested=text(event.cardTournamentId)
   if(explicit&&requested&&explicit!==requested)fail('PLAYER_CARD_EVENT_INVALID','不能更换本次邀请的赛事')
@@ -47,4 +54,4 @@ async function resolve(db,gate,tier,event={}){
   if(candidates.length!==1)fail('PLAYER_CARD_TEMPLATE_UNAVAILABLE',candidates.length?'赛事存在多套活动卡，请联系平台确认':'本赛事球员卡尚未发布，请联系主办方')
   return candidates[0]
 }
-module.exports={contexts,resolve}
+module.exports={contexts,base,resolve}

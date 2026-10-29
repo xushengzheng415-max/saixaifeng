@@ -5,11 +5,14 @@ const {createDataService}=require('./data-center/service.cjs')
 const text=v=>String(v==null?'':v).trim()
 const error=(code,message)=>{throw Object.assign(new Error(message),{code})}
 const owner=(p,s)=>[p.linkedUserId,p.playerUserId,p.guardianUserId].map(text).includes(text(s.userId))
-async function upload(cloud,db,loaded,event) {
+async function upload(cloud,db,loaded,event,trustedAsset) {
   const {session,gate}=loaded
   if(!session.phoneVerified||gate.purpose!=='player_invite_entry')error('PLAYER_AUTH_REQUIRED','请先验证登记手机号')
   let raw,originalId=''
-  if(event.keepExisting===true){
+  if(trustedAsset && trustedAsset.fileID && Buffer.isBuffer(trustedAsset.bytes)){
+    originalId=trustedAsset.fileID
+    raw=trustedAsset.bytes
+  } else if(event.keepExisting===true){
     const choice=session.playerRegistrationChoice
     if(choice?.mode!=='claim')error('PLAYER_PHOTO_INVALID','请先选择待认领球员')
     const player=await suite.document(db,'players',choice.playerId)
@@ -29,7 +32,7 @@ async function upload(cloud,db,loaded,event) {
   const id=crypto.randomBytes(16).toString('hex'),prefix='restricted/service-player-portraits/'+crypto.createHash('sha256').update(text(session._id)).digest('hex').slice(0,24)+'/'+id
   if(!originalId)originalId=(await cloud.uploadFile({cloudPath:prefix+'/original.'+(png?'png':'jpg'),fileContent:raw})).fileID
   let cutout=raw
-  const existingTransparent=event.keepExisting===true&&png&&require('./playerCardRender.cjs').isTransparentPng(raw)
+  const existingTransparent=png&&require('./playerCardRender.cjs').isTransparentPng(raw)
   if(!existingTransparent){
     // A full-resolution phone image can produce a foreground response above the
     // existing Baidu adapter's 4MB limit. Normalize without cropping the person.
@@ -42,7 +45,12 @@ async function upload(cloud,db,loaded,event) {
   }
   if(!cutout.length||cutout.length>8*1024*1024||!require('./playerCardRender.cjs').isTransparentPng(cutout))error('PORTRAIT_PROCESSING_FAILED','抠图结果无效，请重新拍摄')
   const fileId=existingTransparent?originalId:(await cloud.uploadFile({cloudPath:prefix+'/transparent.png',fileContent:cutout})).fileID
-  const portrait={id,fileId,originalId,processingStatus:'ready',provider:'baiduRemoveBg',createdAt:new Date()}
+  // 来源标记只做事实记录：AI 定妆照入库时带上 aiRequestId，可与蜂蜜流水 refId（ai-portrait:<requestId>）互查；
+  // 自己拍照/上传的路径不传，保持原结构不变。
+  const portraitSource=text(event.portraitSource),aiRequestId=text(event.aiRequestId)
+  const portrait={id,fileId,originalId,processingStatus:'ready',provider:existingTransparent?'transparent_original':'baiduRemoveBg',createdAt:new Date()}
+  if(portraitSource)portrait.source=portraitSource
+  if(aiRequestId)portrait.aiRequestId=aiRequestId
   await db.runTransaction(async tx=>{
     const current=await suite.document(tx,'service_entry_sessions',session._id)
     if(!current?.active||text(current.userId)!==text(session.userId))error('ENTRY_SESSION_INVALID','登记会话已变化，请重新进入')
@@ -59,7 +67,9 @@ async function card(cloud,db,loaded,event) {
   const crop=event.crop?require('./playerCards.cjs').normalizeCrop(event.crop):(player.playerCardCrop||{zoom:1,x:0,y:0})
   const score=await createDataService(db).playerCardForAuthorizedPlayer(player._id)
   if(score?.status!=='ready'||!score.tier)error('PLAYER_CARD_PENDING','资料已保存，球员卡数据待核定，请稍后重试')
-  const cardContext=await require('./registrationCardContext.cjs').resolve(db,gate,score.tier,{...event,cardTournamentId:event.cardTournamentId||session.playerRegistrationCardDraft?.cardTournamentId||session.playerRegistrationFormDraft?.values?.cardTournamentId})
+  // 登记链路固定用平台基础等级卡（金/银/铜）：新登记球员尚未进入赛事正式名单，
+  // 赛事定向预装卡只在球员卡库按名单资格读取，不在这里替换基础卡。
+  const cardContext=await require('./registrationCardContext.cjs').base(db,score.tier)
   const template=cardContext.template
   if(!template)error('PLAYER_CARD_TEMPLATE_UNAVAILABLE','资料已保存，球员卡模板暂不可用，请稍后重试')
   const source=await require('./playerCardSource.cjs').resolveSource(db,player)
@@ -91,7 +101,8 @@ async function draftCard(cloud,db,loaded,event) {
   const reuseScore=event.confirm!==true&&event.refreshScore!==true&&cached?.fingerprint===draft.fingerprint&&new Date(cached.expiresAt).getTime()>Date.now()
   const score=reuseScore?{status:'ready',tier:cached.tier,scoreVersion:cached.scoreVersion}:draft.existing?await service.playerCardForAuthorizedPlayer(draft.player._id):await service.playerCardForAuthorizedRegistrationDraft(draft.player)
   if(score?.status!=='ready'||!score.tier)error('PLAYER_CARD_PENDING','球员卡数据待核定，请稍后重试')
-  const cardContext=await require('./registrationCardContext.cjs').resolve(db,gate,score.tier,event)
+  // 登记预览同 card()：尚未进入赛事正式名单，固定平台基础等级卡（金/银/铜）。
+  const cardContext=await require('./registrationCardContext.cjs').base(db,score.tier)
   const template=cardContext.template
   if(!template)error('PLAYER_CARD_TEMPLATE_UNAVAILABLE','球员卡模板暂不可用，请稍后重试')
   const crop=require('./playerCards.cjs').normalizeCrop(event.crop||draft.crop||{zoom:1,x:0,y:0})

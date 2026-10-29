@@ -10,7 +10,7 @@ const load=Module._load
 Module._load=function(name,parent,...rest){
   if(parent?.filename===target){
     if(name==='./playerCardSuite.cjs')return suite
-    if(name==='./registrationCardContext.cjs')return {resolve:async()=>({template:await suite.activeTemplate(),stateId:'bronze',tournamentId:''})}
+    if(name==='./registrationCardContext.cjs')return {base:async()=>({template:await suite.activeTemplate(),stateId:'bronze',tournamentId:''}),resolve:async()=>{throw Error('登记链路必须使用平台基础等级卡，不能套用赛事预装模板')}}
     if(name==='./data-center/service.cjs')return {createDataService:()=>({playerCardForAuthorizedPlayer:async()=>({status:'ready',tier:'bronze'})})}
     if(name==='./playerCardRender.cjs')return {isTransparentPng:b=>b.equals(png)}
     if(name==='@resvg/resvg-js')return {Resvg:class {constructor(svg){assert.ok(svg.includes('width="800"'));assert.ok(svg.includes('xMidYMid meet'))}render(){return {asPng:()=>png}}}}

@@ -1953,3 +1953,13 @@ dataCenter 已差量发布：先下载线上包，仅覆盖 `shared/awards.cjs`�
 - **待办**：用户在真机走一遍测试页验收；通过后打开 `aiV2` 开关并 bump 版本号切正式链路；9:16 是否改成真实出图比例待确认。详见 `docs/releases/registration-ai-sheet-v2-charge-first-20261029.md`。
 
 - **追加（同日）：姿势选项**。用户指出改版后没有姿势选项，弹层此前写死 `pose:'front'`。v2 弹层在上传区与「立即生成」之间新增 `#aiPoseGroup` 三选一（正面抱膀 / 半侧抱膀 / 低位抱膀，用 `assets/pose-presets` 实拍缩略图），key 与 `aiPortraitDemo` 的 `POSES` 一一对应；`generate` 本来就校验 `body.pose`，**后端未改**。已扣费或已有成片时切换姿势会先 `confirm`「已扣蜂蜜不会退回」，确认后作废成片与 `requestId` 并按新编号重新扣费；正式页仍固定 `front`。H5 三个文件已重新发布，测试页版本 `?v=20261029-ai-sheet6`，线上回读 `service-entry.js` 93,942B/`7BBC0895…`、`service-entry.css` 17,527B/`DEEE74C9…`、`registration-ai-test.html` 6,261B/`5A6E9968…` 与本地一致；三张姿势缩略图线上与本地同哈希，未重传。
+
+## 2026-10-29 登记球员卡预览改用平台基础等级卡（已发布测试端 + 共享后端）
+
+用户指出登记页「球员卡预览」显示的是赛事专属卡面（立洋杯 2026·第六届），但新建球员尚未加入赛事正式名单，应为平台标准金/银/铜基础卡。核对后确认 `registrationCardContext.contexts()` 是按球队的 `tournament_teams` 参赛关系生成赛事候选，`resolve()` 优先返回赛事预装模板，而 `draftCard()` 与 `card()` 都走它。`docs/PRODUCT_RULES.md`（新登记不自动进入赛事正式名单）与 `docs/PLAYER_CARD_INTEGRATION.md`（预装是加入卡库、与基础卡并存，不替换基础卡）支持该口径。
+
+- **服务端**：`registrationCardContext.cjs` 新增 `base(db,tier)` 走 `suite.activeTemplate(db,tier)`，`stateId=tier`、赛事字段为空；`serviceRegistrationMedia.cjs` 的 `draftCard()` 与 `card()` 改用 `base()`。等级仍由数据中心核定，模板缺失仍报 `PLAYER_CARD_TEMPLATE_UNAVAILABLE`，不默认铜卡。`resolve()` 保留给卡库等既有入口。
+- **H5**：`service-entry.js` 移除登记表单「制卡赛事」下拉、`getPayload()` 的 `cardTournamentId`、草稿恢复字段与 change 监听；`registration-card-modal.js` 的 `key()` 去掉该字段。未改 `join-player.html` 与 `service-entry.css`。
+- **验证**：四个文件 `node --check` 通过；`tools/test-registration-card-context.cjs` PASS（新增 base 断言：多赛事仍取基础卡）；`tools/test-registration-card-modal-backend.cjs` PASS（mock 的 `resolve()` 一旦被调用即抛错，证明预览不再解析赛事模板）；`tools/test-service-registration-media.cjs` 仍失败于 `upload()` 的抠图计数断言，原因是工作区其他会话未提交的透明 PNG 直通改动与旧断言不符，本轮未改 `upload()` 也未改该断言。
+- **发布**：`webLoginApi` 按线上包差量只替换两个 `.cjs`，`check-referee-backend-package` PASS 后 `fn code update --deployMode cos`；回下载 SHA-256 与本地一致（`registrationCardContext.cjs` d5f974d7…、`serviceRegistrationMedia.cjs` 0ae50488…）。线上探针 `serviceEntryPlayerCard{draft:true}` 返回登记会话已失效，函数在线。H5 三文件 HTTP 回读一致（`service-entry.js` 93,247B/f2e6a09a…、`registration-card-modal.js` 13,486B/1e9cdd69…、`registration-ai-test.html` 6,260B/811af8b8…），测试页版本升到 `?v=20261029-ai-sheet7`。
+- **待办**：测试页真机确认基础卡面且无「制卡赛事」输入；通过后按流程切正式链路。详见 `docs/releases/registration-base-card-preview-20261029.md`。

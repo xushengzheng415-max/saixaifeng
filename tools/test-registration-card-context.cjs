@@ -14,6 +14,12 @@ const gate={teamId:'team',purpose:'player_invite_entry'},loaded=()=>({session:st
 async function main(){
  const selected=await context.resolve(db,gate,'bronze')
  assert.equal(selected.template.templateId,'event-card');assert.equal(selected.stateId,'eventBronze');assert.equal(selected.template.version,6)
+ // 登记链路（新建/认领球员初始卡）固定平台基础等级卡：球队参赛关系再多也不套赛事预装模板。
+ const base=await context.base(db,'bronze')
+ assert.equal(base.template.templateId,'base');assert.equal(base.stateId,'bronze');assert.equal(base.tournamentId,'');assert.deepEqual(base.registrationIds,[])
+ rows.tournament_teams.second={_id:'second',teamId:'team',tournamentId:'other',status:'confirmed'}
+ assert.equal((await context.base(db,'bronze')).template.templateId,'base','多赛事时登记预览仍取基础卡，不要求选赛事')
+ delete rows.tournament_teams.second
  assert.equal(rows.players,undefined);assert.equal(rows.player_card_library,undefined,'preview must not grant cards or roster qualification')
  await assert.rejects(()=>context.resolve(db,gate,'bronze',{cardTournamentId:'other'}),e=>e.code==='PLAYER_CARD_EVENT_INVALID')
  rows.tournament_teams.second={_id:'second',teamId:'team',tournamentId:'other',status:'confirmed'}

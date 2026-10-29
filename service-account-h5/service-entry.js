@@ -425,7 +425,6 @@
     content.innerHTML =
       '<h2>' + esc(data.teamName) + '</h2><button class="text-action" id="backToSearch" type="button">重新选择球员</button><form id="form">' +
       '<div class="row"><label for="name">球员姓名</label><input id="name" maxlength="30" required></div>' +
-      ((data.cardContexts||[]).length>1?'<div class="row"><label for="cardTournamentId">制卡赛事</label><select id="cardTournamentId" required><option value="">请选择赛事</option>'+data.cardContexts.map(function(item){return '<option value="'+esc(item.tournamentId)+'">'+esc(item.name)+'</option>'}).join('')+'</select></div>':'')+
       '<div class="row"><label for="jerseyName">球衣名<small class="muted">（按姓名自动识别拼音，可修改）</small></label><input id="jerseyName" maxlength="20" autocomplete="off" placeholder="如 ZHENG X.S."></div>' +
       '<div class="row"><label for="idCard">球员身份证号<small class="muted">（自动识别出生日期）</small></label><input id="idCard" required maxlength="18" inputmode="text" autocomplete="off" aria-describedby="idCardHint" placeholder="18 位身份证号"><small id="idCardHint" class="field-hint muted" role="status" hidden></small></div>' +
       '<div class="row"><label>出生日期</label><div class="birth-columns">' +
@@ -624,7 +623,7 @@
     function showNumberError(error){if(error.code==='PLAYER_JERSEY_CONFLICT'||error.code==='JERSEY_INVALID')numberError(error.message)}
     function getPayload(){
       if(!activeForm())throw new Error('登记页面已变化')
-      return {serviceEntrySession:session(),choiceToken:data.selection.choiceToken,name:nameInput.value.trim(),birthDate:birthDate(),idCard:idCardInput.value.trim().toUpperCase(),jerseyName:jerseyNameInput.value.trim().toUpperCase(),jerseyNumber:jerseyField.value.trim(),position:document.getElementById('position').value,height:document.getElementById('height').value.trim(),weight:document.getElementById('weight').value.trim(),photoUrl:photoFileID,portraitId:portraitId,guardianRelation:document.getElementById('guardianRelation').value,cardTournamentId:document.getElementById('cardTournamentId')?document.getElementById('cardTournamentId').value:(data.cardContexts||[]).length===1?data.cardContexts[0].tournamentId:'',crop:editor&&editor.crop()||data.resume&&data.resume.crop||undefined,authorizationAgreed:document.getElementById('agree').checked}
+      return {serviceEntrySession:session(),choiceToken:data.selection.choiceToken,name:nameInput.value.trim(),birthDate:birthDate(),idCard:idCardInput.value.trim().toUpperCase(),jerseyName:jerseyNameInput.value.trim().toUpperCase(),jerseyNumber:jerseyField.value.trim(),position:document.getElementById('position').value,height:document.getElementById('height').value.trim(),weight:document.getElementById('weight').value.trim(),photoUrl:photoFileID,portraitId:portraitId,guardianRelation:document.getElementById('guardianRelation').value,crop:editor&&editor.crop()||data.resume&&data.resume.crop||undefined,authorizationAgreed:document.getElementById('agree').checked}
     }
     function markDirty(){if(activeForm()&&portraitId){photoState.textContent='球员卡待确认';editCardButton.hidden=false;editCardButton.textContent='生成球员卡';document.getElementById('confirmedRegistrationCard').hidden=true}}
     var editor=window.SxfRegistrationCardModal({api:api,getPayload:getPayload,isActive:activeForm,onDirty:markDirty,onCrop:function(){saveSoon()},onPhoto:function(kind){if(!photoPending)(kind==='camera'?photoCamera:photoInput).click()},onError:function(error){showNumberError(error);if(activeForm()&&editor&&!editor.isOpen()&&error.code!=='PLAYER_JERSEY_CONFLICT')photoState.textContent=error.message},confirmText:function(){return pendingSubmit?'确认登记':'确认使用'},onClosed:function(reason){if(reason!=='confirmed')pendingSubmit=false;saveSoon()},onConfirmed:function(result){
@@ -1176,7 +1175,7 @@
     if(!data.idCard&&selected.birthDate){year.value=String(Number(selected.birthDate.slice(0,4)));month.value=String(Number(selected.birthDate.slice(5,7)));refreshDays();day.value=String(Number(selected.birthDate.slice(8,10)));refreshGuardian()}
     if(data.resume){
       var values=data.resume.values||{}
-      ;['name','jerseyName','idCard','jerseyNumber','position','height','weight','guardianRelation','cardTournamentId'].forEach(function(id){var field=document.getElementById(id);if(field&&values[id]!==undefined)field.value=values[id]})
+      ;['name','jerseyName','idCard','jerseyNumber','position','height','weight','guardianRelation'].forEach(function(id){var field=document.getElementById(id);if(field&&values[id]!==undefined)field.value=values[id]})
       if(values.birthDate){year.value=String(Number(values.birthDate.slice(0,4)));month.value=String(Number(values.birthDate.slice(5,7)));refreshDays();day.value=String(Number(values.birthDate.slice(8,10)));refreshGuardian()}
       if(values.idCard)validateIdentity(false)
       if(data.resume.portraitId){photoFileID=data.resume.photoUrl;portraitId=data.resume.portraitId;photoPreview.src=data.resume.photoPreview;photoPreview.hidden=false;photoState.textContent='照片已恢复，球员卡待确认';editCardButton.hidden=false}
@@ -1195,7 +1194,6 @@
     function saveSoon(){clearTimeout(draftTimer);draftTimer=setTimeout(saveDraft,900)}
     persistActiveDraft=saveDraft
     formElement.addEventListener('input',saveSoon);formElement.addEventListener('change',saveSoon)
-    var eventSelect=document.getElementById('cardTournamentId');if(eventSelect)eventSelect.addEventListener('change',function(){editor.invalidate()})
     saveSoon()
     var keepExisting=document.getElementById('keepExisting')
     function processExisting(automatic){
