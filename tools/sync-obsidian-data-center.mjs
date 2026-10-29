@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/registration-idcheck-btn-20261029.md','发布记录/登记身份证前置核验与生成球员卡按钮修复-20261029.md'],
+  ['docs/releases/membership-phase1a-20261029.md','发布记录/个人会员一期A上线-20261029.md'],
+  ['docs/releases/registration-done-page-20261029.md','发布记录/球员登记提交后独立完成页-20261029.md'],
+  ['docs/releases/registration-idcard-region-20261029.md','发布记录/登记身份证推算籍贯与默认国籍-20261029.md'],
   ['docs/releases/player-card-preview-layout-align-20261029.md','发布记录/球员卡排版预览与成卡大图对齐-20261029.md'],
   ['docs/releases/registration-base-card-preview-20261029.md','发布记录/登记球员卡预览改基础等级卡-20261029.md'],
   ['docs/releases/registration-ai-sheet-v2-charge-first-20261029.md','发布记录/登记形象照弹层先扣费改版-20261029.md'],
@@ -19,6 +23,7 @@ const files = [
   ['docs/releases/registration-protected-identity-20261028.md','发布记录/registration-protected-identity-20261028.md'],
   ['docs/releases/registration-transparent-portrait-20261028.md','发布记录/球员登记透明形象照直入库-20261028.md'],
   ['docs/releases/mini-1.2.23-upload-20261028.md','发布记录/小程序1.2.23上传与空球队身份修复-20261028.md'],
+  ['docs/releases/mini-1.2.24-upload-20261029.md','发布记录/小程序1.2.24开发版上传-20261029.md'],
   ['docs/releases/home-client-two-download-options-20261028.md','发布记录/官网客户端下载双选项-20261028.md'],
   ['docs/releases/platform-zero-event-repair-20261028.md','发布记录/平台0比0无事件资料保存修复-20261028.md'],
   ['docs/releases/platform-ai-portrait-tool-20261028.md','发布记录/平台后台自主生成球衣照与模型联动-20261028.md'],
@@ -31,6 +36,7 @@ const files = [
   ['docs/releases/ai-portrait-hd-chain-20261028.md','发布记录/AI形象照高清链路修复-20261028.md'],
   ['docs/releases/pad-compact-sidebar-preview-20261028.md','发布记录/平板收起侧栏与紧凑布局-20261028.md'],
   ['docs/handoffs/VALUATION_SNAPSHOT_TRIGGER_AUDIT_2026-10-28.md','研发交接/身价计算与快照缺失调查-20261028.md'],
+  ['docs/handoffs/TEAM_LOGO_CUTOUT_MINI_2026-10-29.md','研发交接/小程序队徽裁剪与去背景-20261029.md'],
   ['docs/handoffs/AI_PORTRAIT_DEMO_HANDOFF_2026-10-28.md','研发交接/AI形象照演示页交接-2026-10-28.md'],
   ['docs/handoffs/DISCOVER_PUBLIC_PLAYER_POOL_2026-10-28.md','研发交接/发现真实球员池与完整分页-20261028.md'],
   ['docs/releases/android-pad-0.1.0-20261028.md','发布记录/安卓平板客户端0.1.0-20261028.md'],
@@ -58,6 +64,7 @@ const files = [
   ['docs/HONEY_TOPUP_HANDOFF_2026-10-27.md','项目规范/蜂蜜积分与充值逻辑交接-2026-10-27.md'],
   ['docs/HONEY_TOPUP_IMPLEMENTATION_2026-10-27.md','项目规范/蜂蜜充值与微信支付实现说明-2026-10-27.md'],
   ['docs/MEMBERSHIP_HONEY_PRICING_2026-10-27.md','项目规范/个人蜂蜜与会员定价方案-2026-10-27.md'],
+  ['docs/MEMBERSHIP_SUBSCRIPTION_DESIGN_2026-10-28.md','项目规范/会员订阅一期A路线设计方案-20261028.md'],
   ['docs/releases/home-client-download-20261027.md','发布记录/官网客户端下载入口-20261027.md'],
   ['docs/releases/windows-client-0.2.3-20261027.md','发布记录/Windows客户端-v0.2.3-20261027.md'],
   ['docs/releases/windows-client-0.2.2-20261027.md','发布记录/Windows客户端-v0.2.2-20261027.md'],

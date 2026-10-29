@@ -1,0 +1,13 @@
+/* 登记表单补充样式（2026-10-29 用户口径）
+   1) 身份证前置核验的提示与「去查找并认领」入口；
+   2) 形象照区「生成球员卡」原先是 .text-action 小字（14px、靠左），现场看不清、点不到，
+      改成整行居中的主按钮，与页面其他主操作按钮同一视觉层级。
+   与 service-entry.css 分离，避免与同期改动互相覆盖。 */
+#idCardCheck{display:block;margin-top:6px;font-size:13px;line-height:1.5;color:#627369}
+#idCardCheck.idcheck-error{color:#b33429;font-weight:600}
+#idCardFindOwner{display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:8px;padding:8px 12px;border:1px solid #087d4b;border-radius:8px;background:#fff;color:#087d4b;font-size:14px;font-weight:600;text-align:center}
+#idCardFindOwner:active{background:#eef7f2}
+
+.photo-card #editRegistrationCard{display:block;width:100%;min-height:46px;margin-top:12px;padding:10px 12px;border:1px solid #087d4b;border-radius:8px;background:#087d4b;color:#fff;font-size:16px;font-weight:600;line-height:1.3;text-align:center;letter-spacing:.5px}
+.photo-card #editRegistrationCard:active{background:#066b41;border-color:#066b41}
+.photo-card #editRegistrationCard:disabled{opacity:.55}
