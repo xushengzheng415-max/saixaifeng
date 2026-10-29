@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/player-card-preview-layout-align-20261029.md','发布记录/球员卡排版预览与成卡大图对齐-20261029.md'],
   ['docs/releases/registration-base-card-preview-20261029.md','发布记录/登记球员卡预览改基础等级卡-20261029.md'],
   ['docs/releases/registration-ai-sheet-v2-charge-first-20261029.md','发布记录/登记形象照弹层先扣费改版-20261029.md'],
   ['docs/releases/registration-entry-subscription-gate-20261028.md','发布记录/登记扫码关注误判修复-20261028.md'],
