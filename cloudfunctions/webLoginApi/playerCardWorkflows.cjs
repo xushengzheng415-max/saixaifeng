@@ -118,6 +118,32 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
     })
     return {success:true,set:await view(await getSet(set._id))}
   }
+  // 名单为空时说明原因：赛事名单需主办方审核通过（approved/locked）才会进入发放范围。
+  async function scopeHintFor(set) {
+    if (set.preload.type === 'tournament') {
+      const snapshots = await preload.readAll(db, 'roster_snapshots', { tournamentId: set.preload.targetId }), latest = new Map()
+      for (const row of snapshots) {
+        if (!row.teamId) continue
+        const key = JSON.stringify([row.teamId, row.divisionId || row.division || 'default']), old = latest.get(key)
+        if (!old || Number(row.version || 0) > Number(old.version || 0)) latest.set(key, row)
+      }
+      let pendingTeams = 0, pendingPlayers = 0, returnedTeams = 0, approvedTeams = 0, approvedPlayers = 0
+      for (const row of latest.values()) {
+        const status = String(row.status || ''), count = Array.isArray(row.playerIds) ? row.playerIds.length : 0
+        if (status === 'submitted' || status === 'pending') { pendingTeams += 1; pendingPlayers += count }
+        else if (status === 'returned') returnedTeams += 1
+        else if (status === 'approved' || status === 'locked') { approvedTeams += 1; approvedPlayers += count }
+      }
+      if (pendingTeams) return `该赛事有 ${pendingTeams} 支球队的名单已提交待审核（${pendingPlayers} 名球员），审核通过后才能发放`
+      if (returnedTeams) return `该赛事有 ${returnedTeams} 支球队的名单被退回，需球队重新提交并审核通过后才能发放`
+      if (approvedTeams && !approvedPlayers) return '该赛事的正式名单为空，请先在报名管理补充球员并审核'
+      if (approvedTeams) return '该赛事正式名单中的球员尚未通过审核，请先在报名管理审核球员'
+      return '该赛事还没有正式名单，请先在报名管理审核球员或导入名单'
+    }
+    if (set.preload.type === 'team') return '该球队还没有球员档案，请先在球队管理中添加球员'
+    if (set.preload.type === 'player') return '该球员档案不存在或已删除'
+    return ''
+  }
   async function candidates(event) {
     const set=await getSet(event.setId)
     await preload.validatePreload(db,set.preload,suite.document)
@@ -133,7 +159,7 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
       const reason=synthetic(player)||synthetic(team)||grade?.status==='test_data_excluded'?'测试资料不发放':!source?.fileId?'缺少可用照片':set.kind==='progression'&&(grade?.status!=='ready'||!TIERS.includes(grade?.tier))?'竞技等级待核定':''
       rows.push({id:player._id,name:String(player.name||'未填写姓名'),teamName:String(team?.name||team?.teamName||''),reason,eligible:!reason,missing:grade?.missing||[],rosterEvidence:found.evidenceByPlayer?.get(String(player._id))||[]})
     }
-    return {success:true,players:rows,missingCount:found.missingPlayers?.length||0}
+    return {success:true,players:rows,missingCount:found.missingPlayers?.length||0,scopeHint:rows.length?'':await scopeHintFor(set)}
   }
   async function beginIssue(event,auth) {
     const set=await getSet(event.setId)
