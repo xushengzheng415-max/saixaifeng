@@ -33,7 +33,7 @@ CloudBase CLI在缺少显式函数配置、从package.json推断配置时可能�
 |---|---|---|
 | 平板自适应（抽屉导航、44px 触控、窄屏堆叠） | `src/assets/platform-tablet.css`、`src/components/PlatformTabletNav.vue` | `node tools/test-platform-tablet-ui.cjs` |
 | 可安装客户端（PWA） | `public/manifest.webmanifest`、`public/sw.js`、`public/pwa-*.png`、`src/components/PlatformInstallGuide.vue`、`src/utils/serviceWorker.js` | `node tools/test-platform-pwa.cjs` |
-| 桌面应用窗口标题条（WCO 自绘，深底白字） | `public/manifest.webmanifest` 的 `display_override`、`src/components/PlatformTitlebar.vue`、`src/main.js`、`src/assets/platform-tablet.css` | `node tools/test-platform-tablet-ui.cjs`（标题条仿真）、`node tools/check-platform-live-pwa.cjs` |
+| 桌面应用窗口标题条（WCO 自绘 + 浅色主题色，浅底深字） | `public/manifest.webmanifest` 的 `display_override`/`theme_color`、`index.html` 的主题色与 `color-scheme`、`src/components/PlatformTitlebar.vue`、`src/main.js`、`src/assets/platform-tablet.css`、`scripts/deploy.mjs`（nginx manifest MIME） | `node tools/test-platform-tablet-ui.cjs`（标题条仿真）、`node tools/check-platform-live-pwa.cjs`（CDP 清单解析核查） |
 | 应用图标 | `scripts/make-pwa-icons.ps1` 由 `public/logo.png` 的蜂+足球徽标生成 | 截图见 `output/` |
 | 线上安装能力核查 | 平台登录页入口、manifest、Service Worker 接管、浏览器安装判定 | `node tools/check-platform-live-pwa.cjs` |
 
@@ -47,7 +47,7 @@ Service Worker 边界：只缓存本站 `/index.html`、构建产物 `/assets/` 
 
 验证脚本的 Playwright 统一由 `tools/lib/load-playwright.cjs` 加载，优先使用仓库内 `npm install --no-save playwright-core`，缓存运行时路径失效时不再整批失败。
 
-状态（标题条修复时）：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，当次线上 release `20261028120608-7ab33d8a`（34 个文件 SHA-256 回读一致；更新可刷新版本见下文 `20261028140847-1639c58a`）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及电脑/安卓/iPad 三种安装说明，manifest 三图标解析正常且 `display_override` 首选 `window-controls-overlay`，线上样式含自绘标题条规则，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），实测不影响 Chrome 解析与安装，暂不改动服务器 mime 配置。
+状态（标题条修复时）：2026-10-28 已提交 `codex/platform-ops` 并发布正式站点 `pingtai.sxffootball.cn`，当次线上 release `20261028120608-7ab33d8a`（34 个文件 SHA-256 回读一致；更新可刷新版本见下文 `20261028140847-1639c58a`）。`node tools/check-platform-live-pwa.cjs` 回读通过：登录页显示“安装客户端”及电脑/安卓/iPad 三种安装说明，manifest 三图标解析正常且 `display_override` 首选 `window-controls-overlay`，线上样式含自绘标题条规则，Service Worker 已激活并接管页面（scope `/`），Chrome 安装判定的唯一提示为无头/无痕环境限制 `in-incognito`。nginx 曾以 `application/octet-stream` 返回 `manifest.webmanifest`（mime 表未登记该扩展名），当时判断为“不影响解析”，该判断已被 2026-10-29 的 CDP 核查证伪并修正：浏览器只在 `application/manifest+json` 下解析清单，见下文 2026-10-29 二次修复。
 
 ## 2026-10-28 安卓平板安装包（APK）1.0.0
 
@@ -129,4 +129,59 @@ APK 60,276 字节，SHA-256 `f641bdb8a85735a7c6858a00ac8893c042f8f5632fd60c21011
 `docs/releases/android-platform-1.0.1-20261028.md`，构建/发布步骤见 `android-platform/README.md`。
 
 限制：本机无安卓设备，真机“检查更新→下载→校验→系统安装→覆盖升级”链路未实测。
+
+## 2026-10-29 桌面窗口标题条二次修复（浅底白字根因）
+
+用户再次上传已安装应用窗口截图，红框处仍是“浅底白字”。上一轮的 WCO 自绘方案实际从未生效，
+本轮定位到两个叠加根因并修复：
+
+1. **manifest 被浏览器忽略**：nginx 未登记 `.webmanifest` 类型，`/manifest.webmanifest` 以
+   `application/octet-stream` 返回；Chrome/Edge 只解析 `application/manifest+json`（或 `json`），
+   其他类型直接丢弃清单，`display_override` 永远不生效，页面自绘标题条也就永远不显示。
+2. **深色主题色导致白字**：窗口标题文字颜色由浏览器按 `theme_color` 亮度决定，深色主题色得白字；
+   旧值深绿 `#1B5E20` 叠加系统浅色标题区，即“浅底白字”（对比度约 1.1:1）。真实窗口对照实验：
+   `#1B5E20` → 白字，浅色 `#E7F0EA` → 深字。
+
+| 改动 | 文件 | 说明 |
+|---|---|---|
+| 浅色主题色 | `platform-admin-vue/index.html`、`public/manifest.webmanifest` | `theme_color` 改 `#E9F1EC`，`<meta name="color-scheme" content="light">` 固定浅色配色，浏览器据此选深色标题文字 |
+| nginx MIME | `platform-admin-vue/scripts/deploy.mjs` | 发布时幂等写入 `location = /manifest.webmanifest { default_type application/manifest+json; add_header Cache-Control "no-cache"; }`，`/index.html` 同 `no-cache`，`nginx -t` 失败回滚旧配置 |
+| 自绘条配色 | `platform-admin-vue/src/components/PlatformTitlebar.vue` | WCO 模式改为浅绿渐变 `#eef5f1 → #e3efe9` + 深色文字 `#16281d`（对比度 13.13:1） |
+| 清单不再长期缓存 | `platform-admin-vue/public/sw.js` | manifest 移出 cache-first 与 `install` 预缓存，改网络优先；缓存版本升 `sxf-platform-shell-v2` |
+| 核查补强 | `tools/check-platform-live-pwa.cjs`、`tools/test-platform-pwa.cjs`、`tools/test-platform-tablet-ui.cjs` | 新增 CDP `Page.getAppManifest` 断言（浏览器是否真的解析清单、`display_override` 首位、解析出的主题色）；PWA 测试断言浅色主题色 + 亮度 > 0.7 + `color-scheme`；平板测试修正十六进制亮度解析并把对比度基准改为 `#e3efe9` |
+
+验证：`npm run build` 通过；`tools/test-platform-pwa.cjs` 0 失败；`tools/test-platform-tablet-ui.cjs`
+60 项 0 失败（标题条 `nameContrast 13.13`、`nameColor rgb(22,40,29)`、`height 33`、重置后隐藏）；
+提交 `d46d3aa0` 后 `npm run deploy` 发布 release `20261029034800-d46d3aa0`，45 个文件 SHA-256 回读一致；
+线上 `/manifest.webmanifest` 回读 `Content-Type: application/manifest+json`、`Cache-Control: no-cache`；
+`tools/check-platform-live-pwa.cjs` `status: passed`（`appManifest` 0 错误、`displayOverride[0]`
+为 `window-controls-overlay`、`themeColor #E9F1EC`；更新可刷新复验 `updateNotice.refreshed true`）；
+真实应用窗口截图为浅底深字，清晰可读（`output/titlebar-diag/live-light-titlebar.png`）。
+
+用户侧：已安装窗口完全退出后重开；若仍是旧外观，卸载后重新“安装”一次（仅这一次），之后日常更新
+点“立即刷新”即可。浏览器标签页与安卓 APK 壳不受影响。详细记录见
+`docs/releases/platform-titlebar-readability-20261029.md`（取代 `platform-titlebar-wco-20261028.md`
+的深底白字配色与上文“nginx 不影响解析”的结论）。
+
+### 2026-10-29 追加：窗口标题不重复应用名
+
+安装版窗口的标题是“manifest `name` + ` - ` + `document.title`”，而页面里又把品牌写进
+`document.title`，于是出现“赛小蜂足球 · 平台运营中心 - 赛小蜂足球 - 平台运营中心”。
+
+标题规则收敛到 `platform-admin-vue/src/utils/appTitle.js`：`PAGE_TITLES` 只写页面名
+（登录“管理员登录”、控制台“运营控制台”、系统“系统管理”），`composePageTitle()` 只在浏览器
+标签页补“· 赛小蜂足球”；`src/main.js` 的路由 `beforeEach` 统一 `applyRouteTitle()`，
+页面组件不再各自设置 `document.title`；`index.html` 默认标题改为“运营控制台”。
+
+验证：`tools/test-platform-pwa.cjs` 导入 `appTitle.js` 断言三条路由的安装版窗口标题品牌只出现
+1 次；`tools/test-platform-tablet-ui.cjs` 把标题重复改为失败项；`tools/check-platform-live-pwa.cjs`
+断言线上页面标题不含 manifest `name` 且含品牌。发布 `20261029044303-31ca596b`（45 文件摘要一致）后
+线上核查 `status: passed`（标题 `管理员登录 · 赛小蜂足球`），已安装应用真实窗口标题回读
+`赛小蜂足球 · 平台运营中心 - 运营控制台`。
+
+一致性机制：标题只由上述两处（appTitle 页面名 + manifest `name`）决定；deploy 每次重写
+manifest 与 `release.json`，manifest 走网络优先（SW v2），安装版刷新即读到同一份清单；
+标题重复在本地测试与线上核查中都是失败项，回退发布会直接报错。
+
+
 
