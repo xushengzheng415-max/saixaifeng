@@ -46,7 +46,7 @@
 - `tools/test-service-registration-media.cjs`：**未通过，但与本次改动无关**。失败点是 `upload()` 的抠图计数断言（`0 !== 1`）：工作区已有其他会话尚未提交的改动把 `existingTransparent` 从「仅 `keepExisting` 时复用」改为「透明 PNG 一律直通、不再调百度抠图」，该测试断言未同步。本轮未修改 `upload()`，也未擅自改这条断言；`card()` 相关断言因中断未执行到。
 - 服务端发布：以线上包为基线，仅替换 `registrationCardContext.cjs`、`serviceRegistrationMedia.cjs`；`node tools/check-referee-backend-package.cjs` PASS（含报名上传权限检查）；`fn code update webLoginApi --deployMode cos` 成功；回下载两文件 SHA-256 与本地一致（`registrationCardContext.cjs` `d5f974d7…`、`serviceRegistrationMedia.cjs` `0ae50488…`）。
 - 线上探针：HTTP `serviceEntryPlayerCard{draft:true}` 返回 `{"success":false,"code":"SERVICE_ENTRY_FAILED","error":"登记会话已失效，请从服务号重新打开"}`，函数在线、路由正常、无鉴权旁路。
-- H5 发布：`service-entry.js`、`registration-card-modal.js`、`registration-ai-test.html` 三个文件经 `hosting deploy` 上传到 `service-account-h5`，HTTP 回读 SHA-256 全部一致（`service-entry.js` 93,247B/`f2e6a09a…`、`registration-card-modal.js` 13,486B/`1e9cdd69…`、`registration-ai-test.html` 6,260B/`811af8b8…`）。测试页资源版本升到 `?v=20261029-ai-sheet7`。
+- H5 发布：`service-entry.js`、`registration-card-modal.js`、`registration-ai-test.html` 三个文件经 `hosting deploy` 上传到 `service-account-h5`，HTTP 回读 SHA-256 全部一致（`service-entry.js` 93,247B/`f2e6a09a…`、`registration-card-modal.js` 13,486B/`1e9cdd69…`、`registration-ai-test.html` 6,480B/`32920a68…`）。测试页资源版本升到 `?v=20261029-ai-sheet7`；提示条补充「球员卡预览已改为平台金/银/铜基础卡（新登记球员尚未进入赛事正式名单）」便于验收核对（单文件补发布后回读 6,480B/`32920a68…`）。
 
 ## 待办
 

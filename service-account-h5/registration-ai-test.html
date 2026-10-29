@@ -8,7 +8,7 @@
 #trace li{margin:2px 0;word-break:break-all}
 #trace li.bad{color:#b33429}
 </style></head>
-<body><main class="entry"><p class="test-banner" id="testBanner"><strong>链路测试页（正式登记页未改动）</strong>本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费；生成前可切换三种抱膀姿势。</p><header><h1>球员登记</h1></header><div id="status" role="status">正在确认微信身份…</div><section id="content" hidden></section><a class="entry-return-link" href="./registration-resume.html">继续登记入口</a><section id="trace" hidden><details open><summary>接口记录（仅本页显示，不含令牌）</summary><ol id="traceList"></ol></details></section></main>
+<body><main class="entry"><p class="test-banner" id="testBanner"><strong>链路测试页（正式登记页未改动）</strong>本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费；生成前可切换三种抱膀姿势；「球员卡预览」已改为平台金/银/铜基础卡（新登记球员尚未进入赛事正式名单）。</p><header><h1>球员登记</h1></header><div id="status" role="status">正在确认微信身份…</div><section id="content" hidden></section><a class="entry-return-link" href="./registration-resume.html">继续登记入口</a><section id="trace" hidden><details open><summary>接口记录（仅本页显示，不含令牌）</summary><ol id="traceList"></ol></details></section></main>
 <script>
 (function () {
   var query = new URLSearchParams(location.search)
@@ -39,7 +39,7 @@
     if (!entry) {
       banner.innerHTML = '<strong>链路测试页（正式登记页未改动）</strong>未找到本机保存的登记会话：请先在微信里打开一次「继续登记」页（registration-resume.html）并点「继续填写」，再回到本页；也可以在本页地址后手动带上 ?entry=…'
     } else {
-      banner.innerHTML = '<strong>链路测试页（正式登记页未改动）</strong>已复用本机保存的登记会话。本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费；生成前可切换三种抱膀姿势。'
+      banner.innerHTML = '<strong>链路测试页（正式登记页未改动）</strong>已复用本机保存的登记会话。本页使用改版弹层：「立即生成」先扣蜂蜜再调模型，生成失败自动退回；「使用这张形象照」只入库，不再扣费；生成前可切换三种抱膀姿势；「球员卡预览」已改为平台金/银/铜基础卡（新登记球员尚未进入赛事正式名单）。'
     }
   }
 
