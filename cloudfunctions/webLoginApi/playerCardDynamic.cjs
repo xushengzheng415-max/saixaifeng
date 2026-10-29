@@ -4,6 +4,9 @@ const {document}=require('./playerCardReader.cjs')
 const preload=require('./playerCardPreload.cjs')
 const sourceReader=require('./playerCardSource.cjs')
 const VERSION='player-card-dynamic/1'
+// CloudBase 拒绝在 set({data}) 中出现 _id（以及客户端托管字段 _openid）；
+// 发布事务会把读回的模板状态文档展开重写，所以写入前统一剔除这两个字段。
+const fieldsOf=value=>{const{_id,_openid,...rest}=value||{};return rest}
 const fontContract=require('./player-card-text-styles.json')
 const fonts=require('./player-card-font-manifest.json').filter(f=>/\.(otf|ttf)$/.test(f.name)).map(f=>({...f,family:fontContract.fonts.find(font=>font.files.includes(f.name)).family,weight:f.name.includes('Bold')?700:400}))
 function values(player,snapshot){return {number:String(player.jerseyNumber??''),position:({GK:'守门员',DF:'后卫',MF:'中场',FW:'前锋'})[player.position]||String(player.position||snapshot.positionOverride||'—'),name:String(player.name||''),jerseyName:String(player.jerseyName||''),height:player.height==null||player.height===''?'':`身高 ${player.height}cm`,weight:player.weight==null||player.weight===''?'':`体重 ${player.weight}kg`,nationality:String(player.nationality||'')}}
@@ -53,9 +56,9 @@ async function publish(cloud,db,row,revision,userId){
   if(!current||Number(current.revision)!==Number(revision))throw new Error('草稿已更新，请重新预览')
   if(state?.candidate)throw new Error('旧制卡任务尚未处理，请继续或退回后再发布动态版')
   if(await document(tx,'player_card_template_versions',snapshotId))throw new Error('此草稿已创建版本，请先处理原任务')
-  await tx.collection('player_card_template_versions').doc(snapshotId).set({data:{...current.draft,templateId:row._id,version,cardTypeId:row.tier,displayMode:'dynamic',createAt:db.serverDate(),createdBy:userId}})
-  await tx.collection('player_card_template_states').doc(key).set({data:{...(state||{}),tier:row.tier,preload:scope,revision:Number(state?.revision||0)+1,mutation:Number(state?.mutation||0),active:{templateId:row._id,version,displayMode:'dynamic'},candidate:null,activatedAt:db.serverDate(),activatedBy:userId}})
-  await tx.collection('player_card_templates').doc(row._id).update({data:{published:db.command.set({...current.draft,displayMode:'dynamic'}),publishedVersion:version,status:'published',revision:Number(revision)+1,publishedAt:db.serverDate(),publishedBy:userId}})
+  await tx.collection('player_card_template_versions').doc(snapshotId).set({data:{...fieldsOf(current.draft),templateId:row._id,version,cardTypeId:row.tier,displayMode:'dynamic',createAt:db.serverDate(),createdBy:userId}})
+  await tx.collection('player_card_template_states').doc(key).set({data:{...fieldsOf(state),tier:row.tier,preload:scope,revision:Number(state?.revision||0)+1,mutation:Number(state?.mutation||0),active:{templateId:row._id,version,displayMode:'dynamic'},candidate:null,activatedAt:db.serverDate(),activatedBy:userId}})
+  await tx.collection('player_card_templates').doc(row._id).update({data:{published:db.command.set({...fieldsOf(current.draft),displayMode:'dynamic'}),publishedVersion:version,status:'published',revision:Number(revision)+1,publishedAt:db.serverDate(),publishedBy:userId}})
  })
  return {success:true,status:'active',displayMode:'dynamic',templateId:row._id,publishedVersion:version}
 }

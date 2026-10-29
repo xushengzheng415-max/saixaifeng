@@ -8,7 +8,7 @@ const tables=new Map(),table=name=>{if(!tables.has(name))tables.set(name,new Map
 const clone=x=>structuredClone(x),unwrap=x=>x?.$set!==undefined?x.$set:x
 const matches=(row,filter)=>Object.entries(filter||{}).every(([key,value])=>value?.$gt!==undefined?String(row[key])>value.$gt:row[key]===value)
 const db={command:{gt:value=>({$gt:value}),set:value=>({$set:value})},serverDate:()=>new Date(),async createCollection(){},collection(name){const rows=table(name);return {
-  doc(id){return {async get(){return {data:clone(rows.get(id)||null)}},async set({data}){rows.set(id,{_id:id,...clone(data)})},async update({data}){assert(rows.has(id));for(const [k,v]of Object.entries(data))rows.get(id)[k]=clone(unwrap(v))}}},
+  doc(id){return {async get(){return {data:clone(rows.get(id)||null)}},async set({data}){assert(!('_id'in data),'set({data}) 不能包含 _id（线上 -501007 不能更新_id的值）');assert(!('_openid'in data),'set({data}) 不能包含 _openid');rows.set(id,{_id:id,...clone(data)})},async update({data}){assert(rows.has(id));for(const [k,v]of Object.entries(data))rows.get(id)[k]=clone(unwrap(v))}}},
   where(filter){let count=100;const q={orderBy(){return q},limit(n){count=n;return q},async get(){return {data:[...rows.values()].filter(row=>matches(row,filter)).sort((a,b)=>a._id.localeCompare(b._id)).slice(0,count).map(clone)}}};return q}
 }},async runTransaction(fn){const before=clone(tables);try{return await fn(db)}catch(e){tables.clear();for(const [k,v]of before)tables.set(k,v);throw e}}}
 const cloud={database:()=>db,async getTempFileURL({fileList}){return {fileList:fileList.map(fileID=>({fileID,tempFileURL:'https://fixture/'+fileID}))}}}
@@ -36,8 +36,15 @@ async function runTests(){
   table(suite.TEMPLATES).get(global.members.gold.id).revision++
   await assert.rejects(call('publish',{setId:global._id,proof:proof.proof}),/草稿已变化/)
   assert.equal(table(suite.STATES).size,0);assert.equal(table(suite.VERSIONS).size,0)
+  // 旧单模板时代遗留的等级状态文档在真实库里带 _id；首次发布必须重写它，
+  // 不能把 _id 带进 set({data})（线上错误 -501007 不能更新_id的值）
+  for(const tier of ['bronze','silver','gold'])table(suite.STATES).set(tier,{_id:tier,tier,preload:{type:'platform'},active:{templateId:'legacy-'+tier,version:1},candidate:null,revision:5})
   global=await publish(global)
   for(const tier of ['bronze','silver','gold'])assert.equal(table(suite.STATES).get(tier).active.templateId,global.members[tier].id)
+  // 二次发布继续重写已存在的状态文档
+  global=await fill(global);const republished=await publish(global)
+  for(const tier of ['bronze','silver','gold'])assert.equal(table(suite.STATES).get(tier).active.templateId,republished.members[tier].id,'二次发布切换活动模板')
+  assert.equal(table(suite.VERSIONS).size,6,'两版草稿各自留存快照')
   const baseline=clone(table(suite.STATES))
   table('teams').set('team',{_id:'team',name:'正式球队'})
   table('teams').set('elsewhere',{_id:'elsewhere',name:'其他球队'})

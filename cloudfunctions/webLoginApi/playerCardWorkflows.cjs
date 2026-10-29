@@ -7,6 +7,9 @@ const TIERS = ['bronze', 'silver', 'gold']
 const id = () => crypto.randomBytes(16).toString('hex')
 const titleOf = value => { const text=String(value||'').trim(); if(text.length<2||text.length>24)throw new Error('名称须为2–24个字');return text }
 const keysOf = set => set.kind==='progression'?TIERS:['single']
+// CloudBase 拒绝在 set({data}) 中出现 _id（以及客户端托管字段 _openid）；
+// 发布事务会把读回的状态文档展开重写，所以写入前统一剔除这两个字段。
+const fieldsOf = value => { const {_id,_openid,...rest}=value||{}; return rest }
 const grantId = (playerId, templateId) => crypto.createHash('sha256').update(JSON.stringify([String(playerId),String(templateId)])).digest('hex')
 const issueFailure=(code,message)=>Object.assign(new Error(message),{recipientFailure:true,code})
 function issueSummary(job){const failures=job.failures||[];return {success:true,jobId:job._id,setId:job.setId,title:job.title,revision:job.setRevision,setDisplay:job.setDisplay,total:job.playerIds.length,completed:job.cursor,succeeded:job.cursor-failures.length,status:job.status,failures}}
@@ -107,12 +110,12 @@ function createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,norma
       for(const p of prepared){
         const versionId=suite.versionId(p.row._id,p.version)
         const old=await suite.document(tx,suite.VERSIONS,versionId)
-        if(!old)await tx.collection(suite.VERSIONS).doc(versionId).set({data:{...p.row.draft,templateId:p.row._id,version:p.version,cardTypeId:p.row.tier,cardKind:set.kind,setId:set._id,displayMode:'dynamic',createdAt:db.serverDate(),createdBy:auth.userId}})
+        if(!old)await tx.collection(suite.VERSIONS).doc(versionId).set({data:{...fieldsOf(p.row.draft),templateId:p.row._id,version:p.version,cardTypeId:p.row.tier,cardKind:set.kind,setId:set._id,displayMode:'dynamic',createdAt:db.serverDate(),createdBy:auth.userId}})
         const active={templateId:p.row._id,version:p.version,displayMode:'dynamic',setId:set._id}
-        await tx.collection(suite.STATES).doc(p.stateKey).set({data:{...(p.state||{}),tier:p.row.tier,preload:set.preload,revision:Number(p.state?.revision||0)+1,active,candidate:null,activatedAt:db.serverDate(),activatedBy:auth.userId}})
+        await tx.collection(suite.STATES).doc(p.stateKey).set({data:{...fieldsOf(p.state),tier:p.row.tier,preload:set.preload,revision:Number(p.state?.revision||0)+1,active,candidate:null,activatedAt:db.serverDate(),activatedBy:auth.userId}})
         // Keep the selected-card lookup key available for upgraded legacy clients too.
         if(set.kind==='progression'&&set.preload.type==='platform')await tx.collection(suite.STATES).doc(preload.stateId(p.row.tier,set.preload,p.row._id)).set({data:{tier:p.row.tier,preload:set.preload,active,candidate:null,revision:Number(p.state?.revision||0)+1}})
-        await tx.collection(suite.TEMPLATES).doc(p.row._id).update({data:{published:db.command.set({...p.row.draft,cardKind:set.kind,setId:set._id,displayMode:'dynamic'}),publishedVersion:p.version,status:'published',revision:Number(p.row.revision)+1,publishedAt:db.serverDate(),publishedBy:auth.userId}})
+        await tx.collection(suite.TEMPLATES).doc(p.row._id).update({data:{published:db.command.set({...fieldsOf(p.row.draft),cardKind:set.kind,setId:set._id,displayMode:'dynamic'}),publishedVersion:p.version,status:'published',revision:Number(p.row.revision)+1,publishedAt:db.serverDate(),publishedBy:auth.userId}})
       }
       await tx.collection(SETS).doc(set._id).update({data:{status:'published',revision:Number(set.revision)+1,published:db.command.set({title:set.title,preload:set.preload,members:Object.fromEntries(prepared.map(p=>[p.key,{templateId:p.row._id,version:p.version}]))}),publishedAt:db.serverDate(),publishedBy:auth.userId,previewProof:null}})
     })
