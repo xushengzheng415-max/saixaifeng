@@ -73,6 +73,14 @@ module.exports = function createServicePrivate({ cloud, config, hashSessionToken
       return action==='servicePrivateRegistrationList'?recovery.list(db,actor):recovery.resume(db,actor,event.registrationId)
     }
     if(action==='servicePrivateAccountData')return require('./servicePersonalAccount.cjs')({db,user:context.user,session:context.session})
+    // 蜂蜜充值：复用同一套自然人会话鉴权，账本归属仍然是服务号 OpenID
+    if(['servicePrivateHoneyRecharge','servicePrivateHoneyOrders','servicePrivateHoneyOrderStatus'].includes(action))return require('./honeyRecharge.cjs').create({db,user:context.user,session:context.session})(action,event)
+    // 个人会员（一期 A）：与蜂蜜共用同一个自然人会话与账本归属，发放只由服务端支付回调完成
+    if(['servicePrivateMembershipStatus','servicePrivateMembershipSubscribe','servicePrivateMembershipOrderStatus','servicePrivateMembershipOrders'].includes(action))return require('./membership.cjs').create({db,user:context.user,session:context.session})(action,event)
+    // 个人保单 PDF：上传识别与确认，仅本人/监护人可提交
+    if(['servicePrivateInsuranceUpload','servicePrivateInsuranceRecognize','servicePrivateInsuranceConfirm','servicePrivateInsurancePurchaseClick'].includes(action)){
+      return require('./serviceInsurancePolicy.cjs')({cloud,db,user:context.user,session:context.session})(action,event)
+    }
     if(action==='serviceFeedbackSubmit')return feedback(event,context)
     if(action==='servicePrivateFeedbackList')return feedbackList(context)
     return require('./servicePersonalData.cjs')({cloud,db,user:context.user}).handle(action,event)
@@ -166,7 +174,7 @@ async function notifyFeedback(doc){
     try {
       if(action==='servicePrivateOAuthUrl')return await oauthUrl(event)
       if(action==='servicePrivateOAuth')return await oauth(event)
-      if(['servicePrivateOverview','servicePrivatePlayerData','servicePrivateRefereeData','servicePrivateAccountData','serviceFeedbackSubmit','servicePrivateFeedbackList','servicePrivateRegistrationList','servicePrivateResumeRegistration'].includes(action))return await personal(action,event)
+      if(['servicePrivateOverview','servicePrivatePlayerData','servicePrivateRefereeData','servicePrivateParticipation','servicePrivateAdultMatchPass','servicePrivateAccountData','serviceFeedbackSubmit','servicePrivateFeedbackList','servicePrivateRegistrationList','servicePrivateResumeRegistration','servicePrivateHoneyRecharge','servicePrivateHoneyOrders','servicePrivateHoneyOrderStatus','servicePrivateMembershipStatus','servicePrivateMembershipSubscribe','servicePrivateMembershipOrderStatus','servicePrivateMembershipOrders','servicePrivateInsuranceUpload','servicePrivateInsuranceRecognize','servicePrivateInsuranceConfirm'].includes(action))return await personal(action,event)
       return fail('SERVICE_PRIVATE_ACTION_INVALID','操作不可用，请重新打开')
     } catch(error){if(['REGISTRATION_RESUME_INVALID','REGISTRATION_RESUME_CHANGED'].includes(error.code))return fail(error.code,error.message);return fail(error.code==='DATA_SCOPE_TOO_LARGE'?error.code:'SERVICE_PRIVATE_READ_FAILED','暂时无法读取，请稍后重新加载')}
   }

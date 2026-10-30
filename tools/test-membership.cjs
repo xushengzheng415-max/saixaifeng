@@ -762,7 +762,7 @@ const tradeOf = (outTradeNo, overrides) => Object.assign({
     assert.ok(account.includes("require('./membership.cjs').homeCard"))
     assert.ok(account.includes("'membership-grant':'会员赠滴'"))
     const h5 = read('service-account-h5/service-personal.js')
-    assert.ok(h5.includes("var PAGE_VERSION='v2.8'"))
+    assert.ok(h5.includes("var PAGE_VERSION='v2.12'"))
     ;['servicePrivateMembershipStatus', 'servicePrivateMembershipSubscribe', 'servicePrivateMembershipOrderStatus', 'servicePrivateMembershipOrders'].forEach(action => {
       assert.ok(h5.includes(action), 'H5 缺少 ' + action)
     })
@@ -785,7 +785,7 @@ const tradeOf = (outTradeNo, overrides) => Object.assign({
     assert.ok(h5.includes('function mockMembershipStatus'))
     assert.ok(h5.includes("if(p.action==='servicePrivateMembershipSubscribe')return Promise.reject("))
     const html = read('service-account-h5/me.html')
-    assert.ok(/service-personal\.js\?v=20261030-payresult/.test(html), 'H5 需要带版本号避免缓存旧脚本')
+    assert.ok(/service-personal\.js\?v=20261030-ins2/.test(html), 'H5 需要带版本号避免缓存旧脚本')
   })
 
   // ============ 收尾 ============
