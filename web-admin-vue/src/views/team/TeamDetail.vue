@@ -4381,6 +4381,23 @@ function generatePlayerId(teamCode, roleSuffix, overrideSeq) {
   return teamCode + nextSeq + roleSuffix;
 }
 
+// 头像临时链接按需解析：列表先渲染，头像解析完成后就地更新，不再阻塞页面。
+// 临时链接本身已按 fileId 缓存，同一张头像不会重复请求。
+async function hydrateAvatarUrls(rows) {
+  await Promise.all((rows || []).map(async (row) => {
+    if (!row) return
+    const exportPhotoFileId = [row.photoFileID, row.photoFileId, row.photoUrl]
+      .map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
+    if (!exportPhotoFileId) return
+    try {
+      row._exportPhotoFileId = exportPhotoFileId
+      row.photoUrl = await getFileUrl(exportPhotoFileId)
+    } catch (error) {
+      console.warn('头像临时链接解析失败:', error && error.message ? error.message : error)
+    }
+  }))
+}
+
 async function loadPlayers() {
   loading.value = true
   const statisticsRequest = requestUnifiedStatistics().catch(error => ({ success: false, error: error.message }))
@@ -4433,13 +4450,8 @@ async function loadPlayers() {
     actualStaffRecords([...(staffByTeamId || []), ...(staffByTeamCode || [])]).forEach(person => {
       if (person?._id) staffMap.set(String(person._id), person)
     })
-    staffMembers.value = await Promise.all(Array.from(staffMap.values()).map(async person => {
-      const exportPhotoFileId = [person.photoFileID, person.photoFileId, person.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
-      if (exportPhotoFileId) {
-        try { return { ...person, _exportPhotoFileId:exportPhotoFileId, photoUrl:await getFileUrl(exportPhotoFileId) } } catch { return { ...person, _exportPhotoFileId:exportPhotoFileId } }
-      }
-      return person
-    }))
+    staffMembers.value = Array.from(staffMap.values())
+    void hydrateAvatarUrls(staffMembers.value)
 
     // 合并并去重（按 _id）
     const playerMap = new Map()
@@ -4451,23 +4463,10 @@ async function loadPlayers() {
     }
     let result = Array.from(playerMap.values())
 
-    // 处理头像URL：如果是 cloudId，需要转换成临时URL
-    const processedPlayers = await Promise.all(result.map(async (player) => {
-      const exportPhotoFileId = [player.photoFileID, player.photoFileId, player.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
-      if (exportPhotoFileId) {
-        try {
-          const tempUrl = await getFileUrl(exportPhotoFileId)
-          return { ...player, _exportPhotoFileId:exportPhotoFileId, photoUrl:tempUrl }
-        } catch (err) {
-          console.error('获取头像临时URL失败:', err)
-          return { ...player, _exportPhotoFileId:exportPhotoFileId }
-        }
-      }
-      return player
-    }))
-
-    players.value = processedPlayers
-    const formalPlayerIds = new Set(processedPlayers.map(player => String(player._id || '')).filter(Boolean))
+    // 头像在后台解析，列表先渲染，避免逐人等待拖慢首屏
+    players.value = result
+    void hydrateAvatarUrls(players.value)
+    const formalPlayerIds = new Set(result.map(player => String(player._id || '')).filter(Boolean))
     const draftMap = new Map()
     ;(exportRosterPlayers || []).forEach(draft => {
       if (!draft?._id) return
@@ -4476,17 +4475,17 @@ async function loadPlayers() {
       if (draft.confirmedPlayerId && formalPlayerIds.has(String(draft.confirmedPlayerId))) return
       draftMap.set(String(draft._id), { ...draft, _exportSource:'registration_player_draft' })
     })
-    importedDraftPlayers.value = await Promise.all(Array.from(draftMap.values()).map(async draft => {
-      const exportPhotoFileId = [draft.photoFileID, draft.photoFileId, draft.photoUrl].map(value => String(value || '')).find(value => value.startsWith('cloud://')) || ''
-      if (!exportPhotoFileId) return draft
-      try { return { ...draft, _exportPhotoFileId:exportPhotoFileId, photoUrl:await getFileUrl(exportPhotoFileId) } } catch { return { ...draft, _exportPhotoFileId:exportPhotoFileId } }
-    }))
+    importedDraftPlayers.value = Array.from(draftMap.values())
+    void hydrateAvatarUrls(importedDraftPlayers.value)
 
     // 普通球队资料页沿用历史同步行为；赛事内查看只读，不因打开页面改写球队资产。
     if (!sourceTournamentId.value) {
       try {
-        await updateRecord('teams', teamId, { playerCount: processedPlayers.length })
-        if (team.value) team.value.playerCount = processedPlayers.length
+        // 只在人数变化时回写，避免每次打开详情都多一次写请求
+        if (Number(team.value && team.value.playerCount) !== result.length) {
+          await updateRecord('teams', teamId, { playerCount: result.length })
+        }
+        if (team.value) team.value.playerCount = result.length
       } catch (e) {
         console.error('同步 playerCount 失败:', e)
       }
