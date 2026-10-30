@@ -6,9 +6,12 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/honey-pay-result-20261030.md','发布记录/蜂蜜充值与会员支付结果识别修复-20261030.md'],
+  ['docs/releases/mini-1.2.27-upload-20261030.md','发布记录/小程序1.2.27开发版上传-20261030.md'],
   ['docs/releases/registration-idcheck-btn-20261029.md','发布记录/登记身份证前置核验与生成球员卡按钮修复-20261029.md'],
   ['docs/releases/membership-phase1a-20261029.md','发布记录/个人会员一期A上线-20261029.md'],
   ['docs/releases/registration-done-page-20261029.md','发布记录/球员登记提交后独立完成页-20261029.md'],
+  ['docs/releases/mini-1.2.26-upload-20261029.md','发布记录/小程序1.2.26开发版上传-20261029.md'],
   ['docs/releases/registration-idcard-region-20261029.md','发布记录/登记身份证推算籍贯与默认国籍-20261029.md'],
   ['docs/releases/player-card-preview-layout-align-20261029.md','发布记录/球员卡排版预览与成卡大图对齐-20261029.md'],
   ['docs/releases/registration-base-card-preview-20261029.md','发布记录/登记球员卡预览改基础等级卡-20261029.md'],
