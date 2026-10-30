@@ -1,14 +1,50 @@
 (function(){
  'use strict'
  var API='https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi',KEY='sxf_referee_h5_session',app=document.getElementById('app')
- var PAGE_VERSION='v2.4'
- var MOCK=false
+ var PAGE_VERSION='v2.8'
+ // 本地预览（?mock=1）：只在 file:// 或本机地址生效，避免线上被加参数后展示假会员与假余额
+ var MOCK=/[?&]mock=1(?:&|$)/.test(location.search)&&(/^(file:|http:\/\/localhost|http:\/\/127\.0\.0\.1)/.test(location.protocol+location.host))
  var state={overview:null,view:'player',playerId:'',detail:null,epoch:0},oauthPending=false
  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
  // 本地预览（?mock=1）：假数据直出，不请求微信与业务接口
+ // 会员本地预览（仅 me.html?mock=1，可加 &member=active 看已开通态）：
+ // 只为核对会员卡、会员中心、档位与订单样式，不发起真实订单或支付；真实价格与资格一律以服务端返回为准。
+ function mockMemberActive(){return /[?&]member=active/.test(location.search)}
+ function mockMemberPlans(){
+  return [
+   {code:'basic',name:'基础会员',firstPriceCents:990,renewPriceCents:1990,yearlyPriceCents:19900,grantDrops:200,portraitDiscount:0.95,portraitDiscountLabel:'9.5 折',visible:true,order:1},
+   {code:'plus',name:'进阶会员',firstPriceCents:1990,renewPriceCents:2990,yearlyPriceCents:29900,grantDrops:500,portraitDiscount:0.9,portraitDiscountLabel:'9 折',visible:true,order:2},
+   {code:'pro',name:'专业会员',firstPriceCents:3990,renewPriceCents:4990,yearlyPriceCents:49900,grantDrops:1000,portraitDiscount:0.8,portraitDiscountLabel:'8 折',visible:true,order:3}
+  ]
+ }
+ function mockMemberSub(){
+  var now=Date.now()
+  return {levelCode:'plus',levelName:'进阶会员',status:'active',startedAt:now-10*86400000,expiresAt:now+20*86400000,daysLeft:20,expiresSoon:false,autoRenew:false,badgeText:'进阶会员',portraitDiscount:0.9}
+ }
+ function mockMembershipCard(){
+  var active=mockMemberActive()
+  return {status:'ready',subscription:active?mockMemberSub():null,isFirstMonthAvailable:!active,purchaseEnabled:true,reason:'',plans:mockMemberPlans(),lowestFirstPriceCents:990,lowestRenewPriceCents:1990,balance:1200}
+ }
+ function mockMembershipStatus(){
+  var active=mockMemberActive(),plans=mockMemberPlans()
+  var rights=[{code:'grant',label:'每月赠滴',open:true,detail:active?'每期赠 500 滴':'每期赠 200 滴'},{code:'badge',label:'会员徽章',open:true},{code:'portrait',label:'AI 定妆照折扣',open:true,detail:active?'定妆照享 9 折':'会员生效后享定妆照折扣'},{code:'backgrounds',label:'卡面背景库',open:false},{code:'export',label:'数据长图导出',open:false},{code:'cards',label:'多套卡面保存',open:false},{code:'report',label:'赛季报告',open:false}]
+  return {plans:plans.concat([{code:'family',name:'家庭会员',firstPriceCents:5990,renewPriceCents:6990,yearlyPriceCents:69900,grantDrops:2000,portraitDiscount:0.8,portraitDiscountLabel:'8 折',visible:false,order:4}]),sellablePlans:plans,subscription:active?mockMemberSub():null,isFirstMonthAvailable:!active,purchaseEnabled:true,reason:'',rights:rights,balance:1200}
+ }
+ function mockMembershipOrders(){
+  var now=Date.now()
+  return [
+   {outTradeNo:'MT20261029000000ABCDEF1234',planCode:'plus',planName:'进阶会员',priceCents:1990,priceYuan:19.9,grantDrops:500,priceTier:'first',months:1,status:'paid',statusLabel:'已支付',ledgerState:'granted',createdAt:now-86400000,paidAt:now-86400000,closedAt:0},
+   {outTradeNo:'MT20261029111111ABCDEF5678',planCode:'basic',planName:'基础会员',priceCents:1990,priceYuan:19.9,grantDrops:200,priceTier:'renew',months:1,status:'pending',statusLabel:'待支付',ledgerState:'pending',createdAt:now,paidAt:0,closedAt:0}
+  ]
+ }
  function mockResponse(p){
   if(p.action==='servicePrivatePlayerData')return Promise.resolve({success:true,data:{player:state.overview.players.filter(function(x){return x.id===p.playerId})[0]||state.overview.players[0],metrics:{appearances:12,goals:8,assists:5,starts:9,yellowCards:2,redCards:0},coverage:{goals:'complete'},matches:[{id:'m1',tournamentName:'2026郑州市青少年足球邀请赛',homeName:'郑州青少队',awayName:'洛阳金茂队',status:'finished',homeScore:3,awayScore:1,matchDate:'2026-10-12',matchTime:'15:00',venue:'郑州市体育中心'},{id:'m2',tournamentName:'2026郑州市青少年足球邀请赛',homeName:'开封铁路队',awayName:'郑州青少队',status:'upcoming',homeScore:null,awayScore:null,matchDate:'2026-10-19',matchTime:'10:00',venue:'开封体育场'}],events:[{matchId:'m1',type:'goal',minute:23,counted:true},{matchId:'m1',type:'assist',minute:56,counted:true}]}})
   if(p.action==='servicePrivateRefereeData')return Promise.resolve({success:true,data:{referee:state.overview.referee,summary:{total:18,completed:14,upcoming:4},matches:[{id:'r1',tournamentName:'2026郑州市青少年足球邀请赛',homeName:'郑州青少队',awayName:'洛阳金茂队',status:'finished',homeScore:3,awayScore:1,matchDate:'2026-10-12',matchTime:'15:00',venue:'郑州市体育中心',roles:['主裁判']}],workbenchUrl:'./?entry=workbench'}})
+  if(p.action==='servicePrivateAccountData')return Promise.resolve({success:true,data:{wallet:{status:'ready',balance:1200,entries:[{label:'会员赠滴',delta:500,time:Date.now()-86400000},{label:'AI 定妆照',delta:-95,time:Date.now()}]},messages:{status:'ready',entries:[]},membership:mockMembershipCard()}})
+  if(p.action==='servicePrivateMembershipStatus')return Promise.resolve(Object.assign({success:true},mockMembershipStatus()))
+  if(p.action==='servicePrivateMembershipOrders')return Promise.resolve({success:true,rows:mockMembershipOrders(),subscription:mockMemberActive()?mockMemberSub():null,purchaseEnabled:true})
+  if(p.action==='servicePrivateMembershipOrderStatus')return Promise.resolve({success:true,order:mockMembershipOrders()[0],subscription:mockMemberActive()?mockMemberSub():null,balance:1200})
+  if(p.action==='servicePrivateMembershipSubscribe')return Promise.reject(Error('本地预览不发起真实支付，请用真实微信打开'))
   if(p.action==='serviceFeedbackSubmit')return Promise.resolve({success:true,feedbackId:'mockfb'+Date.now().toString().slice(-6)})
   return Promise.reject(Error('mock 不支持的动作'))
  }
@@ -43,10 +79,10 @@
    '<section class="me-usercard me-home-profile" aria-label="当前资料">'+portrait(current&&current.avatar,name)+'<div><h1>'+esc(name)+'</h1><p>'+esc(d.phoneMasked||'')+'</p></div><button data-action="homeProfile">个人资料 ›</button></section>'+
    '<nav class="me-home-roles" aria-label="切换身份"><button data-home-role="player" aria-pressed="'+(state.view==='player')+'" '+(!players.length?'disabled':'')+'>球员身份</button><button data-home-role="referee" aria-pressed="'+(state.view==='referee')+'" '+(!d.hasReferee?'disabled':'')+'>裁判身份</button></nav>'+
    '<div class="me-home-context"><span>'+esc(relation.filter(Boolean).join(' · ')||'尚未绑定业务身份')+'</span>'+(state.view==='player'&&players.length>1?'<button data-action="homePlayers">切换球员 ›</button>':'')+'</div>'+
-   '<section class="me-home-wallet" aria-label="我的蜂蜜"><div class="wallet-head"><strong>我的蜂蜜</strong><button data-action="honeyLedger">收支明细 ›</button></div><div class="wallet-body"><div class="amount"><strong id="homeHoneyBalance">—</strong><span>滴</span></div>'+homeRechargeEntry()+'</div><div id="homeHoneyStatus" class="wallet-foot">正在读取蜂蜜余额…</div></section>'+
+   homeMemberCard()+'<section class="me-home-wallet" aria-label="我的蜂蜜"><div class="wallet-head"><strong>我的蜂蜜</strong><button data-action="honeyLedger">收支明细 ›</button></div><div class="wallet-body"><div class="amount"><strong id="homeHoneyBalance">—</strong><span>滴</span></div>'+homeRechargeEntry()+'</div><div id="homeHoneyStatus" class="wallet-foot">正在读取蜂蜜余额…</div></section>'+
    '<section class="me-home-game" aria-label="球员卡玩法"><button class="me-home-game-entry" data-action="homeCardGame"><span class="game-entry-text"><strong>球员卡玩法</strong><small>送出卡片 · 收集图鉴 · 组建阵容 · 阵容对战</small></span><i aria-hidden="true">›</i></button></section>'+
    '<section class="me-home-data"><button class="me-home-data-head" data-action="goData"><strong>'+(state.view==='player'?'我的比赛数据':'我的执裁数据')+'</strong><span>全部记录 ›</span></button><div id="homeMetrics" class="me-home-metrics">'+homeMetrics(null)+'</div>'+homeMenu(state.view==='player'?'shield':'event',state.view==='player'?'我的球员卡':'裁判任务',state.view==='player'?'homePlayerCards':'homeRefereeTasks')+'</section>'+
-   '<h2 class="me-home-label">账号与服务</h2><section class="me-home-menu">'+homeMenu('list','继续球员登记','homeRegistrationResume')+homeMenu('lock','账号与安全','homeSecurity')+homeMenu('list','绑定管理','showBindings')+homeMenu('bell','消息通知','homeMessages')+homeMenu('event','充值订单','honeyOrders')+homeMenu('shield','客服中心','support')+homeMenu('event','我的反馈','myFeedback')+'</section>'+
+   '<h2 class="me-home-label">账号与服务</h2><section class="me-home-menu">'+homeMenu('list','继续球员登记','homeRegistrationResume')+homeMenu('lock','账号与安全','homeSecurity')+homeMenu('list','绑定管理','showBindings')+homeMenu('bell','消息通知','homeMessages')+homeMenu('event','会员订单','membershipOrders')+homeMenu('event','充值订单','honeyOrders')+homeMenu('shield','客服中心','support')+homeMenu('event','我的反馈','myFeedback')+'</section>'+
    '<div class="me-home-footer"><button data-action="openTournament">赛事中心</button><span>·</span><button data-action="about">关于赛小蜂</button><span>·</span><button data-action="logout">退出登录</button></div></main></div>'
   updateHomeWallet();loadHomeStats();loadHomeAccount(false)
  }
@@ -62,7 +98,7 @@
  var homeAccount=null,homeAccountAt=0,homeAccountPromise=null,homeAccountGeneration=0,homeModal=''
  function loadHomeAccount(force){if(homeAccountPromise)return homeAccountPromise;if(!force&&homeAccount&&Date.now()-homeAccountAt<30000)return Promise.resolve(homeAccount)
   var generation=homeAccountGeneration,token=localStorage.getItem(KEY)||''
-  var promise=api({action:'servicePrivateAccountData'}).then(function(r){if(generation!==homeAccountGeneration||token!==(localStorage.getItem(KEY)||''))return null;homeAccount=r.data;homeAccountAt=Date.now();updateHomeWallet();return r.data}).catch(function(error){if(generation!==homeAccountGeneration||token!==(localStorage.getItem(KEY)||''))return null;homeAccount={wallet:{status:'unavailable',balance:null,entries:[]},messages:{status:'unavailable',entries:[]}};updateHomeWallet();return homeAccount}).then(function(result){if(homeAccountPromise===promise)homeAccountPromise=null;return result})
+  var promise=api({action:'servicePrivateAccountData'}).then(function(r){if(generation!==homeAccountGeneration||token!==(localStorage.getItem(KEY)||''))return null;homeAccount=r.data;homeAccountAt=Date.now();updateHomeWallet();updateHomeMember();return r.data}).catch(function(error){if(generation!==homeAccountGeneration||token!==(localStorage.getItem(KEY)||''))return null;homeAccount={wallet:{status:'unavailable',balance:null,entries:[]},messages:{status:'unavailable',entries:[]}};updateHomeWallet();updateHomeMember();return homeAccount}).then(function(result){if(homeAccountPromise===promise)homeAccountPromise=null;return result})
   homeAccountPromise=promise;return promise
  }
  function homeTime(t){return t?new Date(t).toLocaleString('zh-CN',{hour12:false}):'时间未记录'}
@@ -76,6 +112,14 @@
  // 页面只负责展示与拉起收银台；是否到账一律以服务端订单状态为准，前端「支付成功」提示不加余额。
  state.honeyPack=0
  state.honeyBusy=false
+ // 服务端查单失败时会回 queryError（含面向用户的 message 与 retryable）。
+ // 页面必须把原因说出来，不能让「刷新状态」看起来像没反应。
+ state.honeyQueryError=null
+ function payQueryHint(kind){
+  var e=state.honeyQueryError&&state.honeyQueryError.message
+  if(e)return e
+  return kind==='member'?'支付结果待确认（如已扣款不会重复扣费），请到「会员订单」刷新状态':'支付结果待确认（如已扣款不会重复扣费），请到「充值订单」刷新状态'
+ }
  function isIosClient(){return /iPad|iPhone|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
  function isWechatClient(){return /micromessenger/i.test(navigator.userAgent)}
  function honeyWallet(){var w=homeAccount&&homeAccount.wallet;return w&&w.status==='ready'?w:null}
@@ -102,23 +146,30 @@
    '<button class="me-honey-pay" data-action="honeyPay" '+(payable?'':'disabled')+'>'+esc(payLabel)+'</button>'+
    '<p class="me-honey-note">'+esc(note)+'</p>')
  }
+ // 微信 JSAPI 的 err_msg 在官方文档与不同客户端里写法不一致（get_brand_wcpay_request:ok 与
+ // getBrandWCPayRequest:ok 都出现过）。只按某一种字面值比较，会把真实支付成功判成失败，
+ // 于是出现「已经扣款却提示支付未完成」。这里统一去掉非字母字符并转小写后看结尾，
+ // 无法识别的结果一律当作「待核实」，交给服务端主动查单定论，不提示用户重复支付。
  function invokeWechatPay(pay){
   return new Promise(function(resolve,reject){
    if(!pay||!pay['package'])return reject(Error('支付参数异常，请重新打开本页'))
-   var done=false,finish=function(ok,error){if(done)return;done=true;if(ok)resolve(true);else reject(error)}
+   var done=false,finish=function(result,error){if(done)return;done=true;if(error)reject(error);else resolve(result)}
+   function readResult(res){
+    var msg=String(res&&res.err_msg||'').replace(/[^a-zA-Z]/g,'').toLowerCase()
+    if(/ok$/.test(msg))return 'ok'
+    if(/cancel/.test(msg))return 'cancel'
+    return 'unknown'
+   }
    function run(){
     try{
      WeixinJSBridge.invoke('getBrandWCPayRequest',{appId:pay.appId,timeStamp:pay.timeStamp,nonceStr:pay.nonceStr,'package':pay['package'],signType:pay.signType,paySign:pay.paySign},function(res){
-      var msg=String(res&&res.err_msg||'')
-      if(msg==='getBrandWCPayRequest:ok')finish(true)
-      else if(msg.indexOf('cancel')>=0){done=true;resolve(false)}
-      else finish(false,Error('支付未完成，请重新发起'))
+      finish(readResult(res))
      })
-    }catch(error){finish(false,Error('微信支付调用失败，请重新打开本页'))}
+    }catch(error){finish('unknown')}
    }
    if(typeof WeixinJSBridge!=='undefined'&&WeixinJSBridge.invoke)return run()
-   if(document.addEventListener){document.addEventListener('WeixinJSBridgeReady',run,false);setTimeout(function(){if(typeof WeixinJSBridge==='undefined')finish(false,Error(honeyReasonText('WECHAT_NOT_READY')))},3000);return}
-   finish(false,Error(honeyReasonText('WECHAT_NOT_READY')))
+   if(document.addEventListener){document.addEventListener('WeixinJSBridgeReady',run,false);setTimeout(function(){if(typeof WeixinJSBridge==='undefined')finish('',Error(honeyReasonText('WECHAT_NOT_READY')))},3000);return}
+   finish('',Error(honeyReasonText('WECHAT_NOT_READY')))
   })
  }
  // 支付成功后只轮询服务端订单状态；任何「支付成功」回调都不直接加余额
@@ -126,9 +177,10 @@
   attempt=attempt||0
   return api({action:'servicePrivateHoneyOrderStatus',outTradeNo:outTradeNo}).then(function(r){
    var order=r&&r.order
-   if(order&&order.status==='paid')return order
+   if(r&&r.queryError)state.honeyQueryError=r.queryError
+   if(order&&order.status==='paid'){state.honeyQueryError=null;return order}
    var wait=[1200,2000,3000,4000,6000][attempt]
-   if(!wait)return order||null
+   if(!wait||(r&&r.queryError&&r.queryError.retryable===false))return order||null
    return new Promise(function(resolve){setTimeout(resolve,wait)}).then(function(){return pollHoneyOrder(outTradeNo,attempt+1)})
   }).catch(function(){var wait=[1200,2000,3000,4000,6000][attempt];if(!wait)return null;return new Promise(function(resolve){setTimeout(resolve,wait)}).then(function(){return pollHoneyOrder(outTradeNo,attempt+1)})})
  }
@@ -137,15 +189,15 @@
   var recharge=honeyRechargeState(),pack=recharge.packs[state.honeyPack]
   if(!recharge.available||!pack){toast(honeyReasonText(recharge.reason));return}
   if(!isWechatClient()){toast(honeyReasonText('NOT_WECHAT'));return}
-  state.honeyBusy=true;renderHoneyPanel()
+  state.honeyBusy=true;state.honeyQueryError=null;renderHoneyPanel()
   api({action:'servicePrivateHoneyRecharge',packId:pack.id,clientPlatform:isIosClient()?'ios':'wechat-h5'}).then(function(r){
-   return invokeWechatPay(r.payParams).then(function(paid){
+   return invokeWechatPay(r.payParams).then(function(result){
     state.honeyBusy=false
-    if(!paid){renderHoneyPanel();toast('已取消支付');return null}
-    toast('支付已提交，正在确认到账…')
+    if(result==='cancel'){renderHoneyPanel();toast('已取消支付');return null}
+    toast(result==='ok'?'支付已提交，正在确认到账…':'正在向微信核对支付结果…')
     return pollHoneyOrder(r.order.outTradeNo).then(function(order){
      if(order&&order.status==='paid'){loadHomeAccount(true);modal('充值成功','<p class="me-modal-text">已到账 '+order.totalDrops+' 滴，可在「收支明细」核对。</p><p class="me-modal-text">订单号 '+esc(order.outTradeNo)+'</p>');return}
-     renderHoneyPanel();toast('支付结果待确认，请到「充值订单」查看')
+     renderHoneyPanel();toast(payQueryHint('honey'))
     })
    })
   }).catch(function(e){state.honeyBusy=false;renderHoneyPanel();toast(e.message||'支付发起失败，请稍后重试')})
@@ -166,13 +218,159 @@
   toast('正在确认支付结果…')
   api({action:'servicePrivateHoneyOrderStatus',outTradeNo:outTradeNo}).then(function(r){
    var order=r&&r.order
-   if(order&&order.status==='paid'){toast('已到账 '+order.totalDrops+' 滴');loadHomeAccount(true)}
-   else toast('支付结果待确认，请稍后再试')
+   if(r&&r.queryError)state.honeyQueryError=r.queryError
+   if(order&&order.status==='paid'){state.honeyQueryError=null;toast('已到账 '+order.totalDrops+' 滴');loadHomeAccount(true)}
+   else toast(payQueryHint('honey'))
    renderHoneyOrders()
   }).catch(function(e){toast(e.message||'查询失败，请稍后重试')})
  }
+ // ============ 会员（一期 A：30 天单次、不自动续费） ============
+ // 档位、价格、首月资格、赠滴数全部来自服务端；页面不写死价格，也不自行判定资格。
+ state.memberBusy=false
+ function memberSummary(){var m=homeAccount&&homeAccount.membership;return m&&m.status==='ready'?m:null}
+ function memberReasonText(reason){return({PAYMENT_NOT_CONFIGURED:'微信支付待开通',MEMBERSHIP_PLAN_NOT_CONFIGURED:'会员档位待配置',MEMBERSHIP_PLAN_INVALID:'会员档位配置异常，暂未开放',MEMBERSHIP_PLAN_NOT_OPEN:'该档位暂未开放',MEMBERSHIP_YEARLY_NOT_OPEN:'年付暂未开放',MEMBERSHIP_UNAVAILABLE:'会员信息暂不可用',IOS_VIRTUAL_PAYMENT_RESTRICTED:'iOS 暂不支持购买会员',HONEY_ACCOUNT_NOT_OPEN:'请先完成服务号注册',HONEY_ACCOUNT_CONFLICT:'蜂蜜账户存在重复记录，请联系客服',HONEY_RECONCILING:'蜂蜜余额待核对，请稍后重试',NOT_WECHAT:'请在微信中打开后再支付',WECHAT_NOT_READY:'微信支付加载失败，请重新打开本页'})[reason]||'会员暂不可用，请稍后重试'}
+ function memberDate(ms){return ms?new Date(ms).toLocaleDateString('zh-CN'):'—'}
+ function homeMemberCard(){
+  var m=memberSummary()
+  if(!m)return '<section class="me-home-member" id="homeMemberCard" aria-label="赛小蜂会员"><button class="me-member-entry" data-action="membershipCenter"><span class="me-member-text"><strong>赛小蜂会员</strong><small>正在读取会员信息…</small></span><i aria-hidden="true">›</i></button></section>'
+  var sub=m.subscription,plans=m.plans||[],plan=plans[0]||null
+  if(sub&&sub.status==='active'){
+   var tail=sub.expiresSoon?'即将到期':'剩余 '+sub.daysLeft+' 天'
+   return '<section class="me-home-member active" id="homeMemberCard" aria-label="赛小蜂会员"><button class="me-member-entry" data-action="membershipCenter"><span class="me-member-badge">'+esc(sub.levelName||sub.badgeText||'会员')+'</span><span class="me-member-text"><strong>'+esc((sub.levelName||'会员')+' · '+tail)+'</strong><small>有效期至 '+esc(memberDate(sub.expiresAt))+' · 到期不自动续费</small></span><i aria-hidden="true">›</i></button></section>'
+  }
+  if(sub&&sub.status==='expired'){
+   return '<section class="me-home-member" id="homeMemberCard" aria-label="赛小蜂会员"><button class="me-member-entry" data-action="membershipCenter"><span class="me-member-text"><strong>会员已到期</strong><small>'+esc(memberDate(sub.expiresAt))+' 到期 · 续费恢复赠滴与折扣</small></span><span class="me-member-cta">续费</span></button></section>'
+  }
+  var price=m.lowestFirstPriceCents>0?yuanText(m.lowestFirstPriceCents)+' 元':'会员权益'
+  var grant=plan?'每月赠 '+plan.grantDrops+' 滴':'每月赠滴'
+  return '<section class="me-home-member" id="homeMemberCard" aria-label="赛小蜂会员"><button class="me-member-entry" data-action="membershipCenter"><span class="me-member-text"><strong>开通会员 · 首月 '+esc(price)+'起</strong><small>'+esc(grant)+' · 定妆照折扣 · 会员徽章</small></span><span class="me-member-cta">立即开通</span></button></section>'
+ }
+ function updateHomeMember(){var n=document.getElementById('homeMemberCard');if(!n)return;var holder=document.createElement('div');holder.innerHTML=homeMemberCard();var fresh=holder.firstChild;if(fresh)n.parentNode.replaceChild(fresh,n)}
+ // 会员中心：整屏订阅页（会员卡头图 + 权益宫格 + 档位精选 + 吸底开通条），不再是普通弹层。
+ // 版式参考公开定价页通用结构（头部品牌 + 权益 + 档位对比 + 吸附 CTA），样式与文案按本项目自写。
+ var memberRightsIcon={grant:'gift',badge:'crown',portrait:'camera',backgrounds:'gallery',export:'chart',cards:'list',report:'event'}
+ function memberIcon(code){return './assets/icons/'+(memberRightsIcon[code]||'shield')+'.svg'}
+ function renderMembershipCenter(){
+  state.memberStatus=null;state.memberPlan=''
+  openMemberPage('<div class="mp-loading">正在读取会员信息…</div>')
+  api({action:'servicePrivateMembershipStatus'}).then(function(r){
+   if(!document.getElementById('memberPage'))return
+   state.memberStatus=r||{};paintMemberPage()
+  }).catch(function(e){
+   if(!document.getElementById('memberPage'))return
+   openMemberPage('<div class="mp-blocked"><strong>会员信息读取失败</strong><small>'+esc(e.message||'请稍后重试')+'</small></div>')
+  })
+ }
+ function openMemberPage(inner){
+  var page=document.getElementById('memberPage')
+  if(!page){
+   page=document.createElement('div');page.id='memberPage';page.className='mp-mask'
+   page.innerHTML='<div class="mp-sheet" role="dialog" aria-label="赛小蜂会员"><header class="mp-nav"><button class="mp-back" data-member-close="1" aria-label="返回">‹</button><strong>赛小蜂会员</strong><span class="mp-nav-note">30 天单次 · 不自动续费</span></header><div class="mp-body"></div></div>'
+   page.addEventListener('click',function(e){if(e.target===page)closeMemberPage()})
+   app.appendChild(page)
+  }
+  page.querySelector('.mp-body').innerHTML=inner
+ }
+ function closeMemberPage(){var page=document.getElementById('memberPage');if(page)page.remove()}
+ function paintMemberPage(){if(!state.memberStatus)return;openMemberPage(membershipCenterHtml(state.memberStatus))}
+ function chooseMemberPlan(code){if(!code||code===state.memberPlan)return;state.memberPlan=code;paintMemberPage()}
+ function membershipCenterHtml(r){
+  var m=r||{},sub=m.subscription,plans=m.sellablePlans||[],open=!!(sub&&sub.status==='active'),ios=isIosClient()
+  var first=m.isFirstMonthAvailable===true
+  var currentIndex=-1
+  if(open)plans.forEach(function(plan,index){if(plan.code===sub.levelCode)currentIndex=index})
+  var selected=''
+  plans.forEach(function(plan){if(plan.code===state.memberPlan)selected=plan.code})
+  if(!selected){var fallback=open&&currentIndex>=0?plans[currentIndex]:(plans[1]||plans[0]);selected=fallback?fallback.code:''}
+  state.memberPlan=selected
+  var selectedPlan=null
+  plans.forEach(function(plan){if(plan.code===selected)selectedPlan=plan})
+  var hero='<div class="mp-hero"><div class="mp-hero-top"><span class="mp-crest">赛小蜂会员</span><span class="mp-pill">FAN CLUB</span></div>'+
+   '<strong class="mp-hero-title">'+esc(open?(sub.levelName||'会员')+' · 剩余 '+sub.daysLeft+' 天':(sub?'会员已到期':'尚未开通会员'))+'</strong>'+
+   '<small class="mp-hero-note">'+esc(sub?'有效期至 '+memberDate(sub.expiresAt)+' · 到期不自动续费':'首次开通享首月价，之后按同档续费价')+'</small></div>'
+  var rights=(m.rights||[]).map(function(item){
+   return '<li'+(item.open?'':' class="pending"')+'><img src="'+memberIcon(item.code)+'" alt=""><span><strong>'+esc(item.label)+'</strong><small>'+esc(item.open?(item.detail||'已开放'):'即将开放')+'</small></span></li>'
+  }).join('')
+  var rightsPanel=rights?'<section class="mp-panel"><h3 class="mp-title">会员权益<small>'+esc(open?'本档已生效':'开通后立即生效')+'</small></h3><ul class="mp-rights">'+rights+'</ul></section>':''
+  var planHtml=''
+  if(ios)planHtml='<div class="mp-blocked"><strong>iOS 暂不支持购买会员</strong><small>请在安卓或电脑微信中打开本页完成开通。</small></div>'
+  else if(!m.purchaseEnabled)planHtml='<div class="mp-blocked"><strong>'+esc(memberReasonText(m.reason||'MEMBERSHIP_UNAVAILABLE'))+'</strong><small>当前不会创建订单，也不会扣款。</small></div>'
+  else planHtml='<div class="mp-plans" role="radiogroup" aria-label="选择会员档位">'+plans.map(function(plan,index){
+   var price=first?plan.firstPriceCents:plan.renewPriceCents
+   var lower=open&&currentIndex>=0&&index<currentIndex
+   var isCurrent=open&&plan.code===sub.levelCode
+   var isSelected=plan.code===selected
+   var flag=lower?'':(isCurrent?'正在使用':(open?'':(index===1?'推荐':'')))
+   return '<button class="me-member-plan'+(isCurrent?' current':'')+(isSelected?' selected':'')+'" data-member-plan="'+esc(plan.code)+'" data-price-cents="'+esc(price)+'" data-price-tier="'+(first?'first':'renew')+'" aria-pressed="'+(isSelected?'true':'false')+'"'+(lower?' disabled':'')+'>'+
+    (flag?'<span class="plan-flag">'+esc(flag)+'</span>':'')+
+    '<strong class="plan-name">'+esc(plan.name)+'</strong>'+
+    '<span class="plan-price"><i>¥</i><b>'+esc(yuanText(price))+'</b><em>'+(first?'首月价':'续费价')+'</em></span>'+
+    '<span class="plan-line">每月赠 '+esc(plan.grantDrops)+' 滴</span>'+
+    '<span class="plan-line dim">'+(lower?'当前档位更高，暂不支持降档':'定妆照'+esc(plan.portraitDiscountLabel))+'</span>'+
+   '</button>'
+  }).join('')+'</div>'
+  var planPanel='<section class="mp-panel"><h3 class="mp-title">选择档位<small>'+(open?'续费在现有有效期上叠加 30 天':'首月价仅限首次开通')+'</small></h3>'+planHtml+'</section>'
+  var payPrice=selectedPlan?(first?selectedPlan.firstPriceCents:selectedPlan.renewPriceCents):0
+  var bar=selectedPlan&&!ios&&m.purchaseEnabled?'<div class="mp-bar"><div class="mp-bar-price"><small>'+(open?'续费':'实付')+'</small><strong>¥'+esc(yuanText(payPrice))+'</strong><em>'+(first?'首月价':'到期不自动续费')+'</em></div><button class="mp-buy" data-member-buy="'+esc(selectedPlan.code)+'">'+(open?'立即续费':'立即开通')+'</button></div>':''
+  var note='<p class="mp-note">会员不会自动续费，到期需手动续费；已发放的滴不回收，可继续用于定妆照与卡面。<br>只买蜂蜜：<button class="mp-link" data-action="honeyRecharge">买蜂蜜（1 元 = 10 滴）</button></p>'
+  return hero+rightsPanel+planPanel+note+bar
+ }
+ function membershipBuy(code){
+  if(state.memberBusy)return
+  if(!isWechatClient()){toast(memberReasonText('NOT_WECHAT'));return}
+  if(!code){toast('请选择会员档位');return}
+  state.memberBusy=true;state.honeyQueryError=null;toast('正在发起支付…')
+  api({action:'servicePrivateMembershipSubscribe',planCode:code,clientPlatform:isIosClient()?'ios':'wechat-h5'}).then(function(r){
+   return invokeWechatPay(r.payParams).then(function(result){
+    state.memberBusy=false
+    if(result==='cancel'){paintMemberPage();toast('已取消支付');return null}
+    toast(result==='ok'?'支付已提交，正在确认会员…':'正在向微信核对支付结果…')
+    return pollMembershipOrder(r.order.outTradeNo).then(function(res){
+     if(res&&res.order&&res.order.status==='paid'){closeMemberPage();loadHomeAccount(true);var s=res.subscription||{};modal('会员开通成功','<p class="me-modal-text">已赠 '+esc(res.order.grantDrops)+' 滴，可在「蜂蜜收支」核对。</p><p class="me-modal-text">'+esc((s.levelName||'会员')+' · 有效期至 '+memberDate(s.expiresAt))+'</p><p class="me-modal-text">订单号 '+esc(res.order.outTradeNo)+'</p>');return}
+     renderMembershipCenter();toast(payQueryHint('member'))
+    })
+   })
+  }).catch(function(e){state.memberBusy=false;paintMemberPage();toast(e.message||'支付发起失败，请稍后重试')})
+ }
+ // 支付成功后只轮询服务端订单状态；会员与赠滴是否到账只看服务端结论
+ function pollMembershipOrder(outTradeNo,attempt){
+  attempt=attempt||0
+  return api({action:'servicePrivateMembershipOrderStatus',outTradeNo:outTradeNo}).then(function(r){
+   var order=r&&r.order
+   if(r&&r.queryError)state.honeyQueryError=r.queryError
+   if(order&&order.status==='paid'){state.honeyQueryError=null;return r}
+   var wait=[1200,2000,3000,4000,6000][attempt]
+   if(!wait||(r&&r.queryError&&r.queryError.retryable===false))return r
+   return new Promise(function(resolve){setTimeout(resolve,wait)}).then(function(){return pollMembershipOrder(outTradeNo,attempt+1)})
+  }).catch(function(){var wait=[1200,2000,3000,4000,6000][attempt];if(!wait)return null;return new Promise(function(resolve){setTimeout(resolve,wait)}).then(function(){return pollMembershipOrder(outTradeNo,attempt+1)})})
+ }
+ function renderMembershipOrders(){
+  modal('会员订单','<p class="me-modal-text">正在读取…</p>')
+  api({action:'servicePrivateMembershipOrders'}).then(function(r){
+   if(!app.querySelector('.me-modal-mask'))return
+   var rows=(r&&r.rows)||[]
+   var html=rows.length?'<div class="me-account-entries">'+rows.map(function(order){
+    var check=order.status==='pending'?'<div class="me-modal-actions"><button class="me-modal-cancel" data-member-order="'+esc(order.outTradeNo)+'">我已完成支付，刷新状态</button></div>':''
+    return '<div class="me-account-entry"><div><strong>'+esc(order.planName||'会员')+' · '+yuanText(order.priceCents)+' 元</strong><small>'+esc(homeTime(order.createdAt))+' · 赠 '+esc(order.grantDrops)+' 滴 · '+esc(order.outTradeNo)+'</small>'+check+'</div><b>'+esc(order.statusLabel)+'</b></div>'
+   }).join('')+'</div>':'<p class="me-modal-text">暂无会员订单</p>'
+   modal('会员订单',html+'<p class="me-honey-note">未到账的订单不会开通会员；支付完成后由服务端主动查单确认，重复回调只发放一次。</p>')
+  }).catch(function(e){if(app.querySelector('.me-modal-mask'))modal('会员订单','<p class="me-modal-text">读取失败：'+esc(e.message||'请稍后重试')+'</p>')})
+ }
+ function checkMembershipOrder(outTradeNo){
+  toast('正在确认支付结果…')
+  api({action:'servicePrivateMembershipOrderStatus',outTradeNo:outTradeNo}).then(function(r){
+   var order=r&&r.order
+   if(r&&r.queryError)state.honeyQueryError=r.queryError
+   if(order&&order.status==='paid'){state.honeyQueryError=null;toast('会员已开通，赠滴已到账');loadHomeAccount(true)}
+   else toast(payQueryHint('member'))
+   renderMembershipOrders()
+  }).catch(function(e){toast(e.message||'查询失败，请稍后重试')})
+ }
+
  function homeAction(action){
   if(action==='homeRegistrationResume'){location.href='./registration-resume.html';return true}
+  if(action==='membershipCenter'){renderMembershipCenter();return true}
+  if(action==='membershipOrders'){renderMembershipOrders();return true}
   if(action==='honeyRecharge'){if(isIosClient()){toast(honeyReasonText('IOS_VIRTUAL_PAYMENT_RESTRICTED'));return true}state.honeyPack=0;renderHoneyPanel();loadHomeAccount(false).then(function(){if(app.querySelector('.me-modal'))renderHoneyPanel()});return true}
   if(action==='honeyOrders'){renderHoneyOrders();return true}
   if(action==='honeyPay'){honeyPay();return true}
@@ -281,6 +479,10 @@
   var action=t.dataset.action
   if(homeAction(action))return
   if(t.dataset.homeRole){if(t.disabled)return;state.view=t.dataset.homeRole;renderHome()}
+  else if(t.dataset.memberBuy){membershipBuy(t.dataset.memberBuy)}
+  else if(t.dataset.memberPlan){if(!t.disabled)chooseMemberPlan(t.dataset.memberPlan)}
+  else if(t.dataset.memberClose)closeMemberPage()
+  else if(t.dataset.memberOrder){checkMembershipOrder(t.dataset.memberOrder)}
   else if(t.dataset.honeyPack!=null){state.honeyPack=Number(t.dataset.honeyPack)||0;renderHoneyPanel()}
   else if(t.dataset.honeyOrder){checkHoneyOrder(t.dataset.honeyOrder)}
   else if(t.dataset.homePlayer){state.playerId=t.dataset.homePlayer;renderHome()}

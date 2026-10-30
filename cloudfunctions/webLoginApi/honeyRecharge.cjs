@@ -62,6 +62,46 @@ const RECHARGE_REASON_TEXTS = {
   IOS_VIRTUAL_PAYMENT_RESTRICTED: 'iOS 暂不支持购买蜂蜜滴'
 }
 
+// 主动查单失败不能再被静默吞掉：用户点「刷新状态」时必须看到具体原因，
+// 并区分「稍后重试即可」与「必须联系客服」，避免反复刷新却不知发生了什么。
+const QUERY_ERROR_TEXTS = {
+  PAYMENT_NOT_CONFIGURED: '微信支付待开通，暂时无法自动查单',
+  PAYMENT_UNAVAILABLE: '微信支付查单繁忙，请稍后重试',
+  PAYMENT_SIGNATURE_MISSING: '支付配置异常，请联系客服',
+  PAYMENT_SIGNATURE_INVALID: '支付配置异常，请联系客服',
+  HONEY_ORDER_MISMATCH: '订单与当前账号不一致，请联系客服',
+  HONEY_ORDER_INVALID: '订单信息异常，请联系客服',
+  HONEY_ORDER_STATE_INVALID: '订单状态异常，请联系客服',
+  HONEY_AMOUNT_MISMATCH: '订单金额与微信账单不一致，请联系客服',
+  HONEY_TRANSACTION_MISSING: '未查到微信支付流水，请联系客服',
+  HONEY_RECONCILING: '蜂蜜余额待核对，请联系客服',
+  HONEY_LEDGER_INVALID: '蜂蜜账本异常，请联系客服',
+  MEMBERSHIP_ORDER_MISMATCH: '订单号与微信账单不一致，请联系客服',
+  MEMBERSHIP_ORDER_STATE_INVALID: '订单状态异常，请联系客服',
+  MEMBERSHIP_AMOUNT_MISMATCH: '订单金额与微信账单不一致，请联系客服',
+  MEMBERSHIP_TRANSACTION_MISSING: '未查到微信支付流水，请联系客服',
+  MEMBERSHIP_GRANT_FAILED: '会员权益发放失败，请联系客服'
+}
+// 这些失败靠重试不会自愈（账本不一致、金额不符、订单归属错误），必须人工核对。
+const QUERY_ERROR_PERMANENT = [
+  'PAYMENT_SIGNATURE_MISSING', 'PAYMENT_SIGNATURE_INVALID',
+  'HONEY_ORDER_MISMATCH', 'HONEY_ORDER_INVALID', 'HONEY_ORDER_STATE_INVALID',
+  'HONEY_AMOUNT_MISMATCH', 'HONEY_TRANSACTION_MISSING', 'HONEY_RECONCILING', 'HONEY_LEDGER_INVALID',
+  'MEMBERSHIP_ORDER_MISMATCH', 'MEMBERSHIP_ORDER_STATE_INVALID',
+  'MEMBERSHIP_AMOUNT_MISMATCH', 'MEMBERSHIP_TRANSACTION_MISSING', 'MEMBERSHIP_GRANT_FAILED'
+]
+
+// 把查单异常转成前端可直接展示的结论；内部错误码原样保留便于客服定位。
+function describePaymentQueryError(error) {
+  const code = text(error && error.code) || text(error && error.message) || 'PAYMENT_QUERY_FAILED'
+  const permanent = QUERY_ERROR_PERMANENT.indexOf(code) >= 0
+  return {
+    code,
+    retryable: !permanent,
+    message: QUERY_ERROR_TEXTS[code] || (permanent ? '支付结果异常，请联系客服' : '支付结果暂时无法核对，请稍后重试')
+  }
+}
+
 const text = value => String(value == null ? '' : value).trim()
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }) }
 const failResult = (code, error) => ({ success: false, code, error })
@@ -602,16 +642,21 @@ function payParams(config, prepayId) {
   return { appId: config.appId, timeStamp, nonceStr, package: packageValue, signType: 'RSA', paySign: signMessage(config, message) }
 }
 
-async function createPrepay(config, order) {
+// options 仅用于会员订单等复用同一套微信下单能力：
+// 传 description/attach 时按传入值下单，不传时保持蜂蜜充值的原有文案与 attach 不变。
+async function createPrepay(config, order, options) {
+  const opts = options || {}
+  const description = text(opts.description) ? text(opts.description).slice(0, 127) : ('赛小蜂足球蜂蜜充值 ' + order.totalDrops + ' 滴').slice(0, 127)
+  const attach = text(opts.attach) || 'honey-topup'
   const reply = await wxRequest(config, 'POST', '/v3/pay/transactions/jsapi', {
     appid: config.appId,
     mchid: config.mchid,
-    description: ('赛小蜂足球蜂蜜充值 ' + order.totalDrops + ' 滴').slice(0, 127),
+    description,
     out_trade_no: order.outTradeNo,
     notify_url: config.notifyUrl,
     amount: { total: order.priceCents, currency: 'CNY' },
     payer: { openid: order.openId },
-    attach: 'honey-topup',
+    attach,
     time_expire: timeExpire()
   })
   if (reply.status !== 200) fail('PAYMENT_REQUEST_FAILED', '微信支付下单失败，请稍后重试')
@@ -963,6 +1008,21 @@ async function handleNotify(event, db) {
   }
   const outTradeNo = text(trade.out_trade_no || trade.outTradeNo)
   if (!outTradeNo) return { statusCode: 400, body: { code: 'FAIL', message: '订单号缺失' } }
+  // 会员订单（MT 前缀）与蜂蜜充值（HT 前缀）共用同一个支付回调入口，
+  // 按单号前缀分流：会员走 membership.cjs 的发放事务，充值仍走本文件的入账事务。
+  if (/^MT/.test(outTradeNo)) {
+    try {
+      await require('./membership.cjs').confirmOrder(db, outTradeNo, 'notify')
+      return { statusCode: 200, body: { code: 'SUCCESS', message: '成功' } }
+    } catch (error) {
+      const code = text(error.code) || 'MEMBERSHIP_GRANT_FAILED'
+      console.warn('[honeyRecharge] 会员回调发放失败', code)
+      const permanent = ['MEMBERSHIP_ORDER_MISMATCH', 'MEMBERSHIP_AMOUNT_MISMATCH', 'MEMBERSHIP_TRANSACTION_MISSING', 'MEMBERSHIP_ORDER_STATE_INVALID', 'MEMBERSHIP_ORDER_INVALID', 'MEMBERSHIP_ORDER_NOT_FOUND'].includes(code)
+      return permanent
+        ? { statusCode: 400, body: { code: 'FAIL', message: '会员订单校验失败，请联系客服' } }
+        : { statusCode: 500, body: { code: 'FAIL', message: '处理失败，请重试' } }
+    }
+  }
   try {
     const result = await confirmOrder(db, outTradeNo, 'notify')
     const order = result.order || {}
@@ -1107,17 +1167,22 @@ async function orderStatus(db, openId, event) {
   // 不属于当前账号的订单一律按不存在处理，不泄露他人订单
   if (!order || text(order.openId) !== openId) return failResult('HONEY_ORDER_NOT_FOUND', '订单不存在')
   let current = order
+  let queryError = null
   if (text(order.status) === 'pending') {
     try {
       const result = await confirmOrder(db, outTradeNo, 'client')
       current = result.order || order
     } catch (error) {
-      // 查单失败只返回当前状态，前端不会因为这里失败就当成已到账
-      console.warn('[honeyRecharge] 主动查单失败', text(error.code) || text(error.message))
+      // 查单失败不能静默：把原因回给前端，用户点「刷新状态」时才看得到为什么还没到账；
+      // 订单状态仍按库内当前值返回，任何失败都不会被当成已到账。
+      queryError = describePaymentQueryError(error)
+      console.warn('[honeyRecharge] 主动查单失败', queryError.code)
     }
   }
   const balance = await safeBalance(db, openId)
-  return { success: true, order: viewOf(current), balance, recharge: publicRechargeState() }
+  const payload = { success: true, order: viewOf(current), balance, recharge: publicRechargeState() }
+  if (queryError) payload.queryError = queryError
+  return payload
 }
 
 async function safeBalance(db, openId) {
@@ -1155,6 +1220,7 @@ function create({ db, user, session }) {
 module.exports = {
   create,
   handleNotify,
+  describePaymentQueryError,
   rechargeState,
   publicRechargeState,
   paymentConfigStatus,
@@ -1163,5 +1229,5 @@ module.exports = {
   ensureSecrets,
   listOrders,
   refundOrder,
-  __internals: { paymentConfig, parsePacks, verifyNotifySignature, decryptResource, verifyPaidTrade, authorization, creditOrder, confirmOrder, nextOutTradeNo, ledgerDocId, viewOf, normalizeSecretValue, encryptSecret, decryptSecret, secretMasterKey, secretValue, secretSource }
+  __internals: { paymentConfig, parsePacks, verifyNotifySignature, decryptResource, verifyPaidTrade, authorization, creditOrder, confirmOrder, createPrepay, queryTransaction, payParams, wxRequest, nextOutTradeNo, ledgerDocId, viewOf, normalizeSecretValue, encryptSecret, decryptSecret, secretMasterKey, secretValue, secretSource }
 }
