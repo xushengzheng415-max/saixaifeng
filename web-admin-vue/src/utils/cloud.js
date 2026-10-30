@@ -627,6 +627,12 @@ export async function uploadFile(cloudPath, filePath) {
   throw new Error('uploadFile 需要云函数支持，请使用 uploadFileViaCloud')
 }
 
+// 临时文件链接按 fileId 缓存并在途去重：同一头像在一次页面加载里常被多处解析，
+// 临时链接本身有有效期，25 分钟内复用不会失效。
+const TEMP_FILE_URL_TTL_MS = 25 * 60 * 1000
+const tempFileUrlCache = new Map()
+const tempFileUrlInflight = new Map()
+
 export async function getFileUrl(fileId) {
   if (!fileId) return ''
   if (isDemoMode()) return /^(data:|blob:|https?:\/\/|\/)/.test(fileId) ? fileId : ''
@@ -634,21 +640,34 @@ export async function getFileUrl(fileId) {
   if (fileId.startsWith('http://') || fileId.startsWith('https://')) {
     return fileId
   }
-  try {
-    const result = await callFunction('uploadFile', {
-      action: 'getTempFileURL',
-      fileID: fileId
-    })
-    if (result && result.success && result.url) {
-      return result.url
-    }
-    // 如果获取失败，返回原始 fileId（可能已过期或无效）
-    console.warn('[getFileUrl] 获取临时URL失败:', result)
-    return fileId
-  } catch (err) {
-    console.error('[getFileUrl] 异常:', err)
-    return fileId
+  const cached = tempFileUrlCache.get(fileId)
+  if (cached && cached.expiresAt > Date.now() && cached.url) {
+    return cached.url
   }
+  const inflight = tempFileUrlInflight.get(fileId)
+  if (inflight) return inflight
+  const request = (async () => {
+    try {
+      const result = await callFunction('uploadFile', {
+        action: 'getTempFileURL',
+        fileID: fileId
+      })
+      if (result && result.success && result.url) {
+        tempFileUrlCache.set(fileId, { url: result.url, expiresAt: Date.now() + TEMP_FILE_URL_TTL_MS })
+        return result.url
+      }
+      // 如果获取失败，返回原始 fileId（可能已过期或无效）
+      console.warn('[getFileUrl] 获取临时URL失败:', result)
+      return fileId
+    } catch (err) {
+      console.error('[getFileUrl] 异常:', err)
+      return fileId
+    } finally {
+      tempFileUrlInflight.delete(fileId)
+    }
+  })()
+  tempFileUrlInflight.set(fileId, request)
+  return request
 }
 
 /**
