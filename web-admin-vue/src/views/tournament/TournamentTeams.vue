@@ -422,7 +422,7 @@
       </el-form>
       <template #footer><el-button @click="showCreateTeamDialog = false">取消</el-button><el-button type="primary" :loading="creatingTeam" @click="submitCreateTeam">添加球队</el-button></template>
     </el-dialog>
-    <el-dialog v-model="showTeamImportDialog" title="上传资料、名单" width="min(1180px, calc(100vw - 48px))" :close-on-click-modal="false" destroy-on-close :teleported="!qaSnapshot">
+    <el-dialog v-model="showTeamImportDialog" class="team-import-dialog" title="上传资料、名单" width="min(1680px, calc(100vw - 40px))" :close-on-click-modal="false" destroy-on-close :teleported="!qaSnapshot">
       <TeamRegistrationWordImporter :tournament-id="tournamentId" :tournament-name="tournament.name || tournament.tournamentName || ''" :division="activeDivision" :available-slots="availableSlots" :existing-team-names="divisionTournamentTeams.map(team => team.name || team.teamName || '')" @cancel="showTeamImportDialog = false" @success="onRegistrationWordBatchImported" />
     </el-dialog>
 
