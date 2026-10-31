@@ -48,7 +48,8 @@
       <template v-else-if="step===3">
         <div class="review-styles"><figure v-for="card in previews" :key="card.key"><img :src="card.imageUrl" :alt="tierLabel(card.key)" @load="readyPreviews.add(card.key)" @error="readyPreviews.delete(card.key)"><figcaption>{{ tierLabel(card.key) }}</figcaption></figure></div>
         <p>{{ project.kind==='progression'?'确认后，铜银金三档将统一发布。':'确认后，此样式可按选定名单发放。' }} 以上成卡按最近一次保存的排版生成；如果刚改过排版，请返回上一步重新点「预览整套」，否则看到的仍是旧版效果。</p>
-        <div class="studio-actions"><el-button @click="step=2">返回修改</el-button><el-button type="primary" :loading="busy" :disabled="readyPreviews.size!==variantKeys.length || !project.hasDraft" @click="publish">确认发布</el-button></div>
+        <p v-if="publishBlockReason" class="publish-block">{{ publishBlockReason }}</p>
+        <div class="studio-actions"><el-button @click="step=2">返回修改</el-button><el-button type="primary" :loading="busy" :disabled="publishBlockReason!==''" @click="publish">确认发布</el-button></div>
       </template>
       <template v-else-if="step===4"><el-alert title="样式已发布" type="success" :closable="false" /><div class="studio-actions"><el-button @click="project=null;changePane('library')">查看样式库</el-button><el-button v-if="canIssue(project)" type="primary" @click="openIssue(project)">选择名单发放</el-button></div></template>
     </div>
@@ -123,6 +124,8 @@ const published=computed(()=>sets.value.filter(x=>x.status==='published')),legac
 // 「沿用新版排版」必须打开这套已发布的全平台套系，而不是复制旧基础卡自己的排版。
 const rowTime=row=>{const value=row?.publishedAt??row?.createAt??0;const parsed=typeof value==='number'?value:Date.parse(String(value?.$date||value));return Number.isFinite(parsed)?parsed:0}
 const baseSourceSet=computed(()=>published.value.filter(set=>set.kind==='progression'&&(set.preload?.type||'platform')==='platform').sort((a,b)=>rowTime(b)-rowTime(a))[0]||null)
+// 确认发布被禁用时必须给出原因，否则现场只看到灰按钮，不知道是没新草稿还是预览没加载完。
+const publishBlockReason=computed(()=>readyPreviews.size!==variantKeys.value.length?'成卡预览还没有全部加载完成，请稍等；一直不出就返回上一步重新点「预览整套」。':!project.value?.hasDraft?'当前没有待发布的新草稿：这套排版已经是线上最新版，重复发布没有内容可更新。要改版面请回「调整排版」改一处、点「保存当前卡」，再点「预览整套」回到这里；只是要重生成已保存成卡，需后端按新渲染口径重新导出，不必再发版本。':'')
 const tierLabel=key=>({bronze:'铜卡',silver:'银卡',gold:'金卡',single:'单卡'}[key]||key),kindLabel=row=>row.kind==='progression'?'金银铜套系':'荣誉／特殊卡',scopeLabel=scope=>({platform:'全平台',tournament:'赛事',team:'球队',player:'个人'}[scope?.type]||'未设置')+(scope?.targetName?' · '+scope.targetName:'')
 const canIssue=row=>row.status==='published'&&!(row.kind==='progression'&&row.preload?.type==='platform')
 async function api(workflowAction,data={}){const r=await playerCardTemplateRequest('savePlayerCardTemplate',{workflowAction,...data});if(!r?.success)throw new Error(r?.error||'制卡操作失败，请重试');return r}
@@ -179,6 +182,7 @@ onBeforeUnmount(()=>{clearMaterialFiles();window.removeEventListener('beforeunlo
 :global(.recipient-dialog .el-dialog__body){max-height:68vh;overflow:auto}.recipient-pane .el-empty{padding:24px 0}
 .recipient-scope{margin:8px 0;color:#606266;font-size:13px}
 .base-card-tip{margin:6px 0 0;color:#909399;font-size:12px}
+.publish-block{margin:10px 0 0;padding:9px 12px;border:1px solid #f0d8b6;background:#fdf6ea;color:#8a5b12;font-size:12px;line-height:1.5}
 .studio-note{margin:8px 0 0;color:#7c8880;font-size:12px}
 .recipient-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0}.recipient-transfer{display:grid;grid-template-columns:minmax(0,1fr) 100px minmax(0,1fr);gap:12px}.recipient-pane{border:1px solid #dce5df;padding:12px;min-width:0}.recipient-pane h3{display:flex;align-items:center;gap:8px;font-size:15px;margin:0 0 12px}.recipient-pane h3 small{font-weight:400;color:#617267}.recipient-pane h3 .el-button{margin-left:auto}.recipient-tree{height:356px;overflow:auto;margin-top:12px}.recipient-tree :deep(.el-tree-node__content){height:38px;min-width:max-content}.recipient-node{display:flex;align-items:center;gap:8px;padding-right:8px;font-size:13px}.recipient-node small{font-size:12px;color:#94621a}.recipient-node>span{max-width:235px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recipient-move{display:flex;flex-direction:column;justify-content:center;gap:12px}.recipient-move .el-button{margin-left:0}@media(max-width:760px){.recipient-transfer{grid-template-columns:1fr}.recipient-move{flex-direction:row}.recipient-toolbar{flex-wrap:wrap}.recipient-tree{height:300px}}
 
