@@ -23,7 +23,7 @@
               · 建议使用透明背景 PNG 格式，效果最佳
             </span>
             <span class="tip-size">
-              · 建议尺寸 500×500 像素
+              · 按原图像素保留清晰度，最长边不超过 2048
             </span>
           </template>
           <span v-else>
@@ -65,7 +65,10 @@
           :original="false"
           :auto-crop-width="cropConfig.width"
           :auto-crop-height="cropConfig.height"
-          :enlarge="2"
+          :enlarge="isLogoType ? 1 : 2"
+          :full="isLogoType"
+          :high="!isLogoType"
+          :max-img-size="isLogoType ? 4096 : 2000"
           mode="contain"
         />
         <!-- 头像参考框叠加层（仅球员头像显示） -->
@@ -87,11 +90,15 @@
       <div class="image-compare">
         <div class="image-box">
           <p class="label">原图</p>
-          <img :src="originalUrl" alt="原图" />
+          <div class="preview-stage">
+            <img :src="originalUrl" alt="原图" :style="previewFrameStyle(originalFrame)" @load="rememberPreviewSize($event, 'original')" />
+          </div>
         </div>
         <div class="image-box">
           <p class="label">抠图后（透明背景）</p>
-          <img :src="processedUrl" alt="抠图后" class="transparent-bg" />
+          <div class="preview-stage transparent-bg">
+            <img :src="processedUrl" alt="抠图后" :style="previewFrameStyle(processedFrame)" @load="rememberPreviewSize($event, 'processed')" />
+          </div>
         </div>
       </div>
 
@@ -139,9 +146,11 @@ import { removeBackground } from '../../utils/removeBg'
 import { removeBackgroundBaidu } from '../../utils/baiduRemoveBg'
 import { removeWhiteBackground } from '../../utils/whiteBgRemover'
 import { getTempFileURL } from '../../utils/upload'
+import { uploadLargeFileViaCloud } from '../../utils/cloud'
+import { LOGO_MAX_EDGE, LOGO_PREVIEW_BOX, logoPreviewSize, logoUploadEdges } from '../../utils/logoImageSize'
+import { addTransparentSafeArea, fileFittedToEdge, limitDataUrlToEdge, readImageSize } from '../../utils/logoImageCanvas'
 
 const avatarFrameUrl = `${import.meta.env.BASE_URL}images/avatar-frame.png`
-import { uploadLargeFileViaCloud } from '../../utils/cloud'
 import 'vue-cropper/dist/index.css'
 import { VueCropper } from 'vue-cropper'
 
@@ -154,6 +163,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['success'])
+const isLogoType = computed(() => props.type === 'teamLogo' || props.type === 'tournamentLogo')
 
 // 暴露重置方法，供父组件调用
 defineExpose({ reset: handleReset })
@@ -169,6 +179,8 @@ const processedFileID = ref('') // 上传到云存储后的fileID
 const errorMessage = ref('')
 const processMethod = ref('')   // 'rembg' | 'canvas' | ''
 const methodWarning = ref('')    // Canvas 方案时的警告
+const originalFrame = ref(null)
+const processedFrame = ref(null)
 
 // 裁剪相关
 const showCropper = ref(false)
@@ -208,89 +220,27 @@ function revokeBlobUrl() {
   }
 }
 
-/**
- * 压缩图片到指定最大尺寸，输出 PNG
- * 用于避免超大图片撑爆裁剪框和降低处理耗时
- */
-function compressImage(file, maxWidth = 500, maxHeight = 500) {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      let { width, height } = img
-      // 只有在超过限制时才压缩
-      if (width > maxWidth || height > maxHeight) {
-        const ratio = Math.min(maxWidth / width, maxHeight / height)
-        width = Math.round(width * ratio)
-        height = Math.round(height * ratio)
-      }
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      // 先铺白底再绘制，避免 PNG 的透明白色在 Canvas 预乘后丢失 RGB 信息；
-      // 后续边缘抠图会移除外部白底，并保留队徽内部白色。
-      ctx.fillStyle = '#fff'
-      ctx.fillRect(0, 0, width, height)
-      ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          reject(new Error('图片压缩失败'))
-          return
-        }
-        // 保留原文件名，但确保类型为 image/png
-        const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.png'), { type: 'image/png' })
-        resolve(compressedFile)
-      }, 'image/png')
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('图片加载失败'))
-    }
-    img.src = url
-  })
-}
-
-function addLogoSafeArea(source, paddingRatio = 0.08) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => {
-      const longestSide = Math.max(image.width, image.height)
-      const canvasSide = Math.max(1, Math.ceil(longestSide / (1 - paddingRatio * 2)))
-      const canvas = document.createElement('canvas')
-      canvas.width = canvasSide
-      canvas.height = canvasSide
-      const context = canvas.getContext('2d')
-      context.clearRect(0, 0, canvasSide, canvasSide)
-      context.drawImage(image, Math.round((canvasSide - image.width) / 2), Math.round((canvasSide - image.height) / 2))
-      resolve(canvas.toDataURL('image/png'))
-    }
-    image.onerror = () => reject(new Error('Logo 安全边距处理失败'))
-    image.src = source
-  })
-}
-
-async function addLogoSafeAreaToFile(file) {
-  const sourceUrl = URL.createObjectURL(file)
-  try {
-    const dataUrl = await addLogoSafeArea(sourceUrl)
-    const blob = dataUrlToBlob(dataUrl)
-    return new File([blob], file.name.replace(/\.[^.]+$/, '.png'), {
-      type: 'image/png',
-      lastModified: Date.now()
-    })
-  } finally {
-    URL.revokeObjectURL(sourceUrl)
+function rememberPreviewSize(event, key) {
+  const img = event.target
+  const frame = logoPreviewSize(img.naturalWidth || img.width, img.naturalHeight || img.height, LOGO_PREVIEW_BOX)
+  const next = {
+    width: `${frame.width}px`,
+    height: `${frame.height}px`
   }
+  if (key === 'processed') processedFrame.value = next
+  else originalFrame.value = next
+}
+
+function previewFrameStyle(frame) {
+  return frame || undefined
 }
 
 // 根据类型动态裁剪配置
 const cropConfig = computed(() => {
-  if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
+  if (isLogoType.value) {
     return {
       title: '调整 Logo 位置',
-      subtitle: '已预留安全边距，可拖动或缩放调整位置（建议 500×500）',
+      subtitle: '已预留安全边距，可拖动或缩放调整位置；输出保持原图像素',
       ratio: [1, 1],
       width: 500,
       height: 500,
@@ -331,18 +281,19 @@ async function handleFileChange(file) {
   processing.value = true
   errorMessage.value = ''
 
-  // 队徽/赛事Logo：先压缩图片（避免大图撑爆裁剪框）
+  // 队徽只在超过 2048 时缩小，并铺白底供边缘抠白；小图保持原像素。
   let processFile = file.raw
-  if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
+  if (isLogoType.value) {
     try {
-      processFile = await compressImage(file.raw, 500, 500)
+      processFile = await fileFittedToEdge(file.raw, LOGO_MAX_EDGE, { matte: true })
     } catch (err) {
-      console.warn('[RemoveBg] 图片压缩失败，使用原图:', err.message)
+      console.warn('[RemoveBg] 图片尺寸整理失败，使用原图:', err.message)
       processFile = file.raw
     }
   }
 
-  // 显示原图预览
+  originalFrame.value = null
+  if (originalUrl.value && originalUrl.value.startsWith('blob:')) URL.revokeObjectURL(originalUrl.value)
   originalUrl.value = URL.createObjectURL(processFile)
 
   try {
@@ -350,7 +301,7 @@ async function handleFileChange(file) {
       let result
 
     // 根据类型选择抠图方式
-    if (props.type === 'teamLogo' || props.type === 'tournamentLogo') {
+    if (isLogoType.value) {
       // 队徽/赛事Logo：优先使用本地"抠白"算法（去除白色背景）
       result = await removeWhiteBackground(processFile)
 
@@ -376,12 +327,12 @@ async function handleFileChange(file) {
         processMethod.value = result.method || ''
         methodWarning.value = result.warning || ''
 
-        // ★ 进入裁剪器前先压缩抠图结果（百度返回的原图可能几千像素）
-        //    避免裁剪后 getCropData 输出大图 → 413 上传失败
-        const cropperMaxSize = props.type === 'playerAvatar' ? 200 : 200
-        const cropperReady = await compressToSize(result.data, cropperMaxSize)
-        const cropperWithSafeArea = await addLogoSafeArea(cropperReady)
-        console.log(`[RemoveBg] 裁剪前压缩: 最长边≤${cropperMaxSize}px, ${(cropperReady.length / 1024).toFixed(1)}KB`)
+        // 球员头像仍压到 200px，避免人像分割大图触发上传限制。
+        // 队徽保持抠图结果的像素，不再先缩成 200px 再被裁剪框放大。
+        const cropperReady = isLogoType.value ? result.data : await limitDataUrlToEdge(result.data, 200)
+        const cropperWithSafeArea = await addTransparentSafeArea(cropperReady)
+        const preparedSize = await readImageSize(cropperWithSafeArea)
+        console.log(`[RemoveBg] 裁剪源图: ${preparedSize.width}×${preparedSize.height}, ${(cropperWithSafeArea.length / 1024).toFixed(1)}KB`)
 
         // 将 base64 转为 Blob URL（vue-cropper 对大 base64 支持不好）
         revokeBlobUrl()
@@ -409,7 +360,10 @@ async function handleFileChange(file) {
 function handleCropCancel() {
   showCropper.value = false
   cropperUrl.value = ''
+  if (originalUrl.value && originalUrl.value.startsWith('blob:')) URL.revokeObjectURL(originalUrl.value)
   originalUrl.value = ''
+  originalFrame.value = null
+  processedFrame.value = null
   revokeBlobUrl()
 }
 
@@ -423,13 +377,17 @@ async function handleCropConfirm() {
     cropperRef.value.getCropData(async (data) => {
       const rawKB = (data.length / 1024).toFixed(1)
       console.log(`[RemoveBg] getCropData → ${rawKB}KB, 前缀: ${data.substring(0, 30)}`)
+      processedFrame.value = null
       processedUrl.value = data
       showCropper.value = false
       uploading.value = true
 
       try {
-        // ★★★ 关键：先尝试 canvas 压缩，再上传
-        await uploadWithAutoRetry(data)
+        const uploaded = await uploadWithAutoRetry(data)
+        if (uploaded && uploaded !== data) {
+          processedFrame.value = null
+          processedUrl.value = uploaded
+        }
       } catch (err) {
         console.error('[RemoveBg] 上传失败:', err)
         errorMessage.value = '上传失败，请重试'
@@ -447,46 +405,28 @@ async function handleCropConfirm() {
 }
 
 async function uploadWithAutoRetry(base64Data) {
-  // ★ 分片上传：每片 32KB，远低于 HTTP 网关限制
-  const sizes = [200, 128, 64]
+  // 分片上传本身不受单次 body 大小限制。队徽第一次按当前像素上传；
+  // 只有上传失败才逐级缩小。球员头像仍从 200px 起试。
+  const size = isLogoType.value ? await readImageSize(base64Data) : null
+  const longest = size ? Math.max(size.width, size.height) : 0
+  const edges = isLogoType.value ? logoUploadEdges(size.width, size.height) : [200, 128, 64]
   let lastError = null
 
-  for (let i = 0; i < sizes.length; i++) {
+  for (const edge of edges) {
     try {
-      const compressed = await compressToSize(base64Data, sizes[i])
-      const sizeKB = (compressed.length / 1024).toFixed(1)
-      console.log(`[RemoveBg] 压缩到 ${sizes[i]}px → ${sizeKB}KB, 分片上传中...`)
-      await uploadProcessedImage(compressed)
-      return
+      const payload = isLogoType.value && edge >= longest
+        ? base64Data
+        : await limitDataUrlToEdge(base64Data, edge)
+      const payloadSize = await readImageSize(payload)
+      console.log(`[RemoveBg] 上传 ${payloadSize.width}×${payloadSize.height}, ${(payload.length / 1024).toFixed(1)}KB`)
+      await uploadProcessedImage(payload)
+      return payload
     } catch (err) {
       lastError = err
-      console.warn(`[RemoveBg] ${sizes[i]}px 失败:`, err.message)
+      console.warn(`[RemoveBg] 最长边 ${edge}px 上传失败:`, err.message)
     }
   }
   throw lastError || new Error('上传失败')
-}
-
-/**
- * Canvas 强制压缩：在 <canvas> 上绘制后输出 PNG
- * 确保无论输入多大，输出都 ≤ maxSize 像素
- */
-function compressToSize(dataUrl, maxSize) {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const ratio = Math.min(1, maxSize / img.width, maxSize / img.height)
-      const w = Math.max(1, Math.round(img.width * ratio))
-      const h = Math.max(1, Math.round(img.height * ratio))
-      const canvas = document.createElement('canvas')
-      canvas.width = w
-      canvas.height = h
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-      const out = canvas.toDataURL('image/png')
-      resolve(out)
-    }
-    img.onerror = () => reject(new Error('图片加载失败（无效 data URL）'))
-    img.src = dataUrl
-  })
 }
 
 // 上传处理后的图片到云存储
@@ -557,7 +497,10 @@ function getFolderByType() {
 
 // 重置
 function handleReset() {
+  if (originalUrl.value && originalUrl.value.startsWith('blob:')) URL.revokeObjectURL(originalUrl.value)
   originalUrl.value = ''
+  originalFrame.value = null
+  processedFrame.value = null
   sourceFile.value = null
   processedUrl.value = ''
   processedFileUrl.value = ''
@@ -717,13 +660,28 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-.image-box img {
-  width: 100%;
-  max-width: 200px;
+.preview-stage {
+  box-sizing: border-box;
+  width: 200px;
   height: 200px;
-  object-fit: contain;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   border-radius: 8px;
   border: 1px solid #dcdfe6;
+  background: #fff;
+}
+
+.preview-stage img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 200px;
+  max-height: 200px;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .image-box .transparent-bg {
