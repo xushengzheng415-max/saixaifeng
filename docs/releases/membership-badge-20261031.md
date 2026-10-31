@@ -97,3 +97,17 @@
 3. **到期提醒**仍是页面内「即将到期」（`expiresSoon`，≤3 天），未做主动推送：渠道（服务号模板消息 / 小程序订阅消息）、模板 ID 与发送时点需用户确认后另做。
 4. **会员二期权益**（卡面背景库、多套卡面保存、数据长图导出、赛季报告）在会员中心仍如实标「即将开放」，需用户确认先做哪几项。
 5. 仓库工作区 `service-account-h5/service-personal.js` 另含其他会话尚未发布的两处改动（`my-main-card.html` 路由、FAQ 裁判任务文案），本次发布包是从线上基线差量构建（`work/h5-publish-20261031`，已清理），**未**上传工作区整文件，线上与仓库工作区因此存在已知差异。
+
+## 六、真实首单验收（2026-10-31 13:01，用户本人开通）
+
+用户开通后在微信内截图：昵称旁、会员卡档位胶囊均显示徽章，弹层「会员开通成功 · 已赠 200 滴 · 订单号 MT20261031130119YSGTC8BE00」。只读 CLS 日志检索（`sxf-cloud.ps1 football run logs search`）核对如下（MCP 管理凭据对业务库集合无读权限，故未做库内回读）：
+
+| 环节 | 事实 |
+|---|---|
+| 下单 13:01:19 `servicePrivateMembershipSubscribe` | 订单 `MT20261031130119YSGTC8BE00`，基础会员、首月 990 分（9.90 元，`priceTier=first`）、赠 200 滴、`months=1`，`reused=false`；返回 JSAPI 支付参数（`signType=RSA`）；下单前余额 814 |
+| 查单 13:01:30 `servicePrivateMembershipOrderStatus` | 订单 `status=paid`、`ledgerState=granted`、`paidAt` 13:01:30.477；耗时 610ms、HTTP 200、**无 `queryError`** |
+| 订阅 | `levelCode=basic`、`status=active`、`startedAt` 13:01:30.183、`expiresAt` 2026-11-30 13:01:30、`daysLeft=30`、`expiresSoon=false`、`autoRenew=false`、`portraitDiscount=0.95` |
+| 赠滴 | 余额 814 → **1,014**（+200），单次发放，未见重复入账 |
+| 页面文案 | 会员卡「基础会员 · 剩余 30 天」「有效期至 2026/11/30 · 到期不自动续费」；成功弹层订单号与日志一致 |
+
+结论：上一轮的支付结果识别修复（`err_msg` 归一化 + 服务端 `queryError` 回传）在真实微信支付链路生效，未再出现「已扣款却提示失败」；徽章按「只要会员都发这个徽章」在**基础会员**上正常显示，昵称旁、会员卡、会员中心头部三个落点一致。
