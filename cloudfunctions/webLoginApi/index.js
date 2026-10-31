@@ -6195,6 +6195,11 @@ exports.main = async (event, context) => {
       case 'uploadToCosDirect':
         result = await handleUploadToCosDirect(event, params); break
       default:
+        // 卡世界 action 一律以 cardWorld 开头。本机 index.js 若已有 require('./cardWorld.cjs')，合并时只保留这一处。
+        if (typeof action === 'string' && action.indexOf('cardWorld') === 0) {
+          result = await require('./cardWorld.cjs').handle(action, params, { cloud, hashSessionToken, dateValue })
+          break
+        }
         result = { success: false, error: '未知操作：' + action }
     }
 
