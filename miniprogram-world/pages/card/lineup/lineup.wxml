@@ -1,0 +1,70 @@
+<view class="wx-page">
+  <view class="brand-row">
+    <view class="brand">
+      <text class="brand-name">组阵</text>
+      <text class="brand-sub">{{lineup.cityText}} · 同城名册</text>
+    </view>
+    <view class="tag">{{lineup.filledText}}</view>
+  </view>
+
+  <view class="size-tabs">
+    <view class="size-tab {{lineup.size5On}}" data-size="5" bindtap="onChangeSize" role="button" aria-label="5 人新手场">
+      <text class="size-title">5 人</text>
+      <text class="size-sub">新手场</text>
+    </view>
+    <view class="size-tab {{lineup.size8On}} {{lineup.unlock8Class}}" data-size="8" bindtap="onChangeSize" role="button" aria-label="社区 8 人编制">
+      <text class="size-title">{{lineup.unlock8Text}}</text>
+      <text class="size-sub">社区编制</text>
+    </view>
+    <view class="size-tab {{lineup.size11On}} {{lineup.unlock11Class}}" data-size="11" bindtap="onChangeSize" role="button" aria-label="城市 11 人编制">
+      <text class="size-title">{{lineup.unlock11Text}}</text>
+      <text class="size-sub">城市编制</text>
+    </view>
+  </view>
+
+  <view class="progress">
+    <view class="progress-track">
+      <view class="progress-fill" style="width: {{lineup.pctWidth}};"></view>
+    </view>
+    <text class="progress-text">{{lineup.filledText}} · {{lineup.pctText}}</text>
+  </view>
+
+  <fut-pitch rows="{{rows}}" bind:slot="onSlot"></fut-pitch>
+
+  <view class="lineup-tip">{{lineup.tip}}</view>
+
+  <view class="lineup-actions">
+    <view class="btn-ghost save-btn" bindtap="onSave" role="button" aria-label="保存阵容">保存阵容</view>
+    <view class="btn-gold challenge-btn {{lineup.challengeClass}}" bindtap="onChallenge" role="button" aria-label="发起轻对战">发起轻对战</view>
+  </view>
+
+  <view class="log-entry" bindtap="goLog" role="button" aria-label="查看战报">
+    <image class="log-icon" src="/assets/icons/icon-log.svg" mode="aspectFit"></image>
+    <text class="log-text">轻对战战报</text>
+    <image class="log-arrow" src="/assets/icons/icon-arrow.svg" mode="aspectFit"></image>
+  </view>
+
+  <view class="rule-note">新手场为 5 人，赛后只记「轻对战」战报；正式赛与榜单需使用球队端报名名单</view>
+</view>
+
+<view class="picker-mask" wx:if="{{pickerVisible}}" bindtap="onClosePicker">
+  <view class="picker" catchtap="noop">
+    <view class="picker-head">
+      <text class="picker-title">{{pickerTitle}}</text>
+      <text class="picker-close" bindtap="onClosePicker">关闭</text>
+    </view>
+    <scroll-view class="picker-list" scroll-y>
+      <view class="chip" wx:for="{{ownedChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onPick" role="button" aria-label="{{item.label}}">
+        <text class="chip-name">{{item.label}}</text>
+      </view>
+      <view class="chip is-remove" bindtap="onRemoveSlot" role="button" aria-label="移除该位置球员">
+        <text class="chip-name">移除该位置球员</text>
+      </view>
+      <view class="empty" wx:if="{{!hasChips}}">卡册还没有可用球员</view>
+    </scroll-view>
+  </view>
+</view>
+
+<view class="toast" wx:if="{{toastText}}">{{toastText}}</view>
+
+<card-tabbar current="lineup"></card-tabbar>

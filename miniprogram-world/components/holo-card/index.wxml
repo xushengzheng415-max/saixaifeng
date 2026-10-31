@@ -1,0 +1,17 @@
+<view class="holo-wrap">
+  <view
+    class="holo {{touchingClass}}"
+    style="{{tiltStyle}}"
+    catchtouchmove="onTouchMove"
+    bindtouchstart="onTouchStart"
+    bindtouchend="onTouchEnd"
+    bindtouchcancel="onTouchEnd"
+    aria-label="{{ariaLabel}}"
+  >
+    <image class="card-art" src="{{cardUrl}}" mode="aspectFill"></image>
+    <view class="foil" style="{{foilStyle}}"></view>
+    <view class="glare" style="{{glareStyle}}"></view>
+    <view class="edge-light"></view>
+  </view>
+  <view class="holo-hint">手指按住卡面滑动 · 查看烫金流光</view>
+</view>

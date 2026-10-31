@@ -1,0 +1,16 @@
+<view class="tabbar">
+  <view
+    wx:for="{{tabs}}"
+    wx:key="id"
+    class="tab-item {{item.activeClass}}"
+    data-id="{{item.id}}"
+    data-url="{{item.url}}"
+    bindtap="onTap"
+    role="button"
+    aria-label="{{item.text}}"
+  >
+    <image class="tab-icon" src="{{item.icon}}" mode="aspectFit"></image>
+    <text class="tab-text">{{item.text}}</text>
+  </view>
+  <view class="safe-bottom"></view>
+</view>

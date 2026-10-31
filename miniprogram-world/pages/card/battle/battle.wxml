@@ -1,0 +1,86 @@
+<view class="battle-page">
+  <view class="loading-mask" wx:if="{{loading}}">
+    <text class="loading-text">生成对阵中…</text>
+  </view>
+
+  <view class="vs-wrap" wx:if="{{isVs}}">
+    <view class="vs-head">
+      <text class="vs-eyebrow">新手场 · 同城</text>
+      <text class="vs-title">轻对战</text>
+      <text class="vs-sub">同一阵容 + 同一对手 = 同一结果</text>
+    </view>
+
+    <view class="vs-board">
+      <view class="vs-side">
+        <text class="side-title">我的阵容</text>
+        <view class="side-player" wx:for="{{myNames}}" wx:key="key">
+          <text class="side-pos">{{item.positionLabel}}</text>
+          <text class="side-name">{{item.name}}</text>
+          <text class="side-num">{{item.numberText}}</text>
+        </view>
+        <text class="side-power">{{myPowerText}}</text>
+      </view>
+
+      <view class="vs-mid">
+        <view class="vs-ring"></view>
+        <text class="vs-mark">VS</text>
+      </view>
+
+      <view class="vs-side is-right">
+        <text class="side-title">{{opponentLabel}}</text>
+        <view class="side-player" wx:for="{{oppNames}}" wx:key="key">
+          <text class="side-pos">{{item.positionLabel}}</text>
+          <text class="side-name">{{item.name}}</text>
+          <text class="side-num">{{item.numberText}}</text>
+        </view>
+        <text class="side-power">{{oppPowerText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="result-wrap" wx:if="{{isResult}}">
+    <view class="result-top">
+      <text class="result-eyebrow">轻对战 · {{result.opponentLabel}}</text>
+      <view class="score-row">
+        <text class="score-num">{{result.scoreMine}}</text>
+        <text class="score-dash">:</text>
+        <text class="score-num">{{result.scoreOpp}}</text>
+      </view>
+      <view class="result-chip {{result.resultClass}}">{{result.resultText}}</view>
+      <text class="result-comment">{{result.comment}}</text>
+      <view class="badges">
+        <text class="badge" wx:for="{{result.badges}}" wx:key="key">{{item.text}}</text>
+      </view>
+    </view>
+
+    <view class="panel result-detail">
+      <view class="detail-row">
+        <text class="detail-key">我的阵容战力</text>
+        <text class="detail-value">{{myPowerText}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-key">对手阵容战力</text>
+        <text class="detail-value">{{oppPowerText}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-key">复现键</text>
+        <text class="detail-value mono">{{result.deterministicKey}}</text>
+      </view>
+    </view>
+
+    <view class="result-actions">
+      <view class="btn-gold again-btn" bindtap="onAgain" role="button" aria-label="再战一场">再战一场</view>
+      <view class="btn-ghost log-btn" bindtap="onLog" role="button" aria-label="查看战报">查看战报</view>
+    </view>
+
+    <button class="share-btn" open-type="share" hover-class="none">
+      <image class="share-icon" src="/assets/icons/icon-share.svg" mode="aspectFit"></image>
+      <text class="share-text">分享战报</text>
+    </button>
+
+    <text class="back-link" bindtap="onBack">返回组阵</text>
+    <text class="fair-note">胜负只由阵容与规则决定，会员与付费不参与出分</text>
+  </view>
+</view>
+
+<view class="toast" wx:if="{{toastText}}">{{toastText}}</view>

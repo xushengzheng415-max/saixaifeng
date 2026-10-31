@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "我的阵容",
+  "usingComponents": {
+    "card-tabbar": "/components/card-tabbar/index",
+    "fut-pitch": "/components/fut-pitch/index"
+  }
+}

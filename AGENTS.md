@@ -43,7 +43,8 @@
 主要代码端：
 
 - `web-admin-vue/`：Vue 3 + Vite + Element Plus 的 PC 管理后台。
-- `miniprogram/`：原生微信小程序。
+- `miniprogram/`：原生微信小程序（球队端，AppID `wx57164cca8676f411`）。
+- `miniprogram-world/`：球员端独立小程序「赛小蜂足球世界」（AppID `wxa0ac7d45bcabd140`），只承载个人卡世界玩法，见 `docs/WORLD_PLAYER_MINIPROGRAM.md`。
 - `service-account-h5/`：服务号承接的个人与临时任务入口。
 - `index.html`：根域名着陆和登录页。
 - `cloudfunctions/`：Node.js 18 CloudBase 云函数。
