@@ -23,7 +23,7 @@
 | 会员中心 `membershipCenterHtml()` | 头部 `mp-hero-title` 内徽章 + `档位 · 剩余 N 天` |
 | `loadHomeAccount()` 成功 / catch 两支 | 在 `updateHomeWallet();updateHomeMember();` 后追加 `updateNameMark();` |
 
-> 口径：徽章**纯展示**，不替代档位文字、不参与权益判定；资格一律来自服务端 `servicePrivateAccountData.membership.subscription`。
+> 口径：徽章**纯展示**，不替代档位文字、不参与权益判定；资格一律来自服务端 `servicePrivateAccountData.membership.subscription`。**发放范围已由用户 2026-10-31 确认「只要会员都发这个徽章」：基础 / 进阶 / 专业 / 家庭任一档位在有效期内统一显示同一枚徽章，前端不按 `levelCode` 区分。**
 
 ### 2.2 `service-account-h5/service-personal-polish.css`（+6 行）
 
@@ -92,8 +92,8 @@
 
 ## 五、遗留与待确认
 
-1. **徽章发放范围冲突待用户裁决**：`docs/MEMBERSHIP_HONEY_PRICING_2026-10-27.md` 的权益矩阵写「专属卡框/徽章 仅专业/家庭」，而 `docs/MEMBERSHIP_SUBSCRIPTION_DESIGN_2026-10-28.md` 与本次实现按「任意档位在有效期内即显示」。本次按用户原话「作为会员标识」按有效期内显示，未按档位区分；若确认只给专业/家庭，需要在前端加 `levelCode` 判定，并统一改两处文档。
+1. **徽章发放范围已确认（2026-10-31 用户「只要会员都发这个徽章」）**：任一档位在有效期内统一显示同一枚徽章，本次实现不需要按 `levelCode` 加判定。由此把 `docs/MEMBERSHIP_HONEY_PRICING_2026-10-27.md` 权益矩阵「专属卡框 / 徽章 仅专业/家庭」拆成「会员徽章（四档都有，已上线）」+「专属卡框（仅专业/家庭，待建）」，`docs/MEMBERSHIP_SUBSCRIPTION_DESIGN_2026-10-28.md` 中「前端按 `levelCode` 渲染」改为按订阅状态渲染，`docs/PRODUCT_RULES.md` 与 `docs/ADR.md`（2026-10-31）同步记录。线上代码无需再改。
 2. **小程序端未接**：球队端 `miniprogram/`（AppID `wx57164cca8676f411`）本轮未改动；球员端「赛小蜂足球世界」（AppID `wxa0ac7d45bcabd140`）**不在本仓库**，需用户提供工程路径才能接同一 PNG。
 3. **到期提醒**仍是页面内「即将到期」（`expiresSoon`，≤3 天），未做主动推送：渠道（服务号模板消息 / 小程序订阅消息）、模板 ID 与发送时点需用户确认后另做。
 4. **会员二期权益**（卡面背景库、多套卡面保存、数据长图导出、赛季报告）在会员中心仍如实标「即将开放」，需用户确认先做哪几项。
-5. 仓库工作区 `service-account-h5/service-personal.js` 另含其他会话尚未发布的两处改动（`my-main-card.html` 路由、FAQ 裁判任务文案），本次发布包��从线上基线差量构建（`work/h5-publish-20261031`），**未**上传工作区整文件，线上与仓库工作区因此存在已知差异。
+5. 仓库工作区 `service-account-h5/service-personal.js` 另含其他会话尚未发布的两处改动（`my-main-card.html` 路由、FAQ 裁判任务文案），本次发布包是从线上基线差量构建（`work/h5-publish-20261031`，已清理），**未**上传工作区整文件，线上与仓库工作区因此存在已知差异。
