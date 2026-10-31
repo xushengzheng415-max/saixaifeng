@@ -227,20 +227,82 @@ body.pp-pass-presenting{overflow:hidden}
 .pp-pass-qr.live .pp-pass-qr-hit{box-shadow:0 0 0 2px #e8c87766}
 
 
-/* 个人保单 PDF 上传 */
+/* 个人保单 PDF 上传 / 保险资料页 */
+.me-body-insurance .pp-head-ins{position:relative;padding:18px 16px 16px;margin:8px 0 4px;border-radius:18px;overflow:hidden;background:linear-gradient(145deg,#0f5b41 0%,#0a3a29 58%,#071f17 100%);color:#f2f8f3;box-shadow:0 12px 28px #08352628}
+.me-body-insurance .pp-head-ins:before{content:'';position:absolute;right:-24px;top:-28px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,#e8c87744,transparent 68%);pointer-events:none}
+.pp-head-kicker{display:inline-block;position:relative;z-index:1;margin-bottom:8px;padding:3px 9px;border-radius:999px;border:1px solid #e8c87766;background:#e8c8771f;color:#e8c877;font-size:10px;font-weight:700;letter-spacing:1.4px}
+.me-body-insurance .pp-head-ins h1{position:relative;z-index:1;color:#f5faf6;font-size:24px}
+.me-body-insurance .pp-head-ins p{position:relative;z-index:1;color:#b7d0c2}
+
+.pp-ins-sheet{position:relative;margin-top:14px;padding:16px 16px 15px;border-radius:18px;border:1px solid #e3ebe5;background:#fff;box-shadow:0 8px 22px #163e2512;overflow:hidden}
+.pp-ins-sheet:before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#c9d6cd}
+.pp-ins-sheet.warn:before{background:linear-gradient(180deg,#f0a03a,#e8c877)}
+.pp-ins-sheet.ok:before{background:linear-gradient(180deg,#1a8a58,#0b6a44)}
+.pp-ins-sheet.pending:before{background:linear-gradient(180deg,#d4a017,#e8c877)}
+.pp-ins-sheet-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pp-ins-mark{font-size:10px;font-weight:700;letter-spacing:1.6px;color:#8a9a8f}
+.pp-ins-name{margin:12px 0 0;font-size:20px;font-weight:800;letter-spacing:.6px;color:#173d2b;line-height:1.2}
+.pp-ins-event{margin:6px 0 0;font-size:12px;line-height:1.55;color:#7d8e83}
+.pp-ins-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:14px}
+.pp-ins-grid>div{padding:10px 11px;border-radius:12px;background:linear-gradient(180deg,#f8fbf9,#f3f7f4);border:1px solid #e8efe9}
+.pp-ins-grid span{display:block;font-size:10px;color:#8b9a8f;letter-spacing:.4px;margin-bottom:4px}
+.pp-ins-grid b{display:block;font-size:12px;font-weight:600;color:#28452f;line-height:1.4;overflow-wrap:anywhere}
+.pp-ins-note,.pp-ins-guide{margin:12px 0 0;padding:10px 12px;border-radius:11px;background:#fff8eb;border:1px solid #f3e2bf;color:#8d650f;font-size:11px;line-height:1.65}
+.pp-ins-msg{margin:10px 0 0;padding:10px 12px;border-radius:11px;background:#f3faf5;border:1px solid #d7ebe0;color:#0b6a44;font-size:12px;line-height:1.6}
+.pp-ins-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.pp-ins-actions .pp-ins-cta{min-height:44px}
+.pp-ins-actions .pp-ins-cta:only-child{grid-column:1/-1}
+.pp-ins-cta{border:0;border-radius:12px;padding:11px 12px;font-size:13px;font-weight:700;letter-spacing:.3px;cursor:pointer}
+.pp-ins-cta.buy{background:linear-gradient(135deg,#f0d48a,#e8c877);color:#2f2308;box-shadow:0 6px 14px #c9a84a33}
+.pp-ins-cta.upload{background:linear-gradient(135deg,#12724f,#0b5a3f);color:#f4fbf6;box-shadow:0 6px 14px #0b5a3f28}
+.pp-ins-cta.ghost{background:#fff;border:1px solid #e0c778;color:#7a5a12;box-shadow:none}
+.pp-ins-cta:active{transform:translateY(1px)}
+@media(max-width:350px){.pp-ins-grid,.pp-ins-actions{grid-template-columns:1fr}}
+
 .pp-materials li.actionable{padding:0;border-bottom:1px solid #f0f4f1}
-.pp-material-action{display:flex;width:100%;align-items:baseline;justify-content:space-between;gap:8px;padding:8px 0;border:0;background:transparent;font:inherit;color:inherit;text-align:left;cursor:pointer}
-.pp-material-action span{color:#819088;flex-shrink:0}
-.pp-material-action b{font-weight:600;color:#0b6a44;overflow-wrap:anywhere;text-align:right}
+.pp-materials li.pp-mat-ins{display:flex;flex-direction:column;gap:8px;padding:10px 0;grid-column:1/-1}
+.pp-mat-ins-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;width:100%}
+.pp-mat-ins-row span{color:#819088;flex-shrink:0;font-size:12px}
+.pp-mat-ins-status{font-weight:600;color:#b23c33;font-size:12px}
+.pp-mat-ins.warn .pp-mat-ins-status{color:#b23c33}
+.pp-mat-ins.pending .pp-mat-ins-status{color:#a96a00}
+.pp-mat-ins-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;width:100%}
+.pp-mat-chip{border:0;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer}
+.pp-mat-chip.buy{background:#f7ecd0;color:#7a5a12}
+.pp-mat-chip.upload{background:#0f5b41;color:#f4fbf6}
 .pp-mat-link{display:inline;margin-left:6px;border:0;padding:0;background:transparent;color:#0b6a44;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
-.pp-ins-pick{display:flex;align-items:center;justify-content:center;min-height:48px;margin:14px 0 8px;border:1px dashed #9fc3b0;border-radius:12px;background:#f4faf6;color:#0b6a44;font-size:14px;font-weight:600;cursor:pointer}
-.pp-ins-result{margin-top:10px}
-.pp-ins-card{padding:12px 14px;border:1px solid #dce8e0;border-radius:12px;background:#f8fbf9}
-.pp-ins-card strong{display:block;font-size:15px;color:#173d2b}
-.pp-ins-card p{margin:8px 0 0;font-size:13px;line-height:1.55;color:#40534a}
-.pp-ins-card ul{margin:12px 0 0;padding:0;list-style:none}
-.pp-ins-card li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid #e7eee9;font-size:12px}
-.pp-ins-card li span{color:#819088}
-.pp-ins-card li b{color:#36503f;font-weight:500;text-align:right}
-.pp-ins-card small{display:block;margin-top:10px;font-size:11px;line-height:1.5;color:#8a998f}
+
+.pp-ins-hero{display:flex;flex-direction:column;gap:4px;margin:0 0 12px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#f4faf6,#eaf4ee);border:1px solid #d7e6dc}
+.pp-ins-hero strong{font-size:16px;color:#173d2b}
+.pp-ins-hero span{font-size:12px;color:#6f8377;line-height:1.5}
+.pp-ins-modal-buy{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
+.pp-ins-modal-buy small{font-size:11px;color:#8a998f;line-height:1.4;text-align:right}
+.pp-ins-pick{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:108px;margin:4px 0 12px;padding:18px 14px;border:1.5px dashed #9fc3b0;border-radius:16px;background:linear-gradient(180deg,#f7fcf9,#eef7f2);color:#0b6a44;cursor:pointer;transition:border-color .15s,background .15s,transform .12s}
+.pp-ins-pick:active{transform:scale(.99);border-color:#0b6a44;background:#e7f4ec}
+.pp-ins-pick em{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;margin-bottom:4px;border-radius:12px;background:linear-gradient(145deg,#12724f,#0b5a3f);color:#f4fbf6;font-style:normal;font-size:12px;font-weight:800;letter-spacing:.8px;box-shadow:0 8px 16px #0b5a3f2e}
+.pp-ins-pick>span{font-size:15px;font-weight:700}
+.pp-ins-pick small{font-size:11px;color:#6f8377;font-weight:500}
+.pp-ins-result{margin-top:4px}
+.pp-ins-ocr{padding:14px;border-radius:14px;border:1px solid #dce8e0;background:#f8fbf9}
+.pp-ins-ocr.ok{border-color:#b7dfc7;background:linear-gradient(180deg,#f3fbf6,#eaf7ef)}
+.pp-ins-ocr.warn{border-color:#f0c9c4;background:linear-gradient(180deg,#fff7f6,#fdeceb)}
+.pp-ins-ocr.pending{border-color:#f0d9a4;background:linear-gradient(180deg,#fffaf0,#fff4e0)}
+.pp-ins-ocr-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pp-ins-ocr-badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#0b6a44;color:#f4fbf6}
+.pp-ins-ocr.warn .pp-ins-ocr-badge{background:#b23c33}
+.pp-ins-ocr.pending .pp-ins-ocr-badge{background:#a96a00}
+.pp-ins-ocr p{margin:10px 0 0;font-size:13px;line-height:1.55;color:#40534a}
+.pp-ins-ocr ul{margin:12px 0 0;padding:0;list-style:none}
+.pp-ins-ocr li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #e7eee9;font-size:12px}
+.pp-ins-ocr li span{color:#819088}
+.pp-ins-ocr li b{color:#36503f;font-weight:600;text-align:right;overflow-wrap:anywhere}
+.pp-ins-ocr small{display:block;margin-top:10px;font-size:11px;line-height:1.5;color:#8a998f}
+.pp-ins-confirm{background:#0b5a3f!important}
 .me-modal-text.muted{color:#8a998f}
+
+/* 会员标识（2026-10-31）：徽章跟昵称与档位文字一起显示，纯展示 */
+.me-home-profile h1 .me-name-mark{display:inline-flex;align-items:center;margin-left:6px}
+.me-home-profile h1 .me-name-mark .me-member-mark{width:18px;height:18px;display:block}
+.me-member-badge .me-member-mark{width:14px;height:14px;margin-right:4px;vertical-align:-2px;display:inline-block}
+.mp-hero-title .me-member-mark{width:20px;height:20px;margin-right:6px;vertical-align:-4px;display:inline-block}
+.me-member-mark{object-fit:contain}
