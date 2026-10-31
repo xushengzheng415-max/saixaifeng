@@ -111,3 +111,22 @@
 | 页面文案 | 会员卡「基础会员 · 剩余 30 天」「有效期至 2026/11/30 · 到期不自动续费」；成功弹层订单号与日志一致 |
 
 结论：上一轮的支付结果识别修复（`err_msg` 归一化 + 服务端 `queryError` 回传）在真实微信支付链路生效，未再出现「已扣款却提示失败」；徽章按「只要会员都发这个徽章」在**基础会员**上正常显示，昵称旁、会员卡、会员中心头部三个落点一致。
+## 七、会员背景方案未采纳（2026-10-31 同日回退）
+
+用户看到线上会员卡（金色胶囊「基础会员」+「基础会员 · 剩余 30 天 / 有效期至 2026/11/30 · 到期不自动续费」）后原话「其实有这个就行了！」——会员标识以**徽章 + 档位文字**为准，不做「我的」页顶部会员专属底图。
+
+已回退（均为本任务当天新加、从未部署）：
+
+| 项 | 处置 |
+|---|---|
+| `service-account-h5/assets/membership/member-hero-bg.jpg`（1000×652 蜂窝金纹底图） | 删除，未上传正式端与测试端 |
+| `service-personal.js` 内 `.me-member-theme` 主题类切换 | 回退，`updateNameMark()` 只保留徽章渲染；`PAGE_VERSION` v2.15 → **v2.14** |
+| `service-personal-polish.css` `.me-home-root.me-member-theme:before` 规则 | 回退，文件尾部恢复为 `.me-member-mark{object-fit:contain}` |
+| `service-account-h5/me.html` 版本串 `?v=20261031-menubg1` | 回退为当前工作区的 `?v=20261031-jersey1`（球衣名改动，属并行任务，未动） |
+| `tools/make-member-hero-bg.py`、`work/preview-member-hero/` | 删除 |
+| `tools/test-membership.cjs` | 删除会员背景断言，改为**守护断言**：`service-personal.js` 不得含 `me-member-theme`、CSS 不得引用 `member-hero-bg` |
+| `tools/test-h5-pay-result.cjs` | 版本串正则去掉 `menubg`，保留 `jersey` |
+
+回退后复验：`node --check` 通过；`test-membership` 32/32、`test-membership-h5-render` 7/7、`test-h5-pay-result` 9/9；三个 H5 文件中 `me-member-theme` / `member-hero-bg` / `menubg1` 命中数为 **0**。
+
+**边界说明**：会员权益清单里的「会员专属背景」（`backgrounds`）指的是**球员卡卡面背景库**（会员二期、按档位分配），与本次试做的「我的」页头部底图不是一回事；前者仍按 `docs/MEMBERSHIP_SUBSCRIPTION_DESIGN_2026-10-28.md` 的「即将开放」口径推进，未被本次回退影响。
