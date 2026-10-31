@@ -1,6 +1,7 @@
 # 球员端「赛小蜂足球世界」小程序工程
 
-状态：2026-10-31 工程搭建完成（本地演示适配器 + 自检通过），**未上传、未发布、未接后端**。
+状态：2026-10-31 工程搭建完成（本地演示适配器 + 自检通过）；同日补齐服务端 `cardWorld*` action 组源码与离线回归测试。
+**未部署云函数、未建集合、未上传小程序、未发布。**
 规则依据见 [PRODUCT_RULES.md](PRODUCT_RULES.md)、决策见 [ADR.md](ADR.md)（2026-10-31）。
 
 ## 一、端口边界
@@ -11,7 +12,7 @@
 | 源码 | `miniprogram-world/`（与球队端 `miniprogram/` 平行，互不引用） |
 | 云环境 | 业务环境 `cloud1-7g8ckb3c7815a011`（与球队端、PC、H5 共用，不建第二套数据库） |
 | 开通环境 | `sxf-world-dev-d6gxotk5mc8bb7cb6`（2026-10-31 新建，空库，仅用于获得云开发权限与日后网关；PostgreSQL 体系，禁止放业务表） |
-| 后端 | `webLoginApi` 新增 `cardWorld*` action 组（本期未实现） |
+| 后端 | `webLoginApi` 的 `cardWorld*` action 组（`cloudfunctions/webLoginApi/cardWorld.cjs`，2026-10-31 已写源码，未部署） |
 | 模式开关 | `config/env.js` 的 `MODE`：`local`（本地演示）/ `cloud`（`wx.cloud.callFunction`） |
 | 身份 | 手机号自然人账号（`phone` / `phoneNumber` 双字段兼容），不新建用户体系 |
 | 卡面 | 服从统一球员卡套件（[PLAYER_CARD_INTEGRATION.md](PLAYER_CARD_INTEGRATION.md)），不另存卡面字段 |
@@ -80,13 +81,59 @@ miniprogram-world/
 | `signSameCity` | `cardWorldSignSameCity` | 扣配额、写卡册，返回 `deterministicKey` |
 
 返回契约：成功时字段与本地视图同名同结构；失败时 `{ success:false, code, error }`，前端按 `code` 抛错，页面不改。
+`cardWorldOwnedCards` 例外：服务端返回 `{ success, chips }`，`utils/api.js` 在 cloud 分支解包为数组，页面消费不变。
 
 接入要求：页面不改；服务端返回确定性结果；前端不得自判资格、卡级或胜负。
+
+## 四之二、服务端实现（2026-10-31 已写源码）
+
+文件：
+
+| 文件 | 作用 |
+|---|---|
+| `cloudfunctions/webLoginApi/cardWorld.cjs` | 13 个 `cardWorld*` action：身份、档案、签约、编制、阵容、对战、战报、会员视图 |
+| `cloudfunctions/webLoginApi/cardWorldEngine.cjs` | 确定性玩法引擎（服务端唯一实现，与 `miniprogram-world/utils/engine.js` 同源） |
+| `cloudfunctions/webLoginApi/index.js` | 仅在 `switch` 的 `default` 分支新增 6 行：以 `cardWorld` 开头的 action 交给 `cardWorldService()` |
+
+数据集合（首次写入时由 `ensureCollections` 幂等创建，均在 `cloud1-7g8ckb3c7815a011`）：
+
+| 集合 | 内容 |
+|---|---|
+| `card_world_players` | 同城名册（运营维护，只读）。必填 `playerId` / `name` / `group`（GK/DF/MF/FW）/ `ovr` / `cityCode` / `rosterOrder`，缺字段的行会被跳过并打印告警 |
+| `card_world_profiles` | 玩家档案：`cityCode`、`cursor`、`quota`、`rosterSize`、`slots`、`battleLog`（最近 20 条）、`membership` |
+| `card_world_cards` | 已签约卡册：`playerId` + 签约时的 `snapshot`，用于名册调整后仍能展示旧卡 |
+
+身份规则：
+
+1. 三种入口依次判定：H5/PC 会话 `authToken` → `getPhoneNumber` 的 `phoneCode` → 已绑定的 `users.worldOpenId`。
+2. 手机号在 `phone` 与 `phoneNumber` 双字段内命中多个账号时阻断，返回 `WORLD_PHONE_CONFLICT`，不取第一条。
+3. 小程序的 `worldOpenId` / `worldUnionId` 为新增独立字段，不覆盖 `openId`、`openid`、`wechatOpenId`；已有不同微信时不静默换绑（`WORLD_CHANNEL_CONFLICT`）。
+4. 配置了 `WORLD_MINI_PROGRAM_APP_ID` 时，只有该 AppID 的调用可以通过；填了 `WORLD_MINI_PROGRAM_APP_SECRET` 才可走 `phoneCode` 换手机号。
+
+服务端环境变量（部署时与现有变量一并保留，不覆盖）：
+
+| 变量 | 用途 |
+|---|---|
+| `WORLD_MINI_PROGRAM_APP_ID` | 球员端 AppID，用于来源校验与手机号换取 |
+| `WORLD_MINI_PROGRAM_APP_SECRET` | 球员端 AppSecret，仅服务端使用，禁止写进小程序代码或文档 |
+
+付费边界：`cardWorldSetAutoRenew` 只允许关闭；开启时返回 `WORLD_AUTORENEW_ON_H5`，续费与自动续费统一在服务号 H5 办理。会员档位、8/11 编制解锁与限定卡资格只读取档案，球员端不自判。
+
+并发与一致性：
+
+- 签约用「读到的 `quota.dateKey` + `quota.freeUsed` 原值」做条件更新（乐观锁）；条件不命中返回 `WORLD_STATE_CONFLICT`，宁可重试也不重复发卡。
+- 写卡失败会回滚配额；读取先 `count` 再分页，行数与总数不一致返回 `WORLD_READ_INCOMPLETE`，不静默截断。
+
 
 ## 五、验证
 
 ```powershell
 node tools/test-world-player-miniprogram.cjs   # 25 项：引擎规则 + 工程红线 + 签约→组阵→对战→战报闭环
+node tools/test-world-card-backend.cjs         # 25 项：服务端 action 离线回归（内存假库，不连云端）
+node --check cloudfunctions/webLoginApi/cardWorld.cjs
+node --check cloudfunctions/webLoginApi/cardWorldEngine.cjs
+node --check cloudfunctions/webLoginApi/index.js
+node tools/check-referee-backend-package.cjs cloudfunctions/webLoginApi
 node --check miniprogram-world/utils/engine.js # 其余 js 由自检统一执行
 ```
 
@@ -108,16 +155,23 @@ wx.cloud.callFunction({ name: 'cardWorldProbeNotExist' })
 ## 六、当前状态与遗留
 
 已完成：5 个页面 + 4 个组件 + 引擎/状态/适配层、共享 SVG 图标与 manifest、演示资源、
-`config/env.js` 环境与模式开关、`utils/api.js` 的 `cloud` 分支（13 个 `cardWorld*` action 映射），
-自检脚本（25/25 通过）。
+`config/env.js` 环境与模式开关、`utils/api.js` 的 `cloud` 分支（13 个 `cardWorld*` action 映射）、
+自检脚本（25/25 通过）；服务端 `cardWorld.cjs` + `cardWorldEngine.cjs` + `index.js` 接线、
+离线回归 `tools/test-world-card-backend.cjs`（25/25 通过）、`check-referee-backend-package` 通过。
 
 未完成 / 需另行授权：
 
 - **环境共享未确认**：AppID `wxa0ac7d45bcabd140` 调 `cloud1` 仍返回 `-601034 没有权限，请先开通云开发或者云托管`。
   2026-10-31 已新建开通环境 `sxf-world-dev-d6gxotk5mc8bb7cb6`（免费试用 6 个月，到期前需停用），
   还需：① 在开通环境里绑定该 AppID（AppSecret）；② 在 `cloud1` 所属账号的「环境设置 → 环境共享」添加该 AppID。
-- 云函数 `cardWorld*` action 组未实现，`config/env.js` 仍为 `MODE='local'`。
-- 未上传小程序开发版/体验版，未发布云函数，未改数据库，未推 Git 远端。
+- **未部署**：`webLoginApi` 的 `cardWorld*` 代码未发布，`card_world_players/profiles/cards` 三个集合未创建，
+  `config/env.js` 仍为 `MODE='local'`。
+- **发布基线风险**：本分支基于 `main e268aba6`。当前正式仓库工作区里 `webLoginApi/index.js` 及其同目录文件
+  还有大量未提交改动（线上包基线比本分支新），因此**不能从本 worktree 直接打包部署**，否则会覆盖线上函数。
+  正确做法：以最新线上包为基线，仅把 `cardWorld.cjs`、`cardWorldEngine.cjs` 两个新文件和 `index.js` 的 6 行接线
+  差量合入，再跑 `check-referee-backend-package` 与回下载比对。
+- `card_world_players` 同城名册尚无数据；名册来源（现有球员主档/球员卡统一读取接口）需产品确认后由运营导入。
+- 未上传小程序开发版/体验版，未推 Git 远端。
 - 真机验收（全息倾斜、3D 翻面、球场布局、胶囊安全区）待做。
 - 会员权益具体档位与 8/11 编制解锁方式、限定卡发放规则由平台侧另行确认后接入，球员端不自行判定。
 - 演示卡面与图片素材为本地占位，正式版须替换为已授权素材。

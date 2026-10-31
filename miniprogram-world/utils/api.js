@@ -122,7 +122,12 @@ function getBattleLog() {
 }
 
 function getOwnedCards() {
-  if (useCloud()) return callCloud(ACTIONS.ownedCards)
+  if (useCloud()) {
+    /* 服务端返回 { success, chips }，页面仍按数组消费，这里解包成与 local 同构 */
+    return callCloud(ACTIONS.ownedCards).then(function (result) {
+      return (result && result.chips) || []
+    })
+  }
   return wrap(function () {
     return store.ownedChips()
   })

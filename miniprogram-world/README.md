@@ -9,9 +9,9 @@
 | 工程目录 | `miniprogram-world/` |
 | 业务云环境 | `cloud1-7g8ckb3c7815a011`（与球队端、PC、H5 共用同一环境，不建第二套数据库） |
 | 开通环境 | `sxf-world-dev-d6gxotk5mc8bb7cb6`（2026-10-31 新建的空环境，只用于获得云开发权限；PostgreSQL 体系，禁止放业务表） |
-| 后端入口 | `webLoginApi` 新增 `cardWorld*` action 组（本期未实现，见下文「后端待接」） |
+| 后端入口 | `webLoginApi` 的 `cardWorld*` action 组（源码已在 `cloudfunctions/webLoginApi/cardWorld.cjs`，未部署） |
 | 视觉 | 深空黑 + 熔金卡牌；共享图标见 `assets/icons/manifest.json` |
-| 当前状态 | `config/env.js` `MODE = 'local'` 跑通闭环；`cloud` 分支已写好，待后端与环境共享就绪后切换 |
+| 当前状态 | `config/env.js` `MODE = 'local'` 跑通闭环；`cloud` 分支与服务端 action 已写好，待环境共享与部署授权后切换 |
 
 ## 玩法口径（2026-10-31，用户已确认）
 
@@ -88,7 +88,8 @@ wx.cloud.callFunction({ name: 'cardWorldProbeNotExist' })
 
 ```powershell
 cd E:\Documents\sxf-football-wt-world
-node tools/test-world-player-miniprogram.cjs
+node tools/test-world-player-miniprogram.cjs   # 前端工程自检 25 项
+node tools/test-world-card-backend.cjs         # 服务端 action 离线回归 25 项（内存假库）
 ```
 
 脚本覆盖：UTC+8 日期键、签约确定性与游标、跳已拥有、配额与跨日重置、定向筛选、跨城/无可用、
@@ -96,7 +97,11 @@ node tools/test-world-player-miniprogram.cjs
 未成年续费阻断、战报截断、WXML 表达式红线、`node --check`、零 `Math.random`、资源体积，
 以及「签约 → 上阵 → 对战 → 战报」闭环。
 
-## 后端待接
+服务端回归另覆盖：身份缺失/会话通过/渠道绑定、手机号重复账号阻断、同城签约写卡、日配额拦截、
+8/11 未解锁拦截、未持有卡上阵拦截、未知槽位拦截、自动续费指向 H5、未知 action 明确报错、
+前端上传分数被忽略、同键同结果、战报落库、卡册与档案数量一致。
+
+## 后端契约（已实现源码，待部署）
 
 `utils/api.js` 的方法签名即服务端契约，接入时只换实现、页面不改：
 
@@ -126,7 +131,18 @@ node tools/test-world-player-miniprogram.cjs
 - 卡面数据服从统一球员卡接口（`docs/PLAYER_CARD_INTEGRATION.md`），不在球员端另存一套卡面字段。
 - 会员与付费资格以服务端订阅为准，前端只展示。
 
+## 服务端部署清单（需单独授权）
+
+| 项 | 内容 |
+|---|---|
+| 新增文件 | `cloudfunctions/webLoginApi/cardWorld.cjs`、`cardWorldEngine.cjs` |
+| 接线 | `webLoginApi/index.js` 的 `switch` `default` 分支 6 行（`cardWorld` 前缀交给 `cardWorldService()`） |
+| 集合 | `card_world_players`（同城名册，需运营导入）、`card_world_profiles`、`card_world_cards` |
+| 环境变量 | `WORLD_MINI_PROGRAM_APP_ID`、`WORLD_MINI_PROGRAM_APP_SECRET`（保留现有变量） |
+| 发布校验 | `node --check` 三文件 + `node tools/check-referee-backend-package.cjs <实际包目录>` + `node tools/test-world-card-backend.cjs` |
+| 基线 | 必须以最新线上包为基线做差量合入；本 worktree 基于旧 `main`，不能直接打包覆盖线上函数 |
+
 ## 不发版说明
 
-本期交付为源码工程 + 自检，未上传小程序开发版、未发布云函数、未改数据库。
+本期交付为源码工程 + 自检 + 服务端 action 源码，未上传小程序开发版、未发布云函数、未改数据库、未推远端。
 上传/发版与云函数发布须另行授权。
