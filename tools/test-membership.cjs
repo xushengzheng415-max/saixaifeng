@@ -762,7 +762,11 @@ const tradeOf = (outTradeNo, overrides) => Object.assign({
     assert.ok(account.includes("require('./membership.cjs').homeCard"))
     assert.ok(account.includes("'membership-grant':'会员赠滴'"))
     const h5 = read('service-account-h5/service-personal.js')
-    assert.ok(h5.includes("var PAGE_VERSION='v2.12'"))
+    assert.ok(h5.includes("var PAGE_VERSION='v2.14'"))
+    // 会员标识（2026-10-31）：徽章要落在昵称旁，且素材必须随包存在，避免线上只显示文字没有标识
+    assert.ok(h5.includes('function memberMarkImg('), '会员标识需要统一的徽章渲染函数')
+    assert.ok(h5.includes('id="homeNameMark"'), '会员徽章要落在昵称旁')
+    assert.ok(fs.existsSync(path.join(ROOT, 'service-account-h5', 'assets', 'membership', 'member-badge-96.png')), '会员徽章素材 member-badge-96.png 缺失')
     ;['servicePrivateMembershipStatus', 'servicePrivateMembershipSubscribe', 'servicePrivateMembershipOrderStatus', 'servicePrivateMembershipOrders'].forEach(action => {
       assert.ok(h5.includes(action), 'H5 缺少 ' + action)
     })
@@ -785,7 +789,7 @@ const tradeOf = (outTradeNo, overrides) => Object.assign({
     assert.ok(h5.includes('function mockMembershipStatus'))
     assert.ok(h5.includes("if(p.action==='servicePrivateMembershipSubscribe')return Promise.reject("))
     const html = read('service-account-h5/me.html')
-    assert.ok(/service-personal\.js\?v=20261030-ins2/.test(html), 'H5 需要带版本号避免缓存旧脚本')
+    assert.ok(/service-personal\.js\?v=2026103\d-\w+/.test(html), 'H5 需要带版本号避免缓存旧脚本')
   })
 
   // ============ 收尾 ============

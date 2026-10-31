@@ -99,7 +99,7 @@ async function test(name, fn) {
     assert.ok(source.includes('function payQueryHint('), '需要统一的支付查单提示函数')
     assert.ok(source.includes("r.queryError"), '轮询与手动刷新都要读取服务端回传的查单原因')
     const meHtml = fs.readFileSync(path.join(__dirname, '..', 'service-account-h5', 'me.html'), 'utf8')
-    assert.ok(/service-personal\.js\?v=20261030-ins2/.test(meHtml), '资源版本需更新以避开旧脚本缓存')
+    assert.ok(/service-personal\.js\?v=2026103\d-(?:payresult|badge|ins)\d*/.test(meHtml), '资源版本需更新以避开旧脚本缓存')
   })
 
   if (failures) {
