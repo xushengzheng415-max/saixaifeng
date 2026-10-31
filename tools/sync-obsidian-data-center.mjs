@@ -6,7 +6,15 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const defaultRepo = path.resolve(path.dirname(scriptPath), '..')
 const files = [
+  ['docs/releases/player-card-render-cache-build-20261031.md','发布记录/成卡渲染口径缓存键与基础卡沿用新版-20261031.md'],
+  ['docs/releases/service-entry-confirm-restore-route-20261031.md','发布记录/球员登记确认恢复入队路由修复-20261031.md'],
+  ['docs/releases/windows-client-0.2.6-20261031.md','发布记录/Windows客户端0.2.6登录页兼容新版测试端-20261031.md'],
+  ['docs/releases/membership-badge-20261031.md','发布记录/会员标识徽章昵称旁与会员卡-20261031.md'],
+  ['docs/releases/player-join-reject-reopen-20261030.md','发布记录/入队申请驳回后可重新登记-20261030.md'],
+  ['docs/releases/player-reject-service-notification-20261030.md','发布记录/逐人驳回服务号通知复用审核结果模板-20261030.md'],
+  ['docs/releases/service-participation-h5-20261030.md','发布记录/服务号我的参赛资料与电子参赛证-20261030.md'],
   ['docs/releases/honey-pay-result-20261030.md','发布记录/蜂蜜充值与会员支付结果识别修复-20261030.md'],
+  ['docs/releases/mini-1.2.30-upload-20261031.md','发布记录/小程序1.2.30开发版上传-20261031.md'],
   ['docs/releases/mini-1.2.27-upload-20261030.md','发布记录/小程序1.2.27开发版上传-20261030.md'],
   ['docs/releases/registration-idcheck-btn-20261029.md','发布记录/登记身份证前置核验与生成球员卡按钮修复-20261029.md'],
   ['docs/releases/membership-phase1a-20261029.md','发布记录/个人会员一期A上线-20261029.md'],
