@@ -6,6 +6,10 @@ const {normalizeTextStyle,gradientCoordinates,contract} = require('./playerCardT
 const fontCache=require('./playerCardFontCache.cjs')
 const FONT_FILES = contract.fonts.flatMap(font=>font.files).map(file=>fontCache.pathFor(file))
 const WIDTH = 300, HEIGHT = 430
+// 成卡渲染口径版本：只要本文件（或它依赖的字体/文字样式口径）对外观有影响，
+// 就必须抬高该值。按需导出的静态成卡缓存键包含它，否则旧图会一直复用，
+// 出现「编辑器预览是新版面、球员详情/H5 卡库还是旧版面」的不一致。
+const RENDER_BUILD = 'resvg-20261029-1'
 const escapeXml = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&apos;' })[c])
 
 function image(buffer, attributes = '') {
@@ -88,10 +92,8 @@ function star(cx, cy, radius, rotation = 0) {
   return `<polygon points="${points.join(' ')}" fill="#ffdf45"/>`
 }
 
-function isChina(nationality) {
-  const value=String(nationality||'').trim()
-  return ['中国','中国籍','中华人民共和国'].includes(value)||['CHN','CN','CHINA'].includes(value.toUpperCase())
-}
+const { isChinaNationality, isUnknownNationality, nationalityFlagBuffer, nationalityDisplayName } = require('./nationalityDisplay.cjs')
+function isChina(nationality) { return isChinaNationality(nationality) }
 
 function chineseFlagMarkup(badge) {
   if(!badge)return ''
@@ -124,11 +126,20 @@ function isTransparentPng(buffer) {
 }
 
 function nationality(player, badge) {
-  if (!badge || !player.nationality) return ''
+  if (!badge) return ''
+  const { x, y, size } = badge, height = size*2/3
+  const attrs = `x="${x-size/2}" y="${y}" width="${size}" height="${height}" preserveAspectRatio="xMidYMid slice"`
+  if (isUnknownNationality(player && player.nationality)) {
+    const unknown = nationalityFlagBuffer('')
+    return unknown ? image(unknown, attrs) : ''
+  }
+  // 中国继续用矢量国旗，避免位图在小尺寸下糊边。
   if (isChina(player.nationality)) return chineseFlagMarkup(badge)
-  const { x, y, size } = badge, height = size*2/3, textSize = Math.min(size*.6, 18)
-  // 编辑器把这段文字在 y 起始、size*2/3 高的框内垂直居中，这里按同一规则落位。
-  return label(player.nationality, { x, y:y+(height-textSize)/2, size:textSize, weight:700, color:'#1c241d' }, size*2)
+  const flag = nationalityFlagBuffer(player.nationality)
+  if (flag) return image(flag, attrs)
+  const textSize = Math.min(size*.6, 18)
+  // 目录外或素材缺失时回退文字，不假装已出旗。
+  return label(nationalityDisplayName(player.nationality), { x, y:y+(height-textSize)/2, size:textSize, weight:700, color:'#1c241d' }, size*2)
 }
 
 function adjusted(field, delta) {
@@ -167,4 +178,4 @@ function renderCard({ backgroundBuffer, maskBuffer, portraitBuffer, teamLogoBuff
   return new Resvg(svg,{ fitTo:{mode:'zoom',value:size}, font:{fontFiles:FONT_FILES,loadSystemFonts:false} }).render().asPng()
 }
 
-module.exports = { ensureFonts:fontCache.ensureFonts, renderCard, makeForegroundMask, makePortraitMask, makeForegroundLayer, WIDTH, HEIGHT, chineseFlagMarkup, isTransparentPng }
+module.exports = { ensureFonts:fontCache.ensureFonts, renderCard, makeForegroundMask, makePortraitMask, makeForegroundLayer, WIDTH, HEIGHT, RENDER_BUILD, chineseFlagMarkup, isTransparentPng }
