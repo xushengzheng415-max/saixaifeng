@@ -276,18 +276,38 @@
     schedule()
   }
 
+  function ensureToggleOffset() {
+    if (document.getElementById('sxf-i18n-toggle-style')) return
+    var style = document.createElement('style')
+    style.id = 'sxf-i18n-toggle-style'
+    // Keep the top-right control off titles, back buttons, and right-side header actions.
+    // Pages can still nudge it with --sxf-i18n-top / --sxf-i18n-right on body.
+    style.textContent = [
+      '.me-home-header{padding-right:72px}',
+      '.mp-nav{padding-right:76px}',
+      '.mp-nav .mp-nav-note{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pp-pass-present-close{margin-right:52px}',
+      '.parent-camera-topbar,.parent-confirm-header,.pc-header{padding-right:72px}',
+      '.referee-crop-dialog header{padding-right:48px}'
+    ].join('\n')
+    ;(document.head || document.documentElement).appendChild(style)
+  }
+
   function ensureToggle() {
     if (document.getElementById('sxf-i18n-toggle')) return
+    ensureToggleOffset()
     var btn = document.createElement('button')
     btn.id = 'sxf-i18n-toggle'
     btn.type = 'button'
     btn.setAttribute('aria-label', 'Language')
     btn.style.cssText = [
-      'position:fixed', 'right:12px', 'bottom:calc(12px + env(safe-area-inset-bottom,0px))',
-      'z-index:99999', 'min-width:52px', 'height:36px', 'padding:0 12px',
-      'border:0', 'border-radius:999px', 'background:#0b3d2e', 'color:#fff',
-      'font:600 13px/36px system-ui,-apple-system,sans-serif',
-      'box-shadow:0 6px 18px rgba(0,0,0,.22)', 'cursor:pointer'
+      'position:fixed',
+      'top:var(--sxf-i18n-top,calc(8px + env(safe-area-inset-top,0px)))',
+      'right:var(--sxf-i18n-right,12px)',
+      'z-index:99999', 'height:28px', 'padding:0 10px',
+      'border:0', 'border-radius:999px', 'background:rgba(11,61,46,.85)', 'color:#fff',
+      'font:600 12px/28px system-ui,-apple-system,sans-serif',
+      'box-shadow:0 2px 8px rgba(0,0,0,.12)', 'white-space:nowrap', 'cursor:pointer'
     ].join(';')
     btn.addEventListener('click', function () {
       setLang(currentLang() === 'en' ? 'zh' : 'en')
