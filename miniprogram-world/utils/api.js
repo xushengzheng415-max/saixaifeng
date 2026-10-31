@@ -2,17 +2,43 @@
 /**
  * 赛小蜂足球世界 · 数据访问层
  *
- * 当前实现：本地演示适配器（utils/store.js + utils/engine.js），用于没有后端时跑通玩法闭环。
- * 正式版：下面每个方法换成 webLoginApi 的 action 调用（例如 cardWorldMainCard / cardWorldAlbum /
- * cardWorldSignSameCity / cardWorldLineup / cardWorldBattle / cardWorldBattleLog / cardWorldMembership），
- * 页面不改。接入时只允许服务端返回确定性结果，前端不得上传分数、卡级或自判资格。
+ * 两种模式（切换见 config/env.js 的 MODE）：
+ *   local —— 本地演示适配器（utils/store.js + utils/engine.js），无需云开发权限
+ *   cloud —— wx.cloud.callFunction 调 webLoginApi 的 cardWorld* action
+ *
+ * 契约约定：cloud 模式下每个 action 的返回值与本地视图同构（扁平字段），
+ * 服务端返回 { success:false, code, error } 时抛带 code 的错误；页面不改。
+ * 确定性由服务端计算，前端不得上传分数、卡级或自判资格。
  */
 
 var engine = require('./engine')
 var mock = require('./mock')
 var store = require('./store')
+var config = require('../config/env')
 
-var MODE = 'local' // 'local' | 'cloud'
+var MODE = config.MODE === 'cloud' ? 'cloud' : 'local'
+var CLOUD_FUNCTION = config.CLOUD_FUNCTION || 'webLoginApi'
+
+/* 每个前端方法对应一个 action，服务端按此表实现 */
+var ACTIONS = {
+  login: 'cardWorldLogin',
+  mainCard: 'cardWorldMainCard',
+  album: 'cardWorldAlbum',
+  ownedCards: 'cardWorldOwnedCards',
+  lineup: 'cardWorldLineup',
+  battleLog: 'cardWorldBattleLog',
+  membership: 'cardWorldMembership',
+  signSameCity: 'cardWorldSignSameCity',
+  setRosterSize: 'cardWorldSetRosterSize',
+  setSlot: 'cardWorldSetSlot',
+  saveLineup: 'cardWorldSaveLineup',
+  battle: 'cardWorldBattle',
+  setAutoRenew: 'cardWorldSetAutoRenew'
+}
+
+function useCloud() {
+  return MODE === 'cloud'
+}
 
 function fail(code, message) {
   var err = new Error(message || engine.codeMessage(code) || '操作失败，请重试')
@@ -30,9 +56,37 @@ function wrap(fn) {
   })
 }
 
+function callCloud(action, payload) {
+  return new Promise(function (resolve, reject) {
+    if (typeof wx === 'undefined' || !wx.cloud || typeof wx.cloud.callFunction !== 'function') {
+      reject(fail(engine.CODES.MODE_INVALID, '当前运行环境不支持云开发调用'))
+      return
+    }
+    wx.cloud.callFunction({
+      name: CLOUD_FUNCTION,
+      data: Object.assign({ action: action }, payload || {}),
+      success: function (res) {
+        var result = (res && res.result) || {}
+        if (result.success === false) {
+          reject(fail(result.code, result.error || result.message))
+          return
+        }
+        resolve(result)
+      },
+      fail: function (e) {
+        var detail = String((e && (e.errMsg || e.message)) || '')
+        var err = fail(engine.CODES.MODE_INVALID, '云端暂不可用，请稍后重试')
+        err.detail = detail
+        reject(err)
+      }
+    })
+  })
+}
+
 /* ---------------- 只读 ---------------- */
 
 function login() {
+  if (useCloud()) return callCloud(ACTIONS.login)
   return wrap(function () {
     var state = store.getState()
     return { userId: state.userId, cityCode: state.cityCode, cityName: state.cityName, mode: MODE }
@@ -40,36 +94,42 @@ function login() {
 }
 
 function getMainCard() {
+  if (useCloud()) return callCloud(ACTIONS.mainCard)
   return wrap(function () {
     return store.mainCardView()
   })
 }
 
 function getAlbum() {
+  if (useCloud()) return callCloud(ACTIONS.album)
   return wrap(function () {
     return store.albumView()
   })
 }
 
 function getLineup() {
+  if (useCloud()) return callCloud(ACTIONS.lineup)
   return wrap(function () {
     return store.lineupView('')
   })
 }
 
 function getBattleLog() {
+  if (useCloud()) return callCloud(ACTIONS.battleLog)
   return wrap(function () {
     return store.battleLogView()
   })
 }
 
 function getOwnedCards() {
+  if (useCloud()) return callCloud(ACTIONS.ownedCards)
   return wrap(function () {
     return store.ownedChips()
   })
 }
 
 function getMembership() {
+  if (useCloud()) return callCloud(ACTIONS.membership)
   return wrap(function () {
     var state = store.refreshDaily()
     var view = engine.membershipView(state.membership)
@@ -93,8 +153,9 @@ function getMembership() {
  * @param {object} options { mode, filter }
  */
 function signSameCity(options) {
+  var opts = options || {}
+  if (useCloud()) return callCloud(ACTIONS.signSameCity, { mode: opts.mode || 'free_daily', filter: opts.filter || null })
   return wrap(function () {
-    var opts = options || {}
     var state = store.refreshDaily()
     var result = engine.signSameCity({
       players: store.allPlayers(),
@@ -144,9 +205,10 @@ function signSameCity(options) {
 
 /** 切换编制：未解锁返回 ROSTER_LOCKED。已解锁时保留同组球员位置。 */
 function setRosterSize(size) {
+  var next = Math.round(size || 0)
+  if (useCloud()) return callCloud(ACTIONS.setRosterSize, { size: next })
   return wrap(function () {
     var state = store.refreshDaily()
-    var next = Math.round(size || 0)
     if (next !== 5 && next !== 8 && next !== 11) {
       throw fail(engine.CODES.MODE_INVALID, '编制人数无效')
     }
@@ -188,6 +250,7 @@ function setRosterSize(size) {
 }
 
 function setSlot(key, playerId) {
+  if (useCloud()) return callCloud(ACTIONS.setSlot, { key: key || '', playerId: playerId || '' })
   return wrap(function () {
     var state = store.refreshDaily()
     if (!key) throw fail(engine.CODES.LINEUP_INVALID, '缺少槽位')
@@ -206,6 +269,7 @@ function setSlot(key, playerId) {
 }
 
 function saveLineup(slots) {
+  if (useCloud()) return callCloud(ACTIONS.saveLineup, { slots: slots || [] })
   return wrap(function () {
     var state = store.refreshDaily()
     var candidate = slots || state.slots
@@ -223,10 +287,10 @@ function saveLineup(slots) {
   })
 }
 
-/** 发起轻对战：同阵容 + 同对手 + 同规则 = 同一结果。 */
-function battle(options) {
+/** 发起轻对战：同阵容 + 同对手 + 同规则 = 同一结果。服务端出结果，前端只展示。 */
+function battle() {
+  if (useCloud()) return callCloud(ACTIONS.battle, {})
   return wrap(function () {
-    var opts = options || {}
     var state = store.refreshDaily()
     if (state.rosterSize !== 5) throw fail(engine.CODES.ROSTER_LOCKED, '本期仅开放 5 人新手场')
     var map = store.playersById()
@@ -279,6 +343,7 @@ function battle(options) {
 }
 
 function setAutoRenew(enabled) {
+  if (useCloud()) return callCloud(ACTIONS.setAutoRenew, { enabled: !!enabled })
   return wrap(function () {
     var state = store.getState()
     var result = engine.setAutoRenew(state.membership, enabled)
@@ -291,6 +356,8 @@ function setAutoRenew(enabled) {
 
 module.exports = {
   MODE: MODE,
+  ACTIONS: ACTIONS,
+  useCloud: useCloud,
   login: login,
   getMainCard: getMainCard,
   getAlbum: getAlbum,

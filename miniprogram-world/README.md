@@ -7,10 +7,11 @@
 |---|---|
 | AppID | `wxa0ac7d45bcabd140`（赛小蜂足球世界 · 球员端） |
 | 工程目录 | `miniprogram-world/` |
-| 云环境 | `cloud1-7g8ckb3c7815a011`（与球队端、PC 共用同一环境，不建第二套数据库） |
-| 后端入口 | `webLoginApi` 新增 `cardWorld*` action 组（本期未接，见下文「后端待接」） |
+| 业务云环境 | `cloud1-7g8ckb3c7815a011`（与球队端、PC、H5 共用同一环境，不建第二套数据库） |
+| 开通环境 | `sxf-world-dev-d6gxotk5mc8bb7cb6`（2026-10-31 新建的空环境，只用于获得云开发权限；PostgreSQL 体系，禁止放业务表） |
+| 后端入口 | `webLoginApi` 新增 `cardWorld*` action 组（本期未实现，见下文「后端待接」） |
 | 视觉 | 深空黑 + 熔金卡牌；共享图标见 `assets/icons/manifest.json` |
-| 当前状态 | 本地演示适配器（`utils/api.js` `MODE = 'local'`），页面与规则已跑通闭环 |
+| 当前状态 | `config/env.js` `MODE = 'local'` 跑通闭环；`cloud` 分支已写好，待后端与环境共享就绪后切换 |
 
 ## 玩法口径（2026-10-31，用户已确认）
 
@@ -53,6 +54,36 @@ wx.removeStorageSync('sxf-world-card-state-v1')
 
 签约/签约次数/阵容/战报都写在该键下，状态版本 `STATE_VERSION = 1`，结构变化时同步迁移 `utils/store.js` 的 `mergeState`。
 
+## 云开发环境与模式切换
+
+配置集中在 `config/env.js`：
+
+| 常量 | 值 | 用途 |
+|---|---|---|
+| `BUSINESS_ENV` | `cloud1-7g8ckb3c7815a011` | 唯一业务数据源（users / players / 赛事），共用 |
+| `DEV_ENV` | `sxf-world-dev-d6gxotk5mc8bb7cb6` | 新 AppID 的开通环境（空库，仅作权限凭证/日后网关） |
+| `CLOUD_FUNCTION` | `webLoginApi` | `cloud` 模式调用的云函数 |
+| `MODE` | `local` / `cloud` | `local` 走 `utils/store.js`；`cloud` 走 `wx.cloud.callFunction` |
+
+切到 `cloud` 前置条件（缺一不可）：
+
+1. AppID `wxa0ac7d45bcabd140` 能在 `BUSINESS_ENV` 上调用云函数（环境共享/微信小程序关联已完成）；
+2. `webLoginApi` 已部署 `cardWorld*` action 组；
+3. 服务端返回结构与本地视图同构（见下表契约）。
+
+环境连通性探测（只读，不碰任何线上函数）：
+
+```js
+wx.cloud.init({ env: 'cloud1-7g8ckb3c7815a011', traceUser: false })
+wx.cloud.callFunction({ name: 'cardWorldProbeNotExist' })
+  .then(r => console.log('PROBE_OK', r))
+  .catch(e => console.error('PROBE_ERR', e.errCode, e.errMsg))
+```
+
+- `FunctionName not found` → 环境可访问，只差函数；
+- `-601034 没有权限，请先开通云开发或者云托管` → AppID 未开通云开发或未被共享；
+- `env not exists` / `invalid env` → 环境 ID 或关联有误。
+
 ## 自检
 
 ```powershell
@@ -69,16 +100,24 @@ node tools/test-world-player-miniprogram.cjs
 
 `utils/api.js` 的方法签名即服务端契约，接入时只换实现、页面不改：
 
-| 前端方法 | 建议 action |
-|---|---|
-| `login` | `cardWorldLogin` |
-| `getMainCard` | `cardWorldMainCard` |
-| `getAlbum` / `getOwnedCards` | `cardWorldAlbum` |
-| `getLineup` / `setRosterSize` / `setSlot` / `saveLineup` | `cardWorldLineup` |
-| `battle` | `cardWorldBattle` |
-| `getBattleLog` | `cardWorldBattleLog` |
-| `getMembership` / `setAutoRenew` | `cardWorldMembership` |
-| `signSameCity` | `cardWorldSignSameCity` |
+| 前端方法 | action | 说明 |
+|---|---|---|
+| `login` | `cardWorldLogin` | 微信授权 + 手机号命中自然人账号 |
+| `getMainCard` | `cardWorldMainCard` | 主卡、四项能力、成长印记 |
+| `getAlbum` | `cardWorldAlbum` | 卡册网格、配额文本、会员与编制状态 |
+| `getOwnedCards` | `cardWorldOwnedCards` | 可选球员 chips |
+| `getLineup` | `cardWorldLineup` | 阵型四行、进度、可否挑战 |
+| `setRosterSize` | `cardWorldSetRosterSize` | 5/8/11，未解锁返回 `ROSTER_LOCKED` |
+| `setSlot` | `cardWorldSetSlot` | 槽位换人，服务端复核归属 |
+| `saveLineup` | `cardWorldSaveLineup` | 保存阵容，返回战力 |
+| `battle` | `cardWorldBattle` | 服务端出比分与复现键 |
+| `getBattleLog` | `cardWorldBattleLog` | 只读本人战报 |
+| `getMembership` | `cardWorldMembership` | 档位、日签次数、编制解锁 |
+| `setAutoRenew` | `cardWorldSetAutoRenew` | 未成年返回 `MINOR_NO_AUTORENEW` |
+| `signSameCity` | `cardWorldSignSameCity` | 扣配额、写卡册，返回 `deterministicKey` |
+
+返回契约：成功时结果字段与本地视图同名同结构（扁平），失败时返回 `{ success:false, code, error }`，
+前端按 `code` 抛错，页面无需改动。
 
 接入红线：
 
