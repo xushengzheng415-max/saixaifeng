@@ -198,8 +198,10 @@ export function removeWhiteBackground(file, options = {}) {
         canvas.width = img.width
         canvas.height = img.height
         
+        // 按原图像素 1:1 绘制。关闭平滑，避免浏览器在等尺寸拷贝时把边缘滤虚。
         // 先铺白底再绘制，避免透明 PNG 中的白色像素在 Canvas 预乘后丢失 RGB；
         // 后续只移除与外边缘连通的白底，内部白色会保留。
+        ctx.imageSmoothingEnabled = false
         ctx.fillStyle = '#fff'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0)
