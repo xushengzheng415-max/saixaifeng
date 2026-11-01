@@ -198,6 +198,7 @@
             <text class="invite-item-signup">{{item.signupText}}</text>
             <text class="invite-item-deadline">{{item.deadlineText}}</text>
           </view>
+          <text class="invite-present-text" wx:if="{{item.hasPresent}}">{{item.presentText}}</text>
           <text class="invite-item-cry" wx:if="{{item.hasBattleCry}}">{{item.battleCryText}}</text>
           <view class="invite-response-row">
             <text class="invite-response-text">{{item.responseText}}</text>
@@ -206,6 +207,9 @@
             </view>
           </view>
           <text class="invite-item-created">{{item.createdText}}</text>
+          <view class="invite-detail-btn" data-id="{{item.id}}" catchtap="onOpenInviteDetail">
+            <text class="invite-detail-btn-text">查看详情与报名名单</text>
+          </view>
         </view>
       </view>
 
@@ -252,6 +256,7 @@
             <text class="public-badge" wx:if="{{item.hasBadge}}">{{item.badgeText}}</text>
           </view>
           <text class="public-item-title">{{item.titleText}}</text>
+          <text class="invite-status public-item-status {{item.statusClass}}">{{item.statusText}}</text>
           <view class="invite-item-row">
             <image class="invite-item-icon" src="/images/icons/location.svg" mode="aspectFit"></image>
             <text class="invite-item-venue">{{item.venueText}}</text>
@@ -260,9 +265,13 @@
             <text class="invite-item-signup">{{item.signupText}}</text>
             <text class="invite-item-deadline">{{item.deadlineText}}</text>
           </view>
+          <text class="invite-present-text" wx:if="{{item.hasPresent}}">{{item.presentText}}</text>
           <text class="invite-item-cry" wx:if="{{item.hasBattleCry}}">{{item.battleCryText}}</text>
           <view class="{{item.respondClass}}" data-id="{{item.id}}" bindtap="onPublicRespond">
             <text class="public-action-text">{{item.actionText}}</text>
+          </view>
+          <view class="invite-detail-btn" data-id="{{item.id}}" catchtap="onOpenInviteDetail">
+            <text class="invite-detail-btn-text">查看详情</text>
           </view>
         </view>
       </view>

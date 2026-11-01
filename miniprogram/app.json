@@ -36,6 +36,7 @@
     "pages/workspace/restricted/restricted",
     "pages/discover/discover",
     "pages/discover/invite-create/invite-create",
+    "pages/discover/invite-detail/invite-detail",
     "pages/public-tournament-center/index"
   ],
   "window": {

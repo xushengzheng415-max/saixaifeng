@@ -388,25 +388,63 @@ function formatPublicEvent(row) {
   }
 }
 
-// 本队约球邀约列表：只整形服务端已脱敏字段；状态由截止时间与报名人数预计算
+// 报名／签到／应战计数口径（2026-11-01 用户确认）：
+// - 有效报名只认服务端 signupCount；历史邀约没有 signupSchema，signupCount 为 null，
+//   必须显示“报名数据待确认”，不能拿旧 signedInCount 冒充报名人数，也不回填虚构历史。
+// - 签到数 presentCount 与报名数分开；旧 signedInCount 只作历史说明。
+function inviteSignupSummary(row) {
+  row = row || {}
+  var hasSignupData = row.hasSignupData === true
+  var count = scoreValue(row.signupCount)
+  var max = scoreValue(row.maxPlayers)
+  var present = scoreValue(row.presentCount)
+  var legacySignedIn = scoreValue(row.signedInCount)
+  var signupText = '报名数据待确认'
+  if (hasSignupData && count !== null) {
+    signupText = max !== null && max > 0
+      ? count + ' / ' + max + ' 人已报名'
+      : count + ' 人已报名 · 未设限额'
+  }
+  var presentText = ''
+  if (hasSignupData && present !== null && present > 0) presentText = '已签到 ' + present + ' 人'
+  else if (!hasSignupData && legacySignedIn !== null && legacySignedIn > 0) presentText = '历史签到 ' + legacySignedIn + ' 人'
+  return {
+    hasSignupData: hasSignupData && count !== null,
+    signupText: signupText,
+    presentText: presentText,
+    hasPresent: Boolean(presentText)
+  }
+}
+
+// 状态由服务端 signupWindow 决定；缺省时按旧字段兜底，但不再用 signedInCount 判断满员
+function inviteStatusKind(row) {
+  row = row || {}
+  var window = row.signupWindow || {}
+  var windowKind = text(window.kind).toLowerCase()
+  if (windowKind === 'cancelled') return 'cancelled'
+  if (windowKind === 'deadline' || windowKind === 'closed') return 'closed'
+  if (windowKind === 'full') return 'full'
+  if (windowKind === 'open') return 'open'
+
+  var rawStatus = text(row.status).toLowerCase()
+  if (rawStatus === 'cancelled' || rawStatus === 'canceled') return 'cancelled'
+  if (rawStatus && rawStatus !== 'open') return 'closed'
+  if (row.hasSignupData === true) {
+    var count = scoreValue(row.signupCount)
+    var max = scoreValue(row.maxPlayers)
+    if (count !== null && max !== null && max > 0 && count >= max) return 'full'
+  }
+  var deadlineEpoch = shanghaiEpoch(row.deadline)
+  if (deadlineEpoch !== null && deadlineEpoch < Date.now()) return 'closed'
+  return 'open'
+}
+
+// 本队约球邀约列表：只整形服务端已脱敏字段；状态与计数口径由服务端给出
 function formatInvite(row) {
   row = row || {}
   var id = text(row.inviteId || row._id)
-  var signed = scoreValue(row.signedInCount)
-  var max = scoreValue(row.maxPlayers)
-  var signedCount = signed === null ? 0 : signed
-  var rawStatus = text(row.status).toLowerCase()
-  var kind = 'open'
-  if (rawStatus === 'cancelled' || rawStatus === 'canceled') {
-    kind = 'cancelled'
-  } else if (rawStatus && rawStatus !== 'open') {
-    kind = 'closed'
-  } else if (max !== null && max > 0 && signedCount >= max) {
-    kind = 'full'
-  } else {
-    var deadlineEpoch = shanghaiEpoch(row.deadline)
-    if (deadlineEpoch !== null && deadlineEpoch < Date.now()) kind = 'closed'
-  }
+  var kind = inviteStatusKind(row)
+  var summary = inviteSignupSummary(row)
   var dayText = dateLabel(row.matchDate)
   var timeTextValue = text(row.matchTime)
   var titleText = dayText ? (timeTextValue ? dayText + ' ' + timeTextValue : dayText) : '时间待协商'
@@ -415,6 +453,7 @@ function formatInvite(row) {
   var deadlineValue = text(row.deadline)
   var createdText = timeText(row.createdAt)
   var battleCry = text(row.battleCryText)
+  var accepted = scoreValue(row.acceptedCount) || 0
   return {
     key: 'invite-' + id,
     id: id,
@@ -425,17 +464,16 @@ function formatInvite(row) {
     venueText: venue || '场地待协商',
     hasAddress: Boolean(address),
     addressText: address,
-    signupText: max !== null && max > 0
-      ? signedCount + ' / ' + max + ' 人已报名'
-      : signedCount + ' 人已报名 · 未设限额',
+    signupText: summary.signupText,
+    hasSignupData: summary.hasSignupData,
+    presentText: summary.presentText,
+    hasPresent: summary.hasPresent,
     deadlineText: deadlineValue ? '截止 ' + deadlineText(deadlineValue) : '未设截止时间',
     hasBattleCry: Boolean(battleCry),
     battleCryText: battleCry,
-    // 跨队应战（公开约球）计数：发起方据此判断是否有人应战，具体队伍在响应列表里看
-    hasResponse: (scoreValue(row.acceptedCount) || 0) > 0,
-    responseText: (scoreValue(row.acceptedCount) || 0) > 0
-      ? '已收到 ' + scoreValue(row.acceptedCount) + ' 支球队应战'
-      : '还没有球队应战',
+    // 跨队应战（公开约球）计数：发起方据此判断是否有人应战，具体队伍在详情里看
+    hasResponse: accepted > 0,
+    responseText: accepted > 0 ? '已收到 ' + accepted + ' 支球队应战' : '还没有球队应战',
     createdText: createdText ? '发起于 ' + createdText : '发起时间待记录'
   }
 }
@@ -447,9 +485,8 @@ function formatPublicInvite(row, myTeamId, respondState) {
   var id = text(row.inviteId || row._id)
   var teamId = text(row.teamId)
   var myId = text(myTeamId)
-  var signed = scoreValue(row.signedInCount)
-  var max = scoreValue(row.maxPlayers)
-  var signedCount = signed === null ? 0 : signed
+  var summary = inviteSignupSummary(row)
+  var kind = inviteStatusKind(row)
   var dayText = dateLabel(row.matchDate)
   var timeTextValue = text(row.matchTime)
   var titleText = dayText ? (timeTextValue ? dayText + ' ' + timeTextValue : dayText) : '时间待协商'
@@ -457,6 +494,7 @@ function formatPublicInvite(row, myTeamId, respondState) {
   var battleCry = text(row.battleCryText)
   var isMine = Boolean(myId) && teamId === myId
   var responded = Boolean(respondState && respondState.responded)
+  var closed = kind === 'closed' || kind === 'cancelled'
   return {
     key: 'public-' + id,
     id: id,
@@ -469,15 +507,19 @@ function formatPublicInvite(row, myTeamId, respondState) {
     cityText: text(row.teamCity) || '城市待登记',
     titleText: titleText,
     venueText: text(row.venue) || '场地待协商',
-    signupText: max !== null && max > 0
-      ? signedCount + ' / ' + max + ' 人已报名'
-      : signedCount + ' 人已报名 · 未设限额',
+    signupText: summary.signupText,
+    hasSignupData: summary.hasSignupData,
+    presentText: summary.presentText,
+    hasPresent: summary.hasPresent,
+    statusKind: kind,
+    statusClass: INVITE_STATUS_CLASS[kind] || INVITE_STATUS_CLASS.wait,
+    statusText: INVITE_STATUS_TEXT[kind] || '状态待确认',
     deadlineText: deadlineValue ? '截止 ' + deadlineText(deadlineValue) : '未设截止时间',
     hasBattleCry: Boolean(battleCry),
     battleCryText: battleCry,
-    canRespond: Boolean(id) && !isMine && !responded,
-    actionText: isMine ? '本队发起' : (responded ? '已提交应战' : '代表本队应战'),
-    respondClass: (isMine || responded) ? 'public-action public-action-done' : 'public-action',
+    canRespond: Boolean(id) && !isMine && !responded && !closed,
+    actionText: isMine ? '本队发起' : (responded ? '已提交应战' : (closed ? '已结束报名' : '代表本队应战')),
+    respondClass: (isMine || responded || closed) ? 'public-action public-action-done' : 'public-action',
     responded: responded
   }
 }

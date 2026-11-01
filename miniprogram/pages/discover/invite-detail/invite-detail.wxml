@@ -1,0 +1,138 @@
+<view class="page">
+
+  <!-- 读取中 -->
+  <view class="state-card" wx:if="{{loading}}">
+    <text class="state-title">正在读取邀约…</text>
+    <text class="state-desc">正在同步服务端的报名与签到状态</text>
+  </view>
+
+  <!-- 读取失败：保留重试入口，同一个邀约标识重新拉取 -->
+  <view class="state-card" wx:if="{{loadError}}">
+    <text class="state-title">邀约读取失败</text>
+    <text class="state-desc">{{errorText}}</text>
+    <view class="state-btn" bindtap="onRetry">
+      <text class="state-btn-text">重新读取</text>
+    </view>
+  </view>
+
+  <block wx:if="{{showContent}}">
+
+    <!-- 邀约头卡 -->
+    <view class="hero-card">
+      <view class="hero-head">
+        <image class="hero-logo" src="{{teamLogo}}" mode="aspectFit"></image>
+        <view class="hero-main">
+          <text class="hero-team">{{teamName}}</text>
+          <text class="hero-city" wx:if="{{hasTeamCity}}">{{teamCity}}</text>
+        </view>
+        <text class="{{statusClass}}">{{statusText}}</text>
+      </view>
+      <text class="hero-title">{{titleText}}</text>
+      <view class="hero-row">
+        <image class="hero-icon" src="/images/icons/location.svg" mode="aspectFit"></image>
+        <text class="hero-venue">{{venueText}}</text>
+      </view>
+      <text class="hero-address" wx:if="{{hasAddress}}">{{addressText}}</text>
+      <text class="hero-deadline">{{deadlineText}}</text>
+    </view>
+
+    <!-- 计数口径全部来自服务端 -->
+    <view class="count-card">
+      <view class="count-row">
+        <view class="count-main">
+          <text class="count-value">{{signupText}}</text>
+          <text class="count-label">有效报名</text>
+        </view>
+        <text class="count-present" wx:if="{{hasPresent}}">{{presentText}}</text>
+      </view>
+      <text class="count-detail" wx:if="{{hasSignupDetail}}">{{signupDetailText}}</text>
+      <text class="count-response">{{responseText}}</text>
+      <text class="count-created" wx:if="{{hasCreated}}">{{createdText}}</text>
+    </view>
+
+    <view class="notice-bar" wx:if="{{hasClosedNotice}}">
+      <text class="notice-bar-text">{{closedNoticeText}}</text>
+    </view>
+
+    <view class="battle-card" wx:if="{{hasBattleCry}}">
+      <text class="card-label">战书</text>
+      <text class="battle-line" wx:for="{{battleCryLines}}" wx:key="*this">{{item}}</text>
+    </view>
+
+    <!-- 我的报名与签到 -->
+    <view class="mine-card" wx:if="{{hasMySignup}}">
+      <text class="card-label">我的报名</text>
+      <text class="mine-text">{{mySignupText}}</text>
+      <text class="mine-present" wx:if="{{mySignupPresent}}">{{mySignupPresentText}}</text>
+      <text class="checkin-text" wx:if="{{hasCheckIn}}">{{checkInText}}</text>
+      <view class="mine-actions">
+        <view class="mine-btn mine-btn-primary" wx:if="{{canSelfCheckIn}}" bindtap="onSelfCheckIn">
+          <text class="mine-btn-text">本人签到</text>
+        </view>
+        <view class="mine-btn mine-btn-danger" wx:if="{{canCancel}}" bindtap="onCancelSignup">
+          <text class="mine-btn-text">取消报名</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 未登录：先完成手机号登录再报名 -->
+    <view class="login-card" wx:if="{{showLogin}}">
+      <text class="login-title">登录后即可报名</text>
+      <text class="login-desc">报名绑定手机号主账号，用于保留名额与签到记录。</text>
+      <view class="login-btn" bindtap="onGoLogin">
+        <text class="login-btn-text">去登录</text>
+      </view>
+    </view>
+
+    <!-- 个人报名表单：失败保留已填姓名与阵营 -->
+    <view class="form-card" wx:if="{{showSignupForm}}">
+      <text class="card-label">我要报名</text>
+      <view class="side-row">
+        <view class="{{sideHomeClass}}" data-side="home" bindtap="onPickSide">
+          <text class="side-text">本方</text>
+        </view>
+        <view class="{{sideAwayClass}}" data-side="away" bindtap="onPickSide">
+          <text class="side-text">对方</text>
+        </view>
+      </view>
+      <input class="form-input" value="{{name}}" placeholder="填写报名姓名" placeholder-class="form-placeholder" bindinput="onNameInput" maxlength="20" />
+      <view class="{{signupBtnClass}}" bindtap="onSubmitSignup">
+        <text class="submit-btn-text">{{signupBtnText}}</text>
+      </view>
+      <text class="form-note">同一手机号只保留一条有效报名；截止、满员或活动关闭时由服务端拒绝新增。</text>
+    </view>
+
+    <!-- 发起方：个人报名名单与球队应战名单分开呈现 -->
+    <view class="list-card" wx:if="{{canManage}}">
+      <text class="card-label">个人报名名单</text>
+      <text class="list-summary" wx:if="{{signupTotalText}}">{{signupTotalText}}</text>
+      <view class="row-item" wx:for="{{signupRows}}" wx:key="signupId">
+        <view class="row-main">
+          <text class="row-name">{{item.name}}</text>
+          <text class="row-side">{{item.sideText}}</text>
+        </view>
+        <text class="{{item.statusClass}}">{{item.statusText}}</text>
+        <view class="row-btn" wx:if="{{item.canManualSignIn}}" data-signupid="{{item.signupId}}" catchtap="onManualSignIn">
+          <text class="row-btn-text">代签</text>
+        </view>
+      </view>
+      <text class="list-empty" wx:if="{{!hasSignupRows}}">还没有个人报名</text>
+
+      <text class="card-label list-team-label">球队应战名单</text>
+      <view class="row-item" wx:for="{{teamRows}}" wx:key="responseId">
+        <view class="row-main">
+          <text class="row-name">{{item.teamName}}</text>
+        </view>
+        <text class="{{item.statusClass}}">{{item.statusText}}</text>
+      </view>
+      <text class="list-empty" wx:if="{{!hasTeamRows}}">还没有球队应战</text>
+      <text class="list-note">普通参与者只能看到公开计数和自己的报名状态；个人名单与球队应战名单不混用。</text>
+    </view>
+
+    <view class="share-btn" open-type="share">
+      <text class="share-btn-text">分享邀约</text>
+    </view>
+
+  </block>
+
+</view>

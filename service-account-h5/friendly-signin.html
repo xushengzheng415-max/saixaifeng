@@ -86,7 +86,17 @@ body{min-height:100vh;padding:env(safe-area-inset-top) env(safe-area-inset-right
 .error button{background:#0aa85a;color:#fff;border:none;border-radius:24px;padding:18px 36px;font-size:28px;font-weight:700}
 .footer{padding:24px;text-align:center;color:#bbb;font-size:22px}
 .tip{margin:16px 20px;color:#888;font-size:22px;text-align:center}
-/* 创建球队深链按钮 */
+/* ====== 报名 / 签到 / 应战计数 ====== */
+.counts-card{margin:24px 20px 0;background:#fff;border-radius:24px;padding:26px 28px;box-shadow:0 4px 16px rgba(0,0,0,.06)}
+.counts-title{display:block;font-size:24px;color:#888}
+.counts-row{display:flex;align-items:flex-start;margin-top:16px}
+.counts-item{flex:1;display:flex;flex-direction:column}
+.counts-value{font-size:30px;font-weight:900;color:#1a1a1a}
+.counts-label{margin-top:6px;font-size:22px;color:#888}
+.counts-note{margin-top:16px;padding:14px 18px;border-radius:16px;background:#f3f8f5;color:#4d6a5b;font-size:22px;line-height:1.6}
+.counts-note.is-closed{background:#fdecea;color:#a43e38}
+
+/* ====== 创建球队深链按钮 ====== */
 .deep-link-btn{margin:20px auto 0;display:block;width:calc(100% - 40px);background:linear-gradient(135deg,#0aa85a,#065431);color:#fff;text-align:center;padding:22px;border-radius:20px;font-size:28px;font-weight:900;text-decoration:none;box-shadow:0 6px 16px rgba(10,168,90,.3)}
 .deep-link-btn:active{opacity:.85}
 </style>
@@ -163,10 +173,48 @@ body{min-height:100vh;padding:env(safe-area-inset-top) env(safe-area-inset-right
       '<button id="acceptBtn" class="btn is-accept">接收战书</button>' +
     '</div>'
 
-    app.innerHTML = hero + bcHtml + vsHtml + actions + '<p class="tip">接受后会提醒发起方，拒绝也会通知</p><div class="footer">赛小蜂足球 · 战书轻量化</div>'
+    // 计数全部取服务端回执：历史邀约没有 signupSchema 时显示待确认，不拿旧签到数冒充报名
+    var counts = invite.counts || {}
+    var hasSignupData = counts.hasSignupData === true
+    var signupCount = Number(counts.signupCount)
+    var maxPlayers = Number(counts.maxPlayers)
+    var presentCount = Number(counts.presentCount)
+    var acceptedCount = Number(counts.acceptedCount)
+    var signupText = hasSignupData
+      ? (maxPlayers > 0 ? signupCount + ' / ' + maxPlayers + ' 人' : signupCount + ' 人')
+      : '待确认'
+    var presentText = hasSignupData ? (presentCount > 0 ? presentCount + ' 人' : '0 人') : '待确认'
+    var responseText = acceptedCount > 0 ? acceptedCount + ' 支' : '0 支'
+    var windowState = invite.signupWindow || {}
+    var closedNote = ''
+    if (windowState.open !== true) {
+      closedNote = '<div class="counts-note is-closed">报名已结束：' + escapeHtml(windowState.reason || '已截止或已满员') + '</div>'
+    }
+
+    var countsHtml = '<div class="counts-card">' +
+      '<span class="counts-title">本场数据（来自服务端）</span>' +
+      '<div class="counts-row">' +
+        '<div class="counts-item"><span class="counts-value">' + escapeHtml(signupText) + '</span><span class="counts-label">有效报名</span></div>' +
+        '<div class="counts-item"><span class="counts-value">' + escapeHtml(presentText) + '</span><span class="counts-label">已签到</span></div>' +
+        '<div class="counts-item"><span class="counts-value">' + escapeHtml(responseText) + '</span><span class="counts-label">球队应战</span></div>' +
+      '</div>' +
+      closedNote +
+    '</div>'
+
+    // 报名与名单在小程序详情页完成，深链携带同一个 inviteId
+    var detailId = invite.inviteId || ''
+    var detailEntry = detailId
+      ? '<a class="deep-link-btn" id="inviteDetailBtn" href="javascript:void(0)">进入小程序报名 / 查看名单</a>'
+      : '<p class="tip">报名与签到名单请在小程序内查看</p>'
+
+    app.innerHTML = hero + bcHtml + vsHtml + countsHtml + actions + detailEntry +
+      '<p class="tip">接受后会提醒发起方，拒绝也会通知</p><div class="footer">赛小蜂足球 · 战书轻量化</div>'
 
     document.getElementById('acceptBtn').onclick = function(){respond('accepted')}
     document.getElementById('rejectBtn').onclick = function(){respond('rejected')}
+    if (detailId) {
+      document.getElementById('inviteDetailBtn').onclick = function(){ deepLinkMiniProgram(detailId) }
+    }
   }
 
   // ====== STATE 2: 接收 → 球队创建 Prompt ======
@@ -227,10 +275,17 @@ body{min-height:100vh;padding:env(safe-area-inset-top) env(safe-area-inset-right
     document.getElementById('laterBtn').onclick = function(){ mask.remove() }
   }
 
-  function deepLinkMiniProgram(){
-    // 深链到小程序球队创建页（service-account 已有 wechat:// 或 URL Scheme）
-    var scheme = 'weixin://dl/business/?appid=wx57164cca8676f411&path=%2Fpages%2Fteam%2Fcreate%2Fcreate&query=from%3dfriendly-signin'
-    location.href = scheme
+  // 深链：带 inviteId 时进入同一邀约详情（报名 / 名单 / 签到），否则进入球队创建页
+  function deepLinkMiniProgram(inviteId){
+    var appid = 'wx57164cca8676f411'
+    var path = '/pages/team/create/create'
+    var query = 'from=friendly-signin'
+    if (inviteId) {
+      path = '/pages/discover/invite-detail/invite-detail'
+      query = 'inviteId=' + encodeURIComponent(inviteId)
+    }
+    location.href = 'weixin://dl/business/?appid=' + appid + '&path=' + encodeURIComponent(path) +
+      '&query=' + encodeURIComponent(query)
   }
 
   // ====== STATE 4: 拒绝确认 ======

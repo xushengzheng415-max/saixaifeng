@@ -136,6 +136,11 @@
 .invite-item-deadline{font-size:20rpx;color:#7C8B82}
 .invite-item-cry{font-size:21rpx;color:#5F6E66;background:#F5F7F6;border-radius:10rpx;padding:12rpx 16rpx;line-height:1.6;word-break:break-all}
 .invite-item-created{font-size:20rpx;color:#A7B3AC}
+/* 签到数与报名数分开显示；历史邀约的报名数显示“待确认” */
+.invite-present-text{font-size:21rpx;font-weight:800;color:#087A48}
+/* 同一活动标识的详情入口：发现页卡片 → /pages/discover/invite-detail/invite-detail */
+.invite-detail-btn{margin-top:4rpx;height:64rpx;border-radius:12rpx;background:#EAF6EE;display:flex;align-items:center;justify-content:center}
+.invite-detail-btn-text{font-size:24rpx;font-weight:800;color:#087A48}
 
 /* 约球范围切换：本队管理视角 / 跨队公开撮合 */
 .scope-row{display:flex;align-items:center;gap:6rpx;margin:18rpx 31rpx 0;padding:6rpx;border-radius:15rpx;background:#EFF3F1}
@@ -160,6 +165,7 @@
 .public-item-city{font-size:20rpx;color:#7C8B82}
 .public-badge{flex:0 0 auto;font-size:19rpx;font-weight:800;color:#087A48;background:#EAF6EE;border-radius:8rpx;padding:4rpx 12rpx}
 .public-item-title{font-size:29rpx;font-weight:900;color:#162D22;line-height:1.35}
+.public-item-status{align-self:flex-start}
 .public-action{margin-top:6rpx;height:72rpx;border-radius:15rpx;background:#087A48;display:flex;align-items:center;justify-content:center}
 .public-action-done{background:#EFF3F1}
 .public-action-text{font-size:25rpx;font-weight:900;color:#fff;letter-spacing:1rpx}

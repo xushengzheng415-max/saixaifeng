@@ -1,0 +1,101 @@
+@import "../../../styles/proto.wxss";
+
+.page{min-height:100vh;background:#1a1206;padding:28rpx 30rpx calc(120rpx + env(safe-area-inset-bottom));box-sizing:border-box}
+
+/* 读取中 / 读取失败 */
+.state-card{margin-top:120rpx;padding:56rpx 40rpx;border-radius:24rpx;background:rgba(255,255,255,.06);border:2rpx solid rgba(255,255,255,.1);display:flex;flex-direction:column;align-items:center}
+.state-title{color:#ffd580;font-size:30rpx;font-weight:800}
+.state-desc{margin-top:14rpx;color:rgba(255,255,255,.6);font-size:24rpx;line-height:1.6;text-align:center}
+.state-btn{margin-top:32rpx;padding:18rpx 56rpx;border-radius:40rpx;background:linear-gradient(135deg,#e88a0c,#b46e0a)}
+.state-btn-text{color:#fff;font-size:27rpx;font-weight:800}
+
+/* 邀约头卡 */
+.hero-card{padding:26rpx 26rpx 24rpx;border-radius:26rpx;background:linear-gradient(160deg,#b46e0a,#6e4105);border:2rpx solid rgba(255,195,90,.3)}
+.hero-head{display:flex;align-items:center}
+.hero-logo{width:88rpx;height:88rpx;flex:0 0 88rpx;border-radius:18rpx;background:rgba(255,255,255,.15)}
+.hero-main{flex:1;margin-left:20rpx;min-width:0}
+.hero-team{display:block;color:#fff;font-size:32rpx;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hero-city{display:block;margin-top:4rpx;color:rgba(255,220,160,.72);font-size:22rpx}
+.status-badge{flex:0 0 auto;padding:6rpx 16rpx;border-radius:14rpx;background:rgba(255,255,255,.16);color:#fff;font-size:20rpx;font-weight:800}
+.status-open{background:rgba(120,220,170,.28);color:#b9ffd8}
+.status-full{background:rgba(0,0,0,.35);color:#ffe0a8}
+.status-closed{background:rgba(0,0,0,.28);color:rgba(255,255,255,.72)}
+.status-cancelled{background:rgba(192,66,58,.4);color:#ffc9c3}
+
+.hero-title{display:block;margin-top:22rpx;color:#fff;font-size:38rpx;font-weight:900;line-height:1.3}
+.hero-row{display:flex;align-items:center;margin-top:16rpx}
+.hero-icon{width:24rpx;height:24rpx;flex:0 0 24rpx;margin-right:10rpx}
+.hero-venue{flex:1;min-width:0;color:rgba(255,255,255,.9);font-size:25rpx;line-height:1.5;word-break:break-all}
+.hero-address{display:block;margin-top:6rpx;padding-left:34rpx;color:rgba(255,255,255,.6);font-size:23rpx;line-height:1.5;word-break:break-all}
+.hero-deadline{display:block;margin-top:14rpx;color:rgba(255,220,160,.78);font-size:23rpx}
+
+/* 报名 / 签到 / 应战计数 */
+.count-card{margin-top:22rpx;padding:24rpx 26rpx;border-radius:22rpx;background:rgba(255,255,255,.06);border:2rpx solid rgba(255,255,255,.08)}
+.count-row{display:flex;align-items:flex-end;justify-content:space-between}
+.count-main{display:flex;flex-direction:column}
+.count-value{color:#fff;font-size:32rpx;font-weight:900}
+.count-label{margin-top:6rpx;color:rgba(255,220,160,.6);font-size:21rpx}
+.count-present{flex:0 0 auto;padding:6rpx 16rpx;border-radius:14rpx;background:rgba(120,220,170,.16);color:#8ef0be;font-size:21rpx;font-weight:700}
+.count-detail{display:block;margin-top:14rpx;color:rgba(255,255,255,.72);font-size:23rpx}
+.count-response{display:block;margin-top:8rpx;color:rgba(255,220,160,.7);font-size:23rpx}
+.count-created{display:block;margin-top:8rpx;color:rgba(255,255,255,.4);font-size:21rpx}
+
+/* 关闭提示 */
+.notice-bar{margin-top:18rpx;padding:18rpx 22rpx;border-radius:18rpx;background:rgba(192,66,58,.18);border:2rpx solid rgba(192,66,58,.4)}
+.notice-bar-text{color:#ffc9c3;font-size:24rpx;line-height:1.6}
+
+/* 战书 */
+.battle-card{margin-top:20rpx;padding:24rpx 26rpx;border-radius:22rpx;background:rgba(255,195,90,.1);border:2rpx solid rgba(255,195,90,.26)}
+.card-label{display:block;color:rgba(255,220,160,.68);font-size:23rpx;font-weight:700;letter-spacing:1rpx}
+.battle-line{display:block;margin-top:12rpx;color:#ffe0a8;font-size:26rpx;line-height:1.65}
+
+/* 我的报名 */
+.mine-card{margin-top:20rpx;padding:24rpx 26rpx;border-radius:22rpx;background:rgba(255,255,255,.06);border:2rpx solid rgba(255,255,255,.08)}
+.mine-text{display:block;margin-top:12rpx;color:#fff;font-size:26rpx;line-height:1.5}
+.mine-present{display:inline-block;margin-top:12rpx;padding:4rpx 14rpx;border-radius:12rpx;background:rgba(120,220,170,.18);color:#8ef0be;font-size:20rpx;font-weight:700}
+.checkin-text{display:block;margin-top:12rpx;color:rgba(255,255,255,.6);font-size:23rpx;line-height:1.55}
+.mine-actions{display:flex;align-items:center;margin-top:20rpx}
+.mine-btn{padding:18rpx 34rpx;border-radius:18rpx;margin-right:16rpx}
+.mine-btn-primary{background:linear-gradient(135deg,#0aa85a,#087a48)}
+.mine-btn-danger{background:rgba(192,66,58,.24);border:2rpx solid rgba(192,66,58,.5)}
+.mine-btn-text{color:#fff;font-size:26rpx;font-weight:800}
+
+/* 登录提示 */
+.login-card{margin-top:20rpx;padding:28rpx 26rpx;border-radius:22rpx;background:rgba(255,195,90,.1);border:2rpx solid rgba(255,195,90,.28);display:flex;flex-direction:column}
+.login-title{color:#ffd580;font-size:29rpx;font-weight:800}
+.login-desc{margin-top:10rpx;color:rgba(255,255,255,.68);font-size:23rpx;line-height:1.6}
+.login-btn{margin-top:20rpx;height:84rpx;display:flex;align-items:center;justify-content:center;border-radius:20rpx;background:linear-gradient(135deg,#e88a0c,#b46e0a)}
+.login-btn-text{color:#fff;font-size:28rpx;font-weight:900}
+
+/* 报名表单 */
+.form-card{margin-top:20rpx;padding:26rpx;border-radius:22rpx;background:rgba(255,255,255,.06);border:2rpx solid rgba(255,255,255,.08)}
+.side-row{display:flex;align-items:center;margin-top:18rpx}
+.side-btn{min-width:180rpx;height:76rpx;margin-right:16rpx;display:flex;align-items:center;justify-content:center;border-radius:18rpx;background:rgba(255,255,255,.1);border:2rpx solid rgba(255,255,255,.12)}
+.side-btn-active{background:rgba(255,195,90,.24);border-color:rgba(255,195,90,.6)}
+.side-text{color:#fff;font-size:26rpx;font-weight:700}
+.side-btn-active .side-text{color:#ffd580}
+.form-input{margin-top:18rpx;width:100%;padding:20rpx 22rpx;border-radius:18rpx;background:rgba(255,255,255,.1);color:#fff;font-size:28rpx;box-sizing:border-box}
+.form-placeholder{color:rgba(255,255,255,.32)}
+.submit-btn{margin-top:26rpx;height:96rpx;display:flex;align-items:center;justify-content:center;border-radius:24rpx;background:linear-gradient(135deg,#e88a0c,#b46e0a);box-shadow:0 12rpx 30rpx rgba(232,138,12,.32)}
+.submit-btn.is-disabled{background:rgba(255,255,255,.14);box-shadow:none}
+.submit-btn-text{color:#fff;font-size:30rpx;font-weight:900;letter-spacing:1rpx}
+.form-note{display:block;margin-top:16rpx;color:rgba(255,220,160,.48);font-size:21rpx;line-height:1.7}
+
+/* 报名 / 应战名单（仅发起球队管理者可见） */
+.list-card{margin-top:20rpx;padding:26rpx;border-radius:22rpx;background:rgba(255,255,255,.06);border:2rpx solid rgba(255,255,255,.08)}
+.list-summary{display:block;margin-top:12rpx;color:rgba(255,255,255,.72);font-size:23rpx}
+.list-team-label{display:block;margin-top:30rpx}
+.row-item{display:flex;align-items:center;margin-top:16rpx;padding:18rpx 20rpx;border-radius:16rpx;background:rgba(255,255,255,.05)}
+.row-main{flex:1;display:flex;align-items:center;min-width:0}
+.row-name{color:#fff;font-size:26rpx;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-side{margin-left:12rpx;padding:2rpx 12rpx;border-radius:10rpx;background:rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-size:19rpx}
+.row-badge{flex:0 0 auto;margin-left:12rpx;color:rgba(255,255,255,.55);font-size:21rpx}
+.row-badge-present{color:#8ef0be;font-weight:700}
+.row-btn{flex:0 0 auto;margin-left:14rpx;padding:10rpx 22rpx;border-radius:14rpx;background:rgba(255,195,90,.24);border:2rpx solid rgba(255,195,90,.5)}
+.row-btn-text{color:#ffd580;font-size:22rpx;font-weight:800}
+.list-empty{display:block;margin-top:16rpx;color:rgba(255,255,255,.45);font-size:23rpx}
+.list-note{display:block;margin-top:22rpx;color:rgba(255,220,160,.4);font-size:20rpx;line-height:1.7}
+
+/* 分享 */
+.share-btn{margin-top:36rpx;height:100rpx;display:flex;align-items:center;justify-content:center;border-radius:24rpx;background:rgba(255,255,255,.1);border:2rpx solid rgba(255,195,90,.35)}
+.share-btn-text{color:#ffd580;font-size:29rpx;font-weight:900}

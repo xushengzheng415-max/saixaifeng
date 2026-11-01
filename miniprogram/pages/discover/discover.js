@@ -1288,6 +1288,13 @@ Page({
     })
   },
 
+  // 邀约详情：查看、分享、重试与返回刷新统一只用 inviteId（旧 token 链接的详情页会自行回填）
+  onOpenInviteDetail: function (event) {
+    var id = String((event.currentTarget.dataset || {}).id || '')
+    if (!id) return
+    this.navigateOnce('/pages/discover/invite-detail/invite-detail?inviteId=' + encodeURIComponent(id))
+  },
+
   // 发起方查看应战队伍（listSignins 已加鉴权，只回传脱敏字段）
   onViewInviteResponses: function (event) {
     var id = String((event.currentTarget.dataset || {}).id || '')

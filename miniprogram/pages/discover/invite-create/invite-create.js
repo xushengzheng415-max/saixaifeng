@@ -1,5 +1,5 @@
 // pages/discover/invite-create/invite-create.js
-// 约球创建页（前端骨架 · 后端 friendlyMatchCenter 待接入）
+// 约球创建页：调用 friendlyMatchCenter.createInvite，由服务端校验球队管理授权
 // 所有字段可跳过，限额与截止由发起方设定，对手扫码进小程序报名
 
 var workspace = require('../../../utils/workspace')
@@ -285,18 +285,23 @@ Page({
           return
         }
         var invite = result.data || {}
+        var detailPath = text(invite.detailPath) || (text(invite.inviteId)
+          ? '/pages/discover/invite-detail/invite-detail?inviteId=' + encodeURIComponent(text(invite.inviteId))
+          : '')
+        that._lastInviteId = text(invite.inviteId)
         that.setData({ generateBtnClass: 'is-disabled' })
         wx.showModal({
           title: '邀约已创建 ✅',
-          content: '已推送给本队球员，他们在服务号会收到签到通知。\n签到链接：' + (invite.signinUrl || ''),
-          confirmText: '复制链接',
+          content: '已推送给本队球员。可进入邀约详情查看报名名单，并分享给对手。',
+          confirmText: detailPath ? '查看详情' : '完成',
           cancelText: '完成',
+          showCancel: Boolean(detailPath),
           success: function (modalRes) {
-            if (modalRes.confirm && invite.signinUrl) {
-              wx.setClipboardData({ data: invite.signinUrl })
-            } else {
-              setTimeout(function () { wx.navigateBack() }, 200)
+            if (modalRes.confirm && detailPath) {
+              wx.redirectTo({ url: detailPath })
+              return
             }
+            setTimeout(function () { wx.navigateBack() }, 200)
           }
         })
       },
@@ -307,10 +312,14 @@ Page({
     })
   },
 
+  // 分享统一指向详情页，并携带同一个 inviteId
   onShareAppMessage: function () {
+    var inviteId = text(this._lastInviteId)
     return {
       title: this.data.teamName + ' 约球邀约',
-      path: '/pages/discover/discover',
+      path: inviteId
+        ? '/pages/discover/invite-detail/invite-detail?inviteId=' + encodeURIComponent(inviteId)
+        : '/pages/discover/discover',
       imageUrl: '/images/brand/logo-saixiaofeng-football.png'
     }
   }
