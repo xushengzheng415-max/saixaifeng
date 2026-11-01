@@ -6,8 +6,9 @@ const source = path.join(root,'cloudfunctions/dataCenter/shared')
 const consumers = ['getMiniWorkspace','webLoginApi','resultCenter','updateMatch','serviceMatchWorkflow','playerCardPublishWorker']
 const allFiles = ['reader.cjs','statistics.mjs','match-events.mjs','service.cjs','presentation.cjs','support.cjs','player-card-snapshot.cjs','standings.cjs','playing-time.mjs','membership.cjs','write-policy.cjs','substitution.mjs','penalty-shootout.mjs','match-score.cjs']
 const requestedFiles = process.argv.filter(arg => arg.startsWith('--file=')).map(arg => arg.slice(7))
-if (requestedFiles.some(file => !allFiles.includes(file))) throw new Error('Unknown shared file')
-const files = requestedFiles.length ? requestedFiles : allFiles
+const numberingFiles=['numbering.cjs','numbering-regions.json']
+if (requestedFiles.some(file => ![...allFiles,...numberingFiles].includes(file))) throw new Error('Unknown shared file')
+const files = requestedFiles.length ? requestedFiles.filter(file=>allFiles.includes(file)) : allFiles
 const check = process.argv.includes('--check')
 let mismatch = false
 for (const consumer of consumers) {
@@ -29,6 +30,15 @@ if (files.includes('match-score.cjs')) {
     const copy = await fs.readFile(destination).catch(() => null)
     if (!copy || !original.equals(copy)) { console.error('比分展示共享模块未同步：service-account-h5/match-score.js'); mismatch = true }
   } else await fs.writeFile(destination,original)
+}
+// Preserve the already-live registration numbering hook from the unified source.
+if (!requestedFiles.length || requestedFiles.some(file=>numberingFiles.includes(file))) {
+  for(const file of numberingFiles) {
+    const original=await fs.readFile(path.join(source,file))
+    const destination=path.join(root,'cloudfunctions/tournamentRegistrationFlow/data-center',file)
+    if(check){const copy=await fs.readFile(destination).catch(()=>null);if(!copy || !original.equals(copy)){console.error(`数据中心共享模块未同步：tournamentRegistrationFlow/${file}`);mismatch=true}}
+    else {await fs.mkdir(path.dirname(destination),{recursive:true});await fs.writeFile(destination,original)}
+  }
 }
 if (mismatch) process.exitCode = 1
 else console.log(check ? 'PASS: 数据中心部署副本一致' : '数据中心共享模块已同步')

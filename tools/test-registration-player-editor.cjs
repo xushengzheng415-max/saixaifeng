@@ -22,7 +22,7 @@ assert.equal(profile({documentType:'passport',identityNumber:'QA00012345'}).nati
 const missing=profile({height:'',weight:''});assert.equal(missing.height,null);assert.equal(missing.weight,null);assert.equal(missing.identityIncomplete,true)
 // Execute actual import handler with in-memory DB; no network or real users.
 const writes=[]
-const chain=name=>({where(){return this},limit(){return this},skip(){return this},orderBy(){return this},async get(){return {data:[]}},async add({data}){const _id='qa-'+writes.length;writes.push({name,_id,data});return {_id}},doc(id){return {async update({data}){const row=writes.find(w=>w._id===id);if(row)Object.assign(row.data,data)},async remove(){}}}})
+const chain=name=>({where(){return this},limit(){return this},skip(){return this},orderBy(){return this},async get(){return {data:[]}},async add({data}){const _id='qa-'+writes.length;writes.push({name,_id,data});return {_id}},doc(id){return {async get(){return {data:writes.find(w=>w._id===id)?.data || null}},async update({data}){const row=writes.find(w=>w._id===id);if(row)Object.assign(row.data,data)},async remove(){}}}})
 const db={command:{in:values=>values,neq:value=>value},collection:chain,serverDate:()=>new Date('2026-11-01T00:00:00Z')}
 const cloud={init(){},database:()=>db}
 const entry=path.resolve('cloudfunctions/tournamentRegistrationFlow/index.js')
