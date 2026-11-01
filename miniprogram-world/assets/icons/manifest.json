@@ -1,0 +1,31 @@
+{
+  "name": "赛小蜂足球世界 Shared Icon Library",
+  "version": "1.0.0",
+  "status": "active",
+  "design_system": {
+    "style": "rounded professional line icons",
+    "default_stroke": "#8B93A3",
+    "active_stroke": "#E4B04A",
+    "default_stroke_width": "1.8",
+    "view_box": "24x24",
+    "usage": "每个语义只保留一个来源；禁止把图标复制进页面目录，禁止用生成的大图标缩小替代。"
+  },
+  "icons": [
+    { "semantic": "tab-main-card", "file": "tab-card.svg", "active_file": "tab-card-active.svg", "source_type": "project-authored-vector", "targets": ["world-tab-bar"] },
+    { "semantic": "tab-album", "file": "tab-album.svg", "active_file": "tab-album-active.svg", "source_type": "project-authored-vector", "targets": ["world-tab-bar"] },
+    { "semantic": "tab-lineup", "file": "tab-pitch.svg", "active_file": "tab-pitch-active.svg", "source_type": "project-authored-vector", "targets": ["world-tab-bar"] },
+    { "semantic": "sign-same-city", "file": "icon-sign.svg", "source_type": "project-authored-vector", "targets": ["world-album-sign"] },
+    { "semantic": "battle-log", "file": "icon-log.svg", "source_type": "project-authored-vector", "targets": ["world-lineup", "world-battle"] },
+    { "semantic": "share", "file": "icon-share.svg", "source_type": "project-authored-vector", "targets": ["world-main", "world-battle"] },
+    { "semantic": "roster-locked", "file": "icon-lock.svg", "source_type": "project-authored-vector", "targets": ["world-lineup"] },
+    { "semantic": "sign-success", "file": "icon-check.svg", "source_type": "project-authored-vector", "targets": ["world-album-sign"] },
+    { "semantic": "challenge", "file": "icon-ball.svg", "source_type": "project-authored-vector", "targets": ["world-lineup", "world-battle"] },
+    { "semantic": "membership", "file": "icon-trophy.svg", "source_type": "project-authored-vector", "targets": ["world-album-sign"] },
+    { "semantic": "chevron", "file": "icon-arrow.svg", "source_type": "project-authored-vector", "targets": ["world-main", "world-lineup", "world-battle-log"] }
+  ],
+  "gaps": [
+    "city-guide-spot",
+    "membership-benefits-spot"
+  ],
+  "acquisition_policy": "先查本清单，再查球队端共享向量库；仍无合适语义时按 docs/ICON_SYSTEM.md 归档带来源的授权 SVG，禁止页面内复制。"
+}

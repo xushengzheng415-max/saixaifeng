@@ -1,0 +1,59 @@
+    doc.createdAt = db.serverDate()
+    doc.updateTime = db.serverDate()
+    const created = await db.collection(COLLECTIONS.profiles).add({ data: doc })
+    doc._id = created && created._id
+    return doc
+  }
+
+  async function updateProfile(profileId, patch) {
+    const data = Object.assign({ updateTime: database().serverDate() }, patch)
+    return database().collection(COLLECTIONS.profiles).doc(profileId).update({ data: data })
+  }
+
+  function profileMembership(profile) {
+    const raw = (profile && profile.membership) || {}
+    return {
+      tier: raw.tier === 'member' ? 'member' : 'none',
+      isMinor: raw.isMinor === true,
+      autoRenew: raw.autoRenew === true,
+      rosterUnlocks: {
+        size8: !!(raw.rosterUnlocks && raw.rosterUnlocks.size8),
+        size11: !!(raw.rosterUnlocks && raw.rosterUnlocks.size11)
+      }
+    }
+  }
+
+  async function ensureCity(profile, params) {
+    const stored = String(profile.cityCode || '').trim()
+    if (CITY_PATTERN.test(stored)) return { cityCode: stored }
+    const incoming = String(params.cityCode || '').trim()
+    if (!CITY_PATTERN.test(incoming)) {
+      return { error: fail('WORLD_CITY_REQUIRED', '请先在账号资料中选择所在城�?) }
+    }
+    const cityName = String(params.cityName || profile.cityName || '').trim()
+    await updateProfile(profile._id, { cityCode: incoming, cityName: cityName })
+    profile.cityCode = incoming
+    profile.cityName = cityName
+    return { cityCode: incoming }
+  }
+
+  /* ---------------- 名册与卡�?---------------- */
+
+  function normalizePlayer(raw, fallbackId) {
+    const source = raw || {}
+    const player = {}
+    player.playerId = String(source.playerId || fallbackId || '')
+    player.name = String(source.name || '')
+    player.nameEn = String(source.nameEn || '')
+    player.number = Number(source.number) || 0
+    player.position = String(source.position || '')
+    player.group = String(source.group || positionGroup(player.position))
+    player.positionLabel = String(source.positionLabel || POSITION_LABELS[player.position] || player.position || '')
+    player.skillTag = String(source.skillTag || '')
+    player.skillLabel = String(source.skillLabel || SKILL_LABELS[player.skillTag] || '')
+    player.ovr = Number(source.ovr) || 0
+    player.appearances = Number(source.appearances) || 0
+    player.goals = Number(source.goals) || 0
+    player.assists = Number(source.assists) || 0
+    player.rosterOrder = Number(source.rosterOrder) || 0
+    player.cityCode = String(source.cityCode || '')

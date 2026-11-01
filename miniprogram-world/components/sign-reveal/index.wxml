@@ -1,0 +1,50 @@
+<view class="reveal" wx:if="{{visible}}">
+  <view class="reveal-mask" bindtap="onClose"></view>
+
+  <view class="reveal-body">
+    <view class="reveal-head">
+      <text class="reveal-eyebrow">同城签约 · {{cityText}}</text>
+      <text class="reveal-close" bindtap="onClose">稍后再看</text>
+    </view>
+
+    <view class="reveal-stage">
+      <view class="reveal-halo"></view>
+      <view class="reveal-card {{revealedClass}}" bindtap="onTapCard">
+        <view class="flip-inner">
+          <view class="flip-back">
+            <image class="flip-back-img" src="{{backUrl}}" mode="aspectFill"></image>
+            <view class="flip-back-shade"></view>
+            <view class="flip-back-line"></view>
+            <text class="flip-back-title">赛小蜂 · 卡世界</text>
+            <text class="flip-back-sub">轻触翻面</text>
+          </view>
+          <view class="flip-front">
+            <image class="flip-front-img" src="{{card.cardUrl}}" mode="aspectFill"></image>
+            <view class="flip-front-gloss"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="reveal-info" wx:if="{{revealed}}">
+      <view class="reveal-name-row">
+        <text class="reveal-name">{{card.name}}</text>
+        <text class="reveal-number">{{card.numberText}}</text>
+      </view>
+      <view class="reveal-meta">
+        <text class="reveal-chip">{{card.positionLabel}}</text>
+        <text class="reveal-chip">{{card.skillLabel}}</text>
+        <text class="reveal-chip">综合 {{card.ovrText}}</text>
+      </view>
+      <text class="reveal-quota">{{quotaText}}</text>
+
+      <view class="reveal-actions">
+        <view class="btn-gold reveal-primary" bindtap="onLineup">去组阵</view>
+        <view class="reveal-secondary">
+          <text class="reveal-again" bindtap="onAgain">继续签约</text>
+          <text class="reveal-later" bindtap="onClose">收下</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

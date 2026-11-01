@@ -36,6 +36,31 @@ function fanCenterHandlers() {
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 const baiduPlayerFace = createBaiduPlayerFace({ cloud })
 
+// 服务号 H5 会话鉴权：复用 referee_h5_sessions 与现有绑定/手机号核验规则。
+let servicePrivateAuthCache = null
+function servicePrivateAuth() {
+  if (!servicePrivateAuthCache) {
+    servicePrivateAuthCache = require('./servicePrivateAuth.cjs')({ cloud, hashSessionToken })
+  }
+  return servicePrivateAuthCache
+}
+
+// 球员端「赛小蜂足球世界」卡世界 action（cardWorld*）。
+// 按需加载：未使用该玩法的实例不必承担额外模块初始化成本。
+let cardWorldServiceCache = null
+function cardWorldService() {
+  if (!cardWorldServiceCache) {
+    cardWorldServiceCache = require('./cardWorld.cjs')({
+      cloud: cloud,
+      authenticateServicePrivate: event => servicePrivateAuth()(event),
+      authenticateWebSession: authenticateWebSession,
+      httpsGet: httpsGet,
+      httpsPost: httpsPost
+    })
+  }
+  return cardWorldServiceCache
+}
+
 // ========== 邮件配置 ==========
 const EMAIL_CONFIG = {
   host: 'smtp.yeah.net',
@@ -6161,7 +6186,12 @@ exports.main = async (event, context) => {
       case 'uploadToCosDirect':
         result = await handleUploadToCosDirect(event, params); break
       default:
-        result = { success: false, error: '未知操作：' + action }
+        if (action && String(action).indexOf('cardWorld') === 0) {
+          // 卡世界入口统一交给 cardWorld.cjs；身份、配额、确定性计算都在服务端完成。
+          result = await cardWorldService().handle(String(action), params, cloud.getWXContext())
+        } else {
+          result = { success: false, error: '未知操作：' + action }
+        }
     }
 
     result = await require('./data-center/lifecycle-reader.cjs').decorateLifecycleResult(cloud.database(), result, params)

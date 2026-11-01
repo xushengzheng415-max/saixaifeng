@@ -1,0 +1,84 @@
+<view class="wx-page">
+  <view class="brand-row">
+    <view class="brand">
+      <text class="brand-name">赛小蜂足球世界</text>
+      <text class="brand-sub">球员端 · 卡世界</text>
+    </view>
+    <view class="tag">{{card.cityText}}</view>
+  </view>
+
+  <view class="card-stage">
+    <holo-card card-url="{{card.cardUrl}}" aria-label="{{cardLabel}}"></holo-card>
+  </view>
+
+  <view class="identity-row">
+    <view class="identity-main">
+      <text class="player-name">{{card.name}}</text>
+      <text class="player-en">{{card.nameEn}}</text>
+    </view>
+    <view class="identity-meta">
+      <text class="player-number">{{card.numberText}}</text>
+      <text class="player-pos">{{card.positionLabel}}</text>
+    </view>
+  </view>
+
+  <view class="panel stats-panel">
+    <view class="stat" wx:for="{{stats}}" wx:key="label">
+      <text class="stat-num">{{item.num}}</text>
+      <text class="stat-label">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="panel stamps-panel">
+    <view class="row-between">
+      <text class="section-title">成长印记</text>
+      <text class="tiny muted">随赛事数据点亮</text>
+    </view>
+    <view class="stamps">
+      <view class="stamp {{item.lockedClass}}" wx:for="{{stamps}}" wx:key="key">
+        <text class="stamp-icon">{{item.icon}}</text>
+        <text class="stamp-name">{{item.name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="quick">
+    <view class="quick-card" bindtap="goAlbum" role="button" aria-label="同城签约">
+      <image class="quick-icon" src="/assets/icons/icon-sign.svg" mode="aspectFit"></image>
+      <view class="quick-text">
+        <text class="quick-title">同城签约</text>
+        <text class="quick-sub">每日免费 · 按名册顺序取人</text>
+      </view>
+      <image class="quick-arrow" src="/assets/icons/icon-arrow.svg" mode="aspectFit"></image>
+    </view>
+
+    <view class="quick-card" bindtap="goLineup" role="button" aria-label="我的阵容">
+      <image class="quick-icon" src="/assets/icons/tab-pitch.svg" mode="aspectFit"></image>
+      <view class="quick-text">
+        <text class="quick-title">我的阵容</text>
+        <text class="quick-sub">5 人新手场 · 不含随机胜负加成</text>
+      </view>
+      <image class="quick-arrow" src="/assets/icons/icon-arrow.svg" mode="aspectFit"></image>
+    </view>
+
+    <view class="quick-card" bindtap="goLog" role="button" aria-label="轻对战战报">
+      <image class="quick-icon" src="/assets/icons/icon-log.svg" mode="aspectFit"></image>
+      <view class="quick-text">
+        <text class="quick-title">轻对战战报</text>
+        <text class="quick-sub">最近 20 场 · 结果可复现</text>
+      </view>
+      <image class="quick-arrow" src="/assets/icons/icon-arrow.svg" mode="aspectFit"></image>
+    </view>
+  </view>
+
+  <view class="portrait-note" wx:if="{{card.portraitNote}}">{{card.portraitNote}}</view>
+
+  <button class="share-btn" open-type="share" hover-class="none">
+    <image class="share-icon" src="/assets/icons/icon-share.svg" mode="aspectFit"></image>
+    <text class="share-text">分享我的主卡</text>
+  </button>
+
+  <view class="foot-note">不随机发放、不可交易 · 主卡与卡册跟随赛事数据</view>
+</view>
+
+<card-tabbar current="main"></card-tabbar>

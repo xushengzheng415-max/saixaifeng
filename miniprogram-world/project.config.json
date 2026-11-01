@@ -1,0 +1,43 @@
+{
+  "description": "赛小蜂足球世界 · 球员端小程序（独立 AppID）",
+  "appid": "wxa0ac7d45bcabd140",
+  "projectname": "sxf-football-world",
+  "compileType": "miniprogram",
+  "libVersion": "3.16.0",
+  "miniprogramRoot": "",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "coverView": true,
+    "nodeModules": false,
+    "checkInvalidKey": true,
+    "checkSiteMap": true,
+    "uploadWithSourceMap": true,
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "useCompilerPlugins": false,
+    "ignoreUploadUnusedFiles": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "condition": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "condition": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "simulatorPluginLibVersion": {},
+  "editorSetting": {}
+}

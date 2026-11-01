@@ -1,0 +1,20 @@
+{
+  "pages": [
+    "pages/card/main/main",
+    "pages/card/album-sign/album-sign",
+    "pages/card/lineup/lineup",
+    "pages/card/battle/battle",
+    "pages/card/battle-log/battle-log"
+  ],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#07090F",
+    "navigationBarTitleText": "赛小蜂足球世界",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#07090F",
+    "enablePullDownRefresh": false
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

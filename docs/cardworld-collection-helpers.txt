@@ -1,0 +1,51 @@
+function isMissingCollection(error) {
+  return /not exist|does not exist|not found|invalid collection|collection.*not/i.test(String((error && error.message) || ''))
+}
+
+function positionGroup(position) {
+  return POSITION_GROUPS[String(position || '').toUpperCase()] || ''
+}
+
+module.exports = function createCardWorld(deps) {
+  const cloud = deps.cloud
+  const authenticateWebSession = deps.authenticateWebSession
+  const authenticateServicePrivate = deps.authenticateServicePrivate
+  const httpsGet = deps.httpsGet
+  const httpsPost = deps.httpsPost
+
+  function database() {
+    return cloud.database()
+  }
+
+  function worldAppId() {
+    return String(process.env.WORLD_MINI_PROGRAM_APP_ID || '').trim()
+  }
+
+  function worldAppSecret() {
+    return String(process.env.WORLD_MINI_PROGRAM_APP_SECRET || '').trim()
+  }
+
+  /* ---------------- 集合与读�?---------------- */
+
+  async function ensureCollections(db) {
+    for (const name of Object.values(COLLECTIONS)) {
+      try {
+        await db.createCollection(name)
+      } catch (error) {
+        if (!/exist|already|duplicate/i.test(String((error && error.message) || ''))) {
+          console.warn('[cardWorld] collection prepare skipped:', name, (error && error.message) || error)
+        }
+      }
+    }
+  }
+
+  /**
+   * 分页读全量，�?count 再逐页取；总数与实读行数不一致时报错，不返回不完整数据�?   */
+  async function readAll(name, where, orderField) {
+    const db = database()
+    const countResult = await db.collection(name).where(where).count()
+    const total = Number(countResult && countResult.total) || 0
+    if (total > READ_MAX) {
+      throw Object.assign(new Error('卡世界数据量超出单次读取上限�? + READ_MAX + '�?), { code: 'WORLD_READ_LIMIT' })
+    }
+    const rows = []

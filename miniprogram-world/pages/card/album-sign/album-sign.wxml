@@ -1,0 +1,98 @@
+<view class="wx-page">
+  <view class="brand-row">
+    <view class="brand">
+      <text class="brand-name">卡册</text>
+      <text class="brand-sub">同城 {{album.cityText}} · 确定性签约</text>
+    </view>
+    <view class="tag">{{album.countText}}</view>
+  </view>
+
+  <view class="panel sign-panel">
+    <view class="row-between">
+      <view class="sign-copy">
+        <text class="section-title">同城签约</text>
+        <text class="section-sub">每日 {{album.freeTotal}} 次免费 · 会员每日更多</text>
+      </view>
+      <text class="quota-text">{{album.remainText}}</text>
+    </view>
+
+    <view class="sign-main">
+      <image class="sign-icon" src="/assets/icons/icon-sign.svg" mode="aspectFit"></image>
+      <view class="sign-main-copy">
+        <text class="sign-main-title">按名册顺序取下一位</text>
+        <text class="sign-main-sub">已拥有自动跳过 · 只签本城球员 · 同一进度结果一致</text>
+      </view>
+    </view>
+
+    <view class="btn-gold sign-btn {{album.signDisabledClass}}" bindtap="onSign" role="button" aria-label="{{album.signBtn}}">{{album.signBtn}}</view>
+
+    <view class="directed-row">
+      <view class="directed-copy">
+        <text class="directed-title">定向签约</text>
+        <text class="directed-sub">{{album.directedText}}</text>
+      </view>
+      <view class="btn-ghost directed-btn {{album.directedClass}}" bindtap="onDirected" role="button" aria-label="定向签约">选择位置</view>
+    </view>
+  </view>
+
+  <view class="panel member-panel">
+    <view class="row-between">
+      <view class="row">
+        <image class="member-icon" src="/assets/icons/icon-trophy.svg" mode="aspectFit"></image>
+        <text class="section-title member-title">会员与编制</text>
+      </view>
+      <text class="tag is-dim">{{album.membershipTierText}}</text>
+    </view>
+    <view class="member-line">
+      <text class="member-key">每日免费签约</text>
+      <text class="member-value">{{album.memberDailyText}}</text>
+    </view>
+    <view class="member-line">
+      <text class="member-key">编制解锁</text>
+      <view class="member-value-col">
+        <text class="member-value">{{album.unlock8Text}}</text>
+        <text class="member-value">{{album.unlock11Text}}</text>
+      </view>
+    </view>
+    <view class="member-line" wx:if="{{album.minorText}}">
+      <text class="member-key">未成年人保护</text>
+      <text class="member-value">{{album.minorText}}</text>
+    </view>
+    <text class="member-note">会员开通入口暂未开放，本期只展示配额与编制状态</text>
+  </view>
+
+  <view class="album-head">
+    <text class="section-title">我的卡册</text>
+    <text class="tiny muted">按获得顺序排列</text>
+  </view>
+
+  <view class="grid" wx:if="{{!album.isEmpty}}">
+    <view class="tile" wx:for="{{tiles}}" wx:key="id">
+      <view class="tile-card">
+        <image class="tile-img" src="{{item.cardUrl}}" mode="aspectFill"></image>
+        <text class="tile-main" wx:if="{{item.isMain}}">{{item.mainLabel}}</text>
+      </view>
+      <text class="tile-name">{{item.name}}</text>
+      <text class="tile-meta">{{item.metaText}}</text>
+      <text class="tile-ovr">综合 {{item.ovrText}}</text>
+    </view>
+  </view>
+
+  <view class="empty" wx:if="{{album.isEmpty}}">还没有球员卡，先完成一次同城签约</view>
+
+  <view class="last-signed" wx:if="{{album.lastSignText}}">{{album.lastSignText}}</view>
+</view>
+
+<sign-reveal
+  visible="{{revealVisible}}"
+  card="{{revealCard}}"
+  quota-text="{{revealQuotaText}}"
+  city-text="{{album.cityText}}"
+  bind:close="onRevealClose"
+  bind:lineup="onRevealLineup"
+  bind:again="onRevealAgain"
+></sign-reveal>
+
+<view class="toast" wx:if="{{toastText}}">{{toastText}}</view>
+
+<card-tabbar current="album"></card-tabbar>
