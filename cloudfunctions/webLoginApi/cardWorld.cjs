@@ -16,6 +16,7 @@
  */
 
 const engine = require('./cardWorldEngine.cjs')
+const profileStore = require('./cardWorldProfile.cjs')
 
 const COLLECTIONS = {
   players: 'card_world_players',
@@ -57,7 +58,10 @@ function shanghaiParts(ms) {
 }
 
 function isMissingCollection(error) {
-  return /not exist|does not exist|not found|invalid collection|collection.*not/i.test(String((error && error.message) || ''))
+  const code = Number((error && (error.errCode != null ? error.errCode : error.code)) || 0)
+  if (code === -502005) return true
+  return /DATABASE_COLLECTION_NOT_EXIST|Db or Table not exist|ResourceNotFound|collection not exist|COLLECTION_NOT_EXIST|invalid collection|not exist|does not exist|not found|集合不存在|数据集合不存在|表不存在/i
+    .test(String((error && (error.errMsg || error.message)) || ''))
 }
 
 function positionGroup(position) {
@@ -90,8 +94,11 @@ module.exports = function createCardWorld(deps) {
       try {
         await db.createCollection(name)
       } catch (error) {
-        if (!/exist|already|duplicate/i.test(String((error && error.message) || ''))) {
-          console.warn('[cardWorld] collection prepare skipped:', name, (error && error.message) || error)
+        if (!profileStore.isAlreadyExists(error)) {
+          console.warn('[cardWorld] collection prepare failed:', name, JSON.stringify({
+            errCode: error && (error.errCode != null ? error.errCode : error.code) || '',
+            errMsg: String((error && (error.errMsg || error.message)) || '').slice(0, 200)
+          }))
         }
       }
     }
@@ -342,20 +349,14 @@ module.exports = function createCardWorld(deps) {
 
   async function ensureProfile(user) {
     const db = database()
-    const result = await db.collection(COLLECTIONS.profiles).where({ userId: user._id }).limit(2).get()
-    const rows = (result && result.data) || []
-    if (rows.length > 1) {
-      console.error('[cardWorld] 玩家档案重复:', user._id, rows.length)
-      throw Object.assign(new Error('卡世界档案重复，请联系管理员处理'), { code: 'WORLD_PROFILE_CONFLICT' })
-    }
-    if (rows.length === 1) return rows[0]
+    /* 先保证集合存在，再读档案：旧实现先读会因集合缺失直接抛 -502005。 */
     await ensureCollections(db)
-    const doc = defaultProfile(user)
-    doc.createdAt = db.serverDate()
-    doc.updateTime = db.serverDate()
-    const created = await db.collection(COLLECTIONS.profiles).add({ data: doc })
-    doc._id = created && created._id
-    return doc
+    return profileStore.ensureProfile(db, user, function (database) {
+      const doc = defaultProfile(user)
+      doc.createdAt = database.serverDate()
+      doc.updateTime = database.serverDate()
+      return doc
+    })
   }
 
   async function updateProfile(profileId, patch) {
@@ -667,8 +668,13 @@ module.exports = function createCardWorld(deps) {
     try {
       profile = await ensureProfile(user)
     } catch (error) {
-      if (error && error.code === 'WORLD_PROFILE_CONFLICT') return { error: fail(error.code, error.message) }
-      console.error('[cardWorld] 档案初始化失败:', (error && error.message) || error)
+      if (error && (error.code === 'WORLD_PROFILE_CONFLICT' || error.code === 'WORLD_USER_ID_MISSING')) {
+        return { error: fail(error.code, error.message) }
+      }
+      console.error('[cardWorld] 档案初始化失败:', JSON.stringify({
+        errCode: error && (error.errCode != null ? error.errCode : error.code) || '',
+        errMsg: String((error && (error.errMsg || error.message)) || '').slice(0, 300)
+      }))
       return { error: fail('WORLD_PROFILE_FAILED', '卡世界档案初始化失败，请稍后重试') }
     }
     const city = await ensureCity(profile, params || {})
