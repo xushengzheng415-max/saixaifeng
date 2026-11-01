@@ -103,7 +103,7 @@
             <div class="roster-heading-actions">
               <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament && pendingReviewPlayers.length" link type="primary" :disabled="batchReviewing || !!playerReviewingId" @click="togglePendingReviewSelection">{{ selectedReviewPlayers.length === pendingReviewPlayers.length ? '取消全选' : '全选待审' }}</el-button>
               <span v-if="!isTeamDataWorkspace && selectedReviewPlayers.length" class="review-selection-count">已选 {{ selectedReviewPlayers.length }} 人</span>
-            <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="success" :loading="batchReviewing" :disabled="!selectedReviewPlayers.length || !!playerReviewingId || loading" @click="reviewSelectedPlayers">批量审核</el-button>
+            <el-button v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="success" :loading="batchReviewing" :disabled="!selectedReviewPlayers.length || !!playerReviewingId || loading" @click="reviewSelectedPlayers">批量通过</el-button>
             <el-button v-if="!isTeamDataWorkspace" type="primary" plain @click="openAddPlayer"><el-icon><Plus /></el-icon>添加球员</el-button>
             <el-tag v-if="isSyntheticTeam" type="warning" effect="plain">合成测试数据</el-tag>
             </div>
@@ -124,7 +124,7 @@
             <el-table-column v-if="!isTeamDataWorkspace" label="出生日期" width="88" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 44" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="认领状态" width="78" align="center"><template #default="{ row }"><el-tag :type="playerClaimed(row) ? 'success' : 'info'" size="small">{{ playerClaimed(row) ? '已认领' : '未认领' }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="76" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已审核</el-tag><el-button v-else link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">审核</el-button></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="100" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已通过</el-tag><div v-else class="player-review-actions"><el-button v-if="playerOrganizerReviewStatus(row) === 'rejected'" link type="danger" size="small" @click.stop="showPlayerRejection(row)">已驳回</el-button><el-button link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">{{ playerOrganizerReviewStatus(row) === 'rejected' ? '重审' : '审核' }}</el-button></div></template></el-table-column>
             <template v-if="isTeamDataWorkspace">
               <el-table-column prop="appearances" label="出场场次" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="90" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
               <el-table-column prop="minutes" label="出场时间" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="105" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
@@ -1241,12 +1241,15 @@
       <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="exportFields.length === 0" @click="exportTeamData">导出 Excel</el-button></template>
     </el-dialog>
     <RosterPosterModal v-model="rosterPosterVisible" :tournament="tournamentContext" :tournament-logo="tournamentLogoUrl" :division-name="tournamentRelation.divisionName || sourceDivisionId" :team="team" :team-logo="teamLogoDisplayUrl" :players="posterRosterPlayers" :staff="staffMembers" :photo-data-urls="rosterPosterPhotos" :loading="loading || playerStatsLoading || rosterPosterPhotosLoading" />
+    <PlayerReviewDialog v-model="playerReviewDialogVisible" :player="reviewingPlayer" :loading="!!playerReviewingId" @submit="submitPlayerReview" />
   </div>
 </template>
 
 <script setup>
 import { canAssignTeamAccounts, teamStaffDisplayRows, teamStaffPhone } from '../../utils/teamAccountAccess.js'
 import PlayerAvatar from '../../components/common/PlayerAvatar.vue'
+import PlayerReviewDialog from '../../components/tournament/PlayerReviewDialog.vue'
+import { organizerPlayerReviewStatus, organizerPlayerReviewLabel } from '../../utils/playerReviewDisplay.js'
 import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1589,6 +1592,7 @@ const posterRosterPlayers = computed(() => {
   const eligible = source.filter(person => {
     if (!person?._id) return false
     if (currentIds.size && !currentIds.has(String(person._id))) return false
+    if(playerOrganizerReviewStatus(person)==='rejected')return false
     const review = String(person.reviewStatus || '').toLowerCase()
     if (['excluded', 'rejected', 'conflict'].includes(review)) return false
     if (isProfessionalTournamentTeam.value) {
@@ -1743,7 +1747,7 @@ function exportMemberValue(row, key) {
   if (key === 'identityNumber') return row.identityNumber || row.idCard || row.idNumber || row._exportIdentityNumber || ''
   if (key === 'phone') return row.phone || row.contactPhone || ''
   if (key === 'position') return row._memberType === '球员' ? getPositionLabel(row.position) : ''
-  if (key === 'organizerReviewStatus') return row._memberType === '球员' ? (playerOrganizerReviewStatus(row) === 'approved' ? '已审核' : '待审核') : ''
+  if (key === 'organizerReviewStatus') return row._memberType === '球员' ? organizerPlayerReviewLabel(playerOrganizerReviewStatus(row)) : ''
   if (key === 'gender') return ({ male:'男', female:'女' })[String(row.gender || '').toLowerCase()] || row.gender || ''
   if (key === 'age') return row.birthDate ? calculateAge(row.birthDate) : ''
   if (key === 'birthDate' && row.birthDate) {
@@ -1955,9 +1959,10 @@ const avatarReadyCount = computed(() => avatarImportRows.value.filter(row => !ro
 const showEditTeam = ref(false)
 const playerReviewingId = ref('')
 const reviewPlayerTable = ref(null)
+const playerReviewDialogVisible=ref(false),reviewingPlayer=ref(null)
 const selectedReviewPlayers = ref([])
-const pendingReviewPlayers = computed(() => players.value.filter(player => playerOrganizerReviewStatus(player) !== 'approved'))
-function onReviewSelectionChange(selection) { selectedReviewPlayers.value = selection.filter(player => playerOrganizerReviewStatus(player) !== 'approved') }
+const pendingReviewPlayers = computed(() => players.value.filter(player => playerOrganizerReviewStatus(player) === 'pending'))
+function onReviewSelectionChange(selection) { selectedReviewPlayers.value = selection.filter(player => playerOrganizerReviewStatus(player) === 'pending') }
 function togglePendingReviewSelection() {
   if (batchReviewing.value || playerReviewingId.value || loading.value) return
   const selectAll = selectedReviewPlayers.value.length !== pendingReviewPlayers.value.length
@@ -1965,7 +1970,7 @@ function togglePendingReviewSelection() {
   if (selectAll) pendingReviewPlayers.value.forEach(player => reviewPlayerTable.value?.toggleRowSelection(player, true))
 }
 const batchReviewing = ref(false)
-function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && playerOrganizerReviewStatus(player) !== 'approved' }
+function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && playerOrganizerReviewStatus(player) === 'pending' }
 const teamEditForm = ref({
   name: '',
   teamCode: '',
@@ -4479,16 +4484,9 @@ function playerClaimed(player) {
 }
 
 function playerOrganizerReviewStatus(player) {
-  if (sourceTournamentId.value) {
-    const playerId = String(player?._id || '')
-    const source = String(player?.source || '').toLowerCase()
-    const importedRegistrationPlayer = Boolean(player?.registrationImportBatchId || player?.importDraftId || player?.registrationSourceFileId || source.indexOf('registration_docx_import') === 0)
-    if (tournamentRosterPlayerIds.value.has(playerId)) return 'approved'
-    if (importedRegistrationPlayer && String(player?.organizerReviewStatus || '').toLowerCase() === 'approved') return 'approved'
-    return 'pending'
-  }
-  return String(player?.organizerReviewStatus || '').toLowerCase() === 'approved' ? 'approved' : 'pending'
+  return organizerPlayerReviewStatus(player,sourceTournamentId.value,tournamentRosterPlayerIds.value)
 }
+function showPlayerRejection(player){void ElMessageBox.alert(String(player.organizerReviewReason || '未填写原因'),'驳回原因',{confirmButtonText:'知道了'}).catch(()=>{})}
 
 async function approvePlayerRecord(player) {
   if (sourceTournamentId.value) {
@@ -4499,16 +4497,30 @@ async function approvePlayerRecord(player) {
     await updateRecord('players', player._id, { organizerReviewStatus:'approved', organizerReviewedAt:new Date().toISOString(), organizerReviewedBy:'赛事主办方' })
   }
 }
-async function reviewPlayer(player) {
+function reviewPlayer(player) {
   if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value || !player?._id || playerOrganizerReviewStatus(player) === 'approved') return
-  playerReviewingId.value = String(player._id)
-  try {
-    await approvePlayerRecord(player)
-    await loadPlayers()
-    ElMessage.success('已审核')
-  } catch (error) { ElMessage.error(error.message || '审核失败，请重试') }
-  finally { playerReviewingId.value = '' }
+  reviewingPlayer.value=player;playerReviewDialogVisible.value=true
 }
+async function submitPlayerReview({decision,reason}){
+  const player=reviewingPlayer.value
+  if(!playerReviewDialogVisible.value || !player?._id || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value)return
+  if(!['approved','rejected'].includes(decision))return
+  if(decision==='rejected' && !String(reason || '').trim())return ElMessage.warning('请填写驳回原因')
+  playerReviewingId.value=String(player._id)
+  try {
+    if(decision==='approved')await approvePlayerRecord(player)
+    else {
+      if(!sourceTournamentId.value || !tournamentRelation.value?._id)throw new Error('请从当前赛事进入队员审核')
+      const result=await rosterExceptionBoard({rosterAction:'rejectPlayer',tournamentId:sourceTournamentId.value,teamId,divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',playerId:String(player._id),reason:String(reason).trim()})
+      if(!result?.success)throw new Error(result?.error || result?.message || '驳回未完成，请重试')
+    }
+    playerReviewDialogVisible.value=false
+    await loadPlayers()
+    ElMessage.success(decision==='rejected'?'已驳回':'已通过')
+  }catch(error){ElMessage.error(error.message || '审核未完成，请重试')}
+  finally{playerReviewingId.value=''}
+}
+
 async function reviewSelectedPlayers() {
   if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value) return
   const selectedIds = new Set(selectedReviewPlayers.value.map(player => String(player._id)))
@@ -4641,6 +4653,8 @@ function compressBase64(dataUrl, maxSize = 300) {
 </script>
 
 <style scoped>
+.player-review-actions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}.player-review-actions :deep(.el-button){margin-left:0}
+
 .team-info-header {
   display: flex;
   align-items: center;

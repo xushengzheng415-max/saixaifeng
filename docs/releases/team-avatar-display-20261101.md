@@ -15,3 +15,9 @@ TeamDetail原先把尚未解析的cloud://文件编号直接交给img。浏览�
 - tools/test-player-avatar-browser.cjs：46人合成名单在44个云请求悬而未决时仍全部可见；44张解析后显示，2个缺图保留；img不接收cloud编号；HTTP失败/解析失败重试、旧图片报错隔离、透明contain通过。所有业务请求均拦截为合成数据，不写真实报名记录。
 - 运行方式：启动/admin/本地dev服务5197端口；配置SXF_PLAYWRIGHT_MODULE后执行node tools/test-player-avatar-browser.cjs。临时HTML夹具仅本地创建，结束自动移除。
 - 待分别记录正式/测试构建、HTTP/SHA-256、main回合preview及已安装客户端两通道验证结果。
+
+## 客户端补充定位
+
+后续客户端截图指向参赛编号T-65C637的联队；同名球队存在两条，已通过参赛关系精确定位而非按名字合并。排查时该队25人，18人photoUrl为当前环境restricted/service-player-portraits标准照片引用，18个文件元信息均存在且大小非零，7人无照片引用。共用头像组件同样适用；不修改私有桶ACL，不读取证件原图或修改业务照片。
+
+首轮并行构建遇到本机虚拟内存不足；低并发串行构建恢复，不把不完整dist发布。发布前合并同期已上线的球队账号权限与裁判OAuth修复，保留双方功能。
