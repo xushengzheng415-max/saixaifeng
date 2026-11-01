@@ -389,6 +389,17 @@ export function createDemoWorkspace({assetBase='/preview/admin/',poolDataset=nul
       update('tournament_teams', relation._id, { rosterStatus:'approved', rosterPlayerCount:approvedIds.length, playerReviewStatus:approvedIds.length === teamPlayers.length ? 'completed' : 'pending', lastRosterApprovalAt:now })
       return { success:true, playerId, snapshotId:snapshot._id, playerIds:approvedIds, snapshotStatus:'approved' }
     }
+    if(rosterAction==='rejectPlayer') {
+      const player=teamPlayers.find(row=>row._id===playerId)
+      if(!player)return fail('球员不存在或不属于当前球队')
+      const reason=String(params.reason || '').trim().slice(0,200)
+      if(!reason)return fail('请选择或填写驳回原因')
+      if(snapshots.some(row=>['approved','locked'].includes(row.status) && (row.playerIds || []).includes(playerId)))return fail('该球员已在正式名单中，如需调整请通过名单变更处理')
+      const now=new Date().toISOString()
+      update('players',playerId,{organizerReviewStatus:'rejected',organizerReviewReason:reason,organizerReviewedAt:now,organizerReviewedBy:'模拟主办方'})
+      update('tournament_teams',relation._id,{playerReviewStatus:'needs_resubmit',lastPlayerRejectionReason:reason,lastPlayerRejectionAt:now})
+      return {success:true,playerId,reviewStatus:'rejected',reason,message:'已驳回'}
+    }
     if (rosterAction === 'listRoster') return { success:true, snapshot:latest ? { id:latest._id, status:latest.status, version:latest.version || 1, playerIds:approvedIds } : null, rows:teamPlayers.filter(row => approvedIds.includes(row._id)).map(row => ({ id:row._id, name:row.name, identityStatus:row.identityStatus || 'not_verified', mediaStats:{} })) }
     return fail('这项名单操作尚未接入模拟')
   }

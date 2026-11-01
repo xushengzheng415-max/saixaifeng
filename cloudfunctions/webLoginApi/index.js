@@ -5234,6 +5234,18 @@ async function handleRosterExceptionBoard(event) {
     relationsByTeamId.set(teamId, list)
   })
   const relationByTeamId = new Map(Array.from(relationsByTeamId.entries()).map(function (entry) { return [entry[0], entry[1][0]] }))
+  // 报名导入生成的参赛关系在球队通过审核前仍是 invited/pending，但主办方需要在这期间
+  // 逐人审核球员资料，因此审核球员时允许非终止态关系，避免“球队不属于当前赛事竞赛组别”。
+  const reviewRelationsByTeamId = new Map()
+  relationRows.filter(function (item) {
+    return ['cancelled', 'withdrawn', 'removed', 'invite_cancelled', 'rejected', 'replaced'].indexOf(String(item.status || '').toLowerCase()) < 0
+  }).forEach(function (item) {
+    const teamId = String(item.teamId || '')
+    if (!teamId) return
+    const list = reviewRelationsByTeamId.get(teamId) || []
+    list.push(item)
+    reviewRelationsByTeamId.set(teamId, list)
+  })
   const teamIds = Array.from(relationByTeamId.keys()).filter(Boolean)
 
   if (action === 'approvePlayer') {
@@ -5241,7 +5253,7 @@ async function handleRosterExceptionBoard(event) {
     const playerId = String(event.playerId || '')
     const selectedDivisionId = String(event.divisionId || '')
     if (!teamId || !playerId) return { success:false, error:'缺少球队或球员信息' }
-    const teamRelations = relationsByTeamId.get(teamId) || []
+    const teamRelations = reviewRelationsByTeamId.get(teamId) || []
     const relation = selectedDivisionId
       ? teamRelations.find(function (item) { return String(item.divisionId || item.division || 'default') === selectedDivisionId })
       : (teamRelations.length === 1 ? teamRelations[0] : null)
@@ -5274,6 +5286,71 @@ async function handleRosterExceptionBoard(event) {
     const relationId = String(relation._id || '')
     if (relationId) await db.collection('tournament_teams').doc(relationId).update({ data:{ rosterStatus:'approved', rosterPlayerCount:playerIds.length, playerReviewStatus:'completed', lastRosterApprovalAt:now, updateTime:now } })
     return { success:true, playerId, snapshotId:String(created._id), snapshotStatus:'approved', playerIds, message:'球员已审核并加入本届正式名单' }
+  }
+
+  // 逐人驳回：资料缺项（照片、位置、号码、身份证号等）时由主办方退回该球员，
+  // 只标记球员审核状态与原因，不改动已通过的正式名单快照。
+  if (action === 'rejectPlayer') {
+    const teamId = String(event.teamId || '')
+    const playerId = String(event.playerId || '')
+    const selectedDivisionId = String(event.divisionId || '')
+    const reason = String(event.reason || '').trim().slice(0, 200)
+    if (!teamId || !playerId) return { success:false, error:'缺少球队或球员信息' }
+    if (!reason) return { success:false, error:'请选择或填写驳回原因', code:'REASON_REQUIRED' }
+    const teamRelations = reviewRelationsByTeamId.get(teamId) || []
+    const relation = selectedDivisionId
+      ? teamRelations.find(function (item) { return String(item.divisionId || item.division || 'default') === selectedDivisionId })
+      : (teamRelations.length === 1 ? teamRelations[0] : null)
+    if (!relation) return { success:false, error:'球队不属于当前赛事竞赛组别', code:'DIVISION_NOT_FOUND' }
+    const [teamResult, playerByIdResult, playerByCodeResult, snapshotResult] = await Promise.all([
+      db.collection('teams').doc(teamId).get(),
+      db.collection('players').where({ _id:playerId, teamId }).limit(2).get(),
+      db.collection('players').where({ _id:playerId, teamCode:teamId }).limit(2).get(),
+      db.collection('roster_snapshots').where({ tournamentId, teamId }).limit(50).get()
+    ])
+    const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
+    if (!team || !organizerRecordAllowed('teams', team, scope)) return { success:false, error:'无权审核该球队球员' }
+    const player = mergeRosterPlayerRows([playerByIdResult.data || [], playerByCodeResult.data || []]).find(function (item) { return String(item._id) === playerId })
+    if (!player || ['archived', 'deleted'].includes(String(player.status || '').toLowerCase())) return { success:false, error:'球员不存在或不属于当前球队' }
+    const relationDivisionId = String(relation.divisionId || relation.division || 'default')
+    const snapshots = (snapshotResult.data || []).filter(function (item) {
+      const snapshotDivisionId = String(item.divisionId || item.division || '')
+      return snapshotDivisionId ? snapshotDivisionId === relationDivisionId : teamRelations.length === 1
+    })
+    const latestApproved = snapshots.filter(function (item) {
+      return ['approved', 'locked'].indexOf(String(item.status || '').toLowerCase()) >= 0 && rosterSnapshotPlayerIds(item).indexOf(playerId) >= 0
+    })[0]
+    if (latestApproved) return { success:false, error:'该球员已在正式名单中，如需调整请通过名单变更处理', code:'IN_FORMAL_ROSTER' }
+    const now = db.serverDate()
+    const actor = String(authenticated.user.nickname || authenticated.user.userName || authenticated.user.phone || authenticated.user._id || '主办方').slice(0, 50)
+    await db.collection('players').doc(playerId).update({ data:{
+      organizerReviewStatus:'rejected', organizerReviewReason:reason,
+      organizerReviewedAt:now, organizerReviewedBy:String(authenticated.user._id || ''),
+      organizerReviewedByName:actor, updateTime:now
+    } })
+    const relationId = String(relation._id || '')
+    if (relationId) await db.collection('tournament_teams').doc(relationId).update({ data:{
+      playerReviewStatus:'needs_resubmit', lastPlayerRejectionReason:reason, lastPlayerRejectionAt:now, updateTime:now
+    } })
+    // 驳回后服务号通知为 best-effort：发送失败不影响驳回结果，也不向调用方报错。
+    // 调用方身份用两函数共有的服务号 AppSecret 做 HMAC 证明，不新增环境变量。
+    const reviewId = crypto.randomBytes(16).toString('hex')
+    try {
+      const notifySecret = String(SERVICE_ACCOUNT_CONFIG.APP_SECRET || '')
+      if (notifySecret) {
+        const bridgeTimestamp = Date.now()
+        const bridgeNonce = crypto.randomBytes(16).toString('hex')
+        const canonical = ['playerReviewRejected', tournamentId, teamId, playerId, reviewId, String(bridgeTimestamp), bridgeNonce].join('|')
+        const bridgeProof = crypto.createHmac('sha256', notifySecret).update(canonical).digest('hex')
+        await cloud.callFunction({ name:'tournamentRegistrationFlow', data:{
+          action:'notifyPlayerReviewRejected', tournamentId, teamId, playerId, reviewId,
+          divisionId:relationDivisionId, bridgeTimestamp, bridgeNonce, bridgeProof
+        } })
+      }
+    } catch (error) {
+      console.warn('[webLoginApi] 球员驳回服务号通知未发送：', error.message || error)
+    }
+    return { success:true, playerId, reviewStatus:'rejected', reason, message:'已驳回该球员，球队需补充资料后重新提交' }
   }
 
   if (action === 'listRoster') {
