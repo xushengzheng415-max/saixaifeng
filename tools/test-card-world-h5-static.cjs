@@ -55,5 +55,7 @@ assert.ok(html.includes('wx-open-launch-weapp'), '底部应接入足球世界小
 assert.ok(html.includes('path="pages/card/main/main"'), '小程序入口页应为 pages/card/main/main')
 assert.ok(html.includes('library-empty') && html.includes('hero-placeholder'), '无卡时必须有空态')
 assert.ok(html.includes('settings-mask') && html.includes('crop-zoom') && html.includes('background-list'), '必须有背景切换与构图设置')
+assert.ok(html.includes('hero-glare') && html.includes('hero-hint'), '主卡必须有高光层与手势提示')
+assert.ok(app.includes('setupHolo') && app.includes('pointermove') && app.includes("setProperty('--rx'"), '主卡必须有触摸倾斜与流光跟随')
 
 console.log('PASS test-card-world-h5-static: 无交易/玩法入口、复用服务号会话、小程序入口、空态与换装设置齐备')

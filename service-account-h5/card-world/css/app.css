@@ -140,8 +140,8 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .actions { display: flex; gap: 10px; margin-top: 14px; }
 .actions .btn { flex: 1; }
 
-/* 主卡 */
-.hero { position: relative; overflow: hidden; }
+/* 主卡：触摸/拖动时倾斜 + 烫金流光跟随手指 */
+.hero { position: relative; overflow: hidden; perspective: 900px; }
 .hero::before {
   content: "";
   position: absolute;
@@ -161,27 +161,82 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
   background: linear-gradient(150deg, #1b2338, #0c101b 55%, #1a160d);
   border: 1px solid rgba(232, 197, 106, 0.35);
   box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  touch-action: pan-y;
+  will-change: transform;
+  animation: cardFloat 5.5s ease-in-out infinite;
+}
+.hero__card.is-touching {
+  transition: transform 60ms linear;
+  animation: none;
+}
+@keyframes cardFloat {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -3px; }
 }
 
 .hero__image { width: 100%; height: 100%; object-fit: contain; display: block; background: #0b0f18; }
 
+/* 烫金：两层斜向金箔，静止时缓慢漂移，按住后跟随手指 */
 .hero__holo {
   position: absolute; inset: 0;
-  background:
-    linear-gradient(115deg, transparent 28%, rgba(120, 210, 255, 0.16) 42%, rgba(255, 158, 230, 0.14) 52%, rgba(255, 235, 150, 0.18) 62%, transparent 74%);
-  background-size: 220% 220%;
-  animation: holoShift 6s ease-in-out infinite;
+  background-image:
+    linear-gradient(115deg, transparent 20%, rgba(255, 233, 176, 0.42) 42%, transparent 58%),
+    linear-gradient(295deg, transparent 24%, rgba(255, 199, 96, 0.28) 46%, transparent 62%);
+  background-size: 200% 200%, 200% 200%;
+  background-position: var(--hx, 30%) var(--hy, 30%), var(--hx2, 70%) var(--hy2, 70%);
+  animation: foilDrift 7s ease-in-out infinite;
   mix-blend-mode: screen;
+  opacity: 0.85;
   pointer-events: none;
 }
+.hero__card.is-touching .hero__holo { animation: none; }
+@keyframes foilDrift {
+  0% { background-position: 30% 30%, 70% 70%; }
+  50% { background-position: 70% 60%, 30% 40%; }
+  100% { background-position: 30% 30%, 70% 70%; }
+}
+
+/* 高光：跟随手指位置，仅在按住时出现 */
+.hero__glare {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 30%), rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 52%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+.hero__card.is-touching .hero__glare { opacity: 0.55; }
+.hero__card.is-touching {
+  box-shadow: 0 28px 56px rgba(0, 0, 0, 0.55), 0 0 26px rgba(232, 197, 106, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
 .hero__shine {
   position: absolute; inset: 0;
   background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.42));
   pointer-events: none;
 }
-@keyframes holoShift {
-  0%, 100% { background-position: 0% 50%; opacity: 0.8; }
-  50% { background-position: 100% 50%; opacity: 1; }
+.hero__edge {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 34px rgba(255, 240, 200, 0.14), inset 0 0 0 1px rgba(255, 226, 160, 0.16);
+  pointer-events: none;
+}
+
+.hero__hint {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.hero__hint[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__card, .hero__holo { animation: none; }
+  .hero__card { transition: none; }
 }
 
 .hero__placeholder {

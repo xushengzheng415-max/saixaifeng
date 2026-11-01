@@ -84,6 +84,7 @@
     $('hero-number').textContent = numberText || ''
     $('hero-note').hidden = !(hasMain && main.portraitNote)
     $('hero-note').textContent = hasMain ? (main.portraitNote || '') : ''
+    $('hero-hint').hidden = !cardUrl
 
     var grid = $('hero-stats')
     grid.innerHTML = ''
@@ -380,6 +381,62 @@
     })
   }
 
+  // 主卡全息手感：按住拖动时倾斜、烫金流光与高光跟随手指（与小程序 holo-card 同口径）。
+  function setupHolo() {
+    var card = $('hero-card')
+    if (!card || !window.PointerEvent) return
+    var rect = null
+    var touching = false
+    var last = 0
+    var vars = ['--rx', '--ry', '--gx', '--gy', '--hx', '--hy', '--hx2', '--hy2']
+
+    function measure() { rect = card.getBoundingClientRect() }
+    function clamp(value) { return Math.max(0, Math.min(1, value)) }
+    function apply(clientX, clientY) {
+      if (!rect || !rect.width || !rect.height) measure()
+      if (!rect || !rect.width || !rect.height) return
+      var px = clamp((clientX - rect.left) / rect.width)
+      var py = clamp((clientY - rect.top) / rect.height)
+      var x = Math.round(px * 100)
+      var y = Math.round(py * 100)
+      card.style.setProperty('--rx', ((0.5 - py) * 16).toFixed(2) + 'deg')
+      card.style.setProperty('--ry', ((px - 0.5) * 16).toFixed(2) + 'deg')
+      card.style.setProperty('--gx', x + '%')
+      card.style.setProperty('--gy', y + '%')
+      card.style.setProperty('--hx', x + '%')
+      card.style.setProperty('--hy', y + '%')
+      card.style.setProperty('--hx2', (100 - x) + '%')
+      card.style.setProperty('--hy2', (100 - y) + '%')
+    }
+    function start(event) {
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      touching = true
+      measure()
+      card.classList.add('is-touching')
+      apply(event.clientX, event.clientY)
+    }
+    function move(event) {
+      if (!touching) return
+      var now = Date.now()
+      if (now - last < 40) return
+      last = now
+      apply(event.clientX, event.clientY)
+    }
+    function end() {
+      if (!touching) return
+      touching = false
+      card.classList.remove('is-touching')
+      vars.forEach(function (name) { card.style.removeProperty(name) })
+    }
+
+    card.addEventListener('pointerdown', start)
+    window.addEventListener('pointermove', move, { passive: true })
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    window.addEventListener('blur', end)
+    window.addEventListener('resize', function () { rect = null })
+  }
+
   function bind() {
     $('btn-retry').addEventListener('click', function () { init(true) })
     $('btn-relogin').addEventListener('click', function () {
@@ -408,6 +465,7 @@
       $(id).addEventListener('input', applyCropPreview)
     })
     $('weapp-fallback').addEventListener('click', function () { toast('请使用微信打开本页后进入小程序') })
+    setupHolo()
   }
 
   function init(isRetry) {
