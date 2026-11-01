@@ -37,6 +37,14 @@ export default defineConfig({
           .replace('module.exports = {','export default {')
       }
     },
+    {
+      name:'registration-import-profile-browser',
+      enforce:'pre',
+      transform(source,id) {
+        if (!id.replaceAll('\\','/').endsWith('/cloudfunctions/tournamentRegistrationFlow/importPersonFields.cjs')) return null
+        return source.replace('module.exports={supplementImportedIdentity,editableImportedProfile}', 'export {supplementImportedIdentity,editableImportedProfile}')
+      }
+    },
     vue(),
     AutoImport({
       resolvers: [ElementPlusResolver()]
