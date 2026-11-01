@@ -1,0 +1,137 @@
+{
+  "date": "2026-11-01",
+  "productionCodeCommit": "97fca25eb59a941d34db246ec074e2a7312f3220",
+  "previewCodeCommit": "bb11d755f203f7ce24dca0d8fcc262e4d0c59692",
+  "previewIncludesPublishedMain": true,
+  "backend": {
+    "changedFiles": [
+      "importPersonFields.cjs",
+      "index.js",
+      "node_modules/.package-lock.json"
+    ],
+    "beforeFiles": 6411,
+    "afterFiles": 6411,
+    "expectedOnly": false,
+    "importPersonFields.cjs": {
+      "expected": "0ae746e91afa4955c5f3fe37257b9bbe8037a2506cbb415edcf7666ac21d842f",
+      "actual": "0ae746e91afa4955c5f3fe37257b9bbe8037a2506cbb415edcf7666ac21d842f"
+    },
+    "index.js": {
+      "expected": "8e0fce7192c25dcb58506bdab86015b9fd235c9d1bd5866e4ac0ad69677b89a5",
+      "actual": "8e0fce7192c25dcb58506bdab86015b9fd235c9d1bd5866e4ac0ad69677b89a5"
+    },
+    "dependencyCodeUnchanged": true,
+    "lockLicenseMetadataOnly": true,
+    "verified": true
+  },
+  "configuration": {
+    "configurationUnchanged": true,
+    "runtime": "Nodejs18.15",
+    "timeout": 60,
+    "memorySize": 256,
+    "installDependency": true
+  },
+  "productionWeb": {
+    "channel": "production",
+    "files": [
+      {
+        "path": "/admin/index.html",
+        "http": 200,
+        "sha256": "a7cd97162348344d86fa936cf7ed17ff34edd260044c86d1fd218ff196c5e4c6"
+      },
+      {
+        "path": "/admin/assets/index-Cqp_P0Uf.js",
+        "http": 200,
+        "sha256": "807ecc651be9a70d1ac8350578e7d90e13d406f50db1825cc6f64641c00f1cff"
+      },
+      {
+        "path": "/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/admin/assets/index-FWzDnwLX.js",
+        "http": 200,
+        "sha256": "cbd86f2644f32b0d93d3ea0b1e61bc40be6215e79b2ee1c59deed5f1118b2a16"
+      },
+      {
+        "path": "/admin/assets/TournamentTeams-ClhTeCcq.js",
+        "http": 200,
+        "sha256": "a2ec31ccc0e6d62b1be7a3a7e4bb089c1a2ceb2760f6514566a7aaa691b29bfe"
+      },
+      {
+        "path": "/admin/assets/LoginView-CS9rHKek.js",
+        "http": 200,
+        "sha256": "deb4f89a0c2331d7ef79975712e926a2ed2cc3b4a703b85a6065f5c0daaf4c8c"
+      }
+    ]
+  },
+  "previewWeb": {
+    "channel": "preview",
+    "files": [
+      {
+        "path": "/preview/admin/index.html",
+        "http": 200,
+        "sha256": "a5891a9109855376ad93a3bd02d48a4f61eaefa1347f226649a45fe11a2aba88"
+      },
+      {
+        "path": "/preview/admin/assets/index-C7oJcfCh.js",
+        "http": 200,
+        "sha256": "931c22f3dffcea3264b31132f866326c469b590e4bb1e55ad536631644e7ab99"
+      },
+      {
+        "path": "/preview/admin/assets/index-CYE8Z2Lb.js",
+        "http": 200,
+        "sha256": "760627580f8c9635b4b07241a9b2caeceb18a50b1ab7d474feb3066dbb536bf7"
+      },
+      {
+        "path": "/preview/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/preview/admin/assets/TournamentTeams-BkrYGmxa.js",
+        "http": 200,
+        "sha256": "cd469b72a3ae4a327aaa951b235e25d9913c5af17b0aeab17c52d8df6aa795f9"
+      },
+      {
+        "path": "/preview/admin/assets/LoginView-CwtbegPu.js",
+        "http": 200,
+        "sha256": "3ca0579ebcf21699706606b1bda4850876060f17ec5cd1b99d3ab1eba537b489"
+      }
+    ]
+  },
+  "productionClient": {
+    "channel": "production",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/admin/",
+    "status": "passed"
+  },
+  "previewClient": {
+    "channel": "preview",
+    "version": "0.2.8",
+    "checks": [
+      "live login page and WeChat QR iframe loaded",
+      "sandbox enabled; renderer has no Node API",
+      "validated newer-version fixture shows native menu and in-page update badge",
+      "QR expiry feedback and refresh obtain a new live QR",
+      "branded login, 1024px layout, and SPA route timeout regression verified",
+      "blob export saved and content verified",
+      "print popup sandbox and PDF rendering verified",
+      "connection error page and retry recovery verified"
+    ],
+    "entry": "https://www.sxffootball.cn/preview/admin/",
+    "status": "passed"
+  },
+  "installedClientAsarSha256": "5844815af7fd927c324e86102912f0a6d1dd711cbe36965d0f606de91ccff9fe"
+}
