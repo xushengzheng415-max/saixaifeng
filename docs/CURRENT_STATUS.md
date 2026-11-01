@@ -1243,3 +1243,9 @@
 - **Git 与发布读回（2026-10-27 实际完成）**：功能提交 `2845fef6`、preview 合并提交 `91592d09` 已推 Gitee（`141cd2ca..91592d09 preview`）。预览按 `VITE_APP_BASE=/preview/admin/` 构建（404 个文件 `dist`，`/admin/` 泄漏计数 0、无 `@cloudbase/js-sdk`），完整上传 `preview/admin` 共 405 个文件。读回：`https://www.sxffootball.cn/preview/admin/` 200 且入口只引用 `/preview/admin/assets/`；`TournamentTransferCenter-pZ1Yfid-.js`（37259 B）、`TournamentTransferCenter-OlBVzABz.css`（7326 B）、`index-ByCZYzIM.js`（284563 B）、`index-2u7riYJu.css`（363509 B）线上 SHA-256 与本地逐项一致；正式 `https://www.sxffootball.cn/admin/` 仍 200 且继续引用 `/admin/assets/`（`index-yFAlp2Hu.js`），摘要未变。
 - **部署路径故障（已复核，勿再犯）**：`sxf-cloud.ps1` 会先 `Push-Location` 到仓库根 `E:\Documents\sxf-football`，因此 `hosting deploy web-admin-vue/dist preview/admin` 的**相对路径取的是主工作区构建**，不是当前 worktree。本轮首次发布即误把主工作区（`/admin/` base、含平台分支未发布代码）的 397 文件传到 `preview/admin`，入口一度指向 `/admin/assets/`；发现后用预览构建的**绝对路径**重传 405 文件覆盖，入口与四个关键资源立即恢复并校验通过。`preview/admin/assets/` 下仍残留 96 个来自该错误构建的孤儿分包（页面不引用、仅按哈希直链可访问），删除属云端变更，本轮未获授权故未清理，待确认后再精确删除。
 - **固定做法**：预览发布一律写 `E:\Documents\sxf-football\<预览构建目录>\web-admin-vue\dist` 绝对路径，禁止依赖相对路径或用主工作区 `dist` 代替预览构建产物。
+
+
+
+## 2026-11-01 报名导入球员编辑候选
+
+完整编辑弹窗与服务端扩展字段保存已完成本地定向验证；未合并、未发布、未写生产数据。共享后端发布待当前任务明确授权；详见 [实施记录](releases/registration-player-editor-20261101.md)。

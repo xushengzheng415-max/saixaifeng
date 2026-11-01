@@ -185,8 +185,32 @@ function firstPhone(value) {
   return (String(value || '').replace(/[\s-]/g, '').match(/1[3-9]\d{9}/) || [])[0] || ''
 }
 
+// 报名表常用「/」「—」「无」占位表示未填写。身份证要按空值处理，不能当成格式错误；
+// 姓名栏填了占位符时也不能生成一条名字叫「/」的工作人员。
+function isEmptyPlaceholder(value) {
+  return !String(value || '').replace(/[\s/\\(（\\)）\-—－_·、.。,，:：;；]/g, '')
+}
 function normalizeIdentity(value) {
   return String(value || '').toUpperCase().replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/\s/g,'')
+}
+
+function parsePassportIdentity(identityNumber) {
+  // 护照号必须含字母，避免把生日短串、纯数字误判成护照。
+  const complete = /^(?=.*[A-Z])[A-Z0-9]{5,12}$/.test(identityNumber)
+  const protectedMatch = identityNumber.match(/^((?=.*[A-Z])[A-Z0-9]{3,12})[*＊•●×#_…]+[A-Z0-9*＊•●×#_…]*$/)
+  if (!complete && !protectedMatch) {
+    return { valid:false, isPartial:false, documentType:'', birthDate:'', gender:'', nativePlace:'', identityNumberPrefix:'', nationalityDefault:'' }
+  }
+  return {
+    valid:true,
+    isPartial:!complete,
+    documentType:'passport',
+    identityNumberPrefix:complete ? '' : (protectedMatch?.[1] || ''),
+    birthDate:'',
+    gender:'',
+    nativePlace:'',
+    nationalityDefault:''
+  }
 }
 
 export function parseRegistrationIdentity(value) {
@@ -194,7 +218,7 @@ export function parseRegistrationIdentity(value) {
   const complete=/^\d{17}[0-9X]$/.test(identityNumber)
   const protectedMatch=identityNumber.match(/^(\d{6,17})[*＊•●×#_X…]+[0-9*＊•●×#_X…]*$/)
   const prefix=!complete?(/^\d{14,17}$/.test(identityNumber)?identityNumber:protectedMatch?.[1]||''):''
-  if(!complete&&!prefix)return {valid:false,isPartial:false,birthDate:'',gender:'',nativePlace:'',identityNumberPrefix:''}
+  if(!complete&&!prefix) return parsePassportIdentity(identityNumber)
   const digits=complete?identityNumber:prefix
   const year = digits.slice(6, 10)
   const month = digits.slice(10, 12)
@@ -212,10 +236,12 @@ export function parseRegistrationIdentity(value) {
   return {
     valid:digits.length<14||validDate,
     isPartial:!complete,
+    documentType:'resident_id',
     identityNumberPrefix:prefix,
     birthDate: validDate ? `${year}-${month}-${day}` : '',
     gender: complete ? (Number(identityNumber.charAt(16)) % 2 === 1 ? 'male' : 'female') : '',
-    nativePlace
+    nativePlace,
+    nationalityDefault:'中国'
   }
 }
 
@@ -381,8 +407,9 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
       const nameCell = nameCells[personIndex]
       const personColumn = Number(nameCell?.column ?? roleCell.column)
       const name = cleanValue(nameCell?.text || '', ['姓名']).slice(0, 30)
-      if (!name) continue
-      const identityInput = normalizeIdentity(cleanValue(identityCells[personIndex]?.text || '', ['身份证号', '身份证']))
+      if (!name || isEmptyPlaceholder(name)) continue
+      const identityText = cleanValue(identityCells[personIndex]?.text || '', ['身份证号', '身份证'])
+      const identityInput = isEmptyPlaceholder(identityText) ? '' : normalizeIdentity(identityText)
       const jerseyText = cleanValue(numberCells[personIndex]?.text || '', ['球服号码', '球衣号码', '球员号码', '号码'])
       // 球服号码这里同时应用两处改动：号码容错（jerseyNumberFromText，支持「8号」「第8号」
       // 「全角８」等写法）与「工作人员栏有效号码同样计入」。后者是工作人员兼球员判定所依赖
@@ -409,6 +436,8 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
         identityNumber,
         identityNumberPrefix:identity.identityNumberPrefix,
         identityIncomplete:!identityNumber,
+        documentType: identity.documentType || '',
+        nationality: identity.nationalityDefault || '',
         jerseyNumber,
         jerseyName: jerseyNumber ? generateJerseyName(name) : '',
         birthDate: identity.birthDate || explicitBirth,
@@ -421,10 +450,17 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
         photoProcessingStatus: photoFile ? 'pending' : 'missing',
         error: ''
       }
-      if (!identityInput) warnings.push(`「${name}」未填写身份证号`)
-      else if (!identity.valid) person.error = '身份证号格式或出生日期不正确'
-      else if(identity.isPartial)warnings.push(`「${name}」身份证号已保护，按可见信息导入`)
-      if(identity.birthDate&&explicitBirth&&identity.birthDate!==explicitBirth)person.error='出生日期与身份证号不一致'
+      // 工作人员不做证件号核验：报名表里工作人员证件常留空或填「/」，
+      // 只有球员证件参与格式和出生日期一致性校验。护照不推算出生日期。
+      if (type === 'player') {
+        if (!identityInput) warnings.push(`「${name}」未填写证件号`)
+        else if (!identity.valid) person.error = '证件号格式或出生日期不正确'
+        else if (identity.isPartial) warnings.push(`「${name}」证件号已保护，按可见信息导入`)
+        else if (identity.documentType === 'passport') warnings.push(`「${name}」证件识别为护照，国籍待确认`)
+        if (identity.documentType === 'resident_id' && identity.birthDate && explicitBirth && identity.birthDate !== explicitBirth) {
+          person.error = '出生日期与身份证号不一致'
+        }
+      }
       // 填了但无法识别时给出具体内容，避免与「根本没填」混为一谈
       if (type === 'player' && !jerseyNumber) {
         warnings.push(jerseyText
@@ -548,7 +584,35 @@ export async function parseTeamRegistrationDocx(file, options = {}) {
   }
 }
 
-export function maskRegistrationIdentity(value) {
-  const text = String(value || '')
-  return /^\d{17}[0-9X]$/.test(text) ? `${text.slice(0, 6)}********${text.slice(-4)}` : (/^\d{6,17}$/.test(text)?`${text.slice(0,6)}********（保护）`:(text || '未填写'))
+export function registrationDocumentTypeLabel(documentType) {
+  if (documentType === 'passport') return '护照'
+  if (documentType === 'resident_id') return '身份证'
+  return '证件'
+}
+
+export function registrationIdentityColumnLabel(people = []) {
+  const types = people.map(person => person?.documentType).filter(Boolean)
+  if (!types.length) return '证件'
+  if (types.every(type => type === 'passport')) return '护照'
+  if (types.every(type => type === 'resident_id')) return '身份证'
+  return '证件'
+}
+
+export function maskRegistrationIdentity(value, options = {}) {
+  const text = String(value || '').toUpperCase().replace(/\s/g, '')
+  if (!text) return '未填写'
+  if (/^\d{17}[0-9X]$/.test(text)) return `${text.slice(0, 6)}********${text.slice(-4)}`
+  if (/^\d{6,17}$/.test(text)) return `${text.slice(0, 6)}********（保护）`
+  // 打码护照前缀：调用方传入 protected/isPartial，避免与完整短护照号混淆。
+  if ((options.protected || options.isPartial) && /^(?=.*[A-Z])[A-Z0-9]{3,12}$/.test(text)) return `${text}****（保护）`
+  if (/^(?=.*[A-Z])[A-Z0-9]{5,12}$/.test(text)) return text
+  return text
+}
+
+export function displayRegistrationIdentity(person) {
+  const complete = String(person?.identityNumber || '')
+  if (complete) return maskRegistrationIdentity(complete)
+  const prefix = String(person?.identityNumberPrefix || '')
+  if (!prefix) return '未填写'
+  return maskRegistrationIdentity(prefix, { protected: true, isPartial: true })
 }
