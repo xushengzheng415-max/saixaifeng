@@ -17,6 +17,7 @@
 
 const engine = require('./cardWorldEngine.cjs')
 const profileStore = require('./cardWorldProfile.cjs')
+const { readAll: readAllPaged } = require('./data-center/reader.cjs')
 
 const COLLECTIONS = {
   players: 'card_world_players',
@@ -472,14 +473,60 @@ module.exports = function createCardWorld(deps) {
     return engine.normalizeQuota(profile.quota, tier, dateKey)
   }
 
+  function statValue(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? String(value) : '—'
+  }
+
+  function mainCardStamps() {
+    /*
+     * 贴纸规则尚未由产品确认，这里沿用 local 演示的占位集合，
+     * 服务端不做资格判定；确认规则后只在此处接统一发放结果。
+     */
+    return [
+      { key: 'frame', icon: '🥇', name: '熔金边框', lockedClass: '' },
+      { key: 'debut', icon: '✨', name: '首秀贴纸', lockedClass: '' },
+      { key: 'ten', icon: '🔒', name: '十场出勤', lockedClass: 'is-locked' },
+      { key: 'night', icon: '🔒', name: '破门之夜', lockedClass: 'is-locked' }
+    ]
+  }
+
   function mainCardView(world) {
     const profile = world.profile
+    const cityText = [profile.cityName, profile.cityCode].filter(Boolean).join(' · ')
+
+    /* 本人球员卡（主数据只读引用）优先；卡面与箔光由 H5 复用现有组件。 */
+    if (world.selfMain) {
+      const card = world.selfMain.card || {}
+      const player = world.selfMain.player || {}
+      const stats = world.selfMain.stats || {}
+      const position = String(player.position || '')
+      const number = player.number != null ? player.number : player.jerseyNumber
+      return {
+        empty: false,
+        playerId: String(player._id || player.id || card.playerId || ''),
+        name: String(player.name || ''),
+        nameEn: String(player.nameEn || ''),
+        numberText: number ? '#' + number : '',
+        positionLabel: String(player.positionLabel || POSITION_LABELS[position] || position || ''),
+        cityText: cityText,
+        cardUrl: String(card.cardUrl || ''),
+        /* 全部来自数据中心；未采集/未核验为 null，展示为「—」，不补零。 */
+        stats: [
+          { label: '积分', num: statValue(stats.points) },
+          { label: '出场', num: statValue(stats.appearances) },
+          { label: '进球', num: statValue(stats.goals) },
+          { label: '助攻', num: statValue(stats.assists) }
+        ],
+        stamps: mainCardStamps(),
+        portraitNote: player.portraitAuthorized === false ? '形象照未授权，分享使用号码与阵容卡' : ''
+      }
+    }
+
     const playersById = world.playersById
     const ownedIds = ownedIdsOf(world.cards)
     const chosen = String(profile.mainPlayerId || '')
     const mainPlayerId = playersById[chosen] ? chosen : (ownedIds[0] || '')
     const player = mainPlayerId ? playersById[mainPlayerId] : null
-    const cityText = [profile.cityName, profile.cityCode].filter(Boolean).join(' · ')
     if (!player) {
       return {
         empty: true,
@@ -505,21 +552,12 @@ module.exports = function createCardWorld(deps) {
       cityText: cityText,
       cardUrl: player.cardUrl,
       stats: [
-        { label: '综合', num: String(player.ovr) },
-        { label: '出场', num: String(player.appearances) },
-        { label: '进球', num: String(player.goals) },
-        { label: '助攻', num: String(player.assists) }
+        { label: '综合', num: statValue(player.ovr) },
+        { label: '出场', num: statValue(player.appearances) },
+        { label: '进球', num: statValue(player.goals) },
+        { label: '助攻', num: statValue(player.assists) }
       ],
-      /*
-       * 贴纸规则尚未由产品确认，这里沿用 local 演示的占位集合，
-       * 服务端不做资格判定；确认规则后只在此处接统一发放结果。
-       */
-      stamps: [
-        { key: 'frame', icon: '🥇', name: '熔金边框', lockedClass: '' },
-        { key: 'debut', icon: '✨', name: '首秀贴纸', lockedClass: '' },
-        { key: 'ten', icon: '🔒', name: '十场出勤', lockedClass: 'is-locked' },
-        { key: 'night', icon: '🔒', name: '破门之夜', lockedClass: 'is-locked' }
-      ],
+      stamps: mainCardStamps(),
       portraitNote: player.portraitAuthorized ? '' : '形象照未授权，分享使用号码与阵容卡'
     }
   }
@@ -661,9 +699,139 @@ module.exports = function createCardWorld(deps) {
     }
   }
 
+  /* ---------------- 本人球员卡（主数据只读引用） ---------------- */
+
+  async function selfPlayers(userId) {
+    const db = database()
+    const command = db && db.command
+    if (!userId || !command || typeof command.or !== 'function') return []
+    try {
+      /* 按 data-center/reader.cjs 游标分页读全量，不设固定条数截断。 */
+      const rows = await readAllPaged(db, 'players', command.or([
+        { linkedUserId: String(userId) },
+        { playerUserId: String(userId) },
+        { guardianUserId: String(userId) }
+      ]))
+      return (rows || []).filter(row => row && (row._id || row.id))
+    } catch (error) {
+      if (isMissingCollection(error)) return []
+      console.warn('[cardWorld] 本人球员读取失败:', JSON.stringify({
+        errCode: error && (error.errCode != null ? error.errCode : error.code) || '',
+        errMsg: String((error && (error.errMsg || error.message)) || '').slice(0, 200)
+      }))
+      return []
+    }
+  }
+
+  async function readSelfCards(players) {
+    if (!players || !players.length) return []
+    try {
+      /* 按需加载卡面模块：未进入卡世界的实例不承担这部分冷启动成本。 */
+      const playerCardReader = require('./playerCardReader.cjs')
+      return await playerCardReader.readCards(cloud, database(), players)
+    } catch (error) {
+      console.warn('[cardWorld] 本人球员卡读取失败:', JSON.stringify({
+        errCode: error && (error.errCode != null ? error.errCode : error.code) || '',
+        errMsg: String((error && (error.errMsg || error.message)) || '').slice(0, 200)
+      }))
+      return []
+    }
+  }
+
+  /** 已发布优先，其次最新卡面数据；返回第一张可展示的卡。 */
+  function pickSelfCard(cards) {
+    return (cards || [])
+      .filter(card => card && card.status === 'ready' && (card.cardUrl || card.cardScene))
+      .sort((left, right) =>
+        Number(right.publishedVersion || 0) - Number(left.publishedVersion || 0) ||
+        Number(right.cardDataVersion || 0) - Number(left.cardDataVersion || 0))[0] || null
+  }
+
+  /** 统计统一走数据中心；未采集/未核验的值保持 null，展示端不得补零。 */
+  async function selfCardStats(playerId) {
+    try {
+      const { createDataService } = require('./data-center/service.cjs')
+      const score = await createDataService(database()).playerCardForAuthorizedPlayer(String(playerId))
+      const metrics = (score && score.metrics) || {}
+      return {
+        status: String((score && score.status) || ''),
+        points: score ? score.points : null,
+        appearances: metrics.appearances,
+        goals: metrics.goals,
+        assists: metrics.assists
+      }
+    } catch (error) {
+      console.warn('[cardWorld] 主卡统计读取失败:', String((error && (error.message || error.errMsg)) || error).slice(0, 200))
+      return { status: '', points: null, appearances: null, goals: null, assists: null }
+    }
+  }
+
+  async function ensureCardUrl(player, card) {
+    if (!card) return null
+    if (card.cardUrl) return card
+    if (!card.cardScene) return null
+    try {
+      const playerCardDynamic = require('./playerCardDynamic.cjs')
+      return Object.assign({}, card, await playerCardDynamic.exportCard(cloud, database(), player, card))
+    } catch (error) {
+      console.warn('[cardWorld] 主卡成卡图导出失败:', String((error && error.message) || error).slice(0, 200))
+      return null
+    }
+  }
+
+  function cardRefOf(card) {
+    return {
+      playerId: String(card.playerId || ''),
+      cardId: String(card.cardId || ''),
+      templateId: String(card.templateId || ''),
+      cardTypeId: String(card.cardTypeId || ''),
+      publishedVersion: Number(card.publishedVersion || 0),
+      cardDataVersion: Number(card.cardDataVersion || 0)
+    }
+  }
+
+  function sameCardRef(left, right) {
+    if (!left || !right) return false
+    if (String(left.playerId || '') !== String(right.playerId || '')) return false
+    if (left.cardId && right.cardId) return String(left.cardId) === String(right.cardId)
+    return String(left.templateId || '') === String(right.templateId || '')
+  }
+
+  /**
+   * 自动读取本人球员卡并写入档案 mainCard（只存引用，不复制主数据）。
+   * 档案里已有可用的人工选择时保持不变；否则取已发布/最新的一张。
+   */
+  async function resolveSelfMain(user, profile) {
+    const players = await selfPlayers(user._id)
+    if (!players.length) return null
+    const cards = await readSelfCards(players)
+    const ready = (cards || []).filter(card => card && card.status === 'ready')
+    if (!ready.length) return null
+
+    const pinned = profile && profile.mainCard && profile.mainCard.auto !== true
+    const manual = pinned
+      ? ready.filter(card => sameCardRef(profile.mainCard, card))[0]
+      : null
+    let chosen = manual || pickSelfCard(ready)
+    if (!chosen) return null
+    const player = players.filter(row => String(row._id || row.id) === String(chosen.playerId || ''))[0]
+    if (!player) return null
+    chosen = await ensureCardUrl(player, chosen)
+    if (!chosen || !chosen.cardUrl) return null
+
+    const nextRef = cardRefOf(chosen)
+    if (!manual) nextRef.auto = true
+    if (!sameCardRef(profile.mainCard, nextRef) || String(profile.mainPlayerId || '') !== nextRef.playerId) {
+      await updateProfile(profile._id, { mainPlayerId: nextRef.playerId, mainCard: nextRef })
+      profile.mainPlayerId = nextRef.playerId
+      profile.mainCard = nextRef
+    }
+    return { player: player, card: chosen, cards: ready, players: players, stats: await selfCardStats(nextRef.playerId) }
+  }
+
   /* ---------------- 世界状态 ---------------- */
 
-  async function loadWorld(user, params) {
+  async function loadWorld(user, params, options) {
     let profile
     try {
       profile = await ensureProfile(user)
@@ -679,6 +847,15 @@ module.exports = function createCardWorld(deps) {
     }
     const city = await ensureCity(profile, params || {})
     if (city.error) return { error: city.error }
+    let selfMain = null
+    /* 只有登录/主卡/设主卡需要读本人球员卡，避免卡册与组阵请求多付一次主数据读取。 */
+    if (options && options.selfCards) {
+      try {
+        selfMain = await resolveSelfMain(user, profile)
+      } catch (error) {
+        console.warn('[cardWorld] 主卡同步失败:', String((error && (error.errMsg || error.message)) || error).slice(0, 200))
+      }
+    }
     const cards = await readCards(user._id)
     const pool = await readPlayerPool(city.cityCode)
     return {
@@ -687,16 +864,17 @@ module.exports = function createCardWorld(deps) {
       cityCode: city.cityCode,
       cards: cards,
       pool: pool,
+      selfMain: selfMain,
       playersById: buildPlayersById(pool.rows, cards)
     }
   }
 
-  async function withWorld(params, wxContext, fn) {
+  async function withWorld(params, wxContext, fn, options) {
     const resolved = await resolveUser(params, wxContext)
     if (resolved.error) return resolved.error
     const channelError = await bindWorldChannel(resolved.user, wxContext)
     if (channelError) return channelError.error
-    const world = await loadWorld(resolved.user, params)
+    const world = await loadWorld(resolved.user, params, options)
     if (world.error) return world.error
     return fn(world, resolved.user, params)
   }
@@ -713,15 +891,51 @@ module.exports = function createCardWorld(deps) {
         mode: 'cloud',
         ownedCount: (world.cards || []).length,
         mainPlayerId: String(world.profile.mainPlayerId || ''),
+        mainCardReady: !!world.selfMain,
         poolMissing: !!world.pool.missing
       }
-    })
+    }, { selfCards: true })
   }
 
   async function mainCardAction(params, wxContext) {
     return withWorld(params, wxContext, async function (world) {
       return Object.assign({ success: true }, mainCardView(world))
-    })
+    }, { selfCards: true })
+  }
+
+  async function setMainCardAction(params, wxContext) {
+    return withWorld(params, wxContext, async function (world) {
+      const selfMain = world.selfMain
+      if (!selfMain || !Array.isArray(selfMain.cards) || !selfMain.cards.length) {
+        return fail('WORLD_MAIN_CARD_EMPTY', '还没有主卡，请先在「卡册·签约」领取球员卡')
+      }
+      const playerId = String(params.playerId || '').trim()
+      const cardId = String(params.cardId || '').trim()
+      const chosen = selfMain.cards.filter(function (card) {
+        if (playerId && String(card.playerId || '') !== playerId) return false
+        if (cardId && String(card.cardId || '') !== cardId) return false
+        return true
+      })[0]
+      if (!chosen) return fail('WORLD_MAIN_CARD_NOT_FOUND', '该球员卡不在本人卡库中')
+      const player = (selfMain.players || []).filter(function (row) {
+        return String(row._id || row.id) === String(chosen.playerId || '')
+      })[0]
+      if (!player) return fail('WORLD_MAIN_CARD_NOT_FOUND', '球员资料不存在')
+      const card = await ensureCardUrl(player, chosen)
+      if (!card || !card.cardUrl) return fail('WORLD_MAIN_CARD_NOT_READY', '该球员卡暂不可展示，请稍后重试')
+      const ref = cardRefOf(card)
+      await updateProfile(world.profile._id, { mainPlayerId: ref.playerId, mainCard: ref })
+      world.profile.mainPlayerId = ref.playerId
+      world.profile.mainCard = ref
+      world.selfMain = {
+        player: player,
+        card: card,
+        cards: selfMain.cards,
+        players: selfMain.players,
+        stats: await selfCardStats(ref.playerId)
+      }
+      return Object.assign({ success: true }, mainCardView(world))
+    }, { selfCards: true })
   }
 
   async function albumAction(params, wxContext) {
@@ -1053,6 +1267,7 @@ module.exports = function createCardWorld(deps) {
   const ACTIONS = {
     cardWorldLogin: login,
     cardWorldMainCard: mainCardAction,
+    cardWorldSetMainCard: setMainCardAction,
     cardWorldAlbum: albumAction,
     cardWorldOwnedCards: ownedCardsAction,
     cardWorldLineup: lineupAction,
