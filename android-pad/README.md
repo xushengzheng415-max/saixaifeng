@@ -24,7 +24,7 @@
 
 ## 已验证与未验证
 
-编译、zip 对齐、APK v3 签名、manifest 包名/版本/横屏/权限读回通过；16 项纯 Java 地址与文件名策略测试通过；浏览器执行实际导出注入脚本，程序触发及用户点击 Blob 导出、UTF-8、文件名、nonce 与注入去重通过。页面已有的横屏仿真与线上登录入口读回保持有效。
+编译、zip 对齐、APK v3 签名、manifest 包名/版本/横屏/权限读回通过；21 项纯 Java 地址与文件名策略测试通过；浏览器执行实际导出注入脚本，程序触发及用户点击 Blob 导出、UTF-8、文件名、nonce 与注入去重通过。页面已有的横屏仿真与线上登录入口读回保持有效。
 
 当前 adb 没有连接设备，未进行 vivo Pad3 Pro 真机安装或宣称原生 WebView 全流程实测；安装后需验收旋转、短信收取/登录、上传、导出保存、断网重连及覆盖安装。官网 APK 与更新清单已更新为0.1.1，HTTP/文件摘要回读通过；清单版本101高于旧安装版100。真机更新标识与覆盖安装仍待用户验收。0.1.0历史记录见 docs/releases/android-pad-0.1.0-20261028.md。
 
@@ -33,3 +33,6 @@
 旧版按钮只对当前地址再次 loadUrl，没有明确绕过缓存。本版对网页入口添加可替换时间戳参数、清理 HTTP 资源缓存、刷新期间使用 LOAD_NO_CACHE 和 no-cache 请求头，页面结束后恢复默认缓存。路由 hash 与原有查询参数保留，不清理 Cookie、DOMStorage 或登录会话。启动入口及更新清单请求也增加防缓存参数；第一方页面加载后由原生侧补充平板布局标记。
 
 21项 Java 策略检查与 APK 编译/签名校验通过，新旧签名证书一致，允许同包名覆盖安装；不将此称为 vivo 真机缓存故障已复现或安装已验证。参考：[WebView.clearCache](https://developer.android.com/reference/android/webkit/WebView#clearCache(boolean))、[WebSettings 缓存模式](https://developer.android.com/reference/android/webkit/WebSettings#LOAD_NO_CACHE)。
+
+
+0.1.2已发布于既有desktop/android更新通道，签名与0.1.1一致；本轮未连接真机，安装和真机交互验收仍需设备端完成。

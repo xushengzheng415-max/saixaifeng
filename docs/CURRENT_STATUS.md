@@ -1259,3 +1259,8 @@
 ### 2026-11-01 客户端头像与单人驳回
 
 头像云编号/失败标记隔离修复、单个待审核队员通过/驳回选择及必填原因已发布正式/测试。已有照片恢复加载，真实缺图保留缺失状态；不改业务照片。既有rejectPlayer处理器同步入Git，未重发函数。HTTP/摘要及已安装客户端0.2.8两通道各8项通过；无真实审核写入或通知测试。见docs/releases/team-avatar-review-20261101.readback.json。
+
+
+### 名单快捷审核与Pad对齐
+
+待审队员行内通过/驳回、多选原因及其他必填说明已发布正式/测试。Windows0.2.8两通道各8项通过；Pad0.1.2原签名更新包与清单已发布，Java21项及触控浏览器通过，无连接真机。见docs/releases/player-review-shortcuts-alignment.readback.json。

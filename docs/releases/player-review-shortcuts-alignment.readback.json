@@ -1,0 +1,131 @@
+{
+  "productionCodeCommit": "28241f76be015cd1fcfcf15b7724cab81edf7927",
+  "previewCodeCommit": "68b678be4c75603590d45e005e1369496a2f6998",
+  "previewIncludesPublishedMain": true,
+  "rowActions": [
+    "通过",
+    "驳回"
+  ],
+  "rejectionReasonsMultiSelect": true,
+  "otherReasonRequired": true,
+  "backendChanged": false,
+  "productionWeb": {
+    "channel": "production",
+    "files": [
+      {
+        "path": "/admin/index.html",
+        "http": 200,
+        "sha256": "f39e9598a45117b7471137fd0cbdaa9365829cee6bdfe2bf89ed63bf9b24947b"
+      },
+      {
+        "path": "/admin/assets/index-Cqp_P0Uf.js",
+        "http": 200,
+        "sha256": "807ecc651be9a70d1ac8350578e7d90e13d406f50db1825cc6f64641c00f1cff"
+      },
+      {
+        "path": "/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/admin/assets/index-X_bt_S4b.js",
+        "http": 200,
+        "sha256": "8a22a1ce8dd27ad380a78d46d1022b6225161442e5c01cd78eac4acdad63e792"
+      },
+      {
+        "path": "/admin/assets/TeamDetail-BpV6eWd0.js",
+        "http": 200,
+        "sha256": "6ed91f8f46b4c099c7a75f2c84360949f4494cb06dbf603e54554a43907a8934"
+      },
+      {
+        "path": "/admin/assets/LoginView-k4xk2YA0.js",
+        "http": 200,
+        "sha256": "a5b98d9ef2181fe7b72de6e2fd45b44751aa8091acd42ec89874c56b8376d4de"
+      }
+    ]
+  },
+  "previewWeb": {
+    "channel": "preview",
+    "files": [
+      {
+        "path": "/preview/admin/index.html",
+        "http": 200,
+        "sha256": "394ef0a0625e13095409d47d88e66e2d5734e2a4edd4a4311e06735b442ba44d"
+      },
+      {
+        "path": "/preview/admin/assets/index-C7oJcfCh.js",
+        "http": 200,
+        "sha256": "931c22f3dffcea3264b31132f866326c469b590e4bb1e55ad536631644e7ab99"
+      },
+      {
+        "path": "/preview/admin/assets/index-CQyeiTs0.js",
+        "http": 200,
+        "sha256": "3317b959074751f5145cac0b3f944fe829d952a1eacf3d08e978ad74027d59c1"
+      },
+      {
+        "path": "/preview/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/preview/admin/assets/TeamDetail-N7_rzXku.js",
+        "http": 200,
+        "sha256": "5cf8d7fba768165f990f851e99f83618c1d18bd3c5a9950dc7ecb34ae3c289c4"
+      },
+      {
+        "path": "/preview/admin/assets/LoginView-Cm0-feVr.js",
+        "http": 200,
+        "sha256": "9bec570f286cfd180b4794bb8d169562218b7df035c65542c4a50d63b7bf7135"
+      }
+    ]
+  },
+  "windowsClients": {
+    "production": {
+      "channel": "production",
+      "version": "0.2.8",
+      "checks": [
+        "live login page and WeChat QR iframe loaded",
+        "sandbox enabled; renderer has no Node API",
+        "validated newer-version fixture shows native menu and in-page update badge",
+        "QR expiry feedback and refresh obtain a new live QR",
+        "branded login, 1024px layout, and SPA route timeout regression verified",
+        "blob export saved and content verified",
+        "print popup sandbox and PDF rendering verified",
+        "connection error page and retry recovery verified"
+      ],
+      "entry": "https://www.sxffootball.cn/admin/",
+      "status": "passed"
+    },
+    "preview": {
+      "channel": "preview",
+      "version": "0.2.8",
+      "checks": [
+        "live login page and WeChat QR iframe loaded",
+        "sandbox enabled; renderer has no Node API",
+        "validated newer-version fixture shows native menu and in-page update badge",
+        "QR expiry feedback and refresh obtain a new live QR",
+        "branded login, 1024px layout, and SPA route timeout regression verified",
+        "blob export saved and content verified",
+        "print popup sandbox and PDF rendering verified",
+        "connection error page and retry recovery verified"
+      ],
+      "entry": "https://www.sxffootball.cn/preview/admin/",
+      "status": "passed"
+    }
+  },
+  "pad": {
+    "feedHttp": 200,
+    "apkHttp": 200,
+    "version": "0.1.2",
+    "versionCode": 102,
+    "packageId": "cn.sxffootball.pad.preview",
+    "sha256": "0fba0822c0a74b47cb069358708bd0b6e6bde2d5c823704fad8de525331eec1b",
+    "bytes": 242392,
+    "sameSigningIdentity": true,
+    "policyTests": 21,
+    "padTouchBrowserTest": "passed",
+    "connectedAndroidDevices": 0,
+    "nativeDeviceTest": "not performed - no connected device"
+  },
+  "realReviewWrites": 0
+}
