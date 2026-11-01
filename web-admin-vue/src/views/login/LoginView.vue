@@ -1,6 +1,6 @@
 <template>
   <main class="login-overlay modern-login">
-    <section class="login-card" data-modern-login="true" data-desktop-login="true" aria-label="登录赛小蜂足球">
+    <section class="login-card" data-modern-login="true" aria-label="登录赛小蜂足球">
       <aside class="login-brand"><img :src="verticalLogo" alt="赛小蜂足球" /></aside>
       <button class="close" type="button" aria-label="返回官网" @click="goHome">×</button>
       <section class="login-auth">
