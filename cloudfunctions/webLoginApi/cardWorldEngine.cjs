@@ -332,6 +332,7 @@ function pitchRows(slots, playersById, activeKey) {
       posTag: slot.posTag,
       label: slot.label,
       group: slot.group,
+      playerId: slot.playerId ? String(slot.playerId) : '',
       filled: !!player,
       name: player ? player.name : '点选占位',
       numberText: player ? '#' + player.number : '',

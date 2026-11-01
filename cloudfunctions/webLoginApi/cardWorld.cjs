@@ -67,6 +67,7 @@ function positionGroup(position) {
 module.exports = function createCardWorld(deps) {
   const cloud = deps.cloud
   const authenticateWebSession = deps.authenticateWebSession
+  const authenticateServicePrivate = deps.authenticateServicePrivate
   const httpsGet = deps.httpsGet
   const httpsPost = deps.httpsPost
 
@@ -234,7 +235,7 @@ module.exports = function createCardWorld(deps) {
   }
 
   /**
-   * 身份解析顺序：H5/PC 会话 → getPhoneNumber 手机号 → 已绑定的球员端 openId。
+   * 身份解析顺序：服务号 H5 会话 → PC/H5 authToken → getPhoneNumber 手机号 → 已绑定的球员端 openId。
    * 任一渠道命中的账号都必须是同一自然人（手机号主账号），冲突时阻断。
    */
   async function resolveUser(params, wxContext) {
@@ -244,6 +245,23 @@ module.exports = function createCardWorld(deps) {
     if (expectedAppId && appid && appid !== expectedAppId) {
       console.error('[cardWorld] 拒绝非球员端小程序调用:', appid)
       return { error: fail('WORLD_APP_DENIED', '当前小程序没有卡世界权限') }
+    }
+
+    const serviceToken = String(params.serviceSessionToken || '').trim()
+    if (serviceToken) {
+      if (typeof authenticateServicePrivate !== 'function') {
+        return { error: fail('WORLD_LOGIN_REQUIRED', '服务号会话鉴权未就绪，请稍后重试') }
+      }
+      const auth = await authenticateServicePrivate({ serviceSessionToken: serviceToken })
+      if (!auth || auth.success === false) {
+        return { error: fail(auth && auth.code === 'SERVICE_PRIVATE_AUTH_REQUIRED' ? 'WORLD_LOGIN_REQUIRED' : ((auth && auth.code) || 'WORLD_LOGIN_REQUIRED'), (auth && auth.error) || '请先在「我的」完成登录') }
+      }
+      if (auth.needsBinding || !auth.user) {
+        return { error: fail('WORLD_PHONE_UNBOUND', '请先在「我的」完成手机号绑定后再进入赛小蜂足球世界') }
+      }
+      const user = await findUserById(auth.user._id)
+      if (!user) return { error: fail('WORLD_USER_MISSING', '账号不存在，请重新登录') }
+      return { user: user, via: 'service_h5' }
     }
 
     const token = String(params.authToken || '').trim()
