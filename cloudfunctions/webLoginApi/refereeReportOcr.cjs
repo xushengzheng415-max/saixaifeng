@@ -30,17 +30,6 @@ function request(path, fields,timeout=45000) {
 
 const {parseTables,resolveTiming}=require('./refereeReportAnalysis.cjs')
 let tokenCache = null
-async function recognizeImageSet(image,query,timeoutFor){
-  // Table structure is the largest response. Finish it first so its request
-  // body is no longer live when the two text requests start.
-  const table=await request('/rest/2.0/ocr/v1/table'+query,{image},timeoutFor()).catch(()=>null)
-  const timeout=timeoutFor()
-  const [accurate,handwriting]=await Promise.allSettled([
-    request('/rest/2.0/ocr/v1/accurate'+query,{image,detect_direction:'true',probability:'true'},timeout),
-    request('/rest/2.0/ocr/v1/handwriting'+query,{image,recognize_granularity:'big',eng_granularity:'word'},timeout)
-  ])
-  return [table,accurate.status==='fulfilled'?accurate.value:null,handwriting.status==='fulfilled'?handwriting.value:null]
-}
 async function recognize(imageBase64,timing={},options={}) {
   // 总预算：小程序经 getMiniWorkspace 中转，微信侧约 60~65 秒必断，故中转调用只给 45 秒；
   // PC 直连 HTTP 仍用 105 秒，识别质量不受影响。
@@ -67,10 +56,10 @@ async function recognize(imageBase64,timing={},options={}) {
   }
   trace('token',mark);mark=Date.now()
   const query='?access_token='+encodeURIComponent(tokenCache.value)
-  // The three providers previously held three encoded copies of the original
-  // image at once. Keep table parsing first, then run only the two text reads
-  // together; a failed route still does not fail the whole recognition.
-  let [table,text,handwriting]=await recognizeImageSet(image,query,()=>cap(mainTimeout))
+  // 三路并发但互不牵连：某一路超时只丢该路，不把整次识别变成网络错误
+  const mainResults=await Promise.allSettled([request('/rest/2.0/ocr/v1/table'+query,{image},cap(mainTimeout)),request('/rest/2.0/ocr/v1/accurate'+query,{image,detect_direction:'true',probability:'true'},cap(mainTimeout)),request('/rest/2.0/ocr/v1/handwriting'+query,{image,recognize_granularity:'big',eng_granularity:'word'},cap(mainTimeout))])
+  const pick=index=>mainResults[index].status==='fulfilled'?mainResults[index].value:null
+  let table=pick(0),text=pick(1),handwriting=pick(2)
   trace('mainOcr',mark);mark=Date.now()
   let analysis
   try{analysis=parseTables(table || {},text || {},timing,handwriting,options)}catch(error){analysis=parseTables({},text || {},timing,handwriting,options)}
@@ -83,19 +72,13 @@ async function recognize(imageBase64,timing={},options={}) {
   let crops=[],teamTransforms={}
   if(table&&Date.now()<deadline-headroom){try{crops=imageTools.teamCrops(buffer,table,analysis)}catch(error){analysis.warnings.push('主客队局部未读取，请核对名单')}}
   if(crops.length){
-    const results=[]
-    // Process home/away crops one at a time. Each crop may load the native
-    // renderer and two OCR responses, so parallel crops caused the largest
-    // production memory spike.
-    for(const crop of crops){
-      if(Date.now()>=deadline-6000){results.push({crop,error:true});continue}
+    const results=await Promise.all(crops.map(async crop=>{
       const cropTimeout=cap(stageTimeout)
-      try{const image=crop.buffer.toString('base64'),[t,a,h]=await recognizeImageSet(image,query,()=>Math.min(cropTimeout,cap(stageTimeout)))
-        if(!t&&!a)throw new Error('CROP_OCR_EMPTY')
+      try{const image=crop.buffer.toString('base64'),[t,a,h]=await Promise.all([request('/rest/2.0/ocr/v1/table'+query,{image},cropTimeout),request('/rest/2.0/ocr/v1/accurate'+query,{image,detect_direction:'true',probability:'true'},cropTimeout),request('/rest/2.0/ocr/v1/handwriting'+query,{image,recognize_granularity:'big',eng_granularity:'word'},cropTimeout).catch(()=>null)])
         const next=parseTables(t,a,timing,h,{...options,sourceSide:crop.side});imageTools.uploadedRegions(next,size,crop.transform)
-        results.push({crop,next})
-      }catch(error){results.push({crop,error:true})}
-    }
+        return {crop,next}
+      }catch(error){return {crop,error:true}}
+    }))
     for(const {crop,next,error} of results){
       if(!error&&next.teams[crop.side].length>=analysis.teams[crop.side].length){const merged={...analysis,teams:{...analysis.teams,[crop.side]:next.teams[crop.side]}};analysis=imageTools.retainClearGoals(analysis,merged);teamTransforms[crop.side]=crop.transform}
       else analysis.warnings.push((crop.side==='home'?'主队':'客队')+'局部识别未完成，请核对名单')
@@ -108,8 +91,7 @@ async function recognize(imageBase64,timing={},options={}) {
     try{prepared=imageTools.normalize(buffer,table)}catch(error){analysis.warnings.push('图片局部未读取，可选择原图重试')}
     if(prepared){try{
       const normalized=prepared.buffer.toString('base64'),retryTimeout=cap(stageTimeout)
-      const [newTable,newText,newHandwriting]=await recognizeImageSet(normalized,query,()=>Math.min(retryTimeout,cap(stageTimeout)))
-      if(!newTable&&!newText)throw new Error('NORMALIZED_OCR_EMPTY')
+      const [newTable,newText,newHandwriting]=await Promise.all([request('/rest/2.0/ocr/v1/table'+query,{image:normalized},retryTimeout),request('/rest/2.0/ocr/v1/accurate'+query,{image:normalized,detect_direction:'true',probability:'true'},retryTimeout),request('/rest/2.0/ocr/v1/handwriting'+query,{image:normalized,recognize_granularity:'big',eng_granularity:'word'},retryTimeout).catch(()=>null)])
       const next=parseTables(newTable,newText,timing,newHandwriting,options)
       if(['home','away'].every(side=>next.teams[side].length>=analysis.teams[side].length)){
         const previousScore=analysis.score,currentScore=next.score
@@ -128,7 +110,7 @@ async function recognize(imageBase64,timing={},options={}) {
   analysis.analysisVersion='referee-report-analysis/7'
   if(!handwriting)analysis.warnings.push('手写增强暂不可用，请核对手写分钟')
   trace('done',startedAt)
-  return { ...analysis, imageHash:crypto.createHash('sha256').update(buffer).digest('hex') }
+  return { ...analysis, imageHash:crypto.createHash('sha256').update(buffer).digest('hex'), buffer, extension:png?'png':'jpg' }
 }
 function signEvidence(evidence) {
   return require('./paperReportProof.cjs').signEvidence(process.env.BAIDU_REFEREE_OCR_SECRET_KEY,evidence)

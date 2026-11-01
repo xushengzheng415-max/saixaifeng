@@ -13,7 +13,7 @@ function fanOAuthReturnUrl(value) {
     const parsed = new URL(url)
     if (parsed.hostname !== 'www.sxffootball.cn') return ''
     if (parsed.protocol !== 'https:' || parsed.port || parsed.username || parsed.password) return ''
-    if (!['/service-account-h5/me.html', '/service-account-h5/fan-center.html', '/service-account-h5/player-cards.html', '/preview/dynamic-card/h5/player-cards.html'].includes(parsed.pathname)) return ''
+    if (!['/service-account-h5/me.html', '/service-account-h5/fan-center.html', '/service-account-h5/player-cards.html', '/service-account-h5/player-card-game.html', '/preview/service-account-h5/player-card-game.html', '/preview/dynamic-card/h5/player-cards.html'].includes(parsed.pathname)) return ''
     return parsed.origin + parsed.pathname
   } catch (error) { return '' }
 }
@@ -108,9 +108,10 @@ async function handleFanOAuth(event) {
   const existing = (await db.collection('fan_profiles').where({ serviceAccountOpenId: String(oauth.openid) }).limit(2).get()).data || []
   if (existing.length === 1) await db.collection('fan_profiles').doc(existing[0]._id).update({ data: { nickname, avatarUrl, unionId: String(oauth.unionid || existing[0].unionId || ''), updateTime: db.serverDate() } })
   else {
+    const { REGISTRATION_BONUS_DROPS, REASON_REGISTRATION } = require('./honeyBonus.cjs')
     await db.runTransaction(async transaction => {
-      await transaction.collection('fan_profiles').add({ data: { serviceAccountOpenId: String(oauth.openid), unionId: String(oauth.unionid || ''), nickname, avatarUrl, honeyBalance:100, honeyWalletVersion:1, createTime: db.serverDate(), updateTime: db.serverDate() } })
-      await transaction.collection('fan_points_ledger').add({ data: { serviceAccountOpenId: String(oauth.openid), delta: 100, reason: 'fan-registration-bonus', createTime: db.serverDate() } })
+      await transaction.collection('fan_profiles').add({ data: { serviceAccountOpenId: String(oauth.openid), unionId: String(oauth.unionid || ''), nickname, avatarUrl, honeyBalance: REGISTRATION_BONUS_DROPS, honeyWalletVersion: 1, createTime: db.serverDate(), updateTime: db.serverDate() } })
+      await transaction.collection('fan_points_ledger').add({ data: { serviceAccountOpenId: String(oauth.openid), delta: REGISTRATION_BONUS_DROPS, reason: REASON_REGISTRATION, refId: REASON_REGISTRATION + ':' + String(oauth.openid), attempt: 1, createTime: db.serverDate() } })
     })
   }
   await db.collection('fan_h5_sessions').add({ data: { tokenHash: hashSessionToken(token), serviceAccountOpenId: String(oauth.openid), active: true, expiresAt, createTime: db.serverDate(), lastUsedAt: db.serverDate() } })
@@ -227,7 +228,7 @@ async function handleFanRankings(event) {
     const supportRows = supportResult.data || []
     supportRows.forEach(function (row) { if (row.sourceMatchId && !verified.matchIds.has(String(row.sourceMatchId))) return; const target = row.targetType === 'player' ? players.get(String(row.targetId || '')) : teams.get(String(row.targetId || '')); if (target) target.supportCount += 1 })
   } catch (error) { console.warn('[webApi] fan ranking support lookup skipped:', error.message || error) }
-  await applyPlayerCardScores(Array.from(players.values()),verified.career,verified.supportTotals)
+  await applyPlayerCardScores(Array.from(players.values()),verified.career,verified.supportTotals,verified.ruleContext)
     await require('./playerCardAccess.cjs').attachPublicPlayerCards(cloud,db,Array.from(players.values()),{dynamic:event.dynamicCardProtocol==='player-card-dynamic/1'})
   return { success:true, data:{ period, teams:Array.from(teams.values()).sort((a,b) => b.supportCount - a.supportCount || a.name.localeCompare(b.name, 'zh-CN')), players:Array.from(players.values()).sort((a,b) => b.supportCount - a.supportCount || a.name.localeCompare(b.name, 'zh-CN')) } }
 }

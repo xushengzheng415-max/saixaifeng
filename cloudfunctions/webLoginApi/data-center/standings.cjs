@@ -23,7 +23,7 @@ function pointsRule(division) {
 
 function addTeam(table, id, name, logo) {
   const key = id || `name:${name}`
-  if (!table[key]) table[key] = { teamId: id, teamName: name, logo, played: 0, win: 0, draw: 0, loss: 0, penaltyWin: 0, penaltyLoss: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0, fairPlay: 0, yellowCards: 0, redCards: 0, provisionalMatches: 0 }
+  if (!table[key]) table[key] = { teamId: id, teamName: name, logo, played: 0, win: 0, draw: 0, loss: 0, penaltyWin: 0, penaltyLoss: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0, penaltyPoints: 0, penalties: 0, forfeits: 0, fairPlay: 0, yellowCards: 0, redCards: 0, provisionalMatches: 0 }
   return table[key]
 }
 
@@ -53,6 +53,10 @@ function applyResult(table, match, rule, provisional) {
   home.yellowCards += match.yellowHome; away.yellowCards += match.yellowAway
   home.redCards += match.redHome; away.redCards += match.redAway
   if (provisional) { home.provisionalMatches += 1; away.provisionalMatches += 1 }
+  if (text(match.resultType) === 'forfeit') {
+    if (text(match.forfeitingTeamId) === text(match.homeTeamId)) home.forfeits += 1
+    else if (text(match.forfeitingTeamId) === text(match.awayTeamId)) away.forfeits += 1
+  }
   home.goalDifference = home.goalsFor - home.goalsAgainst
   away.goalDifference = away.goalsFor - away.goalsAgainst
 }
@@ -99,7 +103,22 @@ function rankTeams(teams, officialMatches, rule) {
     .map((team, index) => ({ ...team, rank: index + 1 }))
 }
 
-function buildStandings(matches, divisionsById) {
+// 纪律扣分只作用于本赛事本组别的生效处罚记录，不改变比分本身。
+function applyPenalties(table, penalties, bucket) {
+  ;(penalties || []).forEach(penalty => {
+    if (text(penalty.status) !== 'effective' || number(penalty.pointsDeduction) <= 0) return
+    if (text(penalty.tournamentId) !== text(bucket.tournamentId)) return
+    if (text(penalty.divisionId || 'default') !== text(bucket.divisionId || 'default')) return
+    const team = table[text(penalty.teamId)]
+    if (!team) return
+    const deduction = number(penalty.pointsDeduction)
+    team.penaltyPoints -= deduction
+    team.points -= deduction
+    team.penalties += 1
+  })
+}
+
+function buildStandings(matches, divisionsById, penalties = []) {
   const buckets = {}
   matches.filter(match => match.standingsEligible).forEach(match => {
     const key = `${match.tournamentId || ''}:${match.divisionId}:${match.groupName}`
@@ -119,6 +138,8 @@ function buildStandings(matches, divisionsById) {
     })
     bucket.official.forEach(match => applyResult(officialTable, match, rule, false))
     bucket.all.forEach(match => applyResult(previewTable, match, rule, match.resultStatus !== 'approved'))
+    applyPenalties(officialTable, penalties, bucket)
+    applyPenalties(previewTable, penalties, bucket)
     return {
       tournamentId: bucket.tournamentId,
       divisionId: bucket.divisionId,

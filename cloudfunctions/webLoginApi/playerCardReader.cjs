@@ -13,9 +13,10 @@ async function readCards(cloud, db, players, options = {}) {
   if(!players.length)return []
   const states = new Map()
   const dynamic=require('./playerCardDynamic.cjs')
-  const scores=options.legacyOnly?new Map():await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id)))
-  const rows = await Promise.all(players.map(async player => {
+  const scores=options.legacyOnly?new Map():(options.scores||await require('./data-center/service.cjs').createDataService(db).playerCardsForAuthorizedPlayers(players.map(p=>String(p._id||p.id))))
+  const rows = await require('./playerCardPreviewAssets.cjs').mapLimit(players,options.dynamic===false?2:4,async player => {
     const playerId = String(player._id || player.id || '')
+    if(!options.baseOnly&&!options.legacyOnly)player=await require('./playerCardSeriesReader.cjs').resolveSeriesPlayer(db,player,scores.get(playerId),document)
     let live=options.legacyOnly?null:await dynamic.read(cloud,db,player,{...options,score:scores.get(playerId)})
     if(live?.cardScene&&options.restrictedAssets)live=await dynamic.restrictAssets(cloud,db,player,live)
     if(live?.status==='unavailable'&&player.playerCardFileId)return {playerId,status:'ready',legacyStatic:true,displayMode:'legacy-static',reason:'历史卡源图待补齐',fileId:player.playerCardFileId,cardTypeId:String(player.playerCardTier||''),templateId:String(player.playerCardTemplateId||''),publishedVersion:Number(player.playerCardTemplateVersion||0),cardDataVersion:Number(player.playerCardVersion||0)}
@@ -59,17 +60,21 @@ async function readCards(cloud, db, players, options = {}) {
     if (!render || render.renderVersion!==RENDER_VERSION || Number(render.cardDataVersion) !== base.cardDataVersion) return await visualCard() || {...base,status:'pending'}
     if (render.status !== 'ready' || !render.fileId) return await visualCard() || {...base,status:render.status === 'failed' ? 'failed' : 'pending'}
     return {...base,status:'ready',cardId:String(render.cardId||render._id||`${playerId}_${base.templateId}_${base.publishedVersion}`),fileId:render.fileId,renderVersion:render.renderVersion || ''}
-  }))
-  const ids = [...new Set(rows.filter(row=>row.status==='ready'&&!row.cardScene).map(row=>row.fileId))]
+  })
+  // Legacy clients receive an on-demand export with an already resolved URL.
+  // That result has no fileId and may be an awarded event card, not a base card.
+  const staticExport = row => row.displayMode==='static-export' && typeof row.cardUrl==='string' && /^https:\/\//.test(row.cardUrl)
+  const ids = [...new Set(rows.filter(row=>row.status==='ready'&&!row.cardScene&&!staticExport(row)).map(row=>row.fileId))]
   const urls = new Map()
   for (let start=0;start<ids.length;start+=50) {
     const result = await cloud.getTempFileURL({fileList:ids.slice(start,start+50)})
     for (const file of result.fileList || []) if (file.tempFileURL) urls.set(file.fileID,file.tempFileURL)
   }
   const latestStates = new Map()
-  for(const type of new Set(rows.filter(row=>row.status==='ready'&&!row.visualOnly&&!row.selectedDisplay&&!row.legacyStatic).map(row=>row.cardTypeId)))latestStates.set(type,await document(db,'player_card_template_states',type))
+  for(const type of new Set(rows.filter(row=>row.status==='ready'&&!row.cardScene&&!staticExport(row)&&!row.visualOnly&&!row.selectedDisplay&&!row.legacyStatic).map(row=>row.cardTypeId)))latestStates.set(type,await document(db,'player_card_template_states',type))
   return rows.map(row => {
     if(row.status!=='ready'||row.cardScene)return row
+    if(staticExport(row))return row
     if(row.visualOnly||row.selectedDisplay||row.legacyStatic)return {...row,status:urls.has(row.fileId)?'ready':'failed',cardUrl:urls.get(row.fileId)||''}
     const active=latestStates.get(row.cardTypeId)?.active
     if(!active || active.templateId!==row.templateId || Number(active.version)!==row.publishedVersion)return {...row,status:'pending',fileId:'',cardUrl:'',templateId:active?.templateId||'',publishedVersion:Number(active?.version||0)}

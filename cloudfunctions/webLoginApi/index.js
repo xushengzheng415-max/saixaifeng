@@ -1,4 +1,3 @@
-const matchScoreView = require('./data-center/match-score.cjs')
 const { createBaiduPlayerFace } = require('./baiduPlayerFace.cjs')
 // webLoginApi - 赛小蜂网页端登录 API（HTTP 触发器代理）
 // 浏览器通过 fetch() 直接调用，无需任何 SDK
@@ -28,13 +27,39 @@ const { chooseOrganizerOrganization, grantsEventAccess } = require('./organizati
 const https = require('https')
 const crypto = require('crypto')
 const nodemailer = require('nodemailer')
-const { createPlayerCards } = require('./playerCards.cjs')
+// 球员卡渲染依赖原生模块 @resvg/resvg-js，改为动态加载，避免云函数启动时因平台二进制缺失导致整体不可用
 function fanCenterHandlers() {
   return require('./fanCenter.cjs')({ cloud, crypto, SERVICE_ACCOUNT_CONFIG, normalizeServiceH5Url, hashSessionToken, dateValue, httpsGet, getPublicTournamentCenter })
 }
 
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV })
 const baiduPlayerFace = createBaiduPlayerFace({ cloud })
+
+// 球员端「赛小蜂足球世界」卡世界 action（cardWorld*）。
+// 按需加载：未使用该玩法的实例不必承担额外模块初始化成本。
+let cardWorldServiceCache = null
+function cardWorldService() {
+  if (!cardWorldServiceCache) {
+    const servicePrivate = require('./servicePrivate.cjs')({
+      cloud,
+      config: SERVICE_ACCOUNT_CONFIG,
+      hashSessionToken,
+      dateValue,
+      httpsGet,
+      createSession: createRefereeH5Session
+    })
+    cardWorldServiceCache = require('./cardWorld.cjs')({
+      cloud: cloud,
+      authenticateWebSession: authenticateWebSession,
+      authenticateServicePrivate: function (params) {
+        return servicePrivate.authenticate(params)
+      },
+      httpsGet: httpsGet,
+      httpsPost: httpsPost
+    })
+  }
+  return cardWorldServiceCache
+}
 
 // ========== 邮件配置 ==========
 const EMAIL_CONFIG = {
@@ -89,6 +114,12 @@ const SMS_CONFIG = {
 const WECHAT_CONFIG = {
   APP_ID: process.env.WECHAT_WEB_APPID || '',
   APP_SECRET: process.env.WECHAT_WEB_APPSECRET || '',
+}
+
+// 小程序登录配置（新球员端小程序 AppID，从环境变量读取）
+const MINI_PROGRAM_CONFIG = {
+  APP_ID: process.env.MINI_PROGRAM_APP_ID || '',
+  APP_SECRET: process.env.MINI_PROGRAM_APP_SECRET || '',
 }
 
 // 服务号裁判工作台使用独立 AppID/OpenID，不能与 PC 扫码登录或小程序 OpenID 混用。
@@ -193,7 +224,7 @@ const SESSION_REQUIRED_RELAY_FUNCTIONS = new Set([
   'reviewRosterChange',
   'parseTournamentRegulations', 'saveSignature', 'getSignatureStatus',
   'updateMatchSignature', 'updateMatchLineup', 'applyTournament',
-  'tournamentReview', 'getMyTeams', 'bindPhone'
+  'tournamentReview', 'getMyTeams', 'bindPhone', 'tournamentAssistant'
 ])
 
 // 这些入口会直接创建或修改赛事业务数据。没有已确认的机构租户时，
@@ -637,7 +668,7 @@ async function officialAccountAccessToken() {
   if(serviceAccountAccessTokenCache&&serviceAccountAccessTokenCache.expiresAt>Date.now()+120000)return serviceAccountAccessTokenCache.value
   if(!SERVICE_ACCOUNT_CONFIG.APP_ID||!SERVICE_ACCOUNT_CONFIG.APP_SECRET)throw Object.assign(new Error('服务号凭据尚未配置'),{code:'SERVICE_ACCOUNT_NOT_CONFIGURED'})
   const result=await httpsGet('https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid='+encodeURIComponent(SERVICE_ACCOUNT_CONFIG.APP_ID)+'&secret='+encodeURIComponent(SERVICE_ACCOUNT_CONFIG.APP_SECRET))
-  if(!result||!result.access_token)throw Object.assign(new Error('获取服务号接口凭据失败'),{code:String(result&&result.errcode||'SERVICE_ACCESS_TOKEN_FAILED')})
+  if(!result||!result.access_token)throw Object.assign(new Error('获取服务号接口凭据失败'),{code:String(result&&result.errcode||'SERVICE_ACCESS_TOKEN_FAILED'),wxErrorText:String(result&&result.errmsg||'')})
   serviceAccountAccessTokenCache={value:result.access_token,expiresAt:Date.now()+Math.max(300,Number(result.expires_in||7200)-300)*1000}
   return serviceAccountAccessTokenCache.value
 }
@@ -1266,6 +1297,7 @@ async function completeParentProfile(event) {
   if (!player || String(player.teamId || '') !== String(invite.teamId || '')) {
     return { success: false, error: '邀请关联资料已发生变化，请联系球队管理员重新生成链接', code: 'PARENT_INVITE_BROKEN' }
   }
+  const priorProfileComplete = require('./honeyBonus.cjs').isProfileCompleteReady(player)
   const requirements = preview.data.requirements || {}
   const drafts = (await db.collection('parent_profile_drafts').where({ parentInvite: authenticated.session.parentInvite, basicConfirmed: true }).limit(10).get()).data || []
   let verifications = requirements.realName ? (await db.collection('parent_identity_verifications').where({ parentInvite: authenticated.session.parentInvite }).limit(1).get()).data || [] : []
@@ -1320,6 +1352,18 @@ async function completeParentProfile(event) {
     playerUpdate.recentPortraitConfirmedAt = portrait.confirmedAt || db.serverDate()
   }
   await db.collection('players').doc(invite.playerId).update({ data: playerUpdate })
+  const portraitReady = Boolean(portrait) || require('./honeyBonus.cjs').hasStandardPortrait(Object.assign({}, player, playerUpdate))
+  if (!priorProfileComplete && portraitReady && authenticated.session.serviceAccountOpenId) {
+    try {
+      const bonus = await require('./honeyBonus.cjs').grantProfileCompleteBonus(db, {
+        serviceAccountOpenId: String(authenticated.session.serviceAccountOpenId || ''),
+        playerId: String(invite.playerId || '')
+      })
+      if (bonus && bonus.success !== true && !bonus.deduped) console.warn('[completeParentProfile] profile complete honey skipped', bonus.code || bonus.error || 'unknown')
+    } catch (bonusError) {
+      console.warn('[completeParentProfile] profile complete honey failed', bonusError && bonusError.message || 'unknown')
+    }
+  }
   if (verification) {
     const profileRows = (await db.collection('player_identity_profiles').where({ playerId:String(invite.playerId) }).limit(2).get()).data || []
     const profileData = { playerId:String(invite.playerId), teamId:String(invite.teamId), orgId:String(invite.orgId || ''), verificationId:String(verification._id), status:identityStatus, verificationLabel:identityLabel, verificationDisclosure:'平台人证核验，非权威库认证', verificationMethod:identityMethod, verificationScope:identityMethod === 'local_face_1to1' ? 'platform' : 'organizer', identityNumberMasked:String(verification.identityNumberMasked || ''), documentType:String(verification.documentType || 'resident_id'), encryptedFaceFeature:verification.encryptedFaceFeature || null, featureStorageStatus:String(verification.featureStorageStatus || 'not_stored'), biometricConsent:verification.biometricConsent === true, portraitId:portrait ? String(portrait._id || '') : '', portraitFileId:portrait ? String(portrait.avatarFileId || portrait.transparentFileId || '') : '', seasonPhotoRefreshDue:true, updateTime:db.serverDate() }
@@ -1397,6 +1441,7 @@ async function authenticateWebSession(event) {
   const userResult = await db.collection('users').doc(session.userId).get()
   const rawUser = Array.isArray(userResult.data) ? userResult.data[0] : userResult.data
   if (!rawUser) return { success: false, error: '登录账号不存在，请重新登录', code: 'AUTH_REQUIRED' }
+  if (session.source === 'mini_shared_operation') return require('./miniPaperReportSession.cjs').authenticate(db,event,session,rawUser)
   const user = await ensureUserOrgId(db, rawUser)
   const activeOrgId = String(session.activeOrgId || '')
   if (activeOrgId && (user.organizationIds || []).includes(activeOrgId)) {
@@ -1555,35 +1600,126 @@ function recordTeamKeys(record) {
     .filter(Boolean)
 }
 
+// 机构权限索引（teams / tournaments / matches 的 id 集合）按 orgId 缓存。
+// 这些集合只增删改低频，但每个 dbQuery 请求都要用一次索引；原先每次全表
+// limit(1000) 扫描三张集合再在内存过滤，是调用次数被放大的主要来源。
+// 写入 teams / tournaments / matches 后必须失效缓存，避免新资料在 TTL 内不可见。
+const ORGANIZER_SCOPE_INDEX_TTL_MS = 60 * 1000
+const organizerScopeIndexCache = new Map()
+
+function organizerScopeIndexKey(orgId) {
+  return String(orgId || '')
+}
+
+function readOrganizerScopeIndex(orgId) {
+  const key = organizerScopeIndexKey(orgId)
+  if (!key) return null
+  const entry = organizerScopeIndexCache.get(key)
+  if (!entry) return null
+  if (entry.expiresAt <= Date.now()) {
+    organizerScopeIndexCache.delete(key)
+    return null
+  }
+  return entry.index
+}
+
+function writeOrganizerScopeIndex(orgId, index) {
+  const key = organizerScopeIndexKey(orgId)
+  if (!key) return
+  const now = Date.now()
+  if (organizerScopeIndexCache.size >= 200) {
+    for (const [cachedKey, entry] of organizerScopeIndexCache) {
+      if (entry.expiresAt <= now) organizerScopeIndexCache.delete(cachedKey)
+    }
+  }
+  organizerScopeIndexCache.set(key, { index, expiresAt: now + ORGANIZER_SCOPE_INDEX_TTL_MS })
+}
+
+function invalidateOrganizerScopeIndex(orgId) {
+  const key = organizerScopeIndexKey(orgId)
+  if (key) organizerScopeIndexCache.delete(key)
+}
+
+function emptyOrganizerScopeIndex() {
+  return { teamIds: new Set(), teamCodes: new Set(), tournamentIds: new Set(), matchIds: new Set() }
+}
+
 async function buildOrganizerScope(db, rawUser) {
   const user = await ensureUserOrgId(db, rawUser)
-  const [teamResult, tournamentResult] = await Promise.all([
-    db.collection('teams').limit(1000).get(),
-    db.collection('tournaments').limit(1000).get()
-  ])
-
-  // creatorId/ownerId 只记录具体创建人，不能替代当前机构租户。
-  // 缺少一致机构字段的历史记录不进入工作空间索引，避免被间接读写。
-  const teams = (teamResult.data || []).filter(team => recordHasOrg(team, user.orgId))
-  const tournaments = (tournamentResult.data || []).filter(tournament => recordHasOrg(tournament, user.orgId))
-
   const scope = {
     user,
     orgId: user.orgId,
     organizationIds: Array.isArray(user.organizationIds) ? user.organizationIds : [],
     organizationConflict: user.organizationConflict === true,
-    teamIds: new Set(teams.map(item => item._id).filter(Boolean)),
-    teamCodes: new Set(teams.flatMap(item => [item.teamCode, item.code]).filter(Boolean)),
-    tournamentIds: new Set(tournaments.map(item => item._id).filter(Boolean)),
-    matchIds: new Set()
+    ...emptyOrganizerScopeIndex()
+  }
+  const orgId = String(user.orgId || '')
+  // 没有机构时，recordHasOrg 恒为 false，三个索引集合必然为空，无需再查库。
+  if (!orgId) return scope
+
+  const cached = readOrganizerScopeIndex(orgId)
+  if (cached) return { ...scope, ...cached }
+
+  const command = db.command
+  const orgConditions = [
+    { orgId },
+    { organizationId: orgId },
+    { organization_id: orgId }
+  ]
+
+  // 把机构条件下推到数据库，仍然保留 recordHasOrg 的多字段一致性校验。
+  const [teamResult, tournamentResult] = await Promise.all([
+    db.collection('teams').where(command.or(orgConditions)).limit(1000).get(),
+    db.collection('tournaments').where(command.or(orgConditions)).limit(1000).get()
+  ])
+
+  // creatorId/ownerId 只记录具体创建人，不能替代当前机构租户。
+  // 缺少一致机构字段的历史记录不进入工作空间索引，避免被间接读写。
+  const teams = (teamResult.data || []).filter(team => recordHasOrg(team, orgId))
+  const tournaments = (tournamentResult.data || []).filter(tournament => recordHasOrg(tournament, orgId))
+
+  scope.teamIds = new Set(teams.map(item => item._id).filter(Boolean))
+  scope.teamCodes = new Set(teams.flatMap(item => [item.teamCode, item.code]).filter(Boolean))
+  scope.tournamentIds = new Set(tournaments.map(item => item._id).filter(Boolean))
+
+  // 赛事报名的球队属于“赛事所需数据”：主办方要能看到并审核这些球队的球员，
+  // 即使球队长期资料挂在球队自己机构下。否则主账号查看报名管理会显示 0 人，
+  // 而赛事子账号因走赛事范围反而能看到，造成同一页面两种结果。
+  if (scope.tournamentIds.size) {
+    const eventRelationResult = await db.collection('tournament_teams')
+      .where({ tournamentId: command.in(Array.from(scope.tournamentIds).slice(0, 1000)) })
+      .limit(1000)
+      .get()
+    const eventTeamKeys = (eventRelationResult.data || []).flatMap(item => [item.teamId, item.teamCode]).filter(Boolean).map(String)
+    if (eventTeamKeys.length) {
+      eventTeamKeys.forEach(value => scope.teamIds.add(value))
+      const eventTeamResult = await db.collection('teams').where({ _id: command.in(Array.from(new Set(eventTeamKeys)).slice(0, 1000)) }).limit(1000).get()
+      ;(eventTeamResult.data || []).forEach(team => {
+        if (team._id) scope.teamIds.add(String(team._id))
+        ;[team.teamCode, team.code].filter(Boolean).forEach(code => scope.teamCodes.add(String(code)))
+      })
+    }
   }
 
-  const matchResult = await db.collection('matches').limit(1000).get()
+  const matchConditions = orgConditions.slice()
+  const teamIds = Array.from(scope.teamIds)
+  const tournamentIds = Array.from(scope.tournamentIds)
+  if (teamIds.length) matchConditions.push({ homeTeamId: command.in(teamIds) }, { awayTeamId: command.in(teamIds) })
+  if (tournamentIds.length) matchConditions.push({ tournamentId: command.in(tournamentIds) })
+
+  const matchResult = await db.collection('matches').where(command.or(matchConditions)).limit(1000).get()
   ;(matchResult.data || []).forEach(match => {
-    if (recordHasOrg(match, scope.orgId) || scope.tournamentIds.has(match.tournamentId) ||
+    if (recordHasOrg(match, orgId) || scope.tournamentIds.has(match.tournamentId) ||
         scope.teamIds.has(match.homeTeamId) || scope.teamIds.has(match.awayTeamId)) {
       if (match._id) scope.matchIds.add(match._id)
     }
+  })
+
+  writeOrganizerScopeIndex(orgId, {
+    teamIds: scope.teamIds,
+    teamCodes: scope.teamCodes,
+    tournamentIds: scope.tournamentIds,
+    matchIds: scope.matchIds
   })
   return scope
 }
@@ -2925,37 +3061,27 @@ async function normalizeOrganizerUser(db, user) {
   return { ...user, role: ORGANIZER_ROLE }
 }
 
-function httpsPost(hostname, port, path, headers, payload) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(payload)
-    const req = https.request({ hostname, port, path, method: 'POST', headers }, (res) => {
-      let body = ''
-      res.on('data', c => body += c)
-      res.on('end', () => {
-        try { resolve(JSON.parse(body)) }
-        catch(e) { resolve(body) }
-      })
-    })
-    req.on('error', reject)
-    req.setTimeout(15000, () => { req.destroy(new Error('timeout')) })
-    req.write(data)
-    req.end()
+// Outbound calls use global fetch (undici). The legacy https.request/https.get
+// stack was observed hanging indefinitely against api.weixin.qq.com in
+// production (120s function kill, socket timeout never armed), while fetch on
+// the same host returns in ~1s. Signatures and return semantics are preserved:
+// resolve parsed JSON or the raw string; reject on network error/timeout.
+async function httpsPost(hostname, port, path, headers, payload) {
+  const target = 'https://' + hostname + (port && Number(port) !== 443 ? ':' + port : '') + path
+  const response = await fetch(target, {
+    method: 'POST',
+    headers: headers || undefined,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15000)
   })
+  const text = await response.text()
+  try { return JSON.parse(text) } catch (e) { return text }
 }
 
-function httpsGet(url) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      let data = ''
-      res.on('data', c => data += c)
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)) }
-        catch(e) { resolve(data) }
-      })
-    })
-    req.on('error', reject)
-    req.setTimeout(10000, () => { req.destroy(new Error('timeout')) })
-  })
+async function httpsGet(url, headers) {
+  const response = await fetch(url, { headers: headers || undefined, signal: AbortSignal.timeout(10000) })
+  const text = await response.text()
+  try { return JSON.parse(text) } catch (e) { return text }
 }
 
 // ========== TC3 签名（腾讯云 SMS）==========
@@ -3011,6 +3137,119 @@ async function callTencentSMS(phoneNumber, code) {
 }
 
 // ========== 操作实现 ==========
+
+// 小程序登录：code 换 openid/unionid → 查找用户 → 创建 session
+async function handleMiniProgramLogin(event) {
+  const { code } = event
+  if (!code || typeof code !== 'string' || code.length < 10) {
+    return { success: false, error: '缺少有效的登录凭证 code', code: 'MINI_PROGRAM_CODE_REQUIRED' }
+  }
+  if (!MINI_PROGRAM_CONFIG.APP_ID || !MINI_PROGRAM_CONFIG.APP_SECRET) {
+    console.error('[webApi] miniProgramLogin 配置缺失：MINI_PROGRAM_APP_ID / MINI_PROGRAM_APP_SECRET 未设置')
+    return { success: false, error: '小程序登录配置未完成，请联系管理员', code: 'MINI_PROGRAM_CONFIG_MISSING' }
+  }
+
+  // 1. code 换 openid + unionid
+  const sessionUrl = 'https://api.weixin.qq.com/sns/jscode2session?appid=' + MINI_PROGRAM_CONFIG.APP_ID +
+    '&secret=' + MINI_PROGRAM_CONFIG.APP_SECRET + '&js_code=' + encodeURIComponent(code) + '&grant_type=authorization_code'
+  let sessionData
+  try {
+    sessionData = await httpsGet(sessionUrl)
+  } catch (err) {
+    console.error('[webApi] miniProgramLogin jscode2session 网络异常:', err.message)
+    return { success: false, error: '微信服务连接失败，请稍后重试', code: 'MINI_PROGRAM_WX_NETWORK' }
+  }
+  if (!sessionData || sessionData.errcode) {
+    console.error('[webApi] miniProgramLogin jscode2session 失败:', sessionData && sessionData.errcode, sessionData && sessionData.errmsg)
+    return { success: false, error: '微信登录失败，请稍后重试', code: 'MINI_PROGRAM_WX_AUTH_FAILED' }
+  }
+  const openid = String(sessionData.openid || '')
+  const unionid = String(sessionData.unionid || '')
+  if (!openid) {
+    return { success: false, error: '微信登录结果异常，请重试', code: 'MINI_PROGRAM_OPENID_MISSING' }
+  }
+
+  // 2. 查找用户：优先 unionId（跨端一致），其次 openid（本端唯一）
+  const db = cloud.database()
+  let user = null
+  let userId = ''
+
+  if (unionid) {
+    const unionResult = await db.collection('users').where({ unionId: unionid }).limit(2).get()
+    const unionRows = unionResult.data || []
+    if (unionRows.length > 1) {
+      console.error('[webApi] miniProgramLogin unionId 冲突:', unionid, '命中', unionRows.length, '个账号')
+      return { success: false, error: '账号数据异常，请联系管理员处理', code: 'MINI_PROGRAM_UNIONID_CONFLICT' }
+    }
+    if (unionRows.length === 1) {
+      user = unionRows[0]
+      userId = user._id
+    }
+  }
+
+  if (!user) {
+    const openidResult = await db.collection('users').where({ wechatOpenId: openid }).limit(2).get()
+    const openidRows = openidResult.data || []
+    if (openidRows.length > 1) {
+      console.error('[webApi] miniProgramLogin openid 冲突:', openid, '命中', openidRows.length, '个账号')
+      return { success: false, error: '账号数据异常，请联系管理员处理', code: 'MINI_PROGRAM_OPENID_CONFLICT' }
+    }
+    if (openidRows.length === 1) {
+      user = openidRows[0]
+      userId = user._id
+    }
+  }
+
+  // 3. 用户存在 → 补写 unionId/openid → 创建 session
+  if (user) {
+    const updates = {}
+    if (unionid && user.unionId !== unionid) updates.unionId = unionid
+    if (openid && user.wechatOpenId !== openid) updates.wechatOpenId = openid
+    if (Object.keys(updates).length > 0) {
+      await db.collection('users').doc(userId).update({ data: updates })
+    }
+    const token = await createWebSession(userId, 'mini_program')
+    return {
+      success: true,
+      token,
+      user: { _id: userId, role: user.role || ORGANIZER_ROLE },
+      needBindPhone: !user.phone && !user.phoneNumber
+    }
+  }
+
+  // 4. 用户不存在 → 返回 openid/unionid，前端引导绑定手机号
+  return {
+    success: true,
+    needBindPhone: true,
+    miniProgramOpenId: openid,
+    unionId: unionid,
+    message: '该微信尚未绑定手机号，请先完成手机号验证'
+  }
+}
+
+function phoneCodeLoginClientKey(event, context) {
+  const request = event && event.requestContext || {}
+  const value = request.sourceIp || request.identity && request.identity.sourceIp || request.http && request.http.sourceIp || context && (context.clientIP || context.CLIENTIP)
+  return typeof value === 'string' && value.length <= 128 ? value : 'shared-unknown-client'
+}
+
+function phoneCodeLoginService() {
+  const module = require('./phoneCodeLogin.cjs')
+  return module.createPhoneCodeLogin({
+    store: module.createCloudStore(cloud.database(), {
+      dailyMax: process.env.WEB_PHONE_LOGIN_DAILY_LIMIT,
+      hourlyIpMax: process.env.WEB_PHONE_LOGIN_IP_HOURLY_LIMIT,
+      globalHourlyMax: process.env.WEB_PHONE_LOGIN_GLOBAL_HOURLY_LIMIT,
+      globalDailyMax: process.env.WEB_PHONE_LOGIN_GLOBAL_DAILY_LIMIT
+    }),
+    sendSms: data => handleSendSms(data),
+    issueSession: async (userId, phone) => {
+      const users = await module.createCloudStore(cloud.database()).findUsers(phone)
+      if (users.length !== 1 || users[0]._id !== userId || !module.accountAllowed(users[0],phone)) throw new Error('PHONE_ACCOUNT_CHANGED')
+      return { authToken: await createWebSession(userId, 'phone_code'), authExpiresAt: new Date(Date.now() + WEB_SESSION_TTL_MS) }
+    }
+  })
+}
 
 // 1. 发送短信验证码
 async function handleSendSms(event) {
@@ -3913,6 +4152,7 @@ async function handleCheckLogin(event) {
 // 用于浏览器端调用非登录类云函数（如 uploadFile）
 // ★ 添加云函数白名单，防止调用危险云函数
 const ALLOWED_FUNCTIONS = [
+  'tournamentAssistant', // AI 办赛助手：只读本赛事数据，供 PC 主控台对话使用
   'tournamentStaffAccess',
   'dataCenter',
   'uploadFile',
@@ -4151,13 +4391,25 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
         const uploadRight = functionName === 'uploadFile' && tournamentId
           ? await staffUploadRight(db, { ...(functionParams || {}), staffModule: event.staffModule }, tournamentId, authenticated.orgId, authenticated.userId) : ''
         const rule = uploadRight ? [uploadRight] : relayRights(functionName, functionParams || {})
-        const allowed = Array.isArray(rule) && rule.length === 0 && functionName === 'tournamentStaffAccess' ||
-          Boolean(rule && tournamentId && (functionName === 'uploadFile' || await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId)) && (
-            Array.isArray(rule)
-              ? (await Promise.all(rule.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).every(Boolean)
-              : Array.isArray(rule.any) && (await Promise.all(rule.any.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))).some(Boolean)
-          ))
-        if (!allowed) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
+        const scopeOk = functionName === 'uploadFile' ? true : await validateStaffRelayScope(db, functionName, functionParams || {}, tournamentId)
+        const candidateRights = Array.isArray(rule) ? rule : (Array.isArray(rule && rule.any) ? rule.any : [])
+        const rightMap = {}
+        if (candidateRights.length) {
+          const values = await Promise.all(candidateRights.map(right => staffPolicy.hasRight(db, authenticated.userId, authenticated.orgId, tournamentId, right)))
+          candidateRights.forEach((right, index) => { rightMap[right] = Boolean(values[index]) })
+        }
+        const rightsOk = Array.isArray(rule)
+          ? candidateRights.length > 0 && candidateRights.every(right => rightMap[right])
+          : candidateRights.some(right => rightMap[right])
+        // 用户已确认：共享（子）账号同样可以分配球队账号权限，球队账号管理入口只校验赛事范围。
+        const teamAccountAction = functionName === 'organizerClaimInvite' && ['listTeamAccess', 'saveTeamAccess', 'removeTeamAccess', 'addPlayerAsStaff'].indexOf(String(functionParams && functionParams.action || '')) >= 0
+        const allowed = teamAccountAction ? Boolean(tournamentId && scopeOk) :
+          Array.isArray(rule) && rule.length === 0 && functionName === 'tournamentStaffAccess' ||
+          Boolean(rule && tournamentId && scopeOk && rightsOk)
+        if (!allowed) {
+          console.warn('[webApi] 子账号中转被拒:', JSON.stringify({ functionName, keys: Object.keys(functionParams || {}), action: String(functionParams && functionParams.action || ''), career: functionParams && functionParams.career === true, tournamentId, rule, scopeOk, rightsOk, rightMap }))
+          return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '当前子账号没有该操作权限' }
+        }
       }
     }
     const personalWorkspaceLookup = functionName === 'tournamentStaffAccess' && ['scope', 'mine', 'invitations', 'leave'].includes(String(functionParams?.action || ''))
@@ -4199,6 +4451,10 @@ async function handleCallFunction(event, verifiedPaperReport = false) {
         } : {})
       } : {}),
       ...(assistanceGrant ? { assistanceGrantId: assistanceGrant._id } : {})
+    }
+    if (authenticated?.miniPaper) {
+      if (!verifiedPaperReport || functionName !== 'updateMatch' || functionParams?.action !== 'importPaperReport') return {success:false,error:'手机识别授权不能用于其他操作'}
+      return require('./miniPaperReportSession.cjs').relayImport(cloud.database(),cloud,authenticated,functionParams)
     }
     console.log('[webApi] 调用云函数:', functionName, '参数 keys:', Object.keys(functionParams || {}))
     const result = await cloud.callFunction({
@@ -4466,6 +4722,7 @@ async function handleUploadToCosDirect(event, params) {
 // 支持: list / get / count / add / update / delete
 // ★ 添加集合白名单，禁止直接操作系统集合
 const SYSTEM_COLLECTIONS = [
+  'web_phone_login',
   'users', 'sms_codes', 'email_verification', 'email_codes', 'invite_codes',
   'auth_sessions', 'assistance_requests', 'assistance_attempts', 'assistance_audit_logs', 'platform_settings'
 ]
@@ -4559,19 +4816,23 @@ async function handlePaperRefereeReport(event, confirming) {
     const fileId=String(event.fileId || '')
     const referenceSlash=fileId.indexOf('/',8); const filePath=referenceSlash>=0?fileId.slice(referenceSlash+1):''
     if(!fileId.startsWith('cloud://') || !filePath.startsWith(uploadFolder+'/') || filePath.includes('..') || fileId.includes('?'))return {success:false,error:'照片不属于本场比赛，请重新上传'}
+    const tDownload=Date.now()
     const downloaded=await cloud.downloadFile({fileID:fileId})
+    console.log('[refereeReport] step=download cost='+(Date.now()-tDownload)+'ms bytes='+((downloaded.fileContent&&downloaded.fileContent.length)||0))
     const image=downloaded.fileContent
     if(!Buffer.isBuffer(image) || !image.length || image.length>3*1024*1024)return {success:false,error:'请选择不超过3MB的JPG或PNG照片'}
     const db=cloud.database()
     const [division,tournament]=await Promise.all([match.divisionId&&match.divisionId!=='default'?readDocumentOrNull(db,'divisions',String(match.divisionId)):Promise.resolve(null),readDocumentOrNull(db,'tournaments',String(match.tournamentId))])
     if(division?.tournamentId&&String(division.tournamentId)!==String(match.tournamentId))return {success:false,error:'比赛组别范围不一致，请检查赛事配置'}
     const timing=ocr.resolveTiming(match,division || {},tournament || {})
-    const recognized=await ocr.recognize(image.toString('base64'),timing)
-    const evidence={matchId:String(match._id),fileId,imageHash:recognized.imageHash,analysisVersion:recognized.analysisVersion,timing}
-    return {success:true,data:{teams:recognized.teams,score:recognized.score,timing,warnings:recognized.warnings,evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
+    const tRecognize=Date.now()
+    const recognized=await ocr.recognize(image.toString('base64'),timing,{budgetMs:identity.miniPaper?45000:0,blankRoleAsBench:identity.miniPaper ? event.blankRoleAsBench===true : true,circledGoals:identity.miniPaper ? event.circledGoals===true : true})
+    console.log('[refereeReport] step=recognize cost='+(Date.now()-tRecognize)+'ms home='+recognized.teams.home.length+' away='+recognized.teams.away.length+' warnings='+((recognized.warnings||[]).length))
+    const evidence={matchId:String(match._id),fileId,imageHash:recognized.imageHash,analysisVersion:recognized.analysisVersion,timing,...(recognized.roleConvention?{roleConvention:recognized.roleConvention}:{})}
+    return {success:true,data:{teams:recognized.teams,score:recognized.score,imageQuality:recognized.imageQuality || null,timing,warnings:recognized.warnings,annotations:recognized.annotations || [],rawLines:recognized.rawLines || [],evidence,proof:ocr.signEvidence(evidence),expectedEventRevision:Number(match.matchEventRevision || 0)}}
   }
   const evidence=event.evidence
-  if (!evidence || evidence.matchId!==String(match._id) || !/^[a-f0-9]{64}$/.test(evidence.imageHash || '') || ocr.signEvidence(evidence)!==event.proof) return {success:false,error:'识别凭证无效，请重新上传'}
+  if (!evidence || evidence.matchId!==String(match._id) || !/^[a-f0-9]{64}$/.test(evidence.imageHash || '') || !ocr.verifyEvidence(evidence,event.proof)) return {success:false,code:'REPORT_EVIDENCE_INVALID',error:'识别凭证未通过校验，请重新识别'}
   if ((match.paperReportImports || []).some(row=>row.imageHash===evidence.imageHash)) return {success:true,alreadyImported:true,message:'这张裁判表已录入'}
   const lineups={}, entries=[], allowedPlayers={}
   for (const side of ['home','away']) {
@@ -4611,6 +4872,14 @@ async function handlePaperRefereeReport(event, confirming) {
     if (players.length>maxStarters) return {success:false,error:'首发人数超过本场比赛人数'}
     if ([...players,...substitutes].filter(row=>row.isCaptain).length>1 || [...players,...substitutes].filter(row=>row.isGoalkeeper).length>1) return {success:false,error:'请核对队长和守门员标记'}
     lineups[side]={players,substitutes,source:'organizer_paper_report'}
+    const layoutInput=event.formations && event.formations[side]
+    if (layoutInput) {
+      try {
+        const layout=require('./sharedFormation.cjs').validate(maxStarters,layoutInput,players.map(row=>row.playerId))
+        players.forEach(row=>{row.role=layout.roles[row.playerId]})
+        lineups[side].formation=layout.formation
+      } catch (error) { return {success:false,error:error.message || '首发位置与球员不一致，请重新排阵'} }
+    }
   }
   const substitutions=Array.isArray(event.substitutions)?event.substitutions:[]
   try { entries.push(...require('./refereeSubstitutionBatch.cjs').buildEntries(substitutions,allowedPlayers,match,evidence)) }
@@ -4635,8 +4904,80 @@ async function handlePaperRefereeReport(event, confirming) {
   const derived=calculateMatchEventScore({...match,events})
   if (derived.home!==score.home || derived.away!==score.away) return {success:false,error:'后台合计进球'+derived.home+':'+derived.away+'，本表比分'+score.home+':'+score.away+'；请核对本场已有进球'}
   if (event.expectedEventRevision == null || Number(event.expectedEventRevision)!==Number(match.matchEventRevision || 0)) return {success:false,error:'比赛记录已更新，请重新上传核对'}
-  const data={lineups,events,paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,goalCorrections:reconciliation.conflicts,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
+  const data={lineups,events,...(identity.miniPaper?{status:'finished'}:{}),paperReportImports:[...(match.paperReportImports || []).slice(-49),{...evidence,goalCorrections:reconciliation.conflicts,importedAt:new Date().toISOString(),importedBy:identity.userId}]}
   return handleCallFunction({...event,functionName:'updateMatch',functionParams:{action:'importPaperReport',matchId:match._id,expectedEventRevision:event.expectedEventRevision,paperReportProof:ocr.signImport(match._id,event.expectedEventRevision,data),data}},true)
+}
+
+// 平台公用演示数据池：只读返回平台机构下的合成球队与球员。
+// 这些记录不属于任何自然人账号或主办方机构，只在网页演示模式被调用。
+// 返回值按字段白名单裁剪，不包含 orgId、creatorId、手机号等私有字段。
+const DEMO_POOL_ORG_ID = process.env.DEMO_POOL_ORG_ID || '6ad5e27d0c3bba9a50b65592'
+const DEMO_POOL_DATASET_ID = process.env.DEMO_POOL_DATASET_ID || 'football-ai-fixtures-20260822-16teams-v1'
+const DEMO_POOL_MAX_ROWS = 5000
+
+function isSyntheticDemoRecord(record) {
+  return record.synthetic === true || record.isTest === true || Boolean(record.syntheticDatasetId) || Boolean(record.syntheticKey) || record.source === 'ai_fixture'
+}
+
+async function readDemoPoolRows(db, collection, orgId) {
+  const rows = []
+  for (let skip = 0; skip < DEMO_POOL_MAX_ROWS; skip += 1000) {
+    const result = await db.collection(collection).where({ orgId }).skip(skip).limit(1000).get()
+    const page = result.data || []
+    rows.push(...page)
+    if (page.length < 1000) break
+  }
+  return rows
+}
+
+function demoPoolBirthDate(value) {
+  if (!value) return ''
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value).slice(0, 10)
+}
+
+async function handleDemoPoolDataset(event) {
+  const authenticated = await authenticateWebSession(event)
+  if (!authenticated.success) return authenticated
+  try {
+    const db = cloud.database()
+    const teamRows = (await readDemoPoolRows(db, 'teams', DEMO_POOL_ORG_ID)).filter(isSyntheticDemoRecord)
+    const teamIds = new Set(teamRows.map(row => String(row._id)))
+    const playerRows = (await readDemoPoolRows(db, 'players', DEMO_POOL_ORG_ID))
+      .filter(row => isSyntheticDemoRecord(row) && teamIds.has(String(row.teamId)))
+    const datasetId = teamRows.map(row => row.syntheticDatasetId).find(Boolean) || DEMO_POOL_DATASET_ID
+    return {
+      success: true,
+      dataset: {
+        datasetId,
+        teams: teamRows.map(row => ({
+          id: String(row._id),
+          name: row.name || row.teamName || '',
+          ageGroup: row.ageGroup || '',
+          logo: row.logo || row.logoUrl || '',
+          syntheticKey: row.syntheticKey || '',
+          datasetId: row.syntheticDatasetId || datasetId,
+          playerCount: Number(row.playerCount) || 0
+        })),
+        players: playerRows.map(row => ({
+          id: String(row._id),
+          teamId: String(row.teamId),
+          name: row.name || row.realName || '',
+          birthDate: demoPoolBirthDate(row.birthDate),
+          gender: row.gender || '',
+          number: Number(row.jerseyNumber || row.number || 0) || 0,
+          position: row.position || '',
+          photo: row.photoUrl || row.avatarUrl || row.photoFileID || ''
+        })),
+        teamCount: teamRows.length,
+        playerCount: playerRows.length,
+        generatedAt: new Date().toISOString()
+      }
+    }
+  } catch (error) {
+    console.error('[webApi] demoPoolDataset 读取失败:', error)
+    return { success: false, error: error.message || '演示数据读取失败' }
+  }
 }
 
 async function handleDbQuery(event) {
@@ -4657,6 +4998,7 @@ async function handleDbQuery(event) {
   const db = cloud.database()
   const authenticated = await authenticateWebSession(event)
   if (!authenticated.success) return authenticated
+  if (['teams','players'].includes(collection) && ['add','update'].includes(operation)) require('./data-center/numbering.cjs').guardWrite(data)
   const delegatedStaff = Boolean(authenticated.orgId) && await staffPolicy.isStaff(db, authenticated.userId, authenticated.orgId) && !await staffPolicy.owner(db, authenticated.userId, authenticated.orgId)
   if (delegatedStaff && assistanceGrantId) return { success: false, code: 'TOURNAMENT_STAFF_SCOPE_DENIED', error: '赛事子账号不能叠加远程协助授权' }
 
@@ -4702,6 +5044,12 @@ async function handleDbQuery(event) {
   }
 
   try {
+    // teams / tournaments / matches 的写入会改变机构权限索引，先失效缓存，
+    // 让后续读取立即重建，避免新资料在缓存 TTL 内查不到。
+    if (organizerScope && ['add', 'update', 'delete'].includes(operation) &&
+        ['teams', 'tournaments', 'matches'].includes(collection)) {
+      invalidateOrganizerScopeIndex(organizerScope.orgId)
+    }
     switch (operation) {
       case 'divisionRuleEditState': {
         if (collection !== 'divisions' || assistanceScope || !organizerScope) return { success:false, code:'DIVISION_SCOPE_DENIED', error:'无权读取组别规则状态' }
@@ -4933,9 +5281,11 @@ async function handleDbQuery(event) {
             } })
             return { _id:addedTeam._id, tournamentTeamId:addedRelation._id }
           })
+          await require('./data-center/numbering.cjs').afterWrite(db,'teams',result._id)
           return { success:true, ...result, message:'球队已加入赛事' }
         }
         const addRes = await db.collection(collection).add({ data: nextData })
+        if (['teams','players'].includes(collection)) await require('./data-center/numbering.cjs').afterWrite(db,collection,addRes._id)
         if (assistanceScope) {
           await writeAssistanceAudit(
             db, assistanceScope, authenticated.userId, 'add', collection, addRes._id, null, { ...nextData, _id: addRes._id }
@@ -4993,7 +5343,9 @@ async function handleDbQuery(event) {
         if (!await competitionPlanMutationAllowed(db, collection, { ...(before || {}), ...(nextUpdateData || {}) })) {
           return { success: false, error: '竞赛方案已经锁定，不能直接修改已确认赛程', code: 'COMPETITION_PLAN_LOCKED' }
         }
+        if (collection === 'teams' && before?.businessNumber && Object.prototype.hasOwnProperty.call(nextUpdateData,'parentTeamId') && String(before.parentTeamId||'') !== String(nextUpdateData.parentTeamId||'')) return {success:false,code:'NUMBERING_IMMUTABLE',error:'已发号球队不能直接更换主体关系'}
         await db.collection(collection).doc(id).update({ data: nextUpdateData })
+        if (['teams','players'].includes(collection)) await require('./data-center/numbering.cjs').afterWrite(db,collection,id)
         const teamSync = collection === 'teams' && !assistanceScope
           ? await syncTeamProfileReferences(db, id, before, { ...(before || {}), ...(nextUpdateData || {}) })
           : null
@@ -5231,6 +5583,18 @@ async function handleRosterExceptionBoard(event) {
     relationsByTeamId.set(teamId, list)
   })
   const relationByTeamId = new Map(Array.from(relationsByTeamId.entries()).map(function (entry) { return [entry[0], entry[1][0]] }))
+  // 报名导入生成的参赛关系在球队通过审核前仍是 invited/pending，但主办方需要在这期间
+  // 逐人审核球员资料，因此审核球员时允许非终止态关系，避免“球队不属于当前赛事竞赛组别”。
+  const reviewRelationsByTeamId = new Map()
+  relationRows.filter(function (item) {
+    return ['cancelled', 'withdrawn', 'removed', 'invite_cancelled', 'rejected', 'replaced'].indexOf(String(item.status || '').toLowerCase()) < 0
+  }).forEach(function (item) {
+    const teamId = String(item.teamId || '')
+    if (!teamId) return
+    const list = reviewRelationsByTeamId.get(teamId) || []
+    list.push(item)
+    reviewRelationsByTeamId.set(teamId, list)
+  })
   const teamIds = Array.from(relationByTeamId.keys()).filter(Boolean)
 
   if (action === 'approvePlayer') {
@@ -5238,7 +5602,7 @@ async function handleRosterExceptionBoard(event) {
     const playerId = String(event.playerId || '')
     const selectedDivisionId = String(event.divisionId || '')
     if (!teamId || !playerId) return { success:false, error:'缺少球队或球员信息' }
-    const teamRelations = relationsByTeamId.get(teamId) || []
+    const teamRelations = reviewRelationsByTeamId.get(teamId) || []
     const relation = selectedDivisionId
       ? teamRelations.find(function (item) { return String(item.divisionId || item.division || 'default') === selectedDivisionId })
       : (teamRelations.length === 1 ? teamRelations[0] : null)
@@ -5271,6 +5635,71 @@ async function handleRosterExceptionBoard(event) {
     const relationId = String(relation._id || '')
     if (relationId) await db.collection('tournament_teams').doc(relationId).update({ data:{ rosterStatus:'approved', rosterPlayerCount:playerIds.length, playerReviewStatus:'completed', lastRosterApprovalAt:now, updateTime:now } })
     return { success:true, playerId, snapshotId:String(created._id), snapshotStatus:'approved', playerIds, message:'球员已审核并加入本届正式名单' }
+  }
+
+  // 逐人驳回：资料缺项（照片、位置、号码、身份证号等）时由主办方退回该球员，
+  // 只标记球员审核状态与原因，不改动已通过的正式名单快照。
+  if (action === 'rejectPlayer') {
+    const teamId = String(event.teamId || '')
+    const playerId = String(event.playerId || '')
+    const selectedDivisionId = String(event.divisionId || '')
+    const reason = String(event.reason || '').trim().slice(0, 200)
+    if (!teamId || !playerId) return { success:false, error:'缺少球队或球员信息' }
+    if (!reason) return { success:false, error:'请选择或填写驳回原因', code:'REASON_REQUIRED' }
+    const teamRelations = reviewRelationsByTeamId.get(teamId) || []
+    const relation = selectedDivisionId
+      ? teamRelations.find(function (item) { return String(item.divisionId || item.division || 'default') === selectedDivisionId })
+      : (teamRelations.length === 1 ? teamRelations[0] : null)
+    if (!relation) return { success:false, error:'球队不属于当前赛事竞赛组别', code:'DIVISION_NOT_FOUND' }
+    const [teamResult, playerByIdResult, playerByCodeResult, snapshotResult] = await Promise.all([
+      db.collection('teams').doc(teamId).get(),
+      db.collection('players').where({ _id:playerId, teamId }).limit(2).get(),
+      db.collection('players').where({ _id:playerId, teamCode:teamId }).limit(2).get(),
+      db.collection('roster_snapshots').where({ tournamentId, teamId }).limit(50).get()
+    ])
+    const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
+    if (!team || !organizerRecordAllowed('teams', team, scope)) return { success:false, error:'无权审核该球队球员' }
+    const player = mergeRosterPlayerRows([playerByIdResult.data || [], playerByCodeResult.data || []]).find(function (item) { return String(item._id) === playerId })
+    if (!player || ['archived', 'deleted'].includes(String(player.status || '').toLowerCase())) return { success:false, error:'球员不存在或不属于当前球队' }
+    const relationDivisionId = String(relation.divisionId || relation.division || 'default')
+    const snapshots = (snapshotResult.data || []).filter(function (item) {
+      const snapshotDivisionId = String(item.divisionId || item.division || '')
+      return snapshotDivisionId ? snapshotDivisionId === relationDivisionId : teamRelations.length === 1
+    })
+    const latestApproved = snapshots.filter(function (item) {
+      return ['approved', 'locked'].indexOf(String(item.status || '').toLowerCase()) >= 0 && rosterSnapshotPlayerIds(item).indexOf(playerId) >= 0
+    })[0]
+    if (latestApproved) return { success:false, error:'该球员已在正式名单中，如需调整请通过名单变更处理', code:'IN_FORMAL_ROSTER' }
+    const now = db.serverDate()
+    const actor = String(authenticated.user.nickname || authenticated.user.userName || authenticated.user.phone || authenticated.user._id || '主办方').slice(0, 50)
+    await db.collection('players').doc(playerId).update({ data:{
+      organizerReviewStatus:'rejected', organizerReviewReason:reason,
+      organizerReviewedAt:now, organizerReviewedBy:String(authenticated.user._id || ''),
+      organizerReviewedByName:actor, updateTime:now
+    } })
+    const relationId = String(relation._id || '')
+    if (relationId) await db.collection('tournament_teams').doc(relationId).update({ data:{
+      playerReviewStatus:'needs_resubmit', lastPlayerRejectionReason:reason, lastPlayerRejectionAt:now, updateTime:now
+    } })
+    // 驳回后服务号通知为 best-effort：发送失败不影响驳回结果，也不向调用方报错。
+    // 调用方身份用两函数共有的服务号 AppSecret 做 HMAC 证明，不新增环境变量。
+    const reviewId = crypto.randomBytes(16).toString('hex')
+    try {
+      const notifySecret = String(SERVICE_ACCOUNT_CONFIG.APP_SECRET || '')
+      if (notifySecret) {
+        const bridgeTimestamp = Date.now()
+        const bridgeNonce = crypto.randomBytes(16).toString('hex')
+        const canonical = ['playerReviewRejected', tournamentId, teamId, playerId, reviewId, String(bridgeTimestamp), bridgeNonce].join('|')
+        const bridgeProof = crypto.createHmac('sha256', notifySecret).update(canonical).digest('hex')
+        await cloud.callFunction({ name:'tournamentRegistrationFlow', data:{
+          action:'notifyPlayerReviewRejected', tournamentId, teamId, playerId, reviewId,
+          divisionId:relationDivisionId, bridgeTimestamp, bridgeNonce, bridgeProof
+        } })
+      }
+    } catch (error) {
+      console.warn('[webLoginApi] 球员驳回服务号通知未发送：', error.message || error)
+    }
+    return { success:true, playerId, reviewStatus:'rejected', reason, message:'已驳回该球员，球队需补充资料后重新提交' }
   }
 
   if (action === 'listRoster') {
@@ -5569,7 +5998,6 @@ function publicEventView(event, match) {
   const minuteValue = Number(item.minute || item.minuteOfMatch || item.matchMinute || 0)
   return {
     type: type.slice(0, 30),
-    isShootout: item.isShootout === true || ['shootout','penalty_shootout'].includes(String(item.phase || item.period || '').toLowerCase()),
     minute: Number.isFinite(minuteValue) ? Math.max(0, Math.min(130, Math.round(minuteValue))) : 0,
     teamSide: side,
     teamName: side === 'away' ? String(match && match.awayTeamName || '客队') : String(match && match.homeTeamName || '主队'),
@@ -5581,12 +6009,21 @@ function publicEventView(event, match) {
   }
 }
 
-function publicScoreFromEvents(events, match, calculateMatchEventScore) {
-  try { return calculateMatchEventScore({ ...(match || {}), events: Array.isArray(events) ? events : [] }) } catch (error) { if (error.code === 'GOAL_TEAM_REQUIRED') return null; throw error }
+function publicScoreFromEvents(events, match) {
+  const score = { home: 0, away: 0 }
+  ;(Array.isArray(events) ? events : []).forEach(function (event) {
+    const type = String(event && (event.type || event.eventType) || '').trim().toLowerCase()
+    if (!['goal', 'penalty', 'penalty_scored', 'penalty_goal', 'own_goal', 'own-goal', 'og'].includes(type)) return
+    const awayId = String(match && (match.awayTeamId || match.awayTeam && (match.awayTeam._id || match.awayTeam.id)) || '')
+    const awayName = String(match && (match.awayTeamName || match.awayTeam && (match.awayTeam.name || match.awayTeam.teamName)) || '')
+    let side = String(event && (event.teamSide || event.side) || '').trim().toLowerCase() === 'away' || String(event && event.teamId || '') === awayId || String(event && event.teamName || '') === awayName ? 'away' : 'home'
+    if (['own_goal', 'own-goal', 'og'].includes(type)) side = side === 'home' ? 'away' : 'home'
+    score[side] = Math.min(99, score[side] + 1)
+  })
+  return score
 }
 
 async function getPublicTournamentCenter() {
-  const { calculateMatchEventScore } = await import('./data-center/match-events.mjs')
   const db = cloud.database()
   const result = await db.collection('publication_snapshots')
     .where({ sportCode: 'football', type: 'tournament_center', status: 'published' })
@@ -5764,8 +6201,8 @@ async function getPublicTournamentCenter() {
       const home = teamMap.get(String(item.homeTeamId || '')) || {}
       const away = teamMap.get(String(item.awayTeamId || '')) || {}
       const sourceEvents = (Array.isArray(item.events) ? item.events : []).concat(eventRowsByMatch.get(String(item._id || '')) || [])
-      const eventScore = sourceEvents.length && !item.resultCorrection ? publicScoreFromEvents(sourceEvents, item, calculateMatchEventScore) : null
-      liveMatches.push({ ...matchScoreView.publicFields(item),
+      const eventScore = sourceEvents.length && !item.resultCorrection ? publicScoreFromEvents(sourceEvents, item) : null
+      liveMatches.push({
         id: String(item._id || ''), tournamentId: String(item.tournamentId || ''), tournamentName: tournamentNames.get(String(item.tournamentId || '')) || '公开赛事', divisionName: String(item.divisionName || item.division || ''),
         round: String(item.roundName || item.round || item.stageName || item.phase || ''), status: status === 'ongoing' || status === 'live' ? 'ongoing' : (['completed', 'finished', 'ended'].includes(status) ? 'finished' : 'upcoming'),
         matchDate: String(item.matchDate || item.date || ''), matchTime: String(item.startTime || item.time || item.matchTime || ''),
@@ -5773,7 +6210,7 @@ async function getPublicTournamentCenter() {
         venue: String(item.venue || item.field || item.location || ''), homeName: String(item.homeTeamName || home.teamName || home.name || '主队待定'),
         awayName: String(item.awayTeamName || away.teamName || away.name || '客队待定'), homeLogo: String(item.homeTeamLogo || item.homeLogo || home.logoTransparentUrl || home.logoUrl || home.logo || ''),
         awayLogo: String(item.awayTeamLogo || item.awayLogo || away.logoTransparentUrl || away.logoUrl || away.logo || ''),
-        homeScore: eventScore ? eventScore.home : (item.homeScore != null && item.homeScore !== '' && Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null), awayScore: eventScore ? eventScore.away : (item.awayScore != null && item.awayScore !== '' && Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null), resultCorrection: item.resultCorrection || null
+        homeScore: eventScore ? eventScore.home : (Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null), awayScore: eventScore ? eventScore.away : (Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null), resultCorrection: item.resultCorrection || null
       })
     })
   }
@@ -5823,14 +6260,14 @@ async function getPublicTournamentCenter() {
   })
   const matches = Array.from(mergedMatches.values()).map(function (item) {
     const details = publicDetails.get(String(item.id || '')) || { events: [], lineups: { home: null, away: null } }
-    const eventScore = details.events.length && !item.resultCorrection ? publicScoreFromEvents(details.events, item, calculateMatchEventScore) : null
-    return { ...matchScoreView.publicFields(item),
+    const eventScore = details.events.length && !item.resultCorrection ? publicScoreFromEvents(details.events) : null
+    return {
       id: String(item.id || ''), tournamentId: String(item.tournamentId || ''), tournamentName: String(item.tournamentName || ''),
       divisionName: String(item.divisionName || ''), round: String(item.round || ''),
       status: ['ongoing', 'finished'].includes(String(item.status || '')) ? String(item.status) : 'upcoming',
       matchDate: String(item.matchDate || ''), matchTime: String(item.matchTime || ''), timestamp: Number(item.timestamp || 0), venue: String(item.venue || ''),
       homeName: String(item.homeName || '主队待定'), awayName: String(item.awayName || '客队待定'), homeLogo: String(item.homeLogo || ''), awayLogo: String(item.awayLogo || ''),
-      homeScore: eventScore ? eventScore.home : (item.homeScore != null && item.homeScore !== '' && Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null), awayScore: eventScore ? eventScore.away : (item.awayScore != null && item.awayScore !== '' && Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null),
+      homeScore: eventScore ? eventScore.home : (Number.isFinite(Number(item.homeScore)) ? Number(item.homeScore) : null), awayScore: eventScore ? eventScore.away : (Number.isFinite(Number(item.awayScore)) ? Number(item.awayScore) : null),
       support: publicSupportByMatch.get(String(item.id || '')) || { home: 0, away: 0, total: 0 },
       events: details.events,
       lineups: details.lineups
@@ -5909,6 +6346,23 @@ exports.main = async (event, context) => {
     return response(200, '')
   }
 
+  // 微信支付回调：必须在通用参数解析之前，按原始报文 + 微信签名头验签后再决定是否入账。
+  // 微信支付 v3 的 notify_url 不允许携带查询串，正式回调走 <共用域名>/honeyPayNotify 纯路径；
+  // 同时保留 ?action=honeyPayNotify，供本地/调试与旧配置兼容。
+  // 返回值原样写回微信支付（成功必须 200 + {"code":"SUCCESS"}）。
+  const notifyAction = String((event.queryStringParameters && event.queryStringParameters.action) || (event.queryParameters && event.queryParameters.action) || '')
+  const notifyPath = String(event.path || (event.requestContext && event.requestContext.path) || '').toLowerCase()
+  const notifyByPath = /(^|\/)honeypaynotify\/?$/.test(notifyPath)
+  if (notifyAction === 'honeyPayNotify' || notifyByPath) {
+    const notified = await require('./honeyRecharge.cjs').handleNotify(event, cloud.database())
+    return {
+      statusCode: Number(notified && notified.statusCode) || 500,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify((notified && notified.body) || { code: 'FAIL', message: '处理失败' }),
+      isBase64Encoded: false
+    }
+  }
+
   // 从 HTTP 请求体或 SDK 调用中提取参数
   const params = parseHttpRequestParams(event)
   if(event.httpMethod==='POST'&&String(event.headers&&(event.headers['content-type']||event.headers['Content-Type'])||'').toLowerCase().includes('multipart/form-data')){
@@ -5963,6 +6417,15 @@ exports.main = async (event, context) => {
     }
     let result
     switch (action) {
+      case 'phoneCodeLoginOptions':
+        result = await phoneCodeLoginService().options()
+        break
+      case 'sendPhoneCodeLoginSms':
+        result = await phoneCodeLoginService().send(params, phoneCodeLoginClientKey(event, context))
+        break
+      case 'completePhoneCodeLogin':
+        result = await phoneCodeLoginService().complete(params)
+        break
       case 'sendSms':
       case 'verifySmsCode':
       case 'passwordLogin':
@@ -5977,6 +6440,9 @@ exports.main = async (event, context) => {
         break
       case 'wechatWebLogin':
         result = await handleWechatOnlyLogin(params)
+        break
+      case 'miniProgramLogin':
+        result = await handleMiniProgramLogin(params)
         break
       case 'wechatPhoneChallenge':
         result = await handleWechatOnlyLogin(params)
@@ -6017,14 +6483,71 @@ exports.main = async (event, context) => {
       case 'publicDataCenter':
         result = await require('./publicDataCenter.cjs')(cloud.database(), params)
         break
+      case 'marketingSelfTestEvent':
+        result = await require('./marketingSelfTest.cjs').record(cloud.database(), params)
+        break
+      case 'marketingSelfTestSummary': {
+        const auth = await authenticateWebSession(params)
+        result = auth.success && auth.principalType === 'platform_owner'
+          ? await require('./marketingSelfTest.cjs').summary(cloud.database(), params)
+          : {success:false,code:'PLATFORM_OWNER_REQUIRED',error:'仅平台负责人可查看营销活动数据'}
+        break
+      }
+      case 'platformHoneyPaymentConfig': {
+        // 支付配置体检：只回「是否已配置 / 来源 / 格式 / 脱敏指纹」，密钥明文永不返回浏览器。
+        const auth = await authenticateWebSession(params)
+        result = auth.success && auth.principalType === 'platform_owner'
+          ? await require('./honeyRecharge.cjs').paymentConfigStatus(cloud.database())
+          : {success:false,code:'PLATFORM_OWNER_REQUIRED',error:'仅平台负责人可查看支付配置'}
+        break
+      }
+      case 'platformHoneyPaymentSecretSave':
+      case 'platformHoneyPaymentSecretClear': {
+        // 平台「支付设置」逐项写入/清除：密文入库，主密钥只在云函数环境变量，页面永不回读明文。
+        const auth = await authenticateWebSession(params)
+        if (!auth.success || auth.principalType !== 'platform_owner') {
+          result = {success:false,code:'PLATFORM_OWNER_REQUIRED',error:'仅平台负责人可修改支付配置'}
+          break
+        }
+        const rawHeaders = event.headers || {}
+        const forwarded = String(rawHeaders['x-forwarded-for'] || rawHeaders['X-Forwarded-For'] || '').split(',')[0].trim()
+        const platformOperator = {
+          userId: String(auth.userId || ''),
+          name: String((auth.user && (auth.user.nickname || auth.user.name)) || ''),
+          ip: forwarded
+        }
+        const honeyRechargeModule = require('./honeyRecharge.cjs')
+        result = action === 'platformHoneyPaymentSecretSave'
+          ? await honeyRechargeModule.savePaymentSecrets(cloud.database(), platformOperator, params)
+          : await honeyRechargeModule.clearPaymentSecrets(cloud.database(), platformOperator, params)
+        break
+      }
+      case 'marketingSelfTestWxConfig': {
+        const url = String(params.url || '').split('#')[0]
+        if (!/^https:\/\/www\.sxffootball\.cn\/service-account-h5\/(?:valuation-self-test|self-register)\.html(?:\?[^#]*)?$/.test(url)) {
+          result = {success:false,code:'SELFTEST_URL_INVALID',error:'页面地址无效'}
+          break
+        }
+        const reply = await cloud.callFunction({name:'tournamentRegistrationFlow',data:{action:'marketingSelfTestWxSignature',url}})
+        const signed = reply&&reply.result||{}
+        result = signed.success===true&&signed.jsConfig
+          ? {success:true,jsConfig:signed.jsConfig}
+          : {success:false,code:signed.code||'SELFTEST_WECHAT_CONFIG_FAILED',error:signed.message||'微信跳转配置暂不可用'}
+        break
+      }
       case 'getMyPreloadedPlayerCard':
       case 'previewMyPreloadedPlayerCard':
       case 'saveMyPreloadedPlayerCard':
       case 'selectMyPlayerCard':
+      case 'deleteMyPlayerCard':
+      case 'getMyPlayerPointsLedger':
+      case 'submitMyPlayerPointsAppeal':
+      case 'listMyPlayerPointsAppeals':
       case 'listMyPlayerCards':
       case 'getMyPlayerCard':
       case 'previewMyPlayerCard':
       case 'saveMyPlayerCard':
+        const { createPlayerCards } = require('./playerCards.cjs')
         result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
         break
       case 'getPlayerCardsForViewer':
@@ -6032,6 +6555,31 @@ exports.main = async (event, context) => {
       case 'getPlayerCardForViewer':
       case 'getPlayerCardById':
         result = await require('./playerCardAccess.cjs').createPlayerCardAccess({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed,buildStaffEventScope,recordBelongsToStaffEvent})(params); break
+      case 'getPlayerCardGameHome':
+      case 'getMyGameShares':
+      case 'listCollectiblePlayerCards':
+      case 'getMyCollectionCodex':
+      case 'listGameFormations':
+      case 'listMyGameLineups':
+      case 'getMyGameLineup':
+      case 'listGameOpponents':
+      case 'listMyGameMatches':
+      case 'getGameMatchDetail':
+      case 'publishPlayerCardShare':
+      case 'revokePlayerCardShare':
+      case 'collectPlayerCard':
+      case 'saveGameLineup':
+      case 'deleteGameLineup':
+      case 'challengeGameLineup':
+      case 'getCoachCard':
+      case 'feedCoachCard':
+      case 'listGameRunes':
+      case 'equipGameRune':
+      case 'unequipGameRune':
+      case 'decomposeGameRune':
+      case 'listGameSkills':
+      case 'useGameSkill':
+        result = await require('./playerCardGame.cjs').createPlayerCardGame({ cloud, hashSessionToken, dateValue })(params); break
       case 'getAdminPlayerCard':
       case 'saveAdminPlayerCard':
         result = await require('./playerCardsAdmin.cjs').createAdminPlayerCards({cloud,authenticateWebSession,buildOrganizerScope,organizerRecordAllowed})(params); break
@@ -6068,6 +6616,9 @@ exports.main = async (event, context) => {
       case 'publicTournamentCenter':
         result = await getPublicTournamentCenter()
         break
+      case 'liveFeed':
+        result = await require('./liveFeed.cjs')(cloud, params)
+        break
       case 'fanOAuthUrl':
         result = await fanCenterHandlers().createFanOAuthUrl(params && params.returnUrl); break
       case 'fanOAuth':
@@ -6087,12 +6638,51 @@ exports.main = async (event, context) => {
           : await center.handleFanSupport(params)
         break
       }
+      case 'servicePrivateOAuthUrl':
+      case 'servicePrivateOAuth':
+      case 'servicePrivateOverview':
+      case 'servicePrivatePlayerData':
+      case 'servicePrivateRefereeData':
+      case 'servicePrivateAccountData':
+      // 我的参赛：参赛资料与电子参赛证（只读，鉴权在 servicePrivate 内）
+      case 'servicePrivateParticipation':
+      case 'servicePrivateAdultMatchPass':
+      case 'servicePrivateRegistrationList':
+      case 'servicePrivateResumeRegistration':
+      case 'serviceFeedbackSubmit':
+      case 'servicePrivateFeedbackList':
+      // 蜂蜜充值：下单、订单列表、支付结果查单；入账只由服务端支付回调完成
+      case 'servicePrivateHoneyRecharge':
+      case 'servicePrivateHoneyOrders':
+      case 'servicePrivateHoneyOrderStatus':
+      // 个人会员（一期 A）：状态、下单、查单、订单列表；发放只由服务端支付回调完成
+      case 'servicePrivateMembershipStatus':
+      case 'servicePrivateMembershipSubscribe':
+      case 'servicePrivateMembershipOrderStatus':
+      case 'servicePrivateMembershipOrders':
+      // 个人保单 PDF：上传、识别、确认（鉴权在 servicePrivate 内）
+      case 'servicePrivateInsuranceUpload':
+      case 'servicePrivateInsuranceRecognize':
+      case 'servicePrivateInsuranceConfirm':
+        result = await require('./servicePrivate.cjs')({ cloud, config:SERVICE_ACCOUNT_CONFIG, hashSessionToken, dateValue, httpsGet, createSession:createRefereeH5Session })(action, params); break
       case 'serviceRefereeOAuthUrl':
         result = await createRefereeOAuthUrl(params && params.returnUrl); break
       case 'serviceRefereeOAuth':
         result = await handleRefereeOAuth(params); break
       case 'serviceRefereeWorkflow':
         result = await handleRefereeWorkflow(params); break
+      // 服务号 H5 自由球员自助登记：无需球队邀请入口，OAuth + 手机号验证后建档。
+      case 'selfRegisterOAuthUrl':
+      case 'selfRegisterSession':
+      case 'selfRegisterSendSms':
+      case 'selfRegisterVerifySms':
+      case 'selfRegisterContext':
+      case 'selfRegisterSubmit':
+      case 'selfRegisterClaim':
+      case 'selfRegisterTeams':
+      case 'selfRegisterSearchTeams':
+      case 'selfRegisterRequestTeamJoin':
+        result = await require('./selfRegister.cjs')(action, params, { cloud, config: SERVICE_ACCOUNT_CONFIG }); break
       case 'serviceEntryOAuthUrl':
       case 'completeServiceEntryOAuth':
       case 'serviceEntrySendSms':
@@ -6100,7 +6690,34 @@ exports.main = async (event, context) => {
       case 'serviceEntryContext':
       case 'serviceEntryClaimTeam':
       case 'serviceEntryJoinPlayer':
+      case 'serviceEntryUploadPhoto':
+      case 'serviceEntryAiPortraitApply':
+      case 'serviceEntryAiPortraitPrepare':
+      case 'serviceEntryAiPortraitRefund':
+      case 'serviceEntrySearchPlayers':
+      case 'serviceEntrySelectPlayer':
+      case 'serviceEntryCheckPlayerNumber':
+      case 'serviceEntryCheckPlayerId':
+      // 递卡确认：恢复/转入本队（H5 restoreForm 提交）。service-entry.js 已实现该操作，
+      // 缺此 case 时请求会落到 default 返回「未知操作：serviceEntryConfirmRestore」。
+      case 'serviceEntryConfirmRestore':
+      case 'serviceEntryPlayerCard':
+      case 'serviceEntrySavePlayerDraft':
         result = await require('./service-entry')(action, params); break
+      // 约球签到：服务号 H5 通过此入口转发到 friendlyMatchCenter 云函数
+      case 'friendlySignInWorkflow': {
+        const subAction = params.workflowAction || params.subAction || 'getInvite'
+        const friendlyPayload = Object.assign({}, params, { action: subAction })
+        try {
+          const fr = await cloud.callFunction({ name: 'friendlyMatchCenter', data: friendlyPayload })
+          const data = (fr && fr.result) || {}
+          result = data.ok ? { success: true, data: data.data, version: 'friendlyMatchCenter@v1' }
+                           : { success: false, code: data.code || 'UNKNOWN', message: data.message || '约球服务暂不可用' }
+        } catch (error) {
+          result = { success: false, code: 'FRIENDLY_UNAVAILABLE', message: error.message || '约球服务暂不可用' }
+        }
+        break
+      }
       case 'previewParentProfileInvite':
         result = await previewParentProfileInvite(params); break
       case 'parentProfileOAuthUrl':
@@ -6152,6 +6769,10 @@ exports.main = async (event, context) => {
         result = await handlePaperRefereeReport(params, false); break
       case 'confirmRefereeReport':
         result = await handlePaperRefereeReport(params, true); break
+      case 'demoPoolDataset':
+        result = await handleDemoPoolDataset(params); break
+      case 'translateUi':
+        result = await require('./baiduTranslateUi.cjs').translateUi(cloud, params); break
       case 'dbQuery':
         result = await handleDbQuery(params); break
       case 'callFunction':
@@ -6161,7 +6782,12 @@ exports.main = async (event, context) => {
       case 'uploadToCosDirect':
         result = await handleUploadToCosDirect(event, params); break
       default:
-        result = { success: false, error: '未知操作：' + action }
+        if (action && String(action).indexOf('cardWorld') === 0) {
+          // 卡世界入口统一交给 cardWorld.cjs；身份、配额、确定性计算都在服务端完成。
+          result = await cardWorldService().handle(String(action), params, cloud.getWXContext())
+        } else {
+          result = { success: false, error: '未知操作：' + action }
+        }
     }
 
     result = await require('./data-center/lifecycle-reader.cjs').decorateLifecycleResult(cloud.database(), result, params)

@@ -57,7 +57,10 @@ function createPlayerCardAccess({ cloud, authenticateWebSession, buildOrganizerS
           : organizerRecordAllowed('players',player,scope);if(!permitted){denied.set(id,{playerId:id,status:'forbidden',cardUrl:''});continue}}
         allowed.push(player)
       }
-      const cards=await readCards(cloud,db,allowed,{restrictedAssets:Boolean(staffScope),dynamic:event.action==='exportPlayerCardForViewer'||event.dynamicCardProtocol==='player-card-dynamic/1'}),byId=new Map(cards.map(card=>[card.playerId,card]))
+      // Older web bundles advertise dynamic/1 but lack reliable asset loading.
+      // They receive the same authorized card as an on-demand complete image.
+      const webDynamic=event.dynamicCardProtocol==='player-card-dynamic/1'&&event.playerCardRendererVersion==='player-card-web/2'
+      const cards=await readCards(cloud,db,allowed,{restrictedAssets:Boolean(staffScope),preserveDynamic:event.action==='exportPlayerCardForViewer',dynamic:event.action==='exportPlayerCardForViewer'||webDynamic}),byId=new Map(cards.map(card=>[card.playerId,card]))
       if(event.action==='exportPlayerCardForViewer'){const card=byId.get(ids[0]),player=allowed.find(p=>String(p._id)===ids[0]);if(!player||!card?.cardScene)return {success:false,code:'PLAYER_CARD_FORBIDDEN',error:'此球员卡无权导出或暂不可用'};return require('./playerCardDynamic.cjs').exportCard(cloud,db,player,card)}
       const result=ids.map(id=>byId.get(id)||denied.get(id))
       return event.action==='getPlayerCardsForViewer'?{success:true,cards:result}:{success:true,...result[0]}

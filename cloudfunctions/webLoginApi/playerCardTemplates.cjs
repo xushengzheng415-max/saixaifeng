@@ -140,6 +140,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
   const db = cloud.database()
   const publisher = createPlayerCardPublish({ cloud, scoreForPlayer })
   const layouts = createPlayerCardLayoutPresets({cloud,normalizeLayout,normalizePhoto,normalizeBadges})
+  const workflows = require('./playerCardWorkflows.cjs').createPlayerCardWorkflows({cloud,read,save,preview,urlsFor,itemOf,normalizeLayout,normalizePhoto,normalizeBadges})
   async function urlsFor(rows, publicOnly) {
     const ids = [...new Set(rows.flatMap(row => publicOnly
       ? [row.published?.backgroundFileId, row.published?.maskFileId]
@@ -168,9 +169,18 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     if (cursor && !/^[a-f0-9]{32}$/.test(cursor)) return { success: false, code: 'CARD_TEMPLATE_CURSOR_INVALID', error: '列表游标无效' }
     const filter = { ...(publicOnly ? { status: 'published' } : {}), ...(cursor ? { _id: db.command.gt(cursor) } : {}) }
     const page = (await db.collection(COLLECTION).where(filter).orderBy('_id', 'asc').limit(PAGE_SIZE).get()).data || []
-    const visible = publicOnly ? page.filter(row => preload.normalizePreload(row.published?.preload).type === 'platform') : page
+    const visible = publicOnly ? page.filter(row => row.cardKind !== 'honor' && preload.normalizePreload(row.published?.preload).type === 'platform') : page
     const urls = await urlsFor(visible, publicOnly)
     return { success: true, templates: visible.map(row => itemOf(row, urls, publicOnly)), nextCursor: page.length === PAGE_SIZE ? String(page[page.length - 1]._id) : '' }
+  }
+  async function assetData(fileId) {
+    if (!fileId) return ''
+    try {
+      const result = await cloud.downloadFile({ fileID: fileId })
+      const buffer = result && result.fileContent
+      if (!buffer || buffer.length > 2 * 1024 * 1024) return ''
+      return 'data:image/png;base64,' + Buffer.from(buffer).toString('base64')
+    } catch (error) { return '' }
   }
   async function get(event) {
     const id = String(event.templateId || '')
@@ -179,6 +189,12 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     if (!record) return { success: false, code: 'CARD_TEMPLATE_NOT_FOUND', error: '模板不存在' }
     const urls = await urlsFor([record], false)
     const template = itemOf(record, urls, false)
+    // 编辑器预览需要像素级合成；跨域临时链接在部分网络下无法被 fetch 读取，
+    // 这里按需把草稿素材转成 data URL，预览不再依赖存储域名 CORS。
+    if (event.withData === true) {
+      template.backgroundData = await assetData(template.backgroundFileId)
+      template.maskData = await assetData(template.maskFileId)
+    }
     return { success: true, template }
   }
   async function preloadPlayer(event) {
@@ -234,6 +250,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     const positionOverride=normalizePositionOverride(event.positionOverride??draft.positionOverride,scope)
     const template = { layout:normalizeLayout(event.layout || draft.layout), photo:normalizePhoto(event.photo || draft.photo), badges:normalizeBadges(event.badges || draft.badges),preload:scope,positionOverride }
     let player={name:'示例球员',jerseyNumber:'10',position:'FW',jerseyName:'SAMPLE',height:178,weight:72,nationality:'中国'},portraitBuffer,teamLogoBuffer
+    await require('./playerCardRender.cjs').ensureFonts()
     if(event.playerId) {
       const scope=preload.normalizePreload(event.preload||draft.preload)
       if(scope.type!=='player'||scope.targetId!==String(event.playerId)) throw Object.assign(new Error('单人预览对象与预装球员不一致'),{code:'CARD_PREVIEW_PLAYER_SCOPE_MISMATCH'})
@@ -268,6 +285,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     if (id && !record) return { success: false, code: 'CARD_TEMPLATE_NOT_FOUND', error: '模板不存在，请刷新列表' }
     if (record && record.tier !== tier) return { success: false, code: 'CARD_TEMPLATE_TIER_LOCKED', error: '已有模板不能更换等级，请新建模板' }
     const scope = await preload.validatePreload(db, event.preload ?? record?.draft?.preload, suite.document)
+    if(record?.setId && preload.stateId(tier,scope)!==preload.stateId(tier,record.draft?.preload))throw new Error('套系内不能单独改变适用范围')
     const positionOverride=normalizePositionOverride(event.positionOverride??record?.draft?.positionOverride,scope)
     if (record?.publishedVersion && preload.stateId(tier, scope) !== preload.stateId(tier, record.published?.preload)) return { success:false, code:'CARD_PRELOAD_LOCKED', error:'已发布模板不能改绑，请新建模板' }
     const photo = normalizePhoto(event.photo || record?.draft?.photo)
@@ -333,6 +351,7 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
     const auth = await owner(event)
     if (!auth.success) return auth
     try {
+      if(event.workflowAction)return await workflows(event,auth)
       if (action === 'listPlayerCardLayoutPresets') return await layouts.list(event)
       if (action === 'getPlayerCardLayoutPreset') return await layouts.get(event)
       if (action === 'savePlayerCardLayoutPreset') return await layouts.save(event,auth)
@@ -343,14 +362,15 @@ function createPlayerCardTemplates({ cloud, authenticateWebSession, scoreForPlay
       if (action === 'getPlayerCardTemplate') return await get(event)
       if (action === 'previewPlayerCardTemplate') return await preview(event)
       if (action === 'savePlayerCardTemplate') return await save(event, auth)
-      if(action==='publishDynamicPlayerCardTemplate'){const row=await read(String(event.templateId||''));if(!row)throw new Error('模板不存在');return await require('./playerCardDynamic.cjs').publish(cloud,db,row,Number(event.revision),auth.userId)}
+      if(action==='publishDynamicPlayerCardTemplate'){const row=await read(String(event.templateId||''));if(!row)throw new Error('模板不存在');if(row.setId)throw new Error('请在制卡项目中统一预览和发布');return await require('./playerCardDynamic.cjs').publish(cloud,db,row,Number(event.revision),auth.userId)}
       if (action === 'publishPlayerCardTemplate') {
         const row = await read(String(event.templateId || ''))
         if (!row) return { success:false, code:'CARD_TEMPLATE_NOT_FOUND', error:'模板不存在' }
+        if(row.setId)throw new Error('请在制卡项目中统一预览和发布')
         return await publisher.begin(row, Number(event.revision), auth.userId)
       }
       if (action === 'continuePlayerCardTemplatePublish') return await publisher.advance(String(event.jobId || ''))
-      if (action === 'listPlayerCardTemplatePublishPreviews') return await publisher.previews(String(event.jobId || ''),event.offset,event.limit)
+      if (action === 'listPlayerCardTemplatePublishPreviews') return await publisher.previews(String(event.jobId || ''),event.offset,event.limit,{dynamicReview:event.dynamicReview === true})
       if (action === 'confirmPlayerCardTemplatePublish') return await publisher.confirm(String(event.jobId || ''),auth.userId)
       if (action === 'rejectPlayerCardTemplatePublish') return await publisher.reject(String(event.jobId || ''),auth.userId)
       if (action === 'getPlayerCardTemplatePublishStatus') return await publisher.status(tierOf(event.tier), event.preload, event.templateId)

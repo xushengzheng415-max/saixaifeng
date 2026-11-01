@@ -29,7 +29,7 @@ function relayRights(name, params = {}) {
   }
   if (name === 'resultCenter') {
     if (action === 'dashboard') return { any: ['event.dashboard', 'event.results', 'event.news', 'news.edit', 'news.publish'] }
-    if (['staffMatches', 'supplementResult', 'listDisciplinaryActions', 'createDisciplinaryAction', 'revokeDisciplinaryAction', 'addDisciplinaryAttachments'].includes(action)) return { any: ['event.results', 'result.supplement'] }
+    if (['staffMatches', 'supplementResult', 'listDisciplinaryActions', 'createDisciplinaryAction', 'revokeDisciplinaryAction'].includes(action)) return { any: ['event.results', 'result.supplement'] }
     return ['resolvePairingSources', 'publishStandings', 'correctArchivedScore'].includes(action) ? ['event.results'] : null
   }
   if (name === 'newsPreviewGenerate') return ['event.news']
@@ -51,7 +51,13 @@ function relayRights(name, params = {}) {
   if (name === 'baiduRemoveBg') return ['event.teams']
   if (name === 'parseTournamentRegulations') return ['event.competition']
   if (name === 'getRegulations') return { any:['event.dashboard','event.competition','event.settings'] }
-  if (name === 'dataCenter') return { any: ['event.dashboard', 'event.teams', 'event.results'] }
+  if (name === 'dataCenter') {
+    // 转会中心动作单独要求 event.transfer：赛事子账号必须被显式授予转会权限，
+    // 不能凭 event.dashboard／event.teams 等既有读取权限顺手获得审核资格。
+    // 球队侧转会动作仍由 dataCenter 按 manageTeamIds 判定，子账号不会因此获得球队权限。
+    if (action.startsWith('transfer')) return { any: ['event.transfer'] }
+    return { any: ['event.dashboard', 'event.teams', 'event.results', 'event.registration'] }
+  }
   return null
 }
 

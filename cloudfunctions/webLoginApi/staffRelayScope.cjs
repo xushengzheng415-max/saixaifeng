@@ -11,13 +11,15 @@ async function read(db, name, id) {
 async function validateStaffRelayScope(db, functionName, params = {}, tournamentId) {
   const expected = string(tournamentId)
   if (!expected) return false
-  if (functionName === 'dataCenter' && string(params.scope && params.scope.tournamentId) !== expected) return false
+  // 球员详情可不带赛事 ID（生涯口径）；赛事范围由 dataCenter 按账号授权赛事收窄。
+  const careerView = functionName === 'dataCenter' && !string(params.scope && params.scope.tournamentId)
+  if (functionName === 'dataCenter' && !careerView && string(params.scope && params.scope.tournamentId) !== expected) return false
   const nested = [
     params.tournamentId, params.eventId, params.tournament && (params.tournament._id || params.tournament.id),
     params.scope && params.scope.tournamentId, params.data && params.data.tournamentId
   ].map(string).filter(Boolean)
   if (nested.some(value => value !== expected)) return false
-  let scoped = nested.length > 0
+  let scoped = nested.length > 0 || careerView
   if (functionName === 'getRegulations') {
     const event = await read(db, 'tournaments', expected)
     const fileUrl = string(params.fileUrl || params.fileID)
