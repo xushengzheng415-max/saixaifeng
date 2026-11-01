@@ -317,7 +317,10 @@ function refereeOAuthReturnUrl(value) {
     const parsed=new URL(url)
     if(parsed.hostname!=='www.sxffootball.cn')return ''
     if(!['/service-account-h5/','/preview/service-account-h5/'].includes(parsed.pathname))return ''
-    return parsed.origin+parsed.pathname
+    // 仅保留本站裁判登记参数，避免授权回跳丢失邀请后误入任务绑定。
+    const refereeInvite=String(parsed.searchParams.get('refereeInvite')||'').trim()
+    if(refereeInvite.length>256)return ''
+    return parsed.origin+parsed.pathname+(refereeInvite?'?refereeInvite='+encodeURIComponent(refereeInvite):'')
   } catch (error) { return '' }
 }
 
