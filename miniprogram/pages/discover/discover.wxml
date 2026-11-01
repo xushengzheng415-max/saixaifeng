@@ -1,0 +1,479 @@
+<!-- pages/discover/discover.wxml -->
+<!-- 发现一级页：动态／赛事／约球／转会共用同一路由。WXML 只做简单插值、简单取反和简单或，状态全部在 js 预计算 -->
+<view class="page {{isTransferTabClass}}">
+
+  <!-- 顶部页框：安全区 + 标题 + 城市／查询 + 记一场 -->
+  <view class="topbar" style="{{headerStyle}}">
+    <view class="title-row">
+      <text class="page-title">发现</text>
+      <text class="page-role" wx:if="{{isOrganizer}}">赛事组织</text>
+    </view>
+    <view class="tool-row">
+      <view class="city-chip" bindtap="onTapCity">
+        <image class="city-icon" src="/images/icons/location.svg" mode="aspectFit"></image>
+        <text class="city-text" wx:if="{{cityRegistered}}">{{cityText}}</text>
+        <text class="city-text" wx:if="{{!cityRegistered}}">未设城市</text>
+      </view>
+      <view class="{{searchBoxClass}}" wx:if="{{!isTransferTab}}">
+        <image class="search-icon" src="/images/icons/search.svg" mode="aspectFit"></image>
+        <input class="search-input" value="{{keyword}}" placeholder="{{searchPlaceholder}}" placeholder-class="search-placeholder" disabled="{{searchDisabled}}" confirm-type="search" bindinput="onKeywordInput" bindconfirm="onKeywordConfirm" />
+        <text class="search-clear" wx:if="{{hasKeyword}}" catchtap="onClearKeyword">清除</text>
+      </view>
+      <view class="market-search-entry" wx:if="{{isTransferTab}}">
+        <image class="search-icon" src="/images/icons/search.svg" mode="aspectFit"></image>
+        <input class="market-search-input" value="{{transferKeyword}}" placeholder="搜索已展示球员" placeholder-class="search-placeholder" confirm-type="search" bindinput="onTransferSearchInput" />
+      </view>
+      <view class="record-btn {{recordBtnClass}}" bindtap="onStartRecord">
+        <text class="record-btn-text">记一场</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 四个顶部分栏，默认动态 -->
+  <view class="tab-row">
+    <view class="tab-item {{item.itemClass}}" wx:for="{{tabs}}" wx:key="id" data-id="{{item.id}}" bindtap="onSwitchTab">
+      <text class="tab-text {{item.textClass}}">{{item.text}}</text>
+      <view class="tab-line {{item.lineClass}}"></view>
+    </view>
+  </view>
+
+  <!-- 当前栏筛选 + 低权重发布入口 -->
+  <view class="filter-row" wx:if="{{showFilterRow}}">
+    <view class="chip-row">
+      <view class="chip {{item.itemClass}}" wx:for="{{chips}}" wx:key="id" data-id="{{item.id}}" bindtap="onSwitchFilter">
+        <text class="chip-text">{{item.text}}</text>
+      </view>
+    </view>
+    <text class="publish-entry" wx:if="{{showPublishEntry}}" catchtap="onTogglePublish">发布</text>
+  </view>
+
+  <view class="guest-strip" wx:if="{{showGuestNotice}}">
+    <text class="guest-strip-text">{{guestNoticeText}}</text>
+    <text class="guest-strip-action" catchtap="onGoLogin">登录</text>
+  </view>
+
+  <view class="page-error" wx:if="{{showPageError}}">
+    <text class="page-error-text">{{pageErrorText}}</text>
+  </view>
+
+  <!-- ===== 动态 ===== -->
+  <block wx:if="{{isFeedTab}}">
+    <view class="notice-strip" wx:if="{{feedNoticeText}}">
+      <text class="notice-strip-text">{{feedNoticeText}}</text>
+    </view>
+
+    <view class="publish-panel" wx:if="{{publishMenuVisible}}">
+      <view class="publish-item" data-kind="post" bindtap="onPickPublish">
+        <text class="publish-item-title">球队动态</text>
+        <text class="publish-item-desc">正文与授权照片，发布身份为当前有权限球队</text>
+      </view>
+      <view class="publish-item" data-kind="recruit" bindtap="onPickPublish">
+        <text class="publish-item-title">球队招募</text>
+        <text class="publish-item-desc">组别、城市、位置、人数与有效状态</text>
+      </view>
+      <text class="publish-close" catchtap="onTogglePublish">收起</text>
+    </view>
+
+    <view class="card-list" wx:if="{{hasFeedItems}}">
+      <view class="feed-card" wx:for="{{feedItems}}" wx:key="key">
+        <view class="feed-head">
+          <image class="feed-logo" src="{{item.publisherLogo}}" mode="aspectFit"></image>
+          <view class="feed-head-main">
+            <text class="feed-publisher">{{item.publisherName}}</text>
+            <text class="feed-time">{{item.timeText}}</text>
+          </view>
+          <text class="feed-source">{{item.sourceText}}</text>
+        </view>
+        <view class="feed-body" data-id="{{item.id}}" bindtap="onOpenReport">
+          <view class="feed-score">
+            <text class="feed-score-text">{{item.scoreText}}</text>
+            <text class="feed-result {{item.resultClass}}" wx:if="{{item.hasResult}}">{{item.resultText}}</text>
+          </view>
+          <view class="feed-main">
+            <text class="feed-title">{{item.titleText}}</text>
+            <text class="feed-meta">{{item.metaText}}</text>
+            <text class="feed-scorer" wx:if="{{item.hasScorer}}">{{item.scorerText}}</text>
+          </view>
+        </view>
+        <view class="feed-actions">
+          <text class="feed-action" data-id="{{item.id}}" catchtap="onOpenReport">查看战报</text>
+          <text class="feed-action promote" wx:if="{{item.canPromote}}" data-id="{{item.id}}" catchtap="onPromoteFriendly">转入正式数据</text>
+          <text class="feed-action danger" wx:if="{{item.canDelete}}" data-id="{{item.id}}" catchtap="onDeleteFriendly">删除</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="refresh-strip" wx:if="{{feedRefreshText}}">
+      <text class="refresh-strip-text">{{feedRefreshText}}</text>
+    </view>
+
+    <view class="state-card" wx:if="{{feedStateVisible}}">
+      <text class="state-title">{{feedStateTitle}}</text>
+      <text class="state-desc" wx:if="{{feedStateDesc}}">{{feedStateDesc}}</text>
+      <view class="state-btn" wx:if="{{feedStateHasAction}}" data-action="{{feedStateAction}}" bindtap="onStateAction">
+        <text class="state-btn-text">{{feedStateActionText}}</text>
+      </view>
+    </view>
+
+    <view class="end-strip" wx:if="{{feedEndText}}">
+      <text class="end-strip-text">{{feedEndText}}</text>
+    </view>
+  </block>
+
+  <!-- ===== 赛事 ===== -->
+  <block wx:if="{{isEventTab}}">
+    <view class="card-list" wx:if="{{hasEventItems}}">
+      <view class="event-card" wx:for="{{eventItems}}" wx:key="key">
+        <view class="event-cover-wrap">
+          <image class="event-cover" src="{{item.cover}}" mode="aspectFill" data-key="{{item.key}}" binderror="onEventCoverError"></image>
+          <text class="event-badge" wx:if="{{item.hasBadge}}">{{item.badgeText}}</text>
+        </view>
+        <view class="event-body">
+          <view class="event-title-row">
+            <text class="event-name">{{item.name}}</text>
+            <text class="event-status {{item.statusClass}}">{{item.statusText}}</text>
+          </view>
+          <text class="event-meta">{{item.metaText}}</text>
+          <text class="event-host" wx:if="{{item.hasHost}}">{{item.hostText}}</text>
+          <!-- 赛事卡只连赛事中心；转会模块独立在发现根目录，不嵌套在赛事卡内 -->
+          <view class="event-actions">
+            <view class="event-btn event-btn-outline" data-id="{{item.id}}" catchtap="onOpenEventCenter">
+              <text class="event-btn-text event-btn-text-outline">赛事中心</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="refresh-strip" wx:if="{{eventRefreshText}}">
+      <text class="refresh-strip-text">{{eventRefreshText}}</text>
+    </view>
+
+    <view class="state-card" wx:if="{{eventStateVisible}}">
+      <text class="state-title">{{eventStateTitle}}</text>
+      <text class="state-desc" wx:if="{{eventStateDesc}}">{{eventStateDesc}}</text>
+      <view class="state-btn" wx:if="{{eventStateHasAction}}" data-action="{{eventStateAction}}" bindtap="onStateAction">
+        <text class="state-btn-text">{{eventStateActionText}}</text>
+      </view>
+    </view>
+
+    <view class="end-strip" wx:if="{{eventEndText}}">
+      <text class="end-strip-text">{{eventEndText}}</text>
+    </view>
+  </block>
+
+  <!-- ===== 约球：本队约球（管理视角）／公开约球（跨队撮合） ===== -->
+  <block wx:if="{{isInviteTab}}">
+    <view class="invite-card">
+      <text class="invite-title">登记意向，海报约战</text>
+      <text class="invite-desc">发起方登记时间、场地与人数，生成海报分享到微信群；对手扫码报名，比赛日签到。</text>
+      <view class="invite-btn {{inviteBtnClass}}" bindtap="onStartInvite">
+        <text class="invite-btn-text">发起约球</text>
+      </view>
+    </view>
+
+    <view class="scope-row">
+      <view class="scope-item {{item.itemClass}}" wx:for="{{inviteScopes}}" wx:key="id" data-id="{{item.id}}" bindtap="onSwitchInviteScope">
+        <text class="scope-text">{{item.text}}</text>
+      </view>
+    </view>
+
+    <block wx:if="{{isTeamInviteScope}}">
+      <view class="notice-strip" wx:if="{{inviteNoticeText}}">
+        <text class="notice-strip-text">{{inviteNoticeText}}</text>
+      </view>
+
+      <view class="card-list" wx:if="{{hasInviteItems}}">
+        <view class="invite-item" wx:for="{{inviteItems}}" wx:key="key">
+          <view class="invite-item-head">
+            <text class="invite-item-title">{{item.titleText}}</text>
+            <text class="invite-status {{item.statusClass}}">{{item.statusText}}</text>
+          </view>
+          <view class="invite-item-row">
+            <image class="invite-item-icon" src="/images/icons/location.svg" mode="aspectFit"></image>
+            <text class="invite-item-venue">{{item.venueText}}</text>
+          </view>
+          <text class="invite-item-address" wx:if="{{item.hasAddress}}">{{item.addressText}}</text>
+          <view class="invite-item-foot">
+            <text class="invite-item-signup">{{item.signupText}}</text>
+            <text class="invite-item-deadline">{{item.deadlineText}}</text>
+          </view>
+          <text class="invite-item-cry" wx:if="{{item.hasBattleCry}}">{{item.battleCryText}}</text>
+          <view class="invite-response-row">
+            <text class="invite-response-text">{{item.responseText}}</text>
+            <view class="invite-response-btn" wx:if="{{item.hasResponse}}" data-id="{{item.id}}" bindtap="onViewInviteResponses">
+              <text class="invite-response-btn-text">查看应战</text>
+            </view>
+          </view>
+          <text class="invite-item-created">{{item.createdText}}</text>
+        </view>
+      </view>
+
+      <view class="refresh-strip" wx:if="{{inviteRefreshText}}">
+        <text class="refresh-strip-text">{{inviteRefreshText}}</text>
+      </view>
+
+      <view class="state-card" wx:if="{{inviteStateVisible}}">
+        <text class="state-title">{{inviteStateTitle}}</text>
+        <text class="state-desc" wx:if="{{inviteStateDesc}}">{{inviteStateDesc}}</text>
+        <view class="state-btn" wx:if="{{inviteStateHasAction}}" data-action="{{inviteStateAction}}" bindtap="onStateAction">
+          <text class="state-btn-text">{{inviteStateActionText}}</text>
+        </view>
+      </view>
+
+      <view class="end-strip" wx:if="{{inviteEndText}}">
+        <text class="end-strip-text">{{inviteEndText}}</text>
+      </view>
+    </block>
+
+    <block wx:if="{{isPublicInviteScope}}">
+      <view class="public-filter">
+        <view class="public-city">
+          <image class="public-city-icon" src="/images/icons/location.svg" mode="aspectFit"></image>
+          <text class="public-city-text">同城范围：{{publicCityText}}</text>
+        </view>
+        <view class="public-city-btn" bindtap="onTogglePublicCity">
+          <text class="public-city-btn-text">{{publicCityToggleText}}</text>
+        </view>
+      </view>
+
+      <view class="notice-strip" wx:if="{{publicNoticeText}}">
+        <text class="notice-strip-text">{{publicNoticeText}}</text>
+      </view>
+
+      <view class="card-list" wx:if="{{hasPublicItems}}">
+        <view class="public-item" wx:for="{{publicItems}}" wx:key="key">
+          <view class="public-item-head">
+            <image class="public-item-logo" src="{{item.teamLogo}}" mode="aspectFill"></image>
+            <view class="public-item-team-box">
+              <text class="public-item-team">{{item.teamName}}</text>
+              <text class="public-item-city">{{item.cityText}}</text>
+            </view>
+            <text class="public-badge" wx:if="{{item.hasBadge}}">{{item.badgeText}}</text>
+          </view>
+          <text class="public-item-title">{{item.titleText}}</text>
+          <view class="invite-item-row">
+            <image class="invite-item-icon" src="/images/icons/location.svg" mode="aspectFit"></image>
+            <text class="invite-item-venue">{{item.venueText}}</text>
+          </view>
+          <view class="invite-item-foot">
+            <text class="invite-item-signup">{{item.signupText}}</text>
+            <text class="invite-item-deadline">{{item.deadlineText}}</text>
+          </view>
+          <text class="invite-item-cry" wx:if="{{item.hasBattleCry}}">{{item.battleCryText}}</text>
+          <view class="{{item.respondClass}}" data-id="{{item.id}}" bindtap="onPublicRespond">
+            <text class="public-action-text">{{item.actionText}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="refresh-strip" wx:if="{{publicRefreshText}}">
+        <text class="refresh-strip-text">{{publicRefreshText}}</text>
+      </view>
+
+      <view class="state-card" wx:if="{{publicStateVisible}}">
+        <text class="state-title">{{publicStateTitle}}</text>
+        <text class="state-desc" wx:if="{{publicStateDesc}}">{{publicStateDesc}}</text>
+        <view class="state-btn" wx:if="{{publicStateHasAction}}" data-action="{{publicStateAction}}" bindtap="onStateAction">
+          <text class="state-btn-text">{{publicStateActionText}}</text>
+        </view>
+      </view>
+
+      <view class="end-strip" wx:if="{{publicEndText}}">
+        <text class="end-strip-text">{{publicEndText}}</text>
+      </view>
+    </block>
+  </block>
+
+  <!-- ===== 转会公开市场：范围 → 转会动态 → 身价榜 → 发现球员 → 赛事转会中心 ===== -->
+  <block wx:if="{{isTransferTab}}">
+    <!-- 01 范围：赛事／年龄段；时间范围未接入，不再放只能弹说明的入口 -->
+    <view class="market-scope">
+      <view class="{{item.chipClass}}" wx:for="{{transferScopeChips}}" wx:key="key" data-key="{{item.key}}" bindtap="onTransferScopeTap">
+        <text class="scope-chip-text">{{item.text}}</text>
+        <text class="scope-caret">{{item.caret}}</text>
+      </view>
+    </view>
+
+    <!-- 01b 范围选择面板：赛事列表 / 年龄段列表，选中后按该范围重新读取 -->
+    <view class="scope-mask" wx:if="{{transferScopeSheetVisible}}" bindtap="onTransferScopeClose"></view>
+    <view class="scope-sheet" wx:if="{{transferScopeSheetVisible}}">
+      <view class="scope-sheet-head">
+        <text class="scope-sheet-title">{{transferScopeSheetTitle}}</text>
+        <text class="scope-sheet-close" bindtap="onTransferScopeClose">关闭</text>
+      </view>
+      <text class="scope-sheet-desc">{{transferScopeSheetDesc}}</text>
+      <scroll-view class="scope-sheet-list" scroll-y="true">
+        <view class="{{item.itemClass}}" wx:for="{{transferScopeOptions}}" wx:key="key" data-value="{{item.value}}" bindtap="onTransferScopePick">
+          <text class="scope-option-text">{{item.text}}</text>
+          <text class="scope-option-check">{{item.checkText}}</text>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="state-card" wx:if="{{transferStateVisible}}">
+      <text class="state-title">{{transferStateTitle}}</text>
+      <text class="state-desc" wx:if="{{transferStateDesc}}">{{transferStateDesc}}</text>
+      <view class="state-btn" wx:if="{{transferStateHasAction}}" data-action="{{transferStateAction}}" bindtap="onStateAction">
+        <text class="state-btn-text">{{transferStateActionText}}</text>
+      </view>
+    </view>
+
+    <block wx:if="{{transferContentVisible}}">
+      <!-- 02 转会动态：最新一条焦点 + 其余记录，同一条只出现一次；没有记录时只留一个空态 -->
+      <view class="section-head">
+        <text class="section-title">转会动态</text>
+        <text class="section-note" wx:if="{{transferCountText}}">{{transferCountText}}</text>
+      </view>
+
+      <view class="spotlight" wx:if="{{showTransferFocus}}" bindtap="onTransferFocusTap">
+        <image class="spotlight-bg" src="/images/runtime/transfer-announcement-stadium-v1.jpg" mode="aspectFill"></image>
+        <view class="spotlight-mask"></view>
+        <view class="spotlight-body">
+          <view class="spotlight-top">
+            <text class="spotlight-badge">{{transferFocus.typeText}}</text>
+            <text class="spotlight-cross" wx:if="{{transferFocus.crossText}}">{{transferFocus.crossText}}</text>
+            <text class="spotlight-state">已完成</text>
+          </view>
+          <text class="spotlight-title">{{transferFocus.titleText}}</text>
+          <view class="spotlight-flow">
+            <view class="flow-team">
+              <image class="flow-crest" wx:if="{{transferFocus.hasFromLogo}}" src="{{transferFocus.fromLogo}}" mode="aspectFit"></image>
+              <view class="flow-crest flow-crest-empty" wx:if="{{!transferFocus.hasFromLogo}}">
+                <text class="flow-crest-initial">{{transferFocus.fromInitial}}</text>
+              </view>
+              <text class="flow-name">{{transferFocus.fromName}}</text>
+            </view>
+            <text class="flow-arrow">→</text>
+            <view class="flow-team">
+              <image class="flow-crest" wx:if="{{transferFocus.hasToLogo}}" src="{{transferFocus.toLogo}}" mode="aspectFit"></image>
+              <view class="flow-crest flow-crest-empty" wx:if="{{!transferFocus.hasToLogo}}">
+                <text class="flow-crest-initial">{{transferFocus.toInitial}}</text>
+              </view>
+              <text class="flow-name">{{transferFocus.toName}}</text>
+            </view>
+          </view>
+          <view class="spotlight-foot">
+            <text class="spotlight-event">{{transferFocus.eventText}} · {{transferFocus.dateText}}</text>
+            <view class="spotlight-price">
+              <text class="spotlight-price-label">成交</text>
+              <text class="{{transferFocus.priceClass}}">{{transferFocus.priceText}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="trade-row" wx:for="{{transferDynamicItems}}" wx:key="key" data-index="{{index}}" bindtap="onTransferFeedTap">
+        <view class="trade-top">
+          <view class="trade-avatar">
+            <text class="trade-avatar-text">{{item.initialText}}</text>
+          </view>
+          <view class="trade-main">
+            <text class="trade-name">{{item.playerName}}</text>
+            <text class="trade-meta" wx:if="{{item.hasPos}}">{{item.posText}}</text>
+          </view>
+          <view class="trade-value">
+            <text class="trade-type">{{item.typeText}}</text>
+            <text class="{{item.priceClass}}">{{item.priceText}}</text>
+          </view>
+        </view>
+        <view class="trade-move">
+          <text class="trade-move-text">{{item.routeText}}</text>
+        </view>
+        <view class="trade-foot">
+          <text class="trade-cross" wx:if="{{item.crossText}}">{{item.crossText}}</text>
+          <text class="trade-event">{{item.eventText}}</text>
+          <text class="trade-date">{{item.dateText}}</text>
+        </view>
+      </view>
+
+      <view class="transfer-empty" wx:if="{{showTransferDynamicEmpty}}">
+        <text class="transfer-empty-text">{{transferDynamicEmptyText}}</text>
+      </view>
+
+      <!-- 03 身价榜：最新身价／上升最快共用一张卡切换，口径沿用服务端统一测算 -->
+      <view class="section-head">
+        <text class="section-title">身价榜</text>
+        <text class="section-link" wx:if="{{hasTransferRank}}" bindtap="onTransferRankList">全部 ›</text>
+      </view>
+      <view class="rank-card">
+        <view class="rank-tabs">
+          <view class="{{transferRankTabTopClass}}" data-tab="top" bindtap="onTransferRankTab">最新身价</view>
+          <view class="{{transferRankTabRisingClass}}" data-tab="rising" bindtap="onTransferRankTab">上升最快</view>
+        </view>
+        <view class="rank-row" wx:for="{{transferRankRows}}" wx:key="key" data-index="{{index}}" bindtap="onTransferRankRowTap">
+          <text class="{{item.rankClass}}">{{item.rankText}}</text>
+          <view class="rank-avatar">
+            <image class="rank-avatar-img" wx:if="{{item.hasPhoto}}" src="{{item.photoUrl}}" mode="aspectFit"></image>
+            <text class="rank-avatar-text" wx:if="{{!item.hasPhoto}}">{{item.initialText}}</text>
+          </view>
+          <view class="rank-main">
+            <text class="rank-name">{{item.playerName}}</text>
+            <text class="rank-meta">{{item.metaText}}</text>
+          </view>
+          <view class="rank-value">
+            <text class="rank-money">{{item.moneyText}}</text>
+            <text class="rank-rise" wx:if="{{item.riseText}}">{{item.riseText}}</text>
+          </view>
+        </view>
+        <view class="rank-empty" wx:if="{{showTransferRankEmpty}}">
+          <text class="rank-empty-text">{{transferRankEmptyText}}</text>
+        </view>
+        <text class="rank-foot" bindtap="onTransferRules">{{transferRankFootText}}</text>
+      </view>
+
+      <!-- 04 发现球员：位置筛选 + 公开资料入口 -->
+      <view class="section-head">
+        <text class="section-title">发现球员</text>
+        <view class="filter-toggle" bindtap="onTransferToggleFilter">
+          <text class="filter-toggle-text">{{transferFilterToggleText}}</text>
+        </view>
+      </view>
+      <view class="filter-panel" wx:if="{{transferFilterOpen}}">
+        <view class="transfer-filter-row">
+          <text class="filter-label">位置</text>
+          <view class="{{item.chipClass}}" wx:for="{{transferPositionChips}}" wx:key="key" data-key="{{item.key}}" bindtap="onTransferPositionTap">
+            <text class="filter-chip-text">{{item.text}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="player-card" wx:for="{{transferPlayers}}" wx:key="key" data-index="{{index}}" bindtap="onTransferPlayerTap">
+        <view class="player-avatar">
+          <image class="player-avatar-img" wx:if="{{item.hasPhoto}}" src="{{item.photoUrl}}" mode="aspectFit" lazy-load="true"></image>
+          <text class="player-avatar-text" wx:if="{{!item.hasPhoto}}">{{item.initialText}}</text>
+        </view>
+        <view class="player-main">
+          <text class="player-name">{{item.playerName}}</text>
+          <text class="player-meta">{{item.metaText}}</text>
+        </view>
+        <view class="player-value">
+          <text class="player-value-label" wx:if="{{item.measured}}">参考身价</text>
+          <text class="{{item.moneyClass}}">{{item.moneyText}}</text>
+          <view class="player-trend" wx:if="{{item.hasTrend}}">
+            <view wx:for="{{item.trendBars}}" wx:for-item="bar" wx:key="key" class="{{bar.barClass}}" style="height:{{bar.heightText}}"></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="transfer-empty" wx:if="{{showTransferPlayerEmpty}}">
+        <text class="transfer-empty-text">{{transferPlayerEmptyText}}</text>
+      </view>
+      <text class="list-end" wx:if="{{transferPlayerEndText}}">{{transferPlayerEndText}}</text>
+      <view class="transfer-more" wx:if="{{transferMoreVisible}}" bindtap="onTransferLoadMore">
+        <text class="transfer-more-error" wx:if="{{transferMoreError}}">{{transferMoreError}}</text>
+        <text>{{transferMoreText}}</text>
+      </view>
+    </block>
+
+    <!-- 05 我的赛事转会中心：报价与合同仍在赛事内办理 -->
+    <view class="transfer-cta" bindtap="onTransferOpenEvents">
+      <view class="cta-body">
+        <text class="transfer-cta-text">{{transferPrimaryText}}</text>
+        <text class="transfer-cta-desc">{{transferPrimaryDescText}}</text>
+      </view>
+      <text class="transfer-cta-arrow">›</text>
+    </view>
+  </block>
+
+</view>

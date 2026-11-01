@@ -80,9 +80,16 @@ function saveContext(result) {
     workspaces: result.workspaces || [],
     currentWorkspace: result.currentWorkspace,
     currentIdentity: result.currentIdentity || {},
+    homeEntries: result.homeEntries || [],
+    homeEntriesVersion: result.homeEntriesVersion || '',
+    participatingEntries: result.participatingEntries,
+    participatingEntriesVersion: result.participatingEntriesVersion || '',
+    participatingEntriesState: result.participatingEntriesState || '',
+    participatingEntriesError: result.participatingEntriesError || '',
     modules: result.modules || [],
     teams: result.teams || [],
     tournaments: result.tournaments || [],
+    registrations: result.registrations || [],
     schedule: result.schedule || [],
     eventSchedule: result.eventSchedule || [],
     trainingSchedule: result.trainingSchedule || [],
@@ -203,39 +210,54 @@ function loadContext(options) {
       clearTimeout(watchdog)
       callback(value)
     }
-    wx.cloud.callFunction({
-      name: 'getMiniWorkspace',
-      data: { workspaceId: workspaceId, preserveWorkspace: options.preserveWorkspace === true || wx.getStorageSync('workspaceExplicitChoice') === expectedAccountKey + '|' + workspaceId },
-      timeout: 15000,
-      success: function(response) {
-        if (requestGeneration !== contextGeneration || accountKey(activeAccount()) !== expectedAccountKey) {
-          var changedError = new Error('账号已切换，已丢弃上一账号的工作空间数据')
-          changedError.code = 'SESSION_ACCOUNT_MISMATCH'
-          finish(reject, changedError)
-          return
+    function requestWorkspace(targetId, restoringRole) {
+      wx.cloud.callFunction({
+        name: 'getMiniWorkspace',
+        data: { workspaceId: targetId, preserveWorkspace: restoringRole || options.preserveWorkspace === true || wx.getStorageSync('workspaceExplicitChoice') === expectedAccountKey + '|' + targetId },
+        timeout: 15000,
+        success: function(response) {
+          if (settled) return
+          if (requestGeneration !== contextGeneration || accountKey(activeAccount()) !== expectedAccountKey) {
+            var changedError = new Error('账号已切换，已丢弃上一账号的工作空间数据')
+            changedError.code = 'SESSION_ACCOUNT_MISMATCH'
+            finish(reject, changedError)
+            return
+          }
+          var result = response.result || {}
+          if (!result.success) {
+            var resultError = new Error(result.message || '工作空间加载失败')
+            resultError.code = result.code || 'WORKSPACE_LOAD_FAILED'
+            if (isAccountAuthError(resultError)) resetInvalidAccountSession()
+            if (!skipRestrictedRedirect && isWorkspaceAccessError(resultError)) redirectToRestricted(targetId)
+            finish(reject, resultError)
+            return
+          }
+          try {
+            // 初次登录只从刚核验的目录恢复工作视角；明确点击资源时不干预空间。
+            if (!workspaceId && !restoringRole && contextBelongsToActiveAccount(result)) {
+              var preferredRole = readPortalRole(expectedAccount)
+              var targets = preferredRole ? roleWorkspaces(result, preferredRole) : []
+              var currentId = (result.currentWorkspace || {}).id
+              if (targets.length && !targets.some(function(item) { return item.id === currentId })) {
+                requestWorkspace(targets[0].id, true)
+                return
+              }
+            }
+            finish(resolve, saveContext(result))
+          } catch (saveError) {
+            if (isAccountAuthError(saveError)) resetInvalidAccountSession()
+            finish(reject, saveError)
+          }
+        },
+        fail: function(error) {
+          if (settled) return
+          if (isAccountAuthError(error)) resetInvalidAccountSession()
+          if (!skipRestrictedRedirect && isWorkspaceAccessError(error)) redirectToRestricted(targetId)
+          finish(reject, error)
         }
-        var result = response.result || {}
-        if (!result.success) {
-          var resultError = new Error(result.message || '工作空间加载失败')
-          resultError.code = result.code || 'WORKSPACE_LOAD_FAILED'
-          if (isAccountAuthError(resultError)) resetInvalidAccountSession()
-          if (!skipRestrictedRedirect && isWorkspaceAccessError(resultError)) redirectToRestricted(workspaceId)
-          finish(reject, resultError)
-          return
-        }
-        try {
-          finish(resolve, saveContext(result))
-        } catch (saveError) {
-          if (isAccountAuthError(saveError)) resetInvalidAccountSession()
-          finish(reject, saveError)
-        }
-      },
-      fail: function(error) {
-        if (isAccountAuthError(error)) resetInvalidAccountSession()
-        if (!skipRestrictedRedirect && isWorkspaceAccessError(error)) redirectToRestricted(workspaceId)
-        finish(reject, error)
-      }
-    })
+      })
+    }
+    requestWorkspace(workspaceId, false)
   })
   loadingPromise = requestPromise
   return requestPromise.finally(function() {
@@ -255,6 +277,90 @@ function switchWorkspace(workspaceId) {
   wx.setStorageSync('workspaceExplicitChoice', accountKey() + '|' + workspaceId)
   wx.setStorageSync(WORKSPACE_ID_KEY, workspaceId)
   return loadContext({ workspaceId: workspaceId, preserveWorkspace: true })
+}
+
+var PORTAL_ROLE_KEY = 'miniPortalRole'
+var PORTAL_PREFERENCES_KEY = 'miniPortalRolePreferences'
+function validPortalRole(role) { return role === 'team_coach' || role === 'organizer' }
+function validPreferenceId(id) { return Boolean(id && id !== '__proto__' && id !== 'constructor' && id !== 'prototype') }
+function readPortalPreferences() {
+  var saved = wx.getStorageSync(PORTAL_PREFERENCES_KEY) || {}
+  var source = saved.version === 1 && saved.roles && typeof saved.roles === 'object' ? saved.roles : {}
+  var roles = {}
+  Object.keys(source).forEach(function(id) {
+    if (validPreferenceId(id) && validPortalRole(source[id])) roles[id] = source[id]
+  })
+  var legacy = wx.getStorageSync(PORTAL_ROLE_KEY) || {}
+  var legacyKey = typeof legacy.accountKey === 'string' ? legacy.accountKey.split('|') : []
+  if (legacyKey.length === 2 && validPreferenceId(legacyKey[0]) && legacyKey[1] && validPortalRole(legacy.id) && !roles[legacyKey[0]]) roles[legacyKey[0]] = legacy.id
+  return roles
+}
+function readPortalRole(account) {
+  account = account || activeAccount()
+  if (!validPreferenceId(account.id) || !account.phone) return ''
+  var role = readPortalPreferences()[account.id]
+  return validPortalRole(role) ? role : ''
+}
+function writePortalRole(role, account) {
+  account = account || activeAccount()
+  if (!validPreferenceId(account.id) || !account.phone || !validPortalRole(role)) return
+  var roles = readPortalPreferences()
+  roles[account.id] = role
+  wx.setStorageSync(PORTAL_PREFERENCES_KEY, { version: 1, roles: roles })
+  wx.removeStorageSync(PORTAL_ROLE_KEY)
+}
+function clearSessionStorage() {
+  var roles = readPortalPreferences()
+  clearContext()
+  wx.clearStorageSync()
+  if (Object.keys(roles).length) wx.setStorageSync(PORTAL_PREFERENCES_KEY, { version: 1, roles: roles })
+}
+function getPortalRole(context) {
+  var saved = readPortalRole()
+  if (saved) return saved
+  context = context || readContext() || {}
+  var id = (context.currentIdentity || {}).id
+  var role = id === 'organizer' || id === 'event_staff' ? 'organizer' : 'team_coach'
+  if (id && contextBelongsToActiveAccount(context)) writePortalRole(role)
+  return role
+}
+function roleWorkspaces(context, role) {
+  return ((context || {}).workspaces || []).filter(function(item) {
+    var rights = item.permissions || []
+    return role === 'organizer' ? item.type === 'tournament_shared' || (item.type === 'organization' && rights.indexOf('event.manage') >= 0)
+      : item.type !== 'tournament_shared' && (rights.indexOf('team.view') >= 0 || rights.indexOf('team.manage') >= 0)
+  })
+}
+function portalRoleOptions(context) {
+  var current = getPortalRole(context)
+  return [{id:'team_coach',title:'球队管理者',icon:'/images/icons/team.svg'},{id:'organizer',title:'赛事组织者',icon:'/images/icons/event.svg'}].map(function(item) {
+    // 工作视角不授予资源权限；没有球队时也要能进入创建入口。
+    return Object.assign({},item,{selectable:current !== item.id,selectedClass:current === item.id ? 'is-current' : '',selectedText:current === item.id ? '当前使用' : ''})
+  })
+}
+function switchPortalRole(role) {
+  if (['team_coach','organizer'].indexOf(role) < 0) return Promise.reject(new Error('请选择球队管理者或赛事组织者'))
+  var expected = accountKey()
+  return loadContext().then(function(context) {
+    if ((context.currentWorkspace || {}).type === 'personal') return context
+    var targets = roleWorkspaces(context,role), current = context.currentWorkspace || {}
+    var target = targets.filter(function(item) { return item.id === current.id })[0] || targets[0]
+    if (!target) return context
+    return switchWorkspace(target.id)
+  }).then(function(context) {
+    if (accountKey() !== expected) throw new Error('账号已切换，请重试')
+    if (context.currentWorkspace.type === 'tournament_shared' || context.currentWorkspace.type === 'personal') return context
+    // 无匹配空间只切换本地视角，不向当前机构申请或补写业务权限。
+    if (!roleWorkspaces(context,role).some(function(item) { return item.id === context.currentWorkspace.id })) return context
+    return wx.cloud.callFunction({name:'getMiniWorkspace',data:{action:'setHomeIdentity',workspaceId:context.currentWorkspace.id,identity:role}}).then(function(response) {
+      if (!(response.result || {}).success) throw new Error((response.result || {}).message || '身份切换失败')
+      return loadContext({workspaceId:context.currentWorkspace.id,preserveWorkspace:true})
+    })
+  }).then(function(context) {
+    if (accountKey() !== expected) throw new Error('账号已切换，请重试')
+    writePortalRole(role)
+    return context
+  })
 }
 
 function chooseWorkspace(context) {
@@ -293,6 +399,7 @@ module.exports = {
   readContext: readContext,
   saveContext: saveContext,
   clearContext: clearContext,
+  clearSessionStorage: clearSessionStorage,
   hasPermission: hasPermission,
   isVisualQaEnabled: isVisualQaEnabled,
   isGuestReviewEnabled: isGuestReviewEnabled,
@@ -300,5 +407,11 @@ module.exports = {
   selectWorkspace: selectWorkspace,
   loadContext: loadContext,
   switchWorkspace: switchWorkspace,
+  getPortalRole:getPortalRole,
+  hasPortalRole:function() { return Boolean(readPortalRole()) },
+  rememberPortalRole:writePortalRole,
+  portalRoleOptions:portalRoleOptions,
+  roleWorkspaces:roleWorkspaces,
+  switchPortalRole:switchPortalRole,
   chooseWorkspace: chooseWorkspace
 }
