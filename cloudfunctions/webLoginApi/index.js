@@ -348,7 +348,10 @@ function refereeOAuthReturnUrl(value) {
     const parsed=new URL(url)
     if(parsed.hostname!=='www.sxffootball.cn')return ''
     if(!['/service-account-h5/','/preview/service-account-h5/'].includes(parsed.pathname))return ''
-    return parsed.origin+parsed.pathname
+    // 仅保留本站裁判登记参数，避免授权回跳丢失邀请后误入任务绑定。
+    const refereeInvite=String(parsed.searchParams.get('refereeInvite')||'').trim()
+    if(refereeInvite.length>256)return ''
+    return parsed.origin+parsed.pathname+(refereeInvite?'?refereeInvite='+encodeURIComponent(refereeInvite):'')
   } catch (error) { return '' }
 }
 
@@ -687,7 +690,7 @@ async function serviceJsSdkConfig(url) {
   if(!target)return{success:false,code:'SERVICE_JSAPI_URL_REQUIRED',error:'缺少页面地址'}
   let parsed
   try{parsed=new URL(target)}catch(error){return{success:false,code:'SERVICE_JSAPI_URL_INVALID',error:'页面地址无效'}}
-  if(parsed.origin!=='https://www.sxffootball.cn'||!/^\/service-account-h5\//.test(parsed.pathname))return{success:false,code:'SERVICE_JSAPI_URL_INVALID',error:'页面地址不在服务号 H5 范围内'}
+  if(parsed.origin!=='https://www.sxffootball.cn'||!/^\/(?:preview\/)?service-account-h5\//.test(parsed.pathname))return{success:false,code:'SERVICE_JSAPI_URL_INVALID',error:'页面地址不在服务号 H5 范围内'}
   try{
     const ticket=await officialAccountJsApiTicket(),nonceStr=crypto.randomBytes(16).toString('hex'),timestamp=Math.floor(Date.now()/1000)
     const signature=crypto.createHash('sha1').update('jsapi_ticket='+ticket+'&noncestr='+nonceStr+'&timestamp='+timestamp+'&url='+target).digest('hex')

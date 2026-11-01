@@ -4,7 +4,7 @@
   // 本文件只封装只读/换装接口，不包含会员下单、充值、支付等交易入口。
   var API = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
   var KEY = 'sxf_referee_h5_session'
-  var RETURN_URL = 'https://www.sxffootball.cn/service-account-h5/card-world/index.html'
+  var RETURN_URL = location.origin + location.pathname
   // wx-open-launch-weapp 的 username 必须是足球世界小程序的原始 ID（gh_ 开头），
   // 不是 AppID（wxa0ac7d45bcabd140）。值由部署方维护；留空时页面只展示说明、不挂无效按钮。
   var WEAPP_USERNAME = 'gh_6d11304cf55f'
