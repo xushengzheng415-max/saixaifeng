@@ -6,8 +6,8 @@
   var KEY = 'sxf_referee_h5_session'
   var RETURN_URL = 'https://www.sxffootball.cn/service-account-h5/card-world/index.html'
   // wx-open-launch-weapp 的 username 必须是足球世界小程序的原始 ID（gh_ 开头），
-  // 不是 AppID（wxa0ac7d45bcabd140）。部署前由部署方填入；留空时页面只展示说明、不挂无效按钮。
-  var WEAPP_USERNAME = ''
+  // 不是 AppID（wxa0ac7d45bcabd140）。值由部署方维护；留空时页面只展示说明、不挂无效按钮。
+  var WEAPP_USERNAME = 'gh_6d11304cf55f'
 
   function sessionToken() {
     try { return localStorage.getItem(KEY) || '' } catch (e) { return '' }
