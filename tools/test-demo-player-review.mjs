@@ -21,3 +21,14 @@ assert.equal(list('players',{teamId:teams[0]._id})[0].identityStatus,players[0].
 assert.equal(list('players',{teamId:teams[0]._id})[0].organizerReviewStatus,'approved')
 assert.ok(list('roster_snapshots').every(r=>r.synthetic&&r.isTest))
 console.log('PASS: single + batch API approvals, reload persistence, idempotency, team/division scope, unchanged identity, synthetic isolation')
+
+const rejected=players[5]
+const beforeSnapshotCount=list('roster_snapshots').length
+assert.throws(()=>api('rosterExceptionBoard',{...scope,rosterAction:'rejectPlayer',playerId:rejected._id,reason:'  '}),/原因/)
+assert.equal(api('rosterExceptionBoard',{...scope,rosterAction:'rejectPlayer',playerId:rejected._id,reason:'请补充清晰头像'}).reviewStatus,'rejected')
+assert.equal(list('players',{teamId:teams[0]._id}).find(p=>p._id===rejected._id).organizerReviewReason,'请补充清晰头像')
+assert.equal(list('roster_snapshots').length,beforeSnapshotCount,'rejection preserves existing snapshots')
+assert.throws(()=>api('rosterExceptionBoard',{...scope,rosterAction:'rejectPlayer',playerId:players[0]._id,reason:'不能撤销正式名单'}),/正式名单/)
+assert.throws(()=>api('rosterExceptionBoard',{...scope,rosterAction:'rejectPlayer',playerId:list('players',{teamId:teams[1]._id})[0]._id,reason:'跨队应拒绝'}),/不属于/)
+const reload=createDemoWorkspace();reload.restore(w.snapshot());assert.equal(reload.request('dbQuery',{collection:'players',operation:'get',id:rejected._id}).data.organizerReviewStatus,'rejected')
+console.log('PASS: individual rejection reason, reload persistence, formal-roster lock, cross-team denial, no deletion or snapshot rewrite')
