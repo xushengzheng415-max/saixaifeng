@@ -1,0 +1,136 @@
+{
+  "date": "2026-11-01",
+  "productionCodeCommit": "8951c5df990c4496d51f2a3e1321b5ace269eff6",
+  "previewCodeCommit": "72c2a562a5d9e089f3a0b3ed91ab1ca5a5184e8f",
+  "previewIncludesPublishedMain": true,
+  "backendRedeployed": false,
+  "backendReviewContract": {
+    "rejectPlayerPresent": true,
+    "reasonRequired": true,
+    "formalRosterProtected": true,
+    "reviewHandlerUnchanged": true,
+    "handlerSha256": "8e6dff4b0e87c0ad40283f209a8c38d3f9daabea7627236e38715868918a7cce"
+  },
+  "diagnosis": {
+    "firstTeam": {
+      "players": 46,
+      "photoReferences": 44,
+      "existingDistinctFiles": 44,
+      "missingReferences": 2
+    },
+    "clarifiedTeam": {
+      "players": 25,
+      "photoReferences": 18,
+      "existingNonemptyFiles": 18,
+      "missingReferences": 7,
+      "resolvedByParticipationRelation": true,
+      "sameNameTeamsNotMerged": true
+    }
+  },
+  "productionWeb": {
+    "channel": "production",
+    "files": [
+      {
+        "path": "/admin/index.html",
+        "http": 200,
+        "sha256": "7e192dbbd274b7b2d87b2fa9cc767cb825e7fcfbb35b397fd0202431c8bbe694"
+      },
+      {
+        "path": "/admin/assets/index-BjZTfGsC.js",
+        "http": 200,
+        "sha256": "bf9f9318ae22a3421ccda8f77f5add665e64da544bc267589ee22d60a729e7de"
+      },
+      {
+        "path": "/admin/assets/index-Cqp_P0Uf.js",
+        "http": 200,
+        "sha256": "807ecc651be9a70d1ac8350578e7d90e13d406f50db1825cc6f64641c00f1cff"
+      },
+      {
+        "path": "/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/admin/assets/TeamDetail-YHZbWV0P.js",
+        "http": 200,
+        "sha256": "089d9382493efb8c79278141c7682751147d2b658f502451a110ff4068b67676"
+      },
+      {
+        "path": "/admin/assets/LoginView-CTyhHxC7.js",
+        "http": 200,
+        "sha256": "8d0ccc8c9e64dde5be3d4905fab8889c9ea5e1dbeec348723ce2ccbbd2da3594"
+      }
+    ]
+  },
+  "previewWeb": {
+    "channel": "preview",
+    "files": [
+      {
+        "path": "/preview/admin/index.html",
+        "http": 200,
+        "sha256": "8ec6c249c0cddbe99727edac370cfaa5d8af05d057917d7b30dda99291736c38"
+      },
+      {
+        "path": "/preview/admin/assets/index-C7oJcfCh.js",
+        "http": 200,
+        "sha256": "931c22f3dffcea3264b31132f866326c469b590e4bb1e55ad536631644e7ab99"
+      },
+      {
+        "path": "/preview/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/preview/admin/assets/index-Sqcc4WLs.js",
+        "http": 200,
+        "sha256": "9824355b5a0fdb59999846423906edfe6fb5bfa1bd9576f73135a9d81b1df069"
+      },
+      {
+        "path": "/preview/admin/assets/TeamDetail-BgnDDtm6.js",
+        "http": 200,
+        "sha256": "05434c372164fb66416161f430446f56b37aa8a7f1c648a8127966a616d9fa18"
+      },
+      {
+        "path": "/preview/admin/assets/LoginView-AamTO9VN.js",
+        "http": 200,
+        "sha256": "1dfa6168362d4094b57e6f78df9b1f17ac492297d7e1f2d302e4deccec580d3a"
+      }
+    ]
+  },
+  "installedClients": {
+    "production": {
+      "channel": "production",
+      "version": "0.2.8",
+      "checks": [
+        "live login page and WeChat QR iframe loaded",
+        "sandbox enabled; renderer has no Node API",
+        "validated newer-version fixture shows native menu and in-page update badge",
+        "QR expiry feedback and refresh obtain a new live QR",
+        "branded login, 1024px layout, and SPA route timeout regression verified",
+        "blob export saved and content verified",
+        "print popup sandbox and PDF rendering verified",
+        "connection error page and retry recovery verified"
+      ],
+      "entry": "https://www.sxffootball.cn/admin/",
+      "status": "passed"
+    },
+    "preview": {
+      "channel": "preview",
+      "version": "0.2.8",
+      "checks": [
+        "live login page and WeChat QR iframe loaded",
+        "sandbox enabled; renderer has no Node API",
+        "validated newer-version fixture shows native menu and in-page update badge",
+        "QR expiry feedback and refresh obtain a new live QR",
+        "branded login, 1024px layout, and SPA route timeout regression verified",
+        "blob export saved and content verified",
+        "print popup sandbox and PDF rendering verified",
+        "connection error page and retry recovery verified"
+      ],
+      "entry": "https://www.sxffootball.cn/preview/admin/",
+      "status": "passed"
+    }
+  },
+  "businessWritesDuringValidation": 0,
+  "realNotificationsDuringValidation": 0
+}

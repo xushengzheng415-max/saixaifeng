@@ -1,12 +1,12 @@
 # 数据入口登记
 
-## 2026-11-01 单个队员驳回入口（本地候选）
+## 2026-11-01 单个队员驳回入口（已发布）
 
-`TeamDetail/PlayerReviewDialog`接已部署`rosterExceptionBoard.approvePlayer/rejectPlayer`。单个待审者驳回原因必填，不删除档案，不改人证结果或已通过历史名单；同源服务端处理器同步入Git，本次不重发函数。原批量通过行为不扩大为批量驳回；真实与模拟接口边界分别验证。见[记录](../releases/team-player-review-20261101.md)。
+`TeamDetail/PlayerReviewDialog`接已部署`rosterExceptionBoard.approvePlayer/rejectPlayer`。单个待审者驳回原因必填，不删除档案，不改人证结果或已通过历史名单；同源服务端处理器同步入Git，本次不重发函数。原批量通过行为不扩大为批量驳回；真实同源处理器与模拟接口边界分别验证，正式/测试PC已发布并回读，客户端两通道验证通过。见[记录](../releases/team-player-review-20261101.md)。
 
-## 2026-11-01 球队名单照片显示（本地候选）
+## 2026-11-01 球队名单照片显示（已发布）
 
-`TeamDetail` → 共用 `PlayerAvatar` → 既有零SDK `getFileUrl/uploadFile.getTempFileURL`。修正云编号直入img与球员ID失败标记不随URL更新的问题，保持名单首屏异步，不改照片文件、身份、资格、归属、统计或数据读写权限。46人/44云头像的合成浏览器回归通过，待正式/测试发布及客户端回读。见 [记录](../releases/team-avatar-display-20261101.md)。
+`TeamDetail` → 共用 `PlayerAvatar` → 既有零SDK `getFileUrl/uploadFile.getTempFileURL`。修正云编号直入img与球员ID失败标记不随URL更新的问题，保持名单首屏异步，不改照片文件、身份、资格、归属、统计或数据读写权限。46人/44云头像的合成浏览器回归通过；客户端补充指定联队25人/18个头像文件存在。正式/测试发布与HTTP/资源摘要读回、已安装客户端0.2.8两通道各8项均通过。见 [记录](../releases/team-avatar-display-20261101.md)。
 
 ## 2026-11-01 报名导入球员完整编辑（已发布）
 
