@@ -37,6 +37,8 @@ async function ensureFonts() {
     // 始终写临时目录，绝不写 __dirname，避免 EROFS。
     const file=path.join(cacheRoot,item.name)
     if(valid(file,item.sha256))return
+    // 部署包内已存在且哈希一致时直接复用，避免每次冷启动重复下载大字体。
+    if(bundled(item.name,item.sha256))return
     const bytes=await download(item.url)
     if(crypto.createHash('sha256').update(bytes).digest('hex')!==item.sha256)throw new Error('字体资源校验失败，请联系平台')
     fs.mkdirSync(path.dirname(file),{recursive:true});const temp=file+'.'+crypto.randomBytes(6).toString('hex')

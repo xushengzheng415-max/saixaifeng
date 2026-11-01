@@ -26,22 +26,32 @@ function makeReadable(bytes) {
 async function main() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sxf-font-cache-test-'))
   const name = 'stage12-font-test-' + crypto.randomBytes(4).toString('hex') + '.ttf'
+  const okName = 'stage12-font-bundled-' + crypto.randomBytes(4).toString('hex') + '.ttf'
   const good = Buffer.from('good-font-bytes-' + name)
   const bad = Buffer.from('deployed-font-bytes-mismatch-' + name)
-  const manifest = [{ name, url: 'https://example.invalid/font.ttf', sha256: sha256(good) }]
+  const bundledOk = Buffer.from('bundled-valid-font-' + okName)
+  const manifest = [
+    { name, url: 'https://example.invalid/font.ttf', sha256: sha256(good) },
+    { name: okName, url: 'https://example.invalid/never.ttf', sha256: sha256(bundledOk) }
+  ]
 
   fs.writeFileSync(path.join(dir, 'player-card-font-manifest.json'), JSON.stringify(manifest))
   fs.copyFileSync(path.join(repo, 'playerCardFontCache.cjs'), path.join(dir, 'playerCardFontCache.cjs'))
   fs.mkdirSync(path.join(dir, 'fonts'), { recursive: true })
   // 模拟线上部署目录里的字体与清单哈希不一致，且代码目录只读。
   fs.writeFileSync(path.join(dir, 'fonts', name), bad)
+  fs.writeFileSync(path.join(dir, 'fonts', okName), bundledOk)
 
   const cacheFile = path.join(CACHE_ROOT, name)
+  const okCacheFile = path.join(CACHE_ROOT, okName)
   fs.rmSync(cacheFile, { force: true })
+  fs.rmSync(okCacheFile, { force: true })
 
   const https = require('node:https')
   const originalGet = https.get
+  let downloads = 0
   https.get = (url, callback) => {
+    downloads += 1
     const response = makeReadable(good)
     response.statusCode = 200
     process.nextTick(() => callback(response))
@@ -54,10 +64,13 @@ async function main() {
     const resolved = fontCache.pathFor(name)
     assert.strictEqual(resolved, cacheFile, '哈希不匹配的部署字体不得作为缓存写入位置')
     assert.strictEqual(path.dirname(resolved), CACHE_ROOT)
+    assert.strictEqual(fontCache.pathFor(okName), path.join(dir, 'fonts', okName), '哈希一致的部署字体应直接复用')
 
     await fontCache.ensureFonts()
 
+    assert.strictEqual(downloads, 1, '仅哈希不匹配的字体需要下载，哈希一致的不应重复下载')
     assert.strictEqual(fs.existsSync(cacheFile), true, '字体应写入临时缓存')
+    assert.strictEqual(fs.existsSync(okCacheFile), false, '哈希一致的部署字体不应复制到临时缓存')
     assert.strictEqual(sha256(fs.readFileSync(cacheFile)), sha256(good), '缓存字体哈希必须与清单一致')
     assert.strictEqual(sha256(fs.readFileSync(path.join(dir, 'fonts', name))), sha256(bad), '不得覆盖只读部署字体')
     const leftovers = fs.readdirSync(path.join(dir, 'fonts')).filter(file => file.includes(name))
@@ -65,6 +78,7 @@ async function main() {
   } finally {
     https.get = originalGet
     fs.rmSync(cacheFile, { force: true })
+    fs.rmSync(okCacheFile, { force: true })
     fs.rmSync(dir, { recursive: true, force: true })
   }
 
