@@ -2,7 +2,7 @@
 
 ## 2026-11-01 单个队员驳回入口（已发布）
 
-`TeamDetail/PlayerReviewDialog`接已部署`rosterExceptionBoard.approvePlayer/rejectPlayer`。单个待审者驳回原因必填，不删除档案，不改人证结果或已通过历史名单；同源服务端处理器同步入Git，本次不重发函数。原批量通过行为不扩大为批量驳回；真实同源处理器与模拟接口边界分别验证，正式/测试PC已发布并回读，客户端两通道验证通过。见[记录](../releases/team-player-review-20261101.md)。
+`TeamDetail/PlayerReviewDialog`接已部署`rosterExceptionBoard.approvePlayer/rejectPlayer`。单个待审者驳回原因必填；2026-11-02跟进行内直接通过/驳回及常见原因多选，仍合并为既有reason字符串，不删除档案，不改人证结果或已通过历史名单；同源服务端处理器同步入Git，本次不重发函数。原批量通过行为不扩大为批量驳回；真实同源处理器与模拟接口边界分别验证，正式/测试PC已发布并回读，客户端两通道验证通过。见[记录](../releases/team-player-review-20261101.md)。
 
 ## 2026-11-01 球队名单照片显示（已发布）
 
