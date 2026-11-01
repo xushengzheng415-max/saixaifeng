@@ -681,6 +681,22 @@ async function officialAccountJsApiTicket() {
   return serviceAccountJsApiTicketCache.value
 }
 
+// 服务号 H5 网页签名：仅用于 wx-open-launch-weapp（底部进入足球世界小程序），不授予其他 JS-SDK 能力。
+async function serviceJsSdkConfig(url) {
+  const target=String(url||'').trim()
+  if(!target)return{success:false,code:'SERVICE_JSAPI_URL_REQUIRED',error:'缺少页面地址'}
+  let parsed
+  try{parsed=new URL(target)}catch(error){return{success:false,code:'SERVICE_JSAPI_URL_INVALID',error:'页面地址无效'}}
+  if(parsed.origin!=='https://www.sxffootball.cn'||!/^\/service-account-h5\//.test(parsed.pathname))return{success:false,code:'SERVICE_JSAPI_URL_INVALID',error:'页面地址不在服务号 H5 范围内'}
+  try{
+    const ticket=await officialAccountJsApiTicket(),nonceStr=crypto.randomBytes(16).toString('hex'),timestamp=Math.floor(Date.now()/1000)
+    const signature=crypto.createHash('sha1').update('jsapi_ticket='+ticket+'&noncestr='+nonceStr+'&timestamp='+timestamp+'&url='+target).digest('hex')
+    return{success:true,appId:SERVICE_ACCOUNT_CONFIG.APP_ID,timestamp,nonceStr,signature,url:target}
+  }catch(error){
+    return{success:false,code:String(error&&error.code||'SERVICE_JSAPI_SIGN_FAILED'),error:String(error&&error.message||'网页签名暂不可用')}
+  }
+}
+
 async function completeParentProfileReviewSubscribeOAuth(event) {
   const code=String(event.code||'').trim(),state=String(event.state||'').trim()
   if(!code||!state)return{success:false,error:'服务号授权参数不完整，请重新打开订阅入口'}
@@ -6548,7 +6564,11 @@ exports.main = async (event, context) => {
       case 'previewMyPlayerCard':
       case 'saveMyPlayerCard':
         const { createPlayerCards } = require('./playerCards.cjs')
-        result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue })(params)
+        result = await createPlayerCards({ cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue,
+          // 服务号 H5 复用同一套 servicePrivate 鉴权，不新增平行登录态。
+          authenticateServicePrivate: function (params) {
+            return require('./servicePrivate.cjs')({ cloud, config: SERVICE_ACCOUNT_CONFIG, hashSessionToken, dateValue, httpsGet, createSession: createRefereeH5Session }).authenticate(params)
+          } })(params)
         break
       case 'getPlayerCardsForViewer':
       case 'exportPlayerCardForViewer':
@@ -6665,6 +6685,14 @@ exports.main = async (event, context) => {
       case 'servicePrivateInsuranceRecognize':
       case 'servicePrivateInsuranceConfirm':
         result = await require('./servicePrivate.cjs')({ cloud, config:SERVICE_ACCOUNT_CONFIG, hashSessionToken, dateValue, httpsGet, createSession:createRefereeH5Session })(action, params); break
+      case 'servicePrivateJsSdkConfig': {
+        // 仅给已登录的服务号用户签当前页面，用于 wx-open-launch-weapp；签名接口不产生任何交易能力。
+        const jsSdkAuth = await require('./servicePrivate.cjs')({ cloud, config:SERVICE_ACCOUNT_CONFIG, hashSessionToken, dateValue, httpsGet, createSession:createRefereeH5Session }).authenticate(params)
+        if (jsSdkAuth && jsSdkAuth.success === false) { result = jsSdkAuth; break }
+        if (!jsSdkAuth || !jsSdkAuth.user) { result = { success:false, code:'SERVICE_PRIVATE_AUTH_REQUIRED', error:'请先在「我的」完成手机号绑定' }; break }
+        result = await serviceJsSdkConfig(params && params.url)
+        break
+      }
       case 'serviceRefereeOAuthUrl':
         result = await createRefereeOAuthUrl(params && params.returnUrl); break
       case 'serviceRefereeOAuth':

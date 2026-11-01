@@ -19,6 +19,8 @@ const crypto = require('crypto')
 const { readAll, missingCollection } = require('./data-center/reader.cjs')
 const recharge = require('./honeyRecharge.cjs')
 const pay = recharge.__internals
+// 阶段 1：会员主键统一为用户 users._id，历史 officialOpenId 文档只做兼容读取。
+const account = require('./membershipAccount.cjs')
 
 const ORDER_COLLECTION = 'membership_orders'
 const SUB_COLLECTION = 'member_subscriptions'
@@ -232,34 +234,22 @@ function rightsView(subscriptionViewValue, planMap) {
   })
 }
 
-// 球员卡换背景用：只读有效订阅，不写库；读取失败按未开通，避免阻断制卡主流程
-async function isActiveMember(db, openId) {
-  const id = text(openId)
-  if (!id || !db) return false
-  try {
-    const subscription = await subscriptionOf(db, id)
-    return !!(subscription && text(subscription.status) === 'active' && timeValue(subscription.expiresAt) > Date.now())
-  } catch (error) {
-    console.warn('[membership] 会员状态读取失败', text(error.code) || text(error.message))
-    return false
-  }
+// 球员卡换背景用：只读有效订阅，不写库；读取失败按未开通，避免阻断制卡主流程。
+// 参数兼容历史 openId 字符串与新的 {userId, openId} 对象。
+async function isActiveMember(db, identity) {
+  return account.isActiveMember(db, identity)
 }
-async function subscriptionOf(db, openId) {
-  return docValue(db, SUB_COLLECTION, text(openId))
+async function subscriptionOf(db, identity) {
+  return (await account.subscriptionMeta(db, identity)).subscription
 }
 
-async function statusPayload(db, openId) {
+async function statusPayload(db, identity) {
   const state = await planState(db)
   const planMap = {}
   state.plans.forEach(plan => { planMap[plan.code] = plan })
-  let subscription = await subscriptionOf(db, openId)
+  const meta = await account.subscriptionMeta(db, identity)
+  const subscription = await account.expireIfNeeded(db, meta)
   const now = Date.now()
-  if (subscription && text(subscription.status) === 'active' && timeValue(subscription.expiresAt) <= now) {
-    try {
-      await db.collection(SUB_COLLECTION).doc(text(openId)).update({ data: { status: 'expired', updatedAt: new Date() } })
-    } catch (error) { console.warn('[membership] 到期状态回写失败', text(error.code) || text(error.message)) }
-    subscription = Object.assign({}, subscription, { status: 'expired' })
-  }
   const view = subscriptionView(subscription, planMap, now)
   const sellable = state.plans.filter(plan => plan.visible)
   // 会员能否购买同时取决于：档位配置完整 + 至少一档开放 + 微信支付凭据已配置
@@ -272,7 +262,7 @@ async function statusPayload(db, openId) {
     purchaseEnabled: state.ready === true && sellable.length > 0 && paymentReady,
     reason: state.reason || (paymentReady ? '' : 'PAYMENT_NOT_CONFIGURED'),
     rights: rightsView(view, planMap),
-    balance: await safeBalance(db, openId)
+    balance: await safeBalance(db, meta.identity.openId)
   }
 }
 
@@ -310,14 +300,14 @@ async function homeCard(db, openId) {
 }
 
 // 供定妆照扣费使用：只读，不写库；任何异常都回落原价，不能因为会员读取失败破坏主流程
-async function discountFor(db, openId) {
-  const id = text(openId)
-  if (!id) return { active: false, discount: 1, levelCode: '', planName: '', expiresAt: 0 }
+async function discountFor(db, identity) {
+  const input = typeof identity === 'string' ? { openId: text(identity) } : (identity || {})
+  if (!input.openId && !input.userId) return { active: false, discount: 1, levelCode: '', planName: '', expiresAt: 0 }
   try {
     const state = await planState(db)
     const planMap = {}
     state.plans.forEach(plan => { planMap[plan.code] = plan })
-    const subscription = await subscriptionOf(db, id)
+    const subscription = await subscriptionOf(db, input)
     if (!subscription || text(subscription.status) !== 'active' || timeValue(subscription.expiresAt) <= Date.now()) return { active: false, discount: 1, levelCode: '', planName: '', expiresAt: 0 }
     const plan = planMap[text(subscription.levelCode)] || null
     const discount = plan && plan.portraitDiscount < 1 ? plan.portraitDiscount : 1
@@ -358,17 +348,30 @@ function viewOf(order) {
   }
 }
 
-async function listOrders(db, openId, limit) {
-  const id = text(openId)
-  if (!id) return []
+async function orderRowsFor(db, identity, fields, maxRows) {
+  const rows = []
+  const map = new Map()
+  const whereList = []
+  if (text(identity.userId)) whereList.push({ userId: text(identity.userId) })
+  if (text(identity.openId)) whereList.push({ openId: text(identity.openId) })
+  for (const where of whereList) {
+    const part = await readAll(db, ORDER_COLLECTION, where, { fields, maxRows })
+    for (const row of part) {
+      const key = text(row.outTradeNo) || text(row._id)
+      if (!map.has(key)) { map.set(key, row); rows.push(row) }
+    }
+  }
+  return rows
+}
+
+async function listOrders(db, identity, limit) {
+  const input = typeof identity === 'string' ? { openId: text(identity) } : (identity || {})
+  if (!input.openId && !input.userId) return []
   const size = Math.min(Math.max(Number(limit) || MAX_ORDERS, 1), 50)
-  const rows = await readAll(db, ORDER_COLLECTION, { openId: id }, {
-    fields: {
-      outTradeNo: true, planCode: true, planName: true, priceCents: true, grantDrops: true,
-      priceTier: true, months: true, status: true, ledgerState: true, createdAt: true, paidAt: true, closedAt: true
-    },
-    maxRows: 200
-  })
+  const rows = await orderRowsFor(db, input, {
+    outTradeNo: true, planCode: true, planName: true, priceCents: true, grantDrops: true,
+    priceTier: true, months: true, status: true, ledgerState: true, createdAt: true, paidAt: true, closedAt: true
+  }, 200)
   return rows.map(viewOf).sort((left, right) => right.createdAt - left.createdAt || right.outTradeNo.localeCompare(left.outTradeNo)).slice(0, size)
 }
 
@@ -381,13 +384,10 @@ async function closeOrderDoc(db, outTradeNo, reason, errorCode) {
 }
 
 // 复用仍在有效期内的待支付订单，避免用户连点生成一堆订单
-async function findReusableOrder(db, openId, planCode, priceCents, priceTier) {
+async function findReusableOrder(db, identity, planCode, priceCents, priceTier) {
   const now = Date.now()
   try {
-    const rows = await readAll(db, ORDER_COLLECTION, { openId: text(openId) }, {
-      fields: { outTradeNo: true, openId: true, planCode: true, priceCents: true, priceTier: true, status: true, ledgerState: true, prepayId: true, createdAt: true, prepayCreatedAt: true },
-      maxRows: 120
-    })
+    const rows = await orderRowsFor(db, identity, { outTradeNo: true, openId: true, planCode: true, priceCents: true, priceTier: true, status: true, ledgerState: true, prepayId: true, createdAt: true, prepayCreatedAt: true }, 120)
     const candidates = rows.filter(row => text(row.status) === 'pending' && text(row.prepayId) &&
       text(row.planCode) === planCode && Number(row.priceCents) === priceCents && text(row.priceTier) === priceTier &&
       now - timeValue(row.createdAt) <= PENDING_REUSE_MS && now - timeValue(row.prepayCreatedAt || row.createdAt) <= PENDING_REUSE_MS)
@@ -402,6 +402,7 @@ async function findReusableOrder(db, openId, planCode, priceCents, priceTier) {
 
 // ============ 下单 ============
 async function createOrder(db, actor, event) {
+  const identity = await account.resolveIdentity(db, actor)
   await recharge.ensureSecrets(db)
   const config = pay.paymentConfig()
   const state = await planState(db)
@@ -417,26 +418,26 @@ async function createOrder(db, actor, event) {
   // 先确认账户可核对，避免付款后无法发滴
   let walletState
   try {
-    walletState = await require('./honeyWallet.cjs').readHoney(db, actor.openId)
+    walletState = await require('./honeyWallet.cjs').readHoney(db, identity.openId)
   } catch (error) {
     return failResult(text(error.code) || 'HONEY_UNAVAILABLE', text(error.message) || '蜂蜜账户暂不可用，请稍后重试')
   }
-  const subscription = await subscriptionOf(db, actor.openId)
+  const subscription = (await account.subscriptionMeta(db, identity)).subscription
   const priceTier = priceTierFor(subscription)
   const priceCents = priceTier === 'first' ? plan.firstPriceCents : plan.renewPriceCents
-  const reusable = await findReusableOrder(db, actor.openId, plan.code, priceCents, priceTier)
+  const reusable = await findReusableOrder(db, identity, plan.code, priceCents, priceTier)
   if (reusable) {
     return { success: true, reused: true, order: viewOf(reusable), payParams: pay.payParams(config, reusable.prepayId), balance: walletState.balance }
   }
   const now = new Date()
   let outTradeNo = ''
   for (let attempt = 0; attempt < 4 && !outTradeNo; attempt += 1) {
-    const candidate = nextOutTradeNo(actor.openId, now)
+    const candidate = nextOutTradeNo(identity.openId, now)
     if (!(await getOrder(db, candidate))) outTradeNo = candidate
   }
   if (!outTradeNo) return failResult('MEMBERSHIP_ORDER_INVALID', '订单创建失败，请稍后重试')
   const order = {
-    outTradeNo, openId: actor.openId, userId: actor.userId, profileId: text(walletState.profileId),
+    outTradeNo, openId: identity.openId, officialOpenId: identity.openId, userId: identity.userId, profileId: text(walletState.profileId),
     kind: 'membership', planCode: plan.code, planName: plan.name, months: 1,
     priceCents, priceTier, grantDrops: plan.grantDrops, portraitDiscount: plan.portraitDiscount,
     priceSnapshot: { planCode: plan.code, planName: plan.name, priceCents, priceTier, grantDrops: plan.grantDrops },
@@ -516,7 +517,7 @@ async function markPaid(db, outTradeNo, transactionId, source, extras) {
 // 以订单号 + 确定性流水 ID 幂等；镜像与账本合计不一致时抛 HONEY_RECONCILING，不写任何数据。
 async function grantOrder(db, order, transactionId, source) {
   const outTradeNo = text(order.outTradeNo)
-  const openId = text(order.openId)
+  const openId = text(order.openId) || text(order.officialOpenId)
   const grantDrops = Number(order.grantDrops)
   const levelCode = text(order.planCode)
   const months = Number.isSafeInteger(Number(order.months)) && Number(order.months) > 0 ? Number(order.months) : 1
@@ -525,6 +526,10 @@ async function grantOrder(db, order, transactionId, source) {
   if (LEVEL_CODES.indexOf(levelCode) < 0) fail('MEMBERSHIP_ORDER_INVALID', '订单档位异常，请联系客服')
   if (!Number.isSafeInteger(grantDrops) || grantDrops <= 0) fail('MEMBERSHIP_ORDER_INVALID', '订单赠滴异常，请联系客服')
   if (!text(transactionId)) fail('MEMBERSHIP_TRANSACTION_MISSING', '缺少微信支付单号，暂不能发放')
+  // 新订单自带 userId；历史订单（仅 openId）在发放时解析一次，写入时落到统一主键文档。
+  const identity = text(order.userId)
+    ? { userId: text(order.userId), openId, canonicalId: account.canonicalSubscriptionId(text(order.userId)) }
+    : await account.resolveIdentity(db, { openId })
   const refId = LEDGER_REF_PREFIX + levelCode + ':' + outTradeNo
   const ledgerId = grantLedgerId(outTradeNo)
 
@@ -581,17 +586,19 @@ async function grantOrder(db, order, transactionId, source) {
       if (!Number.isSafeInteger(currentMirror) || currentMirror < 0) fail('HONEY_RECONCILING', '蜂蜜余额待核对，请稍后重试')
       if (currentMirror !== balance) fail('HONEY_RECONCILING', '蜂蜜余额待核对，请稍后重试')
 
-      const subscription = await docValue(transaction, SUB_COLLECTION, openId)
+      const canonicalKey = account.canonicalSubscriptionId(identity.userId)
+      let subscription = canonicalKey ? await docValue(transaction, SUB_COLLECTION, canonicalKey) : null
+      if (!subscription) subscription = await docValue(transaction, SUB_COLLECTION, openId)
       const expiresAt = nextExpiry(subscription, now, months)
       const subData = {
-        openId, userId: text(order.userId) || text(subscription && subscription.userId), profileId,
+        userId: text(identity.userId), openId, officialOpenId: openId, profileId,
         levelCode, status: 'active',
         startedAt: subscription && timeValue(subscription.startedAt) ? new Date(timeValue(subscription.startedAt)) : new Date(now),
         expiresAt, firstMonthUsed: true, autoRenew: false,
-        lastOrderId: outTradeNo, lastPriceTier: text(order.priceTier), updatedAt: new Date()
+        lastOrderId: outTradeNo, lastPriceTier: text(order.priceTier)
       }
-      if (subscription) await transaction.collection(SUB_COLLECTION).doc(openId).update({ data: subData })
-      else await transaction.collection(SUB_COLLECTION).doc(openId).set({ data: Object.assign({ createTime: db.serverDate() }, subData) })
+      await account.writeSubscription(transaction, identity,
+        subscription ? subData : Object.assign({ createTime: db.serverDate() }, subData))
 
       if (!duplicate) {
         await transaction.collection(PROFILE_COLLECTION).doc(profileId).update({
@@ -659,12 +666,17 @@ async function confirmOrder(db, outTradeNo, source) {
 }
 
 // ============ 个人端入口 ============
-async function orderStatus(db, openId, event) {
+async function orderStatus(db, identity, event) {
+  const input = typeof identity === 'string' ? { openId: text(identity) } : (identity || {})
   const outTradeNo = text(event && event.outTradeNo)
   if (!/^MT[0-9A-Za-z_-]{4,30}$/.test(outTradeNo)) return failResult('MEMBERSHIP_ORDER_INVALID', '订单号无效')
   const order = await getOrder(db, outTradeNo)
-  // 不属于当前账号的订单一律按不存在处理，不泄露他人订单
-  if (!order || text(order.openId) !== openId) return failResult('MEMBERSHIP_ORDER_NOT_FOUND', '订单不存在')
+  // 不属于当前账号的订单一律按不存在处理，不泄露他人订单（主键与历史 openId 都认）
+  const owned = order && (
+    (text(input.userId) && text(order.userId) === text(input.userId)) ||
+    (text(input.openId) && [text(order.openId), text(order.officialOpenId)].includes(text(input.openId)))
+  )
+  if (!owned) return failResult('MEMBERSHIP_ORDER_NOT_FOUND', '订单不存在')
   let queryError = null
   if (text(order.status) === 'pending') {
     try { await confirmOrder(db, outTradeNo, 'client') } catch (error) {
@@ -673,7 +685,7 @@ async function orderStatus(db, openId, event) {
       console.warn('[membership] 主动查单失败', queryError.code)
     }
   }
-  const state = await statusPayload(db, openId)
+  const state = await statusPayload(db, input)
   const payload = {
     success: true,
     order: viewOf((await getOrder(db, outTradeNo)) || order),
@@ -687,19 +699,21 @@ async function orderStatus(db, openId, event) {
 function create({ db, user, session }) {
   const openId = text(session && session.serviceAccountOpenId)
   const userId = text(user && user._id)
+  const unionId = text(session && session.unionId)
+  const identity = { userId, openId, unionId }
   return async function handle(action, event) {
     try {
-      if (!openId) return failResult('SERVICE_PRIVATE_AUTH_REQUIRED', '请重新连接微信')
+      if (!openId && !userId) return failResult('SERVICE_PRIVATE_AUTH_REQUIRED', '请重新连接微信')
       await recharge.ensureSecrets(db)
       if (action === 'servicePrivateMembershipStatus') {
-        const state = await statusPayload(db, openId)
+        const state = await statusPayload(db, identity)
         return Object.assign({ success: true }, state)
       }
-      if (action === 'servicePrivateMembershipSubscribe') return await createOrder(db, { openId, userId }, event || {})
-      if (action === 'servicePrivateMembershipOrderStatus') return await orderStatus(db, openId, event || {})
+      if (action === 'servicePrivateMembershipSubscribe') return await createOrder(db, identity, event || {})
+      if (action === 'servicePrivateMembershipOrderStatus') return await orderStatus(db, identity, event || {})
       if (action === 'servicePrivateMembershipOrders') {
-        const state = await statusPayload(db, openId)
-        return { success: true, rows: await listOrders(db, openId, MAX_ORDERS), subscription: state.subscription, purchaseEnabled: state.purchaseEnabled }
+        const state = await statusPayload(db, identity)
+        return { success: true, rows: await listOrders(db, identity, MAX_ORDERS), subscription: state.subscription, purchaseEnabled: state.purchaseEnabled }
       }
       return failResult('MEMBERSHIP_ACTION_INVALID', '操作不可用，请重新打开')
     } catch (error) {

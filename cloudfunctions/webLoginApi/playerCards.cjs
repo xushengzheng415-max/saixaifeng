@@ -48,13 +48,17 @@ function archivedPlayer(player) {
 }
 function portraitMatchesRegistration(portrait, entry, auth) {
   if (!portrait || portrait.status !== 'confirmed') return false
-  if (String(portrait.parentInvite || '') === String(entry.relation?.parentInvite || '') && portrait.parentInvite) return true
-  // A registration upgrade creates a new confirmed portrait version. An older
-  // submission may still be the first relation returned for the same player.
-  return portrait.sourceChannel === 'service_account_h5' &&
-    String(portrait.playerId || '') === String(entry.player._id || '') &&
-    String(portrait.serviceAccountOpenId || '') === String(auth.openId || '') &&
-    Boolean(auth.openId) && owns(entry.player, entry.relation || {})
+  const relation = entry.relation || {}
+  if (relation.parentInvite && String(portrait.parentInvite || '') === String(relation.parentInvite)) return true
+  // 生产环境用 players.recentPortraitId 关联形象照，照片文档本身没有 playerId/sourceChannel，
+  // 老版本登记产生的照片也没有这两个字段；这里同时兼容历史字段与 recentPortraitId 关联。
+  const linkedByPlayer = String(entry.player.recentPortraitId || '') === String(portrait._id || '')
+  const samePlayer = !portrait.playerId || String(portrait.playerId) === String(entry.player._id || '')
+  if (!(linkedByPlayer || portrait.sourceChannel === 'service_account_h5') || !samePlayer || !owns(entry.player, relation)) return false
+  // 会员主键统一后，服务号 H5 以 users._id 归属为准；历史 openId-only 会话仍校验照片归属，
+  // 避免同一份照片被其他账号读取。
+  if (auth.userId) return true
+  return Boolean(auth.openId) && String(portrait.serviceAccountOpenId || '') === String(auth.openId || '')
 }
 function cardChangePermission(level, player, portrait, event) {
   if (!level.cardTier) return { code:'PLAYER_CARD_TIER_UNVERIFIED', error:'生涯积分待核定，请稍后重试' }
@@ -98,7 +102,7 @@ async function cardVersionsForPlayer(cloud,db,player) {
   return cards
 }
 function createPlayerCards(deps) {
-  const { cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue } = deps
+  const { cloud, authenticateParentH5Session, previewParentProfileInvite, hashSessionToken, dateValue, authenticateServicePrivate } = deps
   async function readAll(db, collection, where) {
     const rows = []; let after = ''
     for (;;) {
@@ -110,6 +114,20 @@ function createPlayerCards(deps) {
     }
   }
   async function authorize(event, db) {
+    // 服务号 H5：复用 servicePrivate.authenticate，不新建平行鉴权。
+    const serviceToken = String(event.serviceSessionToken || '')
+    if (serviceToken) {
+      if (typeof authenticateServicePrivate !== 'function') throw Object.assign(new Error('服务号会话鉴权未就绪，请稍后重试'), { code: 'PLAYER_CARD_AUTH_REQUIRED' })
+      const auth = await authenticateServicePrivate({ serviceSessionToken: serviceToken })
+      if (!auth || auth.success === false) throw Object.assign(new Error(auth && auth.error || '微信会话已失效，请重新进入'), { code: (auth && auth.code) || 'PLAYER_CARD_AUTH_REQUIRED' })
+      if (auth.needsBinding || !auth.user || !auth.user._id) throw Object.assign(new Error('请先在「我的」完成手机号绑定'), { code: 'PLAYER_CARD_AUTH_REQUIRED' })
+      return {
+        userId: String(auth.user._id),
+        openId: String(auth.session && auth.session.serviceAccountOpenId || ''),
+        unionId: String(auth.session && auth.session.unionId || ''),
+        source: 'service_h5'
+      }
+    }
     if (event.parentSessionToken) {
       const auth = await authenticateParentH5Session(event)
       if (!auth.success) throw Object.assign(new Error(auth.error || '登记会话已失效'), { code: auth.code || 'PLAYER_CARD_AUTH_REQUIRED' })
@@ -126,6 +144,38 @@ function createPlayerCards(deps) {
     return { openId: String(sessions[0].serviceAccountOpenId || '') }
   }
   async function playersFor(auth, db) {
+    if (auth.userId) {
+      // 服务号 H5：本人/监护球员按 users._id 归属读取；历史登记提交仍按 openId 兼容。
+      const rows = new Map()
+      // 分字段查询再合并：readAll 分页会叠加 _id 条件，与 or 条件组合在部分旧版 SDK 上不可靠。
+      for (const field of ['linkedUserId', 'playerUserId', 'guardianUserId']) {
+        const owned = await readAll(db, 'players', { [field]: auth.userId })
+        for (const player of owned) {
+          if (!player || !player._id || archivedPlayer(player)) continue
+          if (rows.has(String(player._id))) continue
+          const isSelf = ['linkedUserId', 'playerUserId'].some(name => String(player[name] || '') === auth.userId)
+          rows.set(String(player._id), { player, relation: isSelf ? { registrantType: 'self', registrantUserId: auth.userId } : { registrantType: 'guardian', registrantUserId: auth.userId } })
+        }
+      }
+      if (auth.openId) {
+        const submissions = await readAll(db, 'parent_profile_submissions', { serviceAccountOpenId: auth.openId, status: 'submitted' })
+        for (const relation of submissions) {
+          const playerId = String(relation.playerId || '')
+          if (!playerId || rows.has(playerId)) continue
+          const result = await db.collection('players').doc(playerId).get()
+          const player = Array.isArray(result.data) ? result.data[0] : result.data
+          if (!player || archivedPlayer(player) || !owns(player, relation)) continue
+          rows.set(playerId, { player, relation })
+        }
+      }
+      const entries = []
+      for (const item of rows.values()) {
+        const teamResult = item.player.teamId ? await db.collection('teams').doc(String(item.player.teamId)).get() : { data: null }
+        const team = Array.isArray(teamResult.data) ? teamResult.data[0] : teamResult.data
+        entries.push({ player: item.player, relation: item.relation, teamName: team && (team.name || team.teamName) || '', teamLogo: require('./playerCardSource.cjs').teamLogoFileId(team) })
+      }
+      return entries
+    }
     if (auth.playerId) {
       const result = await db.collection('players').doc(auth.playerId).get()
       const player = Array.isArray(result.data) ? result.data[0] : result.data
@@ -175,7 +225,9 @@ function createPlayerCards(deps) {
     let memberBackgroundUnlock = null
     async function membershipUnlocksBackground() {
       if (memberBackgroundUnlock !== null) return memberBackgroundUnlock
-      memberBackgroundUnlock = auth.openId ? await require('./membership.cjs').isActiveMember(db, auth.openId) : false
+      memberBackgroundUnlock = (auth.openId || auth.userId)
+        ? await require('./membership.cjs').isActiveMember(db, { userId: auth.userId, openId: auth.openId })
+        : false
       return memberBackgroundUnlock
     }
     async function withMembershipBackground(score) {

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07090f" />
+  <title>我的球员卡 · 赛小蜂足球</title>
+  <link rel="stylesheet" href="css/app.css?v=20261101-stage2" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="topbar__back" href="../me.html" aria-label="返回我的">‹</a>
+      <img class="topbar__logo" src="assets/card-world-icon.jpg" alt="赛小蜂" />
+      <div class="topbar__title">
+        <strong>我的球员卡</strong>
+        <span>个人卡库 · 更衣室</span>
+      </div>
+      <span class="topbar__tag" id="member-chip" hidden>会员</span>
+    </header>
+
+    <main id="app">
+      <section class="state-card" id="state-loading">
+        <i class="spinner"></i>
+        <strong>正在读取我的球员卡…</strong>
+        <span>仅读取当前微信已绑定的账号数据</span>
+      </section>
+
+      <section class="state-card" id="state-error" hidden>
+        <strong id="error-title">暂时无法读取球员卡</strong>
+        <p id="error-text">请稍后重试</p>
+        <div class="state-card__actions">
+          <button type="button" class="btn btn--gold" id="btn-retry">重新加载</button>
+          <button type="button" class="btn btn--ghost" id="btn-relogin">重新登录</button>
+        </div>
+      </section>
+
+      <section id="content" hidden>
+        <!-- 我的球员卡 -->
+        <article class="hero panel">
+          <div class="hero__card" id="hero-card">
+            <div class="hero__placeholder" id="hero-placeholder">
+              <div class="hero__mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.4">
+                  <rect x="4" y="3" width="12" height="18" rx="2"></rect>
+                  <path d="M8 8h4M8 11h4M8 14h2"></path>
+                </svg>
+              </div>
+              <strong>还没有可展示的球员卡</strong>
+              <span>去足球世界小程序签约后，这里会自动显示</span>
+            </div>
+            <img class="hero__image" id="hero-image" alt="" hidden />
+            <div class="hero__holo" aria-hidden="true"></div>
+            <div class="hero__shine" aria-hidden="true"></div>
+          </div>
+
+          <div class="hero__meta">
+            <div class="hero__name">
+              <strong id="hero-name">球员</strong>
+              <span id="hero-sub">—</span>
+            </div>
+            <span class="hero__number" id="hero-number" hidden></span>
+          </div>
+
+          <div class="stats" id="hero-stats" aria-label="数据中心统计"></div>
+
+          <p class="hero__note" id="hero-note" hidden></p>
+
+          <div class="actions">
+            <button type="button" class="btn btn--gold" id="btn-settings">卡面设置</button>
+            <button type="button" class="btn btn--ghost" id="btn-library">我的卡库</button>
+          </div>
+        </article>
+
+        <!-- 会员状态：只读展示，不出现价格与支付 -->
+        <article class="panel membership" id="membership-panel" hidden>
+          <div class="panel__head">
+            <h2>会员权益</h2>
+            <span class="hint">只读</span>
+          </div>
+          <p class="membership__state" id="membership-state">—</p>
+          <p class="membership__hint">会员可更换专属背景；换照片与照片合成请在足球世界小程序完成。</p>
+        </article>
+
+        <!-- 我的卡库 -->
+        <article class="panel" id="library-panel">
+          <div class="panel__head">
+            <h2>我的卡库</h2>
+            <span class="hint" id="library-count">只读</span>
+          </div>
+          <div class="library" id="library-list"></div>
+          <div class="library__empty" id="library-empty" hidden>
+            <div class="library__empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="3" y="5" width="14" height="16" rx="2"></rect>
+                <path d="M7 9h6M7 12h6M7 15h3"></path>
+              </svg>
+            </div>
+            <strong>卡库还是空的</strong>
+            <p>还没有获得球员卡，去足球世界签约后再回来查看。</p>
+          </div>
+        </article>
+
+        <!-- 底部：进入小程序（wx-open-launch-weapp） -->
+        <section class="weapp-entry" id="weapp-entry">
+          <div id="weapp-slot">
+            <div id="weapp-launch" hidden>
+              <wx-open-launch-weapp id="launch-weapp" path="pages/card/main/main">
+                <script type="text/wxtag-template">
+                  <div style="display:block;padding:13px 16px;border-radius:12px;font-size:15px;font-weight:700;text-align:center;color:#2f2205;background:linear-gradient(120deg,#f6e2a7,#e8c56a 45%,#c99a3c);">进入足球世界小程序</div>
+                </script>
+              </wx-open-launch-weapp>
+            </div>
+          </div>
+          <button type="button" class="weapp-fallback" id="weapp-fallback" hidden>请使用微信打开后进入足球世界</button>
+          <p class="weapp-hint" id="weapp-hint">签约、组阵、照片合成在小程序中完成</p>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <!-- 卡面设置 -->
+  <div class="sheet-mask" id="settings-mask" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="sheet__head">
+        <h2 id="settings-title">卡面设置</h2>
+        <button type="button" class="sheet__close" id="btn-close-settings" aria-label="关闭">×</button>
+      </header>
+      <div class="sheet__body" id="settings-body">
+        <div class="field">
+          <label class="field__label">背景卡面</label>
+          <div class="backgrounds" id="background-list"></div>
+          <p class="field__hint" id="background-hint"></p>
+        </div>
+
+        <div class="field">
+          <label class="field__label">照片构图</label>
+          <div class="crop-stage">
+            <div class="crop-frame">
+              <img id="crop-image" alt="标准形象照" hidden />
+              <div class="crop-empty" id="crop-empty">形象照读取中…</div>
+            </div>
+          </div>
+          <div class="slider-row">
+            <span>缩放</span>
+            <input type="range" id="crop-zoom" min="1" max="4" step="0.05" value="1" />
+            <em id="crop-zoom-value">1.00</em>
+          </div>
+          <div class="slider-row">
+            <span>左右</span>
+            <input type="range" id="crop-x" min="-2" max="2" step="0.02" value="0" />
+            <em id="crop-x-value">0.00</em>
+          </div>
+          <div class="slider-row">
+            <span>上下</span>
+            <input type="range" id="crop-y" min="-2" max="2" step="0.02" value="0" />
+            <em id="crop-y-value">0.00</em>
+          </div>
+          <p class="field__hint">只调整背景或构图可直接保存，不消耗蜂蜜；换照片需去小程序合成。</p>
+        </div>
+      </div>
+      <footer class="sheet__foot">
+        <button type="button" class="btn btn--ghost" id="btn-preview">预览</button>
+        <button type="button" class="btn btn--gold" id="btn-save">保存卡面</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- 预览 -->
+  <div class="preview-mask" id="preview-mask" hidden>
+    <div class="preview">
+      <img id="preview-image" alt="卡面预览" />
+      <button type="button" class="btn btn--ghost" id="btn-close-preview">关闭预览</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="js/api.js?v=20261101-stage2"></script>
+  <script src="js/app.js?v=20261101-stage2"></script>
+</body>
+</html>
