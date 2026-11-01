@@ -1,0 +1,3 @@
+<view wx:if="{{errorText}}" class="center-error"><text>{{errorText}}</text><button bindtap="retry">重试</button><text class="center-back" bindtap="back">返回首页</text></view>
+<view wx:if="{{loading}}" class="center-loading">正在打开赛事中心…</view>
+<web-view wx:if="{{url}}" src="{{url}}" bindload="onWebLoad" binderror="onWebError"></web-view>

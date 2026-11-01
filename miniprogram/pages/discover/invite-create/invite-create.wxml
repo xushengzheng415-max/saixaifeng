@@ -1,0 +1,86 @@
+<view class="page">
+
+  <!-- 顶部本队卡 -->
+  <view class="team-card" wx:if="{{hasTeam}}">
+    <image class="team-logo" src="{{teamLogo}}" mode="aspectFit"></image>
+    <view class="team-main">
+      <text class="team-label">本次邀约发起方</text>
+      <text class="team-name">{{teamName}}</text>
+    </view>
+    <view class="team-badge">发起方</view>
+  </view>
+  <view class="team-card team-card-empty" wx:if="{{!hasTeam}}">
+    <text>请先切换到球队管理者</text>
+  </view>
+
+  <!-- 轻提示 -->
+  <view class="tip-bar">
+    <text class="tip-icon">📣</text>
+    <text class="tip-text">对手无需提前注册，扫码进小程序即可报名</text>
+  </view>
+
+  <!-- 表单区：全部可跳过 -->
+  <view class="form-card">
+
+    <view class="form-item">
+      <text class="form-label">比赛时间</text>
+      <picker class="form-picker" mode="date" value="{{matchDate}}" start="{{today}}" bindchange="onDateChange">
+        <text class="picker-text">{{matchDateText}}</text>
+      </picker>
+      <picker class="form-picker-pill" mode="time" value="{{matchTime}}" bindchange="onTimeChange">
+        <text class="picker-pill-text">{{matchTimeText}}</text>
+      </picker>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">场地（可跳过）</text>
+      <view class="venue-presets" wx:if="{{hasVenuePresets}}">
+        <text class="venue-presets-label">常用场地</text>
+        <view class="venue-preset-list">
+          <text class="venue-preset" wx:for="{{venuePresets}}" wx:key="name" data-index="{{index}}" bindtap="onPickVenuePreset">{{item.name}}</text>
+        </view>
+      </view>
+      <view class="venue-row">
+        <input class="form-input venue-input" value="{{venue}}" placeholder="例：市体育中心1号场" placeholder-class="form-placeholder" bindinput="onVenueInput" maxlength="30" />
+        <view class="venue-map-btn" bindtap="onPickVenueLocation">
+          <text class="venue-map-btn-text">地图选点</text>
+        </view>
+      </view>
+      <view class="venue-selected" wx:if="{{hasVenueLocation}}">
+        <text class="venue-selected-text">{{venueAddress}}</text>
+        <text class="venue-nav-btn" catchtap="onOpenVenueLocation">导航</text>
+      </view>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">报名限额</text>
+      <view class="stepper">
+        <view class="stepper-btn" bindtap="onLimitMinus">−</view>
+        <text class="stepper-value">{{signupLimit}}</text>
+        <view class="stepper-btn" bindtap="onLimitPlus">+</view>
+      </view>
+      <text class="form-note">0 表示不限</text>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">报名截止（可跳过）</text>
+      <picker class="form-picker" mode="date" value="{{deadline}}" start="{{today}}" bindchange="onDeadlineChange">
+        <text class="picker-text">{{deadlineText}}</text>
+      </picker>
+    </view>
+
+  </view>
+
+  <!-- 生成海报按钮 -->
+  <view class="generate-btn {{generateBtnClass}}" bindtap="onGenerate">
+    <text class="generate-btn-text">生成邀约海报</text>
+  </view>
+
+  <!-- 说明 -->
+  <view class="notes">
+    <text class="note-item">· 限额与截止由发起方控制</text>
+    <text class="note-item">· 对手扫海报进小程序报名</text>
+    <text class="note-item">· 报名数据与正式赛事隔离</text>
+  </view>
+
+</view>

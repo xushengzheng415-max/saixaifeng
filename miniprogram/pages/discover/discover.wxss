@@ -1,0 +1,449 @@
+/* pages/discover/discover.wxss
+ * 发现一级页（动态／赛事／约球）
+ * 设计令牌：主色 #087A48 / 正文 #162D22 / 辅助 #7C8B82 / 页面底 #F5F7F6 / 浅绿 #EAF6EE / 边界 #E7EEE9
+ * 换算：390px 视口设计值 × 1.92 ≈ rpx（16px→31rpx、12px→23rpx、8px→15rpx、14px→27rpx、11px→21rpx）
+ */
+
+.page{min-height:100vh;background:#F5F7F6;padding-bottom:calc(170rpx + env(safe-area-inset-bottom));box-sizing:border-box}
+
+/* ===== 顶部页框 ===== */
+.topbar{padding-left:31rpx;padding-right:31rpx;background:#F5F7F6}
+.title-row{display:flex;align-items:center;gap:16rpx;height:66rpx}
+.page-title{font-size:46rpx;line-height:1.1;font-weight:900;color:#162D22;letter-spacing:1rpx}
+.page-role{font-size:21rpx;line-height:1.4;font-weight:700;color:#087A48;background:#EAF6EE;border-radius:8rpx;padding:4rpx 12rpx}
+.tool-row{display:flex;align-items:center;gap:16rpx;padding:8rpx 0 18rpx}
+
+.city-chip{display:flex;align-items:center;gap:6rpx;height:64rpx;padding:0 14rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;flex:0 0 auto;max-width:200rpx;box-sizing:border-box}
+.city-icon{width:24rpx;height:24rpx;flex:0 0 24rpx}
+.city-text{font-size:23rpx;color:#162D22;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.search-box{flex:1;min-width:0;height:64rpx;display:flex;align-items:center;gap:10rpx;padding:0 18rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;box-sizing:border-box}
+.search-icon{width:26rpx;height:26rpx;flex:0 0 26rpx}
+.search-input{flex:1;min-width:0;height:64rpx;line-height:64rpx;font-size:25rpx;color:#162D22}
+.search-placeholder{color:#A7B3AC;font-size:24rpx}
+.search-clear{flex:0 0 auto;font-size:21rpx;color:#7C8B82;padding:4rpx 2rpx 4rpx 8rpx}
+/* 约球、转会栏没有检索接口：输入框禁用并降对比，避免看起来能搜其实不生效 */
+.search-box-disabled{background:#EFF3F1;border-color:#E7EEE9}
+.search-box-disabled .search-input{color:#A7B3AC}
+.search-box-disabled .search-placeholder{color:#B7C2BB}
+
+.record-btn{flex:0 0 auto;height:64rpx;padding:0 20rpx;border-radius:15rpx;display:flex;align-items:center;justify-content:center;background:#087A48;box-shadow:0 6rpx 14rpx rgba(8,122,72,.22);box-sizing:border-box}
+.record-btn-text{font-size:25rpx;font-weight:900;color:#fff;letter-spacing:1rpx}
+.record-btn-disabled{background:#B9CBC1;box-shadow:none}
+
+/* ===== 四个顶部分栏 ===== */
+.tab-row{display:flex;align-items:stretch;padding:0 31rpx;background:#F5F7F6;border-bottom:1rpx solid #E7EEE9}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;padding-top:16rpx}
+.tab-text{font-size:29rpx;font-weight:600;color:#7C8B82;padding-bottom:14rpx;line-height:1.3}
+.tab-text-active{font-size:30rpx;font-weight:900;color:#087A48}
+.tab-line{width:46rpx;height:5rpx;border-radius:3rpx;background:transparent}
+.tab-line-active{background:#087A48}
+
+/* ===== 当前栏筛选 ===== */
+.filter-row{display:flex;align-items:center;justify-content:space-between;padding:18rpx 31rpx 4rpx}
+.chip-row{display:flex;align-items:center;gap:14rpx;flex:1;min-width:0;overflow:hidden}
+.chip{height:48rpx;padding:0 20rpx;border-radius:24rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;align-items:center;justify-content:center;flex:0 0 auto;box-sizing:border-box}
+.chip-text{font-size:22rpx;font-weight:600;color:#7C8B82;white-space:nowrap}
+.chip-active{background:#EAF6EE;border-color:#087A48}
+.chip-active .chip-text{font-weight:800;color:#087A48}
+.publish-entry{flex:0 0 auto;margin-left:14rpx;font-size:23rpx;font-weight:700;color:#7C8B82;padding:8rpx 4rpx}
+
+/* ===== 系统提示条 ===== */
+.guest-strip{margin:14rpx 31rpx 0;padding:14rpx 18rpx;border-radius:10rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;align-items:center;gap:14rpx}
+.guest-strip-text{flex:1;min-width:0;font-size:21rpx;color:#7C8B82;line-height:1.55}
+.guest-strip-action{flex:0 0 auto;font-size:22rpx;font-weight:800;color:#087A48;padding:4rpx 6rpx}
+.page-error{margin:14rpx 31rpx 0;padding:16rpx 18rpx;border-radius:10rpx;background:#FDECEA}
+.page-error-text{font-size:21rpx;color:#A43E38;line-height:1.55}
+.notice-strip{margin:18rpx 31rpx 0;padding:14rpx 18rpx;border-radius:10rpx;background:#EAF6EE}
+.notice-strip-text{font-size:21rpx;color:#087A48;line-height:1.55}
+
+/* ===== 发布面板（低权重，仅动态栏出现） ===== */
+.publish-panel{margin:14rpx 31rpx 0;padding:4rpx 20rpx 16rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9}
+.publish-item{padding:18rpx 0;border-bottom:1rpx solid #E7EEE9}
+.publish-item-title{display:block;font-size:26rpx;font-weight:800;color:#162D22}
+.publish-item-desc{display:block;margin-top:4rpx;font-size:21rpx;color:#7C8B82;line-height:1.5}
+.publish-close{display:block;margin-top:12rpx;text-align:center;font-size:21rpx;color:#7C8B82;padding:6rpx 0}
+
+/* ===== 动态卡片（战报） ===== */
+.card-list{padding:0 31rpx}
+.feed-card{margin-top:18rpx;padding:24rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9}
+.feed-head{display:flex;align-items:center;gap:14rpx}
+.feed-logo{width:60rpx;height:60rpx;flex:0 0 60rpx;border-radius:12rpx;background:#F5F7F6}
+.feed-head-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4rpx}
+.feed-publisher{font-size:27rpx;font-weight:800;color:#162D22;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-time{font-size:21rpx;color:#7C8B82}
+.feed-source{flex:0 0 auto;font-size:20rpx;font-weight:700;color:#087A48;background:#EAF6EE;border-radius:8rpx;padding:4rpx 10rpx}
+.feed-body{display:flex;align-items:center;gap:18rpx;margin-top:18rpx}
+.feed-score{flex:0 0 152rpx;display:flex;flex-direction:column;align-items:center;gap:6rpx}
+.feed-score-text{font-size:34rpx;font-weight:900;color:#162D22;letter-spacing:1rpx;line-height:1.2}
+.feed-result{padding:2rpx 12rpx;border-radius:8rpx;font-size:19rpx;font-weight:800}
+.result-win{background:#EAF6EE;color:#087A48}
+.result-draw{background:#EFF3F1;color:#5F6E66}
+.result-lose{background:#FDECEA;color:#C0423A}
+.feed-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6rpx}
+.feed-title{font-size:28rpx;font-weight:800;color:#162D22;line-height:1.35;word-break:break-all}
+.feed-meta{font-size:21rpx;color:#7C8B82}
+.feed-scorer{font-size:21rpx;color:#087A48;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-actions{display:flex;align-items:center;justify-content:flex-end;gap:14rpx;margin-top:16rpx;padding-top:16rpx;border-top:1rpx solid #E7EEE9}
+.feed-action{font-size:21rpx;font-weight:800;color:#087A48;background:#EAF6EE;border-radius:10rpx;padding:8rpx 16rpx}
+.feed-action.danger{color:#C0423A;background:#FDECEA}
+
+/* ===== 赛事卡片 ===== */
+.event-card{margin-top:18rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;overflow:hidden}
+.event-cover-wrap{position:relative;width:100%;height:300rpx;background:#EFF3F1}
+.event-cover{width:100%;height:100%;display:block}
+.event-badge{position:absolute;left:18rpx;top:18rpx;padding:6rpx 14rpx;border-radius:8rpx;background:rgba(22,45,34,.62);color:#fff;font-size:20rpx;font-weight:700;line-height:1.4}
+.event-body{padding:22rpx 24rpx 24rpx;display:flex;flex-direction:column;gap:8rpx}
+.event-title-row{display:flex;align-items:flex-start;gap:14rpx}
+.event-name{flex:1;min-width:0;font-size:31rpx;font-weight:900;color:#162D22;line-height:1.35;word-break:break-all}
+.event-status{flex:0 0 auto;margin-top:4rpx;padding:5rpx 14rpx;border-radius:8rpx;font-size:20rpx;font-weight:800;line-height:1.4;background:#fff;color:#087A48;border:1rpx solid #E7EEE9}
+.event-status-live{background:#087A48;color:#fff;border-color:#087A48}
+.event-status-signup{background:#EAF6EE;color:#087A48;border-color:#EAF6EE}
+.event-status-done{background:#EFF3F1;color:#5F6E66;border-color:#EFF3F1}
+.event-status-wait{background:#fff;color:#7C8B82;border-color:#E7EEE9}
+.event-meta{font-size:21rpx;color:#7C8B82;line-height:1.5}
+.event-host{font-size:21rpx;color:#7C8B82;line-height:1.5}
+.event-actions{display:flex;align-items:center;gap:16rpx;margin-top:8rpx}
+.event-btn{flex:1;height:80rpx;border-radius:15rpx;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+.event-btn-outline{background:#fff;border:1rpx solid #087A48}
+.event-btn-solid{background:#087A48}
+.event-btn-text{font-size:25rpx;font-weight:800;color:#fff}
+.event-btn-text-outline{color:#087A48}
+
+/* ===== 约球 ===== */
+.invite-card{margin:18rpx 31rpx 0;padding:28rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;flex-direction:column;gap:10rpx}
+.invite-title{font-size:31rpx;font-weight:900;color:#162D22;line-height:1.35}
+.invite-desc{font-size:23rpx;color:#7C8B82;line-height:1.6}
+.invite-btn{margin-top:12rpx;height:72rpx;border-radius:15rpx;display:flex;align-items:center;justify-content:center;background:#087A48}
+.invite-btn-disabled{background:#B9CBC1}
+.invite-btn-text{font-size:27rpx;font-weight:900;color:#fff}
+
+/* 本队邀约列表：只读卡片，状态由截止时间与报名人数预计算 */
+.invite-item{margin-top:18rpx;padding:24rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;flex-direction:column;gap:10rpx}
+.invite-item-head{display:flex;align-items:flex-start;gap:14rpx}
+.invite-item-title{flex:1;min-width:0;font-size:29rpx;font-weight:900;color:#162D22;line-height:1.35}
+.invite-status{flex:0 0 auto;margin-top:2rpx;padding:5rpx 14rpx;border-radius:8rpx;font-size:20rpx;font-weight:800;line-height:1.4;background:#fff;color:#7C8B82;border:1rpx solid #E7EEE9}
+.invite-status-open{background:#EAF6EE;color:#087A48;border-color:#EAF6EE}
+.invite-status-full{background:#5F6E66;color:#fff;border-color:#5F6E66}
+.invite-status-closed{background:#EFF3F1;color:#5F6E66;border-color:#EFF3F1}
+.invite-status-cancelled{background:#FDECEA;color:#C0423A;border-color:#FDECEA}
+.invite-item-row{display:flex;align-items:center;gap:10rpx}
+.invite-item-icon{width:24rpx;height:24rpx;flex:0 0 24rpx}
+.invite-item-venue{flex:1;min-width:0;font-size:23rpx;color:#162D22;line-height:1.5;word-break:break-all}
+.invite-item-address{font-size:21rpx;color:#7C8B82;line-height:1.5;padding-left:34rpx;word-break:break-all}
+.invite-item-foot{display:flex;align-items:center;justify-content:space-between;gap:14rpx;margin-top:4rpx;padding-top:14rpx;border-top:1rpx solid #E7EEE9}
+.invite-item-signup{font-size:21rpx;font-weight:800;color:#087A48}
+.invite-item-deadline{font-size:20rpx;color:#7C8B82}
+.invite-item-cry{font-size:21rpx;color:#5F6E66;background:#F5F7F6;border-radius:10rpx;padding:12rpx 16rpx;line-height:1.6;word-break:break-all}
+.invite-item-created{font-size:20rpx;color:#A7B3AC}
+
+/* 约球范围切换：本队管理视角 / 跨队公开撮合 */
+.scope-row{display:flex;align-items:center;gap:6rpx;margin:18rpx 31rpx 0;padding:6rpx;border-radius:15rpx;background:#EFF3F1}
+.scope-item{flex:1;height:64rpx;border-radius:12rpx;display:flex;align-items:center;justify-content:center}
+.scope-item-active{background:#fff;box-shadow:0 2rpx 8rpx rgba(22,45,34,.08)}
+.scope-text{font-size:25rpx;font-weight:700;color:#7C8B82}
+.scope-item-active .scope-text{font-weight:900;color:#087A48}
+
+/* 公开约球：同城筛选条 */
+.public-filter{display:flex;align-items:center;justify-content:space-between;gap:14rpx;margin:18rpx 31rpx 0;padding:0 18rpx;height:64rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;box-sizing:border-box}
+.public-city{display:flex;align-items:center;gap:8rpx;flex:1;min-width:0}
+.public-city-icon{width:24rpx;height:24rpx;flex:0 0 24rpx}
+.public-city-text{flex:1;min-width:0;font-size:22rpx;font-weight:700;color:#162D22;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.public-city-btn{flex:0 0 auto;font-size:21rpx;font-weight:800;color:#087A48;background:#EAF6EE;border-radius:10rpx;padding:8rpx 14rpx}
+
+/* 公开约球卡片：队名与城市在上，应战按钮在底部 */
+.public-item{margin-top:18rpx;padding:24rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;flex-direction:column;gap:10rpx}
+.public-item-head{display:flex;align-items:center;gap:14rpx}
+.public-item-logo{width:60rpx;height:60rpx;flex:0 0 60rpx;border-radius:12rpx;background:#F5F7F6}
+.public-item-team-box{flex:1;min-width:0;display:flex;flex-direction:column;gap:4rpx}
+.public-item-team{font-size:27rpx;font-weight:900;color:#162D22;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.public-item-city{font-size:20rpx;color:#7C8B82}
+.public-badge{flex:0 0 auto;font-size:19rpx;font-weight:800;color:#087A48;background:#EAF6EE;border-radius:8rpx;padding:4rpx 12rpx}
+.public-item-title{font-size:29rpx;font-weight:900;color:#162D22;line-height:1.35}
+.public-action{margin-top:6rpx;height:72rpx;border-radius:15rpx;background:#087A48;display:flex;align-items:center;justify-content:center}
+.public-action-done{background:#EFF3F1}
+.public-action-text{font-size:25rpx;font-weight:900;color:#fff;letter-spacing:1rpx}
+.public-action-done .public-action-text{color:#7C8B82}
+
+/* 本队邀约：应战队伍行 */
+.invite-response-row{display:flex;align-items:center;justify-content:space-between;gap:14rpx;margin-top:2rpx}
+.invite-response-text{flex:1;min-width:0;font-size:21rpx;font-weight:700;color:#5F6E66}
+.invite-response-btn{flex:0 0 auto;font-size:21rpx;font-weight:800;color:#087A48;background:#EAF6EE;border-radius:10rpx;padding:8rpx 16rpx}
+
+/* ===== 状态卡与尾部提示 ===== */
+.state-card{margin:18rpx 31rpx 0;padding:40rpx 28rpx;border-radius:15rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;flex-direction:column;align-items:center;gap:10rpx}
+.state-title{font-size:27rpx;font-weight:800;color:#162D22;text-align:center;line-height:1.4}
+.state-desc{font-size:22rpx;color:#7C8B82;line-height:1.6;text-align:center}
+.state-btn{margin-top:6rpx;height:64rpx;padding:0 32rpx;border-radius:15rpx;background:#EAF6EE;border:1rpx solid #087A48;display:flex;align-items:center;justify-content:center}
+.state-btn-text{font-size:23rpx;font-weight:800;color:#087A48}
+.refresh-strip,.end-strip{display:flex;align-items:center;justify-content:center;padding:18rpx 31rpx 0}
+.refresh-strip-text,.end-strip-text{font-size:21rpx;color:#A7B3AC}
+
+/* ===== 转会公开市场（发现根目录独立分栏，按 2026-10-27 拆解原型） ===== */
+/* 01 范围筛选：赛事／年龄类型／时间。接口未接入时只做说明，不做看起来能筛的假控件 */
+.market-scope{display:flex;align-items:center;gap:14rpx;padding:20rpx 31rpx 0}
+.scope-chip{flex:1;min-width:0;height:60rpx;border-radius:12rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;align-items:center;justify-content:center;gap:6rpx;box-sizing:border-box}
+.scope-chip-text{font-size:23rpx;font-weight:700;color:#162D22;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scope-caret{flex:0 0 auto;font-size:19rpx;color:#7C8B82}
+.market-scope-note{display:block;padding:10rpx 31rpx 0;font-size:19rpx;color:#A7B3AC;line-height:1.5}
+/* 已选范围用高亮区分：赛事与年龄段为真实筛选，时间范围仍为全部 */
+.scope-chip-active{background:#EAF6EE;border-color:#087A48}
+.scope-chip-active .scope-chip-text{color:#087A48}
+
+/* 02b 范围选择面板：底部弹层，选项列表可滚动 */
+.scope-mask{position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(10,26,19,.42);z-index:800}
+.scope-sheet{position:fixed;left:0;right:0;bottom:0;z-index:801;box-sizing:border-box;max-height:72vh;display:flex;flex-direction:column;background:#fff;border-radius:24rpx 24rpx 0 0;padding:26rpx 31rpx calc(24rpx + env(safe-area-inset-bottom));box-shadow:0 -12rpx 40rpx rgba(10,26,19,.16)}
+.scope-sheet-head{display:flex;align-items:center;justify-content:space-between;gap:16rpx}
+.scope-sheet-title{flex:1;min-width:0;font-size:32rpx;font-weight:900;color:#162D22;line-height:1.3}
+.scope-sheet-close{flex:0 0 auto;font-size:23rpx;font-weight:700;color:#7C8B82;padding:6rpx 10rpx}
+.scope-sheet-desc{display:block;margin-top:8rpx;font-size:20rpx;color:#A7B3AC;line-height:1.5}
+.scope-sheet-list{margin-top:16rpx;max-height:56vh}
+.scope-option{display:flex;align-items:center;justify-content:space-between;gap:16rpx;margin-bottom:12rpx;padding:22rpx 20rpx;border-radius:14rpx;background:#F7F9F8;border:1rpx solid transparent;box-sizing:border-box}
+.scope-option-active{background:#EAF6EE;border-color:#087A48}
+.scope-option-text{flex:1;min-width:0;font-size:25rpx;font-weight:700;color:#162D22;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scope-option-active .scope-option-text{font-weight:900;color:#087A48}
+.scope-option-check{flex:0 0 auto;font-size:24rpx;font-weight:900;color:#087A48}
+
+/* 模块标题：标题 + 右侧注解 */
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:16rpx;padding:30rpx 31rpx 16rpx}
+.section-title{flex:0 0 auto;font-size:34rpx;font-weight:900;color:#162D22;letter-spacing:1rpx;line-height:1.2}
+.section-note{flex:0 0 auto;font-size:21rpx;color:#7C8B82}
+
+/* 02 转会焦点：背景图 + 深绿遮罩，文字与流向全部由数据渲染 */
+.spotlight{position:relative;margin:0 31rpx;border-radius:20rpx;overflow:hidden;background:#0B3B2A}
+.spotlight-bg{position:absolute;left:0;top:0;width:100%;height:100%}
+.spotlight-mask{position:absolute;left:0;top:0;width:100%;height:100%;background:linear-gradient(118deg,rgba(6,50,33,.95) 0%,rgba(8,74,47,.86) 52%,rgba(8,122,72,.58) 100%)}
+.spotlight-body{position:relative;box-sizing:border-box;min-height:336rpx;padding:22rpx 26rpx 20rpx;display:flex;flex-direction:column}
+.spotlight-top{display:flex;align-items:center;gap:12rpx}
+.spotlight-badge{flex:0 0 auto;font-size:19rpx;font-weight:800;color:#3A2A05;background:#F6C445;border-radius:6rpx;padding:4rpx 12rpx;line-height:1.4}
+.spotlight-state{flex:0 0 auto;margin-left:auto;font-size:19rpx;font-weight:700;color:rgba(255,255,255,.84)}
+.spotlight-title{display:block;margin-top:14rpx;font-size:32rpx;font-weight:900;color:#fff;line-height:1.32;word-break:break-all}
+.spotlight-flow{display:flex;align-items:center;gap:16rpx;margin-top:20rpx}
+.flow-team{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:8rpx}
+.flow-crest{width:62rpx;height:62rpx;border-radius:14rpx;background:rgba(255,255,255,.14);border:1rpx solid rgba(255,255,255,.3);box-sizing:border-box}
+.flow-crest-empty{display:flex;align-items:center;justify-content:center}
+.flow-crest-initial{font-size:26rpx;font-weight:900;color:#fff}
+.flow-name{max-width:100%;font-size:21rpx;font-weight:700;color:rgba(255,255,255,.92);line-height:1.35;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;word-break:break-all}
+.flow-arrow{flex:0 0 auto;font-size:28rpx;font-weight:900;color:rgba(255,255,255,.68)}
+.spotlight-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:16rpx;margin-top:auto;padding-top:14rpx}
+.spotlight-event{flex:1;min-width:0;font-size:19rpx;color:rgba(255,255,255,.82);line-height:1.5}
+.spotlight-price{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2rpx}
+.spotlight-price-label{font-size:18rpx;color:rgba(255,255,255,.7)}
+/* 成人成交金额已公开时用金色强调；青少年／待核实／未记录用弱化白色，不用金额占位 */
+.spotlight-price-text{font-size:23rpx;font-weight:800;color:rgba(255,255,255,.82);line-height:1.3;max-width:320rpx;text-align:right}
+.spotlight-price-muted{color:rgba(255,255,255,.82);font-weight:800}
+.spotlight-price-open{color:#F6A019;font-size:24rpx;font-weight:900}
+.spotlight-cross{flex:0 0 auto;font-size:18rpx;font-weight:800;color:#0B3B2A;background:#BFE7D2;border-radius:6rpx;padding:4rpx 10rpx;line-height:1.4}
+
+/* 04 球员身价：筛选查询与公开资料入口 */
+.filter-toggle{flex:0 0 auto;height:56rpx;padding:0 18rpx;border-radius:14rpx;background:#fff;border:1rpx solid #087A48;display:flex;align-items:center;gap:8rpx;box-sizing:border-box}
+.filter-toggle-icon{width:24rpx;height:24rpx;flex:0 0 24rpx}
+.filter-toggle-text{font-size:21rpx;font-weight:800;color:#087A48;white-space:nowrap}
+.filter-panel{margin:0 31rpx;padding:16rpx 20rpx;border-radius:16rpx;background:#fff;border:1rpx solid #E7EEE9}
+.transfer-filter-row{display:flex;align-items:center;gap:12rpx;flex-wrap:wrap}
+.filter-label{flex:0 0 auto;font-size:21rpx;font-weight:700;color:#7C8B82}
+.filter-chip{height:50rpx;padding:0 20rpx;border-radius:25rpx;background:#F5F7F6;border:1rpx solid #E7EEE9;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+.filter-chip-active{background:#EAF6EE;border-color:#087A48}
+.filter-chip-text{font-size:21rpx;font-weight:700;color:#7C8B82}
+.filter-chip-active .filter-chip-text{font-weight:900;color:#087A48}
+.filter-note{display:block;margin-top:12rpx;font-size:19rpx;color:#A7B3AC;line-height:1.5}
+
+.player-card{margin:14rpx 31rpx 0;padding:20rpx 22rpx;border-radius:20rpx;background:#fff;border:1rpx solid #E7EEE9;display:flex;align-items:center;gap:16rpx}
+.player-avatar{flex:0 0 78rpx;width:78rpx;height:78rpx;border-radius:16rpx;background:#F5F7F6;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.player-avatar-img{width:100%;height:100%;display:block}
+.player-avatar-text{font-size:32rpx;font-weight:900;color:#087A48}
+.player-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4rpx}
+.player-name{font-size:27rpx;font-weight:900;color:#162D22;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-meta{font-size:20rpx;color:#7C8B82;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-value{flex:0 0 auto;max-width:190rpx;display:flex;flex-direction:column;align-items:flex-end;gap:2rpx}
+.player-value-label{font-size:18rpx;color:#A7B3AC;line-height:1.3}
+.player-money{font-size:26rpx;font-weight:900;color:#087A48;line-height:1.3}
+/* 未测算／青少年不公开：弱化显示，不冒充实测身价 */
+.player-money-muted{font-size:22rpx;font-weight:800;color:#8C9A92}
+.player-trend{display:flex;align-items:flex-end;gap:4rpx;height:46rpx;padding-top:4rpx}
+.trend-bar{width:7rpx;border-radius:3rpx;background:#CBE3D6}
+.trend-bar-last{background:#087A48}
+.player-trend-note{font-size:18rpx;color:#A7B3AC;line-height:1.4}
+
+/* 05 最新转会：公开成交事实，成交金额暂不公开 */
+.trade-row{margin:14rpx 31rpx 0;padding:20rpx 22rpx 16rpx;border-radius:20rpx;background:#fff;border:1rpx solid #E7EEE9}
+.trade-top{display:flex;align-items:center;gap:14rpx}
+.trade-avatar{flex:0 0 72rpx;width:72rpx;height:72rpx;border-radius:50%;background:#EAF6EE;display:flex;align-items:center;justify-content:center}
+.trade-avatar-text{font-size:28rpx;font-weight:900;color:#087A48}
+.trade-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4rpx}
+.trade-name{font-size:26rpx;font-weight:900;color:#162D22;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trade-meta{font-size:19rpx;color:#7C8B82;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trade-move{display:flex;align-items:center;margin-top:12rpx;padding:10rpx 14rpx;border-radius:12rpx;background:#F5F7F6}
+.trade-move-text{flex:1;min-width:0;font-size:21rpx;font-weight:700;color:#162D22;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trade-value{flex:0 0 auto;max-width:190rpx;display:flex;flex-direction:column;align-items:flex-end;gap:4rpx}
+.trade-type{font-size:18rpx;font-weight:700;color:#087A48;background:#EAF6EE;border-radius:6rpx;padding:2rpx 10rpx;line-height:1.4}
+.trade-price{font-size:19rpx;font-weight:800;color:#B5701F;line-height:1.3;max-width:280rpx;text-align:right}
+/* 青少年金额不公开与待核实状态弱化显示，不出现任何金额占位 */
+.trade-price-muted{color:#7C8B82;font-weight:700}
+.trade-price-open{color:#B5701F;font-weight:900}
+.trade-cross{flex:0 0 auto;font-size:17rpx;font-weight:800;color:#087A48;background:#EAF6EE;border-radius:6rpx;padding:2rpx 8rpx;line-height:1.5}
+.trade-foot{display:flex;align-items:center;justify-content:space-between;gap:12rpx;margin-top:12rpx;padding-top:10rpx;border-top:1rpx solid #F3F6F4}
+.trade-event{flex:1;min-width:0;font-size:19rpx;color:#7C8B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trade-date{flex:0 0 auto;font-size:19rpx;color:#A7B3AC}
+
+/* 06 未接入与空态、说明 */
+.transfer-empty{margin:14rpx 31rpx 0;padding:18rpx 24rpx;border-radius:12rpx;background:#fff;border:1rpx dashed #DCE5DF}
+.transfer-empty-text{font-size:21rpx;color:#A7B3AC;line-height:1.5}
+.list-end{display:block;padding:14rpx 31rpx 0;text-align:center;font-size:19rpx;color:#A7B3AC;line-height:1.5}
+
+
+
+/* 07 我的赛事转会中心：报价与合同仍在赛事内办理 */
+.transfer-cta{margin:22rpx 31rpx 0;padding:20rpx 22rpx;border-radius:18rpx;background:#EAF6EE;border:1rpx solid #CFE7DA;display:flex;align-items:center;justify-content:space-between;gap:14rpx}
+.cta-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4rpx}
+.transfer-cta-text{font-size:25rpx;font-weight:900;color:#087A48;line-height:1.3}
+.transfer-cta-desc{font-size:19rpx;color:#5F6E66;line-height:1.4}
+.transfer-cta-arrow{flex:0 0 auto;font-size:34rpx;font-weight:900;color:#087A48;line-height:1}
+
+/* 2026-10-28 按已确认公开市场原图恢复结构与比例，所有值仍来自真实接口。 */
+.market-page{background:#fff;padding-bottom:calc(150rpx + env(safe-area-inset-bottom))}
+.market-page .topbar{padding-left:20rpx;padding-right:20rpx;background:#fff}
+.market-page .page-title{font-size:46rpx;font-weight:800;letter-spacing:0}
+.market-page .tool-row{gap:12rpx;padding:14rpx 0 18rpx}
+.market-page .city-chip{height:62rpx;max-width:180rpx;border-radius:10rpx;padding:0 14rpx;background:#fff;border:1rpx solid #E7EEE9}
+.market-page .city-text{font-size:25rpx}
+.market-page .city-icon{width:24rpx;height:24rpx}
+.market-search-entry{display:flex;align-items:center;gap:10rpx;flex:1;min-width:0;height:62rpx;border-radius:10rpx;background:#F3F6F5;padding:0 16rpx;box-sizing:border-box}
+.market-search-input{flex:1;min-width:0;font-size:25rpx;height:62rpx;line-height:62rpx;color:#162D22}
+.market-page .search-placeholder{font-size:24rpx;color:#8D9B96}
+.market-page .record-btn{height:62rpx;padding:0 20rpx;border-radius:10rpx;box-shadow:none}
+.market-page .record-btn-text{font-size:26rpx;font-weight:700;letter-spacing:0}
+.market-page .tab-row{background:#fff;padding:0 20rpx;border-color:#EDF1EE}
+.market-page .tab-item{padding-top:16rpx}
+.market-page .tab-text{font-size:29rpx;padding-bottom:20rpx}
+.market-page .tab-line{width:48rpx;height:4rpx}
+.market-page .market-scope{padding:18rpx 24rpx 0;gap:14rpx;justify-content:flex-start}
+.market-page .scope-chip{flex:1;min-width:0;height:48rpx;border-radius:6rpx;padding:0 14rpx;background:#F5F7F6;border:0;justify-content:space-between;gap:8rpx}
+.market-page .scope-chip-active{background:#EAF6EE}
+.market-page .scope-chip-text{font-size:24rpx;font-weight:500}
+.market-page .scope-caret{font-size:18rpx;color:#263D30}
+.market-page .section-head{padding:26rpx 24rpx 14rpx;gap:16rpx}
+.market-page .section-title{font-size:33rpx;font-weight:800;letter-spacing:0;line-height:1.3}
+.section-link{font-size:23rpx;color:#647487;line-height:1.5;padding:4rpx 0 4rpx 12rpx}
+.market-page .spotlight{margin:0 18rpx;border-radius:12rpx;min-height:250rpx}
+.market-page .spotlight-mask{background:linear-gradient(90deg,rgba(0,60,34,.62),rgba(1,57,29,.24))}
+.market-page .spotlight-body{padding:20rpx 24rpx;min-height:250rpx}
+.market-page .spotlight-top{gap:12rpx}
+.market-page .spotlight-badge{font-size:20rpx;padding:4rpx 12rpx;background:#F5D381;border-radius:4rpx}
+.market-page .spotlight-title{font-size:34rpx;margin-top:10rpx;line-height:1.25;font-weight:800}
+.market-page .spotlight-flow{margin-top:14rpx;gap:20rpx;justify-content:flex-start}
+.market-page .flow-team{flex:0 1 200rpx;gap:4rpx}
+.market-page .flow-crest{width:52rpx;height:58rpx;border-radius:0;background:transparent;border:0}
+.market-page .flow-name{font-size:22rpx}
+.market-page .spotlight-foot{padding-top:10rpx;align-items:flex-end}
+.market-page .spotlight-price-open{font-size:34rpx;color:#F5C859}
+.market-page .spotlight-event{font-size:21rpx}
+
+.market-page .filter-toggle{height:48rpx;padding:0 16rpx;border-radius:7rpx;border:1rpx solid #087A48;background:#fff;gap:8rpx}
+.market-page .filter-toggle-icon{width:22rpx;height:22rpx;flex-basis:22rpx}
+.market-page .filter-toggle-text{font-size:23rpx;font-weight:700}
+.market-page .filter-panel{margin:0 18rpx 10rpx;padding:18rpx;border-radius:10rpx}
+.market-page .player-card{margin:0 18rpx 10rpx;padding:14rpx 18rpx;gap:16rpx;border-radius:12rpx;border:1rpx solid #E7EEE9;background:#fff}
+.market-page .player-avatar{width:76rpx;height:82rpx;flex-basis:76rpx;background:transparent;border-radius:0;overflow:visible}
+.market-page .player-name{font-size:27rpx;font-weight:700;line-height:1.3}
+.market-page .player-meta{font-size:22rpx;line-height:1.5;color:#6D7A88}
+.market-page .player-value{max-width:170rpx;gap:4rpx}
+.market-page .player-value-label{font-size:20rpx;color:#80908C}
+.market-page .player-money{font-size:31rpx;font-weight:800;line-height:1.25}
+.market-page .player-money-muted{font-size:22rpx;color:#8B9690}
+.market-page .player-trend-note{font-size:18rpx;color:#929E97}
+.market-page .list-end{padding:4rpx 24rpx 0;font-size:19rpx;color:#9CA59F}
+.market-page .transfer-empty{margin:0 18rpx;padding:24rpx;border-radius:10rpx;border:1rpx solid #E7EEE9;background:#FAFCFB}
+.market-page .transfer-empty-text{font-size:23rpx;color:#8B9890;line-height:1.5}
+.market-page .trade-row{margin:0 18rpx 8rpx;border-radius:10rpx;padding:16rpx 20rpx;border:1rpx solid #E7EEE9;background:#fff}
+.market-page .trade-avatar{border-radius:7rpx}
+.market-page .trade-foot{margin-top:8rpx}
+.market-page .transfer-cta{margin:12rpx 18rpx 0;border:0;border-radius:10rpx;background:#F0F7F3;padding:20rpx 24rpx}
+.market-page .transfer-cta-text{font-size:26rpx;font-weight:700}
+.market-page .transfer-cta-desc{font-size:21rpx;line-height:1.5;color:#8A9890}
+.market-page .trade-top{gap:12rpx;align-items:center}
+.market-page .trade-avatar{width:62rpx;height:68rpx;flex-basis:62rpx}
+/* 简化后一行只留“姓名 + 金额”，中间列吃掉剩余宽度，去向单独占一行 */
+.market-page .trade-main{flex:1 1 auto;min-width:0}
+.market-page .trade-value{flex:0 0 auto;max-width:none}
+.transfer-more{margin:12rpx 18rpx;padding:20rpx;text-align:center;font-size:24rpx;color:#087A48;background:#F0F7F3;border-radius:8rpx}
+.transfer-more-error{display:block;margin-bottom:8rpx;font-size:22rpx;color:#9B6330}
+
+/* ===== 2026-10-28 转会市场简化版：范围 → 动态 → 单卡身价榜 → 发现球员 ===== */
+/* 去掉官宣条、双栏榜单、无效快捷筛选和重复口径说明，字号整体放大到可读区间 */
+.market-page .section-head{padding:30rpx 24rpx 16rpx}
+.market-page .section-title{font-size:34rpx}
+.market-page .section-note{font-size:24rpx;color:#7C8B82;line-height:1.4}
+.market-page .section-link{font-size:25rpx;color:#647487;padding:4rpx 0 4rpx 12rpx}
+.market-page .scope-chip{height:64rpx;padding:0 18rpx}
+.market-page .scope-chip-text{font-size:26rpx;font-weight:700}
+
+/* 转会动态：焦点大图只保留成交要点 */
+.market-page .spotlight{min-height:280rpx}
+.market-page .spotlight-body{min-height:280rpx;padding:24rpx 26rpx 22rpx}
+.market-page .spotlight-title{font-size:38rpx;line-height:1.3}
+.market-page .spotlight-badge{font-size:22rpx}
+.market-page .spotlight-state{font-size:22rpx}
+.market-page .flow-name{font-size:24rpx}
+.market-page .spotlight-event{font-size:22rpx}
+.market-page .spotlight-price-label{font-size:22rpx}
+.market-page .spotlight-price-text{font-size:30rpx}
+.market-page .spotlight-price-open{font-size:36rpx}
+
+/* 身价榜：最新身价／上升最快同一张卡切换 */
+.rank-card{margin:0 18rpx;padding:8rpx 22rpx 16rpx;border-radius:14rpx;background:#fff;border:1rpx solid #E7EEE9;box-sizing:border-box}
+.rank-tabs{display:flex;gap:8rpx;margin:8rpx 0 4rpx;padding:6rpx;border-radius:12rpx;background:#F2F6F3}
+.rank-tab{flex:1;min-width:0;padding:14rpx 0;text-align:center;font-size:27rpx;font-weight:700;color:#5F7185;line-height:1.2;border-radius:10rpx}
+.rank-tab-active{background:#fff;color:#087A48;font-weight:900;box-shadow:0 2rpx 8rpx rgba(8,122,72,.12)}
+.rank-row{display:flex;align-items:center;gap:16rpx;padding:18rpx 0;border-bottom:1rpx solid #F1F5F2}
+.rank-row .rank-no{flex:0 0 34rpx;width:34rpx;font-size:26rpx;font-style:italic;font-weight:900;color:#B9C4BD;line-height:1.2}
+.rank-row .rank-no-top{color:#F6A019}
+.rank-avatar{flex:0 0 66rpx;width:66rpx;height:76rpx;border-radius:8rpx;background:#F5F7F6;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.rank-avatar-img{width:100%;height:100%;display:block}
+.rank-avatar-text{font-size:28rpx;font-weight:900;color:#087A48}
+.rank-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4rpx}
+.rank-name{font-size:30rpx;font-weight:800;color:#162D22;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-meta{font-size:24rpx;color:#6D7A88;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-value{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2rpx}
+.rank-money{font-size:30rpx;font-weight:900;color:#087A48;line-height:1.25;white-space:nowrap}
+.rank-rise{font-size:22rpx;font-weight:800;color:#B5701F;line-height:1.3;white-space:nowrap}
+.rank-empty{padding:22rpx 0 12rpx;text-align:center}
+.rank-empty-text{font-size:24rpx;color:#8B9890;line-height:1.5}
+.rank-foot{display:block;padding-top:14rpx;font-size:22rpx;color:#96A29B;line-height:1.5}
+
+/* 发现球员：整行更大，去掉右侧“查看资料”与小字走势说明 */
+.market-page .filter-toggle{height:56rpx;padding:0 20rpx;border-radius:10rpx}
+.market-page .filter-toggle-text{font-size:25rpx;font-weight:800}
+.market-page .filter-panel{margin:0 18rpx 12rpx;padding:20rpx}
+.market-page .filter-label{font-size:23rpx}
+.market-page .filter-chip{height:56rpx;padding:0 24rpx}
+.market-page .filter-chip-text{font-size:24rpx}
+.market-page .player-card{margin:0 18rpx 12rpx;padding:22rpx;gap:20rpx;border-radius:14rpx}
+.market-page .player-avatar{width:88rpx;height:94rpx;flex-basis:88rpx}
+.market-page .player-name{font-size:31rpx;font-weight:800;line-height:1.3}
+.market-page .player-meta{font-size:24rpx;line-height:1.4;color:#6D7A88}
+.market-page .player-value{max-width:196rpx;gap:4rpx}
+.market-page .player-value-label{font-size:22rpx;color:#80908C}
+.market-page .player-money{font-size:34rpx;font-weight:900;line-height:1.2}
+.market-page .player-money-muted{font-size:24rpx;font-weight:800;color:#8B9690}
+.market-page .player-trend{height:40rpx}
+.market-page .transfer-empty{margin:0 18rpx;padding:26rpx;border-radius:12rpx}
+.market-page .transfer-empty-text{font-size:24rpx;line-height:1.5}
+.market-page .list-end{padding:8rpx 24rpx 0;font-size:22rpx}
+.market-page .transfer-more{margin:14rpx 18rpx;padding:22rpx;font-size:26rpx}
+
+/* 转会记录：名字、球队与金额一并放大 */
+.market-page .trade-row{margin:10rpx 18rpx 0;padding:20rpx 22rpx 16rpx}
+.market-page .trade-name{font-size:29rpx}
+.market-page .trade-meta{font-size:23rpx}
+.market-page .trade-move{padding:12rpx 16rpx}
+.market-page .trade-move-text{font-size:25rpx}
+.market-page .trade-type{font-size:22rpx}
+.market-page .trade-price{font-size:28rpx}
+.market-page .trade-price-muted{font-size:23rpx}
+.market-page .trade-cross{font-size:21rpx}
+.market-page .trade-event,.market-page .trade-date{font-size:22rpx}
+
+.market-page .transfer-cta{margin:22rpx 18rpx 0;padding:22rpx 24rpx}
+.market-page .transfer-cta-text{font-size:28rpx}
+.market-page .transfer-cta-desc{font-size:22rpx}

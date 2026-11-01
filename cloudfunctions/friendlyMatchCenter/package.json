@@ -1,0 +1,9 @@
+{
+  "name": "friendlyMatchCenter",
+  "version": "1.0.0",
+  "description": "约球邀约中心 - 创建邀约 / 服务号签到 / 模板消息推送",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

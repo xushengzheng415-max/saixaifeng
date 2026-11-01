@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1a1a1a">
+<title>战书 · 赛小蜂足球</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',Arial,sans-serif;background:#f4f6f5;color:#1a1a1a;-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.page{min-height:100vh}
+
+/* ====== Hero 战书头部 ====== */
+.hero{background:linear-gradient(160deg,#1a1a2e,#16213e 60%,#0f3460);padding:56px 28px 24px;color:#fff;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'⚔️';position:absolute;top:12px;right:-10px;font-size:140px;opacity:.08;transform:rotate(-20deg)}
+.hero .eyebrow{font-size:22px;opacity:.7;letter-spacing:3px;text-transform:uppercase}
+.hero h1{font-size:46px;font-weight:900;margin-top:10px;letter-spacing:2px}
+.hero .challenger{margin-top:16px;font-size:24px;opacity:.85}
+
+/* ====== 战书宣言区 ====== */
+.battlecry-card{margin:-4px 20px 0;background:linear-gradient(160deg,#fff9f0,#fff);border-radius:24px;padding:36px 28px;box-shadow:0 8px 28px rgba(0,0,0,.1);position:relative;border:2rpx solid rgba(232,138,12,.25)}
+.battlecry-card .style-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 18px;border-radius:20px;background:#fff1d6;color:#c46400;font-size:22px;font-weight:700;margin-bottom:20px}
+.battlecry-card .style-emoji{font-size:26px}
+.battlecry-card .style-label{font-size:22px}
+.battlecry-card .cry-line{display:block;font-size:30px;font-weight:900;color:#1a1a1a;line-height:1.5;margin-bottom:10px}
+.battlecry-card .cry-line.is-sub{font-size:24px;font-weight:600;color:#555}
+
+/* ====== 对阵卡 ====== */
+.versus-card{margin:24px 20px;background:#fff;border-radius:24px;padding:32px 28px;box-shadow:0 4px 16px rgba(0,0,0,.06)}
+.versus-teams{display:flex;align-items:center;justify-content:center;gap:18px;padding-bottom:24px;border-bottom:2rpx dashed #eee}
+.versus-team{display:flex;flex-direction:column;align-items:center;flex:1}
+.versus-logo{width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:40px;margin-bottom:10px}
+.versus-logo.home{background:linear-gradient(135deg,#0aa85a,#065431)}
+.versus-logo.away{background:linear-gradient(135deg,#e88a0c,#6a3e04)}
+.versus-name{font-size:30px;font-weight:900;color:#1a1a1a}
+.versus-vs{font-size:28px;font-weight:900;color:#bbb;padding:0 6px}
+.versus-details{padding-top:20px}
+.versus-row{display:flex;justify-content:space-between;padding:10px 0}
+.versus-row .label{color:#888;font-size:24px}
+.versus-row .value{font-size:28px;font-weight:600;color:#1a1a1a}
+.venue-nav{margin-left:8px;padding:4px 14px;border-radius:12px;background:#e7f6ec;color:#0c8a4a;font-size:22px;font-weight:700;text-decoration:none;white-space:nowrap}
+
+/* ====== 响应按钮 ====== */
+.action-row{margin:24px 20px;display:flex;gap:16px}
+.btn{border:none;border-radius:24px;padding:24px 28px;font-size:30px;font-weight:900;cursor:pointer;transition:all .15s}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn.is-reject{flex:1;background:#f4f4f4;color:#555}
+.btn.is-reject:active{background:#e8e8e8}
+.btn.is-accept{flex:2;background:linear-gradient(135deg,#0aa85a,#065431);color:#fff;box-shadow:0 8px 24px rgba(10,168,90,.35)}
+.btn.is-accept:active{box-shadow:0 4px 12px rgba(10,168,90,.3)}
+
+/* ====== 确认/成功页 ====== */
+.result-page{padding:80px 28px;text-align:center}
+.result-icon{width:160px;height:160px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 28px;font-size:88px;color:#fff}
+.result-icon.accept{background:linear-gradient(135deg,#0aa85a,#065431);box-shadow:0 12px 32px rgba(10,168,90,.4)}
+.result-icon.reject{background:linear-gradient(135deg,#9e9e9e,#616161);box-shadow:0 12px 32px rgba(97,97,97,.35)}
+.result h2{font-size:38px;font-weight:900;color:#1a1a1a}
+.result h2.accept{color:#0aa85a}
+.result h2.reject{color:#616161}
+.result p{color:#666;font-size:26px;margin-top:12px;line-height:1.6}
+.result .highlight{margin-top:20px;padding:20px;border-radius:16px;background:#f5f5f5;font-size:24px;color:#555}
+
+/* ====== 球队创建弹窗 ====== */
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:28px;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes popIn{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.modal{background:#fff;border-radius:28px;padding:40px 32px;max-width:560px;width:100%;animation:popIn .25s}
+.modal h2{font-size:34px;font-weight:900;color:#1a1a1a;text-align:center}
+.modal .sub{display:block;text-align:center;color:#666;font-size:26px;margin-top:8px}
+.modal .benefits{margin-top:28px;background:#f8faf9;border-radius:20px;padding:20px 22px}
+.modal .benefit-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0}
+.modal .benefit-icon{font-size:28px;flex-shrink:0;margin-top:2px}
+.modal .benefit-text{font-size:24px;color:#333;line-height:1.6}
+.modal-actions{display:flex;gap:14px;margin-top:28px}
+.modal .btn.is-primary{flex:2;background:linear-gradient(135deg,#0aa85a,#065431);color:#fff}
+.modal .btn.is-ghost{flex:1;background:#f4f4f4;color:#666}
+
+/* ====== Loading / Error ====== */
+.loading{padding:80px 20px;text-align:center;color:#888}
+.loading .spinner{width:40px;height:40px;border:3px solid #e0e0e0;border-top-color:#0aa85a;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error{padding:60px 28px;text-align:center}
+.error h2{font-size:32px;color:#c62828;margin-bottom:8px}
+.error p{color:#666;font-size:26px;margin-bottom:24px}
+.error button{background:#0aa85a;color:#fff;border:none;border-radius:24px;padding:18px 36px;font-size:28px;font-weight:700}
+.footer{padding:24px;text-align:center;color:#bbb;font-size:22px}
+.tip{margin:16px 20px;color:#888;font-size:22px;text-align:center}
+/* 创建球队深链按钮 */
+.deep-link-btn{margin:20px auto 0;display:block;width:calc(100% - 40px);background:linear-gradient(135deg,#0aa85a,#065431);color:#fff;text-align:center;padding:22px;border-radius:20px;font-size:28px;font-weight:900;text-decoration:none;box-shadow:0 6px 16px rgba(10,168,90,.3)}
+.deep-link-btn:active{opacity:.85}
+</style>
+</head>
+<body>
+<div class="page" id="app"></div>
+<script>
+(function(){
+  var API_URL = 'https://cloud1-7g8ckb3c7815a011-1419431905.ap-shanghai.app.tcloudbase.com/webLoginApi'
+  var app = document.getElementById('app')
+  var params = new URLSearchParams(location.search)
+  var TOKEN = params.get('token') || ''
+  var USER_ID = params.get('uid') || ''
+  var USER_NAME = params.get('name') || ''
+
+  function escapeHtml(v){v=v==null?'':String(v);return v.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c])}
+
+  function api(subAction,payload){
+    return fetch(API_URL,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({action:'friendlySignInWorkflow',workflowAction:subAction},payload||{}))
+    }).then(function(r){return r.json()}).then(function(r){if(r&&typeof r.body==='string')return JSON.parse(r.body);return r})
+  }
+
+  function currentInvite(){return window.__INVITE__ || null}
+
+  // ====== STATE 1: 战书页 ======
+  function renderBattlecry(invite){
+    var dateText = invite.matchDate ? invite.matchDate + (invite.matchTime ? ' ' + invite.matchTime : '') : '时间待定'
+    var venueText = invite.venue || '场地待定'
+    var lat = Number(invite.latitude) || 0
+    var lng = Number(invite.longitude) || 0
+    // 发起方用地图选过点才给导航入口，避免拿假坐标把人导走
+    var venueHtml = escapeHtml(venueText)
+    if (lat && lng) {
+      var mapUrl = 'https://uri.amap.com/marker?position=' + lng + ',' + lat +
+        '&name=' + encodeURIComponent(venueText) +
+        (invite.venueAddress ? '&address=' + encodeURIComponent(invite.venueAddress) : '') +
+        '&coordinate=gaode&callnative=1'
+      venueHtml += ' <a class="venue-nav" href="' + mapUrl + '" target="_blank" rel="noopener">地图导航</a>'
+    }
+    var bc = invite.battleCry || {}
+    var cryLines = (bc.lines && bc.lines.length) ? bc.lines : [
+      (bc.text || '来一场友谊赛吧'),
+      '听说你们踢得不错'
+    ]
+
+    var hero = '<div class="hero"><span class="eyebrow">⚔️ 战书</span>' +
+      '<h1>「'+escapeHtml(invite.teamName||'我方')+'」向你下战书！</h1></div>'
+
+    var bcHtml = '<div class="battlecry-card">' +
+      '<div class="style-badge">' +
+        '<span class="style-emoji">'+escapeHtml(bc.styleEmoji||'📋')+'</span>' +
+        '<span class="style-label">'+escapeHtml(bc.styleLabel||'正式战书')+'</span>' +
+      '</div>' +
+      '<span class="cry-line">'+escapeHtml(cryLines[0]||'')+'</span>' +
+      '<span class="cry-line is-sub">'+escapeHtml(cryLines[1]||'')+'</span>' +
+    '</div>'
+
+    var vsHtml = '<div class="versus-card">' +
+      '<div class="versus-teams">' +
+        '<div class="versus-team"><div class="versus-logo home">'+escapeHtml((invite.teamName||'').charAt(0)||'A')+'</div><div class="versus-name">'+escapeHtml(invite.teamName||'我方')+'</div></div>' +
+        '<span class="versus-vs">VS</span>' +
+        '<div class="versus-team"><div class="versus-logo away">'+escapeHtml((invite.opponentName||'你方').charAt(0))+'</div><div class="versus-name">'+escapeHtml(invite.opponentName||'对手')+'</div></div>' +
+      '</div>' +
+      '<div class="versus-details">' +
+        '<div class="versus-row"><span class="label">比赛时间</span><span class="value">'+escapeHtml(dateText)+'</span></div>' +
+        '<div class="versus-row"><span class="label">场地</span><span class="value">'+venueHtml+'</span></div>' +
+      '</div>' +
+    '</div>'
+
+    var actions = '<div class="action-row">' +
+      '<button id="rejectBtn" class="btn is-reject">拒绝战书</button>' +
+      '<button id="acceptBtn" class="btn is-accept">接收战书</button>' +
+    '</div>'
+
+    app.innerHTML = hero + bcHtml + vsHtml + actions + '<p class="tip">接受后会提醒发起方，拒绝也会通知</p><div class="footer">赛小蜂足球 · 战书轻量化</div>'
+
+    document.getElementById('acceptBtn').onclick = function(){respond('accepted')}
+    document.getElementById('rejectBtn').onclick = function(){respond('rejected')}
+  }
+
+  // ====== STATE 2: 接收 → 球队创建 Prompt ======
+  function renderAcceptPrompt(invite){
+    app.innerHTML = '<div class="hero"><span class="eyebrow">🎉 战书已接收</span><h1>对方会收到通知</h1></div>' +
+      '<div class="result-page result accept">' +
+        '<div class="result-icon accept">✓</div>' +
+        '<h2 class="accept">已接收战书！</h2>' +
+        '<p>发起方「'+escapeHtml(invite.teamName||'对手')+'」会收到你的应战通知。</p>' +
+      '</div>'
+    // 自动弹出创建球队提示
+    setTimeout(showTeamPrompt, 300)
+  }
+
+  // ====== STATE 3: 创建球队好处弹窗 ======
+  function showTeamPrompt(){
+    var mask = document.createElement('div')
+    mask.className = 'modal-mask'
+    mask.innerHTML = '<div class="modal">' +
+      '<h2>创建球队来管理这场？</h2>' +
+      '<span class="sub">赛小蜂足球帮你轻量化运营球队</span>' +
+      '<div class="benefits">' +
+        '<div class="benefit-item"><span class="benefit-icon">👥</span><span class="benefit-text">管理球队阵容、球员卡和成长数据</span></div>' +
+        '<div class="benefit-item"><span class="benefit-icon">⚽</span><span class="benefit-text">一键发起约球，对手扫码到场确认</span></div>' +
+        '<div class="benefit-item"><span class="benefit-icon">📊</span><span class="benefit-text">比赛结束自动生成战报，保存球队历史</span></div>' +
+      '</div>' +
+      '<div class="modal-actions">' +
+        '<button class="btn is-ghost" id="skipTeamBtn">暂不</button>' +
+        '<button class="btn is-primary" id="createTeamBtn">立即创建</button>' +
+      '</div>' +
+    '</div>'
+    mask.addEventListener('click', function(e){ if(e.target === mask){ /* 不关闭 */ } })
+    document.body.appendChild(mask)
+    document.getElementById('skipTeamBtn').onclick = function(){ showBenefitsModal(mask) }
+    document.getElementById('createTeamBtn').onclick = function(){ deepLinkMiniProgram(); mask.remove() }
+  }
+
+  function showBenefitsModal(existingMask){
+    existingMask.remove()
+    var mask = document.createElement('div')
+    mask.className = 'modal-mask'
+    mask.innerHTML = '<div class="modal">' +
+      '<h2>等准备好了再来</h2>' +
+      '<span class="sub">随时可以在小程序里创建球队</span>' +
+      '<div class="benefits">' +
+        '<div class="benefit-item"><span class="benefit-icon">👥</span><span class="benefit-text">球队管理 · 球员卡 · 成长档案一体化</span></div>' +
+        '<div class="benefit-item"><span class="benefit-icon">⚽</span><span class="benefit-text">轻量约球 · 对手扫码到场即签</span></div>' +
+        '<div class="benefit-item"><span class="benefit-icon">📋</span><span class="benefit-text">AI 战书 · 球队专属口号风格</span></div>' +
+        '<div class="benefit-item"><span class="benefit-icon">📊</span><span class="benefit-text">自动战报 · 球队战绩 · 成长曲线</span></div>' +
+      '</div>' +
+      '<div class="modal-actions">' +
+        '<button class="btn is-ghost" id="laterBtn">稍后再说</button>' +
+        '<button class="btn is-primary" id="nowBtn">立即创建</button>' +
+      '</div>' +
+    '</div>'
+    document.body.appendChild(mask)
+    document.getElementById('nowBtn').onclick = function(){ deepLinkMiniProgram(); mask.remove() }
+    document.getElementById('laterBtn').onclick = function(){ mask.remove() }
+  }
+
+  function deepLinkMiniProgram(){
+    // 深链到小程序球队创建页（service-account 已有 wechat:// 或 URL Scheme）
+    var scheme = 'weixin://dl/business/?appid=wx57164cca8676f411&path=%2Fpages%2Fteam%2Fcreate%2Fcreate&query=from%3dfriendly-signin'
+    location.href = scheme
+  }
+
+  // ====== STATE 4: 拒绝确认 ======
+  function renderReject(invite){
+    app.innerHTML = '<div class="hero" style="background:linear-gradient(160deg,#333,#555);padding:56px 28px 24px;color:#fff;text-align:center">' +
+      '<span class="eyebrow">战书已拒绝</span><h1>对方会收到通知</h1></div>' +
+      '<div class="result-page result reject">' +
+        '<div class="result-icon reject">—</div>' +
+        '<h2 class="reject">已拒绝战书</h2>' +
+        '<p>发起方「'+escapeHtml(invite.teamName||'对手')+'」会收到你无法应战的通知，建议他们尽快找人补位。</p>' +
+        '<div class="highlight">如果你想代替邀请身边的兄弟，可以转发这条战书给他。</div>' +
+      '</div>'
+  }
+
+  // ====== 主流程 ======
+  function load(){
+    app.innerHTML = '<div class="hero"><span class="eyebrow">⚔️ 赛小蜂足球</span><h1>战书</h1></div>' +
+      '<div class="loading"><div class="spinner"></div>正在获取战书…</div>'
+    if(!TOKEN){app.innerHTML='<div class="hero"><h1>战书无效</h1></div><div class="error"><p>请从教练分享的链接或海报扫码进入</p></div>';return}
+    api('getInvite',{token:TOKEN}).then(function(r){
+      if(!r.success){app.innerHTML='<div class="hero"><h1>战书无效</h1></div><div class="error"><p>'+escapeHtml(r.message||'已过期或被关闭')+'</p></div>';return}
+      var invite = r.data; window.__INVITE__ = invite
+      renderBattlecry(invite)
+    }).catch(function(err){
+      app.innerHTML='<div class="hero"><h1>网络错误</h1></div><div class="error"><p>'+escapeHtml(err.message||'请稍后重试')+'</p></div>'
+    })
+  }
+
+  function respond(status){
+    var btn = status === 'accepted' ? document.getElementById('acceptBtn') : document.getElementById('rejectBtn')
+    if(btn){ btn.disabled = true; btn.textContent = '处理中…' }
+    api('respondInvite',{
+      token: TOKEN, status: status,
+      opponentTeamName: USER_NAME || '对方',
+      userId: USER_ID, userName: USER_NAME
+    }).then(function(r){
+      if(!r.success){ alert(r.message||'操作失败'); if(btn){ btn.disabled=false; btn.textContent = status==='accepted'?'接收战书':'拒绝战书' }; return }
+      var invite = currentInvite()
+      if(status === 'accepted') renderAcceptPrompt(invite)
+      else renderReject(invite)
+    }).catch(function(err){
+      alert(err.message||'网络错误');
+      if(btn){ btn.disabled=false; btn.textContent = status==='accepted'?'接收战书':'拒绝战书' }
+    })
+  }
+
+  load()
+})()
+
+<script src="./i18n-fixed-en.js?v=20261031-fixed1"></script>
+<script src="./i18n-runtime.js?v=20261031-fixed1"></script>

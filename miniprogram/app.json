@@ -32,8 +32,11 @@
     "pages/invite/invite",
     "pages/workspace/select/select",
     "pages/workspace/switch/switch",
-    "pages/workspace/temp-team/temp-team"
-    ,"pages/workspace/restricted/restricted"
+    "pages/workspace/temp-team/temp-team",
+    "pages/workspace/restricted/restricted",
+    "pages/discover/discover",
+    "pages/discover/invite-create/invite-create",
+    "pages/public-tournament-center/index"
   ],
   "window": {
     "backgroundTextStyle": "light",
@@ -61,8 +64,8 @@
         "text": "球队"
       },
       {
-        "pagePath": "pages/training/index",
-        "text": "青训"
+        "pagePath": "pages/discover/discover",
+        "text": "发现"
       },
       {
         "pagePath": "pages/profile/profile",
@@ -71,6 +74,12 @@
     ]
   },
   "subpackages": [
+    {
+      "root": "packageDiscover",
+      "pages": [
+        "pages/record/record"
+      ]
+    },
     {
       "root": "packageA",
       "pages": [
@@ -134,7 +143,9 @@
         "monitor/monitor",
         "review/review",
         "exception/exception",
-        "rules/rules"
+        "rules/rules",
+        "quick-create/quick-create",
+        "quick-signup/quick-signup"
       ]
     }
   ],
