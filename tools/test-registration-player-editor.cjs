@@ -42,6 +42,16 @@ async function run(){
  const count=writes.length
  await assert.rejects(()=>sandbox.exports.importBatch({tournamentId:'qa-event',divisionId:'qa-division',teams:[{name:'非法资料测试队',contactName:'测试',contactPhone:'13800000000',sourceFileId:'cloud://qa/football/team-registration-imports/qa-event/source.docx',players:[{name:'测试',height:-1}]}]}),/身高/)
  assert.equal(writes.length,count,'invalid profile rejected before writes')
+ const pendingStart=writes.length
+ const pendingResult=await sandbox.exports.importBatch({tournamentId:'qa-event',divisionId:'qa-division',teams:[{name:'证件待补齐隔离测试队',contactName:'测试负责人',contactPhone:'13800000000',sourceFileId:'cloud://qa/football/team-registration-imports/qa-event/pending.docx',players:[{name:'待补齐测试球员',identityNumber:'',documentType:'resident_id',identityIncomplete:true,eligibilityReviewRequired:true,birthDate:'1998-06-03',gender:'male',nationality:'中国',strongFoot:'left',height:178,weight:72}]}]})
+ assert.equal(pendingResult.success,true,JSON.stringify(pendingResult))
+ const pendingWrites=writes.slice(pendingStart)
+ const pendingDraft=pendingWrites.find(w=>w.name==='registration_player_drafts').data
+ const pendingPlayer=pendingWrites.find(w=>w.name==='players').data
+ const pendingRoster=pendingWrites.find(w=>w.name==='roster_snapshots').data
+ assert.equal(pendingDraft.reviewStatus,'draft');assert.equal(pendingDraft.eligibilityReviewRequired,true)
+ assert.equal(pendingPlayer.identityStatus,'not_verified');assert.equal(pendingPlayer.eligibilityReviewRequired,true);assert.equal(pendingPlayer.strongFoot,'left')
+ assert.equal(pendingRoster.playerIds.length,0,'pending identity must not become a qualified roster entry')
  console.log('PASS: profile validation and actual import handler persist extended fields in draft, player and immutable snapshot; invalid input makes zero writes')
 }
 run().catch(e=>{console.error(e);process.exit(1)})
