@@ -19,6 +19,7 @@ const engine = require('./cardWorldEngine.cjs')
 const profileStore = require('./cardWorldProfile.cjs')
 const playerCardReader = require('./playerCardReader.cjs')
 const playerCardDynamic = require('./playerCardDynamic.cjs')
+const { readAll: readAllPaged } = require('./data-center/reader.cjs')
 
 const COLLECTIONS = {
   players: 'card_world_players',
@@ -488,10 +489,8 @@ module.exports = function createCardWorld(deps) {
     ]
   }
 
-  function statText(value) {
-    if (value == null || value === '') return '—'
-    const num = Number(value)
-    return Number.isFinite(num) ? String(num) : '—'
+  function statValue(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? String(value) : '—'
   }
 
   function mainCardView(world) {
@@ -502,6 +501,7 @@ module.exports = function createCardWorld(deps) {
     if (world.selfMain) {
       const card = world.selfMain.card || {}
       const player = world.selfMain.player || {}
+      const stats = world.selfMain.stats || {}
       const position = String(player.position || '')
       const number = player.number != null ? player.number : player.jerseyNumber
       return {
@@ -513,11 +513,12 @@ module.exports = function createCardWorld(deps) {
         positionLabel: String(player.positionLabel || POSITION_LABELS[position] || position || ''),
         cityText: cityText,
         cardUrl: String(card.cardUrl || ''),
+        /* 全部来自数据中心；未采集/未核验为 null，展示为「—」，不补零。 */
         stats: [
-          { label: '综合', num: statText(player.ovr) },
-          { label: '出场', num: statText(player.appearances) },
-          { label: '进球', num: statText(player.goals) },
-          { label: '助攻', num: statText(player.assists) }
+          { label: '积分', num: statValue(stats.points) },
+          { label: '出场', num: statValue(stats.appearances) },
+          { label: '进球', num: statValue(stats.goals) },
+          { label: '助攻', num: statValue(stats.assists) }
         ],
         stamps: placeholderStamps(),
         portraitNote: player.portraitAuthorized === false ? '形象照未授权，分享使用号码与阵容卡' : ''
@@ -554,10 +555,10 @@ module.exports = function createCardWorld(deps) {
       cityText: cityText,
       cardUrl: player.cardUrl,
       stats: [
-        { label: '综合', num: String(player.ovr) },
-        { label: '出场', num: String(player.appearances) },
-        { label: '进球', num: String(player.goals) },
-        { label: '助攻', num: String(player.assists) }
+        { label: '综合', num: statValue(player.ovr) },
+        { label: '出场', num: statValue(player.appearances) },
+        { label: '进球', num: statValue(player.goals) },
+        { label: '助攻', num: statValue(player.assists) }
       ],
       stamps: placeholderStamps(),
       portraitNote: player.portraitAuthorized ? '' : '形象照未授权，分享使用号码与阵容卡'
@@ -703,22 +704,18 @@ module.exports = function createCardWorld(deps) {
 
   /* ---------------- 本人球员卡（主数据只读引用） ---------------- */
 
-  const SELF_CARD_LIMIT = 20
-
   async function selfPlayers(userId) {
     const db = database()
     const command = db && db.command
     if (!userId || !command || typeof command.or !== 'function') return []
     try {
-      const result = await db.collection('players')
-        .where(command.or([
-          { linkedUserId: String(userId) },
-          { playerUserId: String(userId) },
-          { guardianUserId: String(userId) }
-        ]))
-        .limit(SELF_CARD_LIMIT)
-        .get()
-      return (result && result.data || []).filter(row => row && (row._id || row.id))
+      /* 按 data-center/reader.cjs 游标分页读全量，不设固定条数截断。 */
+      const rows = await readAllPaged(db, 'players', command.or([
+        { linkedUserId: String(userId) },
+        { playerUserId: String(userId) },
+        { guardianUserId: String(userId) }
+      ]))
+      return (rows || []).filter(row => row && (row._id || row.id))
     } catch (error) {
       if (isMissingCollection(error)) return []
       console.warn('[cardWorld] 本人球员读取失败:', JSON.stringify({
@@ -750,6 +747,25 @@ module.exports = function createCardWorld(deps) {
       .sort((left, right) =>
         Number(right.publishedVersion || 0) - Number(left.publishedVersion || 0) ||
         Number(right.cardDataVersion || 0) - Number(left.cardDataVersion || 0))[0] || null
+  }
+
+  /** 统计统一走数据中心；未采集/未核验的值保持 null，展示端不得补零。 */
+  async function selfCardStats(playerId) {
+    try {
+      const { createDataService } = require('./data-center/service.cjs')
+      const score = await createDataService(database()).playerCardForAuthorizedPlayer(String(playerId))
+      const metrics = (score && score.metrics) || {}
+      return {
+        status: String((score && score.status) || ''),
+        points: score ? score.points : null,
+        appearances: metrics.appearances,
+        goals: metrics.goals,
+        assists: metrics.assists
+      }
+    } catch (error) {
+      console.warn('[cardWorld] 主卡统计读取失败:', String((error && (error.message || error.errMsg)) || error).slice(0, 200))
+      return { status: '', points: null, appearances: null, goals: null, assists: null }
+    }
   }
 
   async function ensureCardUrl(player, card) {
@@ -811,7 +827,7 @@ module.exports = function createCardWorld(deps) {
       profile.mainPlayerId = nextRef.playerId
       profile.mainCard = nextRef
     }
-    return { player: player, card: chosen, cards: ready, players: players }
+    return { player: player, card: chosen, cards: ready, players: players, stats: await selfCardStats(nextRef.playerId) }
   }
 
   /* ---------------- 世界状态 ---------------- */
@@ -913,7 +929,13 @@ module.exports = function createCardWorld(deps) {
       await updateProfile(world.profile._id, { mainPlayerId: ref.playerId, mainCard: ref })
       world.profile.mainPlayerId = ref.playerId
       world.profile.mainCard = ref
-      world.selfMain = { player: player, card: card, cards: selfMain.cards, players: selfMain.players }
+      world.selfMain = {
+        player: player,
+        card: card,
+        cards: selfMain.cards,
+        players: selfMain.players,
+        stats: await selfCardStats(ref.playerId)
+      }
       return Object.assign({ success: true }, mainCardView(world))
     }, { selfCards: true })
   }
