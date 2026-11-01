@@ -124,7 +124,7 @@
             <el-table-column v-if="!isTeamDataWorkspace" label="出生日期" width="88" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 44" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="认领状态" width="78" align="center"><template #default="{ row }"><el-tag :type="playerClaimed(row) ? 'success' : 'info'" size="small">{{ playerClaimed(row) ? '已认领' : '未认领' }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="100" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已通过</el-tag><div v-else class="player-review-actions"><el-button v-if="playerOrganizerReviewStatus(row) === 'rejected'" link type="danger" size="small" @click.stop="showPlayerRejection(row)">已驳回</el-button><el-button link type="warning" :loading="playerReviewingId === row._id" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">{{ playerOrganizerReviewStatus(row) === 'rejected' ? '重审' : '审核' }}</el-button></div></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="100" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已通过</el-tag><div v-else class="player-review-actions"><el-button v-if="playerOrganizerReviewStatus(row) === 'rejected'" link type="danger" size="small" @click.stop="showPlayerRejection(row)">已驳回</el-button><span class="player-review-decisions"><el-button link type="success" size="small" :loading="playerReviewingId === row._id && !playerReviewDialogVisible" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="approvePlayer(row)">通过</el-button><el-button link type="danger" size="small" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">驳回</el-button></span></div></template></el-table-column>
             <template v-if="isTeamDataWorkspace">
               <el-table-column prop="appearances" label="出场场次" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="90" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
               <el-table-column prop="minutes" label="出场时间" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="105" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
@@ -4497,6 +4497,13 @@ async function approvePlayerRecord(player) {
     await updateRecord('players', player._id, { organizerReviewStatus:'approved', organizerReviewedAt:new Date().toISOString(), organizerReviewedBy:'赛事主办方' })
   }
 }
+async function approvePlayer(player){
+  if(isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value || !player?._id || playerOrganizerReviewStatus(player)==='approved')return
+  playerReviewingId.value=String(player._id)
+  try{await approvePlayerRecord(player);await loadPlayers();ElMessage.success('已通过')}
+  catch(error){ElMessage.error(error.message || '审核未完成，请重试')}
+  finally{playerReviewingId.value=''}
+}
 function reviewPlayer(player) {
   if (isTeamDataWorkspace.value || isReadOnlyTournament.value || batchReviewing.value || playerReviewingId.value || !player?._id || playerOrganizerReviewStatus(player) === 'approved') return
   reviewingPlayer.value=player;playerReviewDialogVisible.value=true
@@ -4653,7 +4660,7 @@ function compressBase64(dataUrl, maxSize = 300) {
 </script>
 
 <style scoped>
-.player-review-actions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}.player-review-actions :deep(.el-button){margin-left:0}
+.player-review-actions{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}.player-review-decisions{display:inline-flex;gap:8px;align-items:center}.player-review-actions :deep(.el-button){margin-left:0}@media(pointer:coarse){.player-review-decisions :deep(.el-button){min-width:36px;min-height:36px}}
 
 .team-info-header {
   display: flex;
