@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090f" />
   <title>我的球员卡 · 赛小蜂足球</title>
-  <link rel="stylesheet" href="css/app.css?v=20261101-holo3" />
+  <link rel="stylesheet" href="css/app.css?v=20261101-holo4" />
+  <link rel="stylesheet" href="css/holo-cosmos.css?v=20261101-holo4" />
 </head>
 <body>
   <div class="app">
@@ -38,24 +39,26 @@
       <section id="content" hidden>
         <!-- 我的球员卡 -->
         <article class="hero panel">
-          <div class="hero__card" id="hero-card">
-            <div class="hero__placeholder" id="hero-placeholder">
-              <div class="hero__mark" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.4">
-                  <rect x="4" y="3" width="12" height="18" rx="2"></rect>
-                  <path d="M8 8h4M8 11h4M8 14h2"></path>
-                </svg>
+          <div class="hero__card holo-card is-empty" id="hero-card" data-effect="cosmos">
+            <div class="holo-card__rotator" id="hero-rotator">
+              <div class="hero__placeholder" id="hero-placeholder">
+                <div class="hero__mark" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.4">
+                    <rect x="4" y="3" width="12" height="18" rx="2"></rect>
+                    <path d="M8 8h4M8 11h4M8 14h2"></path>
+                  </svg>
+                </div>
+                <strong>还没有可展示的球员卡</strong>
+                <span>去足球世界小程序签约后，这里会自动显示</span>
               </div>
-              <strong>还没有可展示的球员卡</strong>
-              <span>去足球世界小程序签约后，这里会自动显示</span>
+              <div class="holo-card__front">
+                <img class="hero__image" id="hero-image" alt="" hidden />
+              </div>
+              <div class="holo-card__shine" aria-hidden="true"></div>
+              <div class="holo-card__glare" aria-hidden="true"></div>
             </div>
-            <img class="hero__image" id="hero-image" alt="" hidden />
-            <div class="hero__holo" id="hero-holo" aria-hidden="true"></div>
-            <div class="hero__glare" id="hero-glare" aria-hidden="true"></div>
-            <div class="hero__shine" aria-hidden="true"></div>
-            <div class="hero__edge" aria-hidden="true"></div>
           </div>
-          <p class="hero__hint" id="hero-hint">按住卡面滑动 · 查看烫金流光</p>
+          <p class="hero__hint" id="hero-hint">按住卡面滑动 · 查看星云箔光</p>
 
           <div class="hero__meta">
             <div class="hero__name">
@@ -179,7 +182,8 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="js/api.js?v=20261101-holo3"></script>
-  <script src="js/app.js?v=20261101-holo3"></script>
+  <script src="js/api.js?v=20261101-holo4"></script>
+  <script src="js/holo.js?v=20261101-holo4"></script>
+  <script src="js/app.js?v=20261101-holo4"></script>
 </body>
 </html>

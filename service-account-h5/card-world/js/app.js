@@ -85,6 +85,8 @@
     $('hero-note').hidden = !(hasMain && main.portraitNote)
     $('hero-note').textContent = hasMain ? (main.portraitNote || '') : ''
     $('hero-hint').hidden = !cardUrl
+    syncHolo(cardUrl)
+    if (cardUrl) playHoloShowcase()
 
     var grid = $('hero-stats')
     grid.innerHTML = ''
@@ -381,60 +383,26 @@
     })
   }
 
-  // 主卡全息手感：按住拖动时倾斜、烫金流光与高光跟随手指（与小程序 holo-card 同口径）。
-  function setupHolo() {
+  // 主卡星云箔光：复用原型 holo-cosmos 层叠（front / shine / glare + 卡图 alpha 遮罩）。
+  function syncHolo(cardUrl) {
     var card = $('hero-card')
-    if (!card || !window.PointerEvent) return
-    var rect = null
-    var touching = false
-    var last = 0
-    var vars = ['--rx', '--ry', '--gx', '--gy', '--hx', '--hy', '--hx2', '--hy2']
+    if (!card) return
+    card.classList.toggle('is-empty', !cardUrl)
+    if (!cardUrl) {
+      card.style.removeProperty('--card-mask')
+      if (window.HoloCosmos) window.HoloCosmos.releaseToIdle(card)
+      return
+    }
+    var safe = String(cardUrl).replace(/"/g, '%22').replace(/'/g, '%27')
+    card.style.setProperty('--card-mask', 'url("' + safe + '")')
+    if (window.HoloCosmos && !card.__holoBound) window.HoloCosmos.bindCard(card)
+  }
 
-    function measure() { rect = card.getBoundingClientRect() }
-    function clamp(value) { return Math.max(0, Math.min(1, value)) }
-    function apply(clientX, clientY) {
-      if (!rect || !rect.width || !rect.height) measure()
-      if (!rect || !rect.width || !rect.height) return
-      var px = clamp((clientX - rect.left) / rect.width)
-      var py = clamp((clientY - rect.top) / rect.height)
-      var x = Math.round(px * 100)
-      var y = Math.round(py * 100)
-      card.style.setProperty('--rx', ((0.5 - py) * 16).toFixed(2) + 'deg')
-      card.style.setProperty('--ry', ((px - 0.5) * 16).toFixed(2) + 'deg')
-      card.style.setProperty('--gx', x + '%')
-      card.style.setProperty('--gy', y + '%')
-      card.style.setProperty('--hx', x + '%')
-      card.style.setProperty('--hy', y + '%')
-      card.style.setProperty('--hx2', (100 - x) + '%')
-      card.style.setProperty('--hy2', (100 - y) + '%')
-    }
-    function start(event) {
-      if (event.pointerType === 'mouse' && event.button !== 0) return
-      touching = true
-      measure()
-      card.classList.add('is-touching')
-      apply(event.clientX, event.clientY)
-    }
-    function move(event) {
-      if (!touching) return
-      var now = Date.now()
-      if (now - last < 40) return
-      last = now
-      apply(event.clientX, event.clientY)
-    }
-    function end() {
-      if (!touching) return
-      touching = false
-      card.classList.remove('is-touching')
-      vars.forEach(function (name) { card.style.removeProperty(name) })
-    }
-
-    card.addEventListener('pointerdown', start)
-    window.addEventListener('pointermove', move, { passive: true })
-    window.addEventListener('pointerup', end)
-    window.addEventListener('pointercancel', end)
-    window.addEventListener('blur', end)
-    window.addEventListener('resize', function () { rect = null })
+  var holoSwept = false
+  function playHoloShowcase() {
+    if (holoSwept || !window.HoloCosmos) return
+    holoSwept = true
+    setTimeout(function () { window.HoloCosmos.showcase($('hero-card'), 4200) }, 400)
   }
 
   function bind() {
@@ -465,7 +433,6 @@
       $(id).addEventListener('input', applyCropPreview)
     })
     $('weapp-fallback').addEventListener('click', function () { toast('请使用微信打开本页后进入小程序') })
-    setupHolo()
   }
 
   function init(isRetry) {
