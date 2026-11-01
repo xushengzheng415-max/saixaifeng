@@ -9,7 +9,7 @@ const collection=name=>({where(where){return {limit(){return this},async get(){r
 const db={collection,serverDate:()=>new Date().toISOString()}
 const scope={orgId:'org',tournamentIds:new Set(['event'])}
 const context={cloud:{database:()=>db,callFunction:async()=>{throw new Error('No real notifications allowed')}},crypto,SERVICE_ACCOUNT_CONFIG:{APP_SECRET:''},console,authenticateWebSession:async()=>authenticated?{success:true,orgId:'org',userId:'actor',user:{_id:'actor',orgId:'org',nickname:'隔离审核员'}}:{success:false,code:'AUTH_REQUIRED'},staffPolicy:{isStaff:async()=>delegated,owner:async()=>!delegated,hasRight:async()=>permission},buildStaffEventScope:async()=>scope,buildOrganizerScope:async()=>scope,organizerRecordAllowed:(_c,row,s)=>row.orgId===s.orgId,mergeRosterPlayerRows:groups=>[...new Map(groups.flat().map(row=>[row._id,row])).values()],rosterSnapshotPlayerIds:row=>row?.playerIds||[]}
-vm.createContext(context);vm.runInContext(code+';globalThis.review=handleRosterExceptionBoard',context)
+vm.createContext(context);vm.runInContext(code+'\n;globalThis.review=handleRosterExceptionBoard',context)
 const params={rosterAction:'rejectPlayer',tournamentId:'event',divisionId:'division',teamId:'team',playerId:'pending'}
 async function run(){
  const snapshots=JSON.stringify(tables.roster_snapshots)
