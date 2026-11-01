@@ -181,7 +181,7 @@
                         <div v-if="!player.identityEditing" class="identity-cell">
                           <el-tag v-if="player.documentType" size="small" effect="plain" class="identity-type-tag">{{ documentTypeLabel(player.documentType) }}</el-tag>
                           <span class="identity-mask">{{ displayRegistrationIdentity(player) }}</span>
-                          <el-tag v-if="player.ignoredIdentityIssue" type="info" effect="plain" size="small">已忽略</el-tag>
+                          <el-tag v-if="player.ignoredIdentityIssue" type="info" effect="plain" size="small">待补齐</el-tag>
                           <el-button v-if="canIgnoreIdentity(player)" link type="warning" size="small" @click="ignoreIdentityIssue(player, team)">忽略</el-button>
                         </div>
                         <div v-else class="identity-cell">
@@ -288,7 +288,7 @@ function savePlayerEdit(profile,photoFile){
   const player=editingPlayer.value,team=editingTeam.value
   if(!player || !team?.players.includes(player))return
   const oldName=player.name
-  Object.assign(player,profile,{identityNumberPrefix:'',identityEditing:false,rowEditing:false,identityIncomplete:!profile.identityNumber,error:'',ignoredIdentityIssue:false})
+  Object.assign(player,profile,{identityNumberPrefix:'',identityEditing:false,rowEditing:false,identityIncomplete:!profile.identityNumber,error:'',ignoredIdentityIssue:profile.ignoredIdentityIssue === true})
   if(photoFile)replacePersonPhoto({raw:photoFile},player)
   const markers=[`「${oldName}」`,`“${oldName}”`]
   const keep=item=>!markers.some(marker=>String(item).includes(marker))
