@@ -85,7 +85,7 @@
         <section class="synthetic-player-panel staff-roster-panel">
           <div class="synthetic-player-heading"><div><h2>工作人员</h2><p>共 {{ staffMembers.length }} 人<span v-if="primaryTeamAccount"> · 主账号：{{ primaryTeamAccount.name }}{{ primaryTeamAccount.accountType === 'pending_owner' ? '（待接收）' : '' }}</span><span v-if="!canManageTeamAccess"> · 账号权限由主账号分配</span></p></div><el-button v-if="!isReadOnlyTournament" type="primary" plain @click="openAddStaff"><el-icon><Plus /></el-icon>添加工作人员</el-button></div>
           <el-table :data="staffDisplayRows" v-loading="loading || teamAccessLoading" empty-text="暂无工作人员资料" class="synthetic-player-table compact-roster-table staff-roster-table">
-            <el-table-column label="头像" width="44" align="center"><template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template></el-table-column>
+            <el-table-column label="头像" width="44" align="center"><template #default="{ row }"><PlayerAvatar :player="row" class="player-avatar-img" /></template></el-table-column>
             <el-table-column prop="name" label="姓名" min-width="76" />
             <el-table-column label="球衣名" min-width="84"><template #default="{ row }">{{ row._accountHolderRow ? '—' : displayJerseyName(row) }}</template></el-table-column>
             <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag><el-tag v-if="row._accountHolderRow" size="small" type="info" class="dual-role-tag">非编制工作人员</el-tag></template></el-table-column>
@@ -112,7 +112,7 @@
           <el-table ref="reviewPlayerTable" row-key="_id" :data="isTeamDataWorkspace ? sortedTournamentPlayerRows : players" v-loading="loading || playerStatsLoading" empty-text="暂无球员资料" class="synthetic-player-table" :class="{ 'compact-roster-table': !isTeamDataWorkspace, 'tournament-player-data-table': isTeamDataWorkspace }" @row-click="viewPlayerCard" @sort-change="onTournamentPlayerSort" @selection-change="onReviewSelectionChange">
             <el-table-column v-if="!isTeamDataWorkspace && !isReadOnlyTournament" type="selection" width="36" :selectable="canSelectReviewPlayer" />
             <el-table-column label="头像" :width="48" align="center">
-              <template #default="{ row }"><img v-if="row.photoUrl && !playerAvatarErrors.has(row._id)" :src="row.photoUrl" class="player-avatar-img" alt="" @error="markPlayerAvatarFailed(row)" /><el-avatar v-else :size="36">{{ row.name ? row.name[0] : '?' }}</el-avatar></template>
+              <template #default="{ row }"><PlayerAvatar :player="row" class="player-avatar-img" /></template>
             </el-table-column>
             <el-table-column prop="name" label="姓名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 100 : 84" show-overflow-tooltip />
             <el-table-column prop="jerseyName" label="球衣名" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 125 : 84" show-overflow-tooltip><template #default="{ row }">{{ displayJerseyName(row) }}</template></el-table-column>
@@ -240,13 +240,7 @@
         <el-table-column prop="playerId" label="球员ID" width="140" />
         <el-table-column label="头像" width="60" align="center">
           <template #default="{ row }">
-            <img
-              v-if="row.photoUrl"
-              :src="row.photoUrl"
-              class="player-avatar-img"
-              alt="头像"
-            />
-            <el-avatar v-else :size="36" style="background-color: #fff; color: #909399; border: 1px solid #ebeef5;">{{ row.name ? row.name[0] : '?' }}</el-avatar>
+            <PlayerAvatar :player="row" class="player-avatar-img" />
           </template>
         </el-table-column>
         <!-- 姓名 -->
@@ -1251,6 +1245,7 @@
 </template>
 
 <script setup>
+import PlayerAvatar from '../../components/common/PlayerAvatar.vue'
 import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1454,8 +1449,6 @@ const playerStatsError = ref('')
 const competitionMatches = ref([])
 const competitionRoster = ref(null)
 const competitionDivision = ref({})
-const playerAvatarErrors = ref(new Set())
-function markPlayerAvatarFailed(row) { playerAvatarErrors.value = new Set([...playerAvatarErrors.value, row._id]) }
 function displayJerseyName(row) { return row.jerseyName || row.shirtName || generateJerseyName(row.name || '') || '—' }
 const tournamentPlayerRows = computed(() => {
   const base = buildTournamentPlayerStats(withLinkedStaffPhotos(competitionRoster.value ?? exportPlayers.value, staffMembers.value), qaSnapshot ? competitionMatches.value : [], [teamId, tournamentRelation.value._id].filter(Boolean), competitionDivision.value, tournamentContext.value, { tournamentId: sourceTournamentId.value, divisionId: sourceDivisionId.value || tournamentRelation.value.divisionId || 'default' })
@@ -1524,7 +1517,6 @@ async function loadPlayerCompetitionData() {
         if (String(merged.photoUrl || '').startsWith('cloud://')) merged.photoUrl = await getFileUrl(merged._exportPhotoFileId || merged.photoUrl)
         return merged
       }))
-      playerAvatarErrors.value = new Set()
     }
   } catch (error) {
     playerStatsError.value = error.message || '参赛数据加载失败，请重新加载'
