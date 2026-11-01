@@ -25,19 +25,12 @@ $signing=Join-Path $env:LOCALAPPDATA 'SxfFootballBuild\signing'
 New-Item -ItemType Directory -Force -Path $signing | Out-Null
 $key=Join-Path $signing 'football-pad-preview.p12'
 $passwordFile=Join-Path $signing 'football-pad-preview.dpapi'
-if((Test-Path $key) -xor (Test-Path $passwordFile)){throw 'Incomplete signing identity; restore its matching key/password rather than regenerating it.'}
-if(!(Test-Path $key)){
-  $password=[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-  ConvertTo-SecureString $password -AsPlainText -Force | ConvertFrom-SecureString | Set-Content -LiteralPath $passwordFile
-}else{
-  $secure=(Get-Content -LiteralPath $passwordFile -Raw).Trim() | ConvertTo-SecureString
-  $password=[Net.NetworkCredential]::new('',$secure).Password
-}
+if(!(Test-Path -LiteralPath $key) -or !(Test-Path -LiteralPath $passwordFile)){throw 'Existing Pad signing identity is required; restore its original key/password, never regenerate it for an existing package.'}
+$secure=(Get-Content -LiteralPath $passwordFile -Raw).Trim() | ConvertTo-SecureString
+$password=[Net.NetworkCredential]::new('',$secure).Password
+
 try{
   $env:SXF_PAD_SIGN_PASSWORD=$password
-  if(!(Test-Path $key)){
-    Invoke-Checked (Join-Path $jdk 'bin/keytool.exe') @('-genkeypair','-keystore',$key,'-storetype','PKCS12','-storepass:env','SXF_PAD_SIGN_PASSWORD','-keypass:env','SXF_PAD_SIGN_PASSWORD','-alias','football-pad-preview','-keyalg','RSA','-keysize','3072','-validity','10000','-dname','CN=SXF Football Pad Preview, O=SXF Football, C=CN')
-  }
   $apk=Join-Path $release "SxfFootball-Pad-$version-preview.apk"
   Invoke-Checked (Join-Path $jdk 'bin/java.exe') @('-jar',(Join-Path $tools 'lib/apksigner.jar'),'sign','--ks',$key,'--ks-key-alias','football-pad-preview','--ks-pass','env:SXF_PAD_SIGN_PASSWORD','--key-pass','env:SXF_PAD_SIGN_PASSWORD','--out',$apk,(Join-Path $build 'aligned.apk'))
   Invoke-Checked (Join-Path $jdk 'bin/java.exe') @('-jar',(Join-Path $tools 'lib/apksigner.jar'),'verify','--verbose','--print-certs',$apk)
