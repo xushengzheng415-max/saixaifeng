@@ -25,6 +25,7 @@ function normalizePhone(value) { return text(value).replace(/\D/g, '').slice(-11
 function randomKey(bytes) { return crypto.randomBytes(bytes).toString('base64url') }
 function miniReviewTemplateId() { return text(process.env.SXF_FOOTBALL_MINI_TEMPLATE_TOURNAMENT_REVIEW || 'CxBgS7fgjeNoKTSwl0q0o_lErclh_ffpIj2IeL6mpRw') }
 function serviceReviewTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_REVIEW || 'ovXRAzKHZE3Rsex7SVtl2zR-cMNznM_P3azxG8olz1g') }
+function servicePlayerRejectTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_PLAYER_REJECT || 'pwUTAI-c_v9sXfcVoLjjqwvCr5_0RixPYUQiT4BFi4k') }
 function serviceRegistrationSuccessTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_SUCCESS || 'aX_3wN6SbFR0s3giwyoK5P6eBbl9Iwx2rqU_jCId-Uk') }
 function divisionCapacity(division, tournament) {
   const candidates = [division && division.expectedTeams, division && division.requiredTeams, division && division.teamRequirement, division && division.participantTeams, division && division.maxTeams, division && division.teamLimit, tournament && tournament.maxTeams]
@@ -410,8 +411,11 @@ async function invitationByKey(inviteKey) {
   return (result.data || [])[0] || null
 }
 
+const TERMINAL_TOURNAMENT_STATUSES = ['completed', 'finished', 'ended', 'cancelled', 'canceled', 'archived']
+
 function registrationOpen(tournament, division) {
-  return tournament && division && tournament.registrationEnabled !== false && division.registrationEnabled === true && ['registering', 'upcoming'].includes(text(tournament.status).toLowerCase())
+  if (!tournament || !division || tournament.registrationEnabled === false || division.registrationEnabled !== true) return false
+  return !TERMINAL_TOURNAMENT_STATUSES.includes(text(tournament.status).toLowerCase())
 }
 
 async function setDivisionRegistration(event) {
@@ -481,7 +485,11 @@ function importPhone(value) {
 }
 
 function importIdentity(value) {
-  return text(value).toUpperCase().replace(/[^0-9X]/g, '').slice(0, 18)
+  return text(value).toUpperCase().replace(/\s/g, '').slice(0, 40)
+}
+
+function isResidentIdentityNumber(value) {
+  return /^\d{17}[\dX]$/.test(text(value).toUpperCase())
 }
 
 const IMPORT_KIT_COLOR_VALUES = new Set([
@@ -520,15 +528,20 @@ function importedKitColorLabels(value) {
   return IMPORT_KIT_KEYS.some(key => result.primary[key] || result.secondary[key]) ? result : null
 }
 
-function importedIdentityProfile(value) {
+function importedIdentityProfile(value, person) {
   const identityNumber = importIdentity(value)
-  if (!/^\d{17}[0-9X]$/.test(identityNumber)) return { identityNumber, birthDate:'', gender:'' }
+  const documentType = ['resident_id','passport','household_register','mainland_travel_permit','taiwan_travel_permit'].includes(text(person && person.documentType))
+    ? text(person.documentType)
+    : (isResidentIdentityNumber(identityNumber) ? 'resident_id' : (identityNumber ? 'passport' : ''))
+  if (!isResidentIdentityNumber(identityNumber)) {
+    return { identityNumber, documentType, birthDate:'', gender:'', nationality: importText(person && person.nationality, 40) }
+  }
   const year = identityNumber.slice(6, 10)
   const month = identityNumber.slice(10, 12)
   const day = identityNumber.slice(12, 14)
   const date = new Date(`${year}-${month}-${day}T00:00:00Z`)
   const validDate = !Number.isNaN(date.getTime()) && date.getUTCFullYear() === Number(year) && date.getUTCMonth() + 1 === Number(month) && date.getUTCDate() === Number(day)
-  return { identityNumber, birthDate:validDate ? `${year}-${month}-${day}` : '', gender:Number(identityNumber.charAt(16)) % 2 === 1 ? 'male' : 'female' }
+  return { identityNumber, documentType: documentType || 'resident_id', birthDate:validDate ? `${year}-${month}-${day}` : '', gender:Number(identityNumber.charAt(16)) % 2 === 1 ? 'male' : 'female', nationality: importText(person && person.nationality, 40) || '中国' }
 }
 
 function importedFileId(value, requiredFragment) {
@@ -602,7 +615,15 @@ async function importTeamRegistrationBatch(event) {
 
   const rows = Array.isArray(event.teams) ? event.teams.slice(0, 20) : []
   if (!rows.length) return { success:false, code:'IMPORT_TEAM_REQUIRED', message:'请至少上传一份球队报名表' }
-  const maxPlayers = Number(division.maxPlayersPerTeam || division.maxPlayers || tournament.maxPlayersPerTeam || 35)
+  // 与 PC 报名模板/预览一致：优先组别规则名单上限 rosterLimit，
+  // 再兼容创建组别时写入的 maxPlayersPerTeam（11 人制默认 23）等旧字段。
+  const maxPlayers = (() => {
+    for (const value of [division.rosterLimit, division.maxPlayersPerTeam, division.maxPlayers, tournament.maxPlayersPerTeam, tournament.maxPlayers]) {
+      const count = Number(value)
+      if (Number.isFinite(count) && count >= 1) return Math.floor(count)
+    }
+    return 35
+  })()
   const batchNames = new Set()
   const batchIdentities = new Set()
   const prepared = []
@@ -629,9 +650,10 @@ async function importTeamRegistrationBatch(event) {
 
     const staff = rawStaff.map((person, index) => {
       const roleType = ['team_leader','head_coach','doctor'].includes(text(person.roleType)) ? text(person.roleType) : 'other'
-      const identity = supplementImportedIdentity(importedIdentityProfile(person.identityNumber), person)
-      if (identity.identityNumber && (!identity.birthDate || batchIdentities.has(identity.identityNumber))) {
-        const error = new Error(`${name} 的工作人员身份证号无效或重复`)
+      const identity = supplementImportedIdentity(importedIdentityProfile(person.identityNumber, person), person)
+      const residentNeedsBirth = isResidentIdentityNumber(identity.identityNumber) && !identity.birthDate
+      if (identity.identityNumber && (residentNeedsBirth || batchIdentities.has(identity.identityNumber))) {
+        const error = new Error(`${name} 的工作人员证件号无效或重复`)
         error.code = 'IMPORT_IDENTITY_INVALID'
         throw error
       }
@@ -648,10 +670,10 @@ async function importTeamRegistrationBatch(event) {
 
     const dualRoleIdentities = new Set()
     const players = rawPlayers.map((person, index) => {
-      const identity = supplementImportedIdentity(importedIdentityProfile(person.identityNumber), person)
+      const identity = supplementImportedIdentity(importedIdentityProfile(person.identityNumber, person), person)
       const personName = importText(person.name, 30)
       const playerJerseyNumber = importText(person.jerseyNumber, 3)
-      if (identity.identityNumber && !identity.birthDate) {
+      if (identity.identityNumber && isResidentIdentityNumber(identity.identityNumber) && !identity.birthDate) {
         const error = new Error(`${name} 的球员“${personName || `第${index + 1}人`}”身份证号无效`)
         error.code = 'IMPORT_IDENTITY_INVALID'
         throw error
@@ -662,7 +684,7 @@ async function importTeamRegistrationBatch(event) {
         nativePlace:importText(person.nativePlace, 60),
         photoFileId:importedFileId(person.photoFileId, `/player-photos/imports/${tournamentId}/`),
         photoProcessingStatus:importText(person.photoProcessingStatus, 32), order:index,
-        dualRoleType:identityUsage.dualRoleType, dualRoleLabel:identityUsage.dualRoleLabel || '', eligibilityReviewRequired:identity.identityIncomplete || Boolean(identityUsage.dualRoleType)
+        dualRoleType:identityUsage.dualRoleType, dualRoleLabel:identityUsage.dualRoleLabel || '', nationality:importText(identity.nationality || person.nationality, 40), eligibilityReviewRequired:identity.identityIncomplete || !importText(identity.nationality || person.nationality, 40) || person.eligibilityReviewRequired === true || person.photoProcessingStatus === 'ignored_missing' || Boolean(identityUsage.dualRoleType)
       }
     })
     if (players.some(player => !player.name)) return { success:false, code:'IMPORT_PLAYER_NAME_REQUIRED', message:`${name} 有球员缺少姓名` }
@@ -714,7 +736,7 @@ async function importTeamRegistrationBatch(event) {
         snapshot:{
           team:{ name:team.name, shortName:team.shortName, contactName:team.contactName, contactPhoneMasked:team.contactPhone ? team.contactPhone.slice(0,3) + '****' + team.contactPhone.slice(-4) : '', logoFileId:team.logoFileId, kitColors:team.kitColors || null, kitColorLabels:team.kitColorLabels || null },
           staff:team.staff.map(person => ({ name:person.name, roleType:person.roleType, roleLabel:person.roleLabel, phoneMasked:person.phone ? person.phone.slice(0,3) + '****' + person.phone.slice(-4) : '', identityMasked:importedIdentityMask(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId, jerseyNumber:person.jerseyNumber || '', jerseyName:person.jerseyName || '', dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '' })),
-          players:team.players.map(person => ({ name:person.name, jerseyNumber:person.jerseyNumber, jerseyName:person.jerseyName, position:person.position || '', identityMasked:importedIdentityMask(person.identityNumber), identityDigest:importedIdentityDigest(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId, order:person.order, dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '', eligibilityReviewRequired:person.eligibilityReviewRequired === true }))
+          players:team.players.map(person => ({ name:person.name, jerseyNumber:person.jerseyNumber, jerseyName:person.jerseyName, position:person.position || '', strongFoot:person.strongFoot || '', height:person.height ?? null, weight:person.weight ?? null, documentType:person.documentType || '', nationality:person.nationality || '', identityMasked:importedIdentityMask(person.identityNumber), identityDigest:importedIdentityDigest(person.identityNumber), birthDate:person.birthDate, gender:person.gender, nativePlace:person.nativePlace, photoFileId:person.photoFileId, order:person.order, dualRoleType:person.dualRoleType || '', dualRoleLabel:person.dualRoleLabel || '', eligibilityReviewRequired:person.eligibilityReviewRequired === true }))
         },
         teamName:team.name, playerCount:team.players.length, staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), duplicatePlayerCount:Number(team.duplicatePlayerCount || 0),
         importedByUserId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
@@ -730,6 +752,7 @@ async function importTeamRegistrationBatch(event) {
         playerCount:team.players.length, pendingPlayerDraftCount:0, playerReviewStatus:'completed', staffCount:team.staff.length, dualRoleCount:Number(team.dualRoleCount || 0), creatorId:actor.userId, createTime:db.serverDate(), updateTime:db.serverDate()
       } })
       const teamId = text(teamAdded._id)
+      await require('./data-center/numbering.cjs').afterWrite(db,'teams',teamId)
       artifacts.push({ collection:'teams', id:teamId })
 
       let sequence = 1
@@ -753,7 +776,7 @@ async function importTeamRegistrationBatch(event) {
         const linkedCoachId = person.dualRoleType ? text(linkedCoachIds.get(person.identityNumber)) : ''
         const added = await db.collection('registration_player_drafts').add({ data:{
           sport:SPORT, orgId:actor.orgId, tournamentId, divisionId, importBatchId, sourceTeamId:teamId, teamId,
-          name:person.name, jerseyNumber:Number(person.jerseyNumber || 0), jerseyName:person.jerseyName, position:person.position || '',
+          name:person.name, jerseyNumber:Number(person.jerseyNumber || 0), jerseyName:person.jerseyName, position:person.position || '', strongFoot:person.strongFoot || '', height:person.height ?? null, weight:person.weight ?? null, documentType:person.documentType || '', nationality:person.nationality || '',
           identityDigest:importedIdentityDigest(person.identityNumber), identityMasked:importedIdentityMask(person.identityNumber),
           gender:person.gender || '', birthDate:person.birthDate, nativePlace:person.nativePlace,
           photoUrl:person.photoFileId, photoFileID:person.photoFileId, photoProcessingStatus:person.photoProcessingStatus,
@@ -766,8 +789,8 @@ async function importTeamRegistrationBatch(event) {
         artifacts.push({ collection:'registration_player_drafts', id:draftId })
         const playerAdded = await db.collection('players').add({ data:{
           orgId:actor.orgId, teamId, teamCode:teamId, teamName:team.name,
-          playerId:`${teamId}${String(sequence).padStart(3, '0')}C`, name:person.name, jerseyNumber:Number(person.jerseyNumber || 0), jerseyName:person.jerseyName, position:person.position || '',
-          gender:person.gender || '', nationality:'中国', birthDate:person.birthDate, nativePlace:person.nativePlace,
+          playerId:`${teamId}${String(sequence).padStart(3, '0')}C`, name:person.name, jerseyNumber:Number(person.jerseyNumber || 0), jerseyName:person.jerseyName, position:person.position || '', strongFoot:person.strongFoot || '', height:person.height ?? null, weight:person.weight ?? null, documentType:person.documentType || '', nationality:person.nationality || '',
+          gender:person.gender || '', birthDate:person.birthDate, nativePlace:person.nativePlace,
           photoUrl:person.photoFileId, photoFileID:person.photoFileId, photoProcessingStatus:person.photoProcessingStatus,
           identityDigest:importedIdentityDigest(person.identityNumber), identityNumberMasked:importedIdentityMask(person.identityNumber), identityStatus:'not_verified', identityVerificationLabel:'待人证核验',
           profileStatus:'pending', source:'registration_docx_import_direct', importDraftId:draftId, registrationImportBatchId:importBatchId, registrationSourceFileId:team.sourceFileId,
@@ -775,6 +798,7 @@ async function importTeamRegistrationBatch(event) {
           creatorId:actor.userId, registerTime:db.serverDate(), createTime:db.serverDate(), updateTime:db.serverDate()
         } })
         const formalPlayerId = text(playerAdded._id)
+        await require('./data-center/numbering.cjs').afterWrite(db,'players',formalPlayerId)
         artifacts.push({ collection:'players', id:formalPlayerId })
         if(!person.identityIncomplete)formalPlayerIds.push(formalPlayerId)
         await db.collection('registration_player_drafts').doc(draftId).update({ data:{ confirmedPlayerId:formalPlayerId, updateTime:db.serverDate() } })
@@ -1145,23 +1169,14 @@ async function generateServicePlayerInviteByToken(event) {
     qrCodeUrl:followUrl, expiresAt:invite.expiresAt, channel:'service_account'
   } }
 }
-async function getInvitation(event) {
-  const invite = await invitationByKey(event.inviteKey)
-  // 认领码与报名邀请共用 tournament_invites 集合，但语义不同：认领码只用于小程序认领页，
-  // 不能被当作报名邀请打开，否则会出现“用认领码进入报名流程”的越权路径。
-  if (!invite || invite.status !== 'active' || text(invite.inviteType) === 'tournament_claim_code') return { success: false, code: 'INVITE_INVALID', message: '报名邀请无效或已重置' }
-  const tournament = await getDocument('tournaments', invite.tournamentId)
-  if (!tournament) return { success: false, code: 'TOURNAMENT_NOT_FOUND', message: '赛事不存在' }
-  const divisions = (await db.collection('divisions').where({ tournamentId: invite.tournamentId }).limit(100).get()).data || []
-  const registrations = await listAll('tournament_teams', { tournamentId: invite.tournamentId }, 5000)
+function publicDivisionRows(tournament, divisions, registrations, fixedDivisionId) {
   const capacityCounts = registrations.reduce((counts, item) => {
     if (!['approved', 'invited'].includes(text(item.status).toLowerCase())) return counts
     const divisionId = text(item.divisionId || item.division || 'default') || 'default'
     counts[divisionId] = Number(counts[divisionId] || 0) + 1
     return counts
   }, {})
-  const fixedDivisionId = text(invite.divisionId)
-  const displayDivisions = divisions.map((item, order) => {
+  return divisions.map((item, order) => {
     const id = text(item._id || item.id)
     const maxTeams = divisionCapacity(item, tournament)
     const registeredTeams = Number(capacityCounts[id] || 0)
@@ -1179,6 +1194,7 @@ async function getInvitation(event) {
       maxTeams,
       maxPlayersPerTeam: Number(item.maxPlayersPerTeam || item.maxPlayers || 0),
       registeredTeams,
+      registrationEnabled: item.registrationEnabled === true,
       registrationOpen: isOpen,
       allowedByInvite,
       isFull,
@@ -1187,10 +1203,46 @@ async function getInvitation(event) {
       order
     }
   }).sort((a, b) => Number(b.selectable) - Number(a.selectable) || a.order - b.order)
+}
+
+function publicTournamentSummary(tournament) {
+  return { _id: tournament._id, name: tournament.name, status: tournament.status, startDate: tournament.startDate, endDate: tournament.endDate, location: tournament.location || tournament.region || '', organizerName: tournament.organizerName || '' }
+}
+
+async function getPublicSignupDivisions(event) {
+  const tournamentId = text(event.tournamentId)
+  if (!tournamentId) return { success: false, code: 'TOURNAMENT_REQUIRED', message: '缺少赛事信息' }
+  const tournament = await getDocument('tournaments', tournamentId)
+  if (!tournament) return { success: false, code: 'TOURNAMENT_NOT_FOUND', message: '赛事不存在' }
+  const divisions = (await db.collection('divisions').where({ tournamentId }).limit(100).get()).data || []
+  const registrations = await listAll('tournament_teams', { tournamentId }, 5000)
+  const displayDivisions = publicDivisionRows(tournament, divisions, registrations, '')
+  const firstSelectable = displayDivisions.find(item => item.selectable)
+  return { success: true, data: {
+    tournamentId,
+    defaultDivisionId: text(firstSelectable && firstSelectable.id),
+    registrationOpen: displayDivisions.some(item => item.registrationOpen),
+    hasSelectableDivision: Boolean(firstSelectable),
+    tournament: publicTournamentSummary(tournament),
+    divisions: displayDivisions
+  } }
+}
+
+async function getInvitation(event) {
+  const invite = await invitationByKey(event.inviteKey)
+  // 认领码与报名邀请共用 tournament_invites 集合，但语义不同：认领码只用于小程序认领页，
+  // 不能被当作报名邀请打开，否则会出现“用认领码进入报名流程”的越权路径。
+  if (!invite || invite.status !== 'active' || text(invite.inviteType) === 'tournament_claim_code') return { success: false, code: 'INVITE_INVALID', message: '报名邀请无效或已重置' }
+  const tournament = await getDocument('tournaments', invite.tournamentId)
+  if (!tournament) return { success: false, code: 'TOURNAMENT_NOT_FOUND', message: '赛事不存在' }
+  const divisions = (await db.collection('divisions').where({ tournamentId: invite.tournamentId }).limit(100).get()).data || []
+  const registrations = await listAll('tournament_teams', { tournamentId: invite.tournamentId }, 5000)
+  const fixedDivisionId = text(invite.divisionId)
+  const displayDivisions = publicDivisionRows(tournament, divisions, registrations, fixedDivisionId)
   const firstSelectable = displayDivisions.find(item => item.selectable)
   return { success: true, data: {
     inviteKey: invite.inviteKey, inviteType:text(invite.inviteType || 'public_registration'), tournamentId: invite.tournamentId, defaultDivisionId:fixedDivisionId || text(firstSelectable && firstSelectable.id), registrationOpen: displayDivisions.some(item => item.registrationOpen), hasSelectableDivision:Boolean(firstSelectable), intendedTeamName:text(invite.intendedTeamName), contactName:text(invite.contactName),
-    tournament: { _id: tournament._id, name: tournament.name, status: tournament.status, startDate: tournament.startDate, endDate: tournament.endDate, location: tournament.location || tournament.region || '', organizerName: tournament.organizerName || '' },
+    tournament: publicTournamentSummary(tournament),
     divisions: displayDivisions,
     miniSubscribeTemplateId: miniReviewTemplateId(),
     serviceBindingConfigured: Boolean(text(process.env.SXF_FOOTBALL_SERVICE_FOLLOW_URL))
@@ -1690,13 +1742,15 @@ function notificationConfigurationStatus() {
   const miniTemplateConfigured = Boolean(miniReviewTemplateId())
   const serviceReviewConfigured = Boolean(serviceReviewTemplateId())
   const serviceSuccessConfigured = Boolean(serviceRegistrationSuccessTemplateId())
+  const serviceJoinConfigured = Boolean(teamJoinTemplateId())
   const serviceTemplateConfigured = serviceReviewConfigured && serviceSuccessConfigured
   const missing = []
   if (!miniTemplateConfigured) missing.push('SXF_FOOTBALL_MINI_TEMPLATE_TOURNAMENT_REVIEW')
   if (!serviceReviewConfigured) missing.push('SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_REVIEW')
   if (!serviceSuccessConfigured) missing.push('SXF_FOOTBALL_SERVICE_TEMPLATE_REGISTRATION_SUCCESS')
+  if (!serviceJoinConfigured) missing.push('SXF_FOOTBALL_SERVICE_TEMPLATE_TEAM_JOIN')
   if (!serviceBridgeConfigured()) missing.push('SXF_FOOTBALL_WECHAT_BRIDGE_URL', 'SXF_FOOTBALL_WECHAT_BRIDGE_SECRET')
-  return { success:true, data:{ miniTemplateConfigured, serviceTemplateConfigured, serviceReviewConfigured, serviceSuccessConfigured, serviceBridgeConfigured:serviceBridgeConfigured(), missing:[...new Set(missing)] } }
+  return { success:true, data:{ miniTemplateConfigured, serviceTemplateConfigured, serviceReviewConfigured, serviceSuccessConfigured, serviceJoinConfigured, serviceBridgeConfigured:serviceBridgeConfigured(), missing:[...new Set(missing)] } }
 }
 
 function templateText(value, max) {
@@ -1780,6 +1834,214 @@ async function sendServiceReviewNotification(registration, tournament, decision,
     return result && result.success ? { status:'delivered', code:'', message:'服务号模板消息已发送' } : { status:'failed', code:'SERVICE_SEND_FAILED', message:'服务号模板消息发送失败' }
   } catch (error) {
     return { status:'failed', code:text(error.code || error.wechatCode || 'SERVICE_SEND_FAILED'), message:text(error.message || '服务号模板消息发送失败') }
+  }
+}
+
+// 逐人驳回服务号通知（2026-10-30 用户确认）：
+// 改用服务号模板「注册申请驳回通知」（模板编号 44548，模板ID pwUTAI-c_v9sXfcVoLjjqwvCr5_0RixPYUQiT4BFi4k），
+// 关键词：申请人 {{thing2}} / 申请时间 {{time3}} / 驳回原因 {{thing6}} / 注册项目 {{thing9}}，
+// 全部取自模板类目既有词库，不再申请「球员姓名/球队名称/赛事名称」等自造关键词（微信以类目不匹配驳回）。
+// 只接受持足球服务号 AppSecret 签名的函数间调用：webLoginApi 与本函数共用同一服务号凭据，
+// 因此不需要新增环境变量；签名含时间戳与随机串，5 分钟后失效。
+function playerReviewRejectedProof(fields) {
+  return ['playerReviewRejected', fields.tournamentId, fields.teamId, fields.playerId, fields.reviewId, String(fields.timestamp), fields.nonce].join('|')
+}
+
+async function notifyPlayerReviewRejected(event) {
+  const secret = text(process.env.SXF_FOOTBALL_SERVICE_ACCOUNT_APPSECRET)
+  if (!secret) return { success: false, code: 'SERVICE_CREDENTIALS_REQUIRED', message: '足球服务号AppSecret尚未配置' }
+  const tournamentId = text(event.tournamentId), teamId = text(event.teamId), playerId = text(event.playerId), reviewId = text(event.reviewId)
+  if (!tournamentId || !teamId || !playerId || !reviewId) return { success: false, code: 'NOTIFY_PAYLOAD_REQUIRED', message: '缺少球员驳回通知要素' }
+  const timestamp = Number(event.bridgeTimestamp || 0), nonce = text(event.bridgeNonce), proof = text(event.bridgeProof).toLowerCase()
+  if (!Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 5 * 60 * 1000 || !/^[a-f0-9]{16,64}$/i.test(nonce) || !/^[a-f0-9]{64}$/.test(proof)) {
+    return { success: false, code: 'BRIDGE_AUTH_FAILED', message: '内部调用签名无效或已过期' }
+  }
+  const expected = crypto.createHmac('sha256', secret).update(playerReviewRejectedProof({ tournamentId, teamId, playerId, reviewId, timestamp, nonce })).digest('hex')
+  const proofBuffer = Buffer.from(proof, 'hex')
+  if (proofBuffer.length !== 32 || !crypto.timingSafeEqual(Buffer.from(expected, 'hex'), proofBuffer)) {
+    return { success: false, code: 'BRIDGE_AUTH_FAILED', message: '内部调用签名校验失败' }
+  }
+  const player = await getDocument('players', playerId)
+  if (!player || !(text(player.teamId) === teamId || text(player.teamCode) === teamId)) return { success: false, code: 'PLAYER_NOT_IN_TEAM', message: '球员不属于该球队，未发送通知' }
+  if (text(player.organizerReviewStatus).toLowerCase() !== 'rejected') return { success: false, code: 'PLAYER_NOT_REJECTED', message: '球员当前不是驳回状态，未发送通知' }
+  const reason = text(player.organizerReviewReason).slice(0, 200)
+  const tournament = await getDocument('tournaments', tournamentId)
+  const relationRows = (await db.collection('tournament_teams').where({ sport: SPORT, tournamentId, teamId }).limit(10).get()).data || []
+  const relation = relationRows.find(row => text(row.divisionId || row.division) === text(event.divisionId)) || relationRows[0] || null
+  const tournamentName = text(tournament && (tournament.name || tournament.tournamentName)) || '足球赛事'
+  const divisionName = text(relation && (relation.divisionName || relation.division)) || '竞赛组别'
+  const businessEventId = `player_review_rejected:${playerId}:${reviewId}`
+  const record = (status, extra) => upsertByKey('notification_outbox', `${businessEventId}:service_account`, Object.assign({
+    sport: SPORT, businessEventId, tournamentId, teamId, playerId, channel: 'service_account',
+    status, attemptedAt: db.serverDate(), targetPage: 'https://www.sxffootball.cn/service-account-h5/me.html'
+  }, extra || {}))
+  const existing = (await db.collection('notification_outbox').where({ sport: SPORT, businessEventId, channel: 'service_account' }).limit(5).get()).data || []
+  if (existing.some(item => text(item.status) === 'delivered')) return { success: true, data: { status: 'delivered', code: 'ALREADY_DELIVERED', message: '该驳回通知此前已送达，未重复发送' } }
+  const binding = await playerServiceBinding(player)
+  if (!binding) {
+    await record('waiting_follow_bind', { errorCode: 'SERVICE_BINDING_REQUIRED', errorMessage: '未找到该球员账号的有效服务号关注绑定' })
+    return { success: true, data: { status: 'waiting_follow_bind', code: 'SERVICE_BINDING_REQUIRED', message: '该球员尚未关注绑定服务号，通知未发送' } }
+  }
+  const templateId = servicePlayerRejectTemplateId()
+  if (!templateId) { await record('configuration_required', { errorCode: 'SERVICE_TEMPLATE_REQUIRED', errorMessage: '注册申请驳回通知模板未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_TEMPLATE_REQUIRED' } } }
+  if (!serviceBridgeConfigured()) { await record('configuration_required', { errorCode: 'SERVICE_BRIDGE_REQUIRED', errorMessage: '服务号固定出口中转未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_BRIDGE_REQUIRED' } } }
+  // time 类关键词只接受「YYYY-MM-DD HH:mm」或中文日期格式，统一按北京时间输出。
+  const rejectedAt = dateValue(player.organizerReviewedAt || player.updateTime) || Date.now()
+  const rejectedAtText = new Date(rejectedAt + 8 * 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ')
+  const data = {
+    thing2: { value: templateText(text(player.name || player.playerName) || '球员', 20) },
+    time3: { value: rejectedAtText },
+    thing6: { value: templateText(reason || '资料不符合要求，请补充后重新提交', 20) },
+    thing9: { value: templateText(`${tournamentName}·${divisionName}`, 20) }
+  }
+  try {
+    const result = await serviceBridgeJson('template/send', { message:{
+      touser: text(binding.officialOpenId),
+      template_id: templateId,
+      url: 'https://www.sxffootball.cn/service-account-h5/me.html',
+      data
+    } })
+    await record(result && result.success ? 'delivered' : 'failed', result && result.success ? {} : { errorCode: 'SERVICE_SEND_FAILED', errorMessage: '服务号模板消息发送失败' })
+    return { success: true, data: { status: result && result.success ? 'delivered' : 'failed', code: result && result.success ? '' : 'SERVICE_SEND_FAILED' } }
+  } catch (error) {
+    await record('failed', { errorCode: text(error.code || 'SERVICE_SEND_FAILED'), errorMessage: text(error.message || '服务号模板消息发送失败') })
+    return { success: true, data: { status: 'failed', code: text(error.code || 'SERVICE_SEND_FAILED') } }
+  }
+}
+
+// 逐人入队驳回通知（2026-10-30）：球员扫码登记后被球队驳回时，告诉球员被哪支球队驳回、
+// 原因是什么，并落到服务号自助登记入口重新填写。复用已审核通过的「注册申请驳回通知」
+// 模板与既有服务号桥，不新增环境变量；展示内容一律以服务端库为准。
+async function notifyTeamPlayerJoinRejected(event) {
+  const expected = text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)
+  if (!expected || text(event.bridgeKey) !== expected) return { success: false, code: 'BRIDGE_AUTH_FAILED', message: '服务号桥接校验失败' }
+  const teamId = text(event.teamId), playerId = text(event.playerId)
+  if (!teamId || !playerId) return { success: false, code: 'NOTIFY_PAYLOAD_REQUIRED', message: '缺少入队驳回通知要素' }
+  const player = await getDocument('players', playerId)
+  if (!player || text(player.pendingJoinTeamId) !== teamId || text(player.pendingJoinStatus) !== 'rejected') {
+    return { success: true, data: { status: 'skipped', code: 'PLAYER_JOIN_NOT_REJECTED', message: '该球员当前不是待驳回的入队申请，未发送通知' } }
+  }
+  const team = await getDocument('teams', teamId)
+  const teamName = text(team && (team.name || team.teamName)) || '球队'
+  const reason = text(player.pendingJoinRejectReason).slice(0, 200) || '球队未通过'
+  const rejectedAt = dateValue(player.pendingJoinRejectedAt || player.updateTime) || Date.now()
+  const rejectedAtText = new Date(rejectedAt + 8 * 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ')
+  const businessEventId = `team_player_join_rejected:${playerId}:${rejectedAt}`
+  const targetUrl = 'https://www.sxffootball.cn/service-account-h5/registration-resume.html'
+  const record = (status, extra) => upsertByKey('notification_outbox', `${businessEventId}:service_account`, Object.assign({
+    sport: SPORT, businessEventId, teamId, playerId, channel: 'service_account',
+    status, attemptedAt: db.serverDate(), targetPage: targetUrl
+  }, extra || {}))
+  const existing = (await db.collection('notification_outbox').where({ sport: SPORT, businessEventId, channel: 'service_account' }).limit(5).get()).data || []
+  if (existing.some(item => text(item.status) === 'delivered')) return { success: true, data: { status: 'delivered', code: 'ALREADY_DELIVERED', message: '该驳回通知此前已送达，未重复发送' } }
+  const binding = await playerServiceBinding(player)
+  if (!binding) {
+    await record('waiting_follow_bind', { errorCode: 'SERVICE_BINDING_REQUIRED', errorMessage: '未找到该球员账号的有效服务号关注绑定' })
+    return { success: true, data: { status: 'waiting_follow_bind', code: 'SERVICE_BINDING_REQUIRED', message: '该球员尚未关注绑定服务号，通知未发送' } }
+  }
+  const templateId = servicePlayerRejectTemplateId()
+  if (!templateId) { await record('configuration_required', { errorCode: 'SERVICE_TEMPLATE_REQUIRED', errorMessage: '注册申请驳回通知模板未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_TEMPLATE_REQUIRED' } } }
+  if (!serviceBridgeConfigured()) { await record('configuration_required', { errorCode: 'SERVICE_BRIDGE_REQUIRED', errorMessage: '服务号固定出口中转未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_BRIDGE_REQUIRED' } } }
+  const data = {
+    thing2: { value: templateText(text(player.name || player.playerName) || '球员', 20) },
+    time3: { value: rejectedAtText },
+    thing6: { value: templateText(reason, 20) },
+    thing9: { value: templateText(teamName, 20) }
+  }
+  try {
+    const result = await serviceBridgeJson('template/send', { message:{
+      touser: text(binding.officialOpenId),
+      template_id: templateId,
+      url: targetUrl,
+      data
+    } })
+    await record(result && result.success ? 'delivered' : 'failed', result && result.success ? {} : { errorCode: 'SERVICE_SEND_FAILED', errorMessage: '服务号模板消息发送失败' })
+    return { success: true, data: { status: result && result.success ? 'delivered' : 'failed', code: result && result.success ? '' : 'SERVICE_SEND_FAILED' } }
+  } catch (error) {
+    await record('failed', { errorCode: text(error.code || 'SERVICE_SEND_FAILED'), errorMessage: text(error.message || '服务号模板消息发送失败') })
+    return { success: true, data: { status: 'failed', code: text(error.code || 'SERVICE_SEND_FAILED') } }
+  }
+}
+
+// 球员账号到服务号 openid：优先按账号关联，其次按监护人/本人手机号兜底；
+// 只认 subscribed=true 且有 officialOpenId 的绑定。
+async function playerServiceBinding(player) {
+  const userIds = [player.guardianUserId, player.playerUserId, player.linkedUserId, player.userId].map(text).filter(Boolean)
+  const pick = rows => (rows || []).find(row => row && row.subscribed === true && text(row.officialOpenId)) || null
+  if (userIds.length) {
+    const direct = await db.collection('service_account_bindings').where({ sport: SPORT, userId: _.in(userIds), subscribed: true }).limit(5).get()
+    const hit = pick(direct.data)
+    if (hit) return hit
+  }
+  const phones = [player.guardianPhone, player.contactPhone, player.phone, player.phoneNumber].map(text).filter(Boolean)
+  if (!phones.length) return null
+  const userRows = []
+  for (const field of ['phone', 'phoneNumber']) {
+    const result = await db.collection('users').where({ [field]: _.in(phones) }).limit(5).get()
+    ;(result.data || []).forEach(row => userRows.push(row))
+  }
+  const ids = Array.from(new Set(userRows.map(row => text(row._id)).filter(Boolean)))
+  if (!ids.length) return null
+  const byPhone = await db.collection('service_account_bindings').where({ sport: SPORT, userId: _.in(ids), subscribed: true }).limit(5).get()
+  return pick(byPhone.data)
+}
+
+function teamJoinTemplateId() { return text(process.env.SXF_FOOTBALL_SERVICE_TEMPLATE_TEAM_JOIN) }
+
+// 球员入队申请服务号通知（2026-10-18 用户最终确认口径）：
+// 球员经服务号H5提交成功后，球队收到且只收到一条服务号模板消息。
+// 只接受持内部桥密钥的函数间调用；送达状态如实写入 notification_outbox，不伪造 delivered。
+async function notifyTeamPlayerJoin(event) {
+  const expected = text(process.env.SXF_FOOTBALL_SERVICE_BRIDGE_KEY)
+  if (!expected || text(event.bridgeKey) !== expected) return { success: false, code: 'BRIDGE_AUTH_FAILED', message: '服务号桥接校验失败' }
+  const teamId = text(event.teamId), playerId = text(event.playerId)
+  const playerName = text(event.playerName).slice(0, 20), teamName = text(event.teamName).slice(0, 20)
+  if (!teamId || !playerId || !playerName) return { success: false, code: 'NOTIFY_PAYLOAD_REQUIRED', message: '缺少入队通知要素' }
+  // 幂等键含事件唯一标识：同一球员离隊后再次入队是新事件，必须再次通知，不被旧 outbox 吞掉。
+  const businessEventId = `team_player_join_submitted:${playerId}${text(event.eventId) ? ':' + text(event.eventId) : ''}`
+  // 待球队确认的入队申请由调用方指定小程序落点（本队待确认入队列表）；只接受站内页面路径。
+  const requestedPage = text(event.pagePath)
+  const targetPage = requestedPage && /^pages\/[A-Za-z0-9/_-]+(\?[A-Za-z0-9=&%_.-]*)?$/.test(requestedPage) ? requestedPage.slice(0, 128) : text(process.env.SXF_FOOTBALL_SERVICE_JOIN_PAGE || 'pages/teams/index')
+  const record = (status, extra) => upsertByKey('notification_outbox', `${businessEventId}:service_account`, Object.assign({
+    sport: SPORT, businessEventId, teamId, playerId, channel: 'service_account', status, attemptedAt: db.serverDate(), targetPage,
+    pendingTeamConfirm: event.pendingTeamConfirm === true
+  }, extra || {}))
+  const existing = (await db.collection('notification_outbox').where({ sport: SPORT, businessEventId, channel: 'service_account' }).limit(5).get()).data || []
+  if (existing.some(item => text(item.status) === 'delivered')) return { success: true, data: { status: 'delivered', code: 'ALREADY_DELIVERED', message: '入队申请通知此前已送达，未重复发送' } }
+  const templateId = teamJoinTemplateId()
+  if (!templateId) { await record('configuration_required', { errorCode: 'SERVICE_TEMPLATE_REQUIRED', errorMessage: '入队审核通知模板未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_TEMPLATE_REQUIRED' } } }
+  if (!serviceBridgeConfigured()) { await record('configuration_required', { errorCode: 'SERVICE_BRIDGE_REQUIRED', errorMessage: '服务号固定出口中转未配置' }); return { success: true, data: { status: 'configuration_required', code: 'SERVICE_BRIDGE_REQUIRED' } } }
+  const team = await getDocument('teams', teamId)
+  const invite = text(event.inviteId) ? await getDocument('team_invitations', text(event.inviteId)) : null
+  // 接收人顺序：发起入队邀请的负责人优先，其次球队归属账号；只发给第一个已完成服务号关注绑定的负责人，保证一条通知。
+  const candidateIds = [...new Set([invite && invite.inviterUserId, team && team.ownerId, team && team.ownerUserId, team && team.claimedByUserId, team && team.creatorId].map(text).filter(Boolean))]
+  let recipient = null, binding = null
+  for (const userId of candidateIds) {
+    const user = await getDocument('users', userId)
+    const miniOpenId = text(user && (user.openId || user.openid || user._openid))
+    if (!miniOpenId) continue
+    const bound = (await db.collection('service_account_bindings').where({ sport: SPORT, miniOpenId, subscribed: true }).limit(2).get()).data || []
+    if (bound[0] && text(bound[0].officialOpenId)) { recipient = { userId, miniOpenId }; binding = bound[0]; break }
+  }
+  if (!recipient) { await record('waiting_follow_bind', { recipientUserId: candidateIds[0] || '', errorCode: 'SERVICE_BINDING_REQUIRED', errorMessage: '球队负责人尚未完成服务号关注绑定' }); return { success: true, data: { status: 'waiting_follow_bind', code: 'SERVICE_BINDING_REQUIRED' } } }
+  const data = {}
+  data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_PLAYER_KEY || 'thing1')] = { value: templateText(playerName, 20) }
+  data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_TEAM_KEY || 'thing2')] = { value: templateText(teamName || text(event.teamName) || (team && (team.name || team.teamName)) || '球队', 20) }
+  data[text(process.env.SXF_FOOTBALL_SERVICE_JOIN_TIME_KEY || 'time3')] = { value: new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ') }
+  try {
+    const result = await serviceBridgeJson('template/send', { message: {
+      touser: text(binding.officialOpenId),
+      template_id: templateId,
+      url: 'https://www.sxffootball.cn/',
+      miniprogram: { appid: text(process.env.SXF_FOOTBALL_MINIPROGRAM_APPID || 'wx57164cca8676f411'), pagepath: targetPage },
+      data
+    } })
+    const delivered = Boolean(result && result.success === true)
+    await record(delivered ? 'delivered' : 'failed', { recipientUserId: recipient.userId, recipientMiniOpenId: recipient.miniOpenId, recipientOfficialOpenId: text(binding.officialOpenId), errorCode: delivered ? '' : 'SERVICE_SEND_FAILED', errorMessage: delivered ? '' : '服务号模板消息发送失败' })
+    return { success: true, data: { status: delivered ? 'delivered' : 'failed', code: delivered ? '' : 'SERVICE_SEND_FAILED' } }
+  } catch (error) {
+    await record('failed', { recipientUserId: recipient.userId, recipientMiniOpenId: recipient.miniOpenId, recipientOfficialOpenId: text(binding.officialOpenId), errorCode: text(error.code || error.wechatCode || 'SERVICE_SEND_FAILED'), errorMessage: text(error.message || '服务号模板消息发送失败') })
+    return { success: true, data: { status: 'failed', code: text(error.code || 'SERVICE_SEND_FAILED') } }
   }
 }
 
@@ -1926,6 +2188,11 @@ async function cancelTournamentInvitation(event) {
     message: '邀约已撤回，球队资料和球员库仍保留',
     data: { status: 'invite_cancelled', teamId: registration.teamId || '', cancelledInviteCount: activeInvitations.length }
   }
+}
+
+function activeMembership(item) {
+  const status = text(item && item.status || 'active').toLowerCase()
+  return ['active', 'accepted', 'claimed'].indexOf(status) >= 0
 }
 
 async function teamClaimState(team, registration) {
@@ -2230,6 +2497,12 @@ async function migrateLegacyImportedPlayers(event) {
 exports.main = async (event) => {
   try {
     const action = text(event && event.action)
+    if (action === 'marketingSelfTestWxSignature') {
+      const url = text(event.url)
+      if (!/^https:\/\/www\.sxffootball\.cn\/service-account-h5\/(?:valuation-self-test|self-register)\.html(?:\?[^#]*)?$/.test(url) || url.length > 2048) return {success:false,code:'SELFTEST_URL_INVALID',message:'页面地址无效'}
+      const signed = await serviceBridgeJson('js-signature',{url})
+      return {success:true,jsConfig:signed.jsConfig}
+    }
     if (action === 'bridgeConfigurationStatus') return await bridgeConfigurationStatus()
     if (action === 'notificationConfigurationStatus') return notificationConfigurationStatus()
     await ensureCollections()
@@ -2245,6 +2518,7 @@ exports.main = async (event) => {
     if (action === 'createTargetedClaimServiceCode') return await createTargetedClaimServiceCode(event)
     if (action === 'generateServicePlayerInviteByToken') return await generateServicePlayerInviteByToken(event)
     if (action === 'getInvitation') return await getInvitation(event)
+    if (action === 'getPublicSignupDivisions') return await getPublicSignupDivisions(event)
     if (action === 'createFollowGate') return await createFollowGate(event)
     if (action === 'createOrganizerServiceGate') return await createOrganizerServiceGate(event)
     if (action === 'createRefereeFollowInvite') return await createRefereeFollowInvite(event)
@@ -2258,6 +2532,9 @@ exports.main = async (event) => {
     if (action === 'completeRegistrationDraft') return await completeRegistrationDraft(event)
     if (action === 'probeServiceAccount') return await probeServiceAccount(event)
     if (action === 'bindServiceAccount') return await bindServiceAccount(event)
+    if (action === 'notifyTeamPlayerJoin') return await notifyTeamPlayerJoin(event)
+    if (action === 'notifyTeamPlayerJoinRejected') return await notifyTeamPlayerJoinRejected(event)
+    if (action === 'notifyPlayerReviewRejected') return await notifyPlayerReviewRejected(event)
     if (action === 'reviewRegistration') return await reviewRegistration(event)
     if (action === 'cancelTournamentInvitation') return await cancelTournamentInvitation(event)
     if (action === 'deleteUnclaimedTournamentTeam') return await deleteUnclaimedTournamentTeam(event)

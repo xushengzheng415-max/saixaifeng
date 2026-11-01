@@ -56,6 +56,13 @@
         </header>
 
         <div v-if="team.expanded" class="team-detail">
+          <div v-if="currentTeamErrors(team).length" class="import-blockers" role="alert">
+            <strong>还有 {{ currentTeamErrors(team).length }} 项需修正</strong>
+            <ul><li v-for="issue in currentTeamIssues(team)" :key="issue.message">
+              <span>{{ issue.message }}</span>
+              <el-button v-if="team.players.includes(issue.person)" :disabled="importing || team.processing" link type="primary" @click="openPlayerEditor(issue.person,team)">修改</el-button>
+            </li></ul>
+          </div>
           <div class="team-fields">
             <label><span>球队名称</span><el-input v-model="team.teamName" maxlength="50" /></label>
             <label><span>领队</span><el-input v-model="team.contactName" maxlength="30" /></label>
@@ -75,10 +82,10 @@
           </section>
 
           <section class="staff-section">
-            <header><strong>工作人员资料</strong><span>身份证信息、年龄、籍贯和照片状态已自动识别。</span></header>
+            <header><strong>工作人员资料</strong><span>证件、年龄、籍贯和照片状态已自动识别。</span></header>
             <div class="staff-table-wrap">
               <table>
-                <thead><tr><th>照片</th><th>姓名</th><th>职务</th><th>出生日期</th><th>年龄</th><th>籍贯</th><th>球衣英文</th><th>身份证</th><th>号码</th><th>手机号</th><th>照片状态</th></tr></thead>
+                <thead><tr><th>照片</th><th>姓名</th><th>职务</th><th>出生日期</th><th>年龄</th><th>籍贯</th><th>球衣英文</th><th>{{ identityColumnLabel(team) }}</th><th>号码</th><th>手机号</th><th>照片状态</th></tr></thead>
                 <tbody>
                   <tr v-for="(person, personIndex) in team.staff" :key="`${team.clientKey}-staff-${personIndex}`" :class="{ invalid: person.error }">
                     <td><PersonPhotoUpload :person="person" @change="file => replacePersonPhoto(file, person)" /></td>
@@ -89,19 +96,37 @@
                     </td>
                     <td>{{ person.birthDate || '待补充' }}</td>
                     <td>{{ ageFromBirth(person.birthDate) }}</td>
-                    <td><span class="native-place" :title="person.nativePlace">{{ person.nativePlace || '地区码待核验' }}</span></td>
+                    <td><span class="native-place" :title="person.nativePlace || person.nationality">{{ placeOrNationalityLabel(person) }}</span></td>
                     <td><el-input v-if="person.jerseyNumber" v-model="person.jerseyName" maxlength="32" /><span v-else>—</span></td>
-                    <td><span class="identity-mask">{{ maskRegistrationIdentity(person.identityNumber) }}</span></td>
+                    <td>
+                      <div v-if="!person.identityEditing" class="identity-cell">
+                        <el-tag v-if="person.documentType" size="small" effect="plain" class="identity-type-tag">{{ documentTypeLabel(person.documentType) }}</el-tag>
+                        <span class="identity-mask">{{ displayRegistrationIdentity(person) }}</span>
+                        <el-tag v-if="person.ignoredIdentityIssue" type="info" effect="plain" size="small">已忽略</el-tag>
+                        <el-button link type="primary" size="small" @click="startIdentityEdit(person)">修改</el-button>
+                        <el-button v-if="canIgnoreIdentity(person)" link type="warning" size="small" @click="ignoreIdentityIssue(person, team)">忽略</el-button>
+                      </div>
+                      <div v-else class="identity-cell">
+                        <el-input v-model="person.identityDraft" maxlength="18" :placeholder="identityEditPlaceholder(person)" @keyup.enter="applyIdentityEdit(person, team)" />
+                        <el-button link type="primary" size="small" @click="applyIdentityEdit(person, team)">确认</el-button>
+                        <el-button link size="small" @click="cancelIdentityEdit(person)">取消</el-button>
+                      </div>
+                    </td>
                     <td><el-input v-if="person.jerseyNumber" v-model="person.jerseyNumber" maxlength="3" inputmode="numeric" /><span v-else>—</span></td>
                     <td>{{ person.phone ? maskPhone(person.phone) : '—' }}</td>
                     <td>
-                      <el-tag v-if="person.error" type="danger" size="small">{{ person.error }}</el-tag>
-                      <el-tag v-else-if="person.photoProcessingStatus === 'processing'" type="warning" size="small">{{ person.photoProgressText || '处理中' }}</el-tag>
-                      <el-tag v-else-if="person.photoProcessingStatus === 'processed'" type="success" effect="plain" size="small">已处理</el-tag>
-                      <el-tag v-else-if="person.photoProcessingStatus === 'fallback_original'" type="warning" effect="plain" size="small">已保留原图</el-tag>
-                      <el-tag v-else-if="person.photoProcessingStatus === 'failed'" type="danger" size="small">处理失败</el-tag>
-                      <el-tag v-else-if="person.photoFile" type="info" effect="plain" size="small">待处理</el-tag>
-                      <el-tag v-else type="warning" effect="plain" size="small">缺照片</el-tag>
+                      <div class="issue-cell">
+                        <el-tag v-if="person.error" type="danger" size="small">{{ person.error }}</el-tag>
+                        <el-tag v-else-if="person.photoProcessingStatus === 'processing'" type="warning" size="small">{{ person.photoProgressText || '处理中' }}</el-tag>
+                        <el-tag v-else-if="person.photoProcessingStatus === 'processed'" type="success" effect="plain" size="small">已处理</el-tag>
+                        <el-tag v-else-if="person.photoProcessingStatus === 'fallback_original'" type="warning" effect="plain" size="small">已保留原图</el-tag>
+                        <el-tag v-else-if="person.photoProcessingStatus === 'failed'" type="danger" size="small">处理失败</el-tag>
+                        <el-tag v-else-if="person.photoIsDefault || person.photoProcessingStatus === 'default_avatar'" type="info" effect="plain" size="small">默认头像</el-tag>
+                        <el-tag v-else-if="person.photoFile" type="info" effect="plain" size="small">待处理</el-tag>
+                        <el-tag v-else-if="person.photoIgnored || person.photoProcessingStatus === 'ignored_missing'" type="info" effect="plain" size="small">缺照片（已忽略）</el-tag>
+                        <el-tag v-else type="warning" effect="plain" size="small">缺照片</el-tag>
+                        <el-button v-if="canIgnorePhoto(person)" link type="warning" size="small" @click="ignorePhotoIssue(person, team)">忽略</el-button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -110,65 +135,136 @@
           </section>
 
           <section class="player-section">
-            <header><strong>球员资料</strong><span>出生日期、年龄、籍贯和球衣简称已自动生成。</span></header>
-            <div class="player-table-wrap">
-              <table>
-                <thead><tr><th>照片</th><th>姓名</th><th>出生日期</th><th>年龄</th><th>籍贯</th><th>球衣英文</th><th>身份证</th><th>号码</th><th>位置</th><th>照片状态</th></tr></thead>
-                <tbody>
-                  <tr v-for="(player, playerIndex) in team.players" :key="`${team.clientKey}-player-${playerIndex}`" :class="{ invalid: player.error }">
-                    <td><PersonPhotoUpload :person="player" @change="file => replacePersonPhoto(file, player)" /></td>
-                    <td><el-input v-model="player.name" maxlength="30" /><el-tag v-if="player.dualRoleType" type="warning" effect="plain" size="small" class="dual-role-tag">{{ player.dualRolePlayerLabel || '兼工作人员' }}</el-tag></td>
-                    <td>{{ player.birthDate || '待补充' }}</td>
-                    <td>{{ ageFromBirth(player.birthDate) }}</td>
-                    <td><span class="native-place" :title="player.nativePlace">{{ player.nativePlace || '地区码待核验' }}</span></td>
-                    <td><el-input v-model="player.jerseyName" maxlength="32" /></td>
-                    <td><span class="identity-mask">{{ maskRegistrationIdentity(player.identityNumber) }}</span></td>
-                    <td><el-input v-model="player.jerseyNumber" maxlength="3" inputmode="numeric" /></td><td><el-select v-model="player.position" clearable><el-option v-for="position in ['门将','后卫','中场','前锋','其他']" :key="position" :label="position" :value="position" /></el-select></td>
-                    <td>
-                      <el-tag v-if="player.error" type="danger" size="small">{{ player.error }}</el-tag>
-                      <el-tag v-else-if="player.photoProcessingStatus === 'processing'" type="warning" size="small">{{ player.photoProgressText || '处理中' }}</el-tag>
-                      <el-tag v-else-if="player.photoProcessingStatus === 'processed'" type="success" effect="plain" size="small">已处理</el-tag>
-                      <el-tag v-else-if="player.photoProcessingStatus === 'fallback_original'" type="warning" effect="plain" size="small">已保留原图</el-tag>
-                      <el-tag v-else-if="player.photoProcessingStatus === 'failed'" type="danger" size="small">处理失败</el-tag>
-                      <el-tag v-else-if="player.photoFile" type="info" effect="plain" size="small">待处理</el-tag>
-                      <el-tag v-else type="warning" effect="plain" size="small">缺照片</el-tag>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <header>
+              <strong>球员资料</strong>
+
+            </header>
+            <div class="table-scroll-shell">
+              <button type="button" class="scroll-hand left" title="向左滑动" aria-label="向左滑动" @click="scrollPlayerTable(team, -280)">
+                <span class="scroll-hand-icon" aria-hidden="true"><i class="hand-left"></i></span>
+              </button>
+              <div
+                class="player-table-wrap"
+                :ref="el => setPlayerTableRef(team, el)"
+                @pointerdown="startTableDrag($event, team)"
+                @pointermove="moveTableDrag"
+                @pointerup="endTableDrag"
+                @pointercancel="endTableDrag"
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th>照片</th><th>姓名</th><th>出生日期</th><th>年龄</th><th>籍贯</th><th>球衣英文</th><th>{{ identityColumnLabel(team) }}</th><th>号码</th><th>位置</th><th>照片状态</th><th class="col-actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(player, playerIndex) in team.players" :key="`${team.clientKey}-player-${playerIndex}`" :class="{ invalid: player.error, editing: player.rowEditing }">
+                      <td><PersonPhotoUpload :person="player" @change="file => replacePersonPhoto(file, player)" /></td>
+                      <td><el-input v-model="player.name" maxlength="30" /><el-tag v-if="player.dualRoleType" type="warning" effect="plain" size="small" class="dual-role-tag">{{ player.dualRolePlayerLabel || '兼工作人员' }}</el-tag></td>
+                      <td>
+                        <el-input v-if="player.rowEditing" v-model="player.birthDate" maxlength="10" placeholder="YYYY-MM-DD" />
+                        <template v-else>{{ player.birthDate || '待补充' }}</template>
+                      </td>
+                      <td>{{ ageFromBirth(player.birthDate) }}</td>
+                      <td>
+                        <el-input v-if="player.rowEditing" v-model="player.nativePlace" maxlength="40" placeholder="籍贯/国籍" />
+                        <span v-else class="native-place" :title="player.nativePlace || player.nationality">{{ placeOrNationalityLabel(player) }}</span>
+                      </td>
+                      <td><el-input v-model="player.jerseyName" maxlength="32" /></td>
+                      <td>
+                        <div v-if="!player.identityEditing" class="identity-cell">
+                          <el-tag v-if="player.documentType" size="small" effect="plain" class="identity-type-tag">{{ documentTypeLabel(player.documentType) }}</el-tag>
+                          <span class="identity-mask">{{ displayRegistrationIdentity(player) }}</span>
+                          <el-tag v-if="player.ignoredIdentityIssue" type="info" effect="plain" size="small">已忽略</el-tag>
+                          <el-button v-if="canIgnoreIdentity(player)" link type="warning" size="small" @click="ignoreIdentityIssue(player, team)">忽略</el-button>
+                        </div>
+                        <div v-else class="identity-cell">
+                          <el-input v-model="player.identityDraft" maxlength="18" :placeholder="identityEditPlaceholder(player)" @keyup.enter="applyIdentityEdit(player, team)" />
+                          <el-button link type="primary" size="small" @click="applyIdentityEdit(player, team)">确认</el-button>
+                          <el-button link size="small" @click="cancelIdentityEdit(player)">取消</el-button>
+                        </div>
+                      </td>
+                      <td><el-input v-model="player.jerseyNumber" maxlength="3" inputmode="numeric" /></td>
+                      <td><el-select v-model="player.position" clearable><el-option v-for="position in ['门将','后卫','中场','前锋','其他']" :key="position" :label="position" :value="position" /></el-select></td>
+                      <td>
+                        <div class="issue-cell">
+                          <el-tag v-if="player.error" type="danger" size="small">{{ player.error }}</el-tag>
+                          <el-tag v-else-if="player.photoProcessingStatus === 'processing'" type="warning" size="small">{{ player.photoProgressText || '处理中' }}</el-tag>
+                          <el-tag v-else-if="player.photoProcessingStatus === 'processed'" type="success" effect="plain" size="small">已处理</el-tag>
+                          <el-tag v-else-if="player.photoProcessingStatus === 'fallback_original'" type="warning" effect="plain" size="small">已保留原图</el-tag>
+                          <el-tag v-else-if="player.photoProcessingStatus === 'failed'" type="danger" size="small">处理失败</el-tag>
+                          <el-tag v-else-if="player.photoIsDefault || player.photoProcessingStatus === 'default_avatar'" type="info" effect="plain" size="small">默认头像</el-tag>
+                          <el-tag v-else-if="player.photoFile" type="info" effect="plain" size="small">待处理</el-tag>
+                          <el-tag v-else-if="player.photoIgnored || player.photoProcessingStatus === 'ignored_missing'" type="info" effect="plain" size="small">缺照片（已忽略）</el-tag>
+                          <el-tag v-else type="warning" effect="plain" size="small">缺照片</el-tag>
+                          <el-button v-if="canIgnorePhoto(player)" link type="warning" size="small" @click="ignorePhotoIssue(player, team)">忽略</el-button>
+                        </div>
+                      </td>
+                      <td class="col-actions">
+                        <div class="row-actions">
+                          <el-button link type="primary" size="small" :disabled="importing || team.processing" @click="openPlayerEditor(player,team)">编辑</el-button>
+                          <el-button link type="danger" size="small" :disabled="importing" @click="removePlayer(team, playerIndex)">删除</el-button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <button type="button" class="scroll-hand right" title="向右滑动" aria-label="向右滑动" @click="scrollPlayerTable(team, 280)">
+                <span class="scroll-hand-icon" aria-hidden="true"><i class="hand-right"></i></span>
+              </button>
             </div>
           </section>
 
-          <div v-if="team.errors.length || team.warnings.length || team.importError" class="team-messages">
+          <div v-if="team.errors.length || team.warnings.length || team.importError || teamHasIgnorableIssues(team)" class="team-messages">
             <p v-if="team.importError" class="error">{{ team.importError }}</p>
-            <p v-for="item in currentTeamErrors(team)" :key="`error-${item}`" class="error">{{ item }}</p>
+
             <p v-for="item in team.warnings" :key="`warning-${item}`">{{ item }}</p>
+            <div v-if="teamHasIgnorableIssues(team)" class="ignore-all-row">
+              <span>报名表无照片时自动使用默认头像；证件异常可先忽略，创建后在平台补资料。</span>
+              <el-button size="small" type="warning" plain @click="ignoreAllTeamIssues(team)">忽略全部异常</el-button>
+            </div>
           </div>
         </div>
       </article>
     </div>
 
+    <RegistrationPlayerEditor v-model="playerEditorVisible" :player="editingPlayer" :team="editingTeam" @save="savePlayerEdit" />
     <footer class="import-footer">
-      <span>将创建 {{ validTeamCount }} 支球队、{{ playerCount }} 名球员；认领前不会自动合并同名球队。</span>
+      <div class="import-footer-status">
+        <span v-if="importBlockers.length" class="blocking-reason">{{ importBlockers[0] }}</span>
+        <el-button v-if="importBlockers.length" link type="primary" @click="showImportIssues">查看{{ importBlockers.length }}项问题</el-button>
+        <span v-else>共 {{ teams.length }} 支球队、{{ playerCount }} 名球员</span>
+      </div>
       <div>
         <el-button :disabled="importing" @click="$emit('cancel')">取消</el-button>
-        <el-button type="success" :loading="importing" :disabled="!canImport" @click="confirmImport">{{ importing ? currentProgress : `创建 ${validTeamCount} 支球队` }}</el-button>
+        <el-button type="success" :loading="importing" :disabled="!canImport" @click="confirmImport">{{ importing ? currentProgress : `创建 ${teams.length} 支球队` }}</el-button>
       </div>
     </footer>
   </section>
 </template>
 
 <script setup>
+import RegistrationPlayerEditor from './RegistrationPlayerEditor.vue'
+import { registrationImportIssues, registrationIdentityIssue, ignoredIdentityFields } from '../../utils/registrationImportValidation.js'
 import { computed, defineComponent, h, onBeforeUnmount, ref } from 'vue'
 import { ElButton, ElIcon, ElMessage, ElMessageBox, ElUpload } from 'element-plus'
-import { ArrowDown, ArrowRight, Delete, DocumentAdd, Download, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Delete, DocumentAdd, Download, UploadFilled, User } from '@element-plus/icons-vue'
 import { callFunction, uploadLargeFileViaCloud } from '../../utils/cloud'
 import { removeWhiteBackground } from '../../utils/whiteBgRemover'
 import { findVisiblePixelBounds } from '../../utils/imageBounds'
-import { maskRegistrationIdentity, parseTeamRegistrationDocx } from '../../utils/teamRegistrationDocx'
+import { photoResult } from '../../utils/registrationPhotoReuse.js'
+import {
+  displayRegistrationIdentity,
+  parseRegistrationIdentity,
+  parseTeamRegistrationDocx,
+  registrationDocumentTypeLabel,
+  registrationIdentityColumnLabel
+} from '../../utils/teamRegistrationDocx'
 import { REGISTRATION_FIELDS, REGISTRATION_PRESETS, createRegistrationTemplate, registrationTemplatePlayerLimit } from '../../utils/registrationTemplate'
 import { isDemoMode } from '../../utils/demoMode'
 import { divisionParticipantType } from '../../utils/divisionBasics'
+import defaultPlayerAvatarUrl from '../../assets/default-player-avatar.png'
 
 const props = defineProps({
   tournamentId: { type: String, required: true },
@@ -180,6 +276,20 @@ const props = defineProps({
 const emit = defineEmits(['cancel', 'success'])
 
 const teams = ref([])
+const playerEditorVisible=ref(false),editingPlayer=ref(null),editingTeam=ref(null)
+function openPlayerEditor(player,team){if(importing.value || team.processing)return;editingPlayer.value=player;editingTeam.value=team;playerEditorVisible.value=true}
+function savePlayerEdit(profile,photoFile){
+  const player=editingPlayer.value,team=editingTeam.value
+  if(!player || !team?.players.includes(player))return
+  const oldName=player.name
+  Object.assign(player,profile,{identityNumberPrefix:'',identityEditing:false,rowEditing:false,identityIncomplete:!profile.identityNumber,error:'',ignoredIdentityIssue:false})
+  if(photoFile)replacePersonPhoto({raw:photoFile},player)
+  const markers=[`「${oldName}」`,`“${oldName}”`]
+  const keep=item=>!markers.some(marker=>String(item).includes(marker))
+  team.errors=(team.errors || []).filter(keep)
+  team.warnings=(team.warnings || []).filter(keep)
+  ElMessage.success('球员资料已更新')
+}
 const templateDialogVisible=ref(false)
 const templatePreset=ref(divisionParticipantType(props.division))
 const templateFields=ref([...REGISTRATION_PRESETS[templatePreset.value]])
@@ -189,13 +299,19 @@ const parsingKeys = ref(new Set())
 const importing = ref(false)
 const currentProgress = ref('正在创建')
 const objectUrls = new Set()
+let defaultPlayerAvatarFilePromise = null
+const playerTableRefs = new Map()
+const tableDragState = { active: false, teamKey: '', startX: 0, scrollLeft: 0, moved: false }
 const kitPreviewSets = [{ key:'primary', label:'主比赛服 A' }, { key:'secondary', label:'备用比赛服 B' }]
 const kitPreviewEquipment = [{ key:'jersey', label:'球衣' }, { key:'shorts', label:'球裤' }, { key:'socks', label:'球袜' }]
 const parsingCount = computed(() => parsingKeys.value.size)
-const maxPlayers = computed(() => Number(props.division?.maxPlayersPerTeam || props.division?.maxPlayers || 35))
+// 与下载模板使用同一套取数顺序（rosterLimit → maxPlayersPerTeam → maxPlayers），
+// 避免组别规则上限（rosterLimit）改成 50 后仍按旧的 maxPlayersPerTeam 提示 30 人。
+const maxPlayers = computed(() => {
+  try { return registrationTemplatePlayerLimit(props.division) } catch { return 35 }
+})
 const templatePlayerLimit = computed(() => registrationTemplatePlayerLimit(props.division))
 const playerCount = computed(() => teams.value.reduce((sum, team) => sum + team.players.length, 0))
-const validTeamCount = computed(() => teams.value.filter(team => !teamHasErrors(team)).length)
 const canImport = computed(() => teams.value.length > 0 && teams.value.length <= props.availableSlots && teams.value.every(team => !teamHasErrors(team) && !team.processing) && !importing.value)
 
 const PersonPhotoUpload = defineComponent({
@@ -209,9 +325,9 @@ const PersonPhotoUpload = defineComponent({
       showFileList: false,
       onChange: file => childEmit('change', file)
     }, {
-      default: () => h('button', { type: 'button', class: 'person-photo-button' }, componentProps.person.previewUrl
+      default: () => h('button', { type: 'button', class: ['person-photo-button', { 'is-empty':!componentProps.person.previewUrl }], title:'上传照片', 'aria-label':`${componentProps.person.name || '人员'}上传照片` }, componentProps.person.previewUrl
         ? h('img', { src: componentProps.person.previewUrl, alt: '' })
-        : h('span', null, '上传'))
+        : h(ElIcon, { class:'photo-placeholder', 'aria-hidden':true }, { default:()=>h(User) }))
     })
   }
 })
@@ -227,6 +343,133 @@ function normalizePhone(value) {
 function maskPhone(value) {
   const phone = normalizePhone(value)
   return /^1[3-9]\d{9}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : '手机号待补充'
+}
+
+function documentTypeLabel(documentType) {
+  return registrationDocumentTypeLabel(documentType)
+}
+
+function identityColumnLabel(team) {
+  return registrationIdentityColumnLabel([...(team?.staff || []), ...(team?.players || [])])
+}
+
+function placeOrNationalityLabel(person) {
+  if (person?.documentType === 'passport') return person.nationality || '国籍待确认'
+  return person?.nativePlace || '地区码待核验'
+}
+
+function identityEditPlaceholder(person) {
+  if (person?.documentType === 'passport') return '护照号'
+  if (person?.documentType === 'resident_id') return '18 位身份证号'
+  return '身份证 18 位或护照号'
+}
+
+// 报名表证件号常被打码，解析只能拿到前段。主办方可补全完整身份证或护照号；
+// 身份证可继续推导出生日期/性别/籍贯，护照只保存证件类型与号码，国籍仍待确认。
+function setPlayerTableRef(team, el) {
+  const key = team?.clientKey
+  if (!key) return
+  if (el) playerTableRefs.set(key, el)
+  else playerTableRefs.delete(key)
+}
+
+function scrollPlayerTable(team, delta) {
+  const el = playerTableRefs.get(team?.clientKey)
+  if (!el) return
+  el.scrollBy({ left: delta, behavior: 'smooth' })
+}
+
+function startTableDrag(event, team) {
+  if (event.button != null && event.button !== 0) return
+  if (event.target?.closest?.('input,textarea,button,select,a,.el-input,.el-select,.el-button,.el-upload,.row-actions')) return
+  const el = playerTableRefs.get(team?.clientKey)
+  if (!el) return
+  tableDragState.active = true
+  tableDragState.teamKey = team.clientKey
+  tableDragState.startX = event.clientX
+  tableDragState.scrollLeft = el.scrollLeft
+  tableDragState.moved = false
+  el.classList.add('is-dragging')
+  try { el.setPointerCapture?.(event.pointerId) } catch { /* ignore */ }
+}
+
+function moveTableDrag(event) {
+  if (!tableDragState.active) return
+  const el = playerTableRefs.get(tableDragState.teamKey)
+  if (!el) return
+  const delta = event.clientX - tableDragState.startX
+  if (Math.abs(delta) > 3) tableDragState.moved = true
+  el.scrollLeft = tableDragState.scrollLeft - delta
+  event.preventDefault()
+}
+
+function endTableDrag(event) {
+  if (!tableDragState.active) return
+  const el = playerTableRefs.get(tableDragState.teamKey)
+  if (el) {
+    el.classList.remove('is-dragging')
+    try { el.releasePointerCapture?.(event.pointerId) } catch { /* ignore */ }
+  }
+  tableDragState.active = false
+  tableDragState.teamKey = ''
+}
+
+async function removePlayer(team, playerIndex) {
+  const player = team.players[playerIndex]
+  if (!player) return
+  const name = String(player.name || '').trim() || `第 ${playerIndex + 1} 名球员`
+  try {
+    await ElMessageBox.confirm(
+      `确定从本次导入中删除「${name}」？创建球队后可由主教练分享，让球员自行加入。`,
+      '删除球员',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch { return }
+  if (!player.photoIsDefault) revokePreview(player.previewUrl)
+  team.players.splice(playerIndex, 1)
+  const marker = `「${name}」`
+  team.errors = (team.errors || []).filter(item => !String(item).includes(marker))
+  team.warnings = (team.warnings || []).filter(item => !String(item).includes(marker))
+  ElMessage.success(`已删除「${name}」，可稍后由主教练邀请加入`)
+}
+
+function startIdentityEdit(person) {
+  person.identityEditing = true
+  person.identityDraft = String(person.identityNumber || person.identityNumberPrefix || '')
+}
+
+function cancelIdentityEdit(person) {
+  person.identityEditing = false
+  person.identityDraft = ''
+}
+
+function applyIdentityEdit(person, team) {
+  const raw = String(person.identityDraft || '').trim().toUpperCase()
+  const parsed = parseRegistrationIdentity(raw)
+  const completeResident = /^\d{17}[0-9X]$/.test(raw)
+  const completePassport = parsed.documentType === 'passport' && parsed.valid && !parsed.isPartial
+  if (!parsed.valid || (!completeResident && !completePassport)) {
+    return ElMessage.warning('请填写有效的 18 位身份证号或完整护照号')
+  }
+  const duplicated = [...team.staff, ...team.players].find(item => item !== person && String(item.identityNumber || '') === raw)
+  if (duplicated) return ElMessage.error(`该证件号与「${duplicated.name || '其他人员'}」重复`)
+  person.identityNumber = raw
+  person.identityNumberPrefix = ''
+  person.identityIncomplete = false
+  person.documentType = parsed.documentType || person.documentType || ''
+  if (parsed.documentType === 'passport') {
+    person.nationality = person.nationality || ''
+    if (!person.nativePlace) person.nativePlace = ''
+  } else {
+    if (parsed.nationalityDefault) person.nationality = parsed.nationalityDefault
+    if (parsed.birthDate) person.birthDate = parsed.birthDate
+    if (parsed.gender) person.gender = parsed.gender
+    if (parsed.nativePlace && parsed.nativePlace !== '待核验') person.nativePlace = parsed.nativePlace
+  }
+  person.error = ''
+  person.identityEditing = false
+  person.identityDraft = ''
+  ElMessage.success(`${person.name || '该人员'}${documentTypeLabel(person.documentType)}号已更新`)
 }
 
 function ageFromBirth(value) {
@@ -257,19 +500,146 @@ async function downloadTemplate() {
   }catch(error){ElMessage.error(error.message||'模板下载失败，请重试')}finally{downloadingTemplate.value=false}
 }
 
-function currentTeamErrors(team) {
-  const errors = [...(team.errors || [])]
-  if (!String(team.teamName || '').trim()) errors.push('请填写球队名称')
-  if (!String(team.contactName || '').trim()) errors.push('请填写领队姓名')
-  if (!/^1[3-9]\d{9}$/.test(normalizePhone(team.contactPhone))) errors.push('请填写正确的领队手机号')
-  if (team.players.length > maxPlayers.value) errors.push(`当前组别每队最多 ${maxPlayers.value} 名球员`)
-  const coachPhone = normalizePhone(headCoach(team).phone)
-  if (coachPhone && !/^1[3-9]\d{9}$/.test(coachPhone)) errors.push('主教练手机号格式不正确')
-  return Array.from(new Set(errors))
+function currentTeamIssues(team){return registrationImportIssues(team,maxPlayers.value)}
+function currentTeamErrors(team){return currentTeamIssues(team).map(issue=>issue.message)}
+function showImportIssues(){
+  const team=teams.value.find(team=>teamHasErrors(team)) || teams.value[0]
+  if(team)team.expanded=true
+  requestAnimationFrame(()=>document.querySelector('.import-team.invalid, .import-team')?.scrollIntoView({behavior:'smooth',block:'start'}))
+}
+const importBlockers=computed(()=>{
+  const messages=teams.value.flatMap(team=>currentTeamErrors(team).map(message=>`${team.teamName || '未命名球队'}：${message}`))
+  if(teams.value.length>props.availableSlots)messages.unshift(`当前组别仅剩${props.availableSlots}个球队名额，已选择${teams.value.length}支球队`)
+  for(const team of teams.value)if(team.processing)messages.unshift(`${team.teamName || '球队'}：${team.progressText || '资料处理中，请稍候'}`)
+  if(parsingCount.value)messages.unshift('报名表正在解析，请稍候')
+  return messages
+})
+function hasMissingPhoto(person) {
+  if (person?.photoIsDefault || person?.photoProcessingStatus === 'default_avatar') return false
+  return !person?.photoFile && !person?.photoFileId && person?.photoProcessingStatus !== 'ignored_missing' && !person?.photoIgnored
+}
+
+async function loadDefaultPlayerAvatarFile() {
+  if (!defaultPlayerAvatarFilePromise) {
+    defaultPlayerAvatarFilePromise = fetch(defaultPlayerAvatarUrl)
+      .then(async response => {
+        if (!response.ok) throw new Error('默认头像加载失败')
+        const blob = await response.blob()
+        return new File([blob], 'default-player-avatar.png', { type: blob.type || 'image/png', lastModified: Date.now() })
+      })
+      .catch(error => {
+        defaultPlayerAvatarFilePromise = null
+        throw error
+      })
+  }
+  return defaultPlayerAvatarFilePromise
+}
+
+async function applyDefaultAvatarIfMissing(person, team) {
+  if (!person || person.photoFile || person.photoFileId || person.photoIgnored || person.photoProcessingStatus === 'ignored_missing') return false
+  const file = await loadDefaultPlayerAvatarFile()
+  person.photoFile = file
+  person.photoIsDefault = true
+  person.photoProcessingStatus = 'default_avatar'
+  person.previewUrl = defaultPlayerAvatarUrl
+  person.photoProgressText = ''
+  const name = String(person.name || '').trim()
+  if (name) {
+    const marker = `「${name}」未找到照片`
+    team.warnings = (team.warnings || []).filter(item => item !== marker)
+  }
+  return true
+}
+
+function canIgnoreIdentity(person) {
+  if (!person || person.ignoredIdentityIssue) return false
+  // 身份证/护照通用：格式错误、打码不全、未填写都可忽略，创建后平台补。
+  if (person.error || registrationIdentityIssue(person)) return true
+  if (person.identityIncomplete) return true
+  if (!person.identityNumber) return true
+  return false
+}
+
+function canIgnorePhoto(person) {
+  return Boolean(person?.photoProcessingStatus === 'failed' || hasMissingPhoto(person))
+}
+
+function canIgnorePerson(person) {
+  return canIgnoreIdentity(person) || canIgnorePhoto(person)
+}
+
+function teamHasIgnorableIssues(team) {
+  return [...(team?.staff || []), ...(team?.players || [])].some(canIgnorePerson)
+}
+
+function scrubPersonMessages(team, person, kinds = ['identity', 'photo']) {
+  const name = String(person?.name || '').trim()
+  if (!name) return
+  const marker = `「${name}」`
+  const identityHint = /证件|身份证|护照|出生日期/
+  const photoHint = /照片|人像/
+  const keep = item => {
+    const text = String(item)
+    if (!text.includes(marker)) return true
+    if (kinds.includes('identity') && identityHint.test(text)) return false
+    if (kinds.includes('photo') && photoHint.test(text)) return false
+    if (kinds.includes('identity') && kinds.includes('photo')) return false
+    return true
+  }
+  team.errors = (team.errors || []).filter(keep)
+  team.warnings = (team.warnings || []).filter(keep)
+}
+
+// 主办方可忽略证件（身份证/护照）与缺照片等解析异常，创建后走平台补资料；
+// 队名/领队手机等建队必填项仍不可忽略。
+function ignoreIdentityIssue(person, team) {
+  if (!canIgnoreIdentity(person)) return
+  if(currentTeamIssues(team).some(issue=>issue.code==='duplicate' && issue.people.includes(person))){
+    return ElMessage.warning('证件号重复，请修改或删除对应人员')
+  }
+  person.ignoredIdentityIssue = true
+  const parsed = parseRegistrationIdentity(person.identityNumber || person.identityNumberPrefix || '')
+  if (!parsed.valid || person.error || registrationIdentityIssue(person)) {
+    const ignored=ignoredIdentityFields(person)
+    person.identityNumber = ''
+    person.birthDate=ignored.birthDate
+    person.gender=ignored.gender
+    person.identityNumberPrefix = person.identityNumberPrefix || ''
+  } else if (parsed.isPartial) {
+    person.identityNumber = ''
+    person.identityNumberPrefix = parsed.identityNumberPrefix || person.identityNumberPrefix || ''
+    person.documentType = parsed.documentType || person.documentType || ''
+  }
+  person.identityIncomplete = true
+  person.eligibilityReviewRequired = true
+  person.error = ''
+  scrubPersonMessages(team, person, ['identity'])
+}
+
+function ignorePhotoIssue(person, team) {
+  if (!canIgnorePhoto(person)) return
+  person.photoIgnored = true
+  person.photoProcessingStatus = 'ignored_missing'
+  person.eligibilityReviewRequired = true
+  scrubPersonMessages(team, person, ['photo'])
+}
+
+function ignorePersonIssues(person, team) {
+  if (canIgnoreIdentity(person)) ignoreIdentityIssue(person, team)
+  if (canIgnorePhoto(person)) ignorePhotoIssue(person, team)
+}
+
+function ignoreAllTeamIssues(team) {
+  const people = [...(team.staff || []), ...(team.players || [])].filter(canIgnorePerson)
+  if (!people.length) return ElMessage.info('当前没有可忽略的异常')
+  people.forEach(person => ignorePersonIssues(person, team))
+  const remaining=currentTeamErrors(team)
+  if(remaining.length)ElMessage.warning(`已处理可忽略项，仍有${remaining.length}项需修正：${remaining[0]}`)
+  else ElMessage.success('可忽略项已处理，可以创建球队')
 }
 
 function teamHasErrors(team) {
-  return currentTeamErrors(team).length > 0 || team.players.some(player => player.error || !String(player.name || '').trim())
+  return currentTeamErrors(team).length > 0
 }
 
 function hasImportedKitColors(team) {
@@ -289,6 +659,9 @@ function syncLeaderPhone(team) {
   team.contactPhone = normalizePhone(team.contactPhone)
   const leader = team.staff.find(person => person.roleType === 'team_leader')
   if (leader) leader.phone = team.contactPhone
+  if (/^1[3-9]\d{9}$/.test(team.contactPhone)) {
+    team.errors = (team.errors || []).filter(item => !/领队手机|有效的领队手机/.test(String(item || '')))
+  }
 }
 
 function createPreview(file) {
@@ -307,6 +680,9 @@ function revokePreview(url) {
 async function attachPreviews(team) {
   team.logoPreviewUrl = createPreview(team.logoFile)
   ;[...team.staff, ...team.players].forEach(person => { person.previewUrl = createPreview(person.photoFile) })
+  for (const person of [...team.staff, ...team.players]) {
+    await applyDefaultAvatarIfMissing(person, team)
+  }
   if (team.logoFile) {
     try {
       team.preparedLogoFile = await prepareLogo(team.logoFile)
@@ -371,8 +747,10 @@ async function replaceLogo(file, team) {
 function replacePersonPhoto(file, person) {
   const rawFile = file.raw || file
   if (!rawFile.type?.startsWith('image/') || rawFile.size > 10 * 1024 * 1024) return ElMessage.error('照片须为 10MB 以内的图片')
-  revokePreview(person.previewUrl)
+  if (!person.photoIsDefault) revokePreview(person.previewUrl)
   person.photoFile = rawFile
+  person.photoIsDefault = false
+  person.photoIgnored = false
   person.previewUrl = createPreview(rawFile)
   person.photoFileId = ''
   person.photoProcessingStatus = 'pending'
@@ -461,7 +839,7 @@ async function prepareLogo(file) {
 async function preparePortrait(file) {
   if(isDemoMode())return fitImage(file,300,388,0.04)
   const auditFile = await fitImage(file, 250, 250, 0, '#fff', 'image/jpeg')
-  const result = await callFunction('baiduRemoveBg', { action: 'removeBackground', imageBase64: await blobToRawBase64(auditFile) })
+  const result = await callFunction('baiduRemoveBg', { action: 'removeBackground', tournamentId: props.tournamentId, imageBase64: await blobToRawBase64(auditFile) })
   if (!result?.success || !result.data) throw new Error(result?.message || '人像分割失败')
   if (result.personNum != null && Number(result.personNum) !== 1) throw new Error(`检测到 ${Number(result.personNum) || 0} 个人像`)
   const segmented = dataUrlToFile(`data:image/png;base64,${String(result.data).replace(/^data:image\/png;base64,/, '')}`, `portrait-${Date.now()}.png`)
@@ -516,9 +894,12 @@ async function processTeamFiles(team, teamIndex) {
 
     const people = [...team.staff, ...team.players]
     const pendingPeople = people.filter(person => person.photoFile && !person.photoFileId)
+    const photoResults=new Map(people.filter(person=>person.photoFile&&person.photoFileId).map(person=>[person.photoFile,photoResult(person)]))
     let processedPeople = 0
     for (let index = 0; index < people.length; index += 1) {
       const person = people[index]
+      const reused=photoResults.get(person.photoFile)
+      if(!person.photoFileId&&reused)Object.assign(person,reused)
       if (person.roleType === 'player' && person.dualRoleType && !person.photoFileId) {
         const linkedStaff = team.staff.find(item => item.identityNumber && item.identityNumber === person.identityNumber)
         if (linkedStaff?.photoFileId) {
@@ -529,6 +910,23 @@ async function processTeamFiles(team, teamIndex) {
       if (!person.photoFile || person.photoFileId) continue
       processedPeople += 1
       const personProgress = `${processedPeople}/${pendingPeople.length}`
+      if (person.photoIsDefault) {
+        person.photoProcessingStatus = 'processing'
+        person.photoProgressText = '上传默认头像'
+        updateProgress(`上传默认头像 ${personProgress} · ${person.name || '未命名人员'}`)
+        person.photoFileId = await uploadFile(
+          `player-photos/imports/${props.tournamentId}/${teamKey}-${index + 1}-default.png`,
+          person.photoFile,
+          (received, total) => {
+            person.photoProgressText = `上传 ${Math.round(received / total * 100)}%`
+            updateProgress(`上传默认头像 ${personProgress} · ${person.name || '未命名人员'} ${person.photoProgressText}`)
+          }
+        )
+        person.photoProcessingStatus = 'default_avatar'
+        person.photoProgressText = ''
+        if (person.photoFileId) photoResults.set(person.photoFile, photoResult(person))
+        continue
+      }
       person.photoProcessingStatus = 'processing'
       person.photoProgressText = '分割中'
       updateProgress(`处理人像 ${personProgress} · ${person.name || '未命名人员'}`)
@@ -567,6 +965,7 @@ async function processTeamFiles(team, teamIndex) {
           throw fallbackError
         }
       }
+      if(person.photoFileId)photoResults.set(person.photoFile,photoResult(person))
     }
     updateProgress('资料已就绪')
   } catch (error) {
@@ -596,6 +995,10 @@ function payloadForTeam(team) {
       name: String(person.name || '').trim(),
       phone: normalizePhone(person.phone),
       identityNumber: person.identityNumber,
+      documentType: person.documentType || '',
+      nationality: person.nationality || '',
+      identityIncomplete: Boolean(person.identityIncomplete || !person.identityNumber),
+      eligibilityReviewRequired: Boolean(person.eligibilityReviewRequired || person.ignoredIdentityIssue || person.photoIgnored || !person.identityNumber),
       position:person.position || '',
       jerseyNumber: String(person.jerseyNumber || '').replace(/\D/g, '').slice(0, 3),
       jerseyName: String(person.jerseyName || '').trim().toUpperCase().slice(0, 32),
@@ -608,7 +1011,14 @@ function payloadForTeam(team) {
     players: team.players.map(player => ({
       name: String(player.name || '').trim(),
       identityNumber: player.identityNumber,
+      documentType: player.documentType || '',
+      nationality: player.nationality || '',
+      identityIncomplete: Boolean(player.identityIncomplete || !player.identityNumber),
+      eligibilityReviewRequired: Boolean(player.eligibilityReviewRequired || player.ignoredIdentityIssue || player.photoIgnored || !player.identityNumber || !player.nationality),
       position:player.position || '',
+      strongFoot:player.strongFoot || '',
+      height:player.height ?? null,
+      weight:player.weight ?? null,
       jerseyNumber: String(player.jerseyNumber || '').replace(/\D/g, '').slice(0, 3),
       jerseyName: String(player.jerseyName || '').trim().toUpperCase().slice(0, 32),
       birthDate: player.birthDate,
@@ -622,7 +1032,7 @@ function payloadForTeam(team) {
 }
 
 async function confirmImport() {
-  if (!canImport.value) return ElMessage.warning('请先修正报名表中的必填项')
+  if (!canImport.value) {showImportIssues();return ElMessage.warning(importBlockers.value[0] || '请先选择报名表')}
   const existingNames = new Set(props.existingTeamNames.map(normalizeName))
   const duplicateNames = teams.value.map(team => team.teamName).filter(name => existingNames.has(normalizeName(name)))
   let confirmRisks = false
@@ -633,7 +1043,7 @@ async function confirmImport() {
     } catch { return }
   }
   try {
-    await ElMessageBox.confirm(`确认创建 ${teams.value.length} 支球队和 ${playerCount.value} 名球员？领队手机号已填写；补充主教练手机号后，二者均可通过认领邀请接管球队。`, '批量创建确认', { type: 'info', confirmButtonText: '开始创建', cancelButtonText: '取消' })
+    await ElMessageBox.confirm(`确认创建 ${teams.value.length} 支球队和 ${playerCount.value} 名球员？`, '批量创建确认', { type: 'info', confirmButtonText: '开始创建', cancelButtonText: '取消' })
   } catch { return }
 
   importing.value = true
@@ -643,33 +1053,47 @@ async function confirmImport() {
       await processTeamFiles(teams.value[index], index)
     }
     currentProgress.value = '创建球队和队员'
+    // 50 人名单创建会写多表，默认 60s 易超时；超时后后端可能已创建成功，重试会报「已经导入过」。
     const result = await callFunction('tournamentRegistrationFlow', {
       action: 'importTeamRegistrationBatch',
       tournamentId: props.tournamentId,
       divisionId: props.division?.id || props.division?._id,
       confirmRisks,
       teams: teams.value.map(payloadForTeam)
-    })
-    if (!result?.success) throw new Error(result?.message || '批量创建失败')
+    }, 300000)
+    if (!result?.success) throw Object.assign(new Error(result?.message || '批量创建失败'), { code: result?.code || '' })
 
     const imported = result.data?.teams || []
-    if(isDemoMode()){ElMessage.success(`已创建 ${imported.length} 支虚拟球队`);emit('success',{teams:imported,demo:true});return}
-    const inviteResults = []
-    for (let index = 0; index < imported.length; index += 1) {
-      const item = imported[index]
-      currentProgress.value = `生成认领邀请 ${index + 1}/${imported.length}`
-      try {
-        const code = await callFunction('tournamentRegistrationFlow', { action: 'generateTeamInviteCode', inviteId: item.inviteId, width: 300, envVersion: 'release' })
-        if (!code?.success) throw new Error(code?.message || '认领邀请生成失败')
-        inviteResults.push({ ...item, ...code.data, success: true })
-      } catch (error) {
-        inviteResults.push({ ...item, path: item.path, error: error.message || '认领邀请生成失败', success: false })
-      }
-    }
-    ElMessage.success({ message: `球队资料上传成功：已创建 ${imported.length} 支球队、${Number(result.data?.playerCount || 0)} 名球员，等待领队或主教练认领`, duration: 6000, showClose: true })
-    emit('success', { teams: imported, invitations: inviteResults, playerCount: Number(result.data?.playerCount || 0) })
+    const playerTotal = Number(result.data?.playerCount || 0)
+    ElMessage.success({
+      message: isDemoMode()
+        ? `已创建 ${imported.length} 支虚拟球队`
+        : `球队资料上传成功：已创建 ${imported.length} 支球队、${playerTotal} 名球员`,
+      duration: 6000,
+      showClose: true
+    })
+    // 先关上传弹层；认领码由父页面在关闭后继续生成，避免组件销毁中断。
+    teams.value = []
+    emit('success', {
+      teams: imported,
+      invitations: [],
+      playerCount: playerTotal,
+      demo: isDemoMode(),
+      needInvites: !isDemoMode() && imported.length > 0
+    })
+    emit('cancel')
   } catch (error) {
-    ElMessage.error({ message: error.message || '批量创建失败', duration: 8000, showClose: true })
+    const message = String(error?.message || '批量创建失败')
+    const alreadyImported = error?.code === 'IMPORT_SOURCE_ALREADY_USED' || /已经导入过|请勿重复创建/.test(message)
+    if (alreadyImported) {
+      // 常见于：创建已成功但前端超时/二次点击；报名表文件已落库，应关窗刷新而不是卡在上传页。
+      ElMessage.warning({ message: '该报名表已创建过球队，正在关闭并刷新列表', duration: 5000, showClose: true })
+      teams.value = []
+      emit('success', { teams: [], invitations: [], playerCount: 0, demo: false, needInvites: false, alreadyImported: true })
+      emit('cancel')
+      return
+    }
+    ElMessage.error({ message, duration: 8000, showClose: true })
   } finally {
     importing.value = false
     currentProgress.value = '正在创建'
@@ -683,6 +1107,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.import-blockers{margin-bottom:14px;padding:12px 14px;background:#fff4f2;color:#b33a32;font-size:13px}.import-blockers ul{margin:8px 0 0;padding-left:18px;max-height:180px;overflow:auto}.import-blockers li{line-height:26px}.import-blockers li .el-button{margin-left:10px}.import-footer .import-footer-status{display:flex;flex:1;min-width:0;align-items:center;gap:10px}.blocking-reason{color:#b33a32!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 .registration-importer{display:flex;flex-direction:column;gap:14px;min-height:440px}.import-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}.import-toolbar>div{display:flex;flex-direction:column;gap:4px}.import-toolbar strong{font-size:17px}.import-toolbar span,.import-footer>span{color:#6f7c73;font-size:12px}.import-empty{min-height:300px;display:grid;place-content:center;justify-items:center;gap:9px;color:#7d8981;border:1px dashed #cdd9d1;background:#fafcfa}.import-empty .el-icon{font-size:42px;color:#1c8a4d}.import-team-list{display:flex;flex-direction:column;gap:10px;max-height:58vh;overflow:auto;padding-right:4px}.import-team{border:1px solid #dfe7e1;background:#fff}.import-team.invalid{border-color:#e6b8b4}.import-team>header{display:grid;grid-template-columns:28px 54px minmax(0,1fr) auto auto;align-items:center;gap:10px;min-height:66px;padding:7px 12px}.expand-button{border:0;background:transparent;color:#536159;cursor:pointer}.team-logo-button,.person-photo-button{display:grid;place-items:center;overflow:hidden;border:1px dashed #b8c9bd;background:#f7faf8;color:#21814e;cursor:pointer}.team-logo-button{width:50px;height:50px}.team-logo-button img,.person-photo-button img{width:100%;height:100%;object-fit:contain}.team-logo-button span{font-size:10px}.team-heading{min-width:0;display:flex;flex-direction:column;gap:4px}.team-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.team-heading span{color:#7b8780;font-size:11px}.team-detail{padding:14px 16px 16px;border-top:1px solid #edf1ee;background:#fbfcfb}.team-fields{display:grid;grid-template-columns:1.2fr .8fr .8fr .9fr;gap:11px}.team-fields label{display:flex;min-width:0;flex-direction:column;gap:6px;color:#46554b;font-size:12px}.team-fields small{color:#849087;font-weight:400}.person-photo-button{width:36px;height:44px}.person-photo-button span{font-size:10px}.staff-section{margin-top:14px;padding-top:10px;border-top:1px solid #e7ece8}.staff-section>header,.player-section>header{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px}.staff-section>header strong,.player-section>header strong{font-size:13px}.staff-section>header span,.player-section>header span{color:#7a877f;font-size:11px}.player-section{margin-top:14px}.staff-table-wrap,.player-table-wrap{overflow:auto;border:1px solid #e1e7e3}.staff-table-wrap table,.player-table-wrap table{width:100%;border-collapse:collapse;table-layout:fixed}.staff-table-wrap th,.staff-table-wrap td,.player-table-wrap th,.player-table-wrap td{height:54px;padding:5px 10px;border-bottom:1px solid #edf1ee;text-align:left}.staff-table-wrap th,.player-table-wrap th{height:34px;color:#617068;background:#f5f8f6;font-size:11px}.staff-table-wrap tr:last-child td,.player-table-wrap tr:last-child td{border-bottom:0}.staff-table-wrap tr.invalid,.player-table-wrap tr.invalid{background:#fff7f6}.staff-table-wrap th:first-child,.staff-table-wrap td:first-child,.player-table-wrap th:first-child,.player-table-wrap td:first-child{width:52px}.staff-table-wrap th:last-child,.staff-table-wrap td:last-child,.player-table-wrap th:last-child,.player-table-wrap td:last-child{width:120px}.identity-mask{color:#526159;font-family:monospace;font-size:12px}.dual-role-tag{display:block;width:max-content;margin-top:4px}.team-messages{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:10px;padding:9px 11px;background:#fff8e9}.team-messages p{margin:0;color:#98601d;font-size:11px}.team-messages p.error{color:#c4453c}.import-footer{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-top:13px;border-top:1px solid #e4eae6}.import-footer>div{display:flex;gap:10px}@media(max-width:900px){.team-fields{grid-template-columns:1fr 1fr}.import-toolbar,.import-footer{align-items:flex-start;flex-direction:column}.import-footer>div{align-self:stretch}.import-footer :deep(.el-button){flex:1}}
 .registration-kit-preview{display:flex;align-items:center;gap:14px;margin-top:12px;padding:10px 12px;border-top:1px solid #e7ece8;border-bottom:1px solid #e7ece8}.registration-kit-preview>strong{flex:0 0 62px;font-size:13px}.registration-kit-preview>div{display:flex;align-items:center;gap:10px}.registration-kit-preview b{font-size:12px}.registration-kit-preview span{display:inline-flex;align-items:center;gap:5px;color:#66746b;font-size:11px}.registration-kit-preview i{width:13px;height:13px;border:1px solid #cbd5ce;border-radius:2px}
 .import-toolbar>.import-toolbar-actions{flex-direction:row;align-items:center;gap:10px}
@@ -730,4 +1156,29 @@ onBeforeUnmount(() => {
 .player-table-wrap th:nth-child(7),.player-table-wrap td:nth-child(7){width:170px}
 .player-table-wrap th:nth-child(8),.player-table-wrap td:nth-child(8){width:70px}
 .player-table-wrap th:nth-child(9),.player-table-wrap td:nth-child(9){width:120px}
+.person-photo-button.is-empty{border-style:solid;color:#96a69c;background:#f2f5f3}.photo-placeholder{font-size:24px}
+/* 身份证号默认只看脱敏结果，点「修改」后才出现输入框，避免整表铺满完整号码 */
+.identity-cell{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;min-width:0}
+.identity-cell .el-input{flex:1 0 100%;width:100%}
+.identity-cell .el-button{padding:0;font-size:11px}
+.identity-type-tag{margin-right:2px}
+.issue-cell{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+.ignore-all-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;color:#8a6d3b}
+.ignore-all-row span{font-size:12px}
+.table-scroll-shell{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) 36px;gap:6px;align-items:stretch}
+.scroll-hand{display:grid;place-items:center;width:36px;padding:0;border:1px solid #c9d6ce;border-radius:999px;background:#f4f8f5;color:#1f7a49;cursor:pointer;align-self:center;height:64px;box-shadow:0 1px 2px rgba(16,64,36,.08)}
+.scroll-hand:hover{background:#e7f4ec;border-color:#9fbfab}
+.scroll-hand-icon{display:grid;place-items:center;width:22px;height:22px}
+.hand-left,.hand-right{display:block;width:18px;height:18px;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M13 2a2 2 0 0 0-2 2v7H9.5A2.5 2.5 0 0 0 7 13.5V16a6 6 0 0 0 6 6h1.5A5.5 5.5 0 0 0 20 16.5V10a2 2 0 0 0-2-2h-.5V8a2 2 0 0 0-2-2h-.5V4a2 2 0 0 0-2-2Zm0 2h.5v10h2V10H18v6.5A3.5 3.5 0 0 1 14.5 20H13a4 4 0 0 1-4-4v-2.5A.5.5 0 0 1 9.5 13H13V4a.5.5 0 0 0-.5-.5-.5.5 0 0 0-.5.5v6H10V4a2 2 0 0 1 2-2Z'/%3E%3C/svg%3E") center/contain no-repeat;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M13 2a2 2 0 0 0-2 2v7H9.5A2.5 2.5 0 0 0 7 13.5V16a6 6 0 0 0 6 6h1.5A5.5 5.5 0 0 0 20 16.5V10a2 2 0 0 0-2-2h-.5V8a2 2 0 0 0-2-2h-.5V4a2 2 0 0 0-2-2Zm0 2h.5v10h2V10H18v6.5A3.5 3.5 0 0 1 14.5 20H13a4 4 0 0 1-4-4v-2.5A.5.5 0 0 1 9.5 13H13V4a.5.5 0 0 0-.5-.5-.5.5 0 0 0-.5.5v6H10V4a2 2 0 0 1 2-2Z'/%3E%3C/svg%3E") center/contain no-repeat}
+.hand-left{transform:scaleX(-1) rotate(-18deg)}
+.hand-right{transform:rotate(18deg)}
+.player-table-wrap{cursor:grab;touch-action:pan-y;overflow:auto;border:1px solid #e1e7e3;overscroll-behavior-x:contain}
+.player-table-wrap.is-dragging{cursor:grabbing;user-select:none}
+.player-table-wrap table{min-width:1280px}
+.player-table-wrap th.col-actions,.player-table-wrap td.col-actions{position:sticky;right:0;z-index:2;width:118px;min-width:118px;background:#f5f8f6;box-shadow:-6px 0 8px -8px rgba(20,48,32,.35);vertical-align:middle;text-align:center}
+.player-table-wrap td.col-actions{background:#fff}
+.player-table-wrap tr.invalid td.col-actions{background:#fff7f6}
+.player-table-wrap tr.editing td.col-actions{background:#f3faf5}
+.row-actions{display:inline-flex;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center;gap:10px;width:100%}
+.row-actions :deep(.el-button){margin:0;padding:0;height:auto;min-height:0;font-size:12px;line-height:1.2}
 </style>
