@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "我的主卡",
+  "usingComponents": {
+    "holo-card": "/components/holo-card/index",
+    "card-tabbar": "/components/card-tabbar/index"
+  }
+}

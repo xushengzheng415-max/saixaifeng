@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "卡册与签约",
+  "usingComponents": {
+    "card-tabbar": "/components/card-tabbar/index",
+    "sign-reveal": "/components/sign-reveal/index"
+  }
+}

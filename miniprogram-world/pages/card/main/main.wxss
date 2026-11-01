@@ -1,0 +1,234 @@
+.brand-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 26rpx;
+}
+
+.brand-name {
+  font-size: 34rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+  color: #f6d98b;
+}
+
+.brand-sub {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  letter-spacing: 2rpx;
+  color: #8b93a3;
+}
+
+.card-stage {
+  width: 100%;
+  max-width: 560rpx;
+  margin: 0 auto;
+}
+
+.identity-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 30rpx;
+  padding: 0 6rpx;
+}
+
+.identity-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-name {
+  font-size: 46rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  color: #ffffff;
+}
+
+.player-en {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  letter-spacing: 3rpx;
+  color: #8b93a3;
+}
+
+.identity-meta {
+  display: flex;
+  align-items: center;
+  padding-bottom: 6rpx;
+}
+
+.player-number {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #e4b04a;
+}
+
+.player-pos {
+  margin-left: 14rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  color: #dfe4ee;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
+}
+
+.stats-panel {
+  display: flex;
+  align-items: center;
+  margin-top: 26rpx;
+  padding: 26rpx 12rpx;
+}
+
+.stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-num {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #f6d98b;
+}
+
+.stat-label {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #8b93a3;
+}
+
+.stamps-panel {
+  margin-top: 24rpx;
+}
+
+.stamps {
+  display: flex;
+  margin-top: 22rpx;
+}
+
+.stamp {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16rpx 6rpx;
+  border-radius: 18rpx;
+  background: rgba(228, 176, 74, 0.07);
+  border: 1rpx solid rgba(228, 176, 74, 0.22);
+}
+
+.stamp.is-locked {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.stamp-icon {
+  font-size: 30rpx;
+  line-height: 1.2;
+}
+
+.stamp-name {
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: #cfd5e0;
+}
+
+.stamp.is-locked .stamp-name {
+  color: #6f7683;
+}
+
+.quick {
+  margin-top: 26rpx;
+}
+
+.quick-card {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 26rpx;
+  margin-bottom: 16rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(150deg, rgba(24, 29, 39, 0.94) 0%, rgba(13, 16, 23, 0.94) 100%);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+}
+
+.quick-icon {
+  width: 46rpx;
+  height: 46rpx;
+}
+
+.quick-text {
+  flex: 1;
+  min-width: 0;
+  margin-left: 20rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-title {
+  font-size: 29rpx;
+  font-weight: 600;
+  color: #f2f4f8;
+}
+
+.quick-sub {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #8b93a3;
+}
+
+.quick-arrow {
+  width: 30rpx;
+  height: 30rpx;
+  opacity: 0.6;
+}
+
+.portrait-note {
+  margin-top: 18rpx;
+  font-size: 22rpx;
+  color: #8b93a3;
+}
+
+.share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 30rpx;
+  height: 88rpx;
+  padding: 0;
+  border-radius: 44rpx;
+  color: #201603;
+  font-size: 29rpx;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+  background: linear-gradient(135deg, #f6d98b 0%, #e4b04a 55%, #c88f2c 100%);
+  box-shadow: 0 10rpx 26rpx rgba(228, 176, 74, 0.26);
+  line-height: 88rpx;
+}
+
+.share-btn::after {
+  border: none;
+}
+
+.share-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: 12rpx;
+  filter: brightness(0.25);
+}
+
+.share-text {
+  color: #201603;
+}
+
+.foot-note {
+  margin-top: 26rpx;
+  text-align: center;
+  font-size: 21rpx;
+  letter-spacing: 1rpx;
+  color: #6f7683;
+}

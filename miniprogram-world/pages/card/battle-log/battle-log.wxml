@@ -1,0 +1,31 @@
+<view class="wx-page log-page">
+  <view class="brand-row">
+    <view class="brand">
+      <text class="brand-name">战报</text>
+      <text class="brand-sub">新手场 · 最近 20 场</text>
+    </view>
+    <text class="tag">轻对战</text>
+  </view>
+
+  <view class="log-list" wx:if="{{!isEmpty}}">
+    <view class="log-card" wx:for="{{rows}}" wx:key="id">
+      <view class="log-left">
+        <view class="log-result {{item.resultClass}}">{{item.resultText}}</view>
+        <text class="log-score">{{item.scoreText}}</text>
+      </view>
+      <view class="log-mid">
+        <text class="log-opponent">{{item.opponentText}}</text>
+        <text class="log-comment">{{item.comment}}</text>
+      </view>
+      <text class="log-time">{{item.timeText}}</text>
+    </view>
+  </view>
+
+  <view class="empty" wx:if="{{isEmpty}}">还没有轻对战记录，先在组阵页发起一场</view>
+
+  <view class="back-row">
+    <view class="btn-ghost back-btn" bindtap="onBack" role="button" aria-label="返回组阵">返回组阵</view>
+  </view>
+
+  <view class="log-note">同一阵容和同一对手会得到同一比分，战报不做随机补偿</view>
+</view>

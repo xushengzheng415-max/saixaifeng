@@ -1,0 +1,27 @@
+<view class="pitch">
+  <image class="pitch-bg" src="/assets/pitch/pitch-3d.svg" mode="aspectFill"></image>
+  <view class="pitch-shade"></view>
+
+  <view class="pitch-rows">
+    <view class="pitch-row" wx:for="{{rows}}" wx:for-item="row" wx:key="rowIndex">
+      <view
+        class="pitch-cell {{cell.filledClass}} {{cell.activeClass}} {{cell.mismatchClass}}"
+        wx:for="{{row.cells}}"
+        wx:for-item="cell"
+        wx:key="key"
+        data-key="{{cell.key}}"
+        bindtap="onSlot"
+        role="button"
+        aria-label="{{cell.label}}"
+      >
+        <view class="cell-token">
+          <image class="cell-card" wx:if="{{cell.filled}}" src="{{cell.cardUrl}}" mode="aspectFill"></image>
+          <image class="cell-empty-icon" wx:if="{{!cell.filled}}" src="/assets/icons/icon-ball.svg" mode="aspectFit"></image>
+        </view>
+        <text class="cell-name">{{cell.name}}</text>
+        <text class="cell-number">{{cell.numberText}}</text>
+        <text class="cell-pos">{{cell.label}}</text>
+      </view>
+    </view>
+  </view>
+</view>
