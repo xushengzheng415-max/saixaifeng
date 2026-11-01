@@ -85,6 +85,10 @@
     getCard: function (playerId) { return api('getMyPlayerCard', { playerId: playerId }) },
     previewCard: function (data) { return api('previewMyPlayerCard', data) },
     saveCard: function (data) { return api('saveMyPlayerCard', data) },
+    getPreloadedCard: function (playerId, templateId) { return api('getMyPreloadedPlayerCard', { playerId: playerId, templateId: templateId }) },
+    previewPreloadedCard: function (data) { return api('previewMyPreloadedPlayerCard', data) },
+    savePreloadedCard: function (data) { return api('saveMyPreloadedPlayerCard', data) },
+    selectCard: function (playerId, templateId) { return api('selectMyPlayerCard', { playerId: playerId, templateId: templateId || '' }) },
     setMainCard: function (playerId) { return api('cardWorldSetMainCard', { playerId: playerId }) },
     jsSdkConfig: function (url) { return api('servicePrivateJsSdkConfig', { url: url }) }
   }

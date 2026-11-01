@@ -50,7 +50,7 @@ function createPlayerCardLibrary({ cloud }) {
       const reason = tierPermission(score,template.tier,scope.type,template.cardKind)
       const dynamic=!reason?await require('./playerCardDynamic.cjs').descriptor(cloud,db,player,snapshot,grant):null
       result.push({id:libraryId(player._id,template._id),cardId:dynamic?.cardId || (ready?String(render.cardId||render._id||suite.renderId(player._id,template._id,snapshot.version)):''),templateId:template._id,title:snapshot.title,tier:template.tier,
-        preload:scope,cardKind:template.cardKind||'',setId:template.setId||'',templateVersion:snapshot.version,revision:Number(grant.revision || 0),
+        preload:scope,cardKind:template.cardKind||'',setId:template.setId||'',templateVersion:snapshot.version,revision:Number(grant.revision || 0),crop:grant.crop || {zoom:1,x:0,y:0},
         dataVersion:dynamic?.dataVersion||'',cardDataVersion:Number(player.playerCardVersion||0),publishedVersion:Number(snapshot.version),cardScene:dynamic?.cardScene||null,displayMode:'dynamic',status:reason ? 'locked' : dynamic?.status || (ready ? 'ready' : grant.fileId ? 'pending' : 'unmade'),reason,renderVersion:render?.renderVersion || suite.RENDER_VERSION,
         fileId:!reason && ready ? render.fileId : '',backgroundFileId:snapshot.backgroundFileId,
         snapshot,grant})

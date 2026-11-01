@@ -261,16 +261,62 @@ body { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 .field__label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 .field__hint { margin: 8px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
 
-.backgrounds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.bg-option {
-  border-radius: 12px; padding: 10px 6px; text-align: center;
-  border: 1px solid var(--panel-line);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text); font-size: 12px; font-weight: 600;
+.field__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.field__head .field__label { margin-bottom: 0; }
+.field__head-text { flex: 1; min-width: 0; }
+.field__sub { margin: 4px 0 0; font-size: 11px; color: var(--muted); line-height: 1.5; }
+.field__reload {
+  flex: 0 0 auto; appearance: none; border: 1px solid var(--panel-line); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05); color: var(--muted); font-size: 11px; padding: 5px 10px;
 }
-.bg-option small { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); font-weight: 400; }
-.bg-option.is-active { border-color: rgba(232, 197, 106, 0.75); box-shadow: 0 0 0 1px rgba(232, 197, 106, 0.35) inset; }
+.spinner--sm { width: 18px; height: 18px; border-width: 2px; margin: 0; }
+.btn--sm { padding: 8px 12px; font-size: 12px; border-radius: 10px; }
+
+.bg-loading { display: flex; align-items: center; gap: 8px; padding: 14px 12px; font-size: 12px; color: var(--muted); }
+.bg-error {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px;
+  border-radius: 12px; border: 1px dashed rgba(255, 120, 120, 0.45); background: rgba(255, 90, 90, 0.08);
+  font-size: 12px;
+}
+.bg-error strong { font-size: 13px; color: #ffb3ad; }
+.bg-error span { color: var(--muted); line-height: 1.5; }
+.bg-error .btn { align-self: flex-start; }
+.bg-empty {
+  display: flex; flex-direction: column; gap: 6px; padding: 18px 14px;
+  border-radius: 12px; border: 1px dashed var(--panel-line); background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+}
+.bg-empty strong { font-size: 13px; }
+.bg-empty p { margin: 0; color: var(--muted); line-height: 1.6; }
+
+.backgrounds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.bg-option {
+  appearance: none; position: relative; display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 8px; text-align: left;
+  border-radius: 12px; border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.05); color: var(--text);
+}
+.bg-option__thumb {
+  flex: 0 0 auto; width: 54px; aspect-ratio: 3 / 4; overflow: hidden;
+  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(145deg, #2a3447, #11151f);
+  display: grid; place-items: center;
+}
+.bg-option__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bg-option__thumb--empty { padding: 3px; font-size: 10px; line-height: 1.4; color: var(--muted); text-align: center; }
+.bg-option__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.bg-option__title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bg-option__note { font-size: 10px; color: var(--muted); line-height: 1.4; }
+.bg-option__state {
+  align-self: flex-start; font-size: 10px; padding: 2px 7px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08); color: var(--muted); white-space: nowrap;
+}
+.bg-option.is-active,
+.bg-option.is-chosen { border-color: rgba(232, 197, 106, 0.8); box-shadow: 0 0 0 1px rgba(232, 197, 106, 0.35) inset; }
+.bg-option.is-active .bg-option__state { color: #2f2205; background: linear-gradient(120deg, #f6e2a7, #e8c56a 45%, #c99a3c); }
+.bg-option.is-chosen .bg-option__state { color: #f6e2a7; background: rgba(232, 197, 106, 0.18); }
 .bg-option.is-locked { opacity: 0.55; }
+.bg-option.is-locked .bg-option__thumb img { filter: grayscale(0.7); }
 .bg-option[disabled] { cursor: not-allowed; }
 
 .crop-stage { display: flex; justify-content: center; }

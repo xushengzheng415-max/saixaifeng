@@ -7,14 +7,16 @@
     main: null,
     membership: null,
     settings: null,
+    settingsPlayerId: '',
     saving: false
   }
 
-  var BACKGROUNDS = [
-    { id: 'bronze', name: '铜卡', note: '基础' },
-    { id: 'silver', name: '银卡', note: '进阶' },
-    { id: 'gold', name: '金卡', note: '精英' }
-  ]
+  var BASE_BACKGROUNDS = {
+    bronze: { name: '铜卡', note: '基础卡面' },
+    silver: { name: '银卡', note: '进阶卡面' },
+    gold: { name: '金卡', note: '精英卡面' }
+  }
+  var BASE_ORDER = ['bronze', 'silver', 'gold']
 
   function $(id) { return document.getElementById(id) }
 
@@ -177,67 +179,224 @@
     })
   }
 
+  function normalizeCropValue(value) {
+    var crop = value || {}
+    return { zoom: Number(crop.zoom) || 1, x: Number(crop.x) || 0, y: Number(crop.y) || 0 }
+  }
+
   function openSettings(playerId) {
     if (!playerId) {
       toast('还没有球员卡，先去足球世界签约')
       return
     }
+    state.settingsPlayerId = String(playerId)
+    state.settings = null
     show('settings-mask', true)
+    loadSettings(playerId)
+  }
+
+  function loadSettings(playerId) {
+    state.settingsPlayerId = String(playerId)
+    state.settings = null
     $('settings-body').style.opacity = '0.5'
-    $('btn-save').disabled = true
-    Api.getCard(playerId).then(function (result) {
-      var player = result.player || {}
+    updateSettingsButtons(true)
+    setBackgroundState('loading')
+    var cardTask = Api.getCard(playerId)
+    var listTask = Api.listCards()
+    Promise.all([
+      cardTask.then(function (value) { return { ok: true, value: value } }, function (error) { return { ok: false, error: error } }),
+      listTask.then(function (value) { return { ok: true, value: value } }, function (error) { return { ok: false, error: error } })
+    ]).then(function (results) {
+      var cardResult = results[0]
+      var listResult = results[1]
+      var card = cardResult.ok ? (cardResult.value || {}) : {}
+      var player = card.player || {}
       var score = player.playerCard || {}
-      var draft = result.draft || {}
-      state.settings = {
-        playerId: playerId,
+      var draft = card.draft || {}
+      var list = listResult.ok ? ((listResult.value && listResult.value.players) || []) : []
+      var playerItem = list.filter(function (item) { return String(item.id) === String(playerId) })[0] || null
+      var baseCrop = normalizeCropValue(draft.crop || player.playerCardCrop)
+      var settings = {
+        playerId: String(playerId),
         name: player.name || '',
         tier: player.cardTier || '',
         version: Number(player.version || 0),
         backgroundId: player.backgroundId || player.cardTier || 'bronze',
+        displayTemplateId: String(player.displayTemplateId || (playerItem && playerItem.displayTemplateId) || ''),
         canChangeBackground: Boolean(score.canChangeBackground),
         membershipBackground: Boolean(score.membershipBackground),
         backgroundUnlock: score.backgroundUnlock || '',
-        crop: draft.crop || player.playerCardCrop || { zoom: 1, x: 0, y: 0 },
-        portrait: result.standardPortraitData || '',
-        scene: result.cardScene || null
+        baseCrop: baseCrop,
+        crop: baseCrop,
+        portrait: card.standardPortraitData || '',
+        scene: card.cardScene || null,
+        templates: card.templates || {},
+        preloaded: (playerItem && playerItem.preloadedCards) || [],
+        bases: [],
+        skins: [],
+        options: [],
+        selection: null,
+        loadError: ''
       }
+      if (!cardResult.ok) settings.loadError = (cardResult.error && cardResult.error.message) || '卡面背景读取失败，请重试'
+      else if (!listResult.ok) settings.loadError = '卡库背景读取失败，请重试'
+      settings.bases = baseOptions(settings)
+      settings.skins = skinOptions(settings)
+      settings.options = settings.bases.concat(settings.skins)
+      settings.selection = initialSelection(settings)
+      if (settings.selection && settings.selection.kind === 'skin') settings.crop = normalizeCropValue(settings.selection.crop)
+      state.settings = settings
       $('settings-body').style.opacity = '1'
-      renderBackgrounds()
+      renderBackgroundList()
       renderCrop()
-      $('btn-save').disabled = false
-    }).catch(function (error) {
-      show('settings-mask', false)
-      if (error.code === 'PLAYER_CARD_PORTRAIT_REQUIRED') toast('该球员还没有标准形象照，请先去小程序完成拍摄')
-      else toast(error.message || '卡面读取失败，请重试')
+      updateSettingsButtons()
+      if (settings.loadError) toast(settings.loadError)
     })
   }
 
-  function renderBackgrounds() {
+  function baseOptions(settings) {
+    var templates = settings.templates || {}
+    var options = []
+    BASE_ORDER.forEach(function (id) {
+      var template = templates[id]
+      if (!template) return
+      var meta = BASE_BACKGROUNDS[id] || { name: id, note: '' }
+      var allowed = Boolean(settings.canChangeBackground) || id === settings.tier
+      var current = !settings.displayTemplateId && id === settings.backgroundId
+      var note = meta.note
+      if (!allowed) note = '未解锁 · 满 100 分或会员可用'
+      else if (settings.backgroundUnlock === 'membership') note = '会员权益已生效'
+      options.push({
+        kind: 'base', id: id, title: template.title || meta.name, note: note,
+        thumb: template.backgroundUrl || '', current: current,
+        allowed: allowed, locked: !allowed,
+        stateText: current ? '当前使用' : allowed ? '可选' : '未解锁',
+        backgroundId: id, templateVersion: Number(template.version || 0),
+        crop: settings.baseCrop
+      })
+    })
+    return options
+  }
+
+  function skinOptions(settings) {
+    return (settings.preloaded || []).filter(function (card) { return card && card.templateId }).map(function (card) {
+      var current = String(card.templateId) === settings.displayTemplateId
+      var ready = card.status === 'ready'
+      var note = card.reason || (card.cardKind === 'honor' ? '已拥有的荣誉卡皮肤' : '已拥有的卡库皮肤')
+      if (current && !ready) note = '当前展示的卡面暂不可用，请重新生成'
+      return {
+        kind: 'skin', id: String(card.templateId), title: card.title || '卡库皮肤',
+        note: note, thumb: card.backgroundUrl || card.cardUrl || '',
+        current: current, allowed: ready, locked: !ready,
+        stateText: current ? '当前使用' : ready ? '可选' : card.status === 'locked' ? '未解锁' : '待制作',
+        revision: Number(card.revision || 0), templateVersion: Number(card.templateVersion || 0),
+        crop: normalizeCropValue(card.crop)
+      }
+    })
+  }
+
+  function initialSelection(settings) {
+    var options = settings.options || []
+    var skin = settings.displayTemplateId
+      ? options.filter(function (item) { return item.kind === 'skin' && item.id === settings.displayTemplateId && item.allowed })[0]
+      : null
+    if (skin) return skin
+    var currentBase = options.filter(function (item) { return item.kind === 'base' && item.current })[0]
+    if (currentBase) return currentBase
+    return options.filter(function (item) { return item.allowed })[0] || null
+  }
+
+  function isChosen(settings, item) {
+    var selection = settings.selection
+    return Boolean(selection && selection.kind === item.kind && String(selection.id) === String(item.id))
+  }
+
+  function setBackgroundState(mode, message) {
+    var hasOptions = Boolean(state.settings && state.settings.options.length)
+    $('background-loading').hidden = mode !== 'loading'
+    show('background-error', mode === 'error')
+    show('background-empty', mode === 'empty')
+    show('background-list', mode === 'ready' || (mode === 'error' && hasOptions))
+    $('btn-reload-backgrounds').hidden = mode === 'loading'
+    if (mode === 'error') $('background-error-text').textContent = message || '请检查网络后重试'
+  }
+
+  function backgroundHint(settings) {
+    if (!settings || settings.loadError || !settings.options.length) return ''
+    if (settings.canChangeBackground) {
+      return settings.backgroundUnlock === 'membership'
+        ? '会员权益已生效：可选择已发布的卡面背景，保存不消耗蜂蜜。'
+        : '已满足更换背景条件，保存不消耗蜂蜜。'
+    }
+    return '当前只能使用球员等级对应的背景；满 100 分或会员可更换。'
+  }
+
+  function updateSettingsButtons(disable) {
+    var settings = state.settings
+    var ready = Boolean(settings && settings.selection && settings.tier && !settings.loadError)
+    $('btn-preview').disabled = Boolean(disable) || !ready
+    $('btn-save').disabled = Boolean(disable) || !ready || state.saving
+  }
+
+  function selectBackground(item) {
+    var settings = state.settings
+    if (!settings || !item || !item.allowed) return
+    settings.selection = item
+    settings.crop = normalizeCropValue(item.crop || settings.baseCrop)
+    renderCrop()
+    renderBackgroundList()
+  }
+
+  function retrySettings() {
+    if (state.settingsPlayerId) loadSettings(state.settingsPlayerId)
+  }
+
+  function renderBackgroundList() {
     var settings = state.settings
     var list = $('background-list')
     list.innerHTML = ''
-    var current = settings.backgroundId
-    BACKGROUNDS.forEach(function (item) {
-      var allowed = settings.canChangeBackground || item.id === settings.tier
+    if (!settings) {
+      setBackgroundState('loading')
+      updateSettingsButtons(true)
+      return
+    }
+    setBackgroundState(settings.loadError ? 'error' : settings.options.length ? 'ready' : 'empty', settings.loadError)
+    $('background-hint').textContent = backgroundHint(settings)
+    if (!settings.options.length) {
+      updateSettingsButtons()
+      return
+    }
+    settings.options.forEach(function (item) {
+      var selected = isChosen(settings, item)
       var button = document.createElement('button')
       button.type = 'button'
-      button.className = 'bg-option' + (item.id === current ? ' is-active' : '') + (allowed ? '' : ' is-locked')
-      button.disabled = !allowed
-      button.setAttribute('data-bg', item.id)
-      var note = item.note
-      if (!allowed) note = settings.membershipBackground ? '会员可用' : '未解锁'
-      button.innerHTML = escapeHtml(item.name) + '<small>' + escapeHtml(note) + '</small>'
-      button.addEventListener('click', function () {
-        if (!allowed) return
-        settings.backgroundId = item.id
-        renderBackgrounds()
-      })
+      button.setAttribute('role', 'listitem')
+      button.className = 'bg-option' +
+        (item.current ? ' is-active' : '') +
+        (selected && !item.current ? ' is-chosen' : '') +
+        (item.locked ? ' is-locked' : '')
+      button.disabled = !item.allowed
+      button.setAttribute('data-kind', item.kind)
+      button.setAttribute('data-id', item.id)
+      var thumb = item.thumb
+        ? '<img src="' + escapeHtml(item.thumb) + '" alt="' + escapeHtml(item.title) + '" loading="lazy" />'
+        : '<span class="bg-option__thumb--empty">暂无<br>缩略图</span>'
+      button.innerHTML =
+        '<span class="bg-option__thumb">' + thumb + '</span>' +
+        '<span class="bg-option__body">' +
+        '<span class="bg-option__title">' + escapeHtml(item.title) + '</span>' +
+        '<span class="bg-option__note">' + escapeHtml(item.note || '') + '</span>' +
+        '<span class="bg-option__state">' + escapeHtml(item.stateText) + '</span>' +
+        '</span>'
+      button.addEventListener('click', function () { selectBackground(item) })
       list.appendChild(button)
+      var image = button.querySelector('img')
+      if (image) image.addEventListener('error', function () {
+        var frame = button.querySelector('.bg-option__thumb')
+        if (frame) frame.innerHTML = '<span class="bg-option__thumb--empty">暂无<br>缩略图</span>'
+      })
     })
-    $('background-hint').textContent = settings.canChangeBackground
-      ? (settings.backgroundUnlock === 'membership' ? '会员权益已生效，可不达 100 分更换背景' : '已满足更换背景条件')
-      : '满 100 分或开通会员后可更换背景'
+    updateSettingsButtons()
   }
 
   function cropValues() {
@@ -279,9 +438,10 @@
 
   function settingsPayload(extra) {
     var settings = state.settings
+    var selection = settings.selection || {}
     return Object.assign({
       playerId: settings.playerId,
-      backgroundId: settings.backgroundId,
+      backgroundId: selection.kind === 'base' ? selection.id : settings.backgroundId,
       crop: cropValues(),
       mode: 'portrait',
       tier: settings.tier,
@@ -290,38 +450,82 @@
   }
 
   function previewCard() {
-    if (!state.settings) return
-    if (!state.settings.tier) { toast('球员积分待核定，暂不能预览'); return }
+    var settings = state.settings
+    if (!settings) return
+    var selection = settings.selection
+    if (!settings.tier) { toast('球员积分待核定，暂不能预览'); return }
+    if (!selection) { toast('请先选择卡面背景'); return }
     $('btn-preview').disabled = true
-    Api.previewCard(settingsPayload()).then(function (result) {
-      if (!result.imageData) { toast('该卡面暂不支持预览，请直接保存'); return }
-      $('preview-image').src = result.imageData
-      show('preview-mask', true)
+    var task = selection.kind === 'skin'
+      ? Api.previewPreloadedCard({
+        playerId: settings.playerId,
+        templateId: selection.id,
+        templateVersion: selection.templateVersion,
+        crop: cropValues(),
+        tier: settings.tier
+      })
+      : Api.previewCard(settingsPayload())
+    task.then(function (result) {
+      if (result && result.imageData) {
+        $('preview-image').src = result.imageData
+        show('preview-mask', true)
+      } else {
+        toast('该卡面暂不支持预览，请直接保存')
+      }
     }).catch(function (error) {
       if (error.code === 'PLAYER_CARD_BACKGROUND_LOCKED') toast('该背景未解锁')
       else toast(error.message || '预览失败，请重试')
-    }).then(function () { $('btn-preview').disabled = false })
+    }).then(function () { updateSettingsButtons() })
   }
 
   function saveCard() {
-    if (!state.settings || state.saving) return
-    if (!state.settings.tier) { toast('球员积分待核定，暂不能保存卡面'); return }
+    var settings = state.settings
+    if (!settings || state.saving) return
+    var selection = settings.selection
+    if (!settings.tier) { toast('球员积分待核定，暂不能保存卡面'); return }
+    if (!selection) { toast('请先选择卡面背景'); return }
     state.saving = true
-    $('btn-save').disabled = true
+    updateSettingsButtons(true)
     $('btn-save').textContent = '保存中…'
-    Api.saveCard(settingsPayload()).then(function () {
+    var saved = false
+    var task = selection.kind === 'skin'
+      ? Api.savePreloadedCard({
+        playerId: settings.playerId,
+        templateId: selection.id,
+        expectedRevision: selection.revision,
+        templateVersion: selection.templateVersion,
+        crop: cropValues(),
+        tier: settings.tier
+      }).then(function () {
+        saved = true
+        return Api.selectCard(settings.playerId, selection.id)
+      })
+      : Api.saveCard(settingsPayload()).then(function () {
+        saved = true
+        if (settings.displayTemplateId) return Api.selectCard(settings.playerId, '')
+      })
+    task.then(function () {
       toast('卡面已保存')
       show('settings-mask', false)
+      state.settings = null
       return refresh()
     }).catch(function (error) {
+      if (saved) {
+        toast('卡面已保存，切换展示卡面失败，请重新进入设置')
+        show('settings-mask', false)
+        state.settings = null
+        refresh()
+        return
+      }
       if (error.code === 'PLAYER_CARD_PHOTO_PAY_REQUIRED') toast('换照片需去小程序合成，H5 不扣费')
       else if (error.code === 'PLAYER_CARD_CONFLICT') toast('卡面已更新，请重新打开设置')
       else if (error.code === 'PLAYER_CARD_BACKGROUND_LOCKED') toast('该背景未解锁')
+      else if (error.code === 'PLAYER_CARD_TEMPLATE_CHANGED') toast('卡面已更新，请重新打开设置')
       else toast(error.message || '保存失败，请重试')
     }).then(function () {
       state.saving = false
-      $('btn-save').disabled = false
       $('btn-save').textContent = '保存卡面'
+      updateSettingsButtons()
     })
   }
 
@@ -429,6 +633,8 @@
     })
     $('btn-preview').addEventListener('click', previewCard)
     $('btn-save').addEventListener('click', saveCard)
+    $('btn-retry-backgrounds').addEventListener('click', retrySettings)
+    $('btn-reload-backgrounds').addEventListener('click', retrySettings)
     ;['crop-zoom', 'crop-x', 'crop-y'].forEach(function (id) {
       $(id).addEventListener('input', applyCropPreview)
     })

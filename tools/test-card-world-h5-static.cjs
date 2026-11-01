@@ -43,7 +43,8 @@ assert.ok(!/<button[^>]*>[^<]*(购买|续费|开通会员)/.test(html), 'H5 不�
 
 const requiredActions = [
   'cardWorldMainCard', 'cardWorldSetMainCard', 'listMyPlayerCards', 'getMyPlayerCard',
-  'previewMyPlayerCard', 'saveMyPlayerCard', 'servicePrivateMembershipStatus', 'servicePrivateJsSdkConfig'
+  'previewMyPlayerCard', 'saveMyPlayerCard', 'servicePrivateMembershipStatus', 'servicePrivateJsSdkConfig',
+  'getMyPreloadedPlayerCard', 'previewMyPreloadedPlayerCard', 'saveMyPreloadedPlayerCard', 'selectMyPlayerCard'
 ]
 for (const action of requiredActions) {
   assert.ok(all.includes(action), '缺少 H5 必需接口: ' + action)
@@ -54,7 +55,17 @@ assert.ok(!/sessionStorage\.setItem|localStorage\.setItem\(['"](?!sxf_referee_h5
 assert.ok(html.includes('wx-open-launch-weapp'), '底部应接入足球世界小程序')
 assert.ok(html.includes('path="pages/card/main/main"'), '小程序入口页应为 pages/card/main/main')
 assert.ok(html.includes('library-empty') && html.includes('hero-placeholder'), '无卡时必须有空态')
-assert.ok(html.includes('settings-mask') && html.includes('crop-zoom') && html.includes('background-list'), '必须有背景切换与构图设置')
+assert.ok(html.includes('id="field-background"') && html.includes('id="field-photo"'), '卡面设置必须拆成「卡面背景」「球员照片」两项')
+assert.ok(html.includes('卡面背景') && html.includes('球员照片'), '两项必须有明确标题')
+assert.ok(html.includes('background-list') && html.includes('crop-zoom'), '必须有背景选择与照片构图设置')
+assert.ok(html.includes('background-empty') && html.includes('暂无可用的卡面背景'), '没有可用背景时必须显示明确空态')
+assert.ok(html.includes('background-error') && html.includes('btn-retry-backgrounds'), '背景读取失败时必须提供重试')
+assert.ok(html.includes('btn-reload-backgrounds'), '背景区必须提供重新加载入口')
+assert.ok(app.includes('bg-option__thumb') && app.includes('backgroundUrl'), '背景必须使用后台已发布缩略图')
+assert.ok(app.includes('当前使用') && app.includes('可选') && app.includes('未解锁'), '背景必须标明当前使用/可选/未解锁')
+assert.ok(app.includes('preloadedCards') && app.includes('skinOptions'), '赛季与限定皮肤必须按已拥有卡库数据展示')
+assert.ok(app.includes('previewPreloadedCard') && app.includes('savePreloadedCard') && app.includes('selectCard'), '皮肤背景必须走预览/保存/装备同一链路')
+assert.ok(app.includes('loadError') && app.includes('retrySettings'), '背景读取失败必须保留弹层并提供重试')
 assert.ok(html.includes('holo-card__shine') && html.includes('holo-card__glare') && html.includes('hero-hint'), '主卡必须有星云箔光层与手势提示')
 assert.ok(html.includes('css/holo-cosmos.css'), '必须复用原型星云箔光样式')
 assert.ok(app.includes('syncHolo') && app.includes('HoloCosmos.bindCard') && app.includes('HoloCosmos.showcase'), '主卡必须绑定原型箔光与入场扫光')

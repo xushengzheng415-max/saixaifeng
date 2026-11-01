@@ -216,7 +216,16 @@ function createPlayerCards(deps) {
   }
   async function activeTemplates(db) {
     const snapshots = (await Promise.all(suite.TYPES.map(type => suite.activeTemplate(db,type)))).filter(Boolean)
-    return Object.fromEntries(snapshots.map(item => [item.cardTypeId,{templateId:item.templateId,version:item.version,title:item.title}]))
+    const fileIds = [...new Set(snapshots.map(item => item.backgroundFileId).filter(Boolean))]
+    const urls = new Map()
+    for (let i = 0; i < fileIds.length; i += 50) {
+      const files = (await cloud.getTempFileURL({ fileList: fileIds.slice(i, i + 50) })).fileList || []
+      for (const file of files) if (file.tempFileURL) urls.set(file.fileID, file.tempFileURL)
+    }
+    return Object.fromEntries(snapshots.map(item => [item.cardTypeId,{
+      templateId:item.templateId,version:item.version,title:item.title,
+      backgroundUrl:urls.get(item.backgroundFileId) || ''
+    }]))
   }
   const library=createPlayerCardLibrary({cloud})
   async function handler(event) {
@@ -246,7 +255,9 @@ function createPlayerCards(deps) {
     if (event.action === 'listMyPlayerCards') {
       // One canonical career dataset feeds summaries and base cards for every
       // bound player; per-player reads each re-read the full match corpus.
-      const cardMap = await createDataService(db).playerCardsForAuthorizedPlayers(entries.map(entry => String(entry.player._id)))
+      const cardMap = deps.playerCardsForAuthorizedPlayers
+        ? await deps.playerCardsForAuthorizedPlayers(entries.map(entry => String(entry.player._id)))
+        : await createDataService(db).playerCardsForAuthorizedPlayers(entries.map(entry => String(entry.player._id)))
       const players = await Promise.all(entries.map(async entry => {
         const t0 = Date.now()
         const versionsPromise = cardVersionsForPlayer(cloud, db, entry.player)
@@ -304,6 +315,7 @@ function createPlayerCards(deps) {
     }
     if (event.action === 'getMyPlayerCard') {
       const p = entry.player
+      const level = await summary(entry)
       const portrait = await standardPortrait(auth, entry, db)
       const source = await cloud.downloadFile({ fileID: portrait.transparentFileId })
       if (!source.fileContent || source.fileContent.length > 5 * 1024 * 1024) throw new Error('标准形象照过大，请重新生成')
@@ -317,9 +329,9 @@ function createPlayerCards(deps) {
           }
         } catch (error) { teamLogoData = '' }
       }
-      return { success: true, player: await summary(entry), templates:await activeTemplates(db),
+      return { success: true, player: level, templates:await activeTemplates(db),
         portraitId: String(portrait._id), portraitAvailable:true,
-        teamLogoData, cardScene:(await require('./playerCardDynamic.cjs').read(cloud,db,p,{baseOnly:true}))?.cardScene||null, standardPortraitData:'data:image/png;base64,'+source.fileContent.toString('base64'),draft: (p.playerCardFileId || p.playerCardDynamic) ? { crop: p.playerCardCrop || { zoom: 1, x: 0, y: 0 }, layout: p.playerCardLayout || null } : null }
+        teamLogoData, cardScene:(await require('./playerCardDynamic.cjs').read(cloud,db,p,{baseOnly:true,score:level.playerCard}))?.cardScene||null, standardPortraitData:'data:image/png;base64,'+source.fileContent.toString('base64'),draft: (p.playerCardFileId || p.playerCardDynamic) ? { crop: p.playerCardCrop || { zoom: 1, x: 0, y: 0 }, layout: p.playerCardLayout || null } : null }
     }
     if (!['previewMyPlayerCard','saveMyPlayerCard'].includes(event.action)) return { success: false, error: '未知球员卡操作' }
     const level = await summary(entry)
