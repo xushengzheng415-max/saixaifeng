@@ -66,7 +66,10 @@
 
   function beginOAuth() {
     loading('正在连接微信服务号…')
-    api({ action: 'serviceRefereeOAuthUrl', returnUrl: location.origin + location.pathname }).then(function (result) {
+    var inviteToken = new URLSearchParams(location.search).get('refereeInvite') || localStorage.getItem(REFEREE_INVITE_KEY) || ''
+    var returnUrl = location.origin + location.pathname
+    if (inviteToken) returnUrl += '?refereeInvite=' + encodeURIComponent(inviteToken)
+    api({ action: 'serviceRefereeOAuthUrl', returnUrl: returnUrl }).then(function (result) {
       if (!result.success) throw new Error(result.error || '服务号授权入口暂不可用')
       window.location.replace(result.authorizeUrl)
     }).catch(function (error) { showError('暂时无法进入', error.message, beginOAuth) })
@@ -77,8 +80,10 @@
     api({ action: 'serviceRefereeOAuth', code: code, state: state }).then(function (result) {
       if (!result.success || !result.refereeSessionToken) throw new Error(result.error || '微信授权失败')
       localStorage.setItem(SESSION_KEY, result.refereeSessionToken)
+      // 微信授权可能跨页面上下文返回；优先从回跳地址恢复本次登记，不能仅依赖旧缓存。
+      var inviteToken = new URLSearchParams(location.search).get('refereeInvite') || localStorage.getItem(REFEREE_INVITE_KEY) || ''
+      if (inviteToken) localStorage.setItem(REFEREE_INVITE_KEY, inviteToken)
       history.replaceState({}, document.title, location.pathname)
-      var inviteToken=localStorage.getItem(REFEREE_INVITE_KEY)
       if(inviteToken) loadRefereeInvite(inviteToken)
       else loadWorkbench()
     }).catch(function (error) {
@@ -109,7 +114,15 @@
 
   function loadRefereeInvite(token) {
     loading('正在读取裁判邀请…')
-    workflow('getRefereeInvitation',{ inviteToken:token }).then(function(result){if(!result.success)throw new Error(result.message || '邀请无效');renderRefereeInviteForm(result.data || {},token)}).catch(function(error){showError('邀请暂不可用',error.message)})
+    workflow('getRefereeInvitation',{ inviteToken:token }).then(function(result){
+      if(!result.success && result.code==='H5_AUTH_REQUIRED'){
+        localStorage.setItem(REFEREE_INVITE_KEY,token)
+        localStorage.removeItem(SESSION_KEY)
+        return beginOAuth()
+      }
+      if(!result.success)throw new Error(result.message || '邀请无效')
+      renderRefereeInviteForm(result.data || {},token)
+    }).catch(function(error){showError('邀请暂不可用',error.message)})
   }
 
   function renderRefereeInviteForm(data,token) {
