@@ -1,8 +1,8 @@
 # 数据入口登记
 
-## 2026-11-01 报名导入球员完整编辑（本地候选）
+## 2026-11-01 报名导入球员完整编辑（已发布）
 
-`TeamRegistrationWordImporter` → `RegistrationPlayerEditor` → 共用 `tournamentRegistrationFlow/importPersonFields.cjs` → 既有 `importTeamRegistrationBatch`。位置、惯用脚、身高/体重、证件类型、国籍随既有导入草稿、球员档案及不可变批次快照保存；缺失测量值为 null，证件只沿既有摘要/掩码进入球员及快照。沿用赛事/机构/模块权限及证件冲突校验，不新增统计、不改既有历史名单或真实业务数据。按当前字段生成统一阻断项，旧解析错误不再阻挡已修正/已忽略资料；有效重复身份仍阻断并显示原因。隔离真实处理器/内存数据库及35人忽略/重复修正浏览器验证通过；共享后端与 PC 均未部署。详见 [实施记录](../releases/registration-player-editor-20261101.md)。
+`TeamRegistrationWordImporter` → `RegistrationPlayerEditor` → 共用 `tournamentRegistrationFlow/importPersonFields.cjs` → 既有 `importTeamRegistrationBatch`。位置、惯用脚、身高/体重、证件类型、国籍随既有导入草稿、球员档案及不可变批次快照保存；缺失测量值为 null，证件只沿既有摘要/掩码进入球员及快照。沿用赛事/机构/模块权限及证件冲突校验，不新增统计、不改既有历史名单或真实业务数据。按当前字段生成统一阻断项，旧解析错误不再阻挡已修正/已忽略资料；有效重复身份仍阻断并显示原因。隔离真实处理器/内存数据库及35人忽略/重复修正浏览器验证通过；共享后端已按线上包差量发布并回下载比对，正式/测试PC已分别发布且客户端0.2.8两通道各8项通过；本次编号钩子依赖同源保留，不改变编号或统计规则。详见 [实施记录](../releases/registration-player-editor-20261101.md)。
 
 ## 点球决胜跨页面展示与完整成绩册（2026-10-24）
 
