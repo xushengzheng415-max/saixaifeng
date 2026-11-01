@@ -1,0 +1,9 @@
+{
+  "platform": "android",
+  "packageId": "cn.sxffootball.pad.preview",
+  "versionCode": 102,
+  "version": "0.1.2",
+  "downloadUrl": "https://www.sxffootball.cn/desktop/android/SxfFootball-Pad-0.1.2-preview.apk",
+  "notes": "更新提示更明显，保留登录资料并强制刷新页面；名单行内通过/驳回、原因多选与网页测试版同步。",
+  "sha256": "0fba0822c0a74b47cb069358708bd0b6e6bde2d5c823704fad8de525331eec1b"
+}
