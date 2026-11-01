@@ -1,0 +1,120 @@
+{
+  "date": "2026-11-01",
+  "purpose": "registration identity pending follow-up",
+  "productionCodeCommit": "390ed73c3eb8ddbd4790106a5047d9efa39f9769",
+  "previewCodeCommit": "683304b83383eb4e1f05d2ad676fde2c13f8f58c",
+  "backendChanged": false,
+  "invalidIdentityAcceptedAsVerified": false,
+  "pendingDraftExcludedFromQualifiedRoster": true,
+  "browserCases": [
+    "checksum error explains 18-digit length is insufficient",
+    "cancel leaves original draft intact",
+    "explicit pending saves other profile fields and no identity number",
+    "pending state persists when reopened",
+    "valid full identity can be completed later"
+  ],
+  "productionWeb": {
+    "channel": "production",
+    "files": [
+      {
+        "path": "/admin/index.html",
+        "http": 200,
+        "sha256": "c3275a68eb0c416bf365d4d639b623bafb76d5f420aebd93aa00c12a180acd87"
+      },
+      {
+        "path": "/admin/assets/index-B7W9WI5k.js",
+        "http": 200,
+        "sha256": "05e8744d4facfa2a9abc731d688a1a9b2ea9f15fbc2a9d563247ab587ebef90d"
+      },
+      {
+        "path": "/admin/assets/index-Cqp_P0Uf.js",
+        "http": 200,
+        "sha256": "807ecc651be9a70d1ac8350578e7d90e13d406f50db1825cc6f64641c00f1cff"
+      },
+      {
+        "path": "/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/admin/assets/TournamentTeams-CAOP7tXX.js",
+        "http": 200,
+        "sha256": "84431675af8125693944175c49b56038c57179f73ca6ac953f105d1abf5eb4ab"
+      },
+      {
+        "path": "/admin/assets/LoginView-BfzbjIzs.js",
+        "http": 200,
+        "sha256": "06f5bb4a5a43123ca97b6245e5da250c0a07debb755785e3882b135f7d9e1497"
+      }
+    ]
+  },
+  "previewWeb": {
+    "channel": "preview",
+    "files": [
+      {
+        "path": "/preview/admin/index.html",
+        "http": 200,
+        "sha256": "5356bbd059af67973032de5c771707628848d86bd0ebd8768f8d20a27b8c7923"
+      },
+      {
+        "path": "/preview/admin/assets/index-C7oJcfCh.js",
+        "http": 200,
+        "sha256": "931c22f3dffcea3264b31132f866326c469b590e4bb1e55ad536631644e7ab99"
+      },
+      {
+        "path": "/preview/admin/assets/index-CUDEoPTa.js",
+        "http": 200,
+        "sha256": "0e7d3081edb06006b66d778d14a354a445e8d479eb3d22e49695202e89a00a56"
+      },
+      {
+        "path": "/preview/admin/assets/index-Dkhiv-IB.js",
+        "http": 200,
+        "sha256": "f29d9021a7a60f3998680df41985bb798ae74ee2d9b5832aeccd36525c1486ae"
+      },
+      {
+        "path": "/preview/admin/assets/TournamentTeams-Bkdzz8Uf.js",
+        "http": 200,
+        "sha256": "6a8a9053d6da018387d55c9fd1b74710414071848bbfdcfee6e77c1443224df1"
+      },
+      {
+        "path": "/preview/admin/assets/LoginView-BKGKtcBK.js",
+        "http": 200,
+        "sha256": "aca0a4c8e45a8b715f5638b207e09cd5235bdacae299fd457d4a650831b522e5"
+      }
+    ]
+  },
+  "installedClients": {
+    "production": {
+      "channel": "production",
+      "version": "0.2.8",
+      "checks": [
+        "live login page and WeChat QR iframe loaded",
+        "sandbox enabled; renderer has no Node API",
+        "validated newer-version fixture shows native menu and in-page update badge",
+        "QR expiry feedback and refresh obtain a new live QR",
+        "branded login, 1024px layout, and SPA route timeout regression verified",
+        "blob export saved and content verified",
+        "print popup sandbox and PDF rendering verified",
+        "connection error page and retry recovery verified"
+      ],
+      "entry": "https://www.sxffootball.cn/admin/",
+      "status": "passed"
+    },
+    "preview": {
+      "channel": "preview",
+      "version": "0.2.8",
+      "checks": [
+        "live login page and WeChat QR iframe loaded",
+        "sandbox enabled; renderer has no Node API",
+        "validated newer-version fixture shows native menu and in-page update badge",
+        "QR expiry feedback and refresh obtain a new live QR",
+        "branded login, 1024px layout, and SPA route timeout regression verified",
+        "blob export saved and content verified",
+        "print popup sandbox and PDF rendering verified",
+        "connection error page and retry recovery verified"
+      ],
+      "entry": "https://www.sxffootball.cn/preview/admin/",
+      "status": "passed"
+    }
+  }
+}
