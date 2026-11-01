@@ -1,0 +1,90 @@
+<view class="qc-page">
+
+  <!-- 表单态 -->
+  <block wx:if="{{!created}}">
+
+    <view class="qc-card">
+      <view class="qc-row">
+        <text class="qc-label">我的球队</text>
+        <text class="qc-team">{{teamName}}</text>
+        <text class="qc-auto-tag">自动读</text>
+      </view>
+
+      <view class="qc-divider"></view>
+
+      <view class="qc-row-col">
+        <view class="qc-opponent-head">
+          <text class="qc-label">对手球队</text>
+          <text class="qc-optional">选填</text>
+          <view class="qc-invite-btn" bindtap="onInviteOpponent">
+            <text class="qc-invite-btn-text">邀请对手</text>
+          </view>
+        </view>
+        <input class="qc-input" placeholder="对方队名，还没定就先空着" value="{{opponentName}}" bindinput="onOpponentInput" />
+      </view>
+
+      <view class="qc-divider"></view>
+
+      <view class="qc-row">
+        <text class="qc-label">比赛时间</text>
+        <picker class="qc-picker-wrap" mode="date" value="{{matchDate}}" bindchange="onDateChange">
+          <view class="qc-picker">{{matchDate}}</view>
+        </picker>
+        <picker class="qc-picker-wrap" mode="time" value="{{matchTime}}" bindchange="onTimeChange">
+          <view class="qc-picker">{{matchTime}}</view>
+        </picker>
+      </view>
+
+      <view class="qc-divider"></view>
+
+      <view class="qc-row-col">
+        <text class="qc-label">场地</text>
+        <view class="qc-venue-presets" wx:if="{{hasVenuePresets}}">
+          <text class="qc-venue-preset" wx:for="{{venuePresets}}" wx:key="name" data-index="{{index}}" bindtap="onPickVenuePreset">{{item.name}}</text>
+        </view>
+        <input class="qc-input" placeholder="如：开封立洋小学足球场" value="{{venue}}" bindinput="onVenueInput" />
+      </view>
+
+      <view class="qc-divider"></view>
+
+      <view class="qc-row">
+        <text class="qc-label">人数上限</text>
+        <input class="qc-input-num" type="number" value="{{maxPlayers}}" bindinput="onMaxInput" />
+        <text class="qc-unit">人</text>
+      </view>
+    </view>
+
+    <view class="qc-submit {{submitBtnClass}}" bindtap="onSubmit">立即发起比赛</view>
+
+    <view class="qc-footer">
+      <view class="qc-footer-title">发起后会生成：</view>
+      <view class="qc-footer-item">✓ 群报名卡片，一键转发微信群接龙</view>
+      <view class="qc-footer-item">✓ 比赛当天管理员勾到场名单</view>
+      <view class="qc-footer-item">✓ 赛后自动出战报，数据进「我的」</view>
+    </view>
+
+  </block>
+
+  <!-- 成功态 -->
+  <block wx:else>
+
+    <view class="qc-success">
+      <view class="qc-success-icon">⚽</view>
+      <view class="qc-success-title">比赛发起成功！</view>
+      <view class="qc-success-summary">
+        <view class="qc-success-row"><text class="qc-success-label">我的球队</text><text>{{teamName}}</text></view>
+        <view class="qc-success-row"><text class="qc-success-label">对手</text><text>{{opponentName || '待定 · 群里等对手接龙'}}</text></view>
+        <view class="qc-success-row"><text class="qc-success-label">时间</text><text>{{matchDate}} {{matchTime}}</text></view>
+        <view class="qc-success-row"><text class="qc-success-label">场地</text><text>{{venue}}</text></view>
+      </view>
+    </view>
+
+    <button class="qc-share-btn" open-type="share">转发到微信群报名</button>
+    <view class="qc-share-hint">群友点卡片 → 填姓名手机号 → 完成报名</view>
+
+    <view class="qc-success-secondary" bindtap="onInviteOpponent">还没对手？去生成战书海报邀请 ›</view>
+    <view class="qc-success-done" bindtap="onDone">完成</view>
+
+  </block>
+
+</view>

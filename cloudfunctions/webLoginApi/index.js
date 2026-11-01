@@ -6104,6 +6104,19 @@ exports.main = async (event, context) => {
       case 'serviceEntryClaimTeam':
       case 'serviceEntryJoinPlayer':
         result = await require('./service-entry')(action, params); break
+      case 'friendlySignInWorkflow': {
+        const subAction = params.workflowAction || params.subAction || 'getInvite'
+        const friendlyPayload = Object.assign({}, params, { action: subAction })
+        try {
+          const fr = await cloud.callFunction({ name: 'friendlyMatchCenter', data: friendlyPayload })
+          const data = (fr && fr.result) || {}
+          result = data.ok ? { success: true, data: data.data, version: 'friendlyMatchCenter@v1' }
+                           : { success: false, code: data.code || 'UNKNOWN', message: data.message || '约球服务暂不可用' }
+        } catch (error) {
+          result = { success: false, code: 'FRIENDLY_UNAVAILABLE', message: error.message || '约球服务暂不可用' }
+        }
+        break
+      }
       case 'previewParentProfileInvite':
         result = await previewParentProfileInvite(params); break
       case 'parentProfileOAuthUrl':

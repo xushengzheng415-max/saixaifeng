@@ -1,0 +1,33 @@
+.qs-page{padding:28rpx}
+
+.qs-loading,.qs-error{text-align:center;padding:120rpx 0;font-size:28rpx;color:#8a978e}
+.qs-error{color:#E53935}
+
+/* 比赛信息卡 */
+.qs-match-card{background:linear-gradient(160deg,#065431,#03341f);border-radius:22rpx;padding:40rpx 30rpx 30rpx;color:#fff;box-shadow:0 8rpx 28rpx rgba(6,84,49,.35)}
+.qs-vs{display:flex;align-items:center;justify-content:space-around;margin-bottom:30rpx}
+.qs-team{display:flex;flex-direction:column;align-items:center}
+.qs-team-badge{width:96rpx;height:96rpx;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34rpx;font-weight:700;margin-bottom:12rpx}
+.qs-team-badge.home{background:rgba(127,224,168,.2);color:#7fe0a8;border:2rpx solid rgba(127,224,168,.5)}
+.qs-team-badge.away{background:rgba(255,200,120,.18);color:#ffdfa0;border:2rpx solid rgba(255,200,120,.5)}
+.qs-team-name{font-size:26rpx;color:#dfeee4}
+.qs-vs-mark{font-size:40rpx;font-weight:800;color:#FFB300}
+.qs-match-meta{display:flex;flex-direction:column;align-items:center;gap:8rpx}
+.qs-meta-item{font-size:25rpx;color:rgba(223,238,228,.85);line-height:1.8}
+
+/* 已报名 / 截止卡 */
+.qs-done-card{background:#fff;border-radius:22rpx;margin-top:28rpx;padding:52rpx 36rpx;text-align:center;box-shadow:0 4rpx 20rpx rgba(0,0,0,.06)}
+.qs-done-icon{font-size:80rpx;margin-bottom:14rpx}
+.qs-done-title{font-size:36rpx;font-weight:700;color:#1c2b21;margin-bottom:16rpx}
+.qs-done-text{font-size:27rpx;color:#6b7a6f;line-height:1.7}
+.qs-done-text.sub{font-size:23rpx;color:#9aa8a0;margin-top:8rpx}
+
+/* 报名表单 */
+.qs-form-card{background:#fff;border-radius:22rpx;margin-top:28rpx;padding:8rpx 30rpx;box-shadow:0 4rpx 20rpx rgba(0,0,0,.06)}
+.qs-form-row{display:flex;align-items:center;padding:30rpx 0}
+.qs-divider{height:1rpx;background:#f0f2ee}
+.qs-label{font-size:28rpx;color:#5a6b5e;width:150rpx;flex-shrink:0}
+.qs-input{flex:1;font-size:30rpx;color:#1c2b21}
+
+.qs-submit{margin-top:40rpx;background:linear-gradient(160deg,#0aa85a,#065431);border-radius:48rpx;padding:26rpx 0;text-align:center;box-shadow:0 8rpx 24rpx rgba(10,168,90,.3)}
+.qs-submit-disabled{opacity:.45;box-shadow:none}
