@@ -1,0 +1,2 @@
+page{background:#003621}
+.notify-entry{min-height:100vh;display:flex;align-items:center;justify-content:center;color:#dff3e8;font-size:26rpx}

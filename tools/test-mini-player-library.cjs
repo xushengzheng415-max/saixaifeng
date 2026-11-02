@@ -43,7 +43,7 @@ async function main(){
  page.data.teamId='team';let request=page.loadPlayers();page.onShow();assert.equal(requests,1);resolveCall();await request;assert.equal(page.data.players.length,1)
  fail=true;request=page.loadPlayers();resolveCall();await request;assert.equal(page.data.errorText,'读取失败，请重试')
  fail=false;request=page.loadPlayers({type:'tap'});assert.equal(page.data.loading,true);assert.equal(page.data.errorText,'');resolveCall();await request;assert.equal(page.data.errorText,'');assert.equal(page.data.players.length,1)
- // 返回键：通知直达时页面栈只有一页，返回无处可退，必须弹出「回首页 / 留在本页」选项，并常驻首页入口。
+ // 返回键：通知直达时页面栈只有一页，返回无处可退，必须弹出「回首页 / 留在本页」选项。
  page=makePage();pageStack=[];page.onBack()
  assert.equal(modals.length,1,'栈1必须给出返回选项');assert.equal(modals[0].confirmText,'回首页');assert.equal(modals[0].cancelText,'留在本页')
  modals[0].success({confirm:false,cancel:true});assert.equal(tabs.length,0,'选择留在本页不跳转');assert.equal(backs.length,0)
@@ -67,7 +67,20 @@ async function main(){
  assert.deepEqual(switchCalls,[]);assert.equal(requests,denyBefore,'无权限球队不能发请求');assert.equal(page.data.loading,false);assert.match(page.data.errorText,/不在当前工作空间|没有查看权限/)
  page.onShow();assert.equal(requests,denyBefore,'进入失败后 onShow 不能空转请求')
  const libraryWxml=fs.readFileSync(root+'/miniprogram/pages/team/player-library/player-library.wxml','utf8')
- assert.ok(libraryWxml.includes('bindtap="goHome"'),'球员库导航栏必须有常驻首页入口')
+ assert.ok(!libraryWxml.includes('player-library-home'),'用户已确认取消导航栏右上角首页标识')
+ // 服务号通知中转页：先占住页面栈再打开业务页，用户右滑/返回仍留在小程序内。
+ let entryNav=null,entryDefinition=null
+ vm.runInNewContext(fs.readFileSync(root+'/miniprogram/pages/notify-entry/notify-entry.js','utf8'),{Page:value=>{entryDefinition=value},wx:{navigateTo(o){entryNav=o.url;o.success&&o.success()},switchTab(o){tabs.push('entry:'+o.url)},reLaunch(o){relaunches.push('entry:'+o.url)}},encodeURIComponent,Promise})
+ const makeEntry=()=>({...entryDefinition})
+ tabs=[];relaunches=[]
+ let entry=makeEntry();entry.onShow();assert.equal(tabs.length,0,'首次 onShow 不能跳首页')
+ entry=makeEntry();entry.onLoad({teamId:'team',pendingTeamConfirm:'1'});assert.equal(entryNav,'/pages/team/player-library/player-library?teamId=team&pendingTeamConfirm=1','中转页必须带完整目标参数打开球员库')
+ entry.onShow();assert.deepEqual(tabs,['entry:/pages/home/home'],'从内页返回中转页后必须落到小程序首页，不能退出小程序')
+ entry=makeEntry();entry.onLoad({teamId:'team'});assert.equal(entryNav,'/pages/team/player-library/player-library?teamId=team')
+ tabs=[]
+ entry=makeEntry();entry.onLoad({});assert.deepEqual(tabs,['entry:/pages/home/home'],'没有球队参数时直接回首页')
+ const appJson=JSON.parse(fs.readFileSync(root+'/miniprogram/app.json','utf8'))
+ assert.ok(appJson.pages.includes('pages/notify-entry/notify-entry'),'中转页必须注册在主包页面列表')
  for(const [,expression] of libraryWxml.matchAll(/{{(.*?)}}/gs))assert.doesNotMatch(expression,/===|!==|==|!=|\?|\[|\]|\(|\)|&&|[<>]/)
  console.log('OK: 球员库页面断言通过（加载去重/失败重试、通知直达切工作空间、返回键回首页、WXML 表达式限制）')
  // 以下为球员卡读取隔离检查。当前 playerCardReader.cjs 已在 1f2cc2ea 去掉单卡异常兜底，

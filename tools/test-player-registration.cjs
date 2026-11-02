@@ -1,4 +1,4 @@
-'use strict'
+﻿'use strict'
 const assert=require('node:assert/strict')
 const {run,saveDraft,fields,conflicts,claimProof}=require('../cloudfunctions/getMiniWorkspace/playerRegistration.cjs')
 function id(serial=1,birth='19900101') {const prefix='110101'+birth+String(serial).padStart(3,'0'),w=[7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2];return prefix+'10X98765432'[prefix.split('').reduce((s,n,i)=>s+Number(n)*w[i],0)%11]}
@@ -97,7 +97,7 @@ async function main(){
   assert.ok(fresh.recentPortraitId)
   assert.equal(registered.pendingTeamConfirm,true,'新登记必须回执为待球队确认')
   const newNotice=notices(s).pop()
-  assert.equal(newNotice.pagePath,'pages/team/player-library/player-library?teamId=team&pendingTeamConfirm=1','新登记的入队通知必须直达该队待确认列表')
+  assert.equal(newNotice.pagePath,'pages/notify-entry/notify-entry?teamId=team&pendingTeamConfirm=1','新登记的入队通知必须直达该队待确认列表')
   assert.equal(newNotice.pendingTeamConfirm,true)
   // 2026-10-19 用户确认口径：新登记只进入球队长期球员库「待确认」，等球队负责人确认后才正式入队。
   assert.equal(fresh.teamId,'');assert.equal(fresh.teamCode,'')
@@ -118,7 +118,7 @@ async function main(){
   const claimed=await run(s.deps,{...valid,name:'在队球员',operation:'submit',choiceToken:claimChoice.choiceToken})
   assert.equal(claimed.pendingTeamConfirm,false);assert.equal(s.rows.players.inTeam.teamId,'team')
   const claimNotice=notices(s).pop()
-  assert.equal(claimNotice.pagePath,'pages/team/player-library/player-library?teamId=team','认领入队通知同样直达该队球员库')
+  assert.equal(claimNotice.pagePath,'pages/notify-entry/notify-entry?teamId=team','认领入队通知同样直达该队球员库')
   assert.equal(claimNotice.pendingTeamConfirm,false)
   // 2026-10-19 用户口径：身份证只是检索方式之一，无身份证的青少年档案凭姓名即可认领，
   // 提交时补录的身份证号成为该档案凭据；仍受已认领、历史微信关联、手机号不符拦截。
@@ -162,7 +162,7 @@ async function main(){
   let done=await run(s.deps,{operation:'confirm_restore',choiceToken:picked.choiceToken,jerseyNumber:'7',portraitId:'',authorizationAgreed:true})
   assert.equal(done.restored,true);assert.equal(done.transfer,false);assert.equal(done.playerId,'archived1')
   const restoreNotice=notices(s).pop()
-  assert.equal(restoreNotice.pagePath,'pages/team/player-library/player-library?teamId=team','恢复入队通知也必须直达该队球员库')
+  assert.equal(restoreNotice.pagePath,'pages/notify-entry/notify-entry?teamId=team','恢复入队通知也必须直达该队球员库')
   assert.equal(s.rows.players.archived1.teamId,'team');assert.equal(s.rows.players.archived1.status,'');assert.ok(s.rows.players.archived1.currentHistoryId)
   let logs=Object.values(s.rows.player_team_history||{});assert.equal(logs.length,1);assert.equal(logs[0].joinSource,'restore');assert.equal(logs[0].leftAt,null)
   // 幂等重放：同 choiceToken 重复确认直接返回，不重复写日志。

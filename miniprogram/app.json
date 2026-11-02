@@ -40,7 +40,8 @@
     "pages/workspace/temp-team/temp-team",
     "pages/workspace/restricted/restricted",
     "pages/common/official-webview",
-    "pages/discover/invite-manage/invite-manage"
+    "pages/discover/invite-manage/invite-manage",
+    "pages/notify-entry/notify-entry"
   ],
   "window": {
     "backgroundTextStyle": "light",
