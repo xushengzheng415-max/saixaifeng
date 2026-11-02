@@ -1,0 +1,46 @@
+{
+  "name": "sxf-football-desktop",
+  "version": "0.2.8",
+  "private": true,
+  "description": "赛小蜂足球 Windows 联网客户端",
+  "author": "赛小蜂",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "start:preview": "electron . --preview",
+    "test": "node --test test/*.test.cjs",
+    "smoke": "node scripts/smoke.cjs",
+    "build": "npm test && electron-builder --win nsis --x64 --publish never",
+    "build:dir": "electron-builder --win --x64 --dir --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "cn.sxffootball.desktop",
+    "productName": "赛小蜂足球",
+    "copyright": "Copyright © 2026 赛小蜂",
+    "asar": true,
+    "directories": { "output": "release", "buildResources": "assets" },
+    "files": ["src/**/*", "scripts/runtime-smoke.cjs", "assets/icon.png", "assets/brand-vertical.png", "assets/update-badge.png", "package.json"],
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/icon.ico",
+      "executableName": "SxfFootball",
+      "artifactName": "SxfFootball-Setup-${version}-${arch}.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "赛小蜂足球",
+      "language": "2052",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
