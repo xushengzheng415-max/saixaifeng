@@ -1,5 +1,7 @@
 'use strict'
 
+const stageOrder = require('./stageOrder.cjs')
+
 function label(source) {
   if (!source) return '待产生'
   if (source.type === 'seed') return source.name || `签位${source.seed}`
@@ -69,6 +71,30 @@ function matchFactory(tournamentId, options) {
       isBye: false
     }
   }
+}
+
+// 场序按赛程阶段统一编排：低段排位赛 → 半决赛 → 三四名 → 决赛，
+// 与 scheduler 的先后屏障同一口径，保证决赛是最后一场。
+function resequenceByStage(matches) {
+  if (!Array.isArray(matches) || matches.length < 2) return matches
+  const ordered = matches
+    .map((match, index) => ({ match, index }))
+    .sort((left, right) => stageOrder.compareStage(left.match, right.match) || left.index - right.index)
+    .map(item => item.match)
+  const base = Math.min(...matches.map(match => Number(match.matchNo || match.matchIndex || 0)).filter(Boolean))
+  const renumbered = new Map(ordered.map((match, index) => [Number(match.matchNo || match.matchIndex), base + index]))
+  ordered.forEach((match, index) => {
+    match.matchNo = base + index
+    match.matchIndex = base + index
+    for (const side of ['home', 'away']) {
+      const source = match[`${side}Source`]
+      if (source && ['match_winner', 'match_loser'].includes(source.type) && source.matchNo) source.matchNo = renumbered.get(Number(source.matchNo)) || source.matchNo
+      match[`${side}SourceLabel`] = label(source)
+      match[`${side}TeamName`] = label(source)
+    }
+    match.dependencyMatchNos = (match.dependencyMatchNos || []).map(no => renumbered.get(Number(no))).filter(Boolean)
+  })
+  return ordered
 }
 
 function rangeName(low, high, count) {
@@ -142,8 +168,7 @@ function fullRankingKnockout(tournamentId, participants, options = {}) {
     blocks = next
     round += 1
   }
-  matches.sort((a, b) => a.matchNo - b.matchNo)
-  return { matches, complete: true, warnings: [] }
+  return { matches: resequenceByStage(matches), complete: true, warnings: [] }
 }
 
 function twoGroupKnockout(tournamentId, groups, options = {}) {
@@ -172,8 +197,7 @@ function twoGroupKnockout(tournamentId, groups, options = {}) {
     matches.push(create({ scheduleType: 'tournament', phase: rank === 1 ? 'knockout' : 'placement', round: 2, roundName: low === 1 ? '决赛' : `${low}–${low + 1}名排位赛`, rankRange: `${low}–${low + 1}`, homeSource: winner(first.matchNo), awaySource: winner(second.matchNo), dependencies: [first.matchNo, second.matchNo], finalRankHigh: low, finalRankLow: low + 1 }))
     matches.push(create({ scheduleType: 'tournament', phase: 'placement', round: 2, roundName: low === 1 ? '三、四名决赛' : `${low + 2}–${high}名排位赛`, rankRange: `${low + 2}–${high}`, homeSource: loser(first.matchNo), awaySource: loser(second.matchNo), dependencies: [first.matchNo, second.matchNo], finalRankHigh: low + 2, finalRankLow: high }))
   }
-  matches.sort((left, right) => left.matchNo - right.matchNo)
-  return { matches, complete: true, warnings: [] }
+  return { matches: resequenceByStage(matches), complete: true, warnings: [] }
 }
 
 function multiGroupRanking(tournamentId, groups, options = {}) {
@@ -196,8 +220,7 @@ function multiGroupRanking(tournamentId, groups, options = {}) {
     warnings.push(...result.warnings)
     if (result.matches.length) startMatchNo = result.matches[result.matches.length - 1].matchNo
   }
-  matches.sort((left, right) => left.matchNo - right.matchNo)
-  return { matches, complete: warnings.length === 0, warnings }
+  return { matches: resequenceByStage(matches), complete: warnings.length === 0, warnings }
 }
 
-module.exports = { label, fullRankingKnockout, twoGroupKnockout, multiGroupRanking }
+module.exports = { label, fullRankingKnockout, twoGroupKnockout, multiGroupRanking, resequenceByStage }

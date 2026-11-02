@@ -119,6 +119,28 @@ assert.equal(third.homeSource.type, 'match_loser')
   firstKnockout.forEach(match => assert.notEqual(match.homeSource.groupName, match.awaySource.groupName, '淘汰赛首轮必须回避同组球队'))
 })
 
+// 4.2 全名次排位：场序按阶段编排（低段排位赛 → 半决赛 → 三四名 → 决赛），决赛仍是最后一场。
+const fullRanking = confirmedPairings.buildConfirmedPairings({
+  tournamentId: 'full-ranking',
+  division: { _id: 'u12-full', name: 'U12全排名', formatType: 'cup', advancePerGroup: 2, finalRankingMode: 'full', loopType: 'single' },
+  groupRecords: [{ _id: 'draw', tournamentId: 'full-ranking', divisionId: 'u12-full', status: 'published', groups: Array.from({ length: 4 }, (_, index) => ({
+    groupName: `${String.fromCharCode(65 + index)}组`,
+    groupCode: String.fromCharCode(65 + index),
+    teams: teams(String.fromCharCode(65 + index), 4)
+  })) }]
+}).matches
+assert.equal(fullRanking.filter(match => match.phase === 'group').length, 24, '四组四队小组赛应为 24 场')
+assert.equal(fullRanking.length, 40, '四组四队全名次排位应为 24 + 16 场')
+assert.equal(fullRanking.at(-1).roundName, '决赛', '全名次排位的决赛必须是最后一场')
+assert.equal(fullRanking.at(-2).roundName, '三、四名决赛', '全名次排位的三四名赛排在决赛之前')
+const fullRankingMap = new Map(fullRanking.map(match => [match.matchNo, match]))
+fullRanking.forEach(match => {
+  ;(match.dependencyMatchNos || []).forEach(no => {
+    const dependency = fullRankingMap.get(no)
+    assert(dependency && dependency.matchNo < match.matchNo, `场序${match.matchNo}必须排在前置场序${no}之后`)
+  })
+})
+
 // 5. 排期次序：小组赛按轮次由早到晚，三四名赛后才是决赛，决赛拿到最后一个时段。
 const scheduler = (await import('../cloudfunctions/generateSchedule/scheduler.js')).default
 const scheduled = matches.map(match => Object.assign({}, match, { matchFormat: '5side', requiredVenueFormat: '5side', durationMinutes: 40 }))

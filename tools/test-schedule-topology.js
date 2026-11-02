@@ -42,6 +42,8 @@ assert.deepStrictEqual(
 ;['1/4决赛', '半决赛', '三、四名决赛', '5–8名排位赛', '5–6名排位赛', '7–8名排位赛'].forEach(name => {
   assert(eight.matches.some(match => match.roundName === name), `8队全排名缺少${name}`)
 })
+assert.strictEqual(eight.matches.at(-1).roundName, '决赛', '8队全排名决赛必须是最后一场')
+assert.strictEqual(eight.matches.at(-2).roundName, '三、四名决赛', '三四名决赛必须紧跟决赛之前')
 
 const sixteen = topology.fullRankingKnockout('demo', teams(16))
 assert.strictEqual(sixteen.complete, true)
@@ -62,10 +64,14 @@ assert.strictEqual(twoGroups.matches[0].matchNo, 13)
 ;['决赛', '三、四名决赛', '5–6名排位赛', '7–8名排位赛'].forEach(name => {
   assert(twoGroups.matches.some(match => match.roundName === name), `两组全排名缺少${name}`)
 })
+assert.strictEqual(twoGroups.matches.at(-1).roundName, '决赛', '两组全排名决赛必须是最后一场')
+assert.strictEqual(twoGroups.matches.at(-2).roundName, '三、四名决赛', '两组全排名三四名赛必须排在决赛之前')
 
 const fourGroups = topology.multiGroupRanking('demo', groups(4, 4))
 assert.strictEqual(fourGroups.complete, true)
 assert.strictEqual(fourGroups.matches.length, 16)
+assert.strictEqual(fourGroups.matches.at(-1).roundName, '决赛', '四组全排名决赛必须是最后一场')
+assert.strictEqual(fourGroups.matches.at(-2).roundName, '三、四名决赛', '四组全排名三四名赛必须排在决赛之前')
 
 const scheduled = topology.fullRankingKnockout('demo', teams(8)).matches
 scheduled.forEach(match => { match.matchFormat='5side';match.requiredVenueFormat='5side' })
