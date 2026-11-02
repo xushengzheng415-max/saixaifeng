@@ -378,7 +378,7 @@
  function showHomeAccount(kind){modal(kind==='ledger'?'蜂蜜收支':'消息通知','<p class="me-modal-text">正在读取…</p>');homeModal=kind;loadHomeAccount(true).then(function(data){if(!data||homeModal!==kind||!app.querySelector('.me-modal-mask'))return
   var result=kind==='ledger'?data.wallet:data.messages,entries=result&&result.entries||[],html=''
   if(!result||result.status!=='ready')html='<p class="me-modal-text">'+(kind==='ledger'&&result&&result.status==='not_open'?'尚未开通蜂蜜账户':kind==='ledger'?'蜂蜜余额暂不可核定，请稍后刷新':'消息暂不可用，请稍后刷新')+'</p>'
-  else html=entries.length?'<div class="me-account-entries">'+entries.map(function(row){return '<div class="me-account-entry"><div><strong>'+esc(kind==='ledger'?row.label:row.title)+'</strong><small>'+esc(homeTime(row.time))+'</small>'+(kind==='ledger'?'':'<p>'+esc(row.content)+'</p>')+'</div>'+(kind==='ledger'?'<b>'+esc((row.delta>0?'+':'')+row.delta)+' 滴</b>':'')+'</div>'}).join('')+'</div>':'<p class="me-modal-text">'+(kind==='ledger'?'暂无收支记录':'暂无发给本人账号的消息')+'</p>'
+  else html=entries.length?'<div class="me-account-entries">'+entries.map(function(row){return '<div class="me-account-entry"><div><strong>'+esc(kind==='ledger'?row.label:row.title)+'</strong><small>'+esc(homeTime(row.time))+'</small>'+(kind==='ledger'?'':'<p>'+esc(row.content)+'</p>'+(row.webPath?'<a href="'+esc(row.webPath)+'">查看并处理</a>':''))+'</div>'+(kind==='ledger'?'<b>'+esc((row.delta>0?'+':'')+row.delta)+' 滴</b>':'')+'</div>'}).join('')+'</div>':'<p class="me-modal-text">'+(kind==='ledger'?'暂无收支记录':'暂无发给本人账号的消息')+'</p>'
   modal(kind==='ledger'?'蜂蜜收支':'消息通知',html)
  })}
  // 蜂蜜充值：单价与档位全部来自服务端（1 元 = 10 滴，档位未配置或支付未开通时不开放）。

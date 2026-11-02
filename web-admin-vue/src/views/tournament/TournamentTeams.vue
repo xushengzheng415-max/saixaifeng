@@ -27,7 +27,7 @@
           <h1>{{ isRegistrationWorkspace ? '报名管理' : '球队管理' }}</h1>
 
         </div>
-        <div v-if="isRegistrationWorkspace" class="heading-actions">
+        <div v-if="isRegistrationWorkspace" class="heading-actions"><el-button plain @click="registrationNotify.open()">通知催认领</el-button>
           <el-button plain :disabled="creatingTargetedRegistrationLink" @click="openTargetedRegistrationLinkDialog"><el-icon><Link /></el-icon>邀请球队</el-button>
           <el-dropdown trigger="click" @command="openAddTeamEntry"><el-button type="primary"><el-icon><Plus /></el-icon>添加球队<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="isDemoModeActive" command="virtual"><el-icon><Plus /></el-icon>虚拟球队</el-dropdown-item><el-dropdown-item command="upload"><el-icon><Upload /></el-icon>上传资料、名单</el-dropdown-item><el-dropdown-item command="manual"><el-icon><Plus /></el-icon>快速添加</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
@@ -53,6 +53,9 @@
         <template><el-tab-pane label="已审核球队" name="all" /><el-tab-pane v-if="isProfessional" label="参赛名单" name="roster" /><el-tab-pane v-if="isProfessional" label="名单异常" name="abnormal" /><el-tab-pane :label="isProfessional ? '名单变更' : '球队变更'" name="cancel_requested" /></template>
       </el-tabs>
 
+      <el-tabs v-if="isRegistrationWorkspace" v-model="registrationTab" class="team-work-tabs"><el-tab-pane label="球队报名" name="teams" /><el-tab-pane label="队员审核" name="players" /></el-tabs>
+      <PlayerReviewQueue v-if="isRegistrationWorkspace && registrationTab==='players'" :tournament-id="tournamentId" :division-id="activeDivisionId" />
+      <div v-show="!isRegistrationWorkspace || registrationTab==='teams'">
       <section v-if="!isRegistrationWorkspace && activeTab === 'materials'" class="registration-materials"><header><div><h2>赛事宣传物料</h2></div><el-button type="primary" @click="openQrDialog"><el-icon><Picture /></el-icon>生成当前版式海报</el-button></header><div class="poster-template-grid"><button v-for="template in posterTemplates" :key="template.id" type="button" :class="{ active:posterTemplate===template.id }" @click="posterTemplate=template.id"><span :class="`poster-template-preview ${template.id}`"></span><strong>{{ template.name }}</strong><small>{{ template.description }}</small></button></div><el-alert type="info" :closable="false" title="竞赛规程全文保留在小程序报名页，海报只显示“规程已发布”和扫码入口，避免信息过载。" /></section>
       <section v-else-if="isRegistrationWorkspace && activeTab === 'all'" class="team-summary-grid">
         <article><span>报名球队</span><strong>{{ activeRegistrationTeamCount }}</strong><small>支</small></article>
@@ -243,7 +246,9 @@
         <div class="teams-data-table" role="table"><div class="teams-table-row pending-claim-row teams-table-head" role="row"><span>球队（队徽 + 名称）</span><span>所属组别</span><span>专属小程序认领链接</span><span>发送时间</span><span>操作</span></div><div v-for="row in pendingClaimRows" :key="row.recordId" class="teams-table-row pending-claim-row" role="row"><div class="team-identity"><img v-if="row.logo || row.logoUrl" :src="row.logo || row.logoUrl" class="team-crest" alt="" /><span v-else class="team-crest-placeholder">{{ teamInitial(row) }}</span><div><strong>{{ row.name || row.teamName }}</strong></div></div><span>{{ activeDivision.name }}</span><span><el-tag type="warning" effect="plain" size="small">未认领</el-tag></span><span>{{ applicationTime(row) }}</span><div class="team-row-actions"><el-button link type="primary" @click="openClaimReminder(row)">复制认领链接</el-button><el-button link type="success" @click="openClaimReminder(row)">发送提醒</el-button><el-button v-if="claimLabel(row) !== '已认领'" link type="danger" @click="deleteUnclaimedTeam(row)">删除队伍</el-button><el-button v-else link type="danger" @click="removeTeam(row)">移出赛事</el-button></div></div></div>
       </section>
       <div v-if="isProfessionalApplicationView" class="professional-application-boundary"><el-icon><InfoFilled /></el-icon><span>申请通过后，球队先完成小程序认领与参赛确认，再进入赛事参赛名单提交；审核不会自动生成名单或授予球队所有权。</span></div>
+      </div>
       </template>
+      <PlayerNotifyDialog ref="registrationNotify" :tournament-id="tournamentId" :division-id="activeDivisionId" />
     </main>
 
     <!-- Local visual-QA uses a native overlay because the CDP compositor does not paint Element Plus teleported dialogs. -->
@@ -565,6 +570,8 @@ import { ArrowDown, Plus, Search, User, InfoFilled, Picture, CircleCloseFilled, 
 import { queryById, queryList, addRecord, updateRecord, deleteRecord, callFunction, uploadLargeFileViaCloud, uploadImageViaWebApi, getFileUrl, assignTournamentTeamDivision } from '../../utils/cloud'
 import { provinceCodeMap, cityLetterMap } from '../../data/teamCodeRegions'
 import { getVisualQaSnapshot, visualQaActive } from '../../utils/visualQaFixtures'
+import PlayerReviewQueue from '../../components/tournament/PlayerReviewQueue.vue'
+import PlayerNotifyDialog from '../../components/tournament/PlayerNotifyDialog.vue'
 import TeamRegistrationWordImporter from '../../components/tournament/TeamRegistrationWordImporter.vue'
 import { isDemoMode, demoRequest } from '../../utils/demoMode'
 
@@ -581,6 +588,8 @@ const claimInviteLinkPlaceholder = computed(() => (miniProgramQrEnvVersion === '
 const isRegistrationWorkspace = computed(() => /\/registration$/.test(route.path))
 const publicBase = import.meta.env.BASE_URL
 const tournamentId = route.params.id
+const registrationTab=ref(route.query.review==='players'?'players':'teams'),registrationNotify=ref(null)
+watch(registrationTab,value=>router.replace({query:{...route.query,review:value==='players'?'players':undefined}}))
 const isDemoModeActive = isDemoMode(tournamentId)
 const qaSnapshot = typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && window.location.href.includes('visualQa=1')
   ? (window.__sxfVisualQaSnapshot || getVisualQaSnapshot())

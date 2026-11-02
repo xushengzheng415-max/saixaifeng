@@ -26,7 +26,7 @@
         </nav>
         <div class="detail-heading">
           <div><h1>球队详情</h1></div>
-          <div class="detail-heading-actions"><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button v-if="isReadOnlyTournament" type="success" plain :loading="loading || playerStatsLoading" @click="openRosterPoster"><el-icon><Picture /></el-icon>球队名单海报</el-button><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
+          <div class="detail-heading-actions"><el-button v-if="sourceTournamentId && !isReadOnlyTournament && !isTeamDataWorkspace" plain @click="playerNotifyDialog.open({teamId})">通知催认领</el-button><el-button type="success" plain @click="openExportDialog"><el-icon><Download /></el-icon>导出球队资料</el-button><el-button v-if="isReadOnlyTournament" type="success" plain :loading="loading || playerStatsLoading" @click="openRosterPoster"><el-icon><Picture /></el-icon>球队名单海报</el-button><el-button type="primary" plain @click="editTeam">编辑球队</el-button><el-button type="success" plain @click="goBack"><el-icon><Back /></el-icon>返回参赛球队</el-button></div>
         </div>
 
         <section class="team-event-summary">
@@ -90,7 +90,7 @@
             <el-table-column label="球衣名" min-width="84"><template #default="{ row }">{{ row._accountHolderRow ? '—' : displayJerseyName(row) }}</template></el-table-column>
             <el-table-column label="职务" min-width="130"><template #default="{ row }">{{ row.role || row.type || '工作人员' }}<el-tag v-if="row.isAlsoPlayer || row.dualRoleLabel" size="small" type="warning" class="dual-role-tag">兼{{ row.jerseyNumber ? `${row.jerseyNumber}号` : '' }}球员</el-tag><el-tag v-if="row._accountHolderRow" size="small" type="info" class="dual-role-tag">非编制工作人员</el-tag></template></el-table-column>
             <el-table-column label="出生日期" min-width="98"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
-            <el-table-column label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column label="籍贯" min-width="76" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || resolveNativePlace(row.idCard || row.idNumber)?.nativePlace || '—' }}</template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="手机号" min-width="108"><template #default="{ row }">{{ teamStaffPhone(row, staffAccount(row)) || '未填写' }}<small v-if="canManageTeamAccess && staffAccount(row)" class="staff-account-phone">{{ staffAccountLabel(row) }}</small></template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="操作权限" min-width="86"><template #default="{ row }">{{ canManageTeamAccess ? staffPermissionLabel(row) : '—' }}</template></el-table-column>
             <el-table-column v-if="sourceTournamentId" label="状态" min-width="82"><template #default="{ row }">{{ canManageTeamAccess ? (staffAccount(row)?.status || '未授权') : '未授权' }}</template></el-table-column>
@@ -120,11 +120,11 @@
             <el-table-column v-if="isSyntheticTeam && players.some(player => player.playerId)" prop="playerId" label="球员编号" width="50" />
             <el-table-column prop="jerseyNumber" label="号码" :sortable="isTeamDataWorkspace ? 'custom' : false" width="56" align="center"><template #default="{ row }">{{ row.jerseyNumber || '—' }}</template></el-table-column>
             <el-table-column prop="position" label="位置" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 68 : 66" align="center"><template #default="{ row }"><el-tag size="small" :type="getPositionType(row.position)">{{ getPositionLabel(row.position) }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" width="104" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || '—' }}</template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="籍贯" width="104" show-overflow-tooltip><template #default="{ row }">{{ row.nativePlace || resolveNativePlace(row.idCard || row.idNumber)?.nativePlace || '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="出生日期" width="88" align="center"><template #default="{ row }">{{ row.birthDate || '—' }}</template></el-table-column>
             <el-table-column prop="age" label="年龄" :sortable="isTeamDataWorkspace ? 'custom' : false" :width="isTeamDataWorkspace ? 65 : 44" align="center"><template #default="{ row }">{{ row.birthDate ? calculateAge(row.birthDate) : '—' }}</template></el-table-column>
             <el-table-column v-if="!isTeamDataWorkspace" label="认领状态" width="78" align="center"><template #default="{ row }"><el-tag :type="playerClaimed(row) ? 'success' : 'info'" size="small">{{ playerClaimed(row) ? '已认领' : '未认领' }}</el-tag></template></el-table-column>
-            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="100" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已通过</el-tag><div v-else class="player-review-actions"><el-button v-if="playerOrganizerReviewStatus(row) === 'rejected'" link type="danger" size="small" @click.stop="showPlayerRejection(row)">已驳回</el-button><span class="player-review-decisions"><el-button link type="success" size="small" :loading="playerReviewingId === row._id && !playerReviewDialogVisible" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="approvePlayer(row)">通过</el-button><el-button link type="danger" size="small" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">驳回</el-button></span></div></template></el-table-column>
+            <el-table-column v-if="!isTeamDataWorkspace" label="主办方审核" width="100" align="center"><template #default="{ row }"><el-tag v-if="playerOrganizerReviewStatus(row) === 'approved'" type="success" size="small">已通过</el-tag><el-tooltip v-else-if="playerOrganizerReviewStatus(row) === 'rejected'" :content="row.organizerReviewReason || '等待补充资料后重新提交'" placement="top"><el-tag type="danger" size="small">已驳回</el-tag></el-tooltip><div v-else class="player-review-actions"><el-tag v-if="playerOrganizerReviewStatus(row) === 'resubmitted'" type="warning" size="small">待复审</el-tag><span class="player-review-decisions"><el-button link type="success" size="small" :loading="playerReviewingId === row._id && !playerReviewDialogVisible" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="approvePlayer(row)">通过</el-button><el-button link type="danger" size="small" :disabled="batchReviewing || !!playerReviewingId || isReadOnlyTournament" @click.stop="reviewPlayer(row)">驳回</el-button></span></div></template></el-table-column>
             <template v-if="isTeamDataWorkspace">
               <el-table-column prop="appearances" label="出场场次" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="90" align="center"><template #default="{ row }">{{ statValue(row, 'appearances') }}</template></el-table-column>
               <el-table-column prop="minutes" label="出场时间" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="105" align="center"><template #default="{ row }">{{ statValue(row, 'minutes') }}{{ statValue(row, 'minutes') === '—' ? '' : ' 分钟' }}</template></el-table-column>
@@ -133,7 +133,7 @@
               <el-table-column prop="redCards" label="红牌" sortable="custom" :sort-orders="['descending', 'ascending', null]" width="65" align="center"><template #default="{ row }">{{ statValue(row, 'redCards') }}</template></el-table-column>
               <el-table-column label="操作" width="70" align="center"><template #default="{ row }"><el-button link type="primary" @click.stop="viewPlayerCard(row)">查看</el-button></template></el-table-column>
             </template>
-            <el-table-column v-else label="操作" min-width="132" align="right"><template #default="{ row }"><div class="player-row-ops"><el-button link type="primary" @click.stop="viewPlayerCard(row)">详情</el-button><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></div></template></el-table-column>
+            <el-table-column v-else label="操作" min-width="206" align="right"><template #default="{ row }"><div class="player-row-ops"><el-button v-if="sourceTournamentId && !isReadOnlyTournament" link type="primary" @click.stop="playerNotifyDialog.open({kind:'materials',teamId,player:row})">通知补资料</el-button><el-button link type="primary" @click.stop="viewPlayerCard(row)">详情</el-button><el-button link type="primary" @click.stop="editPlayer(row)">编辑</el-button><el-button link type="danger" @click.stop="deletePlayer(row)">删除</el-button></div></template></el-table-column>
           </el-table>
         </section>
         <section v-if="isReadOnlyTournament" class="tournament-history-panel">
@@ -1241,13 +1241,16 @@
       <template #footer><el-button @click="exportDialogVisible=false">取消</el-button><el-button type="primary" :loading="exporting" :disabled="exportFields.length === 0" @click="exportTeamData">导出 Excel</el-button></template>
     </el-dialog>
     <RosterPosterModal v-model="rosterPosterVisible" :tournament="tournamentContext" :tournament-logo="tournamentLogoUrl" :division-name="tournamentRelation.divisionName || sourceDivisionId" :team="team" :team-logo="teamLogoDisplayUrl" :players="posterRosterPlayers" :staff="staffMembers" :photo-data-urls="rosterPosterPhotos" :loading="loading || playerStatsLoading || rosterPosterPhotosLoading" />
+    <PlayerNotifyDialog ref="playerNotifyDialog" :tournament-id="sourceTournamentId" :division-id="sourceDivisionId || tournamentRelation.divisionId || 'default'" />
     <PlayerReviewDialog v-model="playerReviewDialogVisible" :player="reviewingPlayer" :loading="!!playerReviewingId" @submit="submitPlayerReview" />
   </div>
 </template>
 
 <script setup>
 import { canAssignTeamAccounts, teamStaffDisplayRows, teamStaffPhone } from '../../utils/teamAccountAccess.js'
+import { resolveNativePlace } from '../../../../cloudfunctions/dataCenter/shared/idcard-region.cjs'
 import PlayerAvatar from '../../components/common/PlayerAvatar.vue'
+import PlayerNotifyDialog from '../../components/tournament/PlayerNotifyDialog.vue'
 import PlayerReviewDialog from '../../components/tournament/PlayerReviewDialog.vue'
 import { organizerPlayerReviewStatus, organizerPlayerReviewLabel } from '../../utils/playerReviewDisplay.js'
 import matchScore from '../../../../cloudfunctions/dataCenter/shared/match-score.cjs'
@@ -1278,6 +1281,7 @@ const isTournamentStaff = !isDemoMode() && sessionStorage.getItem('sxfTournament
 const route = useRoute()
 const router = useRouter()
 const teamId = String(route.params.teamId || route.params.id || '')
+const playerNotifyDialog=ref(null)
 const sourceTournamentId = computed(() => typeof route.query.fromTournament === 'string' ? route.query.fromTournament : (route.params.teamId ? String(route.params.id || '') : ''))
 const sourceDivisionId = computed(() => typeof route.query.divisionId === 'string' ? route.query.divisionId : '')
 async function uploadScopedTeamFile(cloudPath, file, options = {}) {
@@ -1961,8 +1965,8 @@ const playerReviewingId = ref('')
 const reviewPlayerTable = ref(null)
 const playerReviewDialogVisible=ref(false),reviewingPlayer=ref(null)
 const selectedReviewPlayers = ref([])
-const pendingReviewPlayers = computed(() => players.value.filter(player => playerOrganizerReviewStatus(player) === 'pending'))
-function onReviewSelectionChange(selection) { selectedReviewPlayers.value = selection.filter(player => playerOrganizerReviewStatus(player) === 'pending') }
+const pendingReviewPlayers = computed(() => players.value.filter(player => ['pending','resubmitted'].includes(playerOrganizerReviewStatus(player))))
+function onReviewSelectionChange(selection) { selectedReviewPlayers.value = selection.filter(player => ['pending','resubmitted'].includes(playerOrganizerReviewStatus(player))) }
 function togglePendingReviewSelection() {
   if (batchReviewing.value || playerReviewingId.value || loading.value) return
   const selectAll = selectedReviewPlayers.value.length !== pendingReviewPlayers.value.length
@@ -1970,7 +1974,7 @@ function togglePendingReviewSelection() {
   if (selectAll) pendingReviewPlayers.value.forEach(player => reviewPlayerTable.value?.toggleRowSelection(player, true))
 }
 const batchReviewing = ref(false)
-function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && playerOrganizerReviewStatus(player) === 'pending' }
+function canSelectReviewPlayer(player) { return !batchReviewing.value && !playerReviewingId.value && ['pending','resubmitted'].includes(playerOrganizerReviewStatus(player)) }
 const teamEditForm = ref({
   name: '',
   teamCode: '',
@@ -2051,120 +2055,7 @@ function parseIdCard(idCard) {
   const genderCode = parseInt(idCard.charAt(16))
   const gender = genderCode % 2 === 1 ? 'male' : 'female'
 
-  // 提取籍贯（前6位地区码）- 显示城市
-  const areaCode = idCard.substring(0, 6)
-  const cityMap = {
-    // 北京
-    '1101': '北京市', '1102': '北京市',
-    // 天津
-    '1201': '天津市', '1202': '天津市',
-    // 河北
-    '1301': '石家庄市', '1302': '唐山市', '1303': '秦皇岛市', '1304': '邯郸市', '1305': '邢台市',
-    '1306': '保定市', '1307': '张家口市', '1308': '承德市', '1309': '沧州市', '1310': '廊坊市', '1311': '衡水市',
-    // 山西
-    '1401': '太原市', '1402': '大同市', '1403': '阳泉市', '1404': '长治市', '1405': '晋城市',
-    '1406': '朔州市', '1407': '晋中市', '1408': '运城市', '1409': '忻州市', '1410': '临汾市', '1411': '吕梁市',
-    // 内蒙古
-    '1501': '呼和浩特市', '1502': '包头市', '1503': '乌海市', '1504': '赤峰市', '1505': '通辽市',
-    '1506': '鄂尔多斯市', '1507': '呼伦贝尔市', '1508': '巴彦淖尔市', '1509': '乌兰察布市',
-    '1522': '兴安盟', '1525': '锡林郭勒盟', '1529': '阿拉善盟',
-    // 辽宁
-    '2101': '沈阳市', '2102': '大连市', '2103': '鞍山市', '2104': '抚顺市', '2105': '本溪市',
-    '2106': '丹东市', '2107': '锦州市', '2108': '营口市', '2109': '阜新市', '2110': '辽阳市',
-    '2111': '盘锦市', '2112': '铁岭市', '2113': '朝阳市', '2114': '葫芦岛市',
-    // 吉林
-    '2201': '长春市', '2202': '吉林市', '2203': '四平市', '2204': '辽源市', '2205': '通化市',
-    '2206': '白山市', '2207': '松原市', '2208': '白城市', '2224': '延边朝鲜族自治州',
-    // 黑龙江
-    '2301': '哈尔滨市', '2302': '齐齐哈尔市', '2303': '鸡西市', '2304': '鹤岗市', '2305': '双鸭山市',
-    '2306': '大庆市', '2307': '伊春市', '2308': '佳木斯市', '2309': '七台河市', '2310': '牡丹江市',
-    '2311': '黑河市', '2312': '绥化市', '2327': '大兴安岭地区',
-    // 上海
-    '3101': '上海市', '3102': '上海市',
-    // 江苏
-    '3201': '南京市', '3202': '无锡市', '3203': '徐州市', '3204': '常州市', '3205': '苏州市',
-    '3206': '南通市', '3207': '连云港市', '3208': '淮安市', '3209': '盐城市', '3210': '扬州市',
-    '3211': '镇江市', '3212': '泰州市', '3213': '宿迁市',
-    // 浙江
-    '3301': '杭州市', '3302': '宁波市', '3303': '温州市', '3304': '嘉兴市', '3305': '湖州市',
-    '3306': '绍兴市', '3307': '金华市', '3308': '衢州市', '3309': '舟山市', '3310': '台州市', '3311': '丽水市',
-    // 安徽
-    '3401': '合肥市', '3402': '芜湖市', '3403': '蚌埠市', '3404': '淮南市', '3405': '马鞍山市',
-    '3406': '淮北市', '3407': '铜陵市', '3408': '安庆市', '3410': '黄山市', '3411': '滁州市',
-    '3412': '阜阳市', '3413': '宿州市', '3415': '六安市', '3416': '亳州市', '3417': '池州市', '3418': '宣城市',
-    // 福建
-    '3501': '福州市', '3502': '厦门市', '3503': '莆田市', '3504': '三明市', '3505': '泉州市',
-    '3506': '漳州市', '3507': '南平市', '3508': '龙岩市', '3509': '宁德市',
-    // 江西
-    '3601': '南昌市', '3602': '景德镇市', '3603': '萍乡市', '3604': '九江市', '3605': '新余市',
-    '3606': '鹰潭市', '3607': '赣州市', '3608': '吉安市', '3609': '宜春市', '3610': '抚州市', '3611': '上饶市',
-    // 山东
-    '3701': '济南市', '3702': '青岛市', '3703': '淄博市', '3704': '枣庄市', '3705': '东营市',
-    '3706': '烟台市', '3707': '潍坊市', '3708': '济宁市', '3709': '泰安市', '3710': '威海市',
-    '3711': '日照市', '3713': '临沂市', '3714': '德州市', '3715': '聊城市', '3716': '滨州市', '3717': '菏泽市',
-    // 河南
-    '4101': '郑州市', '4102': '开封市', '4103': '洛阳市', '4104': '平顶山市', '4105': '安阳市',
-    '4106': '鹤壁市', '4107': '新乡市', '4108': '焦作市', '4109': '濮阳市', '4110': '许昌市',
-    '4111': '漯河市', '4112': '三门峡市', '4113': '南阳市', '4114': '商丘市', '4115': '信阳市',
-    '4116': '周口市', '4117': '驻马店市', '4190': '省直辖县级行政区划',
-    // 湖北
-    '4201': '武汉市', '4202': '黄石市', '4203': '十堰市', '4205': '宜昌市', '4206': '襄阳市',
-    '4207': '鄂州市', '4208': '荆门市', '4209': '孝感市', '4210': '荆州市', '4211': '黄冈市',
-    '4212': '咸宁市', '4213': '随州市', '4228': '恩施土家族苗族自治州', '4290': '省直辖县级行政区划',
-    // 湖南
-    '4301': '长沙市', '4302': '株洲市', '4303': '湘潭市', '4304': '衡阳市', '4305': '邵阳市',
-    '4306': '岳阳市', '4307': '常德市', '4308': '张家界市', '4309': '益阳市', '4310': '郴州市',
-    '4311': '永州市', '4312': '怀化市', '4313': '娄底市', '4331': '湘西土家族苗族自治州',
-    // 广东
-    '4401': '广州市', '4402': '韶关市', '4403': '深圳市', '4404': '珠海市', '4405': '汕头市',
-    '4406': '佛山市', '4407': '江门市', '4408': '湛江市', '4409': '茂名市', '4412': '肇庆市',
-    '4413': '惠州市', '4414': '梅州市', '4415': '汕尾市', '4416': '河源市', '4417': '阳江市',
-    '4418': '清远市', '4419': '东莞市', '4420': '中山市', '4451': '潮州市', '4452': '揭阳市', '4453': '云浮市',
-    // 广西
-    '4501': '南宁市', '4502': '柳州市', '4503': '桂林市', '4504': '梧州市', '4505': '北海市',
-    '4506': '防城港市', '4507': '钦州市', '4508': '贵港市', '4509': '玉林市', '4510': '百色市',
-    '4511': '贺州市', '4512': '河池市', '4513': '来宾市', '4514': '崇左市',
-    // 海南
-    '4601': '海口市', '4602': '三亚市', '4603': '三沙市', '4604': '儋州市', '4690': '省直辖县级行政区划',
-    // 重庆
-    '5001': '重庆市', '5002': '重庆市',
-    // 四川
-    '5101': '成都市', '5103': '自贡市', '5104': '攀枝花市', '5105': '泸州市', '5106': '德阳市',
-    '5107': '绵阳市', '5108': '广元市', '5109': '遂宁市', '5110': '内江市', '5111': '乐山市',
-    '5113': '南充市', '5114': '眉山市', '5115': '宜宾市', '5116': '广安市', '5117': '达州市',
-    '5118': '雅安市', '5119': '巴中市', '5120': '资阳市', '5132': '阿坝藏族羌族自治州',
-    '5133': '甘孜藏族自治州', '5134': '凉山彝族自治州',
-    // 贵州
-    '5201': '贵阳市', '5202': '六盘水市', '5203': '遵义市', '5204': '安顺市', '5205': '毕节市',
-    '5206': '铜仁市', '5223': '黔西南布依族苗族自治州', '5226': '黔东南苗族侗族自治州', '5227': '黔南布依族苗族自治州',
-    // 云南
-    '5301': '昆明市', '5303': '曲靖市', '5304': '玉溪市', '5305': '保山市', '5306': '昭通市',
-    '5307': '丽江市', '5308': '普洱市', '5309': '临沧市', '5323': '楚雄彝族自治州', '5325': '红河哈尼族彝族自治州',
-    '5326': '文山壮族苗族自治州', '5328': '西双版纳傣族自治州', '5329': '大理白族自治州',
-    '5331': '德宏傣族景颇族自治州', '5333': '怒江傈僳族自治州', '5334': '迪庆藏族自治州',
-    // 西藏
-    '5401': '拉萨市', '5402': '日喀则市', '5403': '昌都市', '5404': '林芝市', '5405': '山南市',
-    '5406': '那曲市', '5425': '阿里地区',
-    // 陕西
-    '6101': '西安市', '6102': '铜川市', '6103': '宝鸡市', '6104': '咸阳市', '6105': '渭南市',
-    '6106': '延安市', '6107': '汉中市', '6108': '榆林市', '6109': '安康市', '6110': '商洛市',
-    // 甘肃
-    '6201': '兰州市', '6202': '嘉峪关市', '6203': '金昌市', '6204': '白银市', '6205': '天水市',
-    '6206': '武威市', '6207': '张掖市', '6208': '平凉市', '6209': '酒泉市', '6210': '庆阳市',
-    '6211': '定西市', '6212': '陇南市', '6229': '临夏回族自治州', '6230': '甘南藏族自治州',
-    // 青海
-    '6301': '西宁市', '6302': '海东市', '6322': '海北藏族自治州', '6323': '黄南藏族自治州',
-    '6325': '海南藏族自治州', '6326': '果洛藏族自治州', '6327': '玉树藏族自治州', '6328': '海西蒙古族藏族自治州',
-    // 宁夏
-    '6401': '银川市', '6402': '石嘴山市', '6403': '吴忠市', '6404': '固原市', '6405': '中卫市',
-    // 新疆
-    '6501': '乌鲁木齐市', '6502': '克拉玛依市', '6504': '吐鲁番市', '6505': '哈密市',
-    '6523': '昌吉回族自治州', '6527': '博尔塔拉蒙古自治州', '6528': '巴音郭楞蒙古自治州',
-    '6529': '阿克苏地区', '6530': '克孜勒苏柯尔克孜自治州', '6531': '喀什地区', '6532': '和田地区',
-    '6540': '伊犁哈萨克自治州', '6542': '塔城地区', '6543': '阿勒泰地区', '6590': '自治区直辖县级行政区划'
-  }
-  const cityCode = areaCode.substring(0, 4)
-  const nativePlace = cityMap[cityCode] || ''
+  const nativePlace = resolveNativePlace(idCard)?.nativePlace || ''
 
   return { birthDate, gender, nativePlace }
 }
@@ -2190,6 +2081,7 @@ function onIdCardInput() {
       playerForm.value.gender = parsed.gender
       if (!playerForm.value.nativePlace) {
         playerForm.value.nativePlace = parsed.nativePlace
+        if(parsed.nativePlace)playerForm.value.nativePlaceSource='id_card'
       }
     }
   }
@@ -2318,6 +2210,7 @@ function editPlayer(row) {
     province: row.province || '', city: row.city || '', district: row.district || '', addressDetail: row.addressDetail || '',
     idCardFront: row.idCardFront || '', idCardBack: row.idCardBack || ''
   }
+  if(!playerForm.value.nativePlace){const inferred=resolveNativePlace(playerForm.value.idCard);if(inferred){playerForm.value.nativePlace=inferred.nativePlace;playerForm.value.nativePlaceSource=inferred.nativePlaceSource}}
   showAddPlayer.value = true
 }
 
@@ -2478,6 +2371,7 @@ async function submitPlayer() {
       // 新注册时设置注册时间
       registerTime: isEditingPlayer.value ? playerForm.value.registerTime : new Date().toISOString()
     }
+    if (isEditingPlayer.value) delete data.playerId
     if (keepImportedIdentity) delete data.idCard
     if (isEditingPlayer.value) {
       await updateRecord('players', editingPlayerId.value, data)
@@ -4520,6 +4414,8 @@ async function submitPlayerReview({decision,reason}){
       if(!sourceTournamentId.value || !tournamentRelation.value?._id)throw new Error('请从当前赛事进入队员审核')
       const result=await rosterExceptionBoard({rosterAction:'rejectPlayer',tournamentId:sourceTournamentId.value,teamId,divisionId:sourceDivisionId.value || tournamentRelation.value.divisionId || 'default',playerId:String(player._id),reason:String(reason).trim()})
       if(!result?.success)throw new Error(result?.error || result?.message || '驳回未完成，请重试')
+      const channel=result.notification?.data?.channels?.serviceAccount
+      if(result.notification && (!result.notification.success || channel!=='delivered'))ElMessage.warning(result.notification.success?'驳回已保存；微信通知未送达，可在通知中查看处理':'驳回已保存；通知创建失败，请使用通知补资料重试')
     }
     playerReviewDialogVisible.value=false
     await loadPlayers()
