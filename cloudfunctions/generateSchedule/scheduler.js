@@ -190,6 +190,49 @@ function stageName(index) {
   return `第${names[index] || index}阶段`
 }
 
+// 排程阻断原因：每场排不进去时记录它被哪些条件挡下、各挡了多少个候选时隙。
+// 这些原因是给主办方看的排查依据，新增代码时不要静默丢弃。
+const SCHEDULE_BLOCKER_LABELS = {
+  dateNotAllowed: '日期不在已勾选的比赛日',
+  dateRestricted: '该组别的日期限制不允许',
+  dailyLimit: '该组别当日场次已达上限',
+  policySession: '该组别的时段限制不允许',
+  policyVenue: '该组别的场地限制不允许',
+  windowOverflow: '比赛结束时间超出该时段可用时间',
+  venueOccupied: '该场地该时段已被其他比赛占用',
+  barrierPending: '前一赛段尚未整体排完（赛段屏障）',
+  dependencyPending: '前置场次未落位或休息间隔不足',
+  teamRest: '同一球队两场之间休息不足',
+  teamDaily: '同一球队当日场次已达上限',
+  teamSession: '同一球队同一时段场次已达上限',
+  criticalTimeUsed: '同一开赛点已排半决赛/三四名/决赛',
+  finalsTimeUsed: '决赛阶段独占开赛点已被占用',
+  slotOccupied: '该日期+开赛点+场地已被占用'
+}
+const SCHEDULE_BLOCKER_RANK = [
+  'barrierPending','dependencyPending','teamSession','teamDaily','teamRest','venueOccupied',
+  'windowOverflow','criticalTimeUsed','finalsTimeUsed','slotOccupied','dateRestricted',
+  'dailyLimit','policySession','policyVenue','dateNotAllowed'
+]
+function blockerRank(code) {
+  const index = SCHEDULE_BLOCKER_RANK.indexOf(code)
+  return index < 0 ? SCHEDULE_BLOCKER_RANK.length : index
+}
+function summarizeScheduleBlockers(blockers, attempts) {
+  const entries = Object.keys(blockers || {}).map(code => ({
+    code,
+    label: SCHEDULE_BLOCKER_LABELS[code] || code,
+    count: Number(blockers[code] || 0)
+  })).sort((a, b) => b.count - a.count || blockerRank(a.code) - blockerRank(b.code))
+  const primary = entries[0] || null
+  return {
+    primaryCode: primary ? primary.code : '',
+    primaryLabel: primary ? primary.label : (attempts ? '可用比赛日与场地的时隙已全部排满' : '没有可用于该赛段的比赛日'),
+    items: entries.slice(0, 5),
+    attempts: Number(attempts || 0)
+  }
+}
+
 function assign(matches, config, occupiedInput) {
   config = config || {}
   const venueSlots = buildVenueSlots(config)
@@ -265,6 +308,8 @@ function assign(matches, config, occupiedInput) {
     if (!requiredFieldFormat || eligibleVenueSlots.length===0) {
       match.scheduleStatus='unassigned'
       match.scheduleIssue=!requiredFieldFormat ? '比赛缺少几人制规则' : '没有兼容'+requiredFieldFormat.replace('side','人制')+'场地'
+      match.scheduleIssueCode=!requiredFieldFormat ? 'noFormat' : 'noVenue'
+      match.scheduleIssueDetail=[]
       reasons.push(`场序${match.matchNo || match.matchIndex}: ${match.scheduleIssue}`)
       return
     }
@@ -273,6 +318,9 @@ function assign(matches, config, occupiedInput) {
     const barrierMatches=priority>0 ? ordered.filter(item=>matchScope(item)===matchScope(match) && schedulingPriority(item)<priority) : []
     let placed = false
     let checkedDays = 0
+    let attemptedSlots = 0
+    const blockers = Object.create(null)
+    const noteBlocker = code => { blockers[code] = (blockers[code] || 0) + 1 }
     const maximumDays = endDate && !Number.isNaN(endDate.getTime())
       ? Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1)
       : 366
@@ -283,25 +331,26 @@ function assign(matches, config, occupiedInput) {
       if (!dayAllowed(day, config.matchDays, config.matchDates)) continue
       checkedDays += 1
       const currentDate = dateText(day)
-      if (policy.allowedDates.length && policy.allowedDates.indexOf(currentDate) < 0) continue
-      if (dailyLimit > 0 && (dailyCounts.get(currentDate) || 0) >= dailyLimit) continue
+      if (policy.allowedDates.length && policy.allowedDates.indexOf(currentDate) < 0) { noteBlocker('dateRestricted'); continue }
+      if (dailyLimit > 0 && (dailyCounts.get(currentDate) || 0) >= dailyLimit) { noteBlocker('dailyLimit'); continue }
       for (let slotIndex = 0; slotIndex < eligibleVenueSlots.length && !placed; slotIndex += 1) {
+        attemptedSlots += 1
         const currentTime = eligibleVenueSlots[slotIndex].time
         const venue = eligibleVenueSlots[slotIndex].venue
         const startMs = timestamp(currentDate, currentTime)
         const session = eligibleVenueSlots[slotIndex].session
-        if (policy.allowedSessions.length && policy.allowedSessions.indexOf(session) < 0) continue
-        if (policy.allowedVenues.length && policy.allowedVenues.indexOf(venue) < 0) continue
+        if (policy.allowedSessions.length && policy.allowedSessions.indexOf(session) < 0) { noteBlocker('policySession'); continue }
+        if (policy.allowedVenues.length && policy.allowedVenues.indexOf(venue) < 0) { noteBlocker('policyVenue'); continue }
         const occupiedEndMs=startMs+(durationMinutes+bufferMinutes)*60000
-        if (eligibleVenueSlots[slotIndex].windowEnd && occupiedEndMs>timestamp(currentDate,eligibleVenueSlots[slotIndex].windowEnd)) continue
+        if (eligibleVenueSlots[slotIndex].windowEnd && occupiedEndMs>timestamp(currentDate,eligibleVenueSlots[slotIndex].windowEnd)) { noteBlocker('windowOverflow'); continue }
         const venueBlocked=(venueIntervals.get(venue) || []).some(item=>overlaps(startMs,occupiedEndMs,item.startMs,item.endMs))
-        if(venueBlocked) continue
+        if(venueBlocked) { noteBlocker('venueOccupied'); continue }
         const barrierBlocked=barrierMatches.some(item=>{
           if(!item.matchDate || !item.matchTime) return true
           const itemDuration=Math.max(1,Number(item.durationMinutes || defaultDurationMinutes))
           return startMs < timestamp(item.matchDate,item.matchTime)+itemDuration*60000
         })
-        if(barrierBlocked) continue
+        if(barrierBlocked) { noteBlocker('barrierPending'); continue }
         const dependencyBlocked = dependencies.some(no => {
           const dependency = matchMap.get(scopedMatchKey(match,no))
           if (!dependency || !dependency.matchDate || !dependency.matchTime) return true
@@ -309,28 +358,30 @@ function assign(matches, config, occupiedInput) {
           const dependencyEnd = timestamp(dependency.matchDate, dependency.matchTime) + dependencyDuration * 60000
           return startMs - dependencyEnd < policy.minRestMinutes * 60000
         })
-        if (dependencyBlocked) continue
+        if (dependencyBlocked) { noteBlocker('dependencyPending'); continue }
+        let teamBlockCode = ''
         const teamBlocked = participantKeys.some(teamId => {
           const history = teamHistory.get(teamId) || []
-          if (history.some(item => startMs - item.endMs < policy.minRestMinutes * 60000)) return true
+          if (history.some(item => startMs - item.endMs < policy.minRestMinutes * 60000)) { teamBlockCode = 'teamRest'; return true }
           const dailyKey = `${teamId}|${currentDate}`
-          if ((maxDailyOne || policy.maxMatchesPerDay <= 1) && (teamDailyCounts.get(dailyKey) || 0) >= 1) return true
-          if ((teamDailyCounts.get(dailyKey) || 0) >= policy.maxMatchesPerDay) return true
+          if ((maxDailyOne || policy.maxMatchesPerDay <= 1) && (teamDailyCounts.get(dailyKey) || 0) >= 1) { teamBlockCode = 'teamDaily'; return true }
+          if ((teamDailyCounts.get(dailyKey) || 0) >= policy.maxMatchesPerDay) { teamBlockCode = 'teamDaily'; return true }
           const sessionKey = `${dailyKey}|${session}`
-          return (sessionCounts.get(sessionKey) || 0) >= Math.min(maxPerSession,policy.maxPerSession)
+          if ((sessionCounts.get(sessionKey) || 0) >= Math.min(maxPerSession,policy.maxPerSession)) { teamBlockCode = 'teamSession'; return true }
+          return false
         })
-        if (teamBlocked) continue
+        if (teamBlocked) { noteBlocker(teamBlockCode || 'teamSession'); continue }
         const critical = stageOrder.isFinalStage(match)
         const criticalKey=`${matchScope(match)}|${currentDate}|${currentTime}`
-        if (critical && keyTimeUse.has(criticalKey)) continue
+        if (critical && keyTimeUse.has(criticalKey)) { noteBlocker('criticalTimeUsed'); continue }
         if (finalsExclusive) {
           const globalTimeKey=`${currentDate}|${currentTime}`
-          if (globalFinalsTimeUse.has(globalTimeKey)) continue
-          if (keyStageMatch(match) && globalKeyTimeUse.has(globalTimeKey)) continue
+          if (globalFinalsTimeUse.has(globalTimeKey)) { noteBlocker('finalsTimeUsed'); continue }
+          if (keyStageMatch(match) && globalKeyTimeUse.has(globalTimeKey)) { noteBlocker('finalsTimeUsed'); continue }
         }
 
         const key = slotKey(currentDate, currentTime, venue)
-        if (occupied.has(key)) continue
+        if (occupied.has(key)) { noteBlocker('slotOccupied'); continue }
         occupied.add(key)
         const intervals=venueIntervals.get(venue) || []
         intervals.push({ startMs,endMs:occupiedEndMs,matchId:match._id || '' })
@@ -367,11 +418,23 @@ function assign(matches, config, occupiedInput) {
     }
     if (!placed) {
       match.scheduleStatus = 'unassigned'
-      match.scheduleIssue = checkedDays === 0 ? '没有符合比赛日设置的日期' : '现有日期、时段、场地或球队休息约束不足'
-      reasons.push(`场序${match.matchNo || match.matchIndex}: ${match.scheduleIssue}`)
+      const summary = summarizeScheduleBlockers(blockers, attemptedSlots)
+      const others = summary.items.slice(1).map(item => `${item.label}×${item.count}`)
+      const notes = []
+      if (others.length) notes.push('其他约束：' + others.join('；'))
+      notes.push(`可用比赛日 ${checkedDays} 天`)
+      match.scheduleIssue = checkedDays === 0 ? '没有符合比赛日设置的日期' : summary.primaryLabel
+      match.scheduleIssueCode = checkedDays === 0 ? 'dateNotAllowed' : (summary.primaryCode || 'noSlot')
+      match.scheduleIssueDetail = summary.items
+      match.scheduleIssueLine = checkedDays === 0
+        ? '没有符合比赛日设置的日期'
+        : `${summary.primaryLabel}（${notes.join('；')}）`
+      match.scheduleAttempts = attemptedSlots
+      match.scheduleAvailableDays = checkedDays
+      reasons.push(`场序${match.matchNo || match.matchIndex}: ${match.scheduleIssueLine}`)
     }
   })
   return { assigned, unassigned: ordered.filter(match => !match.isBye && !match.matchDate).length, reasons }
 }
 
-module.exports = { assign, participantIds, sessionName, buildTimeSlots, normalizeSessionWindows, normalizeVenueResources, buildVenueSlots, schedulingPriority, stageName, finalStageOrder, schedulePolicyForMatch, overlaps }
+module.exports = { assign, participantIds, sessionName, buildTimeSlots, normalizeSessionWindows, normalizeVenueResources, buildVenueSlots, schedulingPriority, stageName, finalStageOrder, schedulePolicyForMatch, overlaps, SCHEDULE_BLOCKER_LABELS, summarizeScheduleBlockers }
