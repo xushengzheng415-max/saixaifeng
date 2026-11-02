@@ -1,4 +1,39 @@
 import {configuredKickoffTimes} from './scheduleKickoffTimes.mjs'
+// 与云函数、正式排程引擎共用同一份阶段次序：赛程填写表必须按比赛顺序阅读，
+// 不能出现「A 组全部打完才轮到 B 组」或「决赛排在三四名赛之前」。
+import stageOrder from '../../../cloudfunctions/generateSchedule/stageOrder.cjs'
+
+// 轮次号：优先结构化字段，其次从「小组赛 第1轮」「第二轮」这类名称解析。
+function roundOfMatch(match) {
+  const direct = Number(match.round || match.scheduleRound || match.roundIndex || match.roundNo || 0)
+  if (direct > 0) return direct
+  const name = String(match.roundName || match.scheduleStageName || match.stageName || '')
+  const numeric = name.match(/第\s*(\d+)\s*轮/)
+  if (numeric) return Number(numeric[1])
+  const chinese = name.match(/第\s*([一二三四五六七八九十]+)\s*轮/)
+  return chinese ? stageOrder.cnToNumber(chinese[1]) : 0
+}
+
+function groupOfMatch(match) {
+  return String(match.groupName || match.group || match.pool || '')
+}
+
+// 比赛顺序：阶段档位（小组赛→淘汰/排位→半决赛→三四名→决赛）→ 轮次 → 小组 → 场序。
+// 同轮的小组赛按 A→D 组连续排列，因此第一轮是 A1-A2、A3-A4、B1-B2…，
+// 第二轮才统一打下一轮；决赛恒为最后一场。
+function competitionOrder(left, right) {
+  const leftRank = stageOrder.stageRankOf(left)
+  const rightRank = stageOrder.stageRankOf(right)
+  if (leftRank !== rightRank) return leftRank - rightRank
+  const leftRound = roundOfMatch(left)
+  const rightRound = roundOfMatch(right)
+  if (leftRound !== rightRound) return leftRound - rightRound
+  const leftGroup = groupOfMatch(left)
+  const rightGroup = groupOfMatch(right)
+  if (leftGroup !== rightGroup) return leftGroup.localeCompare(rightGroup, 'zh-CN')
+  return Number(left.matchNo || left.matchIndex || 0) - Number(right.matchNo || right.matchIndex || 0)
+}
+
 export async function createScheduleTemplateWorkbook({tournament={},matches=[],divisionName='当前组别',stageLabel,teamName}={}) {
   if(!matches.length)throw new Error('没有可导出的对阵，请先生成对阵')
   const mod=await import('exceljs'),ExcelJS=mod.default || mod,book=new ExcelJS.Workbook()
@@ -39,7 +74,7 @@ export async function createScheduleTemplateWorkbook({tournament={},matches=[],d
     if(!divisions.has(id))divisions.set(id,{name:match.divisionName || divisionName,rows:[]})
     divisions.get(id).rows.push(match)
   }
-  for(const group of divisions.values())group.rows.sort((a,b)=>Number(a.matchNo || a.matchIndex || 0)-Number(b.matchNo || b.matchIndex || 0))
+  for(const group of divisions.values())group.rows.sort(competitionOrder)
   if(divisions.size>1)await addSheet('全部赛程',[...divisions.values()].flatMap(group=>group.rows))
   const usedNames=new Set(['_填写选项','全部赛程'])
   for(const group of divisions.values()) {
